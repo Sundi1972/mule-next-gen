@@ -1,9 +1,9 @@
 import type { GameContext } from '@tabletop/core';
 import { describe, expect, it } from 'vitest';
-import { AI_HANDS, declareRole, RuleError, WALK, type GameState } from '@mule/engine';
+import { AI_HANDS, boxOf, declareRole, DEV_STEER, doorOutside, floorConfig, HALL, pathTo, RuleError, WALK, type GameState, type HallDoor, type HallPlace } from '@mule/engine';
 import { GOOD_NAME } from '@mule/ai';
 import { GRANT_TICK_MS, MuleGame } from '../src/mule-game.js';
-import { clockRunsInMonth1, readyAll } from './fake-context.js';
+import { clockRunsInMonth1, pressAct, readyAll, steerTo, type SteerPoint } from './fake-context.js';
 
 /** A context with a manual clock, so phase timers run instantly. */
 function fakeContext() {
@@ -43,6 +43,54 @@ const seats = [
   { id: 's2', name: 'Mia', isAi: false, color: 1 },
   { id: 's3', name: 'The Baron', isAi: true, color: 2 },
 ];
+
+// --- Steered development, walked as dev-steer.test.ts walks it: steerTo and pressAct, nothing tapped. ---
+
+/** A steered development as these tests drive it: the game, its fake clock, and its engine state for the map's routes. */
+type Floor = { game: MuleGame; advance: (ms: number) => void; state: GameState };
+type Spot = { x: number; y: number };
+
+/** Where a seat's colonist stands, as the TV reads it. */
+function standing(g: Floor, seat: string): SteerPoint {
+  const c = g.game.viewFor(null).players.find((p) => p.id === seat)!.colonist!;
+  return { space: c.space!, x: c.x!, y: c.y! };
+}
+
+/** The one button, once its words say `verb`: pressed as a phone presses it. */
+function press(g: Floor, seat: string, verb: string): void {
+  expect(g.game.viewFor(seat).me?.reach?.verb, `${seat}'s button`).toMatch(verb);
+  pressAct(g.game, g, seat);
+}
+
+/** In the hall: onto the walkway, along it, and into the middle of `place`'s room. */
+function hallTo(g: Floor, seat: string, place: Exclude<HallPlace, HallDoor>): void {
+  const walkway = HALL.floor[0]!;
+  const y = (walkway.y0 + walkway.y1) / 2;
+  const box = boxOf(place);
+  const to = { x: (box.x0 + box.x1) / 2, y: (box.y0 + box.y1) / 2 };
+  const at = standing(g, seat);
+  steerTo(g.game, g, seat, [{ space: 'hall', x: at.x, y }, { space: 'hall', x: to.x, y }, { space: 'hall', ...to }]);
+}
+
+/** On the map: by the engine's quickest route (pathTo, the AI's own), tile centre by tile centre, to `to`. */
+function mapTo(g: Floor, seat: string, to: Spot, within?: number): void {
+  const path = pathTo(g.state, standing(g, seat), to, floorConfig());
+  if (!path) throw new Error(`no route for ${seat} to (${to.x}, ${to.y})`);
+  const turns = path.tiles.slice(1, -1).map((t): SteerPoint => ({ space: 'map', x: Math.floor(t.x) + 0.5, y: Math.floor(t.y) + 0.5 }));
+  steerTo(g.game, g, seat, [...turns, { space: 'map', ...to }], within === undefined ? {} : { within });
+}
+
+/** In by the nearer door, to the pub, and PUB · END TURN. */
+function toThePub(g: Floor, seat: string): void {
+  const at = standing(g, seat);
+  if (at.space === 'map') {
+    const door: HallDoor = at.x < g.state.tiles.find((t) => t.terrain === 'store')!.x ? 'doorL' : 'doorR';
+    mapTo(g, seat, doorOutside(g.state, door, floorConfig()), 0.1);
+    press(g, seat, 'ENTER STORE');
+  }
+  hallTo(g, seat, 'pub');
+  press(g, seat, 'PUB · END TURN');
+}
 
 describe('MuleGame', () => {
   // The clock as such, met in month 1: it runs from the start, as in any later month.
@@ -99,22 +147,26 @@ describe('MuleGame', () => {
     game.start(seats);
     readyAll(game);
     while (game.viewFor('s1').phase === 'landGrant') advance(GRANT_TICK_MS);
+    const g = { game, advance, state: (game as unknown as { state: GameState }).state };
     const view = game.viewFor('s1');
     expect(view.phase).toBe('development');
     const ends = view.me!.devEndsAt!;
-    const plot = view.tiles.find((t) => t.terrain !== 'store')!;
-    game.handle('s1', { type: 'analyse', x: plot.x, y: plot.y });
-    advance(game.viewFor(null).players.find((p) => p.id === 's1')!.colonist!.walk!.arrivesAt - ctx.now());
+    // A plot two tiles left of the store, on Heiko's door's side: he walks out to it and presses ANALYSE.
+    const store = view.tiles.find((t) => t.terrain === 'store')!;
+    const plot = { x: store.x - 2, y: store.y };
+    mapTo(g, 's1', { x: plot.x + 0.5, y: plot.y + 0.5 });
+    press(g, 's1', 'ANALYSE');
     const after = game.viewFor('s1');
     expect(after.me!.devEndsAt).toBe(ends);
     expect(after.tiles.find((t) => t.x === plot.x && t.y === plot.y)!.ground).toBeDefined();
     expect(game.viewFor('s2').tiles.find((t) => t.x === plot.x && t.y === plot.y)!.ground).toBeUndefined();
-    expect(() => game.handle('s1', { type: 'analyse', x: plot.x, y: plot.y })).toThrow('Still assaying');
+    expect(after.players.find((p) => p.id === 's1')!.colonist!.assayUntil, 'the assay keeps him busy').not.toBeNull();
+    expect(after.me!.reach, 'his button is dim while he assays').toMatchObject({ verb: 'ASSAYING', enabled: false });
     // Mia goes to the pub for cash while she still has time.
     const money = after.players.find((p) => p.id === 's2')!.money;
-    game.handle('s2', { type: 'pub' });
+    toThePub(g, 's2');
     expect(game.viewFor('s2').players.find((p) => p.id === 's2')!.money).toBeGreaterThan(money);
-    expect(() => game.handle('s2', { type: 'buyMule' })).toThrow('pub');
+    expect(game.viewFor('s2').me!.reach, 'her turn is over').toMatchObject({ verb: 'IN THE PUB', enabled: false });
     // Heiko stands on his plot until the one clock runs out, which ends development.
     advance(ends - 1 - ctx.now());
     expect(game.viewFor('s1').phase).toBe('development');
@@ -131,10 +183,12 @@ describe('MuleGame', () => {
     const owned = () => game.viewFor(null).tiles.filter((t) => t.owner === 's3');
     expect(owned().length).toBeGreaterThan(0);
     // The humans go straight to the pub; the AI keeps its own clock.
-    game.handle('s1', { type: 'pub' });
-    game.handle('s2', { type: 'pub' });
+    const g = { game, advance, state: (game as unknown as { state: GameState }).state };
+    toThePub(g, 's1');
+    toThePub(g, 's2');
     expect(game.viewFor('s1').phase).toBe('development');
-    for (let i = 0; i < 120 && game.viewFor('s1').phase === 'development'; i++) advance(1_000);
+    // A tick at a time, as a room's timers fire: a longer jump is a late tick, and the floor drops what it can't catch up.
+    for (let i = 0; i < 120_000 / DEV_STEER.tickMs && game.viewFor('s1').phase === 'development'; i++) advance(DEV_STEER.tickMs);
     expect(game.viewFor('s1').phase).toBe('production');
     expect(owned().some((t) => t.outfit !== null)).toBe(true);
   });

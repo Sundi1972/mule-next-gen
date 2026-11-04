@@ -1,9 +1,9 @@
-import { DEVELOPMENT, RuleError, tileIndex, type GameState } from '@mule/engine';
+import { boxOf, DEVELOPMENT, doorOutside, floorConfig, HALL, pathTo, RuleError, tileIndex, type GameState, type HallDoor, type HallPlace, type Outfit } from '@mule/engine';
 import type { MuleView } from '@mule/protocol';
 import type { SeatInfo } from '@tabletop/core';
 import { describe, expect, it } from 'vitest';
 import { MuleGame } from '../src/mule-game.js';
-import { fakeContext, pressThroughSidePick, readyAll, tapThere, toDevelopment, walkers } from './fake-context.js';
+import { fakeContext, pressAct, pressThroughSidePick, readyAll, steerTo, toDevelopment, walkers, type SteerPoint } from './fake-context.js';
 
 /**
  * A-1 (arcade AM-6, HC-3): in month 1 the one development clock stands full until every seat is in. A present seat is
@@ -23,28 +23,115 @@ function plotNearStore(state: GameState, skip = 0): number {
   return tileIndex(state.width, t.x, t.y);
 }
 
-/** Lena (the host) and Ossa in month 1's development; `owners` names who owns a plot near the store. */
-function firstMonth(owners: string[]) {
+/**
+ * A seat's plot on the store's row, two tiles out on its own door's side (Lena's colonist starts at the left door,
+ * Ossa's at the right), clear of the door's reach; `out` more tiles further out for another.
+ */
+function plotBeside(state: GameState, id: string, out = 0): number {
+  const store = state.tiles.find((t) => t.terrain === 'store')!;
+  return tileIndex(state.width, id === LENA ? store.x - 2 - out : store.x + 2 + out, store.y);
+}
+
+/** Lena (the host) and Ossa in month 1's development; `owners` names who owns a plot beside the store. */
+function firstMonth(owners: string[], prepare?: (state: GameState) => void) {
   const plots: Record<string, number> = {};
   const g = toDevelopment({
     players: walkers,
     firstMonthWaits: true,
     prepare: (state) => {
-      owners.forEach((id, k) => {
-        const i = plotNearStore(state, k);
+      for (const id of owners) {
+        const i = plotBeside(state, id);
         state.tiles[i]!.owner = id;
         plots[id] = i;
-      });
+      }
+      prepare?.(state);
     },
   });
   const xy = (id: string) => ({ x: plots[id]! % g.state.width, y: Math.floor(plots[id]! / g.state.width) });
-  /** The seat buys, outfits and installs its first MULE, the fake clock running through each walk. */
+  /** The seat buys, outfits and installs its first MULE, its colonist steered there and the button pressed. */
   const installFirst = (id: string) => {
-    tapThere(g.game, g, id, { type: 'buyMule' });
-    tapThere(g.game, g, id, { type: 'outfit', outfit: 'food' });
-    tapThere(g.game, g, id, { type: 'install', ...xy(id) });
+    buyAndOutfit(g, id, 'food');
+    installOn(g, id, xy(id));
   };
-  return { ...g, installFirst };
+  return { ...g, xy, installFirst };
+}
+
+// --- Steered development, walked as dev-steer.test.ts walks it: steerTo and pressAct, nothing tapped. ---
+
+/** A steered development as these tests drive it: the game, its fake clock, and its engine state for the map's routes. */
+type Floor = { game: MuleGame; advance: (ms: number) => void; state: GameState };
+type Spot = { x: number; y: number };
+
+/** Where a seat's colonist stands, as the TV reads it. */
+function standing(g: Floor, seat: string): SteerPoint {
+  const c = g.game.viewFor(null).players.find((p) => p.id === seat)!.colonist!;
+  return { space: c.space!, x: c.x!, y: c.y! };
+}
+
+/** The one button, once its words say `verb`: pressed as a phone presses it. */
+function press(g: Floor, seat: string, verb: string): void {
+  expect(g.game.viewFor(seat).me?.reach?.verb, `${seat}'s button`).toMatch(verb);
+  pressAct(g.game, g, seat);
+}
+
+/** In the hall: onto the walkway, along it, and into `place` (a door's own spot, else the middle of its room). */
+function hallTo(g: Floor, seat: string, place: HallPlace): void {
+  const walkway = HALL.floor[0]!;
+  const y = (walkway.y0 + walkway.y1) / 2;
+  const box = boxOf(place);
+  const to = place === 'doorL' || place === 'doorR' ? HALL.spots[place] : { x: (box.x0 + box.x1) / 2, y: (box.y0 + box.y1) / 2 };
+  const at = standing(g, seat);
+  steerTo(g.game, g, seat, [{ space: 'hall', x: at.x, y }, { space: 'hall', x: to.x, y }, { space: 'hall', ...to }]);
+}
+
+/** On the map: by the engine's quickest route (pathTo, the AI's own), tile centre by tile centre, to `to`. */
+function mapTo(g: Floor, seat: string, to: Spot, within?: number): void {
+  const path = pathTo(g.state, standing(g, seat), to, floorConfig());
+  if (!path) throw new Error(`no route for ${seat} to (${to.x}, ${to.y})`);
+  const turns = path.tiles.slice(1, -1).map((t): SteerPoint => ({ space: 'map', x: Math.floor(t.x) + 0.5, y: Math.floor(t.y) + 0.5 }));
+  steerTo(g.game, g, seat, [...turns, { space: 'map', ...to }], within === undefined ? {} : { within });
+}
+
+/** The store door on a point's side of the store. */
+const doorFor = (g: Floor, at: Spot): HallDoor => (at.x < g.state.tiles.find((t) => t.terrain === 'store')!.x ? 'doorL' : 'doorR');
+
+/** Into the store from wherever on the map the colonist stands: to the nearer door's mouth, and ENTER STORE. */
+function goIn(g: Floor, seat: string): void {
+  const at = standing(g, seat);
+  if (at.space === 'hall') return;
+  mapTo(g, seat, doorOutside(g.state, doorFor(g, at), floorConfig()), 0.1);
+  press(g, seat, 'ENTER STORE');
+}
+
+/** Out of the store by the door on the plot's side, and across the map to the middle of the plot. */
+function walkToPlot(g: Floor, seat: string, plot: Spot): void {
+  if (standing(g, seat).space === 'hall') {
+    hallTo(g, seat, doorFor(g, plot));
+    press(g, seat, 'LEAVE');
+  }
+  mapTo(g, seat, { x: plot.x + 0.5, y: plot.y + 0.5 });
+}
+
+/** BUY MULE at the corral and OUTFIT at `outfit`'s shopfront; the colonist stays in the hall. */
+function buyAndOutfit(g: Floor, seat: string, outfit: Outfit): void {
+  goIn(g, seat);
+  hallTo(g, seat, 'corral');
+  press(g, seat, 'BUY MULE');
+  hallTo(g, seat, outfit);
+  press(g, seat, 'OUTFIT');
+}
+
+/** Out with the MULE on its lead to the plot, and INSTALL there. */
+function installOn(g: Floor, seat: string, plot: Spot): void {
+  walkToPlot(g, seat, plot);
+  press(g, seat, 'INSTALL');
+}
+
+/** In by the nearer door, to the pub, and PUB · END TURN. */
+function toThePub(g: Floor, seat: string): void {
+  goIn(g, seat);
+  hallTo(g, seat, 'pub');
+  press(g, seat, 'PUB · END TURN');
 }
 
 const clockOf = (view: MuleView) => ({ devEndsAt: view.me?.devEndsAt ?? null, phaseEndsAt: view.phaseEndsAt, waitsFor: view.clockWaitsFor });
@@ -77,7 +164,7 @@ describe('A-1: month 1’s development clock waits for every first MULE', () => 
   it('A-1: a seat that went to the pub counts as in; while the clock waits the pub pays as for the full clock', () => {
     const g = firstMonth([LENA, OSSA]);
     const { game, ctx, installFirst } = g;
-    tapThere(game, g, OSSA, { type: 'pub' });
+    toThePub(g, OSSA);
     const { base, start, perMonth } = DEVELOPMENT.pub;
     expect(game.viewFor(null).news[0], 'the pub paid for the full clock').toBe(`Ossa went to the pub and won ${base + start + perMonth}.`);
     expect(game.viewFor(null).clockWaitsFor).toEqual([LENA]);
@@ -122,41 +209,76 @@ describe('A-1: month 1’s development clock waits for every first MULE', () => 
   });
 
   it("A-1: once in, you wait: Lena's MULE is in and Ossa's still to come, so her buy, install, analyse and filter are refused, her money and the corral unchanged", () => {
-    const { game, installFirst } = firstMonth([LENA, OSSA]);
+    // Lena's second plot, one further out, is analysed and she holds Alloy, so her button there is FIT FILTER; her first
+    // plot is analysed and filtered already, so with her MULE on it her button there is TAKE MULE (AM-2), which stays open.
+    const g = firstMonth([LENA, OSSA], (state) => {
+      const lena = state.players.find((p) => p.id === LENA)!;
+      const [home, second] = [plotBeside(state, LENA), plotBeside(state, LENA, 1)];
+      state.tiles[home]!.filter = true;
+      state.tiles[second]!.owner = LENA;
+      lena.analysed.push(home, second);
+      lena.stock.alloy = DEVELOPMENT.filterAlloy;
+    });
+    const { game, state, installFirst } = g;
+    const lena = () => state.players.find((p) => p.id === LENA)!;
+    const at = (p: { x: number; y: number }) => state.tiles[tileIndex(state.width, p.x, p.y)]!;
     installFirst(LENA);
+    const home = g.xy(LENA);
+    const second = { x: home.x - 1, y: home.y };
+    const free = { x: home.x - 2, y: home.y };
     const before = game.viewFor(LENA);
     const money = before.players.find((p) => p.id === LENA)!.money;
-    const plot = before.tiles.find((t) => t.owner === LENA)!;
-    for (const intent of [{ type: 'buyMule' }, { type: 'install', x: plot.x, y: plot.y }, { type: 'analyse', x: plot.x, y: plot.y }, { type: 'filter', x: plot.x, y: plot.y }] as const)
-      expect(() => game.handle(LENA, intent), intent.type).toThrow(new RuleError("Waiting for the others' first MULEs"));
+    const stats = (game as unknown as { steering: { stats: { refused: number } } }).steering.stats;
+    const refused = stats.refused;
+
+    goIn(g, LENA);
+    hallTo(g, LENA, 'corral');
+    press(g, LENA, 'BUY MULE');
+    expect(lena().carriedMule, 'buy refused').toBeNull();
+    walkToPlot(g, LENA, second);
+    press(g, LENA, 'FIT FILTER');
+    expect({ filter: at(second).filter, alloy: lena().stock.alloy }, 'filter refused').toEqual({ filter: false, alloy: DEVELOPMENT.filterAlloy });
+    walkToPlot(g, LENA, home);
+    press(g, LENA, 'TAKE MULE');
+    expect(lena().carriedMule, 'TAKE MULE is not refused').toBe('food');
+    walkToPlot(g, LENA, second);
+    press(g, LENA, 'INSTALL');
+    expect({ outfit: at(second).outfit, leads: lena().carriedMule }, 'install refused').toEqual({ outfit: null, leads: 'food' });
+    walkToPlot(g, LENA, free);
+    press(g, LENA, 'ANALYSE');
+    expect(lena().analysed, 'analyse refused').not.toContain(tileIndex(state.width, free.x, free.y));
+    expect(game.viewFor(null).players.find((p) => p.id === LENA)!.colonist?.assayUntil ?? null, 'a refused press starts no assay').toBeNull();
+
+    expect(stats.refused - refused, 'buy, filter, install and analyse, each counted refused').toBe(4);
     const after = game.viewFor(LENA);
     expect(after.players.find((p) => p.id === LENA)!.money).toBe(money);
     expect(after.storeMules).toBe(before.storeMules);
-    expect(after.players.find((p) => p.id === LENA)!.colonist?.walk ?? null, 'a refused tap sets no walk off').toBeNull();
     expect(after.clockWaitsFor).toEqual([OSSA]);
   });
 
   it('A-1: once in, you wait, but the pub is open', () => {
     const g = firstMonth([LENA, OSSA]);
     g.installFirst(LENA);
-    tapThere(g.game, g, LENA, { type: 'pub' });
+    toThePub(g, LENA);
     expect(g.game.viewFor(LENA).players.find((p) => p.id === LENA)!.doneDeveloping).toBe(true);
   });
 
   it('A-1 (negative): a seat not yet in buys its first MULE as ever while another seat waits', () => {
-    const { game, installFirst, ctx, advance } = firstMonth([LENA, OSSA]);
+    const g = firstMonth([LENA, OSSA]);
+    const { game, installFirst } = g;
     installFirst(LENA);
     const corral = game.viewFor(null).storeMules;
-    game.handle(OSSA, { type: 'buyMule' });
-    const walk = game.viewFor(null).players.find((p) => p.id === OSSA)!.colonist!.walk!;
-    advance(walk.arrivesAt - ctx.now());
+    goIn(g, OSSA);
+    hallTo(g, OSSA, 'corral');
+    press(g, OSSA, 'BUY MULE');
     expect(game.viewFor(OSSA).me!.carriedMule).toBe('empty');
     expect(game.viewFor(null).storeMules).toBe(corral - 1);
   });
 
   it('A-1: month 2 is unchanged: the clock starts at once, whoever has no MULE yet', () => {
-    const { game, ctx, state, advance } = firstMonth([]);
-    for (const id of [LENA, OSSA]) game.handle(id, { type: 'pub' });
+    const g = firstMonth([]);
+    const { game, ctx, state, advance } = g;
+    for (const id of [LENA, OSSA]) toThePub(g, id);
     for (let i = 0; i < 100_000 && !(state.month === 2 && game.viewFor(null).phase === 'development'); i++) {
       if (game.viewFor(null).phase === 'planning') {
         // Both own a plot with no MULE as month 2 opens: under month 1's rule neither would be in.

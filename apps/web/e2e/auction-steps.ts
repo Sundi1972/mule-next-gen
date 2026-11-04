@@ -12,7 +12,7 @@ import { GOOD_NAME } from '@mule/ui';
 import { errors as playwrightErrors, type Browser, type Page } from 'playwright';
 import { AI_NAMES, GRANT_PASS_MAX_MS, GRANT_TICK_MS, PHASE_MS } from '../../server/src/mule-game.js';
 import type { MuleServer } from '../../server/src/server.js';
-import { check, headerSlot, held, launch, PHONE, PHONE_SMALL, startServer, TV, type AuctionSteps } from './harness';
+import { check, hallPlace, headerSlot, held, launch, PHONE, PHONE_SMALL, pressAct, startServer, steerTo, throughDoor, TV, type AuctionSteps } from './harness';
 import { hostContinuesWithout } from './hub-steps';
 import { ELECTION_WAIT_MS, readyThroughTheElection, voteThroughTheElection } from './politics-steps';
 import { railFits } from './shell-steps';
@@ -156,7 +156,7 @@ async function playTheLandAuction(browser: Browser, base: string, server: MuleSe
   await everyone(phones, (p) => claimPlots(p.page));
   await brix.page.locator('[data-phase]:not([data-phase=landGrant])').waitFor({ timeout: GRANT_WAIT_MS });
   if ((await brix.page.locator('[data-phase=landAuction]').count()) > 0) await followTheColonyLot(phones, tv, 1, truth);
-  await everyone(phones, (p) => goToThePub(p.page));
+  await everyone(phones, (p) => goToThePub(p, server, code, truth));
   const screens = [...phones.map((p) => ({ name: `${p.name}'s phone`, page: p.page })), { name: 'the TV', page: tv }];
   await Promise.all(screens.map((s) => recordStages(s.page)));
   const serverStages = recordServerStages(truth);
@@ -281,7 +281,7 @@ async function playTheLandAuction(browser: Browser, base: string, server: MuleSe
   console.log(`✓ ${first} and ${second} are Ossa's on the TV's map in development`);
 
   // Month 2's goods: Brix sold all his Food in month 1, so he opens Food's status screen with none to sell.
-  await everyone(phones, (p) => goToThePub(p.page));
+  await everyone(phones, (p) => goToThePub(p, server, code, truth));
   await readTheEmptyHandedStatus(phones, truth);
   await everyone(phones, (p) => pressDoneThroughTheAuction(p.page));
   check(errors.length === 0, `no page errors: ${errors.join('; ')}`);
@@ -1278,11 +1278,22 @@ async function claimPlots(page: Page): Promise<void> {
   }
 }
 
-async function goToThePub(page: Page): Promise<void> {
-  await page
-    .locator('[data-phase=development]')
-    .getByRole('button', { name: 'Go to the pub and end your turn' })
-    .click({ timeout: GRANT_WAIT_MS });
+/**
+ * Development is steered (arcade PR-11): the phone's colonist walks in through the nearer store door and across the
+ * hall to the pub, and the one button ends the turn there, as store-steps' errand ends it (harness steerTo,
+ * throughDoor and pressAct). Returns once the server has the seat done developing.
+ */
+async function goToThePub(p: Phone, server: MuleServer, code: string, truth: Truth): Promise<void> {
+  const seat = truth.idOf(p);
+  const verb = p.page.locator('[data-phase=development]').getByTestId('action-verb');
+  await verb.waitFor({ timeout: GRANT_WAIT_MS });
+  await throughDoor(p.page, server, code, seat);
+  await steerTo(p.page, server, code, seat, hallPlace('pub'));
+  await verb.filter({ hasText: /^\s*PUB · END TURN\s*$/ }).waitFor({ timeout: PRESS_MS });
+  await pressAct(p.page);
+  const done = () => truth.board().players.find((q) => q.id === seat)?.doneDeveloping === true;
+  for (const until = Date.now() + PRESS_MS; !done() && Date.now() < until; ) await p.page.waitForTimeout(50);
+  check(done(), `${p.name} walked to the pub and pressed PUB · END TURN, and the server has them done developing`);
 }
 
 /** The goods auction: press Done at every stage it shows until the phone leaves the auction. */

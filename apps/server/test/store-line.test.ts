@@ -13,7 +13,7 @@ import { fakeContext, readyAll, seats } from './fake-context.js';
  */
 const engineOf = (game: MuleGame) => (game as unknown as { state: GameState }).state;
 
-/** Into the first good's walk, s1 passing and s2 buying, with only the store selling, and plenty. */
+/** Into the first good's walk, s1 passing and s2 buying, with only the store selling, and plenty, and nobody else buying. */
 function toWalk() {
   const { ctx, advance } = fakeContext();
   const game = new MuleGame(ctx, 7);
@@ -33,6 +33,10 @@ function toWalk() {
   advance(WALK.tickMs * 2);
   const auction = game.viewFor('s2').auction!;
   expect(auction.stage).toBe('walk');
+  // Nor does the AI seat buy: with DEV_STEER.on it times its month's walking on the arcade floor (monthWalkSeconds),
+  // declares a Food buyer, and orders 9 from the store's line itself on seed 7. Only s2 trades with the store here.
+  const baron = state.auction!.walkers.find((w) => w.id === 's3')!;
+  Object.assign(baron, { side: 'pass', dir: 0 });
   state.players.find((p) => p.id === 's2')!.money = 5_000;
   return { game, advance, state, good: auction.good };
 }

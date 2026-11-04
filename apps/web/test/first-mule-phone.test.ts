@@ -1,9 +1,9 @@
-import { DEVELOPMENT, tileIndex, type GameState } from '@mule/engine';
+import { DEV_STEER, DEVELOPMENT, tileIndex, type GameState } from '@mule/engine';
 import type { MuleView, TableView } from '@mule/protocol';
 import { Timer } from '@mule/ui';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { MuleGame } from '../../server/src/mule-game';
 import { tapThere, toDevelopment, walkers } from '../../server/test/fake-context';
 import type { TableClient } from '../src/net/client';
@@ -57,9 +57,27 @@ function phone(game: MuleGame, now: number, seat: string, sent: unknown[] = []):
   return renderToStaticMarkup(createElement(ClientProvider, { client, children: createElement(PhoneGameProvider, { value, children: createElement(Develop) }) }));
 }
 
+/**
+ * Pins a describe to the tap path: these tests draw today's Develop, the screen a flag-off server's phone shows, so
+ * their games are built with DEV_STEER.on off (devSteer false) and play by taps; the flag is put back after.
+ */
+function onTheTapPath(): void {
+  let flag = DEV_STEER.on;
+  beforeEach(() => {
+    flag = DEV_STEER.on;
+    DEV_STEER.on = false;
+  });
+  afterEach(() => {
+    DEV_STEER.on = flag;
+  });
+}
+
 const text = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'").replace(/\s+/g, ' ').trim();
 
 describe("A-1: the phone while month 1's development clock waits", () => {
+  // the tap path (devSteer: false), kept while it remains the flag-off fallback
+  onTheTapPath();
+
   it('A-1: the turn is not over; the corral, the walk out and the pub are there; the clock waits, full, in the mock’s words', () => {
     const { game, ctx } = firstMonth();
     const html = phone(game, ctx.now(), LENA);
@@ -105,6 +123,9 @@ describe("A-1: the phone while month 1's development clock waits", () => {
 });
 
 describe("A-1: the host's Start the clock while month 1's development clock waits", () => {
+  // the tap path (devSteer: false), kept while it remains the flag-off fallback
+  onTheTapPath();
+
   const BUTTON = 'data-testid="continue"';
 
   it('A-1: the host sees "Start the clock without Ossa" once the host’s own first MULE is in and Ossa’s is still to come', () => {
@@ -137,6 +158,9 @@ describe("A-1: the host's Start the clock while month 1's development clock wait
 });
 
 describe('A-1: a seat with no plot is in from the start, and waits', () => {
+  // the tap path (devSteer: false), kept while it remains the flag-off fallback
+  onTheTapPath();
+
   it('A-1: with no plot, the Now card says so and names who the clock waits for; the corral is shut and the pub open', () => {
     const { game, ctx } = firstMonth([OSSA]);
     const html = phone(game, ctx.now(), LENA);
@@ -149,6 +173,9 @@ describe('A-1: a seat with no plot is in from the start, and waits', () => {
 });
 
 describe('A-1: with two or more still to come, the wait names the first and counts the rest', () => {
+  // the tap path (devSteer: false), kept while it remains the flag-off fallback
+  onTheTapPath();
+
   it('A-1: "Your MULE is in · waiting for Ossa +1" when Ossa and Kai are still to come', () => {
     const { game, ctx, installFirst } = firstMonth([LENA, OSSA, KAI], TABLE);
     installFirst(LENA);

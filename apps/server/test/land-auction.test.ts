@@ -1,9 +1,9 @@
 import type { GameContext } from '@tabletop/core';
-import { describe, expect, it } from 'vitest';
-import { COLONY_SELLER, GAME, LOTS, RuleError, TAX, WALK, type GameState } from '@mule/engine';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { boxOf, COLONY_SELLER, DEV_STEER, doorOutside, floorConfig, GAME, HALL, LOTS, pathTo, RuleError, TAX, WALK, WOLVES, type GameState, type HallDoor, type HallPlace, type Outfit } from '@mule/engine';
 import type { MuleView } from '@mule/protocol';
 import { GRANT_TICK_MS, MuleGame } from '../src/mule-game.js';
-import { colonySeed, tapThere } from './fake-context.js';
+import { colonySeed, pressAct, steerTo, type SteerPoint } from './fake-context.js';
 
 /** A context with a manual clock, so phase timers and the auction tick run instantly. */
 function fakeContext() {
@@ -37,6 +37,94 @@ function fakeContext() {
   return { ctx, advance };
 }
 
+// --- Steered development, walked as dev-steer.test.ts walks it: steerTo and pressAct, nothing tapped. ---
+
+/** A steered development as these tests drive it: the game, its fake clock, and its engine state for the map's routes. */
+type Floor = { game: MuleGame; advance: (ms: number) => void; state: GameState; tickMs: number };
+type Spot = { x: number; y: number };
+
+/** Where a seat's colonist stands, as the TV reads it. */
+function standing(g: Floor, seat: string): SteerPoint {
+  const c = g.game.viewFor(null).players.find((p) => p.id === seat)!.colonist!;
+  return { space: c.space!, x: c.x!, y: c.y! };
+}
+
+/** The one button, once its words say `verb`: pressed as a phone presses it. */
+function press(g: Floor, seat: string, verb: string): void {
+  expect(g.game.viewFor(seat).me?.reach?.verb, `${seat}'s button`).toMatch(verb);
+  pressAct(g.game, g, seat, { tickMs: g.tickMs });
+}
+
+/** In the hall: onto the walkway, along it, and into `place` (a door's own spot, else the middle of its room). */
+function hallTo(g: Floor, seat: string, place: HallPlace): void {
+  const walkway = HALL.floor[0]!;
+  const y = (walkway.y0 + walkway.y1) / 2;
+  const box = boxOf(place);
+  const to = place === 'doorL' || place === 'doorR' ? HALL.spots[place] : { x: (box.x0 + box.x1) / 2, y: (box.y0 + box.y1) / 2 };
+  const at = standing(g, seat);
+  steerTo(g.game, g, seat, [{ space: 'hall', x: at.x, y }, { space: 'hall', x: to.x, y }, { space: 'hall', ...to }], { tickMs: g.tickMs });
+}
+
+/** On the map: by the engine's quickest route (pathTo, the AI's own), tile centre by tile centre, to `to`. */
+function mapTo(g: Floor, seat: string, to: Spot, within?: number): void {
+  const path = pathTo(g.state, standing(g, seat), to, floorConfig());
+  if (!path) throw new Error(`no route for ${seat} to (${to.x}, ${to.y})`);
+  const turns = path.tiles.slice(1, -1).map((t): SteerPoint => ({ space: 'map', x: Math.floor(t.x) + 0.5, y: Math.floor(t.y) + 0.5 }));
+  steerTo(g.game, g, seat, [...turns, { space: 'map', ...to }], { tickMs: g.tickMs, ...(within === undefined ? {} : { within }) });
+}
+
+/**
+ * Where a colonist stands to work plot `p`: its middle, or for a lake plot a point on a land tile beside it, a quarter
+ * tile from the water, inside the shore's reach (DEV_STEER.shoreReachTiles). Null for a lake plot with no land beside it.
+ */
+function shoreOf(g: Floor, p: Spot): Spot | null {
+  const { width, height, tiles } = g.state;
+  if (tiles[p.y * width + p.x]!.terrain !== 'lake') return { x: p.x + 0.5, y: p.y + 0.5 };
+  for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+    const [x, y] = [p.x + dx, p.y + dy];
+    if (x < 0 || y < 0 || x >= width || y >= height || ['lake', 'store'].includes(tiles[y * width + x]!.terrain)) continue;
+    return { x: p.x + 0.5 + dx * 0.75, y: p.y + 0.5 + dy * 0.75 };
+  }
+  return null;
+}
+
+/** The store door on a point's side of the store. */
+const doorFor = (g: Floor, at: Spot): HallDoor => (at.x < g.state.tiles.find((t) => t.terrain === 'store')!.x ? 'doorL' : 'doorR');
+
+/** Into the store from wherever on the map the colonist stands: to the nearer door's mouth, and ENTER STORE. */
+function goIn(g: Floor, seat: string): void {
+  const at = standing(g, seat);
+  if (at.space === 'hall') return;
+  mapTo(g, seat, doorOutside(g.state, doorFor(g, at), floorConfig()), 0.1);
+  press(g, seat, 'ENTER STORE');
+}
+
+/** BUY MULE at the corral and OUTFIT at `outfit`'s shopfront; the colonist stays in the hall. */
+function buyAndOutfit(g: Floor, seat: string, outfit: Outfit): void {
+  goIn(g, seat);
+  hallTo(g, seat, 'corral');
+  press(g, seat, 'BUY MULE');
+  hallTo(g, seat, outfit);
+  press(g, seat, 'OUTFIT');
+}
+
+/** Out by the door on the plot's side with the MULE on its lead, to where the plot is worked, and INSTALL. */
+function installOn(g: Floor, seat: string, plot: Spot): void {
+  if (standing(g, seat).space === 'hall') {
+    hallTo(g, seat, doorFor(g, plot));
+    press(g, seat, 'LEAVE');
+  }
+  mapTo(g, seat, shoreOf(g, plot)!);
+  press(g, seat, 'INSTALL');
+}
+
+/** In by the nearer door, to the pub, and PUB · END TURN. */
+function toThePub(g: Floor, seat: string): void {
+  goIn(g, seat);
+  hallTo(g, seat, 'pub');
+  press(g, seat, 'PUB · END TURN');
+}
+
 // Three humans at the kitchen table, in seat order.
 const seats = [
   { id: 'b', name: 'Brix', isAi: false, color: 0 },
@@ -51,9 +139,9 @@ const at = (p: Plot) => `${p.x}·${p.y}`;
 /**
  * Plays month 1 through the same moves the phones send: in the land grant
  * Brix, then Lena, then Ossa each claim the next two plots that light up;
- * with `mule`, Brix fits a Food MULE to his first plot in development.
- * Everyone goes to the pub, the goods auction runs out, and the game stops
- * in month 2's planning.
+ * with `mule`, Brix fits a Food MULE to his first plot in development, his
+ * colonist steered there. Everyone walks to the pub, the goods auction runs
+ * out, and the game stops in month 2's planning.
  */
 function toMonth2Planning(opts: { mule?: boolean; phaseScale?: number } = {}) {
   const { ctx, advance } = fakeContext();
@@ -78,12 +166,16 @@ function toMonth2Planning(opts: { mule?: boolean; phaseScale?: number } = {}) {
   expect(game.viewFor(null).phase).toBe('development');
   // A seat that fell sick plays the roll call first, and nobody acts until it ends.
   advance(Math.max(0, (game.viewFor(null).eventShow?.endsAt ?? 0) - ctx.now()));
+  const g = { game, advance, state: (game as unknown as { state: GameState }).state, tickMs: DEV_STEER.tickMs * (opts.phaseScale ?? 1) };
+  // A steered colonist installs where it stands, on the plot or on a lake plot's shore. Seed 7 lights Brix two lake
+  // plots, and only the second has a shore: the plot his MULE can go on is listed first, as his first plot.
+  const [mulePlot] = plots.b!.splice(plots.b!.findIndex((p) => shoreOf(g, p) !== null), 1);
+  plots.b!.unshift(mulePlot!);
   if (opts.mule) {
-    tapThere(game, { ctx, advance }, 'b', { type: 'buyMule' });
-    tapThere(game, { ctx, advance }, 'b', { type: 'outfit', outfit: 'food' });
-    tapThere(game, { ctx, advance }, 'b', { type: 'install', ...plots.b![0]! });
+    buyAndOutfit(g, 'b', 'food');
+    installOn(g, 'b', mulePlot!);
   }
-  for (const id of humans) tapThere(game, { ctx, advance }, id, { type: 'pub' });
+  for (const id of humans) toThePub(g, id);
   note();
   while (game.viewFor(null).phase === 'production') advance(1_000);
   note();
@@ -135,6 +227,16 @@ function ringBell(game: MuleGame, advance: (ms: number) => void, ids: string[]) 
 }
 
 describe('land auction on the server', () => {
+  // Development is only the way to the auction here: no pack comes for a colonist on its errand (arcade moments).
+  let wolves = WOLVES.on;
+  beforeEach(() => {
+    wolves = WOLVES.on;
+    WOLVES.on = false;
+  });
+  afterEach(() => {
+    WOLVES.on = wolves;
+  });
+
   it('UBER-AC-1 / B-AC-2: a listed plot goes to the highest bidder at their bid at the bell; the money moves less sales tax and the news names the sale', () => {
     const { game, advance, plots } = toMonth2Planning({ mule: true });
     const plot = plots.b![0]!;
@@ -366,8 +468,9 @@ describe('land auction on the server', () => {
     expect(tile(dev, plot).outfit).toBeNull();
     expect(money(dev, 'l')).toBe(money(before, 'l') - bid);
 
-    // Lena goes to the pub without installing it, so the MULE runs off.
-    for (const id of humans) game.handle(id, { type: 'pub' });
+    // Lena walks to the pub without installing it, so the MULE runs off.
+    const g = { game, advance, state: (game as unknown as { state: GameState }).state, tickMs: DEV_STEER.tickMs };
+    for (const id of humans) toThePub(g, id);
     const ran = game.viewFor('l');
     expect(ran.phase).not.toBe('development');
     expect(ran.me!.carriedMule).toBeNull();
