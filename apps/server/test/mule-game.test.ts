@@ -356,6 +356,11 @@ describe('MuleGame', () => {
           advance(WALK.tickMs);
           i++;
         }
+        // A good's close stage (A-5) is neither: step through it, and count the step, so the loop always ends.
+        if (game.viewFor(null).phase === 'auction' && stage(game) !== 'status' && stage(game) !== 'walk') {
+          advance(WALK.tickMs);
+          i++;
+        }
       }
       expect(game.viewFor(null).phase).toBe('upkeep');
       // The AI's decision wait, a tick to press Done and one to step: never the old 8 s, never forever.
