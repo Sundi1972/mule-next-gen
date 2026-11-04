@@ -223,8 +223,8 @@ describe('development', () => {
   it('quotes the pub payout without changing the game, and pays exactly that', () => {
     const state = newGame();
     toPhase(state, 'development');
-    // 33 of 50 seconds pays a fraction, so a quote that rounds differently from the pay shows.
-    for (const [id, left] of [['p0', 50], ['p1', 5], ['p2', 0], ['p3', 33]] as const) {
+    // 33.5 s left pays a fraction in the first three months, so a quote that rounds differently from the pay shows.
+    for (const [id, left] of [['p0', DEVELOPMENT.fullSeconds], ['p1', 5], ['p2', 0], ['p3', 33.5]] as const) {
       const before = structuredClone(state);
       const quote = pubPayoutFor(state, id, left);
       expect(state, `${id}: a quote changes nothing`).toEqual(before);
