@@ -560,7 +560,7 @@ export function DevAudit({ state }: { state: DevState }) {
                   <rect x={6} y={5} width={4} height={14} rx={1} />
                   <rect x={14} y={5} width={4} height={14} rx={1} />
                 </svg>
-                0:{FULL}
+                {Math.floor(FULL / 60)}:{String(FULL % 60).padStart(2, '0')}
                 {mark('V8', 'status', 'bl')}
               </span>
             }

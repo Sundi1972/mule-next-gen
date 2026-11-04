@@ -63,6 +63,8 @@ function toWalk() {
   state.players.find((p) => p.id === 's1')!.money = 5_000;
   game.handle('s1', { type: 'declare', side: 'buyer' });
   game.handle('s2', { type: 'declare', side: 'pass' });
+  // The side pick has no clock (A-7): both phones press Ready once their sides are picked.
+  for (const s of seats) if (!s.isAi) game.handle(s.id, { type: 'ready' });
   for (let i = 0; i < 20_000 && game.viewFor(null).auction?.stage !== 'walk'; i++) advance(WALK.tickMs);
   expect(game.viewFor(null).auction?.stage).toBe('walk');
   return { game, advance, state, good };
