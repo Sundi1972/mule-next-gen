@@ -70,6 +70,8 @@ export class AiSeat {
   private landMonth = -1;
   /** The month whose land-grant playbook a writer was asked for: that month's planning asks no land decision. */
   private askedFor = -1;
+  /** The land plan this month's grant plays, fixed at the grant's first look (spec §4: the phase's first tick decides). */
+  private grantPlan: { month: number; plan: LandPlan } | null = null;
   /** Playbooks adopted for the newest month adopted, oldest first. */
   private adopted: readonly Playbook[] = [];
 
@@ -201,15 +203,18 @@ export class AiSeat {
 
   /**
    * This month's land plan, as its hands read it: planned once a month, settled now. In the land grant, a playbook
-   * adopted for the month ranks it. Only an adopted one: the seat's own path drafts, and its land play is WS9's to wire.
-   * Read from what is adopted at each look, never drafted and never cached, so it holds whenever the adopt lands.
+   * adopted for the month ranks it; the seat's own path drafts, so only an adopted playbook ranks it. Fixed at the
+   * grant's first look and kept for the grant: an adopt after that look plays from next month.
    */
   private landPlan(state: GameState): LandPlan {
     if (!this.land || this.landMonth !== state.month) this.planMonth(state);
     const plan = this.brain.resolveNow(this.land!, state).action;
     if (state.phase !== 'landGrant') return plan;
-    const path = this.playPath(state.month, 'landGrant');
-    return path.by === 'adopted' ? rankedBy(plan, path.playbook.landGrant?.ranked) : plan;
+    if (this.grantPlan?.month !== state.month) {
+      const path = this.playPath(state.month, 'landGrant');
+      this.grantPlan = { month: state.month, plan: path.by === 'adopted' ? rankedBy(plan, path.playbook.landGrant?.ranked) : plan };
+    }
+    return this.grantPlan.plan;
   }
 
   /** A writer was asked for this seat's land-grant playbook for `month`: that month's planning asks no land decision. */
