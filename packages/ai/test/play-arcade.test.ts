@@ -15,7 +15,7 @@ import {
   type Outfit,
 } from '@mule/engine';
 import { muleLegs, placePoint } from '../src/floor-time.js';
-import { simFloorConfig } from '../src/floor-turn.js';
+import { playFloorPhase, simFloorConfig } from '../src/floor-turn.js';
 import { ROTATION } from '../src/lineup.js';
 import { playGame, type DevTurn, type SeatSpec } from '../src/play.js';
 import { AiSeat } from '../src/seat.js';
@@ -101,6 +101,25 @@ describe('the sim referees the floor as the server will (arcade C10)', () => {
     const turns = steeredTurns(12).flat();
     for (const t of turns) expect(t.payout, `month ${t.month} ${t.id}`).toBe(t.quoted);
     expect(turns.every((t) => t.quoted !== null)).toBe(true);
+  });
+
+  it("AM-19: a turn steps tick n only while n × tickMs is under the clock, so the bell comes first, as on the server", () => {
+    const saved = DEV_STEER.month1WaitsForFirstMule;
+    DEV_STEER.month1WaitsForFirstMule = false;
+    try {
+      steered(() => {
+        const state = createGame({ seed: 4, players: LEVELS.map((_, i) => ({ id: `ai${i}`, name: `AI ${i + 1}`, isAi: true })) });
+        while (state.phase !== 'development') advancePhase(state);
+        // Seats that stand still and never press: nobody goes to the pub, so the turn runs to the bell.
+        const idle = state.players.map((p) => ({ id: p.id, developSteer: () => ({ x: 0, y: 0, act: false }) })) as unknown as AiSeat[];
+        const phase = playFloorPhase(state, idle);
+        let ticks = 0;
+        for (let step = phase.next(); !step.done; step = phase.next()) ticks++;
+        expect(ticks).toBe((DEVELOPMENT.fullSeconds * MS_PER_SECOND) / DEV_STEER.tickMs - 1);
+      });
+    } finally {
+      DEV_STEER.month1WaitsForFirstMule = saved;
+    }
   });
 
   it('AM-3: in month 1 the clock stands until every seat has its first MULE in, and runs at once without the rule', { timeout: 120_000 }, () => {
