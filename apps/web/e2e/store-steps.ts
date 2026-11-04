@@ -1080,22 +1080,26 @@ function seatSnapshot(server: MuleServer, code: string, seat: string): string {
 }
 
 /**
- * B-AC-1: one phone sideways, no TV, only the stick (steerTo's held keys) and the button (pressAct): in through the
- * store's door, buy at the corral, outfit for Energy, out through a door with the MULE on its lead, install on her own
- * plot, back in and end at the pub, the button saying each step before it and the server's money and plot after each
- * press. Negative: a press with nothing in reach changes nothing on the server. Mia stays connected, so a turn is not
- * over when Heiko's is. Ends with Heiko at the pub.
+ * UBER-AC-1 and B-AC-1: one phone held sideways at 667×375, played with only the stick and the button (steerTo and
+ * throughDoor `via: 'stick'`, pressAct `via: 'button'`): in through the store's door, buy at the corral, outfit for
+ * Energy, out through a door with the MULE on its lead, install on her own plot, back in and end at the pub, the button
+ * saying each step before it and the server's money and plot after each press, with no TV at the table: a phone alone
+ * plays the whole turn (UBER-AC-1's TV half, every colonist drawn where the server has it, is B-AC-2's). Negative: a
+ * press with nothing in reach changes nothing on the server. Mia stays connected, so a turn is not over when Heiko's is.
+ * Ends with Heiko at the pub.
  */
 export async function theWholeErrandByStickAndButton(t: ArcadeTable): Promise<string> {
   const { heiko: phone, server, code } = t;
-  check(t.tv === null, 'B-AC-1: no TV at this table');
+  check(t.tv === null, 'UBER-AC-1, B-AC-1: no TV at this table');
   const seat = 's1';
   const steps: string[] = [];
+  const stick = { via: 'stick' } as const;
+  await phone.setViewportSize(PHONE_SMALL.viewport);
   const money = () => playerOf(server, code, seat).money;
 
   // In through the door with the button.
   await expectButton(phone, server, code, seat, 'ENTER STORE', 'B-AC-1');
-  await pressAct(phone);
+  await pressAct(phone, { via: 'button' });
   const inside = await floorWhen(phone, server, code, seat, (c) => c.space === 'hall');
   check(inside.space === 'hall', `B-AC-1: ENTER STORE takes Heiko into the hall, got ${where(inside)}`);
   steps.push('in');
@@ -1104,12 +1108,13 @@ export async function theWholeErrandByStickAndButton(t: ArcadeTable): Promise<st
   const walk = HALL.floor[0]!;
   const open = { space: 'hall' as const, x: HALL.w * 0.62, y: (walk.y0 + walk.y1) / 2 };
   check(placeAt(open) === null, 'B-AC-1: the negative press stands on open walkway');
-  await steerTo(phone, server, code, seat, open);
+  await steerTo(phone, server, code, seat, open, stick);
   const dim = await buttonSays(phone, server, code, seat);
   check(!dim.enabled, `B-AC-1 (negative): on the walkway nothing is in reach, got "${dim.server}" lit`);
   const before = seatSnapshot(server, code, seat);
   const stood = onFloor(server, code, seat);
   const a0 = t.wires.heiko.acts.length;
+  // The dim button takes no tap, so the press the server must refuse is SPACE's, which still sends the act.
   await pressAct(phone);
   await phone.waitForTimeout(STOP_MS);
   check(seatSnapshot(server, code, seat) === before, `B-AC-1 (negative): a press with nothing in reach changes nothing on the server, ${before} → ${seatSnapshot(server, code, seat)}`);
@@ -1118,20 +1123,20 @@ export async function theWholeErrandByStickAndButton(t: ArcadeTable): Promise<st
   steps.push(`dim "${dim.phone}" (${t.wires.heiko.acts.length - a0} press sent, nothing changed)`);
 
   // Buy at the corral.
-  await steerTo(phone, server, code, seat, hallPlace('corral'));
+  await steerTo(phone, server, code, seat, hallPlace('corral'), stick);
   await expectButton(phone, server, code, seat, 'BUY MULE', 'B-AC-1');
   const m0 = money();
   const price = mulePrice(gameOf(server, code).state);
-  await pressAct(phone);
+  await pressAct(phone, { via: 'button' });
   const bought = await playerWhen(phone, server, code, seat, (p) => p.carriedMule === 'empty');
   check(bought.carriedMule === 'empty' && bought.money === m0 - price, `B-AC-1: BUY MULE leads an empty MULE and costs ${price}, money ${m0} → ${bought.money}, MULE ${bought.carriedMule}`);
   steps.push(`bought ${m0} → ${bought.money}`);
 
   // Outfit for Energy.
-  await steerTo(phone, server, code, seat, hallPlace('energy'));
+  await steerTo(phone, server, code, seat, hallPlace('energy'), stick);
   await expectButton(phone, server, code, seat, 'OUTFIT · ENERGY', 'B-AC-1');
   const m1 = money();
-  await pressAct(phone);
+  await pressAct(phone, { via: 'button' });
   const outfitted = await playerWhen(phone, server, code, seat, (p) => p.carriedMule === 'energy');
   check(outfitted.carriedMule === 'energy' && outfitted.money < m1, `B-AC-1: OUTFIT · Energy outfits the MULE for money, ${m1} → ${outfitted.money}, MULE ${outfitted.carriedMule}`);
   steps.push(`outfitted ${m1} → ${outfitted.money}`);
@@ -1140,27 +1145,27 @@ export async function theWholeErrandByStickAndButton(t: ArcadeTable): Promise<st
   const plot = gameOf(server, code).state.tiles.find((k) => k.owner === seat && k.terrain !== 'lake');
   check(plot, 'B-AC-1: Heiko owns a plot on land to install on');
   const store = gameOf(server, code).state.tiles.find((k) => k.terrain === 'store')!;
-  await throughDoor(phone, server, code, seat, plot.x < store.x ? 'doorL' : 'doorR');
+  await throughDoor(phone, server, code, seat, plot.x < store.x ? 'doorL' : 'doorR', stick);
   const out = onFloor(server, code, seat) as FloorColonist & { lead?: unknown };
   const lead = (steeredOf(server, code).steering!.floor.colonists.find((c) => c.id === seat) as unknown as { lead: { good: string | null } | null }).lead;
   check(out.space === 'map' && lead?.good === 'energy', `B-AC-1: out on the map with the Energy MULE on its lead, got ${where(out)}, lead ${JSON.stringify(lead)}`);
   steps.push(`out at ${where(out)}`);
 
   // Install on her own plot.
-  await steerTo(phone, server, code, seat, plotCentre(plot.x, plot.y));
+  await steerTo(phone, server, code, seat, plotCentre(plot.x, plot.y), stick);
   await expectButton(phone, server, code, seat, 'INSTALL · ENERGY', 'B-AC-1');
-  await pressAct(phone);
+  await pressAct(phone, { via: 'button' });
   const installed = await playerWhen(phone, server, code, seat, (p) => p.carriedMule === null);
   const tile = gameOf(server, code).state.tiles.find((k) => k.x === plot.x && k.y === plot.y)!;
   check(installed.carriedMule === null && tile.outfit === 'energy', `B-AC-1: INSTALL puts the Energy MULE on ${plot.x},${plot.y}, outfit ${tile.outfit}, MULE ${installed.carriedMule}`);
   steps.push(`installed on ${plot.x},${plot.y}`);
 
   // Back in and end at the pub.
-  await throughDoor(phone, server, code, seat);
-  await steerTo(phone, server, code, seat, hallPlace('pub'));
+  await throughDoor(phone, server, code, seat, undefined, stick);
+  await steerTo(phone, server, code, seat, hallPlace('pub'), stick);
   const { detail } = await expectButton(phone, server, code, seat, 'PUB · END TURN', 'B-AC-1');
   const m2 = money();
-  await pressAct(phone);
+  await pressAct(phone, { via: 'button' });
   const done = await playerWhen(phone, server, code, seat, (p) => p.doneDeveloping);
   check(done.doneDeveloping && done.money > m2, `B-AC-1: the pub ends Heiko's turn and pays (${detail}), money ${m2} → ${done.money}`);
   check(gameOf(server, code).state.phase === 'development', "B-AC-1: Mia's turn goes on: development is not over");
