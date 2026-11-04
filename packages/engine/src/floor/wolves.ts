@@ -210,7 +210,8 @@ function stepFight(state: GameState, c0: FloorColonist, e: FloorEncounter, input
     const i = strikeTarget(now, cfg);
     if (i >= 0) {
       strikes++;
-      wolves = wolves.map((w, j) => (j === i ? { ...w, state: 'hurt', sinceTick: tick, untilTick: tick + ticksOf(W.hurtSeconds, cfg) } : w));
+      // Struck, crouching or not, it aims at nothing (AM-28: a target only while it crouches and lunges).
+      wolves = wolves.map((w, j) => (j === i ? { ...w, state: 'hurt', sinceTick: tick, untilTick: tick + ticksOf(W.hurtSeconds, cfg), target: null } : w));
     } else recoverUntilTick = tick + ticksOf(W.whiffSeconds, cfg);
     now = { ...now, encounter: { ...now.encounter!, wolves, strikes, recoverUntilTick } };
   }
