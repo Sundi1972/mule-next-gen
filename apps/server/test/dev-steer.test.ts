@@ -405,6 +405,26 @@ describe('T-AC-9: development never stalls on a phone', () => {
   });
 });
 
+describe('T-AC-9 (AM-3): month 1 refuses a seat already in on the floor too', () => {
+  it("while the clock waits for Ossa's first MULE, Lena, already in, presses BUY MULE at the corral: refused, her money and her lead unchanged, and the press counted refused", () => {
+    const g = steered({ firstMonthWaits: true, ossaHome: true });
+    lenaInstalls(g);
+    expect(g.game.viewFor(null).clockWaitsFor, 'Ossa is present and not in').toEqual([OSSA]);
+    const mouth: SteerPoint = { space: 'map', ...doorOutside(g.state, 'doorL', serverCfg()) };
+    steerTo(g.game, g, LENA, [mouth], { within: 0.1 });
+    pressAct(g.game, g, LENA);
+    steerTo(g.game, g, LENA, toRoom('corral'));
+    expect(reachOfSeat(g, LENA)).toMatchObject({ verb: 'BUY MULE', enabled: true });
+    const stats = (g.game as unknown as { steering: { stats: { acts: number; refused: number } } }).steering.stats;
+    const { acts, refused } = stats;
+    const before = { money: meOf(g, LENA).money, mule: meOf(g, LENA).carriedMule, corral: g.state.store.mules };
+    pressAct(g.game, g, LENA);
+    expect({ money: meOf(g, LENA).money, mule: meOf(g, LENA).carriedMule, corral: g.state.store.mules }).toEqual(before);
+    expect([stats.acts, stats.refused], 'counted as refused, for the phase log').toEqual([acts, refused + 1]);
+    expect(g.game.viewFor(null).clockWaitsFor).toEqual([OSSA]);
+  });
+});
+
 describe('the steered view (flag on)', () => {
   it("ColonistView: the floor's colonist with its v1 fields; assayUntil is development's start + assayUntilTick × tickMs, and bitten only while true", () => {
     const g = steered();
