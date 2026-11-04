@@ -15,6 +15,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
+  "dependencies": {
+    "@mule/engine": "workspace:*"
+  },
   "peerDependencies": {
     "react": "^18.3.1"
   },
