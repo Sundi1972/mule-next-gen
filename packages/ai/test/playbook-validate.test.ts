@@ -343,6 +343,25 @@ describe('the level bound', () => {
     expect(trader.r.playbook.strategy).toMatchObject({ monopolyTarget: 'smithore', kind: 'monopolist' });
     expect(read(trader.r.playbook, `/auction/${good}/hold`)).toBe(trader.hold + 3);
     expect(trader.r.rejected).toEqual([]);
+    // Row 3 reads the engine's fresh draft, not the playbook handed in: a stale Rookie playbook set on cornering Smithore
+    // buys no more than the engine's own draft would, and a fractional hold is a whole number.
+    const rookieMind = mindOf(2, 'rookie');
+    const fresh = draftOf(at.auction, 'auction', rookieMind, 102);
+    const stale = structuredClone(fresh);
+    stale.strategy = { ...stale.strategy, kind: 'monopolist', monopolyTarget: 'smithore' };
+    stale.auction!.smithore = { ...stale.auction!.smithore!, role: 'buyer', hold: 999 };
+    stale.auction![good] = { ...stale.auction![good]!, role: 'buyer', hold: 3.6, start: 1, walkAway: 1 };
+    expect(fresh.auction![good]!.hold).toBeGreaterThanOrEqual(4);
+    const cornered = validatorFor({ mind: rookieMind, seed: 102 })(at.auction, 'ai2', stale, []);
+    const ore = fresh.auction!.smithore!.hold;
+    expect(read(cornered.playbook, '/auction/smithore/hold')).toBe(ore);
+    expect(read(cornered.playbook, `/auction/${good}/hold`)).toBe(4);
+    expect(cornered.rejected).toEqual([
+      { path: '/strategy/kind', to: 'monopolist', why: `level never corners; the engine's draft plays ${fresh.strategy.kind}` },
+      { path: '/strategy/monopolyTarget', to: 'smithore', why: "level never corners; the engine's draft plays null" },
+      { path: `/auction/${good}/hold`, to: 3.6, why: 'clamped to 4: a whole number' },
+      { path: '/auction/smithore/hold', to: 999, why: `clamped to ${ore}: level never corners` },
+    ]);
     // Positive control: the same Rookie with corners forced true accepts the target.
     const cornering = { ...mindOf(2, 'rookie'), level: { ...mindOf(2, 'rookie').level, corners: true } };
     expect(one('planning', '/strategy/monopolyTarget', 'smithore', { mind: cornering })).toMatchObject({ plays: 'smithore', why: null });
@@ -420,21 +439,28 @@ describe("the engine's own draft passes the gate", () => {
       if (!drafts.has(key)) drafts.set(key, draftOf(at[phase], phase, mindOf(i), 100 + i));
       return structuredClone(drafts.get(key)!);
     };
-    const gate = (phase: DraftPhase, i: number, pb: Playbook) => validatorFor({ mind: mindOf(i), seed: 100 + i })(at[phase], `ai${i}`, pb, []);
+    const gate = (phase: DraftPhase, i: number, pb: Playbook, mind: Mind) => validatorFor({ mind, seed: 100 + i })(at[phase], `ai${i}`, pb, []);
     const plays = (pb: Playbook) => {
       const { rejected: _, ...rest } = pb;
       return stableJson(rest);
     };
     const isObject = (v: unknown) => v !== null && typeof v === 'object' && !Array.isArray(v);
     /** Validates `pb`, then its output twice more: each pass must take the one before unchanged. */
-    const fixedPoint = (phase: DraftPhase, i: number, pb: Playbook, label: string) => {
-      const first = gate(phase, i, pb);
+    const fixedPoint = (phase: DraftPhase, i: number, pb: Playbook, label: string, mind = mindOf(i)) => {
+      const first = gate(phase, i, pb, mind);
       let out = first.playbook;
+      // RULE-2 row 3: a seat that never corners buys no more than the engine's fresh draft, under the strategy that plays.
+      if (!mind.level.corners && out.auction) {
+        const engine = draftPlaybook({ state: at[phase], seat: mind.me, mind, seed: 100 + i, phase: 'auction', strategy: out.strategy }).auction!;
+        for (const [g, play] of Object.entries(out.auction)) {
+          if (play?.role === 'buyer') expect(play.hold, `${label}: ${g}'s hold at corners false`).toBeLessThanOrEqual(engine[g as keyof typeof engine]?.hold ?? 0);
+        }
+      }
       // The rows hold no field whose container is not an object, so the containers are checked here.
       const containers = [out.strategy.stances, ...(['planning', 'landGrant', 'development', 'auction'] as const).filter((k) => out[k] !== undefined).map((k) => out[k]), ...Object.values(out.auction ?? {})];
       expect(containers.every(isObject), `${label}: every part and good is an object`).toBe(true);
       for (const pass of [2, 3]) {
-        const r = gate(phase, i, out);
+        const r = gate(phase, i, out, mind);
         expect(r.rejected, `${label}, pass ${pass}`).toEqual([]);
         expect(plays(r.playbook), `${label}, pass ${pass}`).toBe(plays(out));
         out = r.playbook;
@@ -458,6 +484,11 @@ describe("the engine's own draft passes the gate", () => {
     energy.auction!.energy = { ...energy.auction!.energy!, role: 'seller', hold: NaN };
     const powered = fixedPoint('auction', 2, energy, 'probe: a seller with no hold').playbook.auction!.energy!;
     if (powered.role === 'seller') expect(powered.hold).toBeGreaterThanOrEqual(monthNeeds(at.auction, 'ai2').energy);
+    // A Rookie handed a playbook set on cornering Smithore.
+    const cornering = draftFor('auction', 2);
+    cornering.strategy = { ...cornering.strategy, kind: 'monopolist', monopolyTarget: 'smithore' };
+    cornering.auction!.smithore = { ...cornering.auction!.smithore!, role: 'buyer', hold: 999 };
+    fixedPoint('auction', 2, cornering, 'probe: a Rookie buying Smithore to corner it', mindOf(2, 'rookie'));
     // A part, or a good's play, that is not an object at all is replaced, not passed over.
     const nulled = draftFor('auction', 2);
     (nulled.auction as Record<string, unknown>).food = null;
@@ -527,7 +558,9 @@ describe("the engine's own draft passes the gate", () => {
         put(pb, [...at, field], v);
         changed.push(`/${[...at, field].join('/')}=${typeof v === 'symbol' ? 'dropped' : JSON.stringify(v)}`);
       }
-      fixedPoint(phase, i, pb, `case ${n}: ${phase} ai${i} ${changed.join(' ')}`);
+      // Every other case is validated by the seat's Rookie, which never corners: a Trader's draft is foreign to it.
+      const level = n % 2 === 1 ? 'rookie' : 'trader';
+      fixedPoint(phase, i, pb, `case ${n}: ${phase} ai${i} ${level} ${changed.join(' ')}`, mindOf(i, level));
       cases++;
     }
     expect(cases).toBe(50);
