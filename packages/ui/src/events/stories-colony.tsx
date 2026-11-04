@@ -8,6 +8,7 @@ import { useShow } from './frame';
 import { clamp, ramp } from './fx';
 import { At, px, type P } from './place';
 import { colonistAt } from './rollcall';
+import { epidemicSick } from './sick';
 import { Colonist, Crate, ease, Flame, lerp, mix, Smoke, storeAt, TOWN, useStoryClock, type Scene } from './scene';
 import type { ShowEffect, ShowEventKey } from './types';
 
@@ -188,16 +189,16 @@ const Migration: Scene = ({ ev, seg, size }) => {
 
 /**
  * The epidemic: a pink haze from the store; everyone without Medicine sneezes and goes pale; Medicine shields the rest.
- * The view names only the cured (their Medicine used): everyone else is sick this turn and next (RULE-4).
+ * Who it sickened is epidemicSick's one reading of the view.
  */
 const Epidemic: Scene = ({ ev, seg, size }) => {
   const frame = useShow();
   const { u, reduced, t } = useStoryClock(seg);
   if (u < 0 || u > 4.6) return null;
   const store = storeAt(frame, ev);
-  const cured = new Set((ev.effects ?? []).filter((f) => f.what === 'medicine').map((f) => f.on));
-  const sick = frame.cast.players.filter((p) => !cured.has(p.id));
-  const well = frame.cast.players.filter((p) => cured.has(p.id));
+  const ill = new Set(epidemicSick(ev, frame.cast.players));
+  const sick = frame.cast.players.filter((p) => ill.has(p.id));
+  const well = frame.cast.players.filter((p) => !ill.has(p.id));
   const haze = reduced ? 1 : ease(clamp((u - 0.2) / 1.6));
   return (
     <>

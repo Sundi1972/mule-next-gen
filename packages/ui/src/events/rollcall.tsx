@@ -4,6 +4,7 @@ import { PlayerMark } from '../components/PlayerMark';
 import { cx, type Slot } from '../components/tokens';
 import { effectWords, eventSegWho, lineShare, segTitle } from './copy';
 import { useShow, type ShowFrame } from './frame';
+import { epidemicSick } from './sick';
 import { clamp, ramp } from './fx';
 import { EventSignBadge } from './glyphs';
 import { At, px } from './place';
@@ -33,12 +34,7 @@ export function colonistAt({ tiles, grid, cast }: Pick<ShowFrame, 'tiles' | 'gri
 export function sickAt({ s, t, reduced, grid, cast }: ShowFrame): Set<string> {
   const landed = (g: EventSegment, e: ShowEventView) => t >= eventHitAt(g, e, null, reduced, grid);
   const sick = s.segments.flatMap((g) => g.events.filter((e) => e.key === 'sickness' && landed(g, e)).map((e) => cast.playerOf(e) ?? ''));
-  // An epidemic sickens everyone whose Medicine it did not use: the view names only the cured.
-  const sickened = s.segments.flatMap((g) =>
-    g.events
-      .filter((e) => e.key === 'epidemic' && landed(g, e))
-      .flatMap((e) => cast.players.filter((p) => !(e.effects ?? []).some((f) => f.on === p.id && f.what === 'medicine')).map((p) => p.id)),
-  );
+  const sickened = s.segments.flatMap((g) => g.events.filter((e) => e.key === 'epidemic' && landed(g, e)).flatMap((e) => epidemicSick(e, cast.players)));
   return new Set([...sick, ...sickened]);
 }
 

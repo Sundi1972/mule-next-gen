@@ -1,6 +1,6 @@
 import { GOOD_NAME, type Good } from '../components/tokens';
 import { signLook, type ShowCast } from './frame';
-import { sickBecause } from './sick';
+import { epidemicSick, sickBecause } from './sick';
 import type { EventSegment } from './timing';
 import type { ShowEffect, ShowEventKey, ShowEventView, ShowHit, ShowPhase } from './types';
 
@@ -186,9 +186,8 @@ function youFor(ev: ShowEventView, id: string, cast: ShowCast): EventYouSummary 
   }
   const detail = YOU[ev.key]?.(ev);
   const fx = (ev.effects ?? []).filter((f) => f.on === id);
-  // The epidemic sickens everyone whose Medicine it did not use (RULE-4): the view names only the cured.
   if (ev.key === 'epidemic') {
-    if (fx.length === 0) return { headline: 'You’re sick, 2 turns', short: 'sick, 2 turns', detail: detail ?? '', change: {}, sick: true };
+    if (epidemicSick(ev, cast.players).includes(id)) return { headline: 'You’re sick, 2 turns', short: 'sick, 2 turns', detail: detail ?? '', change: {}, sick: true };
     const words = fx.map(effectWords).join(', ');
     return { headline: `${words} for you`, short: words, detail: 'You held Medicine, so you stay well.', change: goodsOf(fx) };
   }
@@ -242,7 +241,6 @@ export function eventMissLine(seg: EventSegment, cast: ShowCast): string {
   const all = ALL[ev.key]?.(ev);
   if (all) return all;
   if (ev.key === 'meteorStrike') return `Not your land: ${lower(eventSummary(ev, cast))}.`;
-  if (ev.key === 'epidemic') return 'You hold Medicine, so you stay well.';
   const player = cast.playerOf(ev);
   if (player) return ev.hits.length ? `Not your land: it hit ${cast.name(player)}.` : `Not you: it hit ${cast.name(player)}.`;
   if (ev.effects?.length && !ev.hits.length) return `Not you: ${eventSummary(ev, cast)}.`;

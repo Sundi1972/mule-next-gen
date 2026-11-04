@@ -50,6 +50,8 @@ export function IntroCard({ size }: { size: ShowSize }) {
  * which swells where it is.
  */
 function flyTo(ev: ShowEventView, grid: { width: number; height: number }): { x: number; y: number } | null {
+  // A story flies the card to where it plays; without one (a ledger bulletin played as a headline, if EVENT_SHOW's
+  // weights change), the card goes where the change lands.
   if (!STORY[ev.key]) {
     if (motionOf(ev.key) === 'ledger') return { x: 0, y: 65 };
     if (motionOf(ev.key) === 'colony') return null;
@@ -112,10 +114,8 @@ export function EffectsCard({ seg, size }: { seg: EventSegment; size: ShowSize }
       .map((on) => ({ key: on, head: <span className={cx('label-caps', tv ? 'text-base!' : 'text-[10px]!')}>{on === 'colony' ? 'The colony' : 'The store'}</span>, items: fx.filter((f) => f.on === on) })),
   ];
   const out = ramp(t, seg.endAt - 0.4, 0.4);
-  // At the store with no story of its own, the card sits at the map's foot so the store stays in view.
-  const atStore = motionOf(ev.key) === 'store' && !STORY[ev.key];
   return (
-    <div className={cx('absolute inset-0 z-20 flex justify-center', atStore ? (tv ? 'items-end pb-4' : 'items-end pb-1.5') : 'items-center')} style={{ opacity: 1 - out }} data-testid="effects-card">
+    <div className="absolute inset-0 z-20 flex items-center justify-center" style={{ opacity: 1 - out }} data-testid="effects-card">
       <div className={cx('flex flex-col rounded-panel border-2 bg-panel/95 shadow-chip', !reduced && 'animate-[ev-pop_0.35s_ease-out]', tv ? 'gap-3 p-5' : 'gap-1.5 p-2.5')} style={{ width: `${cq(size, 520, 300)}cqw`, borderColor: signLook(ev.sign) === 'good' ? 'var(--color-ok)' : 'var(--color-alert)' }}>
         <span className="flex items-center gap-2">
           <EventSignBadge ev={ev} size={tv ? 44 : 26} />
