@@ -423,7 +423,7 @@ export class DevelopHand {
   /**
    * RULE-8: whether a detour to `to` still leaves the errand time to finish inside the turn: the walk there, then from
    * there every step left on the list and the pub, at the floor's speeds and with the presses' pauses (planSeconds, the
-   * estimates the plan is priced by), with botPubMarginSeconds in hand. Always true with DEV_STEER.botsSpareTime off.
+   * estimates the plan is priced by), with the hurry's margin in hand (restMargin). Always true with DEV_STEER.botsSpareTime off.
    */
   private fitsDetour(view: FloorView, c: FloorColonist, to: FloorPoint): boolean {
     const { state, cfg, secondsLeft } = view;
@@ -464,7 +464,8 @@ export class DevelopHand {
   }
 
   /**
-   * Whether an analysis or a filter, from where the colonist stands, still leaves time for the pub; and a MULE about to be
+   * Whether an analysis or a filter, from where the colonist stands, still leaves time for the pub with the hurry's margin
+   * in hand (restMargin: a hungry colonist's is several times botPubMarginSeconds); and a MULE about to be
    * bought, its errand to its plot and on to the pub priced as when it was planned (botPlanSlackShare longer, the hurry's
    * margin in hand): a walk to the corral that ran long drops the MULE before it is paid for (FM-hurry-margin).
    */
@@ -474,7 +475,7 @@ export class DevelopHand {
     if (a.type === 'buyMule') return this.restFrom(view, c) * (1 + cfg.steer.botPlanSlackShare) + this.restMargin(cfg, c) <= secondsLeft;
     if (a.type !== 'analyse' && a.type !== 'filter') return true;
     const work = a.type === 'analyse' ? this.assaySeconds(state, cfg, a.x, a.y) : 0;
-    return plotErrandSeconds(state, cfg, c, tileIndex(state.width, a.x, a.y), work) + cfg.steer.botPubMarginSeconds <= secondsLeft;
+    return plotErrandSeconds(state, cfg, c, tileIndex(state.width, a.x, a.y), work) + this.restMargin(cfg, c) <= secondsLeft;
   }
 
   /**
