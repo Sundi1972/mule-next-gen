@@ -18,13 +18,15 @@ Option-click selects an element for review comments; a plain click uses the prot
 ## Decisions
 
 - **Glyphs:** WS8's five, verbatim (`src/objects.tsx`, GLYPH and ObjectGlyph).
-- **Stage colours:** the build site's own. Standing is `ok`, building is `warn` with a dashed outline for a site, and
-  closed and damaged are `alert`, faded. The list and the map then agree.
-- **Corner chip:** in the map's flag style. It carries what colour can't: a site's months ("1/3"), SHUT or HIT.
+- **Stage colours:** the build site's own. A reserved site (commissioned, sited) is `holo`, dashed, with the glyph
+  faint. Building is `warn`, dashed. Standing is `ok`. Closed and damaged are `alert`, faded. The list and the map
+  then agree.
+- **Corner chip:** in the map's flag style. It carries what colour can't: SITE, a site's months ("1/3"), SHUT or HIT.
 - **Screen readers:** they hear the build site's words, for example "Stadium, building: 1 of 3 months" and
   "Park, closed: counts 0".
-- **The rest of the plot:** it keeps its special badge. It has no MULE, because a plot with an object makes nothing.
-  It has no owner's border or tab, pending WS7's answer on who owns the tile.
+- **The rest of the plot:** the colony owns it (`tile.owner = 'colony'`, set by C30's site bid; WS7's brief), so it has
+  no player's border or tab, and no MULE, since C30 clears the outfit and the plot makes nothing. It keeps its special
+  badge.
 
 ## The two variants
 
@@ -37,10 +39,12 @@ Option-click selects an element for review comments; a plain click uses the prot
 WS5's recommendation is **B**: the objects are the colony's landmarks, and nothing else on the map is a dark plot with
 no owner tab. Review the green.
 
-## Open questions (WS7)
+## Settled with WS7 (brief, 4 Nov)
 
-- **The tile's owner** after C30's site bid. This decides whether an owner border could ever share the plot.
-- **Which stages hold the plot.** The mock draws building, standing, closed and damaged.
+- `Project.plot` is set when C30 wins the site, while the project is still commissioned, and is never cleared. Only
+  park, stadium and spaceport have one.
+- The tile's owner is `'colony'`, so maps draw no player marks there. "Produces nothing" falls out of C30, with no
+  production code.
 
 ## Graft target
 
