@@ -256,6 +256,9 @@ async function readAt(phone: Page, size: { width: number; height: number }, scop
   // Two frames: the container queries and the map's plot size settle on the first.
   await phone.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
   await prep?.();
+  // Every surface is measured at rest: an entrance (a card dropping in from 40 px up) ends now, so its first frames are
+  // not read as off the screen. A looping animation has no end to jump to and is left running.
+  await phone.evaluate(`document.getAnimations().forEach((a) => { if (Number.isFinite(a.effect?.getComputedTiming().endTime)) a.finish(); })`);
   return (await phone.evaluate(`(${AUDIT_JS})(${JSON.stringify(scope)})`)) as AuditRead;
 }
 
