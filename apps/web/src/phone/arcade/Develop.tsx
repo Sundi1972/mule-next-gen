@@ -8,7 +8,7 @@ import { WIDE_PX } from '../Shell';
 import { keyDown, keyUp } from './controls';
 import { colonistBox, css, FRAMES, freeRun, overlap, phoneLayout, tileBox, type Box } from './layout';
 import { PhoneLive, useArcade, useLive } from './live';
-import { CompactClock, GroundChip, GuideNote, LeadChip, Money, OverCard, PaceLine, PlotCard, PlotsLegend, Reconnecting, WaitWords } from './parts';
+import { ChatTicker, CompactClock, GroundChip, GuideNote, LeadChip, Money, OverCard, PaceLine, PlotCard, PlotsLegend, Reconnecting, WaitWords } from './parts';
 import { arcadeSeat, type ArcadeSeat } from './seat';
 import { SeatProvider, YourStage } from './stages';
 
@@ -205,12 +205,18 @@ export function PhoneLandscape({ frame }: { frame: { w: number; h: number } }) {
           <OverCard seat={seat} installs={installs} />
         </div>
         {/* The status: in the side room either side of the map (nothing of it over the map), or at 667 a bar over the
-            map's top edge, clear of your plots and the target. */}
+            map's top edge, clear of your plots and the target. The left room stops above the stick. */}
         {L.left && (
-          <div className={cx('absolute flex flex-col gap-1.5', compactLeft ? 'p-1' : 'p-1.5')} style={{ left: L.left.x, top: L.left.y, width: L.left.w }} data-testid="phone-status-left" data-overlay="status-left">
+          <div className={cx('absolute flex flex-col gap-1.5 overflow-hidden', compactLeft ? 'p-1' : 'p-1.5')} style={{ left: L.left.x, top: L.left.y, width: L.left.w, maxHeight: L.left.h }} data-testid="phone-status-left" data-overlay="status-left">
             {!compactLeft && <span className="label-caps text-[10px]! leading-tight">M{view.month} · Development</span>}
             <Money seat={seat} className={compactLeft ? 'text-[11px] [&_*]:whitespace-nowrap' : 'text-base'} />
             {compactLeft ? <CompactClock seat={seat} /> : <SharedClock seconds={seat.seconds} total={seat.total} />}
+            {/* The newest line keeps its rows: when the room runs out, what follows it is cut at the room's foot. */}
+            {!compactLeft && (
+              <div className="shrink-0">
+                <ChatTicker seat={seat} keep={1} wrap />
+              </div>
+            )}
             <WaitWords seat={seat} short={compactLeft} />
             {!keys.focused && !compactLeft && (
               <span className="rounded-chip bg-panel/90 px-1 py-0.5 text-[10px] leading-tight text-ink-2 shadow-chip" data-testid="focus-hint">
@@ -245,8 +251,12 @@ export function PhoneLandscape({ frame }: { frame: { w: number; h: number } }) {
             <span className="relative min-w-0 shrink">
               <LeadChip seat={seat} className="px-1! text-[11px]!" />
             </span>
-            <span className="min-w-0 flex-1">
+            <span className="min-w-0 shrink">
               <PaceLine seat={seat} short />
+            </span>
+            {/* The newest line keeps a share of the bar however much the status says: the rest of it gives way first. */}
+            <span className="min-w-0 flex-[1_1_40%]">
+              <ChatTicker seat={seat} keep={1} />
             </span>
           </div>
         )}
@@ -337,6 +347,9 @@ export function LaptopArcade({ frame }: { frame: { w: number; h: number } }) {
             <span className="relative flex flex-col items-start">
               <LeadChip seat={seat} />
             </span>
+            <Panel title="Table chat">
+              <ChatTicker seat={seat} keep={2} wrap wide />
+            </Panel>
             <Panel title="Controls" className="mt-auto">
               <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-sm" data-testid="controls-legend">
                 {KEYS.map(([k, v]) => (
