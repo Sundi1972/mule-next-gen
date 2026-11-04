@@ -824,7 +824,9 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     // In planning and at the month end a dropped phone may be a player who locked it to think or read: both wait for
     // their Ready, or the host's Continue.
     const excused = (id: string) => this.away.has(id) && phase !== 'planning' && phase !== 'upkeep';
-    const waiting = this.seats.filter((s) => !s.isAi && !excused(s.id) && !this.ready.has(s.id) && !this.doneDeveloping(s.id));
+    // A steered development's AI colonist walks the floor (C9): the table waits for it as for a person, and it is never away.
+    const counts = (s: SeatInfo) => (s.isAi ? phase === 'development' && this.steered : !excused(s.id));
+    const waiting = this.seats.filter((s) => counts(s) && !this.ready.has(s.id) && !this.doneDeveloping(s.id));
     // The auctions end on their own, good by good and lot by lot.
     if (!phase || phase === 'gameOver' || phase === 'auction' || phase === 'landAuction') return;
     if (waiting.length > 0) {
@@ -1220,7 +1222,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     this.clockWaits = state.month === 1 && DEV_STEER.month1WaitsForFirstMule;
     if (this.clockWaits) this.startClockOnceAllIn();
     else this.startClock();
-    // With the flag on the AI seats stand until they steer (C9, the AI's own PR); today's taps would not walk the floor.
+    // Steered, the AI seats walk the floor by their hands inside the tick (C9, steerTick); the tap hands never run.
     if (this.ai.size > 0 && !this.steered) this.scheduleAiDevelop(state.month, now);
   }
 
@@ -1272,7 +1274,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   }
 
   /**
-   * One tick of RULE-1: each seat's input (an away seat's and, until C9, an AI seat's stand still), the step and the
+   * One tick of RULE-1: each seat's input (an away seat's stands still; an AI seat's from its hand), the step and the
    * presses it reaches, the frame to every screen, then development's early ends. True when the views must go: the
    * game changed, month 1's clock started, the phase ended, or a seat's reach words changed (AM-11).
    */
@@ -1281,11 +1283,12 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     const tick = steering.floor.tick;
     const at = steering.origin + (tick + 1) * this.realTickMs();
     steering.at = at;
+    const secondsLeft = Math.max(0, this.secondsLeft(at));
     const inputs: Record<string, FloorInput> = {};
-    for (const s of this.seats) inputs[s.id] = this.away.has(s.id) || s.isAi ? IDLE_INPUT : steering.inputs.take(s.id, tick);
+    for (const s of this.seats) inputs[s.id] = this.away.has(s.id) ? IDLE_INPUT : this.seatInput(steering, s.id, tick, secondsLeft);
     const before = Object.values(inputs).some((i) => i.act) ? stableJson(state) : null;
     const waited = this.clockWaits;
-    const { floor, presses } = stepTick(steering.floor, state, inputs, steering.cfg, Math.max(0, this.secondsLeft(at)), (seat, reach) => this.refusal(seat, reach));
+    const { floor, presses } = stepTick(steering.floor, state, inputs, steering.cfg, secondsLeft, (seat, reach) => this.refusal(seat, reach));
     steering.floor = floor;
     steering.stats.ticks++;
     for (const press of presses) {
@@ -1306,6 +1309,20 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       changed = true;
     }
     return changed;
+  }
+
+  /**
+   * A present seat's input for the step from `tick` (RULE-1 steps 1 and 2): a phone's latest steer and press; an AI
+   * seat's from its hand (C9), computed here inside the tick's recorded step, so a replay computes it again, from the
+   * floor before the step and the seconds the tick's presses resolve at, as the sim calls it (HC-4). `held` is the
+   * refusal's own test, so the hand never reaches for a press `refusal` would turn down; the press still goes through
+   * it. A seat whose turn is over stands still.
+   */
+  private seatInput(steering: Steering, seatId: string, tick: number, secondsLeft: number): FloorInput {
+    const ai = this.ai.get(seatId);
+    if (!ai) return steering.inputs.take(seatId, tick);
+    if (this.doneDeveloping(seatId)) return IDLE_INPUT;
+    return ai.developSteer(this.requireState(), steering.floor, secondsLeft, steering.cfg, this.clockWaits && this.isIn(seatId));
   }
 
   /** Why the rules hold back a press the floor would make, or null: in month 1 a seat already in waits (AM-3). */

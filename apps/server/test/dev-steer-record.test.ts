@@ -6,10 +6,14 @@ import { createRecordedGame } from '../src/record.js';
 import { replay } from '../src/replay.js';
 import { fakeContext, pressAct, readyAll, steerTo, walkers, type SteerPoint } from './fake-context.js';
 import { HALL, boxOf } from '@mule/engine';
+import type { SeatInfo } from '@tabletop/core';
 
 const LENA = 's1';
 const OSSA = 's2';
 const TICK = DEV_STEER.tickMs;
+const BARON = 's3';
+/** Lena and Ossa with an AI seat beside them, whose colonist walks the floor by its own hand (C9). */
+const withAi: SeatInfo[] = [...walkers, { id: BARON, name: 'The Baron', isAi: true, color: 2 }];
 
 let flag = DEV_STEER.on;
 beforeEach(() => {
@@ -34,10 +38,10 @@ const corral: SteerPoint[] = [
  * the store, buys a MULE and ends her turn at the pub; Ossa wanders the map, then lets go; the clock ends the turn.
  * Returns the written record, the frames that reached the room, and when development began and ended.
  */
-async function recordedSteeredGame() {
-  const fake = fakeContext({ table: walkers });
+async function recordedSteeredGame(table: SeatInfo[] = walkers) {
+  const fake = fakeContext({ table });
   const { game, recorder } = createRecordedGame({ ctx: fake.ctx, seed: 7, options: { maxMonths: 1, politics: false }, brain: createBrain({ gameId: 'steer', env: {} }), dir: null });
-  game.start(walkers);
+  game.start(table);
   const phase = () => game.viewFor(null).phase;
   let devStart: number | null = null;
   let devEnd: number | null = null;
@@ -88,6 +92,17 @@ describe('the game record with DEV_STEER.on (HC-9, HC-10, C8 Task 2.2)', { timeo
     const bytes = (events: unknown[]) => Buffer.byteLength(JSON.stringify(events));
     const ticks = (devEnd - devStart) / TICK;
     console.info(`W-1: record ${Buffer.byteLength(JSON.stringify(record))} B in all; development turn ${bytes(inDev)} B over ${inDev.length} events, ${ticks} ticks (${(bytes(inDev) / ticks).toFixed(1)} B a tick)`);
+  });
+
+  it('HC-4, HC-9: with an AI seat at the table its colonist walks, its input computed in the recorded tick, and the game replays identical', async () => {
+    const { record, frames } = await recordedSteeredGame(withAi);
+    const places = new Set(frames.flatMap((f) => f.colonists.filter((c) => c.id === BARON).map((c) => `${c.space} ${c.x} ${c.y}`)));
+    expect(places.size, "the AI's colonist moved on the floor").toBeGreaterThan(1);
+    // The AI's inputs are no intents: the replay computes them again inside the tick's fire step.
+    expect(record.events.some((e) => e.type === 'intent' && e.seat === BARON)).toBe(false);
+    const result = await replay(JSON.parse(JSON.stringify(record)) as GameRecord<MuleIntent>);
+    expect(result.identical).toBe(true);
+    expect(result.stateHash.replayed).toBe(result.stateHash.recorded);
   });
 
   it("Task 2.2: a recorded game's frames reach a client, and a frame adds no step to the record", async () => {
