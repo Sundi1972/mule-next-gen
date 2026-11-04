@@ -748,7 +748,9 @@ inside a wall; money and stock change only through game.ts rules; development en
   laptop's side panel, and at 667, where the status overlays the map's top edge, one line in that bar; **the bubbles**
   at each colonist (`Speaker`), on the map and in the hall, as the TV already draws them. The ticker covers 0 px² of
   the store, your plots and the controls; a bubble sits at its colonist, as the other map-anchored layers do (AM-30).
-  The TV is unchanged: TvDevelop already keeps the ticker and the speakers.
+  The TV is unchanged: TvDevelop already keeps the ticker and the speakers. **In the mock at 7c88b4cb** (a change since
+  Heiko's approval of the arcade mock, named to him at the walking table test): at 844 only the newest line, wrapped to
+  at most three rows (a cut line was unreadable at the side room's 98 px); the laptop's rail the newest two, wrapped.
 - **AM-30 (2026-11-04, PR-9's review, ruled by WS6).** (1) **C11's 0 px² binds the layers placed on the screen** (the
   scramble banner, the glint strip, the TV's moment lines): they keep off the store, your plots and the controls,
   measured on the drawn text at 844 and 667, the longest line included. **The layers drawn where a moment happens**
