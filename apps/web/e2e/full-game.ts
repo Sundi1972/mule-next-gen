@@ -23,8 +23,6 @@ const GRANT_WAIT_MS = GRANT_PASS_MAX_MS + 3_000;
 const AUCTION_STAGE_MS = within(WALK.goodMs / WALK.tradeClockRate);
 /** The month end has no clock (C20); this is how long a phone has to show its "On to month N". */
 const MONTH_END_MS = 10_000;
-/** How far over the minimum Ossa walks before she lets go. */
-const OVER_THE_MINIMUM = 30;
 
 type Phone = { page: Page; name: string; species: Species; id: string };
 
@@ -77,7 +75,7 @@ try {
   await everyone(phones, (p) => pressDoneThroughTheAuction(p.page));
   await everyone(phones, (p) => p.page.locator('[data-phase=upkeep]').getByTestId('ready').click({ timeout: MONTH_END_MS }));
 
-  // Month 2: Brix lists a plot; after the grant, Ossa bids it up past the minimum and wins it at the bell.
+  // Month 2: Brix lists a plot; after the grant, Ossa bids until the server has her leading at the minimum, and wins it at the bell.
   await brix.locator('[data-phase=planning]').waitFor({ timeout: PRESS_MS * 5 });
   // The map names a plot's owner by their place in the server's players, from 1.
   const listed = await listAPlot(brix, truth.board().players.findIndex((p) => p.id === truth.seatOf('Brix')), truth);
@@ -211,22 +209,22 @@ async function claimPlots(page: Page): Promise<void> {
 
 /**
  * Plays the land auction to its end, if one runs. Every lot but `sell.listing` is passed: every phone presses Done.
- * On `sell.listing` the buyer holds Up to OVER_THE_MINIMUM past the minimum and lets go, while the others keep pressing
- * Done, so the bid never holds up their presses. What the lot came to is read afterwards from the server's state.
+ * On `sell.listing` the buyer bids from the lot's intro on (bidUntilLeading), while the others keep pressing Done, so
+ * the bid never holds up their presses. What the lot came to is read afterwards from the server's state.
  */
 async function throughTheLandAuction(phones: Phone[], truth: Truth, sell: { listing: string; buyer: Phone } | null): Promise<void> {
-  const deadline = Date.now() + within(LOTS.maxLotsPerMonth * (LOTS.introMs + LOTS.walkMs + LOTS.resultMs));
+  const deadline = Date.now() + within(LOTS.maxLotsPerMonth * (LOTS.introMs + LOTS.walkMs + LOTS.lateCapMs + LOTS.resultMs));
   let bid: Promise<void> | null = null;
   while (truth.board().phase === 'landGrant' || truth.board().phase === 'landAuction') {
     check(Date.now() < deadline, 'the land auction ends within its lots');
     const lot = truth.board().landAuction;
+    const ours = lot?.lot.id === sell?.listing;
+    if (ours && bid === null) {
+      bid = bidUntilLeading(sell!.buyer, truth, lot!.lot);
+      // Awaited after the loop; a handler now keeps an early failure from being reported as unhandled meanwhile.
+      bid.catch(() => undefined);
+    }
     if (lot?.stage === 'walk') {
-      const ours = lot.lot.id === sell?.listing;
-      if (ours && bid === null) {
-        bid = bidUpTo(sell!.buyer.page, lot.lot.minimum + OVER_THE_MINIMUM);
-        // Awaited after the loop; a handler now keeps an early failure from being reported as unhandled meanwhile.
-        bid.catch(() => undefined);
-      }
       await Promise.all(
         phones
           .filter((p) => !(ours && p.id === sell!.buyer.id))
@@ -239,20 +237,26 @@ async function throughTheLandAuction(phones: Phone[], truth: Truth, sell: { list
   await bid;
 }
 
-/** Holds Up until the phone's bid reaches `target`, lets go and presses Done; the bell may ring first, which ends the bid too. */
-async function bidUpTo(page: Page, target: number): Promise<void> {
-  const up = page.locator('[data-testid=hold-up]:not([disabled])');
-  await up.waitFor({ timeout: within(LOTS.introMs) });
-  await up.hover();
+/**
+ * Bids on `listing` until the server has this buyer leading at the minimum or more, then lets go and presses Done.
+ * Armed from the lot's intro, finger over Up, so the hold starts the moment the walk opens; it ends on the server's
+ * word, not on a screen's, and only once the lot has moved on does it give up. The bid needs about a ninth of the
+ * walk's clock (from LOTS.boardLow of the minimum at WALK.crossSeconds a board), and a slow runner stretches the walk
+ * rather than shortening it: the server's clock counts its ticks, each capped (mule-game.ts).
+ */
+async function bidUntilLeading(buyer: Phone, truth: Truth, listing: { id: string; minimum: number }): Promise<void> {
+  const { page } = buyer;
+  const onOurLot = () => truth.board().landAuction?.lot.id === listing.id;
+  await page.getByTestId('hold-up').hover({ timeout: within(LOTS.introMs) });
+  await page.locator('[data-testid=hold-up]:not([disabled])').waitFor({ timeout: within(LOTS.introMs + LOTS.walkMs) });
   await page.mouse.down();
   try {
-    await page.waitForFunction((t) => Number(/YOU BID (\d+)/.exec(document.querySelector('[data-testid=my-bid]')?.textContent ?? '')?.[1]) >= t, target, {
-      timeout: within(LOTS.walkMs),
-      polling: 'raf',
-    });
-  } catch (err) {
-    // The bell rang first: whether she won is the plot's owner and her money afterwards, not this wait.
-    if (!(err instanceof playwrightErrors.TimeoutError)) throw err;
+    for (;;) {
+      if (!onOurLot()) return;
+      const leader = truth.board().landAuction?.leader;
+      if (leader?.id === buyer.id && leader.bid >= listing.minimum) break;
+      await new Promise((r) => setTimeout(r, 20));
+    }
   } finally {
     await page.mouse.up();
   }
