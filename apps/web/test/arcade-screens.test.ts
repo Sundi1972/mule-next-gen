@@ -164,6 +164,21 @@ describe('C11: the phone, held sideways', () => {
     expect(phone(devView(), live(mine(5.5, 4.5)))).not.toContain('data-testid="reconnecting"');
   });
 
+  it('C11 (AM-20, A-1): while month 1\'s clock waits, the side room says so in A-1\'s words, not only a full clock', () => {
+    const waits = (me: MyView, size: 844 | 667 = 844) => phone(devView(me, { month: 1, clockWaitsFor: ['s2'] }), live(mine(5.5, 4.5)), size);
+    // Your MULE is in and Ossa's still to come.
+    const inAt844 = waits(lenasMe({ installedThisTurn: true }));
+    expect(text(inside(inAt844, 'phone-status-left'), 'wait-title')).toBe('Your MULE is in · waiting for Ossa');
+    expect(text(inAt844, 'wait-detail')).toBe('Buying, installing and analysing wait for the clock.');
+    expect(inside(inAt844, 'phone-status-left')).toContain('data-testid="shared-clock"');
+    // At 667 the status is a bar over the map: the title goes there.
+    expect(text(inside(waits(lenasMe({ installedThisTurn: true }), 667), 'phone-status-bar'), 'wait-title')).toBe('Your MULE is in · waiting for Ossa');
+    // Before your first MULE, no rush: the corral, and why.
+    expect(text(waits(lenasMe()), 'wait-title')).toBe('Buy a MULE at the corral');
+    // Once the clock runs, no wait words.
+    expect(phone(devView(lenasMe({ installedThisTurn: true }), { month: 1 }), live(mine(5.5, 4.5)))).not.toContain('wait-title');
+  });
+
   it('C11: the turn over in the pub: the card says so, and how many MULEs went in', () => {
     const view = devView(lenasMe({ installedThisTurn: true, reach: reach('IN THE PUB', 'turn over', false) }), { players: PLAYERS.map((p) => (p.id === 's1' ? { ...p, doneDeveloping: true } : p)) });
     const html = phone(view, live(null));
