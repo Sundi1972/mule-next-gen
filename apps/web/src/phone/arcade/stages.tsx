@@ -1,4 +1,4 @@
-import { boxOf, DEV_WALK, HALL, type HallPlace, type HallRect } from '@mule/engine';
+import { boxOf, DEV_WALK, HALL, HALL_BAYS, type HallPlace, type HallRect } from '@mule/engine';
 import type { MuleView } from '@mule/protocol';
 import { cx, fanOut, HoloMap, LiveWalkers, SLOT_COLOR, StoreInterior, type Shop } from '@mule/ui';
 import { createContext, memo, useContext, useMemo, useRef, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
@@ -220,6 +220,13 @@ function GuideOnMap({ seat }: { seat: ArcadeSeat }) {
   );
 }
 
+/**
+ * The phone's works caption strip over its bays, in px: Store.tsx's "The works" line with its padding and border, under
+ * the room's own border (measured 22 px from the works' top to its bays' at 844 and at 667). The plan's bay boxes reach
+ * the works' top; their rings start this far below it, so the caption sits above them. Only the phone draws the guide.
+ */
+export const WORKS_CAPTION_PX = 22;
+
 function GuideInHall({ seat, lit }: { seat: ArcadeSeat; lit: HallPlace | null }) {
   const g = seat.guide;
   if (!g || g.space !== 'hall' || seat.mine?.space !== 'hall') return null;
@@ -230,8 +237,17 @@ function GuideInHall({ seat, lit }: { seat: ArcadeSeat; lit: HallPlace | null })
         .filter((r) => r !== lit)
         .map((r) => {
           const b = boxOf(r);
+          const bay = (HALL_BAYS as readonly HallPlace[]).includes(r);
+          const box = inHall(b);
+          const style = bay ? { ...box, top: `calc(${box.top} + ${WORKS_CAPTION_PX}px)`, height: `calc(${box.height} - ${WORKS_CAPTION_PX}px)` } : box;
           return (
-            <span key={r} className="absolute rounded-panel border-2 border-dashed border-holo animate-[store-beckon_1.6s_ease-in-out_infinite]" style={inHall(b)} data-testid={`guide-room-${r}`}>
+            <span
+              key={r}
+              className="absolute rounded-panel border-2 border-dashed border-holo animate-[store-beckon_1.6s_ease-in-out_infinite]"
+              style={style}
+              data-testid={`guide-room-${r}`}
+              {...(bay ? { 'data-below': 'works-caption' } : {})}
+            >
               {/* The corral's and the pub's captions sit at their foot, so their label goes near the top. */}
               <span className={cx('absolute left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-holo px-1.5 font-mono text-[10px] font-bold leading-4 text-on-holo shadow-glow', b.y0 > HALL.h / 2 ? 'top-6' : 'bottom-1')}>
                 {g.labels[r] ?? 'GO'}

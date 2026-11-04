@@ -1,4 +1,4 @@
-import { HALL } from '@mule/engine';
+import { boxOf, HALL } from '@mule/engine';
 import type { ChatMessage, MuleView, MyView, TileView } from '@mule/protocol';
 import { ActionButton, FAN, Joystick, LiveWalkers, SeatSpeciesProvider, type Slot } from '@mule/ui';
 import { createElement, type ReactElement } from 'react';
@@ -9,6 +9,7 @@ import type { TableClient } from '../src/net/client';
 import { ClientProvider } from '../src/net/react';
 import { keyDown, keyUp, startControls, stickOf } from '../src/phone/arcade/controls';
 import { LaptopArcade, PhoneLandscape } from '../src/phone/arcade/Develop';
+import { WORKS_CAPTION_PX } from '../src/phone/arcade/stages';
 import { FRAMES, overlap, phoneLayout, type Box } from '../src/phone/arcade/layout';
 import { StaticLive, type Live } from '../src/phone/arcade/live';
 import { PhoneGameProvider } from '../src/phone/game';
@@ -186,6 +187,27 @@ describe('C11: the phone, held sideways', () => {
       expect(label).toMatch(cls);
       if (anchor !== 'middle') expect(label).not.toMatch(/translate-x/);
     }
+  });
+
+  it('C11 (RULE-9): the works\' bay rings start below its caption, so "THE WORKS" sits above them; other rooms\' rings fill their box', () => {
+    const html = phone(devView(lenasMe({ carriedMule: 'empty' })), live(mine(4, 6, { space: 'hall' })));
+    for (const bay of ['alloy', 'electronics', 'medicine'] as const) {
+      const ring = tag(html, `guide-room-${bay}`);
+      expect(ring, bay).not.toBeNull();
+      const b = boxOf(bay);
+      // The bay's own top in the plan, pushed down by the caption strip's height as the phone draws it (Store.tsx).
+      const top = /top:calc\(([\d.]+)% \+ (\d+)px\)/.exec(ring!);
+      expect(Number(top?.[1])).toBeCloseTo((b.y0 / HALL.h) * 100, 6);
+      expect(Number(top?.[2])).toBe(WORKS_CAPTION_PX);
+      const height = /height:calc\(([\d.]+)% - (\d+)px\)/.exec(ring!);
+      expect(Number(height?.[1])).toBeCloseTo(((b.y1 - b.y0) / HALL.h) * 100, 6);
+      expect(Number(height?.[2])).toBe(WORKS_CAPTION_PX);
+      expect(ring).toMatch(/data-below="works-caption"/);
+    }
+    expect(WORKS_CAPTION_PX).toBeGreaterThanOrEqual(21);
+    // Negative: a shopfront's ring is its whole box.
+    expect(tag(html, 'guide-room-food')).toMatch(/top:[\d.]+%;/);
+    expect(tag(html, 'guide-room-food')).not.toMatch(/data-below/);
   });
 
   it('C13: two colonists on one spot are drawn side by side in seat order, each visible; the wire\'s positions are untouched', () => {
