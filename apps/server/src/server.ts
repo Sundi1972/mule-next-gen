@@ -9,10 +9,17 @@ import { AI_NAMES, MuleGame } from './mule-game.js';
 import { createRecordedGame } from './record.js';
 
 const MAX_MESSAGE_BYTES = 4_096;
-/** Messages per second a screen may send before it is told to slow down. */
+/**
+ * Messages per second a screen may send; the rest are dropped. It fits a phone steering at DEV_STEER.steerMaxPerSecond
+ * (10) with its presses and pings beside it (AM-15); a faster stick would need it raised.
+ */
 const RATE_LIMIT = 20;
-/** Unsent bytes a socket may hold before its frames are skipped: room for three ~19 kB views, yet only ~5 s of 600 B frames. */
-const FRAME_BACKLOG_BYTES = 64 * 1024;
+/**
+ * Bytes ws holds beyond what the OS has taken before a socket's frames are skipped: room for three ~19 kB views. It
+ * reads `bufferedAmount`, which leaves out the kernel's own TCP buffer, so a socket skips frames only once that is full
+ * too: about 5 s of 600 B frames here is a lower bound on how far behind it is by then.
+ */
+export const FRAME_BACKLOG_BYTES = 64 * 1024;
 const IDLE_ROOM_MS = 30 * 60_000;
 
 const TYPES: Record<string, string> = {
@@ -35,15 +42,22 @@ export interface MuleServer {
  * The game server: an HTTP server for the web client and `POST /rooms`, and a
  * WebSocket endpoint at `/ws` where phones and boards talk to their room.
  * Games play politics unless `politics` is false. With a `recordDir`, each game's record is written there at game over.
+ * With `devSteer`, every game it hosts steers its development (arcade C6), whatever DEV_STEER.on says.
  */
 export function createMuleServer(
-  options: { staticDir?: string; seed?: () => number; maxMonths?: number; phaseScale?: number; politics?: boolean; recordDir?: string | null } = {},
+  options: { staticDir?: string; seed?: () => number; maxMonths?: number; phaseScale?: number; politics?: boolean; recordDir?: string | null; devSteer?: boolean } = {},
 ): MuleServer {
   const seed = options.seed ?? (() => Math.floor(Math.random() * 2 ** 31));
   const recordDir = options.recordDir ?? null;
   const createGame = (ctx: GameContext) => {
     const gameSeed = seed();
-    const gameOptions = { maxMonths: options.maxMonths, phaseScale: options.phaseScale, politics: options.politics ?? true };
+    const gameOptions = {
+      maxMonths: options.maxMonths,
+      phaseScale: options.phaseScale,
+      politics: options.politics ?? true,
+      // Steered development for this server's games only; trunk's DEV_STEER.on stays off (PM ruling).
+      ...(options.devSteer ? { devSteer: true } : {}),
+    };
     if (recordDir === null) return new MuleGame(ctx, gameSeed, gameOptions);
     return createRecordedGame({ ctx, seed: gameSeed, options: gameOptions, dir: recordDir }).game;
   };
@@ -103,13 +117,21 @@ function handleHttp(
   createReadStream(file).pipe(res);
 }
 
-function attach(socket: WebSocket, registry: RoomRegistry<MuleIntent, MuleView>): void {
-  const conn: Connection<MuleView> = {
+/** The part of a ws socket a room's connection uses. */
+export type FrameSocket = Pick<WebSocket, 'readyState' | 'OPEN' | 'bufferedAmount' | 'send'>;
+
+/** A socket as a room sees it: sent to while open, and behind, so it misses frames, while its backlog is over the cap. */
+export function socketConnection(socket: FrameSocket): Connection<MuleView> {
+  return {
     send: (msg) => {
       if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(msg));
     },
     behind: () => socket.bufferedAmount > FRAME_BACKLOG_BYTES,
   };
+}
+
+function attach(socket: WebSocket, registry: RoomRegistry<MuleIntent, MuleView>): void {
+  const conn = socketConnection(socket);
   const from = { seatId: null as string | null };
   let room: Room<MuleIntent, MuleView> | undefined;
   let windowStart = Date.now();
@@ -191,6 +213,9 @@ function parse(text: string): ClientEnvelope<MuleIntent> | null {
   }
 }
 
+/** A stick component: a number from -1 to 1 (the protocol's 1/8 steps are the phone's; the floor takes any). */
+const isAxis = (x: unknown) => typeof x === 'number' && Number.isFinite(x) && Math.abs(x) <= 1;
+
 const isOffice = (x: unknown) => x === 'governor' || x === 'sheriff';
 /** The shape of a tax promise; RULE-10 in the engine checks the rest. */
 const isPromise = (x: unknown) => {
@@ -208,7 +233,10 @@ function isIntent(v: unknown): v is MuleIntent {
     case 'buyMule':
     case 'pub':
     case 'continue':
+    case 'act':
       return true;
+    case 'steer':
+      return isAxis(i.x) && isAxis(i.y) && (i.tick === undefined || (Number.isInteger(i.tick) && (i.tick as number) >= 0));
     case 'claim':
     case 'install':
     case 'analyse':
@@ -222,6 +250,10 @@ function isIntent(v: unknown): v is MuleIntent {
       return i.side === 'buyer' || i.side === 'seller' || i.side === 'pass';
     case 'walk':
       return i.dir === 'up' || i.dir === 'down' || i.dir === 'stop';
+    case 'walkStep':
+      return i.dir === 'up' || i.dir === 'down';
+    case 'lineTrade':
+      return int(i.units) && (i.units as number) >= 1;
     case 'list': {
       const item = i.item as Record<string, unknown> | null;
       return typeof item === 'object' && item !== null && typeof item.kind === 'string' && int(item.x) && int(item.y) && typeof i.minimum === 'number' && typeof i.unsold === 'string';

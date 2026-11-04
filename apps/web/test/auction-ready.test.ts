@@ -219,7 +219,7 @@ describe("the goods auction's walk, in plain words", () => {
   it('G-3: the hint names a price to walk to, and the old "meet the highest bid" is gone', () => {
     const html = phoneScreen(withSide(toFirstWalk().viewFor('s1'), 'buyer', { storeSells: 30, storeForSale: 5 }), 's1');
     expect(textOf(html, 'hint-line')).toMatch(/^Walk up to .*\b\d+\b/);
-    expect(textOf(html, 'hint-how')).toBe('Hold ▲ to walk up.');
+    expect(textOf(html, 'hint-how')).toBe('Hold ▲ to walk up; a tap moves 1 cr.');
     expect(words(html)).not.toMatch(/meet the (highest bid|lowest ask)/);
   });
 
