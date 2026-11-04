@@ -60,6 +60,9 @@ import {
   scoreParts,
   setLotWalk,
   setSalesTax,
+  commission,
+  donate,
+  repair,
   setWalk,
   shipAnnounced,
   shipInPort,
@@ -100,6 +103,7 @@ import { createBrain, type BrainService } from './brain/index.js';
 import { devFrame, noStats, steerConfig, steeredColonistView, SteerInputs, stepTick, type Steering } from './dev-steer.js';
 import { colonistView, dueArrivals, placeName, walkTarget, type Colonist, type DevIntent } from './dev-walking.js';
 import { boardRange, landAuctionView, listingView, lotNews } from './land-auction.js';
+import { colonyView } from './colony-view.js';
 import { ceremonyNews, myPoliticsView, politicsView } from './politics-view.js';
 
 /**
@@ -614,6 +618,15 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         return;
       case 'setTax':
         setSalesTax(state, seatId, intent.percent);
+        return;
+      case 'commission':
+        commission(state, seatId, intent.id);
+        return;
+      case 'donate':
+        donate(state, seatId, intent.id, intent.credits, intent.goods);
+        return;
+      case 'repair':
+        repair(state, seatId, intent.id);
         return;
       case 'continue': {
         if (seatId !== this.ctx.hostId()) throw new RuleError('Only the host can continue');
@@ -1799,6 +1812,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       production: state.phase === 'production' || state.phase === 'upkeep' ? productionView(state, this.productionMs) : null,
       ...this.eventsView(state),
       politics: politicsView(state),
+      colony: colonyView(state),
       ...(this.clockWaits ? { clockWaitsFor: this.seatsNotIn().map((s) => s.id) } : {}),
     };
   }
