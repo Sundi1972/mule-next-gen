@@ -57,6 +57,7 @@ export function createGame(options: { seed: number; players: NewPlayer[]; maxMon
         installedThisTurn: false,
         analysed: [],
         droneOrder: [],
+        droneFound: [],
       }),
     ),
     store: {
@@ -470,6 +471,8 @@ export function advancePhase(state: GameState): void {
       p.doneWithLand = false;
       // Drone results arrive in time to pick.
       for (const i of p.droneOrder) if (!p.analysed.includes(i)) p.analysed.push(i);
+      // Kept for the month, so the phone can still say which plots the drone surveyed (H-3).
+      p.droneFound = p.droneOrder;
       p.droneOrder = [];
     }
     newSweep(state, 0);
@@ -532,6 +535,7 @@ export function advancePhase(state: GameState): void {
   }
   if (next === 'planning') {
     state.month++;
+    for (const p of state.players) p.droneFound = [];
     openPlanning(state);
   }
 }

@@ -133,6 +133,11 @@ export interface Player {
   analysed: number[];
   /** Free plots chosen for a geo drone this planning phase, analysed when the land grant starts. */
   droneOrder: number[];
+  /**
+   * The plots this month's drone surveyed: what droneOrder held when the land grant started, kept until the next month
+   * opens, so the player's phone can say "Your drone: …" while one is lit. Private to them, like analysed.
+   */
+  droneFound: number[];
 }
 
 export type Phase =
