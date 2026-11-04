@@ -11,6 +11,7 @@ import {
   type AiLevelId,
   type AiPersonaId,
   type GameState,
+  type LandGrantPlay,
   type Phase,
   type Playbook,
 } from '@mule/engine';
@@ -434,6 +435,10 @@ describe("the engine's own draft passes the gate", () => {
     const five = draftFor('development', 2);
     (five as unknown as Record<string, unknown>).development = 5;
     expect(fixedPoint('development', 2, five, 'development played as 5').playbook.development).toEqual(draftFor('development', 2).development);
+    // A field every land grant has, missing, is missing nowhere in the output: the engine's part plays.
+    const denied = draftFor('planning', 2);
+    delete (denied.landGrant as Partial<LandGrantPlay>).deny;
+    expect(fixedPoint('planning', 2, denied, 'a land grant with no deny list').playbook.landGrant).toEqual(draftFor('planning', 2).landGrant);
 
     // Seeded perturbations of the fixture drafts: in one part, one field broken (out of range, of the wrong type, or
     // missing) beside one or two siblings moved to other in-range values that may now bound it.
