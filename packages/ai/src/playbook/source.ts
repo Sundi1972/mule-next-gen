@@ -39,8 +39,9 @@ export function playbookSource(seats: readonly SourceSeat[]): PlaybookSource {
       const s = seatOf(seat);
       if (!s) throw new Error(`No AI seat ${seat}`);
       const month = BEFORE_GRANT.has(state.phase) ? state.month : state.month + 1;
+      // Validated once, as the planning draft; the cut takes nothing the gate checked.
       const { planning: _, ...planned } = s.draft(state, 'planning', month);
-      const playbook = s.validator()(state, seat, { ...planned, phase: 'landGrant' }, []).playbook;
+      const playbook: Playbook = { ...planned, phase: 'landGrant' };
       return { playbook, land: { strategy: playbook.strategy, landGrant: playbook.landGrant! } };
     },
     validate(state, seat, draft, edits) {

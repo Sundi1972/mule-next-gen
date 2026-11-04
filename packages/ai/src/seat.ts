@@ -39,7 +39,7 @@ export interface AiSeatOptions {
   onDecision?: (record: DecisionRecord) => void;
   /** RULE-6 row 1: false plays every phase by today's asks. Unset, AI_PLANS.on decides. */
   playbook?: boolean;
-  /** Each playbook the seat plays itself, validated: what the game records for it. */
+  /** Each playbook the seat plays itself, validated: what the game records for it. Unset, the seat writes none. */
   onPlaybook?: (playbook: Playbook) => void;
 }
 
@@ -100,7 +100,8 @@ export class AiSeat {
     const obs = observe(state, this.id);
     this.landMonth = state.month;
     this.land = this.brain.ask('land', landDecision(obs, this.mind), obs, Infinity, null, situation(obs, this.mind));
-    if (this.pathFor(state.month, 'planning') === 'own') this.writeDraft(state, 'planning');
+    // With no listener the draft would reach nothing: no act reads it (T-AC-4).
+    if (this.options.onPlaybook && this.pathFor(state.month, 'planning') === 'own') this.writeDraft(state, 'planning');
   }
 
   /** RULE-6: who plays this month's part, first match wins. */
