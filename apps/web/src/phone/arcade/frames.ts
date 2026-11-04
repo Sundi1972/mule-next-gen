@@ -29,9 +29,6 @@ export function pushFrame(log: FrameLog, frame: DevFrame, recvMs: number): Frame
   return { frames: [...log.frames, { frame, recvMs }].slice(-KEPT) };
 }
 
-/** The newest frame, or null before the first. */
-export const newestFrame = (log: FrameLog): DevFrame | null => log.frames.at(-1)?.frame ?? null;
-
 const lerp = (a: number, b: number, k: number) => a + (b - a) * k;
 
 function between(a: Drawn, b: Drawn, k: number): Drawn {

@@ -135,7 +135,7 @@ export function PhoneLive({ children }: { children: ReactNode }) {
   const client = useClient();
   const { view, me, self } = usePhoneGame();
   const cfg = useMemo(() => floorConfig(), []);
-  // The copy steps on the map and your MULE: a new world only when either changes, not on every view.
+  // The copy steps on the view's map and your MULE; every view sends its tiles anew, so each view makes a new world.
   const world = useMemo(() => predictWorld(view, me, cfg), [view.width, view.height, view.tiles, me.id, me.carriedMule, cfg]);
   const base: ColonistBase = { pace: paceOf(self), bitten: !!self.colonist?.bitten, pelts: self.colonist?.pelts ?? 0 };
   // `assaying`: the assay end (server ms) the copy already holds for, so each view's is applied once.
