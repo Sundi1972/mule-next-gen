@@ -341,6 +341,12 @@ describe('B2 (C5): the map and colony stories play the gallery’s own, and chan
     expect(playFrames([METEOR], 'tv', { map: CRATERED }).some(shaken)).toBe(true);
   });
 
+  it('meteorStrike with reduced motion: the drawn crater comes with the map’s crater badge, not a second after it (lane review)', () => {
+    for (const html of playFrames([METEOR], 'tv', { map: CRATERED, reduced: true })) {
+      expect(has(html, 'crater-7-3'), 'the drawn crater exactly when the badge shows').toBe(glyphOn(html, 7, 3));
+    }
+  });
+
   it('epidemic: the sick tag lands on each colonist it sickens as the epidemic lands, not on the one it cured', () => {
     const frames = playFrames([EPIDEMIC], 'tv');
     expect(frames.some((html) => inside(html, `colonist-${LENA}`).includes('data-testid="sick-tag"'))).toBe(true);

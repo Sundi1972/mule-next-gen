@@ -61,4 +61,18 @@ describe('RULE-1, RULE-3, AM-1 1a: the meteor strikes after the output, on any t
       expect([seed, strike!.plots.map((p) => p.index)]).toEqual([seed, [1]]);
     }
   });
+
+  it("a struck plot's special field rides on its hit as `was`, so the map keeps its badge until the meteor lands (lane review)", () => {
+    meteorAt(1);
+    const state = createGame({ seed: 1, players: [0, 1].map((i) => ({ id: `p${i}`, name: `P${i}`, isAi: false })) });
+    state.month = EVENTS.firstMonth;
+    const store = state.tiles.find((t) => t.terrain === 'store')!;
+    const plot = state.tiles.find((t) => t.terrain !== 'store')!;
+    state.tiles = [store, plot];
+    plot.special = { kind: 'crystalCavern' };
+    expect(rollAfterOutput(state)[0]!.plots[0]).toMatchObject({ becomes: 'crater', was: 'crystalCavern' });
+    delete plot.special;
+    expect(rollAfterOutput(state)[0]!.plots[0]).not.toHaveProperty('was');
+  });
 });
+
