@@ -41,8 +41,12 @@ function table(level: AiLevelId, options: { politics?: boolean; maxMonths?: numb
 /** The budget for the Trader table's hundred-odd drafts: under 1 s alone, four to five times that in CI's parallel run. */
 const SLOW_MS = 20_000;
 
+/**
+ * The month's strategy, read off a development draft: every phase of a month drafts the same one (the test below
+ * checks it), and this draft skips the land ranking, which is most of a planning draft's cost.
+ */
 function strategyOf(state: GameState, mind: Mind, seed: number): Strategy {
-  return draftPlaybook({ state, seat: mind.me, mind, seed, phase: 'planning' }).strategy;
+  return draftPlaybook({ state, seat: mind.me, mind, seed, phase: 'development' }).strategy;
 }
 
 /** Runs `fn` with AI_PLANS paths set by --set, then puts each back. */
@@ -144,7 +148,8 @@ describe('the draft picks a plan kind and writes its strategy', () => {
     // One kind a month: the seat's planning, development and auction drafts of a month draw the same tie.
     for (let seed = 0; seed < 20; seed++) {
       const of = (phase: 'planning' | 'development' | 'auction') => draftPlaybook({ state: trader.state, seat: traderMind.me, mind: traderMind, seed, phase }).strategy.kind;
-      expect([of('development'), of('auction')], `seed ${seed}`).toEqual([of('planning'), of('planning')]);
+      const planning = of('planning');
+      expect([of('development'), of('auction')], `seed ${seed}`).toEqual([planning, planning]);
     }
     // A draft stamped for next month (WS2's, once this month's grant has run) draws next month's tie, not this one's.
     const nextMonth = { ...structuredClone(trader.state), month: trader.state.month + 1 };

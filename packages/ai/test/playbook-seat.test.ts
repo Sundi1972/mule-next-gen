@@ -194,7 +194,9 @@ describe('the seat drafts, validates and writes its planning playbook (C4, RULE-
     expect(asked.filter((a) => a.endsWith('/land')).length).toBeGreaterThanOrEqual(IDS.length);
     expect(playOf(smart)).toEqual(playOf(onToday));
     for (const key of KEYS) expect(smart.seats[1]!.part(smart.state, key), key).toBeNull();
+  });
 
+  it('RULE-6 (B-AC-7): row 2, a playbook adopted for a month carries its planning part, so the Classic seat writes none that month', () => {
     // Row 2: a playbook adopted for a month carries the planning part, so the Classic seat does not write its own that
     // month, and writes again the month after. Adopted ahead in month 1: month 2's, then month 1's, which is older than
     // the newest adopted and so ignored (RULE-6's unknown).
@@ -207,7 +209,9 @@ describe('the seat drafts, validates and writes its planning playbook (C4, RULE-
       },
     });
     expect(adopted.written.map((pb) => `${pb.seat}/${pb.month}`)).toEqual(['ai0/1', 'ai1/1', 'ai2/1', 'ai3/1', 'ai0/2', 'ai2/2', 'ai3/2', 'ai0/3', 'ai1/3', 'ai2/3', 'ai3/3']);
+  });
 
+  it("RULE-6 (B-AC-7): part(state, key) reads each adopted part as a copy, and a Classic seat's own part is its draft", () => {
     // At the seat, as each hand reads it: Smart ai1 adopts a landGrant-only playbook, then a development-only one, for
     // month 1; Classic ai0 adopts nothing.
     const landOnly: Playbook[] = [];
