@@ -1,4 +1,4 @@
-import type { Outfit, EventKey, GrownGood, Good, MinedGood, Office, ProcessedGood, RawGood, SpecialKind, Species, Stock, Terrain, TileTrait } from './types.js';
+import type { Outfit, EventKey, GrownGood, Good, LawId, MinedGood, Office, PrestigeId, ProcessedGood, RawGood, SpecialKind, Species, Stock, Terrain, TileTrait } from './types.js';
 import type { Strategy } from './playbook.js';
 
 /**
@@ -862,6 +862,26 @@ export const POLITICS = {
    */
   termScore: 1200,
   /** How Classic AI seats run, vote and set the tax (VoteHand). Placeholders until the sim balances them. */
+  /** The law ballot. Its only clock is the reveal's, a presentation; the ballot itself waits for every player. */
+  council: {
+    /** Ms the result is shown before a passed law takes effect. */
+    revealMs: 4_000,
+    /** Laws in force at once; a fourth must name the one it replaces. */
+    maxInForce: 3,
+    /** Months a failed proposal waits before it may be put again. */
+    retryMonths: 2,
+  },
+  /** The colony's book of laws, each with its settings. */
+  laws: {
+    /** Per cent of each unit a player sells to the export ship. */
+    exportTax: { settings: [10, 20, 30] },
+    /** Credits a plot owned, at each month end. */
+    landTax: { settings: [5, 10, 20] },
+    /** Credits per point of colony pollution a player caused that month, at its end. */
+    pollutionTax: { settings: [10, 20, 40] },
+    /** The air level above which no new mine or smelter of the listed outfits may be outfitted. */
+    emissionCap: { settings: [40, 50, 60], blocks: ['rareEarth', 'alloy'] as Outfit[] },
+  } satisfies Record<LawId, { settings: number[]; blocks?: Outfit[] }>,
   ai: {
     /** Ms a seat waits before acting in announce or the ballot, drawn per stage: a human's pause. */
     actMs: [800, 2_500] as [number, number],
@@ -877,7 +897,41 @@ export const POLITICS = {
     taxFundBump: 2,
     /** The fund is low under this many months of the elected offices' pay. */
     fundMonths: 3,
+    /** The AI in the council. Placeholders until the sim tunes them. */
+    council: {
+      /** Credits a month a law must cost the leader more than the AI Governor before it proposes it. */
+      minGap: 20,
+      /** Chance an AI Governor proposes its best law in a month it has one, per persona. */
+      proposeChance: { trader: 0.5, cautious: 0.3, aggressive: 0.7, saboteur: 0.6 } satisfies Record<AiPersonaId, number>,
+      /** Credits a month an AI counts for each of its plots an emission cap would stop it re-outfitting. */
+      capPlotCost: 40,
+    },
   },
+};
+
+/**
+ * The colony as a shared project: its prestige objects, one table row each. Every number is a placeholder
+ * until the colony's sim tuning sets it and Heiko OKs it. An object's full cost is its credits plus its goods at
+ * their reference prices; upkeep and repair are in credits.
+ */
+export const PRESTIGE = {
+  park: { name: 'Park', credits: 420, goods: { alloy: 2 }, buildMonths: 1, needsPlot: true, prestige: 2, upkeep: 30, repairCost: 150 },
+  hospital: { name: 'Hospital', credits: 680, goods: { electronics: 1 }, buildMonths: 2, needsPlot: false, prestige: 3, upkeep: 45, repairCost: 225 },
+  observatory: { name: 'Observatory', credits: 700, goods: { crystite: 3 }, buildMonths: 2, needsPlot: false, prestige: 3, upkeep: 50, repairCost: 250 },
+  stadium: { name: 'Stadium', credits: 1_000, goods: { alloy: 2, electronics: 1 }, buildMonths: 3, needsPlot: true, prestige: 4, upkeep: 70, repairCost: 350 },
+  spaceport: { name: 'Spaceport upgrade', credits: 1_380, goods: { alloy: 2, electronics: 2 }, buildMonths: 3, needsPlot: true, prestige: 5, upkeep: 100, repairCost: 500 },
+} satisfies Record<PrestigeId, { name: string; credits: number; goods: Partial<Record<Good, number>>; buildMonths: number; needsPlot: boolean; prestige: number; upkeep: number; repairCost: number }>;
+
+/** The colony fund's own rules. Placeholders until the colony's sim tuning. */
+export const COLONY = {
+  /** Projects commissioned or building at the same time. */
+  maxOpen: 1,
+  /** Credits the fund keeps back from a project's funding, so next month's office pay is there. */
+  reserve: 100,
+  /** The fund buys an object's missing goods from the store at the store's price; off, only donors' goods fund it. */
+  fundBuysGoods: true,
+  /** The Federation's grant into the fund at each upkeep, in credits; flat until a scaling rule is tuned. */
+  grant: { perMonth: 150 },
 };
 
 /**

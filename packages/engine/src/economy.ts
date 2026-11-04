@@ -1,4 +1,5 @@
 import { EXPORT_DEMAND, EXPORT_SHIP, GAME, GOOD_CONFIG, MULE, POLLUTION, PRICE, RECIPES, UPKEEP } from './config.js';
+import { fundIn } from './colony.js';
 import { airBand } from './pollution.js';
 import { energyUseOf, needsOf } from './production.js';
 import { createRng } from './rng.js';
@@ -271,7 +272,7 @@ export function driftReference(state: GameState, good: Good, clearingPrice: numb
 /** Takes the sales tax from a player's sale: the tax goes to the colony fund and the seller keeps the rest. */
 export function taxSale(state: GameState, sellerId: string, total: number): number {
   const tax = Math.round(total * state.treasury.salesTax);
-  state.treasury.money += tax;
+  fundIn(state, 'salesTax', tax);
   state.treasury.paid[sellerId] = (state.treasury.paid[sellerId] ?? 0) + tax;
   return total - tax;
 }

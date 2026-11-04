@@ -268,6 +268,13 @@ function isIntent(v: unknown): v is MuleIntent {
       return isOffice(i.office) && (i.candidate === null || typeof i.candidate === 'string');
     case 'setTax':
       return int(i.percent);
+    case 'commission':
+    case 'repair':
+      return typeof i.id === 'string';
+    case 'donate': {
+      const goods = i.goods as Record<string, unknown> | undefined;
+      return typeof i.id === 'string' && int(i.credits) && (goods === undefined || (typeof goods === 'object' && goods !== null && Object.values(goods).every(int)));
+    }
     default:
       return false;
   }

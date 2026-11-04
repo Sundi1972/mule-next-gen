@@ -1,4 +1,4 @@
-import type { AuctionSide, CanRun, CeremonyBeat, DevPlace, Election, EventEffect, EventKey, EventKind, EventWeight, Good, GoodReceipt, Ground, MonthEvent, Office, OfficeResult, Outfit, Phase, ScoreParts, SkipReason, SpecialField, Species, StatusRow, Stock, TaxPromise, Terrain, TileTrait, VoteWeight } from '@mule/engine';
+import type { AuctionSide, CanRun, CeremonyBeat, DevPlace, Election, EventEffect, EventKey, EventKind, EventWeight, FundLine, FundSource, Good, GoodReceipt, Ground, MonthEvent, Office, OfficeResult, Outfit, Phase, PrestigeId, ScoreParts, SkipReason, SpecialField, Species, StatusRow, Stock, TaxPromise, Terrain, TileTrait, VoteWeight } from '@mule/engine';
 export type { ChatMessage, ClientEnvelope, ServerEnvelope, TableView } from '@tabletop/core/protocol';
 
 /**
@@ -40,6 +40,12 @@ export type MuleIntent =
   | { type: 'vote'; office: Office; candidate: string | null }
   /** Planning, after the election: the Governor sets the sales tax in whole percent. */
   | { type: 'setTax'; percent: number }
+  /** Planning, after the votes: the Governor commissions a prestige object for the colony. */
+  | { type: 'commission'; id: PrestigeId }
+  /** Planning: give credits and goods toward the object being funded; the plaque names the donor. */
+  | { type: 'donate'; id: PrestigeId; credits: number; goods?: Partial<Record<Good, number>> }
+  /** Planning, after the votes: the Governor repairs a damaged object from the fund. */
+  | { type: 'repair'; id: PrestigeId }
   /** Planning: the host ends planning with players not yet Ready; in the election's announce or ballot, it goes on without players not Done. */
   | { type: 'continue' }
   /**
@@ -624,6 +630,8 @@ export interface MuleView {
   eventShow?: EventShowView | null;
   /** Offices, tax, vote weights and the election; null when the game plays without politics. */
   politics: PoliticsView | null;
+  /** The colony as a shared project: gauges, fund, prestige objects and plaques; null when the game plays without politics. Every screen gets the same. */
+  colony?: ColonyView | null;
   /**
    * While month 1's development clock stands full: the seats it still waits for, whose first MULE is still to come, in
    * seat order. Absent once it runs, and in every other phase and month.
@@ -632,3 +640,61 @@ export interface MuleView {
 }
 
 export const PLAYER_COLORS = ['#e4572e', '#3a86ff', '#2bb673', '#f2a541', '#9b5de5', '#00b4d8'];
+
+/** The colony's four gauges; happiness and its band are null until the colony has a mood. */
+export interface ColonyGaugesView {
+  wealth: number;
+  /** The air gauge: the colony's pollution, 0 clean. */
+  environment: number;
+  prestige: number;
+  happiness: number | null;
+  band: 'thriving' | 'content' | 'restless' | 'unhappy' | 'unrest' | null;
+}
+
+export interface ColonyProjectView {
+  id: PrestigeId;
+  name: string;
+  stage: 'commissioned' | 'building' | 'standing' | 'closed' | 'damaged';
+  cost: { credits: number; goods: Partial<Record<Good, number>> };
+  funded: { credits: number; goods: Partial<Record<Good, number>> };
+  buildMonths: number;
+  /** Upkeeps left until it stands; null unless building. */
+  monthsLeft: number | null;
+  /** Its tile index, for an object that needs one; null until sited. */
+  plot: number | null;
+  prestige: number;
+  /** Credits a month while it stands. */
+  upkeep: number;
+  /** Credits to repair it; null unless damaged. */
+  repairCost: number | null;
+  /** Donors, largest first: credits plus goods at reference price. */
+  plaque: { playerId: string; value: number }[];
+}
+
+/** One object the Governor could commission, and why not when they can't now. */
+export interface ColonyCatalogueView {
+  id: PrestigeId;
+  name: string;
+  credits: number;
+  goods: Partial<Record<Good, number>>;
+  buildMonths: number;
+  needsPlot: boolean;
+  prestige: number;
+  upkeep: number;
+  commissionable: boolean;
+  why: string | null;
+}
+
+/** The colony as every screen sees it. Public: no ballot and no private hand reaches it. */
+export interface ColonyView {
+  gauges: ColonyGaugesView;
+  /** Last month's gauges, for "this month"'s change; null in month 1. */
+  lastGauges: { wealth: number; prestige: number; happiness: number | null } | null;
+  fund: number;
+  /** The ledger of the month just ended, or this month's once its upkeep has run; null before the first upkeep. */
+  ledger: { month: number; in: Partial<Record<FundSource, number>>; out: Partial<Record<FundLine, number>> } | null;
+  projects: ColonyProjectView[];
+  catalogue: ColonyCatalogueView[];
+  /** The colony score at game over; null before. Its terms are the end score's (WS3), still to be written. */
+  score: { wealth: number; environment: number; prestige: number; factor: number; total: number } | null;
+}
