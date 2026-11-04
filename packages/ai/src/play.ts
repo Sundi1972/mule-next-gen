@@ -19,9 +19,11 @@ import {
   grantPass,
   installMule,
   lineTrade,
+  list as listLot,
   litPlot,
   lotDone,
   MS_PER_SECOND,
+  orderGeoDrone,
   outfitMule,
   RuleError,
   runFor,
@@ -35,6 +37,7 @@ import {
   stepLandAuction,
   STORE_ID,
   tileIndex,
+  unlist as unlistLot,
   visitPub,
   walkSeconds,
   WALK,
@@ -187,6 +190,15 @@ function applyRule(state: GameState, id: string, action: AiAction, clock?: DevCl
         else if (state.phase === 'landAuction') lotDone(state, id, action.done);
         else if (state.phase === 'planning' && state.politics?.election) electionDone(state, id, action.done);
         else auctionDone(state, id, action.done);
+        break;
+      case 'drone':
+        orderGeoDrone(state, id, action.plots);
+        break;
+      case 'list':
+        listLot(state, id, action);
+        break;
+      case 'unlist':
+        unlistLot(state, id, action.id);
         break;
     }
     return true;
