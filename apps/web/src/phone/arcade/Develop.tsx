@@ -8,7 +8,7 @@ import { WIDE_PX } from '../Shell';
 import { keyDown, keyUp } from './controls';
 import { colonistBox, css, FRAMES, freeRun, overlap, phoneLayout, tileBox, type Box } from './layout';
 import { PhoneLive, useArcade, useLive } from './live';
-import { ChatTicker, CompactClock, GroundChip, GuideNote, LeadChip, Money, OverCard, PaceLine, PlotCard, PlotsLegend, Reconnecting, WaitWords } from './parts';
+import { ChatTicker, CompactClock, GroundChip, GuideNote, LeadChip, Money, OverCard, PaceLine, PlotCard, PlotsLegend, Reconnecting, WaitWords, waitWords } from './parts';
 import { arcadeSeat, type ArcadeSeat } from './seat';
 import { SeatProvider, YourStage } from './stages';
 
@@ -184,6 +184,9 @@ export function PhoneLandscape({ frame }: { frame: { w: number; h: number } }) {
   const bannerFaded = near(L.banner, mePx, L.cell * 0.4);
   const choosing = space === 'hall' && me.carriedMule === 'empty';
   const compactLeft = !!L.left && L.left.w < SIDE_ROOM_FULL;
+  const waits = !!waitWords(seat);
+  // A full side room with nothing waiting: the month's label, and the newest line wrapped under the clock.
+  const roomy = !compactLeft && !waits;
   return (
     <SeatProvider value={seat}>
       <div
@@ -205,19 +208,31 @@ export function PhoneLandscape({ frame }: { frame: { w: number; h: number } }) {
           <OverCard seat={seat} installs={installs} />
         </div>
         {/* The status: in the side room either side of the map (nothing of it over the map), or at 667 a bar over the
-            map's top edge, clear of your plots and the target. The left room stops above the stick. */}
+            map's top edge, clear of your plots and the target. The left room stops above the stick, and the phone always
+            shows the newest line: a speaker in the other space is drawn nowhere here. */}
         {L.left && (
-          <div className={cx('absolute flex flex-col gap-1.5 overflow-hidden', compactLeft ? 'p-1' : 'p-1.5')} style={{ left: L.left.x, top: L.left.y, width: L.left.w, maxHeight: L.left.h }} data-testid="phone-status-left" data-overlay="status-left">
-            {!compactLeft && <span className="label-caps text-[10px]! leading-tight">M{view.month} · Development</span>}
+          <div className={cx('absolute flex flex-col overflow-hidden', compactLeft ? 'gap-1.5 p-1' : waits ? 'gap-1 p-1.5' : 'gap-1.5 p-1.5')} style={{ left: L.left.x, top: L.left.y, width: L.left.w, height: L.left.h }} data-testid="phone-status-left" data-overlay="status-left">
+            {roomy && <span className="label-caps text-[10px]! leading-tight">M{view.month} · Development</span>}
             <Money seat={seat} className={compactLeft ? 'text-[11px] [&_*]:whitespace-nowrap' : 'text-base'} />
             {compactLeft ? <CompactClock seat={seat} /> : <SharedClock seconds={seat.seconds} total={seat.total} />}
-            {/* The newest line keeps its rows: when the room runs out, what follows it is cut at the room's foot. */}
-            {!compactLeft && (
+            {/* With room, the newest line wraps under the clock and keeps its rows. */}
+            {roomy && (
               <div className="shrink-0">
                 <ChatTicker seat={seat} keep={1} wrap />
               </div>
             )}
-            <WaitWords seat={seat} short={compactLeft} />
+            {/* The wait words say why the clock waits, so they never give way: the month's label makes room for them,
+                and the newest line drops to one cut row under them, the first thing cut should the room run short. */}
+            {waits && (
+              <div className="shrink-0" data-testid="wait-room">
+                <WaitWords seat={seat} short={compactLeft} />
+              </div>
+            )}
+            {!roomy && (
+              <div className={cx('min-h-0 overflow-hidden', compactLeft && 'mt-auto')} data-testid="chat-foot">
+                <ChatTicker seat={seat} keep={1} />
+              </div>
+            )}
             {!keys.focused && !compactLeft && (
               <span className="rounded-chip bg-panel/90 px-1 py-0.5 text-[10px] leading-tight text-ink-2 shadow-chip" data-testid="focus-hint">
                 Click the game to steer with the keys

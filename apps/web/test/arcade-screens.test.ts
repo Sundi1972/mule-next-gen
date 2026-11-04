@@ -641,13 +641,60 @@ describe('C11 (AM-31): the table chat on the walking screen', () => {
     return { x: px('left'), y: px('top'), w: px('width'), h: px(height) };
   }
 
+  it.each<[844 | 667, 'map' | 'hall']>([
+    [844, 'map'],
+    [844, 'hall'],
+    [667, 'map'],
+    [667, 'hall'],
+  ])('C11 (AM-31): at %i on the %s the phone shows the ticker, so a line from a speaker it doesn\'t draw still reaches it', (size, where) => {
+    const html = phone(devView(), live(mine(where === 'map' ? 5.5 : 4, where === 'map' ? 4.5 : 6, { space: where })), size, CHAT);
+    expect(tickerLines(html)).toEqual([2]);
+    expect(text(html, 'chat-line-2')).toMatch(/^Ossa:/);
+  });
+
+  it('C11 (AM-31): at 667 in the hall the compact side room carries the newest line on one cut row at its foot, and it covers 0 px² of the store and the controls', () => {
+    const L = phoneLayout(FRAMES[667], 'hall');
+    const html = phone(devView(), live(mine(4, 6, { space: 'hall' })), 667, CHAT);
+    const room = inside(html, 'phone-status-left');
+    expect(tag(room, 'chat-ticker')).not.toBeNull();
+    expect(tag(html, 'chat-line-2')).toMatch(/\btruncate\b/);
+    expect(tag(room, 'chat-foot')).toMatch(/\bmt-auto\b/);
+    expect(inside(room, 'chat-foot')).toContain('data-testid="chat-ticker"');
+    const box = styleBox(html, 'phone-status-left', 'height');
+    expect(box).toEqual(L.left);
+    expect(tag(html, 'phone-status-left')).toMatch(/overflow-hidden/);
+    // The hall is the store: the side room lies beside it.
+    for (const kept of [L.stick, L.button, L.stage]) expect(overlap(box, kept), JSON.stringify(kept)).toBe(0);
+  });
+
+  it('C11 (AM-31, A-1): while month 1\'s clock waits, the wait words keep their room and the newest line drops to one cut row under them', () => {
+    const waiting = devView(lenasMe(), { month: 1, clockWaitsFor: ['s1', 's2'] });
+    const html = phone(waiting, live(mine(5.5, 4.5)), 844, CHAT);
+    const room = inside(html, 'phone-status-left');
+    expect(text(room, 'wait-detail')).toBe('Your first month: no rush. The clock starts when your first MULE is in.');
+    expect(room.indexOf('data-testid="chat-ticker"')).toBeGreaterThan(room.indexOf('data-testid="wait-now"'));
+    expect(tickerLines(html)).toEqual([2]);
+    expect(tag(html, 'chat-line-2')).toMatch(/\btruncate\b/);
+    expect(tag(html, 'chat-line-2')).not.toMatch(/line-clamp/);
+    // The wait never gives way; when the room runs short, the line's row does.
+    expect(tag(room, 'wait-room')).toMatch(/\bshrink-0\b/);
+    expect(tag(room, 'chat-foot')).toMatch(/\bmin-h-0\b/);
+    expect(tag(room, 'chat-foot')).toMatch(/\boverflow-hidden\b/);
+    // The month's label gives its rows to the wait words, which say it is the first month.
+    expect(room).not.toContain('· Development');
+    // Once the clock runs, the label is back and the line wraps under the clock.
+    const running = inside(phone(devView(lenasMe(), { month: 1 }), live(mine(5.5, 4.5)), 844, CHAT), 'phone-status-left');
+    expect(running).toContain('M1 · Development');
+    expect(tag(running, 'chat-line-2')).toMatch(/line-clamp-3/);
+  });
+
   it.each([844, 667] as const)('C11 (AM-31): at %i the ticker covers 0 px² of the store, Lena\'s plots and the controls', (size) => {
     const L = phoneLayout(FRAMES[size], 'map', 15, 9);
     const html = phone(devView(), live(mine(5.5, 4.5)), size, CHAT);
     // The ticker lies in its holder's box, which keeps to it: the side room clips at its height, the bar is one row.
     const holder = size === 844 ? 'phone-status-left' : 'phone-status-bar';
     expect(tag(inside(html, holder), 'chat-ticker')).not.toBeNull();
-    const box = styleBox(html, holder, size === 844 ? 'max-height' : 'min-height');
+    const box = styleBox(html, holder, size === 844 ? 'height' : 'min-height');
     if (size === 844) {
       expect(box).toEqual(L.left);
       expect(tag(html, holder)).toMatch(/overflow-hidden/);
