@@ -157,6 +157,12 @@ function playedHead(t: ReturnType<typeof playTable>, seat: string, month: number
 /** A written land part's ranking, as many as the dev view shows, by the plots' names. */
 const headOf = (land: LandGrantPlay, state: GameState) => land.ranked.slice(0, 5).map((r) => ({ label: plotName(state.tiles[r.plot]!), value: r.value }));
 
+/**
+ * The budget for a test that plays a month of four seats drafting, or reading their parts, at every draft point: about
+ * 1 s alone, and four to five times that in CI's parallel run, past vitest's 5 s default.
+ */
+const SLOW_MS = 20_000;
+
 const KEYS = ['planning', 'landGrant', 'development', 'auction'] as const;
 /** Each part from its seat's own draft: the draft phase that writes it. */
 const OWN_FROM = { planning: 'planning', landGrant: 'planning', development: 'development', auction: 'auction' } as const;
@@ -188,7 +194,9 @@ describe('the seat drafts, validates and writes its planning playbook (C4, RULE-
     expect(asked.filter((a) => a.endsWith('/land')).length).toBeGreaterThanOrEqual(IDS.length);
     expect(playOf(smart)).toEqual(playOf(onToday));
     for (const key of KEYS) expect(smart.seats[1]!.part(smart.state, key), key).toBeNull();
+  });
 
+  it('RULE-6 (B-AC-7): row 2, a playbook adopted for a month carries its planning part, so the Classic seat writes none that month', () => {
     // Row 2: a playbook adopted for a month carries the planning part, so the Classic seat does not write its own that
     // month, and writes again the month after. Adopted ahead in month 1: month 2's, then month 1's, which is older than
     // the newest adopted and so ignored (RULE-6's unknown).
@@ -322,7 +330,7 @@ describe('the seat drafts, validates and writes its planning playbook (C4, RULE-
     return { t, read };
   };
 
-  it('T-AC-4: the same state drafted or read twice gives the same playbook and parts, and neither changes the seat’s acts, records or kept state', () => {
+  it('T-AC-4: the same state drafted or read twice gives the same playbook and parts, and neither changes the seat’s acts, records or kept state', { timeout: SLOW_MS }, () => {
     const base = playTable(1);
     const poked = pokedGame(true);
 
@@ -331,7 +339,7 @@ describe('the seat drafts, validates and writes its planning playbook (C4, RULE-
     expect(poked.t.written).toEqual(base.written);
   });
 
-  it('T-AC-4 (HC-3): a replay reads every part at the same steps and gets stableJson-identical results', () => {
+  it('T-AC-4 (HC-3): a replay reads every part at the same steps and gets stableJson-identical results', { timeout: SLOW_MS }, () => {
     const once = pokedGame(false).read;
     expect([...once.values()].some((v) => v.includes('"by":"own"'))).toBe(true);
     expect(pokedGame(false).read).toEqual(once);
