@@ -206,10 +206,12 @@ export class DevelopHand {
       this.detoured = true;
       return moment;
     }
-    // Back from a detour: the step being walked starts its walk again from where the colonist now stands.
+    // Back from a detour: the step being walked starts its walk again from where the colonist now stands. A press made
+    // the tick before the detour is kept, so the walker reads whether it took: started again, the step would find its
+    // counter offering nothing (the MULE outfitted already) and drop the MULE (FM-floor-outfit-offer).
     if (this.detoured) {
       this.detoured = false;
-      this.walker.reset();
+      if (!this.walker.pressing()) this.walker.reset();
     }
     // The clock is nearly out: whatever is left of the errand, the pub. Held, the clock stands, so there is time.
     // An assay under way holds the colonist still for the rest of it: that time is spent before any walk.
