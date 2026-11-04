@@ -91,6 +91,8 @@ export function Develop() {
   const free = tile && tile.owner === null && tile.terrain !== 'store';
   const owner = tile?.owner ? view.players.find((p) => p.id === tile.owner) : undefined;
 
+  // The server refuses a press while your colonist walks or assays.
+  const busy = !!self.colonist?.walk || (self.colonist?.assayUntil ?? 0) > now;
   const ruled = nextStep({
     filling,
     carry,
@@ -209,7 +211,7 @@ export function Develop() {
                   className="px-2 text-xs"
                   disabled={youWait || tile.filter || me.stock.alloy < DEVELOPMENT.filterAlloy}
                   onClick={() => {
-                    setInstalling((p) => installAfterPress(p, { kind: 'other' }, !!self.colonist?.walk));
+                    setInstalling((p) => installAfterPress(p, { kind: 'other' }, busy));
                     client.intent({ type: 'filter', x: tile.x, y: tile.y });
                   }}
                   {...(youWait ? WAIT_HINT : {})}
@@ -243,7 +245,7 @@ export function Develop() {
                   className="whitespace-nowrap px-2"
                   disabled={!outfitted || !mine}
                   onClick={() => {
-                    setInstalling((p) => installAfterPress(p, { kind: 'install', at: { x: tile.x, y: tile.y } }, !!self.colonist?.walk));
+                    setInstalling((p) => installAfterPress(p, { kind: 'install', at: { x: tile.x, y: tile.y } }, busy));
                     client.intent({ type: 'install', x: tile.x, y: tile.y });
                   }}
                 >
@@ -256,7 +258,7 @@ export function Develop() {
                   aria-label={tile.ground ? 'Analysed' : `Geo analysis, ${DEVELOPMENT.analysisSeconds} seconds`}
                   disabled={!!tile.ground}
                   onClick={() => {
-                    setInstalling((p) => installAfterPress(p, { kind: 'other' }, !!self.colonist?.walk));
+                    setInstalling((p) => installAfterPress(p, { kind: 'other' }, busy));
                     client.intent({ type: 'analyse', x: tile.x, y: tile.y });
                   }}
                 >
