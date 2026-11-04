@@ -5,6 +5,7 @@ import {
   buildFloor,
   createGame,
   DEV_STEER,
+  DEV_WALK,
   DEVELOPMENT,
   doorPresses,
   hasAnalysed,
@@ -71,6 +72,9 @@ function steeredMoments(phases: number): FloorMomentCounts[] {
   });
 }
 
+/** Turns the spare-time negative plays at the hungry walk: the more turns, the more late glints to race. */
+const HUNGRY_TURNS = 60;
+
 const sum = (counts: readonly FloorMomentCounts[], key: keyof FloorMomentCounts) => counts.reduce((n, c) => n + c[key], 0);
 
 describe('the AI walks the floor, and the sim plays it (arcade C9, C10)', () => {
@@ -106,14 +110,20 @@ describe('the AI walks the floor, and the sim plays it (arcade C9, C10)', () => 
     expect(sum(moments, 'glintsWon'), 'glints won').toBeGreaterThan(0);
   });
 
-  it('T-AC-5 negative: with botsSpareTime off, bots race glints they have no time for and miss the pub', { timeout: 120_000 }, () => {
-    const saved = DEV_STEER.botsSpareTime;
-    DEV_STEER.botsSpareTime = false;
+  it('T-AC-5 negative: with botsSpareTime off, bots race glints they have no time for and miss the pub', { timeout: 240_000 }, () => {
+    // At the live walk (Heiko, 4 Nov) a race seldom costs the pub: 20 turns showed none with the margin off, 60 two.
+    // So the case walks every colonist the map at the pace of one with no Food (DEV_WALK.hungerPaceMin), over 60 turns:
+    // the margin's own setting is the one thing that differs between the two runs, and only off do turns miss.
+    const saved = { spare: DEV_STEER.botsSpareTime, map: DEV_STEER.mapTilesPerSecond };
+    DEV_STEER.mapTilesPerSecond = saved.map * DEV_WALK.hungerPaceMin;
+    const missed = () => steeredTurns(HUNGRY_TURNS).flat().filter((t) => t.pubAt === null && !t.biteCostPub).length;
     try {
-      const turns = steeredTurns(20).flat();
-      expect(turns.filter((t) => t.pubAt === null).length, 'AI turns that missed the pub').toBeGreaterThan(0);
+      expect(missed(), 'with the margin: AI turns that missed the pub with no excuse').toBe(0);
+      DEV_STEER.botsSpareTime = false;
+      expect(missed(), 'without it: AI turns that missed the pub with no excuse').toBeGreaterThan(0);
     } finally {
-      DEV_STEER.botsSpareTime = saved;
+      DEV_STEER.botsSpareTime = saved.spare;
+      DEV_STEER.mapTilesPerSecond = saved.map;
     }
   });
 
