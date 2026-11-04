@@ -81,19 +81,22 @@ export function useEventLivingView() {
   return livingAt(useShow());
 }
 
-/** The hits that change a plot's special field (a cavern caves in, a meteor leaves a crater) and have not landed by `t`. */
-export function specialsStanding({ s, t, reduced, grid }: ShowFrame): ShowHit[] {
-  return s.segments.flatMap((seg) => seg.events.flatMap((ev) => ev.hits.filter((hit) => (hit.was || hit.becomes === 'crater') && t < eventHitAt(seg, ev, hit, reduced, grid))));
+/**
+ * The hits that change what a plot shows and have not landed by `t`: a cavern caves in, a meteor leaves a crater, a
+ * MULE is taken or destroyed.
+ */
+export function hitsStanding({ s, t, reduced, grid }: ShowFrame): ShowHit[] {
+  return s.segments.flatMap((seg) => seg.events.flatMap((ev) => ev.hits.filter((hit) => (hit.was || hit.becomes === 'crater' || (hit.muleLost && hit.good)) && t < eventHitAt(seg, ev, hit, reduced, grid))));
 }
 
 /**
- * The map as the show has it at `t`. The view's tiles are after the events, so until its hit lands a plot keeps the
- * special field it had: a caved-in cavern keeps its badge, and a struck plot shows no crater yet (or what it had, when
- * the view says). The view does not carry a plot's MULE before a theft or a strike, so the plot stands empty throughout.
+ * The map as the show has it at `t`. The view's tiles are after the events, so until its hit lands a plot keeps what it
+ * had: a caved-in cavern keeps its badge, a struck plot shows no crater yet (or what it had, when the view says), and a
+ * plot whose MULE is taken or destroyed keeps that MULE, by the good the hit names.
  */
 export function useLiveTiles(frame: ShowFrame): MapTile[] {
-  const standing = specialsStanding(frame);
-  const key = standing.map((h) => `${h.x},${h.y},${h.was ?? ''}`).join('|');
+  const standing = hitsStanding(frame);
+  const key = standing.map((h) => `${h.x},${h.y},${h.was ?? ''},${h.good ?? ''}`).join('|');
   const { tiles } = frame;
   // `standing` is a new array every frame; `key` names its hits, so the map repaints only when one lands.
   return useMemo(() => {
@@ -101,8 +104,13 @@ export function useLiveTiles(frame: ShowFrame): MapTile[] {
     return tiles.map((tile) => {
       const hit = standing.find((h) => h.x === tile.x && h.y === tile.y);
       if (!hit) return tile;
-      if (hit.was) return { ...tile, special: { kind: hit.was } };
-      const { special: _crater, ...before } = tile;
+      let before = tile;
+      if (hit.was) before = { ...before, special: { kind: hit.was } };
+      else if (hit.becomes === 'crater') {
+        const { special: _crater, ...rest } = before;
+        before = rest;
+      }
+      if (hit.muleLost && hit.good) before = { ...before, good: hit.good };
       return before;
     });
   }, [key, tiles]);

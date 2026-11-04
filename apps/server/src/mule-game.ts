@@ -305,7 +305,7 @@ function monthEventView(state: GameState, e: MonthEvent): Omit<EventView, 'weigh
     origin: { ...e.origin },
     ...(e.direction ? { from: e.direction } : {}),
     ...(e.player ? { player: e.player } : {}),
-    hits: e.plots.map((p) => ({ ...at(p.index), order: p.order, delta: p.delta, ...(p.was ? { was: p.was } : {}), ...(p.becomes ? { becomes: p.becomes } : {}), ...(p.muleLost ? { muleLost: p.muleLost } : {}) })),
+    hits: e.plots.map((p) => ({ ...at(p.index), order: p.order, delta: p.delta, ...(p.was ? { was: p.was } : {}), ...(p.becomes ? { becomes: p.becomes } : {}), ...(p.muleLost ? { muleLost: p.muleLost, ...(p.good ? { good: p.good } : {}) } : {}) })),
     phase: e.phase,
     ...(e.effects ? { effects: e.effects.map((f) => ({ ...f })) } : {}),
   };

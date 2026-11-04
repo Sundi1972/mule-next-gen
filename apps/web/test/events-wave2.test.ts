@@ -352,6 +352,14 @@ describe('B2 (C5): the map and colony stories play the gallery’s own, and chan
     expect(playFrames([METEOR], 'tv', { map: CRATERED }).some(shaken)).toBe(true);
   });
 
+  it('meteorStrike on a special plot: the map keeps its old badge until impact, then shows the crater (#282 review)', () => {
+    const onCavern = { ...METEOR, hits: [{ ...METEOR.hits[0]!, was: 'crystalCavern' as const }] };
+    const seg = segOf([onCavern], 'tv');
+    const kindAt = (html: string) => /data-testid="special-glyph-7-3" data-kind="([a-zA-Z]+)"/.exec(html)?.[1];
+    expect(kindAt(screen([onCavern], seg.announceAt + 0.1, 'tv', { map: CRATERED })), 'the cavern while announced').toBe('crystalCavern');
+    expect(kindAt(result([onCavern], 'tv', { map: CRATERED })), 'the crater once it lands').toBe('meteorCrater');
+  });
+
   it('meteorStrike with reduced motion: the drawn crater comes with the map’s crater badge, not a second after it (lane review)', () => {
     for (const html of playFrames([METEOR], 'tv', { map: CRATERED, reduced: true })) {
       expect(has(html, 'crater-7-3'), 'the drawn crater exactly when the badge shows').toBe(glyphOn(html, 7, 3));
