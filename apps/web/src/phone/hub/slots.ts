@@ -151,12 +151,3 @@ export function settle(place: HubPlace, drawn: HubSlots, seat: HubSeat): HubPlac
   if (first === place.first) return place;
   return first ? { ...goTo(place, { desk: first }, drawn), first } : { ...place, first };
 }
-
-/**
- * Whether `open`, the desk the hub draws open, is the one that asked to come first, such as the Governor's: while it
- * is, the rail gives it the room (E-11). Picking another desk ends it; opening that desk again, or anything done inside
- * it, keeps it.
- */
-export function deskAsks(place: HubPlace, open: string | undefined): boolean {
-  return place.first !== null && open === place.first;
-}
