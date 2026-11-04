@@ -7,12 +7,15 @@ import {
   floorConfig,
   GAME,
   observe,
+  stableJson,
   type AiLevelId,
   type AiPersonaId,
   type DevFloor,
   type FloorConfig,
   type FloorInput,
   type GameState,
+  type Listing,
+  type PlanningPlay,
   type Playbook,
 } from '@mule/engine';
 import type { Act, AiAction } from './actions.js';
@@ -21,10 +24,21 @@ import type { Decider, TableTalk } from './decider.js';
 import { AuctionHand, type AuctionDebug } from './hands/auction.js';
 import { DevelopHand, type DevWalking } from './hands/develop.js';
 import { PERSONAS } from './personas.js';
-import { adoptInto, DRAFT_PHASE_OF, draftPlaybook, pathFor, validatePlaybook, validatorFor, type DraftPhase, type PartKey, type PlayedPart, type PlayPath, type ValidatePlan, type ValidatorProfile } from './playbook/index.js';
+import { adoptInto, DRAFT_PHASE_OF, draftPlanningPart, draftPlaybook, pathFor, validatePlaybook, validatorFor, type DraftInput, type DraftPhase, type PartKey, type PlayedPart, type PlayPath, type ValidatePlan, type ValidatorProfile } from './playbook/index.js';
 import { landDecision, wantsAnyAhead, wantsPlot, type LandPlan } from './strategist.js';
 import { situation } from './summary.js';
 import type { Mind } from './value.js';
+
+/** One act of the seat's planning part, and whether the rules took it. */
+export interface PlanningStep {
+  action: AiAction;
+  ok: boolean;
+}
+
+type ListEntry = NonNullable<PlanningPlay['list']>[number];
+
+const xyOf = (state: GameState, plot: number) => ({ x: state.tiles[plot]!.x, y: state.tiles[plot]!.y });
+const sameSquare = (state: GameState, l: Listing, plot: number) => l.item.x === state.tiles[plot]?.x && l.item.y === state.tiles[plot]?.y;
 
 export interface AiSeatOptions {
   id: string;
@@ -70,6 +84,9 @@ export class AiSeat {
   private landMonth = -1;
   /** Playbooks adopted for the newest month adopted, oldest first. */
   private adopted: readonly Playbook[] = [];
+  /** The month whose planning this seat may act in, and how; an adopt in it plays the listings again. */
+  private planning: { month: number; state: GameState; act: Act; refused: Set<string> } | null = null;
+  private planned: PlanningStep[] = [];
 
   constructor(readonly options: AiSeatOptions) {
     this.mind = {
@@ -94,14 +111,56 @@ export class AiSeat {
     this.brain.hear(line);
   }
 
-  /** Planning: the land plan for this month's grant, with its full ranking of free plots. */
-  planMonth(state: GameState): void {
+  /**
+   * Planning: the land plan for this month's grant, with its full ranking of free plots. With `act`, the seat also plays
+   * its planning part: the drone, then its listings; an adopt later in this planning plays the listings again.
+   */
+  planMonth(state: GameState, act?: Act): void {
     if (this.landMonth === state.month) return;
     const obs = observe(state, this.id);
     this.landMonth = state.month;
     this.land = this.brain.ask('land', landDecision(obs, this.mind), obs, Infinity, null, situation(obs, this.mind));
-    // With no listener the draft would reach nothing: no act reads it (T-AC-4).
+    // Written only for a listener; the part plays whenever the seat may act, recorded or not.
     if (this.options.onPlaybook && this.playPath(state.month, 'planning').by === 'own') this.writeDraft(state, 'planning');
+    if (!act) return;
+    this.planning = { month: state.month, state, act, refused: new Set() };
+    this.planned = [];
+    // On its own path the part is its draft's: with nothing to list and nothing of its own listed yet it would play
+    // nothing, so the seat skips the whole draft and its validation.
+    const mine = state.listings.some((l) => l.seller === this.id);
+    if (!mine && this.playPath(state.month, 'planning').by === 'own' && !draftPlanningPart(this.draftInput(state, 'planning')).list) return;
+    const played = this.part(state, 'planning');
+    if (!played) return;
+    const drone = played.part.drone ?? [];
+    const me = state.players.find((p) => p.id === this.id)!;
+    if (drone.length > 0 && me.droneOrder.length === 0) this.planAct({ type: 'drone', plots: drone.map((plot) => xyOf(state, plot)) });
+    this.playListings(state, played.part);
+  }
+
+  /** The planning acts this month, in order, each with whether the rules took it. */
+  planningLog(): readonly PlanningStep[] {
+    return this.planned;
+  }
+
+  /** Makes the seat's listings the part's list: unlists every other one, then lists each entry not yet up. */
+  private playListings(state: GameState, part: PlanningPlay): void {
+    const wanted = part.list ?? [];
+    const mine = state.listings.filter((l) => l.seller === this.id);
+    const same = (l: Listing, e: ListEntry) => l.item.kind === e.item && sameSquare(state, l, e.plot) && l.minimum === e.minimum && l.unsold === e.unsold;
+    for (const l of mine) if (!wanted.some((e) => same(l, e))) this.planAct({ type: 'unlist', id: l.id });
+    for (const e of wanted) {
+      if (!mine.some((l) => same(l, e))) this.planAct({ type: 'list', item: { kind: e.item, ...xyOf(state, e.plot) }, minimum: e.minimum, unsold: e.unsold });
+    }
+  }
+
+  /** One planning act, logged. One the rules refused this month is never tried again. */
+  private planAct(action: AiAction): void {
+    const p = this.planning!;
+    const key = stableJson(action);
+    if (p.refused.has(key)) return;
+    const ok = p.act(action);
+    this.planned.push({ action, ok });
+    if (!ok) p.refused.add(key);
   }
 
   private playPath(month: number, key: PartKey): PlayPath {
@@ -122,10 +181,15 @@ export class AiSeat {
 
   /** The seat's validated draft for a phase. `month` is the month whose land grant it plans. Writes nothing; throws on a draft or validator error. */
   draft(state: GameState, phase: DraftPhase, month = state.month): Playbook {
+    const drafted = draftPlaybook(this.draftInput(state, phase, month));
+    return validatePlaybook(this.profileFor(month))(state, this.id, drafted, []).playbook;
+  }
+
+  /** What the seat's drafts are drafted from. */
+  private draftInput(state: GameState, phase: DraftPhase, month = state.month): DraftInput {
     // Read, never settled: settling would log the land decision before the grant.
     const land = this.landMonth === month ? this.land : null;
-    const drafted = draftPlaybook({ state, seat: this.id, mind: this.mind, seed: this.options.seed, phase, land, month });
-    return validatePlaybook(this.profileFor(month))(state, this.id, drafted, []).playbook;
+    return { state, seat: this.id, mind: this.mind, seed: this.options.seed, phase, land, month };
   }
 
   /**
@@ -144,13 +208,23 @@ export class AiSeat {
       return null;
     }
     const part = playbook[key];
-    // A copy: a hand that changes what it plays changes nothing the seat keeps.
-    return part === undefined ? null : structuredClone({ part: part as NonNullable<Playbook[K]>, strategy: playbook.strategy, by: path.by });
+    // A copy: a hand that changes what it plays changes nothing the seat keeps. The cast is safe: `== null` rules out
+    // null and undefined, but TS can't narrow Playbook[K] for a generic K.
+    return part == null ? null : structuredClone({ part: part as NonNullable<Playbook[K]>, strategy: playbook.strategy, by: path.by });
   }
 
-  /** Puts a playbook's parts in effect for its month (RULE-7). */
+  /**
+   * Puts a playbook's parts in effect for its month (RULE-7). Adopting a later month drops every playbook adopted for
+   * the current one, so a playbook for month m+1 is adopted only after month m's auction. Adopted during the planning
+   * the seat acts in, it plays the listings again, from the planning part now in effect.
+   */
   adopt(playbook: Playbook): void {
     this.adopted = adoptInto(this.adopted, playbook);
+    const p = this.planning;
+    // Listings are made in planning only: once it has ended, the ones made stand.
+    if (!p || p.state.phase !== 'planning' || p.state.month !== p.month || playbook.month !== p.month) return;
+    const played = this.part(p.state, 'planning');
+    if (played) this.playListings(p.state, played.part);
   }
 
   /** The gate this seat's playbooks pass: its mind, its seed and, for the month it holds one, its pending land pick. */
