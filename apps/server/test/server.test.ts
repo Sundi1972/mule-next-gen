@@ -36,6 +36,22 @@ async function screen(url: string) {
 }
 
 describe('game server', () => {
+  it("close() disposes every live room, so no game's timers outlive the server", async () => {
+    await start();
+    const rooms = [running!.registry.create(), running!.registry.create()];
+    const disposed: string[] = [];
+    for (const room of rooms) {
+      const dispose = room.dispose.bind(room);
+      room.dispose = () => {
+        disposed.push(room.code);
+        dispose();
+      };
+    }
+    await running!.close();
+    running = null;
+    expect(disposed.sort()).toEqual(rooms.map((r) => r.code).sort());
+  });
+
   it('runs a room with two phones, an AI and a big screen', async () => {
     const { http, ws } = await start();
     const { code } = (await (await fetch(`${http}/rooms`, { method: 'POST' })).json()) as { code: string };
