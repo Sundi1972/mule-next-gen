@@ -2,6 +2,7 @@ import {
   advancePhase,
   cloneForSim,
   endAuction,
+  endLead,
   exportDemand,
   GAME,
   isGameOver,
@@ -148,7 +149,8 @@ function rollForward(stage: GameState, months: number): Future {
 }
 
 function produce(sim: GameState, me: string): Stock {
-  for (const p of sim.players) p.carriedMule = null;
+  // Development's end, as the game plays it: a MULE taken off a plot goes back to it, any other carried MULE runs off.
+  for (const p of sim.players) endLead(sim, p.id);
   const { produced } = runProduction(sim);
   return produced[me] ?? emptyStock();
 }
