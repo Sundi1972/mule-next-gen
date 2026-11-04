@@ -113,12 +113,12 @@ depends_on   C1 (data)
 C3 · MODIFIED · each phase rolls at its start
 
 today        only production rolls (production.ts); sickness rolls per player in game.ts::startDevelopment
-tomorrow     MUST: planning rolls at openPlanning's end (politics.ts, WS7's: a named edit), development after
+tomorrow     MUST: planning rolls in advancePhase as the month opens, before openPlanning (AM-4), development after
              sickness in startDevelopment, the goods auction before postPrices in advancePhase, upkeep before
              runUpkeep in advancePhase; production's existing roll gains coldSnap (before output) and
              meteorStrike (after output, like cavernCollapse). Each site: `const fired = rollPhase(state, phase);
              applyPhaseEvents(state, phase, fired); state.monthEvents.push(...fired)`.
-seam         game.ts::advancePhase and ::startDevelopment (WS3), politics.ts::openPlanning (WS7),
+seam         game.ts::advancePhase and ::startDevelopment (WS3),
              production.ts::runProduction (WS1)
 mechanism    in_place (one call each)
 pin          first-mule.test.ts (month 1 still ends), planning.test.ts, the land-auction and auction suites
@@ -159,7 +159,7 @@ depends_on   C4 (contract), C2 (real events for the e2e)
 RULE-1 · where a phase rolls, and what its events act on                 shape: table
 
   phase        rolls at                                           acts before
-  planning     the end of openPlanning (the month is open)        the election and the planning screens
+  planning     advancePhase, as the month opens (AM-4)            the election and the planning screens
   development  after sickness, in startDevelopment                the development clocks (the show holds them)
   production   coldSnap: with the production rows, before output   the output (energy need ×2)
                meteorStrike: after output, with cavernCollapse    nothing this month: the plot made what it made,
@@ -291,7 +291,6 @@ No ownership change. Named edits, each OK'd by its owner on the SHA:
 | apps/server/test/production-view.test.ts | WS6 | knownMonth files its events into state.monthEvents too (C1; lead's OK, 4 Nov) |
 | packages/engine/src/types.ts | WS3 | monthEvents, sickNext, MonthEvent.effects/becomes/muleLost, keys |
 | packages/engine/src/game.ts | WS3 | the roll calls in advancePhase and startDevelopment; monthEvents reset |
-| packages/engine/src/politics.ts | WS7 | one roll call at openPlanning's end |
 | packages/protocol/src/index.ts, apps/server/src/mule-game.ts | WS3 | EventView fields; phaseEvents reads monthEvents; monthEventView maps; SICK_BECAUSE 'epidemic' |
 | packages/engine/src/specials.ts | WS5 | none (formMeteorCrater called as is) |
 
@@ -343,5 +342,16 @@ did       WS8 lead, 4 Nov: ties share the mean of their ranks; the grant keeps i
           linear in the rank, so that is the amount at the tied ranks' mean rank, floored). Every player's rank is read
           once, on the wealth before any payout of the phase.
 because   the review found a seat bias in the tie and ranks shifting with earlier payouts in the same phase.
+goal      G-1 unchanged
+```
+
+```
+AM-4 · 2026-11-04 · WS7's review of the planning roll site
+
+target    C3, RULE-1's planning row, §9 (supersedes AM-2 item 1)
+did       planning's roll moves from the start of politics.ts::openPlanning to game.ts::advancePhase's planning branch,
+          after the month reset and before openPlanning: the same order, beside every other phase's roll site.
+          politics.ts is untouched (no WS7 edit); createGame no longer reaches the roll (month 1 rolls nothing anyway).
+because   WS7, 4 Nov: openPlanning is a politics hook, and its doc and early return made the roll depend on code order.
 goal      G-1 unchanged
 ```

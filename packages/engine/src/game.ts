@@ -547,6 +547,8 @@ export function advancePhase(state: GameState): void {
   if (next === 'planning') {
     state.month++;
     state.monthEvents = [];
+    // Planning's events roll as the month opens, with or without politics; they move cash and colonists, never land.
+    firePhase(state, 'planning');
     openPlanning(state);
   }
 }
