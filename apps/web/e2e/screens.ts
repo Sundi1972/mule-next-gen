@@ -3,15 +3,18 @@
  * a big screen, and saves screenshots of every phase. The phone is held
  * sideways: each phone screen is saved as phone-land-* at 844x390 and again
  * at 932x430 (-wide), plus one shot of the turn-sideways screen when upright.
+ * Then steered development (arcade PR-6), in a room of its own on a flag-on server: two phones and a TV; Heiko's
+ * phone on the map, in the store hall at the corral and leading a MULE out of the door, as a laptop at 1440x900 and
+ * as the small phone at 667x375, and the TV during development, each saved as *-arcade-*.
  * Run with `pnpm --filter @mule/web screens [output-dir]`.
  */
 import { mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { Page } from 'playwright';
-import { launch, PHONE, PHONE_WIDE, startServer, TV } from './harness';
+import { check, hallPlace, launch, PHONE, PHONE_SMALL, PHONE_WIDE, pressAct, startServer, steerTo, throughDoor, TV } from './harness';
 import { pressOnward, watchShow } from './production-steps';
 import { voteThroughTheElection } from './politics-steps';
-import { fedPlayerSeesNoHunger, outfittersOpenWithAnEmptyMule, storeIsOneHallWithTwoRows } from './store-steps';
+import { arcadeTable, fedPlayerSeesNoHunger, outfittersOpenWithAnEmptyMule, storeIsOneHallWithTwoRows } from './store-steps';
 
 const out = resolve(process.argv[2] ?? 'screens');
 mkdirSync(out, { recursive: true });
@@ -136,7 +139,8 @@ try {
   const seller = phone.getByTestId('side-seller');
   if ((await seller.isEnabled()) && (await seller.getAttribute('aria-checked')) !== 'true') await seller.click();
   await phone.getByRole('button', { name: 'Ready' }).click();
-  await phone.getByRole('button', { name: 'Hold to walk down' }).waitFor();
+  // The Hold buttons show while the walk is still to start; a key held before it does is dropped, so wait for them to light.
+  await phone.locator('[data-testid=hold-down]:enabled').waitFor();
   await phone.keyboard.down('ArrowDown');
   await phone.waitForTimeout(1_200);
   await phoneShot(phone, '6-auction-walking');
@@ -163,9 +167,71 @@ try {
   await phone.getByRole('button', { name: /On to month/ }).click();
   await phase(phone, 'planning');
   await phoneShot(phone, '8-month2');
-  console.log(`screens saved to ${out}`);
+
+  await arcadeScreens();
 } finally {
   await browser.close();
   await server.close();
 }
+// Last, after the servers' own lines (the steered game logs its development as it winds down).
+console.log(`screens saved to ${out}`);
 process.exit(0);
+
+/**
+ * Steered development on a flag-on server of its own, as shell.ts runs it: two phones (Heiko s1, Mia s2) and a TV, at
+ * phaseScale 1 so steerTo's strides never overshoot. Month 1's clock waits for every first MULE, so nothing runs out
+ * while the shots are taken. The server is closed here, whatever happens.
+ */
+async function arcadeScreens(): Promise<void> {
+  const steered = await startServer({ maxMonths: 1, politics: false, devSteer: true, phaseScale: 1, seed: () => 1 });
+  const errors: string[] = [];
+  try {
+    const t = await arcadeTable(browser, steered.base, steered.server, errors, { names: ['Heiko', 'Mia'], tv: true });
+    const { heiko, server, code } = t;
+    const seat = 's1';
+    const tv = t.tv!;
+    await tv.getByTestId('tv-game').waitFor({ timeout: 5_000 });
+    /** Presses the button once it says `verb`. */
+    const press = async (verb: string) => {
+      await heiko.getByTestId('action-verb').filter({ hasText: new RegExp(`^\\s*${verb}\\s*$`) }).waitFor({ timeout: 5_000 });
+      await pressAct(heiko);
+    };
+    const stage = (space: 'map' | 'hall') => heiko.locator(`[data-testid=your-stage][data-space=${space}]`).waitFor({ timeout: 5_000 });
+
+    // On the map, beside the store's door.
+    await stage('map');
+    await phoneShot(heiko, 'arcade-1-map');
+
+    // In the hall, at the corral: in by the button, then by the stick to the middle of the room, where the button acts.
+    await press('ENTER STORE');
+    await stage('hall');
+    await steerTo(heiko, server, code, seat, hallPlace('corral'));
+    await press('BUY MULE');
+    await heiko.getByTestId('lead-chip').waitFor({ timeout: 5_000 });
+    await phoneShot(heiko, 'arcade-2-hall-corral');
+
+    // Outfitted for Food and led out of the nearer door.
+    await steerTo(heiko, server, code, seat, hallPlace('food'));
+    await press('OUTFIT · FOOD');
+    await heiko.waitForFunction(() => !/OUTFIT/.test(document.querySelector('[data-testid=action-verb]')?.textContent ?? ''), null, { timeout: 5_000 });
+    await throughDoor(heiko, server, code, seat);
+    await stage('map');
+    await phoneShot(heiko, 'arcade-3-mule-out');
+    await shot(tv, 'tv-arcade-develop');
+
+    // The same seat as a laptop, then as the small phone on its side.
+    await heiko.setViewportSize({ width: 1440, height: 900 });
+    await heiko.getByTestId('laptop-game').waitFor({ timeout: 5_000 });
+    // The laptop paints its own, larger land (about 3 s headless); until then the map is its base colour.
+    await heiko.getByTestId('laptop-game').locator('[data-testid=holo-map] img').waitFor({ timeout: 15_000 });
+    await shot(heiko, 'laptop-arcade-1440');
+    await heiko.setViewportSize(PHONE_SMALL.viewport);
+    await heiko.locator('[data-testid=phone-game][data-size="667"]').waitFor({ timeout: 5_000 });
+    await heiko.getByTestId('phone-game').locator('[data-testid=holo-map] img').waitFor({ timeout: 15_000 });
+    await shot(heiko, 'phone-land-arcade-667');
+    await heiko.setViewportSize(PHONE.viewport);
+  } finally {
+    await steered.server.close();
+  }
+  check(errors.length === 0, `arcade: no page errors: ${errors.join('; ')}`);
+}
