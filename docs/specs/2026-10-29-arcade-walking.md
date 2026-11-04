@@ -741,6 +741,13 @@ inside a wall; money and stock change only through game.ts rules; development en
 
 ## §8 · Amendments `[review-only]`
 
+- **AM-33 (2026-11-04, the PM's G-3 play on #285, ruled by WS6; AM-3's gap).** Month 1's clock waits for every
+  seat's first MULE (AM-3), and a seat already counts as in once it installed, is at the pub, is away, is Ready, or
+  owns no plot. A seat the scramble left out (the corral empty, no MULE on its lead) could never bring one, so the
+  clock stood at 60 s with every AI waiting at the pub door until that human walked to the pub. **A seat also counts as
+  in when it cannot get a first MULE: the corral is empty and it leads none, or it cannot pay the corral's price.**
+  The clock then starts at once; the left-out seat's phone keeps its words (the pub pays now). Owner: the month-1
+  clock's server code (`mule-game.ts::isIn`, WS3), with a red test first.
 - **AM-32 (2026-11-04, WS1, ruled by WS6; caused by Heiko's walking ruling: `mapTilesPerSecond` 1.25 → 2.5,
   `hungerPaceMin` 0.6).** RULE-4's chase was tuned as an absolute `WOLVES.chaseSpeed` 1.1 tiles/s against colonists at
   1.25, so at twice the pace a forest run escaped 20 of 20 (T-AC-6's example: about 13 of 20) and "run or fight" stopped
