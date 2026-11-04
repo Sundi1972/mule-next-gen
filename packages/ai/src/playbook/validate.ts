@@ -524,9 +524,8 @@ function validate(profile: ValidatorProfile, state: GameState, seat: PlayerId, d
   ctx.base = structuredClone(pb);
   edits.forEach((e, i) => !STRATEGY_ROOTS.has(parse(e.path)?.[0] ?? '') && apply(e, i));
 
-  // Step 5: every value that plays, against the same rows, pass after pass until one changes nothing. A refused field
-  // the playbook may lack is dropped; any other plays the engine's own draft of what holds it (holderOf), which passes
-  // the rows by INV-1. The next pass checks it against the rest of the playbook (RULE-2's hold against the draft's).
+  // Step 5: every value that plays, against the same rows. A refused field the playbook may lack is dropped; any other
+  // plays the engine's own draft of what holds it (holderOf), siblings and all, which passes the rows as a whole by INV-1.
   const drafted = new Map<DraftPhase | 'strategy', Playbook>();
   const engineDraft = (unit: readonly string[]): Playbook => {
     const part = (PART_KEYS as readonly string[]).includes(unit[0]!) ? DRAFTS[unit[0] as (typeof PART_KEYS)[number]]! : null;
@@ -538,49 +537,39 @@ function validate(profile: ValidatorProfile, state: GameState, seat: PlayerId, d
     }
     return drafted.get(key)!;
   };
-  const check = (): boolean => {
-    let changed = false;
-    /** What this pass dropped: nothing under it is checked. */
-    const gone: string[][] = [];
-    const under = (unit: readonly string[]) => gone.some((g) => g.every((k, n) => unit[n] === k));
-    const settle = (unit: string[], v: Verdict) => {
-      const value = getAt(pb, unit);
-      const reject = (why: string) => rejected.push({ path: pathOf(unit), to: value, why, i: edits.length });
-      const drop = (at: string[], why: string) => {
-        reject(why);
-        dropUnit(pb, at);
-        gone.push(at);
-        changed = true;
-      };
-      if (!('refused' in v)) {
-        if (same(v.plays, value)) return;
-        reject(v.why ?? `clamped to ${show(v.plays)}`);
-        putUnit(pb, unit, v.plays);
-        changed = true;
-        return;
-      }
-      if (isOptional(unit)) return drop(unit, v.refused);
-      const holder = holderOf(unit);
-      const plays = getAt(engineDraft(unit), holder);
-      // The engine drafts nothing there (a good no longer up): it goes.
-      if (plays === undefined) return drop(holder, v.refused);
-      const named = holder.length < unit.length ? `${pathOf(holder)} plays` : plays === null || typeof plays !== 'object' ? `draft plays ${show(plays)}` : 'draft value plays';
-      reject(`${v.refused}; the engine's ${named}`);
-      if (same(plays, getAt(pb, holder))) return;
-      putUnit(pb, holder, structuredClone(plays));
-      putUnit(ctx.base, holder, structuredClone(plays));
-      changed = true;
+  /** What step 5 dropped, or replaced whole with the engine's: nothing under it is checked again. */
+  const settled: string[][] = [];
+  const under = (unit: readonly string[]) => settled.some((g) => g.every((k, n) => unit[n] === k));
+  const settle = (unit: string[], v: Verdict) => {
+    const value = getAt(pb, unit);
+    const reject = (why: string) => rejected.push({ path: pathOf(unit), to: value, why, i: edits.length });
+    const drop = (at: string[], why: string) => {
+      reject(why);
+      dropUnit(pb, at);
+      settled.push(at);
     };
-    for (const unit of containersOf(pb)) if (!under(unit) && !isObject(getAt(pb, unit))) settle(unit, refuse('not an object'));
-    for (const unit of unitsOf(pb)) {
-      if (under(unit)) continue;
-      const verdict = unitOf(unit, pb);
-      settle(unit, 'refused' in verdict ? verdict : verdict.row(getAt(pb, unit), ctx, unit));
+    if (!('refused' in v)) {
+      if (same(v.plays, value)) return;
+      reject(v.why ?? `clamped to ${show(v.plays)}`);
+      putUnit(pb, unit, v.plays);
+      return;
     }
-    return changed;
+    if (isOptional(unit)) return drop(unit, v.refused);
+    const holder = holderOf(unit);
+    const plays = getAt(engineDraft(unit), holder);
+    // The engine drafts nothing there (a good no longer up): it goes.
+    if (plays === undefined) return drop(holder, v.refused);
+    const named = holder.length < unit.length ? `${pathOf(holder)} plays` : plays === null || typeof plays !== 'object' ? `draft plays ${show(plays)}` : 'draft value plays';
+    reject(`${v.refused}; the engine's ${named}`);
+    putUnit(pb, holder, structuredClone(plays));
+    settled.push(holder);
   };
-  // literal-ok: a guard, not a bound: a replaced part settles in two passes, and a third finds nothing to change
-  for (let passes = 4; passes > 0 && check(); passes--);
+  for (const unit of containersOf(pb)) if (!under(unit) && !isObject(getAt(pb, unit))) settle(unit, refuse('not an object'));
+  for (const unit of unitsOf(pb)) {
+    if (under(unit)) continue;
+    const verdict = unitOf(unit, pb);
+    settle(unit, 'refused' in verdict ? verdict : verdict.row(getAt(pb, unit), ctx, unit));
+  }
 
   const strip = <T extends { i: number }>(xs: T[]) => xs.sort((a, b) => a.i - b.i).map(({ i: _, ...x }) => x);
   // Step 6: an accepted edit's `to` is the value that plays. An edit to a field that was dropped, or inside a list a
