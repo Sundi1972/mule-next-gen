@@ -215,10 +215,11 @@ const MULE_STEPS = 3; // literal-ok: RULE-1b's MULE is three steps
 const midSeconds = ([lo, hi]: [number, number]) => (lo + hi) / 2 / MS_PER_SECOND; // literal-ok: the midpoint of a range
 
 /**
- * RULE-5 · development: the analyses, then each MULE as a pick of developDecision on a what-if copy that already holds
- * the MULEs before it, then the filters and the pub. The walk is priced as where the game walks (DEV_WALK).
+ * RULE-5 · development: the analyses, then each MULE as a pick of developDecision, leaning to the money-maker, on a
+ * what-if copy that already holds the MULEs before it, then the filters and the pub. The walk is priced as where the
+ * game walks (DEV_WALK).
  */
-function developmentPart(input: DraftInput, obs: GameState): DevelopmentPlay {
+function developmentPart(input: DraftInput, obs: GameState, moneyMaker: Good | null): DevelopmentPlay {
   const { mind } = input;
   const me = mind.me;
   const copy = cloneForSim(obs);
@@ -243,7 +244,7 @@ function developmentPart(input: DraftInput, obs: GameState): DevelopmentPlay {
   }
   // On the arcade floor the hand prices the walk by the live floor, which this draft does not read.
   for (let k = 0; k < mind.level.mulesPerMonth && route.length + MULE_STEPS < cap; k++) {
-    const mule: DevAction = topPick(input, copy, 'develop', `mule:${k}`, developDecision(copy, mind, k, { at, left, taps }));
+    const mule: DevAction = topPick(input, copy, 'develop', `mule:${k}`, developDecision(copy, mind, k, { at, left, taps }, moneyMaker));
     if (mule.kind === 'stop') break;
     const tile = copy.tiles[mule.index]!;
     try {
@@ -311,6 +312,6 @@ export function draftPlaybook(input: DraftInput): Playbook {
   const strategy = input.strategy ?? draftStrategy(input, obs);
   const head = { v: 1 as const, seat: input.seat, month: monthOf(input, obs), phase: input.phase, strategy, by: 'engine' as const };
   if (input.phase === 'planning') return { ...head, planning: planningPart(input, obs), landGrant: landGrantPart(input, obs) };
-  if (input.phase === 'development') return { ...head, development: developmentPart(input, obs) };
+  if (input.phase === 'development') return { ...head, development: developmentPart(input, obs, strategy.moneyMaker) };
   return { ...head, auction: auctionPart(input, obs) };
 }

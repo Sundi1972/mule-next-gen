@@ -313,12 +313,6 @@ export function sellWanted(obs: GameState, mind: Mind): SellListing[] {
 export type DevAction = { kind: 'install'; index: number; outfit: Outfit } | { kind: 'stop' };
 
 /**
- * The next MULE, or none: per idle plot of the seat, every outfit and
- * factory, plus keeping the cash. Hard rules: no MULE the cash can't pay for
- * without leaving the reserve, no factory it can't feed, nothing when the
- * corral is empty or the month's MULEs are used.
- */
-/**
  * A walk-aware seat's development clock: the seconds it has left and the seconds its taps for one MULE take, and where
  * it is (where the game walks, DEV_WALK), or, where the game steers (the arcade floor), the floor's own estimate.
  */
@@ -330,7 +324,14 @@ export type DevWalk = { left: number; taps: number } & ({ at: DevPlace; floor?: 
  */
 export type FloorLegs = (index: number, outfit: Outfit) => { there: number; pub: number };
 
-export function developDecision(obs: GameState, mind: Mind, mulesSoFar: number, walk?: DevWalk): Shortlist<DevAction> {
+/**
+ * The next MULE, or none: per idle plot of the seat, every outfit and
+ * factory, plus keeping the cash. Hard rules: no MULE the cash can't pay for
+ * without leaving the reserve, no factory it can't feed, nothing when the
+ * corral is empty or the month's MULEs are used. A `focus` good (the seat's
+ * money-maker) leans every pick toward its outfits; null leaves every utility as without one.
+ */
+export function developDecision(obs: GameState, mind: Mind, mulesSoFar: number, walk?: DevWalk, focus: Good | null = null): Shortlist<DevAction> {
   const o = outlook(obs, mind.me, { lookAhead: mind.level.lookAhead });
   const p = me(obs, mind);
   const reserve = cashReserve(obs, mind, o);
@@ -339,11 +340,24 @@ export function developDecision(obs: GameState, mind: Mind, mulesSoFar: number, 
   const needEnergy = !obs.tiles.some((t) => t.owner === mind.me && t.outfit === 'energy');
   const analysed = new Set(p.analysed);
   const cands: Candidate<DevAction>[] = [];
-  const common = (cashAfter: number, known: boolean, feeds: boolean, gain: number, why: string) => [
+  // Added only with a focus: a consideration scoring 1 for all still changes every utility (utilityOf's make-up counts them).
+  const leaning = (makes: Outfit | null) =>
+    focus === null
+      ? []
+      : [
+          consider(
+            'My money-maker',
+            makes === focus ? 1 : AI_PLANS.moneyMaker.otherScore,
+            AI_PLANS.moneyMaker.weight,
+            makes === focus ? `${GOOD_NAME[focus]} is my money-maker` : `not ${GOOD_NAME[focus]}, my money-maker`,
+          ),
+        ];
+  const common = (cashAfter: number, known: boolean, feeds: boolean, gain: number, why: string, makes: Outfit | null) => [
     consider('Gain', curve.gain(gain, STRATEGIST.gainScale.develop), mind.persona.greed, why),
     consider('Cash left', curve.floor(curve.ramp(cashAfter, reserve, reserve * STRATEGIST.cashLeftFull), STRATEGIST.cashLeftFloor), mind.persona.reserve, `${cr(cashAfter)} left, ${cr(reserve)} kept back`),
     consider('Known ground', known ? 1 : STRATEGIST.develop.unknownGround, mind.persona.risk, known ? 'ground analysed' : 'ground not analysed'),
     consider('Feeds me', feeds ? 1 : STRATEGIST.develop.feedsMe.other, mind.persona.reserve * STRATEGIST.develop.feedsMe.reserveShare, feeds ? 'covers my own Food or Energy' : 'I buy my Food and Energy'),
+    ...leaning(makes),
   ];
   for (const tile of idle) {
     const index = tileIndex(obs.width, tile.x, tile.y);
@@ -376,13 +390,13 @@ export function developDecision(obs: GameState, mind: Mind, mulesSoFar: number, 
           `${outfitName(outfit)} on ${plotName(tile)}`,
           { kind: 'install', index, outfit },
           gain,
-          common(cashAfter, analysed.has(index) || outfit === 'greenBelt', feeds, gain, `makes about ${cr(net)} a month, costs ${cr(cost)}, worth ${cr(gain)} over the game`),
+          common(cashAfter, analysed.has(index) || outfit === 'greenBelt', feeds, gain, `makes about ${cr(net)} a month, costs ${cr(cost)}, worth ${cr(gain)} over the game`, outfit),
           veto,
         ),
       );
     }
   }
-  cands.push(candidate<DevAction>('stop', 'Keep the cash', { kind: 'stop' }, 0, common(p.money, true, false, 0, 'no new MULE: the money stays in the bank')));
+  cands.push(candidate<DevAction>('stop', 'Keep the cash', { kind: 'stop' }, 0, common(p.money, true, false, 0, 'no new MULE: the money stays in the bank', null)));
   return shortlist(cands, mind.level.shortlist, mind.level.shortlistTolerance);
 }
 
