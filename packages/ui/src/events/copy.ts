@@ -2,7 +2,7 @@ import { GOOD_NAME, type Good } from '../components/tokens';
 import { signLook, type ShowCast } from './frame';
 import { sickBecause } from './sick';
 import type { EventSegment } from './timing';
-import type { ShowEventKey, ShowEventView, ShowPhase } from './types';
+import type { ShowEventKey, ShowEventView, ShowHit, ShowPhase } from './types';
 
 /** The show's words, the gallery's own (design/mocks/ws8-events src/copy.ts). */
 
@@ -13,6 +13,11 @@ const plots = (good: Good | undefined, n: number) => {
   return plural(n, one, many);
 };
 const signed = (n: number) => `${n < 0 ? '−' : '+'}${Math.abs(n)}`;
+/** The word a plot's chip shows instead of a number, when the change isn't one: CAVED IN. */
+export function hitText(hit: ShowHit): string | undefined {
+  return hit.becomes === 'plain' ? 'CAVED IN' : undefined;
+}
+
 /** What a phase's stretch of time is called: a development turn, otherwise a month. */
 export const phaseNoun = (phase: ShowPhase) => (phase === 'development' ? 'turn' : 'month');
 

@@ -1,4 +1,4 @@
-import type { Slot } from '../components/tokens';
+import type { Slot, SpecialKind } from '../components/tokens';
 
 /** The events the show draws: the engine's EventKey union (packages/engine/src/types.ts). */
 export type ShowEventKey =
@@ -38,7 +38,16 @@ export interface ShowEventView {
   scope: 'colony' | 'local' | 'personal';
   origin: { x: number; y: number };
   from?: 'n' | 'e' | 's' | 'w';
-  hits: { x: number; y: number; order: number; delta: number }[];
+  hits: {
+    x: number;
+    y: number;
+    order: number;
+    delta: number;
+    /** The special field the plot had until this hit: the map keeps its badge until the hit lands. */
+    was?: SpecialKind;
+    /** What the plot is after this hit, when the hit changes what it is. */
+    becomes?: 'plain';
+  }[];
   phase: ShowPhase;
   weight: ShowWeight;
   playMs: number;

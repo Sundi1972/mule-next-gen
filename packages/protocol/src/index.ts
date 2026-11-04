@@ -455,7 +455,16 @@ export interface EventView {
   /** Whose event it is: a personal event's player, or the player who fell sick. */
   player?: string;
   /** The plots it hit, in the order it reached them, and how many units each gained or lost. */
-  hits: { x: number; y: number; order: number; delta: number }[];
+  hits: {
+    x: number;
+    y: number;
+    order: number;
+    delta: number;
+    /** The special field the plot had until this hit, when the hit removes it: the map keeps its badge until the hit lands. */
+    was?: SpecialField['kind'];
+    /** What the plot is after this hit, when the hit changes what it is ('plain': its special field is gone). */
+    becomes?: 'plain';
+  }[];
   /** The phase whose show plays it. */
   phase: Phase;
   /** How big its story is on the TV. */
