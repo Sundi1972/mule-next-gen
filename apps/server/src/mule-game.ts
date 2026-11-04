@@ -689,7 +689,9 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     if (colonist.walk) throw new RuleError('Still walking');
     if (colonist.assayUntil !== null) throw new RuleError('Still assaying');
     // Once in, you wait: the time before month 1's clock is for first MULEs only.
-    if (this.clockWaits && WAIT_REFUSES.has(intent.type) && this.isIn(seatId)) throw new RuleError("Waiting for the others' first MULEs");
+    // A seat in only because it cannot get a MULE hears why from the engine ("Not enough money"), not that it waits.
+    const waitsToBuy = intent.type === 'buyMule' && this.cannotGetFirstMule(seatId);
+    if (this.clockWaits && WAIT_REFUSES.has(intent.type) && !waitsToBuy && this.isIn(seatId)) throw new RuleError("Waiting for the others' first MULEs");
     const to = walkTarget(state, intent);
     if (to === null) {
       this.act(seatId, intent, now);
@@ -913,8 +915,14 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     const state = this.requireState();
     if (this.away.has(seatId) || this.ready.has(seatId)) return true;
     const p = state.players.find((q) => q.id === seatId)!;
-    const cannotGetOne = !p.carriedMule && (state.store.mules <= 0 || p.money < mulePriceFor(state, seatId));
-    return p.installedThisTurn || p.doneDeveloping || cannotGetOne || !state.tiles.some((t) => t.owner === seatId);
+    return p.installedThisTurn || p.doneDeveloping || this.cannotGetFirstMule(seatId) || !state.tiles.some((t) => t.owner === seatId);
+  }
+
+  /** It leads no MULE, and the corral is empty or its price is more than the seat has (AM-33). */
+  private cannotGetFirstMule(seatId: string): boolean {
+    const state = this.requireState();
+    const p = state.players.find((q) => q.id === seatId)!;
+    return !p.carriedMule && (state.store.mules <= 0 || p.money < mulePriceFor(state, seatId));
   }
 
   private seatsNotIn(): SeatInfo[] {
@@ -1407,7 +1415,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
 
   /** Why the rules hold back a press the floor would make, or null: in month 1 a seat already in waits (AM-3). */
   private refusal(seatId: string, reach: Reach): string | null {
-    return this.clockWaits && WAIT_REFUSES_REACH.has(reach.kind) && this.isIn(seatId) ? WAITING_FOR_FIRST_MULES : null;
+    const waitsToBuy = reach.kind === 'buy' && this.cannotGetFirstMule(seatId);
+    return this.clockWaits && WAIT_REFUSES_REACH.has(reach.kind) && !waitsToBuy && this.isIn(seatId) ? WAITING_FOR_FIRST_MULES : null;
   }
 
   /** A seat's button as its view shows it at `at`, epoch ms, compared as text. */

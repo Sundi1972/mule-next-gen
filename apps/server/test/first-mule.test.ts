@@ -1,4 +1,4 @@
-import { DEV_STEER, DEVELOPMENT, RuleError, tileIndex, type GameState } from '@mule/engine';
+import { DEV_STEER, DEVELOPMENT, mulePrice, RuleError, SPECIES_PERK, tileIndex, type GameState } from '@mule/engine';
 import type { MuleView } from '@mule/protocol';
 import type { SeatInfo } from '@tabletop/core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -285,6 +285,28 @@ describe('A-1 (AM-33): a seat that cannot get a first MULE counts as in, so the 
       state.players.find((p) => p.id === LENA)!.money = 0;
     });
     expect(g.game.viewFor(null).clockWaitsFor, 'only Ossa, who can buy, is still to come').toEqual([OSSA]);
+  });
+
+  it("AM-33 (negative): a Gearling that can pay its own lower price is still waited for, though it can't pay the full one", () => {
+    const g = stagedCorral((state) => {
+      const lena = state.players.find((p) => p.id === LENA)!;
+      lena.species = 'gearling';
+      const full = mulePrice(state);
+      lena.money = Math.round(full * SPECIES_PERK.gearlingPrice) + Math.floor((full - Math.round(full * SPECIES_PERK.gearlingPrice)) / 2);
+      expect(lena.money, 'between the Gearling price and the full one').toBeLessThan(full);
+    });
+    expect(g.game.viewFor(null).clockWaitsFor, 'Lena can buy at her price').toEqual([LENA, OSSA]);
+  });
+
+  it("AM-33: a seat that can't pay is told why when it tries to buy, not that it waits", () => {
+    const g = stagedCorral((state) => {
+      state.players.find((p) => p.id === LENA)!.money = 0;
+    });
+    // A tap buy is a walk to the corral; the engine's refusal comes on arrival, in the news.
+    tapThere(g.game, g, LENA, { type: 'buyMule' });
+    const news = g.game.viewFor(null).news.join(' | ');
+    expect(news).toContain('Not enough money');
+    expect(news).not.toContain('Waiting for the others');
   });
 
   it('AM-33 (negative): a seat leading a MULE from an empty corral is still waited for, until it installs', () => {
