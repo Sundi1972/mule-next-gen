@@ -8,8 +8,11 @@ import {
   doorPresses,
   floorConfig,
   GAME,
+  GOODS,
   HALL,
   IDLE_INPUT,
+  mulePriceFor,
+  outfitCostFor,
   pressOrder,
   pubPayoutFor,
   reachOf,
@@ -586,11 +589,29 @@ describe('T-AC-9 (AM-3): month 1 refuses a seat already in on the floor too', ()
     expect(reachOfSeat(g, LENA)).toMatchObject({ verb: 'BUY MULE', enabled: true });
     const stats = (g.game as unknown as { steering: { stats: { acts: number; refused: number } } }).steering.stats;
     const { acts, refused } = stats;
+    // Money for a MULE but not an outfit: in for her install, she still waits, whatever she could pay for.
+    meOf(g, LENA).money = mulePriceFor(g.state, LENA);
     const before = { money: meOf(g, LENA).money, mule: meOf(g, LENA).carriedMule, corral: g.state.store.mules };
     pressAct(g.game, g, LENA);
     expect({ money: meOf(g, LENA).money, mule: meOf(g, LENA).carriedMule, corral: g.state.store.mules }).toEqual(before);
     expect([stats.acts, stats.refused], 'counted as refused, for the phase log').toEqual([acts, refused + 1]);
     expect(g.game.viewFor(null).clockWaitsFor).toEqual([OSSA]);
+  });
+});
+
+describe('AM-33 (flag on): a seat that can never install a first MULE does not hold the clock, and may still buy', () => {
+  it('Lena can pay for a MULE but for no outfit: she is not waited for, and her BUY MULE at the corral goes through', () => {
+    const g = steered({ firstMonthWaits: true, ossaHome: true });
+    const cheapest = Math.min(...[...GOODS, 'greenBelt' as const].map((o) => outfitCostFor(g.state, LENA, o)));
+    meOf(g, LENA).money = mulePriceFor(g.state, LENA) + cheapest - 1;
+    g.advance(TICK);
+    expect(g.game.viewFor(null).clockWaitsFor, 'only Ossa can still install one').toEqual([OSSA]);
+    pressAct(g.game, g, LENA); // ENTER STORE
+    steerTo(g.game, g, LENA, toRoom('corral'));
+    const stats = (g.game as unknown as { steering: { stats: { refused: number } } }).steering.stats;
+    const { refused } = stats;
+    pressAct(g.game, g, LENA); // BUY MULE
+    expect([meOf(g, LENA).carriedMule, stats.refused], 'sold, not refused for waiting').toEqual(['empty', refused]);
   });
 });
 
