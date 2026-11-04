@@ -28,7 +28,7 @@ import { Room, TableError } from '@tabletop/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createBrain } from '../src/brain/index.js';
 import { AI_NAMES, MuleGame } from '../src/mule-game.js';
-import { pressAct, steerTo, toDevelopment, walkers, type SteerPoint } from './fake-context.js';
+import { pressAct, seats, steerTo, toDevelopment, walkers, type SteerPoint } from './fake-context.js';
 
 const LENA = 's1';
 const OSSA = 's2';
@@ -286,6 +286,39 @@ describe('T-AC-4 (server part): one frame a tick; full views only on change', ()
     expect(meOf(g, LENA).carriedMule).toBe('empty');
     expect(meOf(g, LENA).money).toBeLessThan(money);
     expect(g.changes).toHaveLength(1);
+  });
+});
+
+describe("UBER-AC-3 (server part): the moments' lines reach the TV in the tick's frame", () => {
+  it("UBER-AC-3: a pack meeting a colonist, an AI's among them, puts its 'Wolves!' line in that tick's frame, once", () => {
+    // Every plot forest, wolf land: the colonists stand where development starts them, outside the store's doors, and
+    // the packs come to them there (an AI's stands still on this server until it steers, a person's with no steer).
+    const g = toDevelopment({
+      players: seats,
+      prepare: (state) => {
+        for (const t of state.tiles) if (t.terrain !== 'store') Object.assign(t, { terrain: 'forest', owner: null, outfit: null });
+      },
+    });
+    g.frames.length = 0;
+    const named = new Map(g.state.players.map((p) => [p.id, p.name]));
+    const met: { tick: number; line: string }[] = [];
+    // A meeting: a pack round a colonist that had none the tick before.
+    let before = floorOf(g.game);
+    for (let i = 0; i < 600 && g.game.viewFor(null).phase === 'development'; i++) {
+      g.advance(TICK);
+      const floor = floorOf(g.game);
+      for (const c of floor.colonists) {
+        if (c.encounter && !before.colonists.find((b) => b.id === c.id)!.encounter) met.push({ tick: floor.tick, line: `Wolves! ${named.get(c.id)}: run or fight?` });
+      }
+      before = floor;
+    }
+    const ai = g.state.players.find((p) => p.isAi)!;
+    expect(met.some((m) => m.line.includes(ai.name)), 'a pack met the AI').toBe(true);
+    const frames = g.frames as DevFrame[];
+    // Each meeting's line is in its tick's frame, once; and no frame carries a 'Wolves!' line for a meeting not this tick.
+    for (const m of met) expect(frames.find((f) => f.tick === m.tick)!.beats.filter((b) => b === m.line), `tick ${m.tick}`).toEqual([m.line]);
+    const shown = frames.flatMap((f) => f.beats.filter((b) => b.endsWith(': run or fight?')).map((line) => ({ tick: f.tick, line })));
+    expect(shown).toEqual(met);
   });
 });
 
