@@ -19,11 +19,12 @@ import {
   type Good,
   type GameState,
 } from '@mule/engine';
-import { CAUSES, GOOD_NAME, landDecision, OPTION_IDS, PERSONAS, playGame, simSeats, situation, STRATEGY_SYSTEM, toOptions, type Cause, type Mind, type ShortOption } from '@mule/ai';
+import { CAUSES, GOOD_NAME, landDecision, OPTION_IDS, PERSONAS, playGame, simSeats, situation, toOptions, type Cause, type Mind, type ShortOption } from '@mule/ai';
 import { alreadyRanToday, AUTH_STOPPED, claimLedger, day, dayLedgerPath, nearest, numberFlags, resolveDeps, runAsScript, table, type MainDeps, type StopReason } from './cli.js';
 import { billUnknown, CallFailed, createAnthropicSdk, createThinkingComplete, type HaikuSdk, type ThinkingCall, type ThinkingReply } from './client.js';
 import { API_KEY_ENV, apiKeyFrom } from './index.js';
 import { NO_USAGE, type Usage } from './ledger.js';
+import { STRATEGY_SYSTEM } from './strategy-primer.js';
 
 export { STRATEGY_SYSTEM };
 
