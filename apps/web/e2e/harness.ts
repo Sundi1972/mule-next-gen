@@ -3,7 +3,7 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { doorOutside, floorConfig, GAME, HALL, HALL_DOORS, pathTo, type GameState, type HallDoor } from '@mule/engine';
+import { boxOf, doorOutside, floorConfig, GAME, HALL, HALL_DOORS, pathTo, type GameState, type HallDoor, type HallPlace } from '@mule/engine';
 import { chromium, errors as playwrightErrors, type Browser, type Locator, type Page } from 'playwright';
 import QRCode from 'qrcode';
 import { GRANT_PASS_MAX_MS, GRANT_TICK_MS } from '../../server/src/mule-game.js';
@@ -213,6 +213,16 @@ export interface SteerTarget {
 
 /** A plot's centre on the map: the floor reads a tile at the point's whole part. */
 export const plotCentre = (col: number, row: number): SteerTarget => ({ space: 'map', x: col + 0.5, y: row + 0.5 });
+
+/**
+ * Where to stand in the hall to be at a room or a bay, so Act works there: the middle of its box, which steerTo's
+ * reach keeps inside. A room's own spot is on the walkway in front of it, outside the box, where placeAt finds no
+ * place and the button only points the way. A door is narrower than that reach: go through one with throughDoor.
+ */
+export function hallPlace(place: Exclude<HallPlace, HallDoor>): SteerTarget {
+  const box = boxOf(place);
+  return { space: 'hall', x: (box.x0 + box.x1) / 2, y: (box.y0 + box.y1) / 2 };
+}
 
 /** How often the step looks at where the colonist stands: one development tick. */
 const STEER_LOOK_MS = 50;
