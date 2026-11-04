@@ -45,6 +45,9 @@ interface Input extends Stick {
   tick: number;
 }
 
+/** One stepped tick of the phone's own copy: a local record, never the floor itself. */
+export type PastStep = { tick: number; me: FloorColonist };
+
 export interface Prediction {
   /** Waiting for a first frame; live; or reconnecting, no frame for staleMs. */
   readonly status: 'waiting' | 'live' | 'reconnecting';
@@ -53,7 +56,7 @@ export interface Prediction {
   /** The copy at `tick`; null until the first frame. */
   readonly me: FloorColonist | null;
   /** The copy at each recent tick, oldest first, `tick` last: what a frame's tick is compared with. */
-  readonly past: readonly { tick: number; me: FloorColonist }[];
+  readonly past: readonly PastStep[];
   /** The stick from each tick on, oldest first. */
   readonly inputs: readonly Input[];
   /** How far the shown colonist stood from the copy when the copy was last corrected, easing to nothing over correctMs. */
@@ -107,9 +110,9 @@ function stepMe(me: FloorColonist, tick: number, stick: Stick, world: PredictWor
 }
 
 /** The copy stepped on from (tick, me) to `to`, each step with its tick's stick, and the past those steps add. */
-function replay(from: { tick: number; me: FloorColonist }, to: number, inputs: readonly Input[], world: PredictWorld, hold: number | null) {
+function replay(from: PastStep, to: number, inputs: readonly Input[], world: PredictWorld, hold: number | null) {
   let { tick, me } = from;
-  const added: { tick: number; me: FloorColonist }[] = [];
+  const added: PastStep[] = [];
   while (tick < to) {
     me = stepMe(me, tick, stickAt(inputs, tick), world, hold);
     tick++;
