@@ -307,6 +307,57 @@ export function plotErrandSeconds(state: GameState, cfg: FloorConfig, c: FloorCo
   return walk.seconds / mapFactor(cfg, c.pace, lead, c.bot, c.bitten) + work + pubSeconds(state, cfg, { ...c, ...walk.end, lead: null });
 }
 
+/**
+ * The walk from where a colonist stands to plot `index`, as the hand walks it: on the map from where it stands (slowed
+ * by a bite), from the hall out by the door that makes it quickest. Its seconds at the colonist's factors, and where it
+ * ends, where Reach first offers the plot.
+ */
+export function plotWalk(state: GameState, cfg: FloorConfig, c: FloorColonist, index: number): MapWalk {
+  const lead = leading(c);
+  if (c.space === 'map') {
+    const walk = mapWalk(state, cfg, c, index);
+    return { seconds: walk.seconds / mapFactor(cfg, c.pace, lead, c.bot, c.bitten), end: walk.end };
+  }
+  let best: MapWalk = { seconds: Infinity, end: c };
+  for (const [door, map] of doorTable(state, cfg)) {
+    const seconds = hallSeconds(state, cfg, c, door, c.pace, lead) + map[index]!.seconds / mapFactor(cfg, c.pace, lead, c.bot);
+    if (seconds < best.seconds) best = { seconds, end: map[index]!.end };
+  }
+  return best;
+}
+
+/**
+ * A stop on the rest of a plan: a place in the hall or a plot, and `work` seconds there (the press's pause, an assay).
+ * `lead`: whether it walks there leading a MULE (true from the corral to the plot it installs on, false to the corral);
+ * absent, as it stands.
+ */
+export type PlanStop = ({ place: HallPlace } | { plot: number }) & { work: number; lead?: boolean };
+
+/**
+ * Seconds for the rest of a plan from where a colonist stands: each stop in order, every leg setting off where the last
+ * ended (a counter's threshold, a plot's edge) at the floor's speeds, the work at each, as the estimates the plans are
+ * priced by (muleLegs, plotErrandSeconds). A bite slows it until it is back in the store.
+ */
+export function planSeconds(state: GameState, cfg: FloorConfig, c: FloorColonist, stops: readonly PlanStop[]): number {
+  let at = c;
+  let seconds = 0;
+  for (const stop of stops) {
+    const lead = stop.lead === undefined ? at.lead : stop.lead ? (at.lead ?? { good: null, x: at.x, y: at.y }) : null;
+    const me: FloorColonist = { ...at, lead, bolt: undefined };
+    if ('plot' in stop) {
+      const walk = plotWalk(state, cfg, me, stop.plot);
+      seconds += walk.seconds + stop.work;
+      // Installed, the MULE stays on the plot.
+      at = { ...me, space: 'map', ...walk.end, lead: null, bitten: me.space === 'map' && me.bitten };
+    } else {
+      seconds += secondsToPlace(state, cfg, me, stop.place) + stop.work;
+      at = { ...me, space: 'hall', ...standPoint(stop.place, cfg.hall), bitten: false };
+    }
+    if (seconds === Infinity) return seconds;
+  }
+  return seconds;
+}
+
 const AROUND = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]] as const;
 
 /**

@@ -21,6 +21,7 @@ import {
   type FloorInput,
   type FloorPoint,
   type GameState,
+  type HallPlace,
   type Outfit,
   type Rng,
   type WolfFightLevel,
@@ -28,7 +29,7 @@ import {
 } from '@mule/engine';
 import type { Act, AiAction } from '../actions.js';
 import type { Brain, Pending } from '../brain.js';
-import { floorDevWalk, leading, mapFactor, plotErrandSeconds, pubDoor, pubSeconds, tileMiddle, tripSeconds } from '../floor-time.js';
+import { floorDevWalk, leading, mapFactor, planSeconds, plotErrandSeconds, pubDoor, pubSeconds, tileMiddle, tripSeconds, type PlanStop } from '../floor-time.js';
 import { analysesWanted, developDecision, filtersWanted, outfitName, plotName, type DevAction, type DevWalk } from '../strategist.js';
 import { situation } from '../summary.js';
 import { FloorWalker, type FloorView } from './floor-walker.js';
@@ -272,9 +273,11 @@ export class DevelopHand {
         this.chaser.reset();
       }
     }
-    // With the spare-time rule, a race that no longer leaves the pub's time (a pack on the way, a bite) is given up.
-    const spare = !cfg.steer.botsSpareTime || secondsLeft > pubSeconds(state, cfg, c) + this.margin(cfg, c);
-    if (g && this.racingGlint === g.sinceTick && spare) {
+    // With the spare-time rule, a race that no longer leaves the errand's time (a pack on the way, a bite) is given up:
+    // the pub's, and every step left on the list after the glint (RULE-8).
+    const racing = g !== null && this.racingGlint === g.sinceTick;
+    const spare = !cfg.steer.botsSpareTime || (racing && secondsLeft > pubSeconds(state, cfg, c) + this.margin(cfg, c) && this.fitsDetour(view, c, glintMiddle(g)));
+    if (g && racing && spare) {
       const input = this.chaser.seek(view, glintMiddle(g), 'grab');
       if (input) return input;
     }
@@ -385,9 +388,8 @@ export class DevelopHand {
 
   /**
    * RULE-8: whether a detour to `to` still leaves the errand time to finish inside the turn: the walk there, then from
-   * there the step under way (or next) and the pub, at the floor's speeds, with botPubMarginSeconds in hand. A rough
-   * reckoning, as the mock's spare.ts: the next MULE's walk and the pub, not every step on the list. Always true with
-   * DEV_STEER.botsSpareTime off.
+   * there every step left on the list and the pub, at the floor's speeds and with the presses' pauses (planSeconds, the
+   * estimates the plan is priced by), with botPubMarginSeconds in hand. Always true with DEV_STEER.botsSpareTime off.
    */
   private fitsDetour(view: FloorView, c: FloorColonist, to: FloorPoint): boolean {
     const { state, cfg, secondsLeft } = view;
@@ -402,31 +404,36 @@ export class DevelopHand {
     return there + this.restFrom(view, from) + cfg.steer.botPubMarginSeconds <= secondsLeft;
   }
 
-  /** Seconds of errand left from a colonist standing at a point: the step under way or next, then the pub. */
+  /** Seconds of errand left from a colonist standing at a point: every step on the list, in order, then the pub. */
   private restFrom(view: FloorView, at: FloorColonist): number {
     const { state, cfg } = view;
-    const step = this.walking ?? this.queue[0];
-    const a = step?.action;
-    if (a && (a.type === 'install' || a.type === 'analyse' || a.type === 'filter')) {
-      const work = a.type === 'analyse' ? analysisSeconds(state, this.brain.mind.me) : 0;
-      return plotErrandSeconds(state, cfg, at, tileIndex(state.width, a.x, a.y), work);
+    const pause = cfg.steer.botCounterPauseSeconds * this.brain.mind.level.devPace;
+    const plot = (x: number, y: number) => tileIndex(state.width, x, y);
+    const stops: PlanStop[] = [];
+    for (const { action: a } of this.queue) {
+      if (a.type === 'analyse') stops.push({ plot: plot(a.x, a.y), work: this.assaySeconds(state, cfg, a.x, a.y) + pause });
+      else if (a.type === 'filter') stops.push({ plot: plot(a.x, a.y), work: pause });
+      else if (a.type === 'buyMule') stops.push({ place: 'corral', work: pause, lead: false });
+      else if (a.type === 'outfit') stops.push({ place: a.outfit as HallPlace, work: pause, lead: true });
+      else if (a.type === 'install') stops.push({ plot: plot(a.x, a.y), work: pause, lead: true });
+      else if (a.type === 'pub') stops.push({ place: 'pub', work: 0 });
     }
-    const install = this.queue.find((x) => x.action.type === 'install')?.action;
-    const outfit = this.queue.find((x) => x.action.type === 'outfit')?.action;
-    if (a && (a.type === 'buyMule' || a.type === 'outfit') && install?.type === 'install' && outfit?.type === 'outfit') {
-      const legs = floorDevWalk(state, cfg, at, 0, 0).floor!(tileIndex(state.width, install.x, install.y), outfit.outfit);
-      return legs.there + legs.pub;
-    }
-    return pubSeconds(state, cfg, at);
+    const last = stops.at(-1);
+    if (!last || !('place' in last) || last.place !== 'pub') stops.push({ place: 'pub', work: 0 });
+    return planSeconds(state, cfg, at, stops);
+  }
+
+  /** Seconds an analysis of plot (x, y) holds the colonist: a lake plot's shore land is analysed first if it has not been (AM-18), two analyses. */
+  private assaySeconds(state: GameState, cfg: FloorConfig, x: number, y: number): number {
+    const lake = state.tiles[tileIndex(state.width, x, y)]!.terrain === 'lake' && cfg.steer.lakeMode === 'shore';
+    return analysisSeconds(state, this.brain.mind.me) * (lake ? 2 : 1); // literal-ok: the shore's land and the lake, two analyses
   }
 
   /** Whether an analysis or a filter, from where the colonist stands, still leaves time for the pub. */
   private fits(state: GameState, cfg: FloorConfig, c: FloorColonist, step: DevStep, secondsLeft: number): boolean {
     const a = step.action;
     if (a.type !== 'analyse' && a.type !== 'filter') return true;
-    // A lake plot is analysed from its shore, whose own land Reach analyses first if it has not been (AM-18): two analyses.
-    const lake = state.tiles[tileIndex(state.width, a.x, a.y)]!.terrain === 'lake' && cfg.steer.lakeMode === 'shore';
-    const work = a.type === 'analyse' ? analysisSeconds(state, this.brain.mind.me) * (lake ? 2 : 1) : 0; // literal-ok: the shore's land and the lake, two analyses
+    const work = a.type === 'analyse' ? this.assaySeconds(state, cfg, a.x, a.y) : 0;
     return plotErrandSeconds(state, cfg, c, tileIndex(state.width, a.x, a.y), work) + cfg.steer.botPubMarginSeconds <= secondsLeft;
   }
 
