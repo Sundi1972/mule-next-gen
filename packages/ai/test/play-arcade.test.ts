@@ -81,6 +81,12 @@ describe('the AI walks the floor, and the sim plays it (arcade C9, C10)', () => 
       expect(seats, `turn ${i}: one record a seat`).toHaveLength(LEVELS.length);
       for (const t of seats) {
         const why = `turn ${i}, month ${t.month}, ${t.id}`;
+        // The one excuse: a pack met it when the pub, at the bitten pace, was already further than the time left.
+        // The share of such turns is judged on the sim's sample, below; here each one is shown.
+        if (t.pubAt === null && t.lateWolves) {
+          console.log(`T-AC-5 excused: ${why}: a pack met it with the pub out of reach at the bitten pace`);
+          continue;
+        }
         expect(t.pubAt, `${why}: never reached the pub`).not.toBeNull();
         expect(t.pubAt!, `${why}: reached the pub after the clock`).toBeLessThanOrEqual(DEVELOPMENT.fullSeconds);
       }
@@ -131,11 +137,15 @@ describe('the AI walks the floor, and the sim plays it (arcade C9, C10)', () => 
  * 43% at 20 and 42% at 40, so 20 is the smallest steady one at about a second a game.
  */
 const SIM_GAMES = 20;
-let simSample: FloorMomentCounts[] | null = null;
-function simMoments(): FloorMomentCounts[] {
-  simSample ??= steered(() => Array.from({ length: SIM_GAMES }, (_, i) => playGame(i + 1, simSeats(4, 'trader', i + 1, null), { politics: true }).moments).flat());
+let simSample: { moments: FloorMomentCounts[]; turns: DevTurn[] } | null = null;
+function simGames(): { moments: FloorMomentCounts[]; turns: DevTurn[] } {
+  simSample ??= steered(() => {
+    const games = Array.from({ length: SIM_GAMES }, (_, i) => playGame(i + 1, simSeats(4, 'trader', i + 1, null), { politics: true }));
+    return { moments: games.flatMap((g) => g.moments), turns: games.flatMap((g) => g.turns) };
+  });
   return simSample;
 }
+const simMoments = () => simGames().moments;
 
 describe("the moments in the sim's games (T-AC-5, AM-22)", () => {
   it('T-AC-5 (AM-22): a bot races in at least 40% of glints, never one whose detour breaks its errand (RULE-8)', { timeout: 120_000 }, () => {
@@ -145,6 +155,16 @@ describe("the moments in the sim's games (T-AC-5, AM-22)", () => {
     // RULE-8's example, from the mock's one-MULE bots, was 63%; the real AI plans its MULEs to fill the clock, so fewer
     // have time to spare. AM-22 rules the floor at 40%. The never-clause is the spare-time negative below the pub cases.
     expect(sum(moments, 'raced') / glints, 'share of glints a bot raced').toBeGreaterThanOrEqual(0.4);
+  });
+
+  it('T-AC-5: every AI colonist reaches the pub, but where a pack met it with the pub out of reach at the bitten pace, at most 1% of turns', { timeout: 120_000 }, () => {
+    const { turns } = simGames();
+    const missed = turns.filter((t) => t.pubAt === null);
+    const excused = missed.filter((t) => t.lateWolves);
+    for (const t of excused) console.log(`T-AC-5 excused: month ${t.month}, ${t.id}: a pack met it with the pub out of reach at the bitten pace`);
+    expect(missed.filter((t) => !t.lateWolves).map((t) => `month ${t.month}, ${t.id}`), 'missed the pub with no excuse').toEqual([]);
+    expect(excused.length / turns.length, `excused turns: ${excused.length} of ${turns.length}`).toBeLessThanOrEqual(0.01);
+    expect(turns.every((t) => t.pubAt === null || t.pubAt <= DEVELOPMENT.fullSeconds)).toBe(true);
   });
 
   it("AM-22: an AI colonist meets wolves in at least 60% of months (RULE-4's AI line, botWolfLandShare)", { timeout: 120_000 }, () => {
