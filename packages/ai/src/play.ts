@@ -442,7 +442,7 @@ export interface MonthSeat {
 }
 
 export interface MonthPlayed {
-  /** The state after that month's upkeep, or at game over. */
+  /** The state as the next month begins (that month's upkeep advanced out of), or at game over. */
   state: GameState;
   /** The month it played. */
   month: number;
@@ -450,13 +450,13 @@ export interface MonthPlayed {
 
 /**
  * One month of keyless play from `start`, in process: from an upkeep the whole next month, from any other phase the
- * rest of this one, to the end of its upkeep. Every player is an AiSeat with no decider, so nothing waits. Pure: it
- * plays on a clone whose seed is `seed`, draws only from seeds, and reads no clock. Throws a RuleError for a player
- * missing from `seats`, or a playbook stamped for another month than the one played.
+ * rest of this one, through its upkeep. Every player is an AiSeat with no decider, so nothing waits. Pure: it plays
+ * on a clone whose seed is `seed`, draws only from seeds, and reads no clock. Throws an Error for a player missing
+ * from `seats` (the caller's mistake), and a RuleError for a playbook stamped for another month than the one played.
  */
 export function playMonthFrom(start: GameState, seats: readonly MonthSeat[], seed: number, options: { walking?: boolean } = {}): MonthPlayed {
   const month = start.phase === 'upkeep' ? start.month + 1 : start.month;
-  for (const p of start.players) if (!seats.some((s) => s.id === p.id)) throw new RuleError(`No seat for player ${p.id}`);
+  for (const p of start.players) if (!seats.some((s) => s.id === p.id)) throw new Error(`No seat for player ${p.id}`);
   for (const s of seats) {
     if (s.playbook && s.playbook.month !== month) throw new RuleError(`Seat ${s.id}'s playbook is for month ${s.playbook.month}, not ${month}`);
   }

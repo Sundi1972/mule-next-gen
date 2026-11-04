@@ -70,6 +70,6 @@ describe('playMonthFrom: one month of keyless play from a state', () => {
     const me = seats[0]!.id;
     expect(() => playMonthFrom(upkeep, [{ ...seats[0]!, playbook: playbookFor(me, 1) }, ...seats.slice(1)], 9)).toThrow(RuleError);
     expect(() => playMonthFrom(upkeep, [{ ...seats[0]!, playbook: playbookFor(me, 2) }, ...seats.slice(1)], 9)).not.toThrow();
-    expect(() => playMonthFrom(upkeep, seats.slice(1), 9)).toThrow(RuleError);
+    expect(() => playMonthFrom(upkeep, seats.slice(1), 9)).toThrow(/No seat for player/);
   });
 });
