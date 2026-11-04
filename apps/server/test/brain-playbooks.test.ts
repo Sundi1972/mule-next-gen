@@ -59,11 +59,11 @@ const callLines = () => (fs.existsSync(ledgerPath()) ? readLedger(ledgerPath()).
  * A fake model that answers `text` `atMs` after it is asked; every ask here is made at the game's start. Like the real
  * SDK, a call aborted before it answered rejects at once and never answers.
  */
-const answersAt = (atMs: number, text: string) =>
+const answersAt = (atMs: number, text: string | ((n: number) => string)) =>
   fakeSdk(
-    (_n, _params, options) =>
+    (n, _params, options) =>
       new Promise((resolve, reject) => {
-        const timer = setTimeout(() => resolve(sdkMessage(text, USED)), atMs);
+        const timer = setTimeout(() => resolve(sdkMessage(typeof text === 'string' ? text : text(n), USED)), atMs);
         options.signal?.addEventListener('abort', () => {
           clearTimeout(timer);
           reject(options.signal?.reason);
@@ -150,10 +150,11 @@ describe('RULE-A1: which playbook takes effect at the land grant', () => {
     expect(none.now).toBeNull();
   });
 
-  it('T-AC-A1: row 4, a reply 1 s before the land grant: the draft the brief showed, with its accepted edits, plays by llm', async () => {
-    const sdk = answersAt(1_000, EDITS);
+  it("T-AC-A1: row 4, a reply 1 s before the land grant: the draft the brief showed, with its accepted edits, plays by llm; a reply in time with none accepted plays the land grant's own draft, by engine", async () => {
+    // Month 1's reply carries EDITS; month 2's has every edit refused or rejected.
+    const sdk = answersAt(1_000, (n) => (n === 1 ? EDITS : ALL_REFUSED));
     // The draft moves on between the ask and the land grant: the edits apply to the one the brief showed.
-    const { now, inEffectAtStart, engine } = await month1({ brain: smartOn(sdk), source: driftingSource(), grantAtMs: 2_000 });
+    const { now, inEffectAtStart, engine, playbooks, state } = await month1({ brain: smartOn(sdk), source: driftingSource(), grantAtMs: 2_000 });
 
     expect(sdk.calls).toBe(1);
     expect(sdk.requests[0]!.params.model).toBe(BRAIN.writeCalls.strategy.model);
@@ -170,6 +171,23 @@ describe('RULE-A1: which playbook takes effect at the land grant', () => {
     expect(inEffectAtStart?.rejected).toEqual([]);
     expect(now).toEqual(inEffectAtStart);
     expect(callLines().map((l) => [l.kind, l.outcome])).toEqual([['strategy', 'llm']]);
+
+    // Month 2, asked as month 1's upkeep opens: the reply comes in time, but nothing in it is accepted. What plays is
+    // the land grant's fresh draft for month 2, never the upkeep-time draft the brief showed; the feedback is kept.
+    advanceTo(state, 'upkeep');
+    playbooks.ask(state, 2);
+    await vi.advanceTimersByTimeAsync(1_000);
+    advanceTo(state, 'landGrant');
+    playbooks.takeEffect(state);
+    expect(sdk.calls).toBe(2);
+    const month2 = playbooks.playbookFor('p0', 2);
+    expect(month2).toEqual({ ...driftingSource().draft(state, 'p0').playbook, by: 'engine' });
+    expect(month2).toMatchObject({ by: 'engine', month: 2 });
+    expect(month2?.landGrant?.pressShare, "the land grant's draft").toEqual(LATER_PRESS);
+    expect(playbooks.feedbackFor('p0')).toEqual({
+      refused: [{ path: '/landGrant/ranked', cause: 'plan_not_offered' }],
+      rejected: [{ path: '/landGrant/pressShare', to: { start: 0.2, end: 0.7 }, why: 'out of bounds' }],
+    });
   });
 
   it('T-AC-A1: row 2, a model still thinking when the land grant starts is cancelled then: the engine playbook plays, and the call is ledgered as a timeout, its bill unknown and counted at the worst case', async () => {
