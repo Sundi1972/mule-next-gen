@@ -29,6 +29,8 @@ export interface ReplayResult {
   identical: boolean;
   scores: { seat: string; recorded: number | null; replayed: number | null }[];
   stateHash: { recorded: string | null; replayed: string | null };
+  /** Why the replay is not identical, when a step played otherwise than recorded without diverging (AM-5). */
+  reason?: string;
 }
 
 /** A step's tape, timers and brain calls, served back to a game in replay. Never calls a model or the network. */
@@ -211,7 +213,7 @@ export async function replay(record: MuleRecord): Promise<ReplayResult> {
 
   const recorded = record.outcome ?? null;
   const outcome = replayed as MuleRecord['outcome'] | null;
-  const scores = record.seats.map((s) => ({ seat: s.id, recorded: recorded?.scores[s.id] ?? null, replayed: outcome?.scores[s.id] ?? null }));
+  const scores = record.seats.map((s) => ({ seat: s.id, recorded: recorded?.scores?.[s.id] ?? null, replayed: outcome?.scores?.[s.id] ?? null }));
   const stateHash = { recorded: recorded?.stateHash ?? null, replayed: outcome?.stateHash ?? null };
   return { identical: stateHash.recorded === stateHash.replayed && scores.every((s) => s.recorded === s.replayed), scores, stateHash };
 }
