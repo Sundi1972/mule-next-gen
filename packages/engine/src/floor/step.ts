@@ -104,16 +104,16 @@ function doorMove(floor: DevFloor, state: GameState, seat: string, input: FloorI
   return reach.kind === 'enter' || reach.kind === 'leave' ? reach : null;
 }
 
-/**
- * The colonist with its lead as the game has it now: a MULE bought, outfitted or installed since the last tick, and
- * its bolt over once the game has it caught (or the bolt never paid).
- */
 /** The colonist with its stun gone. */
 function unstunned(c: FloorColonist): FloorColonist {
   const { stunnedUntilTick: _over, ...rest } = c;
   return rest;
 }
 
+/**
+ * The colonist with its lead as the game has it now: a MULE bought, outfitted or installed since the last tick, and
+ * its bolt over once the game has it caught (or the bolt never paid).
+ */
 function withLead(c: FloorColonist, state: GameState): FloorColonist {
   const lead = leadFor(state, c);
   const bolted = state.players.find((p) => p.id === c.id)!.muleBolted === true;

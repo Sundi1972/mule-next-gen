@@ -460,7 +460,10 @@ export const WOLVES = {
   /** An AI colonist stands this long before it runs or fights, and dodges a lunge till it is this far beyond its bite. */
   botChooseSeconds: 0.6,
   botDodgeMarginTiles: 0.2,
-  /** Share of an AI colonist's legs that go by wolf land. */
+  /**
+   * Share of an AI colonist's legs, among those it walks with no MULE on the lead, that go by wolf land. A leg leading a
+   * MULE never does (a pack met then costs the install), so the share of all its legs is lower than this.
+   */
   botWolfLandShare: 0.5,
   /**
    * The share of development months with at least one AI wolf encounter that `pnpm sim`'s report asks for (AM-27), on
