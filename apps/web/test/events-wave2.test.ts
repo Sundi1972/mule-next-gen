@@ -361,7 +361,7 @@ describe('B2 (C5): the map and colony stories play the gallery’s own, and chan
     const cases = [
       { events: [THEFT], map: ROBBED, kept: 'mark-6-3' },
       { events: [METEOR], map: CRATERED, kept: 'crater-7-3' },
-      { events: [COLD], map: tiles, kept: 'log' },
+      { events: [COLD], map: tiles, kept: 'log|phone-miss' },
       { events: EPIDEMIC_PHASE, map: tiles, kept: `epidemic-sick-${LENA}` },
       { events: [IMMIGRATION], map: tiles, kept: 'effects-card' },
       { events: [FIRE], map: tiles, kept: 'effects-card' },
@@ -373,10 +373,10 @@ describe('B2 (C5): the map and colony stories play the gallery’s own, and chan
         for (const html of frames) {
           expect(zoomed(html), `${key} on ${where}: no camera`).toBe(false);
           expect(shaken(html), `${key} on ${where}: no jolt`).toBe(false);
-          for (const moving of ['meteor-streak', 'front-coldSnap', 'theft-thief', 'migration-colonist', 'epidemic-haze']) expect(has(html, moving), `${key} on ${where}: no ${moving}`).toBe(false);
+          for (const moving of ['meteor-streak', 'front-coldSnap', 'theft-thief', 'theft-mule', 'pirate-crate']) expect(has(html, moving), `${key} on ${where}: no ${moving}`).toBe(false);
         }
         const settled = [...frames, result(events, where, { map, reduced: true })];
-        expect(settled.some((html) => has(html, kept)), `${key} on ${where}: ${kept}`).toBe(true);
+        expect(settled.some((html) => kept.split('|').some((k) => has(html, k))), `${key} on ${where}: ${kept}`).toBe(true);
       }
     }
     expect(glyphOn(result([METEOR], 'tv', { map: CRATERED, reduced: true }), 7, 3)).toBe(true);

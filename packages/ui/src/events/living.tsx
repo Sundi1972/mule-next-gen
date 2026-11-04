@@ -81,22 +81,29 @@ export function useEventLivingView() {
   return livingAt(useShow());
 }
 
-/** The hits that remove a plot's special field and have not landed by `t`. */
+/** The hits that change a plot's special field (a cavern caves in, a meteor leaves a crater) and have not landed by `t`. */
 export function specialsStanding({ s, t, reduced, grid }: ShowFrame): ShowHit[] {
-  return s.segments.flatMap((seg) => seg.events.flatMap((ev) => ev.hits.filter((hit) => hit.was && t < eventHitAt(seg, ev, hit, reduced, grid))));
+  return s.segments.flatMap((seg) => seg.events.flatMap((ev) => ev.hits.filter((hit) => (hit.was || hit.becomes === 'crater') && t < eventHitAt(seg, ev, hit, reduced, grid))));
 }
 
-/** The map as the show has it at `t`: the view's tiles are after the events, so a caved-in cavern keeps its badge until its hit lands. */
+/**
+ * The map as the show has it at `t`. The view's tiles are after the events, so until its hit lands a plot keeps the
+ * special field it had: a caved-in cavern keeps its badge, and a struck plot shows no crater yet (or what it had, when
+ * the view says). The view does not carry a plot's MULE before a theft or a strike, so the plot stands empty throughout.
+ */
 export function useLiveTiles(frame: ShowFrame): MapTile[] {
   const standing = specialsStanding(frame);
-  const key = standing.map((h) => `${h.x},${h.y},${h.was}`).join('|');
+  const key = standing.map((h) => `${h.x},${h.y},${h.was ?? ''}`).join('|');
   const { tiles } = frame;
   // `standing` is a new array every frame; `key` names its hits, so the map repaints only when one lands.
   return useMemo(() => {
     if (standing.length === 0) return tiles;
     return tiles.map((tile) => {
       const hit = standing.find((h) => h.x === tile.x && h.y === tile.y);
-      return hit ? { ...tile, special: { kind: hit.was! } } : tile;
+      if (!hit) return tile;
+      if (hit.was) return { ...tile, special: { kind: hit.was } };
+      const { special: _crater, ...before } = tile;
+      return before;
     });
   }, [key, tiles]);
 }
@@ -141,6 +148,8 @@ function EventWeather({ ev, seg, size }: { ev: ShowEventView; seg: EventSegment;
       );
     case 'source':
       return ev.key === 'flood' ? <Flood ev={ev} seg={seg} /> : <Ash ev={ev} seg={seg} size={size} />;
+    case 'strike':
+      return <MeteorFall ev={ev} seg={seg} size={size} />;
     default:
       return null;
   }
@@ -154,7 +163,11 @@ const TEXTURE: Partial<Record<ShowEventKey, (angle: number, c: string) => string
   drought: (a, c) => `repeating-linear-gradient(${a + 90}deg, transparent 0 9px, color-mix(in srgb, ${c} 45%, white) 9px 10px, transparent 10px 20px)`,
   acidRain: (a, c) => `repeating-linear-gradient(${a + 70}deg, transparent 0 8px, color-mix(in srgb, ${c} 85%, white) 8px 9.5px, transparent 9.5px 16px)`,
   solarFlare: (_a, c) => `repeating-conic-gradient(from 0deg at 50% -30%, color-mix(in srgb, ${c} 45%, transparent) 0 3deg, transparent 3deg 11deg)`,
+  coldSnap: (_a, c) => `radial-gradient(circle, color-mix(in srgb, ${c} 90%, white) 0 1.6px, transparent 2.2px) 0 0 / 16px 16px`,
 };
+
+/** Where a sweep blows in from: the view's edge, or the event's own (the cold snap's frost comes from the north). */
+const edgeOf = (ev: ShowEventView) => ev.from ?? (ev.key === 'coldSnap' ? 'n' : 'w');
 
 /** A front crosses the map from its edge, in the event's colour and texture: the production show's storm, generalised. */
 function Front({ ev, seg, size }: { ev: ShowEventView; seg: EventSegment; size: ShowSize }) {
@@ -162,7 +175,7 @@ function Front({ ev, seg, size }: { ev: ShowEventView; seg: EventSegment; size: 
   const p = eventFrontAt(seg, t);
   if (reduced || p < -0.2 || p > 1.3) return null;
   const c = accent(ev.key);
-  const dir = ev.from ?? 'w';
+  const dir = edgeOf(ev);
   const front = -45 + p * 100;
   const texture = TEXTURE[ev.key];
   return (
@@ -175,7 +188,7 @@ function Front({ ev, seg, size }: { ev: ShowEventView; seg: EventSegment; size: 
       />
       {texture && (
         <div
-          className={cx('absolute', ev.key !== 'solarFlare' && 'animate-[show-dust-drift_0.5s_linear_infinite]')}
+          className={cx('absolute', ev.key !== 'solarFlare' && ev.key !== 'coldSnap' && 'animate-[show-dust-drift_0.5s_linear_infinite]')}
           style={{ ...band(dir, front - 4, '58%'), background: texture(EDGE[dir].angle, c), maskImage: `linear-gradient(${EDGE[dir].angle}deg, transparent, black 30%, black 70%, transparent)`, opacity: 0.75 }}
         />
       )}
@@ -334,6 +347,74 @@ function Ash({ ev, seg, size }: { ev: ShowEventView; seg: EventSegment; size: Sh
         return k > 0 && <div key={`${h.x},${h.y}`} className="absolute rounded-[10%]" data-testid={`ash-${h.x}-${h.y}`} style={{ ...cell(h.x, h.y), background: 'radial-gradient(circle, color-mix(in srgb, var(--color-g-alloy) 85%, transparent) 0 1.2px, transparent 1.8px) 0 0 / 7px 7px, color-mix(in srgb, var(--color-g-alloy) 25%, transparent)', opacity: k }} />;
       })}
     </>
+  );
+}
+
+/** The meteor's fall and impact: a fireball streaks to the plot, its shadow grows there, a flash and rings, the crater. */
+function MeteorFall({ ev, seg, size }: { ev: ShowEventView; seg: EventSegment; size: ShowSize }) {
+  const { t, reduced, grid, centre } = useShow();
+  const o = ev.origin;
+  const since = t - seg.playAt;
+  if (since < 0) return null;
+  const impact = eventImpactAt(seg) - seg.playAt;
+  const after = since - impact;
+  const c = centre(o.x, o.y);
+  const fall = clamp(since / impact);
+  // It falls from high above, from the side of the map with more room, so the whole streak crosses the map.
+  const dx = o.x >= grid.width / 2 ? -42 : 42;
+  const dy = -75;
+  const tail = (Math.atan2(dy * (grid.height / grid.width), dx) * 180) / Math.PI - 180;
+  return (
+    <>
+      {!reduced && after < 0 && (
+        <div
+          className="absolute"
+          style={{
+            left: `calc(${c.left} + ${(1 - fall) * dx}%)`,
+            top: `calc(${c.top} + ${(1 - fall) * dy}%)`,
+            width: `${cq(size, 240, 80)}cqw`,
+            height: `${cq(size, 18, 7)}cqw`,
+            // The head sits on the falling point; the tail streams back the way it came.
+            transform: `translate(-100%, -50%) rotate(${tail}deg)`,
+            transformOrigin: '100% 50%',
+            background: 'linear-gradient(90deg, transparent, color-mix(in srgb, var(--color-alert) 55%, transparent) 40%, var(--color-warn) 78%, white)',
+            borderRadius: 999,
+            boxShadow: '0 0 26px 8px color-mix(in srgb, var(--color-warn) 50%, transparent)',
+          }}
+          data-testid="meteor-streak"
+        />
+      )}
+      {/* Its shadow on the plot grows as it comes, so the table sees where it will land. */}
+      {!reduced && after < 0 && (
+        <div className="absolute rounded-full" style={{ ...c, width: `${(100 / grid.width) * (0.4 + fall * 1.2)}%`, aspectRatio: '1', transform: 'translate(-50%, -50%)', background: 'radial-gradient(circle, color-mix(in srgb, var(--color-alert) 55%, transparent), transparent 70%)', opacity: 0.4 + fall * 0.6 }} />
+      )}
+      {/* Impact: a white flash over the map, rings running out from the plot. */}
+      {!reduced && after >= 0 && after < 0.35 && <div className="absolute inset-0 bg-white" style={{ opacity: 0.75 * (1 - after / 0.35) }} />}
+      {!reduced &&
+        [0, 0.18, 0.36]
+          .map((d) => after - d)
+          .filter((v) => v > 0 && v < 1.2)
+          .map((v, i) => <span key={i} className="absolute rounded-full border-warn" style={{ ...c, width: `${v * 46}%`, aspectRatio: '1', transform: 'translate(-50%, -50%)', borderWidth: size === 'tv' ? 4 : 2, opacity: 1 - v / 1.2 }} />)}
+      {after >= 0 && <Crater x={o.x} y={o.y} since={reduced ? 9 : after} />}
+    </>
+  );
+}
+
+/** The scorched bowl the meteor leaves, Crystite glinting in it, while its story plays; the map's crater badge stays after. */
+function Crater({ x, y, since }: { x: number; y: number; since: number }) {
+  const { cell } = useShow();
+  const k = clamp(since / 0.6);
+  return (
+    <div className="absolute z-[2]" style={cell(x, y)} data-testid={`crater-${x}-${y}`}>
+      <div className="absolute inset-[6%] rounded-full" style={{ background: 'radial-gradient(circle, var(--color-void) 0 38%, color-mix(in srgb, var(--color-t-crater) 100%, var(--color-void)) 55%, transparent 72%)', transform: `scale(${0.6 + k * 0.4})`, opacity: k }} />
+      {[
+        [38, 40],
+        [58, 52],
+        [46, 62],
+      ].map(([l, tp], i) => (
+        <span key={i} className="absolute size-[10%] rotate-45 rounded-[1px]" style={{ left: `${l}%`, top: `${tp}%`, background: 'var(--color-g-crystite)', opacity: k, boxShadow: '0 0 6px var(--color-g-crystite)' }} />
+      ))}
+    </div>
   );
 }
 

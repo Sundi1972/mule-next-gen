@@ -1,11 +1,12 @@
 import type { ReactNode } from 'react';
 import { GoodIcon } from '../components/GoodIcon';
+import { MuleIcon } from '../components/MuleIcon';
 import { cx } from '../components/tokens';
 import { useShow } from './frame';
 import { clamp } from './fx';
 import { At, px, type P } from './place';
 import { Sneeze } from './rollcall';
-import { useStoryClock, type Scene } from './scene';
+import { Colonist, ease, mix, useStoryClock, type Scene } from './scene';
 import { COLONY_SCENES } from './stories-colony';
 import { LEDGER_SCENES } from './stories-ledger';
 import type { ShowEventKey, ShowSize } from './types';
@@ -108,7 +109,56 @@ const CavernCollapse: Scene = ({ ev, seg }) => {
   );
 };
 
+/** MULE theft: night falls on the plot, a hooded thief sneaks in, unhooks the MULE and leads it off the map. */
+const MuleTheft: Scene = ({ ev, seg, size }) => {
+  const { grid } = useShow();
+  const { u, reduced } = useStoryClock(seg);
+  if (u < 0 || u > 4.2) return null;
+  const h = ev.hits[0];
+  if (!h) return null;
+  const plot: P = { x: h.x, y: h.y };
+  const edge: P = { x: grid.width + 0.5, y: plot.y + 0.3 };
+  const night = reduced ? 0 : clamp(u / 0.5) * (1 - clamp((u - 3.4) / 0.6));
+  const sneak = reduced ? 1 : ease(clamp((u - 0.3) / 1.1));
+  const off = reduced ? 0 : ease(clamp((u - 2) / 1.4));
+  const thief = u < 2 ? mix({ x: plot.x - 2.4, y: plot.y + 0.4 }, { x: plot.x - 0.35, y: plot.y + 0.15 }, sneak) : mix({ x: plot.x - 0.35, y: plot.y + 0.15 }, edge, off);
+  const mule = u < 2 ? { x: plot.x + 0.1, y: plot.y + 0.05 } : mix({ x: plot.x + 0.1, y: plot.y + 0.05 }, { x: edge.x + 0.5, y: edge.y }, off);
+  const walking = (u > 0.3 && u < 1.4) || u > 2;
+  return (
+    <>
+      <At p={plot} w={4}>
+        <div className="aspect-square rounded-full" style={{ background: 'radial-gradient(circle, color-mix(in srgb, var(--color-void) 35%, transparent), color-mix(in srgb, var(--color-void) 75%, transparent) 70%)', opacity: night }} />
+      </At>
+      {!reduced && (
+        <At p={mule} w={0.55} style={{ zIndex: 2 }} testId="theft-mule">
+          <span className={cx('flex text-mule-metal', u > 2 && 'animate-[mule-step_0.3s_ease-in-out_infinite]')}>
+            <MuleIcon size={26} className="h-auto w-full" />
+          </span>
+        </At>
+      )}
+      {!reduced && (
+        <At p={thief} w={0.5} style={{ zIndex: 3 }} testId="theft-thief">
+          <span className="relative block" style={{ filter: 'brightness(0.35)' }}>
+            <Colonist sp="quibbit" color="var(--color-ink-3)" bob={walking ? Math.abs(Math.sin(u * 10)) * 0.06 : 0} />
+          </span>
+          <span className="absolute left-[18%] top-[30%] h-[12%] w-[64%] rounded-full bg-void" />
+        </At>
+      )}
+      {u > 1.4 && u < 2.2 && !reduced && (
+        <At p={{ x: plot.x, y: plot.y - 0.9 }} w={1.6}>
+          <span className="flex justify-center">
+            <span className="whitespace-nowrap rounded-chip bg-alert px-1 font-mono font-bold text-white shadow-chip animate-[ev-pop_0.3s_ease-out]" style={{ fontSize: px(size, 11) }}>
+              psst…
+            </span>
+          </span>
+        </At>
+      )}
+    </>
+  );
+};
+
 const SCENE: Partial<Record<ShowEventKey, Scene>> = {
+  muleTheft: MuleTheft,
   bumperHarvest: BumperHarvest,
   cavernCollapse: CavernCollapse,
   sickness: Sneeze,
