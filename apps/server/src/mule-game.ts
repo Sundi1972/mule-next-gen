@@ -824,7 +824,9 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     // In planning and at the month end a dropped phone may be a player who locked it to think or read: both wait for
     // their Ready, or the host's Continue.
     const excused = (id: string) => this.away.has(id) && phase !== 'planning' && phase !== 'upkeep';
-    const waiting = this.seats.filter((s) => !s.isAi && !excused(s.id) && !this.ready.has(s.id) && !this.doneDeveloping(s.id));
+    // A steered development's AI colonist walks the floor (C9): the table waits for it as for a person, and it is never away.
+    const counts = (s: SeatInfo) => (s.isAi ? phase === 'development' && this.steered : !excused(s.id));
+    const waiting = this.seats.filter((s) => counts(s) && !this.ready.has(s.id) && !this.doneDeveloping(s.id));
     // The auctions end on their own, good by good and lot by lot.
     if (!phase || phase === 'gameOver' || phase === 'auction' || phase === 'landAuction') return;
     if (waiting.length > 0) {
