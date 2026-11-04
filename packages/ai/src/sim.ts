@@ -25,6 +25,7 @@ import {
   rollPlayerEvent,
   score,
   SIM_TARGETS,
+  WOLVES,
   type AiLevelId,
   type AiPersonaId,
   type AirBand,
@@ -96,13 +97,13 @@ function floorLines(turns: readonly DevTurn[], moments: readonly FloorMomentCoun
   const [median, ninetieth] = [quantile(at, 0.5), quantile(at, 0.9)];
   const waited = [...waits];
   const lakeFailed = turns.reduce((n, t) => n + t.lakeAnalyses.failed, 0);
+  const packMonths = moments.filter((c) => c.packs > 0).length;
   const lakeNoTime = turns.reduce((n, t) => n + t.lakeAnalyses.noTime, 0);
   return [
     // literal-ok: two decimals for the MULEs a turn, display only
     `     Development on the floor: ${(installs / turns.length).toFixed(2)} MULEs installed a seat a turn; the pub reached in ${pct(reached.length, turns.length)} of ${turns.length} AI turns, at ${median.toFixed(1)} / ${ninetieth.toFixed(1)} s on the clock (median / 90th percentile); ${(paid / Math.max(1, seats)).toFixed(0)} cr pub payout a seat a game (no check)`,
     `     Floor moments: packs met ${m.packs} (fought ${m.fights}: won ${m.won}, lost ${m.lost}; ran ${m.runs}: bitten ${m.bitten}); MULEs bolted ${m.bolted}, caught ${m.caught}; pelts sold ${m.peltsSold}; glints lit ${m.glints}, raced ${m.raced} (${pct(m.raced, m.glints)}), won ${m.glintsWon}; scrambles ${m.scrambles}, AI racers ${m.scrambleRacers}, left out ${m.leftOut} (no check)`,
-    // literal-ok: whole percent, display only
-    `     Months with an AI wolf encounter: ${moments.filter((c) => c.packs > 0).length} of ${moments.length} (${pct(moments.filter((c) => c.packs > 0).length, moments.length)}; AM-22 builds botWolfLandShare under 60%) (no check)`,
+    `${packMonths / Math.max(1, moments.length) >= WOLVES.simMonthsWithPack ? 'ok  ' : 'MISS'} Months with an AI wolf encounter: ${packMonths} of ${moments.length}, ${pct(packMonths, moments.length)} (AM-22: target ${pct(WOLVES.simMonthsWithPack, 1)} or more)`,
     `     Lake plots: ${lakeFailed} analyses failed on the way, ${lakeNoTime} dropped as not fitting the clock (no check)`,
     // literal-ok: the median the line names
     `     Month 1's clock stood ${quantile(waited, 0.5).toFixed(1)} / ${quantile(waited, 1).toFixed(1)} s for first MULEs (median / max), started by the host's stand-in in ${continued} of ${waits.length} games (no check)`,
