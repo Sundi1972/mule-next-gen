@@ -167,6 +167,21 @@ describe('C34: the colony at game over', () => {
     expect(said(tv, 'tv-winner')).toMatch(/^The game goes to Mia wins with a Worth of 7,050 cr$/);
   });
 
+  it('UBER-AC-7 / B-AC-34-1: in Collapse the TV’s colony band carries the failed colony in alert above the score; passed, it has no verdict lines', () => {
+    const band = element(onTv(over(FINAL, { air: { level: 86, band: 'collapse' } }), TvGameOver), 'colony-band');
+    expect(band).toContain('data-failed="true"');
+    expect(band).toContain('border-alert');
+    expect(band).toContain('bg-alert-bg');
+    expect(said(band, 'verdict-title')).toBe('The colony failed');
+    expect(said(band, 'verdict-line')).toBe('The air ended in Collapse. The Federation cuts every score by a fifth.');
+    expect(band.indexOf('data-testid="verdict-title"')).toBeLessThan(band.indexOf('data-testid="colony-total"'));
+    const passed = element(onTv(over(FINAL), TvGameOver), 'colony-band');
+    expect(passed).toContain('data-failed="false"');
+    expect(passed).not.toContain('border-alert');
+    expect(has(passed, 'verdict-title')).toBe(false);
+    expect(has(passed, 'verdict-line')).toBe(false);
+  });
+
   it('B-AC-34-2: beside a TV the phone shows the colony score card in the verdict card’s place, with your plaques', () => {
     const phone = onPhone(over(FINAL));
     expect(has(phone, 'phone-colony-score')).toBe(true);
