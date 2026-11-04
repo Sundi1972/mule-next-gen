@@ -11,6 +11,7 @@ import {
   createGame,
   createRng,
   declareRole,
+  DEV_STEER,
   electionDone,
   fitFilter,
   GAME,
@@ -45,9 +46,12 @@ import {
 import type { Act, AiAction } from './actions.js';
 import type { DecisionRecord } from './brain.js';
 import type { Decider } from './decider.js';
+import { playFloorPhase, type DevTurn } from './floor-turn.js';
 import { LotHand } from './hands/lot.js';
 import { VoteHand } from './hands/vote.js';
 import { AiSeat } from './seat.js';
+
+export type { DevTurn } from './floor-turn.js';
 
 /**
  * Plays AI-only games headless, with the same seats, hands and timing the
@@ -74,6 +78,10 @@ export interface PlayedGame {
   /** MULEs still led when a seat's development time ran out: they ran off. */
   mulesLost: number;
   decisions: number;
+  /** On the arcade floor (DEV_STEER.on): every seat's development turn, month by month; empty where the game walks. */
+  turns: DevTurn[];
+  /** On the floor: the seconds month 1's clock stood for first MULEs, and whether the host's stand-in had to start it. */
+  month1: { waited: number; continued: boolean } | null;
 }
 
 /** Seat i's place when the order is rotated by k; the period is the most seats a game has. */
@@ -250,6 +258,8 @@ function* playSteps(seed: number, specs: SeatSpec[], options: PlayOptions): Gene
   const voteHands = seats.map((s) => new VoteHand(s.mind, createRng((s.options.seed ^ 0x165667b1) >>> 0))); // literal-ok: a hash salt for the vote hand's rng stream
   const lots = { sold: 0, unsold: 0, colonyOffered: 0, colonySold: 0, stalled: 0 };
   let mulesLost = 0;
+  const turns: DevTurn[] = [];
+  let month1: PlayedGame['month1'] = null;
   let guard = 0;
   // A runaway guard that can never bind before a game of any length ends: it follows the months this game plays.
   // literal-ok: a month has seven phases, so eight a month bounds the loop: a guard, not balance
@@ -290,6 +300,14 @@ function* playSteps(seed: number, specs: SeatSpec[], options: PlayOptions): Gene
         break;
       }
       case 'development': {
+        if (DEV_STEER.on && options.walking !== false) {
+          // The arcade floor: every colonist steered by its hand and stepped by the engine, as on the server (C10).
+          const phase = yield* playFloorPhase(state, seats);
+          turns.push(...phase.turns);
+          if (phase.waited !== null) month1 = { waited: phase.waited, continued: phase.continued };
+          mulesLost += state.players.filter((p) => p.carriedMule !== null).length;
+          break;
+        }
         // Everyone starts the month in the store.
         const startAt: DevPlace | undefined = options.walking === false ? undefined : 'store';
         const clocks = new Map(state.players.map((p): [string, DevClock] => [p.id, { left: p.devSeconds, at: startAt }]));
@@ -363,5 +381,5 @@ function* playSteps(seed: number, specs: SeatSpec[], options: PlayOptions): Gene
     options.onPhase?.(state);
     advancePhase(state);
   }
-  return { state, seats, broke, auction, lots, mulesLost, decisions };
+  return { state, seats, broke, auction, lots, mulesLost, decisions, turns, month1 };
 }

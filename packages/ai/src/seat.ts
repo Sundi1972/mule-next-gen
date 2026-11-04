@@ -1,4 +1,18 @@
-import { AI_HANDS, AI_LEVELS, AI_PERSONAS, createRng, GAME, observe, type AiLevelId, type AiPersonaId, type GameState } from '@mule/engine';
+import {
+  AI_HANDS,
+  AI_LEVELS,
+  AI_PERSONAS,
+  createRng,
+  floorConfig,
+  GAME,
+  observe,
+  type AiLevelId,
+  type AiPersonaId,
+  type DevFloor,
+  type FloorConfig,
+  type FloorInput,
+  type GameState,
+} from '@mule/engine';
 import type { Act } from './actions.js';
 import { Brain, type DecisionRecord, type Pending } from './brain.js';
 import type { Decider, TableTalk } from './decider.js';
@@ -123,6 +137,16 @@ export class AiSeat {
    */
   developTick(state: GameState, dt: number, secondsLeft: number, act: Act, walk?: DevWalking): void {
     this.develop.tick(state, dt, secondsLeft, act, walk);
+  }
+
+  /**
+   * One tick of development on the arcade floor (DEV_STEER.on): this seat's input for the floor's next stepFloor, the
+   * stick and the button, as a phone's would be; `secondsLeft` the game seconds left on the one clock. `held`: month
+   * 1's clock waits and this seat is in, so the referee refuses its next MULE, analysis or filter until it starts. The
+   * server's tick and the sim call it the same way, every DEV_STEER.tickMs, with the same floor (HC-4).
+   */
+  developSteer(state: GameState, floor: DevFloor, secondsLeft: number, cfg: FloorConfig = floorConfig(), held = false): FloorInput {
+    return this.develop.steer(state, floor, secondsLeft, cfg, held);
   }
 
   auctionTick(state: GameState, dt: number, act: Act): void {
