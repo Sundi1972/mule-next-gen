@@ -538,7 +538,8 @@ describe('the roller', () => {
       const state = ready(3);
       expect(rollPhase(cloneForSim(state), 'production')).toEqual([]);
       const fired = rollPhase(state, 'production');
-      expect(fired.map((e) => e.key)).toEqual([
+      // Wave 2's rows, forced into production here, fire too; this pins wave 1's.
+      expect(fired.map((e) => e.key).filter((key) => Object.hasOwn(RULE_3, key))).toEqual([
         ...['dustStorm', 'drought', 'acidRain', 'solarFlare', 'cometPass', 'flood', 'volcanicAsh'],
         ...state.players.flatMap(() => ['pestSwarm', 'wildfire', 'bumperHarvest']),
       ]);
@@ -573,7 +574,8 @@ describe('the roller', () => {
       state.seed = 11;
       for (let i = 0; i < 40; i++) {
         state.month = EVENTS.firstMonth + i;
-        const personal = rollPhase(state, 'production').filter((e) => e.scope === 'personal').map((e) => e.key);
+        // Wave 2's personal rows, forced into production here, fire too; this pins wave 1's.
+        const personal = rollPhase(state, 'production').filter((e) => e.scope === 'personal' && Object.hasOwn(RULE_3, e.key)).map((e) => e.key);
         const own = state.players.flatMap((p) => PERSONAL.filter((key) => rollPlayerEvent(state, key, 'production', p.id)));
         expect([state.month, personal]).toEqual([state.month, own]);
       }

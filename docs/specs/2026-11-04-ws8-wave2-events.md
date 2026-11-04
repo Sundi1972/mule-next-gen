@@ -286,7 +286,8 @@ No ownership change. Named edits, each OK'd by its owner on the SHA:
 | packages/engine/src/config.ts `EVENTS` | WS1 | 13 rows |
 | packages/engine/src/events.ts | WS1 | SHAPE, buildEvent targeting, applyPhaseEvents |
 | packages/engine/src/production.ts | WS1 | coldSnap's energy need; meteorStrike after output |
-| packages/engine/test/events.test.ts | WS1 | RULE_3 typed Partial (EventKey widens); EM-T-AC-3's one-phase check exempts muleTheft (AM-1 3a) (lead's OK, 4 Nov) |
+| packages/engine/test/events.test.ts | WS1 | RULE_3 typed Partial (EventKey widens); EM-T-AC-3's one-phase check exempts muleTheft (AM-1 3a); EM-T-AC-2 pins wave 1's keys only (lead's OK, 4 Nov) |
+| apps/server/test/production-view.test.ts | WS6 | knownMonth files its events into state.monthEvents too (C1; lead's OK, 4 Nov) |
 | packages/engine/src/types.ts | WS3 | monthEvents, sickNext, MonthEvent.effects/becomes/muleLost, keys |
 | packages/engine/src/game.ts | WS3 | the roll calls in advancePhase and startDevelopment; monthEvents reset |
 | packages/engine/src/politics.ts | WS7 | one roll call at openPlanning's end |
