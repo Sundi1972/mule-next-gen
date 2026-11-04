@@ -17,6 +17,7 @@ import {
 import { muleLegs, placePoint } from '../src/floor-time.js';
 import { playFloorPhase, simFloorConfig } from '../src/floor-turn.js';
 import { ROTATION } from '../src/lineup.js';
+import type { FloorMomentCounts } from '../src/floor-turn.js';
 import { playGame, type DevTurn, type SeatSpec } from '../src/play.js';
 import { AiSeat } from '../src/seat.js';
 
@@ -48,6 +49,17 @@ function steeredTurns(phases: number): DevTurn[][] {
   });
 }
 
+/** The moments of the first `phases` development phases of AI-only games from seed 1 on, as steeredTurns plays them. */
+function steeredMoments(phases: number): FloorMomentCounts[] {
+  return steered(() => {
+    const out: FloorMomentCounts[] = [];
+    for (let seed = 1; out.length < phases; seed++) out.push(...playGame(seed, seatsFor(seed)).moments.slice(0, phases - out.length));
+    return out;
+  });
+}
+
+const sum = (counts: readonly FloorMomentCounts[], key: keyof FloorMomentCounts) => counts.reduce((n, c) => n + c[key], 0);
+
 describe('the AI walks the floor, and the sim plays it (arcade C9, C10)', () => {
   it('T-AC-5: in 20 seeded AI-only turns every AI colonist reaches the pub within 50 s', { timeout: 120_000 }, () => {
     const phases = steeredTurns(20);
@@ -62,6 +74,30 @@ describe('the AI walks the floor, and the sim plays it (arcade C9, C10)', () => 
     }
     // Reaching the pub is not the whole turn: the AI walked MULEs out and installed them on the way.
     expect(phases.flat().reduce((n, t) => n + t.installs, 0)).toBeGreaterThan(phases.length);
+  });
+
+  it('T-AC-5: a bot races in most glints, and the moments happen in AI turns', { timeout: 120_000 }, () => {
+    const moments = steeredMoments(20);
+    expect(moments).toHaveLength(20);
+    const glints = sum(moments, 'glints');
+    expect(glints, 'glints lit in 20 turns').toBeGreaterThanOrEqual(5);
+    // RULE-8's example: 12 of 19 glints still see a bot race with the spare-time rule on.
+    expect(sum(moments, 'raced') / glints, 'share of glints a bot raced').toBeGreaterThan(0.5);
+    // The other moments land in the AI's turns too: packs met and played out, a glint won.
+    expect(sum(moments, 'packs'), 'packs met').toBeGreaterThan(0);
+    expect(sum(moments, 'fights') + sum(moments, 'runs'), 'packs fought or run from').toBeGreaterThan(0);
+    expect(sum(moments, 'glintsWon'), 'glints won').toBeGreaterThan(0);
+  });
+
+  it('T-AC-5 negative: with botsSpareTime off, bots race glints they have no time for and miss the pub', { timeout: 120_000 }, () => {
+    const saved = DEV_STEER.botsSpareTime;
+    DEV_STEER.botsSpareTime = false;
+    try {
+      const turns = steeredTurns(20).flat();
+      expect(turns.filter((t) => t.pubAt === null).length, 'AI turns that missed the pub').toBeGreaterThan(0);
+    } finally {
+      DEV_STEER.botsSpareTime = saved;
+    }
   });
 
   it('T-AC-5 negative: with a store floor that takes longer than the clock to cross, no colonist reaches the pub', { timeout: 120_000 }, () => {
