@@ -691,7 +691,7 @@ C14.
 | **B-AC-4** (MUST) | Given a phone at 667×375 and at 844×390 · When the development screen shows the map and the hall · Then nothing overflows its frame; the controls and the plot card cover 0 px² of your colonist, the store and the target, and over your own plots the controls are translucent so the plot's marks read through (AM-20) | shell.ts measurements | — | C11, C15 |
 | **B-AC-5** (MUST) | Given a colonist on forest with wolves due · When the player runs or fights · Then the outcomes of RULE-4 land: bitten and slowed, got away, pelts sold at the store, or the MULE bolted and caught | phone + server state in the e2e (wolves forced by a seeded test option) | no wolves in the hall | C4, C11 |
 | **B-AC-6** (MUST) | Given a glint lit · Then every phone and the TV show it at once and the first colonist onto it gets the prize | phones, TV, server stock | after showSeconds it fades and nobody gets it | C4, C11, C12 |
-| **B-AC-7** (MUST) | Given 3 MULEs left and 4 seats needing one · When the first sale leaves 2 · Then the TV and phones call the scramble and the one left out is told, with the pub's payout | TV, phones, server | no call when no seat needs a MULE | C4 |
+| **B-AC-7** (MUST) | Given 3 MULEs left and 4 seats needing one · When the first sale leaves 2 · Then the TV and phones call the scramble and the one left out is told, with the pub's payout | TV, phones, server; staged by `START.storeMules` 3 (AM-29) | no call when no seat needs a MULE: proven by T-AC-8's negative (engine) and the screens' no-banner unit test (AM-29) | C4 |
 | **B-AC-8** (MUST) | Given a phone that drops mid-turn · Then its colonist stops, the turn still ends on the clock, and on reconnect the player steers again | server + phone | — | C6 |
 | T-AC-1 (serves B-AC-1, B-AC-2) | Given a seed and a per-tick input script · When stepFloor runs twice · Then the floors are identical; and the server's floor after a scripted turn equals the sim's (HC-4) | engine unit + server test | a changed input at one tick changes the result | C1, C6, C10 |
 | T-AC-2 (serves G-2) | speeds per RULE-2's examples (plains 1.5625, mountains 0.625, swamp 0.78, leading 1.41, bitten 0.78 tiles/s) | engine unit | lake 0 blocks | C1, C5 |
@@ -741,6 +741,12 @@ inside a wall; money and stock change only through game.ts rules; development en
 
 ## §8 · Amendments `[review-only]`
 
+- **AM-29 (2026-11-04, PM ruling: one way to stage the scramble; WS5's UBER-AC-3 test and PR-9's B-AC-7).** The
+  scramble is staged by setting `START.storeMules` to 3 on the in-process server before it starts (upkeep refills only
+  at month end, so month 1's corral holds 3), with the seats needers by the game's own rule (`needsMule`: a free plot
+  and the money); no test rewrites money or the corral mid-turn. B-AC-7's negative ("no call when no seat needs a
+  MULE") needed exactly such rewrites in a browser test, so it is proven where the rule lives: T-AC-8's negative in
+  the engine, and the screens' "no banner without a scramble" unit test.
 - **AM-28 (2026-11-04, PR-9's start, by WS6; the frame contract's gap).** The moments' layers (C11, C12) draw the
   wolves, the glint and the scramble on every phone and the TV, but §3's `DevFrame` carried only positions and
   beats, and `ColonistView` only the encounter's stage: the screens had nothing to draw a pack or a glint from.
