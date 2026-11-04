@@ -171,7 +171,8 @@ function inArena(state: GameState, from: FloorColonist, to: FloorColonist, centr
   const step = (speedOf(from, state, cfg) * cfg.steer.tickMs) / MS_PER_SECOND;
   const walked = step > 0 ? walk(from, { x: (edge.x - from.x) / step, y: (edge.y - from.y) / step, act: false }) : from;
   const kept = walked.space === 'map' && dist(walked, centre) <= R + ROUNDING;
-  return kept ? walked : { ...from, moving: false };
+  // The push is the edge's, not the stick's: the colonist still faces the way the stick points.
+  return kept ? { ...walked, facing: to.facing } : { ...from, moving: false };
 }
 
 function stepFight(state: GameState, c0: FloorColonist, e: FloorEncounter, input: FloorInput, tick: number, cfg: FloorConfig, walk: Walk, out: MomentsOut): FloorColonist {
