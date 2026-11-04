@@ -26,7 +26,10 @@ const RACED_TILES = 1;
  * The game's state and the floor's moments, read from the room the server holds. The test reaches into the running
  * game, as the server's own record does, because a bolted MULE and the scramble's left-out seats reach no screen.
  */
-type Floor = { moments: { scramble: { leftOut: readonly string[] } | null } };
+type Floor = {
+  colonists: readonly { id: string; pelts: number; encounter: unknown }[];
+  moments: { scramble: { leftOut: readonly string[] } | null };
+};
 type Running = { state: GameState | null; steering: { floor: Floor } | null };
 
 const errors: string[] = [];
@@ -43,10 +46,11 @@ const seen = {
   boltLostToClock: new Set<string>(),
   glintWonBy: new Set<string>(),
   scrambleLeftOut: new Set<string>(),
+  /** For a failure's message: pelts won in fights, scrambles called, and the fewest MULEs the store held in a development. */
+  peltsWonBy: new Set<string>(),
+  scramblesCalled: 0,
+  fewestMules: Number.POSITIVE_INFINITY,
 };
-
-/** Each colonist's pelts at the last sample, from the board's view. */
-const previousPelts = new Map<string, number>();
 
 const started = Date.now();
 const table = await steeredTable({ seed: SEED, ais: 3, phaseScale: PHASE_SCALE, maxMonths: MONTHS });
@@ -60,6 +64,7 @@ const board = (): MuleView | null => table.board.view();
 
 try {
   let before: GameState | null = null;
+  let floorBefore: Floor | null = null;
   let wasDeveloping = false;
   let developingSince = 0;
   check(
@@ -70,23 +75,29 @@ try {
       if (developing && !wasDeveloping) developingSince = Date.now();
       check(!developing || Date.now() - developingSince < DEVELOPMENT_MS, `month ${state.month}'s development ran past ${DEVELOPMENT_MS / 1000} s: its AI colonists never finished it`);
       const now = structuredClone(state);
-      if (developing && wasDeveloping && before) {
+      const floor = steering ? structuredClone(steering.floor) : null;
+      if (developing && wasDeveloping && before && floor && floorBefore) {
+        seen.fewestMules = Math.min(seen.fewestMules, now.store.mules);
         for (const p of now.players) {
           const was = before.players.find((q) => q.id === p.id)!;
-          const colonist = board()?.players.find((q) => q.id === p.id)?.colonist;
-          if (colonist?.encounter) seen.wolvesMetBy.add(p.id);
+          const c = floor.colonists.find((q) => q.id === p.id);
+          const cWas = floorBefore.colonists.find((q) => q.id === p.id);
+          if (c?.encounter) seen.wolvesMetBy.add(p.id);
+          if (c && cWas && c.pelts > cWas.pelts) seen.peltsWonBy.add(p.id);
+          // Pelts gone from a colonist as its money rises by their price: sold at the store.
+          if (c && cWas && cWas.pelts > 0 && c.pelts === 0 && p.money - was.money === cWas.pelts * WOLVES.peltPrice) seen.peltsSoldBy.add(p.id);
           // Development produces nothing, so Crystite gained in it is the glint's prize.
           if (p.stock.crystite - was.stock.crystite === GLINT.crystite) seen.glintWonBy.add(p.id);
           if (p.muleBolted) seen.bolted.add(p.id);
           if (was.muleBolted && !p.muleBolted && p.carriedMule !== null) seen.boltCaught.add(p.id);
         }
-        for (const id of steering?.floor.moments.scramble?.leftOut ?? []) seen.scrambleLeftOut.add(id);
+        for (const id of floor.moments.scramble?.leftOut ?? []) seen.scrambleLeftOut.add(id);
       }
       if (wasDeveloping && !developing && before) {
         for (const p of before.players) if (p.muleBolted) seen.boltLostToClock.add(p.id);
       }
-      if (developing) peltsSold(before, now);
       before = now;
+      floorBefore = floor;
       wasDeveloping = developing;
       return board()?.finished === true;
     }, GAME_MS),
@@ -98,10 +109,11 @@ try {
 
   // Each moment happened, and what it pays or costs is in the state.
   soft(seen.wolvesMetBy.size > 0, 'wolves: no colonist met a pack in the game');
-  soft(seen.peltsSoldBy.size > 0, `wolves: no pelts were sold at the store (packs met by ${names(seen.wolvesMetBy)})`);
+  soft(seen.peltsSoldBy.size > 0, `wolves: no pelts were sold at the store (packs met by ${names(seen.wolvesMetBy)}; pelts won by ${names(seen.peltsWonBy)})`);
   soft(seen.boltCaught.size + seen.boltLostToClock.size > 0, `wolves: no bolted MULE was caught or lost to the clock (bolted: ${names(seen.bolted)})`);
   soft(seen.glintWonBy.size > 0, 'glint: nobody gained the glint\'s Crystite in a development');
-  soft(seen.scrambleLeftOut.size > 0, 'scramble: no colonist was left without a MULE by a scramble');
+  seen.scramblesCalled = table.board.frames.filter((f) => f.frame.beats.some((b) => b.includes('Race to the corral'))).length;
+  soft(seen.scrambleLeftOut.size > 0, `scramble: no colonist was left without a MULE by a scramble (${seen.scramblesCalled} called; the store held ${seen.fewestMules} MULEs at its fewest)`);
 
   // The TV: a wolf encounter and a glint race, each with an AI colonist in it.
   const frames = table.board.frames.map((f) => f.frame);
@@ -116,20 +128,6 @@ try {
 } finally {
   stopHost();
   await table.close();
-}
-
-/** A colonist's pelts went to the store: they were carried, now none are, and its money rose by their price. */
-function peltsSold(before: GameState | null, now: GameState): void {
-  if (!before) return;
-  for (const p of board()?.players ?? []) {
-    const carried = previousPelts.get(p.id) ?? 0;
-    const pelts = p.colonist?.pelts ?? 0;
-    previousPelts.set(p.id, pelts);
-    if (carried === 0 || pelts !== 0) continue;
-    const was = before.players.find((q) => q.id === p.id)!.money;
-    const is = now.players.find((q) => q.id === p.id)!.money;
-    if (is - was === carried * WOLVES.peltPrice) seen.peltsSoldBy.add(p.id);
-  }
 }
 
 /** A glint lit in the frames, and while it was lit an AI colonist won it or came within RACED_TILES of its tile. */
