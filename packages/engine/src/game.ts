@@ -7,7 +7,7 @@ import { colonyLot, endLandAuction, isListed, plotAt, startLandAuction } from '.
 import { generateMap, tileIndex } from './map.js';
 import { keepPromise, monthLedger, newColony, payGrant, runColony } from './colony.js';
 import { airBand } from './pollution.js';
-import { closeVotes, newPolitics, officeScore, openPlanning, payOffices } from './politics.js';
+import { closeVotes, collectLawTaxes, newPolitics, officeScore, openPlanning, payOffices } from './politics.js';
 import { needsOf, runProduction } from './production.js';
 import { createRng } from './rng.js';
 import { emptyStock } from './stock.js';
@@ -544,6 +544,7 @@ export function advancePhase(state: GameState): void {
     state.auction = null;
     firePhase(state, 'upkeep');
     const { shortages, hungry } = runUpkeep(state);
+    collectLawTaxes(state);
     payGrant(state);
     payOffices(state);
     runColony(state);
