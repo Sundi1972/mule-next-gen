@@ -469,12 +469,16 @@ describe('C11: the moments are the server\'s, never the phone\'s copy (RULE-4, R
     expect([world.cfg.wolves.on, world.cfg.glint.on, world.cfg.scramble.on]).toEqual([false, false, false]);
     const base = { pace: 1, bitten: false, pelts: 0 };
     let p = steerFrom(receiveFrame(startPrediction(), lenaAt(0, 2.5, 2.5), 0, world, base), { x: 1, y: 0 });
-    p = upTo(p, 200, world);
-    expect(p.tick).toBe(200);
+    // Four seconds of walking right: long enough to meet a certain pack, short enough to stay off the map's far edge.
+    const ticks = 80;
+    const walked = ticks * (TICK / 1_000) * speedOf(p.me!, world.state, world.cfg);
+    expect(2.5 + walked).toBeLessThan(world.state.width - 1);
+    p = upTo(p, ticks, world);
+    expect(p.tick).toBe(ticks);
     expect(p.past.every((e) => e.me.encounter === null)).toBe(true);
     expect(p.me!.encounter).toBeNull();
     // It walked the whole way, at forest's speed: nothing stopped it to choose run or fight.
-    expect(p.me!.x).toBeGreaterThan(2.5 + 0.9 * 200 * (TICK / 1_000) * speedOf(p.me!, world.state, world.cfg));
+    expect(p.me!.x).toBeGreaterThan(2.5 + 0.9 * walked);
   });
 
   /** Lena's copy live on forest at 2.5·2.5 at tick 40, her stick pushed right. */
