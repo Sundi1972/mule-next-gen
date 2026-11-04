@@ -96,7 +96,6 @@ export function openShops(locks: NextStep['locks']): Shop[] {
   return shops.filter(([, room]) => locks[room] === undefined).map(([shop]) => shop);
 }
 
-/** RULE-7, development's next step: a decision table, first match wins. */
 /** A plot tap's press, as the Install plot cares: Install on a plot, or any other move (Analyse, the filter). */
 export type PlotPress = { kind: 'install'; at: { x: number; y: number } } | { kind: 'other' };
 
@@ -109,6 +108,7 @@ export function installAfterPress(prev: { x: number; y: number } | null, press: 
   return press.kind === 'install' ? press.at : null;
 }
 
+/** RULE-7, development's next step: a decision table, first match wins. */
 export function nextStep(s: DevelopState): NextStep {
   const warn = s.seconds <= WARN_SECONDS;
   const locks = locksFor(s.carry);
