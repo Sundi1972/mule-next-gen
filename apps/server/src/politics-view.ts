@@ -168,7 +168,7 @@ export function myPoliticsView(state: GameState, playerId: string): MyPoliticsVi
     canRun: perOffice((office) => may[office]),
     paid: state.treasury.paid[playerId] ?? 0,
     reputation: state.players.find((pl) => pl.id === playerId)!.reputation,
-    lawBallot: p.council?.ballots[playerId] ?? null,
+    lawBallot: p.council?.stage === 'ballot' ? (p.council.ballots[playerId] ?? null) : null,
   };
 }
 

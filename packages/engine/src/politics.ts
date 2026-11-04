@@ -490,7 +490,12 @@ export function proposeLaw(state: GameState, playerId: string, proposal: LawProp
       throw new RuleError(`${maxInForce} laws are in force: pick the one this replaces`);
     }
   }
-  edit(state).proposal = { by: playerId, month: state.month, proposal };
+  // Only the proposal's own fields are kept: the rest of an intent never reaches the screens or the record.
+  const kept: LawProposal =
+    proposal.kind === 'repeal'
+      ? { kind: 'repeal', law: proposal.law }
+      : { kind: 'enact', law: proposal.law, setting: proposal.setting, ...(proposal.replaces !== undefined ? { replaces: proposal.replaces } : {}) };
+  edit(state).proposal = { by: playerId, month: state.month, proposal: kept };
 }
 
 /** A proposal from an earlier month comes to its ballot, if its proposer still governs; otherwise it is dropped. */
