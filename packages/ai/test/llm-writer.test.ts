@@ -3,7 +3,7 @@ import { AI_LEVELS, AI_PERSONAS, BRAIN, createGame, type LandGrantPlay, type Pla
 import { PERSONAS } from '../src/personas.js';
 import type { Mind } from '../src/value.js';
 import { landBrief, type LandBrief } from '../src/llm/brief.js';
-import { replySchema, writePlaybook, type Cause, type PlanEdit, type ValidatePlan, type WriteComplete, type WriterPrompt } from '../src/llm/writer.js';
+import { playbookFrom, replySchema, writeReply, type Cause, type PlanEdit, type ValidatePlan, type WriteComplete, type WriterPrompt } from '../src/llm/writer.js';
 
 const state = createGame({ seed: 7, players: [0, 1, 2, 3].map((i) => ({ id: `p${i}`, name: `Seat ${i}`, isAi: true })) });
 
@@ -52,13 +52,16 @@ function fakeModel(text: string, stopReason: string | null = 'end_turn') {
 const strategyReply = (over: Record<string, unknown> = {}) => ({ kind: 'specialist', moneyMaker: 'smithore', cashFloor: 150, reason: 'Ore pays.', ...over });
 const replyText = (over: Record<string, unknown> = {}) => JSON.stringify({ strategy: strategyReply(), edits: [{ path: '/landGrant/claims', to: 1, reason: 'One plot will do.' }], line: 'Ore, ore, ore.', ...over });
 
+/** writeReply on a fake model, then playbookFrom on the draft: the reply, and the playbook that plays from it. */
 async function write(level: 'rookie' | 'trader', text: string, stopReason: string | null = 'end_turn') {
   const model = fakeModel(text, stopReason);
   const v = fakeValidate();
   const brief = briefOf(level);
-  const written = await writePlaybook(model.complete, v.validate, { state, draft: DRAFT, brief, system: SYSTEM, waitMs: WAIT });
-  return { written, model, v, brief };
+  const written = await writeReply(model.complete, { brief, system: SYSTEM, waitMs: WAIT });
+  return { written, made: playbookFrom(v.validate, state, DRAFT, written), model, v, brief };
 }
+
+const ENGINE: Playbook = { ...DRAFT, by: 'engine' };
 
 const paths = (edits: readonly { path: string }[]) => edits.map((e) => e.path);
 
@@ -101,18 +104,22 @@ describe("T-AC-A5: a Rookie seat's edits that would corner are refused; the same
   it("T-AC-A5: a Rookie edit that names /strategy/monopolyTarget in its edits, around the schema, is refused 'never_corners' too", async () => {
     const around = replyText({ strategy: undefined, edits: [{ path: '/strategy/monopolyTarget', to: 'smithore', reason: 'Sneak.' }, { path: '/strategy/kind', to: 'monopolist', reason: 'Sneak.' }] });
     const r = await write('rookie', around);
-    expect(r.written.refused).toEqual([
+    const refused = [
       { path: '/strategy/monopolyTarget', cause: 'never_corners' },
       { path: '/strategy/kind', cause: 'never_corners' },
-    ]);
-    expect(r.v.seen[0]).toEqual([]);
+    ];
+    expect(r.written.refused).toEqual(refused);
+    // Nothing left to validate: the engine's draft plays, and the refusals go to the next brief.
+    expect(r.v.seen).toEqual([]);
+    expect(r.made).toEqual({ playbook: ENGINE, feedback: { refused, rejected: [] } });
   });
 
-  it("T-AC-A5: what plays is validate's result, and validate sees only the edits the writer accepted", async () => {
-    const { written, v } = await write('trader', replyText());
+  it("T-AC-A5: what plays is validate's playbook, by 'llm', and validate sees only the edits the writer accepted", async () => {
+    const { written, made, v } = await write('trader', replyText());
     expect(v.seen).toHaveLength(1);
-    expect(written.result).toBe(v.results[0]);
     expect(written.reply.edits).toEqual(v.seen[0]);
+    expect(made.playbook).toEqual({ ...v.results[0]!.playbook, by: 'llm', rejected: [] });
+    expect(made.feedback).toEqual({ refused: [], rejected: [] });
   });
 });
 
@@ -132,23 +139,25 @@ describe('C2: the checks the schema cannot carry, each a cause code with no repl
     { cause: 'bad_shape', text: JSON.stringify([MARK]) },
     { cause: 'bad_line', text: JSON.stringify({ edits: [{ path: '/landGrant/claims', to: 1, reason: MARK }], line: 7 }) },
   ];
-  it.each(whole)('C2: $cause sets the reply\'s cause; nothing is edited, validate gets the draft alone', async ({ cause, text, stop }) => {
-    const { written, v } = await write('trader', text, stop ?? 'end_turn');
+  it.each(whole)("C2: $cause sets the reply's cause; nothing is edited, validate is never called, and the engine's draft plays", async ({ cause, text, stop }) => {
+    const { written, made, v } = await write('trader', text, stop ?? 'end_turn');
     expect(written.reply).toEqual({ edits: [], line: null, cause });
     expect(written.refused).toEqual([]);
-    expect(v.seen).toEqual([[]]);
-    expect(written.result).toBe(v.results[0]);
+    expect(v.seen).toEqual([]);
+    expect(made).toEqual({ playbook: ENGINE, feedback: { refused: [], rejected: [] } });
     expect(kept(written)).not.toContain(MARK);
   });
 
-  it("C2: a model call that fails comes back as cause 'no_reply', never a throw, and keeps none of the error's text", async () => {
+  it("C2: a model call that fails comes back as cause 'no_reply', never a throw, and keeps none of the error's text; the engine's draft plays, as with no reply at all", async () => {
     const v = fakeValidate();
     const failing: WriteComplete = async () => {
       throw new Error(`timed out ${MARK}`);
     };
-    const written = await writePlaybook(failing, v.validate, { state, draft: DRAFT, brief: briefOf('trader'), system: SYSTEM, waitMs: WAIT });
+    const written = await writeReply(failing, { brief: briefOf('trader'), system: SYSTEM, waitMs: WAIT });
     expect(written.reply).toEqual({ edits: [], line: null, cause: 'no_reply' });
-    expect(v.seen).toEqual([[]]);
+    expect(playbookFrom(v.validate, state, DRAFT, written).playbook).toEqual(ENGINE);
+    expect(playbookFrom(v.validate, state, DRAFT, null)).toEqual({ playbook: ENGINE, feedback: null });
+    expect(v.seen).toEqual([]);
     expect(kept(written)).not.toContain(MARK);
   });
 
