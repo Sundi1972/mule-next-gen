@@ -1,4 +1,4 @@
-import type { AuctionSide, CanRun, CeremonyBeat, DevPlace, Election, EventKey, EventKind, EventWeight, Good, Ground, MonthEvent, Office, OfficeResult, Outfit, Phase, ScoreParts, SkipReason, SpecialField, Species, StatusRow, Stock, TaxPromise, Terrain, TileTrait, VoteWeight } from '@mule/engine';
+import type { AuctionSide, CanRun, CeremonyBeat, DevPlace, Election, EventKey, EventKind, EventWeight, Good, GoodReceipt, Ground, MonthEvent, Office, OfficeResult, Outfit, Phase, ScoreParts, SkipReason, SpecialField, Species, StatusRow, Stock, TaxPromise, Terrain, TileTrait, VoteWeight } from '@mule/engine';
 export type { ChatMessage, ClientEnvelope, ServerEnvelope, TableView } from '@tabletop/core/protocol';
 
 /**
@@ -314,7 +314,8 @@ export interface DealView {
 /** The live goods auction, on every screen. */
 export interface AuctionView {
   good: Good;
-  stage: 'status' | 'walk';
+  /** The status screen, the walk, then the close stage: the board holds still while each phone shows its receipt (UX audit G-5). */
+  stage: 'status' | 'walk' | 'close';
   /** Seconds left on the stage's clock. It runs slower while units change hands. */
   seconds: number;
   /** The stage's full time in seconds, for the draining time bar. */
@@ -343,6 +344,12 @@ export interface AuctionView {
   status: StatusRow[];
   /** Goods skipped since the last one that came up, and why, for one line on screen. */
   skipped: { good: Good; reason: SkipReason }[];
+  /** In the close stage: the good that comes up next, or null when this was the last. Null in the other stages. */
+  upNext: Good | null;
+  /** Only on a seat's own view, in the close stage: what it bought and sold of this good. Null on a board and in the other stages. */
+  receipt: GoodReceipt | null;
+  /** Only on a seat's own view: its net credits from this month's auction so far. Null on a board. */
+  tally: number | null;
 }
 
 /** What is for sale: a plot (with whatever stands on it), or the MULE off one of the seller's plots. */
@@ -430,10 +437,13 @@ export interface ProductionLineView {
   parts: { why: ProductionReason; delta: number }[];
 }
 
-/** The month's event as the map shows it. */
-export interface ProductionEventView {
-  key: EventKey;
-  kind: EventKind;
+/** What an event on screen is: one of the engine's month events, or a player falling sick at development's start. */
+export type ShowEventKey = EventKey | 'sickness';
+
+/** One event as every screen shows it, whichever phase fired it: production's map and every other phase's show. */
+export interface EventView {
+  key: ShowEventKey;
+  kind: EventKind | 'sickness';
   title: string;
   line: string;
   sign: MonthEvent['sign'];
@@ -442,6 +452,8 @@ export interface ProductionEventView {
   origin: { x: number; y: number };
   /** For a colony sweep, the map edge it blows in from. */
   from?: 'n' | 'e' | 's' | 'w';
+  /** Whose event it is: a personal event's player, or the player who fell sick. */
+  player?: string;
   /** The plots it hit, in the order it reached them, and how many units each gained or lost. */
   hits: { x: number; y: number; order: number; delta: number }[];
   /** The phase whose show plays it. */
@@ -452,11 +464,28 @@ export interface ProductionEventView {
   playMs: number;
 }
 
+/** Production's name for EventView, from before every phase had a show. */
+export type ProductionEventView = EventView;
+
+/** When the current phase's event show plays (RULE-1): its intro, then each event's playMs in fired order. */
+export interface EventShowView {
+  /** Epoch ms on the server's clock when the intro starts: in production, where its map plays it; otherwise as the phase opens. */
+  startsAt: number;
+  /** The whole show, intro included, in ms at full pace like playMs: never more than the cap. */
+  showMs: number;
+  /** How long the intro plays before the first event, in ms at full pace. */
+  introMs: number;
+  /** Epoch ms on the server's clock when the show ends: startsAt plus showMs at the table's pace. */
+  endsAt: number;
+  /** Whether the server holds the phase's clocks until endsAt: then nobody can act and the show covers the screen. */
+  held: boolean;
+}
+
 /** What every plot made this month and what the month's event did: never anything a player holds. */
 export interface ProductionView {
   /** In reading order: row by row, left to right. */
   lines: ProductionLineView[];
-  events: ProductionEventView[];
+  events: EventView[];
   /** How long the production phase was scheduled to run, in ms; the show's timeline stretches over it. */
   lengthMs: number;
   /** How long the phase's intro plays before the first event, in ms: 0 in a quiet month. */
@@ -507,6 +536,10 @@ export interface MuleView {
   landAuction: LandAuctionView | null;
   /** The month's production show, during production and upkeep. */
   production: ProductionView | null;
+  /** The events the current phase fired, in fired order; empty when it fired none. Optional only for older fixtures: the server always sends it. */
+  events?: EventView[];
+  /** When those events play; null when there are none. Optional only for older fixtures: the server always sends it. */
+  eventShow?: EventShowView | null;
   /** Offices, tax, vote weights and the election; null when the game plays without politics. */
   politics: PoliticsView | null;
   /**

@@ -34,10 +34,15 @@ export function Develop() {
   const carry = me.carriedMule;
   const [place, setPlace] = useState<'store' | 'map'>('store');
   const [cardDismissed, setCardDismissed] = useState(false);
-  // Develop mounts as development starts; the card runs on wall time, whatever the server's phase scale.
-  const [devStartedAt] = useState(now);
+  // The turn starts as Develop mounts, unless the server holds development for its event show (RULE-4): then it
+  // starts at the show's end, when the hold lifts and the overlay uncovers the screen. The anchor is stable: the server
+  // keeps the held show in the view for the whole phase, and a show only opens with its phase. The card runs on wall
+  // time, whatever the server's phase scale.
+  const [mounted] = useState(() => ({ at: now, wall: performance.now() }));
+  const show = view.eventShow;
+  const devStartedAt = show?.held ? Math.max(mounted.at, show.endsAt) : mounted.at;
   // The thought bubble shows as the card ends, once a turn: the hall remounts on every trip back into the store.
-  const [clockStartsAt] = useState(() => performance.now() + FILL_CARD_SECONDS * 1000);
+  const clockStartsAt = mounted.wall + (devStartedAt - mounted.at) + FILL_CARD_SECONDS * 1000;
   const [selected, setSelected] = useState<{ x: number; y: number } | null>(null);
   // Kept here, not in the map, so the zoom survives a trip into the store.
   const [zoomed, setZoomed] = useState(false);

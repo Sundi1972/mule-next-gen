@@ -1,7 +1,7 @@
 import { cx, PlayerMark, SPECIES_NAME, Timer } from '@mule/ui';
 import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { flushSync } from 'react-dom';
-import { TableChat } from '../chat/Chat';
+import { FallbackBubble, TableChat } from '../chat/Chat';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { fmt } from '../game/derive';
 import { useEscape } from './dialog';
@@ -72,7 +72,7 @@ export function NowCard({ now }: { now: Now }) {
 
 /**
  * The Now card that folds once read (WS6's month-end mock, UX audit H-7): folded it is one line, its title, and a tap
- * opens it. A new step opens it again (the title changing re-mounts it), so nothing new is missed.
+ * opens it. A new step re-mounts it folded (the title is its key), so the new title shows on its one line.
  */
 function FoldingNowCard({ now }: { now: Now }) {
   const [open, setOpen] = useState(false);
@@ -217,11 +217,13 @@ export function PhoneShell({
                   {fmt(self.money)} cr
                 </span>
               </div>
-              <TableChat />
+              {/* The table chat (C20): in the header from WIDE_PX; on a phone it follows the rail's content, its bubble here. */}
+              {wide ? <TableChat /> : <FallbackBubble />}
             </header>
             <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-3 py-2.5 *:shrink-0 short:gap-2 @min-[1100px]/shell:gap-4 @min-[1100px]/shell:px-5 @min-[1100px]/shell:py-4">
               {now && (foldNow ? <FoldingNowCard key={now.title} now={now} /> : <NowCard now={now} />)}
               {rail}
+              {!wide && <TableChat under />}
             </div>
             {footer && (
               <div
