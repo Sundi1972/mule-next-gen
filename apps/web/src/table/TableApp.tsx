@@ -1,4 +1,4 @@
-import { DEV_WALK, DEVELOPMENT, GAME, POLITICS } from '@mule/engine';
+import { DEV_STEER, DEV_WALK, DEVELOPMENT, GAME, POLITICS } from '@mule/engine';
 import type { DealView, MuleView, TableView } from '@mule/protocol';
 import { AirGauge, Button, cx, GOOD_NAME, GoodTag, HoloMap, PaceList, PlayerMark, SeatSpeciesProvider, SharedClock, StoreInterior, TERRAIN_NAME, TimeBar, Timer, WalkBoard, type CreatureWrap } from '@mule/ui';
 import { Speaker, TvTicker, tvSpeakerAt } from '../chat/Chat';
@@ -14,6 +14,7 @@ import { useAuctionSound } from '../game/sound';
 import { useClient, useClientState, useServerNow } from '../net/react';
 import { connectedIn, hostMayContinue, readyRows, stillPlanning } from '../phone/hub/ready';
 import { ReadyCount, WaitingFor } from '../phone/hub/ReadyBar';
+import { TvDevelop } from './TvDevelop';
 import { TvElection } from './TvElection';
 import { TvGovernorPromise } from './TvGovernorPromise';
 import { TvLandAuction } from './TvLandAuction';
@@ -171,6 +172,7 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
       </SeatSpeciesProvider>
     );
   if (phase === 'planning' && game.politics?.election && game.politics.election.stage !== 'over') return <TvElection table={table} game={game} />;
+  if (phase === 'development' && DEV_STEER.on) return <TvDevelop game={game} />;
 
   let side: ReactNode;
   if (phase === 'landGrant')
