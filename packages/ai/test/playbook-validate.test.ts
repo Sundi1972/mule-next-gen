@@ -7,6 +7,7 @@ import {
   GAME,
   monthNeeds,
   MS_PER_SECOND,
+  observe,
   stableJson,
   type AiLevelId,
   type AiPersonaId,
@@ -19,8 +20,9 @@ import { playGame } from '../src/play.js';
 import { draftPlaybook, type DraftPhase } from '../src/playbook/draft.js';
 import { validatorFor, type PlanEdit } from '../src/playbook/validate.js';
 import { AiSeat } from '../src/seat.js';
+import { outlook } from '../src/outlook.js';
 import { applySets } from '../src/sim.js';
-import type { Mind } from '../src/value.js';
+import { unitValues, type Mind } from '../src/value.js';
 
 const PERSONAS_AT_TABLE: AiPersonaId[] = ['cautious', 'aggressive', 'trader', 'saboteur'];
 const players = PERSONAS_AT_TABLE.map((_, i) => ({ id: `ai${i}`, name: `AI ${i + 1}`, isAi: true }));
@@ -439,19 +441,21 @@ describe("the engine's own draft passes the gate", () => {
       if (!drafts.has(key)) drafts.set(key, draftOf(at[phase], phase, mindOf(i), 100 + i));
       return structuredClone(drafts.get(key)!);
     };
-    const gate = (phase: DraftPhase, i: number, pb: Playbook, mind: Mind) => validatorFor({ mind, seed: 100 + i })(at[phase], `ai${i}`, pb, []);
+    type Seat = { mind?: Mind; state?: GameState };
+    const gate = (phase: DraftPhase, i: number, pb: Playbook, { mind = mindOf(i), state = at[phase] }: Seat = {}) => validatorFor({ mind, seed: 100 + i })(state, `ai${i}`, pb, []);
     const plays = (pb: Playbook) => {
       const { rejected: _, ...rest } = pb;
       return stableJson(rest);
     };
     const isObject = (v: unknown) => v !== null && typeof v === 'object' && !Array.isArray(v);
     /** Validates `pb`, then its output twice more: each pass must take the one before unchanged. */
-    const fixedPoint = (phase: DraftPhase, i: number, pb: Playbook, label: string, mind = mindOf(i)) => {
-      const first = gate(phase, i, pb, mind);
+    const fixedPoint = (phase: DraftPhase, i: number, pb: Playbook, label: string, seat: Seat = {}) => {
+      const { mind = mindOf(i), state = at[phase] } = seat;
+      const first = gate(phase, i, pb, seat);
       let out = first.playbook;
       // RULE-2 row 3: a seat that never corners buys no more than the engine's fresh draft, under the strategy that plays.
       if (!mind.level.corners && out.auction) {
-        const engine = draftPlaybook({ state: at[phase], seat: mind.me, mind, seed: 100 + i, phase: 'auction', strategy: out.strategy }).auction!;
+        const engine = draftPlaybook({ state, seat: mind.me, mind, seed: 100 + i, phase: 'auction', strategy: out.strategy }).auction!;
         for (const [g, play] of Object.entries(out.auction)) {
           if (play?.role === 'buyer') expect(play.hold, `${label}: ${g}'s hold at corners false`).toBeLessThanOrEqual(engine[g as keyof typeof engine]?.hold ?? 0);
         }
@@ -460,7 +464,7 @@ describe("the engine's own draft passes the gate", () => {
       const containers = [out.strategy.stances, ...(['planning', 'landGrant', 'development', 'auction'] as const).filter((k) => out[k] !== undefined).map((k) => out[k]), ...Object.values(out.auction ?? {})];
       expect(containers.every(isObject), `${label}: every part and good is an object`).toBe(true);
       for (const pass of [2, 3]) {
-        const r = gate(phase, i, out, mind);
+        const r = gate(phase, i, out, seat);
         expect(r.rejected, `${label}, pass ${pass}`).toEqual([]);
         expect(plays(r.playbook), `${label}, pass ${pass}`).toBe(plays(out));
         out = r.playbook;
@@ -480,22 +484,46 @@ describe("the engine's own draft passes the gate", () => {
     food.auction!.food = { ...food.auction!.food!, role: 'seller', walkAway: 62, start: NaN };
     const fed = fixedPoint('auction', 2, food, 'probe: a seller with no start').playbook.auction!.food!;
     expect(fed.start).toBeGreaterThanOrEqual(fed.walkAway);
-    const energy = draftFor('auction', 2);
-    energy.auction!.energy = { ...energy.auction!.energy!, role: 'seller', hold: NaN };
-    const powered = fixedPoint('auction', 2, energy, 'probe: a seller with no hold').playbook.auction!.energy!;
-    if (powered.role === 'seller') expect(powered.hold).toBeGreaterThanOrEqual(monthNeeds(at.auction, 'ai2').energy);
+    // Next month's need as the hands measure it (AM-7's floorUnits), on a seat with Energy to sell whose own power plant
+    // makes some of that need, so the engine's Energy play is a seller's and the floor is below the gross monthNeeds.
+    const plant = structuredClone(at.auction);
+    plant.tiles.find((t) => t.owner === 'ai2')!.outfit = 'energy';
+    plant.players.find((p) => p.id === 'ai2')!.stock.energy = 25;
+    const obs = observe(plant, 'ai2');
+    const floor = unitValues(obs, outlook(obs, 'ai2', { lookAhead: mindOf(2).level.lookAhead }), 'energy', mindOf(2)).floorUnits;
+    const gross = monthNeeds(plant, 'ai2').energy;
+    expect(floor).toBeLessThan(gross);
+    const energy = draftOf(plant, 'auction', mindOf(2), 102);
+    expect(energy.auction!.energy!.role).toBe('seller');
+    energy.auction!.energy!.hold = NaN;
+    const powered = fixedPoint('auction', 2, energy, 'probe: a seller with no hold', { state: plant }).playbook.auction!.energy!;
+    expect(powered.role).toBe('seller');
+    expect(powered.hold).toBeGreaterThanOrEqual(floor);
+    const holdAtFloor = (mind: Mind) => read(validatorFor({ mind, seed: 102 })(plant, 'ai2', draftOf(plant, 'auction', mindOf(2), 102), [edit('/auction/energy/hold', floor)]).playbook, '/auction/energy/hold');
+    expect(holdAtFloor(mindOf(2))).toBe(floor);
+    // A profile with no level reads the gross monthNeeds.
+    expect(holdAtFloor({ ...mindOf(2), level: undefined } as unknown as Mind)).toBe(gross);
     // A Rookie handed a playbook set on cornering Smithore.
     const cornering = draftFor('auction', 2);
     cornering.strategy = { ...cornering.strategy, kind: 'monopolist', monopolyTarget: 'smithore' };
     cornering.auction!.smithore = { ...cornering.auction!.smithore!, role: 'buyer', hold: 999 };
-    fixedPoint('auction', 2, cornering, 'probe: a Rookie buying Smithore to corner it', mindOf(2, 'rookie'));
-    // A part, or a good's play, that is not an object at all is replaced, not passed over.
-    const nulled = draftFor('auction', 2);
-    (nulled.auction as Record<string, unknown>).food = null;
-    expect(fixedPoint('auction', 2, nulled, 'a good played as null').rejected).not.toEqual([]);
-    const five = draftFor('development', 2);
-    (five as unknown as Record<string, unknown>).development = 5;
-    expect(fixedPoint('development', 2, five, 'development played as 5').playbook.development).toEqual(draftFor('development', 2).development);
+    fixedPoint('auction', 2, cornering, 'probe: a Rookie buying Smithore to corner it', { mind: mindOf(2, 'rookie') });
+    // A strategy, part, good's play or stance list that is not an object at all is replaced, not passed over, and the
+    // record names what plays.
+    const notObject = (phase: DraftPhase, path: string[], v: unknown, label: string) => {
+      const pb = draftFor(phase, 2);
+      put(pb, path, v);
+      const first = fixedPoint(phase, 2, pb, label);
+      expect(first.rejected, label).toContainEqual({ path: `/${path.join('/')}`, to: v, why: `not an object; the engine's /${path.join('/')} plays` });
+      return first.playbook;
+    };
+    expect(notObject('auction', ['auction', 'food'], null, 'a good played as null').auction!.food).toEqual(draftFor('auction', 2).auction!.food);
+    expect(notObject('development', ['development'], 5, 'development played as 5').development).toEqual(draftFor('development', 2).development);
+    expect(notObject('planning', ['strategy', 'stances'], 5, 'stances played as 5').strategy.stances).toEqual(draftFor('planning', 2).strategy.stances);
+    const strategy = draftFor('planning', 2);
+    (strategy as unknown as Record<string, unknown>).strategy = null;
+    expect(gate('planning', 2, strategy).rejected, 'a strategy played as null').toEqual([{ path: '/strategy', to: null, why: "not an object; the engine's /strategy plays" }]);
+    expect(notObject('planning', ['strategy'], null, 'a strategy played as null').strategy).toEqual(draftFor('planning', 2).strategy);
     // A field every land grant has, missing, is missing nowhere in the output: the engine's part plays.
     const denied = draftFor('planning', 2);
     delete (denied.landGrant as Partial<LandGrantPlay>).deny;
@@ -560,7 +588,7 @@ describe("the engine's own draft passes the gate", () => {
       }
       // Every other case is validated by the seat's Rookie, which never corners: a Trader's draft is foreign to it.
       const level = n % 2 === 1 ? 'rookie' : 'trader';
-      fixedPoint(phase, i, pb, `case ${n}: ${phase} ai${i} ${level} ${changed.join(' ')}`, mindOf(i, level));
+      fixedPoint(phase, i, pb, `case ${n}: ${phase} ai${i} ${level} ${changed.join(' ')}`, { mind: mindOf(i, level) });
       cases++;
     }
     expect(cases).toBe(50);
