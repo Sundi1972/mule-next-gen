@@ -8,6 +8,7 @@ import { guideOf } from './guide';
 import { useGameKeys, useTunables, useWorld } from './loop';
 import { NOTE } from './notes';
 import { ScrambleBanner } from './ScrambleLayer';
+import { Ticker } from '../../proposed/Chat';
 import { reachOf } from './sim';
 import { ActionButton, conditionOf, GroundChip, Joystick, LeadChip, meOf, Money, OverCard, ruleOf, secondsLeft, YourStage } from './views';
 
@@ -181,6 +182,7 @@ export function PhoneLandscape({ size = 844 }: { size?: PhoneSize }) {
           <Money className={compactLeft ? 'text-[11px] [&_*]:whitespace-nowrap' : 'text-base'} />
           {compactLeft ? <CompactClock world={world} tun={tun} /> : <SharedClock seconds={secondsLeft(world, tun)} total={tun.devSeconds} />}
           {markers}
+          {!compactLeft && <Ticker lines={1} wrap />}
           {!keys.focused && !compactLeft && (
             <span className="rounded-chip bg-panel/90 px-1 py-0.5 text-[10px] leading-tight text-ink-2 shadow-chip" data-testid="focus-hint">
               Click the game to steer with the keys
@@ -215,8 +217,11 @@ export function PhoneLandscape({ size = 844 }: { size?: PhoneSize }) {
           <span className="relative min-w-0 shrink">
             <LeadChip className="px-1! text-[11px]!" />
           </span>
-          <span className="min-w-0 flex-1">
+          <span className="min-w-0 shrink">
             <PaceLine world={world} me={me} tun={tun} short />
+          </span>
+          <span className="min-w-0 flex-1">
+            <Ticker lines={1} />
           </span>
         </div>
       )}
