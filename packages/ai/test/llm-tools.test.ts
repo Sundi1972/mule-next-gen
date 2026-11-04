@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { createGame, type GameState } from '@mule/engine';
-import { OFFERED, TOOL_DEFS, toolsFor } from '../src/llm/tools.js';
+import { createGame, type GameState, type Playbook } from '@mule/engine';
+import { OFFERED, TOOL_DEFS, toolsFor, type WhatIfSim } from '../src/llm/tools.js';
 
 const fixture = (): GameState =>
   createGame({
@@ -20,9 +20,22 @@ const SAMPLE: Record<string, unknown> = {
   whatIf: { edits: [] },
 };
 
+/** The month sim for seat `a` of `state`: every player a Trader with its own seed; the edits ignored, its playbook a bare strategy. */
+const simFor = (state: GameState): WhatIfSim => ({
+  seats: state.players.map((p, i) => ({ id: p.id, persona: 'trader', level: 'trader', seed: 500 + i })),
+  playbook: (): Playbook => ({
+    v: 1,
+    seat: 'a',
+    month: state.phase === 'upkeep' ? state.month + 1 : state.month,
+    phase: 'planning',
+    strategy: { kind: 'builder', moneyMaker: null, monopolyTarget: null, cashFloor: 0, landTarget: { plots: 3, byMonth: 3 }, stances: {}, reason: 'test' },
+    by: 'engine',
+  }),
+});
+
 /** What every tool answers seat `a`, by tool name. */
 function answers(state: GameState): Record<string, { content: string; is_error?: boolean }> {
-  const tools = toolsFor(state, 'a');
+  const tools = toolsFor(state, 'a', simFor(state));
   return Object.fromEntries(TOOL_DEFS.map((d) => [d.name, tools.run(d.name, SAMPLE[d.name])]));
 }
 
@@ -61,16 +74,30 @@ describe("Claude's tools (C9)", () => {
   it('T-AC-A9: no tool, whatIf included, changes the live game state', () => {
     const state = fixture();
     const before = structuredClone(state);
-    const tools = toolsFor(state, 'a');
+    const tools = toolsFor(state, 'a', simFor(state));
     for (const d of TOOL_DEFS) tools.run(d.name, SAMPLE[d.name]);
     tools.run('nope', {});
     tools.run('worth', 'not an object');
     expect(state).toEqual(before);
   });
 
-  it('whatIf is defined but not offered until the one-month sim it plays on exists', () => {
-    expect(OFFERED.map((d) => d.name).sort()).toEqual(['legalMoves', 'standings', 'worth']);
-    expect(toolsFor(fixture(), 'a').definitions).toEqual(OFFERED);
+  it('whatIf is offered only with a month sim to play on; without one it answers unavailable', () => {
+    const state = fixture();
+    expect(toolsFor(state, 'a').definitions.map((d) => d.name).sort()).toEqual(['legalMoves', 'standings', 'worth']);
+    expect(toolsFor(state, 'a').run('whatIf', { edits: [] })).toMatchObject({ is_error: true });
+    expect(toolsFor(state, 'a', simFor(state)).definitions).toEqual(OFFERED);
+    expect(OFFERED.map((d) => d.name).sort()).toEqual(['legalMoves', 'standings', 'whatIf', 'worth']);
+  });
+
+  it("whatIf plays the month on what the seat can see and answers its Worth after it, the same for the same edits", () => {
+    const state = fixture();
+    const tools = toolsFor(state, 'a', simFor(state));
+    const first = tools.run('whatIf', { edits: [] });
+    expect(first.is_error).toBeUndefined();
+    const answer = JSON.parse(first.content) as { month: number; worth: { total: number } };
+    expect(answer.month).toBe(1);
+    expect(typeof answer.worth.total).toBe('number');
+    expect(tools.run('whatIf', { edits: [] })).toEqual(first);
   });
 
   it('T-AC-A9: an unknown tool or a malformed input answers is_error with a code, never an exception', () => {
