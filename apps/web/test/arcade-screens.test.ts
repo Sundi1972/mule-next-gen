@@ -1,5 +1,5 @@
 import { HALL } from '@mule/engine';
-import type { ChatMessage, MuleView, MyView } from '@mule/protocol';
+import type { ChatMessage, MuleView, MyView, TileView } from '@mule/protocol';
 import { LiveWalkers, SeatSpeciesProvider, type Slot } from '@mule/ui';
 import { createElement, type ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -13,7 +13,7 @@ import { FRAMES, overlap, phoneLayout, type Box } from '../src/phone/arcade/layo
 import { StaticLive, type Live } from '../src/phone/arcade/live';
 import { PhoneGameProvider } from '../src/phone/game';
 import { fitHall, TvArcade } from '../src/table/TvDevelop';
-import { at, devView, FRAMED, LENAS_PLOTS, lenasMe, NOW, PLAYERS, reach, STORE, tableOf } from './fixtures/arcade';
+import { at, devView, FRAMED, LENAS_PLOTS, lenasMe, NOW, PLAYERS, reach, STORE, tableOf, TILES } from './fixtures/arcade';
 
 /**
  * C11, C12, C13: the arcade's development screens grafted from the approved mock (design/mocks/ws6-ux/src/screens/
@@ -204,6 +204,55 @@ describe('C11: it fits the phone (B-AC-4\'s layout half, B-AC-11\'s text floor)'
     expect(left).toBeGreaterThanOrEqual(L.stage.x + 4 * L.cell);
     expect(left + width).toBeLessThanOrEqual(L.stage.x + 14 * L.cell);
     expect(tag(html, 'phone-status-left')).toBeNull();
+  });
+
+  /** The fixture's map with these plots handed to Lena (or anyone), each with its outfit. */
+  const owning = (plots: { x: number; y: number; outfit?: TileView['outfit']; owner?: string }[]): TileView[] =>
+    TILES.map((t) => {
+      const p = plots.find((q) => q.x === t.x && q.y === t.y);
+      return p ? { ...t, terrain: 'plains', owner: p.owner ?? 's1', outfit: p.outfit ?? null } : t;
+    });
+  const left = (html: string, testid: string) => Number(/left:([\d.]+)px/.exec(tag(html, testid)!)![1]);
+
+  it('C11 (AM-20): a control fades over the target, so the ring reads through it', () => {
+    // A Food MULE, and Lena's best free plot for it at 14·8, under the button at 844; she stands clear of it.
+    const view = devView(lenasMe({ carriedMule: 'food' }), { tiles: owning([{ x: 3, y: 0, outfit: 'food' }, { x: 14, y: 0, outfit: 'food' }, { x: 13, y: 7 }]) });
+    const html = phone(view, live(mine(11.5, 7.5)));
+    expect(text(html, 'guide-label')).toBe('YOUR PLOT 14·8');
+    expect(tag(html, 'overlay-button')).toMatch(/data-faded="true"/);
+    expect(tag(html, 'overlay-stick')).not.toMatch(/data-faded/);
+  });
+
+  it('C11 (AM-20): over another plot of yours the controls are translucent, so its marks read through', () => {
+    const L = phoneLayout(FRAMES[844], 'map', 15, 9);
+    const under = { x: 0, y: 7 };
+    expect(overlap(L.stick, { x: L.stage.x + under.x * L.cell, y: L.stage.y + under.y * L.cell, w: L.cell, h: L.cell })).toBeGreaterThan(0);
+    const html = phone(devView(lenasMe(), { tiles: owning([under]) }), live(mine(5.5, 4.5)));
+    // Not the target, and you are not near: no fade, but neither the pad nor the button's panel is opaque.
+    expect(tag(html, 'overlay-stick')).not.toMatch(/data-faded/);
+    expect(tag(html, 'joystick')).toMatch(/bg-panel\/30!/);
+    expect(tag(html, 'overlay-button')).toMatch(/bg-panel\/80/);
+  });
+
+  it('C11 (AM-20): the plot card covers neither you nor the target: columns 5–14 when they are clear of it, 0–9 when not', () => {
+    const L = phoneLayout(FRAMES[844], 'map', 15, 9);
+    const cols5to14 = L.stage.x + 4.15 * L.cell;
+    const cols0to9 = L.stage.x + 0.15 * L.cell;
+    // On Plains 4·1, top left: the card is clear of her at columns 5–14.
+    const clear = phone(devView(), live(mine(3.5, 0.6)));
+    expect(left(clear, 'plot-card')).toBeCloseTo(cols5to14, 6);
+    // On a plot of hers at 13·3, under columns 5–14: the card moves to 0–9.
+    const underIt = phone(devView(lenasMe(), { tiles: owning([{ x: 12, y: 2 }]) }), live(mine(12.5, 2.6)));
+    expect(left(underIt, 'plot-card')).toBeCloseTo(cols0to9, 6);
+    // On Plains 4·1 with a Food MULE, the ring on her best free plot, 12·3, under columns 5–14: it moves to 0–9.
+    const target = phone(devView(lenasMe({ carriedMule: 'food' }), { tiles: owning([{ x: 3, y: 0 }, { x: 14, y: 0, outfit: 'food' }, { x: 11, y: 2 }]) }), live(mine(3.5, 0.6)));
+    expect(text(target, 'guide-label')).toBe('YOUR PLOT 12·3');
+    expect(left(target, 'plot-card')).toBeCloseTo(cols0to9, 6);
+  });
+
+  it('C11 (AM-20): under both of the card\'s places at once, the card is not drawn rather than cover you', () => {
+    const html = phone(devView(lenasMe(), { tiles: owning([{ x: 8, y: 2 }]) }), live(mine(8.5, 2.6)));
+    expect(tag(html, 'plot-card')).toBeNull();
   });
 
   it('C11: a control fades while you stand under it, so it never hides you', () => {
