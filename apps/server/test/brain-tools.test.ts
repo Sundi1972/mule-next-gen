@@ -129,7 +129,7 @@ describe('the tool loop (C9, RULE-A4)', () => {
       await runTable(game, fake, (v) => v.phase === 'landGrant');
 
       const writes = sdk.requests.filter((r) => isWrite(r.params));
-      expect(writes.map((r) => (r.params.tools ?? []).map((t) => t.name).sort())).toEqual([
+      expect(writes.map((r) => (r.params.tools ?? []).map((t) => ('name' in t ? t.name : '')).sort())).toEqual([
         ['legalMoves', 'standings', 'whatIf', 'worth'],
         ['legalMoves', 'standings', 'whatIf', 'worth'],
       ]);
