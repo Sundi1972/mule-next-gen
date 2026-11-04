@@ -29,6 +29,8 @@ async function main(arg: string | undefined): Promise<number> {
     const result = await replay(record);
     for (const s of result.scores) console.log(`${s.seat.padEnd(4)} recorded ${s.recorded ?? '-'}  replayed ${s.replayed ?? '-'}`);
     console.log(`state hash recorded ${result.stateHash.recorded ?? '-'}  replayed ${result.stateHash.replayed ?? '-'}`);
+    if (record.ended === 'error') console.log(`ended by a game error: ${record.error ?? '-'}`);
+    if (result.reason) console.log(result.reason);
     console.log(result.identical ? 'identical' : 'differs');
     return result.identical ? 0 : 1;
   } catch (err) {

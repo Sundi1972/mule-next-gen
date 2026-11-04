@@ -362,6 +362,18 @@ describe('the phone plays the show alone (C7)', () => {
     expect(sent, 'a skip is this phone’s alone: nothing is sent').toEqual([]);
   });
 
+  it("T-AC-12: a cavern collapse on your own plot says it caved in on your phone, never that it missed you", async () => {
+    // The server's collapse hit changes no output (delta 0); what it changes is the plot itself.
+    const collapse: ProductionEventView = { ...fired('cavernCollapse', 'Cavern collapse', 'bad', [1, 0], []), scope: 'personal', player: LENA, hits: [{ x: 1, y: 0, order: 0, delta: 0, was: 'crystalCavern', becomes: 'plain' }] };
+    const month = monthOf([collapse]);
+    for (const boards of [0, 1]) {
+      const settled = await render(boards, DUST_AT + 2.9, month);
+      expect(card(settled), `boards ${boards}`).toEqual({ event: 'cavernCollapse', at: 'you' });
+      expect(text(settled, 'phone-you'), `boards ${boards}`).toContain('Your cavern caved in');
+      expect(settled, `boards ${boards}: not a miss`).not.toContain('data-testid="phone-miss"');
+    }
+  });
+
   it('B-AC-2: the harvest says its goods are flying home only once they fly, after the last event, never while one plays', async () => {
     // The drought plays at 10.6, past a quiet month's fly start (9.6); the goods fly from 15.6, when the events end.
     for (const boards of [0, 1]) {

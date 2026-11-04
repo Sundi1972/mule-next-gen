@@ -1,4 +1,4 @@
-import type { AuctionSide, CanRun, CeremonyBeat, DevPlace, Election, EventKey, EventKind, EventWeight, Good, GoodReceipt, Ground, MonthEvent, Office, OfficeResult, Outfit, Phase, ScoreParts, SkipReason, SpecialField, Species, StatusRow, Stock, TaxPromise, Terrain, TileTrait, VoteWeight } from '@mule/engine';
+import type { AuctionSide, CanRun, CeremonyBeat, DevPlace, Election, EventEffect, EventKey, EventKind, EventWeight, Good, GoodReceipt, Ground, MonthEvent, Office, OfficeResult, Outfit, Phase, ScoreParts, SkipReason, SpecialField, Species, StatusRow, Stock, TaxPromise, Terrain, TileTrait, VoteWeight } from '@mule/engine';
 export type { ChatMessage, ClientEnvelope, ServerEnvelope, TableView } from '@tabletop/core/protocol';
 
 /**
@@ -474,7 +474,20 @@ export interface EventView {
   /** Whose event it is: a personal event's player, or the player who fell sick. */
   player?: string;
   /** The plots it hit, in the order it reached them, and how many units each gained or lost. */
-  hits: { x: number; y: number; order: number; delta: number }[];
+  hits: {
+    x: number;
+    y: number;
+    order: number;
+    delta: number;
+    /** The special field the plot had until this hit, when the hit removes it: the map keeps its badge until the hit lands. */
+    was?: SpecialField['kind'];
+    /** What the plot is after this hit, when the hit changes what it is: 'plain' (its special field is gone), 'crater', 'idle'. */
+    becomes?: 'plain' | 'crater' | 'idle';
+    /** True when the hit destroyed or took the plot's MULE. */
+    muleLost?: true;
+  }[];
+  /** What it changed off the map, in the order it changed it: a player's (by id), the store's or the colony's. */
+  effects?: EventEffect[];
   /** The phase whose show plays it. */
   phase: Phase;
   /** How big its story is on the TV. */

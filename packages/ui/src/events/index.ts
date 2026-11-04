@@ -9,6 +9,8 @@ export {
   eventStageAt,
   eventFrontAt,
   EVENT_FRONT,
+  eventEffectsAt,
+  type EventLandedEffect,
   type EventScript,
   type EventSegment,
   type EventStage,
@@ -18,6 +20,7 @@ export {
 } from './timing';
 export { EVENT_ENTRY, type EventEntry, type EventMotion } from './catalogue';
 export { EventBoundary } from './boundary';
+export { EventEffectChip } from './glyphs';
 export { EventSickTag, sickAt as eventSickAt } from './rollcall';
 export { EventShow, useShow as useEventShow, useEnclosingEventShow, type EventShowProps } from './frame';
 export { EventLivingMap } from './map';
