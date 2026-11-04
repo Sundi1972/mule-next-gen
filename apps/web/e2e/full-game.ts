@@ -68,7 +68,7 @@ try {
   for (const p of phones) check(truth.plotsOf(p.id).length > 0, `month 1: ${p.name} owns a plot after the land grant`);
   console.log(`✓ month 1: everyone claimed land (${phones.map((p) => `${p.name} ${truth.plotsOf(p.id).length}`).join(', ')})`);
   await throughTheLandAuction(phones, truth, null);
-  await Promise.all([buyAndInstallAMule(lena), goToThePub(brix), goToThePub(ossa)]);
+  await Promise.all([buyAndInstallAMule(phones.find((p) => p.name === 'Lena')!, truth), goToThePub(brix), goToThePub(ossa)]);
   const lenaId = truth.seatOf('Lena');
   check(truth.plotsOf(lenaId).some((t) => t.outfit === 'energy'), `month 1: Lena's plot has the Energy MULE she installed, ${JSON.stringify(truth.plotsOf(lenaId).map((t) => t.outfit))}`);
   console.log(`✓ month 1: Lena bought a MULE, outfitted it for Energy and installed it on her plot`);
@@ -263,14 +263,25 @@ async function bidUntilLeading(buyer: Phone, truth: Truth, listing: { id: string
   await page.locator('[data-phase=landAuction] [data-testid=done]:not([disabled])').click({ timeout: PRESS_MS }).catch(() => undefined);
 }
 
-/** Development: buys a MULE in the store's corral, outfits it for Energy, walks it out and installs it on the plot. */
-async function buyAndInstallAMule(page: Page): Promise<void> {
+/**
+ * Development: buys a MULE in the store's corral, outfits it for Energy, walks it out and installs it on the plot. The
+ * walk out takes its time, and Install here pressed before the colonist reaches the plot does nothing, so it presses
+ * until the server has the plot outfitted, then reads the phone's confirmation.
+ */
+async function buyAndInstallAMule(phone: Phone, truth: Truth): Promise<void> {
+  const { page } = phone;
   const dev = page.locator('[data-phase=development]');
   await dev.waitFor({ timeout: within(LOTS.resultMs) + PRESS_MS * 5 });
   await page.locator('[data-shop=corral]:not([disabled])').click({ timeout: PRESS_MS * 3 });
   await page.locator('[data-shop=energy]:not([disabled])').click({ timeout: PRESS_MS });
   await dev.getByRole('button', { name: 'Walk out to the map' }).click({ timeout: PRESS_MS });
-  await dev.getByRole('button', { name: 'Install here' }).click({ timeout: PRESS_MS });
+  const installed = () => truth.plotsOf(phone.id).some((t) => t.outfit === 'energy');
+  const deadline = Date.now() + within(PHASE_MS.development);
+  while (!installed()) {
+    check(Date.now() < deadline, `${phone.name}'s Install here puts the MULE on her plot within development`);
+    await dev.getByRole('button', { name: 'Install here' }).click({ timeout: 500 }).catch(() => undefined);
+    await new Promise((r) => setTimeout(r, 200));
+  }
   await dev.getByText(/Your MULE here makes/).waitFor({ timeout: PRESS_MS });
   await goToThePub(page);
 }
