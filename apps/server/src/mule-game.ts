@@ -16,6 +16,10 @@ import {
   createRng,
   declareRole,
   electionDone,
+  votesDone,
+  votesOpen,
+  proposeLaw,
+  castLawVote,
   DEV_STEER,
   buildFloor,
   IDLE_INPUT,
@@ -39,6 +43,7 @@ import {
   hungerPace,
   installMule,
   isElectionDone,
+  isVotesDone,
   lineTrade,
   list as listLot,
   litPlot,
@@ -72,7 +77,7 @@ import {
   SPECIES,
   type Species,
   stepAuction,
-  stepElection,
+  stepVotes,
   stepLandAuction,
   stepWalk,
   storeBuyLine,
@@ -104,7 +109,7 @@ import { devFrame, noStats, steerConfig, steeredColonistView, SteerInputs, stepT
 import { colonistView, dueArrivals, placeName, walkTarget, type Colonist, type DevIntent } from './dev-walking.js';
 import { boardRange, landAuctionView, listingView, lotNews } from './land-auction.js';
 import { colonyView } from './colony-view.js';
-import { ceremonyNews, myPoliticsView, politicsView } from './politics-view.js';
+import { ceremonyNews, councilNews, myPoliticsView, politicsView } from './politics-view.js';
 
 /**
  * The longest each phase lasts, in milliseconds, from the engine's PHASES.
@@ -542,9 +547,9 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         this.steering?.inputs.press(seatId);
         return;
       case 'ready':
-        // During the election, ready is Done for the stage; it never ends planning.
+        // While a vote is open (the election, then the law ballot), ready is Done for its stage; it never ends planning.
         if (this.electionOpen()) {
-          electionDone(state, seatId);
+          votesDone(state, seatId);
           return;
         }
         if (state.phase === 'auction') {
@@ -628,6 +633,12 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       case 'repair':
         repair(state, seatId, intent.id);
         return;
+      case 'propose':
+        proposeLaw(state, seatId, intent.proposal);
+        return;
+      case 'voteLaw':
+        castLawVote(state, seatId, intent.yes);
+        return;
       case 'continue': {
         if (seatId !== this.ctx.hostId()) throw new RuleError('Only the host can continue');
         if (state.phase === 'development') this.continueDevelopment(seatId);
@@ -649,6 +660,14 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     const goneOn = (did: string, left: string[]) => {
       if (left.length > 0) this.addNews(`${this.nameOf(hostId)} ${did} without ${andList(left)}.`);
     };
+    const council = state.politics?.council;
+    if (this.electionOpen() && council && council.stage !== 'over') {
+      if (council.stage === 'reveal') throw new RuleError('The result is being announced');
+      const waiting = this.seats.filter((s) => !s.isAi && !isVotesDone(state, s.id));
+      for (const s of waiting) votesDone(state, s.id);
+      goneOn('closed the law ballot', waiting.filter((s) => s.id !== hostId).map((s) => s.name));
+      return;
+    }
     if (this.electionOpen()) {
       const { stage } = state.politics!.election!;
       if (stage === 'ceremony') throw new RuleError('The result is being announced');
@@ -1128,11 +1147,9 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     for (const seat of this.ai.values()) seat.planMonth(state);
   }
 
-  /** True while this month's election runs, before planning proper. */
+  /** True while the colony votes in planning (this month's election, then its law ballot), before planning proper. */
   private electionOpen(): boolean {
-    const state = this.state;
-    const election = state?.politics?.election;
-    return state?.phase === 'planning' && !!election && election.stage !== 'over';
+    return !!this.state && votesOpen(this.state);
   }
 
   /**
@@ -1150,9 +1167,12 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         // A stalled server loop must not skip a stage.
         const dt = Math.min(Math.max(0, now - last), WALK.tickMs * 3) / this.phaseScale;
         this.tickVoteHands(dt);
-        const before = state.politics!.election!.ceremony?.elapsedMs ?? -1;
-        stepElection(state, dt);
+        const before = state.politics!.election?.ceremony?.elapsedMs ?? -1;
+        const revealed = !!state.politics!.council?.result;
+        stepVotes(state, dt);
         for (const line of ceremonyNews(state, before, (id) => this.nameOf(id))) this.addNews(line);
+        const news = revealed ? null : councilNews(state);
+        if (news) this.addNews(news);
         if (this.electionOpen()) this.scheduleElectionTick(now);
         else {
           // Planning proper opens now: its show, were it to fire one, starts here and not at the election's start.
@@ -1514,7 +1534,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
           lineTrade(state, seatId, action.units);
           break;
         case 'done':
-          if (this.electionOpen()) electionDone(state, seatId, action.done);
+          if (this.electionOpen()) votesDone(state, seatId, action.done);
           else if (state.phase === 'landGrant') grantPass(state, seatId);
           else if (state.phase === 'landAuction') lotDone(state, seatId, action.done);
           else auctionDone(state, seatId, action.done);
@@ -1695,7 +1715,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       return !!p && (p.doneWithLand || p.claimsThisGrant >= GAME.claimsPerGrant);
     };
     const isReady = (id: string) =>
-      this.electionOpen() ? isElectionDone(state, id) : state.phase === 'landGrant' ? doneWithLand(id) : this.ready.has(id);
+      this.electionOpen() ? isVotesDone(state, id) : state.phase === 'landGrant' ? doneWithLand(id) : this.ready.has(id);
     const lastEnd = this.monthEnds.get(state.month - 1) ?? null;
     return {
       finished: state.phase === 'gameOver',
