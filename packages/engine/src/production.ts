@@ -1,8 +1,8 @@
-import { ADJACENCY, FACTORY, FACTORY_FIT, GROWN_BASE, GROWN_MIN, POLLUTION, RECIPES, SPECIES_PERK, THIN_VEIN_MONTHS, TRAIT_EFFECT, UPKEEP } from './config.js';
-import { eventOutput, plotEvent, rollPhase } from './events.js';
+import { ADJACENCY, EVENTS, FACTORY, FACTORY_FIT, GROWN_BASE, GROWN_MIN, POLLUTION, RECIPES, SPECIES_PERK, THIN_VEIN_MONTHS, TRAIT_EFFECT, UPKEEP } from './config.js';
+import { applyEvents, eventOutput, plotEvent, rollAfterOutput, rollPhase } from './events.js';
 import { neighbours } from './map.js';
 import { airBand, runPollution } from './pollution.js';
-import { relicFit, settleSpecials, specialBonus } from './specials.js';
+import { formMeteorCrater, relicFit, settleSpecials, specialBonus } from './specials.js';
 import { addStock, emptyStock, hasStock } from './stock.js';
 import {
   GROWN_GOODS,
@@ -220,6 +220,9 @@ export function runProduction(state: GameState): {
   const ran = new Set<Tile>();
   const lines: ProductionLine[] = [];
   const events = rollPhase(state, 'production');
+  applyEvents(state, events);
+  // A cold snap multiplies every plot's Energy need for this run only.
+  const cold = events.some((e) => e.key === 'coldSnap') ? EVENTS.colony.coldSnap.factor : 1;
   const reaching = new Map<number, { key: EventKey; plot: MonthEvent['plots'][number] }[]>();
   for (const { key, plots } of events) {
     for (const plot of plots) {
@@ -257,7 +260,7 @@ export function runProduction(state: GameState): {
     const owner = playerById.get(tile.owner!)!;
     const good = tile.outfit as RawGood;
     const parts = rawOutputParts(state, tile);
-    const energy = energyUseOf(state, tile);
+    const energy = energyUseOf(state, tile) * cold;
     if (owner.stock.energy >= energy) owner.stock.energy -= energy;
     else halve(parts, 'noEnergy');
     if (dry.has(owner.id) && UPKEEP.irrigated.includes(good)) halve(parts, 'noWater');
@@ -268,7 +271,7 @@ export function runProduction(state: GameState): {
     for (const tile of working.filter((t) => t.outfit === good)) {
       const owner = playerById.get(tile.owner!)!;
       const fit = factoryFit(state, tile, good, owner.id);
-      const inputs = { ...RECIPES[good].inputs, energy: fit.energy };
+      const inputs = { ...RECIPES[good].inputs, energy: fit.energy * cold };
       if (!hasStock(owner.stock, inputs)) continue;
       addStock(owner.stock, inputs, -1);
       credit(tile, good, [{ why: 'factory', delta: fit.output }]);
@@ -282,6 +285,11 @@ export function runProduction(state: GameState): {
   }
 
   for (const index of settleSpecials(state, lines)) events.push(plotEvent(state, 'cavernCollapse', index));
+  // A meteor strikes after the output, so the plot made what it made; then its MULE is lost and it becomes a crater.
+  for (const strike of rollAfterOutput(state)) {
+    for (const { index } of strike.plots) formMeteorCrater(state, state.tiles[index]!.x, state.tiles[index]!.y);
+    events.push(strike);
+  }
   const pollutionBy = runPollution(state);
   return { produced, pollutionBy, lines, events };
 }

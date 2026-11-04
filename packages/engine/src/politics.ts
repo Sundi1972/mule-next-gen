@@ -6,6 +6,7 @@
  */
 import { POLITICS } from './config.js';
 import { RuleError } from './errors.js';
+import { firePhase } from './events.js';
 import { player } from './game.js';
 import { createRng } from './rng.js';
 import { PERCENT } from './units.js';
@@ -53,6 +54,8 @@ function landBaron(state: GameState, current: string | null): string | null {
 
 /** When planning opens: fixes the month's Land Baron and starting tax, and opens the election in an election month. See WS7 spec RULE-5, RULE-61. */
 export function openPlanning(state: GameState): void {
+  // Planning's events roll as the month opens, with or without politics; they move cash and colonists, never land.
+  firePhase(state, 'planning');
   if (!state.politics) return;
   const p = edit(state);
   p.baron = landBaron(state, p.baron);

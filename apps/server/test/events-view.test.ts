@@ -74,8 +74,8 @@ const REAL_SEED = 404;
 const TWO_EVENT_MONTH = 4;
 /** Production fires a colony comet pass and nothing else. */
 const ONE_EVENT_MONTH = 5;
-/** Production fires nothing. */
-const QUIET_MONTH = 6;
+/** Nothing fires all month (wave 2's meteor strike took month 6, the quiet month before it). */
+const QUIET_MONTH = 3;
 
 /**
  * Plays REAL_SEED on the fake clock through production of `lastMonth`, humans pressing Ready where the game waits and
@@ -108,10 +108,10 @@ function playRealMonths(lastMonth: number) {
   };
 }
 
-/** REAL_SEED's months, played once for every block that reads them: six months on the fake clock take seconds. */
+/** REAL_SEED's months, played once for every block that reads them: five months on the fake clock take seconds. */
 let realMonths: ReturnType<typeof playRealMonths> | null = null;
-const playedMonths = () => (realMonths ??= playRealMonths(QUIET_MONTH));
-/** Room for six months under a loaded full run, past the 10 s a hook gets by default. */
+const playedMonths = () => (realMonths ??= playRealMonths(ONE_EVENT_MONTH));
+/** Room for five months under a loaded full run, past the 10 s a hook gets by default. */
 const PLAY_MONTHS_MS = 60_000;
 
 describe('the event show on real engine months: the view plays exactly what the month report fired', () => {

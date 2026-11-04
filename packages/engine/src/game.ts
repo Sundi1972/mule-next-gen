@@ -2,7 +2,7 @@ import { endAuction, startAuction } from './auction.js';
 import { RuleError } from './errors.js';
 import { DEFAULT_SPECIES, DEV_STEER, DEVELOPMENT, GAME, GLINT, GOOD_CONFIG, mapSize, MULE, POLLUTION, SPECIES_PERK, START, TAX, UPKEEP, WOLVES } from './config.js';
 import { allPrices, mulePrice, planShip, postPrices, targetPrice } from './economy.js';
-import { rollPlayerEvent } from './events.js';
+import { firePhase, rollPlayerEvent } from './events.js';
 import { colonyLot, endLandAuction, isListed, plotAt, startLandAuction } from './lots.js';
 import { generateMap, tileIndex } from './map.js';
 import { airBand } from './pollution.js';
@@ -209,8 +209,10 @@ function developer(state: GameState, playerId: string): Player {
  * Starts development: one clock, the same full time for every player. A
  * player short of the month's Food is hungry. Each player rolls for
  * sickness (events.ts, likelier in dirty air and for a big polluter); a
- * Medicine cures it, and is used up. Hunger and sickness slow the walk
- * (dev-walk.ts).
+ * Medicine cures it, and is used up. A player last month's epidemic made
+ * sick is sick again unless they now hold a Medicine, which they then take.
+ * Then development's events roll (an epidemic, a MULE theft). Hunger and
+ * sickness slow the walk (dev-walk.ts).
  */
 function startDevelopment(state: GameState): void {
   for (const p of state.players) {
@@ -220,10 +222,16 @@ function startDevelopment(state: GameState): void {
       if (p.stock.medicine >= 1) p.stock.medicine--;
       else p.sick = true;
     }
+    if (p.sickNext && !p.sick) {
+      if (p.stock.medicine >= 1) p.stock.medicine--;
+      else p.sick = true;
+    }
+    p.sickNext = false;
     p.devSeconds = DEVELOPMENT.fullSeconds;
     p.doneDeveloping = false;
     p.installedThisTurn = false;
   }
+  firePhase(state, 'development');
 }
 
 /** What this player pays for an empty MULE. Gearlings pay less. */
@@ -516,6 +524,8 @@ export function advancePhase(state: GameState): void {
     state.monthEvents.push(...(state.history.at(-1)!.events ?? []));
   }
   if (next === 'auction') {
+    // A pirate raid or a store fire changes the stock before the prices are posted.
+    firePhase(state, 'auction');
     postPrices(state);
     startAuction(state);
   }
@@ -523,6 +533,7 @@ export function advancePhase(state: GameState): void {
     // Goods the auction didn't reach trade nothing.
     endAuction(state);
     state.auction = null;
+    firePhase(state, 'upkeep');
     const { shortages, hungry } = runUpkeep(state);
     payOffices(state);
     const report = state.history.at(-1);

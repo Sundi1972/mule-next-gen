@@ -1,4 +1,4 @@
-import { EVENTS, grantees, UPKEEP, type EventKey, type GameState, type MonthEvent, type Phase } from '@mule/engine';
+import { DEV_STEER, EVENTS, grantees, UPKEEP, type EventKey, type GameState, type MonthEvent, type Phase } from '@mule/engine';
 import { afterEach, describe, expect, it } from 'vitest';
 import { MuleGame } from '../src/mule-game.js';
 import { fakeContext, readyAll, seats } from './fake-context.js';
@@ -63,6 +63,9 @@ const allRows = (): [string, Row][] => [...Object.entries(EVENTS.colony), ...Obj
 function forceOnly(key: EventKey, from: number): () => void {
   const saved = allRows().map(([, row]) => ({ row, phases: { ...row.phases }, cap: row.cap }));
   const firstMonth = EVENTS.firstMonth;
+  // Month 1's clock runs from the start, as every later month's does, instead of waiting for first MULEs (A-1).
+  const waits = DEV_STEER.month1WaitsForFirstMule;
+  DEV_STEER.month1WaitsForFirstMule = false;
   for (const [k, row] of allRows()) {
     row.phases = Object.fromEntries(Object.keys(row.phases).map((p) => [p, k === key ? 1 : 0]));
     if (k === key) row.cap = 1;
@@ -71,6 +74,7 @@ function forceOnly(key: EventKey, from: number): () => void {
   return () => {
     for (const { row, phases, cap } of saved) Object.assign(row, { phases, cap });
     EVENTS.firstMonth = firstMonth;
+    DEV_STEER.month1WaitsForFirstMule = waits;
   };
 }
 
@@ -108,6 +112,7 @@ function firedIn(key: EventKey, phase: Phase, month: number, prepare?: (state: G
     fake.advance(100);
   }
   expect([state.month, state.phase]).toEqual([month, phase]);
+  before ??= last;
   const views = [null, 's1', 's2'].map((seat) => game.viewFor(seat).events!.filter((e) => e.key === key));
   for (const v of views) expect(v).toEqual(views[0]);
   return { game, state, before: before! as GameState, events: views[0]! };
@@ -167,8 +172,9 @@ describe('T-AC-1: each wave-2 event fires in its phase, changes the state as RUL
     const { x, y } = theft!.hits[0]!;
     expect(dev.state.tiles[y * dev.state.width + x]).toMatchObject({ owner: 's1', outfit: null, runMonths: 0 });
     const upkeep = firedIn('muleTheft', 'upkeep', 1, farms(2));
-    expect(upkeep.events.map((e) => e.phase)).toEqual(['upkeep']);
-    expect(upkeep.state.history.at(-1)!.events!.filter((e) => e.key === 'muleTheft').map((e) => e.phase)).toEqual(['development', 'upkeep']);
+    const mine = (events: readonly { player?: string; phase: string }[]) => events.filter((e) => e.player === 's1').map((e) => e.phase);
+    expect(mine(upkeep.events)).toEqual(['upkeep']);
+    expect(mine(upkeep.state.history.at(-1)!.events!.filter((e) => e.key === 'muleTheft'))).toEqual(['development', 'upkeep']);
     expect(upkeep.state.tiles.filter((t) => t.owner === 's1' && t.outfit === 'food')).toHaveLength(0);
   });
 
@@ -209,13 +215,15 @@ describe('T-AC-1: each wave-2 event fires in its phase, changes the state as RUL
   });
 
   it("pirateRaid: the auction opens with every player's and the store's Crystite at 0", () => {
-    const { state, events } = firedIn('pirateRaid', 'auction', 1, (s) => {
+    const { state, before, events } = firedIn('pirateRaid', 'auction', 1, (s) => {
       s.players[0]!.stock.crystite = 3;
       s.store.stock.crystite = 5;
     });
     expect(state.players.map((p) => p.stock.crystite)).toEqual([0, 0, 0]);
     expect(state.store.stock.crystite).toBe(0);
-    expect(events[0]).toMatchObject({ phase: 'auction', effects: [{ on: 's1', what: 'crystite', delta: -3 }, { on: 'store', what: 'crystite', delta: -5 }] });
+    const held = [...before.players.map((p) => ({ on: p.id, n: p.stock.crystite })), { on: 'store', n: before.store.stock.crystite }].filter((h) => h.n > 0);
+    expect(held).toContainEqual({ on: 's1', n: 3 });
+    expect(events[0]).toMatchObject({ phase: 'auction', effects: held.map(({ on, n }) => ({ on, what: 'crystite', delta: -n })) });
   });
 
   it('storeFire: the auction opens with the store empty and the corral at 0', () => {
