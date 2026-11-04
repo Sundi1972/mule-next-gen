@@ -31,6 +31,14 @@ export class RoomRegistry<Intent, View> {
     return this.rooms.size;
   }
 
+  /** Disposes every room, as the server shuts down: no game's timers outlive it. */
+  disposeAll(): void {
+    for (const [code, entry] of this.rooms) {
+      entry.room.dispose();
+      this.rooms.delete(code);
+    }
+  }
+
   /** Closes rooms nobody has been connected to for `idleMs`. Phones that drop briefly keep their room. */
   sweep(idleMs: number): void {
     const now = this.now();
