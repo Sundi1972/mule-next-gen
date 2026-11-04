@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { advancePhase, cloneForSim, createGame, type GameState, type MonthEvent } from '../src/index.js';
+import { advancePhase, cloneForSim, createGame, EVENTS, type GameState, type MonthEvent } from '../src/index.js';
 
 const fourPlayers = () => createGame({ seed: 3, players: [0, 1, 2, 3].map((i) => ({ id: `p${i}`, name: `P${i}`, isAi: false })) });
 
@@ -23,7 +23,7 @@ function toPhase(state: GameState, phase: GameState['phase']) {
 }
 
 describe('C1: the month keeps every event it fires', () => {
-  it('a new game opens month 1 with no events kept', () => {
+  it("a new game opens month 1 with no events kept (EVENTS.firstMonth is 2)", () => {
     expect(fourPlayers().monthEvents).toEqual([]);
   });
 
@@ -66,5 +66,30 @@ describe('C1: the month keeps every event it fires', () => {
     expect(report.events).toEqual(events);
     expect(state.monthEvents).toBe(list);
     expect(state.monthEvents).toEqual(month);
+  });
+
+  it("a what-if copy keeps its own copy of the month's list, so nothing it fires reaches the real game's (WS3's review)", () => {
+    const state = fourPlayers();
+    toPhase(state, 'auction');
+    state.monthEvents.unshift(filed('planning'));
+    const sim = cloneForSim(state);
+    expect(sim.monthEvents).toEqual(state.monthEvents);
+    expect(sim.monthEvents).not.toBe(state.monthEvents);
+    sim.monthEvents.push(filed('auction'));
+    expect(state.monthEvents).toEqual([filed('planning')]);
+  });
+
+  it("month 1's planning rolls as a new game opens, as every later month's does in advancePhase (WS3's review)", () => {
+    const row = EVENTS.colony.federationTax;
+    const before = { firstMonth: EVENTS.firstMonth, phases: row.phases };
+    try {
+      (EVENTS as { firstMonth: number }).firstMonth = 1;
+      (row as { phases: typeof row.phases }).phases = { planning: 1 };
+      const state = fourPlayers();
+      expect(state.monthEvents.map((e) => [e.key, e.phase])).toEqual([['federationTax', 'planning']]);
+    } finally {
+      (EVENTS as { firstMonth: number }).firstMonth = before.firstMonth;
+      (row as { phases: typeof row.phases }).phases = before.phases;
+    }
   });
 });
