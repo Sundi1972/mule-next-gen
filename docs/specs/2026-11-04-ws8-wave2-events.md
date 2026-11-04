@@ -58,7 +58,8 @@ HC-2  The engine stays pure: seeded dice only (rowDice), no Date.now, no Math.ra
 HC-3  Wave 1's rolls do not move: every wave-1 row keeps its own dice (rowDice seeds by key, phase and roller), so
       adding rows never changes which wave-1 events fire. Proven by the sim's wave-1 rates staying identical.
                                                                                      source: WS1 §2 · breach: fatal
-HC-4  No new balancing: the chances are the catalogue's (design/mocks/ws8-events/src/catalogue.ts, wave 'wave2').
+HC-4  No new balancing: the chances are the catalogue's (design/mocks/ws8-events/src/catalogue.ts, wave 'wave2'),
+      the two production rows ×1.6 as Heiko ruled for every production base (AM-1).
                                                                                      source: PM 4 Nov · breach: decision
 HC-5  An event's effect on cash or goods never drives a number below 0.              source: rules · breach: fatal
 ```
@@ -182,8 +183,8 @@ RULE-2 · the rows (chance a roll; the catalogue's; HC-4)                 shape:
   inheritance        planning               player   0.015         min 100 … max 300, more for the poorer (RULE-3)
   muleTheft          development, upkeep    player   0.01 each     one installed MULE taken; the plot stands idle
   epidemic           development            colony   0.005         each player without Medicine sick this turn and next
-  coldSnap           production             colony   0.02          every plot's energy need × factor 2 this month
-  meteorStrike       production             colony   0.02          one tile at random (not the store): crater
+  coldSnap           production             colony   0.032         every plot's energy need × factor 2 this month
+  meteorStrike       production             colony   0.032         one tile at random (not the store): crater
   pirateRaid         auction                colony   0.01          every player's and the store's Crystite → 0
   storeFire          auction                colony   0.01          the store's stock of every good → 0, its MULEs → 0
   ratsInSilo         upkeep                 player   0.015         lose share 0.5 of held Food (floor)
@@ -293,4 +294,18 @@ No ownership change. Named edits, each OK'd by its owner on the SHA:
 
 ## §8 · Amendments `[review-only]`
 
-(none yet)
+```
+AM-1 · 2026-11-04 · Heiko's ruling on the six readings (relayed by the PM: "I go with your picks", the PM's picks)
+
+target    RULE-2 (coldSnap, meteorStrike chances), RULE-3's meteor note, RULE-2's muleTheft note, RULE-4 (epidemic,
+          federationGrant, inheritance)
+did       1 (a) the meteor strikes after production's output: the MULE produced this month, then is destroyed.
+          2 (b) cold snap and meteor strike at the catalogue's 2% ×1.6 = 0.032, as the 29 Oct ruling (WS1 AM-6)
+            did for every production base; both named config values. The PM's pick; WS8 had recommended (a).
+          3 (a) MULE theft can fire twice a month: 1% in development, 1% at the month end.
+          4 (a) epidemic: sick next development only if the player then still holds no Medicine.
+          5 (a) the Federation grant is new money (no source).
+          6 (a) inheritance by wealth rank: the poorest 300, the richest 100, linear between.
+because   Heiko, 4 Nov, through the PM.
+goal      G-1 unchanged
+```
