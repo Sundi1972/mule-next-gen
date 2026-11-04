@@ -67,7 +67,7 @@ function ResultList() {
                 <span data-num className="font-mono font-bold">
                   {t.votes} vote{t.votes === 1 ? '' : 's'}
                 </span>
-                {t.id === r.winner && <span className="rounded-chip bg-holo px-1 font-mono text-[9px] font-bold leading-4 text-on-holo @min-[1100px]/shell:text-xs">ELECTED</span>}
+                {t.id === r.winner && <span className="rounded-chip bg-holo px-1 font-mono text-[10px] font-bold leading-4 text-on-holo @min-[1100px]/shell:text-xs">ELECTED</span>}
               </span>
             ))}
             <span className={cx('text-[11px] leading-snug @min-[1100px]/shell:text-sm', r.how === 'votes' ? 'text-ink-2' : 'text-warn')} data-testid={`result-how-${o}`}>

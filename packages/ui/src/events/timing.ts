@@ -27,10 +27,27 @@ export function playShare(ev: ShowEventView): number {
       return 0.8 + ev.hits.length * 0.35;
     case 'plot':
       return 1.8;
+    case 'colonists':
+      return 1.6;
   }
 }
 
-/** One event's stretch of the show. */
+/** A segment's motion in the gallery: one event's, or a roll call's, which gives each name after the first half a second. */
+const groupShare = (events: ShowEventView[]) => Math.max(...events.map(playShare)) + (events.length - 1) * 0.5;
+
+/**
+ * The show's beats: headlines and spotlights one by one in the order they fired, then every bulletin of the phase
+ * gathered into ONE roll call that closes it (RULE-1), so the personal news never interrupts the big news.
+ */
+export function eventGroups(events: ShowEventView[]): ShowEventView[][] {
+  const roll = events.filter((ev) => ev.weight === 'bulletin');
+  return [...events.filter((ev) => ev.weight !== 'bulletin').map((ev) => [ev]), ...(roll.length ? [roll] : [])];
+}
+
+/** A roll call: the segment of the phase's bulletins. */
+export const isRollCall = (seg: EventSegment) => seg.events[0]!.weight === 'bulletin';
+
+/** One event's stretch of the show, or the roll call of the phase's bulletins. */
 export interface EventSegment {
   events: ShowEventView[];
   /** How fast its motion plays: the gallery's seconds times this are the segment's. */
@@ -54,18 +71,20 @@ export function eventSegments({ events, introMs }: ShowTimeline, start = 0, mode
   // Each end is the start plus the intro and every length so far, so the show sums to the server's lengths exactly.
   // A length below 0 counts as 0: a moment, never time running back.
   let ms = Math.max(0, introMs);
-  return events.map((ev, i) => {
+  const groups = eventGroups(events);
+  return groups.map((group, i) => {
     const startAt = start + ms / 1000;
-    ms += Math.max(0, ev.playMs);
+    // A roll call plays as long as its bulletins' shares together.
+    for (const ev of group) ms += Math.max(0, ev.playMs);
     const endAt = start + ms / 1000;
-    const play = playShare(ev) * modePace;
+    const play = groupShare(group) * modePace;
     const k = (endAt - startAt) / (beat.announce + play + beat.settle);
     const announceAt = startAt;
     const playAt = announceAt + beat.announce * k;
     // The pace divides the clock in the layers (a story's seconds, a front's progress): never 0. A 0 ms segment's
     // hits still land at once, clamped to its settle.
     const pace = Math.max(k, MIN_SCALE) * modePace;
-    return { events: [ev], pace, n: i + 1, count: events.length, startAt, announceAt, playAt, settleAt: playAt + play * k, endAt };
+    return { events: group, pace, n: i + 1, count: groups.length, startAt, announceAt, playAt, settleAt: playAt + play * k, endAt };
   });
 }
 
@@ -96,6 +115,16 @@ export function eventScript(show: ShowTimeline, start = 0, mode: ShowMode = 'tv'
   };
 }
 
+/** How long before its settle an event counts as done: its result comes up as the motion ends. */
+const SETTLE_MARGIN = 0.2;
+/** How long the phone buzzes after an event is announced, in seconds. */
+const BUZZ_FOR = 1.2;
+
+/** Whether the segment's event is still playing at `t`: the map, the rails and the skip hint all ask this. */
+export const isPlaying = (seg: EventSegment, t: number) => t < seg.settleAt - SETTLE_MARGIN;
+/** Whether the phone buzzes for the segment's announcement at `t`. */
+export const isBuzzing = (seg: EventSegment, t: number) => t - seg.announceAt < BUZZ_FOR;
+
 export type EventStage = 'before' | 'intro' | 'announce' | 'play' | 'settle' | 'outro';
 
 export function eventStageAt(s: EventScript, t: number): { stage: EventStage; seg: EventSegment | null } {
@@ -113,7 +142,7 @@ export function eventStageAt(s: EventScript, t: number): { stage: EventStage; se
 export function eventSkipTo(s: EventScript, t: number): number | null {
   const { seg } = eventStageAt(s, t);
   if (!seg) return null;
-  return t < seg.settleAt - 0.05 ? seg.settleAt : seg.endAt;
+  return isPlaying(seg, t) ? seg.settleAt : seg.endAt;
 }
 
 /** How far a colony sweep has to travel to reach a plot: 0 at its edge, 1 at the far one. */
@@ -157,6 +186,8 @@ export function eventHitAt(seg: EventSegment, ev: ShowEventView, h: ShowHit | nu
         return 0.4 + (h?.order ?? 0) * 0.9;
       case 'source':
         return 0.5 + (h?.order ?? 0) * 0.35;
+      case 'colonists':
+        return 0.3 + nth * 0.5;
       default:
         return 0.5 + nth * 0.5 + (h?.order ?? 0) * 0.15;
     }

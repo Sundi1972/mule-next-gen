@@ -18,6 +18,7 @@ import {
   grantDone,
   grantPass,
   installMule,
+  lineTrade,
   litPlot,
   lotDone,
   MS_PER_SECOND,
@@ -166,6 +167,9 @@ function applyRule(state: GameState, id: string, action: AiAction, clock?: DevCl
       case 'walk':
         if (state.phase === 'landAuction') setLotWalk(state, id, action.dir);
         else setWalk(state, id, action.dir);
+        break;
+      case 'lineTrade':
+        lineTrade(state, id, action.units);
         break;
       case 'run':
         runFor(state, id, action.office, action.promise);
