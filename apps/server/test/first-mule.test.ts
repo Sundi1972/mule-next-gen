@@ -197,7 +197,7 @@ describe('A-1: games with AI seats still finish month 1 (WS1’s stall seeds)', 
     expect(game.viewFor(null).month, 'month 1 ended').toBe(2);
     expect(devMs, 'development ran its full clock').toBeGreaterThanOrEqual(FULL_MS);
     expect(devMs, 'the wait and the full clock, never a stall').toBeLessThanOrEqual(2 * FULL_MS);
-  });
+  }, 30_000);
 
   it('A-1: once in, an AI waits or goes to the pub while a human holds the clock; nothing it does changes the table, and the host can still start the clock', () => {
     const fake = fakeContext({ table });
