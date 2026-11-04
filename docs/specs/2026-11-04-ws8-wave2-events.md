@@ -286,6 +286,7 @@ No ownership change. Named edits, each OK'd by its owner on the SHA:
 | packages/engine/src/config.ts `EVENTS` | WS1 | 13 rows |
 | packages/engine/src/events.ts | WS1 | SHAPE, buildEvent targeting, applyPhaseEvents |
 | packages/engine/src/production.ts | WS1 | coldSnap's energy need; meteorStrike after output |
+| packages/ai/src/sim.ts | WS1 | report lines only: each wave-2 key's rate and what it moved a game; the month after a store fire |
 | packages/engine/test/events.test.ts | WS1 | RULE_3 typed Partial (EventKey widens); EM-T-AC-3's one-phase check exempts muleTheft (AM-1 3a); EM-T-AC-2 pins wave 1's keys only (lead's OK, 4 Nov) |
 | apps/server/test/production-view.test.ts | WS6 | knownMonth files its events into state.monthEvents too (C1; lead's OK, 4 Nov) |
 | packages/engine/src/types.ts | WS3 | monthEvents, sickNext, MonthEvent.effects/becomes/muleLost, keys |
@@ -330,5 +331,17 @@ did       1 Planning rolls at the START of openPlanning, not its end: openPlanni
             take fails its only-if (RULE-3) and fires nothing, leaving 0.
 because   the code paths the spec named (the early return, the shared state) make the literal text impossible or
           equivalent; the lead ruled the out-of-authority test edits (§9's rows).
+goal      G-1 unchanged
+```
+
+```
+AM-3 · 2026-11-04 · inheritance ties (WS8 lead's ruling, from #243's review)
+
+target    RULE-3 (inheritance's pick) · AM-1 6a
+did       WS8 lead, 4 Nov: ties share the mean of their ranks; the grant keeps its first-seat tie as ruled. Players with
+          equal starting worth get the mean of their ranks' amounts, rounded down, with no seat bias (the amounts are
+          linear in the rank, so that is the amount at the tied ranks' mean rank, floored). Every player's rank is read
+          once, on the wealth before any payout of the phase.
+because   the review found a seat bias in the tie and ranks shifting with earlier payouts in the same phase.
 goal      G-1 unchanged
 ```

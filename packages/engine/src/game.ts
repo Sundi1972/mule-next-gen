@@ -209,20 +209,17 @@ function developer(state: GameState, playerId: string): Player {
  * Starts development: one clock, the same full time for every player. A
  * player short of the month's Food is hungry. Each player rolls for
  * sickness (events.ts, likelier in dirty air and for a big polluter); a
- * Medicine cures it, and is used up. A player last month's epidemic made
- * sick is sick again unless they now hold a Medicine, which they then take.
- * Then development's events roll (an epidemic, a MULE theft). Hunger and
+ * player last month's epidemic made sick is sick again. One Medicine cures
+ * being sick this turn, whatever the cause, and is used up. Then
+ * development's events roll (an epidemic, a MULE theft). Hunger and
  * sickness slow the walk (dev-walk.ts).
  */
 function startDevelopment(state: GameState): void {
   for (const p of state.players) {
     p.hungry = p.stock.food < Math.max(1, needsOf(state, p.id).food);
     p.sick = false;
-    if (rollPlayerEvent(state, 'sickness', 'development', p.id)) {
-      if (p.stock.medicine >= 1) p.stock.medicine--;
-      else p.sick = true;
-    }
-    if (p.sickNext && !p.sick) {
+    const rolled = rollPlayerEvent(state, 'sickness', 'development', p.id);
+    if (rolled || p.sickNext) {
       if (p.stock.medicine >= 1) p.stock.medicine--;
       else p.sick = true;
     }

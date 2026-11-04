@@ -285,12 +285,13 @@ export function runProduction(state: GameState): {
   }
 
   for (const index of settleSpecials(state, lines)) events.push(plotEvent(state, 'cavernCollapse', index));
-  // A meteor strikes after the output, so the plot made what it made; then its MULE is lost and it becomes a crater.
+  const pollutionBy = runPollution(state);
+  // A meteor strikes after the month ran (AM-1 1a): the plot made its output and its pollution counts; then its MULE
+  // is lost and it becomes a crater.
   for (const strike of rollAfterOutput(state)) {
     for (const { index } of strike.plots) formMeteorCrater(state, state.tiles[index]!.x, state.tiles[index]!.y);
     events.push(strike);
   }
-  const pollutionBy = runPollution(state);
   return { produced, pollutionBy, lines, events };
 }
 

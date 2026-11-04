@@ -9,7 +9,7 @@ afterEach(() => {
 });
 
 /** Only `keys` can fire, each certain in its every phase; every other row at 0. */
-function only(...keys: EventKey[]) {
+function only(...keys: (EventKey | 'sickness')[]) {
   for (const [k, row] of allRows()) {
     const on = (keys as string[]).includes(k);
     row.phases = Object.fromEntries(Object.keys(row.phases).map((p) => [p, on ? 1 : 0]));

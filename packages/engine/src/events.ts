@@ -296,14 +296,18 @@ export function grantees(state: GameState): Player[] {
 
 /**
  * An inheritance's credits for this player (AM-1 6a): min for the richest, max for the poorest, linear in the rank
- * from the richest (a tie to the first seat), floored; a lone player gets max.
+ * from the richest, floored; players tied on worth share the mean of their ranks' amounts (AM-3); a lone player gets
+ * max.
  */
 export function inheritanceAmount(state: GameState, id: string): number {
   const { min, max } = EVENTS.player.inheritance;
   if (state.players.length < 2) return max; // literal-ok: a rank needs two players to compare
-  const ranked = state.players.map((p, seat) => ({ id: p.id, seat, worth: worthOf(state, p) }));
-  ranked.sort((a, b) => b.worth - a.worth || a.seat - b.seat);
-  const rank = ranked.findIndex((r) => r.id === id);
+  const mine = worthOf(state, state.players.find((p) => p.id === id)!);
+  const worths = state.players.map((p) => worthOf(state, p));
+  const richer = worths.filter((w) => w > mine).length;
+  const tied = worths.filter((w) => w === mine).length;
+  // The amounts are linear in the rank, so the mean of the tied ranks' amounts is the amount at their mean rank.
+  const rank = richer + (tied - 1) / 2; // literal-ok: the middle of the tied ranks
   return Math.floor(min + ((max - min) * rank) / (state.players.length - 1));
 }
 
