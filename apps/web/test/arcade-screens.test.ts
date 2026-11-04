@@ -91,6 +91,25 @@ function inside(html: string, testid: string): string {
 }
 const text = (html: string, testid: string) => inside(html, testid).replace(/<[^>]+>/g, '');
 
+describe('C11: the plots legend in the hall fits above the button', () => {
+  // Seven plots of Lena's along row 8, the first three free, the rest with a MULE on.
+  const many = (n: number) => TILES.map((t) => (t.y === 8 && t.x < n ? { ...t, owner: 's1', outfit: t.x >= 3 ? ('food' as const) : null } : t.owner === 's1' ? { ...t, owner: null, outfit: null } : t));
+  const rows = (html: string) => (inside(html, 'my-plots-legend').match(/data-testid="legend-\d+-\d+"/g) ?? []).length;
+
+  it('C11 (B-AC-4): with up to five plots every one is listed', () => {
+    const html = phone(devView(lenasMe({ carriedMule: 'empty' }), { tiles: many(5) }), live(mine(4, 6, { space: 'hall' })));
+    expect(rows(html)).toBe(5);
+    expect(text(html, 'my-plots-legend')).not.toContain('more');
+  });
+
+  it('C11 (B-AC-4): with six or more the free plots come first, four rows, the rest as "+N more", so it never reaches the button', () => {
+    const html = phone(devView(lenasMe({ carriedMule: 'empty' }), { tiles: many(7) }), live(mine(4, 6, { space: 'hall' })));
+    expect(rows(html)).toBe(4);
+    for (const x of [0, 1, 2]) expect(inside(html, 'my-plots-legend')).toContain(`data-testid="legend-${x}-8"`);
+    expect(text(html, 'my-plots-legend')).toContain('+3 more');
+  });
+});
+
 describe('C11: the phone, held sideways', () => {
   it('C11: the whole map, every colonist where the frames have them, and yours where your own prediction is', () => {
     const html = phone(devView(), live(mine(5.5, 4.5, { moving: true })));
