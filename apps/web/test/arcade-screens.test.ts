@@ -1,4 +1,4 @@
-import { boxOf, HALL } from '@mule/engine';
+import { boxOf, createGame, HALL, pubPayoutFor } from '@mule/engine';
 import type { ChatMessage, MuleView, MyView, TileView } from '@mule/protocol';
 import { ActionButton, FAN, Joystick, LiveWalkers, SeatSpeciesProvider, type Slot } from '@mule/ui';
 import { createElement, type ReactElement } from 'react';
@@ -11,6 +11,7 @@ import { keyDown, keyUp, startControls, stickOf } from '../src/phone/arcade/cont
 import { LaptopArcade, PhoneLandscape } from '../src/phone/arcade/Develop';
 import { WORKS_CAPTION_PX } from '../src/phone/arcade/stages';
 import { FRAMES, overlap, phoneLayout, type Box } from '../src/phone/arcade/layout';
+import { pubPay } from '../src/phone/arcade/seat';
 import { StaticLive, type Live } from '../src/phone/arcade/live';
 import { PhoneGameProvider } from '../src/phone/game';
 import { fitHall, TvArcade } from '../src/table/TvDevelop';
@@ -149,13 +150,34 @@ describe('C11: the phone, held sideways', () => {
     if (poor) for (const dear of ['smithore', 'crystite', 'rareEarth', 'alloy', 'electronics', 'medicine']) expect(tag(html, `guide-room-${dear}`)).toBeNull();
   });
 
+  /** What the engine's pub pays Lena with `seconds` left, in month 2's development as the fixture has it. */
+  function enginePay(seconds: number): number {
+    const state = createGame({ seed: 1, players: [{ id: 's1', name: 'Lena', isAi: false, species: 'zipwing' }, { id: 's2', name: 'Ossa', isAi: false, species: 'gearling' }] });
+    state.phase = 'development';
+    state.month = 2;
+    state.players[0]!.devSeconds = lenasMe().devSeconds;
+    return pubPayoutFor(state, 's1', seconds);
+  }
+  const poorView = (me: MyView = lenasMe()) => devView(me, { players: PLAYERS.map((p) => (p.id === 's1' ? { ...p, money: 100 } : p)) });
+
   it('C11 (RULE-9, V-7): no MULE and not the money for one: never the corral; what you can do instead, in words', () => {
-    const view = devView(lenasMe(), { players: PLAYERS.map((p) => (p.id === 's1' ? { ...p, money: 100 } : p)) });
+    const view = poorView();
     const html = phone(view, live(mine(6.6, 4.5)));
     expect(text(html, 'guide-label')).toBe('ANALYSE · 4·1');
-    expect(text(html, 'guide-note')).toMatch(/^A MULE costs 148 cr; you have 100\. Analyse a plot, or end at the pub for ≈\d+ cr\.$/);
+    expect(text(html, 'guide-note')).toBe(`A MULE costs 148 cr; you have 100. Analyse a plot, or end at the pub for ≈${enginePay(30)} cr.`);
     expect(guide(lenasMe(), 'hall')).toContain('guide-room-corral');
     expect(phone(view, live(mine(4, 6, { space: 'hall' })))).not.toContain('guide-room-corral');
+  });
+
+  it('C11 (R-2): the pub\'s sum, in the guide\'s words and on the hall\'s pub, is the engine\'s pubPayoutFor, its clamps included', () => {
+    const inHall = phone(poorView(), live(mine(4, 6, { space: 'hall' })));
+    expect(text(inHall, 'guide-room-pub')).toBe(`PUB ≈ +${enginePay(30)} cr`);
+    // A clock that reads more than the turn's full time pays the full share, as the engine caps it.
+    const early = phone(poorView(lenasMe({ devEndsAt: NOW + 80_000 })), live(mine(4, 6, { space: 'hall' })));
+    expect(text(early, 'guide-room-pub')).toBe(`PUB ≈ +${enginePay(80)} cr`);
+    expect(enginePay(80)).toBe(enginePay(50));
+    // Time past the end pays no share, never less than the base.
+    expect(pubPay(poorView(), lenasMe(), -5)).toBe(enginePay(-5));
   });
 
   it('C11: the target is ringed with the map\'s own selected ring: your plot to install on, the door to enter by', () => {
