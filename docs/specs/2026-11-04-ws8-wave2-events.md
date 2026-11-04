@@ -311,3 +311,24 @@ did       1 (a) the meteor strikes after production's output: the MULE produced 
 because   Heiko, 4 Nov, through the PM.
 goal      G-1 unchanged
 ```
+
+```
+AM-2 · 2026-11-04 · PR-A's plan drifts, as built (WS8 implementer)
+
+target    C3 (planning's roll site) · RULE-3 (rats, accountant) · T-AC-2 · T-AC-3
+did       1 Planning rolls at the START of openPlanning, not its end: openPlanning returns early with politics off,
+            so a roll at its end would never fire in a no-politics game. Planning's events move cash and colonists
+            only, so the Land Baron (by plots) and the starting tax read the same either way.
+          2 Rats and the accountant fire only when they would take at least 1 (floor(held × share) ≥ 1): RULE-3's
+            "≥ 2 Food" and "≥ 10 credits" at today's shares, with no extra config number.
+          3 T-AC-2 as written ("wave-1 rates byte-identical") cannot hold once wave 2 changes the state: a theft, a
+            crater or a tax moves the AIs' land and cash, and the wave-1 rows read land (buildEvent's targets) and
+            wealth. What HC-3 protects, each row's own dice, is proven instead by the sim with every wave-2 chance set
+            to 0 (`--set …=0`): byte-identical to the base in all six cells. With wave 2 on, wave-1 counts move by a
+            few (flood 36→31 in seed 1, politics on).
+          4 T-AC-3's "the event still shows" holds for the colony tax; a theft, rats or accountant with nothing to
+            take fails its only-if (RULE-3) and fires nothing, leaving 0.
+because   the code paths the spec named (the early return, the shared state) make the literal text impossible or
+          equivalent; the lead ruled the out-of-authority test edits (§9's rows).
+goal      G-1 unchanged
+```
