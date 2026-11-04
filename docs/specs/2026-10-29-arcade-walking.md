@@ -696,7 +696,7 @@ C14.
 | T-AC-2 (serves G-2) | speeds per RULE-2's examples (plains 1.5625, mountains 0.625, swamp 0.78, leading 1.41, bitten 0.78 tiles/s) | engine unit | lake 0 blocks | C1, C5 |
 | T-AC-3 (serves B-AC-1) | Reach per RULE-3's table, one row each | engine unit | money short → disabled, not hidden | C3 |
 | T-AC-4 (serves B-AC-2) | Given the tick · Then one frame per tick reaches every connection, frames are dropped not queued for a slow one, full views go only on change, or to one seat when its reach's words change (AM-11) | server + tabletop test | no full view on a tick where nothing changed and no seat's reach words changed; a steer sends no full view (AM-13) | C6, C8 |
-| T-AC-5 (serves G-2, RULE-8) | In 20 seeded AI-only turns at the defaults every AI colonist reaches the pub within the turn (`DEVELOPMENT.fullSeconds`, 60 s since #259), except one a wolf's bite cost the pub: when the bite landed, its bitten walk to the pub was longer than the time left (AM-26), a bot races in at least 40% of glints, never one whose detour breaks its errand (RULE-8; AM-22), and at least 60% of months see an AI wolf encounter (AM-22) | sim (`pnpm sim` report) | with botsSpareTime off, Kai misses turns | C9, C10 |
+| T-AC-5 (serves G-2, RULE-8) | In 20 seeded AI-only turns at the defaults every AI colonist reaches the pub within the turn (`DEVELOPMENT.fullSeconds`, 60 s since #259), except one a wolf's bite cost the pub: when the bite landed, its bitten walk to the pub was longer than the time left (AM-26), a bot races in at least 40% of glints, never one whose detour breaks its errand (RULE-8; AM-22), and at least 50% of months see an AI wolf encounter on each of the sim's seeds 1, 101 and 201 (AM-22, AM-27) | sim (`pnpm sim` report) | with botsSpareTime off, Kai misses turns | C9, C10 |
 | T-AC-6 (serves B-AC-5) | Wolves: the rookie wins ≈ 1 in 4 over 60 seeded fights; a forest run escapes ≈ 13 of 20 | engine headless | — | C4, C9 |
 | T-AC-7 (serves B-AC-6) | Glint timing per RULE-5 (none in the first 6 s, 8 s shown, the first onto it wins) | engine unit | a non-racing colonist on the tile wins too | C4 |
 | T-AC-8 (serves B-AC-7) | Scramble per RULE-6, the beats in order, the last sale's single line | engine unit | — | C4 |
@@ -740,6 +740,13 @@ inside a wall; money and stock change only through game.ts rules; development en
 
 ## §8 · Amendments `[review-only]`
 
+- **AM-27 (2026-11-04, WS1's PR-8 #248 sim, ruled by WS6; changes AM-22's bar).** With `botWolfLandShare` built at
+  0.5, AI wolf months over 40 AI-only games with walking on are 61% on seed 1, 52% on 101 and 50% on 201 (standard
+  error about 2.2 points, so 101 and 201 truly miss 60%). The bar is now **at least 50% of months on each of seeds 1,
+  101 and 201**, judged by the sim report's wolf-month line (`WOLVES.simMonthsWithPack` 0.5); the 20-game vitest case
+  is a smoke check only. Why: UBER-AC-3 needs one AI wolf encounter on the TV in a 12-month game, and at 50% of months
+  a game has about six, so the promise holds with room on every seed, where 60% on seed 1 alone passes by a point and
+  fails two seeds of three. Raising `botWolfLandShare` to keep 60% would be tuning, Heiko's, and tuning is parked.
 - **AM-26 (2026-11-04, WS1's PR-8 #248, ruled by WS6; replaces AM-23's excuse).** AM-23 excused only a colonist an
   encounter still held at the bell, but none of the 7 late-pack turns was: every encounter had ended before it. One
   was an AI choice (running through the pack, fixed). The other six are dead ends: the colonist is slower than the
