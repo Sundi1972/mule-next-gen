@@ -336,9 +336,17 @@ Heiko's OK through the PM.
   - **pending:** WS2's PR #227 (spec A PR-1, into ws2-brain) asks for a named edit in `mule-game.ts` at 28ab532b,
     the Playbooks wiring. It is asked for at start and at each upkeep's opening, takes effect at the land grant,
     and reaches the record only through `recordPlaybook`. WS3's OK or flag is owed on that SHA.
-- **R-2, the crashed-game record** (Heiko approved): the file is written with `ended: 'error'`, and the replay
-  reproduces the throw. It was to come after A-1, and A-1 is now on trunk (#200), so R-2 is next once milestone 1's
-  queue clears. It is a red test first, then the build, then its own PR. Still planned, not started.
+- [x] **R-2, the crashed-game record** (Heiko approved; spec AM-5 at 5ea6da22): **built as PR #246** on
+  `ws3-record-crash` from trunk f1d7c8b0.
+  - The commits: 3b300e65 (T-AC-13, red first) and 16cebd0c (the build).
+  - The throw is caught in WS3's own wraps in `record.ts` and rethrown, so no tabletop edit was needed.
+  - The replay must throw the same message at the last step.
+  - Positive control: a replay that ignores the throw goes red.
+  - Gates: `MULE_FULL=1` record 22/22.
+  - Merge gate:
+    - [x] T-AC-13 is green, named, and red first.
+    - [ ] One independent review after green CI.
+    - [ ] The PM's merge batch.
 - [x] **A balance-independent T-AC-10 fixture: DONE in PR #209** (branch `ws3-record-fixture`; 677e26f1, a trunk
   merge bc3f66bf, fixes df30b355). It has MERGED (`gh pr view 209`: merged 2026-10-29, b1c5906d).
   - The fixture builds its lot and its ship sale from the state, not from a lucky seed. 32/32 seeds pass.
@@ -354,7 +362,7 @@ Heiko's OK through the PM.
 
 - **R-1 (memory per room):** measure it in PR-1. Task 6 Step 2 also prints the file size of T-AC-1's game, and the
   lead records it in the ledger.
-- **R-2 (a crashed game leaves no file):** Heiko approved building it. It is planned under "Still to come"; A-1 is on trunk.
+- **R-2 (a crashed game leaves no file):** Heiko approved building it. It is built as AM-5, PR #246.
 - **R-3 (Node microtask order):** covered by T-AC-1's positive control (Task 4 Step 4).
 - **R-4 (viewFor purity):** covered by T-AC-6 (Task 3).
 
