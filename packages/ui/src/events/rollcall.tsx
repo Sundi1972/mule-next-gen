@@ -31,7 +31,15 @@ export function colonistAt({ tiles, grid, cast }: Pick<ShowFrame, 'tiles' | 'gri
 
 /** The players whose sickness has landed by `t`. */
 export function sickAt({ s, t, reduced, grid, cast }: ShowFrame): Set<string> {
-  return new Set(s.segments.flatMap((g) => g.events.filter((e) => e.key === 'sickness' && t >= eventHitAt(g, e, null, reduced, grid)).map((e) => cast.playerOf(e) ?? '')));
+  const landed = (g: EventSegment, e: ShowEventView) => t >= eventHitAt(g, e, null, reduced, grid);
+  const sick = s.segments.flatMap((g) => g.events.filter((e) => e.key === 'sickness' && landed(g, e)).map((e) => cast.playerOf(e) ?? ''));
+  // An epidemic sickens everyone whose Medicine it did not use: the view names only the cured.
+  const sickened = s.segments.flatMap((g) =>
+    g.events
+      .filter((e) => e.key === 'epidemic' && landed(g, e))
+      .flatMap((e) => cast.players.filter((p) => !(e.effects ?? []).some((f) => f.on === p.id && f.what === 'medicine')).map((p) => p.id)),
+  );
+  return new Set([...sick, ...sickened]);
 }
 
 /** WS6's approved sick tag (variant B): a pink cross on the condition chip. */
