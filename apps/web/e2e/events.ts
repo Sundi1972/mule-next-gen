@@ -3,6 +3,8 @@
  * month 2's production fires two events. B-AC-4 and T-AC-10's display: as month 2's development starts the human seat
  * falls sick, and its roll call holds the phase, played by the TV (the phone keeps the light card) or the phone alone. Local tier. Run after `vite build`: `pnpm --filter @mule/web exec tsx e2e/events.ts`.
  * MULE_E2E_EVENTS picks the pair (default the spec's drought then pest swarm); MULE_E2E_SHOTS=<dir> saves screenshots.
+ * Wave 2's B-AC-1 and B-AC-2 (docs/specs/2026-11-04-ws8-wave2-events.md), in two more rooms beside them: month 2's goods
+ * auction opens on a pirate raid the TV plays, and on a store fire a phone alone plays.
  */
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -29,6 +31,26 @@ const PLAY_MS = 6 * 60_000;
 const AHEAD_MS = 300;
 /** Each event's own story element on a map that plays it. */
 const STORY_MARK: Partial<Record<EventView['key'], string>> = { dustStorm: 'front-dustStorm', drought: 'front-drought', acidRain: 'front-acidRain', pestSwarm: 'swarm-', wildfire: 'fire-' };
+
+/** What the server says to an intent while a phase's event show holds it (mule-game.ts, RULE-4 of the show spec). */
+const STILL_PLAYING = 'The event is still playing';
+
+/**
+ * In the page, test-only: keeps a handle on every WebSocket the app opens, so a phone can send an intent over its own
+ * socket exactly as the app's client does while the event overlay covers its controls (chat.ts's KEEP_SOCKETS).
+ */
+const KEEP_SOCKETS = `{
+  if (!window.__sockets) {
+    window.__sockets = [];
+    const Native = window.WebSocket;
+    window.WebSocket = class extends Native {
+      constructor(...args) {
+        super(...args);
+        window.__sockets.push(this);
+      }
+    };
+  }
+}`;
 
 /** The development control the sickness step clicks at and presses: in the store, where development opens. */
 const PUB = 'Go to the pub and end your turn';
@@ -59,10 +81,12 @@ const watchedSent = new WeakMap<Page, () => unknown[]>();
 const pubAt = new WeakMap<Page, { x: number; y: number }>();
 try {
   if (SHOTS) mkdirSync(SHOTS, { recursive: true });
-  const [withTv, alone] = await Promise.all([theTvPlaysEachStory(browser), thePhoneAlonePlaysAndSkips(browser)]);
+  const [withTv, alone, raid, fire] = await Promise.all([theTvPlaysEachStory(browser), thePhoneAlonePlaysAndSkips(browser), theTvPlaysThePirateRaid(browser), thePhoneAlonePlaysTheStoreFire(browser)]);
   check(errors.length === 0, `no page errors: ${errors.join('; ')}`);
   console.log(`B-AC-1: ${withTv}`);
   console.log(`B-AC-2: ${alone}`);
+  console.log(`wave-2 B-AC-1: ${raid}`);
+  console.log(`wave-2 B-AC-2: ${fire}`);
   for (const line of sickness) console.log(`B-AC-4/T-AC-10: ${line}`);
   console.log(`e2e events: ok (seed ${SEED}, month ${MONTH}, ${FIRED.join(' then ')}, ${seconds()} s)`);
 } catch (err) {
@@ -249,9 +273,11 @@ function railBoxes(phone: Page, earlier: string): Promise<RailBoxes> {
   }, earlier);
 }
 
-/** A host phone, its show watched, that opens a room with three AI players. */
-async function openRoom(browser: Browser, tag: string): Promise<{ phone: Page; code: string; watch: ShowWatch }> {
-  const phone = await (await browser.newContext(PHONE)).newPage();
+/** A host phone, its show watched, that opens a room with three AI players. `speaks`: it keeps its socket to send on. */
+async function openRoom(browser: Browser, tag: string, speaks = false): Promise<{ phone: Page; code: string; watch: ShowWatch }> {
+  const context = await browser.newContext(PHONE);
+  if (speaks) await context.addInitScript({ content: KEEP_SOCKETS });
+  const phone = await context.newPage();
   phone.on('pageerror', (e) => errors.push(`${tag}: ${e.message}`));
   const watch = await watchShow(phone);
   watchGame(phone);
@@ -592,4 +618,170 @@ async function checkColonyChips(tv: Page, view: ProductionView): Promise<void> {
 
 async function shoot(page: Page, name: string): Promise<void> {
   if (SHOTS) await page.screenshot({ path: join(SHOTS, `${name}-e2e.png`) });
+}
+
+// --- Wave 2: the goods auction opens on an event ---------------------------------------------------------------------
+
+/** The room's game on the server, with the parts these steps reach for. */
+type RoomGame = { state: GameState; heldUntil: number | null; nextPhase(): void };
+function roomGame(code: string): RoomGame {
+  return (server.registry.get(code) as unknown as { game: RoomGame }).game;
+}
+
+/**
+ * Makes `key` fire as MONTH's goods auction opens, on the engine's own roll: for the one advancePhase that leaves
+ * MONTH's production, the row's auction chance is 1 (and its cap), then restored. The engine rolls it before it posts
+ * prices and applies it (firePhase); the server holds the phase for its show. Only this room's call is changed, and
+ * synchronously, so no other room rolls with it. `before` readies the state first (what the raid has to take).
+ */
+function fireOnNextAuction(code: string, key: 'pirateRaid' | 'storeFire', before: (state: GameState) => void = () => {}): void {
+  const game = roomGame(code);
+  const next = game.nextPhase.bind(game);
+  game.nextPhase = () => {
+    const state = game.state;
+    if (state.phase !== 'production' || state.month !== MONTH) return next();
+    game.nextPhase = next;
+    before(state);
+    const row = EVENTS.colony[key] as { phases: Record<string, number>; cap: number };
+    const { phases, cap } = row;
+    row.phases = { ...phases, auction: 1 };
+    row.cap = 1;
+    try {
+      next();
+    } finally {
+      row.phases = phases;
+      row.cap = cap;
+    }
+  };
+}
+
+/** Starts the game and plays the phone through to MONTH's goods auction, while its event show holds the phase. */
+async function startAndReachAuction(phone: Page, code: string, tag: string): Promise<void> {
+  await phone.getByRole('button', { name: 'Start game' }).click();
+  await phone.locator('[data-phase]').waitFor({ timeout: SHOWN_MS });
+  const deadline = Date.now() + PLAY_MS;
+  for (;;) {
+    const { month, phase } = roomGame(code).state;
+    check(Date.now() < deadline, `${tag}: month ${MONTH}'s goods auction within ${PLAY_MS} ms, still in month ${month}'s ${phase}`);
+    if (month === MONTH && phase === 'auction') return;
+    // Through MONTH's production the phone only waits: a press as the auction opens would land in its hold.
+    if (month === MONTH && phase === 'production') await phone.waitForTimeout(100);
+    else await act(phone, phase);
+  }
+}
+
+/** The goods auction's event, in the state the server keeps and builds every screen's view from. */
+function auctionEvent(code: string, key: EventKey, tag: string): MonthEvent {
+  const fired = roomGame(code).state.monthEvents.filter((e) => e.phase === 'auction');
+  const event = fired.find((e) => e.key === key);
+  check(event, `${tag}: month ${MONTH}'s goods auction fired ${key}, fired ${fired.map((e) => e.key).join(', ') || 'nothing'}`);
+  return event;
+}
+
+/** Waits for the server to end the phase's hold, so its clocks run. */
+async function holdEnds(code: string, tag: string): Promise<void> {
+  const until = roomGame(code).heldUntil;
+  check(until !== null, `${tag}: the server holds the goods auction for its show`);
+  const deadline = until + SHOWN_MS;
+  while (roomGame(code).heldUntil !== null && Date.now() < deadline) await new Promise((r) => setTimeout(r, 50));
+  check(roomGame(code).heldUntil === null, `${tag}: the hold ended`);
+}
+
+/**
+ * Wave-2 B-AC-1 (UBER-AC-2): a pirate raid in a goods-auction month. The TV plays the pirate ship before trading
+ * opens; a bid during it gets "The event is still playing"; after it, every player and the store hold 0 Crystite.
+ */
+async function theTvPlaysThePirateRaid(browser: Browser): Promise<string> {
+  const tag = 'raid room';
+  const { phone, code } = await openRoom(browser, tag, true);
+  const tv = await (await browser.newContext(TV)).newPage();
+  tv.on('pageerror', (e) => errors.push(`${tag} tv: ${e.message}`));
+  await tv.goto(`${base}/table?room=${code}`);
+  await tv.getByTestId('room-code').waitFor();
+  // Every seat and the store hold Crystite as the auction opens, so the raid has something to take.
+  const holders = new Map<string, number>();
+  fireOnNextAuction(code, 'pirateRaid', (state) => {
+    state.players.forEach((p, i) => (p.stock.crystite = 2 + i));
+    state.store.stock.crystite = Math.max(state.store.stock.crystite, 5);
+    for (const p of state.players) holders.set(p.id, p.stock.crystite);
+    holders.set('store', state.store.stock.crystite);
+  });
+  await startAndReachAuction(phone, code, tag);
+  const raid = auctionEvent(code, 'pirateRaid', tag);
+
+  // Before trading opens, the TV plays the pirates' story over the auction screen.
+  const overlay = tv.locator('[data-testid=tv-event-overlay][data-event-phase=auction]');
+  await overlay.waitFor({ timeout: SHOWN_MS });
+  await overlay.locator('[data-testid=event-map][data-event=pirateRaid]').waitFor({ timeout: SHOWN_MS * 2 });
+  await overlay.getByTestId('pirate-ship').first().waitFor({ timeout: SHOWN_MS });
+  check(roomGame(code).heldUntil !== null, 'wave-2 B-AC-1: the pirate ship plays before trading opens (the server still holds the auction)');
+  await shoot(tv, 'tv-1920x1080-pirate-raid');
+
+  // A bid, sent as the app sends one, during the show; the server's answer is heard on the same socket.
+  const intent = JSON.stringify({ t: 'intent', intent: { type: 'declare', side: 'buyer' } });
+  const open = await phone.evaluate(`(() => {
+    const open = window.__sockets.filter((w) => w.readyState === 1);
+    window.__heard = [];
+    for (const w of open) {
+      w.addEventListener('message', (e) => window.__heard.push(String(e.data)));
+      w.send(${JSON.stringify(intent)});
+    }
+    return open.length;
+  })()`);
+  check(open === 1, `${tag}: the phone has one open socket to bid on, found ${open}`);
+  const answer = () => phone.evaluate(`window.__heard.find((m) => m.includes(${JSON.stringify(STILL_PLAYING)})) ?? null`) as Promise<string | null>;
+  let reply = await answer();
+  for (let i = 0; i < SHOWN_MS / 50 && !reply; i++) {
+    await new Promise((r) => setTimeout(r, 50));
+    reply = await answer();
+  }
+  const heard = reply ? '' : await phone.evaluate(`window.__heard.filter((m) => !m.startsWith('{"t":"view"')).map((m) => m.slice(0, 160)).join(' | ')`);
+  check(reply, `wave-2 B-AC-1: a bid during the raid gets "${STILL_PLAYING}", heard ${heard || 'nothing but views'}`);
+  check(roomGame(code).heldUntil !== null, "wave-2 B-AC-1: the bid's answer came during the hold");
+
+  // After the show: no Crystite anywhere, on the server and in the phone's view.
+  await holdEnds(code, tag);
+  const state = roomGame(code).state;
+  const left = [...state.players.map((p) => `${p.name} ${p.stock.crystite}`), `store ${state.store.stock.crystite}`];
+  check(state.players.every((p) => p.stock.crystite === 0) && state.store.stock.crystite === 0, `wave-2 B-AC-1: after the raid every player and the store hold 0 Crystite, hold ${left.join(', ')}`);
+  const view = await viewWith(phone, (v) => v.phase === 'auction' && v.market.some((m) => m.good === 'crystite'), `${tag}: the phone's auction view after the show`);
+  const market = view.market.find((m) => m.good === 'crystite')!;
+  check(market.storeStock === 0 && view.me?.stock.crystite === 0, `wave-2 B-AC-1: the phone's view shows the store's Crystite ${market.storeStock} and its own ${view.me?.stock.crystite}`);
+  const taken = (raid.effects ?? []).map((f) => `${f.on === 'store' ? 'store' : state.players.find((p) => p.id === f.on)?.name} ${f.delta}`);
+  check(taken.length === holders.size, `wave-2 B-AC-1: the raid's effects name every holder: ${taken.join(', ')}`);
+  return `the TV played the pirate ship over the held auction; a bid got "${STILL_PLAYING}"; the raid took ${taken.join(', ')}; after it every seat and the store hold 0 Crystite`;
+}
+
+/**
+ * Wave-2 B-AC-2: a store fire with no board. The phone alone plays it; after it the store shows 0 of every good and
+ * the corral 0.
+ */
+async function thePhoneAlonePlaysTheStoreFire(browser: Browser): Promise<string> {
+  const tag = 'fire room';
+  const { phone, code } = await openRoom(browser, tag);
+  let had = '';
+  fireOnNextAuction(code, 'storeFire', (state) => {
+    // The corral holds MULEs to burn.
+    state.store.mules = Math.max(state.store.mules, 3);
+    had = `${Object.values(state.store.stock).reduce((n, v) => n + v, 0)} goods and ${state.store.mules} MULEs`;
+  });
+  await startAndReachAuction(phone, code, tag);
+  const fire = auctionEvent(code, 'storeFire', tag);
+
+  const overlay = phone.locator('[data-testid=phone-event-overlay][data-mode=solo][data-event-phase=auction]');
+  await overlay.waitFor({ timeout: SHOWN_MS });
+  await overlay.locator('[data-testid=event-map][data-event=storeFire]').waitFor({ timeout: SHOWN_MS * 2 });
+  await overlay.getByTestId('store-storage').first().waitFor({ timeout: SHOWN_MS });
+  await overlay.getByTestId('store-flames').first().waitFor({ timeout: SHOWN_MS });
+  check(roomGame(code).heldUntil !== null, 'wave-2 B-AC-2: the phone alone plays the fire while the server holds the auction');
+  await shoot(phone, 'phone-844x390-alone-store-fire');
+
+  await holdEnds(code, tag);
+  const state = roomGame(code).state;
+  const stock = Object.entries(state.store.stock).filter(([, n]) => n !== 0);
+  check(stock.length === 0 && state.store.mules === 0, `wave-2 B-AC-2: after the fire the store holds ${stock.map(([g, n]) => `${n} ${g}`).join(', ') || 'no goods'} and ${state.store.mules} MULEs`);
+  const view = await viewWith(phone, (v) => v.phase === 'auction' && v.market.length > 0, `${tag}: the phone's auction view after the show`);
+  const shown = view.market.filter((m) => m.storeStock !== 0).map((m) => `${m.storeStock} ${m.good}`);
+  check(shown.length === 0 && view.storeMules === 0, `wave-2 B-AC-2: the phone's store shows ${shown.join(', ') || '0 of every good'} and a corral of ${view.storeMules}`);
+  return `the phone alone played the store fire (${(fire.effects ?? []).length} changes; the store had ${had}); after it the store shows 0 of every good and the corral 0`;
 }

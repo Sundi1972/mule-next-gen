@@ -431,10 +431,47 @@ export const WOLVES = {
   /** A lost fight's MULE bolts this many tiles at this many tiles a second. */
   boltTiles: 4,
   boltSpeed: 3.5,
+  /** The lands a pack comes on. */
+  lands: ['forest', 'hills', 'tundra'] as readonly WalkTerrain[],
+  /** Where a pack stands when it comes: this far from its colonist, spread over this arc from one side, in radians. */
+  packRingTiles: 1.6,
+  packArcRadians: 1.9,
+  /** A chase: the wolves set off after this head start, and catch a colonist they come this close to. */
+  headStartSeconds: 0.4,
+  chaseCatchTiles: 0.35,
+  /** A fight: the wolves circle this far from where it began, turning this fast; the colonist stays within arenaTiles of it. */
+  fightRingTiles: 1.3,
+  prowlRadiansPerSecond: 0.7,
+  arenaTiles: 1,
+  /** The fight's first lunge comes this long after it starts. */
+  firstLungeSeconds: 0.9,
+  /** A lunge takes this long to land, and bites a colonist still this close to the spot it aimed at. */
+  lungeSeconds: 0.22,
+  biteTiles: 0.38,
+  /** A wolf that missed stands open this long; one struck, or that has bitten, is out of the fight this long. */
+  openSeconds: 0.9,
+  hurtSeconds: 0.7,
+  /** A strike lands on a wolf this close; a strike at nothing leaves its colonist open this long. */
+  strikeTiles: 0.8,
+  whiffSeconds: 0.45,
+  /** A bolted MULE is caught by its colonist this close to it (arcade RULE-3 row 4). */
+  catchReachTiles: 0.6,
   /** Share of AI colonists that fight rather than run. */
   botFightShare: 0.5,
-  /** Share of an AI colonist's legs that go by wolf land. */
+  /** An AI colonist stands this long before it runs or fights, and dodges a lunge till it is this far beyond its bite. */
+  botChooseSeconds: 0.6,
+  botDodgeMarginTiles: 0.2,
+  /**
+   * Share of an AI colonist's legs, among those it walks with no MULE on the lead, that go by wolf land. A leg leading a
+   * MULE never does (a pack met then costs the install), so the share of all its legs is lower than this.
+   */
   botWolfLandShare: 0.5,
+  /**
+   * The share of development months with at least one AI wolf encounter that `pnpm sim`'s report asks for (AM-27), on
+   * each of seeds 1, 101 and 201 (40 games each, AI-only): UBER-AC-3 needs the table to see an AI colonist meet wolves
+   * on the TV in an ordinary game. Under it the report prints MISS.
+   */
+  simMonthsWithPack: 0.5,
   /** Each level's chance to dodge a lunge, and its delay before it strikes at a wolf that stands open. */
   levels: {
     rookie: { dodge: 0.4, strikeDelaySeconds: 0.5 },
@@ -458,6 +495,8 @@ export const GLINT = {
   /** The prize: this much Crystite, or these credits when prize is 'credits'. */
   crystite: 1,
   credits: 60,
+  /** GRAB THE GLINT reaches it from this far from its tile's middle, in tiles: about a step away (arcade RULE-3 row 3). */
+  grabReach: 1.2,
   /** Share of AI colonists that race, and only for a glint within botCareTiles. */
   botShare: 0.75,
   botCareTiles: 8,
@@ -976,6 +1015,20 @@ export const EVENT_SHOW = {
     wildfire: 'spotlight',
     bumperHarvest: 'spotlight',
     cavernCollapse: 'spotlight',
+    // Wave 2, as the approved gallery sizes them (design/mocks/ws8-events, catalogue.ts `tier`).
+    federationTax: 'headline',
+    federationGrant: 'headline',
+    immigrationWave: 'headline',
+    inheritance: 'bulletin',
+    muleTheft: 'spotlight',
+    epidemic: 'headline',
+    coldSnap: 'headline',
+    meteorStrike: 'headline',
+    pirateRaid: 'headline',
+    storeFire: 'headline',
+    ratsInSilo: 'bulletin',
+    crookedAccountant: 'bulletin',
+    packageFromHome: 'bulletin',
   } as Partial<Record<EventKey, EventWeight>>,
   /** How long one headline or spotlight plays, in ms. */
   playMs: { headline: 7_000, spotlight: 5_200 },
@@ -1134,7 +1187,24 @@ export const EVENTS = {
      * the phase start; a collapse leaves a plain plot.
      */
     cavernCollapse: { phases: { production: 0.06 }, perPlot: true, cap: 0.9 },
-  } satisfies Record<string, import('./events.js').EventRow>,
+    // Wave 2 (the catalogue's chances; the two production rows x1.6 as every production base, wave-2 spec AM-1).
+    /** Share of each player's cash the Federation takes into the colony fund (floored). */
+    federationTax: { phases: { planning: 0.02 }, share: 0.1, cap: 0.9 },
+    /** Credits the Federation pays each of the `count` poorest players, new money. */
+    federationGrant: { phases: { planning: 0.02 }, amount: 150, count: 2, cap: 0.9 },
+    /** The colonists grow by this share, for good (rounded). */
+    immigrationWave: { phases: { planning: 0.02 }, growth: 0.1, cap: 0.9 },
+    /** Every player without a Medicine is sick this development and the next; one with a Medicine uses it. */
+    epidemic: { phases: { development: 0.005 }, cap: 0.9 },
+    /** Every plot's Energy need is `factor` times this production. */
+    coldSnap: { phases: { production: 0.032 }, factor: 2, cap: 0.9 },
+    /** After production's output, one tile (not the store) becomes a meteor crater and loses its MULE. */
+    meteorStrike: { phases: { production: 0.032 }, afterOutput: true, cap: 0.9 },
+    /** Every player's and the store's Crystite goes to 0 before the auction opens. */
+    pirateRaid: { phases: { auction: 0.01 }, cap: 0.9 },
+    /** The store's stock of every good and its MULEs go to 0 before the auction opens. */
+    storeFire: { phases: { auction: 0.01 }, cap: 0.9 },
+  } satisfies Record<string, import('./events.js').EventRow & import('./events.js').EventParams>,
   player: {
     /**
      * Sickness, at development start: the colonist walks at DEV_WALK.sickPace this turn unless it holds a Medicine,
@@ -1155,7 +1225,17 @@ export const EVENTS = {
       cap: 0.9,
     },
     bumperHarvest: { phases: { production: 0.024 }, wealth: { poorest: 0.015, richest: -0.01 }, cap: 0.9 },
-  } satisfies Record<string, import('./events.js').EventRow>,
+    /** Credits from min (the richest) to max (the poorest), linear in wealth rank (wave-2 AM-1 6a). */
+    inheritance: { phases: { planning: 0.015 }, min: 100, max: 300, cap: 0.9 },
+    /** One installed MULE is taken off one of the player's plots; rolls in development and again at the month end. */
+    muleTheft: { phases: { development: 0.01, upkeep: 0.01 }, cap: 0.9 },
+    /** Share of the player's Food the rats eat (floored); fires only when that is at least 1. */
+    ratsInSilo: { phases: { upkeep: 0.015 }, share: 0.5, cap: 0.9 },
+    /** Share of the player's cash the accountant takes (floored); fires only when that is at least 1. */
+    crookedAccountant: { phases: { upkeep: 0.01 }, share: 0.1, cap: 0.9 },
+    /** Food the package brings. */
+    packageFromHome: { phases: { upkeep: 0.015 }, amount: 3, cap: 0.9 },
+  } satisfies Record<string, import('./events.js').EventRow & import('./events.js').EventParams>,
   /** Pairs that never fire together in one phase: if both roll, the seeded dice keep one. */
   excludes: [
     ['drought', 'flood'],

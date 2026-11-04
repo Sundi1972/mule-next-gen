@@ -16,13 +16,24 @@ export {
   IDLE_INPUT,
   type DevFloor,
   type FloorColonist,
+  type FloorBeat,
+  type FloorBolt,
   type FloorConfig,
+  type FloorDue,
   type FloorEncounter,
+  type FloorGlint,
   type FloorInput,
   type FloorLead,
+  type FloorMoments,
   type FloorPoint,
+  type FloorScramble,
+  type FloorWolf,
   type Space,
 } from './floor/floor.js';
+export { glintMiddle } from './floor/glint.js';
+export { settleMoments } from './floor/moments.js';
+export { needsMule } from './floor/scramble.js';
+export { meetWolves, strikeTarget, wolfInput, type WolfPlay } from './floor/wolves.js';
 export { pathTo, type MapPath } from './floor/path.js';
 export { applyReach, reachOf, reachWords, type Press, type Reach, type ReachHint, type ReachKind, type ReachRefusal, type ReachWords } from './floor/reach.js';
 export { speedOf, terrainShare } from './floor/speed.js';
