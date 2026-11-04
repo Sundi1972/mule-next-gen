@@ -27,10 +27,10 @@ const T: Record<string, Terrain> = {
 
 /** `worth` is the server's (PlayerView.worth); the mocks rank by proposed/worth.ts, which computes it from this fixture. */
 export const PLAYERS: PlayerView[] = [
-  { id: 'lena', slot: 0, name: 'Lena', isAi: false, color: '#e4572e', species: 'zipwing', money: 640, plots: 7, ready: false, doneDeveloping: false, colonist: null, condition: null, worth: 4333 },
-  { id: 'ossa', slot: 1, name: 'Ossa', isAi: true, color: '#3a86ff', species: 'bramblet', money: 910, plots: 7, ready: true, doneDeveloping: false, colonist: null, condition: null, worth: 4543 },
-  { id: 'brix', slot: 2, name: 'Brix', isAi: false, color: '#2bb673', species: 'gearling', money: 380, plots: 7, ready: false, doneDeveloping: false, colonist: null, condition: null, worth: 4178 },
-  { id: 'kai', slot: 3, name: 'Kai', isAi: true, color: '#f2a541', species: 'mollox', money: 215, plots: 5, ready: true, doneDeveloping: false, colonist: null, condition: null, worth: 2625 },
+  { id: 'lena', slot: 0, name: 'Lena', isAi: false, color: '#e4572e', species: 'zipwing', money: 640, plots: 7, ready: false, doneDeveloping: false, colonist: null, condition: null, lastWorth: null, worthBeforeCut: null, worth: 4333 },
+  { id: 'ossa', slot: 1, name: 'Ossa', isAi: true, color: '#3a86ff', species: 'bramblet', money: 910, plots: 7, ready: true, doneDeveloping: false, colonist: null, condition: null, lastWorth: null, worthBeforeCut: null, worth: 4543 },
+  { id: 'brix', slot: 2, name: 'Brix', isAi: false, color: '#2bb673', species: 'gearling', money: 380, plots: 7, ready: false, doneDeveloping: false, colonist: null, condition: null, lastWorth: null, worthBeforeCut: null, worth: 4178 },
+  { id: 'kai', slot: 3, name: 'Kai', isAi: true, color: '#f2a541', species: 'mollox', money: 215, plots: 5, ready: true, doneDeveloping: false, colonist: null, condition: null, lastWorth: null, worthBeforeCut: null, worth: 2625 },
 ];
 
 /** Who owns which plot, and what stands on it. Empty outfit: claimed, no MULE yet. */
@@ -72,7 +72,7 @@ export const MARKET: MarketRow[] = [row('food', 31, 12, 2.1), row('water', 27, 9
 
 export const VIEW: MuleView = {
   finished: false, month: 5, maxMonths: 12, phase: 'auction', phaseEndsAt: null, width: W, height: H, tiles: TILES, lit: null,
-  players: PLAYERS, me: ME, market: MARKET, storeMules: 5, mulePrice: 148, colonists: 1260, air: { level: 22, band: 'clean' },
+  players: PLAYERS, me: ME, market: MARKET, storeMules: 5, mulePrice: 148, colonists: 1260, air: { level: 22, band: 'clean' }, lastAir: null, colonistsFed: null,
   ship: { arrives: 6, inPort: false, wants: null }, treasury: { money: 340, salesTax: 0.05 }, news: ['Ossa bought 2 Food from the store.'],
   scores: null, auction: null, listings: [], lotSlots: { used: 0, max: 4 }, landAuction: null, production: null, politics: null,
 };
