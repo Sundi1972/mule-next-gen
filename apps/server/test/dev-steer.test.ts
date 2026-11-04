@@ -27,8 +27,9 @@ import type { DevFrame, MuleIntent, MuleView, ReachView, ServerEnvelope } from '
 import { Room, TableError } from '@tabletop/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createBrain } from '../src/brain/index.js';
+import { devFrame } from '../src/dev-steer.js';
 import { AI_NAMES, MuleGame } from '../src/mule-game.js';
-import { pressAct, steerTo, toDevelopment, walkers, type SteerPoint } from './fake-context.js';
+import { pressAct, seats, steerTo, toDevelopment, walkers, type SteerPoint } from './fake-context.js';
 
 const LENA = 's1';
 const OSSA = 's2';
@@ -286,6 +287,166 @@ describe('T-AC-4 (server part): one frame a tick; full views only on change', ()
     expect(meOf(g, LENA).carriedMule).toBe('empty');
     expect(meOf(g, LENA).money).toBeLessThan(money);
     expect(g.changes).toHaveLength(1);
+  });
+});
+
+describe("UBER-AC-3 (server part): the moments' lines reach the TV in the tick's frame", () => {
+  it("UBER-AC-3: a pack meeting a colonist, an AI's among them, puts its 'Wolves!' line in that tick's frame, once", () => {
+    // Every plot forest, wolf land: the colonists stand where development starts them, outside the store's doors, and
+    // the packs come to them there (an AI's stands still on this server until it steers, a person's with no steer).
+    const g = toDevelopment({
+      players: seats,
+      prepare: (state) => {
+        for (const t of state.tiles) if (t.terrain !== 'store') Object.assign(t, { terrain: 'forest', owner: null, outfit: null });
+      },
+    });
+    g.frames.length = 0;
+    const named = new Map(g.state.players.map((p) => [p.id, p.name]));
+    const met: { tick: number; line: string }[] = [];
+    // A meeting: a pack round a colonist that had none the tick before.
+    let before = floorOf(g.game);
+    for (let i = 0; i < 600 && g.game.viewFor(null).phase === 'development'; i++) {
+      g.advance(TICK);
+      const floor = floorOf(g.game);
+      for (const c of floor.colonists) {
+        if (c.encounter && !before.colonists.find((b) => b.id === c.id)!.encounter) met.push({ tick: floor.tick, line: `Wolves! ${named.get(c.id)}: run or fight?` });
+      }
+      before = floor;
+    }
+    const ai = g.state.players.find((p) => p.isAi)!;
+    expect(met.some((m) => m.line.includes(ai.name)), 'a pack met the AI').toBe(true);
+    const frames = g.frames as DevFrame[];
+    // Each meeting's line is in its tick's frame, once; and no frame carries a 'Wolves!' line for a meeting not this tick.
+    for (const m of met) expect(frames.find((f) => f.tick === m.tick)!.beats.filter((b) => b === m.line), `tick ${m.tick}`).toEqual([m.line]);
+    const shown = frames.flatMap((f) => f.beats.filter((b) => b.endsWith(': run or fight?')).map((line) => ({ tick: f.tick, line })));
+    expect(shown).toEqual(met);
+  });
+});
+
+describe("AM-28: the frame carries the moments' state, straight from the floor", () => {
+  /** The server's floor at development start, with one colonist or the moments changed as a row needs. */
+  const floorWith = (patch: { lena?: Partial<DevFloor['colonists'][number]>; moments?: Partial<DevFloor['moments']> }): DevFloor => {
+    const floor = floorOf(steered().game);
+    return {
+      ...floor,
+      colonists: floor.colonists.map((c) => (c.id === LENA ? { ...c, ...patch.lena } : c)),
+      moments: { ...floor.moments, ...patch.moments },
+    };
+  };
+  const none = { packs: [], glint: null, scramble: null, bolted: [], stunned: [] };
+
+  it('AM-28: with no pack, no glint, no scramble, no bolted MULE and no stun, the frame has no moments key', () => {
+    const frame = devFrame(floorWith({}));
+    expect('moments' in frame, 'the key is missing, not empty').toBe(false);
+  });
+
+  it('AM-28: a pack mid-fight: whose, its stage, when and where the stage began, its strikes and bites, and each wolf rounded', () => {
+    const wolf = { angle: 1, sinceTick: 40, untilTick: 52, from: null };
+    const encounter = {
+      stage: 'fight' as const,
+      sinceTick: 37,
+      centre: { x: 3.14159, y: 2.71828 },
+      wolves: [
+        { ...wolf, x: 1.23456, y: 4.56789, state: 'tell' as const, target: { x: 3.00001, y: 2.98765 } },
+        { ...wolf, x: 5.55555, y: 1.11111, state: 'prowl' as const, target: null },
+      ],
+      strikes: 1,
+      bites: 2,
+      nextLungeTick: 60,
+      recoverUntilTick: 37,
+    };
+    const frame = devFrame(floorWith({ lena: { space: 'map', x: 3, y: 3, encounter } }));
+    expect(frame.moments).toEqual({
+      ...none,
+      packs: [
+        {
+          who: LENA,
+          stage: 'fight',
+          sinceTick: 37,
+          centre: { x: 3.14, y: 2.72 },
+          strikes: 1,
+          bites: 2,
+          wolves: [
+            { x: 1.23, y: 4.57, state: 'tell', target: { x: 3, y: 2.99 } },
+            { x: 5.56, y: 1.11, state: 'prowl', target: null },
+          ],
+        },
+      ],
+    });
+  });
+
+  it('AM-28: a glint lit: its tile and the tick it fades', () => {
+    const frame = devFrame(floorWith({ moments: { glint: { x: 4, y: 5, sinceTick: 3, untilTick: 163 } } }));
+    expect(frame.moments).toEqual({ ...none, glint: { x: 4, y: 5, untilTick: 163 } });
+  });
+
+  it('AM-28: the scramble from its call, and after it ends, to the end of the turn', () => {
+    const running = { sinceTick: 9, untilTick: 309, needers: [LENA, OSSA], got: [LENA], over: null, leftOut: [] };
+    expect(devFrame(floorWith({ moments: { scramble: running, scrambled: true } })).moments).toEqual({
+      ...none,
+      scramble: { untilTick: 309, needers: [LENA, OSSA], got: [LENA], over: null, leftOut: [] },
+    });
+    const over = { ...running, over: 'time' as const, leftOut: [OSSA] };
+    expect(devFrame(floorWith({ moments: { scramble: over, scrambled: true } })).moments).toEqual({
+      ...none,
+      scramble: { untilTick: 309, needers: [LENA, OSSA], got: [LENA], over: 'time', leftOut: [OSSA] },
+    });
+  });
+
+  it('AM-28: a colonist stunned by a lost fight: whose, and the tick the stun ends', () => {
+    const frame = devFrame(floorWith({ lena: { space: 'map', x: 3, y: 3, stunnedUntilTick: 140 } }));
+    expect(frame.moments).toEqual({ ...none, stunned: [{ who: LENA, untilTick: 140 }] });
+  });
+
+  it("AM-28: a MULE bolted and not caught, running or standing: its seat, the MULE at the colonist's lead", () => {
+    for (const left of [2.5, 0]) {
+      const frame = devFrame(floorWith({ lena: { space: 'map', x: 3, y: 3, lead: { good: 'food', x: 6.12345, y: 2.5 }, bolt: { dx: 1, dy: 0, left } } }));
+      expect(frame.moments, `bolt with ${left} tiles to run`).toEqual({ ...none, bolted: [LENA] });
+      expect(frame.colonists.find((c) => c.id === LENA)!.lead).toEqual({ good: 'food', x: 6.12, y: 2.5 });
+    }
+  });
+});
+
+describe("AM-13: a frame's size on the wire, with every moment on at once", () => {
+  // trace-allow: a budget pin, not a behaviour. S-1 measured the frames at 420-606 B with two colonists and no moments;
+  // the worst a moments frame can be (AM-28) is four packs mid-fight at once (RULE-4), measured at 2,219 B here, so
+  // FRAME_CEILING_BYTES (3 KB) leaves about 850 B for fields added later. It prints what it measures.
+  it('AM-13: four packs mid-fight of three crouching wolves, a glint, a scramble that has ended, a stun, a bolted MULE and the tick\'s lines: the frame stays under its ceiling', () => {
+    const FRAME_CEILING_BYTES = 3_072;
+    const base = floorOf(steered().game);
+    // Every number a two-decimal one, the most characters the wire carries for a position.
+    const at = (i: number, k: number) => ({ x: 10.37 + i + k / 7, y: 4.61 + i - k / 9 });
+    const wolf = (i: number, k: number) => ({ ...at(i, k), angle: 2.1, state: 'tell' as const, sinceTick: 1_201, untilTick: 1_213, from: at(i, k + 1), target: at(i, k + 2) });
+    const ids = ['s1', 's2', 's3', 's4'];
+    const colonists = ids.map((id, i) => ({
+      ...base.colonists[0]!,
+      id,
+      space: 'map' as const,
+      ...at(i, 0),
+      moving: true,
+      lead: { good: 'electronics' as const, ...at(i, 3) },
+      encounter: { stage: 'fight' as const, sinceTick: 1_199, centre: at(i, 4), wolves: [0, 1, 2].map((k) => wolf(i, k)), strikes: 2, bites: 2, nextLungeTick: 1_230, recoverUntilTick: 1_204 },
+      ...(i === 2 && { stunnedUntilTick: 1_260 }),
+      ...(i === 3 && { bolt: { dx: 0.6, dy: 0.8, left: 1.5 } }),
+    }));
+    const floor: DevFloor = {
+      ...base,
+      tick: 1_210,
+      colonists,
+      moments: {
+        ...base.moments,
+        glint: { x: 12, y: 4, sinceTick: 1_150, untilTick: 1_310 },
+        scramble: { sinceTick: 1_100, untilTick: 1_400, needers: ids, got: ['s1', 's2'], over: 'empty', leftOut: ['s3', 's4'] },
+        scrambled: true,
+      },
+    };
+    const beats = ['Wolves! Ossa: run or fight?', 'Lena fights the wolves!', 'A Crystite glint at the river plot C4! First there wins', 'The Baron got the last one: the corral is empty', 'No MULE this turn for Ossa, Kai'];
+    const frame = devFrame(floor, beats);
+    expect(frame.moments?.packs).toHaveLength(4);
+    // As the room sends it to a screen: the envelope, as JSON, in bytes.
+    const bytes = Buffer.byteLength(JSON.stringify({ t: 'frame', payload: frame }), 'utf8');
+    console.log(`AM-13: the worst moments frame is ${bytes} B`);
+    expect(bytes).toBeLessThanOrEqual(FRAME_CEILING_BYTES);
   });
 });
 

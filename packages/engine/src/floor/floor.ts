@@ -59,7 +59,10 @@ export interface FloorWolf {
   /** The tick its state began, and the tick it ends (unused while it prowls). */
   readonly sinceTick: number;
   readonly untilTick: number;
-  /** A lunge's start and the spot it aims at: where its colonist stood when it crouched. */
+  /**
+   * A lunge's start, and the spot it aims at: where its colonist stood when it crouched. The target is set only while
+   * it crouches (tell) and lunges, and null otherwise (AM-28).
+   */
   readonly from: FloorPoint | null;
   readonly target: FloorPoint | null;
 }
@@ -104,7 +107,7 @@ export interface FloorScramble {
   readonly got: readonly string[];
   /** How it ended: the corral emptied, its clock ran out, or every needer had a MULE; null while it runs. */
   readonly over: 'empty' | 'time' | 'everyone' | null;
-  /** Needers still without a MULE when the corral emptied. */
+  /** Needers who went without a MULE, filled when it ends, however it ends (AM-28); [] while it runs. */
   readonly leftOut: readonly string[];
 }
 
@@ -159,7 +162,10 @@ export interface FloorColonist {
   readonly pelts: number;
   /** No pack comes for it before this tick (WOLVES.cooldownSeconds after the last); absent: any time. */
   readonly wolvesAfterTick?: number;
-  /** Stunned by a fight lost with no MULE on the lead: it stands till this tick. Absent: not stunned. */
+  /**
+   * Stunned by a fight lost with no MULE on the lead: it stands till this tick, and the field is cleared on it (AM-28).
+   * Absent: not stunned.
+   */
   readonly stunnedUntilTick?: number;
   /** Its MULE bolted and not caught yet: the lead is where the MULE is, running or standing. Absent or null: not bolted. */
   readonly bolt?: FloorBolt | null;

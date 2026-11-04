@@ -21,6 +21,7 @@ import {
   type FloorInput,
   type FloorPoint,
   type GameState,
+  type HallPlace,
   type Outfit,
   type Rng,
   type WolfFightLevel,
@@ -28,7 +29,7 @@ import {
 } from '@mule/engine';
 import type { Act, AiAction } from '../actions.js';
 import type { Brain, Pending } from '../brain.js';
-import { floorDevWalk, leading, mapFactor, plotErrandSeconds, pubDoor, pubSeconds, tileMiddle, tripSeconds } from '../floor-time.js';
+import { floorDevWalk, leading, mapFactor, planSeconds, plotErrandSeconds, pubDoor, pubSeconds, tileMiddle, tripSeconds, type PlanStop } from '../floor-time.js';
 import { analysesWanted, developDecision, filtersWanted, outfitName, plotName, type DevAction, type DevWalk } from '../strategist.js';
 import { situation } from '../summary.js';
 import { FloorWalker, type FloorView } from './floor-walker.js';
@@ -119,6 +120,8 @@ export class DevelopHand {
   /** The scramble it last decided on (by the tick it was called), and whether it raced it. */
   private scrambleSeen: number | null = null;
   private scrambleRaced = 0;
+  /** On the floor, where the tick's input must be pure (HC-4): decisions take the default pick, never the decider. */
+  private onFloor = false;
 
   constructor(
     private readonly brain: Brain,
@@ -153,6 +156,7 @@ export class DevelopHand {
     const mind = this.brain.mind;
     if (state.phase !== 'development') return;
     if (state.month !== this.month) this.reset(state.month);
+    this.onFloor = false;
     // While the colonist walks or assays nothing else happens; the next tap's time starts when it is done.
     if (walk?.busy) return;
     const at = walk?.at;
@@ -183,6 +187,7 @@ export class DevelopHand {
     const mind = this.brain.mind;
     if (state.phase !== 'development') return IDLE_INPUT;
     if (state.month !== this.month) this.reset(state.month);
+    this.onFloor = true;
     const me = state.players.find((p) => p.id === mind.me)!;
     if (me.doneDeveloping || this.stage === 'done') return IDLE_INPUT;
     if (secondsLeft <= 0) {
@@ -272,9 +277,11 @@ export class DevelopHand {
         this.chaser.reset();
       }
     }
-    // With the spare-time rule, a race that no longer leaves the pub's time (a pack on the way, a bite) is given up.
-    const spare = !cfg.steer.botsSpareTime || secondsLeft > pubSeconds(state, cfg, c) + this.margin(cfg, c);
-    if (g && this.racingGlint === g.sinceTick && spare) {
+    // With the spare-time rule, a race that no longer leaves the errand's time (a pack on the way, a bite) is given up:
+    // the pub's, and every step left on the list after the glint (RULE-8).
+    const racing = g !== null && this.racingGlint === g.sinceTick;
+    const spare = !cfg.steer.botsSpareTime || (racing && secondsLeft > pubSeconds(state, cfg, c) + this.margin(cfg, c) && this.fitsDetour(view, c, glintMiddle(g)));
+    if (g && racing && spare) {
       const input = this.chaser.seek(view, glintMiddle(g), 'grab');
       if (input) return input;
     }
@@ -295,13 +302,15 @@ export class DevelopHand {
   /**
    * RULE-4's AI line (AM-22): each new leg on the map goes by wolf land by WOLVES.botWolfLandShare, by the wolf-land tile
    * that adds least to the straight walk, if that detour still fits its errand and the clock (RULE-8). The input that
-   * walks there, or null to walk the leg as it is.
+   * walks there, or null to walk the leg as it is. Never a leg walked leading a MULE: a pack met then is what loses the
+   * install (the MULE bolts, or the fight and the bite cost the walk to the plot), so the AI spends its share of wolf-land
+   * legs where a pack costs it least. With the wolves off, none: a leg by wolf land would be a detour for nothing.
    */
   private byWolfLand(view: FloorView, c: FloorColonist, step: DevStep): FloorInput | null {
     const { cfg } = view;
     if (this.leg?.step !== step || this.leg.space !== c.space) {
       this.leg = { step, space: c.space };
-      this.via = c.space === 'map' && this.rng.next() < cfg.wolves.botWolfLandShare ? this.wolfVia(view, c, step) : null;
+      this.via = cfg.wolves.on && c.space === 'map' && !leading(c) && this.rng.next() < cfg.wolves.botWolfLandShare ? this.wolfVia(view, c, step) : null;
       if (this.via) this.chaser.reset();
     }
     const via = this.via;
@@ -373,21 +382,25 @@ export class DevelopHand {
     const store = this.raceFrom(view, { ...c, space: 'hall' });
     const care = Math.hypot(store.x - this.raceFrom(view, c).x, store.y - this.raceFrom(view, c).y) <= view.cfg.scramble.botCareTiles;
     if (!(this.rng.next() < view.cfg.scramble.botShare && care && this.fitsDetour(view, c, store))) return;
+    // Ahead of its next MULE: the steps before the MULE on the list; with none on it yet and one still to be decided, the
+    // whole list; finished (no MULE to come), none. The rest it keeps.
+    const buy = this.queue.findIndex((step) => step.action.type === 'buyMule');
+    const ahead = buy >= 0 ? buy : this.then === 'decide' ? this.queue.length : 0;
     const scouting = (step: DevStep) => step.action.type === 'analyse' || step.action.type === 'filter';
-    if (this.walking && scouting(this.walking)) {
+    const dropped = new Set(this.queue.slice(0, ahead).filter(scouting));
+    if (this.walking && dropped.has(this.walking)) {
       const step = this.walking;
       this.walking = null;
       this.taken(step, false, 'scramble');
     }
-    this.queue = this.queue.filter((step) => !scouting(step));
+    this.queue = this.queue.filter((step) => !dropped.has(step));
     this.scrambleRaced++;
   }
 
   /**
    * RULE-8: whether a detour to `to` still leaves the errand time to finish inside the turn: the walk there, then from
-   * there the step under way (or next) and the pub, at the floor's speeds, with botPubMarginSeconds in hand. A rough
-   * reckoning, as the mock's spare.ts: the next MULE's walk and the pub, not every step on the list. Always true with
-   * DEV_STEER.botsSpareTime off.
+   * there every step left on the list and the pub, at the floor's speeds and with the presses' pauses (planSeconds, the
+   * estimates the plan is priced by), with botPubMarginSeconds in hand. Always true with DEV_STEER.botsSpareTime off.
    */
   private fitsDetour(view: FloorView, c: FloorColonist, to: FloorPoint): boolean {
     const { state, cfg, secondsLeft } = view;
@@ -402,31 +415,36 @@ export class DevelopHand {
     return there + this.restFrom(view, from) + cfg.steer.botPubMarginSeconds <= secondsLeft;
   }
 
-  /** Seconds of errand left from a colonist standing at a point: the step under way or next, then the pub. */
+  /** Seconds of errand left from a colonist standing at a point: every step on the list, in order, then the pub. */
   private restFrom(view: FloorView, at: FloorColonist): number {
     const { state, cfg } = view;
-    const step = this.walking ?? this.queue[0];
-    const a = step?.action;
-    if (a && (a.type === 'install' || a.type === 'analyse' || a.type === 'filter')) {
-      const work = a.type === 'analyse' ? analysisSeconds(state, this.brain.mind.me) : 0;
-      return plotErrandSeconds(state, cfg, at, tileIndex(state.width, a.x, a.y), work);
+    const pause = cfg.steer.botCounterPauseSeconds * this.brain.mind.level.devPace;
+    const plot = (x: number, y: number) => tileIndex(state.width, x, y);
+    const stops: PlanStop[] = [];
+    for (const { action: a } of this.queue) {
+      if (a.type === 'analyse') stops.push({ plot: plot(a.x, a.y), work: this.assaySeconds(state, cfg, a.x, a.y) + pause });
+      else if (a.type === 'filter') stops.push({ plot: plot(a.x, a.y), work: pause });
+      else if (a.type === 'buyMule') stops.push({ place: 'corral', work: pause, lead: false });
+      else if (a.type === 'outfit') stops.push({ place: a.outfit as HallPlace, work: pause, lead: true });
+      else if (a.type === 'install') stops.push({ plot: plot(a.x, a.y), work: pause, lead: true });
+      else if (a.type === 'pub') stops.push({ place: 'pub', work: 0 });
     }
-    const install = this.queue.find((x) => x.action.type === 'install')?.action;
-    const outfit = this.queue.find((x) => x.action.type === 'outfit')?.action;
-    if (a && (a.type === 'buyMule' || a.type === 'outfit') && install?.type === 'install' && outfit?.type === 'outfit') {
-      const legs = floorDevWalk(state, cfg, at, 0, 0).floor!(tileIndex(state.width, install.x, install.y), outfit.outfit);
-      return legs.there + legs.pub;
-    }
-    return pubSeconds(state, cfg, at);
+    const last = stops.at(-1);
+    if (!last || !('place' in last) || last.place !== 'pub') stops.push({ place: 'pub', work: 0 });
+    return planSeconds(state, cfg, at, stops);
+  }
+
+  /** Seconds an analysis of plot (x, y) holds the colonist: a lake plot's shore land is analysed first if it has not been (AM-18), two analyses. */
+  private assaySeconds(state: GameState, cfg: FloorConfig, x: number, y: number): number {
+    const lake = state.tiles[tileIndex(state.width, x, y)]!.terrain === 'lake' && cfg.steer.lakeMode === 'shore';
+    return analysisSeconds(state, this.brain.mind.me) * (lake ? 2 : 1); // literal-ok: the shore's land and the lake, two analyses
   }
 
   /** Whether an analysis or a filter, from where the colonist stands, still leaves time for the pub. */
   private fits(state: GameState, cfg: FloorConfig, c: FloorColonist, step: DevStep, secondsLeft: number): boolean {
     const a = step.action;
     if (a.type !== 'analyse' && a.type !== 'filter') return true;
-    // A lake plot is analysed from its shore, whose own land Reach analyses first if it has not been (AM-18): two analyses.
-    const lake = state.tiles[tileIndex(state.width, a.x, a.y)]!.terrain === 'lake' && cfg.steer.lakeMode === 'shore';
-    const work = a.type === 'analyse' ? analysisSeconds(state, this.brain.mind.me) * (lake ? 2 : 1) : 0; // literal-ok: the shore's land and the lake, two analyses
+    const work = a.type === 'analyse' ? this.assaySeconds(state, cfg, a.x, a.y) : 0;
     return plotErrandSeconds(state, cfg, c, tileIndex(state.width, a.x, a.y), work) + cfg.steer.botPubMarginSeconds <= secondsLeft;
   }
 
@@ -461,7 +479,12 @@ export class DevelopHand {
       if (!this.pending) {
         const obs = observe(state, mind.me);
         const d = AI_HANDS.develop;
-        this.pending = this.brain.ask('develop', developDecision(obs, mind, this.mules, walk?.()), obs, d.decideWaitMs, null, situation(obs, mind));
+        const list = developDecision(obs, mind, this.mules, walk?.());
+        // On the floor the server computes this inside the tick's recorded step, and a replay computes it again: no
+        // decider call and no reply to wait for (WS3's condition 1). A Smart seat plays the default pick here.
+        this.pending = this.onFloor
+          ? this.brain.pick('develop', list, obs, null, situation(obs, mind))
+          : this.brain.ask('develop', list, obs, d.decideWaitMs, null, situation(obs, mind));
       }
       const settled = this.brain.resolve(this.pending, dt, state);
       if (!settled) return null;

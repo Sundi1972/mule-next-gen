@@ -282,8 +282,11 @@ export const MULE = {
 };
 
 export const DEVELOPMENT = {
-  /** Seconds of development, the same for every player: hunger and sickness slow the walk instead (DEV_WALK). */
-  fullSeconds: 50,
+  /**
+   * Seconds of development, the same for every player: hunger and sickness slow the walk instead (DEV_WALK). 60 (Heiko,
+   * 4 Nov), so a starving colonist has the time to put Food on a plot next to the store.
+   */
+  fullSeconds: 60,
   /** Seconds a colonist stands on a plot for a geo analysis. */
   analysisSeconds: 8,
   /** The pub pays base + (start + month * perMonth) * share of time left. */
@@ -457,7 +460,10 @@ export const WOLVES = {
   /** An AI colonist stands this long before it runs or fights, and dodges a lunge till it is this far beyond its bite. */
   botChooseSeconds: 0.6,
   botDodgeMarginTiles: 0.2,
-  /** Share of an AI colonist's legs that go by wolf land. */
+  /**
+   * Share of an AI colonist's legs, among those it walks with no MULE on the lead, that go by wolf land. A leg leading a
+   * MULE never does (a pack met then costs the install), so the share of all its legs is lower than this.
+   */
   botWolfLandShare: 0.5,
   /**
    * The share of development months with at least one AI wolf encounter that `pnpm sim`'s report asks for (AM-27), on
@@ -881,8 +887,12 @@ export const POLITICS = {
 export const WALK = {
   /** The order goods come up in: raw goods first, then processed ones. */
   order: ['food', 'water', 'energy', 'smithore', 'crystite', 'rareEarth', 'alloy', 'electronics', 'medicine'] as Good[],
-  /** The status screen before each good: what everyone had, used, made and is short of, and where each player picks a side for the walk. */
-  statusMs: 8_000,
+  /**
+   * The status screen before each good: what everyone had, used, made and is short of, and where each player picks a
+   * side for the walk. null: no clock (A-7, G-7), it waits for every player's Done or the host's Continue; a number
+   * restores a timer.
+   */
+  statusMs: null as number | null,
   /** The walk's clock for one good. */
   goodMs: 20_000,
   /** The close stage after a good's walk: each phone shows its receipt for the good (UX audit G-5), as the land auction's result does. Display and game time only. */

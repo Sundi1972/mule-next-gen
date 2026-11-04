@@ -185,11 +185,12 @@ function stepFight(state: GameState, c0: FloorColonist, e: FloorEncounter, input
         const k = Math.min(1, (tick - w.sinceTick) / (w.untilTick - w.sinceTick));
         const at = { x: w.from!.x + (w.target!.x - w.from!.x) * k, y: w.from!.y + (w.target!.y - w.from!.y) * k };
         if (tick < w.untilTick) return { ...w, ...at };
+        // The lunge is over, bitten or missed: it aims at nothing now (AM-28: the TV draws the aim only while it is one).
         if (dist(c, w.target!) < W.biteTiles) {
           bites++;
-          return { ...w, ...at, state: 'hurt', sinceTick: tick, untilTick: tick + ticksOf(W.hurtSeconds, cfg) };
+          return { ...w, ...at, state: 'hurt', sinceTick: tick, untilTick: tick + ticksOf(W.hurtSeconds, cfg), target: null };
         }
-        return { ...w, ...at, state: 'open', sinceTick: tick, untilTick: tick + ticksOf(W.openSeconds, cfg) };
+        return { ...w, ...at, state: 'open', sinceTick: tick, untilTick: tick + ticksOf(W.openSeconds, cfg), target: null };
       }
       case 'open':
         // It overshot and stands exposed; then back to circling, from where it stands.
@@ -209,7 +210,8 @@ function stepFight(state: GameState, c0: FloorColonist, e: FloorEncounter, input
     const i = strikeTarget(now, cfg);
     if (i >= 0) {
       strikes++;
-      wolves = wolves.map((w, j) => (j === i ? { ...w, state: 'hurt', sinceTick: tick, untilTick: tick + ticksOf(W.hurtSeconds, cfg) } : w));
+      // Struck, crouching or not, it aims at nothing (AM-28: a target only while it crouches and lunges).
+      wolves = wolves.map((w, j) => (j === i ? { ...w, state: 'hurt', sinceTick: tick, untilTick: tick + ticksOf(W.hurtSeconds, cfg), target: null } : w));
     } else recoverUntilTick = tick + ticksOf(W.whiffSeconds, cfg);
     now = { ...now, encounter: { ...now.encounter!, wolves, strikes, recoverUntilTick } };
   }

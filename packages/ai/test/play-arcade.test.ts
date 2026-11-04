@@ -27,8 +27,8 @@ import {
   WOLVES,
 } from '@mule/engine';
 import { FloorWalker, type StepRun } from '../src/hands/floor-walker.js';
-import { muleLegs, placePoint } from '../src/floor-time.js';
-import { playFloorPhase, simFloorConfig } from '../src/floor-turn.js';
+import { muleLegs, placePoint, pubSeconds } from '../src/floor-time.js';
+import { biteCostPub, playFloorPhase, simFloorConfig } from '../src/floor-turn.js';
 import { ROTATION, simSeats } from '../src/lineup.js';
 import type { FloorMomentCounts } from '../src/floor-turn.js';
 import { playGame, type DevTurn, type SeatSpec } from '../src/play.js';
@@ -91,9 +91,10 @@ describe('the AI walks the floor, and the sim plays it (arcade C9, C10)', () => 
         expect(t.pubAt!, `${why}: reached the pub after the clock`).toBeLessThanOrEqual(DEVELOPMENT.fullSeconds);
       }
     }
-    // Reaching the pub is not the whole turn: the AI walked MULEs out and installed them on the way. With the moments
-    // (packs, glints, legs by wolf land, AM-22) costing it time, 18 in these 20 turns: at least one in two turns.
-    expect(phases.flat().reduce((n, t) => n + t.installs, 0)).toBeGreaterThanOrEqual(phases.length / 2);
+    // Reaching the pub is not the whole turn: the AI walked MULEs out and installed them on the way. The moments may
+    // not cost it them (RULE-8: a detour never breaks the errand), so the bar is the one the floor had without them.
+    const installs = phases.flat().reduce((n, t) => n + t.installs, 0);
+    expect(installs, `MULEs installed in ${phases.length} turns`).toBeGreaterThan(phases.length);
   });
 
   it('T-AC-5: the moments happen in AI turns: packs met and played out, glints lit and won', { timeout: 120_000 }, () => {
@@ -138,19 +139,35 @@ describe('the AI walks the floor, and the sim plays it (arcade C9, C10)', () => 
  * 43% at 20 and 42% at 40, so 20 is the smallest steady one at about a second a game.
  */
 const SIM_GAMES = 20;
-let simSample: { moments: FloorMomentCounts[]; turns: DevTurn[] } | null = null;
-function simGames(): { moments: FloorMomentCounts[]; turns: DevTurn[] } {
-  simSample ??= steered(() => {
-    const games = Array.from({ length: SIM_GAMES }, (_, i) => playGame(i + 1, simSeats(4, 'trader', i + 1, null), { politics: true }));
-    return { moments: games.flatMap((g) => g.moments), turns: games.flatMap((g) => g.turns) };
-  });
+/**
+ * The first case to await the sample plays it: about 58 s here with #259's 60-second turns (39 s at 50 s), so its
+ * cases allow five minutes, as INV-estimate's sample does, for a slower CI machine. A hang still fails, at that bound.
+ */
+const SAMPLE_TIMEOUT_MS = 300_000;
+type SimSample = { moments: FloorMomentCounts[]; turns: DevTurn[] };
+let simSample: Promise<SimSample> | null = null;
+/**
+ * The sample, played a game at a time with a yield to the event loop between games: played in one go it holds the
+ * worker for about 40 s, and vitest's worker times out reporting to the runner (onTaskUpdate) and fails the run.
+ */
+function simGames(): Promise<SimSample> {
+  simSample ??= (async () => {
+    const out: SimSample = { moments: [], turns: [] };
+    for (let i = 0; i < SIM_GAMES; i++) {
+      const g = steered(() => playGame(i + 1, simSeats(4, 'trader', i + 1, null), { politics: true }));
+      out.moments.push(...g.moments);
+      out.turns.push(...g.turns);
+      await new Promise((r) => setImmediate(r));
+    }
+    return out;
+  })();
   return simSample;
 }
-const simMoments = () => simGames().moments;
+const simMoments = async () => (await simGames()).moments;
 
 describe("the moments in the sim's games (T-AC-5, AM-22)", () => {
-  it('T-AC-5 (AM-22): a bot races in at least 40% of glints, never one whose detour breaks its errand (RULE-8)', { timeout: 120_000 }, () => {
-    const moments = simMoments();
+  it('T-AC-5 (AM-22): a bot races in at least 40% of glints, never one whose detour breaks its errand (RULE-8)', { timeout: SAMPLE_TIMEOUT_MS }, async () => {
+    const moments = await simMoments();
     const glints = sum(moments, 'glints');
     expect(glints, 'glints lit').toBeGreaterThanOrEqual(100);
     // RULE-8's example, from the mock's one-MULE bots, was 63%; the real AI plans its MULEs to fill the clock, so fewer
@@ -158,8 +175,8 @@ describe("the moments in the sim's games (T-AC-5, AM-22)", () => {
     expect(sum(moments, 'raced') / glints, 'share of glints a bot raced').toBeGreaterThanOrEqual(0.4);
   });
 
-  it("T-AC-5 (AM-26): every AI colonist reaches the pub within the turn, except one a wolf's bite cost the pub, at most 1% of turns", { timeout: 120_000 }, () => {
-    const { turns } = simGames();
+  it("T-AC-5 (AM-26): every AI colonist reaches the pub within the turn, except one a wolf's bite cost the pub, at most 1% of turns", { timeout: SAMPLE_TIMEOUT_MS }, async () => {
+    const { turns } = await simGames();
     const missed = turns.filter((t) => t.pubAt === null);
     const excused = missed.filter((t) => t.biteCostPub);
     for (const t of excused) console.log(`T-AC-5 excused (AM-26): month ${t.month}, ${t.id}: a wolf's bite cost it the pub`);
@@ -174,8 +191,8 @@ describe("the moments in the sim's games (T-AC-5, AM-22)", () => {
   // WOLVES.simMonthsWithPack of months. AM-27's binding check is `pnpm sim`'s report, 40 games AI-only on each of seeds
   // 1, 101 and 201 (its 'Months with an AI wolf encounter' line, MISS under that share): 40 games here would cost the
   // file about 30 s more than its budget.
-  it('an AI colonist meets wolves in WOLVES.simMonthsWithPack of months of the sim sample: the legs by wolf land are walked', { timeout: 120_000 }, () => {
-    const moments = simMoments();
+  it('an AI colonist meets wolves in WOLVES.simMonthsWithPack of months of the sim sample: the legs by wolf land are walked', { timeout: SAMPLE_TIMEOUT_MS }, async () => {
+    const moments = await simMoments();
     const met = moments.filter((m) => m.packs > 0).length;
     expect(met / moments.length, `months with an AI wolf encounter: ${met} of ${moments.length}`).toBeGreaterThanOrEqual(WOLVES.simMonthsWithPack);
   });
@@ -238,10 +255,33 @@ describe('the sim referees the floor as the server will (arcade C10)', () => {
       expect(applyReach(state, floor, 'ai1', secondsLeft, cfg).payout).toBe(expected);
       expect(state.players[1]!.money - money).toBe(expected);
     });
-    // And in played turns: every pub paid what its button quoted, from the same pubPayoutFor.
+    // And in played turns: every pub paid what its button quoted, from the same pubPayoutFor. Every turn pressed one,
+    // but where a wolf's bite cost it the pub (T-AC-5's one excuse, AM-26).
     const turns = steeredTurns(12).flat();
     for (const t of turns) expect(t.payout, `month ${t.month} ${t.id}`).toBe(t.quoted);
-    expect(turns.every((t) => t.quoted !== null)).toBe(true);
+    expect(turns.filter((t) => t.quoted === null && !t.biteCostPub).map((t) => `month ${t.month}, ${t.id}`), 'no pub pressed, no excuse').toEqual([]);
+    expect(turns.filter((t) => t.quoted !== null).length, 'pubs pressed').toBeGreaterThan(turns.length / 2);
+  });
+
+  it("AM-26: the bite is the excuse only where it cost the pub: the walk there fitted the clock unbitten, and bitten it does not", () => {
+    steered(() => {
+      const state = createGame({ seed: 4, players: LEVELS.map((_, i) => ({ id: `ai${i}`, name: `AI ${i + 1}`, isAi: true })) });
+      while (state.phase !== 'development') advancePhase(state);
+      const cfg = simFloorConfig();
+      // A colonist bitten out on the map, at the far end of a plot row from the store.
+      const store = state.tiles.find((t) => t.terrain === 'store')!;
+      const far = state.tiles.filter((t) => t.y === store.y && terrainShare(t.terrain, cfg) > 0).reduce((a, b) => (Math.abs(b.x - store.x) > Math.abs(a.x - store.x) ? b : a));
+      const built = buildFloor(state, cfg);
+      const c: FloorColonist = { ...built.colonists[1]!, space: 'map', x: far.x + 0.5, y: far.y + 0.5, lead: null, bitten: true };
+      const unbitten = pubSeconds(state, cfg, { ...c, bitten: false });
+      const bitten = pubSeconds(state, cfg, c);
+      expect(bitten, 'the bite slows the walk to the pub').toBeGreaterThan(unbitten);
+      const between = (unbitten + bitten) / 2; // literal-ok: halfway between the two walks
+      expect(biteCostPub(state, cfg, c, between), 'in time unbitten, late bitten: the bite cost it the pub').toBe(true);
+      expect(biteCostPub(state, cfg, c, bitten + 1), 'in time even bitten: no excuse needed').toBe(false);
+      // Already late by its own choices before the bite: the bite cost it nothing, and the miss is its own.
+      expect(biteCostPub(state, cfg, c, unbitten - 1), 'late even unbitten: not the bite').toBe(false);
+    });
   });
 
   it("AM-19: a turn steps tick n only while n × tickMs is under the clock, so the bell comes first, as on the server", () => {
@@ -280,7 +320,22 @@ describe('the sim referees the floor as the server will (arcade C10)', () => {
     expect(waited.month1!.waited).toBeGreaterThan(0);
     const first = waited.turns.filter((t) => t.month === 1);
     expect(first.every((t) => t.installs > 0), JSON.stringify(first)).toBe(true);
+    // The hands' `held` is the referee's own refusal: a seat already in never presses one, so none is refused.
+    expect(waited.turns.map((t) => t.refused)).toEqual(waited.turns.map(() => 0));
     expect(month1(false).month1).toBeNull();
+    // While ai3 stands idle, never in, the clock waits; the others, told nothing is held, press what it refuses: each
+    // refused press is counted, per turn (§4).
+    const original = AiSeat.prototype.developSteer;
+    const spy = vi.spyOn(AiSeat.prototype, 'developSteer').mockImplementation(function (this: AiSeat, state, floor, secondsLeft, cfg) {
+      return this.id === 'ai3' ? { x: 0, y: 0, act: false } : original.call(this, state, floor, secondsLeft, cfg, false);
+    });
+    try {
+      const unheld = month1(true).turns.filter((t) => t.month === 1);
+      expect(unheld.find((t) => t.id === 'ai3')!.refused).toBe(0);
+      expect(unheld.reduce((n, t) => n + t.refused, 0), JSON.stringify(unheld)).toBeGreaterThan(0);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
 
@@ -358,10 +413,11 @@ function muleWalks(games: number): Record<Leg, LegTime[]> {
     if (input.act) s.lastAct = t;
     return input;
   });
-  // The estimate is of the errand's walk: this sample plays without the moments (no packs, glints or scrambles, and no
-  // legs sent by wolf land, AM-22), whose time is not the walk's.
-  const saved = { wolves: WOLVES.on, share: WOLVES.botWolfLandShare, glint: GLINT.on, scramble: SCRAMBLE.on };
-  Object.assign(WOLVES, { on: false, botWolfLandShare: 0 });
+  // The estimate is of the errand's walk: this sample plays without the moments (no packs, glints or scrambles), whose
+  // time is not the walk's. With the wolves off no leg goes by wolf land either (AM-22's legs are for the packs): the
+  // share is left as configured, so a leg sent there for nothing shows as a walk off its estimate.
+  const saved = { wolves: WOLVES.on, glint: GLINT.on, scramble: SCRAMBLE.on };
+  WOLVES.on = false;
   GLINT.on = false;
   SCRAMBLE.on = false;
   try {
@@ -386,7 +442,7 @@ function muleWalks(games: number): Record<Leg, LegTime[]> {
     });
   } finally {
     spy.mockRestore();
-    Object.assign(WOLVES, { on: saved.wolves, botWolfLandShare: saved.share });
+    WOLVES.on = saved.wolves;
     GLINT.on = saved.glint;
     SCRAMBLE.on = saved.scramble;
   }
