@@ -304,8 +304,10 @@ export function ScoreSum({ score, colony, size }: { score: ColonyScore; colony: 
   );
 }
 
-/** The colony's score, big: the total, its verdict and the sum that made it. */
-/** `failed`: the colony failed (the air's verdict, shown above it), so the score keeps no verdict of its own. */
+/**
+ * The colony's score, big: the total, its verdict and the sum that made it. `failed`: the colony failed (the air's
+ * verdict, shown above it), so the score keeps no verdict of its own.
+ */
 export function ScoreHero({ colony, score, size, failed = false }: { colony: ColonyView; score: ColonyScore; size: 'hero' | 'tv'; failed?: boolean }) {
   const v = scoreVerdict(score);
   const hero = size === 'hero';
