@@ -17,7 +17,7 @@ import {
 const SEATS = ['lena', 'brix', 'ossa', 'kai'];
 
 function newGame(politics = true): GameState {
-  return createGame({ seed: 7, players: SEATS.map((id) => ({ id, name: id })), politics });
+  return createGame({ seed: 7, players: SEATS.map((id) => ({ id, name: id, isAi: false })), politics });
 }
 
 function governedBy(state: GameState, id: string): void {
@@ -32,7 +32,7 @@ const total = (side: Partial<Record<string, number>>) => Object.values(side).red
 const net = (ledger: FundLedger) => total(ledger.in) - total(ledger.out);
 
 describe('the colony fund keeps a ledger', () => {
-  it("B-AC-20: the month report's ledger shows the sales tax, the Federation tax and office pay by source and line, and in - out is the fund's change", () => {
+  it("B-AC-20: the month report's ledger shows the sales tax, the Federation tax, the grant and office pay by source and line, and in - out is the fund's change", () => {
     const state = newGame();
     governedBy(state, 'lena');
     const fundAtStart = state.treasury.money;
@@ -49,8 +49,8 @@ describe('the colony fund keeps a ledger', () => {
     const ledger = state.history.at(-1)!.ledger!;
     expect(salesTax).toBeGreaterThan(0);
     expect(federationTax).toBeGreaterThan(0);
-    expect(ledger.in).toEqual({ salesTax, federationTax });
-    expect(ledger.out).toEqual({ officePay: Math.min(POLITICS.pay.governor, salesTax + federationTax) });
+    expect(ledger.in).toEqual({ salesTax, federationTax, grant: COLONY.grant.perMonth });
+    expect(ledger.out).toEqual({ officePay: Math.min(POLITICS.pay.governor, salesTax + federationTax + COLONY.grant.perMonth) });
     expect(net(ledger)).toBe(state.treasury.money - fundAtStart);
   });
 

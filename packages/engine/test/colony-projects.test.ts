@@ -18,7 +18,7 @@ const SEATS = ['lena', 'brix', 'ossa', 'kai'];
 
 /** A politics game in planning with Lena governing and no election open. */
 function governedGame(fund = 0, politics = true): GameState {
-  const state = createGame({ seed: 7, players: SEATS.map((id) => ({ id, name: id })), politics });
+  const state = createGame({ seed: 7, players: SEATS.map((id) => ({ id, name: id, isAi: false })), politics });
   if (state.politics) state.politics = { ...state.politics, governor: 'lena', election: null };
   state.treasury.money = fund;
   return state;
@@ -108,7 +108,7 @@ describe('prestige objects: commissioned, funded, built, kept up', () => {
     expect(refused(() => commission(governedGame(0, false), 'lena', 'hospital'))).toBe("This game plays without the colony's council");
 
     const voting = governedGame();
-    voting.politics = { ...voting.politics!, election: { ...createGame({ seed: 7, players: SEATS.map((id) => ({ id, name: id })) }).politics!.election!, stage: 'ballot' } };
+    voting.politics = { ...voting.politics!, election: { ...createGame({ seed: 7, players: SEATS.map((id) => ({ id, name: id, isAi: false })) }).politics!.election!, stage: 'ballot' } };
     expect(refused(() => commission(voting, 'lena', 'hospital'))).toBe('Commission once the votes are over');
     const auction = governedGame();
     auction.phase = 'auction';
