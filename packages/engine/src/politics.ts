@@ -512,7 +512,9 @@ function liveCouncil(state: GameState): Shared<Council> {
 export function castLawVote(state: GameState, voterId: string, yes: boolean): void {
   const voter = player(state, voterId);
   liveCouncil(state);
-  edit(state).council!.ballots[voter.id] = yes;
+  const council = edit(state).council!;
+  council.ballots[voter.id] = yes;
+  if (!council.done.includes(voter.id)) council.done = [...council.done, voter.id];
 }
 
 /** Presses (or takes back) Done on the law ballot. */
@@ -603,6 +605,9 @@ export function closeVotes(state: GameState): ElectionResult | null {
     if (politics.council!.stage === 'ballot') tally(state, politics.council!);
     takeEffect(state, politics);
   }
+  // A proposal from an earlier month had this planning for its ballot; one that never got it is dropped.
+  const pending = state.politics?.proposal;
+  if (pending && pending.month < state.month) edit(state).proposal = null;
   return result;
 }
 
