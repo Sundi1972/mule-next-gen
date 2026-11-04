@@ -144,6 +144,8 @@ export class Room<Intent, View> {
   private queued: Map<ReturnType<typeof setTimeout>, () => void> | null = null;
   private started = false;
   private endedBy: 'closed' | 'error' | null = null;
+  /** Once disposed, the room is done with its game: no callback runs, none is scheduled, and no leave reaches it. */
+  private disposed = false;
   private nextSeat = 1;
   private chatId = 0;
   private broadcastQueued = false;
@@ -166,9 +168,10 @@ export class Room<Intent, View> {
     this.game = options.createGame({
       now: this.opts.now,
       schedule: (ms, fn) => {
+        if (this.disposed) return () => {};
         const timer = setTimeout(() => {
           this.timers.delete(timer);
-          if (this.endedBy) return;
+          if (this.endedBy || this.disposed) return;
           if (this.queued) this.queued.set(timer, fn);
           else this.runScheduled(fn);
         }, ms);
@@ -333,7 +336,8 @@ export class Room<Intent, View> {
 
   /** A screen's connection closed: it stops being a board and lets go of its seat. */
   disconnect(conn: Connection<View>): void {
-    if (this.endedBy === 'error') return;
+    // A leave can arrive after the room is gone, as a closing server's sockets do: the game must not hear it.
+    if (this.endedBy === 'error' || this.disposed) return;
     try {
       const wasBoard = this.boards.delete(conn);
       // Checked even for a board, so no path leaves a seat on a closed socket.
@@ -558,6 +562,7 @@ export class Room<Intent, View> {
   }
 
   dispose(): void {
+    this.disposed = true;
     for (const t of this.timers) clearTimeout(t);
     this.timers.clear();
     this.queued?.clear();
