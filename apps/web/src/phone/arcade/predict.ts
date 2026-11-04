@@ -1,5 +1,5 @@
 import { stepFloor, type FloorColonist, type FloorConfig, type FloorLead, type FloorMoments, type GameState, type Space } from '@mule/engine';
-import type { DevFrame, MuleView, MyView } from '@mule/protocol';
+import type { ColonistView, DevFrame, MuleView, MyView } from '@mule/protocol';
 import { gateSteer, heldBack, unsure, type SteerGate, type Stick } from './steer';
 
 /**
@@ -17,6 +17,8 @@ import { gateSteer, heldBack, unsure, type SteerGate, type Stick } from './steer
 /** What the copy steps on: the map and your MULE as the view has them, and the config the server steps with. */
 export interface PredictWorld {
   state: GameState;
+  /** The same, with your MULE bolted: the game the floor steps a colonist whose MULE runs loose with. */
+  boltedState: GameState;
   cfg: FloorConfig;
   id: string;
 }
@@ -27,8 +29,8 @@ export interface PredictWorld {
  * press, and the phone never predicts a press (its words and its effect are the server's).
  */
 export function predictWorld(view: Pick<MuleView, 'width' | 'height' | 'tiles'>, me: Pick<MyView, 'id' | 'carriedMule'>, cfg: FloorConfig): PredictWorld {
-  const state = { width: view.width, height: view.height, tiles: view.tiles, players: [{ id: me.id, carriedMule: me.carriedMule, isAi: false }] } as unknown as GameState;
-  return { state, cfg: momentsOff(cfg), id: me.id };
+  const seat = (muleBolted: boolean) => ({ width: view.width, height: view.height, tiles: view.tiles, players: [{ id: me.id, carriedMule: me.carriedMule, isAi: false, muleBolted }] }) as unknown as GameState;
+  return { state: seat(false), boltedState: seat(true), cfg: momentsOff(cfg), id: me.id };
 }
 
 /**
@@ -46,6 +48,16 @@ export interface ColonistBase {
   pace: number;
   bitten: boolean;
   pelts: number;
+  /** Your MULE bolted and not caught yet, as the frames say (DevFrame.moments.bolted). */
+  bolted?: boolean;
+}
+
+/** A bolt the copy holds while your MULE runs loose: the server runs it, so on the copy it stands where the frames put it. */
+const LOOSE = { dx: 0, dy: 0, left: 0 } as const;
+
+/** Whether the server moves your colonist on its own terms now: a pack has you (your view), or a stun holds you (the frame). */
+export function serverHolds(id: string, encounter: ColonistView['encounter'] | undefined, frame: Pick<DevFrame, 'moments'> | undefined): boolean {
+  return !!encounter || !!frame?.moments?.stunned.some((s) => s.who === id);
 }
 
 interface Input extends Stick {
@@ -119,7 +131,7 @@ const STAND: Stick = { x: 0, y: 0 };
 function stepMe(me: FloorColonist, tick: number, stick: Stick, world: PredictWorld, hold: number | null): FloorColonist {
   // stepFloor holds an assaying colonist still itself, as on the server, and only on steps that start before the hold.
   const held = hold !== null ? { ...me, assayUntilTick: hold } : me;
-  const next = stepFloor({ tick, colonists: [held], moments: NO_MOMENTS }, world.state, { [world.id]: { x: stick.x, y: stick.y, act: false } }, world.cfg.steer.tickMs, world.cfg);
+  const next = stepFloor({ tick, colonists: [held], moments: NO_MOMENTS }, me.bolt ? world.boltedState : world.state, { [world.id]: { x: stick.x, y: stick.y, act: false } }, world.cfg.steer.tickMs, world.cfg);
   return next.colonists[0]!;
 }
 
@@ -186,7 +198,7 @@ export function steerStep(p: Prediction, gate: SteerGate, want: Stick, nowMs: nu
 /** Your colonist as the frame has it, with what the view says of it besides, and the copy's own where a frame has none. */
 function fromFrame(c: FramedColonist, base: ColonistBase, id: string): FloorColonist {
   const lead: FloorLead | null = c.lead && { good: c.lead.good, x: c.lead.x, y: c.lead.y };
-  return { id, space: c.space, x: c.x, y: c.y, facing: c.facing, moving: c.moving, lead, pace: base.pace, bot: false, bitten: base.bitten, encounter: null, pelts: base.pelts, assayUntilTick: null };
+  return { id, space: c.space, x: c.x, y: c.y, facing: c.facing, moving: c.moving, lead, pace: base.pace, bot: false, bitten: base.bitten, encounter: null, pelts: base.pelts, assayUntilTick: null, bolt: base.bolted && lead ? LOOSE : null };
 }
 
 /**
@@ -255,6 +267,16 @@ export function wolvesHold(p: Prediction, on: boolean, base: ColonistBase, shown
   const past = p.past.map((e) => (e.tick === p.tick ? { tick: e.tick, me } : e));
   const near = shown && shown.space === me.space && Math.hypot(shown.x - me.x, shown.y - me.y) <= cfg.steer.snapTiles;
   return { ...p, wolves: false, me, past, ease: near ? { dx: shown.x - me.x, dy: shown.y - me.y, fromMs: nowMs } : null };
+}
+
+/**
+ * Your MULE bolted, or caught, as the frames say: the copy walks free of it at full pace and leaves it where it stands,
+ * or leads it again. The same state, the same copy.
+ */
+export function boltedNow(p: Prediction, bolted: boolean): Prediction {
+  if (!p.me || !!p.me.bolt === (bolted && !!p.me.lead)) return p;
+  const me = { ...p.me, bolt: bolted && p.me.lead ? LOOSE : null };
+  return { ...p, me, past: p.past.map((e) => (e.tick === p.tick ? { tick: e.tick, me } : e)) };
 }
 
 /** Your colonist as the screen draws it. */

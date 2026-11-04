@@ -1,5 +1,5 @@
 import type { DEV_STEER } from '@mule/engine';
-import type { DevFrame } from '@mule/protocol';
+import type { DevFrame, FrameMoments } from '@mule/protocol';
 
 /**
  * Everyone else's colonists from the frames (arcade spec RULE-10): drawn DEV_STEER.interpolateMs behind the newest
@@ -15,39 +15,8 @@ export interface FrameLog {
 /** A colonist as a frame carries it. */
 export type Drawn = DevFrame['colonists'][number];
 
-/** One wolf of a pack, as a frame carries it. */
-export interface FrameWolf {
-  x: number;
-  y: number;
-  state: 'prowl' | 'tell' | 'lunge' | 'open' | 'hurt';
-  /** Where its colonist stood when it crouched: set while it crouches (`tell`) and lunges, null otherwise. */
-  target: { x: number; y: number } | null;
-}
-
-/** The pack a colonist met, and the stage of it. */
-export interface FramePack {
-  who: string;
-  stage: 'choose' | 'chase' | 'fight';
-  wolves: FrameWolf[];
-}
-
-/**
- * The moments on a frame (DevFrame.moments, arcade spec AM-28): the packs met, the glint lit and the corral scramble.
- * Declared here until the protocol carries it; the frame omits it while nothing is on.
- */
-export interface FrameMoments {
-  packs: FramePack[];
-  /** The lit glint's tile, in whole tiles: drawn at the tile's middle. */
-  glint: { x: number; y: number; untilTick: number } | null;
-  /**
-   * From its call to the turn's end: `over` set once it ends, and then `leftOut`, the needers still without a MULE,
-   * however it ended.
-   */
-  scramble: { untilTick: number; needers: string[]; got: string[]; over: 'empty' | 'time' | 'everyone' | null; leftOut: string[] } | null;
-}
-
 /** A frame's moments; none while nothing is on. */
-export const momentsOf = (frame: DevFrame): FrameMoments | null => (frame as DevFrame & { moments?: FrameMoments }).moments ?? null;
+export const momentsOf = (frame: DevFrame): FrameMoments | null => frame.moments ?? null;
 
 /** Frames kept: a second's worth at 20 a second, more than interpolateMs ever reaches back. */
 const KEPT = 20;
@@ -103,48 +72,6 @@ export function othersAt(log: FrameLog, nowMs: number, cfg: Pick<typeof DEV_STEE
   return drawn;
 }
 
-/**
- * What a frame's moments leave a screen to work out for itself, from the frames as they come: when each pack's stage
- * began, where its colonist stood then (a fight stays round that spot), and a fight's strikes and bites, counted from
- * its wolves turning hurt (from a lunge, a bite; otherwise, a strike).
- */
-export interface PackMark {
-  stage: FramePack['stage'];
-  sinceTick: number;
-  centre: { x: number; y: number };
-  strikes: number;
-  bites: number;
-}
-
-export type PackMarks = ReadonlyMap<string, PackMark>;
-
-/** The marks after `frame`, which came after `before` (null for the first); a frame no newer changes nothing. A pack gone takes its mark with it. */
-export function markPacks(marks: PackMarks, frame: DevFrame, before: DevFrame | null): PackMarks {
-  if (before && frame.tick <= before.tick) return marks;
-  const packs = momentsOf(frame)?.packs ?? [];
-  const old = before ? (momentsOf(before)?.packs ?? []) : [];
-  const next = new Map<string, PackMark>();
-  for (const p of packs) {
-    const was = marks.get(p.who);
-    if (!was || was.stage !== p.stage) {
-      const c = frame.colonists.find((k) => k.id === p.who);
-      next.set(p.who, { stage: p.stage, sinceTick: frame.tick, centre: c ? { x: c.x, y: c.y } : { x: 0, y: 0 }, strikes: 0, bites: 0 });
-      continue;
-    }
-    const prev = old.find((q) => q.who === p.who);
-    let { strikes, bites } = was;
-    if (prev && prev.wolves.length === p.wolves.length && p.stage === 'fight')
-      p.wolves.forEach((w, j) => {
-        const from = prev.wolves[j]!.state;
-        if (w.state !== 'hurt' || from === 'hurt') return;
-        if (from === 'lunge') bites++;
-        else strikes++;
-      });
-    next.set(p.who, { ...was, strikes, bites });
-  }
-  return next;
-}
-
 /** The moments as a screen draws them now, at the instant everyone else is drawn at. */
 export interface MomentsNow {
   /** The packs with their wolves interpolated, the glint while it is still lit, the scramble. */
@@ -153,6 +80,8 @@ export interface MomentsNow {
   tick: number;
   /** The colonists closing on the lit glint between the two frames: the race as the table sees it. */
   racers: string[];
+  /** Each bolted MULE, where it runs: its colonist's lead, in map tiles even while its colonist is in the hall. */
+  loose: { who: string; x: number; y: number; good: NonNullable<Drawn['lead']>['good']; facing: Drawn['facing'] }[];
 }
 
 /** What every screen draws of the moments now; null while no frame carries any. */
@@ -170,7 +99,14 @@ export function momentsAt(log: FrameLog, nowMs: number, cfg: Pick<typeof DEV_STE
   });
   const glint = mb.glint && tick < mb.glint.untilTick ? mb.glint : null;
   const racers = glint && a !== b ? b.colonists.filter((c) => closing(a.colonists.find((o) => o.id === c.id), c, glint)).map((c) => c.id) : [];
-  return { moments: { ...mb, packs, glint }, tick, racers };
+  const loose = mb.bolted.flatMap((who) => {
+    const now = b.colonists.find((c) => c.id === who);
+    const was = a.colonists.find((c) => c.id === who);
+    if (!now?.lead) return [];
+    const from = was?.lead ?? now.lead;
+    return [{ who, x: lerp(from.x, now.lead.x, k), y: lerp(from.y, now.lead.y, k), good: now.lead.good, facing: now.lead.x >= from.x ? ('right' as const) : ('left' as const) }];
+  });
+  return { moments: { ...mb, packs, glint }, tick, racers, loose };
 }
 
 /** Moving nearer the glint's middle on the map between two frames. */

@@ -4,8 +4,8 @@ import { createContext, useContext, useEffect, useMemo, useRef, useSyncExternalS
 import type { TableClient } from '../../net/client';
 import { useClient } from '../../net/react';
 import { startControls, stickOf, type Controls } from './controls';
-import { markPacks, momentsAt, msPerTick, othersAt, pushFrame, startFrameLog, type Drawn, type FrameLog, type MomentsNow, type PackMarks } from './frames';
-import { advanceTo, assayTick, holdUntil, markStale, phoneTick, predictWorld, receiveFrame, shownAt, startPrediction, steerStep, wolvesHold, type ColonistBase, type Prediction, type Shown } from './predict';
+import { momentsAt, msPerTick, othersAt, pushFrame, startFrameLog, type Drawn, type FrameLog, type MomentsNow } from './frames';
+import { advanceTo, assayTick, boltedNow, holdUntil, markStale, phoneTick, predictWorld, receiveFrame, serverHolds, shownAt, startPrediction, steerStep, wolvesHold, type ColonistBase, type Prediction, type Shown } from './predict';
 import { startGate, type SteerGate } from './steer';
 import { usePhoneGame } from '../game';
 
@@ -33,8 +33,6 @@ export interface Live {
   at?: number;
   /** The moments at the instant the others are drawn at; none while nothing is on. */
   moments?: MomentsNow | null;
-  /** What the frames so far say of each pack: when its stage began, where, and a fight's score. */
-  marks?: PackMarks;
 }
 
 interface LiveSource {
@@ -147,7 +145,7 @@ export function PhoneLive({ children }: { children: ReactNode }) {
   const world = useMemo(() => predictWorld(view, me, cfg), [view.width, view.height, view.tiles, me.id, me.carriedMule, cfg]);
   const base: ColonistBase = { pace: paceOf(self), bitten: !!self.colonist?.bitten, pelts: self.colonist?.pelts ?? 0 };
   // `assaying`: the assay end (server ms) the copy already holds for, so each view's is applied once.
-  const state = useRef<{ p: Prediction; log: FrameLog; gate: SteerGate; beats: Beat[]; assaying: number | null; marks: PackMarks }>({ p: startPrediction(), log: startFrameLog(), gate: startGate(), beats: [], assaying: null, marks: new Map() });
+  const state = useRef<{ p: Prediction; log: FrameLog; gate: SteerGate; beats: Beat[]; assaying: number | null }>({ p: startPrediction(), log: startFrameLog(), gate: startGate(), beats: [], assaying: null });
   const ctx = useRef({ world, base, view, self });
   ctx.current = { world, base, view, self };
   const viewOthers = (v: MuleView) => new Map(v.players.filter((p) => p.id !== me.id).flatMap((p) => (fromView(p) ? [[p.id, fromView(p)!] as const] : [])));
@@ -155,9 +153,8 @@ export function PhoneLive({ children }: { children: ReactNode }) {
     client,
     (frame, at) => {
       const s = state.current;
-      s.marks = markPacks(s.marks, frame, s.log.frames.at(-1)?.frame ?? null);
       s.log = pushFrame(s.log, frame, at);
-      s.p = receiveFrame(s.p, frame, at, ctx.current.world, ctx.current.base);
+      s.p = receiveFrame(s.p, frame, at, ctx.current.world, { ...ctx.current.base, bolted: !!frame.moments?.bolted.includes(me.id) });
       s.beats = beatsOf(s.beats, frame, at);
     },
     (now) => {
@@ -176,14 +173,16 @@ export function PhoneLive({ children }: { children: ReactNode }) {
       const drawn = framed ? othersAt(s.log, now, cfg.steer) : null;
       const framedMe = drawn?.get(me.id) ?? null;
       drawn?.delete(me.id);
-      // While a pack has you the server moves you: you are drawn from the frames, as everyone else.
-      s.p = wolvesHold(s.p, !!ctx.current.self.colonist?.encounter, ctx.current.base, framedMe, now, cfg);
+      // While a pack or a stun has you the server moves you: you are drawn from the frames, as everyone else.
+      const newest = s.log.frames.at(-1)?.frame;
+      s.p = wolvesHold(s.p, serverHolds(me.id, ctx.current.self.colonist?.encounter, newest), ctx.current.base, framedMe, now, cfg);
+      s.p = boltedNow(s.p, !!newest?.moments?.bolted.includes(me.id));
       // At the frames' own pace, so a table that plays its phases quicker needs no corrections.
       const target = phoneTick(s.p, now, rtt, cfg, pace);
       if (target !== null) s.p = advanceTo(s.p, target, world);
       steerNow(now);
       const mine = s.p.wolves && framedMe ? shownOf(framedMe) : shownAt(s.p, now, cfg);
-      return { me: mine, others: drawn ?? viewOthers(ctx.current.view), status: s.p.status, beats: s.beats.filter((b) => now - b.at < BEAT_MS), moments: momentsAt(s.log, now, cfg.steer), marks: s.marks, ...(framed ? { at: now } : {}) };
+      return { me: mine, others: drawn ?? viewOthers(ctx.current.view), status: s.p.status, beats: s.beats.filter((b) => now - b.at < BEAT_MS), moments: momentsAt(s.log, now, cfg.steer), ...(framed ? { at: now } : {}) };
     },
     () => ({ me: fromView(self), others: viewOthers(view), status: 'waiting', beats: [] }),
   );
@@ -236,7 +235,7 @@ export function PhoneLive({ children }: { children: ReactNode }) {
 export function BoardLive({ view, children }: { view: MuleView; children: ReactNode }) {
   const client = useClient();
   const cfg = useMemo(() => floorConfig(), []);
-  const state = useRef<{ log: FrameLog; beats: Beat[]; marks: PackMarks }>({ log: startFrameLog(), beats: [], marks: new Map() });
+  const state = useRef<{ log: FrameLog; beats: Beat[] }>({ log: startFrameLog(), beats: [] });
   const viewRef = useRef(view);
   viewRef.current = view;
   const fromViews = (v: MuleView) => new Map(v.players.flatMap((p) => (fromView(p) ? [[p.id, fromView(p)!] as const] : [])));
@@ -244,7 +243,6 @@ export function BoardLive({ view, children }: { view: MuleView; children: ReactN
     client,
     (frame, at) => {
       const s = state.current;
-      s.marks = markPacks(s.marks, frame, s.log.frames.at(-1)?.frame ?? null);
       s.log = pushFrame(s.log, frame, at);
       s.beats = beatsOf(s.beats, frame, at);
     },
@@ -252,7 +250,7 @@ export function BoardLive({ view, children }: { view: MuleView; children: ReactN
       const s = state.current;
       const newest = s.log.frames.at(-1);
       const status = !newest ? 'waiting' : now - newest.recvMs > cfg.steer.staleMs ? 'reconnecting' : 'live';
-      return { me: null, others: newest ? othersAt(s.log, now, cfg.steer) : fromViews(viewRef.current), status, beats: s.beats.filter((b) => now - b.at < BEAT_MS), moments: momentsAt(s.log, now, cfg.steer), marks: s.marks, ...(newest ? { at: now } : {}) };
+      return { me: null, others: newest ? othersAt(s.log, now, cfg.steer) : fromViews(viewRef.current), status, beats: s.beats.filter((b) => now - b.at < BEAT_MS), moments: momentsAt(s.log, now, cfg.steer), ...(newest ? { at: now } : {}) };
     },
     () => ({ me: null, others: fromViews(view), status: 'waiting', beats: [] }),
   );

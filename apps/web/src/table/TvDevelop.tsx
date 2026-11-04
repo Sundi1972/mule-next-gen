@@ -113,7 +113,7 @@ function TvBeats({ game, colonists, mapW }: { game: MuleView; colonists: ArcadeC
   if (started && !seen.current.has(started)) seen.current.set(started, now);
   const host: TvLine[] = started && now - seen.current.get(started)! < BEAT_MS ? [{ key: 'started', text: started, tone: 'warn' }] : [];
   const place = tvLinesPlace(game, mapW);
-  const lines = [...tvLines({ now: live.moments ?? null, marks: live.marks ?? new Map(), colonists, beats: live.beats.map((b) => b.text), mulesLeft: game.storeMules }), ...host].slice(0, place.most);
+  const lines = [...tvLines({ now: live.moments ?? null, colonists, beats: live.beats.map((b) => b.text), mulesLeft: game.storeMules }), ...host].slice(0, place.most);
   if (lines.length === 0) return null;
   return (
     <div

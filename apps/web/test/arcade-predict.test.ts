@@ -1,7 +1,7 @@
 import { applyReach, buildFloor, createGame, DEV_STEER, floorConfig, GLINT, speedOf, stepFloor, WOLVES, type DevFloor, type FloorConfig, type FloorInput, type GameState, type Terrain } from '@mule/engine';
 import type { DevFrame, MuleView, TileView } from '@mule/protocol';
 import { describe, expect, it } from 'vitest';
-import { advanceTo, assayTick, holdUntil, markStale, phoneTick, predictWorld, receiveFrame, shownAt, startPrediction, steerFrom, steerStep, wolvesHold, type Prediction, type PredictWorld } from '../src/phone/arcade/predict';
+import { advanceTo, assayTick, boltedNow, holdUntil, markStale, phoneTick, predictWorld, receiveFrame, serverHolds, shownAt, startPrediction, steerFrom, steerStep, wolvesHold, type Prediction, type PredictWorld } from '../src/phone/arcade/predict';
 import { msPerTick, pushFrame, startFrameLog } from '../src/phone/arcade/frames';
 import { gateSteer, heldBack, quantise, startGate, type SteerGate } from '../src/phone/arcade/steer';
 
@@ -522,5 +522,40 @@ describe('C11: the moments are the server\'s, never the phone\'s copy (RULE-4, R
     expect(limping.dx).toBeCloseTo(10 * (TICK / 1_000) * limping.speed, 6);
     expect(limping.speed).toBeCloseTo(well.speed * WOLVES.bittenPace, 6);
     expect(well.dx).toBeGreaterThan(limping.dx);
+  });
+});
+
+describe('C11: a lost fight, as the frames say: the stun holds the copy, a bolted MULE leaves it free (RULE-4)', () => {
+  const frameWith = (moments: Partial<NonNullable<DevFrame['moments']>>): Pick<DevFrame, 'moments'> => ({ moments: { packs: [], glint: null, scramble: null, bolted: [], stunned: [], ...moments } });
+
+  it('C11: the server holds her while a pack has her or a stun does, and not otherwise', () => {
+    expect(serverHolds('lena', 'choose', frameWith({}))).toBe(true);
+    expect(serverHolds('lena', null, frameWith({ stunned: [{ who: 'lena', untilTick: 90 }] }))).toBe(true);
+    expect(serverHolds('lena', null, frameWith({ stunned: [{ who: 'kai', untilTick: 90 }] }))).toBe(false);
+    expect(serverHolds('lena', null, {})).toBe(false);
+  });
+
+  /** Lena leading a Food MULE on plains, live at tick 40, her stick pushed right. */
+  function leading() {
+    const state = game();
+    state.players = state.players.map((p) => (p.id === 'lena' ? { ...p, carriedMule: 'food' } : p));
+    const cfg = floorConfig();
+    const world = predictWorld(viewOf(state), { id: 'lena', carriedMule: 'food' }, cfg);
+    const base = { pace: 1, bitten: false, pelts: 0, bolted: false };
+    const f: DevFrame = { tick: 40, at: 40 * TICK, colonists: [{ id: 'lena', x: 2.5, y: 7.5, space: 'map', facing: 'right', moving: false, lead: { good: 'food', x: 2, y: 7.5 } }], beats: [] };
+    const p = steerFrom(receiveFrame(startPrediction(), f, 2_000, world, base), { x: 1, y: 0 });
+    return { world, p };
+  }
+
+  it('C11: her MULE bolted, the copy walks at full pace and leaves the MULE where it stands; caught, at the lead\'s pace again', () => {
+    const { world, p } = leading();
+    const led = upTo(p, 60, world);
+    const bolted = upTo(boltedNow(p, true), 60, world);
+    expect(bolted.me!.lead).toEqual({ good: 'food', x: 2, y: 7.5 });
+    expect(bolted.me!.x - 2.5).toBeCloseTo((led.me!.x - 2.5) / DEV_STEER.leadPace, 6);
+    const caught = upTo(boltedNow(bolted, false), 80, world);
+    expect(caught.me!.x - bolted.me!.x).toBeCloseTo(led.me!.x - 2.5, 6);
+    // Unchanged, the copy is the same copy.
+    expect(boltedNow(p, false)).toBe(p);
   });
 });

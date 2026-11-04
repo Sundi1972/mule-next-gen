@@ -1,8 +1,8 @@
 import { boxOf, DEV_STEER, GLINT, HALL, WOLVES } from '@mule/engine';
-import type { MuleView } from '@mule/protocol';
-import { cx, GlintSparkle, WolfGlyph, type LiveWalker, type WalkerMarks } from '@mule/ui';
+import type { FramePack, FrameWolf, MuleView } from '@mule/protocol';
+import { cx, GlintSparkle, Mule, WolfGlyph, type LiveWalker, type WalkerMarks } from '@mule/ui';
 import type { CSSProperties } from 'react';
-import type { FramePack, FrameWolf, MomentsNow, PackMark, PackMarks } from './frames';
+import type { MomentsNow } from './frames';
 import type { ArcadeColonist, ArcadeSeat } from './seat';
 
 /**
@@ -32,25 +32,38 @@ function Placed({ x, y, cols, rows, children, ...data }: { x: number; y: number;
 
 // --- Wolves -------------------------------------------------------------------------------------------------------
 
-/** Every pack on the map, its fight's ground, each wolf's crouch and where it will land: on every view of the map. */
-export function WolvesOnMap({ now, marks, colonists, cols, rows, cell }: { now: MomentsNow | null; marks: PackMarks; colonists: ArcadeColonist[]; cols: number; rows: number; cell: number }) {
+/**
+ * Every pack on the map, its fight's ground, each wolf's crouch and where it will land, and every MULE that bolted, an
+ * alarm over it: on every view of the map.
+ */
+export function WolvesOnMap({ now, colonists, cols, rows, cell }: { now: MomentsNow | null; colonists: ArcadeColonist[]; cols: number; rows: number; cell: number }) {
   const packs = now?.moments.packs ?? [];
   const size = Math.round(cell * 0.75);
+  const ring = cell * (WOLVES.arenaTiles + 0.3) * 2;
   return (
     <div className="pointer-events-none absolute inset-0 z-[7]" data-testid="wolves-layer">
-      {packs.map((p) => {
-        const centre = p.stage === 'fight' ? marks.get(p.who)?.centre : undefined;
-        const ring = cell * (WOLVES.arenaTiles + 0.3) * 2;
+      {packs
+        .filter((p) => p.stage === 'fight')
+        .map((p) => (
+          // The fight's ground: you dodge inside this ring.
+          <Placed key={`arena-${p.who}`} x={p.centre.x} y={p.centre.y} cols={cols} rows={rows} data-testid={`arena-${p.who}`}>
+            <span className="absolute left-0 top-0 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-dashed border-warn/70" style={{ width: ring, height: ring }} />
+          </Placed>
+        ))}
+      {packs.map((p) => p.wolves.map((w, i) => <OneWolf key={`${p.who}-${i}`} pack={p} w={w} i={i} c={colonists.find((k) => k.id === p.who)} size={size} cell={cell} cols={cols} rows={rows} />))}
+      {(now?.loose ?? []).map((m) => {
+        const owner = colonists.find((k) => k.id === m.who);
         return (
-          centre && (
-            // The fight's ground: you dodge inside this ring.
-            <Placed key={`arena-${p.who}`} x={centre.x} y={centre.y} cols={cols} rows={rows} data-testid={`arena-${p.who}`}>
-              <span className="absolute left-0 top-0 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-dashed border-warn/70" style={{ width: ring, height: ring }} />
+          owner && (
+            <Placed key={`loose-${m.who}`} x={m.x} y={m.y} cols={cols} rows={rows} data-testid={`loose-${m.who}`} data-x={m.x.toFixed(3)} data-y={m.y.toFixed(3)}>
+              <span className="absolute left-0 top-0 flex -translate-x-1/2 -translate-y-[80%] flex-col items-center">
+                <span className="rounded-full bg-alert px-1 font-mono text-[10px] font-bold leading-4 text-white shadow-chip">!</span>
+                <Mule size={Math.round(size * 1.35)} state="idle" good={m.good} owner={owner.slot} facing={m.facing} />
+              </span>
             </Placed>
           )
         );
       })}
-      {packs.map((p) => p.wolves.map((w, i) => <OneWolf key={`${p.who}-${i}`} pack={p} w={w} i={i} c={colonists.find((k) => k.id === p.who)} size={size} cell={cell} cols={cols} rows={rows} />))}
     </div>
   );
 }
@@ -81,16 +94,23 @@ const canStrike = (c: { x: number; y: number }, pack: FramePack | undefined) => 
 
 /**
  * What the wolves want of a colonist, at it: the choice (stick runs, button fights) with its countdown, then the chase,
- * then the fight's score. On every view, so the TV shows it too; `mine` names the controls.
+ * then the fight's score; after a lost fight, the stun. On every view, so the TV shows it too; `mine` names the controls.
  */
-export function WolfCallout({ c, pack, mark, tick, density, mine }: { c: ArcadeColonist; pack: FramePack | undefined; mark: PackMark | undefined; tick: number | null; density: Density; mine: boolean }) {
-  const stage = c.encounter;
-  if (!stage) return null;
+export function WolfCallout({ c, now, density, mine }: { c: ArcadeColonist; now: MomentsNow | null; density: Density; mine: boolean }) {
   const text = density === 'tv' ? 'text-sm' : density === 'wide' ? 'text-base' : 'text-[11px]';
   // Near the map's top edge the callout hangs below the colonist, so the map never clips it.
   const place = c.y < 2 ? 'top-full mt-1' : 'bottom-full mb-1';
-  const since = mark && mark.stage === stage && tick !== null ? seconds(tick - mark.sinceTick) : null;
-  const left = (total: number) => (since === null ? null : Math.ceil(Math.max(0, total - since)));
+  const stun = now?.moments.stunned.find((s) => s.who === c.id);
+  if (stun && now && now.tick < stun.untilTick)
+    return (
+      <span className={cx('absolute left-1/2 -translate-x-1/2 whitespace-nowrap rounded-chip bg-alert px-1.5 font-mono font-bold text-white shadow-chip', place, text)} data-testid={`stunned-${c.id}`}>
+        ✶ STUNNED {Math.ceil(seconds(stun.untilTick - now.tick))}s
+      </span>
+    );
+  const stage = c.encounter;
+  if (!stage) return null;
+  const pack = now?.moments.packs.find((p) => p.who === c.id && p.stage === stage);
+  const left = (total: number) => (pack && now ? Math.ceil(Math.max(0, total - seconds(now.tick - pack.sinceTick))) : null);
   if (stage === 'choose') {
     const s = left(WOLVES.chooseSeconds);
     return (
@@ -118,17 +138,17 @@ export function WolfCallout({ c, pack, mark, tick, density, mine }: { c: ArcadeC
     <span
       className={cx('absolute left-1/2 flex -translate-x-1/2 items-center gap-1.5 whitespace-nowrap rounded-chip border px-1.5 font-mono font-bold shadow-chip', place, open ? 'border-holo bg-holo text-on-holo' : 'border-alert bg-panel text-ink', text)}
       data-testid={`fight-hud-${c.id}`}
-      data-strikes={mark?.strikes}
-      data-bites={mark?.bites}
+      data-strikes={pack?.strikes}
+      data-bites={pack?.bites}
     >
       <span>{open ? 'STRIKE!' : 'DODGE'}</span>
-      {mark && (
+      {pack && (
         <>
           <span>
-            ⚔ {mark.strikes}/{WOLVES.strikesToWin}
+            ⚔ {pack.strikes}/{WOLVES.strikesToWin}
           </span>
           <span className={open ? '' : 'text-alert'}>
-            bites {mark.bites}/{WOLVES.bitesToLose}
+            bites {pack.bites}/{WOLVES.bitesToLose}
           </span>
         </>
       )}
@@ -319,16 +339,22 @@ export function ScrambleBanner({ seat, scramble, at, faded = false }: { seat: Ar
 // --- Every walker's marks -----------------------------------------------------------------------------------------
 
 /** What each colonist carries with it on a map: the wolves' callout, its bite and pelts, and on the TV its turn to the glint. */
-export function walkerMarks({ now, marks, colonists, density, own, names, size }: { now: MomentsNow | null; marks: PackMarks; colonists: ArcadeColonist[]; density: Density; own: string | null; names: boolean; size: number }) {
+export function walkerMarks({ now, colonists, density, own, names, size }: { now: MomentsNow | null; colonists: ArcadeColonist[]; density: Density; own: string | null; names: boolean; size: number }) {
   return (w: LiveWalker): WalkerMarks | null => {
     const c = colonists.find((k) => k.id === w.id);
     if (!c) return null;
     return {
-      above: <WolfCallout c={c} pack={now?.moments.packs.find((p) => p.who === c.id)} mark={marks.get(c.id)} tick={now?.tick ?? null} density={density} mine={c.id === own} />,
+      above: <WolfCallout c={c} now={now} density={density} mine={c.id === own} />,
       shoulder: names ? <GlintTurn now={now} c={c} size={size} /> : null,
       below: <WolfMarks c={c} density={density} />,
     };
   };
+}
+
+/** The colonists as a space draws them: a MULE that bolted runs loose, drawn by the wolves' layer, not on its lead. */
+export function offTheLead<C extends ArcadeColonist>(colonists: C[], now: MomentsNow | null): C[] {
+  const bolted = now?.moments.bolted ?? [];
+  return bolted.length === 0 ? colonists : colonists.map((c) => (bolted.includes(c.id) ? { ...c, lead: null } : c));
 }
 
 // --- The TV's lines -----------------------------------------------------------------------------------------------
@@ -343,7 +369,7 @@ export interface TvLine {
  * The TV's lines along the map, most pressing first: the scramble's call while it runs, the glint while lit, one line
  * per colonist meeting wolves now, then the frames' latest beats (the three newest) not already said by those.
  */
-export function tvLines({ now, marks, colonists, beats, mulesLeft }: { now: MomentsNow | null; marks: PackMarks; colonists: ArcadeColonist[]; beats: readonly string[]; mulesLeft: number }): TvLine[] {
+export function tvLines({ now, colonists, beats, mulesLeft }: { now: MomentsNow | null; colonists: ArcadeColonist[]; beats: readonly string[]; mulesLeft: number }): TvLine[] {
   const m = now?.moments;
   const meeting = colonists.filter((c) => c.encounter);
   const said = (b: string) => b.startsWith('Wolves!') || b.startsWith('A Crystite glint') || b.endsWith('left! Race to the corral');
@@ -351,7 +377,7 @@ export function tvLines({ now, marks, colonists, beats, mulesLeft }: { now: Mome
     ...(m && running(m.scramble) ? [{ key: 'scramble', text: scrambleCall(mulesLeft), tone: 'alert' as const }] : []),
     ...(m?.glint ? [{ key: 'glint', text: `A Crystite glint at ${plotLabel(m.glint)}! First there wins · ${Math.ceil(glintLeft(m.glint, now!.tick))} s`, tone: 'glint' as const }] : []),
     ...meeting.map((c) => {
-      const k = marks.get(c.id);
+      const k = m?.packs.find((p) => p.who === c.id);
       const text =
         c.encounter === 'choose'
           ? `Wolves! ${c.name}: run or fight?`
