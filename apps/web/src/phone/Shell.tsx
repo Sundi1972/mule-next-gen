@@ -72,7 +72,7 @@ export function NowCard({ now }: { now: Now }) {
 
 /**
  * The Now card that folds once read (WS6's month-end mock, UX audit H-7): folded it is one line, its title, and a tap
- * opens it. A new step opens it again (the title changing re-mounts it), so nothing new is missed.
+ * opens it. A new step re-mounts it folded (the title is its key), so the new title shows on its one line.
  */
 function FoldingNowCard({ now }: { now: Now }) {
   const [open, setOpen] = useState(false);
