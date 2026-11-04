@@ -2,10 +2,13 @@ import { GAME } from '../config.js';
 import { tileAt } from '../grid.js';
 import type { GameState, Tile } from '../types.js';
 import { MS_PER_SECOND } from '../units.js';
-import { IDLE_INPUT, isAssaying, leadFor, mouthOf, openDoor, storeOf, type DevFloor, type FloorColonist, type FloorConfig, type FloorInput, type FloorPoint } from './floor.js';
+import { IDLE_INPUT, isAssaying, isStunned, leadFor, mouthOf, openDoor, storeOf, type DevFloor, type FloorColonist, type FloorConfig, type FloorInput, type FloorPoint, type MomentsOut } from './floor.js';
+import { stepGlint } from './glint.js';
 import { HALL_DOORS, isOpenFloor, placeAt, type HallDoor, type HallPlan } from './hall.js';
 import { reachOf, type Reach } from './reach.js';
+import { stepScramble } from './scramble.js';
 import { hallSpeed, speedOf, terrainShare } from './speed.js';
+import { rollWolves, stepBolt, stepEncounter } from './wolves.js';
 
 /** What one step reads: the game, the config, and what it finds once for every colonist. */
 interface Step {
@@ -20,36 +23,60 @@ type Inputs = Readonly<Record<string, FloorInput>>;
 
 /**
  * One tick of the floor: every colonist moved by its seat's input, at RULE-2's speed, or through a door when its press
- * reached ENTER or LEAVE on this floor. Pure: a new floor, the old one and the game untouched. A seat with no input
- * stands still, and so does an assaying colonist, whatever its input. Throws an Error, its caller's bug, for a dtMs
- * other than cfg.steer.tickMs (every runner steps at the one tick), or for a floorSeconds the hall has no finite speed
- * for, or a step in the hall that is not finite (a pace or lead factor of Infinity): either would never end.
+ * reached ENTER or LEAVE on this floor; then the moments (C4), in this order: a colonist meeting wolves runs or fights
+ * instead of walking, one on wolf land may meet a pack, a bolted MULE runs, the glint is won (the first onto it, in the
+ * tick's press order), fades or lights, and the scramble's clock runs. Pure: a new floor, the old one and the game
+ * untouched; what the moments pay is left due for settleMoments, which the runner calls next. The floor's beats are
+ * this tick's. A seat with no input stands still (and a pack it meets resolves with none), and so does an assaying or
+ * a stunned colonist, whatever its input. Throws an Error, its caller's bug, for a dtMs other than cfg.steer.tickMs
+ * (every runner steps at the one tick), or for a floorSeconds the hall has no finite speed for, or a step in the hall
+ * that is not finite (a pace or lead factor of Infinity): either would never end.
  */
 export function stepFloor(floor: DevFloor, state: GameState, inputs: Inputs, dtMs: number, cfg: FloorConfig): DevFloor {
   if (dtMs !== cfg.steer.tickMs) throw new Error(`stepFloor steps ${cfg.steer.tickMs} ms at a time, not ${dtMs}`);
   const { floorSeconds } = cfg.steer;
   if (floorSeconds <= 0 || !Number.isFinite(hallSpeed(cfg))) throw new Error(`stepFloor needs a positive floorSeconds the hall has a finite speed for, not ${floorSeconds}`);
   const ctx: Step = { state, cfg, store: storeOf(state), wall: thinnestWall(cfg.hall) };
-  return {
-    tick: floor.tick + 1,
-    colonists: floor.colonists.map((c) => {
-      const led = withLead(c, state);
-      if (isAssaying(c, floor.tick)) return { ...led, moving: false, assayUntilTick: isAssaying(c, floor.tick + 1) ? c.assayUntilTick : null };
-      const input = inputs[c.id] ?? IDLE_INPUT;
+  const tick = floor.tick + 1;
+  const out: MomentsOut = { beats: [], due: [] };
+  const walk = (c: FloorColonist, input: FloorInput) => stepColonist(c, input, dtMs, ctx);
+  const colonists = floor.colonists.map((c) => {
+    const led = withLead(c, state);
+    const input = inputs[c.id] ?? IDLE_INPUT;
+    let next: FloorColonist;
+    if (isAssaying(c, floor.tick)) next = { ...led, moving: false, assayUntilTick: isAssaying(c, tick) ? c.assayUntilTick : null };
+    else if (isStunned(c, floor.tick)) next = led.moving ? { ...led, moving: false } : led;
+    else if (led.encounter) next = stepEncounter(state, led, input, tick, cfg, walk, out);
+    else {
       const reach = doorMove(floor, state, c.id, input, cfg);
-      if (reach?.kind === 'enter') return follow({ ...enterHall(led, reach.door, cfg.hall), moving: true }, cfg);
-      if (reach?.kind === 'leave') return follow({ ...leaveHall(led, reach.door, ctx), moving: true }, cfg);
-      return stepColonist(led, input, dtMs, ctx);
-    }),
-  };
+      if (reach?.kind === 'enter') next = follow({ ...enterHall(led, reach.door, cfg.hall), moving: true }, cfg);
+      else if (reach?.kind === 'leave') next = follow({ ...leaveHall(led, reach.door, ctx), moving: true }, cfg);
+      else next = walk(led, input);
+      next = rollWolves(state, next, tick, cfg, out);
+    }
+    return stepBolt(state, healed(next, state), tick, cfg);
+  });
+  const stepped: DevFloor = { tick, colonists, moments: floor.moments };
+  const glint = stepGlint(state, colonists, pressOrder(stepped, colonists.map((c) => c.id)), tick, floor.moments, cfg, out);
+  const scramble = stepScramble(state, floor.moments.scramble, tick, out);
+  return { ...stepped, moments: { ...floor.moments, ...glint, scramble, beats: out.beats, due: out.due } };
 }
 
 /**
- * The seats whose press stepFloor spends on a door move from this floor, given what stepFloor was given. A press does
- * one thing: after the step, apply every other press at the stepped position (RULE-1), and not these.
+ * The seats whose press stepFloor spends from this floor, given what stepFloor was given: a door move, or a press at
+ * the wolves (FIGHT, a strike). A press does one thing: after the step, apply every other press at the stepped
+ * position (RULE-1), and not these.
  */
 export function doorPresses(floor: DevFloor, state: GameState, inputs: Inputs, cfg: FloorConfig): ReadonlySet<string> {
-  return new Set(floor.colonists.filter((c) => doorMove(floor, state, c.id, inputs[c.id] ?? IDLE_INPUT, cfg)).map((c) => c.id));
+  const atWolves = (c: FloorColonist) => c.encounter !== null && c.encounter.stage !== 'chase' && !isAssaying(c, floor.tick) && !isStunned(c, floor.tick);
+  return new Set(floor.colonists.filter((c) => (inputs[c.id]?.act && atWolves(c)) || doorMove(floor, state, c.id, inputs[c.id] ?? IDLE_INPUT, cfg)).map((c) => c.id));
+}
+
+/** A bite heals in the store or on a plot of the colonist's own. */
+function healed(c: FloorColonist, state: GameState): FloorColonist {
+  if (!c.bitten) return c;
+  const home = c.space === 'hall' || tileAt(state.tiles, state.width, Math.floor(c.x), Math.floor(c.y))?.owner === c.id;
+  return home ? { ...c, bitten: false } : c;
 }
 
 /**
@@ -73,10 +100,15 @@ function doorMove(floor: DevFloor, state: GameState, seat: string, input: FloorI
   return reach.kind === 'enter' || reach.kind === 'leave' ? reach : null;
 }
 
-/** The colonist with its lead as the game has it now: a MULE bought, outfitted or installed since the last tick. */
+/**
+ * The colonist with its lead as the game has it now: a MULE bought, outfitted or installed since the last tick, and
+ * its bolt over once the game has it caught (or the bolt never paid).
+ */
 function withLead(c: FloorColonist, state: GameState): FloorColonist {
   const lead = leadFor(state, c);
-  return lead?.good === c.lead?.good && !lead === !c.lead ? c : { ...c, lead };
+  const bolted = state.players.find((p) => p.id === c.id)!.muleBolted === true;
+  const bolt = bolted && lead ? (c.bolt ?? null) : null;
+  return lead?.good === c.lead?.good && !lead === !c.lead && (c.bolt ?? null) === bolt ? c : { ...c, lead, bolt };
 }
 
 function stepColonist(c: FloorColonist, input: FloorInput, dtMs: number, ctx: Step): FloorColonist {
@@ -170,22 +202,25 @@ function thinnestWall(hall: HallPlan): number {
   return thinnest;
 }
 
+/** Whether the MULE on the lead walks with its colonist: one that bolted stays where it ran to. */
+const onRope = (c: FloorColonist) => c.lead !== null && !c.bolt;
+
 /** In at a door's spot, facing into the hall; a MULE on the lead comes through with its colonist. */
 function enterHall(c: FloorColonist, door: HallDoor, hall: HallPlan): FloorColonist {
   const { x, y } = hall.spots[door];
-  return { ...c, space: 'hall', x, y, facing: door === 'doorL' ? 'right' : 'left', lead: c.lead && { ...c.lead, x, y } };
+  return { ...c, space: 'hall', x, y, facing: door === 'doorL' ? 'right' : 'left', lead: onRope(c) ? { ...c.lead!, x, y } : c.lead };
 }
 
 /** Out onto the map at a door, or at the other one when the ground outside it is blocked. */
 function leaveHall(c: FloorColonist, door: HallDoor, { state, cfg, store }: Step): FloorColonist {
   const out = openDoor(state, store, door, cfg);
   const at = mouthOf(store, out, cfg);
-  return { ...c, space: 'map', ...at, facing: out === 'doorL' ? 'left' : 'right', lead: c.lead && { ...c.lead, ...at } };
+  return { ...c, space: 'map', ...at, facing: out === 'doorL' ? 'left' : 'right', lead: onRope(c) ? { ...c.lead!, ...at } : c.lead };
 }
 
 /** The MULE on its lead, pulled after its colonist to the rope's length. */
 function follow(c: FloorColonist, cfg: FloorConfig): FloorColonist {
-  if (!c.lead) return c;
+  if (!c.lead || !onRope(c)) return c;
   const rope = c.space === 'map' ? cfg.steer.leadTiles : cfg.steer.leadHallShare * cfg.hall.w;
   const gap = Math.hypot(c.lead.x - c.x, c.lead.y - c.y);
   if (gap <= rope) return c;
