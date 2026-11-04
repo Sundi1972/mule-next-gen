@@ -232,7 +232,7 @@ const PART_ROWS: Record<'planning' | 'landGrant' | 'development', Record<string,
         if (good) seen.add(r.plot);
         return good;
       });
-      if (kept.length === 0) return refuse('no free plot left to rank');
+      if (kept.length === 0 && v.length > 0) return refuse('no free plot left to rank');
       return kept.length === v.length ? ok(v) : clamped(kept, 'free plots, each once, at a whole value of 0 or more');
     },
     pressShare: (v) => {
@@ -480,16 +480,44 @@ function validate(profile: ValidatorProfile, state: GameState, seat: PlayerId, d
   ctx.base = structuredClone(pb);
   edits.forEach((e, i) => !STRATEGY_ROOTS.has(parse(e.path)?.[0] ?? '') && apply(e, i));
 
-  // Step 5: every value that plays, against the same rows.
+  // Step 5: every value that plays, against the same rows. A refused field the playbook may lack is dropped; any other
+  // plays the engine's own draft's value there, which passes by INV-1.
+  const drafted = new Map<DraftPhase | 'strategy', Playbook>();
+  const engineDraft = (unit: readonly string[]): Playbook => {
+    const part = (PART_KEYS as readonly string[]).includes(unit[0]!) ? DRAFTS[unit[0] as (typeof PART_KEYS)[number]]! : null;
+    const key = part ?? 'strategy';
+    if (!drafted.has(key)) {
+      const phase = part ?? DRAFTS[draft.phase] ?? 'planning';
+      // A part is drafted under the strategy that plays; a strategy field is the engine's own.
+      drafted.set(key, draftPlaybook({ state, seat, mind: profile.mind, seed: profile.seed, phase, land: profile.land ?? null, ...(part && { strategy: pb.strategy }) }));
+    }
+    return drafted.get(key)!;
+  };
   for (const unit of unitsOf(pb)) {
+    if (!isObject(getAt(pb, unit.slice(0, -1)))) continue;
     const value = getAt(pb, unit);
     const verdict = unitOf(unit, pb);
     const v = 'refused' in verdict ? verdict : verdict.row(value, ctx, unit);
+    const reject = (why: string) => rejected.push({ path: pathOf(unit), to: value, why, i: edits.length });
     if ('refused' in v) {
-      rejected.push({ path: pathOf(unit), to: value, why: v.refused, i: edits.length });
-      if (isOptional(unit)) dropUnit(pb, unit);
+      if (isOptional(unit)) {
+        reject(v.refused);
+        dropUnit(pb, unit);
+        continue;
+      }
+      const engine = engineDraft(unit);
+      // The engine drafts no such field (a good no longer up): its whole part goes.
+      const lacks = unit.findIndex((_, k) => getAt(engine, unit.slice(0, k + 1)) === undefined);
+      if (lacks >= 0) {
+        reject(v.refused);
+        dropUnit(pb, unit.slice(0, lacks + 1));
+        continue;
+      }
+      const plays = structuredClone(getAt(engine, unit));
+      reject(`${v.refused}; the engine's draft ${plays === null || typeof plays !== 'object' ? `plays ${show(plays)}` : 'value plays'}`);
+      putUnit(pb, unit, plays);
     } else if (!same(v.plays, value)) {
-      rejected.push({ path: pathOf(unit), to: value, why: v.why ?? `clamped to ${show(v.plays)}`, i: edits.length });
+      reject(v.why ?? `clamped to ${show(v.plays)}`);
       putUnit(pb, unit, v.plays);
     }
   }
