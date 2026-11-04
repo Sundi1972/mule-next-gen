@@ -3,9 +3,10 @@
  * Governor commissions. The only writer of GameState.colony and, through fundIn and fundOut, of treasury.money.
  * With politics off there is no colony, and the fund moves exactly as it always has, with no ledger.
  */
-import { COLONY, PRESTIGE } from './config.js';
+import { COLONY, GOOD_CONFIG, PRESTIGE } from './config.js';
 import { storeForSale, storeQuotes } from './economy.js';
 import { RuleError } from './errors.js';
+import { PERCENT } from './units.js';
 import type { Colony, FundLedger, FundLine, FundSource, GameState, Good, PrestigeId, Project } from './types.js';
 
 /** The colony at the start of a game played with politics. */
@@ -17,20 +18,31 @@ function emptyLedger(month: number): FundLedger {
   return { month, in: {}, out: {} };
 }
 
-/** A what-if copy may share the colony, so every write copies it first; a new month's first write starts a fresh ledger. */
+/** Each state's own copy of the colony, made at its first write: a what-if copy shares the colony it was made from. */
+const owned = new WeakMap<GameState, Colony>();
+
+/** The state's own colony to write to, copied first if it may be shared; a new month's first write starts a fresh ledger. */
 function edit(state: GameState): Colony {
-  const colony = structuredClone(state.colony!);
+  let colony = state.colony!;
+  if (owned.get(state) !== colony) {
+    colony = structuredClone(colony);
+    owned.set(state, colony);
+    state.colony = colony;
+  }
   if (colony.ledger.month !== state.month) colony.ledger = emptyLedger(state.month);
-  state.colony = colony;
   return colony;
 }
 
 /** Puts money into the colony fund, recorded under where it came from. */
 export function fundIn(state: GameState, source: FundSource, amount: number): void {
+  if (state.colony && amount !== 0) payIn(state, edit(state), source, amount);
+  else state.treasury.money += amount;
+}
+
+/** fundIn on a colony this call already holds for writing. */
+function payIn(state: GameState, colony: Colony, source: FundSource, amount: number): void {
   state.treasury.money += amount;
-  if (!state.colony || amount === 0) return;
-  const ledger = edit(state).ledger;
-  ledger.in[source] = (ledger.in[source] ?? 0) + amount;
+  colony.ledger.in[source] = (colony.ledger.in[source] ?? 0) + amount;
 }
 
 /** Pays out of the colony fund as far as it reaches, never below 0, recorded under what it paid for. Returns what it paid. */
@@ -44,7 +56,7 @@ function take(state: GameState, amount: number): number {
   return paid;
 }
 
-/** fundOut on a colony this call has already copied. */
+/** fundOut on a colony this call already holds for writing. */
 function payOut(state: GameState, colony: Colony, line: FundLine, amount: number): number {
   const paid = take(state, amount);
   if (paid > 0) colony.ledger.out[line] = (colony.ledger.out[line] ?? 0) + paid;
@@ -155,4 +167,64 @@ function fund(state: GameState, colony: Colony, project: Project): void {
   const funded = needs.credits === 0 && Object.keys(needs.goods).length === 0;
   const sited = !PRESTIGE[project.id].needsPlot || project.plot !== null;
   if (funded && sited) Object.assign(project, { stage: 'building', monthsLeft: PRESTIGE[project.id].buildMonths });
+}
+
+/** A good's key as words for a message: rareEarth reads "rare earth". */
+function words(good: Good): string {
+  return good.replace(/[A-Z]/g, (c) => ` ${c.toLowerCase()}`);
+}
+
+const whole = (n: number) => Number.isInteger(n) && n >= 0;
+
+/** A player gives credits and goods toward the object being funded; the plaque and their vote weight count it. See G-5 RULE-23. */
+export function donate(state: GameState, playerId: string, id: PrestigeId, credits: number, goods: Partial<Record<Good, number>> = {}): void {
+  if (!state.colony) throw new RuleError("This game plays without the colony's council");
+  if (state.phase !== 'planning') throw new RuleError('Donate in planning');
+  const project = state.colony.projects.find((p) => p.id === id && p.stage === 'commissioned');
+  if (!project) throw new RuleError('Nothing is being funded');
+  const given = Object.entries(goods) as [Good, number][];
+  if (!whole(credits) || !given.every(([, units]) => whole(units)) || credits + given.reduce((sum, [, units]) => sum + units, 0) === 0) {
+    throw new RuleError('Give at least 1 cr or 1 unit');
+  }
+  const donor = state.players.find((p) => p.id === playerId)!;
+  if (credits > donor.money) throw new RuleError(`You have ${donor.money} cr`);
+  const { name } = PRESTIGE[id];
+  const needs = stillNeeds(project);
+  if (credits > needs.credits) throw new RuleError(`The ${name} needs only ${needs.credits} cr more`);
+  for (const [good, units] of given) {
+    if (units === 0) continue;
+    const missing = needs.goods[good];
+    if (missing === undefined) throw new RuleError(`The ${name} needs no ${words(good)}`);
+    if (units > missing) throw new RuleError(`The ${name} still needs ${missing} ${words(good)}`);
+    if (units > donor.stock[good]) throw new RuleError(`You have ${donor.stock[good]} ${words(good)}`);
+  }
+
+  const colony = edit(state);
+  const target = colony.projects.find((p) => p.id === id)!;
+  donor.money -= credits;
+  payIn(state, colony, 'donation', credits);
+  target.funded.credits += payOut(state, colony, 'project', credits);
+  let value = credits;
+  for (const [good, units] of given) {
+    if (units === 0) continue;
+    donor.stock[good] -= units;
+    target.funded.goods[good] = (target.funded.goods[good] ?? 0) + units;
+    value += units * GOOD_CONFIG[good].refPrice;
+  }
+  target.plaque[playerId] = (target.plaque[playerId] ?? 0) + value;
+  state.treasury.paid[playerId] = (state.treasury.paid[playerId] ?? 0) + value;
+}
+
+/**
+ * At planning's close, before an election still open is closed: whether the sitting Governor's tax promise held this
+ * month. Nothing is recorded while the election is open, since the Governor could not set the tax. See G-5 RULE-24.
+ */
+export function keepPromise(state: GameState): void {
+  const politics = state.politics;
+  if (!state.colony || !politics?.governor || !politics.promise || politics.promiseFrom === null) return;
+  if (politics.election && politics.election.stage !== 'over') return;
+  const tax = Math.round(state.treasury.salesTax * PERCENT);
+  const { promise, promiseFrom: from } = politics;
+  const kept = promise.kind === 'cap' ? tax <= promise.percent : promise.kind === 'lower' ? tax < from : tax === from;
+  edit(state).promises.push({ month: state.month, governor: politics.governor, kind: promise.kind, kept });
 }
