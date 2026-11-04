@@ -77,14 +77,21 @@ export function LandGrant() {
 }
 
 /**
+ * The fewest pips (of 4) the drone line's best good needs to be named "good for". A display threshold, not balance:
+ * groundPips gives Food, Water and Energy a pip even at a raw 0, so a best of 1 is a poor plot, not a good one.
+ */
+const DRONE_GOOD_MIN_PIPS = 2;
+
+/**
  * "Your drone: 12·5 Desert, good for Energy" while the lit plot is one this player's drone surveyed this month (H-3).
  * The goods are the analysis's best, on the pips the ground card and the map draw, so the line names what the map marks.
+ * Below DRONE_GOOD_MIN_PIPS it names none and stops at the plot and its terrain.
  */
 function droneFoundLine(tile: TileView, me: Pick<MyView, 'droneFound'>): string | null {
   if (!tile.ground || !me.droneFound?.some((p) => p.x === tile.x && p.y === tile.y)) return null;
   const pips = (Object.entries(tile.ground) as [Good, number][]).map(([g, n]) => [g, groundPips(g, n)] as const);
   const top = Math.max(0, ...pips.map(([, n]) => n));
-  const best = pips.filter(([, n]) => top > 0 && n === top).map(([g]) => GOOD_NAME[g]);
+  const best = pips.filter(([, n]) => top >= DRONE_GOOD_MIN_PIPS && n === top).map(([g]) => GOOD_NAME[g]);
   const where = `Your drone: ${plotName(tile.x, tile.y)} ${TERRAIN_NAME[tile.terrain]}`;
   return best.length ? `${where}, good for ${best.length > 1 ? `${best.slice(0, -1).join(', ')} and ${best.at(-1)}` : best[0]}` : where;
 }
