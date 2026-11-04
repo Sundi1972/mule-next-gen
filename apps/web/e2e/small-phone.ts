@@ -32,7 +32,12 @@ const WHOLE: AuditScope = { roots: ['[data-testid=game-shell]'], skip: ['[data-t
  * whole stage: at 667 its map tools are 28 px tall and the ballot's ELECTED tag is 9 px, owned by the hub and politics
  * work, so the stage joins this read once those meet B-AC-11.
  */
-const HUB: AuditScope = { roots: [...RAIL.roots, '[data-testid=desks]', '[data-testid=actions]'], skip: RAIL.skip };
+const HUB: AuditScope = {
+  roots: [...RAIL.roots, '[data-testid=desks]', '[data-testid=actions]'],
+  skip: RAIL.skip,
+  // H-9 in the approved mock: folded, the Now card keeps to one line, its long title truncating (whole one tap away).
+  truncates: ['[data-testid=now][aria-expanded=false] [data-testid=now-title]'],
+};
 /**
  * Out on the development map: the rail header and the map. The plot card (the rail's body and its footer) is excluded:
  * it retires in arcade C14, so it is measured and printed, not asserted. The plots are the map's own grid, 13 across
