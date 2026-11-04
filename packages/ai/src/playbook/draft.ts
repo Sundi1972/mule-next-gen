@@ -63,7 +63,8 @@ export interface DraftInput {
   month?: number;
 }
 
-const KINDS: Kind[] = ['builder', 'specialist', 'monopolist', 'landBaron', 'politician', 'spoiler'];
+/** The six plan kinds, in RULE-3's order. */
+export const KINDS: readonly Kind[] = ['builder', 'specialist', 'monopolist', 'landBaron', 'politician', 'spoiler'];
 
 const REASONS: Record<Kind, string> = {
   builder: 'Farms and power first, a full larder, then whatever is left over. Slow and steady keeps a colony fed.',
@@ -73,6 +74,9 @@ const REASONS: Record<Kind, string> = {
   politician: 'Offices pay, and a vote costs less than a MULE. I run for the council.',
   spoiler: 'Whoever leads will find every road blocked. I play to bring them down.',
 };
+
+/** The month the playbook is for: a draft for next month is seeded as next month's. */
+const monthOf = (input: DraftInput, obs: GameState) => input.month ?? obs.month;
 
 /** A pick's seed: the seat's seed, the month and the pick's key, hashed (FNV-1a). */
 function seedOf(input: DraftInput, month: number, key: string): number {
@@ -91,7 +95,7 @@ function pick(input: DraftInput, obs: GameState, kind: DecisionKind, key: string
     month: obs.month,
     maxMonths: obs.maxMonths,
     summary: '',
-    seed: seedOf(input, obs.month, key),
+    seed: seedOf(input, monthOf(input, obs), key),
     pickTolerance: mind.level.pickTolerance,
     tableTalk: [],
   };
@@ -157,7 +161,8 @@ function draftStrategy(input: DraftInput, obs: GameState): Strategy {
     moneyMaker: kind === 'builder' || kind === 'politician' ? null : kind === 'monopolist' ? target : moneyMaker,
     monopolyTarget: kind === 'monopolist' ? target : null,
     cashFloor: Math.min(AI_PLANS.bounds.cashFloorMax, cashReserve(obs, mind)),
-    landTarget: { plots: owned + perMonth * (months - obs.month), byMonth: months },
+    // No more a month than the grants can give (RULE-1 S5), whatever a sweep sets.
+    landTarget: { plots: owned + Math.min(perMonth, GAME.claimsPerGrant) * (months - obs.month), byMonth: months },
     stances: Object.fromEntries(obs.players.filter((p) => p.id !== seat).map((p) => [p.id, kind === 'spoiler' && p.id === leader ? 'target' : 'neutral'])),
     reason: REASONS[kind],
   };
@@ -197,6 +202,8 @@ function pendingPlan(land: LandPick): LandPlan {
   return land.list.options[answered >= 0 ? answered : Math.max(0, at(land.fallback.optionId))]!.action;
 }
 
+/** A MULE's steps in a route: buyMule, outfit, install. */
+const MULE_STEPS = 3; // literal-ok: RULE-1b's MULE is three steps
 const midSeconds = ([lo, hi]: [number, number]) => (lo + hi) / 2 / MS_PER_SECOND; // literal-ok: the midpoint of a range
 
 /**
@@ -219,13 +226,15 @@ function developmentPart(input: DraftInput, obs: GameState): DevelopmentPlay {
   const taps = (midSeconds(d.buyTapMs) + midSeconds(d.outfitMs) + midSeconds(d.installTapMs)) * pace;
   let at: DevPlace = 'store';
   let left = self.devSeconds;
-  for (const plot of analysesWanted(copy, mind, left)) {
+  // Every step fits under the route cap (RULE-1 P8), the pub's included.
+  const cap = AI_PLANS.bounds.routeSteps;
+  for (const plot of analysesWanted(copy, mind, left).slice(0, Math.max(0, cap - 1))) {
     route.push({ act: 'analyse', plot });
     left -= walkSeconds(copy, me, at, plot) + analysisSeconds(copy, me) + midSeconds(d.analyseTapMs) * pace;
     at = plot;
   }
-  // On the arcade floor the hand prices the walk by the live floor; the development draft point (PR-3) passes it.
-  for (let k = 0; k < mind.level.mulesPerMonth; k++) {
+  // On the arcade floor the hand prices the walk by the live floor, which this draft does not read.
+  for (let k = 0; k < mind.level.mulesPerMonth && route.length + MULE_STEPS < cap; k++) {
     const mule: DevAction = topPick(input, copy, 'develop', `mule:${k}`, developDecision(copy, mind, k, { at, left, taps }));
     if (mule.kind === 'stop') break;
     const tile = copy.tiles[mule.index]!;
@@ -241,9 +250,9 @@ function developmentPart(input: DraftInput, obs: GameState): DevelopmentPlay {
     left -= walkSeconds(copy, me, at, 'corral') + walkSeconds(copy, me, 'corral', mule.index) + taps;
     at = mule.index;
   }
-  const room = Math.max(0, AI_PLANS.bounds.routeSteps - route.length - 1);
+  const room = Math.max(0, cap - route.length - 1);
   for (const plot of filtersWanted(copy, mind).slice(0, room)) route.push({ act: 'filter', plot });
-  route.push({ act: 'pub' });
+  if (route.length < cap) route.push({ act: 'pub' });
   return { route, timeBudgetMs: obs.players.find((p) => p.id === me)!.devSeconds * MS_PER_SECOND, ifSoldOut: 'pub' };
 }
 
@@ -287,7 +296,7 @@ function goodPart(input: DraftInput, obs: GameState, good: Good): GoodPlay {
 export function draftPlaybook(input: DraftInput): Playbook {
   const obs = observe(input.state, input.seat);
   const strategy = input.strategy ?? draftStrategy(input, obs);
-  const head = { v: 1 as const, seat: input.seat, month: obs.month, phase: input.phase, strategy, by: 'engine' as const };
+  const head = { v: 1 as const, seat: input.seat, month: monthOf(input, obs), phase: input.phase, strategy, by: 'engine' as const };
   if (input.phase === 'planning') return { ...head, planning: {}, landGrant: landGrantPart(input, obs) };
   if (input.phase === 'development') return { ...head, development: developmentPart(input, obs) };
   return { ...head, auction: auctionPart(input, obs) };

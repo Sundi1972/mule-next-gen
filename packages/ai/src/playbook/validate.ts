@@ -22,7 +22,7 @@ import {
 import { outlook } from '../outlook.js';
 import { capCodePoints } from '../text.js';
 import { unitValues, type Mind } from '../value.js';
-import { draftPlaybook, type DraftPhase, type LandPick } from './draft.js';
+import { draftPlaybook, KINDS, type DraftPhase, type LandPick } from './draft.js';
 
 /**
  * The gate every playbook passes before it plays (spec C1, RULE-1, RULE-2): each edit is accepted, clamped to the
@@ -71,13 +71,17 @@ const show = (v: unknown) => (typeof v === 'string' ? v : JSON.stringify(v));
 const ok = (plays: unknown): Verdict => ({ plays });
 const clamped = (plays: unknown, bound: string): Verdict => ({ plays, why: `clamped to ${show(plays)}: ${bound}` });
 const refuse = (refused: string): Verdict => ({ refused });
+/** A list clamped by dropping entries: its why counts them, as a ranking can run to the whole map. */
+const dropped = (kept: unknown[], from: number, keeping: string): Verdict => {
+  const n = from - kept.length;
+  return { plays: kept, why: `clamped: dropped ${n} ${n === 1 ? 'entry' : 'entries'}, keeping ${keeping}` };
+};
 const isObject = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v);
 const oneOf =
   (values: readonly unknown[], why: string): Row =>
   (v) =>
     values.includes(v) ? ok(v) : refuse(why);
 
-const KINDS = ['builder', 'specialist', 'monopolist', 'landBaron', 'politician', 'spoiler'];
 const STANCES = ['ally', 'neutral', 'rival', 'target'];
 const TACTICS = ['hold', 'undercut1', 'yield'];
 const OUTFITS: readonly Outfit[] = [...GOODS, 'greenBelt'];
@@ -233,7 +237,7 @@ const PART_ROWS: Record<'planning' | 'landGrant' | 'development', Record<string,
         return good;
       });
       if (kept.length === 0 && v.length > 0) return refuse('no free plot left to rank');
-      return kept.length === v.length ? ok(v) : clamped(kept, 'free plots, each once, at a whole value of 0 or more');
+      return kept.length === v.length ? ok(v) : dropped(kept, v.length, 'free plots, each once, at a whole value of 0 or more');
     },
     pressShare: (v) => {
       if (!isObject(v) || typeof v.start !== 'number' || typeof v.end !== 'number' || !Number.isFinite(v.start) || !Number.isFinite(v.end)) {
@@ -253,13 +257,13 @@ const PART_ROWS: Record<'planning' | 'landGrant' | 'development', Record<string,
         if (good) seen.add(d.plot);
         return good;
       });
-      return kept.length === v.length ? ok(v) : clamped(kept, 'free, distinct plots, another seat, a cost of 0 or more');
+      return kept.length === v.length ? ok(v) : dropped(kept, v.length, 'free, distinct plots, another seat, a cost of 0 or more');
     },
     planB: (v, ctx) => {
       const plots = plotListOf(v);
       if (!plots) return refuse('not a list of plots');
       const kept = plots.filter((p, i) => isFree(ctx, p) && plots.indexOf(p) === i);
-      return kept.length === plots.length ? ok(v) : clamped(kept, 'free, distinct plots');
+      return kept.length === plots.length ? ok(v) : dropped(kept, plots.length, 'free, distinct plots');
     },
     pair: (v, ctx) => {
       const plots = plotListOf(v);
@@ -374,19 +378,23 @@ function getAt(root: unknown, segs: readonly string[]): unknown {
   return segs.reduce<unknown>((at, k) => (at !== null && typeof at === 'object' && Object.hasOwn(at, k) ? (at as Record<string, unknown>)[k] : undefined), root);
 }
 
-/** Sets a value inside an existing object; false when the path leads nowhere. `-` appends to an array. */
-function setAt(root: unknown, segs: readonly string[], value: unknown): boolean {
+/**
+ * Sets a value at a key the field already holds, or appends to an array (`-`, or the index after its last). Returns
+ * the key it set, or null: an object's own keys only, so never a prototype key, and an array index only as digits.
+ */
+function setAt(root: unknown, segs: readonly string[], value: unknown): string | null {
   const parent = getAt(root, segs.slice(0, -1));
   const key = segs.at(-1)!;
   if (Array.isArray(parent)) {
+    if (key !== '-' && !/^(0|[1-9][0-9]*)$/.test(key)) return null;
     const i = key === '-' ? parent.length : Number(key);
-    if (!Number.isInteger(i) || i < 0 || i > parent.length) return false;
+    if (i > parent.length) return null;
     parent[i] = value;
-    return true;
+    return String(i);
   }
-  if (!isObject(parent)) return false;
+  if (!isObject(parent) || !Object.hasOwn(parent, key)) return null;
   parent[key] = value;
-  return true;
+  return key;
 }
 
 /** Writes a whole field, making the optional objects above it (rivalReads, per). */
@@ -448,7 +456,8 @@ function validate(profile: ValidatorProfile, state: GameState, seat: PlayerId, d
     pb,
     base: pb,
   };
-  const accepted: (Accepted & { i: number })[] = [];
+  /** Each accepted edit, with the keys of the value it set (an append's `-` as the index it took). */
+  const accepted: (Accepted & { i: number; at: string[] })[] = [];
   const rejected: (Rejected & { i: number })[] = [];
 
   const apply = (e: PlanEdit, i: number): void => {
@@ -457,15 +466,18 @@ function validate(profile: ValidatorProfile, state: GameState, seat: PlayerId, d
     const refused = (why: string) => rejected.push({ path: e.path, to: e.to, why, i });
     if ('refused' in u) return void refused(u.refused);
     let value: unknown = structuredClone(e.to);
+    let at = segs!;
     if (segs!.length > u.unit.length) {
       value = structuredClone(getAt(pb, u.unit));
-      if (!setAt(value, segs!.slice(u.unit.length), structuredClone(e.to))) return void refused('no such field');
+      const key = setAt(value, segs!.slice(u.unit.length), structuredClone(e.to));
+      if (key === null) return void refused('no such field');
+      at = [...segs!.slice(0, -1), key];
     }
     const verdict = u.row(value, ctx, u.unit);
     if ('refused' in verdict) return void refused(verdict.refused);
-    const from = getAt(pb, segs!);
+    const from = getAt(pb, at);
     putUnit(pb, u.unit, verdict.plays);
-    accepted.push({ path: e.path, from, to: getAt(pb, segs!), reason: e.reason, i });
+    accepted.push({ path: e.path, from, to: undefined, reason: e.reason, i, at });
     if (verdict.why) refused(verdict.why);
   };
 
@@ -474,7 +486,7 @@ function validate(profile: ValidatorProfile, state: GameState, seat: PlayerId, d
   const phase = DRAFTS[draft.phase];
   const replanned = (['kind', 'moneyMaker', 'monopolyTarget'] as const).some((k) => pb.strategy[k] !== draft.strategy[k]);
   if (replanned && phase) {
-    const redrafted = draftPlaybook({ state, seat, mind: profile.mind, seed: profile.seed, phase, land: profile.land ?? null, strategy: pb.strategy });
+    const redrafted = draftPlaybook({ state, seat, mind: profile.mind, seed: profile.seed, phase, land: profile.land ?? null, strategy: pb.strategy, month: draft.month });
     for (const k of PART_KEYS) if (pb[k] !== undefined && redrafted[k] !== undefined) Object.assign(pb, { [k]: redrafted[k] });
   }
   ctx.base = structuredClone(pb);
@@ -489,7 +501,7 @@ function validate(profile: ValidatorProfile, state: GameState, seat: PlayerId, d
     if (!drafted.has(key)) {
       const phase = part ?? DRAFTS[draft.phase] ?? 'planning';
       // A part is drafted under the strategy that plays; a strategy field is the engine's own.
-      drafted.set(key, draftPlaybook({ state, seat, mind: profile.mind, seed: profile.seed, phase, land: profile.land ?? null, ...(part && { strategy: pb.strategy }) }));
+      drafted.set(key, draftPlaybook({ state, seat, mind: profile.mind, seed: profile.seed, phase, land: profile.land ?? null, month: draft.month, ...(part && { strategy: pb.strategy }) }));
     }
     return drafted.get(key)!;
   };
@@ -523,7 +535,8 @@ function validate(profile: ValidatorProfile, state: GameState, seat: PlayerId, d
   }
 
   const strip = <T extends { i: number }>(xs: T[]) => xs.sort((a, b) => a.i - b.i).map(({ i: _, ...x }) => x);
-  const outEdits = strip(accepted);
+  // Step 6: an accepted edit's `to` is the value that plays; an edit to a field step 5 dropped plays nothing.
+  const outEdits = strip(accepted.flatMap(({ at, ...a }) => (getAt(pb, at) === undefined ? [] : [{ ...a, to: getAt(pb, at) }])));
   const outRejected = strip(rejected);
   pb.by = outEdits.length > 0 ? 'llm' : 'engine';
   if (outEdits.length > 0) pb.edits = outEdits;

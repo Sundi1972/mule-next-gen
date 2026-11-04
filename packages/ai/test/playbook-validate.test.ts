@@ -227,7 +227,9 @@ describe('the validator holds every playbook to RULE-1', () => {
     expect(proto.why).toBe('no such field');
     expect(proto.r.playbook.by).toBe('engine');
     expect(Object.getPrototypeOf(proto.r.playbook.strategy.landTarget)).toBe(Object.prototype);
-    expect(one('planning', '/landGrant/ranked/', { plot: f1, value: 3 })).toMatchObject({ why: 'no such field', plays: draft.landGrant!.ranked });
+    const blank = one('planning', '/landGrant/ranked/', { plot: f1, value: 3 });
+    expect(blank.why).toBe('no such field');
+    expect(blank.r.playbook.landGrant!.ranked).toEqual(draft.landGrant!.ranked);
 
     // Step 3: an edit to kind re-drafts the phase's parts under the edited strategy; a reason edit does not.
     const handed = { ...run('development', []).draft, development: { route: [{ act: 'pub' as const }], timeBudgetMs: 1000, ifSoldOut: 'pub' as const } };
@@ -331,9 +333,9 @@ describe("the engine's own draft passes the gate", () => {
       }
     };
     passes('as configured');
-    // A --set sweep that moves a bound moves the draft with it: a route cap below two MULEs and the pub, and a land
+    // A --set sweep that moves a bound moves the draft with it: a route cap that leaves room for the pub alone, and a land
     // baron's target past what the grants can give.
-    const sweep = ['AI_PLANS.bounds.routeSteps=4', `AI_PLANS.landTarget.perMonth.landBaron=${GAME.claimsPerGrant + 1}`];
+    const sweep = ['AI_PLANS.bounds.routeSteps=1', `AI_PLANS.landTarget.perMonth.landBaron=${GAME.claimsPerGrant + 1}`];
     const saved = [`AI_PLANS.bounds.routeSteps=${AI_PLANS.bounds.routeSteps}`, `AI_PLANS.landTarget.perMonth.landBaron=${AI_PLANS.landTarget.perMonth.landBaron}`];
     applySets(sweep);
     try {

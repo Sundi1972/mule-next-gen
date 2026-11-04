@@ -126,7 +126,7 @@ export class AiSeat {
   draft(state: GameState, phase: DraftPhase, month = state.month): Playbook {
     // Read, never settled: settling would log the land decision before the grant.
     const land = this.landMonth === month ? this.land : null;
-    const drafted = { ...draftPlaybook({ state, seat: this.id, mind: this.mind, seed: this.options.seed, phase, land }), month };
+    const drafted = draftPlaybook({ state, seat: this.id, mind: this.mind, seed: this.options.seed, phase, land, month });
     return validatePlaybook(this.profileFor(month))(state, this.id, drafted, []).playbook;
   }
 
