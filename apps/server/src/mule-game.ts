@@ -693,8 +693,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     // Once in, you wait: the time before month 1's clock is for first MULEs only.
     // A seat in only because it cannot install a first MULE may still buy one; the engine says why it can't ("Not enough
     // money"), not that it waits.
-    const waitsToBuy = intent.type === 'buyMule' && this.cannotInstallFirstMule(seatId);
-    if (this.clockWaits && WAIT_REFUSES.has(intent.type) && !waitsToBuy && this.isIn(seatId)) throw new RuleError("Waiting for the others' first MULEs");
+    const mayBuyWhileWaiting = intent.type === 'buyMule' && this.inOnlyForWantOfAMule(seatId);
+    if (this.clockWaits && WAIT_REFUSES.has(intent.type) && !mayBuyWhileWaiting && this.isIn(seatId)) throw new RuleError("Waiting for the others' first MULEs");
     const to = walkTarget(state, intent);
     if (to === null) {
       this.act(seatId, intent, now);
@@ -915,10 +915,20 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
    * needs no special case: counting a seat in only starts the clock, and it may still buy and install while it runs.
    */
   private isIn(seatId: string): boolean {
+    return this.inForItsTurn(seatId) || this.cannotInstallFirstMule(seatId);
+  }
+
+  /** In for what it did or has: away, Ready, its first MULE installed, its turn over, or no plot. */
+  private inForItsTurn(seatId: string): boolean {
     const state = this.requireState();
     if (this.away.has(seatId) || this.ready.has(seatId)) return true;
     const p = state.players.find((q) => q.id === seatId)!;
-    return p.installedThisTurn || p.doneDeveloping || this.cannotInstallFirstMule(seatId) || !state.tiles.some((t) => t.owner === seatId);
+    return p.installedThisTurn || p.doneDeveloping || !state.tiles.some((t) => t.owner === seatId);
+  }
+
+  /** In only because it can never install a first MULE: such a seat may still buy one while the clock waits. */
+  private inOnlyForWantOfAMule(seatId: string): boolean {
+    return !this.inForItsTurn(seatId) && this.cannotInstallFirstMule(seatId);
   }
 
   /**
@@ -1423,8 +1433,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
 
   /** Why the rules hold back a press the floor would make, or null: in month 1 a seat already in waits (AM-3). */
   private refusal(seatId: string, reach: Reach): string | null {
-    const waitsToBuy = reach.kind === 'buy' && this.cannotInstallFirstMule(seatId);
-    return this.clockWaits && WAIT_REFUSES_REACH.has(reach.kind) && !waitsToBuy && this.isIn(seatId) ? WAITING_FOR_FIRST_MULES : null;
+    const mayBuyWhileWaiting = reach.kind === 'buy' && this.inOnlyForWantOfAMule(seatId);
+    return this.clockWaits && WAIT_REFUSES_REACH.has(reach.kind) && !mayBuyWhileWaiting && this.isIn(seatId) ? WAITING_FOR_FIRST_MULES : null;
   }
 
   /** A seat's button as its view shows it at `at`, epoch ms, compared as text. */
