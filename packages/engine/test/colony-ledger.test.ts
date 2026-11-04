@@ -3,6 +3,7 @@ import {
   advancePhase,
   applyEvents,
   buildEvent,
+  cloneForSim,
   COLONY,
   createGame,
   createRng,
@@ -82,12 +83,17 @@ describe('the colony fund keeps a ledger', () => {
     expect(state.history.at(-1)!).not.toHaveProperty('ledger');
   });
 
-  it("INV-whatif (HC-21): a what-if copy's sale never reaches the real game's ledger", () => {
+  it("INV-whatif (HC-21): a what-if copy's sale never reaches the real game's ledger, and the real game's later sales never reach the copy's", () => {
     const state = newGame();
     advanceTo(state, 'auction');
-    const copy = { ...state, treasury: { ...state.treasury, paid: { ...state.treasury.paid } } };
+    taxSale(state, 'brix', 100);
+    const copy = cloneForSim(state);
+    taxSale(state, 'brix', 100);
+    expect(state.colony!.ledger.in.salesTax).toBe(10);
+    expect(copy.colony!.ledger.in.salesTax, "the real game's write after the copy stays out of it").toBe(5);
     taxSale(copy, 'brix', 200);
-    expect(state.colony!.ledger.in).toEqual({});
+    expect(copy.colony!.ledger.in.salesTax).toBe(15);
+    expect(state.colony!.ledger.in.salesTax, "and the copy's stays out of the real game's").toBe(10);
   });
 
   it("T-AC-28: politics on, each upkeep pays the Federation's grant under 'grant', before the offices are paid; politics off, none", () => {

@@ -121,6 +121,27 @@ describe("C40: the council — the Governor proposes in planning, the next plann
     expect(votesOpen(state)).toBe(true);
   });
 
+  it("T-AC-40 (RULE-40): a cast ballot is Done, so the ballot closes once every player has voted", () => {
+    const state = governed();
+    proposeLaw(state, 'lena', LAND_10);
+    toTheBallot(state);
+    for (const id of SEATS) castLawVote(state, id, true);
+    stepVotes(state, 0);
+    expect(state.politics!.council!.stage).toBe('reveal');
+  });
+
+  it('T-AC-40 (RULE-40): a proposal not balloted by the time its next planning closes is dropped, not carried to a later month', () => {
+    const state = governed();
+    state.month = POLITICS.electionMonths[1]! - 1;
+    proposeLaw(state, 'lena', LAND_10);
+    toTheBallot(state);
+    expect(state.politics!.election?.stage).toBe('announce');
+    closeVotes(state);
+    expect(state.politics!.proposal).toBeNull();
+    toTheBallot(state);
+    expect(state.politics!.council).toBeNull();
+  });
+
   it.each([
     { ballots: { brix: true, ossa: true, kai: false }, passed: true, tie: false },
     { ballots: { brix: false, ossa: false, kai: false }, passed: false, tie: false },
