@@ -20,7 +20,7 @@ import { GOODS, type GameState, type Stock, type Tile } from './types.js';
  * - other players' stock: the colony's holdings that the market's cover
  *   implies, shared evenly among them, except the good on the auction's status
  *   screen, whose rows are public;
- * - other players' analyses, drone orders and MULE in tow (their hunger and sickness are public, Heiko's ruling);
+ * - other players' analyses, drone orders, what their drones found and MULE in tow (their hunger and sickness are public, Heiko's ruling);
  * - the seed, the land grant's coming order and the unannounced ship's
  *   wishlist, which would let a reader see the future;
  * - other players' rows in the history (what they had and made);
@@ -60,7 +60,7 @@ export function observe(state: GameState, playerId: string): GameState {
         const row = status.status.find((r) => r.id === p.id);
         if (row) stock[status.good!] = row.now;
       }
-      Object.assign(p, { analysed: [], droneOrder: [], carriedMule: null, stock });
+      Object.assign(p, { analysed: [], droneOrder: [], droneFound: [], carriedMule: null, stock });
     });
   }
 
@@ -100,7 +100,7 @@ export function cloneForSim(state: GameState): GameState {
     // A what-if never rolls a production event: seeded from the game, it would show the real one ahead of time.
     whatIf: true,
     tiles: state.tiles.map((t) => ({ ...t, ground: { ...t.ground }, traits: t.traits.slice() })),
-    players: state.players.map((p) => ({ ...p, stock: { ...p.stock }, analysed: p.analysed.slice(), droneOrder: p.droneOrder.slice() })),
+    players: state.players.map((p) => ({ ...p, stock: { ...p.stock }, analysed: p.analysed.slice(), droneOrder: p.droneOrder.slice(), droneFound: p.droneFound.slice() })),
     store: {
       ...state.store,
       stock: { ...state.store.stock },
@@ -111,6 +111,8 @@ export function cloneForSim(state: GameState): GameState {
     treasury: { ...state.treasury, paid: { ...state.treasury.paid } },
     ship: { ...state.ship, goods: state.ship.goods.slice(), hold: { ...state.ship.hold }, bought: { ...state.ship.bought } },
     grant: state.grant ? { ...state.grant, order: state.grant.order.slice() } : null,
+    // Its own month list: nothing a what-if fires may reach the real game's.
+    monthEvents: state.monthEvents.slice(),
     history: state.history.slice(-2), // literal-ok: the last two reports, the window nextPostedPrice's at(-2) reads
     auction: state.auction ? structuredClone(state.auction) : null,
     listings: structuredClone(state.listings),

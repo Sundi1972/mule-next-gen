@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { advancePhase, createGame, expectedGround, isGameOver, observe, stepAuction, WALK, type Trade } from '@mule/engine';
+import { advancePhase, createGame, DEV_STEER, expectedGround, isGameOver, observe, stepAuction, WALK, type Trade } from '@mule/engine';
 import { applyAction, playGame } from '../src/play.js';
 import { AiSeat } from '../src/seat.js';
 import type { DecisionRecord } from '../src/brain.js';
@@ -99,22 +99,37 @@ describe('AI seats at the auction', () => {
 });
 
 describe('headless games', () => {
-  it('play a full game to the end without broken prices, and replay exactly from the seed', () => {
-    const run = () => playGame(7, simSeats(4, 'trader', 7));
-    const { state, decisions } = run();
-    expect(isGameOver(state)).toBe(true);
-    expect(state.phase).toBe('gameOver');
-    expect(decisions).toBeGreaterThan(0);
-    // The store never runs out of money, so its capital is a running total that may go negative, never broken.
-    expect(Number.isFinite(state.store.capital)).toBe(true);
-    for (const report of state.history) {
-      for (const price of Object.values(report.prices)) {
-        expect(price).toBeGreaterThan(0);
-        expect(Number.isFinite(price)).toBe(true);
-      }
+  // Arcade C9/C10's pin: the same with development walked on the arcade floor (DEV_STEER.on) as with today's walk.
+  it.each([false, true])('play a full game to the end without broken prices, and replay exactly from the seed (DEV_STEER.on %s)', (on) => {
+    const saved = DEV_STEER.on;
+    DEV_STEER.on = on;
+    try {
+      playsAndReplays();
+    } finally {
+      DEV_STEER.on = saved;
     }
-    expect(state.tiles.some((t) => t.owner && t.outfit)).toBe(true);
-    const again = run().state;
-    expect(again.players.map((p) => p.money)).toEqual(state.players.map((p) => p.money));
   }, 30_000); // plays two full games with look-ahead seats: about 4-5 s locally, so vitest's 5 s default flakes on slow runners
 });
+
+function playsAndReplays(): void {
+  const run = () => playGame(7, simSeats(4, 'trader', 7));
+  const { state, decisions, turns } = run();
+  // On the floor the sim records every seat's turn; on today's walk none.
+  expect(turns.length > 0).toBe(DEV_STEER.on);
+  expect(isGameOver(state)).toBe(true);
+  expect(state.phase).toBe('gameOver');
+  expect(decisions).toBeGreaterThan(0);
+  // The store never runs out of money, so its capital is a running total that may go negative, never broken.
+  expect(Number.isFinite(state.store.capital)).toBe(true);
+  for (const report of state.history) {
+    for (const price of Object.values(report.prices)) {
+      expect(price).toBeGreaterThan(0);
+      expect(Number.isFinite(price)).toBe(true);
+    }
+  }
+  expect(state.tiles.some((t) => t.owner && t.outfit)).toBe(true);
+  const again = run();
+  expect(again.state.players.map((p) => p.money)).toEqual(state.players.map((p) => p.money));
+  expect(again.state.tiles.map((t) => [t.owner, t.outfit])).toEqual(state.tiles.map((t) => [t.owner, t.outfit]));
+  expect(again.turns).toEqual(turns);
+}

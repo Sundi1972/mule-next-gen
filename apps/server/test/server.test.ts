@@ -36,6 +36,59 @@ async function screen(url: string) {
 }
 
 describe('game server', () => {
+  it("close() disposes every live room, so no game's timers outlive the server", async () => {
+    await start();
+    const rooms = [running!.registry.create(), running!.registry.create()];
+    const disposed: string[] = [];
+    for (const room of rooms) {
+      const dispose = room.dispose.bind(room);
+      room.dispose = () => {
+        disposed.push(room.code);
+        dispose();
+      };
+    }
+    await running!.close();
+    running = null;
+    expect(disposed.sort()).toEqual(rooms.map((r) => r.code).sort());
+  });
+
+  it('close() still disposes the other rooms when one room fails to dispose, and resolves', async () => {
+    await start();
+    const [bad, good] = [running!.registry.create(), running!.registry.create()];
+    bad.dispose = () => {
+      throw new Error('a game that will not stop');
+    };
+    let goodDisposed = false;
+    const dispose = good.dispose.bind(good);
+    good.dispose = () => {
+      goodDisposed = true;
+      dispose();
+    };
+    await running!.close();
+    running = null;
+    expect(goodDisposed, 'the room after the failing one is disposed too').toBe(true);
+  });
+
+  it('after close(), a started game holds no timers, even once its phones\' sockets have closed (a late leave reaches no game)', async () => {
+    const { http, ws } = await start();
+    const { code } = (await (await fetch(`${http}/rooms`, { method: 'POST' })).json()) as { code: string };
+    const heiko = await screen(ws);
+    heiko.send({ t: 'join', code, name: 'Heiko' });
+    await heiko.waitFor('welcome');
+    heiko.send({ t: 'addAi' });
+    heiko.send({ t: 'start' });
+    await heiko.waitFor('view', (m) => m.view.status === 'playing');
+    const room = running!.registry.get(code)!;
+    const timers = () => (room as unknown as { timers: Set<unknown> }).timers.size;
+    const closed = new Promise((r) => heiko.socket.once('close', r));
+    await running!.close();
+    running = null;
+    await closed;
+    // The socket's close reached the server too: give its leave a turn of the event loop to run.
+    await new Promise((r) => setTimeout(r, 20));
+    expect(timers(), 'no timer of the game outlives close()').toBe(0);
+  });
+
   it('runs a room with two phones, an AI and a big screen', async () => {
     const { http, ws } = await start();
     const { code } = (await (await fetch(`${http}/rooms`, { method: 'POST' })).json()) as { code: string };

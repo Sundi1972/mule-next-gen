@@ -2,18 +2,22 @@ import { DEV_WALK, DEVELOPMENT, GAME, POLITICS } from '@mule/engine';
 import type { DealView, MuleView, TableView } from '@mule/protocol';
 import { AirGauge, Button, cx, GOOD_NAME, GoodTag, HoloMap, PaceList, PlayerMark, SeatSpeciesProvider, SharedClock, StoreInterior, TERRAIN_NAME, TimeBar, Timer, WalkBoard, type CreatureWrap } from '@mule/ui';
 import { Speaker, TvTicker, tvSpeakerAt } from '../chat/Chat';
-import { boardWalkers, dealLine, newestFirst, shipWants, ShipWants, SIDE_WORD, skippedLine, StatusTable, StoreBox, TvReadout, type DealRow } from '../components/AuctionParts';
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { boardWalkers, dealLine, newestFirst, shipWants, ShipWants, SIDE_WORD, skippedLine, StatusTable, StoreBox, TvReadout, WaitingToPick, type DealRow } from '../components/AuctionParts';
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { CollapseBanner, ColonyPanel, LeagueTable, WinnerCard } from '../components/MonthEnd';
 import { joinUrl, Qr } from '../components/Qr';
 import { Scaled } from '../components/Scaled';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { fmt, lobbySeatSpecies, mapTiles, PHASE_NAME, plotName, seatSpecies, secondsUntil, slotOf, standings, tileAt, toSlot } from '../game/derive';
-import { inCollapse } from '../game/month-end';
+import { inCollapse, ordinal } from '../game/month-end';
 import { useAuctionSound } from '../game/sound';
 import { useClient, useClientState, useServerNow } from '../net/react';
-import { connectedIn, hostMayContinue, readyRows, stillPlanning } from '../phone/hub/ready';
+import { connectedIn, hostMayContinue, pickedIn, readyRows, SIDE_PICK_WORDS, stillPicking, stillPlanning } from '../phone/hub/ready';
 import { ReadyCount, WaitingFor } from '../phone/hub/ReadyBar';
+import { steering } from '../phone/arcade/route';
+import { TvDevelop } from './TvDevelop';
+import { placesOf } from '../phone/hub/standing';
+import { TvEventLayer } from '../events/TvEventLayer';
 import { TvElection } from './TvElection';
 import { TvGovernorPromise } from './TvGovernorPromise';
 import { TvLandAuction } from './TvLandAuction';
@@ -31,7 +35,7 @@ export function TableApp({ room }: { room: string }) {
   if (!room || notice) screen = <PickRoom notice={notice} />;
   else if (!view || role !== 'board') screen = <Waiting code={room} />;
   else if (view.status === 'lobby' || !view.game) screen = <TvLobby table={view} />;
-  else screen = <TvGame table={view} game={view.game} />;
+  else screen = <TvEventLayer game={view.game}><TvGame table={view} game={view.game} /></TvEventLayer>;
 
   return (
     <div className="h-dvh bg-table">
@@ -171,6 +175,7 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
       </SeatSpeciesProvider>
     );
   if (phase === 'planning' && game.politics?.election && game.politics.election.stage !== 'over') return <TvElection table={table} game={game} />;
+  if (phase === 'development' && steering(game)) return <TvDevelop game={game} />;
 
   let side: ReactNode;
   if (phase === 'landGrant')
@@ -222,6 +227,7 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
     const host = game.players.find((p) => p.id === table.hostId);
     // The host's Continue goes on without the others in planning proper and the election's announce and ballot; never in its ceremony.
     const hostCanContinue = !!host && (host.ready || host.isAi) && hostMayContinue(game);
+    const places = placesOf(game);
     side = (
       <>
         {/* This branch also draws an auction or land auction for the moment before its data arrives; Ready means Done there. */}
@@ -248,12 +254,24 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
               if (row.kind === 'ais')
                 return (
                   <li key="ais" className="flex items-center gap-3 opacity-60" data-testid="tv-ready-ais" data-count={row.seats.length}>
+                    {/* The place column stays, empty, so the row lines up; each AI's place follows its name. */}
+                    <span aria-hidden className="w-9 shrink-0" />
                     <span className="flex shrink-0 -space-x-1.5">
                       {row.seats.map((s) => (
                         <PlayerMark key={s.id} slot={toSlot(s.slot)} size={22} />
                       ))}
                     </span>
-                    <span className="flex-1 truncate font-display text-xl font-semibold">{row.seats.map((s) => s.name).join(', ')}</span>
+                    <span className="flex-1 truncate font-display text-xl font-semibold">
+                      {row.seats.map((s, i) => (
+                        <Fragment key={s.id}>
+                          {i > 0 && ', '}
+                          {s.name}{' '}
+                          <span data-num className="font-mono text-sm font-normal text-ink-3" data-testid={`tv-rank-${s.id}`}>
+                            {ordinal(places.get(s.id) ?? game.players.length)}
+                          </span>
+                        </Fragment>
+                      ))}
+                    </span>
                     <span className="font-mono text-sm text-ink-3">{row.seats.length} AI · READY</span>
                   </li>
                 );
@@ -262,6 +280,10 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
               const state = s.isAi ? 'AI · READY' : s.ready ? 'READY' : isAway ? 'AWAY · PLANNING' : 'PLANNING';
               return (
                 <li key={s.id} className={cx('flex items-center gap-3', (s.isAi || s.ready) && 'opacity-60')}>
+                  {/* Their place by Worth, the number everyone sees. */}
+                  <span data-num className="w-9 shrink-0 font-mono text-sm text-ink-3" data-testid={`tv-rank-${s.id}`}>
+                    {ordinal(places.get(s.id) ?? game.players.length)}
+                  </span>
                   <PlayerMark slot={toSlot(s.slot)} size={22} glow={!(s.isAi || s.ready)} />
                   <span className="flex-1 truncate font-display text-xl font-semibold">{s.name}</span>
                   <span className={cx('font-mono text-sm', isAway ? 'text-warn' : s.ready || s.isAi ? 'text-ink-3' : 'text-holo')}>{state}</span>
@@ -423,27 +445,42 @@ function useNewestFirst(deals: DealView[]): DealRow[] {
  * The auction on the big screen: before each good, the status table and everyone's side, which is public;
  * then the whole board, large, with every creature walking live.
  */
-function TvAuction({ table, game, auction }: { table: TableView<MuleView>; game: MuleView; auction: NonNullable<MuleView['auction']> }) {
+export function TvAuction({ table, game, auction }: { table: TableView<MuleView>; game: MuleView; auction: NonNullable<MuleView['auction']> }) {
   useAuctionSound(auction);
   const skipped = skippedLine(auction);
+  // The status line names the skipped goods only, no reasons, so it fits its one line (WS6 ruling on #204).
+  const skippedGoods = auction.skipped.length > 0 ? `Skipped: ${auction.skipped.map((s) => GOOD_NAME[s.good]).join(', ')}` : null;
   const walkers = boardWalkers(game, auction);
   const stock = auction.storeForSale;
   const deals = useNewestFirst(auction.deals);
   const status = auction.stage === 'status';
-  const stageName = status ? 'Buy or sell?' : auction.slowed ? 'Trading · clock slowed' : 'Walk';
+  // The close stage (A-5, G-5): the board holds still while each phone shows its receipt; "closed" is the receipt's word.
+  const closed = auction.stage === 'close';
+  const stageName = status ? 'Buy or sell?' : closed ? 'Closed' : auction.slowed ? 'Trading · clock slowed' : 'Walk';
   const ship = shipWants(game, auction);
+  // The side pick has no clock (A-7): who has picked, who is still picking, and the host who can move on for them.
+  const connected = connectedIn(table.seats);
+  const waiting = status ? stillPicking(game, connected) : [];
+  const host = game.players.find((p) => p.id === table.hostId);
+  const picked = game.players.map((p) => ({ ...p, ready: pickedIn(game, p.id) }));
   return (
-    <div className="flex h-[720px] w-[1280px] flex-col gap-4 bg-table px-10 py-8 text-ink" data-phase="auction" data-testid={status ? 'tv-status' : 'tv-walk'}>
+    <div className="flex h-[720px] w-[1280px] flex-col gap-4 bg-table px-10 py-8 text-ink" data-phase="auction" data-stage={auction.stage} data-testid={status ? 'tv-status' : 'tv-walk'}>
       <TvHeader game={game} title={`Auction · ${GOOD_NAME[auction.good]}`} />
       <div className="flex min-h-0 flex-1 gap-6">
         <div className={cx('flex min-w-0 flex-1 flex-col', status ? 'gap-3' : 'gap-2')}>
           {status ? (
-            // On the status stage the skipped words share the time bar's row, so the ship panel keeps its room.
-            <div className="flex shrink-0 items-center gap-4">
-              <TimeBar size="tv" seconds={auction.seconds} total={auction.total} slowed={auction.slowed} className="min-w-0 flex-1" />
-              {skipped && (
+            // On the status stage the skipped words share the picked count's row, so the ship panel keeps its room.
+            <div className="flex shrink-0 items-center gap-4" data-testid="tv-pick-bar">
+              {/* The time bar's height, not ReadyCount's TV chip: a taller row pushes the ship panel off the screen. */}
+              <span className="flex h-8 shrink-0 items-center rounded-chip border border-holo-line bg-holo-soft px-4 font-mono text-2xl font-bold leading-none text-holo" data-testid="ready-count">
+                {picked.filter((p) => p.isAi || p.ready).length} / {picked.length} PICKED
+              </span>
+              <span className="min-w-0 flex-1 truncate text-2xl text-ink-2">
+                <strong className="font-semibold text-ink">No clock:</strong> {SIDE_PICK_WORDS.noClock}
+              </span>
+              {skippedGoods && (
                 <p className="min-w-0 max-w-[45%] truncate font-mono text-base text-ink-3" data-testid="skipped">
-                  {skipped}
+                  {skippedGoods}
                 </p>
               )}
             </div>
@@ -482,14 +519,16 @@ function TvAuction({ table, game, auction }: { table: TableView<MuleView>; game:
               storeStock={stock}
               marks={{ ask: true, bid: true }}
               wrapCreature={tvSpeakerAt}
-              className="min-h-0 flex-1"
+              className={cx('min-h-0 flex-1', closed && 'opacity-40')}
             />
           )}
         </div>
         <div className="flex w-[300px] shrink-0 flex-col gap-4">
           <div className="flex flex-col gap-1 rounded-panel border-2 border-holo bg-holo-soft p-4 shadow-glow">
             <GoodTag good={auction.good} name className="text-2xl" />
-            <span className={cx('font-display text-xl font-semibold', auction.slowed && 'text-warn')}>{stageName}</span>
+            <span className={cx('font-display text-xl font-semibold', auction.slowed && 'text-warn')} data-testid="tv-stage">
+              {stageName}
+            </span>
             {!status && (
               <span data-num className="font-mono text-lg text-ink-2" data-testid="tv-units">
                 {auction.units} unit{auction.units === 1 ? '' : 's'} traded
@@ -500,12 +539,14 @@ function TvAuction({ table, game, auction }: { table: TableView<MuleView>; game:
             <ul className="flex flex-col gap-2" data-testid="tv-picked">
               {game.players.map((p) => {
                 const s = auction.walkers.find((w) => w.id === p.id)?.side;
+                const done = p.isAi || pickedIn(game, p.id);
+                const away = !connected(p.id);
                 return (
-                  <li key={p.id} className="flex items-center gap-3">
-                    <PlayerMark slot={slotOf(game, p.id) ?? 0} size={22} />
+                  <li key={p.id} className="flex items-center gap-3" data-testid={`tv-picked-${p.id}`}>
+                    <PlayerMark slot={slotOf(game, p.id) ?? 0} size={22} glow={!done} />
                     <span className="flex-1 truncate font-display text-xl font-semibold">{p.name}</span>
-                    <span className={cx('font-mono text-lg font-bold', s === 'seller' ? 'text-rise' : s === 'buyer' ? 'text-fall' : 'text-ink-3')}>
-                      {s === undefined ? '…' : SIDE_WORD[s].toUpperCase()}
+                    <span className={cx('font-mono text-lg font-bold', !done ? (away ? 'text-warn' : 'text-holo') : s === 'seller' ? 'text-rise' : s === 'buyer' ? 'text-fall' : 'text-ink-3')}>
+                      {!done ? (away ? 'AWAY · PICKING' : 'PICKING') : `${SIDE_WORD[s ?? 'pass'].toUpperCase()} ✓`}
                     </span>
                   </li>
                 );
@@ -514,6 +555,12 @@ function TvAuction({ table, game, auction }: { table: TableView<MuleView>; game:
           ) : (
             <div className="shrink-0 rounded-panel border border-holo-line bg-panel p-3">
               <TvReadout view={game} auction={auction} />
+            </div>
+          )}
+          {waiting.length > 0 && (
+            <div className="flex flex-col gap-2 rounded-panel border-2 border-holo bg-holo-soft p-4 shadow-glow" data-testid="tv-waiting">
+              <WaitingToPick seats={waiting} tv />
+              {host && <span className="text-lg text-ink-2">{host.name}, the host, can move on for them.</span>}
             </div>
           )}
           {!status && (
@@ -549,7 +596,7 @@ function TvAuction({ table, game, auction }: { table: TableView<MuleView>; game:
           </ul>
           <p className={cx('mt-auto text-base leading-snug text-ink-2', auction.deals.length > 0 && 'hidden')}>
             {status
-              ? 'Your side is picked for you from what you have and need. Change it on your phone before the bell.'
+              ? `Pick your side on your phone. No clock: ${SIDE_PICK_WORDS.noClock}`
               : 'Sellers push the red line down, buyers push the green line up. When the two lines meet, the goods change hands.'}
           </p>
           <span className="truncate font-mono text-sm text-ink-3">

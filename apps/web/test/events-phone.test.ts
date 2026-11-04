@@ -268,6 +268,7 @@ describe('the phone plays the show alone (C7)', () => {
     const later = words(await render(1, BUMPER_AT + 0.5, grazed));
     expect(later, "the drought's line in the rail").toMatch(/Drought not you/);
     expect(later, 'no +0 anywhere').not.toMatch(/[+−-]0\b/);
+    expect(later, "the rail's short figure: no 'for you'").toMatch(/Dust storm [−-]2 Energy(?! for you)/);
     const grazedCard = await render(1, BUMPER_AT - 0.1, grazed);
     expect(card(grazedCard)).toEqual({ event: 'drought', at: 'you' });
     expect(text(grazedCard, 'phone-miss'), 'a zero hit: the miss card').toContain('Your plots are clear of it.');
@@ -298,6 +299,7 @@ describe('the phone plays the show alone (C7)', () => {
     // result holds until the phase ends (AM-8).
     const solo = await render(0, DUST_AT + 1);
     expect(tag(solo, 'event-map-box')).toContain('data-reduced="false"');
+    expect(text(await render(0, INTRO_AT + 0.5), 'intro-card'), "the intro card names the phase's month").toMatch(/^ ?This month 3 things happen this month/);
     const story = await Promise.all(frames(BUMPER_AT, EVENTS_END, 0.25).map((t) => render(0, t)));
     expect(story.some(camera), 'alone, the camera flies in').toBe(true);
     expect(await render(0, DUST_AT + 0.4, quiet), 'a quiet month').toContain('Your plots are working');
@@ -312,6 +314,11 @@ describe('the phone plays the show alone (C7)', () => {
     const hint = (html: string) => text(inside(html, 'actions'), 'skip-hint');
     expect(hint(await render(0, DUST_AT + 0.5))).toContain('tap the map to skip');
     expect(hint(await render(0, DUST_AT + 2.6))).toContain('tap the map: next');
+    // The hint and the rail agree on every frame: "skip" exactly while the rail still shows the event playing.
+    for (const t of frames(DUST_AT, EVENTS_END, 0.05)) {
+      const html = await render(0, t);
+      expect(hint(html).includes('to skip'), `the hint says skip at ${t.toFixed(3)} iff the rail has no result yet`).toBe(card(html) === null);
+    }
     for (const [boards, t] of [
       [0, INTRO_AT + 0.2],
       [0, EVENTS_END + 0.5],
@@ -353,6 +360,18 @@ describe('the phone plays the show alone (C7)', () => {
     expect(card(phone.html()), 'at the phase end').toEqual({ event: 'bumperHarvest', at: 'you' });
     expect(text(phone.html(), 'harvest'), 'at the phase end').toContain('+3');
     expect(sent, 'a skip is this phone’s alone: nothing is sent').toEqual([]);
+  });
+
+  it("T-AC-12: a cavern collapse on your own plot says it caved in on your phone, never that it missed you", async () => {
+    // The server's collapse hit changes no output (delta 0); what it changes is the plot itself.
+    const collapse: ProductionEventView = { ...fired('cavernCollapse', 'Cavern collapse', 'bad', [1, 0], []), scope: 'personal', player: LENA, hits: [{ x: 1, y: 0, order: 0, delta: 0, was: 'crystalCavern', becomes: 'plain' }] };
+    const month = monthOf([collapse]);
+    for (const boards of [0, 1]) {
+      const settled = await render(boards, DUST_AT + 2.9, month);
+      expect(card(settled), `boards ${boards}`).toEqual({ event: 'cavernCollapse', at: 'you' });
+      expect(text(settled, 'phone-you'), `boards ${boards}`).toContain('Your cavern caved in');
+      expect(settled, `boards ${boards}: not a miss`).not.toContain('data-testid="phone-miss"');
+    }
   });
 
   it('B-AC-2: the harvest says its goods are flying home only once they fly, after the last event, never while one plays', async () => {

@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
   configSnapshot,
+  RuleError,
   score,
   stableJson,
   type CallKind,
@@ -16,7 +17,7 @@ import {
 } from '@mule/engine';
 import type { Choice } from '@mule/ai';
 import type { MuleIntent, MuleView } from '@mule/protocol';
-import type { Game, GameContext, SeatInfo } from '@tabletop/core';
+import { TableError, type Game, type GameContext, type SeatInfo } from '@tabletop/core';
 import { createBrain, type BrainService } from './brain/index.js';
 import { ledgerGameId, MuleGame, type Notice, type PlaybookNote } from './mule-game.js';
 
@@ -33,6 +34,8 @@ type NewStep = StepEvent extends infer E ? (E extends StepEvent ? Omit<E, 'at' |
 export interface RecordOptions {
   maxMonths?: number;
   phaseScale?: number;
+  /** The game steered its development; the replay steers it too. */
+  devSteer?: boolean;
   politics: boolean;
 }
 
@@ -45,8 +48,18 @@ function sha256(text: string): string {
   return createHash('sha256').update(text).digest('hex');
 }
 
+/**
+ * An absolute path in a message: a POSIX `/…` run not inside a word, a number or a URL, or a Windows `C:\…` run. It
+ * ends at whitespace, a quote, or punctuation that closes it in a sentence.
+ */
+const ABSOLUTE_PATH = /(?<![\w:/.~-])\/[^\s'"`,;()<>]+|\b[A-Za-z]:\\[^\s'"`,;()<>]*/g;
+
+/**
+ * What a record keeps of a thrown error (a refusal, a failed brain call, a game error): its message only, every
+ * absolute path in it replaced by `<path>` so no machine's folders reach the file, then cut at MESSAGE_CHARS.
+ */
 export function messageOf(err: unknown): string {
-  return (err instanceof Error ? err.message : String(err)).slice(0, MESSAGE_CHARS);
+  return (err instanceof Error ? err.message : String(err)).replace(ABSOLUTE_PATH, '<path>').slice(0, MESSAGE_CHARS);
 }
 
 function recordedChoice({ optionId, line, by, note }: Choice): RecordedChoice {
@@ -56,6 +69,22 @@ function recordedChoice({ optionId, line, by, note }: Choice): RecordedChoice {
 export function outcomeOf(state: GameState, seats: readonly { id: string }[]): NonNullable<MuleRecord['outcome']> {
   return { scores: Object.fromEntries(seats.map((s) => [s.id, score(state, s.id)])), stateHash: stateHash(state) };
 }
+
+/**
+ * The outcome of a game a game error ended (AM-5): the state's hash as the error left it, and its scores, or none if
+ * scoring that state throws too. A game that never started hashes as null.
+ */
+export function crashOutcomeOf(state: GameState | null, seats: readonly { id: string }[]): NonNullable<MuleRecord['outcome']> {
+  const hash = sha256(stableJson(state));
+  try {
+    return { ...outcomeOf(state!, seats), stateHash: hash };
+  } catch {
+    return { stateHash: hash };
+  }
+}
+
+/** The server's own user errors: a refusal shown to the player, never a game error that ends the room. */
+export const isUserError = (err: unknown): boolean => err instanceof RuleError || err instanceof TableError;
 
 /**
  * Keeps one game's record in memory: wraps its context, the game and its brain, and writes the file once the game is
@@ -73,6 +102,7 @@ export class Recorder {
   private timers = 0;
   private viewing = 0;
   private readonly calls = new Map<string, number>();
+  private stateOf: () => GameState | null = () => null;
 
   constructor(
     private readonly inner: GameContext,
@@ -80,45 +110,50 @@ export class Recorder {
     options: RecordOptions,
     brain: BrainService,
     private readonly dir: string | null,
+    private readonly userError: (err: unknown) => boolean = isUserError,
   ) {
     this.record = { v: 1, seed, configFingerprint: configFingerprint(), options: { ...options }, seats: [], t0: inner.now(), events: [] };
     this.ctx = this.wrapContext(inner);
     this.brain = this.wrapBrain(brain);
   }
 
-  /** The game as the room should host it: every call opens a step, except `viewFor`. A heard line keeps no words. */
-  wrap(game: Game<MuleIntent, MuleView>): Game<MuleIntent, MuleView> {
+  /**
+   * The game as the room should host it: every call opens a step, except `viewFor`. A heard line keeps no words.
+   * `stateOf` reads the game's state, for the record of a game an error ends.
+   */
+  wrap(game: Game<MuleIntent, MuleView>, stateOf: () => GameState | null = () => null): Game<MuleIntent, MuleView> {
+    this.stateOf = stateOf;
     return {
       start: (seats: SeatInfo[]) => {
         this.begin(() => ({ type: 'start' }));
         this.guard(() => {
           this.record.seats = seats.map(({ id, name, isAi, color, pick }) => ({ id, name, isAi, color, ...(pick !== undefined ? { pick } : {}), smart: false }));
         });
-        game.start(seats);
+        this.run(() => game.start(seats));
       },
       handle: (seat, intent) => {
         this.begin(() => ({ type: 'intent', seat, intent: structuredClone(intent) }));
         const step = this.open;
-        try {
-          game.handle(seat, intent);
-        } catch (err) {
-          this.guard(() => {
+        this.run(
+          () => game.handle(seat, intent),
+          (err) => {
             if (step?.type === 'intent') step.refused = messageOf(err);
-          });
-          throw err;
-        }
+          },
+        );
       },
+      // The room asks before it sends views after an intent; it is the game's own answer, not an input.
+      quiet: (intent) => game.quiet?.(intent) ?? false,
       connectionChanged: (seat, connected) => {
         this.begin(() => ({ type: 'connection', seat, connected }));
-        game.connectionChanged?.(seat, connected);
+        this.run(() => game.connectionChanged?.(seat, connected));
       },
       seatMoved: (seat) => {
         this.begin(() => ({ type: 'moved', seat }));
-        game.seatMoved?.(seat);
+        this.run(() => game.seatMoved?.(seat));
       },
       heard: (from, text, to) => {
         this.begin(() => ({ type: 'heard', from, ...(to ? { to } : {}) }));
-        game.heard?.(from, text, to);
+        this.run(() => game.heard?.(from, text, to));
       },
       viewFor: (seat) => {
         this.viewing++;
@@ -130,6 +165,30 @@ export class Recorder {
       },
       dispose: () => game.dispose?.(),
     };
+  }
+
+  /**
+   * Runs one step of the game that the room calls. A user error is the player's refusal (`refused`, for an intent);
+   * any other throw ends the room (it reaches the room's onError and fail()), so the record is written as it stands,
+   * `ended: 'error'`. Either way the throw goes on to the room unchanged.
+   */
+  private run(step: () => void, refused?: (err: unknown) => void): void {
+    try {
+      step();
+    } catch (err) {
+      const user = this.userError(err);
+      this.guard(() => (user ? refused?.(err) : this.crashed(err)));
+      throw err;
+    }
+  }
+
+  /** A game error ended the room: the record closes now, with the state the error left (AM-5). */
+  private crashed(err: unknown): void {
+    if (this.finished) return;
+    this.record.ended = 'error';
+    this.record.error = messageOf(err);
+    this.record.outcome = crashOutcomeOf(this.stateOf(), this.record.seats);
+    this.close();
   }
 
   /** Sets the outcome; the file is written once the step that ended the game has run to its end. */
@@ -213,7 +272,13 @@ export class Recorder {
         const timer = this.timers++;
         return inner.schedule(ms, () => {
           this.begin(() => ({ type: 'fire', timer }));
-          fn();
+          // The room fails on any throw from a timer, a user error included: nobody is there to be refused.
+          try {
+            fn();
+          } catch (err) {
+            this.guard(() => this.crashed(err));
+            throw err;
+          }
         });
       },
       changed: () => inner.changed(),
@@ -302,9 +367,11 @@ export function createRecordedGame(args: {
   brain?: BrainService;
   /** Where the file goes at game over; null keeps the record in memory only. */
   dir?: string | null;
+  /** The room's own user-error test: any other throw from a step ends the room and writes the record. */
+  isUserError?: (err: unknown) => boolean;
 }): { game: Game<MuleIntent, MuleView>; recorder: Recorder } {
   const brain = args.brain ?? createBrain({ gameId: ledgerGameId(args.seed, args.ctx.now()) });
-  const recorder = new Recorder(args.ctx, args.seed, args.options, brain, args.dir ?? null);
+  const recorder = new Recorder(args.ctx, args.seed, args.options, brain, args.dir ?? null, args.isUserError);
   const game = new MuleGame(recorder.ctx, args.seed, {
     ...args.options,
     brain: recorder.brain,
@@ -312,5 +379,5 @@ export function createRecordedGame(args: {
     notice: (notice) => recorder.notice(notice),
     recordPlaybook: (entry) => recorder.playbook(entry),
   });
-  return { game: recorder.wrap(game), recorder };
+  return { game: recorder.wrap(game, () => game.stateNow()), recorder };
 }

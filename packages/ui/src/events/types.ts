@@ -1,6 +1,6 @@
-import type { Slot } from '../components/tokens';
+import type { Good, Slot, SpecialKind } from '../components/tokens';
 
-/** The wave-1 events: the engine's EventKey union (packages/engine/src/types.ts), every one fired in production. */
+/** The events the show draws: the engine's EventKey union (packages/engine/src/types.ts). */
 export type ShowEventKey =
   | 'dustStorm'
   | 'drought'
@@ -12,7 +12,22 @@ export type ShowEventKey =
   | 'pestSwarm'
   | 'wildfire'
   | 'bumperHarvest'
-  | 'cavernCollapse';
+  | 'cavernCollapse'
+  | 'federationTax'
+  | 'federationGrant'
+  | 'immigrationWave'
+  | 'inheritance'
+  | 'muleTheft'
+  | 'epidemic'
+  | 'coldSnap'
+  | 'meteorStrike'
+  | 'pirateRaid'
+  | 'storeFire'
+  | 'ratsInSilo'
+  | 'crookedAccountant'
+  | 'packageFromHome'
+  // Not an EventKey: development's sick players, each sent as a bulletin (C11; the protocol's EventView widens to match).
+  | 'sickness';
 
 /** The engine's phases (packages/engine/src/types.ts Phase), so the protocol's views fit without a cast. */
 export type ShowPhase = 'planning' | 'landGrant' | 'landAuction' | 'development' | 'production' | 'auction' | 'upkeep' | 'gameOver';
@@ -24,7 +39,7 @@ export type ShowPhase = 'planning' | 'landGrant' | 'landAuction' | 'development'
 export type ShowWeight = 'headline' | 'spotlight' | 'bulletin';
 
 /**
- * One event as the server sends it (the protocol's ProductionEventView, structurally: @mule/ui does not import the
+ * One event as the server sends it (the protocol's EventView, structurally: @mule/ui does not import the
  * protocol). `playMs` is how long its segment of the show lasts; the show never computes a length of its own.
  */
 export interface ShowEventView {
@@ -36,10 +51,33 @@ export interface ShowEventView {
   scope: 'colony' | 'local' | 'personal';
   origin: { x: number; y: number };
   from?: 'n' | 'e' | 's' | 'w';
-  hits: { x: number; y: number; order: number; delta: number }[];
+  hits: {
+    x: number;
+    y: number;
+    order: number;
+    delta: number;
+    /** The special field the plot had until this hit: the map keeps its badge until the hit lands. */
+    was?: SpecialKind;
+    /** What the plot is after this hit, when the hit changes what it is. */
+    becomes?: 'plain' | 'crater' | 'idle';
+    /** True when the hit destroyed or took the plot's MULE. */
+    muleLost?: true;
+  }[];
+  /** What it changed off the map, in the order it changed it: a player's (by id), the store's or the colony's. */
+  effects?: ShowEffect[];
   phase: ShowPhase;
   weight: ShowWeight;
   playMs: number;
+  /** Whose event it is, when it is one player's and on no plot: a sick player (C11). */
+  player?: string;
+}
+
+/** One change an event made off the map (the protocol's EventEffect, structurally): whose, of what, by how much. */
+export interface ShowEffect {
+  /** A player's id, 'store' or 'colony'. */
+  on: string;
+  what: Good | 'money' | 'mules' | 'colonists' | 'energyNeed';
+  delta: number;
 }
 
 export type ShowHit = ShowEventView['hits'][number];
