@@ -282,8 +282,11 @@ export const MULE = {
 };
 
 export const DEVELOPMENT = {
-  /** Seconds of development, the same for every player: hunger and sickness slow the walk instead (DEV_WALK). */
-  fullSeconds: 50,
+  /**
+   * Seconds of development, the same for every player: hunger and sickness slow the walk instead (DEV_WALK). 60 (Heiko,
+   * 4 Nov), so a starving colonist has the time to put Food on a plot next to the store.
+   */
+  fullSeconds: 60,
   /** Seconds a colonist stands on a plot for a geo analysis. */
   analysisSeconds: 8,
   /** The pub pays base + (start + month * perMonth) * share of time left. */
