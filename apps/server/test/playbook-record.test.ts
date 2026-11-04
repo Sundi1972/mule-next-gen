@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { RuleError, type GameRecord, type GameState } from '@mule/engine';
+import { AI_HANDS, RuleError, type GameRecord, type GameState } from '@mule/engine';
 import type { Decider } from '@mule/ai';
 import type { MuleIntent, MuleView } from '@mule/protocol';
 import { Room, TableError, type ClientEnvelope, type Connection, type GameContext, type ServerEnvelope } from '@tabletop/core';
@@ -42,6 +42,8 @@ const GAME_OPTIONS = { maxMonths: 2, politics: true };
 const STEP_MS = 100;
 const PLANNING_READY_MS = 3_000;
 const GAME_LIMIT_MS = 30 * 60_000;
+/** A good's side pick has no clock (A-7): the phones read it past the AI seats' decision wait, then press Ready. */
+const SIDE_PICK_READ_MS = AI_HANDS.auction.decideWaitMs + 500;
 /** How the Claude stand-in answers each call, in turn: after a delay in ms, or by rejecting at once as a busy decider. */
 const ANSWERS: readonly (number | 'busy')[] = [40, 'busy', 1_300, 260, 3_100, 90, 700];
 const SMART = 's3';
@@ -97,6 +99,8 @@ async function recordedGame(): Promise<MuleRecord> {
 
   const view = () => room.viewFor(null).game!;
   let planningFor = 0;
+  let sidePickFor = 0;
+  let sidePickOf = '';
   let claimed = false;
   for (let elapsed = 0; elapsed < GAME_LIMIT_MS && !view().finished; elapsed += STEP_MS) {
     await vi.advanceTimersByTimeAsync(STEP_MS);
@@ -107,6 +111,12 @@ async function recordedGame(): Promise<MuleRecord> {
       for (const p of phones) if (view().phase === 'planning') send(p, { t: 'intent', intent: { type: 'ready' } });
     }
     if (v.phase === 'upkeep') for (const p of phones) send(p, { t: 'intent', intent: { type: 'ready' } });
+    const pick = v.auction;
+    if (v.phase === 'auction' && pick?.stage === 'status') {
+      if (pick.good !== sidePickOf) [sidePickOf, sidePickFor] = [pick.good, 0];
+      sidePickFor += STEP_MS;
+      if (sidePickFor >= SIDE_PICK_READ_MS) for (const p of phones) if (!pick.walkers.find((w) => w.id === p.from.seatId)?.done) send(p, { t: 'intent', intent: { type: 'ready' } });
+    } else sidePickFor = 0;
     if (v.phase === 'landGrant' && v.lit && !claimed) {
       claimed = true;
       send(phones[0]!, { t: 'intent', intent: { type: 'claim', x: v.lit.x, y: v.lit.y } });

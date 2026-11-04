@@ -5,6 +5,7 @@ import {
   createGame,
   GAME,
   monthNeeds,
+  MS_PER_SECOND,
   stableJson,
   type AiLevelId,
   type AiPersonaId,
@@ -177,8 +178,9 @@ describe('the validator holds every playbook to RULE-1', () => {
     expect(fault(tooMany).why).toBe(`route: more than ${mindOf(2).level.mulesPerMonth} MULEs, step ${mindOf(2).level.mulesPerMonth * mule(0).length}`);
     const steps = Array.from({ length: AI_PLANS.bounds.routeSteps + 1 }, () => ({ act: 'analyse', plot: f1 }));
     expect(fault(steps).why).toBe(`route: more than ${AI_PLANS.bounds.routeSteps} steps, step ${AI_PLANS.bounds.routeSteps}`);
-    // P9: RULE-1's example, a 50 s seat; P10.
-    expect(one('development', '/development/timeBudgetMs', 90000)).toMatchObject({ plays: 50000, why: "clamped to 50000: the seat's development time" });
+    // P9: RULE-1's example (a 50 s seat asked for 90 s), read against the seat's own development seconds.
+    const devMs = at.development.players.find((p) => p.id === 'ai2')!.devSeconds * MS_PER_SECOND;
+    expect(one('development', '/development/timeBudgetMs', devMs + 40 * MS_PER_SECOND)).toMatchObject({ plays: devMs, why: `clamped to ${devMs}: the seat's development time` });
     expect(one('development', '/development/ifSoldOut', 'analyse')).toMatchObject({ plays: 'analyse', why: null });
     expect(one('development', '/development/ifSoldOut', 'wait').why).toBe('no such choice');
 
