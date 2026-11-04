@@ -686,7 +686,7 @@ C14.
 | **B-AC-1** (MUST) | Given a development turn on the rig and one phone held sideways with no TV · When the player uses only the stick and the button · Then they reach the store, buy at the corral, outfit, leave with the MULE on its lead, install on their own plot and end at the pub, the button saying each step before it | the phone in a real browser (e2e, the steering step), and the server's GameState (money, the plot's outfit) | a press with nothing in reach changes nothing | C1, C3, C6, C11 |
 | **B-AC-2** (MUST) | Given four seats and the TV · When colonists move · Then the TV draws each where the server has it, within one frame | TV page vs the server's floor in the e2e | an away seat's colonist stands still on the TV | C8, C12 |
 | **B-AC-3** (MUST) | Given a laptop · When the player holds arrow keys and presses SPACE, or holds the mouse on a spot · Then the colonist walks there and the press acts; the page never scrolls | laptop page in the e2e | keys with the page unfocused do nothing | C11 |
-| **B-AC-4** (MUST) | Given a phone at 667×375 and at 844×390 · When the development screen shows the map and the hall · Then nothing overflows its frame and the controls cover 0 px² of the store, own plots and the target | shell.ts measurements | — | C11, C15 |
+| **B-AC-4** (MUST) | Given a phone at 667×375 and at 844×390 · When the development screen shows the map and the hall · Then nothing overflows its frame; the controls and the plot card cover 0 px² of your colonist, the store and the target, and over your own plots the controls are translucent so the plot's marks read through (AM-20) | shell.ts measurements | — | C11, C15 |
 | **B-AC-5** (MUST) | Given a colonist on forest with wolves due · When the player runs or fights · Then the outcomes of RULE-4 land: bitten and slowed, got away, pelts sold at the store, or the MULE bolted and caught | phone + server state in the e2e (wolves forced by a seeded test option) | no wolves in the hall | C4, C11 |
 | **B-AC-6** (MUST) | Given a glint lit · Then every phone and the TV show it at once and the first colonist onto it gets the prize | phones, TV, server stock | after showSeconds it fades and nobody gets it | C4, C11, C12 |
 | **B-AC-7** (MUST) | Given 3 MULEs left and 4 seats needing one · When the first sale leaves 2 · Then the TV and phones call the scramble and the one left out is told, with the pub's payout | TV, phones, server | no call when no seat needs a MULE | C4 |
@@ -739,6 +739,20 @@ inside a wall; money and stock change only through game.ts rules; development en
 
 ## §8 · Amendments `[review-only]`
 
+- **AM-20 (2026-11-04, PR-6 phase A's findings, ruled by WS6).** (1) **B-AC-4 on real maps.** The stick and the button
+  sit at the map's bottom corners, so on a real map they can lie over one of your plots (at 844 column 0 rows 5–8 and
+  columns 13–14 rows 6–8; at 667 columns 0–2 and 11–14 of rows 6–8): "0 px² of own plots" holds only for the
+  fixture. B-AC-4 now asks 0 px² of **your colonist, the store and the target**, with the controls translucent over
+  your other plots (the scaffold's fade when you or the target come near stays). (2) **The plot card** never covers
+  your colonist or the target: when either is under its box (the mock's columns 5–14, rows 1–4), it moves to the
+  map's other half (columns 0–9). (3) **The route follows the server:** the phone and the TV show the arcade screen
+  when the view says the floor is on (its Reach and frames are present), not by the bundle's own `DEV_STEER.on`, so
+  a flag-on server needs no flag-on build. (4) **Month 1's wait:** while the clock waits for every first MULE (A-1),
+  the side room says so in A-1's own words (`waitingNow`), not a full clock and nothing else. (5) **Reconnecting:**
+  the app's ConnectionBar look with "RECONNECTING…" is the stale state RULE-10 asks for. (6) **Deferred, not PR-6:**
+  the second choice on one spot (V-3/V-5's alt button; it needs a second verb in ReachView and the act, a protocol
+  change; installing first and then analysing reaches the same result today), and the chips with no data on the wire
+  (`crystite`, the bolted lead, the TV's "→ PUB", play-again).
 - **AM-19 (2026-11-04, WS3's two gaps at arcade PR-3 #235, ruled by WS6).** (1) RULE-1 step 4's "RuleError to that
   seat only" cannot come from the tick: a timer has no channel to one seat. A press the game.ts rule refuses inside
   the tick is counted and logged for that seat, never shown; the button shows the server's Reach words (C3), so a
