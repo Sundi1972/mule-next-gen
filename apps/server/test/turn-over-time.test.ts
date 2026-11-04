@@ -1,7 +1,7 @@
 import { AiSeat } from '@mule/ai';
-import { DEV_STEER, IDLE_INPUT } from '@mule/engine';
+import { DEV_STEER, IDLE_INPUT, type DevFloor } from '@mule/engine';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { turnOverAt } from '../src/mule-game.js';
+import { type MuleGame, turnOverAt } from '../src/mule-game.js';
 import { toDevelopment } from './fake-context.js';
 
 /*
@@ -24,8 +24,11 @@ describe("FM-ai-tick-time: turnOverAt, a seat's turn is over by a given time, th
   });
 });
 
+/** Where a seat's colonist stands on the server's steered floor. */
+type Standing = (seatId: string) => { space: string; x: number; y: number };
+
 /** The game's steered floor and clock, read through its private fields as the server tests read its GameState. */
-type Inside = { steering: { origin: number; floor: { tick: number } } | null; devEndsAt: number | null };
+type Inside = { steering: { origin: number; floor: DevFloor } | null; devEndsAt: number | null };
 
 let flag = DEV_STEER.on;
 beforeEach(() => {
@@ -39,11 +42,11 @@ afterEach(() => {
 
 /**
  * Plays a steered development (two idle phones, one AI seat standing still) on the fake clock, tick by tick, until
- * the tick due `ticksEarly` ticks before devEndsAt is next; then that tick's timer fires late, the clock reading
- * `lateBy` ms past its due time. Returns the from-ticks the AI's hand was asked for in that late batch, how many
- * ticks the batch stepped (one frame each) and the phase after it.
+ * the tick due `ticksEarly` ticks before devEndsAt is next; `queue` then sends what the phones send, and that tick's
+ * timer fires late, the clock reading `lateBy` ms past its due time. Returns the from-ticks the AI's hand was asked for
+ * in that late batch, how many ticks have stepped since (one frame each), the phase after it, and the game to play on.
  */
-function lateBatch(ticksEarly: number, lateBy: number) {
+function lateBatch(ticksEarly: number, lateBy: number, queue: (game: MuleGame, standing: Standing, lateTick: number) => void = () => {}) {
   const { game, ctx, advance, frames } = toDevelopment();
   const inside = game as unknown as Inside;
   const steering = inside.steering!;
@@ -62,6 +65,12 @@ function lateBatch(ticksEarly: number, lateBy: number) {
   while (steering.floor.tick < lateTick) advance(dueOf(steering.floor.tick) - ctx.now());
   expect(ctx.now()).toBe(dueOf(lateTick - 1));
   expect(game.viewFor(null).phase).toBe('development');
+  // The floor the steering last stepped, read even once the phase has ended and the views no longer show it.
+  const standing: Standing = (seatId) => {
+    const c = steering.floor.colonists.find((q) => q.id === seatId)!;
+    return { space: c.space, x: c.x, y: c.y };
+  };
+  queue(game, standing, lateTick);
   asked.length = 0;
   const framesBefore = frames.length;
   const real = ctx.now;
@@ -69,20 +78,33 @@ function lateBatch(ticksEarly: number, lateBy: number) {
   advance(dueOf(lateTick) - real());
   const lateNow = ctx.now();
   ctx.now = real;
-  return { asked, stepped: frames.length - framesBefore, phase: game.viewFor(null).phase, lateTick, lateNow, end, dueOf };
+  const stepped = () => frames.length - framesBefore;
+  return { game, ctx, advance, standing, asked, stepped, phase: game.viewFor(null).phase, lateTick, lateNow, end, dueOf };
 }
 
+
 describe("FM-ai-tick-time on the server: a late steer tick's AI input follows the tick's own time", () => {
-  it('a late batch run with the wall clock past devEndsAt plays every tick due before it, the AI hand asked for each, then ends', () => {
-    const { asked, stepped, phase, lateTick, lateNow, end, dueOf } = lateBatch(2, 110);
+  it('a late batch run with the wall clock past devEndsAt steps exactly the ticks due before it (AM-19), the AI hand asked for each', () => {
+    let from: ReturnType<Standing> | null = null;
+    const { game, ctx, advance, standing, asked, stepped, phase, lateTick, lateNow, end, dueOf } = lateBatch(2, 110, (table, standing, lateTick) => {
+      from = standing('s1');
+      // Heiko's phone steers for the batch's third tick, the one at devEndsAt, which AM-19 never steps.
+      table.handle('s1', { type: 'steer', x: 1, y: 0, tick: lateTick + 2 });
+    });
     // The batch's first two ticks resolve before the clock's end, though the wall clock already reads past it.
     expect(dueOf(lateTick + 1)).toBeLessThan(end);
     expect(dueOf(lateTick + 2)).toBe(end);
     expect(lateNow).toBeGreaterThan(end);
-    // As the sim plays them: both ticks before the end ask the AI hand; the tick at the end, its turn over, does not.
+    // As the sim plays them: both ticks before the end ask the AI hand, and no tick at or after the end is stepped.
     expect(asked).toEqual([lateTick, lateTick + 1]);
-    // Development ends in the tick at devEndsAt, not after the batch's first tick.
-    expect(stepped).toBe(3);
-    expect(phase).not.toBe('development');
+    expect.soft(stepped()).toBe(2);
+    // The steer queued for the tick at devEndsAt never applies: Heiko's colonist stands where it stood.
+    expect.soft(standing('s1')).toEqual(from);
+    // The development-end timer ends the phase, as on time, still stepping nothing more.
+    expect(phase).toBe('development');
+    advance(end - ctx.now());
+    expect(game.viewFor(null).phase).not.toBe('development');
+    expect.soft(stepped()).toBe(2);
+    expect(asked).toEqual([lateTick, lateTick + 1]);
   });
 });
