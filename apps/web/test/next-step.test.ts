@@ -1,7 +1,7 @@
 import { createElement, Fragment } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { nextStep, openShops, type DevelopState } from '../src/phone/next-step';
+import { installAfterPress, nextStep, openShops, type DevelopState } from '../src/phone/next-step';
 
 /** Lena in the store at the start of the turn's clock, nothing in tow, a free plot of hers at 5·7. */
 const BASE: DevelopState = {
@@ -93,6 +93,21 @@ describe('RULE-7: development says what to do next', () => {
     expect(belt.now.title).toBe('Install your Green belt MULE here');
   });
 
+  it('T-AC-9 row 6: never says installing is instant, for the install is a walk that ends at the plot', () => {
+    const r = at({ carry: 'energy', place: 'map', atOwnPlot: true });
+    expect(String(r.now.detail)).not.toMatch(/instant/i);
+    expect(String(r.now.detail)).toMatch(/goes in when you get there/);
+  });
+
+  it('T-AC-9 row 6 walking: on the way to your plot with the MULE, Now says where it is going, not "install here"', () => {
+    const r = at({ carry: 'energy', place: 'map', atOwnPlot: true, walkingTo: { x: 1, y: 0 } });
+    expect(r.now).toMatchObject({ step: 3, of: 3, title: 'Walking your Energy MULE to 2·1' });
+    expect(String(r.now.detail)).toMatch(/goes in when you get there/);
+    expect(r.next).toEqual([]);
+    // Not walking, the same plot says install here again.
+    expect(at({ carry: 'energy', place: 'map', atOwnPlot: true, walkingTo: null }).now.title).toBe('Install your Energy MULE here');
+  });
+
   it('T-AC-9 row 7: once a MULE is installed and none is carried, the corral and the pub glow, with no step', () => {
     const r = at({ installed: true });
     expect(r.now.title).toBe('MULE installed. What next?');
@@ -129,5 +144,15 @@ describe('RULE-7: development says what to do next', () => {
     expect(sorted(openShops(at({}).locks))).toEqual(['corral', 'pub']);
     expect(sorted(openShops(at({ carry: 'empty' }).locks))).toEqual(sorted(['food', 'water', 'energy', 'smithore', 'crystite', 'rareEarth', 'alloy', 'electronics', 'medicine', 'greenBelt', 'pub']));
     expect(openShops(at({ carry: 'energy' }).locks)).toEqual(['pub']);
+  });
+
+  it('T-AC-9 row 6 walking: only a press the server takes moves the Install plot, so no other walk reads as an install', () => {
+    const a = { x: 1, y: 0 };
+    // Standing still: Install remembers its plot, Analyse and the filter forget it.
+    expect(installAfterPress(null, { kind: 'install', at: a }, false)).toEqual(a);
+    expect(installAfterPress(a, { kind: 'other' }, false)).toBeNull();
+    // Walking, the server refuses any press ("Still walking"), so nothing changes either way.
+    expect(installAfterPress(null, { kind: 'install', at: a }, true)).toBeNull();
+    expect(installAfterPress(a, { kind: 'other' }, true)).toEqual(a);
   });
 });
