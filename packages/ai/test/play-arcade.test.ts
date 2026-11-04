@@ -26,7 +26,7 @@ import {
 import { FloorWalker, type StepRun } from '../src/hands/floor-walker.js';
 import { muleLegs, placePoint } from '../src/floor-time.js';
 import { playFloorPhase, simFloorConfig } from '../src/floor-turn.js';
-import { ROTATION } from '../src/lineup.js';
+import { ROTATION, simSeats } from '../src/lineup.js';
 import type { FloorMomentCounts } from '../src/floor-turn.js';
 import { playGame, type DevTurn, type SeatSpec } from '../src/play.js';
 import { AiSeat } from '../src/seat.js';
@@ -86,16 +86,10 @@ describe('the AI walks the floor, and the sim plays it (arcade C9, C10)', () => 
     expect(phases.flat().reduce((n, t) => n + t.installs, 0)).toBeGreaterThan(phases.length);
   });
 
-  it('T-AC-5: a bot races in most glints, and the moments happen in AI turns', { timeout: 120_000 }, () => {
+  it('T-AC-5: the moments happen in AI turns: packs met and played out, glints lit and won', { timeout: 120_000 }, () => {
     const moments = steeredMoments(20);
     expect(moments).toHaveLength(20);
-    const glints = sum(moments, 'glints');
-    expect(glints, 'glints lit in 20 turns').toBeGreaterThanOrEqual(5);
-    // RULE-8's example, from the mock's one-MULE bots: 12 of 19 glints (63%) still see a bot race with the spare-time
-    // rule on. The real AI plans its MULEs to fill the clock, so fewer have time to spare: 9 of 19 here, 53 of 120 over
-    // ten games (44%). Departure from T-AC-5's "most", reported to WS1's lead (balance is parked): a floor of 40%.
-    expect(sum(moments, 'raced') / glints, 'share of glints a bot raced').toBeGreaterThanOrEqual(0.4);
-    // The other moments land in the AI's turns too: packs met and played out, a glint won.
+    expect(sum(moments, 'glints'), 'glints lit in 20 turns').toBeGreaterThanOrEqual(5);
     expect(sum(moments, 'packs'), 'packs met').toBeGreaterThan(0);
     expect(sum(moments, 'fights') + sum(moments, 'runs'), 'packs fought or run from').toBeGreaterThan(0);
     expect(sum(moments, 'glintsWon'), 'glints won').toBeGreaterThan(0);
@@ -125,6 +119,35 @@ describe('the AI walks the floor, and the sim plays it (arcade C9, C10)', () => 
       DEV_STEER.floorSeconds = saved.floorSeconds;
       DEV_STEER.month1WaitsForFirstMule = saved.waits;
     }
+  });
+});
+
+/**
+ * The sim's own sample (T-AC-5's observed_at is `pnpm sim`): SIM_GAMES AI-only games from seed 1, its lineup (four
+ * Traders), politics on, steered; played once for every case that reads it. 20 games: the glint share was 45% at 10,
+ * 43% at 20 and 42% at 40, so 20 is the smallest steady one at about a second a game.
+ */
+const SIM_GAMES = 20;
+let simSample: FloorMomentCounts[] | null = null;
+function simMoments(): FloorMomentCounts[] {
+  simSample ??= steered(() => Array.from({ length: SIM_GAMES }, (_, i) => playGame(i + 1, simSeats(4, 'trader', i + 1, null), { politics: true }).moments).flat());
+  return simSample;
+}
+
+describe("the moments in the sim's games (T-AC-5, AM-22)", () => {
+  it('T-AC-5 (AM-22): a bot races in at least 40% of glints, never one whose detour breaks its errand (RULE-8)', { timeout: 120_000 }, () => {
+    const moments = simMoments();
+    const glints = sum(moments, 'glints');
+    expect(glints, 'glints lit').toBeGreaterThanOrEqual(100);
+    // RULE-8's example, from the mock's one-MULE bots, was 63%; the real AI plans its MULEs to fill the clock, so fewer
+    // have time to spare. AM-22 rules the floor at 40%. The never-clause is the spare-time negative below the pub cases.
+    expect(sum(moments, 'raced') / glints, 'share of glints a bot raced').toBeGreaterThanOrEqual(0.4);
+  });
+
+  it("AM-22: an AI colonist meets wolves in at least 60% of months (RULE-4's AI line, botWolfLandShare)", { timeout: 120_000 }, () => {
+    const moments = simMoments();
+    const met = moments.filter((m) => m.packs > 0).length;
+    expect(met / moments.length, `months with an AI wolf encounter: ${met} of ${moments.length}`).toBeGreaterThanOrEqual(0.6);
   });
 });
 
