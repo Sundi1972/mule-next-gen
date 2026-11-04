@@ -4,7 +4,7 @@
  * read with and without a TV, and the month end in Collapse too (C20).
  * Local tier: `pnpm --filter @mule/web build`, then `pnpm --filter @mule/web e2e:small`.
  */
-import { POLLUTION } from '@mule/engine';
+import { DEV_WALK, POLLUTION } from '@mule/engine';
 import type { Locator, Page } from 'playwright';
 import { claimAPlot, CLAIM_MS, check, doneWithLand, held, launch, PHONE, PHONE_SMALL, SHOWN_MS, startServer, TV } from './harness';
 import { ELECTION_WAIT_MS, readyThroughTheElection, voteThroughTheElection } from './politics-steps';
@@ -16,6 +16,11 @@ const PHASE_SCALE = 0.1;
 /** A laptop, for the A-5 close read's third size. */
 const LAPTOP = { width: 1440, height: 900 };
 const PRESS_MS = 2_000;
+/**
+ * A store room waits for the colonist to cross the floor: at the slowest pace the rules allow (starving and sick) that
+ * is floorSeconds / (hungerPaceMin × sickPace), so a hungry colonist never times a room out.
+ */
+const STORE_STEP_MS = (DEV_WALK.floorSeconds / (DEV_WALK.hungerPaceMin * DEV_WALK.sickPace)) * 1_000 + PRESS_MS;
 /** Development's one clock runs on wall time, held or not: enough for two MULEs and every read. */
 const DEV_MS = 120_000;
 /** Two MULEs and their outfits, whatever the seed deals. */
@@ -127,15 +132,15 @@ try {
   await dev.waitFor({ timeout: 20_000 });
   giveDevelopment(code);
   await both('development, the store hall', WHOLE);
-  await phone.locator('[data-shop=corral]:not([disabled])').click({ timeout: PRESS_MS });
-  await phone.locator('[data-shop=energy]:not([disabled])').click({ timeout: PRESS_MS });
+  await phone.locator('[data-shop=corral]:not([disabled])').click({ timeout: STORE_STEP_MS });
+  await phone.locator('[data-shop=energy]:not([disabled])').click({ timeout: STORE_STEP_MS });
   await dev.getByRole('button', { name: 'Walk out to the map' }).click({ timeout: PRESS_MS });
   await dev.getByRole('button', { name: 'Install here' }).click({ timeout: PRESS_MS });
   await dev.getByText(/Your MULE here makes/).waitFor({ timeout: PRESS_MS });
   await startMonthOnesClock(phone, code);
   await dev.getByRole('button', { name: 'Store', exact: true }).click({ timeout: PRESS_MS });
-  await phone.locator('[data-shop=corral]:not([disabled])').click({ timeout: PRESS_MS });
-  await phone.locator('[data-shop=food]:not([disabled])').click({ timeout: PRESS_MS });
+  await phone.locator('[data-shop=corral]:not([disabled])').click({ timeout: STORE_STEP_MS });
+  await phone.locator('[data-shop=food]:not([disabled])').click({ timeout: STORE_STEP_MS });
   await dev.getByRole('button', { name: 'Walk out to the map' }).click({ timeout: PRESS_MS });
   const swap = dev.getByRole('button', { name: 'Replace MULE' });
   await swap.waitFor({ timeout: PRESS_MS });
