@@ -305,7 +305,7 @@ function monthEventView(state: GameState, e: MonthEvent): Omit<EventView, 'weigh
     origin: { ...e.origin },
     ...(e.direction ? { from: e.direction } : {}),
     ...(e.player ? { player: e.player } : {}),
-    hits: e.plots.map((p) => ({ ...at(p.index), order: p.order, delta: p.delta, ...(p.was ? { was: p.was } : {}), ...(p.becomes ? { becomes: p.becomes } : {}), ...(p.muleLost ? { muleLost: p.muleLost } : {}) })),
+    hits: e.plots.map((p) => ({ ...at(p.index), order: p.order, delta: p.delta, ...(p.was ? { was: p.was } : {}), ...(p.becomes ? { becomes: p.becomes } : {}), ...(p.muleLost ? { muleLost: p.muleLost, ...(p.good ? { good: p.good } : {}) } : {}) })),
     phase: e.phase,
     ...(e.effects ? { effects: e.effects.map((f) => ({ ...f })) } : {}),
   };
@@ -502,6 +502,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         // From the game seed and the seat, so a replay plays the same AI.
         seed: (this.seed * 7_919 + i * 104_729 + 17) >>> 0,
         decider: this.brain.deciderFor(brainSeat),
+        onPlaybook: (playbook) => this.recordPlaybook({ seat: s.id, month: playbook.month, phase: playbook.phase, playbook }),
         // A decision can come in the tick that enters a phase, before that phase's view goes out; its line waits for it.
         onDecision: (record) => {
           this.ctx.schedule(0, () => chat(record));

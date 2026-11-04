@@ -33,6 +33,7 @@ describe('T-AC-4: a game record replays every wave-2 event', () => {
     const inner = new MuleGame(recorder.ctx, 21, {
       ...options,
       brain: recorder.brain,
+      recordPlaybook: (entry) => recorder.playbook(entry),
       onGameOver: (state) => {
         final = structuredClone(state);
         recorder.gameOver(state);

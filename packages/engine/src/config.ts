@@ -1,4 +1,5 @@
 import type { Outfit, EventKey, GrownGood, Good, MinedGood, Office, ProcessedGood, RawGood, SpecialKind, Species, Stock, Terrain, TileTrait } from './types.js';
+import type { Strategy } from './playbook.js';
 
 /**
  * Every balancing number lives here, so playtests and the simulator can tune
@@ -284,7 +285,8 @@ export const MULE = {
 export const DEVELOPMENT = {
   /**
    * Seconds of development, the same for every player: hunger and sickness slow the walk instead (DEV_WALK). 60 (Heiko,
-   * 4 Nov), so a starving colonist has the time to put Food on a plot next to the store.
+   * 4 Nov). With walking on, the clock alone doesn't save a starving colonist: at a fifth of its pace even the
+   * nearest Food errand and the pub take longer than 60 s, which is why DEV_WALK.hungerPaceMin is 0.6.
    */
   fullSeconds: 60,
   /** Seconds a colonist stands on a plot for a geo analysis. */
@@ -301,7 +303,7 @@ export const DEVELOPMENT = {
 /**
  * Walking in development costs time off the one development clock (Heiko's R1, 0.4 s a tile). A walk goes in grid
  * steps on the map, never diagonally; the store and its corral are on the store's tile. A hungry or sick colonist
- * walks slower, and the two multiply: no Food and sick is a tenth of normal pace (Heiko's numbers).
+ * walks slower, and the two multiply: no Food and sick is 0.6 × 0.5 = 0.3 of normal pace (Heiko's numbers).
  * Not WALK, the goods auction's walk.
  */
 export const DEV_WALK = {
@@ -309,8 +311,13 @@ export const DEV_WALK = {
   tileSeconds: 0.4,
   /** Seconds to cross the store floor to the corral, from the door or any other room. */
   floorSeconds: 1,
-  /** Share of its pace a colonist with no Food walks at; it rises linearly to 1 with the share of the month's Food it holds. */
-  hungerPaceMin: 0.2,
+  /**
+   * Share of its pace a colonist with no Food walks at; it rises linearly to 1 with the share of the month's Food it holds.
+   * 0.6 (Heiko, 4 Nov, "Yes, 60%"): the strongest slowdown with which the colony escapes famine with walking on. At 0.2
+   * a starving colonist couldn't reach Food and the pub inside the turn and stayed starving (measured: 58% of months
+   * short of Food or Water; from 0.6, under 15% in every measured cell).
+   */
+  hungerPaceMin: 0.6,
   /** Share of its pace a sick colonist walks at (EVENTS.player.sickness rolled, and no Medicine held). */
   sickPace: 0.5,
   /**
@@ -334,8 +341,8 @@ export type LakeMode = 'shore' | 'wade';
 export const DEV_STEER = {
   /** Steered walking instead of DEV_WALK's tap-to-walk. On since Heiko's OK on the rig (arcade PR-11). */
   on: true as boolean,
-  /** Tiles a second on plains at full pace: half of today's 1 / DEV_WALK.tileSeconds. */
-  mapTilesPerSecond: 1.25,
+  /** Tiles a second on plains at full pace: the tap walk's own pace, 1 / DEV_WALK.tileSeconds (Heiko, 4 Nov; 1.25 was half). */
+  mapTilesPerSecond: 2.5,
   /** Seconds across the store's hall at full pace, door to corral. */
   floorSeconds: 3,
   /** Share of its speed a colonist keeps while it leads a MULE. */
@@ -368,6 +375,12 @@ export const DEV_STEER = {
   botsSpareTime: true as boolean,
   /** An AI colonist drops its errand for the pub once the clock shows no more than its walk there and this many seconds. */
   botPubMarginSeconds: 2,
+  /**
+   * An AI colonist buys a MULE only while its errand, this share longer than estimated, still leaves the pub margin
+   * (botPubMarginSeconds, as the hurry for the pub counts it): a walk that runs a little long then costs the margin
+   * nothing, and the MULE is installed, not walked into the pub (FM-hurry-margin).
+   */
+  botPlanSlackShare: 0.1,
   /** Ticks an AI colonist may push its stick without moving before it gives that step of its errand up. */
   botStuckTicks: 20,
   /** An AI colonist installing on a lake plot from the shore stands this far from the shore tile's middle towards the lake, in tiles. */
@@ -409,9 +422,17 @@ export const WOLVES = {
   cooldownSeconds: 20,
   /** Time to choose run or fight before they pounce, which is a fight. */
   chooseSeconds: 3,
-  /** A chasing wolf's speed, in tiles a second. */
-  chaseSpeed: 1.1,
-  /** A chase ends, got away, after this long or this far from where it started. */
+  /**
+   * A chasing wolf's speed, as a share of DEV_STEER.mapTilesPerSecond (AM-32). Relative, not tiles a second, so a change
+   * of walking pace cannot defang the pack: RULE-4 tuned 1.1 tiles a second against colonists at 1.25, and 0.88 is that.
+   */
+  chaseShare: 0.88,
+  /**
+   * A chase ends, got away, after this long, or this far from where it started. The distance stays in tiles at any pace
+   * (AM-32, corrected): the pack's distances (packRingTiles, chaseCatchTiles) are tiles and its speed is a share of the
+   * pace, so a give-up distance in tiles holds the chase's odds; scaled with the pace, it let the pack close twice the
+   * ground at 2.5 and escapes fell to 4 of 20.
+   */
   giveUpSeconds: 5,
   giveUpTiles: 4,
   /** Share of its speed a bitten colonist keeps, till it reaches the store or its own plot. */
@@ -1395,6 +1416,66 @@ export const AI_HANDS = {
   grant: {
     /** A go/no-go choice takes this much longer than a bare reaction. */
     choiceMs: [150, 300] as [number, number],
+  },
+};
+
+type PlanKind = Strategy['kind'];
+
+/**
+ * The AI's game plan (playbook.ts): which plan kind a seat drafts, the strategy fields it writes, and the bounds every
+ * playbook is held to, the engine's own draft and Claude's edits alike.
+ */
+export const AI_PLANS = {
+  /** Seats play their playbook; false: every seat plays the phase-by-phase asks, as before playbooks. */
+  on: true,
+  /** How much each persona leans to each plan kind, 0 to 1: the draft picks the eligible kind it leans to most. */
+  leaning: {
+    cautious: { builder: 1, specialist: 0.5, monopolist: 0.2, landBaron: 0.3, politician: 0.4, spoiler: 0 },
+    aggressive: { builder: 0.3, specialist: 0.5, monopolist: 0.6, landBaron: 1, politician: 0.2, spoiler: 0.4 },
+    trader: { builder: 0.3, specialist: 1, monopolist: 1, landBaron: 0.3, politician: 0.2, spoiler: 0 },
+    saboteur: { builder: 0.2, specialist: 0.4, monopolist: 0.5, landBaron: 0.4, politician: 0.3, spoiler: 1 },
+  } satisfies Record<AiPersonaId, Record<PlanKind, number>>,
+  moneyMaker: {
+    /** A good's score sums its install gain over this many of the seat's best plots for it (own idle and free). */
+    plots: 3,
+    /** Each rival plot already making the good cuts its score by this share. */
+    rivalDiscount: 0.15,
+    /** Weight of the "My money-maker" consideration in a development pick. */
+    weight: 1,
+    /** That consideration's score, 0 to 1, for an outfit that makes another good (the money-maker scores 1). */
+    otherScore: 0.8,
+  },
+  monopoly: {
+    /** The goods a seat may try to corner. */
+    goods: ['food', 'energy', 'smithore'] as Good[],
+    /** A good is cornered only while at most this many rival plots make it. */
+    maxRivalPlots: 1,
+    /** And only with at least this many of its own idle or free plots whose best outfit is the good. */
+    minPlots: 2,
+  },
+  landBaron: {
+    /** The land baron is a plan while at least this share of all plots is free. */
+    minFreeShare: 0.3,
+  },
+  landTarget: {
+    /** The plot target is for this many months ahead, at most to the last month. */
+    months: 3,
+    /** Plots a month the target adds, by plan kind; `other` for every kind not named. */
+    perMonth: { landBaron: 2, other: 1 } as Partial<Record<PlanKind, number>> & { other: number },
+  },
+  /** What a playbook may hold: a value outside is clamped or refused. */
+  bounds: {
+    /** Credits a strategy's cash floor may ask, at most. */
+    cashFloorMax: 2000,
+    /** Notes on one rival, at most, and characters a note. */
+    rivalReadNotes: 3,
+    rivalReadChars: 140,
+    /** Notes for later months, at most. */
+    lessons: 5,
+    /** Steps a development route may have, at most. */
+    routeSteps: 24,
+    /** Credits a second of the auction clock a seat may concede, at most. */
+    concedeMaxCrPerS: 50,
   },
 };
 

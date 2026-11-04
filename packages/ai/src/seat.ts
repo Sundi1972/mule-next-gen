@@ -2,6 +2,7 @@ import {
   AI_HANDS,
   AI_LEVELS,
   AI_PERSONAS,
+  AI_PLANS,
   createRng,
   floorConfig,
   GAME,
@@ -12,6 +13,7 @@ import {
   type FloorConfig,
   type FloorInput,
   type GameState,
+  type Playbook,
 } from '@mule/engine';
 import type { Act, AiAction } from './actions.js';
 import { Brain, type DecisionRecord, type Pending } from './brain.js';
@@ -19,6 +21,7 @@ import type { Decider, TableTalk } from './decider.js';
 import { AuctionHand, type AuctionDebug } from './hands/auction.js';
 import { DevelopHand, type DevWalking } from './hands/develop.js';
 import { PERSONAS } from './personas.js';
+import { adoptInto, DRAFT_PHASE_OF, draftPlaybook, pathFor, validatePlaybook, validatorFor, type DraftPhase, type PartKey, type PlayedPart, type PlayPath, type ValidatePlan, type ValidatorProfile } from './playbook/index.js';
 import { landDecision, wantsAnyAhead, wantsPlot, type LandPlan } from './strategist.js';
 import { situation } from './summary.js';
 import type { Mind } from './value.js';
@@ -34,6 +37,10 @@ export interface AiSeatOptions {
   decider?: Decider | null;
   /** Every settled decision, with its candidates and scores. */
   onDecision?: (record: DecisionRecord) => void;
+  /** RULE-6 row 1: false plays every phase by today's asks. Unset, AI_PLANS.on decides. */
+  playbook?: boolean;
+  /** Each playbook the seat plays itself, validated: what the game records for it. Unset, the seat writes none. */
+  onPlaybook?: (playbook: Playbook) => void;
 }
 
 /** What the dev view shows of an AI: its limits and its plan. */
@@ -61,6 +68,8 @@ export class AiSeat {
   private readonly auction: AuctionHand;
   private land: Pending<LandPlan> | null = null;
   private landMonth = -1;
+  /** Playbooks adopted for the newest month adopted, oldest first. */
+  private adopted: readonly Playbook[] = [];
 
   constructor(readonly options: AiSeatOptions) {
     this.mind = {
@@ -91,6 +100,66 @@ export class AiSeat {
     const obs = observe(state, this.id);
     this.landMonth = state.month;
     this.land = this.brain.ask('land', landDecision(obs, this.mind), obs, Infinity, null, situation(obs, this.mind));
+    // With no listener the draft would reach nothing: no act reads it (T-AC-4).
+    if (this.options.onPlaybook && this.playPath(state.month, 'planning').by === 'own') this.writeDraft(state, 'planning');
+  }
+
+  private playPath(month: number, key: PartKey): PlayPath {
+    return pathFor({ on: AI_PLANS.on, playbook: this.options.playbook, hasDecider: !!this.options.decider, adopted: this.adopted, month, key });
+  }
+
+  /** A draft point: drafts, validates and writes. A draft or validator error is logged and the phase plays today's path (HC-9). */
+  private writeDraft(state: GameState, phase: DraftPhase): void {
+    let playbook: Playbook;
+    try {
+      playbook = this.draft(state, phase);
+    } catch (err) {
+      console.error(`AI seat ${this.id}: no ${phase} playbook for month ${state.month}, playing without one: ${err instanceof Error ? err.message : String(err)}`);
+      return;
+    }
+    this.options.onPlaybook?.(playbook);
+  }
+
+  /** The seat's validated draft for a phase. `month` is the month whose land grant it plans. Writes nothing; throws on a draft or validator error. */
+  draft(state: GameState, phase: DraftPhase, month = state.month): Playbook {
+    // Read, never settled: settling would log the land decision before the grant.
+    const land = this.landMonth === month ? this.land : null;
+    const drafted = draftPlaybook({ state, seat: this.id, mind: this.mind, seed: this.options.seed, phase, land, month });
+    return validatePlaybook(this.profileFor(month))(state, this.id, drafted, []).playbook;
+  }
+
+  /**
+   * RULE-6: what this month's hand plays for `key`; null plays today's path, as does a draft or validator error (HC-9,
+   * logged). The seat's own part is drafted from `state`, as `draft` does: it writes nothing and changes no kept state.
+   * That draft costs milliseconds, so a hand reads its part once per phase and keeps it for the phase, never per tick.
+   */
+  part<K extends PartKey>(state: GameState, key: K): PlayedPart<K> | null {
+    const path = this.playPath(state.month, key);
+    if (path.by === 'today') return null;
+    let playbook = path.by === 'adopted' ? path.playbook : null;
+    try {
+      playbook ??= this.draft(state, DRAFT_PHASE_OF[key]);
+    } catch (err) {
+      console.error(`AI seat ${this.id}: no ${key} part for month ${state.month}, playing without one: ${err instanceof Error ? err.message : String(err)}`);
+      return null;
+    }
+    const part = playbook[key];
+    // A copy: a hand that changes what it plays changes nothing the seat keeps.
+    return part === undefined ? null : structuredClone({ part: part as NonNullable<Playbook[K]>, strategy: playbook.strategy, by: path.by });
+  }
+
+  /** Puts a playbook's parts in effect for its month (RULE-7). */
+  adopt(playbook: Playbook): void {
+    this.adopted = adoptInto(this.adopted, playbook);
+  }
+
+  /** The gate this seat's playbooks pass: its mind, its seed and, for the month it holds one, its pending land pick. */
+  validator(): ValidatePlan {
+    return (state, seat, draft, edits) => validatorFor(this.profileFor(draft.month))(state, seat, draft, edits);
+  }
+
+  private profileFor(month: number): ValidatorProfile {
+    return { mind: this.mind, seed: this.options.seed, land: this.landMonth === month ? this.land : null };
   }
 
   /**

@@ -5,6 +5,7 @@ import {
   buildFloor,
   createGame,
   DEV_STEER,
+  DEV_WALK,
   DEVELOPMENT,
   doorPresses,
   hasAnalysed,
@@ -71,6 +72,9 @@ function steeredMoments(phases: number): FloorMomentCounts[] {
   });
 }
 
+/** Turns the spare-time negative plays at the hungry walk: the more turns, the more late glints to race. */
+const HUNGRY_TURNS = 60;
+
 const sum = (counts: readonly FloorMomentCounts[], key: keyof FloorMomentCounts) => counts.reduce((n, c) => n + c[key], 0);
 
 describe('the AI walks the floor, and the sim plays it (arcade C9, C10)', () => {
@@ -106,14 +110,20 @@ describe('the AI walks the floor, and the sim plays it (arcade C9, C10)', () => 
     expect(sum(moments, 'glintsWon'), 'glints won').toBeGreaterThan(0);
   });
 
-  it('T-AC-5 negative: with botsSpareTime off, bots race glints they have no time for and miss the pub', { timeout: 120_000 }, () => {
-    const saved = DEV_STEER.botsSpareTime;
-    DEV_STEER.botsSpareTime = false;
+  it('T-AC-5 negative: with botsSpareTime off, bots race glints they have no time for and miss the pub', { timeout: 240_000 }, () => {
+    // At the live walk (Heiko, 4 Nov) a race seldom costs the pub: 20 turns showed none with the margin off, 60 two.
+    // So the case walks every colonist the map at the pace of one with no Food (DEV_WALK.hungerPaceMin), over 60 turns:
+    // the margin's own setting is the one thing that differs between the two runs, and only off do turns miss.
+    const saved = { spare: DEV_STEER.botsSpareTime, map: DEV_STEER.mapTilesPerSecond };
+    DEV_STEER.mapTilesPerSecond = saved.map * DEV_WALK.hungerPaceMin;
+    const missed = () => steeredTurns(HUNGRY_TURNS).flat().filter((t) => t.pubAt === null && !t.biteCostPub).length;
     try {
-      const turns = steeredTurns(20).flat();
-      expect(turns.filter((t) => t.pubAt === null).length, 'AI turns that missed the pub').toBeGreaterThan(0);
+      expect(missed(), 'with the margin: AI turns that missed the pub with no excuse').toBe(0);
+      DEV_STEER.botsSpareTime = false;
+      expect(missed(), 'without it: AI turns that missed the pub with no excuse').toBeGreaterThan(0);
     } finally {
-      DEV_STEER.botsSpareTime = saved;
+      DEV_STEER.botsSpareTime = saved.spare;
+      DEV_STEER.mapTilesPerSecond = saved.map;
     }
   });
 
@@ -185,6 +195,25 @@ describe("the moments in the sim's games (T-AC-5, AM-22)", () => {
     expect(unexcused, 'missed the pub with no excuse').toEqual([]);
     expect(excused.length / turns.length, `excused turns: ${excused.length} of ${turns.length}`).toBeLessThanOrEqual(0.01);
     expect(turns.every((t) => t.pubAt === null || t.pubAt <= DEVELOPMENT.fullSeconds)).toBe(true);
+  });
+
+  it('FM-hurry-margin: no AI colonist buys a MULE it then walks into the pub, for want of time or for a step the floor refused, but where a pack met it while it led that MULE', { timeout: SAMPLE_TIMEOUT_MS }, async () => {
+    const { turns } = await simGames();
+    // A MULE bought and not installed is paid for and lost: walked into the pub on its lead, or still on it at the clock.
+    // The AI plans a MULE only with the margin its hurry for the pub keeps, so time never costs one; a pack met on the
+    // way may. Nor does the floor refuse a step its plan counted on (FM-floor-outfit-offer, FM-floor-lake-stand): an
+    // outfit or install given up on the floor excuses nothing, but where a pack met it leading that MULE.
+    // Each excuse is that MULE's own: a pack met leading an earlier MULE, since installed, excuses nothing later.
+    const lost = turns.flatMap((t) => t.lostMules.map((m) => ({ t, m })));
+    const what = (t: DevTurn, m: DevTurn['lostMules'][number]) => `month ${t.month}, ${t.id}: bought ${t.bought}, installed ${t.installs}${m.stepFailed ? ', its outfit or install refused on the floor' : ''}`;
+    console.log(`FM-hurry-margin: ${lost.length} MULEs lost in ${turns.length} turns, ${lost.filter(({ m }) => m.packLeading).length} of them a pack met leading it`);
+    const unexcused = lost.filter(({ m }) => !m.packLeading).map(({ t, m }) => what(t, m));
+    expect(unexcused, `MULEs bought and lost for want of time or to a refused step (of ${turns.length} turns)`).toEqual([]);
+    // An analysis or a filter is priced with the same margin: a hungry colonist, whose margin is several times
+    // botPubMarginSeconds, never sets off for one the hurry for the pub then gives up on the way, but where a pack met
+    // it there (scoutsCut counts the others).
+    const cut = turns.filter((t) => t.scoutsCut > 0).map((t) => `month ${t.month}, ${t.id}: ${t.scoutsCut} cut`);
+    expect(cut, `turns whose hurry for the pub cut an analysis or filter walk short (of ${turns.length})`).toEqual([]);
   });
 
   // trace-allow: a smoke check that the AI's legs by wolf land (RULE-4's AI line, botWolfLandShare) bring packs into

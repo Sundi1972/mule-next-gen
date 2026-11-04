@@ -20,7 +20,7 @@ import {
 import { outlook } from '../src/outlook.js';
 import { AiSeat } from '../src/seat.js';
 import { developDecision, goodPlan, landDecision, muleValue, plotRoom, plotValue, tradeDecision, wantsAnyAhead, wantsPlot } from '../src/strategist.js';
-import { cashReserve, installGain, type Mind } from '../src/value.js';
+import { cashReserve, installGain, secondValue, type Mind } from '../src/value.js';
 
 const fourSeats = (seed: number) => createGame({ seed, players: [0, 1, 2, 3].map((i) => ({ id: `ai${i}`, name: `AI${i}`, isAi: true })) });
 
@@ -396,7 +396,16 @@ describe('the sales tax', () => {
     expect((taxed.action as { keep: number }).keep).toBe((free.action as { keep: number }).keep);
     expect(taxed.value).toBeCloseTo(free.value * 0.85, 0);
 
-    const food = (tax: number) => goodPlan(observe(auctionAtTax(tax, 'food', 20), 'ai0'), traderMind, 'food').values;
+    // Its own use of Food is next month's walking at full pace (value.ts unitValues), worth the most to a seat with land
+    // still to develop: an undeveloped plains plot of its own makes its development seconds worth the busy rate. With
+    // none, at the walk of 4 Nov (DEV_WALK.hungerPaceMin 0.6), the walking a unit keeps is worth less than its resale.
+    const food = (tax: number) => {
+      const state = auctionAtTax(tax, 'food', 20);
+      state.tiles.find((t) => t.terrain === 'plains' && !t.owner)!.owner = 'ai0';
+      const obs = observe(state, 'ai0');
+      expect(secondValue(obs, 'ai0'), 'a development second, with land to develop').toBe(STRATEGIST.secondValue.busy);
+      return goodPlan(obs, traderMind, 'food').values;
+    };
     const [v0, v15] = [food(0), food(0.15)];
     const resale0 = v0.keep[v0.block]!;
     const own = [...Array(v0.block).keys()].filter((k) => k >= v0.floorUnits && v0.keep[k]! > resale0);
