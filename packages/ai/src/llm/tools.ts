@@ -1,4 +1,6 @@
-import { allPrices, observe, scoreParts, type GameState, type Phase, type PlayerId } from '@mule/engine';
+import { allPrices, observe, scoreParts, type GameState, type Phase, type Playbook, type PlayerId } from '@mule/engine';
+import { playMonthFrom, type MonthSeat } from '../play.js';
+import type { PlanEdit } from '../playbook/index.js';
 import { MOVES } from './moves-stub.js';
 
 /**
@@ -71,10 +73,20 @@ const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'obj
  * The tools for one seat, fixed at the moment they are made: the observation is taken now, so a game that moves on
  * while the model thinks changes no answer. `run` never throws.
  */
-/** The tools offered to the model: whatIf waits for the one-month engine sim it plays on, so it is not offered yet. */
-export const OFFERED: readonly ToolDef[] = TOOL_DEFS.filter((d) => d.name !== 'whatIf');
+/** The tools offered to the model with a month sim for whatIf: all of them. Without one, whatIf is left out. */
+export const OFFERED: readonly ToolDef[] = TOOL_DEFS;
+const WITHOUT_SIM: readonly ToolDef[] = TOOL_DEFS.filter((d) => d.name !== 'whatIf');
 
-export function toolsFor(state: GameState, seat: PlayerId): { definitions: readonly ToolDef[]; run(name: string, input: unknown): ToolResult } {
+/** What whatIf plays the month with: every player's seat, and the seat's playbook for the month with edits applied. */
+export interface WhatIfSim {
+  seats: readonly MonthSeat[];
+  /** The playbook the edits make of the seat's draft, stamped for the month played; may throw on edits it refuses. */
+  playbook(edits: readonly PlanEdit[]): Playbook;
+}
+
+const isEdit = (e: unknown): e is PlanEdit => isObject(e) && typeof e.path === 'string' && 'to' in e;
+
+export function toolsFor(state: GameState, seat: PlayerId, sim?: WhatIfSim): { definitions: readonly ToolDef[]; run(name: string, input: unknown): ToolResult } {
   const obs = observe(state, seat);
   // Public on every row of the board, so read from the game itself: the totals only.
   const standings = state.players
@@ -92,12 +104,20 @@ export function toolsFor(state: GameState, seat: PlayerId): { definitions: reado
     },
     worth: () => ok(scoreParts(obs, seat)),
     standings: () => ok(standings),
-    // The one-month engine sim to play it on is not there yet: it answers so, and the loop goes on.
-    whatIf: (input) => (Array.isArray(input.edits) ? error('unavailable') : error('bad_input')),
+    // The month is played on what the seat can see, every rival as the engine would play it, with no production event.
+    whatIf: (input) => {
+      if (!Array.isArray(input.edits) || !input.edits.every(isEdit)) return error('bad_input');
+      if (!sim) return error('unavailable');
+      const edits = input.edits.map((e) => ({ path: e.path, to: e.to, reason: typeof e.reason === 'string' ? e.reason : '' }));
+      const mine = sim.playbook(edits);
+      const seats = sim.seats.map((s) => (s.id === seat ? { ...s, playbook: mine } : s));
+      const played = playMonthFrom(obs, seats, obs.seed);
+      return ok({ month: played.month, worth: scoreParts(played.state, seat) });
+    },
   };
 
   return {
-    definitions: OFFERED,
+    definitions: sim ? OFFERED : WITHOUT_SIM,
     run(name, input) {
       const handler = handlers[name];
       if (!handler) return error('unknown_tool');
