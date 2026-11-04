@@ -4,7 +4,7 @@ import { HEIGHT, objectsFor, OBJECT_PLOTS, tiles, WIDTH, type Stages } from './f
 import { ObjectDisc, ObjectGround, objectLabel, OBJECT_NAME, type PlotObject, type PlotStage } from './objects';
 
 type Variant = 'A' | 'B';
-const STAGES: PlotStage[] = ['building', 'standing', 'closed', 'damaged'];
+const STAGES: PlotStage[] = ['commissioned', 'building', 'standing', 'closed', 'damaged'];
 
 /**
  * The map with the colony's objects on their plots. In the mock the objects ride a grid laid over HoloMap with the same
@@ -57,9 +57,9 @@ export default function App() {
         <ul className="list-disc pl-5 text-sm text-ink-2">
           <li>A park, stadium or spaceport upgrade is drawn on its plot on every map: the TV's and each phone's, from the same map tiles.</li>
           <li>The glyphs are WS8's five (design/mocks/ws8-colony, b0f52001), verbatim.</li>
-          <li>The stage colour is the build site's: standing ok, building warn (dashed: a site), closed and damaged alert, faded.</li>
-          <li>A corner chip in the map's flag style says what the colours can't: a site's months ("1/3"), SHUT, HIT.</li>
-          <li>The plot keeps its special badge; it has no owner's border or tab (the colony's plot: open with WS7) and no MULE (it makes nothing).</li>
+          <li>The stage colour is the build site's: a reserved site holo (dashed, the glyph faint), building warn (dashed), standing ok, closed and damaged alert, faded.</li>
+          <li>A corner chip in the map's flag style says what the colours can't: SITE, a site's months ("1/3"), SHUT, HIT.</li>
+          <li>The plot is the colony's (owner 'colony', set by C30's site bid): no player's border or tab, no MULE (it makes nothing); it keeps its special badge.</li>
           <li>Screen readers hear the build site's words: "Stadium, building: 1 of 3 months".</li>
         </ul>
       </header>

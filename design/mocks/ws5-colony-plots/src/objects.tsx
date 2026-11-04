@@ -3,8 +3,11 @@ import { cx } from '@mule/ui';
 /** The objects that stand on a plot (spec C21's catalogue, needsPlot): the hospital and the observatory have none. */
 export type PlotObjectKind = 'park' | 'stadium' | 'spaceport';
 export type PrestigeId = PlotObjectKind | 'hospital' | 'observatory';
-/** The stages a project holds its plot in: from the first month of building until the game ends. */
-export type PlotStage = 'building' | 'standing' | 'closed' | 'damaged';
+/**
+ * The stages a project holds its plot in: from the land auction that wins its site (still commissioned) until the game
+ * ends. Project.plot is never cleared (WS7's brief).
+ */
+export type PlotStage = 'commissioned' | 'building' | 'standing' | 'closed' | 'damaged';
 
 export const OBJECT_NAME: Record<PrestigeId, string> = {
   park: 'Park',
@@ -46,6 +49,7 @@ export interface PlotObject {
 /** The words a screen reader hears for the plot's object, in the build site's own phrasing (WS8's pips: "1 of 3 months built"). */
 export function objectLabel(o: PlotObject): string {
   const name = OBJECT_NAME[o.kind];
+  if (o.stage === 'commissioned') return `${name}, site reserved: not building yet`;
   if (o.stage === 'building') return `${name}, building: ${o.built ?? 0} of ${o.buildMonths} months`;
   if (o.stage === 'standing') return `${name}, standing`;
   return `${name}, ${o.stage}: counts 0`;
@@ -53,9 +57,10 @@ export function objectLabel(o: PlotObject): string {
 
 /**
  * The stage's colour, the build site's own (WS8's parts.tsx STAGE and ProjectRow), so the map and the list agree:
- * standing ok, building warn, closed and damaged alert.
+ * a site still collecting holo, standing ok, building warn, closed and damaged alert.
  */
 const STAGE_RING: Record<PlotStage, string> = {
+  commissioned: 'ring-holo text-holo',
   standing: 'ring-ok text-ok',
   building: 'ring-warn text-warn',
   closed: 'ring-alert text-alert',
@@ -63,6 +68,7 @@ const STAGE_RING: Record<PlotStage, string> = {
 };
 /** The corner chip, in the map's flag style (HoloMap's OFF, SALE, SCAN): what a dimmed object is, or how far a site has come. */
 const STAGE_CHIP: Partial<Record<PlotStage, { text: (o: PlotObject) => string; tone: string }>> = {
+  commissioned: { text: () => 'SITE', tone: 'bg-holo text-on-holo' },
   building: { text: (o) => `${o.built ?? 0}/${o.buildMonths}`, tone: 'bg-warn text-void' },
   closed: { text: () => 'SHUT', tone: 'bg-alert text-white' },
   damaged: { text: () => 'HIT', tone: 'bg-alert text-white' },
@@ -75,7 +81,9 @@ const STAGE_CHIP: Partial<Record<PlotStage, { text: (o: PlotObject) => string; t
  */
 export function ObjectDisc({ object, tv, className }: { object: PlotObject; tv: boolean; className?: string }) {
   const chip = STAGE_CHIP[object.stage];
+  // A reserved site shows only a faint outline of what will stand there; a closed or damaged object fades.
   const faded = object.stage === 'closed' || object.stage === 'damaged';
+  const staked = object.stage === 'commissioned';
   return (
     <span
       className={cx('relative z-[2] flex aspect-square w-[62%] items-center justify-center rounded-full bg-map-chip shadow-chip', className)}
@@ -88,11 +96,11 @@ export function ObjectDisc({ object, tv, className }: { object: PlotObject; tv: 
         className={cx(
           'absolute inset-0 rounded-full',
           tv ? 'border-[3px]' : 'border-2',
-          object.stage === 'building' ? 'border-dashed' : 'border-solid',
-          object.stage === 'standing' ? 'border-ok' : object.stage === 'building' ? 'border-warn' : 'border-alert',
+          object.stage === 'building' || staked ? 'border-dashed' : 'border-solid',
+          staked ? 'border-holo' : object.stage === 'standing' ? 'border-ok' : object.stage === 'building' ? 'border-warn' : 'border-alert',
         )}
       />
-      <ObjectGlyph kind={object.kind} size="70%" className={cx(STAGE_RING[object.stage].split(' ')[1], faded && 'opacity-45')} />
+      <ObjectGlyph kind={object.kind} size="70%" className={cx(STAGE_RING[object.stage].split(' ')[1], faded && 'opacity-45', staked && 'opacity-30')} />
       {chip && (
         <span
           data-num
@@ -112,7 +120,9 @@ export function ObjectDisc({ object, tv, className }: { object: PlotObject; tv: 
  */
 export function ObjectGround({ object, tv, className }: { object: PlotObject; tv: boolean; className?: string }) {
   const chip = STAGE_CHIP[object.stage];
+  // A reserved site shows only a faint outline of what will stand there; a closed or damaged object fades.
   const faded = object.stage === 'closed' || object.stage === 'damaged';
+  const staked = object.stage === 'commissioned';
   return (
     <span className={cx('absolute inset-0 flex items-center justify-center', className)} data-testid="plot-object" data-kind={object.kind} data-stage={object.stage}>
       <span
@@ -120,11 +130,11 @@ export function ObjectGround({ object, tv, className }: { object: PlotObject; tv
         className={cx(
           'absolute inset-[2%] rounded-[10%] bg-map-chip/60',
           tv ? 'border-[4px]' : 'border-2',
-          object.stage === 'building' ? 'border-dashed' : 'border-solid',
-          object.stage === 'standing' ? 'border-ok' : object.stage === 'building' ? 'border-warn' : 'border-alert',
+          object.stage === 'building' || staked ? 'border-dashed' : 'border-solid',
+          staked ? 'border-holo' : object.stage === 'standing' ? 'border-ok' : object.stage === 'building' ? 'border-warn' : 'border-alert',
         )}
       />
-      <ObjectGlyph kind={object.kind} size="78%" className={cx('relative', STAGE_RING[object.stage].split(' ')[1], faded && 'opacity-45')} />
+      <ObjectGlyph kind={object.kind} size="78%" className={cx('relative', STAGE_RING[object.stage].split(' ')[1], faded && 'opacity-45', staked && 'opacity-30')} />
       {chip && (
         <span
           data-num
