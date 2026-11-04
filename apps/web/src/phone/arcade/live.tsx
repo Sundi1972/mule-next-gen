@@ -162,12 +162,14 @@ export function PhoneLive({ children }: { children: ReactNode }) {
       s.p = markStale(s.p, now, cfg);
       const rtt = client.roundTripMs() ?? 0;
       // Your own view says you assay: the copy stands until then, as the server holds you (needs a frame to time it).
+      const pace = msPerTick(s.log, cfg.steer.tickMs);
       const until = ctx.current.self.colonist?.assayUntil ?? null;
       if (until !== s.assaying && (until === null || s.p.frame)) {
         s.assaying = until;
-        s.p = holdUntil(s.p, until === null ? null : assayTick(s.p, until, now, client.serverNow(), rtt, msPerTick(s.log, cfg.steer.tickMs)));
+        s.p = holdUntil(s.p, until === null ? null : assayTick(s.p, until, now, client.serverNow(), rtt, pace));
       }
-      const target = phoneTick(s.p, now, rtt, cfg);
+      // At the frames' own pace, so a table that plays its phases quicker needs no corrections.
+      const target = phoneTick(s.p, now, rtt, cfg, pace);
       if (target !== null) s.p = advanceTo(s.p, target, world);
       const shown = shownAt(s.p, now, cfg);
       const want = stickOf(source.controls, shown);
