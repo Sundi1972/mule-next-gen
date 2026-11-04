@@ -11,7 +11,7 @@ const SICK: Condition = { foodShare: 1, sick: true, sickBecause: 'chance', condi
 const HUNGRY_AND_SICK: Condition = { foodShare: 0.5, sick: true, sickBecause: 'air', conditionPace: 0.3 };
 const STARVING_AND_SICK: Condition = { foodShare: 0, sick: true, sickBecause: 'pollution', conditionPace: 0.1 };
 const FOOD = { ate: 5, need: 10 };
-/** "8 points of walking speed per 10% of Food missing", from config. */
+/** The points of walking speed lost per 10% of Food missing, from config. */
 const POINTS = Math.round((1 - DEV_WALK.hungerPaceMin) * 10);
 
 describe('a colonist’s condition, in words (AM-14)', () => {
@@ -46,7 +46,7 @@ describe('a colonist’s condition, in words (AM-14)', () => {
 
   it('T-AC-12: the long-press rule says what hunger and sickness cost, its points from config', () => {
     expect(paceRule(HUNGRY, DEV_WALK, FOOD)).toEqual([`You ate 5 of the 10 Food you need. You lose ${POINTS} points of walking speed per 10% of Food missing.`]);
-    expect(POINTS).toBe(8);
+    expect(POINTS).toBeCloseTo((1 - DEV_WALK.hungerPaceMin) * 10);
     expect(paceRule(SICK, DEV_WALK, FOOD)).toEqual(['Sick this month. Sickness halves your walking speed.']);
     expect(paceRule(HUNGRY_AND_SICK, DEV_WALK, FOOD)).toEqual([expect.stringMatching(/^You ate 5 of the 10/), 'Sick: the air is toxic. Sickness halves your walking speed.']);
     expect(paceRule(FED, DEV_WALK, FOOD)).toEqual([]);

@@ -46,7 +46,8 @@ describe('the store view at the start of development', () => {
   it("B-AC-9: every screen sees each seat's condition in development, never in planning or production (the month end keeps it, C20): its hunger × sickness pace, species aside, and why it is sick", () => {
     const { game, state, planning, ctx, advance } = hungryWithAnEmptyCorral();
     const want = { foodShare: foodShare(state, 's1'), foodNeed: needsOf(state, 's1').food, sick: false, sickBecause: null, conditionPace: hungerPace(state, 's1') };
-    expect(want.conditionPace).toBeCloseTo(0.52);
+    expect(want.foodShare).toBeLessThan(1);
+    expect(want.conditionPace).toBeCloseTo(1 - (1 - DEV_WALK.hungerPaceMin) * (1 - want.foodShare));
     for (const viewer of ['s1', 's2', null]) expect(game.viewFor(viewer).players.find((p) => p.id === 's1')!.condition).toEqual(want);
     expect(game.viewFor('s1').me!.hungry).toBe(true);
     // A fed seat walks at full pace; outside development nobody has a condition.
