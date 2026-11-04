@@ -1,8 +1,10 @@
-/** Development's steps: smoke.ts's hunger seed, and the steered floor's checks shell.ts and screens.ts run. */
-import { DEV_STEER, DEVELOPMENT, floorConfig, HALL, isOpenFloor, mulePrice, pathTo, placeAt, terrainShare, type GameState } from '@mule/engine';
+/** Development's steps: smoke.ts's hunger seed, the steered floor's checks shell.ts and screens.ts run, and the moments'. */
+import { DEV_STEER, DEV_WALK, DEVELOPMENT, floorConfig, foodShare, GLINT, HALL, isOpenFloor, mulePrice, needsMule, pathTo, placeAt, hungerPace, monthNeeds, needsOf, pubPayoutFor, SCRAMBLE, sickPace, START, speedOf, strikeTarget, terrainShare, WOLVES, type DevFloor, type FloorColonist as EngineColonist, type GameState } from '@mule/engine';
 import type { DevFrame } from '@mule/protocol';
 import type { Browser, Page } from 'playwright';
 import type { MuleServer } from '../../server/src/server.js';
+import type { FrameMoments } from '@mule/protocol';
+import { momentsOf } from '../src/phone/arcade/frames';
 import { check, CLAIM_MS, claimAPlot, doneWithLand, hallPlace, PHONE, PHONE_SMALL, plotCentre, pressAct, steerTo, throughDoor, type SteerTarget } from './harness';
 
 /** Nine working farms give a crew of nine, so the seat needs 5 Food. */
@@ -159,6 +161,8 @@ export async function arcadeTable(
   const open = async (name: string, options: Parameters<Browser['newContext']>[0]) => {
     const page = await (await browser.newContext(options)).newPage();
     page.on('pageerror', (e) => errors.push(`${name}: ${e.message}`));
+    // A socket refused once the room's server has closed is the browser's own line, not the game's.
+    page.on('console', (m) => m.type() === 'error' && !/WebSocket connection to .* failed/.test(m.text()) && errors.push(`${name} (console): ${m.text()}`));
     return { page, wire: await watchWire(page) };
   };
   const host = await open(names[0]!, PHONE);
@@ -957,4 +961,639 @@ export function installSpot(server: MuleServer, code: string, seat: string, x: n
     .sort((a, b) => a.path!.seconds - b.path!.seconds);
   check(shores[0], `a shore to reach lake plot ${x},${y} from`);
   return { at: shores[0].at, within: SHORE_GAP / 2 };
+}
+
+// --- The moments (arcade PR-9): wolves, the glint race and the corral scramble, on the phones and the TV -----------
+
+/** The server's whole floor, the moments with it. */
+function floorOf(server: MuleServer, code: string): DevFloor {
+  const steering = steeredOf(server, code).steering;
+  check(steering, 'the server steers development');
+  return steering.floor as unknown as DevFloor;
+}
+
+/** A seat's colonist on the server's floor, its encounter and marks with it. */
+function colonistOf(server: MuleServer, code: string, seat: string): EngineColonist {
+  const c = floorOf(server, code).colonists.find((k) => k.id === seat);
+  check(c, `seat ${seat} has a colonist on the floor`);
+  return c;
+}
+
+/** Waits until the server has the seat's colonist as `ok` wants it; returns the last read. */
+async function colonistWhen(page: Page, server: MuleServer, code: string, seat: string, ok: (c: EngineColonist) => boolean, timeout = 2_000): Promise<EngineColonist> {
+  const end = Date.now() + timeout;
+  for (;;) {
+    const c = colonistOf(server, code, seat);
+    if (ok(c) || Date.now() > end) return c;
+    await page.waitForTimeout(TICK_MS);
+  }
+}
+
+/** The newest moments the TV's socket heard, in the last few frames; null when none of them carried any. */
+function heardMoments(wire: Wire | null, frames = 10): FrameMoments | null {
+  return (
+    wire?.frames
+      .slice(-frames)
+      .map((f) => momentsOf(f.frame))
+      .filter((m): m is FrameMoments => m !== null)
+      .at(-1) ?? null
+  );
+}
+
+/** Every beat the socket heard in a frame since `sinceMs`. */
+const heardBeats = (wire: Wire | null, sinceMs: number) => [...new Set(wire?.frames.filter((f) => f.at >= sinceMs).flatMap((f) => f.frame.beats) ?? [])];
+
+/** What a screen shows of the moments, in one pass. */
+type MomentsRead = {
+  wolves: { who: string; state: string | null; x: number; y: number }[];
+  callouts: { id: string; text: string }[];
+  marks: string[];
+  glint: { x: number; y: number } | null;
+  strip: string | null;
+  banner: { text: string; tone: string | null; r: Rect } | null;
+  corral: string | null;
+  beats: string[];
+  loose: { who: string; x: number; y: number }[];
+  /** Whose MULE the map draws on its lead. */
+  leads: string[];
+  /** Each colonist the map draws, where. */
+  drawn: Record<string, { x: number; y: number }>;
+};
+
+/** Kept a string, as READ_HALL. */
+const READ_MOMENTS = `(() => {
+  const all = (sel) => [...document.querySelectorAll(sel)];
+  const id = (e) => e.getAttribute('data-testid');
+  const box = (el) => { const r = el.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; };
+  const glint = document.querySelector('[data-testid=glint]');
+  const strip = document.querySelector('[data-testid=glint-strip]');
+  const banner = document.querySelector('[data-testid=scramble-banner]');
+  const corral = document.querySelector('[data-testid=scramble-corral]');
+  return {
+    wolves: all('[data-testid^=wolf-]').filter((e) => /^wolf-s\\d+-\\d+$/.test(id(e))).map((e) => ({ who: id(e).split('-')[1], state: e.getAttribute('data-state'), x: Number(e.getAttribute('data-x')), y: Number(e.getAttribute('data-y')) })),
+    callouts: all('[data-testid^=wolf-choice-], [data-testid^=wolf-chase-], [data-testid^=fight-hud-], [data-testid^=stunned-]').map((e) => ({ id: id(e), text: e.textContent })),
+    marks: all('[data-testid^=bitten-], [data-testid^=pelts-]').map(id),
+    glint: glint && { x: Number(glint.getAttribute('data-x')), y: Number(glint.getAttribute('data-y')) },
+    strip: strip && strip.textContent,
+    banner: banner && { text: banner.textContent, tone: banner.getAttribute('data-tone'), r: box(banner) },
+    corral: corral && corral.getAttribute('data-left'),
+    beats: all('[data-testid=tv-beat]').map((e) => e.textContent),
+    loose: all('[data-testid^=loose-]').map((e) => ({ who: id(e).slice(6), x: Number(e.getAttribute('data-x')), y: Number(e.getAttribute('data-y')) })),
+    leads: all('[data-testid=walkers-map] [data-testid^=mule-]').map((e) => id(e).slice(5)),
+    drawn: Object.fromEntries(all('[data-testid=walkers-map] [data-testid^=colonist-]:not([data-testid^=colonist-name])').map((e) => [id(e).slice(9), { x: Number(e.getAttribute('data-x')), y: Number(e.getAttribute('data-y')) }])),
+  };
+})()`;
+
+const readMoments = async (page: Page) => (await page.evaluate(READ_MOMENTS)) as MomentsRead;
+
+/** What a check that the screens show a moment says of the frames: whether the server's producer put it on them. */
+const framesSay = (m: FrameMoments | null) => (m ? `the frames carry moments ${JSON.stringify(m)}` : 'the frames carry no moments');
+
+/** A pack is certain every tick on wolf land: a seeded roll under chancePerSecond × the tick always meets one. */
+const CERTAIN = 1_000;
+/** A drawn wolf this close to one in the newest frame is drawn where the frame has it: interpolateMs of a pack closing in, and a read's age. */
+const WOLF_NEAR = 0.5;
+
+/** A plot of wolf land nobody owns, open on all four sides, nearest `near` and at least `apart` tiles from `avoid`. */
+function wolfLand(server: MuleServer, code: string, near: { x: number; y: number }, avoid: { x: number; y: number } | null = null, apart = 3): { x: number; y: number } {
+  const { state } = gameOf(server, code);
+  const cfg = floorConfig();
+  const at = (x: number, y: number) => state.tiles.find((k) => k.x === x && k.y === y);
+  const open = (x: number, y: number) => {
+    const k = at(x, y);
+    return !!k && k.terrain !== 'lake' && terrainShare(k.terrain, cfg) > 0;
+  };
+  const land = state.tiles
+    .filter((k) => (WOLVES.lands as readonly string[]).includes(k.terrain) && k.owner === null && open(k.x - 1, k.y) && open(k.x + 1, k.y) && open(k.x, k.y - 1) && open(k.x, k.y + 1))
+    .filter((k) => !avoid || Math.hypot(k.x - avoid.x, k.y - avoid.y) >= apart)
+    .sort((a, b) => Math.hypot(a.x - near.x, a.y - near.y) - Math.hypot(b.x - near.x, b.y - near.y));
+  check(land[0], 'the map has wolf land, open on every side, nobody owns');
+  return { x: land[0].x + 0.5, y: land[0].y + 0.5 };
+}
+
+/** The arrow keys for a direction, one per axis that carries at least a third of it. */
+function arrowsFor(d: { x: number; y: number }): string[] {
+  const m = Math.hypot(d.x, d.y) || 1;
+  return [...(Math.abs(d.x) / m >= 0.33 ? [d.x < 0 ? 'ArrowLeft' : 'ArrowRight'] : []), ...(Math.abs(d.y) / m >= 0.33 ? [d.y < 0 ? 'ArrowUp' : 'ArrowDown'] : [])];
+}
+
+/** Holds exactly `want` of the arrow keys, letting go of the rest. */
+async function holdKeys(page: Page, held: Set<string>, want: string[]): Promise<void> {
+  for (const k of [...held]) if (!want.includes(k)) (await page.keyboard.up(k), held.delete(k));
+  for (const k of want) if (!held.has(k)) (await page.keyboard.down(k), held.add(k));
+}
+
+/**
+ * Fights as a player who reads the wolves well (RULE-4): off the red ring while a wolf crouches at your spot, and the
+ * button at a wolf that stands open within reach. Reads the server's floor each tick; returns when the fight is over.
+ */
+async function fightWell(page: Page, server: MuleServer, code: string, seat: string): Promise<{ strikes: number; bites: number; presses: number }> {
+  const held = new Set<string>();
+  const score = { strikes: 0, bites: 0, presses: 0 };
+  const cfg = floorConfig();
+  const end = Date.now() + (WOLVES.fightSeconds + 3) * 1_000;
+  try {
+    while (Date.now() < end) {
+      const floor = floorOf(server, code);
+      const c = floor.colonists.find((k) => k.id === seat)!;
+      const e = c.encounter;
+      if (!e || e.stage !== 'fight') return score;
+      Object.assign(score, { strikes: e.strikes, bites: e.bites });
+      const coming = e.wolves.find((w) => (w.state === 'tell' || w.state === 'lunge') && w.target && Math.hypot(c.x - w.target.x, c.y - w.target.y) < WOLVES.biteTiles + 0.3);
+      if (coming) {
+        const off = { x: c.x - coming.target!.x, y: c.y - coming.target!.y };
+        await holdKeys(page, held, arrowsFor(Math.hypot(off.x, off.y) > 0.05 ? off : { x: -(coming.target!.y - coming.y), y: coming.target!.x - coming.x }));
+      } else {
+        await holdKeys(page, held, []);
+        const i = strikeTarget(c, cfg);
+        if (i >= 0 && e.wolves[i]!.state === 'open' && floor.tick >= e.recoverUntilTick) {
+          await page.keyboard.press(' ');
+          score.presses++;
+        }
+      }
+      await page.waitForTimeout(TICK_MS);
+    }
+  } finally {
+    await holdKeys(page, held, []);
+  }
+  return score;
+}
+
+/**
+ * B-AC-5: wolves forced on (a pack certain each tick on wolf land, by setting the in-process server's WOLVES). Mia,
+ * on forest, pushes the stick and runs: she is bitten and slowed, or gets away. Heiko presses and fights: he wins pelts
+ * and sells them at the store's door, or loses and is stunned (he leads no MULE). Then he loses one on purpose (the
+ * first lunge held back until he has pushed to the fight's ring, where he stands to be bitten), leading a MULE: on his
+ * phone he stays inside the ring while he pushes out of it, the MULE runs loose off his lead, he walks to it at full
+ * pace, the button says CATCH MULE, and caught it is on his lead again. Every phone and the TV show the pack where the
+ * frames have it, the choice, the chase and the fight. Negative: no pack comes in the hall. The checks of what the
+ * screens drew run last, so the server's outcomes are measured whatever they show.
+ */
+export async function wolvesRunOrFight(t: ArcadeTable): Promise<string> {
+  const { heiko, mia, tv, server, code, wires } = t;
+  check(tv, 'B-AC-5: the table has a TV');
+  const saved = { ...WOLVES };
+  const out: string[] = [];
+  const owed: { tag: string; ok: boolean; said: string }[] = [];
+  const owe = (tag: string, ok: boolean, said: string) => owed.push({ tag, ok, said });
+  try {
+    Object.assign(WOLVES, { on: true, chancePerSecond: 0, cooldownSeconds: 0 });
+    // Negative: both in the hall with a pack certain, and none comes.
+    const walk = HALL.floor[0]!;
+    placeOnFloor(server, code, 's1', { space: 'hall', x: HALL.w * 0.4, y: (walk.y0 + walk.y1) / 2 });
+    placeOnFloor(server, code, 's2', { space: 'hall', x: HALL.w * 0.6, y: (walk.y0 + walk.y1) / 2 });
+    await mia.waitForTimeout(300);
+    WOLVES.chancePerSecond = CERTAIN;
+    await mia.waitForTimeout(1_000);
+    WOLVES.chancePerSecond = 0;
+    for (const seat of ['s1', 's2']) check(colonistOf(server, code, seat).encounter === null, `B-AC-5 (negative): no pack comes for ${seat} in the hall, with one certain each tick on wolf land`);
+    for (const [name, page] of [['Mia', mia], ['the TV', tv]] as const) {
+      const r = await readMoments(page);
+      check(r.wolves.length === 0 && r.callouts.length === 0, `B-AC-5 (negative): ${name} draws no wolves while nobody meets any, got ${JSON.stringify(r.wolves)} ${JSON.stringify(r.callouts)}`);
+    }
+    out.push('no pack in the hall');
+
+    // Run: Mia on wolf land meets a pack, pushes the stick, and runs.
+    const store = gameOf(server, code).state.tiles.find((k) => k.terrain === 'store')!;
+    const miaLand = wolfLand(server, code, store);
+    placeOnFloor(server, code, 's2', { space: 'map', ...miaLand });
+    await mia.locator('[data-testid=your-stage][data-space=map]').waitFor({ timeout: 2_000 });
+    await mia.getByTestId('phone-game').focus();
+    WOLVES.chancePerSecond = CERTAIN;
+    const met = await colonistWhen(mia, server, code, 's2', (c) => c.encounter?.stage === 'choose');
+    WOLVES.chancePerSecond = 0;
+    check(met.encounter?.stage === 'choose', `B-AC-5: a pack comes for Mia on wolf land at ${where(met)}, got ${met.encounter?.stage ?? 'none'}`);
+    await mia.waitForTimeout(300);
+    const choosing = { mia: await readMoments(mia), tv: await readMoments(tv), frames: heardMoments(wires.tv) };
+    const pack = choosing.frames?.packs.find((k) => k.who === 's2');
+    const drawnAt = (r: MomentsRead) => !!pack && pack.wolves.every((w) => r.wolves.some((d) => d.who === 's2' && Math.hypot(d.x - w.x, d.y - w.y) <= WOLF_NEAR));
+    owe(
+      "Mia's phone and the TV draw her pack where the frames have it, and the choice",
+      !!pack && drawnAt(choosing.mia) && drawnAt(choosing.tv) && choosing.mia.callouts.some((c) => c.id === 'wolf-choice-s2' && c.text.includes('stick: RUN · button: FIGHT')) && choosing.tv.callouts.some((c) => c.id === 'wolf-choice-s2' && c.text.includes('run or fight?')),
+      `${framesSay(choosing.frames)}; Mia's phone drew ${JSON.stringify(choosing.mia.wolves)} ${JSON.stringify(choosing.mia.callouts)}; the TV ${JSON.stringify(choosing.tv.wolves)} ${JSON.stringify(choosing.tv.callouts)}`,
+    );
+    const centre = met.encounter!.wolves.reduce((a, w) => ({ x: a.x + w.x / met.encounter!.wolves.length, y: a.y + w.y / met.encounter!.wolves.length }), { x: 0, y: 0 });
+    const away = arrowsFor({ x: met.x - centre.x, y: met.y - centre.y });
+    const held = new Set<string>();
+    await holdKeys(mia, held, away);
+    const chased = await colonistWhen(mia, server, code, 's2', (c) => c.encounter?.stage !== 'choose', 1_500);
+    check(chased.encounter?.stage === 'chase' || (chased.encounter === null && chased.bitten), `B-AC-5: pushing the stick runs: the pack gives chase, got ${chased.encounter?.stage ?? 'none'}`);
+    await mia.waitForTimeout(200);
+    const running = await readMoments(mia);
+    owe("Mia's phone says RUN! while the pack chases her", running.callouts.some((c) => c.id === 'wolf-chase-s2'), `${framesSay(heardMoments(wires.mia))}; it drew ${JSON.stringify(running.callouts)}`);
+    const ran = await colonistWhen(mia, server, code, 's2', (c) => c.encounter === null, (WOLVES.giveUpSeconds + 2) * 1_000);
+    await holdKeys(mia, held, []);
+    check(ran.encounter === null, `B-AC-5: the chase ends within giveUpSeconds, still ${ran.encounter?.stage}`);
+    if (ran.bitten) {
+      const state = gameOf(server, code).state;
+      const cfg = floorConfig();
+      check(speedOf(ran, state, cfg) < speedOf({ ...ran, bitten: false }, state, cfg), 'B-AC-5: bitten, Mia walks slower on the server');
+      await mia.waitForTimeout(300);
+      const marked = await readMoments(mia);
+      owe("Mia's phone marks her BITTEN", marked.marks.includes('bitten-s2'), `it drew ${JSON.stringify(marked.marks)}`);
+      out.push(`Mia ran and was bitten at ${where(ran)}, slowed`);
+    } else out.push(`Mia ran and got away at ${where(ran)}`);
+
+    // Fight: Heiko on wolf land near the store's door meets a pack and presses.
+    const heikoLand = wolfLand(server, code, store, ran);
+    placeOnFloor(server, code, 's1', { space: 'map', ...heikoLand });
+    await heiko.locator('[data-testid=your-stage][data-space=map]').waitFor({ timeout: 2_000 });
+    await heiko.getByTestId('phone-game').focus();
+    WOLVES.chancePerSecond = CERTAIN;
+    const met2 = await colonistWhen(heiko, server, code, 's1', (c) => c.encounter?.stage === 'choose');
+    WOLVES.chancePerSecond = 0;
+    check(met2.encounter?.stage === 'choose', `B-AC-5: a pack comes for Heiko at ${where(met2)}`);
+    await pressAct(heiko);
+    const fighting = await colonistWhen(heiko, server, code, 's1', (c) => c.encounter?.stage === 'fight');
+    check(fighting.encounter?.stage === 'fight', `B-AC-5: the button fights, got ${fighting.encounter?.stage ?? 'none'}`);
+    await heiko.waitForTimeout(300);
+    const fight = { heiko: await readMoments(heiko), tv: await readMoments(tv), frames: heardMoments(wires.tv) };
+    owe(
+      "Heiko's phone and the TV show his fight: the pack and the score",
+      fight.heiko.callouts.some((c) => c.id === 'fight-hud-s1') && fight.tv.callouts.some((c) => c.id === 'fight-hud-s1') && fight.tv.wolves.some((w) => w.who === 's1'),
+      `${framesSay(fight.frames)}; his phone drew ${JSON.stringify(fight.heiko.callouts)}; the TV ${JSON.stringify(fight.tv.callouts)} and ${fight.tv.wolves.length} wolves`,
+    );
+    const score = await fightWell(heiko, server, code, 's1');
+    const after = colonistOf(server, code, 's1');
+    const fought = `${score.strikes} strikes, ${score.bites} bites, ${score.presses} presses at an open wolf`;
+    check(after.encounter === null, `B-AC-5: the fight ends within fightSeconds, still ${after.encounter?.stage}`);
+    if (after.pelts > 0) {
+      await heiko.waitForTimeout(300);
+      const marked = await readMoments(heiko);
+      owe("Heiko's phone shows the pelts he carries", marked.marks.includes('pelts-s1'), `it drew ${JSON.stringify(marked.marks)}`);
+      const m0 = playerOf(server, code, 's1').money;
+      // The fight leaves him anywhere in its ring, maybe at a tile's edge, where a straight push catches the corner of
+      // the next row: the walk to the door starts from his tile's middle, as steerTo's routes do.
+      const won = colonistOf(server, code, 's1');
+      await steerTo(heiko, server, code, 's1', plotCentre(Math.floor(won.x), Math.floor(won.y)), { within: 0.1 });
+      await throughDoor(heiko, server, code, 's1', heikoLand.x < store.x + 0.5 ? 'doorL' : 'doorR').catch((e: Error) => {
+        const c = colonistOf(server, code, 's1');
+        const focused = heiko.evaluate(() => document.activeElement?.getAttribute('data-testid') ?? document.activeElement?.tagName ?? null);
+        return focused.then((f) => {
+          throw new Error(`${e.message}; on the floor ${JSON.stringify({ ...c, encounter: c.encounter?.stage ?? null })}; the page's focus ${f}; its last steers ${JSON.stringify(wires.heiko.steers.slice(-4))}; ${framesSay(heardMoments(wires.heiko))}`);
+        });
+      });
+      await expectButton(heiko, server, code, 's1', `SELL ${after.pelts} PELTS`, 'B-AC-5');
+      await pressAct(heiko);
+      const sold = await playerWhen(heiko, server, code, 's1', (p) => p.money > m0);
+      check(sold.money === m0 + after.pelts * WOLVES.peltPrice && colonistOf(server, code, 's1').pelts === 0, `B-AC-5: the pelts sell at the store's door for ${after.pelts * WOLVES.peltPrice} cr, money ${m0} → ${sold.money}`);
+      out.push(`Heiko fought and won ${after.pelts} pelts (${fought}), sold for ${sold.money - m0} cr`);
+    } else if (score.bites < WOLVES.bitesToLose - 1) {
+      // Neither side won in fightSeconds: the wolves slink away and nothing is paid.
+      check(after.pelts === 0 && after.stunnedUntilTick === undefined, `B-AC-5: held off, Heiko carries no pelts and stands free, got pelts ${after.pelts}, stunned until ${after.stunnedUntilTick}`);
+      out.push(`Heiko held them off (${fought})`);
+    } else {
+      const tick = floorOf(server, code).tick;
+      check((after.stunnedUntilTick ?? 0) > tick, `B-AC-5: a fight lost with no MULE on the lead stuns Heiko, got pelts ${after.pelts}, stunned until ${after.stunnedUntilTick} (${fought})`);
+      await heiko.waitForTimeout(200);
+      const stunned = await readMoments(heiko);
+      owe("Heiko's phone says he is stunned", stunned.callouts.some((c) => c.id === 'stunned-s1'), `${framesSay(heardMoments(wires.heiko))}; it drew ${JSON.stringify(stunned.callouts)}`);
+      out.push(`Heiko fought and lost, stunned (${fought})`);
+    }
+    out.push(await aFightLostWithAMule(t, store, owe));
+  } finally {
+    Object.assign(WOLVES, saved);
+  }
+  // What the server measured, whatever the screens drew.
+  console.log(`  B-AC-5, the server: ${out.join('; ')}`);
+  for (const o of owed) check(o.ok, `B-AC-5: ${o.tag}; ${o.said}`);
+  return out.join('; ');
+}
+
+/** How far inside its ring a drawn colonist may seem: the wire's rounding and a frame's interpolation. */
+const RING_SLACK = 0.05;
+/** Pushing out of the ring, he gets this near its edge. */
+const AT_THE_RING = 0.8;
+
+/**
+ * B-AC-5's lost fight, made sure: Heiko buys a MULE, leads it onto wolf land, fights and pushes out of the ring while the
+ * first lunge waits until he is at its edge, where he stands, so every lunge bites. Then the MULE runs loose, and he
+ * catches it. Restores nothing itself: the caller restores WOLVES.
+ */
+async function aFightLostWithAMule(t: ArcadeTable, store: { x: number; y: number }, owe: (tag: string, ok: boolean, said: string) => void): Promise<string> {
+  const { heiko, server, code, wires } = t;
+  const cfg = floorConfig();
+  if (onFloor(server, code, 's1').space === 'map') await throughDoor(heiko, server, code, 's1');
+  await steerTo(heiko, server, code, 's1', hallPlace('corral'));
+  await expectButton(heiko, server, code, 's1', 'BUY MULE', 'B-AC-5');
+  await pressAct(heiko);
+  check((await playerWhen(heiko, server, code, 's1', (p) => p.carriedMule === 'empty')).carriedMule === 'empty', 'B-AC-5: Heiko buys a MULE to lead');
+  await throughDoor(heiko, server, code, 's1');
+  // Test fixture: onto wolf land, as B-AC-5's run and fight are put there; his MULE follows on its lead.
+  placeOnFloor(server, code, 's1', { space: 'map', ...wolfLand(server, code, store, onFloor(server, code, 's2')) });
+  await heiko.locator('[data-testid=your-stage][data-space=map]').waitFor({ timeout: 2_000 });
+  await heiko.getByTestId('phone-game').focus();
+  await heiko.waitForTimeout(500);
+  Object.assign(WOLVES, { firstLungeSeconds: 2.5, chancePerSecond: CERTAIN });
+  const met = await colonistWhen(heiko, server, code, 's1', (c) => c.encounter?.stage === 'choose');
+  WOLVES.chancePerSecond = 0;
+  check(met.encounter?.stage === 'choose', `B-AC-5: a pack comes for Heiko leading his MULE, got ${met.encounter?.stage ?? 'none'}`);
+  await pressAct(heiko);
+  const fight = await colonistWhen(heiko, server, code, 's1', (c) => c.encounter?.stage === 'fight');
+  check(fight.encounter?.stage === 'fight', `B-AC-5: he fights, got ${fight.encounter?.stage ?? 'none'}`);
+  const centre = fight.encounter!.centre;
+  // Out of the ring, and on until the fight is over: he never dodges.
+  const out = arrowsFor({ x: 1, y: 0 });
+  for (const k of out) await heiko.keyboard.down(k);
+  const reads: number[] = [];
+  const end = Date.now() + (WOLVES.fightSeconds + 2) * 1_000;
+  try {
+    while (colonistOf(server, code, 's1').encounter && Date.now() < end) {
+      const d = (await readMoments(heiko)).drawn['s1'];
+      if (d) reads.push(Math.hypot(d.x - centre.x, d.y - centre.y));
+      await heiko.waitForTimeout(100);
+    }
+  } finally {
+    for (const k of out) await heiko.keyboard.up(k);
+  }
+  const lost = colonistOf(server, code, 's1');
+  check(lost.encounter === null && !!playerOf(server, code, 's1').muleBolted && !!lost.bolt, `B-AC-5: standing to be bitten, Heiko loses and his MULE bolts, got ${JSON.stringify({ encounter: lost.encounter?.stage ?? null, bolt: lost.bolt ?? null, bolted: playerOf(server, code, 's1').muleBolted })}`);
+  const farthest = Math.max(...reads);
+  owe(
+    "pushing out of the fight's ring, Heiko's phone draws him inside it, at its edge",
+    reads.length >= 10 && farthest <= WOLVES.arenaTiles + RING_SLACK && farthest >= AT_THE_RING * WOLVES.arenaTiles,
+    `${reads.length} reads, his drawn distance from the ring's centre at most ${farthest.toFixed(3)} of ${WOLVES.arenaTiles}`,
+  );
+
+  // The MULE runs its bolt; then it stands loose, off his lead, on his phone where the server has it.
+  await heiko.waitForTimeout(((WOLVES.boltTiles / WOLVES.boltSpeed) * 1_000) + 500);
+  const mule = colonistOf(server, code, 's1').lead!;
+  const loose = await readMoments(heiko);
+  const drawnLoose = loose.loose.find((m) => m.who === 's1');
+  const me = loose.drawn['s1'];
+  owe(
+    "the bolted MULE runs loose on Heiko's phone, where the server has it, off his lead",
+    !!drawnLoose && !loose.leads.includes('s1') && Math.hypot(drawnLoose.x - mule.x, drawnLoose.y - mule.y) <= 0.3 && !!me && Math.hypot(drawnLoose.x - me.x, drawnLoose.y - me.y) >= 1,
+    `${framesSay(heardMoments(wires.heiko))}; loose ${JSON.stringify(loose.loose)}, on leads ${JSON.stringify(loose.leads)}, him ${JSON.stringify(me)}, the server's MULE ${mule.x.toFixed(2)},${mule.y.toFixed(2)}`,
+  );
+
+  // To it, at full pace: the server's steps, against a led colonist's on the same ground.
+  const steps: { tick: number; c: EngineColonist }[] = [];
+  const timer = setInterval(() => {
+    const tick = floorOf(server, code).tick;
+    if (steps.at(-1)?.tick !== tick) steps.push({ tick, c: colonistOf(server, code, 's1') });
+  }, 2);
+  try {
+    await steerTo(heiko, server, code, 's1', { space: 'map', x: mule.x, y: mule.y }, { within: 0.3 });
+  } finally {
+    clearInterval(timer);
+  }
+  const state = gameOf(server, code).state;
+  // One tick's steps only, each judged on the ground it started from; a step along a wall or off its land is shorter.
+  const paces = steps.slice(1).flatMap(({ tick, c }, i) => {
+    const { tick: t0, c: a } = steps[i]!;
+    const d = Math.hypot(c.x - a.x, c.y - a.y);
+    if (tick !== t0 + 1 || !c.moving || d === 0 || c.space !== 'map' || a.space !== 'map' || !c.bolt) return [];
+    const led = (speedOf({ ...a, bolt: null }, state, cfg) * DEV_STEER.tickMs) / 1_000;
+    const free = (speedOf({ ...a, lead: null, bolt: null }, state, cfg) * DEV_STEER.tickMs) / 1_000;
+    // A diagonal key pair goes on the wire as the stick (5/8, 5/8): 0.88 of a step. Straight steps are the measure.
+    const straight = Math.abs(c.x - a.x) < 1e-9 || Math.abs(c.y - a.y) < 1e-9;
+    return straight ? [{ d: Number(d.toFixed(4)), led: Number(led.toFixed(4)), free: Number(free.toFixed(4)) }] : [];
+  });
+  const full = paces.filter((k) => Math.abs(k.d - k.free) <= 0.0002);
+  check(paces.length >= 5 && full.length === paces.length, `B-AC-5: with his MULE bolted Heiko walks at full pace, not a led one: ${full.length} of ${paces.length} straight steps at full; the rest ${JSON.stringify(paces.filter((k) => !full.includes(k)).slice(0, 6))}`);
+  await heiko.waitForTimeout(300);
+  const there = (await readMoments(heiko)).drawn['s1'];
+  const truth = colonistOf(server, code, 's1');
+  owe("walking free of his MULE, Heiko's phone draws him where the server has him", !!there && Math.hypot(there.x - truth.x, there.y - truth.y) <= 0.15, `drawn ${JSON.stringify(there)}, the server ${truth.x.toFixed(2)},${truth.y.toFixed(2)}`);
+
+  // CATCH MULE, and it is on his lead again.
+  await expectButton(heiko, server, code, 's1', 'CATCH MULE', 'B-AC-5');
+  await pressAct(heiko);
+  const caught = await playerWhen(heiko, server, code, 's1', (p) => !p.muleBolted);
+  check(!caught.muleBolted && caught.carriedMule === 'empty' && !colonistOf(server, code, 's1').bolt, 'B-AC-5: CATCH MULE catches it: on his lead again on the server');
+  await heiko.waitForTimeout(300);
+  const back = await readMoments(heiko);
+  owe("caught, Heiko's phone draws his MULE on his lead again, and none loose", back.leads.includes('s1') && !back.loose.some((m) => m.who === 's1'), `loose ${JSON.stringify(back.loose)}, on leads ${JSON.stringify(back.leads)}`);
+  return `Heiko lost a fight leading a MULE (drawn at most ${farthest.toFixed(2)} of ${WOLVES.arenaTiles} from the ring's centre), it bolted, he walked to it at full pace (${paces.length} steps) and caught it`;
+}
+
+/** The glint's tile once lit, waited for; null if none lights in `timeout`. */
+async function glintWhen(page: Page, server: MuleServer, code: string, timeout: number): Promise<{ x: number; y: number; untilTick: number } | null> {
+  const end = Date.now() + timeout;
+  while (Date.now() < end) {
+    const g = floorOf(server, code).moments.glint;
+    if (g) return { x: g.x, y: g.y, untilTick: g.untilTick };
+    await page.waitForTimeout(TICK_MS);
+  }
+  return null;
+}
+
+/** A tile next to `g` a colonist can stand on, other than a lake. */
+function besideGlint(server: MuleServer, code: string, g: { x: number; y: number }): { x: number; y: number } {
+  const { state } = gameOf(server, code);
+  const cfg = floorConfig();
+  const next = [
+    [1, 0],
+    [-1, 0],
+    [0, 1],
+    [0, -1],
+  ]
+    .map(([dx, dy]) => state.tiles.find((k) => k.x === g.x + dx! && k.y === g.y + dy!))
+    .find((k) => k && k.terrain !== 'lake' && k.terrain !== 'store' && terrainShare(k.terrain, cfg) > 0);
+  check(next, `B-AC-6: the glint at ${g.x},${g.y} has open land beside it`);
+  return { x: next.x + 0.5, y: next.y + 0.5 };
+}
+
+/**
+ * B-AC-6: glints forced early and often (the in-process server's GLINT). One lights: every phone and the TV show it at
+ * once (Mia on the map draws it on its tile, Heiko in the hall a strip that says where), and Mia, walking onto it with
+ * the stick, gets the prize in the server's stock. Negative: the next, with nobody racing, fades after showSeconds and
+ * nobody gets it. The checks of what the screens drew run last.
+ */
+export async function theGlintRace(t: ArcadeTable): Promise<string> {
+  const { heiko, mia, tv, server, code, wires } = t;
+  check(tv, 'B-AC-6: the table has a TV');
+  const saved = { glint: { ...GLINT }, wolves: WOLVES.on };
+  const owed: { tag: string; ok: boolean; said: string }[] = [];
+  const out: string[] = [];
+  try {
+    WOLVES.on = false;
+    Object.assign(GLINT, { on: true, prize: 'crystite', meanGapSeconds: 1, showSeconds: 8, pauseSeconds: 0.5 });
+    const store = gameOf(server, code).state.tiles.find((k) => k.terrain === 'store')!;
+    const walk = HALL.floor[0]!;
+    placeOnFloor(server, code, 's1', { space: 'hall', x: HALL.w * 0.4, y: (walk.y0 + walk.y1) / 2 });
+    placeOnFloor(server, code, 's2', { space: 'map', x: store.x - 1.5, y: store.y + 0.5 });
+    await mia.locator('[data-testid=your-stage][data-space=map]').waitFor({ timeout: 2_000 });
+    const g = await glintWhen(mia, server, code, 20_000);
+    check(g, 'B-AC-6: a glint lights within 20 s');
+    await mia.waitForTimeout(300);
+    const lit = { mia: await readMoments(mia), heiko: await readMoments(heiko), tv: await readMoments(tv), frames: heardMoments(wires.tv) };
+    const words = `${g.x + 1}·${g.y + 1}`;
+    owed.push({
+      tag: `every phone and the TV show the glint at ${words} at once: on the map where it lit, in the hall as a strip`,
+      ok: lit.mia.glint?.x === g.x && lit.mia.glint.y === g.y && lit.tv.glint?.x === g.x && lit.tv.glint.y === g.y && !!lit.heiko.strip?.includes(words),
+      said: `${framesSay(lit.frames)}; Mia's phone ${JSON.stringify(lit.mia.glint)}, the TV ${JSON.stringify(lit.tv.glint)}, Heiko's strip ${JSON.stringify(lit.heiko.strip)}`,
+    });
+    // The race: Mia, a step away, walks onto it with the stick.
+    const c0 = playerOf(server, code, 's2').stock.crystite;
+    const h0 = playerOf(server, code, 's1').stock.crystite;
+    const raced = Date.now();
+    placeOnFloor(server, code, 's2', { space: 'map', ...besideGlint(server, code, g) });
+    await mia.waitForTimeout(200);
+    await steerTo(mia, server, code, 's2', plotCentre(g.x, g.y), { via: 'stick', within: 0.3 }).catch(() => undefined);
+    const won = await playerWhen(mia, server, code, 's2', (p) => p.stock.crystite > c0);
+    check(won.stock.crystite === c0 + GLINT.crystite && floorOf(server, code).moments.glint === null, `B-AC-6: the first onto the glint, Mia, gets +${GLINT.crystite} Crystite, ${c0} → ${won.stock.crystite}`);
+    check(playerOf(server, code, 's1').stock.crystite === h0, 'B-AC-6: and nobody else does');
+    await tv.waitForTimeout(300);
+    const after = await readMoments(tv);
+    check(after.beats.some((b) => b.startsWith('Mia got the glint')), `B-AC-6: the TV says who got it; the frames' beats ${JSON.stringify(heardBeats(wires.tv, raced))}, the TV shows ${JSON.stringify(after.beats)}`);
+    owed.push({ tag: 'once won the glint is drawn on no screen', ok: after.glint === null && (await readMoments(mia)).glint === null, said: `the TV ${JSON.stringify(after.glint)}` });
+    out.push(`lit at ${words}, Mia got it`);
+
+    // Negative: the next, with nobody on the way, fades and nobody gets it.
+    GLINT.showSeconds = 2;
+    const g2 = await glintWhen(mia, server, code, 20_000);
+    check(g2, 'B-AC-6 (negative): a second glint lights within 20 s');
+    const lit2 = Date.now();
+    const before = ['s1', 's2'].map((s) => playerOf(server, code, s).stock.crystite);
+    const end = Date.now() + (GLINT.showSeconds + 2) * 1_000;
+    while (floorOf(server, code).moments.glint && Date.now() < end) await mia.waitForTimeout(TICK_MS);
+    check(floorOf(server, code).moments.glint === null, `B-AC-6 (negative): after showSeconds the glint at ${g2.x + 1}·${g2.y + 1} fades`);
+    check(['s1', 's2'].every((s, i) => playerOf(server, code, s).stock.crystite === before[i]), 'B-AC-6 (negative): and nobody gets it');
+    await tv.waitForTimeout(300);
+    const faded = { tv: await readMoments(tv), mia: await readMoments(mia) };
+    check(faded.tv.glint === null && faded.mia.glint === null, 'B-AC-6 (negative): faded, it is drawn on no screen');
+    check(faded.tv.beats.includes('The glint faded'), `B-AC-6 (negative): the TV says the glint faded; the frames' beats ${JSON.stringify(heardBeats(wires.tv, lit2))}, the TV shows ${JSON.stringify(faded.tv.beats)}`);
+    out.push(`the next at ${g2.x + 1}·${g2.y + 1} faded`);
+  } finally {
+    Object.assign(GLINT, saved.glint);
+    WOLVES.on = saved.wolves;
+  }
+  // What the server measured, whatever the screens drew.
+  console.log(`  B-AC-6, the server: ${out.join('; ')}`);
+  for (const o of owed) check(o.ok, `B-AC-6: ${o.tag}; ${o.said}`);
+  return out.join('; ');
+}
+
+/** The banner's box on a phone against the store, your plots and the controls: what it covers, as B-AC-4 measures. */
+async function bannerCovers(page: Page, seat: string): Promise<string[]> {
+  const fit = (await page.evaluate(readFit(seat))) as FitRead;
+  const banner = (await readMoments(page)).banner;
+  if (!banner) return [];
+  const store = fit.kept.filter((k) => k.id === 'the store');
+  const controls = fit.controls.filter((c) => c.id !== 'plot card').map((c) => ({ id: c.id, r: c.r }));
+  return [...store, ...fit.plots, ...controls].flatMap((k) => (area(banner.r, k.r) > 0 ? [`${k.id} ${area(banner.r, k.r).toFixed(0)} px²`] : []));
+}
+
+/** The corral month 1 starts with for B-AC-7: three, so the first sale leaves two (START.storeMules; upkeep refills at month end). */
+export const SCRAMBLE_MULES = 3;
+
+/** Runs `room` with month 1's corral starting at SCRAMBLE_MULES: set before the room's server makes its game, and restored. */
+export async function shortCorral<T>(room: () => Promise<T>): Promise<T> {
+  const was = START.storeMules;
+  START.storeMules = SCRAMBLE_MULES;
+  try {
+    return await room();
+  } finally {
+    START.storeMules = was;
+  }
+}
+
+/**
+ * B-AC-7, on a table shortCorral starts: three MULEs in the corral and four seats needing one by the game's rule (each
+ * owns a free plot from the land grant and has the money). Heiko's sale leaves two: the TV and every phone call the
+ * scramble (Heiko's, that the others race); Mia and Kai buy the last two, and Lena, left out, is told on her phone with
+ * the pub's payout, the engine's pubPayoutFor. The banner covers none of the store, your plots and the controls. The
+ * checks of what the screens drew run last. No call when no seat needs a MULE: the engine's floor-moments.test.ts
+ * (T-AC-8 negative) and arcade-moments.test.ts ("no scramble, no banner").
+ */
+export async function theScramble(t: ArcadeTable): Promise<string> {
+  const { tv, server, code, phones, wires } = t;
+  check(tv && phones.length === 4, 'B-AC-7: four phones and a TV');
+  const [heiko, mia, kai, lena] = phones as [Page, Page, Page, Page];
+  const game = gameOf(server, code);
+  const seats = ['s1', 's2', 's3', 's4'];
+  const saved = { scramble: { ...SCRAMBLE }, wolves: WOLVES.on, glint: GLINT.on };
+  const owed: { tag: string; ok: boolean; said: string }[] = [];
+  const out: string[] = [];
+  const buy = async (page: Page, seat: string) => {
+    if (onFloor(server, code, seat).space === 'map') await throughDoor(page, server, code, seat);
+    await steerTo(page, server, code, seat, hallPlace('corral'));
+    await expectButton(page, server, code, seat, 'BUY MULE', 'B-AC-7');
+    await pressAct(page);
+    const p = await playerWhen(page, server, code, seat, (k) => k.carriedMule === 'empty');
+    check(p.carriedMule === 'empty', `B-AC-7: ${seat} buys a MULE`);
+  };
+  try {
+    Object.assign(SCRAMBLE, { on: true, maxSeconds: 90 });
+    WOLVES.on = false;
+    GLINT.on = false;
+    check(seats.every((s) => needsMule(game.state, s)), `B-AC-7: four seats need a MULE by the game's rule, got ${seats.filter((s) => needsMule(game.state, s)).join(', ')}`);
+    // The others walk into the hall first, so the call finds them near the corral.
+    for (const [i, page] of [mia, kai, lena].entries()) if (onFloor(server, code, seats[i + 1]!).space === 'map') await throughDoor(page, server, code, seats[i + 1]!);
+
+    // Heiko's sale: the call, if it leaves two.
+    const left0 = game.state.store.mules;
+    await buy(heiko, 's1');
+    const called = floorOf(server, code).moments.scramble;
+    check(called && called.over === null && ['s2', 's3', 's4'].every((s) => called.needers.includes(s)), `B-AC-7: Heiko's sale leaves 2 and calls the scramble for the three still needing one, got the corral ${left0} → ${game.state.store.mules} and ${JSON.stringify(called)}`);
+    await tv.waitForTimeout(300);
+    const call = await Promise.all([...phones, tv].map(readMoments));
+    owed.push({
+      // Heiko's sale called it, so he is no needer: his phone says the others race.
+      tag: 'every phone calls the scramble: the three needing one race, Heiko is told the others do, and the TV\'s corral counts 2',
+      ok:
+        call[0]!.banner?.tone === 'warn' &&
+        !!call[0]!.banner.text.includes('2 MULEs left: the others race for them') &&
+        call.slice(1, 4).every((r) => r.banner?.tone === 'alert' && r.banner.text.includes('2 MULEs left! Race to the corral')) &&
+        call[4]!.corral === '2',
+      said: `${framesSay(heardMoments(wires.tv))}; the phones' banners ${JSON.stringify(call.slice(0, 4).map((r) => r.banner && [r.banner.tone, r.banner.text]))}, the TV's corral ${call[4]!.corral}`,
+    });
+    check(call[4]!.beats.some((b) => b.includes('2 MULEs left! Race to the corral')), `B-AC-7: the TV calls it; the frames' beats ${JSON.stringify(heardBeats(wires.tv, Date.now() - 2_000))}, the TV shows ${JSON.stringify(call[4]!.beats)}`);
+    const covered = (await Promise.all(phones.map((p, i) => bannerCovers(p, seats[i]!)))).flat();
+    owed.push({ tag: 'the banner covers 0 px² of the store, your plots and the controls', ok: covered.length === 0, said: `it covers ${covered.join(', ') || 'nothing'}` });
+
+    // Mia and Kai buy the last two; Lena is left out, and told with the pub's payout.
+    await buy(mia, 's2');
+    await buy(kai, 's3');
+    const over = floorOf(server, code).moments.scramble;
+    check(over?.over === 'empty' && over.leftOut.includes('s4') && game.state.store.mules === 0, `B-AC-7: the last sale empties the corral and leaves Lena out, got ${JSON.stringify(over)}`);
+    await tv.waitForTimeout(300);
+    const left = { lena: await readMoments(lena), tv: await readMoments(tv) };
+    check(left.tv.beats.some((b) => b === 'No MULE this turn for Lena'), `B-AC-7: the TV says who is left out; the frames' beats ${JSON.stringify(heardBeats(wires.tv, Date.now() - 2_000))}, the TV shows ${JSON.stringify(left.tv.beats)}`);
+    const me = (game as unknown as { viewFor(s: string): { me?: { devSeconds: number } } }).viewFor('s4').me!;
+    const secondsLeft = game.devEndsAt === null ? [me.devSeconds] : [0, 1, 2].map((d) => Math.max(0, (game.devEndsAt! - game.ctx.now()) / 1_000 + d));
+    const pays = secondsLeft.map((s) => pubPayoutFor(game.state, 's4', s));
+    owed.push({
+      tag: "Lena's phone tells her she is left out, with the pub's payout",
+      ok: left.lena.banner?.tone === 'warn' && !!left.lena.banner.text.includes('no MULE for you this turn') && pays.some((n) => left.lena.banner!.text.includes(`+${n} cr`)),
+      said: `${framesSay(heardMoments(wires.phones[3]!))}; her banner ${JSON.stringify(left.lena.banner?.text ?? null)}, the pub pays ${pays.join(' or ')}`,
+    });
+    // Her left-out line, the phone's longest banner: inside the screen, and over none of the store, her plots and the
+    // controls, at both sizes, in the hall and out on the map.
+    const fits: string[] = [];
+    const bad: string[] = [];
+    const measure = async (tag: string) => {
+      await lena.waitForTimeout(400);
+      const banner = (await readMoments(lena)).banner;
+      const frame = await lena.getByTestId('phone-game').boundingBox();
+      if (!banner || !frame || !banner.text.includes('no MULE for you this turn')) return void bad.push(`${tag}: no left-out banner (${banner?.text ?? 'none'})`);
+      const covers = await bannerCovers(lena, 's4');
+      const within = inside(banner.r, { x: frame.x, y: frame.y, w: frame.width, h: frame.height });
+      if (covers.length > 0 || !within) bad.push(`${tag}: ${JSON.stringify(banner.r)} covers ${covers.join(', ') || 'nothing'}${within ? '' : ', off the screen'}`);
+      fits.push(`${tag} ${banner.r.w.toFixed(0)}×${banner.r.h.toFixed(0)}`);
+    };
+    for (const [tag, size, px] of [['844 hall', PHONE.viewport, '844'], ['667 hall', PHONE_SMALL.viewport, '667']] as const) {
+      await lena.setViewportSize(size);
+      await lena.locator(`[data-testid=phone-game][data-size="${px}"]`).waitFor({ timeout: 2_000 });
+      await measure(tag);
+    }
+    await throughDoor(lena, server, code, 's4');
+    for (const [tag, size, px] of [['667 map', PHONE_SMALL.viewport, '667'], ['844 map', PHONE.viewport, '844']] as const) {
+      await lena.setViewportSize(size);
+      await lena.locator(`[data-testid=phone-game][data-size="${px}"]`).waitFor({ timeout: 2_000 });
+      await measure(tag);
+    }
+    owed.push({ tag: "Lena's left-out banner stays on the screen and covers 0 px² of the store, her plots and the controls, at 844 and 667", ok: bad.length === 0 && fits.length === 4, said: bad.join('; ') || fits.join(', ') });
+    out.push(`the corral at ${left0}: called at 2, Heiko, Mia and Kai got them, Lena left out (the pub pays ${pays[0]}); her banner ${fits.join(', ')}`);
+  } finally {
+    Object.assign(SCRAMBLE, saved.scramble);
+    WOLVES.on = saved.wolves;
+    GLINT.on = saved.glint;
+  }
+  // What the server measured, whatever the screens drew.
+  console.log(`  B-AC-7, the server: ${out.join('; ')}`);
+  for (const o of owed) check(o.ok, `B-AC-7: ${o.tag}; ${o.said}`);
+  return out.join('; ');
 }
