@@ -1,4 +1,4 @@
-import { DEV_STEER, DEVELOPMENT, mulePrice, RuleError, SPECIES_PERK, tileIndex, type GameState } from '@mule/engine';
+import { DEV_STEER, DEVELOPMENT, GOODS, mulePrice, mulePriceFor, outfitCostFor, RuleError, SPECIES_PERK, tileIndex, type GameState } from '@mule/engine';
 import type { MuleView } from '@mule/protocol';
 import type { SeatInfo } from '@tabletop/core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -292,10 +292,43 @@ describe('A-1 (AM-33): a seat that cannot get a first MULE counts as in, so the 
       const lena = state.players.find((p) => p.id === LENA)!;
       lena.species = 'gearling';
       const full = mulePrice(state);
-      lena.money = Math.round(full * SPECIES_PERK.gearlingPrice) + Math.floor((full - Math.round(full * SPECIES_PERK.gearlingPrice)) / 2);
-      expect(lena.money, 'between the Gearling price and the full one').toBeLessThan(full);
+      // Enough for her own MULE and her cheapest outfit (AM-33's extension), not for a MULE at the full price.
+      lena.money = mulePriceFor(state, LENA) + cheapestOutfit(state, LENA);
+      expect(lena.money, 'below the full MULE price with the same outfit').toBeLessThan(full + cheapestOutfit(state, LENA));
     });
     expect(g.game.viewFor(null).clockWaitsFor, 'Lena can buy at her price').toEqual([LENA, OSSA]);
+  });
+
+  it('AM-33: a seat that can pay for a MULE but for no outfit with it is not waited for', () => {
+    const g = stagedCorral((state) => {
+      state.players.find((p) => p.id === LENA)!.money = mulePriceFor(state, LENA) + cheapestOutfit(state, LENA) - 1;
+    });
+    expect(g.game.viewFor(null).clockWaitsFor, 'Lena could buy a MULE but never install it').toEqual([OSSA]);
+  });
+
+  it('AM-33: a seat in only because it cannot outfit may still buy its MULE, and is not told it waits', () => {
+    const g = stagedCorral((state) => {
+      state.players.find((p) => p.id === LENA)!.money = mulePriceFor(state, LENA) + cheapestOutfit(state, LENA) - 1;
+    });
+    tapThere(g.game, g, LENA, { type: 'buyMule' });
+    expect(g.game.viewFor(LENA).me!.carriedMule, 'the engine sold it').toBe('empty');
+    expect(g.game.viewFor(null).news.join(' | ')).not.toContain('Waiting for the others');
+  });
+
+  it('AM-33: a seat leading an empty MULE it cannot pay to outfit is not waited for', () => {
+    const g = stagedCorral((state) => {
+      const lena = state.players.find((p) => p.id === LENA)!;
+      lena.carriedMule = 'empty';
+      lena.money = cheapestOutfit(state, LENA) - 1;
+    });
+    expect(g.game.viewFor(null).clockWaitsFor, 'Lena can never outfit it').toEqual([OSSA]);
+  });
+
+  it('AM-33 (negative): a seat that can pay for a MULE and its cheapest outfit is still waited for', () => {
+    const g = stagedCorral((state) => {
+      state.players.find((p) => p.id === LENA)!.money = mulePriceFor(state, LENA) + cheapestOutfit(state, LENA);
+    });
+    expect(g.game.viewFor(null).clockWaitsFor, 'Lena can buy, outfit and install').toEqual([LENA, OSSA]);
   });
 
   it("AM-33: a seat that can't pay is told why when it tries to buy, not that it waits", () => {
@@ -317,3 +350,13 @@ describe('A-1 (AM-33): a seat that cannot get a first MULE counts as in, so the 
     expect(g.game.viewFor(null).clockWaitsFor, 'Lena leads the last MULE: she can still install it; Ossa cannot get one').toEqual([LENA]);
   });
 });
+
+/** Every outfit a seat can choose, as its view's `outfitCosts` lists them. */
+function outfitsOf(_state: GameState) {
+  return [...GOODS, 'greenBelt' as const];
+}
+
+/** The seat's own price for its cheapest outfit. */
+function cheapestOutfit(state: GameState, seatId: string): number {
+  return Math.min(...outfitsOf(state).map((o) => outfitCostFor(state, seatId, o)));
+}
