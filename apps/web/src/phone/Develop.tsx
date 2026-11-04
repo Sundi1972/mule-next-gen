@@ -44,7 +44,8 @@ export function Develop() {
   // The thought bubble shows as the card ends, once a turn: the hall remounts on every trip back into the store.
   const clockStartsAt = mounted.wall + (devStartedAt - mounted.at) + FILL_CARD_SECONDS * 1000;
   const [selected, setSelected] = useState<{ x: number; y: number } | null>(null);
-  // The plot you last pressed Install for: a walk there is an install (Analyse and the filter walk to a plot too).
+  // The plot you last pressed Install for: a walk there is an install. Analyse and the filter walk to a plot too, so
+  // pressing either forgets it, even after a refused install.
   const [installing, setInstalling] = useState<{ x: number; y: number } | null>(null);
   // Kept here, not in the map, so the zoom survives a trip into the store.
   const [zoomed, setZoomed] = useState(false);
@@ -207,7 +208,10 @@ export function Develop() {
                   variant="outline"
                   className="px-2 text-xs"
                   disabled={youWait || tile.filter || me.stock.alloy < DEVELOPMENT.filterAlloy}
-                  onClick={() => client.intent({ type: 'filter', x: tile.x, y: tile.y })}
+                  onClick={() => {
+                    setInstalling(null);
+                    client.intent({ type: 'filter', x: tile.x, y: tile.y });
+                  }}
                   {...(youWait ? WAIT_HINT : {})}
                 >
                   {tile.filter ? 'Filter fitted' : `Fit a filter · ${DEVELOPMENT.filterAlloy} Alloy (have ${me.stock.alloy})`}
@@ -251,7 +255,10 @@ export function Develop() {
                   className="whitespace-nowrap px-2"
                   aria-label={tile.ground ? 'Analysed' : `Geo analysis, ${DEVELOPMENT.analysisSeconds} seconds`}
                   disabled={!!tile.ground}
-                  onClick={() => client.intent({ type: 'analyse', x: tile.x, y: tile.y })}
+                  onClick={() => {
+                    setInstalling(null);
+                    client.intent({ type: 'analyse', x: tile.x, y: tile.y });
+                  }}
                 >
                   {tile.ground ? 'Analysed' : `Analyse · ${DEVELOPMENT.analysisSeconds} s`}
                 </Button>
