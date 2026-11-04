@@ -136,6 +136,11 @@ export class FloorWalker {
   /** The runner for one seat: `me`, the seat whose colonist it steers. */
   constructor(private readonly me: string) {}
 
+  /** Whether the step's button was pressed on the last tick: the step is committed, its outcome read this tick. */
+  pressing(): boolean {
+    return this.pressed;
+  }
+
   /** Starts a new step: nothing pressed, no pause stood. */
   reset(): void {
     this.paused = 0;

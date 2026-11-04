@@ -215,13 +215,17 @@ export class DevelopHand {
       if (!step) return IDLE_INPUT;
       // Held, it starts none of these; one it is already walking (or has just pressed) it sees through.
       if (held && HELD.has(step.action.type) && this.walking !== step) return IDLE_INPUT;
-      if (this.walking !== step) {
-        // An analysis or a filter it sets off for only if the walk there, the work and the walk on to the pub still
-        // fit the clock (RULE-8's spare time); the MULEs' walks were priced when they were chosen.
-        if (!held && !this.fits(state, cfg, colonist, step, secondsLeft - holding)) {
-          this.taken(step, false, 'no time');
-          continue;
-        }
+      // An analysis or a filter it sets off for, and presses, only while the walk there, the work and the walk on to the
+      // pub still fit the clock (RULE-8's spare time): a walk there that ran long drops it before it costs the pub. The
+      // MULEs' walks were priced when they were chosen.
+      const starting = this.walking !== step;
+      const committed = !starting && (this.walker.pressing() || colonist.assayUntilTick !== null);
+      if (!held && !committed && !this.fits(state, cfg, colonist, step, secondsLeft - holding)) {
+        if (!starting) this.walking = null;
+        this.taken(step, false, 'no time');
+        continue;
+      }
+      if (starting) {
         this.walking = step;
         this.walker.reset();
       }
