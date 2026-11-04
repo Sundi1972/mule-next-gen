@@ -290,7 +290,7 @@ tomorrow     MUST: the room's Game may emit a transient frame to everyone (`ctx.
              MUST (AM-13, S-1): a `steer` intent sends no full view, or 4 phones × 10 steers a second make 40 full
                views a second (~3.7 MB/s). Frame positions are rounded to 2 decimals on the wire.
              MUST (AM-15): the room stays game-agnostic. Game gains an optional `quiet?(intent): boolean`; the room
-               skips `broadcast()` after an intent it returns true for (MuleGame: `type === 'steer'`, WS3, PR-3).
+               skips `broadcast()` after an intent it returns true for (MuleGame: `steer` and `act`, AM-21; WS3, PR-3).
                Connection gains an optional `behind?(): boolean`; the room skips that connection's frame while it is
                true, never a full view (server.ts: `socket.bufferedAmount > FRAME_BACKLOG_BYTES`, a named server
                config value; a WS3 named edit in PR-2). The rounding happens where the DevFrame is built (WS3's
@@ -457,8 +457,9 @@ every DEV_STEER.tickMs (50 ms) of game time, while phase = development:
   1  inputs ← for each seat: away → IDLE; else its latest steer (latest-wins) and any act pressed since the last tick
   2  ai     ← each AI seat's hand reads (floor, state) and returns an input (C9)
   3  floor  ← stepFloor(floor, state, inputs, tickMs, cfg)      // C1, then C4's moments inside it
-  4  acts   ← for each act: Reach (C3) at the stepped position → apply the game.ts rule; a refused rule throws
-              RuleError to that seat only (HC-7)
+  4  acts   ← for each act: Reach (C3) at the stepped position → apply the game.ts rule; a refused rule is counted
+              and logged for that seat, never thrown: a timer has no channel to one seat, and the button shows the
+              server's Reach words, so a refusal is only ever a race the next view corrects (AM-19)
   5  frame  → ctx.frame(DevFrame)                                // C8, every tick
   6  view   → broadcast full views only if GameState changed (money, stock, plots, done, the moments' outcomes)
   7  end    ← existing: devEndsAt reached, or every seat away-or-done, or everyone Ready (checkAllReady /
@@ -466,6 +467,8 @@ every DEV_STEER.tickMs (50 ms) of game time, while phase = development:
 order        seats in seat order within a tick, rotating the first seat each tick (as play.ts does today), so no seat
              always acts first
 time         game ms = tick × tickMs; the server maps its clock to ticks (phaseScale applies, as realMs does today);
+             the floor steps tick n only while n × tickMs < the turn's length, so the clock's end comes first and a
+             50 s turn steps 999 ticks; the sim and the replay use the same boundary (AM-19);
              a late timer runs the missed ticks, at most DEV_STEER.catchUpTicks, then resyncs (mule-game.ts's
              existing dt clamp, AI_DEV_TICK_MS × 10, is the precedent)
 determinism  (seed, the per-tick inputs) → the same floor and state, in the engine, the sim and the server (HC-4).
@@ -657,7 +660,7 @@ measures it).
 | Question | Answer |
 |---|---|
 | A dependency unavailable? | A phone drops: its input zeroes at once (C6), its colonist stands; away seats count as done (existing). The TV drops: nothing in the game waits on it. A late server timer: missed ticks run, capped at catchUpTicks, then resync (RULE-1). |
-| Retry / poison / page? | Steering is latest-wins, never retried; a refused act throws RuleError to that seat only (HC-7); a socket over RATE_LIMIT has its extra messages dropped (existing, server.ts) — the phone sends ≤ 10 steers/s so it never reaches it. Nothing pages. |
+| Retry / poison / page? | Steering is latest-wins, never retried; a refused act inside the tick is counted and logged per seat, not shown (AM-19; a malformed intent is still refused at `handle`); a socket over RATE_LIMIT has its extra messages dropped (existing, server.ts) — the phone sends ≤ 10 steers/s so it never reaches it. Nothing pages. |
 | Idempotency / delivery? | `steer` is a state (the latest wins), so a duplicate is harmless; `act` is applied at most once per tick per seat; frames are fire-and-forget, the next one supersedes; full views are the source of truth for money, stock and plots. |
 | What can race? | Two colonists pressing BUY on the last MULE in one tick: seat order with the rotating first seat (RULE-1) decides, deterministically; two onto a glint tile in one tick: the same. |
 | What still works if this breaks? | Behind DEV_STEER.on = false, today's tap-to-walk until C14; after C14, development still ends on its clock (HC-3) even if the tick misbehaves, because the end timer is independent of the tick. |
@@ -683,7 +686,7 @@ C14.
 | **B-AC-1** (MUST) | Given a development turn on the rig and one phone held sideways with no TV · When the player uses only the stick and the button · Then they reach the store, buy at the corral, outfit, leave with the MULE on its lead, install on their own plot and end at the pub, the button saying each step before it | the phone in a real browser (e2e, the steering step), and the server's GameState (money, the plot's outfit) | a press with nothing in reach changes nothing | C1, C3, C6, C11 |
 | **B-AC-2** (MUST) | Given four seats and the TV · When colonists move · Then the TV draws each where the server has it, within one frame | TV page vs the server's floor in the e2e | an away seat's colonist stands still on the TV | C8, C12 |
 | **B-AC-3** (MUST) | Given a laptop · When the player holds arrow keys and presses SPACE, or holds the mouse on a spot · Then the colonist walks there and the press acts; the page never scrolls | laptop page in the e2e | keys with the page unfocused do nothing | C11 |
-| **B-AC-4** (MUST) | Given a phone at 667×375 and at 844×390 · When the development screen shows the map and the hall · Then nothing overflows its frame and the controls cover 0 px² of the store, own plots and the target | shell.ts measurements | — | C11, C15 |
+| **B-AC-4** (MUST) | Given a phone at 667×375 and at 844×390 · When the development screen shows the map and the hall · Then nothing overflows its frame; the controls and the plot card cover 0 px² of your colonist, the store and the target, and over your own plots the controls are translucent so the plot's marks read through (AM-20) | shell.ts measurements | — | C11, C15 |
 | **B-AC-5** (MUST) | Given a colonist on forest with wolves due · When the player runs or fights · Then the outcomes of RULE-4 land: bitten and slowed, got away, pelts sold at the store, or the MULE bolted and caught | phone + server state in the e2e (wolves forced by a seeded test option) | no wolves in the hall | C4, C11 |
 | **B-AC-6** (MUST) | Given a glint lit · Then every phone and the TV show it at once and the first colonist onto it gets the prize | phones, TV, server stock | after showSeconds it fades and nobody gets it | C4, C11, C12 |
 | **B-AC-7** (MUST) | Given 3 MULEs left and 4 seats needing one · When the first sale leaves 2 · Then the TV and phones call the scramble and the one left out is told, with the pub's payout | TV, phones, server | no call when no seat needs a MULE | C4 |
@@ -736,6 +739,31 @@ inside a wall; money and stock change only through game.ts rules; development en
 
 ## §8 · Amendments `[review-only]`
 
+- **AM-21 (2026-11-04, #235's review, ruled by WS6).** `act` is quiet too: MuleGame's `quiet` returns true for `steer`
+  and `act`. A press applies only at the next tick (RULE-1), so a full view sent on receipt shows the state before it,
+  and a mashed button sent up to 20 such views a second to every screen, against RULE-1 step 6. The tick's state
+  compare sends the one view the press's effect needs, `assayUntil` included, one tick after the press.
+- **AM-20 (2026-11-04, PR-6 phase A's findings, ruled by WS6).** (1) **B-AC-4 on real maps.** The stick and the button
+  sit at the map's bottom corners, so on a real map they can lie over one of your plots (at 844 column 0 rows 5–8 and
+  columns 13–14 rows 6–8; at 667 columns 0–2 and 11–14 of rows 6–8): "0 px² of own plots" holds only for the
+  fixture. B-AC-4 now asks 0 px² of **your colonist, the store and the target**, with the controls translucent over
+  your other plots (the scaffold's fade when you or the target come near stays). (2) **The plot card** never covers
+  your colonist or the target: when either is under its box (the mock's columns 5–14, rows 1–4), it moves to the
+  map's other half (columns 0–9). (3) **The route follows the server:** the phone and the TV show the arcade screen
+  when the view says the floor is on (its Reach and frames are present), not by the bundle's own `DEV_STEER.on`, so
+  a flag-on server needs no flag-on build. (4) **Month 1's wait:** while the clock waits for every first MULE (A-1),
+  the side room says so in A-1's own words (`waitingNow`), not a full clock and nothing else. (5) **Reconnecting:**
+  the app's ConnectionBar look with "RECONNECTING…" is the stale state RULE-10 asks for. (6) **Deferred, not PR-6:**
+  the second choice on one spot (V-3/V-5's alt button; it needs a second verb in ReachView and the act, a protocol
+  change; installing first and then analysing reaches the same result today), and the chips with no data on the wire
+  (`crystite`, the bolted lead, the TV's "→ PUB", play-again).
+- **AM-19 (2026-11-04, WS3's two gaps at arcade PR-3 #235, ruled by WS6).** (1) RULE-1 step 4's "RuleError to that
+  seat only" cannot come from the tick: a timer has no channel to one seat. A press the game.ts rule refuses inside
+  the tick is counted and logged for that seat, never shown; the button shows the server's Reach words (C3), so a
+  refusal is a race the next view corrects. A malformed intent is still refused at `handle`, as today. §4's row says
+  so. (2) The turn's last tick: the floor steps tick n only while n × tickMs is under the turn's length, so the
+  clock's end fires first and a 50 s turn steps 999 ticks. That boundary is the rule for the server, the sim (PR-4)
+  and the replay alike (HC-4); 50 ms of walking at the bell is not worth a second end condition.
 - **AM-18 (2026-11-04, WS1's finding at arcade PR-4, ruled by WS6).** Nobody stands on a lake (lakeMode 'shore'),
   so RULE-3's rows that need you on the plot could never reach a lake plot: PR-4's sim with the flag on failed the
   AI's lake analyses 36 times in 40 games. Rows 11 (ANALYSE), 12 (FIT FILTER) and **11a (TAKE MULE)**, which has the
