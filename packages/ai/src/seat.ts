@@ -25,7 +25,7 @@ import { AuctionHand, type AuctionDebug } from './hands/auction.js';
 import { DevelopHand, type DevWalking } from './hands/develop.js';
 import { PERSONAS } from './personas.js';
 import { adoptInto, DRAFT_PHASE_OF, draftPlaybook, pathFor, validatePlaybook, validatorFor, type DraftPhase, type PartKey, type PlayedPart, type PlayPath, type ValidatePlan, type ValidatorProfile } from './playbook/index.js';
-import { landDecision, wantsAnyAhead, wantsPlot, type LandPlan } from './strategist.js';
+import { landDecision, sellWanted, wantsAnyAhead, wantsPlot, type LandPlan } from './strategist.js';
 import { situation } from './summary.js';
 import type { Mind } from './value.js';
 
@@ -125,6 +125,10 @@ export class AiSeat {
     if (!act) return;
     this.planning = { month: state.month, state, act, refused: new Set() };
     this.planned = [];
+    // On its own path the part is the draft's list, which is sellWanted's: with nothing wanted and nothing of its own
+    // listed yet, it would play nothing, so the seat drafts nothing. Most months; the sim's games are the gain.
+    const mine = state.listings.some((l) => l.seller === this.id);
+    if (!mine && this.playPath(state.month, 'planning').by === 'own' && sellWanted(obs, this.mind).length === 0) return;
     const played = this.part(state, 'planning');
     if (!played) return;
     const drone = played.part.drone ?? [];
