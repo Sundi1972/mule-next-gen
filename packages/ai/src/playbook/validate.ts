@@ -7,6 +7,7 @@ import {
   list,
   monthNeeds,
   MS_PER_SECOND,
+  observe,
   orderGeoDrone,
   RuleError,
   STRATEGIST,
@@ -18,8 +19,9 @@ import {
   type PlayerId,
   type RecordedWrite,
 } from '@mule/engine';
+import { outlook } from '../outlook.js';
 import { capCodePoints } from '../text.js';
-import type { Mind } from '../value.js';
+import { unitValues, type Mind } from '../value.js';
 import { draftPlaybook, type DraftPhase, type LandPick } from './draft.js';
 
 /**
@@ -290,7 +292,7 @@ const GOOD_ROWS: Record<string, Row> = {
     const drafted = ctx.base.auction![good]!.hold;
     if (!ctx.corners && role === 'buyer' && hold > drafted) [hold, why] = [drafted, 'level never corners'];
     const staple = role === 'seller' && (good === 'food' || good === 'energy');
-    const least = staple ? monthNeeds(ctx.state, ctx.seat)[good] : 0;
+    const least = staple ? stapleFloor(ctx, good) : 0;
     if (hold < least) [hold, why] = [least, staple ? "next month's need" : 'a hold of 0 or more'];
     return hold === v ? ok(v) : clamped(hold, why);
   },
@@ -312,6 +314,16 @@ const GOOD_ROWS: Record<string, Row> = {
   vsRival: oneOf(TACTICS, 'no such tactic'),
   bluff: (v) => (typeof v === 'boolean' ? ok(v) : refuse('not a boolean')),
 };
+
+/**
+ * P12's floor: the Food or Energy the seat needs next month, as its hands measure it (unitValues' floorUnits): Energy
+ * its own power plants will make is not needed from stock. A profile with no level reads the gross monthNeeds.
+ */
+function stapleFloor(ctx: Ctx, good: Good): number {
+  if (!ctx.mind.level) return monthNeeds(ctx.state, ctx.seat)[good];
+  const obs = observe(ctx.state, ctx.seat);
+  return unitValues(obs, outlook(obs, ctx.seat, { lookAhead: ctx.mind.level.lookAhead }), good, ctx.mind).floorUnits;
+}
 
 const perRow: Row = (v, ctx, unit) => (!ctx.others.has(unit[3]!) ? refuse('no such player') : oneOf(TACTICS, 'no such tactic')(v, ctx, unit));
 
