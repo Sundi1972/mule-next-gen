@@ -252,8 +252,13 @@ async function main(): Promise<void> {
     const before = money(await lena.page.getByTestId('money').innerText());
     const paidBefore = truth.taxPaid(lenaId);
     await hold(lena.page, 'down', within(WALK.statusMs));
-    await untilServer(lena.page, () => truth.stockOf(lenaId, good) === 0 || null, `UBER-AC-2: Lena sells her one ${good}`, within(WALK.goodMs / WALK.tradeClockRate));
+    // At a house's line nothing trades until she says how many (A-6): she sells her one, confirming if it is one she needs.
+    await lena.page.getByTestId('line-go').waitFor({ timeout: within(WALK.goodMs) });
     await lena.page.mouse.up();
+    await lena.page.getByTestId('line-go').click({ timeout: PRESS_MS });
+    const need = truth.board().auction?.status.find((r) => r.id === lenaId)?.need ?? 0;
+    if (need >= 1) await lena.page.getByTestId('sell-anyway').click({ timeout: PRESS_MS });
+    await untilServer(lena.page, () => truth.stockOf(lenaId, good) === 0 || null, `UBER-AC-2: Lena sells her one ${good}`, within(WALK.goodMs / WALK.tradeClockRate));
     await lena.page.waitForFunction((b) => Number((document.querySelector('[data-testid=money]')?.textContent ?? '').replace(/[^\d-]/g, '')) !== b, before, { timeout: PRESS_MS });
     const after = money(await lena.page.getByTestId('money').innerText());
     // The sale's gross: what reached Lena's phone plus what the fund took from her, measured apart.
