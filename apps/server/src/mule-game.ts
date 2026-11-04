@@ -388,6 +388,15 @@ function shipQuote(state: GameState, good: Good): number[] {
   return prices;
 }
 
+/**
+ * Whether an AI seat's development turn is over for the tick resolving at `at`: it went to the pub, or the clock
+ * ended by the tick's own time. A tick that runs late is still judged at its own time, as the sim's is (HC-4); month
+ * 1's waiting clock (`devEndsAt` null) ends no turn by time.
+ */
+export function aiTurnOver(doneDeveloping: boolean, devEndsAt: number | null, at: number): boolean {
+  throw new Error('NotImplemented');
+}
+
 export class MuleGame implements Game<MuleIntent, MuleView> {
   private state: GameState | null = null;
   private seats: SeatInfo[] = [];
