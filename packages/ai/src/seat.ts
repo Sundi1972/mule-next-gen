@@ -145,10 +145,13 @@ export class AiSeat {
     }
     const part = playbook[key];
     // A copy: a hand that changes what it plays changes nothing the seat keeps.
-    return part === undefined ? null : structuredClone({ part: part as NonNullable<Playbook[K]>, strategy: playbook.strategy, by: path.by });
+    return part == null ? null : structuredClone({ part: part as NonNullable<Playbook[K]>, strategy: playbook.strategy, by: path.by }); // safe cast: `== null` rules out null and undefined, but TS can't narrow Playbook[K] for a generic K
   }
 
-  /** Puts a playbook's parts in effect for its month (RULE-7). */
+  /**
+   * Puts a playbook's parts in effect for its month (RULE-7). Adopting a later month drops every playbook adopted for
+   * the current one, so a playbook for month m+1 is adopted only after month m's auction.
+   */
   adopt(playbook: Playbook): void {
     this.adopted = adoptInto(this.adopted, playbook);
   }
