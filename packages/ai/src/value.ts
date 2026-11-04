@@ -1,9 +1,11 @@
 import {
   airPoints,
   crewOf,
+  DEV_STEER,
   DEV_WALK,
   DEVELOPMENT,
   factoryFit,
+  floorConfig,
   GOOD_CONFIG,
   isFactory,
   isRaw,
@@ -32,6 +34,7 @@ import {
   type Stock,
   type Tile,
 } from '@mule/engine';
+import { standPoint, tripSeconds } from './floor-time.js';
 import { productionsLeft, type Outlook } from './outlook.js';
 
 /** Who is thinking: the seat, its persona and its level. */
@@ -174,6 +177,15 @@ export function monthWalkSeconds(obs: GameState, mind: Mind): number {
   const p = obs.players.find((q) => q.id === me)!;
   const own = obs.tiles.filter((t) => t.owner === me);
   const plots = own.length > 0 ? own : obs.tiles.filter((t) => t.terrain !== 'store');
+  const zip = p.species === 'zipwing' ? SPECIES_PERK.zipwingSpeed : 1;
+  if (DEV_STEER.on) {
+    // On the arcade floor, at RULE-2's speed: from the corral out to the plot leading the MULE and back to the corral.
+    const cfg = floorConfig();
+    const w = { pace: zip, bot: p.isAi };
+    const corral = standPoint('corral', cfg.hall);
+    const floorTrips = plots.reduce((n, t) => n + tripSeconds(obs, cfg, w, corral, tileIndex(obs.width, t.x, t.y), true, 'corral'), 0);
+    return (mind.level.mulesPerMonth * floorTrips) / plots.length;
+  }
   const trips = plots.reduce((n, t) => {
     const i = tileIndex(obs.width, t.x, t.y);
     return n + walkSeconds(obs, me, 'corral', i) + walkSeconds(obs, me, i, 'corral');

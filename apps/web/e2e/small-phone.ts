@@ -4,7 +4,7 @@
  * read with and without a TV, and the month end in Collapse too (C20).
  * Local tier: `pnpm --filter @mule/web build`, then `pnpm --filter @mule/web e2e:small`.
  */
-import { DEV_WALK, POLLUTION } from '@mule/engine';
+import { DEV_WALK, GAME, mapSize, POLLUTION } from '@mule/engine';
 import type { Locator, Page } from 'playwright';
 import { claimAPlot, CLAIM_MS, check, doneWithLand, held, launch, PHONE, PHONE_SMALL, SHOWN_MS, startServer, TV } from './harness';
 import { ELECTION_WAIT_MS, readyThroughTheElection, voteThroughTheElection } from './politics-steps';
@@ -21,6 +21,12 @@ const PRESS_MS = 2_000;
  * is floorSeconds / (hungerPaceMin × sickPace), so a hungry colonist never times a room out.
  */
 const STORE_STEP_MS = (DEV_WALK.floorSeconds / (DEV_WALK.hungerPaceMin * DEV_WALK.sickPace)) * 1_000 + PRESS_MS;
+/**
+ * Installing is a walk to the plot, and the MULE goes in on arrival: at the slowest pace, a step a tile across the
+ * largest map's width and height, at the table's scale. So a hungry colonist never times the install out.
+ */
+const BIGGEST_MAP = mapSize(GAME.maxPlayers);
+const PLOT_WALK_MS = ((BIGGEST_MAP.width + BIGGEST_MAP.height) * DEV_WALK.tileSeconds) / (DEV_WALK.hungerPaceMin * DEV_WALK.sickPace) * 1_000 * PHASE_SCALE + PRESS_MS;
 /** Development's one clock runs on wall time, held or not: enough for two MULEs and every read. */
 const DEV_MS = 120_000;
 /** Two MULEs and their outfits, whatever the seed deals. */
@@ -136,7 +142,7 @@ try {
   await phone.locator('[data-shop=energy]:not([disabled])').click({ timeout: STORE_STEP_MS });
   await dev.getByRole('button', { name: 'Walk out to the map' }).click({ timeout: PRESS_MS });
   await dev.getByRole('button', { name: 'Install here' }).click({ timeout: PRESS_MS });
-  await dev.getByText(/Your MULE here makes/).waitFor({ timeout: PRESS_MS });
+  await dev.getByText(/Your MULE here makes/).waitFor({ timeout: PLOT_WALK_MS });
   await startMonthOnesClock(phone, code);
   await dev.getByRole('button', { name: 'Store', exact: true }).click({ timeout: PRESS_MS });
   await phone.locator('[data-shop=corral]:not([disabled])').click({ timeout: STORE_STEP_MS });

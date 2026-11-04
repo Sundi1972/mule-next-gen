@@ -8,6 +8,7 @@
  *   pnpm sim -- --persona cautious     (every seat the same persona; default: they rotate)
  *   pnpm sim -- --politics off         (no offices, elections or Governor's tax; default: on, as at real tables)
  *   pnpm sim -- --set SPECIES_PERK.zipwingSpeed=1.5   (a config number for this run; repeatable; the header lists them)
+ *   pnpm sim -- --set DEV_STEER.on=true   (a switch: true or false; this one plays development on the arcade floor)
  *   pnpm sim -- --air smoggy           (also counts each month's events as if the air were Smoggy; the games play on unforced)
  */
 import * as engine from '@mule/engine';
@@ -31,7 +32,7 @@ import {
   type MonthReport,
 } from '@mule/engine';
 import { simSeats } from './lineup.js';
-import { playGame } from './play.js';
+import { playGame, type DevTurn } from './play.js';
 
 function arg(name: string, fallback: number): number {
   const i = process.argv.indexOf(`--${name}`);
@@ -45,7 +46,7 @@ function argText(name: string): string | null {
 
 /**
  * Sets each `BLOCK.key=value` on the engine's config before the games, so a sweep edits no file; returns them for
- * the report's header. A path that names no number in config is refused.
+ * the report's header. A path that names no number or switch (true or false) in config is refused.
  */
 export function applySets(sets: readonly string[]): string[] {
   for (const set of sets) {
@@ -53,9 +54,15 @@ export function applySets(sets: readonly string[]): string[] {
     const keys = path.split('.');
     const key = keys.pop()!;
     const block = keys.reduce<unknown>((at, k) => (at as Record<string, unknown> | undefined)?.[k], engine) as Record<string, unknown> | undefined;
+    // A switch takes true or false, as written: `--set DEV_STEER.on=true`.
+    if (keys.length > 0 && typeof block?.[key] === 'boolean') {
+      if (text !== 'true' && text !== 'false') throw new Error(`--set ${set}: ${path} is a switch, so true or false, not ${text}`);
+      block[key] = text === 'true';
+      continue;
+    }
     const value = Number(text);
     if (keys.length === 0 || typeof block?.[key] !== 'number' || text.trim() === '' || !Number.isFinite(value)) {
-      throw new Error(`--set ${set}: ${path} names no number in config, or ${text} is not one`);
+      throw new Error(`--set ${set}: ${path} names no number or switch in config, or ${text} is not one`);
     }
     block[key] = value;
   }
@@ -69,6 +76,28 @@ const quantile = (values: number[], q: number) => {
   const sorted = [...values].sort((a, b) => a - b);
   return sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))] ?? 0;
 };
+
+/**
+ * The arcade floor's report lines (spec §4), only when development played on it: MULEs installed and pub times a turn,
+ * the pub payout, month 1's waiting clock; the moments (packs, glints, scrambles) count 0 until they are built (PR-8).
+ */
+function floorLines(turns: readonly DevTurn[], waits: readonly number[], continued: number, seats: number): string[] {
+  if (turns.length === 0) return [];
+  const reached = turns.filter((t) => t.pubAt !== null);
+  const installs = turns.reduce((n, t) => n + t.installs, 0);
+  const paid = reached.reduce((n, t) => n + t.payout!, 0);
+  const at = reached.map((t) => t.pubAt!);
+  // literal-ok: the median and 90th percentile the line names
+  const [median, ninetieth] = [quantile(at, 0.5), quantile(at, 0.9)];
+  const waited = [...waits];
+  return [
+    // literal-ok: two decimals for the MULEs a turn, display only
+    `     Development on the floor: ${(installs / turns.length).toFixed(2)} MULEs installed a seat a turn; the pub reached in ${pct(reached.length, turns.length)} of ${turns.length} AI turns, at ${median.toFixed(1)} / ${ninetieth.toFixed(1)} s on the clock (median / 90th percentile); ${(paid / Math.max(1, seats)).toFixed(0)} cr pub payout a seat a game (no check)`,
+    `     Floor moments: packs met 0, glints raced 0, scrambles 0 (built in PR-8)`,
+    // literal-ok: the median the line names
+    `     Month 1's clock stood ${quantile(waited, 0.5).toFixed(1)} / ${quantile(waited, 1).toFixed(1)} s for first MULEs (median / max), started by the host's stand-in in ${continued} of ${waits.length} games (no check)`,
+  ];
+}
 
 /** A month's events by the phase they fire in: sickness at development's start, the rest in production. */
 interface PhaseEvents {
@@ -157,6 +186,10 @@ function main() {
   // `--walking off` plays the game as it was before walking cost development time.
   const walking = argText('walking') !== 'off';
   let mulesLost = 0;
+  // On the arcade floor (DEV_STEER.on): every seat's development turn, and month 1's waiting clock per game.
+  const floorTurns: DevTurn[] = [];
+  const month1Waits: number[] = [];
+  let month1Continued = 0;
   let playerGames = 0;
   let spirals = 0;
   const byPersona: Record<string, number> = {};
@@ -220,8 +253,13 @@ function main() {
         hungryRun.set(p.id, h);
       }
     };
-    const { state, broke, auction: a, lots: l, mulesLost: lost } = playGame(seed, specs, { politics, walking, onPhase: onEachPhase });
+    const { state, broke, auction: a, lots: l, mulesLost: lost, turns, month1 } = playGame(seed, specs, { politics, walking, onPhase: onEachPhase });
     mulesLost += lost;
+    floorTurns.push(...turns);
+    if (month1) {
+      month1Waits.push(month1.waited);
+      if (month1.continued) month1Continued++;
+    }
     playerGames += state.players.length;
     spirals += [...hungryRun.values()].filter((h) => h.spiral).length;
     pol.taxPaid += Object.values(state.treasury.paid).reduce((n, x) => n + x, 0);
@@ -275,6 +313,7 @@ function main() {
   console.log(`${check(collapsed / games <= SIM_TARGETS.collapsed)} Ended in Collapse: ${pct(collapsed, games)} (target ${share(SIM_TARGETS.collapsed)} or less)`);
   console.log(`     Store capital: lowest ${minCapital} (no check: the store never runs out of money)`);
   console.log(`     MULEs lost to the clock: ${(mulesLost / games).toFixed(1)} a game (walking ${walking ? 'on' : 'off'}; no check)`);
+  for (const line of floorLines(floorTurns, month1Waits, month1Continued, playerGames)) console.log(line);
   console.log(`     Players hungry ${SPIRAL_MONTHS} or more months running: ${pct(spirals, playerGames)} (no check)`);
   console.log(`     Wins by species:${Object.entries(wins).map(([s, n]) => `${s} ${pct(n, games)}`).join(', ')}`);
   console.log(`     Wins by persona: ${Object.entries(byPersona).map(([s, n]) => `${s} ${pct(n, games)}`).join(', ')}`);

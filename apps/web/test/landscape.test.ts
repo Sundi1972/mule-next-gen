@@ -187,7 +187,8 @@ describe('the landscape on a phase change', () => {
     // With more than 3 pictures cached, every day picture went, once it was off screen.
     expect([...revoked].sort()).toEqual([...before].sort());
     screen.unmount();
-  });
+    // As long as `pictures` waits: under a full suite's load its eleven paints outrun the 5 s default.
+  }, 10_000);
 });
 
 describe('the landscape painted in a worker', () => {
@@ -201,12 +202,12 @@ describe('the landscape painted in a worker', () => {
       return url;
     });
     const screen = mount(swatch(11));
-    await vi.waitFor(() => expect(fakeWorker.jobs).toHaveLength(1), { interval: 5 });
+    await vi.waitFor(() => expect(fakeWorker.jobs).toHaveLength(1), { timeout: 10_000, interval: 5 });
 
     screen.render([{ ...swatch(11), theme: 'dark' }]);
     fakeWorker.release();
     // The light picture is in, and the dark one sent, 16 ms later: long after any render the light one caused.
-    await vi.waitFor(() => expect(fakeWorker.jobs).toHaveLength(2), { interval: 5 });
+    await vi.waitFor(() => expect(fakeWorker.jobs).toHaveLength(2), { timeout: 10_000, interval: 5 });
     expect(made).toHaveLength(1);
     expect(screen.srcs()).toEqual([]);
 
@@ -230,7 +231,8 @@ describe('the landscape painted in a worker', () => {
     expect(shown.every((src) => src?.startsWith('blob:'))).toBe(true);
     expect(revoked).toEqual([shown[0], shown[1]]);
     onScreen.unmount();
-  });
+    // As long as `pictures` waits: under a full suite's load its five paints outrun the 5 s default.
+  }, 10_000);
 
   const BOTH_HERE = [{ width: 256, height: 128 }, { width: 192, height: 128 }];
   // Two maps in turn: what the worker answers the first (and whether the page has OffscreenCanvas), how many jobs
@@ -257,7 +259,7 @@ describe('the landscape painted in a worker', () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     installWorker(['silent']);
     const screen = mount({ ...swatch(9), width: 4 });
-    await vi.waitFor(() => expect(fakeWorker.jobs).toHaveLength(1), { interval: 5 });
+    await vi.waitFor(() => expect(fakeWorker.jobs).toHaveLength(1), { timeout: 10_000, interval: 5 });
 
     // A slow paint is not a hung worker: nothing is painted twice before the 30 s are up.
     await vi.advanceTimersByTimeAsync(29_900);
@@ -278,7 +280,7 @@ describe('the landscape painted in a worker', () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     installWorker(['held']);
     const screen = mount({ ...swatch(12), width: 4 });
-    await vi.waitFor(() => expect(fakeWorker.jobs).toHaveLength(1), { interval: 5 });
+    await vi.waitFor(() => expect(fakeWorker.jobs).toHaveLength(1), { timeout: 10_000, interval: 5 });
 
     // The phone is locked mid-paint for a minute; 10 s after it comes back, the worker answers.
     document.setHidden(true);

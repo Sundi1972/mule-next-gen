@@ -1,4 +1,4 @@
-import { DEV_STEER, DEV_WALK, DEVELOPMENT, UPKEEP, type Good, type Outfit } from '@mule/engine';
+import { DEV_STEER, DEV_WALK, DEVELOPMENT, tileIndex, UPKEEP, type Good, type Outfit } from '@mule/engine';
 import type { PlayerView, TileView } from '@mule/protocol';
 import { AirGauge, Button, cx, GOOD_NAME, GoodIcon, hungerLevel, HoloMap, MuleIcon, paceLine, PlayerMark, SharedClock, sickReason, StoreInterior, TERRAIN_NAME, TimeBar, YourPace, ZoomMap, type Condition, type FoodEaten, type PaceRule, type Shop } from '@mule/ui';
 import { useEffect, useState } from 'react';
@@ -9,7 +9,7 @@ import { useClient, useServerNow } from '../net/react';
 import { usePhoneGame } from './game';
 import { GroundCard, Traits } from './ground';
 import { press, type Press } from './hub/ready';
-import { nearest, nextStep, openShops } from './next-step';
+import { installAfterPress, nearest, nextStep, openShops } from './next-step';
 import { MapFit, PhoneShell, useWide, type Now } from './Shell';
 
 const OUTFIT_NAME = (o: TileView['outfit']) => (o === null ? '' : o === 'greenBelt' ? 'Green belt' : GOOD_NAME[o]);
@@ -44,6 +44,9 @@ export function Develop() {
   // The thought bubble shows as the card ends, once a turn: the hall remounts on every trip back into the store.
   const clockStartsAt = mounted.wall + (devStartedAt - mounted.at) + FILL_CARD_SECONDS * 1000;
   const [selected, setSelected] = useState<{ x: number; y: number } | null>(null);
+  // The plot you last pressed Install for: a walk there is an install. Analyse and the filter walk to a plot too, and
+  // a press while walking is refused, so only a press made standing still moves it (installAfterPress).
+  const [installing, setInstalling] = useState<{ x: number; y: number } | null>(null);
   // Kept here, not in the map, so the zoom survives a trip into the store.
   const [zoomed, setZoomed] = useState(false);
   const [confirmStart, setConfirmStart] = useState(false);
@@ -88,11 +91,14 @@ export function Develop() {
   const free = tile && tile.owner === null && tile.terrain !== 'store';
   const owner = tile?.owner ? view.players.find((p) => p.id === tile.owner) : undefined;
 
+  // The server refuses a press while your colonist walks or assays.
+  const busy = !!self.colonist?.walk || (self.colonist?.assayUntil ?? 0) > now;
   const ruled = nextStep({
     filling,
     carry,
     place,
     atOwnPlot: place === 'map' && mine,
+    walkingTo: installing && self.colonist?.walk && self.colonist.at === tileIndex(view.width, installing.x, installing.y) ? installing : null,
     installed,
     seconds,
     freePlots,
@@ -204,7 +210,10 @@ export function Develop() {
                   variant="outline"
                   className="px-2 text-xs"
                   disabled={youWait || tile.filter || me.stock.alloy < DEVELOPMENT.filterAlloy}
-                  onClick={() => client.intent({ type: 'filter', x: tile.x, y: tile.y })}
+                  onClick={() => {
+                    setInstalling((p) => installAfterPress(p, { kind: 'other' }, busy));
+                    client.intent({ type: 'filter', x: tile.x, y: tile.y });
+                  }}
                   {...(youWait ? WAIT_HINT : {})}
                 >
                   {tile.filter ? 'Filter fitted' : `Fit a filter · ${DEVELOPMENT.filterAlloy} Alloy (have ${me.stock.alloy})`}
@@ -235,7 +244,10 @@ export function Develop() {
                   size="md"
                   className="whitespace-nowrap px-2"
                   disabled={!outfitted || !mine}
-                  onClick={() => client.intent({ type: 'install', x: tile.x, y: tile.y })}
+                  onClick={() => {
+                    setInstalling((p) => installAfterPress(p, { kind: 'install', at: { x: tile.x, y: tile.y } }, busy));
+                    client.intent({ type: 'install', x: tile.x, y: tile.y });
+                  }}
                 >
                   {outfitted && mine && tile.outfit ? 'Replace MULE' : 'Install here'}
                 </Button>
@@ -245,7 +257,10 @@ export function Develop() {
                   className="whitespace-nowrap px-2"
                   aria-label={tile.ground ? 'Analysed' : `Geo analysis, ${DEVELOPMENT.analysisSeconds} seconds`}
                   disabled={!!tile.ground}
-                  onClick={() => client.intent({ type: 'analyse', x: tile.x, y: tile.y })}
+                  onClick={() => {
+                    setInstalling((p) => installAfterPress(p, { kind: 'other' }, busy));
+                    client.intent({ type: 'analyse', x: tile.x, y: tile.y });
+                  }}
                 >
                   {tile.ground ? 'Analysed' : `Analyse · ${DEVELOPMENT.analysisSeconds} s`}
                 </Button>
