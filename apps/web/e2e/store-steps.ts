@@ -562,7 +562,7 @@ export async function arcadeTable(
 }
 
 /** Kept a string: tsx would wrap named functions in a helper the page lacks. A colonist the TV draws, by seat. */
-const TV_DRAWS = `(() => Object.fromEntries([...document.querySelectorAll('[data-testid^=colonist-]:not([data-testid^=colonist-name])')].map((e) => [e.getAttribute('data-testid').slice(9), { space: e.getAttribute('data-space'), x: Number(e.getAttribute('data-x')), y: Number(e.getAttribute('data-y')) }])))()`;
+const TV_DRAWS = `(() => Object.fromEntries([...document.querySelectorAll('[data-testid^=colonist-]:not([data-testid^=colonist-name])')].map((e) => [e.getAttribute('data-testid').slice(9), { space: e.getAttribute('data-space'), x: Number(e.getAttribute('data-x')), y: Number(e.getAttribute('data-y')), at: e.hasAttribute('data-at') ? Number(e.getAttribute('data-at')) : null }])))()`;
 
 /**
  * Stops the page's animation frames, as a phone put in a pocket does, and tells the page it is hidden and has lost
@@ -1226,14 +1226,13 @@ export async function theTvDrawsEveryoneLive(t: ArcadeTable): Promise<string> {
   check(tv && phones.length === 4, 'B-AC-2: four phones and a TV');
   await tv.getByTestId('tv-game').waitFor({ timeout: 5_000 });
   const seats = phones.map((_, i) => `s${i + 1}`);
-  const samples: { at: number; drawn: Record<string, { space: string; x: number; y: number }> }[] = [];
+  const samples: Record<string, { space: string; x: number; y: number; at: number | null }>[] = [];
   const { log } = await logFloor(server, code, async () => {
     for (const [i, p] of phones.entries()) await p.keyboard.down(B_AC_2_MOVES[i]!);
     const end = Date.now() + 1_500;
     while (Date.now() < end) {
-      const t0 = Date.now();
-      const drawn = (await tv.evaluate(TV_DRAWS)) as Record<string, { space: string; x: number; y: number }>;
-      samples.push({ at: (t0 + Date.now()) / 2, drawn });
+      // Each drawn walker says the instant (the machine's Date.now) the TV worked its position out for.
+      samples.push((await tv.evaluate(TV_DRAWS)) as Record<string, { space: string; x: number; y: number; at: number | null }>);
       await tv.waitForTimeout(30);
     }
     for (const [i, p] of phones.entries()) await p.keyboard.up(B_AC_2_MOVES[i]!);
@@ -1250,10 +1249,11 @@ export async function theTvDrawsEveryoneLive(t: ArcadeTable): Promise<string> {
     const allowed = tickTravel(log, seat) + WIRE_ROUNDING;
     let most = 0;
     for (const s of samples) {
-      const d = s.drawn[seat];
-      const then = floorAt(log, seat, s.at - DEV_STEER.interpolateMs);
-      const now = floorAt(log, seat, s.at);
-      if (!d || !then || !now || then.space !== d.space) continue;
+      const d = s[seat];
+      if (!d || d.at === null) continue;
+      const then = floorAt(log, seat, d.at - DEV_STEER.interpolateMs);
+      const now = floorAt(log, seat, d.at);
+      if (!then || !now || then.space !== d.space) continue;
       compared++;
       most = Math.max(most, Math.hypot(d.x - then.x, d.y - then.y));
       worstNow = Math.max(worstNow, Math.hypot(d.x - now.x, d.y - now.y));

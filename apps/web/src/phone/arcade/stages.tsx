@@ -3,7 +3,7 @@ import type { MuleView } from '@mule/protocol';
 import { cx, fanOut, HoloMap, LiveWalkers, SLOT_COLOR, StoreInterior, type Shop } from '@mule/ui';
 import { createContext, memo, useContext, useMemo, useRef, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
 import { mapTiles, plotName } from '../../game/derive';
-import { useArcade } from './live';
+import { useArcade, useLive } from './live';
 import { suits } from './plots';
 import type { ArcadeColonist, ArcadeSeat, Target } from './seat';
 
@@ -89,6 +89,7 @@ export function MapStage({ data, width, height, density, interactive = false, na
   const door = target && 'door' in target ? target.door : null;
   const ptr = usePointer('map', layer, view.width, view.height, (p) => targetHits(target, store, p, 'map'), interactive);
   const walkers = data.colonists.filter((c) => c.space === 'map' && !c.done);
+  const { at } = useLive();
   return (
     <div className={cx('relative overflow-hidden rounded-panel', interactive && 'cursor-crosshair touch-none')} style={{ width, height: viewH }} data-testid={testid} data-camera="whole" {...ptr}>
       <div ref={layer} className="absolute left-0 top-0" style={{ width, height: mapH, transform: `translate(0px, ${-(mapH - viewH) / 2}px)` }}>
@@ -105,7 +106,7 @@ export function MapStage({ data, width, height, density, interactive = false, na
         ))}
         {guide && interactive && seat && <MyPlots seat={seat} />}
         {guide && interactive && seat && <GuideOnMap seat={seat} />}
-        <LiveWalkers walkers={walkers} space="map" cols={view.width} rows={view.height} cell={cell} density={density} names={names} rule={DEV_WALK} />
+        <LiveWalkers walkers={walkers} space="map" cols={view.width} rows={view.height} cell={cell} density={density} names={names} rule={DEV_WALK} at={at} />
       </div>
     </div>
   );
@@ -129,6 +130,7 @@ export function HallStage({ data, width, density, store = density, interactive =
   const lit = target && 'room' in target && seat?.mine?.space === 'hall' ? target.room : null;
   const mine = interactive && seat ? data.colonists.find((c) => c.id === seat.me.id && c.space === 'hall') : undefined;
   const walkers = data.colonists.filter((c) => c.space === 'hall' && c !== mine);
+  const { at } = useLive();
   // Over everyone in the hall, your own visitor included, so it and a walker on its spot move aside by one rule.
   const fan = fanOut(data.colonists.filter((c) => c.space === 'hall'), 'hall');
   const aside = (mine && fan.get(mine.id)) ?? { dx: 0, dy: 0 };
@@ -157,7 +159,7 @@ export function HallStage({ data, width, density, store = density, interactive =
       )}
       {guide && interactive && seat && <GuideInHall seat={seat} lit={lit} />}
       {guide && interactive && seat && <PlotsByOutfitter seat={seat} />}
-      <LiveWalkers walkers={walkers} space="hall" cols={HALL.w} rows={HALL.h} cell={width / HALL.w} density={density} names={names} rule={DEV_WALK} fan={fan} />
+      <LiveWalkers walkers={walkers} space="hall" cols={HALL.w} rows={HALL.h} cell={width / HALL.w} density={density} names={names} rule={DEV_WALK} fan={fan} at={at} />
     </div>
   );
 }

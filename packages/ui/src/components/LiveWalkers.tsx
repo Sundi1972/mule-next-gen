@@ -83,6 +83,8 @@ export interface LiveWalkersProps {
    * a stage that draws one colonist elsewhere (the hall's own visitor) passes the one it computed over all of them.
    */
   fan?: ReadonlyMap<string, { dx: number; dy: number }>;
+  /** The device time (Date.now) these positions are for, written as each colonist's data-at. */
+  at?: number;
 }
 
 /**
@@ -93,7 +95,7 @@ export interface LiveWalkersProps {
  * #195's gait (motionOf, cycleSeconds), its MULE on the same stride. Pointer-transparent: the stage under it takes the
  * mouse and the taps.
  */
-export function LiveWalkers({ walkers, space, cols, rows, cell, density, names = false, rule, fan = fanOut(walkers, space) }: LiveWalkersProps) {
+export function LiveWalkers({ walkers, space, cols, rows, cell, density, names = false, rule, fan = fanOut(walkers, space), at: drawnAt }: LiveWalkersProps) {
   const map = space === 'map';
   const size = Math.round(cell * SPRITE[space]);
   const muleSize = Math.round(size * (map ? 1.35 : 1.1));
@@ -135,6 +137,7 @@ export function LiveWalkers({ walkers, space, cols, rows, cell, density, names =
               data-testid={`colonist-${w.id}`}
               data-x={w.x.toFixed(3)}
               data-y={w.y.toFixed(3)}
+              data-at={drawnAt}
               data-space={space}
               data-moving={w.moving || undefined}
               data-bitten={w.bitten || undefined}

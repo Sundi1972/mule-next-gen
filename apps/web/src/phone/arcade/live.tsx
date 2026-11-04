@@ -29,6 +29,8 @@ export interface Live {
   status: Prediction['status'];
   /** The frames' lines of the last few seconds. */
   beats: readonly Beat[];
+  /** The device time (Date.now) the frames' positions were worked out for; none before the first frame. */
+  at?: number;
 }
 
 interface LiveSource {
@@ -172,7 +174,8 @@ export function PhoneLive({ children }: { children: ReactNode }) {
       const target = phoneTick(s.p, now, rtt, cfg, pace);
       if (target !== null) s.p = advanceTo(s.p, target, world);
       steerNow(now);
-      return { me: shownAt(s.p, now, cfg), others: s.log.frames.length ? othersFrom(s.log, now) : viewOthers(ctx.current.view), status: s.p.status, beats: s.beats.filter((b) => now - b.at < BEAT_MS) };
+      const framed = s.log.frames.length > 0;
+      return { me: shownAt(s.p, now, cfg), others: framed ? othersFrom(s.log, now) : viewOthers(ctx.current.view), status: s.p.status, beats: s.beats.filter((b) => now - b.at < BEAT_MS), ...(framed ? { at: now } : {}) };
     },
     () => ({ me: fromView(self), others: viewOthers(view), status: 'waiting', beats: [] }),
   );
@@ -240,7 +243,7 @@ export function BoardLive({ view, children }: { view: MuleView; children: ReactN
       const s = state.current;
       const newest = s.log.frames.at(-1);
       const status = !newest ? 'waiting' : now - newest.recvMs > cfg.steer.staleMs ? 'reconnecting' : 'live';
-      return { me: null, others: newest ? othersAt(s.log, now, cfg.steer) : fromViews(viewRef.current), status, beats: s.beats.filter((b) => now - b.at < BEAT_MS) };
+      return { me: null, others: newest ? othersAt(s.log, now, cfg.steer) : fromViews(viewRef.current), status, beats: s.beats.filter((b) => now - b.at < BEAT_MS), ...(newest ? { at: now } : {}) };
     },
     () => ({ me: null, others: fromViews(view), status: 'waiting', beats: [] }),
   );
