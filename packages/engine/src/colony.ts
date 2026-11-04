@@ -168,6 +168,7 @@ export function runColony(state: GameState): void {
   }
   const open = colony.projects.find((p) => p.stage === 'commissioned');
   if (open) fund(state, colony, open);
+  // literal-ok: the last two month ends, the window lastGauges reads (this month's and the one before)
   colony.monthEnds = [...colony.monthEnds, colonyGauges(state)].slice(-2);
 }
 
