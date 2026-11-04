@@ -1,11 +1,11 @@
-import { DEVELOPMENT, SPECIES_PERK, type RawGood } from '@mule/engine';
+import type { RawGood } from '@mule/engine';
 import { cx, GoodIcon, MuleIcon, TERRAIN_NAME } from '@mule/ui';
 import { useState, type CSSProperties } from 'react';
 import { waitingNow } from '../Develop';
 import type { Now } from '../Shell';
 import { groundPips, plotName } from '../../game/derive';
 import { bestHere, OUTFIT_WORD, RAW, plotTitle, suits, suitsLine } from './plots';
-import type { ArcadeSeat } from './seat';
+import { assaySeconds, type ArcadeSeat } from './seat';
 
 /**
  * The arcade's status parts, grafted from the mock's views.tsx and AddendumLayer.tsx (d30ae057) onto the view: the
@@ -113,9 +113,6 @@ export function PaceLine({ seat, short = false }: { seat: ArcadeSeat; short?: bo
 
 // --- V-3 · analyse before you install, in words ----------------------------------------------------
 
-/** Seconds a geo analysis takes this player: the engine's analysisSeconds, from its config. */
-const analysisSeconds = (seat: ArcadeSeat) => DEVELOPMENT.analysisSeconds * (seat.self.species === 'mollox' ? SPECIES_PERK.molloxAnalysis : 1);
-
 /**
  * The card for the plot of yours you stand on, over the map away from it: every good in words and dots once it is
  * analysed, what is best here, and a mismatch with the MULE you lead (or the one standing on it). Before: what its land
@@ -126,7 +123,7 @@ export function PlotCard({ seat, now, at }: { seat: ArcadeSeat; now: number; at:
   if (seat.mine?.space !== 'map' || !t || t.owner !== seat.me.id) return null;
   const lead = seat.me.carriedMule && seat.me.carriedMule !== 'empty' ? seat.me.carriedMule : null;
   const best = t.ground ? bestHere(t.ground) : null;
-  const total = analysisSeconds(seat);
+  const total = assaySeconds(seat.view, seat.me);
   const left = seat.assayUntil !== null ? Math.max(0, seat.assayUntil - now) / 1000 : 0;
   return (
     <div className="pointer-events-none absolute z-20 flex flex-col gap-0.5 overflow-hidden rounded-panel border border-holo-line bg-panel/92 px-2 py-1.5 text-xs shadow-map backdrop-blur-[2px]" style={at} data-testid="plot-card" data-analysed={!!t.ground || undefined}>

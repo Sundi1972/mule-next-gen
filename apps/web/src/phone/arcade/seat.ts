@@ -1,4 +1,4 @@
-import { DEV_STEER, DEVELOPMENT, floorConfig, placeAt, terrainShare, WOLVES, type FloorConfig, type HallPlace } from '@mule/engine';
+import { analysisSeconds, DEV_STEER, floorConfig, placeAt, pubPayoutFor, terrainShare, WOLVES, type FloorConfig, type GameState, type HallPlace } from '@mule/engine';
 import type { MuleView, MyView, PlayerView, ReachView, TileView } from '@mule/protocol';
 import type { LiveWalker, Slot } from '@mule/ui';
 import { toSlot } from '../../game/derive';
@@ -68,10 +68,22 @@ const NO_REACH: ReachView = { verb: '', detail: null, enabled: false };
 export const tileUnder = (view: Pick<MuleView, 'tiles' | 'width'>, at: Where): TileView | null =>
   at.space === 'map' ? (view.tiles[Math.floor(at.y) * view.width + Math.floor(at.x)] ?? null) : null;
 
-/** The pub's own sum, from the time left now: the engine's pubPayoutFor, as today's Develop screen shows it. */
-export function pubPay(view: Pick<MuleView, 'month'>, me: Pick<MyView, 'devSeconds'>, seconds: number): number {
-  const { base, start, perMonth } = DEVELOPMENT.pub;
-  return Math.round(base + (start + view.month * perMonth) * Math.min(1, seconds / Math.max(me.devSeconds, 1)));
+type SeatSums = Pick<MyView, 'id' | 'species' | 'devSeconds'>;
+
+/** Your seat as the GameState the engine's sums read: the month, and your species and turn, still developing. */
+function sumsState(view: Pick<MuleView, 'month'>, me: SeatSums): GameState {
+  const player = { id: me.id, species: me.species, devSeconds: me.devSeconds, doneDeveloping: false };
+  return { phase: 'development', month: view.month, players: [player] } as unknown as GameState;
+}
+
+/** What the pub pays with `seconds` left: the engine's pubPayoutFor. */
+export function pubPay(view: Pick<MuleView, 'month'>, me: SeatSums, seconds: number): number {
+  return pubPayoutFor(sumsState(view, me), me.id, seconds);
+}
+
+/** Seconds a geo analysis takes you: the engine's analysisSeconds. */
+export function assaySeconds(view: Pick<MuleView, 'month'>, me: SeatSums): number {
+  return analysisSeconds(sumsState(view, me), me.id);
 }
 
 function walkerOf(view: MuleView, p: PlayerView, at: Drawn, mine: boolean, cfg: FloorConfig): ArcadeColonist {
