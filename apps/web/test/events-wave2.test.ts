@@ -338,6 +338,8 @@ describe('B2 (C5): the map and colony stories play the gallery’s own, and chan
     for (const where of ['tv', 'alone'] as const) {
       expect(has(screen(events, seg.announceAt + 0.1, where, { map }), `installed-${x}-${y}`), `${where}: its MULE while announced`).toBe(true);
       expect(has(result(events, where, { map }), `installed-${x}-${y}`), `${where}: gone once it lands`).toBe(false);
+      // The chip says what was lost by the good's icon, though the tile has no good any more (#295 review).
+      expect(inside(result(events, where, { map }), `mark-${x}-${y}`), `${where}: the chip's good`).toMatch(/<svg/);
     }
   });
 
@@ -356,7 +358,9 @@ describe('B2 (C5): the map and colony stories play the gallery’s own, and chan
     const onCavern = { ...METEOR, hits: [{ ...METEOR.hits[0]!, was: 'crystalCavern' as const }] };
     const seg = segOf([onCavern], 'tv');
     const kindAt = (html: string) => /data-testid="special-glyph-7-3" data-kind="([a-zA-Z]+)"/.exec(html)?.[1];
-    expect(kindAt(screen([onCavern], seg.announceAt + 0.1, 'tv', { map: CRATERED })), 'the cavern while announced').toBe('crystalCavern');
+    const announced = screen([onCavern], seg.announceAt + 0.1, 'tv', { map: CRATERED });
+    expect(kindAt(announced), 'the cavern while announced').toBe('crystalCavern');
+    expect(has(announced, 'installed-7-3'), 'and its MULE, with the cavern').toBe(true);
     expect(kindAt(result([onCavern], 'tv', { map: CRATERED })), 'the crater once it lands').toBe('meteorCrater');
   });
 
