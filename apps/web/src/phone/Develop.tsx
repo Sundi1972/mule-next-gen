@@ -9,7 +9,7 @@ import { useClient, useServerNow } from '../net/react';
 import { usePhoneGame } from './game';
 import { GroundCard, Traits } from './ground';
 import { press, type Press } from './hub/ready';
-import { nearest, nextStep, openShops } from './next-step';
+import { installAfterPress, nearest, nextStep, openShops } from './next-step';
 import { MapFit, PhoneShell, useWide, type Now } from './Shell';
 
 const OUTFIT_NAME = (o: TileView['outfit']) => (o === null ? '' : o === 'greenBelt' ? 'Green belt' : GOOD_NAME[o]);
@@ -44,8 +44,8 @@ export function Develop() {
   // The thought bubble shows as the card ends, once a turn: the hall remounts on every trip back into the store.
   const clockStartsAt = mounted.wall + (devStartedAt - mounted.at) + FILL_CARD_SECONDS * 1000;
   const [selected, setSelected] = useState<{ x: number; y: number } | null>(null);
-  // The plot you last pressed Install for: a walk there is an install. Analyse and the filter walk to a plot too, so
-  // pressing either forgets it, even after a refused install.
+  // The plot you last pressed Install for: a walk there is an install. Analyse and the filter walk to a plot too, and
+  // a press while walking is refused, so only a press made standing still moves it (installAfterPress).
   const [installing, setInstalling] = useState<{ x: number; y: number } | null>(null);
   // Kept here, not in the map, so the zoom survives a trip into the store.
   const [zoomed, setZoomed] = useState(false);
@@ -209,7 +209,7 @@ export function Develop() {
                   className="px-2 text-xs"
                   disabled={youWait || tile.filter || me.stock.alloy < DEVELOPMENT.filterAlloy}
                   onClick={() => {
-                    setInstalling(null);
+                    setInstalling((p) => installAfterPress(p, { kind: 'other' }, !!self.colonist?.walk));
                     client.intent({ type: 'filter', x: tile.x, y: tile.y });
                   }}
                   {...(youWait ? WAIT_HINT : {})}
@@ -243,7 +243,7 @@ export function Develop() {
                   className="whitespace-nowrap px-2"
                   disabled={!outfitted || !mine}
                   onClick={() => {
-                    setInstalling({ x: tile.x, y: tile.y });
+                    setInstalling((p) => installAfterPress(p, { kind: 'install', at: { x: tile.x, y: tile.y } }, !!self.colonist?.walk));
                     client.intent({ type: 'install', x: tile.x, y: tile.y });
                   }}
                 >
@@ -256,7 +256,7 @@ export function Develop() {
                   aria-label={tile.ground ? 'Analysed' : `Geo analysis, ${DEVELOPMENT.analysisSeconds} seconds`}
                   disabled={!!tile.ground}
                   onClick={() => {
-                    setInstalling(null);
+                    setInstalling((p) => installAfterPress(p, { kind: 'other' }, !!self.colonist?.walk));
                     client.intent({ type: 'analyse', x: tile.x, y: tile.y });
                   }}
                 >
