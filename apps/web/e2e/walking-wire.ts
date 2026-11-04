@@ -121,7 +121,7 @@ export async function steeredTable(options: { seed: number; ais: number; phaseSc
 }
 
 /**
- * A human seat presses Ready in every phase but development, so the table reaches development on its own. In the land
+ * A human seat presses Ready in every phase and auction stage but development, so the table plays on. In the land
  * grant it first claims `plot`, when the light is on it, if one is given.
  */
 export function keepsPlaying(host: Wire, plot?: { x: number; y: number }): () => void {
@@ -135,7 +135,8 @@ export function keepsPlaying(host: Wire, plot?: { x: number; y: number }): () =>
       host.intent({ type: 'claim', x: plot.x, y: plot.y });
       claimed = true;
     }
-    const key = `${view.month}-${view.phase}`;
+    // Once per stage: each good's side pick waits for every seat's Done, and so does each land lot.
+    const key = `${view.month}-${view.phase}-${view.auction?.good}-${view.auction?.stage}-${view.landAuction?.lot.id}-${view.landAuction?.stage}`;
     if (pressed === key) return;
     pressed = key;
     host.intent({ type: 'ready' });
