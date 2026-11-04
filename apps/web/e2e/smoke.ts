@@ -235,8 +235,9 @@ async function readyIfStillPlanning(phone: Page): Promise<void> {
 }
 
 /**
- * Month 1, development: a food MULE on the phone's first plot, as installing leaves it, so the first-MULE wait counts
- * the seat in and the AI seats' next tick starts the clock (T-AC-1: the phone owns a plot by now).
+ * Month 1, development: an Energy MULE on the phone's first plot, as installing leaves it, so the first-MULE wait
+ * counts the seat in and the AI seats' next tick starts the clock (T-AC-1: the phone owns a plot by now). Energy, as
+ * the tap store's errand installed: SHOW_SEED's dust storm (B-AC-7) only fires on a working Energy plot.
  */
 function installAFirstMule(server: MuleServer, code: string, seat = 's1'): void {
   const room = server.registry.get(code);
@@ -245,7 +246,7 @@ function installAFirstMule(server: MuleServer, code: string, seat = 's1'): void 
   check(state.phase === 'development', `the MULE goes in during development, not in ${state.phase}`);
   const plot = state.tiles.find((t) => t.owner === seat && t.terrain !== 'store');
   check(plot, `T-AC-1: the phone owns a plot in month 1's development`);
-  plot.outfit = 'food';
+  plot.outfit = 'energy';
   state.players.find((p) => p.id === seat)!.installedThisTurn = true;
   // Changed behind the game's back: the room's broadcast is the one way every screen sees it now (as makeHungry does).
   (room as unknown as { broadcast(): void }).broadcast();
