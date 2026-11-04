@@ -177,9 +177,14 @@ export function PlotCard({ seat, now, at }: { seat: ArcadeSeat; now: number; at:
 // --- V-2 · your plots, and what each suits, while you choose ---------------------------------------
 
 /** The side room, in the store while you choose: each plot of yours, what it suits, and what stands on it. */
+/** The most rows the hall's side room has for your plots above the button at 844. */
+const LEGEND_ROWS = 5;
+
 export function PlotsLegend({ seat, short = false }: { seat: ArcadeSeat; short?: boolean }) {
   if (seat.mine?.space !== 'hall' || seat.me.carriedMule !== 'empty') return null;
-  const mine = seat.view.tiles.filter((t) => t.owner === seat.me.id);
+  // Free plots first: they are what an empty MULE is outfitted for. Past five the side room would reach the button.
+  const all = seat.view.tiles.filter((t) => t.owner === seat.me.id).sort((a, b) => Number(!!a.outfit) - Number(!!b.outfit));
+  const mine = all.length > LEGEND_ROWS ? all.slice(0, LEGEND_ROWS - 1) : all;
   return (
     <div className="relative flex flex-col gap-1 rounded-control border border-holo-faint bg-panel/80 p-1 text-[10px] leading-tight" data-testid="my-plots-legend">
       <span className="label-caps text-[10px]!">Your plots</span>
@@ -191,6 +196,11 @@ export function PlotsLegend({ seat, short = false }: { seat: ArcadeSeat; short?:
           {t.outfit ? ` · ${short ? 'MULE' : `${OUTFIT_WORD[t.outfit]} MULE`}` : ''}
         </span>
       ))}
+      {all.length > mine.length && (
+        <span className="text-ink-3" data-testid="legend-more">
+          +{all.length - mine.length} more
+        </span>
+      )}
     </div>
   );
 }
