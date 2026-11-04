@@ -86,7 +86,9 @@ export function* playFloorPhase(state: GameState, seats: readonly AiSeat[]): Gen
       waiting = false;
       continued = true;
     }
-    const left = DEVELOPMENT.fullSeconds - run * tickSeconds;
+    // The seconds left as this tick ends, where its presses apply and the pub is priced, counted in whole ms as the
+    // server's clock counts them (HC-4); all of them while month 1's clock waits.
+    const left = waiting ? DEVELOPMENT.fullSeconds : (DEVELOPMENT.fullSeconds * MS_PER_SECOND - (run + 1) * cfg.steer.tickMs) / MS_PER_SECOND;
     // AM-19: the tick this step makes, run + 1, runs only while it falls before the clock's end, as on the server.
     if ((run + 1) * cfg.steer.tickMs >= DEVELOPMENT.fullSeconds * MS_PER_SECOND || ids.every(done)) break;
     const inputs: Record<string, FloorInput> = {};
