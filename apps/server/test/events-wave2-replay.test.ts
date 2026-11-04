@@ -17,7 +17,7 @@ afterEach(() => {
 });
 
 /** Every seat plays Classic: no Claude call to record. */
-const classic: BrainService = { deciderFor: () => null, chatter: (seat, say) => chatter(seat.id, say), finish: () => {} };
+const classic: BrainService = { deciderFor: () => null, writerFor: () => null, chatter: (seat, say) => chatter(seat.id, say), finish: () => {} };
 
 describe('T-AC-4: a game record replays every wave-2 event', () => {
   it('a recorded two-month game with wave-2 events in every phase replays to the same final state', { timeout: 60_000 }, async () => {

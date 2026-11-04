@@ -2,6 +2,7 @@ import { BRAIN, GAME, GOODS, type GameState, type Playbook, type PlayerId, type 
 import { OPTION_IDS } from '../decider.js';
 import { LAND_PATHS, type LandBrief, type LandPath } from './brief.js';
 import { cleanLine } from './reply.js';
+import type { PlanEdit, ValidatePlan } from '../playbook/index.js';
 
 /**
  * Why a reply, or one of its edits, cannot be used: a code only, never reply text. refused and cut_off come from the
@@ -26,16 +27,6 @@ export const CAUSES = [
 export type Cause = (typeof CAUSES)[number];
 
 export type { RecordedWrite };
-
-export type PlanEdit = RecordedWrite['edits'][number];
-
-/** WS1's validator: each edit clamped to the bounds the rules allow; what it refuses keeps the draft's value. */
-export type ValidatePlan = (
-  state: GameState,
-  seat: PlayerId,
-  draft: Playbook,
-  edits: readonly PlanEdit[],
-) => { playbook: Playbook; rejected: NonNullable<Playbook['rejected']> };
 
 const KIND_SET: Record<Strategy['kind'], true> = { builder: true, specialist: true, monopolist: true, landBaron: true, politician: true, spoiler: true };
 const STRATEGY_KINDS = Object.keys(KIND_SET) as Strategy['kind'][];

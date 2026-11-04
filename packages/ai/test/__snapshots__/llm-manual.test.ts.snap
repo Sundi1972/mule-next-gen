@@ -83,6 +83,12 @@ Does: Moves you on the board during a walk: 1 up, -1 down, 0 stand still. A buye
 Legal when: in the goods auction, a good is up (else: "The auction is not running"); the walk has started, after the good's status screen or the lot's intro (else: "Not walking yet"); in the goods auction, you did not pass on this good (else: "You passed on this good"); at the land auction, you stand as a buyer: not the seller, the minimum in hand, and no MULE in tow when a MULE is up (else: "You can't bid on this lot").
 Cost: free.
 
+### lineTrade
+In: the goods auction. Args: units (number).
+Does: At the store's or the ship's line during a good's walk: buys or sells that many units with it at its price, then you stop there.
+Legal when: in the goods auction, a good is up (else: "The auction is not running"); the walk has started, after the good's status screen (else: "Not walking yet"); a whole number of units, at least 1 (else: "Choose at least one unit"); you did not pass on this good (else: "You passed on this good"); you stand at the store's or the ship's line (else: "Walk to the store’s line first"); as a buyer, you can pay for one unit (else: "You can’t pay for one"); as a seller, you have one to sell (else: "You have none to sell").
+Cost: free.
+
 ### run
 In: planning. Args: office (governor), promise (lower | hold | cap).
 Does: Runs for an office in the next election, moving any run for the other one; null withdraws. Elections open planning in months 1, 4, 7, 10. A Governor run carries a tax promise: lower, hold, or a cap of 0% to 15%.

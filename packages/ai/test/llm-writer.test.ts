@@ -3,7 +3,8 @@ import { AI_LEVELS, AI_PERSONAS, BRAIN, createGame, type LandGrantPlay, type Pla
 import { PERSONAS } from '../src/personas.js';
 import type { Mind } from '../src/value.js';
 import { landBrief, type LandBrief } from '../src/llm/brief.js';
-import { playbookFrom, replySchema, writeReply, type Cause, type PlanEdit, type ValidatePlan, type WriteComplete, type WriterPrompt } from '../src/llm/writer.js';
+import { playbookFrom, replySchema, writeReply, type Cause, type WriteComplete, type WriterPrompt } from '../src/llm/writer.js';
+import type { PlanEdit, ValidatePlan } from '../src/playbook/index.js';
 
 const state = createGame({ seed: 7, players: [0, 1, 2, 3].map((i) => ({ id: `p${i}`, name: `Seat ${i}`, isAi: true })) });
 
