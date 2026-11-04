@@ -431,6 +431,8 @@ export function firePhase(state: GameState, phase: Phase): MonthEvent[] {
  * wave-1 event changes only production's output.
  */
 export function applyEvents(state: GameState, fired: readonly MonthEvent[]): void {
+  // Inheritances are ranked once, on the wealth before any of this phase's payouts (RULE-3).
+  const inherits = new Map(state.players.map((p) => [p.id, inheritanceAmount(state, p.id)]));
   for (const event of fired) {
     const effects: EventEffect[] = [];
     const change = (on: string, what: EventEffect['what'], delta: number) => {
@@ -459,7 +461,7 @@ export function applyEvents(state: GameState, fired: readonly MonthEvent[]): voi
         break;
       }
       case 'inheritance': {
-        const amount = inheritanceAmount(state, me!.id);
+        const amount = inherits.get(me!.id)!;
         me!.money += amount;
         change(me!.id, 'money', amount);
         break;
