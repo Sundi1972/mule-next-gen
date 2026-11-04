@@ -296,7 +296,7 @@ sale to the ship. AI claims share one `claim()` path. A seat's side is noticed a
 
 ## Phase P3: PR-3, the heard step (AM-4)
 
-**PR #194 into feat/strategist, open.** Branch `ws3-record-heard` is cut from trunk, because the lane PR #178 already merged.
+**PR #194: MERGED into feat/strategist at acae3b64.** Branch `ws3-record-heard` was cut from trunk, because the lane PR #178 had already merged.
 **It must land before WS2's B-2b**, which reacts to whispers. AM-4 is agreed by WS1, WS2 and WS3 (spec §8). Merging needs
 Heiko's OK through the PM.
 
@@ -323,22 +323,29 @@ Heiko's OK through the PM.
 - [x] T-AC-12 is green, named, and red first. T-AC-1 is strengthened and green.
 - [x] `pnpm typecheck` is clean. `record.test.ts` under `MULE_FULL=1` is 20/20. config-guard is 2/2.
 - [x] Root `pnpm test` is green: server 235 (42 skipped), engine 281, web 257, ai 125, ui 46, tabletop 148.
-- [ ] The independent review is clean, and its verdict is in the #194 body.
-- [ ] Heiko's OK through the PM. Then WS2 is told B-2b can build on it.
+- [x] The independent review: APPROVE WITH FIXES. The replay's heard calls were unpinned. Fixed in a200c6c2:
+  T-AC-12 spies on `MuleGame.prototype.heard` and asserts `[['s1','',undefined],['s2','','s3']]`; two controls
+  went red. The verdict is in the #194 body. CI 4/4.
+- [x] Heiko's OK through the PM; merged at acae3b64. WS2 was told B-2b can build on it.
 
 ## Still to come (planned, in order)
 
 - **WS2's named edits in WS3's record files**, made in WS2's PRs and reviewed on their SHAs:
   - the writerFor wrap (WS2's a9709756, OK'd: writerFor is non-null exactly when deciderFor is, spec A AM-A15);
-  - the talkerFor coupling (B-2): a pass-through in `record.ts` and null in `replay.ts`, not through `call()`.
+  - the talkerFor coupling (B-2): a pass-through in `record.ts` and null in `replay.ts`, not through `call()`;
+  - **pending:** WS2's PR #227 (spec A PR-1, into ws2-brain) asks for a named edit in `mule-game.ts` at 28ab532b,
+    the Playbooks wiring. It is asked for at start and at each upkeep's opening, takes effect at the land grant,
+    and reaches the record only through `recordPlaybook`. WS3's OK or flag is owed on that SHA.
 - **R-2, the crashed-game record** (Heiko approved): the file is written with `ended: 'error'`, and the replay
-  reproduces the throw. This comes after A-1. It is a red test first, then the build, then its own PR.
-- **A balance-independent T-AC-10 fixture**, after WS1's #180 lands. T-AC-10 hangs on balance today:
-  - the seed was moved from 4 to 2 when #180 changed it;
-  - its script gives no Ready at the month end, which #185 now requires.
-
-  The fixture builds its lot and its ship sale from the state rather than from a seed that happens to make them.
-  #185's interim line (Ready at upkeep) is a named edit and lands with #185.
+  reproduces the throw. It was to come after A-1, and A-1 is now on trunk (#200), so R-2 is next once milestone 1's
+  queue clears. It is a red test first, then the build, then its own PR. Still planned, not started.
+- [x] **A balance-independent T-AC-10 fixture: DONE in PR #209** (branch `ws3-record-fixture`; 677e26f1, a trunk
+  merge bc3f66bf, fixes df30b355). It has MERGED (`gh pr view 209`: merged 2026-10-29, b1c5906d).
+  - The fixture builds its lot and its ship sale from the state, not from a lucky seed. 32/32 seeds pass.
+  - Positive control: with the lot-sale notice disabled, it goes red.
+  - Review: APPROVE WITH FIXES. The fixes are `maxMonths: Math.max(2, GAME.exportShipEvery)`,
+    `n.month === GAME.exportShipEvery`, and comment fixes.
+  - WS1's interim seed edit, 2c1bdef1 (NOTICE_GAME seed 2 → 8 on ws1-events), merged through #210.
 - **B-AC-1 is still open:** Heiko's real keyed game, then the keyless replay. The PM sets it up. Never report it from a test run.
 
 ---
@@ -347,7 +354,7 @@ Heiko's OK through the PM.
 
 - **R-1 (memory per room):** measure it in PR-1. Task 6 Step 2 also prints the file size of T-AC-1's game, and the
   lead records it in the ledger.
-- **R-2 (a crashed game leaves no file):** Heiko approved building it. It is planned under "Still to come", after A-1.
+- **R-2 (a crashed game leaves no file):** Heiko approved building it. It is planned under "Still to come"; A-1 is on trunk.
 - **R-3 (Node microtask order):** covered by T-AC-1's positive control (Task 4 Step 4).
 - **R-4 (viewFor purity):** covered by T-AC-6 (Task 3).
 
