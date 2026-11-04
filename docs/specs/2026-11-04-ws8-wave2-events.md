@@ -289,6 +289,7 @@ No ownership change. Named edits, each OK'd by its owner on the SHA:
 | packages/ai/src/sim.ts | WS1 | report lines only: each wave-2 key's rate and what it moved a game; the month after a store fire |
 | packages/engine/test/events.test.ts | WS1 | RULE_3 typed Partial (EventKey widens); EM-T-AC-3's one-phase check exempts muleTheft (AM-1 3a); EM-T-AC-2 pins wave 1's keys only (lead's OK, 4 Nov) |
 | apps/server/test/production-view.test.ts | WS6 | knownMonth files its events into state.monthEvents too (C1; lead's OK, 4 Nov) |
+| packages/engine/src/observe.ts | WS1 | cloneForSim copies monthEvents (WS3's review) |
 | packages/engine/src/types.ts | WS3 | monthEvents, sickNext, MonthEvent.effects/becomes/muleLost, keys |
 | packages/engine/src/game.ts | WS3 | the roll calls in advancePhase and startDevelopment; monthEvents reset |
 | packages/protocol/src/index.ts, apps/server/src/mule-game.ts | WS3 | EventView fields; phaseEvents reads monthEvents; monthEventView maps; SICK_BECAUSE 'epidemic' |
@@ -353,5 +354,17 @@ did       planning's roll moves from the start of politics.ts::openPlanning to g
           after the month reset and before openPlanning: the same order, beside every other phase's roll site.
           politics.ts is untouched (no WS7 edit); createGame no longer reaches the roll (month 1 rolls nothing anyway).
 because   WS7, 4 Nov: openPlanning is a politics hook, and its doc and early return made the roll depend on code order.
+goal      G-1 unchanged
+```
+
+```
+AM-5 · 2026-11-04 · WS3's review of #243
+
+target    C1, C3, §9
+did       createGame fires planning before its openPlanning, as advancePhase does for later months, so the roll site
+          never depends on EVENTS.firstMonth; cloneForSim gives a what-if its own copy of monthEvents (observe.ts,
+          WS1). Both behaviours were already safe today (month 1 rolls nothing; a what-if never fires); these make them
+          hold by construction.
+because   WS3, 4 Nov, conditions on its OK of 8e51befc
 goal      G-1 unchanged
 ```
