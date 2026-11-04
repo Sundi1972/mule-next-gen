@@ -52,6 +52,7 @@ export function Joystick({ onStick, className, size = STICK }: { onStick: (at: S
       onPointerMove={(e) => held.current === e.pointerId && set(e)}
       onPointerUp={(e) => held.current === e.pointerId && set(null)}
       onPointerCancel={(e) => held.current === e.pointerId && set(null)}
+      onLostPointerCapture={(e) => held.current === e.pointerId && set(null)}
       role="application"
       aria-label="Joystick: drag to walk"
       data-testid="joystick"
