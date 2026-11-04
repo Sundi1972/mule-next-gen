@@ -222,7 +222,7 @@ export function PhoneShell({
                     onClick={standing.onOpen}
                     aria-haspopup="dialog"
                     aria-label={`${fmt(self.money)} cr. ${standing.aria}`}
-                    className="relative -my-1 ml-auto flex shrink-0 flex-col items-end rounded-chip px-1 py-0.5 hover:bg-holo-soft"
+                    className="relative -my-1 ml-auto flex shrink-0 flex-col items-end rounded-chip py-0.5 hover:bg-holo-soft"
                     data-testid="standing"
                   >
                     <span data-num className="font-mono text-sm font-bold leading-tight text-ink @min-[1100px]/shell:text-lg" data-testid="money">
