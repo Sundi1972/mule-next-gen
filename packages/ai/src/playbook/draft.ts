@@ -1,10 +1,37 @@
-import { AI_PLANS, GOOD_CONFIG, GOODS, observe, STRATEGIST, type AiPersonaId, type GameState, type Good, type Playbook, type PlayerId, type Strategy } from '@mule/engine';
-import { OPTION_IDS, TopPickDecider, type Choice, type DecisionContext, type ShortOption } from '../decider.js';
+import {
+  AI_HANDS,
+  AI_PLANS,
+  analysisSeconds,
+  buyMule,
+  cloneForSim,
+  GAME,
+  GOOD_CONFIG,
+  GOODS,
+  installMule,
+  MS_PER_SECOND,
+  observe,
+  outfitMule,
+  RuleError,
+  STRATEGIST,
+  walkSeconds,
+  WALK,
+  type AiPersonaId,
+  type DevelopmentPlay,
+  type DevPlace,
+  type GameState,
+  type Good,
+  type GoodPlay,
+  type LandGrantPlay,
+  type Playbook,
+  type PlayerId,
+  type Strategy,
+} from '@mule/engine';
+import { OPTION_IDS, TopPickDecider, toOptions, type Choice, type DecisionContext, type ShortOption } from '../decider.js';
 import { outlook } from '../outlook.js';
 import { PERSONAS, type DecisionKind } from '../personas.js';
-import { leaderOf, type LandPlan } from '../strategist.js';
+import { analysesWanted, developDecision, filtersWanted, goodPlan, landDecision, leaderOf, tradeDecision, type DevAction, type LandPlan } from '../strategist.js';
 import type { Shortlist } from '../utility.js';
-import { canFeed, cashReserve, installGain, type Mind } from '../value.js';
+import { beforeTax, canFeed, cashReserve, installGain, type Mind } from '../value.js';
 
 /**
  * The engine's own playbook for a phase (spec C2): the strategist's shortlists, reshaped, each pick a seeded TopPick.
@@ -67,6 +94,13 @@ function pick(input: DraftInput, obs: GameState, kind: DecisionKind, place: stri
     tableTalk: [],
   };
   return new TopPickDecider().decide(options, PERSONAS[mind.personaId as AiPersonaId], context).optionId;
+}
+
+/** TopPick of a strategist shortlist: the action of the option it draws. */
+function topPick<A>(input: DraftInput, obs: GameState, kind: DecisionKind, place: string, list: Shortlist<A>): A {
+  const options = toOptions(list);
+  const id = pick(input, obs, kind, place, options);
+  return list.options[Math.max(0, options.findIndex((o) => o.id === id))]!.action;
 }
 
 /** RULE-4's goods: each good's money-maker score, its rival plots, and how many candidate plots it is the best use of. */
@@ -140,8 +174,118 @@ function pickKind(input: DraftInput, obs: GameState, eligible: Record<Kind, bool
   return tied[options.findIndex((o) => o.id === id)]!;
 }
 
-/** The seat's playbook for a phase: complete, by 'engine', with no edits. */
+/** RULE-5 · land grant: the plan the seat's land hand plays (its pending pick), else the draft's own pick. */
+function landGrantPart(input: DraftInput, obs: GameState): LandGrantPlay {
+  const plan = input.land ? pendingPlan(input.land) : topPick(input, obs, 'land', 'land', landDecision(obs, input.mind));
+  return {
+    // A plot worth less than nothing still ranks last, at 0: RULE-1 drops a negative value.
+    ranked: plan.ranking.map((s) => ({ plot: s.index, value: Math.max(0, Math.round(s.value)) })),
+    pressShare: { start: STRATEGIST.grantShare, end: STRATEGIST.grantShare },
+    claims: GAME.claimsPerGrant as LandGrantPlay['claims'],
+    deny: [],
+    planB: [],
+  };
+}
+
+/** The plan the pending pick will settle on: its answer when that names an option, else its fallback. */
+function pendingPlan(land: LandPick): LandPlan {
+  const at = (id: string) => land.options.findIndex((o) => o.id === id);
+  const answered = land.answer ? at(land.answer.optionId) : -1;
+  return land.list.options[answered >= 0 ? answered : Math.max(0, at(land.fallback.optionId))]!.action;
+}
+
+const midSeconds = ([lo, hi]: [number, number]) => (lo + hi) / 2 / MS_PER_SECOND; // literal-ok: the midpoint of a range
+
+/**
+ * RULE-5 · development: the analyses, then each MULE as a pick of developDecision on a what-if copy that already holds
+ * the MULEs before it, then the filters and the pub. The walk is priced as where the game walks (DEV_WALK).
+ */
+function developmentPart(input: DraftInput, obs: GameState): DevelopmentPlay {
+  const { mind } = input;
+  const me = mind.me;
+  const copy = cloneForSim(obs);
+  const self = copy.players.find((p) => p.id === me)!;
+  // Drafted ahead of development (WS2 may ask at any time), the copy plays the coming phase.
+  if (copy.phase !== 'development') {
+    copy.phase = 'development';
+    self.doneDeveloping = false;
+  }
+  const route: DevelopmentPlay['route'] = [];
+  const d = AI_HANDS.develop;
+  const pace = mind.level.devPace;
+  const taps = (midSeconds(d.buyTapMs) + midSeconds(d.outfitMs) + midSeconds(d.installTapMs)) * pace;
+  let at: DevPlace = 'store';
+  let left = self.devSeconds;
+  for (const plot of analysesWanted(copy, mind, left)) {
+    route.push({ act: 'analyse', plot });
+    left -= walkSeconds(copy, me, at, plot) + analysisSeconds(copy, me) + midSeconds(d.analyseTapMs) * pace;
+    at = plot;
+  }
+  // On the arcade floor the hand prices the walk by the live floor; the development draft point (PR-3) passes it.
+  for (let k = 0; k < mind.level.mulesPerMonth; k++) {
+    const mule: DevAction = topPick(input, copy, 'develop', `mule:${k}`, developDecision(copy, mind, k, { at, left, taps }));
+    if (mule.kind === 'stop') break;
+    const tile = copy.tiles[mule.index]!;
+    try {
+      buyMule(copy, me);
+      outfitMule(copy, me, mule.outfit);
+      installMule(copy, me, tile.x, tile.y);
+    } catch (err) {
+      if (err instanceof RuleError) break;
+      throw err;
+    }
+    route.push({ act: 'buyMule' }, { act: 'outfit', outfit: mule.outfit }, { act: 'install', plot: mule.index });
+    left -= walkSeconds(copy, me, at, 'corral') + walkSeconds(copy, me, 'corral', mule.index) + taps;
+    at = mule.index;
+  }
+  const room = Math.max(0, AI_PLANS.bounds.routeSteps - route.length - 1);
+  for (const plot of filtersWanted(copy, mind).slice(0, room)) route.push({ act: 'filter', plot });
+  route.push({ act: 'pub' });
+  return { route, timeBudgetMs: obs.players.find((p) => p.id === me)!.devSeconds * MS_PER_SECOND, ifSoldOut: 'pub' };
+}
+
+/** RULE-5 · auction: per good, from the one that is up through the queue, the side and hold today's trade pick plays. */
+function auctionPart(input: DraftInput, obs: GameState): Partial<Record<Good, GoodPlay>> {
+  const a = obs.auction;
+  const goods = a ? [...(a.good ? [a.good] : []), ...a.queue] : WALK.order;
+  return Object.fromEntries(goods.map((good) => [good, goodPart(input, obs, good)]));
+}
+
+function goodPart(input: DraftInput, obs: GameState, good: Good): GoodPlay {
+  const { mind } = input;
+  const plan = goodPlan(obs, mind, good);
+  const trade = topPick(input, obs, 'trade', `trade:${good}`, tradeDecision(obs, mind, plan));
+  const me = obs.players.find((p) => p.id === mind.me)!;
+  const h = me.stock[good];
+  let limit = obs.store.posted[good];
+  if (trade.side === 'seller') limit = Math.ceil(beforeTax(obs, plan.values.keep[h - 1] ?? 0));
+  if (trade.side === 'buyer') {
+    // As the auction hand walks: the Food and Energy it needs may take all its money, anything else its budget.
+    const essential = h < plan.values.block && (good === 'food' || good === 'energy');
+    const cap = essential ? me.money : Math.min(me.money, plan.budget);
+    limit = Math.floor(Math.min(plan.values.buy[h] ?? 0, cap));
+  }
+  const walkAway = Math.max(1, Number.isFinite(limit) ? limit : Math.round(obs.store.posted[good]));
+  return {
+    role: trade.side === 'pass' ? 'out' : trade.side,
+    hold: trade.side === 'seller' ? trade.keep : trade.side === 'buyer' ? trade.upTo : h,
+    walkAway,
+    start: walkAway,
+    concedeCrPerS: 0,
+    bluff: false,
+    vsRival: 'undercut1',
+  };
+}
+
+/**
+ * The seat's playbook for a phase, complete, by 'engine' with no edits: the strategy, and the phase's parts drafted
+ * under it. Given a strategy, it plays that one; the same input always drafts the same playbook.
+ */
 export function draftPlaybook(input: DraftInput): Playbook {
   const obs = observe(input.state, input.seat);
-  return { v: 1, seat: input.seat, month: obs.month, phase: input.phase, strategy: input.strategy ?? draftStrategy(input, obs), by: 'engine' };
+  const strategy = input.strategy ?? draftStrategy(input, obs);
+  const head = { v: 1 as const, seat: input.seat, month: obs.month, phase: input.phase, strategy, by: 'engine' as const };
+  if (input.phase === 'planning') return { ...head, planning: {}, landGrant: landGrantPart(input, obs) };
+  if (input.phase === 'development') return { ...head, development: developmentPart(input, obs) };
+  return { ...head, auction: auctionPart(input, obs) };
 }
