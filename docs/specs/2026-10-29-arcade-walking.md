@@ -290,7 +290,7 @@ tomorrow     MUST: the room's Game may emit a transient frame to everyone (`ctx.
              MUST (AM-13, S-1): a `steer` intent sends no full view, or 4 phones × 10 steers a second make 40 full
                views a second (~3.7 MB/s). Frame positions are rounded to 2 decimals on the wire.
              MUST (AM-15): the room stays game-agnostic. Game gains an optional `quiet?(intent): boolean`; the room
-               skips `broadcast()` after an intent it returns true for (MuleGame: `type === 'steer'`, WS3, PR-3).
+               skips `broadcast()` after an intent it returns true for (MuleGame: `steer` and `act`, AM-21; WS3, PR-3).
                Connection gains an optional `behind?(): boolean`; the room skips that connection's frame while it is
                true, never a full view (server.ts: `socket.bufferedAmount > FRAME_BACKLOG_BYTES`, a named server
                config value; a WS3 named edit in PR-2). The rounding happens where the DevFrame is built (WS3's
@@ -739,6 +739,10 @@ inside a wall; money and stock change only through game.ts rules; development en
 
 ## §8 · Amendments `[review-only]`
 
+- **AM-21 (2026-11-04, #235's review, ruled by WS6).** `act` is quiet too: MuleGame's `quiet` returns true for `steer`
+  and `act`. A press applies only at the next tick (RULE-1), so a full view sent on receipt shows the state before it,
+  and a mashed button sent up to 20 such views a second to every screen, against RULE-1 step 6. The tick's state
+  compare sends the one view the press's effect needs, `assayUntil` included, one tick after the press.
 - **AM-20 (2026-11-04, PR-6 phase A's findings, ruled by WS6).** (1) **B-AC-4 on real maps.** The stick and the button
   sit at the map's bottom corners, so on a real map they can lie over one of your plots (at 844 column 0 rows 5–8 and
   columns 13–14 rows 6–8; at 667 columns 0–2 and 11–14 of rows 6–8): "0 px² of own plots" holds only for the
