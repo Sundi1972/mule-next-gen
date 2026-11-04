@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createGame, type GameState } from '@mule/engine';
-import { TOOL_DEFS, toolsFor } from '../src/llm/tools.js';
+import { OFFERED, TOOL_DEFS, toolsFor } from '../src/llm/tools.js';
 
 const fixture = (): GameState =>
   createGame({
@@ -23,7 +23,7 @@ const SAMPLE: Record<string, unknown> = {
 /** What every tool answers seat `a`, by tool name. */
 function answers(state: GameState): Record<string, { content: string; is_error?: boolean }> {
   const tools = toolsFor(state, 'a');
-  return Object.fromEntries(tools.definitions.map((d) => [d.name, tools.run(d.name, SAMPLE[d.name])]));
+  return Object.fromEntries(TOOL_DEFS.map((d) => [d.name, tools.run(d.name, SAMPLE[d.name])]));
 }
 
 describe("Claude's tools (C9)", () => {
@@ -62,10 +62,15 @@ describe("Claude's tools (C9)", () => {
     const state = fixture();
     const before = structuredClone(state);
     const tools = toolsFor(state, 'a');
-    for (const d of tools.definitions) tools.run(d.name, SAMPLE[d.name]);
+    for (const d of TOOL_DEFS) tools.run(d.name, SAMPLE[d.name]);
     tools.run('nope', {});
     tools.run('worth', 'not an object');
     expect(state).toEqual(before);
+  });
+
+  it('whatIf is defined but not offered until the one-month sim it plays on exists', () => {
+    expect(OFFERED.map((d) => d.name).sort()).toEqual(['legalMoves', 'standings', 'worth']);
+    expect(toolsFor(fixture(), 'a').definitions).toEqual(OFFERED);
   });
 
   it('T-AC-A9: an unknown tool or a malformed input answers is_error with a code, never an exception', () => {

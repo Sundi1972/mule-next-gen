@@ -18,7 +18,17 @@ export interface ToolResult {
   is_error?: true;
 }
 
-const PHASES: readonly Phase[] = ['planning', 'landGrant', 'landAuction', 'development', 'production', 'auction', 'upkeep'];
+/** Every phase a move can be sent in; the type keeps it complete when the engine adds one. */
+const PHASE_SET: { readonly [P in Exclude<Phase, 'gameOver'>]: true } = {
+  planning: true,
+  landGrant: true,
+  landAuction: true,
+  development: true,
+  production: true,
+  auction: true,
+  upkeep: true,
+};
+const PHASES = Object.keys(PHASE_SET) as Phase[];
 
 export const TOOL_DEFS: readonly ToolDef[] = [
   {
@@ -61,6 +71,9 @@ const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'obj
  * The tools for one seat, fixed at the moment they are made: the observation is taken now, so a game that moves on
  * while the model thinks changes no answer. `run` never throws.
  */
+/** The tools offered to the model: whatIf waits for the one-month engine sim it plays on, so it is not offered yet. */
+export const OFFERED: readonly ToolDef[] = TOOL_DEFS.filter((d) => d.name !== 'whatIf');
+
 export function toolsFor(state: GameState, seat: PlayerId): { definitions: readonly ToolDef[]; run(name: string, input: unknown): ToolResult } {
   const obs = observe(state, seat);
   // Public on every row of the board, so read from the game itself: the totals only.
@@ -84,7 +97,7 @@ export function toolsFor(state: GameState, seat: PlayerId): { definitions: reado
   };
 
   return {
-    definitions: TOOL_DEFS,
+    definitions: OFFERED,
     run(name, input) {
       const handler = handlers[name];
       if (!handler) return error('unknown_tool');

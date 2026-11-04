@@ -276,8 +276,10 @@ export function createBrain(options: BrainOptions): MeteredBrain {
           signal?.removeEventListener('abort', release);
           release();
           if (failure instanceof Stopped) {
-            // Out of share before a round: a budget line, round 1's at the kind's model. Out of time: no line, no bill.
+            // Stopped before a round: out of share, a budget line (round 1's at the kind's model); out of time after a
+            // round, a late line. Neither was sent, so neither is billed.
             if (failure.why === 'budget') line(kind, failure.model ?? call.model, 'budget', NO_USAGE, 0, failure.round);
+            else if (failure.model) line(kind, failure.model, 'late', NO_USAGE, 0, failure.round);
           } else if (slot.called) {
             const ms = slot.reply?.ms ?? (failure instanceof CallFailed ? failure.ms : 0);
             const outcome = writeOutcomeOf(slot.reply, failure, written);

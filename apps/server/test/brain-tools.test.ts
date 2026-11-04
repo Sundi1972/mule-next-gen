@@ -45,12 +45,14 @@ const callLines = () => readLedger(file).filter((l) => !('type' in l));
 
 describe('the tool loop (C9, RULE-A4)', () => {
   it('T-AC-A8 row 3: a model that only ever calls tools gets BRAIN.toolRounds rounds with tools and one last round without, then its answer plays', async () => {
-    const sdk = fakeSdk((n, params) => (params.tools ? toolUse(n) : sdkMessage(ANSWER, { input: 100, output: 50 })));
+    const sdk = fakeSdk((n, params) => (params.tool_choice === undefined ? toolUse(n) : sdkMessage(ANSWER, { input: 100, output: 50 })));
     const written = await brainOn(sdk).writerFor(SEAT)!.write('strategy', ask(toolBox(() => ({ content: '{"total":1000}' }))));
 
     expect(sdk.requests).toHaveLength(BRAIN.toolRounds + 1);
-    expect(sdk.requests.slice(0, -1).every((r) => (r.params.tools ?? []).length === 1)).toBe(true);
-    expect(sdk.requests.at(-1)!.params.tools).toBeUndefined();
+    expect(sdk.requests.slice(0, -1).every((r) => (r.params.tools ?? []).length === 1 && r.params.tool_choice === undefined)).toBe(true);
+    // The last round keeps the definitions (a request with tool_use blocks must carry them) and forbids their use.
+    expect(sdk.requests.at(-1)!.params.tools).toHaveLength(1);
+    expect(sdk.requests.at(-1)!.params.tool_choice).toEqual({ type: 'none' });
     // Each round after the first carries the last round's tool result.
     for (const r of sdk.requests.slice(1)) expect(resultsIn(r.params)).toHaveLength(1);
     expect(written.reply.cause).toBeUndefined();
@@ -101,6 +103,10 @@ describe('the tool loop (C9, RULE-A4)', () => {
 
     expect(sdk.requests).toHaveLength(1);
     expect(written.reply.cause).toBe('no_reply');
+    expect(callLines().map((l) => [l.round, l.outcome])).toEqual([
+      [1, 'tool'],
+      [2, 'late'],
+    ]);
   });
 
   it('a write with no tools is one round trip, as before', async () => {
@@ -130,8 +136,8 @@ describe('the tool loop (C9, RULE-A4)', () => {
 
       const writes = sdk.requests.filter((r) => isWrite(r.params));
       expect(writes.map((r) => (r.params.tools ?? []).map((t) => ('name' in t ? t.name : '')).sort())).toEqual([
-        ['legalMoves', 'standings', 'whatIf', 'worth'],
-        ['legalMoves', 'standings', 'whatIf', 'worth'],
+        ['legalMoves', 'standings', 'worth'],
+        ['legalMoves', 'standings', 'worth'],
       ]);
       const [result] = resultsIn(writes[1]!.params) as { content: string }[];
       const rows = JSON.parse(result!.content) as { seat: string; name: string; worth: number }[];

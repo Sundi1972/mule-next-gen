@@ -247,6 +247,7 @@ export function createToolLoop(
       const picked = gate.before(round, { ...prompt, user: seen }, model);
       if (picked === null) throw new Stopped('budget', round, model);
       model = picked;
+      // The last round keeps the definitions, which a request carrying tool_use blocks must have, and forbids their use.
       const offer = tools !== undefined && round <= BRAIN.toolRounds;
       const roundStart = now();
       const controller = new AbortController();
@@ -262,7 +263,12 @@ export function createToolLoop(
             thinking: { type: 'adaptive' },
             system: [{ type: 'text', text: prompt.system, cache_control: { type: 'ephemeral' } }],
             messages,
-            ...(offer ? { tools: tools.definitions.map((d) => ({ name: d.name, description: d.description, input_schema: copyOf(d.input_schema) as Anthropic.Tool.InputSchema })) } : {}),
+            ...(tools
+              ? {
+                  tools: tools.definitions.map((d) => ({ name: d.name, description: d.description, input_schema: copyOf(d.input_schema) as Anthropic.Tool.InputSchema })),
+                  ...(offer ? {} : { tool_choice: { type: 'none' as const } }),
+                }
+              : {}),
             output_config: { effort: call.effort, format: { type: 'json_schema', schema: copyOf(prompt.schema) } },
           },
           { timeout: Math.ceil(left), maxRetries: 0, signal: controller.signal },
@@ -287,6 +293,8 @@ export function createToolLoop(
       if (!more) return { reply, model };
       // The reply goes back as it came, thinking blocks included; the results answer each tool_use in order.
       messages.push({ role: 'assistant', content: res.content as unknown as Anthropic.ContentBlockParam[] });
+      // Resent as input next round, so it counts toward the next round's worst case, thinking and tool inputs included.
+      seen += JSON.stringify(res.content);
       const results: Anthropic.ContentBlockParam[] = res.content.flatMap((b) => {
         if (b.type !== 'tool_use') return [];
         // A handler that throws answers a code, never its text (RULE-A4 unknown); the loop goes on.
