@@ -42,7 +42,8 @@ export interface MuleServer {
  * The game server: an HTTP server for the web client and `POST /rooms`, and a
  * WebSocket endpoint at `/ws` where phones and boards talk to their room.
  * Games play politics unless `politics` is false. With a `recordDir`, each game's record is written there at game over.
- * With `devSteer`, every game it hosts steers its development (arcade C6), whatever DEV_STEER.on says.
+ * With `devSteer: true` every game it hosts steers its development (arcade C6), and with `false` none does, whatever
+ * DEV_STEER.on says; without it, the flag decides.
  */
 export function createMuleServer(
   options: { staticDir?: string; seed?: () => number; maxMonths?: number; phaseScale?: number; politics?: boolean; recordDir?: string | null; devSteer?: boolean } = {},
@@ -56,7 +57,7 @@ export function createMuleServer(
       phaseScale: options.phaseScale,
       politics: options.politics ?? true,
       // Steered development for this server's games only; trunk's DEV_STEER.on stays off (PM ruling).
-      ...(options.devSteer ? { devSteer: true } : {}),
+      ...(options.devSteer === undefined ? {} : { devSteer: options.devSteer }),
     };
     if (recordDir === null) return new MuleGame(ctx, gameSeed, gameOptions);
     return createRecordedGame({ ctx, seed: gameSeed, options: gameOptions, dir: recordDir, isUserError }).game;

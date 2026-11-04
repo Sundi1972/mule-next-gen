@@ -726,11 +726,13 @@ describe.runIf(FULL)('playbooks in the record', { timeout: 60_000 }, () => {
   it('T-AC-11: recordPlaybook entries come out in call order with their step\'s at and seq, and the replay ignores them', async () => {
     const written = writeOnReady();
     const { record, t } = await recordedGame();
-    const entries = record.events.filter((e) => e.type === 'playbook');
+    // The Classic AI seat writes its own planning playbooks too (C15); this test is about the ones the spy wrote.
+    const spySeats = new Set(written.map((w) => w.seat));
+    const entries = record.events.flatMap((e) => (e.type === 'playbook' && spySeats.has(e.seat) ? [e] : []));
     expect(entries.length, 'the game wrote playbooks').toBeGreaterThan(1);
     expect(entries.map(({ seat, month, phase, playbook }) => ({ seat, month, phase, playbook }))).toEqual(written);
     record.events.forEach((e, i) => {
-      if (e.type !== 'playbook') return;
+      if (e.type !== 'playbook' || !spySeats.has(e.seat)) return;
       const step = record.events.slice(0, i).filter(isStep).at(-1)!;
       expect(step).toMatchObject({ type: 'intent', seat: e.seat, intent: { type: 'ready' }, at: e.at, seq: e.seq });
     });

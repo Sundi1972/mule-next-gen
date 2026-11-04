@@ -169,7 +169,7 @@ The standing line, verbatim, in every handoff:
 | PR-9 | `apps/web/src/phone/arcade/**`, `apps/web/src/table/TvDevelop.tsx`, its `packages/ui` pieces (Wolf/Glint sprites), `apps/web/e2e/store-steps.ts` | the arcade mock at ceedd23f (as PR-6) | `apps/server/**`, `packages/engine/**` |
 | PR-10 | each owner's own files only: WS3 `apps/server/test/**` and `apps/web/e2e/auction-steps.ts::goToThePub`; WS1 `packages/ai/test/play-walk.test.ts`, `balance.test.ts`; WS4 `harness.ts`, `smoke.ts`, `table-steps.ts`, `zoom.ts`; WS6 `store-steps.ts`, `screens.ts`, `shell.ts`; WS5 `specials.ts`, `special-steps.ts` | — | every other owner's files |
 | PR-11 | `packages/engine/src/config.ts` (`DEV_STEER.on`) | — | everything else |
-| PR-12 | WS6: removing `apps/web/src/phone/Develop.tsx` (a named edit, WS4 reviewing) and `next-step.ts`, `apps/web/test/next-step.test.ts`, `store-view.test.ts`; WS1: removing `packages/engine/src/dev-walk.ts`; WS3: removing `apps/server/src/dev-walking.ts` and ColonistView v1 fields in `packages/protocol/src/index.ts` | — | anything not removed by C14 |
+| PR-12 | WS6: removing `apps/web/src/phone/Develop.tsx` (a named edit, WS4 reviewing) and `next-step.ts`, `apps/web/test/next-step.test.ts`, `store-view.test.ts`; WS1: removing `packages/engine/src/dev-walk.ts`; WS3: removing `apps/server/src/dev-walking.ts`, ColonistView v1 fields in `packages/protocol/src/index.ts`, and the tap-path tests PR-11 pinned to `DEV_STEER.on` off (`apps/server/test/dev-walking.test.ts`, `walk-settle.test.ts`, the tap describes of `apps/web/test/first-mule-phone.test.ts`; PM ruling, 4 Nov) | — | anything not removed by C14 |
 
 ### Contention
 
@@ -703,7 +703,9 @@ promise. WS4's part first (harness.ts is shared), then the others at once.
   `apps/web/test/next-step.test.ts`, and `store-view.test.ts`'s tap cases.
 - [ ] **Step 2 (WS1):** remove `packages/engine/src/dev-walk.ts` and `DEV_STEER.on`'s other branch.
 - [ ] **Step 3 (WS3):** remove `apps/server/src/dev-walking.ts`, the flag's other branch in mule-game.ts, and
-  ColonistView v1's `at`, `walk`, `assayUntil`.
+  ColonistView v1's `at`, `walk`, `assayUntil`. Delete with them the tap-path tests PR-11 pinned to `DEV_STEER.on`
+  off (`apps/server/test/dev-walking.test.ts`, `walk-settle.test.ts`, and the tap describes of
+  `apps/web/test/first-mule-phone.test.ts`): they guard the flag-off rollback, which goes here (PM ruling, 4 Nov).
 - [ ] **Step 4: Run `pnpm typecheck && pnpm test`, the e2e and `pnpm sim`.** Expected: exit 0; C14's pins (the
   steering twins of PR-10) green. Commit `refactor: C14 tap-to-walk removed`.
 
