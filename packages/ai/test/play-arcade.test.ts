@@ -138,19 +138,30 @@ describe('the AI walks the floor, and the sim plays it (arcade C9, C10)', () => 
  * 43% at 20 and 42% at 40, so 20 is the smallest steady one at about a second a game.
  */
 const SIM_GAMES = 20;
-let simSample: { moments: FloorMomentCounts[]; turns: DevTurn[] } | null = null;
-function simGames(): { moments: FloorMomentCounts[]; turns: DevTurn[] } {
-  simSample ??= steered(() => {
-    const games = Array.from({ length: SIM_GAMES }, (_, i) => playGame(i + 1, simSeats(4, 'trader', i + 1, null), { politics: true }));
-    return { moments: games.flatMap((g) => g.moments), turns: games.flatMap((g) => g.turns) };
-  });
+type SimSample = { moments: FloorMomentCounts[]; turns: DevTurn[] };
+let simSample: Promise<SimSample> | null = null;
+/**
+ * The sample, played a game at a time with a yield to the event loop between games: played in one go it holds the
+ * worker for about 40 s, and vitest's worker times out reporting to the runner (onTaskUpdate) and fails the run.
+ */
+function simGames(): Promise<SimSample> {
+  simSample ??= (async () => {
+    const out: SimSample = { moments: [], turns: [] };
+    for (let i = 0; i < SIM_GAMES; i++) {
+      const g = steered(() => playGame(i + 1, simSeats(4, 'trader', i + 1, null), { politics: true }));
+      out.moments.push(...g.moments);
+      out.turns.push(...g.turns);
+      await new Promise((r) => setImmediate(r));
+    }
+    return out;
+  })();
   return simSample;
 }
-const simMoments = () => simGames().moments;
+const simMoments = async () => (await simGames()).moments;
 
 describe("the moments in the sim's games (T-AC-5, AM-22)", () => {
-  it('T-AC-5 (AM-22): a bot races in at least 40% of glints, never one whose detour breaks its errand (RULE-8)', { timeout: 120_000 }, () => {
-    const moments = simMoments();
+  it('T-AC-5 (AM-22): a bot races in at least 40% of glints, never one whose detour breaks its errand (RULE-8)', { timeout: 120_000 }, async () => {
+    const moments = await simMoments();
     const glints = sum(moments, 'glints');
     expect(glints, 'glints lit').toBeGreaterThanOrEqual(100);
     // RULE-8's example, from the mock's one-MULE bots, was 63%; the real AI plans its MULEs to fill the clock, so fewer
@@ -158,8 +169,8 @@ describe("the moments in the sim's games (T-AC-5, AM-22)", () => {
     expect(sum(moments, 'raced') / glints, 'share of glints a bot raced').toBeGreaterThanOrEqual(0.4);
   });
 
-  it("T-AC-5 (AM-26): every AI colonist reaches the pub within the turn, except one a wolf's bite cost the pub, at most 1% of turns", { timeout: 120_000 }, () => {
-    const { turns } = simGames();
+  it("T-AC-5 (AM-26): every AI colonist reaches the pub within the turn, except one a wolf's bite cost the pub, at most 1% of turns", { timeout: 120_000 }, async () => {
+    const { turns } = await simGames();
     const missed = turns.filter((t) => t.pubAt === null);
     const excused = missed.filter((t) => t.biteCostPub);
     for (const t of excused) console.log(`T-AC-5 excused (AM-26): month ${t.month}, ${t.id}: a wolf's bite cost it the pub`);
@@ -174,8 +185,8 @@ describe("the moments in the sim's games (T-AC-5, AM-22)", () => {
   // WOLVES.simMonthsWithPack of months. AM-27's binding check is `pnpm sim`'s report, 40 games AI-only on each of seeds
   // 1, 101 and 201 (its 'Months with an AI wolf encounter' line, MISS under that share): 40 games here would cost the
   // file about 30 s more than its budget.
-  it('an AI colonist meets wolves in WOLVES.simMonthsWithPack of months of the sim sample: the legs by wolf land are walked', { timeout: 120_000 }, () => {
-    const moments = simMoments();
+  it('an AI colonist meets wolves in WOLVES.simMonthsWithPack of months of the sim sample: the legs by wolf land are walked', { timeout: 120_000 }, async () => {
+    const moments = await simMoments();
     const met = moments.filter((m) => m.packs > 0).length;
     expect(met / moments.length, `months with an AI wolf encounter: ${met} of ${moments.length}`).toBeGreaterThanOrEqual(WOLVES.simMonthsWithPack);
   });
