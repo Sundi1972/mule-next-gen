@@ -5,8 +5,8 @@ import type { TableClient } from '../../net/client';
 import { useClient } from '../../net/react';
 import { startControls, stickOf, type Controls } from './controls';
 import { msPerTick, othersAt, pushFrame, startFrameLog, type Drawn, type FrameLog } from './frames';
-import { advanceTo, assayTick, holdUntil, markStale, phoneTick, predictWorld, receiveFrame, shownAt, startPrediction, steerFrom, type ColonistBase, type Prediction, type Shown } from './predict';
-import { gateSteer, heldBack, startGate, type SteerGate } from './steer';
+import { advanceTo, assayTick, holdUntil, markStale, phoneTick, predictWorld, receiveFrame, shownAt, startPrediction, steerStep, type ColonistBase, type Prediction, type Shown } from './predict';
+import { startGate, type SteerGate } from './steer';
 import { usePhoneGame } from '../game';
 
 /**
@@ -185,16 +185,10 @@ export function PhoneLive({ children }: { children: ReactNode }) {
   function steerNow(now: number): void {
     const s = state.current;
     const want = stickOf(source.controls, shownAt(s.p, now, cfg));
-    // Only a live copy steers: the stamp is its tick, and a closed socket would only toast.
-    if (s.p.status !== 'live' || client.getState().status !== 'open') return;
-    const r = gateSteer(s.gate, want, now);
-    if (r.send) {
-      s.gate = r.gate;
-      s.p = steerFrom(s.p, r.send);
-      client.intent({ type: 'steer', x: r.send.x, y: r.send.y, tick: s.p.tick });
-      return;
-    }
-    const wait = heldBack(s.gate, want, now);
+    const { p, gate, send, wait } = steerStep(s.p, s.gate, want, now, client.getState().status === 'open');
+    s.p = p;
+    s.gate = gate;
+    if (send) client.intent({ type: 'steer', ...send });
     if (wait === null || later.current !== null) return;
     later.current = setTimeout(() => {
       later.current = null;

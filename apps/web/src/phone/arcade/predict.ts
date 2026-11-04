@@ -1,6 +1,6 @@
 import { stepFloor, type FloorColonist, type FloorConfig, type FloorLead, type GameState, type Space } from '@mule/engine';
 import type { DevFrame, MuleView, MyView } from '@mule/protocol';
-import type { Stick } from './steer';
+import { gateSteer, heldBack, type SteerGate, type Stick } from './steer';
 
 /**
  * Your own colonist on your phone (arcade spec RULE-10, AM-7). The phone runs its own copy of its colonist ahead of the
@@ -143,6 +143,23 @@ export function advanceTo(p: Prediction, tick: number, world: PredictWorld): Pre
 /** The stick from the copy's tick on: the phone sends it stamped with that tick, so the server steps with it from there too. */
 export function steerFrom(p: Prediction, stick: Stick): Prediction {
   return { ...p, inputs: [...p.inputs.filter((i) => i.tick < p.tick), { tick: p.tick, x: stick.x, y: stick.y }] };
+}
+
+/** One moment's steering: what goes to the server, stamped with the copy's tick, and how long a held-back change must wait. */
+export interface Steered {
+  p: Prediction;
+  gate: SteerGate;
+  send: (Stick & { tick: number }) | null;
+  wait: number | null;
+}
+
+/** Sends what the stick wants if the gate lets it go; only a live copy on an open socket steers. */
+export function steerStep(p: Prediction, gate: SteerGate, want: Stick, nowMs: number, open: boolean): Steered {
+  if (p.status !== 'live' || !open) return { p, gate, send: null, wait: null };
+  const r = gateSteer(gate, want, nowMs);
+  if (!r.send) return { p, gate, send: null, wait: heldBack(gate, want, nowMs) };
+  const next = steerFrom(p, r.send);
+  return { p: next, gate: r.gate, send: { ...r.send, tick: next.tick }, wait: null };
 }
 
 /** Your colonist as the frame has it, with what the view says of it besides, and the copy's own where a frame has none. */
