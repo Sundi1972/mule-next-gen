@@ -1,7 +1,7 @@
-import { DEVELOPMENT, RuleError, tileIndex, type GameState } from '@mule/engine';
+import { DEV_STEER, DEVELOPMENT, RuleError, tileIndex, type GameState } from '@mule/engine';
 import type { MuleView } from '@mule/protocol';
 import type { SeatInfo } from '@tabletop/core';
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { MuleGame } from '../src/mule-game.js';
 import { fakeContext, pressThroughSidePick, readyAll, tapThere, toDevelopment, walkers } from './fake-context.js';
 
@@ -233,4 +233,65 @@ describe('A-1: games with AI seats still finish month 1 (WS1’s stall seeds)', 
     for (let i = 0; i < 20_000 && game.viewFor(null).phase === 'development'; i++) fake.advance(100);
     expect(game.viewFor(null).phase).toBe('production');
   }, SLOW_ROW_MS);
+});
+
+describe('A-1 (AM-33): a seat that cannot get a first MULE counts as in, so the clock never waits on it', () => {
+  // The tap path (devSteer off): the rule is isIn's, the same for the floor, whose tick re-checks it every tick.
+  let was = DEV_STEER.on;
+  beforeAll(() => {
+    was = DEV_STEER.on;
+    DEV_STEER.on = false;
+  });
+  afterAll(() => {
+    DEV_STEER.on = was;
+  });
+
+  /** Lena and Ossa own a plot each; `prepare` sets the corral and the purses up before development. */
+  function stagedCorral(prepare: (state: GameState) => void) {
+    const plots: Record<string, number> = {};
+    const g = toDevelopment({
+      players: walkers,
+      firstMonthWaits: true,
+      prepare: (state) => {
+        [LENA, OSSA].forEach((id, k) => {
+          const i = plotNearStore(state, k);
+          state.tiles[i]!.owner = id;
+          plots[id] = i;
+        });
+        prepare(state);
+      },
+    });
+    const xy = (id: string) => ({ x: plots[id]! % g.state.width, y: Math.floor(plots[id]! / g.state.width) });
+    return { ...g, xy };
+  }
+
+  it('AM-33: the last MULE sells while Lena still needs one: once Ossa installs it, the clock starts, Lena left out', () => {
+    const g = stagedCorral((state) => {
+      state.store.mules = 1;
+    });
+    expect(g.game.viewFor(null).clockWaitsFor, 'both still to come').toEqual([LENA, OSSA]);
+    tapThere(g.game, g, OSSA, { type: 'buyMule' });
+    // The corral is empty and Lena leads none: she cannot get a first MULE, so only Ossa is still to come.
+    expect(g.game.viewFor(null).clockWaitsFor, 'Lena can no longer get one').toEqual([OSSA]);
+    tapThere(g.game, g, OSSA, { type: 'outfit', outfit: 'food' });
+    tapThere(g.game, g, OSSA, { type: 'install', ...g.xy(OSSA) });
+    const view = g.game.viewFor(LENA);
+    expect(view.clockWaitsFor, 'nobody is waited for').toBeUndefined();
+    expect(view.me!.devEndsAt, 'the full clock runs').toBe(g.ctx.now() + FULL_MS);
+  });
+
+  it('AM-33: a seat that cannot pay the corral\'s price is not waited for', () => {
+    const g = stagedCorral((state) => {
+      state.players.find((p) => p.id === LENA)!.money = 0;
+    });
+    expect(g.game.viewFor(null).clockWaitsFor, 'only Ossa, who can buy, is still to come').toEqual([OSSA]);
+  });
+
+  it('AM-33 (negative): a seat leading a MULE from an empty corral is still waited for, until it installs', () => {
+    const g = stagedCorral((state) => {
+      state.store.mules = 1;
+    });
+    tapThere(g.game, g, LENA, { type: 'buyMule' });
+    expect(g.game.viewFor(null).clockWaitsFor, 'Lena leads the last MULE: she can still install it; Ossa cannot get one').toEqual([LENA]);
+  });
 });
