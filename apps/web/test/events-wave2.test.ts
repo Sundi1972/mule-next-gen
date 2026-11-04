@@ -223,10 +223,36 @@ describe('B1 (C5): the ledger stories play the gallery’s own, and say what the
         expect(inside(result([ev], where, { reduced: true }), 'effects-card'), `${ev.key} on ${where}`).not.toBe('');
       }
     }
+    // Nothing travels: no crate goes up the ramp, no coin flies, no pod drops.
+    for (const ev of [TAX, GRANT, PIRATES]) {
+      for (const where of ['tv', 'alone'] as const) {
+        for (const html of playFrames([ev], where, { reduced: true })) {
+          for (const moving of ['pirate-crate', 'tax-coin', 'grant-pod']) expect(has(html, moving), `${ev.key} on ${where}: no ${moving}`).toBe(false);
+        }
+      }
+    }
     // The pirates still land and their hold still reads 0: the result, without the flight.
     const frames = playFrames([PIRATES], 'tv', { reduced: true });
     expect(frames.some((html) => has(html, 'pirate-ship'))).toBe(true);
     expect(text(inside(frames.find((html) => has(html, 'pirate-hold'))!, 'pirate-hold'))).toMatch(/Ossa 0/);
+  });
+
+  it('in a segment of several events, a phone it missed shows every event’s change to the store and the colony', () => {
+    // Two bulletins in one roll call: Lena's rats, then a raid on the store. Brix is in neither.
+    const roll = [
+      { ...RATS, weight: 'bulletin' as const, playMs: EVENT_SHOW.rollCallMs / 2 },
+      { ...PIRATES, weight: 'bulletin' as const, playMs: EVENT_SHOW.rollCallMs / 2, effects: [{ on: 'store', what: 'crystite' as const, delta: -8 }] },
+    ];
+    // The line names it too; the chip is the change itself, so look for the chip.
+    expect(inside(result(roll, 'withTv', { me: BRIX }), 'phone-miss'), 'the raid’s chip under the miss line').toMatch(/data-delta="-1"[^>]*><span[^>]*>▼<\/span>Store −8/);
+  });
+
+  it('a key this client does not know yet still plays, on the plain badge', () => {
+    const unknown = event('festival' as ShowEventView['key'], 'planning', { title: 'Festival', sign: 'good' });
+    const seg = segOf([unknown], 'tv');
+    const html = screen([unknown], seg.announceAt + 0.3, 'tv');
+    expect(html).toMatch(/data-glyph="festival"[^>]*>\s*<circle/);
+    expect(() => playFrames([unknown], 'alone')).not.toThrow();
   });
 });
 
