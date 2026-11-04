@@ -5,6 +5,7 @@ import { allPrices, mulePrice, planShip, postPrices, targetPrice } from './econo
 import { firePhase, rollPlayerEvent } from './events.js';
 import { colonyLot, endLandAuction, isListed, plotAt, startLandAuction } from './lots.js';
 import { generateMap, tileIndex } from './map.js';
+import { monthLedger, newColony } from './colony.js';
 import { airBand } from './pollution.js';
 import { closeElection, newPolitics, officeScore, openPlanning, payOffices } from './politics.js';
 import { needsOf, runProduction } from './production.js';
@@ -83,6 +84,7 @@ export function createGame(options: { seed: number; players: NewPlayer[]; maxMon
     listings: [],
     landAuction: null,
     politics: options.politics === false ? null : newPolitics(),
+    colony: options.politics === false ? null : newColony(1),
   };
   // The first month's prices start where supply and demand put them.
   for (const good of GOODS) state.store.posted[good] = Math.round(targetPrice(state, good));
@@ -546,6 +548,8 @@ export function advancePhase(state: GameState): void {
       report.colonistsHungry = hungry;
       report.storeCapital = state.store.capital;
       report.colonyFund = state.treasury.money;
+      const ledger = monthLedger(state);
+      if (ledger) report.ledger = ledger;
       // The month's report keeps every event the month fired, not production's alone; a what-if copy shares the report.
       if (!state.whatIf) report.events = [...state.monthEvents];
     }
