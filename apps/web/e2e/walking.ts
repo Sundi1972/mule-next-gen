@@ -17,8 +17,8 @@ const SEED = 8;
 const PHASE_SCALE = 0.25;
 /** Long enough to reach the first development from the lobby: planning, the grant and its short passes. */
 const TO_DEVELOPMENT_MS = 60_000;
-/** One development at PHASE_SCALE, with room for the server's end-of-phase work. */
-const DEVELOPMENT_MS = 30_000;
+/** One development at PHASE_SCALE, month 1's wait for the first MULEs included, with room for the server's end-of-phase work. */
+const DEVELOPMENT_MS = 60_000;
 /** A frame's lateness the TV tolerates when the phase ends: a few ticks. */
 const END_SLACK_MS = 500;
 /** Samples a colonist needs on a land before its speed there counts. */
@@ -82,10 +82,14 @@ function checkNeverOnBlockedLand(frames: DevFrame[], view: MuleView, who: string
 async function watchADevelopment(board: Wire): Promise<{ frames: DevFrame[]; view: MuleView; endsAt: number; endedAt: number }> {
   check(await until(() => board.view()?.phase === 'development', TO_DEVELOPMENT_MS), 'the table never reached development');
   const start = board.view()!;
-  const endsAt = start.phaseEndsAt ?? Number.POSITIVE_INFINITY;
+  const firstView = board.views.length - 1;
   const firstFrame = board.frames.length;
   check(await until(() => board.view()?.phase !== 'development', DEVELOPMENT_MS), 'development never ended');
-  return { frames: board.frames.slice(firstFrame).map((f) => f.frame), view: start, endsAt, endedAt: Date.now() };
+  const endedAt = Date.now();
+  // Month 1's clock starts only once every seat's first MULE is in, so the deadline is the last one development showed.
+  const endsAt = board.views.slice(firstView).filter((v) => v.phase === 'development' && v.phaseEndsAt != null).at(-1)?.phaseEndsAt;
+  check(endsAt != null, 'development showed no clock: phaseEndsAt stayed null');
+  return { frames: board.frames.slice(firstFrame).map((f) => f.frame), view: start, endsAt, endedAt };
 }
 
 const started = Date.now();
