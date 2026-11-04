@@ -4,6 +4,8 @@ import { Button, Creature, cx, GOOD_NAME, GoodIcon, MuleIcon, PlayerMark, SLOT_C
 import type { ReactNode } from 'react';
 import { fmt, plotName, slotOf, TERRAIN_ODDS, tileAt } from '../game/derive';
 import { GroundCard } from '../phone/ground';
+import type { Seat } from '../phone/hub/ready';
+import { WaitingFor } from '../phone/hub/ReadyBar';
 import { SpecialLine } from './SpecialLine';
 
 /** The auction's walkers as the board draws them, in seat order, with their units and the surplus over this month's need. */
@@ -478,6 +480,16 @@ export function LeaderBox({ view, lot, meId, className }: { view: MuleView; lot:
     >
       {line.text}
     </div>
+  );
+}
+
+/** "Waiting for Kai to pick": planning's names line, each with its creature and an AWAY mark for a dropped phone. */
+export function WaitingToPick({ seats, tv = false }: { seats: readonly Seat[]; tv?: boolean }) {
+  return (
+    <span className={cx('flex flex-wrap items-center gap-x-1.5 gap-y-1', tv ? 'text-3xl' : 'text-sm @min-[1100px]/shell:text-lg')} data-testid="waiting-to-pick" aria-label={`Waiting for ${seats.map((s) => s.name).join(' and ')} to pick`}>
+      <WaitingFor seats={seats} me={null} tv={tv} />
+      <span className="text-ink-2">to pick</span>
+    </span>
   );
 }
 
