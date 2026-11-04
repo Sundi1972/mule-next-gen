@@ -15,6 +15,7 @@ import { useClient, useClientState, useServerNow } from '../net/react';
 import { connectedIn, hostMayContinue, readyRows, stillPlanning } from '../phone/hub/ready';
 import { ReadyCount, WaitingFor } from '../phone/hub/ReadyBar';
 import { placesOf } from '../phone/hub/standing';
+import { TvEventLayer } from '../events/TvEventLayer';
 import { TvElection } from './TvElection';
 import { TvGovernorPromise } from './TvGovernorPromise';
 import { TvLandAuction } from './TvLandAuction';
@@ -32,7 +33,7 @@ export function TableApp({ room }: { room: string }) {
   if (!room || notice) screen = <PickRoom notice={notice} />;
   else if (!view || role !== 'board') screen = <Waiting code={room} />;
   else if (view.status === 'lobby' || !view.game) screen = <TvLobby table={view} />;
-  else screen = <TvGame table={view} game={view.game} />;
+  else screen = <TvEventLayer game={view.game}><TvGame table={view} game={view.game} /></TvEventLayer>;
 
   return (
     <div className="h-dvh bg-table">

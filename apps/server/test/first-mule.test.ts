@@ -177,6 +177,9 @@ describe('A-1: month 1’s development clock waits for every first MULE', () => 
 });
 
 describe('A-1: games with AI seats still finish month 1 (WS1’s stall seeds)', () => {
+  // Each row plays whole AI months on the fake clock: the outcome is fixed by the seed, but the wall time is not, and a
+  // loaded CI runner took 5.2 s against vitest's 5 s default. The budget is for the runner, not for the game.
+  const SLOW_ROW_MS = 30_000;
   // The server's planning ends on a human's Ready, so a table of AIs alone never leaves it: one idle human with no
   // plot sits in. Present and plotless, Hal counts as in, so only the four AIs decide when the clock starts.
   const table: SeatInfo[] = [{ id: 'h', name: 'Hal', isAi: false, color: 4 }, ...['Ada', 'Bo', 'Cy', 'Di'].map((name, i) => ({ id: `a${i}`, name, isAi: true, color: i }))];
@@ -187,8 +190,9 @@ describe('A-1: games with AI seats still finish month 1 (WS1’s stall seeds)', 
     game.start(table);
     let devFrom: number | null = null;
     let devMs = 0;
-    for (let i = 0; i < 20_000 && game.viewFor(null).month === 1; i++) {
-      const phase = game.viewFor(null).phase;
+    for (let i = 0; i < 20_000; i++) {
+      const { month, phase } = game.viewFor(null);
+      if (month !== 1) break;
       if (phase === 'planning' || phase === 'landGrant' || phase === 'upkeep') readyAll(game);
       if (phase === 'development' && devFrom === null) devFrom = fake.ctx.now();
       if (phase !== 'development' && devFrom !== null && devMs === 0) devMs = fake.ctx.now() - devFrom;
@@ -197,7 +201,7 @@ describe('A-1: games with AI seats still finish month 1 (WS1’s stall seeds)', 
     expect(game.viewFor(null).month, 'month 1 ended').toBe(2);
     expect(devMs, 'development ran its full clock').toBeGreaterThanOrEqual(FULL_MS);
     expect(devMs, 'the wait and the full clock, never a stall').toBeLessThanOrEqual(2 * FULL_MS);
-  });
+  }, SLOW_ROW_MS);
 
   it('A-1: once in, an AI waits or goes to the pub while a human holds the clock; nothing it does changes the table, and the host can still start the clock', () => {
     const fake = fakeContext({ table });
@@ -224,5 +228,5 @@ describe('A-1: games with AI seats still finish month 1 (WS1’s stall seeds)', 
     game.handle('h', { type: 'continue' });
     for (let i = 0; i < 20_000 && game.viewFor(null).phase === 'development'; i++) fake.advance(100);
     expect(game.viewFor(null).phase).toBe('production');
-  });
+  }, SLOW_ROW_MS);
 });
