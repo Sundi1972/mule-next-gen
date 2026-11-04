@@ -38,6 +38,9 @@ function table(level: AiLevelId, options: { politics?: boolean; maxMonths?: numb
   return { state, seats };
 }
 
+/** The budget for the Trader table's hundred-odd drafts: under 1 s alone, four to five times that in CI's parallel run. */
+const SLOW_MS = 20_000;
+
 function strategyOf(state: GameState, mind: Mind, seed: number): Strategy {
   return draftPlaybook({ state, seat: mind.me, mind, seed, phase: 'planning' }).strategy;
 }
@@ -128,7 +131,7 @@ describe('the draft picks a plan kind and writes its strategy', () => {
     expect(new Set(reasons).size).toBe(reasons.length);
   });
 
-  it('T-AC-5: a Trader table drafts cautious builder, aggressive landBaron, trader specialist or monopolist, saboteur spoiler; at Rookie no monopolist and no spoiler', () => {
+  it('T-AC-5: a Trader table drafts cautious builder, aggressive landBaron, trader specialist or monopolist, saboteur spoiler; at Rookie no monopolist and no spoiler', { timeout: SLOW_MS }, () => {
     const trader = table('trader');
     const kinds = trader.seats.map((s) => strategyOf(trader.state, s.mind, s.seed).kind);
     expect([kinds[0], kinds[1], kinds[3]]).toEqual(['builder', 'landBaron', 'spoiler']);
