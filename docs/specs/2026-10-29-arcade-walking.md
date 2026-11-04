@@ -754,7 +754,12 @@ inside a wall; money and stock change only through game.ts rules; development en
   the lunge ends**, so it is null outside `tell` and `lunge`; the scramble goes **from its call to the turn's end**,
   `over` and `leftOut` included, and `leftOut` is filled whenever `over` is set (under `'time'` too), so "absent" means
   no pack, no glint and no scramble yet this turn; the glint's `x`, `y` are its tile, drawn at the tile's middle;
-  `packs[].stage` stays, as the TV reads every pack from the frame at 20 Hz. The e2e forces the moments by
+  `packs[].stage` stays, as the TV reads every pack from the frame at 20 Hz. **Extended at PR-9's first build** (the layers drew
+  them by guessing from successive frames, which is rules in the client and wrong for a screen that joins mid-fight):
+  each pack also carries its `centre` {x, y}, its stage's `sinceTick`, and its `strikes` and `bites`; `moments` also
+  carries `stunned` [{who, untilTick}] from `FloorColonist.stunnedUntilTick` and `bolted` [who] for a MULE bolted and
+  not caught (`FloorColonist.bolt`), the MULE drawn at the colonist's `lead`. And **the frame's `beats` are filled**:
+  `devFrame` gets the tick's `floor.moments.beats` texts (it was called with none, so no TV line ever showed). The e2e forces the moments by
   setting `WOLVES` and `GLINT` on the in-process server's config, so no server test option is added.
 - **AM-27 (2026-11-04, WS1's PR-8 #248 sim, ruled by WS6; changes AM-22's bar).** With `botWolfLandShare` built at
   0.5, AI wolf months over 40 AI-only games with walking on are 61% on seed 1, 52% on 101 and 50% on 201 (standard
