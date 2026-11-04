@@ -83,6 +83,7 @@ export function createMuleServer(
     close: () =>
       new Promise((done) => {
         clearInterval(sweeper);
+        registry.disposeAll();
         for (const client of wss.clients) client.terminate();
         wss.close();
         server.close(() => done());
