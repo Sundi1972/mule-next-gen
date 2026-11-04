@@ -457,8 +457,9 @@ every DEV_STEER.tickMs (50 ms) of game time, while phase = development:
   1  inputs ← for each seat: away → IDLE; else its latest steer (latest-wins) and any act pressed since the last tick
   2  ai     ← each AI seat's hand reads (floor, state) and returns an input (C9)
   3  floor  ← stepFloor(floor, state, inputs, tickMs, cfg)      // C1, then C4's moments inside it
-  4  acts   ← for each act: Reach (C3) at the stepped position → apply the game.ts rule; a refused rule throws
-              RuleError to that seat only (HC-7)
+  4  acts   ← for each act: Reach (C3) at the stepped position → apply the game.ts rule; a refused rule is counted
+              and logged for that seat, never thrown: a timer has no channel to one seat, and the button shows the
+              server's Reach words, so a refusal is only ever a race the next view corrects (AM-19)
   5  frame  → ctx.frame(DevFrame)                                // C8, every tick
   6  view   → broadcast full views only if GameState changed (money, stock, plots, done, the moments' outcomes)
   7  end    ← existing: devEndsAt reached, or every seat away-or-done, or everyone Ready (checkAllReady /
@@ -466,6 +467,8 @@ every DEV_STEER.tickMs (50 ms) of game time, while phase = development:
 order        seats in seat order within a tick, rotating the first seat each tick (as play.ts does today), so no seat
              always acts first
 time         game ms = tick × tickMs; the server maps its clock to ticks (phaseScale applies, as realMs does today);
+             the floor steps tick n only while n × tickMs < the turn's length, so the clock's end comes first and a
+             50 s turn steps 999 ticks; the sim and the replay use the same boundary (AM-19);
              a late timer runs the missed ticks, at most DEV_STEER.catchUpTicks, then resyncs (mule-game.ts's
              existing dt clamp, AI_DEV_TICK_MS × 10, is the precedent)
 determinism  (seed, the per-tick inputs) → the same floor and state, in the engine, the sim and the server (HC-4).
@@ -657,7 +660,7 @@ measures it).
 | Question | Answer |
 |---|---|
 | A dependency unavailable? | A phone drops: its input zeroes at once (C6), its colonist stands; away seats count as done (existing). The TV drops: nothing in the game waits on it. A late server timer: missed ticks run, capped at catchUpTicks, then resync (RULE-1). |
-| Retry / poison / page? | Steering is latest-wins, never retried; a refused act throws RuleError to that seat only (HC-7); a socket over RATE_LIMIT has its extra messages dropped (existing, server.ts) — the phone sends ≤ 10 steers/s so it never reaches it. Nothing pages. |
+| Retry / poison / page? | Steering is latest-wins, never retried; a refused act inside the tick is counted and logged per seat, not shown (AM-19; a malformed intent is still refused at `handle`); a socket over RATE_LIMIT has its extra messages dropped (existing, server.ts) — the phone sends ≤ 10 steers/s so it never reaches it. Nothing pages. |
 | Idempotency / delivery? | `steer` is a state (the latest wins), so a duplicate is harmless; `act` is applied at most once per tick per seat; frames are fire-and-forget, the next one supersedes; full views are the source of truth for money, stock and plots. |
 | What can race? | Two colonists pressing BUY on the last MULE in one tick: seat order with the rotating first seat (RULE-1) decides, deterministically; two onto a glint tile in one tick: the same. |
 | What still works if this breaks? | Behind DEV_STEER.on = false, today's tap-to-walk until C14; after C14, development still ends on its clock (HC-3) even if the tick misbehaves, because the end timer is independent of the tick. |
@@ -736,6 +739,13 @@ inside a wall; money and stock change only through game.ts rules; development en
 
 ## §8 · Amendments `[review-only]`
 
+- **AM-19 (2026-11-04, WS3's two gaps at arcade PR-3 #235, ruled by WS6).** (1) RULE-1 step 4's "RuleError to that
+  seat only" cannot come from the tick: a timer has no channel to one seat. A press the game.ts rule refuses inside
+  the tick is counted and logged for that seat, never shown; the button shows the server's Reach words (C3), so a
+  refusal is a race the next view corrects. A malformed intent is still refused at `handle`, as today. §4's row says
+  so. (2) The turn's last tick: the floor steps tick n only while n × tickMs is under the turn's length, so the
+  clock's end fires first and a 50 s turn steps 999 ticks. That boundary is the rule for the server, the sim (PR-4)
+  and the replay alike (HC-4); 50 ms of walking at the bell is not worth a second end condition.
 - **AM-18 (2026-11-04, WS1's finding at arcade PR-4, ruled by WS6).** Nobody stands on a lake (lakeMode 'shore'),
   so RULE-3's rows that need you on the plot could never reach a lake plot: PR-4's sim with the flag on failed the
   AI's lake analyses 36 times in 40 games. Rows 11 (ANALYSE), 12 (FIT FILTER) and **11a (TAKE MULE)**, which has the
