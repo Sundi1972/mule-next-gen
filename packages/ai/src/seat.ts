@@ -158,6 +158,11 @@ export class AiSeat {
     return this.develop.racing();
   }
 
+  /** On the floor: whether this seat is off its errand's walk for a moment (a glint race, a leg by wolf land). */
+  developDetouring(): boolean {
+    return this.develop.detouring();
+  }
+
   /** On the floor: the scrambles this seat raced this month (the sim's report). */
   developScramblesRaced(): number {
     return this.develop.scramblesRaced();

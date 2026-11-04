@@ -9,6 +9,8 @@ import {
   MS_PER_SECOND,
   observe,
   pathTo,
+  terrainShare,
+  tileAt,
   tileIndex,
   wolfInput,
   type AiLevelId,
@@ -111,6 +113,9 @@ export class DevelopHand {
   private glintSeen: number | null = null;
   private glintWanted = false;
   private racingGlint: number | null = null;
+  /** The leg it last drew wolf land for (the step, and the space it set off in), and the wolf-land tile it goes by. */
+  private leg: { step: DevStep; space: string } | null = null;
+  private via: FloorPoint | null = null;
   /** The scramble it last decided on (by the tick it was called), and whether it raced it. */
   private scrambleSeen: number | null = null;
   private scrambleRaced = 0;
@@ -126,6 +131,11 @@ export class DevelopHand {
   /** The glint this seat is racing now, by the tick it lit; null when it races none. For the sim's report. */
   racing(): number | null {
     return this.racingGlint;
+  }
+
+  /** Whether it is off its errand's walk for a moment: racing a glint, or going by wolf land. For the tests. */
+  detouring(): boolean {
+    return this.racingGlint !== null || this.via !== null;
   }
 
   /** Scrambles this seat raced this month. For the sim's report. */
@@ -214,6 +224,8 @@ export class DevelopHand {
         this.walking = step;
         this.walker.reset();
       }
+      const via = !held && !this.toPub ? this.byWolfLand(view, colonist, step) : null;
+      if (via) return via;
       const run = this.walker.run(view, step.action, pauseMs);
       if (run.kind === 'going') return run.input;
       this.walking = null;
@@ -271,6 +283,52 @@ export class DevelopHand {
   /** The seconds it keeps in hand for the pub: botPubMarginSeconds at full pace, more as a bite or a MULE slows it. */
   private margin(cfg: FloorConfig, c: FloorColonist): number {
     return cfg.steer.botPubMarginSeconds / Math.min(1, mapFactor(cfg, c.pace, leading(c), c.bot, c.bitten));
+  }
+
+  /**
+   * RULE-4's AI line (AM-22): each new leg on the map goes by wolf land by WOLVES.botWolfLandShare, by the wolf-land tile
+   * that adds least to the straight walk, if that detour still fits its errand and the clock (RULE-8). The input that
+   * walks there, or null to walk the leg as it is.
+   */
+  private byWolfLand(view: FloorView, c: FloorColonist, step: DevStep): FloorInput | null {
+    const { cfg } = view;
+    if (this.leg?.step !== step || this.leg.space !== c.space) {
+      this.leg = { step, space: c.space };
+      this.via = c.space === 'map' && this.rng.next() < cfg.wolves.botWolfLandShare ? this.wolfVia(view, c, step) : null;
+      if (this.via) this.chaser.reset();
+    }
+    const via = this.via;
+    if (!via) return null;
+    if (Math.floor(c.x) === Math.floor(via.x) && Math.floor(c.y) === Math.floor(via.y)) {
+      // Been by it: on with the leg, its walk set off afresh from here.
+      this.via = null;
+      this.walker.reset();
+      return null;
+    }
+    const input = this.chaser.seek(view, via, 'none');
+    if (input) return input;
+    this.via = null;
+    return null;
+  }
+
+  /** The wolf-land tile a leg goes by: the one adding least to the straight walk to the leg's goal, if it fits. */
+  private wolfVia(view: FloorView, c: FloorColonist, step: DevStep): FloorPoint | null {
+    const { state, cfg } = view;
+    const lands = cfg.wolves.lands as readonly string[];
+    const here = tileAt(state.tiles, state.width, Math.floor(c.x), Math.floor(c.y));
+    if (!here || lands.includes(here.terrain)) return null;
+    const a = step.action;
+    const store = state.tiles.find((t) => t.terrain === 'store')!;
+    const goal = a.type === 'install' || a.type === 'analyse' || a.type === 'filter' ? tileMiddle(a.x, a.y) : tileMiddle(store.x, store.y);
+    const d = (p: FloorPoint, q: FloorPoint) => Math.hypot(p.x - q.x, p.y - q.y);
+    let best: { at: FloorPoint; extra: number } | null = null;
+    for (const t of state.tiles) {
+      if (!lands.includes(t.terrain) || terrainShare(t.terrain, cfg) <= 0) continue;
+      const at = tileMiddle(t.x, t.y);
+      const extra = d(c, at) + d(at, goal) - d(c, goal);
+      if (!best || extra < best.extra) best = { at, extra };
+    }
+    return best && this.fitsDetour(view, c, best.at) ? best.at : null;
   }
 
   /** How it plays a pack: its level's dodge and strike, and fight or run by WOLVES.botFightShare, running if a fight would cost it the pub. */
@@ -439,6 +497,8 @@ export class DevelopHand {
     this.toPub = false;
     this.walking = null;
     this.detoured = false;
+    this.leg = null;
+    this.via = null;
     this.pack = null;
     this.glintSeen = null;
     this.glintWanted = false;

@@ -22,6 +22,9 @@ import {
   type FloorConfig,
   type GameState,
   type Outfit,
+  GLINT,
+  SCRAMBLE,
+  WOLVES,
 } from '@mule/engine';
 import { FloorWalker, type StepRun } from '../src/hands/floor-walker.js';
 import { muleLegs, placePoint } from '../src/floor-time.js';
@@ -265,8 +268,9 @@ type Leg = 'corral' | 'outfitter' | 'plot' | 'pub' | 'mule';
  * Every MULE the AI seats walked in `games` steered games from seed 1: per leg, the estimate (floor-time.ts muleLegs,
  * what developDecision's veto adds up, plus the counter's pause before the press) from where the colonist stood when
  * it set off, against the floor ticks it took. A leg runs from the tick the seat first sees its last press taken to the
- * tick it sees this one taken. MULEs whose walk ran through anything else (an analysis, a filter, month 1's hold) are
- * left out: their time is not the walk's.
+ * tick it sees this one taken. MULEs whose walk ran through anything else (an analysis, a filter, month 1's hold, a
+ * moment: wolves, a bite, a stun, a bolted MULE, pelts to sell, a glint race, a leg by wolf land) are left out: their
+ * time is not the walk's.
  */
 function muleWalks(games: number): Record<Leg, LegTime[]> {
   const out: Record<Leg, LegTime[]> = { corral: [], outfitter: [], plot: [], pub: [], mule: [] };
@@ -292,7 +296,8 @@ function muleWalks(games: number): Record<Leg, LegTime[]> {
     }
     const was = s.carried;
     const now = p.carriedMule;
-    if (held) {
+    const moment = c.encounter !== null || c.bitten || (c.stunnedUntilTick ?? -1) > t || !!c.bolt || c.pelts > 0 || this.developDetouring();
+    if (held || moment) {
       if (s.trip) s.trip.held = true;
       if (s.pub) s.pub.held = true;
     }
@@ -325,6 +330,12 @@ function muleWalks(games: number): Record<Leg, LegTime[]> {
     if (input.act) s.lastAct = t;
     return input;
   });
+  // The estimate is of the errand's walk: this sample plays without the moments (no packs, glints or scrambles, and no
+  // legs sent by wolf land, AM-22), whose time is not the walk's.
+  const saved = { wolves: WOLVES.on, share: WOLVES.botWolfLandShare, glint: GLINT.on, scramble: SCRAMBLE.on };
+  Object.assign(WOLVES, { on: false, botWolfLandShare: 0 });
+  GLINT.on = false;
+  SCRAMBLE.on = false;
   try {
     steered(() => {
       for (let seed = 1; seed <= games; seed++) {
@@ -347,6 +358,9 @@ function muleWalks(games: number): Record<Leg, LegTime[]> {
     });
   } finally {
     spy.mockRestore();
+    Object.assign(WOLVES, { on: saved.wolves, botWolfLandShare: saved.share });
+    GLINT.on = saved.glint;
+    SCRAMBLE.on = saved.scramble;
   }
   return out;
 }
