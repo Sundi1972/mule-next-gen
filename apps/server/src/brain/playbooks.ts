@@ -66,6 +66,7 @@ export class Playbooks {
         const brief = landBrief(state, seat.mind, seat.brain.persona, drafted.land, seat.brain.heard());
         const ask: Ask = { month, draft: drafted.playbook, written: null, started: false, controller: new AbortController() };
         this.asks.set(seat.id, ask);
+        seat.playbookAsked(month);
         const waitMs = WRITE_CALLS.strategy.timeoutMs;
         writer.write('strategy', { brief, system: WRITER_SYSTEM, waitMs, late: () => ask.started, signal: ask.controller.signal }).then(
           (written) => {
@@ -103,7 +104,11 @@ export class Playbooks {
       }
       const playbook = this.decide(state, seat.id, now, asked, source.validate);
       this.playing.set(`${seat.id}/${state.month}`, playbook);
-      if (this.writers.has(seat.id)) this.options.record?.({ seat: seat.id, month: state.month, phase: 'landGrant', playbook });
+      if (!this.writers.has(seat.id)) continue;
+      // In effect from the grant on: adopted only here, at this month's grant, never at the upkeep that asked for next
+      // month's, since adopt keeps the newest month's playbooks only (WS9).
+      seat.adopt(playbook);
+      this.options.record?.({ seat: seat.id, month: state.month, phase: 'landGrant', playbook });
     }
   }
 
