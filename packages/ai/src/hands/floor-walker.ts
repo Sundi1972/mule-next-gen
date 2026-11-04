@@ -20,9 +20,10 @@ import {
   type HallPlace,
   type HallPoint,
   type Reach,
+  type ReachKind,
 } from '@mule/engine';
 import type { AiAction } from '../actions.js';
-import { backToDoor, doorTable, hallSeconds, mapFactor, placePoint, shoreStands, tileMiddle, walkwayOf } from '../floor-time.js';
+import { backToDoor, doorTable, hallSeconds, leading, mapFactor, placePoint, shoreStands, tileMiddle, walkwayOf } from '../floor-time.js';
 
 /**
  * The develop hand's runner on the dev floor (arcade C9): it walks one step of the to-do list, as a person would, with
@@ -177,7 +178,25 @@ export class FloorWalker {
     return goal.space === 'hall' ? this.toPlace(view, c, goal.place, reach) : this.toPlot(view, c, goal.plot, action, reach);
   }
 
-  private going(input: FloorInput): StepRun {
+  /**
+   * One tick of a detour for a moment (arcade C9): to a point on the map, out of the store first by the door nearest
+   * it, pressing once Reach offers `wants` (GRAB THE GLINT, CATCH MULE). The input, or null when there is no way there.
+   */
+  seek(view: FloorView, to: FloorPoint, wants: ReachKind): FloorInput | null {
+    const { state, floor, cfg } = view;
+    const c = floor.colonists.find((x) => x.id === this.me);
+    if (!c) return null;
+    const reach = reachOf(floor, state, this.me, cfg, { secondsLeft: view.secondsLeft });
+    if (reach.kind === wants && reach.enabled) return this.going({ x: 0, y: 0, act: true }).input;
+    let run: StepRun;
+    if (c.space === 'hall') {
+      const exit = this.exitFor(view, c, to);
+      run = reach.kind === 'leave' && placeAt(c, cfg.hall) === exit ? this.going({ x: 0, y: 0, act: true }) : this.toPlace(view, c, exit, reach);
+    } else run = this.onMap(view, c, to);
+    return run.kind === 'going' ? run.input : null;
+  }
+
+  private going(input: FloorInput): { kind: 'going'; input: FloorInput } {
     this.pushed = input.x !== 0 || input.y !== 0;
     return { kind: 'going', input };
   }
@@ -221,7 +240,7 @@ export class FloorWalker {
     const { state, cfg } = view;
     let best: { door: HallDoor; s: number } | null = null;
     for (const [door, map] of doorTable(state, cfg)) {
-      const s = backToDoor(state, cfg, map, c) / mapFactor(cfg, c.pace, c.lead !== null, c.bot) + hallSeconds(state, cfg, cfg.hall.spots[door], place, c.pace, c.lead !== null);
+      const s = backToDoor(state, cfg, map, c) / mapFactor(cfg, c.pace, leading(c), c.bot, c.bitten) + hallSeconds(state, cfg, cfg.hall.spots[door], place, c.pace, leading(c));
       if (!best || s < best.s) best = { door, s };
     }
     if (!best || !Number.isFinite(best.s)) return { kind: 'failed', why: 'no open walk to the store' };
@@ -257,7 +276,7 @@ export class FloorWalker {
   private exitFor(view: FloorView, c: FloorColonist, to: FloorPoint): HallDoor {
     const { state, cfg } = view;
     const index = tileIndex(state.width, Math.floor(to.x), Math.floor(to.y));
-    const lead = c.lead !== null;
+    const lead = leading(c);
     let best: { door: HallDoor; s: number } = { door: HALL_DOORS[0], s: Infinity };
     for (const [door, map] of doorTable(state, cfg)) {
       const s = hallSeconds(state, cfg, c, door, c.pace, lead) + map[index]!.seconds / mapFactor(cfg, c.pace, lead, c.bot);

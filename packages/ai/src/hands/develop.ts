@@ -1,10 +1,35 @@
-import { AI_HANDS, analysisSeconds, IDLE_INPUT, MS_PER_SECOND, observe, tileIndex, type DevFloor, type DevPlace, type FloorColonist, type FloorConfig, type FloorInput, type GameState, type Outfit, type Rng } from '@mule/engine';
+import {
+  AI_HANDS,
+  analysisSeconds,
+  doorOutside,
+  HALL_DOORS,
+  reachOf,
+  glintMiddle,
+  IDLE_INPUT,
+  MS_PER_SECOND,
+  observe,
+  pathTo,
+  tileIndex,
+  wolfInput,
+  type AiLevelId,
+  type DevFloor,
+  type DevPlace,
+  type FloorColonist,
+  type FloorConfig,
+  type FloorInput,
+  type FloorPoint,
+  type GameState,
+  type Outfit,
+  type Rng,
+  type WolfFightLevel,
+  type WolfPlay,
+} from '@mule/engine';
 import type { Act, AiAction } from '../actions.js';
 import type { Brain, Pending } from '../brain.js';
-import { floorDevWalk, plotErrandSeconds, pubSeconds } from '../floor-time.js';
+import { floorDevWalk, leading, mapFactor, plotErrandSeconds, pubSeconds, tileMiddle, tripSeconds } from '../floor-time.js';
 import { analysesWanted, developDecision, filtersWanted, outfitName, plotName, type DevAction, type DevWalk } from '../strategist.js';
 import { situation } from '../summary.js';
-import { FloorWalker } from './floor-walker.js';
+import { FloorWalker, type FloorView } from './floor-walker.js';
 
 /**
  * Development hands. On this server development is tap-to-act: a phone has
@@ -40,6 +65,9 @@ const midSeconds = ([lo, hi]: [number, number]) => (lo + hi) / 2 / 1_000; // lit
 /** The presses a MULE takes at the counters and its plot: buy, outfit, install. */
 const MULE_PRESSES = 3; // literal-ok: a count of the rule's steps, not balance
 
+/** How an AI level plays a pack of wolves (RULE-4's levels): a Rookie a rookie, a Trader a regular, a Tycoon a veteran. */
+const WOLF_LEVEL: Record<AiLevelId, WolfFightLevel> = { rookie: 'rookie', trader: 'regular', tycoon: 'veteran' };
+
 /** What a seat already in may not do while month 1's clock waits for the others' first MULEs (the server's rule). */
 const HELD: ReadonlySet<AiAction['type']> = new Set(['buyMule', 'install', 'analyse', 'filter']);
 
@@ -74,12 +102,35 @@ export class DevelopHand {
   private walking: DevStep | null = null;
   /** On the floor: the clock ran short and the list is down to the pub. */
   private toPub = false;
+  /** On the floor, the moments (arcade C9): the runner for a detour, and whether one interrupted the step being walked. */
+  private readonly chaser: FloorWalker;
+  private detoured = false;
+  /** How it plays the pack it meets now: drawn once, when the pack comes. */
+  private pack: WolfPlay | null = null;
+  /** The glint it last decided on, and the one it races (by the tick each lit). */
+  private glintSeen: number | null = null;
+  private glintWanted = false;
+  private racingGlint: number | null = null;
+  /** The scramble it last decided on (by the tick it was called), and whether it raced it. */
+  private scrambleSeen: number | null = null;
+  private scrambleRaced = 0;
 
   constructor(
     private readonly brain: Brain,
     private readonly rng: Rng,
   ) {
     this.walker = new FloorWalker(brain.mind.me);
+    this.chaser = new FloorWalker(brain.mind.me);
+  }
+
+  /** The glint this seat is racing now, by the tick it lit; null when it races none. For the sim's report. */
+  racing(): number | null {
+    return this.racingGlint;
+  }
+
+  /** Scrambles this seat raced this month. For the sim's report. */
+  scramblesRaced(): number {
+    return this.scrambleRaced;
   }
 
   /** What the hands are about to do, for the dev view. */
@@ -132,10 +183,20 @@ export class DevelopHand {
     this.clock += dt;
     const view = { state, floor, cfg, secondsLeft };
     const colonist = floor.colonists.find((c) => c.id === mind.me)!;
+    const moment = this.moment(view, colonist, held);
+    if (moment) {
+      this.detoured = true;
+      return moment;
+    }
+    // Back from a detour: the step being walked starts its walk again from where the colonist now stands.
+    if (this.detoured) {
+      this.detoured = false;
+      this.walker.reset();
+    }
     // The clock is nearly out: whatever is left of the errand, the pub. Held, the clock stands, so there is time.
     // An assay under way holds the colonist still for the rest of it: that time is spent before any walk.
     const holding = colonist.assayUntilTick === null ? 0 : (Math.max(0, colonist.assayUntilTick - floor.tick) * dt) / MS_PER_SECOND;
-    if (!held && !this.toPub && secondsLeft <= holding + pubSeconds(state, cfg, colonist) + cfg.steer.botPubMarginSeconds) this.hurry();
+    if (!held && !this.toPub && secondsLeft <= holding + pubSeconds(state, cfg, colonist) + this.margin(cfg, colonist)) this.hurry();
     const pauseMs = cfg.steer.botCounterPauseSeconds * MS_PER_SECOND * mind.level.devPace;
     // A step done this tick hands over to the next at once, so no tick is spent standing between them.
     for (let ticks = dt; ; ticks = 0) {
@@ -158,6 +219,134 @@ export class DevelopHand {
       this.walking = null;
       this.taken(step, run.kind === 'ok', run.kind === 'failed' ? run.why : undefined);
     }
+  }
+
+  /**
+   * The development moments, before the to-do list (arcade C9): a pack it meets it fights or runs from (RULE-4); stunned
+   * it stands; a glint or the scramble it races only with time to spare (RULE-8); a bolted MULE it goes to catch. The
+   * input for the tick, or null to walk the list.
+   */
+  private moment(view: FloorView, c: FloorColonist, held: boolean): FloorInput | null {
+    const { state, floor, cfg, secondsLeft } = view;
+    const me = this.brain.mind.me;
+    if (c.encounter) {
+      this.pack ??= this.playFor(view, c);
+      return wolfInput(floor, state, me, cfg, this.pack);
+    }
+    this.pack = null;
+    if (c.stunnedUntilTick !== undefined && floor.tick < c.stunnedUntilTick) return IDLE_INPUT;
+    // Pelts on it at a door in the store: the store buys them (and the door's LEAVE waits a press behind SELL).
+    if (c.pelts > 0 && reachOf(floor, state, me, cfg, { secondsLeft }).kind === 'sell') return { x: 0, y: 0, act: true };
+    if (c.assayUntilTick !== null && floor.tick < c.assayUntilTick) return null;
+    const g = floor.moments.glint;
+    // Whether it would race is drawn once a glint (GLINT.botShare); whether it can, every tick the glint is lit and it
+    // is not racing yet: near enough to care, and with the time to spare (RULE-8).
+    if (g && this.glintSeen !== g.sinceTick) {
+      this.glintSeen = g.sinceTick;
+      this.glintWanted = this.rng.next() < cfg.glint.botShare;
+    }
+    if (g && this.glintWanted && this.racingGlint !== g.sinceTick && !held) {
+      const to = glintMiddle(g);
+      const from = this.raceFrom(view, c);
+      if (Math.hypot(to.x - from.x, to.y - from.y) <= cfg.glint.botCareTiles && this.fitsDetour(view, c, to)) {
+        this.racingGlint = g.sinceTick;
+        this.chaser.reset();
+      }
+    }
+    if (g && this.racingGlint === g.sinceTick) {
+      const input = this.chaser.seek(view, glintMiddle(g), 'grab');
+      if (input) return input;
+      // No way there after all: it gives the race up.
+      this.glintWanted = false;
+    }
+    this.racingGlint = null;
+    this.raceScramble(view, c, held);
+    const p = state.players.find((x) => x.id === me)!;
+    if (p.muleBolted && c.lead && !this.toPub && secondsLeft > pubSeconds(state, cfg, c) + this.margin(cfg, c)) return this.chaser.seek(view, c.lead, 'catch');
+    return null;
+  }
+
+  /** The seconds it keeps in hand for the pub: botPubMarginSeconds at full pace, more as a bite or a MULE slows it. */
+  private margin(cfg: FloorConfig, c: FloorColonist): number {
+    return cfg.steer.botPubMarginSeconds / Math.min(1, mapFactor(cfg, c.pace, leading(c), c.bot, c.bitten));
+  }
+
+  /** How it plays a pack: its level's dodge and strike, and fight or run by WOLVES.botFightShare, running if a fight would cost it the pub. */
+  private playFor(view: FloorView, c: FloorColonist): WolfPlay {
+    const { state, cfg, secondsLeft } = view;
+    const level = WOLF_LEVEL[this.brain.mind.levelId as AiLevelId] ?? 'regular';
+    const time = cfg.wolves.chooseSeconds + cfg.wolves.fightSeconds + pubSeconds(state, cfg, c) + cfg.steer.botPubMarginSeconds;
+    const fights = this.rng.next() < cfg.wolves.botFightShare && time <= secondsLeft;
+    // Running, it heads for the store's nearer door: inside, the wolves give up, and the pub is that way anyway.
+    const doors = HALL_DOORS.map((d) => doorOutside(state, d, cfg));
+    const refuge = doors.reduce((a, b) => (Math.hypot(b.x - c.x, b.y - c.y) < Math.hypot(a.x - c.x, a.y - c.y) ? b : a));
+    return { level, fights, refuge };
+  }
+
+  /** Where a colonist is for a race's care distance: on the map, or at the store when inside. */
+  private raceFrom({ state, cfg }: FloorView, c: FloorColonist): FloorPoint {
+    if (c.space === 'map') return c;
+    const store = state.tiles.find((t) => t.terrain === 'store')!;
+    return tileMiddle(store.x, store.y);
+  }
+
+  /**
+   * The scramble called with this seat needing a MULE: it races by SCRAMBLE.botShare, from within botCareTiles of the
+   * store and with time to spare (RULE-8), by dropping the analyses and filters ahead of its next MULE.
+   */
+  private raceScramble(view: FloorView, c: FloorColonist, held: boolean): void {
+    const s = view.floor.moments.scramble;
+    const me = this.brain.mind.me;
+    if (!s || s.over || this.scrambleSeen === s.sinceTick || !s.needers.includes(me) || held) return;
+    this.scrambleSeen = s.sinceTick;
+    const store = this.raceFrom(view, { ...c, space: 'hall' });
+    const care = Math.hypot(store.x - this.raceFrom(view, c).x, store.y - this.raceFrom(view, c).y) <= view.cfg.scramble.botCareTiles;
+    if (!(this.rng.next() < view.cfg.scramble.botShare && care && this.fitsDetour(view, c, store))) return;
+    const scouting = (step: DevStep) => step.action.type === 'analyse' || step.action.type === 'filter';
+    if (this.walking && scouting(this.walking)) {
+      const step = this.walking;
+      this.walking = null;
+      this.taken(step, false, 'scramble');
+    }
+    this.queue = this.queue.filter((step) => !scouting(step));
+    this.scrambleRaced++;
+  }
+
+  /**
+   * RULE-8: whether a detour to `to` still leaves the errand time to finish inside the turn: the walk there, then from
+   * there the step under way (or next) and the pub, at the floor's speeds, with botPubMarginSeconds in hand. A rough
+   * reckoning, as the mock's spare.ts: the next MULE's walk and the pub, not every step on the list. Always true with
+   * DEV_STEER.botsSpareTime off.
+   */
+  private fitsDetour(view: FloorView, c: FloorColonist, to: FloorPoint): boolean {
+    const { state, cfg, secondsLeft } = view;
+    if (!cfg.steer.botsSpareTime) return true;
+    const index = tileIndex(state.width, Math.floor(to.x), Math.floor(to.y));
+    const w = { pace: c.pace, bot: c.bot };
+    const there =
+      c.space === 'hall'
+        ? tripSeconds(state, cfg, w, c, index, leading(c))
+        : (pathTo(state, c, to, cfg)?.seconds ?? Infinity) / mapFactor(cfg, c.pace, leading(c), c.bot, c.bitten);
+    const from: FloorColonist = { ...c, space: 'map', x: to.x, y: to.y };
+    return there + this.restFrom(view, from) + cfg.steer.botPubMarginSeconds <= secondsLeft;
+  }
+
+  /** Seconds of errand left from a colonist standing at a point: the step under way or next, then the pub. */
+  private restFrom(view: FloorView, at: FloorColonist): number {
+    const { state, cfg } = view;
+    const step = this.walking ?? this.queue[0];
+    const a = step?.action;
+    if (a && (a.type === 'install' || a.type === 'analyse' || a.type === 'filter')) {
+      const work = a.type === 'analyse' ? analysisSeconds(state, this.brain.mind.me) : 0;
+      return plotErrandSeconds(state, cfg, at, tileIndex(state.width, a.x, a.y), work);
+    }
+    const install = this.queue.find((x) => x.action.type === 'install')?.action;
+    const outfit = this.queue.find((x) => x.action.type === 'outfit')?.action;
+    if (a && (a.type === 'buyMule' || a.type === 'outfit') && install?.type === 'install' && outfit?.type === 'outfit') {
+      const legs = floorDevWalk(state, cfg, at, 0, 0).floor!(tileIndex(state.width, install.x, install.y), outfit.outfit);
+      return legs.there + legs.pub;
+    }
+    return pubSeconds(state, cfg, at);
   }
 
   /** Whether an analysis or a filter, from where the colonist stands, still leaves time for the pub. */
@@ -223,6 +412,7 @@ export class DevelopHand {
 
   /** The head step was taken: done, or refused, which drops what depended on it. */
   private taken(step: DevStep, ok: boolean, why?: string): void {
+    if (this.walking === step) this.walking = null;
     this.queue.shift();
     this.done.push({ label: step.label, ok, at: this.clock, action: step.action, ...(why && { why }) });
     if (!ok) {
@@ -244,6 +434,13 @@ export class DevelopHand {
     this.clock = 0;
     this.toPub = false;
     this.walking = null;
+    this.detoured = false;
+    this.pack = null;
+    this.glintSeen = null;
+    this.glintWanted = false;
+    this.racingGlint = null;
+    this.scrambleSeen = null;
+    this.scrambleRaced = 0;
   }
 
   private push(action: AiAction, range: [number, number], label: string, group: number): void {

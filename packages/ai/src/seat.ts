@@ -153,6 +153,16 @@ export class AiSeat {
     this.auction.tick(state, dt, act);
   }
 
+  /** On the floor: the glint this seat races now, by the tick it lit, or null (the sim's report). */
+  developRacing(): number | null {
+    return this.develop.racing();
+  }
+
+  /** On the floor: the scrambles this seat raced this month (the sim's report). */
+  developScramblesRaced(): number {
+    return this.develop.scramblesRaced();
+  }
+
   /** The development steps taken this month, in order. */
   developLog(): readonly { label: string; ok: boolean; at: number; action: AiAction; why?: string }[] {
     return this.develop.done;

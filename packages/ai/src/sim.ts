@@ -32,6 +32,7 @@ import {
   type MonthReport,
 } from '@mule/engine';
 import { simSeats } from './lineup.js';
+import type { FloorMomentCounts } from './floor-turn.js';
 import { playGame, type DevTurn } from './play.js';
 
 function arg(name: string, fallback: number): number {
@@ -79,10 +80,14 @@ const quantile = (values: number[], q: number) => {
 
 /**
  * The arcade floor's report lines (spec §4), only when development played on it: MULEs installed and pub times a turn,
- * the pub payout, month 1's waiting clock; the moments (packs, glints, scrambles) count 0 until they are built (PR-8).
+ * the pub payout, month 1's waiting clock, the moments (packs, glints, scrambles), and the AI's lake analyses.
  */
-function floorLines(turns: readonly DevTurn[], waits: readonly number[], continued: number, seats: number): string[] {
+function floorLines(turns: readonly DevTurn[], moments: readonly FloorMomentCounts[], waits: readonly number[], continued: number, seats: number): string[] {
   if (turns.length === 0) return [];
+  const m = moments.reduce((sum, c) => {
+    for (const k of Object.keys(sum) as (keyof FloorMomentCounts)[]) sum[k] += c[k];
+    return sum;
+  });
   const reached = turns.filter((t) => t.pubAt !== null);
   const installs = turns.reduce((n, t) => n + t.installs, 0);
   const paid = reached.reduce((n, t) => n + t.payout!, 0);
@@ -95,7 +100,7 @@ function floorLines(turns: readonly DevTurn[], waits: readonly number[], continu
   return [
     // literal-ok: two decimals for the MULEs a turn, display only
     `     Development on the floor: ${(installs / turns.length).toFixed(2)} MULEs installed a seat a turn; the pub reached in ${pct(reached.length, turns.length)} of ${turns.length} AI turns, at ${median.toFixed(1)} / ${ninetieth.toFixed(1)} s on the clock (median / 90th percentile); ${(paid / Math.max(1, seats)).toFixed(0)} cr pub payout a seat a game (no check)`,
-    `     Floor moments: packs met 0, glints raced 0, scrambles 0 (built in PR-8)`,
+    `     Floor moments: packs met ${m.packs} (fought ${m.fights}: won ${m.won}, lost ${m.lost}; ran ${m.runs}: bitten ${m.bitten}); MULEs bolted ${m.bolted}, caught ${m.caught}; pelts sold ${m.peltsSold}; glints lit ${m.glints}, raced ${m.raced} (${pct(m.raced, m.glints)}), won ${m.glintsWon}; scrambles ${m.scrambles}, AI racers ${m.scrambleRacers}, left out ${m.leftOut} (no check)`,
     `     Lake plots: ${lakeFailed} analyses failed on the way, ${lakeNoTime} dropped as not fitting the clock (no check)`,
     // literal-ok: the median the line names
     `     Month 1's clock stood ${quantile(waited, 0.5).toFixed(1)} / ${quantile(waited, 1).toFixed(1)} s for first MULEs (median / max), started by the host's stand-in in ${continued} of ${waits.length} games (no check)`,
@@ -191,6 +196,7 @@ function main() {
   let mulesLost = 0;
   // On the arcade floor (DEV_STEER.on): every seat's development turn, and month 1's waiting clock per game.
   const floorTurns: DevTurn[] = [];
+  const floorMoments: FloorMomentCounts[] = [];
   const month1Waits: number[] = [];
   let month1Continued = 0;
   let playerGames = 0;
@@ -256,9 +262,10 @@ function main() {
         hungryRun.set(p.id, h);
       }
     };
-    const { state, broke, auction: a, lots: l, mulesLost: lost, turns, month1 } = playGame(seed, specs, { politics, walking, onPhase: onEachPhase });
+    const { state, broke, auction: a, lots: l, mulesLost: lost, turns, month1, moments } = playGame(seed, specs, { politics, walking, onPhase: onEachPhase });
     mulesLost += lost;
     floorTurns.push(...turns);
+    floorMoments.push(...moments);
     if (month1) {
       month1Waits.push(month1.waited);
       if (month1.continued) month1Continued++;
@@ -316,7 +323,7 @@ function main() {
   console.log(`${check(collapsed / games <= SIM_TARGETS.collapsed)} Ended in Collapse: ${pct(collapsed, games)} (target ${share(SIM_TARGETS.collapsed)} or less)`);
   console.log(`     Store capital: lowest ${minCapital} (no check: the store never runs out of money)`);
   console.log(`     MULEs lost to the clock: ${(mulesLost / games).toFixed(1)} a game (walking ${walking ? 'on' : 'off'}; no check)`);
-  for (const line of floorLines(floorTurns, month1Waits, month1Continued, playerGames)) console.log(line);
+  for (const line of floorLines(floorTurns, floorMoments, month1Waits, month1Continued, playerGames)) console.log(line);
   console.log(`     Players hungry ${SPIRAL_MONTHS} or more months running: ${pct(spirals, playerGames)} (no check)`);
   console.log(`     Wins by species:${Object.entries(wins).map(([s, n]) => `${s} ${pct(n, games)}`).join(', ')}`);
   console.log(`     Wins by persona: ${Object.entries(byPersona).map(([s, n]) => `${s} ${pct(n, games)}`).join(', ')}`);
