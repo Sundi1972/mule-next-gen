@@ -11,6 +11,7 @@ import {
   reachOf,
   RuleError,
   stepFloor,
+  tileIndex,
   type DevFloor,
   type FloorConfig,
   type FloorInput,
@@ -42,6 +43,8 @@ export interface DevTurn {
   quoted: number | null;
   /** MULEs it installed this turn. */
   installs: number;
+  /** Analyses of lake plots its hand gave up on the way (failed), and dropped before setting off as not fitting the clock. */
+  lakeAnalyses: { failed: number; noTime: number };
 }
 
 /** What one development phase on the floor came to. */
@@ -67,13 +70,21 @@ export function simFloorConfig(): FloorConfig {
   return { ...floorConfig(), pubPayout: pubPayoutFor };
 }
 
+/** The analyses of lake plots in a hand's log for the month that failed on the way, and that it dropped for time. */
+function lakeFailures(state: GameState, log: ReturnType<AiSeat['developLog']>): DevTurn['lakeAnalyses'] {
+  const lake = (x: number, y: number) => state.tiles[tileIndex(state.width, x, y)]?.terrain === 'lake';
+  const failed = log.filter((e) => !e.ok && e.action.type === 'analyse' && lake(e.action.x, e.action.y));
+  const noTime = failed.filter((e) => e.why === 'no time').length;
+  return { failed: failed.length - noTime, noTime };
+}
+
 /** Plays one development phase on the floor, yielding after every tick; returns each seat's turn. */
 export function* playFloorPhase(state: GameState, seats: readonly AiSeat[]): Generator<void, FloorPhase, void> {
   const cfg = simFloorConfig();
   const tickSeconds = cfg.steer.tickMs / MS_PER_SECOND;
   let floor: DevFloor = buildFloor(state, cfg);
   const ids = seats.map((s) => s.id);
-  const turns = new Map(ids.map((id): [string, DevTurn] => [id, { month: state.month, id, pubAt: null, payout: null, quoted: null, installs: 0 }]));
+  const turns = new Map(ids.map((id): [string, DevTurn] => [id, { month: state.month, id, pubAt: null, payout: null, quoted: null, installs: 0, lakeAnalyses: { failed: 0, noTime: 0 } }]));
   let waiting = state.month === 1 && cfg.steer.month1WaitsForFirstMule;
   // Whole ticks, so the clock never drifts in floating point: stood waiting, and run.
   let stood = 0;
@@ -120,6 +131,7 @@ export function* playFloorPhase(state: GameState, seats: readonly AiSeat[]): Gen
     else run++;
     yield;
   }
+  for (const s of seats) turns.get(s.id)!.lakeAnalyses = lakeFailures(state, s.developLog());
   const waits = state.month === 1 && cfg.steer.month1WaitsForFirstMule;
   return { turns: [...turns.values()], waited: waits ? stood * tickSeconds : null, continued };
 }

@@ -90,10 +90,13 @@ function floorLines(turns: readonly DevTurn[], waits: readonly number[], continu
   // literal-ok: the median and 90th percentile the line names
   const [median, ninetieth] = [quantile(at, 0.5), quantile(at, 0.9)];
   const waited = [...waits];
+  const lakeFailed = turns.reduce((n, t) => n + t.lakeAnalyses.failed, 0);
+  const lakeNoTime = turns.reduce((n, t) => n + t.lakeAnalyses.noTime, 0);
   return [
     // literal-ok: two decimals for the MULEs a turn, display only
     `     Development on the floor: ${(installs / turns.length).toFixed(2)} MULEs installed a seat a turn; the pub reached in ${pct(reached.length, turns.length)} of ${turns.length} AI turns, at ${median.toFixed(1)} / ${ninetieth.toFixed(1)} s on the clock (median / 90th percentile); ${(paid / Math.max(1, seats)).toFixed(0)} cr pub payout a seat a game (no check)`,
     `     Floor moments: packs met 0, glints raced 0, scrambles 0 (built in PR-8)`,
+    `     Lake plots: ${lakeFailed} analyses failed on the way, ${lakeNoTime} dropped as not fitting the clock (no check)`,
     // literal-ok: the median the line names
     `     Month 1's clock stood ${quantile(waited, 0.5).toFixed(1)} / ${quantile(waited, 1).toFixed(1)} s for first MULEs (median / max), started by the host's stand-in in ${continued} of ${waits.length} games (no check)`,
   ];

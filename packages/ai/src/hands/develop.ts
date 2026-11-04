@@ -64,8 +64,8 @@ export class DevelopHand {
   private group = 0;
   /** Where to go once the queue is empty. */
   private then: 'decide' | 'finish' | 'done' = 'decide';
-  /** Every step taken this month, in order, for tests and the dev view. */
-  readonly done: { label: string; ok: boolean; at: number }[] = [];
+  /** Every step taken this month, in order, for tests, the dev view and the sim's report. */
+  readonly done: { label: string; ok: boolean; at: number; action: AiAction; why?: string }[] = [];
   private clock = 0;
   /** Where the seat stands, when the game walks. */
   private at: DevPlace | undefined;
@@ -147,7 +147,7 @@ export class DevelopHand {
         // An analysis or a filter it sets off for only if the walk there, the work and the walk on to the pub still
         // fit the clock (RULE-8's spare time); the MULEs' walks were priced when they were chosen.
         if (!held && !this.fits(state, cfg, colonist, step, secondsLeft - holding)) {
-          this.taken(step, false);
+          this.taken(step, false, 'no time');
           continue;
         }
         this.walking = step;
@@ -156,7 +156,7 @@ export class DevelopHand {
       const run = this.walker.run(view, step.action, pauseMs);
       if (run.kind === 'going') return run.input;
       this.walking = null;
-      this.taken(step, run.kind === 'ok');
+      this.taken(step, run.kind === 'ok', run.kind === 'failed' ? run.why : undefined);
     }
   }
 
@@ -222,9 +222,9 @@ export class DevelopHand {
   }
 
   /** The head step was taken: done, or refused, which drops what depended on it. */
-  private taken(step: DevStep, ok: boolean): void {
+  private taken(step: DevStep, ok: boolean, why?: string): void {
     this.queue.shift();
-    this.done.push({ label: step.label, ok, at: this.clock });
+    this.done.push({ label: step.label, ok, at: this.clock, action: step.action, ...(why && { why }) });
     if (!ok) {
       // Drop what depended on it. A MULE that couldn't be bought means the corral is empty: no more MULEs this month.
       this.queue = this.queue.filter((s) => s.group !== step.group);
