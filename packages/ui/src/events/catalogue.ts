@@ -22,8 +22,11 @@ export interface EventEntry {
   look: string;
 }
 
-/** Keyed by every ShowEventKey, each entry carrying its own key: a missing or mislabelled entry is a compile error. */
-export const EVENT_ENTRY: { [K in ShowEventKey]: EventEntry & { key: K } } = {
+/**
+ * Keyed by ShowEventKey, each entry carrying its own key: a mislabelled entry is a compile error. A key with no entry
+ * yet (wave 2's, until its story lands) moves as 'plot' (motionOf): no travel, the generic card.
+ */
+export const EVENT_ENTRY = {
   dustStorm: { key: 'dustStorm', motion: 'sweep', look: 'A wall of dust blows in from one edge and takes half of each Energy plot as it passes.' },
   drought: { key: 'drought', motion: 'sweep', look: 'Heat shimmer crosses the map; the ground cracks under each Food and Water plot.' },
   acidRain: { key: 'acidRain', motion: 'sweep', look: 'A sickly green rain front crosses the map; Energy and Food plots hiss as it passes.' },
@@ -36,7 +39,10 @@ export const EVENT_ENTRY: { [K in ShowEventKey]: EventEntry & { key: K } } = {
   bumperHarvest: { key: 'bumperHarvest', motion: 'plot', look: 'One plot glows and its bars double.' },
   cavernCollapse: { key: 'cavernCollapse', motion: 'plot', look: 'The cavern badge cracks and sinks; dust puffs up and the plot is plain.' },
   sickness: { key: 'sickness', motion: 'colonists', look: 'The sick tag pops onto the colonist and their slot; one roll call names everyone sick.' },
-};
+} satisfies { [K in ShowEventKey]?: EventEntry & { key: K } };
+
+/** How an event moves: its entry's motion, or 'plot' (no travel) for a key with no entry yet. */
+export const motionOf = (key: ShowEventKey): EventMotion => (EVENT_ENTRY as { [K in ShowEventKey]?: EventEntry })[key]?.motion ?? 'plot';
 
 /**
  * Each event's own story: where the camera goes and when its change lands. Seconds are proportions of the gallery's

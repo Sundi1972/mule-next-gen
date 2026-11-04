@@ -240,13 +240,11 @@ function weightOf(e: ShownEvent): EventWeight {
 
 /**
  * The events a phase fired this month, in fired order: what its show plays and what its length counts (RULE-1). They
- * are this month's report's events of that phase (a report from an earlier month holds none), then in development the
- * players who fell sick at its start: no report exists before production.
+ * are the month's own list's events of that phase (the engine starts a new list each month), then in development the
+ * players who fell sick at its start.
  */
 function phaseEvents(state: GameState, phase: Phase): ShownEvent[] {
-  const report = state.history.at(-1);
-  const fired = report && report.month === state.month ? (report.events ?? []).filter((e) => e.phase === phase) : [];
-  return [...fired, ...sickBulletins(state, phase)];
+  return [...state.monthEvents.filter((e) => e.phase === phase), ...sickBulletins(state, phase)];
 }
 
 /**
@@ -260,7 +258,18 @@ function sickBulletins(state: GameState, phase: Phase): SickBulletin[] {
 }
 
 /** Why a player fell sick, as the bulletin's line ends: playerEventReason's influence that raised the chance most. */
-const SICK_BECAUSE = { air: 'the air is bad', pollution: 'their plots foul the air', chance: 'bad luck' } as const;
+const SICK_BECAUSE = { air: 'the air is bad', pollution: 'their plots foul the air', chance: 'bad luck', epidemic: 'the epidemic' } as const;
+
+/**
+ * Whether an epidemic made this player sick: this development's, or last month's, which keeps the player it sickened
+ * sick this development too (wave-2 RULE-4). A player it made sick is one it did not cure with a Medicine.
+ */
+function sickFromEpidemic(state: GameState, player: string): boolean {
+  const last = state.history.at(-1);
+  const lastMonth = last && last.month === state.month - 1 ? (last.events ?? []) : [];
+  const sickened = (e: MonthEvent) => e.key === 'epidemic' && !e.effects?.some((f) => f.on === player && f.what === 'medicine');
+  return state.monthEvents.some((e) => e.phase === 'development' && sickened(e)) || lastMonth.some(sickened);
+}
 
 /** Fired events as every screen shows them, with each one's weight and share of the show. */
 function eventViews(state: GameState, events: readonly ShownEvent[]): EventView[] {
@@ -281,8 +290,9 @@ function monthEventView(state: GameState, e: MonthEvent): Omit<EventView, 'weigh
     origin: { ...e.origin },
     ...(e.direction ? { from: e.direction } : {}),
     ...(e.player ? { player: e.player } : {}),
-    hits: e.plots.map((p) => ({ ...at(p.index), order: p.order, delta: p.delta })),
+    hits: e.plots.map((p) => ({ ...at(p.index), order: p.order, delta: p.delta, ...(p.becomes ? { becomes: p.becomes } : {}), ...(p.muleLost ? { muleLost: p.muleLost } : {}) })),
     phase: e.phase,
+    ...(e.effects ? { effects: e.effects.map((f) => ({ ...f })) } : {}),
   };
 }
 
@@ -297,7 +307,7 @@ function sickView(state: GameState, { player }: SickBulletin): Omit<EventView, '
     key: 'sickness',
     kind: 'sickness',
     title: 'Sickness',
-    line: `${name} fell sick: ${SICK_BECAUSE[playerEventReason(state, 'sickness', 'development', player)]}.`,
+    line: `${name} fell sick: ${SICK_BECAUSE[sickFromEpidemic(state, player) ? 'epidemic' : playerEventReason(state, 'sickness', 'development', player)]}.`,
     sign: 'bad',
     scope: 'personal',
     origin: store ? { x: store.x, y: store.y } : { x: 0, y: 0 },

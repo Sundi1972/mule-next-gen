@@ -93,7 +93,7 @@ describe('how an event spreads', () => {
 });
 
 /** RULE-3: what a hit plot makes after the event, from what it made before; `first` is the event's first plot. */
-const RULE_3: Record<EventKey, (before: number, first: boolean) => number> = {
+const RULE_3: Partial<Record<EventKey, (before: number, first: boolean) => number>> = {
   dustStorm: (b) => Math.floor(b * 0.5),
   drought: (b) => b - 1,
   acidRain: (b) => b - 1,
@@ -179,7 +179,7 @@ describe('events in production', () => {
                 continue;
               }
               const before = line.made - (part?.delta ?? 0);
-              const after = Math.max(0, RULE_3[key](before, plot.order === 0));
+              const after = Math.max(0, RULE_3[key]!(before, plot.order === 0));
               expect([key, line.tile, line.made]).toEqual([key, line.tile, after]);
               expect(plot.delta).toBe(after - before);
               expect(part?.event).toBe(key);
@@ -237,7 +237,8 @@ describe('several events in one production', () => {
     expect(readsThisPhase).toEqual([]);
     // A row rolls once a month only while it lists one phase (RULE-2 step 5 holds by construction).
     const table: Record<string, EventRow> = { ...EVENTS.colony, ...EVENTS.player };
-    expect(Object.entries(table).flatMap(([key, row]) => (Object.keys(row.phases).length === 1 ? [] : [key]))).toEqual([]);
+    // Wave-2 AM-1 3a: MULE theft rolls in development and at the month end, so it may fire twice a month.
+    expect(Object.entries(table).flatMap(([key, row]) => (Object.keys(row.phases).length === 1 || key === 'muleTheft' ? [] : [key]))).toEqual([]);
   });
 
   it('EM-T-AC-3: two events on one plot both apply in order, never below 0, and an excluded pair keeps one', () => {

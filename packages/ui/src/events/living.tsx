@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react';
 import { cx, type Slot } from '../components/tokens';
-import { EVENT_ENTRY, STORY } from './catalogue';
+import { motionOf, STORY } from './catalogue';
 import { signLook, useShow, type ShowFrame } from './frame';
 import { band, clamp, Dim, EDGE, OnPlot, ramp, Spotlight, Swarm, Trail } from './fx';
 import { accent, EventDeltaChip, EventGlyph } from './glyphs';
@@ -86,7 +86,7 @@ export function Weather({ size }: { size: ShowSize }) {
 
 function EventWeather({ ev, seg, size }: { ev: ShowEventView; seg: EventSegment; size: ShowSize }) {
   if (STORY[ev.key]) return null;
-  switch (EVENT_ENTRY[ev.key].motion) {
+  switch (motionOf(ev.key)) {
     case 'sweep':
       return (
         <>

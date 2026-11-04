@@ -13,6 +13,19 @@ export type ShowEventKey =
   | 'wildfire'
   | 'bumperHarvest'
   | 'cavernCollapse'
+  | 'federationTax'
+  | 'federationGrant'
+  | 'immigrationWave'
+  | 'inheritance'
+  | 'muleTheft'
+  | 'epidemic'
+  | 'coldSnap'
+  | 'meteorStrike'
+  | 'pirateRaid'
+  | 'storeFire'
+  | 'ratsInSilo'
+  | 'crookedAccountant'
+  | 'packageFromHome'
   // Not an EventKey: development's sick players, each sent as a bulletin (C11; the protocol's EventView widens to match).
   | 'sickness';
 

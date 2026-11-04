@@ -2,7 +2,7 @@ import { EVENTS, GAME } from './config.js';
 import { neighbours } from './grid.js';
 import { airBand, type AirBand } from './pollution.js';
 import { createRng } from './rng.js';
-import { RAW_GOODS, type EventKey, type EventKind, type GameState, type Good, type MonthEvent, type Phase, type Player, type SpecialKind, type Tile } from './types.js';
+import { GOODS, RAW_GOODS, type EventEffect, type EventKey, type EventKind, type GameState, type Good, type MonthEvent, type Phase, type Player, type SpecialKind, type Tile } from './types.js';
 
 type Rng = ReturnType<typeof createRng>;
 type Direction = NonNullable<MonthEvent['direction']>;
@@ -20,6 +20,19 @@ const SHAPE: Record<EventKey, { kind: EventKind; title: string; scope: MonthEven
   wildfire: { kind: 'fire', title: 'Wildfire', scope: 'personal', sign: 'bad', line: () => 'A fire burns one Food plot and scorches the farms joined to it.' },
   bumperHarvest: { kind: 'bounty', title: 'Bumper harvest', scope: 'personal', sign: 'good', line: () => `One plot makes ${EVENTS.bumperHarvest.factor} times its usual output.` },
   cavernCollapse: { kind: 'quake', title: 'Cavern collapse', scope: 'personal', sign: 'bad', line: () => 'A crystal cavern caves in and becomes a plain plot.' },
+  federationTax: { kind: 'ledger', title: 'Federation tax', scope: 'colony', sign: 'bad', line: () => `The Federation takes ${pct(EVENTS.colony.federationTax.share)} of every player's cash for the colony fund.` },
+  federationGrant: { kind: 'ledger', title: 'Federation grant', scope: 'colony', sign: 'good', line: () => `The Federation pays the ${EVENTS.colony.federationGrant.count} poorest players ${EVENTS.colony.federationGrant.amount} each.` },
+  immigrationWave: { kind: 'colony', title: 'Immigration wave', scope: 'colony', sign: 'good', line: () => `A ship brings ${pct(EVENTS.colony.immigrationWave.growth)} more colonists, for good.` },
+  inheritance: { kind: 'ledger', title: 'Inheritance', scope: 'personal', sign: 'good', line: () => `An inheritance: ${EVENTS.player.inheritance.min} to ${EVENTS.player.inheritance.max} credits, more for the poorer.` },
+  muleTheft: { kind: 'plot', title: 'MULE theft', scope: 'personal', sign: 'bad', line: () => 'A MULE is stolen; its plot stands idle until it is outfitted again.' },
+  epidemic: { kind: 'colonists', title: 'Epidemic', scope: 'colony', sign: 'bad', line: () => 'An epidemic: everyone without Medicine is sick this turn and next.' },
+  coldSnap: { kind: 'sweep', title: 'Cold snap', scope: 'colony', sign: 'bad', line: () => `A cold snap: every plot needs ${EVENTS.colony.coldSnap.factor} times its Energy this month.` },
+  meteorStrike: { kind: 'strike', title: 'Meteor strike', scope: 'local', sign: 'bad', line: () => 'A meteor strikes: its MULE is lost and the plot becomes a crater rich in Crystite.' },
+  pirateRaid: { kind: 'ledger', title: 'Pirate raid', scope: 'colony', sign: 'bad', line: () => "Pirates take all the Crystite, the store's and every player's." },
+  storeFire: { kind: 'store', title: 'Store fire', scope: 'colony', sign: 'bad', line: () => 'The store burns: every good it held and its MULEs are lost.' },
+  ratsInSilo: { kind: 'ledger', title: 'Rats in the silo', scope: 'personal', sign: 'bad', line: () => `Rats eat ${pct(EVENTS.player.ratsInSilo.share)} of the stored Food.` },
+  crookedAccountant: { kind: 'ledger', title: 'Crooked accountant', scope: 'personal', sign: 'bad', line: () => `A crooked accountant takes ${pct(EVENTS.player.crookedAccountant.share)} of the cash.` },
+  packageFromHome: { kind: 'ledger', title: 'Package from home', scope: 'personal', sign: 'good', line: () => `A package from home: +${EVENTS.player.packageFromHome.amount} Food.` },
 };
 
 /** The goods a colony-wide event touches. */
@@ -36,7 +49,7 @@ const steps = (a: Tile, b: Tile) => Math.max(Math.abs(a.x - b.x), Math.abs(a.y -
 
 /** What a hit plot makes after the event (never below 0), from what it made before; `first` marks the event's first plot. */
 export function eventOutput(key: EventKey, before: number, first: boolean): number {
-  const after = {
+  const rules: Partial<Record<EventKey, () => number>> = {
     dustStorm: () => Math.floor(before * (1 - EVENTS.dustStorm.cut)),
     drought: () => before - EVENTS.drought.loss,
     acidRain: () => before - EVENTS.acidRain.loss,
@@ -48,8 +61,9 @@ export function eventOutput(key: EventKey, before: number, first: boolean): numb
     wildfire: () => (first ? 0 : before - EVENTS.wildfire.loss),
     bumperHarvest: () => before * EVENTS.bumperHarvest.factor,
     cavernCollapse: () => before,
-  }[key]();
-  return Math.max(0, after);
+  };
+  // An event with no rule here changes no plot's output.
+  return Math.max(0, rules[key]?.() ?? before);
 }
 
 /**
@@ -57,7 +71,8 @@ export function eventOutput(key: EventKey, before: number, first: boolean): numb
  * it in; null when it would hit nothing. A personal event starts on `player`'s plots (null when they have none).
  * Throws for a key it draws no plots for; a per-plot row's event is plotEvent's.
  */
-export function buildEvent(state: GameState, key: EventKey, rng: Rng, player?: string): MonthEvent | null {
+export function buildEvent(state: GameState, key: EventKey, rng: Rng, player?: string, phase: Phase = 'production'): MonthEvent | null {
+  if (Object.hasOwn(OFF_MAP, key)) return offMapEvent(state, key as OffMapKey, rng, phase, player);
   const working = state.tiles.filter((t) => t.owner && t.outfit && (RAW_GOODS as readonly string[]).includes(t.outfit));
   const food = working.filter((t) => t.outfit === 'food');
   let hit: Tile[];
@@ -102,6 +117,52 @@ export function buildEvent(state: GameState, key: EventKey, rng: Rng, player?: s
 }
 
 /**
+ * The wave-2 events' only-ifs (spec RULE-3): whether each fires for this state and player. Most change things off the
+ * map and hit no plot; a MULE theft and a meteor strike hit one plot each, picked on the row's dice (offMapEvent).
+ */
+const OFF_MAP = {
+  federationTax: () => true,
+  federationGrant: (state: GameState) => state.players.length > 0,
+  immigrationWave: () => true,
+  inheritance: () => true,
+  muleTheft: () => true,
+  epidemic: () => true,
+  coldSnap: () => true,
+  meteorStrike: () => true,
+  pirateRaid: () => true,
+  storeFire: () => true,
+  // Rats and the accountant fire only when they would take at least 1: 2 Food and 10 credits at today's shares.
+  ratsInSilo: (_: GameState, p?: Player) => p !== undefined && taken(p.stock.food, EVENTS.player.ratsInSilo.share) >= 1,
+  crookedAccountant: (_: GameState, p?: Player) => p !== undefined && taken(p.money, EVENTS.player.crookedAccountant.share) >= 1,
+  packageFromHome: () => true,
+} satisfies Partial<Record<EventKey, (state: GameState, player?: Player) => boolean>>;
+type OffMapKey = keyof typeof OFF_MAP;
+
+/** A share of what someone holds, floored, never more than they hold (HC-5). */
+const taken = (have: number, share: number) => Math.min(have, Math.floor(have * share));
+
+function offMapEvent(state: GameState, key: OffMapKey, rng: Rng, phase: Phase, player?: string): MonthEvent | null {
+  if (!OFF_MAP[key](state, state.players.find((p) => p.id === player))) return null;
+  if (key === 'muleTheft') {
+    const outfitted = state.tiles.filter((t) => t.owner === player && t.outfit);
+    if (outfitted.length === 0) return null;
+    const plot = rng.pick(outfitted);
+    return withPlots(toEvent(state, key, { x: plot.x, y: plot.y }, [plot], undefined, player, phase), { becomes: 'idle', muleLost: true });
+  }
+  if (key === 'meteorStrike') {
+    const tile = rng.pick(state.tiles.filter((t) => t.terrain !== 'store'));
+    const event = toEvent(state, key, { x: tile.x, y: tile.y }, [tile], undefined, tile.owner ?? undefined, phase);
+    return withPlots(event, { becomes: 'crater', ...(tile.outfit ? { muleLost: true as const } : {}) });
+  }
+  // Off the map: it starts at the store, where every colonist starts development.
+  const store = state.tiles.find((t) => t.terrain === 'store');
+  return toEvent(state, key, store ? { x: store.x, y: store.y } : { x: 0, y: 0 }, [], undefined, player, phase);
+}
+
+/** `event` with each of its plots changed as `change` says. */
+const withPlots = (event: MonthEvent, change: Partial<MonthEvent['plots'][number]>): MonthEvent => ({ ...event, plots: event.plots.map((p) => ({ ...p, ...change })) });
+
+/**
  * What a per-plot row's event turns its plot into. The special is gone by the time the event is built (settleSpecials
  * deletes it), so the event carries it for the screens to show until the hit lands.
  */
@@ -117,7 +178,7 @@ export function plotEvent(state: GameState, key: EventKey, index: number): Month
   return change ? { ...event, plots: event.plots.map((p) => ({ ...p, ...change })) } : event;
 }
 
-function toEvent(state: GameState, key: EventKey, origin: MonthEvent['origin'], hit: Tile[], direction?: Direction, player?: string): MonthEvent {
+function toEvent(state: GameState, key: EventKey, origin: MonthEvent['origin'], hit: Tile[], direction?: Direction, player?: string, phase: Phase = 'production'): MonthEvent {
   const shape = SHAPE[key];
   const index = new Map(state.tiles.map((t, i) => [t, i]));
   return {
@@ -131,7 +192,7 @@ function toEvent(state: GameState, key: EventKey, origin: MonthEvent['origin'], 
     plots: hit.map((t, order) => ({ index: index.get(t)!, order, good: t.outfit as Good, delta: 0 })),
     ...(player === undefined ? {} : { player }),
     sign: shape.sign,
-    phase: 'production',
+    phase,
   };
 }
 
@@ -163,7 +224,20 @@ export interface EventRow {
   follows?: Record<string, { points: number; thisPhase?: boolean; lastMonth?: boolean }>;
   /** Rolls once per plot its caller names, after production's output; rollPhase never rolls it. */
   perPlot?: true;
+  /** Rolls once for the colony after production's output (rollAfterOutput); rollPhase never rolls it. */
+  afterOutput?: true;
   cap: number;
+}
+
+/** A wave-2 row's effect numbers, each named on its row (spec RULE-2). */
+export interface EventParams {
+  share?: number;
+  amount?: number;
+  count?: number;
+  growth?: number;
+  min?: number;
+  max?: number;
+  factor?: number;
 }
 
 /** What a chance reads beside the state: whose roll it is (none for a colony row), and the keys already fired this phase. */
@@ -202,10 +276,35 @@ function influences(state: GameState, row: EventRow, { player, firedThisPhase = 
 
 /** A wealth influence for this player: the richest's and the poorest's points, by cash plus land, a tie to the first seat. */
 function wealthShare(state: GameState, wealth: NonNullable<EventRow['wealth']>, id: string): number {
-  const worth = (p: Player) => p.money + GAME.plotScore * state.tiles.filter((t) => t.owner === p.id).length;
+  const worth = (p: Player) => worthOf(state, p);
   const richest = state.players.reduce((a, b) => (worth(b) > worth(a) ? b : a));
   const poorest = state.players.reduce((a, b) => (worth(b) < worth(a) ? b : a));
   return (richest.id === id ? (wealth.richest ?? 0) : 0) + (poorest.id === id ? (wealth.poorest ?? 0) : 0);
+}
+
+/** A player's wealth as the wealth influence ranks it: cash plus land at GAME.plotScore a plot. */
+function worthOf(state: GameState, p: Player): number {
+  return p.money + GAME.plotScore * state.tiles.filter((t) => t.owner === p.id).length;
+}
+
+/** The Federation grant's players: the EVENTS.colony.federationGrant.count poorest by worthOf, a tie to the first seat. */
+export function grantees(state: GameState): Player[] {
+  const ranked = state.players.map((p, seat) => ({ p, seat, worth: worthOf(state, p) }));
+  ranked.sort((a, b) => a.worth - b.worth || a.seat - b.seat);
+  return ranked.slice(0, EVENTS.colony.federationGrant.count).map((r) => r.p);
+}
+
+/**
+ * An inheritance's credits for this player (AM-1 6a): min for the richest, max for the poorest, linear in the rank
+ * from the richest (a tie to the first seat), floored; a lone player gets max.
+ */
+export function inheritanceAmount(state: GameState, id: string): number {
+  const { min, max } = EVENTS.player.inheritance;
+  if (state.players.length < 2) return max; // literal-ok: a rank needs two players to compare
+  const ranked = state.players.map((p, seat) => ({ id: p.id, seat, worth: worthOf(state, p) }));
+  ranked.sort((a, b) => b.worth - a.worth || a.seat - b.seat);
+  const rank = ranked.findIndex((r) => r.id === id);
+  return Math.floor(min + ((max - min) * rank) / (state.players.length - 1));
 }
 
 /** A player event's key: a row of EVENTS.player. */
@@ -273,7 +372,7 @@ function roll(state: GameState, phase: Phase, rolls: ReturnType<typeof rowsOf>, 
     if (chance <= 0) continue;
     // Its own dice for the roll and the event's shape: a shared rng would let retuning one row move every later one.
     const rng = rowDice(state, key, phase, player);
-    const event = rng.chance(chance) ? buildEvent(state, key, rng, player) : null;
+    const event = rng.chance(chance) ? buildEvent(state, key, rng, player, phase) : null;
     if (event) out.push(event);
   }
   return out;
@@ -296,8 +395,129 @@ function keepOneOfEachPair(state: GameState, phase: Phase, fired: MonthEvent[]):
  */
 function rowsOf(table: Record<string, EventRow>, player?: string) {
   return Object.entries(table)
-    .filter((entry): entry is [EventKey, EventRow] => Object.hasOwn(SHAPE, entry[0]) && !entry[1].perPlot)
+    .filter((entry): entry is [EventKey, EventRow] => Object.hasOwn(SHAPE, entry[0]) && !entry[1].perPlot && !entry[1].afterOutput)
     .map(([key, row]) => ({ key, row, player }));
+}
+
+/**
+ * The colony rows that roll after production's output (a meteor strike), each once on its own dice: nothing on a
+ * what-if copy or before EVENTS.firstMonth. The caller applies what fired.
+ */
+export function rollAfterOutput(state: GameState): MonthEvent[] {
+  if (state.whatIf || state.month < EVENTS.firstMonth) return [];
+  const rows = Object.entries(EVENTS.colony as Record<string, EventRow>).filter(([, row]) => row.afterOutput) as [keyof typeof EVENTS.colony, EventRow][];
+  return rows.flatMap(([key, row]) => {
+    const chance = eventChance(state, row, 'production');
+    const rng = rowDice(state, key, 'production');
+    const event = chance > 0 && rng.chance(chance) ? buildEvent(state, key, rng, undefined, 'production') : null;
+    return event ? [event] : [];
+  });
+}
+
+/**
+ * Rolls a phase's events, applies them in fired order and keeps them in the month's list: the one call each phase but
+ * production makes (spec C3). Production rolls inside runProduction, and the month keeps what its report files.
+ */
+export function firePhase(state: GameState, phase: Phase): MonthEvent[] {
+  const fired = rollPhase(state, phase);
+  applyEvents(state, fired);
+  state.monthEvents.push(...fired);
+  return fired;
+}
+
+/**
+ * What each fired wave-2 event does, in fired order (spec RULE-4), filing its changes off the map on it as `effects`.
+ * Nothing goes below 0 (HC-5). A cold snap's Energy need and a meteor strike's crater are production's to apply; a
+ * wave-1 event changes only production's output.
+ */
+export function applyEvents(state: GameState, fired: readonly MonthEvent[]): void {
+  for (const event of fired) {
+    const effects: EventEffect[] = [];
+    const change = (on: string, what: EventEffect['what'], delta: number) => {
+      if (delta !== 0) effects.push({ on, what, delta });
+    };
+    const me = state.players.find((p) => p.id === event.player);
+    switch (event.key) {
+      case 'federationTax':
+        for (const p of state.players) {
+          const t = taken(p.money, EVENTS.colony.federationTax.share);
+          p.money -= t;
+          state.treasury.money += t;
+          change(p.id, 'money', -t);
+        }
+        break;
+      case 'federationGrant':
+        for (const p of grantees(state)) {
+          p.money += EVENTS.colony.federationGrant.amount;
+          change(p.id, 'money', EVENTS.colony.federationGrant.amount);
+        }
+        break;
+      case 'immigrationWave': {
+        const n = Math.round(state.colonists * (1 + EVENTS.colony.immigrationWave.growth)) - state.colonists;
+        state.colonists += n;
+        change('colony', 'colonists', n);
+        break;
+      }
+      case 'inheritance': {
+        const amount = inheritanceAmount(state, me!.id);
+        me!.money += amount;
+        change(me!.id, 'money', amount);
+        break;
+      }
+      case 'muleTheft':
+        for (const { index } of event.plots) Object.assign(state.tiles[index]!, { outfit: null, runMonths: 0, filter: false });
+        break;
+      case 'epidemic':
+        for (const p of state.players) {
+          if (p.stock.medicine >= 1) {
+            p.stock.medicine--;
+            change(p.id, 'medicine', -1);
+          } else {
+            p.sick = true;
+            p.sickNext = true;
+          }
+        }
+        break;
+      case 'coldSnap':
+        change('colony', 'energyNeed', Math.round((EVENTS.colony.coldSnap.factor - 1) * 100)); // literal-ok: the extra need in percent
+        break;
+      case 'pirateRaid':
+        for (const p of state.players) {
+          change(p.id, 'crystite', -p.stock.crystite);
+          p.stock.crystite = 0;
+        }
+        change('store', 'crystite', -state.store.stock.crystite);
+        state.store.stock.crystite = 0;
+        break;
+      case 'storeFire':
+        for (const g of GOODS) {
+          change('store', g, -state.store.stock[g]);
+          state.store.stock[g] = 0;
+        }
+        change('store', 'mules', -state.store.mules);
+        state.store.mules = 0;
+        break;
+      case 'ratsInSilo': {
+        const n = taken(me!.stock.food, EVENTS.player.ratsInSilo.share);
+        me!.stock.food -= n;
+        change(me!.id, 'food', -n);
+        break;
+      }
+      case 'crookedAccountant': {
+        const n = taken(me!.money, EVENTS.player.crookedAccountant.share);
+        me!.money -= n;
+        change(me!.id, 'money', -n);
+        break;
+      }
+      case 'packageFromHome':
+        me!.stock.food += EVENTS.player.packageFromHome.amount;
+        change(me!.id, 'food', EVENTS.player.packageFromHome.amount);
+        break;
+      default:
+        break;
+    }
+    if (effects.length > 0) event.effects = effects;
+  }
 }
 
 /** A seed from a game's seed, its month and some names: FNV-1a over them. */

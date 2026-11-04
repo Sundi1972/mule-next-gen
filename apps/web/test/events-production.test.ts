@@ -202,7 +202,8 @@ describe('the production show plays every event of the month', () => {
 
   it('T-AC-4: each key plays its own story inside its segment, and no other key’s', () => {
     // Every key production fires; sickness is development's, and its roll call is events-overlay's and the UI's roll-call test.
-    const OWN: Record<Exclude<ShowEventKey, 'sickness'>, RegExp> = {
+    // Wave 1's production keys; wave 2's stories (and their entries here) come with PR-B.
+    const OWN: Partial<Record<Exclude<ShowEventKey, 'sickness'>, RegExp>> = {
       dustStorm: /data-testid="front-dustStorm"/,
       drought: /data-testid="front-drought"/,
       acidRain: /data-testid="front-acidRain"/,
@@ -221,10 +222,10 @@ describe('the production show plays every event of the month', () => {
       const one = viewOf(month.lines, [ev]);
       const shown = frames(EVENT_AT + INTRO, EVENT_AT + INTRO + 4).map((t) => render(one, t));
       expect(
-        shown.some((html) => OWN[k].test(html)),
+        shown.some((html) => OWN[k]!.test(html)),
         `${k} draws its own story`,
       ).toBe(true);
-      for (const other of keys.filter((o) => o !== k)) expect(shown.some((html) => OWN[other].test(html)), `${k} draws ${other}'s story`).toBe(false);
+      for (const other of keys.filter((o) => o !== k)) expect(shown.some((html) => OWN[other]!.test(html)), `${k} draws ${other}'s story`).toBe(false);
       // Only the cavern collapse jolts the camera.
       if (k !== 'cavernCollapse') expect(shown.some(jolted), `${k} never jolts`).toBe(false);
     }

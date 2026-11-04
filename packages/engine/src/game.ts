@@ -53,6 +53,7 @@ export function createGame(options: { seed: number; players: NewPlayer[]; maxMon
         hungry: false,
         devSeconds: DEVELOPMENT.fullSeconds,
         sick: false,
+        sickNext: false,
         doneDeveloping: false,
         installedThisTurn: false,
         analysed: [],
@@ -76,6 +77,7 @@ export function createGame(options: { seed: number; players: NewPlayer[]; maxMon
     grant: null,
     landRanOutMonth: null,
     history: [],
+    monthEvents: [],
     auction: null,
     listings: [],
     landAuction: null,
@@ -510,6 +512,8 @@ export function advancePhase(state: GameState): void {
       colonyFund: state.treasury.money,
       colonistsHungry: false,
     });
+    // What the report filed, so the month's list and the report hold the same production events.
+    state.monthEvents.push(...(state.history.at(-1)!.events ?? []));
   }
   if (next === 'auction') {
     postPrices(state);
@@ -527,11 +531,14 @@ export function advancePhase(state: GameState): void {
       report.colonistsHungry = hungry;
       report.storeCapital = state.store.capital;
       report.colonyFund = state.treasury.money;
+      // The month's report keeps every event the month fired, not production's alone; a what-if copy shares the report.
+      if (!state.whatIf) report.events = [...state.monthEvents];
     }
     if (isGameOver(state)) state.phase = 'gameOver';
   }
   if (next === 'planning') {
     state.month++;
+    state.monthEvents = [];
     openPlanning(state);
   }
 }

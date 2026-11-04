@@ -17,7 +17,7 @@ const F = { fill: 'currentColor' };
 
 /** One glyph per event, each with its own silhouette so it reads without colour: wind lines, a beetle, a flame. */
 /** Each is a function, so no JSX is evaluated until a glyph renders: importing @mule/ui from Node (e2e scripts) must not need React in scope. */
-const GLYPH: Record<ShowEventKey, () => ReactNode> = {
+const GLYPH: Partial<Record<ShowEventKey, () => ReactNode>> = {
   dustStorm: () => (
     <>
       <path {...S} d="M3 8h10.5a3 3 0 1 0-3-3" />
@@ -111,13 +111,14 @@ const GLYPH: Record<ShowEventKey, () => ReactNode> = {
 export function EventGlyph({ k, size = 24, className }: { k: ShowEventKey; size?: number; className?: string }) {
   return (
     <svg viewBox="0 0 24 24" width={size} height={size} className={cx('shrink-0', className)} aria-hidden data-glyph={k}>
-      {GLYPH[k]()}
+      {/* A key with no glyph yet (wave 2's, until its story lands): a plain disc. */}
+      {GLYPH[k]?.() ?? <circle cx={12} cy={12} r={7} {...F} />}
     </svg>
   );
 }
 
 /** Each event's own colour, from the palette the game already speaks: dust is amber, pests eat Food. */
-export const EVENT_ACCENT: Record<ShowEventKey, string> = {
+export const EVENT_ACCENT: Partial<Record<ShowEventKey, string>> = {
   dustStorm: 'var(--color-warn)',
   drought: 'var(--color-g-smithore)',
   acidRain: 'var(--color-g-food)',
@@ -131,7 +132,8 @@ export const EVENT_ACCENT: Record<ShowEventKey, string> = {
   cavernCollapse: 'var(--color-g-crystite)',
   sickness: 'var(--color-g-medicine)',
 };
-export const accent = (k: ShowEventKey) => EVENT_ACCENT[k];
+/** A key with no colour yet (wave 2's, until its story lands) takes the text colour. */
+export const accent = (k: ShowEventKey) => EVENT_ACCENT[k] ?? 'currentColor';
 
 /**
  * The event's badge: its glyph inside a frame whose SHAPE says the sign, so it reads without colour: a diamond
