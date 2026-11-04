@@ -2,9 +2,11 @@ import { useMemo, type ReactNode } from 'react';
 import { HoloMap } from '../components/HoloMap';
 import { cx, type Slot } from '../components/tokens';
 import { useShow } from './frame';
-import { livingAt, Marks, Overlays, Shade, Weather } from './living';
+import { Overlays } from './cards';
+import { livingAt, Marks, Shade, Weather } from './living';
+import { EventColonists } from './rollcall';
 import { Stories } from './stories';
-import { eventSkipTo } from './timing';
+import { eventSkipTo, isPlaying } from './timing';
 import type { ShowSize } from './types';
 
 export interface EventLivingMapProps {
@@ -35,7 +37,7 @@ export interface EventLivingMapProps {
 export function EventLivingMap({ size, focusSlot, bars, over, onSkip, light = false, className }: EventLivingMapProps) {
   const frame = useShow();
   const { tiles, grid, t, reduced, s } = frame;
-  const living = livingAt(frame);
+  const living = livingAt(frame, size);
   const seg = light ? null : living.seg;
   const view = light ? undefined : living.view;
   // The painted map renders once; only the layers redraw as the clock runs.
@@ -43,7 +45,7 @@ export function EventLivingMap({ size, focusSlot, bars, over, onSkip, light = fa
     () => <HoloMap width={grid.width} height={grid.height} tiles={tiles} density={size === 'tv' ? 'tv' : 'phone'} hideGround {...(focusSlot !== undefined ? { focusSlot } : {})} className="w-full" />,
     [grid.width, grid.height, tiles, size, focusSlot],
   );
-  const playing = seg !== null && t < seg.settleAt - 0.05;
+  const playing = seg !== null && isPlaying(seg, t);
   const skip = () => {
     const to = eventSkipTo(s, t);
     if (to !== null) onSkip?.(to);
@@ -64,6 +66,7 @@ export function EventLivingMap({ size, focusSlot, bars, over, onSkip, light = fa
           <div className="pointer-events-none absolute inset-0 rounded-panel">
             {!light && <Stories size={size} />}
             <Marks size={size} {...(light && focusSlot !== undefined ? { slot: focusSlot } : {})} />
+            <EventColonists size={size} slot={light ? focusSlot : undefined} />
             {over}
           </div>
         </div>

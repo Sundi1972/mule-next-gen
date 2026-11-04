@@ -69,7 +69,7 @@ export const AUCTION_NOTES = {
     id: 'G7',
     n: 7,
     title: 'Time to choose',
-    what: 'The side-pick has no clock: it waits until everyone has picked (“2 / 3 PICKED” where the time bar was, “Waiting for Kai to pick”), and the host can move on for someone who is away, who then gets the side their numbers give. Your side still starts where your numbers point; Ready, today’s button under Buy and Sell, is the pick, and once pressed it gives way to who is still picking. Try it: Move on for Kai.',
+    what: 'The side-pick has no clock: it waits until everyone has picked (“2 / 3 PICKED” where the time bar was, “Waiting for Kai to pick”), and the host can move on for someone who is away, who then sits that good’s walk out. Your side still starts where your numbers point; Ready, today’s button under Buy and Sell, is the pick, and once pressed it gives way to who is still picking. Try it: Move on for Kai.',
     serves: '1 and 2',
     intent: 'Know which good is up · Decide whether I’m buying, selling or sitting it out',
     why: 'At real speed the side-pick lasted 8 s and each good’s walk 20 s, so goods passed while a newcomer looked away.',
