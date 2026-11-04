@@ -685,7 +685,7 @@ C14.
 | ID | Given / When / Then | observed_at | negative case | verifies |
 |---|---|---|---|---|
 | **B-AC-1** (MUST) | Given a development turn on the rig and one phone held sideways with no TV · When the player uses only the stick and the button · Then they reach the store, buy at the corral, outfit, leave with the MULE on its lead, install on their own plot and end at the pub, the button saying each step before it | the phone in a real browser (e2e, the steering step), and the server's GameState (money, the plot's outfit) | a press with nothing in reach changes nothing | C1, C3, C6, C11 |
-| **B-AC-2** (MUST) | Given four seats and the TV · When colonists move · Then the TV draws each where the server has it, within one frame | TV page vs the server's floor in the e2e | an away seat's colonist stands still on the TV | C8, C12 |
+| **B-AC-2** (MUST) | Given four seats and the TV · When colonists move · Then the TV draws each where the server had it `DEV_STEER.interpolateMs` earlier (RULE-10), within one tick's travel (AM-24) | TV page vs the server's floor in the e2e | an away seat's colonist stands still on the TV | C8, C12 |
 | **B-AC-3** (MUST) | Given a laptop · When the player holds arrow keys and presses SPACE, or holds the mouse on a spot · Then the colonist walks there and the press acts; the page never scrolls | laptop page in the e2e | keys with the page unfocused do nothing | C11 |
 | **B-AC-4** (MUST) | Given a phone at 667×375 and at 844×390 · When the development screen shows the map and the hall · Then nothing overflows its frame; the controls and the plot card cover 0 px² of your colonist, the store and the target, and over your own plots the controls are translucent so the plot's marks read through (AM-20) | shell.ts measurements | — | C11, C15 |
 | **B-AC-5** (MUST) | Given a colonist on forest with wolves due · When the player runs or fights · Then the outcomes of RULE-4 land: bitten and slowed, got away, pelts sold at the store, or the MULE bolted and caught | phone + server state in the e2e (wolves forced by a seeded test option) | no wolves in the hall | C4, C11 |
@@ -740,6 +740,14 @@ inside a wall; money and stock change only through game.ts rules; development en
 
 ## §8 · Amendments `[review-only]`
 
+- **AM-24 (2026-11-04, PR-6 phase B's findings, ruled by WS6).** (1) **B-AC-2 measured as RULE-10 draws:** others are
+  drawn `interpolateMs` (100 ms, two ticks) behind the newest frame, so at the same instant the TV is up to about 0.13
+  tiles behind the server. B-AC-2 compares the TV against where the server had each colonist `interpolateMs`
+  earlier, within that seat's largest one-tick move plus the wire's 0.01 rounding; measured 0.065 tiles worst over
+  four seats. (2) **"Translucent" over your other plots (AM-20) is 60% opacity,** the scaffold's fade near you or the
+  target staying at 25%. (3) **A released stick sends its stop by timer and on hide or blur,** not on the next
+  animation frame: a phone put away mid-walk otherwise left its colonist walking on the server. (4) **The TV shows no
+  header clock while month 1's clock waits** (`phaseEndsAt` null), as the flag-off TV does, never a red 0:00.
 - **AM-23 (2026-11-04, WS1's PR-8 numbers, ruled by WS6).** `botWolfLandShare` is built at its specced 0.5 (AI wolf
   months were 46% without it). On T-AC-5's own sample (20 seeded AI-only games, its `observed_at`): wolf months
   61.7%, glints raced 43.1%, pub missed 7 of 960 turns (0.7%), each a colonist a late pack still held at the bell.
