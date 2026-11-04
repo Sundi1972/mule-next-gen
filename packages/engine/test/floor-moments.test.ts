@@ -95,25 +95,25 @@ function tick(state: GameState, floor: DevFloor, inputs: Record<string, FloorInp
 const texts = (beats: readonly FloorBeat[]) => beats.map((b) => b.text);
 
 /** 'a' on the forest below the store, meeting a pack: the floor in its choice, and the game. */
-function meeting(seed: number, mule = false): { state: GameState; floor: DevFloor } {
+function meeting(seed: number, mule = false, config: FloorConfig = cfg): { state: GameState; floor: DevFloor } {
   const state = world(seed, FOREST);
   if (mule) player(state, 'a').carriedMule = 'food';
-  const built = buildFloor(state, cfg);
+  const built = buildFloor(state, config);
   const floor = moved(built, 'a', { space: 'map', x: 7.5, y: 6.5, lead: mule ? { good: 'food', x: 7.5, y: 6.2 } : null });
-  return { state, floor: meetWolves(floor, state, 'a', cfg) };
+  return { state, floor: meetWolves(floor, state, 'a', config) };
 }
 
 type WolfEnd = { won: boolean; lost: boolean; bitten: boolean; floor: DevFloor; state: GameState; ticks: number };
 
 /** 'a' plays the pack out as a bot of `level` that fights or runs: every tick its input, the tick, until the pack is gone. */
-function playPack(seed: number, how: { level: WolfFightLevel; fights: boolean }, mule = false): WolfEnd {
-  const met = meeting(seed, mule);
+function playPack(seed: number, how: { level: WolfFightLevel; fights: boolean }, mule = false, config: FloorConfig = cfg): WolfEnd {
+  const met = meeting(seed, mule, config);
   const { state } = met;
   let floor = met.floor;
   const limit = ticks(WOLVES.chooseSeconds + WOLVES.fightSeconds + WOLVES.giveUpSeconds + 2);
   let n = 0;
   const lost = () => player(state, 'a').muleBolted === true || (seat(floor, 'a').stunnedUntilTick ?? 0) > floor.tick;
-  for (; n < limit && seat(floor, 'a').encounter; n++) floor = tick(state, floor, { a: wolfInput(floor, state, 'a', cfg, how) });
+  for (; n < limit && seat(floor, 'a').encounter; n++) floor = tick(state, floor, { a: wolfInput(floor, state, 'a', config, how) }, config);
   expect(seat(floor, 'a').encounter, `seed ${seed}: the pack still there after ${n} ticks`).toBeNull();
   return { won: seat(floor, 'a').pelts === WOLVES.pelts, lost: lost(), bitten: seat(floor, 'a').bitten, floor, state, ticks: n };
 }
@@ -137,6 +137,23 @@ describe('the floor moments: wolves (RULE-4)', () => {
       expect(r.won || r.lost, 'a run neither wins pelts nor loses the fight').toBe(false);
       // Bitten is slowed till the store or an own plot; got away is not.
       expect(r.floor.colonists[0]!.bitten).toBe(r.bitten);
+    }
+  });
+
+  it('INV-chase-pace: T-AC-6\'s odds hold at any walking pace', { timeout: 120_000 }, () => {
+    // AM-32: the chase is relative to DEV_STEER.mapTilesPerSecond, so the same seeded packs land in RULE-4's ranges at
+    // any pace. Ticks are a fixed 50 ms, so the counts need not be equal from pace to pace: the ranges are what hold.
+    const odds = [1.25, 2.5, 5].map((pace) => {
+      const config: FloorConfig = { ...cfg, steer: { ...cfg.steer, mapTilesPerSecond: pace } };
+      const rookie = Array.from({ length: 60 }, (_, i) => playPack(100 + i, { level: 'rookie', fights: true }, false, config)).filter((f) => f.won).length;
+      const away = Array.from({ length: 20 }, (_, i) => playPack(300 + i, { level: 'rookie', fights: false }, false, config)).filter((r) => !r.bitten).length;
+      return { pace, rookie, away };
+    });
+    for (const { pace, rookie, away } of odds) {
+      expect(rookie, `pace ${pace}: rookie wins of 60`).toBeGreaterThanOrEqual(9);
+      expect(rookie, `pace ${pace}: rookie wins of 60`).toBeLessThanOrEqual(24);
+      expect(away, `pace ${pace}: forest runs escaped of 20`).toBeGreaterThanOrEqual(9);
+      expect(away, `pace ${pace}: forest runs escaped of 20`).toBeLessThanOrEqual(18);
     }
   });
 
