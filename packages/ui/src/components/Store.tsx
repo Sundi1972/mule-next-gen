@@ -78,9 +78,9 @@ function placeOf(leading: Leading): HallPlace {
  * works caption is the short one: the long one wraps there.
  */
 const SIZES = {
-  phone: { lock: 'px-0.5 py-px text-[10px]', name: 'text-[11px]', price: 'text-[10px]', small: 'text-[10px]', icon: 20, iconPad: 'p-1', fit: 16, fits: 'p-px', bay: 'p-px', mule: 30, creature: 28, led: 32, sign: 'h-5 w-5', chimney: 'h-3 w-3', caps: 'text-[10px]!', door: 'text-base', doorBox: 'min-w-8', doorNote: 'text-[10px]', works: 'The works' },
-  tv: { lock: 'px-1 py-0.5 text-[10px]', name: 'text-sm', price: 'text-sm', small: 'text-xs', icon: 30, iconPad: 'p-1.5', fit: 22, fits: 'p-0.5', bay: 'p-0.5', mule: 44, creature: 40, led: 44, sign: 'h-7 w-7', chimney: 'h-4 w-4', caps: 'text-xs!', door: 'text-xl', doorBox: '', doorNote: 'text-[10px]', works: 'The works · factory fits' },
-  wide: { lock: 'px-1 py-0.5 text-[11px]', name: 'text-lg', price: 'text-base', small: 'text-sm', icon: 40, iconPad: 'p-1.5', fit: 30, fits: 'p-0.5', bay: 'p-0.5', mule: 84, creature: 52, led: 60, sign: 'h-10 w-10', chimney: 'h-5 w-5', caps: 'text-xs!', door: 'text-3xl', doorBox: '', doorNote: 'text-xs', works: 'The works · factory fits' },
+  phone: { lock: 'px-0.5 py-px text-[10px]', name: 'text-[11px]', price: 'text-[10px]', small: 'text-[10px]', icon: 20, iconPad: 'p-1', fit: 16, fits: 'p-px', bay: 'p-px', mule: 30, creature: 28, led: 32, sign: 'h-5 w-5', chimney: 'h-3 w-3', caps: 'text-[10px]!', door: 'text-base', doorBox: 'min-w-8', doorNote: 'text-[10px]', works: 'The works', worksLine: 'truncate' },
+  tv: { lock: 'px-1 py-0.5 text-[10px]', name: 'text-sm', price: 'text-sm', small: 'text-xs', icon: 30, iconPad: 'p-1.5', fit: 22, fits: 'p-0.5', bay: 'p-0.5', mule: 44, creature: 40, led: 44, sign: 'h-7 w-7', chimney: 'h-4 w-4', caps: 'text-xs!', door: 'text-xl', doorBox: '', doorNote: 'text-[10px]', works: 'The works · factory fits', worksLine: '' },
+  wide: { lock: 'px-1 py-0.5 text-[11px]', name: 'text-lg', price: 'text-base', small: 'text-sm', icon: 40, iconPad: 'p-1.5', fit: 30, fits: 'p-0.5', bay: 'p-0.5', mule: 84, creature: 52, led: 60, sign: 'h-10 w-10', chimney: 'h-5 w-5', caps: 'text-xs!', door: 'text-3xl', doorBox: '', doorNote: 'text-xs', works: 'The works · factory fits', worksLine: '' },
 };
 type Sizes = (typeof SIZES)[keyof typeof SIZES];
 
@@ -184,8 +184,9 @@ export function StoreInterior({ mules, mulePrice, pubPayout, prices, open, onSho
             <svg aria-hidden viewBox="0 0 16 16" className={z.chimney}>
               <path d="M2 14V7l4 2V7l4 2V3h4v11z" fill="var(--color-ink-3)" />
             </svg>
-            {/* One line, so a guide's label below it never meets it: the phone's works is too narrow for the long caption. */}
-            <span className={cx('label-caps truncate whitespace-nowrap', z.caps)}>{z.works}</span>
+            {/* On the phone, one short line, so the guide's label below it never meets it; the TV and the wide shell have no
+                guide in the hall and keep the long caption, wrapping where the works is narrow. */}
+            <span className={cx('label-caps', z.caps, z.worksLine)}>{z.works}</span>
           </span>
           {/* The bays stand where the plan cuts the works; the body's padding and each column's make the gaps between them. */}
           <span className={cx('flex flex-1', z.fits)}>
