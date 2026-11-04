@@ -79,10 +79,13 @@ export function hallSpeed(state: GameState, cfg: FloorConfig, pace: number, lead
   return speedOf(probe('hall', { x: 0, y: 0 }, pace, lead, false), state, cfg);
 }
 
-/** The share of pathTo's full-pace map speed a colonist walks at: RULE-2's pace, lead and bot factors, off its land. */
-export function mapFactor(cfg: FloorConfig, pace: number, lead: boolean, bot: boolean): number {
-  return pace * (lead ? cfg.steer.leadPace : 1) * (bot ? cfg.steer.botSpeed : 1);
+/** The share of pathTo's full-pace map speed a colonist walks at: RULE-2's pace, lead, bot and bitten factors, off its land. */
+export function mapFactor(cfg: FloorConfig, pace: number, lead: boolean, bot: boolean, bitten = false): number {
+  return pace * (lead ? cfg.steer.leadPace : 1) * (bot ? cfg.steer.botSpeed : 1) * (bitten ? cfg.wolves.bittenPace : 1);
 }
+
+/** Whether a colonist leads its MULE: one that bolted is off the rope. */
+export const leading = (c: FloorColonist): boolean => c.lead !== null && !c.bolt;
 
 /** Hall seconds from a point to a place, at this pace and lead. */
 export function hallSeconds(state: GameState, cfg: FloorConfig, from: HallPoint, to: HallPlace, pace: number, lead: boolean): number {
@@ -209,13 +212,24 @@ export function tripSeconds(state: GameState, cfg: FloorConfig, w: Walker, from:
 
 /** Seconds from where a colonist stands to a place in the store's hall, by the quickest door when it is on the map. */
 export function secondsToPlace(state: GameState, cfg: FloorConfig, c: FloorColonist, place: HallPlace): number {
-  const lead = c.lead !== null;
+  const lead = leading(c);
   if (c.space === 'hall') return hallSeconds(state, cfg, c, place, c.pace, lead);
   let best = Infinity;
   for (const [door, map] of doorTable(state, cfg)) {
-    best = Math.min(best, backToDoor(state, cfg, map, c) / mapFactor(cfg, c.pace, lead, c.bot) + hallSeconds(state, cfg, cfg.hall.spots[door], place, c.pace, lead));
+    // A bite slows the walk to the store, and heals there.
+    best = Math.min(best, backToDoor(state, cfg, map, c) / mapFactor(cfg, c.pace, lead, c.bot, c.bitten) + hallSeconds(state, cfg, cfg.hall.spots[door], place, c.pace, lead));
   }
   return best;
+}
+
+/** Just outside the store's door whose walk to the pub, from where a colonist stands on the map, is quickest. */
+export function pubDoor(state: GameState, cfg: FloorConfig, c: FloorColonist): FloorPoint {
+  let best: { door: HallDoor; s: number } = { door: HALL_DOORS[0], s: Infinity };
+  for (const [door, map] of doorTable(state, cfg)) {
+    const s = backToDoor(state, cfg, map, c) / mapFactor(cfg, c.pace, leading(c), c.bot, c.bitten) + hallSeconds(state, cfg, cfg.hall.spots[door], 'pub', c.pace, leading(c));
+    if (s < best.s) best = { door, s };
+  }
+  return doorOutside(state, best.door, cfg);
 }
 
 /**
@@ -286,11 +300,62 @@ export function plotToPlace(state: GameState, cfg: FloorConfig, w: Walker, index
  */
 export function plotErrandSeconds(state: GameState, cfg: FloorConfig, c: FloorColonist, index: number, work: number): number {
   const w: Walker = { pace: c.pace, bot: c.bot };
-  const lead = c.lead !== null;
+  const lead = leading(c);
   if (c.space === 'hall') return tripSeconds(state, cfg, w, c, index, lead) + work + plotToPlace(state, cfg, w, index, 'pub');
-  // On the map it walks there from where it stands, and back from where that walk ends.
+  // On the map it walks there from where it stands (slowed by a bite), and back from where that walk ends.
   const walk = mapWalk(state, cfg, c, index);
-  return walk.seconds / mapFactor(cfg, c.pace, lead, c.bot) + work + pubSeconds(state, cfg, { ...c, ...walk.end, lead: null });
+  return walk.seconds / mapFactor(cfg, c.pace, lead, c.bot, c.bitten) + work + pubSeconds(state, cfg, { ...c, ...walk.end, lead: null });
+}
+
+/**
+ * The walk from where a colonist stands to plot `index`, as the hand walks it: on the map from where it stands (slowed
+ * by a bite), from the hall out by the door that makes it quickest. Its seconds at the colonist's factors, and where it
+ * ends, where Reach first offers the plot.
+ */
+export function plotWalk(state: GameState, cfg: FloorConfig, c: FloorColonist, index: number): MapWalk {
+  const lead = leading(c);
+  if (c.space === 'map') {
+    const walk = mapWalk(state, cfg, c, index);
+    return { seconds: walk.seconds / mapFactor(cfg, c.pace, lead, c.bot, c.bitten), end: walk.end };
+  }
+  let best: MapWalk = { seconds: Infinity, end: c };
+  for (const [door, map] of doorTable(state, cfg)) {
+    const seconds = hallSeconds(state, cfg, c, door, c.pace, lead) + map[index]!.seconds / mapFactor(cfg, c.pace, lead, c.bot);
+    if (seconds < best.seconds) best = { seconds, end: map[index]!.end };
+  }
+  return best;
+}
+
+/**
+ * A stop on the rest of a plan: a place in the hall or a plot, and `work` seconds there (the press's pause, an assay).
+ * `lead`: whether it walks there leading a MULE (true from the corral to the plot it installs on, false to the corral);
+ * absent, as it stands.
+ */
+export type PlanStop = ({ place: HallPlace } | { plot: number }) & { work: number; lead?: boolean };
+
+/**
+ * Seconds for the rest of a plan from where a colonist stands: each stop in order, every leg setting off where the last
+ * ended (a counter's threshold, a plot's edge) at the floor's speeds, the work at each, as the estimates the plans are
+ * priced by (muleLegs, plotErrandSeconds). A bite slows it until it is back in the store.
+ */
+export function planSeconds(state: GameState, cfg: FloorConfig, c: FloorColonist, stops: readonly PlanStop[]): number {
+  let at = c;
+  let seconds = 0;
+  for (const stop of stops) {
+    const lead = stop.lead === undefined ? at.lead : stop.lead ? (at.lead ?? { good: null, x: at.x, y: at.y }) : null;
+    const me: FloorColonist = { ...at, lead, bolt: undefined };
+    if ('plot' in stop) {
+      const walk = plotWalk(state, cfg, me, stop.plot);
+      seconds += walk.seconds + stop.work;
+      // Installed, the MULE stays on the plot.
+      at = { ...me, space: 'map', ...walk.end, lead: null, bitten: me.space === 'map' && me.bitten };
+    } else {
+      seconds += secondsToPlace(state, cfg, me, stop.place) + stop.work;
+      at = { ...me, space: 'hall', ...standPoint(stop.place, cfg.hall), bitten: false };
+    }
+    if (seconds === Infinity) return seconds;
+  }
+  return seconds;
 }
 
 const AROUND = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]] as const;

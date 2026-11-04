@@ -1,10 +1,10 @@
 import { PlayerMark } from '../components/PlayerMark';
-import { cx } from '../components/tokens';
-import { eventMissLine, eventSegLabel, phaseNoun, segTitle, eventWhoLine, eventYouSummary } from './copy';
+import { cx, SLOT_COLOR } from '../components/tokens';
+import { colonyNews, eventMissLine, eventSegLabel, phaseNoun, segTitle, eventWhoLine, eventYouSummary } from './copy';
 import { signLook, useShow } from './frame';
-import { EventBuzz, EventSignBadge } from './glyphs';
+import { EventBuzz, EventEffectChip, EventSignBadge } from './glyphs';
 import { EventSickTag } from './rollcall';
-import { eventStageAt, isBuzzing, isPlaying, isRollCall, type EventSegment } from './timing';
+import { eventEffectsAt, eventStageAt, isBuzzing, isPlaying, isRollCall, type EventSegment } from './timing';
 
 /**
  * The phone's rail through a phase, inside <EventShow>; the screen's shell places it. One small card at a time
@@ -23,6 +23,9 @@ export function EventPhoneCard({ seg, me, at, buzz = false }: { seg: EventSegmen
   const sign = signLook(ev.sign);
   const mixed = sign === 'neutral' || seg.events.some((e) => e.sign !== ev.sign);
   const tone = mixed ? 'border-holo bg-holo-soft' : sign === 'good' ? 'border-ok bg-holo-soft' : 'border-alert bg-alert-bg';
+  // The segment's changes off the map: yours as chips under what it did to you; the colony's and the store's when it missed you.
+  const mine = seg.events.flatMap((e) => e.effects ?? []);
+  const colony = seg.events.flatMap((e) => e.effects ?? []).filter((f) => f.on === 'colony' || f.on === 'store');
   const ink = mixed ? 'text-holo!' : sign === 'good' ? 'text-ok!' : 'text-alert-ink!';
   return (
     <div key={`${seg.n}-${at}`} className={cx('flex flex-col gap-1.5 rounded-panel border-2 p-2.5 animate-[ev-drop_0.3s_ease-out]', tone)} data-testid="phone-card" data-at={at} data-event={ev.key}>
@@ -72,10 +75,26 @@ export function EventPhoneCard({ seg, me, at, buzz = false }: { seg: EventSegmen
               {you.headline}
             </span>
             <span className="text-xs leading-snug text-ink-2 max-[700px]:truncate" title={you.detail}>{you.detail}</span>
+            {mine.some((f) => f.on === me) && (
+              <span className="flex flex-wrap gap-1">
+                {mine
+                  .filter((f) => f.on === me)
+                  .map((f, i) => (
+                    <EventEffectChip key={i} f={f} size="phone" />
+                  ))}
+              </span>
+            )}
           </div>
         ) : (
           <div className="flex flex-col gap-1" data-testid="phone-miss">
             <span className="text-xs leading-snug text-ink-2">{eventMissLine(seg, cast)}</span>
+            {colony.length > 0 && (
+              <span className="flex flex-wrap gap-1">
+                {colony.map((f, i) => (
+                  <EventEffectChip key={i} f={f} size="phone" />
+                ))}
+              </span>
+            )}
           </div>
         ))}
     </div>
@@ -107,10 +126,12 @@ export function EventNowPlaying({ seg, buzz }: { seg: EventSegment; buzz: boolea
   );
 }
 
-/** Under the current card: the phase's earlier events, one line each. */
+/** Under the current card: the phase's earlier events, one line each, and the changes off the map that are yours. */
 export function EventRailTail({ me, current }: { me: string; current: EventSegment | null }) {
-  const { s, t, cast } = useShow();
+  const { s, t, reduced, grid, cast } = useShow();
   const done = s.segments.filter((g) => t >= g.settleAt && g !== current);
+  const yours = eventEffectsAt(s, t, reduced, grid).filter((l) => l.effect.on === me);
+  const slot = cast.slotOf(me);
   return (
     <>
       {done.map((g) => {
@@ -120,10 +141,20 @@ export function EventRailTail({ me, current }: { me: string; current: EventSegme
           <div key={g.n} className="flex items-center gap-2 rounded-control bg-raised px-2 py-1">
             <EventSignBadge ev={g.events[0]!} size={22} />
             <span className="min-w-0 flex-1 truncate text-xs font-semibold">{segTitle(g)}</span>
-            <span className={cx('text-xs', you ? (good ? 'font-bold text-ok' : 'font-bold text-alert-ink') : 'text-ink-3')}>{you ? you.short : 'not you'}</span>
+            <span className={cx('text-xs', you ? (good ? 'font-bold text-ok' : 'font-bold text-alert-ink') : 'text-ink-3')}>{you ? you.short : colonyNews(g) ? 'everyone' : 'not you'}</span>
           </div>
         );
       })}
+      {yours.length > 0 && (
+        <div className="mt-auto flex flex-wrap items-center gap-1 border-t border-holo-line pt-1.5" data-testid="phone-ledger">
+          <span className="label-caps text-[10px]!" style={slot !== undefined ? { color: SLOT_COLOR[slot] } : undefined}>
+            Yours
+          </span>
+          {yours.map((l, i) => (
+            <EventEffectChip key={i} f={l.effect} size="phone" />
+          ))}
+        </div>
+      )}
     </>
   );
 }

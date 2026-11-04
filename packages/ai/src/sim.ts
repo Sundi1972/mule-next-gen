@@ -25,13 +25,16 @@ import {
   rollPlayerEvent,
   score,
   SIM_TARGETS,
+  WOLVES,
   type AiLevelId,
   type AiPersonaId,
   type AirBand,
+  type EventKey,
   type GameState,
   type MonthReport,
 } from '@mule/engine';
 import { simSeats } from './lineup.js';
+import type { FloorMomentCounts } from './floor-turn.js';
 import { playGame, type DevTurn } from './play.js';
 
 function arg(name: string, fallback: number): number {
@@ -79,10 +82,15 @@ const quantile = (values: number[], q: number) => {
 
 /**
  * The arcade floor's report lines (spec §4), only when development played on it: MULEs installed and pub times a turn,
- * the pub payout, the presses the referee refused, month 1's waiting clock; the moments (packs, glints, scrambles) count 0 until they are built (PR-8).
+ * the pub payout, the presses the referee refused, month 1's waiting clock, the moments (packs, glints, scrambles),
+ * and the AI's lake analyses.
  */
-function floorLines(turns: readonly DevTurn[], waits: readonly number[], continued: number, seats: number): string[] {
+function floorLines(turns: readonly DevTurn[], moments: readonly FloorMomentCounts[], waits: readonly number[], continued: number, seats: number): string[] {
   if (turns.length === 0) return [];
+  const m = moments.reduce((sum, c) => {
+    for (const k of Object.keys(sum) as (keyof FloorMomentCounts)[]) sum[k] += c[k];
+    return sum;
+  });
   const reached = turns.filter((t) => t.pubAt !== null);
   const installs = turns.reduce((n, t) => n + t.installs, 0);
   const paid = reached.reduce((n, t) => n + t.payout!, 0);
@@ -91,10 +99,15 @@ function floorLines(turns: readonly DevTurn[], waits: readonly number[], continu
   // literal-ok: the median and 90th percentile the line names
   const [median, ninetieth] = [quantile(at, 0.5), quantile(at, 0.9)];
   const waited = [...waits];
+  const lakeFailed = turns.reduce((n, t) => n + t.lakeAnalyses.failed, 0);
+  const packMonths = moments.filter((c) => c.packs > 0).length;
+  const lakeNoTime = turns.reduce((n, t) => n + t.lakeAnalyses.noTime, 0);
   return [
     // literal-ok: two decimals for the MULEs a turn, display only
     `     Development on the floor: ${(installs / turns.length).toFixed(2)} MULEs installed a seat a turn; the pub reached in ${pct(reached.length, turns.length)} of ${turns.length} AI turns, at ${median.toFixed(1)} / ${ninetieth.toFixed(1)} s on the clock (median / 90th percentile); ${(paid / Math.max(1, seats)).toFixed(0)} cr pub payout a seat a game; ${refused} presses refused (no check)`,
-    `     Floor moments: packs met 0, glints raced 0, scrambles 0 (built in PR-8)`,
+    `     Floor moments: packs met ${m.packs} (fought ${m.fights}: won ${m.won}, lost ${m.lost}; ran ${m.runs}: bitten ${m.bitten}); MULEs bolted ${m.bolted}, caught ${m.caught}; pelts sold ${m.peltsSold}; glints lit ${m.glints}, raced ${m.raced} (${pct(m.raced, m.glints)}), won ${m.glintsWon}; scrambles ${m.scrambles}, AI racers ${m.scrambleRacers}, left out ${m.leftOut} (no check)`,
+    `${packMonths / Math.max(1, moments.length) >= WOLVES.simMonthsWithPack ? 'ok  ' : 'MISS'} Months with an AI wolf encounter: ${packMonths} of ${moments.length}, ${pct(packMonths, moments.length)} (AM-27: target ${pct(WOLVES.simMonthsWithPack, 1)} or more, on each of seeds 1, 101 and 201)`,
+    `     Lake plots: ${lakeFailed} analyses failed on the way, ${lakeNoTime} dropped as not fitting the clock (no check)`,
     // literal-ok: the median the line names
     `     Month 1's clock stood ${quantile(waited, 0.5).toFixed(1)} / ${quantile(waited, 1).toFixed(1)} s for first MULEs (median / max), started by the host's stand-in in ${continued} of ${waits.length} games (no check)`,
   ];
@@ -105,6 +118,23 @@ interface PhaseEvents {
   development: number;
   production: number;
 }
+
+/** The wave-2 events (WS8 wave-2 spec UBER-AC-1): the report gives each one's rate a month and what it moved a game. */
+const WAVE_TWO: readonly EventKey[] = [
+  'federationTax',
+  'federationGrant',
+  'immigrationWave',
+  'inheritance',
+  'muleTheft',
+  'epidemic',
+  'coldSnap',
+  'meteorStrike',
+  'pirateRaid',
+  'storeFire',
+  'ratsInSilo',
+  'crookedAccountant',
+  'packageFromHome',
+];
 
 /** Months with this many events or more share the report's last column. */
 const EVENT_COLUMNS = 4; // literal-ok: the report's last column, 4 or more events a month; presentation only
@@ -189,6 +219,7 @@ function main() {
   let mulesLost = 0;
   // On the arcade floor (DEV_STEER.on): every seat's development turn, and month 1's waiting clock per game.
   const floorTurns: DevTurn[] = [];
+  const floorMoments: FloorMomentCounts[] = [];
   const month1Waits: number[] = [];
   let month1Continued = 0;
   let playerGames = 0;
@@ -209,6 +240,11 @@ function main() {
   let eventMonths = 0;
   let distinctEvents = 0;
   const byEvent: Record<string, number> = {};
+  /** Each wave-2 key's events, and the sum of its effects' deltas by what they moved, over every game. */
+  const wave2 = Object.fromEntries(WAVE_TWO.map((k) => [k, { fired: 0, moved: {} as Record<string, number> }]));
+  /** The month after each store fire: its MULE price and the plots developed at its production; and every month's. */
+  const afterFire = { mulePrices: [] as number[], developed: [] as number[] };
+  const everyDeveloped: number[] = [];
   const wins: Record<string, number> = {};
   const auction = { between: 0, store: 0, ship: 0, ms: 0 };
   const lots = { sold: 0, unsold: 0, colonyOffered: 0, colonySold: 0, stalled: 0 };
@@ -235,8 +271,11 @@ function main() {
     const hungryRun = new Map<string, { run: number; spiral: boolean }>();
     // This month's sickness and forced counts, read once development is played; production completes them.
     let pending: { sickness: number; forced: PhaseEvents | null } | null = null;
+    /** Plots developed as each month's production runs, by month. */
+    const developedAt = new Map<number, number>();
     const onEachPhase = (s: GameState) => {
       onPhase(s);
+      if (s.phase === 'production') developedAt.set(s.month, s.tiles.filter((t) => t.owner && t.outfit).length);
       if (s.phase === 'production' && pending) {
         const events = s.history.at(-1)!.events ?? [];
         monthEvents.push({ development: pending.sickness, production: events.length });
@@ -254,9 +293,10 @@ function main() {
         hungryRun.set(p.id, h);
       }
     };
-    const { state, broke, auction: a, lots: l, mulesLost: lost, turns, month1 } = playGame(seed, specs, { politics, walking, onPhase: onEachPhase });
+    const { state, broke, auction: a, lots: l, mulesLost: lost, turns, month1, moments } = playGame(seed, specs, { politics, walking, onPhase: onEachPhase });
     mulesLost += lost;
     floorTurns.push(...turns);
+    floorMoments.push(...moments);
     if (month1) {
       month1Waits.push(month1.waited);
       if (month1.continued) month1Continued++;
@@ -286,6 +326,19 @@ function main() {
     eventMonths += state.history.filter((h) => (h.events ?? []).length > 0).length;
     distinctEvents += new Set(keys).size;
     for (const k of keys) byEvent[k] = (byEvent[k] ?? 0) + 1;
+    for (const e of state.history.flatMap((h) => h.events ?? [])) {
+      const row = wave2[e.key];
+      if (!row) continue;
+      row.fired++;
+      for (const f of e.effects ?? []) row.moved[f.what] = (row.moved[f.what] ?? 0) + f.delta;
+    }
+    everyDeveloped.push(...developedAt.values());
+    state.history.forEach((h, i) => {
+      const next = state.history[i + 1];
+      if (!next || !(h.events ?? []).some((e) => e.key === 'storeFire')) return;
+      afterFire.mulePrices.push(next.mulePrice);
+      afterFire.developed.push(developedAt.get(next.month) ?? 0);
+    });
     const ranked = state.players.map((p, i) => ({ p, i })).sort((a, b) => score(state, b.p.id) - score(state, a.p.id));
     const winner = ranked[0]!;
     wins[winner.p.species] = (wins[winner.p.species] ?? 0) + 1;
@@ -314,7 +367,7 @@ function main() {
   console.log(`${check(collapsed / games <= SIM_TARGETS.collapsed)} Ended in Collapse: ${pct(collapsed, games)} (target ${share(SIM_TARGETS.collapsed)} or less)`);
   console.log(`     Store capital: lowest ${minCapital} (no check: the store never runs out of money)`);
   console.log(`     MULEs lost to the clock: ${(mulesLost / games).toFixed(1)} a game (walking ${walking ? 'on' : 'off'}; no check)`);
-  for (const line of floorLines(floorTurns, month1Waits, month1Continued, playerGames)) console.log(line);
+  for (const line of floorLines(floorTurns, floorMoments, month1Waits, month1Continued, playerGames)) console.log(line);
   console.log(`     Players hungry ${SPIRAL_MONTHS} or more months running: ${pct(spirals, playerGames)} (no check)`);
   console.log(`     Wins by species:${Object.entries(wins).map(([s, n]) => `${s} ${pct(n, games)}`).join(', ')}`);
   console.log(`     Wins by persona: ${Object.entries(byPersona).map(([s, n]) => `${s} ${pct(n, games)}`).join(', ')}`);
@@ -331,6 +384,18 @@ function main() {
     }`,
   );
   for (const line of eventLines(monthEvents, '', 'no check')) console.log(line);
+  // literal-ok: three decimals for a rate a month, display only
+  const rate = (n: number) => (n / Math.max(1, months)).toFixed(3);
+  for (const key of WAVE_TWO) {
+    const { fired, moved } = wave2[key]!;
+    const perGame = Object.entries(moved).map(([what, d]) => `${what} ${(d / games).toFixed(1)}`);
+    console.log(`     Wave 2 ${key}: ${rate(fired)} a month (${fired} in all); a game: ${perGame.join(', ') || 'nothing off the map'} (no check)`);
+  }
+  // literal-ok: the median, the statistic the line is named for
+  const median = (values: number[]) => quantile(values, 0.5);
+  console.log(
+    `     The month after a store fire (${afterFire.mulePrices.length}): MULE price median ${median(afterFire.mulePrices)} (every month ${muleMedian}), plots developed median ${median(afterFire.developed)} (every month ${median(everyDeveloped)}) (no check)`,
+  );
   if (band) {
     const note = `measure only, as if each player had caused ${SIM_TARGETS.forcedAirPoints} air points last month`;
     for (const line of eventLines(forcedMonthEvents, ` in forced ${band.name} air`, note)) console.log(line);

@@ -1,4 +1,4 @@
-import type { AuctionSide, CanRun, CeremonyBeat, DevPlace, Election, EventKey, EventKind, EventWeight, Good, GoodReceipt, Ground, MonthEvent, Office, OfficeResult, Outfit, Phase, ScoreParts, SkipReason, SpecialField, Species, StatusRow, Stock, TaxPromise, Terrain, TileTrait, VoteWeight } from '@mule/engine';
+import type { AuctionSide, CanRun, CeremonyBeat, DevPlace, Election, EventEffect, EventKey, EventKind, EventWeight, Good, GoodReceipt, Ground, MonthEvent, Office, OfficeResult, Outfit, Phase, ScoreParts, SkipReason, SpecialField, Species, StatusRow, Stock, TaxPromise, Terrain, TileTrait, VoteWeight } from '@mule/engine';
 export type { ChatMessage, ClientEnvelope, ServerEnvelope, TableView } from '@tabletop/core/protocol';
 
 /**
@@ -164,6 +164,52 @@ export interface ReachView {
   enabled: boolean;
 }
 
+/** A wolf of a pack on the floor (arcade RULE-4), its position rounded as the colonists' are. */
+export interface FrameWolf {
+  x: number;
+  y: number;
+  /** Circling; crouched to lunge (the warning); lunging; open after a miss; hurt after a strike or a bite. */
+  state: 'prowl' | 'tell' | 'lunge' | 'open' | 'hurt';
+  /** Where it aims, a map position: set while it crouches (tell) and lunges, null otherwise. */
+  target: { x: number; y: number } | null;
+}
+
+/** A pack round a colonist: whose, and the stage of the meeting (the same as that colonist's ColonistView.encounter). */
+export interface FramePack {
+  who: string;
+  stage: 'choose' | 'chase' | 'fight';
+  /** The tick the stage began. */
+  sinceTick: number;
+  /** Where the stage began, a map position: a chase gives up far enough from it, and a fight stays round it. */
+  centre: { x: number; y: number };
+  /** In a fight: the strikes that landed on wolves, and the bites taken. */
+  strikes: number;
+  bites: number;
+  wolves: FrameWolf[];
+}
+
+/**
+ * The moments on the floor this tick (AM-28), straight from the floor's state. Absent from the frame when there is no
+ * pack, no glint, no scramble yet this turn, no bolted MULE and no stunned colonist.
+ */
+export interface FrameMoments {
+  packs: FramePack[];
+  /** The glint lit, by its tile: x and y are the tile's (whole numbers), and it is drawn at the tile's middle (+0.5). */
+  glint: { x: number; y: number; untilTick: number } | null;
+  /**
+   * The turn's corral scramble, from its call to the end of the turn: `over` is null while it runs, then how it ended;
+   * `got` the needers that got a MULE from it, in order; `leftOut` the needers who went without, filled once it is over.
+   */
+  scramble: { untilTick: number; needers: string[]; got: string[]; over: 'empty' | 'time' | 'everyone' | null; leftOut: string[] } | null;
+  /**
+   * The seats whose MULE bolted after a lost fight and is not caught yet, running or standing. The MULE is at that
+   * colonist's `lead`, in map tiles even while its colonist is in the hall.
+   */
+  bolted: string[];
+  /** Colonists stunned by a lost fight: whose, and the tick the stun ends (it is gone from the frame on that tick). */
+  stunned: { who: string; untilTick: number }[];
+}
+
 /** One development tick's positions for every screen, sent beside the full view. */
 export interface DevFrame {
   tick: number;
@@ -181,6 +227,8 @@ export interface DevFrame {
   }[];
   /** The moments' lines everyone sees this tick. */
   beats: string[];
+  /** The moments' state this tick; absent while none is on (AM-28). */
+  moments?: FrameMoments;
 }
 
 export interface MyView {
@@ -474,7 +522,20 @@ export interface EventView {
   /** Whose event it is: a personal event's player, or the player who fell sick. */
   player?: string;
   /** The plots it hit, in the order it reached them, and how many units each gained or lost. */
-  hits: { x: number; y: number; order: number; delta: number }[];
+  hits: {
+    x: number;
+    y: number;
+    order: number;
+    delta: number;
+    /** The special field the plot had until this hit, when the hit removes it: the map keeps its badge until the hit lands. */
+    was?: SpecialField['kind'];
+    /** What the plot is after this hit, when the hit changes what it is: 'plain' (its special field is gone), 'crater', 'idle'. */
+    becomes?: 'plain' | 'crater' | 'idle';
+    /** True when the hit destroyed or took the plot's MULE. */
+    muleLost?: true;
+  }[];
+  /** What it changed off the map, in the order it changed it: a player's (by id), the store's or the colony's. */
+  effects?: EventEffect[];
   /** The phase whose show plays it. */
   phase: Phase;
   /** How big its story is on the TV. */

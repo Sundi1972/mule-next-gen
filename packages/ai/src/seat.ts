@@ -15,7 +15,7 @@ import {
   type GameState,
   type Playbook,
 } from '@mule/engine';
-import type { Act } from './actions.js';
+import type { Act, AiAction } from './actions.js';
 import { Brain, type DecisionRecord, type Pending } from './brain.js';
 import type { Decider, TableTalk } from './decider.js';
 import { AuctionHand, type AuctionDebug } from './hands/auction.js';
@@ -221,8 +221,23 @@ export class AiSeat {
     this.auction.tick(state, dt, act);
   }
 
+  /** On the floor: the glint this seat races now, by the tick it lit, or null (the sim's report). */
+  developRacing(): number | null {
+    return this.develop.racing();
+  }
+
+  /** On the floor: whether this seat is off its errand's walk for a moment (a glint race, a leg by wolf land). */
+  developDetouring(): boolean {
+    return this.develop.detouring();
+  }
+
+  /** On the floor: the scrambles this seat raced this month (the sim's report). */
+  developScramblesRaced(): number {
+    return this.develop.scramblesRaced();
+  }
+
   /** The development steps taken this month, in order. */
-  developLog(): readonly { label: string; ok: boolean; at: number }[] {
+  developLog(): readonly { label: string; ok: boolean; at: number; action: AiAction; why?: string }[] {
     return this.develop.done;
   }
 
