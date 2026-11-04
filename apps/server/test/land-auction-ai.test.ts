@@ -586,5 +586,7 @@ describe('AI seats at the land auction, on the server', () => {
       expect(s.price).toBeLessThanOrEqual(w.limit);
     }
     for (const id of new Set(sold.map((s) => s.buyer))) expect(paid(before, id) - paid(after, id)).toBe(sold.filter((s) => s.buyer === id).reduce((n, s) => n + s.price, 0));
-  });
+    // It plays month 1 at the arcade's 20 Hz tick on the fake clock: about a second alone, but CI's parallel check job
+    // ran it past 5 s.
+  }, 30_000);
 });
