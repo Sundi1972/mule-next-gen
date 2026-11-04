@@ -3,6 +3,7 @@ import {
   advancePhase,
   applyEvents,
   buildEvent,
+  COLONY,
   createGame,
   createRng,
   fundOut,
@@ -87,5 +88,20 @@ describe('the colony fund keeps a ledger', () => {
     const copy = { ...state, treasury: { ...state.treasury, paid: { ...state.treasury.paid } } };
     taxSale(copy, 'brix', 200);
     expect(state.colony!.ledger.in).toEqual({});
+  });
+
+  it("T-AC-28: politics on, each upkeep pays the Federation's grant under 'grant', before the offices are paid; politics off, none", () => {
+    const state = newGame();
+    governedBy(state, 'lena');
+    state.treasury.money = 0;
+    advanceTo(state, 'upkeep');
+    const ledger = state.history.at(-1)!.ledger!;
+    expect(ledger.in.grant).toBe(COLONY.grant.perMonth);
+    expect(ledger.out.officePay).toBe(Math.min(POLITICS.pay.governor, COLONY.grant.perMonth));
+
+    const off = newGame(false);
+    const fund = off.treasury.money;
+    advanceTo(off, 'upkeep');
+    expect(off.treasury.money).toBe(fund);
   });
 });
