@@ -271,6 +271,7 @@ export function WaitWords({ seat, short = false }: { seat: ArcadeSeat; short?: b
 /**
  * The table chat's newest lines, newest first, from the same chat state as the shell's ticker. Each line is cut to one
  * row, or with `wrap` (a narrow column) runs on as one sentence, speaker and words together, over at most three rows.
+ * A line never gives up its rows: a holder short of room cuts the oldest first, at its foot.
  */
 export function ChatTicker({ seat, keep, wrap = false, wide = false }: { seat: ArcadeSeat; keep: number; wrap?: boolean; wide?: boolean }) {
   const { lines } = useTableChat();
@@ -283,7 +284,7 @@ export function ChatTicker({ seat, keep, wrap = false, wide = false }: { seat: A
         return (
           <li
             key={l.id}
-            className={cx('min-w-0', wrap ? 'line-clamp-3 leading-tight' : 'flex items-center gap-1.5 truncate', wide ? 'text-sm' : 'text-[11px]', i === 0 ? 'animate-[show-card-in_0.25s_ease-out] text-ink' : 'text-ink-3')}
+            className={cx('min-w-0 shrink-0', wrap ? 'line-clamp-3 leading-tight' : 'flex items-center gap-1.5 truncate', wide ? 'text-sm' : 'text-[11px]', i === 0 ? 'animate-[show-card-in_0.25s_ease-out] text-ink' : 'text-ink-3')}
             data-testid={`chat-line-${l.id}`}
           >
             <span className={wrap ? 'mr-1 inline-block align-[-3px]' : 'contents'}>

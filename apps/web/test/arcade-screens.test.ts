@@ -629,6 +629,62 @@ describe('C11 (AM-31): the table chat on the walking screen', () => {
     expect(text(html, 'chat-line-1')).toBe('Kai: Crystite is up north');
   });
 
+  /** The fixture's map cut or grown to `w` × `h`: a table of 2–3 seats plays on 13 × 7, of 5–6 on 19 × 11. */
+  const sized = (w: number, h: number): Partial<MuleView> => ({
+    width: w,
+    height: h,
+    tiles: Array.from({ length: w * h }, (_, i) => {
+      const x = i % w;
+      const y = Math.floor(i / w);
+      return TILES.find((t) => t.x === x && t.y === y) ?? { ...TILES.find((t) => t.terrain === 'plains')!, x, y, owner: null, outfit: null };
+    }),
+  });
+
+  it.each([
+    [13, 7],
+    [19, 11],
+  ])('C11 (AM-31): at 844 on a %i × %i map the status is a bar over the map, and the bar carries the newest line', (w, h) => {
+    const html = phone(devView(lenasMe(), sized(w, h)), live(mine(5.5, 4.5)), 844, CHAT);
+    expect(tag(html, 'phone-game')).toMatch(/data-mode="top"/);
+    expect(tag(inside(html, 'phone-status-bar'), 'chat-ticker')).not.toBeNull();
+    expect(tickerLines(html)).toEqual([2]);
+  });
+
+  it('C11 (AM-31): a line from someone not at this table is not drawn, and draws nothing in its place', () => {
+    const stranger: ChatMessage = { id: 9, from: 'zz', text: 'Who am I', at: 0 };
+    for (const html of [phone(devView(), live(mine(5.5, 4.5)), 844, [...CHAT, stranger]), laptop(devView(), live(mine(5.5, 4.5)), [...CHAT, stranger])]) {
+      expect(tickerLines(html)).toEqual(tickerLines(html).length === 1 ? [2] : [2, 1]);
+      expect(html).not.toContain('Who am I');
+    }
+  });
+
+  it('C11 (AM-31): your own map and hall bound their colonists\' bubbles, which they clip; the TV\'s stages draw none', () => {
+    expect(tag(phone(devView(), live(mine(5.5, 4.5))), 'map-stage')).toMatch(/data-bubble-bounds/);
+    expect(tag(phone(devView(), live(mine(4, 6, { space: 'hall' }))), 'hall-stage')).toMatch(/data-bubble-bounds/);
+    expect(tag(laptop(devView(), live(mine(5.5, 4.5))), 'map-stage')).toMatch(/data-bubble-bounds/);
+    const tv = renderToStaticMarkup(createElement(ClientProvider, { client: clientFor(devView(), 'board'), children: createElement(StaticLive, { live: live(null, FRAMED), children: createElement(TvArcade, { game: devView() }) }) }));
+    expect(tv).not.toContain('data-bubble-bounds');
+  });
+
+  it('C11 (AM-31, A-1): while month 1\'s clock waits, the keys hint goes to the right side room, so the wait and the line keep the left', () => {
+    const waiting = phone(devView(lenasMe(), { month: 1, clockWaitsFor: ['s1', 's2'] }), live(mine(5.5, 4.5)), 844, CHAT);
+    expect(tag(inside(waiting, 'phone-status-left'), 'focus-hint')).toBeNull();
+    expect(tag(inside(waiting, 'phone-status-right'), 'focus-hint')).not.toBeNull();
+    const running = phone(devView(), live(mine(5.5, 4.5)), 844, CHAT);
+    expect(tag(inside(running, 'phone-status-left'), 'focus-hint')).not.toBeNull();
+    expect(tag(inside(running, 'phone-status-right'), 'focus-hint')).toBeNull();
+  });
+
+  it('C11 (AM-31): on a short laptop the chat panel folds, its older line first, so Controls stays in the window', () => {
+    const rail = inside(laptop(devView(), live(mine(5.5, 4.5)), CHAT), 'laptop-rail');
+    const panel = /<section class="([^"]*)"[^>]*><header[^>]*><h2[^>]*>Table chat/.exec(rail)?.[1] ?? '';
+    expect(panel).toMatch(/\bmin-h-0\b/);
+    expect(panel).toMatch(/\boverflow-hidden\b/);
+    // Newest first, and no line gives up its rows: the panel folds from the bottom, the older line first.
+    expect(tickerLines(rail)).toEqual([2, 1]);
+    for (const id of [1, 2]) expect(tag(rail, `chat-line-${id}`)).toMatch(/\bshrink-0\b/);
+  });
+
   it('C11 (AM-31): a whisper carries its lock in the ticker', () => {
     const html = phone(devView(), live(mine(5.5, 4.5)), 844, [{ id: 3, from: 's2', to: 's1', text: 'Psst', at: 0 }]);
     expect(text(html, 'chat-line-3')).toBe('Ossa 🔒: Psst');
@@ -680,6 +736,8 @@ describe('C11 (AM-31): the table chat on the walking screen', () => {
     expect(tag(room, 'wait-room')).toMatch(/\bshrink-0\b/);
     expect(tag(room, 'chat-foot')).toMatch(/\bmin-h-0\b/);
     expect(tag(room, 'chat-foot')).toMatch(/\boverflow-hidden\b/);
+    // The room keeps no padding under the line's row, so the row can go to nothing without the room overflowing.
+    expect(tag(html, 'phone-status-left')).toMatch(/\bpb-0\b/);
     // The month's label gives its rows to the wait words, which say it is the first month.
     expect(room).not.toContain('· Development');
     // Once the clock runs, the label is back and the line wraps under the clock.
@@ -787,6 +845,56 @@ describe('C11 (AM-31): a speaking colonist\'s bubble, at that colonist (mounted)
     const { host, unmount } = speak(mine(4, 6, { space: 'hall' }), 's1');
     expect(element(element(host, 'visitor-s1')!, 'chat-bubble-s1')?.textContent).toBe('Race you to the corral');
     unmount();
+  });
+
+  /** Boxes the fake DOM reports, by testid (a prefix for the bubbles), and the stage's search for a bubble. */
+  function boxes(by: Record<string, { left: number; top: number; right: number; bottom: number }>) {
+    const proto = dom.FakeElement.prototype as unknown as { getBoundingClientRect(): object; querySelector(sel: string): unknown };
+    const before = { rect: proto.getBoundingClientRect, query: proto.querySelector };
+    proto.getBoundingClientRect = function (this: InstanceType<Dom['FakeElement']>) {
+      const id = this.getAttribute('data-testid') ?? '';
+      const hit = Object.entries(by).find(([k]) => (k.endsWith('*') ? id.startsWith(k.slice(0, -1)) : id === k))?.[1];
+      const r = hit ?? { left: 0, top: 0, right: 0, bottom: 0 };
+      return { ...r, x: r.left, y: r.top, width: r.right - r.left, height: r.bottom - r.top };
+    };
+    proto.querySelector = function (this: InstanceType<Dom['FakeElement']>, sel: string) {
+      const prefix = /^\[data-testid\^=([\w-]+)\]$/.exec(sel)?.[1];
+      const find = (n: InstanceType<Dom['FakeElement']>): InstanceType<Dom['FakeElement']> | null => {
+        for (const c of n.childNodes) {
+          if (!(c instanceof dom.FakeElement)) continue;
+          if (prefix && (c.getAttribute('data-testid') ?? '').startsWith(prefix)) return c;
+          const deeper = find(c);
+          if (deeper) return deeper;
+        }
+        return null;
+      };
+      return find(this);
+    };
+    return () => Object.assign(proto, { getBoundingClientRect: before.rect, querySelector: before.query });
+  }
+  const at667 = () => createElement(PhoneLandscape, { frame: { w: FRAMES[667].w, h: FRAMES[667].h } });
+
+  it('C11 (AM-31): at 667 a bubble that meets the status bar fades the bar and paints above it', () => {
+    const restore = boxes({ 'phone-status-bar': { left: 200, top: 2, right: 600, bottom: 37 }, 'chat-bubble-*': { left: 300, top: 10, right: 420, bottom: 44 } });
+    const { host, unmount } = speak(mine(5.5, 4.5), 's2', at667);
+    expect(element(host, 'phone-status-bar')!.getAttribute('data-faded')).toBe('true');
+    const walkers = element(host, 'walkers-layer')!;
+    expect(walkers.getAttribute('data-over-bar')).toBe('true');
+    expect(walkers.getAttribute('class')).toMatch(/\bz-\[25\]/);
+    expect(element(host, 'phone-status-bar')!.getAttribute('class')).toMatch(/\bz-20\b/);
+    unmount();
+    restore();
+  });
+
+  it('C11 (AM-31): at 667 a bubble clear of the bar leaves it, and the colonists stay under it', () => {
+    const restore = boxes({ 'phone-status-bar': { left: 200, top: 2, right: 600, bottom: 37 }, 'chat-bubble-*': { left: 300, top: 120, right: 420, bottom: 154 } });
+    const { host, unmount } = speak(mine(5.5, 4.5), 's2', at667);
+    expect(element(host, 'chat-bubble-s2')).not.toBeNull();
+    expect(element(host, 'phone-status-bar')!.getAttribute('data-faded')).toBeNull();
+    expect(element(host, 'walkers-layer')!.getAttribute('data-over-bar')).toBeNull();
+    expect(element(host, 'walkers-layer')!.getAttribute('class')).toMatch(/\bz-\[7\]/);
+    unmount();
+    restore();
   });
 
   it('C11 (AM-31): on the laptop, at the colonist on its map', () => {

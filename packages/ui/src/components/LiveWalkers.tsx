@@ -86,7 +86,7 @@ export interface LiveWalkersProps {
   /** The device time (Date.now) these positions are for, written as each colonist's data-at. */
   at?: number;
   /** Wraps each colonist's mark, for a screen that hangs something on it (a speech bubble). */
-  wrapCreature?: CreatureWrap;
+  wrapCreature?: CreatureWrap | undefined;
 }
 
 /**
