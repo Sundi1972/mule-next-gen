@@ -363,6 +363,14 @@ export const DEV_STEER = {
   botCounterPauseSeconds: 0.5,
   /** An AI colonist joins a glint race or the scramble only if its errand still fits the time left after the detour. */
   botsSpareTime: true as boolean,
+  /** An AI colonist drops its errand for the pub once the clock shows no more than its walk there and this many seconds. */
+  botPubMarginSeconds: 2,
+  /** Ticks an AI colonist may push its stick without moving before it gives that step of its errand up. */
+  botStuckTicks: 20,
+  /** An AI colonist installing on a lake plot from the shore stands this far from the shore tile's middle towards the lake, in tiles. */
+  botShoreTiles: 0.3,
+  /** The sim's stand-in for the host's Continue (AM-3): month 1's waiting clock starts after this many seconds anyway. */
+  simHostContinueSeconds: 120,
   /** Share of what a MULE cost that the pub pays back when its owner walks in leading it. */
   pubLeadRefund: 0,
   /** A re-outfit's price, as a share of the outfitter's price for the new good: 1 is the outfit price. */

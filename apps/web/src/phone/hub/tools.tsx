@@ -7,6 +7,7 @@ import { usePhoneGame } from '../game';
 import { GroundCard } from '../ground';
 import { SellMap } from '../Sell';
 import { MapFit, useWide } from '../Shell';
+import { OnlyYou } from './OnlyYou';
 import { useToday } from './state';
 
 /* Today's map tools: Look, the geo drone (planning's drone flow) and selling a plot (the Sell form's map). */
@@ -85,43 +86,69 @@ export function DroneMap() {
   );
 }
 
-export function DroneRail() {
+/**
+ * The drone in the rail while it is open: what to tap, that only you see the result, and the plot last picked. It takes
+ * the rail's top, the desks under it, until you send it or pick another tool.
+ */
+export function DronePanel() {
   const { view } = usePhoneGame();
   const { ordered, chosen } = useDrone();
   const last = chosen.at(-1);
   const lastTile = last ? tileAt(view, last.x, last.y) : undefined;
   return (
-    <section className="flex flex-col gap-1.5" data-testid="drone">
-      <p className="text-xs text-ink-2">
-        {ordered
-          ? 'Your drone is on its way. Only you will see what it finds, in time for the land grant.'
-          : `Tap up to ${DEVELOPMENT.dronePlots} free plots. The drone reads their ground from orbit for ${DEVELOPMENT.droneFee} cr, before anyone claims them.`}
-      </p>
-      {lastTile && (
-        <div className="flex flex-col gap-0.5 border-t border-holo-faint pt-2">
-          <span className="label-caps flex justify-between">
-            Plot {plotName(lastTile.x, lastTile.y)} <span className="text-holo">{ordered ? 'ON ITS WAY' : 'PICKED'}</span>
+    <section className="relative rounded-control border border-holo bg-panel p-2 @min-[1100px]/shell:p-3" data-testid="drone-panel">
+      <div className="flex flex-col gap-1 @min-[1100px]/shell:gap-1.5" data-testid="drone">
+        <span className="flex items-center gap-1.5">
+          <span className="font-display text-sm font-semibold @min-[1100px]/shell:text-lg" data-testid="drone-hint">
+            {ordered ? 'Your drone is on its way' : `Tap up to ${DEVELOPMENT.dronePlots} free plots`}
           </span>
-          <span className="font-display text-lg font-semibold">{TERRAIN_NAME[lastTile.terrain]}</span>
-          <SpecialLine special={lastTile.special} />
-          <span className="text-xs text-ink-2" data-testid="terrain-hint">
-            {TERRAIN_ODDS[lastTile.terrain]}
+          <OnlyYou />
+        </span>
+        <span className="text-[11px] leading-snug text-ink-2 @min-[1100px]/shell:text-sm">
+          {ordered
+            ? 'Only you see what it finds, when the land grant starts.'
+            : `The drone reads their ground from orbit for ${DEVELOPMENT.droneFee} cr, before anyone claims them. Only you see what it finds, at the land grant.`}
+        </span>
+        {lastTile && (
+          <span className="flex flex-col gap-0.5 border-t border-holo-faint pt-1 text-[11px] leading-snug @min-[1100px]/shell:text-sm" data-testid="drone-pick">
+            <strong className="font-semibold">
+              Plot {plotName(lastTile.x, lastTile.y)} · {TERRAIN_NAME[lastTile.terrain]}
+            </strong>
+            <SpecialLine special={lastTile.special} />
+            <span className="text-ink-2" data-testid="terrain-hint">
+              {TERRAIN_ODDS[lastTile.terrain]}
+            </span>
           </span>
-        </div>
-      )}
+        )}
+      </div>
     </section>
   );
 }
 
-export function DroneAction() {
+/** Send the drone: the button counts the plots picked, and while one more is free to add, says so. */
+export function DroneSend() {
   const client = useClient();
   const { self } = usePhoneGame();
   const { ordered, picked } = useDrone();
   if (ordered) return null;
+  const left = DEVELOPMENT.dronePlots - picked.length;
   return (
-    <Button size="md" className="w-full px-2" disabled={picked.length === 0 || self.money < DEVELOPMENT.droneFee} onClick={() => client.intent({ type: 'drone', plots: picked })}>
-      {picked.length === 0 ? 'Pick a free plot' : `Send the drone · ${DEVELOPMENT.droneFee} cr`}
-    </Button>
+    <div className="relative flex flex-col gap-1">
+      <Button
+        size="md"
+        className="w-full whitespace-nowrap px-1.5 text-xs! tracking-tight @min-[1100px]/shell:text-base! @min-[1100px]/shell:tracking-normal"
+        disabled={picked.length === 0 || self.money < DEVELOPMENT.droneFee}
+        onClick={() => client.intent({ type: 'drone', plots: picked })}
+        data-testid="drone-send"
+      >
+        {picked.length === 0 ? 'Pick a free plot for the drone' : `Send the drone · ${picked.length} of ${DEVELOPMENT.dronePlots} plots · ${DEVELOPMENT.droneFee} cr`}
+      </Button>
+      {picked.length > 0 && left > 0 && (
+        <span className="text-[11px] leading-snug text-warn @min-[1100px]/shell:text-sm" data-testid="drone-one-more">
+          Pick {left} more: {left === 1 ? 'it costs' : 'they cost'} nothing extra.
+        </span>
+      )}
+    </div>
   );
 }
 
