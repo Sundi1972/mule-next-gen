@@ -394,7 +394,7 @@ function shipQuote(state: GameState, good: Good): number[] {
  * 1's waiting clock (`devEndsAt` null) ends no turn by time.
  */
 export function aiTurnOver(doneDeveloping: boolean, devEndsAt: number | null, at: number): boolean {
-  throw new Error('NotImplemented');
+  return doneDeveloping || (devEndsAt !== null && devEndsAt <= at);
 }
 
 export class MuleGame implements Game<MuleIntent, MuleView> {
@@ -1340,7 +1340,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     steering.at = at;
     const secondsLeft = Math.max(0, this.secondsLeft(at));
     const inputs: Record<string, FloorInput> = {};
-    for (const s of this.seats) inputs[s.id] = this.away.has(s.id) ? IDLE_INPUT : this.seatInput(steering, s.id, tick, secondsLeft);
+    for (const s of this.seats) inputs[s.id] = this.away.has(s.id) ? IDLE_INPUT : this.seatInput(steering, s.id, tick, at, secondsLeft);
     const before = Object.values(inputs).some((i) => i.act) ? stableJson(state) : null;
     const waited = this.clockWaits;
     const { floor, presses } = stepTick(steering.floor, state, inputs, steering.cfg, secondsLeft, (seat, reach) => this.refusal(seat, reach));
@@ -1371,13 +1371,15 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
    * seat's from its hand (C9), computed here inside the tick's recorded step, so a replay computes it again, from the
    * floor before the step and the seconds the tick's presses resolve at, as the sim calls it (HC-4). `held` is the
    * refusal's own test, so the hand never reaches for a press `refusal` would turn down; the press still goes through
-   * it. A seat whose turn is over stands still.
+   * it. A seat whose turn is over by the tick's own time `at` stands still (aiTurnOver), however late the tick runs.
    */
-  private seatInput(steering: Steering, seatId: string, tick: number, secondsLeft: number): FloorInput {
+  private seatInput(steering: Steering, seatId: string, tick: number, at: number, secondsLeft: number): FloorInput {
     const ai = this.ai.get(seatId);
     if (!ai) return steering.inputs.take(seatId, tick);
-    if (this.doneDeveloping(seatId)) return IDLE_INPUT;
-    return ai.developSteer(this.requireState(), steering.floor, secondsLeft, steering.cfg, this.clockWaits && this.isIn(seatId));
+    const state = this.requireState();
+    const done = !!state.players.find((p) => p.id === seatId)?.doneDeveloping;
+    if (state.phase === 'development' && aiTurnOver(done, this.devEndsAt, at)) return IDLE_INPUT;
+    return ai.developSteer(state, steering.floor, secondsLeft, steering.cfg, this.clockWaits && this.isIn(seatId));
   }
 
   /** Why the rules hold back a press the floor would make, or null: in month 1 a seat already in waits (AM-3). */
