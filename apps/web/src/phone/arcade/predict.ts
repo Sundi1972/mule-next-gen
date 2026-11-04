@@ -193,3 +193,7 @@ export function shownAt(p: Prediction, nowMs: number, cfg: FloorConfig): Shown |
   const dy = ease ? ease.dy * left : 0;
   return { x: me.x + dx, y: me.y + dy, space: me.space, facing: me.facing, moving: me.moving, lead: me.lead && { ...me.lead, x: me.lead.x + dx, y: me.lead.y + dy } };
 }
+
+/** Not built yet: the assay's hold (its T-AC-10 case first). */
+export const assayTick = (_p: Prediction, _assayUntilMs: number, _nowMs: number, _serverNowMs: number, _rttMs: number, _msPerTick: number): number | null => null;
+export const holdUntil = (p: Prediction, _tick: number | null): Prediction => p;

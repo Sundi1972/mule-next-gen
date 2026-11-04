@@ -1,7 +1,7 @@
-import { buildFloor, createGame, DEV_STEER, floorConfig, stepFloor, type DevFloor, type FloorInput, type GameState, type Terrain } from '@mule/engine';
+import { applyReach, buildFloor, createGame, DEV_STEER, floorConfig, stepFloor, type DevFloor, type FloorInput, type GameState, type Terrain } from '@mule/engine';
 import type { DevFrame, MuleView, TileView } from '@mule/protocol';
 import { describe, expect, it } from 'vitest';
-import { advanceTo, markStale, phoneTick, predictWorld, receiveFrame, shownAt, startPrediction, steerFrom, type Prediction, type PredictWorld } from '../src/phone/arcade/predict';
+import { advanceTo, assayTick, holdUntil, markStale, phoneTick, predictWorld, receiveFrame, shownAt, startPrediction, steerFrom, type Prediction, type PredictWorld } from '../src/phone/arcade/predict';
 import { gateSteer, quantise, startGate, type SteerGate } from '../src/phone/arcade/steer';
 
 /**
@@ -87,15 +87,30 @@ interface Run {
   ahead: number;
   /** Lena's frames that showed her in the hall. */
   inHall: number;
+  /** The copy's tick and where it stood, at every phone step after its own view said it assays; and the assay's last tick. */
+  trace: { tick: number; x: number; fixes: number }[];
+  assayUntilTick: number | null;
+  /** Where the server holds her while she assays. */
+  heldX: number | null;
 }
+
+interface TurnOptions {
+  spike?: { fromMs: number; toMs: number; spikeMs: number };
+  stick?: [number, number, number][];
+  /** When the phone presses the button, an `act` with no tick: the server applies it at its next step. */
+  pressAt?: number;
+  /** Whether the phone holds its copy still for the assay its own view announces. */
+  hold?: boolean;
+}
+
 
 /**
  * One scripted turn: the server steps every 50 ms, applying each of Lena's inputs from the tick it is stamped with (one
  * that arrives after its tick from the next), and sends a frame each tick; the phone steps its copy every 16 ms and
  * sends its stick on change. Every message takes `oneWayMs`, plus `spikeMs` for those in the spike window.
  */
-function playTurn(oneWayMs: number, spike: { fromMs: number; toMs: number; spikeMs: number } | null = null): Run {
-  const state = game();
+function playTurn(oneWayMs: number, { spike, stick = STICK, pressAt, hold = true }: TurnOptions = {}): Run {
+  let state = game();
   const cfg = floorConfig();
   let floor = buildFloor(state, cfg);
   const world: PredictWorld = predictWorld(viewOf(state), { id: 'lena', carriedMule: null }, cfg);
@@ -104,12 +119,17 @@ function playTurn(oneWayMs: number, spike: { fromMs: number; toMs: number; spike
 
   const toPhone: { due: number; frame: DevFrame }[] = [];
   const toServer: { due: number; tick: number; x: number; y: number }[] = [];
+  /** Your own seat's full view, when it carries the assay's end (server ms; the server's tick 0 is at 0 ms here). */
+  const views: { due: number; assayUntil: number }[] = [];
+  let acted: number | null = null;
+  let pressed = false;
   /** Lena's inputs as the server has them, by the tick each applies from. */
   const held: { tick: number; x: number; y: number }[] = [];
 
   let p: Prediction = startPrediction();
   let gate: SteerGate = startGate();
-  const run: Run = { compared: 0, corrected: 0, snapped: 0, worst: 0, ahead: 0, inHall: 0 };
+  const run: Run = { compared: 0, corrected: 0, snapped: 0, worst: 0, ahead: 0, inHall: 0, trace: [], assayUntilTick: null, heldX: null };
+  let told = false;
   let nextServerAt = TICK;
 
   for (let now = 0; now <= TURN_MS; now += 16) {
@@ -120,6 +140,17 @@ function playTurn(oneWayMs: number, spike: { fromMs: number; toMs: number; spike
       const mine = held.filter((h) => h.tick <= floor.tick).at(-1);
       const inputs: Record<string, FloorInput> = { lena: { x: mine?.x ?? 0, y: mine?.y ?? 0, act: false } };
       floor = stepFloor(floor, state, inputs, TICK, cfg);
+      // An act that has arrived counts once, at the step after it, at the stepped position (RULE-1); its view goes
+      // with the tick after (spec AM-21: an act is quiet).
+      if (acted !== null && acted <= nextServerAt) {
+        acted = null;
+        state = structuredClone(state);
+        floor = applyReach(state, floor, 'lena', 30, cfg).floor;
+        const until = floor.colonists[0]!.assayUntilTick;
+        run.assayUntilTick = until;
+        run.heldX = floor.colonists[0]!.x;
+        if (until !== null) views.push({ due: nextServerAt + TICK + delay(nextServerAt), assayUntil: until * TICK });
+      }
       toPhone.push({ due: nextServerAt + delay(nextServerAt), frame: frameOf(floor) });
       nextServerAt += TICK;
     }
@@ -131,9 +162,19 @@ function playTurn(oneWayMs: number, spike: { fromMs: number; toMs: number; spike
       run.compared += p.stats.compared - before.compared;
     }
     toPhone.splice(0, toPhone.length, ...toPhone.filter((m) => m.due > now));
+    for (const v of views.filter((v) => v.due <= now)) {
+      told = true;
+      if (hold) p = holdUntil(p, assayTick(p, v.assayUntil, now, now, 2 * oneWayMs, TICK));
+    }
+    views.splice(0, views.length, ...views.filter((v) => v.due > now));
     const target = phoneTick(p, now, 2 * oneWayMs, cfg);
     if (target !== null) p = advanceTo(p, target, world);
-    const [, sx, sy] = STICK.filter(([at]) => at <= now).at(-1)!;
+    if (told && p.me) run.trace.push({ tick: p.tick, x: p.me.x, fixes: p.stats.corrected + p.stats.snapped });
+    if (pressAt !== undefined && !pressed && now >= pressAt) {
+      pressed = true;
+      acted = now + delay(now);
+    }
+    const [, sx, sy] = stick.filter(([at]) => at <= now).at(-1)!;
     const sent = gateSteer(gate, quantise(sx, sy), now);
     gate = sent.gate;
     if (sent.send && p.me) {
@@ -163,10 +204,42 @@ describe('T-AC-10: the phone predicts its own colonist (RULE-10)', () => {
   });
 
   it('T-AC-10: a latency spike lands inputs after their tick: the copy eases back to the server within snapTiles, never snapping', () => {
-    const run = playTurn(100, { fromMs: 6_600, toMs: 7_300, spikeMs: 80 });
+    const run = playTurn(100, { spike: { fromMs: 6_600, toMs: 7_300, spikeMs: 80 } });
     expect(run.corrected).toBeGreaterThan(0);
     expect(run.snapped).toBe(0);
     expect(run.worst).toBeLessThanOrEqual(DEV_STEER.snapTiles);
+  });
+
+  /** Lena walks left from the store's left door over the plains, pushing on, and presses ANALYSE a second in. */
+  const ANALYSE_WALK: [number, number, number][] = [
+    [0, 0, 0],
+    [300, -1, 0],
+  ];
+
+  it('T-AC-10: a press to analyse: once her own view says she assays, the copy stands until assayUntil, then walks on', () => {
+    const run = playTurn(100, { stick: ANALYSE_WALK, pressAt: 1_000 });
+    const until = run.assayUntilTick!;
+    expect(until).toBeGreaterThan(100);
+    // From her view on, every tick before the assay's end stands where the server holds her: one place, whatever the stick.
+    const held = run.trace.filter((t) => t.tick < until);
+    expect(held.length).toBeGreaterThan(50);
+    // The steps it took before the view came are put right by the next frames; after that it stands where the server
+    // holds her, and no frame has anything more to put right.
+    const settled = held.slice(Math.ceil((2 * 100 + DEV_STEER.correctMs) / 16));
+    expect(new Set(settled.map((t) => t.x.toFixed(6))).size).toBe(1);
+    expect(Math.abs(settled[0]!.x - run.heldX!)).toBeLessThanOrEqual(0.01);
+    expect(settled.at(-1)!.fixes).toBe(settled[0]!.fixes);
+    // Then it walks on, left, as the stick still says.
+    const after = run.trace.filter((t) => t.tick > until + 10);
+    expect(after.at(-1)!.x).toBeLessThan(settled[0]!.x - 0.5);
+    expect(run.snapped).toBeLessThanOrEqual(1);
+  });
+
+  it('T-AC-10 (negative): without the hold the copy walks on through the assay and every frame puts it back', () => {
+    const run = playTurn(100, { stick: ANALYSE_WALK, pressAt: 1_000, hold: false });
+    const held = run.trace.filter((t) => t.tick < run.assayUntilTick!);
+    expect(held.at(-1)!.fixes - held[0]!.fixes).toBeGreaterThan(50);
+    expect(Math.abs(held.at(-1)!.x - run.heldX!)).toBeGreaterThan(DEV_STEER.snapTiles / 2);
   });
 
   /** A phone that has stepped its copy to tick 40 walking left, from a first frame at tick 20. */
