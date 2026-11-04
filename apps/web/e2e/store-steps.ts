@@ -1058,26 +1058,18 @@ function seatSnapshot(server: MuleServer, code: string, seat: string): string {
  * UBER-AC-1 and B-AC-1: one phone held sideways at 667×375, played with only the stick and the button (steerTo and
  * throughDoor `via: 'stick'`, pressAct `via: 'button'`): in through the store's door, buy at the corral, outfit for
  * Energy, out through a door with the MULE on its lead, install on her own plot, back in and end at the pub, the button
- * saying each step before it and the server's money and plot after each press. The phone's arcade screen reads nothing
- * of a TV (phone/arcade/), so the TV watching changes nothing on it; at each stop the TV must draw Heiko where the
- * server's floor has him (UBER-AC-1's "on the TV in the same room every colonist is seen moving"). Negative: a press with
- * nothing in reach changes nothing on the server. Mia stays connected, so a turn is not over when Heiko's is. Ends with
- * Heiko at the pub.
+ * saying each step before it and the server's money and plot after each press, with no TV at the table: a phone alone
+ * plays the whole turn (UBER-AC-1's TV half, every colonist drawn where the server has it, is B-AC-2's). Negative: a
+ * press with nothing in reach changes nothing on the server. Mia stays connected, so a turn is not over when Heiko's is.
+ * Ends with Heiko at the pub.
  */
 export async function theWholeErrandByStickAndButton(t: ArcadeTable): Promise<string> {
   const { heiko: phone, server, code } = t;
-  check(t.tv, 'UBER-AC-1: a TV watches the turn');
+  check(t.tv === null, 'UBER-AC-1, B-AC-1: no TV at this table');
   const seat = 's1';
   const steps: string[] = [];
   const stick = { via: 'stick' } as const;
   await phone.setViewportSize(PHONE_SMALL.viewport);
-  /** UBER-AC-1: at a stop, the TV draws Heiko where the server's floor has him. */
-  const tvSees = async (what: string) => {
-    const at = onFloor(server, code, seat);
-    const drawn = await tvDrawsAt(t.tv!, seat, at);
-    check(drawn.ok, `UBER-AC-1: ${what}, the TV draws Heiko at ${drawn.read}, the server has ${where(at)}`);
-    steps.push(`TV ${what}`);
-  };
   const money = () => playerOf(server, code, seat).money;
 
   // In through the door with the button.
@@ -1086,7 +1078,6 @@ export async function theWholeErrandByStickAndButton(t: ArcadeTable): Promise<st
   const inside = await floorWhen(phone, server, code, seat, (c) => c.space === 'hall');
   check(inside.space === 'hall', `B-AC-1: ENTER STORE takes Heiko into the hall, got ${where(inside)}`);
   steps.push('in');
-  await tvSees('in the hall');
 
   // Negative: on the open walkway the button is dim, and a press changes nothing.
   const walk = HALL.floor[0]!;
@@ -1134,7 +1125,6 @@ export async function theWholeErrandByStickAndButton(t: ArcadeTable): Promise<st
   const lead = (steeredOf(server, code).steering!.floor.colonists.find((c) => c.id === seat) as unknown as { lead: { good: string | null } | null }).lead;
   check(out.space === 'map' && lead?.good === 'energy', `B-AC-1: out on the map with the Energy MULE on its lead, got ${where(out)}, lead ${JSON.stringify(lead)}`);
   steps.push(`out at ${where(out)}`);
-  await tvSees('out on the map with the MULE');
 
   // Install on her own plot.
   await steerTo(phone, server, code, seat, plotCentre(plot.x, plot.y), stick);
@@ -1144,7 +1134,6 @@ export async function theWholeErrandByStickAndButton(t: ArcadeTable): Promise<st
   const tile = gameOf(server, code).state.tiles.find((k) => k.x === plot.x && k.y === plot.y)!;
   check(installed.carriedMule === null && tile.outfit === 'energy', `B-AC-1: INSTALL puts the Energy MULE on ${plot.x},${plot.y}, outfit ${tile.outfit}, MULE ${installed.carriedMule}`);
   steps.push(`installed on ${plot.x},${plot.y}`);
-  await tvSees('at the plot');
 
   // Back in and end at the pub.
   await throughDoor(phone, server, code, seat, undefined, stick);
@@ -1157,24 +1146,6 @@ export async function theWholeErrandByStickAndButton(t: ArcadeTable): Promise<st
   check(gameOf(server, code).state.phase === 'development', "B-AC-1: Mia's turn goes on: development is not over");
   steps.push(`pub ${m2} → ${done.money}`);
   return steps.join('; ');
-}
-
-/** How near the TV's drawing must come to a standing colonist, in its space's units: well under a tile or a hall step. */
-const TV_SEES_WITHIN = 0.25;
-
-/**
- * Waits up to a second for the TV to draw `seat`'s colonist in `at`'s space within TV_SEES_WITHIN of it, the colonist
- * standing: the TV draws RULE-10's interpolateMs behind the floor, so a standing colonist is where it settles.
- */
-async function tvDrawsAt(tv: Page, seat: string, at: FloorColonist): Promise<{ ok: boolean; read: string }> {
-  let read = 'nothing';
-  for (const end = Date.now() + 1_000; Date.now() < end; await tv.waitForTimeout(50)) {
-    const d = ((await tv.evaluate(TV_DRAWS)) as Record<string, { space: string; x: number; y: number }>)[seat];
-    if (!d) continue;
-    read = `${d.space} ${d.x.toFixed(2)},${d.y.toFixed(2)}`;
-    if (d.space === at.space && Math.hypot(d.x - at.x, d.y - at.y) <= TV_SEES_WITHIN) return { ok: true, read };
-  }
-  return { ok: false, read };
 }
 
 /** Each seat's colonist on the server's floor, by the ms it was read at. */
