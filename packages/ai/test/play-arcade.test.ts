@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   advancePhase,
   applyReach,
@@ -50,26 +50,35 @@ function steered<T>(body: () => T): T {
   }
 }
 
+/**
+ * Hands the event loop to vitest's worker. A game is played in one synchronous go, and vitest's runner moves from one
+ * case to the next without a macrotask between them, so a file of game loops can hold the worker past the 60 s its
+ * RPC to the runner waits for an answer (CI run 41875028114: "Timeout calling onTaskUpdate", under every package's
+ * suite at once). So every loop of games here yields between games, and every case yields after it.
+ */
+const yieldToWorker = () => new Promise<void>((r) => setImmediate(r));
+afterEach(yieldToWorker);
+
 /** The first `phases` development turns of AI-only games from seed 1 on, each the four seats' turns of one month. */
-function steeredTurns(phases: number): DevTurn[][] {
-  return steered(() => {
-    const out: DevTurn[][] = [];
-    for (let seed = 1; out.length < phases; seed++) {
-      const { turns } = playGame(seed, seatsFor(seed));
-      const months = [...new Set(turns.map((t) => t.month))];
-      for (const m of months) if (out.length < phases) out.push(turns.filter((t) => t.month === m));
-    }
-    return out;
-  });
+async function steeredTurns(phases: number): Promise<DevTurn[][]> {
+  const out: DevTurn[][] = [];
+  for (let seed = 1; out.length < phases; seed++) {
+    const { turns } = steered(() => playGame(seed, seatsFor(seed)));
+    const months = [...new Set(turns.map((t) => t.month))];
+    for (const m of months) if (out.length < phases) out.push(turns.filter((t) => t.month === m));
+    await yieldToWorker();
+  }
+  return out;
 }
 
 /** The moments of the first `phases` development phases of AI-only games from seed 1 on, as steeredTurns plays them. */
-function steeredMoments(phases: number): FloorMomentCounts[] {
-  return steered(() => {
-    const out: FloorMomentCounts[] = [];
-    for (let seed = 1; out.length < phases; seed++) out.push(...playGame(seed, seatsFor(seed)).moments.slice(0, phases - out.length));
-    return out;
-  });
+async function steeredMoments(phases: number): Promise<FloorMomentCounts[]> {
+  const out: FloorMomentCounts[] = [];
+  for (let seed = 1; out.length < phases; seed++) {
+    out.push(...steered(() => playGame(seed, seatsFor(seed))).moments.slice(0, phases - out.length));
+    await yieldToWorker();
+  }
+  return out;
 }
 
 /** Turns the spare-time negative plays at the hungry walk: the more turns, the more late glints to race. */
@@ -78,8 +87,8 @@ const HUNGRY_TURNS = 60;
 const sum = (counts: readonly FloorMomentCounts[], key: keyof FloorMomentCounts) => counts.reduce((n, c) => n + c[key], 0);
 
 describe('the AI walks the floor, and the sim plays it (arcade C9, C10)', () => {
-  it('T-AC-5 (AM-26): in 20 seeded AI-only turns every AI colonist reaches the pub within the turn, but where a wolf\'s bite cost it the pub', { timeout: 120_000 }, () => {
-    const phases = steeredTurns(20);
+  it('T-AC-5 (AM-26): in 20 seeded AI-only turns every AI colonist reaches the pub within the turn, but where a wolf\'s bite cost it the pub', { timeout: 120_000 }, async () => {
+    const phases = await steeredTurns(20);
     expect(phases).toHaveLength(20);
     for (const [i, seats] of phases.entries()) {
       expect(seats, `turn ${i}: one record a seat`).toHaveLength(LEVELS.length);
@@ -101,8 +110,8 @@ describe('the AI walks the floor, and the sim plays it (arcade C9, C10)', () => 
     expect(installs, `MULEs installed in ${phases.length} turns`).toBeGreaterThan(phases.length);
   });
 
-  it('T-AC-5: the moments happen in AI turns: packs met and played out, glints lit and won', { timeout: 120_000 }, () => {
-    const moments = steeredMoments(20);
+  it('T-AC-5: the moments happen in AI turns: packs met and played out, glints lit and won', { timeout: 120_000 }, async () => {
+    const moments = await steeredMoments(20);
     expect(moments).toHaveLength(20);
     expect(sum(moments, 'glints'), 'glints lit in 20 turns').toBeGreaterThanOrEqual(5);
     expect(sum(moments, 'packs'), 'packs met').toBeGreaterThan(0);
@@ -110,31 +119,31 @@ describe('the AI walks the floor, and the sim plays it (arcade C9, C10)', () => 
     expect(sum(moments, 'glintsWon'), 'glints won').toBeGreaterThan(0);
   });
 
-  it('T-AC-5 negative: with botsSpareTime off, bots race glints they have no time for and miss the pub', { timeout: 240_000 }, () => {
+  it('T-AC-5 negative: with botsSpareTime off, bots race glints they have no time for and miss the pub', { timeout: 240_000 }, async () => {
     // At the live walk (Heiko, 4 Nov) a race seldom costs the pub: 20 turns showed none with the margin off, 60 two.
     // So the case walks every colonist the map at the pace of one with no Food (DEV_WALK.hungerPaceMin), over 60 turns:
     // the margin's own setting is the one thing that differs between the two runs, and only off do turns miss.
     const saved = { spare: DEV_STEER.botsSpareTime, map: DEV_STEER.mapTilesPerSecond };
     DEV_STEER.mapTilesPerSecond = saved.map * DEV_WALK.hungerPaceMin;
-    const missed = () => steeredTurns(HUNGRY_TURNS).flat().filter((t) => t.pubAt === null && !t.biteCostPub).length;
+    const missed = async () => (await steeredTurns(HUNGRY_TURNS)).flat().filter((t) => t.pubAt === null && !t.biteCostPub).length;
     try {
-      expect(missed(), 'with the margin: AI turns that missed the pub with no excuse').toBe(0);
+      expect(await missed(), 'with the margin: AI turns that missed the pub with no excuse').toBe(0);
       DEV_STEER.botsSpareTime = false;
-      expect(missed(), 'without it: AI turns that missed the pub with no excuse').toBeGreaterThan(0);
+      expect(await missed(), 'without it: AI turns that missed the pub with no excuse').toBeGreaterThan(0);
     } finally {
       DEV_STEER.botsSpareTime = saved.spare;
       DEV_STEER.mapTilesPerSecond = saved.map;
     }
   });
 
-  it('T-AC-5 negative: with a store floor that takes longer than the clock to cross, no colonist reaches the pub', { timeout: 120_000 }, () => {
+  it('T-AC-5 negative: with a store floor that takes longer than the clock to cross, no colonist reaches the pub', { timeout: 120_000 }, async () => {
     const saved = { floorSeconds: DEV_STEER.floorSeconds, waits: DEV_STEER.month1WaitsForFirstMule };
     // The pub is three hall units in from the right door, a third of the door-to-corral walk: four clocks a crossing.
     DEV_STEER.floorSeconds = DEVELOPMENT.fullSeconds * 4;
     // Month 1's waiting clock would give them the time: this is the clock alone.
     DEV_STEER.month1WaitsForFirstMule = false;
     try {
-      const [first] = steeredTurns(1);
+      const [first] = await steeredTurns(1);
       expect(first!.map((t) => t.pubAt)).toEqual(LEVELS.map(() => null));
     } finally {
       DEV_STEER.floorSeconds = saved.floorSeconds;
@@ -167,7 +176,7 @@ function simGames(): Promise<SimSample> {
       const g = steered(() => playGame(i + 1, simSeats(4, 'trader', i + 1, null), { politics: true }));
       out.moments.push(...g.moments);
       out.turns.push(...g.turns);
-      await new Promise((r) => setImmediate(r));
+      await yieldToWorker();
     }
     return out;
   })();
@@ -268,7 +277,7 @@ describe('the AI on a lake plot (AM-18)', () => {
 });
 
 describe('the sim referees the floor as the server will (arcade C10)', () => {
-  it('C10: a pub press pays exactly what game.ts pubPayoutFor says, and the button said so first', { timeout: 120_000 }, () => {
+  it('C10: a pub press pays exactly what game.ts pubPayoutFor says, and the button said so first', { timeout: 120_000 }, async () => {
     steered(() => {
       // One press, by hand: a colonist standing in the pub with 30 s on the clock.
       const state = createGame({ seed: 4, players: LEVELS.map((_, i) => ({ id: `ai${i}`, name: `AI ${i + 1}`, isAi: true })) });
@@ -286,7 +295,7 @@ describe('the sim referees the floor as the server will (arcade C10)', () => {
     });
     // And in played turns: every pub paid what its button quoted, from the same pubPayoutFor. Every turn pressed one,
     // but where a wolf's bite cost it the pub (T-AC-5's one excuse, AM-26).
-    const turns = steeredTurns(12).flat();
+    const turns = (await steeredTurns(12)).flat();
     for (const t of turns) expect(t.payout, `month ${t.month} ${t.id}`).toBe(t.quoted);
     expect(turns.filter((t) => t.quoted === null && !t.biteCostPub).map((t) => `month ${t.month}, ${t.id}`), 'no pub pressed, no excuse').toEqual([]);
     expect(turns.filter((t) => t.quoted !== null).length, 'pubs pressed').toBeGreaterThan(turns.length / 2);
@@ -333,7 +342,7 @@ describe('the sim referees the floor as the server will (arcade C10)', () => {
     }
   });
 
-  it('AM-3: in month 1 the clock stands until every seat has its first MULE in, and runs at once without the rule', { timeout: 120_000 }, () => {
+  it('AM-3: in month 1 the clock stands until every seat has its first MULE in, and runs at once without the rule', { timeout: 120_000 }, async () => {
     const month1 = (waits: boolean) => {
       const saved = DEV_STEER.month1WaitsForFirstMule;
       DEV_STEER.month1WaitsForFirstMule = waits;
@@ -344,6 +353,7 @@ describe('the sim referees the floor as the server will (arcade C10)', () => {
       }
     };
     const waited = month1(true);
+    await yieldToWorker();
     // The seats got in by themselves (no host's stand-in), and the time they took stood off the clock.
     expect(waited.month1).toMatchObject({ continued: false });
     expect(waited.month1!.waited).toBeGreaterThan(0);
@@ -352,6 +362,7 @@ describe('the sim referees the floor as the server will (arcade C10)', () => {
     // The hands' `held` is the referee's own refusal: a seat already in never presses one, so none is refused.
     expect(waited.turns.map((t) => t.refused)).toEqual(waited.turns.map(() => 0));
     expect(month1(false).month1).toBeNull();
+    await yieldToWorker();
     // While ai3 stands idle, never in, the clock waits; the others, told nothing is held, press what it refuses: each
     // refused press is counted, per turn (§4).
     const original = AiSeat.prototype.developSteer;
@@ -384,7 +395,7 @@ type Leg = 'corral' | 'outfitter' | 'plot' | 'pub' | 'mule';
  * moment: wolves, a bite, a stun, a bolted MULE, pelts to sell, a glint race, a leg by wolf land) are left out: their
  * time is not the walk's.
  */
-function muleWalks(games: number): Record<Leg, LegTime[]> {
+async function muleWalks(games: number): Promise<Record<Leg, LegTime[]>> {
   const out: Record<Leg, LegTime[]> = { corral: [], outfitter: [], plot: [], pub: [], mule: [] };
   type Trip = { at: number; c: FloorColonist; analysed: number; held: boolean; bought?: number; outfitted?: number; good?: Outfit; outfits?: Map<number, Outfit | null> };
   type PubWalk = { at: number; index: number; pause: number; c: FloorColonist; analysed: number; filters: number; held: boolean };
@@ -450,8 +461,8 @@ function muleWalks(games: number): Record<Leg, LegTime[]> {
   GLINT.on = false;
   SCRAMBLE.on = false;
   try {
-    steered(() => {
-      for (let seed = 1; seed <= games; seed++) {
+    for (let seed = 1; seed <= games; seed++) {
+      steered(() =>
         playGame(seed, seatsFor(seed), {
           onPhase: (state) => {
             if (state.phase !== 'development') return;
@@ -466,9 +477,10 @@ function muleWalks(games: number): Record<Leg, LegTime[]> {
             }
             seats.clear();
           },
-        });
-      }
-    });
+        }),
+      );
+      await yieldToWorker();
+    }
   } finally {
     spy.mockRestore();
     WOLVES.on = saved.wolves;
@@ -491,8 +503,8 @@ function legSummary(leg: string, xs: LegTime[]) {
 }
 
 describe('the AI prices its walks as the floor plays them (arcade RULE-2, C9)', () => {
-  it("INV-estimate: over seeded AI turns, a MULE's walk estimate is within 15% of the floor's time, leg by leg", { timeout: 300_000 }, () => {
-    const legs = Object.entries(muleWalks(8)).map(([leg, xs]) => legSummary(leg, xs));
+  it("INV-estimate: over seeded AI turns, a MULE's walk estimate is within 15% of the floor's time, leg by leg", { timeout: 300_000 }, async () => {
+    const legs = Object.entries(await muleWalks(8)).map(([leg, xs]) => legSummary(leg, xs));
     const table = legs
       .map((m) => `${m.leg}: ${m.predicted.toFixed(2)} s estimated, ${m.measured.toFixed(2)} s on the floor, ${Math.round(m.within * 100)}% of ${m.n} walks within`)
       .join('\n');
