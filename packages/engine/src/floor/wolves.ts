@@ -242,10 +242,14 @@ export function stepBolt(state: GameState, c: FloorColonist, tick: number, cfg: 
   return { ...c, lead: { ...c.lead, ...next }, bolt: { ...b, left: b.left - s } };
 }
 
-/** How an AI colonist plays a pack: its level's dodge and strike delay, and whether it fights or runs. */
+/**
+ * How an AI colonist plays a pack: its level's dodge and strike delay, and whether it fights or runs; running, it heads
+ * for `refuge` (the store's door: the hall ends a chase) unless the pack stands that way, else straight away from it.
+ */
 export interface WolfPlay {
   level: WolfFightLevel;
   fights: boolean;
+  refuge?: FloorPoint;
 }
 
 /** Whether a colonist of this level dodges the lunge a wolf crouched for at `sinceTick`: one seeded roll a lunge. */
@@ -264,7 +268,10 @@ export function wolfInput(floor: DevFloor, state: GameState, seat: string, cfg: 
   if (!c || !e) return IDLE_INPUT;
   const tick = floor.tick;
   const middle = { x: e.wolves.reduce((n, w) => n + w.x, 0) / e.wolves.length, y: e.wolves.reduce((n, w) => n + w.y, 0) / e.wolves.length };
-  const away = toward(middle, c) ?? { x: 1, y: 0 };
+  const flee = toward(middle, c) ?? { x: 1, y: 0 };
+  const refuge = play.refuge && toward(c, play.refuge);
+  // To the refuge if the pack is not that way (it lies behind or beside the line there), else away from the pack.
+  const away = refuge && refuge.x * flee.x + refuge.y * flee.y >= 0 ? refuge : flee;
   if (e.stage === 'choose') {
     if (tick - e.sinceTick < ticksOf(cfg.wolves.botChooseSeconds, cfg)) return IDLE_INPUT;
     return play.fights ? { x: 0, y: 0, act: true } : { ...away, act: false };
