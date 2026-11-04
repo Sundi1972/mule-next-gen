@@ -315,6 +315,19 @@ describe('A-1 (AM-33): a seat that cannot get a first MULE counts as in, so the 
     expect(g.game.viewFor(null).news.join(' | ')).not.toContain('Waiting for the others');
   });
 
+  it('AM-33 (negative): a seat already in, with money for a MULE but not an outfit, still waits to buy', () => {
+    const g = stagedCorral(() => {});
+    tapThere(g.game, g, LENA, { type: 'buyMule' });
+    tapThere(g.game, g, LENA, { type: 'outfit', outfit: 'food' });
+    tapThere(g.game, g, LENA, { type: 'install', ...g.xy(LENA) });
+    expect(g.game.viewFor(null).clockWaitsFor, 'Lena is in: her MULE is installed').toEqual([OSSA]);
+    const lena = g.state.players.find((p) => p.id === LENA)!;
+    lena.money = mulePriceFor(g.state, LENA);
+    const corral = g.state.store.mules;
+    expect(() => g.game.handle(LENA, { type: 'buyMule' })).toThrow(new RuleError("Waiting for the others' first MULEs"));
+    expect([lena.carriedMule, g.state.store.mules], 'no second MULE, the corral unchanged').toEqual([null, corral]);
+  });
+
   it('AM-33: a seat leading an empty MULE it cannot pay to outfit is not waited for', () => {
     const g = stagedCorral((state) => {
       const lena = state.players.find((p) => p.id === LENA)!;
@@ -322,6 +335,12 @@ describe('A-1 (AM-33): a seat that cannot get a first MULE counts as in, so the 
       lena.money = cheapestOutfit(state, LENA) - 1;
     });
     expect(g.game.viewFor(null).clockWaitsFor, 'Lena can never outfit it').toEqual([OSSA]);
+    const able = stagedCorral((state) => {
+      const lena = state.players.find((p) => p.id === LENA)!;
+      lena.carriedMule = 'empty';
+      lena.money = cheapestOutfit(state, LENA);
+    });
+    expect(able.game.viewFor(null).clockWaitsFor, 'with exactly the cheapest outfit she can still outfit it').toEqual([LENA, OSSA]);
   });
 
   it('AM-33 (negative): a seat that can pay for a MULE and its cheapest outfit is still waited for', () => {
@@ -351,12 +370,7 @@ describe('A-1 (AM-33): a seat that cannot get a first MULE counts as in, so the 
   });
 });
 
-/** Every outfit a seat can choose, as its view's `outfitCosts` lists them. */
-function outfitsOf(_state: GameState) {
-  return [...GOODS, 'greenBelt' as const];
-}
-
-/** The seat's own price for its cheapest outfit. */
+/** The seat's own price for its cheapest outfit, over the outfits its view's `outfitCosts` lists. */
 function cheapestOutfit(state: GameState, seatId: string): number {
-  return Math.min(...outfitsOf(state).map((o) => outfitCostFor(state, seatId, o)));
+  return Math.min(...[...GOODS, 'greenBelt' as const].map((o) => outfitCostFor(state, seatId, o)));
 }
