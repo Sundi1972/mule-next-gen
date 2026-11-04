@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { foodShare, needsOf, player, POLLUTION, RuleError, scoreParts, type GameState } from '@mule/engine';
+import { foodShare, needsOf, player, POLLUTION, RuleError, scoreParts, UPKEEP, type GameState } from '@mule/engine';
 import type { MuleView, PlayerView } from '@mule/protocol';
 import { MuleGame } from '../src/mule-game.js';
 import { fakeContext, pressThroughSidePick, readyAll, seats } from './fake-context.js';
@@ -8,6 +8,8 @@ import { fakeContext, pressThroughSidePick, readyAll, seats } from './fake-conte
 const VIEWERS = ['s1', 's2', null] as const;
 /** A posted Food price far beyond what the colonists' wages pay (UPKEEP.colonistBudget). */
 const DEAR_FOOD = 10_000;
+/** A posted price every colonist's wage pays for Food and Water alike (UPKEEP.colonistBudget, before the store's spread). */
+const CHEAP = 10;
 /** The air set in each month's goods auction, after production cleans it: smoggy in month 1, toxic in month 2 (POLLUTION.bands). */
 const AIR_IN: Record<number, number> = { 1: band('smoggy'), 2: band('toxic') };
 /** Ten minutes: far longer than any phase clock, so a phase still up after it has none. */
@@ -39,7 +41,7 @@ interface MonthEnd {
  * first plot lit in each land grant, so the players' worths differ. In month 2's planning s1 is left one Food, short of
  * what its household eats, so the month's condition says hungry.
  */
-function playThreeMonths(options: { dearFoodIn?: number } = {}): { ends: MonthEnd[]; over: MuleView; state: GameState } {
+function playThreeMonths(options: { dearFoodIn?: number; stockedIn?: number } = {}): { ends: MonthEnd[]; over: MuleView; state: GameState } {
   const { ctx, advance } = fakeContext();
   const game = new MuleGame(ctx, 7, { maxMonths: 3, phaseScale: 0.1 });
   game.start(seats);
@@ -56,6 +58,14 @@ function playThreeMonths(options: { dearFoodIn?: number } = {}): { ends: MonthEn
     }
     // Food on the shelf at a price no colonist's wage reaches, in that month's goods auction.
     if (state.phase === 'auction' && state.month === options.dearFoodIn) state.store.posted.food = DEAR_FOOD;
+    // Or a shelf that feeds every colonist, at a price their wages pay: the month's upkeep goes short of nothing.
+    if (state.phase === 'auction' && state.month === options.stockedIn) {
+      const need = Math.ceil(state.colonists / UPKEEP.colonistsPerUnit);
+      for (const good of ['food', 'water'] as const) {
+        state.store.stock[good] = Math.max(state.store.stock[good], need);
+        state.store.posted[good] = CHEAP;
+      }
+    }
     // Each month's air in its own band, so a month end showing the live air, or one band for all, can't match.
     if (state.phase === 'auction' && AIR_IN[state.month] !== undefined && airedIn !== state.month) {
       state.air = AIR_IN[state.month]!;
@@ -256,7 +266,9 @@ describe('Colonists fed or short (C20)', () => {
   });
 
   it("T-AC-15: at game over colonistsFed is the last upkeep's: true when that month fed the colonists, false when they couldn't afford Food", () => {
-    const fed = playThreeMonths();
+    // The fed row stocks the last month's shelf, as the short row prices it: whether a scripted play's colonists eat
+    // is the colony's balance (the hunger ruling changed it), not this view's promise.
+    const fed = playThreeMonths({ stockedIn: 3 });
     const fedLast = fed.state.history.at(-1)!;
     expect(fedLast.month, 'the last report is the last month').toBe(fed.over.month);
     expect(fedLast.colonistsHungry, 'precondition: the last month fed the colonists').toBe(false);
