@@ -16,6 +16,7 @@ import {
   type HallPlan,
   type HallPoint,
   type HallRect,
+  type Outfit,
 } from '@mule/engine';
 import type { DevWalk, FloorLegs } from './strategist.js';
 
@@ -141,21 +142,42 @@ export function pubSeconds(state: GameState, cfg: FloorConfig, c: FloorColonist)
   return secondsToPlace(state, cfg, { ...c, lead: null }, 'pub');
 }
 
+/** One MULE's walk on the floor, leg by leg, in seconds at the colonist's pace, without the presses' pauses. */
+export interface MuleLegs {
+  /** From where the colonist stands to the corral. */
+  corral: number;
+  /** From the corral to the outfitter, leading the empty MULE. */
+  outfitter: number;
+  /** From the outfitter out to the plot, leading the outfitted MULE. */
+  plot: number;
+  /** From the plot back to the pub, without a MULE. */
+  pub: number;
+}
+
+/** The legs of a MULE for plot `index` and `outfit`, walked from where the colonist stands; Infinity where none is open. */
+export function muleLegs(state: GameState, cfg: FloorConfig, c: FloorColonist, index: number, outfit: Outfit): MuleLegs {
+  // A plot nobody can stand to install on is out of reach: a lake whose shore is all the seat's own land.
+  if (!installable(state, cfg, c.id, index)) return { corral: Infinity, outfitter: Infinity, plot: Infinity, pub: Infinity };
+  const w: Walker = { pace: c.pace, bot: c.bot };
+  const corral = placePoint('corral', cfg.hall);
+  // Every outfit has its counter in the hall: a shopfront, one of the works' bays, or the Green belt.
+  const place = outfit as HallPlace;
+  return {
+    corral: secondsToPlace(state, cfg, { ...c, lead: null }, 'corral'),
+    outfitter: hallSeconds(state, cfg, corral, place, w.pace, true),
+    plot: tripSeconds(state, cfg, w, placePoint(place, cfg.hall), index, true),
+    pub: plotToPlace(state, cfg, w, index, 'pub'),
+  };
+}
+
 /**
  * The develop hand's DevWalk on the floor: for each plot and outfit, the walk from where the colonist stands to the
  * corral, its outfitter and out to the plot leading the MULE, and from the plot back to the pub.
  */
 export function floorDevWalk(state: GameState, cfg: FloorConfig, c: FloorColonist, left: number, taps: number): DevWalk {
-  const w: Walker = { pace: c.pace, bot: c.bot };
-  const toCorral = secondsToPlace(state, cfg, { ...c, lead: null }, 'corral');
-  const corral = placePoint('corral', cfg.hall);
   const floor: FloorLegs = (index, outfit) => {
-    // A plot nobody can stand to install on is out of reach: a lake whose shore is all the seat's own land.
-    if (!installable(state, cfg, c.id, index)) return { there: Infinity, pub: Infinity };
-    // Every outfit has its counter in the hall: a shopfront, one of the works' bays, or the Green belt.
-    const place = outfit as HallPlace;
-    const there = toCorral + hallSeconds(state, cfg, corral, place, w.pace, true) + tripSeconds(state, cfg, w, placePoint(place, cfg.hall), index, true);
-    return { there, pub: plotToPlace(state, cfg, w, index, 'pub') };
+    const legs = muleLegs(state, cfg, c, index, outfit);
+    return { there: legs.corral + legs.outfitter + legs.plot, pub: legs.pub };
   };
   return { left, taps, floor };
 }
