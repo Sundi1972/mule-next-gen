@@ -9,6 +9,7 @@ import {
   proposeLaw,
   RuleError,
   stepVotes,
+  votesDone,
   votesOpen,
   type GameState,
   type LawId,
@@ -105,6 +106,21 @@ describe("C40: the council — the Governor proposes in planning, the next plann
     expect(state.politics!.proposal).toBeNull();
   });
 
+  it('T-AC-40: in an election month the law ballot opens only once the election is over', () => {
+    const state = governed();
+    state.month = POLITICS.electionMonths[1]! - 1;
+    proposeLaw(state, 'lena', LAND_10);
+    toTheBallot(state);
+    expect(state.politics!.election?.stage).toBe('announce');
+    expect(state.politics!.council).toBeNull();
+    for (const id of SEATS) votesDone(state, id);
+    for (let i = 0; i < 100 && state.politics!.election!.stage !== 'over'; i++) stepVotes(state, POLITICS.council.revealMs);
+    expect(state.politics!.election!.stage).toBe('over');
+    expect(state.politics!.governor).toBe('lena');
+    expect(state.politics!.council).toMatchObject({ stage: 'ballot', proposal: LAND_10 });
+    expect(votesOpen(state)).toBe(true);
+  });
+
   it.each([
     { ballots: { brix: true, ossa: true, kai: false }, passed: true, tie: false },
     { ballots: { brix: false, ossa: false, kai: false }, passed: false, tie: false },
@@ -114,7 +130,7 @@ describe("C40: the council — the Governor proposes in planning, the next plann
     const state = governed();
     proposeLaw(state, 'lena', LAND_10);
     toTheBallot(state);
-    vote(state, ballots);
+    vote(state, ballots as Record<string, boolean>);
     const council = state.politics!.council!;
     expect(council.stage).toBe('reveal');
     expect(council.result).toMatchObject({ passed, tie });
