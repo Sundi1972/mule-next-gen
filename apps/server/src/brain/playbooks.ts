@@ -1,6 +1,6 @@
 /** When a seat's brain asks for its land-grant playbook, and which playbook takes effect when the land grant starts. */
 import type { GameState, Playbook, PlayerId } from '@mule/engine';
-import { landBrief, playbookFrom, STRATEGY_SYSTEM, type AiSeat, type Feedback, type LandDraft, type ValidatePlan, type WriterReply } from '@mule/ai';
+import { landBrief, playbookFrom, WRITER_SYSTEM, type AiSeat, type Feedback, type LandDraft, type ValidatePlan, type WriterReply } from '@mule/ai';
 import type { PlaybookNote } from '../mule-game.js';
 import { WRITE_CALLS } from './client.js';
 import type { BrainService, PlaybookWriter } from './index.js';
@@ -74,7 +74,7 @@ export class Playbooks {
         const ask: Ask = { month, draft: drafted.playbook, written: null, started: false, controller: new AbortController() };
         this.asks.set(seat.id, ask);
         const waitMs = WRITE_CALLS.strategy.timeoutMs;
-        writer.write('strategy', { brief, system: STRATEGY_SYSTEM, waitMs, late: () => ask.started, signal: ask.controller.signal }).then(
+        writer.write('strategy', { brief, system: WRITER_SYSTEM, waitMs, late: () => ask.started, signal: ask.controller.signal }).then(
           (written) => {
             if (!ask.started) ask.written = written;
           },

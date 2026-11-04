@@ -113,7 +113,8 @@ describe('the manual of moves', () => {
     const rookie = seatBounds(AI_LEVELS.rookie);
     expect(rookie).toContain('never aims for a monopoly');
     expect(rookie).toContain("'monopolist'");
-    expect(rookie).toContain('monopolyTarget');
+    // Never offered the field: its reply schema has no monopolyTarget (T-AC-A2).
+    expect(rookie).not.toContain('monopolyTarget');
     for (const level of [AI_LEVELS.trader, AI_LEVELS.tycoon]) {
       expect(level.corners).toBe(true);
       expect(seatBounds(level)).not.toContain('never aims for a monopoly');

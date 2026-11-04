@@ -306,9 +306,12 @@ export function defaultManual(advice: readonly AdviceLine[] = ADVICE): string {
   return renderManual(MOVES, advice);
 }
 
-/** The seat's own bounds, kept out of the shared manual so the manual stays the same for every level. */
+/**
+ * The seat's own bounds, for its brief: kept out of the shared manual so the manual stays the same for every level. A
+ * seat that never corners is not shown the monopolyTarget field at all; its reply schema has none.
+ */
 export function seatBounds(level: Pick<AiLevelConfig, 'corners'>): string {
   return level.corners
     ? "Your level may corner a good: Strategy.kind 'monopolist' with a monopolyTarget is open to you when a good is scarce."
-    : "Your level never aims for a monopoly: never set Strategy.kind to 'monopolist', and keep Strategy.monopolyTarget null.";
+    : "Your level never aims for a monopoly: never set Strategy.kind to 'monopolist'.";
 }

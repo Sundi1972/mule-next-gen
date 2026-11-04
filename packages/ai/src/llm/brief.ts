@@ -3,6 +3,7 @@ import { toOptions, type TableTalk } from '../decider.js';
 import type { Persona } from '../personas.js';
 import { GOOD_NAME, landDecision, outfitName } from '../strategist.js';
 import type { Mind } from '../value.js';
+import { seatBounds } from './manual.js';
 import { optionLine, tableTalkBlock } from './prompt.js';
 
 /** What the engine drafted for the seat this month, as far as the land brief shows it. */
@@ -101,13 +102,9 @@ export function landBrief(state: GameState, mind: Mind, persona: Persona, draft:
   }));
   const prices = allPrices(obs);
   const goods = GOODS.filter((g) => me.stock[g] > 0).map((g) => `${GOOD_NAME[g]} ${me.stock[g]}`);
-  const bound = corners
-    ? 'Your level may aim to corner a good.'
-    : 'Your level never aims for a monopoly: never choose monopolist.';
-
   const text = [
     `You are ${me.name}. Month ${obs.month} of ${obs.maxMonths}, phase ${obs.phase}.`,
-    `Your level: ${mind.levelId}. ${bound}`,
+    `Your level: ${mind.levelId}. ${seatBounds(mind.level)}`,
     `You have ${me.money} credits. Your goods: ${goods.join(', ') || 'none'}.`,
     '',
     'Who owns the land:',
