@@ -75,6 +75,8 @@ describe("C40: the council — the Governor proposes in planning, the next plann
     { row: 10, why: 'room for another law', make: () => governed(), by: 'lena', proposal: LAND_10, then: 'valid' },
     { row: 11, why: 'a fourth law naming the one it replaces', make: () => governed({ exportTax: 10, pollutionTax: 10, emissionCap: 50 }), by: 'lena', proposal: { ...LAND_10, replaces: 'exportTax' } as LawProposal, then: 'valid' },
     { row: 12, why: 'a fourth law naming none', make: () => governed({ exportTax: 10, pollutionTax: 10, emissionCap: 50 }), by: 'lena', proposal: LAND_10, then: `${POLITICS.council.maxInForce} laws are in force: pick the one this replaces` },
+    { row: 12, why: 'a fourth law naming a law not in force', make: () => governed({ exportTax: 10, pollutionTax: 10, emissionCap: 50 }), by: 'lena', proposal: { ...LAND_10, replaces: 'landTax' } as LawProposal, then: `${POLITICS.council.maxInForce} laws are in force: pick the one this replaces` },
+    { row: 12, why: "a fourth law naming a name every object has (WS3's finding)", make: () => governed({ exportTax: 10, pollutionTax: 10, emissionCap: 50 }), by: 'lena', proposal: { ...LAND_10, replaces: 'toString' } as unknown as LawProposal, then: `${POLITICS.council.maxInForce} laws are in force: pick the one this replaces` },
   ])('T-AC-40: RULE-41 row $row ($why)', ({ make, by, proposal, then }) => {
     const state = make();
     expect(refused(() => proposeLaw(state, by, proposal))).toBe(then);
