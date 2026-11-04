@@ -121,6 +121,23 @@ describe("T-AC-A5: a Rookie seat's edits that would corner are refused; the same
     expect(made.playbook).toEqual({ ...v.results[0]!.playbook, by: 'llm', rejected: [] });
     expect(made.feedback).toEqual({ refused: [], rejected: [] });
   });
+
+  it("T-AC-A1: an edit is accepted when validate's playbook carries it: a clamped edit plays by 'llm' though also listed in rejected; with none carried the engine's draft plays", async () => {
+    const written = (await write('trader', JSON.stringify({ edits: [{ path: '/landGrant/claims', to: 9, reason: 'All of it.' }], line: '' }))).written;
+    // The validator clamps the edit, plays it, and lists the clamp with its why.
+    const clamped = { path: '/landGrant/claims', to: 9, why: 'clamped to 2' };
+    const clamps: ValidatePlan = (_s, _seat, draft, edits) => ({
+      playbook: { ...draft, edits: [{ path: '/landGrant/claims', from: 2, to: 2, reason: edits[0]!.reason }] },
+      rejected: [clamped],
+    });
+    const made = playbookFrom(clamps, state, DRAFT, written);
+    expect(made.playbook).toMatchObject({ by: 'llm', rejected: [clamped] });
+    expect(made.feedback?.rejected, 'the clamp still reaches the next brief').toEqual([clamped]);
+
+    // The same why, but the validator carries no edit: nothing was accepted.
+    const refuses: ValidatePlan = (_s, _seat, draft) => ({ playbook: { ...draft, edits: [] }, rejected: [{ ...clamped, why: 'out of bounds' }] });
+    expect(playbookFrom(refuses, state, DRAFT, written).playbook).toEqual(ENGINE);
+  });
 });
 
 /** In every reply below: no part of what the writer returns may carry it. */
