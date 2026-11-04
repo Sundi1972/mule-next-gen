@@ -11,7 +11,7 @@ import { errors as playwrightErrors, type Page } from 'playwright';
 import { GRANT_TICK_MS, PHASE_MS } from '../../server/src/mule-game.js';
 import type { MuleServer } from '../../server/src/server.js';
 import { check, CLAIM_MS, doneWithLand, held, launch, PHONE, startServer, TV } from './harness';
-import { ELECTION_WAIT_MS, PRESS_MS } from './politics-steps';
+import { ELECTION_WAIT_MS, firstMulesThroughTheServer, PRESS_MS } from './politics-steps';
 
 const SCALE = 0.25;
 /** How long the last phone's Ready takes to land and the land grant to show; planning has no clock. */
@@ -230,12 +230,15 @@ async function main(): Promise<void> {
     await ossa.page.getByTestId('desk-colony').click({ timeout: PRESS_MS });
     await ossa.page.getByTestId('fund-in').filter({ hasText: `the ${NEW_TAX}% sales tax` }).waitFor({ timeout: PRESS_MS });
 
-    // On to the auction: ready, claim, the pub.
+    // On to the auction: ready, claim, then development. Walking is on, so development is the arcade screen; this
+    // test's promise is not the errand, so both phones' first MULEs go in through the server, month 1's clock (which
+    // waits for every first MULE, the AI seat's too) starts, and it runs out the turn.
     await everyone(phones, (p) => p.page.getByTestId('ready').click({ timeout: PRESS_MS }));
     await everyone(phones, (p) => claimPlots(p.page));
     await everyone(phones, (p) => doneWithLand(p.page));
-    await everyone(phones, (p) => goToThePub(p.page));
-    await lena.page.locator('[data-phase=auction]').waitFor({ timeout: within(PHASE_MS.development + PHASE_MS.production) });
+    await lena.page.locator('[data-phase=development]').waitFor({ timeout: within(PHASE_MS.development) });
+    firstMulesThroughTheServer(server, code, [lenaId, ossaId].map((seat) => ({ seat, outfit: 'food' as const })));
+    await lena.page.locator('[data-phase=auction]').waitFor({ timeout: within(2 * PHASE_MS.development + PHASE_MS.production) });
 
     // Lena holds one unit of a good the store buys for 100 cr or more, seeded as the auction opens and before that good
     // comes up, so 7%, 8% and 9% (and the old rate) each take a different tax from the sale.
@@ -447,10 +450,6 @@ async function claimPlots(page: Page): Promise<void> {
       if (!(err instanceof playwrightErrors.TimeoutError)) throw err;
     }
   }
-}
-
-async function goToThePub(page: Page): Promise<void> {
-  await page.locator('[data-phase=development]').getByRole('button', { name: 'Go to the pub and end your turn' }).click({ timeout: within(PHASE_MS.development) });
 }
 
 /**
