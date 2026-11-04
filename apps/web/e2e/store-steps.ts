@@ -434,13 +434,30 @@ const where = (c: { x: number; y: number; space: string }) => `${c.space} ${c.x.
 /** One screen's socket as the e2e hears it: the frames that came, and the steers and presses that went. */
 export interface Wire {
   frames: { at: number; frame: DevFrame }[];
+  /** `at` is when the e2e heard the send: late by however long the browser took to tell it, so never a spacing. */
   steers: { at: number; x: number; y: number; tick: number | undefined }[];
   acts: number[];
+  /** When the page itself sent each steer, by its own Date.now (the gate's clock): the spacing HC-5 promises. */
+  steersSentAt(): Promise<number[]>;
 }
 
+/**
+ * Kept a string, as READ_HALL: stamps every steer intent on the page's own clock as the socket sends it. The e2e hears
+ * framesent only once the browser tells it, so under load two sends 100 ms apart can arrive 80 ms apart.
+ */
+const RECORD_STEERS = `(() => {
+  window.__steersSentAt = [];
+  const send = WebSocket.prototype.send;
+  WebSocket.prototype.send = function (data) {
+    if (typeof data === 'string' && data.includes('"type":"steer"')) window.__steersSentAt.push(Date.now());
+    return send.call(this, data);
+  };
+})()`;
+
 /** Listens on every socket the page opens from now on: call before its first goto. */
-export function watchWire(page: Page): Wire {
-  const wire: Wire = { frames: [], steers: [], acts: [] };
+export async function watchWire(page: Page): Promise<Wire> {
+  await page.addInitScript(RECORD_STEERS);
+  const wire: Wire = { frames: [], steers: [], acts: [], steersSentAt: async () => ((await page.evaluate('window.__steersSentAt ?? []')) as number[]) };
   page.on('websocket', (ws) => {
     ws.on('framereceived', (f) => {
       if (typeof f.payload !== 'string' || !f.payload.startsWith('{"t":"frame"')) return;
@@ -457,9 +474,11 @@ export function watchWire(page: Page): Wire {
   return wire;
 }
 
-/** The most steers the page sent in any one second of `steers`. */
-function busiestSecond(steers: Wire['steers']): number {
-  return steers.reduce((most, s) => Math.max(most, steers.filter((q) => q.at >= s.at && q.at < s.at + 1_000).length), 0);
+/** HC-5's spacing: a steer at most every 1000 / steerMaxPerSecond ms, less this for the page's timers and its ms clock. */
+const STEER_JITTER_MS = 5;
+/** The closest two consecutive times, in ms; Infinity with fewer than two. */
+function closestGap(times: number[]): number {
+  return times.slice(1).reduce((least, t, i) => Math.min(least, t - times[i]!), Infinity);
 }
 
 /** A table with steered development: people's phones (a computer seat is never waited for), and a TV or none. */
@@ -499,7 +518,7 @@ export async function arcadeTable(
   const open = async (name: string, options: Parameters<Browser['newContext']>[0]) => {
     const page = await (await browser.newContext(options)).newPage();
     page.on('pageerror', (e) => errors.push(`${name}: ${e.message}`));
-    return { page, wire: watchWire(page) };
+    return { page, wire: await watchWire(page) };
   };
   const host = await open(names[0]!, PHONE);
   await host.page.goto(base);
@@ -629,6 +648,7 @@ export async function thePiecesMeet(t: ArcadeTable): Promise<string> {
 
   // Mashing the keys: never more than steerMaxPerSecond a second, and the last change, a release, still arrives.
   const m0 = wires.mia.steers.length;
+  const p0 = (await wires.mia.steersSentAt()).length;
   for (let i = 0; i < 30; i++) await hold(mia, [i % 2 ? 'ArrowUp' : 'ArrowDown'], 25);
   await hold(mia, ['ArrowLeft'], 15);
   await mia.waitForTimeout(STOP_MS);
@@ -636,8 +656,13 @@ export async function thePiecesMeet(t: ArcadeTable): Promise<string> {
   await mia.waitForTimeout(500);
   const mashedLater = onFloor(server, code, 's2');
   const mash = wires.mia.steers.slice(m0);
-  const busiest = busiestSecond(mash);
-  check(busiest <= DEV_STEER.steerMaxPerSecond, `step 1: mashed keys send at most ${DEV_STEER.steerMaxPerSecond} steers a second, got ${busiest}`);
+  // HC-5 as a spacing on the page's own clock, from the last send before the mash: no two steers closer than a step of
+  // the rate. A count per second would hang on the window's edge: 11 sends 100 ms apart span exactly 1000 ms.
+  const sentAt = (await wires.mia.steersSentAt()).slice(Math.max(0, p0 - 1));
+  const step = 1_000 / DEV_STEER.steerMaxPerSecond;
+  const closest = closestGap(sentAt);
+  check(sentAt.length - (p0 > 0 ? 1 : 0) >= 5, `step 1: mashing sends steers, got ${sentAt.length} page-side stamps`);
+  check(closest >= step - STEER_JITTER_MS, `step 1: mashed keys send at most ${DEV_STEER.steerMaxPerSecond} steers a second: no two closer than ${step} ms, got ${closest} ms (sent at ${sentAt.map((t) => t - sentAt[0]!).join(', ')})`);
   check(mash.at(-1)?.x === 0 && mash.at(-1)?.y === 0, `step 1: after mashing, the last steer is the release, got ${JSON.stringify(mash.at(-1))}`);
   check(Math.hypot(mashedLater.x - mashed.x, mashedLater.y - mashed.y) < STILL, `step 1: after mashing the colonist stops on the server, ${where(mashed)} then ${where(mashedLater)}`);
 
@@ -665,7 +690,7 @@ export async function thePiecesMeet(t: ArcadeTable): Promise<string> {
   }
   const game = steeredOf(server, code);
   if (game.devEndsAt === null) check((await tv.locator('header [role=timer]').count()) === 0, "step 1: while month 1's clock waits the TV's header shows no clock, as the flag-off TV");
-  return `${perSecond.toFixed(1)} frames/s; held → ${where(before)} → ${where(held)}, stopped at ${where(stopped)}; mashing ${busiest} steers/s at most; the TV drew ${Object.entries(drawn).map(([k, d]) => `${k} ${where(d)}`).join(', ')}`;
+  return `${perSecond.toFixed(1)} frames/s; held → ${where(before)} → ${where(held)}, stopped at ${where(stopped)}; mashing ${closest} ms apart at the closest; the TV drew ${Object.entries(drawn).map(([k, d]) => `${k} ${where(d)}`).join(', ')}`;
 }
 
 /** Test fixture: puts a seat's colonist at `at` on the server's floor, as a teleport; the phone's copy snaps to it. */
@@ -984,7 +1009,7 @@ export async function aDroppedPhoneStops(t: ArcadeTable): Promise<string> {
   // Back on the same phone: it opens the game again and takes its saved seat.
   const phone = await context.newPage();
   phone.on('pageerror', (e) => t.errors.push(`Mia (back): ${e.message}`));
-  t.wires.mia = watchWire(phone);
+  t.wires.mia = await watchWire(phone);
   t.wires.phones[1] = t.wires.mia;
   t.mia = phone;
   t.phones[1] = phone;
