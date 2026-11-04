@@ -203,3 +203,87 @@ export function checkLink(link: string, code: string, token: string, who: string
   const handoff = url.searchParams.get('handoff') ?? '';
   check(token !== '' && handoff !== '' && handoff !== token && !link.includes(token), `${tag}: ${who}'s link carries a handoff code, not the seat token`);
 }
+
+/** A point a colonist steers to: in map tiles when `space` is 'map', in the hall plan's units in the hall. */
+export interface SteerTarget {
+  space: 'map' | 'hall';
+  x: number;
+  y: number;
+}
+
+/** A plot's centre on the map: the floor reads a tile at the point's whole part. */
+export const plotCentre = (col: number, row: number): SteerTarget => ({ space: 'map', x: col + 0.5, y: row + 0.5 });
+
+/** How often the step looks at where the colonist stands: one development tick. */
+const STEER_LOOK_MS = 50;
+/** Within this of the target on an axis, the step lets go of that axis; within it on both, the colonist is there. */
+const STEER_WITHIN = 0.5;
+/** Within this many STEER_WITHINs, an axis is held every other look, so a full-speed stride cannot carry it past. */
+const STEER_EASE = 3;
+const STEER_TIMEOUT_MS = 30_000;
+const AXES = { x: ['ArrowLeft', 'ArrowRight'], y: ['ArrowUp', 'ArrowDown'] } as const;
+
+/**
+ * Steers a seat's colonist to `target` from its phone, as a player does (arcade spec C15): holds the arrow keys on the
+ * arcade screen (two at once for a diagonal), lets go of an axis once within reach of it, and of every key on arrival.
+ * The screen's own send loop turns held keys into steer intents. Where the colonist stands is read from the in-process
+ * server's view, the state its frames carry. Throws, with where it last stood and the keys held, when it is in another
+ * space than the target (go through a door with pressAct first) or does not arrive in `timeoutMs`.
+ */
+export async function steerTo(
+  phone: Page,
+  server: MuleServer,
+  code: string,
+  seatId: string,
+  target: SteerTarget,
+  { within = STEER_WITHIN, timeoutMs = STEER_TIMEOUT_MS }: { within?: number; timeoutMs?: number } = {},
+): Promise<void> {
+  const room = server.registry.get(code);
+  check(room, `a room ${code} on the server`);
+  const where = () => {
+    const c = room.viewFor(null).game?.players.find((p) => p.id === seatId)?.colonist;
+    check(c?.x !== undefined && c.y !== undefined && c.space !== undefined, `steerTo: ${seatId} has no steered colonist (is the server steering?)`);
+    return { x: c.x, y: c.y, space: c.space };
+  };
+  const pressed = new Set<string>();
+  const hold = async (want: Set<string>) => {
+    for (const k of [...pressed]) {
+      if (want.has(k)) continue;
+      await phone.keyboard.up(k);
+      pressed.delete(k);
+    }
+    for (const k of want) {
+      if (pressed.has(k)) continue;
+      await phone.keyboard.down(k);
+      pressed.add(k);
+    }
+  };
+  const deadline = Date.now() + timeoutMs;
+  let look = 0;
+  try {
+    for (;;) {
+      const at = where();
+      check(at.space === target.space, `steerTo: ${seatId} is in the ${at.space}, the target is in the ${target.space}`);
+      const gap = { x: target.x - at.x, y: target.y - at.y };
+      if (Math.abs(gap.x) <= within && Math.abs(gap.y) <= within) return;
+      check(Date.now() < deadline, `steerTo: ${seatId} did not reach ${target.space} (${target.x}, ${target.y}) in ${timeoutMs} ms; stands at (${at.x.toFixed(2)}, ${at.y.toFixed(2)}) holding [${[...pressed].join(', ')}]`);
+      const want = new Set<string>();
+      for (const axis of ['x', 'y'] as const) {
+        const g = gap[axis];
+        if (Math.abs(g) <= within) continue;
+        if (Math.abs(g) <= within * STEER_EASE && look % 2 === 1) continue;
+        want.add(AXES[axis][g < 0 ? 0 : 1]);
+      }
+      await hold(want);
+      look++;
+      await phone.waitForTimeout(STEER_LOOK_MS);
+    }
+  } finally {
+    await hold(new Set());
+  }
+}
+
+/** The one button, as a player presses it on the arcade screen: Space, once. */
+export async function pressAct(phone: Page): Promise<void> {
+  await phone.keyboard.press(' ');
+}
