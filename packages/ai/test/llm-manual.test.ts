@@ -113,4 +113,8 @@ describe('the manual of moves', () => {
     }
     expect(defaultManual()).not.toContain('never aims for a monopoly');
   });
+
+  it("T-AC-A7: the default config's manual is pinned, so the cached system block moves only with the config", () => {
+    expect(defaultManual()).toMatchSnapshot();
+  });
 });
