@@ -3,7 +3,7 @@ import type { ChatMessage, MuleView, MyView, TileView } from '@mule/protocol';
 import { ActionButton, FAN, Joystick, LiveWalkers, SeatSpeciesProvider, type Slot } from '@mule/ui';
 import { createElement, type ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { seatSpecies } from '../src/game/derive';
 import type { TableClient } from '../src/net/client';
 import { ClientProvider } from '../src/net/react';
@@ -15,6 +15,7 @@ import { pubPay } from '../src/phone/arcade/seat';
 import { StaticLive, type Live } from '../src/phone/arcade/live';
 import { PhoneGameProvider } from '../src/phone/game';
 import { fitHall, TvArcade } from '../src/table/TvDevelop';
+import { BUBBLE_MAX_MS } from '../src/chat/queue';
 import { at, devView, FRAMED, LENAS_PLOTS, lenasMe, NOW, PLAYERS, reach, STORE, tableOf, TILES } from './fixtures/arcade';
 
 /**
@@ -874,16 +875,27 @@ describe('C11 (AM-31): a speaking colonist\'s bubble, at that colonist (mounted)
   }
   const at667 = () => createElement(PhoneLandscape, { frame: { w: FRAMES[667].w, h: FRAMES[667].h } });
 
-  it('C11 (AM-31): at 667 a bubble that meets the status bar fades the bar and paints above it', () => {
+  it('C11 (AM-31): at 667 a bubble that meets the status bar fades the bar and paints above it, until the bubble ends', () => {
+    // The chat store's clock: a bubble ends on its own timer, at most BUBBLE_MAX_MS after it starts.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
     const restore = boxes({ 'phone-status-bar': { left: 200, top: 2, right: 600, bottom: 37 }, 'chat-bubble-*': { left: 300, top: 10, right: 420, bottom: 44 } });
-    const { host, unmount } = speak(mine(5.5, 4.5), 's2', at667);
-    expect(element(host, 'phone-status-bar')!.getAttribute('data-faded')).toBe('true');
-    const walkers = element(host, 'walkers-layer')!;
-    expect(walkers.getAttribute('data-over-bar')).toBe('true');
-    expect(walkers.getAttribute('class')).toMatch(/\bz-\[25\]/);
-    expect(element(host, 'phone-status-bar')!.getAttribute('class')).toMatch(/\bz-20\b/);
-    unmount();
-    restore();
+    try {
+      const { host, unmount } = speak(mine(5.5, 4.5), 's2', at667);
+      expect(element(host, 'phone-status-bar')!.getAttribute('data-faded')).toBe('true');
+      const walkers = element(host, 'walkers-layer')!;
+      expect(walkers.getAttribute('data-over-bar')).toBe('true');
+      expect(walkers.getAttribute('class')).toMatch(/\bz-\[25\]/);
+      expect(element(host, 'phone-status-bar')!.getAttribute('class')).toMatch(/\bz-20\b/);
+      act(() => vi.advanceTimersByTime(BUBBLE_MAX_MS + 100));
+      expect(element(host, 'chat-bubble-s2')).toBeNull();
+      expect(element(host, 'phone-status-bar')!.getAttribute('data-faded')).toBeNull();
+      expect(element(host, 'walkers-layer')!.getAttribute('data-over-bar')).toBeNull();
+      expect(element(host, 'walkers-layer')!.getAttribute('class')).toMatch(/\bz-\[7\]/);
+      unmount();
+    } finally {
+      restore();
+      vi.useRealTimers();
+    }
   });
 
   it('C11 (AM-31): at 667 a bubble clear of the bar leaves it, and the colonists stay under it', () => {
