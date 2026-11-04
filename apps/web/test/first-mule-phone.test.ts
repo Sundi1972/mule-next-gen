@@ -1,5 +1,6 @@
 import { DEVELOPMENT, tileIndex, type GameState } from '@mule/engine';
 import type { MuleView, TableView } from '@mule/protocol';
+import { Timer } from '@mule/ui';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -69,7 +70,10 @@ describe("A-1: the phone while month 1's development clock waits", () => {
     expect(text(html)).toContain('Your first month: no rush. The clock starts when your first MULE is in.');
     expect(text(html)).toContain('The clock starts when your first MULE is in');
     expect(html).toContain('data-testid="clock-waits"');
-    expect(text(html.slice(html.indexOf('data-testid="clock-waits"')))).toMatch(new RegExp(`^[^<]*0:${DEVELOPMENT.fullSeconds}`));
+    // The waiting chip writes the full time the way the header's running clock does (60 s is 1:00, never 0:60).
+    const fullClock = text(renderToStaticMarkup(createElement(Timer, { seconds: DEVELOPMENT.fullSeconds }))).trim();
+    const chip = html.slice(html.indexOf('>', html.indexOf('data-testid="clock-waits"')) + 1);
+    expect(text(chip).trim().slice(0, fullClock.length)).toBe(fullClock);
     // The pub pays as for the full clock while it waits.
     const { base, start, perMonth } = DEVELOPMENT.pub;
     expect(text(html)).toContain(`≈${base + start + perMonth} cr`);
