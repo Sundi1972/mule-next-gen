@@ -73,11 +73,16 @@ function lateBatch(ticksEarly: number, lateBy: number) {
 }
 
 describe("FM-ai-tick-time on the server: a late steer tick's AI input follows the tick's own time", () => {
-  it('the last tick due before devEndsAt, run with the wall clock past devEndsAt, still asks the AI hand', () => {
-    const { asked, lateTick, lateNow, end, dueOf } = lateBatch(1, 60);
-    // The batch's first tick resolves before the clock's end, though the wall clock already reads past it.
-    expect(dueOf(lateTick)).toBeLessThan(end);
+  it('a late batch run with the wall clock past devEndsAt plays every tick due before it, the AI hand asked for each, then ends', () => {
+    const { asked, stepped, phase, lateTick, lateNow, end, dueOf } = lateBatch(2, 110);
+    // The batch's first two ticks resolve before the clock's end, though the wall clock already reads past it.
+    expect(dueOf(lateTick + 1)).toBeLessThan(end);
+    expect(dueOf(lateTick + 2)).toBe(end);
     expect(lateNow).toBeGreaterThan(end);
-    expect(asked).toContain(lateTick);
+    // As the sim plays them: both ticks before the end ask the AI hand; the tick at the end, its turn over, does not.
+    expect(asked).toEqual([lateTick, lateTick + 1]);
+    // Development ends in the tick at devEndsAt, not after the batch's first tick.
+    expect(stepped).toBe(3);
+    expect(phase).not.toBe('development');
   });
 });
