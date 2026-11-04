@@ -1,4 +1,5 @@
 import {
+  analysisSeconds,
   doorOutside,
   HALL_DOORS,
   IDLE_INPUT,
@@ -129,6 +130,8 @@ export class FloorWalker {
   private anchor: { x: number; y: number; space: string } | null = null;
   /** Where on the map it stands for the step: undefined until worked out, null if nowhere. */
   private stand: FloorPoint | null | undefined = undefined;
+  /** The last press was the analysis of the shore's own land, before the lake's (AM-18): it took nothing of the step's. */
+  private pressedLand = false;
 
   /** The runner for one seat: `me`, the seat whose colonist it steers. */
   constructor(private readonly me: string) {}
@@ -141,12 +144,18 @@ export class FloorWalker {
     this.pushed = false;
     this.anchor = null;
     this.stand = undefined;
+    this.pressedLand = false;
   }
 
   /** One tick of a step: the input that walks it on, or how it ended. `pauseMs`: how long it stands at a counter first. */
   run(view: FloorView, action: AiAction, pauseMs: number): StepRun {
     const { state, floor, cfg } = view;
-    if (this.pressed) {
+    if (this.pressed && this.pressedLand) {
+      // The shore's land analysed: the lake's own press comes next, from the same spot.
+      this.pressed = false;
+      this.pressedLand = false;
+      this.paused = 0;
+    } else if (this.pressed) {
       const ok = took(state, this.me, action);
       this.reset();
       return ok ? { kind: 'ok' } : { kind: 'failed', why: 'the press did not take' };
@@ -166,13 +175,15 @@ export class FloorWalker {
     const goal = goalOf(action);
     if (!goal) return { kind: 'failed', why: 'not a development step' };
     const reach = reachOf(floor, state, this.me, cfg, { secondsLeft: view.secondsLeft });
-    if (offers(reach, action)) {
+    const land = this.landFirst(c, reach, action);
+    if (offers(reach, action) || land) {
       if (!reach.enabled) return { kind: 'failed', why: 'offered dim' };
       if (this.paused < pauseMs) {
         this.paused += cfg.steer.tickMs;
         return this.going(IDLE_INPUT);
       }
       this.pressed = true;
+      this.pressedLand = land;
       return this.going({ x: 0, y: 0, act: true });
     }
     return goal.space === 'hall' ? this.toPlace(view, c, goal.place, reach) : this.toPlot(view, c, goal.plot, action, reach);
@@ -257,9 +268,9 @@ export class FloorWalker {
     const tile = tileAt(state.tiles, state.width, plot.x, plot.y);
     if (!tile) return { kind: 'failed', why: 'no such plot' };
     const open = terrainShare(tile.terrain, cfg) > 0;
-    // A lake plot is installed on from its shore; nobody stands on it to analyse it or fit its filter.
+    // A lake plot is worked from its shore: installed on, analysed or fitted with a filter there (AM-18).
     // Where to stand is settled once a step: the shore's spot costs a search.
-    if (this.stand === undefined) this.stand = open ? tileMiddle(plot.x, plot.y) : action.type === 'install' ? this.shore(view, c, plot) : null;
+    if (this.stand === undefined) this.stand = open ? tileMiddle(plot.x, plot.y) : this.shore(view, c, plot, action);
     const stand = this.stand;
     if (!stand) return { kind: 'failed', why: 'nowhere to stand for it' };
     if (c.space === 'hall') {
@@ -286,19 +297,39 @@ export class FloorWalker {
   }
 
   /**
-   * For a lake plot: the spot on its quickest open neighbour, towards the lake, from which Reach offers it. Not on a
-   * plot of the seat's own: there Reach installs on the land underfoot, not the lake beside it.
+   * At the shore spot for a lake plot's analysis, Reach offers the land underfoot first (AM-18 mirrors row 10): the
+   * press analyses that land, and the lake's comes after it.
    */
-  private shore(view: FloorView, c: FloorColonist, plot: FloorPoint): FloorPoint | null {
+  private landFirst(c: FloorColonist, reach: Reach, action: AiAction): boolean {
+    const stand = this.stand;
+    if (action.type !== 'analyse' || !stand || reach.kind !== 'analyse' || c.space !== 'map') return false;
+    const under = { x: Math.floor(stand.x), y: Math.floor(stand.y) };
+    return samePlot(reach.plot, under) && Math.floor(c.x) === under.x && Math.floor(c.y) === under.y && Math.hypot(c.x - stand.x, c.y - stand.y) < THERE;
+  }
+
+  /**
+   * For a lake plot: the spot on its quickest open neighbour, towards the lake, from which Reach offers the step's press
+   * on it. Not on a plot of the seat's own: there Reach works the land underfoot first, not the lake beside it. For an
+   * analysis, a spot whose land is not analysed yet offers that land first, then the lake: it costs an analysis more.
+   */
+  private shore(view: FloorView, c: FloorColonist, plot: FloorPoint, action: AiAction): FloorPoint | null {
     const { state, floor, cfg } = view;
     const from = c.space === 'map' ? c : doorOutside(state, HALL_DOORS[0], cfg);
+    const me = state.players.find((p) => p.id === this.me)!;
     let best: { at: FloorPoint; s: number } | null = null;
     for (const at of shoreStands(state, cfg, this.me, plot)) {
       // Reach itself says whether this spot offers this plot, and not another lake plot of the seat's nearer to it.
       const there = { ...floor, colonists: floor.colonists.map((x) => (x.id === this.me ? { ...x, space: 'map' as const, ...at } : x)) };
-      const offered = reachOf(there, state, this.me, cfg);
-      if (offered.kind !== 'install' || !samePlot(offered.plot, plot)) continue;
-      const s = pathTo(state, from, at, cfg)?.seconds ?? Infinity;
+      let extra = 0;
+      if (!offers(reachOf(there, state, this.me, cfg), action)) {
+        if (action.type !== 'analyse') continue;
+        // With the land underfoot analysed first.
+        const land = tileIndex(state.width, Math.floor(at.x), Math.floor(at.y));
+        const after = { ...state, players: state.players.map((p) => (p.id === this.me ? { ...p, analysed: [...p.analysed, land] } : p)) };
+        if (!offers(reachOf(there, after, this.me, cfg), action)) continue;
+        extra = analysisSeconds(state, me.id);
+      }
+      const s = (pathTo(state, from, at, cfg)?.seconds ?? Infinity) + extra;
       if (Number.isFinite(s) && (!best || s < best.s)) best = { at, s };
     }
     return best?.at ?? null;

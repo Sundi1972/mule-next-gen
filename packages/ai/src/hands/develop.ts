@@ -253,12 +253,14 @@ export class DevelopHand {
         this.chaser.reset();
       }
     }
-    if (g && this.racingGlint === g.sinceTick) {
+    // With the spare-time rule, a race that no longer leaves the pub's time (a pack on the way, a bite) is given up.
+    const spare = !cfg.steer.botsSpareTime || secondsLeft > pubSeconds(state, cfg, c) + this.margin(cfg, c);
+    if (g && this.racingGlint === g.sinceTick && spare) {
       const input = this.chaser.seek(view, glintMiddle(g), 'grab');
       if (input) return input;
-      // No way there after all: it gives the race up.
-      this.glintWanted = false;
     }
+    // No way there after all, or no more time: it gives the race up.
+    if (g && this.racingGlint === g.sinceTick) this.glintWanted = false;
     this.racingGlint = null;
     this.raceScramble(view, c, held);
     const p = state.players.find((x) => x.id === me)!;
@@ -353,7 +355,9 @@ export class DevelopHand {
   private fits(state: GameState, cfg: FloorConfig, c: FloorColonist, step: DevStep, secondsLeft: number): boolean {
     const a = step.action;
     if (a.type !== 'analyse' && a.type !== 'filter') return true;
-    const work = a.type === 'analyse' ? analysisSeconds(state, this.brain.mind.me) : 0;
+    // A lake plot is analysed from its shore, whose own land Reach analyses first if it has not been (AM-18): two analyses.
+    const lake = state.tiles[tileIndex(state.width, a.x, a.y)]!.terrain === 'lake' && cfg.steer.lakeMode === 'shore';
+    const work = a.type === 'analyse' ? analysisSeconds(state, this.brain.mind.me) * (lake ? 2 : 1) : 0; // literal-ok: the shore's land and the lake, two analyses
     return plotErrandSeconds(state, cfg, c, tileIndex(state.width, a.x, a.y), work) + cfg.steer.botPubMarginSeconds <= secondsLeft;
   }
 
