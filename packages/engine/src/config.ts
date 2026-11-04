@@ -1,4 +1,5 @@
 import type { Outfit, EventKey, GrownGood, Good, MinedGood, Office, ProcessedGood, RawGood, SpecialKind, Species, Stock, Terrain, TileTrait } from './types.js';
+import type { Strategy } from './playbook.js';
 
 /**
  * Every balancing number lives here, so playtests and the simulator can tune
@@ -1395,6 +1396,66 @@ export const AI_HANDS = {
   grant: {
     /** A go/no-go choice takes this much longer than a bare reaction. */
     choiceMs: [150, 300] as [number, number],
+  },
+};
+
+type PlanKind = Strategy['kind'];
+
+/**
+ * The AI's game plan (playbook.ts): which plan kind a seat drafts, the strategy fields it writes, and the bounds every
+ * playbook is held to, the engine's own draft and Claude's edits alike.
+ */
+export const AI_PLANS = {
+  /** Seats play their playbook; false: every seat plays the phase-by-phase asks, as before playbooks. */
+  on: true,
+  /** How much each persona leans to each plan kind, 0 to 1: the draft picks the eligible kind it leans to most. */
+  leaning: {
+    cautious: { builder: 1, specialist: 0.5, monopolist: 0.2, landBaron: 0.3, politician: 0.4, spoiler: 0 },
+    aggressive: { builder: 0.3, specialist: 0.5, monopolist: 0.6, landBaron: 1, politician: 0.2, spoiler: 0.4 },
+    trader: { builder: 0.3, specialist: 1, monopolist: 1, landBaron: 0.3, politician: 0.2, spoiler: 0 },
+    saboteur: { builder: 0.2, specialist: 0.4, monopolist: 0.5, landBaron: 0.4, politician: 0.3, spoiler: 1 },
+  } satisfies Record<AiPersonaId, Record<PlanKind, number>>,
+  moneyMaker: {
+    /** A good's score sums its install gain over this many of the seat's best plots for it (own idle and free). */
+    plots: 3,
+    /** Each rival plot already making the good cuts its score by this share. */
+    rivalDiscount: 0.15,
+    /** Weight of the "My money-maker" consideration in a development pick. */
+    weight: 1,
+    /** That consideration's score, 0 to 1, for an outfit that makes another good (the money-maker scores 1). */
+    otherScore: 0.8,
+  },
+  monopoly: {
+    /** The goods a seat may try to corner. */
+    goods: ['food', 'energy', 'smithore'] as Good[],
+    /** A good is cornered only while at most this many rival plots make it. */
+    maxRivalPlots: 1,
+    /** And only with at least this many of its own idle or free plots whose best outfit is the good. */
+    minPlots: 2,
+  },
+  landBaron: {
+    /** The land baron is a plan while at least this share of all plots is free. */
+    minFreeShare: 0.3,
+  },
+  landTarget: {
+    /** The plot target is for this many months ahead, at most to the last month. */
+    months: 3,
+    /** Plots a month the target adds, by plan kind; `other` for every kind not named. */
+    perMonth: { landBaron: 2, other: 1 } as Partial<Record<PlanKind, number>> & { other: number },
+  },
+  /** What a playbook may hold: a value outside is clamped or refused. */
+  bounds: {
+    /** Credits a strategy's cash floor may ask, at most. */
+    cashFloorMax: 2000,
+    /** Notes on one rival, at most, and characters a note. */
+    rivalReadNotes: 3,
+    rivalReadChars: 140,
+    /** Notes for later months, at most. */
+    lessons: 5,
+    /** Steps a development route may have, at most. */
+    routeSteps: 24,
+    /** Credits a second of the auction clock a seat may concede, at most. */
+    concedeMaxCrPerS: 50,
   },
 };
 
