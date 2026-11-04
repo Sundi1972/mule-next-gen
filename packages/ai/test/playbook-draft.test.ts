@@ -1,10 +1,29 @@
 import { describe, expect, it } from 'vitest';
-import { AI_PLANS, createGame, GOODS, observe, type AiLevelId, type AiPersonaId, type GameState, type Good, type Strategy } from '@mule/engine';
-import { draftPlaybook } from '../src/playbook/draft.js';
+import {
+  advancePhase,
+  AI_PLANS,
+  createGame,
+  GAME,
+  GOODS,
+  MS_PER_SECOND,
+  observe,
+  stableJson,
+  STRATEGIST,
+  type AiLevelId,
+  type AiPersonaId,
+  type GameState,
+  type Good,
+  type Phase,
+  type Strategy,
+} from '@mule/engine';
+import { Brain } from '../src/brain.js';
+import { PERSONAS } from '../src/personas.js';
+import { playGame } from '../src/play.js';
+import { draftPlaybook, type DraftPhase } from '../src/playbook/draft.js';
 import { AiSeat } from '../src/seat.js';
 import { applySets } from '../src/sim.js';
-import { leaderOf } from '../src/strategist.js';
-import { canFeed, cashReserve, installGain, type Mind } from '../src/value.js';
+import { goodPlan, landDecision, leaderOf, tradeDecision } from '../src/strategist.js';
+import { beforeTax, canFeed, cashReserve, installGain, type Mind } from '../src/value.js';
 import { outlook } from '../src/outlook.js';
 
 const PERSONAS_AT_TABLE: AiPersonaId[] = ['cautious', 'aggressive', 'trader', 'saboteur'];
@@ -145,4 +164,138 @@ describe('the draft picks a plan kind and writes its strategy', () => {
   });
 
   it.todo('B-AC-5: four personas draft four kinds; Rookie drafts no monopolist or spoiler');
+});
+
+/** Plays seed 11's table to the end of month 1's production, keeping a copy of the state at the end of each phase. */
+function month1(): Partial<Record<Phase, GameState>> {
+  const kept: Partial<Record<Phase, GameState>> = {};
+  const enough = new Error('month 1 played');
+  try {
+    playGame(11, PERSONAS_AT_TABLE.map((persona) => ({ persona, level: 'trader' })), {
+      onPhase: (s) => {
+        if (s.month !== 1) return;
+        kept[s.phase] = structuredClone(s);
+        if (s.phase === 'production') throw enough;
+      },
+    });
+  } catch (err) {
+    if (err !== enough) throw err;
+  }
+  return kept;
+}
+
+function advanceTo(state: GameState, phase: Phase): GameState {
+  const s = structuredClone(state);
+  while (s.phase !== phase) advancePhase(s);
+  return s;
+}
+
+/** The phase's state: planning as month 1 opens, development after the grant, the auction after production. */
+const played = month1();
+const at: Record<DraftPhase, GameState> = {
+  planning: createGame({ seed: 11, players: PERSONAS_AT_TABLE.map((_, i) => ({ id: `ai${i}`, name: `AI ${i + 1}`, isAi: true })) }),
+  development: advanceTo(played.landGrant!, 'development'),
+  auction: advanceTo(played.production!, 'auction'),
+};
+const seats = table('trader').seats;
+const draftAt = (phase: DraftPhase, i: number, state = at[phase]) => draftPlaybook({ state, seat: seats[i]!.mind.me, mind: seats[i]!.mind, seed: seats[i]!.seed, phase });
+
+/** RULE-1b: (analyse | buyMule outfit install | filter)* pub?, pub at most once and last. */
+const ROUTE = /^(?:(?:analyse|buyMule outfit install|filter)(?: |$))*(?:pub)?$/;
+const grammar = (route: { act: string }[]) => route.map((s) => s.act).join(' ');
+
+describe('the draft writes the parts of its phase', () => {
+  it('T-AC-4: the same state drafts stableJson-identical playbooks, for each phase', () => {
+    for (const phase of ['planning', 'development', 'auction'] as const) {
+      for (let i = 0; i < seats.length; i++) {
+        const before = stableJson(at[phase]);
+        const first = draftAt(phase, i);
+        expect(first[phase === 'planning' ? 'landGrant' : phase], `${phase} ai${i}`).toBeDefined();
+        expect(stableJson(draftAt(phase, i)), `${phase} ai${i}`).toBe(stableJson(first));
+        // The draft reads a copy; the game it was handed is untouched.
+        expect(stableJson(at[phase]), `${phase} ai${i}`).toBe(before);
+      }
+    }
+  });
+
+  it("RULE-5: each phase's parts", () => {
+    // planning: the strategy, an empty planning part (no listing until RULE-12, no drone), the land grant part.
+    const planning = draftAt('planning', 2);
+    expect(Object.keys(planning).sort()).toEqual(['by', 'landGrant', 'month', 'phase', 'planning', 'seat', 'strategy', 'v']);
+    expect(planning).toMatchObject({ v: 1, seat: 'ai2', month: 1, phase: 'planning', by: 'engine', planning: {} });
+    const grant = planning.landGrant!;
+    expect(grant).toMatchObject({ pressShare: { start: STRATEGIST.grantShare, end: STRATEGIST.grantShare }, claims: GAME.claimsPerGrant, deny: [], planB: [] });
+    // With no pending pick, the ranking of one of landDecision's plans, as {plot, value}.
+    const mind = seats[2]!.mind;
+    const plans = landDecision(observe(at.planning, 'ai2'), mind).options.map((c) => c.action.ranking.map((s) => ({ plot: s.index, value: Math.round(s.value) })));
+    expect(plans).toContainEqual(grant.ranked);
+    expect(new Set(grant.ranked.map((r) => r.plot)).size).toBe(grant.ranked.length);
+    for (const r of grant.ranked) expect(at.planning.tiles[r.plot]).toMatchObject({ owner: null }), expect(at.planning.tiles[r.plot]!.terrain).not.toBe('store');
+
+    // With the seat's pending pick, the plan it answered, else its fallback; the pick stays unsettled.
+    const obs = observe(at.planning, 'ai2');
+    const pending = new Brain(mind, PERSONAS.trader, 'AI 3', 7, null).ask('land', landDecision(obs, mind), obs, Infinity, null, '');
+    expect(pending.options.length).toBeGreaterThan(1);
+    const rankingOf = (k: number) => pending.list.options[k]!.action.ranking.map((s) => ({ plot: s.index, value: Math.round(s.value) }));
+    const withPick = (answer: typeof pending.answer) =>
+      draftPlaybook({ state: at.planning, seat: 'ai2', mind, seed: seats[2]!.seed, phase: 'planning', land: { ...pending, answer } }).landGrant!.ranked;
+    expect(withPick({ optionId: 'B', line: null, by: 'llm' })).toEqual(rankingOf(1));
+    const fallback = pending.options.findIndex((o) => o.id === pending.fallback.optionId);
+    expect(withPick(null)).toEqual(rankingOf(fallback));
+    expect(withPick({ optionId: 'Z', line: null, by: 'llm' })).toEqual(rankingOf(fallback));
+    expect(pending.settled).toBeNull();
+
+    // development: RULE-1b's grammar ending at the pub, MULEs on distinct idle plots of its own, at most the level's.
+    for (let i = 0; i < seats.length; i++) {
+      const dev = draftAt('development', i);
+      expect(Object.keys(dev).sort()).toEqual(['by', 'development', 'month', 'phase', 'seat', 'strategy', 'v']);
+      const { route, timeBudgetMs, ifSoldOut } = dev.development!;
+      expect(grammar(route), `ai${i}`).toMatch(ROUTE);
+      expect(route.at(-1)).toEqual({ act: 'pub' });
+      expect(route.length).toBeLessThanOrEqual(AI_PLANS.bounds.routeSteps);
+      const installs = route.filter((s) => s.act === 'install').map((s) => s.plot!);
+      expect(installs.length).toBeLessThanOrEqual(mind.level.mulesPerMonth);
+      expect(new Set(installs).size).toBe(installs.length);
+      for (const plot of installs) expect(at.development.tiles[plot]).toMatchObject({ owner: `ai${i}`, outfit: null });
+      for (const step of route.filter((s) => s.act === 'outfit')) expect(step.outfit).toBeDefined();
+      expect(timeBudgetMs).toBe(at.development.players[i]!.devSeconds * MS_PER_SECOND);
+      expect(ifSoldOut).toBe('pub');
+    }
+    // After month 1's grant every seat holds idle land and the cash for a MULE: at least one seat drafts two.
+    expect(seats.map((_, i) => draftAt('development', i).development!.route.filter((s) => s.act === 'buyMule').length)).toContain(2);
+    // Negative: with no idle plot of its own, no MULE at all.
+    const bare = advanceTo(at.planning, 'development');
+    expect(bare.tiles.some((t) => t.owner === 'ai0')).toBe(false);
+    expect(draftAt('development', 0, bare).development!.route.filter((s) => s.act !== 'analyse' && s.act !== 'filter')).toEqual([{ act: 'pub' }]);
+
+    // auction: the good that is up and the queue; role and hold from a tradeDecision option; the walk's defaults.
+    const a = at.auction.auction!;
+    const goods = [a.good!, ...a.queue];
+    for (let i = 0; i < seats.length; i++) {
+      const auction = draftAt('auction', i);
+      expect(Object.keys(auction).sort()).toEqual(['auction', 'by', 'month', 'phase', 'seat', 'strategy', 'v']);
+      expect(Object.keys(auction.auction!)).toEqual(goods);
+      const sobs = observe(at.auction, `ai${i}`);
+      const me = sobs.players[i]!;
+      for (const good of goods) {
+        const part = auction.auction![good]!;
+        const plan = goodPlan(sobs, seats[i]!.mind, good);
+        const h = me.stock[good];
+        const options = tradeDecision(sobs, seats[i]!.mind, plan).options.map(({ action: t }) =>
+          t.side === 'seller' ? { role: 'seller', hold: t.keep } : t.side === 'buyer' ? { role: 'buyer', hold: t.upTo } : { role: 'out', hold: h },
+        );
+        expect(options, `ai${i} ${good}`).toContainEqual({ role: part.role, hold: part.hold });
+        expect(part).toMatchObject({ start: part.walkAway, concedeCrPerS: 0, bluff: false, vsRival: 'undercut1' });
+        expect(part.per).toBeUndefined();
+        expect(part.market).toBeUndefined();
+        expect(Number.isInteger(part.walkAway) && part.walkAway >= 1).toBe(true);
+        // The walk-away is today's limit for the first unit: a seller's floor, a buyer's ceiling.
+        if (part.role === 'seller') expect(part.walkAway).toBe(Math.max(1, Math.ceil(beforeTax(sobs, plan.values.keep[h - 1]!))));
+        if (part.role === 'buyer') {
+          const essential = h < plan.values.block && (good === 'food' || good === 'energy');
+          expect(part.walkAway).toBe(Math.max(1, Math.floor(Math.min(plan.values.buy[h]!, essential ? me.money : Math.min(me.money, plan.budget)))));
+        }
+      }
+    }
+  });
 });
