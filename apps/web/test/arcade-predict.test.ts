@@ -62,19 +62,18 @@ function frameOf(floor: DevFloor): DevFrame {
   };
 }
 
-/** Lena's stick over the turn, by the ms it is pushed: around the store, through its hall, out and down past the swamp. */
+/**
+ * Lena's stick over the turn, by the ms it is pushed: in at the store's left door, across its hall and out of the right
+ * one, on over the plains, down past the lake, then back left and up past the swamp, a diagonal and a half push between.
+ */
 const STICK: [number, number, number][] = [
   [0, 0, 0],
-  [300, -1, 0],
-  [1_300, 0, -1],
-  [2_100, 1, 0],
-  [3_300, 0.7, 0.7],
-  [4_000, 0, 1],
-  [4_900, 1, 0],
-  [8_400, 0, 0.5],
-  [9_000, -1, 0.25],
-  [10_500, -0.5, -0.875],
-  [11_600, 0, 0],
+  [300, 1, 0],
+  [6_800, 0.7, 0.7],
+  [7_600, 0, 1],
+  [8_200, -1, 0.25],
+  [9_900, -0.5, -0.875],
+  [11_300, 0, 0],
 ];
 const TURN_MS = 12_000;
 
@@ -164,33 +163,37 @@ describe('T-AC-10: the phone predicts its own colonist (RULE-10)', () => {
   });
 
   it('T-AC-10: a latency spike lands inputs after their tick: the copy eases back to the server within snapTiles, never snapping', () => {
-    const run = playTurn(100, { fromMs: 2_000, toMs: 2_600, spikeMs: 120 });
+    const run = playTurn(100, { fromMs: 6_600, toMs: 7_300, spikeMs: 80 });
     expect(run.corrected).toBeGreaterThan(0);
     expect(run.snapped).toBe(0);
     expect(run.worst).toBeLessThanOrEqual(DEV_STEER.snapTiles);
   });
 
-  /** A phone that has stepped its copy to tick 40 walking right, from a first frame at tick 30. */
+  /** A phone that has stepped its copy to tick 40 walking left, from a first frame at tick 20. */
   function walking(): { p: Prediction; world: PredictWorld; base: { pace: number; bitten: boolean; pelts: number }; first: DevFrame } {
     const state = game();
     const cfg = floorConfig();
     const floor = buildFloor(state, cfg);
     const world = predictWorld(viewOf(state), { id: 'lena', carriedMule: null }, cfg);
     const base = { pace: floor.colonists[0]!.pace, bitten: false, pelts: 0 };
-    const first = frameOf({ ...floor, tick: 30 });
+    const first = frameOf({ ...floor, tick: 20 });
     let p = receiveFrame(startPrediction(), first, 0, world, base);
     p = steerFrom(p, { x: -1, y: 0 });
     p = advanceTo(p, 40, world);
     return { p, world, base, first };
   }
 
-  const at = (frame: DevFrame, tick: number, dx: number): DevFrame => ({ ...frame, tick, at: tick * TICK, colonists: frame.colonists.map((c, i) => (i === 0 ? { ...c, x: c.x + dx } : c)) });
+  /** The server's frame at `tick`: Lena `dx` to the right of where the copy had her then, or of `frame` past the copy. */
+  const at = (frame: DevFrame, tick: number, dx: number, p?: Prediction): DevFrame => {
+    const mine = p?.past.find((e) => e.tick === tick)?.me;
+    return { ...frame, tick, at: tick * TICK, colonists: frame.colonists.map((c, i) => (i === 0 ? { ...c, x: (mine?.x ?? c.x) + dx } : c)) };
+  };
 
   it('T-AC-10: within snapTiles the shown colonist eases to the server over correctMs', () => {
     const { p, world, base, first } = walking();
     const before = shownAt(p, 1_000, world.cfg)!;
     // The server has her 0.1 tiles to the right of where the copy had her at tick 30.
-    const corrected = receiveFrame(p, at(first, 30, 0.1), 1_000, world, base);
+    const corrected = receiveFrame(p, at(first, 30, 0.1, p), 1_000, world, base);
     expect(corrected.stats).toMatchObject({ corrected: 1, snapped: 0 });
     // At once she still stands where she was shown; over correctMs she moves the 0.1 across; then she holds.
     expect(shownAt(corrected, 1_000, world.cfg)!.x).toBeCloseTo(before.x, 6);
@@ -203,7 +206,7 @@ describe('T-AC-10: the phone predicts its own colonist (RULE-10)', () => {
     const { p, world, base, first } = walking();
     const before = shownAt(p, 1_000, world.cfg)!;
     const off = DEV_STEER.snapTiles + 0.05;
-    const snapped = receiveFrame(p, at(first, 30, off), 1_000, world, base);
+    const snapped = receiveFrame(p, at(first, 30, off, p), 1_000, world, base);
     expect(snapped.stats).toMatchObject({ corrected: 0, snapped: 1 });
     // No ease: the very same moment shows her where the server's frame and her own inputs since put her.
     expect(shownAt(snapped, 1_000, world.cfg)!.x).toBeCloseTo(before.x + off, 6);
