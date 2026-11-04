@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { GAME, POLLUTION, score, type GameState } from '@mule/engine';
 import type { MuleView } from '@mule/protocol';
 import { MuleGame } from '../src/mule-game.js';
-import { fakeContext, pressThroughSidePick, readyAll, seats, tapThere } from './fake-context.js';
+import { fakeContext, pressThroughSidePick, readyAll, seats } from './fake-context.js';
 
-/** A one-month game where s1 claims the first lit plot and installs a food MULE on it, played to game over. */
+/** A one-month game where s1 claims the first lit plot and has a food MULE on it, played to game over. */
 function playedOut() {
   const { ctx, advance } = fakeContext();
   const game = new MuleGame(ctx, 7, { maxMonths: 1, phaseScale: 0.1 });
@@ -20,12 +20,13 @@ function playedOut() {
   const lit = game.viewFor('s1').lit!;
   game.handle('s1', { type: 'claim', x: lit.x, y: lit.y });
   while (game.viewFor(null).phase !== 'development') step();
-  tapThere(game, { ctx, advance }, 's1', { type: 'buyMule' });
-  tapThere(game, { ctx, advance }, 's1', { type: 'outfit', outfit: 'food' });
-  tapThere(game, { ctx, advance }, 's1', { type: 'install', x: lit.x, y: lit.y });
+  // The score parts are this test's subject, not the errand (walking it is dev-steer.test.ts's): the food MULE goes on
+  // s1's plot as installing leaves it, and month 1's clock, waiting for first MULEs, counts s1 in.
+  const state = (game as unknown as { state: GameState }).state;
+  state.tiles.find((t) => t.x === lit.x && t.y === lit.y)!.outfit = 'food';
+  state.players.find((p) => p.id === 's1')!.installedThisTurn = true;
   for (let n = 0; n < 100_000 && !game.viewFor(null).finished; n++) step();
   expect(game.viewFor(null).finished).toBe(true);
-  const state = (game as unknown as { state: GameState }).state;
   return { game, state, before };
 }
 

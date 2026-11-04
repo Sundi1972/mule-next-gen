@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { GRANT_TICK_MS, MuleGame, PHASE_MS } from '../src/mule-game.js';
-import { clockRunsInMonth1, fakeContext, readyAll, seats } from './fake-context.js';
+import { clockRunsInMonth1, fakeContext, readyAll, seats, steerToThePub } from './fake-context.js';
 
 const humans = ['s1', 's2'];
 
@@ -8,9 +8,10 @@ const humans = ['s1', 's2'];
 function developmentEnds(seed: number, humansGoToPub: boolean) {
   let game: MuleGame | null = null;
   const broadcasts: { at: number; phase: string }[] = [];
-  const { ctx, advance } = fakeContext({
+  const fake = fakeContext({
     onChanged: (at) => broadcasts.push({ at, phase: game!.viewFor(null).phase }),
   });
+  const { ctx, advance } = fake;
   game = new MuleGame(ctx, seed);
   game.start(seats);
   readyAll(game);
@@ -18,7 +19,8 @@ function developmentEnds(seed: number, humansGoToPub: boolean) {
   expect(game.viewFor(null).phase).toBe('development');
   const aiEndsAt = game.viewFor('s3').me!.devEndsAt!;
   const humansEndAt = Math.max(...humans.map((id) => game!.viewFor(id).me!.devEndsAt!));
-  if (humansGoToPub) for (const id of humans) game.handle(id, { type: 'pub' });
+  // Walking is on: each human walks into the store and ends the turn at the pub.
+  if (humansGoToPub) for (const id of humans) steerToThePub(game, fake, id);
   expect(game.viewFor(null).phase).toBe('development');
 
   // Small steps, so a broadcast that only comes with production's own timer can't hide in one big jump.
