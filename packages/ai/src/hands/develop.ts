@@ -207,7 +207,8 @@ export class DevelopHand {
     // An assay under way holds the colonist still for the rest of it: that time is spent before any walk.
     const holding = colonist.assayUntilTick === null ? 0 : (Math.max(0, colonist.assayUntilTick - floor.tick) * dt) / MS_PER_SECOND;
     if (!held && !this.toPub && secondsLeft <= holding + pubSeconds(state, cfg, colonist) + this.margin(cfg, colonist)) this.hurry();
-    const pauseMs = cfg.steer.botCounterPauseSeconds * MS_PER_SECOND * mind.level.devPace;
+    // Hurrying for the pub, it presses the moment it is there: a pause at the counter could cost it the pub.
+    const pauseMs = this.toPub ? 0 : cfg.steer.botCounterPauseSeconds * MS_PER_SECOND * mind.level.devPace;
     // A step done this tick hands over to the next at once, so no tick is spent standing between them.
     for (let ticks = dt; ; ticks = 0) {
       const step = this.next(state, ticks, secondsLeft, () => floorDevWalk(state, cfg, colonist, secondsLeft - holding, (MULE_PRESSES * pauseMs) / MS_PER_SECOND));

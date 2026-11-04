@@ -259,7 +259,16 @@ export class FloorWalker {
     // wall, and the door is still in reach.
     const mouth = doorOutside(state, best.door, cfg);
     const out = best.door === 'doorL' ? -cfg.steer.bodyTiles : cfg.steer.bodyTiles;
-    return this.onMap(view, c, { x: mouth.x + out, y: mouth.y });
+    const to = { x: mouth.x + out, y: mouth.y };
+    // Against the store's top or bottom wall (a straight line to the door grazed its corner): along the wall to the
+    // door's side first, rather than sliding along it at the stick's sideways share.
+    const store = state.tiles.find((t) => t.terrain === 'store')!;
+    const body = cfg.steer.bodyTiles;
+    const inBand = c.x > store.x - body && c.x < store.x + 1 + body;
+    // A step short of the wall is against it: the floor stops a step that would cross into it.
+    const step = (speedOf(c, state, cfg) * cfg.steer.tickMs) / MS_PER_SECOND;
+    const onWall = Math.min(Math.abs(c.y - (store.y - body)), Math.abs(c.y - (store.y + 1 + body))) < step + THERE;
+    return this.onMap(view, c, inBand && onWall ? { x: to.x, y: c.y } : to);
   }
 
   /** To a plot: out of the store first, by the door nearest it, then across the map onto it, or to its shore. */
