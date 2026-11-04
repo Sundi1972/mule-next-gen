@@ -1,4 +1,4 @@
-import { AI_HANDS, lineOf, MS_PER_SECOND, observe, shipLine, storeBuyLine, storeSellLine, type GameState, type Good, type Rng, type Walker } from '@mule/engine';
+import { AI_HANDS, lineOf, MS_PER_SECOND, observe, SHIP_ID, shipLine, shipPrice, storeBuyLine, storeSellLine, type GameState, type Good, type Rng, type Walker } from '@mule/engine';
 import type { Act } from '../actions.js';
 import type { Brain, Pending } from '../brain.js';
 import { goodPlan, tradeDecision, type GoodPlan, type TradeAction } from '../strategist.js';
@@ -206,24 +206,31 @@ export class AuctionHand {
     const line = lineOf(state, w.id);
     if (!line || this.dir !== 0 || w.dir !== 0 || running(w)) return;
     const me = state.players.find((p) => p.id === this.brain.mind.me)!;
-    const units = this.unitsAt(state, w.side, line.price);
+    const units = this.unitsAt(state, w.side, line);
     const key = `${line.house}:${line.price}:${me.stock[state.auction!.good!]}:${me.money}`;
     if (units < 1 || key === this.lineTried) return;
     this.lineTried = key;
     act({ type: 'lineTrade', units });
   }
 
-  /** The units it would trade one by one at this price, by the same limits `aim` walks to: a buyer's value and purse, a seller's floor. */
-  private unitsAt(state: GameState, side: Walker['side'], price: number): number {
+  /**
+   * The units it would trade one by one at this line, by the same limits `aim` walks to: a buyer's value and purse, a
+   * seller's floor. The ship pays a little less for each further unit, so each is priced as the ship will pay it.
+   */
+  private unitsAt(state: GameState, side: Walker['side'], line: { house: string; price: number }): number {
+    const price = line.price;
     const good = state.auction!.good!;
     const plan = this.plan!;
     const trade = this.trade!;
     const me = state.players.find((p) => p.id === this.brain.mind.me)!;
     let units = 0;
     if (side === 'seller' && trade.side === 'seller') {
+      const bought = state.ship.bought[good] ?? 0;
+      const pays = (k: number) => (line.house === SHIP_ID ? shipPrice({ ...state, ship: { ...state.ship, bought: { ...state.ship.bought, [good]: bought + k } } }, good) : price);
       for (let h = me.stock[good]; h > trade.keep && h > 0; h--, units++) {
         const floor = Math.ceil(beforeTax(state, plan.values.keep[h - 1] ?? 0));
-        if (!Number.isFinite(floor) || floor > price) break;
+        const unit = pays(units);
+        if (!Number.isFinite(floor) || unit === null || floor > unit) break;
       }
       return units;
     }
