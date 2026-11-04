@@ -189,13 +189,12 @@ function Glyph({ d, size = 18, className }: { d: string; size?: number; classNam
 }
 
 /**
- * The desks' tabs, on one row. `first` is the desk that asked to come first: amber-edged while another is open. Six
- * keep at least 32 px each in a small phone's 232 px rail: 1 px apart, no side padding, and the words a size smaller
- * there, so "Governor" and "Council" keep every letter (E-11).
+ * The desks' tabs, on one row. `first` is the desk that asked to come first: amber-edged while another is open. On a
+ * phone six or more take rows of four, as the hub mock draws them, so every label keeps 10 px and every letter (E-11).
  */
 export function DeskTabs({ desks, active, first = null, onPick }: { desks: DeskSlot[]; active: string; first?: string | null; onPick(id: string): void }) {
   return (
-    <div role="tablist" aria-label="Desks" className="flex gap-0.5 @max-3xl/shell:gap-px @min-[1100px]/shell:gap-1" data-testid="desks">
+    <div role="tablist" aria-label="Desks" className="flex gap-0.5 @max-3xl/shell:gap-px @max-3xl/shell:has-[>:nth-child(6)]:grid @max-3xl/shell:has-[>:nth-child(6)]:grid-cols-4 @min-[1100px]/shell:gap-1" data-testid="desks">
       {desks.map(({ id, label, icon, locked, Badge }) => (
         <button
           key={id}
