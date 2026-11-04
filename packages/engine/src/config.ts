@@ -1,4 +1,4 @@
-import type { Outfit, EventKey, GrownGood, Good, MinedGood, Office, ProcessedGood, RawGood, SpecialKind, Species, Stock, Terrain, TileTrait } from './types.js';
+import type { Outfit, EventKey, GrownGood, Good, MinedGood, Office, PrestigeId, ProcessedGood, RawGood, SpecialKind, Species, Stock, Terrain, TileTrait } from './types.js';
 
 /**
  * Every balancing number lives here, so playtests and the simulator can tune
@@ -877,6 +877,31 @@ export const POLITICS = {
     /** The fund is low under this many months of the elected offices' pay. */
     fundMonths: 3,
   },
+};
+
+/**
+ * The colony as a shared project: its prestige objects, one table row each. Every number is a placeholder
+ * until the colony's sim tuning sets it and Heiko OKs it. An object's full cost is its credits plus its goods at
+ * their reference prices; upkeep and repair are in credits.
+ */
+export const PRESTIGE = {
+  park: { name: 'Park', credits: 420, goods: { alloy: 2 }, buildMonths: 1, needsPlot: true, prestige: 2, upkeep: 30, repairCost: 150 },
+  hospital: { name: 'Hospital', credits: 680, goods: { electronics: 1 }, buildMonths: 2, needsPlot: false, prestige: 3, upkeep: 45, repairCost: 225 },
+  observatory: { name: 'Observatory', credits: 700, goods: { crystite: 3 }, buildMonths: 2, needsPlot: false, prestige: 3, upkeep: 50, repairCost: 250 },
+  stadium: { name: 'Stadium', credits: 1_000, goods: { alloy: 2, electronics: 1 }, buildMonths: 3, needsPlot: true, prestige: 4, upkeep: 70, repairCost: 350 },
+  spaceport: { name: 'Spaceport upgrade', credits: 1_380, goods: { alloy: 2, electronics: 2 }, buildMonths: 3, needsPlot: true, prestige: 5, upkeep: 100, repairCost: 500 },
+} satisfies Record<PrestigeId, { name: string; credits: number; goods: Partial<Record<Good, number>>; buildMonths: number; needsPlot: boolean; prestige: number; upkeep: number; repairCost: number }>;
+
+/** The colony fund's own rules. Placeholders until the colony's sim tuning. */
+export const COLONY = {
+  /** Projects commissioned or building at the same time. */
+  maxOpen: 1,
+  /** Credits the fund keeps back from a project's funding, so next month's office pay is there. */
+  reserve: 100,
+  /** The fund buys an object's missing goods from the store at the store's price; off, only donors' goods fund it. Provisional until Heiko confirms it. */
+  fundBuysGoods: true,
+  /** The Federation's grant into the fund at each upkeep, in credits; flat until a scaling rule is tuned. */
+  grant: { perMonth: 150 },
 };
 
 /**

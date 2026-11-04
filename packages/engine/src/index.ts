@@ -7,6 +7,7 @@ export * from './map.js';
 export * from './production.js';
 export * from './events.js';
 export * from './economy.js';
+export * from './colony.js';
 export * from './walk.js';
 export * from './dev-walk.js';
 export {

@@ -4,6 +4,7 @@
  * GameState.politics. A tie nothing else breaks is drawn by lot on its own seeded
  * stream, so a replay from the seed draws the same and no other draw moves.
  */
+import { fundOut } from './colony.js';
 import { POLITICS } from './config.js';
 import { RuleError } from './errors.js';
 import { player } from './game.js';
@@ -427,9 +428,7 @@ export function payOffices(state: GameState): void {
   for (const office of POLITICS.offices) {
     const id = state.politics[office];
     if (id === null) continue;
-    const paid = Math.max(0, Math.min(state.treasury.money, POLITICS.pay[office]));
-    state.treasury.money -= paid;
-    player(state, id).money += paid;
+    player(state, id).money += fundOut(state, 'officePay', POLITICS.pay[office]);
   }
 }
 
