@@ -155,7 +155,8 @@ const point = (p: { x: number; y: number }) => ({ x: onWire(p.x), y: onWire(p.y)
 
 /**
  * The moments' state for the frame (AM-28), straight from the floor, positions rounded (AM-15): each pack met, the
- * glint, the turn's scramble from its call to the turn's end, and the MULEs bolted and not caught. Null while none is on.
+ * glint, the turn's scramble from its call to the turn's end, the MULEs bolted and not caught, and the colonists
+ * stunned. Null while none is on.
  */
 function frameMoments(floor: DevFloor): FrameMoments | null {
   const packs = floor.colonists.flatMap((c) => {
@@ -167,12 +168,15 @@ function frameMoments(floor: DevFloor): FrameMoments | null {
   const g = floor.moments.glint;
   const s = floor.moments.scramble;
   const bolted = floor.colonists.filter((c) => c.bolt).map((c) => c.id);
-  if (packs.length === 0 && !g && !s && bolted.length === 0) return null;
+  // The floor clears a stun on the tick it ends, so one still on a colonist is on.
+  const stunned = floor.colonists.flatMap((c) => (c.stunnedUntilTick === undefined ? [] : [{ who: c.id, untilTick: c.stunnedUntilTick }]));
+  if (packs.length === 0 && !g && !s && bolted.length === 0 && stunned.length === 0) return null;
   return {
     packs,
     glint: g && { x: g.x, y: g.y, untilTick: g.untilTick },
     scramble: s && { untilTick: s.untilTick, needers: [...s.needers], got: [...s.got], over: s.over, leftOut: [...s.leftOut] },
     bolted,
+    stunned,
   };
 }
 
