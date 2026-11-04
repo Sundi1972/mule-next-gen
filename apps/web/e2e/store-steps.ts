@@ -1438,6 +1438,13 @@ export async function theGlintRace(t: ArcadeTable): Promise<string> {
       ok: lit.mia.glint?.x === g.x && lit.mia.glint.y === g.y && lit.tv.glint?.x === g.x && lit.tv.glint.y === g.y && !!lit.heiko.strip?.includes(words),
       said: `${framesSay(lit.frames)}; Mia's phone ${JSON.stringify(lit.mia.glint)}, the TV ${JSON.stringify(lit.tv.glint)}, Heiko's strip ${JSON.stringify(lit.heiko.strip)}`,
     });
+    // A glint once won or faded is gone; the next can light pauseSeconds later (0.5), so "gone" is never "no glint".
+    const gone = (was: { untilTick: number }) => floorOf(server, code).moments.glint?.untilTick !== was.untilTick;
+    // What a screen draws once one is gone: none, or the server's next, never the one that went.
+    const drawsNotThe = (was: { untilTick: number }, d: { x: number; y: number } | null) => {
+      const next = floorOf(server, code).moments.glint;
+      return d === null || (!!next && next.untilTick !== was.untilTick && d.x === next.x && d.y === next.y);
+    };
     // The race: Mia, a step away, walks onto it with the stick.
     const c0 = playerOf(server, code, 's2').stock.crystite;
     const h0 = playerOf(server, code, 's1').stock.crystite;
@@ -1446,16 +1453,13 @@ export async function theGlintRace(t: ArcadeTable): Promise<string> {
     await mia.waitForTimeout(200);
     await steerTo(mia, server, code, 's2', plotCentre(g.x, g.y), { via: 'stick', within: 0.3 }).catch(() => undefined);
     const won = await playerWhen(mia, server, code, 's2', (p) => p.stock.crystite > c0);
-    check(won.stock.crystite === c0 + GLINT.crystite && floorOf(server, code).moments.glint === null, `B-AC-6: the first onto the glint, Mia, gets +${GLINT.crystite} Crystite, ${c0} → ${won.stock.crystite}`);
+    check(won.stock.crystite === c0 + GLINT.crystite && gone(g), `B-AC-6: the first onto the glint, Mia, gets +${GLINT.crystite} Crystite, ${c0} → ${won.stock.crystite}`);
     check(playerOf(server, code, 's1').stock.crystite === h0, 'B-AC-6: and nobody else does');
     await tv.waitForTimeout(300);
     const after = await readMoments(tv);
     check(after.beats.some((b) => b.startsWith('Mia got the glint')), `B-AC-6: the TV says who got it; the frames' beats ${JSON.stringify(heardBeats(wires.tv, raced))}, the TV shows ${JSON.stringify(after.beats)}`);
-    // The next may light within a second (pauseSeconds 0.5, meanGapSeconds 1): a screen draws the server's glint, never the won one.
-    const next = floorOf(server, code).moments.glint;
     const afterMia = (await readMoments(mia)).glint;
-    const notTheWon = (d: { x: number; y: number } | null) => d === null || (!!next && next.untilTick !== g.untilTick && d.x === next.x && d.y === next.y);
-    owed.push({ tag: 'once won the glint is drawn on no screen', ok: notTheWon(after.glint) && notTheWon(afterMia), said: `the TV ${JSON.stringify(after.glint)}, Mia ${JSON.stringify(afterMia)}, the server's next ${JSON.stringify(next)}` });
+    owed.push({ tag: 'once won the glint is drawn on no screen', ok: drawsNotThe(g, after.glint) && drawsNotThe(g, afterMia), said: `the TV ${JSON.stringify(after.glint)}, Mia ${JSON.stringify(afterMia)}, the server's next ${JSON.stringify(floorOf(server, code).moments.glint)}` });
     out.push(`lit at ${words}, Mia got it`);
 
     // Negative: the next, with nobody on the way, fades and nobody gets it.
@@ -1470,12 +1474,12 @@ export async function theGlintRace(t: ArcadeTable): Promise<string> {
     const lit2 = Date.now();
     const before = ['s1', 's2'].map((s) => playerOf(server, code, s).stock.crystite);
     const end = Date.now() + (GLINT.showSeconds + 2) * 1_000;
-    while (floorOf(server, code).moments.glint && Date.now() < end) await mia.waitForTimeout(TICK_MS);
-    check(floorOf(server, code).moments.glint === null, `B-AC-6 (negative): after showSeconds the glint at ${g2.x + 1}·${g2.y + 1} fades`);
+    while (!gone(g2) && Date.now() < end) await mia.waitForTimeout(TICK_MS);
+    check(gone(g2), `B-AC-6 (negative): after showSeconds the glint at ${g2.x + 1}·${g2.y + 1} fades`);
     check(['s1', 's2'].every((s, i) => playerOf(server, code, s).stock.crystite === before[i]), 'B-AC-6 (negative): and nobody gets it');
     await tv.waitForTimeout(300);
     const faded = { tv: await readMoments(tv), mia: await readMoments(mia) };
-    check(faded.tv.glint === null && faded.mia.glint === null, 'B-AC-6 (negative): faded, it is drawn on no screen');
+    check(drawsNotThe(g2, faded.tv.glint) && drawsNotThe(g2, faded.mia.glint), `B-AC-6 (negative): faded, it is drawn on no screen; the TV ${JSON.stringify(faded.tv.glint)}, Mia ${JSON.stringify(faded.mia.glint)}`);
     check(faded.tv.beats.includes('The glint faded'), `B-AC-6 (negative): the TV says the glint faded; the frames' beats ${JSON.stringify(heardBeats(wires.tv, lit2))}, the TV shows ${JSON.stringify(faded.tv.beats)}`);
     out.push(`the next at ${g2.x + 1}·${g2.y + 1} faded`);
   } finally {
