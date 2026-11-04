@@ -20,8 +20,19 @@ const CODE = 'KEYLESS';
 const STEP_MS = 500;
 /** How long the host looks at planning, and reads the month end, before pressing on: the two phases that wait for players. */
 const HOST_PRESSES_AFTER_MS = 3_000;
+/**
+ * How far past its legal length a phase may stay open before it counts as stalled. Keyless there is no model wait
+ * anywhere: what is left is the AI seat's own reaction (its level's slowest) and the step this loop sees the change in.
+ */
+const SLACK_MS = AI_LEVELS[DEFAULT_AI_LEVEL].reactMs[1] + STEP_MS;
+/**
+ * A good's side pick at its slowest. Since A-7 it has no clock (WALK.statusMs null): it waits for every seat's Done, so
+ * it lasts the host's Ready plus the AI seats' reaction. The host never presses Continue, which would mark the AI seats
+ * Done for them and hide the very stall this proves absent. A number restores a clock, and then that is its length.
+ */
+const SIDE_PICK_MS = (WALK.statusMs ?? HOST_PRESSES_AFTER_MS) + SLACK_MS;
 /** The goods auction at its slowest: every good's side pick, walk at the trading clock, and close. */
-const GOODS_AUCTION_MS = WALK.order.length * (WALK.statusMs + WALK.goodMs / WALK.tradeClockRate + WALK.closeMs);
+const GOODS_AUCTION_MS = WALK.order.length * (SIDE_PICK_MS + WALK.goodMs / WALK.tradeClockRate + WALK.closeMs);
 /** The land auction at its slowest: every lot of the month and the colony's plot, each run to its late-change cap. */
 const LAND_AUCTION_MS = (LOTS.maxLotsPerMonth + 1) * (LOTS.introMs + LOTS.walkMs + LOTS.lateCapMs + LOTS.resultMs);
 const AIS = 4;
@@ -44,15 +55,11 @@ interface PhaseLived {
   month: number;
   phase: string;
   ms: number;
+  /** The good whose side pick is open, and how long it has been open with no event show holding it; null outside one. */
+  sidePick: { good: string; ms: number; pressed: boolean } | null;
   /** The most the phase was still open past its legal length or its own clock's end. */
   overrunMs: number;
 }
-
-/**
- * How far past its legal length a phase may stay open before it counts as stalled. Keyless there is no model wait
- * anywhere: what is left is the AI seat's own reaction (its level's slowest) and the step this loop sees the change in.
- */
-const SLACK_MS = AI_LEVELS[DEFAULT_AI_LEVEL].reactMs[1] + STEP_MS;
 
 /**
  * The longest a phase may legally stay open, from the config, or null where the view carries its clock (phaseEndsAt:
@@ -77,9 +84,9 @@ function legalMs(phase: string, view: MuleView): number | null {
   }
 }
 
-/** Whether a phase has stalled: open past its legal length, or past its own clock, by more than SLACK_MS. */
+/** Whether a phase has stalled: open past its legal length or its own clock by more than SLACK_MS, or a side pick past its own. */
 function stalledBy(p: PhaseLived): boolean {
-  return p.overrunMs > SLACK_MS;
+  return p.overrunMs > SLACK_MS || (p.sidePick !== null && p.sidePick.ms > SIDE_PICK_MS);
 }
 
 /**
@@ -103,7 +110,7 @@ async function playKeyless(seed: number, months: number): Promise<{ finished: bo
   send({ t: 'start' });
 
   const now = () => game!.viewFor(null);
-  const lived = (month: number, phase: string): PhaseLived => ({ month, phase, ms: 0, overrunMs: 0 });
+  const lived = (month: number, phase: string): PhaseLived => ({ month, phase, ms: 0, overrunMs: 0, sidePick: null });
   const phases: PhaseLived[] = [];
   let current = lived(now().month, now().phase);
   while (!(now().finished ?? false)) {
@@ -120,6 +127,17 @@ async function playKeyless(seed: number, months: number): Promise<{ finished: bo
     const over = phaseEndsAt !== null ? Date.now() - phaseEndsAt : current.ms - (legal ?? GOODS_AUCTION_MS + EVENT_SHOW.capMs);
     current.overrunMs = Math.max(current.overrunMs, over);
     if ((phase === 'planning' || phase === 'upkeep') && current.ms >= HOST_PRESSES_AFTER_MS) send({ t: 'intent', intent: { type: 'ready' } });
+    // A good's side pick: the host presses Ready once, HOST_PRESSES_AFTER_MS after any event show lets it; the AI seats must do the rest.
+    const pick = phase === 'auction' && view.auction?.stage === 'status' ? view.auction.good : null;
+    if (pick === null) current.sidePick = null;
+    else {
+      if (current.sidePick?.good !== pick) current.sidePick = { good: pick, ms: 0, pressed: false };
+      if (!view.eventShow?.held) current.sidePick.ms += STEP_MS;
+      if (!current.sidePick.pressed && current.sidePick.ms >= HOST_PRESSES_AFTER_MS) {
+        send({ t: 'intent', intent: { type: 'ready' } });
+        current.sidePick.pressed = true;
+      }
+    }
     if (stalledBy(current)) return { finished: false, phases, stalled: current };
   }
   phases.push(current);
@@ -145,7 +163,7 @@ describe('G-2 keyless: AI seats never stall a game with the key unset', () => {
     const stalls: string[] = [];
     for (const seed of TRIAL_SEEDS) {
       const { finished, phases, stalled } = await playKeyless(seed, GAME.maxMonths);
-      if (stalled) stalls.push(`seed ${seed}: month ${stalled.month} ${stalled.phase} open ${stalled.ms} ms, ${stalled.overrunMs} ms past its bound`);
+      if (stalled) stalls.push(`seed ${seed}: month ${stalled.month} ${stalled.phase}${stalled.sidePick ? ` (${stalled.sidePick.good} side pick ${stalled.sidePick.ms} ms)` : ''} open ${stalled.ms} ms, ${stalled.overrunMs} ms past its bound`);
       else if (!finished) stalls.push(`seed ${seed}: no gameOver`);
       console.log(`keyless seed ${seed}: ${finished ? 'over' : 'stalled'}, ${phases.length} phases, longest ${Math.max(...phases.map((p) => p.ms)) / 1_000} s`);
     }
