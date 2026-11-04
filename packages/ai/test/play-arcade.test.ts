@@ -81,10 +81,10 @@ describe('the AI walks the floor, and the sim plays it (arcade C9, C10)', () => 
       expect(seats, `turn ${i}: one record a seat`).toHaveLength(LEVELS.length);
       for (const t of seats) {
         const why = `turn ${i}, month ${t.month}, ${t.id}`;
-        // The one excuse: a pack met it when the pub, at the bitten pace, was already further than the time left.
-        // The share of such turns is judged on the sim's sample, below; here each one is shown.
-        if (t.pubAt === null && t.lateWolves) {
-          console.log(`T-AC-5 excused: ${why}: a pack met it with the pub out of reach at the bitten pace`);
+        // The one excuse (AM-23, RULE-4's unknown): a wolf encounter holds it when the bell rings. The share of such
+        // turns is judged on the sim's sample, below; here each one is shown.
+        if (t.pubAt === null && t.wolvesAtBell) {
+          console.log(`T-AC-5 excused (AM-23): ${why}: a wolf encounter held it when the bell rang`);
           continue;
         }
         expect(t.pubAt, `${why}: never reached the pub`).not.toBeNull();
@@ -158,12 +158,13 @@ describe("the moments in the sim's games (T-AC-5, AM-22)", () => {
     expect(sum(moments, 'raced') / glints, 'share of glints a bot raced').toBeGreaterThanOrEqual(0.4);
   });
 
-  it('T-AC-5: every AI colonist reaches the pub, but where a pack met it with the pub out of reach at the bitten pace, at most 1% of turns', { timeout: 120_000 }, () => {
+  it('T-AC-5 (AM-23): every AI colonist reaches the pub within 50 s, except one a wolf encounter holds when the bell rings, at most 1% of turns', { timeout: 120_000 }, () => {
     const { turns } = simGames();
     const missed = turns.filter((t) => t.pubAt === null);
-    const excused = missed.filter((t) => t.lateWolves);
-    for (const t of excused) console.log(`T-AC-5 excused: month ${t.month}, ${t.id}: a pack met it with the pub out of reach at the bitten pace`);
-    expect(missed.filter((t) => !t.lateWolves).map((t) => `month ${t.month}, ${t.id}`), 'missed the pub with no excuse').toEqual([]);
+    const excused = missed.filter((t) => t.wolvesAtBell);
+    for (const t of excused) console.log(`T-AC-5 excused (AM-23): month ${t.month}, ${t.id}: a wolf encounter held it when the bell rang`);
+    const unexcused = missed.filter((t) => !t.wolvesAtBell).map((t) => `month ${t.month}, ${t.id}${t.lateWolves ? ' (a pack met it with the pub out of reach at the bitten pace)' : ''}`);
+    expect(unexcused, 'missed the pub with no excuse').toEqual([]);
     expect(excused.length / turns.length, `excused turns: ${excused.length} of ${turns.length}`).toBeLessThanOrEqual(0.01);
     expect(turns.every((t) => t.pubAt === null || t.pubAt <= DEVELOPMENT.fullSeconds)).toBe(true);
   });
