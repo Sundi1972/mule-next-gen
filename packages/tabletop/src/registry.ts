@@ -31,11 +31,11 @@ export class RoomRegistry<Intent, View> {
     return this.rooms.size;
   }
 
-  /** Disposes every room, as the server shuts down: no game's timers outlive it. */
+  /** Disposes every room, as the server shuts down: no game's timers outlive it. One room that fails to stops no other. */
   disposeAll(): void {
     for (const [code, entry] of this.rooms) {
-      entry.room.dispose();
       this.rooms.delete(code);
+      disposeQuietly(code, entry.room);
     }
   }
 
@@ -46,9 +46,18 @@ export class RoomRegistry<Intent, View> {
       if (!entry.room.isIdle) entry.idleSince = null;
       else if (entry.idleSince === null) entry.idleSince = now;
       else if (now - entry.idleSince >= idleMs) {
-        entry.room.dispose();
         this.rooms.delete(code);
+        disposeQuietly(code, entry.room);
       }
     }
+  }
+}
+
+/** Disposes a room; a game whose own dispose throws is logged, so the rooms after it are still disposed. */
+function disposeQuietly(code: string, room: { dispose(): void }): void {
+  try {
+    room.dispose();
+  } catch (err) {
+    console.error(`room ${code}: dispose failed: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
