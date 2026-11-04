@@ -28,7 +28,14 @@ Option-click selects an element for review comments; a plain click uses the prot
 ## What the build waits for
 
 - WS7's ColonyView. The mock's types (`src/colony.ts`) are WS7's §3 draft on `ws7-g5-spec`
-  (a0678be1) plus two fields WS8 proposed: `projects[].buildMonths` and `lastGauges`.
+  (a0678be1) plus two fields WS8 proposed and WS7 accepted (4 Nov): `projects[].buildMonths` and
+  `lastGauges` (null in month 1; happiness stays null until W3 builds the mood). WS7 freezes
+  them at W2's view task.
+- Heiko's ruling on `COLONY.fundBuysGoods` (provisional: on). While it is on, a collecting project
+  gets one more line: "the fund buys the rest at the store". The "funded" line reads the same
+  either way.
+- The Colony desk slot is agreed with WS7 as drawn. WS7's C35 desks open inside the Donate and
+  Commission entries.
 - Wave 4 of WS7's plan.
 - RULE-25 (C31, WS3) for the score's terms. Every number in the mock is a fixture.
 
