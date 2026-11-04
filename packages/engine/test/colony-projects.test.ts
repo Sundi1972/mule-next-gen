@@ -110,6 +110,9 @@ describe('prestige objects: commissioned, funded, built, kept up', () => {
     const voting = governedGame();
     voting.politics = { ...voting.politics!, election: { ...createGame({ seed: 7, players: SEATS.map((id) => ({ id, name: id, isAi: false })) }).politics!.election!, stage: 'ballot' } };
     expect(refused(() => commission(voting, 'lena', 'hospital'))).toBe('Commission once the votes are over');
+    const lawBallot = governedGame();
+    lawBallot.politics = { ...lawBallot.politics!, council: { stage: 'ballot', clockMs: 0, proposal: { kind: 'enact', law: 'landTax', setting: 10 }, proposer: 'lena', ballots: { lena: true }, done: [], result: null } };
+    expect(refused(() => commission(lawBallot, 'lena', 'hospital')), 'the law ballot is a vote too').toBe('Commission once the votes are over');
     const auction = governedGame();
     auction.phase = 'auction';
     expect(refused(() => commission(auction, 'lena', 'hospital'))).toBe('Commission once the votes are over');
