@@ -119,7 +119,8 @@ const isDoor = (place: HallPlace | null): place is HallDoor => place === 'doorL'
 
 /**
  * On the map inside the band a body's width round the store's walls, where the floor stops every step that ends in it:
- * no walk puts a colonist there, but a fight's arena edge can (game 18 of T-AC-5's sample, AM-26). From there only a
+ * no walk puts a colonist there, nor since FM-arena-wall a fight's arena edge (game 18 of T-AC-5's sample, AM-26): a
+ * guard, for a colonist the floor ever leaves there by another way. From there only a
  * step straight out moves it, so the walker makes that first: the spot just past the band's nearest edge on open land.
  * Null where the colonist is clear of the band.
  */
