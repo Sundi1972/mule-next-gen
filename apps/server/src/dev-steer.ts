@@ -23,7 +23,7 @@ import {
   type GameState,
   type Reach,
 } from '@mule/engine';
-import type { ColonistView, DevFrame } from '@mule/protocol';
+import type { ColonistView, DevFrame, FrameMoments } from '@mule/protocol';
 
 /** Positions on the wire keep 2 decimals: a frame of 420–606 B instead of 804 (S-1, AM-13). */
 const WIRE_DECIMALS = 100; // literal-ok: 10^2, the wire's 2 decimals, not balance
@@ -150,9 +150,39 @@ function placed(c: FloorColonist) {
   };
 }
 
-/** The tick's frame for every screen (C8): each colonist's place, rounded where it is built (AM-15), and the beats. */
+/** A point on the wire, rounded. */
+const point = (p: { x: number; y: number }) => ({ x: onWire(p.x), y: onWire(p.y) });
+
+/**
+ * The moments' state for the frame (AM-28), straight from the floor, positions rounded (AM-15): each pack met, the
+ * glint, the turn's scramble from its call to the turn's end, and the MULEs bolted and not caught. Null while none is on.
+ */
+function frameMoments(floor: DevFloor): FrameMoments | null {
+  const packs = floor.colonists.flatMap((c) => {
+    const e = c.encounter;
+    if (!e) return [];
+    const wolves = e.wolves.map((w) => ({ ...point(w), state: w.state, target: w.target && point(w.target) }));
+    return [{ who: c.id, stage: e.stage, sinceTick: e.sinceTick, centre: point(e.centre), strikes: e.strikes, bites: e.bites, wolves }];
+  });
+  const g = floor.moments.glint;
+  const s = floor.moments.scramble;
+  const bolted = floor.colonists.filter((c) => c.bolt).map((c) => c.id);
+  if (packs.length === 0 && !g && !s && bolted.length === 0) return null;
+  return {
+    packs,
+    glint: g && { x: g.x, y: g.y, untilTick: g.untilTick },
+    scramble: s && { untilTick: s.untilTick, needers: [...s.needers], got: [...s.got], over: s.over, leftOut: [...s.leftOut] },
+    bolted,
+  };
+}
+
+/**
+ * The tick's frame for every screen (C8): each colonist's place, rounded where it is built (AM-15), the beats, and the
+ * moments' state, absent while none is on (AM-28).
+ */
 export function devFrame(floor: DevFloor, beats: readonly string[] = []): DevFrame {
-  return { tick: floor.tick, at: floor.tick * DEV_STEER.tickMs, colonists: floor.colonists.map(placed), beats: [...beats] };
+  const moments = frameMoments(floor);
+  return { tick: floor.tick, at: floor.tick * DEV_STEER.tickMs, colonists: floor.colonists.map(placed), beats: [...beats], ...(moments && { moments }) };
 }
 
 /**
