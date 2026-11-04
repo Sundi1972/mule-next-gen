@@ -1,5 +1,6 @@
 import { Button, cx, PlayerMark, Timer } from '@mule/ui';
 import type { MuleView } from '@mule/protocol';
+import { colonyVerdict } from '../../../../apps/web/src/game/derive';
 import { league, winnerWords } from '../../../../apps/web/src/game/month-end';
 import type { ReactNode } from 'react';
 import { ColonyPanel, LeagueTable, WinnerCard, YourWorth } from '../../../../apps/web/src/components/MonthEnd';
@@ -39,9 +40,10 @@ function TvHeader({ title, month, colony, seconds }: { title: string; month: num
 }
 
 /** The phone on its side (844 × 390), as PhoneShell lays it out: the stage, and the rail on the right. */
-function Phone({ phase, title, children, rail, footer, testid }: { phase: string; title: string; children: ReactNode; rail: ReactNode; footer?: ReactNode; testid: string }) {
+function Phone({ phase, title, children, rail, footer, testid, small = false }: { phase: string; title: string; children: ReactNode; rail: ReactNode; footer?: ReactNode; testid: string; small?: boolean }) {
   return (
-    <div className="flex h-[390px] w-[844px] shrink-0 overflow-hidden rounded-[28px] border-4 border-raised bg-table text-ink" data-testid={testid}>
+    <div className={cx('flex shrink-0', small ? 'h-[375px] w-[667px]' : 'h-[390px] w-[844px]')}>
+    <div className="flex h-full w-full shrink-0 overflow-hidden rounded-[28px] border-4 border-raised bg-table text-ink" data-testid={testid}>
       <div className="flex min-w-0 flex-1 flex-col gap-1.5 p-2">{children}</div>
       <aside className="flex w-[var(--rail)] shrink-0 flex-col gap-1.5 border-l border-holo-line bg-panel p-2">
         <span className="label-caps text-[10px]!">{phase}</span>
@@ -49,6 +51,7 @@ function Phone({ phase, title, children, rail, footer, testid }: { phase: string
         <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-hidden">{rail}</div>
         {footer}
       </aside>
+    </div>
     </div>
   );
 }
@@ -264,14 +267,18 @@ export function PhoneColonyDesk({ colony, governor }: { colony: ColonyView; gove
  * Game over on the phone (graft target: apps/web/src/phone/GameOver.tsx): your place and your Worth as today, and the
  * air verdict's card becomes the colony's score, with your plaques under it. The rail keeps the table by Worth.
  */
-export function PhoneGameOver({ colony }: { colony: ColonyView }) {
+export function PhoneGameOver({ colony, small = false }: { colony: ColonyView; small?: boolean }) {
   const view = finalGame(colony);
   const score = colony.score!;
   const v = scoreVerdict(score);
+  // WS6: the card takes PhoneVerdict's place, so it carries a failed colony the way PhoneVerdict did: in alert, with the
+  // verdict's own title and rule. A failed colony is never just a low number.
+  const failed = colonyVerdict(view.air);
   const mine = plaquesOf(colony, 's1');
   return (
     <Phone
       testid="phone-gameover"
+      small={small}
       phase="Game over"
       title="Game over: 2nd of 4"
       rail={
@@ -285,17 +292,28 @@ export function PhoneGameOver({ colony }: { colony: ColonyView }) {
         </Button>
       }
     >
-      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,5fr)_minmax(0,6fr)] gap-2.5">
-        <div className="flex min-h-0 flex-col gap-2.5">
-          <WinnerCard view={view} density="phone" selfId="s1" />
-          <section className="flex flex-col gap-1.5 rounded-panel border border-holo-line bg-panel p-2.5" data-testid="phone-colony-score">
+      {/* As GameOver.tsx does below 3xl (@max-3xl/shell): on a small phone the card moves under your lines. */}
+      <div className={cx('grid min-h-0 flex-1 gap-2.5', small ? 'grid-cols-[minmax(0,4fr)_minmax(0,7fr)] grid-rows-[auto_minmax(0,1fr)]' : 'grid-cols-[minmax(0,5fr)_minmax(0,6fr)]')}>
+        <div className={small ? 'contents' : 'flex min-h-0 flex-col gap-2.5'}>
+          <WinnerCard view={view} density="phone" selfId="s1" {...(small ? { className: 'row-span-2' } : {})} />
+          <section className={cx('flex flex-col rounded-panel border', small ? 'col-start-2 row-start-2 gap-1 p-2' : 'gap-1.5 p-2.5', failed.failed ? 'border-alert bg-alert-bg' : 'border-holo-line bg-panel')} data-testid="phone-colony-score" data-failed={failed.failed}>
+            {failed.failed && (
+              <span className="flex flex-col" data-testid="verdict">
+                <span className="font-display text-sm font-semibold leading-tight text-alert-ink" data-testid="verdict-title">
+                  {failed.title}
+                </span>
+                <span className="text-[11px] leading-tight text-ink" data-testid="verdict-line">
+                  {failed.line}
+                </span>
+              </span>
+            )}
             <span className="flex items-baseline gap-2">
-              <span data-num className="font-mono text-2xl font-bold leading-none text-holo" data-testid="colony-total">
+              <span data-num className={cx('font-mono text-2xl font-bold leading-none', failed.failed ? 'text-alert-ink' : 'text-holo')} data-testid="colony-total">
                 {score.total}
               </span>
               <span className="flex flex-col">
-                <span className="label-caps text-[9px]!">Colony score</span>
-                <span className={cx('font-display text-sm font-semibold leading-tight', v.tone)}>{v.title}</span>
+                <span className="label-caps text-[10px]!">Colony score</span>
+                {!failed.failed && <span className={cx('font-display text-sm font-semibold leading-tight', v.tone)}>{v.title}</span>}
               </span>
             </span>
             <ScoreSum score={score} colony={colony} size="phone" />
@@ -304,9 +322,10 @@ export function PhoneGameOver({ colony }: { colony: ColonyView }) {
             </span>
           </section>
         </div>
-        <YourWorth view={view} density="phone" />
+        <div className={cx('min-h-0', small && 'col-start-2 row-start-1')}>
+          <YourWorth view={view} density="phone" />
+        </div>
       </div>
     </Phone>
   );
 }
-

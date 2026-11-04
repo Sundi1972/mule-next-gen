@@ -180,6 +180,13 @@ export const FINAL_UNREST: ColonyView = {
   score: { wealth: 30, environment: 12, prestige: 2, factor: 0.82, total: 36 },
 };
 
+/** Game over with the air in Collapse: the colony failed (colonyVerdict), whatever its score. */
+export const FINAL_FAILED: ColonyView = {
+  ...FINAL_UNREST,
+  gauges: { ...FINAL_UNREST.gauges, environment: 86 },
+  score: { wealth: 30, environment: 3, prestige: 2, factor: 0.82, total: 29 },
+};
+
 /** Every plaque a player is on, across the projects: shown beside their standing, not added to it (WS7's RULE-25 lean). */
 export function plaquesOf(colony: ColonyView, playerId: string): { project: ProjectView; credits: number; goods: number }[] {
   return colony.projects.flatMap((p) => {

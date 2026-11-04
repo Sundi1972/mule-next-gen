@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { EMPTY, FINAL, FINAL_UNREST, MIDGAME, TROUBLE } from './colony';
+import { EMPTY, FINAL, FINAL_FAILED, FINAL_UNREST, MIDGAME, TROUBLE } from './colony';
 import { PhoneColonyDesk, PhoneGameOver, TvGameOverA, TvGameOverB, TvMonthEnd, TvPlanning } from './screens';
 
 /** Every screen and state, by hash: #/tv-gameover-a and so on. */
@@ -9,6 +9,9 @@ const SCREENS: { id: string; group: string; title: string; note: string; render:
   { id: 'tv-gameover-a-unrest', group: 'Game over · the TV (pick one)', title: 'A · a colony in Unrest', note: 'The same screen when the colony was run badly: × 0.82, a damaged hospital.', render: () => <TvGameOverA colony={FINAL_UNREST} /> },
   { id: 'tv-gameover-b-unrest', group: 'Game over · the TV (pick one)', title: 'B · a colony in Unrest', note: 'Damaged objects stay on the skyline, dark, at “counts 0”.', render: () => <TvGameOverB colony={FINAL_UNREST} /> },
   { id: 'phone-gameover', group: 'Game over · the phone', title: 'Your phone at game over', note: 'Your place and Worth as today; the colony card shows its score and your plaques.', render: () => <PhoneGameOver colony={FINAL} /> },
+  { id: 'phone-gameover-small', group: 'Game over · the phone', title: 'The same on a small phone (667 × 375)', note: 'The smallest phone the shell supports.', render: () => <PhoneGameOver colony={FINAL} small /> },
+  { id: 'phone-gameover-failed', group: 'Game over · the phone', title: 'Your phone when the colony failed', note: 'The air ended in Collapse: the card turns alert with the verdict’s title and rule (WS6), as PhoneVerdict does today.', render: () => <PhoneGameOver colony={FINAL_FAILED} /> },
+  { id: 'phone-gameover-failed-small', group: 'Game over · the phone', title: 'Failed, on a small phone', note: 'The longest card at the smallest size.', render: () => <PhoneGameOver colony={FINAL_FAILED} small /> },
   { id: 'tv-planning', group: 'During the game · the TV', title: 'The four gauges in the header', note: 'Wealth, Environment, Prestige and Happiness take the air gauge’s place, all game.', render: () => <TvPlanning colony={MIDGAME} /> },
   { id: 'tv-monthend', group: 'During the game · the TV', title: 'Month end: the build site', note: 'Today’s colony report beside the projects: collecting, building, standing.', render: () => <TvMonthEnd colony={MIDGAME} /> },
   { id: 'tv-monthend-trouble', group: 'During the game · the TV', title: 'Month end: closed and damaged', note: 'The fund ran dry (park closed), a riot hit the hospital: both count 0 until fixed.', render: () => <TvMonthEnd colony={TROUBLE} /> },
@@ -22,6 +25,7 @@ const DECISIONS = [
   'The colony is scored like a player: one big number, and the sum that made it written out (wealth + environment + prestige, × the happiness factor), so the table can argue about it.',
   'The four gauges replace the TV header’s air gauge all game. Environment is the air everyone already knows, with its bands; Happiness shows its number and its band together (WS7).',
   'The build site is one list, newest first, each project at its stage: Collecting (credits and goods in), Building (months as pips), Standing (its perk), Closed or Damaged (red, “counts 0”, what fixes it).',
+  'The winner’s words change in every game: “The game goes to” and “You win the game!”, since the colony now has its own score (WS6 OK). Without politics the TV keeps today’s tall winner card and the phone keeps its air verdict.',
   'Plaques are shown beside a player’s standing, not added to their Worth (WS7’s lean for RULE-25): who gave most is its own small table.',
   'Without politics nothing changes: no gauges, no build site, today’s game over (HC-22).',
   'Every number is a fixture: the objects are WS1’s placeholders, the score’s terms wait for RULE-25 (WS3, C31).',

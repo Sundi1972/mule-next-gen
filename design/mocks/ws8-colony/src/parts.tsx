@@ -267,19 +267,19 @@ export function ScoreSum({ score, colony, size }: { score: ColonyScore; colony: 
     // On a phone the sum is one line of numbers with the four names under it, so it never wraps mid-sum.
     const cells: [string, string, string, string | undefined][] = [
       ['', `${score.wealth}`, 'Wealth', undefined],
-      ['+', `${score.environment}`, 'Envir.', undefined],
+      ['+', `${score.environment}`, 'Env.', undefined],
       ['+', `${score.prestige}`, 'Prestige', undefined],
       ['×', score.factor.toFixed(2), mood.label, mood.tone],
     ];
     return (
-      <span className="grid grid-cols-4 gap-x-1" data-testid="score-sum">
+      <span className="flex justify-between gap-x-1" data-testid="score-sum">
         {cells.map(([op, v, name, tone]) => (
           <span key={name} className="flex flex-col items-center">
             <span data-num className={cx('whitespace-nowrap font-mono text-sm font-bold leading-none', tone)}>
               {op && <span className="mr-0.5 text-ink-3">{op}</span>}
               {v}
             </span>
-            <span className="label-caps mt-0.5 text-[8px]!">{name}</span>
+            <span className="mt-0.5 text-[10px] font-semibold uppercase leading-none text-ink-3">{name}</span>
           </span>
         ))}
       </span>
