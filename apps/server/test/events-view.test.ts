@@ -1,4 +1,4 @@
-import { EVENT_SHOW, type EventKey, type GameState, type MonthEvent, type MonthReport, type Phase } from '@mule/engine';
+import { DEV_STEER, EVENT_SHOW, EVENTS, type EventKey, type EventRow, type GameState, type MonthEvent, type MonthReport, type Phase } from '@mule/engine';
 import type { EventView, MuleView } from '@mule/protocol';
 import { beforeAll, describe, expect, it } from 'vitest';
 // Types only, erased at run time: the show's own shapes, which @mule/ui keeps structural so it never imports the protocol.
@@ -358,5 +358,63 @@ describe('T-AC-10: the view carries the current phase\'s events, when their show
     expect(shown.key).toBe('cometPass');
     expect(listed).toHaveLength(2);
     expect(timeline.events).toBe(view.events);
+  });
+});
+
+/**
+ * Plays month 1 to production with the cavern collapse and the drought certain and every other row silent: s1 mines a
+ * crystal cavern for Crystite and s2 farms one, which the drought reaches. Returns each seat's view and the board's.
+ */
+function playCollapse() {
+  const rows: EventRow[] = [...Object.values(EVENTS.colony), ...Object.values(EVENTS.player)];
+  const saved = rows.map((row) => structuredClone(row));
+  const firstMonth = EVENTS.firstMonth;
+  const waits = DEV_STEER.month1WaitsForFirstMule;
+  try {
+    // Month 1 would wait for each owner's first MULE; these plots come with theirs.
+    DEV_STEER.month1WaitsForFirstMule = false;
+    for (const row of rows) row.phases = {};
+    EVENTS.colony.cavernCollapse.phases = { production: 1 };
+    EVENTS.colony.drought.phases = { production: 1 };
+    EVENTS.firstMonth = 1;
+    let game: MuleGame | null = null;
+    const fake = fakeContext({});
+    game = new MuleGame(fake.ctx, 7);
+    game.start(seats);
+    const state = (game as unknown as { state: GameState }).state;
+    const land = state.tiles.filter((t) => t.terrain !== 'store' && !t.owner);
+    const [mined, farmed] = ([['s1', 'crystite'], ['s2', 'food']] as const).map(([owner, outfit], i) => {
+      const tile = land[i * 6]!;
+      Object.assign(tile, { owner, outfit, traits: [], pollution: 0, special: { kind: 'crystalCavern' } });
+      Object.assign(tile.ground, { crystite: 3, food: 3 });
+      return { x: tile.x, y: tile.y };
+    }) as [{ x: number; y: number }, { x: number; y: number }];
+    for (const p of state.players) Object.assign(p.stock, { energy: 10, water: 10 });
+    readyAll(game);
+    for (let i = 0; i < 100_000 && game.viewFor(null).phase !== 'production'; i++) fake.advance(100);
+    const views = [null, ...seats.map((s) => s.id)].map((id) => ({ id, view: game.viewFor(id) }));
+    return { views, mined, farmed };
+  } finally {
+    rows.forEach((row, i) => {
+      for (const key of Object.keys(row) as (keyof EventRow)[]) delete (row as Partial<EventRow>)[key];
+      Object.assign(row, saved[i]!);
+    });
+    EVENTS.firstMonth = firstMonth;
+    DEV_STEER.month1WaitsForFirstMule = waits;
+  }
+}
+
+describe('T-AC-11: a cavern collapse tells every screen what the plot was and what it becomes', () => {
+  it("T-AC-11: a cavern collapse's hit carries was 'crystalCavern' and becomes 'plain' in every seat's view and the board; a drought hit carries neither", () => {
+    const { views, mined, farmed } = playCollapse();
+    for (const { id, view } of views) {
+      expect({ id, phase: view.phase }).toEqual({ id, phase: 'production' });
+      const collapse = view.events!.find((e) => e.key === 'cavernCollapse' && e.hits.some((h) => h.x === mined.x && h.y === mined.y));
+      expect(collapse?.hits, `${id}'s view`).toEqual([{ ...mined, order: 0, delta: 0, was: 'crystalCavern', becomes: 'plain' }]);
+      expect(view.production!.events).toEqual(view.events);
+      const drought = view.events!.find((e) => e.key === 'drought');
+      expect(drought?.hits.some((h) => h.x === farmed.x && h.y === farmed.y), `${id}: the drought reaches the farmed cavern`).toBe(true);
+      for (const hit of drought!.hits) expect(['was' in hit, 'becomes' in hit]).toEqual([false, false]);
+    }
   });
 });
