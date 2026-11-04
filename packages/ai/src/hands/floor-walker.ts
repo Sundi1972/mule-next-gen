@@ -177,6 +177,19 @@ export class FloorWalker {
     this.pressedLand = false;
   }
 
+  /**
+   * Back from a detour (a moment, arcade C9): the step's walk starts again from where the colonist now stands, but a
+   * press it made before the detour took it off is read, not walked again. The referee applied it at once; walked
+   * again, a BUY would find the corral offering nothing to a colonist already leading a MULE, and the hand would drop
+   * the MULE it had paid for (FM-hurry-margin, game 7 of T-AC-5's sample).
+   */
+  resume(): void {
+    const { pressed, pressedLand } = this;
+    this.reset();
+    this.pressed = pressed;
+    this.pressedLand = pressedLand;
+  }
+
   /** One tick of a step: the input that walks it on, or how it ended. `pauseMs`: how long it stands at a counter first. */
   run(view: FloorView, action: AiAction, pauseMs: number): StepRun {
     const { state, floor, cfg } = view;

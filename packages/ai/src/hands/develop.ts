@@ -206,10 +206,11 @@ export class DevelopHand {
       this.detoured = true;
       return moment;
     }
-    // Back from a detour: the step being walked starts its walk again from where the colonist now stands.
+    // Back from a detour: the step being walked starts its walk again from where the colonist now stands, a press it
+    // made before the detour read first (FloorWalker.resume).
     if (this.detoured) {
       this.detoured = false;
-      this.walker.reset();
+      this.walker.resume();
     }
     // The clock is nearly out: whatever is left of the errand, the pub. Held, the clock stands, so there is time.
     // An assay under way holds the colonist still for the rest of it: that time is spent before any walk.
