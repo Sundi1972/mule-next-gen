@@ -1,18 +1,11 @@
 /** When a seat's brain asks for its land-grant playbook, and which playbook takes effect when the land grant starts. */
 import type { GameState, Playbook, PlayerId } from '@mule/engine';
-import { landBrief, playbookFrom, WRITER_SYSTEM, type AiSeat, type Feedback, type LandDraft, type ValidatePlan, type WriterReply } from '@mule/ai';
+import { landBrief, playbookFrom, WRITER_SYSTEM, type AiSeat, type Feedback, type PlaybookSource, type ValidatePlan, type WriterReply } from '@mule/ai';
 import type { PlaybookNote } from '../mule-game.js';
 import { WRITE_CALLS } from './client.js';
 import type { BrainService, PlaybookWriter } from './index.js';
 
-/** The engine's side of a playbook: the seat's draft for the state, and the validator every playbook passes. */
-export interface PlaybookSource {
-  draft(state: GameState, seat: PlayerId): { playbook: Playbook; land: LandDraft };
-  validate: ValidatePlan;
-}
-
-/** None until the engine drafts and validates playbooks: with no source, no seat asks and no playbook is written. */
-export const ENGINE_SOURCE: PlaybookSource | null = null;
+export type { PlaybookSource };
 
 export interface PlaybooksOptions {
   brain: BrainService;
@@ -73,6 +66,7 @@ export class Playbooks {
         const brief = landBrief(state, seat.mind, seat.brain.persona, drafted.land, seat.brain.heard());
         const ask: Ask = { month, draft: drafted.playbook, written: null, started: false, controller: new AbortController() };
         this.asks.set(seat.id, ask);
+        seat.playbookAsked(month);
         const waitMs = WRITE_CALLS.strategy.timeoutMs;
         writer.write('strategy', { brief, system: WRITER_SYSTEM, waitMs, late: () => ask.started, signal: ask.controller.signal }).then(
           (written) => {
@@ -110,7 +104,11 @@ export class Playbooks {
       }
       const playbook = this.decide(state, seat.id, now, asked, source.validate);
       this.playing.set(`${seat.id}/${state.month}`, playbook);
-      if (this.writers.has(seat.id)) this.options.record?.({ seat: seat.id, month: state.month, phase: 'landGrant', playbook });
+      if (!this.writers.has(seat.id)) continue;
+      // In effect from the grant on: adopted only here, at this month's grant, never at the upkeep that asked for next
+      // month's, since adopt keeps the newest month's playbooks only (WS9).
+      seat.adopt(playbook);
+      this.options.record?.({ seat: seat.id, month: state.month, phase: 'landGrant', playbook });
     }
   }
 

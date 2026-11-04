@@ -22,7 +22,7 @@ import { AuctionHand, type AuctionDebug } from './hands/auction.js';
 import { DevelopHand, type DevWalking } from './hands/develop.js';
 import { PERSONAS } from './personas.js';
 import { adoptInto, DRAFT_PHASE_OF, draftPlaybook, pathFor, validatePlaybook, validatorFor, type DraftPhase, type PartKey, type PlayedPart, type PlayPath, type ValidatePlan, type ValidatorProfile } from './playbook/index.js';
-import { landDecision, wantsAnyAhead, wantsPlot, type LandPlan } from './strategist.js';
+import { landDecision, rankedBy, wantsAnyAhead, wantsPlot, type LandPlan } from './strategist.js';
 import { situation } from './summary.js';
 import type { Mind } from './value.js';
 
@@ -68,6 +68,10 @@ export class AiSeat {
   private readonly auction: AuctionHand;
   private land: Pending<LandPlan> | null = null;
   private landMonth = -1;
+  /** The month whose land-grant playbook a writer was asked for: that month's planning asks no land decision. */
+  private askedFor = -1;
+  /** The land plan this month's grant plays, fixed at the grant's first look (spec §4: the phase's first tick decides). */
+  private grantPlan: { month: number; plan: LandPlan } | null = null;
   /** Playbooks adopted for the newest month adopted, oldest first. */
   private adopted: readonly Playbook[] = [];
 
@@ -99,7 +103,11 @@ export class AiSeat {
     if (this.landMonth === state.month) return;
     const obs = observe(state, this.id);
     this.landMonth = state.month;
-    this.land = this.brain.ask('land', landDecision(obs, this.mind), obs, Infinity, null, situation(obs, this.mind));
+    // A playbook asked for this month ranks the grant, so planning takes the seeded default pick: no land ask, which
+    // the open write would leave busy anyway. Keyed on the ask, made at a fixed step, so a replay does the same.
+    const list = landDecision(obs, this.mind);
+    const summary = situation(obs, this.mind);
+    this.land = this.askedFor === state.month ? this.brain.pick('land', list, obs, null, summary) : this.brain.ask('land', list, obs, Infinity, null, summary);
     // With no listener the draft would reach nothing: no act reads it (T-AC-4).
     if (this.options.onPlaybook && this.playPath(state.month, 'planning').by === 'own') this.writeDraft(state, 'planning');
   }
@@ -193,10 +201,25 @@ export class AiSeat {
     return !wantsAnyAhead(this.landPlan(state), observe(state, this.id), grant.order.slice(grant.step), this.mind);
   }
 
-  /** This month's land plan, as its hands read it: planned once a month, settled now. */
+  /**
+   * This month's land plan, as its hands read it: planned once a month, settled now. In the land grant, a playbook
+   * adopted for the month ranks it; the seat's own path drafts, so only an adopted playbook ranks it. Fixed at the
+   * grant's first look and kept for the grant: an adopt after that look plays from next month.
+   */
   private landPlan(state: GameState): LandPlan {
     if (!this.land || this.landMonth !== state.month) this.planMonth(state);
-    return this.brain.resolveNow(this.land!, state).action;
+    const plan = this.brain.resolveNow(this.land!, state).action;
+    if (state.phase !== 'landGrant') return plan;
+    if (this.grantPlan?.month !== state.month) {
+      const path = this.playPath(state.month, 'landGrant');
+      this.grantPlan = { month: state.month, plan: path.by === 'adopted' ? rankedBy(plan, path.playbook.landGrant?.ranked) : plan };
+    }
+    return this.grantPlan.plan;
+  }
+
+  /** A writer was asked for this seat's land-grant playbook for `month`: that month's planning asks no land decision. */
+  playbookAsked(month: number): void {
+    this.askedFor = month;
   }
 
   /**
