@@ -160,7 +160,9 @@ export function PhoneLandscape({ frame }: { frame: { w: number; h: number } }) {
     bar = { x: L.stage.x + c0 * L.cell + 3, y: L.stage.y + 2, w: (c1 - c0 + 1) * L.cell - 6, h: L.cell - 6 };
   }
   const barFaded = !!bar && near(bar, mePx, L.cell * 0.5);
-  // The card covers neither your colonist nor the target (AM-20): the first of its places clear of both, or none.
+  // The card covers neither your colonist nor the target (AM-20): the first of its places clear of both. Under both
+  // places at once (your plot in columns 5 to 9 of rows 1 to 3) it is not drawn: the button's words still say what a
+  // press does there, and your colonist stays in sight (ruled with AM-20).
   const target = seat.target;
   const clearOf: Box[] = [
     ...(seat.mine && space === 'map' ? [colonistBox(L, seat.mine)] : []),
