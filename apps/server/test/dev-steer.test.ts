@@ -27,6 +27,7 @@ import type { DevFrame, MuleIntent, MuleView, ReachView, ServerEnvelope } from '
 import { Room, TableError } from '@tabletop/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createBrain } from '../src/brain/index.js';
+import { devFrame } from '../src/dev-steer.js';
 import { AI_NAMES, MuleGame } from '../src/mule-game.js';
 import { pressAct, seats, steerTo, toDevelopment, walkers, type SteerPoint } from './fake-context.js';
 
@@ -319,6 +320,85 @@ describe("UBER-AC-3 (server part): the moments' lines reach the TV in the tick's
     for (const m of met) expect(frames.find((f) => f.tick === m.tick)!.beats.filter((b) => b === m.line), `tick ${m.tick}`).toEqual([m.line]);
     const shown = frames.flatMap((f) => f.beats.filter((b) => b.endsWith(': run or fight?')).map((line) => ({ tick: f.tick, line })));
     expect(shown).toEqual(met);
+  });
+});
+
+describe("AM-28: the frame carries the moments' state, straight from the floor", () => {
+  /** The server's floor at development start, with one colonist or the moments changed as a row needs. */
+  const floorWith = (patch: { lena?: Partial<DevFloor['colonists'][number]>; moments?: Partial<DevFloor['moments']> }): DevFloor => {
+    const floor = floorOf(steered().game);
+    return {
+      ...floor,
+      colonists: floor.colonists.map((c) => (c.id === LENA ? { ...c, ...patch.lena } : c)),
+      moments: { ...floor.moments, ...patch.moments },
+    };
+  };
+  const none = { packs: [], glint: null, scramble: null, bolted: [] };
+
+  it('AM-28: with no pack, no glint, no scramble and no bolted MULE, the frame has no moments key', () => {
+    const frame = devFrame(floorWith({}));
+    expect('moments' in frame, 'the key is missing, not empty').toBe(false);
+  });
+
+  it('AM-28: a pack mid-fight: whose, its stage, when and where the stage began, its strikes and bites, and each wolf rounded', () => {
+    const wolf = { angle: 1, sinceTick: 40, untilTick: 52, from: null };
+    const encounter = {
+      stage: 'fight' as const,
+      sinceTick: 37,
+      centre: { x: 3.14159, y: 2.71828 },
+      wolves: [
+        { ...wolf, x: 1.23456, y: 4.56789, state: 'tell' as const, target: { x: 3.00001, y: 2.98765 } },
+        { ...wolf, x: 5.55555, y: 1.11111, state: 'prowl' as const, target: null },
+      ],
+      strikes: 1,
+      bites: 2,
+      nextLungeTick: 60,
+      recoverUntilTick: 37,
+    };
+    const frame = devFrame(floorWith({ lena: { space: 'map', x: 3, y: 3, encounter } }));
+    expect(frame.moments).toEqual({
+      ...none,
+      packs: [
+        {
+          who: LENA,
+          stage: 'fight',
+          sinceTick: 37,
+          centre: { x: 3.14, y: 2.72 },
+          strikes: 1,
+          bites: 2,
+          wolves: [
+            { x: 1.23, y: 4.57, state: 'tell', target: { x: 3, y: 2.99 } },
+            { x: 5.56, y: 1.11, state: 'prowl', target: null },
+          ],
+        },
+      ],
+    });
+  });
+
+  it('AM-28: a glint lit: its tile and the tick it fades', () => {
+    const frame = devFrame(floorWith({ moments: { glint: { x: 4, y: 5, sinceTick: 3, untilTick: 163 } } }));
+    expect(frame.moments).toEqual({ ...none, glint: { x: 4, y: 5, untilTick: 163 } });
+  });
+
+  it('AM-28: the scramble from its call, and after it ends, to the end of the turn', () => {
+    const running = { sinceTick: 9, untilTick: 309, needers: [LENA, OSSA], got: [LENA], over: null, leftOut: [] };
+    expect(devFrame(floorWith({ moments: { scramble: running, scrambled: true } })).moments).toEqual({
+      ...none,
+      scramble: { untilTick: 309, needers: [LENA, OSSA], got: [LENA], over: null, leftOut: [] },
+    });
+    const over = { ...running, over: 'time' as const, leftOut: [OSSA] };
+    expect(devFrame(floorWith({ moments: { scramble: over, scrambled: true } })).moments).toEqual({
+      ...none,
+      scramble: { untilTick: 309, needers: [LENA, OSSA], got: [LENA], over: 'time', leftOut: [OSSA] },
+    });
+  });
+
+  it("AM-28: a MULE bolted and not caught, running or standing: its seat, the MULE at the colonist's lead", () => {
+    for (const left of [2.5, 0]) {
+      const frame = devFrame(floorWith({ lena: { space: 'map', x: 3, y: 3, lead: { good: 'food', x: 6.12345, y: 2.5 }, bolt: { dx: 1, dy: 0, left } } }));
+      expect(frame.moments, `bolt with ${left} tiles to run`).toEqual({ ...none, bolted: [LENA] });
+      expect(frame.colonists.find((c) => c.id === LENA)!.lead).toEqual({ good: 'food', x: 6.12, y: 2.5 });
+    }
   });
 });
 
