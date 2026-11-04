@@ -293,7 +293,7 @@ const GOOD_ROWS: Record<string, Row> = {
     let hold = Math.round(v);
     let why = 'a whole number';
     // RULE-2 row 3: a seat that never corners buys no more than its draft would.
-    const drafted = ctx.base.auction![good]!.hold;
+    const drafted = ctx.base.auction?.[good]?.hold ?? Infinity;
     if (!ctx.corners && role === 'buyer' && hold > drafted) [hold, why] = [drafted, 'level never corners'];
     const staple = role === 'seller' && (good === 'food' || good === 'energy');
     const least = staple ? stapleFloor(ctx, good) : 0;
@@ -419,7 +419,10 @@ function unitsOf(pb: Playbook): string[][] {
   for (const p of Object.keys(pb.rivalReads ?? {})) out.push(['rivalReads', p]);
   if (pb.lessons !== undefined) out.push(['lessons']);
   for (const k of ['drone', 'list'] as const) if (pb.planning?.[k] !== undefined) out.push(['planning', k]);
-  if (pb.landGrant) for (const k of ['ranked', 'pressShare', 'claims', 'deny', 'planB', 'pair'] as const) if (pb.landGrant[k] !== undefined) out.push(['landGrant', k]);
+  if (pb.landGrant) {
+    for (const k of ['ranked', 'pressShare', 'claims', 'deny', 'planB']) out.push(['landGrant', k]);
+    if (pb.landGrant.pair !== undefined) out.push(['landGrant', 'pair']);
+  }
   if (pb.development) for (const k of ['route', 'timeBudgetMs', 'ifSoldOut']) out.push(['development', k]);
   for (const [g, part] of Object.entries(pb.auction ?? {})) {
     for (const k of ['role', 'hold', 'walkAway', 'start', 'concedeCrPerS', 'vsRival', 'bluff']) out.push(['auction', g, k]);
@@ -430,9 +433,29 @@ function unitsOf(pb: Playbook): string[][] {
   return out;
 }
 
+/** The objects a playbook holds its fields in, where present: the stances, each part, each good, a good's per, the rival reads. */
+function containersOf(pb: Playbook): string[][] {
+  const out: string[][] = [['strategy', 'stances']];
+  for (const k of PART_KEYS) if (pb[k] !== undefined) out.push([k]);
+  if (isObject(pb.auction)) {
+    for (const [g, part] of Object.entries(pb.auction)) {
+      out.push(['auction', g]);
+      if (isObject(part) && part.per !== undefined) out.push(['auction', g, 'per']);
+    }
+  }
+  if (pb.rivalReads !== undefined) out.push(['rivalReads']);
+  return out;
+}
+
+/**
+ * What a refused field that the playbook must have is replaced with: a strategy field alone, else the whole part or
+ * the good's whole play that holds it, so the siblings that bound its value (a role, a walk-away) come with it.
+ */
+const holderOf = (unit: readonly string[]) => unit.slice(0, unit[0] === 'strategy' || unit[0] === 'auction' ? 2 : 1);
+
 /** A field the playbook may lack: one that fails step 5 is dropped; a field every playbook of its phase has stays. */
 const isOptional = (unit: readonly string[]) =>
-  ['rivalReads', 'lessons', 'store'].includes(unit[0]!) || unit[1] === 'stances' || unit.includes('per') || ['drone', 'list', 'pair', 'market'].includes(unit.at(-1)!);
+  ['rivalReads', 'lessons', 'store'].includes(unit[0]!) || (unit[1] === 'stances' && unit.length > 2) || unit.includes('per') || ['drone', 'list', 'pair', 'market'].includes(unit.at(-1)!);
 
 const pathOf = (segs: readonly string[]) => `/${segs.map((k) => k.replace(/~/g, '~0').replace(/\//g, '~1')).join('/')}`;
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
@@ -492,8 +515,9 @@ function validate(profile: ValidatorProfile, state: GameState, seat: PlayerId, d
   ctx.base = structuredClone(pb);
   edits.forEach((e, i) => !STRATEGY_ROOTS.has(parse(e.path)?.[0] ?? '') && apply(e, i));
 
-  // Step 5: every value that plays, against the same rows. A refused field the playbook may lack is dropped; any other
-  // plays the engine's own draft's value there, which passes by INV-1.
+  // Step 5: every value that plays, against the same rows, pass after pass until one changes nothing. A refused field
+  // the playbook may lack is dropped; any other plays the engine's own draft of what holds it (holderOf), which passes
+  // the rows by INV-1. The next pass checks it against the rest of the playbook (RULE-2's hold against the draft's).
   const drafted = new Map<DraftPhase | 'strategy', Playbook>();
   const engineDraft = (unit: readonly string[]): Playbook => {
     const part = (PART_KEYS as readonly string[]).includes(unit[0]!) ? DRAFTS[unit[0] as (typeof PART_KEYS)[number]]! : null;
@@ -505,34 +529,49 @@ function validate(profile: ValidatorProfile, state: GameState, seat: PlayerId, d
     }
     return drafted.get(key)!;
   };
-  for (const unit of unitsOf(pb)) {
-    if (!isObject(getAt(pb, unit.slice(0, -1)))) continue;
-    const value = getAt(pb, unit);
-    const verdict = unitOf(unit, pb);
-    const v = 'refused' in verdict ? verdict : verdict.row(value, ctx, unit);
-    const reject = (why: string) => rejected.push({ path: pathOf(unit), to: value, why, i: edits.length });
-    if ('refused' in v) {
-      if (isOptional(unit)) {
-        reject(v.refused);
-        dropUnit(pb, unit);
-        continue;
+  const check = (): boolean => {
+    let changed = false;
+    /** What this pass dropped: nothing under it is checked. */
+    const gone: string[][] = [];
+    const under = (unit: readonly string[]) => gone.some((g) => g.every((k, n) => unit[n] === k));
+    const settle = (unit: string[], v: Verdict) => {
+      const value = getAt(pb, unit);
+      const reject = (why: string) => rejected.push({ path: pathOf(unit), to: value, why, i: edits.length });
+      const drop = (at: string[], why: string) => {
+        reject(why);
+        dropUnit(pb, at);
+        gone.push(at);
+        changed = true;
+      };
+      if (!('refused' in v)) {
+        if (same(v.plays, value)) return;
+        reject(v.why ?? `clamped to ${show(v.plays)}`);
+        putUnit(pb, unit, v.plays);
+        changed = true;
+        return;
       }
-      const engine = engineDraft(unit);
-      // The engine drafts no such field (a good no longer up): its whole part goes.
-      const lacks = unit.findIndex((_, k) => getAt(engine, unit.slice(0, k + 1)) === undefined);
-      if (lacks >= 0) {
-        reject(v.refused);
-        dropUnit(pb, unit.slice(0, lacks + 1));
-        continue;
-      }
-      const plays = structuredClone(getAt(engine, unit));
-      reject(`${v.refused}; the engine's draft ${plays === null || typeof plays !== 'object' ? `plays ${show(plays)}` : 'value plays'}`);
-      putUnit(pb, unit, plays);
-    } else if (!same(v.plays, value)) {
-      reject(v.why ?? `clamped to ${show(v.plays)}`);
-      putUnit(pb, unit, v.plays);
+      if (isOptional(unit)) return drop(unit, v.refused);
+      const holder = holderOf(unit);
+      const plays = getAt(engineDraft(unit), holder);
+      // The engine drafts nothing there (a good no longer up): it goes.
+      if (plays === undefined) return drop(holder, v.refused);
+      const named = holder.length < unit.length ? `${pathOf(holder)} plays` : plays === null || typeof plays !== 'object' ? `draft plays ${show(plays)}` : 'draft value plays';
+      reject(`${v.refused}; the engine's ${named}`);
+      if (same(plays, getAt(pb, holder))) return;
+      putUnit(pb, holder, structuredClone(plays));
+      putUnit(ctx.base, holder, structuredClone(plays));
+      changed = true;
+    };
+    for (const unit of containersOf(pb)) if (!under(unit) && !isObject(getAt(pb, unit))) settle(unit, refuse('not an object'));
+    for (const unit of unitsOf(pb)) {
+      if (under(unit)) continue;
+      const verdict = unitOf(unit, pb);
+      settle(unit, 'refused' in verdict ? verdict : verdict.row(getAt(pb, unit), ctx, unit));
     }
-  }
+    return changed;
+  };
+  // literal-ok: a guard, not a bound: a replaced part settles in two passes, and a third finds nothing to change
+  for (let passes = 4; passes > 0 && check(); passes--);
 
   const strip = <T extends { i: number }>(xs: T[]) => xs.sort((a, b) => a.i - b.i).map(({ i: _, ...x }) => x);
   // Step 6: an accepted edit's `to` is the value that plays; an edit to a field step 5 dropped plays nothing.
