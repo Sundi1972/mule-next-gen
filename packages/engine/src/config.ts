@@ -1519,6 +1519,11 @@ export const BRAIN = {
   /** The cheaper model a strategy or playbook call may be sent to instead of its kind's model. */
   writeFallbackModel: 'claude-haiku-5-5',
   /**
+   * Round trips with the game's tools offered in one strategy or playbook call (RULE-A4); one more round without them
+   * asks for the answer, so a call makes at most toolRounds + 1.
+   */
+  toolRounds: 3,
+  /**
    * Spike S-A1 (WS2 spec A §7), brain:strategy-spike: Haiku 5.5 with adaptive thinking against Sonnet 5.5 writing a
    * seat's strategy. `models.haiku` is priced at pricesPerMTok, `models.sonnet` at sonnetPricesPerMTok.
    */

@@ -17,8 +17,9 @@ export const NO_USAGE: Readonly<Usage> = Object.freeze({ input: 0, cached_read: 
 /**
  * 'fallback' is a write call's usable reply from the fallback model, sent because its kind's model did not fit the budget.
  * 'late' is a second line for a write call whose reply came after its phase started: no usage, never played.
+ * 'tool' is a write call's round trip that ended asking for the game's tools: billed, and the loop went on.
  */
-export type Outcome = RejectOutcome | 'llm' | 'fallback' | 'refused' | 'timeout' | 'error' | 'budget' | 'late';
+export type Outcome = RejectOutcome | 'llm' | 'fallback' | 'refused' | 'timeout' | 'error' | 'budget' | 'late' | 'tool';
 
 /** What a call was for: a move (land, develop, trade), or writing a seat's strategy or playbook. */
 export type LedgerKind = DecisionKind | WriteKind;
@@ -35,6 +36,8 @@ export interface CallRecord extends Usage {
   kind: LedgerKind;
   ms: number;
   outcome: Outcome;
+  /** A write call's round trip, from 1 (RULE-A4); absent on a move call. */
+  round?: number;
 }
 
 /** A call's line in the ledger file. See RULE-4. */
@@ -50,6 +53,7 @@ export interface CallLine extends Usage {
   ms: number;
   timed_out: boolean;
   outcome: Outcome;
+  round?: number;
 }
 
 /** A game's total line in the ledger file: model calls only, settled before finish. See RULE-4. */
@@ -178,6 +182,7 @@ export function createLedger(opts: { path?: string; clock?: () => Date } = {}): 
         ms: call.ms,
         timed_out: call.outcome === 'timeout',
         outcome: call.outcome,
+        ...(call.round === undefined ? {} : { round: call.round }),
       };
       append(line);
     },

@@ -2,11 +2,14 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BRAIN, type Strategy } from '@mule/engine';
 import type { LandBrief, ToolDef, ToolResult } from '@mule/ai';
 import { createBrain, type BrainSeat, type PlaybookAsk } from '../src/brain/index.js';
-import { fakeSdk, KEY, readLedger, sdkMessage, type SdkMessage, type SdkParams } from './brain-fakes.js';
+import { MuleGame } from '../src/mule-game.js';
+import { fakeSdk, KEY, promptOf, readLedger, sdkMessage, type SdkMessage, type SdkParams } from './brain-fakes.js';
+import { fakeContext, seats as THREE } from './fake-context.js';
+import { runTable } from './playbook-fakes.js';
 
 const SEAT: BrainSeat = { id: 'p0', persona: 'trader', level: 'trader' };
 const STRATEGY: Strategy = { kind: 'builder', moneyMaker: 'food', monopolyTarget: null, cashFloor: 200, landTarget: { plots: 6, byMonth: 6 }, stances: {}, reason: 'Grow steady.' };
@@ -108,5 +111,34 @@ describe('the tool loop (C9, RULE-A4)', () => {
     expect(sdk.requests[0]!.params.tools).toBeUndefined();
     expect(written.reply.cause).toBeUndefined();
     expect(callLines().map((l) => [l.round, l.outcome])).toEqual([[1, 'llm']]);
+  });
+
+  it("the game's own write offers its tools end to end: the model calls standings, and the next request carries every seat's public Worth", async () => {
+    vi.useFakeTimers();
+    try {
+      const isWrite = (params: SdkParams) => promptOf(params).user.includes('What you may change:');
+      const sdk = fakeSdk((_n, params) => {
+        if (!isWrite(params)) return sdkMessage(JSON.stringify({ option: 'A', line: '' }));
+        if (params.messages.length === 1)
+          return { ...sdkMessage('', {}, 'tool_use'), content: [{ type: 'tool_use', id: 's1', name: 'standings', input: {} }] } as unknown as SdkMessage;
+        return sdkMessage(JSON.stringify({ edits: [], line: '' }));
+      });
+      const fake = fakeContext({ table: THREE });
+      const game = new MuleGame(fake.ctx, 10, { maxMonths: 1, politics: false, brain: brainOn(sdk) });
+      game.start(THREE);
+      await runTable(game, fake, (v) => v.phase === 'landGrant');
+
+      const writes = sdk.requests.filter((r) => isWrite(r.params));
+      expect(writes.map((r) => (r.params.tools ?? []).map((t) => t.name).sort())).toEqual([
+        ['legalMoves', 'standings', 'whatIf', 'worth'],
+        ['legalMoves', 'standings', 'whatIf', 'worth'],
+      ]);
+      const [result] = resultsIn(writes[1]!.params) as { content: string }[];
+      const rows = JSON.parse(result!.content) as { seat: string; name: string; worth: number }[];
+      expect(rows.map((r) => r.seat).sort()).toEqual(THREE.map((s) => s.id).sort());
+      for (const row of rows) expect(row.worth).toBeGreaterThan(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
