@@ -1,4 +1,4 @@
-import type { AuctionSide, Office, Outfit, TaxPromise } from '@mule/engine';
+import type { AuctionSide, GameState, Office, Outfit, Phase, TaxPromise } from '@mule/engine';
 
 /**
  * The moves an AI seat makes: exactly the ones a human's phone can send. The
@@ -24,7 +24,40 @@ export type AiAction =
   /** The Governor's sales tax, in whole percent. */
   | { type: 'setTax'; percent: number }
   /** Done with this auction or election stage, or not done after all. */
-  | { type: 'done'; done: boolean };
+  | { type: 'done'; done: boolean }
+  /** Planning: send the geo drone over one or two free or listed plots. */
+  | { type: 'drone'; plots: { x: number; y: number }[] }
+  /** Planning: put a plot, or the MULE on one, up for the land auction. */
+  | { type: 'list'; item: { kind: 'plot' | 'mule'; x: number; y: number }; minimum: number; unsold: 'store' | 'keep' }
+  /** Planning: take one of its listings back. */
+  | { type: 'unlist'; id: string };
 
 /** Plays one action. Returns false when the rules refused it (a RuleError), so the hands move on to the next item. */
 export type Act = (action: AiAction) => boolean;
+
+/** What a move takes from the seat. */
+export interface MoveCost {
+  money?: number;
+  /** Credits by outfit, for a move whose price is the outfit chosen. */
+  moneyByOutfit?: Partial<Record<Outfit, number>>;
+  /** Development seconds. */
+  seconds?: number;
+  alloy?: number;
+}
+
+/** One move, described for a reader of the rules: what it is and when the engine refuses it, never when it is smart. */
+export interface MoveDescriptor {
+  type: AiAction['type'];
+  /** The phone command it is. */
+  command: string;
+  phases: readonly Phase[];
+  does(): string;
+  /** One line per check, each the refusal text the engine throws. `{phase}` and the like stand for a value it fills in. */
+  legalWhen(): readonly string[];
+  /** Null when it takes nothing. */
+  cost: ((state: GameState, me: string) => MoveCost) | null;
+  /** Each field of the move besides its type, in plain words. */
+  args: Readonly<Record<string, string>>;
+}
+
+export const MOVES: Record<AiAction['type'], MoveDescriptor> = {} as Record<AiAction['type'], MoveDescriptor>;
