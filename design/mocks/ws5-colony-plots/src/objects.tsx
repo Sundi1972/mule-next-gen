@@ -56,12 +56,14 @@ export function objectLabel(o: PlotObject): string {
 }
 
 /**
- * The stage's colour, the build site's own (WS8's parts.tsx STAGE and ProjectRow), so the map and the list agree:
- * a site still collecting holo, standing ok, building warn, closed and damaged alert.
+ * The stage's colour on the map. Building, closed and damaged are the build site's own (WS8's parts.tsx STAGE and
+ * ProjectRow: warn, alert). Standing is holo, the colony's colour, not the list's ok: on the map a standing object sits
+ * beside players' plots, and ok's green reads as a green player's border (WS8's review). A reserved site is holo too,
+ * told apart by its dashed outline, its faint glyph and its SITE chip.
  */
 const STAGE_RING: Record<PlotStage, string> = {
   commissioned: 'ring-holo text-holo',
-  standing: 'ring-ok text-ok',
+  standing: 'ring-holo text-holo',
   building: 'ring-warn text-warn',
   closed: 'ring-alert text-alert',
   damaged: 'ring-alert text-alert',
@@ -97,7 +99,7 @@ export function ObjectDisc({ object, tv, className }: { object: PlotObject; tv: 
           'absolute inset-0 rounded-full',
           tv ? 'border-[3px]' : 'border-2',
           object.stage === 'building' || staked ? 'border-dashed' : 'border-solid',
-          staked ? 'border-holo' : object.stage === 'standing' ? 'border-ok' : object.stage === 'building' ? 'border-warn' : 'border-alert',
+          staked || object.stage === 'standing' ? 'border-holo' : object.stage === 'building' ? 'border-warn' : 'border-alert',
         )}
       />
       <ObjectGlyph kind={object.kind} size="70%" className={cx(STAGE_RING[object.stage].split(' ')[1], faded && 'opacity-45', staked && 'opacity-30')} />
@@ -105,7 +107,7 @@ export function ObjectDisc({ object, tv, className }: { object: PlotObject; tv: 
         <span
           data-num
           data-testid="plot-object-chip"
-          className={cx('absolute left-[15%] top-[85%] -translate-x-1/2 -translate-y-1/2 rounded-chip px-0.5 font-mono font-bold leading-tight shadow-chip', tv ? 'text-[11px]' : 'text-[7px]', chip.tone)}
+          className={cx('absolute left-[15%] top-[85%] -translate-x-1/2 -translate-y-1/2 rounded-chip px-0.5 font-mono font-bold leading-tight shadow-chip', tv ? 'text-[11px]' : 'text-[10px]', chip.tone)}
         >
           {chip.text(object)}
         </span>
@@ -131,7 +133,7 @@ export function ObjectGround({ object, tv, className }: { object: PlotObject; tv
           'absolute inset-[2%] rounded-[10%] bg-map-chip/60',
           tv ? 'border-[4px]' : 'border-2',
           object.stage === 'building' || staked ? 'border-dashed' : 'border-solid',
-          staked ? 'border-holo' : object.stage === 'standing' ? 'border-ok' : object.stage === 'building' ? 'border-warn' : 'border-alert',
+          staked || object.stage === 'standing' ? 'border-holo' : object.stage === 'building' ? 'border-warn' : 'border-alert',
         )}
       />
       <ObjectGlyph kind={object.kind} size="78%" className={cx('relative', STAGE_RING[object.stage].split(' ')[1], faded && 'opacity-45', staked && 'opacity-30')} />
@@ -139,7 +141,7 @@ export function ObjectGround({ object, tv, className }: { object: PlotObject; tv
         <span
           data-num
           data-testid="plot-object-chip"
-          className={cx('absolute right-0.5 top-0.5 z-[4] rounded-chip font-mono font-bold leading-tight shadow-chip', tv ? 'px-1 text-[11px]' : 'px-0.5 text-[8px]', chip.tone)}
+          className={cx('absolute right-0.5 top-0.5 z-[4] rounded-chip font-mono font-bold leading-tight shadow-chip', tv ? 'px-1 text-[11px]' : 'px-0.5 text-[10px]', chip.tone)}
         >
           {chip.text(object)}
         </span>
