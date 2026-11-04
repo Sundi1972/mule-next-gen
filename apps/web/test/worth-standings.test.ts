@@ -161,3 +161,34 @@ describe('B-AC-10 (WS4, Worth): who is leading, in credits, every month', () => 
     expect(text(element(tv, 'tv-winner'))).toBe(`The colony goes to Mia wins with a Worth of ${final[0]!.score} cr`);
   });
 });
+
+describe('N-6 (WS4): a shared win at game over', () => {
+  /** Heiko and Mia end level on 5,200; Kai is third. */
+  const tied = (players: PlayerView[]) =>
+    view({ finished: true, phase: 'gameOver', players, scores: players.map((p) => ({ id: p.id, score: p.worth })) });
+  const LEVEL = tied([{ ...HEIKO, worth: 5_200 }, MIA, KAI]);
+  const tvOf = (game: MuleView) => renderToStaticMarkup(createElement(ClientProvider, { client, children: createElement(TvGameOver, { game: { ...game, me: null } }) }));
+
+  it('N-6: the TV names both winners under its heading, with a mark for each, and calls it a shared win', () => {
+    const tv = element(tvOf(LEVEL), 'tv-winner');
+    expect(text(element(tv, 'winner-line'))).toBe('Heiko and Mia share the win, each with a Worth of 5,200 cr');
+    expect([...element(tv, 'winner-marks').matchAll(/aria-label="([^"]+)"/g)].map((m) => m[1])).toEqual(['Heiko', 'Mia']);
+  });
+
+  it('N-6: a winner who shares it is told so on the phone, in the card and the rail; three level winners read as a list', () => {
+    const phone = onPhone(LEVEL, GameOver);
+    expect(text(element(phone, 'my-place'))).toBe('You share the win!');
+    expect(text(phone)).toContain('Game over: you share the win');
+    expect(text(phone)).toContain('Heiko and Mia share the win, each with a Worth of 5,200 cr.');
+
+    const three = tied([{ ...HEIKO, worth: 5_200 }, MIA, { ...KAI, worth: 5_200 }]);
+    expect(text(element(element(tvOf(three), 'tv-winner'), 'winner-line'))).toBe('Heiko, Mia and Kai share the win, each with a Worth of 5,200 cr');
+  });
+
+  it('N-6 (negative): a sole winner keeps its own words, one mark, and no shared win', () => {
+    const tv = element(tvOf(OVER), 'tv-winner');
+    expect(text(element(tv, 'winner-line'))).toBe('Mia wins with a Worth of 5,200 cr');
+    expect([...element(tv, 'winner-marks').matchAll(/aria-label="([^"]+)"/g)].map((m) => m[1])).toEqual(['Mia']);
+    expect(text(onPhone(OVER, GameOver))).not.toContain('share the win');
+  });
+});
