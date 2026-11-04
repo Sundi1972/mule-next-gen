@@ -218,6 +218,36 @@ describe('the validator holds every playbook to RULE-1', () => {
       { path: `/auction/${staple}/hold`, from: reversed.draft.auction![staple]!.hold, to: need, reason: 'a test edit' },
       { path: `/auction/${staple}/role`, from: reversed.draft.auction![staple]!.role, to: 'seller', reason: 'a test edit' },
     ]);
+    // An edit counts as accepted only if its own value plays: one inside a part or good that step 5 replaced whole goes
+    // to rejected, naming what plays instead, and is no edit by 'llm'.
+    const replaced = (phase: DraftPhase, breakDraft: (pb: Playbook) => void, edits: PlanEdit[]) => {
+      const engine = draftOf(at[phase], phase, mindOf(2), 102);
+      const broken = structuredClone(engine);
+      breakDraft(broken);
+      const r = run(phase, edits, { draft: broken });
+      expect(r.playbook.edits, phase).toBeUndefined();
+      expect(r.playbook.by, phase).toBe('engine');
+      return { engine, r };
+    };
+    const noStart = replaced('auction', (pb) => void (pb.auction!.food!.start = NaN), [edit('/auction/food/walkAway', 50)]);
+    expect(noStart.r.playbook.auction!.food).toEqual(noStart.engine.auction!.food);
+    expect(noStart.r.rejected).toEqual([
+      { path: '/auction/food/walkAway', to: 50, why: "the engine's /auction/food plays" },
+      { path: '/auction/food/start', to: NaN, why: "not a number; the engine's /auction/food plays" },
+    ]);
+    const noDeny = replaced('planning', (pb) => void ((pb.landGrant as unknown as Record<string, unknown>).deny = null), [edit('/landGrant/claims', 0), edit('/landGrant/ranked/0/value', 7)]);
+    expect(noDeny.r.playbook.landGrant).toEqual(noDeny.engine.landGrant);
+    expect(noDeny.r.rejected).toEqual([
+      { path: '/landGrant/claims', to: 0, why: "the engine's /landGrant plays" },
+      { path: '/landGrant/ranked/0/value', to: 7, why: "the engine's /landGrant plays" },
+      { path: '/landGrant/deny', to: null, why: "not a list of plots to deny; the engine's /landGrant plays" },
+    ]);
+    const noBudget = replaced('development', (pb) => void (pb.development!.timeBudgetMs = NaN), [edit('/development/ifSoldOut', 'stop')]);
+    expect(noBudget.r.playbook.development).toEqual(noBudget.engine.development);
+    expect(noBudget.r.rejected).toEqual([
+      { path: '/development/ifSoldOut', to: 'stop', why: "the engine's /development plays" },
+      { path: '/development/timeBudgetMs', to: NaN, why: "not a number; the engine's /development plays" },
+    ]);
     expect(one('auction', g('walkAway'), 0).plays).toBe(1);
     const buyer = run('auction', [edit(g('role'), 'buyer'), edit(g('start'), part.walkAway + 40)]);
     expect(read(buyer.playbook, g('start'))).toBe(part.walkAway);
