@@ -1,18 +1,11 @@
 /** When a seat's brain asks for its land-grant playbook, and which playbook takes effect when the land grant starts. */
 import type { GameState, Playbook, PlayerId } from '@mule/engine';
-import { landBrief, playbookFrom, WRITER_SYSTEM, type AiSeat, type Feedback, type LandDraft, type ValidatePlan, type WriterReply } from '@mule/ai';
+import { landBrief, playbookFrom, WRITER_SYSTEM, type AiSeat, type Feedback, type PlaybookSource, type ValidatePlan, type WriterReply } from '@mule/ai';
 import type { PlaybookNote } from '../mule-game.js';
 import { WRITE_CALLS } from './client.js';
 import type { BrainService, PlaybookWriter } from './index.js';
 
-/** The engine's side of a playbook: the seat's draft for the state, and the validator every playbook passes. */
-export interface PlaybookSource {
-  draft(state: GameState, seat: PlayerId): { playbook: Playbook; land: LandDraft };
-  validate: ValidatePlan;
-}
-
-/** None until the engine drafts and validates playbooks: with no source, no seat asks and no playbook is written. */
-export const ENGINE_SOURCE: PlaybookSource | null = null;
+export type { PlaybookSource };
 
 export interface PlaybooksOptions {
   brain: BrainService;
