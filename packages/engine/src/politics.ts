@@ -652,3 +652,46 @@ export function outfitBlocked(state: GameState, outfit: Outfit): string | null {
   const capped = emissionCapped(state, outfit);
   return capped && `The emission cap stops new ${CAPPED_NAME[outfit] ?? outfit} while the air is above ${capped.level} (now ${capped.air})`;
 }
+
+/** What a law would cost one player a month, from public facts; a negative cost is a saving. See slice 2a RULE-45. */
+export interface LawImpact {
+  cost: number;
+  /** For the emission cap: whether it would stop outfits now, and how many of the player's plots it covers. */
+  capped?: { blocksNow: boolean; plots: number };
+}
+
+function enactImpact(state: GameState, law: LawId, setting: number, playerId: string): LawImpact {
+  switch (law) {
+    case 'landTax':
+      return { cost: setting * plotsOwned(state, playerId) };
+    case 'pollutionTax':
+      return { cost: Math.round(setting * (state.history.at(-1)?.pollutionBy[playerId] ?? 0)) };
+    case 'exportTax': {
+      const { stock } = player(state, playerId);
+      const wanted = (Object.keys(state.ship.hold) as (keyof typeof stock)[]).filter((g) => (state.ship.hold[g] ?? 0) > 0);
+      const worth = wanted.reduce((sum, g) => sum + stock[g] * state.store.offWorld[g], 0);
+      return { cost: Math.round((setting * worth) / PERCENT) };
+    }
+    case 'emissionCap': {
+      const blocks = POLITICS.laws.emissionCap.blocks;
+      const plots = state.tiles.filter((t) => t.owner === playerId && t.outfit !== null && blocks.includes(t.outfit)).length;
+      const blocksNow = state.air > setting;
+      return { cost: blocksNow ? plots * POLITICS.ai.council.capPlotCost : 0, capped: { blocksNow, plots } };
+    }
+  }
+}
+
+/** Each player's monthly cost of a proposal, for every phone's "For you" and the AI's vote; a repeal is the law in force's cost, saved. */
+export function lawImpact(state: GameState, proposal: LawProposal): Record<string, LawImpact> {
+  const out: Record<string, LawImpact> = {};
+  for (const p of state.players) {
+    if (proposal.kind === 'enact') {
+      out[p.id] = enactImpact(state, proposal.law, proposal.setting, p.id);
+      continue;
+    }
+    const inForce = state.politics?.laws[proposal.law];
+    const impact = inForce ? enactImpact(state, proposal.law, inForce.setting, p.id) : { cost: 0 };
+    out[p.id] = { ...impact, cost: impact.cost === 0 ? 0 : -impact.cost };
+  }
+  return out;
+}
