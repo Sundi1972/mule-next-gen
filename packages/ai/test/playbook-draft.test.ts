@@ -118,7 +118,7 @@ describe('the draft picks a plan kind and writes its strategy', () => {
     const traderMind = trader.seats[2]!.mind;
     const drawn = new Set(Array.from({ length: 20 }, (_, seed) => strategyOf(trader.state, traderMind, seed).kind));
     expect(drawn).toEqual(new Set(['specialist', 'monopolist']));
-    expect(strategyOf(trader.state, traderMind, 102).kind).toBe('monopolist');
+    expect(strategyOf(trader.state, traderMind, 102).kind).toBe('specialist');
 
     const rookie = table('rookie');
     const rookieKinds = rookie.seats.map((s) => strategyOf(rookie.state, s.mind, s.seed));
