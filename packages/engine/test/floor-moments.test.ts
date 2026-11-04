@@ -229,6 +229,58 @@ describe('the floor moments: wolves (RULE-4)', () => {
     expect(seat(struck, 'a').encounter?.wolves[0], 'the struck wolf').toMatchObject({ state: 'hurt', target: null });
   });
 
+  it('FM-arena-wall: a fight never leaves its colonist inside the band a body round the store\'s walls, where the walk never ends', () => {
+    // The walk stops every step short of the band (a body's width round the store's walls): from inside it only a step
+    // straight out moves. A fight's arena edge must leave the colonist where the walk could, not 0.018 tiles inside the
+    // band (T-AC-5's sample: game 18, month 4, ai0).
+    const body = cfg.steer.bodyTiles;
+    const R = WOLVES.arenaTiles;
+    const fightAt = (state: GameState, centre: { x: number; y: number }): DevFloor => {
+      const met = meetWolves(moved(buildFloor(state, cfg), 'a', { space: 'map', ...centre, lead: null }), state, 'a', cfg);
+      const fought = tick(state, met, { a: { x: 0, y: 0, act: true } });
+      expect(seat(fought, 'a').encounter?.stage, 'a fight under way').toBe('fight');
+      return fought;
+    };
+    const state = world(31, FOREST);
+    const store = state.tiles.find((t) => t.terrain === 'store')!;
+    const band = { x0: store.x - body, x1: store.x + 1 + body, y0: store.y - body, y1: store.y + 1 + body };
+    const inBand = (c: FloorColonist) => c.x > band.x0 && c.x < band.x1 && c.y > band.y0 && c.y < band.y1;
+
+    // The sample's case: walking along the band's top edge, out to the arena's edge, from a fight begun beside the store.
+    const centre = { x: band.x0 - 0.3, y: band.y0 + 0.5 };
+    const fought = fightAt(state, centre);
+    const y = band.y0 - 0.005;
+    const along = moved(fought, 'a', { x: centre.x + Math.sqrt((R - 0.001) ** 2 - (centre.y - y) ** 2), y });
+    expect(inBand(seat(along, 'a')), 'it starts clear of the band').toBe(false);
+    const after = seat(tick(state, along, { a: { x: 1, y: 0, act: false } }), 'a');
+    expect(after.encounter?.stage, 'still fighting').toBe('fight');
+    expect(Math.hypot(after.x - centre.x, after.y - centre.y), 'within the arena').toBeLessThanOrEqual(R + 1e-9);
+    expect(inBand(after), `a step to the arena's edge ended inside the band, at (${after.x.toFixed(3)}, ${after.y.toFixed(3)})`).toBe(false);
+
+
+    // A fight begun beside each wall, the stick pushed one way and then another (round a corner, then along a wall to
+    // the arena's edge): no tick of the fight ends in the band.
+    const ends: string[] = [];
+    const beside = [
+      { x: band.x0 - 0.3, y: band.y0 + 0.4 }, { x: band.x1 + 0.3, y: band.y0 + 0.4 }, { x: band.x0 - 0.3, y: band.y1 - 0.4 },
+      { x: band.x1 + 0.3, y: band.y1 - 0.4 }, { x: band.x0 + 0.4, y: band.y0 - 0.3 }, { x: band.x1 - 0.4, y: band.y1 + 0.3 },
+    ];
+    const way = (k: number) => ({ x: Math.cos((k / 8) * 2 * Math.PI), y: Math.sin((k / 8) * 2 * Math.PI), act: false });
+    for (const at of beside) {
+      for (let first = 0; first < 8; first++) {
+        for (let then = 0; then < 8; then++) {
+          let f = fightAt(state, at);
+          for (let i = 0; i < ticks(1.5) && seat(f, 'a').encounter?.stage === 'fight'; i++) {
+            f = tick(state, f, { a: way(i < ticks(0.4) ? first : then) });
+            const c = seat(f, 'a');
+            if (c.space === 'map' && inBand(c)) ends.push(`from (${at.x.toFixed(2)}, ${at.y.toFixed(2)}), ${first}/8 then ${then}/8: (${c.x.toFixed(3)}, ${c.y.toFixed(3)})`);
+          }
+        }
+      }
+    }
+    expect(ends, 'fight ticks that ended inside the store wall band').toEqual([]);
+  });
+
   it('T-AC-6 negative: no wolves in the hall, on plains, or with WOLVES.on false', () => {
     const roll = (map: readonly string[], at: Partial<FloorColonist>, config: FloorConfig) => {
       const state = world(11, map);
