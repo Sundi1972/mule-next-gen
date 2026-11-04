@@ -423,14 +423,18 @@ function useNewestFirst(deals: DealView[]): DealRow[] {
  * The auction on the big screen: before each good, the status table and everyone's side, which is public;
  * then the whole board, large, with every creature walking live.
  */
-function TvAuction({ table, game, auction }: { table: TableView<MuleView>; game: MuleView; auction: NonNullable<MuleView['auction']> }) {
+export function TvAuction({ table, game, auction }: { table: TableView<MuleView>; game: MuleView; auction: NonNullable<MuleView['auction']> }) {
   useAuctionSound(auction);
   const skipped = skippedLine(auction);
+  // The status line names the skipped goods only, no reasons, so it fits its one line (WS6 ruling on #204).
+  const skippedGoods = auction.skipped.length > 0 ? `Skipped: ${auction.skipped.map((s) => GOOD_NAME[s.good]).join(', ')}` : null;
   const walkers = boardWalkers(game, auction);
   const stock = auction.storeForSale;
   const deals = useNewestFirst(auction.deals);
   const status = auction.stage === 'status';
-  const stageName = status ? 'Buy or sell?' : auction.slowed ? 'Trading · clock slowed' : 'Walk';
+  // The close stage (A-5, G-5): the board holds still while each phone shows its receipt; "closed" is the receipt's word.
+  const closed = auction.stage === 'close';
+  const stageName = status ? 'Buy or sell?' : closed ? 'Closed' : auction.slowed ? 'Trading · clock slowed' : 'Walk';
   const ship = shipWants(game, auction);
   // The side pick has no clock (A-7): who has picked, who is still picking, and the host who can move on for them.
   const connected = connectedIn(table.seats);
@@ -438,7 +442,7 @@ function TvAuction({ table, game, auction }: { table: TableView<MuleView>; game:
   const host = game.players.find((p) => p.id === table.hostId);
   const picked = game.players.map((p) => ({ ...p, ready: pickedIn(game, p.id) }));
   return (
-    <div className="flex h-[720px] w-[1280px] flex-col gap-4 bg-table px-10 py-8 text-ink" data-phase="auction" data-testid={status ? 'tv-status' : 'tv-walk'}>
+    <div className="flex h-[720px] w-[1280px] flex-col gap-4 bg-table px-10 py-8 text-ink" data-phase="auction" data-stage={auction.stage} data-testid={status ? 'tv-status' : 'tv-walk'}>
       <TvHeader game={game} title={`Auction · ${GOOD_NAME[auction.good]}`} />
       <div className="flex min-h-0 flex-1 gap-6">
         <div className={cx('flex min-w-0 flex-1 flex-col', status ? 'gap-3' : 'gap-2')}>
@@ -452,9 +456,9 @@ function TvAuction({ table, game, auction }: { table: TableView<MuleView>; game:
               <span className="min-w-0 flex-1 truncate text-2xl text-ink-2">
                 <strong className="font-semibold text-ink">No clock:</strong> {SIDE_PICK_WORDS.noClock}
               </span>
-              {skipped && (
+              {skippedGoods && (
                 <p className="min-w-0 max-w-[45%] truncate font-mono text-base text-ink-3" data-testid="skipped">
-                  {skipped}
+                  {skippedGoods}
                 </p>
               )}
             </div>
@@ -493,14 +497,16 @@ function TvAuction({ table, game, auction }: { table: TableView<MuleView>; game:
               storeStock={stock}
               marks={{ ask: true, bid: true }}
               wrapCreature={tvSpeakerAt}
-              className="min-h-0 flex-1"
+              className={cx('min-h-0 flex-1', closed && 'opacity-40')}
             />
           )}
         </div>
         <div className="flex w-[300px] shrink-0 flex-col gap-4">
           <div className="flex flex-col gap-1 rounded-panel border-2 border-holo bg-holo-soft p-4 shadow-glow">
             <GoodTag good={auction.good} name className="text-2xl" />
-            <span className={cx('font-display text-xl font-semibold', auction.slowed && 'text-warn')}>{stageName}</span>
+            <span className={cx('font-display text-xl font-semibold', auction.slowed && 'text-warn')} data-testid="tv-stage">
+              {stageName}
+            </span>
             {!status && (
               <span data-num className="font-mono text-lg text-ink-2" data-testid="tv-units">
                 {auction.units} unit{auction.units === 1 ? '' : 's'} traded

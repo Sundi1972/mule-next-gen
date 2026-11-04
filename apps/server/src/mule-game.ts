@@ -74,6 +74,7 @@ import {
   walkSeconds,
   type GameState,
   type Good,
+  type GoodReceipt,
   type MonthEvent,
   type NoticeEntry,
   type Outfit,
@@ -141,6 +142,8 @@ function isSpecies(pick: string | undefined): pick is Species {
 /** The reasons a plot's badges may name; its ground, the output floor, a factory's fit and the event never get one. */
 const BADGE_REASONS: readonly ProductionReason[] = ['cluster', 'species', 'trait', 'pollution', 'noEnergy', 'noWater'];
 const MAX_BADGES = 2;
+/** The receipt of a seat that traded nothing in the good that closed. */
+const NO_RECEIPT: GoodReceipt = { bought: { units: 0, gross: 0, tax: 0, prices: [], with: [] }, sold: { units: 0, gross: 0, tax: 0, prices: [], with: [] } };
 
 /** What a seat already in may not do while month 1's clock waits; the pub stays open. */
 const WAIT_REFUSES: ReadonlySet<DevIntent['type']> = new Set(['buyMule', 'install', 'analyse', 'filter']);
@@ -1145,12 +1148,15 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         }
         // Read before the step: a status screen that ends with nobody trading moves straight on to the next good.
         const sides = state.auction.stage === 'status' ? state.auction.walkers.map(({ id, side }) => ({ id, side })) : [];
+        const walking = state.auction.stage === 'walk';
         const trades = stepAuction(state, dt);
         if (good && sides.length > 0 && (state.auction.stage !== 'status' || state.auction.good !== good)) {
           for (const { id, side } of sides) this.notify({ kind: 'declare', seat: id, good, side });
         }
         for (const t of trades) this.notify({ kind: 'trade', good: t.good, buyer: t.buyer, seller: t.seller, price: t.price, qty: t.quantity });
         this.dealsInGood.push(...trades.filter((t) => t.buyer !== 'store' && t.buyer !== 'ship' && t.seller !== 'store'));
+        // The good's headline goes up as its walk ends, so the close stage shows it (A-5); a skipped good has none.
+        if (walking && state.auction.stage === 'close') this.reportGood(good);
         if (state.auction.good !== good) {
           this.reportGood(good);
           const skipped = state.auction.skipped;
@@ -1385,7 +1391,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
               return { id: s.id, score: total, parts };
             })
           : null,
-      auction: this.auctionView(),
+      auction: this.auctionView(seatId),
       listings: state.listings.map(listingView),
       lotSlots: { used: state.listings.length, max: LOTS.maxLotsPerMonth },
       landAuction: landAuctionView(state),
@@ -1395,8 +1401,11 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     };
   }
 
-  /** The auction board as every screen draws it. Public, as in the original: everyone sees everyone walk. */
-  private auctionView(): MuleView['auction'] {
+  /**
+   * The auction board as every screen draws it. Public, as in the original: everyone sees everyone walk. A seat's
+   * own view adds its receipt for the good in the close stage and its month's running total (UX audit G-5).
+   */
+  private auctionView(seatId: string | null): MuleView['auction'] {
     const state = this.requireState();
     const a = state.auction;
     if (state.phase !== 'auction' || !a || !a.good || a.stage === 'over') return null;
@@ -1408,7 +1417,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       stage: a.stage,
       seconds: Math.max(0, a.clockMs / 1_000),
       // The side pick has no clock unless WALK.statusMs restores one (A-7): 0 draws none.
-      total: (a.stage === 'status' ? (WALK.statusMs ?? 0) : WALK.goodMs) / 1_000,
+      total: (a.stage === 'status' ? (WALK.statusMs ?? 0) : a.stage === 'close' ? WALK.closeMs : WALK.goodMs) / 1_000,
       slowed: a.stage === 'walk' && a.deals.length > 0,
       next: [...a.queue],
       storeBuys: storeBuyLine(state),
@@ -1430,6 +1439,9 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       units: a.units,
       status: a.status,
       skipped: a.skipped,
+      upNext: a.stage === 'close' ? a.upNext : null,
+      receipt: seatId !== null && a.stage === 'close' ? (a.receipts[seatId] ?? NO_RECEIPT) : null,
+      tally: seatId !== null ? (a.tally[seatId] ?? 0) : null,
     };
   }
 
