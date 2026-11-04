@@ -1,4 +1,4 @@
-import { boxOf, createGame, HALL, pubPayoutFor } from '@mule/engine';
+import { boxOf, buildFloor, createGame, DEV_WALK, floorConfig, HALL, pubPayoutFor, reachOf, reachWords, type HallPlace, type Player } from '@mule/engine';
 import type { ChatMessage, MuleView, MyView, TileView } from '@mule/protocol';
 import { ActionButton, FAN, Joystick, LiveWalkers, SeatSpeciesProvider, type Slot } from '@mule/ui';
 import { createElement, type ReactElement } from 'react';
@@ -281,6 +281,48 @@ describe('C11: the phone, held sideways', () => {
     const view = devView(lenasMe({ installedThisTurn: true, reach: reach('IN THE PUB', 'turn over', false) }), { players: PLAYERS.map((p) => (p.id === 's1' ? { ...p, doneDeveloping: true } : p)) });
     const html = phone(view, live(null));
     expect(text(html, 'over-card')).toMatch(/^In the pub: your turn is over/);
+  });
+});
+
+describe('C11: the store\'s promises on the walking screen (B-AC-9, B-AC-10)', () => {
+  it('B-AC-9: fed and well, the pace line says full pace and her colonist wears no tag', () => {
+    const html = phone(devView(), live(mine(5.5, 4.5)));
+    expect(tag(html, 'pace-line')).toMatch(/data-pct="100"/);
+    expect(text(html, 'pace-line')).toBe('Your pace 100%: fed and well');
+    expect(tag(inside(html, 'walkers-map'), 'condition-s1')).toBeNull();
+  });
+
+  it('B-AC-9: hungry, the pace line says her pace and the Food she ate, and her colonist wears the hunger tag at its level', () => {
+    const { hungryFrom, starvingFrom } = DEV_WALK.hungerLevels;
+    const hungry = { foodShare: 1 - (hungryFrom + starvingFrom) / 2, conditionPace: 0.7 };
+    const players = PLAYERS.map((p) => (p.id === 's1' ? { ...p, condition: { ...p.condition!, ...hungry } } : p));
+    const me = lenasMe();
+    const html = phone(devView(lenasMe({ stock: { ...me.stock, food: 2 }, needs: { ...me.needs, food: 5 } }), { players }), live(mine(5.5, 4.5)));
+    expect(tag(html, 'pace-line')).toMatch(/data-pct="70"/);
+    expect(text(html, 'pace-line')).toMatch(/^Your pace 70%: you ate 2 of the 5 Food you need/);
+    expect(tag(inside(html, 'walkers-map'), 'condition-s1')).toMatch(/data-hunger="2"/);
+  });
+
+  /** The engine's words for Lena's press at `place` in the hall, leading `mule`. */
+  function wordsAt(place: HallPlace, mule: Player['carriedMule']) {
+    const state = createGame({ seed: 1, players: [{ id: 's1', name: 'Lena', isAi: false, species: 'zipwing' }, { id: 's2', name: 'Ossa', isAi: false, species: 'gearling' }] });
+    state.phase = 'development';
+    state.players[0]!.carriedMule = mule;
+    const floor = buildFloor(state, floorConfig());
+    const b = boxOf(place);
+    const there = { space: 'hall' as const, x: (b.x0 + b.x1) / 2, y: (b.y0 + b.y1) / 2 };
+    return { there, words: reachWords(reachOf({ ...floor, colonists: floor.colonists.map((c) => (c.id === 's1' ? { ...c, ...there } : c)) }, state, 's1')) };
+  }
+
+  it.each<HallPlace>(['energy', 'alloy'])('B-AC-10: with no MULE in tow the %s outfitter is shut: its button is dim and points to the corral; leading an empty MULE it outfits', (place) => {
+    const shut = wordsAt(place, null);
+    const dim = phone(devView(lenasMe({ reach: shut.words })), live(mine(shut.there.x, shut.there.y, { space: 'hall' })));
+    expect(text(dim, 'action-verb')).toBe('TO THE CORRAL');
+    expect(tag(dim, 'action-button')).toMatch(/\sdisabled=""/);
+    const open = wordsAt(place, 'empty');
+    const lit = phone(devView(lenasMe({ carriedMule: 'empty', reach: open.words })), live(mine(open.there.x, open.there.y, { space: 'hall' })));
+    expect(text(lit, 'action-verb')).toBe(`OUTFIT · ${place.toUpperCase()}`);
+    expect(tag(lit, 'action-button')).toMatch(/data-enabled="true"/);
   });
 });
 

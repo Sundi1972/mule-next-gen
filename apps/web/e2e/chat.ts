@@ -8,7 +8,7 @@
 import { AI_HANDS, LOTS } from '@mule/engine';
 import type { Page } from 'playwright';
 import { GRANT_PASS_MAX_MS, PHASE_MS } from '../../server/src/mule-game.js';
-import { check, launch, PHONE, startServer, TV } from './harness';
+import { check, hallPlace, launch, PHONE, pressAct, startServer, steerTo, throughDoor, TV } from './harness';
 
 const LAPTOP = { width: 1440, height: 900 };
 const AI_LINES = process.env.E2E_AI_LINES === '1';
@@ -200,7 +200,7 @@ try {
   await Promise.all([phase(lena, 'development'), phase(kai, 'development'), phase(tv, 'development')]);
   await lena.waitForTimeout(PHASE_SETTLES_MS);
   await burst(lena, kai, 'dev');
-  for (const p of [lena, kai]) await p.locator('[data-phase=development]').getByRole('button', { name: 'Go to the pub and end your turn' }).click({ timeout: 5_000 });
+  await Promise.all([lena, kai].map((p) => toThePub(p, code, wires.get(p)!.seatId!)));
 
   // The auction: two lines within a second while the TV draws the walk.
   await Promise.all([phase(lena, 'auction'), phase(kai, 'auction')]);
@@ -309,6 +309,15 @@ async function burst(a: Page, b: Page, tag: string): Promise<void> {
   await a.waitForTimeout(400);
   await say(b, `Nice plot, Lena! (${tag})`);
   await a.waitForTimeout(BURST_SETTLES_MS);
+}
+
+/** Ends a seat's development turn as a steering player does: in through the store's door, to the pub, and a press. */
+async function toThePub(p: Page, code: string, seat: string): Promise<void> {
+  await throughDoor(p, server, code, seat);
+  await steerTo(p, server, code, seat, hallPlace('pub'));
+  await pressAct(p);
+  // The last seat's press ends development at once, so its screen may go straight on to the next phase.
+  await p.getByTestId('over-card').or(p.locator('[data-phase]:not([data-phase=development])')).first().waitFor({ timeout: 5_000 });
 }
 
 /** Claims the next free plot that lights up. */
