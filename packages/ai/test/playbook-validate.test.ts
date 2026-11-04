@@ -315,5 +315,13 @@ describe("the engine's own draft passes the gate", () => {
         expect(stableJson(r.playbook), `${phase} ai${i}`).toBe(stableJson(draft));
       }
     }
+    // No free plot left: the draft ranks nothing, and ranking nothing passes.
+    const taken = structuredClone(at.planning);
+    for (const t of taken.tiles) if (t.terrain !== 'store') t.owner = 'ai1';
+    const bare = draftOf(taken, 'planning', mindOf(2), 102);
+    expect(bare.landGrant!.ranked).toEqual([]);
+    const r = validatorFor({ mind: mindOf(2), seed: 102 })(taken, 'ai2', bare, []);
+    expect(r.rejected).toEqual([]);
+    expect(stableJson(r.playbook)).toBe(stableJson(bare));
   });
 });
