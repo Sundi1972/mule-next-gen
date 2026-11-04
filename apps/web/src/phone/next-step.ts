@@ -101,11 +101,11 @@ export function openShops(locks: NextStep['locks']): Shop[] {
 export type PlotPress = { kind: 'install'; at: { x: number; y: number } } | { kind: 'other' };
 
 /**
- * The plot a walk is an install for, after a press. The server refuses every press while the colonist walks, so only a
- * press made standing still moves it: Install remembers its plot, any other move forgets it.
+ * The plot a walk is an install for, after a press. The server refuses every press while the colonist walks or
+ * assays (`busy`), so only a press it takes moves it: Install remembers its plot, any other move forgets it.
  */
-export function installAfterPress(prev: { x: number; y: number } | null, press: PlotPress, walking: boolean): { x: number; y: number } | null {
-  if (walking) return prev;
+export function installAfterPress(prev: { x: number; y: number } | null, press: PlotPress, busy: boolean): { x: number; y: number } | null {
+  if (busy) return prev;
   return press.kind === 'install' ? press.at : null;
 }
 
