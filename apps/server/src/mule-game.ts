@@ -681,8 +681,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   private settleAt(due: number, pad = 0): void {
     this.cancels.push(
       this.ctx.schedule(Math.max(0, due - this.ctx.now()) + pad, () => {
-        // Waiting again a millisecond past `due`, so an early timer can't spin on the same millisecond.
-        if (this.ctx.now() < due) this.settleAt(due, 1);
+        // Waiting again past `due`, a little longer each time, so however early a timer fires the wait ends.
+        if (this.ctx.now() < due) this.settleAt(due, Math.max(1, pad * 2));
         else this.settle();
       }),
     );
