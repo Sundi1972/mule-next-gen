@@ -221,6 +221,8 @@ export interface MonthReport {
   events?: MonthEvent[];
   /** Events announced ahead of time. Absent in older reports. */
   warnings?: EventWarning[];
+  /** The colony fund's money in and out this month; absent when the game plays without politics. */
+  ledger?: FundLedger;
   /** Every working plot's output, part by part. Absent in older reports. */
   lines?: ProductionLine[];
 }
@@ -371,6 +373,50 @@ export interface GameState {
    * Written only by politics.ts, which replaces the object on every write: re-read it, don't hold a reference.
    */
   politics: Politics | null;
+  /**
+   * The colony as a shared project: its fund's ledger and projects; null when the game plays without politics.
+   * Written only by colony.ts, which replaces the object on every write: re-read it, don't hold a reference.
+   */
+  colony: Colony | null;
+}
+
+/** Where money comes into the colony fund from. */
+export type FundSource = 'salesTax' | 'federationTax' | 'exportTax' | 'landTax' | 'pollutionTax' | 'donation' | 'grant';
+/** What the colony fund pays out for. */
+export type FundLine = 'officePay' | 'project' | 'upkeep' | 'repair' | 'strikePay' | 'siteBid';
+
+/** One month's money into and out of the colony fund. */
+export interface FundLedger {
+  month: number;
+  in: Partial<Record<FundSource, number>>;
+  out: Partial<Record<FundLine, number>>;
+}
+
+export type PrestigeId = 'park' | 'hospital' | 'observatory' | 'stadium' | 'spaceport';
+
+/** A prestige object from the moment the Governor commissions it. */
+export interface Project {
+  id: PrestigeId;
+  stage: 'commissioned' | 'building' | 'standing' | 'closed' | 'damaged';
+  funded: { credits: number; goods: Partial<Record<Good, number>> };
+  /** Upkeeps left until it stands; null unless building. */
+  monthsLeft: number | null;
+  /** The tile it stands on, for an object that needs one; null until sited. */
+  plot: number | null;
+  /** The month it was commissioned. */
+  since: number;
+  /** Each donor's credits plus goods at reference price. */
+  plaque: Record<string, number>;
+}
+
+export interface Colony {
+  ledger: FundLedger;
+  /** In commission order. */
+  projects: Project[];
+  /** Each month a sitting Governor's tax promise was kept or broken. */
+  promises: { month: number; governor: string; kind: TaxPromise['kind']; kept: boolean }[];
+  /** Prestige that stays whatever happens to the objects, such as a festival's. */
+  permanentPrestige: number;
 }
 
 export type Office = 'governor' | 'sheriff';
