@@ -161,7 +161,8 @@ const KEYS = ['planning', 'landGrant', 'development', 'auction'] as const;
 /** Each part from its seat's own draft: the draft phase that writes it. */
 const OWN_FROM = { planning: 'planning', landGrant: 'planning', development: 'development', auction: 'auction' } as const;
 
-describe('the seat drafts, validates and writes its planning playbook (C4, RULE-6, RULE-7)', () => {
+// Its tests play whole tables: about 1.5 s on a laptop, up to 5 s on a CI runner (T-AC-4 took 4.8 s on #301's run).
+describe('the seat drafts, validates and writes its planning playbook (C4, RULE-6, RULE-7)', { timeout: 30_000 }, () => {
   it("B-AC-7: a keyless seat writes its validated planning draft, by 'engine'", () => {
     const t = playTable(3);
 
