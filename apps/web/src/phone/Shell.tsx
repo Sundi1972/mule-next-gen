@@ -1,6 +1,7 @@
 import { cx, PlayerMark, SPECIES_NAME, Timer } from '@mule/ui';
 import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { flushSync } from 'react-dom';
+import { FallbackBubble, TableChat } from '../chat/Chat';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { fmt } from '../game/derive';
 import { useEscape } from './dialog';
@@ -69,6 +70,43 @@ export function NowCard({ now }: { now: Now }) {
   );
 }
 
+/**
+ * The Now card that folds once read (WS6's month-end mock, UX audit H-7): folded it is one line, its title, and a tap
+ * opens it. A new step re-mounts it folded (the title is its key), so the new title shows on its one line.
+ */
+function FoldingNowCard({ now }: { now: Now }) {
+  const [open, setOpen] = useState(false);
+  if (open)
+    return (
+      <div className="relative">
+        <NowCard now={now} />
+        <button type="button" onClick={() => setOpen(false)} aria-expanded aria-label="Fold the Now card" className="absolute right-1.5 top-1.5 grid size-8 place-items-center rounded-chip text-holo hover:bg-holo-soft" data-testid="now-fold">
+          <svg aria-hidden viewBox="0 0 24 24" width={14} height={14} fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M6 15l6-6 6 6" />
+          </svg>
+        </button>
+      </div>
+    );
+  return (
+    <button
+      type="button"
+      onClick={() => setOpen(true)}
+      aria-expanded={false}
+      className={cx('flex min-h-8 w-full items-center gap-2 rounded-panel border-2 px-2.5 py-1.5 text-left @min-[1100px]/shell:px-4 @min-[1100px]/shell:py-2.5', now.warn ? 'border-warn bg-warn/10' : 'border-holo bg-holo-soft')}
+      data-testid="now"
+    >
+      <span className="label-caps shrink-0 text-[10px]! @min-[1100px]/shell:text-xs!">Now</span>
+      <span className="min-w-0 flex-1 truncate font-display text-sm font-semibold leading-tight @min-[1100px]/shell:text-lg" data-testid="now-title">
+        {now.title}
+      </span>
+      <svg aria-hidden viewBox="0 0 24 24" width={14} height={14} className="shrink-0 text-holo" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+        <path d="M6 9l6 6 6-6" />
+      </svg>
+      <span className="sr-only">Tap to read it again</span>
+    </button>
+  );
+}
+
 /** Before paint in the browser; the server renderer (and the node tests) has nothing to measure and no paint. */
 const useBeforePaint = typeof document === 'undefined' ? useEffect : useLayoutEffect;
 
@@ -101,22 +139,31 @@ function useWideRef<T extends HTMLElement>() {
 export function PhoneShell({
   phase,
   seconds,
+  status,
   now,
+  foldNow = false,
   rail,
   footer,
   fill = false,
+  standing,
   children,
 }: {
   phase: string;
   seconds?: number | undefined;
+  /** Shown where the clock goes when the phase has none, such as planning's ready count. */
+  status?: ReactNode;
   /** The one next step, first in the rail. Screens without it draw no Now card. */
   now?: Now | undefined;
+  /** The Now card folds to its title once read, for a screen whose rail carries more than it (the month end). */
+  foldNow?: boolean;
   /** Controls and details for the side rail; scrolls if it runs long. */
   rail?: ReactNode;
   /** The main action, pinned to the bottom of the rail. */
   footer?: ReactNode;
   /** The content fills the main area without scrolling, as the map does. */
   fill?: boolean;
+  /** Under the money: where you stand against the others ("2nd of 4"); with the money, a tap opens the standings. */
+  standing?: { label: string; aria: string; onOpen: () => void } | undefined;
   children: ReactNode;
 }) {
   const { view, self, slot } = usePhoneGame();
@@ -137,26 +184,28 @@ export function PhoneShell({
             {children}
           </main>
           <aside className="flex w-(--rail) shrink-0 flex-col border-l border-holo-faint bg-void/40" data-testid="guide">
-            <header className="flex flex-col gap-1 border-b border-holo-faint px-3 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))] @min-[1100px]/shell:gap-2 @min-[1100px]/shell:px-5 @min-[1100px]/shell:pb-4 @min-[1100px]/shell:pt-[max(1rem,env(safe-area-inset-top))]">
-              <div className="flex items-center justify-between gap-2">
+            <header className="flex flex-col gap-1 border-b border-holo-faint px-3 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))] short:gap-0.5 short:pb-1 short:pt-[max(0.25rem,env(safe-area-inset-top))] @min-[1100px]/shell:gap-2 @min-[1100px]/shell:px-5 @min-[1100px]/shell:pb-4 @min-[1100px]/shell:pt-[max(1rem,env(safe-area-inset-top))]">
+              <div className="flex items-center justify-between gap-1.5 @min-[1100px]/shell:gap-2">
                 <div className="flex min-w-0 flex-col">
-                  <span className="label-caps text-[10px]! @min-[1100px]/shell:text-xs!">
+                  <span className="label-caps text-[10px]! @min-[1100px]/shell:text-xs!" data-testid="month">
                     Month {view.month} / {view.maxMonths}
                   </span>
                   <span className="truncate font-display text-lg font-semibold leading-tight @min-[1100px]/shell:text-2xl">{phase}</span>
                 </div>
-                {seconds !== undefined && <Timer seconds={seconds} className="@min-[1100px]/shell:h-11 @min-[1100px]/shell:px-4 @min-[1100px]/shell:text-2xl" />}
+                {seconds !== undefined ? <Timer seconds={seconds} className="@min-[1100px]/shell:h-11 @min-[1100px]/shell:px-4 @min-[1100px]/shell:text-2xl" /> : status}
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 @min-[1100px]/shell:gap-2">
                 <PlayerMark slot={slot} species={self.species} size={12} label={`You, ${SPECIES_NAME[self.species]}`} />
-                <span className="min-w-0 truncate text-sm font-semibold @min-[1100px]/shell:text-base">{self.name}</span>
-                <ThemeToggle className="ml-1 shrink-0" />
+                <span className="min-w-0 truncate text-sm font-semibold @min-[1100px]/shell:text-base" data-testid="self-name">
+                  {self.name}
+                </span>
+                <ThemeToggle iconUntilWide className="shrink-0 @min-[1100px]/shell:ml-1" />
                 {move && (
                   <button
                     ref={move.button}
                     type="button"
                     onClick={move.open}
-                    className="flex h-7 shrink-0 items-center gap-1 rounded-chip border border-holo-line px-1.5 text-xs text-holo hover:border-holo @min-[1100px]/shell:h-8 @min-[1100px]/shell:px-2.5 @min-[1100px]/shell:text-sm"
+                    className="flex size-8 shrink-0 items-center justify-center gap-1 rounded-chip border border-holo-line text-xs text-holo hover:border-holo @min-[1100px]/shell:w-auto @min-[1100px]/shell:px-2.5 @min-[1100px]/shell:text-sm"
                     aria-label="Move to my phone"
                     data-testid="move-to-phone"
                   >
@@ -167,18 +216,42 @@ export function PhoneShell({
                     <span className="hidden @min-[1100px]/shell:inline">To my phone</span>
                   </button>
                 )}
-                <span data-num className="ml-auto shrink-0 font-mono text-sm font-bold text-ink @min-[1100px]/shell:text-lg" data-testid="money">
-                  {fmt(self.money)} cr
-                </span>
+                {standing ? (
+                  <button
+                    type="button"
+                    onClick={standing.onOpen}
+                    aria-haspopup="dialog"
+                    aria-label={`${fmt(self.money)} cr. ${standing.aria}`}
+                    className="relative -my-1 ml-auto flex shrink-0 flex-col items-end rounded-chip py-0.5 hover:bg-holo-soft"
+                    data-testid="standing"
+                  >
+                    <span data-num className="font-mono text-sm font-bold leading-tight text-ink @min-[1100px]/shell:text-lg" data-testid="money">
+                      {fmt(self.money)} cr
+                    </span>
+                    <span className="flex items-center gap-0.5 text-[10px] font-semibold leading-tight text-holo @min-[1100px]/shell:text-sm" data-testid="standing-rank">
+                      {standing.label}
+                      <svg aria-hidden viewBox="0 0 24 24" width={10} height={10} fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M9 6l6 6-6 6" />
+                      </svg>
+                    </span>
+                  </button>
+                ) : (
+                  <span data-num className="ml-auto shrink-0 font-mono text-sm font-bold text-ink @min-[1100px]/shell:text-lg" data-testid="money">
+                    {fmt(self.money)} cr
+                  </span>
+                )}
               </div>
+              {/* The table chat (C20): in the header from WIDE_PX; on a phone it follows the rail's content, its bubble here. */}
+              {wide ? <TableChat /> : <FallbackBubble />}
             </header>
-            <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-3 py-2.5 *:shrink-0 @min-[1100px]/shell:gap-4 @min-[1100px]/shell:px-5 @min-[1100px]/shell:py-4">
-              {now && <NowCard now={now} />}
+            <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-3 py-2.5 *:shrink-0 short:gap-2 @min-[1100px]/shell:gap-4 @min-[1100px]/shell:px-5 @min-[1100px]/shell:py-4">
+              {now && (foldNow ? <FoldingNowCard key={now.title} now={now} /> : <NowCard now={now} />)}
               {rail}
+              {!wide && <TableChat under />}
             </div>
             {footer && (
               <div
-                className="flex flex-col gap-2 border-t border-holo-faint bg-void/60 px-3 pb-[max(0.625rem,env(safe-area-inset-bottom))] pt-2.5 @min-[1100px]/shell:gap-3 @min-[1100px]/shell:px-5 @min-[1100px]/shell:pb-[max(1rem,env(safe-area-inset-bottom))] @min-[1100px]/shell:pt-4"
+                className="flex flex-col gap-2 border-t border-holo-faint bg-void/60 px-3 pb-[max(0.625rem,env(safe-area-inset-bottom))] pt-2.5 short:gap-1.5 short:pb-[max(0.375rem,env(safe-area-inset-bottom))] short:pt-1.5 @min-[1100px]/shell:gap-3 @min-[1100px]/shell:px-5 @min-[1100px]/shell:pb-[max(1rem,env(safe-area-inset-bottom))] @min-[1100px]/shell:pt-4"
                 data-testid="actions"
               >
                 {footer}

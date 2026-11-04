@@ -3,15 +3,23 @@ import {
   createGame,
   EVENTS,
   factoryFit,
+  formMeteorCrater,
+  MAP,
+  MINERAL_ODDS,
+  MINERAL_ODDS_MIN,
   PROCESSED_GOODS,
   RAW_GOODS,
+  ratingsOf,
   rawOutputParts,
+  RuleError,
   runProduction,
+  type EventRow,
   type GameState,
   type SpecialField,
   type Species,
   type Tile,
 } from '../src/index.js';
+import { specialBonus } from '../src/specials.js';
 
 /**
  * RULE-6, observed where the owner receives it: the month's `produced`
@@ -180,7 +188,8 @@ describe('RULE-6: cavern collapse', () => {
     Object.assign(state, { seed, month }, whatIf ? { whatIf: true } : {});
     const run = runProduction(state);
     return {
-      event: run.events.length > 0,
+      // A month has an event when an output event fired; a collapse is the cavern's own, not another event.
+      event: run.events.some((e) => e.key !== 'cavernCollapse'),
       caverns: caverns.map((at) => {
         const made = madeOn(run, state, state.tiles[at]!);
         return { made, produced: (made ?? 0) > 0, collapsed: state.tiles[at]!.special === undefined };
@@ -196,61 +205,74 @@ describe('RULE-6: cavern collapse', () => {
 
   // Thousands of production runs, to measure the rate; past vitest's 5 s default on a CI runner.
   it('T-AC-6: a cavern’s collapse is the same on replay, and comes about 6 times in 100', () => {
-    const { base, caverns } = cavernGame();
-    let produced = 0;
-    let collapsed = 0;
-    // From the first month that can have an event: mined caverns and their collapses, in months with an event and without.
-    const byEvent = { with: { produced: 0, collapsed: 0 }, without: { produced: 0, collapsed: 0 } };
-    // Months where both caverns produced and only one collapsed.
-    let apart = 0;
-    for (let seed = 1; seed <= RATE_SEEDS; seed++) {
-      for (let month = 1; month <= 10; month++) {
-        const first = produceAt(base, caverns, seed, month);
-        expect(produceAt(base, caverns, seed, month), `seed ${seed}, month ${month}`).toEqual(first);
-        const bucket = month >= EVENTS.firstMonth ? byEvent[first.event ? 'with' : 'without'] : undefined;
-        for (const cavern of first.caverns) {
-          if (!cavern.produced) {
-            // A cavern that made no Crystite this month never collapses.
-            expect(cavern.collapsed, `seed ${seed}, month ${month}`).toBe(false);
-            continue;
+    // About half the months have an event, one draw a month: volcanic ash at 0.5, every other row that production's
+    // start rolls at 0. A per-plot row, the cavern's own, keeps its odds.
+    const rows = [...Object.values(EVENTS.colony), ...Object.values(EVENTS.player)].filter((row: EventRow) => 'production' in row.phases && !row.perPlot);
+    const saved = rows.map((row) => ({ ...row }));
+    const reset = (row: object, fields: object) => {
+      for (const key of Object.keys(row)) delete (row as Record<string, unknown>)[key];
+      Object.assign(row, fields);
+    };
+    for (const row of rows) reset(row, { phases: { production: row === EVENTS.colony.volcanicAsh ? 0.5 : 0 }, cap: 1 });
+    try {
+      const { base, caverns } = cavernGame();
+      let produced = 0;
+      let collapsed = 0;
+      // From the first month that can have an event: mined caverns and their collapses, in months with an event and without.
+      const byEvent = { with: { produced: 0, collapsed: 0 }, without: { produced: 0, collapsed: 0 } };
+      // Months where both caverns produced and only one collapsed.
+      let apart = 0;
+      for (let seed = 1; seed <= RATE_SEEDS; seed++) {
+        for (let month = 1; month <= 10; month++) {
+          const first = produceAt(base, caverns, seed, month);
+          expect(produceAt(base, caverns, seed, month), `seed ${seed}, month ${month}`).toEqual(first);
+          const bucket = month >= EVENTS.firstMonth ? byEvent[first.event ? 'with' : 'without'] : undefined;
+          for (const cavern of first.caverns) {
+            if (!cavern.produced) {
+              // A cavern that made no Crystite this month never collapses.
+              expect(cavern.collapsed, `seed ${seed}, month ${month}`).toBe(false);
+              continue;
+            }
+            produced++;
+            if (bucket) bucket.produced++;
+            if (!cavern.collapsed) continue;
+            collapsed++;
+            if (bucket) bucket.collapsed++;
           }
-          produced++;
-          if (bucket) bucket.produced++;
-          if (!cavern.collapsed) continue;
-          collapsed++;
-          if (bucket) bucket.collapsed++;
-        }
-        const [one, two] = first.caverns as [(typeof first.caverns)[number], (typeof first.caverns)[number]];
-        if (one.produced && two.produced && one.collapsed !== two.collapsed) apart++;
-        if (one.collapsed || two.collapsed) {
-          // An AI's what-if copy can't know the real draw, so it imagines no collapse (as with events and colony lots).
-          const whatIf = produceAt(base, caverns, seed, month, true);
-          expect(whatIf.caverns.map((c) => c.collapsed), `what-if, seed ${seed}, month ${month}`).toEqual([false, false]);
+          const [one, two] = first.caverns as [(typeof first.caverns)[number], (typeof first.caverns)[number]];
+          if (one.produced && two.produced && one.collapsed !== two.collapsed) apart++;
+          if (one.collapsed || two.collapsed) {
+            // An AI's what-if copy can't know the real draw, so it imagines no collapse (as with events and colony lots).
+            const whatIf = produceAt(base, caverns, seed, month, true);
+            expect(whatIf.caverns.map((c) => c.collapsed), `what-if, seed ${seed}, month ${month}`).toEqual([false, false]);
+          }
         }
       }
-    }
-    // The sample is big enough: over 15 mined caverns a seed (6,000 at 400 seeds), over 5 a seed in each bucket below.
-    expect(produced).toBeGreaterThan(15 * RATE_SEEDS);
-    const rate = collapsed / produced;
-    expect(rate).toBeGreaterThan(0.06 * 0.7);
-    expect(rate).toBeLessThan(0.06 * 1.3);
-    // The collapse draw is apart from the event draw, so it comes as often in a month with an event as in one without.
-    for (const [when, { produced: n, collapsed: c }] of Object.entries(byEvent)) {
-      expect(n, `months ${when} an event`).toBeGreaterThan(5 * RATE_SEEDS);
-      expect(c / n, `months ${when} an event`).toBeGreaterThan(0.06 * 0.7);
-      expect(c / n, `months ${when} an event`).toBeLessThan(0.06 * 1.3);
-    }
-    // Each plot draws its own collapse: two caverns mined the same month don't always share their fate.
-    expect(apart).toBeGreaterThan(0);
+      // The sample is big enough: over 15 mined caverns a seed (6,000 at 400 seeds), over 5 a seed in each bucket below.
+      expect(produced).toBeGreaterThan(15 * RATE_SEEDS);
+      const rate = collapsed / produced;
+      expect(rate).toBeGreaterThan(0.06 * 0.7);
+      expect(rate).toBeLessThan(0.06 * 1.3);
+      // The collapse draw is apart from the event draw, so it comes as often in a month with an event as in one without.
+      for (const [when, { produced: n, collapsed: c }] of Object.entries(byEvent)) {
+        expect(n, `months ${when} an event`).toBeGreaterThan(5 * RATE_SEEDS);
+        expect(c / n, `months ${when} an event`).toBeGreaterThan(0.06 * 0.7);
+        expect(c / n, `months ${when} an event`).toBeLessThan(0.06 * 1.3);
+      }
+      // Each plot draws its own collapse: two caverns mined the same month don't always share their fate.
+      expect(apart).toBeGreaterThan(0);
 
-    // A cavern farmed for Food is not mined, and one mined on Crystite 0 makes nothing: neither ever collapses.
-    const [farmed, empty] = caverns as [number, number];
-    base.tiles[farmed]!.outfit = 'food';
-    base.tiles[empty]!.ground.crystite = 0;
-    for (let seed = 1; seed <= 200; seed++) {
-      const month = produceAt(base, caverns, seed, 1);
-      expect(month.caverns[1]!.made, `mined on 0, seed ${seed}`).toBe(0);
-      expect(month.caverns.map((c) => c.collapsed), `farmed and mined on 0, seed ${seed}`).toEqual([false, false]);
+      // A cavern farmed for Food is not mined, and one mined on Crystite 0 makes nothing: neither ever collapses.
+      const [farmed, empty] = caverns as [number, number];
+      base.tiles[farmed]!.outfit = 'food';
+      base.tiles[empty]!.ground.crystite = 0;
+      for (let seed = 1; seed <= 200; seed++) {
+        const month = produceAt(base, caverns, seed, 1);
+        expect(month.caverns[1]!.made, `mined on 0, seed ${seed}`).toBe(0);
+        expect(month.caverns.map((c) => c.collapsed), `farmed and mined on 0, seed ${seed}`).toEqual([false, false]);
+      }
+    } finally {
+      rows.forEach((row, i) => reset(row, saved[i]!));
     }
   }, 30_000);
 });
@@ -271,5 +293,100 @@ describe('RULE-6: a plot without a special field', () => {
         }
       }
     }
+  });
+});
+
+describe('a meteor crater, formed in play', () => {
+  /** Heiko's "Crystite at the top of the scale", read from the mined scale itself. */
+  const TOP_MINED = Math.max(...ratingsOf(MINERAL_ODDS.none, MINERAL_ODDS_MIN));
+  const at = (state: GameState, x: number, y: number) => state.tiles[y * state.width + x]!;
+  /** What a destroyed MULE could have gone back to: every player's holdings and the store's corral. */
+  const holdings = (state: GameState) => structuredClone({ players: state.players, corral: state.store.mules });
+
+  it('B-AC-10: an owned, worked plot becomes a meteor crater: the owner keeps it, the MULE and its filter are gone, Crystite is rated at the top', () => {
+    const state = colony();
+    const tile = worked(plot(state, 3, 2, 'mountains', { food: -1, energy: 2, smithore: 3, crystite: 1, rareEarth: 2 }), 'smithore', 'p0');
+    Object.assign(tile, { peaks: 2, traits: ['toxic'], pollution: 2, filter: true, runMonths: 5 });
+    const before = structuredClone(tile);
+    const held = holdings(state);
+
+    formMeteorCrater(state, 3, 2);
+
+    expect(tile).toEqual({
+      ...before,
+      outfit: null,
+      runMonths: 0,
+      filter: false,
+      ground: { ...before.ground, crystite: TOP_MINED },
+      special: { kind: 'meteorCrater' },
+    });
+    // Destroyed: no player or corral gets the MULE back.
+    expect(holdings(state)).toEqual(held);
+    expect(madeOn(runProduction(state), state, tile)).toBeUndefined();
+  });
+
+  it('B-AC-10: an unowned, empty plot still becomes a meteor crater, and stays unowned', () => {
+    const state = colony();
+    const tile = plot(state, 12, 7, 'plains', { food: 2, smithore: 1 });
+    const before = structuredClone(tile);
+
+    formMeteorCrater(state, 12, 7);
+
+    expect(tile).toEqual({ ...before, ground: { ...before.ground, crystite: TOP_MINED }, special: { kind: 'meteorCrater' } });
+  });
+
+  it('B-AC-10: a meteor crater replaces any earlier special field, and struck ruins never pay their salvage', () => {
+    const earlier = {
+      ruins: { kind: 'ruins', salvage: 'electronics' },
+      crystalCavern: { kind: 'crystalCavern' },
+      geyser: { kind: 'geyser' },
+      oasis: { kind: 'oasis' },
+      relic: { kind: 'relic' },
+    } satisfies Record<Exclude<SpecialField['kind'], 'meteorCrater'>, SpecialField>;
+    for (const special of Object.values(earlier)) {
+      const state = colony();
+      const tile = worked(plot(state, 3, 2, 'hills', { crystite: 2 }), null, 'p0', { ...special });
+      const electronics = state.players[0]!.stock.electronics;
+
+      formMeteorCrater(state, 3, 2);
+      runProduction(state);
+
+      expect(tile.special, special.kind).toEqual({ kind: 'meteorCrater' });
+      expect(state.players[0]!.stock.electronics, special.kind).toBe(electronics);
+    }
+  });
+
+  it('B-AC-10: a relic struck by a meteor stops adding to its working neighbour', () => {
+    const state = colony();
+    plot(state, 3, 2, 'plains').special = { kind: 'relic' };
+    const farm = worked(plot(state, 4, 2, 'plains', { food: 1 }), 'food', 'p1');
+    const bonus = specialBonus(state, farm, 'food');
+    const made = madeOn(runProduction(structuredClone(state)), state, farm)!;
+
+    formMeteorCrater(state, 3, 2);
+
+    expect(specialBonus(state, farm, 'food')).toBe(bonus - MAP.specialEffect.relic);
+    expect(madeOn(runProduction(state), state, farm)).toBe(made - MAP.specialEffect.relic);
+  });
+
+  it('B-AC-10: the store and a plot off the map are refused with a RuleError, and nothing changes', () => {
+    const state = colony();
+    const store = state.tiles.find((t) => t.terrain === 'store')!;
+    const before = structuredClone(state);
+    const refused = [[store.x, store.y], [-1, 0], [state.width, 0], [0, -1], [0, state.height], [0.5, 0.5]] as const;
+    for (const [x, y] of refused) expect(() => formMeteorCrater(state, x, y), `${x},${y}`).toThrow(RuleError);
+    expect(state).toEqual(before);
+  });
+
+  it('B-AC-10: a meteor crater adds nothing to production: a Crystite mine on it makes its rating and no more', () => {
+    const state = colony();
+    plot(state, 3, 2, 'crater');
+    formMeteorCrater(state, 3, 2);
+    const mine = worked(at(state, 3, 2), 'crystite', 'p0');
+
+    for (const good of RAW_GOODS) expect(specialBonus(state, mine, good), good).toBe(0);
+    const run = runProduction(state);
+    expect(madeOn(run, state, mine)).toBe(TOP_MINED);
+    expect(run.lines.find((l) => l.tile === indexOf(state, mine))!.parts.map((p) => p.why)).not.toContain('special');
   });
 });

@@ -1,7 +1,8 @@
 import { endAuction, startAuction } from './auction.js';
 import { RuleError } from './errors.js';
-import { DEFAULT_SPECIES, DEVELOPMENT, GAME, GOOD_CONFIG, MULE, POLLUTION, SPECIES_PERK, START, TAX, UPKEEP } from './config.js';
+import { DEFAULT_SPECIES, DEV_STEER, DEVELOPMENT, GAME, GLINT, GOOD_CONFIG, mapSize, MULE, POLLUTION, SPECIES_PERK, START, TAX, UPKEEP, WOLVES } from './config.js';
 import { allPrices, mulePrice, planShip, postPrices, targetPrice } from './economy.js';
+import { firePhase, rollPlayerEvent } from './events.js';
 import { colonyLot, endLandAuction, isListed, plotAt, startLandAuction } from './lots.js';
 import { generateMap, tileIndex } from './map.js';
 import { airBand } from './pollution.js';
@@ -48,13 +49,16 @@ export function createGame(options: { seed: number; players: NewPlayer[]; maxMon
         carriedMule: null,
         reputation: START.reputation,
         claimsThisGrant: 0,
+        doneWithLand: false,
         hungry: false,
         devSeconds: DEVELOPMENT.fullSeconds,
         sick: false,
+        sickNext: false,
         doneDeveloping: false,
         installedThisTurn: false,
         analysed: [],
         droneOrder: [],
+        droneFound: [],
       }),
     ),
     store: {
@@ -74,6 +78,7 @@ export function createGame(options: { seed: number; players: NewPlayer[]; maxMon
     grant: null,
     landRanOutMonth: null,
     history: [],
+    monthEvents: [],
     auction: null,
     listings: [],
     landAuction: null,
@@ -81,6 +86,8 @@ export function createGame(options: { seed: number; players: NewPlayer[]; maxMon
   };
   // The first month's prices start where supply and demand put them.
   for (const good of GOODS) state.store.posted[good] = Math.round(targetPrice(state, good));
+  // Month 1's planning rolls here, as every later month's does in advancePhase (none fires before EVENTS.firstMonth).
+  firePhase(state, 'planning');
   openPlanning(state);
   return state;
 }
@@ -155,20 +162,35 @@ export function advanceGrant(state: GameState): Tile | null {
 }
 
 /**
- * The grant ends when every player has used their claims, no free land is
- * left, or the light has swept the free plots GAME.grantSweeps times: a
- * player who doesn't want land must not hold the table up.
+ * The grant ends when every player has used their claims or pressed Done, no
+ * free land is left, or the light has passed every free plot (GAME.grantSweeps
+ * passes): a player who doesn't want land must not hold the table up.
  */
 export function grantDone(state: GameState): boolean {
   if (freePlots(state).length === 0 || (state.grant?.sweep ?? 0) >= GAME.grantSweeps) return true;
-  return state.players.every((p) => p.claimsThisGrant >= GAME.claimsPerGrant);
+  return state.players.every((p) => p.claimsThisGrant >= GAME.claimsPerGrant || p.doneWithLand);
 }
+
+/** Done with land: the player claims no more in this grant. Pressing it again changes nothing. */
+export function grantPass(state: GameState, playerId: string): void {
+  requirePhase(state, 'landGrant');
+  player(state, playerId).doneWithLand = true;
+}
+
+const LARGEST_MAP = mapSize(GAME.maxPlayers);
+
+/**
+ * The longest a land grant can run: one pass of the light over every plot of the largest map. An upper bound; the
+ * grant has no phase clock, and phaseScale never shortens its tick.
+ */
+export const GRANT_PASS_MAX_MS = LARGEST_MAP.width * LARGEST_MAP.height * GAME.grantTickMs;
 
 /** Claims the lit plot. The coordinates say which plot the player saw lit, so a late press can't grab the next one. */
 export function claimPlot(state: GameState, playerId: string, x: number, y: number): void {
   requirePhase(state, 'landGrant');
   const p = player(state, playerId);
   if (p.claimsThisGrant >= GAME.claimsPerGrant) throw new RuleError('No claims left this month');
+  if (p.doneWithLand) throw new RuleError('You are done with land this month');
   const tile = plotAt(state, x, y);
   if (tile.owner) throw new RuleError('Plot already taken');
   if (litPlot(state) !== tile) throw new RuleError('That plot is not lit');
@@ -187,28 +209,29 @@ function developer(state: GameState, playerId: string): Player {
 }
 
 /**
- * Sets each player's development time. Food buys time: enough for the month
- * gives the full time, and it shrinks with the shortfall. In dirty air
- * colonists get sick and lose more time, unless they take a Medicine.
+ * Starts development: one clock, the same full time for every player. A
+ * player short of the month's Food is hungry. Each player rolls for
+ * sickness (events.ts, likelier in dirty air and for a big polluter); a
+ * player last month's epidemic made sick is sick again. One Medicine cures
+ * being sick this turn, whatever the cause, and is used up. Then
+ * development's events roll (an epidemic, a MULE theft). Hunger and
+ * sickness slow the walk (dev-walk.ts).
  */
 function startDevelopment(state: GameState): void {
-  const penalty = airBand(state.air).devPenalty;
   for (const p of state.players) {
-    const share = Math.min(1, p.stock.food / Math.max(1, needsOf(state, p.id).food));
-    p.hungry = share < 1;
-    let seconds = DEVELOPMENT.minSeconds + (DEVELOPMENT.fullSeconds - DEVELOPMENT.minSeconds) * share;
+    p.hungry = p.stock.food < Math.max(1, needsOf(state, p.id).food);
     p.sick = false;
-    if (penalty > 0) {
+    const rolled = rollPlayerEvent(state, 'sickness', 'development', p.id);
+    if (rolled || p.sickNext) {
       if (p.stock.medicine >= 1) p.stock.medicine--;
-      else {
-        p.sick = true;
-        seconds -= penalty;
-      }
+      else p.sick = true;
     }
-    p.devSeconds = Math.max(DEVELOPMENT.floorSeconds, Math.round(seconds));
+    p.sickNext = false;
+    p.devSeconds = DEVELOPMENT.fullSeconds;
     p.doneDeveloping = false;
     p.installedThisTurn = false;
   }
+  firePhase(state, 'development');
 }
 
 /** What this player pays for an empty MULE. Gearlings pay less. */
@@ -239,6 +262,11 @@ export function buyMule(state: GameState, playerId: string): void {
 export function outfitMule(state: GameState, playerId: string, outfit: Outfit): void {
   const p = developer(state, playerId);
   if (!p.carriedMule) throw new RuleError('No MULE to outfit');
+  requireLed(p);
+  // With the arcade on, a fitted MULE changes good only by RE-OUTFIT (AM-2), never by a full-price re-fit.
+  // It reads the global flag, not a game's own devSteer; a devSteer game cannot reach it, as the floor offers OUTFIT
+  // only for an empty MULE and taps are refused.
+  if (DEV_STEER.on && p.carriedMule !== 'empty') throw new RuleError('This MULE is outfitted: re-outfit it');
   const cost = outfitCostFor(state, playerId, outfit);
   if (p.money < cost) throw new RuleError('Not enough money');
   p.money -= cost;
@@ -249,13 +277,124 @@ export function outfitMule(state: GameState, playerId: string, outfit: Outfit): 
 export function installMule(state: GameState, playerId: string, x: number, y: number): void {
   const p = developer(state, playerId);
   if (!p.carriedMule || p.carriedMule === 'empty') throw new RuleError('The MULE is not outfitted');
+  requireLed(p);
   const tile = plotAt(state, x, y);
   if (tile.owner !== playerId) throw new RuleError('Not your plot');
   // Installing over an existing MULE replaces it; the old one runs away, as in the original.
   if (tile.outfit !== p.carriedMule) tile.runMonths = 0;
+  // A MULE taken off this plot this turn and put back with the same outfit, by any route, keeps the plot's run
+  // from before the first take (AM-2: nothing lost; review F3: nor wiped by a hop through another plot).
+  const before = p.takenRuns?.find((r) => r.x === x && r.y === y);
+  if (before && before.outfit === p.carriedMule) tile.runMonths = before.runMonths;
   tile.outfit = p.carriedMule;
   p.carriedMule = null;
+  delete p.takenMule;
   p.installedThisTurn = true;
+}
+
+// --- Re-outfitting (arcade spec AM-2): take a MULE off a plot, fit it for another good, install it again --------
+
+/** Takes the MULE off one of your plots onto your lead: the plot makes nothing until a MULE is installed on it again. */
+export function takeMule(state: GameState, playerId: string, x: number, y: number): void {
+  const p = developer(state, playerId);
+  if (p.carriedMule) throw new RuleError('Already leading a MULE');
+  const tile = plotAt(state, x, y);
+  if (tile.owner !== playerId) throw new RuleError('Not your plot');
+  if (!tile.outfit) throw new RuleError('No MULE on this plot');
+  p.takenMule = { x, y, outfit: tile.outfit, runMonths: tile.runMonths };
+  if (!p.takenRuns?.some((r) => r.x === x && r.y === y)) p.takenRuns = [...(p.takenRuns ?? []), p.takenMule];
+  p.carriedMule = tile.outfit;
+  // The plot's run is left as it was: every way a MULE lands on it again sets the run (installMule, returnTakenMule).
+  tile.outfit = null;
+}
+
+/** What this player pays to re-outfit a MULE for `outfit`: DEV_STEER.reoutfitCost of the outfitter's price. */
+export function reoutfitCostFor(state: GameState, playerId: string, outfit: Outfit): number {
+  return Math.round(outfitCostFor(state, playerId, outfit) * DEV_STEER.reoutfitCost);
+}
+
+/**
+ * Fits a MULE taken off a plot this turn for another good, at an outfitter. The same good is refused, and so is a MULE
+ * bought this turn (AM-14): its outfit is chosen once, at OUTFIT.
+ */
+export function reoutfitMule(state: GameState, playerId: string, outfit: Outfit): void {
+  const p = developer(state, playerId);
+  if (!p.carriedMule) throw new RuleError('No MULE to re-outfit');
+  if (p.carriedMule === 'empty') throw new RuleError('This MULE is not outfitted yet: outfit it');
+  if (!p.takenMule) throw new RuleError('Only a MULE taken off a plot can be re-outfitted');
+  requireLed(p);
+  if (p.carriedMule === outfit) throw new RuleError('The MULE is already outfitted for that');
+  const cost = reoutfitCostFor(state, playerId, outfit);
+  if (p.money < cost) throw new RuleError('Not enough money');
+  p.money -= cost;
+  state.store.capital += cost;
+  p.carriedMule = outfit;
+}
+
+/** The turn ends with a taken MULE still carried: it goes back to its plot with the outfit and run it had there. */
+function returnTakenMule(state: GameState, p: Player): void {
+  const taken = p.takenMule;
+  if (!taken) return;
+  const tile = plotAt(state, taken.x, taken.y);
+  tile.outfit = taken.outfit;
+  tile.runMonths = taken.runMonths;
+  p.carriedMule = null;
+  delete p.takenMule;
+}
+
+/**
+ * A player's development turn is over, at the pub or by the clock: a MULE taken off a plot goes home (bolted or not,
+ * AM-14), any other carried MULE runs off, and the turn's bolt and taken runs are forgotten. No phase check, so the
+ * clock's end can call it after the phase has moved on.
+ */
+export function endLead(state: GameState, playerId: string): void {
+  const p = player(state, playerId);
+  returnTakenMule(state, p);
+  p.carriedMule = null;
+  delete p.muleBolted;
+  delete p.takenRuns;
+}
+
+// --- Development's moments (arcade spec C4): the floor's wolves and glint pay out through these -------------
+
+/** Sells pelts at the store, which pays WOLVES.peltPrice each from its capital. Returns the credits paid. */
+export function sellPelts(state: GameState, playerId: string, pelts: number): number {
+  const p = developer(state, playerId);
+  if (!Number.isInteger(pelts) || pelts < 1) throw new RuleError('No pelts to sell');
+  const price = pelts * WOLVES.peltPrice;
+  p.money += price;
+  state.store.capital -= price;
+  return price;
+}
+
+/** The glint's prize to the first colonist onto it: GLINT.crystite Crystite, or GLINT.credits when GLINT.prize says so. */
+export function awardGlint(state: GameState, playerId: string): { prize: 'crystite' | 'credits'; amount: number } {
+  const p = developer(state, playerId);
+  if (GLINT.prize === 'credits') {
+    p.money += GLINT.credits;
+    return { prize: 'credits', amount: GLINT.credits };
+  }
+  p.stock.crystite += GLINT.crystite;
+  return { prize: 'crystite', amount: GLINT.crystite };
+}
+
+/** A lost wolf fight: the MULE on the player's lead bolts. It stays theirs, and leads again once caught. */
+export function boltMule(state: GameState, playerId: string): void {
+  const p = developer(state, playerId);
+  if (!p.carriedMule) throw new RuleError('No MULE to bolt');
+  if (p.muleBolted) throw new RuleError('Your MULE has already bolted');
+  p.muleBolted = true;
+}
+
+/** Catches the player's bolted MULE, which leads again. */
+export function catchMule(state: GameState, playerId: string): void {
+  const p = developer(state, playerId);
+  if (!p.muleBolted) throw new RuleError('Your MULE has not bolted');
+  delete p.muleBolted;
+}
+
+function requireLed(p: Player): void {
+  if (p.muleBolted) throw new RuleError('Your MULE bolted: catch it first');
 }
 
 /** Seconds a geo analysis takes this player. Mollox dig faster. */
@@ -293,17 +432,27 @@ export function fitFilter(state: GameState, playerId: string, x: number, y: numb
 }
 
 /**
+ * What the pub would pay a player with `secondsLeft` of their development time: more the earlier they go. Changes
+ * nothing, and refuses whom the pub would refuse.
+ */
+export function pubPayoutFor(state: GameState, playerId: string, secondsLeft: number): number {
+  const p = developer(state, playerId);
+  const share = Math.min(1, Math.max(0, secondsLeft / p.devSeconds));
+  const { base, start, perMonth } = DEVELOPMENT.pub;
+  return Math.round(base + (start + state.month * perMonth) * share);
+}
+
+/**
  * The pub ends your development turn and pays cash: more the more time you
- * have left, and more later in the game. A MULE you were leading runs off.
+ * have left, and more later in the game. A MULE you were leading runs off,
+ * but one taken off your plot goes back to it (AM-2).
  * The server says how many seconds the player had left. Returns the payout.
  */
 export function visitPub(state: GameState, playerId: string, secondsLeft: number): number {
   const p = developer(state, playerId);
-  const share = Math.min(1, Math.max(0, secondsLeft / p.devSeconds));
-  const { base, start, perMonth } = DEVELOPMENT.pub;
-  const payout = Math.round(base + (start + state.month * perMonth) * share);
+  const payout = pubPayoutFor(state, playerId, secondsLeft);
   p.money += payout;
-  p.carriedMule = null;
+  endLead(state, playerId);
   p.doneDeveloping = true;
   return payout;
 }
@@ -330,8 +479,11 @@ export function advancePhase(state: GameState): void {
   if (next === 'landGrant') {
     for (const p of state.players) {
       p.claimsThisGrant = 0;
+      p.doneWithLand = false;
       // Drone results arrive in time to pick.
       for (const i of p.droneOrder) if (!p.analysed.includes(i)) p.analysed.push(i);
+      // Kept for the month, so the phone can still say which plots the drone surveyed (H-3).
+      p.droneFound = p.droneOrder;
       p.droneOrder = [];
     }
     newSweep(state, 0);
@@ -345,8 +497,8 @@ export function advancePhase(state: GameState): void {
     startDevelopment(state);
   }
   if (next === 'production') {
-    // A MULE nobody installed runs away at the end of development.
-    for (const p of state.players) p.carriedMule = null;
+    // A MULE nobody installed runs away at the end of development; one taken off a plot goes back to it (AM-2).
+    for (const p of state.players) endLead(state, p.id);
     const price = mulePrice(state);
     const soldOut = state.store.mules === 0;
     // MULEs get dearer each month the corral sells out, and cheaper when they are left over.
@@ -372,8 +524,12 @@ export function advancePhase(state: GameState): void {
       colonyFund: state.treasury.money,
       colonistsHungry: false,
     });
+    // What the report filed, so the month's list and the report hold the same production events.
+    state.monthEvents.push(...(state.history.at(-1)!.events ?? []));
   }
   if (next === 'auction') {
+    // A pirate raid or a store fire changes the stock before the prices are posted.
+    firePhase(state, 'auction');
     postPrices(state);
     startAuction(state);
   }
@@ -381,6 +537,7 @@ export function advancePhase(state: GameState): void {
     // Goods the auction didn't reach trade nothing.
     endAuction(state);
     state.auction = null;
+    firePhase(state, 'upkeep');
     const { shortages, hungry } = runUpkeep(state);
     payOffices(state);
     const report = state.history.at(-1);
@@ -389,11 +546,17 @@ export function advancePhase(state: GameState): void {
       report.colonistsHungry = hungry;
       report.storeCapital = state.store.capital;
       report.colonyFund = state.treasury.money;
+      // The month's report keeps every event the month fired, not production's alone; a what-if copy shares the report.
+      if (!state.whatIf) report.events = [...state.monthEvents];
     }
     if (isGameOver(state)) state.phase = 'gameOver';
   }
   if (next === 'planning') {
     state.month++;
+    state.monthEvents = [];
+    for (const p of state.players) p.droneFound = [];
+    // Planning's events roll as the month opens, with or without politics; they move cash and colonists, never land.
+    firePhase(state, 'planning');
     openPlanning(state);
   }
 }
@@ -415,16 +578,16 @@ export interface ScoreParts {
   land: number;
   mules: number;
   muleValue: number;
-  /** Points for terms served (POLITICS.termScore each); Collapse doesn't cut it. 0 with politics off. */
+  /** Points for terms served (POLITICS.termScore each), before any Collapse cut. 0 with politics off. */
   office: number;
-  /** What Collapse took off: 0 unless the colony failed. */
+  /** What Collapse took off every line, office included: 0 unless the colony failed. */
   cut: number;
   total: number;
 }
 
 /**
  * A final score line by line: money, goods at today's colony prices, land,
- * installed MULEs at the store price, terms in office, and the Collapse cut.
+ * installed MULEs at the store price, terms in office, and the Collapse cut on all of them.
  * The lines add up to total + cut exactly; goods absorbs the rounding. See spec RULE-3.
  */
 export function scoreParts(state: GameState, playerId: string): ScoreParts {
@@ -439,12 +602,11 @@ export function scoreParts(state: GameState, playerId: string): ScoreParts {
   // Keep this exact order of addition: regrouping it moves Math.round at .5 edges and changes scores.
   const raw = p.money + stockValue + (land + muleValue);
   const before = Math.round(raw);
-  // The office line joins after the rounding, so it moves no existing total.
+  // Outside Collapse the office line joins after the rounding, so it moves no existing total.
   const office = officeScore(state, playerId);
-  const kept = colonyFailed(state) ? Math.round(raw * POLLUTION.collapseScore) : before;
-  const total = kept + office;
+  const total = colonyFailed(state) ? Math.round((raw + office) * POLLUTION.collapseScore) : before + office;
   const money = Math.round(p.money);
-  return { money, goods: before - money - land - muleValue, plots, land, mules, muleValue, office, cut: before - kept, total };
+  return { money, goods: before - money - land - muleValue, plots, land, mules, muleValue, office, cut: before + office - total, total };
 }
 
 /** Final score: scoreParts().total. */

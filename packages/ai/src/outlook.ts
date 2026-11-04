@@ -2,6 +2,7 @@ import {
   advancePhase,
   cloneForSim,
   endAuction,
+  endLead,
   exportDemand,
   GAME,
   isGameOver,
@@ -62,7 +63,7 @@ export function outlook(obs: GameState, me: string, options: { lookAhead: boolea
     lastShortages = sim.history.at(-1)?.shortages ?? [];
     made = produce(sim, me);
   } else if (sim.phase === 'production') {
-    lastShortages = sim.history.at(-2)?.shortages ?? [];
+    lastShortages = sim.history.at(-2)?.shortages ?? []; // literal-ok: last month's report, a position in the history
   } else {
     // At or after the auction: finish the month, then look at next month's.
     let shortages: readonly Good[] = sim.history.at(-1)?.shortages ?? [];
@@ -128,6 +129,7 @@ function rollForward(stage: GameState, months: number): Future {
   let prices: Stock = { ...sim.store.posted };
   let last: Stock = prices;
   let corralShort = false;
+  // literal-ok: a month has seven phases, so eight a month bounds the loop: a guard, not balance
   for (let guard = 0; guard < (target - sim.month + 1) * 8 && sim.phase !== 'gameOver'; guard++) {
     advancePhase(sim);
     if (sim.phase === 'production') sim.store.mules = Math.max(0, sim.store.mules - sim.players.length * GAME.claimsPerGrant);
@@ -147,7 +149,8 @@ function rollForward(stage: GameState, months: number): Future {
 }
 
 function produce(sim: GameState, me: string): Stock {
-  for (const p of sim.players) p.carriedMule = null;
+  // Development's end, as the game plays it: a MULE taken off a plot goes back to it, any other carried MULE runs off.
+  for (const p of sim.players) endLead(sim, p.id);
   const { produced } = runProduction(sim);
   return produced[me] ?? emptyStock();
 }

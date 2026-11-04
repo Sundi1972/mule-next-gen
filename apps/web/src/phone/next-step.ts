@@ -12,6 +12,8 @@ export interface DevelopState {
   place: 'store' | 'map';
   /** The plot selected on the map is one of yours: before R1 a tap on a plot is standing at it. */
   atOwnPlot: boolean;
+  /** Your colonist is walking to this plot, where the move it set off for happens on arrival; null when it isn't. */
+  walkingTo?: { x: number; y: number } | null | undefined;
   /** A MULE was installed this turn. */
   installed: boolean;
   /** Development seconds left. */
@@ -25,8 +27,8 @@ export interface DevelopState {
    * unknown: then row 3 glows nothing.
    */
   month?: { needs: Partial<Record<Good, number>>; have: Partial<Record<Good, number>> } | undefined;
-  /** For the words: Food eaten, this month's seconds, the corral, the pub. */
-  ate: number;
+  /** For the words: your pace line ("Hungry: 52% pace"), everyone's seconds, the corral, the pub. */
+  pace: string;
   devSeconds: number;
   mulePrice: number;
   mulesLeft: number;
@@ -94,6 +96,18 @@ export function openShops(locks: NextStep['locks']): Shop[] {
   return shops.filter(([, room]) => locks[room] === undefined).map(([shop]) => shop);
 }
 
+/** A plot tap's press, as the Install plot cares: Install on a plot, or any other move (Analyse, the filter). */
+export type PlotPress = { kind: 'install'; at: { x: number; y: number } } | { kind: 'other' };
+
+/**
+ * The plot a walk is an install for, after a press. The server refuses every press while the colonist walks or
+ * assays (`busy`), so only a press it takes moves it: Install remembers its plot, any other move forgets it.
+ */
+export function installAfterPress(prev: { x: number; y: number } | null, press: PlotPress, busy: boolean): { x: number; y: number } | null {
+  if (busy) return prev;
+  return press.kind === 'install' ? press.at : null;
+}
+
 /** RULE-7, development's next step: a decision table, first match wins. */
 export function nextStep(s: DevelopState): NextStep {
   const warn = s.seconds <= WARN_SECONDS;
@@ -105,7 +119,7 @@ export function nextStep(s: DevelopState): NextStep {
     locks,
   });
   // Row 1.
-  if (s.filling) return step(1, 'You eat and your time bar fills', `You ate ${s.ate} Food: ${s.devSeconds} s this month. The clock is running; tap a room to start.`, ['corral']);
+  if (s.filling) return step(1, 'You eat, and the clock starts for everyone', `${s.pace}. Everyone has the same ${s.devSeconds} s; tap a room to start.`, ['corral']);
   // Row 2.
   if (s.carry === null && !s.installed)
     return step(
@@ -133,8 +147,10 @@ export function nextStep(s: DevelopState): NextStep {
     const free = nearest(s.freePlots, s.from);
     // Row 4.
     if (s.place === 'store') return step(3, 'Walk out and install it', `Leave by either door${free ? `: your plot ${plotName(free.x, free.y)} has no MULE yet` : ''}.`, ['doorL', 'doorR']);
+    // Row 6, while the walk to the plot is under way: installing is that walk, and the MULE goes in at its end.
+    if (s.walkingTo) return step(3, `Walking your ${outfitName(s.carry)} MULE to ${plotName(s.walkingTo.x, s.walkingTo.y)}`, 'It goes in when you get there. A MULE works only on a plot you own.');
     // Row 6.
-    if (s.atOwnPlot) return step(3, `Install your ${outfitName(s.carry)} MULE here`, 'Installing is instant. A MULE works only on a plot you own.');
+    if (s.atOwnPlot) return step(3, `Install your ${outfitName(s.carry)} MULE here`, 'Press Install: you walk it over, and it goes in when you get there. A MULE works only on a plot you own.');
     // Row 5, and its unknown: no plot of yours without a MULE.
     if (!free) return step(3, 'Install on a plot of yours', 'Tap a plot of yours on the map. A MULE works only on a plot you own.');
     return step(3, `Walk to your plot ${plotName(free.x, free.y)}`, 'Tap it on the map. A MULE works only on a plot you own.', [], free);

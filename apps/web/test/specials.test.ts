@@ -1,4 +1,4 @@
-import { COLONY_SELLER, MAP } from '@mule/engine';
+import { COLONY_SELLER, EVENTS, MAP } from '@mule/engine';
 import type { ListingView, MuleView, TileView } from '@mule/protocol';
 import { HoloMap, type MapSpecial, type MapTile } from '@mule/ui';
 import { createElement } from 'react';
@@ -48,10 +48,11 @@ describe('B-AC-9: the special-field badge on the map (variant A)', () => {
 
   it("draws the owner's mark above every badge, so a neighbour's overhang never covers it", () => {
     const html = map();
-    const mark = html.match(/<span role="img" data-slot="0"[^>]*>/)?.[0];
-    expect(mark).toBeDefined();
+    // The mark's layer is the one its holder, the owner's tab, takes: the opening tag right before the mark's.
+    const holder = html.match(/(<[a-z]+[^>]*>)<span role="img" data-slot="0"/)?.[1] ?? '';
+    expect(holder).toContain('data-testid="owner-0-1"');
     const z = (tagHtml: string) => Number(tagHtml.match(/z-\[(\d+)\]/)?.[1] ?? 0);
-    expect(z(mark!)).toBeGreaterThan(z(tag(html, 'special-glyph-0-0')!));
+    expect(z(holder)).toBeGreaterThan(z(tag(html, 'special-glyph-0-0')!));
   });
 
   it('keeps its layers inside the map: the root isolates, so a badge never paints over what sits on top of the map', () => {
@@ -91,7 +92,7 @@ describe("B-AC-9: the phone's plot card says what a special field does", () => {
     const text = (special: MapSpecial) => renderToStaticMarkup(createElement(SpecialLine, { special })).replace(/<[^>]+>/g, '').replace(/&#x27;/g, "'");
     expect(text({ kind: 'geyser' })).toBe(`Geyser: +${FX.geyser} Water or Energy.`);
     expect(text({ kind: 'oasis' })).toBe(`Oasis: +${FX.oasis} Food.`);
-    expect(text({ kind: 'crystalCavern' })).toBe(`Crystal cavern: +${FX.crystalCavern} Crystite when mined. Each month it's mined, a ${Math.round(FX.collapseChance * 100)}% chance it caves in.`);
+    expect(text({ kind: 'crystalCavern' })).toBe(`Crystal cavern: +${FX.crystalCavern} Crystite when mined. Each month it's mined, a ${Math.round(EVENTS.colony.cavernCollapse.phases.production * 100)}% chance it caves in.`);
     expect(text({ kind: 'relic' })).toBe(`Alien relic: +${FX.relic} to every working plot touching it, anyone's.`);
     expect(text({ kind: 'ruins', salvage: 'alloy' })).toBe(`Ruins: the first owner salvages ${FX.salvage.alloy} Alloy, once.`);
     expect(text({ kind: 'ruins', salvage: 'electronics' })).toBe(`Ruins: the first owner salvages ${FX.salvage.electronics} Electronics, once.`);
@@ -118,5 +119,33 @@ describe("B-AC-9: the phone's plot card says what a special field does", () => {
     expect(html).toContain('<strong class="font-semibold">Oasis:</strong>');
     expect(html).toContain('width:15px;height:15px');
     expect(renderToStaticMarkup(createElement(SpecialLine, { special: undefined }))).toBe('');
+  });
+});
+
+describe('B-AC-11: a meteor crater shows its approved badge and says what it is', () => {
+  /** The crater's icon as Heiko approved it in the map gallery. */
+  const APPROVED_PATH = 'M4 14a6 6 0 1 0 12 0a6 6 0 1 0-12 0z M9 14a1 1 0 1 0 2 0a1 1 0 1 0-2 0z M13.5 10.5 21 3 M16.5 11.5 20.5 7.5 M12.5 7.5 16.5 3.5';
+  const crater = (owner: MapTile['owner']): MapTile[] => [
+    { x: 0, y: 0, terrain: 'mountains', owner, special: { kind: 'meteorCrater' } },
+    { x: 1, y: 0, terrain: 'mountains', owner: null, special: { kind: 'crystalCavern' } },
+  ];
+
+  it('B-AC-11: the map draws the crater badge, with its kind, its icon and its colour, at phone and TV density', () => {
+    for (const density of ['phone', 'tv'] as const) {
+      const html = renderToStaticMarkup(createElement(HoloMap, { width: 2, height: 1, tiles: crater(2), density }));
+      expect(tag(html, 'special-glyph-0-0'), density).toContain('data-kind="meteorCrater"');
+      const glyph = html.slice(html.indexOf('data-testid="special-glyph-0-0"'), html.indexOf('data-testid="special-glyph-1-0"'));
+      expect(glyph, density).toContain(`d="${APPROVED_PATH}"`);
+      expect(glyph, density).toContain('stroke="var(--color-s-meteorCrater)"');
+      expect(html, density).toContain('aria-label="Mountains, Meteor crater, ');
+    }
+  });
+
+  it("B-AC-11: the plot card's line names the crater and gives the engine's rating", () => {
+    const html = renderToStaticMarkup(createElement(SpecialLine, { special: { kind: 'meteorCrater' } }));
+    expect(html).toMatch(/^<p[^>]*data-testid="special-line"[^>]*data-kind="meteorCrater"/);
+    expect(html.replace(/<[^>]+>/g, '')).toBe(
+      `Meteor crater: Crystite rated ${MAP.meteorCrater.crystite}, the top of the scale. Left by a meteor; what stood here was destroyed.`,
+    );
   });
 });

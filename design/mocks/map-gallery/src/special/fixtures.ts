@@ -1,4 +1,4 @@
-import { createRng, generateMap, MAP, type GameMap, type Tile } from '@mule/engine';
+import { createGame, createRng, formMeteorCrater, generateMap, MAP, TERRAIN_ODDS, type GameMap, type Tile } from '@mule/engine';
 import type { Good, Slot, Terrain } from '@mule/ui';
 import { SPECIAL_KINDS, type MapSpecial, type SpecialKind, type SpecialTile } from './kinds';
 
@@ -84,7 +84,7 @@ export function crop(map: GameMap, x0: number, y0: number, width: number, height
   return { width, height, tiles };
 }
 
-export type StateId = 'unowned' | 'owned' | 'selected' | 'lit' | 'developed' | 'analysed' | 'public' | 'gone';
+export type StateId = 'unowned' | 'owned' | 'selected' | 'lit' | 'developed' | 'analysed' | 'public' | 'gone' | 'before' | 'after';
 
 export interface StateCard {
   id: StateId;
@@ -177,4 +177,75 @@ export function sweep(): Crop {
     }),
   );
   return { width: SWEEP_TERRAINS.length, height: SPECIAL_KINDS.length, tiles };
+}
+
+/** The plot the meteor strikes: P3's Smithore mine on seed 93, right beside the crystal cavern P1 mines. */
+export const STRUCK = { x: 15, y: 4 } as const;
+
+export interface CraterView {
+  cards: StateCard[];
+  /** The struck plot and the cavern beside it, as the engine holds them after the strike. */
+  crater: Tile;
+  cavern: Tile;
+}
+
+/**
+ * The meteor crater beside the crystal cavern, on the state strip's corner of seed 93 (x 13–17, y 3–7): the
+ * second month, before and after a meteor strikes P3's mine. The strike is the engine's own formMeteorCrater,
+ * run on seed 93's game, so the crater, its owner and its Crystite are what the game will hold.
+ */
+export function craterView(density: 'phone' | 'tv'): CraterView {
+  const X0 = 13;
+  const Y0 = 3;
+  const players = Array.from({ length: PLAYERS }, (_, i) => ({ id: `p${i}`, name: `P${i + 1}`, isAi: true }));
+  const game = createGame({ seed: SEED, players });
+  const mine = game.tiles.find((t) => t.x === STRUCK.x && t.y === STRUCK.y)!;
+  Object.assign(mine, { owner: 'p2', outfit: 'smithore', runMonths: 1 });
+  const before = structuredClone(game);
+  formMeteorCrater(game, STRUCK.x, STRUCK.y);
+  const cavern = find(game, 'crystalCavern');
+
+  const local = (t: { x: number; y: number }) => ({ x: t.x - X0, y: t.y - Y0 });
+  const at = (c: Crop, t: { x: number; y: number }) => c.tiles.find((p) => p.x === t.x - X0 && p.y === t.y - Y0)!;
+  /** The corner as everyone sees it: P1 mines the cavern, P3 owns the struck plot and the one above it. */
+  const corner = (map: GameMap): Crop => {
+    const c = crop(map, X0, Y0, 5, 5);
+    Object.assign(at(c, cavern), { owner: 0 as Slot, good: 'crystite' as Good });
+    Object.assign(at(c, { x: STRUCK.x, y: STRUCK.y - 1 }), { owner: 2 as Slot });
+    const struck = at(c, STRUCK);
+    struck.owner = 2;
+    const outfit = map.tiles.find((t) => t.x === STRUCK.x && t.y === STRUCK.y)!.outfit;
+    if (outfit) struck.good = outfit as Good;
+    return c;
+  };
+  const analysed = () => {
+    const c = corner(game);
+    at(c, STRUCK).ground = analysis(mine);
+    return c;
+  };
+  const cards: StateCard[] = [
+    { id: 'before', title: 'Before', note: "P3's Smithore mine, beside the cavern P1 mines.", crop: corner(before) },
+    { id: 'after', title: 'After the strike', note: 'P3 keeps the plot; its MULE is gone. A crater, Crystite 4.', crop: corner(game) },
+  ];
+  if (density === 'phone') {
+    cards.push(
+      { id: 'selected', title: 'Selected', note: 'P3 looks at the crater in Develop.', crop: corner(game), selected: local(STRUCK) },
+      { id: 'analysed', title: 'Geo analysis', note: "P3's own analysis: Crystite 4 under the crater.", crop: analysed() },
+    );
+  }
+  return { cards, crater: mine, cavern };
+}
+
+/** The meteor crater on every land terrain, river and lake included: a meteor can strike any plot but the store. */
+export function craterSweep(): Crop {
+  const terrains = Object.keys(TERRAIN_ODDS) as Terrain[];
+  const tiles: SpecialTile[] = terrains.map((terrain, x) => ({
+    x,
+    y: 0,
+    terrain,
+    owner: null,
+    peaks: terrain === 'mountains' ? 2 : 0,
+    special: { kind: 'meteorCrater' },
+  }));
+  return { width: terrains.length, height: 1, tiles };
 }

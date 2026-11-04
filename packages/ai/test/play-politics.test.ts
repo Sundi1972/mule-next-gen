@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { TAX, type ElectionHow } from '@mule/engine';
+import { POLITICS, TAX, type ElectionHow } from '@mule/engine';
 import { simSeats } from '../src/lineup.js';
 import { playGame } from '../src/play.js';
 
@@ -13,7 +13,7 @@ function playedPolitics(seeds: number[]) {
         if (s.phase !== 'landGrant' || !s.politics) return;
         taxes.push(Math.round(s.treasury.salesTax * 100));
         const result = s.politics.election?.result;
-        if (result) how.push(result.governor.how, result.sheriff.how);
+        if (result) for (const office of POLITICS.offices) how.push(result[office]!.how);
       },
     });
   }
@@ -25,10 +25,10 @@ function playedPolitics(seeds: number[]) {
 const SEEDS = process.env.MULE_FULL === '1' ? [1, 2, 3, 4] : [1];
 
 describe('the sim plays politics', () => {
-  it('UBER-AC-1: AI seats run and vote, so offices are won by votes, not only appointed, and a Governor moves the tax', () => {
+  it('UBER-AC-1, T-AC-63: AI seats declare and vote, so every office is filled in every election and some are won by votes, not only appointed, and a Governor moves the tax', () => {
     const { how, taxes } = playedPolitics(SEEDS);
-    // Four elections a game fill both offices each time.
-    expect(how).toHaveLength(SEEDS.length * 4 * 2);
+    // Four elections a game fill every office each time.
+    expect(how).toHaveLength(SEEDS.length * 4 * POLITICS.offices.length);
     expect(how).toContain('votes');
     expect(taxes.some((t) => t !== Math.round(TAX.salesTax * 100))).toBe(true);
   }, 30_000); // up to four full games under MULE_FULL: about 5 s locally, over vitest's 5 s default

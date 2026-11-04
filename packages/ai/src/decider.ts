@@ -57,6 +57,7 @@ export function toOptions<A>(list: Shortlist<A>): ShortOption[] {
     id: OPTION_IDS[i]!,
     key: c.key,
     label: c.label,
+    // literal-ok: rounds utilities to three decimals for the option list and its prompt
     utility: Math.round(c.utility * 1000) / 1000,
     value: c.value,
     rationale: c.rationale,
@@ -77,10 +78,12 @@ export class TopPickDecider implements Decider {
     const rng = createRng(context.seed >>> 0);
     const best = shortlist[0]?.utility ?? 0;
     const near = shortlist.filter((o, i) => i === 0 || o.utility >= best * (1 - context.pickTolerance));
+    // literal-ok: a floor so an option of zero utility still has a weight to draw; a numeric guard, not a tuning value
     const total = near.reduce((n, o) => n + Math.max(1e-6, o.utility), 0);
     let r = rng.next() * total;
     let pick = near[0];
     for (const o of near) {
+      // literal-ok: the same floor as the total above, so the draw always lands on an option
       r -= Math.max(1e-6, o.utility);
       if (r <= 0) {
         pick = o;

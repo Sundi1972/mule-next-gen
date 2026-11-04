@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { WALK } from '@mule/engine';
+import { PHASES, WALK } from '@mule/engine';
 import { GRANT_TICK_MS, MuleGame, PHASE_MS } from '../src/mule-game.js';
-import { fakeContext, seats } from './fake-context.js';
+import { clockRunsInMonth1, fakeContext, pressThroughSidePick, readyAll, seats, throughSidePicks } from './fake-context.js';
 
 type Options = ConstructorParameters<typeof MuleGame>[2];
 
@@ -12,47 +12,78 @@ function started(options?: Options) {
   return { game, ...fake };
 }
 
-/** Plays the given game through planning and the land grant, on its own clocks. */
+/** Plays the given game through planning (everyone Ready) and the land grant, on its own clocks. */
 function toDevelopment(options?: Options) {
   const g = started(options);
-  g.advance(g.game.viewFor(null).phaseEndsAt! - g.ctx.now());
+  readyAll(g.game);
   while (g.game.viewFor('s1').phase === 'landGrant') g.advance(GRANT_TICK_MS);
   expect(g.game.viewFor('s1').phase).toBe('development');
   return g;
 }
 
-/** Plays on until the auction's status screen is up, before its first tick. */
+/** Plays on until production opens; the clock stops on the step that opened it, so its timer starts at ctx.now(). */
+function toProduction(options?: Options) {
+  const g = toDevelopment(options);
+  const step = 100;
+  while (g.game.viewFor('s1').phase === 'development') g.advance(step);
+  expect(g.game.viewFor('s1').phase).toBe('production');
+  return g;
+}
+
+/** Plays on until the auction's status screen is up, before its first tick. It has no clock (A-7). */
 function toAuction(options?: Options) {
   const g = toDevelopment(options);
   while (g.game.viewFor('s1').phase === 'development' || g.game.viewFor('s1').phase === 'production') g.advance(100);
   const auction = g.game.viewFor(null).auction!;
   expect(auction.stage).toBe('status');
-  expect(auction.seconds).toBe(WALK.statusMs / 1_000);
+  expect(auction.seconds).toBe(0);
+  return g;
+}
+
+/**
+ * Plays on until the first good's walk has just started, its clock full: both humans press Ready at the side pick and
+ * the AI presses Done by itself. Retargets the status-clock rows below to the walk's clock, the auction's one clock
+ * since A-7.
+ */
+function toWalk(options?: Options) {
+  const g = toAuction(options);
+  const good = g.game.viewFor(null).auction!.good;
+  for (let i = 0; i < 1_000 && g.game.viewFor(null).auction?.stage === 'status'; i++) {
+    pressThroughSidePick(g.game);
+    g.advance(WALK.tickMs);
+  }
+  expect(g.game.viewFor(null).auction).toMatchObject({ good, stage: 'walk', seconds: WALK.goodMs / 1_000 });
   return g;
 }
 
 describe('phaseScale and maxMonths', () => {
-  it('T-AC-2: with no options, planning waits 45 s and the game runs 12 months', () => {
-    const { game, waits, advance } = started();
-    expect(waits[0]).toBe(45_000);
-    expect(game.viewFor(null).phaseEndsAt).toBe(45_000);
+  // The clock as such, met in month 1: it runs from the start, as in any later month.
+  clockRunsInMonth1();
+
+  it('T-AC-2: with no options, production waits its full PHASES.productionMs and the game runs 12 months', () => {
+    const { game, waits, advance, ctx } = toProduction();
+    expect(waits).toContain(PHASES.productionMs);
+    expect(game.viewFor(null).phaseEndsAt).toBe(ctx.now() + PHASES.productionMs);
     expect(game.viewFor(null).maxMonths).toBe(12);
-    advance(44_999);
-    expect(game.viewFor(null).phase).toBe('planning');
+    advance(PHASES.productionMs - 1);
+    expect(game.viewFor(null).phase).toBe('production');
     advance(1);
-    expect(game.viewFor(null).phase).toBe('landGrant');
+    expect(game.viewFor(null).phase).not.toBe('production');
   });
 
-  it('T-AC-2: phaseScale 0.1 makes planning wait 4.5 s', () => {
-    const { game, waits, advance } = started({ phaseScale: 0.1 });
-    expect(waits[0]).toBe(4_500);
-    expect(game.viewFor(null).phaseEndsAt).toBe(4_500);
-    advance(4_499);
-    expect(game.viewFor(null).phase).toBe('planning');
-    advance(1);
-    expect(game.viewFor(null).phase).toBe('landGrant');
+  it('T-AC-2: phaseScale 0.1 makes production wait a tenth of PHASES.productionMs; the land grant keeps its real tick', () => {
+    const g = started({ phaseScale: 0.1 });
+    readyAll(g.game);
     // The land grant's light keeps its real pace, so AI thumbs can still beat it.
-    expect(waits.at(-1)).toBe(GRANT_TICK_MS);
+    expect(g.game.viewFor(null).phase).toBe('landGrant');
+    expect(g.waits.at(-1)).toBe(GRANT_TICK_MS);
+    const { game, waits, advance, ctx } = toProduction({ phaseScale: 0.1 });
+    expect(waits).toContain(PHASES.productionMs * 0.1);
+    expect(game.viewFor(null).phaseEndsAt).toBe(ctx.now() + PHASES.productionMs * 0.1);
+    advance(PHASES.productionMs * 0.1 - 1);
+    expect(game.viewFor(null).phase).toBe('production');
+    advance(1);
+    expect(game.viewFor(null).phase).not.toBe('production');
   });
 
   it.each([
@@ -65,31 +96,55 @@ describe('phaseScale and maxMonths', () => {
     const now = ctx.now();
     expect(view.me!.devEndsAt! - now).toBeCloseTo(view.me!.devSeconds * msPerSecond, 6);
     expect(view.phaseEndsAt! - now).toBeCloseTo(PHASE_MS.development * (phaseScale ?? 1), 6);
-    // Each player's clock is checked the moment it runs out.
-    expect(waits).toContainEqual(expect.closeTo(view.me!.devSeconds * msPerSecond + 1, 6));
+    expect(view.phaseEndsAt, 'the one development clock is the phase clock').toBe(view.me!.devEndsAt);
+    // The one clock is checked the moment it runs out.
+    expect(waits).toContainEqual(expect.closeTo(view.me!.devSeconds * msPerSecond, 6));
   });
 
-  it.each([[undefined], [1], [0.1]])('T-AC-2: with phaseScale %s the auction status clock runs tick / phaseScale, clamped for a stall before scaling', (phaseScale) => {
+  // The walk's clock is the auction's one clock since the side pick lost its own (A-7): the first row measures the
+  // scaling there; the second says the side pick has no clock at any phaseScale.
+  it.each([[undefined], [1], [0.1]])('T-AC-2: with phaseScale %s the auction walk clock runs tick / phaseScale, clamped for a stall before scaling', (phaseScale) => {
     const opts = phaseScale === undefined ? undefined : { phaseScale };
     const scale = phaseScale ?? 1;
-    // Game seconds left on the status screen after one tick, and after a 1 s stall clamped to three ticks.
-    const afterTick = (WALK.statusMs - WALK.tickMs / scale) / 1_000;
-    const afterStall = (WALK.statusMs - (WALK.tickMs * 3) / scale) / 1_000;
-    const ticked = toAuction(opts);
+    // Game seconds left on the walk after one tick, and after a 1 s stall clamped to three ticks.
+    const afterTick = (WALK.goodMs - WALK.tickMs / scale) / 1_000;
+    const afterStall = (WALK.goodMs - (WALK.tickMs * 3) / scale) / 1_000;
+    const ticked = toWalk(opts);
     ticked.advance(WALK.tickMs);
     expect(ticked.game.viewFor(null).auction!.seconds).toBeCloseTo(afterTick, 6);
 
-    const stalled = toAuction(opts);
+    const stalled = toWalk(opts);
     stalled.advance(1_000);
     expect(stalled.game.viewFor(null).auction!.seconds).toBeCloseTo(afterStall, 6);
   });
 
-  it('T-AC-2: under phaseScale 0.1 the status screen ends after a tenth of its real time', () => {
+  it('T-AC-2 (A-7): under phaseScale 0.1 the side pick still has no clock: ten times the 8 s it once ran, it waits', () => {
     const { game, advance } = toAuction({ phaseScale: 0.1 });
-    for (let i = 0; i < (WALK.statusMs * 0.1) / WALK.tickMs - 1; i++) advance(WALK.tickMs);
-    expect(game.viewFor(null).auction!.stage).toBe('status');
-    advance(WALK.tickMs);
-    expect(game.viewFor(null).auction!.stage).toBe('walk');
+    const good = game.viewFor(null).auction!.good;
+    for (let t = 0; t < 80_000; t += WALK.tickMs) advance(WALK.tickMs);
+    expect(game.viewFor(null).auction).toMatchObject({ good, stage: 'status', seconds: 0 });
+  });
+
+  it("T-AC-6: a production length set mid-production waits for the next production: this one's view keeps the length its timer was given, through upkeep", () => {
+    const g = toDevelopment();
+    while (g.game.viewFor(null).phase === 'development') g.advance(100);
+    expect(g.game.viewFor(null).phase).toBe('production');
+    const timer = g.game.viewFor(null).phaseEndsAt! - g.ctx.now();
+    const saved = PHASES.productionMs;
+    try {
+      PHASES.productionMs = saved * 3;
+      for (const viewer of ['s1', null]) expect(g.game.viewFor(viewer).production!.lengthMs, `seen by ${viewer ?? 'the TV'}`).toBe(timer);
+      g.advance(timer - 1);
+      expect(g.game.viewFor(null).phase).toBe('production');
+      g.advance(1);
+      expect(g.game.viewFor(null).phase).toBe('auction');
+      const advance = throughSidePicks(g.game, g.advance);
+      while (g.game.viewFor(null).phase === 'auction') advance(WALK.tickMs);
+      expect(g.game.viewFor(null).phase).toBe('upkeep');
+      expect(g.game.viewFor(null).production!.lengthMs, "upkeep still shows this month's show at its length").toBe(timer);
+    } finally {
+      PHASES.productionMs = saved;
+    }
   });
 
   it('T-AC-6: production lasts 15 s (scaled by phaseScale, and the view says so) and ends early when all are ready', () => {

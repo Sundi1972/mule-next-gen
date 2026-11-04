@@ -1,5 +1,6 @@
-import type { GameState } from '@mule/engine';
+import { BRAIN, type GameState } from '@mule/engine';
 import { TopPickDecider, toOptions, type Choice, type DecisionContext, type Decider, type ShortOption, type TableTalk } from './decider.js';
+import { capCodePoints, toOneLine } from './text.js';
 import type { DecisionKind, Persona } from './personas.js';
 import type { Consideration, Shortlist } from './utility.js';
 import type { Mind } from './value.js';
@@ -37,7 +38,14 @@ export interface Pending<A> {
   settled: { choice: Choice; action: A } | null;
 }
 
-const MAX_TALK = 6;
+// literal-ok: caps a failed decider's message in its diagnostic note; no effect on play
+const NOTE_MESSAGE_CHARS = 80;
+
+/** The note for a decider that failed: its message as one short line, or 'unknown error' when there is none. */
+function failedNote(err: unknown): string {
+  const message = err instanceof Error ? capCodePoints(toOneLine(err.message), NOTE_MESSAGE_CHARS).trim() : '';
+  return `decider failed: ${message || 'unknown error'}`;
+}
 
 /**
  * Asks the decider and keeps the log. The default pick is always worked out
@@ -57,15 +65,28 @@ export class Brain {
     private readonly seed: number,
     private readonly decider: Decider | null,
     private readonly onRecord?: (r: DecisionRecord) => void,
+    // literal-ok: how many decision records the diagnostic log keeps; no effect on play
     private readonly logSize = 200,
   ) {}
 
   /** Table talk the seat heard, newest last. Only quoted to a decider, never obeyed. */
   hear(line: TableTalk): void {
-    this.talk = [...this.talk, line].slice(-MAX_TALK);
+    this.talk = [...this.talk, line].slice(-BRAIN.talkLines);
   }
 
   ask<A>(kind: DecisionKind, list: Shortlist<A>, obs: GameState, waitMs: number, topic: string | null, summary: string): Pending<A> {
+    return this.open(kind, list, obs, waitMs, topic, summary, true);
+  }
+
+  /**
+   * The default pick, settled at once without asking the decider: for a decision made inside a step that must be a
+   * pure function of the game, as the arcade floor's tick is (HC-4). It is logged as any other.
+   */
+  pick<A>(kind: DecisionKind, list: Shortlist<A>, obs: GameState, topic: string | null, summary: string): Pending<A> {
+    return this.open(kind, list, obs, 0, topic, summary, false);
+  }
+
+  private open<A>(kind: DecisionKind, list: Shortlist<A>, obs: GameState, waitMs: number, topic: string | null, summary: string, consult: boolean): Pending<A> {
     const id = this.nextId++;
     const options = toOptions(list);
     const context: DecisionContext = {
@@ -75,13 +96,14 @@ export class Brain {
       month: obs.month,
       maxMonths: obs.maxMonths,
       summary,
+      // literal-ok: hash multipliers that spread each decision's seed; changing them reshuffles, never rebalances
       seed: (this.seed * 2_654_435_761 + id * 40_503 + obs.month * 977) >>> 0,
       pickTolerance: this.mind.level.pickTolerance,
       tableTalk: [...this.talk],
     };
     const fallback = this.top.decide(options, this.persona, context);
     const pending: Pending<A> = { id, kind, topic, list, options, fallback, answer: null, waitedMs: 0, waitMs, settled: null };
-    if (!this.decider || options.length <= 1) {
+    if (!consult || !this.decider || options.length <= 1) {
       pending.answer = fallback;
       return pending;
     }
@@ -92,13 +114,13 @@ export class Brain {
           (c) => {
             if (!pending.settled) pending.answer = c;
           },
-          () => {
-            if (!pending.settled) pending.answer = { ...fallback, by: 'fallback', note: 'decider failed' };
+          (err: unknown) => {
+            if (!pending.settled) pending.answer = { ...fallback, by: 'fallback', note: failedNote(err) };
           },
         );
       } else pending.answer = r;
-    } catch {
-      pending.answer = { ...fallback, by: 'fallback', note: 'decider failed' };
+    } catch (err) {
+      pending.answer = { ...fallback, by: 'fallback', note: failedNote(err) };
     }
     return pending;
   }
@@ -132,6 +154,7 @@ export class Brain {
       month: obs.month,
       phase: obs.phase,
       topic: p.topic,
+      // literal-ok: rounds utilities to three decimals for the decision log
       candidates: p.list.all.map((c) => ({ key: c.key, label: c.label, utility: Math.round(c.utility * 1000) / 1000, value: c.value, veto: c.veto, rationale: c.rationale, considerations: c.considerations })),
       shortlist: p.options,
       pick: { id: choice.optionId, key: picked.key, label: picked.label },

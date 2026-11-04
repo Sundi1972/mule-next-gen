@@ -16,6 +16,7 @@ export function shipInPort(state: GameState): boolean {
 
 /** Plans the next call of the export ship: when it arrives and the goods it will want, drawn from the seed. */
 export function planShip(seed: number, arrives: number, players: number): ExportShip {
+  // literal-ok: hash constants that mix the seed and the month into the ship's own rng stream
   const rng = createRng((seed * 7 + arrives * 2_654_435) >>> 0);
   const goods = rng.shuffle(Object.keys(EXPORT_DEMAND) as Good[]).slice(0, EXPORT_SHIP.wishlist);
   const hold: Partial<Stock> = {};
@@ -34,7 +35,7 @@ export function monthlyDemand(state: GameState): Stock {
 
   // Players must eat and power their plots whatever the price. Colonists buy
   // less when the store's price is above what their wages pay.
-  const sick = airBand(state.air).devPenalty > 0;
+  const sick = airBand(state.air).sickens;
   const own = playersUse(state);
   demand.food = own.food + colonistDemand(state, 'food', colonistUnits);
   demand.water = own.water + colonistDemand(state, 'water', colonistUnits);
@@ -143,7 +144,7 @@ export function targetPrice(state: GameState, good: Good, demand = monthlyDemand
 export function postPrices(state: GameState): void {
   const demand = monthlyDemand(state);
   // This month's report is already open; last month's says what colonists lacked.
-  const lastShortages = state.history.at(-2)?.shortages ?? [];
+  const lastShortages = state.history.at(-2)?.shortages ?? []; // literal-ok: last month's report, a position in the history
   const off = exportDemand(state);
   const next = GOODS.map((good) => nextPostedPrice(state, good, demand, lastShortages, off));
   GOODS.forEach((good, i) => (state.store.posted[good] = next[i]!));
@@ -160,7 +161,7 @@ export function nextPostedPrice(
   state: GameState,
   good: Good,
   demand = monthlyDemand(state),
-  lastShortages: readonly Good[] = state.history.at(-2)?.shortages ?? [],
+  lastShortages: readonly Good[] = state.history.at(-2)?.shortages ?? [], // literal-ok: last month's report, a position in the history
   off = exportDemand(state),
 ): number {
   const prev = state.store.posted[good];

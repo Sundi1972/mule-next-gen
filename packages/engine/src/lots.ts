@@ -83,7 +83,7 @@ export function colonyLot(state: GameState): Listing | null {
   // An AI's look-ahead neither foresees the real colony lot nor imagines one from its zeroed seed.
   if (state.whatIf) return null;
   // Its own RNG from (seed, month) alone: sharing one would shift every draw after it when a colony lot appears.
-  const rng = createRng((state.seed * 53 + state.month * 6_151) >>> 0);
+  const rng = createRng((state.seed * 53 + state.month * 6_151) >>> 0); // literal-ok: rng salt, reshuffles replays only
   if (rng.next() >= LOTS.colonyPlotChance) return null;
   const free = freePlots(state);
   if (free.length === 0 || state.listings.length >= LOTS.maxLotsPerMonth) return null;

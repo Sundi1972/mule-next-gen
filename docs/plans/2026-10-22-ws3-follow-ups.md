@@ -63,7 +63,22 @@
 - Each trim kills the same mutants as before.
 - WS3's Tier 1 unit time: about 15 s → 7.5 s locally.
 - auction-steps.ts stays one Tier 2 game.
-- Owed: trim auction-steps.ts:439's three declare-text alternatives once WS4's FU-17 (#96) is on trunk.
+- #101 merged to trunk at 7fe5d0e (Heiko: "Yes, merge").
+- Owed:
+  - trim auction-steps.ts:439's three declare-text alternatives once WS4's FU-17 (#96) is on trunk;
+  - #107 (the `PHASES` block and the `literal-ok` markers) is in the lane at fd9a556 and goes to trunk with the WS6-C13 batch.
+
+**The settings guard (#117, trunk da4a56f), 2026-10-28:**
+- The lane merged it; WS3's four marked files left its PENDING list in cabd80f, WS1's named-edit file.
+- walk.ts and hands/lot.ts divide by WS1's `MS_PER_SECOND` (93ce2b4).
+
+**Found in WS6-C13's review (round 1, 2026-10-28), not in that PR:**
+- **Extract the walking state machine's pure parts** into `apps/server/src/dev-walking.ts`, as land-auction.ts and politics-view.ts are: `DevIntent`, `Colonist`, `walkTarget`, `placeName`, the order of due arrivals, `colonistView`. The timer wiring stays in `MuleGame`. mule-game.ts went from 881 to 1036 lines.
+- **Extracting the walking parts is PR-C, below** (the PM's order, 2026-10-28).
+- **`GRANT_TICK_MS` isn't scaled by `phaseScale`.** At phaseScale 0.1 on seed 7, the AI wins no land in month 1. This predates C13. **CLOSED, won't fix (PM ruling A, 2026-10-28):** WS4's T-AC-2 (phase-scale.test.ts) pins the tick at its real pace on purpose, so AI thumbs can still beat it, and that rule stands. Compressed-time games give AI seats little land; that is e2e runs and demos only, never a scale-1 game.
+- **RULE-7 row 1's 30 s timeout** (WS5's 5b3f3c8): re-time it under load once WS5's #112 (maps 2.7× faster) is on trunk, and drop it if the row stays well inside vitest's 5 s default. **Done: PR-E, below.**
+- **The FU-17 trim** (auction-steps.ts's three declare-text alternatives in `stageShown`). **Done: PR-D, below.**
+- **The AI's rule when humans finish development early** (parked by the PM): the pub path waits for AI seats, the Ready/drop path doesn't. Unify only on a PM ruling.
 
 ## PR-A: engine and server (`ws3-fu-a` from `ws3-auctions`)
 
@@ -150,3 +165,82 @@ WS4's PR-6 adds a "move to your phone" dialog (`role="dialog"`, `aria-modal`, te
 - [x] `pnpm typecheck` · `pnpm --filter @mule/web test` · build, then `tsx e2e/auction-steps.ts` · `pnpm --filter @mule/web e2e` are green
 - [ ] (automated only: B.4 drives this in a real browser and asserts it at the server; no hands-on check yet, owed at UAT) A goal check in the browser: hold Up across a good's switch, and the next good's first press moves the walker
 - [x] A code review has come back clean
+
+## PR-C: the walking parts in their own file (`ws3-fu-walk` from `ws3-auctions`)
+
+No behaviour change: a pure move, as land-auction.ts and politics-view.ts already sit beside `MuleGame`. The C13 suite (`apps/server/test/dev-walking.test.ts`, WS3's) is the pin, and it stays unedited.
+
+**Authority:**
+- `may_edit`: `apps/server/src/mule-game.ts`, and the new `apps/server/src/dev-walking.ts` (a split from WS3's mule-game.ts, so WS3's).
+- `must_not_edit`: every test file, every other lane's file, `packages/**` (no engine, protocol or AI change), and the 25 importers of mule-game.js. Its exports (`MuleGame`, `GRANT_TICK_MS`, `PHASE_MS`, `DEFAULT_AI_LEVEL`, `AI_NAMES`, `AI_DEV_TICK_MS`) stay where they are.
+
+### Task C.1: move the pure walking parts
+
+**MERGED into the lane as #134 (1ec8d5b, head 9db7c57).** mule-game.ts went from 1118 to 1066 lines, and dev-walking.ts is 58. The colonist view takes the phase, not the clock, because its body never read the clock. The control turned 12 of 26 C13 rows red. CI check and e2e were green, and the lead reviewed it from the diff.
+
+- [x] **Step 1:** move into `dev-walking.ts`: `DevIntent`, `Colonist`, `walkTarget`, `placeName`, the order of due arrivals (the sort inside `settleArrivals`), and the colonist view (the body of `colonistView`, as a function of the colonist and the clock). The timer wiring (scheduling, `settleArrivals`/`arrive`/`act` as methods, `devEndsAt`, the early end) stays in `MuleGame`.
+- [x] **Step 2:** the pin. `dev-walking.test.ts`, `planning.test.ts` and the whole server suite pass unedited. **Positive control:** break `walkTarget` in its new home (one place returns the wrong target), watch dev-walking.test.ts go red, then restore.
+
+### PR-C merge gate
+
+- [x] `git diff --stat` shows only the two server source files; no test is edited
+- [x] `pnpm typecheck` · `pnpm test` are green, and the server count is unchanged (153 +1 skipped)
+- [x] The positive control went red, and the tree is clean after the restore
+- [x] `pnpm --filter @mule/web build` and `pnpm --filter @mule/web e2e:core` are green (the walk is driven in the smoke)
+- [x] A code review has come back clean
+
+## PR-D: the FU-17 trim (`ws3-fu17-trim` from `ws3-auctions`)
+
+WS4's FU-17 (#96, on trunk via #132) removed WalkBoard's dead declare block and narrowed its stage to `'walk'`. The three declare texts that `stageShown` in `apps/web/e2e/auction-steps.ts` (WS3's) looks for (`SELLERS START AT THE TOP`, `Done choosing`, `Buy, sell or pass?`) now exist nowhere in `apps/web/src` or `packages/ui/src`, so that check can't fire.
+
+**MERGED into the lane as #138 (d1025ea, head dfa47f8):** +1 −3. auction-steps.ts exits 0 in 44 s, with both UBER-AC-1 ✓ lines. CI check and e2e are green, and the lead reviewed it from the diff.
+
+- [x] **Step 1:** remove that check, the `text` it alone used, and the doc comment's "Any sign of a declare screen counts as one". Keep the `· buy or sell?` heading alternative, which names the good on the status screen (Auction.tsx:60). The server-side UBER-AC-1 check (no declare stage) stays.
+- [x] **Merge gate:** the grep is still empty at the head; `tsx e2e/auction-steps.ts` exits 0 with UBER-AC-1's ✓ (Tier 2, so run locally); typecheck 0; only auction-steps.ts changes; review clean.
+
+## PR-E: RULE-7 row 1's timeout (`ws3-rule7-timeout` from `ws3-auctions`)
+
+WS5's #112 (maps 2.7× faster) is on trunk via #133. Row 1 in `packages/engine/test/lots-colony.test.ts` (:110–128) still carries a `30_000` timeout as headroom (5b3f3c8).
+
+**MERGED into the lane as #140 (ce70203, head 49795ee):** row 1 took 170, 178, 237, 265 and 237 ms at a load average of about 13, so the `30_000` and its comment clause are gone. Engine is 266 +1 skipped. CI check and e2e are green, and the lead reviewed it from the diff.
+
+- [x] **Step 1:** time the row 5 times under the machine's normal load, recording each time and the load average. If every run is under 2.5 s, drop the timeout and the comment's headroom clause. Otherwise set it to about 2× the slowest run, in whole seconds, and say so in the comment.
+- [x] **Merge gate:** no assertion edited; `pnpm --filter @mule/engine test` green; typecheck 0; only lots-colony.test.ts changes; review clean.
+
+## PR-F: the land grant is one pass with no clock (`ws3-grant-pass` from `ws3-auctions`)
+
+Heiko's ruling, option B (2026-10-28, through the PM): the grant always completes one full pass over the free plots, then stops, or stops earlier once every player has used their claims. The fixed 60 s cap is gone. Class: Sketch.
+
+**MERGED into the lane as #158 (49139bc, pinned to head 9337974f)** after CI check and e2e were green (run 40762592038) and every owner had OK'd its named edits.
+
+**The scope grew past the original plan, by Heiko's later rulings (through the PM):**
+- the one pass (option B, above);
+- **Done with land** (option A): `Player.doneWithLand` and `grantPass` in the engine; the `ready` intent in the grant presses it. The grant ends when every player has used their claims or is done, or the pass ends (`grantDone`). A dropped phone is not done;
+- **fast-forward** (option c, with WS3's adjustment): once every human is done, the server resolves each lit plot at once and steps at `PHASES.grantFastForwardMs` = `GAME.grantTickMs / 8`;
+- `GRANT_PASS_MAX_MS`, derived in `game.ts` from the largest map and the tick, which e2e waits on;
+- the `wantsPlot` "plots ahead" rule (WS1's named edits): the lit plot ranks within `claimsLeft + grantSpare` among it and the plots ahead, with utility ≥ `grantShare` × the best ahead. `grantLaterShare` is removed;
+- the broadcast fix: one `changed()` per light move in fast-forward.
+
+**Authority:**
+- `may_edit`: `packages/engine/src/config.ts` (the PHASES block, WS3's); `packages/engine/src/game.ts`, `types.ts`; `apps/server/src/mule-game.ts`; WS3's tests; `apps/web/src/phone/LandGrant.tsx`, `phone/grant-ready.ts`.
+- **Named edits, each in its own commit, each OK'd by its owner on the SHA:**
+  - **WS1** (GAME block, strategist, seat, sim rows): 421da14, d9d3795, 2d76996, 0f4802f, dbdb913, 38708d6, b1247df, 3f71e58, 7305f52. All OK.
+  - **WS4** (phase-scale and its tests): 0af7241, d33f808, 8c01373, 704f3ba, 2ac8075d, 57dbe6f, 153b811. All OK.
+  - **WS2:** e0be093, 7ebe940 (B-AC-2 restated). OK.
+  - **WS5:** 59c3305. OK.
+  - **WS7:** d15ca91, ef97a7a (the humans press Done in politics tests). OK.
+- **WS3's commits:** 7bb3669 red test · cb4cbf5 no clock · 9acef23 `GRANT_PASS_MAX_MS` · e3a9515 rules.test (INV-grant-order on one pass) · 95fefa3 red Done T-AC · 4d55b45 engine · 36b6b93, 466e80d server · 640cf66 LandGrant.tsx · 1bc3630d red fast-forward test · 94e504b6 fast-forward · 9337974f single broadcast (count row; control 154 vs ≤ 81).
+
+- [x] **Step 1 (RED):** at viewFor, a land grant has no clock (`phaseEndsAt` null), and it ends after one pass over the free plots with claims unused, not at 60 s. It still ends early once every claim is used.
+- [x] **Step 2:** `PHASES.landGrantMs` null means no phase timer (as `planningMs`), and `GAME.grantSweeps` is 1. The sim already ends the grant through `grantDone`.
+- [x] **Step 3:** the phone's and TV's grant views draw no countdown while `phaseEndsAt` is null, as in untimed planning.
+- [x] **Step 4 (Done with land):** red T-AC first (95fefa3); engine, server, phone ready button.
+- [x] **Step 5 (fast-forward):** red test first (1bc3630d); equal claims, a wall bound, and the broadcast count.
+- [x] **Merge gate:** typecheck and test green; e2e:core green, with its wall time before and after; the sim's 4-game smoke runs; the named edits are each their own commit; review clean.
+
+**Findings recorded at merge:**
+- The 40-game sim (seed 1) passes all 9 checks; developed land 75 → 73%.
+- The AI's claims by map third went from 39/33/28 to 23/32/45. A stopgap, recorded in WS1's spec AM-19 (b); the AI land step's P(free) is the fix.
+- e2e:core is 39 s (base 34 s; 113 s before fast-forward). e2e:regression is 83 s.
+- **Flake risk, WS7's call:** `politics.test.ts` T-AC-6 · C8 ran 4508 ms in CI against a 5 s limit (about 800 ms locally at every commit, so it is runner variance; its `onChanged` builds a whole view per broadcast). Routed to the PM; reading the tax from the engine instead would weaken "the screens get it".
+- **Unproven:** the TV's racing light in a browser; zoom and specials not re-run after fast-forward; politics.ts e2e (Tier 2) green locally only, until the lane PR runs it.

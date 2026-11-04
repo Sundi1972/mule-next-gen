@@ -1,0 +1,439 @@
+import { describe, expect, it } from 'vitest';
+import {
+  analysisSeconds,
+  applyReach,
+  buildFloor,
+  createGame,
+  createRng,
+  DEV_STEER,
+  doorPresses,
+  floorConfig,
+  HALL,
+  hasAnalysed,
+  pathTo,
+  placeAt,
+  pressOrder,
+  RuleError,
+  speedOf,
+  stepFloor,
+  type DevFloor,
+  type FloorConfig,
+  type FloorInput,
+  type GameState,
+  type HallPoint,
+  type HallRect,
+  type Terrain,
+} from '../src/index.js';
+
+const LAND: Record<string, Terrain> = { '.': 'plains', '^': 'mountains', s: 'swamp', '~': 'lake', f: 'forest', S: 'store' };
+
+/** The store at 5·3 with open plains on both sides of it, lakes, mountains, swamp and forest around. */
+const MAP = [
+  '..f.....^^...',
+  '..f..~~.^^...',
+  '.....~~......',
+  '.s...S.......',
+  '.s........~..',
+  '....^^....~..',
+  '.............',
+];
+
+/** MAP with a lake beside the store's left door. */
+const LAKE_MAP = MAP.map((row, y) => (y === 3 ? '.s..~S.......' : row));
+
+const SEED = 29;
+/** A development turn's worth of ticks: 50 s at DEV_STEER.tickMs. */
+const TICKS = 1_000;
+/** The script's one press: 'a', walking down onto the plains left of the store, analyses the plot it is on. */
+const ANALYSE_AT = 405;
+const SECONDS_LEFT = 30;
+
+/** Four seats in development on the map drawn: 'a' a Zipwing, 'b' leading a MULE, 'c' an AI seat, 'd' a Bramblet. */
+function game(seed: number, map: readonly string[] = MAP): GameState {
+  const state = createGame({
+    seed,
+    players: [
+      { id: 'a', name: 'A', isAi: false, species: 'zipwing' },
+      { id: 'b', name: 'B', isAi: false, species: 'gearling' },
+      { id: 'c', name: 'C', isAi: true, species: 'mollox' },
+      { id: 'd', name: 'D', isAi: false, species: 'bramblet' },
+    ],
+  });
+  const template = state.tiles[0]!;
+  state.width = map[0]!.length;
+  state.height = map.length;
+  state.tiles = map.flatMap((row, y) => [...row].map((ch, x) => ({ ...template, x, y, terrain: LAND[ch]!, owner: null, outfit: null })));
+  state.players[1]!.carriedMule = 'food';
+  state.phase = 'development';
+  return state;
+}
+
+type Script = Record<string, FloorInput>[];
+
+const go = (x: number, y: number): FloorInput => ({ x, y, act: false });
+
+/** 'b' from outside the store's right door, leading its MULE: in, and across the hall. */
+const B_LEGS: [number, FloorInput][] = [[20, go(-1, 0)]];
+
+/** 'd' from outside the store's right door: under the store and up into its wall, then into its side off the door and across the hall. */
+const D_LEGS: [number, FloorInput][] = [
+  [20, go(0, 1)],
+  [35, go(-1, 0)],
+  [60, go(0, -1)],
+  [80, go(1, 0)],
+  [100, go(0, -1)],
+  [240, go(-1, 0)],
+];
+
+/**
+ * 'a' walks right from outside the store's left door, through the hall and out of its right door to the map's edge,
+ * back the same way, then down, pressing at ANALYSE_AT, then stands. 'b' walks B_LEGS and 'd' D_LEGS. Then they and
+ * the others wander, from the seed, with sticks past full and in between.
+ */
+function script(seed: number): Script {
+  const rng = createRng(seed);
+  const sticks = [-1.5, -1, -0.5, 0, 0.5, 1, 1.5];
+  const wander = () => go(rng.pick(sticks), rng.pick(sticks));
+  const held: Record<string, FloorInput> = { b: wander(), c: wander(), d: wander() };
+  return Array.from({ length: TICKS }, (_, t) => {
+    if (t % 20 === 0) for (const id of Object.keys(held)) held[id] = wander();
+    const a = t < 200 ? go(1, 0) : t < 400 ? go(-1, 0) : t < 600 ? go(0, 1) : go(0, 0);
+    const b = B_LEGS.find(([until]) => t < until)?.[1] ?? held.b!;
+    const d = D_LEGS.find(([until]) => t < until)?.[1] ?? held.d!;
+    return { ...held, a: t === ANALYSE_AT ? { ...a, act: true } : a, b, d };
+  });
+}
+
+function deepFreeze<T>(value: T): T {
+  if (value && typeof value === 'object' && !Object.isFrozen(value)) {
+    Object.freeze(value);
+    for (const v of Object.values(value)) deepFreeze(v);
+  }
+  return value;
+}
+
+/**
+ * One tick as RULE-1 runs it: the step, then each press the step did not spend, at the stepped position in pressOrder.
+ * The game is frozen, so the presses apply to a copy of it; the step writes to neither.
+ */
+function tick(state: GameState, floor: DevFloor, inputs: Record<string, FloorInput>, cfg: FloorConfig): { state: GameState; floor: DevFloor } {
+  const spent = doorPresses(floor, state, inputs, cfg);
+  const stepped = stepFloor(floor, state, inputs, DEV_STEER.tickMs, cfg);
+  const pressing = pressOrder(stepped, Object.keys(inputs).filter((seat) => inputs[seat]!.act && !spent.has(seat)));
+  if (pressing.length === 0) return { state, floor: stepped };
+  const next = structuredClone(state);
+  const pressed = pressing.reduce((f, seat) => applyReach(next, f, seat, SECONDS_LEFT, cfg).floor, stepped);
+  return { state: deepFreeze(next), floor: pressed };
+}
+
+/**
+ * Every floor of a turn played from the seed, and the game at its end, the game and the inputs frozen so that a write
+ * to either throws. The floor is built under `built`, the config it is stepped under unless a test says otherwise.
+ */
+function play(seed: number, inputs: Script, map: readonly string[] = MAP, built = floorConfig(HALL)): { state: GameState; floors: DevFloor[] } {
+  let state = game(seed, map);
+  const cfg = floorConfig(HALL);
+  let floor = buildFloor(state, built);
+  deepFreeze(state);
+  deepFreeze(inputs);
+  const floors = [deepFreeze(floor)];
+  for (const inputsNow of inputs) {
+    ({ state, floor } = tick(state, floor, inputsNow, cfg));
+    floors.push(deepFreeze(floor));
+  }
+  return { state, floors };
+}
+
+/**
+ * Why a colonist stands where it may not: any of its body on a lake, in the store's walls, off the map or off the
+ * hall's floor; or its MULE further behind than the lead reaches, or pulled since `before` to other than the rope's
+ * length.
+ */
+function misplaced(state: GameState, floor: DevFloor, before?: DevFloor): string[] {
+  const store = state.tiles.find((t) => t.terrain === 'store')!;
+  return floor.colonists.flatMap((c, i) => {
+    const where = `tick ${floor.tick} ${c.id} at ${c.space} ${c.x.toFixed(3)},${c.y.toFixed(3)}`;
+    const rope = c.space === 'map' ? DEV_STEER.leadTiles : DEV_STEER.leadHallShare * HALL.w;
+    const was = before?.colonists[i];
+    if (c.lead) {
+      const gap = Math.hypot(c.lead.x - c.x, c.lead.y - c.y);
+      const pulled = was?.lead && was.space === c.space && (was.lead.x !== c.lead.x || was.lead.y !== c.lead.y);
+      if (gap > rope + 1e-9 || (pulled && Math.abs(gap - rope) > 1e-9)) return [`${where}: its MULE ${gap.toFixed(3)} behind, on a ${rope} lead`];
+    }
+    if (c.space === 'hall') {
+      return HALL.floor.some((r) => c.x >= r.x0 && c.x <= r.x1 && c.y >= r.y0 && c.y <= r.y1) ? [] : [`${where}: off the hall's floor`];
+    }
+    if (c.x < 0 || c.y < 0 || c.x > state.width || c.y > state.height) return [`${where}: off the map`];
+    const body = DEV_STEER.bodyTiles;
+    const feet = [[c.x - body, c.y - body], [c.x + body, c.y - body], [c.x - body, c.y + body], [c.x + body, c.y + body]];
+    if (feet.some(([x, y]) => state.tiles[Math.floor(y!) * state.width + Math.floor(x!)]?.terrain === 'lake')) return [`${where}: on a lake`];
+    if (c.x > store.x && c.x < store.x + 1 && c.y > store.y && c.y < store.y + 1) return [`${where}: in the store's walls`];
+    return [];
+  });
+}
+
+/** Every tick's misplaced colonists in a played turn. */
+const wrong = (run: { state: GameState; floors: DevFloor[] }) => run.floors.flatMap((f, i) => misplaced(run.state, f, run.floors[i - 1]));
+
+const TICKS_A_SECOND = 1_000 / DEV_STEER.tickMs;
+
+type Axis = 'x' | 'y';
+const crossAxis = (axis: Axis): Axis => (axis === 'x' ? 'y' : 'x');
+const extent = (r: HallRect, axis: Axis): [number, number] => (axis === 'x' ? [r.x0, r.x1] : [r.y0, r.y1]);
+const gapBetween = (a: HallRect, b: HallRect) => Math.hypot(Math.max(0, b.x0 - a.x1, a.x0 - b.x1), Math.max(0, b.y0 - a.y1, a.y0 - b.y1));
+
+/** The narrowest gap between two of the hall's floor boxes that do not touch. */
+const thinnestGap = () => Math.min(...HALL.floor.flatMap((a, i) => HALL.floor.slice(i + 1).map((b) => gapBetween(a, b)).filter((g) => g > 0)));
+
+/** The hall's floor along `axis` at `line` across it, as the stretches a colonist walks without leaving the floor. */
+function stretches(axis: Axis, line: number): [number, number][] {
+  const spans = HALL.floor
+    .filter((r) => extent(r, crossAxis(axis))[0] <= line && line <= extent(r, crossAxis(axis))[1])
+    .map((r) => extent(r, axis))
+    .sort(([a], [b]) => a - b);
+  const out: [number, number][] = [];
+  for (const [a, b] of spans) {
+    const last = out.at(-1);
+    if (last && a <= last[1]) last[1] = Math.max(last[1], b);
+    else out.push([a, b]);
+  }
+  return out;
+}
+
+/** A wall to hold a colonist into: walking along `axis` at `line`, on the stretch of floor `from`, pushed `way`. */
+interface HeldWall {
+  axis: Axis;
+  line: number;
+  from: [number, number];
+  way: -1 | 1;
+  width: number;
+}
+
+/**
+ * Every wall between two of the hall's floor boxes that do not touch, once from each side: on the lines through the
+ * band the two share (its edges and its middle), each gap between the stretches of floor that hold them.
+ */
+function hallWalls(): HeldWall[] {
+  const found = new Map<string, HeldWall>();
+  HALL.floor.forEach((a, i) => {
+    for (const b of HALL.floor.slice(i + 1)) {
+      if (gapBetween(a, b) === 0) continue;
+      for (const axis of ['x', 'y'] as const) {
+        const lo = Math.max(extent(a, crossAxis(axis))[0], extent(b, crossAxis(axis))[0]);
+        const hi = Math.min(extent(a, crossAxis(axis))[1], extent(b, crossAxis(axis))[1]);
+        if (lo > hi) continue;
+        for (const line of [lo, (lo + hi) / 2, hi]) {
+          const along = stretches(axis, line);
+          const holding = (r: HallRect) => along.findIndex(([s0, s1]) => s0 <= extent(r, axis)[0] && extent(r, axis)[1] <= s1);
+          const [first, last] = [holding(a), holding(b)].sort((p, q) => p - q) as [number, number];
+          for (let k = first; k < last; k++) {
+            const [left, right] = [along[k]!, along[k + 1]!];
+            const width = right[0] - left[1];
+            found.set(`${axis} ${line} ${left} 1`, { axis, line, from: left, way: 1, width });
+            found.set(`${axis} ${line} ${right} -1`, { axis, line, from: right, way: -1, width });
+          }
+        }
+      }
+    }
+  });
+  return [...found.values()];
+}
+
+describe('the dev floor: the step', () => {
+  it('T-AC-1: a seed and a per-tick input script step to identical floors', () => {
+    const inputs = script(SEED);
+    const first = play(SEED, inputs);
+    const again = play(SEED, script(SEED));
+    expect(again.floors).toEqual(first.floors);
+    expect(again.state).toEqual(first.state);
+
+    // The presses' order: seat order, the first seat rotating each tick over the most seats a game has (play.ts's rot).
+    const order = (tick: number, seats = ['a', 'b', 'c', 'd']) => pressOrder({ ...first.floors[0]!, tick }, seats);
+    expect([0, 1, 2, 3, 4].map((t) => order(t)), 'four seats at ticks 0 to 4').toEqual([
+      ['a', 'b', 'c', 'd'],
+      ['b', 'c', 'd', 'a'],
+      ['c', 'd', 'a', 'b'],
+      ['d', 'a', 'b', 'c'],
+      ['a', 'b', 'c', 'd'],
+    ]);
+    expect(order(1, ['a', 'c']), 'two of them, by their places in seat order').toEqual(['c', 'a']);
+    expect(() => order(0, ['z']), 'a seat not on the floor').toThrow(Error);
+
+    // 'a''s one press, walking down: ANALYSE, holding it where it stands for the analysis's ticks, the stick held down.
+    const pressed = ANALYSE_AT + 1;
+    const assay = Math.ceil((analysisSeconds(first.state, 'a') * 1_000) / DEV_STEER.tickMs);
+    const a = (t: number) => first.floors[t]!.colonists[0]!;
+    const plot = first.state.tiles[Math.floor(a(pressed).y) * first.state.width + Math.floor(a(pressed).x)]!;
+    expect([plot.terrain, plot.owner, hasAnalysed(first.state.players[0]!, first.state, plot)], "'a' analysed the free plains under it").toEqual(['plains', null, true]);
+    expect(a(pressed).assayUntilTick, "'a' assaying").toBe(pressed + assay);
+    const hold = first.floors.slice(pressed + 1, pressed + assay + 1).map((f) => [f.colonists[0]!.x, f.colonists[0]!.y, f.colonists[0]!.moving]);
+    expect(hold, "'a' still while it assays").toEqual(Array(assay).fill([a(pressed).x, a(pressed).y, false]));
+    expect(a(pressed + assay).assayUntilTick, "'a' done assaying").toBeNull();
+    expect(a(pressed + assay + 1).y, "'a' walking down again").toBeGreaterThan(a(pressed).y);
+
+    expect(first.floors.map((f) => f.tick), 'a tick a step').toEqual(first.floors.map((_, i) => i));
+    expect(wrong(first)).toEqual([]);
+    // The script walks every kind of move: through both doors and back, and into the store's walls off the door.
+    const spaces = (seat: number, until: number) =>
+      first.floors.slice(0, until + 1).map((f) => f.colonists[seat]!.space).filter((s, i, all) => i === 0 || s !== all[i - 1]);
+    expect(spaces(0, TICKS), "'a' in and out of the hall, twice").toEqual(['map', 'hall', 'map', 'hall', 'map']);
+    expect(spaces(1, B_LEGS.at(-1)![0]), "'b' in, leading its MULE").toEqual(['map', 'hall']);
+    expect(spaces(3, D_LEGS.at(-1)![0]), "'d' slid along the store's side onto its door, and through").toEqual(['map', 'hall', 'map']);
+    const facing = (t: number) => first.floors[t]!.colonists[3]!.facing;
+    expect([facing(30), facing(70)], "'d' faces the way it walks: left, then right").toEqual(['left', 'right']);
+    expect(first.floors[100]!.colonists[3]!.space, "'d' kept out by the store's side, off its door").toBe('map');
+    const store = first.state.tiles.find((t) => t.terrain === 'store')!;
+    const entries = first.floors.slice(1).flatMap((f, t) =>
+      f.colonists.flatMap((c, i) => {
+        const was = first.floors[t]!.colonists[i]!;
+        return c.space === 'hall' && was.space === 'map' ? [{ tick: t + 1, c, was }] : [];
+      }),
+    );
+    expect(new Set(entries.map((e) => e.c.id)), 'in through a door').toEqual(new Set(['a', 'b', 'd']));
+    for (const { tick, c, was } of entries) {
+      const door = was.x < store.x ? 'doorL' : 'doorR';
+      expect(placeAt(c, HALL), `tick ${tick} ${c.id}: in at the door on its side`).toBe(door);
+      expect({ x: c.x, y: c.y }, `tick ${tick} ${c.id}: in at its door's spot`).toEqual(HALL.spots[door]);
+      expect(Math.abs(was.y - (store.y + 0.5)), `tick ${tick} ${c.id}: in from the door's height`).toBeLessThanOrEqual(DEV_STEER.doorHalfTiles);
+      if (c.lead) expect([c.lead.x, c.lead.y], `tick ${tick} ${c.id}: its MULE through the door with it`).toEqual([c.x, c.y]);
+    }
+    expect(entries.some((e) => e.c.lead), 'a MULE through a door').toBe(true);
+
+    // A lake beside the store's left door: nobody starts on it, and that door lets out at the right door.
+    const lake = play(SEED, inputs, LAKE_MAP);
+    expect(wrong(lake), 'beside a lake').toEqual([]);
+    const outLeft = lake.floors.slice(1).flatMap((f, t) => f.colonists.filter((c, i) => {
+      const was = lake.floors[t]!.colonists[i]!;
+      return c.space === 'map' && was.space === 'hall' && placeAt(was, HALL) === 'doorL';
+    }));
+    expect(outLeft.length, "out through the lake's door").toBeGreaterThan(0);
+    // Built while lakes were waded, stepped with them worked from the shore: those standing in it walk out, and stay out.
+    const waded = play(SEED, inputs, LAKE_MAP, { ...floorConfig(HALL), steer: { ...DEV_STEER, lakeMode: 'wade' } });
+    const wet = waded.floors.map((f, i) => misplaced(waded.state, f, waded.floors[i - 1]));
+    expect(wet[0]!.length, 'in the lake at the start').toBe(2);
+    expect(wet.slice(2_000 / DEV_STEER.tickMs).flat(), 'out of it within two seconds, for good').toEqual([]);
+    // Held down from the door onto the plains, 'a' walks out on its own feet: half a tile at 1.25 × the lake's wading 0.3
+    // × its 1.25, then the 0.18 of its body at the plains' 1, off it after 25 ticks.
+    let held = waded.floors[0]!;
+    for (let t = 0; t < 2_000 / DEV_STEER.tickMs; t++) {
+      const next = stepFloor(held, waded.state, { a: go(0, 1) }, DEV_STEER.tickMs, floorConfig(HALL));
+      expect(next.colonists[0]!.y, `tick ${next.tick}: 'a' walks down while it wades out`).toBeGreaterThan(held.colonists[0]!.y);
+      held = next;
+    }
+    expect(misplaced(waded.state, { ...held, colonists: held.colonists.slice(0, 1) }), "'a' out of it onto the plains").toEqual([]);
+    expect(held.colonists[0]!.space, "'a' out of it onto the plains").toBe('map');
+
+    // Every runner steps at the one tick: any other length is its caller's bug, not a rule refused.
+    const halfTick = () => stepFloor(first.floors[0]!, first.state, {}, DEV_STEER.tickMs / 2, floorConfig(HALL));
+    expect(halfTick).toThrow(Error);
+    expect(halfTick).not.toThrow(RuleError);
+    // So is a floorSeconds the hall has no finite speed for: refused before a step in the hall could hang on it.
+    const inHall = first.floors.find((f) => f.colonists[0]!.space === 'hall')!;
+    for (const floorSeconds of [0, -1, Number.NaN]) {
+      const cfg = { ...floorConfig(HALL), steer: { ...DEV_STEER, floorSeconds } };
+      const step = (floor: DevFloor) => () => stepFloor(floor, first.state, { a: go(1, 0) }, DEV_STEER.tickMs, cfg);
+      expect(step(first.floors[0]!), `floorSeconds ${floorSeconds}`).toThrow(Error);
+      expect(step(first.floors[0]!), `floorSeconds ${floorSeconds}`).not.toThrow(RuleError);
+      expect(step(inHall), `floorSeconds ${floorSeconds}, walking in the hall`).toThrow(Error);
+    }
+
+    // So is a pace that makes a step in the hall infinite (a Zipwing perk, a lead factor): it throws, it does not hang.
+    const unbounded = { ...inHall, colonists: inHall.colonists.map((c) => (c.id === 'a' ? { ...c, pace: Infinity } : c)) };
+    const endless = () => stepFloor(unbounded, first.state, { a: go(1, 0) }, DEV_STEER.tickMs, floorConfig(HALL));
+    expect(endless, 'a pace of Infinity, walking in the hall').toThrow(Error);
+    expect(endless, 'a pace of Infinity, walking in the hall').not.toThrow(RuleError);
+
+    // One input changed at one tick: 'a', standing still in the corner, steps right once.
+    const changed = inputs.map((tick, t) => (t === 700 ? { ...tick, a: go(1, 0) } : tick));
+    const nudged = play(SEED, changed).floors.at(-1)!;
+    expect(nudged.colonists[0]!.x).toBeGreaterThan(first.floors.at(-1)!.colonists[0]!.x);
+    expect(nudged).not.toEqual(first.floors.at(-1));
+  });
+
+  it("INV-walls: a colonist held into any wall between two floor boxes that don't touch stays on its own side, at floorSeconds 3 and 0.5", () => {
+    const state = game(SEED);
+    const walls = hallWalls();
+    // The thinnest wall, the left doorway's floor to the works', sets the bound on a step's pieces: it is among them.
+    expect(Math.min(...walls.map((w) => w.width)), 'the thinnest wall held into').toBeCloseTo(thinnestGap(), 9);
+    const water = HALL.floor.find((r) => placeAt({ x: (r.x0 + r.x1) / 2, y: (r.y0 + r.y1) / 2 }, HALL) === 'water')!;
+    expect(walls.some((w) => w.axis === 'x' && w.from[0] === water.x0 && w.from[1] === water.x1), "the water outfitter's side walls held into").toBe(true);
+    const escaped: string[] = [];
+    const short: string[] = [];
+    for (const floorSeconds of [3, 0.5]) {
+      const cfg = { ...floorConfig(HALL), steer: { ...DEV_STEER, floorSeconds } };
+      const built = buildFloor(state, cfg);
+      const at = (p: HallPoint): DevFloor => ({ ...built, colonists: built.colonists.map((c) => (c.id === 'a' ? { ...c, space: 'hall', ...p } : c)) });
+      const walk = (speedOf(at(HALL.spots.doorL).colonists[0]!, state, cfg) * DEV_STEER.tickMs) / 1_000;
+      for (const { axis, line, from: [lo, hi], way } of walls) {
+        const wall = way > 0 ? hi : lo;
+        const point = (along: number): HallPoint => (axis === 'x' ? { x: along, y: line } : { x: line, y: along });
+        // From every point on its stretch of floor within half a second's walk of the wall, held into it.
+        for (let d = 0; d <= Math.min(hi - lo, (walk * TICKS_A_SECOND) / 2); d += 0.05) {
+          const start = wall - way * d;
+          const where = `${floorSeconds} s, along ${axis} at ${line.toFixed(2)}, from ${start.toFixed(2)} held ${way}`;
+          let floor = at(point(start));
+          for (let t = 0; t < TICKS_A_SECOND; t++) {
+            floor = stepFloor(floor, state, { a: axis === 'x' ? go(way, 0) : go(0, way) }, DEV_STEER.tickMs, cfg);
+            const a = floor.colonists[0]!;
+            const off = a.space !== 'hall' || a[axis] < lo || a[axis] > hi || a[crossAxis(axis)] !== line;
+            if (off) escaped.push(`${where}: at tick ${t} at ${a.space} ${a.x.toFixed(2)},${a.y.toFixed(2)}`);
+          }
+          if (Math.abs(floor.colonists[0]![axis] - wall) >= walk) short.push(`${where}: ended at ${floor.colonists[0]![axis].toFixed(2)}`);
+        }
+      }
+    }
+    expect(escaped, 'through a wall, off its stretch of floor').toEqual([]);
+    expect(short, 'stopped short of the wall it was held into').toEqual([]);
+  });
+
+  it('C9, serving B-AC-1: a terrain-weighted path goes round a lake, takes plains over mountains when equally short, and reaches a lake plot at its shore', () => {
+    // From beside the store's door, 2·3, to a plot at 7·3, a lake between them: round it above or below, nine steps either way.
+    const across = (above: string, below: string) => ['~~~~~~~~~', above, '....~....', '.S..~....', '....~....', below, '~~~~~~~~~'];
+    const cfg = floorConfig(HALL);
+    const from = { x: 2, y: 3 };
+    const plot = { x: 7, y: 3 };
+    const land = (state: GameState, p: { x: number; y: number }) => state.tiles[p.y * state.width + p.x]!.terrain;
+    for (const [label, map, side] of [
+      ['a mountain above', across('....^....', '.........'), 5],
+      ['a mountain below', across('.........', '....^....'), 1],
+    ] as const) {
+      const state = game(SEED, map);
+      const path = pathTo(state, from, plot, cfg)!;
+      expect(path.tiles[0], label).toEqual(from);
+      expect(path.tiles.at(-1), label).toEqual(plot);
+      expect(path.tiles.some((p) => p.x === 4 && p.y === side), `${label}: round the lake on the plains side`).toBe(true);
+      expect(path.tiles.map((p) => land(state, p)), label).not.toContain('lake');
+      expect(path.tiles.map((p) => land(state, p)), label).not.toContain('mountains');
+      expect(path.tiles.every((p, i) => i === 0 || Math.abs(p.x - path.tiles[i - 1]!.x) + Math.abs(p.y - path.tiles[i - 1]!.y) === 1), label).toBe(true);
+      // Nine plains tiles entered at 1.25 tiles a second.
+      expect(path.seconds, label).toBeCloseTo(7.2, 9);
+    }
+
+    // From a colonist's position, part way across a tile, to a plot's: the walk is from the tile under it.
+    const state0 = game(SEED, across('....^....', '.........'));
+    expect(pathTo(state0, { x: 2.7, y: 3.4 }, { x: 7.5, y: 3.5 }, cfg), 'from a colonist').toEqual(pathTo(state0, from, plot, cfg));
+
+    // A lake plot is worked from its shore: the path ends on it, and the step into it costs nothing.
+    const state = game(SEED, across('.........', '.........'));
+    const shore = pathTo(state, from, { x: 4, y: 3 }, cfg)!;
+    expect(shore.tiles).toEqual([from, { x: 3, y: 3 }, { x: 4, y: 3 }]);
+    expect(shore.seconds).toBeCloseTo(0.8, 9);
+
+    // Negative: a plot walled in by lakes has no path.
+    expect(pathTo(game(SEED, ['.....', '..~..', '.~.~.', '..~..', 'S....']), { x: 0, y: 0 }, { x: 2, y: 2 }, cfg)).toBeNull();
+
+    // The config's switches: mountains made impassable wall a plot in; a waded lake is crossed where it is quicker.
+    const walled = game(SEED, ['.....', '..^..', '.^.^.', '..^..', 'S....']);
+    expect(pathTo(walled, { x: 0, y: 0 }, { x: 2, y: 2 }, { ...cfg, steer: { ...DEV_STEER, mountainsImpassable: true } }), 'mountains, impassable').toBeNull();
+    const wade = pathTo(state, from, plot, { ...cfg, steer: { ...DEV_STEER, lakeMode: 'wade' } })!;
+    expect(wade.tiles.map((p) => land(state, p)), 'a lake, waded: straight through it').toContain('lake');
+    // Four plains tiles at 0.8 s and one of lake at 1.25 × 0.3 tiles a second.
+    expect(wade.seconds, 'a lake, waded').toBeCloseTo(4 * 0.8 + 1 / (1.25 * 0.3), 9);
+
+    // The store between the two ends: round it, never through it.
+    const store = game(SEED, ['...', '.S.', '...']);
+    const round = pathTo(store, { x: 0, y: 1 }, { x: 2, y: 1 }, cfg)!;
+    expect(round.tiles.map((p) => land(store, p)), 'round the store').not.toContain('store');
+    expect(round.seconds, 'round the store: four plains tiles').toBeCloseTo(3.2, 9);
+  });
+});

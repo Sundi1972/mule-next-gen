@@ -1,14 +1,15 @@
-import { ADJACENCY, FACTORY, FACTORY_FIT, GROWN_BASE, GROWN_MIN, POLLUTION, RECIPES, SPECIES_PERK, THIN_VEIN_MONTHS, TRAIT_EFFECT, UPKEEP } from './config.js';
-import { eventOutput, planEvent } from './events.js';
+import { ADJACENCY, EVENTS, FACTORY, FACTORY_FIT, GROWN_BASE, GROWN_MIN, POLLUTION, RECIPES, SPECIES_PERK, THIN_VEIN_MONTHS, TRAIT_EFFECT, UPKEEP } from './config.js';
+import { applyEvents, eventOutput, plotEvent, rollAfterOutput, rollPhase } from './events.js';
 import { neighbours } from './map.js';
 import { airBand, runPollution } from './pollution.js';
-import { relicFit, settleSpecials, specialBonus } from './specials.js';
+import { formMeteorCrater, relicFit, settleSpecials, specialBonus } from './specials.js';
 import { addStock, emptyStock, hasStock } from './stock.js';
 import {
   GROWN_GOODS,
   MINED_GOODS,
   PROCESSED_GOODS,
   RAW_GOODS,
+  type EventKey,
   type GameState,
   type Good,
   type MinedGood,
@@ -53,7 +54,7 @@ export function clusterSize(state: GameState, tile: Tile): number {
 export function adjacencyBonus(state: GameState, tile: Tile): number {
   const size = clusterSize(state, tile);
   if (size >= ADJACENCY.clusterSize) return ADJACENCY.cluster;
-  if (size >= 2) return ADJACENCY.neighbour;
+  if (size >= 2) return ADJACENCY.neighbour; // literal-ok: the plot and one own neighbour, what ADJACENCY.neighbour means
   return 0;
 }
 
@@ -199,7 +200,10 @@ export function energyUseOf(state: GameState, tile: Tile): number {
  *    Electronics needs it; in an Energy shortage they are served last;
  * 4. special fields settle (ruins pay, a mined cavern may collapse), then
  *    pollution spreads and the air gauge moves.
- * Returns what each player produced and the air points each caused.
+ * Every event the phase fires (rollPhase) works on the plots it reaches, on
+ * top of what made each plot's output. Returns what each player produced, the
+ * air points each caused, each plot's line and the events: those the phase
+ * fired, then each cavern collapse, which changes no output.
  */
 export function runProduction(state: GameState): {
   produced: Record<string, Stock>;
@@ -215,15 +219,24 @@ export function runProduction(state: GameState): {
   const indexOf = new Map(state.tiles.map((t, i) => [t, i]));
   const ran = new Set<Tile>();
   const lines: ProductionLine[] = [];
-  const event = planEvent(state);
-  const hit = new Map(event?.plots.map((p) => [p.index, p]));
+  const events = rollPhase(state, 'production');
+  applyEvents(state, events);
+  // A cold snap multiplies every plot's Energy need for this run only.
+  const cold = events.some((e) => e.key === 'coldSnap') ? EVENTS.colony.coldSnap.factor : 1;
+  const reaching = new Map<number, { key: EventKey; plot: MonthEvent['plots'][number] }[]>();
+  for (const { key, plots } of events) {
+    for (const plot of plots) {
+      const list = reaching.get(plot.index) ?? [];
+      list.push({ key, plot });
+      reaching.set(plot.index, list);
+    }
+  }
   const credit = (tile: Tile, good: Good, parts: Part[]) => {
-    const plot = hit.get(indexOf.get(tile)!);
-    if (event && plot) {
-      // The event comes last, on top of everything else that made this month's output.
+    // The events come last, in the order they fired, each on the output the ones before it left.
+    for (const { key, plot } of reaching.get(indexOf.get(tile)!) ?? []) {
       const before = parts.reduce((n, p) => n + p.delta, 0);
-      plot.delta = eventOutput(event.key, before, plot.order === 0) - before;
-      parts.push({ why: 'event', delta: plot.delta, event: event.key });
+      plot.delta = eventOutput(key, before, plot.order === 0) - before;
+      parts.push({ why: 'event', delta: plot.delta, event: key });
     }
     const made = parts.reduce((n, p) => n + p.delta, 0);
     playerById.get(tile.owner!)!.stock[good] += made;
@@ -247,7 +260,7 @@ export function runProduction(state: GameState): {
     const owner = playerById.get(tile.owner!)!;
     const good = tile.outfit as RawGood;
     const parts = rawOutputParts(state, tile);
-    const energy = energyUseOf(state, tile);
+    const energy = energyUseOf(state, tile) * cold;
     if (owner.stock.energy >= energy) owner.stock.energy -= energy;
     else halve(parts, 'noEnergy');
     if (dry.has(owner.id) && UPKEEP.irrigated.includes(good)) halve(parts, 'noWater');
@@ -258,7 +271,7 @@ export function runProduction(state: GameState): {
     for (const tile of working.filter((t) => t.outfit === good)) {
       const owner = playerById.get(tile.owner!)!;
       const fit = factoryFit(state, tile, good, owner.id);
-      const inputs = { ...RECIPES[good].inputs, energy: fit.energy };
+      const inputs = { ...RECIPES[good].inputs, energy: fit.energy * cold };
       if (!hasStock(owner.stock, inputs)) continue;
       addStock(owner.stock, inputs, -1);
       credit(tile, good, [{ why: 'factory', delta: fit.output }]);
@@ -271,9 +284,15 @@ export function runProduction(state: GameState): {
     tile.runMonths = ran.has(tile) ? tile.runMonths + 1 : 0;
   }
 
-  settleSpecials(state, lines);
+  for (const index of settleSpecials(state, lines)) events.push(plotEvent(state, 'cavernCollapse', index));
   const pollutionBy = runPollution(state);
-  return { produced, pollutionBy, lines, events: event ? [event] : [] };
+  // A meteor strikes after the month ran (AM-1 1a): the plot made its output and its pollution counts; then its MULE
+  // is lost and it becomes a crater.
+  for (const strike of rollAfterOutput(state)) {
+    for (const { index } of strike.plots) formMeteorCrater(state, state.tiles[index]!.x, state.tiles[index]!.y);
+    events.push(strike);
+  }
+  return { produced, pollutionBy, lines, events };
 }
 
 /** Raw goods a plot is rated for, best first, from the ground card. */
@@ -300,6 +319,6 @@ export function monthNeeds(state: GameState, playerId: string): Stock {
     if (!isFactory(t.outfit)) continue;
     for (const [g, q] of Object.entries(RECIPES[t.outfit].inputs) as [Good, number][]) if (g !== 'energy') need[g] += q;
   }
-  if (airBand(state.air).devPenalty > 0) need.medicine = 1;
+  if (airBand(state.air).sickens) need.medicine = 1;
   return need;
 }

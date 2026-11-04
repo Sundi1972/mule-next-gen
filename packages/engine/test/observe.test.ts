@@ -47,7 +47,7 @@ function votedElection(): GameState {
   runFor(state, 'brix', 'governor', { kind: 'hold' });
   runFor(state, 'ossa', 'governor', { kind: 'hold' });
   for (const id of SEATS) electionDone(state, id);
-  for (let t = 0; state.politics!.election!.stage === 'nominate' && t < 120_000; t += 10) stepElection(state, 10);
+  for (let t = 0; state.politics!.election!.stage === 'announce' && t < 120_000; t += 10) stepElection(state, 10);
   expect(state.politics!.election!.stage).toBe('ballot');
   castVote(state, 'lena', 'governor', 'brix');
   castVote(state, 'tam', 'governor', 'ossa');
@@ -57,7 +57,8 @@ function votedElection(): GameState {
 describe('secret ballots', () => {
   it('T-AC-7: observe() for one seat and cloneForSim never expose or share another seat’s ballot, in any stage', () => {
     const state = votedElection();
-    for (const stage of ['ballot', 'reveal', 'over'] as const) {
+    for (const stage of ['ballot', 'ceremony', 'over'] as const) {
+      for (const id of SEATS) electionDone(state, id);
       for (let t = 0; state.politics!.election!.stage !== stage && t < 120_000; t += 10) stepElection(state, 10);
       expect(state.politics!.election!.stage).toBe(stage);
       // Each voter sees its own ballot and nobody else's; a seat that didn't vote sees none.
@@ -70,5 +71,24 @@ describe('secret ballots', () => {
       sim.politics!.election!.ballots.lena!.governor = 'ossa';
       expect(state.politics!.election!.ballots.lena).toEqual({ governor: 'brix' });
     }
+  });
+});
+
+describe('what a seat sees of the others', () => {
+  it("T-AC-25: another player's hunger and sickness are public; their analyses, drone orders, MULE in tow and stock stay hidden", () => {
+    const state = createGame({ seed: 11, players: SEATS.map((id) => ({ id, name: id, isAi: false })) });
+    while (state.phase !== 'development') advancePhase(state);
+    const ossa = state.players.find((p) => p.id === 'ossa')!;
+    Object.assign(ossa, { hungry: true, sick: true, analysed: [4], droneOrder: [7], carriedMule: 'empty' });
+    for (const p of state.players) p.stock.crystite = 0;
+    ossa.stock.crystite = 9;
+    const seen = observe(state, 'brix').players.find((p) => p.id === 'ossa')!;
+    expect([seen.hungry, seen.sick]).toEqual([true, true]);
+    expect([seen.analysed, seen.droneOrder, seen.carriedMule]).toEqual([[], [], null]);
+    expect(seen.stock.crystite).not.toBe(9);
+    // Negative case: a well, fed player reads as one.
+    Object.assign(ossa, { hungry: false, sick: false });
+    const well = observe(state, 'brix').players.find((p) => p.id === 'ossa')!;
+    expect([well.hungry, well.sick]).toEqual([false, false]);
   });
 });

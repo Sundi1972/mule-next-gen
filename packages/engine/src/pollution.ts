@@ -1,5 +1,5 @@
 import { POLLUTION } from './config.js';
-import { neighbours } from './map.js';
+import { neighbours } from './grid.js';
 import type { GameState, Tile } from './types.js';
 
 export type AirBand = (typeof POLLUTION.bands)[number];

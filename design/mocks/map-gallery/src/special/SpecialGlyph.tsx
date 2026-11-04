@@ -32,6 +32,9 @@ const PATHS: Record<SpecialKind, string> = {
   oasis: 'M12.5 19.5c.6-3.8.4-7-1-10 M11.5 9.5C9.5 7 6 7 4 9.2 M11.5 9.5c2-2.5 5.5-2.5 7.5-.3 M11.5 9.5C10.6 6.4 8 4.5 5.4 4.6 M11.5 9.5c1-3 3.5-4.9 6.1-4.8 M4 21c2.5-2 13.5-2 16 0z',
   // An artefact sending its power out to the four plots around it.
   relic: 'M12 7l5 5-5 5-5-5z M12 10.5v3 M12 2v2.5 M12 19.5V22 M2 12h2.5 M19.5 12H22',
+  // A crater seen from above, struck in its centre, with the meteor's trail still in the sky. Both Crystite
+  // kinds wear one colour, so this one is round and slanted where the cavern is a dome.
+  meteorCrater: 'M4 14a6 6 0 1 0 12 0a6 6 0 1 0-12 0z M9 14a1 1 0 1 0 2 0a1 1 0 1 0-2 0z M13.5 10.5 21 3 M16.5 11.5 20.5 7.5 M12.5 7.5 16.5 3.5',
 };
 
 export function SpecialIcon({ kind, size = 16, className, color, halo = false }: { kind: SpecialKind; size?: number; className?: string; color?: string; halo?: boolean }) {

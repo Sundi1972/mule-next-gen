@@ -1,18 +1,18 @@
 import { emptyStock, RuleError, type GameState, type MonthEvent, type ProductionLine } from '@mule/engine';
 import { describe, expect, it } from 'vitest';
 import { GRANT_TICK_MS, MuleGame } from '../src/mule-game.js';
-import { fakeContext, seats } from './fake-context.js';
+import { fakeContext, readyAll, seats } from './fake-context.js';
 
 /** Stock numbers no plot could make in a month, so finding one in a view can only mean it leaked. */
 const SECRET_FOOD = 7_919;
 const SECRET_ENERGY = 104_729;
 
-/** A game played on its own clocks until production starts. */
+/** A game played on its own clocks until production starts, everyone Ready in planning, which has no clock. */
 function inProduction() {
   const fake = fakeContext();
   const game = new MuleGame(fake.ctx, 7);
   game.start(seats);
-  fake.advance(game.viewFor(null).phaseEndsAt! - fake.ctx.now());
+  readyAll(game);
   while (game.viewFor(null).phase === 'landGrant') fake.advance(GRANT_TICK_MS);
   // Small steps, so the AI seat develops its land.
   while (game.viewFor(null).phase === 'development') fake.advance(100);
@@ -50,7 +50,7 @@ function knownMonth(state: GameState) {
     origin: { x: 6, y: 0 },
     plots: [{ index: plant, order: 0, good: 'energy', delta: -2 }],
     sign: 'bad',
-    when: 'afterProduction',
+    phase: 'production',
   };
   const storm: MonthEvent = {
     key: 'dustStorm',
@@ -62,11 +62,12 @@ function knownMonth(state: GameState) {
     direction: 'e',
     plots: [{ index: farm, order: 0, good: 'food', delta: -1 }],
     sign: 'bad',
-    when: 'afterProduction',
+    phase: 'production',
   };
   const report = state.history.at(-1)!;
   report.lines = lines;
   report.events = [quake, storm];
+  state.monthEvents = [quake, storm];
   report.before = {
     s1: { ...emptyStock(), food: SECRET_FOOD },
     s2: { ...emptyStock(), energy: SECRET_ENERGY },
@@ -96,6 +97,9 @@ describe('the production view', () => {
             scope: 'local',
             origin: { x: 6, y: 0 },
             hits: [{ x: 5, y: 0, order: 0, delta: -2 }],
+            phase: 'production',
+            weight: 'headline',
+            playMs: 7_000,
           },
           {
             key: 'dustStorm',
@@ -107,9 +111,13 @@ describe('the production view', () => {
             origin: { x: state.width - 1, y: 1 },
             from: 'e',
             hits: [{ x: 3, y: 1, order: 0, delta: -1 }],
+            phase: 'production',
+            weight: 'headline',
+            playMs: 7_000,
           },
         ],
         lengthMs: 15_000,
+        introMs: 1_800,
       });
       expect(Object.keys(view.production!.events[0]!)).not.toContain('from');
       expect(keysOf(view.production)).not.toContainEqual(expect.stringMatching(/before|stock/i));
@@ -152,6 +160,7 @@ describe('the production view', () => {
       const view = game.viewFor(null);
       if (view.month === 2) break;
       seen.set(view.phase, (seen.get(view.phase) ?? new Set()).add(view.production !== null));
+      if (view.phase === 'planning') readyAll(game);
       if (view.phase === 'auction') {
         for (const s of ['s1', 's2']) {
           try {

@@ -3,9 +3,9 @@ import { afterEach, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import { advancePhase, COLONY_SELLER, createGame, WALK } from '@mule/engine';
 import type { MuleView, ServerEnvelope } from '@mule/protocol';
-import { GRANT_TICK_MS, MuleGame, PHASE_MS } from '../src/mule-game.js';
+import { GRANT_TICK_MS, MuleGame } from '../src/mule-game.js';
 import { createMuleServer, type MuleServer } from '../src/server.js';
-import { fakeContext, seats } from './fake-context.js';
+import { fakeContext, readyAll, seats } from './fake-context.js';
 
 const humans = ['s1', 's2'];
 const goodsWalker = (v: MuleView, id: string) => v.auction!.walkers.find((w) => w.id === id)!;
@@ -16,7 +16,7 @@ function toGoodsStatus() {
   const { ctx, advance } = fakeContext();
   const game = new MuleGame(ctx, 7);
   game.start(seats);
-  advance(PHASE_MS.planning);
+  readyAll(game);
   while (game.viewFor(null).phase === 'landGrant') advance(GRANT_TICK_MS);
   while (game.viewFor(null).phase === 'development') advance(1_000);
   while (game.viewFor(null).phase === 'production') advance(1_000);

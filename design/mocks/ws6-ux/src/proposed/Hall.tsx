@@ -4,6 +4,7 @@ import type { CSSProperties, ReactNode } from 'react';
 import { slotOf } from '../../../../../apps/web/src/game/derive';
 import { VIEW } from '../fixture';
 import { Speaker } from './Chat';
+import { ConditionTag, DEV_WALK_STAND_IN, paceOf, ThoughtBubble, useCondition } from './Condition';
 import { Mule } from './Mule';
 
 /**
@@ -49,17 +50,15 @@ export const SPOT: Record<Spot, { x: number; y: number }> = {
   doorR: { x: 95.5, y: 50 },
 };
 
-/** Seconds to walk between two spots: the hall's width in about 2 s (R1 placeholder). */
-export function walkSeconds(a: { x: number; y: number }, b: { x: number; y: number }, zipwing = false): number {
-  const d = Math.hypot((a.x - b.x) / 100, ((a.y - b.y) / 100) * 0.5);
-  return Math.max(0.3, d * 2) / (zipwing ? 2 : 1);
+/** Seconds one walk across the store floor takes: DEV_WALK's hall time at full pace, divided by the walker's pace (Heiko 2026-10-28). */
+export function walkSeconds(_a: { x: number; y: number }, _b: { x: number; y: number }, pace = 1): number {
+  return DEV_WALK_STAND_IN.hallSeconds / pace;
 }
 
 export interface Visitor {
   id: string;
   at: { x: number; y: number };
   walk: number;
-  time: number;
   leading: 'empty' | Good | null;
   me?: boolean;
   moving?: boolean;
@@ -67,8 +66,19 @@ export interface Visitor {
 
 const box = (x0: number, x1: number, y0: number, y1: number): CSSProperties => ({ left: `${x0}%`, width: `${x1 - x0}%`, top: `${y0}%`, height: `${y1 - y0}%` });
 
+/**
+ * Type and creature sizes, the phone's and the laptop's: the product's table (packages/ui Store.tsx SIZES, WS4's #174).
+ * The phone's type is never under 10 px, and its doors and fitting bays are at least 32 px wide on a 667 px phone.
+ */
+const SIZES = {
+  phone: { lock: 'px-0.5 py-px text-[10px]', name: 'text-[11px]', price: 'text-[10px]', small: 'text-[10px]', icon: 20, iconPad: 'p-1', fit: 16, fits: 'gap-0.5 p-0.5', mule: 30, creature: 28, led: 32, sign: 'h-5 w-5', chimney: 'h-3 w-3', caps: 'text-[10px]!', door: 'text-base', doorBox: 'min-w-8', doorNote: 'text-[10px]' },
+  wide: { lock: 'px-1 py-0.5 text-[11px]', name: 'text-lg', price: 'text-base', small: 'text-sm', icon: 40, iconPad: 'p-1.5', fit: 30, fits: 'gap-1 p-1', mule: 84, creature: 52, led: 60, sign: 'h-10 w-10', chimney: 'h-5 w-5', caps: 'text-xs!', door: 'text-3xl', doorBox: '', doorNote: 'text-xs' },
+};
+type Sizes = (typeof SIZES)[keyof typeof SIZES];
+
 /** A room you can walk to: a real button, glowing when the guide points at it, legible and saying why when closed. */
 function Room({
+  z,
   testid,
   style,
   onTap,
@@ -78,6 +88,7 @@ function Room({
   className,
   children,
 }: {
+  z: Sizes;
   testid: string;
   style: CSSProperties;
   onTap?: (() => void) | undefined;
@@ -109,7 +120,7 @@ function Room({
         </span>
       )}
       {disabled && lock && (
-        <span className="shrink-0 bg-void/60 px-1 py-px font-mono text-[7px] uppercase leading-tight text-ink-2 @min-[1100px]/shell:py-0.5 @min-[1100px]/shell:text-[11px]">{lock}</span>
+        <span className={cx('shrink-0 bg-void/60 font-mono uppercase leading-tight text-ink-2', z.lock)}>{lock}</span>
       )}
     </Tag>
   );
@@ -154,8 +165,9 @@ export function Hall({
   const can = (s: Spot) => !open || open.includes(s);
   const tap = (s: Spot, fit?: Good) => (onSpot ? () => onSpot(s, fit) : undefined);
   const nx = (s: Spot) => next.includes(s);
-  const name = wide ? 'text-lg' : 'text-[11px]';
-  const price = cx('font-mono font-bold', wide ? 'text-base' : 'text-[10px]');
+  const z = SIZES[wide ? 'wide' : 'phone'];
+  const name = z.name;
+  const price = cx('font-mono font-bold', z.price);
   return (
     <div
       className="relative h-full w-full select-none overflow-hidden rounded-sheet border border-holo-line"
@@ -173,14 +185,14 @@ export function Hall({
 
       <div data-testid="row-outfitters">
         {OUTFITTERS.map((g, i) => (
-          <Room key={g} testid={`booth-${g}`} style={box(X0 + COL * i + 0.4, X0 + COL * (i + 1) - 0.4, TOP.y0, TOP.y1)} onTap={tap(g)} disabled={!can(g)} next={nx(g)} lock={locks?.[g]} className="bg-panel">
+          <Room key={g} z={z} testid={`booth-${g}`} style={box(X0 + COL * i + 0.4, X0 + COL * (i + 1) - 0.4, TOP.y0, TOP.y1)} onTap={tap(g)} disabled={!can(g)} next={nx(g)} lock={locks?.[g]} className="bg-panel">
             <Awning color={`var(--color-g-${g})`} />
             <span className="flex flex-1 flex-col items-center justify-center gap-0.5 px-1" data-shop={g}>
-              <span className="grid place-items-center rounded-full p-1.5" style={{ background: `color-mix(in srgb, var(--color-g-${g}) 18%, transparent)`, boxShadow: `0 0 18px color-mix(in srgb, var(--color-g-${g}) 35%, transparent)` }}>
-                <GoodIcon good={g} size={wide ? 40 : 20} />
+              <span className={cx('grid place-items-center rounded-full', z.iconPad)} style={{ background: `color-mix(in srgb, var(--color-g-${g}) 18%, transparent)`, boxShadow: `0 0 18px color-mix(in srgb, var(--color-g-${g}) 35%, transparent)` }}>
+                <GoodIcon good={g} size={z.icon} />
               </span>
               <span className={cx('font-display font-semibold leading-tight', name)}>{GOOD_NAME[g]}</span>
-              <span data-num className={cx(price, 'rounded-chip bg-void/50 px-1.5 text-ink')}>
+              <span data-num className={cx(price, 'whitespace-nowrap rounded-chip bg-void/50 px-1.5 text-ink')}>
                 {prices[g]} cr
               </span>
             </span>
@@ -190,14 +202,14 @@ export function Hall({
 
       <div data-testid="row-services">
         {/* The works: three fitting bays under a chimney. */}
-        <Room testid="booth-works" style={box(BOTTOM.works[0], BOTTOM.works[1], BOT.y0, BOT.y1)} disabled={!can('works')} next={nx('works')} lock={locks?.works} className="bg-panel">
+        <Room z={z} testid="booth-works" style={box(BOTTOM.works[0], BOTTOM.works[1], BOT.y0, BOT.y1)} disabled={!can('works')} next={nx('works')} lock={locks?.works} className="bg-panel">
           <span className="flex items-center justify-center gap-1.5 border-b border-holo-faint bg-raised/60 py-0.5">
-            <svg aria-hidden viewBox="0 0 16 16" className={wide ? 'h-5 w-5' : 'h-3 w-3'}>
+            <svg aria-hidden viewBox="0 0 16 16" className={z.chimney}>
               <path d="M2 14V7l4 2V7l4 2V3h4v11z" fill="var(--color-ink-3)" />
             </svg>
-            <span className={cx('label-caps', wide ? 'text-xs!' : 'text-[8px]!')}>The works · factory fits</span>
+            <span className={cx('label-caps', z.caps)}>The works · factory fits</span>
           </span>
-          <span className="grid flex-1 grid-cols-3 gap-1 p-1">
+          <span className={cx('grid flex-1 grid-cols-3', z.fits)}>
             {FITS.map((f) => (
               <button
                 key={f.good}
@@ -207,7 +219,7 @@ export function Hall({
                 className="flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-control border border-holo-faint bg-raised enabled:hover:border-holo"
                 data-testid={`fit-${f.good}`}
               >
-                <GoodIcon good={f.good} size={wide ? 30 : 16} />
+                <GoodIcon good={f.good} size={z.fit} />
                 {wide && <span className="text-sm font-semibold">{f.name}</span>}
                 <span data-num className={price}>
                   {prices[f.good]}
@@ -218,8 +230,8 @@ export function Hall({
         </Room>
 
         {/* The green belt: a little greenhouse. */}
-        <Room testid="booth-greenBelt" style={box(BOTTOM.greenBelt[0], BOTTOM.greenBelt[1], BOT.y0, BOT.y1)} onTap={tap('greenBelt')} disabled={!can('greenBelt')} next={nx('greenBelt')} lock={locks?.greenBelt} className="bg-ok/10">
-          <svg aria-hidden viewBox="0 0 40 24" preserveAspectRatio="none" className="h-[22%] w-full">
+        <Room z={z} testid="booth-greenBelt" style={box(BOTTOM.greenBelt[0], BOTTOM.greenBelt[1], BOT.y0, BOT.y1)} onTap={tap('greenBelt')} disabled={!can('greenBelt')} next={nx('greenBelt')} lock={locks?.greenBelt} className="bg-ok/10">
+          <svg aria-hidden viewBox="0 0 40 24" preserveAspectRatio="none" className="h-[22%] w-full shrink-0">
             <path d="M0 24 L20 2 L40 24 Z" fill="var(--color-ok)" fillOpacity={0.35} stroke="var(--color-ok)" strokeWidth={1} />
             <path d="M20 2 V24 M10 13 H30" stroke="var(--color-ok)" strokeWidth={0.8} />
           </svg>
@@ -232,7 +244,7 @@ export function Hall({
         </Room>
 
         {/* The corral: a pen of real MULEs. */}
-        <Room testid="booth-corral" style={box(BOTTOM.corral[0], BOTTOM.corral[1], BOT.y0, BOT.y1)} onTap={tap('corral')} disabled={!can('corral') || mules === 0} next={nx('corral')} lock={locks?.corral} className="bg-holo-soft">
+        <Room z={z} testid="booth-corral" style={box(BOTTOM.corral[0], BOTTOM.corral[1], BOT.y0, BOT.y1)} onTap={tap('corral')} disabled={!can('corral') || mules === 0} next={nx('corral')} lock={locks?.corral} className="bg-holo-soft">
           <span className="relative flex flex-1 items-end justify-center gap-0 overflow-hidden px-1 pt-3" data-shop="corral">
             {/* The fence. */}
             <svg aria-hidden viewBox="0 0 100 20" preserveAspectRatio="none" className="absolute inset-x-0 bottom-0 h-[22%] w-full">
@@ -242,7 +254,7 @@ export function Hall({
             {mules === 0 ? (
               <span className="mb-[18%] font-mono text-sm font-bold text-alert">SOLD OUT</span>
             ) : (
-              Array.from({ length: Math.min(mules, 3) }, (_, i) => <Mule key={i} size={wide ? 84 : 30} facing={i % 2 ? 'left' : 'right'} className="relative -mx-1 mb-1" />)
+              Array.from({ length: Math.min(mules, 3) }, (_, i) => <Mule key={i} size={z.mule} facing={i % 2 ? 'left' : 'right'} className="relative -mx-1 mb-1" />)
             )}
           </span>
           <span className="flex items-baseline justify-center gap-2 bg-void/40 py-0.5">
@@ -255,6 +267,7 @@ export function Hall({
 
         {/* The pub: warm light, a sign. */}
         <Room
+          z={z}
           testid="booth-pub"
           style={{ ...box(BOTTOM.pub[0], BOTTOM.pub[1], BOT.y0, BOT.y1), background: 'radial-gradient(circle at 50% 35%, color-mix(in srgb, var(--color-warn) 30%, transparent), color-mix(in srgb, var(--color-warn) 8%, var(--color-panel)) 70%)' }}
           onTap={tap('pub')}
@@ -263,20 +276,20 @@ export function Hall({
           lock={locks?.pub}
         >
           <span className="flex flex-1 flex-col items-center justify-center gap-0.5" data-shop="pub">
-            <svg aria-hidden viewBox="0 0 24 24" className={wide ? 'h-10 w-10' : 'h-5 w-5'}>
+            <svg aria-hidden viewBox="0 0 24 24" className={z.sign}>
               <path d="M5 5h10v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2z" fill="var(--color-warn)" fillOpacity={0.5} stroke="var(--color-warn)" strokeWidth={1.5} />
               <path d="M15 8h2.5a2.5 2.5 0 0 1 0 5H15" fill="none" stroke="var(--color-warn)" strokeWidth={1.5} />
               <path d="M5 5c1-2 3-2 4-1 1-1.5 4-1.5 5 0" fill="none" stroke="var(--color-ink)" strokeWidth={1.2} />
             </svg>
             <span className={cx('font-display font-semibold', name)}>Pub</span>
             <span data-num className={cx(price, 'text-warn')}>≈{pubPayout} cr</span>
-            <span className={cx('text-ink-2', wide ? 'text-sm' : 'text-[8px]')}>ends your turn</span>
+            <span className={cx('text-ink-2', z.small)}>ends your turn</span>
           </span>
         </Room>
       </div>
 
-      <Door side="L" onTap={tap('doorL')} next={nx('doorL')} wide={wide} />
-      <Door side="R" onTap={tap('doorR')} next={nx('doorR')} wide={wide} />
+      <Door side="L" onTap={tap('doorL')} next={nx('doorL')} z={z} />
+      <Door side="R" onTap={tap('doorR')} next={nx('doorR')} z={z} />
 
       {visitors.map((v) => (
         <HallWalker key={v.id} v={v} wide={wide} />
@@ -287,7 +300,7 @@ export function Hall({
 }
 
 /** An airlock door out to the colony. */
-function Door({ side, onTap, next, wide }: { side: 'L' | 'R'; onTap: (() => void) | undefined; next: boolean; wide: boolean }) {
+function Door({ side, onTap, next, z }: { side: 'L' | 'R'; onTap: (() => void) | undefined; next: boolean; z: Sizes }) {
   return (
     <button
       type="button"
@@ -295,6 +308,7 @@ function Door({ side, onTap, next, wide }: { side: 'L' | 'R'; onTap: (() => void
       disabled={!onTap}
       className={cx(
         'absolute top-[30%] flex h-[40%] w-[7%] flex-col items-center justify-center gap-1 rounded-panel border-2 border-dashed border-holo-line bg-void/60 text-holo enabled:hover:bg-holo-soft',
+        z.doorBox,
         side === 'L' ? 'left-[0.6%]' : 'right-[0.6%]',
         next && 'border-solid border-holo bg-holo-soft animate-[beckon_1.6s_ease-in-out_infinite]',
       )}
@@ -302,16 +316,21 @@ function Door({ side, onTap, next, wide }: { side: 'L' | 'R'; onTap: (() => void
       data-testid={`door-${side}`}
       {...(next ? { 'data-next': true } : {})}
     >
-      <span className={cx('font-display font-bold', wide ? 'text-3xl' : 'text-base')}>{side === 'L' ? '←' : '→'}</span>
-      <span className={cx('font-mono font-bold leading-tight [writing-mode:vertical-rl]', wide ? 'text-xs' : 'text-[7px]')}>TO THE COLONY</span>
+      <span className={cx('font-display font-bold', z.door)}>{side === 'L' ? '←' : '→'}</span>
+      <span className={cx('font-mono font-bold leading-tight [writing-mode:vertical-rl]', z.doorNote)}>TO THE COLONY</span>
     </button>
   );
 }
 
-/** A colonist on the floor with its time bar, leading its MULE (the character, not the glyph). */
+/**
+ * A colonist on the floor, leading its MULE (the character, not the glyph). No time bar over its head any more: the
+ * clock is everyone's (Heiko 2026-10-28). Instead its condition: the tag at its shoulder, and in variant B a thought
+ * bubble at the moments it explains the slow walk. It waddles at its pace, so a hungry colonist visibly drags.
+ */
 export function HallWalker({ v, wide }: { v: Visitor; wide: boolean }) {
   const slot = (slotOf(VIEW, v.id) ?? 0) as Slot;
   const species = useSeatSpecies(slot);
+  const pace = paceOf(useCondition(v.id));
   const left = v.at.x > 50;
   return (
     <div
@@ -319,13 +338,15 @@ export function HallWalker({ v, wide }: { v: Visitor; wide: boolean }) {
       style={{ left: `${v.at.x}%`, top: `${v.at.y}%`, transition: `left ${v.walk}s linear, top ${v.walk}s linear` }}
       data-testid={`visitor-${v.id}`}
     >
-      <span className={cx('mb-0.5 overflow-hidden rounded-full bg-void/70', wide ? 'h-2 w-14' : 'h-1 w-8')}>
-        <span className="block h-full rounded-full" style={{ width: `${Math.max(0, Math.min(1, v.time)) * 100}%`, background: SLOT_COLOR[slot] }} />
-      </span>
-      <span className={cx('flex items-end', left ? 'flex-row-reverse' : '', v.moving && 'animate-[waddle_0.36s_ease-in-out_infinite]')}>
+      <span
+        className={cx('flex items-end', left ? 'flex-row-reverse' : '', v.moving && 'animate-[waddle_0.36s_ease-in-out_infinite]')}
+        style={v.moving ? { animationDuration: `${0.36 / pace}s` } : undefined}
+      >
         <Speaker id={v.id}>
-          <span className={cx('rounded-full', v.me && 'ring-2 ring-holo ring-offset-1 ring-offset-table')}>
+          <span className={cx('relative rounded-full', v.me && 'ring-2 ring-holo ring-offset-1 ring-offset-table')}>
             <Creature species={species} color={SLOT_COLOR[slot]} size={wide ? 52 : 28} />
+            <ConditionTag id={v.id} size={wide ? 'wide' : 'phone'} explain={!!v.me} />
+            <ThoughtBubble id={v.id} moving={!!v.moving} size={wide ? 'wide' : 'phone'} edge={v.at.x < 15 ? 'left' : v.at.x > 85 ? 'right' : undefined} />
           </span>
         </Speaker>
         {v.leading && <Mule size={wide ? 60 : 32} state={v.moving ? 'walk' : 'idle'} good={v.leading === 'empty' ? null : v.leading} owner={SLOT_COLOR[slot]} facing={left ? 'left' : 'right'} />}

@@ -1,9 +1,10 @@
 import { Button, Creature, cx, HoloMap, SLOT_COLOR, type MapTile, type Slot } from '@mule/ui';
-import { useState, type ReactNode } from 'react';
+import { createContext, useContext, useState, type ReactNode } from 'react';
 import { mapTiles, plotName } from '../../../../../apps/web/src/game/derive';
 import { MapFit } from '../../../../../apps/web/src/phone/Shell';
 import { H, VIEW, W } from '../fixture';
 import { GameShell, useWide, type Now } from '../proposed/GameShell';
+import { ReadyBar, ReadyCount, readyNow, useWaiting } from '../proposed/PlanningReady';
 import type { CodeState } from '../proposed/HandoffCode';
 import { MarketStrip, News, ThisMonth } from './PlanningBrief';
 
@@ -33,10 +34,10 @@ import { MarketStrip, News, ThisMonth } from './PlanningBrief';
 
 export type Desk = 'colony' | 'talk' | 'council' | 'market' | 'secret' | 'governor' | 'sheriff';
 export type Office = 'none' | 'governor' | 'sheriff';
-type Status = 'today' | 'part' | 'soon';
-type Tool = 'look' | 'drone' | 'list' | 'factory' | 'guard' | 'target';
+export type Status = 'today' | 'part' | 'soon';
+export type Tool = 'look' | 'drone' | 'list' | 'factory' | 'guard' | 'target';
 
-const ICON: Record<Desk, string> = {
+export const ICON: Record<Desk, string> = {
   colony: 'M3 11l9-7 9 7v9H3z M9 20v-6h6v6',
   talk: 'M4 5h16v10H9l-5 4z',
   council: 'M4 10h16 M6 10v8 M10 10v8 M14 10v8 M18 10v8 M3 20h18 M12 3l9 5H3z',
@@ -46,7 +47,7 @@ const ICON: Record<Desk, string> = {
   sheriff: 'M12 2l2.6 5.6 6.1.7-4.5 4.2 1.2 6L12 15.6 6.6 18.5l1.2-6L3.3 8.3l6.1-.7z',
 };
 
-const DESKS: { id: Desk; label: string; status: Status; locked?: boolean; office?: Office }[] = [
+export const DESKS: { id: Desk; label: string; status: Status; locked?: boolean; office?: Office }[] = [
   { id: 'colony', label: 'Colony', status: 'today' },
   { id: 'talk', label: 'Talk', status: 'part' },
   { id: 'council', label: 'Council', status: 'part' },
@@ -56,7 +57,7 @@ const DESKS: { id: Desk; label: string; status: Status; locked?: boolean; office
   { id: 'sheriff', label: 'Sheriff', status: 'soon', office: 'sheriff', locked: true },
 ];
 
-function Glyph({ d, size = 18, className }: { d: string; size?: number; className?: string }) {
+export function Glyph({ d, size = 18, className }: { d: string; size?: number; className?: string }) {
   return (
     <svg aria-hidden viewBox="0 0 24 24" width={size} height={size} className={className} fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
       <path d={d} />
@@ -65,7 +66,7 @@ function Glyph({ d, size = 18, className }: { d: string; size?: number; classNam
 }
 
 /** Built by WS7, not yet in the game. */
-function Soon({ part = false, slice }: { part?: boolean; slice?: number }) {
+export function Soon({ part = false, slice }: { part?: boolean; slice?: number }) {
   const next = slice === 1;
   return (
     <span className={cx('rounded-chip border px-1 font-mono text-[9px] font-bold leading-4 @min-[1100px]/shell:text-[10px]', next ? 'border-holo/60 text-holo' : 'border-warn/50 text-warn')}>
@@ -74,20 +75,46 @@ function Soon({ part = false, slice }: { part?: boolean; slice?: number }) {
   );
 }
 
-/** Only you see this. */
-function Private({ text = 'ONLY YOU' }: { text?: string }) {
+/**
+ * How "only you see this" is drawn: today's lock, or the UX audit's eye-slash (H-3, #audit-hub), which a newcomer
+ * does not read as "locked". The audit mock sets it for everything it draws, these desks included.
+ */
+export const OnlyYouLook = createContext<'lock' | 'eye'>('lock');
+
+/** The eye-slash: hidden from everyone else. */
+export function EyeOff({ size = 10, strokeWidth = 2.4 }: { size?: number; strokeWidth?: number }) {
   return (
-    <span className="inline-flex items-center gap-0.5 rounded-chip bg-holo-soft px-1 font-mono text-[9px] font-bold leading-4 text-holo @min-[1100px]/shell:text-[10px]">
-      <svg aria-hidden viewBox="0 0 24 24" width={10} height={10} fill="none" stroke="currentColor" strokeWidth={2.4}>
-        <rect x={5} y={11} width={14} height={10} rx={2} />
-        <path d="M8 11V7a4 4 0 0 1 8 0v4" />
-      </svg>
+    <svg aria-hidden viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M10.7 5.1A10.7 10.7 0 0 1 21.9 11.7a1 1 0 0 1 0 .7 10.7 10.7 0 0 1-1.4 2.5" />
+      <path d="M14.1 14.2a3 3 0 0 1-4.2-4.2" />
+      <path d="M17.5 17.5A10.7 10.7 0 0 1 2.1 12.3a1 1 0 0 1 0-.7 10.7 10.7 0 0 1 4.4-5.1" />
+      <path d="M2 2l20 20" />
+    </svg>
+  );
+}
+
+/** Only you see this. */
+export function Private({ text = 'ONLY YOU' }: { text?: string }) {
+  const look = useContext(OnlyYouLook);
+  return (
+    <span
+      className={cx('inline-flex items-center gap-0.5 rounded-chip bg-holo-soft px-1 leading-4 text-holo', look === 'eye' ? 'text-[10px] font-semibold @min-[1100px]/shell:text-xs' : 'font-mono text-[9px] font-bold @min-[1100px]/shell:text-[10px]')}
+      {...(look === 'eye' && !text ? { role: 'img', 'aria-label': 'Only you see this' } : {})}
+    >
+      {look === 'eye' ? (
+        <EyeOff />
+      ) : (
+        <svg aria-hidden viewBox="0 0 24 24" width={10} height={10} fill="none" stroke="currentColor" strokeWidth={2.4}>
+          <rect x={5} y={11} width={14} height={10} rx={2} />
+          <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+        </svg>
+      )}
       {text}
     </span>
   );
 }
 
-function Section({ title, badge, children, testid }: { title: ReactNode; badge?: ReactNode; children: ReactNode; testid?: string }) {
+export function Section({ title, badge, children, testid }: { title: ReactNode; badge?: ReactNode; children: ReactNode; testid?: string }) {
   return (
     <section className="flex flex-col gap-1.5 @min-[1100px]/shell:gap-2" data-testid={testid}>
       <h3 className="label-caps flex items-center gap-1.5 @min-[1100px]/shell:text-xs!">
@@ -99,8 +126,8 @@ function Section({ title, badge, children, testid }: { title: ReactNode; badge?:
   );
 }
 
-const PLAYER = Object.fromEntries(VIEW.players.map((p, i) => [p.id, { ...p, slot: i as Slot }]));
-const Who = ({ id, size = 16 }: { id: string; size?: number }) => {
+export const PLAYER = Object.fromEntries(VIEW.players.map((p, i) => [p.id, { ...p, slot: i as Slot }]));
+export const Who = ({ id, size = 16 }: { id: string; size?: number }) => {
   const p = PLAYER[id]!;
   return (
     <span className="inline-flex items-center gap-1 font-semibold">
@@ -197,7 +224,7 @@ function ColonyDesk() {
   );
 }
 
-function TalkDesk() {
+export function TalkDesk() {
   const [channel, setChannel] = useState<'all' | 'ossa' | 'kai' | 'pact'>('ossa');
   const channels: { id: typeof channel; label: ReactNode; private: boolean; status: Status }[] = [
     { id: 'all', label: 'Everyone', private: false, status: 'today' },
@@ -315,10 +342,80 @@ function VoteWeights() {
   );
 }
 
-export type Election = 'nominate' | 'ballot';
+export type Election = 'nominate' | 'promise' | 'ballot';
 
-function CouncilDesk({ election }: { election: Election }) {
-  const [running, setRunning] = useState<'governor' | 'sheriff' | null>('sheriff');
+/** The colony's tax this month, for the promise picker's starting cap. */
+const TAX_NOW: number = 5;
+const TAX_MAX = 15;
+
+/** WS7 C12 / RULE-10 (Heiko: "Tax promises now"): a Governor candidate picks one; a Sheriff makes none until slice 4. */
+type Promise = { kind: 'cap'; n: number } | { kind: 'lower' } | { kind: 'hold' };
+const promiseText = (p: Promise) => (p.kind === 'cap' ? `Tax no higher than ${p.n}%` : p.kind === 'lower' ? 'Lower the tax' : 'Hold the tax');
+
+/**
+ * Running for Governor asks for a promise first: one of three, no free text. The cap starts at today's tax; "Lower"
+ * can't be promised at 0 %. Nothing is sent until "Run with this promise".
+ */
+function PromisePicker({ onRun, onCancel }: { onRun: (p: Promise) => void; onCancel: () => void }) {
+  const [kind, setKind] = useState<Promise['kind'] | null>(null);
+  const [n, setN] = useState(TAX_NOW);
+  const chosen: Promise | null = kind === 'cap' ? { kind, n } : kind ? { kind } : null;
+  const chip = (k: Promise['kind'], label: ReactNode, testid: string, disabled?: string) => (
+    <label
+      className={cx(
+        'flex min-h-11 cursor-pointer items-center gap-2 rounded-control border px-2 py-1 text-sm',
+        kind === k ? 'border-holo bg-holo-soft' : 'border-holo-line',
+        disabled && 'cursor-not-allowed opacity-50',
+      )}
+      data-testid={testid}
+    >
+      <input type="radio" name="promise" checked={kind === k} disabled={!!disabled} onChange={() => setKind(k)} className="accent-[var(--color-holo)]" />
+      <span className="flex min-w-0 flex-1 flex-col">
+        {label}
+        {disabled && <span className="text-[11px] text-ink-3">{disabled}</span>}
+      </span>
+    </label>
+  );
+  return (
+    <div className="flex flex-col gap-1.5 rounded-panel border border-holo bg-panel p-2" role="radiogroup" aria-label="Your promise as Governor" data-testid="promise-pick">
+      <span className="text-sm font-semibold">Your promise as Governor</span>
+      <span className="text-xs text-ink-2">Everyone sees it on the ballot and the TV. Tax today: {TAX_NOW}%.</span>
+      {chip(
+        'cap',
+        <span className="flex flex-wrap items-center gap-1.5">
+          Tax no higher than
+          <span className="inline-flex items-center rounded-control border border-holo-line" onClick={() => setKind('cap')}>
+            <button type="button" aria-label="Lower the cap" disabled={n <= 0} onClick={() => setN((x) => Math.max(0, x - 1))} className="grid size-9 place-items-center text-holo disabled:opacity-40" data-testid="promise-cap-minus">
+              −
+            </button>
+            <span data-num className="w-9 text-center font-mono font-bold" data-testid="promise-cap-value">
+              {n}%
+            </span>
+            <button type="button" aria-label="Raise the cap" disabled={n >= TAX_MAX} onClick={() => setN((x) => Math.min(TAX_MAX, x + 1))} className="grid size-9 place-items-center text-holo disabled:opacity-40" data-testid="promise-cap-plus">
+              +
+            </button>
+          </span>
+        </span>,
+        'promise-cap',
+      )}
+      {chip('lower', 'Lower the tax', 'promise-lower', TAX_NOW === 0 ? 'The tax is already 0 %.' : undefined)}
+      {chip('hold', 'Hold the tax', 'promise-hold')}
+      <div className="grid grid-cols-[1fr_auto] gap-1.5">
+        <Button size="md" disabled={!chosen} onClick={() => chosen && onRun(chosen)} data-testid="promise-run">
+          {chosen ? `Run, promising “${promiseText(chosen)}”` : 'Pick a promise to run'}
+        </Button>
+        <Button size="md" variant="ghost" onClick={onCancel} data-testid="promise-cancel">
+          Cancel
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+export function CouncilDesk({ election }: { election: Election }) {
+  const [running, setRunning] = useState<'governor' | 'sheriff' | null>(election === 'promise' ? null : 'sheriff');
+  const [picking, setPicking] = useState(election === 'promise');
+  const [promise, setPromise] = useState<Promise | null>(null);
   const [gov, setGov] = useState<string | null>('kai');
   const [sheriff, setSheriff] = useState<string | null>(null);
   const [law, setLaw] = useState<'yes' | 'no' | null>(null);
@@ -331,7 +428,8 @@ function CouncilDesk({ election }: { election: Election }) {
           {c.id ? (
             <span className="flex flex-col">
               <Who id={c.id} />
-              <span className="text-xs text-ink-2">“{c.promise}”</span>
+              {/* A Sheriff makes no promise yet (slice 4): no line, not an empty quote. */}
+              {c.promise && <span className="text-xs text-ink-2" data-testid={`promise-${c.id}`}>“{c.promise}”</span>}
             </span>
           ) : (
             <span className="text-ink-2">Abstain</span>
@@ -343,28 +441,37 @@ function CouncilDesk({ election }: { election: Election }) {
   const voted = ['ossa', 'kai', 'brix'];
   return (
     <>
-      <Section title={election === 'nominate' ? 'Election · who runs' : 'Election · secret ballot'} badge={<Soon slice={1} />} testid="election">
+      <Section title={election !== 'ballot' ? 'Election · who runs' : 'Election · secret ballot'} badge={<Soon slice={1} />} testid="election">
         <span className="flex items-center justify-between rounded-control bg-holo-soft px-2 py-1 font-mono text-[10px] font-bold text-holo @min-[1100px]/shell:text-xs" data-testid="election-stage">
-          {election === 'nominate' ? '1 NOMINATE · 2 BALLOT · 3 REVEAL' : '1 NOMINATE ✓ · 2 BALLOT · 3 REVEAL'}
+          {election !== 'ballot' ? '1 NOMINATE · 2 BALLOT · 3 REVEAL' : '1 NOMINATE ✓ · 2 BALLOT · 3 REVEAL'}
           <span data-num>0:14</span>
         </span>
-        {election === 'nominate' ? (
+        {election !== 'ballot' ? (
           <>
             <div className="grid grid-cols-2 gap-1.5" data-testid="run">
               {/* Running for the other office switches your candidacy (WS7: one office per election). */}
-              <Button size="md" variant={running === 'governor' ? 'holo' : 'outline'} onClick={() => setRunning('governor')} data-testid="run-governor">
+              {/* Governor asks for a promise first; Sheriff stays one tap. */}
+              <Button size="md" variant={running === 'governor' ? 'holo' : 'outline'} onClick={() => setPicking(true)} data-testid="run-governor">
                 {running === 'sheriff' ? 'Run for Governor instead' : 'Run for Governor'}
               </Button>
-              <Button size="md" variant={running === 'sheriff' ? 'holo' : 'outline'} onClick={() => setRunning('sheriff')} data-testid="run-sheriff">
+              <Button size="md" variant={running === 'sheriff' ? 'holo' : 'outline'} onClick={() => (setRunning('sheriff'), setPromise(null), setPicking(false))} data-testid="run-sheriff">
                 {running === 'governor' ? 'Run for Sheriff instead' : 'Run for Sheriff'}
               </Button>
             </div>
             <span className="text-xs text-ink-3" data-testid="cannot-run">
               When you can't run, the button says why: “Candidates are closed” or “Two Governor terms in a row”.
             </span>
-            {running && (
-              <span className="flex items-center justify-between gap-2 text-xs text-ink-2 @min-[1100px]/shell:text-sm">
-                You run for {running === 'sheriff' ? 'Sheriff' : 'Governor'}; one office at a time.
+            {picking && (
+              <PromisePicker
+                onRun={(p) => (setRunning('governor'), setPromise(p), setPicking(false))}
+                onCancel={() => setPicking(false)}
+              />
+            )}
+            {running && !picking && (
+              <span className="flex items-center justify-between gap-2 text-xs text-ink-2 @min-[1100px]/shell:text-sm" data-testid="running">
+                {running === 'governor' && promise
+                  ? `You run for Governor, promising “${promiseText(promise)}”; one office at a time.`
+                  : `You run for ${running === 'sheriff' ? 'Sheriff' : 'Governor'}; one office at a time.`}
                 <button type="button" className="text-holo underline" onClick={() => setRunning(null)} data-testid="withdraw">
                   Withdraw
                 </button>
@@ -373,6 +480,11 @@ function CouncilDesk({ election }: { election: Election }) {
             <ul className="flex flex-col gap-1 text-sm" data-testid="candidates">
               <li>
                 Governor: <Who id="ossa" size={14} />, <Who id="kai" size={14} />
+                {running === 'governor' && (
+                  <>
+                    , <Who id="lena" size={14} />
+                  </>
+                )}
               </li>
               <li>
                 Sheriff: <Who id="brix" size={14} />
@@ -387,8 +499,8 @@ function CouncilDesk({ election }: { election: Election }) {
           </>
         ) : (
           <>
-            <Ballot title="Governor" cands={[{ id: 'ossa', promise: 'No land tax' }, { id: 'kai', promise: 'Cleanup squad from month 5' }]} pick={gov} onPick={setGov} />
-            <Ballot title="Sheriff" cands={[{ id: 'brix', promise: 'Guards on every factory' }, { id: 'lena', promise: 'I will catch the saboteur' }]} pick={sheriff} onPick={setSheriff} />
+            <Ballot title="Governor" cands={[{ id: 'ossa', promise: 'Tax no higher than 3%' }, { id: 'kai', promise: 'Lower the tax' }]} pick={gov} onPick={setGov} />
+            <Ballot title="Sheriff" cands={[{ id: 'brix', promise: '' }, { id: 'lena', promise: '' }]} pick={sheriff} onPick={setSheriff} />
             <span className="flex items-center gap-1.5 text-xs text-ink-2 @min-[1100px]/shell:text-sm" data-testid="voted">
               Voted: {voted.map((id) => <Who key={id} id={id} size={14} />)} · 3 of 4. Never shown: for whom.
             </span>
@@ -425,7 +537,7 @@ function CouncilDesk({ election }: { election: Election }) {
   );
 }
 
-function MarketDesk({ onTool }: { onTool: (t: Tool) => void }) {
+export function MarketDesk({ onTool }: { onTool: (t: Tool) => void }) {
   return (
     <>
       <Section title="Sell at the auction after planning" testid="list-asset">
@@ -463,7 +575,7 @@ const SABOTAGE = [
   { id: 'steal', name: 'Steal a MULE', effect: "takes an empty MULE; low success", cost: 200, ok: 25, caught: 55 },
 ];
 
-function SecretDesk({ onTool }: { onTool: (t: Tool) => void }) {
+export function SecretDesk({ onTool }: { onTool: (t: Tool) => void }) {
   const [pick, setPick] = useState('power');
   return (
     <>
@@ -507,7 +619,7 @@ const BUDGET = [
   { id: 'projects', name: 'Projects', buys: 'saved toward the levee (500)' },
 ];
 
-function GovernorDesk() {
+export function GovernorDesk() {
   const START = 5;
   const [tax, setTax] = useState(8);
   const [lines, setLines] = useState<Record<string, number>>({ reserve: 100, security: 200, environment: 200, welfare: 0, projects: 300 });
@@ -572,7 +684,7 @@ function GovernorDesk() {
   );
 }
 
-function SheriffDesk({ onTool }: { onTool: (t: Tool) => void }) {
+export function SheriffDesk({ onTool }: { onTool: (t: Tool) => void }) {
   return (
     <>
       <div className="flex items-center gap-1.5 text-xs text-ink-2">
@@ -618,6 +730,8 @@ export function PlanningHub({
   tool: startTool = 'look',
   election = 'ballot',
   handoff = false,
+  ready: startReady = false,
+  confirm = false,
 }: {
   desk?: Desk;
   office?: Office;
@@ -625,13 +739,20 @@ export function PlanningHub({
   election?: Election | 'done';
   /** Mock only: open with the in-game hand-off dialog (#game-handoff), its code in that state. */
   handoff?: boolean | CodeState;
+  /** Mock only: open already Ready (#hub-ready), or with the host's Continue confirmation open (#hub-continue). */
+  ready?: boolean;
+  confirm?: boolean;
 }) {
+  const [ready, setReady] = useState(startReady);
+  const { players, others, isHost: host } = useWaiting(ready);
+  const isHost = host && election === 'done';
   const [desk, setDesk] = useState<Desk>(start);
   const [tool, setTool] = useState<Tool>(startTool);
   const desks = DESKS.filter((d) => !d.office || d.office === office);
-  const now: Now =
-    election === 'nominate'
-      ? { step: 1, of: 3, title: 'Run for an office, or press Done', detail: 'Election month: Governor and Sheriff. Then the secret ballot, then the result on every screen at once.' }
+  const now: Now = ready
+    ? readyNow(others, isHost)
+    : election === 'nominate' || election === 'promise'
+      ? { step: 1, of: 3, title: "Run for an office, or press I'm ready", detail: 'Election month: Governor and Sheriff. A Governor candidate promises something about the tax. Then the secret ballot, then the result on every screen at once.' }
       : election === 'ballot'
         ? { step: 2, of: 3, title: 'Cast your secret vote', detail: 'One vote per office, or abstain; your vote weighs 2. Then everything below is yours until you press Ready.' }
         : office === 'governor'
@@ -654,7 +775,7 @@ export function PlanningHub({
   return (
     <GameShell
       phase="Planning"
-      seconds={74}
+      status={<ReadyCount players={players} />}
       now={now}
       handoff={handoff}
       rail={
@@ -691,11 +812,7 @@ export function PlanningHub({
           </div>
         </>
       }
-      footer={
-        <Button size="lg" className="w-full @min-[1100px]/shell:h-14 @min-[1100px]/shell:text-lg" data-testid="ready">
-          I'm ready
-        </Button>
-      }
+      footer={<ReadyBar ready={ready} onReady={() => setReady(true)} confirm={confirm} planningProper={election === 'done'} />}
     >
       <HubStage tools={tools.filter((t) => t.show)} tool={tool} setTool={setTool} tiles={tiles} office={office} after={election === 'done'} setDesk={setDesk} />
     </GameShell>

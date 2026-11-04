@@ -1,8 +1,11 @@
+import { DEV_STEER, HALL, WOLVES, type HallPlace, type HallRect } from '@mule/engine';
 import type { CSSProperties, ReactNode } from 'react';
+import { ConditionTag, ThoughtBubble, type Condition, type FoodEaten, type PaceRule } from './Condition';
 import { Creature } from './Creature';
 import { GoodIcon } from './GoodIcon';
+import { cycleSeconds, motionOf, type GaitInput } from './motion/gait';
 import { Mule } from './Mule';
-import { useSeatSpecies } from './species';
+import { useSeatSpecies, type CreatureWrap } from './species';
 import { cx, GOOD_NAME, SLOT_COLOR, type Good, type Slot } from './tokens';
 
 /** Outfitters for farms and mines, in the order the store shows them. */
@@ -30,49 +33,54 @@ export type StoreRoom = OutfitGood | 'works' | 'greenBelt' | 'corral' | 'pub' | 
 /** The MULE a colonist leads: none, an empty one, or one fitted for a good or a green belt. */
 type Leading = Good | 'greenBelt' | 'empty' | null;
 
-const isFactory = (g: Good | 'greenBelt'): g is FactoryGood => (FACTORY_GOODS as readonly string[]).includes(g);
-
 /** The works' three fitting bays, as the hall labels them on a wide screen. */
 const FIT_LABEL: Record<FactoryGood, string> = { alloy: 'Smelter', electronics: 'Electronics', medicine: 'Medicine lab' };
 
-/** The two rows' bands and the shopfronts' span, in % of the hall. */
-const TOP = { y0: 3, y1: 39 };
-const BOT = { y0: 60, y1: 97 };
-const X0 = 9;
-const X1 = 91;
-const COL = (X1 - X0) / 6;
-const BOTTOM: Record<'works' | 'greenBelt' | 'corral' | 'pub', [number, number]> = { works: [9, 36], greenBelt: [37, 46], corral: [47, 73], pub: [74, 91] };
-/** The airlocks stand across the walkway, from 30 % to 70 % of the hall's height. */
-const DOOR = { y0: 30, y1: 70 };
+/*
+ * The hall's geometry is the engine's one plan (spec C2, floor/hall.ts): the floor's walls and reach read the same
+ * rooms this draws, so a colonist steered in the store stands where the drawing says it is. Nothing here restates it.
+ */
 
-/** Where a colonist stands on the floor: in front of each room, or in a doorway. */
-type Spot = StoreRoom;
-const SPOT: Record<Spot, { x: number; y: number }> = {
-  ...(Object.fromEntries(OUTFIT_GOODS.map((g, i) => [g, { x: X0 + COL * (i + 0.5), y: 46 }])) as Record<OutfitGood, { x: number; y: number }>),
-  works: { x: 22.5, y: 54 },
-  greenBelt: { x: 41.5, y: 54 },
-  corral: { x: 60, y: 54 },
-  pub: { x: 82.5, y: 54 },
-  doorL: { x: 4.5, y: 50 },
-  doorR: { x: 95.5, y: 50 },
+/** A box of the plan in % of the hall, the units StoreInterior lays out in. */
+const pctOf = (r: HallRect): HallRect => ({ x0: (r.x0 / HALL.w) * 100, y0: (r.y0 / HALL.h) * 100, x1: (r.x1 / HALL.w) * 100, y1: (r.y1 / HALL.h) * 100 });
+/** A % for a style, rounded so the plan's float noise (9.399999… for 9.4) never reaches the markup. */
+const pct = (v: number) => `${Math.round(v * 1e4) / 1e4}%`;
+
+/** The two rows' bands: the shopfronts' along the back wall and the front row's, each as deep as its rooms. */
+const TOP = pctOf(HALL.rooms.food);
+const BOT = pctOf(HALL.rooms.works);
+
+/** A room's box in % of its row: across the hall's full width, down the row's band. */
+const inRow = (r: HallRect, row: HallRect): CSSProperties => {
+  const b = pctOf(r);
+  const deep = row.y1 - row.y0;
+  return { left: pct(b.x0), width: pct(b.x1 - b.x0), top: pct(((b.y0 - row.y0) / deep) * 100), height: pct(((b.y1 - b.y0) / deep) * 100) };
+};
+const band = (b: HallRect): CSSProperties => ({ top: pct(b.y0), height: pct(b.y1 - b.y0) });
+/** A bay's column in % of the works: the plan cuts the works across into its bays. */
+const inWorks = (g: FactoryGood): CSSProperties => {
+  const works = pctOf(HALL.rooms.works);
+  const b = pctOf(HALL.bays[g]);
+  const wide = works.x1 - works.x0;
+  return { left: pct(((b.x0 - works.x0) / wide) * 100), width: pct(((b.x1 - b.x0) / wide) * 100) };
 };
 
-/** Before R1 a tap acts at once: you stand at the room you used last. In the left door with no MULE, at the corral with an empty one, at its outfitter (or the works) once fitted. */
-function spotFor(leading: Leading): Spot {
+/** Before R1 a tap acts at once: you stand at the place you used last. In the left door with no MULE, at the corral with an empty one, at its outfitter or its bay once fitted. */
+function placeOf(leading: Leading): HallPlace {
   if (leading === null) return 'doorL';
   if (leading === 'empty') return 'corral';
-  return isFactory(leading) ? 'works' : leading;
+  return leading;
 }
 
-/** A box in % of its row: across the hall's full width, down the row's band. */
-const inRow = (x0: number, x1: number): CSSProperties => ({ left: `${x0}%`, width: `${x1 - x0}%`, top: 0, height: '100%' });
-const band = (b: { y0: number; y1: number }): CSSProperties => ({ top: `${b.y0}%`, height: `${b.y1 - b.y0}%` });
-
-/** Type and creature sizes: the phone's, the big screen's side panel, and the shell's wide layout. */
+/**
+ * Type and creature sizes: the phone's, the big screen's side panel, and the shell's wide layout. The phone's type is
+ * never under 10 px, and its doors and fitting bays are at least 32 px wide on a 667 px phone (B-AC-11). The phone's
+ * works caption is the short one: the long one wraps there.
+ */
 const SIZES = {
-  phone: { lock: 'py-px text-[7px]', name: 'text-[11px]', price: 'text-[10px]', small: 'text-[8px]', icon: 20, fit: 16, mule: 30, creature: 28, led: 32, bar: 'h-1 w-8', sign: 'h-5 w-5', chimney: 'h-3 w-3', caps: 'text-[8px]!', door: 'text-base', doorNote: 'text-[7px]' },
-  tv: { lock: 'py-0.5 text-[10px]', name: 'text-sm', price: 'text-sm', small: 'text-xs', icon: 30, fit: 22, mule: 44, creature: 40, led: 44, bar: 'h-1.5 w-10', sign: 'h-7 w-7', chimney: 'h-4 w-4', caps: 'text-xs!', door: 'text-xl', doorNote: 'text-[10px]' },
-  wide: { lock: 'py-0.5 text-[11px]', name: 'text-lg', price: 'text-base', small: 'text-sm', icon: 40, fit: 30, mule: 84, creature: 52, led: 60, bar: 'h-2 w-14', sign: 'h-10 w-10', chimney: 'h-5 w-5', caps: 'text-xs!', door: 'text-3xl', doorNote: 'text-xs' },
+  phone: { lock: 'px-0.5 py-px text-[10px]', name: 'text-[11px]', price: 'text-[10px]', small: 'text-[10px]', icon: 20, iconPad: 'p-1', fit: 16, fits: 'p-px', bay: 'p-px', mule: 30, creature: 28, led: 32, sign: 'h-5 w-5', chimney: 'h-3 w-3', caps: 'text-[10px]!', door: 'text-base', doorBox: 'min-w-8', doorNote: 'text-[10px]', works: 'The works', worksLine: 'truncate' },
+  tv: { lock: 'px-1 py-0.5 text-[10px]', name: 'text-sm', price: 'text-sm', small: 'text-xs', icon: 30, iconPad: 'p-1.5', fit: 22, fits: 'p-0.5', bay: 'p-0.5', mule: 44, creature: 40, led: 44, sign: 'h-7 w-7', chimney: 'h-4 w-4', caps: 'text-xs!', door: 'text-xl', doorBox: '', doorNote: 'text-[10px]', works: 'The works · factory fits', worksLine: '' },
+  wide: { lock: 'px-1 py-0.5 text-[11px]', name: 'text-lg', price: 'text-base', small: 'text-sm', icon: 40, iconPad: 'p-1.5', fit: 30, fits: 'p-0.5', bay: 'p-0.5', mule: 84, creature: 52, led: 60, sign: 'h-10 w-10', chimney: 'h-5 w-5', caps: 'text-xs!', door: 'text-3xl', doorBox: '', doorNote: 'text-xs', works: 'The works · factory fits', worksLine: '' },
 };
 type Sizes = (typeof SIZES)[keyof typeof SIZES];
 
@@ -93,19 +101,17 @@ export interface StoreInteriorProps {
   /** Why a closed room is closed, such as "needs a MULE"; an empty note fades the room without one. */
   locks?: Partial<Record<StoreRoom, string>>;
   /** The player whose screen this is, standing at the room their MULE says they used last. */
-  me?: {
-    id: string;
-    slot: Slot;
-    leading: Leading;
-    /** Share of their development time left, for the bar over their head. */
-    time: number;
-  };
+  me?: Visitor;
+  /** The engine's DEV_WALK: with it, your colonist shows its condition. */
+  paceRule?: PaceRule;
   /** Drawn over the floor, such as the start-of-turn card. */
   overlay?: ReactNode;
   /** The big screen's side panel. */
   tv?: boolean;
   /** The shell's wide layout (laptop and up): bigger type and creatures. */
   wide?: boolean;
+  /** Wraps the colonist's creature, such as in a chat bubble's anchor. */
+  wrapCreature?: CreatureWrap;
 }
 
 /**
@@ -115,12 +121,13 @@ export interface StoreInteriorProps {
  * airlock door to the colony at each end. It fills whatever stage it is given. The room the guide names glows and
  * says TAP; a closed room stays legible and says why.
  */
-export function StoreInterior({ mules, mulePrice, pubPayout, prices, open, onShop, onDoor, next = [], locks, me, overlay, tv = false, wide = false }: StoreInteriorProps) {
+export function StoreInterior({ mules, mulePrice, pubPayout, prices, open, onShop, onDoor, next = [], locks, me, paceRule, overlay, tv = false, wide = false, wrapCreature }: StoreInteriorProps) {
   const usable = (s: Shop) => !open || open.includes(s);
   const tap = (s: Shop) => (onShop ? () => onShop(s) : undefined);
   const cost = (s: Shop) => (prices[s] === undefined ? null : `${prices[s]} cr`);
   const glows = (r: StoreRoom) => next.includes(r);
-  const z = wide ? SIZES.wide : tv ? SIZES.tv : SIZES.phone;
+  const size = wide ? 'wide' : tv ? 'tv' : 'phone';
+  const z = SIZES[size];
   const price = cx('font-mono font-bold', z.price);
   const worksOpen = FACTORY_GOODS.some(usable);
   return (
@@ -133,18 +140,19 @@ export function StoreInterior({ mules, mulePrice, pubPayout, prices, open, onSho
       }}
       data-testid="store-hall"
     >
+      {/* The back wall and the walkway are decoration, not floor: where feet may stand is HALL.floor, not these. */}
       {/* The back wall behind the shopfronts. */}
       <div aria-hidden className="absolute inset-x-0 top-0 h-[42%] border-b-2 border-holo-line bg-raised/50" />
       {/* The walkway between the rows. */}
       <div aria-hidden className="absolute inset-x-[8%] top-[43%] h-[14%] rounded-full border border-dashed border-holo-faint bg-panel/30" />
 
       <div className="absolute inset-x-0" style={band(TOP)} data-testid="row-outfitters">
-        {OUTFIT_GOODS.map((g, i) => (
+        {OUTFIT_GOODS.map((g) => (
           <Room z={z}
             key={g}
             shop={g}
             testid={`booth-${g}`}
-            style={inRow(X0 + COL * i + 0.4, X0 + COL * (i + 1) - 0.4)}
+            style={inRow(HALL.rooms[g], TOP)}
             onTap={tap(g)}
             disabled={!usable(g)}
             next={glows(g)}
@@ -153,12 +161,12 @@ export function StoreInterior({ mules, mulePrice, pubPayout, prices, open, onSho
           >
             <Awning color={`var(--color-g-${g})`} />
             <span className="flex flex-1 flex-col items-center justify-center gap-0.5 px-1">
-              <span className="grid place-items-center rounded-full p-1.5" style={{ background: `color-mix(in srgb, var(--color-g-${g}) 18%, transparent)`, boxShadow: `0 0 18px color-mix(in srgb, var(--color-g-${g}) 35%, transparent)` }}>
+              <span className={cx('grid place-items-center rounded-full', z.iconPad)} style={{ background: `color-mix(in srgb, var(--color-g-${g}) 18%, transparent)`, boxShadow: `0 0 18px color-mix(in srgb, var(--color-g-${g}) 35%, transparent)` }}>
                 <GoodIcon good={g} size={z.icon} />
               </span>
               <span className={cx('font-display font-semibold leading-tight', z.name)}>{GOOD_NAME[g]}</span>
               {cost(g) && (
-                <span data-num className={cx(price, 'rounded-chip bg-void/50 px-1.5 text-ink')}>
+                <span data-num className={cx(price, 'whitespace-nowrap rounded-chip bg-void/50 px-1.5 text-ink')}>
                   {cost(g)}
                 </span>
               )}
@@ -168,42 +176,48 @@ export function StoreInterior({ mules, mulePrice, pubPayout, prices, open, onSho
       </div>
 
       <div className="absolute inset-x-0" style={band(BOT)} data-testid="row-services">
-        <Door side="L" onTap={onDoor} next={glows('doorL')} z={z} />
+        <Door side="L" box={HALL.doors.doorL} onTap={onDoor} next={glows('doorL')} z={z} />
 
         {/* The works: three fitting bays under a chimney. */}
-        <Room z={z} testid="booth-works" style={inRow(...BOTTOM.works)} disabled={!worksOpen} next={glows('works')} lock={locks?.works} className="bg-panel">
+        <Room z={z} testid="booth-works" style={inRow(HALL.rooms.works, BOT)} disabled={!worksOpen} next={glows('works')} lock={locks?.works} className="bg-panel">
           <span className="flex items-center justify-center gap-1.5 border-b border-holo-faint bg-raised/60 py-0.5">
             <svg aria-hidden viewBox="0 0 16 16" className={z.chimney}>
               <path d="M2 14V7l4 2V7l4 2V3h4v11z" fill="var(--color-ink-3)" />
             </svg>
-            <span className={cx('label-caps', z.caps)}>The works · factory fits</span>
+            {/* On the phone, one short line, so the guide's label below it never meets it; the TV and the wide shell have no
+                guide in the hall and keep the long caption, wrapping where the works is narrow. */}
+            <span className={cx('label-caps', z.caps, z.worksLine)}>{z.works}</span>
           </span>
-          <span className="grid flex-1 grid-cols-3 gap-1 p-1">
-            {FACTORY_GOODS.map((g) => (
-              <button
-                key={g}
-                type="button"
-                disabled={!onShop || !usable(g)}
-                onClick={tap(g)}
-                aria-label={`${FACTORY_NAME[g]} fit`}
-                className="flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-control border border-holo-faint bg-raised enabled:hover:border-holo"
-                data-testid={`fit-${g}`}
-                {...(onShop ? { 'data-shop': g } : {})}
-              >
-                <GoodIcon good={g} size={z.fit} />
-                {wide && <span className="text-sm font-semibold">{FIT_LABEL[g]}</span>}
-                {prices[g] !== undefined && (
-                  <span data-num className={price}>
-                    {prices[g]}
-                  </span>
-                )}
-              </button>
-            ))}
+          {/* The bays stand where the plan cuts the works; the body's padding and each column's make the gaps between them. */}
+          <span className={cx('flex flex-1', z.fits)}>
+            <span className="relative flex-1">
+              {FACTORY_GOODS.map((g) => (
+                <span key={g} className={cx('absolute inset-y-0 flex', z.bay)} style={inWorks(g)} data-bay={g}>
+                  <button
+                    type="button"
+                    disabled={!onShop || !usable(g)}
+                    onClick={tap(g)}
+                    aria-label={`${FACTORY_NAME[g]} fit`}
+                    className="flex min-h-11 flex-1 flex-col items-center justify-center gap-0.5 rounded-control border border-holo-faint bg-raised enabled:hover:border-holo"
+                    data-testid={`fit-${g}`}
+                    {...(onShop ? { 'data-shop': g } : {})}
+                  >
+                    <GoodIcon good={g} size={z.fit} />
+                    {wide && <span className="text-sm font-semibold">{FIT_LABEL[g]}</span>}
+                    {prices[g] !== undefined && (
+                      <span data-num className={price}>
+                        {prices[g]}
+                      </span>
+                    )}
+                  </button>
+                </span>
+              ))}
+            </span>
           </span>
         </Room>
 
         {/* The green belt: a little greenhouse. */}
-        <Room z={z} shop="greenBelt" testid="booth-greenBelt" style={inRow(...BOTTOM.greenBelt)} onTap={tap('greenBelt')} disabled={!usable('greenBelt')} next={glows('greenBelt')} lock={locks?.greenBelt} className="bg-ok/10">
+        <Room z={z} shop="greenBelt" testid="booth-greenBelt" style={inRow(HALL.rooms.greenBelt, BOT)} onTap={tap('greenBelt')} disabled={!usable('greenBelt')} next={glows('greenBelt')} lock={locks?.greenBelt} className="bg-ok/10">
           <svg aria-hidden viewBox="0 0 40 24" preserveAspectRatio="none" className="h-[22%] w-full shrink-0">
             <path d="M0 24 L20 2 L40 24 Z" fill="var(--color-ok)" fillOpacity={0.35} stroke="var(--color-ok)" strokeWidth={1} />
             <path d="M20 2 V24 M10 13 H30" stroke="var(--color-ok)" strokeWidth={0.8} />
@@ -219,7 +233,7 @@ export function StoreInterior({ mules, mulePrice, pubPayout, prices, open, onSho
         </Room>
 
         {/* The corral: a pen of MULE characters, none of them anyone's yet. */}
-        <Room z={z} shop="corral" testid="booth-corral" style={inRow(...BOTTOM.corral)} onTap={tap('corral')} disabled={!usable('corral') || mules === 0} next={glows('corral')} lock={locks?.corral} className="bg-holo-soft">
+        <Room z={z} shop="corral" testid="booth-corral" style={inRow(HALL.rooms.corral, BOT)} onTap={tap('corral')} disabled={!usable('corral') || mules === 0} next={glows('corral')} lock={locks?.corral} className="bg-holo-soft">
           <span className="relative flex flex-1 items-end justify-center overflow-hidden px-1 pt-3">
             {/* The fence. */}
             <svg aria-hidden viewBox="0 0 100 20" preserveAspectRatio="none" className="absolute inset-x-0 bottom-0 h-[22%] w-full">
@@ -244,7 +258,7 @@ export function StoreInterior({ mules, mulePrice, pubPayout, prices, open, onSho
         <Room z={z}
           shop="pub"
           testid="booth-pub"
-          style={{ ...inRow(...BOTTOM.pub), background: 'radial-gradient(circle at 50% 35%, color-mix(in srgb, var(--color-warn) 30%, transparent), color-mix(in srgb, var(--color-warn) 8%, var(--color-panel)) 70%)' }}
+          style={{ ...inRow(HALL.rooms.pub, BOT), background: 'radial-gradient(circle at 50% 35%, color-mix(in srgb, var(--color-warn) 30%, transparent), color-mix(in srgb, var(--color-warn) 8%, var(--color-panel)) 70%)' }}
           onTap={tap('pub')}
           disabled={!usable('pub')}
           next={glows('pub')}
@@ -266,10 +280,10 @@ export function StoreInterior({ mules, mulePrice, pubPayout, prices, open, onSho
           </span>
         </Room>
 
-        <Door side="R" onTap={onDoor} next={glows('doorR')} z={z} />
+        <Door side="R" box={HALL.doors.doorR} onTap={onDoor} next={glows('doorR')} z={z} />
       </div>
 
-      {me && <Colonist at={SPOT[spotFor(me.leading)]} slot={me.slot} leading={me.leading} time={me.time} testid={`visitor-${me.id}`} z={z} />}
+      {me && <Colonist me={me} at={standing(me)} paceRule={paceRule} size={size} z={z} wrap={wrapCreature} />}
       {overlay}
     </div>
   );
@@ -322,7 +336,7 @@ function Room({
         </span>
       )}
       {disabled && lock && (
-        <span className={cx('shrink-0 bg-void/60 px-1 font-mono uppercase leading-tight text-ink-2', z.lock)} data-lock>
+        <span className={cx('shrink-0 bg-void/60 font-mono uppercase leading-tight text-ink-2', z.lock)} data-lock>
           {lock}
         </span>
       )}
@@ -340,19 +354,22 @@ function Awning({ color }: { color: string }) {
   );
 }
 
-/** An airlock door out to the colony, standing across the walkway: placed in % of the bottom row it sits in. */
-function Door({ side, onTap, next, z }: { side: 'L' | 'R'; onTap: (() => void) | undefined; next: boolean; z: Sizes }) {
+/**
+ * An airlock door out to the colony, standing across the walkway: its frame from the plan, placed in % of the bottom
+ * row it sits in. Each is held from its own side of the hall, so the phone's minimum width grows it inwards.
+ */
+function Door({ side, box, onTap, next, z }: { side: 'L' | 'R'; box: HallRect; onTap: (() => void) | undefined; next: boolean; z: Sizes }) {
   const Tag = onTap ? 'button' : 'div';
-  const rowH = BOT.y1 - BOT.y0;
+  const at = inRow(box, BOT);
   return (
     <Tag
       {...(onTap ? { type: 'button' as const, onClick: onTap } : {})}
       className={cx(
-        'absolute flex w-[7%] flex-col items-center justify-center gap-1 rounded-panel border-2 border-dashed border-holo-line bg-void/60 text-holo enabled:hover:bg-holo-soft',
-        side === 'L' ? 'left-[0.6%]' : 'right-[0.6%]',
+        'absolute flex flex-col items-center justify-center gap-1 rounded-panel border-2 border-dashed border-holo-line bg-void/60 text-holo enabled:hover:bg-holo-soft',
+        z.doorBox,
         next && 'z-[1] border-solid border-holo bg-holo-soft animate-[store-beckon_1.6s_ease-in-out_infinite]',
       )}
-      style={{ top: `${((DOOR.y0 - BOT.y0) / rowH) * 100}%`, height: `${((DOOR.y1 - DOOR.y0) / rowH) * 100}%` }}
+      style={{ ...(side === 'L' ? { left: at.left } : { right: pct(100 - pctOf(box).x1) }), width: at.width, top: at.top, height: at.height }}
       aria-label="Out to the colony"
       data-testid={`door-${side}`}
       {...(next ? { 'data-next': true } : {})}
@@ -363,29 +380,79 @@ function Door({ side, onTap, next, z }: { side: 'L' | 'R'; onTap: (() => void) |
   );
 }
 
+/** Your colonist in the hall: where it stands is its own position, or else the place its MULE says it used last. */
+export interface Visitor {
+  id: string;
+  slot: Slot;
+  leading: Leading;
+  /** A free position on the hall's plan, in hall units (HALL.w across, HALL.h down). Without it: its place's spot. */
+  x?: number;
+  y?: number;
+  /** How hunger and sickness slow it this month (PlayerView.condition). */
+  condition?: Condition | null;
+  /** What you ate and needed, for the rule a long press on your tag shows. */
+  food?: FoodEaten;
+  /** Walking: it strides at its condition's pace (gait.ts), and its MULE walks in step. */
+  moving?: boolean;
+  /** Which way it heads, from its own movement (PR-6's frames). Without it: toward the doors, from the half it stands in. */
+  facing?: 'left' | 'right';
+  /** When the one clock starts, as a performance.now() time: the thought bubble shows then. */
+  clockStartsAt?: number;
+}
+
+/** Where a visitor stands, in % of the hall: its free position, or its place's spot on the plan. */
+function standing(me: Visitor): { x: number; y: number } {
+  const p = me.x !== undefined && me.y !== undefined ? { x: me.x, y: me.y } : HALL.spots[placeOf(me.leading)];
+  return { x: (p.x / HALL.w) * 100, y: (p.y / HALL.h) * 100 };
+}
+
 /**
- * Your colonist on the floor with your time bar, leading your MULE (the character, not the glyph). Before R1 it
- * stands at the room it used; it never walks, so the waddle and the MULE's walk cycle (C14) do not play yet.
+ * Your colonist on the floor, leading your MULE, with its condition at its shoulder (AM-14). It walks with #195's gait
+ * (spec AM-16): its stride from its pace and the lead on the hall's flat floor, and its MULE steps on the same stride.
+ * Standing, it breathes on the gait's idle cycle as it does on the map (WS6's variant A); reduced motion is Creature's
+ * and Mule's own.
  */
-function Colonist({ at, slot, leading, time, testid, z }: { at: { x: number; y: number }; slot: Slot; leading: Leading; time: number; testid: string; z: Sizes }) {
-  const species = useSeatSpecies(slot);
-  const left = at.x > 50;
+function Colonist({ me, at, paceRule, size, z, wrap = (_, c) => c }: { me: Visitor; at: { x: number; y: number }; paceRule: PaceRule | undefined; size: keyof typeof SIZES; z: Sizes; wrap?: CreatureWrap | undefined }) {
+  const species = useSeatSpecies(me.slot);
+  const left = me.facing ? me.facing === 'left' : at.x > 50;
+  const condition = me.condition ?? null;
+  // The hall has no terrain, encounters or bites: those are the map's. The balance's paces are the engine's.
+  const gait: GaitInput = {
+    moving: !!me.moving,
+    encounter: null,
+    pace: condition?.conditionPace ?? 1,
+    terrain: 1,
+    lead: !!me.leading,
+    bitten: false,
+    leadPace: DEV_STEER.leadPace,
+    bittenPace: WOLVES.bittenPace,
+    lungeSeconds: WOLVES.lungeEverySeconds,
+  };
+  const stride = cycleSeconds(gait);
+  const facing = left ? 'left' : 'right';
   return (
-    <div className="pointer-events-none absolute z-[3] flex -translate-x-1/2 -translate-y-[80%] flex-col items-center" style={{ left: `${at.x}%`, top: `${at.y}%` }} data-testid={testid}>
-      <span className={cx('mb-0.5 overflow-hidden rounded-full bg-void/70', z.bar)}>
-        <span className="block h-full rounded-full" style={{ width: `${Math.max(0, Math.min(1, time)) * 100}%`, background: SLOT_COLOR[slot] }} />
-      </span>
+    <div className="pointer-events-none absolute z-[3] flex -translate-x-1/2 -translate-y-[80%] flex-col items-center" style={{ left: `${at.x}%`, top: `${at.y}%` }} data-testid={`visitor-${me.id}`}>
       <span className={cx('flex items-end', left && 'flex-row-reverse')}>
-        <span className="rounded-full ring-2 ring-holo ring-offset-1 ring-offset-table">
-          <Creature species={species} color={SLOT_COLOR[slot]} size={z.creature} />
-        </span>
-        {leading && <Mule size={z.led} state="idle" good={leading === 'empty' ? null : leading} owner={slot} facing={left ? 'left' : 'right'} />}
+        {wrap(
+          me.id,
+          <span className="relative rounded-full ring-2 ring-holo ring-offset-1 ring-offset-table">
+          {/* Always in motion, idle while standing: the wrappers stay mounted, so a start or stop never remounts the drawing. */}
+          <Creature species={species} color={SLOT_COLOR[me.slot]} size={z.creature} motion={motionOf(gait)} cycle={stride} facing={facing} />
+          {paceRule && (
+            <>
+              <ConditionTag id={me.id} condition={condition} rule={paceRule} food={me.food} size={size} explain />
+              <ThoughtBubble id={me.id} condition={condition} rule={paceRule} moving={!!me.moving} clockStartsAt={me.clockStartsAt} size={size} edge={at.x < 15 ? 'left' : at.x > 85 ? 'right' : undefined} />
+            </>
+          )}
+          </span>,
+        )}
+        {me.leading && <Mule size={z.led} state={me.moving ? 'walk' : 'idle'} good={me.leading === 'empty' ? null : me.leading} owner={me.slot} facing={facing} cycle={stride} />}
       </span>
     </div>
   );
 }
 
-/** Development time left, and why: it comes from how well fed the colonist is. */
+/** Development time left, and how well fed the colonist is: Food sets how fast it walks, never how long it has. */
 export function FoodTime({ seconds, total, food, need, note }: { seconds: number; total: number; food: number; need: number; note?: ReactNode }) {
   const full = food >= need;
   return (
@@ -394,7 +461,7 @@ export function FoodTime({ seconds, total, food, need, note }: { seconds: number
         <div className={cx('absolute inset-y-0 left-0 rounded-full', seconds < 10 ? 'bg-alert' : 'bg-holo')} style={{ width: `${Math.max(0, Math.min(1, seconds / total)) * 100}%` }} />
       </div>
       <span className="text-xs text-ink-2">
-        {note ?? (full ? `Full time: you had ${food} Food and needed ${need}.` : `Short of Food (${food} of ${need}), so less time.`)}
+        {note ?? (full ? `Fed: you had ${food} Food and needed ${need}.` : `Short of Food (${food} of ${need}), so you walk slower.`)}
       </span>
     </div>
   );

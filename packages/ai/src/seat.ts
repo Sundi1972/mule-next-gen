@@ -1,11 +1,25 @@
-import { AI_HANDS, AI_LEVELS, AI_PERSONAS, createRng, GAME, observe, type AiLevelId, type AiPersonaId, type GameState } from '@mule/engine';
-import type { Act } from './actions.js';
+import {
+  AI_HANDS,
+  AI_LEVELS,
+  AI_PERSONAS,
+  createRng,
+  floorConfig,
+  GAME,
+  observe,
+  type AiLevelId,
+  type AiPersonaId,
+  type DevFloor,
+  type FloorConfig,
+  type FloorInput,
+  type GameState,
+} from '@mule/engine';
+import type { Act, AiAction } from './actions.js';
 import { Brain, type DecisionRecord, type Pending } from './brain.js';
 import type { Decider, TableTalk } from './decider.js';
 import { AuctionHand, type AuctionDebug } from './hands/auction.js';
-import { DevelopHand } from './hands/develop.js';
+import { DevelopHand, type DevWalking } from './hands/develop.js';
 import { PERSONAS } from './personas.js';
-import { landDecision, wantsPlot, type LandPlan } from './strategist.js';
+import { landDecision, wantsAnyAhead, wantsPlot, type LandPlan } from './strategist.js';
 import { situation } from './summary.js';
 import type { Mind } from './value.js';
 
@@ -55,12 +69,12 @@ export class AiSeat {
       persona: AI_PERSONAS[options.persona],
       levelId: options.level,
       level: AI_LEVELS[options.level],
-      salt: (options.seed ^ 0x27d4eb2d) >>> 0,
+      salt: (options.seed ^ 0x27d4eb2d) >>> 0, // literal-ok: a hash salt, so the seat's tie-break stream is its own
     };
     this.rng = createRng(options.seed >>> 0);
     this.brain = new Brain(this.mind, PERSONAS[options.persona], options.name, options.seed, options.decider ?? null, options.onDecision);
-    this.develop = new DevelopHand(this.brain, createRng((options.seed ^ 0x9e3779b9) >>> 0));
-    this.auction = new AuctionHand(this.brain, createRng((options.seed ^ 0x85ebca6b) >>> 0));
+    this.develop = new DevelopHand(this.brain, createRng((options.seed ^ 0x9e3779b9) >>> 0)); // literal-ok: a hash salt for the develop hand's rng stream
+    this.auction = new AuctionHand(this.brain, createRng((options.seed ^ 0x85ebca6b) >>> 0)); // literal-ok: a hash salt for the auction hand's rng stream
   }
 
   get id(): string {
@@ -88,27 +102,74 @@ export class AiSeat {
     const grant = state.grant;
     if (state.phase !== 'landGrant' || !grant) return null;
     const me = state.players.find((p) => p.id === this.id)!;
-    if (me.claimsThisGrant >= GAME.claimsPerGrant) return null;
-    if (!this.land || this.landMonth !== state.month) this.planMonth(state);
-    const plan = this.brain.resolveNow(this.land!, state).action;
+    if (me.claimsThisGrant >= GAME.claimsPerGrant || me.doneWithLand) return null;
+    const plan = this.landPlan(state);
     const index = grant.order[grant.step];
     if (index === undefined) return null;
     const obs = observe(state, this.id);
-    if (!wantsPlot(plan, obs, index, grant.sweep, this.mind)) return null;
+    if (!wantsPlot(plan, obs, index, grant.order.slice(grant.step), this.mind)) return null;
     if (this.rng.next() < this.mind.level.missChance) return null;
     return this.rng.int(...this.mind.level.reactMs) + this.rng.int(...AI_HANDS.grant.choiceMs);
   }
 
-  developTick(state: GameState, dt: number, secondsLeft: number, act: Act): void {
-    this.develop.tick(state, dt, secondsLeft, act);
+  /**
+   * Done with land: true when the seat has claims left and wants no plot still ahead of the light, by the same rule
+   * as onLit. A seat whose claims are used, or that is done already, has nothing to press.
+   */
+  passesGrant(state: GameState): boolean {
+    const grant = state.grant;
+    if (state.phase !== 'landGrant' || !grant) return false;
+    const me = state.players.find((p) => p.id === this.id)!;
+    if (me.claimsThisGrant >= GAME.claimsPerGrant || me.doneWithLand) return false;
+    return !wantsAnyAhead(this.landPlan(state), observe(state, this.id), grant.order.slice(grant.step), this.mind);
+  }
+
+  /** This month's land plan, as its hands read it: planned once a month, settled now. */
+  private landPlan(state: GameState): LandPlan {
+    if (!this.land || this.landMonth !== state.month) this.planMonth(state);
+    return this.brain.resolveNow(this.land!, state).action;
+  }
+
+  /**
+   * One development tick: `dt` in game ms, `secondsLeft` the game seconds left on the one development clock. Where
+   * the game walks, `walk` says where the colonist stands (or is walking to) and whether it is still walking or
+   * assaying; the referee refuses taps meanwhile, so the hands wait. Without it the seat develops as where nobody walks.
+   */
+  developTick(state: GameState, dt: number, secondsLeft: number, act: Act, walk?: DevWalking): void {
+    this.develop.tick(state, dt, secondsLeft, act, walk);
+  }
+
+  /**
+   * One tick of development on the arcade floor (DEV_STEER.on): this seat's input for the floor's next stepFloor, the
+   * stick and the button, as a phone's would be; `secondsLeft` the game seconds left on the one clock. `held`: month
+   * 1's clock waits and this seat is in, so the referee refuses its next MULE, analysis or filter until it starts. The
+   * server's tick and the sim call it the same way, every DEV_STEER.tickMs, with the same floor (HC-4).
+   */
+  developSteer(state: GameState, floor: DevFloor, secondsLeft: number, cfg: FloorConfig = floorConfig(), held = false): FloorInput {
+    return this.develop.steer(state, floor, secondsLeft, cfg, held);
   }
 
   auctionTick(state: GameState, dt: number, act: Act): void {
     this.auction.tick(state, dt, act);
   }
 
+  /** On the floor: the glint this seat races now, by the tick it lit, or null (the sim's report). */
+  developRacing(): number | null {
+    return this.develop.racing();
+  }
+
+  /** On the floor: whether this seat is off its errand's walk for a moment (a glint race, a leg by wolf land). */
+  developDetouring(): boolean {
+    return this.develop.detouring();
+  }
+
+  /** On the floor: the scrambles this seat raced this month (the sim's report). */
+  developScramblesRaced(): number {
+    return this.develop.scramblesRaced();
+  }
+
   /** The development steps taken this month, in order. */
-  developLog(): readonly { label: string; ok: boolean; at: number }[] {
+  developLog(): readonly { label: string; ok: boolean; at: number; action: AiAction; why?: string }[] {
     return this.develop.done;
   }
 
@@ -117,10 +178,11 @@ export class AiSeat {
     return {
       persona: this.mind.personaId as AiPersonaId,
       level: this.mind.levelId as AiLevelId,
+      // literal-ok: the dev view's top five plots, utility to three decimals: display only
       landPlan: plan ? { focus: plan.focus, top: plan.ranking.slice(0, 5).map((s) => ({ label: s.label, utility: Math.round(s.utility * 1000) / 1000, value: s.value })) } : null,
       developPlan: this.develop.plan(),
       auction: this.auction.debug(),
-      recent: this.brain.log.slice(-5),
+      recent: this.brain.log.slice(-5), // literal-ok: the dev view's last five decisions, display only
     };
   }
 }
