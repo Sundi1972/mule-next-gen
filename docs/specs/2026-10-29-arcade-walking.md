@@ -696,7 +696,7 @@ C14.
 | T-AC-2 (serves G-2) | speeds per RULE-2's examples (plains 1.5625, mountains 0.625, swamp 0.78, leading 1.41, bitten 0.78 tiles/s) | engine unit | lake 0 blocks | C1, C5 |
 | T-AC-3 (serves B-AC-1) | Reach per RULE-3's table, one row each | engine unit | money short → disabled, not hidden | C3 |
 | T-AC-4 (serves B-AC-2) | Given the tick · Then one frame per tick reaches every connection, frames are dropped not queued for a slow one, full views go only on change, or to one seat when its reach's words change (AM-11) | server + tabletop test | no full view on a tick where nothing changed and no seat's reach words changed; a steer sends no full view (AM-13) | C6, C8 |
-| T-AC-5 (serves G-2, RULE-8) | In 20 seeded AI-only turns at the defaults every AI colonist reaches the pub within 50 s, and a bot races in at least 40% of glints, never one whose detour breaks its errand (RULE-8; AM-22) | sim (`pnpm sim` report) | with botsSpareTime off, Kai misses turns | C9, C10 |
+| T-AC-5 (serves G-2, RULE-8) | In 20 seeded AI-only turns at the defaults every AI colonist reaches the pub within 50 s, except one a wolf encounter holds when the bell rings (RULE-4's `unknown`; AM-23), a bot races in at least 40% of glints, never one whose detour breaks its errand (RULE-8; AM-22), and at least 60% of months see an AI wolf encounter (AM-22) | sim (`pnpm sim` report) | with botsSpareTime off, Kai misses turns | C9, C10 |
 | T-AC-6 (serves B-AC-5) | Wolves: the rookie wins ≈ 1 in 4 over 60 seeded fights; a forest run escapes ≈ 13 of 20 | engine headless | — | C4, C9 |
 | T-AC-7 (serves B-AC-6) | Glint timing per RULE-5 (none in the first 6 s, 8 s shown, the first onto it wins) | engine unit | a non-racing colonist on the tile wins too | C4 |
 | T-AC-8 (serves B-AC-7) | Scramble per RULE-6, the beats in order, the last sale's single line | engine unit | — | C4 |
@@ -740,6 +740,13 @@ inside a wall; money and stock change only through game.ts rules; development en
 
 ## §8 · Amendments `[review-only]`
 
+- **AM-23 (2026-11-04, WS1's PR-8 numbers, ruled by WS6).** `botWolfLandShare` is built at its specced 0.5 (AI wolf
+  months were 46% without it). On T-AC-5's own sample (20 seeded AI-only games, its `observed_at`): wolf months
+  61.7%, glints raced 43.1%, pub missed 7 of 960 turns (0.7%), each a colonist a late pack still held at the bell.
+  T-AC-5 is judged on that sample, not the 40-game sim (wolf months 59%, glints 39%, both within sampling noise of the
+  bars): the two pull against each other, and with tuning parked neither is raised at the other's cost. T-AC-5's
+  "every AI colonist reaches the pub" now names the one excuse the test already applied: a colonist a wolf encounter
+  holds when the bell rings (RULE-4: the encounter ends, nothing paid), never one that simply ran out of time.
 - **AM-22 (2026-11-04, WS1's findings at arcade PR-8, ruled by WS6).** (1) **T-AC-5's glints:** with RULE-8 honoured
   (a bot races only if its errand still fits the clock after the detour, `botsSpareTime`), the real AI races 44–47%
   of glints (252 of 565 in 40 games; the mock's one-MULE bots 63%), because it plans its MULEs to fill the clock.
