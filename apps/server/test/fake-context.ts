@@ -88,8 +88,11 @@ export function readyAll(game: MuleGame): void {
  */
 export function pressThroughSidePick(game: MuleGame, how: { host: string } | 'ready' = 'ready'): boolean {
   // Read from the engine first: this runs on every step, and building a view each time is what costs.
-  const state = (game as unknown as { state: GameState | null }).state;
+  const inside = game as unknown as { state: GameState | null; heldUntil: number | null };
+  const state = inside.state;
   if (state?.phase !== 'auction' || state.auction?.stage !== 'status') return false;
+  // While an event's show holds the table nobody may press (the server refuses it): press once the hold has ended.
+  if (inside.heldUntil !== null) return false;
   const view = game.viewFor(null);
   const a = view.auction;
   if (view.phase !== 'auction' || a?.stage !== 'status') return false;
