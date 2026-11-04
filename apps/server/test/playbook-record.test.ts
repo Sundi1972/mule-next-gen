@@ -184,7 +184,16 @@ describe('AI playbooks in a keyless game record', { timeout: 60_000 }, () => {
   it('T-AC-4: a recorded keyless game replays with no ReplayDiverged, every playbook rewritten at its seq', async () => {
     const record = await recordedGame();
     const entries = playbooksOf(record);
-    expect(entries.length, 'the record holds playbooks to check').toBe(GAME_OPTIONS.maxMonths);
+    // The Classic seat's planning playbook and the Smart seat's land-grant one (WS2's writer, by 'engine' here), each month.
+    expect(
+      entries.map((e) => [e.seat, e.month, e.phase, e.playbook.by]).sort(),
+      'the record holds playbooks to check',
+    ).toEqual([
+      [SMART, 1, 'landGrant', 'engine'],
+      [SMART, 2, 'landGrant', 'engine'],
+      [CLASSIC, 1, 'planning', 'engine'],
+      [CLASSIC, 2, 'planning', 'engine'],
+    ]);
 
     const result = await replay(record);
     expect(result.stateHash.replayed).toBe(result.stateHash.recorded);

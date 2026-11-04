@@ -4,7 +4,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
 import { AI_HANDS, configSnapshot, GAME, RuleError, stableJson, type GameRecord, type GameState, type Playbook, type PlaybookEntry } from '@mule/engine';
-import type { Decider } from '@mule/ai';
+import { unusableReply, type Decider } from '@mule/ai';
 import type { MuleIntent, MuleView } from '@mule/protocol';
 import { Room, TableError, type ClientEnvelope, type Connection, type GameContext, type ServerEnvelope } from '@tabletop/core';
 import type { BrainService } from '../src/brain/index.js';
@@ -125,7 +125,7 @@ const playbookOf = (seat: string, cashFloor: number): Playbook => ({
   landGrant: { ranked: [], pressShare: { start: 1, end: 0 }, deny: [], planB: [], claims: 1 },
 });
 
-/** A Smart brain for seat `smartId` only, answering as ANSWERS says; the rest play Classic. */
+/** A Smart brain for seat `smartId` only, deciding as ANSWERS says; the rest play Classic. */
 function stubBrain(smartId: string): BrainService & { calls: () => number } {
   let calls = 0;
   const decider: Decider = {
@@ -140,7 +140,19 @@ function stubBrain(smartId: string): BrainService & { calls: () => number } {
   };
   return {
     deciderFor: (seat) => (seat.id === smartId ? decider : null),
-    writerFor: () => null,
+    // A Smart seat has a writer too, as createBrain gives one: this one never answers, so its land grant plays the
+    // engine's draft. Cancelled at the grant, it settles no_reply, as the real writer does.
+    writerFor: (seat) =>
+      seat.id === smartId
+        ? {
+            write: (_kind, ask) =>
+              new Promise((resolve) => {
+                const noReply = () => resolve(unusableReply('no_reply'));
+                if (ask.signal?.aborted) noReply();
+                else ask.signal?.addEventListener('abort', noReply, { once: true });
+              }),
+          }
+        : null,
     chatter: (seat, say) => chatter(seat.id, say),
     finish: () => {},
     calls: () => calls,
