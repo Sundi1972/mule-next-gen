@@ -9,7 +9,7 @@ import type { DevFrame, MuleView } from '@mule/protocol';
 import { check } from './harness';
 import { keepsPlaying, steeredTable, until } from './walking-wire';
 
-/** Packs met, pelts sold, a MULE bolted and caught or lost, and glints won, in 12 months on bd41a36e's server. */
+/** A map where, in 12 months, packs are met, pelts sold, a bolted MULE caught or lost, and glints won. */
 const SEED = 7;
 const MONTHS = 12;
 /** Development's 50 s of game time in about 12 s of real time. */
