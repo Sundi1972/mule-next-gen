@@ -178,12 +178,19 @@ export interface FrameWolf {
 export interface FramePack {
   who: string;
   stage: 'choose' | 'chase' | 'fight';
+  /** The tick the stage began. */
+  sinceTick: number;
+  /** Where the stage began, a map position: a chase gives up far enough from it, and a fight stays round it. */
+  centre: { x: number; y: number };
+  /** In a fight: the strikes that landed on wolves, and the bites taken. */
+  strikes: number;
+  bites: number;
   wolves: FrameWolf[];
 }
 
 /**
  * The moments on the floor this tick (AM-28), straight from the floor's state. Absent from the frame when there is no
- * pack, no glint and no scramble yet this turn.
+ * pack, no glint, no scramble yet this turn and no bolted MULE.
  */
 export interface FrameMoments {
   packs: FramePack[];
@@ -194,6 +201,11 @@ export interface FrameMoments {
    * `got` the needers that got a MULE from it, in order; `leftOut` the needers who went without, filled once it is over.
    */
   scramble: { untilTick: number; needers: string[]; got: string[]; over: 'empty' | 'time' | 'everyone' | null; leftOut: string[] } | null;
+  /**
+   * The seats whose MULE bolted after a lost fight and is not caught yet, running or standing. The MULE is at that
+   * colonist's `lead`, in map tiles even while its colonist is in the hall.
+   */
+  bolted: string[];
 }
 
 /** One development tick's positions for every screen, sent beside the full view. */
@@ -213,7 +225,7 @@ export interface DevFrame {
   }[];
   /** The moments' lines everyone sees this tick. */
   beats: string[];
-  /** The moments' state this tick; absent when there is none yet this turn (AM-28). */
+  /** The moments' state this tick; absent while none is on (AM-28). */
   moments?: FrameMoments;
 }
 
