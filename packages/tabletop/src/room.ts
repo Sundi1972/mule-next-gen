@@ -333,11 +333,20 @@ export class Room<Intent, View> {
 
   /** A screen's connection closed: it stops being a board and lets go of its seat. */
   disconnect(conn: Connection<View>): void {
-    const wasBoard = this.boards.delete(conn);
-    // Checked even for a board, so no path leaves a seat on a closed socket.
-    const seat = this.seats.find((s) => s.conn === conn);
-    if (seat) this.detach(seat);
-    if (wasBoard || seat) this.broadcast();
+    if (this.endedBy === 'error') return;
+    try {
+      const wasBoard = this.boards.delete(conn);
+      // Checked even for a board, so no path leaves a seat on a closed socket.
+      const seat = this.seats.find((s) => s.conn === conn);
+      if (seat) this.detach(seat);
+      if (wasBoard || seat) this.broadcast();
+    } catch (err) {
+      // The caller is a socket's close handler: a throw from here would be uncaught. A user error has nobody left to
+      // read it; a bug ends this table, as it does in receive.
+      if (this.opts.isUserError(err)) return;
+      this.opts.onError(err);
+      this.fail();
+    }
   }
 
   /** A connection holds one seat: one that joins another lets go of the seat it held, as a disconnect would. See FM-3. */
