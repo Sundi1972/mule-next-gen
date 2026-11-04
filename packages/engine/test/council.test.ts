@@ -83,7 +83,7 @@ describe("C40: the council — the Governor proposes in planning, the next plann
     if (then === 'valid') expect(state.politics!.proposal).toEqual({ by, month: state.month, proposal });
   });
 
-  it('T-AC-40: a proposal is kept as its known fields only, so nothing else reaches the screens or the record', () => {
+  it('T-AC-40: a proposal is kept as its known fields only, so nothing else reaches the state or the screens', () => {
     const state = governed();
     proposeLaw(state, 'lena', { ...LAND_10, note: 'not a field' } as unknown as LawProposal);
     expect(state.politics!.proposal?.proposal).toStrictEqual(LAND_10);

@@ -490,7 +490,7 @@ export function proposeLaw(state: GameState, playerId: string, proposal: LawProp
       throw new RuleError(`${maxInForce} laws are in force: pick the one this replaces`);
     }
   }
-  // Only the proposal's own fields are kept: the rest of an intent never reaches the screens or the record.
+  // Only the proposal's own fields are kept: the rest of an intent never reaches the state or the screens.
   const kept: LawProposal =
     proposal.kind === 'repeal'
       ? { kind: 'repeal', law: proposal.law }
