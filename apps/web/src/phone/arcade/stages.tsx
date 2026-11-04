@@ -1,7 +1,8 @@
 import { boxOf, DEV_WALK, HALL, HALL_BAYS, type HallPlace, type HallRect } from '@mule/engine';
 import type { MuleView } from '@mule/protocol';
-import { cx, fanOut, HoloMap, LiveWalkers, SLOT_COLOR, StoreInterior, type Shop } from '@mule/ui';
+import { cx, fanOut, HoloMap, LiveWalkers, SLOT_COLOR, StoreInterior, type CreatureWrap, type Shop } from '@mule/ui';
 import { createContext, memo, useContext, useMemo, useRef, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
+import { speakerAt } from '../../chat/Chat';
 import { mapTiles, plotName } from '../../game/derive';
 import { useArcade, useLive } from './live';
 import { suits } from './plots';
@@ -72,9 +73,11 @@ function targetHits(target: Target, store: { x: number; y: number }, p: { x: num
 /**
  * The colony map as a stage, drawn by the approved HoloMap, the whole map at `width` (the phone, the laptop and the TV
  * all show the whole colony). `interactive` is your own screen: it lights what your button acts on, rings your next
- * step and takes the mouse.
+ * step and takes the mouse. `wrapCreature` wraps each colonist's mark (your own screen's speech bubbles), whose
+ * bubbles the stage then bounds, since it clips them. `walkersOnTop` lifts the colonists, and their bubbles, above the
+ * phone's status bar, which a bubble would otherwise paint under.
  */
-export function MapStage({ data, width, height, density, interactive = false, names = false, guide = false, testid = 'map-stage' }: { data: StageData; width: number; height?: number; density: Density; interactive?: boolean; names?: boolean; guide?: boolean; testid?: string }) {
+export function MapStage({ data, width, height, density, interactive = false, names = false, guide = false, testid = 'map-stage', wrapCreature, walkersOnTop = false }: { data: StageData; width: number; height?: number; density: Density; interactive?: boolean; names?: boolean; guide?: boolean; testid?: string; wrapCreature?: CreatureWrap | undefined; walkersOnTop?: boolean }) {
   const seat = useSeat();
   const { view } = data;
   const tiles = useMemo(() => mapTiles(view), [view]);
@@ -91,8 +94,10 @@ export function MapStage({ data, width, height, density, interactive = false, na
   const walkers = data.colonists.filter((c) => c.space === 'map' && !c.done);
   const { at } = useLive();
   return (
-    <div className={cx('relative overflow-hidden rounded-panel', interactive && 'cursor-crosshair touch-none')} style={{ width, height: viewH }} data-testid={testid} data-camera="whole" {...ptr}>
-      <div ref={layer} className="absolute left-0 top-0" style={{ width, height: mapH, transform: `translate(0px, ${-(mapH - viewH) / 2}px)` }}>
+    <div className={cx('relative overflow-hidden rounded-panel', interactive && 'cursor-crosshair touch-none')} style={{ width, height: viewH }} data-testid={testid} data-camera="whole" data-bubble-bounds={!!wrapCreature || undefined} {...ptr}>
+      {/* Offset by top, not a transform: a transform would make the layer its own stacking context, and the colonists
+          could then never rise above the screen's status bar. */}
+      <div ref={layer} className="absolute left-0" style={{ width, height: mapH, top: -(mapH - viewH) / 2 }}>
         <MemoMap width={view.width} height={view.height} tiles={tiles} density={density === 'wide' ? 'tv' : density} hideGround selected={selected} className="w-full" />
         {/* The store's two doors, on its left and right faces: the only way in. */}
         {(['L', 'R'] as const).map((side) => (
@@ -106,7 +111,9 @@ export function MapStage({ data, width, height, density, interactive = false, na
         ))}
         {guide && interactive && seat && <MyPlots seat={seat} />}
         {guide && interactive && seat && <GuideOnMap seat={seat} />}
-        <LiveWalkers walkers={walkers} space="map" cols={view.width} rows={view.height} cell={cell} density={density} names={names} rule={DEV_WALK} at={at} />
+        <div className={cx('pointer-events-none absolute inset-0', walkersOnTop ? 'z-[25]' : 'z-[7]')} data-testid="walkers-layer" data-over-bar={walkersOnTop || undefined}>
+          <LiveWalkers walkers={walkers} space="map" cols={view.width} rows={view.height} cell={cell} density={density} names={names} rule={DEV_WALK} at={at} wrapCreature={wrapCreature} />
+        </div>
       </div>
     </div>
   );
@@ -120,7 +127,7 @@ const SHORT: Record<string, string> = { BUY: 'BUY', OUTFIT: 'OUTFIT', PUB: 'PUB'
  * you are the store's own visitor, at your free position on the plan, and the room your button acts on is lit.
  * `store` sizes the hall's own type apart from the walkers: the TV's narrow side panel needs the phone's to fit.
  */
-export function HallStage({ data, width, density, store = density, interactive = false, names = false, guide = false, testid = 'hall-stage' }: { data: StageData; width: number; density: Density; store?: Density; interactive?: boolean; names?: boolean; guide?: boolean; testid?: string }) {
+export function HallStage({ data, width, density, store = density, interactive = false, names = false, guide = false, testid = 'hall-stage', wrapCreature }: { data: StageData; width: number; density: Density; store?: Density; interactive?: boolean; names?: boolean; guide?: boolean; testid?: string; wrapCreature?: CreatureWrap | undefined }) {
   const seat = useSeat();
   const { view } = data;
   const height = (width * HALL.h) / HALL.w;
@@ -137,7 +144,7 @@ export function HallStage({ data, width, density, store = density, interactive =
   const prices = seat ? (seat.me.outfitCosts as Partial<Record<Shop, number>>) : {};
   const leading = seat?.me.carriedMule ?? null;
   return (
-    <div ref={layer} className={cx('relative', interactive && 'cursor-crosshair touch-none')} style={{ width, height }} data-testid={testid} {...ptr}>
+    <div ref={layer} className={cx('relative', interactive && 'cursor-crosshair touch-none')} style={{ width, height }} data-testid={testid} data-bubble-bounds={!!wrapCreature || undefined} {...ptr}>
       <StoreInterior
         mules={view.storeMules}
         mulePrice={seat?.me.mulePrice ?? view.mulePrice}
@@ -145,6 +152,7 @@ export function HallStage({ data, width, density, store = density, interactive =
         prices={prices}
         tv={store === 'tv'}
         wide={store === 'wide'}
+        wrapCreature={wrapCreature}
         {...(mine && seat
           ? {
               me: { id: mine.id, slot: mine.slot, leading, x: mine.x + aside.dx, y: mine.y + aside.dy, facing: mine.facing, condition: seat.self.condition, food: { ate: Math.min(seat.me.stock.food, seat.me.needs.food), need: seat.me.needs.food }, moving: mine.moving },
@@ -159,18 +167,21 @@ export function HallStage({ data, width, density, store = density, interactive =
       )}
       {guide && interactive && seat && <GuideInHall seat={seat} lit={lit} />}
       {guide && interactive && seat && <PlotsByOutfitter seat={seat} />}
-      <LiveWalkers walkers={walkers} space="hall" cols={HALL.w} rows={HALL.h} cell={width / HALL.w} density={density} names={names} rule={DEV_WALK} fan={fan} at={at} />
+      <LiveWalkers walkers={walkers} space="hall" cols={HALL.w} rows={HALL.h} cell={width / HALL.w} density={density} names={names} rule={DEV_WALK} fan={fan} at={at} wrapCreature={wrapCreature} />
     </div>
   );
 }
 
-/** Where you are, drawn big: the whole map on the map, the hall inside the store. */
-export function YourStage({ seat, width, height, density, guide = false }: { seat: ArcadeSeat; width: number; height: number; density: Density; guide?: boolean }) {
+/**
+ * Where you are, drawn big: the whole map on the map, the hall inside the store. Each colonist there speaks;
+ * `walkersOnTop` as MapStage's.
+ */
+export function YourStage({ seat, width, height, density, guide = false, walkersOnTop = false }: { seat: ArcadeSeat; width: number; height: number; density: Density; guide?: boolean; walkersOnTop?: boolean }) {
   const hallW = Math.min(width, (height * HALL.w) / HALL.h);
   const space = seat.mine?.space ?? 'map';
   return (
     <div className="relative flex items-center justify-center overflow-hidden rounded-panel" style={{ width, height }} data-testid="your-stage" data-space={space}>
-      {space === 'hall' ? <HallStage data={seat} width={hallW} density={density} interactive guide={guide} /> : <MapStage data={seat} width={width} height={height} density={density} interactive guide={guide} />}
+      {space === 'hall' ? <HallStage data={seat} width={hallW} density={density} interactive guide={guide} wrapCreature={speakerAt} /> : <MapStage data={seat} width={width} height={height} density={density} interactive guide={guide} wrapCreature={speakerAt} walkersOnTop={walkersOnTop} />}
     </div>
   );
 }

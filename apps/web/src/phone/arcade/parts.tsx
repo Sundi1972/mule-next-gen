@@ -1,9 +1,10 @@
 import type { RawGood } from '@mule/engine';
-import { cx, GoodIcon, MuleIcon, TERRAIN_NAME } from '@mule/ui';
+import { Creature, cx, GoodIcon, MuleIcon, SLOT_COLOR, TERRAIN_NAME } from '@mule/ui';
 import { useState, type CSSProperties } from 'react';
 import { waitingNow } from '../Develop';
 import type { Now } from '../Shell';
-import { groundPips, plotName } from '../../game/derive';
+import { useTableChat } from '../../chat/store';
+import { groundPips, plotName, toSlot } from '../../game/derive';
 import { bestHere, OUTFIT_WORD, RAW, plotTitle, suits, suitsLine } from './plots';
 import { assaySeconds, type ArcadeSeat } from './seat';
 
@@ -264,5 +265,42 @@ export function WaitWords({ seat, short = false }: { seat: ArcadeSeat; short?: b
         </span>
       )}
     </span>
+  );
+}
+
+/**
+ * The table chat's newest lines, newest first, from the same chat state as the shell's ticker. Each line is cut to one
+ * row, or with `wrap` (a narrow column) runs on as one sentence, speaker and words together, over at most three rows.
+ * A line never gives up its rows: a holder short of room cuts the oldest first, at its foot.
+ */
+export function ChatTicker({ seat, keep, wrap = false, wide = false }: { seat: ArcadeSeat; keep: number; wrap?: boolean; wide?: boolean }) {
+  const { lines } = useTableChat();
+  const players = new Map(seat.view.players.map((p) => [p.id, p]));
+  const said = lines.filter((l) => players.has(l.from)).slice(-keep).reverse();
+  return (
+    <ul className="flex min-w-0 flex-col gap-0.5 overflow-hidden" data-testid="chat-ticker" aria-label="Table chat" aria-live="polite">
+      {said.map((l, i) => {
+        const p = players.get(l.from)!;
+        return (
+          <li
+            key={l.id}
+            className={cx('min-w-0 shrink-0', wrap ? 'line-clamp-3 leading-tight' : 'flex items-center gap-1.5 truncate', wide ? 'text-sm' : 'text-[11px]', i === 0 ? 'animate-[show-card-in_0.25s_ease-out] text-ink' : 'text-ink-3')}
+            data-testid={`chat-line-${l.id}`}
+          >
+            <span className={wrap ? 'mr-1 inline-block align-[-3px]' : 'contents'}>
+              <Creature species={p.species} color={SLOT_COLOR[toSlot(p.slot)]} size={14} />
+            </span>
+            <strong className={wrap ? '' : 'shrink-0'}>
+              {p.name}
+              {l.to ? ' 🔒' : ''}:
+            </strong>
+            <span className={wrap ? '' : 'truncate'}>
+              {wrap ? ' ' : ''}
+              {l.text}
+            </span>
+          </li>
+        );
+      })}
+    </ul>
   );
 }

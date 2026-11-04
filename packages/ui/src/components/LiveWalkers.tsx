@@ -3,7 +3,7 @@ import { ConditionTag, type Condition, type PaceRule } from './Condition';
 import { Creature } from './Creature';
 import { Mule, type MuleGood } from './Mule';
 import { cycleSeconds, motionOf, type Encounter, type Facing, type GaitInput } from './motion/gait';
-import type { Species } from './species';
+import type { CreatureWrap, Species } from './species';
 import { cx, SLOT_COLOR, type Slot } from './tokens';
 
 /** A colonist as the live layer draws it: where it stands this frame, in the space's own units. */
@@ -85,6 +85,8 @@ export interface LiveWalkersProps {
   fan?: ReadonlyMap<string, { dx: number; dy: number }>;
   /** The device time (Date.now) these positions are for, written as each colonist's data-at. */
   at?: number;
+  /** Wraps each colonist's mark, for a screen that hangs something on it (a speech bubble). */
+  wrapCreature?: CreatureWrap | undefined;
 }
 
 /**
@@ -95,7 +97,7 @@ export interface LiveWalkersProps {
  * #195's gait (motionOf, cycleSeconds), its MULE on the same stride. Pointer-transparent: the stage under it takes the
  * mouse and the taps.
  */
-export function LiveWalkers({ walkers, space, cols, rows, cell, density, names = false, rule, fan = fanOut(walkers, space), at: drawnAt }: LiveWalkersProps) {
+export function LiveWalkers({ walkers, space, cols, rows, cell, density, names = false, rule, fan = fanOut(walkers, space), at: drawnAt, wrapCreature = (_, mark) => mark }: LiveWalkersProps) {
   const map = space === 'map';
   const size = Math.round(cell * SPRITE[space]);
   const muleSize = Math.round(size * (map ? 1.35 : 1.1));
@@ -144,16 +146,19 @@ export function LiveWalkers({ walkers, space, cols, rows, cell, density, names =
               data-fanned={off.dx !== 0 || off.dy !== 0 || undefined}
             >
               <div className="absolute left-0 top-0 flex -translate-x-1/2 -translate-y-[85%] flex-col items-center">
-                <span
-                  role="img"
-                  aria-label={w.name}
-                  className={cx('relative block rounded-full', w.mine && 'ring-2 ring-holo ring-offset-1 ring-offset-table')}
-                  // PlayerMark's edge and, on your own, its glow in your colour.
-                  style={{ filter: w.mine ? `drop-shadow(0 0 1px var(--color-mark-edge)) drop-shadow(0 0 ${Math.round(size / 3)}px color-mix(in srgb, ${color} var(--mark-glow), transparent))` : 'drop-shadow(0 0 1px var(--color-mark-edge))' }}
-                >
-                  <Creature species={w.species} color={color} size={size} motion={motionOf(gait)} cycle={stride} facing={w.facing} />
-                  {rule && w.condition !== undefined && <ConditionTag id={w.id} condition={w.condition} rule={rule} size={density} />}
-                </span>
+                {wrapCreature(
+                  w.id,
+                  <span
+                    role="img"
+                    aria-label={w.name}
+                    className={cx('relative block rounded-full', w.mine && 'ring-2 ring-holo ring-offset-1 ring-offset-table')}
+                    // PlayerMark's edge and, on your own, its glow in your colour.
+                    style={{ filter: w.mine ? `drop-shadow(0 0 1px var(--color-mark-edge)) drop-shadow(0 0 ${Math.round(size / 3)}px color-mix(in srgb, ${color} var(--mark-glow), transparent))` : 'drop-shadow(0 0 1px var(--color-mark-edge))' }}
+                  >
+                    <Creature species={w.species} color={color} size={size} motion={motionOf(gait)} cycle={stride} facing={w.facing} />
+                    {rule && w.condition !== undefined && <ConditionTag id={w.id} condition={w.condition} rule={rule} size={density} />}
+                  </span>,
+                )}
                 {names && (
                   <span className={cx('mt-0.5 whitespace-nowrap rounded-chip bg-map-chip px-1 font-mono font-bold leading-tight text-ink shadow-chip', density === 'tv' ? 'text-xs' : 'text-[10px]')} data-testid={`colonist-name-${w.id}`}>
                     {w.name}
