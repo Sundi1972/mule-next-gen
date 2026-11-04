@@ -462,6 +462,20 @@ describe('the steered view (flag on)', () => {
     expect(g.game.viewFor(null).news[0]).toMatch(/Lena went to the pub and won \d+/);
   });
 
+  it("MyView.reach is priced at the last tick's time, the time its words were compared at, even after a late timer's catch-up", () => {
+    const g = steered();
+    pressAct(g.game, g, LENA);
+    steerTo(g.game, g, LENA, toRoom('pub'));
+    const steering = (g.game as unknown as { steering: { words: Map<string, string> } }).steering;
+    // A late timer: 40 ticks due at once, 10 run, so the last tick stands 30 ticks before the clock.
+    g.jump(40 * TICK);
+    const view = reachOfSeat(g, LENA)!;
+    expect(stableJson(view), 'the view shows what the tick compared').toBe(steering.words.get(LENA));
+    const nowLeft = (g.game.viewFor(LENA).me!.devEndsAt! - g.ctx.now()) / 1_000;
+    const atNow = reachWords(reachOf(floorOf(g.game), g.state, LENA, serverCfg(), { secondsLeft: nowLeft }));
+    expect(atNow.detail, 'the row means something: priced at the clock, the payout would differ').not.toBe(view.detail);
+  });
+
   it('with the flag on, the old taps are refused, and steer or act outside development changes nothing', () => {
     const g = steered();
     expect(() => g.game.handle(LENA, { type: 'buyMule' })).toThrow(/steer/i);
