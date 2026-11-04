@@ -29,7 +29,7 @@ import {
 } from '@mule/engine';
 import type { Act, AiAction } from '../actions.js';
 import type { Brain, Pending } from '../brain.js';
-import { floorDevWalk, leading, mapFactor, planSeconds, plotErrandSeconds, pubDoor, pubSeconds, tileMiddle, tripSeconds, type PlanStop } from '../floor-time.js';
+import { floorDevWalk, leading, mapFactor, planSeconds, plotErrandSeconds, pubDoor, pubMargin, pubSeconds, tileMiddle, tripSeconds, type PlanStop } from '../floor-time.js';
 import { analysesWanted, developDecision, filtersWanted, outfitName, plotName, type DevAction, type DevWalk } from '../strategist.js';
 import { situation } from '../summary.js';
 import { FloorWalker, type FloorView } from './floor-walker.js';
@@ -110,6 +110,9 @@ export class DevelopHand {
   private detoured = false;
   /** How it plays the pack it meets now: drawn once, when the pack comes. */
   private pack: WolfPlay | null = null;
+  /** Packs met this month, and how many had been met when it set off for the step it walks: a walk a pack met on the way. */
+  private packsMet = 0;
+  private walkPacks = 0;
   /** The glint it last decided on, and the one it races (by the tick each lit). */
   private glintSeen: number | null = null;
   private glintWanted = false;
@@ -211,27 +214,33 @@ export class DevelopHand {
     // The clock is nearly out: whatever is left of the errand, the pub. Held, the clock stands, so there is time.
     // An assay under way holds the colonist still for the rest of it: that time is spent before any walk.
     const holding = colonist.assayUntilTick === null ? 0 : (Math.max(0, colonist.assayUntilTick - floor.tick) * dt) / MS_PER_SECOND;
-    if (!held && !this.toPub && secondsLeft <= holding + pubSeconds(state, cfg, colonist) + this.margin(cfg, colonist)) this.hurry();
+    // A MULE under way whose rest of errand, to its plot and on to the pub, still fits with the margin in hand is seen
+    // through: dropping it for the pub would lose what it cost (FM-hurry-margin).
+    if (!held && !this.toPub && secondsLeft <= holding + pubSeconds(state, cfg, colonist) + this.margin(cfg, colonist) && !this.muleFits(view, colonist, secondsLeft - holding)) this.hurry(colonist);
     // Hurrying for the pub, it presses the moment it is there: a pause at the counter could cost it the pub.
     const pauseMs = this.toPub ? 0 : cfg.steer.botCounterPauseSeconds * MS_PER_SECOND * mind.level.devPace;
     // A step done this tick hands over to the next at once, so no tick is spent standing between them.
     for (let ticks = dt; ; ticks = 0) {
-      const step = this.next(state, ticks, secondsLeft, () => floorDevWalk(state, cfg, colonist, secondsLeft - holding, (MULE_PRESSES * pauseMs) / MS_PER_SECOND));
+      // A MULE is priced with the margin the hurry for the pub keeps while it leads one, and its errand as if it ran
+      // botPlanSlackShare longer than estimated (FM-hurry-margin).
+      const planLeft = (secondsLeft - holding - pubMargin(cfg, colonist, true)) / (1 + cfg.steer.botPlanSlackShare);
+      const step = this.next(state, ticks, secondsLeft, () => floorDevWalk(state, cfg, colonist, planLeft, (MULE_PRESSES * pauseMs) / MS_PER_SECOND));
       if (!step) return IDLE_INPUT;
       // Held, it starts none of these; one it is already walking (or has just pressed) it sees through.
       if (held && HELD.has(step.action.type) && this.walking !== step) return IDLE_INPUT;
       // An analysis or a filter it sets off for, and presses, only while the walk there, the work and the walk on to the
-      // pub still fit the clock (RULE-8's spare time): a walk there that ran long drops it before it costs the pub. The
-      // MULEs' walks were priced when they were chosen.
+      // pub still fit the clock (RULE-8's spare time): a walk there that ran long drops it before it costs the pub. A
+      // MULE it buys only while its errand still fits with the hurry's margin (FM-hurry-margin).
       const starting = this.walking !== step;
       const committed = !starting && (this.walker.pressing() || colonist.assayUntilTick !== null);
-      if (!held && !committed && !this.fits(state, cfg, colonist, step, secondsLeft - holding)) {
+      if (!held && !committed && !this.fits(view, colonist, step, secondsLeft - holding)) {
         if (!starting) this.walking = null;
         this.taken(step, false, 'no time');
         continue;
       }
       if (starting) {
         this.walking = step;
+        this.walkPacks = this.packsMet;
         this.walker.reset();
       }
       const via = !held && !this.toPub ? this.byWolfLand(view, colonist, step) : null;
@@ -252,6 +261,7 @@ export class DevelopHand {
     const { state, floor, cfg, secondsLeft } = view;
     const me = this.brain.mind.me;
     if (c.encounter) {
+      if (!this.pack) this.packsMet++;
       this.pack ??= this.playFor(view, c);
       return wolfInput(floor, state, me, cfg, this.pack);
     }
@@ -296,7 +306,20 @@ export class DevelopHand {
 
   /** The seconds it keeps in hand for the pub: botPubMarginSeconds at full pace, more as a bite or a MULE slows it. */
   private margin(cfg: FloorConfig, c: FloorColonist): number {
-    return cfg.steer.botPubMarginSeconds / Math.min(1, mapFactor(cfg, c.pace, leading(c), c.bot, c.bitten));
+    return pubMargin(cfg, c);
+  }
+
+  /** The margin for the rest of the list: as the hurry counts it while the colonist leads a MULE, if one is on the list or the lead. */
+  private restMargin(cfg: FloorConfig, c: FloorColonist): number {
+    const mule = leading(c) || this.queue.some((s) => s.action.type === 'outfit' || s.action.type === 'install');
+    return pubMargin(cfg, c, mule);
+  }
+
+  /** Whether the list is a MULE under way whose rest (every step left, then the pub) fits `left` with the hurry's margin in hand. */
+  private muleFits(view: FloorView, c: FloorColonist, left: number): boolean {
+    const head = this.queue[0]?.action.type;
+    if (head !== 'buyMule' && head !== 'outfit' && head !== 'install') return false;
+    return this.restFrom(view, c) + this.restMargin(view.cfg, c) <= left;
   }
 
   /**
@@ -400,7 +423,7 @@ export class DevelopHand {
   /**
    * RULE-8: whether a detour to `to` still leaves the errand time to finish inside the turn: the walk there, then from
    * there every step left on the list and the pub, at the floor's speeds and with the presses' pauses (planSeconds, the
-   * estimates the plan is priced by), with botPubMarginSeconds in hand. Always true with DEV_STEER.botsSpareTime off.
+   * estimates the plan is priced by), with the hurry's margin in hand (restMargin). Always true with DEV_STEER.botsSpareTime off.
    */
   private fitsDetour(view: FloorView, c: FloorColonist, to: FloorPoint): boolean {
     const { state, cfg, secondsLeft } = view;
@@ -412,7 +435,7 @@ export class DevelopHand {
         ? tripSeconds(state, cfg, w, c, index, leading(c))
         : (pathTo(state, c, to, cfg)?.seconds ?? Infinity) / mapFactor(cfg, c.pace, leading(c), c.bot, c.bitten);
     const from: FloorColonist = { ...c, space: 'map', x: to.x, y: to.y };
-    return there + this.restFrom(view, from) + cfg.steer.botPubMarginSeconds <= secondsLeft;
+    return there + this.restFrom(view, from) + this.restMargin(cfg, from) <= secondsLeft;
   }
 
   /** Seconds of errand left from a colonist standing at a point: every step on the list, in order, then the pub. */
@@ -440,16 +463,32 @@ export class DevelopHand {
     return analysisSeconds(state, this.brain.mind.me) * (lake ? 2 : 1); // literal-ok: the shore's land and the lake, two analyses
   }
 
-  /** Whether an analysis or a filter, from where the colonist stands, still leaves time for the pub. */
-  private fits(state: GameState, cfg: FloorConfig, c: FloorColonist, step: DevStep, secondsLeft: number): boolean {
+  /**
+   * Whether an analysis or a filter, from where the colonist stands, still leaves time for the pub with the hurry's margin
+   * in hand (restMargin: a hungry colonist's is several times botPubMarginSeconds); and a MULE about to be
+   * bought, its errand to its plot and on to the pub priced as when it was planned (botPlanSlackShare longer, the hurry's
+   * margin in hand): a walk to the corral that ran long drops the MULE before it is paid for (FM-hurry-margin).
+   */
+  private fits(view: FloorView, c: FloorColonist, step: DevStep, secondsLeft: number): boolean {
+    const { state, cfg } = view;
     const a = step.action;
+    if (a.type === 'buyMule') return this.restFrom(view, c) * (1 + cfg.steer.botPlanSlackShare) + this.restMargin(cfg, c) <= secondsLeft;
     if (a.type !== 'analyse' && a.type !== 'filter') return true;
     const work = a.type === 'analyse' ? this.assaySeconds(state, cfg, a.x, a.y) : 0;
-    return plotErrandSeconds(state, cfg, c, tileIndex(state.width, a.x, a.y), work) + cfg.steer.botPubMarginSeconds <= secondsLeft;
+    return plotErrandSeconds(state, cfg, c, tileIndex(state.width, a.x, a.y), work) + this.restMargin(cfg, c) <= secondsLeft;
   }
 
-  /** Out of time: drop the rest of the list and go to the pub. */
-  private hurry(): void {
+  /**
+   * Out of time: drop the rest of the list and go to the pub. A step it was walking to and had not pressed yet it gives
+   * up, logged so a walk the clock cut short shows: 'hurry', or 'hurry after a pack' where a pack met it on the way
+   * (FM-hurry-margin).
+   */
+  private hurry(c: FloorColonist): void {
+    const cut = this.walking;
+    if (cut && !this.walker.pressing() && c.assayUntilTick === null) {
+      const why = this.packsMet > this.walkPacks ? 'hurry after a pack' : 'hurry';
+      this.done.push({ label: cut.label, ok: false, at: this.clock, action: cut.action, why });
+    }
     this.toPub = true;
     this.pending = null;
     this.queue = [];
@@ -534,6 +573,8 @@ export class DevelopHand {
     this.leg = null;
     this.via = null;
     this.pack = null;
+    this.packsMet = 0;
+    this.walkPacks = 0;
     this.glintSeen = null;
     this.glintWanted = false;
     this.racingGlint = null;
