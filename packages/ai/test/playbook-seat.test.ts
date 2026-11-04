@@ -201,7 +201,9 @@ describe('the seat drafts, validates and writes its planning playbook (C4, RULE-
       },
     });
     expect(adopted.written.map((pb) => `${pb.seat}/${pb.month}`)).toEqual(['ai0/1', 'ai1/1', 'ai2/1', 'ai3/1', 'ai0/2', 'ai2/2', 'ai3/2', 'ai0/3', 'ai1/3', 'ai2/3', 'ai3/3']);
+  });
 
+  it("RULE-6 (B-AC-7): part(state, key) reads each adopted part as a copy, and a Classic seat's own part is its draft", () => {
     // At the seat, as each hand reads it: Smart ai1 adopts a landGrant-only playbook, then a development-only one, for
     // month 1; Classic ai0 adopts nothing.
     const landOnly: Playbook[] = [];
