@@ -13,6 +13,7 @@ import {
   pubPayoutFor,
   reachOf,
   reachWords,
+  RuleError,
   stableJson,
   stepFloor,
   tileIndex,
@@ -22,9 +23,11 @@ import {
   type GameState,
   type HallPlace,
 } from '@mule/engine';
-import type { DevFrame, MuleIntent, ReachView } from '@mule/protocol';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { MuleGame } from '../src/mule-game.js';
+import type { DevFrame, MuleIntent, MuleView, ReachView, ServerEnvelope } from '@mule/protocol';
+import { Room, TableError } from '@tabletop/core';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createBrain } from '../src/brain/index.js';
+import { AI_NAMES, MuleGame } from '../src/mule-game.js';
 import { pressAct, steerTo, toDevelopment, walkers, type SteerPoint } from './fake-context.js';
 
 const LENA = 's1';
@@ -245,10 +248,10 @@ describe('T-AC-4 (server part): one frame a tick; full views only on change', ()
     expect(g.changes).toEqual([]);
   });
 
-  it('T-AC-4 (AM-13): a steer sends no full view, and the room is told so: MuleGame is quiet for a steer only', () => {
+  it('T-AC-4 (AM-13, AM-21): a steer or a press sends no full view by itself, and the room is told so: MuleGame is quiet for steer and act only', () => {
     const g = steered();
     expect(g.game.quiet({ type: 'steer', x: 1, y: 0 })).toBe(true);
-    expect(g.game.quiet({ type: 'act' })).toBe(false);
+    expect(g.game.quiet({ type: 'act' })).toBe(true);
     expect(g.game.quiet({ type: 'ready' })).toBe(false);
     for (let i = 0; i < 20; i++) g.game.handle(OSSA, { type: 'steer', x: i % 2 ? 0 : 0.125, y: 0 });
     expect(g.changes).toEqual([]);
@@ -297,6 +300,51 @@ describe('RULE-1: the tick keeps to the clock', () => {
     expect(floorOf(g.game).tick, 'resynced: one tick every tickMs from there').toBe(DEV_STEER.catchUpTicks + 5);
     const late = g.game.viewFor(LENA).me!.devEndsAt!;
     expect(late, 'the clock does not move with the ticks').toBe(g.start + DEVELOPMENT.fullSeconds * 1_000);
+  });
+});
+
+describe('T-AC-4 at the room (AM-21): a press sends at most one full view, the tick\'s', () => {
+  it("T-AC-4: on a real Room, Lena mashing the button five times in a tick gets one full view per screen, the tick's, already showing her through the door", async () => {
+    vi.useFakeTimers();
+    let room: Room<MuleIntent, MuleView> | null = null;
+    try {
+      const r = new Room<MuleIntent, MuleView>({
+        code: 'PRESS',
+        createGame: (ctx) => new MuleGame(ctx, 7, { devSteer: true, politics: false, maxMonths: 1, brain: createBrain({ gameId: 'press', env: {} }), log: () => {} }),
+        aiNames: AI_NAMES,
+        isUserError: (err) => err instanceof RuleError || err instanceof TableError,
+      });
+      room = r;
+      const phones = ['Lena', 'Ossa'].map((name) => {
+        const views: MuleView[] = [];
+        const from = { seatId: null as string | null };
+        const conn = { send: (m: ServerEnvelope<MuleView>) => void (m.t === 'view' && m.view.game && views.push(m.view.game)) };
+        r.receive(conn, from, { t: 'join', code: 'PRESS', name });
+        return { views, start: () => r.receive(conn, from, { t: 'start' }), send: (intent: MuleIntent) => r.receive(conn, from, { t: 'intent', intent }) };
+      });
+      const [lena] = phones as [(typeof phones)[number], (typeof phones)[number]];
+      lena.start();
+      const phase = () => r.viewFor(null).game?.phase;
+      for (let i = 0; i < 20_000 && phase() !== 'development'; i++) {
+        if (phase() === 'planning' || phase() === 'landGrant') for (const p of phones) p.send({ type: 'ready' });
+        await vi.advanceTimersByTimeAsync(100);
+      }
+      expect(phase()).toBe('development');
+      await vi.advanceTimersByTimeAsync(TICK);
+      expect(lena.views.at(-1)!.me!.reach?.verb).toBe('ENTER STORE');
+      const seen = phones.map((p) => p.views.length);
+      for (let k = 0; k < 5; k++) lena.send({ type: 'act' });
+      await vi.advanceTimersByTimeAsync(2 * TICK);
+      for (const [i, p] of phones.entries()) {
+        const after = p.views.slice(seen[i]);
+        expect(after, `screen ${i}: one view, the tick's`).toHaveLength(1);
+        expect(after[0]!.players[0]!.colonist!.space, `screen ${i}: it shows the press applied`).toBe('hall');
+      }
+      expect(lena.views.at(-1)!.me!.reach?.verb).toBe('LEAVE');
+    } finally {
+      room?.dispose();
+      vi.useRealTimers();
+    }
   });
 });
 
