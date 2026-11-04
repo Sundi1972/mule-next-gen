@@ -138,6 +138,11 @@ describe('the draft picks a plan kind and writes its strategy', () => {
     const drawn = new Set(Array.from({ length: 20 }, (_, seed) => strategyOf(trader.state, traderMind, seed).kind));
     expect(drawn).toEqual(new Set(['specialist', 'monopolist']));
     expect(strategyOf(trader.state, traderMind, 102).kind).toBe('specialist');
+    // One kind a month: the seat's planning, development and auction drafts of a month draw the same tie.
+    for (let seed = 0; seed < 20; seed++) {
+      const of = (phase: 'planning' | 'development' | 'auction') => draftPlaybook({ state: trader.state, seat: traderMind.me, mind: traderMind, seed, phase }).strategy.kind;
+      expect([of('development'), of('auction')], `seed ${seed}`).toEqual([of('planning'), of('planning')]);
+    }
 
     const rookie = table('rookie');
     const rookieKinds = rookie.seats.map((s) => strategyOf(rookie.state, s.mind, s.seed));
