@@ -93,4 +93,29 @@ describe('the floor never refuses a MULE step the AI planned (FM-floor-refusals)
     expect(me.carriedMule, 'no MULE left on the lead').toBeNull();
     expect(tileAt(state.tiles, state.width, plot.x, plot.y)!.outfit, 'the MULE on its plot').not.toBeNull();
   });
+
+  it("FM-floor-lake-stand: no MULE is bought for a lake plot whose only shore off the seat's own land no walk reaches", () => {
+    // Seed 14's map for four seats, as the sim's game 14 has it in month 2: ai0's lake plot at 12·8 (0-based) borders its
+    // own swamps at 11·7 and 11·8, each with a MULE, where Reach works the swamp underfoot, not the lake; and the plains at
+    // 13·7 and 13·8, which the lakes along column 12 and row 5 wall off from the store. No spot to install it from is
+    // reachable, though the walk to the lake's edge across the swamps is.
+    const state = development(14, 4);
+    const at = (x: number, y: number) => tileAt(state.tiles, state.width, x, y)!;
+    expect([at(12, 8), at(12, 5), at(13, 5), at(14, 5), at(12, 6), at(12, 7)].map((t) => t.terrain)).toEqual(Array(6).fill('lake'));
+    at(12, 8).owner = ME;
+    for (const t of [at(11, 7), at(11, 8)]) {
+      t.owner = ME;
+      t.outfit = 'water';
+    }
+    const cfg = quietConfig();
+    const seat = new AiSeat({ id: ME, name: 'AI 1', persona: 'trader', level: 'trader', seed: 11 });
+    playTurn(state, cfg, seat);
+    const me = state.players.find((p) => p.id === ME)!;
+    const log = seat.developLog();
+    // The promise: no MULE paid for and lost. Every MULE it buys it installs.
+    expect(refused(seat), JSON.stringify(log)).toEqual([]);
+    expect(me.carriedMule, 'no MULE on the lead').toBeNull();
+    const ok = (type: string) => log.filter((e) => e.action.type === type && e.ok).length;
+    expect(ok('install'), 'MULEs installed, of those bought').toBe(ok('buyMule'));
+  });
 });
