@@ -201,6 +201,15 @@ describe('the floor moments: wolves (RULE-4)', () => {
     f = tick(state, f, { a: IDLE });
     expect(f.tick).toBe(until);
     expect('stunnedUntilTick' in seat(f, 'a'), 'on its tick, the stun is cleared').toBe(false);
+
+    // AM-28: a crouching wolf struck before it lunges turns hurt with no aim left.
+    const fresh = meeting(7);
+    const a = seat(fresh.floor, 'a');
+    const e = a.encounter!;
+    const crouched = { ...e.wolves[0]!, x: a.x + WOLVES.strikeTiles / 2, y: a.y, state: 'tell' as const, untilTick: fresh.floor.tick + 100, target: { x: a.x, y: a.y } };
+    const fight = { ...e, stage: 'fight' as const, sinceTick: fresh.floor.tick, wolves: [crouched, ...e.wolves.slice(1)], nextLungeTick: fresh.floor.tick + 100, recoverUntilTick: 0 };
+    const struck = tick(fresh.state, moved(fresh.floor, 'a', { encounter: fight }), { a: { x: 0, y: 0, act: true } });
+    expect(seat(struck, 'a').encounter?.wolves[0], 'the struck wolf').toMatchObject({ state: 'hurt', target: null });
   });
 
   it('T-AC-6 negative: no wolves in the hall, on plains, or with WOLVES.on false', () => {
