@@ -114,6 +114,10 @@ function youFor(ev: ShowEventView, id: string, cast: ShowCast): EventYouSummary 
     return { headline: 'You’re sick', short: 'sick', detail: `You walk at half pace this turn.${why ? ` Why: ${why}.` : ''}`, change: {}, sick: true };
   }
   const detail = YOU[ev.key]?.(ev);
+  // A collapse changes no output, but it changed your plot: it did not miss you.
+  if (ev.hits.some((h) => h.becomes === 'plain' && cast.ownerAt(h.x, h.y) === id)) {
+    return { headline: 'Your cavern caved in', short: 'caved in', detail: detail ?? '', change: {} };
+  }
   // As in eventSummary, a hit that changed nothing is no loss: a player only it reached was missed.
   const mine = ev.hits.filter((h) => h.delta !== 0 && cast.ownerAt(h.x, h.y) === id);
   if (mine.length === 0) return null;
