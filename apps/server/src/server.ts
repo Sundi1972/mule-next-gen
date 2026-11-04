@@ -56,7 +56,7 @@ export function createMuleServer(
       maxMonths: options.maxMonths,
       phaseScale: options.phaseScale,
       politics: options.politics ?? true,
-      // Steered development for this server's games only; trunk's DEV_STEER.on stays off (PM ruling).
+      // A game's own steered setting when the caller gives one; otherwise DEV_STEER.on decides, which is on.
       ...(options.devSteer === undefined ? {} : { devSteer: options.devSteer }),
     };
     if (recordDir === null) return new MuleGame(ctx, gameSeed, gameOptions);
