@@ -50,7 +50,8 @@ export interface LiveWalkersProps {
 /**
  * Every colonist in one space at its exact position this frame (arcade spec C13): a layer of its own over a map or the
  * store's hall, positioned on every render with no CSS easing, since easing between 20 Hz frames would draw a live
- * walk as a lag. HoloMap's own avatars ease over 700 ms between plots; this layer is for steering. Each walker moves by
+ * walk as a lag, and by transform only, never left and top. HoloMap's own avatars ease over 700 ms between plots; this
+ * layer is for steering. Each walker moves by
  * #195's gait (motionOf, cycleSeconds), its MULE on the same stride. Pointer-transparent: the stage under it takes the
  * mouse and the taps.
  */
@@ -58,7 +59,9 @@ export function LiveWalkers({ walkers, space, cols, rows, cell, density, names =
   const map = space === 'map';
   const size = Math.round(cell * (map ? 0.62 : 0.95));
   const muleSize = Math.round(size * (map ? 1.35 : 1.1));
-  const at = (x: number, y: number) => ({ left: `${(x / cols) * 100}%`, top: `${(y / rows) * 100}%` });
+  // Each walker rides a layer the size of the space, moved by transform alone: a translate's % is of the layer's own
+  // size, which is the space's, so no frame lays anything out and nothing needs measuring (#195's walk board's lesson).
+  const at = (x: number, y: number) => ({ transform: `translate(${(x / cols) * 100}%, ${(y / rows) * 100}%)` });
   // The nearer the bottom, the nearer the viewer: drawn last.
   const ordered = [...walkers].sort((a, b) => a.y - b.y);
   return (
@@ -80,12 +83,14 @@ export function LiveWalkers({ walkers, space, cols, rows, cell, density, names =
         return (
           <div key={w.id}>
             {w.lead && (
-              <div className="absolute -translate-x-1/2 -translate-y-[80%]" style={at(w.lead.x, w.lead.y)} data-testid={`mule-${w.id}`} data-good={w.lead.good ?? 'empty'}>
-                <Mule size={muleSize} state={w.moving ? 'walk' : 'idle'} good={w.lead.good} owner={w.slot} facing={w.facing} cycle={stride} />
+              <div className="absolute inset-0" style={at(w.lead.x, w.lead.y)} data-testid={`mule-${w.id}`} data-good={w.lead.good ?? 'empty'}>
+                <div className="absolute left-0 top-0 -translate-x-1/2 -translate-y-[80%]">
+                  <Mule size={muleSize} state={w.moving ? 'walk' : 'idle'} good={w.lead.good} owner={w.slot} facing={w.facing} cycle={stride} />
+                </div>
               </div>
             )}
             <div
-              className="absolute flex -translate-x-1/2 -translate-y-[85%] flex-col items-center"
+              className="absolute inset-0"
               style={at(w.x, w.y)}
               data-testid={`colonist-${w.id}`}
               data-x={w.x.toFixed(3)}
@@ -94,21 +99,23 @@ export function LiveWalkers({ walkers, space, cols, rows, cell, density, names =
               data-moving={w.moving || undefined}
               data-bitten={w.bitten || undefined}
             >
-              <span
-                role="img"
-                aria-label={w.name}
-                className={cx('relative block rounded-full', w.mine && 'ring-2 ring-holo ring-offset-1 ring-offset-table')}
-                // PlayerMark's edge and, on your own, its glow in your colour.
-                style={{ filter: w.mine ? `drop-shadow(0 0 1px var(--color-mark-edge)) drop-shadow(0 0 ${Math.round(size / 3)}px color-mix(in srgb, ${color} var(--mark-glow), transparent))` : 'drop-shadow(0 0 1px var(--color-mark-edge))' }}
-              >
-                <Creature species={w.species} color={color} size={size} motion={motionOf(gait)} cycle={stride} facing={w.facing} />
-                {rule && w.condition !== undefined && <ConditionTag id={w.id} condition={w.condition} rule={rule} size={density} />}
-              </span>
-              {names && (
-                <span className={cx('mt-0.5 whitespace-nowrap rounded-chip bg-map-chip px-1 font-mono font-bold leading-tight text-ink shadow-chip', density === 'tv' ? 'text-xs' : 'text-[10px]')} data-testid={`colonist-name-${w.id}`}>
-                  {w.name}
+              <div className="absolute left-0 top-0 flex -translate-x-1/2 -translate-y-[85%] flex-col items-center">
+                <span
+                  role="img"
+                  aria-label={w.name}
+                  className={cx('relative block rounded-full', w.mine && 'ring-2 ring-holo ring-offset-1 ring-offset-table')}
+                  // PlayerMark's edge and, on your own, its glow in your colour.
+                  style={{ filter: w.mine ? `drop-shadow(0 0 1px var(--color-mark-edge)) drop-shadow(0 0 ${Math.round(size / 3)}px color-mix(in srgb, ${color} var(--mark-glow), transparent))` : 'drop-shadow(0 0 1px var(--color-mark-edge))' }}
+                >
+                  <Creature species={w.species} color={color} size={size} motion={motionOf(gait)} cycle={stride} facing={w.facing} />
+                  {rule && w.condition !== undefined && <ConditionTag id={w.id} condition={w.condition} rule={rule} size={density} />}
                 </span>
-              )}
+                {names && (
+                  <span className={cx('mt-0.5 whitespace-nowrap rounded-chip bg-map-chip px-1 font-mono font-bold leading-tight text-ink shadow-chip', density === 'tv' ? 'text-xs' : 'text-[10px]')} data-testid={`colonist-name-${w.id}`}>
+                    {w.name}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
         );
