@@ -1,7 +1,7 @@
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { extname, join, normalize, resolve } from 'node:path';
-import { SPECIES } from '@mule/engine';
+import { GOODS, SPECIES } from '@mule/engine';
 import { EMOTES, type MuleIntent, type MuleView } from '@mule/protocol';
 import { RoomRegistry, type ClientEnvelope, type Connection, type GameContext, type Room } from '@tabletop/core';
 import { WebSocketServer, type WebSocket } from 'ws';
@@ -226,6 +226,13 @@ const isPromise = (x: unknown) => {
   return p.kind === 'cap' ? Number.isInteger(p.percent) : p.kind === 'lower' || p.kind === 'hold';
 };
 
+function isProposal(v: unknown): boolean {
+  const p = v as Record<string, unknown> | null;
+  if (typeof p !== 'object' || p === null || typeof p.law !== 'string') return false;
+  if (p.kind === 'repeal') return true;
+  return p.kind === 'enact' && Number.isInteger(p.setting) && (p.replaces === undefined || typeof p.replaces === 'string');
+}
+
 function isIntent(v: unknown): v is MuleIntent {
   if (typeof v !== 'object' || v === null) return false;
   const i = v as Record<string, unknown>;
@@ -271,9 +278,14 @@ function isIntent(v: unknown): v is MuleIntent {
     case 'commission':
     case 'repair':
       return typeof i.id === 'string';
+    case 'propose':
+      return i.proposal === null || isProposal(i.proposal);
+    case 'voteLaw':
+      return typeof i.yes === 'boolean';
     case 'donate': {
       const goods = i.goods as Record<string, unknown> | undefined;
-      return typeof i.id === 'string' && int(i.credits) && (goods === undefined || (typeof goods === 'object' && goods !== null && Object.values(goods).every(int)));
+      const record = typeof goods === 'object' && goods !== null && !Array.isArray(goods);
+      return typeof i.id === 'string' && int(i.credits) && (goods === undefined || (record && Object.entries(goods).every(([g, n]) => (GOODS as readonly string[]).includes(g) && int(n))));
     }
     default:
       return false;
