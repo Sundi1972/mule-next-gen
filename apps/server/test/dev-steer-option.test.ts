@@ -36,8 +36,9 @@ async function phoneInDevelopment(devSteer: boolean | undefined) {
   send({ t: 'addAi' });
   send({ t: 'start' });
   const phase = () => inbox.filter((m) => m.t === 'view').at(-1)?.view.game?.phase;
-  // Ready from the server's own phase, not the phone's last view: a view can trail a phase behind, and a Ready sent on a
-  // stale land-grant view landed in development, where a tap game takes it as done for the turn (1 run in 5).
+  // One Ready per phase, read from the server's own phase, then wait for it to change. Sending on a timer raced the
+  // server: a Ready sent before the last one was processed reached development, where a tap game takes it as done for
+  // the turn, and the game ran on past development before the test looked (1 run in 5 under load).
   const room = server.registry.get(code) as unknown as { game: { viewFor(seat: null): MuleView } };
   const serverPhase = () => {
     try {
@@ -46,11 +47,17 @@ async function phoneInDevelopment(devSteer: boolean | undefined) {
       return null; // The start message has not reached the game yet.
     }
   };
-  for (let i = 0; i < 2_000 && phase() !== 'development'; i++) {
-    // Ten a second at most, under the server's RATE_LIMIT, so the steer that follows is not dropped.
-    if (i % 10 === 0 && (serverPhase() === 'planning' || serverPhase() === 'landGrant')) send({ t: 'intent', intent: { type: 'ready' } });
+  const readied = new Set<string>();
+  for (let i = 0; i < 4_000 && serverPhase() !== 'development'; i++) {
+    const now = serverPhase();
+    if ((now === 'planning' || now === 'landGrant') && !readied.has(now)) {
+      readied.add(now);
+      send({ t: 'intent', intent: { type: 'ready' } });
+    }
     await new Promise((r) => setTimeout(r, 10));
   }
+  expect(serverPhase(), 'the game reached development').toBe('development');
+  for (let i = 0; i < 500 && phase() !== 'development'; i++) await new Promise((r) => setTimeout(r, 10));
   expect(phase(), 'the game reached development').toBe('development');
   const settle = (ms: number) => new Promise((r) => setTimeout(r, ms));
   return { inbox, send, settle, phase, serverPhase };
