@@ -59,7 +59,10 @@ export interface FloorWolf {
   /** The tick its state began, and the tick it ends (unused while it prowls). */
   readonly sinceTick: number;
   readonly untilTick: number;
-  /** A lunge's start and the spot it aims at: where its colonist stood when it crouched. */
+  /**
+   * A lunge's start, and the spot it aims at: where its colonist stood when it crouched. The target is set only while
+   * it crouches (tell) and lunges, and null otherwise (AM-28).
+   */
   readonly from: FloorPoint | null;
   readonly target: FloorPoint | null;
 }
