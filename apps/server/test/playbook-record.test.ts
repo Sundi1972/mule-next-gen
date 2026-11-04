@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AI_HANDS, RuleError, type GameRecord, type GameState } from '@mule/engine';
-import type { Decider } from '@mule/ai';
+import { unusableReply, type Decider } from '@mule/ai';
 import type { MuleIntent, MuleView } from '@mule/protocol';
 import { Room, TableError, type ClientEnvelope, type Connection, type GameContext, type ServerEnvelope } from '@tabletop/core';
 import type { BrainService } from '../src/brain/index.js';
@@ -49,7 +49,7 @@ const ANSWERS: readonly (number | 'busy')[] = [40, 'busy', 1_300, 260, 3_100, 90
 const SMART = 's3';
 const CLASSIC = 's4';
 
-/** A Smart brain for seat `smartId` only, answering as ANSWERS says; the rest play Classic, as with no key. */
+/** A Smart brain for seat `smartId` only, deciding as ANSWERS says; the rest play Classic, as with no key. */
 function stubBrain(smartId: string): BrainService {
   let calls = 0;
   const decider: Decider = {
@@ -62,7 +62,24 @@ function stubBrain(smartId: string): BrainService {
         setTimeout(() => resolve({ optionId: option.id, line: 'Mine.', by: 'llm' }), answer);
       }),
   };
-  return { deciderFor: (seat) => (seat.id === smartId ? decider : null), chatter: (seat, say) => chatter(seat.id, say), finish: () => {} };
+  return {
+    deciderFor: (seat) => (seat.id === smartId ? decider : null),
+    // A Smart seat has a writer too, as createBrain gives one: this one never answers, so its land grant plays the
+    // engine's draft. Cancelled at the grant, it settles no_reply, as the real writer does.
+    writerFor: (seat) =>
+      seat.id === smartId
+        ? {
+            write: (_kind, ask) =>
+              new Promise((resolve) => {
+                const noReply = () => resolve(unusableReply('no_reply'));
+                if (ask.signal?.aborted) noReply();
+                else ask.signal?.addEventListener('abort', noReply, { once: true });
+              }),
+          }
+        : null,
+    chatter: (seat, say) => chatter(seat.id, say),
+    finish: () => {},
+  };
 }
 
 let rooms: Room<MuleIntent, MuleView>[];
@@ -167,7 +184,16 @@ describe('AI playbooks in a keyless game record', { timeout: 60_000 }, () => {
   it('T-AC-4: a recorded keyless game replays with no ReplayDiverged, every playbook rewritten at its seq', async () => {
     const record = await recordedGame();
     const entries = playbooksOf(record);
-    expect(entries.length, 'the record holds playbooks to check').toBe(GAME_OPTIONS.maxMonths);
+    // The Classic seat's planning playbook and the Smart seat's land-grant one (WS2's writer, by 'engine' here), each month.
+    expect(
+      entries.map((e) => [e.seat, e.month, e.phase, e.playbook.by]).sort(),
+      'the record holds playbooks to check',
+    ).toEqual([
+      [SMART, 1, 'landGrant', 'engine'],
+      [SMART, 2, 'landGrant', 'engine'],
+      [CLASSIC, 1, 'planning', 'engine'],
+      [CLASSIC, 2, 'planning', 'engine'],
+    ]);
 
     const result = await replay(record);
     expect(result.stateHash.replayed).toBe(result.stateHash.recorded);
