@@ -197,19 +197,18 @@ describe("the moments in the sim's games (T-AC-5, AM-22)", () => {
     expect(turns.every((t) => t.pubAt === null || t.pubAt <= DEVELOPMENT.fullSeconds)).toBe(true);
   });
 
-  it('FM-hurry-margin: no AI colonist buys a MULE it then walks into the pub for want of time, but where a pack met it while it led that MULE', { timeout: SAMPLE_TIMEOUT_MS }, async () => {
+  it('FM-hurry-margin: no AI colonist buys a MULE it then walks into the pub, for want of time or for a step the floor refused, but where a pack met it while it led that MULE', { timeout: SAMPLE_TIMEOUT_MS }, async () => {
     const { turns } = await simGames();
     // A MULE bought and not installed is paid for and lost: walked into the pub on its lead, or still on it at the clock.
     // The AI plans a MULE only with the margin its hurry for the pub keeps, so time never costs one; a pack met on the
-    // way may. A MULE whose outfit or install the floor refused is lost for that, not for time: shown, not judged here.
+    // way may. Nor does the floor refuse a step its plan counted on (FM-floor-outfit-offer, FM-floor-lake-stand): an
+    // outfit or install given up on the floor excuses nothing, but where a pack met it leading that MULE.
     // Each excuse is that MULE's own: a pack met leading an earlier MULE, since installed, excuses nothing later.
     const lost = turns.flatMap((t) => t.lostMules.map((m) => ({ t, m })));
-    const what = (t: DevTurn) => `month ${t.month}, ${t.id}: bought ${t.bought}, installed ${t.installs}`;
-    for (const { t } of lost.filter(({ m }) => m.stepFailed)) console.log(`FM-hurry-margin, not for time: ${what(t)}, its outfit or install refused on the floor`);
-    const excused = lost.filter(({ m }) => m.packLeading || m.stepFailed);
-    console.log(`FM-hurry-margin: ${lost.length} MULEs lost in ${turns.length} turns, ${excused.length} excused (${lost.filter(({ m }) => m.packLeading).length} a pack met leading it)`);
-    const unexcused = lost.filter(({ m }) => !m.packLeading && !m.stepFailed).map(({ t }) => what(t));
-    expect(unexcused, `MULEs bought and lost for want of time (of ${turns.length} turns)`).toEqual([]);
+    const what = (t: DevTurn, m: DevTurn['lostMules'][number]) => `month ${t.month}, ${t.id}: bought ${t.bought}, installed ${t.installs}${m.stepFailed ? ', its outfit or install refused on the floor' : ''}`;
+    console.log(`FM-hurry-margin: ${lost.length} MULEs lost in ${turns.length} turns, ${lost.filter(({ m }) => m.packLeading).length} of them a pack met leading it`);
+    const unexcused = lost.filter(({ m }) => !m.packLeading).map(({ t, m }) => what(t, m));
+    expect(unexcused, `MULEs bought and lost for want of time or to a refused step (of ${turns.length} turns)`).toEqual([]);
     // An analysis or a filter is priced with the same margin: a hungry colonist, whose margin is several times
     // botPubMarginSeconds, never sets off for one the hurry for the pub then gives up on the way, but where a pack met
     // it there (scoutsCut counts the others).
