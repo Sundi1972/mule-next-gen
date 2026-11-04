@@ -1,7 +1,7 @@
 import { createElement, Fragment } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { nextStep, openShops, type DevelopState } from '../src/phone/next-step';
+import { installAfterPress, nextStep, openShops, type DevelopState } from '../src/phone/next-step';
 
 /** Lena in the store at the start of the turn's clock, nothing in tow, a free plot of hers at 5·7. */
 const BASE: DevelopState = {
@@ -144,5 +144,15 @@ describe('RULE-7: development says what to do next', () => {
     expect(sorted(openShops(at({}).locks))).toEqual(['corral', 'pub']);
     expect(sorted(openShops(at({ carry: 'empty' }).locks))).toEqual(sorted(['food', 'water', 'energy', 'smithore', 'crystite', 'rareEarth', 'alloy', 'electronics', 'medicine', 'greenBelt', 'pub']));
     expect(openShops(at({ carry: 'energy' }).locks)).toEqual(['pub']);
+  });
+
+  it('T-AC-9 row 6 walking: only a press the server takes moves the Install plot, so no other walk reads as an install', () => {
+    const a = { x: 1, y: 0 };
+    // Standing still: Install remembers its plot, Analyse and the filter forget it.
+    expect(installAfterPress(null, { kind: 'install', at: a }, false)).toEqual(a);
+    expect(installAfterPress(a, { kind: 'other' }, false)).toBeNull();
+    // Walking, the server refuses any press ("Still walking"), so nothing changes either way.
+    expect(installAfterPress(null, { kind: 'install', at: a }, true)).toBeNull();
+    expect(installAfterPress(a, { kind: 'other' }, true)).toEqual(a);
   });
 });
