@@ -79,7 +79,8 @@ try {
 
   // Month 2: Brix lists a plot; after the grant, Ossa bids it up past the minimum and wins it at the bell.
   await brix.locator('[data-phase=planning]').waitFor({ timeout: PRESS_MS * 5 });
-  const listed = await listAPlot(brix, phones.indexOf(phones.find((p) => p.name === 'Brix')!), truth);
+  // The map names a plot's owner by their place in the server's players, from 1.
+  const listed = await listAPlot(brix, truth.board().players.findIndex((p) => p.id === truth.seatOf('Brix')), truth);
   console.log(`✓ month 2: Brix listed ${listed.id} (plot ${listed.item.x},${listed.item.y}) at ${listed.minimum}`);
   await everyone(phones, (p) => readyThroughTheElection(p.page, within(ELECTION_WAIT_MS) + PRESS_MS));
   await everyone(phones, (p) => claimPlots(p.page));
