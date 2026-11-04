@@ -1409,7 +1409,8 @@ export async function theGlintRace(t: ArcadeTable): Promise<string> {
   const out: string[] = [];
   try {
     WOLVES.on = false;
-    Object.assign(GLINT, { on: true, prize: 'crystite', meanGapSeconds: 1, showSeconds: 8, pauseSeconds: 0.5 });
+    const raceShow = 8;
+    Object.assign(GLINT, { on: true, prize: 'crystite', meanGapSeconds: 1, showSeconds: raceShow, pauseSeconds: 0.5 });
     const store = gameOf(server, code).state.tiles.find((k) => k.terrain === 'store')!;
     const walk = HALL.floor[0]!;
     placeOnFloor(server, code, 's1', { space: 'hall', x: HALL.w * 0.4, y: (walk.y0 + walk.y1) / 2 });
@@ -1438,13 +1439,22 @@ export async function theGlintRace(t: ArcadeTable): Promise<string> {
     await tv.waitForTimeout(300);
     const after = await readMoments(tv);
     check(after.beats.some((b) => b.startsWith('Mia got the glint')), `B-AC-6: the TV says who got it; the frames' beats ${JSON.stringify(heardBeats(wires.tv, raced))}, the TV shows ${JSON.stringify(after.beats)}`);
-    owed.push({ tag: 'once won the glint is drawn on no screen', ok: after.glint === null && (await readMoments(mia)).glint === null, said: `the TV ${JSON.stringify(after.glint)}` });
+    // The next may light within a second (pauseSeconds 0.5, meanGapSeconds 1): a screen draws the server's glint, never the won one.
+    const next = floorOf(server, code).moments.glint;
+    const afterMia = (await readMoments(mia)).glint;
+    const notTheWon = (d: { x: number; y: number } | null) => d === null || (!!next && next.untilTick !== g.untilTick && d.x === next.x && d.y === next.y);
+    owed.push({ tag: 'once won the glint is drawn on no screen', ok: notTheWon(after.glint) && notTheWon(afterMia), said: `the TV ${JSON.stringify(after.glint)}, Mia ${JSON.stringify(afterMia)}, the server's next ${JSON.stringify(next)}` });
     out.push(`lit at ${words}, Mia got it`);
 
     // Negative: the next, with nobody on the way, fades and nobody gets it.
     GLINT.showSeconds = 2;
+    // The next may have lit under the race's 8 s before that took: wait it out, so the one measured lit under 2 s.
+    const stale = Date.now() + (raceShow + 2) * 1_000;
+    while (floorOf(server, code).moments.glint && Date.now() < stale) await mia.waitForTimeout(TICK_MS);
     const g2 = await glintWhen(mia, server, code, 20_000);
     check(g2, 'B-AC-6 (negative): a second glint lights within 20 s');
+    const lasts = g2.untilTick - floorOf(server, code).tick;
+    check(lasts <= (GLINT.showSeconds * 1_000) / TICK_MS, `B-AC-6 (negative): the glint measured lit under showSeconds ${GLINT.showSeconds}, ${lasts} ticks left`);
     const lit2 = Date.now();
     const before = ['s1', 's2'].map((s) => playerOf(server, code, s).stock.crystite);
     const end = Date.now() + (GLINT.showSeconds + 2) * 1_000;
