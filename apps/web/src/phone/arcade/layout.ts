@@ -130,7 +130,10 @@ const BANNER_MIN_CELLS = 4;
 
 /** The banner's text, as moments.tsx draws it (text-sm, leading-tight, px-2 py-1 in a 2 px border), in px. */
 export const BANNER_TEXT = { linePx: 17.5, padX: 20, padY: 12 } as const;
-/** A banner character's width at most, in px: its words' width is their length times this. */
+/**
+ * A banner character's width, in px, for sizing its box: about 1.2 times the measured average of the banners' sentences
+ * (6.75 px). Not a maximum: a line of wide capitals would overflow it, and no banner is written in capitals.
+ */
 export const BANNER_CHAR_PX = 8;
 
 /**

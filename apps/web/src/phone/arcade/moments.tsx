@@ -389,9 +389,16 @@ export function tvLines({ drawn, colonists, beats, mulesLeft }: { drawn: DrawnMo
   ], beats);
 }
 
-/** The lines, then the frames' three newest beats that none of them already says (a live line starts with its beat). */
+/** Whether a line is the corral's call, whatever count it gives. */
+const isCorralCall = (text: string) => text.endsWith(scrambleCall(1).slice(mules(1).length));
+
+/**
+ * The lines, then the frames' three newest beats that none of them already says: a live line starts with its beat, or
+ * both are the corral's call, the live one with the newer count.
+ */
 function withBeats(lines: TvLine[], beats: readonly string[]): TvLine[] {
-  const fresh = beats.filter((b) => !lines.some((l) => l.text.startsWith(b)));
+  const says = (l: TvLine, b: string) => l.text.startsWith(b) || (isCorralCall(l.text) && isCorralCall(b));
+  const fresh = beats.filter((b) => !lines.some((l) => says(l, b)));
   return [...lines, ...fresh.slice(-3).map((b) => ({ key: `beat-${b}`, text: b, tone: 'warn' as const }))];
 }
 
