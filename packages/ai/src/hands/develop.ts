@@ -1,8 +1,10 @@
-import { AI_HANDS, observe, type DevPlace, type GameState, type Outfit, type Rng } from '@mule/engine';
+import { AI_HANDS, analysisSeconds, IDLE_INPUT, MS_PER_SECOND, observe, tileIndex, type DevFloor, type DevPlace, type FloorColonist, type FloorConfig, type FloorInput, type GameState, type Outfit, type Rng } from '@mule/engine';
 import type { Act, AiAction } from '../actions.js';
 import type { Brain, Pending } from '../brain.js';
-import { analysesWanted, developDecision, filtersWanted, outfitName, plotName, type DevAction } from '../strategist.js';
+import { floorDevWalk, plotErrandSeconds, pubSeconds } from '../floor-time.js';
+import { analysesWanted, developDecision, filtersWanted, outfitName, plotName, type DevAction, type DevWalk } from '../strategist.js';
 import { situation } from '../summary.js';
+import { FloorWalker } from './floor-walker.js';
 
 /**
  * Development hands. On this server development is tap-to-act: a phone has
@@ -18,6 +20,12 @@ import { situation } from '../summary.js';
  * Where the game walks (the referee says where the seat stands), the walk
  * costs clock time on its own, so the taps are taps alone and a MULE the
  * seat can't walk out before its time runs out is not bought.
+ *
+ * Where the game steers (the arcade floor, DEV_STEER.on), the same list is
+ * walked instead of tapped: `steer` hands each step to a FloorWalker, which
+ * returns the stick and the button for the tick, and the floor's stepFloor
+ * moves the colonist. The list's source (`next`, `taken` and the stages) and
+ * its runner (a tap, or a walk) are apart, so either can change alone.
  */
 
 /** Where the colonist stands (or is walking to), and whether it is still walking or assaying, when the game walks. */
@@ -28,6 +36,12 @@ export interface DevWalking {
 
 /** The middle of a ms range, in seconds. */
 const midSeconds = ([lo, hi]: [number, number]) => (lo + hi) / 2 / 1_000; // literal-ok: midpoint of a range, ms to s
+
+/** The presses a MULE takes at the counters and its plot: buy, outfit, install. */
+const MULE_PRESSES = 3; // literal-ok: a count of the rule's steps, not balance
+
+/** What a seat already in may not do while month 1's clock waits for the others' first MULEs (the server's rule). */
+const HELD: ReadonlySet<AiAction['type']> = new Set(['buyMule', 'install', 'analyse', 'filter']);
 
 export interface DevStep {
   action: AiAction;
@@ -55,11 +69,18 @@ export class DevelopHand {
   private clock = 0;
   /** Where the seat stands, when the game walks. */
   private at: DevPlace | undefined;
+  /** On the floor: the runner, and the step it is walking. */
+  private readonly walker: FloorWalker;
+  private walking: DevStep | null = null;
+  /** On the floor: the clock ran short and the list is down to the pub. */
+  private toPub = false;
 
   constructor(
     private readonly brain: Brain,
     private readonly rng: Rng,
-  ) {}
+  ) {
+    this.walker = new FloorWalker(brain.mind.me);
+  }
 
   /** What the hands are about to do, for the dev view. */
   plan(): string[] {
@@ -82,7 +103,88 @@ export class DevelopHand {
       return;
     }
     this.clock += dt;
+    const d = AI_HANDS.develop;
+    const taps = () => (midSeconds(d.buyTapMs) + midSeconds(d.outfitMs) + midSeconds(d.installTapMs)) * mind.level.devPace;
+    const step = this.next(state, dt, secondsLeft, at === undefined ? undefined : () => ({ at, left: secondsLeft, taps: taps() }));
+    if (!step) return;
+    this.timer += dt;
+    if (this.timer < step.ms) return;
+    this.timer = 0;
+    this.taken(step, act(step.action));
+  }
 
+  /**
+   * One tick on the dev floor: the stick and the button for this seat's colonist, walking the to-do list `tick` taps.
+   * `held`: month 1's clock is waiting and this seat is in, so it may not start another MULE, analysis or filter yet
+   * (the referee refuses them); it stands until the clock starts.
+   */
+  steer(state: GameState, floor: DevFloor, secondsLeft: number, cfg: FloorConfig, held = false): FloorInput {
+    const mind = this.brain.mind;
+    if (state.phase !== 'development') return IDLE_INPUT;
+    if (state.month !== this.month) this.reset(state.month);
+    const me = state.players.find((p) => p.id === mind.me)!;
+    if (me.doneDeveloping || this.stage === 'done') return IDLE_INPUT;
+    if (secondsLeft <= 0) {
+      this.stage = 'done';
+      return IDLE_INPUT;
+    }
+    const dt = cfg.steer.tickMs;
+    this.clock += dt;
+    const view = { state, floor, cfg, secondsLeft };
+    const colonist = floor.colonists.find((c) => c.id === mind.me)!;
+    // The clock is nearly out: whatever is left of the errand, the pub. Held, the clock stands, so there is time.
+    // An assay under way holds the colonist still for the rest of it: that time is spent before any walk.
+    const holding = colonist.assayUntilTick === null ? 0 : (Math.max(0, colonist.assayUntilTick - floor.tick) * dt) / MS_PER_SECOND;
+    if (!held && !this.toPub && secondsLeft <= holding + pubSeconds(state, cfg, colonist) + cfg.steer.botPubMarginSeconds) this.hurry();
+    const pauseMs = cfg.steer.botCounterPauseSeconds * MS_PER_SECOND * mind.level.devPace;
+    // A step done this tick hands over to the next at once, so no tick is spent standing between them.
+    for (let ticks = dt; ; ticks = 0) {
+      const step = this.next(state, ticks, secondsLeft, () => floorDevWalk(state, cfg, colonist, secondsLeft - holding, (MULE_PRESSES * pauseMs) / MS_PER_SECOND));
+      if (!step) return IDLE_INPUT;
+      // Held, it starts none of these; one it is already walking (or has just pressed) it sees through.
+      if (held && HELD.has(step.action.type) && this.walking !== step) return IDLE_INPUT;
+      if (this.walking !== step) {
+        // An analysis or a filter it sets off for only if the walk there, the work and the walk on to the pub still
+        // fit the clock (RULE-8's spare time); the MULEs' walks were priced when they were chosen.
+        if (!held && !this.fits(state, cfg, colonist, step, secondsLeft - holding)) {
+          this.taken(step, false);
+          continue;
+        }
+        this.walking = step;
+        this.walker.reset();
+      }
+      const run = this.walker.run(view, step.action, pauseMs);
+      if (run.kind === 'going') return run.input;
+      this.walking = null;
+      this.taken(step, run.kind === 'ok');
+    }
+  }
+
+  /** Whether an analysis or a filter, from where the colonist stands, still leaves time for the pub. */
+  private fits(state: GameState, cfg: FloorConfig, c: FloorColonist, step: DevStep, secondsLeft: number): boolean {
+    const a = step.action;
+    if (a.type !== 'analyse' && a.type !== 'filter') return true;
+    const work = a.type === 'analyse' ? analysisSeconds(state, this.brain.mind.me) : 0;
+    return plotErrandSeconds(state, cfg, c, tileIndex(state.width, a.x, a.y), work) + cfg.steer.botPubMarginSeconds <= secondsLeft;
+  }
+
+  /** Out of time: drop the rest of the list and go to the pub. */
+  private hurry(): void {
+    this.toPub = true;
+    this.pending = null;
+    this.queue = [];
+    this.walking = null;
+    this.push({ type: 'pub' }, AI_HANDS.develop.pubMs, 'Go to the pub', ++this.group);
+    this.stage = 'steps';
+    this.then = 'done';
+  }
+
+  /**
+   * The to-do list's source: runs its stages until a step is due and returns it, the head of the queue, or null while
+   * it decides or has nothing to do. `walk` prices the walks, where the game walks or steers.
+   */
+  private next(state: GameState, dt: number, secondsLeft: number, walk?: () => DevWalk): DevStep | null {
+    const mind = this.brain.mind;
     if (this.stage === 'start') {
       const obs = observe(state, mind.me);
       for (const index of analysesWanted(obs, mind, secondsLeft)) {
@@ -97,33 +199,31 @@ export class DevelopHand {
       if (!this.pending) {
         const obs = observe(state, mind.me);
         const d = AI_HANDS.develop;
-        const taps = (midSeconds(d.buyTapMs) + midSeconds(d.outfitMs) + midSeconds(d.installTapMs)) * mind.level.devPace;
-        const walk = at === undefined ? undefined : { at, left: secondsLeft, taps };
-        this.pending = this.brain.ask('develop', developDecision(obs, mind, this.mules, walk), obs, d.decideWaitMs, null, situation(obs, mind));
+        this.pending = this.brain.ask('develop', developDecision(obs, mind, this.mules, walk?.()), obs, d.decideWaitMs, null, situation(obs, mind));
       }
       const settled = this.brain.resolve(this.pending, dt, state);
-      if (!settled) return;
+      if (!settled) return null;
       this.pending = null;
       const a = settled.action;
       if (a.kind === 'stop') this.finish(state);
       else this.queueMule(state, a.index, a.outfit);
       // The first step's time starts now.
-      return;
+      return null;
     }
 
-    if (this.stage !== 'steps') return;
+    if (this.stage !== 'steps') return null;
     if (this.queue.length === 0) {
       if (this.then === 'decide') this.stage = 'decide';
       else if (this.then === 'finish') this.finish(state);
       else this.stage = 'done';
-      return;
+      return null;
     }
-    this.timer += dt;
-    const step = this.queue[0]!;
-    if (this.timer < step.ms) return;
-    this.timer = 0;
+    return this.queue[0]!;
+  }
+
+  /** The head step was taken: done, or refused, which drops what depended on it. */
+  private taken(step: DevStep, ok: boolean): void {
     this.queue.shift();
-    const ok = act(step.action);
     this.done.push({ label: step.label, ok, at: this.clock });
     if (!ok) {
       // Drop what depended on it. A MULE that couldn't be bought means the corral is empty: no more MULEs this month.
@@ -142,6 +242,8 @@ export class DevelopHand {
     this.mules = 0;
     this.done.length = 0;
     this.clock = 0;
+    this.toPub = false;
+    this.walking = null;
   }
 
   private push(action: AiAction, range: [number, number], label: string, group: number): void {
