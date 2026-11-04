@@ -16,10 +16,11 @@ export function Joystick({ onStick, className, size = STICK }: { onStick: (at: S
   const knobSize = Math.round((KNOB * size) / STICK);
   const knob = useRef<HTMLSpanElement>(null);
   const pad = useRef<HTMLDivElement>(null);
-  const held = useRef(false);
+  /** The pointer that took the stick: only it steers, and only its lift lets go. */
+  const held = useRef<number | null>(null);
   const set = (e: ReactPointerEvent | null) => {
     if (!e) {
-      held.current = false;
+      held.current = null;
       onStick(null);
       if (knob.current) knob.current.style.transform = 'translate(-50%, -50%)';
       return;
@@ -34,7 +35,6 @@ export function Joystick({ onStick, className, size = STICK }: { onStick: (at: S
       x /= m;
       y /= m;
     }
-    held.current = true;
     onStick({ x, y });
     if (knob.current) knob.current.style.transform = `translate(calc(-50% + ${(x * reach * size) / r.width}px), calc(-50% + ${(y * reach * size) / r.width}px))`;
   };
@@ -44,16 +44,16 @@ export function Joystick({ onStick, className, size = STICK }: { onStick: (at: S
       className={cx('relative shrink-0 touch-none select-none rounded-full border-2 border-holo-line bg-holo-soft shadow-map', className)}
       style={{ width: size, height: size }}
       onPointerDown={(e) => {
-        if (e.altKey) return;
+        if (e.altKey || held.current !== null) return;
         e.currentTarget.setPointerCapture(e.pointerId);
+        held.current = e.pointerId;
         set(e);
       }}
-      onPointerMove={(e) => held.current && set(e)}
-      onPointerUp={() => set(null)}
-      onPointerCancel={() => set(null)}
-      role="slider"
+      onPointerMove={(e) => held.current === e.pointerId && set(e)}
+      onPointerUp={(e) => held.current === e.pointerId && set(null)}
+      onPointerCancel={(e) => held.current === e.pointerId && set(null)}
+      role="application"
       aria-label="Joystick: drag to walk"
-      aria-valuenow={0}
       data-testid="joystick"
     >
       {/* The four directions, faint. */}
