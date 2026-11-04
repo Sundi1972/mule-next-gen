@@ -98,6 +98,7 @@ describe('the validator holds every playbook to RULE-1', () => {
     expect(target.plays).toEqual({ plots: GAME.claimsPerGrant * (at.planning.maxMonths - month), byMonth: at.planning.maxMonths });
     expect(target.why).toMatch(/^clamped to /);
     expect(one('planning', '/strategy/landTarget/byMonth', 0).plays).toBe(month);
+    expect(one('planning', '/strategy/landTarget', { ...draft.strategy.landTarget, extra: 1 })).toMatchObject({ plays: draft.strategy.landTarget, why: expect.stringMatching(/^clamped to /) });
     // S6: another seat of this game; a stance from the four. RULE-1's example: a stance for the seat itself.
     expect(one('planning', '/strategy/stances/ai2', 'rival').why).toBe('no such player');
     expect(one('planning', '/strategy/stances/ai7', 'rival').why).toBe('no such player');
@@ -161,6 +162,7 @@ describe('the validator holds every playbook to RULE-1', () => {
     expect(one('planning', '/landGrant/planB', [f1, f1, f2])).toMatchObject({ plays: [f1, f2], why: 'clamped: dropped 1 entry, keeping free, distinct plots' });
     expect(one('planning', '/landGrant/pair', [f1, f2])).toMatchObject({ plays: [f1, f2], why: null });
     expect(one('planning', '/landGrant/pair', [f1, f1]).why).toBe('not two free, distinct plots');
+    expect(one('planning', '/landGrant/pair', [rivalPlot, p1], { state: planning2, draft: draftOf(planning2, 'planning', mindOf(2), 102) }).why).toBe('not two free, distinct plots');
 
     // P8: RULE-1b's grammar; own plots for install and filter, any plot for analyse; the level's MULEs; the step cap.
     const own = ownPlots(at.development, 'ai2');
@@ -210,7 +212,11 @@ describe('the validator holds every playbook to RULE-1', () => {
     expect(one('auction', g('walkAway'), 0).plays).toBe(1);
     const buyer = run('auction', [edit(g('role'), 'buyer'), edit(g('start'), part.walkAway + 40)]);
     expect(read(buyer.playbook, g('start'))).toBe(part.walkAway);
+    const seller2 = run('auction', [edit(g('role'), 'seller'), edit(g('walkAway'), 50), edit(g('start'), 20)]);
+    expect(read(seller2.playbook, g('start'))).toBe(50);
+    expect(seller2.rejected).toContainEqual({ path: g('start'), to: 20, why: 'clamped to 50: a seller starts at or above its walk-away' });
     expect(one('auction', g('concedeCrPerS'), AI_PLANS.bounds.concedeMaxCrPerS + 30).plays).toBe(AI_PLANS.bounds.concedeMaxCrPerS);
+    expect(one('auction', g('concedeCrPerS'), -1)).toMatchObject({ plays: 0, why: 'clamped to 0: a rate of 0 or more' });
     expect(one('auction', g('vsRival'), 'bully').why).toBe('no such tactic');
     expect(one('auction', g('vsRival'), 'yield')).toMatchObject({ plays: 'yield', why: null });
     expect(one('auction', g('per/ai2'), 'yield').why).toBe('no such player');
@@ -239,6 +245,11 @@ describe('the validator holds every playbook to RULE-1', () => {
     expect(redrafted.playbook.strategy.kind).toBe(kind);
     expect(redrafted.playbook.development).toEqual(engineDev);
     expect(run('development', [edit('/strategy/reason', 'Still me.')], { draft: handed }).playbook.development).toEqual(handed.development);
+    // So does an edit to the money-maker or the monopoly target.
+    const maker = handed.strategy.moneyMaker === 'crystite' ? 'food' : 'crystite';
+    expect(run('development', [edit('/strategy/moneyMaker', maker)], { draft: handed }).playbook.development).toEqual(engineDev);
+    expect(handed.strategy.monopolyTarget).not.toBe('smithore');
+    expect(run('development', [edit('/strategy/monopolyTarget', 'smithore')], { draft: handed }).playbook.development).toEqual(engineDev);
 
     // The output: by 'llm' when an edit took; each accepted or clamped edit with from and the value that plays.
     const out = run('planning', [edit('/strategy/cashFloor', 5000), edit('/strategy/kind', 'tycoon'), edit('/strategy/reason', 'Hoard.')]);

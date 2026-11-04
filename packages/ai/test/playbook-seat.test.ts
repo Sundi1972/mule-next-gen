@@ -184,15 +184,18 @@ describe('the seat drafts, validates and writes its planning playbook (C4, RULE-
     expect(asked.filter((a) => a.endsWith('/land')).length).toBeGreaterThanOrEqual(IDS.length);
     expect(playOf(smart)).toEqual(playOf(onToday));
 
-    // Row 2: a playbook adopted for the month carries the planning part, so the Classic seat does not write its own.
-    const adopted = playTable(2, {
+    // Row 2: a playbook adopted for a month carries the planning part, so the Classic seat does not write its own that
+    // month, and writes again the month after. Adopted ahead in month 1: month 2's, then month 1's, which is older than
+    // the newest adopted and so ignored (RULE-6's unknown).
+    const adopted = playTable(3, {
       opening: (state, seats) => {
-        if (state.phase !== 'planning' || state.month !== 2) return;
+        if (state.phase !== 'planning' || state.month !== 1) return;
         const pb = draftPlaybook({ state, seat: 'ai1', mind: seats[1]!.mind, seed: 1, phase: 'planning' });
+        seats[1]!.adopt({ ...pb, month: 2, by: 'llm' });
         seats[1]!.adopt({ ...pb, by: 'llm' });
       },
     });
-    expect(adopted.written.map((pb) => `${pb.seat}/${pb.month}`)).toEqual(['ai0/1', 'ai1/1', 'ai2/1', 'ai3/1', 'ai0/2', 'ai2/2', 'ai3/2']);
+    expect(adopted.written.map((pb) => `${pb.seat}/${pb.month}`)).toEqual(['ai0/1', 'ai1/1', 'ai2/1', 'ai3/1', 'ai0/2', 'ai2/2', 'ai3/2', 'ai0/3', 'ai1/3', 'ai2/3', 'ai3/3']);
   });
 
   it('T-AC-13 (C4 pin): a seat built with playbook false, or with AI_PLANS.on false, writes nothing and acts as the default seat does', () => {
@@ -332,6 +335,16 @@ describe("playbookSource, WS2's PlaybookSource (AM-1)", () => {
     // At the grant it plans the pending pick the land hand then plays, the decider's, not a pick of its own.
     expect(headOf(at('landGrant').playbook.landGrant!, t.state)).toEqual(playedHead(t, 'ai2', 1));
     expect(headOf(at('planning').playbook.landGrant!, t.state)).not.toEqual(playedHead(t, 'ai2', 1));
+    // After the grant it plans next month's, and the seat holds no pick for that month: a fresh month-2 draft with none.
+    const next = at('development');
+    const fresh = draftPlaybook({ state: next.state, seat: 'ai2', mind: t.seats[2]!.mind, seed: t.seats[2]!.options.seed, phase: 'planning', land: null, month: 2 });
+    const { planning: _, ...freshGrant } = fresh;
+    expect(next.playbook).toEqual({ ...freshGrant, phase: 'landGrant' });
+    // Its gate re-drafts that land part for month 2 the same way, with no pick of this month's.
+    const kind = next.playbook.strategy.kind === 'builder' ? 'landBaron' : 'builder';
+    const replanned = source!.validate(next.state, 'ai2', next.playbook, [{ path: '/strategy/kind', to: kind, reason: 'Land, now.' }]);
+    expect(replanned.playbook.strategy.kind).toBe(kind);
+    expect(replanned.playbook.landGrant).toEqual(fresh.landGrant);
 
     // An in-bounds edit plays, by 'llm'.
     const grant = at('landGrant');
