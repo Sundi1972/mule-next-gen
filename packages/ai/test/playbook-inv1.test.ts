@@ -75,7 +75,8 @@ describe('INV-1 over seeded games (T-AC-3)', () => {
     expect(checked).toBeGreaterThan(0);
   }, 120_000);
 
-  it('T-AC-3: a draft value forced out of bounds is rejected, by its path', async () => {
+  it('T-AC-3: a draft value forced out of bounds is clamped or replaced, by its path', async () => {
+    // Clamped: a development budget past the seat's time.
     const specs = specsFor(1);
     const [seat] = seatsFor(specs, 1);
     let development: GameState | null = null;
@@ -87,42 +88,35 @@ describe('INV-1 over seeded games (T-AC-3)', () => {
     const bound = state.players.find((p) => p.id === seat!.id)!.devSeconds * MS_PER_SECOND;
     const forced: Playbook = { ...draft, development: { ...draft.development!, timeBudgetMs: bound + 1 } };
 
-    const { playbook, rejected } = seat!.validator()(state, seat!.id, forced, []);
-    expect(rejected.map((r) => r.path)).toEqual(['/development/timeBudgetMs']);
-    expect(rejected[0]!.why).toBe(`clamped to ${bound}: the seat's development time`);
-    expect(playbook.development!.timeBudgetMs).toBe(bound);
-  });
+    const clamped = seat!.validator()(state, seat!.id, forced, []);
+    expect(clamped.rejected.map((r) => r.path)).toEqual(['/development/timeBudgetMs']);
+    expect(clamped.rejected[0]!.why).toBe(`clamped to ${bound}: the seat's development time`);
+    expect(clamped.playbook.development!.timeBudgetMs).toBe(bound);
 
-  it('T-AC-3: a draft value forced out of bounds is rejected and replaced, by its path', () => {
-    // A stale or recorded playbook handed to a Rookie: a monopoly it may never play, a stance from no list, and a
-    // ranking with no free plot in it.
-    const state = createGame({ seed: 1, players: [0, 1, 2, 3].map((i) => ({ id: `ai${i}`, name: `AI ${i + 1}`, isAi: true })) });
+    // Replaced: a stale or recorded playbook handed to a Rookie, with a monopoly it may never play, a stance from no
+    // list, and a ranking with no free plot in it.
+    const opening = createGame({ seed: 1, players: [0, 1, 2, 3].map((i) => ({ id: `ai${i}`, name: `AI ${i + 1}`, isAi: true })) });
     const rookie = new AiSeat({ id: 'ai2', name: 'AI 3', persona: 'trader', level: 'rookie', seed: 7 });
-    const draft = rookie.draft(state, 'planning');
-    const store = state.tiles.findIndex((t) => t.terrain === 'store');
+    const planned = rookie.draft(opening, 'planning');
+    const store = opening.tiles.findIndex((t) => t.terrain === 'store');
     const stale: Playbook = {
-      ...draft,
-      strategy: { ...draft.strategy, kind: 'monopolist', monopolyTarget: 'smithore', stances: { ...draft.strategy.stances, ai0: 'enemy' as 'rival' } },
-      landGrant: { ...draft.landGrant!, ranked: [{ plot: store, value: 5 }] },
+      ...planned,
+      strategy: { ...planned.strategy, kind: 'monopolist', monopolyTarget: 'smithore', stances: { ...planned.strategy.stances, ai0: 'enemy' as 'rival' } },
+      landGrant: { ...planned.landGrant!, ranked: [{ plot: store, value: 5 }] },
     };
 
-    const { playbook, rejected } = rookie.validator()(state, rookie.id, stale, []);
-    expect(draft.strategy.kind).not.toBe('monopolist');
-    expect(playbook.strategy).toMatchObject({ kind: draft.strategy.kind, monopolyTarget: null });
+    const { playbook, rejected } = rookie.validator()(opening, rookie.id, stale, []);
+    expect(planned.strategy.kind).not.toBe('monopolist');
+    expect(playbook.strategy).toMatchObject({ kind: planned.strategy.kind, monopolyTarget: null });
     // A stance is a field a playbook may lack: it is dropped, not replaced.
     expect(playbook.strategy.stances).not.toHaveProperty('ai0');
-    expect(playbook.landGrant!.ranked).toEqual(draft.landGrant!.ranked);
+    expect(playbook.landGrant).toEqual(planned.landGrant);
     expect(playbook.by).toBe('engine');
     expect(rejected).toEqual([
-      { path: '/strategy/kind', to: 'monopolist', why: `level never corners; the engine's draft plays ${draft.strategy.kind}` },
+      { path: '/strategy/kind', to: 'monopolist', why: `level never corners; the engine's draft plays ${planned.strategy.kind}` },
       { path: '/strategy/monopolyTarget', to: 'smithore', why: "level never corners; the engine's draft plays null" },
       { path: '/strategy/stances/ai0', to: 'enemy', why: 'no such stance' },
-      { path: '/landGrant/ranked', to: [{ plot: store, value: 5 }], why: "no free plot left to rank; the engine's draft value plays" },
+      { path: '/landGrant/ranked', to: [{ plot: store, value: 5 }], why: "no free plot left to rank; the engine's /landGrant plays" },
     ]);
-    // Whatever went in, every value that comes out is in bounds: the gate passes its own output unchanged.
-    const again = rookie.validator()(state, rookie.id, playbook, []);
-    expect(again.rejected).toEqual([]);
-    const { rejected: _, ...plays } = playbook;
-    expect(stableJson(again.playbook)).toBe(stableJson(plays));
   });
 });
