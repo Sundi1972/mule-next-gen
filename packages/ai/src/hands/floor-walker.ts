@@ -117,6 +117,30 @@ const THERE = 1e-3; // literal-ok: geometry, a tolerance on floating-point posit
 
 const isDoor = (place: HallPlace | null): place is HallDoor => place === 'doorL' || place === 'doorR';
 
+/**
+ * On the map inside the band a body's width round the store's walls, where the floor stops every step that ends in it:
+ * no walk puts a colonist there, but a fight's arena edge can (game 18 of T-AC-5's sample, AM-26). From there only a
+ * step straight out moves it, so the walker makes that first: the spot just past the band's nearest edge on open land.
+ * Null where the colonist is clear of the band.
+ */
+export function outOfWallBand(state: GameState, cfg: FloorConfig, c: FloorPoint): FloorPoint | null {
+  const store = state.tiles.find((t) => t.terrain === 'store')!;
+  const body = cfg.steer.bodyTiles;
+  const band = { x0: store.x - body, x1: store.x + 1 + body, y0: store.y - body, y1: store.y + 1 + body };
+  if (!(c.x > band.x0 && c.x < band.x1 && c.y > band.y0 && c.y < band.y1)) return null;
+  const open = (p: FloorPoint) => {
+    const t = tileAt(state.tiles, state.width, Math.floor(p.x), Math.floor(p.y));
+    return t !== undefined && terrainShare(t.terrain, cfg) > 0;
+  };
+  const outs = [
+    { gap: c.y - band.y0, at: { x: c.x, y: band.y0 - THERE } },
+    { gap: band.y1 - c.y, at: { x: c.x, y: band.y1 + THERE } },
+    { gap: c.x - band.x0, at: { x: band.x0 - THERE, y: c.y } },
+    { gap: band.x1 - c.x, at: { x: band.x1 + THERE, y: c.y } },
+  ];
+  return outs.filter((o) => open(o.at)).sort((a, b) => a.gap - b.gap)[0]?.at ?? null;
+}
+
 
 export class FloorWalker {
   /** Ms stood at the counter before the press. */
@@ -364,6 +388,8 @@ export class FloorWalker {
   /** Across the map to a point: along pathTo's quickest walk tile by tile, then onto the point within its tile. */
   private onMap(view: FloorView, c: FloorColonist, to: FloorPoint): StepRun {
     const { state, cfg } = view;
+    const out = outOfWallBand(state, cfg, c);
+    if (out) return this.toward(view, c, out);
     if (Math.floor(c.x) === Math.floor(to.x) && Math.floor(c.y) === Math.floor(to.y)) return this.toward(view, c, to);
     const path = pathTo(state, c, to, cfg);
     const next = path?.tiles[1];
