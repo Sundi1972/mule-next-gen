@@ -911,7 +911,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   /**
    * Whether a seat counts as in for month 1's clock: away, or present with its first MULE installed, no plot, or its
    * turn ended at the pub or by Ready. The last two keep a seat that cannot or will not install from holding the table.
-   * So does a seat that can never install a first MULE (AM-33): see cannotInstallFirstMule. Money that comes later
+   * So does a seat that can never install a first MULE: see cannotInstallFirstMule. Money that comes later
    * needs no special case: counting a seat in only starts the clock, and it may still buy and install while it runs.
    */
   private isIn(seatId: string): boolean {
@@ -922,7 +922,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   }
 
   /**
-   * Whether a seat can never install a first MULE with what it has (AM-33), at its own prices: it leads none and the
+   * Whether a seat can never install a first MULE with what it has, at its own prices: it leads none and the
    * corral is empty or it can't pay for a MULE and its cheapest outfit, or it leads an empty MULE it can't outfit.
    */
   private cannotInstallFirstMule(seatId: string): boolean {
