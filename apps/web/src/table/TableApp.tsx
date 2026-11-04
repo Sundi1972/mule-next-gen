@@ -731,7 +731,7 @@ export function TvGameOver({ game }: { game: MuleView }) {
               <LeagueTable view={game} density="tv" final />
             </div>
           </div>
-          {game.colony ? <ColonyScoreBand colony={game.colony} players={game.players} /> : <ColonyPanel view={game} density="tv" layout="row" verdict />}
+          {game.colony ? <ColonyScoreBand view={game} colony={game.colony} /> : <ColonyPanel view={game} density="tv" layout="row" verdict />}
         </div>
       </FitHeight>
     </div>

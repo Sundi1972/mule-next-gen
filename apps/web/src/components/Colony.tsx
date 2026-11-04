@@ -387,17 +387,33 @@ export function TvWinner({ view, className }: { view: MuleView; className?: stri
   );
 }
 
-/** The TV's band at game over: how the colony did, beside who gave most. */
-export function ColonyScoreBand({ colony, players }: { colony: ColonyView; players: PlayerView[] }) {
+/** The TV's band at game over: how the colony did, beside who gave most. A failed colony is carried in alert, never just a low number. */
+export function ColonyScoreBand({ view, colony }: { view: MuleView; colony: ColonyView }) {
+  const failed = colonyVerdict(view.air);
   return (
-    <section className="grid shrink-0 grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-6 rounded-panel border border-holo-line bg-panel p-5" aria-label="How the colony did" data-testid="colony-band">
+    <section
+      className={cx('grid shrink-0 grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-6 rounded-panel border p-5', failed.failed ? 'border-alert bg-alert-bg' : 'border-holo-line bg-panel')}
+      aria-label="How the colony did"
+      data-testid="colony-band"
+      data-failed={failed.failed}
+    >
       <div className="flex flex-col gap-2">
         <h2 className="label-caps text-base!">How the colony did</h2>
+        {failed.failed && (
+          <span className="flex flex-wrap items-baseline gap-x-4">
+            <span className="font-display text-2xl font-semibold text-alert-ink" data-testid="verdict-title">
+              {failed.title}
+            </span>
+            <span className="text-lg text-ink" data-testid="verdict-line">
+              {failed.line}
+            </span>
+          </span>
+        )}
         {colony.score ? <ScoreHero colony={colony} score={colony.score} size="tv" /> : <ScorePending size="tv" />}
       </div>
       <div className="flex flex-col gap-2">
         <h2 className="label-caps text-base!">Plaques · who gave most</h2>
-        <PlaqueBoard colony={colony} players={players} size="tv" />
+        <PlaqueBoard colony={colony} players={view.players} size="tv" />
       </div>
     </section>
   );
