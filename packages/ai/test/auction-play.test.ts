@@ -188,7 +188,7 @@ function probe(screen: GameState, part: GoodPlay, board: { mine: number; rival: 
 }
 
 describe('AM-20: the one-good draft', () => {
-  it('AM-20: at a good\'s status screen the one-good draft carries only that good, as the month\'s draft drafts it there, and passes the gate', () => {
+  it('T-AC-8 · AM-20: at a good\'s status screen the one-good draft carries only that good, as the month\'s draft drafts it there, and passes the gate', () => {
     const screens = statusScreens(auctionTable(5, arrange), 5);
     expect(screens.length).toBeGreaterThan(1);
     for (const screen of screens) {
