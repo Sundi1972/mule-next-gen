@@ -31,7 +31,7 @@ const said = (input: PathInput) => {
 };
 
 describe('RULE-6, the path a part plays (pure)', () => {
-  it('RULE-6: each row of the decision table, first match wins', () => {
+  it("RULE-6 (B-AC-7's table): each row of the decision table, first match wins", () => {
     const rows: [string, PathInput, string][] = [
       ['row 1: AI_PLANS.on false', { ...CLASSIC, on: false, adopted: [LAND], key: 'landGrant' }, 'today'],
       ['row 1: AI_PLANS.on false, Smart', { ...SMART, on: false, adopted: [LAND], key: 'landGrant' }, 'today'],
@@ -53,6 +53,7 @@ describe('RULE-6, the path a part plays (pure)', () => {
     expect(rows.map(([name, input]) => [name, said(input)])).toEqual(rows.map(([name, , want]) => [name, want]));
   });
 
+  // trace-allow: the plan's RULE-7 adopt table (spec C4); the spec's RULE-7 names no AC, and RULE-6's row 2 reads what it keeps
   it("RULE-7: adopt keeps every playbook of the newest month, ignores an earlier month's, and a repeat changes nothing", () => {
     const tags = (list: readonly Playbook[]) => list.map((p) => p.lessons![0]);
     const NEXT = pb('next', 3, ['auction']);
