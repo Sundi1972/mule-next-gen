@@ -43,6 +43,12 @@ describe('T-AC-4: a game record replays every wave-2 event', () => {
     for (let i = 0; i < 200_000 && !final; i++) {
       const phase = game.viewFor(null).phase;
       if (phase === 'planning' || phase === 'upkeep') for (const s of seats) if (!s.isAi && game.viewFor(null).phase === phase) game.handle(s.id, { type: 'ready' });
+      // A good's side pick has no clock (A-7): each person not yet Done presses Ready there, through the recorder so the
+      // record holds it, once an event's show has let go of the table.
+      const view = game.viewFor(null);
+      const pick = view.phase === 'auction' && view.auction?.stage === 'status' ? view.auction : null;
+      if (pick && !(view.eventShow?.held && fake.ctx.now() < view.eventShow.endsAt))
+        for (const s of seats) if (!s.isAi && !pick.walkers.find((w) => w.id === s.id)?.done) game.handle(s.id, { type: 'ready' });
       fake.advance(100);
     }
     expect(final, 'the game reached game over').not.toBeNull();
