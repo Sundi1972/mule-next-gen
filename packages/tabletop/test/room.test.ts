@@ -1141,8 +1141,11 @@ describe('Room: a connection is a board or a seat, never both (FM-12)', () => {
   });
 });
 
-/** The secrets game with a bug: the secret 'boom' throws a plain Error, as an engine bug would, and so can a tick it schedules. */
-function buggyRoom(tick?: 'throws') {
+/**
+ * The secrets game with a bug: the secret 'boom' throws a plain Error, as an engine bug would, and so can a tick it
+ * schedules, or its hearing that a seat's screen went away (`onLeave`).
+ */
+function buggyRoom(tick?: 'throws', onLeave?: () => void) {
   const errors: unknown[] = [];
   let closed = 0;
   const room = new Room<Intent, View>({
@@ -1160,6 +1163,9 @@ function buggyRoom(tick?: 'throws') {
         handle(seatId, intent) {
           if (intent.secret === 'boom') throw new Error('boom');
           game.handle(seatId, intent);
+        },
+        connectionChanged(_seatId, connected) {
+          if (!connected) onLeave?.();
         },
       };
     },
@@ -1215,6 +1221,40 @@ describe('Room: a game error ends only its own table', () => {
     const before = mia.inbox.length;
     room.receive(mia, mia.from, { t: 'chat', text: 'still here?' });
     expect(mia.inbox).toHaveLength(before);
+  });
+
+  it('a game error ends only its own table: a game that throws on hearing a screen went away ends the room the same way, and the closing socket sees no throw', async () => {
+    const { room, heiko, mia, tv, errors, closes } = buggyRoom(undefined, () => {
+      throw new Error('leave boom');
+    });
+    room.receive(heiko, heiko.from, { t: 'start' });
+
+    expect(() => room.disconnect(heiko)).not.toThrow();
+    await flush();
+
+    for (const screen of [mia, tv]) expect(screen.inbox.at(-1)).toStrictEqual({ t: 'removed', reason: 'error' });
+    expect(closes()).toBe(1);
+    expect(errors).toHaveLength(1);
+    expect((errors[0] as Error).message).toBe('leave boom');
+    expect(() => room.disconnect(mia)).not.toThrow();
+    expect(closes()).toBe(1);
+  });
+
+  it('a game error ends only its own table: a TableError on hearing a screen went away is nobody\'s to read, so the room plays on', async () => {
+    const { room, heiko, mia, tv, errors, closes } = buggyRoom(undefined, () => {
+      throw new TableError('Not now');
+    });
+    room.receive(heiko, heiko.from, { t: 'start' });
+
+    expect(() => room.disconnect(heiko)).not.toThrow();
+    await flush();
+
+    expect([...mia.inbox, ...tv.inbox].some((m) => m.t === 'removed')).toBe(false);
+    expect(errors).toEqual([]);
+    expect(closes()).toBe(0);
+    room.receive(mia, mia.from, { t: 'intent', intent: { secret: 'fine' } });
+    await flush();
+    expect(tv.last('view')!.view.game).toEqual({ mySecret: null, secretsTold: 1 });
   });
 
   it('a game error ends only its own table: a TableError still goes to the sender only, and the room plays on', async () => {
