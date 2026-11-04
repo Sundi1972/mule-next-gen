@@ -28,21 +28,35 @@ import { draftPlaybook, playbookSource } from '../src/playbook/index.js';
 import { AiSeat, type AiSeatOptions } from '../src/seat.js';
 import { plotName } from '../src/strategist.js';
 
-// The HC-9 seam: a draft that throws, switched on per test; otherwise the real draft.
-const seam = vi.hoisted(() => ({ throwing: false }));
+// The HC-9 seams: a draft or a validator that throws, switched on per test; otherwise the real ones.
+const seam = vi.hoisted(() => ({ throwing: null as 'draft' | 'validator' | null }));
 vi.mock('../src/playbook/draft.js', async (importOriginal) => {
   const real = await importOriginal<typeof import('../src/playbook/draft.js')>();
   return {
     ...real,
     draftPlaybook: (input: Parameters<typeof real.draftPlaybook>[0]) => {
-      if (seam.throwing) throw new Error('draft broke');
+      if (seam.throwing === 'draft') throw new Error('draft broke');
       return real.draftPlaybook(input);
+    },
+  };
+});
+vi.mock('../src/playbook/validate.js', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../src/playbook/validate.js')>();
+  return {
+    ...real,
+    validatePlaybook: (profile: Parameters<typeof real.validatePlaybook>[0]): ReturnType<typeof real.validatePlaybook> => {
+      if (seam.throwing === 'validator') {
+        return () => {
+          throw new Error('validator broke');
+        };
+      }
+      return real.validatePlaybook(profile);
     },
   };
 });
 
 afterEach(() => {
-  seam.throwing = false;
+  seam.throwing = null;
   vi.restoreAllMocks();
 });
 
@@ -199,17 +213,20 @@ describe('the seat drafts, validates and writes its planning playbook (C4, RULE-
   });
 
   // trace-allow: HC-9, the spec's own failure-mode id (spec §4, "Retry, poison, page?"); trace-check reads no HC- ids
-  it('HC-9: a draft that throws is logged, writes nothing, and the seat plays today’s path', () => {
+  it('HC-9: a draft or a validator that throws is logged, writes nothing, and the seat plays today’s path', () => {
     const base = playTable(2);
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
-    seam.throwing = true;
-    const broken = playTable(2);
-    seam.throwing = false;
+    for (const broke of ['draft', 'validator'] as const) {
+      const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+      seam.throwing = broke;
+      const broken = playTable(2);
+      seam.throwing = null;
 
-    expect(broken.written).toEqual([]);
-    expect(logged).toHaveBeenCalledTimes(IDS.length * 2);
-    expect(String(logged.mock.calls[0]!.join(' '))).toContain('draft broke');
-    expect(playOf(broken)).toEqual(playOf(base));
+      expect(broken.written, broke).toEqual([]);
+      expect(logged, broke).toHaveBeenCalledTimes(IDS.length * 2);
+      expect(String(logged.mock.calls[0]!.join(' ')), broke).toContain(`${broke} broke`);
+      expect(playOf(broken), broke).toEqual(playOf(base));
+      logged.mockRestore();
+    }
   });
 
   /** The phases whose opening a seat drafts at (RULE-7): the only states T-AC-4 needs to draft from. */
