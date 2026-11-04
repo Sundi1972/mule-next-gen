@@ -543,7 +543,7 @@ const RISING_PRESS = { start: 0.2, end: 0.7 };
  * fake model takes plan B in every land brief and sends a press share out of bounds; every move gets option A. Returns
  * the record, the writer requests, and the engine's draft for each land grant.
  */
-async function recordedToMonth2(recordPlaybook = true) {
+async function recordedToMonth2(recordPlaybook = true, until: (view: MuleView) => boolean = (v) => v.month === 2 && v.phase !== 'planning') {
   const sdk = fakeSdk((_n, params) =>
     isWrite(params)
       ? sdkMessage(JSON.stringify({ edits: [{ path: '/landGrant/ranked', to: 'B', reason: 'B is mine.' }, { path: '/landGrant/pressShare', to: RISING_PRESS, reason: 'Late rush.' }], line: '' }))
@@ -570,7 +570,7 @@ async function recordedToMonth2(recordPlaybook = true) {
   });
   const hosted = recorder.wrap(game);
   hosted.start(THREE);
-  await runTable(hosted, fake, (v) => v.month === 2 && v.phase !== 'planning');
+  await runTable(hosted, fake, until);
   hosted.dispose?.();
   const ai = THREE.find((s) => s.isAi)!.id;
   return { record: recorder.record, writes: sdk.requests.filter((r) => isWrite(r.params)), drafts, ai };
@@ -602,8 +602,9 @@ describe('Claude plans the land grant', { timeout: 30_000 }, () => {
   });
 
   // At SEED The Big Spender's plan B starts on another plot than the engine's ranking, so its first claim tells them apart.
-  it.skip("B-AC-A1 (claim): the seat claims by the edited ranking in month 2 — needs the land-grant execution layer that plays LandGrantPlay.ranked (WS1/WS3, not on trunk at 84c5a66) and WS1's real validatePlan/draft", async () => {
-    const { record, writes, drafts, ai } = await recordedToMonth2();
+  it("B-AC-A1 (claim): the Smart seat's first month-2 claim is the first plot of the plan Claude chose, not the engine's", async () => {
+    // Played through month 2's land grant, so its claims are in the record.
+    const { record, writes, drafts, ai } = await recordedToMonth2(true, (v) => v.month === 2 && v.phase !== 'planning' && v.phase !== 'landGrant');
     const planB = planInBrief(writes[1]!.params, 'B');
     const engine = drafts.find((d) => d.month === 2 && d.seat === ai)!.playbook;
     const claims = record.events.filter((e) => e.type === 'notice' && e.kind === 'claim' && e.month === 2 && e.seat === ai);
