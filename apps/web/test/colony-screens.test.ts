@@ -175,6 +175,9 @@ describe('C34: the colony at game over', () => {
     expect(said(band, 'verdict-title')).toBe('The colony failed');
     expect(said(band, 'verdict-line')).toBe('The air ended in Collapse. The Federation cuts every score by a fifth.');
     expect(band.indexOf('data-testid="verdict-title"')).toBeLessThan(band.indexOf('data-testid="colony-total"'));
+    // A failed colony is never also "a colony to be proud of": the score's own verdict goes, and its total is in alert.
+    expect(has(band, 'colony-verdict')).toBe(false);
+    expect(band).toMatch(/text-alert-ink[^"]*" data-testid="colony-total"/);
     const passed = element(onTv(over(FINAL), TvGameOver), 'colony-band');
     expect(passed).toContain('data-failed="false"');
     expect(passed).not.toContain('border-alert');
