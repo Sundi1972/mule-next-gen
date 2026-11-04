@@ -209,6 +209,11 @@ export function Auction() {
       const h = lineHint(moment, lineSide, good, have, need);
       return <Hint tone={moment.kind === 'trading' ? 'lit' : 'ok'} line={h.line} how={h.how} testid="line-hint" />;
     }
+    // At a line with nothing to choose, one plain reason, so a newcomer knows why nothing happens (F5, WS6's ruling).
+    if (moment.kind === 'line') {
+      const reason = lineSide === 'buyer' ? `You can't pay for one at ${auction.storeSells ?? 0} cr` : `You have no ${GOOD_NAME[good]} to sell`;
+      return <Hint line={reason} testid="line-reason" />;
+    }
     return null;
   })();
   const rail = (

@@ -169,6 +169,31 @@ describe('A-6 on the phone: at the store line you choose how many', () => {
     expect(tagOf(html, 'hold-up')).not.toBeNull();
   });
 
+  it('F5 (WS6 ruling): a buyer at the store line who can\'t pay for one is told why: "You can\'t pay for one at N cr"', () => {
+    const { game, state } = atTheLine();
+    const price = game.viewFor('s1').auction!.storeSells!;
+    state.players.find((p) => p.id === 's1')!.money = price - 1;
+    const html = phoneScreen(game.viewFor('s1'), 's1');
+    expect(textOf(html, 'line-reason')).toBe(`You can't pay for one at ${price} cr`);
+  });
+
+  it('F5 (WS6 ruling): a seller at the store line with none left is told why: "You have no <Good> to sell"', () => {
+    const { game, advance, state, good } = toWalk();
+    const s1 = state.players.find((p) => p.id === 's1')!;
+    s1.stock[good] = 5;
+    game.handle('s1', { type: 'declare', side: 'seller' });
+    game.handle('s1', { type: 'walk', dir: 'down' });
+    for (let i = 0; i < 400 && mine(game).line !== 'store'; i++) advance(WALK.tickMs);
+    game.handle('s1', { type: 'walk', dir: 'stop' });
+    expect(mine(game).line).toBe('store');
+    s1.stock[good] = 0;
+    const view = game.viewFor('s1');
+    const html = phoneScreen(view, 's1');
+    const name = { food: 'Food', water: 'Water', energy: 'Energy', smithore: 'Smithore' }[view.auction!.good as 'food'];
+    expect(tagOf(html, 'line-question')).toBeNull();
+    expect(textOf(html, 'line-reason')).toBe(`You have no ${name} to sell`);
+  });
+
   it('G-2: the walk buttons and the hint say a tap moves one step', () => {
     const { game } = toWalk();
     const html = phoneScreen(game.viewFor('s1'), 's1');
