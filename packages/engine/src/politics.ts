@@ -4,7 +4,7 @@
  * GameState.politics. A tie nothing else breaks is drawn by lot on its own seeded
  * stream, so a replay from the seed draws the same and no other draw moves.
  */
-import { fundOut } from './colony.js';
+import { fundIn, fundOut } from './colony.js';
 import { POLITICS } from './config.js';
 import { RuleError } from './errors.js';
 import { player } from './game.js';
@@ -604,4 +604,36 @@ export function closeVotes(state: GameState): ElectionResult | null {
     takeEffect(state, politics);
   }
   return result;
+}
+
+/** Charges a law tax: what the payer has, at most, into the fund under its source; it counts as taxes paid. */
+function lawCharge(state: GameState, payerId: string, source: 'landTax' | 'pollutionTax', due: number): void {
+  const payer = player(state, payerId);
+  const paid = Math.max(0, Math.min(payer.money, due));
+  if (paid === 0) return;
+  payer.money -= paid;
+  fundIn(state, source, paid);
+  state.treasury.paid[payerId] = (state.treasury.paid[payerId] ?? 0) + paid;
+}
+
+/** The export tax on one unit a player sells to the export ship, after the sales tax and out of the sale; returns what it took. See slice 2a RULE-43. */
+export function chargeExportTax(state: GameState, sellerId: string, price: number): number {
+  const law = state.politics?.laws.exportTax;
+  if (!law) return 0;
+  const tax = Math.round((price * law.setting) / PERCENT);
+  fundIn(state, 'exportTax', tax);
+  state.treasury.paid[sellerId] = (state.treasury.paid[sellerId] ?? 0) + tax;
+  return tax;
+}
+
+/** At upkeep, before the grant and the offices: the land tax, then the pollution tax, each payer in seat order. See slice 2a RULE-43. */
+export function collectLawTaxes(state: GameState): void {
+  const laws = state.politics?.laws;
+  if (!laws) return;
+  if (laws.landTax) for (const p of state.players) lawCharge(state, p.id, 'landTax', laws.landTax.setting * plotsOwned(state, p.id));
+  const report = state.history.at(-1);
+  const pollutionBy = report?.month === state.month ? report.pollutionBy : {};
+  if (laws.pollutionTax) {
+    for (const p of state.players) lawCharge(state, p.id, 'pollutionTax', Math.round(laws.pollutionTax.setting * (pollutionBy[p.id] ?? 0)));
+  }
 }
