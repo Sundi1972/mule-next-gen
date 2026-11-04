@@ -233,12 +233,76 @@ const STEER_WAYPOINT = 0.2;
 /** Within this many STEER_WITHINs of the target, an axis is held every other look, so a full-speed stride cannot carry it past. */
 const STEER_EASE = 3;
 const STEER_TIMEOUT_MS = 30_000;
-const AXES = { x: ['ArrowLeft', 'ArrowRight'], y: ['ArrowUp', 'ArrowDown'] } as const;
+/** How long the step lets the one button take to be pressable, as a player waits for it to light. */
+const ACT_PRESS_MS = 2_000;
+
+/** How a step steers: the arrow keys, a laptop's way (arcade B-AC-3), or the on-screen stick, a phone's thumb. */
+export type SteerVia = 'keys' | 'stick';
+type Way = 'left' | 'right' | 'up' | 'down';
+const AXES = { x: ['left', 'right'], y: ['up', 'down'] } as const;
+const ARROW: Record<Way, string> = { left: 'ArrowLeft', right: 'ArrowRight', up: 'ArrowUp', down: 'ArrowDown' };
+const PUSH: Record<Way, { x: number; y: number }> = { left: { x: -1, y: 0 }, right: { x: 1, y: 0 }, up: { x: 0, y: -1 }, down: { x: 0, y: 1 } };
+
+/** What the step holds, and lets go of: the arrow keys for `ways`, or the stick pushed to its rim toward them. */
+interface Hold {
+  set(ways: ReadonlySet<Way>): Promise<void>;
+  /** What is held now, for a failure's message. */
+  held(): string;
+}
+
+function holdOn(phone: Page, via: SteerVia): Hold {
+  if (via === 'keys') {
+    const pressed = new Set<Way>();
+    return {
+      async set(want) {
+        for (const w of [...pressed]) {
+          if (want.has(w)) continue;
+          await phone.keyboard.up(ARROW[w]);
+          pressed.delete(w);
+        }
+        for (const w of want) {
+          if (pressed.has(w)) continue;
+          await phone.keyboard.down(ARROW[w]);
+          pressed.add(w);
+        }
+      },
+      held: () => `[${[...pressed].map((w) => ARROW[w]).join(', ')}]`,
+    };
+  }
+  // The thumb goes down on the stick's middle, slides to its rim toward the ways (a diagonal for two), and lifts to
+  // let go. The stick captures the pointer, so the slide steers wherever the thumb ends up.
+  let thumb: { x: number; y: number; r: number } | null = null;
+  let ways = new Set<Way>();
+  return {
+    async set(want) {
+      if (want.size === 0) {
+        if (thumb) await phone.mouse.up();
+        thumb = null;
+        ways = new Set();
+        return;
+      }
+      if (!thumb) {
+        const box = await phone.getByTestId('overlay-stick').getByTestId('joystick').boundingBox();
+        check(box, 'steerTo: the phone shows the stick');
+        thumb = { x: box.x + box.width / 2, y: box.y + box.height / 2, r: box.width / 2 };
+        await phone.mouse.move(thumb.x, thumb.y);
+        await phone.mouse.down();
+        ways = new Set();
+      }
+      if ([...want].every((w) => ways.has(w)) && want.size === ways.size) return;
+      const to = [...want].reduce((a, w) => ({ x: a.x + PUSH[w].x, y: a.y + PUSH[w].y }), { x: 0, y: 0 });
+      await phone.mouse.move(thumb.x + to.x * thumb.r, thumb.y + to.y * thumb.r);
+      ways = new Set(want);
+    },
+    held: () => `the stick [${[...ways].join(', ')}]`,
+  };
+}
 
 /**
  * Steers a seat's colonist to `target` from its phone, as a player does (arcade spec C15): holds the arrow keys on the
- * arcade screen (one at a time between turns, two at once on the last stretch), lets go of an axis once within reach
- * of it, and of every key on arrival. The screen's own send loop turns held keys into steer intents. On the map it walks
+ * arcade screen, or with `via: 'stick'` the on-screen stick (one way at a time between turns, two at once on the last
+ * stretch), lets go of a way once within reach of it, and of everything on arrival. The screen's own send loop turns
+ * what is held into steer intents. On the map it walks
  * the engine's quickest route (pathTo, the AI's own), tile centre by tile centre, round what blocks it; in the hall it
  * keeps to the walkway until it is below or above the target. Where the colonist stands is read from the in-process
  * server's view, the state its frames carry. Throws, with where it last stood and the keys held, when it is in another
@@ -251,7 +315,7 @@ export async function steerTo(
   code: string,
   seatId: string,
   target: SteerTarget,
-  { within = STEER_WITHIN, timeoutMs = STEER_TIMEOUT_MS }: { within?: number; timeoutMs?: number } = {},
+  { within = STEER_WITHIN, timeoutMs = STEER_TIMEOUT_MS, via = 'keys' }: { within?: number; timeoutMs?: number; via?: SteerVia } = {},
 ): Promise<void> {
   const room = server.registry.get(code);
   check(room, `a room ${code} on the server`);
@@ -261,7 +325,7 @@ export async function steerTo(
   const route = routeTo(room, from, target);
   for (const [i, point] of route.entries()) {
     const last = i === route.length - 1;
-    await steerStraight(phone, room, seatId, point, last ? within : STEER_WAYPOINT, deadline, timeoutMs, last);
+    await steerStraight(phone, holdOn(phone, via), room, seatId, point, last ? within : STEER_WAYPOINT, deadline, timeoutMs, last);
   }
 }
 
@@ -290,22 +354,9 @@ function routeTo(room: StepRoom, from: SteerTarget, target: SteerTarget): SteerT
   return [...path.tiles.slice(1, -1).map((t) => ({ space: 'map' as const, x: Math.floor(t.x) + 0.5, y: Math.floor(t.y) + 0.5 })), target];
 }
 
-/** Holds the arrows straight toward one point until the colonist is within `within` of it on both axes. */
-async function steerStraight(phone: Page, room: StepRoom, seatId: string, target: SteerTarget, within: number, deadline: number, timeoutMs: number, ease: boolean): Promise<void> {
+/** Holds straight toward one point until the colonist is within `within` of it on both axes. */
+async function steerStraight(phone: Page, hold: Hold, room: StepRoom, seatId: string, target: SteerTarget, within: number, deadline: number, timeoutMs: number, ease: boolean): Promise<void> {
   const where = () => steeredAt(room, seatId);
-  const pressed = new Set<string>();
-  const hold = async (want: Set<string>) => {
-    for (const k of [...pressed]) {
-      if (want.has(k)) continue;
-      await phone.keyboard.up(k);
-      pressed.delete(k);
-    }
-    for (const k of want) {
-      if (pressed.has(k)) continue;
-      await phone.keyboard.down(k);
-      pressed.add(k);
-    }
-  };
   let look = 0;
   try {
     for (;;) {
@@ -316,12 +367,12 @@ async function steerStraight(phone: Page, room: StepRoom, seatId: string, target
         // On the way, passing through is enough. At the end the keys come up and the screen's last steer still carries
         // it a little, so it counts once it has stopped there; drifted out, it steers on.
         if (!ease) return;
-        await hold(new Set());
+        await hold.set(new Set());
         if (await stoppedWithin(phone, room, seatId, target, within, deadline)) return;
         continue;
       }
-      check(Date.now() < deadline, `steerTo: ${seatId} did not reach ${target.space} (${target.x}, ${target.y}) in ${timeoutMs} ms; stands at (${at.x.toFixed(2)}, ${at.y.toFixed(2)}) holding [${[...pressed].join(', ')}]`);
-      const want = new Set<string>();
+      check(Date.now() < deadline, `steerTo: ${seatId} did not reach ${target.space} (${target.x}, ${target.y}) in ${timeoutMs} ms; stands at (${at.x.toFixed(2)}, ${at.y.toFixed(2)}) holding ${hold.held()}`);
+      const want = new Set<Way>();
       // Between turning points the route is four-way, so one axis at a time, the longer first; at the end, a diagonal.
       const axes = ease ? (['x', 'y'] as const) : ([Math.abs(gap.x) - within >= Math.abs(gap.y) - within ? 'x' : 'y'] as const);
       for (const axis of axes) {
@@ -330,22 +381,29 @@ async function steerStraight(phone: Page, room: StepRoom, seatId: string, target
         if (ease && Math.abs(g) <= within * STEER_EASE && look % 2 === 1) continue;
         want.add(AXES[axis][g < 0 ? 0 : 1]);
       }
-      await hold(want);
+      await hold.set(want);
       look++;
       await phone.waitForTimeout(STEER_LOOK_MS);
     }
   } finally {
-    await hold(new Set());
+    await hold.set(new Set());
   }
 }
 
 /**
  * Through a store door, as a player walks it (arcade C1: a door is walked through): on the map, to the door's mouth by
  * the engine's route and on into the store's side; in the hall, to the door's spot by the walkway and on out through
- * it. `door` is the nearer one when not given. Returns once the colonist is in the other space; throws, with where it
- * stands, if it is not in `timeoutMs`.
+ * it. `door` is the nearer one when not given; `via` as steerTo's. Returns once the colonist is in the other space;
+ * throws, with where it stands, if it is not in `timeoutMs`.
  */
-export async function throughDoor(phone: Page, server: MuleServer, code: string, seatId: string, door?: HallDoor, { timeoutMs = STEER_TIMEOUT_MS }: { timeoutMs?: number } = {}): Promise<void> {
+export async function throughDoor(
+  phone: Page,
+  server: MuleServer,
+  code: string,
+  seatId: string,
+  door?: HallDoor,
+  { timeoutMs = STEER_TIMEOUT_MS, via = 'keys' }: { timeoutMs?: number; via?: SteerVia } = {},
+): Promise<void> {
   const room = server.registry.get(code);
   check(room, `a room ${code} on the server`);
   const from = steeredAt(room, seatId);
@@ -357,16 +415,17 @@ export async function throughDoor(phone: Page, server: MuleServer, code: string,
   // Walking up to a door can already take it through: that is arriving, not a wrong space.
   const crossed = () => steeredAt(room, seatId).space !== from.space;
   try {
-    await steerTo(phone, server, code, seatId, spotOf(which), { within: cfg.steer.doorHalfTiles, timeoutMs });
+    await steerTo(phone, server, code, seatId, spotOf(which), { within: cfg.steer.doorHalfTiles, timeoutMs, via });
   } catch (err) {
     if (crossed()) return;
     throw err;
   }
   if (crossed()) return;
   // On the map the store lies right of the left door's mouth; in the hall the left door opens to the left.
-  const intoStore = which === 'doorL' ? 'ArrowRight' : 'ArrowLeft';
-  const key = from.space === 'map' ? intoStore : intoStore === 'ArrowRight' ? 'ArrowLeft' : 'ArrowRight';
-  await phone.keyboard.down(key);
+  const intoStore: Way = which === 'doorL' ? 'right' : 'left';
+  const way: Way = from.space === 'map' ? intoStore : intoStore === 'right' ? 'left' : 'right';
+  const hold = holdOn(phone, via);
+  await hold.set(new Set([way]));
   try {
     for (;;) {
       const at = steeredAt(room, seatId);
@@ -375,7 +434,7 @@ export async function throughDoor(phone: Page, server: MuleServer, code: string,
       await phone.waitForTimeout(STEER_LOOK_MS);
     }
   } finally {
-    await phone.keyboard.up(key);
+    await hold.set(new Set());
   }
 }
 
@@ -386,7 +445,11 @@ async function stoppedWithin(phone: Page, room: StepRoom, seatId: string, target
   return at.space === target.space && Math.abs(target.x - at.x) <= within && Math.abs(target.y - at.y) <= within;
 }
 
-/** The one button, as a player presses it on the arcade screen: Space, once. */
-export async function pressAct(phone: Page): Promise<void> {
-  await phone.keyboard.press(' ');
+/**
+ * The one button, as a player presses it on the arcade screen: Space, once, or with `via: 'button'` a tap on the
+ * on-screen button, which waits for it to light as a thumb would and throws if it stays dim.
+ */
+export async function pressAct(phone: Page, { via = 'keys' }: { via?: 'keys' | 'button' } = {}): Promise<void> {
+  if (via === 'keys') return phone.keyboard.press(' ');
+  await phone.getByTestId('overlay-button').getByTestId('action-button').click({ timeout: ACT_PRESS_MS });
 }
