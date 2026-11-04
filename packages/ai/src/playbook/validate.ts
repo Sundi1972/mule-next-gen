@@ -532,15 +532,16 @@ function validate(profile: ValidatorProfile, state: GameState, seat: PlayerId, d
 }
 
 /** The gate for one seat, throwing on its own error: for a caller that handles it (HC-9). */
-export function validatePlaybook(_profile: ValidatorProfile): ValidatePlan {
-  throw new Error('NotImplemented: validatePlaybook');
+export function validatePlaybook(profile: ValidatorProfile): ValidatePlan {
+  return (state, seat, draft, edits) => validate(profile, state, seat, draft, edits);
 }
 
 /** The gate for one seat. The function it returns never throws: on its own error, the draft plays and every edit is refused. */
 export function validatorFor(profile: ValidatorProfile): ValidatePlan {
+  const gate = validatePlaybook(profile);
   return (state, seat, draft, edits) => {
     try {
-      return validate(profile, state, seat, draft, edits);
+      return gate(state, seat, draft, edits);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       const all = Array.isArray(edits) ? edits : [];

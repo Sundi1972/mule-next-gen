@@ -21,7 +21,7 @@ import type { Decider, TableTalk } from './decider.js';
 import { AuctionHand, type AuctionDebug } from './hands/auction.js';
 import { DevelopHand, type DevWalking } from './hands/develop.js';
 import { PERSONAS } from './personas.js';
-import { draftPlaybook, validatorFor, type DraftPhase, type ValidatePlan } from './playbook/index.js';
+import { draftPlaybook, validatePlaybook, validatorFor, type DraftPhase, type ValidatePlan, type ValidatorProfile } from './playbook/index.js';
 import { landDecision, wantsAnyAhead, wantsPlot, type LandPlan } from './strategist.js';
 import { situation } from './summary.js';
 import type { Mind } from './value.js';
@@ -122,12 +122,12 @@ export class AiSeat {
     this.options.onPlaybook?.(playbook);
   }
 
-  /** The seat's validated draft for a phase. `month` is the month whose land grant it plans. Writes nothing. */
+  /** The seat's validated draft for a phase. `month` is the month whose land grant it plans. Writes nothing; throws on a draft or validator error. */
   draft(state: GameState, phase: DraftPhase, month = state.month): Playbook {
     // Read, never settled: settling would log the land decision before the grant.
     const land = this.landMonth === month ? this.land : null;
     const drafted = { ...draftPlaybook({ state, seat: this.id, mind: this.mind, seed: this.options.seed, phase, land }), month };
-    return this.validator()(state, this.id, drafted, []).playbook;
+    return validatePlaybook(this.profileFor(month))(state, this.id, drafted, []).playbook;
   }
 
   /** Puts a playbook's parts in effect for its month (RULE-7). */
@@ -140,8 +140,11 @@ export class AiSeat {
 
   /** The gate this seat's playbooks pass: its mind, its seed and, for the month it holds one, its pending land pick. */
   validator(): ValidatePlan {
-    return (state, seat, draft, edits) =>
-      validatorFor({ mind: this.mind, seed: this.options.seed, land: this.landMonth === draft.month ? this.land : null })(state, seat, draft, edits);
+    return (state, seat, draft, edits) => validatorFor(this.profileFor(draft.month))(state, seat, draft, edits);
+  }
+
+  private profileFor(month: number): ValidatorProfile {
+    return { mind: this.mind, seed: this.options.seed, land: this.landMonth === month ? this.land : null };
   }
 
   /**
