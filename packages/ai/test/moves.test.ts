@@ -1,7 +1,11 @@
+import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 import { createGame, DEVELOPMENT, list, LOTS, orderGeoDrone, RuleError, tileIndex, unlist, type GameState, type Outfit, type Tile } from '@mule/engine';
 import { MOVES, type AiAction, type MoveCost, type MoveDescriptor } from '../src/actions.js';
 import { applyAction } from '../src/play.js';
+import type { MuleIntent } from '@mule/protocol';
 
 const IDS = ['p0', 'p1', 'p2', 'p3'];
 const planning = (): GameState => createGame({ seed: 7, players: IDS.map((id) => ({ id, name: id, isAi: true })) });
@@ -233,5 +237,66 @@ describe('the AI move list (C9)', () => {
     expect(s.players[0]!.droneOrder).toEqual([tileIndex(s.width, free.x, free.y)]);
     expect(applyAction(s, 'p0', { type: 'drone', plots: [{ x: free.x, y: free.y }] })).toBe(false);
     expect(s.players[0]!.money).toBe(before - DEVELOPMENT.droneFee);
+  });
+});
+
+const FLOOR_INPUT = 'the AI plays them through FloorInput (AiSeat.developSteer)';
+
+/** Every phone command, and the AI move that plays it or why none does (AM-2, AM-4). */
+const COVERAGE = {
+  ready: { move: 'done' },
+  drone: { move: 'drone' },
+  claim: { move: 'claim' },
+  buyMule: { move: 'buyMule' },
+  outfit: { move: 'outfit' },
+  install: { move: 'install' },
+  analyse: { move: 'analyse' },
+  filter: { move: 'filter' },
+  pub: { move: 'pub' },
+  declare: { move: 'declare' },
+  walk: { move: 'walk' },
+  walkStep: { move: 'walk' },
+  lineTrade: { move: 'lineTrade' },
+  list: { move: 'list' },
+  unlist: { move: 'unlist' },
+  run: { move: 'run' },
+  vote: { move: 'vote' },
+  setTax: { move: 'setTax' },
+  continue: { excluded: 'host only' },
+  steer: { excluded: FLOOR_INPUT },
+  act: { excluded: FLOOR_INPUT },
+} satisfies Record<MuleIntent['type'], { move: AiAction['type'] } | { excluded: string }>;
+
+/** MuleIntent's command names, read from the protocol's source: the compiler's view is gone by the time a test runs. */
+function protocolCommands(): string[] {
+  const file = createRequire(import.meta.url).resolve('@mule/protocol');
+  const source = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true);
+  const alias = source.statements.find((s): s is ts.TypeAliasDeclaration => ts.isTypeAliasDeclaration(s) && s.name.text === 'MuleIntent');
+  if (!alias || !ts.isUnionTypeNode(alias.type)) throw new Error(`no MuleIntent union in ${file}`);
+  return alias.type.types.map((member) => {
+    const type = ts.isTypeLiteralNode(member)
+      ? member.members.find((m): m is ts.PropertySignature => ts.isPropertySignature(m) && m.name.getText(source) === 'type')?.type
+      : undefined;
+    if (!type || !ts.isLiteralTypeNode(type) || !ts.isStringLiteral(type.literal)) throw new Error(`can't read a command name from \`${member.getText(source)}\``);
+    return type.literal.text;
+  });
+}
+
+describe('every phone command has an AI move (C11)', () => {
+  it('B-AC-9: every MuleIntent command has an AI move or a reviewed exclusion', () => {
+    const commands = protocolCommands();
+    const unlisted = commands.filter((c) => !(c in COVERAGE));
+    expect(unlisted, 'a MuleIntent command with neither an AI move nor an exclusion').toEqual([]);
+    expect(Object.keys(COVERAGE).sort(), 'the table names only protocol commands').toEqual([...commands].sort());
+
+    const rows: Record<string, { move?: AiAction['type']; excluded?: string }> = COVERAGE;
+    for (const [command, row] of Object.entries(rows)) {
+      if (!row.move) continue;
+      // walkStep is played by the walk move, whose own command is walk: the descriptor's command maps back to the same move.
+      const d = MOVES[row.move];
+      expect(d, `${command} → ${row.move}`).toBeDefined();
+      expect(rows[d.command]?.move, `${command} → ${row.move}, whose command is ${d.command}`).toBe(row.move);
+    }
+    for (const d of Object.values(MOVES)) expect(rows[d.command]?.move, `MOVES.${d.type}.command ${d.command}`).toBe(d.type);
   });
 });
