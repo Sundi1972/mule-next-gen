@@ -1304,13 +1304,15 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   /**
    * The fixed tick: at each tickMs of game time, through ctx.schedule only (HC-9). A late timer runs the ticks it
    * missed, at most catchUpTicks, then resyncs, so the floor's tick 0 stands that much later on the server's clock.
-   * The views go once, after the ticks, and only when one changed the game or a seat's reach words.
+   * The views go once, after the ticks, and only when one changed the game or a seat's reach words. The batch stops at
+   * a tick at or after the clock's end (AM-19), which waits a tick and looks again: the development-end timer ends the
+   * phase, or devEndsAt moved later meanwhile and the ticks go on. `wait` overrides the wait for the next tick.
    */
-  private scheduleSteerTick(month: number): void {
+  private scheduleSteerTick(month: number, wait?: number): void {
     const steering = this.steering!;
     const state = this.requireState();
     const nextAt = steering.origin + (steering.floor.tick + 1) * this.realTickMs();
-    this.cancelSteerTick = this.ctx.schedule(Math.max(0, nextAt - this.ctx.now()), () => {
+    this.cancelSteerTick = this.ctx.schedule(wait ?? Math.max(0, nextAt - this.ctx.now()), () => {
       if (this.steering !== steering || state.phase !== 'development' || state.month !== month) return;
       const now = this.ctx.now();
       const realTick = this.realTickMs();
@@ -1319,13 +1321,24 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       const due = Math.min(missed, DEV_STEER.catchUpTicks);
       steering.stats.catchUp += due - 1;
       let changed = false;
-      for (let i = 0; i < due && this.steering === steering; i++) changed = this.steerTick(steering) || changed;
-      if (this.steering === steering) {
-        if (missed > due) {
-          steering.stats.resyncs++;
-          steering.origin = now - steering.floor.tick * realTick;
+      let atEnd = false;
+      for (let i = 0; i < due && this.steering === steering; i++) {
+        const stepped = this.steerTick(steering);
+        if (stepped === null) {
+          atEnd = true;
+          break;
         }
-        this.scheduleSteerTick(month);
+        changed = stepped || changed;
+      }
+      if (this.steering === steering) {
+        if (atEnd) this.scheduleSteerTick(month, realTick);
+        else {
+          if (missed > due) {
+            steering.stats.resyncs++;
+            steering.origin = now - steering.floor.tick * realTick;
+          }
+          this.scheduleSteerTick(month);
+        }
       }
       if (changed) this.ctx.changed();
     });
@@ -1334,12 +1347,15 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   /**
    * One tick of RULE-1: each seat's input (an away seat's stands still; an AI seat's from its hand), the step and the
    * presses it reaches, the frame to every screen, then development's early ends. True when the views must go: the
-   * game changed, month 1's clock started, the phase ended, or a seat's reach words changed (AM-11).
+   * game changed, month 1's clock started, the phase ended, or a seat's reach words changed (AM-11). Null, stepping
+   * nothing and taking no input, for a tick at or after the clock's end: no press, AI input or moment applies then,
+   * as in the sim (AM-19). Month 1's waiting clock (devEndsAt null) ends no tick.
    */
-  private steerTick(steering: Steering): boolean {
+  private steerTick(steering: Steering): boolean | null {
     const state = this.requireState();
     const tick = steering.floor.tick;
     const at = steering.origin + (tick + 1) * this.realTickMs();
+    if (this.devEndsAt !== null && at >= this.devEndsAt) return null;
     steering.at = at;
     const secondsLeft = Math.max(0, this.secondsLeft(at));
     const inputs: Record<string, FloorInput> = {};
