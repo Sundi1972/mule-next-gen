@@ -32,11 +32,12 @@ export function ActionButton({ verb, detail, enabled, onPress, size = 'xl', comp
       size={size}
       disabled={!enabled}
       aria-label={label}
+      // Only a lit button presses: Chrome hands a disabled <button> its pointer events all the same.
       onPointerDown={(e) => {
         e.preventDefault();
-        if (!e.altKey) onPress();
+        if (enabled && !e.altKey) onPress();
       }}
-      onClick={(e) => e.detail === 0 && onPress()}
+      onClick={(e) => enabled && e.detail === 0 && onPress()}
       className={cx('h-auto! min-h-20 w-full flex-col gap-0! px-3! py-2', className)}
       data-testid="action-button"
       data-enabled={enabled}
