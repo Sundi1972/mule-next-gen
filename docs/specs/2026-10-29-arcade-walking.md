@@ -648,6 +648,7 @@ unknown      no frame for > DEV_STEER.staleMs (1000) → the phone shows "reconn
 | `ColonistView` v2: `{x, y, space: 'map'\|'hall', facing: 'left'\|'right', moving, lead: {good: Outfit\|null, x, y}\|null, pace, pelts, encounter: 'choose'\|'chase'\|'fight'\|null}` | MODIFIED (v1 fields `at`, `walk`, `assayUntil` go in C14) | yes, at C14 | C7 | phone, TV |
 | `MyView.reach: {verb, detail, enabled}`; `MyView.banners` (the moments' lines for you) | ADDED | no | C7 | phone C11 |
 | `DevFrame {tick, at, colonists: [{id, x, y, space, facing, moving, lead}], beats: string[]}` via the tabletop's frame message `{t:'frame'; payload}` | ADDED | no | C7, C8 | phone, TV |
+| `DevFrame.moments?` {packs: [{who, stage, wolves: [{x, y, state, target}]}], glint: {x, y, untilTick} \| null, scramble: {untilTick, needers, got, over, leftOut} \| null}, absent when nothing is on (AM-28) | ADDED | no (optional) | C4, C8 | phone, TV (PR-9's layers) |
 | `DevFloor` (engine, not on the wire) | ADDED | — | C1 | server, sim, phone prediction |
 | config `DEV_STEER`, `WOLVES`, `GLINT`, `SCRAMBLE` | ADDED | no | C5 | engine, AI, sim |
 
@@ -740,6 +741,16 @@ inside a wall; money and stock change only through game.ts rules; development en
 
 ## §8 · Amendments `[review-only]`
 
+- **AM-28 (2026-11-04, PR-9's start, by WS6; the frame contract's gap).** The moments' layers (C11, C12) draw the
+  wolves, the glint and the scramble on every phone and the TV, but §3's `DevFrame` carried only positions and
+  beats, and `ColonistView` only the encounter's stage: the screens had nothing to draw a pack or a glint from.
+  `DevFrame` gains an optional **`moments`**, absent when nothing is on: `packs` (per colonist met, `who`, `stage`,
+  and each wolf's `x`, `y`, `state` prowl | tell | lunge | open | hurt, and lunge `target` or null), `glint` (`x`,
+  `y`, `untilTick`, or null) and `scramble` (`untilTick`, `needers`, `got`, `over`, `leftOut`, or null), from the
+  engine's `FloorEncounter`, `FloorGlint` and `FloorScramble`, rounded to 2 decimals where the frame is built
+  (AM-15); about 300 B with four packs out. The producer is the frame builder (`dev-steer.ts::devFrame`) and
+  `packages/protocol`; who builds it is the PM's ruling. PR-9 stubs against this shape. The e2e forces the moments by
+  setting `WOLVES` and `GLINT` on the in-process server's config, so no server test option is added.
 - **AM-27 (2026-11-04, WS1's PR-8 #248 sim, ruled by WS6; changes AM-22's bar).** With `botWolfLandShare` built at
   0.5, AI wolf months over 40 AI-only games with walking on are 61% on seed 1, 52% on 101 and 50% on 201 (standard
   error about 2.2 points, so 101 and 201 truly miss 60%). The bar is now **at least 50% of months on each of seeds 1,
