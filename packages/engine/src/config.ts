@@ -332,8 +332,8 @@ export type LakeMode = 'shore' | 'wade';
  * Heiko's starting values (arcade spec RULE-7); DEV_WALK's hunger, sickness and Zipwing pace still apply.
  */
 export const DEV_STEER = {
-  /** Steered walking instead of DEV_WALK's tap-to-walk. Off until Heiko's OK on the rig. */
-  on: false as boolean,
+  /** Steered walking instead of DEV_WALK's tap-to-walk. On since Heiko's OK on the rig (arcade PR-11). */
+  on: true as boolean,
   /** Tiles a second on plains at full pace: half of today's 1 / DEV_WALK.tileSeconds. */
   mapTilesPerSecond: 1.25,
   /** Seconds across the store's hall at full pace, door to corral. */
