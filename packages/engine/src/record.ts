@@ -59,7 +59,15 @@ export interface GameRecord<Intent> {
   seats: { id: PlayerId; name: string; isAi: boolean; color: number; pick?: string; smart: boolean }[];
   t0: number;                       // the room clock when recording began, epoch ms
   events: RecordEvent<Intent>[];
-  outcome?: { scores: Record<PlayerId, number>; stateHash: string };
+  /**
+   * The state when the game ended: at game over, or, with `ended: 'error'`, when the error ended the room. Then the
+   * scores are what `score` gives on that state, and absent if scoring itself threw.
+   */
+  outcome?: { scores?: Record<PlayerId, number>; stateHash: string };
+  /** Absent: the game ended normally (or not yet). 'error': a game error ended the room at the record's last step. */
+  ended?: 'error';
+  /** With `ended: 'error'`: the error's message only, never its stack, so no path or env reaches the file. */
+  error?: string;
 }
 
 /** Every value config.ts exports, as plain data: what a record's config fingerprint is taken over. */

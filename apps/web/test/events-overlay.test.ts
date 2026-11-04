@@ -459,3 +459,46 @@ describe('HC-6: reduced motion on the overlays: no motion, the result still show
     expect(count(over, 'data-testid="sick-tag"')).toBe(4);
   });
 });
+
+describe('G-1 / C4: a wave-2 event with no story yet shows its title on every screen, and nothing throws', () => {
+  /** A wave-2 event as the server sends it (monthEventView): off the map, so no hits, and what it changed as effects. */
+  const wave2 = (key: string, title: string, line: string, phase: MuleView['phase'], scope: string, player?: string): EventView =>
+    ({
+      key,
+      kind: 'ledger',
+      title,
+      line,
+      sign: 'bad',
+      scope,
+      ...(player ? { player } : {}),
+      origin: { x: 4, y: 2 },
+      hits: [],
+      phase,
+      effects: [{ on: player ?? LENA, what: key === 'ratsInSilo' ? 'food' : 'money', delta: -3 }],
+      weight: 'headline',
+      playMs: EVENT_SHOW.rollCallMs,
+    }) as unknown as EventView;
+  const cases = [
+    { phase: 'planning' as const, ev: wave2('federationTax', 'Federation tax', 'The Federation takes 10% of every cash for the colony fund.', 'planning', 'colony') },
+    { phase: 'upkeep' as const, ev: wave2('ratsInSilo', 'Rats in the silo', 'Rats eat 50% of the stored Food.', 'upkeep', 'personal', LENA) },
+  ];
+  /** Show seconds across the whole show, intro to settle. */
+  const moments = [INTRO_S + 0.1, ROLL_S, ROLL_S + 1, RESULT_S];
+
+  it.each(cases)('$ev.key in $phase: the TV and each phone, alone and with a TV, show its title at some moment and never throw', async ({ phase, ev }) => {
+    const at = (t: number) => viewAt(t, { phase, events: [ev], held: false });
+    const screens = [
+      { name: 'TV', overlay: 'tv-event-overlay', at: (t: number) => tv(at(t)) },
+      { name: 'phone alone', overlay: 'phone-event-overlay', at: (t: number) => phone(OSSA, 0, at(t)) },
+      { name: 'phone with a TV', overlay: 'phone-event-overlay', at: (t: number) => phone(OSSA, 1, at(t)) },
+    ];
+    for (const screen of screens) {
+      const frames: string[] = [];
+      for (const t of moments) frames.push(await render(await screen.at(t)));
+      expect(
+        frames.some((html) => inside(html, screen.overlay).includes(ev.title)),
+        `${screen.name} shows ${ev.title}`,
+      ).toBe(true);
+    }
+  });
+});

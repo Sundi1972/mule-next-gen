@@ -1,8 +1,10 @@
 import type { CSSProperties, ReactNode } from 'react';
+import { GoodIcon } from '../components/GoodIcon';
 import { PlayerMark } from '../components/PlayerMark';
 import { cx, type Slot } from '../components/tokens';
-import { eventSegWho, segTitle } from './copy';
+import { effectWords, eventSegWho, lineShare, segTitle } from './copy';
 import { useShow, type ShowFrame } from './frame';
+import { epidemicSick } from './sick';
 import { clamp, ramp } from './fx';
 import { EventSignBadge } from './glyphs';
 import { At, px } from './place';
@@ -30,7 +32,10 @@ export function colonistAt({ tiles, grid, cast }: Pick<ShowFrame, 'tiles' | 'gri
 
 /** The players whose sickness has landed by `t`. */
 export function sickAt({ s, t, reduced, grid, cast }: ShowFrame): Set<string> {
-  return new Set(s.segments.flatMap((g) => g.events.filter((e) => e.key === 'sickness' && t >= eventHitAt(g, e, null, reduced, grid)).map((e) => cast.playerOf(e) ?? '')));
+  const landed = (g: EventSegment, e: ShowEventView) => t >= eventHitAt(g, e, null, reduced, grid);
+  const sick = s.segments.flatMap((g) => g.events.filter((e) => e.key === 'sickness' && landed(g, e)).map((e) => cast.playerOf(e) ?? ''));
+  const sickened = s.segments.flatMap((g) => g.events.filter((e) => e.key === 'epidemic' && landed(g, e)).flatMap((e) => epidemicSick(e, cast.players)));
+  return new Set([...sick, ...sickened]);
 }
 
 /** WS6's approved sick tag (variant B): a pink cross on the condition chip. */
@@ -100,8 +105,33 @@ export function Sneeze({ ev, seg, size }: { ev: ShowEventView; seg: EventSegment
 /** Places a piece of the vignette over the mark, in percent of the mark's box. */
 const at = (x: number, y: number, w: number, extra?: CSSProperties): CSSProperties => ({ position: 'absolute', left: `${x}%`, top: `${y}%`, width: `${w}%`, transform: 'translate(-50%, -50%)', ...extra });
 
+function Rat({ style }: { style: CSSProperties }) {
+  return (
+    <svg viewBox="0 0 20 10" style={style} aria-hidden>
+      <ellipse cx="9" cy="6" rx="6" ry="3.4" fill="var(--color-ink-2)" />
+      <path d="M14 4.5 19 6l-5 1.6Z" fill="var(--color-ink-2)" />
+      <circle cx="13.6" cy="3.4" r="1.3" fill="var(--color-ink-2)" />
+      <path d="M3 6.5C0 6.5 0 9.5 2.5 9.5" fill="none" stroke="var(--color-ink-2)" strokeWidth={0.9} />
+    </svg>
+  );
+}
+
+function Envelope({ open }: { open: number }) {
+  return (
+    <svg viewBox="0 0 20 14" className="h-auto w-full" aria-hidden>
+      <rect x="1" y="3" width="18" height="10" rx="1.2" fill="var(--color-mule-metal)" stroke="var(--color-warn)" strokeWidth={0.8} />
+      <path d={`M1 3.4 10 ${3 + 6 * (1 - open) - 5 * open} 19 3.4`} fill="color-mix(in srgb, var(--color-mule-metal) 80%, var(--color-void))" stroke="var(--color-warn)" strokeWidth={0.8} />
+      <circle cx="10" cy="8.5" r="1.8" fill="var(--color-alert)" opacity={1 - open} />
+    </svg>
+  );
+}
+
+function Coin({ style }: { style: CSSProperties }) {
+  return <span className="aspect-square rounded-full border border-void/40 bg-warn" style={style} />;
+}
+
 /** Each bulletin's own little story on its player's mark; `k` runs 0 to 1 over it. */
-const DRAW: Partial<Record<ShowEventKey, (k: number) => ReactNode>> = {
+const DRAW: Partial<Record<ShowEventKey, (k: number, ev: ShowEventView) => ReactNode>> = {
   sickness: (k) => (
     <>
       {k > 0.3 &&
@@ -112,6 +142,54 @@ const DRAW: Partial<Record<ShowEventKey, (k: number) => ReactNode>> = {
       {k > 0.3 && k < 0.8 && (
         <span className="absolute -top-[55%] left-[85%] whitespace-nowrap font-display font-bold italic text-g-medicine" style={{ fontSize: '55%' }}>
           achoo!
+        </span>
+      )}
+    </>
+  ),
+  // Rats run off with the Food.
+  ratsInSilo: (k) => (
+    <>
+      <span style={at(50, 108, 46, { opacity: 1 - clamp((k - 0.5) / 0.4) })}>
+        <GoodIcon good="food" size={14} className="h-auto w-full" />
+      </span>
+      <Rat style={at(-30 + k * 160, 112, 52)} />
+      <Rat style={at(-60 + k * 160, 118, 44)} />
+    </>
+  ),
+  // A letter drops in and opens into coins.
+  inheritance: (k) => (
+    <>
+      <span style={at(50, -40 + clamp(k / 0.4) * 50, 80, { opacity: 1 - clamp((k - 0.8) / 0.2) })}>
+        <Envelope open={clamp((k - 0.4) / 0.25)} />
+      </span>
+      {k > 0.6 && [0, 1, 2].map((i) => <Coin key={i} style={at(50 + (i - 1) * 40 * clamp((k - 0.6) / 0.4), 10 - clamp((k - 0.6) / 0.4) * 40, 28, { opacity: 1 - clamp((k - 0.85) / 0.15) })} />)}
+    </>
+  ),
+  // A coin sneaks away.
+  crookedAccountant: (k, ev) => (
+    <>
+      <Coin style={at(60 + k * 120, 40 + Math.sin(k * Math.PI) * -30, 34, { opacity: 1 - clamp((k - 0.7) / 0.3) })} />
+      {k > 0.2 && lineShare(ev) && (
+        <span className="absolute font-mono font-bold text-alert" style={{ ...at(140 + k * 40, -10, 60), fontSize: '50%', opacity: 1 - clamp((k - 0.8) / 0.2) }}>
+          −{lineShare(ev)}
+        </span>
+      )}
+    </>
+  ),
+  // A parcel floats down and opens.
+  packageFromHome: (k) => (
+    <>
+      <span style={at(50, -70 + clamp(k / 0.55) * 75, 90, { opacity: 1 - clamp((k - 0.85) / 0.15) })}>
+        <svg viewBox="0 0 20 26" className="h-auto w-full" aria-hidden>
+          {k < 0.55 && <path d="M2 8a8 7 0 0 1 16 0Z" fill="var(--color-ok)" />}
+          {k < 0.55 && <path d="M2 8l6 9M18 8l-6 9" stroke="var(--color-ink-2)" strokeWidth={0.6} />}
+          <rect x="6" y="16" width="8" height="8" rx="1" fill="var(--color-g-smithore)" />
+          <path d="M10 16v8" stroke="var(--color-void)" strokeWidth={0.8} />
+        </svg>
+      </span>
+      {k > 0.6 && (
+        <span style={at(50, -30 - clamp((k - 0.6) / 0.4) * 30, 50, { opacity: 1 - clamp((k - 0.9) / 0.1) })}>
+          <GoodIcon good="food" size={14} className="h-auto w-full" />
         </span>
       )}
     </>
@@ -127,7 +205,7 @@ function Vignette({ ev, seg }: { ev: ShowEventView; seg: EventSegment }) {
   if (k < 0 || k > 1) return null;
   return (
     <span className="pointer-events-none absolute inset-0 overflow-visible" data-testid={`vignette-${ev.key}`}>
-      {draw(k)}
+      {draw(k, ev)}
     </span>
   );
 }
@@ -163,7 +241,7 @@ export function RollCall({ size }: { size: ShowSize }) {
                 </span>
                 <span className="flex flex-col leading-tight">
                   <span className={cx('font-display font-semibold', tv ? 'text-xl' : 'text-[11px]')}>{cast.name(id)}</span>
-                  <span className={cx('font-mono text-ink-2', tv ? 'text-base' : 'text-[9px]')}>{e.key === 'sickness' ? '50% pace' : e.title}</span>
+                  <span className={cx('font-mono text-ink-2', tv ? 'text-base' : 'text-[9px]')}>{e.key === 'sickness' ? '50% pace' : (e.effects ?? []).filter((f) => f.on === id).map(effectWords).join(', ') || e.title}</span>
                 </span>
               </span>
             );

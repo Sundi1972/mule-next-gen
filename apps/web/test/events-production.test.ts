@@ -202,7 +202,8 @@ describe('the production show plays every event of the month', () => {
 
   it('T-AC-4: each key plays its own story inside its segment, and no other key’s', () => {
     // Every key production fires; sickness is development's, and its roll call is events-overlay's and the UI's roll-call test.
-    const OWN: Record<Exclude<ShowEventKey, 'sickness'>, RegExp> = {
+    // Wave 1's production keys; wave 2's stories (and their entries here) come with PR-B.
+    const OWN: Partial<Record<Exclude<ShowEventKey, 'sickness'>, RegExp>> = {
       dustStorm: /data-testid="front-dustStorm"/,
       drought: /data-testid="front-drought"/,
       acidRain: /data-testid="front-acidRain"/,
@@ -221,10 +222,10 @@ describe('the production show plays every event of the month', () => {
       const one = viewOf(month.lines, [ev]);
       const shown = frames(EVENT_AT + INTRO, EVENT_AT + INTRO + 4).map((t) => render(one, t));
       expect(
-        shown.some((html) => OWN[k].test(html)),
+        shown.some((html) => OWN[k]!.test(html)),
         `${k} draws its own story`,
       ).toBe(true);
-      for (const other of keys.filter((o) => o !== k)) expect(shown.some((html) => OWN[other].test(html)), `${k} draws ${other}'s story`).toBe(false);
+      for (const other of keys.filter((o) => o !== k)) expect(shown.some((html) => OWN[other]!.test(html)), `${k} draws ${other}'s story`).toBe(false);
       // Only the cavern collapse jolts the camera.
       if (k !== 'cavernCollapse') expect(shown.some(jolted), `${k} never jolts`).toBe(false);
     }
@@ -274,6 +275,38 @@ describe('the production show plays every event of the month', () => {
     expect(still.some((html) => html.includes('data-testid="cave-in-dust"')), 'reduced: the dust shows').toBe(true);
   });
 
+  it('T-AC-12: a cavern collapse hit shows a CAVED IN chip once it lands, and the cavern badge until then', () => {
+    // The view's tiles are the map after the month's events: the cavern at (1, 0) is already a plain plot.
+    const after = tiles.map((t) => (t.x === 1 && t.y === 0 ? { ...t, owner: 0 as const, good: 'food' as const } : t));
+    const collapse: ProductionEventView = { ...fired('cavernCollapse', 4000, []), scope: 'personal', hits: [{ x: 1, y: 0, order: 0, delta: 0, was: 'crystalCavern', becomes: 'plain' }] };
+    const caveIn = viewOf(month.lines, [collapse]);
+    const seg = eventSegments(caveIn, EVENT_AT, 'tv')[0]!;
+    const lands = eventHitAt(seg, seg.events[0]!, seg.events[0]!.hits[0]!, false, GRID);
+    const draw = (production: ProductionView, t: number, reduced = false) =>
+      renderToStaticMarkup(createElement(ProductionMap, { width: W, height: H, tiles: after, production, t, slots: { lena: 0, ossa: 1 }, tv: true, reduced }));
+    const badge = /data-testid="special-glyph-1-0" data-kind="crystalCavern"/;
+    const cavedIn = /data-testid="mark-1-0"[^]*?\u25BC<\/span>CAVED IN/;
+    // With reduced motion the hit lands sooner; the badge goes on that landing, not the full-motion one.
+    for (const reduced of [false, true]) {
+      const at = eventHitAt(seg, seg.events[0]!, seg.events[0]!.hits[0]!, reduced, GRID);
+      for (const t of [0, EVENT_AT, at - 0.05]) {
+        const html = draw(caveIn, t, reduced);
+        expect(html, `the badge at ${t}, reduced ${reduced}`).toMatch(badge);
+        expect(html, `no chip yet at ${t}, reduced ${reduced}`).not.toContain('data-testid="mark-1-0"');
+      }
+      // From the landing instant itself: the chip, never beside the badge.
+      for (const t of [at, at + 0.05, showEnd(caveIn)]) {
+        const html = draw(caveIn, t, reduced);
+        expect(html, `no badge at ${t}, reduced ${reduced}`).not.toContain('special-glyph-1-0');
+        expect(html, `the chip at ${t}, reduced ${reduced}`).toMatch(cavedIn);
+      }
+    }
+    // A hit that changes no plot's kind reads as its number, and keeps no badge the tiles lack.
+    const loss = draw(viewOf(month.lines, [fired('cavernCollapse', 4000, [[1, 0, -1]])]), lands - 0.05);
+    expect(loss).not.toContain('special-glyph-1-0');
+    expect(draw(viewOf(month.lines, [fired('cavernCollapse', 4000, [[1, 0, -1]])]), lands + 0.05)).not.toContain('CAVED IN');
+  });
+
   it("T-AC-4: a quiet month's timeline is unchanged: the goods fly at 9.6 and the show ends at 15", () => {
     const quiet = viewOf(month.lines, []);
     const start = 1_000_000;
@@ -314,5 +347,46 @@ describe('the production show plays every event of the month', () => {
     const after = render(rain, EVENT_AT + INTRO + 3 - 0.05, { tv: false });
     expect(plot(after, 1, 0)).toContain('data-badge="reason"');
     expect(plot(after, 4, 0)).not.toContain('data-badge="reason"');
+  });
+});
+
+describe('G-1 / C4: a wave-2 production event with no story yet plays on the production map', () => {
+  // As the server sends them: a cold snap hits no plot and says so in effects; a meteor strike hits one plot, 0 delta,
+  // which becomes a crater and loses its MULE.
+  const cold: ProductionEventView = {
+    ...fired('coldSnap', 7000, []),
+    kind: 'sweep',
+    title: 'Cold snap',
+    line: 'A cold snap: every plot needs 2 times its Energy this month.',
+    effects: [{ on: 'colony', what: 'energyNeed', delta: 100 }],
+  };
+  const meteor: ProductionEventView = {
+    ...fired('meteorStrike', 7000, [[1, 0, 0]]),
+    kind: 'strike',
+    title: 'Meteor strike',
+    line: 'A meteor strikes: its MULE is lost and the plot becomes a crater rich in Crystite.',
+    scope: 'local',
+    hits: [{ x: 1, y: 0, order: 0, delta: 0, becomes: 'crater', muleLost: true }],
+  };
+  const lines: ProductionView['lines'] = [{ x: 1, y: 0, owner: 'lena', good: 'food', made: 2, parts: [] }];
+  const month = viewOf(lines, [cold, meteor]);
+
+  it.each([
+    { name: 'the TV', tv: true, mode: 'tv' as const },
+    { name: 'a phone with a TV', tv: false, mode: 'tv' as const },
+    { name: 'a phone alone', tv: false, mode: 'solo' as const },
+  ])('on $name, each shows its title in its segment and no frame throws', ({ tv, mode }) => {
+    const segments = eventSegments(month, EVENT_AT, mode);
+    expect(segments.map((s) => s.events.map((e) => e.key))).toEqual([['coldSnap'], ['meteorStrike']]);
+    for (const [i, ev] of [cold, meteor].entries()) {
+      const seg = segments[i]!;
+      const shown = frames(seg.startAt, seg.endAt).map((t) => render(month, t, { tv, mode }));
+      expect(
+        shown.some((html) => html.includes(ev.title)),
+        `${ev.key} shows its title`,
+      ).toBe(true);
+    }
+    // The goods still fly home after the last event: the show reaches its end.
+    expect(() => render(month, showEnd(month) + 0.1, { tv, mode })).not.toThrow();
   });
 });

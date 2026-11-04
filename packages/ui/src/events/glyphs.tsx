@@ -1,8 +1,9 @@
 import type { ReactNode } from 'react';
 import { GoodIcon } from '../components/GoodIcon';
-import { cx, type Good } from '../components/tokens';
+import { cx, GOOD_NAME, type Good } from '../components/tokens';
+import { effectWords } from './copy';
 import { signLook } from './frame';
-import type { ShowEventKey, ShowEventView } from './types';
+import type { ShowEffect, ShowEventKey, ShowEventView } from './types';
 
 /** An n-pointed star's outline: the solar flare's spiky sun. */
 const star = (n: number, outer: number, inner: number, cy = 12, cx = 12) =>
@@ -13,11 +14,13 @@ const star = (n: number, outer: number, inner: number, cy = 12, cx = 12) =>
   }).join('L')}Z`;
 
 const S = { fill: 'none', stroke: 'currentColor', strokeWidth: 2.2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
+/** A cut-out in the glyph, in the badge's own background. */
+const V = { fill: 'none', stroke: 'var(--color-void)', strokeWidth: 1.6, strokeLinecap: 'round' as const };
 const F = { fill: 'currentColor' };
 
 /** One glyph per event, each with its own silhouette so it reads without colour: wind lines, a beetle, a flame. */
 /** Each is a function, so no JSX is evaluated until a glyph renders: importing @mule/ui from Node (e2e scripts) must not need React in scope. */
-const GLYPH: Record<ShowEventKey, () => ReactNode> = {
+const GLYPH: Partial<Record<ShowEventKey, () => ReactNode>> = {
   dustStorm: () => (
     <>
       <path {...S} d="M3 8h10.5a3 3 0 1 0-3-3" />
@@ -106,18 +109,121 @@ const GLYPH: Record<ShowEventKey, () => ReactNode> = {
   ),
   // WS6's approved sick cross.
   sickness: () => <path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6Z" {...F} />,
+  // Wave 2, the gallery's glyphs.
+  federationTax: () => (
+    <>
+      <ellipse cx="9" cy="19" rx="6" ry="2.3" {...F} />
+      <ellipse cx="9" cy="14.8" rx="6" ry="2.3" {...F} />
+      <ellipse cx="9" cy="10.6" rx="6" ry="2.3" {...F} />
+      <path {...S} d="M15 8.5 21 2.5M16 2.5h5v5" />
+    </>
+  ),
+  federationGrant: () => (
+    <>
+      <path {...F} d={star(5, 6.5, 2.8, 7.5)} />
+      <circle cx="6.5" cy="18" r="3.2" {...F} />
+      <circle cx="17.5" cy="18" r="3.2" {...F} />
+      <path {...S} strokeWidth={1.6} d="M6.5 11.5v2M17.5 11.5v2" />
+    </>
+  ),
+  immigrationWave: () => (
+    <>
+      <circle cx="8" cy="8" r="3" {...F} />
+      <circle cx="16" cy="8" r="3" {...F} />
+      <path {...F} d="M2.5 19a5.5 5.5 0 0 1 11 0ZM10.5 19a5.5 5.5 0 0 1 11 0Z" />
+      <path {...S} strokeWidth={1.8} d="M12 1.5v2.5" />
+      <path {...S} d="M3 22h18" />
+    </>
+  ),
+  inheritance: () => (
+    <>
+      <rect x="2" y="5.5" width="20" height="14" rx="1.6" {...S} />
+      <path {...S} d="M2.5 6.5 12 13.5l9.5-7" />
+      <circle cx="12" cy="15" r="3.3" {...F} />
+    </>
+  ),
+  muleTheft: () => (
+    <>
+      <rect x="2.5" y="10" width="12" height="6.5" rx="1.8" {...F} />
+      <path {...F} d="M14.5 11.5 18 7h3.5v3.6L19 12Z" />
+      <path {...S} d="M4.5 16.5v4.5M8.5 16.5v4.5M12.5 16.5v4.5" />
+      <path {...S} strokeWidth={1.7} strokeDasharray="1.5 2.4" d="M2 6.5c3-3.5 7-4.5 11-3" />
+    </>
+  ),
+  epidemic: () => (
+    <>
+      <path {...F} d="M10 7h4.5v4.5H19V16h-4.5v4.5H10V16H5.5v-4.5H10Z" />
+      <path {...F} d="M3 2h2.4v2.4h2.4v2.4H5.4v2.4H3V6.8H.6V4.4H3Z" />
+      <path {...F} d="M18.6 1h2.4v2.4h2.4v2.4H21v2.4h-2.4V5.8h-2.4V3.4h2.4Z" />
+    </>
+  ),
+  coldSnap: () => (
+    <>
+      <path {...S} d="M12 2v20M3.3 7l17.4 10M3.3 17l17.4-10" />
+      <path {...S} strokeWidth={1.8} d="M9.5 3.2 12 5.7l2.5-2.5M9.5 20.8 12 18.3l2.5 2.5M3.4 10.6l3.4-.9-.9-3.4M20.6 13.4l-3.4.9.9 3.4M5.9 17.7l.9-3.4-3.4-.9M18.1 6.3l-.9 3.4 3.4.9" />
+    </>
+  ),
+  meteorStrike: () => (
+    <>
+      <path {...S} d="M3 3l8 8M7 2.5l6.5 6.5M2.5 7l6.5 6.5" />
+      <circle cx="16" cy="16" r="5.5" {...F} />
+      <circle cx="14.3" cy="14.8" r="1.3" fill="var(--color-void)" opacity="0.55" />
+      <circle cx="17.8" cy="17.6" r="0.9" fill="var(--color-void)" opacity="0.55" />
+    </>
+  ),
+  pirateRaid: () => (
+    <>
+      <path {...F} d="M12 2.5a7 7 0 0 0-7 7c0 2.4 1.2 4.1 3 5V17h8v-2.5c1.8-.9 3-2.6 3-5a7 7 0 0 0-7-7Z" />
+      <circle cx="9.3" cy="9.6" r="1.8" fill="var(--color-void)" />
+      <circle cx="14.7" cy="9.6" r="1.8" fill="var(--color-void)" />
+      <path {...S} d="M3 19 21 22.5M3 22.5 21 19" />
+    </>
+  ),
+  storeFire: () => (
+    <>
+      <path {...F} d="M4 13h16v9H4Z" />
+      <path {...F} d="M2.5 13l2-4h15l2 4Z" />
+      <path fill="var(--color-void)" d="M10 22v-4.5h4V22Z" />
+      <path {...F} d="M12 .8c.3 2 3 3.3 3 5.9a3 3 0 0 1-6 0c0-1.3.8-2.1 1.3-2.9.2 1 .6 1.5 1 1.6 0-1.6-.2-3.1.7-4.6Z" />
+    </>
+  ),
+  ratsInSilo: () => (
+    <>
+      <ellipse cx="11" cy="15" rx="6.2" ry="4.2" {...F} />
+      <path {...F} d="M15.5 12.3 22 15.4l-6.5 3Z" />
+      <circle cx="15.2" cy="11.3" r="1.9" {...F} />
+      <circle cx="18" cy="14.4" r="0.8" fill="var(--color-void)" />
+      <path {...S} strokeWidth={1.8} d="M5.2 16.5C1.5 16.5 1.5 21 4.5 21H9" />
+    </>
+  ),
+  crookedAccountant: () => (
+    <>
+      <rect x="3" y="2.5" width="13" height="19" rx="1.6" {...F} />
+      <path {...V} strokeWidth={1.8} d="M6.5 7.5h6M6.5 11.5h6M6.5 15.5h3.5" />
+      <path {...S} d="M20 3v10M17.4 10.5 20 13.2l2.6-2.7" />
+    </>
+  ),
+  packageFromHome: () => (
+    <>
+      <path {...F} d="M4 10h16v11.5H4Z" />
+      <path {...F} d="M2.5 6.5h19V10h-19Z" />
+      <path {...V} strokeWidth={2.2} d="M12 6.5v15" />
+      <path {...S} strokeWidth={1.8} d="M12 6.2C10 2 6 3.5 8.5 6.2M12 6.2C14 2 18 3.5 15.5 6.2" />
+    </>
+  ),
 };
 
 export function EventGlyph({ k, size = 24, className }: { k: ShowEventKey; size?: number; className?: string }) {
   return (
     <svg viewBox="0 0 24 24" width={size} height={size} className={cx('shrink-0', className)} aria-hidden data-glyph={k}>
-      {GLYPH[k]()}
+      {/* A key this client doesn't know yet (a newer server's): a plain disc, never a crash. */}
+      {GLYPH[k]?.() ?? <circle cx={12} cy={12} r={7} {...F} />}
     </svg>
   );
 }
 
 /** Each event's own colour, from the palette the game already speaks: dust is amber, pests eat Food. */
-export const EVENT_ACCENT: Record<ShowEventKey, string> = {
+export const EVENT_ACCENT: Partial<Record<ShowEventKey, string>> = {
   dustStorm: 'var(--color-warn)',
   drought: 'var(--color-g-smithore)',
   acidRain: 'var(--color-g-food)',
@@ -130,8 +236,22 @@ export const EVENT_ACCENT: Record<ShowEventKey, string> = {
   bumperHarvest: 'var(--color-g-food)',
   cavernCollapse: 'var(--color-g-crystite)',
   sickness: 'var(--color-g-medicine)',
+  federationTax: 'var(--color-warn)',
+  federationGrant: 'var(--color-warn)',
+  immigrationWave: 'var(--color-holo)',
+  inheritance: 'var(--color-warn)',
+  muleTheft: 'var(--color-mule-metal)',
+  epidemic: 'var(--color-g-medicine)',
+  coldSnap: 'var(--color-ink)',
+  meteorStrike: 'var(--color-alert)',
+  pirateRaid: 'var(--color-g-crystite)',
+  storeFire: 'var(--color-alert)',
+  ratsInSilo: 'var(--color-ink-2)',
+  crookedAccountant: 'var(--color-warn)',
+  packageFromHome: 'var(--color-g-food)',
 };
-export const accent = (k: ShowEventKey) => EVENT_ACCENT[k];
+/** A key this client doesn't know yet takes the text colour. */
+export const accent = (k: ShowEventKey) => EVENT_ACCENT[k] ?? 'currentColor';
 
 /**
  * The event's badge: its glyph inside a frame whose SHAPE says the sign, so it reads without colour: a diamond
@@ -188,6 +308,19 @@ export function EventDeltaChip({ delta, good, size = 'tv', className, lost, text
       {good && <GoodIcon good={good} size={px.icon} color={tone === 'loss' ? 'white' : 'var(--color-on-holo)'} />}
     </span>
   );
+}
+
+const isGood = (what: ShowEffect['what']): what is Good => what in GOOD_NAME;
+
+/** Whether a change off the map is good for the colony: a higher energy need is not, and losing MULEs never is. */
+export const effectIsGood = (f: ShowEffect) => (f.what === 'energyNeed' ? f.delta < 0 : f.what === 'mules' ? false : f.delta > 0);
+
+/** A change off the map, as a chip: credits, held goods, a gauge. Same notch-and-stripes language as the plot's chip. */
+export function EventEffectChip({ f, size = 'tv', className }: { f: ShowEffect; size?: 'tv' | 'phone' | 'hero'; className?: string }) {
+  const good = isGood(f.what) ? f.what : undefined;
+  // A held good shows its icon and number only; everything else says what moved.
+  const text = good ? `${f.on === 'store' ? 'Store ' : ''}${f.delta < 0 ? '−' : '+'}${Math.abs(f.delta)}` : effectWords(f);
+  return <EventDeltaChip delta={effectIsGood(f) ? 1 : -1} good={good} size={size} text={text} {...(className ? { className } : {})} />;
 }
 
 /** The phone buzzes: drawn as a small vibrating handset beside the card. */
