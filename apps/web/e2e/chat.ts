@@ -83,6 +83,10 @@ type Sample = {
    * scrolled or not, and whether the chat is the body's last child. Null in the header or on the TV.
    */
   tickerReach: { end: number; last: boolean } | null;
+  /** The ticker lies in a bar that has faded: the walking screen's status bar, under a bubble or a colonist. */
+  tickerFaded: boolean;
+  /** The walking screen: a speaker it doesn't draw has its ticker line only, no bubble. */
+  walking: boolean;
   viewport: { w: number; h: number };
   bubbles: Bubble[];
   speakers: string[];
@@ -92,7 +96,8 @@ type Sample = {
 
 /**
  * In the page: every 50 ms, what the chat shows: the ticker's lines, each bubble with its line, anchor and rect, which
- * seats the screen draws as speakers, and the frame bubbles must stay inside (the phone's stage, the TV's screen).
+ * seats the screen draws as speakers, and the frame bubbles must stay inside (the stage that clips them, the phone's
+ * stage, the TV's screen).
  * Kept a string: tsx would wrap named functions in a helper the page lacks.
  */
 const SAMPLE = `{
@@ -100,7 +105,7 @@ const SAMPLE = `{
     window.__chatSamples = [];
     const rect = (el) => { if (!el) return null; const r = el.getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom }; };
     setInterval(() => {
-      const bounds = document.querySelector('[data-testid=stage]') ?? document.querySelector('[data-phase]');
+      const bounds = document.querySelector('[data-bubble-bounds]') ?? document.querySelector('[data-testid=stage]') ?? document.querySelector('[data-phase]');
       window.__chatSamples.push({
         t: Date.now(),
         phase: document.querySelector('[data-phase]')?.getAttribute('data-phase') ?? null,
@@ -117,6 +122,8 @@ const SAMPLE = `{
           if (!body || !body.contains(t)) return null;
           return { end: body.getBoundingClientRect().top - body.scrollTop + body.scrollHeight, last: !!body.lastElementChild?.contains(t) };
         })(),
+        tickerFaded: !!document.querySelector('[data-testid=chat-ticker]')?.closest('[data-faded]'),
+        walking: !!document.querySelector('[data-testid=phone-game], [data-testid=laptop-game]'),
         viewport: { w: window.innerWidth, h: window.innerHeight },
         bubbles: [...document.querySelectorAll('[data-testid^=chat-bubble-]')].map((b) => ({
           seat: b.getAttribute('data-testid').slice(12),
@@ -353,7 +360,10 @@ function inside(a: Rect, box: Rect): boolean {
   return a.l >= box.l - 0.5 && a.r <= box.r + 0.5 && a.t >= box.t - 0.5 && a.b <= box.b + 0.5;
 }
 
-/** B-AC-18: in every sample, no two bubbles meet, no bubble meets the ticker, and each bubble stays inside its frame. */
+/**
+ * B-AC-18: in every sample, no two bubbles meet, no bubble meets the ticker unless the ticker's bar has faded under it,
+ * and each bubble stays inside its frame.
+ */
 function noOverlaps(who: string, samples: Sample[]): string {
   let withBubble = 0;
   for (const s of samples) {
@@ -361,7 +371,8 @@ function noOverlaps(who: string, samples: Sample[]): string {
     withBubble++;
     for (const [i, a] of s.bubbles.entries()) {
       for (const b of s.bubbles.slice(i + 1)) check(!meets(a.rect, b.rect), `B-AC-18: on ${who} (${s.phase}) the bubbles of lines ${a.line} and ${b.line} overlap`);
-      check(!s.tickerRect || !meets(a.rect, s.tickerRect), `B-AC-18: on ${who} (${s.phase}) the bubble of line ${a.line} covers the ticker`);
+      // The walking screen's status bar, ticker and all, fades under a bubble that meets it, as under a colonist.
+      check(!s.tickerRect || !meets(a.rect, s.tickerRect) || s.tickerFaded, `B-AC-18: on ${who} (${s.phase}) the bubble of line ${a.line} covers the ticker${s.walking ? ', and its bar has not faded' : ''}`);
       check(s.bounds && inside(a.rect, s.bounds), `B-AC-18: on ${who} (${s.phase}) the bubble of line ${a.line} crosses its frame's edge: ${JSON.stringify(a.rect)} in ${JSON.stringify(s.bounds)}`);
     }
   }
@@ -413,7 +424,7 @@ function deadline(samples: Sample[], phase: string, t: number): number {
 /**
  * B-AC-17: every line this page received shows in its ticker within ~1 s and in the same phase; each bubble RULE-9
  * schedules shows within ~1 s of its start at the speaker's anchor (the creature when the screen draws one, else the
- * seat row, which the TV has none of); no bubble shows a line from an earlier phase.
+ * seat row, which the TV and the walking screen have none of); no bubble shows a line from an earlier phase.
  */
 function everyLineShows(who: string, wire: Wire, samples: Sample[]): string {
   const tv = who === 'tv';
@@ -447,6 +458,9 @@ function everyLineShows(who: string, wire: Wire, samples: Sample[]): string {
     const line = wire.lines.find((l) => l.id === b.id)!;
     // The TV has no seat row: a speaker it doesn't draw (by the views it received) has only the ticker there.
     if (tv && !line.tvDraws.includes(line.from)) continue;
+    // Nor has the walking screen: a speaker it doesn't draw when the bubble is due has its ticker line only.
+    const atStart = samples.find((s) => s.t >= b.from);
+    if (atStart?.walking && !atStart.speakers.includes(line.from)) continue;
     const shown = samples.find((s) => s.t >= b.from && s.bubbles.some((x) => x.line === b.id));
     const due = Math.min(b.to, deadline(samples, name(line), b.from));
     timing(!!shown && shown.t <= due, `B-AC-17: on ${who} line ${b.id}'s bubble shown ${shown ? `+${shown.t - b.from} ms` : 'never'} after its start (deadline +${due - b.from} ms)`);
