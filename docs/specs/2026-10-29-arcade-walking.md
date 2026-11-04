@@ -749,7 +749,12 @@ inside a wall; money and stock change only through game.ts rules; development en
   `y`, `untilTick`, or null) and `scramble` (`untilTick`, `needers`, `got`, `over`, `leftOut`, or null), from the
   engine's `FloorEncounter`, `FloorGlint` and `FloorScramble`, rounded to 2 decimals where the frame is built
   (AM-15); about 300 B with four packs out. The producer is the frame builder (`dev-steer.ts::devFrame`) and
-  `packages/protocol`: **PM ruling (a), WS1 builds it in PR-8 #248** with a frame test, WS3 OKing the SHA and the shape. PR-9 stubs against this shape. The e2e forces the moments by
+  `packages/protocol`: **PM ruling (a), WS1 builds it in PR-8 #248** with a frame test, WS3 OKing the SHA and the shape. PR-9 stubs against this shape. **Refined with WS1 before PR-9's red steps:** a wolf's
+  `target` is a position (where its colonist stood when it crouched), set at `tell` and **cleared by the engine when
+  the lunge ends**, so it is null outside `tell` and `lunge`; the scramble goes **from its call to the turn's end**,
+  `over` and `leftOut` included, and `leftOut` is filled whenever `over` is set (under `'time'` too), so "absent" means
+  no pack, no glint and no scramble yet this turn; the glint's `x`, `y` are its tile, drawn at the tile's middle;
+  `packs[].stage` stays, as the TV reads every pack from the frame at 20 Hz. The e2e forces the moments by
   setting `WOLVES` and `GLINT` on the in-process server's config, so no server test option is added.
 - **AM-27 (2026-11-04, WS1's PR-8 #248 sim, ruled by WS6; changes AM-22's bar).** With `botWolfLandShare` built at
   0.5, AI wolf months over 40 AI-only games with walking on are 61% on seed 1, 52% on 101 and 50% on 201 (standard
