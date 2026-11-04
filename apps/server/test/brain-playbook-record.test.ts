@@ -1,4 +1,7 @@
-/** A game whose Smart seat had a written playbook, recorded and replayed: the replay writes the recorded playbook. */
+/**
+ * A game whose Smart seat had a written playbook, recorded and replayed: the replay writes the recorded playbook. The
+ * game's own source drafts and validates it (WS9's playbookSource), live and in the replay.
+ */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GameRecord, PlaybookEntry } from '@mule/engine';
 import type { MuleIntent } from '@mule/protocol';
@@ -8,12 +11,6 @@ import { replay, ReplayDiverged } from '../src/replay.js';
 import { fakeSdk, KEY, promptOf, sdkMessage, type SdkMessage, type SdkParams } from './brain-fakes.js';
 import { fakeContext, seats as THREE } from './fake-context.js';
 import { runTable } from './playbook-fakes.js';
-
-// The engine's source, as it will be once the engine drafts and validates playbooks: live and replayed games both build on it.
-vi.mock('../src/brain/playbooks.js', async (original) => ({
-  ...(await original<typeof import('../src/brain/playbooks.js')>()),
-  ENGINE_SOURCE: (await import('./playbook-fakes.js')).stubSource(),
-}));
 
 const SEED = 10;
 const isWrite = (params: SdkParams) => promptOf(params).user.includes('What you may change:');
