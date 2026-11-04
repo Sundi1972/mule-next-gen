@@ -31,6 +31,12 @@ check(Number.isSafeInteger(SEED), `bad MULE_E2E_SEED "${process.env.MULE_E2E_SEE
 const { server, base } = await startServer({ maxMonths: 2, phaseScale: SCALE, seed: () => SEED });
 const browser = await launch();
 const errors: string[] = [];
+/**
+ * For the evidence a failed run prints: every message the game took from a seat (`handled`), and every development press
+ * among them with whether it was accepted or refused and why (`devIntents`). A press missing from both never arrived.
+ */
+const handled: string[] = [];
+const devIntents: string[] = [];
 /** Every screen in the game, for the evidence a failed run prints. */
 const screensOpen: { name: string; page: Page }[] = [];
 const started = Date.now();
@@ -54,6 +60,7 @@ try {
   const picks: Record<keyof typeof pages, Species> = { Brix: 'mollox', Lena: 'glimmer', Ossa: 'quibbit' };
   for (const [name, page] of Object.entries(pages) as [keyof typeof pages, Page][]) await page.getByTestId(`species-${picks[name]}`).click({ timeout: PRESS_MS });
   const truth = serverTruth(server, code);
+  logDevIntents(server, code);
   const phones: Phone[] = (Object.keys(pages) as (keyof typeof pages)[]).map((name) => ({ page: pages[name], name, species: picks[name], id: truth.seatOf(name) }));
   await brix.locator('[data-testid=seats] li').nth(2).waitFor();
   await brix.getByRole('button', { name: 'Start game' }).click();
@@ -140,11 +147,43 @@ async function printEvidence(): Promise<void> {
   const room = code ? server.registry.get(code) : undefined;
   const game = room?.viewFor(null).game;
   console.error(`server: ${game ? `month ${game.month}, ${game.phase}, land auction ${game.landAuction?.stage ?? '-'} ${game.landAuction?.lot.id ?? ''}` : 'no game'}`);
+  if (game) {
+    // Where each colonist stands or walks on the server (at, walk, assayUntil), and the news, where a refusal on
+    // arrival lands ("<name> reached the plot: <reason>").
+    for (const p of game.players) console.error(`server ${p.id} ${p.name}: colonist ${JSON.stringify(p.colonist && { at: p.colonist.at, walk: p.colonist.walk, assayUntil: p.colonist.assayUntil })}`);
+    console.error(`server news: ${game.news.slice(-6).join(' | ')}`);
+  }
+  console.error(`server got: ${handled.slice(-24).join(' | ') || 'nothing'}`);
+  console.error(`server's development presses: ${devIntents.slice(-16).join(' | ') || 'none'}`);
   for (const { name, page } of screensOpen) {
     const phase = await page.locator('[data-phase]').first().getAttribute('data-phase', { timeout: 500 }).catch(() => '?');
     const words = await page.locator('body').innerText({ timeout: 500 }).catch(() => '');
-    console.error(`--- ${name} (${phase}): ${words.replace(/\s+/g, ' ').slice(0, 400)}`);
+    console.error(`--- ${name} (${phase}): ${words.replace(/\s+/g, ' ').slice(0, 1_200)}`);
   }
+}
+
+/**
+ * Logs every message the room's game takes, and every development press with whether it was refused and why, by
+ * wrapping the game's handle and develop: the reason a press did nothing is otherwise only a toast on one phone.
+ */
+function logDevIntents(server: MuleServer, code: string): void {
+  const game = (server.registry.get(code) as unknown as { game: { handle(seat: string, intent: unknown): void; develop(seat: string, intent: unknown): void } }).game;
+  const stamp = (seat: string, intent: unknown) => `${((Date.now() - started) / 1_000).toFixed(1)}s ${seat} ${JSON.stringify(intent).slice(0, 80)}`;
+  const handle = game.handle.bind(game);
+  game.handle = (seat, intent) => {
+    handled.push(stamp(seat, intent));
+    handle(seat, intent);
+  };
+  const develop = game.develop.bind(game);
+  game.develop = (seat, intent) => {
+    try {
+      develop(seat, intent);
+      devIntents.push(`${stamp(seat, intent)} ok`);
+    } catch (err) {
+      devIntents.push(`${stamp(seat, intent)} refused: ${(err as Error).message}`);
+      throw err;
+    }
+  };
 }
 
 async function joinRoom(page: Page, code: string, name: string): Promise<Page> {
