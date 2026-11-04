@@ -9,7 +9,7 @@
 import { DEV_STEER, type Terrain } from '@mule/engine';
 import type { DevFrame, MuleView } from '@mule/protocol';
 import { check } from './harness';
-import { hostKeepsPlaying, steeredTable, until, type Wire } from './walking-wire';
+import { keepsPlaying, steeredTable, until, type Wire } from './walking-wire';
 
 const SEED = 20261104;
 /** Development's 50 s of game time in about 12 s of real time. */
@@ -89,7 +89,7 @@ async function watchADevelopment(board: Wire): Promise<{ frames: DevFrame[]; vie
 
 const started = Date.now();
 const table = await steeredTable({ seed: SEED, ais: 3, phaseScale: PHASE_SCALE, maxMonths: 1 });
-const stopHost = hostKeepsPlaying(table.host);
+const stopHost = keepsPlaying(table.host);
 try {
   const { frames, view, endsAt, endedAt } = await watchADevelopment(table.board);
   const ais = view.players.filter((p) => p.isAi);
