@@ -13,6 +13,7 @@ import {
   pubPayoutFor,
   reachOf,
   RuleError,
+  settleMoments,
   stepFloor,
   tileIndex,
   type DevFloor,
@@ -111,7 +112,7 @@ export function stepTick(
   allow: (seat: string, reach: Reach) => string | null,
 ): { floor: DevFloor; presses: TickPress[] } {
   const spent = doorPresses(floor, state, inputs, cfg);
-  const stepped = stepFloor(floor, state, inputs, cfg.steer.tickMs, cfg);
+  const stepped = settleMoments(state, stepFloor(floor, state, inputs, cfg.steer.tickMs, cfg));
   const pressing = pressOrder(stepped, Object.keys(inputs).filter((seat) => inputs[seat]!.act && !spent.has(seat)));
   const presses: TickPress[] = [];
   let after = stepped;
