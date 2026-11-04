@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { AI_LEVELS, createGame, GAME, scoreParts } from '@mule/engine';
 import type { AiAction } from '../src/actions.js';
 import { ADVICE, defaultManual, seatBounds, type AdviceLine } from '../src/llm/manual.js';
+import { WRITER_SYSTEM } from '../src/llm/system.js';
 
 /** Every AiAction type, listed here rather than read from the descriptors under test; the type keeps it complete. */
 const EVERY_MOVE: { readonly [T in AiAction['type']]: true } = {
@@ -124,5 +125,10 @@ describe('the manual of moves', () => {
 
   it("T-AC-A7: the default config's manual is pinned, so the cached system block moves only with the config", () => {
     expect(defaultManual()).toMatchSnapshot();
+  });
+
+  it("T-AC-A7: the writer's system block is the manual plus a pinned role and reply, so no wording moves the cache unseen", () => {
+    expect(WRITER_SYSTEM).toContain(defaultManual());
+    expect(WRITER_SYSTEM.replace(defaultManual(), '<the manual>')).toMatchSnapshot();
   });
 });

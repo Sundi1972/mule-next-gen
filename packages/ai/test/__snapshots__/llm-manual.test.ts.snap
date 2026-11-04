@@ -61,7 +61,7 @@ Cost: yes, as it says under Does.
 
 ### filter
 In: development. Args: plot (plot).
-Does: Walks to one of your plots and fits a filter for 1 Alloy from your stock; it halves the plot's air pollution and stops it spreading.
+Does: Walks to one of your plots and fits a filter for 1 Alloy from your stock; it multiplies the plot's air pollution by 0.5 and stops it spreading.
 Legal when: the development checks above; in month 1, before the clock starts, you are not already in with your first MULE (else: "Waiting for the others' first MULEs"); it names a plot on the map, not the store (else: "Not a plot"); the walk there ends before the clock does (else: "Not enough time to walk there"); you own the plot (else: "Not your plot"); the plot has no filter yet (else: "This plot already has a filter"); you hold 1 Alloy (else: "A filter needs 1 Alloy").
 Cost: yes, as it says under Does.
 
@@ -116,10 +116,24 @@ Each line names the move and the playbook field you set to play it.
 - analyse (DevelopmentPlay.route): before outfitting a plot whose ground you do not know; it costs 8 s of 50, so analyse only where the answer changes the outfit.
 - outfit (Strategy.moneyMaker): for the good the colony is short of or the export ship wants (3 goods, every 3 months): a scarce good sells dear.
 - pub (DevelopmentPlay.ifSoldOut): when the corral is out or your route is done: the pub pays more the earlier you go, 20 plus up to 60 + 20 times the month.
-- filter (DevelopmentPlay.route): when the air nears Collapse (80): Collapse multiplies every player's Worth by 0.8, and a filter halves a polluting plot's air points.
+- filter (DevelopmentPlay.route): when the air nears Collapse (80): Collapse multiplies every player's Worth by 0.8, and a filter multiplies a polluting plot's air points by 0.5.
 - declare (GoodPlay.role): sell what you hold above next month's needs and the depot's 10, buy what you will be short of, and pass on the rest; goods that spoil lose value in stock.
 - walk (GoodPlay.walkAway): never walk past your walk-away price; concede toward it over the 20000 ms walk rather than at once.
 - declare (GoodPlay.market): hold units for the export ship's month when its wishlist names the good; it calls every 3 months.
 - declare (Strategy.monopolyTarget): only if your level may corner: buy up a scarce good that spoils less than 50% a month, so the others must buy it from you.
 - run (Strategy.kind): as a politician: each term adds 1200 to Worth, and the Governor is paid 50 a month from the colony fund."
+`;
+
+exports[`the manual of moves > T-AC-A7: the writer's system block is the manual plus a pinned role and reply, so no wording moves the cache unseen 1`] = `
+"You play one seat in a colony trading game in the spirit of M.U.L.E.: a few players share a young colony and each tries to end with the highest Worth.
+
+<the manual>
+
+## Your reply
+You write your seat's strategy and your edits to the engine's draft playbook, in character. The brief shows the draft and what you may change.
+- Strategy.kind is the plan you play to. builder: develop many plots and grow steady production. specialist: concentrate on one good, your moneyMaker, and sell it. monopolist: corner one good, your monopolyTarget, so others must buy it from you. landBaron: gather plots, since each one counts toward Worth. politician: win office, since each term adds to Worth. spoiler: hold the leader back.
+- moneyMaker is the good you mean to earn most from, or null. monopolyTarget is the good you mean to corner, or null: only a monopolist names one, and only a seat whose level may corner. cashFloor is the credits you keep back and do not spend below, a whole number from 0 to the money you have.
+- Each edit names a path the brief offers, the value to set and why. A plan letter must be one the brief lists. An edit past what the rules allow is clamped to the nearest value they allow and plays, or is refused and the draft's value plays; your next brief lists each one with why.
+- line is one short sentence you say at the table, at most 140 characters, in the character's voice, or empty. Keep it family-friendly.
+Reply with JSON only, in the shape the schema gives."
 `;

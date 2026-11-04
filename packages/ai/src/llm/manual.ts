@@ -192,7 +192,7 @@ export const ADVICE: readonly AdviceLine[] = [
     move: 'filter',
     field: 'DevelopmentPlay.route',
     when: () =>
-      `when the air nears Collapse (${COLLAPSE_AIR}): Collapse multiplies every player's Worth by ${POLLUTION.collapseScore}, and a filter halves a polluting plot's air points.`,
+      `when the air nears Collapse (${COLLAPSE_AIR}): Collapse multiplies every player's Worth by ${POLLUTION.collapseScore}, and a filter multiplies a polluting plot's air points by ${POLLUTION.filterFactor}.`,
   },
   {
     move: 'declare',
@@ -308,7 +308,8 @@ export function defaultManual(advice: readonly AdviceLine[] = ADVICE): string {
 
 /**
  * The seat's own bounds, for its brief: kept out of the shared manual so the manual stays the same for every level. A
- * seat that never corners is not shown the monopolyTarget field at all; its reply schema has none.
+ * seat that never corners is not offered monopolyTarget, by its brief or its reply schema; the shared system block
+ * still names the field, as one only a cornering level may set, and the writer refuses it from such a seat.
  */
 export function seatBounds(level: Pick<AiLevelConfig, 'corners'>): string {
   return level.corners

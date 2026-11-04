@@ -11,6 +11,7 @@ import {
   outfitCostFor,
   PERCENT,
   POLITICS,
+  POLLUTION,
   SPECIES_PERK,
   TAX,
   type GameState,
@@ -168,7 +169,7 @@ export const MOVES: MoveTable = {
     command: 'filter',
     phases: ['development'],
     does: () =>
-      `Walks to one of your plots and fits a filter for ${DEVELOPMENT.filterAlloy} Alloy from your stock; it halves the plot's air pollution and stops it spreading.`,
+      `Walks to one of your plots and fits a filter for ${DEVELOPMENT.filterAlloy} Alloy from your stock; it multiplies the plot's air pollution by ${POLLUTION.filterFactor} and stops it spreading.`,
     legalWhen: () => [
       ...developing(),
       notWaiting,
