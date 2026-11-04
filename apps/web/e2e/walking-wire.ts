@@ -9,6 +9,8 @@ import { check, startServer } from './harness';
 
 /** Time for the room to answer a join. */
 const WELCOME_MS = 5_000;
+/** Time for the room to hear every screen leave once its sockets are closed. */
+const LEAVE_MS = 2_000;
 
 type Envelope = ServerEnvelope<MuleView, DevFrame>;
 
@@ -107,6 +109,12 @@ export async function steeredTable(options: { seed: number; ais: number; phaseSc
       host.close();
       for (const guest of guests) guest.close();
       board.close();
+      // The server's close lets its sockets go but leaves the game running, and a test table rarely plays to the end:
+      // a phase that waits for its departed players would tick on and keep the process alive. The room is disposed
+      // once every screen has left it, because a leave arriving later would start the next phase's ticks again.
+      const room = server.registry.get(code);
+      await until(() => room?.isIdle ?? true, LEAVE_MS);
+      room?.dispose();
       await server.close();
     },
   };

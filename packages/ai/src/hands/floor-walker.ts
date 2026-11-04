@@ -34,7 +34,7 @@ import { backToDoor, doorTable, hallSeconds, mapFactor, placePoint, shoreStands,
  * A step fails, so the hand drops it and what depends on it as when the rules refuse a tap, when its place cannot be
  * reached (no open walk, a lake plot to stand on), when the colonist stands at it and Reach offers something else or
  * offers it dim (the corral sold out, money short), when the press did not take, or when the colonist pushes without
- * moving for DEV_STEER.botStuckTicks.
+ * moving, or stands short of the step's goal, for DEV_STEER.botStuckTicks.
  */
 
 /** Where a step is done: a place in the store's hall, or a plot on the map. */
@@ -121,8 +121,9 @@ export class FloorWalker {
   private paused = 0;
   /** The button was pressed for the step on the last tick; this tick reads whether it took. */
   private pressed = false;
-  /** Ticks pushed without moving. */
+  /** Ticks pushed, or stood short of the goal, without moving. */
   private stuck = 0;
+  /** The last tick's input counts towards stuck: a push, or standing with nothing to wait for (not a counter's pause or an assay). */
   private pushed = false;
   /** Where the colonist stood when the stuck count started. */
   private anchor: { x: number; y: number; space: string } | null = null;
@@ -152,8 +153,9 @@ export class FloorWalker {
     }
     const c = floor.colonists.find((x) => x.id === this.me);
     if (!c) return { kind: 'failed', why: 'no colonist on the floor' };
-    if (c.assayUntilTick !== null && floor.tick < c.assayUntilTick) return this.going(IDLE_INPUT);
-    // Pushing for botStuckTicks and no further than where it started them: a wall, a lake's corner, or going back and forth.
+    if (c.assayUntilTick !== null && floor.tick < c.assayUntilTick) return this.waiting();
+    // Pushing, or standing short of the goal, for botStuckTicks and no further than where it started them: a wall, a
+    // lake's corner, going back and forth, or a spot outside a door whose Reach never offers ENTER.
     if (!this.pushed || !this.anchor || c.space !== this.anchor.space) {
       this.anchor = { x: c.x, y: c.y, space: c.space };
       this.stuck = 0;
@@ -169,7 +171,7 @@ export class FloorWalker {
       if (!reach.enabled) return { kind: 'failed', why: 'offered dim' };
       if (this.paused < pauseMs) {
         this.paused += cfg.steer.tickMs;
-        return this.going(IDLE_INPUT);
+        return this.waiting();
       }
       this.pressed = true;
       return this.going({ x: 0, y: 0, act: true });
@@ -177,9 +179,19 @@ export class FloorWalker {
     return goal.space === 'hall' ? this.toPlace(view, c, goal.place, reach) : this.toPlot(view, c, goal.plot, action, reach);
   }
 
+  /**
+   * On its way with `input`. A press does not count towards stuck; a push does, and so does standing still: the
+   * runner stands only when it has got as close as it can and Reach does not offer the step, which no tick will change.
+   */
   private going(input: FloorInput): StepRun {
-    this.pushed = input.x !== 0 || input.y !== 0;
+    this.pushed = !input.act;
     return { kind: 'going', input };
+  }
+
+  /** Standing for a reason that ends by itself, a counter's pause or an assay: it does not count towards stuck. */
+  private waiting(): StepRun {
+    this.pushed = false;
+    return { kind: 'going', input: IDLE_INPUT };
   }
 
   /** The stick towards `to`, short of a full push for the last bit so the colonist stops on it. */

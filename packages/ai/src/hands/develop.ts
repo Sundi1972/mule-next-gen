@@ -74,6 +74,8 @@ export class DevelopHand {
   private walking: DevStep | null = null;
   /** On the floor: the clock ran short and the list is down to the pub. */
   private toPub = false;
+  /** On the floor, where the tick's input must be pure (HC-4): decisions take the default pick, never the decider. */
+  private onFloor = false;
 
   constructor(
     private readonly brain: Brain,
@@ -92,6 +94,7 @@ export class DevelopHand {
     const mind = this.brain.mind;
     if (state.phase !== 'development') return;
     if (state.month !== this.month) this.reset(state.month);
+    this.onFloor = false;
     // While the colonist walks or assays nothing else happens; the next tap's time starts when it is done.
     if (walk?.busy) return;
     const at = walk?.at;
@@ -122,6 +125,7 @@ export class DevelopHand {
     const mind = this.brain.mind;
     if (state.phase !== 'development') return IDLE_INPUT;
     if (state.month !== this.month) this.reset(state.month);
+    this.onFloor = true;
     const me = state.players.find((p) => p.id === mind.me)!;
     if (me.doneDeveloping || this.stage === 'done') return IDLE_INPUT;
     if (secondsLeft <= 0) {
@@ -199,7 +203,12 @@ export class DevelopHand {
       if (!this.pending) {
         const obs = observe(state, mind.me);
         const d = AI_HANDS.develop;
-        this.pending = this.brain.ask('develop', developDecision(obs, mind, this.mules, walk?.()), obs, d.decideWaitMs, null, situation(obs, mind));
+        const list = developDecision(obs, mind, this.mules, walk?.());
+        // On the floor the server computes this inside the tick's recorded step, and a replay computes it again: no
+        // decider call and no reply to wait for (WS3's condition 1). A Smart seat plays the default pick here.
+        this.pending = this.onFloor
+          ? this.brain.pick('develop', list, obs, null, situation(obs, mind))
+          : this.brain.ask('develop', list, obs, d.decideWaitMs, null, situation(obs, mind));
       }
       const settled = this.brain.resolve(this.pending, dt, state);
       if (!settled) return null;

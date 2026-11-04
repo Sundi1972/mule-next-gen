@@ -308,8 +308,12 @@ async function pressDoneThroughTheAuction(phone: Page, beforePress?: (button: st
       if (err instanceof playwrightErrors.TimeoutError) continue;
       throw err;
     }
-    // Pressed, it turns to 'Done · waiting'; 'Ready' on the status screen stays until the next stage.
-    await phone.locator('[data-phase=auction]').getByRole('button', { name: label, exact: true }).waitFor({ state: 'hidden', timeout: AUCTION_STAGE_MS });
+    // Pressed, it gives way at once; but the last Ready ends the side pick and the next good can open on Ready again (A-7), so a moment's wait, then press again.
+    try {
+      await phone.locator('[data-phase=auction]').getByRole('button', { name: label, exact: true }).waitFor({ state: 'hidden', timeout: PRESS_MS });
+    } catch (err) {
+      if (!(err instanceof playwrightErrors.TimeoutError)) throw err;
+    }
   }
 }
 
