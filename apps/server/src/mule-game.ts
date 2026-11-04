@@ -666,11 +666,26 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     colonist.walk = { from: colonist.at, startedAt: now, arrivesAt, then: intent };
     colonist.at = to;
     if (arrivesAt > now) {
-      this.cancels.push(this.ctx.schedule(arrivesAt - now, () => this.settle()));
+      this.settleAt(arrivesAt);
       return;
     }
     this.settleArrivals();
     this.checkEarlyEnd();
+  }
+
+  /**
+   * Settles at `due`, epoch ms. A real timer may fire while the clock still reads a millisecond short (Node's setTimeout
+   * against Date.now()); then nothing is due yet, so it waits again for the rest, or the colonist would stand frozen
+   * until some other seat acted.
+   */
+  private settleAt(due: number, pad = 0): void {
+    this.cancels.push(
+      this.ctx.schedule(Math.max(0, due - this.ctx.now()) + pad, () => {
+        // Waiting again a millisecond past `due`, so an early timer can't spin on the same millisecond.
+        if (this.ctx.now() < due) this.settleAt(due, 1);
+        else this.settle();
+      }),
+    );
   }
 
   /** A walk or an assay is due: applies what has arrived, ends development if that was the last seat, tells every screen. */
@@ -731,7 +746,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       case 'analyse': {
         const until = at + this.realMs(analysePlot(state, seatId, intent.x, intent.y));
         this.colonists.get(seatId)!.assayUntil = until;
-        this.cancels.push(this.ctx.schedule(Math.max(0, until - this.ctx.now()), () => this.settle()));
+        this.settleAt(until);
         return;
       }
       case 'pub': {
