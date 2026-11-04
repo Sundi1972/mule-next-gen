@@ -5,7 +5,7 @@ import { allPrices, mulePrice, planShip, postPrices, targetPrice } from './econo
 import { firePhase, rollPlayerEvent } from './events.js';
 import { colonyLot, endLandAuction, isListed, plotAt, startLandAuction } from './lots.js';
 import { generateMap, tileIndex } from './map.js';
-import { monthLedger, newColony, payGrant, runColony } from './colony.js';
+import { keepPromise, monthLedger, newColony, payGrant, runColony } from './colony.js';
 import { airBand } from './pollution.js';
 import { closeElection, newPolitics, officeScore, openPlanning, payOffices } from './politics.js';
 import { needsOf, runProduction } from './production.js';
@@ -472,7 +472,10 @@ const ORDER: Phase[] = ['planning', 'landGrant', 'landAuction', 'development', '
  */
 export function advancePhase(state: GameState): void {
   if (state.phase === 'gameOver') return;
-  if (state.phase === 'planning') closeElection(state);
+  if (state.phase === 'planning') {
+    keepPromise(state);
+    closeElection(state);
+  }
   let next = ORDER[(ORDER.indexOf(state.phase) + 1) % ORDER.length]!;
   if (next === 'landAuction') colonyLot(state);
   if (next === 'landAuction' && state.listings.length === 0) next = 'development';
