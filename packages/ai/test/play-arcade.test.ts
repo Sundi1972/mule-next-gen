@@ -74,17 +74,17 @@ function steeredMoments(phases: number): FloorMomentCounts[] {
 const sum = (counts: readonly FloorMomentCounts[], key: keyof FloorMomentCounts) => counts.reduce((n, c) => n + c[key], 0);
 
 describe('the AI walks the floor, and the sim plays it (arcade C9, C10)', () => {
-  it('T-AC-5: in 20 seeded AI-only turns every AI colonist reaches the pub within 50 s', { timeout: 120_000 }, () => {
+  it('T-AC-5 (AM-26): in 20 seeded AI-only turns every AI colonist reaches the pub within the turn, but where a wolf\'s bite cost it the pub', { timeout: 120_000 }, () => {
     const phases = steeredTurns(20);
     expect(phases).toHaveLength(20);
     for (const [i, seats] of phases.entries()) {
       expect(seats, `turn ${i}: one record a seat`).toHaveLength(LEVELS.length);
       for (const t of seats) {
         const why = `turn ${i}, month ${t.month}, ${t.id}`;
-        // The one excuse (AM-23, RULE-4's unknown): a wolf encounter holds it when the bell rings. The share of such
-        // turns is judged on the sim's sample, below; here each one is shown.
-        if (t.pubAt === null && t.wolvesAtBell) {
-          console.log(`T-AC-5 excused (AM-23): ${why}: a wolf encounter held it when the bell rang`);
+        // The one excuse (AM-26): a wolf's bite cost it the pub, its bitten walk there longer than the time left when the
+        // bite landed. The share of such turns is judged on the sim's sample, below; here each one is shown.
+        if (t.pubAt === null && t.biteCostPub) {
+          console.log(`T-AC-5 excused (AM-26): ${why}: a wolf's bite cost it the pub`);
           continue;
         }
         expect(t.pubAt, `${why}: never reached the pub`).not.toBeNull();
@@ -158,12 +158,13 @@ describe("the moments in the sim's games (T-AC-5, AM-22)", () => {
     expect(sum(moments, 'raced') / glints, 'share of glints a bot raced').toBeGreaterThanOrEqual(0.4);
   });
 
-  it('T-AC-5 (AM-23): every AI colonist reaches the pub within 50 s, except one a wolf encounter holds when the bell rings, at most 1% of turns', { timeout: 120_000 }, () => {
+  it("T-AC-5 (AM-26): every AI colonist reaches the pub within the turn, except one a wolf's bite cost the pub, at most 1% of turns", { timeout: 120_000 }, () => {
     const { turns } = simGames();
     const missed = turns.filter((t) => t.pubAt === null);
-    const excused = missed.filter((t) => t.wolvesAtBell);
-    for (const t of excused) console.log(`T-AC-5 excused (AM-23): month ${t.month}, ${t.id}: a wolf encounter held it when the bell rang`);
-    const unexcused = missed.filter((t) => !t.wolvesAtBell).map((t) => `month ${t.month}, ${t.id}${t.lateWolves ? ' (a pack met it with the pub out of reach at the bitten pace)' : ''}`);
+    const excused = missed.filter((t) => t.biteCostPub);
+    for (const t of excused) console.log(`T-AC-5 excused (AM-26): month ${t.month}, ${t.id}: a wolf's bite cost it the pub`);
+    // Every other late turn is a miss, the AI's own choices included.
+    const unexcused = missed.filter((t) => !t.biteCostPub).map((t) => `month ${t.month}, ${t.id}`);
     expect(unexcused, 'missed the pub with no excuse').toEqual([]);
     expect(excused.length / turns.length, `excused turns: ${excused.length} of ${turns.length}`).toBeLessThanOrEqual(0.01);
     expect(turns.every((t) => t.pubAt === null || t.pubAt <= DEVELOPMENT.fullSeconds)).toBe(true);
