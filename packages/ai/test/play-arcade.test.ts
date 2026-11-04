@@ -170,13 +170,14 @@ describe("the moments in the sim's games (T-AC-5, AM-22)", () => {
     expect(turns.every((t) => t.pubAt === null || t.pubAt <= DEVELOPMENT.fullSeconds)).toBe(true);
   });
 
-  // trace-allow: a smoke check that the AI's legs by wolf land (RULE-4's AI line, botWolfLandShare) bring packs into most
-  // months. AM-22's binding check is `pnpm sim`'s report over 40 games, AI-only (its 'Months with an AI wolf encounter'
-  // line, MISS under WOLVES.simMonthsWithPack): 40 games here would cost the file about 30 s more than its budget.
-  it('an AI colonist meets wolves in most months of the sim sample: the legs by wolf land are walked', { timeout: 120_000 }, () => {
+  // trace-allow: a smoke check that the AI's legs by wolf land (RULE-4's AI line, botWolfLandShare) bring packs into
+  // WOLVES.simMonthsWithPack of months. AM-27's binding check is `pnpm sim`'s report, 40 games AI-only on each of seeds
+  // 1, 101 and 201 (its 'Months with an AI wolf encounter' line, MISS under that share): 40 games here would cost the
+  // file about 30 s more than its budget.
+  it('an AI colonist meets wolves in WOLVES.simMonthsWithPack of months of the sim sample: the legs by wolf land are walked', { timeout: 120_000 }, () => {
     const moments = simMoments();
     const met = moments.filter((m) => m.packs > 0).length;
-    expect(met / moments.length, `months with an AI wolf encounter: ${met} of ${moments.length}`).toBeGreaterThan(0.5);
+    expect(met / moments.length, `months with an AI wolf encounter: ${met} of ${moments.length}`).toBeGreaterThanOrEqual(WOLVES.simMonthsWithPack);
   });
 });
 

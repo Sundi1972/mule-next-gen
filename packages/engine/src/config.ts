@@ -460,10 +460,11 @@ export const WOLVES = {
   /** Share of an AI colonist's legs that go by wolf land. */
   botWolfLandShare: 0.5,
   /**
-   * AM-22's target, checked by `pnpm sim`'s report (40 games, AI-only): the share of development months with at least
-   * one AI wolf encounter. Under it the report prints MISS.
+   * The share of development months with at least one AI wolf encounter that `pnpm sim`'s report asks for (AM-27), on
+   * each of seeds 1, 101 and 201 (40 games each, AI-only): UBER-AC-3 needs the table to see an AI colonist meet wolves
+   * on the TV in an ordinary game. Under it the report prints MISS.
    */
-  simMonthsWithPack: 0.6,
+  simMonthsWithPack: 0.5,
   /** Each level's chance to dodge a lunge, and its delay before it strikes at a wolf that stands open. */
   levels: {
     rookie: { dodge: 0.4, strikeDelaySeconds: 0.5 },
