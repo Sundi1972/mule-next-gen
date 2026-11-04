@@ -1,9 +1,9 @@
 /** The development store's checks, run as development starts by smoke.ts (scaled clocks) and screens.ts (real time). */
-import { boxOf, DEV_STEER, DEV_WALK, DEVELOPMENT, foodShare, HALL, isOpenFloor, mulePrice, placeAt, type HallPlace, hungerPace, monthNeeds, needsOf, sickPace, type GameState } from '@mule/engine';
+import { DEV_STEER, DEV_WALK, DEVELOPMENT, foodShare, HALL, isOpenFloor, mulePrice, placeAt, hungerPace, monthNeeds, needsOf, sickPace, type GameState } from '@mule/engine';
 import type { DevFrame } from '@mule/protocol';
 import type { Browser, Page } from 'playwright';
 import type { MuleServer } from '../../server/src/server.js';
-import { check, CLAIM_MS, claimAPlot, doneWithLand, PHONE, PHONE_SMALL, plotCentre, pressAct, steerTo, throughDoor, type SteerTarget } from './harness';
+import { check, CLAIM_MS, claimAPlot, doneWithLand, hallPlace, PHONE, PHONE_SMALL, plotCentre, pressAct, steerTo, throughDoor } from './harness';
 
 const OUTFITTERS = ['food', 'water', 'energy', 'smithore', 'crystite', 'rareEarth'];
 const SERVICES = ['door-L', 'booth-works', 'booth-greenBelt', 'booth-corral', 'booth-pub', 'door-R'];
@@ -1014,16 +1014,6 @@ export async function aDroppedPhoneStops(t: ArcadeTable): Promise<string> {
 
 type Player = GameState['players'][number];
 
-/**
- * Where to stand to be at a room: the middle of its box. Its HALL.spots point is on the walkway before it, where
- * placeAt finds no room and the button reaches nothing (a door's spot is inside its airlock, so a door's will do).
- */
-function inRoom(place: HallPlace): SteerTarget {
-  const b = boxOf(place);
-  const at = { x: (b.x0 + b.x1) / 2, y: (b.y0 + b.y1) / 2 };
-  check(placeAt(at) === place && isOpenFloor(at), `the middle of the ${place} is open floor in it`);
-  return { space: 'hall', ...at };
-}
 /** The seat's player in the server's game. */
 function playerOf(server: MuleServer, code: string, seat: string): Player {
   const p = gameOf(server, code).state.players.find((q) => q.id === seat);
@@ -1103,7 +1093,7 @@ export async function theWholeErrandByStickAndButton(t: ArcadeTable): Promise<st
   steps.push(`dim "${dim.phone}" (${t.wires.heiko.acts.length - a0} press sent, nothing changed)`);
 
   // Buy at the corral.
-  await steerTo(phone, server, code, seat, inRoom('corral'));
+  await steerTo(phone, server, code, seat, hallPlace('corral'));
   await expectButton(phone, server, code, seat, 'BUY MULE', 'B-AC-1');
   const m0 = money();
   const price = mulePrice(gameOf(server, code).state);
@@ -1113,7 +1103,7 @@ export async function theWholeErrandByStickAndButton(t: ArcadeTable): Promise<st
   steps.push(`bought ${m0} → ${bought.money}`);
 
   // Outfit for Energy.
-  await steerTo(phone, server, code, seat, inRoom('energy'));
+  await steerTo(phone, server, code, seat, hallPlace('energy'));
   await expectButton(phone, server, code, seat, 'OUTFIT · ENERGY', 'B-AC-1');
   const m1 = money();
   await pressAct(phone);
@@ -1142,7 +1132,7 @@ export async function theWholeErrandByStickAndButton(t: ArcadeTable): Promise<st
 
   // Back in and end at the pub.
   await throughDoor(phone, server, code, seat);
-  await steerTo(phone, server, code, seat, inRoom('pub'));
+  await steerTo(phone, server, code, seat, hallPlace('pub'));
   const { detail } = await expectButton(phone, server, code, seat, 'PUB · END TURN', 'B-AC-1');
   const m2 = money();
   await pressAct(phone);
