@@ -7,7 +7,7 @@ import { colonyLot, endLandAuction, isListed, plotAt, startLandAuction } from '.
 import { generateMap, tileIndex } from './map.js';
 import { keepPromise, monthLedger, newColony, payGrant, runColony } from './colony.js';
 import { airBand } from './pollution.js';
-import { closeVotes, collectLawTaxes, newPolitics, officeScore, openPlanning, payOffices } from './politics.js';
+import { closeVotes, collectLawTaxes, newPolitics, outfitBlocked, officeScore, openPlanning, payOffices } from './politics.js';
 import { needsOf, runProduction } from './production.js';
 import { createRng } from './rng.js';
 import { emptyStock } from './stock.js';
@@ -269,6 +269,8 @@ export function outfitMule(state: GameState, playerId: string, outfit: Outfit): 
   // It reads the global flag, not a game's own devSteer; a devSteer game cannot reach it, as the floor offers OUTFIT
   // only for an empty MULE and taps are refused.
   if (DEV_STEER.on && p.carriedMule !== 'empty') throw new RuleError('This MULE is outfitted: re-outfit it');
+  const capped = outfitBlocked(state, outfit);
+  if (capped) throw new RuleError(capped);
   const cost = outfitCostFor(state, playerId, outfit);
   if (p.money < cost) throw new RuleError('Not enough money');
   p.money -= cost;
@@ -326,6 +328,8 @@ export function reoutfitMule(state: GameState, playerId: string, outfit: Outfit)
   if (!p.takenMule) throw new RuleError('Only a MULE taken off a plot can be re-outfitted');
   requireLed(p);
   if (p.carriedMule === outfit) throw new RuleError('The MULE is already outfitted for that');
+  const capped = outfitBlocked(state, outfit);
+  if (capped) throw new RuleError(capped);
   const cost = reoutfitCostFor(state, playerId, outfit);
   if (p.money < cost) throw new RuleError('Not enough money');
   p.money -= cost;
