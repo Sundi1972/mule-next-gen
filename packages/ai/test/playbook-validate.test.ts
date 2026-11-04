@@ -83,7 +83,14 @@ function one(phase: DraftPhase, path: string, to: unknown, options: Parameters<t
 }
 
 describe('the validator holds every playbook to RULE-1', () => {
-  it('T-AC-1: RULE-1, one case per row family', () => {
+  // Shared by the row families below: read-only facts of the fixture states, and ai2's engine draft of the good up.
+  const [f1, f2, f3] = freePlots(at.planning);
+  const goods = Object.keys(run('auction', []).playbook.auction!);
+  const good = at.auction.auction!.good!;
+  const g = (field: string) => `/auction/${good}/${field}`;
+  const part = run('auction', []).playbook.auction![good]!;
+
+  it('T-AC-1: RULE-1 S1-S9, the strategy rows', () => {
     const month = at.planning.month;
     const draft = draftOf(at.planning, 'planning', mindOf(2), 102);
 
@@ -118,15 +125,18 @@ describe('the validator holds every playbook to RULE-1', () => {
     expect(one('planning', '/lessons', lessons).plays).toEqual(lessons.slice(0, AI_PLANS.bounds.lessons));
     // S9: the reason is the writer's shape check.
     expect(one('planning', '/strategy/reason', 'Ore, all of it.')).toMatchObject({ plays: 'Ore, all of it.', why: null });
+  });
+
+  it('T-AC-1: RULE-1 P1-P7, the planning and land-grant rows', () => {
+    const month = at.planning.month;
+    const draft = draftOf(at.planning, 'planning', mindOf(2), 102);
 
     // P1: a part of another phase, or one this playbook lacks. Spec §3's example.
     expect(one('development', '/auction/food/role', 'buyer').why).toBe('not in this playbook');
     expect(one('planning', '/development/route', [{ act: 'pub' }]).why).toBe('not in this playbook');
-    const goods = Object.keys(run('auction', []).playbook.auction!);
     expect(one('auction', '/auction/gold/role', 'buyer').why).toBe('not in this playbook');
 
     // P2: the engine's own orderGeoDrone on a copy, in its own words.
-    const [f1, f2, f3] = freePlots(at.planning);
     expect(one('planning', '/planning/drone', [f1, f2])).toMatchObject({ plays: [f1, f2], why: null });
     expect(one('planning', '/planning/drone', [f1, f2, f3]).why).toBe('Pick 1 to 2 plots');
     const rivalPlot = ownPlots(planning2, 'ai0')[0]!;
@@ -174,6 +184,11 @@ describe('the validator holds every playbook to RULE-1', () => {
     expect(one('planning', '/landGrant/pair', [f1, f2])).toMatchObject({ plays: [f1, f2], why: null });
     expect(one('planning', '/landGrant/pair', [f1, f1]).why).toBe('not two free, distinct plots');
     expect(one('planning', '/landGrant/pair', [rivalPlot, p1], { state: planning2, draft: draftOf(planning2, 'planning', mindOf(2), 102) }).why).toBe('not two free, distinct plots');
+  });
+
+  it('T-AC-1: RULE-1 P8-P10, the development rows', () => {
+    const month = at.planning.month;
+    const draft = draftOf(at.planning, 'planning', mindOf(2), 102);
 
     // P8: RULE-1b's grammar; own plots for install and filter, any plot for analyse; the level's MULEs; the step cap.
     const own = ownPlots(at.development, 'ai2');
@@ -198,11 +213,13 @@ describe('the validator holds every playbook to RULE-1', () => {
     expect(one('development', '/development/timeBudgetMs', devMs + 40 * MS_PER_SECOND)).toMatchObject({ plays: devMs, why: `clamped to ${devMs}: the seat's development time` });
     expect(one('development', '/development/ifSoldOut', 'analyse')).toMatchObject({ plays: 'analyse', why: null });
     expect(one('development', '/development/ifSoldOut', 'wait').why).toBe('no such choice');
+  });
+
+  it('T-AC-1: RULE-1 P11-P17 and step 5, the auction rows', () => {
+    const month = at.planning.month;
+    const draft = draftOf(at.planning, 'planning', mindOf(2), 102);
 
     // P11-P17, on the good that is up.
-    const good = at.auction.auction!.good!;
-    const g = (field: string) => `/auction/${good}/${field}`;
-    const part = run('auction', []).playbook.auction![good]!;
     expect(one('auction', g('role'), 'broker')).toMatchObject({ plays: part.role, why: 'no such role' });
     expect(one('auction', g('hold'), -3).plays).toBe(0);
     const staple = (['food', 'energy'] as const).find((x) => goods.includes(x))!;
@@ -220,6 +237,12 @@ describe('the validator holds every playbook to RULE-1', () => {
       { path: `/auction/${staple}/hold`, from: reversed.draft.auction![staple]!.hold, to: need, reason: 'a test edit' },
       { path: `/auction/${staple}/role`, from: reversed.draft.auction![staple]!.role, to: 'seller', reason: 'a test edit' },
     ]);
+  });
+
+  it('T-AC-1: RULE-1 step 6, an edit counts as accepted only if its own value plays', () => {
+    const month = at.planning.month;
+    const draft = draftOf(at.planning, 'planning', mindOf(2), 102);
+
     // An edit counts as accepted only if its own value plays: one inside a part or good that step 5 replaced whole goes
     // to rejected, naming what plays instead, and is no edit by 'llm'.
     const replaced = (phase: DraftPhase, breakDraft: (pb: Playbook) => void, edits: PlanEdit[]) => {
@@ -263,6 +286,12 @@ describe('the validator holds every playbook to RULE-1', () => {
     expect(one('auction', g('per/ai2'), 'yield').why).toBe('no such player');
     expect(one('auction', g('per/ai0'), 'hold')).toMatchObject({ plays: 'hold', why: null });
     expect(one('auction', g('bluff'), 'yes').why).toBe('not a boolean');
+  });
+
+  it('T-AC-1: RULE-1 P18, P19 and paths inside a field', () => {
+    const month = at.planning.month;
+    const draft = draftOf(at.planning, 'planning', mindOf(2), 102);
+
     // RULE-1's example; P18; P19.
     expect(one('auction', '/auction/food/market/buyOutStore', { upTo: 3, maxPrice: 40 })).toMatchObject({ plays: undefined, why: 'market play is step 3' });
     expect(one('auction', '/store', {}).why).toBe('no store play in v1');
@@ -277,6 +306,11 @@ describe('the validator holds every playbook to RULE-1', () => {
     const blank = one('planning', '/landGrant/ranked/', { plot: f1, value: 3 });
     expect(blank.why).toBe('no such field');
     expect(blank.r.playbook.landGrant!.ranked).toEqual(draft.landGrant!.ranked);
+  });
+
+  it('T-AC-1: RULE-1 step 3 and the output: re-drafts, by, edits and rejected', () => {
+    const month = at.planning.month;
+    const draft = draftOf(at.planning, 'planning', mindOf(2), 102);
 
     // Step 3: an edit to kind re-drafts the phase's parts under the edited strategy; a reason edit does not.
     const handed = { ...run('development', []).draft, development: { route: [{ act: 'pub' as const }], timeBudgetMs: 1000, ifSoldOut: 'pub' as const } };
