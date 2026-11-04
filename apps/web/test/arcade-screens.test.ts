@@ -1,6 +1,6 @@
 import { HALL } from '@mule/engine';
 import type { ChatMessage, MuleView, MyView, TileView } from '@mule/protocol';
-import { ActionButton, Joystick, LiveWalkers, SeatSpeciesProvider, type Slot } from '@mule/ui';
+import { ActionButton, FAN, Joystick, LiveWalkers, SeatSpeciesProvider, type Slot } from '@mule/ui';
 import { createElement, type ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -167,6 +167,47 @@ describe('C11: the phone, held sideways', () => {
     // A dim button lights nothing.
     const dim = phone(devView(lenasMe({ carriedMule: 'food', reach: reach('TO YOUR PLOT', null, false) })), live(mine(3.5, 0.6)));
     expect(dim).not.toContain('data-selected');
+  });
+
+  /** Lena's one free plot moved to (x, y), her Energy plot kept, a Food MULE on her lead: the ring goes there. */
+  const onlyFreePlot = (x: number, y: number) =>
+    devView(lenasMe({ carriedMule: 'food' }), { tiles: TILES.map((t) => ({ ...t, owner: t.x === x && t.y === y ? 's1' : t.owner === 's1' && t.outfit === null ? null : t.owner })) });
+  it.each<[string, number, string, RegExp]>([
+    ['column 0: anchored to the plot\'s inner side, its left edge', 0, 'start', /\bleft-0\b/],
+    ['the last column: anchored to its right edge', 14, 'end', /\bright-0\b/],
+    ['inside: centred on the ring', 4, 'middle', /left-1\/2 -translate-x-1\/2/],
+  ])('C11 (RULE-9): the plot label stays inside the map at %s', (_, x, anchor, cls) => {
+    for (const size of [844, 667] as const) {
+      const html = phone(onlyFreePlot(x, 2), live(mine(5.5, 4.5)), size);
+      expect(tag(html, 'guide-map')).toMatch(new RegExp(`data-x="${x}"`));
+      expect(text(html, 'guide-label')).toBe(`YOUR PLOT ${x + 1}·3`);
+      const label = tag(html, 'guide-label')!;
+      expect(label).toMatch(new RegExp(`data-anchor="${anchor}"`));
+      expect(label).toMatch(cls);
+      if (anchor !== 'middle') expect(label).not.toMatch(/translate-x/);
+    }
+  });
+
+  it('C13: two colonists on one spot are drawn side by side in seat order, each visible; the wire\'s positions are untouched', () => {
+    const together = FRAMED.filter((c) => c.id !== 's1').map((c) => (c.id === 's2' ? { ...c, x: 6.6, y: 4.5, moving: false } : c));
+    const map = inside(phone(devView(), live(mine(6.6, 4.5), together)), 'walkers-map');
+    const [lena, ossa] = [pct(map, 'colonist-s1', 'left'), pct(map, 'colonist-s2', 'left')];
+    expect(lena).toBeCloseTo(((6.6 - FAN.step.map / 2) / 15) * 100, 6);
+    expect(ossa).toBeCloseTo(((6.6 + FAN.step.map / 2) / 15) * 100, 6);
+    expect(pct(map, 'colonist-s1', 'top')).toBeCloseTo((4.5 / 9) * 100, 6);
+    // Drawing only: each still says where it stands.
+    expect(tag(map, 'colonist-s1')).toMatch(/data-x="6.600"/);
+    expect(tag(map, 'colonist-s2')).toMatch(/data-x="6.600"/);
+    // Brix, apart from them, is drawn where he stands.
+    expect(pct(map, 'colonist-s4', 'left')).toBeCloseTo((9.5 / 15) * 100, 6);
+    // In the hall your own colonist is the store's visitor: it moves aside by the same rule, the other walker the other way.
+    const hall = inside(phone(devView(), live(mine(8, 6, { space: 'hall' }))), 'hall-stage');
+    expect(pct(hall, 'visitor-s1', 'left')).toBeCloseTo(((8 - FAN.step.hall / 2) / HALL.w) * 100, 6);
+    expect(pct(inside(hall, 'walkers-hall'), 'colonist-s3', 'left')).toBeCloseTo(((8 + FAN.step.hall / 2) / HALL.w) * 100, 6);
+    // Negative: apart by more than 0.3, nobody moves.
+    const apart = inside(phone(devView(), live(mine(6.6, 4.5), together.map((c) => (c.id === 's2' ? { ...c, x: 7.0 } : c)))), 'walkers-map');
+    expect(pct(apart, 'colonist-s1', 'left')).toBeCloseTo((6.6 / 15) * 100, 6);
+    expect(pct(apart, 'colonist-s2', 'left')).toBeCloseTo((7.0 / 15) * 100, 6);
   });
 
   it('C11 (RULE-10): reconnecting says so, and the colonist stands where the last frame had it', () => {

@@ -31,6 +31,39 @@ export interface LiveWalker {
   mine?: boolean;
 }
 
+/** Each colonist's share of a unit as drawn: a plot on the map, a unit of the hall's plan. */
+const SPRITE = { map: 0.62, hall: 0.95 } as const;
+
+/**
+ * Colonists drawn on one spot fan out so each stays visible: within `within` units of each other (a chain of near ones
+ * is one group), they are drawn side by side, `step` apart, in seat order. A step is half a sprite, so each shows at
+ * least half of itself. Drawing only: where each stands, on the wire and in your own prediction, is unchanged.
+ */
+export const FAN = { within: 0.3, step: { map: SPRITE.map / 2, hall: SPRITE.hall / 2 } } as const;
+
+/**
+ * The drawing offset of each colonist that shares a spot, in the space's units; one alone, or apart, has none. `points`
+ * come in seat order, which is the order across. Every screen that draws a space calls this over the same colonists, so
+ * a walker and the hall's own visitor move aside by the same rule.
+ */
+export function fanOut(points: readonly { id: string; x: number; y: number }[], space: 'map' | 'hall'): Map<string, { dx: number; dy: number }> {
+  const group = points.map((_, i) => i);
+  const root = (i: number): number => (group[i] === i ? i : (group[i] = root(group[i]!)));
+  for (let i = 0; i < points.length; i++)
+    for (let j = i + 1; j < points.length; j++) {
+      const [a, b] = [points[i]!, points[j]!];
+      if (Math.hypot(a.x - b.x, a.y - b.y) <= FAN.within) group[root(j)] = root(i);
+    }
+  const members = new Map<number, number[]>();
+  points.forEach((_, i) => members.set(root(i), [...(members.get(root(i)) ?? []), i]));
+  const out = new Map<string, { dx: number; dy: number }>();
+  for (const idx of members.values()) {
+    if (idx.length < 2) continue;
+    idx.forEach((i, k) => out.set(points[i]!.id, { dx: (k - (idx.length - 1) / 2) * FAN.step[space], dy: 0 }));
+  }
+  return out;
+}
+
 export interface LiveWalkersProps {
   walkers: LiveWalker[];
   space: 'map' | 'hall';
@@ -45,6 +78,11 @@ export interface LiveWalkersProps {
   names?: boolean;
   /** The engine's DEV_WALK: with it, a walker with a condition shows its tag. */
   rule?: PaceRule;
+  /**
+   * Who shares a spot, from fanOut over everyone drawn in this space, in seat order. Defaults to fanOut over `walkers`;
+   * a stage that draws one colonist elsewhere (the hall's own visitor) passes the one it computed over all of them.
+   */
+  fan?: ReadonlyMap<string, { dx: number; dy: number }>;
 }
 
 /**
@@ -55,9 +93,9 @@ export interface LiveWalkersProps {
  * #195's gait (motionOf, cycleSeconds), its MULE on the same stride. Pointer-transparent: the stage under it takes the
  * mouse and the taps.
  */
-export function LiveWalkers({ walkers, space, cols, rows, cell, density, names = false, rule }: LiveWalkersProps) {
+export function LiveWalkers({ walkers, space, cols, rows, cell, density, names = false, rule, fan = fanOut(walkers, space) }: LiveWalkersProps) {
   const map = space === 'map';
-  const size = Math.round(cell * (map ? 0.62 : 0.95));
+  const size = Math.round(cell * SPRITE[space]);
   const muleSize = Math.round(size * (map ? 1.35 : 1.1));
   // Each walker rides a layer the size of the space, moved by transform alone: a translate's % is of the layer's own
   // size, which is the space's, so no frame lays anything out and nothing needs measuring (#195's walk board's lesson).
@@ -80,10 +118,12 @@ export function LiveWalkers({ walkers, space, cols, rows, cell, density, names =
         };
         const stride = cycleSeconds(gait);
         const color = SLOT_COLOR[w.slot];
+        // Drawn aside when it shares a spot; its MULE keeps beside it. data-x and data-y still say where it stands.
+        const off = fan.get(w.id) ?? { dx: 0, dy: 0 };
         return (
           <div key={w.id}>
             {w.lead && (
-              <div className="absolute inset-0" style={at(w.lead.x, w.lead.y)} data-testid={`mule-${w.id}`} data-good={w.lead.good ?? 'empty'}>
+              <div className="absolute inset-0" style={at(w.lead.x + off.dx, w.lead.y + off.dy)} data-testid={`mule-${w.id}`} data-good={w.lead.good ?? 'empty'}>
                 <div className="absolute left-0 top-0 -translate-x-1/2 -translate-y-[80%]">
                   <Mule size={muleSize} state={w.moving ? 'walk' : 'idle'} good={w.lead.good} owner={w.slot} facing={w.facing} cycle={stride} />
                 </div>
@@ -91,13 +131,14 @@ export function LiveWalkers({ walkers, space, cols, rows, cell, density, names =
             )}
             <div
               className="absolute inset-0"
-              style={at(w.x, w.y)}
+              style={at(w.x + off.dx, w.y + off.dy)}
               data-testid={`colonist-${w.id}`}
               data-x={w.x.toFixed(3)}
               data-y={w.y.toFixed(3)}
               data-space={space}
               data-moving={w.moving || undefined}
               data-bitten={w.bitten || undefined}
+              data-fanned={off.dx !== 0 || off.dy !== 0 || undefined}
             >
               <div className="absolute left-0 top-0 flex -translate-x-1/2 -translate-y-[85%] flex-col items-center">
                 <span

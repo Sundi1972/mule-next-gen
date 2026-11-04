@@ -1,6 +1,6 @@
 import { boxOf, DEV_WALK, HALL, type HallPlace, type HallRect } from '@mule/engine';
 import type { MuleView } from '@mule/protocol';
-import { cx, HoloMap, LiveWalkers, SLOT_COLOR, StoreInterior, type Shop } from '@mule/ui';
+import { cx, fanOut, HoloMap, LiveWalkers, SLOT_COLOR, StoreInterior, type Shop } from '@mule/ui';
 import { createContext, memo, useContext, useMemo, useRef, type PointerEvent as ReactPointerEvent, type RefObject } from 'react';
 import { mapTiles, plotName } from '../../game/derive';
 import { useArcade } from './live';
@@ -129,6 +129,9 @@ export function HallStage({ data, width, density, store = density, interactive =
   const lit = target && 'room' in target && seat?.mine?.space === 'hall' ? target.room : null;
   const mine = interactive && seat ? data.colonists.find((c) => c.id === seat.me.id && c.space === 'hall') : undefined;
   const walkers = data.colonists.filter((c) => c.space === 'hall' && c !== mine);
+  // Over everyone in the hall, your own visitor included, so it and a walker on its spot move aside by one rule.
+  const fan = fanOut(data.colonists.filter((c) => c.space === 'hall'), 'hall');
+  const aside = (mine && fan.get(mine.id)) ?? { dx: 0, dy: 0 };
   const prices = seat ? (seat.me.outfitCosts as Partial<Record<Shop, number>>) : {};
   const leading = seat?.me.carriedMule ?? null;
   return (
@@ -142,7 +145,7 @@ export function HallStage({ data, width, density, store = density, interactive =
         wide={store === 'wide'}
         {...(mine && seat
           ? {
-              me: { id: mine.id, slot: mine.slot, leading, x: mine.x, y: mine.y, facing: mine.facing, condition: seat.self.condition, food: { ate: Math.min(seat.me.stock.food, seat.me.needs.food), need: seat.me.needs.food }, moving: mine.moving },
+              me: { id: mine.id, slot: mine.slot, leading, x: mine.x + aside.dx, y: mine.y + aside.dy, facing: mine.facing, condition: seat.self.condition, food: { ate: Math.min(seat.me.stock.food, seat.me.needs.food), need: seat.me.needs.food }, moving: mine.moving },
               paceRule: DEV_WALK,
             }
           : {})}
@@ -154,7 +157,7 @@ export function HallStage({ data, width, density, store = density, interactive =
       )}
       {guide && interactive && seat && <GuideInHall seat={seat} lit={lit} />}
       {guide && interactive && seat && <PlotsByOutfitter seat={seat} />}
-      <LiveWalkers walkers={walkers} space="hall" cols={HALL.w} rows={HALL.h} cell={width / HALL.w} density={density} names={names} rule={DEV_WALK} />
+      <LiveWalkers walkers={walkers} space="hall" cols={HALL.w} rows={HALL.h} cell={width / HALL.w} density={density} names={names} rule={DEV_WALK} fan={fan} />
     </div>
   );
 }
@@ -187,6 +190,8 @@ function GuideOnMap({ seat }: { seat: ArcadeSeat }) {
         const first = i === 0;
         // Standing on it, the ring is enough: its label would only say to walk where you are.
         const here = Math.floor(me.x) === s.at.x && Math.floor(me.y) === s.at.y;
+        // A label is wider than its plot: centred on an edge column it would hang off the map, so there it keeps to the plot's inner side.
+        const anchor = s.at.x === 0 ? 'start' : s.at.x === view.width - 1 ? 'end' : 'middle';
         return (
           <span
             key={`${s.what}-${s.at.x}-${s.at.y}`}
@@ -198,11 +203,12 @@ function GuideOnMap({ seat }: { seat: ArcadeSeat }) {
             data-x={s.at.x}
             data-y={s.at.y}
           >
-            {/* On the top row the label hangs below the ring, inside the map. */}
+            {/* On the top row the label hangs below the ring, and on an edge column it keeps to the ring's inner side: inside the map. */}
             {!here && (
               <span
-                className={cx('absolute left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full px-1.5 font-mono text-[10px] font-bold leading-4 shadow-glow', first ? 'bg-holo text-on-holo' : 'bg-panel text-holo', s.at.y < 0.5 ? 'top-full mt-0.5' : 'bottom-full mb-0.5')}
+                className={cx('absolute whitespace-nowrap rounded-full px-1.5 font-mono text-[10px] font-bold leading-4 shadow-glow', first ? 'bg-holo text-on-holo' : 'bg-panel text-holo', s.at.y < 0.5 ? 'top-full mt-0.5' : 'bottom-full mb-0.5', anchor === 'start' ? 'left-0' : anchor === 'end' ? 'right-0' : 'left-1/2 -translate-x-1/2')}
                 data-testid={first ? 'guide-label' : 'guide-label-alt'}
+                data-anchor={anchor}
               >
                 {s.label}
               </span>
