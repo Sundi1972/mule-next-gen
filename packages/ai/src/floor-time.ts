@@ -84,6 +84,16 @@ export function mapFactor(cfg: FloorConfig, pace: number, lead: boolean, bot: bo
   return pace * (lead ? cfg.steer.leadPace : 1) * (bot ? cfg.steer.botSpeed : 1) * (bitten ? cfg.wolves.bittenPace : 1);
 }
 
+/**
+ * The seconds an AI colonist keeps in hand for the pub (DEV_STEER.botPubMarginSeconds at full pace, more as hunger,
+ * sickness, a bite or a MULE on the lead slows it): the hurry for the pub keeps it, and every plan the hands make is
+ * priced with it, so no MULE is bought on a plan the hurry would then drop (FM-hurry-margin). `lead`: as if leading a
+ * MULE, or not; absent, as it stands.
+ */
+export function pubMargin(cfg: FloorConfig, c: FloorColonist, lead = leading(c)): number {
+  return cfg.steer.botPubMarginSeconds / Math.min(1, mapFactor(cfg, c.pace, lead, c.bot, c.bitten));
+}
+
 /** Whether a colonist leads its MULE: one that bolted is off the rope. */
 export const leading = (c: FloorColonist): boolean => c.lead !== null && !c.bolt;
 

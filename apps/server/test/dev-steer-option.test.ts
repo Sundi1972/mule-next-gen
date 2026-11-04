@@ -64,6 +64,21 @@ async function phoneInDevelopment(devSteer: boolean | undefined) {
 }
 
 describe('createMuleServer({ devSteer }): steering for one game, with DEV_STEER.on off', { timeout: 30_000 }, () => {
+  it('devSteer: false keeps a game on taps even when DEV_STEER.on is set: the option wins either way', async () => {
+    const was = DEV_STEER.on;
+    DEV_STEER.on = true;
+    try {
+      const tapped = await phoneInDevelopment(false);
+      tapped.inbox.length = 0;
+      tapped.send({ t: 'intent', intent: { type: 'steer', x: 1, y: 0 } });
+      for (let i = 0; i < 200 && !tapped.inbox.some((m) => m.t === 'error'); i++) await tapped.settle(10);
+      expect(tapped.inbox.filter((m) => m.t === 'frame'), 'a devSteer: false game sends no frames').toEqual([]);
+      expect(tapped.inbox.filter((m) => m.t === 'error').map((m) => (m as { message: string }).message)).toEqual([expect.stringMatching(/steer/i)]);
+    } finally {
+      DEV_STEER.on = was;
+    }
+  });
+
   it('a devSteer game ticks and takes steer intents; a default game on the same seed refuses steer and sends no frames', async () => {
     expect(DEV_STEER.on, "trunk's flag stays off").toBe(false);
     // Both at once: the steered game's AI walks and gets its first MULE in, so its month-1 clock runs while it waits.
