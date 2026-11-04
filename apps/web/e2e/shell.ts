@@ -4,11 +4,14 @@
  * through the land grant and the land auction, and the steps waiting on those missed them.
  * B-AC-19's six-seat TV case runs here too, in a room of its own (hub-steps.ts), and E-11's Governor's desk beside the
  * table chat, a room per phone size.
+ * Steered development (arcade PR-6) runs last, on servers of its own with the floor on: step 1 (the phones, the TV and
+ * the server's floor meet), B-AC-1, B-AC-2, B-AC-3, B-AC-4 and B-AC-8. `MULE_E2E_ARCADE=0` leaves it out.
  * Run with `pnpm --filter @mule/web e2e`.
  */
 import { check, launch, PHONE, startServer } from './harness';
 import { governorsDeskFits, sixSeatsOnTheTv } from './hub-steps';
 import { shellFillsTheStage } from './shell-steps';
+import { aDroppedPhoneStops, arcadeTable, laptopKeysAndMouse, phoneFitsAndCoversNothing, theTvDrawsEveryoneLive, thePiecesMeet, theWholeErrandByStickAndButton } from './store-steps';
 
 const started = Date.now();
 const { server, base } = await startServer({ maxMonths: 1 });
@@ -30,6 +33,8 @@ try {
   console.log(`✓ B-AC-19: ${await sixSeatsOnTheTv({ browser, base, server })}`);
   console.log(`✓ E-11: ${await governorsDeskFits({ browser, base, server })}`);
   check(errors.length === 0, `no page errors: ${errors.join('; ')}`);
+  if (process.env.MULE_E2E_ARCADE !== '0') await arcade();
+  check(errors.length === 0, `no page errors: ${errors.join('; ')}`);
   console.log(`e2e shell: ok (${((Date.now() - started) / 1000).toFixed(1)} s)`);
 } catch (err) {
   console.error('e2e shell: FAILED');
@@ -40,3 +45,27 @@ try {
   await server.close();
 }
 process.exit(0);
+
+/**
+ * Steered development on flag-on servers of their own (the flag-off server above never sees one), a room per table: two
+ * phones and a TV for step 1, B-AC-3, B-AC-4 and B-AC-8; two phones and no TV for UBER-AC-1 and B-AC-1; four phones and
+ * a TV for B-AC-2. phaseScale 1: frames at the tick's 20 Hz, and a stride never carries steerTo past a reach.
+ */
+async function arcade(): Promise<void> {
+  const room = async (names: string[], tv: boolean, run: (table: Awaited<ReturnType<typeof arcadeTable>>) => Promise<void>) => {
+    const steered = await startServer({ maxMonths: 1, politics: false, devSteer: true, phaseScale: 1, seed: () => 1 });
+    try {
+      await run(await arcadeTable(browser, steered.base, steered.server, errors, { names, tv }));
+    } finally {
+      await steered.server.close();
+    }
+  };
+  await room(['Heiko', 'Mia'], true, async (table) => {
+    console.log(`✓ step 1, the pieces meet: ${await thePiecesMeet(table)}`);
+    console.log(`✓ B-AC-3: ${await laptopKeysAndMouse(table)}`);
+    console.log(`✓ B-AC-4: ${await phoneFitsAndCoversNothing(table)}`);
+    console.log(`✓ B-AC-8: ${await aDroppedPhoneStops(table)}`);
+  });
+  await room(['Heiko', 'Mia'], false, async (table) => console.log(`✓ UBER-AC-1, B-AC-1: ${await theWholeErrandByStickAndButton(table)}`));
+  await room(['Heiko', 'Mia', 'Kai', 'Lena'], true, async (table) => console.log(`✓ B-AC-2: ${await theTvDrawsEveryoneLive(table)}`));
+}

@@ -282,8 +282,11 @@ export const MULE = {
 };
 
 export const DEVELOPMENT = {
-  /** Seconds of development, the same for every player: hunger and sickness slow the walk instead (DEV_WALK). */
-  fullSeconds: 50,
+  /**
+   * Seconds of development, the same for every player: hunger and sickness slow the walk instead (DEV_WALK). 60 (Heiko,
+   * 4 Nov), so a starving colonist has the time to put Food on a plot next to the store.
+   */
+  fullSeconds: 60,
   /** Seconds a colonist stands on a plot for a geo analysis. */
   analysisSeconds: 8,
   /** The pub pays base + (start + month * perMonth) * share of time left. */
@@ -427,10 +430,47 @@ export const WOLVES = {
   /** A lost fight's MULE bolts this many tiles at this many tiles a second. */
   boltTiles: 4,
   boltSpeed: 3.5,
+  /** The lands a pack comes on. */
+  lands: ['forest', 'hills', 'tundra'] as readonly WalkTerrain[],
+  /** Where a pack stands when it comes: this far from its colonist, spread over this arc from one side, in radians. */
+  packRingTiles: 1.6,
+  packArcRadians: 1.9,
+  /** A chase: the wolves set off after this head start, and catch a colonist they come this close to. */
+  headStartSeconds: 0.4,
+  chaseCatchTiles: 0.35,
+  /** A fight: the wolves circle this far from where it began, turning this fast; the colonist stays within arenaTiles of it. */
+  fightRingTiles: 1.3,
+  prowlRadiansPerSecond: 0.7,
+  arenaTiles: 1,
+  /** The fight's first lunge comes this long after it starts. */
+  firstLungeSeconds: 0.9,
+  /** A lunge takes this long to land, and bites a colonist still this close to the spot it aimed at. */
+  lungeSeconds: 0.22,
+  biteTiles: 0.38,
+  /** A wolf that missed stands open this long; one struck, or that has bitten, is out of the fight this long. */
+  openSeconds: 0.9,
+  hurtSeconds: 0.7,
+  /** A strike lands on a wolf this close; a strike at nothing leaves its colonist open this long. */
+  strikeTiles: 0.8,
+  whiffSeconds: 0.45,
+  /** A bolted MULE is caught by its colonist this close to it (arcade RULE-3 row 4). */
+  catchReachTiles: 0.6,
   /** Share of AI colonists that fight rather than run. */
   botFightShare: 0.5,
-  /** Share of an AI colonist's legs that go by wolf land. */
+  /** An AI colonist stands this long before it runs or fights, and dodges a lunge till it is this far beyond its bite. */
+  botChooseSeconds: 0.6,
+  botDodgeMarginTiles: 0.2,
+  /**
+   * Share of an AI colonist's legs, among those it walks with no MULE on the lead, that go by wolf land. A leg leading a
+   * MULE never does (a pack met then costs the install), so the share of all its legs is lower than this.
+   */
   botWolfLandShare: 0.5,
+  /**
+   * The share of development months with at least one AI wolf encounter that `pnpm sim`'s report asks for (AM-27), on
+   * each of seeds 1, 101 and 201 (40 games each, AI-only): UBER-AC-3 needs the table to see an AI colonist meet wolves
+   * on the TV in an ordinary game. Under it the report prints MISS.
+   */
+  simMonthsWithPack: 0.5,
   /** Each level's chance to dodge a lunge, and its delay before it strikes at a wolf that stands open. */
   levels: {
     rookie: { dodge: 0.4, strikeDelaySeconds: 0.5 },
@@ -454,6 +494,8 @@ export const GLINT = {
   /** The prize: this much Crystite, or these credits when prize is 'credits'. */
   crystite: 1,
   credits: 60,
+  /** GRAB THE GLINT reaches it from this far from its tile's middle, in tiles: about a step away (arcade RULE-3 row 3). */
+  grabReach: 1.2,
   /** Share of AI colonists that race, and only for a glint within botCareTiles. */
   botShare: 0.75,
   botCareTiles: 8,
@@ -845,8 +887,12 @@ export const POLITICS = {
 export const WALK = {
   /** The order goods come up in: raw goods first, then processed ones. */
   order: ['food', 'water', 'energy', 'smithore', 'crystite', 'rareEarth', 'alloy', 'electronics', 'medicine'] as Good[],
-  /** The status screen before each good: what everyone had, used, made and is short of, and where each player picks a side for the walk. */
-  statusMs: 8_000,
+  /**
+   * The status screen before each good: what everyone had, used, made and is short of, and where each player picks a
+   * side for the walk. null: no clock (A-7, G-7), it waits for every player's Done or the host's Continue; a number
+   * restores a timer.
+   */
+  statusMs: null as number | null,
   /** The walk's clock for one good. */
   goodMs: 20_000,
   /** The close stage after a good's walk: each phone shows its receipt for the good (UX audit G-5), as the land auction's result does. Display and game time only. */

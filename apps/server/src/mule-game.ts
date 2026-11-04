@@ -77,6 +77,7 @@ import {
   storeQuotes,
   storeSellLine,
   tileIndex,
+  tradePossible,
   unlist as unlistLot,
   visitPub,
   WALK,
@@ -92,7 +93,7 @@ import {
   type PlaybookEntry,
   type Trade,
 } from '@mule/engine';
-import { AiSeat, LotHand, personaFor, VoteHand, type AiAction } from '@mule/ai';
+import { AiSeat, GOOD_NAME, LotHand, personaFor, VoteHand, type AiAction } from '@mule/ai';
 import { PLAYER_COLORS, type EventView, type MuleIntent, type MuleView, type PlayerView, type ProductionReason, type ProductionView, type ScorePartsView } from '@mule/protocol';
 import type { Game, GameContext, SeatInfo } from '@tabletop/core';
 import { createBrain, type BrainService } from './brain/index.js';
@@ -616,8 +617,10 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
 
   /**
    * The host's Continue. In the election's announce or ballot every human not Done becomes Done, abstaining; refused in
-   * its ceremony. Otherwise it ends planning proper, or the month end (upkeep), with players not yet Ready. The news
-   * names the others it went on without and the stage it moved past. The caller must have checked the seat is the host.
+   * its ceremony. At a good's side pick (the auction's status screen, A-7) every seat not Done becomes Done on the side
+   * it stands on, so the walk starts; refused in the walk, which keeps its clock. Otherwise it ends planning proper, or
+   * the month end (upkeep), with players not yet Ready. The news names the others it went on without and the stage it
+   * moved past. The caller must have checked the seat is the host.
    */
   private continuePlanning(hostId: string): void {
     const state = this.requireState();
@@ -633,7 +636,18 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       goneOn(did, waiting.filter((s) => s.id !== hostId).map((s) => s.name));
       return;
     }
-    if (state.phase !== 'planning' && state.phase !== 'upkeep') throw new RuleError('Continue ends planning or the month end only');
+    if (state.phase === 'auction') {
+      const a = state.auction;
+      if (!a || !a.good || a.stage !== 'status') throw new RuleError('The walk keeps its clock');
+      const left = this.seats.filter((s) => !s.isAi && s.id !== hostId && !a.done.includes(s.id)).map((s) => s.name);
+      // AIs too: one still deciding declares its side once the walk has begun, as it would after a slow decision.
+      for (const s of this.seats) auctionDone(state, s.id);
+      // With nobody able to trade there is no walk: the good is skipped on the next tick.
+      const walks = tradePossible(a, goodsMarket(state));
+      goneOn(walks ? `started the ${GOOD_NAME[a.good]} walk` : `moved on from ${GOOD_NAME[a.good]}`, left);
+      return;
+    }
+    if (state.phase !== 'planning' && state.phase !== 'upkeep') throw new RuleError('Continue ends planning, a side pick or the month end only');
     const left = this.seats.filter((s) => !s.isAi && s.id !== hostId && !this.ready.has(s.id)).map((s) => s.name);
     this.nextPhase();
     goneOn('continued', left);
@@ -676,11 +690,26 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     colonist.walk = { from: colonist.at, startedAt: now, arrivesAt, then: intent };
     colonist.at = to;
     if (arrivesAt > now) {
-      this.cancels.push(this.ctx.schedule(arrivesAt - now, () => this.settle()));
+      this.settleAt(arrivesAt);
       return;
     }
     this.settleArrivals();
     this.checkEarlyEnd();
+  }
+
+  /**
+   * Settles at `due`, epoch ms. A real timer may fire while the clock still reads a millisecond short (Node's setTimeout
+   * against Date.now()); then nothing is due yet, so it waits again for the rest, or the colonist would stand frozen
+   * until some other seat acted.
+   */
+  private settleAt(due: number, pad = 0): void {
+    this.cancels.push(
+      this.ctx.schedule(Math.max(0, due - this.ctx.now()) + pad, () => {
+        // Waiting again past `due`, a little longer each time, so however early a timer fires the wait ends.
+        if (this.ctx.now() < due) this.settleAt(due, Math.max(1, pad * 2));
+        else this.settle();
+      }),
+    );
   }
 
   /** A walk or an assay is due: applies what has arrived, ends development if that was the last seat, tells every screen. */
@@ -741,7 +770,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       case 'analyse': {
         const until = at + this.realMs(analysePlot(state, seatId, intent.x, intent.y));
         this.colonists.get(seatId)!.assayUntil = until;
-        this.cancels.push(this.ctx.schedule(Math.max(0, until - this.ctx.now()), () => this.settle()));
+        this.settleAt(until);
         return;
       }
       case 'pub': {
@@ -832,9 +861,13 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     // that drops in the grant just doesn't claim and is not Done; a reload must not end the grant for everyone.
     if (phase === 'landGrant') return;
     // In planning and at the month end a dropped phone may be a player who locked it to think or read: both wait for
-    // their Ready, or the host's Continue.
+    // their Ready, or the host's Continue. A good's side pick (A-7) holds a dropped phone the same way, for the same
+    // reason and so a reload never skips a good for everyone; the engine ends it once every seat is Done, so it is not
+    // decided here (scheduleAuctionTick leaves an away seat alone there, and the host can move on for it).
     const excused = (id: string) => this.away.has(id) && phase !== 'planning' && phase !== 'upkeep';
-    const waiting = this.seats.filter((s) => !s.isAi && !excused(s.id) && !this.ready.has(s.id) && !this.doneDeveloping(s.id));
+    // A steered development's AI colonist walks the floor (C9): the table waits for it as for a person, and it is never away.
+    const counts = (s: SeatInfo) => (s.isAi ? phase === 'development' && this.steered : !excused(s.id));
+    const waiting = this.seats.filter((s) => counts(s) && !this.ready.has(s.id) && !this.doneDeveloping(s.id));
     // The auctions end on their own, good by good and lot by lot.
     if (!phase || phase === 'gameOver' || phase === 'auction' || phase === 'landAuction') return;
     if (waiting.length > 0) {
@@ -891,6 +924,11 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
 
   private requireState(): GameState {
     if (!this.state) throw new RuleError('The game has not started');
+    return this.state;
+  }
+
+  /** The state as it stands, null before start: what a crashed game's record fingerprints (AM-5). Never mutate it. */
+  stateNow(): GameState | null {
     return this.state;
   }
 
@@ -1230,7 +1268,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     this.clockWaits = state.month === 1 && DEV_STEER.month1WaitsForFirstMule;
     if (this.clockWaits) this.startClockOnceAllIn();
     else this.startClock();
-    // With the flag on the AI seats stand until they steer (C9, the AI's own PR); today's taps would not walk the floor.
+    // Steered, the AI seats walk the floor by their hands inside the tick (C9, steerTick); the tap hands never run.
     if (this.ai.size > 0 && !this.steered) this.scheduleAiDevelop(state.month, now);
   }
 
@@ -1282,7 +1320,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   }
 
   /**
-   * One tick of RULE-1: each seat's input (an away seat's and, until C9, an AI seat's stand still), the step and the
+   * One tick of RULE-1: each seat's input (an away seat's stands still; an AI seat's from its hand), the step and the
    * presses it reaches, the frame to every screen, then development's early ends. True when the views must go: the
    * game changed, month 1's clock started, the phase ended, or a seat's reach words changed (AM-11).
    */
@@ -1291,11 +1329,12 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     const tick = steering.floor.tick;
     const at = steering.origin + (tick + 1) * this.realTickMs();
     steering.at = at;
+    const secondsLeft = Math.max(0, this.secondsLeft(at));
     const inputs: Record<string, FloorInput> = {};
-    for (const s of this.seats) inputs[s.id] = this.away.has(s.id) || s.isAi ? IDLE_INPUT : steering.inputs.take(s.id, tick);
+    for (const s of this.seats) inputs[s.id] = this.away.has(s.id) ? IDLE_INPUT : this.seatInput(steering, s.id, tick, secondsLeft);
     const before = Object.values(inputs).some((i) => i.act) ? stableJson(state) : null;
     const waited = this.clockWaits;
-    const { floor, presses } = stepTick(steering.floor, state, inputs, steering.cfg, Math.max(0, this.secondsLeft(at)), (seat, reach) => this.refusal(seat, reach));
+    const { floor, presses } = stepTick(steering.floor, state, inputs, steering.cfg, secondsLeft, (seat, reach) => this.refusal(seat, reach));
     steering.floor = floor;
     steering.stats.ticks++;
     for (const press of presses) {
@@ -1303,7 +1342,9 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       else steering.stats.acts++;
       if (press.reach.kind === 'pub' && press.refused === null) this.addNews(`${this.nameOf(press.seat)} went to the pub and won ${press.payout}.`);
     }
-    this.ctx.frame(devFrame(floor));
+    // This tick's lines for the TV: stepFloor starts them fresh each step, then settleMoments' (a glint's payout) and the
+    // presses' follow, so the floor after the presses holds the tick's, in order, and no earlier tick's.
+    this.ctx.frame(devFrame(floor, floor.moments.beats.map((b) => b.text)));
     steering.stats.frames++;
     this.checkEarlyEnd();
     if (this.steering !== steering) return true;
@@ -1316,6 +1357,20 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       changed = true;
     }
     return changed;
+  }
+
+  /**
+   * A present seat's input for the step from `tick` (RULE-1 steps 1 and 2): a phone's latest steer and press; an AI
+   * seat's from its hand (C9), computed here inside the tick's recorded step, so a replay computes it again, from the
+   * floor before the step and the seconds the tick's presses resolve at, as the sim calls it (HC-4). `held` is the
+   * refusal's own test, so the hand never reaches for a press `refusal` would turn down; the press still goes through
+   * it. A seat whose turn is over stands still.
+   */
+  private seatInput(steering: Steering, seatId: string, tick: number, secondsLeft: number): FloorInput {
+    const ai = this.ai.get(seatId);
+    if (!ai) return steering.inputs.take(seatId, tick);
+    if (this.doneDeveloping(seatId)) return IDLE_INPUT;
+    return ai.developSteer(this.requireState(), steering.floor, secondsLeft, steering.cfg, this.clockWaits && this.isIn(seatId));
   }
 
   /** Why the rules hold back a press the floor would make, or null: in month 1 a seat already in waits (AM-3). */
@@ -1435,7 +1490,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
 
   /**
    * The live auction runs on a fixed tick. Each tick the AI players choose
-   * their step, players who dropped count as done, and the engine moves
+   * their step, players who dropped sit the walk out (the side pick waits for
+   * them, A-7), and the engine moves
    * everyone by the time that really passed on the server's clock. Every
    * screen gets the new board.
    */
@@ -1452,7 +1508,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
           try {
             const ai = this.ai.get(seat.id);
             if (ai) ai.auctionTick(state, dt, (a) => this.aiAct(seat.id, a));
-            else if (this.away.has(seat.id)) this.sitOut(seat.id);
+            // The side pick holds an away seat for its Done or the host's Continue (A-7); in the walk it sits out.
+            else if (this.away.has(seat.id) && state.auction.stage === 'walk') this.sitOut(seat.id);
           } catch (err) {
             if (!(err instanceof RuleError)) throw err;
           }
@@ -1481,10 +1538,10 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   }
 
   /**
-   * A dropped phone sits the rest of the good out, on the status screen and
-   * in the walk: off the board, it can't walk on its own or stand on a line
-   * for the store or a player to trade with. Back online during the walk, the
-   * side picker lets it rejoin.
+   * A dropped phone sits the rest of the walk out: off the board, it can't
+   * walk on its own or stand on a line for the store or a player to trade
+   * with. Back online during the walk, the side picker lets it rejoin. The
+   * side pick before it waits for the phone instead (A-7).
    */
   private sitOut(seatId: string): void {
     const state = this.requireState();
@@ -1747,7 +1804,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       good: a.good,
       stage: a.stage,
       seconds: Math.max(0, a.clockMs / 1_000),
-      total: (a.stage === 'status' ? WALK.statusMs : a.stage === 'close' ? WALK.closeMs : WALK.goodMs) / 1_000,
+      // The side pick has no clock unless WALK.statusMs restores one (A-7): 0 draws none.
+      total: (a.stage === 'status' ? (WALK.statusMs ?? 0) : a.stage === 'close' ? WALK.closeMs : WALK.goodMs) / 1_000,
       slowed: a.stage === 'walk' && a.deals.length > 0,
       next: [...a.queue],
       storeBuys: storeBuyLine(state),

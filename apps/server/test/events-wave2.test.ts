@@ -1,7 +1,7 @@
 import { DEV_STEER, EVENTS, grantees, inheritanceAmount, UPKEEP, type EventKey, type GameState, type MonthEvent, type Phase } from '@mule/engine';
 import { afterEach, describe, expect, it } from 'vitest';
 import { MuleGame } from '../src/mule-game.js';
-import { fakeContext, readyAll, seats } from './fake-context.js';
+import { fakeContext, pressThroughSidePick, readyAll, seats } from './fake-context.js';
 
 /** A new game in month 1's planning, and its private engine state, which a test reaches to arrange the month. */
 function newGame() {
@@ -109,6 +109,8 @@ function firedIn(key: EventKey, phase: Phase, month: number, prepare?: (state: G
   prepare?.(state);
   for (let i = 0; i < 200_000 && !(state.month === month && state.phase === phase); i++) {
     if (state.phase === 'planning' || state.phase === 'upkeep') readyAll(game);
+    // A good's side pick has no clock (A-7): the people press Ready there, once an event's show has let go.
+    pressThroughSidePick(game);
     fake.advance(100);
   }
   expect([state.month, state.phase]).toEqual([month, phase]);

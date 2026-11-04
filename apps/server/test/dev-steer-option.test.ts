@@ -16,8 +16,8 @@ afterEach(async () => {
 const PHASE_SCALE = 0.1;
 
 /**
- * A server on seed 42, with or without `devSteer`, and one phone that hosts a game with one AI seat: it presses Ready whenever it
- * may until development opens. Returns what the phone received and a way to send.
+ * A server on seed 42, with or without `devSteer`, and one phone that hosts a game with one AI seat: it presses Ready while
+ * the server is in planning or the land grant, until development opens. Returns what the phone received and a way to send.
  */
 async function phoneInDevelopment(devSteer: boolean | undefined) {
   const server = createMuleServer({ seed: () => 42, phaseScale: PHASE_SCALE, politics: false, maxMonths: 1, ...(devSteer === undefined ? {} : { devSteer }) });
@@ -36,21 +36,31 @@ async function phoneInDevelopment(devSteer: boolean | undefined) {
   send({ t: 'addAi' });
   send({ t: 'start' });
   const phase = () => inbox.filter((m) => m.t === 'view').at(-1)?.view.game?.phase;
+  // Ready from the server's own phase, not the phone's last view: a view can trail a phase behind, and a Ready sent on a
+  // stale land-grant view landed in development, where a tap game takes it as done for the turn (1 run in 5).
+  const room = server.registry.get(code) as unknown as { game: { viewFor(seat: null): MuleView } };
+  const serverPhase = () => {
+    try {
+      return room.game.viewFor(null).phase;
+    } catch {
+      return null; // The start message has not reached the game yet.
+    }
+  };
   for (let i = 0; i < 2_000 && phase() !== 'development'; i++) {
     // Ten a second at most, under the server's RATE_LIMIT, so the steer that follows is not dropped.
-    if (i % 10 === 0 && (phase() === 'planning' || phase() === 'landGrant')) send({ t: 'intent', intent: { type: 'ready' } });
+    if (i % 10 === 0 && (serverPhase() === 'planning' || serverPhase() === 'landGrant')) send({ t: 'intent', intent: { type: 'ready' } });
     await new Promise((r) => setTimeout(r, 10));
   }
   expect(phase(), 'the game reached development').toBe('development');
   const settle = (ms: number) => new Promise((r) => setTimeout(r, ms));
-  return { inbox, send, settle, phase };
+  return { inbox, send, settle, phase, serverPhase };
 }
 
 describe('createMuleServer({ devSteer }): steering for one game, with DEV_STEER.on off', { timeout: 30_000 }, () => {
   it('a devSteer game ticks and takes steer intents; a default game on the same seed refuses steer and sends no frames', async () => {
     expect(DEV_STEER.on, "trunk's flag stays off").toBe(false);
-    const steered = await phoneInDevelopment(true);
-    const plain = await phoneInDevelopment(undefined);
+    // Both at once: the steered game's AI walks and gets its first MULE in, so its month-1 clock runs while it waits.
+    const [steered, plain] = await Promise.all([phoneInDevelopment(true), phoneInDevelopment(undefined)]);
     for (const p of [steered, plain]) {
       p.inbox.length = 0;
       p.send({ t: 'intent', intent: { type: 'steer', x: 1, y: 0 } });
@@ -68,7 +78,8 @@ describe('createMuleServer({ devSteer }): steering for one game, with DEV_STEER.
     for (let i = 0; i < 200 && !plain.inbox.some((m) => m.t === 'error'); i++) await plain.settle(10);
     const refused = plain.inbox.filter((m) => m.t === 'error');
     expect(refused.map((m) => (m as { message: string }).message)).toEqual([expect.stringMatching(/steer/i)]);
-    expect(plain.phase()).toBe('development');
+    // The server's phase: the inbox was cleared before the steer, so no view may have come since.
+    expect(plain.serverPhase()).toBe('development');
     const view = plain.inbox.filter((m) => m.t === 'view').at(-1)?.view.game;
     expect(view?.me?.reach, "the default game's phone has today's screens").toBeUndefined();
   });

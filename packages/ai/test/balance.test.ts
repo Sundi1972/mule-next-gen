@@ -10,6 +10,7 @@ import {
   mulePriceFor,
   observe,
   STRATEGIST,
+  takeMule,
   walkSeconds,
   type AiLevelConfig,
   type AiLevelId,
@@ -449,6 +450,20 @@ describe('cornering', () => {
 });
 
 describe('production events and the outlook', () => {
+  it('T-AC-7 (F4): a MULE taken off its plot during development still makes the plot’s output in the outlook', () => {
+    const state = fourSeats(2);
+    while (state.phase !== 'development') advancePhase(state);
+    const plot = state.tiles.find((t) => !t.owner && t.terrain === 'plains')!;
+    Object.assign(plot, { owner: 'ai0', outfit: 'food' });
+    const made = () => outlook(observe(state, 'ai0'), 'ai0', { lookAhead: true }).made.food;
+    const before = made();
+    expect(before, 'the Food MULE makes Food').toBeGreaterThan(0);
+    // Taken off on the arcade floor (AM-2): if the turn ends with it on the lead, it goes back to the plot (endLead).
+    takeMule(state, 'ai0', plot.x, plot.y);
+    expect([plot.outfit, state.players[0]!.carriedMule]).toEqual([null, 'food']);
+    expect(made(), 'the plot is not counted empty').toBe(before);
+  });
+
   it('T-AC-7: a seat’s outlook forecasts the same with events on as off: it never sees next month’s event', () => {
     /** Gives an event row exactly these fields, dropping any others it had. */
     const reset = (row: object, fields: object) => {

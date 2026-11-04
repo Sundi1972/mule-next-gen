@@ -402,7 +402,7 @@ export function FillCard({ condition, rule, food }: { condition: Condition; rule
 }
 
 /** The Now card while month 1's clock waits: no rush before your first MULE; once it is in, whose are still to come. */
-function waitingNow(now: Now, carry: Outfit | 'empty' | null, installed: boolean, plotless: boolean, mulesLeft: number, waitsFor: readonly string[], me: string, players: readonly PlayerView[]): Now {
+export function waitingNow(now: Now, carry: Outfit | 'empty' | null, installed: boolean, plotless: boolean, mulesLeft: number, waitsFor: readonly string[], me: string, players: readonly PlayerView[]): Now {
   if (carry !== null) return now;
   // Row 1 or 2 with MULEs left: the start card's "the clock starts for everyone" isn't so while it waits.
   if (!installed) return now.step === 1 && mulesLeft > 0 ? { step: 1, of: 3, title: 'Buy a MULE at the corral', detail: 'Your first month: no rush. The clock starts when your first MULE is in.' } : now;
@@ -466,7 +466,7 @@ function ClockWaitsChip({ seconds }: { seconds: number }) {
         <rect x={6} y={5} width={4} height={14} rx={1} />
         <rect x={14} y={5} width={4} height={14} rx={1} />
       </svg>
-      0:{seconds}
+      {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, '0')}
     </span>
   );
 }
