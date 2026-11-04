@@ -594,7 +594,7 @@ RULE-7 · Heiko's starting values (config)                         shape: table
     .pubLeadRefund 0 · .reoutfitCost = the outfitter's price (AM-2) ·
     .month1WaitsForFirstMule true (AM-3)
   WOLVES.on true · chancePerSecond 0.1 · packSize 3 · cooldownSeconds 20 · chooseSeconds 3 · chaseShare 0.88 (of mapTilesPerSecond; AM-32) ·
-    giveUpSeconds 5 · giveUpTiles 4 (at the base pace; scales with it, AM-32) · bittenPace 0.5 · fightSeconds 10 · lungeEverySeconds 1.6 · warnSeconds 0.8 ·
+    giveUpSeconds 5 · giveUpTiles 4 · bittenPace 0.5 · fightSeconds 10 · lungeEverySeconds 1.6 · warnSeconds 0.8 ·
     strikesToWin 3 · bitesToLose 3 · pelts 2 · peltPrice 20 · stunSeconds 4 · boltTiles 4 · boltSpeed 3.5 ·
     botFightShare 0.5 · botWolfLandShare 0.5 · levels {rookie 0.4/0.5, regular 0.6/0.35, veteran 0.9/0.15}
   GLINT.on true · meanGapSeconds 20 · showSeconds 8 · firstAfterSeconds 6 · pauseSeconds 5 · onOwnedPlots true ·
@@ -745,11 +745,13 @@ inside a wall; money and stock change only through game.ts rules; development en
   `hungerPaceMin` 0.6).** RULE-4's chase was tuned as an absolute `WOLVES.chaseSpeed` 1.1 tiles/s against colonists at
   1.25, so at twice the pace a forest run escaped 20 of 20 (T-AC-6's example: about 13 of 20) and "run or fight" stopped
   being a choice. **The chase is relative to the walking pace:** `WOLVES.chaseShare` 0.88 (1.1 / 1.25) of
-  `DEV_STEER.mapTilesPerSecond` replaces `chaseSpeed`, and the chase's give-up distance (`giveUpTiles`) scales with the
-  pace the same way; `giveUpSeconds` stays a time. The invariant: the chase's odds do not depend on
-  `mapTilesPerSecond`, so a later pace change cannot defang the wolves. A change of model, not tuning: it keeps
-  RULE-4's specced behaviour. WS1 re-measures T-AC-6 (≈ 13 of 20 at 2.5) and AM-27's three seeds on it. RULE-2's
-  examples are restated at 2.5.
+  `DEV_STEER.mapTilesPerSecond` replaces `chaseSpeed`; **`giveUpTiles` stays 4 tiles and the chase's times stay as
+  they are.** (Ruled first with `giveUpTiles` scaled too; WS1 measured it backwards: the pack's distances are in tiles
+  and the wolves at 0.88 of the pace outrun a forest colonist at 0.75 of it, so a scaled give-up let them close twice
+  the ground, 4 of 20 escaping at 2.5 and 0 at 5.) Measured with `chaseShare` alone, forest runs escaping of 20: 11 at
+  1.25, 12 at 2.5, 15 at 5, all within T-AC-6's 9–18, the rookie winning 11 of 60 at each. The exact invariant (every
+  chase time × 1.25 / pace too) was not taken: it moves two more values for a drift that stays in range at any pace
+  played. A change of model, not tuning: it keeps RULE-4's specced behaviour. RULE-2's examples are restated at 2.5.
 - **AM-31 (2026-11-04, PR-10 on #291, by WS6; C11's gap).** With walking on, the phone's and the laptop's development
   drew no table chat: the tap screen gets it from `phone/Shell.tsx`'s `TableChat`, and the walking screen has no shell,
   so the ws6-ux spec's B-AC-17 (a line in development shows on both phones and the TV, at the speaker and in the
