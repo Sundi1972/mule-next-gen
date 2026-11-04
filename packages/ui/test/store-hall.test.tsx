@@ -179,6 +179,14 @@ describe('AM-16: the hall walks with the gait', () => {
     // Walking on the hall's right half it faces left, the way it heads back to the doors.
     expect(walker(hall({ me: lena(true, 12) })).creature).toContain('data-facing="left"');
     expect(walker(hall({ me: lena(true, 2) })).creature).toContain('data-facing="right"');
+    // A facing the visitor carries (its own heading, from the frames) wins over the half of the hall it stands in, for
+    // the creature, the MULE it leads and which side the MULE walks on.
+    for (const [x, facing] of [[12, 'right'], [2, 'left']] as const) {
+      const turned = walker(hall({ me: { ...lena(true, x), facing } }));
+      expect(turned.creature, `at x ${x} facing ${facing}`).toContain(`data-facing="${facing}"`);
+      expect(turned.mule!.includes('scale(-1 1)'), `its MULE at x ${x} faces ${facing}`).toBe(facing === 'left');
+      expect(turned.visitor.includes('flex-row-reverse'), `the MULE trails it at x ${x}`).toBe(facing === 'left');
+    }
 
     // Standing, nothing walks: the creature breathes in its idle motion on the gait's idle cycle, facing its way, and
     // the MULE stands; no walk, no stride, no waddle. The wrappers stay mounted, so a start or stop never remounts it.
