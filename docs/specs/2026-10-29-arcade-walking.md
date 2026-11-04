@@ -553,7 +553,8 @@ RULE-4 · Wolves                          shape: state machine per colonist     
                                                      (boltTiles at boltSpeed; CATCH MULE to lead it again),
                                                      no MULE → stunned stunSeconds
 AI           run or fight by WOLVES.botFightShare; dodge chance and strike delay by level (rookie 0.4 / 0.5 s,
-             regular 0.6 / 0.35 s, veteran 0.9 / 0.15 s); a share of bot legs routes through wolf land
+             regular 0.6 / 0.35 s, veteran 0.9 / 0.15 s); a share of bot legs routes through wolf land, unless
+             the AI meets wolves often enough without it (AM-22); a bot may run to the store as its refuge
 unknown      a colonist in the hall → no roll; the clock ends mid-encounter → the encounter ends, nothing paid
 open         pelts not sold by the turn's end are lost (as built) — flagged for Heiko with the second-MULE item
 examples     rookie wins ≈ 1 in 4 (17 of 60 headless) · forest runs escape 13 of 20 (11 of 20 leading a MULE)  → T-AC-6
@@ -695,7 +696,7 @@ C14.
 | T-AC-2 (serves G-2) | speeds per RULE-2's examples (plains 1.5625, mountains 0.625, swamp 0.78, leading 1.41, bitten 0.78 tiles/s) | engine unit | lake 0 blocks | C1, C5 |
 | T-AC-3 (serves B-AC-1) | Reach per RULE-3's table, one row each | engine unit | money short → disabled, not hidden | C3 |
 | T-AC-4 (serves B-AC-2) | Given the tick · Then one frame per tick reaches every connection, frames are dropped not queued for a slow one, full views go only on change, or to one seat when its reach's words change (AM-11) | server + tabletop test | no full view on a tick where nothing changed and no seat's reach words changed; a steer sends no full view (AM-13) | C6, C8 |
-| T-AC-5 (serves G-2, RULE-8) | In 20 seeded AI-only turns at the defaults every AI colonist reaches the pub within 50 s, and a bot races in most glints | sim (`pnpm sim` report) | with botsSpareTime off, Kai misses turns | C9, C10 |
+| T-AC-5 (serves G-2, RULE-8) | In 20 seeded AI-only turns at the defaults every AI colonist reaches the pub within 50 s, and a bot races in at least 40% of glints, never one whose detour breaks its errand (RULE-8; AM-22) | sim (`pnpm sim` report) | with botsSpareTime off, Kai misses turns | C9, C10 |
 | T-AC-6 (serves B-AC-5) | Wolves: the rookie wins ≈ 1 in 4 over 60 seeded fights; a forest run escapes ≈ 13 of 20 | engine headless | — | C4, C9 |
 | T-AC-7 (serves B-AC-6) | Glint timing per RULE-5 (none in the first 6 s, 8 s shown, the first onto it wins) | engine unit | a non-racing colonist on the tile wins too | C4 |
 | T-AC-8 (serves B-AC-7) | Scramble per RULE-6, the beats in order, the last sale's single line | engine unit | — | C4 |
@@ -739,6 +740,16 @@ inside a wall; money and stock change only through game.ts rules; development en
 
 ## §8 · Amendments `[review-only]`
 
+- **AM-22 (2026-11-04, WS1's findings at arcade PR-8, ruled by WS6).** (1) **T-AC-5's glints:** with RULE-8 honoured
+  (a bot races only if its errand still fits the clock after the detour, `botsSpareTime`), the real AI races 44–47%
+  of glints (252 of 565 in 40 games; the mock's one-MULE bots 63%), because it plans its MULEs to fill the clock.
+  RULE-8 wins: T-AC-5 asserts a floor of 40%, never a detour that breaks an errand; the share is not tuned up
+  (tuning parked by the PM). (2) **AM-18 on an unanalysed shore:** ANALYSE takes the plot underfoot first, then the
+  lake from its shore, as row 10 does for INSTALL; standing there, two presses analyse both. (3) **RULE-4's
+  `botWolfLandShare`:** not built if the AI meets wolves often enough without it. UBER-AC-3 needs the TV to show the AI
+  in a wolf encounter in an ordinary game, so PR-8's sim reports the months with at least one AI wolf encounter
+  (40 games, AI-only): **at least 60% of months** and the routing share is dropped from config; under it, it is built
+  as specced. The AI's run-to-the-store refuge is an addition, the bot's way of running (RULE-4's RUN).
 - **AM-21 (2026-11-04, #235's review, ruled by WS6).** `act` is quiet too: MuleGame's `quiet` returns true for `steer`
   and `act`. A press applies only at the next tick (RULE-1), so a full view sent on receipt shows the state before it,
   and a mashed button sent up to 20 such views a second to every screen, against RULE-1 step 6. The tick's state
