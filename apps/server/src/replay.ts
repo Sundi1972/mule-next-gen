@@ -4,7 +4,7 @@ import type { Choice } from '@mule/ai';
 import type { GameContext, SeatInfo } from '@tabletop/core';
 import type { BrainService } from './brain/index.js';
 import { MuleGame, type PlaybookNote } from './mule-game.js';
-import { configFingerprint, messageOf, outcomeOf, type MuleRecord, type StepEvent } from './record.js';
+import { configFingerprint, crashOutcomeOf, messageOf, outcomeOf, type MuleRecord, type StepEvent } from './record.js';
 
 /** The replay reached a step that does not play as recorded. `seq` is that step's. */
 export class ReplayDiverged extends Error {
@@ -182,6 +182,10 @@ const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
  * Plays a record through a fresh MuleGame: its timers by recorded id and order, its clock from the tape, and Claude's
  * answers from the record. Throws RecordMismatch before building anything when the record's version or config differs,
  * and ReplayDiverged at the first step that doesn't play as recorded.
+ *
+ * A record a game error ended (`ended: 'error'`, AM-5) must throw at its last step with the recorded message; the
+ * state it leaves is then compared. A replay that doesn't throw there, throws another message, or throws at an
+ * earlier step is not identical, and `reason` says which.
  */
 export async function replay(record: MuleRecord): Promise<ReplayResult> {
   if (record.v !== 1) throw new RecordMismatch(`record version ${String(record.v)}; this server replays version 1`);
@@ -189,6 +193,7 @@ export async function replay(record: MuleRecord): Promise<ReplayResult> {
 
   const script = new Script(record);
   let replayed: MuleRecord['outcome'] | null = null;
+  let reason: string | undefined;
   const game = new MuleGame(script.ctx, record.seed, {
     ...record.options,
     brain: script.brain,
@@ -196,15 +201,34 @@ export async function replay(record: MuleRecord): Promise<ReplayResult> {
     recordPlaybook: (entry) => script.playbook(entry),
   });
   const seats: SeatInfo[] = record.seats.map(({ id, name, isAi, color, pick }) => ({ id, name, isAi, color, ...(pick !== undefined ? { pick } : {}) }));
+  const crashSeq = record.ended === 'error' ? (record.events.filter(isStep).at(-1)?.seq ?? null) : null;
   try {
     for (const event of record.events) {
-      if (event.type === 'notice' || event.type === 'playbook') continue;
+      if (!isStep(event)) continue;
       script.enter(event);
-      playStep(game, script, event, seats);
+      const threw = playStep(game, script, event, seats);
+      if (event.seq === crashSeq) {
+        const expected = record.error ?? '';
+        if (threw === undefined) reason = `step ${event.seq} did not throw; recorded the game error "${expected}" there`;
+        else if (threw !== expected) reason = `step ${event.seq} threw "${threw}"; recorded the game error "${expected}"`;
+        // The room failed at once, so nothing the step started ran after the throw: its tape is checked as it stands.
+        else script.leave(event);
+        replayed = crashOutcomeOf(game.stateNow(), record.seats);
+        break;
+      }
+      const refused = event.type === 'intent' ? event.refused : undefined;
+      if (threw !== refused) {
+        if (crashSeq !== null && threw !== undefined) {
+          reason = `the game threw at step ${event.seq} ("${threw}"); recorded the game error at step ${crashSeq}`;
+          break;
+        }
+        const said = (r: string | undefined) => (r === undefined ? 'accepted' : `refused "${r}"`);
+        script.diverge(event.type === 'intent' ? `intent ${said(threw)}, recorded ${said(refused)}` : `the game threw: ${threw}`);
+      }
       await settle();
       script.leave(event);
     }
-    const unwritten = script.unwritten();
+    const unwritten = reason === undefined ? script.unwritten() : undefined;
     if (unwritten) throw new ReplayDiverged(unwritten.seq, `seat ${unwritten.seat}'s recorded playbook was never written`);
   } finally {
     script.dispose();
@@ -215,23 +239,19 @@ export async function replay(record: MuleRecord): Promise<ReplayResult> {
   const outcome = replayed as MuleRecord['outcome'] | null;
   const scores = record.seats.map((s) => ({ seat: s.id, recorded: recorded?.scores?.[s.id] ?? null, replayed: outcome?.scores?.[s.id] ?? null }));
   const stateHash = { recorded: recorded?.stateHash ?? null, replayed: outcome?.stateHash ?? null };
-  return { identical: stateHash.recorded === stateHash.replayed && scores.every((s) => s.recorded === s.replayed), scores, stateHash };
+  const identical = reason === undefined && stateHash.recorded === stateHash.replayed && scores.every((s) => s.recorded === s.replayed);
+  return { identical, scores, stateHash, ...(reason !== undefined ? { reason } : {}) };
 }
 
-function playStep(game: MuleGame, script: Script, event: StepEvent, seats: SeatInfo[]): void {
-  if (event.type === 'intent') {
-    let refused: string | undefined;
-    try {
-      game.handle(event.seat, structuredClone(event.intent));
-    } catch (err) {
-      refused = messageOf(err);
-    }
-    const said = (r: string | undefined) => (r === undefined ? 'accepted' : `refused "${r}"`);
-    if (refused !== event.refused) script.diverge(`intent ${said(refused)}, recorded ${said(event.refused)}`);
-    return;
-  }
+const isStep = (event: MuleRecord['events'][number]): event is StepEvent => event.type !== 'notice' && event.type !== 'playbook';
+
+/** Plays one step; returns the message of what the game threw, a refusal or an error, or undefined if it threw nothing. */
+function playStep(game: MuleGame, script: Script, event: StepEvent, seats: SeatInfo[]): string | undefined {
   try {
     switch (event.type) {
+      case 'intent':
+        game.handle(event.seat, structuredClone(event.intent));
+        return;
       case 'start':
         game.start(seats);
         return;
@@ -252,6 +272,6 @@ function playStep(game: MuleGame, script: Script, event: StepEvent, seats: SeatI
         return;
     }
   } catch (err) {
-    script.diverge(`the game threw: ${messageOf(err)}`);
+    return messageOf(err);
   }
 }

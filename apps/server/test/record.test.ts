@@ -821,6 +821,8 @@ describe.runIf(FULL)('a crashed game in the record', { timeout: 60_000 }, () => 
     expect(text).not.toContain('record.test.ts');
     const last = record.events.filter(isStep).at(-1)!;
     expect(last.type === 'intent' && last.refused !== undefined, 'the crash is not recorded as a refusal').toBe(false);
+    expect(last, 'a timer threw as development opened, mid-game').toMatchObject({ type: 'fire' });
+    expect(last.seq).toBeGreaterThan(1);
 
     spies.arrange = faultIn('development');
     const result = await replay(record);

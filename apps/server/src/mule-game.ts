@@ -884,6 +884,11 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     return this.state;
   }
 
+  /** The state as it stands, null before start: what a crashed game's record fingerprints (AM-5). Never mutate it. */
+  stateNow(): GameState | null {
+    return this.state;
+  }
+
   /** The open phase's notices, until the next phase opens. */
   phaseNotices(): readonly Notice[] {
     return this.notices;

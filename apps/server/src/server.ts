@@ -1,12 +1,12 @@
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { extname, join, normalize, resolve } from 'node:path';
-import { RuleError, SPECIES } from '@mule/engine';
+import { SPECIES } from '@mule/engine';
 import { EMOTES, type MuleIntent, type MuleView } from '@mule/protocol';
-import { RoomRegistry, TableError, type ClientEnvelope, type Connection, type GameContext, type Room } from '@tabletop/core';
+import { RoomRegistry, type ClientEnvelope, type Connection, type GameContext, type Room } from '@tabletop/core';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { AI_NAMES, MuleGame } from './mule-game.js';
-import { createRecordedGame } from './record.js';
+import { createRecordedGame, isUserError } from './record.js';
 
 const MAX_MESSAGE_BYTES = 4_096;
 /**
@@ -59,14 +59,15 @@ export function createMuleServer(
       ...(options.devSteer ? { devSteer: true } : {}),
     };
     if (recordDir === null) return new MuleGame(ctx, gameSeed, gameOptions);
-    return createRecordedGame({ ctx, seed: gameSeed, options: gameOptions, dir: recordDir }).game;
+    return createRecordedGame({ ctx, seed: gameSeed, options: gameOptions, dir: recordDir, isUserError }).game;
   };
   const registry = new RoomRegistry<MuleIntent, MuleView>({
     createGame,
     aiNames: AI_NAMES,
     emotes: EMOTES,
     picks: SPECIES,
-    isUserError: (err) => err instanceof RuleError || err instanceof TableError,
+    // The same test the recorder uses: what the room shows a player, the record keeps as a refusal, not a crash.
+    isUserError,
     // The room has already ended itself; only the stack is logged, never what the players sent.
     onError: (err) => console.error(`game error: ${err instanceof Error ? err.stack : String(err)}`),
   });
