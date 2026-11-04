@@ -184,7 +184,9 @@ describe('AM-16: the hall walks with the gait', () => {
     for (const [x, facing] of [[12, 'right'], [2, 'left']] as const) {
       const turned = walker(hall({ me: { ...lena(true, x), facing } }));
       expect(turned.creature, `at x ${x} facing ${facing}`).toContain(`data-facing="${facing}"`);
-      expect(turned.mule!.includes('scale(-1 1)'), `its MULE at x ${x} faces ${facing}`).toBe(facing === 'left');
+      // The MULE is drawn after the creature, so from its svg on, a mirror is the MULE's own.
+      const mule = turned.visitor.slice(turned.visitor.indexOf(turned.mule!));
+      expect(mule.includes('scale(-1 1)'), `its MULE at x ${x} faces ${facing}`).toBe(facing === 'left');
       expect(turned.visitor.includes('flex-row-reverse'), `the MULE trails it at x ${x}`).toBe(facing === 'left');
     }
 

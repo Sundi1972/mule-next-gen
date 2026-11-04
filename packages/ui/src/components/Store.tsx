@@ -391,6 +391,8 @@ export interface Visitor {
   food?: FoodEaten;
   /** Walking: it strides at its condition's pace (gait.ts), and its MULE walks in step. */
   moving?: boolean;
+  /** Which way it heads, from its own movement (PR-6's frames). Without it: toward the doors, from the half it stands in. */
+  facing?: 'left' | 'right';
   /** When the one clock starts, as a performance.now() time: the thought bubble shows then. */
   clockStartsAt?: number;
 }
@@ -409,7 +411,7 @@ function standing(me: Visitor): { x: number; y: number } {
  */
 function Colonist({ me, at, paceRule, size, z, wrap = (_, c) => c }: { me: Visitor; at: { x: number; y: number }; paceRule: PaceRule | undefined; size: keyof typeof SIZES; z: Sizes; wrap?: CreatureWrap | undefined }) {
   const species = useSeatSpecies(me.slot);
-  const left = at.x > 50;
+  const left = me.facing ? me.facing === 'left' : at.x > 50;
   const condition = me.condition ?? null;
   // The hall has no terrain, encounters or bites: those are the map's. The balance's paces are the engine's.
   const gait: GaitInput = {
