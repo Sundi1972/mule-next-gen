@@ -380,9 +380,12 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     this.enterPhase();
   }
 
-  /** A steer changes no view by itself: its colonist moves in the frames, and a reach it changes sends its own view. */
+  /**
+   * A steer or a press changes no view by itself (AM-21): the colonist moves in the frames, and the tick that applies a
+   * press, or finds a seat's reach words changed, sends the views.
+   */
   quiet(intent: MuleIntent): boolean {
-    return intent.type === 'steer';
+    return intent.type === 'steer' || intent.type === 'act';
   }
 
   handle(seatId: string, intent: MuleIntent): void {

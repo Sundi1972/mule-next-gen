@@ -97,6 +97,7 @@ describe('the game record with DEV_STEER.on (HC-9, HC-10, C8 Task 2.2)', { timeo
     expect(frames.filter((f) => f.tick >= 0).map((f) => f.tick)).toEqual(Array.from({ length: framesInDev - 5 }, (_, i) => i + 1));
     expect(extraFrames.after).toBe(extraFrames.before);
     expect(game.quiet?.({ type: 'steer', x: 1, y: 0 }), 'the recorded game is as quiet for a steer as the game').toBe(true);
-    expect(game.quiet?.({ type: 'act' })).toBe(false);
+    expect(game.quiet?.({ type: 'act' }), 'and for a press (AM-21)').toBe(true);
+    expect(game.quiet?.({ type: 'ready' })).toBe(false);
   });
 });
