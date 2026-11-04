@@ -9,7 +9,8 @@ import type { DevFrame, MuleView } from '@mule/protocol';
 import { check } from './harness';
 import { keepsPlaying, steeredTable, until } from './walking-wire';
 
-const SEED = 1;
+/** Packs met, pelts sold, a MULE bolted and caught or lost, and glints won, in 12 months on bd41a36e's server. */
+const SEED = 7;
 const MONTHS = 12;
 /** Development's 50 s of game time in about 12 s of real time. */
 const PHASE_SCALE = 0.25;
@@ -43,7 +44,7 @@ const seen = {
   peltsSoldBy: new Set<string>(),
   bolted: new Set<string>(),
   boltCaught: new Set<string>(),
-  boltLostToClock: new Set<string>(),
+  boltLost: new Set<string>(),
   glintWonBy: new Set<string>(),
   scrambleLeftOut: new Set<string>(),
   /** For a failure's message: pelts won in fights, scrambles called, and the fewest MULEs the store held in a development. */
@@ -90,11 +91,14 @@ try {
           if (p.stock.crystite - was.stock.crystite === GLINT.crystite) seen.glintWonBy.add(p.id);
           if (p.muleBolted) seen.bolted.add(p.id);
           if (was.muleBolted && !p.muleBolted && p.carriedMule !== null) seen.boltCaught.add(p.id);
+          // Ending the turn at the pub with it still loose, the MULE runs off: lost, as to the clock.
+          if (was.muleBolted && !p.muleBolted && p.carriedMule === null) seen.boltLost.add(p.id);
         }
         for (const id of floor.moments.scramble?.leftOut ?? []) seen.scrambleLeftOut.add(id);
       }
       if (wasDeveloping && !developing && before) {
-        for (const p of before.players) if (p.muleBolted) seen.boltLostToClock.add(p.id);
+        // Still loose when the clock ends development: lost to the clock.
+        for (const p of before.players) if (p.muleBolted) seen.boltLost.add(p.id);
       }
       before = now;
       floorBefore = floor;
@@ -110,7 +114,7 @@ try {
   // Each moment happened, and what it pays or costs is in the state.
   soft(seen.wolvesMetBy.size > 0, 'wolves: no colonist met a pack in the game');
   soft(seen.peltsSoldBy.size > 0, `wolves: no pelts were sold at the store (packs met by ${names(seen.wolvesMetBy)}; pelts won by ${names(seen.peltsWonBy)})`);
-  soft(seen.boltCaught.size + seen.boltLostToClock.size > 0, `wolves: no bolted MULE was caught or lost to the clock (bolted: ${names(seen.bolted)})`);
+  soft(seen.boltCaught.size + seen.boltLost.size > 0, `wolves: no bolted MULE was caught or lost (bolted: ${names(seen.bolted)})`);
   soft(seen.glintWonBy.size > 0, 'glint: nobody gained the glint\'s Crystite in a development');
   seen.scramblesCalled = table.board.frames.filter((f) => f.frame.beats.some((b) => b.includes('Race to the corral'))).length;
   soft(seen.scrambleLeftOut.size > 0, `scramble: no colonist was left without a MULE by a scramble (${seen.scramblesCalled} called; the store held ${seen.fewestMules} MULEs at its fewest)`);
