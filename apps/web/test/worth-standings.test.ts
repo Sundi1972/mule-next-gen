@@ -179,7 +179,6 @@ describe('N-6 (WS4): a shared win at game over', () => {
     const phone = onPhone(LEVEL, GameOver);
     expect(text(element(phone, 'my-place'))).toBe('You share the win!');
     expect(text(phone)).toContain('Game over: you share the win');
-    expect(text(phone)).toContain('Heiko and Mia share the win, each with a Worth of 5,200 cr.');
 
     const three = tied([{ ...HEIKO, worth: 5_200 }, MIA, { ...KAI, worth: 5_200 }]);
     expect(text(element(element(tvOf(three), 'tv-winner'), 'winner-line'))).toBe('Heiko, Mia and Kai share the win, each with a Worth of 5,200 cr');

@@ -164,7 +164,7 @@ export async function theLeagueTableAtTheMonthEnd(ctx: GameStepContext, last?: M
 /** B-AC-12 at game over: the winner line and the final Worth in credits on both screens, never points. */
 export async function gameOverIsInCredits(phone: Page, tv: Page): Promise<string> {
   const line = await text(tv.getByTestId('tv-winner').getByTestId('winner-line'));
-  check(/^(.+ wins with a Worth of [\d,]+ cr|.+ share the colony, each with a Worth of [\d,]+ cr)$/.test(line), `B-AC-12: the TV's winner line is in credits, got "${line}"`);
+  check(/^(.+ wins with a Worth of [\d,]+ cr|.+ share the win, each with a Worth of [\d,]+ cr)$/.test(line), `B-AC-12: the TV's winner line is in credits, got "${line}"`);
   check(/^Worth [\d,]+ cr$/.test(await text(phone.getByTestId('winner-worth'))), 'B-AC-12: the phone gives your final Worth in credits');
   for (const [screen, page] of [
     ['phone', phone],

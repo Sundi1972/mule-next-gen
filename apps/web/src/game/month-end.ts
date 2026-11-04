@@ -83,15 +83,21 @@ export function leaderWords(view: MuleView, lg: League, selfId?: string): { lead
   return { lead, you };
 }
 
-/** At the game's end: "Ossa wins with a Worth of 5,643 cr", or a shared win. */
+/**
+ * At the game's end: "Ossa wins with a Worth of 5,643 cr", or a shared win, "Ossa, Lena and Kai share the win, each
+ * with a Worth of 5,643 cr". It reads under the TV's heading ("The game goes to") and as a sentence on a phone.
+ */
 export function winnerWords(view: MuleView, lg: League): string {
   const top = lg.rows[0];
   if (!lg.leader || !top) return '';
   const worth = `${fmt(top.total)} cr`;
   return lg.leader.level.length > 1
-    ? `${lg.leader.level.map((id) => nameOf(view, id)).join(' and ')} share the colony, each with a Worth of ${worth}`
+    ? `${listOf(lg.leader.level.map((id) => nameOf(view, id)))} share the win, each with a Worth of ${worth}`
     : `${nameOf(view, lg.leader.id)} wins with a Worth of ${worth}`;
 }
+
+/** "Ossa and Lena", "Ossa, Lena and Kai". */
+const listOf = (names: string[]) => (names.length < 3 ? names.join(' and ') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`);
 
 /** A player who went short of Food this month: units eaten against the household's need. */
 export interface Hungry {
