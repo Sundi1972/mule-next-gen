@@ -79,7 +79,7 @@ try {
   const lenaId = truth.seatOf('Lena');
   check(truth.plotsOf(lenaId).some((t) => t.outfit === 'energy'), `month 1: Lena's plot has the Energy MULE she installed, ${JSON.stringify(truth.plotsOf(lenaId).map((t) => t.outfit))}`);
   console.log(`✓ month 1: Lena bought a MULE, outfitted it for Energy and installed it on her plot`);
-  await everyone(phones, (p) => pressDoneThroughTheAuction(p.page));
+  await everyone(phones, (p) => pressDoneThroughTheAuction(p.page, truth));
   await everyone(phones, (p) => p.page.locator('[data-phase=upkeep]').getByTestId('ready').click({ timeout: MONTH_END_MS }));
 
   // Month 2: Brix lists a plot; after the grant, Ossa bids until the server has her leading at the minimum, and wins it at the bell.
@@ -104,7 +104,7 @@ try {
   check(after[seller.id] === before[seller.id]! + proceeds, `month 2: Brix got ${proceeds} for ${price} after ${tax * 100}% tax: ${before[seller.id]} → ${after[seller.id]}`);
   console.log(`✓ month 2: Ossa bought Brix's plot at the bell for ${price}; Ossa −${price}, Brix +${proceeds}`);
   await everyone(phones, (p) => goToThePub(p.page));
-  await everyone(phones, (p) => pressDoneThroughTheAuction(p.page));
+  await everyone(phones, (p) => pressDoneThroughTheAuction(p.page, truth));
 
   // Game over: every screen shows each seat's final score as the server has it, best first.
   await everyone(phones, (p) => p.page.locator('[data-phase=gameOver] [data-testid=scores]').waitFor({ timeout: MONTH_END_MS }));
@@ -328,8 +328,12 @@ async function goToThePub(page: Page): Promise<void> {
   await page.locator('[data-phase=development]').getByRole('button', { name: 'Go to the pub and end your turn' }).click({ timeout: within(LOTS.resultMs) + PRESS_MS * 5 });
 }
 
-/** The goods auction: presses Ready or Done at every stage it shows, until the phone leaves the auction. */
-async function pressDoneThroughTheAuction(page: Page): Promise<void> {
+/**
+ * The goods auction: presses Ready or Done once at every stage it shows, until the phone leaves the auction. A press has
+ * landed when its button goes, or when the server's auction is at another good or stage: since A-7 a side pick has no
+ * clock, and when the goods between two side picks are skipped the next one opens on the same Ready at once.
+ */
+async function pressDoneThroughTheAuction(page: Page, truth: Truth): Promise<void> {
   await page.locator('[data-phase=auction]').waitFor({ timeout: within(PHASE_MS.development + PHASE_MS.production) });
   const done = page.locator('[data-phase=auction]').getByRole('button', { name: /^(Ready|Done with .+)$/ });
   const over = page.locator('[data-phase]:not([data-phase=auction])');
@@ -339,8 +343,15 @@ async function pressDoneThroughTheAuction(page: Page): Promise<void> {
     if (await over.count()) return;
     try {
       const label = await done.innerText({ timeout: PRESS_MS });
+      const stage = () => `${truth.board().auction?.good}:${truth.board().auction?.stage}`;
+      const at = stage();
       await done.click({ timeout: PRESS_MS });
-      await page.locator('[data-phase=auction]').getByRole('button', { name: label, exact: true }).waitFor({ state: 'hidden', timeout: AUCTION_STAGE_MS * 3 });
+      const pressed = page.locator('[data-phase=auction]').getByRole('button', { name: label, exact: true });
+      const deadline = Date.now() + AUCTION_STAGE_MS * 3;
+      while (stage() === at && (await pressed.isVisible())) {
+        if (Date.now() > deadline) throw new playwrightErrors.TimeoutError(`${label} stayed up at ${at}`);
+        await new Promise((r) => setTimeout(r, 100));
+      }
     } catch (err) {
       // The stage moved on under the press; the wait above decides what comes next.
       if (!(err instanceof playwrightErrors.TimeoutError)) throw err;

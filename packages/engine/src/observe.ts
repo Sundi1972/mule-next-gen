@@ -111,6 +111,8 @@ export function cloneForSim(state: GameState): GameState {
     treasury: { ...state.treasury, paid: { ...state.treasury.paid } },
     ship: { ...state.ship, goods: state.ship.goods.slice(), hold: { ...state.ship.hold }, bought: { ...state.ship.bought } },
     grant: state.grant ? { ...state.grant, order: state.grant.order.slice() } : null,
+    // Its own month list: nothing a what-if fires may reach the real game's.
+    monthEvents: state.monthEvents.slice(),
     history: state.history.slice(-2), // literal-ok: the last two reports, the window nextPostedPrice's at(-2) reads
     auction: state.auction ? structuredClone(state.auction) : null,
     listings: structuredClone(state.listings),

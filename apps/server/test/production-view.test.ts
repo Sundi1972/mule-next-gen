@@ -67,6 +67,7 @@ function knownMonth(state: GameState) {
   const report = state.history.at(-1)!;
   report.lines = lines;
   report.events = [quake, storm];
+  state.monthEvents = [quake, storm];
   report.before = {
     s1: { ...emptyStock(), food: SECRET_FOOD },
     s2: { ...emptyStock(), energy: SECRET_ENERGY },
