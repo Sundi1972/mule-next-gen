@@ -216,25 +216,26 @@ describe('B1 (C5): the ledger stories play the gallery’s own, and say what the
     expect(roll).toContain('+3 Food');
   });
 
-  it('HC-6: with reduced motion no ledger story moves the camera, and each still shows its result', () => {
+  // Every 0.1 s of seven stories on two screens is about a thousand static renders, each drawn once and checked for
+  // everything below. Alone that is under half a second; under `pnpm test`'s parallel run on a CI runner it has gone
+  // past vitest's 5 s default (batch 13), so it gets its own budget rather than a coarser scrub that could miss a frame.
+  it('HC-6: with reduced motion no ledger story moves the camera, and each still shows its result', { timeout: 30_000 }, () => {
     for (const ev of [TAX, GRANT, INHERITANCE, PIRATES, RATS, ACCOUNTANT, PACKAGE]) {
       for (const where of ['tv', 'alone'] as const) {
-        for (const html of playFrames([ev], where, { reduced: true })) expect(zoomed(html), `${ev.key} on ${where}`).toBe(false);
-        expect(inside(result([ev], where, { reduced: true }), 'effects-card'), `${ev.key} on ${where}`).not.toBe('');
-      }
-    }
-    // Nothing travels: no crate goes up the ramp, no coin flies, no pod drops.
-    for (const ev of [TAX, GRANT, PIRATES]) {
-      for (const where of ['tv', 'alone'] as const) {
-        for (const html of playFrames([ev], where, { reduced: true })) {
+        const frames = playFrames([ev], where, { reduced: true });
+        for (const html of frames) {
+          expect(zoomed(html), `${ev.key} on ${where}`).toBe(false);
+          // Nothing travels: no crate goes up the ramp, no coin flies, no pod drops.
           for (const moving of ['pirate-crate', 'tax-coin', 'grant-pod']) expect(has(html, moving), `${ev.key} on ${where}: no ${moving}`).toBe(false);
+        }
+        expect(inside(result([ev], where, { reduced: true }), 'effects-card'), `${ev.key} on ${where}`).not.toBe('');
+        if (ev === PIRATES && where === 'tv') {
+          // The pirates still land and their hold still reads 0: the result, without the flight.
+          expect(frames.some((html) => has(html, 'pirate-ship'))).toBe(true);
+          expect(text(inside(frames.find((html) => has(html, 'pirate-hold'))!, 'pirate-hold'))).toMatch(/Ossa 0/);
         }
       }
     }
-    // The pirates still land and their hold still reads 0: the result, without the flight.
-    const frames = playFrames([PIRATES], 'tv', { reduced: true });
-    expect(frames.some((html) => has(html, 'pirate-ship'))).toBe(true);
-    expect(text(inside(frames.find((html) => has(html, 'pirate-hold'))!, 'pirate-hold'))).toMatch(/Ossa 0/);
   });
 
   it('in a segment of several events, a phone it missed shows every event’s change to the store and the colony', () => {
@@ -340,6 +341,12 @@ describe('B2 (C5): the map and colony stories play the gallery’s own, and chan
     expect(playFrames([METEOR], 'tv', { map: CRATERED }).some(shaken)).toBe(true);
   });
 
+  it('meteorStrike with reduced motion: the drawn crater comes with the map’s crater badge, not a second after it (lane review)', () => {
+    for (const html of playFrames([METEOR], 'tv', { map: CRATERED, reduced: true })) {
+      expect(has(html, 'crater-7-3'), 'the drawn crater exactly when the badge shows').toBe(glyphOn(html, 7, 3));
+    }
+  });
+
   it('epidemic: the sick tag lands on each colonist it sickens as the epidemic lands, not on the one it cured', () => {
     const frames = playFrames([EPIDEMIC], 'tv');
     expect(frames.some((html) => inside(html, `colonist-${LENA}`).includes('data-testid="sick-tag"'))).toBe(true);
@@ -389,7 +396,8 @@ describe('B2 (C5): the map and colony stories play the gallery’s own, and chan
     expect(text(inside(result([COLD], 'tv'), 'log'))).toContain('Energy need +100%');
   });
 
-  it('HC-6: with reduced motion no camera, no jolt, nothing travels, and each still shows its result', () => {
+  // Every 0.1 s of six stories on two screens, each frame drawn once: its own budget, as B1's HC-6 has, for the same reason.
+  it('HC-6: with reduced motion no camera, no jolt, nothing travels, and each still shows its result', { timeout: 30_000 }, () => {
     const cases = [
       { events: [THEFT], map: ROBBED, kept: 'mark-6-3' },
       { events: [METEOR], map: CRATERED, kept: 'crater-7-3' },
