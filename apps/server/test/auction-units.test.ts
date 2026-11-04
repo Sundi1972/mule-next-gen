@@ -58,8 +58,11 @@ const NEW_FIELD = 'a new board field: check it against HC-2';
 function expectBoardKeys(auction: NonNullable<MuleView['auction']>) {
   expect(keysOf(auction), NEW_FIELD).toEqual(
     // A-6: shipQuote is the ship's prices for the good up, no stock.
-    ['deals', 'good', 'hi', 'lo', 'next', 'seconds', 'shipPays', 'shipQuote', 'skipped', 'slowed', 'speed', 'stage', 'status', 'storeBuys', 'storeForSale', 'storeSells', 'total', 'units', 'walkers'],
+    ['deals', 'good', 'hi', 'lo', 'next', 'receipt', 'seconds', 'shipPays', 'shipQuote', 'skipped', 'slowed', 'speed', 'stage', 'status', 'storeBuys', 'storeForSale', 'storeSells', 'tally', 'total', 'units', 'upNext', 'walkers'],
   );
+  // A-5: a seat's receipt and month's total ride only on its own view, never the board's.
+  expect(auction.receipt, NEW_FIELD).toBeNull();
+  expect(auction.tally, NEW_FIELD).toBeNull();
   // A-6: `line` names a house ('store', 'ship') and `order` holds units of the good that is up: no other good's stock.
   for (const w of auction.walkers) expect(keysOf(w), NEW_FIELD).toEqual(['at', 'dir', 'done', 'id', 'line', 'order', 'price', 'side', 'units']);
   for (const r of auction.status) expect(keysOf(r), NEW_FIELD).toEqual(['had', 'id', 'made', 'need', 'now', 'spoils', 'used']);
