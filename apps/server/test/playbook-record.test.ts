@@ -132,7 +132,8 @@ describe('AI playbooks in a keyless game record', { timeout: 60_000 }, () => {
     expect(record.seats.filter((s) => s.isAi).map((s) => [s.id, s.smart])).toEqual([[SMART, true], [CLASSIC, false]]);
 
     const entries = playbooksOf(record);
-    expect(entries.filter((e) => e.seat === SMART), 'the Smart seat writes none').toEqual([]);
+    // A Smart seat drafts no playbook of its own (RULE-6 row 3); the land-grant ones WS2's writer records are not its.
+    expect(entries.filter((e) => e.seat === SMART && e.phase === 'planning'), 'the Smart seat writes no planning playbook').toEqual([]);
     const classic = entries.filter((e) => e.seat === CLASSIC);
     expect(classic.map((e) => ({ month: e.month, phase: e.phase })), 'one planning playbook per month played').toEqual([
       { month: 1, phase: 'planning' },
