@@ -751,6 +751,12 @@ inside a wall; money and stock change only through game.ts rules; development en
   The TV is unchanged: TvDevelop already keeps the ticker and the speakers. **In the mock at 7c88b4cb** (a change since
   Heiko's approval of the arcade mock, named to him at the walking table test): at 844 only the newest line, wrapped to
   at most three rows (a cut line was unreadable at the side room's 98 px); the laptop's rail the newest two, wrapped.
+  **Built (WS6, on #291's branch):** the ticker follows the status: the side room where the layout has one (844 with
+  four seats), else the top bar (one cut line; 667, and 844 on the 13×7 and 19×11 maps). While month 1's wait words
+  show, the side-room ticker drops to one cut row: the wait words are never cut. In the hall at 667 one cut row at the
+  compact room's foot: every development layout has a ticker. A speaker the screen does not draw (in the other space,
+  or done) is anchored by their ticker line, creature and name: the walking screen has no seat row, so no fallback
+  bubble.
 - **AM-30 (2026-11-04, PR-9's review, ruled by WS6).** (1) **C11's 0 px² binds the layers placed on the screen** (the
   scramble banner, the glint strip, the TV's moment lines): they keep off the store, your plots and the controls,
   measured on the drawn text at 844 and 667, the longest line included. **The layers drawn where a moment happens**
