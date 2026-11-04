@@ -250,10 +250,12 @@ describe('the sim referees the floor as the server will (arcade C10)', () => {
       expect(applyReach(state, floor, 'ai1', secondsLeft, cfg).payout).toBe(expected);
       expect(state.players[1]!.money - money).toBe(expected);
     });
-    // And in played turns: every pub paid what its button quoted, from the same pubPayoutFor.
+    // And in played turns: every pub paid what its button quoted, from the same pubPayoutFor. Every turn pressed one,
+    // but where a wolf's bite cost it the pub (T-AC-5's one excuse, AM-26).
     const turns = steeredTurns(12).flat();
     for (const t of turns) expect(t.payout, `month ${t.month} ${t.id}`).toBe(t.quoted);
-    expect(turns.every((t) => t.quoted !== null)).toBe(true);
+    expect(turns.filter((t) => t.quoted === null && !t.biteCostPub).map((t) => `month ${t.month}, ${t.id}`), 'no pub pressed, no excuse').toEqual([]);
+    expect(turns.filter((t) => t.quoted !== null).length, 'pubs pressed').toBeGreaterThan(turns.length / 2);
   });
 
   it("AM-26: the bite is the excuse only where it cost the pub: the walk there fitted the clock unbitten, and bitten it does not", () => {
