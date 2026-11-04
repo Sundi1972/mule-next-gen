@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { advancePhase, createGame, orderGeoDrone, type GameState } from '../src/index.js';
+import { advancePhase, cloneForSim, createGame, observe, orderGeoDrone, type GameState } from '../src/index.js';
 
 /**
  * H-3 (WS6 UX audit): the land grant's "Your drone: …" line. At the grant the drone's plots are analysed and its
@@ -53,5 +53,20 @@ describe("H-3: what the drone surveyed survives the land grant (droneFound)", ()
     expect(ossa(state).droneFound).toEqual([]);
     toPhase(state, 'landGrant');
     expect(ossa(state).droneFound, 'no drone in month 2').toEqual([]);
+  });
+
+  it("H-3: an AI seat's observation never carries another player's droneFound; a what-if copy does not share it", () => {
+    const state = newGame();
+    orderGeoDrone(state, 'ossa', twoFree(state));
+    toPhase(state, 'landGrant');
+    const found = ossa(state).droneFound.slice();
+
+    const seenByBrix = observe(state, 'brix');
+    expect(seenByBrix.players.find((p) => p.id === 'ossa')!.droneFound).toEqual([]);
+    expect(observe(state, 'ossa').players.find((p) => p.id === 'ossa')!.droneFound, 'her own stays hers').toEqual(found);
+
+    const sim = cloneForSim(state);
+    sim.players.find((p) => p.id === 'ossa')!.droneFound.push(-1);
+    expect(ossa(state).droneFound).toEqual(found);
   });
 });
