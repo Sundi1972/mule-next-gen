@@ -108,8 +108,7 @@ export class Playbooks {
         console.error(`playbooks: seat ${seat.id} has no draft for month ${state.month}: ${messageOf(err)}`);
         continue;
       }
-      // A reply's edits apply to the draft its brief showed, never to a later one whose plan letters may name other plots.
-      const playbook = asked?.written ? this.decide(state, seat.id, asked.draft, asked.written, source.validate) : this.decide(state, seat.id, now, null, source.validate);
+      const playbook = this.decide(state, seat.id, now, asked, source.validate);
       this.playing.set(`${seat.id}/${state.month}`, playbook);
       if (this.writers.has(seat.id)) this.options.record?.({ seat: seat.id, month: state.month, phase: 'landGrant', playbook });
     }
@@ -126,18 +125,23 @@ export class Playbooks {
   }
 
   /**
-   * The playbook that takes effect, by playbookFrom: `draft` is the one the reply's brief showed when a reply came in
-   * time, else the engine's draft now. A validator that throws leaves the engine's playbook.
+   * The playbook that takes effect, by playbookFrom. A reply that came in time has its edits validated against the
+   * draft its brief showed, never a later one whose plan letters may name other plots; only a playbook by 'llm' comes
+   * from that draft. Otherwise (no reply, nothing accepted, a validator that throws) the engine's draft `now` plays.
+   * The reply's feedback is kept either way.
    */
-  private decide(state: GameState, seat: PlayerId, draft: Playbook, written: WriterReply | null, validate: ValidatePlan): Playbook {
+  private decide(state: GameState, seat: PlayerId, now: Playbook, asked: Ask | null, validate: ValidatePlan): Playbook {
+    const engine: Playbook = { ...now, by: 'engine' };
+    const written: WriterReply | null = asked?.written ?? null;
+    if (!asked || !written) return engine;
     let made: ReturnType<typeof playbookFrom>;
     try {
-      made = playbookFrom(validate, state, draft, written);
+      made = playbookFrom(validate, state, asked.draft, written);
     } catch (err) {
       console.error(`playbooks: validatePlan failed for seat ${seat}, the engine's playbook plays: ${messageOf(err)}`);
-      made = { playbook: { ...draft, by: 'engine' }, feedback: written && { refused: written.refused, rejected: [] } };
+      made = { playbook: engine, feedback: { refused: written.refused, rejected: [] } };
     }
     if (made.feedback) this.feedback.set(seat, made.feedback);
-    return made.playbook;
+    return made.playbook.by === 'llm' ? made.playbook : engine;
   }
 }
