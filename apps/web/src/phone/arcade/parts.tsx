@@ -176,10 +176,10 @@ export function PlotCard({ seat, now, at }: { seat: ArcadeSeat; now: number; at:
 
 // --- V-2 · your plots, and what each suits, while you choose ---------------------------------------
 
-/** The side room, in the store while you choose: each plot of yours, what it suits, and what stands on it. */
 /** The most rows the hall's side room has for your plots above the button at 844. */
 const LEGEND_ROWS = 5;
 
+/** The side room, in the store while you choose: each plot of yours, what it suits, and what stands on it. */
 export function PlotsLegend({ seat, short = false }: { seat: ArcadeSeat; short?: boolean }) {
   if (seat.mine?.space !== 'hall' || seat.me.carriedMule !== 'empty') return null;
   // Free plots first: they are what an empty MULE is outfitted for. Past five the side room would reach the button.
