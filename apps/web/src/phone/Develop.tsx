@@ -451,7 +451,7 @@ function ClockWaitsChip({ seconds }: { seconds: number }) {
         <rect x={6} y={5} width={4} height={14} rx={1} />
         <rect x={14} y={5} width={4} height={14} rx={1} />
       </svg>
-      0:{seconds}
+      {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, '0')}
     </span>
   );
 }
