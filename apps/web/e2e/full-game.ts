@@ -264,9 +264,9 @@ async function bidUntilLeading(buyer: Phone, truth: Truth, listing: { id: string
 }
 
 /**
- * Development: buys a MULE in the store's corral, outfits it for Energy, walks it out and installs it on the plot. The
- * walk out takes its time, and Install here pressed before the colonist reaches the plot does nothing, so it presses
- * until the server has the plot outfitted, then reads the phone's confirmation.
+ * Development: buys a MULE in the store's corral, outfits it for Energy, walks it out and installs it on the plot.
+ * Install here starts a walk to the plot, and the MULE goes in on arrival; a hungry or sick colonist walks slowly, so
+ * the wait is development's own clock, read first from the server's plot and then from the phone.
  */
 async function buyAndInstallAMule(phone: Phone, truth: Truth): Promise<void> {
   const { page } = phone;
@@ -275,14 +275,13 @@ async function buyAndInstallAMule(phone: Phone, truth: Truth): Promise<void> {
   await page.locator('[data-shop=corral]:not([disabled])').click({ timeout: PRESS_MS * 3 });
   await page.locator('[data-shop=energy]:not([disabled])').click({ timeout: PRESS_MS });
   await dev.getByRole('button', { name: 'Walk out to the map' }).click({ timeout: PRESS_MS });
-  const installed = () => truth.plotsOf(phone.id).some((t) => t.outfit === 'energy');
+  await dev.getByRole('button', { name: 'Install here' }).click({ timeout: PRESS_MS });
   const deadline = Date.now() + within(PHASE_MS.development);
-  while (!installed()) {
+  while (!truth.plotsOf(phone.id).some((t) => t.outfit === 'energy')) {
     check(Date.now() < deadline, `${phone.name}'s Install here puts the MULE on her plot within development`);
-    await dev.getByRole('button', { name: 'Install here' }).click({ timeout: 500 }).catch(() => undefined);
-    await new Promise((r) => setTimeout(r, 200));
+    await new Promise((r) => setTimeout(r, 100));
   }
-  await dev.getByText(/Your MULE here makes/).waitFor({ timeout: PRESS_MS });
+  await dev.getByText(/Your MULE here makes/).waitFor({ timeout: Math.max(PRESS_MS, deadline - Date.now()) });
   await goToThePub(page);
 }
 
