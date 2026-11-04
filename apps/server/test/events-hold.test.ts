@@ -314,15 +314,20 @@ describe('T-AC-8: an untimed phase and a phase without events are not held (RULE
 
   it('T-AC-8: planning is not held: its events play while people press Ready, and Ready moves the month on', () => {
     nobodyRollsSick();
-    const { game, state, advance } = toPhase('upkeep', []);
-    // Month 1's report stands in for a report month 2's planning fired an event into: no planning event fires today.
-    const report = state.history.at(-1)!;
-    report.month = 2;
-    report.events = [event('drought', 'planning')];
-    readyAll(game);
-    advance(1);
+    const { game, advance } = toPhase('upkeep', []);
+    // Month 2's planning fires a Federation tax for certain: a headline of its own.
+    const tax = EVENTS.colony.federationTax;
+    const was = { phases: { ...tax.phases }, cap: tax.cap };
+    Object.assign(tax, { phases: { planning: 1 }, cap: 1 });
+    try {
+      readyAll(game);
+      advance(1);
+    } finally {
+      Object.assign(tax, was);
+    }
     const view: MuleView = game.viewFor(null);
     expect({ month: view.month, phase: view.phase }).toEqual({ month: 2, phase: 'planning' });
+    expect(view.events!.map((e) => e.key)).toEqual(['federationTax']);
     expect(view.eventShow).toMatchObject({ showMs: 8_800, held: false });
     readyAll(game);
     expect(game.viewFor(null).phase).not.toBe('planning');
