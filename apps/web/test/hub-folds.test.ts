@@ -5,19 +5,19 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { TableClient } from '../src/net/client';
-import { TableChat, TickerLines } from '../src/chat/Chat';
 import { ClientProvider } from '../src/net/react';
 import { PhoneGameProvider } from '../src/phone/game';
 import { Hub } from '../src/phone/hub/Hub';
-import { deskAsks, drawnSlots, goTo, settle, type HubSeat, type HubSlots } from '../src/phone/hub/slots';
+import type { HubSlots } from '../src/phone/hub/slots';
 import { HUB_SLOTS } from '../src/phone/hub/today';
 import { aMuleView, aPlayer } from './fixtures/views';
 
 /**
- * E-11 (UX audit, WS6's mock 7f7f1814): while the Governor's desk is open the rail gives it the room. The footer folds
- * its "Waiting for" names (the header's ready count says it in brief) and the chat ticker keeps its newest line; the
- * seat row stays. Picking another desk brings both back; Set does not. The browser half, where the desk is measured
- * against the footer, is e2e/governor-desk.ts.
+ * E-11 (UX audit) under C20's rule on a phone (Heiko's "(c) chat at the bottom", WS6's mock 529bc7f8 ?ticker=under):
+ * the table chat follows the rail's content, so the Governor's desk folds nothing. The footer names who is still
+ * planning, the ticker keeps both lines, and the seat row comes after the open desk, not in the rail's header. The
+ * static render has no width, so it draws the phone's layout, as the shell does before it measures. The browser half,
+ * where the desk is measured against the footer at 844 and 667, is hub-steps.ts's governorsDeskFits.
  */
 
 const player = (id: string, name: string, slot: number, isAi = false): PlayerView => aPlayer({ id, name, slot, isAi });
@@ -85,7 +85,7 @@ const SAID: ChatMessage[] = [
  */
 const RENDERED: HubSlots = { ...HUB_SLOTS, tools: [], desks: HUB_SLOTS.desks.filter((d) => d.id !== 'talk') };
 
-/** Lena's planning hub, with the table chat in the rail's header, as the game draws it. */
+/** Lena's planning hub, as the game draws it on a phone. */
 function clientFor(game: MuleView): TableClient {
   return {
     subscribe: () => () => {},
@@ -104,52 +104,30 @@ function lenasHub(game: MuleView): string {
 }
 
 /**
- * What the rail shows: the open desk, the footer's names (shown, and in the markup at all, which a screen reader reads
- * even when they are visually folded), the seat row, and the ticker's lines by id, newest first.
+ * What the rail shows: the open desk, the footer's names (shown, not hidden for a screen reader only), where the seat
+ * row is (in the rail's header, or under the open desk's body), and the ticker's lines by id, newest first.
  */
 function rail(html: string) {
-  const spoken = html.includes('data-testid="waiting-for"');
+  const row = html.indexOf('data-testid="seat-row"');
+  const header = html.indexOf('</header>');
+  const desk = html.search(/data-testid="desk-body-[a-z]+"/);
   return {
     desk: /aria-selected="true"[^>]*data-testid="desk-([a-z]+)"/.exec(html)?.[1] ?? null,
-    names: spoken && !/class="sr-only"[^>]*><span[^>]*data-testid="waiting-for"/.test(html),
-    spoken,
-    seatRow: html.includes('data-testid="seat-row"'),
+    names: html.includes('data-testid="waiting-for"') && !/class="sr-only"[^>]*><span[^>]*data-testid="waiting-for"/.test(html),
+    seatRow: row < 0 ? null : row < header ? 'header' : desk >= 0 && row > desk ? 'under the desk' : 'elsewhere',
     ticker: [...html.matchAll(/data-testid="chat-line-(\d+)"/g)].map((m) => Number(m[1])),
+    /** The Now card: folded to its title (a button), or whole. */
+    now: /<button[^>]*data-testid="now"/.test(html) ? 'folded' : /<section[^>]*data-testid="now"/.test(html) ? 'whole' : null,
   };
 }
 
-describe('the Governor desk folds (E-11)', () => {
+describe('the Governor desk beside the chat, which follows the rail on a phone (E-11, C20)', () => {
   it.each<[string, MuleView, ReturnType<typeof rail>]>([
-    ['Lena governs: her desk opens first, the names fold, the ticker keeps its newest line', month(true), { desk: 'governor', names: false, spoken: true, seatRow: true, ticker: [2] }],
-    ['after Set (4% from 5%), the desk stays open and still folded', month(true, 4, 5), { desk: 'governor', names: false, spoken: true, seatRow: true, ticker: [2] }],
-    ['Ossa governs: Lena has no Governor desk, the names and both lines show', month(false), { desk: 'colony', names: true, spoken: true, seatRow: true, ticker: [2, 1] }],
-  ])('E-11: %s', (_, game, shows) => {
+    ['Lena governs: her desk opens first; the names and both lines show, the seat row under the desk', month(true), { desk: 'governor', names: true, seatRow: 'under the desk', ticker: [2, 1], now: 'folded' }],
+    ['after Set (4% from 5%), the desk stays open and nothing folds', month(true, 4, 5), { desk: 'governor', names: true, seatRow: 'under the desk', ticker: [2, 1], now: 'folded' }],
+    // H-7: in an ordinary month, with no desk asking first, Now folds too.
+    ['Ossa governs: Lena has no Governor desk, the names and both lines show, and Now is folded all the same', month(false), { desk: 'colony', names: true, seatRow: 'under the desk', ticker: [2, 1], now: 'folded' }],
+  ])('E-11, H-7: %s', (_, game, shows) => {
     expect(rail(lenasHub(game))).toEqual(shows);
-  });
-
-  it.each<[string, number | null, number[]]>([
-    ['asks for one', 1, [2]],
-    ['asks for none', 0, [2]],
-    ['asks for nothing', null, [2, 1]],
-  ])('E-11: the ticker keeps at least its newest line whatever a screen asks (%s)', (_, asked, lines) => {
-    const html = renderToStaticMarkup(createElement(ClientProvider, { client: clientFor(month(true)), children: createElement(TickerLines.Provider, { value: asked, children: createElement(TableChat) }) }));
-    expect(rail(html).ticker).toEqual(lines);
-  });
-
-  it('E-11: the fold holds while the desk that asked first is open: another desk unfolds, back to it folds again', () => {
-    const game = month(true);
-    const seat: HubSeat = { view: game, me: game.me!, self: PLAYERS[0]! };
-    const drawn = drawnSlots(HUB_SLOTS, seat);
-    const opens = settle({ desk: 'colony', tool: 'look', focus: null, first: null }, drawn, seat);
-    const colony = goTo(opens, { desk: 'colony' }, drawn);
-    const back = goTo(colony, { desk: 'governor' }, drawn);
-    const door = goTo(colony, { desk: 'governor', focus: 'tax' }, drawn);
-    expect([opens, colony, back, door].map((p) => deskAsks(p, p.desk))).toEqual([true, false, true, true]);
-    // It follows the desk the hub draws: a place still naming the asking desk, with another drawn, does not fold.
-    expect(deskAsks(opens, 'colony')).toBe(false);
-    // Nobody asks first (Ossa governs): nothing folds, whatever is open.
-    const ossas: HubSeat = { view: month(false), me: game.me!, self: PLAYERS[0]! };
-    const plain = settle({ desk: 'colony', tool: 'look', focus: null, first: null }, drawnSlots(HUB_SLOTS, ossas), ossas);
-    expect(deskAsks(plain, plain.desk)).toBe(false);
   });
 });

@@ -39,11 +39,9 @@ export function WaitingFor({ seats, me, tv = false, lead = 'Waiting for' }: { se
  * The planning footer on every phone and laptop. Before you're ready: who is still planning, then I'm ready. Once
  * you are, as the server has it: who you're waiting for. The host, once ready and while anyone is still planning,
  * can continue without them, after one confirming tap. `words` default to planning's at the election's stage;
- * `canReady` false greys the ready button, such as a ballot with nothing picked. `names` false folds who is still
- * planning above the button while a desk asks first (E-11, the Governor's tax): the header's ready count says it in brief,
- * and a screen reader still reads them.
+ * `canReady` false greys the ready button, such as a ballot with nothing picked.
  */
-export function ReadyBar({ words: given, canReady = true, names = true }: { words?: ReadyWords | undefined; canReady?: boolean | undefined; names?: boolean }) {
+export function ReadyBar({ words: given, canReady = true }: { words?: ReadyWords | undefined; canReady?: boolean | undefined }) {
   const client = useClient();
   const { table, view, self } = usePhoneGame();
   const [confirm, setConfirm] = useState(false);
@@ -58,15 +56,7 @@ export function ReadyBar({ words: given, canReady = true, names = true }: { word
   if (!footer.ready)
     return (
       <>
-        {footer.waiting.length > 0 &&
-          (names ? (
-            <WaitingFor seats={footer.waiting} me={self.id} />
-          ) : (
-            // Folded from sight, the names stay for a screen reader.
-            <span className="sr-only">
-              <WaitingFor seats={footer.waiting} me={self.id} />
-            </span>
-          ))}
+        {footer.waiting.length > 0 && <WaitingFor seats={footer.waiting} me={self.id} />}
         <Button size="lg" className="w-full @min-[1100px]/shell:h-14 @min-[1100px]/shell:text-lg" onClick={on('ready')} disabled={!canReady} data-testid="ready">
           {words.ready}
         </Button>

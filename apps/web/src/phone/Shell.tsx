@@ -1,7 +1,7 @@
 import { cx, PlayerMark, SPECIES_NAME, Timer } from '@mule/ui';
 import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { flushSync } from 'react-dom';
-import { TableChat } from '../chat/Chat';
+import { FallbackBubble, TableChat } from '../chat/Chat';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { fmt } from '../game/derive';
 import { useEscape } from './dialog';
@@ -72,7 +72,7 @@ export function NowCard({ now }: { now: Now }) {
 
 /**
  * The Now card that folds once read (WS6's month-end mock, UX audit H-7): folded it is one line, its title, and a tap
- * opens it. A new step opens it again (the title changing re-mounts it), so nothing new is missed.
+ * opens it. A new step re-mounts it folded (the title is its key), so the new title shows on its one line.
  */
 function FoldingNowCard({ now }: { now: Now }) {
   const [open, setOpen] = useState(false);
@@ -145,6 +145,7 @@ export function PhoneShell({
   rail,
   footer,
   fill = false,
+  standing,
   children,
 }: {
   phase: string;
@@ -161,6 +162,8 @@ export function PhoneShell({
   footer?: ReactNode;
   /** The content fills the main area without scrolling, as the map does. */
   fill?: boolean;
+  /** Under the money: where you stand against the others ("2nd of 4"); with the money, a tap opens the standings. */
+  standing?: { label: string; aria: string; onOpen: () => void } | undefined;
   children: ReactNode;
 }) {
   const { view, self, slot } = usePhoneGame();
@@ -213,15 +216,38 @@ export function PhoneShell({
                     <span className="hidden @min-[1100px]/shell:inline">To my phone</span>
                   </button>
                 )}
-                <span data-num className="ml-auto shrink-0 font-mono text-sm font-bold text-ink @min-[1100px]/shell:text-lg" data-testid="money">
-                  {fmt(self.money)} cr
-                </span>
+                {standing ? (
+                  <button
+                    type="button"
+                    onClick={standing.onOpen}
+                    aria-haspopup="dialog"
+                    aria-label={`${fmt(self.money)} cr. ${standing.aria}`}
+                    className="relative -my-1 ml-auto flex shrink-0 flex-col items-end rounded-chip py-0.5 hover:bg-holo-soft"
+                    data-testid="standing"
+                  >
+                    <span data-num className="font-mono text-sm font-bold leading-tight text-ink @min-[1100px]/shell:text-lg" data-testid="money">
+                      {fmt(self.money)} cr
+                    </span>
+                    <span className="flex items-center gap-0.5 text-[10px] font-semibold leading-tight text-holo @min-[1100px]/shell:text-sm" data-testid="standing-rank">
+                      {standing.label}
+                      <svg aria-hidden viewBox="0 0 24 24" width={10} height={10} fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M9 6l6 6-6 6" />
+                      </svg>
+                    </span>
+                  </button>
+                ) : (
+                  <span data-num className="ml-auto shrink-0 font-mono text-sm font-bold text-ink @min-[1100px]/shell:text-lg" data-testid="money">
+                    {fmt(self.money)} cr
+                  </span>
+                )}
               </div>
-              <TableChat />
+              {/* The table chat (C20): in the header from WIDE_PX; on a phone it follows the rail's content, its bubble here. */}
+              {wide ? <TableChat /> : <FallbackBubble />}
             </header>
             <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-3 py-2.5 *:shrink-0 short:gap-2 @min-[1100px]/shell:gap-4 @min-[1100px]/shell:px-5 @min-[1100px]/shell:py-4">
               {now && (foldNow ? <FoldingNowCard key={now.title} now={now} /> : <NowCard now={now} />)}
               {rail}
+              {!wide && <TableChat under />}
             </div>
             {footer && (
               <div
