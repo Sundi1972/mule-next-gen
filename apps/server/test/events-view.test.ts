@@ -103,6 +103,7 @@ function playRealMonths(lastMonth: number) {
   for (let i = 0; i < 1_000_000 && !months.has(lastMonth); i++) {
     const phase = game.viewFor(null).phase;
     if (phase === 'planning' || phase === 'upkeep') readyAll(game);
+    pressThroughSidePick(game);
     fake.advance(100);
   }
   return (month: number) => {
@@ -343,6 +344,7 @@ describe('T-AC-10: the view carries the current phase\'s events, when their show
     readyAll(game);
     for (let i = 0; i < 100_000 && game.viewFor(null).month < 2; i++) {
       if (game.viewFor(null).phase === 'upkeep') readyAll(game);
+      pressThroughSidePick(game);
       fake.advance(100);
     }
     const view = game.viewFor(null);
