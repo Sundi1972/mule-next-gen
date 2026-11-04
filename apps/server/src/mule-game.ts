@@ -728,11 +728,14 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     this.ctx.changed();
   }
 
-  /** Development's two early ends, checked again whenever a colonist arrives or finishes an assay. */
-  private checkEarlyEnd(): void {
+  /**
+   * Development's two early ends, checked again whenever a colonist arrives or finishes an assay. A steered tick passes
+   * its own time `at`, so a late tick judges the clock's end as the sim does (HC-4); everyone else, the wall clock.
+   */
+  private checkEarlyEnd(at?: number): void {
     this.startClockOnceAllIn();
     if (this.endWhenSettled) this.checkAllReady();
-    this.checkDevelopmentOver();
+    this.checkDevelopmentOver(at);
   }
 
   /** True when no colonist is walking, so ending development drops no move; an assay applied on arrival, so it holds nothing. */
@@ -891,12 +894,12 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     this.nextPhase();
   }
 
-  /** During development: true once a player went to the pub or ran out of time. */
-  private doneDeveloping(seatId: string): boolean {
+  /** During development: true once a player went to the pub or ran out of time by `at`, the wall clock unless a tick's own. */
+  private doneDeveloping(seatId: string, at = this.ctx.now()): boolean {
     const state = this.requireState();
     if (state.phase !== 'development') return false;
     const p = state.players.find((q) => q.id === seatId);
-    return !!p?.doneDeveloping || (this.devEndsAt !== null && this.devEndsAt <= this.ctx.now());
+    return aiTurnOver(!!p?.doneDeveloping, this.devEndsAt, at);
   }
 
   /**
@@ -925,10 +928,10 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   }
 
   /** Development ends once every player, AI included, is at the pub, out of time or away, and no colonist is still out. */
-  private checkDevelopmentOver(): void {
+  private checkDevelopmentOver(at?: number): void {
     const state = this.requireState();
     if (state.phase !== 'development') return;
-    if (this.seats.every((s) => this.away.has(s.id) || this.doneDeveloping(s.id)) && this.colonistsSettled()) this.nextPhase();
+    if (this.seats.every((s) => this.away.has(s.id) || this.doneDeveloping(s.id, at)) && this.colonistsSettled()) this.nextPhase();
   }
 
   private requireState(): GameState {
@@ -1353,7 +1356,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     }
     this.ctx.frame(devFrame(floor));
     steering.stats.frames++;
-    this.checkEarlyEnd();
+    this.checkEarlyEnd(at);
     if (this.steering !== steering) return true;
     let changed = (before !== null && stableJson(state) !== before) || waited !== this.clockWaits;
     for (const s of this.seats) {
@@ -1376,10 +1379,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   private seatInput(steering: Steering, seatId: string, tick: number, at: number, secondsLeft: number): FloorInput {
     const ai = this.ai.get(seatId);
     if (!ai) return steering.inputs.take(seatId, tick);
-    const state = this.requireState();
-    const done = !!state.players.find((p) => p.id === seatId)?.doneDeveloping;
-    if (state.phase === 'development' && aiTurnOver(done, this.devEndsAt, at)) return IDLE_INPUT;
-    return ai.developSteer(state, steering.floor, secondsLeft, steering.cfg, this.clockWaits && this.isIn(seatId));
+    if (this.doneDeveloping(seatId, at)) return IDLE_INPUT;
+    return ai.developSteer(this.requireState(), steering.floor, secondsLeft, steering.cfg, this.clockWaits && this.isIn(seatId));
   }
 
   /** Why the rules hold back a press the floor would make, or null: in month 1 a seat already in waits (AM-3). */
