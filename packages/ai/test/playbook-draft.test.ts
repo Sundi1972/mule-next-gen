@@ -218,6 +218,7 @@ describe('the draft writes the parts of its phase', () => {
     }
   });
 
+  // trace-allow: the plan's RULE-5 table test (spec C2); the spec's RULE-5 names no AC, INV-1 (T-AC-3) consumes it in Task 1.7
   it("RULE-5: each phase's parts", () => {
     // planning: the strategy, an empty planning part (no listing until RULE-12, no drone), the land grant part.
     const planning = draftAt('planning', 2);

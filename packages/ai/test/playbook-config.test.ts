@@ -3,6 +3,7 @@ import { AI_PLANS } from '@mule/engine';
 import { applySets } from '../src/sim.js';
 
 describe('AI_PLANS is a sweepable config block', () => {
+  // trace-allow: the plan's C3 contract test (spec C3, HC-5): the spec gives the --set reachability no AC id
   it('C3: every AI_PLANS number is reachable by --set', () => {
     const saved = { cashFloorMax: AI_PLANS.bounds.cashFloorMax, monopolist: AI_PLANS.leaning.trader.monopolist, on: AI_PLANS.on };
     try {
