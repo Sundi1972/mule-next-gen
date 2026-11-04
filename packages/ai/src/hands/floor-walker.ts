@@ -3,6 +3,7 @@ import {
   doorOutside,
   HALL_DOORS,
   IDLE_INPUT,
+  inStore,
   MS_PER_SECOND,
   pathTo,
   placeAt,
@@ -128,7 +129,7 @@ export function outOfWallBand(state: GameState, cfg: FloorConfig, c: FloorPoint)
   const store = state.tiles.find((t) => t.terrain === 'store')!;
   const body = cfg.steer.bodyTiles;
   const band = { x0: store.x - body, x1: store.x + 1 + body, y0: store.y - body, y1: store.y + 1 + body };
-  if (!(c.x > band.x0 && c.x < band.x1 && c.y > band.y0 && c.y < band.y1)) return null;
+  if (!inStore(store, body, c.x, c.y)) return null;
   const open = (p: FloorPoint) => {
     const t = tileAt(state.tiles, state.width, Math.floor(p.x), Math.floor(p.y));
     return t !== undefined && terrainShare(t.terrain, cfg) > 0;
