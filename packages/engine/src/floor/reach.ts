@@ -8,21 +8,31 @@
  */
 import { DEVELOPMENT } from '../config.js';
 import { RuleError } from '../errors.js';
-import { analysePlot, buyMule, fitFilter, hasAnalysed, installMule, mulePriceFor, outfitCostFor, outfitMule, player, visitPub } from '../game.js';
+import { analysePlot, buyMule, catchMule, fitFilter, hasAnalysed, installMule, mulePriceFor, outfitCostFor, outfitMule, player, sellPelts, visitPub } from '../game.js';
 import { tileAt } from '../grid.js';
 import type { GameState, Outfit, Player, Tile } from '../types.js';
 import { MS_PER_SECOND } from '../units.js';
-import { doorOutside, floorConfig, isAssaying, type DevFloor, type FloorColonist, type FloorConfig, type FloorPoint } from './floor.js';
+import { nameOf } from './chance.js';
+import { doorOutside, floorConfig, isAssaying, isStunned, type DevFloor, type FloorColonist, type FloorConfig, type FloorPoint } from './floor.js';
+import { grabGlint, inGrabReach } from './glint.js';
 import { HALL_BAYS, HALL_DOORS, HALL_OUTFITTERS, placeAt, type HallDoor, type HallPlace } from './hall.js';
+import { afterSale } from './scramble.js';
+import { strikeTarget } from './wolves.js';
 
 /** Why a row's press is refused: money short by `short` credits, or the corral empty. */
 export type ReachRefusal = { kind: 'money'; short: number } | { kind: 'soldOut' };
 
 /** Where a dim button points when nothing is in reach, or why the seat has nothing to press now. */
-export type ReachHint = 'over' | 'done' | 'assaying' | 'corral' | 'outfitter' | 'door' | 'store' | 'outfitFirst' | 'plot' | 'noMules';
+export type ReachHint = 'over' | 'done' | 'assaying' | 'stunned' | 'run' | 'dodge' | 'catch' | 'corral' | 'outfitter' | 'door' | 'store' | 'outfitFirst' | 'plot' | 'noMules';
 
 /** The one thing a press does now (RULE-3), with what its words and its press need. */
 export type Reach =
+  /** Wolves met, choosing: the press fights (the stick runs); stepFloor makes the move. */
+  | { kind: 'fight'; enabled: true }
+  /** In a fight, a wolf open within reach: the press strikes it; stepFloor makes the move. */
+  | { kind: 'strike'; enabled: true }
+  | { kind: 'grab'; enabled: true; plot: FloorPoint }
+  | { kind: 'catch'; enabled: true }
   | { kind: 'enter'; enabled: true; door: HallDoor }
   | { kind: 'sell'; enabled: true; pelts: number; price: number }
   | { kind: 'buy'; enabled: boolean; price: number; why: ReachRefusal | null }
@@ -56,6 +66,7 @@ export interface Press {
 }
 
 interface Standing {
+  floor: DevFloor;
   state: GameState;
   cfg: FloorConfig;
   colonist: FloorColonist;
@@ -87,6 +98,27 @@ function shorePlot(state: GameState, cfg: FloorConfig, c: FloorColonist, tile: T
   return lakes.reduce<Tile | null>((best, t) => (best && gap(best) <= gap(t) ? best : t), null);
 }
 
+/** Rows 1 and 2: wolves met. Choosing, FIGHT; running, nothing to press; fighting, STRIKE at a wolf open, else dodge. */
+const wolves: Row = ({ floor, cfg, colonist: c }) => {
+  const e = c.encounter;
+  if (!e) return null;
+  if (e.stage === 'choose') return { kind: 'fight', enabled: true };
+  if (e.stage === 'chase') return dim('run');
+  return strikeTarget(c, cfg) >= 0 && floor.tick >= e.recoverUntilTick ? { kind: 'strike', enabled: true } : dim('dodge');
+};
+
+/** Row 3: the lit glint within GLINT.grabReach. */
+const grab: Row = ({ floor, cfg, colonist: c }) => {
+  const g = inGrabReach(floor, c, cfg);
+  return g && { kind: 'grab', enabled: true, plot: { x: g.x, y: g.y } };
+};
+
+/** Row 4: the seat's bolted MULE within WOLVES.catchReachTiles, on the map. */
+const catchIt: Row = ({ cfg, colonist: c, player: p }) => {
+  if (!p.muleBolted || c.space !== 'map' || !c.lead) return null;
+  return Math.hypot(c.lead.x - c.x, c.lead.y - c.y) <= cfg.wolves.catchReachTiles ? { kind: 'catch', enabled: true } : null;
+};
+
 const enter: Row = ({ state, cfg, colonist: c }) => {
   if (c.space !== 'map') return null;
   const door = HALL_DOORS.find((d) => {
@@ -112,17 +144,17 @@ const OUTFITTERS = [...HALL_OUTFITTERS, ...HALL_BAYS, 'greenBelt'] as const sati
 
 const outfit: Row = ({ state, player: p, place }) => {
   const good = OUTFITTERS.find((g) => g === place);
-  if (!good || p.carriedMule !== 'empty') return null;
+  if (!good || p.carriedMule !== 'empty' || p.muleBolted) return null;
   const cost = outfitCostFor(state, p.id, good);
   const why = shortBy(p, cost);
   return { kind: 'outfit', enabled: !why, good, cost, why };
 };
 
-const leave: Row = ({ player: p, place }) => (isDoor(place) ? { kind: 'leave', enabled: true, door: place, leading: p.carriedMule !== null } : null);
+const leave: Row = ({ player: p, place }) => (isDoor(place) ? { kind: 'leave', enabled: true, door: place, leading: p.carriedMule !== null && !p.muleBolted } : null);
 
 const install: Row = ({ state, cfg, colonist: c, player: p, tile }) => {
   const good = p.carriedMule;
-  if (!tile || !good || good === 'empty') return null;
+  if (!tile || !good || good === 'empty' || p.muleBolted) return null;
   const plot = tile.owner === p.id ? tile : cfg.steer.lakeMode === 'shore' ? shorePlot(state, cfg, c, tile, p.id) : null;
   return plot && { kind: 'install', enabled: true, good, plot: at(plot), fromShore: plot !== tile, replaces: plot.outfit };
 };
@@ -142,14 +174,15 @@ const pub: Row = ({ state, cfg, player: p, place, secondsLeft }) => {
   return { kind: 'pub', enabled: true, payout };
 };
 
-/** RULE-3's rows 5 to 13 in its order: the first that holds is the reach, and row 14 is none. */
+/** RULE-3's rows 1 to 13 in its order: the first that holds is the reach, and row 14 is none. */
 // Row 11a, TAKE MULE, slots in after filter: any earlier, it would hide ANALYSE and FIT FILTER on a plot with a MULE.
-const ROWS: readonly Row[] = [enter, sell, buy, outfit, leave, install, analyse, filter, pub];
+const ROWS: readonly Row[] = [wolves, grab, catchIt, enter, sell, buy, outfit, leave, install, analyse, filter, pub];
 
 const dim = (hint: ReachHint): Reach => ({ kind: 'none', enabled: false, hint });
 
 function hintFor({ state, colonist: c, player: p }: Standing): ReachHint {
   const hall = c.space === 'hall';
+  if (p.muleBolted) return 'catch';
   if (!p.carriedMule) return state.store.mules <= 0 ? 'noMules' : hall ? 'corral' : 'store';
   if (p.carriedMule === 'empty') return hall ? 'outfitter' : 'outfitFirst';
   return hall ? 'door' : 'plot';
@@ -167,7 +200,9 @@ export function reachOf(floor: DevFloor, state: GameState, seat: string, cfg: Fl
   const colonist = floor.colonists.find((c) => c.id === seat);
   if (!colonist) throw new Error(`No colonist on the floor for ${seat}`);
   if (isAssaying(colonist, floor.tick)) return dim('assaying');
+  if (isStunned(colonist, floor.tick)) return dim('stunned');
   const s: Standing = {
+    floor,
     state,
     cfg,
     colonist,
@@ -184,19 +219,33 @@ export function reachOf(floor: DevFloor, state: GameState, seat: string, cfg: Fl
 }
 
 /**
- * Presses the button for a seat: the game.ts rule for its reach on this floor, the pub paying for `secondsLeft`.
- * ENTER, LEAVE and a dim reach change nothing here; stepFloor makes the door moves. Throws RuleError for SELL.
+ * Presses the button for a seat: the game.ts rule for its reach on this floor, the pub paying for `secondsLeft`, and
+ * the floor after it (SELL drops the pelts sold, GRAB the glint, CATCH the bolt; a sale may call or count the
+ * scramble). ENTER, LEAVE, FIGHT, STRIKE and a dim reach change nothing here: stepFloor makes those moves.
  */
 export function applyReach(state: GameState, floor: DevFloor, seat: string, secondsLeft: number, cfg: FloorConfig = floorConfig()): Press {
   const reach = reachOf(floor, state, seat, cfg, { secondsLeft });
   const press: Press = { reach, seconds: null, payout: null, floor };
   if (!reach.enabled) return press;
   switch (reach.kind) {
-    case 'sell':
-      throw new RuleError('The store does not buy pelts yet');
+    case 'sell': {
+      // sellPelts trusts the count, so the floor drops the pelts it sold.
+      const paid = sellPelts(state, seat, reach.pelts);
+      const sold = withColonist(floor, seat, { pelts: 0 });
+      const beat = { kind: 'store' as const, who: seat, text: `${nameOf(state, seat)} sold ${reach.pelts} ${reach.pelts === 1 ? 'pelt' : 'pelts'}: +${credits(paid)}` };
+      return { ...press, floor: { ...sold, moments: { ...sold.moments, beats: [...sold.moments.beats, beat] } } };
+    }
+    case 'grab':
+      return { ...press, floor: grabGlint(state, floor, seat, cfg) };
+    case 'catch': {
+      catchMule(state, seat);
+      const caught = withColonist(floor, seat, { bolt: null });
+      const beat = { kind: 'wolves' as const, who: seat, text: `${nameOf(state, seat)} caught the MULE` };
+      return { ...press, floor: { ...caught, moments: { ...caught.moments, beats: [...caught.moments.beats, beat] } } };
+    }
     case 'buy':
       buyMule(state, seat);
-      return press;
+      return { ...press, floor: afterSale(state, floor, seat, cfg) };
     case 'outfit':
       outfitMule(state, seat, reach.good);
       return press;
@@ -212,10 +261,17 @@ export function applyReach(state: GameState, floor: DevFloor, seat: string, seco
       return press;
     case 'pub':
       return { ...press, payout: visitPub(state, seat, secondsLeft) };
+    case 'fight':
+    case 'strike':
     case 'enter':
     case 'leave':
       return press;
   }
+}
+
+/** The floor with one seat's colonist changed. */
+function withColonist(floor: DevFloor, seat: string, patch: Partial<FloorColonist>): DevFloor {
+  return { ...floor, colonists: floor.colonists.map((c) => (c.id === seat ? { ...c, ...patch } : c)) };
 }
 
 /** The floor with the seat's colonist assaying for `seconds`, in whole ticks. */
@@ -242,6 +298,10 @@ const HINT: Record<ReachHint, readonly [string, string | null]> = {
   over: ['DEVELOPMENT OVER', null],
   done: ['IN THE PUB', 'turn over'],
   assaying: ['ASSAYING', null],
+  stunned: ['STUNNED', null],
+  run: ['RUN!', 'to the store or your plot'],
+  dodge: ['DODGE', null],
+  catch: ['CATCH YOUR MULE', 'it bolted'],
   corral: ['TO THE CORRAL', null],
   outfitter: ['TO AN OUTFITTER', null],
   door: ['TO A DOOR', null],
@@ -260,6 +320,14 @@ const priced = (price: number, why: ReachRefusal | null) => (why?.kind === 'mone
 export function reachWords(reach: Reach): ReachWords {
   const say = (verb: string, detail: string | null = null): ReachWords => ({ verb, detail, enabled: reach.enabled });
   switch (reach.kind) {
+    case 'fight':
+      return say('FIGHT', 'or push the stick to run');
+    case 'strike':
+      return say('STRIKE!');
+    case 'grab':
+      return say('GRAB THE GLINT');
+    case 'catch':
+      return say('CATCH MULE');
     case 'enter':
       return say('ENTER STORE');
     case 'sell':

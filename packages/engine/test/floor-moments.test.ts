@@ -85,7 +85,7 @@ const moved = (floor: DevFloor, id: string, patch: Partial<FloorColonist>): DevF
  */
 function tick(state: GameState, floor: DevFloor, inputs: Record<string, FloorInput>, config: FloorConfig = cfg): DevFloor {
   const spent = doorPresses(floor, state, inputs, config);
-  let next = settleMoments(state, stepFloor(floor, state, inputs, TICK, config), config);
+  let next = settleMoments(state, stepFloor(floor, state, inputs, TICK, config));
   for (const id of pressOrder(next, Object.keys(inputs).filter((s) => inputs[s]!.act && !spent.has(s)))) {
     next = applyReach(state, next, id, SECONDS_LEFT, config).floor;
   }
@@ -154,11 +154,15 @@ describe('the floor moments: wolves (RULE-4)', () => {
       // The rule's own flag, set by game.ts's boltMule: the MULE is the seat's still, not led.
       expect(f.state.players[0]!.muleBolted).toBe(true);
       expect(f.state.players[0]!.carriedMule).toBe('food');
-      // It runs off on its own: boltTiles at boltSpeed, then stands, far from its colonist.
+      // It runs off on its own, boltTiles at boltSpeed, then stands; off the rope, it does not follow its colonist.
       let floor = f.floor;
+      const from = { ...seat(floor, 'a').lead! };
       for (let i = 0; i < ticks(WOLVES.boltTiles / WOLVES.boltSpeed + 1); i++) floor = tick(f.state, floor, { a: IDLE });
-      const a = seat(floor, 'a');
-      expect(Math.hypot(a.lead!.x - a.x, a.lead!.y - a.y), 'the bolted MULE ran off').toBeGreaterThan(DEV_STEER.leadTiles + 1);
+      const ran = seat(floor, 'a');
+      expect(ran.bolt?.left, 'its run spent').toBe(0);
+      expect(Math.hypot(ran.lead!.x - from.x, ran.lead!.y - from.y), 'the bolted MULE ran off').toBeGreaterThan(DEV_STEER.leadTiles);
+      for (let i = 0; i < ticks(1); i++) floor = tick(f.state, floor, { a: { x: 0, y: -1, act: false } });
+      expect(seat(floor, 'a').lead, 'it stands where it ran to').toEqual(ran.lead);
     }
     // No MULE on the lead: a lost fight stuns instead, and never bolts what is not there.
     const bare = Array.from({ length: 40 }, (_, i) => playPack(500 + i, { level: 'rookie', fights: true })).filter((f) => f.lost);

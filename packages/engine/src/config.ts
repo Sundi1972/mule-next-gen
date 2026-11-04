@@ -427,8 +427,36 @@ export const WOLVES = {
   /** A lost fight's MULE bolts this many tiles at this many tiles a second. */
   boltTiles: 4,
   boltSpeed: 3.5,
+  /** The lands a pack comes on. */
+  lands: ['forest', 'hills', 'tundra'] as readonly WalkTerrain[],
+  /** Where a pack stands when it comes: this far from its colonist, spread over this arc from one side, in radians. */
+  packRingTiles: 1.6,
+  packArcRadians: 1.9,
+  /** A chase: the wolves set off after this head start, and catch a colonist they come this close to. */
+  headStartSeconds: 0.4,
+  chaseCatchTiles: 0.35,
+  /** A fight: the wolves circle this far from where it began, turning this fast; the colonist stays within arenaTiles of it. */
+  fightRingTiles: 1.3,
+  prowlRadiansPerSecond: 0.7,
+  arenaTiles: 1,
+  /** The fight's first lunge comes this long after it starts. */
+  firstLungeSeconds: 0.9,
+  /** A lunge takes this long to land, and bites a colonist still this close to the spot it aimed at. */
+  lungeSeconds: 0.22,
+  biteTiles: 0.38,
+  /** A wolf that missed stands open this long; one struck, or that has bitten, is out of the fight this long. */
+  openSeconds: 0.9,
+  hurtSeconds: 0.7,
+  /** A strike lands on a wolf this close; a strike at nothing leaves its colonist open this long. */
+  strikeTiles: 0.8,
+  whiffSeconds: 0.45,
+  /** A bolted MULE is caught by its colonist this close to it (arcade RULE-3 row 4). */
+  catchReachTiles: 0.6,
   /** Share of AI colonists that fight rather than run. */
   botFightShare: 0.5,
+  /** An AI colonist stands this long before it runs or fights, and dodges a lunge till it is this far beyond its bite. */
+  botChooseSeconds: 0.6,
+  botDodgeMarginTiles: 0.2,
   /** Share of an AI colonist's legs that go by wolf land. */
   botWolfLandShare: 0.5,
   /** Each level's chance to dodge a lunge, and its delay before it strikes at a wolf that stands open. */
@@ -454,6 +482,8 @@ export const GLINT = {
   /** The prize: this much Crystite, or these credits when prize is 'credits'. */
   crystite: 1,
   credits: 60,
+  /** GRAB THE GLINT reaches it from this far from its tile's middle, in tiles: about a step away (arcade RULE-3 row 3). */
+  grabReach: 1.2,
   /** Share of AI colonists that race, and only for a glint within botCareTiles. */
   botShare: 0.75,
   botCareTiles: 8,

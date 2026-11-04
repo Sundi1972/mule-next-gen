@@ -267,11 +267,16 @@ const TABLE: Row[] = [
     },
   },
   {
-    row: '2, in a fight with no wolf open in reach: DODGE, dim',
+    row: '2, in a fight with no wolf open in reach: DODGE, dim; a press is a strike at nothing and leaves it open',
     at: () => ({ ...onTile(2, 4), encounter: pack('fight', PROWLING) }),
     reach: () => ({ kind: 'none', enabled: false, hint: 'dodge' }),
     words: () => words('DODGE', null, false),
-    press: 'nothing',
+    press: {
+      moment: (was, now, after) => {
+        expect(after.colonists[0]!.encounter).toMatchObject({ strikes: 0, recoverUntilTick: after.tick + Math.round((WOLVES.whiffSeconds * 1_000) / DEV_STEER.tickMs) });
+        expect(now).toEqual(was);
+      },
+    },
   },
   {
     row: '1, running from the pack: RUN!, dim',
