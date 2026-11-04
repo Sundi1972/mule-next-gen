@@ -447,7 +447,7 @@ export function Marks({ size, slot }: { size: ShowSize; slot?: Slot }) {
         return (
           <OnPlot key={`${hit.x},${hit.y},${ev.key}`} x={hit.x} y={hit.y} testId={`mark-${hit.x}-${hit.y}`} rise={`${rise}cqw`} className={cx(!reduced && 'animate-[ev-pop_0.35s_ease-out]')}>
             <span className="flex flex-col items-center gap-0.5">
-              <EventDeltaChip delta={hit.delta} good={cast.goodAt(hit.x, hit.y)} lost={!!text} text={text} size={size === 'tv' ? 'tv' : 'phone'} />
+              <EventDeltaChip delta={hit.delta} good={hit.good ?? cast.goodAt(hit.x, hit.y)} lost={!!text} text={text} size={size === 'tv' ? 'tv' : 'phone'} />
             </span>
           </OnPlot>
         );
