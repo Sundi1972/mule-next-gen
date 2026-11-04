@@ -71,6 +71,17 @@ describe('T-AC-3 (HC-5): a wave-2 event never drives cash or goods below 0', () 
   });
 });
 
+describe('T-AC-5 (RULE-4): one Medicine cures being sick this turn, whatever the cause', () => {
+  it("a carried-over epidemic and a sickness roll together take one Medicine, and the player is not sick", () => {
+    only('sickness');
+    const state = monthTwo();
+    const p = state.players[0]!;
+    Object.assign(p, { sickNext: true, stock: { ...p.stock, medicine: 1 } });
+    toPhase(state, 'development');
+    expect([p.sick, p.sickNext, p.stock.medicine]).toEqual([false, false, 0]);
+  });
+});
+
 describe('RULE-3 (AM-1 6a): inheritances in one phase are ranked once, by wealth before any payout', () => {
   it('four players inheriting in the same planning get 300 / 233 / 166 / 100 by their starting wealth', () => {
     only('inheritance');

@@ -1,4 +1,4 @@
-import { DEV_STEER, EVENTS, grantees, UPKEEP, type EventKey, type GameState, type MonthEvent, type Phase } from '@mule/engine';
+import { DEV_STEER, EVENTS, grantees, inheritanceAmount, UPKEEP, type EventKey, type GameState, type MonthEvent, type Phase } from '@mule/engine';
 import { afterEach, describe, expect, it } from 'vitest';
 import { MuleGame } from '../src/mule-game.js';
 import { fakeContext, readyAll, seats } from './fake-context.js';
@@ -162,6 +162,7 @@ describe('T-AC-1: each wave-2 event fires in its phase, changes the state as RUL
       expect(effect!.delta).toBeGreaterThanOrEqual(EVENTS.player.inheritance.min);
       expect(effect!.delta).toBeLessThanOrEqual(EVENTS.player.inheritance.max);
       expect(p.money).toBe(before.players[i]!.money + effect!.delta);
+      expect(effect!.delta).toBe(inheritanceAmount(before, p.id));
     });
   });
 
@@ -203,6 +204,12 @@ describe('T-AC-1: each wave-2 event fires in its phase, changes the state as RUL
     expect(events[0]).toMatchObject({ phase: 'production', kind: 'sweep', effects: [{ on: 'colony', what: 'energyNeed', delta: 100 }] });
     const burnt = before.players[0]!.stock.energy - state.players[0]!.stock.energy;
     expect(burnt).toBe(EVENTS.colony.coldSnap.factor * UPKEEP.energyUse.food);
+    // Without a snap the same farm burns its plain need: the factor is the snap's alone.
+    const plain = firedIn('packageFromHome', 'production', 1, (s) => {
+      farms(1)(s);
+      s.players[0]!.stock.energy = 10;
+    });
+    expect(plain.before.players[0]!.stock.energy - plain.state.players[0]!.stock.energy).toBe(UPKEEP.energyUse.food);
   });
 
   it("meteorStrike: after production's output a tile becomes a crater and loses any MULE", () => {

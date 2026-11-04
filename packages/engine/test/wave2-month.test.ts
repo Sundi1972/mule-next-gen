@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { advancePhase, createGame, type GameState, type MonthEvent } from '../src/index.js';
+import { advancePhase, cloneForSim, createGame, type GameState, type MonthEvent } from '../src/index.js';
 
 const fourPlayers = () => createGame({ seed: 3, players: [0, 1, 2, 3].map((i) => ({ id: `p${i}`, name: `P${i}`, isAi: false })) });
 
@@ -51,5 +51,20 @@ describe('C1: the month keeps every event it fires', () => {
     // A new array, not the old one emptied: a what-if copy may still share last month's.
     expect(state.monthEvents).not.toBe(kept);
     expect(kept[0]).toEqual(filed('planning'));
+  });
+
+  it("a what-if copy taken in the auction and played through the month end leaves the real report and list as they were", () => {
+    const state = fourPlayers();
+    toPhase(state, 'auction');
+    state.monthEvents.unshift(filed('planning'));
+    const report = state.history.at(-1)!;
+    const events = structuredClone(report.events);
+    const month = structuredClone(state.monthEvents);
+    const list = state.monthEvents;
+    const sim = cloneForSim(state);
+    toPhase(sim, 'planning');
+    expect(report.events).toEqual(events);
+    expect(state.monthEvents).toBe(list);
+    expect(state.monthEvents).toEqual(month);
   });
 });

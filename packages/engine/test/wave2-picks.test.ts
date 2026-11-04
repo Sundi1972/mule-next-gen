@@ -28,6 +28,16 @@ describe('RULE-3: the wave-2 picks', () => {
     expect(state.players.map((p) => inheritanceAmount(state, p.id))).toEqual([EVENTS.player.inheritance.max, EVENTS.player.inheritance.min]);
   });
 
+  it('inheritance: players tied on worth share the mean of their ranks\' amounts, rounded down, with no seat bias (AM-3)', () => {
+    const { min, max } = EVENTS.player.inheritance;
+    const at = (rank: number) => min + ((max - min) * rank) / 3;
+    const state = withCash([500, 300, 500, 100]);
+    const tied = Math.floor((at(0) + at(1)) / 2);
+    expect(state.players.map((p) => inheritanceAmount(state, p.id))).toEqual([tied, Math.floor(at(2)), tied, max]);
+    // Today's config: 100 and 166.67 share 133.
+    expect(tied).toBe(133);
+  });
+
   it('inheritance: a lone player gets the most', () => {
     const state = withCash([0, 0]);
     state.players.pop();
