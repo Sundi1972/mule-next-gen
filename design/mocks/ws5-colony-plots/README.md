@@ -1,7 +1,8 @@
 # G-5 · C33 · the colony's objects on their plots (WS5)
 
-**Status: reviewed by WS8 (consistent with C34; B agreed), for Heiko.** WS8's two changes are in: the phone chip is
-10 px, and standing is `holo`. Nothing is built until Heiko approves a variant.
+**Approved by Heiko, 4 Nov 2026: "apprive variant b"** (seen on localhost:5315). The approved scaffold is the mock as
+of **f7fc747d**, with variant A, the object's disc, removed afterwards. It was reviewed by WS8 against C34
+(consistent). C33's build grafts this; it doesn't redesign it.
 
 A built park, stadium or spaceport upgrade is drawn on its plot on every map. The TV's map and each phone's are drawn
 from the same map tiles, so one mark serves them all. The hospital and the observatory need no plot and aren't drawn.
@@ -12,7 +13,7 @@ from the same map tiles, so one mark serves them all. The hospital and the obser
 ./node_modules/.bin/vite --port 5315 --strictPort
 ```
 
-The page shows the TV map and a phone's map, with two variants and every stage reachable from the controls.
+The page shows the TV map and a phone's map, with every stage reachable from the controls.
 Option-click selects an element for review comments; a plain click uses the prototype.
 
 ## Decisions
@@ -29,16 +30,14 @@ Option-click selects an element for review comments; a plain click uses the prot
   no player's border or tab, and no MULE, since C30 clears the outfit and the plot makes nothing. It keeps its special
   badge.
 
-## The two variants
+## The variant
 
-| | A · the object's disc | B · the colony's ground |
-|---|---|---|
-| Mark | the glyph on the map's chip disc at the plot's centre, where a MULE's good disc sits | the whole plot: a stage-coloured inset border, a dark fill, the glyph large across it |
-| Reads | quiet, the same weight as a MULE | strong, from across a room: "the colony built here" |
-| Risk | can be mistaken for an installed good (a ringed disc) | its border can be mistaken for an owner's plot, especially standing's green |
+**B · the colony's ground (approved):** the whole plot is the object's, with a stage-coloured inset border, a dark
+fill and the glyph large across it. It reads from across a room as "the colony built here", and nothing else on the
+map is a dark plot with no owner tab.
 
-WS5's and WS8's recommendation is **B**: the objects are the colony's landmarks, and nothing else on the map is a dark
-plot with no owner tab. A's ringed disc sits where a MULE's good does, so a built park reads as an installed good.
+A, the object's disc, was not chosen and is removed. Its glyph on a ringed disc at the plot's centre sat where a MULE's
+good does, so a built park read as an installed good.
 
 ## Settled with WS7 (brief, 4 Nov)
 
@@ -49,7 +48,7 @@ plot with no owner tab. A's ringed disc sits where a MULE's good does, so a buil
 
 ## Graft target
 
-- `PlotObject`, `ObjectDisc` or `ObjectGround`, and `objectLabel` are drawn inside HoloMap's plot
+- `PlotObject`, `ObjectGround` and `objectLabel` are drawn inside HoloMap's plot
   (`packages/ui/src/components/HoloMap.tsx`), in the installed good's slot. This is a named edit for WS4. `MapTile`
   gains `object?: PlotObject`.
 - `ObjectGlyph` moves to `packages/ui` beside `SpecialIcon`, a named edit for WS4, with WS8 OKing the glyphs.
