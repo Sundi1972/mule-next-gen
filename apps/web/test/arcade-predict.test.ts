@@ -2,6 +2,7 @@ import { applyReach, buildFloor, createGame, DEV_STEER, floorConfig, stepFloor, 
 import type { DevFrame, MuleView, TileView } from '@mule/protocol';
 import { describe, expect, it } from 'vitest';
 import { advanceTo, assayTick, holdUntil, markStale, phoneTick, predictWorld, receiveFrame, shownAt, startPrediction, steerFrom, type Prediction, type PredictWorld } from '../src/phone/arcade/predict';
+import { msPerTick, pushFrame, startFrameLog } from '../src/phone/arcade/frames';
 import { gateSteer, quantise, startGate, type SteerGate } from '../src/phone/arcade/steer';
 
 /**
@@ -101,6 +102,8 @@ interface TurnOptions {
   pressAt?: number;
   /** Whether the phone holds its copy still for the assay its own view announces. */
   hold?: boolean;
+  /** Real ms a tick takes as a share of tickMs: a table that plays its phases quicker (phaseScale) ticks quicker. */
+  scale?: number;
 }
 
 
@@ -109,7 +112,7 @@ interface TurnOptions {
  * that arrives after its tick from the next), and sends a frame each tick; the phone steps its copy every 16 ms and
  * sends its stick on change. Every message takes `oneWayMs`, plus `spikeMs` for those in the spike window.
  */
-function playTurn(oneWayMs: number, { spike, stick = STICK, pressAt, hold = true }: TurnOptions = {}): Run {
+function playTurn(oneWayMs: number, { spike, stick = STICK, pressAt, hold = true, scale = 1 }: TurnOptions = {}): Run {
   let state = game();
   const cfg = floorConfig();
   let floor = buildFloor(state, cfg);
@@ -130,7 +133,8 @@ function playTurn(oneWayMs: number, { spike, stick = STICK, pressAt, hold = true
   let gate: SteerGate = startGate();
   const run: Run = { compared: 0, corrected: 0, snapped: 0, worst: 0, ahead: 0, inHall: 0, trace: [], assayUntilTick: null, heldX: null };
   let told = false;
-  let nextServerAt = TICK;
+  let log = startFrameLog();
+  let nextServerAt = TICK * scale;
 
   for (let now = 0; now <= TURN_MS; now += 16) {
     // The server: every input that has arrived, then every tick that is due.
@@ -149,25 +153,26 @@ function playTurn(oneWayMs: number, { spike, stick = STICK, pressAt, hold = true
         const until = floor.colonists[0]!.assayUntilTick;
         run.assayUntilTick = until;
         run.heldX = floor.colonists[0]!.x;
-        if (until !== null) views.push({ due: nextServerAt + TICK + delay(nextServerAt), assayUntil: until * TICK });
+        if (until !== null) views.push({ due: nextServerAt + TICK * scale + delay(nextServerAt), assayUntil: until * TICK * scale });
       }
       toPhone.push({ due: nextServerAt + delay(nextServerAt), frame: frameOf(floor) });
-      nextServerAt += TICK;
+      nextServerAt += TICK * scale;
     }
     // The phone: the frames that have arrived, then its copy up to its tick, then its stick.
     for (const m of toPhone.filter((m) => m.due <= now)) {
       const before = p.stats;
       p = receiveFrame(p, m.frame, now, world, base);
+      log = pushFrame(log, m.frame, now);
       if (m.frame.colonists[0]!.space === 'hall') run.inHall++;
       run.compared += p.stats.compared - before.compared;
     }
     toPhone.splice(0, toPhone.length, ...toPhone.filter((m) => m.due > now));
     for (const v of views.filter((v) => v.due <= now)) {
       told = true;
-      if (hold) p = holdUntil(p, assayTick(p, v.assayUntil, now, now, 2 * oneWayMs, TICK));
+      if (hold) p = holdUntil(p, assayTick(p, v.assayUntil, now, now, 2 * oneWayMs, msPerTick(log, TICK)));
     }
     views.splice(0, views.length, ...views.filter((v) => v.due > now));
-    const target = phoneTick(p, now, 2 * oneWayMs, cfg);
+    const target = phoneTick(p, now, 2 * oneWayMs, cfg, msPerTick(log, TICK));
     if (target !== null) p = advanceTo(p, target, world);
     if (told && p.me) run.trace.push({ tick: p.tick, x: p.me.x, fixes: p.stats.corrected + p.stats.snapped });
     if (pressAt !== undefined && !pressed && now >= pressAt) {
@@ -208,6 +213,16 @@ describe('T-AC-10: the phone predicts its own colonist (RULE-10)', () => {
     expect(run.corrected).toBeGreaterThan(0);
     expect(run.snapped).toBe(0);
     expect(run.worst).toBeLessThanOrEqual(DEV_STEER.snapTiles);
+  });
+
+  it('T-AC-10: on a table that plays its phases twice as quick, the copy keeps the frames\' pace and needs no corrections', () => {
+    // A tick every 25 ms of real time, the same 50 ms of game time each: the phone's tick runs at the frames' own pace.
+    const run = playTurn(100, { scale: 0.5 });
+    expect(run.compared).toBeGreaterThan(400);
+    expect(run).toMatchObject({ corrected: 0, snapped: 0 });
+    expect(run.worst).toBeLessThanOrEqual(DEV_STEER.snapTiles);
+    // Ahead by half the round trip and a tick, counted in the quicker ticks.
+    expect(run.ahead).toBeGreaterThanOrEqual(100 / (TICK / 2) + 1);
   });
 
   /** Lena walks left from the store's left door over the plains, pushing on, and presses ANALYSE a second in. */

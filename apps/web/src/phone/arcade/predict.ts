@@ -85,7 +85,7 @@ const stale = (p: Prediction, nowMs: number, cfg: FloorConfig) => !p.frame || no
  * The tick the copy should stand at now: the newest frame's tick, the ticks since it came, the round trip (half for
  * the frame's way here, half for the input's way there), and one tick. Null while there is nothing to predict from.
  */
-export function phoneTick(p: Prediction, nowMs: number, rttMs: number, cfg: FloorConfig): number | null {
+export function phoneTick(p: Prediction, nowMs: number, rttMs: number, cfg: FloorConfig, _msPerTick: number = cfg.steer.tickMs): number | null {
   if (p.status !== 'live' || stale(p, nowMs, cfg)) return null;
   return p.frame!.tick + Math.floor((nowMs - p.frame!.recvMs + rttMs) / cfg.steer.tickMs) + 1;
 }
