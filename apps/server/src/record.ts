@@ -48,8 +48,18 @@ function sha256(text: string): string {
   return createHash('sha256').update(text).digest('hex');
 }
 
+/**
+ * An absolute path in a message: a POSIX `/…` run not inside a word, a number or a URL, or a Windows `C:\…` run. It
+ * ends at whitespace, a quote, or punctuation that closes it in a sentence.
+ */
+const ABSOLUTE_PATH = /(?<![\w:/.~-])\/[^\s'"`,;()<>]+|\b[A-Za-z]:\\[^\s'"`,;()<>]*/g;
+
+/**
+ * What a record keeps of a thrown error (a refusal, a failed brain call, a game error): its message only, every
+ * absolute path in it replaced by `<path>` so no machine's folders reach the file, then cut at MESSAGE_CHARS.
+ */
 export function messageOf(err: unknown): string {
-  return (err instanceof Error ? err.message : String(err)).slice(0, MESSAGE_CHARS);
+  return (err instanceof Error ? err.message : String(err)).replace(ABSOLUTE_PATH, '<path>').slice(0, MESSAGE_CHARS);
 }
 
 function recordedChoice({ optionId, line, by, note }: Choice): RecordedChoice {
