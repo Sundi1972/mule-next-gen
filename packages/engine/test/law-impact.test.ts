@@ -14,9 +14,11 @@ function board(laws: Partial<Record<LawId, number>> = {}): GameState {
   free[0]!.outfit = 'rareEarth';
   free[3]!.owner = 'brix';
   state.history.at(-1)!.pollutionBy = { lena: 4, brix: 1 };
-  state.ship = { ...state.ship, hold: { crystite: 5 } };
+  // The ship still wants crystite; it has had all the food it came for, so Lena's food is no export.
+  state.ship = { ...state.ship, hold: { crystite: 5, food: 0 } };
   state.store.offWorld.crystite = 120;
   player(state, 'lena').stock.crystite = 2;
+  player(state, 'lena').stock.food = 4;
   player(state, 'brix').stock.crystite = 0;
   state.air = 55;
   return state;
