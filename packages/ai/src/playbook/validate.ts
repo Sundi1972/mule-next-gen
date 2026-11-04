@@ -451,11 +451,11 @@ function containersOf(pb: Playbook): string[][] {
  * What a refused field that the playbook must have is replaced with: a strategy field alone, else the whole part or
  * the good's whole play that holds it, so the siblings that bound its value (a role, a walk-away) come with it.
  */
-const holderOf = (unit: readonly string[]) => unit.slice(0, unit[0] === 'strategy' || unit[0] === 'auction' ? 2 : 1);
+const holderOf = (unit: readonly string[]) => unit.slice(0, unit[0] === 'strategy' || unit[0] === 'auction' ? 2 : 1); // literal-ok: a strategy field and a good sit two keys deep, a part one
 
 /** A field the playbook may lack: one that fails step 5 is dropped; a field every playbook of its phase has stays. */
 const isOptional = (unit: readonly string[]) =>
-  ['rivalReads', 'lessons', 'store'].includes(unit[0]!) || (unit[1] === 'stances' && unit.length > 2) || unit.includes('per') || ['drone', 'list', 'pair', 'market'].includes(unit.at(-1)!);
+  ['rivalReads', 'lessons', 'store'].includes(unit[0]!) || (unit[1] === 'stances' && unit[2] !== undefined) || unit.includes('per') || ['drone', 'list', 'pair', 'market'].includes(unit.at(-1)!);
 
 const pathOf = (segs: readonly string[]) => `/${segs.map((k) => k.replace(/~/g, '~0').replace(/\//g, '~1')).join('/')}`;
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
@@ -585,9 +585,9 @@ function validate(profile: ValidatorProfile, state: GameState, seat: PlayerId, d
   const strip = <T extends { i: number }>(xs: T[]) => xs.sort((a, b) => a.i - b.i).map(({ i: _, ...x }) => x);
   // Step 6: an accepted edit's `to` is the value that plays. An edit to a field that was dropped, or inside a list a
   // clamp shortened or lengthened, is clamped only: it stays in rejected and is not listed here.
-  const plays = ({ at, lists }: (typeof accepted)[number]) =>
+  const stillPlays = ({ at, lists }: (typeof accepted)[number]) =>
     getAt(pb, at) !== undefined && lists.every(([path, length]) => (getAt(pb, path) as unknown[] | undefined)?.length === length);
-  const outEdits = strip(accepted.filter(plays).map(({ at, lists: _, ...a }) => ({ ...a, to: getAt(pb, at) })));
+  const outEdits = strip(accepted.filter(stillPlays).map(({ at, lists: _, ...a }) => ({ ...a, to: getAt(pb, at) })));
   const outRejected = strip(rejected);
   pb.by = outEdits.length > 0 ? 'llm' : 'engine';
   if (outEdits.length > 0) pb.edits = outEdits;
