@@ -1,13 +1,11 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { EMPTY, FINAL, FINAL_FAILED, FINAL_UNREST, MIDGAME, TROUBLE } from './colony';
-import { PhoneColonyDesk, PhoneGameOver, TvGameOverA, TvGameOverB, TvMonthEnd, TvPlanning } from './screens';
+import { PhoneColonyDesk, PhoneGameOver, TvGameOverA, TvMonthEnd, TvPlanning } from './screens';
 
 /** Every screen and state, by hash: #/tv-gameover-a and so on. */
 const SCREENS: { id: string; group: string; title: string; note: string; render: () => ReactNode }[] = [
-  { id: 'tv-gameover-a', group: 'Game over · the TV (pick one)', title: 'A · The colony’s line', note: 'Today’s game over kept whole; the bottom band becomes the colony’s score beside who gave most.', render: () => <TvGameOverA colony={FINAL} /> },
-  { id: 'tv-gameover-b', group: 'Game over · the TV (pick one)', title: 'B · Two scoreboards', note: 'The colony gets half the screen as a second winner, with its skyline; the players’ table moves to the winner card.', render: () => <TvGameOverB colony={FINAL} /> },
-  { id: 'tv-gameover-a-unrest', group: 'Game over · the TV (pick one)', title: 'A · a colony in Unrest', note: 'The same screen when the colony was run badly: × 0.82, a damaged hospital.', render: () => <TvGameOverA colony={FINAL_UNREST} /> },
-  { id: 'tv-gameover-b-unrest', group: 'Game over · the TV (pick one)', title: 'B · a colony in Unrest', note: 'Damaged objects stay on the skyline, dark, at “counts 0”.', render: () => <TvGameOverB colony={FINAL_UNREST} /> },
+  { id: 'tv-gameover-a', group: 'Game over · the TV', title: 'The colony’s line', note: 'Today’s game over kept whole; the bottom band becomes the colony’s score beside who gave most.', render: () => <TvGameOverA colony={FINAL} /> },
+  { id: 'tv-gameover-a-unrest', group: 'Game over · the TV', title: 'A colony in Unrest', note: 'The same screen when the colony was run badly: × 0.82, a damaged hospital.', render: () => <TvGameOverA colony={FINAL_UNREST} /> },
   { id: 'phone-gameover', group: 'Game over · the phone', title: 'Your phone at game over', note: 'Your place and Worth as today; the colony card shows its score and your plaques.', render: () => <PhoneGameOver colony={FINAL} /> },
   { id: 'phone-gameover-small', group: 'Game over · the phone', title: 'The same on a small phone (667 × 375)', note: 'The smallest phone the shell supports.', render: () => <PhoneGameOver colony={FINAL} small /> },
   { id: 'phone-gameover-failed', group: 'Game over · the phone', title: 'Your phone when the colony failed', note: 'The air ended in Collapse: the card turns alert with the verdict’s title and rule (WS6), as PhoneVerdict does today.', render: () => <PhoneGameOver colony={FINAL_FAILED} /> },
@@ -65,6 +63,9 @@ export default function App() {
       <header className="flex flex-col gap-1">
         <span className="label-caps">G-5 · C34 · WS8 mocks</span>
         <h1 className="font-display text-4xl font-semibold">The colony at the table</h1>
+        <p className="font-semibold text-ok" data-testid="approved">
+          Approved by Heiko, 4 Nov 2026 (“Yes, A”): the binding scaffold for C34.
+        </p>
         <p className="max-w-3xl text-base text-ink-2">
           What everyone sees of the colony: its four gauges all game, the projects it builds, and at game over the colony’s own score beside each player’s standing.
         </p>
@@ -76,22 +77,6 @@ export default function App() {
             <li key={d}>{d}</li>
           ))}
         </ul>
-      </section>
-      <section className="flex flex-col gap-2" data-testid="variants">
-        <h2 className="label-caps">The open choice: game over on the TV, A or B</h2>
-        <div className="flex flex-wrap gap-6">
-          {(['tv-gameover-a', 'tv-gameover-b'] as const).map((id) => {
-            const s = SCREENS.find((x) => x.id === id)!;
-            return (
-              <a key={id} href={`#/${id}`} className="flex flex-col gap-2" data-testid={`variant-${id}`}>
-                <span className="font-display text-xl font-semibold text-holo underline">{s.title}</span>
-                <div className="h-[360px] w-[640px] overflow-hidden rounded-panel border border-holo-line">
-                  <div className="origin-top-left scale-50">{s.render()}</div>
-                </div>
-              </a>
-            );
-          })}
-        </div>
       </section>
       {groups.map((g) => (
         <section key={g} className="flex flex-col gap-2">

@@ -7,7 +7,7 @@ import { ColonyPanel, LeagueTable, WinnerCard, YourWorth } from '../../../../app
 import { OBJECT, plaquesOf, type ColonyView } from './colony';
 import { FitHeight } from './fit';
 import { finalGame, game } from './fixture';
-import { BuildSite, ColonyGauges, ObjectGlyph, PlaqueBoard, ScoreSum, scoreVerdict, scoreWords } from './parts';
+import { BuildSite, ColonyGauges, PlaqueBoard, ScoreSum, scoreVerdict, scoreWords } from './parts';
 
 // --- Frames -------------------------------------------------------------------------------------------
 
@@ -140,7 +140,7 @@ function ScoreHero({ colony, size }: { colony: ColonyView; size: 'hero' | 'tv' }
 }
 
 /**
- * Direction A, "the colony's line": today's game over kept whole (the winner, the table by Worth), and the colony band
+ * The approved game over (Heiko, "Yes, A"), "the colony's line": today's game over kept whole (the winner, the table by Worth), and the colony band
  * across the bottom becomes the colony's score beside who gave most. One more thing to read, nothing moves.
  */
 export function TvGameOverA({ colony }: { colony: ColonyView }) {
@@ -166,56 +166,6 @@ export function TvGameOverA({ colony }: { colony: ColonyView }) {
           <PlaqueBoard colony={colony} size="tv" />
         </div>
       </section>
-      </div>
-      </FitHeight>
-    </Tv>
-  );
-}
-
-/** The colony's skyline: each object as a tile, standing lit, closed or damaged dark. */
-function Skyline({ colony }: { colony: ColonyView }) {
-  return (
-    <ul className="flex flex-wrap gap-3" data-testid="skyline">
-      {colony.projects.map((p) => {
-        const counts = p.stage === 'standing';
-        return (
-          <li key={p.id} className={cx('flex w-[120px] flex-col items-center gap-1 rounded-control border px-2 py-3', counts ? 'border-ok text-ok' : 'border-alert text-alert opacity-70')} data-testid={`skyline-${p.id}`}>
-            <ObjectGlyph kind={p.id} size={40} />
-            <span className="text-center font-display text-base font-semibold leading-tight text-ink">{OBJECT[p.id].name}</span>
-            <span className="font-mono text-sm font-bold">{counts ? `+${p.prestige}` : 'counts 0'}</span>
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
-
-/**
- * Direction B, "two scoreboards": the colony gets half the screen, as a second winner. Left the colony's score with
- * what it built; right the players by Worth, with the plaques beside each name. Louder, and it moves today's layout.
- */
-export function TvGameOverB({ colony }: { colony: ColonyView }) {
-  const view = finalGame(colony);
-  return (
-    <Tv testid="tv-gameover-b">
-      <TvHeader title="Game over" month={12} colony={null} />
-      <FitHeight className="flex-1">
-      <div className="grid flex-1 grid-cols-2 gap-6">
-        <section className="flex flex-col gap-4 rounded-panel border border-holo-line bg-panel p-6" aria-label="The colony" data-testid="colony-half">
-          <h2 className="label-caps text-base!">The colony</h2>
-          <ScoreHero colony={colony} size="hero" />
-          <Skyline colony={colony} />
-        </section>
-        <section className="flex flex-col gap-4" aria-label="The players" data-testid="players-half">
-          <TvWinner view={view} />
-          <div className="flex min-h-0 flex-col">
-            <LeagueTable view={view} density="tv" final />
-          </div>
-          <div className="flex flex-col gap-2 rounded-panel border border-holo-line bg-panel p-4">
-            <h2 className="label-caps text-sm!">Plaques beside each standing</h2>
-            <PlaqueBoard colony={colony} size="tv" />
-          </div>
-        </section>
       </div>
       </FitHeight>
     </Tv>
