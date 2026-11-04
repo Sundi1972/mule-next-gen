@@ -162,7 +162,10 @@ export interface FloorColonist {
   readonly pelts: number;
   /** No pack comes for it before this tick (WOLVES.cooldownSeconds after the last); absent: any time. */
   readonly wolvesAfterTick?: number;
-  /** Stunned by a fight lost with no MULE on the lead: it stands till this tick. Absent: not stunned. */
+  /**
+   * Stunned by a fight lost with no MULE on the lead: it stands till this tick, and the field is cleared on it (AM-28).
+   * Absent: not stunned.
+   */
   readonly stunnedUntilTick?: number;
   /** Its MULE bolted and not caught yet: the lead is where the MULE is, running or standing. Absent or null: not bolted. */
   readonly bolt?: FloorBolt | null;

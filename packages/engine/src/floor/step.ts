@@ -45,7 +45,11 @@ export function stepFloor(floor: DevFloor, state: GameState, inputs: Inputs, dtM
     const input = inputs[c.id] ?? IDLE_INPUT;
     let next: FloorColonist;
     if (isAssaying(c, floor.tick)) next = { ...led, moving: false, assayUntilTick: isAssaying(c, tick) ? c.assayUntilTick : null };
-    else if (isStunned(c, floor.tick)) next = led.moving ? { ...led, moving: false } : led;
+    else if (isStunned(c, floor.tick)) {
+      // It stands this step; on the tick its stun ends the stun is cleared from it (AM-28: none left to read as one).
+      const still = led.moving ? { ...led, moving: false } : led;
+      next = isStunned(c, tick) ? still : unstunned(still);
+    }
     else if (led.encounter) next = stepEncounter(state, led, input, tick, cfg, walk, out);
     else {
       const reach = doorMove(floor, state, c.id, input, cfg);
@@ -104,6 +108,12 @@ function doorMove(floor: DevFloor, state: GameState, seat: string, input: FloorI
  * The colonist with its lead as the game has it now: a MULE bought, outfitted or installed since the last tick, and
  * its bolt over once the game has it caught (or the bolt never paid).
  */
+/** The colonist with its stun gone. */
+function unstunned(c: FloorColonist): FloorColonist {
+  const { stunnedUntilTick: _over, ...rest } = c;
+  return rest;
+}
+
 function withLead(c: FloorColonist, state: GameState): FloorColonist {
   const lead = leadFor(state, c);
   const bolted = state.players.find((p) => p.id === c.id)!.muleBolted === true;
