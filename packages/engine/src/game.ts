@@ -57,6 +57,7 @@ export function createGame(options: { seed: number; players: NewPlayer[]; maxMon
         installedThisTurn: false,
         analysed: [],
         droneOrder: [],
+        droneFound: [],
       }),
     ),
     store: {
@@ -254,6 +255,8 @@ export function outfitMule(state: GameState, playerId: string, outfit: Outfit): 
   if (!p.carriedMule) throw new RuleError('No MULE to outfit');
   requireLed(p);
   // With the arcade on, a fitted MULE changes good only by RE-OUTFIT (AM-2), never by a full-price re-fit.
+  // It reads the global flag, not a game's own devSteer; a devSteer game cannot reach it, as the floor offers OUTFIT
+  // only for an empty MULE and taps are refused.
   if (DEV_STEER.on && p.carriedMule !== 'empty') throw new RuleError('This MULE is outfitted: re-outfit it');
   const cost = outfitCostFor(state, playerId, outfit);
   if (p.money < cost) throw new RuleError('Not enough money');
@@ -470,6 +473,8 @@ export function advancePhase(state: GameState): void {
       p.doneWithLand = false;
       // Drone results arrive in time to pick.
       for (const i of p.droneOrder) if (!p.analysed.includes(i)) p.analysed.push(i);
+      // Kept for the month, so the phone can still say which plots the drone surveyed (H-3).
+      p.droneFound = p.droneOrder;
       p.droneOrder = [];
     }
     newSweep(state, 0);
@@ -532,6 +537,7 @@ export function advancePhase(state: GameState): void {
   }
   if (next === 'planning') {
     state.month++;
+    for (const p of state.players) p.droneFound = [];
     openPlanning(state);
   }
 }
