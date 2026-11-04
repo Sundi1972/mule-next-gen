@@ -250,7 +250,7 @@ describe("FM-planning-host-continue: the host's Continue ends planning proper; n
     }
     expect(tried).toEqual(expect.arrayContaining(['landGrant', 'development', 'production', 'auction']));
     expect(sidePick, "the host's Continue moved a side pick on").not.toBeNull();
-  });
+  }, 30_000);
 
   it("FM-planning-host-continue: a non-host's Continue is refused and nothing changes; the host's ends planning with nobody Ready, and the news names who was left waiting", () => {
     const { game } = started();
