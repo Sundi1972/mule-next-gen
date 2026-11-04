@@ -182,6 +182,8 @@ export function Auction() {
   const ask = (() => {
     if (moment.kind !== 'line') return null;
     const { aim, max } = lineLimits(auction, lineSide, moment.house, have, need, self.money);
+    // Nothing to choose (you can't pay for one, or there is none to trade): no question, no Buy (F5).
+    if (max < 1) return null;
     return lineAsk(auction, lineSide, moment.house, here.amount ?? startAmount(aim, max), have, need, self.money);
   })();
   const confirming = ask !== null && here.confirming;

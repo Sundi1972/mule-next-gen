@@ -160,6 +160,15 @@ describe('A-6 on the phone: at the store line you choose how many', () => {
     expect(textOf(phoneScreen(game.viewFor('s1'), 's1'), 'line-hint')).toMatch(/^You bought 1 /);
   });
 
+  it("F5: at the store line with too little money for one unit, the phone asks nothing and offers no Buy", () => {
+    const { game, state } = atTheLine();
+    state.players.find((p) => p.id === 's1')!.money = game.viewFor('s1').auction!.storeSells! - 1;
+    const html = phoneScreen(game.viewFor('s1'), 's1');
+    expect(tagOf(html, 'line-question')).toBeNull();
+    expect(tagOf(html, 'line-go')).toBeNull();
+    expect(tagOf(html, 'hold-up')).not.toBeNull();
+  });
+
   it('G-2: the walk buttons and the hint say a tap moves one step', () => {
     const { game } = toWalk();
     const html = phoneScreen(game.viewFor('s1'), 's1');
@@ -186,6 +195,12 @@ describe('A-6 the line, in pure parts', () => {
     expect(lineLimits(auction(), 'buyer', 'store', 0, 9, 65)).toEqual({ aim: 9, max: 2 });
     expect(lineAsk(auction(), 'buyer', 'store', 9, 0, 9, 65)).toMatchObject({ amount: 2, total: 60 });
     expect(lineAsk(auction(), 'buyer', 'store', 0, 0, 9, 65).amount).toBe(1);
+  });
+
+  it("F5: a buyer who can't pay for one unit, or a store with none, gets a real max of 0, so the phone asks nothing", () => {
+    expect(lineLimits(auction(), 'buyer', 'store', 0, 9, 29).max).toBe(0);
+    expect(lineLimits(auction({ storeForSale: 0 }), 'buyer', 'store', 0, 9, 1_000).max).toBe(0);
+    expect(lineLimits(auction({ shipQuote: [] }), 'seller', 'ship', 3, 0, 0).max).toBe(0);
   });
 
   it('negative: a seller can choose no more than it holds, and at the ship no more than it still wants', () => {

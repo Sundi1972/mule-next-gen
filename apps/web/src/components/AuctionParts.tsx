@@ -523,7 +523,8 @@ function linePrice(auction: Pick<AuctionView, 'storeSells' | 'storeBuys' | 'ship
 
 /**
  * The aim the amount starts at and the most you can choose: a buyer what it still needs, up to what the store has and
- * you can pay for; a seller its spare, up to what you hold (and, at the ship, what it still wants).
+ * you can pay for; a seller its spare, up to what you hold (and, at the ship, what it still wants). A max under 1 means
+ * there is nothing to choose: the phone asks nothing (F5).
  */
 export function lineLimits(
   auction: Pick<AuctionView, 'storeSells' | 'storeBuys' | 'storeForSale' | 'shipQuote'>,
@@ -535,9 +536,9 @@ export function lineLimits(
 ): { aim: number; max: number } {
   if (side === 'buyer') {
     const price = linePrice(auction, side, house, 0);
-    return { aim: Math.max(0, need - have), max: Math.max(1, Math.min(auction.storeForSale, price > 0 ? Math.floor(money / price) : 0)) };
+    return { aim: Math.max(0, need - have), max: Math.max(0, Math.min(auction.storeForSale, price > 0 ? Math.floor(money / price) : 0)) };
   }
-  return { aim: have - need, max: Math.max(1, house === SHIP_ID ? Math.min(have, auction.shipQuote?.length ?? have) : have) };
+  return { aim: have - need, max: Math.max(0, house === SHIP_ID ? Math.min(have, auction.shipQuote?.length ?? have) : have) };
 }
 
 /** The amount the question opens at: what you need, or your spare, kept between 1 and the most you can choose. */
