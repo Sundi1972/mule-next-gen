@@ -273,7 +273,8 @@ export function wolfInput(floor: DevFloor, state: GameState, seat: string, cfg: 
   // To the refuge if the pack is not that way (it lies behind or beside the line there), else away from the pack.
   const away = refuge && refuge.x * flee.x + refuge.y * flee.y >= 0 ? refuge : flee;
   if (e.stage === 'choose') {
-    if (tick - e.sinceTick < ticksOf(cfg.wolves.botChooseSeconds, cfg)) return IDLE_INPUT;
+    // In a hurry it does not stop to think.
+    if (!play.through && tick - e.sinceTick < ticksOf(cfg.wolves.botChooseSeconds, cfg)) return IDLE_INPUT;
     return play.fights ? { x: 0, y: 0, act: true } : { ...away, act: false };
   }
   if (e.stage === 'chase') return { ...away, act: false };

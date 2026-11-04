@@ -20,6 +20,7 @@ import {
   type GameState,
   type ReachKind,
 } from '@mule/engine';
+import { pubSeconds } from './floor-time.js';
 import type { AiSeat } from './seat.js';
 
 /**
@@ -46,6 +47,11 @@ export interface DevTurn {
   quoted: number | null;
   /** MULEs it installed this turn. */
   installs: number;
+  /**
+   * A pack met it when the walk to the pub, at the bitten pace, already took longer than the time left: the pub was out
+   * of reach whatever it chose (T-AC-5's one excuse).
+   */
+  lateWolves: boolean;
   /** Analyses of lake plots its hand gave up on the way (failed), and dropped before setting off as not fitting the clock. */
   lakeAnalyses: { failed: number; noTime: number };
 }
@@ -145,7 +151,7 @@ export function* playFloorPhase(state: GameState, seats: readonly AiSeat[]): Gen
   const tickSeconds = cfg.steer.tickMs / MS_PER_SECOND;
   let floor: DevFloor = buildFloor(state, cfg);
   const ids = seats.map((s) => s.id);
-  const turns = new Map(ids.map((id): [string, DevTurn] => [id, { month: state.month, id, pubAt: null, payout: null, quoted: null, installs: 0, lakeAnalyses: { failed: 0, noTime: 0 } }]));
+  const turns = new Map(ids.map((id): [string, DevTurn] => [id, { month: state.month, id, pubAt: null, payout: null, quoted: null, installs: 0, lateWolves: false, lakeAnalyses: { failed: 0, noTime: 0 } }]));
   let waiting = state.month === 1 && cfg.steer.month1WaitsForFirstMule;
   // Whole ticks, so the clock never drifts in floating point: stood waiting, and run.
   let stood = 0;
@@ -169,6 +175,10 @@ export function* playFloorPhase(state: GameState, seats: readonly AiSeat[]): Gen
     const before = floor;
     floor = settleMoments(state, stepFloor(floor, state, inputs, cfg.steer.tickMs, cfg));
     countStep(moments, before, floor);
+    for (const c of floor.colonists) {
+      const met = c.encounter && !before.colonists.find((x) => x.id === c.id)!.encounter;
+      if (met && !done(c.id) && pubSeconds(state, cfg, { ...c, bitten: true }) > left) turns.get(c.id)!.lateWolves = true;
+    }
     for (const s of seats) {
       const racing = s.developRacing();
       if (racing !== null) raced.add(racing);

@@ -222,6 +222,16 @@ export function secondsToPlace(state: GameState, cfg: FloorConfig, c: FloorColon
   return best;
 }
 
+/** Just outside the store's door whose walk to the pub, from where a colonist stands on the map, is quickest. */
+export function pubDoor(state: GameState, cfg: FloorConfig, c: FloorColonist): FloorPoint {
+  let best: { door: HallDoor; s: number } = { door: HALL_DOORS[0], s: Infinity };
+  for (const [door, map] of doorTable(state, cfg)) {
+    const s = backToDoor(state, cfg, map, c) / mapFactor(cfg, c.pace, leading(c), c.bot, c.bitten) + hallSeconds(state, cfg, cfg.hall.spots[door], 'pub', c.pace, leading(c));
+    if (s < best.s) best = { door, s };
+  }
+  return doorOutside(state, best.door, cfg);
+}
+
 /**
  * Seconds from where a colonist stands to the pub. A MULE it leads stays on the lead, slowing it, all the way: it runs
  * off at the pub, not before.

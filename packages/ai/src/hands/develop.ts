@@ -28,7 +28,7 @@ import {
 } from '@mule/engine';
 import type { Act, AiAction } from '../actions.js';
 import type { Brain, Pending } from '../brain.js';
-import { floorDevWalk, leading, mapFactor, plotErrandSeconds, pubSeconds, tileMiddle, tripSeconds } from '../floor-time.js';
+import { floorDevWalk, leading, mapFactor, plotErrandSeconds, pubDoor, pubSeconds, tileMiddle, tripSeconds } from '../floor-time.js';
 import { analysesWanted, developDecision, filtersWanted, outfitName, plotName, type DevAction, type DevWalk } from '../strategist.js';
 import { situation } from '../summary.js';
 import { FloorWalker, type FloorView } from './floor-walker.js';
@@ -247,8 +247,10 @@ export class DevelopHand {
     }
     this.pack = null;
     if (c.stunnedUntilTick !== undefined && floor.tick < c.stunnedUntilTick) return IDLE_INPUT;
-    // Pelts on it at a door in the store: the store buys them (and the door's LEAVE waits a press behind SELL).
-    if (c.pelts > 0 && reachOf(floor, state, me, cfg, { secondsLeft }).kind === 'sell') return { x: 0, y: 0, act: true };
+    // A press that comes first wherever it stands: pelts at a store door (the door's LEAVE waits behind SELL), and a
+    // glint within reach, raced or not (ENTER, ANALYSE, INSTALL wait behind GRAB THE GLINT).
+    const first = reachOf(floor, state, me, cfg, { secondsLeft }).kind;
+    if ((c.pelts > 0 && first === 'sell') || first === 'grab') return { x: 0, y: 0, act: true };
     if (c.assayUntilTick !== null && floor.tick < c.assayUntilTick) return null;
     const g = floor.moments.glint;
     // Whether it would race is drawn once a glint (GLINT.botShare); whether it can, every tick the glint is lit and it
@@ -335,12 +337,16 @@ export class DevelopHand {
   private playFor(view: FloorView, c: FloorColonist): WolfPlay {
     const { state, cfg, secondsLeft } = view;
     const level = WOLF_LEVEL[this.brain.mind.levelId as AiLevelId] ?? 'regular';
-    const time = cfg.wolves.chooseSeconds + cfg.wolves.fightSeconds + pubSeconds(state, cfg, c) + cfg.steer.botPubMarginSeconds;
-    const fights = this.rng.next() < cfg.wolves.botFightShare && time <= secondsLeft;
-    // Running, it heads for the store's nearer door: inside, the wolves give up, and the pub is that way anyway.
-    const doors = HALL_DOORS.map((d) => doorOutside(state, d, cfg));
-    const refuge = doors.reduce((a, b) => (Math.hypot(b.x - c.x, b.y - c.y) < Math.hypot(a.x - c.x, a.y - c.y) ? b : a));
-    return { level, fights, refuge };
+    // The pub beats the pack: it never starts a fight it cannot finish and still make the pub, bitten on the way.
+    const bitten: FloorColonist = { ...c, bitten: true };
+    const fightTime = cfg.wolves.botChooseSeconds + cfg.wolves.fightSeconds + pubSeconds(state, cfg, bitten) + this.margin(cfg, bitten);
+    const fights = this.rng.next() < cfg.wolves.botFightShare && fightTime <= secondsLeft;
+    // Running, it heads for the store's door quickest to the pub: inside, the wolves give up, and the pub is there.
+    const refuge = pubDoor(state, cfg, c);
+    // Short of time, it heads for the pub at once and through the pack if that is the way: a bite on the way costs less
+    // than the run off and back.
+    const through = secondsLeft <= pubSeconds(state, cfg, bitten) + this.margin(cfg, bitten) + cfg.wolves.giveUpSeconds * 2; // literal-ok: a run off and back again
+    return { level, fights, refuge, through };
   }
 
   /** Where a colonist is for a race's care distance: on the map, or at the store when inside. */

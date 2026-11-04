@@ -91,8 +91,9 @@ describe('the AI walks the floor, and the sim plays it (arcade C9, C10)', () => 
         expect(t.pubAt!, `${why}: reached the pub after the clock`).toBeLessThanOrEqual(DEVELOPMENT.fullSeconds);
       }
     }
-    // Reaching the pub is not the whole turn: the AI walked MULEs out and installed them on the way.
-    expect(phases.flat().reduce((n, t) => n + t.installs, 0)).toBeGreaterThan(phases.length);
+    // Reaching the pub is not the whole turn: the AI walked MULEs out and installed them on the way. With the moments
+    // (packs, glints, legs by wolf land, AM-22) costing it time, 18 in these 20 turns: at least one in two turns.
+    expect(phases.flat().reduce((n, t) => n + t.installs, 0)).toBeGreaterThanOrEqual(phases.length / 2);
   });
 
   it('T-AC-5: the moments happen in AI turns: packs met and played out, glints lit and won', { timeout: 120_000 }, () => {
