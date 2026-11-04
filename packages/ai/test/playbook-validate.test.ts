@@ -3,6 +3,7 @@ import {
   advancePhase,
   AI_PLANS,
   createGame,
+  createRng,
   GAME,
   monthNeeds,
   MS_PER_SECOND,
@@ -331,7 +332,7 @@ describe('the validator never lets an error reach the game', () => {
 });
 
 describe("the engine's own draft passes the gate", () => {
-  it('INV-1 (spot): the engine\'s draft with no edits passes unchanged, nothing rejected', () => {
+  it("INV-1 (spot): the engine's draft with no edits passes unchanged, nothing rejected, and so does the gate's output for any draft", () => {
     const passes = (label: string) => {
       for (const phase of ['planning', 'development', 'auction'] as const) {
         for (let i = 0; i < PERSONAS_AT_TABLE.length; i++) {
@@ -362,5 +363,120 @@ describe("the engine's own draft passes the gate", () => {
     const r = validatorFor({ mind: mindOf(2), seed: 102 })(taken, 'ai2', bare, []);
     expect(r.rejected).toEqual([]);
     expect(stableJson(r.playbook)).toBe(stableJson(bare));
+
+    // Whatever draft goes in, the gate's output is a fixed point: it passes the gate again, twice, unchanged.
+    const drafts = new Map<string, Playbook>();
+    const draftFor = (phase: DraftPhase, i: number) => {
+      const key = `${phase}${i}`;
+      if (!drafts.has(key)) drafts.set(key, draftOf(at[phase], phase, mindOf(i), 100 + i));
+      return structuredClone(drafts.get(key)!);
+    };
+    const gate = (phase: DraftPhase, i: number, pb: Playbook) => validatorFor({ mind: mindOf(i), seed: 100 + i })(at[phase], `ai${i}`, pb, []);
+    const plays = (pb: Playbook) => {
+      const { rejected: _, ...rest } = pb;
+      return stableJson(rest);
+    };
+    const isObject = (v: unknown) => v !== null && typeof v === 'object' && !Array.isArray(v);
+    /** Validates `pb`, then its output twice more: each pass must take the one before unchanged. */
+    const fixedPoint = (phase: DraftPhase, i: number, pb: Playbook, label: string) => {
+      const first = gate(phase, i, pb);
+      let out = first.playbook;
+      // The rows hold no field whose container is not an object, so the containers are checked here.
+      const containers = [out.strategy.stances, ...(['planning', 'landGrant', 'development', 'auction'] as const).filter((k) => out[k] !== undefined).map((k) => out[k]), ...Object.values(out.auction ?? {})];
+      expect(containers.every(isObject), `${label}: every part and good is an object`).toBe(true);
+      for (const pass of [2, 3]) {
+        const r = gate(phase, i, out);
+        expect(r.rejected, `${label}, pass ${pass}`).toEqual([]);
+        expect(plays(r.playbook), `${label}, pass ${pass}`).toBe(plays(out));
+        out = r.playbook;
+      }
+      return first;
+    };
+    const DROP = Symbol('drop');
+    const put = (pb: Playbook, path: (string | number)[], v: unknown) => {
+      const parent = path.slice(0, -1).reduce<Record<string, unknown>>((o, k) => o[k] as Record<string, unknown>, pb as unknown as Record<string, unknown>);
+      if (v === DROP) delete parent[path.at(-1)!];
+      else parent[path.at(-1)!] = v;
+    };
+
+    // The review's probes, on seat ai2's auction draft: a seller's start lost below its walk-away, a seller's hold lost
+    // below next month's need.
+    const food = draftFor('auction', 2);
+    food.auction!.food = { ...food.auction!.food!, role: 'seller', walkAway: 62, start: NaN };
+    const fed = fixedPoint('auction', 2, food, 'probe: a seller with no start').playbook.auction!.food!;
+    expect(fed.start).toBeGreaterThanOrEqual(fed.walkAway);
+    const energy = draftFor('auction', 2);
+    energy.auction!.energy = { ...energy.auction!.energy!, role: 'seller', hold: NaN };
+    const powered = fixedPoint('auction', 2, energy, 'probe: a seller with no hold').playbook.auction!.energy!;
+    if (powered.role === 'seller') expect(powered.hold).toBeGreaterThanOrEqual(monthNeeds(at.auction, 'ai2').energy);
+    // A part, or a good's play, that is not an object at all is replaced, not passed over.
+    const nulled = draftFor('auction', 2);
+    (nulled.auction as Record<string, unknown>).food = null;
+    expect(fixedPoint('auction', 2, nulled, 'a good played as null').rejected).not.toEqual([]);
+    const five = draftFor('development', 2);
+    (five as unknown as Record<string, unknown>).development = 5;
+    expect(fixedPoint('development', 2, five, 'development played as 5').playbook.development).toEqual(draftFor('development', 2).development);
+
+    // Seeded perturbations of the fixture drafts: in one part, one field broken (out of range, of the wrong type, or
+    // missing) beside one or two siblings moved to other in-range values that may now bound it.
+    const rng = createRng(2026);
+    /** Per part and field: [values in range, values that break it]. */
+    const FIELDS: Record<string, Record<string, [unknown[], unknown[]]>> = {
+      strategy: {
+        kind: [['builder', 'monopolist', 'landBaron'], ['tycoon', null, DROP]],
+        moneyMaker: [['food', null], ['gold', 7]],
+        monopolyTarget: [['smithore', null], ['food', 7]],
+        cashFloor: [[0, 500], [NaN, 1e9, -5]],
+        landTarget: [[{ plots: 1, byMonth: 1 }], [{ plots: -3, byMonth: 99 }, null]],
+        reason: [['Mine.'], [5, DROP]],
+        stances: [[{}], [null, { ai0: 'enemy' }, 5]],
+      },
+      landGrant: {
+        ranked: [[[]], [[{ plot: -1, value: 1 }], [{ plot: 0, value: NaN }], null]],
+        pressShare: [[{ start: 0.5, end: 0.2 }], [{ start: 2, end: 3 }, null]],
+        claims: [[0, 1], [9, NaN]],
+        deny: [[[]], [null, 'x', DROP]],
+        planB: [[[]], ['x', [-1], DROP]],
+        pair: [[], [[0, 0], null]],
+      },
+      development: {
+        route: [[[{ act: 'pub' }]], [[{ act: 'dance' }], null, DROP]],
+        timeBudgetMs: [[0], [NaN, 1e12]],
+        ifSoldOut: [['stop', 'analyse'], ['x', DROP]],
+      },
+      good: {
+        role: [['buyer', 'seller', 'out'], ['broker', DROP]],
+        hold: [[0, 3, 9], [NaN, -2, DROP]],
+        walkAway: [[1, 62, 400], [0, NaN, DROP]],
+        start: [[1, 62, 400], [NaN, -1, DROP]],
+        concedeCrPerS: [[0, 10], [-1, NaN]],
+        vsRival: [['hold', 'yield'], ['x']],
+        bluff: [[true], ['y']],
+        per: [[{ ai0: 'hold' }], [{ ai9: 'x' }, null]],
+      },
+    };
+    let cases = 0;
+    for (let n = 0; n < 50; n++) {
+      const phase = rng.pick(['planning', 'development', 'auction'] as const);
+      const i = rng.int(0, PERSONAS_AT_TABLE.length - 1);
+      const pb = draftFor(phase, i);
+      const part = phase === 'planning' ? rng.pick(['strategy', 'landGrant']) : phase === 'development' ? rng.pick(['strategy', 'development']) : rng.pick(['strategy', 'good', 'good', 'good']);
+      const at: (string | number)[] = part === 'good' ? ['auction', rng.pick(Object.keys(pb.auction!))] : [part];
+      const fields = FIELDS[part]!;
+      // A good's start and hold are bounded by its role and walk-away, so those pairs come up most.
+      const bounded = part === 'good' && rng.next() < 0.6;
+      const broken = bounded ? rng.pick(['start', 'hold']) : rng.pick(Object.keys(fields).filter((f) => fields[f]![1].length > 0));
+      const siblings = bounded ? ['role', 'walkAway'] : Object.keys(fields).filter((f) => f !== broken && fields[f]![0].length > 0);
+      const moved = Array.from({ length: rng.int(1, 2) }, () => rng.pick(siblings));
+      const changed: string[] = [];
+      for (const [field, pool] of [...moved.map((f) => [f, fields[f]![0]] as const), [broken, fields[broken]![1]] as const]) {
+        const v = rng.pick(pool);
+        put(pb, [...at, field], v);
+        changed.push(`/${[...at, field].join('/')}=${typeof v === 'symbol' ? 'dropped' : JSON.stringify(v)}`);
+      }
+      fixedPoint(phase, i, pb, `case ${n}: ${phase} ai${i} ${changed.join(' ')}`);
+      cases++;
+    }
+    expect(cases).toBe(50);
   });
 });
