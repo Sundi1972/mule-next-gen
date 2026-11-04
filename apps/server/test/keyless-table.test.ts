@@ -109,7 +109,17 @@ async function playKeyless(seed: number, months: number): Promise<{ finished: bo
   for (let i = 0; i < AIS; i++) send({ t: 'addAi' });
   send({ t: 'start' });
 
-  const now = () => game!.viewFor(null);
+  // A finished game's room is disposed at once: twenty live rooms on one fake clock would each tick on every step.
+  try {
+    return await playToTheEnd(() => game!.viewFor(null), send);
+  } finally {
+    room.dispose();
+    rooms.splice(rooms.indexOf(room), 1);
+  }
+}
+
+/** Steps the fake clock until the game is over or a phase stalls; `send` is the host's line to the room. */
+async function playToTheEnd(now: () => MuleView, send: (msg: ClientEnvelope<MuleIntent>) => void): Promise<{ finished: boolean; phases: PhaseLived[]; stalled: PhaseLived | null }> {
   const lived = (month: number, phase: string): PhaseLived => ({ month, phase, ms: 0, overrunMs: 0, sidePick: null });
   const phases: PhaseLived[] = [];
   let current = lived(now().month, now().phase);
@@ -144,7 +154,7 @@ async function playKeyless(seed: number, months: number): Promise<{ finished: bo
   return { finished: true, phases, stalled: null };
 }
 
-/** G-2's twenty games, as WS2's brain:trial seeds them. Local only (MULE_FULL=1, `pnpm test:full`): about 20 s a game, 7 minutes for the twenty. */
+/** G-2's twenty games, as WS2's brain:trial seeds them. Local only (MULE_FULL=1, `pnpm test:full`): about 30 s a game, 9 minutes for the twenty. */
 const FULL = process.env.MULE_FULL === '1';
 const TRIAL_SEEDS = Array.from({ length: 20 }, (_, i) => 101 + i);
 
