@@ -1632,3 +1632,78 @@ describe('Room: a held room runs no game callback until release (FM-11)', () => 
     expect(fired).toEqual([]);
   });
 });
+
+/**
+ * A started room whose game, on hearing a screen went away, starts a tick that reschedules itself, as the server's
+ * auction tick does after a leave ends a phase. Counts what the game heard and how often the tick ran.
+ */
+function tickingRoom() {
+  const heard = { changes: [] as [string, boolean][], ticks: 0 };
+  let ctx!: GameContext;
+  const room = new Room<Intent, View>({
+    code: 'KRTX',
+    createGame: (c) => {
+      ctx = c;
+      const tick = () => {
+        heard.ticks++;
+        ctx.schedule(100, tick);
+      };
+      return {
+        ...secretsGame(),
+        connectionChanged: (seatId, connected) => {
+          heard.changes.push([seatId, connected]);
+          if (!connected) ctx.schedule(100, tick);
+        },
+      };
+    },
+    newToken: () => `t${++tokens}`,
+  });
+  const heiko = join(room, 'Heiko');
+  const mia = join(room, 'Mia');
+  room.receive(heiko, heiko.from, { t: 'start' });
+  return { room, heiko, mia, heard, schedule: (ms: number, fn: () => void) => ctx.schedule(ms, fn) };
+}
+
+describe('Room: a disposed room is done with its game', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('a screen that leaves after the room was disposed reaches no game, and no tick starts', async () => {
+    const { room, heiko, heard } = tickingRoom();
+    room.dispose();
+
+    expect(() => room.disconnect(heiko)).not.toThrow();
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    expect(heard.changes).toEqual([]);
+    expect(heard.ticks).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('a callback the game schedules after the room was disposed never runs and holds no timer', async () => {
+    const { room, schedule } = tickingRoom();
+    room.dispose();
+    let ran = false;
+
+    schedule(0, () => void (ran = true));
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    expect(ran).toBe(false);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('positive control: before dispose, a leave reaches the game and its tick runs', async () => {
+    const { room, heiko, heard } = tickingRoom();
+
+    room.disconnect(heiko);
+    await vi.advanceTimersByTimeAsync(350);
+
+    expect(heard.changes).toEqual([['s1', false]]);
+    expect(heard.ticks).toBe(3);
+    room.dispose();
+  });
+});
