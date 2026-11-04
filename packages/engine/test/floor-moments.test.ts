@@ -257,6 +257,22 @@ describe('the floor moments: wolves (RULE-4)', () => {
     expect(Math.hypot(after.x - centre.x, after.y - centre.y), 'within the arena').toBeLessThanOrEqual(R + 1e-9);
     expect(inBand(after), `a step to the arena's edge ended inside the band, at (${after.x.toFixed(3)}, ${after.y.toFixed(3)})`).toBe(false);
 
+    // On the arena's edge, away from the store, a stick pushed out and to the right slides the colonist along the edge
+    // up and to the LEFT: it still faces the way the stick points, right, every tick of the slide.
+    const open = { x: 3.5, y: 6.5 };
+    const rim = { x: open.x + R * Math.cos(Math.PI / 6), y: open.y - R * Math.sin(Math.PI / 6) };
+    let slid = moved(fightAt(state, open), 'a', { ...rim, facing: 'left' });
+    const facings: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      const was = seat(slid, 'a');
+      slid = tick(state, slid, { a: { x: 0.5, y: -1, act: false } });
+      const now = seat(slid, 'a');
+      expect(now.encounter?.stage, 'still fighting').toBe('fight');
+      expect(now.x, 'the slide along the edge goes left').toBeLessThan(was.x);
+      facings.push(now.facing);
+    }
+    expect(facings, 'facing on a tangential push at the arena edge').toEqual(['right', 'right', 'right']);
+
 
     // A fight begun beside each wall, the stick pushed one way and then another (round a corner, then along a wall to
     // the arena's edge): no tick of the fight ends in the band.
