@@ -1,5 +1,6 @@
 import { SeatSpeciesProvider } from '@mule/ui';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { PhoneEventOverlay } from '../events/PhoneEventOverlay';
 import { player, seatSpecies, slotOf } from '../game/derive';
 import { useClient, useClientState } from '../net/react';
 import { Auction } from './Auction';
@@ -75,7 +76,7 @@ function PhoneScreens({ room, moving }: { room: string; moving: boolean }) {
     <SeatSpeciesProvider value={seatSpecies(view)}>
       <PhoneGameProvider value={{ table, view, me, self, slot }}>
         {/* Emotes float inside each screen's shell, clear of its rail. */}
-        <ShellLayer.Provider value={<EmoteBubbles view={view} />}>
+        <ShellLayer.Provider value={<><EmoteBubbles view={view} /><PhoneEventOverlay view={view} /></>}>
           <InGame room={table.code} name={self.name}>
             {/* Keyed by phase so each phase starts with fresh screen state. */}
             <div key={`${view.month}-${view.phase}`} className="h-full" data-phase={view.phase}>
