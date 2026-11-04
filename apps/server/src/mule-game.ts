@@ -93,11 +93,11 @@ import {
   type PlaybookEntry,
   type Trade,
 } from '@mule/engine';
-import { AiSeat, GOOD_NAME, LotHand, personaFor, VoteHand, type AiAction } from '@mule/ai';
+import { AiSeat, GOOD_NAME, LotHand, personaFor, playbookSource, VoteHand, type AiAction } from '@mule/ai';
 import { PLAYER_COLORS, type EventView, type MuleIntent, type MuleView, type PlayerView, type ProductionReason, type ProductionView, type ScorePartsView } from '@mule/protocol';
 import type { Game, GameContext, SeatInfo } from '@tabletop/core';
 import { createBrain, type BrainService } from './brain/index.js';
-import { ENGINE_SOURCE, Playbooks, type PlaybookSource } from './brain/playbooks.js';
+import { Playbooks, type PlaybookSource } from './brain/playbooks.js';
 import { devFrame, noStats, steerConfig, steeredColonistView, SteerInputs, stepTick, type Steering } from './dev-steer.js';
 import { colonistView, dueArrivals, placeName, walkTarget, type Colonist, type DevIntent } from './dev-walking.js';
 import { boardRange, landAuctionView, listingView, lotNews } from './land-auction.js';
@@ -476,7 +476,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       /** Hears each notice as it settles. */
       notice?: (notice: Notice) => void;
       recordPlaybook?: (entry: PlaybookNote) => void;
-      /** The engine's playbook drafts and validator; ENGINE_SOURCE unless a test sets one. */
+      /** The engine's playbook drafts and validator: the AI seats' own (playbookSource) unless a test sets one; null asks for none. */
       playbookSource?: PlaybookSource | null;
       /** Where a steered development's per-phase log line goes (spec §4); console.info by default. */
       log?: (line: string) => void;
@@ -517,7 +517,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       this.lotHands.set(s.id, new LotHand(seat.mind, createRng((seat.options.seed ^ 0xc2b2ae35) >>> 0)));
       this.voteHands.set(s.id, new VoteHand(seat.mind, createRng((seat.options.seed ^ 0x165667b1) >>> 0)));
     });
-    const source = this.options.playbookSource === undefined ? ENGINE_SOURCE : this.options.playbookSource;
+    const source = this.options.playbookSource === undefined ? playbookSource([...this.ai.values()]) : this.options.playbookSource;
     this.playbooks = new Playbooks({ brain: this.brain, source, seats: [...this.ai.values()], record: this.recordPlaybook });
     this.playbooks.ask(this.state, this.state.month);
     this.news = ['Welcome to the colony. Talk tactics, then grab land.'];
