@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { advancePhase, createGame, RuleError, stepAuction, WALK, type GameState, type Good, type Trade } from '@mule/engine';
+import { advancePhase, createGame, RuleError, shipPrice, stepAuction, WALK, type GameState, type Good, type Trade } from '@mule/engine';
 import type { AiAction } from '../src/actions.js';
 import { applyAction } from '../src/play.js';
 import { AiSeat } from '../src/seat.js';
@@ -13,6 +13,8 @@ interface Sent {
   good: Good;
   action: AiAction;
   refused: boolean;
+  /** Whether the seat's own choice at a line still had units to move when it sent this. */
+  running: boolean;
 }
 
 /** One month's auction with four AI seats, every action logged with whether the rules refused it. `refuse` stands in for rules that refuse an action. */
@@ -27,14 +29,16 @@ function auction(seed: number, arrange: (state: GameState) => void, refuse: (act
     for (const s of seats)
       s.auctionTick(state, WALK.tickMs, (action) => {
         const good = state.auction!.good!;
+        const order = state.auction!.walkers.find((w) => w.id === s.id)?.order;
+        const running = order !== undefined && order.traded < order.units;
         try {
           if (refuse(action)) throw new RuleError('refused by the test');
           applyAction(state, s.id, action);
-          sent.push({ seat: s.id, good, action, refused: false });
+          sent.push({ seat: s.id, good, action, refused: false, running });
           return true;
         } catch (err) {
           if (!(err instanceof RuleError)) throw err;
-          sent.push({ seat: s.id, good, action, refused: true });
+          sent.push({ seat: s.id, good, action, refused: true, running });
           return false;
         }
       });
@@ -54,11 +58,14 @@ describe('A-6: the AI says how many at a house line', () => {
     expect(fromStore.length).toBeGreaterThan(0);
     const chose = sent.filter((s) => s.good === 'food' && s.action.type === 'lineTrade' && !s.refused);
     expect(chose.length).toBeGreaterThan(0);
-    // Every seat that bought from the store chose at its line first, and none bought more than it chose.
-    for (const seat of new Set(fromStore.map((t) => t.buyer))) {
+    // Every seat that bought from the store chose at its line first, and got exactly the units it chose: it never walks
+    // away from its own running choice, and the store has plenty.
+    for (const seat of new Set(chose.map((s) => s.seat))) {
       const units = chose.filter((s) => s.seat === seat).reduce((n, s) => n + (s.action.type === 'lineTrade' ? s.action.units : 0), 0);
-      expect(fromStore.filter((t) => t.buyer === seat).length).toBeLessThanOrEqual(units);
+      expect(fromStore.filter((t) => t.buyer === seat).length, seat).toBe(units);
     }
+    // While its own choice runs, a seat sends no walk: walking would stop the units it chose.
+    expect(sent.filter((s) => s.action.type === 'walk' && s.running)).toEqual([]);
   });
 
   it('B-AC: an AI with spare Smithore sells to the store by choosing how many at its line', () => {
@@ -99,5 +106,40 @@ describe('A-6: the AI says how many at a house line', () => {
     const per = new Map<string, number>();
     for (const s of asked) per.set(`${s.seat}:${s.good}`, (per.get(`${s.seat}:${s.good}`) ?? 0) + 1);
     for (const [k, n] of per) expect(n, k).toBeLessThanOrEqual(2);
+  });
+
+  it("an AI never walks while its own choice runs, even at the ship's line where the price falls under it", () => {
+    for (const seed of [1, 2, 3, 4, 5, 6]) {
+      const { sent, trades } = auction(seed, (state) => {
+        state.ship = { arrives: state.month, goods: ['crystite', 'smithore'], hold: { crystite: 20, smithore: 20 }, bought: {} };
+        for (const p of state.players) {
+          p.stock.crystite = 15;
+          p.stock.smithore = 15;
+        }
+      });
+      expect(trades.some((t) => t.buyer === 'ship'), `seed ${seed}: the ship buys`).toBe(true);
+      expect(sent.filter((s) => s.action.type === 'walk' && s.running), `seed ${seed}`).toEqual([]);
+    }
+  });
+
+  it("F3: at the ship's line a seller counts the ship's falling price per unit, never selling a unit below what it is worth", () => {
+    const state = createGame({ seed: 3, players: [0, 1, 2, 3].map((i) => ({ id: `ai${i}`, name: `AI${i}`, isAi: true })) });
+    while (state.phase !== 'auction') advancePhase(state);
+    state.treasury.salesTax = 0;
+    state.ship = { arrives: state.month, goods: ['crystite'], hold: { crystite: 10 }, bought: {} };
+    state.store.offWorld.crystite = 200;
+    state.auction!.good = 'crystite';
+    state.players[0]!.stock.crystite = 5;
+    const seat = new AiSeat({ id: 'ai0', name: 'AI0', persona: 'trader', level: 'trader', seed: 1 });
+    const hand = (seat as unknown as { auction: Record<string, unknown> }).auction;
+    const prices = [0, 1, 2, 3, 4].map((k) => shipPrice({ ...state, ship: { ...state.ship, bought: { crystite: k } } }, 'crystite')!);
+    // Each unit is worth just under the ship's 3rd price: it sells 3 at the falling prices, not all 5 at the first.
+    const worth = prices[2]! - 0.5;
+    hand.plan = { values: { keep: [worth, worth, worth, worth, worth] } };
+    hand.trade = { side: 'seller', keep: 0 };
+    const unitsAt = (hand.unitsAt as (s: GameState, side: string, line: { house: string; price: number }) => number).bind(hand);
+    expect(unitsAt(state, 'seller', { house: 'ship', price: prices[0]! })).toBe(3);
+    // At the store the price holds for every unit.
+    expect(unitsAt(state, 'seller', { house: 'store', price: prices[0]! })).toBe(5);
   });
 });
