@@ -97,6 +97,18 @@ export function openShops(locks: NextStep['locks']): Shop[] {
 }
 
 /** RULE-7, development's next step: a decision table, first match wins. */
+/** A plot tap's press, as the Install plot cares: Install on a plot, or any other move (Analyse, the filter). */
+export type PlotPress = { kind: 'install'; at: { x: number; y: number } } | { kind: 'other' };
+
+/**
+ * The plot a walk is an install for, after a press. The server refuses every press while the colonist walks, so only a
+ * press made standing still moves it: Install remembers its plot, any other move forgets it.
+ */
+export function installAfterPress(prev: { x: number; y: number } | null, press: PlotPress, walking: boolean): { x: number; y: number } | null {
+  if (walking) return prev;
+  return press.kind === 'install' ? press.at : null;
+}
+
 export function nextStep(s: DevelopState): NextStep {
   const warn = s.seconds <= WARN_SECONDS;
   const locks = locksFor(s.carry);
