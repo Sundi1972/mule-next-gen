@@ -373,6 +373,14 @@ describe('C12: the TV', () => {
     expect(html).not.toContain('data-testid="shared-clock"');
   });
 
+  it("C12 (A-1): while month 1's clock waits the TV's header shows no clock, as the flag-off TV; once it runs, it does", () => {
+    const header = (html: string) => /<header[\s\S]*?<\/header>/.exec(html)?.[0] ?? '';
+    const waiting = onTv(devView(lenasMe(), { month: 1, clockWaitsFor: ['s2'], phaseEndsAt: null }), everyone());
+    expect(header(waiting)).not.toBe('');
+    expect(header(waiting)).not.toContain('role="timer"');
+    expect(header(onTv(devView(lenasMe(), { month: 1, phaseEndsAt: Date.now() + 30_000 }), everyone()))).toContain('role="timer"');
+  });
+
   it('C12 (A-1): the host started the clock: the news shows on the TV as a beat; other news does not', () => {
     const started = onTv(devView(lenasMe(), { month: 1, news: ['Kai installed a MULE.', 'Lena started the clock without Ossa.'] }), everyone());
     expect([...started.matchAll(/data-testid="tv-beat"[^>]*>([^<]+)</g)].map((m) => m[1])).toEqual(['Lena started the clock without Ossa.']);

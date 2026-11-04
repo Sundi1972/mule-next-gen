@@ -6,7 +6,7 @@ import { useClient } from '../../net/react';
 import { startControls, stickOf, type Controls } from './controls';
 import { msPerTick, othersAt, pushFrame, startFrameLog, type Drawn, type FrameLog } from './frames';
 import { advanceTo, assayTick, holdUntil, markStale, phoneTick, predictWorld, receiveFrame, shownAt, startPrediction, steerFrom, type ColonistBase, type Prediction, type Shown } from './predict';
-import { gateSteer, startGate, type SteerGate } from './steer';
+import { gateSteer, heldBack, startGate, type SteerGate } from './steer';
 import { usePhoneGame } from '../game';
 
 /**
@@ -171,21 +171,56 @@ export function PhoneLive({ children }: { children: ReactNode }) {
       // At the frames' own pace, so a table that plays its phases quicker needs no corrections.
       const target = phoneTick(s.p, now, rtt, cfg, pace);
       if (target !== null) s.p = advanceTo(s.p, target, world);
-      const shown = shownAt(s.p, now, cfg);
-      const want = stickOf(source.controls, shown);
-      // Only a live copy steers: the stamp is its tick, and a closed socket would only toast.
-      if (s.p.status === 'live' && client.getState().status === 'open') {
-        const r = gateSteer(s.gate, want, now);
-        if (r.send) {
-          s.gate = r.gate;
-          s.p = steerFrom(s.p, r.send);
-          client.intent({ type: 'steer', x: r.send.x, y: r.send.y, tick: s.p.tick });
-        }
-      }
+      steerNow(now);
       return { me: shownAt(s.p, now, cfg), others: s.log.frames.length ? othersFrom(s.log, now) : viewOthers(ctx.current.view), status: s.p.status, beats: s.beats.filter((b) => now - b.at < BEAT_MS) };
     },
     () => ({ me: fromView(self), others: viewOthers(view), status: 'waiting', beats: [] }),
   );
+  /** A change the gate held back, sent by a timer when no animation frame comes first. */
+  const later = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /**
+   * Sends what the stick, the keys or the mouse want, if the gate lets it go; a change it holds back goes by a timer
+   * after the interval, so the last change, a release above all, never waits for a frame that may not come.
+   */
+  function steerNow(now: number): void {
+    const s = state.current;
+    const want = stickOf(source.controls, shownAt(s.p, now, cfg));
+    // Only a live copy steers: the stamp is its tick, and a closed socket would only toast.
+    if (s.p.status !== 'live' || client.getState().status !== 'open') return;
+    const r = gateSteer(s.gate, want, now);
+    if (r.send) {
+      s.gate = r.gate;
+      s.p = steerFrom(s.p, r.send);
+      client.intent({ type: 'steer', x: r.send.x, y: r.send.y, tick: s.p.tick });
+      return;
+    }
+    const wait = heldBack(s.gate, want, now);
+    if (wait === null || later.current !== null) return;
+    later.current = setTimeout(() => {
+      later.current = null;
+      steerNow(Date.now());
+    }, wait);
+  }
+  const steer = useRef(steerNow);
+  steer.current = steerNow;
+  // Put away (hidden, or the window loses focus), the phone lets go of everything at once: its frames stop next.
+  useEffect(() => {
+    const letGo = () => {
+      if (document.visibilityState !== 'hidden' && document.hasFocus()) return;
+      source.controls.keys.clear();
+      source.controls.stick = null;
+      source.controls.mouse = null;
+      steer.current(Date.now());
+    };
+    document.addEventListener('visibilitychange', letGo);
+    window.addEventListener('blur', letGo);
+    return () => {
+      document.removeEventListener('visibilitychange', letGo);
+      window.removeEventListener('blur', letGo);
+      if (later.current !== null) clearTimeout(later.current);
+      later.current = null;
+    };
+  }, [source]);
   source.press = () => {
     if (client.getState().status === 'open') client.intent({ type: 'act' });
   };

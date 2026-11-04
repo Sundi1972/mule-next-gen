@@ -43,7 +43,16 @@ const same = (a: Stick, b: Stick) => a.x === b.x && a.y === b.y;
  * latest; so the last change is never lost, and the ones between are skipped.
  */
 export function gateSteer(gate: SteerGate, want: Stick, nowMs: number): { gate: SteerGate; send: Stick | null } {
-  if (same(want, gate.sent)) return { gate, send: null };
-  if (nowMs - gate.sentAt < MS_PER_SECOND / DEV_STEER.steerMaxPerSecond) return { gate, send: null };
+  if (heldBack(gate, want, nowMs) !== 0) return { gate, send: null };
   return { gate: { sent: want, sentAt: nowMs }, send: want };
+}
+
+/**
+ * How long `want` must still wait to be sent, in ms: 0 when it may go now, null when there is nothing to send (the
+ * server has it). The screen sets a timer for a change held back, so it goes out after the interval even when no
+ * animation frame comes to ask again (a phone put away: its frames stop, its stick lets go).
+ */
+export function heldBack(gate: SteerGate, want: Stick, nowMs: number): number | null {
+  if (same(want, gate.sent)) return null;
+  return Math.max(0, gate.sentAt + MS_PER_SECOND / DEV_STEER.steerMaxPerSecond - nowMs);
 }

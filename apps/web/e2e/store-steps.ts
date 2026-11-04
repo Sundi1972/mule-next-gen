@@ -472,6 +472,8 @@ export interface ArcadeTable {
   mia: Page;
   tv: Page;
   wires: { heiko: Wire; mia: Wire; tv: Wire };
+  /** Where the pages' errors go. */
+  errors: string[];
 }
 
 /** Real ms a frame is due at the server's 20 Hz tick, at phaseScale 1. */
@@ -513,7 +515,7 @@ export async function arcadeTable(browser: Browser, base: string, server: MuleSe
   const end = Date.now() + FLOOR_STARTS_MS;
   while (!game.steering && Date.now() < end) await heiko.page.waitForTimeout(100);
   check(game.steering, `arcade: the server's floor ticks within ${FLOOR_STARTS_MS / 1_000} s of development (phase ${game.state.phase})`);
-  return { server, code, heiko: heiko.page, mia: mia.page, tv: tv.page, wires: { heiko: heiko.wire, mia: mia.wire, tv: tv.wire } };
+  return { server, code, heiko: heiko.page, mia: mia.page, tv: tv.page, wires: { heiko: heiko.wire, mia: mia.wire, tv: tv.wire }, errors };
 }
 
 /** Kept a string: tsx would wrap named functions in a helper the page lacks. A colonist the TV draws, by seat. */
@@ -637,7 +639,7 @@ export async function thePiecesMeet(t: ArcadeTable): Promise<string> {
     check(d && d.space === s.space && Math.abs(d.x - s.x) < STILL && Math.abs(d.y - s.y) < STILL, `step 1: the TV draws ${seat} where the server has it, ${where(s)}, got ${d ? where(d) : 'nothing'}`);
   }
   const game = steeredOf(server, code);
-  if (game.devEndsAt === null) check((await tv.getByRole('timer').count()) === 0, "step 1: while month 1's clock waits the TV shows no clock, as the flag-off TV");
+  if (game.devEndsAt === null) check((await tv.locator('header [role=timer]').count()) === 0, "step 1: while month 1's clock waits the TV's header shows no clock, as the flag-off TV");
   return `${perSecond.toFixed(1)} frames/s; held → ${where(before)} → ${where(held)}, stopped at ${where(stopped)}; mashing ${busiest} steers/s at most; the TV drew ${Object.entries(drawn).map(([k, d]) => `${k} ${where(d)}`).join(', ')}`;
 }
 
@@ -932,39 +934,50 @@ export async function aDroppedPhoneStops(t: ArcadeTable): Promise<string> {
   check(onFloor(server, code, seat).space === 'hall', 'B-AC-8: Mia starts in the hall');
 
   await mia.getByTestId('phone-game').focus();
+  const still = onFloor(server, code, seat);
+  const w0 = wires.mia.steers.length;
   await mia.keyboard.down('ArrowLeft');
-  await mia.waitForTimeout(400);
-  const walking = onFloor(server, code, seat);
-  await mia.context().setOffline(true);
+  const walking = await floorWhen(mia, server, code, seat, (c) => still.x - c.x >= MOVES_AT_LEAST);
+  check(still.x - walking.x >= MOVES_AT_LEAST, `B-AC-8: Mia is walking when her phone drops, ${where(still)} → ${where(walking)}; sent ${JSON.stringify(wires.mia.steers.slice(w0))}`);
+  // The phone drops mid-walk, its key still held: its page and socket are gone at once.
+  const url = mia.url();
+  const context = mia.context();
+  await mia.close();
   const away = Date.now();
   const end = away + 5_000;
-  while (!game.away.has(seat) && Date.now() < end) await mia.waitForTimeout(TICK_MS);
+  while (!game.away.has(seat) && Date.now() < end) await t.tv.waitForTimeout(TICK_MS);
   check(game.away.has(seat), 'B-AC-8: the server sees Mia drop within 5 s');
   const awaySeen = Date.now();
-  await mia.waitForTimeout(1_000);
+  await t.tv.waitForTimeout(1_000);
   const frames = wires.tv.frames.filter((f) => f.at > awaySeen + 2 * TICK_MS).map((f) => f.frame.colonists.find((c) => c.id === seat)!);
   check(frames.length >= 15, `B-AC-8: the TV keeps getting frames while Mia is away, got ${frames.length}`);
   const spots = new Set(frames.map((c) => `${c.space} ${c.x},${c.y}`));
   check(spots.size === 1, `B-AC-8: while away her colonist stands in the server's frames, got ${[...spots].join(' | ')}`);
   check(game.devEndsAt === endsAt, 'B-AC-8: the drop does not move the clock');
-  await mia.keyboard.up('ArrowLeft');
 
-  await mia.context().setOffline(false);
+  // Back on the same phone: it opens the game again and takes its saved seat.
+  const phone = await context.newPage();
+  phone.on('pageerror', (e) => t.errors.push(`Mia (back): ${e.message}`));
+  t.wires.mia = watchWire(phone);
+  t.mia = phone;
+  await phone.goto(url);
   const backBy = Date.now() + 10_000;
-  while (game.away.has(seat) && Date.now() < backBy) await mia.waitForTimeout(TICK_MS);
+  while (game.away.has(seat) && Date.now() < backBy) await phone.waitForTimeout(TICK_MS);
   check(!game.away.has(seat), 'B-AC-8: Mia comes back within 10 s');
-  await mia.getByTestId('reconnecting').waitFor({ state: 'hidden', timeout: 3_000 }).catch(() => undefined);
-  await mia.getByTestId('phone-game').focus();
+  await phone.getByTestId('phone-game').waitFor({ timeout: 5_000 });
+  await phone.waitForFunction(() => document.querySelector('[data-testid=phone-game]') === document.activeElement, null, { timeout: 2_000 }).catch(() => undefined);
+  const mia2 = phone;
   const r0 = onFloor(server, code, seat);
-  const s0 = wires.mia.steers.length;
-  await hold(mia, ['ArrowRight'], HOLD_MS);
-  const r1 = await floorWhen(mia, server, code, seat, (c) => c.x - r0.x >= MOVES_AT_LEAST);
-  check(wires.mia.steers.length > s0, 'B-AC-8: back, the phone sends steers again');
-  check(r1.x - r0.x >= MOVES_AT_LEAST, `B-AC-8: back, Mia steers her colonist again, ${where(r0)} → ${where(r1)}`);
+  const s0 = t.wires.mia.steers.length;
+  // On along the walkway, away from the door she came in by.
+  await hold(mia2, ['ArrowLeft'], HOLD_MS);
+  const r1 = await floorWhen(mia2, server, code, seat, (c) => r0.x - c.x >= MOVES_AT_LEAST);
+  check(t.wires.mia.steers.length > s0, 'B-AC-8: back, the phone sends steers again');
+  check(r1.space === r0.space && r0.x - r1.x >= MOVES_AT_LEAST, `B-AC-8: back, Mia steers her colonist again, ${where(r0)} → ${where(r1)}`);
   check(game.devEndsAt === endsAt, 'B-AC-8: coming back does not move the clock');
 
   const over = Date.now() + DROP_TURN_SECONDS * 1_000 + 5_000;
-  while (game.state.phase === 'development' && Date.now() < over) await mia.waitForTimeout(TICK_MS);
+  while (game.state.phase === 'development' && Date.now() < over) await mia2.waitForTimeout(TICK_MS);
   const endedAt = Date.now();
   check(game.state.phase !== 'development', 'B-AC-8: development ends');
   check(Math.abs(endedAt - endsAt) <= ON_THE_CLOCK_MS, `B-AC-8: the turn ends on the clock, ${endedAt - endsAt} ms from it`);

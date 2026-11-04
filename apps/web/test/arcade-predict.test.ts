@@ -3,7 +3,7 @@ import type { DevFrame, MuleView, TileView } from '@mule/protocol';
 import { describe, expect, it } from 'vitest';
 import { advanceTo, assayTick, holdUntil, markStale, phoneTick, predictWorld, receiveFrame, shownAt, startPrediction, steerFrom, type Prediction, type PredictWorld } from '../src/phone/arcade/predict';
 import { msPerTick, pushFrame, startFrameLog } from '../src/phone/arcade/frames';
-import { gateSteer, quantise, startGate, type SteerGate } from '../src/phone/arcade/steer';
+import { gateSteer, heldBack, quantise, startGate, type SteerGate } from '../src/phone/arcade/steer';
 
 /**
  * T-AC-10 (arcade spec RULE-10, AM-7; S-2's harness in docs/research/2026-10-29-arcade-s2-feel.md is the reference): the
@@ -348,5 +348,17 @@ describe('C11: the stick on the wire (HC-5, spec §3)', () => {
     // Resting sends nothing more.
     const rest = gateSteer(gate, quantise(0, 0), 5_000);
     expect(rest.send).toBeNull();
+  });
+
+  it('C11: a change the gate holds back says when it may go, so a timer can send it without an animation frame', () => {
+    const step = 1_000 / DEV_STEER.steerMaxPerSecond;
+    const walking = gateSteer(startGate(), { x: -1, y: 0 }, 1_000).gate;
+    // Let go 30 ms after the walk was sent: held back until a step after the send, then it goes.
+    expect(gateSteer(walking, { x: 0, y: 0 }, 1_030).send).toBeNull();
+    expect(heldBack(walking, { x: 0, y: 0 }, 1_030)).toBe(step - 30);
+    expect(gateSteer(walking, { x: 0, y: 0 }, 1_000 + step).send).toEqual({ x: 0, y: 0 });
+    // Nothing held back: the server has what the stick wants, or the change may go now.
+    expect(heldBack(walking, { x: -1, y: 0 }, 1_030)).toBeNull();
+    expect(heldBack(walking, { x: 0, y: 0 }, 1_000 + step)).toBe(0);
   });
 });

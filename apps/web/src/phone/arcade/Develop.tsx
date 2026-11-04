@@ -109,6 +109,9 @@ function useGameKeys() {
 
 const near = (r: Box, p: { x: number; y: number } | null, by: number) => !!p && p.x > r.x - by && p.x < r.x + r.w + by && p.y > r.y - by && p.y < r.y + r.h + by;
 
+/** A control over a plot of yours (AM-20): translucent, so the plot's marks read through, and still plainly a control. */
+const OVER_YOUR_PLOTS = 'opacity-60';
+
 /** Under this a side column drops the month's label and the big clock for a compact one. */
 const SIDE_ROOM_FULL = 90;
 
@@ -152,6 +155,11 @@ export function PhoneLandscape({ frame }: { frame: { w: number; h: number } }) {
   const fade = (r: Box) => near(r, mePx, L.cell * 0.8) || targets.some((t) => near(r, t, L.cell * 0.5));
   const stickFaded = fade(L.stick);
   const buttonFaded = fade(L.button);
+  // Over a plot of yours a control is translucent, so the plot's marks read through it (AM-20); near you or the target
+  // it fades further, near-clear, as the scaffold has it.
+  const myPlots = space === 'map' ? view.tiles.filter((t) => t.owner === me.id) : [];
+  const overMine = (r: Box) => myPlots.some((t) => overlap(r, tileBox(L, t)) > 0);
+  const look = (faded: boolean, r: Box) => (faded ? 'opacity-25' : overMine(r) ? OVER_YOUR_PLOTS : 'opacity-100');
   // At 667 the status bar: row 0's widest run with no plot of yours and no target on it.
   let bar: Box | null = null;
   if (L.mode === 'top') {
@@ -249,15 +257,23 @@ export function PhoneLandscape({ frame }: { frame: { w: number; h: number } }) {
           <GuideNote seat={seat} faded={bannerFaded} />
         </div>
         {/* The controls, over the bottom corners. */}
-        <span className={cx('absolute z-30 transition-opacity duration-200', stickFaded ? 'opacity-25' : 'opacity-100')} style={{ left: L.stick.x, top: L.stick.y }} data-testid="overlay-stick" data-overlay="stick" data-faded={stickFaded || undefined}>
+        <span
+          className={cx('absolute z-30 transition-opacity duration-200', look(stickFaded, L.stick))}
+          style={{ left: L.stick.x, top: L.stick.y }}
+          data-testid="overlay-stick"
+          data-overlay="stick"
+          data-faded={stickFaded || undefined}
+          data-over-plot={(!stickFaded && overMine(L.stick)) || undefined}
+        >
           <Stick size={L.stick.w} className="border-holo/60! bg-panel/30! backdrop-blur-[2px]" />
         </span>
         <span
-          className={cx('absolute z-30 rounded-panel bg-panel/80 p-1 shadow-map backdrop-blur-[2px] transition-opacity duration-200', buttonFaded ? 'opacity-25' : 'opacity-100')}
+          className={cx('absolute z-30 rounded-panel bg-panel/80 p-1 shadow-map backdrop-blur-[2px] transition-opacity duration-200', look(buttonFaded, L.button))}
           style={css(L.button)}
           data-testid="overlay-button"
           data-overlay="button"
           data-faded={buttonFaded || undefined}
+          data-over-plot={(!buttonFaded && overMine(L.button)) || undefined}
         >
           <Button seat={seat} small={L.small} className="h-full! min-h-0! px-2! py-1! disabled:opacity-90!" />
         </span>
