@@ -105,6 +105,21 @@ describe('A-6 at the server: choose how many at the line, and a tap is one step'
     expect(auction.shipQuote![2]).toBeLessThan(auction.shipQuote![0]!);
   });
 
+  it("an AI seat's own lineTrade keeps its Done, as in the simulator (a phone's takes it back)", () => {
+    const { game, state } = toWalk();
+    const a = state.auction!;
+    const baron = a.walkers.find((w) => w.id === 's3')!;
+    baron.side = 'buyer';
+    baron.dir = 0;
+    baron.price = a.storeSell;
+    state.players.find((p) => p.id === 's3')!.money = 5_000;
+    if (!a.done.includes('s3')) a.done.push('s3');
+    const act = (game as unknown as { aiAct(seat: string, action: { type: 'lineTrade'; units: number }): boolean }).aiAct.bind(game);
+    expect(act('s3', { type: 'lineTrade', units: 1 })).toBe(true);
+    expect(baron.order).toMatchObject({ house: 'store', units: 1 });
+    expect(a.done).toContain('s3');
+  });
+
   it('refuses a lineTrade away from a line with the rules\' message, and changes nothing', () => {
     const { game } = toWalk();
     expect(() => game.handle('s2', { type: 'lineTrade', units: 1 })).toThrow(RuleError);
@@ -149,7 +164,7 @@ describe('A-6 over the wire', () => {
       send({ t: 'intent', intent: ok });
       expect(await error, JSON.stringify(ok)).toBe('The auction is not running');
     }
-    const malformed = [{ type: 'lineTrade' }, { type: 'lineTrade', units: '2' }, { type: 'lineTrade', units: 1.5 }, { type: 'walkStep' }, { type: 'walkStep', dir: 'stop' }];
+    const malformed = [{ type: 'lineTrade' }, { type: 'lineTrade', units: 0 }, { type: 'lineTrade', units: -1 }, { type: 'lineTrade', units: '2' }, { type: 'lineTrade', units: 1.5 }, { type: 'walkStep' }, { type: 'walkStep', dir: 'stop' }];
     for (const bad of malformed) {
       const error = nextError();
       send({ t: 'intent', intent: bad });

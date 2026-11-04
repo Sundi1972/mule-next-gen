@@ -225,7 +225,7 @@ function isIntent(v: unknown): v is MuleIntent {
     case 'walkStep':
       return i.dir === 'up' || i.dir === 'down';
     case 'lineTrade':
-      return int(i.units);
+      return int(i.units) && (i.units as number) >= 1;
     case 'list': {
       const item = i.item as Record<string, unknown> | null;
       return typeof item === 'object' && item !== null && typeof item.kind === 'string' && int(item.x) && int(item.y) && typeof i.minimum === 'number' && typeof i.unsold === 'string';
