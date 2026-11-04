@@ -61,4 +61,20 @@ describe('C11: the joystick', () => {
     act(() => on.onPointerUp!(at(1, 64, 128)));
     expect(seen.at(-1)).toBeNull();
   });
+
+  it('C11: a pointer that loses its capture mid-drag (the page hidden) lets go: the knob recentres and the next thumb steers', () => {
+    const seen: StickAt[] = [];
+    root = createRoot(host as unknown as HTMLElement);
+    act(() => root!.render(createElement(Joystick, { onStick: (at) => seen.push(at) })));
+    const pad = find('joystick')!;
+    const on = handlers(pad);
+    const at = (pointerId: number, clientX: number, clientY: number) => ({ pointerId, clientX, clientY, altKey: false, currentTarget: { setPointerCapture: () => {} } });
+    act(() => on.onPointerDown!(at(1, 128, 64)));
+    expect(find('joystick-knob')!.style.transform).not.toBe('translate(-50%, -50%)');
+    act(() => on.onLostPointerCapture!(at(1, 128, 64)));
+    expect(seen.at(-1)).toBeNull();
+    expect(find('joystick-knob')!.style.transform).toBe('translate(-50%, -50%)');
+    act(() => on.onPointerDown!(at(2, 64, 128)));
+    expect(seen.at(-1)).toEqual({ x: 0, y: 1 });
+  });
 });
