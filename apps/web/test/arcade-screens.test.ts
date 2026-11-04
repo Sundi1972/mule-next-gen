@@ -165,7 +165,7 @@ describe('C11: the phone, held sideways', () => {
   });
 
   it('C11 (AM-20, A-1): while month 1\'s clock waits, the side room says so in A-1\'s words, not only a full clock', () => {
-    const waits = (me: MyView, size: 844 | 667 = 844) => phone(devView(me, { month: 1, clockWaitsFor: ['s2'] }), live(mine(5.5, 4.5)), size);
+    const waits = (me: MyView, size: 844 | 667 = 844, waitsFor = ['s2']) => phone(devView(me, { month: 1, clockWaitsFor: waitsFor }), live(mine(5.5, 4.5)), size);
     // Your MULE is in and Ossa's still to come.
     const inAt844 = waits(lenasMe({ installedThisTurn: true }));
     expect(text(inside(inAt844, 'phone-status-left'), 'wait-title')).toBe('Your MULE is in · waiting for Ossa');
@@ -173,8 +173,10 @@ describe('C11: the phone, held sideways', () => {
     expect(inside(inAt844, 'phone-status-left')).toContain('data-testid="shared-clock"');
     // At 667 the status is a bar over the map: the title goes there.
     expect(text(inside(waits(lenasMe({ installedThisTurn: true }), 667), 'phone-status-bar'), 'wait-title')).toBe('Your MULE is in · waiting for Ossa');
-    // Before your first MULE, no rush: the corral, and why.
-    expect(text(waits(lenasMe()), 'wait-title')).toBe('Buy a MULE at the corral');
+    // Before your first MULE (the clock waits for you too), no rush: the corral, and why.
+    const before = waits(lenasMe(), 844, ['s1', 's2']);
+    expect(text(before, 'wait-title')).toBe('Buy a MULE at the corral');
+    expect(text(before, 'wait-detail')).toBe('Your first month: no rush. The clock starts when your first MULE is in.');
     // Once the clock runs, no wait words.
     expect(phone(devView(lenasMe({ installedThisTurn: true }), { month: 1 }), live(mine(5.5, 4.5)))).not.toContain('wait-title');
   });

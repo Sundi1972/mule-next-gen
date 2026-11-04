@@ -1,6 +1,8 @@
 import { DEVELOPMENT, SPECIES_PERK, type RawGood } from '@mule/engine';
 import { cx, GoodIcon, MuleIcon, TERRAIN_NAME } from '@mule/ui';
 import { useState, type CSSProperties } from 'react';
+import { waitingNow } from '../Develop';
+import type { Now } from '../Shell';
 import { groundPips, plotName } from '../../game/derive';
 import { bestHere, OUTFIT_WORD, RAW, plotTitle, suits, suitsLine } from './plots';
 import type { ArcadeSeat } from './seat';
@@ -233,3 +235,37 @@ export function Reconnecting({ seat }: { seat: ArcadeSeat }) {
   );
 }
 
+
+/**
+ * Month 1's wait (A-1, spec AM-20), in today's Develop's own words (waitingNow): before your first MULE, no rush; once it
+ * is in, whose are still to come. Null while the clock runs, and when the wait has nothing of its own to say.
+ */
+export function waitWords(seat: ArcadeSeat): Now | null {
+  const waitsFor = seat.view.clockWaitsFor;
+  if (!waitsFor) return null;
+  const { me, view } = seat;
+  const youWait = !waitsFor.includes(me.id);
+  // Row 1, buying your first MULE, is the step waitingNow rewords; any other step it leaves as it is.
+  const toCorral = seat.guide?.space === 'map' ? seat.guide.spots[0]?.label === 'STORE · CORRAL' : seat.guide?.rooms.includes('corral');
+  const step: Now = toCorral ? { step: 1, of: 3, title: '' } : { title: '' };
+  const said = waitingNow(step, me.carriedMule, me.installedThisTurn || youWait, !view.tiles.some((t) => t.owner === me.id), view.storeMules, waitsFor, me.id, view.players);
+  return said === step ? null : said;
+}
+
+/** The wait's words in the side room, or its title alone in the small phone's bar. */
+export function WaitWords({ seat, short = false }: { seat: ArcadeSeat; short?: boolean }) {
+  const now = waitWords(seat);
+  if (!now) return null;
+  return (
+    <span className="flex min-w-0 flex-col gap-0.5" data-testid="wait-now">
+      <span className={cx('font-display font-semibold leading-tight text-holo', short ? 'truncate text-[11px]' : 'text-xs')} data-testid="wait-title">
+        {now.title}
+      </span>
+      {!short && now.detail && (
+        <span className="text-[10px] leading-tight text-ink-2" data-testid="wait-detail">
+          {now.detail}
+        </span>
+      )}
+    </span>
+  );
+}

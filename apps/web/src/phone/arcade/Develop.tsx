@@ -8,7 +8,7 @@ import { WIDE_PX } from '../Shell';
 import { keyDown, keyUp } from './controls';
 import { colonistBox, css, FRAMES, freeRun, overlap, phoneLayout, tileBox, type Box } from './layout';
 import { PhoneLive, useArcade, useLive } from './live';
-import { CompactClock, GroundChip, GuideNote, LeadChip, Money, OverCard, PaceLine, PlotCard, PlotsLegend, Reconnecting } from './parts';
+import { CompactClock, GroundChip, GuideNote, LeadChip, Money, OverCard, PaceLine, PlotCard, PlotsLegend, Reconnecting, WaitWords } from './parts';
 import { arcadeSeat, type ArcadeSeat } from './seat';
 import { SeatProvider, YourStage } from './stages';
 
@@ -201,6 +201,7 @@ export function PhoneLandscape({ frame }: { frame: { w: number; h: number } }) {
             {!compactLeft && <span className="label-caps text-[10px]! leading-tight">M{view.month} · Development</span>}
             <Money seat={seat} className={compactLeft ? 'text-[11px] [&_*]:whitespace-nowrap' : 'text-base'} />
             {compactLeft ? <CompactClock seat={seat} /> : <SharedClock seconds={seat.seconds} total={seat.total} />}
+            <WaitWords seat={seat} short={compactLeft} />
             {!keys.focused && !compactLeft && (
               <span className="rounded-chip bg-panel/90 px-1 py-0.5 text-[10px] leading-tight text-ink-2 shadow-chip" data-testid="focus-hint">
                 Click the game to steer with the keys
@@ -230,6 +231,7 @@ export function PhoneLandscape({ frame }: { frame: { w: number; h: number } }) {
           >
             <Money seat={seat} className="text-xs" />
             <CompactClock seat={seat} />
+            <WaitWords seat={seat} short />
             <span className="relative min-w-0 shrink">
               <LeadChip seat={seat} className="px-1! text-[11px]!" />
             </span>
