@@ -7,7 +7,7 @@ import { secondsUntil, seatSpecies, toSlot } from '../game/derive';
 import { useServerNow } from '../net/react';
 import { BEAT_MS, BoardLive, useLive } from '../phone/arcade/live';
 import { stillNeeding, tvLines, tvLinesPlace, TV_LINE, type TvLine } from '../phone/arcade/moments';
-import type { MomentsNow } from '../phone/arcade/frames';
+import type { DrawnMoments } from '../phone/arcade/frames';
 import { colonistsOf, type ArcadeColonist } from '../phone/arcade/seat';
 import { HallStage, MapStage } from '../phone/arcade/stages';
 import { ClockWaits, FirstMules, TvHeader } from './TableApp';
@@ -28,12 +28,12 @@ export function TvDevelop({ game }: { game: MuleView }) {
 }
 
 /** What each colonist is doing, at its row's end, as far as the frames and the view say: a moment first. */
-function doing(c: ArcadeColonist | undefined, done: boolean, now: MomentsNow | null, racing: readonly string[]): string {
+function doing(c: ArcadeColonist | undefined, done: boolean, drawn: DrawnMoments | null, racing: readonly string[]): string {
   if (done) return 'PUB';
   if (!c) return '';
   if (c.encounter) return c.encounter === 'fight' ? 'FIGHT' : c.encounter === 'chase' ? 'RUN' : 'WOLVES';
   if (racing.includes(c.id)) return 'CORRAL';
-  if (now?.moments.glint && now.racers.includes(c.id)) return 'GLINT';
+  if (drawn?.glint && drawn.racers.includes(c.id)) return 'GLINT';
   return c.space === 'hall' ? (c.lead ? 'OUTFIT' : 'STORE') : c.lead?.good ? '→ PLOT' : '→ STORE';
 }
 
@@ -56,9 +56,9 @@ export function TvArcade({ game }: { game: MuleView }) {
   const serverNow = useServerNow(200);
   const colonists = colonistsOf(game, live, null);
   const seconds = secondsUntil(game.phaseEndsAt, serverNow) ?? 0;
-  const now = live.moments ?? null;
-  const racing = stillNeeding(now?.moments.scramble, colonists);
-  const rows: PaceRow[] = game.players.map((p) => ({ id: p.id, name: p.name, slot: toSlot(p.slot), condition: p.condition, note: doing(colonists.find((c) => c.id === p.id), p.doneDeveloping, now, racing), done: p.doneDeveloping }));
+  const drawn = live.moments ?? null;
+  const racing = stillNeeding(drawn?.scramble, colonists);
+  const rows: PaceRow[] = game.players.map((p) => ({ id: p.id, name: p.name, slot: toSlot(p.slot), condition: p.condition, note: doing(colonists.find((c) => c.id === p.id), p.doneDeveloping, drawn, racing), done: p.doneDeveloping }));
   const data = { view: game, colonists };
   // The hall takes the height the pace list leaves (A-1: six seats and a three-line ticker), at 4:3.
   const box = useRef<HTMLDivElement>(null);
@@ -113,7 +113,7 @@ function TvBeats({ game, colonists, mapW }: { game: MuleView; colonists: ArcadeC
   if (started && !seen.current.has(started)) seen.current.set(started, now);
   const host: TvLine[] = started && now - seen.current.get(started)! < BEAT_MS ? [{ key: 'started', text: started, tone: 'warn' }] : [];
   const place = tvLinesPlace(game, mapW);
-  const lines = [...tvLines({ now: live.moments ?? null, colonists, beats: live.beats.map((b) => b.text), mulesLeft: game.storeMules }), ...host].slice(0, place.most);
+  const lines = [...tvLines({ drawn: live.moments ?? null, colonists, beats: live.beats.map((b) => b.text), mulesLeft: game.storeMules }), ...host].slice(0, place.most);
   if (lines.length === 0) return null;
   return (
     <div

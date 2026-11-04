@@ -15,6 +15,9 @@ import { HALL } from '@mule/engine';
  * - The stick and the button lie over the bottom corners.
  */
 export type PhoneSize = 844 | 667;
+
+/** How a screen is read: a phone in the hand, the TV across a room, the laptop's wide one. */
+export type Density = 'phone' | 'tv' | 'wide';
 export interface Box {
   x: number;
   y: number;

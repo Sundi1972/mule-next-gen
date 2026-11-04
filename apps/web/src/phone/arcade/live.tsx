@@ -4,8 +4,9 @@ import { createContext, useContext, useEffect, useMemo, useRef, useSyncExternalS
 import type { TableClient } from '../../net/client';
 import { useClient } from '../../net/react';
 import { startControls, stickOf, type Controls } from './controls';
-import { momentsAt, msPerTick, othersAt, pushFrame, startFrameLog, type Drawn, type FrameLog, type MomentsNow } from './frames';
-import { advanceTo, assayTick, boltedNow, holdUntil, markStale, phoneTick, predictWorld, receiveFrame, serverHolds, shownAt, startPrediction, steerStep, wolvesHold, type ColonistBase, type Prediction, type Shown } from './predict';
+import { momentsAt, othersAt, pushFrame, startFrameLog, type Drawn, type FrameLog, type DrawnMoments } from './frames';
+import { ownFrame, ownTick, startOwn, type Own, type OwnWorld } from './own';
+import { predictWorld, shownAt, steerStep, type ColonistBase, type Prediction, type Shown } from './predict';
 import { startGate, type SteerGate } from './steer';
 import { usePhoneGame } from '../game';
 
@@ -32,7 +33,7 @@ export interface Live {
   /** The device time (Date.now) the frames' positions were worked out for; none before the first frame. */
   at?: number;
   /** The moments at the instant the others are drawn at; none while nothing is on. */
-  moments?: MomentsNow | null;
+  moments?: DrawnMoments | null;
 }
 
 interface LiveSource {
@@ -79,8 +80,6 @@ export function fromView(p: PlayerView): Drawn | null {
   if (!c || c.x === undefined || c.y === undefined || !c.space) return null;
   return { id: p.id, x: c.x, y: c.y, space: c.space, facing: c.facing ?? 'right', moving: !!c.moving, lead: c.lead ?? null };
 }
-
-const shownOf = ({ id: _id, ...at }: Drawn): Shown => at;
 
 /** Your pace as the floor has it: the wire's, else hunger × sickness × the Zipwing's perk. */
 export function paceOf(p: PlayerView): number {
@@ -144,45 +143,25 @@ export function PhoneLive({ children }: { children: ReactNode }) {
   // The copy steps on the view's map and your MULE; every view sends its tiles anew, so each view makes a new world.
   const world = useMemo(() => predictWorld(view, me, cfg), [view.width, view.height, view.tiles, me.id, me.carriedMule, cfg]);
   const base: ColonistBase = { pace: paceOf(self), bitten: !!self.colonist?.bitten, pelts: self.colonist?.pelts ?? 0 };
-  // `assaying`: the assay end (server ms) the copy already holds for, so each view's is applied once.
-  const state = useRef<{ p: Prediction; log: FrameLog; gate: SteerGate; beats: Beat[]; assaying: number | null }>({ p: startPrediction(), log: startFrameLog(), gate: startGate(), beats: [], assaying: null });
+  const state = useRef<{ own: Own; gate: SteerGate; beats: Beat[] }>({ own: startOwn(), gate: startGate(), beats: [] });
   const ctx = useRef({ world, base, view, self });
   ctx.current = { world, base, view, self };
+  const ownWorld = (): OwnWorld => ({ world: ctx.current.world, base: ctx.current.base, id: me.id, cfg, assayUntil: ctx.current.self.colonist?.assayUntil ?? null });
   const viewOthers = (v: MuleView) => new Map(v.players.filter((p) => p.id !== me.id).flatMap((p) => (fromView(p) ? [[p.id, fromView(p)!] as const] : [])));
   const source = useLoop(
     client,
     (frame, at) => {
       const s = state.current;
-      s.log = pushFrame(s.log, frame, at);
-      s.p = receiveFrame(s.p, frame, at, ctx.current.world, { ...ctx.current.base, bolted: !!frame.moments?.bolted.includes(me.id) });
+      s.own = ownFrame(s.own, frame, at, ownWorld());
       s.beats = beatsOf(s.beats, frame, at);
     },
     (now) => {
       const s = state.current;
-      const { world } = ctx.current;
-      s.p = markStale(s.p, now, cfg);
-      const rtt = client.roundTripMs() ?? 0;
-      // Your own view says you assay: the copy stands until then, as the server holds you (needs a frame to time it).
-      const pace = msPerTick(s.log, cfg.steer.tickMs);
-      const until = ctx.current.self.colonist?.assayUntil ?? null;
-      if (until !== s.assaying && (until === null || s.p.frame)) {
-        s.assaying = until;
-        s.p = holdUntil(s.p, until === null ? null : assayTick(s.p, until, now, client.serverNow(), rtt, pace));
-      }
-      const framed = s.log.frames.length > 0;
-      const drawn = framed ? othersAt(s.log, now, cfg.steer) : null;
-      const framedMe = drawn?.get(me.id) ?? null;
-      drawn?.delete(me.id);
-      // While a pack or a stun has you the server moves you: you are drawn from the frames, as everyone else.
-      const newest = s.log.frames.at(-1)?.frame;
-      s.p = wolvesHold(s.p, serverHolds(me.id, ctx.current.self.colonist?.encounter, newest), ctx.current.base, framedMe, now, cfg);
-      s.p = boltedNow(s.p, !!newest?.moments?.bolted.includes(me.id));
-      // At the frames' own pace, so a table that plays its phases quicker needs no corrections.
-      const target = phoneTick(s.p, now, rtt, cfg, pace);
-      if (target !== null) s.p = advanceTo(s.p, target, world);
+      const step = ownTick(s.own, now, ownWorld(), { rttMs: client.roundTripMs() ?? 0, serverNow: client.serverNow() });
+      s.own = step.own;
       steerNow(now);
-      const mine = s.p.wolves && framedMe ? shownOf(framedMe) : shownAt(s.p, now, cfg);
-      return { me: mine, others: drawn ?? viewOthers(ctx.current.view), status: s.p.status, beats: s.beats.filter((b) => now - b.at < BEAT_MS), moments: momentsAt(s.log, now, cfg.steer), ...(framed ? { at: now } : {}) };
+      const framed = step.others !== null;
+      return { me: step.me, others: step.others ?? viewOthers(ctx.current.view), status: s.own.p.status, beats: s.beats.filter((b) => now - b.at < BEAT_MS), moments: momentsAt(s.own.log, now, cfg.steer), ...(framed ? { at: now } : {}) };
     },
     () => ({ me: fromView(self), others: viewOthers(view), status: 'waiting', beats: [] }),
   );
@@ -194,9 +173,9 @@ export function PhoneLive({ children }: { children: ReactNode }) {
    */
   function steerNow(now: number): void {
     const s = state.current;
-    const want = stickOf(source.controls, shownAt(s.p, now, cfg));
-    const { p, gate, send, wait } = steerStep(s.p, s.gate, want, now, client.getState().status === 'open');
-    s.p = p;
+    const want = stickOf(source.controls, shownAt(s.own.p, now, cfg));
+    const { p, gate, send, wait } = steerStep(s.own.p, s.gate, want, now, client.getState().status === 'open');
+    s.own = { ...s.own, p };
     s.gate = gate;
     if (send) client.intent({ type: 'steer', ...send });
     if (wait === null || later.current !== null) return;

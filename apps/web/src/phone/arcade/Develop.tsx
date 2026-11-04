@@ -186,7 +186,7 @@ export function PhoneLandscape({ frame }: { frame: { w: number; h: number } }) {
   const banner = bannerBox(L, space, view.height, [...myPlots, seat.store]);
   const bannerFaded = near(banner, mePx, L.cell * 0.4);
   const { moments = null } = useLive();
-  const scramble = moments?.moments.scramble ?? null;
+  const scramble = moments?.scramble ?? null;
   const choosing = space === 'hall' && me.carriedMule === 'empty';
   const compactLeft = !!L.left && L.left.w < SIDE_ROOM_FULL;
   return (

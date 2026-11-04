@@ -88,7 +88,7 @@ export function assaySeconds(view: Pick<MuleView, 'month'>, me: SeatSums): numbe
   return analysisSeconds(sumsState(view, me), me.id);
 }
 
-function walkerOf(view: MuleView, p: PlayerView, at: Drawn, mine: boolean, cfg: FloorConfig): ArcadeColonist {
+function walkerOf(view: MuleView, p: PlayerView, at: Drawn, mine: boolean, encounter: ArcadeColonist['encounter'], cfg: FloorConfig): ArcadeColonist {
   const tile = tileUnder(view, at);
   return {
     id: p.id,
@@ -104,7 +104,7 @@ function walkerOf(view: MuleView, p: PlayerView, at: Drawn, mine: boolean, cfg: 
     pace: paceOf(p),
     terrain: tile ? terrainShare(tile.terrain, cfg) || 1 : 1,
     bitten: !!p.colonist?.bitten,
-    encounter: p.colonist?.encounter ?? null,
+    encounter,
     condition: p.condition,
     mine,
     done: p.doneDeveloping,
@@ -112,12 +112,18 @@ function walkerOf(view: MuleView, p: PlayerView, at: Drawn, mine: boolean, cfg: 
   };
 }
 
-/** Where every colonist stands: yours from your prediction, the others from the frames, else the view's own. */
+/**
+ * Where every colonist stands: yours from your prediction, the others from the frames, else the view's own. Its pack's
+ * stage comes from the frames once they come (a frame's moments name every pack; no moments, none): the server sends
+ * no view while an AI seat meets wolves.
+ */
 export function colonistsOf(view: MuleView, live: Live, meId: string | null, cfg: FloorConfig = floorConfig()): ArcadeColonist[] {
+  const framed = live.at !== undefined;
   return view.players.flatMap((p) => {
     const mine = p.id === meId;
     const at = (mine ? live.me && { id: p.id, ...live.me } : null) ?? live.others.get(p.id) ?? fromView(p);
-    return at ? [walkerOf(view, p, at, mine, cfg)] : [];
+    const encounter = framed ? (live.moments?.packs.find((k) => k.who === p.id)?.stage ?? null) : (p.colonist?.encounter ?? null);
+    return at ? [walkerOf(view, p, at, mine, encounter, cfg)] : [];
   });
 }
 

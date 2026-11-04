@@ -1,5 +1,5 @@
 import { stepFloor, type FloorColonist, type FloorConfig, type FloorLead, type FloorMoments, type GameState, type Space } from '@mule/engine';
-import type { ColonistView, DevFrame, MuleView, MyView } from '@mule/protocol';
+import type { DevFrame, MuleView, MyView } from '@mule/protocol';
 import { gateSteer, heldBack, unsure, type SteerGate, type Stick } from './steer';
 
 /**
@@ -55,9 +55,10 @@ export interface ColonistBase {
 /** A bolt the copy holds while your MULE runs loose: the server runs it, so on the copy it stands where the frames put it. */
 const LOOSE = { dx: 0, dy: 0, left: 0 } as const;
 
-/** Whether the server moves your colonist on its own terms now: a pack has you (your view), or a stun holds you (the frame). */
-export function serverHolds(id: string, encounter: ColonistView['encounter'] | undefined, frame: Pick<DevFrame, 'moments'> | undefined): boolean {
-  return !!encounter || !!frame?.moments?.stunned.some((s) => s.who === id);
+/** Whether the server moves your colonist on its own terms now, as the newest frame says: a pack round you, or a stun. */
+export function serverHolds(id: string, frame: Pick<DevFrame, 'moments'> | undefined): boolean {
+  const m = frame?.moments;
+  return !!m && (m.packs.some((p) => p.who === id) || m.stunned.some((s) => s.who === id));
 }
 
 interface Input extends Stick {
@@ -270,12 +271,17 @@ export function wolvesHold(p: Prediction, on: boolean, base: ColonistBase, shown
 }
 
 /**
- * Your MULE bolted, or caught, as the frames say: the copy walks free of it at full pace and leaves it where it stands,
- * or leads it again. The same state, the same copy.
+ * Your MULE bolted, or caught, as the frames say, with the newest frame's lead for you (`lead`): bolted, the copy walks
+ * free of it at full pace and keeps it where the frame has it; caught, it leads it on from there. Nothing to change,
+ * the same copy.
  */
-export function boltedNow(p: Prediction, bolted: boolean): Prediction {
-  if (!p.me || !!p.me.bolt === (bolted && !!p.me.lead)) return p;
-  const me = { ...p.me, bolt: bolted && p.me.lead ? LOOSE : null };
+export function boltedNow(p: Prediction, bolted: boolean, lead: FloorLead | null): Prediction {
+  if (!p.me) return p;
+  const was = !!p.me.bolt;
+  const at = lead ?? p.me.lead;
+  if (!was && (!bolted || !at)) return p;
+  if (was && bolted && at && p.me.lead && at.x === p.me.lead.x && at.y === p.me.lead.y && at.good === p.me.lead.good) return p;
+  const me = { ...p.me, lead: at, bolt: bolted && at ? LOOSE : null };
   return { ...p, me, past: p.past.map((e) => (e.tick === p.tick ? { tick: e.tick, me } : e)) };
 }
 

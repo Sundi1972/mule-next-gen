@@ -528,11 +528,14 @@ describe('C11: the moments are the server\'s, never the phone\'s copy (RULE-4, R
 describe('C11: a lost fight, as the frames say: the stun holds the copy, a bolted MULE leaves it free (RULE-4)', () => {
   const frameWith = (moments: Partial<NonNullable<DevFrame['moments']>>): Pick<DevFrame, 'moments'> => ({ moments: { packs: [], glint: null, scramble: null, bolted: [], stunned: [], ...moments } });
 
-  it('C11: the server holds her while a pack has her or a stun does, and not otherwise', () => {
-    expect(serverHolds('lena', 'choose', frameWith({}))).toBe(true);
-    expect(serverHolds('lena', null, frameWith({ stunned: [{ who: 'lena', untilTick: 90 }] }))).toBe(true);
-    expect(serverHolds('lena', null, frameWith({ stunned: [{ who: 'kai', untilTick: 90 }] }))).toBe(false);
-    expect(serverHolds('lena', null, {})).toBe(false);
+  it('C11: the server holds her while the frame has a pack round her or a stun on her, and not otherwise', () => {
+    const lenas = { who: 'lena', stage: 'choose' as const, sinceTick: 1, centre: { x: 1, y: 1 }, strikes: 0, bites: 0, wolves: [] };
+    expect(serverHolds('lena', frameWith({ packs: [lenas] }))).toBe(true);
+    expect(serverHolds('lena', frameWith({ packs: [{ ...lenas, who: 'kai' }] }))).toBe(false);
+    expect(serverHolds('lena', frameWith({ stunned: [{ who: 'lena', untilTick: 90 }] }))).toBe(true);
+    expect(serverHolds('lena', frameWith({ stunned: [{ who: 'kai', untilTick: 90 }] }))).toBe(false);
+    expect(serverHolds('lena', {})).toBe(false);
+    expect(serverHolds('lena', undefined)).toBe(false);
   });
 
   /** Lena leading a Food MULE on plains, live at tick 40, her stick pushed right. */
@@ -550,12 +553,20 @@ describe('C11: a lost fight, as the frames say: the stun holds the copy, a bolte
   it('C11: her MULE bolted, the copy walks at full pace and leaves the MULE where it stands; caught, at the lead\'s pace again', () => {
     const { world, p } = leading();
     const led = upTo(p, 60, world);
-    const bolted = upTo(boltedNow(p, true), 60, world);
+    const bolted = upTo(boltedNow(p, true, null), 60, world);
     expect(bolted.me!.lead).toEqual({ good: 'food', x: 2, y: 7.5 });
     expect(bolted.me!.x - 2.5).toBeCloseTo((led.me!.x - 2.5) / DEV_STEER.leadPace, 6);
-    const caught = upTo(boltedNow(bolted, false), 80, world);
+    const caught = upTo(boltedNow(bolted, false, null), 80, world);
     expect(caught.me!.x - bolted.me!.x).toBeCloseTo(led.me!.x - 2.5, 6);
     // Unchanged, the copy is the same copy.
-    expect(boltedNow(p, false)).toBe(p);
+    expect(boltedNow(p, false, null)).toBe(p);
+  });
+
+  it('C11: caught, the copy leads the MULE from where the frames have it, not from where it bolted', () => {
+    const { world, p } = leading();
+    const bolted = upTo(boltedNow(p, true, { good: 'food', x: 6, y: 7.2 }), 50, world);
+    const caught = boltedNow(bolted, false, { good: 'food', x: bolted.me!.x - 0.4, y: 7.5 });
+    expect(caught.me!.lead).toEqual({ good: 'food', x: bolted.me!.x - 0.4, y: 7.5 });
+    expect(upTo(caught, 60, world).me!.lead!.x).toBeLessThan(upTo(caught, 60, world).me!.x);
   });
 });

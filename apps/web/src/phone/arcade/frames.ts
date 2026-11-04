@@ -72,10 +72,11 @@ export function othersAt(log: FrameLog, nowMs: number, cfg: Pick<typeof DEV_STEE
   return drawn;
 }
 
-/** The moments as a screen draws them now, at the instant everyone else is drawn at. */
-export interface MomentsNow {
-  /** The packs with their wolves interpolated, the glint while it is still lit, the scramble. */
-  moments: FrameMoments;
+/**
+ * The moments as a screen draws them, at the instant everyone else is drawn at: the frame's, with the packs' wolves
+ * interpolated and the glint only while still lit.
+ */
+export interface DrawnMoments extends FrameMoments {
   /** The frames' tick at that instant, with its fraction. */
   tick: number;
   /** The colonists closing on the lit glint between the two frames: the race as the table sees it. */
@@ -85,7 +86,7 @@ export interface MomentsNow {
 }
 
 /** What every screen draws of the moments now; null while no frame carries any. */
-export function momentsAt(log: FrameLog, nowMs: number, cfg: Pick<typeof DEV_STEER, 'interpolateMs'>): MomentsNow | null {
+export function momentsAt(log: FrameLog, nowMs: number, cfg: Pick<typeof DEV_STEER, 'interpolateMs'>): DrawnMoments | null {
   const i = instantOf(log, nowMs, cfg);
   const mb = i && momentsOf(i.b);
   if (!i || !mb) return null;
@@ -104,9 +105,19 @@ export function momentsAt(log: FrameLog, nowMs: number, cfg: Pick<typeof DEV_STE
     const was = a.colonists.find((c) => c.id === who);
     if (!now?.lead) return [];
     const from = was?.lead ?? now.lead;
-    return [{ who, x: lerp(from.x, now.lead.x, k), y: lerp(from.y, now.lead.y, k), good: now.lead.good, facing: now.lead.x >= from.x ? ('right' as const) : ('left' as const) }];
+    return [{ who, x: lerp(from.x, now.lead.x, k), y: lerp(from.y, now.lead.y, k), good: now.lead.good, facing: lastRan(log, who) }];
   });
-  return { moments: { ...mb, packs, glint }, tick, racers, loose };
+  return { ...mb, packs, glint, tick, racers, loose };
+}
+
+/** The way a seat's lead last moved across the kept frames; right when it has not. */
+function lastRan(log: FrameLog, who: string): Drawn['facing'] {
+  const xs = log.frames.map((f) => f.frame.colonists.find((c) => c.id === who)?.lead?.x);
+  for (let i = xs.length - 1; i > 0; i--) {
+    const [a, b] = [xs[i - 1], xs[i]];
+    if (a !== undefined && b !== undefined && a !== b) return b > a ? 'right' : 'left';
+  }
+  return 'right';
 }
 
 /** Moving nearer the glint's middle on the map between two frames. */

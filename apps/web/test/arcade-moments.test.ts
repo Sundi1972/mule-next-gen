@@ -8,7 +8,7 @@ import { seatSpecies } from '../src/game/derive';
 import type { TableClient } from '../src/net/client';
 import { ClientProvider } from '../src/net/react';
 import { LaptopArcade, PhoneLandscape } from '../src/phone/arcade/Develop';
-import { momentsAt, pushFrame, startFrameLog, type MomentsNow } from '../src/phone/arcade/frames';
+import { momentsAt, pushFrame, startFrameLog, type DrawnMoments } from '../src/phone/arcade/frames';
 import { bannerBox, FRAMES, overlap, phoneLayout, type Box } from '../src/phone/arcade/layout';
 import { StaticLive, type Live } from '../src/phone/arcade/live';
 import { TV_LINE, tvLinesPlace } from '../src/phone/arcade/moments';
@@ -100,8 +100,8 @@ const pack = (
 const NONE: FrameMoments = { packs: [], glint: null, scramble: null, bolted: [], stunned: [] };
 
 /** A moment on the screens: the frames' moments at `tick`, everyone where FRAMED has them. */
-function moment(moments: Partial<FrameMoments>, { tick = 100, racers = [], loose = [], me = LENA }: { tick?: number; racers?: string[]; loose?: MomentsNow['loose']; me?: { x: number; y: number; space?: 'map' | 'hall' } } = {}): Live {
-  const now: MomentsNow = { moments: { ...NONE, ...moments }, tick, racers, loose };
+function moment(moments: Partial<FrameMoments>, { tick = 100, racers = [], loose = [], me = LENA }: { tick?: number; racers?: string[]; loose?: DrawnMoments['loose']; me?: { x: number; y: number; space?: 'map' | 'hall' } } = {}): Live {
+  const now: DrawnMoments = { ...NONE, ...moments, tick, racers, loose };
   const others = framed().filter((c) => c.id !== 's1');
   return { me: { x: me.x, y: me.y, space: me.space ?? 'map', facing: 'right', moving: false, lead: null }, others: new Map(others.map((c) => [c.id, c])), status: 'live', beats: [], moments: now };
 }
@@ -148,14 +148,15 @@ describe('C11, C12: the wolves (RULE-4)', () => {
     }
   });
 
-  it('B-AC-5: the chase says RUN!; the fight its ground at the pack\'s centre, DODGE or STRIKE! with a wolf open in reach, and the pack\'s score', () => {
+  it('B-AC-5: the chase says RUN!; the fight its ground at the pack\'s centre and the pack\'s score; on the TV, STRIKE! with a wolf open in reach', () => {
     expect(text(phone(viewWith({ encounter: 'chase' }), moment({ packs: [pack('chase')] })), 'wolf-chase-s1')).toBe('RUN!');
     const fight = phone(viewWith({ encounter: 'fight' }), moment({ packs: [pack('fight', undefined, { strikes: 1, bites: 2 })] }, { tick: 160 }));
     // The open wolf at 2.6·2.9 is 1.4 tiles off: out of a strike's reach.
     expect(text(fight, 'fight-hud-s1')).toBe(`DODGE⚔ 1/${WOLVES.strikesToWin}bites 2/${WOLVES.bitesToLose}${WOLVES.fightSeconds - 3}s`);
     expect(moved(inside(fight, 'wolves-layer'), 'arena-s1')).toEqual({ x: (2.5 / 15) * 100, y: (1.5 / 9) * 100 });
     const near = pack('fight', [{ x: 2.9, y: 1.6, state: 'open', target: null }]);
-    expect(text(phone(viewWith({ encounter: 'fight' }), moment({ packs: [near] })), 'fight-hud-s1')).toMatch(/^STRIKE!/);
+    // Everyone else's HUD, on the TV, reads the wolves: one open within a strike's reach.
+    expect(text(tv(viewWith({ encounter: 'fight' }), onTv(moment({ packs: [near] }))), 'fight-hud-s1')).toMatch(/^STRIKE!/);
   });
 
   it('B-AC-5: a fight lost with no MULE: the stun the frame carries, with its seconds, on the phone and the TV; gone on its last tick', () => {
@@ -178,6 +179,51 @@ describe('C11, C12: the wolves (RULE-4)', () => {
     const mine = phone(devView(lenasMe({ carriedMule: 'food' })), { ...out, me: { ...out.me!, lead: { good: 'food', x: 2.2, y: 1.5 } } });
     expect(tag(inside(mine, 'walkers-map'), 'mule-s1')).toBeNull();
     expect(tag(mine, 'loose-s1')).not.toBeNull();
+  });
+
+  /** Kai, an AI seat the server sends no view for while he meets wolves, on the map with his pack in the frame. */
+  const kaiPack = (stage: FramePack['stage']): FramePack => ({ who: 's3', stage, sinceTick: 100, centre: { x: 5.5, y: 6.5 }, strikes: 1, bites: 2, wolves: [{ x: 6.9, y: 6.5, state: 'prowl', target: null }] });
+  const kaiOut = (l: Live): Live => ({ ...onTv(l), others: new Map(framed().map((c) => [c.id, c.id === 's3' ? at('s3', 5.5, 6.5) : c])), at: NOW });
+  const kaiStale = () => devView(lenasMe(), { players: PLAYERS.map((p) => (p.id === 's3' ? { ...p, colonist: { ...p.colonist!, encounter: 'fight' } } : p)) });
+
+  it('B-AC-5: an AI\'s pack, from the frame alone: with the view saying none, the TV shows its fight HUD, its line and its pace word; once the pack leaves the frame they go, though a stale view still says fight', () => {
+    const html = tv(devView(), kaiOut(moment({ packs: [kaiPack('fight')] }, { tick: 120 })));
+    expect(text(html, 'fight-hud-s3')).toBe(`DODGE⚔ 1/${WOLVES.strikesToWin}bites 2/${WOLVES.bitesToLose}${WOLVES.fightSeconds - 1}s`);
+    expect(text(html, 'tv-beats')).toContain(`Kai fights the wolves · 1/${WOLVES.strikesToWin} strikes · 2/${WOLVES.bitesToLose} bites`);
+    expect(text(html, 'pace-s3')).toContain('FIGHT');
+    for (const gone of [tv(kaiStale(), kaiOut(moment({}))), tv(kaiStale(), { ...kaiOut(moment({})), moments: null })]) {
+      expect(tag(gone, 'fight-hud-s3')).toBeNull();
+      expect(text(gone, 'tv-beats')).not.toContain('Kai fights');
+      expect(text(gone, 'pace-s3')).not.toContain('FIGHT');
+    }
+  });
+
+  it('B-AC-5: the TV announces an AI\'s pack: the frame\'s "Wolves!" beat once with the live line, and the beat alone when no line says it', () => {
+    const beat = 'Wolves! Kai: run or fight?';
+    const choosing = tv(devView(), { ...kaiOut(moment({ packs: [kaiPack('choose')] })), beats: [{ text: beat, at: NOW }] });
+    expect(text(choosing, 'tv-beats').split(beat)).toHaveLength(2);
+    const alone = tv(devView(), { ...kaiOut(moment({})), beats: [{ text: beat, at: NOW }] });
+    expect(text(alone, 'tv-beats')).toContain(beat);
+  });
+
+  it('B-AC-5: your own fight HUD says what your button says (the server\'s reach), not what the wolves seem to allow', () => {
+    const far = pack('fight', [{ x: 5, y: 1.5, state: 'open', target: null }]);
+    const near = pack('fight', [{ x: 2.9, y: 1.6, state: 'open', target: null }]);
+    expect(text(phone(viewWith({ encounter: 'fight' }, lenasMe({ reach: { verb: 'STRIKE!', detail: null, enabled: true } })), moment({ packs: [far] })), 'fight-hud-s1')).toMatch(/^STRIKE!/);
+    expect(text(phone(viewWith({ encounter: 'fight' }, lenasMe({ reach: { verb: 'DODGE', detail: null, enabled: false } })), moment({ packs: [near] })), 'fight-hud-s1')).toMatch(/^DODGE/);
+  });
+
+  it('B-AC-5: a bite or pelts hang under the colonist without lifting it off its spot', () => {
+    const html = phone(viewWith({ bitten: true, pelts: 2 }), moment({}));
+    const wrap = /<span class="([^"]*)"[^>]*><span[^>]*data-testid="bitten-s1"/.exec(html)?.[1] ?? '';
+    expect(wrap.split(' ')).toEqual(expect.arrayContaining(['absolute', 'top-full']));
+  });
+
+  it('B-AC-5: in the store with your MULE bolted, you lead none: it runs loose outside', () => {
+    const hall = { me: { x: 4, y: 6, space: 'hall' as const } };
+    const view = devView(lenasMe({ carriedMule: 'food' }));
+    expect(inside(phone(view, moment({}, hall)), 'visitor-s1')).toContain('data-mule-state');
+    expect(inside(phone(view, moment({ bolted: ['s1'] }, hall)), 'visitor-s1')).not.toContain('data-mule-state');
   });
 
   it('B-AC-5: a bite and pelts, as the view says, ride under the colonist on the phone and the TV', () => {
@@ -224,10 +270,10 @@ describe('C11, C12: the glint race (RULE-5)', () => {
     const frame = (tick: number): DevFrame & { moments: FrameMoments } => ({ tick, at: tick * TICK, colonists: framed(), beats: [], moments: { ...NONE, glint: { x: 9, y: 2, untilTick: 104 } } });
     for (const t of [100, 101, 102, 103, 104, 105]) log = pushFrame(log, frame(t), t * TICK);
     // Drawn interpolateMs behind the newest: tick 103, still lit; then 105, past it.
-    expect(momentsAt(log, 105 * TICK, DEV_STEER)!.moments.glint).not.toBeNull();
+    expect(momentsAt(log, 105 * TICK, DEV_STEER)!.glint).not.toBeNull();
     const later = momentsAt(log, 105 * TICK + 2 * TICK, DEV_STEER)!;
     expect(later.tick).toBeGreaterThanOrEqual(104);
-    expect(later.moments.glint).toBeNull();
+    expect(later.glint).toBeNull();
     const html = phone(devView(), { ...moment({}), moments: later });
     expect(tag(html, 'glint')).toBeNull();
   });
@@ -270,6 +316,15 @@ describe('C11, C12: the corral scramble (RULE-6)', () => {
     // Not left out and without one, after a scramble that ran out of time: nothing to say.
     const ossa = devView({ ...lenasMe(), id: 's4' }, { storeMules: 1 });
     expect(tag(phone(ossa, ended), 'scramble-banner')).toBeNull();
+  });
+
+  it('B-AC-7: a needer who has a MULE on the lead, or is at the pub, no longer races: the others race, and the TV draws no line from him', () => {
+    const leading = devView(lenasMe({ carriedMule: 'empty' }), { storeMules: 2 });
+    expect(tag(phone(leading, moment({ scramble: called })), 'scramble-banner')).toContain('data-tone="warn"');
+    const done = devView(lenasMe(), { storeMules: 2, players: PLAYERS.map((p) => (p.id === 's1' ? { ...p, doneDeveloping: true } : p)) });
+    expect(text(phone(done, moment({ scramble: called })), 'scramble-banner')).toBe('2 MULEs left: the others race for them');
+    const ossaLeads = { ...onTv(moment({ scramble: called })), others: new Map(framed().map((c) => [c.id, c.id === 's2' ? { ...c, lead: { good: null, x: c.x - 0.3, y: c.y } } : c])) };
+    expect(inside(tv(devView(lenasMe(), { storeMules: 2 }), ossaLeads), 'scramble-lines-map')).not.toContain('data-who="s2"');
   });
 
   it('B-AC-7 (negative): no scramble, no banner, no corral call: the guide\'s note keeps the box', () => {
@@ -342,7 +397,7 @@ describe('C11, C12: the frames\' moments, as the screens read them', () => {
     // Drawn interpolateMs behind now, the instant falls half way between the two frames.
     const now = momentsAt(log, 11 * TICK + DEV_STEER.interpolateMs - TICK / 2, DEV_STEER)!;
     expect(now.tick).toBeCloseTo(10.5, 6);
-    expect(now.moments.packs[0]!.wolves[0]!.x).toBeCloseTo(1.5, 6);
+    expect(now.packs[0]!.wolves[0]!.x).toBeCloseTo(1.5, 6);
     expect(now.racers).toEqual(['s2']);
   });
 
@@ -351,7 +406,7 @@ describe('C11, C12: the frames\' moments, as the screens read them', () => {
     const mid = pack('fight', [{ x: 3.4, y: 1.5, state: 'prowl', target: null }], { sinceTick: 40, centre: { x: 2.6, y: 1.4 }, strikes: 2, bites: 1 });
     log = pushFrame(log, frame(140, [mid]), 140 * TICK);
     const now = momentsAt(log, 140 * TICK, DEV_STEER)!;
-    expect(now.moments.packs[0]).toMatchObject({ sinceTick: 40, centre: { x: 2.6, y: 1.4 }, strikes: 2, bites: 1 });
+    expect(now.packs[0]).toMatchObject({ sinceTick: 40, centre: { x: 2.6, y: 1.4 }, strikes: 2, bites: 1 });
     for (const html of [phone(viewWith({ encounter: 'fight' }), { ...moment({}), moments: now }), tv(viewWith({ encounter: 'fight' }), onTv({ ...moment({}), moments: now }))]) {
       expect(tag(html, 'fight-hud-s1')).toContain('data-strikes="2"');
       expect(text(html, 'fight-hud-s1')).toBe(`DODGE⚔ 2/${WOLVES.strikesToWin}bites 1/${WOLVES.bitesToLose}${WOLVES.fightSeconds - 5}s`);
@@ -365,8 +420,15 @@ describe('C11, C12: the frames\' moments, as the screens read them', () => {
     log = pushFrame(log, frame(10, [pack('fight', w(1), { strikes: 0 })]), 10 * TICK);
     log = pushFrame(log, frame(11, [pack('fight', w(2), { strikes: 1, bites: 1 })]), 11 * TICK);
     const now = momentsAt(log, 11 * TICK + DEV_STEER.interpolateMs - TICK / 2, DEV_STEER)!;
-    expect(now.moments.packs[0]).toMatchObject({ strikes: 1, bites: 1, sinceTick: 100, centre: LENA });
-    expect(now.moments.packs[0]!.wolves[0]!.x).toBeCloseTo(1.5, 6);
+    expect(now.packs[0]).toMatchObject({ strikes: 1, bites: 1, sinceTick: 100, centre: LENA });
+    expect(now.packs[0]!.wolves[0]!.x).toBeCloseTo(1.5, 6);
+  });
+
+  it('C11, C12: a loose MULE that stops keeps the way it last ran', () => {
+    let log = startFrameLog();
+    const ran = (x: number) => framed().map((c) => (c.id === 's1' ? at('s1', 2, 6, { lead: { good: 'food', x, y: 6.5 } }) : c));
+    [[10, 5], [11, 4.6], [12, 4.6], [13, 4.6]].forEach(([tick, x]) => (log = pushFrame(log, { ...frame(tick!, [], ran(x!)), moments: { ...NONE, bolted: ['s1'] } }, tick! * TICK)));
+    expect(momentsAt(log, 13 * TICK, DEV_STEER)!.loose[0]!.facing).toBe('left');
   });
 
   it('C11, C12: a bolted MULE is drawn where its colonist\'s lead is, in map tiles, also while the colonist is in the hall', () => {

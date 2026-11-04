@@ -2,7 +2,8 @@ import { boxOf, DEV_STEER, GLINT, HALL, WOLVES } from '@mule/engine';
 import type { FramePack, FrameWolf, MuleView } from '@mule/protocol';
 import { cx, GlintSparkle, Mule, WolfGlyph, type LiveWalker, type WalkerMarks } from '@mule/ui';
 import type { CSSProperties } from 'react';
-import type { MomentsNow } from './frames';
+import type { DrawnMoments } from './frames';
+import type { Density } from './layout';
 import type { ArcadeColonist, ArcadeSeat } from './seat';
 
 /**
@@ -11,9 +12,8 @@ import type { ArcadeColonist, ArcadeSeat } from './seat';
  * glint and the scramble, on the phone, the laptop and the TV.
  */
 
-type Density = 'phone' | 'tv' | 'wide';
-type FrameScramble = NonNullable<MomentsNow['moments']['scramble']>;
-type Glint = NonNullable<MomentsNow['moments']['glint']>;
+type FrameScramble = NonNullable<DrawnMoments['scramble']>;
+type Glint = NonNullable<DrawnMoments['glint']>;
 
 const seconds = (ticks: number) => (ticks * DEV_STEER.tickMs) / 1_000;
 const pct = (v: number, of: number) => `${(v / of) * 100}%`;
@@ -36,8 +36,8 @@ function Placed({ x, y, cols, rows, children, ...data }: { x: number; y: number;
  * Every pack on the map, its fight's ground, each wolf's crouch and where it will land, and every MULE that bolted, an
  * alarm over it: on every view of the map.
  */
-export function WolvesOnMap({ now, colonists, cols, rows, cell }: { now: MomentsNow | null; colonists: ArcadeColonist[]; cols: number; rows: number; cell: number }) {
-  const packs = now?.moments.packs ?? [];
+export function WolvesOnMap({ drawn, colonists, cols, rows, cell }: { drawn: DrawnMoments | null; colonists: ArcadeColonist[]; cols: number; rows: number; cell: number }) {
+  const packs = drawn?.packs ?? [];
   const size = Math.round(cell * 0.75);
   const ring = cell * (WOLVES.arenaTiles + 0.3) * 2;
   return (
@@ -51,7 +51,7 @@ export function WolvesOnMap({ now, colonists, cols, rows, cell }: { now: Moments
           </Placed>
         ))}
       {packs.map((p) => p.wolves.map((w, i) => <OneWolf key={`${p.who}-${i}`} pack={p} w={w} i={i} c={colonists.find((k) => k.id === p.who)} size={size} cell={cell} cols={cols} rows={rows} />))}
-      {(now?.loose ?? []).map((m) => {
+      {(drawn?.loose ?? []).map((m) => {
         const owner = colonists.find((k) => k.id === m.who);
         return (
           owner && (
@@ -96,21 +96,21 @@ const canStrike = (c: { x: number; y: number }, pack: FramePack | undefined) => 
  * What the wolves want of a colonist, at it: the choice (stick runs, button fights) with its countdown, then the chase,
  * then the fight's score; after a lost fight, the stun. On every view, so the TV shows it too; `mine` names the controls.
  */
-export function WolfCallout({ c, now, density, mine }: { c: ArcadeColonist; now: MomentsNow | null; density: Density; mine: boolean }) {
+export function WolfCallout({ c, drawn, density, mine, strike }: { c: ArcadeColonist; drawn: DrawnMoments | null; density: Density; mine: boolean; strike?: boolean }) {
   const text = density === 'tv' ? 'text-sm' : density === 'wide' ? 'text-base' : 'text-[11px]';
   // Near the map's top edge the callout hangs below the colonist, so the map never clips it.
   const place = c.y < 2 ? 'top-full mt-1' : 'bottom-full mb-1';
-  const stun = now?.moments.stunned.find((s) => s.who === c.id);
-  if (stun && now && now.tick < stun.untilTick)
+  const stun = drawn?.stunned.find((s) => s.who === c.id);
+  if (stun && drawn && drawn.tick < stun.untilTick)
     return (
       <span className={cx('absolute left-1/2 -translate-x-1/2 whitespace-nowrap rounded-chip bg-alert px-1.5 font-mono font-bold text-white shadow-chip', place, text)} data-testid={`stunned-${c.id}`}>
-        ✶ STUNNED {Math.ceil(seconds(stun.untilTick - now.tick))}s
+        ✶ STUNNED {Math.ceil(seconds(stun.untilTick - drawn.tick))}s
       </span>
     );
   const stage = c.encounter;
   if (!stage) return null;
-  const pack = now?.moments.packs.find((p) => p.who === c.id && p.stage === stage);
-  const left = (total: number) => (pack && now ? Math.ceil(Math.max(0, total - seconds(now.tick - pack.sinceTick))) : null);
+  const pack = drawn?.packs.find((p) => p.who === c.id && p.stage === stage);
+  const left = (total: number) => (pack && drawn ? Math.ceil(Math.max(0, total - seconds(drawn.tick - pack.sinceTick))) : null);
   if (stage === 'choose') {
     const s = left(WOLVES.chooseSeconds);
     return (
@@ -132,7 +132,8 @@ export function WolfCallout({ c, now, density, mine }: { c: ArcadeColonist; now:
         RUN!
       </span>
     );
-  const open = canStrike(c, pack);
+  // Your own button says what a press does now (the server's reach); for everyone else, what the wolves show.
+  const open = mine && strike !== undefined ? strike : canStrike(c, pack);
   const s = left(WOLVES.fightSeconds);
   return (
     <span
@@ -161,8 +162,9 @@ export function WolfCallout({ c, now, density, mine }: { c: ArcadeColonist; now:
 export function WolfMarks({ c, density }: { c: ArcadeColonist; density: Density }) {
   if (!c.bitten && !c.pelts) return null;
   const text = density === 'tv' ? 'text-[11px]' : 'text-[9px]';
+  // Hung below the name, out of the column's flow, so a chip never lifts the colonist off its spot.
   return (
-    <span className="mt-0.5 flex gap-0.5">
+    <span className="absolute left-1/2 top-full mt-0.5 flex -translate-x-1/2 gap-0.5">
       {c.bitten && (
         <span className={cx('rounded-chip bg-alert px-1 font-mono font-bold leading-tight text-white shadow-chip', text)} data-testid={`bitten-${c.id}`}>
           BITTEN
@@ -183,10 +185,10 @@ export function WolfMarks({ c, density }: { c: ArcadeColonist; density: Density 
 const glintLeft = (g: Glint, tick: number) => Math.max(0, seconds(g.untilTick - tick));
 
 /** The glint on its tile, its ring emptying as its seconds run out: on every view of the map. */
-export function GlintOnMap({ now, cols, rows, cell }: { now: MomentsNow | null; cols: number; rows: number; cell: number }) {
-  const g = now?.moments.glint;
+export function GlintOnMap({ drawn, cols, rows, cell }: { drawn: DrawnMoments | null; cols: number; rows: number; cell: number }) {
+  const g = drawn?.glint;
   if (!g) return null;
-  const left = glintLeft(g, now.tick);
+  const left = glintLeft(g, drawn.tick);
   const size = cell * 0.95;
   return (
     <div
@@ -203,10 +205,10 @@ export function GlintOnMap({ now, cols, rows, cell }: { now: MomentsNow | null; 
 }
 
 /** On the TV: a line from each colonist racing for the glint to it. */
-export function GlintSightlines({ now, colonists, cols, rows }: { now: MomentsNow | null; colonists: ArcadeColonist[]; cols: number; rows: number }) {
-  const g = now?.moments.glint;
+export function GlintSightlines({ drawn, colonists, cols, rows }: { drawn: DrawnMoments | null; colonists: ArcadeColonist[]; cols: number; rows: number }) {
+  const g = drawn?.glint;
   if (!g) return null;
-  const racing = colonists.filter((c) => c.space === 'map' && !c.done && now.racers.includes(c.id));
+  const racing = colonists.filter((c) => c.space === 'map' && !c.done && drawn.racers.includes(c.id));
   return (
     <svg className="pointer-events-none absolute inset-0 z-[6] h-full w-full" viewBox={`0 0 ${cols} ${rows}`} preserveAspectRatio="none" aria-hidden data-testid="glint-sightlines">
       {racing.map((c) => (
@@ -217,8 +219,8 @@ export function GlintSightlines({ now, colonists, cols, rows }: { now: MomentsNo
 }
 
 /** The arrow at a colonist's shoulder that points at the glint: everyone turns to look. */
-export function GlintTurn({ now, c, size }: { now: MomentsNow | null; c: LiveWalker & { done?: boolean }; size: number }) {
-  const g = now?.moments.glint;
+export function GlintTurn({ drawn, c, size }: { drawn: DrawnMoments | null; c: LiveWalker & { done?: boolean }; size: number }) {
+  const g = drawn?.glint;
   if (!g || c.done) return null;
   const deg = (Math.atan2(g.y + 0.5 - c.y, g.x + 0.5 - c.x) * 180) / Math.PI;
   return (
@@ -231,13 +233,13 @@ export function GlintTurn({ now, c, size }: { now: MomentsNow | null; c: LiveWal
 }
 
 /** Inside the store you cannot see the map: a strip says a glint is lit outside, where and for how long. */
-export function GlintStrip({ now, store }: { now: MomentsNow | null; store: { x: number } }) {
-  const g = now?.moments.glint;
+export function GlintStrip({ drawn, store }: { drawn: DrawnMoments | null; store: { x: number } }) {
+  const g = drawn?.glint;
   if (!g) return null;
   const door = g.x < store.x + 0.5 ? 'left' : 'right';
   return (
     <span className="pointer-events-none absolute inset-x-2 top-2 z-20 truncate rounded-chip border border-g-crystite bg-panel/95 px-2 py-0.5 text-center font-mono text-xs font-bold text-ink shadow-chip" data-testid="glint-strip">
-      GLINT outside at {plotLabel(g)} · the {door} door · {Math.ceil(glintLeft(g, now.tick))} s
+      GLINT outside at {plotLabel(g)} · the {door} door · {Math.ceil(glintLeft(g, drawn.tick))} s
     </span>
   );
 }
@@ -276,8 +278,8 @@ export function ScrambleCorral({ scramble, left }: { scramble: FrameScramble | n
 }
 
 /** The TV's lines from everyone still racing for a MULE: to the store on the map, to the corral in the hall. */
-export function ScrambleLines({ now, colonists, view, space }: { now: MomentsNow | null; colonists: ArcadeColonist[]; view: Pick<MuleView, 'width' | 'height' | 'tiles'>; space: 'map' | 'hall' }) {
-  const ids = stillNeeding(now?.moments.scramble, colonists);
+export function ScrambleLines({ drawn, colonists, view, space }: { drawn: DrawnMoments | null; colonists: ArcadeColonist[]; view: Pick<MuleView, 'width' | 'height' | 'tiles'>; space: 'map' | 'hall' }) {
+  const ids = stillNeeding(drawn?.scramble, colonists);
   if (ids.length === 0) return null;
   const W = space === 'map' ? view.width : HALL.w;
   const H = space === 'map' ? view.height : HALL.h;
@@ -339,21 +341,21 @@ export function ScrambleBanner({ seat, scramble, at, faded = false }: { seat: Ar
 // --- Every walker's marks -----------------------------------------------------------------------------------------
 
 /** What each colonist carries with it on a map: the wolves' callout, its bite and pelts, and on the TV its turn to the glint. */
-export function walkerMarks({ now, colonists, density, own, names, size }: { now: MomentsNow | null; colonists: ArcadeColonist[]; density: Density; own: string | null; names: boolean; size: number }) {
+export function walkerMarks({ drawn, colonists, density, own, names, size, strike }: { drawn: DrawnMoments | null; colonists: ArcadeColonist[]; density: Density; own: string | null; names: boolean; size: number; strike?: boolean }) {
   return (w: LiveWalker): WalkerMarks | null => {
     const c = colonists.find((k) => k.id === w.id);
     if (!c) return null;
     return {
-      above: <WolfCallout c={c} now={now} density={density} mine={c.id === own} />,
-      shoulder: names ? <GlintTurn now={now} c={c} size={size} /> : null,
+      above: <WolfCallout c={c} drawn={drawn} density={density} mine={c.id === own} {...(c.id === own && strike !== undefined ? { strike } : {})} />,
+      shoulder: names ? <GlintTurn drawn={drawn} c={c} size={size} /> : null,
       below: <WolfMarks c={c} density={density} />,
     };
   };
 }
 
 /** The colonists as a space draws them: a MULE that bolted runs loose, drawn by the wolves' layer, not on its lead. */
-export function offTheLead<C extends ArcadeColonist>(colonists: C[], now: MomentsNow | null): C[] {
-  const bolted = now?.moments.bolted ?? [];
+export function offTheLead<C extends ArcadeColonist>(colonists: C[], drawn: DrawnMoments | null): C[] {
+  const bolted = drawn?.bolted ?? [];
   return bolted.length === 0 ? colonists : colonists.map((c) => (bolted.includes(c.id) ? { ...c, lead: null } : c));
 }
 
@@ -367,17 +369,15 @@ export interface TvLine {
 
 /**
  * The TV's lines along the map, most pressing first: the scramble's call while it runs, the glint while lit, one line
- * per colonist meeting wolves now, then the frames' latest beats (the three newest) not already said by those.
+ * per colonist meeting wolves now (its stage from the frames), then the frames' newest beats not already said by those.
  */
-export function tvLines({ now, colonists, beats, mulesLeft }: { now: MomentsNow | null; colonists: ArcadeColonist[]; beats: readonly string[]; mulesLeft: number }): TvLine[] {
-  const m = now?.moments;
+export function tvLines({ drawn, colonists, beats, mulesLeft }: { drawn: DrawnMoments | null; colonists: ArcadeColonist[]; beats: readonly string[]; mulesLeft: number }): TvLine[] {
   const meeting = colonists.filter((c) => c.encounter);
-  const said = (b: string) => b.startsWith('Wolves!') || b.startsWith('A Crystite glint') || b.endsWith('left! Race to the corral');
-  return [
-    ...(m && running(m.scramble) ? [{ key: 'scramble', text: scrambleCall(mulesLeft), tone: 'alert' as const }] : []),
-    ...(m?.glint ? [{ key: 'glint', text: `A Crystite glint at ${plotLabel(m.glint)}! First there wins · ${Math.ceil(glintLeft(m.glint, now!.tick))} s`, tone: 'glint' as const }] : []),
+  return withBeats([
+    ...(drawn && running(drawn.scramble) ? [{ key: 'scramble', text: scrambleCall(mulesLeft), tone: 'alert' as const }] : []),
+    ...(drawn?.glint ? [{ key: 'glint', text: `A Crystite glint at ${plotLabel(drawn.glint)}! First there wins · ${Math.ceil(glintLeft(drawn.glint, drawn.tick))} s`, tone: 'glint' as const }] : []),
     ...meeting.map((c) => {
-      const k = m?.packs.find((p) => p.who === c.id);
+      const k = drawn?.packs.find((p) => p.who === c.id);
       const text =
         c.encounter === 'choose'
           ? `Wolves! ${c.name}: run or fight?`
@@ -386,11 +386,13 @@ export function tvLines({ now, colonists, beats, mulesLeft }: { now: MomentsNow 
             : `${c.name} fights the wolves${k && k.stage === 'fight' ? ` · ${k.strikes}/${WOLVES.strikesToWin} strikes · ${k.bites}/${WOLVES.bitesToLose} bites` : ''}`;
       return { key: `live-${c.id}`, text, tone: c.encounter === 'fight' ? ('warn' as const) : ('alert' as const) };
     }),
-    ...beats
-      .filter((b) => !said(b))
-      .slice(-3)
-      .map((b) => ({ key: `beat-${b}`, text: b, tone: 'warn' as const })),
-  ];
+  ], beats);
+}
+
+/** The lines, then the frames' three newest beats that none of them already says (a live line starts with its beat). */
+function withBeats(lines: TvLine[], beats: readonly string[]): TvLine[] {
+  const fresh = beats.filter((b) => !lines.some((l) => l.text.startsWith(b)));
+  return [...lines, ...fresh.slice(-3).map((b) => ({ key: `beat-${b}`, text: b, tone: 'warn' as const }))];
 }
 
 /** One TV line's height and the gap between two, in px: text-xl in its padded, bordered panel. */
