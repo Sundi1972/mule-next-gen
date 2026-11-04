@@ -1,4 +1,4 @@
-import { DEV_WALK } from '@mule/engine';
+import { DEV_WALK, DEVELOPMENT } from '@mule/engine';
 import { PaceList, SharedClock, StoreInterior, TimeBar, Timer, type Condition } from '@mule/ui';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -36,7 +36,8 @@ describe('the store at a glance', () => {
 
   it('B-AC-9: a hungry player is told what she ate and her pace, never less time', () => {
     const text = textFrom(renderToStaticMarkup(createElement(FillCard, { condition: HUNGRY, rule: DEV_WALK, food: { ate: 2, need: 5 } })), 'fill-card');
-    expect(text).toMatch(/^ One clock for everyone · 50 s You eat 2 of the 5 Food you need\./);
+    const opening = ` One clock for everyone · ${DEVELOPMENT.fullSeconds} s You eat 2 of the 5 Food you need.`;
+    expect(text.slice(0, opening.length)).toBe(opening);
     expect(text).toContain('Hungry: 52% pace');
     expect(text).not.toMatch(/less time|time bar/);
   });
@@ -61,8 +62,10 @@ describe('the store at a glance', () => {
     expect(tagOf(hall(SICK), 'condition-lena')).toContain('data-sick="true"');
     const fed = hall(FED);
     expect(fed).not.toContain('data-testid="condition-lena"');
-    // The bar over the head is gone: nothing in the colonist is a width.
-    expect(fed.slice(fed.indexOf(tagOf(fed, 'visitor-lena')))).not.toMatch(/style="width:/);
+    // The bar over the head is gone: nothing in the colonist is a width but the creature's own motion box, which sizes
+    // the drawing it moves (Creature's wrapper, known by its data-motion) and is no bar (AM-16, WS6's ruling b).
+    const widths = fed.slice(fed.indexOf(tagOf(fed, 'visitor-lena'))).match(/<[a-z]+[^>]*style="width:[^>]*>/g) ?? [];
+    expect(widths.filter((tag) => !/\sdata-motion="/.test(tag))).toEqual([]);
   });
 
   it('T-AC-12: the clock is one for everyone, and the TV lists each pace and why on the roster rows', () => {

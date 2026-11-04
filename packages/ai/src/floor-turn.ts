@@ -55,6 +55,8 @@ export interface DevTurn {
   biteCostPub: boolean;
   /** Analyses of lake plots its hand gave up on the way (failed), and dropped before setting off as not fitting the clock. */
   lakeAnalyses: { failed: number; noTime: number };
+  /** Presses the referee refused this turn (spec §4, as the server's tick counts them): held while month 1's clock waits, or a rule's RuleError. */
+  refused: number;
 }
 
 /** What the moments came to in one development phase on the floor (arcade C4, the sim's report). */
@@ -161,7 +163,7 @@ export function* playFloorPhase(state: GameState, seats: readonly AiSeat[]): Gen
   const tickSeconds = cfg.steer.tickMs / MS_PER_SECOND;
   let floor: DevFloor = buildFloor(state, cfg);
   const ids = seats.map((s) => s.id);
-  const turns = new Map(ids.map((id): [string, DevTurn] => [id, { month: state.month, id, pubAt: null, payout: null, quoted: null, installs: 0, biteCostPub: false, lakeAnalyses: { failed: 0, noTime: 0 } }]));
+  const turns = new Map(ids.map((id): [string, DevTurn] => [id, { month: state.month, id, pubAt: null, payout: null, quoted: null, installs: 0, biteCostPub: false, lakeAnalyses: { failed: 0, noTime: 0 }, refused: 0 }]));
   let waiting = state.month === 1 && cfg.steer.month1WaitsForFirstMule;
   // Whole ticks, so the clock never drifts in floating point: stood waiting, and run.
   let stood = 0;
@@ -176,7 +178,9 @@ export function* playFloorPhase(state: GameState, seats: readonly AiSeat[]): Gen
       waiting = false;
       continued = true;
     }
-    const left = DEVELOPMENT.fullSeconds - run * tickSeconds;
+    // The seconds left as this tick ends, where its presses apply and the pub is priced, counted in whole ms as the
+    // server's clock counts them (HC-4); all of them while month 1's clock waits.
+    const left = waiting ? DEVELOPMENT.fullSeconds : (DEVELOPMENT.fullSeconds * MS_PER_SECOND - (run + 1) * cfg.steer.tickMs) / MS_PER_SECOND;
     // AM-19: the tick this step makes, run + 1, runs only while it falls before the clock's end, as on the server.
     if ((run + 1) * cfg.steer.tickMs >= DEVELOPMENT.fullSeconds * MS_PER_SECOND || ids.every(done)) break;
     const inputs: Record<string, FloorInput> = {};
@@ -198,11 +202,16 @@ export function* playFloorPhase(state: GameState, seats: readonly AiSeat[]): Gen
       if (done(id)) continue;
       const turn = turns.get(id)!;
       const money = player(state, id).money;
+      // As the server's stepTick: a press with nothing in reach is ignored (the button was dim); one the referee
+      // refuses changes nothing and is counted for the seat.
+      const reach = reachOf(floor, state, id, cfg, { secondsLeft: left });
+      if (!reach.enabled) continue;
+      // The server refuses these to a seat already in while the clock waits.
+      if (waiting && isIn(state, id) && HELD.has(reach.kind)) {
+        turn.refused++;
+        continue;
+      }
       try {
-        if (waiting && isIn(state, id)) {
-          // The server refuses these to a seat already in while the clock waits; the press does nothing.
-          if (HELD.has(reachOf(floor, state, id, cfg, { secondsLeft: left }).kind)) continue;
-        }
         const press = applyReach(state, floor, id, left, cfg);
         const pressed = floor;
         floor = press.floor;
@@ -219,6 +228,7 @@ export function* playFloorPhase(state: GameState, seats: readonly AiSeat[]): Gen
       } catch (err) {
         // A press the rules refuse changes nothing.
         if (!(err instanceof RuleError)) throw err;
+        turn.refused++;
       }
     }
     if (waiting) stood++;

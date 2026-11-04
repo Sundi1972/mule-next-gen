@@ -81,7 +81,8 @@ const quantile = (values: number[], q: number) => {
 
 /**
  * The arcade floor's report lines (spec §4), only when development played on it: MULEs installed and pub times a turn,
- * the pub payout, month 1's waiting clock, the moments (packs, glints, scrambles), and the AI's lake analyses.
+ * the pub payout, the presses the referee refused, month 1's waiting clock, the moments (packs, glints, scrambles),
+ * and the AI's lake analyses.
  */
 function floorLines(turns: readonly DevTurn[], moments: readonly FloorMomentCounts[], waits: readonly number[], continued: number, seats: number): string[] {
   if (turns.length === 0) return [];
@@ -92,6 +93,7 @@ function floorLines(turns: readonly DevTurn[], moments: readonly FloorMomentCoun
   const reached = turns.filter((t) => t.pubAt !== null);
   const installs = turns.reduce((n, t) => n + t.installs, 0);
   const paid = reached.reduce((n, t) => n + t.payout!, 0);
+  const refused = turns.reduce((n, t) => n + t.refused, 0);
   const at = reached.map((t) => t.pubAt!);
   // literal-ok: the median and 90th percentile the line names
   const [median, ninetieth] = [quantile(at, 0.5), quantile(at, 0.9)];
@@ -101,7 +103,7 @@ function floorLines(turns: readonly DevTurn[], moments: readonly FloorMomentCoun
   const lakeNoTime = turns.reduce((n, t) => n + t.lakeAnalyses.noTime, 0);
   return [
     // literal-ok: two decimals for the MULEs a turn, display only
-    `     Development on the floor: ${(installs / turns.length).toFixed(2)} MULEs installed a seat a turn; the pub reached in ${pct(reached.length, turns.length)} of ${turns.length} AI turns, at ${median.toFixed(1)} / ${ninetieth.toFixed(1)} s on the clock (median / 90th percentile); ${(paid / Math.max(1, seats)).toFixed(0)} cr pub payout a seat a game (no check)`,
+    `     Development on the floor: ${(installs / turns.length).toFixed(2)} MULEs installed a seat a turn; the pub reached in ${pct(reached.length, turns.length)} of ${turns.length} AI turns, at ${median.toFixed(1)} / ${ninetieth.toFixed(1)} s on the clock (median / 90th percentile); ${(paid / Math.max(1, seats)).toFixed(0)} cr pub payout a seat a game; ${refused} presses refused (no check)`,
     `     Floor moments: packs met ${m.packs} (fought ${m.fights}: won ${m.won}, lost ${m.lost}; ran ${m.runs}: bitten ${m.bitten}); MULEs bolted ${m.bolted}, caught ${m.caught}; pelts sold ${m.peltsSold}; glints lit ${m.glints}, raced ${m.raced} (${pct(m.raced, m.glints)}), won ${m.glintsWon}; scrambles ${m.scrambles}, AI racers ${m.scrambleRacers}, left out ${m.leftOut} (no check)`,
     `${packMonths / Math.max(1, moments.length) >= WOLVES.simMonthsWithPack ? 'ok  ' : 'MISS'} Months with an AI wolf encounter: ${packMonths} of ${moments.length}, ${pct(packMonths, moments.length)} (AM-27: target ${pct(WOLVES.simMonthsWithPack, 1)} or more, on each of seeds 1, 101 and 201)`,
     `     Lake plots: ${lakeFailed} analyses failed on the way, ${lakeNoTime} dropped as not fitting the clock (no check)`,

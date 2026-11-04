@@ -315,7 +315,22 @@ describe('the sim referees the floor as the server will (arcade C10)', () => {
     expect(waited.month1!.waited).toBeGreaterThan(0);
     const first = waited.turns.filter((t) => t.month === 1);
     expect(first.every((t) => t.installs > 0), JSON.stringify(first)).toBe(true);
+    // The hands' `held` is the referee's own refusal: a seat already in never presses one, so none is refused.
+    expect(waited.turns.map((t) => t.refused)).toEqual(waited.turns.map(() => 0));
     expect(month1(false).month1).toBeNull();
+    // While ai3 stands idle, never in, the clock waits; the others, told nothing is held, press what it refuses: each
+    // refused press is counted, per turn (§4).
+    const original = AiSeat.prototype.developSteer;
+    const spy = vi.spyOn(AiSeat.prototype, 'developSteer').mockImplementation(function (this: AiSeat, state, floor, secondsLeft, cfg) {
+      return this.id === 'ai3' ? { x: 0, y: 0, act: false } : original.call(this, state, floor, secondsLeft, cfg, false);
+    });
+    try {
+      const unheld = month1(true).turns.filter((t) => t.month === 1);
+      expect(unheld.find((t) => t.id === 'ai3')!.refused).toBe(0);
+      expect(unheld.reduce((n, t) => n + t.refused, 0), JSON.stringify(unheld)).toBeGreaterThan(0);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
 
