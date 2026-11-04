@@ -1443,6 +1443,13 @@ export const AI_PLANS = {
     /** Plots a month the target adds, by plan kind; `other` for every kind not named. */
     perMonth: { landBaron: 2, other: 1 } as Partial<Record<PlanKind, number>> & { other: number },
   },
+  /** A seat whose money is under its cash reserve lists a plot or a MULE for the land auction, unsold to the store. */
+  sell: {
+    /** Lots a seat lists a month when short, at most. LOTS.perPlayer still caps every seller. */
+    perMonth: 1,
+    /** A lot's minimum, as a share of what it is worth to the seat; never under one credit over what the store pays. */
+    minimumShare: 0.8,
+  },
   /** What a playbook may hold: a value outside is clamped or refused. */
   bounds: {
     /** Credits a strategy's cash floor may ask, at most. */

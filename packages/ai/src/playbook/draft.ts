@@ -22,6 +22,7 @@ import {
   type Good,
   type GoodPlay,
   type LandGrantPlay,
+  type PlanningPlay,
   type Playbook,
   type PlayerId,
   type Strategy,
@@ -29,7 +30,7 @@ import {
 import { OPTION_IDS, TopPickDecider, toOptions, type Choice, type DecisionContext, type ShortOption } from '../decider.js';
 import { outlook } from '../outlook.js';
 import { PERSONAS, type DecisionKind } from '../personas.js';
-import { analysesWanted, developDecision, filtersWanted, goodPlan, landDecision, leaderOf, tradeDecision, type DevAction, type LandPlan } from '../strategist.js';
+import { analysesWanted, developDecision, filtersWanted, goodPlan, landDecision, leaderOf, sellWanted, tradeDecision, type DevAction, type LandPlan } from '../strategist.js';
 import type { Shortlist } from '../utility.js';
 import { beforeTax, canFeed, cashReserve, installGain, type Mind } from '../value.js';
 
@@ -182,6 +183,13 @@ function pickKind(input: DraftInput, obs: GameState, eligible: Record<Kind, bool
   return tied[options.findIndex((o) => o.id === id)]!;
 }
 
+/** RULE-5 · planning: what the seat lists when short of cash; nothing outside this month's planning, as lots.ts lists only there. */
+function planningPart(input: DraftInput, obs: GameState): PlanningPlay {
+  if (obs.phase !== 'planning' || monthOf(input, obs) !== obs.month) return {};
+  const list = sellWanted(obs, input.mind);
+  return list.length > 0 ? { list } : {};
+}
+
 /** RULE-5 · land grant: the plan the seat's land hand plays (its pending pick), else the draft's own pick. */
 function landGrantPart(input: DraftInput, obs: GameState): LandGrantPlay {
   const plan = input.land ? pendingPlan(input.land) : topPick(input, obs, 'land', 'land', landDecision(obs, input.mind));
@@ -297,7 +305,7 @@ export function draftPlaybook(input: DraftInput): Playbook {
   const obs = observe(input.state, input.seat);
   const strategy = input.strategy ?? draftStrategy(input, obs);
   const head = { v: 1 as const, seat: input.seat, month: monthOf(input, obs), phase: input.phase, strategy, by: 'engine' as const };
-  if (input.phase === 'planning') return { ...head, planning: {}, landGrant: landGrantPart(input, obs) };
+  if (input.phase === 'planning') return { ...head, planning: planningPart(input, obs), landGrant: landGrantPart(input, obs) };
   if (input.phase === 'development') return { ...head, development: developmentPart(input, obs) };
   return { ...head, auction: auctionPart(input, obs) };
 }

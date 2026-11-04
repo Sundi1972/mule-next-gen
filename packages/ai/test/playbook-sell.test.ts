@@ -90,19 +90,23 @@ describe('selling when short of cash (C10, RULE-12)', () => {
     const three = holding(40, [[DESERT, null], [MOUNTAIN, 'smithore'], [MOUNTAIN_2, 'smithore']]);
     expect(wanted(three)).toHaveLength(AI_PLANS.sell.perMonth);
     expect(withSets(['AI_PLANS.sell.perMonth=0'], () => wanted(three))).toEqual([]);
+    const lots = [
+      { item: 'plot' as const, plot: DESERT, worth: plotWorth(three, DESERT) },
+      { item: 'mule' as const, plot: MOUNTAIN, worth: muleWorth(three, MOUNTAIN) },
+      { item: 'mule' as const, plot: MOUNTAIN_2, worth: muleWorth(three, MOUNTAIN_2) },
+    ].sort((a, b) => a.worth - storePaysFor(three, a.item) - (b.worth - storePaysFor(three, b.item)));
+    expect(lots.every((l) => l.worth > 0)).toBe(true);
     const two = withSets(['AI_PLANS.sell.perMonth=2'], () => wanted(three));
-    expect(two.map((l) => l.item)).toEqual(['plot', 'mule']);
-    expect(two[0]!.plot).toBe(DESERT);
-    expect(two[1]!.minimum).toBe(minimumFor(three, 'mule', muleWorth(three, two[1]!.plot)));
+    expect(two).toEqual(lots.slice(0, 2).map(({ item, plot, worth }) => ({ item, plot, minimum: minimumFor(three, item, worth), unsold: 'store' })));
   });
 
   it('T-AC-10: RULE-12 unknown, a worth of 0 or less ranks first and lists at one over what the store pays', () => {
-    // A Crystite MULE on plains earns nothing. With the store paying 3 plot scores for land, the plot's worth over the
+    // A Smithore MULE on plains earns nothing. With the store paying 5 plot scores for land, the plot's worth over the
     // store's price would be the lower; a lot that earns nothing still goes first.
-    const state = holding(40, [[DESERT, null], [PLAINS, 'crystite']]);
+    const state = holding(40, [[DESERT, null], [PLAINS, 'smithore']]);
     const dud = muleWorth(state, PLAINS);
     expect(dud).toBeLessThanOrEqual(0);
-    const listed = withSets(['LOTS.storePlotShare=3'], () => {
+    const listed = withSets(['LOTS.storePlotShare=5'], () => {
       expect(plotWorth(state, DESERT) - storePaysFor(state, 'plot')).toBeLessThan(dud - storePaysFor(state, 'mule'));
       return wanted(state);
     });
@@ -128,8 +132,9 @@ describe('selling when short of cash (C10, RULE-12)', () => {
   });
 
   it('T-AC-10 (negative): a seat with money at or over its reserve never lists, whatever it holds', () => {
-    for (const money of [120, 400, 5_000]) {
-      expect(wanted(holding(money, [[DESERT, null], [PLAINS, 'crystite'], [MOUNTAIN, 'smithore'], [PLAINS_2, 'food']])), `money ${money}`).toEqual([]);
-    }
+    const plots: [number, Outfit | null][] = [[DESERT, null], [PLAINS, 'smithore'], [MOUNTAIN, 'smithore'], [PLAINS_2, 'food'], [MOUNTAIN_2, 'food']];
+    const reserve = cashReserve(observe(holding(0, plots), 'ai0'), seller());
+    expect(wanted(holding(reserve - 1, plots))).toHaveLength(1);
+    for (const money of [reserve, reserve + 1, 5_000]) expect(wanted(holding(money, plots)), `money ${money}`).toEqual([]);
   });
 });
