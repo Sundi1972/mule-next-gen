@@ -748,6 +748,10 @@ inside a wall; money and stock change only through game.ts rules; development en
   in when it cannot get a first MULE: the corral is empty and it leads none, or it cannot pay the corral's price.**
   The clock then starts at once; the left-out seat's phone keeps its words (the pub pays now). Owner: the month-1
   clock's server code (`mule-game.ts::isIn`, WS3), with a red test first.
+  **Extended (WS3's #311 review):** an installed MULE needs an outfit, so the same holds for the outfit: a seat counts
+  as in when it leads no MULE and cannot pay for a MULE and the cheapest outfit, or leads an empty MULE and cannot pay
+  for any outfit. Counting a seat in only starts the clock; the seat still plays if it comes by the money (a pelt
+  sold, say) — no one holds the table by being unable to act.
 - **AM-32 (2026-11-04, WS1, ruled by WS6; caused by Heiko's walking ruling: `mapTilesPerSecond` 1.25 → 2.5,
   `hungerPaceMin` 0.6).** RULE-4's chase was tuned as an absolute `WOLVES.chaseSpeed` 1.1 tiles/s against colonists at
   1.25, so at twice the pace a forest run escaped 20 of 20 (T-AC-6's example: about 13 of 20) and "run or fight" stopped
