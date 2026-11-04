@@ -157,6 +157,10 @@ function playedHead(t: ReturnType<typeof playTable>, seat: string, month: number
 /** A written land part's ranking, as many as the dev view shows, by the plots' names. */
 const headOf = (land: LandGrantPlay, state: GameState) => land.ranked.slice(0, 5).map((r) => ({ label: plotName(state.tiles[r.plot]!), value: r.value }));
 
+const KEYS = ['planning', 'landGrant', 'development', 'auction'] as const;
+/** Each part from its seat's own draft: the draft phase that writes it. */
+const OWN_FROM = { planning: 'planning', landGrant: 'planning', development: 'development', auction: 'auction' } as const;
+
 describe('the seat drafts, validates and writes its planning playbook (C4, RULE-6, RULE-7)', () => {
   it("B-AC-7: a keyless seat writes its validated planning draft, by 'engine'", () => {
     const t = playTable(3);
@@ -183,6 +187,7 @@ describe('the seat drafts, validates and writes its planning playbook (C4, RULE-
     expect(asked).toEqual(today);
     expect(asked.filter((a) => a.endsWith('/land')).length).toBeGreaterThanOrEqual(IDS.length);
     expect(playOf(smart)).toEqual(playOf(onToday));
+    for (const key of KEYS) expect(smart.seats[1]!.part(smart.state, key), key).toBeNull();
 
     // Row 2: a playbook adopted for a month carries the planning part, so the Classic seat does not write its own that
     // month, and writes again the month after. Adopted ahead in month 1: month 2's, then month 1's, which is older than
@@ -196,6 +201,42 @@ describe('the seat drafts, validates and writes its planning playbook (C4, RULE-
       },
     });
     expect(adopted.written.map((pb) => `${pb.seat}/${pb.month}`)).toEqual(['ai0/1', 'ai1/1', 'ai2/1', 'ai3/1', 'ai0/2', 'ai2/2', 'ai3/2', 'ai0/3', 'ai1/3', 'ai2/3', 'ai3/3']);
+
+    // At the seat, as each hand reads it: Smart ai1 adopts a landGrant-only playbook, then a development-only one, for
+    // month 1; Classic ai0 adopts nothing.
+    const landOnly: Playbook[] = [];
+    const devOnly: Playbook[] = [];
+    const read: Record<string, unknown> = {};
+    playTable(1, {
+      seat: (i) => (i === 1 ? { decider: countingDecider([]) } : {}),
+      opening: (state, seats) => {
+        const [classic, smartSeat] = [seats[0]!, seats[1]!];
+        if (state.phase === 'planning') {
+          const { planning: _, ...land } = smartSeat.draft(state, 'planning');
+          landOnly.push({ ...land, phase: 'landGrant', by: 'llm', strategy: { ...land.strategy, kind: 'landBaron', reason: 'Land first.' } });
+          const dev = smartSeat.draft(state, 'development');
+          devOnly.push({ ...dev, by: 'llm', strategy: { ...dev.strategy, kind: 'builder', reason: 'Build.' } });
+          smartSeat.adopt(landOnly[0]!);
+          smartSeat.adopt(devOnly[0]!);
+        }
+        if (!['planning', 'landGrant', 'development', 'auction'].includes(state.phase)) return;
+        for (const key of KEYS) {
+          const got = smartSeat.part(state, key);
+          read[`smart/${state.phase}/${key}`] = structuredClone(got);
+          // A hand that changes what it read changes nothing the seat keeps: the next phase reads it as adopted.
+          if (got) got.strategy.reason = 'A hand changed it.';
+          const own = classic.draft(state, OWN_FROM[key]);
+          expect(classic.part(state, key), `${state.phase}/${key}`).toEqual({ part: own[key], strategy: own.strategy, by: 'own' });
+        }
+      },
+    });
+    for (const phase of ['planning', 'landGrant', 'development', 'auction']) {
+      expect(read[`smart/${phase}/landGrant`], phase).toEqual({ part: landOnly[0]!.landGrant, strategy: landOnly[0]!.strategy, by: 'adopted' });
+      expect(read[`smart/${phase}/development`], phase).toEqual({ part: devOnly[0]!.development, strategy: devOnly[0]!.strategy, by: 'adopted' });
+      // Row 3: nothing adopted carries these, and a Smart seat drafts none of its own.
+      expect(read[`smart/${phase}/planning`], phase).toBeNull();
+      expect(read[`smart/${phase}/auction`], phase).toBeNull();
+    }
   });
 
   it('T-AC-13 (C4 pin): a seat built with playbook false, or with AI_PLANS.on false, writes nothing and acts as the default seat does', () => {
@@ -203,6 +244,7 @@ describe('the seat drafts, validates and writes its planning playbook (C4, RULE-
     const off = playTable(3, { seat: () => ({ playbook: false }) });
     expect(off.written).toEqual([]);
     expect(playOf(off)).toEqual(playOf(base));
+    for (const key of KEYS) expect(off.seats[0]!.part(off.state, key), key).toBeNull();
 
     const saved = AI_PLANS.on;
     AI_PLANS.on = false;
@@ -210,6 +252,7 @@ describe('the seat drafts, validates and writes its planning playbook (C4, RULE-
       const allOff = playTable(3);
       expect(allOff.written).toEqual([]);
       expect(playOf(allOff)).toEqual(playOf(base));
+      for (const key of KEYS) expect(allOff.seats[0]!.part(allOff.state, key), key).toBeNull();
     } finally {
       AI_PLANS.on = saved;
     }
@@ -222,10 +265,13 @@ describe('the seat drafts, validates and writes its planning playbook (C4, RULE-
       const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
       seam.throwing = broke;
       const broken = playTable(2);
+      const own = broken.seats[0]!.part(broken.state, 'development');
       seam.throwing = null;
 
+      expect(own, broke).toBeNull();
+
       expect(broken.written, broke).toEqual([]);
-      expect(logged, broke).toHaveBeenCalledTimes(IDS.length * 2);
+      expect(logged, broke).toHaveBeenCalledTimes(IDS.length * 2 + 1);
       expect(String(logged.mock.calls[0]!.join(' ')), broke).toContain(`${broke} broke`);
       expect(playOf(broken), broke).toEqual(playOf(base));
       logged.mockRestore();
@@ -235,35 +281,58 @@ describe('the seat drafts, validates and writes its planning playbook (C4, RULE-
   /** The phases whose opening a seat drafts at (RULE-7): the only states T-AC-4 needs to draft from. */
   const DRAFT_POINTS = new Set(['planning', 'development', 'auction']);
 
-  it('T-AC-4: the same state drafted twice gives the same playbook, and drafting changes none of the seat’s acts or records', () => {
-    const base = playTable(1);
-    const drafted = new Map<string, string>();
-    const draftAll = (state: GameState, seats: AiSeat[]) => {
-      if (!DRAFT_POINTS.has(state.phase)) return;
+  /**
+   * A month-1 game whose every seat reads each part at each draft point and once a grant mid-grant, after its first
+   * step has settled the land pick; `full`, it reads each twice and also drafts each phase twice there. Returns what it read.
+   */
+  const pokedGame = (full: boolean) => {
+    const read = new Map<string, string>();
+    const readTwice = (s: AiSeat, state: GameState, at: string) => {
+      const kept = stableJson(s.debug());
+      for (const key of KEYS) {
+        const once = stableJson(s.part(state, key));
+        if (full) expect(stableJson(s.part(state, key))).toBe(once);
+        read.set(`${s.id}/${at}/part:${key}`, once);
+      }
+      expect(stableJson(s.debug())).toBe(kept);
+    };
+    const poke = (state: GameState, seats: AiSeat[], at: string) => {
       const before = stableJson(state);
       for (const s of seats) {
-        for (const phase of ['planning', 'development', 'auction'] as const) {
+        for (const phase of full ? (['planning', 'development', 'auction'] as const) : []) {
           const once = stableJson(s.draft(state, phase));
           expect(stableJson(s.draft(state, phase))).toBe(once);
-          drafted.set(`${s.id}/${state.month}/${state.phase}/${phase}`, once);
+          read.set(`${s.id}/${at}/${phase}`, once);
         }
+        readTwice(s, state, at);
       }
       expect(stableJson(state)).toBe(before);
     };
     const pokedIn = new Set<number>();
-    const poked = playTable(1, {
-      opening: draftAll,
-      // Once a grant, after its first step has settled the land pick.
+    const t = playTable(1, {
+      opening: (state, seats) => DRAFT_POINTS.has(state.phase) && poke(state, seats, `${state.month}/${state.phase}`),
       between: (state, seats) => {
         if (pokedIn.has(state.month)) return;
         pokedIn.add(state.month);
-        drafted.set(`${state.month}/grant`, stableJson(seats.map((s) => s.draft(state, 'planning'))));
+        poke(state, seats, `${state.month}/grant`);
       },
     });
+    return { t, read };
+  };
 
-    expect(drafted.size).toBeGreaterThan(0);
-    expect(playOf(poked)).toEqual(playOf(base));
-    expect(poked.written).toEqual(base.written);
+  it('T-AC-4: the same state drafted or read twice gives the same playbook and parts, and neither changes the seat’s acts, records or kept state', () => {
+    const base = playTable(1);
+    const poked = pokedGame(true);
+
+    expect([...poked.read.keys()].filter((k) => k.includes('/part:')).length).toBeGreaterThan(0);
+    expect(playOf(poked.t)).toEqual(playOf(base));
+    expect(poked.t.written).toEqual(base.written);
+  });
+
+  it('T-AC-4 (HC-3): a replay reads every part at the same steps and gets stableJson-identical results', () => {
+    const once = pokedGame(false).read;
+    expect([...once.values()].some((v) => v.includes('"by":"own"'))).toBe(true);
+    expect(pokedGame(false).read).toEqual(once);
   });
 
   it('B-AC-5: four personas draft four kinds; Rookie drafts no monopolist or spoiler', () => {

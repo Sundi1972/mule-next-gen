@@ -97,10 +97,11 @@ export function eventSummary(ev: ShowEventView, cast: ShowCast): string {
   const first = ev.hits[0];
   const whose = (h: ShowHit) => cast.name(cast.ownerAt(h.x, h.y) ?? '');
   const kindOf = (h: ShowHit) => {
-    const good = cast.goodAt(h.x, h.y);
+    // A MULE lost has gone from the map's tile; the hit names the good it made.
+    const good = h.good ?? cast.goodAt(h.x, h.y);
     return `${good ? `${GOOD_NAME[good]} ` : ''}${plots(good, 1).slice(2)}`;
   };
-  if (ev.key === 'meteorStrike' && first) return cast.ownerAt(first.x, first.y) ? `${whose(first)}’s plot ${first.muleLost ? 'lost its MULE' : 'was struck'} · a crater` : 'A crater on open land';
+  if (ev.key === 'meteorStrike' && first) return cast.ownerAt(first.x, first.y) ? `${whose(first)}’s ${first.muleLost ? `${kindOf(first)} lost its MULE` : 'plot was struck'} · a crater` : 'A crater on open land';
   if (first?.becomes === 'idle') return `${whose(first)}’s ${kindOf(first)} stands idle`;
   if (first?.becomes === 'plain') return `${whose(first)}’s crystal cavern is a plain plot`;
   // A hit that changed nothing is no loss: it is in no figure and no plot count; with none left, the effects speak.
