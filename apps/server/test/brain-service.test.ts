@@ -4,12 +4,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Anthropic from '@anthropic-ai/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { AI_LEVELS, AI_PERSONAS, BRAIN, createGame, observe } from '@mule/engine';
-import { Brain, candidate, consider, PERSONAS, shortlist, TopPickDecider, WAIT_MS, type Complete, type Decider, type DecisionRecord, type Mind, type Prompt } from '@mule/ai';
-import type { HaikuSdk } from '../src/brain/client.js';
-import { API_KEY_ENV, createBrain, type BrainSeat, type BrainService } from '../src/brain/index.js';
+import { AI_LEVELS, AI_PERSONAS, BRAIN, createGame, observe, type Strategy } from '@mule/engine';
+import { Brain, candidate, consider, PERSONAS, replySchema, shortlist, TopPickDecider, WAIT_MS, type Complete, type Decider, type DecisionRecord, type LandBrief, type Mind, type Prompt } from '@mule/ai';
+import { WRITE_CALLS, type HaikuSdk } from '../src/brain/client.js';
+import { API_KEY_ENV, createBrain, type BrainSeat, type BrainService, type WriteAsk } from '../src/brain/index.js';
 import { NO_USAGE, type Usage } from '../src/brain/ledger.js';
-import { fakeSdk, KEY, readLedger, sdkMessage, worstUsdOfRequest, type SdkMessage, type SdkModuleFake } from './brain-fakes.js';
+import { fakeSdk, KEY, neverAnswers, readLedger, sdkMessage, worstUsdOf, worstUsdOfRequest, type SdkMessage, type SdkModuleFake } from './brain-fakes.js';
 
 /** The SDK module's constructor: records its options and builds nothing, so no network and no credential chain. */
 const sdkModule = vi.hoisted((): SdkModuleFake => ({ built: [], create: null }));
@@ -49,6 +49,19 @@ const mind: Mind = { me: 'p0', personaId: 'trader', persona: AI_PERSONAS.trader,
 const obs = observe(createGame({ seed: 7, players: [0, 1, 2].map((i) => ({ id: `p${i}`, name: `P${i}`, isAi: true })) }), 'p0');
 const list = () =>
   shortlist(['a', 'b', 'c'].map((a, i) => candidate(a, `Option ${a}`, a, 10, [consider('fit', 0.9 - i * 0.05, 1, 'fits')])), 3, 0.5);
+
+const STRATEGY: Strategy = { kind: 'builder', moneyMaker: 'food', monopolyTarget: null, cashFloor: 200, landTarget: { plots: 6, byMonth: 6 }, stances: {}, reason: 'Grow steady.' };
+/** A land brief as playbooks.ts will hand the writer: one plan to pick, the draft's strategy to edit. */
+const BRIEF: LandBrief = { text: 'You are P0. The land brief.', plans: [{ id: 'A', label: 'Take the river', ranked: [{ plot: 12, value: 410 }] }], corners: true, strategy: STRATEGY };
+const ASK: WriteAsk = { brief: BRIEF, system: 'The manual.', waitMs: 5_000 };
+/** A writer reply the model could send: a strategy and one plan pick. */
+const WRITER_TEXT = JSON.stringify({
+  strategy: { kind: 'specialist', moneyMaker: 'smithore', monopolyTarget: null, cashFloor: 150, reason: 'Ore pays.' },
+  edits: [{ path: '/landGrant/ranked', to: 'A', reason: 'River.' }],
+  line: 'Ore.',
+});
+/** What a writer call that made no usable reply returns. */
+const unusable = (cause: string) => ({ reply: { edits: [], line: null, cause }, refused: [] });
 
 /** Every clock read moves 40 ms on, so each call takes 40 ms. */
 const ticking = () => {
@@ -127,6 +140,7 @@ describe('brain service', () => {
       const service = createBrain({ gameId: GAME, env, logPath: file, sdkFactory });
       expect(service.deciderFor(SEAT)).toBeNull();
       expect(service.deciderFor({ id: 'p1', persona: 'aggressive', level: 'tycoon' })).toBeNull();
+      expect(service.writerFor(SEAT)).toBeNull();
     }
 
     // The default env is process.env and the default factory is the real SDK's constructor (mocked to count).
@@ -146,6 +160,7 @@ describe('brain service', () => {
     const keyed = createBrain({ gameId: GAME, env: KEY, logPath: file, sdkFactory });
     expect(keyed.deciderFor(SEAT)).not.toBeNull();
     expect(keyed.deciderFor({ id: 'p1', persona: 'aggressive', level: 'tycoon' })).not.toBeNull();
+    expect(keyed.writerFor(SEAT)).not.toBeNull();
     expect(keys).toEqual(['test-key-not-real']);
 
     // The default factory passes the key and nothing else the SDK could fall back on: no auth token, and the
@@ -396,9 +411,12 @@ describe('brain service', () => {
     });
   }
 
-  it('INV-one-in-flight: a second decision for a busy seat makes no call and writes no line, from any decider for that seat', async () => {
+  it('INV-one-in-flight: a second call for a busy seat makes no call and writes no line, from any decider or writer for that seat', async () => {
     let answer!: (m: SdkMessage) => void;
-    const sdk = fakeSdk((n) => (n === 1 ? new Promise<SdkMessage>((r) => (answer = r)) : sdkMessage('{"option":"C","line":""}', USED)));
+    let answerWrite!: (m: SdkMessage) => void;
+    const sdk = fakeSdk((n) =>
+      n === 1 ? new Promise<SdkMessage>((r) => (answer = r)) : n === 3 ? new Promise<SdkMessage>((r) => (answerWrite = r)) : sdkMessage('{"option":"C","line":""}', USED),
+    );
     const service = serviceOn(sdk);
     const a = seatOn(service);
     const b = seatOn(service); // a second decider for the same seat id
@@ -417,6 +435,9 @@ describe('brain service', () => {
     // The same decider again while its call is open: busy too.
     const again = await a.decide();
     expect(again.record.note).toBe('decider failed: busy');
+    // A writer for the seat shares its one open call: no call, no line, and the reply says none came.
+    const writer = service.writerFor(SEAT)!;
+    expect(await writer.write('strategy', ASK)).toEqual(unusable('no_reply'));
     expect(sdk.calls).toBe(1);
     expect(lines()).toEqual([]);
 
@@ -429,6 +450,16 @@ describe('brain service', () => {
     expect(next.settled.choice).toMatchObject({ by: 'llm', optionId: 'C' });
     expect(sdk.calls).toBe(2);
     expect(lines()).toHaveLength(2);
+
+    // While a writer's call is open, the seat's deciders are busy; once it settles, its line is written.
+    const writing = writer.write('playbook', ASK);
+    await flush();
+    const blocked = await a.decide();
+    expect(blocked.record.note).toBe('decider failed: busy');
+    expect(sdk.calls).toBe(3);
+    answerWrite(sdkMessage(WRITER_TEXT, USED));
+    expect((await writing).reply.line).toBe('Ore.');
+    expect(lines().map((l) => [l.kind, l.outcome])).toEqual([['develop', 'llm'], ['develop', 'llm'], ['playbook', 'llm']]);
   });
 
   it("INV-trial-cap: countedUsd is the game's spend as the seat budget counts it, billed dollars plus each unknown-bill call at its worst case, and keeps that figure after finish", async () => {
@@ -460,6 +491,7 @@ describe('brain service', () => {
     const sdk = fakeSdk(() => sdkMessage('{"option":"B","line":"Mine."}', { input: tokens }));
     const service = serviceOn(sdk);
     const seat = seatOn(service);
+    const writer = service.writerFor(SEAT)!;
 
     await seat.decide();
     const locked = await seat.decide();
@@ -475,8 +507,10 @@ describe('brain service', () => {
       by_seat: { p0: { calls: 1, usd: expect.closeTo(billed, 10) } },
     });
 
-    // Terminal: no new deciders, and an existing one makes no call and writes no line.
+    // Terminal: no new deciders or writers, and an existing one makes no call and writes no line.
     expect(service.deciderFor(SEAT)).toBeNull();
+    expect(service.writerFor(SEAT)).toBeNull();
+    expect(await writer.write('strategy', ASK)).toEqual(unusable('no_reply'));
     const after = await seat.decide();
     expect(after.settled.choice).toMatchObject({ by: 'fallback', optionId: after.topPick });
     expect(after.record.note).toBe('decider failed: game over');
@@ -490,5 +524,157 @@ describe('brain service', () => {
 
     service.finish();
     expect(lines()).toHaveLength(3);
+  });
+});
+
+describe('the playbook writer port', () => {
+  const MARK = 'MARK-sdk-text-4q';
+  const USED = { input: 410, cached_read: 620, cache_write: 50, output: 38 };
+  const apiError = (status: number) =>
+    Anthropic.APIError.generate(status, { type: 'error', error: { type: 'api_error', message: MARK } }, MARK, new Headers());
+  /** An SDK whose create throws before it returns a promise; it still counts each request. */
+  const throwsAtOnce = () => {
+    const sdk = fakeSdk(() => sdkMessage(WRITER_TEXT));
+    const create = sdk.messages.create.bind(sdk.messages);
+    sdk.messages.create = (params, options) => {
+      void create(params, options);
+      throw new Error(MARK);
+    };
+    return sdk;
+  };
+  /** Characters of the prompt a write call sends for ASK: system text, brief text and the reply schema. */
+  const ASK_CHARS = ASK.system.length + BRIEF.text.length + JSON.stringify(replySchema(BRIEF.corners)).length;
+  const pricesAt = (model: keyof typeof BRAIN.priceTable) => BRAIN[BRAIN.priceTable[model]];
+  /** RULE-3's worst case for ASK's prompt at a model's prices and a reply cap, from BRAIN's constants. */
+  const worstAt = (model: keyof typeof BRAIN.priceTable, maxTokens: number) => {
+    const p = pricesAt(model);
+    return (Math.ceil(ASK_CHARS / BRAIN.charsPerToken) * Math.max(p.input, p.cacheWrite) + maxTokens * p.output) / 1_000_000;
+  };
+  const SONNET = BRAIN.writeCalls.strategy.model;
+  const HAIKU = BRAIN.writeFallbackModel;
+  const sonnetWorst = worstAt(SONNET, BRAIN.writeCalls.strategy.maxTokens);
+  const haikuWorst = worstAt(HAIKU, BRAIN.writeCalls.strategy.maxTokens);
+  /** Between a move call's worst case and the cheapest write call's: a write priced at the move cap would fit. */
+  const belowEveryWrite = (worstUsdOf(ASK_CHARS) + haikuWorst) / 2;
+  const billedAt = (model: keyof typeof BRAIN.priceTable, usage: Partial<Usage>) => {
+    const p = pricesAt(model);
+    const u = { ...NO_USAGE, ...usage };
+    return (u.input * p.input + u.cached_read * p.cacheRead + u.cache_write * p.cacheWrite + u.output * p.output) / 1_000_000;
+  };
+
+  const rows: {
+    name: string;
+    sdk: () => ReturnType<typeof fakeSdk>;
+    waitMs?: number;
+    gameBudgetUsd?: number;
+    cause: string;
+    outcome: string | null;
+    calls: number;
+    counted: 'worst' | number;
+  }[] = [
+    { name: 'the SDK throws at once', sdk: throwsAtOnce, cause: 'no_reply', outcome: 'error', calls: 1, counted: 'worst' },
+    {
+      name: 'a 500',
+      sdk: () =>
+        fakeSdk(() => {
+          throw apiError(500);
+        }),
+      cause: 'no_reply',
+      outcome: 'error',
+      calls: 1,
+      counted: 0,
+    },
+    {
+      name: 'a refusal',
+      sdk: () => fakeSdk(() => sdkMessage(`{"edits":[],"line":"${MARK}"}`, { output: 5 }, 'refusal')),
+      cause: 'refused',
+      outcome: 'refused',
+      calls: 1,
+      counted: billedAt(SONNET, { output: 5 }),
+    },
+    {
+      name: 'a cut-off reply',
+      sdk: () => fakeSdk(() => sdkMessage(`{"edits":[{"reason":"${MARK}`, { output: 3_000 }, 'max_tokens')),
+      cause: 'cut_off',
+      outcome: 'unreadable',
+      calls: 1,
+      counted: billedAt(SONNET, { output: 3_000 }),
+    },
+    { name: 'a timeout', sdk: () => fakeSdk((_n, _p, options) => neverAnswers(options)), waitMs: 30, cause: 'no_reply', outcome: 'timeout', calls: 1, counted: 'worst' },
+    { name: 'a budget refusal', sdk: () => fakeSdk(() => sdkMessage(WRITER_TEXT)), gameBudgetUsd: belowEveryWrite, cause: 'no_reply', outcome: 'budget', calls: 0, counted: 0 },
+    { name: 'a wait of 0', sdk: () => fakeSdk(() => sdkMessage(WRITER_TEXT)), waitMs: 0, cause: 'no_reply', outcome: null, calls: 0, counted: 0 },
+    { name: 'a negative wait', sdk: () => fakeSdk(() => sdkMessage(WRITER_TEXT)), waitMs: -500, cause: 'no_reply', outcome: null, calls: 0, counted: 0 },
+    { name: 'a NaN wait', sdk: () => fakeSdk(() => sdkMessage(WRITER_TEXT)), waitMs: Number.NaN, cause: 'no_reply', outcome: null, calls: 0, counted: 0 },
+  ];
+
+  it.each(rows)('INV-writer-never-throws: $name resolves with cause $cause, empty edits and no line, ledgered $outcome', async (row) => {
+    const sdk = row.sdk();
+    const service = createBrain({ gameId: GAME, env: KEY, logPath: file, sdkFactory: () => sdk, now: ticking(), ...(row.gameBudgetUsd === undefined ? {} : { gameBudgetUsd: row.gameBudgetUsd }) });
+    const writer = service.writerFor(SEAT)!;
+
+    const written = await writer.write('strategy', { ...ASK, waitMs: row.waitMs ?? ASK.waitMs });
+
+    expect(written).toEqual(unusable(row.cause));
+    expect(JSON.stringify(written)).not.toContain(MARK);
+    expect(sdk.calls).toBe(row.calls);
+    const seen = lines().map((l) => ({ game: l.game, seat: l.seat, kind: l.kind, model: l.model, outcome: l.outcome }));
+    expect(seen).toEqual(row.outcome === null ? [] : [{ game: GAME, seat: 'p0', kind: 'strategy', model: SONNET, outcome: row.outcome }]);
+    // A call whose bill is unknown counts at its worst case; one the API answered counts what it billed.
+    expect(service.countedUsd()).toBeCloseTo(row.counted === 'worst' ? sonnetWorst : row.counted, 12);
+
+    // The seat is free again: the next write sends a fresh request, except where the budget still refuses.
+    await writer.write('strategy', { ...ASK, waitMs: 30 });
+    expect(sdk.calls).toBe(row.outcome === 'budget' ? 0 : row.calls + 1);
+  });
+
+  it("T-AC-A11: RULE-A5 rows 1-3; a Sonnet call is counted at Sonnet's prices", async () => {
+    expect(billedAt(SONNET, USED)).not.toBeCloseTo(billedAt(HAIKU, USED), 6);
+    const play = async (gameBudgetUsd: number) => {
+      fs.rmSync(file, { force: true });
+      const sdk = fakeSdk(() => sdkMessage(WRITER_TEXT, USED));
+      const service = createBrain({ gameId: GAME, env: KEY, logPath: file, sdkFactory: () => sdk, now: ticking(), gameBudgetUsd });
+      const written = await service.writerFor(SEAT)!.write('strategy', ASK);
+      return { sdk, service, written, lines: lines() };
+    };
+
+    // Row 1: a fresh seat with the whole game budget sends Sonnet, ledgered and counted at Sonnet's prices.
+    const fresh = await play(BRAIN.gameBudgetUsd);
+    expect(fresh.sdk.requests.map((r) => r.params.model)).toEqual([SONNET]);
+    expect(fresh.written.reply.line).toBe('Ore.');
+    expect(fresh.lines).toEqual([expect.objectContaining({ kind: 'strategy', model: SONNET, outcome: 'llm', usd: expect.closeTo(billedAt(SONNET, USED), 12) })]);
+    expect(fresh.service.countedUsd()).toBeCloseTo(billedAt(SONNET, USED), 12);
+
+    // Row 2: a share below Sonnet's worst case but above Haiku's sends Haiku, ledgered as the fallback at Haiku's prices.
+    const fallback = await play((sonnetWorst + haikuWorst) / 2);
+    expect(fallback.sdk.requests.map((r) => r.params.model)).toEqual([HAIKU]);
+    expect(fallback.written.reply.line).toBe('Ore.');
+    expect(fallback.lines).toEqual([expect.objectContaining({ kind: 'strategy', model: HAIKU, outcome: 'fallback', usd: expect.closeTo(billedAt(HAIKU, USED), 12) })]);
+
+    // Row 3: below both, no call and a budget line; the seat is not locked, so a move that fits still calls.
+    const none = await play(belowEveryWrite);
+    expect(none.sdk.calls).toBe(0);
+    expect(none.written).toEqual(unusable('no_reply'));
+    expect(none.lines.map((l) => [l.kind, l.outcome])).toEqual([['strategy', 'budget']]);
+    const move = await seatOn(none.service).decide();
+    expect(none.sdk.calls).toBe(1);
+    expect(move.record.note).not.toBe('decider failed: budget spent');
+  });
+
+  it('INV-writer-decider-parity: writerFor is non-null exactly when deciderFor is: Classic, an unset key, a Smart seat, a spent budget, after finish', async () => {
+    const parity = (service: BrainService) => [service.deciderFor(SEAT) !== null, service.writerFor(SEAT) !== null];
+
+    expect(parity(createBrain({ gameId: GAME, env: { [API_KEY_ENV]: '  ' }, logPath: file })), 'Classic: a blank key').toEqual([false, false]);
+    expect(parity(createBrain({ gameId: GAME, env: {}, logPath: file })), 'an unset key').toEqual([false, false]);
+
+    // One call bills the only seat's share, the whole game budget.
+    const sdk = fakeSdk(() => sdkMessage('{"option":"B","line":"Mine."}', { input: inputTokensFor(BRAIN.gameBudgetUsd) }));
+    const service = serviceOn(sdk);
+    expect(parity(service), 'a Smart seat').toEqual([true, true]);
+    await seatOn(service).decide();
+    expect((await seatOn(service).decide()).record.note).toBe('decider failed: budget spent');
+    expect(parity(service), 'a spent budget stays a cause, never a null writer').toEqual([true, true]);
+
+    service.finish();
+    expect(parity(service), 'after finish').toEqual([false, false]);
   });
 });

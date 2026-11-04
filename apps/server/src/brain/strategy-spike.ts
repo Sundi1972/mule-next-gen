@@ -10,26 +10,22 @@ import {
   AI_LEVELS,
   allPrices,
   BRAIN,
-  GAME,
   GOODS,
   observe,
   PHASES,
-  POLITICS,
-  POLLUTION,
-  PROCESSED_GOODS,
-  RAW_GOODS,
   score,
-  UPKEEP,
   type AiLevelId,
   type AiPersonaId,
   type Good,
   type GameState,
 } from '@mule/engine';
-import { GOOD_NAME, landDecision, OPTION_IDS, PERSONAS, playGame, simSeats, situation, toOptions, type Mind, type ShortOption } from '@mule/ai';
+import { CAUSES, GOOD_NAME, landDecision, OPTION_IDS, PERSONAS, playGame, simSeats, situation, STRATEGY_SYSTEM, toOptions, type Cause, type Mind, type ShortOption } from '@mule/ai';
 import { alreadyRanToday, AUTH_STOPPED, claimLedger, day, dayLedgerPath, nearest, numberFlags, resolveDeps, runAsScript, table, type MainDeps, type StopReason } from './cli.js';
-import { billUnknown, CallFailed, createAnthropicSdk, fail, type HaikuReply, type HaikuSdk } from './client.js';
+import { billUnknown, CallFailed, createAnthropicSdk, createThinkingComplete, type HaikuSdk, type ThinkingCall, type ThinkingReply } from './client.js';
 import { API_KEY_ENV, apiKeyFrom } from './index.js';
 import { NO_USAGE, type Usage } from './ledger.js';
+
+export { STRATEGY_SYSTEM };
 
 const S = BRAIN.strategySpike;
 const PER_MILLION = 1_000_000;
@@ -107,39 +103,7 @@ export interface Brief {
   prompt: StrategyPrompt;
 }
 
-const names = (goods: readonly Good[]) => goods.map((g) => GOOD_NAME[g]).join(', ');
-const pctOf = (share: number) => `${Math.round(share * 100)}%`; // literal-ok: a share as a whole percentage
 
-/**
- * A stand-in for the generated manual (spec A C8): the phases as llm/prompt.ts's PRIMER gives them, how the game is
- * won as engine/src/game.ts::scoreParts computes it, and what the strategy fields mean.
- */
-export const STRATEGY_SYSTEM = `You play one seat in a colony trading game in the spirit of M.U.L.E.: a few players share a young colony and each tries to end with the highest score. You write your seat's strategy for the rest of the game, in character.
-
-How a month goes:
-- Planning. Everyone looks at the colony's stores, prices and plots, and decides what to aim for. This is when you write your strategy.
-- Land grant. Free plots are handed out. Each player may claim up to ${GAME.claimsPerGrant} plots per grant, and the choice matters: ground differs in what it produces well, and a plot next to your others can be worth more.
-- Development. You may outfit a plot with a MULE, a working machine the store builds from ${GOOD_NAME.smithore}, set to produce one raw good: ${names(RAW_GOODS)}. A plot without a MULE produces nothing. A MULE costs money and the wrong kind wastes it. Factories make the processed goods (${names(PROCESSED_GOODS)}); they are fitted at the works counter and use inputs from your stock.
-- Production. Plots and factories produce, and goods that are short hurt the player who runs out.
-- The auction. Players buy and sell goods with each other, and the store trades there too. Buyers bid up, sellers ask down, and a trade happens when they meet. Cheap goods bought now and sold when dear are how a trader earns; a scarce good can be cornered. Goods spoil and storage is limited, so hoarding has a cost.
-- Upkeep. At the end of the month each player eats ${GOOD_NAME.food} and ${GOOD_NAME.water} from their own stock, goods spoil, and anything above the depot limit of ${UPKEEP.depotCapacity} is lost. If the colony fails, everyone's score suffers.
-
-How the game is won. At the end, the highest score wins. A player's score adds up:
-- money on hand;
-- every good in stock, valued at the colony's posted price for it that day;
-- ${GAME.plotScore} for each plot owned;
-- each plot with a MULE installed, valued at the store's MULE price that day.
-That sum is rounded. If the colony's air has fallen to Collapse, it is cut to ${pctOf(POLLUTION.collapseScore)} of itself. Then ${POLITICS.termScore} points are added for each term served in office, which Collapse does not cut.
-
-Your strategy. You choose:
-- kind: the plan you play to. builder: develop many plots and grow steady production. specialist: concentrate on one good, your moneyMaker, and sell it. monopolist: corner one good, your monopolyTarget, so others must buy it from you. landBaron: gather plots, since each one counts toward the score. politician: win office, since each term adds points. spoiler: hold the leader back.
-- moneyMaker: the good you mean to earn most from, or null.
-- monopolyTarget: the good you mean to corner, or null. Only a monopolist names one, and only a seat whose level may corner.
-- cashFloor: credits you keep back and do not spend below, a whole number from 0 to the money you have.
-- reason: why, in at most ${S.reasonChars} characters.
-You also pick one of this month's land plans by its letter (planPick); the engine ranked them, best first, and the ranking is a guide you may depart from when your strategy calls for it. Never name a plan that is not in the list. And you may say one short sentence at the table (line), at most ${BRAIN.maxLineChars} characters, in the character's voice, or leave it empty. Keep it family-friendly.
-
-Reply with JSON only, in the shape the schema gives.`;
 
 /** The strategy prompt's user text for a seat's brief, from its view and situation summary. */
 export function strategyUserText(b: Omit<Brief, 'prompt' | 'index'>, view: GameState, summary: string): string {
@@ -270,64 +234,19 @@ export function capFor(flagMaxUsd: number, ceilingUsd: number = S.capUsd): numbe
   return Number.isFinite(flagMaxUsd) && flagMaxUsd > 0 ? Math.min(flagMaxUsd, ceilingUsd) : 0;
 }
 
-export interface StrategyReply extends HaikuReply {
-  /** usage.output_tokens_details.thinking_tokens, or null when the response carries none. */
-  thinking: number | null;
-}
+export type StrategyReply = ThinkingReply;
 
 export type StrategyComplete = (role: ModelRole, prompt: StrategyPrompt) => Promise<StrategyReply>;
 
-/** The SDK's message type, through the client seam: only brain/client.ts imports the SDK. */
-type SdkMessage = Awaited<ReturnType<HaikuSdk['messages']['create']>>;
-
-const count = (n: number | null | undefined): number => n ?? 0;
-
-/** What one spike call asks of the API besides the prompt. */
-export interface SpikeCallSettings {
-  model: string;
-  effort: NonNullable<NonNullable<Parameters<HaikuSdk['messages']['create']>[0]['output_config']>['effort']>;
-  maxTokens: number;
-  timeoutMs: number;
-}
+/** What one spike call asks of the API besides the prompt: the client's thinking-call settings. */
+export type SpikeCallSettings = ThinkingCall;
 
 export type SpikeCall = (prompt: SpikePrompt, settings: SpikeCallSettings) => Promise<StrategyReply>;
 
-/** The port over both models: adaptive thinking, the effort, the schema; one try, no retries, never past timeoutMs. */
-export function createSpikeCall(sdk: HaikuSdk, now: () => number = () => performance.now()): SpikeCall {
-  return async (prompt, settings) => {
-    const { timeoutMs } = settings;
-    const start = now();
-    // The SDK's timeout stops at the response headers; this abort bounds the body read too.
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    let res: SdkMessage;
-    try {
-      res = await sdk.messages.create(
-        {
-          model: settings.model,
-          max_tokens: settings.maxTokens,
-          thinking: { type: 'adaptive' },
-          system: [{ type: 'text', text: prompt.system, cache_control: { type: 'ephemeral' } }],
-          messages: [{ role: 'user', content: prompt.user }],
-          output_config: { effort: settings.effort, format: { type: 'json_schema', schema: JSON.parse(JSON.stringify(prompt.schema)) } },
-        },
-        { timeout: timeoutMs, maxRetries: 0, signal: controller.signal },
-      );
-    } catch (e) {
-      throw fail(e, now() - start, timeoutMs, controller.signal.aborted);
-    } finally {
-      clearTimeout(timer);
-    }
-    const ms = now() - start;
-    const u = res.usage;
-    return {
-      text: res.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join(''),
-      ms,
-      stopReason: res.stop_reason,
-      thinking: u.output_tokens_details?.thinking_tokens ?? null,
-      usage: { input: count(u.input_tokens), cached_read: count(u.cache_read_input_tokens), cache_write: count(u.cache_creation_input_tokens), output: count(u.output_tokens) },
-    };
-  };
+/** The client's thinking port, at the settings each call names: one try, no retries, never past its timeout. */
+export function createSpikeCall(sdk: HaikuSdk, now?: () => number): SpikeCall {
+  const think = createThinkingComplete(sdk, now);
+  return (prompt, settings) => think(settings, prompt);
 }
 
 /** The strategy port: createSpikeCall at BRAIN.strategySpike's model, effort, reply cap and timeout. */
@@ -337,7 +256,7 @@ export function createStrategyComplete(sdk: HaikuSdk, now: () => number = () => 
 }
 
 export interface Verdict {
-  /** The reply parses, has every field in the schema's shape, a reason within S.reasonChars and a plan from the brief. */
+  /** The reply parses, has every field in the schema's shape, a reason within BRAIN.writeReasonChars and a plan from the brief. */
   valid: boolean;
   /** Valid, and within the seat's bounds: cashFloor 0…money, goods known or null, and no monopoly for a seat that never corners. */
   within: boolean;
@@ -349,23 +268,8 @@ export interface Verdict {
   bound: Bound | null;
 }
 
-/**
- * Why a reply is invalid, checked in this order. refused and cut_off come from the stop reason; bad_shape is keys
- * missing or extra, or a strategy or reason that is not of its JSON type.
- */
-export const CAUSES = [
-  'refused',
-  'cut_off',
-  'not_json',
-  'bad_shape',
-  'bad_kind',
-  'bad_good',
-  'bad_cash_floor',
-  'reason_too_long',
-  'plan_not_offered',
-  'bad_line',
-] as const;
-export type Cause = (typeof CAUSES)[number];
+/** Why a reply is invalid: the writer's cause codes, one list, so the spike and the writer count the same things. */
+export type { Cause };
 
 export const BOUNDS = ['cash_floor', 'corners'] as const;
 export type Bound = (typeof BOUNDS)[number];
@@ -396,7 +300,7 @@ export function judgeReply(brief: Brief, text: string, stopReason: StrategyReply
   if (!isGoodOrNull(moneyMaker) || !isGoodOrNull(monopolyTarget)) return invalid('bad_good');
   if (!Number.isInteger(cashFloor)) return invalid('bad_cash_floor');
   if (typeof reason !== 'string') return invalid('bad_shape');
-  if ([...reason].length > S.reasonChars) return invalid('reason_too_long');
+  if ([...reason].length > BRAIN.writeReasonChars) return invalid('reason_too_long');
   if (typeof planPick !== 'string' || !brief.plans.some((p) => p.id === planPick)) return invalid('plan_not_offered');
   if (typeof line !== 'string') return invalid('bad_line');
   const floor = cashFloor as number;

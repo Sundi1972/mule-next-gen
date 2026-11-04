@@ -74,6 +74,11 @@ export class Brain {
     this.talk = [...this.talk, line].slice(-BRAIN.talkLines);
   }
 
+  /** The table talk the seat has heard, newest last: what a brief quotes. */
+  heard(): readonly TableTalk[] {
+    return this.talk;
+  }
+
   ask<A>(kind: DecisionKind, list: Shortlist<A>, obs: GameState, waitMs: number, topic: string | null, summary: string): Pending<A> {
     const id = this.nextId++;
     const options = toOptions(list);
