@@ -1348,6 +1348,11 @@ type MomentsRead = {
   banner: { text: string; tone: string | null; r: Rect } | null;
   corral: string | null;
   beats: string[];
+  loose: { who: string; x: number; y: number }[];
+  /** Whose MULE the map draws on its lead. */
+  leads: string[];
+  /** Each colonist the map draws, where. */
+  drawn: Record<string, { x: number; y: number }>;
 };
 
 /** Kept a string, as READ_HALL. */
@@ -1368,6 +1373,9 @@ const READ_MOMENTS = `(() => {
     banner: banner && { text: banner.textContent, tone: banner.getAttribute('data-tone'), r: box(banner) },
     corral: corral && corral.getAttribute('data-left'),
     beats: all('[data-testid=tv-beat]').map((e) => e.textContent),
+    loose: all('[data-testid^=loose-]').map((e) => ({ who: id(e).slice(6), x: Number(e.getAttribute('data-x')), y: Number(e.getAttribute('data-y')) })),
+    leads: all('[data-testid=walkers-map] [data-testid^=mule-]').map((e) => id(e).slice(5)),
+    drawn: Object.fromEntries(all('[data-testid=walkers-map] [data-testid^=colonist-]:not([data-testid^=colonist-name])').map((e) => [id(e).slice(9), { x: Number(e.getAttribute('data-x')), y: Number(e.getAttribute('data-y')) }])),
   };
 })()`;
 
@@ -1449,9 +1457,12 @@ async function fightWell(page: Page, server: MuleServer, code: string, seat: str
 /**
  * B-AC-5: wolves forced on (a pack certain each tick on wolf land, by setting the in-process server's WOLVES). Mia,
  * on forest, pushes the stick and runs: she is bitten and slowed, or gets away. Heiko presses and fights: he wins pelts
- * and sells them at the store's door, or loses and is stunned (he leads no MULE). Every phone and the TV show the
- * pack where the frames have it, the choice, the chase and the fight. Negative: no pack comes in the hall. The checks
- * of what the screens drew run last, so the server's outcomes are measured whatever they show.
+ * and sells them at the store's door, or loses and is stunned (he leads no MULE). Then he loses one on purpose (the
+ * first lunge held back until he has pushed to the fight's ring, where he stands to be bitten), leading a MULE: on his
+ * phone he stays inside the ring while he pushes out of it, the MULE runs loose off his lead, he walks to it at full
+ * pace, the button says CATCH MULE, and caught it is on his lead again. Every phone and the TV show the pack where the
+ * frames have it, the choice, the chase and the fight. Negative: no pack comes in the hall. The checks of what the
+ * screens drew run last, so the server's outcomes are measured whatever they show.
  */
 export async function wolvesRunOrFight(t: ArcadeTable): Promise<string> {
   const { heiko, mia, tv, server, code, wires } = t;
@@ -1574,6 +1585,7 @@ export async function wolvesRunOrFight(t: ArcadeTable): Promise<string> {
       owe("Heiko's phone says he is stunned", stunned.callouts.some((c) => c.id === 'stunned-s1'), `${framesSay(heardMoments(wires.heiko))}; it drew ${JSON.stringify(stunned.callouts)}`);
       out.push(`Heiko fought and lost, stunned (${fought})`);
     }
+    out.push(await aFightLostWithAMule(t, store, owe));
   } finally {
     Object.assign(WOLVES, saved);
   }
@@ -1581,6 +1593,114 @@ export async function wolvesRunOrFight(t: ArcadeTable): Promise<string> {
   console.log(`  B-AC-5, the server: ${out.join('; ')}`);
   for (const o of owed) check(o.ok, `B-AC-5: ${o.tag}; ${o.said}`);
   return out.join('; ');
+}
+
+/** How far inside its ring a drawn colonist may seem: the wire's rounding and a frame's interpolation. */
+const RING_SLACK = 0.05;
+/** Pushing out of the ring, he gets this near its edge. */
+const AT_THE_RING = 0.8;
+
+/**
+ * B-AC-5's lost fight, made sure: Heiko buys a MULE, leads it onto wolf land, fights and pushes out of the ring while the
+ * first lunge waits until he is at its edge, where he stands, so every lunge bites. Then the MULE runs loose, and he
+ * catches it. Restores nothing itself: the caller restores WOLVES.
+ */
+async function aFightLostWithAMule(t: ArcadeTable, store: { x: number; y: number }, owe: (tag: string, ok: boolean, said: string) => void): Promise<string> {
+  const { heiko, server, code, wires } = t;
+  const cfg = floorConfig();
+  if (onFloor(server, code, 's1').space === 'map') await throughDoor(heiko, server, code, 's1');
+  await steerTo(heiko, server, code, 's1', hallPlace('corral'));
+  await expectButton(heiko, server, code, 's1', 'BUY MULE', 'B-AC-5');
+  await pressAct(heiko);
+  check((await playerWhen(heiko, server, code, 's1', (p) => p.carriedMule === 'empty')).carriedMule === 'empty', 'B-AC-5: Heiko buys a MULE to lead');
+  await throughDoor(heiko, server, code, 's1');
+  // Test fixture: onto wolf land, as B-AC-5's run and fight are put there; his MULE follows on its lead.
+  placeOnFloor(server, code, 's1', { space: 'map', ...wolfLand(server, code, store, onFloor(server, code, 's2')) });
+  await heiko.locator('[data-testid=your-stage][data-space=map]').waitFor({ timeout: 2_000 });
+  await heiko.getByTestId('phone-game').focus();
+  await heiko.waitForTimeout(500);
+  Object.assign(WOLVES, { firstLungeSeconds: 2.5, chancePerSecond: CERTAIN });
+  const met = await colonistWhen(heiko, server, code, 's1', (c) => c.encounter?.stage === 'choose');
+  WOLVES.chancePerSecond = 0;
+  check(met.encounter?.stage === 'choose', `B-AC-5: a pack comes for Heiko leading his MULE, got ${met.encounter?.stage ?? 'none'}`);
+  await pressAct(heiko);
+  const fight = await colonistWhen(heiko, server, code, 's1', (c) => c.encounter?.stage === 'fight');
+  check(fight.encounter?.stage === 'fight', `B-AC-5: he fights, got ${fight.encounter?.stage ?? 'none'}`);
+  const centre = fight.encounter!.centre;
+  // Out of the ring, and on until the fight is over: he never dodges.
+  const out = arrowsFor({ x: 1, y: 0 });
+  for (const k of out) await heiko.keyboard.down(k);
+  const reads: number[] = [];
+  const end = Date.now() + (WOLVES.fightSeconds + 2) * 1_000;
+  try {
+    while (colonistOf(server, code, 's1').encounter && Date.now() < end) {
+      const d = (await readMoments(heiko)).drawn['s1'];
+      if (d) reads.push(Math.hypot(d.x - centre.x, d.y - centre.y));
+      await heiko.waitForTimeout(100);
+    }
+  } finally {
+    for (const k of out) await heiko.keyboard.up(k);
+  }
+  const lost = colonistOf(server, code, 's1');
+  check(lost.encounter === null && !!playerOf(server, code, 's1').muleBolted && !!lost.bolt, `B-AC-5: standing to be bitten, Heiko loses and his MULE bolts, got ${JSON.stringify({ encounter: lost.encounter?.stage ?? null, bolt: lost.bolt ?? null, bolted: playerOf(server, code, 's1').muleBolted })}`);
+  const farthest = Math.max(...reads);
+  owe(
+    "pushing out of the fight's ring, Heiko's phone draws him inside it, at its edge",
+    reads.length >= 10 && farthest <= WOLVES.arenaTiles + RING_SLACK && farthest >= AT_THE_RING * WOLVES.arenaTiles,
+    `${reads.length} reads, his drawn distance from the ring's centre at most ${farthest.toFixed(3)} of ${WOLVES.arenaTiles}`,
+  );
+
+  // The MULE runs its bolt; then it stands loose, off his lead, on his phone where the server has it.
+  await heiko.waitForTimeout(((WOLVES.boltTiles / WOLVES.boltSpeed) * 1_000) + 500);
+  const mule = colonistOf(server, code, 's1').lead!;
+  const loose = await readMoments(heiko);
+  const drawnLoose = loose.loose.find((m) => m.who === 's1');
+  const me = loose.drawn['s1'];
+  owe(
+    "the bolted MULE runs loose on Heiko's phone, where the server has it, off his lead",
+    !!drawnLoose && !loose.leads.includes('s1') && Math.hypot(drawnLoose.x - mule.x, drawnLoose.y - mule.y) <= 0.3 && !!me && Math.hypot(drawnLoose.x - me.x, drawnLoose.y - me.y) >= 1,
+    `${framesSay(heardMoments(wires.heiko))}; loose ${JSON.stringify(loose.loose)}, on leads ${JSON.stringify(loose.leads)}, him ${JSON.stringify(me)}, the server's MULE ${mule.x.toFixed(2)},${mule.y.toFixed(2)}`,
+  );
+
+  // To it, at full pace: the server's steps, against a led colonist's on the same ground.
+  const steps: { tick: number; c: EngineColonist }[] = [];
+  const timer = setInterval(() => {
+    const tick = floorOf(server, code).tick;
+    if (steps.at(-1)?.tick !== tick) steps.push({ tick, c: colonistOf(server, code, 's1') });
+  }, 2);
+  try {
+    await steerTo(heiko, server, code, 's1', { space: 'map', x: mule.x, y: mule.y }, { within: 0.3 });
+  } finally {
+    clearInterval(timer);
+  }
+  const state = gameOf(server, code).state;
+  // One tick's steps only, each judged on the ground it started from; a step along a wall or off its land is shorter.
+  const paces = steps.slice(1).flatMap(({ tick, c }, i) => {
+    const { tick: t0, c: a } = steps[i]!;
+    const d = Math.hypot(c.x - a.x, c.y - a.y);
+    if (tick !== t0 + 1 || !c.moving || d === 0 || c.space !== 'map' || a.space !== 'map' || !c.bolt) return [];
+    const led = (speedOf({ ...a, bolt: null }, state, cfg) * DEV_STEER.tickMs) / 1_000;
+    const free = (speedOf({ ...a, lead: null, bolt: null }, state, cfg) * DEV_STEER.tickMs) / 1_000;
+    // A diagonal key pair goes on the wire as the stick (5/8, 5/8): 0.88 of a step. Straight steps are the measure.
+    const straight = Math.abs(c.x - a.x) < 1e-9 || Math.abs(c.y - a.y) < 1e-9;
+    return straight ? [{ d: Number(d.toFixed(4)), led: Number(led.toFixed(4)), free: Number(free.toFixed(4)) }] : [];
+  });
+  const full = paces.filter((k) => Math.abs(k.d - k.free) <= 0.0002);
+  check(paces.length >= 5 && full.length === paces.length, `B-AC-5: with his MULE bolted Heiko walks at full pace, not a led one: ${full.length} of ${paces.length} straight steps at full; the rest ${JSON.stringify(paces.filter((k) => !full.includes(k)).slice(0, 6))}`);
+  await heiko.waitForTimeout(300);
+  const there = (await readMoments(heiko)).drawn['s1'];
+  const truth = colonistOf(server, code, 's1');
+  owe("walking free of his MULE, Heiko's phone draws him where the server has him", !!there && Math.hypot(there.x - truth.x, there.y - truth.y) <= 0.15, `drawn ${JSON.stringify(there)}, the server ${truth.x.toFixed(2)},${truth.y.toFixed(2)}`);
+
+  // CATCH MULE, and it is on his lead again.
+  await expectButton(heiko, server, code, 's1', 'CATCH MULE', 'B-AC-5');
+  await pressAct(heiko);
+  const caught = await playerWhen(heiko, server, code, 's1', (p) => !p.muleBolted);
+  check(!caught.muleBolted && caught.carriedMule === 'empty' && !colonistOf(server, code, 's1').bolt, 'B-AC-5: CATCH MULE catches it: on his lead again on the server');
+  await heiko.waitForTimeout(300);
+  const back = await readMoments(heiko);
+  owe("caught, Heiko's phone draws his MULE on his lead again, and none loose", back.leads.includes('s1') && !back.loose.some((m) => m.who === 's1'), `loose ${JSON.stringify(back.loose)}, on leads ${JSON.stringify(back.leads)}`);
+  return `Heiko lost a fight leading a MULE (drawn at most ${farthest.toFixed(2)} of ${WOLVES.arenaTiles} from the ring's centre), it bolted, he walked to it at full pace (${paces.length} steps) and caught it`;
 }
 
 /** The glint's tile once lit, waited for; null if none lights in `timeout`. */
@@ -1775,7 +1895,33 @@ export async function theScramble(t: ArcadeTable): Promise<string> {
       ok: left.lena.banner?.tone === 'warn' && !!left.lena.banner.text.includes('no MULE for you this turn') && pays.some((n) => left.lena.banner!.text.includes(`+${n} cr`)),
       said: `${framesSay(heardMoments(wires.phones[3]!))}; her banner ${JSON.stringify(left.lena.banner?.text ?? null)}, the pub pays ${pays.join(' or ')}`,
     });
-    out.push(`the corral at ${left0}: called at 2, Heiko, Mia and Kai got them, Lena left out (the pub pays ${pays[0]})`);
+    // Her left-out line, the phone's longest banner: inside the screen, and over none of the store, her plots and the
+    // controls, at both sizes, in the hall and out on the map.
+    const fits: string[] = [];
+    const bad: string[] = [];
+    const measure = async (tag: string) => {
+      await lena.waitForTimeout(400);
+      const banner = (await readMoments(lena)).banner;
+      const frame = await lena.getByTestId('phone-game').boundingBox();
+      if (!banner || !frame || !banner.text.includes('no MULE for you this turn')) return void bad.push(`${tag}: no left-out banner (${banner?.text ?? 'none'})`);
+      const covers = await bannerCovers(lena, 's4');
+      const within = inside(banner.r, { x: frame.x, y: frame.y, w: frame.width, h: frame.height });
+      if (covers.length > 0 || !within) bad.push(`${tag}: ${JSON.stringify(banner.r)} covers ${covers.join(', ') || 'nothing'}${within ? '' : ', off the screen'}`);
+      fits.push(`${tag} ${banner.r.w.toFixed(0)}×${banner.r.h.toFixed(0)}`);
+    };
+    for (const [tag, size, px] of [['844 hall', PHONE.viewport, '844'], ['667 hall', PHONE_SMALL.viewport, '667']] as const) {
+      await lena.setViewportSize(size);
+      await lena.locator(`[data-testid=phone-game][data-size="${px}"]`).waitFor({ timeout: 2_000 });
+      await measure(tag);
+    }
+    await throughDoor(lena, server, code, 's4');
+    for (const [tag, size, px] of [['667 map', PHONE_SMALL.viewport, '667'], ['844 map', PHONE.viewport, '844']] as const) {
+      await lena.setViewportSize(size);
+      await lena.locator(`[data-testid=phone-game][data-size="${px}"]`).waitFor({ timeout: 2_000 });
+      await measure(tag);
+    }
+    owed.push({ tag: "Lena's left-out banner stays on the screen and covers 0 px² of the store, her plots and the controls, at 844 and 667", ok: bad.length === 0 && fits.length === 4, said: bad.join('; ') || fits.join(', ') });
+    out.push(`the corral at ${left0}: called at 2, Heiko, Mia and Kai got them, Lena left out (the pub pays ${pays[0]}); her banner ${fits.join(', ')}`);
   } finally {
     Object.assign(SCRAMBLE, saved.scramble);
     WOLVES.on = saved.wolves;
