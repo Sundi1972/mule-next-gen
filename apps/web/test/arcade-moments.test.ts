@@ -296,6 +296,13 @@ describe('C11, C12: the corral scramble (RULE-6)', () => {
     expect(laptop(view, moment({ scramble: called }))).toContain('data-testid="scramble-banner"');
   });
 
+  it('B-AC-7: a sale inside a beat\'s seconds leaves the TV one corral call, the newest count, never two', () => {
+    const view = devView(lenasMe(), { storeMules: 1 });
+    const html = tv(view, { ...onTv(moment({ scramble: called })), beats: [{ text: '2 MULEs left! Race to the corral', at: NOW }] });
+    expect(text(html, 'tv-beats')).toContain('1 MULE left! Race to the corral');
+    expect(text(html, 'tv-beats')).not.toContain('2 MULEs left!');
+  });
+
   it('B-AC-7: left out, your phone tells you, with what the pub pays now: the engine\'s pubPayoutFor through pubPay', () => {
     const view = devView(lenasMe(), { storeMules: 0 });
     const html = phone(view, moment({ scramble: { ...called, got: ['s2', 's3'], over: 'empty', leftOut: ['s1'] } }));
