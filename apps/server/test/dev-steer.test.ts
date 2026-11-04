@@ -333,9 +333,9 @@ describe("AM-28: the frame carries the moments' state, straight from the floor",
       moments: { ...floor.moments, ...patch.moments },
     };
   };
-  const none = { packs: [], glint: null, scramble: null, bolted: [] };
+  const none = { packs: [], glint: null, scramble: null, bolted: [], stunned: [] };
 
-  it('AM-28: with no pack, no glint, no scramble and no bolted MULE, the frame has no moments key', () => {
+  it('AM-28: with no pack, no glint, no scramble, no bolted MULE and no stun, the frame has no moments key', () => {
     const frame = devFrame(floorWith({}));
     expect('moments' in frame, 'the key is missing, not empty').toBe(false);
   });
@@ -391,6 +391,11 @@ describe("AM-28: the frame carries the moments' state, straight from the floor",
       ...none,
       scramble: { untilTick: 309, needers: [LENA, OSSA], got: [LENA], over: 'time', leftOut: [OSSA] },
     });
+  });
+
+  it('AM-28: a colonist stunned by a lost fight: whose, and the tick the stun ends', () => {
+    const frame = devFrame(floorWith({ lena: { space: 'map', x: 3, y: 3, stunnedUntilTick: 140 } }));
+    expect(frame.moments).toEqual({ ...none, stunned: [{ who: LENA, untilTick: 140 }] });
   });
 
   it("AM-28: a MULE bolted and not caught, running or standing: its seat, the MULE at the colonist's lead", () => {
