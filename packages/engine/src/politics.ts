@@ -485,7 +485,7 @@ export function proposeLaw(state: GameState, playerId: string, proposal: LawProp
     const { settings } = POLITICS.laws[proposal.law];
     if (!settings.includes(proposal.setting)) throw new RuleError(`${LAW_NAME[proposal.law]} is set to ${inWords(settings)}`);
     if (inForce?.setting === proposal.setting) throw new RuleError('That law is already in force at that setting');
-    const replacing = proposal.replaces !== undefined && politics.laws[proposal.replaces] !== undefined;
+    const replacing = proposal.replaces !== undefined && Object.hasOwn(politics.laws, proposal.replaces);
     if (!inForce && Object.keys(politics.laws).length >= maxInForce && !replacing) {
       throw new RuleError(`${maxInForce} laws are in force: pick the one this replaces`);
     }
