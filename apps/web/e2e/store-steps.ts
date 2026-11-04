@@ -1,5 +1,5 @@
 /** The development store's checks, run as development starts by smoke.ts (scaled clocks) and screens.ts (real time). */
-import { DEV_STEER, DEV_WALK, DEVELOPMENT, floorConfig, foodShare, GLINT, HALL, isOpenFloor, mulePrice, placeAt, hungerPace, monthNeeds, needsOf, pubPayoutFor, SCRAMBLE, sickPace, speedOf, strikeTarget, terrainShare, WOLVES, type DevFloor, type FloorColonist as EngineColonist, type GameState } from '@mule/engine';
+import { DEV_STEER, DEV_WALK, DEVELOPMENT, floorConfig, foodShare, GLINT, HALL, isOpenFloor, mulePrice, needsMule, placeAt, hungerPace, monthNeeds, needsOf, pubPayoutFor, SCRAMBLE, sickPace, START, speedOf, strikeTarget, terrainShare, WOLVES, type DevFloor, type FloorColonist as EngineColonist, type GameState } from '@mule/engine';
 import type { DevFrame } from '@mule/protocol';
 import type { Browser, Page } from 'playwright';
 import type { MuleServer } from '../../server/src/server.js';
@@ -1546,6 +1546,10 @@ export async function wolvesRunOrFight(t: ArcadeTable): Promise<string> {
       const marked = await readMoments(heiko);
       owe("Heiko's phone shows the pelts he carries", marked.marks.includes('pelts-s1'), `it drew ${JSON.stringify(marked.marks)}`);
       const m0 = playerOf(server, code, 's1').money;
+      // The fight leaves him anywhere in its ring, maybe at a tile's edge, where a straight push catches the corner of
+      // the next row: the walk to the door starts from his tile's middle, as steerTo's routes do.
+      const won = colonistOf(server, code, 's1');
+      await steerTo(heiko, server, code, 's1', plotCentre(Math.floor(won.x), Math.floor(won.y)), { within: 0.1 });
       await throughDoor(heiko, server, code, 's1', heikoLand.x < store.x + 0.5 ? 'doorL' : 'doorR').catch((e: Error) => {
         const c = colonistOf(server, code, 's1');
         const focused = heiko.evaluate(() => document.activeElement?.getAttribute('data-testid') ?? document.activeElement?.tagName ?? null);
@@ -1687,12 +1691,27 @@ async function bannerCovers(page: Page, seat: string): Promise<string[]> {
   return [...store, ...fit.plots, ...controls].flatMap((k) => (area(banner.r, k.r) > 0 ? [`${k.id} ${area(banner.r, k.r).toFixed(0)} px²`] : []));
 }
 
+/** The corral month 1 starts with for B-AC-7: three, so the first sale leaves two (START.storeMules; upkeep refills at month end). */
+export const SCRAMBLE_MULES = 3;
+
+/** Runs `room` with month 1's corral starting at SCRAMBLE_MULES: set before the room's server makes its game, and restored. */
+export async function shortCorral<T>(room: () => Promise<T>): Promise<T> {
+  const was = START.storeMules;
+  START.storeMules = SCRAMBLE_MULES;
+  try {
+    return await room();
+  } finally {
+    START.storeMules = was;
+  }
+}
+
 /**
- * B-AC-7: three MULEs left in the corral (a fixture) and four seats needing one. Heiko's sale leaves two: the TV and
- * every phone call the scramble (Heiko's, that the others race); Mia and Kai buy the last two, and Lena, left out, is
- * told on her phone with the pub's payout, the engine's pubPayoutFor. The banner covers none of the store, your plots and the controls. Negative first:
- * with nobody else able to pay, Lena's sale at three leaves two and calls nothing. The checks of what the screens drew
- * run last.
+ * B-AC-7, on a table shortCorral starts: three MULEs in the corral and four seats needing one by the game's rule (each
+ * owns a free plot from the land grant and has the money). Heiko's sale leaves two: the TV and every phone call the
+ * scramble (Heiko's, that the others race); Mia and Kai buy the last two, and Lena, left out, is told on her phone with
+ * the pub's payout, the engine's pubPayoutFor. The banner covers none of the store, your plots and the controls. The
+ * checks of what the screens drew run last. No call when no seat needs a MULE: the engine's floor-moments.test.ts
+ * (T-AC-8 negative) and arcade-moments.test.ts ("no scramble, no banner").
  */
 export async function theScramble(t: ArcadeTable): Promise<string> {
   const { tv, server, code, phones, wires } = t;
@@ -1704,6 +1723,7 @@ export async function theScramble(t: ArcadeTable): Promise<string> {
   const owed: { tag: string; ok: boolean; said: string }[] = [];
   const out: string[] = [];
   const buy = async (page: Page, seat: string) => {
+    if (onFloor(server, code, seat).space === 'map') await throughDoor(page, server, code, seat);
     await steerTo(page, server, code, seat, hallPlace('corral'));
     await expectButton(page, server, code, seat, 'BUY MULE', 'B-AC-7');
     await pressAct(page);
@@ -1714,37 +1734,15 @@ export async function theScramble(t: ArcadeTable): Promise<string> {
     Object.assign(SCRAMBLE, { on: true, maxSeconds: 90 });
     WOLVES.on = false;
     GLINT.on = false;
-    // Test fixture: everyone on the hall's walkway, a step apart.
-    const walk = HALL.floor[0]!;
-    seats.forEach((seat, i) => placeOnFloor(server, code, seat, { space: 'hall', x: HALL.w * (0.35 + 0.1 * i), y: (walk.y0 + walk.y1) / 2 }));
-    await Promise.all(phones.map((p) => p.locator('[data-testid=your-stage][data-space=hall]').waitFor({ timeout: 2_000 })));
+    check(seats.every((s) => needsMule(game.state, s)), `B-AC-7: four seats need a MULE by the game's rule, got ${seats.filter((s) => needsMule(game.state, s)).join(', ')}`);
+    // The others walk into the hall first, so the call finds them near the corral.
+    for (const [i, page] of [mia, kai, lena].entries()) if (onFloor(server, code, seats[i + 1]!).space === 'map') await throughDoor(page, server, code, seats[i + 1]!);
 
-    // Negative: three left, only Lena can pay; her sale leaves two and calls no scramble.
-    const money = Object.fromEntries(seats.map((s) => [s, playerOf(server, code, s).money]));
-    game.state.store.mules = 3;
-    for (const s of ['s1', 's2', 's3']) playerOf(server, code, s).money = 0;
-    game.ctx.changed();
-    await buy(lena, 's4');
-    await lena.waitForTimeout(500);
-    check(game.state.store.mules === 2 && floorOf(server, code).moments.scramble === null, `B-AC-7 (negative): with no seat still needing a MULE, the sale that leaves 2 calls no scramble, got ${JSON.stringify(floorOf(server, code).moments.scramble)}`);
-    const quiet = await Promise.all([...phones, tv].map(readMoments));
-    check(quiet.every((r) => r.banner === null && r.corral === null && !r.beats.some((b) => b.includes('Race to the corral'))), `B-AC-7 (negative): and no screen calls one, got ${JSON.stringify(quiet.map((r) => [r.banner?.text, r.beats]))}`);
-    out.push('no call with nobody needing one');
-
-    // Test fixture: Lena's MULE back to the corral, three in it, everyone's money back.
-    const price = mulePrice(game.state);
-    const lp = playerOf(server, code, 's4');
-    lp.carriedMule = null;
-    for (const s of seats) playerOf(server, code, s).money = money[s]!;
-    game.state.store.mules = 3;
-    game.ctx.changed();
-    await lena.waitForTimeout(300);
-    check(seats.every((s) => !playerOf(server, code, s).carriedMule && playerOf(server, code, s).money >= price), 'B-AC-7: four seats need a MULE and can pay for one');
-
-    // Heiko's sale leaves two: the call.
+    // Heiko's sale: the call, if it leaves two.
+    const left0 = game.state.store.mules;
     await buy(heiko, 's1');
     const called = floorOf(server, code).moments.scramble;
-    check(called && called.over === null && ['s2', 's3', 's4'].every((s) => called.needers.includes(s)), `B-AC-7: Heiko's sale leaves 2 and calls the scramble for the three still needing one, got ${JSON.stringify(called)}`);
+    check(called && called.over === null && ['s2', 's3', 's4'].every((s) => called.needers.includes(s)), `B-AC-7: Heiko's sale leaves 2 and calls the scramble for the three still needing one, got the corral ${left0} → ${game.state.store.mules} and ${JSON.stringify(called)}`);
     await tv.waitForTimeout(300);
     const call = await Promise.all([...phones, tv].map(readMoments));
     owed.push({
@@ -1777,7 +1775,7 @@ export async function theScramble(t: ArcadeTable): Promise<string> {
       ok: left.lena.banner?.tone === 'warn' && !!left.lena.banner.text.includes('no MULE for you this turn') && pays.some((n) => left.lena.banner!.text.includes(`+${n} cr`)),
       said: `${framesSay(heardMoments(wires.phones[3]!))}; her banner ${JSON.stringify(left.lena.banner?.text ?? null)}, the pub pays ${pays.join(' or ')}`,
     });
-    out.push(`called at 2, Heiko, Mia and Kai got them, Lena left out (the pub pays ${pays[0]})`);
+    out.push(`the corral at ${left0}: called at 2, Heiko, Mia and Kai got them, Lena left out (the pub pays ${pays[0]})`);
   } finally {
     Object.assign(SCRAMBLE, saved.scramble);
     WOLVES.on = saved.wolves;
