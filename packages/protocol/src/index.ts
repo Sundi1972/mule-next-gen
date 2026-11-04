@@ -190,7 +190,7 @@ export interface FramePack {
 
 /**
  * The moments on the floor this tick (AM-28), straight from the floor's state. Absent from the frame when there is no
- * pack, no glint, no scramble yet this turn and no bolted MULE.
+ * pack, no glint, no scramble yet this turn, no bolted MULE and no stunned colonist.
  */
 export interface FrameMoments {
   packs: FramePack[];
@@ -206,6 +206,8 @@ export interface FrameMoments {
    * colonist's `lead`, in map tiles even while its colonist is in the hall.
    */
   bolted: string[];
+  /** Colonists stunned by a lost fight: whose, and the tick the stun ends (it is gone from the frame on that tick). */
+  stunned: { who: string; untilTick: number }[];
 }
 
 /** One development tick's positions for every screen, sent beside the full view. */
