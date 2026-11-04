@@ -1,10 +1,10 @@
 import { playGame, type SeatSpec } from '@mule/ai';
-import { DEV_STEER, EVENT_SHOW, GOODS, stableJson, type GameState } from '@mule/engine';
+import { boxOf, DEV_STEER, EVENT_SHOW, GOODS, HALL, stableJson, type GameState } from '@mule/engine';
 import type { SeatInfo } from '@tabletop/core';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createBrain } from '../src/brain/index.js';
 import { MuleGame } from '../src/mule-game.js';
-import { fakeContext } from './fake-context.js';
+import { fakeContext, pressAct, readyAll, steerTo, type SteerPoint } from './fake-context.js';
 
 /*
  * Arcade C9 on the server (PR-4's follow-up): with DEV_STEER.on the AI seats walk the floor, their input from the
@@ -134,5 +134,85 @@ describe('the AI walks the floor on the server as in the sim (arcade C9, HC-4)',
     expect(server.outcomes).toHaveLength(MONTHS);
     expect(server.outcomes.some((o) => o.players.some((p) => p.mules > 0)), 'the AI developed, by walking').toBe(true);
     expect(server.taps).toEqual({ scheduled: 0, acts: 0 });
+  });
+});
+
+/** One human and one AI seat at a table, seed 7. */
+const HUMAN = 's1';
+const BARON = 's2';
+const mixed: SeatInfo[] = [
+  { id: HUMAN, name: 'Lena', isAi: false, color: 0 },
+  { id: BARON, name: 'The Baron', isAi: true, color: 1 },
+];
+const toPub: SteerPoint[] = [
+  { space: 'hall', ...HALL.spots.pub },
+  { space: 'hall', x: (boxOf('pub').x0 + boxOf('pub').x1) / 2, y: (boxOf('pub').y0 + boxOf('pub').y1) / 2 },
+];
+
+/**
+ * The mixed table played into month 1's development, its clock running from the start as in any later month; and,
+ * once development ends, whether the AI seat was done then and whether the clock had run out.
+ */
+function mixedDevelopment() {
+  const rule = DEV_STEER.month1WaitsForFirstMule;
+  DEV_STEER.month1WaitsForFirstMule = false;
+  try {
+    const fake = fakeContext({ table: mixed });
+    const game = new MuleGame(fake.ctx, 7, { brain: createBrain({ gameId: 'ai-wait', env: {} }), log: () => {} });
+    const inside = game as unknown as Inside & { devEndsAt: number | null };
+    const ended: { aiDone: boolean; timeUp: boolean }[] = [];
+    const finish = inside.finishDevelopment.bind(game);
+    inside.finishDevelopment = () => {
+      const ai = inside.state.players.find((p) => p.id === BARON)!;
+      ended.push({ aiDone: ai.doneDeveloping, timeUp: inside.devEndsAt !== null && inside.devEndsAt <= fake.ctx.now() });
+      finish();
+    };
+    game.start(mixed);
+    readyAll(game);
+    for (let i = 0; i < 10_000 && inside.state.phase !== 'development'; i++) fake.advance(100);
+    if (inside.state.phase !== 'development') throw new Error('month 1 never reached development');
+    const aiOf = () => inside.state.players.find((p) => p.id === BARON)!;
+    /** The AI seat still has its turn and the clock time left. */
+    const aiStillWalking = () => !aiOf().doneDeveloping && inside.devEndsAt !== null && inside.devEndsAt > fake.ctx.now();
+    /** Runs the ticks until development ends, at most a full clock and a second more. */
+    const runOut = () => {
+      for (let i = 0; i < 2_000 && inside.state.phase === 'development'; i++) fake.advance(TICK);
+    };
+    return { game, fake, inside, ended, aiOf, aiStillWalking, runOut };
+  } finally {
+    DEV_STEER.month1WaitsForFirstMule = rule;
+  }
+}
+
+describe('a table with a human waits for its AI colonists in a steered development', () => {
+  it('T-AC-1: at a table with a human, development waits for the AI colonists still walking when the human drops or goes to the pub', () => {
+    // The human's phone drops a few ticks in.
+    const dropped = mixedDevelopment();
+    dropped.fake.advance(5 * TICK);
+    expect(dropped.aiStillWalking(), 'the row means something: the AI has its turn and time left').toBe(true);
+    dropped.game.connectionChanged(HUMAN, false);
+    expect(dropped.inside.state.phase, 'a dropped human ends nothing while the AI still walks').toBe('development');
+    dropped.fake.advance(20 * TICK);
+    expect(dropped.aiStillWalking()).toBe(true);
+    expect(dropped.inside.state.phase).toBe('development');
+    dropped.runOut();
+    expect(dropped.inside.state.phase).not.toBe('development');
+    expect(dropped.ended).toHaveLength(1);
+    expect(dropped.ended[0]!.aiDone || dropped.ended[0]!.timeUp, 'development ended at the AI\'s pub or the clock').toBe(true);
+
+    // The human walks into the store and ends the turn at the pub; then the phone is put down.
+    const pubbed = mixedDevelopment();
+    pressAct(pubbed.game, pubbed.fake, HUMAN);
+    steerTo(pubbed.game, pubbed.fake, HUMAN, toPub);
+    pressAct(pubbed.game, pubbed.fake, HUMAN);
+    expect(pubbed.inside.state.players.find((p) => p.id === HUMAN)!.doneDeveloping, 'the human went to the pub').toBe(true);
+    expect(pubbed.aiStillWalking(), 'the row means something: the AI has its turn and time left').toBe(true);
+    expect(pubbed.inside.state.phase, 'the human at the pub ends nothing while the AI still walks').toBe('development');
+    pubbed.game.connectionChanged(HUMAN, false);
+    expect(pubbed.inside.state.phase, 'nor does the phone put down after the pub').toBe('development');
+    pubbed.runOut();
+    expect(pubbed.inside.state.phase).not.toBe('development');
+    expect(pubbed.ended).toHaveLength(1);
+    expect(pubbed.ended[0]!.aiDone || pubbed.ended[0]!.timeUp, 'development ended at the AI\'s pub or the clock').toBe(true);
   });
 });
