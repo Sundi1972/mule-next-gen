@@ -83,8 +83,13 @@ export const landAuction: NonNullable<AuctionSteps['landAuction']> = async ({ ph
 
 // --- UBER-AC-1, front to back ----------------------------------------------------
 
-/** Fast enough for a quick run, slow enough that a held Up can be let go between two ticks of the board. */
-const SCALE = 0.25;
+/**
+ * Fast enough for a quick run, slow enough that a held Up can be let go between two ticks of the board. Half time,
+ * not a quarter: the food walk carries A-6's purchase at the store line and the player trade after it, and at 0.25 a
+ * local run left 0.14 s of its 20 s, so a slow CI runner reached the close stage first (batch 3, seed 766329798).
+ * At 0.5 that run leaves 8 s.
+ */
+const SCALE = 0.5;
 const SALES_TAX = TAX.salesTax;
 /** Bids the two buyers walk to on lot 1. Several board steps apart, so a release a tick late still leaves the order intact. */
 const LOW_BID = 260;
