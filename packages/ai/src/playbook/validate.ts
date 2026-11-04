@@ -61,8 +61,8 @@ interface Ctx {
   others: Set<PlayerId>;
   /** The playbook as edited so far. */
   pb: Playbook;
-  /** The playbook before any part edit: the draft, re-drafted under an edited strategy. */
-  base: Playbook;
+  /** The hold the engine's fresh draft plays for a good, under the strategy that plays. */
+  freshHold: (good: Good) => number;
 }
 
 type Row = (value: unknown, ctx: Ctx, unit: string[]) => Verdict;
@@ -292,9 +292,11 @@ const GOOD_ROWS: Record<string, Row> = {
     const { role } = goodOf(ctx, unit);
     let hold = Math.round(v);
     let why = 'a whole number';
-    // RULE-2 row 3: a seat that never corners buys no more than its draft would.
-    const drafted = ctx.base.auction?.[good]?.hold ?? Infinity;
-    if (!ctx.corners && role === 'buyer' && hold > drafted) [hold, why] = [drafted, 'level never corners'];
+    // RULE-2 row 3: a seat that never corners buys no more than the engine's own draft would, whatever was handed in.
+    if (!ctx.corners && role === 'buyer') {
+      const most = ctx.freshHold(good);
+      if (hold > most) [hold, why] = [most, 'level never corners'];
+    }
     const staple = role === 'seller' && (good === 'food' || good === 'energy');
     const least = staple ? stapleFloor(ctx, good) : 0;
     if (hold < least) [hold, why] = [least, staple ? "next month's need" : 'a hold of 0 or more'];
@@ -469,6 +471,18 @@ function validate(profile: ValidatorProfile, state: GameState, seat: PlayerId, d
   const pb = structuredClone(draft);
   delete pb.edits;
   delete pb.rejected;
+  /** The engine's fresh draft, the same seed, land and month, drafted once per part or for the strategy. */
+  const drafted = new Map<DraftPhase | 'strategy', Playbook>();
+  const engineDraft = (unit: readonly string[]): Playbook => {
+    const part = (PART_KEYS as readonly string[]).includes(unit[0]!) ? DRAFTS[unit[0] as (typeof PART_KEYS)[number]]! : null;
+    const key = part ?? 'strategy';
+    if (!drafted.has(key)) {
+      const phase = part ?? DRAFTS[draft.phase] ?? 'planning';
+      // A part is drafted under the strategy that plays; a strategy field is the engine's own.
+      drafted.set(key, draftPlaybook({ state, seat, mind: profile.mind, seed: profile.seed, phase, land: profile.land ?? null, month: draft.month, ...(part && { strategy: pb.strategy }) }));
+    }
+    return drafted.get(key)!;
+  };
   const ctx: Ctx = {
     state,
     seat,
@@ -477,7 +491,8 @@ function validate(profile: ValidatorProfile, state: GameState, seat: PlayerId, d
     corners: profile.mind.level?.corners === true,
     others: new Set(state.players.map((p) => p.id).filter((id) => id !== seat)),
     pb,
-    base: pb,
+    // A profile with no level has no draft of its own, so it buys nothing (RULE-2's safe side).
+    freshHold: (good) => (profile.mind.level ? (engineDraft(['auction', good]).auction?.[good]?.hold ?? 0) : 0),
   };
   /**
    * Each accepted edit, with the keys of the value it set (an append's `-` as the index it took) and the length of each
@@ -521,22 +536,10 @@ function validate(profile: ValidatorProfile, state: GameState, seat: PlayerId, d
     const redrafted = draftPlaybook({ state, seat, mind: profile.mind, seed: profile.seed, phase, land: profile.land ?? null, strategy: pb.strategy, month: draft.month });
     for (const k of PART_KEYS) if (pb[k] !== undefined && redrafted[k] !== undefined) Object.assign(pb, { [k]: redrafted[k] });
   }
-  ctx.base = structuredClone(pb);
   edits.forEach((e, i) => !STRATEGY_ROOTS.has(parse(e.path)?.[0] ?? '') && apply(e, i));
 
   // Step 5: every value that plays, against the same rows. A refused field the playbook may lack is dropped; any other
   // plays the engine's own draft of what holds it (holderOf), siblings and all, which passes the rows as a whole by INV-1.
-  const drafted = new Map<DraftPhase | 'strategy', Playbook>();
-  const engineDraft = (unit: readonly string[]): Playbook => {
-    const part = (PART_KEYS as readonly string[]).includes(unit[0]!) ? DRAFTS[unit[0] as (typeof PART_KEYS)[number]]! : null;
-    const key = part ?? 'strategy';
-    if (!drafted.has(key)) {
-      const phase = part ?? DRAFTS[draft.phase] ?? 'planning';
-      // A part is drafted under the strategy that plays; a strategy field is the engine's own.
-      drafted.set(key, draftPlaybook({ state, seat, mind: profile.mind, seed: profile.seed, phase, land: profile.land ?? null, month: draft.month, ...(part && { strategy: pb.strategy }) }));
-    }
-    return drafted.get(key)!;
-  };
   /** What step 5 dropped, or replaced whole with the engine's, and what plays there instead: nothing under it is checked again. */
   const settled: { at: string[]; plays: string }[] = [];
   const settledOver = (unit: readonly string[]) => settled.find(({ at }) => at.every((k, n) => unit[n] === k));
