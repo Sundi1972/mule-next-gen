@@ -15,6 +15,9 @@ import { HALL } from '@mule/engine';
  * - The stick and the button lie over the bottom corners.
  */
 export type PhoneSize = 844 | 667;
+
+/** How a screen is read: a phone in the hand, the TV across a room, the laptop's wide one. */
+export type Density = 'phone' | 'tv' | 'wide';
 export interface Box {
   x: number;
   y: number;
@@ -120,4 +123,64 @@ export const tileBox = (L: Pick<PhoneLayout, 'stage' | 'cell'>, t: { x: number; 
 export function colonistBox(L: Pick<PhoneLayout, 'stage' | 'cell'>, at: { x: number; y: number }): Box {
   const size = Math.round(L.cell * 0.62);
   return { x: L.stage.x + at.x * L.cell - size / 2, y: L.stage.y + at.y * L.cell - 0.85 * size, w: size, h: size };
+}
+
+/** The fewest plots across the banner needs for its words. */
+const BANNER_MIN_CELLS = 4;
+
+/** The banner's text, as moments.tsx draws it (text-sm, leading-tight, px-2 py-1 in a 2 px border), in px. */
+export const BANNER_TEXT = { linePx: 17.5, padX: 20, padY: 12 } as const;
+/**
+ * A banner character's width, in px, for sizing its box: about 1.2 times the measured average of the banners' sentences
+ * (6.75 px). Not a maximum: a line of wide capitals would overflow it, and no banner is written in capitals.
+ */
+export const BANNER_CHAR_PX = 8;
+
+/**
+ * The banner's box on the map, clear of `blocked` (your plots and the store): along the bottom rows between the stick
+ * and the button, in the widest run of plots free of them, and as tall as words `textPx` wide need in its width,
+ * growing upward over rows that are free too; failing that, along the top rows (below the small phone's status bar),
+ * growing downward; failing both, the layout's own box. In the hall, the layout's own box across the walkway.
+ */
+export function bannerBox(L: PhoneLayout, space: 'map' | 'hall', rows: number, blocked: readonly { x: number; y: number }[], textPx = 0): Box {
+  if (space === 'hall') return L.banner;
+  const { stage, cell } = L;
+  const need = (w: number) => Math.max(L.banner.h, Math.ceil((textPx + BANNER_TEXT.padX) / w) * BANNER_TEXT.linePx + BANNER_TEXT.padY);
+  const bottom = L.banner.y + L.banner.h;
+  const bands = [
+    { at: (h: number) => bottom - h, from: L.banner.x, to: L.banner.x + L.banner.w },
+    { at: () => stage.y + (L.mode === 'top' ? cell : 0) + 2, from: stage.x, to: stage.x + stage.w },
+  ];
+  for (const band of bands) {
+    let h = L.banner.h;
+    // Each taller box covers more rows, which may narrow its run, which needs a taller box: a few rounds settle it.
+    for (let round = 0; round < rows; round++) {
+      const y = band.at(h);
+      if (y < stage.y || y + h > stage.y + stage.h) break;
+      const run = freeColumns(L, rows, blocked, y, h, band.from, band.to);
+      if (run[1] - run[0] + 1 < BANNER_MIN_CELLS) break;
+      const box = { x: stage.x + run[0] * cell + 2, y, w: (run[1] - run[0] + 1) * cell - 4, h };
+      if (need(box.w) <= h) return box;
+      h = need(box.w);
+    }
+  }
+  return L.banner;
+}
+
+/** The widest run of the stage's columns between `from` and `to` px with none of `blocked` in the rows y to y + h cover. */
+function freeColumns(L: PhoneLayout, rows: number, blocked: readonly { x: number; y: number }[], y: number, h: number, from: number, to: number): [number, number] {
+  const { stage, cell } = L;
+  const under = [...Array(rows).keys()].filter((r) => stage.y + r * cell < y + h && stage.y + (r + 1) * cell > y);
+  const first = Math.ceil((from - stage.x) / cell - 1e-9);
+  const last = Math.floor((to - stage.x) / cell + 1e-9) - 1;
+  const taken = blocked.filter((t) => under.includes(t.y)).map((t) => t.x);
+  let best: [number, number] = [0, -1];
+  let start = first;
+  for (let c = first; c <= last + 1; c++) {
+    if (c === last + 1 || taken.includes(c)) {
+      if (c - 1 - start > best[1] - best[0]) best = [start, c - 1];
+      start = c + 1;
+    }
+  }
+  return best;
 }
