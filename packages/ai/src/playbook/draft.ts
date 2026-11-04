@@ -319,9 +319,23 @@ export function draftPlanningPart(input: DraftInput): PlanningPlay {
  */
 export function draftPlaybook(input: DraftInput): Playbook {
   const obs = observe(input.state, input.seat);
-  const strategy = input.strategy ?? draftStrategy(input, obs);
-  const head = { v: 1 as const, seat: input.seat, month: monthOf(input, obs), phase: input.phase, strategy, by: 'engine' as const };
+  const head = headOf(input, obs);
   if (input.phase === 'planning') return { ...head, planning: planningPart(input, obs), landGrant: landGrantPart(input, obs) };
-  if (input.phase === 'development') return { ...head, development: developmentPart(input, obs, strategy.moneyMaker) };
+  if (input.phase === 'development') return { ...head, development: developmentPart(input, obs, head.strategy.moneyMaker) };
   return { ...head, auction: auctionPart(input, obs) };
+}
+
+/**
+ * AM-20: the seat's auction playbook for one good, drafted at that good's status screen, so its unit values see the
+ * good's status rows and the money the earlier goods left. Its auction part carries only `good`.
+ */
+export function draftGoodPlaybook(input: Omit<DraftInput, 'phase'>, good: Good): Playbook {
+  const auction: DraftInput = { ...input, phase: 'auction' };
+  const obs = observe(auction.state, auction.seat);
+  return { ...headOf(auction, obs), auction: { [good]: goodPart(auction, obs, good) } };
+}
+
+function headOf(input: DraftInput, obs: GameState) {
+  const strategy = input.strategy ?? draftStrategy(input, obs);
+  return { v: 1 as const, seat: input.seat, month: monthOf(input, obs), phase: input.phase, strategy, by: 'engine' as const };
 }
