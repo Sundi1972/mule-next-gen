@@ -1076,7 +1076,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   private startSteering(month: number): void {
     const state = this.requireState();
     const cfg = steerConfig();
-    const steering: Steering = { floor: buildFloor(state, cfg), inputs: new SteerInputs(), cfg, origin: this.ctx.now(), words: new Map(), stats: noStats() };
+    const origin = this.ctx.now();
+    const steering: Steering = { floor: buildFloor(state, cfg), inputs: new SteerInputs(), cfg, origin, at: origin, words: new Map(), stats: noStats() };
     this.steering = steering;
     for (const s of this.seats) steering.words.set(s.id, this.wordsAt(steering, s.id, steering.origin));
     this.cancels.push(() => this.cancelSteerTick?.());
@@ -1122,6 +1123,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     const state = this.requireState();
     const tick = steering.floor.tick;
     const at = steering.origin + (tick + 1) * this.realTickMs();
+    steering.at = at;
     const inputs: Record<string, FloorInput> = {};
     for (const s of this.seats) inputs[s.id] = this.away.has(s.id) || s.isAi ? IDLE_INPUT : steering.inputs.take(s.id, tick);
     const before = Object.values(inputs).some((i) => i.act) ? stableJson(state) : null;
@@ -1494,7 +1496,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
             politics: myPoliticsView(state, me.id),
             installedThisTurn: me.installedThisTurn,
             worthParts: worthPartsOf(state, me.id),
-            ...(this.steering ? { reach: this.reachAt(this.steering, me.id, this.ctx.now()), banners: [] } : {}),
+            // At the last tick's time, not now: after a catch-up the view must show the words the tick compared (AM-11).
+            ...(this.steering ? { reach: this.reachAt(this.steering, me.id, this.steering.at), banners: [] } : {}),
           }
         : null,
       market: GOODS.map((good) => {

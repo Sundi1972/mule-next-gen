@@ -194,6 +194,8 @@ export interface Steering {
   readonly cfg: FloorConfig;
   /** The server's epoch ms that tick 0 stands at; a resync moves it on. */
   origin: number;
+  /** The server's epoch ms the last tick stood for (tick 0's at the start): views price the button there, as the tick compared it. */
+  at: number;
   /** The reach words each seat's view last showed, to send a seat its view when they change (AM-11). */
   readonly words: Map<string, string>;
   readonly stats: SteerStats;
