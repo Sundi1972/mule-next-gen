@@ -53,6 +53,7 @@ jobs:
   sim:
     if: github.event_name == 'push' || github.base_ref == 'feat/strategist' || github.base_ref == 'main'
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
