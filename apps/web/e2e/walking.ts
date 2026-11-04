@@ -11,7 +11,8 @@ import type { DevFrame, MuleView } from '@mule/protocol';
 import { check } from './harness';
 import { keepsPlaying, steeredTable, until, type Wire } from './walking-wire';
 
-const SEED = 20261104;
+/** Two AI colonists lead MULEs across both plains and mountains in month 1 on this map. */
+const SEED = 8;
 /** Development's 50 s of game time in about 12 s of real time. */
 const PHASE_SCALE = 0.25;
 /** Long enough to reach the first development from the lobby: planning, the grant and its short passes. */
