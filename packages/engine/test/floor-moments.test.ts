@@ -194,6 +194,13 @@ describe('the floor moments: wolves (RULE-4)', () => {
     expect(seat(f, 'a').encounter).toBeNull();
     expect(seat(f, 'a').stunnedUntilTick! > f.tick).toBe(true);
     expect(player(state, 'a').muleBolted).toBe(true);
+    // AM-28: the stun is on the colonist until its tick, and gone from it once that tick comes.
+    const until = seat(f, 'a').stunnedUntilTick!;
+    while (f.tick < until - 1) f = tick(state, f, { a: IDLE });
+    expect(seat(f, 'a').stunnedUntilTick, 'the tick before it ends').toBe(until);
+    f = tick(state, f, { a: IDLE });
+    expect(f.tick).toBe(until);
+    expect('stunnedUntilTick' in seat(f, 'a'), 'on its tick, the stun is cleared').toBe(false);
   });
 
   it('T-AC-6 negative: no wolves in the hall, on plains, or with WOLVES.on false', () => {
