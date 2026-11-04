@@ -6,8 +6,9 @@
 import { COLONY, GOOD_CONFIG, PRESTIGE } from './config.js';
 import { storeForSale, storeQuotes } from './economy.js';
 import { RuleError } from './errors.js';
+import { votesOpen } from './politics.js';
 import { PERCENT } from './units.js';
-import type { Colony, FundLedger, FundLine, FundSource, GameState, Good, PrestigeId, Project } from './types.js';
+import { GOODS, type Colony, type FundLedger, type FundLine, type FundSource, type GameState, type Good, type PrestigeId, type Project } from './types.js';
 
 /** The colony at the start of a game played with politics. */
 export function newColony(month: number): Colony {
@@ -18,13 +19,17 @@ function emptyLedger(month: number): FundLedger {
   return { month, in: {}, out: {} };
 }
 
-/** Each state's own copy of the colony, made at its first write: a what-if copy shares the colony it was made from. */
+/** Each what-if copy's own colony, made at its first write: it shares the colony of the state it was made from. */
 const owned = new WeakMap<GameState, Colony>();
 
-/** The state's own colony to write to, copied first if it may be shared; a new month's first write starts a fresh ledger. */
+/**
+ * The state's own colony to write to; a new month's first write starts a fresh ledger. The real game copies on every
+ * write, since a what-if made from it may still hold the old object; a what-if copies once and then writes its own,
+ * which keeps its many simulated sales cheap.
+ */
 function edit(state: GameState): Colony {
   let colony = state.colony!;
-  if (owned.get(state) !== colony) {
+  if (!state.whatIf || owned.get(state) !== colony) {
     colony = structuredClone(colony);
     owned.set(state, colony);
     state.colony = colony;
@@ -98,8 +103,7 @@ const OPEN: readonly Project['stage'][] = ['commissioned', 'building'];
 /** The Governor's acts for the colony: planning only, once no vote is open. */
 function governorActs(state: GameState, playerId: string, act: string): Colony {
   if (!state.colony) throw new RuleError("This game plays without the colony's council");
-  const election = state.politics?.election;
-  if (state.phase !== 'planning' || (election && election.stage !== 'over')) throw new RuleError(`${act} once the votes are over`);
+  if (state.phase !== 'planning' || votesOpen(state)) throw new RuleError(`${act} once the votes are over`);
   if (state.politics?.governor !== playerId) throw new RuleError(`Only the Governor ${act.toLowerCase()}s for the colony`);
   return state.colony;
 }
@@ -183,17 +187,19 @@ export function donate(state: GameState, playerId: string, id: PrestigeId, credi
   const project = state.colony.projects.find((p) => p.id === id && p.stage === 'commissioned');
   if (!project) throw new RuleError('Nothing is being funded');
   const given = Object.entries(goods) as [Good, number][];
+  if (given.some(([good]) => !GOODS.includes(good))) throw new RuleError('That is not a good');
   if (!whole(credits) || !given.every(([, units]) => whole(units)) || credits + given.reduce((sum, [, units]) => sum + units, 0) === 0) {
     throw new RuleError('Give at least 1 cr or 1 unit');
   }
-  const donor = state.players.find((p) => p.id === playerId)!;
+  const donor = state.players.find((p) => p.id === playerId);
+  if (!donor) throw new RuleError('No such player');
   if (credits > donor.money) throw new RuleError(`You have ${donor.money} cr`);
   const { name } = PRESTIGE[id];
   const needs = stillNeeds(project);
   if (credits > needs.credits) throw new RuleError(`The ${name} needs only ${needs.credits} cr more`);
   for (const [good, units] of given) {
     if (units === 0) continue;
-    const missing = needs.goods[good];
+    const missing = Object.hasOwn(needs.goods, good) ? needs.goods[good]! : undefined;
     if (missing === undefined) throw new RuleError(`The ${name} needs no ${words(good)}`);
     if (units > missing) throw new RuleError(`The ${name} still needs ${missing} ${words(good)}`);
     if (units > donor.stock[good]) throw new RuleError(`You have ${donor.stock[good]} ${words(good)}`);
