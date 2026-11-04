@@ -422,9 +422,17 @@ export const WOLVES = {
   cooldownSeconds: 20,
   /** Time to choose run or fight before they pounce, which is a fight. */
   chooseSeconds: 3,
-  /** A chasing wolf's speed, in tiles a second. */
-  chaseSpeed: 1.1,
-  /** A chase ends, got away, after this long or this far from where it started. */
+  /**
+   * A chasing wolf's speed, as a share of DEV_STEER.mapTilesPerSecond (AM-32). Relative, not tiles a second, so a change
+   * of walking pace cannot defang the pack: RULE-4 tuned 1.1 tiles a second against colonists at 1.25, and 0.88 is that.
+   */
+  chaseShare: 0.88,
+  /**
+   * A chase ends, got away, after this long, or this far from where it started. The distance stays in tiles at any pace
+   * (AM-32, corrected): the pack's distances (packRingTiles, chaseCatchTiles) are tiles and its speed is a share of the
+   * pace, so a give-up distance in tiles holds the chase's odds; scaled with the pace, it let the pack close twice the
+   * ground at 2.5 and escapes fell to 4 of 20.
+   */
   giveUpSeconds: 5,
   giveUpTiles: 4,
   /** Share of its speed a bitten colonist keeps, till it reaches the store or its own plot. */

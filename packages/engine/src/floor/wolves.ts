@@ -31,6 +31,8 @@ const HALF = 0.5; // literal-ok: geometry, the middle of a range
 const dist = (a: FloorPoint, b: FloorPoint) => Math.hypot(a.x - b.x, a.y - b.y);
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 const secondsPerTick = (cfg: FloorConfig) => cfg.steer.tickMs / MS_PER_SECOND;
+/** A chasing wolf's speed: a share of the walking pace (AM-32), so the chase's odds do not hang on the pace. */
+const chaseSpeed = (cfg: FloorConfig) => cfg.wolves.chaseShare * cfg.steer.mapTilesPerSecond;
 
 /** A point `r` from `centre` at `angle`, kept on the map. */
 function ring(state: GameState, centre: FloorPoint, angle: number, r: number): FloorPoint {
@@ -141,7 +143,7 @@ export function stepEncounter(state: GameState, c0: FloorColonist, input: FloorI
   if (e.stage === 'chase') {
     const moved = walk(c, input);
     if (moved.space !== 'map') return end(state, moved, tick, cfg, out, 'reached the store: the wolves gave up');
-    const step = tick - e.sinceTick < ticksOf(W.headStartSeconds, cfg) ? 0 : W.chaseSpeed * secondsPerTick(cfg);
+    const step = tick - e.sinceTick < ticksOf(W.headStartSeconds, cfg) ? 0 : chaseSpeed(cfg) * secondsPerTick(cfg);
     const wolves = e.wolves.map((w) => {
       const d = toward(w, moved);
       return d ? { ...w, x: w.x + d.x * Math.min(step, dist(w, moved)), y: w.y + d.y * Math.min(step, dist(w, moved)) } : w;
