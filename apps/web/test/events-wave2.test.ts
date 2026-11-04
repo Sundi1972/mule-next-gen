@@ -314,6 +314,12 @@ describe('B2 (C5): the map and colony stories play the gallery’s own, and chan
     expect(playFrames([METEOR], 'tv', { map: CRATERED }).some(shaken)).toBe(true);
   });
 
+  it('epidemic: the sick tag lands on each colonist it sickens as the epidemic lands, not on the one it cured', () => {
+    const frames = playFrames([EPIDEMIC], 'tv');
+    expect(frames.some((html) => inside(html, `colonist-${LENA}`).includes('data-testid="sick-tag"'))).toBe(true);
+    expect(frames.some((html) => inside(html, `colonist-${BRIX}`).includes('data-testid="sick-tag"'))).toBe(false);
+  });
+
   it('storeFire: the store’s storage burns shelf by shelf down to 0, the corral too', () => {
     const shelves = playFrames([FIRE], 'tv')
       .filter((html) => has(html, 'store-storage'))
