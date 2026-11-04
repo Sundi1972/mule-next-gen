@@ -2,7 +2,7 @@ import { DEV_STEER } from '@mule/engine';
 import type { DevFrame } from '@mule/protocol';
 import { describe, expect, it } from 'vitest';
 import { TableClient, type SocketLike } from '../src/net/client';
-import { othersAt, pushFrame, startFrameLog } from '../src/phone/arcade/frames';
+import { msPerTick, othersAt, pushFrame, startFrameLog } from '../src/phone/arcade/frames';
 
 /**
  * C8 on the client, and RULE-10's others: a screen hears every frame the room sends, without a render per frame, and
@@ -96,5 +96,12 @@ describe('RULE-10: everyone else, interpolateMs behind the newest frame', () => 
     for (let t = 0; t < 5; t++) log = pushFrame(log, frame(t, { ...colonist('ossa', 3, 3), moving: false }), 1_000 + t * TICK);
     const seen = [1_150, 1_175, 1_190, 1_400].map((now) => othersAt(log, now, DEV_STEER).get('ossa')!);
     expect(seen.every((c) => c.x === 3 && c.y === 3 && !c.moving)).toBe(true);
+  });
+
+  it('C11: the frames\' own pace times an assay: a table that plays its phases quicker sends its ticks quicker', () => {
+    expect(msPerTick(startFrameLog(), TICK)).toBe(TICK);
+    let log = startFrameLog();
+    for (let t = 0; t < 5; t++) log = pushFrame(log, frame(t, colonist('kai', 1)), 1_000 + t * 25);
+    expect(msPerTick(log, TICK)).toBe(25);
   });
 });

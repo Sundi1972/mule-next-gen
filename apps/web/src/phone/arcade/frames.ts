@@ -64,3 +64,6 @@ export function othersAt(log: FrameLog, nowMs: number, cfg: Pick<typeof DEV_STEE
   }
   return drawn;
 }
+
+/** Real ms between the server's ticks. Not built yet: its test first. */
+export const msPerTick = (_log: FrameLog, fallback: number): number => fallback;
