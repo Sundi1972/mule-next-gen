@@ -80,6 +80,13 @@ describe('the manual of moves', () => {
       expect(block, type).toMatch(/\nLegal when: \S/);
       expect(block, type).toMatch(/\nCost: \S/);
     }
+    const development = section(manual, 'How a month goes').split('\n').find((l) => l.startsWith('- development: '))!;
+    for (const refusal of ['"Not allowed during <phase>"', '"Your development time is up"', '"Still walking"', '"Still assaying"']) {
+      expect(development, refusal).toContain(refusal);
+    }
+    for (const type of ['buyMule', 'outfit', 'install', 'analyse', 'filter', 'pub']) {
+      expect(moveBlock(manual, type), type).toContain('Legal when: the development checks above');
+    }
     const won = section(manual, 'How the game is won');
     const state = fixture();
     for (const id of ['a', 'b']) {

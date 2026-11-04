@@ -225,8 +225,30 @@ export const ADVICE: readonly AdviceLine[] = [
   },
 ];
 
-function moveBlock(move: MoveDescriptor): string {
-  const legal = move.legalWhen();
+type Shared = ReadonlyMap<Phase, readonly string[]>;
+
+/** Per phase, the checks every move legal in that phase alone lists, so the manual states them once. */
+function sharedChecks(moves: MoveTable): Shared {
+  const byPhase = new Map<Phase, (readonly string[])[]>();
+  for (const move of Object.values(moves) as MoveDescriptor[]) {
+    if (move.phases.length !== 1) continue;
+    const phase = move.phases[0]!;
+    byPhase.set(phase, [...(byPhase.get(phase) ?? []), move.legalWhen()]);
+  }
+  const shared = new Map<Phase, readonly string[]>();
+  for (const [phase, lists] of byPhase) {
+    if (lists.length < 2) continue;
+    const common = lists[0]!.filter((line) => lists.every((l) => l.includes(line)));
+    if (common.length > 0) shared.set(phase, common);
+  }
+  return shared;
+}
+
+function moveBlock(move: MoveDescriptor, shared: Shared): string {
+  const common = move.phases.length === 1 ? (shared.get(move.phases[0]!) ?? []) : [];
+  const own = move.legalWhen().filter((line) => !common.includes(line));
+  const lead = common.length ? [`the ${PHASE_NAME[move.phases[0]!]} checks above`] : [];
+  const legal = [...lead, ...own];
   const args = move.args.map((a) => (a.values ? `${a.name} (${a.values.join(' | ')})` : `${a.name} (${a.kind})`));
   return [
     `### ${move.type}`,
@@ -247,9 +269,14 @@ function checkAdvice(moves: MoveTable, advice: readonly AdviceLine[]): void {
 /** The manual for these moves and the config as it stands. Throws when an advice line names a move or field that does not exist. */
 export function renderManual(moves: MoveTable, advice: readonly AdviceLine[] = ADVICE): string {
   checkAdvice(moves, advice);
-  const phases = (Object.keys(PHASES) as (keyof typeof PHASES)[]).map((p) => `- ${PHASE_NAME[p]}: ${PHASES[p]()}`);
+  const shared = sharedChecks(moves);
+  const phases = (Object.keys(PHASES) as (keyof typeof PHASES)[]).map((p) => {
+    const checks = shared.get(p);
+    const tail = checks ? ` Every ${PHASE_NAME[p]} move first passes these checks: ${checks.join('; ')}.` : '';
+    return `- ${PHASE_NAME[p]}: ${PHASES[p]()}${tail}`;
+  });
   const worth = (Object.keys(WORTH) as (keyof ScoreParts)[]).map((part) => `- ${part}: ${WORTH[part]()}`);
-  const blocks = Object.values(moves).map(moveBlock);
+  const blocks = (Object.values(moves) as MoveDescriptor[]).map((m) => moveBlock(m, shared));
   const tips = advice.map((a) => `- ${a.move} (${a.field}): ${a.when()}`);
   return [
     '# The manual',
