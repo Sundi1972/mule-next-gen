@@ -258,8 +258,9 @@ export interface Feedback {
 /**
  * The playbook that plays from the engine's draft and the reply that came in time, if any: the draft by 'engine' unless
  * validate accepts at least one of the reply's edits; then validate's playbook, by 'llm'. Validate is never called
- * without an edit. The feedback is null with no reply. An edit counts as rejected when a rejection names its path (the
- * writer accepts each path once), however many times. Throws what validate throws.
+ * without an edit. The feedback is null with no reply. An edit is accepted when validate's playbook carries its path in
+ * `edits`, whatever `rejected` says: a clamped edit plays and is listed there too, with its why (the writer accepts each
+ * path once). Throws what validate throws.
  */
 export function playbookFrom(
   validate: ValidatePlan,
@@ -273,7 +274,7 @@ export function playbookFrom(
   if (edits.length === 0) return { playbook: engine, feedback: { refused: written.refused, rejected: [] } };
   const result = validate(state, draft.seat, draft, edits);
   const feedback: Feedback = { refused: written.refused, rejected: result.rejected };
-  const rejected = new Set(result.rejected.map((r) => r.path));
-  if (edits.every((e) => rejected.has(e.path))) return { playbook: engine, feedback };
+  const carried = new Set((result.playbook.edits ?? []).map((e) => e.path));
+  if (!edits.some((e) => carried.has(e.path))) return { playbook: engine, feedback };
   return { playbook: { ...result.playbook, by: 'llm', rejected: result.rejected }, feedback };
 }
