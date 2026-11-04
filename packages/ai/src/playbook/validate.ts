@@ -479,8 +479,12 @@ function validate(profile: ValidatorProfile, state: GameState, seat: PlayerId, d
     pb,
     base: pb,
   };
-  /** Each accepted edit, with the keys of the value it set (an append's `-` as the index it took). */
-  const accepted: (Accepted & { i: number; at: string[] })[] = [];
+  /**
+   * Each accepted edit, with the keys of the value it set (an append's `-` as the index it took) and the length of each
+   * list on that path as the edit left it: a clamp that changes one has shifted the entries, so the keys no longer
+   * reach what the edit set.
+   */
+  const accepted: (Accepted & { i: number; at: string[]; lists: [string[], number][] })[] = [];
   const rejected: (Rejected & { i: number })[] = [];
 
   const apply = (e: PlanEdit, i: number): void => {
@@ -490,17 +494,22 @@ function validate(profile: ValidatorProfile, state: GameState, seat: PlayerId, d
     if ('refused' in u) return void refused(u.refused);
     let value: unknown = structuredClone(e.to);
     let at = segs!;
+    const lists: [string[], number][] = [];
     if (segs!.length > u.unit.length) {
       value = structuredClone(getAt(pb, u.unit));
       const key = setAt(value, segs!.slice(u.unit.length), structuredClone(e.to));
       if (key === null) return void refused('no such field');
       at = [...segs!.slice(0, -1), key];
+      for (let k = u.unit.length; k < at.length; k++) {
+        const list = getAt(value, at.slice(u.unit.length, k));
+        if (Array.isArray(list)) lists.push([at.slice(0, k), list.length]);
+      }
     }
     const verdict = u.row(value, ctx, u.unit);
     if ('refused' in verdict) return void refused(verdict.refused);
     const from = getAt(pb, at);
     putUnit(pb, u.unit, verdict.plays);
-    accepted.push({ path: e.path, from, to: undefined, reason: e.reason, i, at });
+    accepted.push({ path: e.path, from, to: undefined, reason: e.reason, i, at, lists });
     if (verdict.why) refused(verdict.why);
   };
 
@@ -574,8 +583,11 @@ function validate(profile: ValidatorProfile, state: GameState, seat: PlayerId, d
   for (let passes = 4; passes > 0 && check(); passes--);
 
   const strip = <T extends { i: number }>(xs: T[]) => xs.sort((a, b) => a.i - b.i).map(({ i: _, ...x }) => x);
-  // Step 6: an accepted edit's `to` is the value that plays; an edit to a field step 5 dropped plays nothing.
-  const outEdits = strip(accepted.flatMap(({ at, ...a }) => (getAt(pb, at) === undefined ? [] : [{ ...a, to: getAt(pb, at) }])));
+  // Step 6: an accepted edit's `to` is the value that plays. An edit to a field that was dropped, or inside a list a
+  // clamp shortened or lengthened, is clamped only: it stays in rejected and is not listed here.
+  const plays = ({ at, lists }: (typeof accepted)[number]) =>
+    getAt(pb, at) !== undefined && lists.every(([path, length]) => (getAt(pb, path) as unknown[] | undefined)?.length === length);
+  const outEdits = strip(accepted.filter(plays).map(({ at, lists: _, ...a }) => ({ ...a, to: getAt(pb, at) })));
   const outRejected = strip(rejected);
   pb.by = outEdits.length > 0 ? 'llm' : 'engine';
   if (outEdits.length > 0) pb.edits = outEdits;
@@ -596,6 +608,7 @@ export function validatorFor(profile: ValidatorProfile): ValidatePlan {
       return gate(state, seat, draft, edits);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      console.error(`AI seat ${seat}: validator error, the draft plays and every edit is refused: ${message}`);
       const all = Array.isArray(edits) ? edits : [];
       return { playbook: draft, rejected: all.map((e) => ({ path: e?.path, to: e?.to, why: `validator error: ${message}` })) };
     }

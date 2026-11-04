@@ -161,8 +161,8 @@ function draftStrategy(input: DraftInput, obs: GameState): Strategy {
     moneyMaker: kind === 'builder' || kind === 'politician' ? null : kind === 'monopolist' ? target : moneyMaker,
     monopolyTarget: kind === 'monopolist' ? target : null,
     cashFloor: Math.min(AI_PLANS.bounds.cashFloorMax, cashReserve(obs, mind)),
-    // No more a month than the grants can give (RULE-1 S5), whatever a sweep sets.
-    landTarget: { plots: owned + Math.min(perMonth, GAME.claimsPerGrant) * (months - obs.month), byMonth: months },
+    // Whole plots, from none to what the grants can give (RULE-1 S5), whatever a sweep sets.
+    landTarget: { plots: owned + Math.max(0, Math.round(Math.min(perMonth, GAME.claimsPerGrant) * (months - obs.month))), byMonth: months },
     stances: Object.fromEntries(obs.players.filter((p) => p.id !== seat).map((p) => [p.id, kind === 'spoiler' && p.id === leader ? 'target' : 'neutral'])),
     reason: REASONS[kind],
   };

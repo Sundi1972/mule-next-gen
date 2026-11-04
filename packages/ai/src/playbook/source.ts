@@ -29,8 +29,9 @@ const BEFORE_GRANT = new Set<GameState['phase']>(['planning', 'landGrant']);
 
 /**
  * The source for one game's AI seats. Its draft is the seat's planning draft cut to the strategy and the land grant,
- * stamped with the month of the grant it plans, and drafted from the live state: it ranks the plots free now. An
- * unknown seat's draft throws; its validate refuses every edit and never throws.
+ * stamped with the month of the grant it plans, and drafted from the live state: it ranks the plots free now. Its
+ * draft throws on an unknown seat and on a draft or validator error, for WS2 to catch. Its validate never throws: it
+ * refuses every edit for an unknown seat, and on its own error plays the draft and refuses every edit.
  */
 export function playbookSource(seats: readonly SourceSeat[]): PlaybookSource {
   const seatOf = (id: PlayerId) => seats.find((s) => s.id === id);
