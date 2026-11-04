@@ -388,6 +388,15 @@ function shipQuote(state: GameState, good: Good): number[] {
   return prices;
 }
 
+/**
+ * Whether a seat's development turn is over by a given time `at`: it went to the pub, or the clock ended by then. A
+ * steered tick passes its own time, so a tick that runs late is still judged at its own time, as the sim's is (HC-4);
+ * month 1's waiting clock (`devEndsAt` null) ends no turn by time.
+ */
+export function turnOverAt(doneDeveloping: boolean, devEndsAt: number | null, at: number): boolean {
+  return doneDeveloping || (devEndsAt !== null && devEndsAt <= at);
+}
+
 export class MuleGame implements Game<MuleIntent, MuleView> {
   private state: GameState | null = null;
   private seats: SeatInfo[] = [];
@@ -719,11 +728,14 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     this.ctx.changed();
   }
 
-  /** Development's two early ends, checked again whenever a colonist arrives or finishes an assay. */
-  private checkEarlyEnd(): void {
+  /**
+   * Development's two early ends, checked again whenever a colonist arrives or finishes an assay. A steered tick passes
+   * its own time `at`, so a late tick judges the clock's end as the sim does (HC-4); everyone else, the wall clock.
+   */
+  private checkEarlyEnd(at?: number): void {
     this.startClockOnceAllIn();
     if (this.endWhenSettled) this.checkAllReady();
-    this.checkDevelopmentOver();
+    this.checkDevelopmentOver(at);
   }
 
   /** True when no colonist is walking, so ending development drops no move; an assay applied on arrival, so it holds nothing. */
@@ -882,12 +894,12 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     this.nextPhase();
   }
 
-  /** During development: true once a player went to the pub or ran out of time. */
-  private doneDeveloping(seatId: string): boolean {
+  /** During development: true once a player went to the pub or ran out of time by `at`, the wall clock unless a tick's own. */
+  private doneDeveloping(seatId: string, at = this.ctx.now()): boolean {
     const state = this.requireState();
     if (state.phase !== 'development') return false;
     const p = state.players.find((q) => q.id === seatId);
-    return !!p?.doneDeveloping || (this.devEndsAt !== null && this.devEndsAt <= this.ctx.now());
+    return turnOverAt(!!p?.doneDeveloping, this.devEndsAt, at);
   }
 
   /**
@@ -916,10 +928,10 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   }
 
   /** Development ends once every player, AI included, is at the pub, out of time or away, and no colonist is still out. */
-  private checkDevelopmentOver(): void {
+  private checkDevelopmentOver(at?: number): void {
     const state = this.requireState();
     if (state.phase !== 'development') return;
-    if (this.seats.every((s) => this.away.has(s.id) || this.doneDeveloping(s.id)) && this.colonistsSettled()) this.nextPhase();
+    if (this.seats.every((s) => this.away.has(s.id) || this.doneDeveloping(s.id, at)) && this.colonistsSettled()) this.nextPhase();
   }
 
   private requireState(): GameState {
@@ -1292,13 +1304,15 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   /**
    * The fixed tick: at each tickMs of game time, through ctx.schedule only (HC-9). A late timer runs the ticks it
    * missed, at most catchUpTicks, then resyncs, so the floor's tick 0 stands that much later on the server's clock.
-   * The views go once, after the ticks, and only when one changed the game or a seat's reach words.
+   * The views go once, after the ticks, and only when one changed the game or a seat's reach words. The batch stops at
+   * a tick at or after the clock's end (AM-19), which waits a tick and looks again: the development-end timer ends the
+   * phase, or devEndsAt moved later meanwhile and the ticks go on. `wait` overrides the wait for the next tick.
    */
-  private scheduleSteerTick(month: number): void {
+  private scheduleSteerTick(month: number, wait?: number): void {
     const steering = this.steering!;
     const state = this.requireState();
     const nextAt = steering.origin + (steering.floor.tick + 1) * this.realTickMs();
-    this.cancelSteerTick = this.ctx.schedule(Math.max(0, nextAt - this.ctx.now()), () => {
+    this.cancelSteerTick = this.ctx.schedule(wait ?? Math.max(0, nextAt - this.ctx.now()), () => {
       if (this.steering !== steering || state.phase !== 'development' || state.month !== month) return;
       const now = this.ctx.now();
       const realTick = this.realTickMs();
@@ -1307,13 +1321,24 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       const due = Math.min(missed, DEV_STEER.catchUpTicks);
       steering.stats.catchUp += due - 1;
       let changed = false;
-      for (let i = 0; i < due && this.steering === steering; i++) changed = this.steerTick(steering) || changed;
-      if (this.steering === steering) {
-        if (missed > due) {
-          steering.stats.resyncs++;
-          steering.origin = now - steering.floor.tick * realTick;
+      let atEnd = false;
+      for (let i = 0; i < due && this.steering === steering; i++) {
+        const stepped = this.steerTick(steering);
+        if (stepped === null) {
+          atEnd = true;
+          break;
         }
-        this.scheduleSteerTick(month);
+        changed = stepped || changed;
+      }
+      if (this.steering === steering) {
+        if (atEnd) this.scheduleSteerTick(month, realTick);
+        else {
+          if (missed > due) {
+            steering.stats.resyncs++;
+            steering.origin = now - steering.floor.tick * realTick;
+          }
+          this.scheduleSteerTick(month);
+        }
       }
       if (changed) this.ctx.changed();
     });
@@ -1322,16 +1347,19 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   /**
    * One tick of RULE-1: each seat's input (an away seat's stands still; an AI seat's from its hand), the step and the
    * presses it reaches, the frame to every screen, then development's early ends. True when the views must go: the
-   * game changed, month 1's clock started, the phase ended, or a seat's reach words changed (AM-11).
+   * game changed, month 1's clock started, the phase ended, or a seat's reach words changed (AM-11). Null, stepping
+   * nothing and taking no input, for a tick at or after the clock's end: no press, AI input or moment applies then,
+   * as in the sim (AM-19). Month 1's waiting clock (devEndsAt null) ends no tick.
    */
-  private steerTick(steering: Steering): boolean {
+  private steerTick(steering: Steering): boolean | null {
     const state = this.requireState();
     const tick = steering.floor.tick;
     const at = steering.origin + (tick + 1) * this.realTickMs();
+    if (this.devEndsAt !== null && at >= this.devEndsAt) return null;
     steering.at = at;
     const secondsLeft = Math.max(0, this.secondsLeft(at));
     const inputs: Record<string, FloorInput> = {};
-    for (const s of this.seats) inputs[s.id] = this.away.has(s.id) ? IDLE_INPUT : this.seatInput(steering, s.id, tick, secondsLeft);
+    for (const s of this.seats) inputs[s.id] = this.away.has(s.id) ? IDLE_INPUT : this.seatInput(steering, s.id, tick, at, secondsLeft);
     const before = Object.values(inputs).some((i) => i.act) ? stableJson(state) : null;
     const waited = this.clockWaits;
     const { floor, presses } = stepTick(steering.floor, state, inputs, steering.cfg, secondsLeft, (seat, reach) => this.refusal(seat, reach));
@@ -1346,7 +1374,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     // presses' follow, so the floor after the presses holds the tick's, in order, and no earlier tick's.
     this.ctx.frame(devFrame(floor, floor.moments.beats.map((b) => b.text)));
     steering.stats.frames++;
-    this.checkEarlyEnd();
+    this.checkEarlyEnd(at);
     if (this.steering !== steering) return true;
     let changed = (before !== null && stableJson(state) !== before) || waited !== this.clockWaits;
     for (const s of this.seats) {
@@ -1364,12 +1392,12 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
    * seat's from its hand (C9), computed here inside the tick's recorded step, so a replay computes it again, from the
    * floor before the step and the seconds the tick's presses resolve at, as the sim calls it (HC-4). `held` is the
    * refusal's own test, so the hand never reaches for a press `refusal` would turn down; the press still goes through
-   * it. A seat whose turn is over stands still.
+   * it. A seat whose turn is over by the tick's own time `at` stands still (turnOverAt), however late the tick runs.
    */
-  private seatInput(steering: Steering, seatId: string, tick: number, secondsLeft: number): FloorInput {
+  private seatInput(steering: Steering, seatId: string, tick: number, at: number, secondsLeft: number): FloorInput {
     const ai = this.ai.get(seatId);
     if (!ai) return steering.inputs.take(seatId, tick);
-    if (this.doneDeveloping(seatId)) return IDLE_INPUT;
+    if (this.doneDeveloping(seatId, at)) return IDLE_INPUT;
     return ai.developSteer(this.requireState(), steering.floor, secondsLeft, steering.cfg, this.clockWaits && this.isIn(seatId));
   }
 
