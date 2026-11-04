@@ -49,7 +49,8 @@ export interface DevTurn {
   installs: number;
   /**
    * A wolf's bite cost it the pub (T-AC-5's one excuse, AM-26): at the tick the bite landed, its walk to the pub at the
-   * bitten pace (floor-time.ts's pubSeconds, the AI's own estimate) was longer than the seconds left.
+   * bitten pace (floor-time.ts's pubSeconds, the AI's own estimate) was longer than the seconds left, and unbitten not
+   * (biteCostPub).
    */
   biteCostPub: boolean;
   /** Analyses of lake plots its hand gave up on the way (failed), and dropped before setting off as not fitting the clock. */
@@ -139,10 +140,11 @@ export function simFloorConfig(): FloorConfig {
 
 /**
  * T-AC-5's one excuse (AM-26), for a colonist just bitten with `left` seconds on the clock: the bite cost it the pub,
- * its walk there at the bitten pace (floor-time.ts's pubSeconds, the AI's own estimate) longer than the time left.
+ * its walk there at the bitten pace (floor-time.ts's pubSeconds, the AI's own estimate) longer than the time left, and
+ * the same walk unbitten not. One late even unbitten was late by its own choices, and the bite cost it nothing.
  */
 export function biteCostPub(state: GameState, cfg: FloorConfig, c: FloorColonist, left: number): boolean {
-  return pubSeconds(state, cfg, c) > left;
+  return pubSeconds(state, cfg, c) > left && pubSeconds(state, cfg, { ...c, bitten: false }) <= left;
 }
 
 /** The analyses of lake plots in a hand's log for the month that failed on the way, and that it dropped for time. */
