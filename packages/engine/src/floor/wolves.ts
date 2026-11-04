@@ -37,6 +37,9 @@ function ring(state: GameState, centre: FloorPoint, angle: number, r: number): F
   return { x: clamp(centre.x + Math.cos(angle) * r, 0, state.width), y: clamp(centre.y + Math.sin(angle) * r, 0, state.height) };
 }
 
+/** A vector scaled to length 1; null for none. */
+const unit = (v: FloorPoint): FloorPoint | null => toward({ x: 0, y: 0 }, v);
+
 /** A unit vector from `from` towards `to`; null when they are one point. */
 function toward(from: FloorPoint, to: FloorPoint): FloorPoint | null {
   const d = dist(from, to);
@@ -250,6 +253,11 @@ export interface WolfPlay {
   level: WolfFightLevel;
   fights: boolean;
   refuge?: FloorPoint;
+  /**
+   * In a hurry: it sets off at once and heads for the refuge even with the pack that way, round it: the heading to the
+   * refuge less its part towards the pack, so it neither runs off nor into the wolves.
+   */
+  through?: boolean;
 }
 
 /** Whether a colonist of this level dodges the lunge a wolf crouched for at `sinceTick`: one seeded roll a lunge. */
@@ -271,7 +279,9 @@ export function wolfInput(floor: DevFloor, state: GameState, seat: string, cfg: 
   const flee = toward(middle, c) ?? { x: 1, y: 0 };
   const refuge = play.refuge && toward(c, play.refuge);
   // To the refuge if the pack is not that way (it lies behind or beside the line there), else away from the pack.
-  const away = refuge && refuge.x * flee.x + refuge.y * flee.y >= 0 ? refuge : flee;
+  const towards = refuge ? -(refuge.x * flee.x + refuge.y * flee.y) : 0;
+  const round = refuge && play.through && towards > 0 ? unit({ x: refuge.x + towards * flee.x, y: refuge.y + towards * flee.y }) ?? { x: -flee.y, y: flee.x } : null;
+  const away = round ?? (refuge && (play.through || towards <= 0) ? refuge : flee);
   if (e.stage === 'choose') {
     // In a hurry it does not stop to think.
     if (!play.through && tick - e.sinceTick < ticksOf(cfg.wolves.botChooseSeconds, cfg)) return IDLE_INPUT;
