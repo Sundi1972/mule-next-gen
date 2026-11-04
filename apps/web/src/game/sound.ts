@@ -130,7 +130,8 @@ export function useAuctionSound(auction: AuctionView | null) {
   useEffect(() => {
     const prev = last.current;
     last.current = auction ? { good: auction.good, stage: auction.stage, units: auction.units } : null;
-    if (prev?.stage === 'walk' && (!auction || auction.good !== prev.good)) bell();
+    // The walk ends into the good's close stage (A-5), or straight into the next good: ring once, as it leaves the walk.
+    if (prev?.stage === 'walk' && (!auction || auction.good !== prev.good || auction.stage !== 'walk')) bell();
     if (!auction || auction.stage !== 'walk' || !prev || prev.good !== auction.good) return;
     const n = Math.min(6, auction.units - prev.units);
     const price = auction.deals[0]?.price ?? 0;
