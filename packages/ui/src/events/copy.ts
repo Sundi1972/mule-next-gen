@@ -2,7 +2,7 @@ import { GOOD_NAME, type Good } from '../components/tokens';
 import { signLook, type ShowCast } from './frame';
 import { sickBecause } from './sick';
 import type { EventSegment } from './timing';
-import type { ShowEventKey, ShowEventView, ShowPhase } from './types';
+import type { ShowEventKey, ShowEventView, ShowHit, ShowPhase } from './types';
 
 /** The show's words, the gallery's own (design/mocks/ws8-events src/copy.ts). */
 
@@ -13,6 +13,11 @@ const plots = (good: Good | undefined, n: number) => {
   return plural(n, one, many);
 };
 const signed = (n: number) => `${n < 0 ? '−' : '+'}${Math.abs(n)}`;
+/** The word a plot's chip shows instead of a number, when the change isn't one: CAVED IN. */
+export function hitText(hit: ShowHit): string | undefined {
+  return hit.becomes === 'plain' ? 'CAVED IN' : undefined;
+}
+
 /** What a phase's stretch of time is called: a development turn, otherwise a month. */
 export const phaseNoun = (phase: ShowPhase) => (phase === 'development' ? 'turn' : 'month');
 
@@ -109,6 +114,10 @@ function youFor(ev: ShowEventView, id: string, cast: ShowCast): EventYouSummary 
     return { headline: 'You’re sick', short: 'sick', detail: `You walk at half pace this turn.${why ? ` Why: ${why}.` : ''}`, change: {}, sick: true };
   }
   const detail = YOU[ev.key]?.(ev);
+  // A collapse changes no output, but it changed your plot: it did not miss you.
+  if (ev.hits.some((h) => h.becomes === 'plain' && cast.ownerAt(h.x, h.y) === id)) {
+    return { headline: 'Your cavern caved in', short: 'caved in', detail: detail ?? '', change: {} };
+  }
   // As in eventSummary, a hit that changed nothing is no loss: a player only it reached was missed.
   const mine = ev.hits.filter((h) => h.delta !== 0 && cast.ownerAt(h.x, h.y) === id);
   if (mine.length === 0) return null;

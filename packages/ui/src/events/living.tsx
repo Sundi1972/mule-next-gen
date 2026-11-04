@@ -1,11 +1,13 @@
-import type { CSSProperties } from 'react';
+import { useMemo, type CSSProperties } from 'react';
+import type { MapTile } from '../components/HoloMap';
 import { cx, type Slot } from '../components/tokens';
 import { EVENT_ENTRY, STORY } from './catalogue';
+import { hitText } from './copy';
 import { signLook, useShow, type ShowFrame } from './frame';
 import { band, clamp, Dim, EDGE, OnPlot, ramp, Spotlight, Swarm, Trail } from './fx';
 import { accent, EventDeltaChip, EventGlyph } from './glyphs';
 import { eventHitAt, eventLanded, eventStageAt, eventFrontAt, isRollCall, type EventSegment } from './timing';
-import type { ShowEventKey, ShowEventView, ShowSize } from './types';
+import type { ShowEventKey, ShowEventView, ShowHit, ShowSize } from './types';
 
 /**
  * Living weather, one engine for the TV and for a phone with no TV in the room: the map's state and camera, each
@@ -63,6 +65,26 @@ export function livingAt({ s, t, reduced, grid, cast }: ShowFrame, size: ShowSiz
 /** The same, for a layer inside <EventShow>; the caller reads it to glow the spotlit player's slot. */
 export function useEventLivingView() {
   return livingAt(useShow());
+}
+
+/** The hits that remove a plot's special field and have not landed by `t`. */
+export function specialsStanding({ s, t, reduced, grid }: ShowFrame): ShowHit[] {
+  return s.segments.flatMap((seg) => seg.events.flatMap((ev) => ev.hits.filter((hit) => hit.was && t < eventHitAt(seg, ev, hit, reduced, grid))));
+}
+
+/** The map as the show has it at `t`: the view's tiles are after the events, so a caved-in cavern keeps its badge until its hit lands. */
+export function useLiveTiles(frame: ShowFrame): MapTile[] {
+  const standing = specialsStanding(frame);
+  const key = standing.map((h) => `${h.x},${h.y},${h.was}`).join('|');
+  const { tiles } = frame;
+  // `standing` is a new array every frame; `key` names its hits, so the map repaints only when one lands.
+  return useMemo(() => {
+    if (standing.length === 0) return tiles;
+    return tiles.map((tile) => {
+      const hit = standing.find((h) => h.x === tile.x && h.y === tile.y);
+      return hit ? { ...tile, special: { kind: hit.was! } } : tile;
+    });
+  }, [key, tiles]);
 }
 
 /** Each segment's own motion over the map, under the bars, from when it starts to play. */
@@ -313,14 +335,15 @@ export function Marks({ size, slot }: { size: ShowSize; slot?: Slot }) {
   return (
     <>
       {eventLanded(s, t, reduced, grid).map(({ ev, hit, at }) => {
-        if (hit.delta === 0) return null;
+        const text = hitText(hit);
+        if (hit.delta === 0 && !text) return null;
         if (slot !== undefined && cast.slotOf(cast.ownerAt(hit.x, hit.y) ?? '') !== slot) return null;
         const since = t - at;
         const rise = reduced ? 0 : since < 0.45 ? (since / 0.45) * lift : since < 1.3 ? lift * (1 - (since - 0.45) / 0.85) : 0;
         return (
           <OnPlot key={`${hit.x},${hit.y},${ev.key}`} x={hit.x} y={hit.y} testId={`mark-${hit.x}-${hit.y}`} rise={`${rise}cqw`} className={cx(!reduced && 'animate-[ev-pop_0.35s_ease-out]')}>
             <span className="flex flex-col items-center gap-0.5">
-              <EventDeltaChip delta={hit.delta} good={cast.goodAt(hit.x, hit.y)} size={size === 'tv' ? 'tv' : 'phone'} />
+              <EventDeltaChip delta={hit.delta} good={cast.goodAt(hit.x, hit.y)} lost={!!text} text={text} size={size === 'tv' ? 'tv' : 'phone'} />
             </span>
           </OnPlot>
         );
