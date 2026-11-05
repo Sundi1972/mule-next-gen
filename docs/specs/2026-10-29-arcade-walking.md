@@ -748,8 +748,13 @@ inside a wall; money and stock change only through game.ts rules; development en
   any route, keeping its run. It is marked `swapped`: if the turn ends (pub or clock) with it still led, it goes to the
   corral (`store.mules++`, no refund, as a plot's MULE does at a lot sale), never home over the new MULE. Over a MULE
   with the **same** outfit the press is refused, "Same outfit: nothing to swap": the player keeps the lead, the plot is
-  unchanged. Reach row 10's notes: "you lead your <good> MULE" and "same outfit, nothing to swap". Pins:
-  `apps/server/test/installed-this-turn.test.ts` B-AC-SWAP-1..3, `floor-reach.test.ts` rows 10. Not in scope: a
+  unchanged, and the row dims (`enabled: false`, why `sameGood`), as RE-OUTFIT's does for its own good. **No SWAP back
+  onto the plot the led MULE was just swapped off** (PM ruling A, so a double tap can't swap back and lose the new
+  MULE): the row stays on that plot, dimmed (why `justSwapped`, "just swapped: lead it to another plot"), so a second
+  press holds and never falls through to the tile's next row (FILTER, ANALYSE, TAKE); `installMule` refuses it too,
+  "Just swapped: lead it to another plot", for a direct action such as the AI's. Reach row 10's notes: "you lead your
+  <good> MULE", "same outfit, nothing to swap" and "just swapped: lead it to another plot". Pins:
+  `apps/server/test/installed-this-turn.test.ts` B-AC-SWAP-1..4, `floor-reach.test.ts` rows 10. Not in scope: a
   mid-turn "return to the corral" press with a refund (backlog, put to Heiko).
 
 - **AM-22 (2026-11-04, WS1's findings at arcade PR-8, ruled by WS6).** (1) **T-AC-5's glints:** with RULE-8 honoured
