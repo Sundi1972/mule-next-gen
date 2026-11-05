@@ -1143,10 +1143,17 @@ export async function wolvesRunOrFight(t: ArcadeTable): Promise<string> {
   const { heiko, mia, tv, server, code, wires } = t;
   check(tv, 'B-AC-5: the table has a TV');
   const saved = { ...WOLVES };
+  const glintsWere = GLINT.on;
   const out: string[] = [];
   const owed: { tag: string; ok: boolean; said: string }[] = [];
   const owe = (tag: string, ok: boolean, said: string) => owed.push({ tag, ok, said });
   try {
+    // No glint while the packs come: one lit nearby takes the button ("GRAB THE GLINT") whatever the moment's rolls,
+    // which differ with the table's other rules. One already lit runs out its showSeconds first.
+    GLINT.on = false;
+    const unlit = Date.now() + (GLINT.showSeconds + 2) * 1_000;
+    while (floorOf(server, code).moments.glint && Date.now() < unlit) await mia.waitForTimeout(TICK_MS);
+    check(!floorOf(server, code).moments.glint, 'B-AC-5: no glint is lit while the packs come');
     Object.assign(WOLVES, { on: true, chancePerSecond: 0, cooldownSeconds: 0 });
     // Negative: both in the hall with a pack certain, and none comes.
     const walk = HALL.floor[0]!;
@@ -1265,6 +1272,7 @@ export async function wolvesRunOrFight(t: ArcadeTable): Promise<string> {
     out.push(await aFightLostWithAMule(t, store, owe));
   } finally {
     Object.assign(WOLVES, saved);
+    GLINT.on = glintsWere;
   }
   // What the server measured, whatever the screens drew.
   console.log(`  B-AC-5, the server: ${out.join('; ')}`);
