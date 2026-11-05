@@ -606,9 +606,15 @@ export class DevelopHand {
 
   private finish(state: GameState): void {
     const mind = this.brain.mind;
+    const analysed = state.players.find((p) => p.id === mind.me)!.analysed;
     for (const index of filtersWanted(observe(state, mind.me), mind)) {
       const t = state.tiles[index]!;
-      this.push({ type: 'filter', x: t.x, y: t.y }, AI_HANDS.develop.filterMs, `Fit a filter on ${plotName(t)}`, ++this.group);
+      const g = ++this.group;
+      // On the floor an own plot not yet analysed offers ANALYSE before FIT FILTER (RULE-3 rows 10 and 11), so its
+      // analysis is planned first, in the filter's group: an analysis dropped (for time, or refused) drops its filter too
+      // (FM-floor-filter).
+      if (this.onFloor && !analysed.includes(index)) this.push({ type: 'analyse', x: t.x, y: t.y }, AI_HANDS.develop.analyseTapMs, `Analyse ${plotName(t)}`, g);
+      this.push({ type: 'filter', x: t.x, y: t.y }, AI_HANDS.develop.filterMs, `Fit a filter on ${plotName(t)}`, g);
     }
     this.push({ type: 'pub' }, AI_HANDS.develop.pubMs, 'Go to the pub', ++this.group);
     this.stage = 'steps';
