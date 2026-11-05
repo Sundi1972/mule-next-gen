@@ -53,7 +53,7 @@ const me: MyView = {
   droneOrder: [],
   politics: null,
   installedThisTurn: false,
-  worthParts: { money: 3_000, goods: 100, plots: 1, land: 300, mules: 0, muleValue: 0, office: 0, cut: 0 },
+  worthParts: { money: 3_000, goods: 100, plots: 1, land: 300, mules: 0, muleValue: 0, office: 0, donated: 0, cut: 0 },
 };
 
 function view(extra: Partial<MuleView> = {}): MuleView {

@@ -41,6 +41,7 @@ import {
   validatorFor,
   type DraftInput,
   type DraftPhase,
+  type LeftOutPick,
   type OwnDeclare,
   type PartKey,
   type PhaseFact,
@@ -61,23 +62,23 @@ export interface PlanningStep {
 
 type ListEntry = NonNullable<PlanningPlay['list']>[number];
 
-/** This month's auction as the seat plays it, good by good (AM-20). */
+/** This month's auction as the seat plays it, good by good. See AM-20. */
 interface AuctionRun {
   month: number;
   /** The playbook it plays under: its month's own draft, or the adopted one; null until the first good is played. */
   head: Playbook | null;
   /** Each good's play as it was played, in order. */
   played: Partial<Record<Good, GoodPlay>>;
-  /** A draft or validator error: the rest of this month's auction plays today's path (HC-9). */
+  /** A draft or validator error: the rest of this month's auction plays today's path. See HC-9. */
   failed: boolean;
-  /** Its own declares, in order: the outcome's side for each good (AM-23). */
+  /** Its own declares, in order: the outcome's side for each good. See AM-23. */
   declared: OwnDeclare[];
 }
 
-/** The `id` of a DecisionRecord the seat builds itself, for a drafted part: no Brain decision, so no Brain id (AM-22). */
+/** The `id` of a DecisionRecord the seat builds itself, for a drafted part: no Brain decision, so no Brain id. See AM-22. */
 export const DRAFTED_RECORD_ID = 0;
 
-/** The parts AI_PLANS.ownPhases holds back on the own path (AM-26). */
+/** The parts AI_PLANS.ownPhases holds back on the own path. See AM-26. */
 const OWN_PHASE_KEYS: ReadonlySet<PartKey> = new Set(['development', 'auction']);
 
 const xyOf = (state: GameState, plot: number) => ({ x: state.tiles[plot]!.x, y: state.tiles[plot]!.y });
@@ -96,7 +97,7 @@ export interface AiSeatOptions {
   onDecision?: (record: DecisionRecord) => void;
   /** RULE-6 row 1: false plays every phase by today's asks. Unset, AI_PLANS.on decides. */
   playbook?: boolean;
-  /** AM-26: whether the own path plays its own development and auction parts. Unset, AI_PLANS.ownPhases decides. */
+  /** Whether the own path plays its own development and auction parts; unset, AI_PLANS.ownPhases decides. See AM-26. */
   ownPhases?: boolean;
   /** Each playbook the seat plays itself, validated: what the game records for it. Unset, the seat writes none. */
   onPlaybook?: (playbook: Playbook) => void;
@@ -119,10 +120,8 @@ export interface AiSeatDebug {
  * call `planMonth` when planning starts, `onLit` when a plot lights up,
  * `developTick` and `auctionTick` on every tick of those phases.
  *
- * It drafts lazily at its own ticks (RULE-7): the month's first developTick or developSteer drafts the development
- * part and hands its route to the development hand; each good's first auctionTick, at the good's status screen, plays
- * that good's part (AM-20). So the server and the sim draft at the same step, with no hook of their own. Its own
- * development and auction drafts wait behind AI_PLANS.ownPhases (AM-26); adopted parts play either way.
+ * It drafts lazily at its own ticks, so the server and the sim draft at the same step with no hook of their own.
+ * See RULE-7, AM-20, AM-26.
  */
 export class AiSeat {
   readonly mind: Mind;
@@ -225,14 +224,15 @@ export class AiSeat {
     if (!ok) p.refused.add(key);
   }
 
-  /**
-   * RULE-6's path for `key`. The own path's development and auction parts play only while the seat's ownPhases is on,
-   * AI_PLANS.ownPhases unless its options say (AM-26): off, the own path plays today's for them, while an adopted part
-   * still plays. Read per call, so `--set` and a test that sets it switch it.
-   */
+  /** RULE-6's path for `key`; the own path's development and auction parts play only with ownPhases on. See AM-26. */
   private playPath(month: number, key: PartKey): PlayPath {
     const path = pathFor({ on: AI_PLANS.on, playbook: this.options.playbook, hasDecider: !!this.options.decider, adopted: this.adopted, month, key });
-    return path.by === 'own' && OWN_PHASE_KEYS.has(key) && !(this.options.ownPhases ?? AI_PLANS.ownPhases) ? { by: 'today' } : path;
+    return path.by === 'own' && OWN_PHASE_KEYS.has(key) && !this.ownPhasesOn() ? { by: 'today' } : path;
+  }
+
+  /** Read per call: `--set` and a test switch AI_PLANS.ownPhases while seats exist. */
+  private ownPhasesOn(): boolean {
+    return this.options.ownPhases ?? AI_PLANS.ownPhases;
   }
 
   /** A draft point: drafts, validates and writes. A draft or validator error is logged and the phase plays today's path (HC-9). */
@@ -240,9 +240,14 @@ export class AiSeat {
     this.ownDraft(state, phase, () => this.draft(state, phase));
   }
 
-  /** The seat's validated draft for a phase. `month` is the month whose land grant it plans. Writes nothing; throws on a draft or validator error. */
+  /**
+   * The seat's validated draft for a phase. `month` is the month whose land grant it plans. Writes nothing, and logs
+   * the MULE picks the draft left out; throws on a draft or validator error.
+   */
   draft(state: GameState, phase: DraftPhase, month = state.month): Playbook {
-    const drafted = draftPlaybook(this.draftInput(state, phase, month));
+    const leftOut: LeftOutPick[] = [];
+    const drafted = draftPlaybook(this.draftInput(state, phase, month), leftOut);
+    for (const p of leftOut) console.error(`AI seat ${this.id}: the development draft left out MULE ${p.mule} (${p.outfit} on plot ${p.plot}), refused: ${p.refused}`);
     return validatePlaybook(this.profileFor(month))(state, this.id, drafted, []).playbook;
   }
 
@@ -380,9 +385,8 @@ export class AiSeat {
   }
 
   /**
-   * RULE-7's development draft point, at the month's first development tick: on the playbook path, the part RULE-6
-   * picks (the adopted one, or its own draft, written and said) is handed to the hand. A draft or validator error is
-   * logged and the month plays today's path (HC-9).
+   * The development draft point, at the month's first development tick: the part the seat's path picks goes to the
+   * hand. A draft or validator error is logged and the month plays today's path. See RULE-6, RULE-7, HC-9.
    */
   private developPoint(state: GameState): void {
     if (state.phase !== 'development' || this.devMonth === state.month) return;
@@ -399,10 +403,9 @@ export class AiSeat {
   }
 
   /**
-   * The auction hand's source, asked once a good at its status screen (AM-20, RULE-10). On the playbook path: the
-   * adopted part's play for the good; else its own: at the month's first good the whole auction draft, written; at
-   * each later good a fresh one-good draft, written as its own entry. Null plays today's ask. A draft or validator
-   * error is logged and the rest of the month's auction plays today's path (HC-9).
+   * The auction hand's source for `good`, asked at its status screen: the adopted part's play, else the seat's own
+   * draft, written; null plays today's ask. A good the adopted part lacks is drafted only with ownPhases on. A draft or
+   * validator error is logged, and the month's later goods play today's ask. See AM-20, AM-26, HC-9.
    */
   private goodPlay(state: GameState, good: Good): GoodPlay | null {
     const run = this.auctionFor(state.month);
@@ -410,6 +413,7 @@ export class AiSeat {
     if (run.failed || path.by === 'today') return null;
     let play = path.by === 'adopted' ? path.playbook.auction?.[good] : undefined;
     if (path.by === 'adopted') run.head ??= path.playbook;
+    if (!play && path.by === 'adopted' && !this.ownPhasesOn()) return null;
     if (!play) {
       const whole = !run.head;
       const playbook = this.ownDraft(state, 'auction', () => (whole ? this.draft(state, 'auction') : this.draftGood(state, good)));
@@ -431,13 +435,13 @@ export class AiSeat {
     return this.auctionRun;
   }
 
-  /** AM-20: the seat's validated auction playbook for one good, drafted at that good's status screen. Throws on an error. */
+  /** The seat's validated auction playbook for one good, drafted at that good's status screen. Throws on an error. See AM-20. */
   private draftGood(state: GameState, good: Good): Playbook {
     const { phase: _, ...input } = this.draftInput(state, 'auction');
     return validatePlaybook(this.profileFor(state.month))(state, this.id, draftGoodPlaybook(input, good), []).playbook;
   }
 
-  /** An own draft point's playbook, written; a draft or validator error is logged and gives null (HC-9). */
+  /** An own draft point's playbook, written; a draft or validator error is logged and gives null. See HC-9. */
   private ownDraft(state: GameState, phase: DraftPhase, make: () => Playbook): Playbook | null {
     let playbook: Playbook;
     try {
@@ -451,9 +455,8 @@ export class AiSeat {
   }
 
   /**
-   * AM-22: the table line for a drafted part, as a DecisionRecord the seat builds itself (no candidates, by 'top'), its
-   * line the persona's template with a roll from the draft's seeded stream. The Brain's counter is not advanced, so every
-   * Brain decision keeps the seed it has on today's path.
+   * The table line for a drafted part, as a DecisionRecord the seat builds itself. The Brain's counter is not advanced,
+   * so every Brain decision keeps the seed it has on today's path. See AM-22.
    */
   private say(state: GameState, kind: 'develop' | 'trade', topic: string | null, label: string, key: string): void {
     const persona = PERSONAS[this.options.persona];
@@ -475,14 +478,14 @@ export class AiSeat {
   }
 
   /**
-   * How this month's development or auction went against the part it played (RULE-11), read from `state` as the phase
-   * ends; `facts` are the phase's public facts (the server's phaseNotices). Null for a phase it played by today's path.
+   * How this month's development or auction went against the part it played, read from `state` as the phase ends;
+   * `facts` are the phase's public facts (the server's phaseNotices). Null for a phase played by today's path. See RULE-11.
    */
   outcome(phase: 'development' | 'auction', state: GameState, facts: readonly PhaseFact[] = []): PhaseOutcome | null {
     if (phase === 'development') return this.devMonth === state.month && this.devPlayed ? developmentOutcome(this.devPlayed, this.develop.routeLog(state)) : null;
     const run = this.auctionRun;
     if (!run || run.month !== state.month || !run.head) return null;
-    // After an error the goods it went on to play by today's path are not the part's (HC-9).
+    // After an error the goods it went on to play by today's path are not the part's. See HC-9.
     const auction = run.failed ? run.played : { ...run.head.auction, ...run.played };
     return auctionOutcome({ ...run.head, auction }, state, facts, this.id, run.declared);
   }
@@ -502,7 +505,7 @@ export class AiSeat {
     return this.develop.scramblesRaced();
   }
 
-  /** The development steps taken this month, in order; on a route, each with its route index and RULE-11 outcome. */
+  /** The development steps taken this month, in order; on a route, each with its route index and outcome. */
   developLog(): readonly DevLogEntry[] {
     return this.develop.done;
   }
