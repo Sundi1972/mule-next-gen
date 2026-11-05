@@ -18,6 +18,8 @@ describe("C26's writers: addPrestige (colony.ts) and reputationShift (politics.t
     addPrestige(state, 2);
     expect(state.colony!.permanentPrestige).toBe(4);
     expect(colonyPrestige(state)).toBe(4);
+    addPrestige(state, 0.6);
+    expect(Number.isInteger(state.colony!.permanentPrestige), 'whole points only').toBe(true);
   });
 
   it("INV-whatif (HC-21): addPrestige on a what-if copy never reaches the real game's colony", () => {

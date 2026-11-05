@@ -16,6 +16,7 @@ import {
   COLONY,
   SOCIAL_EVENTS,
   START,
+  storeForSale,
   UPKEEP,
   type EventRow,
   type GameState,
@@ -118,6 +119,9 @@ describe('C26: the colony\'s planning social events, fired through the planning 
     // The extra Food is demand this month: the store's outlook and the colonists' meal at upkeep both carry it.
     const plain = colonyAt(AT.content);
     expect(monthlyDemand(state).food - monthlyDemand(plain).food).toBeCloseTo(colonistDemand(state, 'food', units));
+    // The store keeps the extra back from the players for the colonists, on a stocked shelf.
+    for (const s of [state, plain]) s.store.stock.food = 50;
+    expect(storeForSale(state, 'food')).toBe(storeForSale(plain, 'food') - units);
     // A shelf one unit short of the festival month's need, at a price the colonists' wages cover, and no ship in port:
     // the festival month runs short of Food, a plain month does not.
     const need = state.colonists / UPKEEP.colonistsPerUnit;
@@ -273,10 +277,15 @@ describe('C26: the colony\'s planning social events, fired through the planning 
     expect(at('festival')).toEqual(close([0.06, 0.02, 0.01, 0, 0]));
     const stadium = (s: GameState) => s.colony!.projects.push({ id: 'stadium', stage: 'standing', funded: { credits: 0, goods: {} }, monthsLeft: null, plot: null, since: 1, plaque: {}, maxBid: null });
     expect(at('festival', stadium)).toEqual(close([0.11, 0.07, 0.06, 0, 0]));
+    // Only a standing stadium raises it: one still commissioned adds 0.
+    const commissioned = (s: GameState) => s.colony!.projects.push({ id: 'stadium', stage: 'commissioned', funded: { credits: 0, goods: {} }, monthsLeft: null, plot: null, since: 1, plaque: {}, maxBid: null });
+    expect(at('festival', commissioned)).toEqual(close([0.06, 0.02, 0.01, 0, 0]));
     expect(at('generalStrike')).toEqual(close([0, 0, 0.02, 0.05, 0.1]));
     const dearFood = (s: GameState) => (s.store.posted.food = GOOD_CONFIG.food.refPrice * 1.5 + 1);
     // UBER-AC-6's estimate: a troubled colony (Unhappy, Food above 1.5 times its usual price) draws strikes at 8% a month; a thriving one 0%.
     expect(at('generalStrike', dearFood)).toEqual(close([0, 0.03, 0.05, 0.08, 0.13]));
+    // "Above" 1.5 times: Food at exactly 1.5 times its usual price adds 0.
+    expect(at('generalStrike', (s) => (s.store.posted.food = GOOD_CONFIG.food.refPrice * 1.5))).toEqual(close([0, 0, 0.02, 0.05, 0.1]));
     expect(at('emigrationWave')).toEqual(close([0, 0, 0.01, 0.04, 0.08]));
     expect(at('emigrationWave', (s) => (s.air = 70))).toEqual(close([0.03, 0.03, 0.04, 0.07, 0.11]));
     // p3 is not the richest until it is.
@@ -308,5 +317,23 @@ describe('C26: the colony\'s planning social events, fired through the planning 
     only(SOCIAL);
     expect(firePhase(cloneForSim(colonyAt(AT.restless)), 'planning')).toEqual([]);
     expect(firePhase(colonyAt(AT.restless), 'planning')).toEqual(firePhase(colonyAt(AT.restless), 'planning'));
+
+    // An unpaid strike reaches a what-if copy's production (the AI's look-ahead sees the struck output), and nothing the
+    // copy runs reaches the real game's colony or month list.
+    only(['generalStrike']);
+    const real = colonyAt(AT.unhappy);
+    firePhase(real, 'planning');
+    only([]);
+    const colony = structuredClone(real.colony);
+    const month = structuredClone(real.monthEvents);
+    const food = foodPlots(real);
+    const lineOf = (s: GameState) => food.map((i) => s.history.at(-1)!.lines!.find((l) => l.tile === i)!.made);
+    const twin = colonyAt(AT.unhappy);
+    produce(twin);
+    const copy = cloneForSim(real);
+    produce(copy);
+    expect(lineOf(copy)).toEqual(lineOf(twin).map((n) => Math.floor(n * COLONY.strike.output)));
+    expect(real.colony).toEqual(colony);
+    expect(real.monthEvents).toEqual(month);
   });
 });
