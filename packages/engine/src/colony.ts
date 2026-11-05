@@ -332,7 +332,7 @@ export function moodStep(h: number, target: number): number {
 }
 
 function clampMood(h: number): number {
-  return Math.max(0, Math.min(100, h));
+  return Math.max(0, Math.min(100, h)); // literal-ok: the mood's scale is 0..100 by definition (G-5 RULE-20)
 }
 
 /** An event's change to the mood, at once and uncapped; the only writer of happiness besides the monthly drift. */
