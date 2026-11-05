@@ -159,6 +159,10 @@ describe('B-AC-20 (AM-19): everyone taps Speed up, and the rest plays 3× faster
     const html = tvAt(month({ hurry: { asked: ['s1'], from: null } }), 2, undefined, 5_000_000, { players: three, away: ['s3'] });
     expect(html).toMatch(/1 of 2 asked to speed up\. Waiting for Ossa\./);
     expect(html).not.toMatch(/Waiting for[^<]*Brix/);
+    // Brix's drop leaves nobody to wait for until the server's speed-up arrives: no empty "Waiting for".
+    const both = tvAt(month({ hurry: { asked: ['s1', 's2'], from: null } }), 2, undefined, 5_000_000, { players: three, away: ['s3'] });
+    expect(both).toMatch(/2 of 2 asked to speed up/);
+    expect(both).not.toMatch(/Waiting for/);
   });
 
   it('once both have asked, the TV says so and its clock runs 3× from the moment they did', () => {

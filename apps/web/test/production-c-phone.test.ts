@@ -101,6 +101,11 @@ describe('B-AC-20 (AM-19): the phone asks to speed the show up', () => {
       createElement(ClientProvider, { client, children: createElement(PhoneGameProvider, { value: game(1, MID, month({ asked: [LENA], from: null }), { cast: withKai, away: ['s4'] }), children: createElement(Production, { production: month({ asked: [LENA], from: null }) }) }) }),
     );
     expect(text(html, 'speed-up-button')).toBe('⏩ Asked: 1 of 2');
+    // Her own phone, reconnecting, is still counted: never "Asked: 0 of 0".
+    const self = renderToStaticMarkup(
+      createElement(ClientProvider, { client, children: createElement(PhoneGameProvider, { value: game(1, MID, month({ asked: [LENA], from: null }), { cast: withKai, away: ['s4', LENA] }), children: createElement(Production, { production: month({ asked: [LENA], from: null }) }) }) }),
+    );
+    expect(text(self, 'speed-up-button')).toBe('⏩ Asked: 1 of 2');
   });
 
   it('a tap on ⏩ Speed up sends the hurry intent, and nothing else', () => {
