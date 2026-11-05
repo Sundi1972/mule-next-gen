@@ -256,7 +256,7 @@ describe("brain:trial tournament (WS1's bar for UBER-AC-A: --table pair, --seeds
     expect(calls()).toBe(0);
     expect(fs.readdirSync(dir)).toEqual([]);
     expect(report!.results.games).toBe(1);
-    expect(report!.bar).toEqual({ kind: 'control', verdict: tournamentBar(report!.results, true) });
+    expect(report!.bar).toEqual({ kind: 'control', verdict: tournamentBar(report!.results, true, 1) });
     expect(out.join('\n')).toContain('control: the Claude chairs play as engine seats');
   });
 
@@ -272,15 +272,18 @@ describe("brain:trial tournament (WS1's bar for UBER-AC-A: --table pair, --seeds
 
   it("TOURNEY-5: WS1's bar: the Claude chairs pass at 60% wins or more with a mean-rank lead of 0.3 or more, failing just short of either; the control passes at 45-55% wins within 0.15 mean rank, failing just outside", () => {
     expect([T.claim.winShare, T.claim.rankLead, T.control.winShareLow, T.control.winShareHigh, T.control.rankBand]).toEqual([0.6, 0.3, 0.45, 0.55, 0.15]);
-    expect(tournamentBar(results(60, 2.34375, 2.65625), false)).toBe('pass');
-    expect(tournamentBar(results(59, 2.34375, 2.65625), false)).toBe('fail');
-    expect(tournamentBar(results(80, 2.375, 2.625), false)).toBe('fail');
-    expect(tournamentBar(results(45, 2.4375, 2.5625), true)).toBe('pass');
-    expect(tournamentBar(results(55, 2.5625, 2.4375), true)).toBe('pass');
-    expect(tournamentBar(results(44, 2.5, 2.5), true)).toBe('fail');
-    expect(tournamentBar(results(56, 2.5, 2.5), true)).toBe('fail');
-    expect(tournamentBar(results(50, 2.40625, 2.59375), true)).toBe('fail');
-    expect(tournamentBar({ ...results(0, Number.NaN, Number.NaN), games: 0 }, false)).toBe('not proven');
+    expect(tournamentBar(results(60, 2.34375, 2.65625), false, 100)).toBe('pass');
+    expect(tournamentBar(results(59, 2.34375, 2.65625), false, 100)).toBe('fail');
+    expect(tournamentBar(results(80, 2.375, 2.625), false, 100)).toBe('fail');
+    expect(tournamentBar(results(45, 2.4375, 2.5625), true, 100)).toBe('pass');
+    expect(tournamentBar(results(55, 2.5625, 2.4375), true, 100)).toBe('pass');
+    expect(tournamentBar(results(44, 2.5, 2.5), true, 100)).toBe('fail');
+    expect(tournamentBar(results(56, 2.5, 2.5), true, 100)).toBe('fail');
+    expect(tournamentBar(results(50, 2.40625, 2.59375), true, 100)).toBe('fail');
+    expect(tournamentBar({ ...results(0, Number.NaN, Number.NaN), games: 0 }, false, 100)).toBe('not proven');
+    // WS1: 120 means 120. A game left unscored (unfinished, crashed, stopped) is not dropped uncharged: the bar is not proven.
+    expect(tournamentBar(results(90, 1.5, 3.5), false, 101)).toBe('not proven');
+    expect(tournamentBar(results(50, 2.5, 2.5), true, 101)).toBe('not proven');
   });
 
   it('TOURNEY-6: a pair report shows the bar row and both caps\' totals; a run without --table shows neither', () => {
@@ -292,8 +295,13 @@ describe("brain:trial tournament (WS1's bar for UBER-AC-A: --table pair, --seeds
     // One game, played to its end: both Claude chairs above both engine chairs, so ranks 1.5 against 3.5.
     expect(pair.bar).toEqual({ kind: 'claim', verdict: 'pass' });
     expect(trialReport({ ...input, stopped: 'cap', table: 'pair', control: false }).bar).toEqual({ kind: 'claim', verdict: 'not proven' });
+    // A crashed game counts in the planned games, unscored: the bar says how many.
+    const crashed = { ...game({}), id: 'g2', end: 'crashed' as const };
+    const short = trialReport({ ...input, planned: 2, games: [...input.games, crashed], table: 'pair', control: false });
+    expect(short.bar).toEqual({ kind: 'claim', verdict: 'not proven' });
+    expect(renderTrialReport(short)).toContainEqual(expect.stringMatching(/^WS1's bar \(UBER-AC-A result\)\s+NOT PROVEN: .*; unscored 1 of 2 planned$/));
     const text = renderTrialReport(pair);
-    expect(text).toContainEqual(expect.stringMatching(/^WS1's bar \(UBER-AC-A result\)\s+PASS: won 100\.0% of 1 games \(at least 60%\); mean rank lead 2\.00 \(at least 0\.30\)$/));
+    expect(text).toContainEqual(expect.stringMatching(/^WS1's bar \(UBER-AC-A result\)\s+PASS: won 100\.0% of 1 games \(at least 60%\); mean rank lead 2\.00 \(at least 0\.30\); unscored 0 of 1 planned$/));
     expect(text).toContainEqual(expect.stringMatching(new RegExp(`^Spend so far, every ledger\\s+PR-5 proofs \\$8\\.50 of \\$${BRAIN.proofCapUsd.toFixed(2).replace('.', '\\.')}; tournament \\$0\\.40 of \\$${T.capUsd.toFixed(2).replace('.', '\\.')}$`)));
     const plain = renderTrialReport(trialReport(input));
     expect(plain.some((l) => l.startsWith("WS1's bar") || l.startsWith('Spend so far'))).toBe(false);
