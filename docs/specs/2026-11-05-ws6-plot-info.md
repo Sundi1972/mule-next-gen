@@ -98,11 +98,14 @@ today        orderGeoDrone charges the fee and stores droneOrder; the land-grant
              sets droneFound and clears droneOrder. The planning view has no ground for the plots until then.
              anchors: packages/engine/src/game.ts::orderGeoDrone · game.ts::advancePhase (the `next === 'landGrant'` block)
              · packages/ai/src/actions.ts::DESCRIBED (the drone's words: "their ground is known from the land grant on")
+             · packages/ai/src/llm/moves-stub.ts, the drone line (on WS2's ws2-brain, not yet on trunk)
              verified_by: read (engine), executed (the real build)
 tomorrow     orderGeoDrone also adds the plots to the player's analysed and sets droneFound, at once; the server's next
              view carries their ground to that player only. droneOrder still marks the drone used until the land
-             grant clears it (one drone per planning). The land-grant step keeps clearing droneOrder; adding to
-             analysed there becomes a no-op. WS2's action text says the ground is known at once.
+             grant clears it (one drone per planning). The land-grant step only clears droneOrder: it no longer adds
+             to analysed or sets droneFound (game.ts::advancePhase, the `next === 'landGrant'` block), and the
+             comments on types.ts::droneOrder and types.ts::droneFound ("what droneOrder held when the land grant
+             started") say the results land at Scan. WS2's action text says the ground is known at once.
 logic        → §2 RULE-4 · evaluated_at: the drone intent · writes: player.analysed, droneFound, money, store capital
 seam         game.ts::orderGeoDrone — the one place a drone is paid for; the server's view already sends ground for analysed
 senior       junior would: a server-side "scan" event that pushes a report message · senior does: reuse analysed, the
@@ -112,7 +115,8 @@ call sites   apps/server/src/mule-game.ts (intent 'drone'); packages/ai/src/acti
 pin          one drone per planning ('A drone is already on its way'), the fee charged once, only free or listed plots:
              engine tests for orderGeoDrone; LandGrant.tsx::droneFoundLine still finds droneFound while a drone plot is lit
 depends_on   none
-atomicity    with WS2's DESCRIBED text (the AI is told the truth)
+atomicity    with WS2's drone text, actions.ts::DESCRIBED and llm/moves-stub.ts, changed in the SAME PR that makes the
+             game do it: Claude is never told something the game does not do yet
 ```
 
 ```
@@ -337,7 +341,9 @@ lands at the land grant (droneOrder is kept until then).
 
 ## §8 · Amendments `[review-only]`
 
-None yet.
+- 5 Nov, from the lane reads before approval: C1's land-grant step stops setting droneFound and the two types.ts
+  comments change (WS3); WS2's drone text includes llm/moves-stub.ts and ships in the same PR as the engine change
+  (WS2); R-1 records WS1's sim read (WS1).
 
 ## §9 · Ownership Boundaries
 
