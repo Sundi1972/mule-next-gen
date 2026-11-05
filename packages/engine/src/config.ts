@@ -258,16 +258,19 @@ export const START = {
    * prices Water at what colonists pay, so the seats build wells early. A few units more put the dry month past the
    * outlook, and the colonists go short later in the game. When this, START.colonists, UPKEEP.colonistGrowth or the
    * outlook changes, re-run `pnpm sim -- --games 40 --seed N --politics on|off` for seeds 1, 101 and 201 and read
-   * "Colonists short of Food or Water". Food is per seat (storeFoodPerPlayer); storeStockFor adds it.
+   * "Colonists short of Food or Water". Food and Energy are per seat (storeFoodPerPlayer, storeEnergyPerPlayer);
+   * storeStockFor adds them.
    */
-  storeStock: { water: 20, energy: 16, smithore: 20, crystite: 0, rareEarth: 4, alloy: 8, electronics: 0, medicine: 4 } satisfies Omit<Stock, 'food'>,
+  storeStock: { water: 20, smithore: 20, crystite: 0, rareEarth: 4, alloy: 8, electronics: 0, medicine: 4 } satisfies Omit<Stock, 'food' | 'energy'>,
   /** The store's Food at the start, for each seat: 4 (Heiko, 5 Nov), so 16 in a 4-seat game. */
   storeFoodPerPlayer: 4,
+  /** The store's Energy at the start, for each seat: 5 (Heiko, 5 Nov), so 20 in a 4-seat game. */
+  storeEnergyPerPlayer: 5,
 };
 
-/** The store's stock as a game of `players` seats starts: START.storeStock, with storeFoodPerPlayer Food for each seat. */
+/** The store's stock as a game of `players` seats starts: START.storeStock, with Food and Energy for each seat. */
 export function storeStockFor(players: number): Stock {
-  return { ...START.storeStock, food: players * START.storeFoodPerPlayer };
+  return { ...START.storeStock, food: players * START.storeFoodPerPlayer, energy: players * START.storeEnergyPerPlayer };
 }
 
 export const MULE = {
