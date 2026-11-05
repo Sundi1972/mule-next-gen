@@ -54,6 +54,45 @@ describe('a written playbook through the record and the replay', { timeout: 30_0
     await expect(replay(changed)).rejects.toThrow(/playbook differs/);
   });
 
+  it("B-AC-A2 (auction): a recorded game with a Claude-edited auction playbook replays with the key unset to the same game, calling no model; a changed entry diverges", async () => {
+    let edited: string | null = null;
+    const sdk = fakeSdk((_n, params) => {
+      const { user } = promptOf(params);
+      if (user.includes('Your draft auction:')) {
+        // The first good the brief offers: its hold, one unit lower.
+        const offered = (params.output_config?.format?.schema as { properties: { edits: { items: { anyOf: { properties: { path: { enum: string[] } } }[] } } } }).properties.edits.items.anyOf.map((v) => v.properties.path.enum[0]!);
+        edited = offered.find((p) => p.endsWith('/hold'))!;
+        return sdkMessage(JSON.stringify({ edits: [{ path: edited, to: 0, reason: 'Keep none.' }], line: '' }));
+      }
+      if (isWrite(params)) return sdkMessage(JSON.stringify({ edits: [], line: '' }));
+      return sdkMessage(JSON.stringify({ option: 'A', line: '' }));
+    });
+    const fake = fakeContext({ table: THREE });
+    const brain = createBrain({ gameId: 'g-playbook-auction', env: KEY, sdkFactory: () => sdk });
+    const { game, recorder } = createRecordedGame({ ctx: fake.ctx, seed: SEED, options: { maxMonths: 1, politics: false }, brain });
+    game.start(THREE);
+    expect((await runTable(game, fake, () => false)).at(-1)?.[1]).toBe('gameOver');
+    await vi.advanceTimersByTimeAsync(0);
+    vi.useRealTimers();
+    const record = JSON.parse(JSON.stringify(recorder.finished)) as GameRecord<MuleIntent>;
+
+    const auction = record.events.filter((e): e is PlaybookEntry => e.type === 'playbook' && e.phase === 'auction');
+    expect(edited, 'the auction brief offered a hold').not.toBeNull();
+    expect(auction.map((e) => [e.seat, e.month, e.playbook.by])).toEqual([['s3', 1, 'llm']]);
+    expect(auction[0]!.playbook.edits?.map((e) => e.path)).toEqual([edited]);
+    const calls = sdk.calls;
+
+    const result = await replay(record);
+    expect(result.identical).toBe(true);
+    expect(sdk.calls, 'the replay calls no model').toBe(calls);
+
+    // Positive control: the replay checks the auction playbook it adopts against the recorded entry.
+    const changed = structuredClone(record);
+    const entry = changed.events.find((e): e is PlaybookEntry => e.type === 'playbook' && e.phase === 'auction')!;
+    entry.playbook.edits = [];
+    await expect(replay(changed)).rejects.toThrow(/playbook differs/);
+  });
+
   /** When the write's reply is let go: before the land grant, after it started, or in its tick just before it starts. */
   type Release = 'beforeGrant' | 'afterGrant' | 'inGrantTick';
   const ROWS: { release: Release; by: 'llm' | 'engine'; recorded: 'reply' | 'no_reply'; answered: 'before' | 'after' }[] = [
