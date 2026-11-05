@@ -352,10 +352,11 @@ const GOOD_ROWS: Record<string, Row> = {
  * P12's floor: the units of a good the seat's auction hand keeps whatever hold it is handed (tradeOf keeps goodPlan's
  * floorUnits), at the good's own status screen. An auction part is validated once and played good by good, so a good
  * still in the queue is raised as goodPlan raises it when it is up (shortfallHold): what keeps it whole next month,
- * while it holds less and the store sells the good. A profile with no level reads next month's gross need.
+ * while it holds less and the store sells the good. A profile with no level reads next month's gross need, for
+ * STRATEGIST.buyShortfall's goods only, as the level's path raises them.
  */
 function sellerFloor(ctx: Ctx, good: Good): number {
-  if (!ctx.mind.level) return monthNeeds(ctx.state, ctx.seat)[good];
+  if (!ctx.mind.level) return STRATEGIST.buyShortfall.includes(good) ? monthNeeds(ctx.state, ctx.seat)[good] : 0;
   const obs = observe(ctx.state, ctx.seat);
   return Math.max(goodPlan(obs, ctx.mind, good).values.floorUnits, shortfallHold(obs, ctx.seat, good).mustHold);
 }
