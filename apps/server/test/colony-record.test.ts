@@ -25,6 +25,8 @@ describe('T-AC-30: the record replays the colony', () => {
       const inner = new MuleGame(recorder.ctx, 21, {
         ...options,
         brain: recorder.brain,
+        // As createRecordedGame wires it: the AI's playbooks belong to the record, or the replay finds ones it lacks.
+        recordPlaybook: (entry) => recorder.playbook(entry),
         onGameOver: (state) => {
           final = structuredClone(state);
           recorder.gameOver(state);
