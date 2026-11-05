@@ -551,7 +551,7 @@ export function advancePhase(state: GameState): void {
     collectLawTaxes(state);
     payGrant(state);
     payOffices(state);
-    runColony(state);
+    runColony(state, shortages);
     const report = state.history.at(-1);
     if (report) {
       report.shortages = shortages;
