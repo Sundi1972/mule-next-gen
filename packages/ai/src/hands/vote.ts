@@ -59,8 +59,6 @@ export class VoteHand {
   private acted = false;
   /** The election month it last decided its candidacy for. */
   private decidedFor: number | null = null;
-  /** The game's seed, read from the real state each tick: the council's stream is (seed, month, seat). */
-  private gameSeed = 0;
 
   constructor(
     readonly mind: Mind,
@@ -70,8 +68,6 @@ export class VoteHand {
   /** Call before stepElection, with the same (phaseScale-divided) dt. */
   tick(state: GameState, dt: number, act: Act): void {
     if (state.phase !== 'planning' || !state.politics) return;
-    // observe() hides the seed, so the council's stream takes the game's own here (HC-41).
-    this.gameSeed = state.seed;
     // The law ballot, once the election is over: it votes per RULE-46 and presses Done at once. Its draws come from
     // the council's own stream, so the election's seeded stream stays as it was (HC-41) and no ballot waits on an AI seat.
     const { council, election } = state.politics;
@@ -176,10 +172,13 @@ export class VoteHand {
     return others.length > 0 ? others : candidates;
   }
 
-  /** The council's own draws for this game, month and seat (slice 2a HC-41): the election's stream never moves for it. */
+  /**
+   * The council's own draws for this seat and month (slice 2a HC-41): the election's stream never moves for it. It
+   * hashes the seat's own seed (the mind's salt), never the game's: that one drives the game's dice, which observe() hides.
+   */
   private council(obs: GameState): Rng {
-    const seat = obs.players.findIndex((p) => p.id === this.mind.me);
-    return createRng(((this.gameSeed * 1_000_003) ^ (obs.month * 7_919) ^ (seat * 104_729)) >>> 0); // literal-ok: hashing constants (primes) that make one stream per game, month and seat
+    const seatSeed = (this.mind.salt ?? 0) ^ 0x2545f491; // literal-ok: a hash salt, so the council's stream is its own
+    return createRng((Math.imul(seatSeed, 1_000_003) ^ Math.imul(obs.month, 7_919)) >>> 0); // literal-ok: hashing constants (primes) that make one stream per seat and month
   }
 
   /** What a law costs a player a month: an enact at its setting, a repeal at the setting in force (slice 2a RULE-45). */
