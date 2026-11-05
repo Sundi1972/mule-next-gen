@@ -9,8 +9,9 @@ import type { ColonyView, MuleView } from '@mule/protocol';
 import { errors as playwrightErrors, type Page } from 'playwright';
 import { PHASE_MS } from '../../server/src/mule-game.js';
 import type { MuleServer } from '../../server/src/server.js';
-import { check, doneWithLand, held, launch, PHONE, startServer, TV } from './harness';
+import { check, doneWithLand, held, launch, PHONE, PHONE_SMALL, startServer, TV } from './harness';
 import { ELECTION_WAIT_MS, PRESS_MS, readyThroughTheElection, voteThroughTheElection } from './politics-steps';
+import { shownWhole, theTvHeaderFits } from './tv-fit-steps';
 
 const SCALE = 0.25;
 const within = (ms: number) => ms * SCALE + 5_000;
@@ -175,6 +176,8 @@ async function main(): Promise<void> {
 // Rooms keep their phase timers running after the test, so the process ends here.
 main()
   .then(theMonthEndsMoodDrift)
+  .then(theColonyScoreEveryMonthEnd)
+  .then(theMonthEndScoreAtSixSeats)
   .then(
   () => process.exit(0),
   (err: unknown) => {
@@ -283,6 +286,241 @@ async function theMonthEndsMoodDrift(): Promise<void> {
   } finally {
     await browser.close();
     await server.close();
+  }
+}
+
+/**
+ * B-AC-27-2 / B-AC-27-3 / B-AC-27-5 front to back (G-5 AM-12), a game of its own: three months, so month 2 has a month end
+ * with one before it. At month 1's end the TV shows the server's colony total and no change line; at month 2's end the
+ * change is the server's score.total − lastScore. The phone beside the TV carries the line, and on a 667 × 375 phone the
+ * league stays whole above it. In planning neither screen shows the month end's score.
+ */
+async function theColonyScoreEveryMonthEnd(): Promise<void> {
+  const SEED = seedFrom(process.env.MULE_E2E_SEED);
+  const { server, base } = await startServer({ maxMonths: 3, phaseScale: SCALE, seed: () => SEED });
+  const browser = await launch().catch(async (err: unknown) => {
+    await server.close();
+    throw err;
+  });
+  const errors: string[] = [];
+  try {
+    const phone = await (await browser.newContext(PHONE)).newPage();
+    phone.on('pageerror', (e) => errors.push(`phone: ${e.message}`));
+    await phone.goto(base);
+    await phone.getByPlaceholder('Heiko').fill('Lena');
+    await phone.getByRole('button', { name: 'Start a new game' }).click();
+    await phone.getByText("You're at the table").waitFor();
+    const code = (await phone.getByTestId('room-code').textContent())?.trim() ?? '';
+    await phone.getByRole('button', { name: 'Add AI player' }).click();
+    await phone.locator('[data-testid=seats] li').nth(1).waitFor();
+    const tv = await (await browser.newContext(TV)).newPage();
+    tv.on('pageerror', (e) => errors.push(`tv: ${e.message}`));
+    await tv.goto(`${base}/table?room=${code}`);
+    await tv.getByTestId('room-code').waitFor();
+    await phone.getByRole('button', { name: 'Start game' }).click();
+    const board = (): MuleView => {
+      const g = server.registry.get(code)?.viewFor(null).game;
+      check(g, `room ${code} has a game running`);
+      return g;
+    };
+    const colony = (): ColonyView => {
+      const c = board().colony;
+      check(c, 'the server plays with the colony (politics on)');
+      return c;
+    };
+    const band = tv.getByTestId('tv-monthend').getByTestId('colony-band');
+    const line = phone.locator('[data-phase=upkeep]').getByTestId('phone-month-score');
+    const throughTheMonth = async () => {
+      await readyThroughTheElection(phone, within(ELECTION_WAIT_MS) + PRESS_MS);
+      // B-AC-27-5: planning carries a score in the view, and no screen shows the month end's.
+      check(board().colony?.score != null, 'the server fills the colony score in planning too');
+      check((await tv.getByTestId('colony-band').count()) === 0 && (await phone.getByTestId('phone-month-score').count()) === 0, 'B-AC-27-5: in planning neither screen shows the month end’s colony score');
+      await doneWithLand(phone);
+      await throughTheLandAuction(phone, board);
+      await goToThePub(phone);
+      await pressDoneThroughTheAuction(phone, board);
+      await tv.getByTestId('tv-monthend').waitFor({ timeout: MONTH_END_MS });
+    };
+    const shownTotal = async () => Number((await band.getByTestId('colony-total').innerText({ timeout: PRESS_MS })).replace(/[^\d-]/g, ''));
+
+    // Month 1's end: the server's total, no last month, so no change line on either screen.
+    await throughTheMonth();
+    const first = colony();
+    check(first.score !== null && (first.lastScore ?? null) === null, `month 1 ends with a score and no lastScore, got ${JSON.stringify({ score: first.score, lastScore: first.lastScore })}`);
+    check((await shownTotal()) === first.score!.total, `B-AC-27-2: month 1's TV total is the server's ${first.score!.total}`);
+    check((await band.getByTestId('colony-score-change').count()) === 0, 'B-AC-27-2: month 1’s end has no change line');
+    await line.getByTestId('colony-total').filter({ hasText: fmt(first.score!.total) }).waitFor({ timeout: PRESS_MS });
+    check((await line.getByTestId('colony-score-change').count()) === 0, 'B-AC-27-3: month 1’s phone line has no change');
+    console.log(`✓ B-AC-27-2: month 1's end shows the server's colony score ${fmt(first.score!.total)} on the TV and the phone, with no change line`);
+
+    // B-AC-27-3 at 667 × 375: the line fits under the league, every league row whole and in view.
+    await phone.setViewportSize(PHONE_SMALL.viewport);
+    await line.waitFor({ timeout: PRESS_MS });
+    const fit = await phone.evaluate(() => {
+      // No named helpers in here: tsx wraps them in a __name the page doesn't have.
+      const end = document.querySelector('[data-phase=upkeep]');
+      const rows = [...(end?.querySelectorAll('[data-testid=league-table] tbody tr') ?? [])].map((r) => r.getBoundingClientRect());
+      const foot = end?.querySelector('[data-testid=colony-on-tv]')?.getBoundingClientRect() ?? null;
+      const table = end?.querySelector('[data-testid=league-table]');
+      // The innermost clipping box is the tightest bound the league's rows must fit in.
+      let clip: DOMRect | null = null;
+      for (let el = table?.parentElement; el && el !== end && !clip; el = el.parentElement) {
+        if (getComputedStyle(el).overflowY !== 'visible') clip = el.getBoundingClientRect();
+      }
+      return { rows: rows.map((r) => ({ top: r.top, bottom: r.bottom })), foot: foot && { top: foot.top, bottom: foot.bottom }, clipBottom: clip?.bottom ?? null, vh: innerHeight };
+    });
+    const lastRow = fit.rows.at(-1);
+    check(fit.rows.length === 2 && lastRow && fit.foot, `the phone's month end has the league's two rows and the colony line, got ${JSON.stringify(fit)}`);
+    check(lastRow.bottom <= fit.foot.top + 0.5, `B-AC-27-3: at 667×375 the colony line sits under the league, not over it: ${JSON.stringify(fit)}`);
+    check(lastRow.bottom <= (fit.clipBottom ?? fit.vh) + 0.5 && fit.foot.bottom <= fit.vh + 0.5, `B-AC-27-3: at 667×375 the league is whole and the line in view: ${JSON.stringify(fit)}`);
+    console.log(`✓ B-AC-27-3: at 667×375 the phone's league stays whole (last row ends ${lastRow.bottom.toFixed(0)} px) above the colony line (${fit.foot.top.toFixed(0)}–${fit.foot.bottom.toFixed(0)} px)`);
+    await phone.setViewportSize(PHONE.viewport);
+
+    // Month 2's end: the change is the server's score.total − lastScore, on the TV and the phone.
+    await phone.locator('[data-phase=upkeep]').getByTestId('ready').click({ timeout: MONTH_END_MS });
+    await phone.locator('[data-phase=planning]').waitFor({ timeout: MONTH_END_MS });
+    await throughTheMonth();
+    const now = colony();
+    check(now.score !== null && typeof now.lastScore === 'number', `month 2 ends with a score and last month's, got ${JSON.stringify({ score: now.score, lastScore: now.lastScore })}`);
+    const delta = now.score!.total - now.lastScore!;
+    const words = delta > 0 ? `↑ +${fmt(delta)}` : delta < 0 ? `↓ −${fmt(-delta)}` : '± 0';
+    check((await shownTotal()) === now.score!.total, `B-AC-27-2: month 2's TV total is the server's ${now.score!.total}`);
+    const change = (await band.getByTestId('colony-score-change').innerText({ timeout: PRESS_MS })).replace(/\s+/g, ' ').trim();
+    check(change === `${words} since month 1`, `B-AC-27-2: the TV's change is the server's ${now.score!.total} − ${now.lastScore} = "${words} since month 1", got "${change}"`);
+    const onPhone = (await line.getByTestId('colony-score-change').innerText({ timeout: PRESS_MS })).replace(/\s+/g, ' ').trim();
+    check(onPhone === change, `B-AC-27-3: the phone's change is the TV's "${change}", got "${onPhone}"`);
+    check((await band.getByTestId('colony-verdict').count()) === 0, 'B-AC-27-2: no verdict at a month end');
+    console.log(`✓ B-AC-27-2: month 2's end shows ${fmt(now.score!.total)} and "${change}" (server ${now.score!.total} − ${now.lastScore}) on the TV and the phone`);
+
+    check(errors.length === 0, `no page errors: ${errors.join('; ')}`);
+    console.log(`e2e colony score every month end: ok (room ${code}, seed ${SEED})`);
+  } catch (err) {
+    console.error(`e2e colony score every month end: FAILED (seed ${SEED})`);
+    if (errors.length > 0) console.error(`page errors: ${errors.join('; ')}`);
+    throw err;
+  } finally {
+    await browser.close();
+    await server.close();
+  }
+}
+
+/** Below this the month end's league is hard to read from the couch (WS4's fit condition for #416). */
+const COUCH_SCALE = 0.8;
+
+/**
+ * B-AC-27-2 at a full table (WS4's TV-FIT, 1920×1080): six seats, month 2's end, the colony band up under the league.
+ * Read on two TVs, the chat ticker full and empty: the header still fits, the band and the league show whole, and the
+ * log gives the month end's scale with and without the band, against COUCH_SCALE. `MULE_E2E_SHOTS=<dir>` saves both TVs.
+ */
+async function theMonthEndScoreAtSixSeats(): Promise<void> {
+  const SEED = seedFrom(process.env.MULE_E2E_SEED);
+  const { server, base } = await startServer({ maxMonths: 3, phaseScale: SCALE, seed: () => SEED });
+  const browser = await launch().catch(async (err: unknown) => {
+    await server.close();
+    throw err;
+  });
+  const errors: string[] = [];
+  try {
+    const phone = await (await browser.newContext(PHONE)).newPage();
+    phone.on('pageerror', (e) => errors.push(`phone: ${e.message}`));
+    await phone.goto(base);
+    await phone.getByPlaceholder('Heiko').fill('Lena');
+    await phone.getByRole('button', { name: 'Start a new game' }).click();
+    await phone.getByText("You're at the table").waitFor();
+    const code = (await phone.getByTestId('room-code').textContent())?.trim() ?? '';
+    for (let seat = 1; seat < 6; seat++) {
+      await phone.getByRole('button', { name: 'Add AI player' }).click();
+      await phone.locator('[data-testid=seats] li').nth(seat).waitFor();
+    }
+    const tv = await (await browser.newContext(TV)).newPage();
+    tv.on('pageerror', (e) => errors.push(`tv: ${e.message}`));
+    await tv.goto(`${base}/table?room=${code}`);
+    await tv.getByTestId('room-code').waitFor();
+    await phone.getByRole('button', { name: 'Start game' }).click();
+    const board = (): MuleView => {
+      const g = server.registry.get(code)?.viewFor(null).game;
+      check(g, `room ${code} has a game running`);
+      return g;
+    };
+    const throughTheMonth = async () => {
+      await readyThroughTheElection(phone, within(ELECTION_WAIT_MS) + PRESS_MS);
+      await doneWithLand(phone);
+      await throughTheLandAuction(phone, board);
+      await goToThePub(phone);
+      await pressDoneThroughTheAuction(phone, board);
+      await tv.getByTestId('tv-monthend').waitFor({ timeout: MONTH_END_MS });
+    };
+    await throughTheMonth();
+    await phone.locator('[data-phase=upkeep]').getByTestId('ready').click({ timeout: MONTH_END_MS });
+    await phone.locator('[data-phase=planning]').waitFor({ timeout: MONTH_END_MS });
+    await throughTheMonth();
+
+    check(board().month === 2 && board().players.length === 6, `month 2's end at six seats, got month ${board().month}, ${board().players.length} seats`);
+    // The full ticker: the TV that has watched the game. The empty one: a TV that joins now (the server replays no chat).
+    const fresh = await (await browser.newContext(TV)).newPage();
+    fresh.on('pageerror', (e) => errors.push(`fresh tv: ${e.message}`));
+    await fresh.goto(`${base}/table?room=${code}`);
+    for (const [page, name] of [
+      [tv, 'ticker-full'],
+      [fresh, 'ticker-empty'],
+    ] as const) {
+      const read = await readTheSixSeatMonthEnd(page, name);
+      console.log(`✓ B-AC-27-2: six seats, month 2's end, ${read}`);
+    }
+
+    check(errors.length === 0, `no page errors: ${errors.join('; ')}`);
+    console.log(`e2e colony six seats: ok (room ${code}, seed ${SEED})`);
+  } catch (err) {
+    console.error(`e2e colony six seats: FAILED (seed ${SEED})`);
+    if (errors.length > 0) console.error(`page errors: ${errors.join('; ')}`);
+    throw err;
+  } finally {
+    await browser.close();
+    await server.close();
+  }
+}
+
+/**
+ * The six-seat month end on one TV, once no event show covers it: the league's six rows and the band whole, the header
+ * fitting, the FitHeight scale settled; then the scale it would have without the band, and the chat lines showing.
+ */
+async function readTheSixSeatMonthEnd(tv: Page, name: string): Promise<string> {
+  const end = tv.getByTestId('tv-monthend');
+  const overlay = tv.getByTestId('tv-event-overlay');
+  for (let attempt = 0; ; attempt++) {
+    check(attempt < 5, `the ${name} TV shows its month end clear of any event show`);
+    await overlay.waitFor({ state: 'hidden', timeout: MONTH_END_MS + 20_000 });
+    await end.getByTestId('colony-band').getByTestId('colony-score-change').waitFor({ state: 'visible', timeout: MONTH_END_MS });
+    await end.getByTestId('league-table').waitFor({ state: 'visible', timeout: PRESS_MS });
+    check((await end.locator('[data-testid^=league-row-]').count()) === 6, 'six league rows on the TV');
+    const header = await theTvHeaderFits(tv, `six-seat month end (${name})`);
+    let scale = Number(await end.locator('[data-fit]').getAttribute('data-fit'));
+    for (let i = 0; i < 10; i++) {
+      await tv.waitForTimeout(300);
+      const again = Number(await end.locator('[data-fit]').getAttribute('data-fit'));
+      if (again === scale) break;
+      scale = again;
+    }
+    const parts = await end.evaluate((root) => {
+      const box = root.querySelector('[data-fit]')!;
+      const band = root.querySelector('[data-testid=colony-band]') as HTMLElement;
+      // The left column holds the league, then the band; the right column the colony panel and the build site.
+      const league = band.parentElement!.firstElementChild as HTMLElement;
+      const right = band.parentElement!.nextElementSibling as HTMLElement;
+      // The grid stretches the right column to the row; its content runs from its first child's top to its last's foot.
+      const first = right.firstElementChild as HTMLElement;
+      const last = right.lastElementChild as HTMLElement;
+      const lines = [...root.querySelectorAll('[data-testid^=chat-line-]')].filter((l) => (l as HTMLElement).checkVisibility()).length;
+      return { box: box.clientHeight, league: league.offsetHeight, band: band.offsetHeight, right: last.offsetTop + last.offsetHeight - first.offsetTop, lines };
+    });
+    await shownWhole(tv, `six-seat month end (${name})`, ['[data-testid=colony-band]', '[data-testid=league-table]']);
+    const shot = process.env.MULE_E2E_SHOTS ? `${process.env.MULE_E2E_SHOTS}/tv-monthend-six-seats-month2-${name}.png` : null;
+    if (shot) await tv.screenshot({ path: shot });
+    // A show that came up while it was read: read it again once it has gone.
+    if (await overlay.isVisible()) continue;
+    const without = Math.min(1, parts.box / Math.max(parts.league, parts.right));
+    const note = scale < COUCH_SCALE ? `; below the couch scale ${COUCH_SCALE}` : '';
+    return `${name} (${parts.lines} chat lines): scale ${scale.toFixed(3)} with the band, ${without.toFixed(3)} without (box ${parts.box} px, league ${parts.league}, band ${parts.band}, right column ${parts.right})${note}; TV-FIT ${header}${shot ? `; ${shot}` : ''}`;
   }
 }
 

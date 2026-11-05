@@ -3,7 +3,8 @@ import type { ColonyProjectView, ColonyView, MuleView, PlayerView } from '@mule/
 import { airBandStyle, cx, GoodIcon, PlayerMark, useEventReducedMotion } from '@mule/ui';
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { colonyVerdict, fmt, toSlot } from '../game/derive';
-import { league, winnerWords } from '../game/month-end';
+import { inCollapse, league, winnerWords } from '../game/month-end';
+import { ChangeTag } from './MonthEnd';
 import { MOOD, moodOf, type MoodBand, PERK, plaqueBoard, plaquesOf, scoreVerdict, scoreWords, STAGE, standingCount, type ColonyScore } from '../game/colony';
 
 /** The colony's parts at the TV's size and the phone's: its four gauges, its build site, and its score at game over. */
@@ -368,8 +369,11 @@ export function ColonyDeskCard({ view, action, className }: { view: MuleView; ac
 
 // --- The colony score ---------------------------------------------------------------------------------
 
-function Term({ label, value, size, testid, sign, tone }: { label: string; value: string; size: Size | 'hero'; testid: string; sign?: string; tone?: string }) {
-  const big = size === 'hero' ? 'text-5xl' : size === 'tv' ? 'text-3xl' : 'text-base';
+type SumSize = Size | 'hero' | 'band';
+const TERM_BIG: Record<SumSize, string> = { hero: 'text-5xl', tv: 'text-3xl', band: 'text-2xl', phone: 'text-base' };
+
+function Term({ label, value, size, testid, sign, tone }: { label: string; value: string; size: SumSize; testid: string; sign?: string; tone?: string }) {
+  const big = TERM_BIG[size];
   return (
     <span className="flex items-end gap-2" data-testid={testid}>
       {sign && <span className={cx('pb-1 font-mono text-ink-3', size === 'phone' ? 'text-sm' : 'text-2xl')}>{sign}</span>}
@@ -384,14 +388,14 @@ function Term({ label, value, size, testid, sign, tone }: { label: string; value
 }
 
 /** The sum as one line everyone can read across the room: wealth + environment + prestige, × the happiness factor. */
-export function ScoreSum({ score, colony, size }: { score: ColonyScore; colony: ColonyView; size: Size | 'hero' }) {
+export function ScoreSum({ score, colony, size }: { score: ColonyScore; colony: ColonyView; size: SumSize }) {
   const mood = moodOf(colony.gauges.band);
   if (size === 'phone') {
     // On a phone the sum is one line of numbers with the four names under it, so it never wraps mid-sum.
     const cells: [string, string, string, string | undefined][] = [
-      ['', `${score.wealth}`, 'Wealth', undefined],
-      ['+', `${score.environment}`, 'Env.', undefined],
-      ['+', `${score.prestige}`, 'Prestige', undefined],
+      ['', fmt(score.wealth), 'Wealth', undefined],
+      ['+', fmt(score.environment), 'Env.', undefined],
+      ['+', fmt(score.prestige), 'Prestige', undefined],
       ['×', score.factor.toFixed(2), mood.label, mood.tone],
     ];
     return (
@@ -410,9 +414,9 @@ export function ScoreSum({ score, colony, size }: { score: ColonyScore; colony: 
   }
   return (
     <span className="flex flex-wrap items-end gap-x-4 gap-y-2" data-testid="score-sum">
-      <Term size={size} testid="term-wealth" label="Wealth" value={`${score.wealth}`} />
-      <Term size={size} testid="term-environment" label="Environment" value={`${score.environment}`} sign="+" />
-      <Term size={size} testid="term-prestige" label="Prestige" value={`${score.prestige}`} sign="+" />
+      <Term size={size} testid="term-wealth" label="Wealth" value={fmt(score.wealth)} />
+      <Term size={size} testid="term-environment" label="Environment" value={fmt(score.environment)} sign="+" />
+      <Term size={size} testid="term-prestige" label="Prestige" value={fmt(score.prestige)} sign="+" />
       <Term size={size} testid="term-factor" label={mood.label} value={score.factor.toFixed(2)} sign="×" tone={mood.tone} />
     </span>
   );
@@ -430,7 +434,7 @@ export function ScoreHero({ colony, score, size, failed = false }: { colony: Col
       <span className={cx('flex gap-x-8 gap-y-4', hero ? 'flex-col' : 'flex-row flex-wrap items-end')}>
         <span className="flex items-baseline gap-4">
           <span data-num className={cx('font-mono font-bold leading-none', failed ? 'text-alert-ink' : 'text-holo', hero ? 'text-8xl' : 'text-6xl')} data-testid="colony-total">
-            {score.total}
+            {fmt(score.total)}
           </span>
           <span className="flex flex-col">
             <span className="label-caps text-sm!">Colony score</span>
@@ -483,6 +487,115 @@ export function PlaqueBoard({ colony, players, size, selfId }: { colony: ColonyV
         </li>
       ))}
     </ol>
+  );
+}
+
+// --- The month end ------------------------------------------------------------------------------------
+
+/** "↑ +2,069 since month 6": score.total − lastScore. Month 1 has no last month end, so no line. */
+function SinceLast({ score, last, month, size }: { score: ColonyScore; last: number | null; month: number; size: Size }) {
+  if (last === null) return null;
+  const tv = size === 'tv';
+  return (
+    <span className={cx('flex items-baseline whitespace-nowrap', tv ? 'gap-2' : 'gap-1')} data-testid="colony-score-change">
+      <ChangeTag change={score.total - last} className={tv ? 'text-2xl' : 'text-xs'} testid="colony-score-delta" />
+      <span className={cx('text-ink-3', tv ? 'text-lg' : 'text-[11px]')}>since month {month - 1}</span>
+    </span>
+  );
+}
+
+/** Collapse cuts every Worth, never the colony's score (RULE-25): said once, so a high score beside cut Worths reads right. */
+function NotCut({ size }: { size: Size }) {
+  return (
+    <span className={cx('text-ink-2', size === 'tv' ? 'text-base' : 'text-[11px] leading-tight')} data-testid="colony-score-uncut">
+      The Collapse cuts each Worth, not the colony’s score.
+    </span>
+  );
+}
+
+const monthScoreOf = (view: MuleView) => (view.colony?.score ? { colony: view.colony, score: view.colony.score, last: view.colony.lastScore ?? null } : null);
+
+/** The colony score under the league at a month end: the total, the change, the sum and its words. No verdict: that is game over's. */
+function MonthScoreBand({ view, colony, score, last }: { view: MuleView; colony: ColonyView; score: ColonyScore; last: number | null }) {
+  return (
+    <section className="relative flex shrink-0 flex-col gap-2 rounded-panel border border-holo-line bg-panel p-5" aria-label="The colony’s score" data-testid="colony-band" data-month={view.month}>
+      <header className="flex items-baseline justify-between gap-4">
+        <h2 className="label-caps text-sm!">Colony score · month {view.month}</h2>
+        <span className="text-lg text-ink-3">counted again at game over</span>
+      </header>
+      <div className="flex flex-wrap items-end gap-x-6 gap-y-2" data-testid="colony-score">
+        <span className="flex flex-col gap-1">
+          <span data-num className="font-mono text-6xl font-bold leading-none text-holo" data-testid="colony-total">
+            {fmt(score.total)}
+          </span>
+          <SinceLast score={score} last={last} month={view.month} size="tv" />
+        </span>
+        <ScoreSum score={score} colony={colony} size="band" />
+      </div>
+      <span className="text-base leading-snug text-ink-2" data-testid="colony-score-words">
+        {scoreWords(colony, score)}
+      </span>
+      {inCollapse(view) && <NotCut size="tv" />}
+    </section>
+  );
+}
+
+/** The TV month end's left column: the league (`children`) with the colony score under it, once the view carries one. */
+export function MonthScoreColumn({ view, children }: { view: MuleView; children: ReactNode }) {
+  const at = monthScoreOf(view);
+  if (!at) return children;
+  return (
+    <div className="flex min-h-0 flex-col gap-4">
+      {children}
+      <MonthScoreBand view={view} {...at} />
+    </div>
+  );
+}
+
+/** The phone's one line: "Colony score", the total and the change; `sum` adds the sum from 800 px of shell. */
+function PhoneMonthScore({ view, colony, score, last, sum = false, children }: { view: MuleView; colony: ColonyView; score: ColonyScore; last: number | null; sum?: boolean; children?: ReactNode }) {
+  const mood = moodOf(colony.gauges.band);
+  return (
+    <div className="flex min-w-0 flex-col gap-0.5" data-testid="phone-month-score">
+      <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">
+        <span className="label-caps text-[10px]!">Colony score</span>
+        <span data-num className="font-mono text-base font-bold leading-none text-holo" data-testid="colony-total">
+          {fmt(score.total)}
+        </span>
+        <SinceLast score={score} last={last} month={view.month} size="phone" />
+        {sum && (
+          <span data-num className="hidden whitespace-nowrap font-mono text-[11px] text-ink-2 @min-[800px]/shell:inline" data-testid="score-sum">
+            = {fmt(score.wealth)} + {fmt(score.environment)} + {fmt(score.prestige)} × <span className={mood.tone}>{score.factor.toFixed(2)}</span>
+          </span>
+        )}
+      </span>
+      {inCollapse(view) && <NotCut size="phone" />}
+      {children}
+    </div>
+  );
+}
+
+/** Beside a TV, the month end's footnote place: the colony line once the view carries a score, else `children` (today's footnote). */
+export function PhoneMonthScoreNote({ view, children }: { view: MuleView; children: ReactNode }) {
+  const at = monthScoreOf(view);
+  if (!at) return children;
+  return (
+    <div className="mt-auto" data-testid="colony-on-tv">
+      <PhoneMonthScore view={view} {...at}>
+        <span className="text-[11px] leading-snug text-ink-3">Its sum is on the TV; your own lines are beside, yours only.</span>
+      </PhoneMonthScore>
+    </div>
+  );
+}
+
+/** With no TV, the colony line heading the colony panel, the sum on it where the phone is wide enough. */
+export function PhoneMonthScoreHead({ view }: { view: MuleView }) {
+  const at = monthScoreOf(view);
+  if (!at) return null;
+  return (
+    <div className="mb-1 rounded-panel border border-holo-line bg-panel px-2.5 py-1">
+      <PhoneMonthScore view={view} {...at} sum />
+    </div>
   );
 }
 
@@ -559,7 +672,7 @@ export function PhoneColonyScore({ view, colony, selfId, className }: { view: Mu
         <>
           <span className="flex items-baseline gap-2">
             <span data-num className={cx('font-mono text-2xl font-bold leading-none', failed.failed ? 'text-alert-ink' : 'text-holo')} data-testid="colony-total">
-              {score.total}
+              {fmt(score.total)}
             </span>
             <span className="flex flex-col">
               <span className="label-caps text-[10px]!">Colony score</span>
