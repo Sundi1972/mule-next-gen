@@ -204,20 +204,30 @@ export interface EnergyOffPlot {
  * stock is no working plot and is left out. `cold` multiplies every use; by default it is the cold snap's factor if
  * one is among this month's filed events.
  */
-export function energyOffOrder(state: GameState, playerId: string, cold?: number): EnergyOffPlot[] {
-  throw new Error('NotImplemented: energyOffOrder');
+export function energyOffOrder(state: GameState, playerId: string, cold = coldFactor(state.monthEvents)): EnergyOffPlot[] {
+  const owner = state.players.find((p) => p.id === playerId);
+  if (!owner) return [];
+  const at = new Map(state.tiles.map((t, i) => [t, i]));
+  const worth = (p: EnergyOffPlot) => state.store.posted[p.tile.outfit as Good] * p.full;
+  return state.tiles
+    .filter((t) => t.owner === playerId && t.outfit && t.outfit !== 'energy' && t.outfit !== 'greenBelt')
+    .filter((t) => !isFactory(t.outfit!) || hasStock(owner.stock, feedOf(t.outfit)))
+    .map((tile) => ({
+      tile,
+      use: energyUseOf(state, tile) * cold,
+      full: isFactory(tile.outfit!) ? factoryFit(state, tile, tile.outfit, playerId).output : rawOutput(state, tile),
+    }))
+    .sort((a, b) => b.use - a.use || worth(a) - worth(b) || at.get(a.tile)! - at.get(b.tile)!);
 }
 
-/**
- * The plots an owner turns off this month for want of Energy (AM-17): its working plots but the Energy plots, raw and
- * factories in one list, biggest use first, then the one whose full output is worth least at the store's posted
- * price, then tile order; off from the front until the uses of the rest fit `stock`.
- */
-function turnedOff(state: GameState, plots: { tile: Tile; use: number; full: number }[], stock: number): Set<Tile> {
-  const at = (t: Tile) => state.tiles.indexOf(t);
-  const worth = (p: { tile: Tile; full: number }) => state.store.posted[p.tile.outfit as Good] * p.full;
-  const order = [...plots].sort((a, b) => b.use - a.use || worth(a) - worth(b) || at(a.tile) - at(b.tile));
-  let need = plots.reduce((n, p) => n + p.use, 0);
+/** The factor every Energy use is multiplied by when a cold snap is among `events`, else 1. */
+function coldFactor(events: readonly MonthEvent[]): number {
+  return events.some((e) => e.key === 'coldSnap') ? EVENTS.colony.coldSnap.factor : 1;
+}
+
+/** The plots turned off from the front of `order` (energyOffOrder) until the uses of the rest fit `stock` (AM-17). */
+function turnedOff(order: readonly EnergyOffPlot[], stock: number): Set<Tile> {
+  let need = order.reduce((n, p) => n + p.use, 0);
   const off = new Set<Tile>();
   for (const p of order) {
     if (need <= stock) break;
@@ -273,7 +283,7 @@ export function runProduction(state: GameState): {
   const events = rollPhase(state, 'production');
   applyEvents(state, events);
   // A cold snap multiplies every plot's Energy need for this run only.
-  const cold = events.some((e) => e.key === 'coldSnap') ? EVENTS.colony.coldSnap.factor : 1;
+  const cold = coldFactor(events);
   const reaching = new Map<number, { key: EventKey; plot: MonthEvent['plots'][number] }[]>();
   for (const { key, plots } of events) {
     for (const plot of plots) {
@@ -317,16 +327,9 @@ export function runProduction(state: GameState): {
   const off = new Set<Tile>();
   const listed = new Set<Tile>();
   for (const owner of state.players) {
-    const plots = working
-      .filter((t) => t.owner === owner.id && t.outfit !== 'energy' && t.outfit !== 'greenBelt')
-      .filter((t) => !isFactory(t.outfit!) || hasStock(owner.stock, feedOf(t.outfit)))
-      .map((tile) => ({
-        tile,
-        use: use(tile),
-        full: isFactory(tile.outfit!) ? factoryFit(state, tile, tile.outfit, owner.id).output : rawOutput(state, tile),
-      }));
-    for (const { tile } of plots) listed.add(tile);
-    for (const tile of turnedOff(state, plots, owner.stock.energy)) off.add(tile);
+    const order = energyOffOrder(state, owner.id, cold);
+    for (const { tile } of order) listed.add(tile);
+    for (const tile of turnedOff(order, owner.stock.energy)) off.add(tile);
   }
 
   // Who is short of Water is decided before anything runs, so a well
