@@ -184,6 +184,11 @@ function mount(view: MuleView): void {
   act(() => root!.render(onPhone(view, ColonyWithFacts)));
 }
 
+/** Draws the mounted desk again from a new view, as a broadcast does. */
+function rerender(view: MuleView): void {
+  act(() => root!.render(onPhone(view, ColonyWithFacts)));
+}
+
 afterEach(() => {
   const r = root;
   if (r) act(() => r.unmount());
@@ -253,6 +258,12 @@ describe('C35: the Governor commissions a project (B-AC-35-1)', () => {
     expect(text('commission-confirm-line')).toBe('Commission the Park: 420 cr and 2 Alloy, from the fund and donations');
     tap('commission-go');
     expect(sent).toEqual([{ type: 'commission', id: 'park' }]);
+    expect(has('commission-news'), 'no news before the server has the project').toBe(false);
+    // Refused: the server's next view still has no park, so still no news.
+    rerender(game(colonyOf([])));
+    expect(has('commission-news'), 'no news for a refused commission').toBe(false);
+    rerender(game(colonyOf([project('park', 'commissioned')])));
+    expect(text('commission-news')).toBe('News: Lena commissions a Park');
   });
 
   it('B-AC-35-1: a phone that is not the Governor has no Commission button', () => {
@@ -403,6 +414,12 @@ describe('C35: the Governor repairs (B-AC-35-4)', () => {
     expect(off('repair-button-park')).toBe(false);
     tap('repair-button-park');
     expect(sent).toEqual([{ type: 'repair', id: 'park' }]);
+    // At the boundary: a fund of exactly the repair's cost can pay it.
+    rerender(game(colonyOf([project('park', 'damaged')], { fund: PRESTIGE.park.repairCost })));
+    expect(off('repair-button-park'), 'fund === cost').toBe(false);
+    expect(has('repair-short-park')).toBe(false);
+    tap('repair-button-park');
+    expect(sent).toEqual([{ type: 'repair', id: 'park' }, { type: 'repair', id: 'park' }]);
   });
 
   it("B-AC-35-4: when the fund can't afford it the button is off, with RULE-21's words", () => {
