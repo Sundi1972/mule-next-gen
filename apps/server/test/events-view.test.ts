@@ -88,20 +88,23 @@ const fourSeats = [
 // The seats (even their names) and the AIs' play move what fires, so these months hold only for fourSeats, and only for
 // the AIs and rules of their day: trunk's AI and rules changes (WS3's A-7, WS4's A-1, WS6's #218) moved what seed 26 fired,
 // and the slower auction walk and trade pace (#376, 5 Nov) moved seed 404's pest swarm: re-searched over seeds 1-120.
+// With trunk's batch 33 no seed of 1-60 fires both a comet pass with a pest swarm and a comet pass alone, so the lone
+// comet has a seed of its own (searched over seeds 1-60, months 1-10).
 const REAL_SEED = 17;
 /** Production fires a colony comet pass, then a personal pest swarm. */
 const TWO_EVENT_MONTH = 6;
-/** Production fires a colony comet pass and nothing else. */
-const ONE_EVENT_MONTH = 5;
+/** On ONE_EVENT_SEED, production fires a colony comet pass and nothing else. */
+const ONE_EVENT_SEED = 10;
+const ONE_EVENT_MONTH = 2;
 /** Nothing fires all month. */
 const QUIET_MONTH = 3;
 
 /**
- * Plays REAL_SEED on the fake clock through production of `lastMonth`, humans pressing Ready where the game waits and
+ * Plays `seed` on the fake clock through production of `lastMonth`, humans pressing Ready where the game waits and
  * nothing else, the engine's reports untouched. Returns, for each month, its production report and the production view
  * and length the moment production was announced.
  */
-function playRealMonths(lastMonth: number) {
+function playRealMonths(seed: number, lastMonth: number) {
   const months = new Map<number, { view: MuleView; at: number; report: MonthReport }>();
   let game: MuleGame | null = null;
   const fake = fakeContext({
@@ -114,7 +117,7 @@ function playRealMonths(lastMonth: number) {
       months.set(view.month, { view, at, report: structuredClone(state.history.at(-1)!) });
     },
   });
-  game = new MuleGame(fake.ctx, REAL_SEED);
+  game = new MuleGame(fake.ctx, seed);
   game.start(fourSeats);
   for (let i = 0; i < 1_000_000 && !months.has(lastMonth); i++) {
     const phase = game.viewFor(null).phase;
@@ -124,21 +127,25 @@ function playRealMonths(lastMonth: number) {
   }
   return (month: number) => {
     const seen = months.get(month);
-    if (!seen) throw new Error(`seed ${REAL_SEED} never reached production of month ${month}`);
+    if (!seen) throw new Error(`seed ${seed} never reached production of month ${month}`);
     return { report: seen.report, view: seen.view, at: seen.at, production: seen.view.production!, length: seen.view.phaseEndsAt! - seen.at };
   };
 }
 
-/** REAL_SEED's months, played once for every block that reads them: five months on the fake clock take seconds. */
+/** Each seed's months, played once for every block that reads them: six months on the fake clock take seconds. */
 let realMonths: ReturnType<typeof playRealMonths> | null = null;
-const playedMonths = () => (realMonths ??= playRealMonths(Math.max(TWO_EVENT_MONTH, ONE_EVENT_MONTH, QUIET_MONTH)));
+const playedMonths = () => (realMonths ??= playRealMonths(REAL_SEED, Math.max(TWO_EVENT_MONTH, QUIET_MONTH)));
+let loneMonths: ReturnType<typeof playRealMonths> | null = null;
+const playedLone = () => (loneMonths ??= playRealMonths(ONE_EVENT_SEED, ONE_EVENT_MONTH));
 /** Room for five months under a loaded full run, past the 10 s a hook gets by default. */
 const PLAY_MONTHS_MS = 60_000;
 
 describe('the event show on real engine months: the view plays exactly what the month report fired', () => {
   let month: ReturnType<typeof playRealMonths>;
+  let lone: ReturnType<typeof playRealMonths>;
   beforeAll(() => {
     month = playedMonths();
+    lone = playedLone();
   }, PLAY_MONTHS_MS);
 
   it('T-AC-1, T-AC-2: a real month firing comet pass and pest swarm runs production its show, the events 14 000 ms of it, each event its own share', () => {
@@ -159,7 +166,7 @@ describe('the event show on real engine months: the view plays exactly what the 
   });
 
   it('T-AC-1, T-AC-2: a real month firing only a comet pass runs production its show, the comet a 7 000 ms headline', () => {
-    const { report, production, length } = month(ONE_EVENT_MONTH);
+    const { report, production, length } = lone(ONE_EVENT_MONTH);
     expect(report.events?.map((e) => e.key)).toEqual(['cometPass']);
     expect(production.events.map(({ key, weight, playMs }) => ({ key, weight, playMs }))).toEqual([{ key: 'cometPass', weight: 'headline', playMs: 7_000 }]);
     expect(production.introMs).toBe(1_800);
@@ -264,8 +271,10 @@ describe('the event show: production lasts long enough for every event, and the 
 
 describe('T-AC-10: the view carries the current phase\'s events, when their show starts and how long it plays', () => {
   let month: ReturnType<typeof playRealMonths>;
+  let lone: ReturnType<typeof playRealMonths>;
   beforeAll(() => {
     month = playedMonths();
+    lone = playedLone();
   }, PLAY_MONTHS_MS);
 
   it('T-AC-10: the view carries the phase\'s events with startsAt and showMs: a real comet pass and pest swarm, as production lists them', () => {
@@ -294,7 +303,7 @@ describe('T-AC-10: the view carries the current phase\'s events, when their show
   });
 
   it('T-AC-10: the view carries the phase\'s events with startsAt and showMs: a real lone comet pass', () => {
-    const { view, at, production } = month(ONE_EVENT_MONTH);
+    const { view, at, production } = lone(ONE_EVENT_MONTH);
     expect(view.events).toEqual(production.events);
     expect(view.events!.map((e) => e.key)).toEqual(['cometPass']);
     const from = eventsAt(production);
