@@ -387,13 +387,29 @@ async function checkTheScoresAddUp(phone: Page, tv: Page): Promise<void> {
   // The band as the TV's air gauge names it, which everyone in the room reads.
   const gauge = (await tvEnd.getByText(/^\d+ · (CLEAN|SMOGGY|TOXIC|COLLAPSE)$/).textContent()) ?? '';
   const expected = gauge.endsWith('COLLAPSE') ? 'failed' : 'passed';
-  for (const [screen, verdict] of [
-    ['phone', end.getByTestId('verdict')],
-    ['TV', tvEnd.getByTestId('tv-verdict')],
-  ] as const) {
+  // With politics on, the colony's score card (phone) and band (TV) take the verdict's place (C34) and carry a failed
+  // colony as data-failed, with the verdict's words in alert; with politics off the verdict cards are today's.
+  const colony = (await tvEnd.getByTestId('colony-band').count()) > 0;
+  for (const [screen, verdict] of colony
+    ? ([
+        ['phone', end.getByTestId('phone-colony-score')],
+        ['TV', tvEnd.getByTestId('colony-band')],
+      ] as const)
+    : ([
+        ['phone', end.getByTestId('verdict')],
+        ['TV', tvEnd.getByTestId('tv-verdict')],
+      ] as const)) {
     // As read on screen: textContent runs the title into the gauge ("passedColony air"), innerText keeps them apart.
     const text = await verdict.innerText();
-    const says = /\bfailed\b/.test(text) ? 'failed' : /\bpassed\b/.test(text) ? 'passed' : 'neither';
+    const says = colony
+      ? (await verdict.getAttribute('data-failed')) === 'true'
+        ? 'failed'
+        : 'passed'
+      : /\bfailed\b/.test(text)
+        ? 'failed'
+        : /\bpassed\b/.test(text)
+          ? 'passed'
+          : 'neither';
     check(says === expected, `B-AC-3: the ${screen} verdict reads "${says}", but the TV's air gauge shows ${gauge}: "${text}"`);
   }
   check(expected === 'failed' || cut === 0, `B-AC-3: the colony passed, yet the phone shows a Collapse line of ${cut}`);

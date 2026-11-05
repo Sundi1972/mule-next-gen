@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  newPolitics,
   advancePhase,
   analysePlot,
   analysisSeconds,
@@ -462,6 +463,18 @@ const TABLE: Row[] = [
     game: (s) => void Object.assign(a(s), { carriedMule: 'empty', money: outfitCostFor(s, 'a', 'energy') - 3 }),
     reach: (s) => ({ kind: 'outfit', enabled: false, good: 'energy', cost: outfitCostFor(s, 'a', 'energy'), why: { kind: 'money', short: 3 } }),
     words: (s) => words('OUTFIT · ENERGY', `${outfitCostFor(s, 'a', 'energy')} cr · 3 short`, false),
+    press: 'nothing',
+  },
+  {
+    row: '8, the emission cap with the air above it: a Rare earth outfit disabled, with the cap (WS7 slice 2a C42)',
+    at: () => inHall('rareEarth'),
+    game: (s) => {
+      a(s).carriedMule = 'empty';
+      s.politics = { ...(s.politics ?? newPolitics()), laws: { emissionCap: { setting: 50, since: 1 } } };
+      s.air = 55;
+    },
+    reach: (s) => ({ kind: 'outfit', enabled: false, good: 'rareEarth', cost: outfitCostFor(s, 'a', 'rareEarth'), why: { kind: 'capped', level: 50, air: 55 } }),
+    words: (s) => words('OUTFIT · RARE EARTH', `${outfitCostFor(s, 'a', 'rareEarth')} cr · cap 50, air 55`, false),
     press: 'nothing',
   },
   ...(['alloy', 'electronics', 'medicine'] as const).map(

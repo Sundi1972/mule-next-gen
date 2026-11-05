@@ -1,15 +1,25 @@
 import {
   canRun,
+  commissionRefusal,
+  createRng,
+  lawImpact,
+  moodBand,
   nextElectionMonth,
   observe,
   PERCENT,
   plotsOwned,
   POLITICS,
+  PRESTIGE,
+  score,
   taxBounds,
   type AiPersonaId,
+  type Council,
   type Election,
   type GameState,
+  type LawId,
+  type LawProposal,
   type Office,
+  type PrestigeId,
   type Rng,
   type TaxPromise,
 } from '@mule/engine';
@@ -58,6 +68,18 @@ export class VoteHand {
   /** Call before stepElection, with the same (phaseScale-divided) dt. */
   tick(state: GameState, dt: number, act: Act): void {
     if (state.phase !== 'planning' || !state.politics) return;
+    // The law ballot, once the election is over: it votes per RULE-46 and presses Done at once. Its draws come from
+    // the council's own stream, so the election's seeded stream stays as it was (HC-41) and no ballot waits on an AI seat.
+    const { council, election } = state.politics;
+    if (council?.stage === 'ballot' && (!election || election.stage === 'over')) {
+      if (!council.done.includes(this.mind.me)) {
+        if (council.ballots[this.mind.me] === undefined) act({ type: 'voteLaw', yes: this.lawVote(observe(state, this.mind.me), council) });
+        act({ type: 'done', done: true });
+      }
+      return;
+    }
+    // The reveal: votes are still open, so the Governor waits it out rather than spend its month's turn on refusals.
+    if (council?.stage === 'reveal') return;
     const stage: Election['stage'] | 'none' = state.politics.election?.stage ?? 'none';
     const key = `${state.month}:${stage}`;
     if (key !== this.key) {
@@ -124,7 +146,7 @@ export class VoteHand {
       const candidates = election.candidates[office];
       // literal-ok: an office is contested only with two or more candidates, a definition
       if (candidates.length < 2) continue;
-      act({ type: 'vote', office, candidate: this.choose(obs, candidates) });
+      act({ type: 'vote', office, candidate: this.choose(obs, candidates, office) });
     }
   }
 
@@ -132,12 +154,105 @@ export class VoteHand {
    * Itself if it runs; a Rookie's seeded guess; else the smallest landowner, so the table leans against the leader.
    * A tie is a seeded draw, not the lower seat: in month 1 nobody owns land (AM-10). A lone minimum draws nothing.
    */
-  private choose(obs: GameState, candidates: readonly string[]): string {
+  private choose(obs: GameState, candidates: readonly string[], office: Office): string {
     if (candidates.includes(this.mind.me)) return this.mind.me;
-    if (this.mind.levelId === 'rookie') return this.rng.pick(candidates);
-    const fewest = Math.min(...candidates.map((id) => plotsOwned(obs, id)));
-    const tied = candidates.filter((id) => plotsOwned(obs, id) === fewest);
+    const pool = this.leanAgainst(obs, candidates, office);
+    if (this.mind.levelId === 'rookie') return this.rng.pick(pool);
+    const fewest = Math.min(...pool.map((id) => plotsOwned(obs, id)));
+    const tied = pool.filter((id) => plotsOwned(obs, id) === fewest);
     return tied.length === 1 ? tied[0]! : this.rng.pick(tied);
+  }
+
+  /** G-5 C25: in the bands POLITICS.ai.colony.leanIn it will not back the sitting Governor while anyone else runs. */
+  private leanAgainst(obs: GameState, candidates: readonly string[], office: Office): readonly string[] {
+    const sitting = obs.politics!.governor;
+    const unhappy = obs.colony !== null && POLITICS.ai.colony.leanIn.includes(moodBand(obs.colony.happiness));
+    if (office !== 'governor' || !unhappy || sitting === null || !candidates.includes(sitting)) return candidates;
+    const others = candidates.filter((id) => id !== sitting);
+    return others.length > 0 ? others : candidates;
+  }
+
+  /**
+   * The council's own draws for this seat and month (slice 2a HC-41): the election's stream never moves for it. It
+   * hashes the seat's own seed (the mind's salt), never the game's: that one drives the game's dice, which observe() hides.
+   */
+  private council(obs: GameState): Rng {
+    const seatSeed = (this.mind.salt ?? 0) ^ 0x2545f491; // literal-ok: a hash salt, so the council's stream is its own
+    return createRng((Math.imul(seatSeed, 1_000_003) ^ Math.imul(obs.month, 7_919)) >>> 0); // literal-ok: hashing constants (primes) that make one stream per seat and month
+  }
+
+  /** What a law costs a player a month: an enact at its setting, a repeal at the setting in force (slice 2a RULE-45). */
+  private lawCost(obs: GameState, proposal: LawProposal, playerId: string): number {
+    const setting = proposal.kind === 'enact' ? proposal.setting : obs.politics!.laws[proposal.law]?.setting;
+    if (setting === undefined) return 0;
+    return lawImpact(obs, { kind: 'enact', law: proposal.law, setting })[playerId]?.cost ?? 0;
+  }
+
+  /** RULE-46's vote rows. */
+  private lawVote(obs: GameState, council: Readonly<Council>): boolean {
+    const me = this.mind.me;
+    const { proposal } = council;
+    const politics = obs.politics!;
+    if (politics.governor === me) return true;
+    if (proposal.kind === 'enact' && proposal.law === 'landTax' && politics.baron === me) return false;
+    if (this.mind.levelId === 'rookie') return this.council(obs).chance(POLITICS.ai.council.rookieYes);
+    const costs = obs.players.map((p) => this.lawCost(obs, proposal, p.id)).sort((a, b) => a - b);
+    const half = Math.floor(costs.length / 2); // literal-ok: the middle of a list
+    const median = costs.length % 2 === 1 ? costs[half]! : (costs[half - 1]! + costs[half]!) / 2; // literal-ok: odd or even count
+    const mine = this.lawCost(obs, proposal, me);
+    return proposal.kind === 'enact' ? mine <= median : mine > median;
+  }
+
+  /** RULE-46's proposal: the law that costs the leader most against itself, put at its middle setting, or a repeal. */
+  private proposeLaw(obs: GameState, act: Act): void {
+    const me = this.mind.me;
+    const politics = obs.politics!;
+    if (politics.proposal) return;
+    const others = obs.players.filter((p) => p.id !== me);
+    if (others.length === 0) return;
+    const leader = others.reduce((best, p) => (score(obs, p.id) > score(obs, best.id) ? p : best)).id;
+    const { minGap, proposeChance } = POLITICS.ai.council;
+    const { retryMonths, maxInForce } = POLITICS.council;
+    const waiting = (proposal: LawProposal) => {
+      const failedIn = politics.failed[`${proposal.kind}:${proposal.law}`];
+      return failedIn !== undefined && obs.month <= failedIn + retryMonths;
+    };
+    const candidates: { proposal: LawProposal; gain: number }[] = [];
+    for (const law of Object.keys(POLITICS.laws) as LawId[]) {
+      const inForce = politics.laws[law];
+      const { settings } = POLITICS.laws[law];
+      const proposal: LawProposal = inForce
+        ? { kind: 'repeal', law }
+        : { kind: 'enact', law, setting: settings[Math.floor(settings.length / 2)]! }; // literal-ok: the middle setting
+      if (waiting(proposal)) continue;
+      const [self, lead] = [this.lawCost(obs, proposal, me), this.lawCost(obs, proposal, leader)];
+      candidates.push({ proposal, gain: inForce ? self - lead : lead - self });
+    }
+    const best = candidates.reduce<{ proposal: LawProposal; gain: number } | null>((b, c) => (b === null || c.gain > b.gain ? c : b), null);
+    if (!best || best.gain < minGap || !this.council(obs).chance(proposeChance[this.persona])) return;
+    let proposal = best.proposal;
+    if (proposal.kind === 'enact' && Object.keys(politics.laws).length >= maxInForce) {
+      const inForce = Object.keys(politics.laws) as LawId[];
+      const dearest = inForce.reduce((a, b) => (this.lawCost(obs, { kind: 'repeal', law: b }, me) > this.lawCost(obs, { kind: 'repeal', law: a }, me) ? b : a));
+      proposal = { ...proposal, replaces: dearest };
+    }
+    act({ type: 'propose', proposal });
+  }
+
+  /** G-5 C25: an AI Governor pays a strike it can afford and commissions the most prestige the fund can pay for, by persona. */
+  private colonyActs(obs: GameState, act: Act): void {
+    const colony = obs.colony;
+    if (!colony) return;
+    const { commissions, paysStrike } = POLITICS.ai.colony;
+    const strike = colony.strike;
+    let fund = obs.treasury.money;
+    if (strike && strike.month === obs.month && !strike.paid && paysStrike[this.persona] && fund >= strike.cost && act({ type: 'payStrike' })) fund -= strike.cost;
+    if (!commissions[this.persona]) return;
+    // Plot-free objects only, until the AI Governor bids for a site (a later C25 step).
+    const choices = (Object.keys(PRESTIGE) as PrestigeId[])
+      .filter((id) => !PRESTIGE[id].needsPlot && PRESTIGE[id].credits <= fund && commissionRefusal(obs, id) === null)
+      .sort((a, b) => PRESTIGE[b].prestige - PRESTIGE[a].prestige || PRESTIGE[a].credits - PRESTIGE[b].credits);
+    if (choices[0]) act({ type: 'commission', id: choices[0] });
   }
 
   private govern(obs: GameState, act: Act): void {
@@ -145,5 +260,7 @@ export class VoteHand {
     const current = Math.round(obs.treasury.salesTax * PERCENT);
     const next = nextTax(current, POLITICS.ai.taxTarget[this.persona], obs.treasury.money, taxBounds(obs), obs.month);
     if (next !== current) act({ type: 'setTax', percent: next });
+    this.proposeLaw(obs, act);
+    this.colonyActs(obs, act);
   }
 }
