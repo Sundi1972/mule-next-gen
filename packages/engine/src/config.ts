@@ -1052,11 +1052,13 @@ export const WALK = {
    * While a buyer and a seller (or a player and the store or the ship) stay
    * matched, the first unit takes tradeStartMs, each further one tradeSpeedUp
    * times as long as the one before, down to tradeFloorMs, so big lots don't
-   * take ages. The speed-up starts again when the pair separates.
+   * take ages. The speed-up starts again when the pair separates. 1000 and 200, from 400 and 60: start slow, about one
+   * unit a second, then faster to at most 5 a second, about 7 units in (Heiko at the table, 5 Nov; guess numbers, to be
+   * tested).
    */
-  tradeStartMs: 400,
+  tradeStartMs: 1_000,
   tradeSpeedUp: 0.8,
-  tradeFloorMs: 60,
+  tradeFloorMs: 200,
   /**
    * Walking speed in price units per second, set when a good comes up: its
    * board's starting height divided by this, so crossing the board takes

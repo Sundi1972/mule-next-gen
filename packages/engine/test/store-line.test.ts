@@ -26,6 +26,9 @@ import {
  */
 const TICK = WALK.tickMs;
 
+/** The time n units take at one line, on RULE-3's curve (tradeInterval), rounded up to whole ticks. */
+const unitsMs = (n: number) => Math.ceil(Array.from({ length: n }, (_, i) => tradeInterval(i)).reduce((x, y) => x + y, 0) / TICK) * TICK;
+
 function newGame(): GameState {
   const state = createGame({ seed: 42, players: ['zipwing', 'bramblet', 'gearling', 'mollox'].map((s, i) => ({ id: `p${i}`, name: `P${i}`, isAi: false, species: s as 'zipwing' })) });
   for (const p of state.players) {
@@ -99,7 +102,7 @@ describe('RULE-1: at a house line units trade by themselves', () => {
     const state = buyerAtStore();
     state.players[1]!.money = 10_000;
     expect(lineOf(state, 'p1')).toEqual({ house: 'store', price: a(state).storeSell });
-    const trades = run(state, 2_000);
+    const trades = run(state, unitsMs(10));
     expect(trades.length).toBeGreaterThanOrEqual(10);
     expect(trades.every((t) => t.seller === 'store' && t.buyer === 'p1' && t.price === a(state).storeSell && t.quantity === 1)).toBe(true);
   });
@@ -113,19 +116,19 @@ describe('RULE-1: at a house line units trade by themselves', () => {
 
   it('RULE-1 row 4: stepping off the line stops it at once, the next unit unsold', () => {
     const buyer = buyerAtStore();
-    expect(run(buyer, 500).length).toBeGreaterThan(0);
+    expect(run(buyer, unitsMs(1)).length).toBeGreaterThan(0);
     stepWalk(buyer, 'p1', -1);
     expect(lineOf(buyer, 'p1')).toBeNull();
     expect(run(buyer, 5_000)).toEqual([]);
     const seller = sellerAtStore(12);
-    expect(run(seller, 500).length).toBeGreaterThan(0);
+    expect(run(seller, unitsMs(1)).length).toBeGreaterThan(0);
     stepWalk(seller, 'p0', 1);
     expect(run(seller, 5_000)).toEqual([]);
   });
 
   it('RULE-1 row 4: switching side stops it: the walker jumps to the new side\'s edge, never trading at once', () => {
     const state = buyerAtStore();
-    run(state, 500);
+    expect(run(state, unitsMs(1)).length).toBeGreaterThan(0);
     declareRole(state, 'p1', 'seller');
     expect(lineOf(state, 'p1')).toBeNull();
     expect(run(state, 2_000).filter((t) => t.seller === 'store')).toEqual([]);
@@ -181,7 +184,7 @@ describe('RULE-3: slow at first, then faster and faster, to the floor', () => {
     const state = buyerAtStore();
     state.players[1]!.money = 10_000;
     const at: number[] = [];
-    for (let t = 0; t < 4_000; t++) if (stepAuction(state, 1).length > 0) at.push(a(state).elapsed);
+    for (let t = 0; t < unitsMs(16); t++) if (stepAuction(state, 1).length > 0) at.push(a(state).elapsed);
     const gaps = at.slice(1).map((x, i) => x - at[i]!);
     expect(gaps.length).toBeGreaterThan(12);
     // Stepped 1 ms at a time, a deal carries its leftover into the next unit, so each gap is within 1 ms of the curve.

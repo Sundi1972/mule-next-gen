@@ -389,8 +389,10 @@ describe('the walk', () => {
     const ask = a(state).storeBuy + 2;
     walker(state, 'p0').price = ask;
     walker(state, 'p1').price = ask;
-    // 400 + 320 + 256 + 204.8 + 163.84 + 131.07 = 1,475.7 ms for six units, where an even pace would take 2.4 s.
-    expect(run(state, 1_500)).toHaveLength(6);
+    // Six units on RULE-3's curve, each gap tradeSpeedUp times the one before, well under six at the starting pace.
+    const six = Array.from({ length: 6 }, (_, i) => tradeInterval(i)).reduce((x, y) => x + y, 0);
+    expect(six).toBeLessThan(6 * WALK.tradeStartMs);
+    expect(run(state, Math.ceil(six / TICK) * TICK)).toHaveLength(6);
     // They part, then meet again: the first unit takes the full time again.
     walker(state, 'p1').price = ask - 5;
     run(state, TICK);
@@ -484,7 +486,8 @@ describe('the store and the ship on the board', () => {
     startAuction(state, ['smithore']);
     a(state).storeBudget = 4;
     toWalk(state, { p0: 'seller' });
-    const trades = walkToLines(state, ['p0'], 8_000);
+    // Long enough to walk to the line and sell well past the budget's 4, so the budget is what stops it.
+    const trades = walkToLines(state, ['p0'], 20_000);
     const store = trades.filter((t) => t.buyer === 'store');
     expect(store).toHaveLength(4);
     expect(store.every((t) => t.price === a(state).storeBuy)).toBe(true);
