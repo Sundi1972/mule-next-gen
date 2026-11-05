@@ -75,6 +75,23 @@ describe('T-AC-15: a bubble covers no label when a free place exists', () => {
     expect(placeBubble({ at, w: 200, h: 40, within: SCREEN, labels, gap: GAP, edge: EDGE }).place).toBe('left');
   });
 
+  it('a wide bubble at the frame’s edge, where no place keeps its tail on it, still stays inside the frame', () => {
+    // A speaker 2 px from a narrow stage's left edge: centred above or below, a 540 px bubble would slide past its tail
+    // room; beside it, it crosses the stage's side.
+    const board = box(60, 435, 620, 1032);
+    const fit = placeBubble({ at: box(62, 700, 92, 730), w: 540, h: 100, within: board, labels: [box(0, 0, 1920, 1080)], gap: GAP, edge: EDGE });
+    expect(fit.box.l).toBeGreaterThanOrEqual(board.l + EDGE - 0.5);
+    expect(fit.box.r).toBeLessThanOrEqual(board.r - EDGE + 0.5);
+    expect(fit.box.t).toBeGreaterThanOrEqual(board.t + EDGE - 0.5);
+  });
+
+  it('crowded, it keeps its place while that covers about as little as the least (no flicker)', () => {
+    const at = box(500, 500, 540, 540);
+    // Every place covers a strip; above covers 2 % more than below.
+    const labels = [box(420, 452, 620, 461.2), box(420, 548, 620, 557), box(548, 500, 748, 509), box(292, 500, 492, 509)];
+    expect(placeBubble({ at, w: 200, h: 40, within: SCREEN, labels, gap: GAP, edge: EDGE, current: 'above' }).place).toBe('above');
+  });
+
   it('stays where it is while that still covers nothing (no hopping between free places)', () => {
     const at = box(500, 500, 540, 540);
     expect(placeBubble({ at, w: 200, h: 40, within: SCREEN, labels: [], gap: GAP, edge: EDGE, current: 'left' }).place).toBe('left');
