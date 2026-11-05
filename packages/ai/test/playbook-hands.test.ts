@@ -256,9 +256,9 @@ function ownPhasesOn(): void {
 describe('the own path plays today’s development and auction while AI_PLANS.ownPhases is off (AM-26, RULE-6)', { timeout: SLOW_MS }, () => {
   it("B-AC-6, T-AC-13 (RULE-6, AI_PLANS.ownPhases off): a Classic seat's own path plays today's development and auction and writes neither; its planning still writes and plays; an adopted part still plays", () => {
     expect(AI_PLANS.ownPhases, 'the default').toBe(false);
-    // Seed 4's fifth month is the first in which a seat runs short of cash, so it lists in planning. Re-picked 6 Nov
-    // (WS1's shortfall rule, OK'd by WS9): it was the third month before seats bought what keeps them whole.
-    const [seed, months] = [4, 5];
+    // Seed 1 has a seat run short of cash, so it lists in planning, within its first four months. Re-picked for WS1's
+    // shortfall rule (#386): seed 4 then needed a fifth month, which took this test past its CI budget.
+    const [seed, months] = [1, 4];
     /** Per seat and month, the planning acts it played, read at its first development tick. */
     const planningLogs = (into: Map<string, string>) => {
       const first = once();
