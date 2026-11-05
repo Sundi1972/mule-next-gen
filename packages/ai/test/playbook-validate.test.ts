@@ -14,21 +14,25 @@ import {
   observe,
   setLotWalk,
   stableJson,
+  stepAuction,
   stepLandAuction,
+  WALK,
   type AiLevelId,
   type AiPersonaId,
   type GameState,
+  type Good,
   type LandGrantPlay,
   type Outfit,
   type Phase,
   type Playbook,
 } from '@mule/engine';
-import { playGame } from '../src/play.js';
+import { applyAction, playGame } from '../src/play.js';
 import { draftPlaybook, type DraftPhase } from '../src/playbook/draft.js';
 import { validatorFor, type PlanEdit } from '../src/playbook/validate.js';
 import { AiSeat } from '../src/seat.js';
 import { outlook } from '../src/outlook.js';
 import { applySets } from '../src/sim.js';
+import { goodPlan } from '../src/strategist.js';
 import { unitValues, type Mind } from '../src/value.js';
 
 const PERSONAS_AT_TABLE: AiPersonaId[] = ['cautious', 'aggressive', 'trader', 'saboteur'];
@@ -106,6 +110,19 @@ function fedSeller(): GameState {
   Object.assign(state.tiles[plains[1]!]!, { owner: 'ai2', outfit: 'smithore' });
   while (state.phase !== 'auction') advancePhase(state);
   expect(state.auction!.good).toBe('food');
+  return state;
+}
+
+/** fedSeller's auction at `good`'s status screen, the goods before it passed with every seat pressing Done, ai2 holding 1 of it. */
+function upAt(good: Good): GameState {
+  const state = fedSeller();
+  // literal-ok: a runaway guard on the auction's ticks, not a game clock
+  for (let t = 0; t < 100_000 && !(state.auction!.good === good && state.auction!.stage === 'status'); t++) {
+    for (const p of state.players) applyAction(state, p.id, { type: 'done', done: true });
+    stepAuction(state, WALK.tickMs);
+  }
+  expect(state.auction).toMatchObject({ good, stage: 'status' });
+  state.players.find((p) => p.id === 'ai2')!.stock[good] = 1;
   return state;
 }
 
@@ -320,6 +337,25 @@ describe('the validator holds every playbook to RULE-1', () => {
       { path: food('hold'), from: reversed.draft.auction!.food!.hold, to: need, reason: 'a test edit' },
       { path: food('role'), from: reversed.draft.auction!.food!.role, to: 'seller', reason: 'a test edit' },
     ]);
+  });
+
+  it("T-AC-1: RULE-1 P12, a seller's staple hold under what its hands keep is clamped to that, and the clamp is listed", () => {
+    // ai2 short at the good's status screen, with a farm to water and a mine to power, the store selling: its hands keep
+    // what keeps it whole next month (goodPlan's mustHold), above the unraised floor, whatever hold the playbook says.
+    const mind = mindOf(2);
+    for (const staple of ['food', 'water', 'energy'] as const) {
+      const state = upAt(staple);
+      const obs = observe(state, 'ai2');
+      const plan = goodPlan(obs, mind, staple);
+      const kept = plan.values.floorUnits;
+      expect(plan.mustHold, `${staple}: short of what keeps it whole, the store selling`).toBeGreaterThan(obs.players[2]!.stock[staple]);
+      expect(kept, staple).toBe(plan.mustHold);
+      const r = run('auction', [edit(`/auction/${staple}/role`, 'seller'), edit(`/auction/${staple}/hold`, 0)], { state, mind });
+      expect(read(r.playbook, `/auction/${staple}/hold`), staple).toBe(kept);
+      expect(r.rejected, staple).toEqual([{ path: `/auction/${staple}/hold`, to: 0, why: `clamped to ${kept}: what its hands keep for next month` }]);
+      // At what its hands keep, the hold plays as sent, and the hands keep exactly it.
+      expect(run('auction', [edit(`/auction/${staple}/role`, 'seller'), edit(`/auction/${staple}/hold`, kept)], { state, mind }).rejected, staple).toEqual([]);
+    }
   });
 
   it('T-AC-1: RULE-1 step 6, an edit counts as accepted only if its own value plays', () => {
