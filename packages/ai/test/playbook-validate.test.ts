@@ -98,6 +98,17 @@ function ledInFromLot(outfit: Outfit): { state: GameState; plots: number[] } {
   return { state, plots };
 }
 
+/** Month 1's auction at Food's status screen, ai2 owning a farm and a Smithore mine on seed 11's plains, holding Food. */
+function fedSeller(): GameState {
+  const state = createGame({ seed: 11, players });
+  const plains = state.tiles.flatMap((t, i) => (t.terrain === 'plains' && t.owner === null ? [i] : []));
+  Object.assign(state.tiles[plains[0]!]!, { owner: 'ai2', outfit: 'food' });
+  Object.assign(state.tiles[plains[1]!]!, { owner: 'ai2', outfit: 'smithore' });
+  while (state.phase !== 'auction') advancePhase(state);
+  expect(state.auction!.good).toBe('food');
+  return state;
+}
+
 const mindOf = (i: number, level: AiLevelId = 'trader'): Mind => new AiSeat({ id: `ai${i}`, name: `AI ${i + 1}`, persona: PERSONAS_AT_TABLE[i]!, level, seed: 100 + i }).mind;
 const draftOf = (state: GameState, phase: DraftPhase, mind: Mind, seed: number) => draftPlaybook({ state, seat: mind.me, mind, seed, phase });
 
@@ -286,26 +297,28 @@ describe('the validator holds every playbook to RULE-1', () => {
   });
 
   it('T-AC-1: RULE-1 P11-P17 and step 5, the auction rows', () => {
-    const month = at.planning.month;
-    const draft = draftOf(at.planning, 'planning', mindOf(2), 102);
+    // Month 1's auction at Food's status screen, ai2 holding a farm and Food to sell.
+    const state = fedSeller();
+    const at = { state };
+    const food = (field: string) => `/auction/food/${field}`;
+    const part = run('auction', [], at).playbook.auction!.food!;
 
     // P11-P17, on the good that is up.
-    expect(one('auction', g('role'), 'broker')).toMatchObject({ plays: part.role, why: 'no such role' });
-    expect(one('auction', g('hold'), -3).plays).toBe(0);
-    const staple = (['food', 'energy'] as const).find((x) => goods.includes(x))!;
-    const need = monthNeeds(at.auction, 'ai2')[staple];
+    expect(one('auction', food('role'), 'broker', at)).toMatchObject({ plays: part.role, why: 'no such role' });
+    expect(one('auction', food('hold'), -3, at).plays).toBe(0);
+    const need = monthNeeds(state, 'ai2').food;
     expect(need).toBeGreaterThan(0);
-    const seller = run('auction', [edit(`/auction/${staple}/role`, 'seller'), edit(`/auction/${staple}/hold`, 0)]);
-    expect(read(seller.playbook, `/auction/${staple}/hold`)).toBe(need);
-    expect(seller.rejected.find((x) => x.path === `/auction/${staple}/hold`)?.why).toBe(`clamped to ${need}: next month's need`);
+    const seller = run('auction', [edit(food('role'), 'seller'), edit(food('hold'), 0)], at);
+    expect(read(seller.playbook, food('hold'))).toBe(need);
+    expect(seller.rejected.find((x) => x.path === food('hold'))?.why).toBe(`clamped to ${need}: next month's need`);
     // Step 5: the same edits the other way round; the hold is checked again against the role that plays.
-    const reversed = run('auction', [edit(`/auction/${staple}/hold`, 0), edit(`/auction/${staple}/role`, 'seller')]);
-    expect(read(reversed.playbook, `/auction/${staple}/hold`)).toBe(need);
-    expect(reversed.rejected).toContainEqual({ path: `/auction/${staple}/hold`, to: 0, why: `clamped to ${need}: next month's need` });
+    const reversed = run('auction', [edit(food('hold'), 0), edit(food('role'), 'seller')], at);
+    expect(read(reversed.playbook, food('hold'))).toBe(need);
+    expect(reversed.rejected).toContainEqual({ path: food('hold'), to: 0, why: `clamped to ${need}: next month's need` });
     // Each accepted edit's `to` is the value that plays, after step 5.
     expect(reversed.playbook.edits).toEqual([
-      { path: `/auction/${staple}/hold`, from: reversed.draft.auction![staple]!.hold, to: need, reason: 'a test edit' },
-      { path: `/auction/${staple}/role`, from: reversed.draft.auction![staple]!.role, to: 'seller', reason: 'a test edit' },
+      { path: food('hold'), from: reversed.draft.auction!.food!.hold, to: need, reason: 'a test edit' },
+      { path: food('role'), from: reversed.draft.auction!.food!.role, to: 'seller', reason: 'a test edit' },
     ]);
   });
 
