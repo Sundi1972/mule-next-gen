@@ -35,11 +35,11 @@ function MonthEnd() {
   return (
     <PhoneShell phase="End of the month" now={now} foldNow rail={<YourWorth view={view} density={density} />} footer={<MonthEndFooter />}>
       <div className={cx('relative flex min-h-0 flex-1 flex-col', tv ? 'gap-2' : 'gap-1.5')} data-testid={tv ? 'phone-monthend' : 'phone-only-monthend'}>
-        {inCollapse(view) && <CollapseBanner density={density} />}
+        {inCollapse(view) && <CollapseBanner density={density} donations={!!view.colony} />}
         <LeagueTable view={view} density={density} selfId={self.id} />
         {tv ? (
           <p className="mt-auto text-[11px] leading-snug text-ink-3" data-testid="colony-on-tv">
-            How the colony is doing is on the TV. Worth is cash + goods + land + MULEs + offices + donations; your own lines are beside, for you only.
+            How the colony is doing is on the TV. Worth is cash + goods + land + MULEs + offices{view.colony ? ' + donations' : ''}; your own lines are beside, for you only.
           </p>
         ) : (
           <div className="relative" data-testid="phone-only-colony">

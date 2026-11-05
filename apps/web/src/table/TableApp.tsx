@@ -737,7 +737,7 @@ export function TvMonthEnd({ game, drift }: { game: MuleView; drift?: GaugeLandi
       <div className="flex flex-col gap-3">
         <TvHeader game={game} title="End of the month" ready={<ReadyCount players={game.players} tv />} landing={drift} />
       </div>
-      {inCollapse(game) && <CollapseBanner density="tv" />}
+      {inCollapse(game) && <CollapseBanner density="tv" donations={!!game.colony} />}
       <FitHeight className="flex-1">
         {game.colony ? (
           <div className="grid flex-1 grid-cols-[minmax(0,6fr)_minmax(0,6fr)] gap-6">
@@ -755,7 +755,7 @@ export function TvMonthEnd({ game, drift }: { game: MuleView; drift?: GaugeLandi
         )}
       </FitHeight>
       <p className="text-lg leading-snug text-ink-2" data-testid="worth-rule">
-        Worth: cash + goods at the store’s price + land at {GAME.plotScore} cr a plot + MULEs at {game.mulePrice} cr + {POLITICS.termScore} cr a term in office. Each player’s own lines are on their phone.
+        Worth: cash + goods at the store’s price + land at {GAME.plotScore} cr a plot + MULEs at {game.mulePrice} cr + {POLITICS.termScore} cr a term in office{game.colony ? ' + donations' : ''}. Each player’s own lines are on their phone.
       </p>
     </div>
   );
