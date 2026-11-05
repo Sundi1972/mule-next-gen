@@ -5,7 +5,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { MuleGame } from '../../server/src/mule-game.js';
-import { dealSpeed, keepWords, lineHint, lineMoment, toggleSide, walkHint } from '../src/components/AuctionParts';
+import { dealSpeed, keepWords, lineHint, lineMoment, linePrice, toggleSide, walkHint } from '../src/components/AuctionParts';
 import type { TableClient } from '../src/net/client';
 import { ClientProvider } from '../src/net/react';
 import { Auction } from '../src/phone/Auction';
@@ -261,6 +261,17 @@ describe('WS6 variant A: the auction trades by itself, faster and faster, on the
     expect(textOf(html, 'keep')).toBe(`You keep ${have} of the ${need} ${name} you need next month.`);
     expect(tagOf(html, 'have')).toContain('text-warn');
     expect(textOf(html, 'line-hint')).not.toContain('you keep');
+  });
+
+  it('the rail’s price is the line’s own: its running deal, else its house’s line, the ship’s too (WS3’s review of #335)', () => {
+    const auction = { storeSells: 38, storeBuys: 30, shipPays: 120, deals: [] as AuctionView['deals'] };
+    // A seller at the ship's line, no unit moving this tick: the ship's price, never the store's.
+    expect(linePrice(auction, 'seller', 'ship')).toBe(120);
+    expect(linePrice(auction, 'seller', 'store')).toBe(30);
+    expect(linePrice(auction, 'buyer', 'store')).toBe(38);
+    // Two sellers share the store's line: the deal names whoever took the last unit; the price is still the line's.
+    const shared = { ...auction, deals: [{ buyer: 'store', seller: 'mia', price: 29, units: 4 }] };
+    expect(linePrice(shared, 'seller', 'store')).toBe(29);
   });
 
   it('the speed follows WALK’s curve: 0 at the first unit, 1 from the floor on', () => {
