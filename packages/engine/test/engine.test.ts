@@ -66,6 +66,14 @@ describe('createGame', () => {
   it.each([2, 4, 6])('every seat of a %i-seat game starts with 2 Food (Heiko, 5 Nov)', (n) => {
     expect(newGame(n).players.map((p) => p.stock.food)).toEqual(Array.from({ length: n }, () => 2));
   });
+
+  it.each([
+    [2, 8],
+    [4, 16],
+    [6, 24],
+  ])("a %i-seat game's store starts with %i Food, 4 a seat (Heiko, 5 Nov)", (n, food) => {
+    expect(newGame(n).store.stock.food).toBe(food);
+  });
 });
 
 describe('prices', () => {
