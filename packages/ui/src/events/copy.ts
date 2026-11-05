@@ -36,6 +36,15 @@ export function effectWords(f: ShowEffect): string {
       return `Energy need ${n}%`;
     case 'mules':
       return `${n} MULEs`;
+    // G-5 C26's effects.
+    case 'mood':
+      return `Mood ${n}`;
+    case 'prestige':
+      return `Prestige ${n}`;
+    case 'air':
+      return `Air ${n}`;
+    case 'reputation':
+      return `Reputation ${n}`;
     default:
       return `${n} ${GOOD_NAME[f.what]}`;
   }
