@@ -192,6 +192,20 @@ describe('AM-17: an owner short of Energy turns plots off, biggest use first', (
       off: [false],
       energyAfter: 5,
     },
+    {
+      name: 'two furnaces share Smithore for one: only the first is listed, so the mine is not turned off to make room',
+      // Mine 2, furnaces 2 each; 4 Energy, 2 Smithore. The first furnace reserves the 2 Smithore; the second waits for
+      // the second pass: by then the mine's Smithore is there but no Energy is, so it is turned off, and as 20% of its 2
+      // rounds to 0 it takes nothing (R4). Listing both would turn the mine off for a furnace that never runs.
+      plots: [{ good: 'smithore', out: 4 }, { good: 'alloy' }, { good: 'alloy' }],
+      energy: 4,
+      posted: { smithore: 10 },
+      stock: { smithore: 2 },
+      made: [4, 2, 0],
+      off: [false, false, true],
+      energyAfter: 0,
+      stockAfter: { smithore: 4, alloy: 2 },
+    },
   ];
 
   it.each(rows)('B-AC-energy-off: $name', ({ plots, energy, posted, stock, made, off, energyAfter, stockAfter }) => {
@@ -431,10 +445,23 @@ describe('AM-17: invariants over generated owners', () => {
       const replay = structuredClone(state);
       const before = new Map(state.players.map((pl) => [pl.id, pl.stock.energy]));
       // A factory whose non-Energy inputs are not in stock before production is no working plot this month.
-      const fed = new Map(state.tiles.map((t) => [t, !isFactory(t.outfit ?? 'food') || Object.entries(RECIPES[t.outfit as 'alloy'].inputs).every(([g, q]) => g === 'energy' || p(state, t.owner!).stock[g as Good] >= q!)]));
+      // A factory is fed if the owner's stock, less what the factories before it (factory order, then tile order) reserve,
+      // covers its non-Energy inputs. Fed factories are listed; the rest wait for the second pass.
+      const fed = new Map<Tile, boolean>(state.tiles.map((t) => [t, !isFactory(t.outfit ?? 'food')]));
+      for (const pl of state.players) {
+        const left = { ...pl.stock };
+        for (const good of ['alloy', 'electronics', 'medicine'] as const) {
+          for (const t of state.tiles.filter((x) => x.owner === pl.id && x.outfit === good)) {
+            const feed = Object.entries(RECIPES[good].inputs).filter(([g]) => g !== 'energy') as [Good, number][];
+            if (!feed.every(([g, q]) => left[g] >= q)) continue;
+            for (const [g, q] of feed) left[g] -= q;
+            fed.set(t, true);
+          }
+        }
+      }
       const uses = new Map(state.tiles.map((t) => [t, energyUseOf(state, t)]));
       // Read before production, on the replay copy (production moves run counts, and so a factory's experience).
-      const orders = new Map(replay.players.map((pl) => [pl.id, energyOffOrder(replay, pl.id).map((e) => replay.tiles.indexOf(e.tile))]));
+      const orders = new Map(replay.players.map((pl) => [pl.id, energyOffOrder(replay, pl.id, 1).map((e) => replay.tiles.indexOf(e.tile))]));
       const fullBefore = new Map(state.tiles.map((t, i) => [t, !t.outfit || !t.owner || t.outfit === 'greenBelt' ? 0 : isFactory(t.outfit) ? factoryFit(replay, replay.tiles[i]!, t.outfit, t.owner).output : rawOutput(replay, replay.tiles[i]!)]));
 
       const run = runProduction(state);
