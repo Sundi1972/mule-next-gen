@@ -51,9 +51,16 @@ describe('the AI bids for a lot MULE only what its outfit gains on its own land 
     // The case: no own plot gains from an Energy MULE, and one does from a Food MULE.
     const obs = observe(state, ME);
     const o = outlook(obs, ME, { lookAhead: seat.mind.level.lookAhead });
-    const best = (outfit: Outfit) => Math.max(...obs.tiles.filter((t) => t.owner === ME).map((t) => installGain(obs, o, t, outfit, seat.mind).gain));
+    const gains = (outfit: Outfit) => obs.tiles.filter((t) => t.owner === ME).map((t) => installGain(obs, o, t, outfit, seat.mind));
+    const best = (outfit: Outfit) => Math.max(...gains(outfit).map((g) => g.gain));
     expect(best('energy'), 'no own plot an Energy MULE suits').toBeLessThanOrEqual(0);
     expect(best('food'), 'an own plot a Food MULE suits').toBeGreaterThan(0);
+    // The Food MULE's minimum is over what installGain says it gains, which is net of a MULE's price and outfit, and under
+    // that gain with those added back: a lot MULE stands in for a MULE bought and outfitted, so the seat still bids.
+    const food = gains('food').reduce((a, b) => (b.gain > a.gain ? b : a));
+    const foodLot = state.landAuction!.queue.find((l) => l.item.kind === 'mule' && l.item.outfit === 'food')!;
+    foodLot.minimum = Math.round(food.gain + food.cost / 2);
+    expect(foodLot.minimum, 'the minimum over the gain alone').toBeGreaterThan(food.gain);
     const hand = new LotHand(seat.mind, createRng(7));
     const results: { outfit: Outfit | undefined; result: LotResult }[] = [];
     // literal-ok: a runaway guard in ticks, not a game clock
