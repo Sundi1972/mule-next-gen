@@ -1604,6 +1604,14 @@ export const BRAIN = {
     plotsPerPlan: 3,
     /** Entries named from each list in the draft land grant; the rest are counted. */
     draftEntries: 6,
+    /** Past months of colony prices shown beside this month's, newest first. */
+    trendMonths: 3,
+    /** Items named from the seat's last PhaseOutcome (planned against got); the rest are counted. */
+    outcomeItems: 6,
+    /** Trades named per rival from the last PhaseOutcome; the rest are counted. */
+    rivalTrades: 4,
+    /** Refused edits named from the seat's last reply; the rest are counted. */
+    refusals: 6,
   },
   /** Longest reason the playbook writer accepts on a strategy or an edit, in characters. */
   writeReasonChars: 140,

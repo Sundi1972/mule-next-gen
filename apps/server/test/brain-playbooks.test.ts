@@ -233,7 +233,8 @@ describe('RULE-A1: which playbook takes effect at the land grant', () => {
 
   it('T-AC-A1: row 3, a reply whose every edit is refused or rejected leaves the engine playbook; what was refused is kept for the next brief, never played, and only until the next month', async () => {
     // Month 1's call answers ALL_REFUSED; month 2's never answers before its land grant.
-    const sdk = fakeSdk((n, _params, options) => (n === 1 ? sdkMessage(ALL_REFUSED, USED) : neverAnswers(options)));
+    const asked: SdkParams[] = [];
+    const sdk = fakeSdk((n, params, options) => (asked.push(params), n === 1 ? sdkMessage(ALL_REFUSED, USED) : neverAnswers(options)));
     const { now, engine, playbooks, state } = await month1({ brain: smartOn(sdk), grantAtMs: 2_000 });
 
     expect(now).toEqual({ ...engine, by: 'engine' });
@@ -249,6 +250,9 @@ describe('RULE-A1: which playbook takes effect at the land grant', () => {
     advanceTo(state, 'landGrant');
     playbooks.takeEffect(state);
     expect(sdk.calls).toBe(2);
+    // T-AC-A10: month 2's brief tells the model what month 1's reply had refused, by path and why.
+    expect(promptOf(asked[0]!).user).not.toContain('Last time:');
+    expect(promptOf(asked[1]!).user).toContain('Last time: the rules clamped or refused /landGrant/pressShare (out of bounds); your reply was refused at /landGrant/ranked (plan_not_offered).');
     expect(playbooks.playbookFor('p0', 2)?.by).toBe('engine');
     expect(playbooks.feedbackFor('p0')).toBeNull();
   });

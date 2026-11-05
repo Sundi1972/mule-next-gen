@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { AI_LEVELS, AI_PERSONAS, allPrices, BRAIN, createGame, GOODS, type GameState, type LandGrantPlay, type Strategy } from '@mule/engine';
+import { AI_LEVELS, AI_PERSONAS, allPrices, BRAIN, createGame, GOODS, type GameState, type LandGrantPlay, type PhaseOutcome, type Strategy } from '@mule/engine';
 import { PERSONAS } from '../src/personas.js';
 import { GOOD_NAME } from '../src/strategist.js';
 import type { Mind } from '../src/value.js';
 import { landBrief } from '../src/llm/brief.js';
+import type { Feedback } from '../src/llm/writer.js';
 import type { LandDraft } from '../src/playbook/index.js';
 
 /** Stock counts no game reaches, one per seat, so a leak into another seat's brief is unmistakable. */
@@ -106,6 +107,27 @@ describe("T-AC-A2: the brief holds only public facts in a deterministic order; t
     expect(brief.text).toContain('<table_talk>\nAda: "I want the river ‹b›now‹/b›"\n</table_talk>');
   });
 
+  it('T-AC-A2: prices carry their trend over BRAIN.brief.trendMonths past months, the store\'s stock, and the export ship\'s wishlist once announced', () => {
+    const state = table();
+    // Only what the brief and observe read of a month's report.
+    const past = (month: number, food: number) => ({ month, before: {}, produced: {}, prices: { ...allPrices(state), food } }) as unknown as GameState['history'][number];
+    state.history = [past(1, 11), past(2, 22), past(3, 33), past(4, 44)].slice(0, BRAIN.brief.trendMonths + 1);
+    state.month = 5;
+    const now = allPrices(state).food;
+    const text = briefFor(state, 'p0');
+    // Newest first, the oldest past the cap left out.
+    const was = [44, 33, 22, 11].slice(0, BRAIN.brief.trendMonths).join(', ');
+    expect(text).toContain(`${GOOD_NAME.food} ${now} (was ${was})`);
+    expect(text).not.toContain(`, ${[44, 33, 22, 11][BRAIN.brief.trendMonths]})`);
+    for (const g of GOODS) expect(text).toContain(`${GOOD_NAME[g]} ${state.store.stock[g]}`);
+    expect(text).toContain('Store stock:');
+
+    state.ship = { arrives: 6, goods: ['food', 'energy'], hold: { food: 4, energy: 2 }, bought: {} };
+    expect(briefFor(state, 'p0')).toContain(`The export ship calls in month 6 and wants: ${GOOD_NAME.food} 4, ${GOOD_NAME.energy} 2.`);
+    state.ship = { arrives: 9, goods: [], hold: {}, bought: {} };
+    expect(briefFor(state, 'p0')).toContain('No export ship is announced.');
+  });
+
   it('T-AC-A2: each section stays within its BRAIN cap', () => {
     const state = table();
     const many = state.tiles.map((t, i) => (t.terrain === 'store' ? -1 : i)).filter((i) => i >= 0);
@@ -132,5 +154,78 @@ describe("T-AC-A2: the brief holds only public facts in a deterministic order; t
     expect(rookie.text).toMatch(/never aims for a monopoly/);
     expect(rookie.text).not.toContain('monopolyTarget');
     expect(trader.text).toContain('monopolyTarget');
+  });
+});
+
+/** p0's land grant last month: one claim short of the plan, and what the rivals did in the open. */
+const OUTCOME: PhaseOutcome = {
+  seat: 'p0',
+  month: 1,
+  phase: 'landGrant',
+  items: [
+    { path: '/landGrant/claims', expected: 2, actual: 1, note: 'outbid on plot 12' },
+    { path: '/landGrant/ranked/0', expected: 12, actual: 30 },
+  ],
+  rivals: {
+    p1: { claimed: [12] },
+    p2: { traded: [{ good: 'food', side: 'seller', price: 31, qty: 2 }], declaredButIdle: ['energy'] },
+  },
+};
+
+describe('T-AC-A10: the next brief carries what happened: this seat\'s last PhaseOutcome, the rivals\' public trades and claims, and what the rules refused', () => {
+  const brief = (outcome: PhaseOutcome | null, feedback: Feedback | null = null) =>
+    landBrief(table(), mindOf('p0'), PERSONAS.trader, draftOf(12), TALK, { outcome, feedback }).text;
+
+  it("T-AC-A10: the next brief carries this seat's last PhaseOutcome items and the rivals' public trades and claims; a seat with no outcome gets none", () => {
+    const text = brief(OUTCOME);
+    expect(text).toContain('What happened in your last phase (month 1, landGrant):');
+    expect(text).toContain('/landGrant/claims: planned 2, got 1 (outbid on plot 12)');
+    expect(text).toContain('/landGrant/ranked/0: planned 12, got 30');
+    expect(text).toContain('Seat 1 claimed plot 12.');
+    expect(text).toContain(`Seat 2 sold 2 ${GOOD_NAME.food} at 31; declared for ${GOOD_NAME.energy} and traded none.`);
+    // In order: what happened comes after the strategy it was played by, before this month's plans.
+    expect(text.indexOf('Your strategy')).toBeLessThan(text.indexOf('What happened in your last phase'));
+    expect(text.indexOf('What happened in your last phase')).toBeLessThan(text.indexOf('Land plans for this month'));
+
+    for (const none of [brief(null), landBrief(table(), mindOf('p0'), PERSONAS.trader, draftOf(12), TALK).text]) {
+      expect(none).not.toContain('What happened in your last phase');
+      expect(none).not.toContain('outbid');
+    }
+  });
+
+  it("T-AC-A10: another seat's outcome never reaches this seat's brief", () => {
+    const theirs: PhaseOutcome = { ...OUTCOME, seat: 'p1', items: [{ path: '/landGrant/claims', expected: 3, actual: 0, note: 'p1 secret' }] };
+    const text = brief(theirs);
+    expect(text).not.toContain('What happened in your last phase');
+    expect(text).not.toContain('p1 secret');
+  });
+
+  it('T-AC-A10: the edits the rules clamped or refused and the ones the writer refused last time are in the next brief, by path and why, each kind only when there is one', () => {
+    const text = brief(OUTCOME, {
+      rejected: [{ path: '/landGrant/claims', to: 9, why: 'at most 2' }],
+      refused: [{ path: '/landGrant/ranked', cause: 'plan_not_offered' }],
+    });
+    expect(text).toContain('Last time: the rules clamped or refused /landGrant/claims (at most 2); your reply was refused at /landGrant/ranked (plan_not_offered).');
+    // One kind alone names only that kind: never a 'none'.
+    const rulesOnly = brief(OUTCOME, { rejected: [{ path: '/landGrant/claims', to: 9, why: 'at most 2' }], refused: [] });
+    expect(rulesOnly).toContain('Last time: the rules clamped or refused /landGrant/claims (at most 2).');
+    const replyOnly = brief(OUTCOME, { rejected: [], refused: [{ path: null, cause: 'not_json' }] });
+    expect(replyOnly).toContain('Last time: your reply was refused at the reply (not_json).');
+    for (const t of [rulesOnly, replyOnly]) expect(t.split('\n').find((l) => l.startsWith('Last time:'))).not.toMatch(/\bnone\b/);
+    expect(brief(OUTCOME, { rejected: [], refused: [] })).not.toContain('Last time:');
+  });
+
+  it('T-AC-A10: what happened stays within its BRAIN caps', () => {
+    const many: PhaseOutcome = {
+      ...OUTCOME,
+      items: Array.from({ length: BRAIN.brief.outcomeItems + 2 }, (_, i) => ({ path: `/landGrant/ranked/${i}`, expected: i, actual: i + 1 })),
+      rivals: { p1: { traded: Array.from({ length: BRAIN.brief.rivalTrades + 3 }, (_, i) => ({ good: 'food' as const, side: 'buyer' as const, price: 10 + i, qty: 1 })) } },
+    };
+    const text = brief(many);
+    expect(text.match(/: planned \d+, got \d+/g)?.length).toBe(BRAIN.brief.outcomeItems);
+    expect(text).toContain('and 2 more');
+    const rival = text.split('\n').find((l) => l.startsWith('Seat 1 '))!;
+    expect(rival.match(/ at \d+/g)?.length).toBe(BRAIN.brief.rivalTrades);
+    expect(rival).toContain('and 3 more');
   });
 });
