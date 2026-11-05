@@ -5,7 +5,7 @@ import { Speaker, TvTicker, tvSpeakerAt } from '../chat/Chat';
 import { boardWalkers, dealLine, dealSpeed, newestFirst, shipWants, ShipWants, SIDE_WORD, skippedLine, StatusTable, StoreBox, TvReadout, WaitingToPick, type DealRow } from '../components/AuctionParts';
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { BuildSite, ColonyGauges, ColonyScoreBand, TvWinner } from '../components/Colony';
-import { StrikeBadge, StrikeMap } from '../components/Strike';
+import { StrikeBadge, StrikeMap, StrikeWaiting } from '../components/Strike';
 import { CollapseBanner, ColonyPanel, LeagueTable, WinnerCard } from '../components/MonthEnd';
 import { joinUrl, Qr } from '../components/Qr';
 import { Scaled } from '../components/Scaled';
@@ -242,6 +242,7 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
         ) : (
           <div className="shrink-0 rounded-panel border-2 border-holo bg-holo-soft p-5 font-display text-3xl font-semibold shadow-glow">Everyone is ready</div>
         )}
+        <StrikeWaiting game={game} />
         <div className="shrink-0">
           <MarketTiles game={game} />
         </div>
