@@ -27,9 +27,10 @@ export function planShip(seed: number, arrives: number, players: number): Export
 
 /**
  * Expected demand for next month, per good, from colonists, players,
- * industry and the export ship's off-world buyers.
+ * industry and the export ship's off-world buyers. `festival` is the extra Food the colonists ask this month (G-5 C26);
+ * once upkeep's meal has run it is eaten, and the caller passes 0.
  */
-export function monthlyDemand(state: GameState): Stock {
+export function monthlyDemand(state: GameState, festival = festivalFood(state)): Stock {
   const demand = emptyStock();
   const players = state.players.length;
   const colonistUnits = state.colonists / UPKEEP.colonistsPerUnit;
@@ -38,7 +39,7 @@ export function monthlyDemand(state: GameState): Stock {
   // less when the store's price is above what their wages pay.
   const sick = airBand(state.air).sickens;
   const own = playersUse(state);
-  demand.food = own.food + colonistDemand(state, 'food', colonistUnits + festivalFood(state));
+  demand.food = own.food + colonistDemand(state, 'food', colonistUnits + festival);
   demand.water = own.water + colonistDemand(state, 'water', colonistUnits);
   demand.energy = own.energy + colonistDemand(state, 'energy', colonistUnits * UPKEEP.colonistEnergyShare);
   // Sick colonists in dirty air need more Medicine.

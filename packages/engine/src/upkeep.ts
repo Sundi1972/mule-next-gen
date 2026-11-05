@@ -58,7 +58,8 @@ export function runUpkeep(state: GameState): { shortages: Good[]; hungry: boolea
   // The export ship takes the store's surplus last, after the players sold to
   // it at the auction, then leaves and announces its next call.
   if (shipInPort(state)) {
-    const demand = monthlyDemand(state);
+    // The colonists have eaten: a festival's extra Food is no longer demand.
+    const demand = monthlyDemand(state, 0);
     for (const good of state.ship.goods) {
       let surplus = state.store.stock[good] - Math.ceil(demand[good] * PRICE.targetCover);
       for (let price = shipPrice(state, good); surplus > 0 && price !== null; price = shipPrice(state, good)) {
