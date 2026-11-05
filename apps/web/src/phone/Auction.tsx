@@ -9,6 +9,7 @@ import {
   Hint,
   keepWords,
   lineHint,
+  linePrice,
   lineMoment,
   MyStoreLine,
   shipWants,
@@ -221,8 +222,7 @@ export function Auction() {
   const keeping = lineSide === 'seller' && need > 0 && have < need;
   const lineRail = (() => {
     if (moment.kind === 'trading') {
-      const price = myDeal?.price ?? (lineSide === 'buyer' ? auction.storeSells : auction.storeBuys) ?? 0;
-      const h = lineHint(moment, lineSide, good, price);
+      const h = lineHint(moment, lineSide, good, linePrice(auction, lineSide, moment.house));
       return <Hint tone="lit" line={h.line} how={h.how} testid="line-hint" />;
     }
     // At a line with nothing moving, one plain reason, so a newcomer knows why nothing happens (F5, WS6's ruling).

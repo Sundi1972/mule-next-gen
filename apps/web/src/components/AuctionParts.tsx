@@ -525,6 +525,17 @@ export function lineHint(m: Extract<LineMoment, { kind: 'trading' }>, side: 'buy
 }
 
 /**
+ * The price at your line: its running deal's, whoever took the last unit, else the house's own line (the ship's when
+ * you sell to it). Never the store's price at the ship's line.
+ */
+export function linePrice(auction: Pick<AuctionView, 'deals' | 'storeSells' | 'storeBuys' | 'shipPays'>, side: 'buyer' | 'seller', house: string): number {
+  const deal = auction.deals.find((d) => (side === 'buyer' ? d.seller : d.buyer) === house);
+  if (deal) return deal.price;
+  if (house === SHIP_ID) return auction.shipPays ?? 0;
+  return (side === 'buyer' ? auction.storeSells : auction.storeBuys) ?? 0;
+}
+
+/**
  * How fast a running deal moves now, 0 at its first unit to 1 at the top speed: from the units it has traded (the view's
  * running count) and WALK's curve, so the board's chevrons light as the engine speeds up.
  */
