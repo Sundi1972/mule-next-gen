@@ -1,5 +1,5 @@
 import { cx, PlayerMark, SPECIES_NAME, Timer } from '@mule/ui';
-import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type ComponentType, type ReactNode, type RefObject } from 'react';
 import { flushSync } from 'react-dom';
 import { FallbackBubble, TableChat } from '../chat/Chat';
 import { ThemeToggle } from '../components/ThemeToggle';
@@ -42,6 +42,8 @@ export interface Now {
   detail?: ReactNode;
   /** Something the player must notice, such as time running short: shown amber. */
   warn?: boolean;
+  /** A Now that is its own card, such as a decision with its buttons: drawn whole in NowCard's place, never folded. */
+  Card?: ComponentType;
 }
 
 /** "Now": the one next step and why. It opens the rail of every screen that gives one. */
@@ -245,7 +247,7 @@ export function PhoneShell({
               {wide ? <TableChat /> : <FallbackBubble />}
             </header>
             <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-3 py-2.5 *:shrink-0 short:gap-2 @min-[1100px]/shell:gap-4 @min-[1100px]/shell:px-5 @min-[1100px]/shell:py-4">
-              {now && (foldNow ? <FoldingNowCard key={now.title} now={now} /> : <NowCard now={now} />)}
+              {now && (now.Card ? <now.Card /> : foldNow ? <FoldingNowCard key={now.title} now={now} /> : <NowCard now={now} />)}
               {rail}
               {!wide && <TableChat under />}
             </div>

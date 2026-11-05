@@ -15,6 +15,7 @@ import {
   fitFilter,
   hasAnalysed,
   installMule,
+  justSwappedOff,
   mulePriceFor,
   outfitCostFor,
   outfitMule,
@@ -36,8 +37,12 @@ import { HALL_BAYS, HALL_DOORS, HALL_OUTFITTERS, placeAt, type HallDoor, type Ha
 import { afterSale } from './scramble.js';
 import { strikeTarget } from './wolves.js';
 
-/** Why a row's press is refused: money short by `short` credits, the corral empty, or a re-outfit for the good it has. */
-export type ReachRefusal = { kind: 'money'; short: number } | { kind: 'soldOut' } | { kind: 'sameGood' } | { kind: 'capped'; level: number; air: number };
+/**
+ * Why a row's press is refused: money short by `short` credits, the corral empty, the same good (a re-outfit, or a SWAP
+ * over a MULE with that outfit), a SWAP back onto the plot the led MULE was just swapped off, or the colony's emission
+ * cap stopping that outfit (its level and the air now).
+ */
+export type ReachRefusal = { kind: 'money'; short: number } | { kind: 'soldOut' } | { kind: 'sameGood' } | { kind: 'justSwapped' } | { kind: 'capped'; level: number; air: number };
 
 /** Where a dim button points when nothing is in reach, or why the seat has nothing to press now. */
 export type ReachHint = 'over' | 'done' | 'assaying' | 'stunned' | 'run' | 'dodge' | 'catch' | 'corral' | 'outfitter' | 'door' | 'store' | 'outfitFirst' | 'plot' | 'noMules';
@@ -57,8 +62,11 @@ export type Reach =
   /** A MULE taken off a plot this turn, fitted for another good here (AM-2); its own good's outfitter dims it. */
   | { kind: 'reoutfit'; enabled: boolean; good: Outfit; cost: number; why: ReachRefusal | null }
   | { kind: 'leave'; enabled: true; door: HallDoor; leading: boolean }
-  /** On a plot that has a MULE, `replaces` is its outfit: installing swaps the new MULE in and the old one runs away. */
-  | { kind: 'install'; enabled: true; good: Outfit; plot: FloorPoint; fromShore: boolean; replaces: Outfit | null }
+  /**
+   * On a plot that has a MULE, `replaces` is its outfit: installing swaps the new MULE in and the colonist leads the old
+   * one (AM-35); for the outfit it already has, the row dims (why: sameGood), nothing to swap.
+   */
+  | { kind: 'install'; enabled: boolean; good: Outfit; plot: FloorPoint; fromShore: boolean; replaces: Outfit | null; why: ReachRefusal | null }
   | { kind: 'analyse'; enabled: true; plot: FloorPoint }
   | { kind: 'filter'; enabled: true; plot: FloorPoint; alloy: number }
   /** The MULE off a plot of the seat's onto its lead (AM-2): `good`, the plot's outfit. */
@@ -199,7 +207,12 @@ const install: Row = (s) => {
   const good = p.carriedMule;
   if (!tile || !good || good === 'empty' || p.muleBolted) return null;
   const plot = plotFor(s, (t) => t.owner === p.id);
-  return plot && { kind: 'install', enabled: true, good, plot: at(plot), fromShore: plot !== tile, replaces: plot.outfit };
+  // The plot the led MULE was just swapped off keeps the row, dimmed (AM-35, PM ruling A): a double tap on SWAP holds,
+  // and never falls through to the tile's next row (FILTER, ANALYSE, TAKE). Over a MULE with the outfit it leads there
+  // is nothing to swap: dimmed too, as RE-OUTFIT's row is for its own good.
+  const swappedOff = !!plot && justSwappedOff(p, plot.x, plot.y);
+  const why: ReachRefusal | null = swappedOff ? { kind: 'justSwapped' } : plot?.outfit === good ? { kind: 'sameGood' } : null;
+  return plot && { kind: 'install', enabled: !why, good, plot: at(plot), fromShore: plot !== tile, replaces: plot.outfit, why };
 };
 
 /** Any plot, owned or free, with or without a MULE, led or on it: as analysePlot allows; a lake plot from its shore. */
@@ -404,7 +417,7 @@ export function reachWords(reach: Reach): ReachWords {
     case 'leave':
       return say('LEAVE', reach.leading ? 'with your MULE' : 'to the colony');
     case 'install': {
-      const notes = [reach.fromShore && 'from the shore', reach.replaces && (reach.replaces === reach.good ? 'same outfit, nothing gained' : `your ${inWords(reach.replaces)} MULE runs away`)].filter((n) => n);
+      const notes = [reach.fromShore && 'from the shore', reach.why?.kind === 'justSwapped' ? 'just swapped: lead it to another plot' : reach.replaces && (reach.replaces === reach.good ? 'same outfit, nothing to swap' : `you lead your ${inWords(reach.replaces)} MULE`)].filter((n) => n);
       return say(reach.replaces ? 'SWAP' : `INSTALL · ${NAME[reach.good]}`, notes.join(' · ') || null);
     }
     case 'analyse':
