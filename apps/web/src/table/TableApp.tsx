@@ -161,7 +161,7 @@ export function TvHeader({
   chatLines?: number;
 }) {
   const colony = game.colony && gauges ? <ColonyGauges colony={game.colony} size="tv" className={ready ? 'w-full' : 'w-[760px]'} landing={landing} /> : null;
-  const ownRow = colony !== null && ready !== undefined;
+  const ownRow = colony !== null && (ready !== undefined || !!game.colony?.strike);
   // With a ready chip the title keeps one line and the chip its size; without one the header is as it always was: the
   // gauges give way to a long title ("Election day · the result").
   const fixed = ready !== undefined;
