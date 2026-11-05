@@ -254,7 +254,34 @@
 <p class="code-ref">In the code: <code>packages/engine/src/production.ts::runProduction</code> (the raw-plot loop and <code>halve</code>) · <code>config.ts::UPKEEP.shortOutputShare</code></p>
 <p class="owner">Kept current by: the Balance team (WS1).</p>
 
-<h2 id="water-shortage">Short of Water: farms make half <span class="pill built">In the game</span></h2>
+<h2 id="water-use">Water: every plot uses it <span class="pill open">Being designed</span></h2>
+<p>Heiko set this on 5 November: Water is a base resource like Food and Energy, so every plot uses some, not only farms. In his words: "Each plott should conusme some water. water is like food and energy a base ressource we msut ensure that this is reflected . not that only food plots need water".</p>
+<div class="box"><h4>The rules Heiko chose</h4>
+<ol>
+<li><strong>Every working plot uses Water</strong>, by what it produces, the same way it uses Energy. Your household and crew still drink as today.</li>
+<li><strong>Short of Water works like short of Energy:</strong> the plot that uses most Water is turned off first, then the next, until the rest fit.</li>
+<li><strong>A turned-off plot produces 20%</strong> and uses neither Water nor Energy.</li>
+</ol></div>
+<div class="table-wrap"><table>
+<thead><tr><th>Plot, by what it produces</th><th class="n">Water a month today</th><th class="n">Water a month, new</th></tr></thead>
+<tbody>
+<tr><td>Food farm</td><td class="n">0 (but makes half if you are short)</td><td class="n">to be proposed</td></tr>
+<tr><td>Water well</td><td class="n">0</td><td class="n">to be proposed</td></tr>
+<tr><td>Energy plant</td><td class="n">0</td><td class="n">to be proposed</td></tr>
+<tr><td>Smithore, Crystite and Rare earth mines</td><td class="n">0</td><td class="n">to be proposed</td></tr>
+<tr><td>Alloy smelter, Electronics works</td><td class="n">0</td><td class="n">to be proposed</td></tr>
+<tr><td>Medicine lab</td><td class="n">1 as an input</td><td class="n">to be proposed</td></tr>
+</tbody></table></div>
+<div class="box next"><h4>What is being designed</h4>
+<p>Heiko chose to have the Balance team (WS1) propose the Water use per plot type and per factory, recheck the Energy table at the same time, and measure both in the simulator before he confirms the numbers. Still to settle:</p>
+<ul>
+<li>Whether a well pays its own Water from its own output, as an Energy plant pays its Energy.</li>
+<li>The order when a player is short of both, so that no plot is cut twice.</li>
+</ul>
+<p>Today's rule (below) stays until it lands, and it goes with it: only Food farms make half when you are short. This joins the Energy rule as one change about base resources.</p></div>
+<p class="owner">Kept current by: the Balance team (WS1).</p>
+
+<h2 id="water-shortage">Short of Water today, until the new rule lands: farms make half <span class="pill built">In the game</span></h2>
 <p>Food farms need irrigation. When production starts, the game compares the Water you hold with the Water your household and crew need this month (see <a href="#upkeep-and-crew">Upkeep and crew</a>). If you hold less, every one of your Food farms makes half, rounded down. This comes on top of any Energy shortfall: a farm short of both makes a quarter, rounded down at each step.</p>
 <ul>
 <li>Only Food farms are irrigated. Wells, Energy plots and mines don't care about Water.</li>
