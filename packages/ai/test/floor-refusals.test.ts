@@ -109,10 +109,11 @@ function idleGains(state: GameState, seat: AiSeat, outfit: Outfit): Map<number, 
 const bestOf = (gains: Map<number, number>) => [...gains].sort((a, b) => b[1] - a[1])[0]![0];
 
 /**
- * The MULE steps the hand gave up on the floor: an outfit or an install the button did not offer. Not a route's stale
- * MULE, replaced before it was bought (RULE-9 row 3): none of its steps was pressed.
+ * The MULE steps the floor refused: an outfit or an install the button did not offer. Today's hand logs a refused press
+ * with no outcome, a route with 'refused'. A route step the hand replaced, skipped or never reached was not pressed.
  */
-const refused = (seat: AiSeat) => seat.developLog().filter((e) => !e.ok && e.outcome !== 'replaced' && (e.action.type === 'outfit' || e.action.type === 'install'));
+const refused = (seat: AiSeat) =>
+  seat.developLog().filter((e) => !e.ok && (e.outcome === undefined || e.outcome === 'refused') && (e.action.type === 'outfit' || e.action.type === 'install'));
 
 describe('the floor never refuses a MULE step the AI planned (FM-floor-refusals)', () => {
   it('FM-floor-outfit-offer: a MULE outfitted just before a glint detour is installed, not dropped at its outfitter', () => {
