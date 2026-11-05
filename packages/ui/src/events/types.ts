@@ -1,4 +1,8 @@
+import type { ObjectKind } from '../components/ObjectGlyph';
 import type { Good, Slot, SpecialKind } from '../components/tokens';
+
+/** The colony's mood events (G-5 C26; the protocol's ColonyEventKey). */
+export type ColonyEventKey = 'generalStrike' | 'festival' | 'riot' | 'emigrationWave' | 'volunteerCleanup' | 'storeStrike' | 'walkout' | 'loyalCrew' | 'blamedForUnrest';
 
 /** The events the show draws: the engine's EventKey union (packages/engine/src/types.ts). */
 export type ShowEventKey =
@@ -26,6 +30,7 @@ export type ShowEventKey =
   | 'ratsInSilo'
   | 'crookedAccountant'
   | 'packageFromHome'
+  | ColonyEventKey
   // Not an EventKey: development's sick players, each sent as a bulletin (C11; the protocol's EventView widens to match).
   | 'sickness';
 
@@ -72,13 +77,15 @@ export interface ShowEventView {
   playMs: number;
   /** Whose event it is, when it is one player's and on no plot: a sick player (C11). */
   player?: string;
+  /** The colony's objects it damaged (a riot): one with a plot is among its hits. */
+  objects?: { id: ObjectKind; becomes: 'damaged' }[];
 }
 
 /** One change an event made off the map (the protocol's EventEffect, structurally): whose, of what, by how much. */
 export interface ShowEffect {
   /** A player's id, 'store' or 'colony'. */
   on: string;
-  what: Good | 'money' | 'mules' | 'colonists' | 'energyNeed';
+  what: Good | 'money' | 'mules' | 'colonists' | 'energyNeed' | 'mood' | 'prestige' | 'air' | 'reputation';
   delta: number;
 }
 
