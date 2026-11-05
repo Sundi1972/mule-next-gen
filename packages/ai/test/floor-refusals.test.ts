@@ -1,0 +1,160 @@
+import { describe, expect, it } from 'vitest';
+import {
+  advancePhase,
+  applyReach,
+  buildFloor,
+  createGame,
+  DEVELOPMENT,
+  doorPresses,
+  MS_PER_SECOND,
+  reachOf,
+  RuleError,
+  settleMoments,
+  stepFloor,
+  terrainShare,
+  tileAt,
+  type DevFloor,
+  type FloorConfig,
+  type GameState,
+} from '@mule/engine';
+import { installable, placePoint } from '../src/floor-time.js';
+import { simFloorConfig } from '../src/floor-turn.js';
+import { FloorWalker, type StepRun } from '../src/hands/floor-walker.js';
+import { AiSeat } from '../src/seat.js';
+
+const ME = 'ai0';
+
+/** The sim's floor config with no moments of its own: no wolves, no scramble, no glint lit by the floor's roll. */
+function quietConfig(): FloorConfig {
+  const live = simFloorConfig();
+  return {
+    ...live,
+    wolves: { ...live.wolves, on: false },
+    scramble: { ...live.scramble, on: false },
+    // A glint the test lights is raced by the AI whenever it can be (botShare 1, any distance).
+    glint: { ...live.glint, on: false, botShare: 1, botCareTiles: Number.POSITIVE_INFINITY },
+  };
+}
+
+/** Month 1's development for `seats` AI seats, ai0's land cleared for the test to give. */
+function development(seed: number, seats = 2): GameState {
+  const state = createGame({ seed, players: Array.from({ length: seats }, (_, i) => i).map((i) => ({ id: `ai${i}`, name: `AI ${i + 1}`, isAi: true })) });
+  while (state.phase !== 'development') advancePhase(state);
+  for (const t of state.tiles) if (t.owner === ME) t.owner = null;
+  return state;
+}
+
+/**
+ * ai0's development turn on the floor, as the sim's referee plays it (floor-turn.ts): its input, the step, the moments,
+ * then its press where Reach offers one; `between` may change the floor after each tick. The other seats stand.
+ */
+function playTurn(state: GameState, cfg: FloorConfig, seat: AiSeat, between: (floor: DevFloor) => DevFloor = (f) => f): DevFloor {
+  let floor = buildFloor(state, cfg);
+  const ticks = (DEVELOPMENT.fullSeconds * MS_PER_SECOND) / cfg.steer.tickMs;
+  for (let run = 0; run + 1 < ticks && !state.players.find((p) => p.id === ME)!.doneDeveloping; run++) {
+    const left = (DEVELOPMENT.fullSeconds * MS_PER_SECOND - (run + 1) * cfg.steer.tickMs) / MS_PER_SECOND;
+    const inputs = { [ME]: seat.developSteer(state, floor, left, cfg) };
+    const spent = doorPresses(floor, state, inputs, cfg);
+    floor = settleMoments(state, stepFloor(floor, state, inputs, cfg.steer.tickMs, cfg));
+    if (inputs[ME]!.act && !spent.has(ME) && reachOf(floor, state, ME, cfg, { secondsLeft: left }).enabled) {
+      try {
+        floor = applyReach(state, floor, ME, left, cfg).floor;
+      } catch (err) {
+        if (!(err instanceof RuleError)) throw err;
+      }
+    }
+    floor = between(floor);
+  }
+  return floor;
+}
+
+/** The MULE steps the hand gave up on the floor: an outfit or an install the button did not offer. */
+const refused = (seat: AiSeat) => seat.developLog().filter((e) => !e.ok && (e.action.type === 'outfit' || e.action.type === 'install'));
+
+describe('the floor never refuses a MULE step the AI planned (FM-floor-refusals)', () => {
+  it('FM-floor-outfit-offer: a MULE outfitted just before a glint detour is installed, not dropped at its outfitter', () => {
+    const state = development(4);
+    const plot = state.tiles.find((t) => t.terrain === 'plains' && t.owner === null)!;
+    plot.owner = ME;
+    const cfg = quietConfig();
+    const seat = new AiSeat({ id: ME, name: 'AI 1', persona: 'trader', level: 'trader', seed: 11 });
+    // The tick its outfit press takes, a glint lights a few tiles off: the AI races it, and it fades before the race is run.
+    const store = state.tiles.find((t) => t.terrain === 'store')!;
+    const glintAt = state.tiles.find((t) => t.owner === null && t.terrain !== 'store' && terrainShare(t.terrain, cfg) > 0 && Math.abs(t.x - store.x) + Math.abs(t.y - store.y) === 2)!;
+    let lit = false;
+    playTurn(state, cfg, seat, (floor) => {
+      const carried = state.players.find((p) => p.id === ME)!.carriedMule;
+      if (lit || !carried || carried === 'empty') return floor;
+      lit = true;
+      return { ...floor, moments: { ...floor.moments, glint: { x: glintAt.x, y: glintAt.y, sinceTick: floor.tick, untilTick: floor.tick + 3 } } };
+    });
+    expect(lit, 'the AI outfitted a MULE').toBe(true);
+    const me = state.players.find((p) => p.id === ME)!;
+    // The promise: the MULE it paid for is on its plot, not left on its lead or walked into the pub.
+    expect(refused(seat), JSON.stringify(seat.developLog())).toEqual([]);
+    expect(me.carriedMule, 'no MULE left on the lead').toBeNull();
+    expect(tileAt(state.tiles, state.width, plot.x, plot.y)!.outfit, 'the MULE on its plot').not.toBeNull();
+  });
+
+  it("FM-floor-lake-stand: no MULE is bought for a lake plot whose only shore off the seat's own land no walk reaches", () => {
+    // Seed 14's map for four seats, as the sim's game 14 has it in month 2: ai0's lake plot at 12·8 (0-based) borders its
+    // own swamps at 11·7 and 11·8, each with a MULE, where Reach works the swamp underfoot, not the lake; and the plains at
+    // 13·7 and 13·8, which the lakes along column 12 and row 5 wall off from the store. No spot to install it from is
+    // reachable, though the walk to the lake's edge across the swamps is.
+    const state = development(14, 4);
+    const at = (x: number, y: number) => tileAt(state.tiles, state.width, x, y)!;
+    expect([at(12, 8), at(12, 5), at(13, 5), at(14, 5), at(12, 6), at(12, 7)].map((t) => t.terrain)).toEqual(Array(6).fill('lake'));
+    at(12, 8).owner = ME;
+    for (const t of [at(11, 7), at(11, 8)]) {
+      t.owner = ME;
+      t.outfit = 'water';
+    }
+    const cfg = quietConfig();
+    const seat = new AiSeat({ id: ME, name: 'AI 1', persona: 'trader', level: 'trader', seed: 11 });
+    playTurn(state, cfg, seat);
+    const me = state.players.find((p) => p.id === ME)!;
+    const log = seat.developLog();
+    // The promise: no MULE paid for and lost. Every MULE it buys it installs.
+    expect(refused(seat), JSON.stringify(log)).toEqual([]);
+    expect(me.carriedMule, 'no MULE on the lead').toBeNull();
+    const ok = (type: string) => log.filter((e) => e.action.type === type && e.ok).length;
+    expect(ok('install'), 'MULEs installed, of those bought').toBe(ok('buyMule'));
+  });
+
+  it('FM-floor-lake-stand: a lake plot whose only reachable shore is out of the right-hand door is installed from there, as planned', () => {
+    // A test-local map: the store's column made lake splits the map, so the land out of the left door never reaches the
+    // right half. ai0's lake plot two tiles right of the store has its whole shore on the right half.
+    const state = development(4);
+    const store = state.tiles.find((t) => t.terrain === 'store')!;
+    for (const t of state.tiles) {
+      if (t.x === store.x && t !== store) t.terrain = 'lake';
+      else if (t.x !== store.x && Math.abs(t.x - store.x) <= 4) t.terrain = 'plains';
+    }
+    const lake = tileAt(state.tiles, state.width, store.x + 2, store.y)!;
+    lake.terrain = 'lake';
+    lake.owner = ME;
+    const cfg = quietConfig();
+    const index = state.tiles.indexOf(lake);
+    expect(installable(state, cfg, ME, index), 'the plan counts on a spot to install it from').toBe(true);
+    // In the store at the corral, leading an Energy MULE.
+    state.players.find((p) => p.id === ME)!.carriedMule = 'energy';
+    const at = placePoint('corral', cfg.hall);
+    const built = buildFloor(state, cfg);
+    let floor: DevFloor = { ...built, colonists: built.colonists.map((c) => (c.id === ME ? { ...c, space: 'hall' as const, ...at, lead: { good: 'energy' as const, ...at } } : c)) };
+    const walker = new FloorWalker(ME);
+    const action = { type: 'install' as const, x: lake.x, y: lake.y };
+    let run: StepRun = { kind: 'going', input: { x: 0, y: 0, act: false } };
+    // literal-ok: a bound in ticks, many times the walk
+    for (let i = 0; i < 2_000 && run.kind === 'going'; i++) {
+      run = walker.run({ state, floor, cfg, secondsLeft: 40 }, action, 0);
+      if (run.kind !== 'going') break;
+      const inputs = { [ME]: run.input };
+      const spent = doorPresses(floor, state, inputs, cfg);
+      floor = settleMoments(state, stepFloor(floor, state, inputs, cfg.steer.tickMs, cfg));
+      if (run.input.act && !spent.has(ME)) floor = applyReach(state, floor, ME, 40, cfg).floor;
+    }
+    // The promise: the walk agrees with the plan, and the MULE is on its plot.
+    expect(run).toEqual({ kind: 'ok' });
+    expect(lake.outfit).toBe('energy');
+  });
+});

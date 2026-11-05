@@ -408,6 +408,7 @@ export function setSiteBid(state: GameState, playerId: string, id: PrestigeId, m
 /** The colony won a plot for an object: lots.ts calls this at the lot's settle. The tile becomes the colony's, bare. */
 export function siteProject(state: GameState, id: PrestigeId, tile: number): void {
   waitingForSite(state, id);
-  edit(state).projects.find((p) => p.id === id)!.plot = tile;
+  // The tile first: a bad index throws before the project holds a plot it doesn't have.
   Object.assign(state.tiles[tile]!, { owner: COLONY_SELLER, outfit: null });
+  edit(state).projects.find((p) => p.id === id)!.plot = tile;
 }

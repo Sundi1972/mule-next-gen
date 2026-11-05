@@ -1,4 +1,5 @@
 import {
+  AI_PLANS,
   airPoints,
   DEVELOPMENT,
   GAME,
@@ -15,12 +16,14 @@ import {
   UPKEEP,
   shipInPort,
   shipPrice,
+  storePaysFor,
   tileIndex,
   walkSeconds,
   type DevPlace,
   type GameState,
   type Good,
   type Outfit,
+  type PlanningPlay,
   type Tile,
 } from '@mule/engine';
 import { outlook, type Outlook } from './outlook.js';
@@ -274,6 +277,36 @@ export function muleValue(obs: GameState, mind: Mind): number {
     }
   }
   return Math.round(best);
+}
+
+export type SellListing = NonNullable<PlanningPlay['list']>[number];
+
+/**
+ * What the seat lists for the land auction while its money is under its cash reserve: up to AI_PLANS.sell.perMonth
+ * lots, those worth least to it over what the store pays first, each sold to the store if no one bids. Its idle plots
+ * and its MULEs are candidates, never its last Food or Energy MULE. Empty when it is not short.
+ */
+export function sellWanted(obs: GameState, mind: Mind): SellListing[] {
+  if (me(obs, mind).money >= cashReserve(obs, mind)) return [];
+  const o = outlook(obs, mind.me, { lookAhead: mind.level.lookAhead });
+  const mine = obs.tiles.flatMap((tile, plot) => (tile.owner === mind.me && tile.terrain !== 'store' ? [{ tile, plot }] : []));
+  const isLast = (outfit: Outfit) => (outfit === 'food' || outfit === 'energy') && mine.filter((m) => m.tile.outfit === outfit).length === 1;
+  const lots = mine.flatMap(({ tile, plot }): { item: SellListing['item']; plot: number; worth: number }[] => {
+    if (!tile.outfit) return [{ item: 'plot', plot, worth: plotValue(obs, mind, plot) }];
+    if (isLast(tile.outfit)) return [];
+    const { gain, cost } = installGain(obs, o, tile, tile.outfit, mind);
+    return [{ item: 'mule', plot, worth: gain + cost }];
+  });
+  const ranked = lots
+    .map((lot) => ({ ...lot, storePays: storePaysFor(obs, lot.item) }))
+    // A lot that earns nothing goes first, whatever the store pays for it.
+    .sort((a, b) => Number(a.worth > 0) - Number(b.worth > 0) || a.worth - a.storePays - (b.worth - b.storePays) || a.plot - b.plot);
+  return ranked.slice(0, Math.max(0, AI_PLANS.sell.perMonth)).map(({ item, plot, worth, storePays }) => ({
+    item,
+    plot,
+    minimum: Math.max(storePays + 1, Math.round(AI_PLANS.sell.minimumShare * worth)),
+    unsold: 'store' as const,
+  }));
 }
 
 // --- Development -------------------------------------------------------------
