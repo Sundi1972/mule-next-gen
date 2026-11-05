@@ -4,8 +4,10 @@ import {
   DEVELOPMENT,
   GAME,
   GOOD_CONFIG,
+  monthNeeds,
   mulePrice,
   mulePriceFor,
+  needsOf,
   neighbours,
   outfitBlocked,
   POLLUTION,
@@ -17,6 +19,7 @@ import {
   shipInPort,
   shipPrice,
   storePaysFor,
+  storeSellLine,
   tileIndex,
   walkSeconds,
   type DevPlace,
@@ -322,7 +325,7 @@ export type FloorLegs = (index: number, outfit: Outfit) => { there: number; pub:
 
 /**
  * The walk's veto on a MULE: the walk out to its plot (`there`), back to the pub (`back`) and the taps take more than
- * the seconds left. developDecision's, and RULE-9 row 3's on the floor (AM-25): a route MULE it vetoes is stale.
+ * the seconds left. developDecision's, and on the floor the route's stale check. See AM-25.
  */
 export function walkVeto(walk: DevWalk, there: number, back: number): string | null {
   const seconds = there + back + walk.taps;
@@ -476,6 +479,11 @@ export interface GoodPlan {
   spiteBid: number;
   /** Extra value per unit, up to the others' shortfall, for cornering a scarce good. */
   corner: { units: number; premium: number };
+  /**
+   * Units it buys up to, as far as its money goes: what keeps it whole next month (wholeNextMonth), while it holds less
+   * and the store sells the good (STRATEGIST.buyShortfall); 0 otherwise. While it is above 0 it sells none of them.
+   */
+  mustHold: number;
 }
 
 /** What the seat makes of the good that is up: the value of every unit, the cash it spends, and whether it corners or spites. */
@@ -490,6 +498,23 @@ export function goodPlan(obs: GameState, mind: Mind, good: Good): GoodPlan {
     const now = afterTax(obs, expectedPrices(obs, good).sell);
     for (let k = values.block; k < values.keep.length; k++) values.keep[k] = Math.min(values.keep[k]!, now - 1);
   }
+  // Short for next month is a loss, not a small cost (Heiko, 5 Nov). While it holds less than what keeps it whole and the
+  // store sells the good, each unit up to that is worth at least the store's ask, so it buys it there or cheaper from a
+  // player, never dearer, and it sells none of them. Otherwise its floor is the screen's need and the rest is for sale
+  // (Heiko's choice of 5 Nov, "sell surplus").
+  const whole = STRATEGIST.buyShortfall.includes(good) ? wholeNextMonth(obs, mind.me, good) : 0;
+  // The store's line is the good's that is up: a draft of a good still in the queue has no ask yet, and keeps its values.
+  const ask = whole > 0 && obs.auction?.good === good ? storeSellLine(obs) : null;
+  const mustHold = ask !== null && p.stock[good] < whole ? whole : 0;
+  for (let k = 0; k < mustHold; k++) {
+    values.buy[k] = Math.max(values.buy[k] ?? 0, ask!);
+    values.keep[k] = Infinity;
+  }
+  // Otherwise it keeps the screen's need, what upkeep eats or its plots burn, whatever its own plots may make: Water
+  // only for a seat with a farm to water, as wholeNextMonth counts it.
+  const floor = mustHold > 0 ? mustHold : whole > 0 ? values.need : 0;
+  for (let k = 0; k < floor; k++) values.keep[k] = Infinity;
+  values.floorUnits = Math.max(values.floorUnits, floor);
   const reserve = cashReserve(obs, mind);
   const budget = Math.max(0, Math.min(p.money * STRATEGIST.budgetShare, p.money - reserve));
   const a = obs.auction;
@@ -511,7 +536,23 @@ export function goodPlan(obs: GameState, mind: Mind, good: Good): GoodPlan {
     }
     values.buy.sort((x, y) => y - x);
   }
-  return { good, values, budget, reserve, spiteBid, corner };
+  return { good, values, budget, reserve, spiteBid, corner, mustHold };
+}
+
+/**
+ * The units of a good the seat must hold at the auction to be whole next month; #385's resource-value model replaces it
+ * and its twin, value.ts unitValues' `block`. In the engine's order: upkeep eats its Food and drinks its Water, then
+ * every good spoils and the depot keeps what it can; next development is hungry under the household's Food, and next
+ * production halves a plot short of its Energy, or a farm whose owner is short of Water. Water counts only for a seat
+ * with a farm to water: without one, going short costs it nothing. 0 for other goods.
+ */
+export function wholeNextMonth(obs: GameState, me: string, good: Good): number {
+  const kept = (n: number) => Math.ceil(Math.min(n, UPKEEP.depotCapacity) / (1 - GOOD_CONFIG[good].spoilage));
+  if (good === 'food') return needsOf(obs, me).food + kept(needsOf(obs, me).food);
+  if (good === 'energy') return kept(monthNeeds(obs, me).energy);
+  const farms = obs.tiles.some((t) => t.owner === me && (UPKEEP.irrigated as readonly string[]).includes(t.outfit ?? ''));
+  if (good === 'water' && farms) return needsOf(obs, me).water + kept(needsOf(obs, me).water);
+  return 0;
 }
 
 /** The price the seat expects to get for a unit, and to pay: the houses' lines while they trade, otherwise around the posted price. */
@@ -563,10 +604,12 @@ export function tradeDecision(obs: GameState, mind: Mind, plan: GoodPlan): Short
     if (buffer > keepAt && buffer < h) sellTo(buffer, `Sell ${h - buffer} ${GOOD_NAME[good]}, keep a buffer of ${buffer}`, 'sell:buffer');
   }
 
-  // Buy: up to the last unit worth more than its price, within the budget.
+  // Buy: up to the last unit worth more than its price, within the budget; the Food, Energy or Water it must hold
+  // (plan.mustHold), as far as its money goes.
   let upTo = h;
   let spent = 0;
-  while (upTo < v.buy.length && (v.buy[upTo] ?? 0) > buy && spent + buy <= plan.budget) {
+  const wanted = (k: number) => (k < plan.mustHold ? spent + buy <= p.money : (v.buy[k] ?? 0) > buy && spent + buy <= plan.budget);
+  while (upTo < v.buy.length && wanted(upTo)) {
     spent += buy;
     upTo++;
   }
@@ -574,17 +617,18 @@ export function tradeDecision(obs: GameState, mind: Mind, plan: GoodPlan): Short
     let gain = 0;
     for (let k = h; k < target; k++) gain += (v.buy[k] ?? 0) - buy;
     const cost = (target - h) * buy;
-    const essential = target <= v.block && (good === 'food' || good === 'energy');
+    const essential = (target <= v.block && (good === 'food' || good === 'energy')) || target <= plan.mustHold;
     const veto = !essential && p.money - cost < plan.reserve ? `it would dip into the ${cr(plan.reserve)} kept for upkeep` : null;
     cands.push(candidate<TradeAction>(key, label, { side: 'buyer', upTo: target }, gain, gainCons(gain, p.money - cost, sure, `buys ${target - h} at about ${buy}, worth ${cr(gain)} more to it`, sureWhy), veto));
   };
   if (upTo > h) {
-    const needOnly = Math.min(upTo, Math.max(h, v.block));
-    const speculative = upTo > Math.max(h, v.block);
+    const needOnly = Math.min(upTo, Math.max(h, v.block, plan.mustHold));
+    const speculative = upTo > Math.max(h, v.block, plan.mustHold);
     buyTo(upTo, `Buy ${upTo - h} ${GOOD_NAME[good]}${speculative ? ' (some to resell)' : ''}`, 'buy', speculative ? sure.resale : sure.need, speculative ? 'resale next month is a forecast' : 'it needs them');
     if (speculative && needOnly > h) buyTo(needOnly, `Buy ${needOnly - h} ${GOOD_NAME[good]}, just what I need`, 'buy:need', sure.need, 'it needs them');
   }
 
-  cands.push(candidate<TradeAction>('pass', `Pass on ${GOOD_NAME[good]}`, { side: 'pass' }, 0, gainCons(0, p.money, 1, 'no trade', 'nothing at stake')));
+  const short = upTo > h && h < plan.mustHold ? `it is ${plan.mustHold - h} ${GOOD_NAME[good]} short of next month's need and can pay the store's ${buy}` : null;
+  cands.push(candidate<TradeAction>('pass', `Pass on ${GOOD_NAME[good]}`, { side: 'pass' }, 0, gainCons(0, p.money, 1, 'no trade', 'nothing at stake'), short));
   return shortlist(cands, mind.level.shortlist, mind.level.shortlistTolerance);
 }

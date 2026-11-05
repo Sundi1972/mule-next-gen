@@ -92,9 +92,8 @@ HC-1  packages/engine stays pure: no Date.now(), no Math.random(); time enters a
 HC-2  Every number is a named value in packages/engine/src/config.ts (DEV_STEER, WOLVES, GLINT, SCRAMBLE), never
       inline; `pnpm sim --set` can move each one.        source: CLAUDE.md, memory "configurable balance"  breach: fatal
 HC-3  Never stall a game: development ends on its one clock whatever a phone does (dropped, silent, flooding);
-      an away seat's colonist stands still and counts as done, as today. The one exception (AM-3): in month 1 the
-      clock stands full until every present seat's first MULE is in; the host's Continue starts it past anyone not
-      in, and an away seat counts as in. The clock is the only thing that waits: the tick, the moments and the AI run.
+      an away seat's colonist stands still and counts as done, as today. No exception: month 1's clock counts down
+      from the start like any month's (AM-34 withdrew AM-3's first-MULE wait and its Continue).
                                                         source: ws2-brain G-2b; mule-game.ts::checkDevelopmentOver  breach: fatal
 HC-4  The server, the sim and the phone's prediction call the SAME engine step with the SAME tick length; a seeded
       AI-only game in the sim and on the server ends in the same state.
@@ -492,8 +491,8 @@ in the hall  speed = the door-to-corral distance / DEV_STEER.floorSeconds × pac
 movement     position += unit(input) × |input| × speed × dt; diagonals normalised; a blocked step slides along the
              free axis
 unknown      a tile with no terrain entry → 1 (and a typecheck error: DEV_STEER.terrain is keyed by Terrain)
-examples     plains, fed Zipwing, no MULE: 1.25 × 1 × 1.25 = 1.5625 tiles/s · mountains 0.625 · swamp 0.78 ·
-             leading a MULE on plains 1.41 · bitten 0.78                     → T-AC-2
+examples     plains, fed Zipwing, no MULE: 2.5 × 1 × 1.25 = 3.125 tiles/s · mountains 1.25 · swamp 1.5625 ·
+             leading a MULE on plains 2.8125 · bitten 1.5625 (at mapTilesPerSecond 2.5, AM-32)   → T-AC-2
 ```
 
 ```
@@ -587,13 +586,13 @@ unknown  no seat needs a MULE → no call                                       
 ```
 RULE-7 · Heiko's starting values (config)                         shape: table
 
-  DEV_STEER.mapTilesPerSecond 1.25 (half of 1 / DEV_WALK.tileSeconds) · .floorSeconds 3 (door to corral; Heiko, S-2: "3 is fine") · .leadPace 0.9 ·
+  DEV_STEER.mapTilesPerSecond 2.5 (Heiko, 4 Nov; was 1.25, half of 1 / DEV_WALK.tileSeconds; AM-32) · .floorSeconds 3 (door to corral; Heiko, S-2: "3 is fine") · .leadPace 0.9 ·
     .terrain plains 1, desert 0.9, tundra 0.85, forest 0.75, ice 0.75, crater 0.8, hills 0.7, volcanic 0.6,
     river 0.6, swamp 0.5, mountains 0.4, lake 0 (lakeMode 'shore', wading 0.3) · .tickMs 50 · .catchUpTicks 10 ·
     .steerMaxPerSecond 10 · .botSpeed 1 · .botCounterPauseSeconds 0.5 · .trespass true · .mountainsImpassable false ·
-    .pubLeadRefund 0 · .reoutfitCost = the outfitter's price (AM-2) ·
-    .month1WaitsForFirstMule true (AM-3)
-  WOLVES.on true · chancePerSecond 0.1 · packSize 3 · cooldownSeconds 20 · chooseSeconds 3 · chaseSpeed 1.1 ·
+    .pubLeadRefund 0 · .reoutfitCost = the outfitter's price (AM-2)
+    (.month1WaitsForFirstMule removed: AM-34)
+  WOLVES.on true · chancePerSecond 0.1 · packSize 3 · cooldownSeconds 20 · chooseSeconds 3 · chaseShare 0.88 (of mapTilesPerSecond; AM-32) ·
     giveUpSeconds 5 · giveUpTiles 4 · bittenPace 0.5 · fightSeconds 10 · lungeEverySeconds 1.6 · warnSeconds 0.8 ·
     strikesToWin 3 · bitesToLose 3 · pelts 2 · peltPrice 20 · stunSeconds 4 · boltTiles 4 · boltSpeed 3.5 ·
     botFightShare 0.5 · botWolfLandShare 0.5 · levels {rookie 0.4/0.5, regular 0.6/0.35, veteran 0.9/0.15}
@@ -648,6 +647,7 @@ unknown      no frame for > DEV_STEER.staleMs (1000) → the phone shows "reconn
 | `ColonistView` v2: `{x, y, space: 'map'\|'hall', facing: 'left'\|'right', moving, lead: {good: Outfit\|null, x, y}\|null, pace, pelts, encounter: 'choose'\|'chase'\|'fight'\|null}` | MODIFIED (v1 fields `at`, `walk`, `assayUntil` go in C14) | yes, at C14 | C7 | phone, TV |
 | `MyView.reach: {verb, detail, enabled}`; `MyView.banners` (the moments' lines for you) | ADDED | no | C7 | phone C11 |
 | `DevFrame {tick, at, colonists: [{id, x, y, space, facing, moving, lead}], beats: string[]}` via the tabletop's frame message `{t:'frame'; payload}` | ADDED | no | C7, C8 | phone, TV |
+| `DevFrame.moments?` {packs: [{who, stage, wolves: [{x, y, state, target}]}], glint: {x, y, untilTick} \| null, scramble: {untilTick, needers, got, over, leftOut} \| null}, absent when nothing is on (AM-28) | ADDED | no (optional) | C4, C8 | phone, TV (PR-9's layers) |
 | `DevFloor` (engine, not on the wire) | ADDED | — | C1 | server, sim, phone prediction |
 | config `DEV_STEER`, `WOLVES`, `GLINT`, `SCRAMBLE` | ADDED | no | C5 | engine, AI, sim |
 
@@ -685,18 +685,18 @@ C14.
 | ID | Given / When / Then | observed_at | negative case | verifies |
 |---|---|---|---|---|
 | **B-AC-1** (MUST) | Given a development turn on the rig and one phone held sideways with no TV · When the player uses only the stick and the button · Then they reach the store, buy at the corral, outfit, leave with the MULE on its lead, install on their own plot and end at the pub, the button saying each step before it | the phone in a real browser (e2e, the steering step), and the server's GameState (money, the plot's outfit) | a press with nothing in reach changes nothing | C1, C3, C6, C11 |
-| **B-AC-2** (MUST) | Given four seats and the TV · When colonists move · Then the TV draws each where the server has it, within one frame | TV page vs the server's floor in the e2e | an away seat's colonist stands still on the TV | C8, C12 |
+| **B-AC-2** (MUST) | Given four seats and the TV · When colonists move · Then the TV draws each where the server had it `DEV_STEER.interpolateMs` earlier (RULE-10), within one tick's travel (AM-24) | TV page vs the server's floor in the e2e | an away seat's colonist stands still on the TV | C8, C12 |
 | **B-AC-3** (MUST) | Given a laptop · When the player holds arrow keys and presses SPACE, or holds the mouse on a spot · Then the colonist walks there and the press acts; the page never scrolls | laptop page in the e2e | keys with the page unfocused do nothing | C11 |
 | **B-AC-4** (MUST) | Given a phone at 667×375 and at 844×390 · When the development screen shows the map and the hall · Then nothing overflows its frame; the controls and the plot card cover 0 px² of your colonist, the store and the target, and over your own plots the controls are translucent so the plot's marks read through (AM-20) | shell.ts measurements | — | C11, C15 |
 | **B-AC-5** (MUST) | Given a colonist on forest with wolves due · When the player runs or fights · Then the outcomes of RULE-4 land: bitten and slowed, got away, pelts sold at the store, or the MULE bolted and caught | phone + server state in the e2e (wolves forced by a seeded test option) | no wolves in the hall | C4, C11 |
 | **B-AC-6** (MUST) | Given a glint lit · Then every phone and the TV show it at once and the first colonist onto it gets the prize | phones, TV, server stock | after showSeconds it fades and nobody gets it | C4, C11, C12 |
-| **B-AC-7** (MUST) | Given 3 MULEs left and 4 seats needing one · When the first sale leaves 2 · Then the TV and phones call the scramble and the one left out is told, with the pub's payout | TV, phones, server | no call when no seat needs a MULE | C4 |
+| **B-AC-7** (MUST) | Given 3 MULEs left and 4 seats needing one · When the first sale leaves 2 · Then the TV and phones call the scramble and the one left out is told, with the pub's payout | TV, phones, server; staged by `START.storeMules` 3 (AM-29) | no call when no seat needs a MULE: proven by T-AC-8's negative (engine) and the screens' no-banner unit test (AM-29) | C4 |
 | **B-AC-8** (MUST) | Given a phone that drops mid-turn · Then its colonist stops, the turn still ends on the clock, and on reconnect the player steers again | server + phone | — | C6 |
 | T-AC-1 (serves B-AC-1, B-AC-2) | Given a seed and a per-tick input script · When stepFloor runs twice · Then the floors are identical; and the server's floor after a scripted turn equals the sim's (HC-4) | engine unit + server test | a changed input at one tick changes the result | C1, C6, C10 |
 | T-AC-2 (serves G-2) | speeds per RULE-2's examples (plains 1.5625, mountains 0.625, swamp 0.78, leading 1.41, bitten 0.78 tiles/s) | engine unit | lake 0 blocks | C1, C5 |
 | T-AC-3 (serves B-AC-1) | Reach per RULE-3's table, one row each | engine unit | money short → disabled, not hidden | C3 |
 | T-AC-4 (serves B-AC-2) | Given the tick · Then one frame per tick reaches every connection, frames are dropped not queued for a slow one, full views go only on change, or to one seat when its reach's words change (AM-11) | server + tabletop test | no full view on a tick where nothing changed and no seat's reach words changed; a steer sends no full view (AM-13) | C6, C8 |
-| T-AC-5 (serves G-2, RULE-8) | In 20 seeded AI-only turns at the defaults every AI colonist reaches the pub within 50 s, and a bot races in at least 40% of glints, never one whose detour breaks its errand (RULE-8; AM-22) | sim (`pnpm sim` report) | with botsSpareTime off, Kai misses turns | C9, C10 |
+| T-AC-5 (serves G-2, RULE-8) | In 20 seeded AI-only turns at the defaults every AI colonist reaches the pub within the turn (`DEVELOPMENT.fullSeconds`, 60 s since #259), except one a wolf's bite cost the pub: when the bite landed, its bitten walk to the pub was longer than the time left (AM-26), a bot races in at least 40% of glints, never one whose detour breaks its errand (RULE-8; AM-22), and at least 50% of months see an AI wolf encounter on each of the sim's seeds 1, 101 and 201 (AM-22, AM-27) | sim (`pnpm sim` report) | with botsSpareTime off, Kai misses turns | C9, C10 |
 | T-AC-6 (serves B-AC-5) | Wolves: the rookie wins ≈ 1 in 4 over 60 seeded fights; a forest run escapes ≈ 13 of 20 | engine headless | — | C4, C9 |
 | T-AC-7 (serves B-AC-6) | Glint timing per RULE-5 (none in the first 6 s, 8 s shown, the first onto it wins) | engine unit | a non-racing colonist on the tile wins too | C4 |
 | T-AC-8 (serves B-AC-7) | Scramble per RULE-6, the beats in order, the last sale's single line | engine unit | — | C4 |
@@ -740,6 +740,131 @@ inside a wall; money and stock change only through game.ts rules; development en
 
 ## §8 · Amendments `[review-only]`
 
+- **AM-34 (2026-11-05, Heiko: "Yes, always count", via the PM).** Month 1's development clock counts down from the
+  start, like any month's. **Withdrawn:** AM-3's first-MULE wait and the host's Continue that ended it, AM-6's
+  "in force now" for that wait, and AM-33's who-counts-as-in rule (`mule-game.ts::isIn`); the config value
+  `DEV_STEER.month1WaitsForFirstMule`; on the screens, the side room's wait words (`waitingNow`, AM-20 (4)), the
+  ticker's one-row fold under them (AM-31) and the TV's hidden header clock while month 1 waits (AM-24 (4));
+  T-AC-9's month-1 case (AM-3) goes with it, and T-AC-9 keeps its away-seat and flood cases. HC-3 has no
+  exception. Owner of the removal: WS3, on arcade-pr11-walking-on (server, config, the screens' copy in one change).
+- **AM-33 (2026-11-04, the PM's G-3 play on #285, ruled by WS6; AM-3's gap). WITHDRAWN by AM-34.** Month 1's clock waits for every
+  seat's first MULE (AM-3), and a seat already counts as in once it installed, is at the pub, is away, is Ready, or
+  owns no plot. A seat the scramble left out (the corral empty, no MULE on its lead) could never bring one, so the
+  clock stood at 60 s with every AI waiting at the pub door until that human walked to the pub. **A seat also counts as
+  in when it cannot get a first MULE: the corral is empty and it leads none, or it cannot pay the corral's price.**
+  The clock then starts at once; the left-out seat's phone keeps its words (the pub pays now). Owner: the month-1
+  clock's server code (`mule-game.ts::isIn`, WS3), with a red test first.
+  **Extended (WS3's #311 review):** an installed MULE needs an outfit, so the same holds for the outfit: a seat counts
+  as in when it leads no MULE and cannot pay for a MULE and the cheapest outfit, or leads an empty MULE and cannot pay
+  for any outfit. Counting a seat in only starts the clock; the seat still plays if it comes by the money (a pelt
+  sold, say) — no one holds the table by being unable to act.
+- **AM-32 (2026-11-04, WS1, ruled by WS6; caused by Heiko's walking ruling: `mapTilesPerSecond` 1.25 → 2.5,
+  `hungerPaceMin` 0.6).** RULE-4's chase was tuned as an absolute `WOLVES.chaseSpeed` 1.1 tiles/s against colonists at
+  1.25, so at twice the pace a forest run escaped 20 of 20 (T-AC-6's example: about 13 of 20) and "run or fight" stopped
+  being a choice. **The chase is relative to the walking pace:** `WOLVES.chaseShare` 0.88 (1.1 / 1.25) of
+  `DEV_STEER.mapTilesPerSecond` replaces `chaseSpeed`; **`giveUpTiles` stays 4 tiles and the chase's times stay as
+  they are.** (Ruled first with `giveUpTiles` scaled too; WS1 measured it backwards: the pack's distances are in tiles
+  and the wolves at 0.88 of the pace outrun a forest colonist at 0.75 of it, so a scaled give-up let them close twice
+  the ground, 4 of 20 escaping at 2.5 and 0 at 5.) Measured with `chaseShare` alone, forest runs escaping of 20: 11 at
+  1.25, 12 at 2.5, 15 at 5, all within T-AC-6's 9–18, the rookie winning 11 of 60 at each. The exact invariant (every
+  chase time × 1.25 / pace too) was not taken: it moves two more values for a drift that stays in range at any pace
+  played. A change of model, not tuning: it keeps RULE-4's specced behaviour. RULE-2's examples are restated at 2.5.
+- **AM-31 (2026-11-04, PR-10 on #291, by WS6; C11's gap).** With walking on, the phone's and the laptop's development
+  drew no table chat: the tap screen gets it from `phone/Shell.tsx`'s `TableChat`, and the walking screen has no shell,
+  so the ws6-ux spec's B-AC-17 (a line in development shows on both phones and the TV, at the speaker and in the
+  ticker) failed. C11 now also MUSTs the table chat: **the ticker** in the side room under the status at 844 and on the
+  laptop's side panel, and at 667, where the status overlays the map's top edge, one line in that bar; **the bubbles**
+  at each colonist (`Speaker`), on the map and in the hall, as the TV already draws them. The ticker covers 0 px² of
+  the store, your plots and the controls; a bubble sits at its colonist, as the other map-anchored layers do (AM-30).
+  The TV is unchanged: TvDevelop already keeps the ticker and the speakers. **In the mock at 7c88b4cb** (a change since
+  Heiko's approval of the arcade mock, named to him at the walking table test): at 844 only the newest line, wrapped to
+  at most three rows (a cut line was unreadable at the side room's 98 px); the laptop's rail the newest two, wrapped.
+  **Built (WS6, on #291's branch):** the ticker follows the status: the side room where the layout has one (844 with
+  four seats), else the top bar (one cut line; 667, and 844 on the 13×7 and 19×11 maps). (Withdrawn with AM-34: the
+  side-room ticker's one-row fold under month 1's wait words; there are no wait words.) In the hall at 667 one cut row at the
+  compact room's foot: every development layout has a ticker. A speaker the screen does not draw (in the other space,
+  or done) is anchored by their ticker line, creature and name: the walking screen has no seat row, so no fallback
+  bubble.
+- **AM-30 (2026-11-04, PR-9's review, ruled by WS6).** (1) **C11's 0 px² binds the layers placed on the screen** (the
+  scramble banner, the glint strip, the TV's moment lines): they keep off the store, your plots and the controls,
+  measured on the drawn text at 844 and 667, the longest line included. **The layers drawn where a moment happens**
+  (the wolves and their ring, the choice callout, the glint on its tile) sit at their place on the map: a glint on your
+  own plot covers it by definition (`GLINT.onOwnedPlots`), and a pack met near the map's bottom corners can sit under
+  the stick or the button. The laptop's banner along the bottom edge and the glint strip at the hall's top are the
+  mock's own placement. (2) **The TV reads every colonist's encounter stage from the frame's `packs`**, never from the
+  view: in steered development a view is sent only when a human's reach words or the state change, so an AI's
+  encounter would never reach the TV through it. (3) **Later, not in PR-9:** the frame's `beats` carry text only, so
+  the client matches a few beat texts by prefix; carrying each beat's `kind` (WS1's `FloorBeat.kind`) on the wire
+  would remove that coupling.
+- **AM-29 (2026-11-04, PM ruling: one way to stage the scramble; WS5's UBER-AC-3 test and PR-9's B-AC-7).** The
+  scramble is staged by setting `START.storeMules` to 3 on the in-process server before it starts (upkeep refills only
+  at month end, so month 1's corral holds 3), with the seats needers by the game's own rule (`needsMule`: a free plot
+  and the money); no test rewrites money or the corral mid-turn. B-AC-7's negative ("no call when no seat needs a
+  MULE") needed exactly such rewrites in a browser test, so it is proven where the rule lives: T-AC-8's negative in
+  the engine, and the screens' "no banner without a scramble" unit test.
+  **UBER-AC-3's scramble clause (PM ruling, 2026-11-04):** proved on the same staged corral (`START.storeMules` 3,
+  the host claiming the plot by the store so it is a needer), not in a natural 12-month game: upkeep refills the corral
+  to its target every month (`upkeep.ts:76`), so an ordinary game never runs it down to a scramble. §0's wording
+  stands; this is how its scramble clause is measured (WS5's UBER-AC-3 test). The wolves' and the glint's clauses are
+  still measured in the natural seeded game.
+- **AM-28 (2026-11-04, PR-9's start, by WS6; the frame contract's gap).** The moments' layers (C11, C12) draw the
+  wolves, the glint and the scramble on every phone and the TV, but §3's `DevFrame` carried only positions and
+  beats, and `ColonistView` only the encounter's stage: the screens had nothing to draw a pack or a glint from.
+  `DevFrame` gains an optional **`moments`**, absent when nothing is on: `packs` (per colonist met, `who`, `stage`,
+  and each wolf's `x`, `y`, `state` prowl | tell | lunge | open | hurt, and lunge `target` or null), `glint` (`x`,
+  `y`, `untilTick`, or null) and `scramble` (`untilTick`, `needers`, `got`, `over`, `leftOut`, or null), from the
+  engine's `FloorEncounter`, `FloorGlint` and `FloorScramble`, rounded to 2 decimals where the frame is built
+  (AM-15); about 300 B with four packs out. The producer is the frame builder (`dev-steer.ts::devFrame`) and
+  `packages/protocol`: **PM ruling (a), WS1 builds it in PR-8 #248** with a frame test, WS3 OKing the SHA and the shape. PR-9 stubs against this shape. **Refined with WS1 before PR-9's red steps:** a wolf's
+  `target` is a position (where its colonist stood when it crouched), set at `tell` and **cleared by the engine when
+  the lunge ends**, so it is null outside `tell` and `lunge`; the scramble goes **from its call to the turn's end**,
+  `over` and `leftOut` included, and `leftOut` is filled whenever `over` is set (under `'time'` too), so "absent" means
+  no pack, no glint and no scramble yet this turn; the glint's `x`, `y` are its tile, drawn at the tile's middle;
+  `packs[].stage` stays, as the TV reads every pack from the frame at 20 Hz. **Extended at PR-9's first build** (the layers drew
+  them by guessing from successive frames, which is rules in the client and wrong for a screen that joins mid-fight):
+  each pack also carries its `centre` {x, y}, its stage's `sinceTick`, and its `strikes` and `bites`; `moments` also
+  carries `stunned` [{who, untilTick}] from `FloorColonist.stunnedUntilTick` and `bolted` [who] for a MULE bolted and
+  not caught (`FloorColonist.bolt`), the MULE drawn at the colonist's `lead`. And **the frame's `beats` are filled**:
+  `devFrame` gets the tick's `floor.moments.beats` texts (it was called with none, so no TV line ever showed). The e2e forces the moments by
+  setting `WOLVES` and `GLINT` on the in-process server's config, so no server test option is added.
+- **AM-27 (2026-11-04, WS1's PR-8 #248 sim, ruled by WS6; changes AM-22's bar).** With `botWolfLandShare` built at
+  0.5, AI wolf months over 40 AI-only games with walking on are 61% on seed 1, 52% on 101 and 50% on 201 (standard
+  error about 2.2 points, so 101 and 201 truly miss 60%). The bar is now **at least 50% of months on each of seeds 1,
+  101 and 201**, judged by the sim report's wolf-month line (`WOLVES.simMonthsWithPack` 0.5); the 20-game vitest case
+  is a smoke check only. Why: UBER-AC-3 needs one AI wolf encounter on the TV in a 12-month game, and at 50% of months
+  a game has about six, so the promise holds with room on every seed, where 60% on seed 1 alone passes by a point and
+  fails two seeds of three. Raising `botWolfLandShare` to keep 60% would be tuning, Heiko's, and tuning is parked.
+- **AM-26 (2026-11-04, WS1's PR-8 #248, ruled by WS6; replaces AM-23's excuse).** AM-23 excused only a colonist an
+  encounter still held at the bell, but none of the 7 late-pack turns was: every encounter had ended before it. One
+  was an AI choice (running through the pack, fixed). The other six are dead ends: the colonist is slower than the
+  pack (0.37–0.96 tiles/s against `chaseSpeed` 1.1), the bite lands mid-chase, and the bitten walk to the pub is then
+  longer than the time left (6.1 s left against 6.2 s, up to 20.9 s against 30.3 s). T-AC-5's excuse is now exactly
+  that, checked at the bite's tick: **when the bite landed, the bitten walk to the pub exceeded the time left.** It is
+  objective and covers 6 of 960 turns (0.6%); any AI choice that misses the pub stays a miss. Keeping the AI off wolf
+  land when a bite would cost the pub was tried and reverted: 7 misses, and wolf months fell under AM-22's 60%.
+  Changing `chaseSpeed` or `bittenPace` instead is a balance call, Heiko's, with tuning parked.
+- **AM-25 (2026-11-04, PR-6's render gate and screenshots, ruled by WS6).** (1) **The TV's hall names its rooms
+  only:** outfit prices and the pub's payout are each seat's own (`me.outfitCosts`, the pub's sum from your time
+  left), and the TV has no seat, so it draws no prices where the mock's TV did. (2) **A plot's label stays inside the
+  map:** near an edge it is anchored to the plot's inner side, never clipped ("UR PLOT 1·1" at 844 and 667). (3)
+  **Colonists on one spot fan out:** two or more drawn within 0.3 tiles of each other are offset a little in seat
+  order, so none hides another (at the start two share a door spot); drawing only, the wire and the prediction
+  unchanged.
+- **AM-24 (2026-11-04, PR-6 phase B's findings, ruled by WS6).** (1) **B-AC-2 measured as RULE-10 draws:** others are
+  drawn `interpolateMs` (100 ms, two ticks) behind the newest frame, so at the same instant the TV is up to about 0.13
+  tiles behind the server. B-AC-2 compares the TV against where the server had each colonist `interpolateMs`
+  earlier, within that seat's largest one-tick move plus the wire's 0.01 rounding; measured 0.065 tiles worst over
+  four seats. (2) **"Translucent" over your other plots (AM-20) is 60% opacity,** the scaffold's fade near you or the
+  target staying at 25%. (3) **A released stick sends its stop by timer and on hide or blur,** not on the next
+  animation frame: a phone put away mid-walk otherwise left its colonist walking on the server. (4) ~~The TV shows no
+  header clock while month 1's clock waits~~ (withdrawn, AM-34: month 1's clock always counts).
+- **AM-23 (2026-11-04, WS1's PR-8 numbers, ruled by WS6).** `botWolfLandShare` is built at its specced 0.5 (AI wolf
+  months were 46% without it). On T-AC-5's own sample (20 seeded AI-only games, its `observed_at`): wolf months
+  61.7%, glints raced 43.1%, pub missed 7 of 960 turns (0.7%), each a colonist a late pack still held at the bell.
+  T-AC-5 is judged on that sample, not the 40-game sim (wolf months 59%, glints 39%, both within sampling noise of the
+  bars): the two pull against each other, and with tuning parked neither is raised at the other's cost. T-AC-5's
+  "every AI colonist reaches the pub" now names the one excuse the test already applied: a colonist a wolf encounter
+  holds when the bell rings (RULE-4: the encounter ends, nothing paid), never one that simply ran out of time.
 - **AM-22 (2026-11-04, WS1's findings at arcade PR-8, ruled by WS6).** (1) **T-AC-5's glints:** with RULE-8 honoured
   (a bot races only if its errand still fits the clock after the detour, `botsSpareTime`), the real AI races 44–47%
   of glints (252 of 565 in 40 games; the mock's one-MULE bots 63%), because it plans its MULEs to fill the clock.
@@ -762,8 +887,8 @@ inside a wall; money and stock change only through game.ts rules; development en
   your colonist or the target: when either is under its box (the mock's columns 5–14, rows 1–4), it moves to the
   map's other half (columns 0–9). (3) **The route follows the server:** the phone and the TV show the arcade screen
   when the view says the floor is on (its Reach and frames are present), not by the bundle's own `DEV_STEER.on`, so
-  a flag-on server needs no flag-on build. (4) **Month 1's wait:** while the clock waits for every first MULE (A-1),
-  the side room says so in A-1's own words (`waitingNow`), not a full clock and nothing else. (5) **Reconnecting:**
+  a flag-on server needs no flag-on build. (4) ~~**Month 1's wait** (`waitingNow` in the
+  side room)~~ withdrawn, AM-34: month 1's clock always counts, so there is no wait to put into words. (5) **Reconnecting:**
   the app's ConnectionBar look with "RECONNECTING…" is the stale state RULE-10 asks for. (6) **Deferred, not PR-6:**
   the second choice on one spot (V-3/V-5's alt button; it needs a second verb in ReachView and the act, a protocol
   change; installing first and then analysing reaches the same result today), and the chips with no data on the wire
@@ -860,7 +985,7 @@ inside a wall; money and stock change only through game.ts rules; development en
   to the record's §3. Coupling into C8: WS3's recorder and replay pass `frame` through (to the room when recording, a
   no-op on replay), two WS3 lines in C8's wave that WS6 reviews, with a test row that a recorded game's frames still
   reach a client. S-1 still settles 20 Hz against 10 Hz.
-- **AM-6 (2026-10-29, PM ruling).** AM-3's month-1 clock does not wait for the arcade switch: Heiko approved it for
+- **AM-6 (2026-10-29, PM ruling; its month-1 wait WITHDRAWN by AM-34).** AM-3's month-1 clock does not wait for the arcade switch: Heiko approved it for
   the game now. It is a clock rule in mule-game.ts, not the tick, so it applies with `DEV_STEER.on` false, on
   today's walk. It is built as its own small WS3 PR in the audit build split, after WS1 measures month 1's
   development time on today's walk with the existing sim (AI-only, and with one idle human plus the host's
@@ -891,7 +1016,7 @@ inside a wall; money and stock change only through game.ts rules; development en
   audit mock's dashed "Or re-outfit it at the store" (#audit-dev-swap, V-4). Serves G-1 (no menus) and lands in C3
   and C11; T-AC-3 gains rows 8a and 11a; game.ts's outfit rule gains the re-outfit as a named edit (WS3 owns game.ts
   edits, per the ruling).
-- **AM-3 (2026-10-29, Heiko's Q3 "yes", via the PM).** Month 1's development clock stands full until every present
+- **AM-3 (2026-10-29, Heiko's Q3 "yes", via the PM). WITHDRAWN by AM-34 (Heiko, 2026-11-05).** Month 1's development clock stands full until every present
   seat's first MULE is installed; the host's Continue (the approved planning pattern: host only, one confirming tap,
   a news line naming who was passed) starts it past anyone not in, and an away seat counts as in. HC-3 carries the
   exception; the tick, the moments and the AI run while the clock waits. The TV shows whose first MULE is still to

@@ -18,6 +18,7 @@ import {
   AI_PERSONAS,
   COLONY_SELLER,
   colonyFailed,
+  colonyScore,
   emptyStock,
   GOOD_CONFIG,
   GOODS,
@@ -93,7 +94,7 @@ export function winnerOf(state: GameState): number {
   return state.players.map((p, i) => ({ p, i })).sort((a, b) => score(state, b.p.id) - score(state, a.p.id))[0]!.i;
 }
 
-/** What the plan lines (C14) count over a run. */
+/** What the plan lines count over a run. See C14. */
 export interface PlanTally {
   games: number;
   /** Wins, and seats sat, by seat kind: a seat's `plays`. */
@@ -105,7 +106,7 @@ export interface PlanTally {
   /** Land-auction lots AI sellers listed; their sales by item and buyer, and the credits they fetched. */
   listed: number;
   sold: { plot: number; mule: number; toStore: number; cr: number };
-  /** Route steps played from a part, and those that fell back, by reason (RULE-9 / RULE-11). */
+  /** Route steps played from a part, and those that fell back, by reason. See RULE-9, RULE-11. */
   steps: number;
   fallbacks: Record<string, number>;
 }
@@ -143,7 +144,7 @@ export function tallyGame(t: PlanTally, specs: readonly SeatSpec[], played: Play
   }
 }
 
-/** The plan lines (C14): wins by seat kind, monopoly plans at the level, AI listings and their sales, route fallbacks. */
+/** The plan lines: wins by seat kind, monopoly plans at the level, AI listings and their sales, route fallbacks. See C14. */
 export function planLines(t: PlanTally, level: AiLevelId): string[] {
   const seats = t.seats.playbook + t.seats.today;
   const sales = t.sold.plot + t.sold.mule;
@@ -163,6 +164,42 @@ const quantile = (values: number[], q: number) => {
   const sorted = [...values].sort((a, b) => a - b);
   return sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))] ?? 0;
 };
+
+/**
+ * One game's colony score total (the engine's colonyScore, RULE-25) at each month's end, month 1 first: read as each
+ * upkeep ends, and the last month's from the final state, since its upkeep moves straight to game over. Empty when the
+ * game plays without the council.
+ */
+export function colonyScoreRecorder(): { onPhase: (s: GameState) => void; end: (state: GameState) => number[] } {
+  const totals: number[] = [];
+  return {
+    onPhase: (s) => {
+      const score = s.phase === 'upkeep' ? colonyScore(s) : null;
+      if (score) totals.push(score.total);
+    },
+    end: (state) => {
+      const score = colonyScore(state);
+      return score ? [...totals, score.total] : [];
+    },
+  };
+}
+
+/**
+ * The colony score lines (C29's baseline; no check, no target yet): the median and 90th percentile at game end, and the
+ * median across games at each month's end. None when no game had a colony (politics off), so that report is unchanged.
+ */
+export function colonyScoreLines(games: readonly (readonly number[])[]): string[] {
+  const played = games.filter((g) => g.length > 0);
+  if (played.length === 0) return [];
+  const ends = played.map((g) => g.at(-1)!);
+  const months = Math.max(...played.map((g) => g.length));
+  const path = Array.from({ length: months }, (_, m) => quantile(played.flatMap((g) => (m < g.length ? [g[m]!] : [])), 0.5)); // literal-ok: the median the line names
+  return [
+    // literal-ok: the median and 90th percentile the line names
+    `     Colony score at game end: median ${quantile(ends, 0.5)}, 90th percentile ${quantile(ends, 0.9)} over ${played.length} games (no check)`,
+    `     Colony score by month (median across games), months 1-${months}: ${path.join(' / ')} (no check)`,
+  ];
+}
 
 /**
  * The arcade floor's report lines (spec §4), only when development played on it: MULEs installed and pub times a turn,
@@ -349,6 +386,8 @@ function main() {
   /** Planning months by the mood their roll read, each social event's count by that band, and the strikes production felt. */
   const zero = () => Object.fromEntries(MOOD_BANDS.map((b) => [b, 0])) as Record<MoodBand, number>;
   const mood = { months: zero(), events: Object.fromEntries(SOCIAL.map((k) => [k, zero()])) as Record<string, Record<MoodBand, number>>, strikesFelt: 0 };
+  /** Each game's colony score at each month's end; empty games without the council. */
+  const colonyPaths: number[][] = [];
   // Read once the land grant opens: by then the month's election is closed and the Governor has set the tax.
   const onPhase = (s: Parameters<NonNullable<Parameters<typeof playGame>[2]>['onPhase'] & {}>[0]) => {
     if (s.phase === 'planning') {
@@ -377,8 +416,10 @@ function main() {
     let pending: { sickness: number; forced: PhaseEvents | null } | null = null;
     /** Plots developed as each month's production runs, by month. */
     const developedAt = new Map<number, number>();
+    const colony = colonyScoreRecorder();
     const onEachPhase = (s: GameState) => {
       onPhase(s);
+      colony.onPhase(s);
       if (s.phase === 'production') developedAt.set(s.month, s.tiles.filter((t) => t.owner && t.outfit).length);
       if (s.phase === 'production' && pending) {
         const events = s.history.at(-1)!.events ?? [];
@@ -400,6 +441,7 @@ function main() {
     const played = playGame(seed, specs, { politics, walking, onPhase: onEachPhase });
     const { state, broke, auction: a, lots: l, mulesLost: lost, turns, moments } = played;
     mulesLost += lost;
+    colonyPaths.push(colony.end(state));
     floorTurns.push(...turns);
     floorMoments.push(...moments);
     playerGames += state.players.length;
@@ -518,6 +560,7 @@ function main() {
     const called = MOOD_BANDS.reduce((n, b) => n + mood.events.generalStrike![b], 0);
     console.log(`       general strikes called ${called}, felt unpaid in production ${mood.strikesFelt}`);
   }
+  for (const line of colonyScoreLines(colonyPaths)) console.log(line);
   console.log('\nPosted prices (min / median / 90th percentile / max):');
   for (const good of GOODS) {
     const all = prices[good]!;

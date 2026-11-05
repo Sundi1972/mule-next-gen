@@ -1,4 +1,5 @@
 import { Panel, SharedClock, YourPace } from '@mule/ui';
+import { Ticker } from '../../proposed/Chat';
 import { ThemeToggle } from '../../../../../../apps/web/src/components/ThemeToggle';
 import { IntentMarker } from '../../proposed/IntentNote';
 import { MONTH } from './fixture';
@@ -63,6 +64,9 @@ export function LaptopArcade() {
             <LeadChip />
             <IntentMarker note={NOTE.A4} at="tr" />
           </span>
+          <Panel title="Table chat">
+            <Ticker lines={2} wrap />
+          </Panel>
           <Panel title="Controls" className="mt-auto">
             <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-sm" data-testid="controls-legend">
               {KEYS.map(([k, v]) => (

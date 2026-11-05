@@ -400,14 +400,14 @@ describe('land auction on the server', () => {
     }
   });
 
-  it('B-AC-9: Ossa and Lena walk a 200 lot past 400: every seat sees the climb go twice as fast, a lead change with under 2 s left puts 2 s back on every clock; a lot with one bidder runs its 12 s', () => {
+  it('B-AC-9: Ossa and Lena walk a 200 lot past 400: every seat sees the climb go twice as fast, a lead change with under 2 s left puts 2 s back on every clock; a lot with one bidder runs its LOTS.walkMs', () => {
     const { game, advance, plots } = toMonth2Planning();
     for (const plot of plots.b!) game.handle('b', { type: 'list', item: { kind: 'plot', ...plot }, minimum: 200, unsold: 'keep' });
     toLandAuction(game, advance);
     skipIntro(game, advance);
     const views = () => [...humans, null].map((id) => game.viewFor(id).landAuction!);
-    // The board runs from 140 to 400, crossed in 6 s.
-    const base = (400 - 140) / 6;
+    // The board runs from 140 to 400, crossed in WALK.crossSeconds.
+    const base = (400 - 140) / WALK.crossSeconds;
     for (const v of views()) expect(v.speed).toBeCloseTo(base);
 
     const ossa = walkUpTo(game, advance, 'o', 401);

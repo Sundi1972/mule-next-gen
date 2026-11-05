@@ -216,16 +216,26 @@ export const UPKEEP = {
   crewPerWater: 6,
   crew: { raw: 1, factory: 2, greenBelt: 0 },
   /**
-   * Energy a raw plot burns a month, by what it makes. Factories burn what
-   * their recipe says. Without it a raw plot makes half, a factory nothing.
+   * Energy a raw plot burns a month, by what it makes. Factories burn what their recipe says. An Energy plot pays its
+   * use from its own output and is never turned off; an owner short of Energy turns its other plots off, biggest use
+   * first, until the rest fit (AM-17). Energy plots 1: Heiko, 5 Nov.
    */
-  energyUse: { food: 1, water: 1, energy: 0, smithore: 2, crystite: 2, rareEarth: 2 } satisfies Record<RawGood, number>,
+  energyUse: { food: 1, water: 1, energy: 1, smithore: 2, crystite: 2, rareEarth: 2 } satisfies Record<RawGood, number>,
+  /**
+   * Share of its output a plot turned off for want of Energy makes, rounded half up (Heiko, 5 Nov: 20%). A turned-off
+   * factory makes it from the same share of its non-Energy inputs, rounded up (PM, 5 Nov: nothing from nothing), and
+   * takes none when its share of output rounds to 0 (PM, 5 Nov: nothing spent for nothing).
+   */
+  offOutputShare: 0.2,
   /**
    * Plots that need irrigation: when their owner holds less Water than the
    * household and crew need, they make half (on top of any Energy shortfall).
    */
   irrigated: ['food'] as RawGood[],
-  /** Share of its output a plot makes without the Energy (or, for an irrigated plot, the Water) it needs. */
+  /**
+   * Share of its output an irrigated plot makes when its owner is short of Water, rounded down. (Energy no longer
+   * halves: offOutputShare, AM-17.)
+   */
   shortOutputShare: 0.5,
   /** Colonists need 1 Food and 1 Water a month per this many colonists. */
   colonistsPerUnit: 20,
@@ -947,16 +957,16 @@ export const POLITICS = {
     /** The AI Governor's colony acts and the mood-weighed vote (G-5 C25). Placeholders until the sim tunes them. */
     colony: {
       /** Whether an AI Governor of each persona commissions a prestige object the fund can pay for. */
-      commissions: { trader: true, cautious: true, aggressive: true, saboteur: false } as Record<AiPersonaId, boolean>,
+      commissions: ({ trader: true, cautious: true, aggressive: true, saboteur: false } satisfies Record<AiPersonaId, boolean>) as Record<AiPersonaId, boolean>,
       /** Whether an AI Governor of each persona pays general strikers the fund can pay. */
-      paysStrike: { trader: true, cautious: true, aggressive: false, saboteur: false } as Record<AiPersonaId, boolean>,
+      paysStrike: ({ trader: true, cautious: true, aggressive: false, saboteur: false } satisfies Record<AiPersonaId, boolean>) as Record<AiPersonaId, boolean>,
       /** Whether an AI Governor of each persona repairs a damaged object the fund can pay for (AM-10). */
-      repairs: { trader: true, cautious: true, aggressive: true, saboteur: false } as Record<AiPersonaId, boolean>,
+      repairs: ({ trader: true, cautious: true, aggressive: true, saboteur: false } satisfies Record<AiPersonaId, boolean>) as Record<AiPersonaId, boolean>,
       /**
        * An AI Governor's top bid, in credits, for an object's site at the land auction (RULE-28, AM-10); null, it never
        * bids, so it commissions only objects that need no plot. The engine caps the bid at the fund over its reserve.
        */
-      siteBid: { trader: 400, cautious: 300, aggressive: 500, saboteur: null } as Record<AiPersonaId, number | null>,
+      siteBid: ({ trader: 400, cautious: 300, aggressive: 500, saboteur: null } satisfies Record<AiPersonaId, number | null>) as Record<AiPersonaId, number | null>,
       /** In these mood bands an AI voter will not vote for the sitting Governor if anyone else runs. */
       leanIn: ['unhappy', 'unrest'] as MoodBand[],
     },
@@ -1071,18 +1081,21 @@ export const WALK = {
    * While a buyer and a seller (or a player and the store or the ship) stay
    * matched, the first unit takes tradeStartMs, each further one tradeSpeedUp
    * times as long as the one before, down to tradeFloorMs, so big lots don't
-   * take ages. The speed-up starts again when the pair separates.
+   * take ages. The speed-up starts again when the pair separates. 1000 and 200, from 400 and 60: start slow, about one
+   * unit a second, then faster to at most 5 a second, about 7 units in (Heiko at the table, 5 Nov; guess numbers, to be
+   * tested).
    */
-  tradeStartMs: 400,
+  tradeStartMs: 1_000,
   tradeSpeedUp: 0.8,
-  tradeFloorMs: 60,
+  tradeFloorMs: 200,
   /**
    * Walking speed in price units per second, set when a good comes up: its
    * board's starting height divided by this, so crossing the board takes
-   * this many seconds whatever the good costs. Never under minSpeed.
+   * this many seconds whatever the good costs. Never under minSpeed. The land auction walks at the same speed.
+   * 7.5 and 1.6, 25% slower than 6 and 2 (Heiko at the table, 5 Nov: walking up and down must be a bit slower).
    */
-  crossSeconds: 6,
-  minSpeed: 2,
+  crossSeconds: 7.5,
+  minSpeed: 1.6,
   /** The board reaches this share beyond the outermost price line; sellers start at its top, buyers at its bottom. */
   boardMargin: 0.3,
   /** And this share of the posted price more, so a board whose price lines sit close together still has room to walk. */
@@ -1103,8 +1116,11 @@ export const LOTS = {
   maxLotsPerMonth: 4,
   /** The intro: the lot lit on the map with its seller and minimum. */
   introMs: 3_000,
-  /** The walk's clock for one lot. */
-  walkMs: 12_000,
+  /**
+   * The walk's clock for one lot. 15 s, 25% longer than 12, with WALK's 25% slower walk (Heiko at the table, 5 Nov:
+   * walking up and down must be a bit slower), so a second bidder still reaches its limit before the bell.
+   */
+  walkMs: 15_000,
   /** The result on screen before the next lot comes up. */
   resultMs: 2_500,
   /** The board runs from this share of the minimum (where buyers start) to boardHigh's. */
@@ -1585,6 +1601,12 @@ export const STRATEGIST = {
   /** When it sizes its cash reserve, a short unit counts at most this many times the reference price. */
   reservePriceCap: 3,
   /**
+   * Goods it keeps itself whole in for next month (Heiko, 5 Nov; Water only with a farm): while it holds less and
+   * the store sells the good, it buys up to that, as far as its money goes, at no more than the store's ask, and sells
+   * none of it; otherwise it keeps the status screen's need and may sell the rest.
+   */
+  buyShortfall: ['food', 'energy', 'water'] as Good[],
+  /**
    * A new farm's Food, Water or Energy that covers the seat's own shortfall is
    * worth at least this many times the reference price: going short costs
    * development time (Food), half of every farm (Water) or half of every plot
@@ -1675,7 +1697,7 @@ type PlanKind = Strategy['kind'];
 export const AI_PLANS = {
   /** Seats play their playbook; false: every seat plays the phase-by-phase asks, as before playbooks. */
   on: true,
-  /** A feature switch, not a balance value: a seat's own path plays its drafted development and auction parts; false, today's (AM-26). */
+  /** A feature switch, not a balance value: a seat's own path plays its drafted development and auction parts; false, today's. See AM-26. */
   ownPhases: false,
   /** How much each persona leans to each plan kind, 0 to 1: the draft picks the eligible kind it leans to most. */
   leaning: {

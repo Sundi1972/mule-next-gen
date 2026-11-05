@@ -8,6 +8,7 @@
 import { AI_HANDS, LOTS } from '@mule/engine';
 import type { Page } from 'playwright';
 import { GRANT_PASS_MAX_MS, PHASE_MS } from '../../server/src/mule-game.js';
+import { BOUNDS, EDGE, GAP, placeBubble } from '../src/chat/place';
 import { check, hallPlace, launch, PHONE, pressAct, startServer, steerTo, throughDoor, TV } from './harness';
 
 const LAPTOP = { width: 1440, height: 900 };
@@ -72,7 +73,13 @@ type Line = Said & { at: number; phase: number; tvDraws: string[] };
 type Phase = { key: string; name: string; at: number };
 type Wire = { lines: Line[]; phases: Phase[]; seatId: string | null; ai: Set<string> };
 type Rect = { l: number; t: number; r: number; b: number };
-type Bubble = { seat: string; line: number; text: string; anchor: string | null; rect: Rect };
+type Label = Rect & { text: string };
+/**
+ * `room`, on the TV (AM-22): what a creature's bubble had to place itself by, measured as the app measures it: its
+ * speaker, its frame, the screen's scale and every visible line of text in that frame but the bubbles' own.
+ */
+type Room = { at: Rect; within: Rect; k: number; labels: Label[] };
+type Bubble = { seat: string; line: number; text: string; anchor: string | null; rect: Rect; place: string | null; room: Room | null };
 type Sample = {
   t: number;
   phase: string | null;
@@ -131,6 +138,22 @@ const SAMPLE = `{
           text: b.textContent,
           anchor: b.closest('[data-speaker]')?.getAttribute('data-speaker') ?? (b.closest('[data-testid=table-chat], [data-fallback]') ? 'seat-row' : null),
           rect: rect(b),
+          place: b.getAttribute('data-place'),
+          room: (() => {
+            const frame = b.closest(${JSON.stringify(BOUNDS)});
+            if (!location.pathname.startsWith('/table') || !b.closest('[data-speaker]') || !frame) return null;
+            const labels = [];
+            const range = document.createRange();
+            const walk = document.createTreeWalker(frame, NodeFilter.SHOW_TEXT);
+            for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+              const el = n.parentElement;
+              if (!n.textContent.trim() || !el || el.closest('[data-testid^=chat-bubble-]')) continue;
+              if (el.checkVisibility && !el.checkVisibility({ opacityProperty: true, visibilityProperty: true })) continue;
+              range.selectNodeContents(n);
+              for (const r of range.getClientRects()) if (r.width > 1 && r.height > 1) labels.push({ l: r.left, t: r.top, r: r.right, b: r.bottom, text: n.textContent.trim().slice(0, 30) });
+            }
+            return { at: rect(b.parentElement), within: rect(frame), k: b.getBoundingClientRect().width / b.offsetWidth || 1, labels };
+          })(),
         })),
         speakers: [...document.querySelectorAll('[data-speaker]')].map((s) => s.getAttribute('data-speaker')),
         speaking: [...document.querySelectorAll('[data-testid=seat-row] [data-speaking]')].map((s) => s.getAttribute('data-testid').slice(5)),
@@ -366,16 +389,27 @@ function meets(a: Rect, b: Rect): boolean {
   return a.l < b.r && b.l < a.r && a.t < b.b && b.t < a.b;
 }
 
+/** A bubble less a pixel all round: touching a label is not covering it. */
+function shrunk(a: Rect): Rect {
+  return { l: a.l + 1, t: a.t + 1, r: a.r - 1, b: a.b - 1 };
+}
+
 function inside(a: Rect, box: Rect): boolean {
   return a.l >= box.l - 0.5 && a.r <= box.r + 0.5 && a.t >= box.t - 0.5 && a.b <= box.b + 0.5;
 }
 
 /**
  * B-AC-18: in every sample, no two bubbles meet, no bubble meets the ticker unless the ticker's bar has faded under it,
- * and each bubble stays inside its frame.
+ * and each bubble stays inside its frame. On the TV (AM-22), where its frame leaves a creature's bubble a place that
+ * covers no text (RULE-9's companion, placeBubble, over what the sample measured), the bubble covers none: no name,
+ * caption or price. A label that moves into a bubble is allowed one sample, the frame the bubble takes to move away.
  */
 function noOverlaps(who: string, samples: Sample[]): string {
   let withBubble = 0;
+  let roomy = 0;
+  let crowded = 0;
+  /** What each line's bubble covered in the sample before, where it had room. */
+  const covers = new Map<number, string[]>();
   for (const s of samples) {
     if (s.bubbles.length === 0) continue;
     withBubble++;
@@ -384,10 +418,24 @@ function noOverlaps(who: string, samples: Sample[]): string {
       // The walking screen's status bar, ticker and all, fades under a bubble that meets it, as under a colonist.
       check(!s.tickerRect || !meets(a.rect, s.tickerRect) || s.tickerFaded, `B-AC-18: on ${who} (${s.phase}) the bubble of line ${a.line} covers the ticker${s.walking ? ', and its bar has not faded' : ''}`);
       check(s.bounds && inside(a.rect, s.bounds), `B-AC-18: on ${who} (${s.phase}) the bubble of line ${a.line} crosses its frame's edge: ${JSON.stringify(a.rect)} in ${JSON.stringify(s.bounds)}`);
+      if (!a.room) continue;
+      const { at, within, k, labels } = a.room;
+      const free = placeBubble({ at, w: a.rect.r - a.rect.l, h: a.rect.b - a.rect.t, within, labels, gap: GAP * k, edge: EDGE }).covers === 0;
+      if (!free) {
+        crowded++;
+        covers.delete(a.line);
+        continue;
+      }
+      roomy++;
+      const covered = labels.filter((l) => meets(shrunk(a.rect), l)).map((l) => l.text);
+      const before = covers.get(a.line);
+      check(covered.length === 0 || !before || !before.some((t) => covered.includes(t)), `B-AC-18: on ${who} (${s.phase}) the bubble of line ${a.line} covers "${covered.join('", "')}" in two samples running, with a free place beside its speaker (${a.place} at ${JSON.stringify(a.rect)})`);
+      covers.set(a.line, covered);
     }
   }
+  if (who === 'tv') check(roomy >= 20, `B-AC-18: on the TV bubbles with room were checked against its labels, got ${roomy} samples (${crowded} crowded)`);
   check(withBubble >= 20, `B-AC-18: on ${who} bubbles were sampled through their lifetime, got ${withBubble} samples with one`);
-  return `${withBubble} samples with a bubble, none overlapping`;
+  return `${withBubble} samples with a bubble, none overlapping${roomy + crowded ? `; ${roomy} with room covered no label, ${crowded} crowded` : ''}`;
 }
 
 /**
@@ -445,6 +493,14 @@ function everyLineShows(who: string, wire: Wire, samples: Sample[]): string {
   for (const line of wire.lines) {
     const phase = name(line);
     const seen = samples.find((s) => s.t >= line.at && s.ticker.some((l) => l.id === line.id));
+    // The TV's goods auction shows no ticker on the walk, and the speaker's bubble on the board carries the line (PM
+    // rulings, 5 Nov): said then, the line shows as its bubble, at least.
+    if (!seen && tv && phase === 'auction') {
+      const hidden = samples.find((s) => s.t >= line.at);
+      const bubble = samples.find((s) => s.t >= line.at && s.bubbles.some((x) => x.line === line.id));
+      check(hidden && !hidden.tickerRect && bubble, `B-AC-17: on the TV line ${line.id} ("${line.text}"), said on the auction's walk (its ticker ${hidden?.tickerRect ? 'up' : 'hidden'}), shows in the ticker or as its bubble`);
+      continue;
+    }
     check(seen, `B-AC-17: on ${who} line ${line.id} ("${line.text}") shows in the ticker`);
     const due = deadline(samples, phase, line.at);
     timing(seen.t <= due, `B-AC-17: on ${who} line ${line.id} shown in the ticker +${seen.t - line.at} ms (deadline +${due - line.at} ms)`);
