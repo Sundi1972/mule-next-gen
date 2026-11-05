@@ -253,7 +253,7 @@ async function main(): Promise<void> {
     const passing = everyone(phones, (p) => readyAtSidePicksUntil(p.page, () => truth.board().auction?.good === good || truth.board().phase !== 'auction'));
     await untilServer(lena.page, isUp, `UBER-AC-2: ${good} comes up at the auction`, upNext);
     await passing;
-    // With one to spare she opens on Sell; a second tap on Sell would pass.
+    // Everyone opens as a buyer (RULE-2): she switches to Sell.
     const sideOf = () => truth.board().auction?.walkers.find((w) => w.id === lenaId)?.side;
     if (sideOf() !== 'seller') await lena.page.getByTestId('side-seller').click({ timeout: PRESS_MS });
     await untilServer(lena.page, () => sideOf() === 'seller' || null, `UBER-AC-2: Lena sells ${good}`);
@@ -261,13 +261,10 @@ async function main(): Promise<void> {
     const paidBefore = truth.taxPaid(lenaId);
     await everyone(phones, (p) => p.page.locator('[data-phase=auction]').getByRole('button', { name: 'Ready', exact: true }).click({ timeout: PRESS_MS }));
     await hold(lena.page, 'down', toAuction);
-    // At a house's line nothing trades until she says how many (A-6): she sells her one, confirming if it is one she needs.
-    await lena.page.getByTestId('line-go').waitFor({ timeout: within(WALK.goodMs) });
-    await lena.page.mouse.up();
-    await lena.page.getByTestId('line-go').click({ timeout: PRESS_MS });
-    const need = truth.board().auction?.status.find((r) => r.id === lenaId)?.need ?? 0;
-    if (need >= 1) await lena.page.getByTestId('sell-anyway').click({ timeout: PRESS_MS });
+    // At a house's line units sell by themselves (the auto-trade amendment, RULE-1): holding Down, she reaches the
+    // store's line and her one sells, nothing asked, even if it is one she needs ("show, don't stop").
     await untilServer(lena.page, () => truth.stockOf(lenaId, good) === 0 || null, `UBER-AC-2: Lena sells her one ${good}`, within(WALK.goodMs / WALK.tradeClockRate));
+    await lena.page.mouse.up();
     await lena.page.waitForFunction((b) => Number((document.querySelector('[data-testid=money]')?.textContent ?? '').replace(/[^\d-]/g, '')) !== b, before, { timeout: PRESS_MS });
     const after = money(await lena.page.getByTestId('money').innerText());
     // The sale's gross: what reached Lena's phone plus what the fund took from her, measured apart.

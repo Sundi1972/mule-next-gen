@@ -15,6 +15,7 @@ import {
   createGame,
   createRng,
   declareRole,
+  leaveBoard,
   electionDone,
   DEV_STEER,
   buildFloor,
@@ -38,7 +39,6 @@ import {
   hungerPace,
   installMule,
   isElectionDone,
-  lineTrade,
   list as listLot,
   litPlot,
   lotDone,
@@ -588,10 +588,6 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       }
       case 'walkStep':
         stepWalk(state, seatId, intent.dir === 'up' ? 1 : -1);
-        auctionDone(state, seatId, false);
-        return;
-      case 'lineTrade':
-        lineTrade(state, seatId, intent.units);
         auctionDone(state, seatId, false);
         return;
       case 'list':
@@ -1441,10 +1437,6 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
           if (state.phase === 'landAuction') setLotWalk(state, seatId, action.dir);
           else setWalk(state, seatId, action.dir);
           break;
-        case 'lineTrade':
-          // As walking: the hands keep their own Done, the same as in the simulator.
-          lineTrade(state, seatId, action.units);
-          break;
         case 'done':
           if (this.electionOpen()) electionDone(state, seatId, action.done);
           else if (state.phase === 'landGrant') grantPass(state, seatId);
@@ -1518,13 +1510,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
    */
   private sitOut(seatId: string): void {
     const state = this.requireState();
-    // Passing also stops the walker: it leaves the board.
-    try {
-      declareRole(state, seatId, 'pass');
-    } catch (err) {
-      if (!(err instanceof RuleError)) throw err;
-    }
-    // Last, because passing during the walk takes a Done back.
+    // Leaving the board also stops the walker. Players can't pass (RULE-2); this is the server's, for a dropped phone.
+    leaveBoard(state, seatId);
     auctionDone(state, seatId);
   }
 
@@ -1795,7 +1782,6 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         done: a.done.includes(w.id),
         units: market.units(w.id),
         line: a.stage === 'walk' ? (houseLineAt(market, w)?.house ?? null) : null,
-        order: w.order ? { ...w.order } : null,
       })),
       deals: a.deals.map(({ buyer, seller, price, units }) => ({ buyer, seller, price, units })),
       units: a.units,
