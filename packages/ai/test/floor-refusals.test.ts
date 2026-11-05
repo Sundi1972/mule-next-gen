@@ -389,4 +389,32 @@ describe('a MULE led into development is never lost to the lead (FM-led-no-gain)
     expect(me.doneDeveloping, `it went to the pub: ${shown}`).toBe(true);
     expect(state.tiles[best]!.outfit, `the lot MULE on its best idle plot: ${shown}`).toBe('food');
   });
+
+  it('FM-led-no-gain: a led MULE goes on the best idle plot it can be installed on, not a lake plot no walk reaches a shore of', () => {
+    // Seen in the walking-on sim (seed 101, game 9, ai2): the led Food MULE's best plot was a lake plot with nowhere to
+    // stand for it, the install was refused, and the seat walked to the corral for a MULE it could not buy. Seed 14's
+    // map for four seats: ai0's lake plot at 12·8 has no reachable shore off its own land (as FM-floor-lake-stand).
+    const state = development(14, 4);
+    const at = (x: number, y: number) => tileAt(state.tiles, state.width, x, y)!;
+    at(12, 8).owner = ME;
+    for (const t of [at(11, 7), at(11, 8)]) Object.assign(t, { owner: ME, outfit: 'water' });
+    const cfg = quietConfig();
+    const lake = state.tiles.indexOf(at(12, 8));
+    expect(installable(state, cfg, ME, lake), 'nowhere to stand for the lake plot').toBe(false);
+    const seat = new AiSeat({ id: ME, name: 'AI 1', persona: 'trader', level: 'trader', seed: 11 });
+    // A reachable idle plot that a Food MULE gains less on than the lake plot.
+    const [dry] = nearestFree(state).filter((t) => terrainShare(t.terrain, cfg) > 0);
+    dry!.owner = ME;
+    const gains = idleGains(state, seat, 'food');
+    expect(bestOf(gains), 'the lake plot ranks first by installGain').toBe(lake);
+    const me = state.players.find((p) => p.id === ME)!;
+    me.carriedMule = 'food';
+    playTurn(state, cfg, seat);
+    const log = seat.developLog();
+    const shown = JSON.stringify(log);
+    // The promise: the MULE it was given is on a plot of its own, and no step was walked to and refused.
+    expect(me.carriedMule, `no MULE left on the lead: ${shown}`).toBeNull();
+    expect(dry!.outfit, `the lot MULE on the plot it can reach: ${shown}`).toBe('food');
+    expect(log.filter((e) => !e.ok), shown).toEqual([]);
+  });
 });
