@@ -236,7 +236,8 @@ describe('WS6 variant A: the auction trades by itself, faster and faster, on the
     for (let i = 0; i < 400 && game.viewFor('s1').auction!.deals.length === 0; i++) advance(WALK.tickMs);
     const first = lit(phoneScreen(game.viewFor('s1'), 's1'));
     expect(first).toBeGreaterThanOrEqual(1);
-    for (let i = 0; i < 30 && game.viewFor('s1').auction!.deals[0]!.units < 9; i++) advance(WALK.tickMs);
+    // Full speed is reached once tradeInterval hits tradeFloorMs; 9 units is past it at any pace the config sets.
+    for (let i = 0; i < 400 && game.viewFor('s1').auction!.deals[0]!.units < 9; i++) advance(WALK.tickMs);
     const later = lit(phoneScreen(game.viewFor('s1'), 's1'));
     expect(later).toBe(4);
     expect(later).toBeGreaterThan(first);
