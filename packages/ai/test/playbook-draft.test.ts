@@ -330,7 +330,7 @@ describe('the draft writes the parts of its phase', () => {
         // The walk-away is today's limit for the first unit: a seller's floor, a buyer's ceiling.
         if (part.role === 'seller') expect(part.walkAway).toBe(Math.max(1, Math.ceil(beforeTax(sobs, plan.values.keep[h - 1]!))));
         if (part.role === 'buyer') {
-          const essential = h < plan.values.block && (good === 'food' || good === 'energy');
+          const essential = (h < plan.values.block && (good === 'food' || good === 'energy')) || h < plan.mustHold;
           expect(part.walkAway).toBe(Math.max(1, Math.floor(Math.min(plan.values.buy[h]!, essential ? me.money : Math.min(me.money, plan.budget)))));
         }
       }

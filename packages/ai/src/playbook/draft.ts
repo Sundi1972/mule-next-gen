@@ -368,8 +368,9 @@ function goodPart(input: DraftInput, obs: GameState, good: Good): GoodPlay {
   let limit = obs.store.posted[good];
   if (trade.side === 'seller') limit = Math.ceil(beforeTax(obs, plan.values.keep[h - 1] ?? 0));
   if (trade.side === 'buyer') {
-    // As the auction hand walks: the Food and Energy it needs may take all its money, anything else its budget.
-    const essential = h < plan.values.block && (good === 'food' || good === 'energy');
+    // As the auction hand walks: the Food and Energy it needs, and the units it must hold to be whole next month, may
+    // take all its money; anything else its budget.
+    const essential = (h < plan.values.block && (good === 'food' || good === 'energy')) || h < plan.mustHold;
     const cap = essential ? me.money : Math.min(me.money, plan.budget);
     limit = Math.floor(Math.min(plan.values.buy[h] ?? 0, cap));
   }
