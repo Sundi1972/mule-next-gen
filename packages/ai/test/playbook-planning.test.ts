@@ -219,7 +219,8 @@ describe('the seat plays its planning part (C4, RULE-13)', () => {
     expect(listingsOf(state)).toEqual([listingFor(state, MULE_LOT)]);
   });
 
-  it("T-AC-10: the sim's planning loop hands each seat its act, so a seat short of cash lists, unsold to the store", () => {
+  // Two whole sim games, walking off and on: 1 to 2.5 s alone, past vitest's 5 s default in CI's parallel run.
+  it("T-AC-10: the sim's planning loop hands each seat its act, so a seat short of cash lists, unsold to the store", { timeout: 20_000 }, () => {
     // The row makes its own seats short: whether a sim seat runs short by itself depends on the economy (walking on or off).
     const saved = DEV_STEER.on;
     try {
