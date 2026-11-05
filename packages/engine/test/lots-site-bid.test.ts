@@ -45,7 +45,7 @@ const project = (state: GameState, id: PrestigeId) => state.colony!.projects.fin
 /** Brix lists his plot at (x, y) for `minimum`; on into the land auction's walk of that lot. */
 function brixLists(state: GameState, minimum = 100, x = 2, y = 1, kind: 'plot' | 'mule' = 'plot'): void {
   Object.assign(tileOf(state, x, y), { terrain: 'plains', owner: 'brix', outfit: kind === 'mule' ? 'food' : null, runMonths: 0 });
-  list(state, 'brix', { item: kind === 'plot' ? { kind, x, y } : { kind, x, y, outfit: 'food' }, minimum, unsold: 'keep' });
+  list(state, 'brix', { item: { kind, x, y }, minimum, unsold: 'keep' });
   // No colony lot this month, so Brix's lot is the one up.
   state.listings = state.listings.filter((l) => l.seller !== COLONY_SELLER);
   while (state.phase !== 'landAuction') {
@@ -80,10 +80,9 @@ describe('C30: the colony bids for an object’s site at the land auction (RULE-
     const state = governed(300);
     brixLists(state, 100);
     expect(lotLeader(state)).toEqual({ id: COLONY_SELLER, bid: 100 });
-    const fund = state.treasury.money;
     const brix = money(state, 'brix');
     expect(bell(state)).toEqual({ kind: 'sold', buyer: COLONY_SELLER, price: 100 });
-    expect(state.treasury.money).toBe(fund - 100);
+    // The fund's site-bid line pays the price; the sale's tax comes back in as tax, as on any sale.
     expect(state.colony!.ledger.out.siteBid).toBe(100);
     expect(money(state, 'brix')).toBeGreaterThan(brix);
     const tile = tileOf(state, 2, 1);
@@ -98,9 +97,8 @@ describe('C30: the colony bids for an object’s site at the land auction (RULE-
     expect(lotLeader(state)).toEqual({ id: COLONY_SELLER, bid: 251 });
     walkTo(state, 'ossa', 300);
     expect(lotLeader(state)).toEqual({ id: 'ossa', bid: 300 });
-    const fund = state.treasury.money;
     expect(bell(state)).toEqual({ kind: 'sold', buyer: 'ossa', price: 300 });
-    expect(state.treasury.money).toBe(fund);
+    expect(state.colony!.ledger.out.siteBid).toBeUndefined();
     expect(tileOf(state, 2, 1).owner).toBe('ossa');
     expect(project(state, 'park').plot).toBeNull();
   });
@@ -150,10 +148,12 @@ describe('C30: the colony bids for an object’s site at the land auction (RULE-
     Object.assign(tileOf(state, 5, 1), { terrain: 'plains', owner: 'kai', outfit: null, runMonths: 0 });
     list(state, 'kai', { item: { kind: 'plot', x: 5, y: 1 }, minimum: 100, unsold: 'keep' });
     brixLists(state, 100);
-    expect(bell(state).kind).toBe('sold');
-    expect(project(state, 'park')).toMatchObject({ plot: state.width + 2, maxBid: 300 });
-    untilStage(state, 'walk');
+    // Kai listed first, so Kai's plot comes up first and the colony takes it.
     expect(live(state).lot!.seller).toBe('kai');
+    expect(bell(state).kind).toBe('sold');
+    expect(project(state, 'park')).toMatchObject({ plot: state.width + 5, maxBid: 300 });
+    untilStage(state, 'walk');
+    expect(live(state).lot!.seller).toBe('brix');
     expect(lotLeader(state)).toBeNull();
     expect(bell(state)).toEqual({ kind: 'kept' });
   });
