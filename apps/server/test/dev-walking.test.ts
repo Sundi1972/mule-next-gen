@@ -1,7 +1,7 @@
 import { AI_HANDS, AI_LEVELS, analysisSeconds, DEVELOPMENT, RuleError, SPECIES_PERK, tileIndex, walkSeconds, type GameState, type Outfit } from '@mule/engine';
 import type { MuleIntent, MuleView } from '@mule/protocol';
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_AI_LEVEL, PHASE_MS, type MuleGame } from '../src/mule-game.js';
+import { DEFAULT_AI_LEVEL, type MuleGame } from '../src/mule-game.js';
 import { pressThroughSidePick, readyAll, seats, tapThere, toDevelopment, walkers } from './fake-context.js';
 
 const LENA = 's1';
@@ -86,7 +86,8 @@ function heikoInstallsThenPubs(blip: boolean) {
   const humansDoneAt = walkOf(game.viewFor(null), 's1').arrivesAt;
   for (let i = 0; i < 10_000 && game.viewFor(null).phase === 'development'; i++) g.advance(100);
   const after = game.viewFor(null);
-  return { humansDoneAt, endedAt: after.phaseEndsAt! - PHASE_MS.production, baronAtPub: after.players.find((p) => p.id === 's3')!.doneDeveloping };
+  // Production lasts its show (ws6-ux AM-19): development ended the length production's timer was given before its end.
+  return { humansDoneAt, endedAt: after.phaseEndsAt! - after.production!.lengthMs, baronAtPub: after.players.find((p) => p.id === 's3')!.doneDeveloping };
 }
 
 /** At phaseScale 1, Lena buys a MULE at the corral and outfits it, waiting out her walk there. */

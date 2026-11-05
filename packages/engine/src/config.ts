@@ -995,11 +995,6 @@ export const PHASES = {
    */
   grantFastForwardMs: GAME.grantTickMs / 8,
   /**
-   * Production: the show of what each plot made. Superseded by productionShowMs (PRODUCTION_SHOW, AM-19), which the
-   * server reads once WS3's view lands; kept until then so today's phase keeps its length.
-   */
-  productionMs: 15_000,
-  /**
    * Upkeep, the month end: colonists eat and goods spoil, and the table reads the league table. null: it waits for
    * every player's Ready ("On to month N") or the host's Continue; a number restores a timer.
    */
@@ -1045,8 +1040,6 @@ export const EVENT_SHOW = {
   introMs: 1_800,
   /** How long the one roll call that every bulletin of a phase shares plays, in ms. */
   rollCallMs: 4_000,
-  /** The event window production's 15 s show already has; only time beyond it lengthens production. */
-  productionWindowMs: 4_800,
   /** The most the events of one phase may play in all, in ms; past it each is cut in proportion. */
   capMs: 30_000,
 };

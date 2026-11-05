@@ -127,8 +127,9 @@ export const PHASE_MS: { readonly planning: number | null; readonly landGrant: n
   get development() {
     return DEVELOPMENT.fullSeconds * 1_000;
   },
+  // Production lasts its show (RULE-3, AM-19); this is the longest it can run: every good made, the events at their cap.
   get production() {
-    return PHASES.productionMs;
+    return productionShowMs(PRODUCTION_SHOW.order.length, EVENT_SHOW.capMs);
   },
   get upkeep() {
     return PHASES.upkeepMs;
