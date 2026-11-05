@@ -54,6 +54,8 @@ describe("C21/C30: the colony's site for an object (RULE-28)", () => {
     }, by: 'lena', id: 'park' as PrestigeId, bid: 300, then: 'The Park already has its site' },
     { row: 7, why: 'a bid not whole', make: () => governed(), by: 'lena', id: 'park' as PrestigeId, bid: 12.5, then: 'Bid a whole number of credits' },
     { row: 7, why: 'a bid below 0', make: () => governed(), by: 'lena', id: 'park' as PrestigeId, bid: -1, then: 'Bid a whole number of credits' },
+    { row: 7, why: 'NaN, which the wire lets through as a number (WS3)', make: () => governed(), by: 'lena', id: 'park' as PrestigeId, bid: Number.NaN, then: 'Bid a whole number of credits' },
+    { row: 7, why: 'Infinity, likewise', make: () => governed(), by: 'lena', id: 'park' as PrestigeId, bid: Number.POSITIVE_INFINITY, then: 'Bid a whole number of credits' },
     { row: 8, why: 'a bid', make: () => governed(), by: 'lena', id: 'park' as PrestigeId, bid: 300, then: 'done' },
     { row: 8, why: 'no bid', make: () => governed(), by: 'lena', id: 'park' as PrestigeId, bid: null, then: 'done' },
   ])('T-AC-37: setSiteBid, RULE-28 row $row ($why)', ({ make, by, id, bid, then }) => {
