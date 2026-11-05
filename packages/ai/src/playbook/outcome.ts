@@ -75,7 +75,8 @@ export function auctionOutcome(playbook: Playbook, state: GameState, facts: read
   const rivals = emptyRivals(playbook, seat, [...declares.map((d) => d.seat), ...trades.flatMap((t) => [t.buyer, t.seller])].filter((id) => id !== seat && !isHouse(id)));
   for (const [id, rival] of Object.entries(rivals)) {
     const traded = tradedBy(trades, id);
-    const idle = declares.filter((d) => d.seat === id && d.side !== 'pass' && !traded.some((t) => t.good === d.good)).map((d) => d.good);
+    // Everyone starts a buyer (no Pass, #335), so only a declared Sell that traded none of the good is idle.
+    const idle = declares.filter((d) => d.seat === id && d.side === 'seller' && !traded.some((t) => t.good === d.good)).map((d) => d.good);
     if (traded.length > 0) rival.traded = traded;
     if (idle.length > 0) rival.declaredButIdle = [...new Set(idle)];
   }
