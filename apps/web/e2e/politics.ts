@@ -5,7 +5,7 @@
  * Governor's ceremony; the promise stays beside the tax; the next sale is taxed at the new Governor's rate.
  * Run with `pnpm --filter @mule/web e2e`; replay with `MULE_E2E_SEED=<seed>`.
  */
-import { AI_HANDS, GAME, POLITICS, storeQuotes, WALK, type GameState, type Good, type TaxPromise } from '@mule/engine';
+import { AI_HANDS, GAME, lawImpact, POLITICS, storeQuotes, WALK, type GameState, type Good, type LawProposal, type TaxPromise } from '@mule/engine';
 import type { MuleIntent, MuleView } from '@mule/protocol';
 import { errors as playwrightErrors, type Page } from 'playwright';
 import { GRANT_TICK_MS, PHASE_MS } from '../../server/src/mule-game.js';
@@ -229,6 +229,24 @@ async function main(): Promise<void> {
     await everyone(phones, (p) => p.page.getByTestId('promise-status').filter({ hasText: `tax ${NEW_TAX}%, kept` }).waitFor({ timeout: PRESS_MS }));
     await ossa.page.getByTestId('desk-colony').click({ timeout: PRESS_MS });
     await ossa.page.getByTestId('fund-in').filter({ hasText: `the ${NEW_TAX}% sales tax` }).waitFor({ timeout: PRESS_MS });
+
+    // B-AC-46-1, B-AC-46-4 (C46): the Governor proposes a law through the picker; its preview is the server's cost for
+    // each player, the server holds the proposal as picked, and Ossa's This month carries it with her own cost.
+    const setting = POLITICS.laws.landTax.settings[1]!;
+    const law: LawProposal = { kind: 'enact', law: 'landTax', setting };
+    await lena.page.getByTestId(`law-landTax-${setting}`).click({ timeout: PRESS_MS });
+    const costs = lawImpact(truth.state(), law);
+    for (const id of [lenaId, ossaId, ...aiIds]) {
+      const c = costs[id]!.cost;
+      await lena.page.getByTestId(`for-each-${id}`).filter({ hasText: c === 0 ? 'nothing' : `${c} cr a month` }).waitFor({ timeout: PRESS_MS });
+    }
+    await lena.page.getByTestId('propose').filter({ hasText: `Propose Land tax ${setting} cr a plot for next month’s vote` }).click({ timeout: PRESS_MS });
+    await untilServer(lena.page, () => JSON.stringify(truth.state().politics!.proposal?.proposal) === JSON.stringify(law) || null, `B-AC-46-1: the server's proposal is Land tax ${setting}`);
+    await lena.page.getByTestId('pending-words').filter({ hasText: `You propose Land tax ${setting} cr a plot` }).waitFor({ timeout: PRESS_MS });
+    const ossaCost = costs[ossaId]!.cost;
+    await ossa.page.getByTestId('agenda-law').filter({ hasText: `Lena proposes Land tax ${setting} cr a plot. For you: ${ossaCost === 0 ? 'nothing' : `about ${ossaCost} cr a month`}.` }).waitFor({ timeout: PRESS_MS });
+    check((await lena.page.getByTestId('agenda-law').count()) === 0, "B-AC-46-4: the Governor's own phone has no agenda line for it");
+    console.log(`✓ B-AC-46-1, B-AC-46-4: Lena proposed Land tax ${setting} through the picker; the server holds it; Ossa's This month reads her cost, ${ossaCost} cr`);
 
     // On to the auction: ready, claim, the pub.
     await everyone(phones, (p) => p.page.getByTestId('ready').click({ timeout: PRESS_MS }));
