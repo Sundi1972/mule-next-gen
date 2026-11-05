@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The game at a glance · M.U.L.E. Rulebook</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="rulebook.css">
+</head>
+<body>
+<div class="rb-shell">
+<aside class="rb-rail"></aside>
+<main class="rb-main">
+<article>
+<h1>The game at a glance</h1>
+<p class="rb-lede">Who sits at the table, what everyone starts with, how a month runs from planning to the month end, which clocks run and which wait for you, and how the game decides who wins.</p>
+
+<h2 id="players-and-seats">Players and seats <span class="pill built">In the game</span></h2>
+<p>A game seats <span class="num">2</span> to <span class="num">6</span> players. Each seat is either a person with a phone (or a laptop) or a computer player. The table needs at least one person, because only a person can host it, so a game has at most <span class="num">5</span> computer players.</p>
+<ul>
+<li><strong>People</strong> join from their own phone with the room's four-letter code or its QR. Each picks a name (up to <span class="num">16</span> characters), a colour and a species.</li>
+<li><strong>The host</strong> is the first person at the table who is connected. The host adds computer players, removes seats, closes the room and presses Start. If the host's phone drops, the next connected person hosts until it comes back.</li>
+<li><strong>Computer players</strong> are added by the host: The Accountant, The Baron, The Grudge, The Gambler and The Good Neighbour, in that order, each with its own temperament. All play at the Trader skill level. With a Claude key on the server they can think and chat with Claude on a small budget. See <a href="computer-players.html">Computer players</a>.</li>
+<li><strong>The big screen</strong> (a TV or laptop) is not a seat. It shows the public view and has no controls. See <a href="table-and-phones.html">The table and the phones</a>.</li>
+</ul>
+<p>Once the host presses Start the seats are fixed. Nobody new can join a running game; a player whose phone reloads gets their own seat back, and a player can move their seat to another device with a one-time code.</p>
+<p class="code-ref">In the code: <code>packages/engine/src/config.ts::GAME</code> (minPlayers, maxPlayers) · <code>apps/server/src/mule-game.ts::AI_NAMES, DEFAULT_AI_LEVEL</code> · <code>packages/ai/src/personas.ts::personaFor</code> · <code>packages/tabletop/src/room.ts</code></p>
+<p class="owner">Kept current by: the PM, with the Table team (WS4) for seats and the lobby.</p>
+
+<h2 id="species">Species <span class="pill built">In the game</span></h2>
+<p>Every player is drawn as a small creature of their species in their colour. Two players may pick the same species. A player who does not pick gets the species of their seat number, in the order below. Each species has one perk; all perk numbers are placeholders until the balance work sets them.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Species</th><th>Perk, as the game applies it today</th><th class="n">Value</th></tr></thead>
+<tbody>
+<tr><td>Zipwing</td><td>Walks faster in development</td><td class="n">× 1.25</td></tr>
+<tr><td>Bramblet</td><td>Extra Food on every farm</td><td class="n">+1</td></tr>
+<tr><td>Gearling</td><td>Pays less for MULEs and outfits (the share of the normal price)</td><td class="n">0.95</td></tr>
+<tr><td>Mollox</td><td>Extra output on every working mine; a geo analysis takes this share of the normal time</td><td class="n">+1 · 0.5</td></tr>
+<tr><td>Glimmer</td><td>Meant to see next month's event a month early: <strong>not built</strong></td><td class="n">none</td></tr>
+<tr><td>Quibbit</td><td>First in line when the store hands out units in turns at the goods auction</td><td class="n">first</td></tr>
+</tbody>
+</table></div>
+<div class="box next"><h4>What is changing</h4><p><strong>Two facts do not match.</strong> (1) The Glimmer has no perk in the rules: nothing in the engine, the server or the computer players reads it, so a Glimmer plays with no advantage. (2) The lobby's perk text promises more than the rules give: it says a Zipwing "moves twice as fast" (the rules give × 1.25) and a Gearling pays "a quarter less" (the rules give 5 % less). The numbers were cut on purpose (at × 1.5 Zipwings won 37 % of games, at 0.75 Gearlings 44 %); the words were not updated. Owners: the Balance team (WS1) for the Glimmer's perk and the numbers, the Table team (WS4) for the lobby's words.</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/config.ts::SPECIES_PERK, DEFAULT_SPECIES</code> · <code>packages/engine/src/auction.ts</code> (Quibbit) · <code>packages/ui/src/components/species.ts::SPECIES_PERK</code> (the lobby's words)</p>
+<p class="owner">Kept current by: the Balance team (WS1) for perks; the Table team (WS4) for the lobby.</p>
+
+<h2 id="setup">Setting up a game <span class="pill built">In the game</span></h2>
+<p>When the host presses Start, the server draws a seed and makes the map from it. The same seed and the same moves replay the same game, which is how games are recorded and checked. The map's size depends on how many players sit at the table, and the store sits on its own tile on it.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Players</th><th>Map</th><th class="n">Width × height</th></tr></thead>
+<tbody>
+<tr><td>2 or 3</td><td>Small</td><td class="n">13 × 7</td></tr>
+<tr><td>4</td><td>Mid</td><td class="n">15 × 9</td></tr>
+<tr><td>5 or 6</td><td>Large</td><td class="n">19 × 11</td></tr>
+</tbody>
+</table></div>
+<h3 id="start-values">What everyone starts with</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Who</th><th>Start value</th><th class="n">Amount</th></tr></thead>
+<tbody>
+<tr><td>Each player</td><td>Money</td><td class="n">1,000 cr</td></tr>
+<tr><td>Each player</td><td>Food · Water · Energy in the home depot</td><td class="n">2 · 6 · 2</td></tr>
+<tr><td>Each player</td><td>Reputation, out of 100</td><td class="n">50</td></tr>
+<tr><td>Each player</td><td>Land</td><td class="n">none</td></tr>
+<tr><td>The colony</td><td>Colonists</td><td class="n">100</td></tr>
+<tr><td>The colony</td><td>Air (0 clean, 100 worst)</td><td class="n">0</td></tr>
+<tr><td>The colony</td><td>Sales tax on every sale, into the colony fund</td><td class="n">5 %</td></tr>
+<tr><td>The colony</td><td>Happiness (with the council on), out of 100</td><td class="n">60</td></tr>
+<tr><td>The store</td><td>MULEs in the corral</td><td class="n">10</td></tr>
+<tr><td>The store</td><td>Capital</td><td class="n">4,000 cr</td></tr>
+<tr><td>The store</td><td>Food, for each seat</td><td class="n">4</td></tr>
+<tr><td>The store</td><td>Energy, for each seat</td><td class="n">5</td></tr>
+<tr><td>The store</td><td>Water · Smithore · Crystite</td><td class="n">20 · 20 · 0</td></tr>
+<tr><td>The store</td><td>Rare earth · Alloy · Electronics · Medicine</td><td class="n">4 · 8 · 0 · 4</td></tr>
+</tbody>
+</table></div>
+<p>The store's first prices are set where supply and demand put them at the start, not at the goods' reference prices. Month 1 opens in planning.</p>
+<div class="box example"><h4>Example</h4><p>A four-seat game starts with a 15 × 9 map, four players holding 1,000 cr, 2 Food, 6 Water and 2 Energy each, and a store holding 4 × 4 = 16 Food and 4 × 5 = 20 Energy beside its fixed 20 Water and 20 Smithore.</p></div>
+<div class="box why"><h4>Why it is like this</h4><p>Heiko set the start on 5 Nov after playing the walking build: players start with only 2 Energy and 2 Food, and the store holds 5 Energy and 4 Food for each seat. Asked whether to tune the food shortage this causes, he chose to "judge it at the table" rather than run a balance sweep first.</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/config.ts::START, storeStockFor, mapSize, TAX, HAPPINESS</code> · <code>packages/engine/src/game.ts::createGame</code></p>
+<p class="owner">Kept current by: the PM, with the Balance team (WS1) for the numbers.</p>
+
+<h2 id="the-month">The month, phase by phase <span class="pill built">In the game</span></h2>
+<p>A game runs month by month. Every month walks through the same phases in the same order. Events can strike at the start of planning, development and the goods auction, during production and at the month end, from month <span class="num">2</span> on. With the council on, an election or a law vote opens planning in some months.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Phase</th><th>What happens</th><th>Who acts</th><th>How long</th></tr></thead>
+<tbody>
+<tr><td>Planning</td><td>Election day in months 1, 4, 7 and 10, then any law vote; then everyone plans: order a geo drone, list a plot or MULE for the land auction, read the market, chat. The Governor sets the tax and runs the colony.</td><td>Everyone at once</td><td>No clock: waits for every person's Ready, or the host's Continue</td></tr>
+<tr><td>Land grant</td><td>Free plots light up one at a time, top row first, left to right. The first to press Claim takes the lit plot.</td><td>Everyone at once, one claim each</td><td>One pass of the light, 0.65 s a plot; ends as soon as everyone has claimed or is done</td></tr>
+<tr><td>Land auction</td><td>Plots and MULEs listed in planning, and sometimes a free plot from the colony, are sold one lot at a time. Skipped in a month with nothing listed.</td><td>Every bidder walks up; the seller watches</td><td>Per lot: 3 s intro, 12 s walk (late leader changes add up to 6 s), 2.5 s result</td></tr>
+<tr><td>Development</td><td>Every colonist walks the colony at once: buy a MULE, outfit it, install it on your plot, analyse ground, fit filters, or go to the pub for cash.</td><td>Everyone at once, computer players included</td><td>One 60 s clock for everyone; ends early once everyone is at the pub or out of time</td></tr>
+<tr><td>Production</td><td>Every working plot makes its good. The TV plays the harvest good by good, then the bonuses, the losses, the month's events, and the goods fly into each player's silo.</td><td>Nobody: watch</td><td>As long as its show, about 14 s in a quiet month, at most about 51 s; can be sped up × 3</td></tr>
+<tr><td>Goods auction</td><td>The nine goods come up one at a time. Each player picks a side, then walks up and down the board to buy and sell with each other, the store and, in its month, the export ship.</td><td>Everyone at once</td><td>Per good: side pick with no clock, a 20 s walk, 2.5 s receipt</td></tr>
+<tr><td>Month end</td><td>Players and colonists eat, goods spoil, the export ship leaves, the store builds MULEs, the colony collects taxes and pays its bills, the mood moves. Everyone reads the league table by Worth.</td><td>Everyone taps "On to month N"</td><td>No clock: waits for every person, or the host's Continue</td></tr>
+</tbody>
+</table></div>
+<p>After the month end of the last month, the game is over and the final table shows instead.</p>
+<p class="code-ref">In the code: <code>packages/engine/src/game.ts::advancePhase</code> (the order) · <code>packages/engine/src/config.ts::PHASES, LOTS, WALK, DEVELOPMENT, PRODUCTION_SHOW, EVENTS.firstMonth</code> · <code>apps/server/src/mule-game.ts::startPhase</code></p>
+<p class="owner">Kept current by: the PM, with the Auctions team (WS3) for phases and the clock.</p>
+
+<h2 id="planning">Planning <span class="pill built">In the game</span></h2>
+<p>Planning is the month's calm moment, with no clock. Everyone uses their phone's hub at once:</p>
+<ul>
+<li><strong>Order a geo drone</strong> for <span class="num">60</span> cr. It surveys up to <span class="num">2</span> free or listed plots from orbit, and its results arrive as the land grant starts, in time to choose.</li>
+<li><strong>Sell a plot or a MULE</strong>: list it for the land auction with a minimum price. Each player may list up to <span class="num">2</span> lots a month, and the land auction takes at most <span class="num">4</span> lots a month from everyone together.</li>
+<li><strong>Talk</strong> and <strong>read the market</strong>: chat and whispers, the store's prices, the export ship's next call.</li>
+</ul>
+<h3 id="planning-colony">Colony and council steps in planning</h3>
+<p>With the council on (the server's default), planning carries the colony's politics, in this order:</p>
+<ol>
+<li><strong>Election day</strong> in months <span class="num">1</span>, <span class="num">4</span>, <span class="num">7</span> and <span class="num">10</span>: candidates announce with a tax promise, everyone votes in secret, and the TV and every phone play the reveal. Today one office is elected, the Governor. A Governor who has served <span class="num">2</span> terms in a row may not run again until someone else has held it.</li>
+<li><strong>The law vote</strong>, when the Governor proposed a law the month before: yes or no, in secret, then the reveal.</li>
+<li><strong>Planning proper</strong>: the Governor sets the sales tax (0 to 15 %, at most 5 points from the month's starting rate), may propose a law for next month, commission a building, pay off strikers; anyone may donate to the building being funded.</li>
+</ol>
+<p>As planning closes, the game records whether the Governor kept their tax promise. Every stage of the votes waits for everyone's Done, with no clock; only the reveals are timed shows. See <a href="colony-and-politics.html">Colony and politics</a> for the rules of each.</p>
+<p class="code-ref">In the code: <code>packages/engine/src/game.ts::orderGeoDrone</code> · <code>packages/engine/src/config.ts::DEVELOPMENT.droneFee, LOTS.perPlayer, POLITICS</code> · <code>packages/engine/src/politics.ts::openPlanning</code></p>
+<p class="owner">Kept current by: the PM; the Politics team (WS7) for the council steps.</p>
+
+<h2 id="land-grant">The land grant <span class="pill built">In the game</span></h2>
+<p>Every free plot lights up once, in reading order: the top row from left to right, then the next row. Each lit plot stays lit for <span class="num">0.65</span> s. The first player to press Claim while a plot is lit takes it. Each seat may claim <span class="num">1</span> plot a month. A player who wants nothing presses "I'm ready" (done with land) and claims no more this month.</p>
+<p>The grant ends as soon as every seat has claimed or is done, when no free land is left, or when the light has passed every free plot once. Once every person is done, the light races on: the computer players' presses resolve at once on each lit plot, and the light moves every <span class="num">0.08</span> s, so the TV shows the rest of the pass in a few seconds. A phone that drops in the grant does not end it for anyone; it just does not claim.</p>
+<p>A press counts for the plot the player saw lit. Computer players press after a human reaction time, so a quick person can beat them.</p>
+<div class="box example"><h4>Example</h4><p>In month 1 of a four-seat game, the 15 × 9 map has 134 free plots. One full pass of the light would take 134 × 0.65 s = 87.1 s. The pass is usually much shorter: as soon as all four seats have claimed their one plot, the grant ends.</p></div>
+<div class="box why"><h4>Why it is like this</h4><p>One claim a month: Heiko, 5 Nov ("we should only have 1"). The store's MULE supply is sized separately, so cutting the claims did not shrink the corral. One pass with no clock: Heiko approved on 28 Oct that the grant always completes one full pass over the free plots instead of running on a fixed 60 s clock, so a player who wants no land does not hold up the table.</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/config.ts::GAME.claimsPerGrant, GAME.grantSweeps, GAME.grantTickMs, PHASES.grantFastForwardMs</code> · <code>packages/engine/src/game.ts::claimPlot, grantDone</code> · <code>apps/server/src/mule-game.ts::scheduleGrantTick</code></p>
+<p class="owner">Kept current by: the Auctions team (WS3). Details in <a href="land.html">Land and geology</a>.</p>
+
+<h2 id="land-auction">The land auction <span class="pill built">In the game</span></h2>
+<p>After the grant, each month there is a <span class="num">10</span> % chance that the colony puts one free plot up for sale, at a minimum of two thirds of a plot's Worth. With nothing listed by players or the colony, the land auction is skipped and development starts at once.</p>
+<p>Otherwise the lots come up one at a time: a <span class="num">3</span> s intro, a <span class="num">12</span> s walk in which bidders hold Up, and a <span class="num">2.5</span> s result. A change of leader in the last <span class="num">2</span> s puts the clock back to 2 s, at most <span class="num">6</span> s more per lot. The highest bid at the bell wins; the store buys what does not sell.</p>
+<p class="code-ref">In the code: <code>packages/engine/src/config.ts::LOTS</code> · <code>packages/engine/src/lots.ts</code></p>
+<p class="owner">Kept current by: the Auctions team (WS3). Details in <a href="land.html">Land and geology</a>.</p>
+
+<h2 id="development">Development and its clock <span class="pill built">In the game</span></h2>
+<p>Development is the arcade part of the month. Every colonist starts at the store, and everyone steers theirs live at once: buy a MULE at the corral, fit it at an outfitter, lead it out and install it on your plot. You can also analyse ground (<span class="num">8</span> s on the plot), fit a filter (<span class="num">1</span> Alloy), re-outfit a MULE, fight wolves, race for a glint, or go to the pub.</p>
+<h3 id="one-clock">One clock for everyone</h3>
+<p>There is one development clock of <span class="num">60</span> s, the same for every player, shown on the TV and on every phone. It counts down from the start in every month, month 1 included. Hunger and sickness never take time off the clock; they slow your walk instead:</p>
+<ul>
+<li><strong>Hunger</strong>: a player who starts development short of this month's Food walks slower, from <span class="num">60</span> % of normal pace with no Food at all, rising evenly to full pace with all of it.</li>
+<li><strong>Sickness</strong>: each development a player may fall sick (likelier in dirty air and for a big polluter). A sick player walks at <span class="num">50</span> % pace. One Medicine held when the turn starts cures it and is used up.</li>
+<li>The two multiply: no Food and sick is 0.6 × 0.5 = <span class="num">30</span> % pace. A Zipwing's × 1.25 comes on top.</li>
+</ul>
+<p>Development ends when the clock runs out, or earlier once every player, computer players included, is at the pub or out of time (or has dropped), and no colonist is still walking. A MULE still on your lead when your turn ends runs away; one you took off your own plot goes back to it.</p>
+<h3 id="the-pub">The pub</h3>
+<p>Walking into the pub ends your turn and pays cash: more the more time you have left, and more later in the game. The pub pays <span class="num">20</span> + (<span class="num">60</span> + <span class="num">20</span> × month) × the share of the clock left.</p>
+<div class="box example"><h4>Example</h4><p>In month 3, Lena installs her MULE and walks into the pub with 45 s of the 60 s left. Her share is 45 / 60 = 0.75, so the pub pays 20 + (60 + 3 × 20) × 0.75 = 20 + 120 × 0.75 = 110 cr. A player who walks straight to the pub in month 1 with the full clock gets 20 + 80 = 100 cr; in month 12, 20 + 300 = 320 cr.</p></div>
+<div class="box why"><h4>Why it is like this</h4><p>Heiko, 28 Oct: "if we just steer it via the walking then managing the time bars also gets easier. Then we only have one global time bar for all users, which is much better." The PM then ruled that every per-player condition acts through walking pace, never the clock. The clock became 60 s on 4 Nov (Heiko: "lets just generally increase the time to 60 seconds"). The hunger floor is Heiko's ("Yes, 60%", 4 Nov). Month 1 counts down like any month since 5 Nov (Heiko: "Yes, always count"); it used to wait for everyone's first MULE.</p></div>
+<div class="box next"><h4>What is changing</h4><p>The old tap-to-walk development screen is being removed so every game steers (PR #369, the Auctions team, being built). Steered walking is already the default in every game the server hosts.</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/config.ts::DEVELOPMENT, DEV_WALK, DEV_STEER</code> · <code>packages/engine/src/game.ts::startDevelopment, pubPayoutFor, visitPub, endLead</code> · <code>apps/server/src/mule-game.ts::startDevelopment, checkDevelopmentOver</code></p>
+<p class="owner">Kept current by: the Auctions team (WS3) for the clock; details in <a href="development.html">Development</a>.</p>
+
+<h2 id="production">Production <span class="pill built">In the game</span></h2>
+<p>Every plot with a MULE makes its good; nobody acts, everyone watches. The phase lasts exactly as long as its show: a <span class="num">1</span> s intro, a <span class="num">1.1</span> s beat for each good made (every player's plots of that good together), all bonuses for <span class="num">1.6</span> s, all losses for <span class="num">1.6</span> s, the month's production events (at most <span class="num">30</span> s), then the flight into the silos and a <span class="num">2</span> s hold.</p>
+<p>Once every person at the table has pressed Speed up, the rest of the show plays <span class="num">3</span> times faster. Computer players always agree; a dropped phone is not waited for. After the show, each player can press "Ready for the auction".</p>
+<div class="box example"><h4>Example</h4><p>A quiet month in which plots made Food, Energy and Smithore: 1 s intro + 3 × 1.1 s + 0.5 s gap + 1.6 s + 1.6 s + 0.5 s gap + 2.4 s of flights + 0.75 s for the last flight + 2 s hold = 13.65 s. The longest possible month, all nine goods and events at their 30 s cap, comes to 50.75 s.</p></div>
+<div class="box why"><h4>Why it is like this</h4><p>Heiko, 5 Nov, on the production mock: harvest "resource by resource for all players in parallel", then the bonuses for everyone, then the losses, "and the way that the resources fly to the silos is super". The PM ruled the same day that Ready waits for the end of the show and Speed up is the only shortcut, following his "more dramatic" ask.</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/config.ts::PRODUCTION_SHOW</code> · <code>packages/engine/src/production-show.ts::productionShow</code> · <code>apps/server/src/mule-game.ts::startPhaseTimer, hurryIfAllAsked</code></p>
+<p class="owner">Kept current by: the Balance team (WS1) for the rules; details in <a href="production.html">Production</a>.</p>
+
+<h2 id="goods-auction">The goods auction <span class="pill built">In the game</span></h2>
+<p>Auction events strike first (a pirate raid or a store fire), the store posts its prices, and the goods come up one at a time: Food, Water, Energy, Smithore, Crystite, Rare earth, Alloy, Electronics, Medicine. A good nobody can trade is skipped. For each good:</p>
+<ol>
+<li><strong>Side pick</strong> on a status screen of what everyone holds and needs. No clock: it waits for everyone, or the host moves on.</li>
+<li><strong>The walk</strong>: <span class="num">20</span> s. Where a buyer and a seller meet, units change hands, and the clock runs at <span class="num">25</span> % speed meanwhile.</li>
+<li><strong>Close</strong>: <span class="num">2.5</span> s in which each phone shows its receipt for the good.</li>
+</ol>
+<p>Every sale pays the sales tax into the colony fund.</p>
+<p class="code-ref">In the code: <code>packages/engine/src/config.ts::WALK</code> · <code>packages/engine/src/auction.ts</code> · <code>packages/engine/src/game.ts::advancePhase</code> (auction entry)</p>
+<p class="owner">Kept current by: the Auctions team (WS3); details in <a href="goods-auction.html">The goods auction</a>.</p>
+
+<h2 id="month-end">The month end <span class="pill built">In the game</span></h2>
+<p>The month end (the game calls it upkeep) settles the month in this order:</p>
+<ol>
+<li>Any month-end events strike.</li>
+<li><strong>Players eat and drink</strong>: each player needs <span class="num">2</span> Food and <span class="num">1</span> Water for themselves, plus 1 Food for every <span class="num">4</span> crew or part of 4, and 1 Water for every <span class="num">6</span> crew or part of 6. A plot with a MULE making a raw good has a crew of 1, a factory 2, a green belt none. Energy for the plots was already paid in production.</li>
+<li><strong>Colonists buy</strong> 1 Food and 1 Water for every <span class="num">20</span> colonists from the store, at its selling price, as far as their wages reach. Fed, the colony grows by <span class="num">4</span> %; short, it shrinks by <span class="num">5</span> %.</li>
+<li><strong>Goods spoil</strong>, and anything above <span class="num">10</span> units of a good in a player's home depot is lost. The store's goods spoil at a quarter of the normal rate.</li>
+<li><strong>The export ship</strong>, in its month, takes the store's surplus and leaves.</li>
+<li><strong>The store builds MULEs</strong> from Smithore, until its corral holds <span class="num">2</span> for each seat plus <span class="num">2</span> spare.</li>
+<li><strong>The colony</strong> (with the council on): law taxes are collected, the Federation pays <span class="num">150</span> cr into the colony fund, the Governor is paid <span class="num">50</span> cr from the fund, buildings pay their upkeep and go up, the building being funded takes what the fund can spare, and the colony's mood moves toward its target by at most <span class="num">5</span> points.</li>
+</ol>
+<p>Then the screens show the league table by Worth, with each player's change since last month, and how the colony is doing. The month end has no clock: it waits for every person to tap "On to month N" (computer players are on at once), or for the host's Continue. A dropped phone is waited for here too. After the last month's end the game goes straight to the final table.</p>
+<div class="box next"><h4>What is changing</h4><p>In the colony branch, not yet on trunk: at the month end the TV's Happiness gauge will open on last month's value, count to this month's, and pulse when it crosses into another mood band (PR #365, the Events team). A general strike will show as a badge on the TV, with the table waiting for the Governor's choice and strikers standing on the struck plots (PR #368, the Events team). See <a href="table-and-phones.html#colony-on-the-tv">The table and the phones</a>.</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/upkeep.ts::runUpkeep</code> · <code>packages/engine/src/game.ts::advancePhase</code> (upkeep) · <code>packages/engine/src/colony.ts::payGrant, runColony</code> · <code>packages/engine/src/config.ts::UPKEEP, MULE, COLONY, POLITICS.pay, HAPPINESS</code></p>
+<p class="owner">Kept current by: the PM; the Balance team (WS1) for upkeep, the Politics team (WS7) for the colony.</p>
+
+<h2 id="clocks-and-waits">Clocks, Ready and who the table waits for <span class="pill built">In the game</span></h2>
+<p>Some moments run on a clock; others wait for people. The rule of thumb: decisions you need to read for have no clock; action has one.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Moment</th><th>Clock</th><th>Ends when</th><th>A dropped phone</th><th>Host can go on</th></tr></thead>
+<tbody>
+<tr><td>Planning</td><td>None</td><td>Every person pressed "I'm ready"</td><td>Waited for</td><td>Yes, after one confirming tap</td></tr>
+<tr><td>Election: announce, ballot</td><td>None</td><td>Every person is Done</td><td>Waited for</td><td>Yes; they abstain</td></tr>
+<tr><td>Election reveal, law reveal</td><td>A timed show</td><td>The show ends</td><td>Not relevant</td><td>No</td></tr>
+<tr><td>Law vote</td><td>None</td><td>Every person is Done</td><td>Waited for</td><td>Yes; they do not vote</td></tr>
+<tr><td>Land grant</td><td>The light, 0.65 s a plot</td><td>All claimed or done, or the pass is over</td><td>Just does not claim</td><td>No need</td></tr>
+<tr><td>Land auction lot</td><td>Intro, walk, result</td><td>Each lot's clocks</td><td>Stops bidding where it stands</td><td>No</td></tr>
+<tr><td>Development</td><td>60 s, one for all</td><td>Clock out, or everyone at the pub or out of time</td><td>Colonist stands still; not waited for</td><td>No</td></tr>
+<tr><td>Production</td><td>Its show</td><td>The show ends, or every person is Ready after it</td><td>Not waited for</td><td>No (Speed up instead)</td></tr>
+<tr><td>Goods auction side pick</td><td>None</td><td>Every seat is Done</td><td>Waited for</td><td>Yes: "move on" for them</td></tr>
+<tr><td>Goods auction walk</td><td>20 s</td><td>The clock</td><td>Sits the walk out</td><td>No</td></tr>
+<tr><td>Month end</td><td>None</td><td>Every person tapped "On to month N"</td><td>Waited for</td><td>Yes, after one confirming tap</td></tr>
+</tbody>
+</table></div>
+<p>When the host goes on without someone, the news line names who was left out.</p>
+<h3 id="event-holds">Events hold the clocks</h3>
+<p>When an event strikes at the start of development or the goods auction, that phase's clocks, the computer players' included, wait until the event's show has played: <span class="num">7</span> s for a headline, <span class="num">5.2</span> s for a spotlight, one shared <span class="num">4</span> s roll call for all small bulletins, after a <span class="num">1.8</span> s intro, and never more than <span class="num">30</span> s in all. Planning is never held; production plays its events inside its own show. Players who fall sick are told in development's roll call, so development often opens with a short show.</p>
+<div class="box why"><h4>Why it is like this</h4><p>Heiko, 28 Oct ("Yes, all as recommended", to the UX audit's seven questions): the month-end table "holds until everyone taps On to month N", with the host's Continue for anyone absent. The goods auction's side pick lost its clock on 29 Oct (the Auctions team's change A-7, built on that audit); the simulator measured computer players picking within seconds, so only a person who never picks can hold the table, and the host can move on for them.</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/config.ts::PHASES, WALK.statusMs, EVENT_SHOW</code> · <code>apps/server/src/mule-game.ts::checkAllReady, continuePlanning, holdMs</code></p>
+<p class="owner">Kept current by: the Auctions team (WS3).</p>
+
+<h2 id="export-ship">The export ship's calendar <span class="pill built">In the game</span></h2>
+<p>The export ship calls every <span class="num">3</span> months: in months <span class="num">3</span>, <span class="num">6</span>, <span class="num">9</span> and <span class="num">12</span>. It is announced a month before with its wishlist: <span class="num">3</span> goods drawn from the seed, out of the six below. Food, Water and Energy do not travel, and nothing is ever imported. Its hold for each listed good is the off-world demand per player per month × the players × 3 months.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Good</th><th class="n">Off-world demand per player per month</th><th class="n">Hold in a four-seat game</th></tr></thead>
+<tbody>
+<tr><td>Crystite</td><td class="n">2</td><td class="n">24</td></tr>
+<tr><td>Smithore</td><td class="n">1</td><td class="n">12</td></tr>
+<tr><td>Alloy</td><td class="n">1</td><td class="n">12</td></tr>
+<tr><td>Electronics</td><td class="n">1</td><td class="n">12</td></tr>
+<tr><td>Rare earth</td><td class="n">0.5</td><td class="n">6</td></tr>
+<tr><td>Medicine</td><td class="n">0.5</td><td class="n">6</td></tr>
+</tbody>
+</table></div>
+<p>In its month the ship buys at the goods auction: it pays the off-world price for its first unit of a good and <span class="num">2</span> % less for each further unit, and <span class="num">10</span> % more while the colony's air is clean. At that month's end it takes the store's surplus of its goods (what the store holds above two months of demand) while it still has room, leaves, and its next call is planned three months on.</p>
+<p class="code-ref">In the code: <code>packages/engine/src/config.ts::GAME.exportShipEvery, EXPORT_SHIP, EXPORT_DEMAND, POLLUTION.cleanExportBonus</code> · <code>packages/engine/src/economy.ts::planShip, shipAnnounced, shipInPort, shipPrice</code> · <code>packages/engine/src/upkeep.ts</code></p>
+<p class="owner">Kept current by: the Balance team (WS1); details in <a href="store-and-prices.html">The store and prices</a>.</p>
+
+<h2 id="worth">Worth and scoring <span class="pill built">In the game</span></h2>
+<p>A player's score is their <strong>Worth</strong>, in credits. It is shown every month, on the TV and on every phone, as one total per player; only your own phone shows your Worth line by line. Worth is:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Line</th><th>How it counts</th><th class="n">Value</th></tr></thead>
+<tbody>
+<tr><td>Cash</td><td>Your money</td><td class="n">as held</td></tr>
+<tr><td>Goods</td><td>Every unit you hold, at the store's posted price today</td><td class="n">varies</td></tr>
+<tr><td>Land</td><td>Each plot you own</td><td class="n">300 cr</td></tr>
+<tr><td>MULEs</td><td>Each MULE installed on your plots, at this month's MULE price</td><td class="n">varies</td></tr>
+<tr><td>Office</td><td>Each term you have served as Governor (council on)</td><td class="n">1,200 cr</td></tr>
+<tr><td>Collapse cut</td><td>While the air is in Collapse, the whole total is multiplied by this</td><td class="n">× 0.8</td></tr>
+</tbody>
+</table></div>
+<div class="box example"><h4>Example</h4><p>Lena holds 1,450 cr, 3 Food at the store's price of 32 and 2 Smithore at 55, owns 4 plots with 3 MULEs installed, the MULE price this month is 175 cr, and she has served one term as Governor. Her Worth is 1,450 + (96 + 110) + 4 × 300 + 3 × 175 + 1,200 = 1,450 + 206 + 1,200 + 525 + 1,200 = 4,581 cr. Were the air in Collapse, it would be 4,581 × 0.8 = 3,665 cr (rounded).</p></div>
+<h3 id="colony-score">The colony's score</h3>
+<p>With the council on, the colony gets a score of its own at the end, beside the players' Worth and never added to it: (the colony's wealth + <span class="num">100</span> cr for each point the air is cleaner than 100 + <span class="num">1,000</span> cr for each point of prestige) × a happiness factor that runs from <span class="num">0.8</span> at happiness 0 to <span class="num">1.2</span> at happiness 100. The colony's wealth is the fund plus every player's Worth before the office line and any Collapse cut. Each player's donations to colony buildings are shown on plaques beside their Worth, never in it.</p>
+<div class="box example"><h4>Example</h4><p>The colony ends with 18,000 cr of wealth, air at 25 and 5 points of prestige, at happiness 70. Environment: 100 × (100 − 25) = 7,500. Prestige: 5 × 1,000 = 5,000. Factor: 0.8 + 0.4 × 0.70 = 1.08. Score: (18,000 + 7,500 + 5,000) × 1.08 = 32,940.</p></div>
+<div class="box next"><h4>What is changing</h4><p>The game-over verdict on the colony's score ("A colony to be proud of" from 100, "A colony that held together" from 50, "A colony in ruins" below) uses placeholder thresholds written before the score's scale was set. The score is now in credits, in the tens of thousands, so every colony reads "proud". The colony-score numbers themselves are placeholders too, to be tuned at the end. Owner: the Politics team (WS7), with the Auctions team (WS3) for the score rule.</p></div>
+<div class="box why"><h4>Why it is like this</h4><p>Heiko agreed the scoring model on 28 Oct ("Yes, as recommended"): one Worth number in credits, the same every month and at the end; highest Worth wins; others see totals only; and the Collapse cut applies mid-game too, so Worth is "your score if the game ended now". The same day he ruled the cut takes the office line too ("Yes, cut it too"). A term is worth about one good month's income for a top-half player. Donations sit beside Worth on plaques under the colony spec's end rule (RULE-25).</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/game.ts::scoreParts, colonyScoreOf, playerStanding</code> · <code>packages/engine/src/config.ts::GAME.plotScore, POLITICS.termScore, POLLUTION.collapseScore, COLONY_SCORE</code> · <code>apps/web/src/game/colony.ts::scoreVerdict</code></p>
+<p class="owner">Kept current by: the PM, with the Table team (WS4) for the score's screens.</p>
+
+<h2 id="game-end">How long a game lasts and who wins <span class="pill built">In the game</span></h2>
+<p>A game lasts <span class="num">12</span> months. It ends earlier when the land runs out: once the last free plot is claimed, the game goes on for <span class="num">3</span> more months. The check is made at each month end, so the game ends at the month end of whichever comes first.</p>
+<div class="box example"><h4>Example</h4><p>The last free plot is claimed in month 6's land grant. The game ends at the end of month 9 (6 + 3), three months short of the full 12.</p></div>
+<p>The winner is the player with the highest Worth after the last month end. On the screens, players level at the top share the win ("You share the win!"). The final screens show the winner, the final table by Worth and, with the council on, the colony's score and plaques. Your phone shows your place, your Worth line by line, and the winner.</p>
+<div class="box next"><h4>What is changing</h4><p>On a tie at the top, the screens call it a shared win, but the server's closing news line ("Game over. … wins the colony!") names only the first of the tied players, by seat order. Owner: the Auctions team (WS3) for the server's news, the Table team (WS4) for the screens.</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/game.ts::isGameOver</code> · <code>packages/engine/src/config.ts::GAME.maxMonths, GAME.landRushMonths</code> · <code>apps/server/src/mule-game.ts::enterPhase</code> (game over) · <code>apps/web/src/components/MonthEnd.tsx::WinnerCard</code></p>
+<p class="owner">Kept current by: the PM.</p>
+
+<h2 id="collapse">Colony collapse <span class="pill built">In the game</span></h2>
+<p>The colony's air runs from 0 (clean) to 100. Mines and smelters foul it; nature cleans <span class="num">2</span> points a month for each player, and green belts and filters help. The air sits in one of four bands:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Band</th><th class="n">From</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td>Clean</td><td class="n">0</td><td>The export ship pays 10 % more</td></tr>
+<tr><td>Smoggy</td><td class="n">30</td><td>The dirty air can make a player sick in development; the colonists need 1.5 × the Medicine</td></tr>
+<tr><td>Toxic</td><td class="n">60</td><td>As smoggy, and every farm and well makes 1 less</td></tr>
+<tr><td>Collapse</td><td class="n">80</td><td>As toxic, and 5 % of colonists leave every month whatever they eat; every Worth is cut to 0.8</td></tr>
+</tbody>
+</table></div>
+<p>Collapse does not end the game. The game plays on to its normal end; if the air is in Collapse when the game ends, the Federation judges the colony a failure and every player's final Worth is cut by a fifth. While the air is in Collapse, the month-end screens show the cut already, with a banner saying why every Worth is lower. The colony's own score is counted before any cut.</p>
+<p class="code-ref">In the code: <code>packages/engine/src/config.ts::POLLUTION</code> · <code>packages/engine/src/game.ts::colonyFailed, scoreParts</code> · <code>packages/engine/src/upkeep.ts</code> (colonists leaving)</p>
+<p class="owner">Kept current by: the Balance team (WS1); details in <a href="production.html">Production</a> and <a href="colony-and-politics.html">Colony and politics</a>.</p>
+
+<h2 id="host-options">Host and server options <span class="pill built">In the game</span></h2>
+<p>These belong to the server, not the lobby; the host cannot change them today:</p>
+<ul>
+<li><strong>The council</strong> (elections, laws, the colony fund, buildings, mood) is on in every game. Without it there are no offices, no moving tax and no colony score.</li>
+<li><strong>The game length</strong> is 12 months unless the server is started with another.</li>
+<li><strong>Steered walking</strong> in development is on for every game.</li>
+<li><strong>The computer players' skill level</strong> is Trader for every computer seat.</li>
+</ul>
+<p class="code-ref">In the code: <code>apps/server/src/server.ts::createMuleServer</code> (politics on) · <code>apps/server/src/index.ts</code> · <code>apps/server/src/mule-game.ts::DEFAULT_AI_LEVEL</code></p>
+<p class="owner">Kept current by: the PM, with the Table team (WS4) for the server.</p>
+</article>
+</main>
+</div>
+<script src="search-index.js"></script>
+<script src="rulebook.js"></script>
+</body>
+</html>

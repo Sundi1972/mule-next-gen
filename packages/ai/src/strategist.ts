@@ -334,7 +334,7 @@ export type FloorLegs = (index: number, outfit: Outfit) => { there: number; pub:
 
 /**
  * The walk's veto on a MULE: the walk out to its plot (`there`), back to the pub (`back`) and the taps take more than
- * the seconds left. developDecision's, and RULE-9 row 3's on the floor (AM-25): a route MULE it vetoes is stale.
+ * the seconds left. developDecision's, and on the floor the route's stale check. See AM-25.
  */
 export function walkVeto(walk: DevWalk, there: number, back: number): string | null {
   const seconds = there + back + walk.taps;

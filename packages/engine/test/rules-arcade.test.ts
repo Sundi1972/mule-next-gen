@@ -258,16 +258,6 @@ describe('AM-2: take a MULE off a plot and re-outfit it at the store', () => {
     expect(state.players[1]!.carriedMule).toBe('water');
   });
 
-  it('F1 pin: with the arcade off, OUTFIT re-fits a fitted MULE at full price, as the tap-to-walk phone does today', () => {
-    const state = developing();
-    DEV_STEER.on = false;
-    leadingFood(state);
-    const { money } = p0(state);
-    outfitMule(state, 'p0', 'water');
-    expect(p0(state).carriedMule).toBe('water');
-    expect(p0(state).money).toBe(money - outfitCostFor(state, 'p0', 'water'));
-  });
-
   it('AM-2, AM-14: the clock’s end returns a taken MULE to its plot with its old outfit, and the re-outfit fee stays paid', () => {
     const state = developing();
     plot(state, 0, 0, 'p0', 'food').runMonths = 3;
