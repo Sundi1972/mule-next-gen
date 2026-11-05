@@ -621,7 +621,13 @@ export interface ReceiptSide {
   units: number;
   /** Before tax. */
   gross: number;
+  /** The sales tax the engine took, unit by unit. */
   tax: number;
+  /**
+   * The export tax on units sold to the export ship (slice 2a RULE-43), what chargeExportTax took; 0 without the law.
+   * The engine always sets it; optional so receipts built before it still type.
+   */
+  exportTax?: number;
   prices: number[];
   /** Counterparties in the order first traded with: player ids, 'store' or 'ship'. */
   with: string[];
