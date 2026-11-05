@@ -172,9 +172,10 @@ call sites   strategist.ts::goodPlan (strategist.ts:484) ·
 pin          AI_VALUE.model 'today': default, `--plays today` and politics-off sims
              byte-identical to trunk on 1/101/201 (T-AC-9)
 depends_on   C3 (the belief; stubbable: outlook.price) · WS1's exported turn-off order
-             for Energy and Water, shipping in the AM-17 PR (energyOffOrder(state,
-             playerId) today; WS1 generalises it per good for Water; PM ruling, 5 Nov;
-             data, not stubbable) · the upkeep target WS1's stopgap builds (ws1-food-short;
+             for Energy and Water, shipping in the AM-17 PR #393 (energyOffOrder(state,
+             playerId, cold), with `cold` REQUIRED and passed explicitly as next month's
+             (the default read the month just produced); WS1 generalises it per good for
+             Water; data, not stubbable) · the upkeep target WS1's stopgap builds (ws1-food-short;
              RULE-3 reuses it)
 ```
 
@@ -461,7 +462,7 @@ outcome    → RULE-2 replace, RULE-4 carry, RULE-5 later goods' asks
 | Function | WS5 kind | What the AI reads it for |
 |---|---|---|
 | `nextPostedPrice(state, good, demand?, lastShortages?, off?)` | MODIFIED behaviour, same signature | RULE-6 rows 2–3. `outlook.price` already calls it, so PR-1 and PR-2 pick up the new pricing with no AI edit |
-| `storeQuotes(state, good)` → `{ buy, sell }`, each `number \| null` | MODIFIED behaviour | `expectedPrices`. A `null` side means the store won't trade that way: RULE-2's replace is then unknown (see RULE-2) |
+| `storeQuotes(state, good)` → `{ buy, sell }`, each `number \| null` | MODIFIED behaviour | `expectedPrices`. `sell === null` is "won't sell" and `buy === null` is "won't buy", pinned by WS5's #390 contract test (48540317). With `sell` null, RULE-2's replace is unknown |
 | `storeWants(state, good, demand?)` | MODIFIED behaviour | how many units a seller can place with the store (RULE-4's sell side) |
 | `expectedOffWorld(state, good, monthsAhead)` | ADDED, pure, never draws | PR-3's belief for export goods (RULE-6 row 2) |
 
