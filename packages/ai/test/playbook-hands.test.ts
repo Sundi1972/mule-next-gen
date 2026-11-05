@@ -441,6 +441,36 @@ describe('the own path plays today’s development and auction while AI_PLANS.ow
     expect(items.some((i) => i.path.startsWith(`/auction/${missing}/`)), 'the outcome names no part for it').toBe(false);
     expect(items.some((i) => i.path.startsWith(`/auction/${kept[0]}/`)), 'the adopted goods are in it').toBe(true);
   });
+
+  it("B-AC-6, T-AC-13 (AM-26, the seat's ownPhases on): a good an adopted auction part lacks is drafted and played, its one-good entry written in seat order", () => {
+    // The mirror of the row above, with AI_PLANS.ownPhases still off and every seat's own ownPhases option on. ME's own
+    // auction draft is adopted at month 1's first status screen without Food, the good that is up; ME opens the
+    // auction with no Food and the money to buy it.
+    let kept: Good[] | null = null;
+    const t = playTable({
+      months: 1,
+      edit: hungry(1),
+      seat: () => ({ ownPhases: true }),
+      before: (seat, state, point) => {
+        if (kept || point !== 'auction' || seat.id !== ME || state.auction?.stage !== 'status') return;
+        expect(state.auction.good, 'the good up at the first status screen').toBe('food');
+        const { food: _, ...rest } = seat.draft(state, 'auction').auction!;
+        kept = Object.keys(rest) as Good[];
+        const { playbook } = seat.validator()(state, ME, { ...seat.draft(state, 'auction'), auction: rest }, []);
+        seat.adopt({ ...playbook, by: 'llm' });
+      },
+    });
+    expect(AI_PLANS.ownPhases, 'the global switch').toBe(false);
+    expect(kept!.length, 'the adopted part plays other goods').toBeGreaterThan(0);
+    // At Food's status screen every seat writes, in seat order: ME a one-good entry for Food, the rest their drafts.
+    const atFood = t.written.filter((pb) => pb.phase === 'auction' && pb.month === 1).slice(0, SPECS.length);
+    expect(atFood.map((pb) => pb.seat), 'in seat order').toEqual(SPECS.map((_, i) => `ai${i}`));
+    expect(Object.keys(atFood[0]!.auction!), "ME's entry: Food alone").toEqual(['food']);
+    // The drafted play is the one it plays: its outcome names Food's part, and it buys the Food it lacks.
+    const items = t.outcomes.get(key(ME, 1, 'auction'))!.items;
+    expect(items.find((i) => i.path === '/auction/food/role'), "the outcome names Food's drafted part").toMatchObject({ expected: atFood[0]!.auction!.food!.role });
+    expect(t.traded(ME, 1, 'food'), 'it buys Food').toBeGreaterThan(0);
+  });
 });
 
 // The own-path promises switch AI_PLANS.ownPhases on (ownPhasesOn); the adopted-path ones play with the default.
