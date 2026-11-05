@@ -382,8 +382,10 @@ function PlotBars({ line, t, times, flyAt: flyStart, tv, colour }: { line: ShowL
   const strikes = plotStrikes(s.segments, line, reduced, grid);
   const base = baseOf(line);
   const from = times.goodAt[line.good] ?? SHOW.intro;
-  const landsAt = (delta: number) => (delta > 0 ? times.bonusAt : times.lossAt);
-  const landed = line.parts.filter((p) => t >= landsAt(p.delta));
+  // The floor that lifts a plot back to 0 is no bonus: it softens the losses, so it lands with them.
+  const bonus = (p: ShowLine['parts'][number]) => p.delta > 0 && p.why !== 'floor';
+  const landsAt = (p: ShowLine['parts'][number]) => (bonus(p) ? times.bonusAt : times.lossAt);
+  const landed = line.parts.filter((p) => t >= landsAt(p));
   const struck = strikes.filter((x) => t >= x.at);
   const last = struck.at(-1);
   const counted = t < from ? 0 : Math.min(base, Math.floor((t - from) / SHOW.unitStep) + 1);
@@ -392,22 +394,25 @@ function PlotBars({ line, t, times, flyAt: flyStart, tv, colour }: { line: ShowL
   const waiting = t < from;
   const making = !waiting && t < from + base * SHOW.unitStep + 0.35;
   // A part stays lit for its whole beat: green while the bonuses land, red while the losses do.
-  const lighting = line.parts.find((p) => t >= landsAt(p.delta) - 0.1 && t < landsAt(p.delta) + SHOW.allAtOnce - 0.2);
-  const ring = lighting ? (lighting.delta > 0 ? 'var(--color-ok)' : 'var(--color-alert)') : making ? colour : null;
+  const lighting = line.parts.find((p) => t >= landsAt(p) - 0.1 && t < landsAt(p) + SHOW.allAtOnce - 0.2);
+  const ring = lighting ? (bonus(lighting) ? 'var(--color-ok)' : 'var(--color-alert)') : making ? colour : null;
   // What a loss or the last event took, falling away in grey: never with reduced motion.
   const lossAt = line.parts.some((p) => p.delta < 0) ? times.lossAt : null;
+  const lost = -line.parts.filter((p) => !bonus(p)).reduce((n, p) => n + p.delta, 0);
   const fromEvent = last && last.before > last.after ? { n: last.before - last.after, ago: t - last.at } : null;
-  const fromLoss = lossAt !== null && t >= lossAt ? { n: -line.parts.filter((p) => p.delta < 0).reduce((n, p) => n + p.delta, 0), ago: t - lossAt } : null;
+  const fromLoss = lossAt !== null && t >= lossAt && lost > 0 ? { n: lost, ago: t - lossAt } : null;
   const falling = (fromEvent && fromEvent.ago < 0.9 ? fromEvent : fromLoss && fromLoss.ago < 0.9 && !last ? fromLoss : null) ?? null;
   // A bonus unit glows green as it arrives.
-  const gained = t >= times.bonusAt && t < times.bonusAt + SHOW.allAtOnce && !last ? line.parts.filter((p) => p.delta > 0).reduce((n, p) => n + p.delta, 0) : 0;
+  const gained = t >= times.bonusAt && t < times.bonusAt + SHOW.allAtOnce && !last ? line.parts.filter(bonus).reduce((n, p) => n + p.delta, 0) : 0;
   // On the phone a bar is outlined so a one-unit plot doesn't blend into its border.
   const bar = tv ? 'h-3.5 w-1.5' : 'h-3 w-1.5 ring-1 ring-void/70';
   const chip = tv ? 'px-1 py-0.5 text-[11px]' : 'px-0.5 text-[9px]';
   // An event's chip on the plot (the module's marks): the TV keeps three parts beside it; the phone has room for one
   // badge, the biggest, and the event's wins.
   const chipped = struck.some((x) => x.delta !== 0);
-  const shown = tv ? landed.slice(0, 3) : chipped ? [] : [...landed].sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta)).slice(0, 1);
+  // The floor gets no badge: the losses' badges say why the plot made less.
+  const reasons = landed.filter((p) => p.why !== 'floor');
+  const shown = tv ? reasons.slice(0, 3) : chipped ? [] : [...reasons].sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta)).slice(0, 1);
   const state = waiting ? 'waiting' : flying ? 'flown' : making ? 'harvest' : 'done';
 
   return (
@@ -422,9 +427,9 @@ function PlotBars({ line, t, times, flyAt: flyStart, tv, colour }: { line: ShowL
       {ring && !flying && <span className="absolute inset-0 rounded-[4px]" style={{ boxShadow: `0 0 0 ${tv ? 3 : 2}px ${ring}, 0 0 ${tv ? 18 : 10}px ${ring}` }} data-testid="spotlight" />}
       {!waiting && !flying && (
         <span className={cx('absolute flex flex-col items-end', tv ? 'right-1 top-1 gap-0.5' : 'right-0.5 top-0.5 gap-px')}>
-          {shown.map((p) => (
+          {shown.map((p, i) => (
             <span
-              key={p.why}
+              key={`${p.why}-${i}`}
               data-badge="reason"
               data-why={p.why}
               className={cx('flex items-center rounded-chip font-mono font-bold leading-none shadow-chip animate-[show-badge-in_0.3s_ease-out]', badgeTone(p.why, p.delta), tv ? 'gap-0.5' : '', chip)}
