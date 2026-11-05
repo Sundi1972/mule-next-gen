@@ -409,8 +409,8 @@ const COUCH_SCALE = 0.8;
 
 /**
  * B-AC-27-2 at a full table (WS4's TV-FIT, 1920×1080): six seats, month 2's end, the colony band up under the league.
- * The header still fits (the chip clear of the gauges, nothing past the foot), the band and the league show whole, and
- * the log gives the month end's scale with and without the band, against COUCH_SCALE. `MULE_E2E_SHOTS=<dir>` saves the TV.
+ * Read on two TVs, the chat ticker full and empty: the header still fits, the band and the league show whole, and the
+ * log gives the month end's scale with and without the band, against COUCH_SCALE. `MULE_E2E_SHOTS=<dir>` saves both TVs.
  */
 async function theMonthEndScoreAtSixSeats(): Promise<void> {
   const SEED = seedFrom(process.env.MULE_E2E_SEED);
@@ -455,38 +455,18 @@ async function theMonthEndScoreAtSixSeats(): Promise<void> {
     await phone.locator('[data-phase=planning]').waitFor({ timeout: MONTH_END_MS });
     await throughTheMonth();
 
-    const end = tv.getByTestId('tv-monthend');
     check(board().month === 2 && board().players.length === 6, `month 2's end at six seats, got month ${board().month}, ${board().players.length} seats`);
-    await end.getByTestId('colony-band').getByTestId('colony-score-change').waitFor({ timeout: PRESS_MS });
-    check((await end.locator('[data-testid^=league-row-]').count()) === 6, 'six league rows on the TV');
-    const header = await theTvHeaderFits(tv, 'six-seat month end');
-    // Settled: read the scale until two reads a beat apart agree.
-    let scale = Number(await end.locator('[data-fit]').getAttribute('data-fit'));
-    for (let i = 0; i < 10; i++) {
-      await tv.waitForTimeout(300);
-      const again = Number(await end.locator('[data-fit]').getAttribute('data-fit'));
-      if (again === scale) break;
-      scale = again;
+    // The full ticker: the TV that has watched the game. The empty one: a TV that joins now (the server replays no chat).
+    const fresh = await (await browser.newContext(TV)).newPage();
+    fresh.on('pageerror', (e) => errors.push(`fresh tv: ${e.message}`));
+    await fresh.goto(`${base}/table?room=${code}`);
+    for (const [page, name] of [
+      [tv, 'ticker-full'],
+      [fresh, 'ticker-empty'],
+    ] as const) {
+      const read = await readTheSixSeatMonthEnd(page, name);
+      console.log(`✓ B-AC-27-2: six seats, month 2's end, ${read}`);
     }
-    // What the band costs: the scale the same screen would have without it, from the unscaled heights of its parts.
-    const parts = await end.evaluate((root) => {
-      const box = root.querySelector('[data-fit]')!;
-      const band = root.querySelector('[data-testid=colony-band]') as HTMLElement;
-      // The left column holds the league, then the band; the right column the colony panel and the build site.
-      const league = band.parentElement!.firstElementChild as HTMLElement;
-      const right = band.parentElement!.nextElementSibling as HTMLElement;
-      // The grid stretches the right column to the row; its content runs from its first child's top to its last's foot.
-      const first = right.firstElementChild as HTMLElement;
-      const last = right.lastElementChild as HTMLElement;
-      return { box: box.clientHeight, league: league.offsetHeight, band: band.offsetHeight, right: last.offsetTop + last.offsetHeight - first.offsetTop };
-    });
-    const without = Math.min(1, parts.box / Math.max(parts.league, parts.right));
-    if (process.env.MULE_E2E_SHOTS) await tv.screenshot({ path: `${process.env.MULE_E2E_SHOTS}/tv-monthend-six-seats-month2.png` });
-    await shownWhole(tv, 'six-seat month end', ['[data-testid=colony-band]', '[data-testid=league-table]']);
-    console.log(
-      `✓ B-AC-27-2: six seats, month 2's end: the band under six league rows at scale ${scale.toFixed(3)} (${without.toFixed(3)} without the band; box ${parts.box} px, league ${parts.league}, band ${parts.band}, right column ${parts.right}); TV-FIT ${header}`,
-    );
-    if (scale < COUCH_SCALE) console.log(`  note: below the couch scale ${COUCH_SCALE}; without the band it would be ${without.toFixed(3)}`);
 
     check(errors.length === 0, `no page errors: ${errors.join('; ')}`);
     console.log(`e2e colony six seats: ok (room ${code}, seed ${SEED})`);
@@ -497,6 +477,50 @@ async function theMonthEndScoreAtSixSeats(): Promise<void> {
   } finally {
     await browser.close();
     await server.close();
+  }
+}
+
+/**
+ * The six-seat month end on one TV, once no event show covers it: the league's six rows and the band whole, the header
+ * fitting, the FitHeight scale settled; then the scale it would have without the band, and the chat lines showing.
+ */
+async function readTheSixSeatMonthEnd(tv: Page, name: string): Promise<string> {
+  const end = tv.getByTestId('tv-monthend');
+  const overlay = tv.getByTestId('tv-event-overlay');
+  for (let attempt = 0; ; attempt++) {
+    check(attempt < 5, `the ${name} TV shows its month end clear of any event show`);
+    await overlay.waitFor({ state: 'hidden', timeout: MONTH_END_MS + 20_000 });
+    await end.getByTestId('colony-band').getByTestId('colony-score-change').waitFor({ state: 'visible', timeout: MONTH_END_MS });
+    await end.getByTestId('league-table').waitFor({ state: 'visible', timeout: PRESS_MS });
+    check((await end.locator('[data-testid^=league-row-]').count()) === 6, 'six league rows on the TV');
+    const header = await theTvHeaderFits(tv, `six-seat month end (${name})`);
+    let scale = Number(await end.locator('[data-fit]').getAttribute('data-fit'));
+    for (let i = 0; i < 10; i++) {
+      await tv.waitForTimeout(300);
+      const again = Number(await end.locator('[data-fit]').getAttribute('data-fit'));
+      if (again === scale) break;
+      scale = again;
+    }
+    const parts = await end.evaluate((root) => {
+      const box = root.querySelector('[data-fit]')!;
+      const band = root.querySelector('[data-testid=colony-band]') as HTMLElement;
+      // The left column holds the league, then the band; the right column the colony panel and the build site.
+      const league = band.parentElement!.firstElementChild as HTMLElement;
+      const right = band.parentElement!.nextElementSibling as HTMLElement;
+      // The grid stretches the right column to the row; its content runs from its first child's top to its last's foot.
+      const first = right.firstElementChild as HTMLElement;
+      const last = right.lastElementChild as HTMLElement;
+      const lines = [...root.querySelectorAll('[data-testid^=chat-line-]')].filter((l) => (l as HTMLElement).checkVisibility()).length;
+      return { box: box.clientHeight, league: league.offsetHeight, band: band.offsetHeight, right: last.offsetTop + last.offsetHeight - first.offsetTop, lines };
+    });
+    await shownWhole(tv, `six-seat month end (${name})`, ['[data-testid=colony-band]', '[data-testid=league-table]']);
+    const shot = process.env.MULE_E2E_SHOTS ? `${process.env.MULE_E2E_SHOTS}/tv-monthend-six-seats-month2-${name}.png` : null;
+    if (shot) await tv.screenshot({ path: shot });
+    // A show that came up while it was read: read it again once it has gone.
+    if (await overlay.isVisible()) continue;
+    const without = Math.min(1, parts.box / Math.max(parts.league, parts.right));
+    const note = scale < COUCH_SCALE ? `; below the couch scale ${COUCH_SCALE}` : '';
+    return `${name} (${parts.lines} chat lines): scale ${scale.toFixed(3)} with the band, ${without.toFixed(3)} without (box ${parts.box} px, league ${parts.league}, band ${parts.band}, right column ${parts.right})${note}; TV-FIT ${header}${shot ? `; ${shot}` : ''}`;
   }
 }
 
