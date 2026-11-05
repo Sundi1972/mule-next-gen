@@ -497,8 +497,8 @@ export interface GoodPlan {
   /** Extra value per unit, up to the others' shortfall, for cornering a scarce good. */
   corner: { units: number; premium: number };
   /**
-   * Units it buys up to, as far as its money goes, and never sells under: what keeps it whole next month (wholeNextMonth)
-   * while it holds less and the store sells the good (STRATEGIST.buyShortfall); 0 otherwise.
+   * Units it buys up to, as far as its money goes: what keeps it whole next month (wholeNextMonth), while it holds less
+   * and the store sells the good (STRATEGIST.buyShortfall); 0 otherwise. It never sells under that, short or not.
    */
   mustHold: number;
 }
@@ -515,17 +515,16 @@ export function goodPlan(obs: GameState, mind: Mind, good: Good): GoodPlan {
     const now = afterTax(obs, expectedPrices(obs, good).sell);
     for (let k = values.block; k < values.keep.length; k++) values.keep[k] = Math.min(values.keep[k]!, now - 1);
   }
-  // Short for next month is a loss, not a small cost (Heiko, 5 Nov): while the store sells the good, each unit up to
-  // what keeps the seat whole is worth at least the store's ask, so it buys it there or cheaper from a player, never
-  // dearer, and it sells none of them.
-  const ask = STRATEGIST.buyShortfall.includes(good) ? storeSellLine(obs) : null;
-  const whole = wholeNextMonth(obs, mind.me, good);
+  // Short for next month is a loss, not a small cost (Heiko, 5 Nov). It never sells under what keeps it whole, short or
+  // not, and whether or not the store sells: a unit sold there is next month's loss, and with the store out it can't buy
+  // it back. While the store sells the good and it holds less, each unit up to that is worth at least the store's ask,
+  // so it buys it there or cheaper from a player, never dearer.
+  const whole = STRATEGIST.buyShortfall.includes(good) ? wholeNextMonth(obs, mind.me, good) : 0;
+  for (let k = 0; k < whole; k++) values.keep[k] = Infinity;
+  values.floorUnits = Math.max(values.floorUnits, whole);
+  const ask = whole > 0 ? storeSellLine(obs) : null;
   const mustHold = ask !== null && p.stock[good] < whole ? whole : 0;
-  for (let k = 0; k < mustHold; k++) {
-    values.buy[k] = Math.max(values.buy[k] ?? 0, ask!);
-    values.keep[k] = Infinity;
-  }
-  values.floorUnits = Math.max(values.floorUnits, mustHold);
+  for (let k = 0; k < mustHold; k++) values.buy[k] = Math.max(values.buy[k] ?? 0, ask!);
   const reserve = cashReserve(obs, mind);
   const budget = Math.max(0, Math.min(p.money * STRATEGIST.budgetShare, p.money - reserve));
   const a = obs.auction;
@@ -555,12 +554,13 @@ export function goodPlan(obs: GameState, mind: Mind, good: Good): GoodPlan {
  * and drinks its Water, then every good spoils and the depot keeps what it can; next development is hungry under the
  * household's Food, and next production halves a plot short of its Energy, or a farm whose owner is short of Water.
  * Water counts only for a seat with a farm to water: without one, going short costs it nothing. 0 for other goods.
+ * Its twin is value.ts unitValues' `block` (the units next month's needs take); #385's resource-value model replaces both.
  */
 export function wholeNextMonth(obs: GameState, me: string, good: Good): number {
   const kept = (n: number) => Math.ceil(Math.min(n, UPKEEP.depotCapacity) / (1 - GOOD_CONFIG[good].spoilage));
   if (good === 'food') return needsOf(obs, me).food + kept(needsOf(obs, me).food);
   if (good === 'energy') return kept(monthNeeds(obs, me).energy);
-  const farms = obs.tiles.some((t) => t.owner === me && UPKEEP.irrigated.includes(t.outfit as never));
+  const farms = obs.tiles.some((t) => t.owner === me && (UPKEEP.irrigated as readonly string[]).includes(t.outfit ?? ''));
   if (good === 'water' && farms) return needsOf(obs, me).water + kept(needsOf(obs, me).water);
   return 0;
 }
@@ -614,7 +614,8 @@ export function tradeDecision(obs: GameState, mind: Mind, plan: GoodPlan): Short
     if (buffer > keepAt && buffer < h) sellTo(buffer, `Sell ${h - buffer} ${GOOD_NAME[good]}, keep a buffer of ${buffer}`, 'sell:buffer');
   }
 
-  // Buy: up to the last unit worth more than its price, within the budget; the Food it must hold, as far as its money goes.
+  // Buy: up to the last unit worth more than its price, within the budget; the Food, Energy or Water it must hold
+  // (plan.mustHold), as far as its money goes.
   let upTo = h;
   let spent = 0;
   const wanted = (k: number) => (k < plan.mustHold ? spent + buy <= p.money : (v.buy[k] ?? 0) > buy && spent + buy <= plan.budget);
