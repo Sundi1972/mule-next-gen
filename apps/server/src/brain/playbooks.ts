@@ -1,6 +1,23 @@
-/** When a seat's brain asks for its land-grant playbook, and which playbook takes effect when the land grant starts. */
+/**
+ * When a seat's brain asks for its playbooks, and which takes effect: the land grant's at the land grant's start, and the
+ * auction's at the auction's start, asked in the production show (spec A RULE-A2, AM-A16).
+ */
 import { BRAIN, type GameState, type Playbook, type PlayerId } from '@mule/engine';
-import { landBrief, playbookFrom, toolsFor, WRITER_SYSTEM, type AiSeat, type Feedback, type PlaybookSource, type ValidatePlan, type WhatIfSim, type WriterReply } from '@mule/ai';
+import {
+  landBrief,
+  phaseBrief,
+  playbookFrom,
+  toolsFor,
+  WRITER_SYSTEM,
+  type AiSeat,
+  type EditPhase,
+  type Feedback,
+  type PhaseFact,
+  type PlaybookSource,
+  type ValidatePlan,
+  type WhatIfSim,
+  type WriterReply,
+} from '@mule/ai';
 import type { PlaybookNote } from '../mule-game.js';
 import { WRITE_CALLS } from './client.js';
 import { timeSlicer } from './slice.js';
@@ -44,6 +61,10 @@ export class Playbooks {
   private readonly feedback = new Map<PlayerId, Feedback>();
   /** The writes still open, so a trial can let them settle before the land grant (settle). */
   private readonly open = new Set<Promise<unknown>>();
+  /** Each seat's open ask for the development or the auction, by `${seat}/${phase}`. */
+  private readonly phaseAsks = new Map<string, Ask>();
+  /** What the last reply for each seat's development or auction had refused, for that phase's next brief. */
+  private readonly phaseFeedback = new Map<string, Feedback>();
 
   constructor(private readonly options: PlaybooksOptions) {
     if (!options.source) return;
@@ -137,6 +158,70 @@ export class Playbooks {
       // month's, since adopt keeps the newest month's playbooks only (WS9).
       seat.adopt(playbook);
       this.options.record?.({ seat: seat.id, month: state.month, phase: 'landGrant', playbook });
+    }
+  }
+
+  /**
+   * Asks each Smart seat's writer for its edits to `phase` in the slack before it: the game asks the auction's in the
+   * production show (spec A RULE-A2, AM-A16), with the development's outcome from `facts`, its public facts read before
+   * they reset. Returns at once; the phase's start (takePhase) cancels a call still open. No whatIf: its month sim plays
+   * land-grant playbooks.
+   */
+  askPhase(state: GameState, phase: EditPhase, facts: readonly PhaseFact[]): void {
+    if (!this.options.source) return;
+    for (const seat of this.options.seats) {
+      const writer = this.writers.get(seat.id);
+      if (!writer) continue;
+      const key = `${seat.id}/${phase}`;
+      try {
+        const draft = seat.draft(state, phase);
+        const outcome = phase === 'auction' ? seat.outcome('development', state, facts) : null;
+        const brief = phaseBrief(state, seat.mind, seat.brain.persona, draft, phase, seat.brain.heard(), { outcome, feedback: this.phaseFeedback.get(key) ?? null });
+        const ask: Ask = { month: state.month, draft, written: null, started: false, controller: new AbortController() };
+        this.phaseAsks.set(key, ask);
+        const waitMs = WRITE_CALLS.playbook.timeoutMs;
+        const write = writer
+          .write('playbook', { brief, system: WRITER_SYSTEM, waitMs, late: () => ask.started, signal: ask.controller.signal, tools: toolsFor(state, seat.id) })
+          .then(
+            (written) => {
+              if (!ask.started) ask.written = written;
+            },
+            (err: unknown) => console.error(`playbooks: seat ${seat.id}'s ${phase} write failed: ${messageOf(err)}`),
+          );
+        this.open.add(write);
+        void write.finally(() => this.open.delete(write));
+      } catch (err) {
+        console.error(`playbooks: seat ${seat.id} could not ask for its ${phase}: ${messageOf(err)}`);
+      }
+    }
+  }
+
+  /**
+   * `phase` has started: a call still open for it is cancelled and its reply would be late. A reply that came in time
+   * is validated against the draft its brief showed; only a playbook carrying Claude's accepted edits is adopted and
+   * recorded. Otherwise nothing is adopted, so the seat plays the phase its own way (today's hands while
+   * AI_PLANS.ownPhases is off). The reply's feedback is kept for that phase's next brief.
+   */
+  takePhase(state: GameState, phase: EditPhase): void {
+    for (const seat of this.options.seats) {
+      const key = `${seat.id}/${phase}`;
+      const ask = this.phaseAsks.get(key);
+      if (!ask || ask.month !== state.month) continue;
+      ask.started = true;
+      ask.controller.abort();
+      this.phaseAsks.delete(key);
+      if (!ask.written) continue;
+      let made: ReturnType<typeof playbookFrom>;
+      try {
+        made = playbookFrom(seat.validator(), state, ask.draft, ask.written);
+      } catch (err) {
+        console.error(`playbooks: validatePlan failed for seat ${seat.id}'s ${phase}, it plays its own way: ${messageOf(err)}`);
+        continue;
+      }
+      if (made.feedback) this.phaseFeedback.set(key, made.feedback);
+      if (made.playbook.by !== 'llm') continue;
+      seat.adopt(made.playbook);
+      this.options.record?.({ seat: seat.id, month: state.month, phase, playbook: made.playbook });
     }
   }
 

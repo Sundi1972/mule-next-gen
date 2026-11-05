@@ -1794,6 +1794,8 @@ export const BRAIN = {
     rivalTrades: 4,
     /** Refused edits named from the seat's last reply; the rest are counted. */
     refusals: 6,
+    /** Goods named, with their plays, in the auction brief; the rest are counted. */
+    auctionGoods: 6,
   },
   /** Longest reason the playbook writer accepts on a strategy or an edit, in characters. */
   writeReasonChars: 140,

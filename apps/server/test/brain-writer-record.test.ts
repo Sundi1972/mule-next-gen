@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createGame, type GameRecord, type GameState, type Strategy } from '@mule/engine';
-import type { LandBrief, WriterReply } from '@mule/ai';
+import { LAND_OFFERS, type LandBrief, type WriterReply } from '@mule/ai';
 import type { MuleIntent } from '@mule/protocol';
 import type { GameContext, SeatInfo } from '@tabletop/core';
 import { WRITE_CALLS } from '../src/brain/client.js';
@@ -21,7 +21,7 @@ const STATE: GameState = createGame({ seed: 3, players: SEATS.map(({ id, name, i
 
 const STRATEGY: Strategy = { kind: 'builder', moneyMaker: 'food', monopolyTarget: null, cashFloor: 200, landTarget: { plots: 6, byMonth: 6 }, stances: {}, reason: 'Grow steady.' };
 const RANKED = [{ plot: 12, value: 410 }];
-const BRIEF: LandBrief = { text: 'You are Ada. The land brief.', plans: [{ id: 'A', label: 'Take the river', ranked: RANKED }], corners: true, strategy: STRATEGY };
+const BRIEF: LandBrief = { text: 'You are Ada. The land brief.', plans: [{ id: 'A', label: 'Take the river', ranked: RANKED }], corners: true, strategy: STRATEGY, offers: LAND_OFFERS, strategyOffered: true };
 const ASK: WriteAsk = { brief: BRIEF, system: 'The manual.', waitMs: 5_000 };
 /** An edit path the brief never offers: the writer refuses it, and nothing of it may reach the record. */
 const REFUSED_PATH = '/landGrant/MARK-refused-7w';
