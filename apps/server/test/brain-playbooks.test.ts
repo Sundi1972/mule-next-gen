@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { advancePhase, AI_LEVELS, BRAIN, createGame, observe, type GameState, type Playbook } from '@mule/engine';
+import { advancePhase, AI_LEVELS, BRAIN, createGame, GAME, observe, type GameState, type Playbook } from '@mule/engine';
 import { AiSeat, candidate, consider, defaultManual, seatBounds, shortlist, WRITER_SYSTEM, type ValidatePlan } from '@mule/ai';
 import { createBrain, type BrainService, type MeteredBrain } from '../src/brain/index.js';
 import { MuleGame } from '../src/mule-game.js';
@@ -162,7 +162,7 @@ describe('RULE-A1: which playbook takes effect at the land grant', () => {
     expect(sdk.requests[0]!.options.timeout).toBe(BRAIN.writeCalls.strategy.timeoutMs);
     const planA = planInBrief(sdk.requests[0]!.params, 'A');
     expect(planA.length).toBeGreaterThan(0);
-    expect(engine?.landGrant?.claims).toBe(2);
+    expect(engine?.landGrant?.claims).toBe(GAME.claimsPerGrant);
     expect(inEffectAtStart?.by).toBe('llm');
     expect(inEffectAtStart?.landGrant?.ranked.slice(0, planA.length)).toEqual(planA);
     expect(inEffectAtStart?.landGrant?.claims).toBe(1);

@@ -86,7 +86,12 @@ const GAME_LIMIT_MS = 30 * 60_000;
  * later), or by rejecting at once, as the real decider does when the seat is busy.
  */
 const ANSWERS: readonly (number | 'busy')[] = [40, 'busy', 1_300, 260, 3_100, 90, 700];
-const GAME_OPTIONS = { maxMonths: 1, politics: true };
+/**
+ * Three months: under the 5 Nov start values (2 Food and 2 Energy a seat, one claim a grant) the Smart seat meets no
+ * close call in month 1, so it would never ask the stand-in; by month 3 it has asked, and been answered busy, at least
+ * once (WS1's B-AC-2 plays four months for the same reason).
+ */
+const GAME_OPTIONS = { maxMonths: 3, politics: true };
 /** Units of a good T-AC-10's market hands Mia to spare as each production opens. */
 const SPARE = 20;
 /**
@@ -266,7 +271,7 @@ function table(options: TableOptions = {}) {
   /** The goods, by month, whose status screen and walk the market has played. */
   const declared = new Set<string>();
   const walked = new Set<string>();
-  const chose = new Set<string>();
+  const stopped = new Set<string>();
   let elapsed = 0;
   const market = () => {
     const [heiko, mia] = phones as [Screen, Screen];
@@ -291,7 +296,8 @@ function table(options: TableOptions = {}) {
     const miaSells = (food || auction.shipPays !== null) && (auction.walkers.find((w) => w.id === 's2')?.units ?? 0) > 0;
     if (auction.stage === 'status' && !declared.has(key)) {
       declared.add(key);
-      send(heiko, { t: 'intent', intent: { type: 'declare', side: food ? 'buyer' : 'pass' } });
+      // Everyone starts as a buyer (RULE-2): Heiko says so again for Food, which changes nothing; Mia switches to sell.
+      if (food) send(heiko, { t: 'intent', intent: { type: 'declare', side: 'buyer' } });
       if (miaSells) send(mia, { t: 'intent', intent: { type: 'declare', side: 'seller' } });
     }
     if (auction.stage === 'walk' && !walked.has(key)) {
@@ -299,11 +305,13 @@ function table(options: TableOptions = {}) {
       if (food) send(heiko, { t: 'intent', intent: { type: 'walk', dir: 'up' } });
       if (miaSells) send(mia, { t: 'intent', intent: { type: 'walk', dir: 'down' } });
     }
-    // At a house's line nothing trades until the seat says how many (A-6): Mia sells all she holds there, once a good.
+    // At a house's line units trade by themselves (RULE-1): once Mia is selling there, she stops with one tap up, once a
+    // good, so the record holds a mid-run stop at a house line (the auto-trade amendment's T-AC-1).
     const miaThere = auction.walkers.find((w) => w.id === 's2');
-    if (auction.stage === 'walk' && miaThere?.side === 'seller' && miaThere.line && !miaThere.order && !chose.has(key)) {
-      chose.add(key);
-      send(mia, { t: 'intent', intent: { type: 'lineTrade', units: miaThere.units } });
+    const selling = auction.deals.some((d) => d.seller === 's2' && (d.buyer === 'store' || d.buyer === 'ship') && d.units > 0);
+    if (auction.stage === 'walk' && miaThere?.side === 'seller' && miaThere.line && selling && !stopped.has(key)) {
+      stopped.add(key);
+      send(mia, { t: 'intent', intent: { type: 'walkStep', dir: 'up' } });
     }
   };
   const script = () => {
@@ -352,7 +360,6 @@ function table(options: TableOptions = {}) {
       send(heiko, { t: 'intent', intent: { type: 'claim', x: lit.x, y: lit.y } });
     }
     // Heiko never installs on his plot: as host he starts month 1's waiting development clock once Mia is back (A-1).
-    if (phase === 'development' && view().clockWaitsFor && dropAt !== null && elapsed > dropAt + 20 * STEP_MS) send(heiko, { t: 'intent', intent: { type: 'continue' } });
     if (phase === 'development' && dropAt === null) {
       dropAt = elapsed;
       room.disconnect(mia.conn);
@@ -793,12 +800,13 @@ describe.runIf(FULL)('notices in the record', { timeout: 120_000 }, () => {
     for (const n of notices) expect(n.phase, `a ${n.kind} settles in its phase`).toBe(phaseOf[n.kind]);
     expect(notices.some((n) => n.kind === 'claim' && n.seat === 's1'), "the human's claim").toBe(true);
     expect(notices.some((n) => n.kind === 'claim' && n.seat !== 's1'), "an AI seat's claim").toBe(true);
-    expect(notices.some((n) => n.kind === 'declare' && n.side === 'pass'), 'a seat passing on a good').toBe(true);
-    expect(notices.some((n) => n.kind === 'declare' && n.side !== 'pass'), 'a seat buying or selling a good').toBe(true);
+    expect(notices.some((n) => n.kind === 'declare' && n.side === 'seller'), 'a seat switching to sell a good').toBe(true);
+    expect(notices.some((n) => n.kind === 'declare' && n.side === 'pass'), 'nobody passes: everyone takes part').toBe(false);
     expect(notices.some((n) => n.kind === 'trade' && n.buyer === 'ship' && n.month === GAME.exportShipEvery), 'a sale to the export ship').toBe(true);
     expect(notices.some((n) => n.kind === 'trade' && n.buyer !== 'ship' && n.buyer !== 'store' && n.seller !== 'store'), 'a trade between players').toBe(true);
     expect(notices.some((n) => n.kind === 'sale' && n.buyer !== 'store'), 'a lot sold to a player').toBe(true);
-    expect(record.events.some((e) => e.type === 'intent' && e.intent.type === 'lineTrade' && e.refused === undefined), "a phone's choice at a house line (A-6), replayed below").toBe(true);
+    expect(record.events.some((e) => e.type === 'intent' && e.seat === 's2' && e.intent.type === 'walkStep' && e.refused === undefined), "a phone's stop at a house line (T-AC-1), replayed below").toBe(true);
+    expect(notices.some((n) => n.kind === 'trade' && n.seller === 's2' && (n.buyer === 'store' || n.buyer === 'ship')), 'a sale at a house line with nothing chosen').toBe(true);
     record.events.forEach((e, i) => {
       if (e.type !== 'notice') return;
       const step = record.events.slice(0, i).filter(isStep).at(-1)!;

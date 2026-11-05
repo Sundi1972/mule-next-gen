@@ -15,6 +15,8 @@ const ALLOWED = new Set([
   'HALL',
   'DEV_STEER',
   'WOLVES',
+  // The production show's lengths (ws6-ux AM-19, WS6's ruling): its timeline's numbers, the server's own.
+  'PRODUCTION_SHOW',
   // Types: exactly those Store.tsx draws the plan with.
   'HallPlace',
   'HallRect',

@@ -79,7 +79,6 @@ interface GoodRun {
   trades: Trade[];
   /** The seat's rounded price on the board at each walk tick, with the walk's elapsed ms. */
   path: { elapsed: number; price: number }[];
-  lineUnits: number[];
   state: GameState;
 }
 
@@ -93,7 +92,7 @@ function runGood(screen: GameState, seed: number, k: number, play?: (state: Game
   const seats = seatsFor(seed);
   const me = seats[k]!;
   const hand = play ? handFor(me, play) : null;
-  const run: GoodRun = { acts: [], trades: [], path: [], lineUnits: [], state };
+  const run: GoodRun = { acts: [], trades: [], path: [], state };
   for (let tick = 0; tick < 2_000; tick++) {
     const a = state.auction!;
     if (a.good !== good || a.stage === 'close' || a.stage === 'over') break;
@@ -106,7 +105,6 @@ function runGood(screen: GameState, seed: number, k: number, play?: (state: Game
       const spy = (x: AiAction) => {
         const ok = act(x);
         run.acts.push(`${tick} ${stableJson(x)} ${ok}`);
-        if (x.type === 'lineTrade' && ok) run.lineUnits.push(x.units);
         return ok;
       };
       if (hand) hand.tick(state, WALK.tickMs, spy);
@@ -162,6 +160,9 @@ function probe(screen: GameState, part: GoodPlay, board: { mine: number; rival: 
   const acts: string[] = [];
   const targets: (number | null)[] = [];
   let top = -Infinity;
+  // Everyone starts as a buyer (no Pass, #333/#335): ai0 declares Sell, as its stock once made it by default, so the
+  // board has a seller and the walk opens (with no trade possible the status screen moves straight to the next good).
+  applyAction(state, 'ai0', { type: 'declare', side: 'seller' });
   for (let i = 0; i < 200 && state.auction!.stage === 'status'; i++) {
     hand.tick(state, WALK.tickMs, (x) => applyAction(state, seat.id, x));
     for (const p of state.players) if (p.id !== seat.id) applyAction(state, p.id, { type: 'done', done: true });
@@ -290,21 +291,37 @@ describe('C7 · RULE-10: the auction hand plays the good part', () => {
     const one = runGood(screen, 5, 1, () => ({ ...buyer, hold: 1 }));
     expect(bought(one, 'ai1').length).toBe(1);
 
-    // role: out passes and trades nothing; a seller told to buy declares a buyer.
+    // role: out sits the good out as the no-Pass auction has it (#335; auto-trade RULE-2 row 6, C4): it declares nothing,
+    // stays a buyer at the bottom edge, presses Done and trades nothing. A seller told to buy stays the buyer everyone
+    // starts as: it never declares Sell, and sells nothing.
+    const declares = (run: GoodRun) => run.acts.filter((x) => x.includes('"type":"declare"'));
     const out = runGood(screen, 5, 1, () => ({ ...buyer, role: 'out' }));
-    expect(out.acts.some((x) => x.includes('"type":"declare"') && x.includes('"side":"pass"'))).toBe(true);
+    expect(declares(out)).toEqual([]);
+    expect(out.acts.some((x) => x.includes('{"done":true,"type":"done"}'))).toBe(true);
+    expect(out.path.length).toBeGreaterThan(0);
+    expect(out.path.every((s) => s.price <= screen.auction!.lo)).toBe(true);
     expect(out.trades.filter((t) => t.buyer === 'ai1' || t.seller === 'ai1')).toEqual([]);
+    expect(declares(runGood(screen, 5, 0)).some((x) => x.includes('"side":"seller"')), 'today the seller declares Sell').toBe(true);
     const turned = runGood(screen, 5, 0, () => ({ ...seller, role: 'buyer', hold: had }));
-    expect(turned.acts.some((x) => x.includes('"type":"declare"') && x.includes('"side":"buyer"'))).toBe(true);
+    expect(declares(turned)).toEqual([]);
+    expect(sold(turned, 'ai0')).toEqual([]);
 
-    // bluff: it declares its side, aims at the far edge, presses Done and trades nothing.
-    const bluffSeller = runGood(screen, 5, 0, () => ({ ...seller, bluff: true }));
+    // bluff: it declares its side, aims at the far edge, presses Done and trades nothing. The seller's row on a store
+    // with Food to sell all walk: under the 5 Nov start stock (4 Food a seat) the store sells out mid-walk, and ai1, with
+    // no Food and 2,000 cr, then pays the board's top and meets the bluffing seller there.
+    const stocked = structuredClone(screen);
+    stocked.store.stock.food = 30;
+    const bluffSeller = runGood(stocked, 5, 0, () => ({ ...seller, bluff: true }));
     expect(bluffSeller.acts.some((x) => x.includes('"side":"seller"'))).toBe(true);
     expect(bluffSeller.acts.some((x) => x.includes('{"done":true,"type":"done"}'))).toBe(true);
     expect(sold(bluffSeller, 'ai0')).toEqual([]);
     expect(bluffSeller.path.at(-1)!.price).toBe(screen.auction!.hi);
+    // A bluffing buyer is the buyer it starts as (no declare under the no-Pass auction): it aims at lo, presses Done and
+    // buys nothing.
     const bluffBuyer = runGood(screen, 5, 1, () => ({ ...buyer, bluff: true }));
-    expect(bluffBuyer.acts.some((x) => x.includes('"side":"buyer"'))).toBe(true);
+    expect(declares(bluffBuyer)).toEqual([]);
+    expect(bluffBuyer.acts.some((x) => x.includes('{"done":true,"type":"done"}'))).toBe(true);
+    expect(bluffBuyer.path.at(-1)!.price).toBeLessThanOrEqual(screen.auction!.lo);
     expect(bought(bluffBuyer, 'ai1')).toEqual([]);
 
     // vsRival, against a rival buyer ahead at 20, the seller asking 40: undercut1 aims one over it; hold never does (it
@@ -347,15 +364,15 @@ describe('C7 · RULE-10: the auction hand plays the good part', () => {
     expect(own.acts).toEqual(today.acts);
     const toShip = sold(today, 'ai2').filter((t) => t.buyer === SHIP_ID);
     expect(toShip.length, 'today it sells to the ship').toBeGreaterThan(2);
-    // A walkAway two units down the ship's steps: it still walks to the line, but chooses only the units priced at or over it.
+    // A walkAway two units down the ship's steps: it still walks to the line, but trades there only the units priced at or
+    // over it, and steps off (units trade by themselves at a house's line: the auto-trade amendment, C1/C4).
     const prices = toShip.map((t) => t.price);
     const walkAway = prices[2]!;
     const bounded = runGood(screen!, seed, 2, () => ({ ...draft, walkAway, start: walkAway }));
     const shipSales = sold(bounded, 'ai2').filter((t) => t.buyer === SHIP_ID);
     expect(shipSales.length).toBeGreaterThan(0);
     expect(shipSales.every((t) => t.price >= walkAway)).toBe(true);
-    expect(bounded.lineUnits.length).toBeGreaterThan(0);
-    expect(Math.max(...bounded.lineUnits)).toBeLessThanOrEqual(prices.filter((p) => p >= walkAway).length);
-    expect(Math.max(...today.lineUnits), 'today it chose more at the line').toBeGreaterThan(Math.max(...bounded.lineUnits));
+    expect(shipSales.length).toBeLessThanOrEqual(prices.filter((p) => p >= walkAway).length);
+    expect(toShip.length, 'today it sold more at the line').toBeGreaterThan(shipSales.length);
   });
 });

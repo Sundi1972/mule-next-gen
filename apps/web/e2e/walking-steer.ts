@@ -13,16 +13,22 @@
  * W-4 (B-AC-2, T-AC-4, the wire half): every connection is sent the same frame for every tick, in order, one a tick.
  * In all of them no colonist stands on land that blocks it, and development ends by its clock at the latest.
  */
-import { boxOf, DEV_STEER, HALL, type HallPlace, type Terrain } from '@mule/engine';
+import { boxOf, DEV_STEER, DEVELOPMENT, HALL, type HallPlace, type Terrain } from '@mule/engine';
 import type { DevFrame, MuleView } from '@mule/protocol';
 import { check } from './harness';
 import { connect, keepsPlaying, me, press, reachOf, steerHall, steerTo, steeredTable, until, type Wire } from './walking-wire';
 
 /** A map where the store's left door opens onto a river plot and then plains, and its right door onto mountains. */
 const SEED = 24;
-/** Development at a quarter of its game time: 50 s of clock in 12.5 s. */
+/** Development at a quarter of its game time: each game second passes in a quarter of a real one. */
 const PHASE_SCALE = 0.25;
 const TO_DEVELOPMENT_MS = 60_000;
+/**
+ * The turn this test stages, in game seconds. The clock runs from the first frame of development, and the route
+ * (W-6's flood, W-1's two holds, W-3's store and plot, W-5's drop and back, the pub) walks about 60 of them at full
+ * pace: more than a real turn leaves. Twice that fits a slower runner or a hungry colonist; restored at the end.
+ */
+const STAGED_TURN_S = 120;
 const DEVELOPMENT_MS = 60_000;
 /** A real development tick at PHASE_SCALE. */
 const TICK_MS = DEV_STEER.tickMs * PHASE_SCALE;
@@ -31,9 +37,13 @@ const NEAR_TILES = 0.15;
 const NEAR_HALL = 0.3;
 /** The hall's corridor runs between the top rooms and the bottom ones. */
 const CORRIDOR_Y = HALL.h / 2;
-/** How long W-1 holds the stick on mountains, in game seconds, as UBER-AC-2 says; plains run out sooner here. */
-const HOLD_GAME_S = 2;
-const PLAINS_HOLD_GAME_S = 0.6;
+/**
+ * How far W-1 walks each land, in tiles: what this map has of it in a row from where the hold starts, with room to
+ * spare. The hold lasts that distance at the config's speed, so a faster walk never carries the colonist off the land
+ * it measures.
+ */
+const PLAINS_TILES = 1.2;
+const MOUNTAIN_TILES = 1.4;
 /** Measured speed against the config's: frames land on ticks, and the first and last tick of a hold carry no step. */
 const SPEED_TOLERANCE = 0.15;
 /** W-6's flood: steers a second, for this long. */
@@ -76,6 +86,9 @@ function terrainAt(view: MuleView, x: number, y: number): Terrain | null {
 }
 
 const started = Date.now();
+// Staged before the table starts: createGame and each development read the turn's length from config.
+const turnSeconds = DEVELOPMENT.fullSeconds;
+DEVELOPMENT.fullSeconds = STAGED_TURN_S;
 // Ossa stays at the table doing nothing: with no human left playing, development would end at once (HC-3), and W-5
 // drops Brix.
 const table = await steeredTable({ seed: SEED, ais: 2, phaseScale: PHASE_SCALE, maxMonths: 1, guests: ['Ossa'] });
@@ -138,7 +151,7 @@ try {
   const expectSpeed = (terrain: Terrain) => DEV_STEER.mapTilesPerSecond * (SHARE[terrain] ?? 0) * pace;
   check(await steerTo(host, 'map', plot.x + ON_PLOT_X, plot.y + 0.5, NEAR_TILES), 'W-1: the host never reached its own plot');
   check(await steerTo(host, 'map', plot.x - INTO_PLAINS_X, plot.y + 0.5, NEAR_TILES), 'W-1: the host never reached the plains');
-  const plains = await hold(-1, PLAINS_HOLD_GAME_S);
+  const plains = await hold(-1, PLAINS_TILES / expectSpeed('plains'));
   const plainsLand = terrainAt(view, plains.to.x, plains.to.y);
   soft(plainsLand === 'plains' && terrainAt(view, plains.from.x, plains.from.y) === 'plains', `W-1: the plains hold ran from ${terrainAt(view, plains.from.x, plains.from.y)} to ${plainsLand}`);
   soft(Math.abs(plains.tilesPerSecond - expectSpeed('plains')) <= expectSpeed('plains') * SPEED_TOLERANCE, `W-1: held on plains it walked ${plains.tilesPerSecond.toFixed(2)} tiles/s, not ${expectSpeed('plains').toFixed(2)}`);
@@ -163,7 +176,7 @@ try {
   check(await steerHall(host, hallRoute(me(host)!, 'doorR'), NEAR_HALL), 'W-1: never reached the right door');
   check(await press(host), 'W-1: LEAVE by the right door changed nothing');
   check(await until(() => me(host)?.space === 'map', 2_000), 'W-1: LEAVE did not take the colonist onto the map');
-  const mountains = await hold(1, HOLD_GAME_S);
+  const mountains = await hold(1, MOUNTAIN_TILES / expectSpeed('mountains'));
   soft(terrainAt(view, mountains.to.x, mountains.to.y) === 'mountains', `W-1: the mountains hold ended on ${terrainAt(view, mountains.to.x, mountains.to.y)}`);
   soft(Math.abs(mountains.tilesPerSecond - expectSpeed('mountains')) <= expectSpeed('mountains') * SPEED_TOLERANCE, `W-1: held on mountains it walked ${mountains.tilesPerSecond.toFixed(2)} tiles/s, not ${expectSpeed('mountains').toFixed(2)}`);
 
@@ -190,7 +203,7 @@ try {
 
   // W-5: the clock runs; the host drops, its colonist stops; back with its token, it steers again.
   host.intent({ type: 'continue' });
-  check(await until(() => board.view()?.phaseEndsAt != null, 2_000), 'W-5: the host\'s Continue did not start the clock');
+  check(await until(() => board.view()?.phaseEndsAt != null, 2_000), 'W-5: the development clock is not running');
   const endsAt = board.view()!.phaseEndsAt!;
   host.intent({ type: 'steer', x: 0, y: 1 });
   await sleep(10 * TICK_MS);
@@ -239,6 +252,7 @@ try {
 } catch (err) {
   errors.push(err instanceof Error ? err.message : String(err));
 } finally {
+  DEVELOPMENT.fullSeconds = turnSeconds;
   stopHost();
   stopOssa();
   host.close();

@@ -18,7 +18,6 @@ import {
   grantDone,
   grantPass,
   installMule,
-  lineTrade,
   list as listLot,
   litPlot,
   lotDone,
@@ -93,8 +92,6 @@ export interface PlayedGame {
   decisions: number;
   /** On the arcade floor (DEV_STEER.on): every seat's development turn, month by month; empty where the game walks. */
   turns: DevTurn[];
-  /** On the floor: the seconds month 1's clock stood for first MULEs, and whether the host's stand-in had to start it. */
-  month1: { waited: number; continued: boolean } | null;
   /** On the floor: what the moments came to, one a development phase, month by month; empty where the game walks. */
   moments: FloorMomentCounts[];
   /** The public facts as they settled, in order, as MuleGame notifies them (C8): claims, declares, trades and sales. */
@@ -218,9 +215,6 @@ function applyRule(state: GameState, id: string, action: AiAction, clock?: DevCl
         if (state.phase === 'landAuction') setLotWalk(state, id, action.dir);
         else setWalk(state, id, action.dir);
         break;
-      case 'lineTrade':
-        lineTrade(state, id, action.units);
-        break;
       case 'run':
         runFor(state, id, action.office, action.promise);
         break;
@@ -329,8 +323,8 @@ function* playSteps(seed: number, specs: SeatSpec[], options: PlayOptions): Gene
   options.onSeats?.(seats, state);
   const tally = newTally();
   yield* playPhases(state, seats, options, tally, () => false, specs);
-  const { broke, auction, lots, mulesLost, turns, month1, moments, facts, outcomes } = tally;
-  return { state, seats, broke, auction, lots, mulesLost, decisions, turns, month1, moments, facts, outcomes, playbooks };
+  const { broke, auction, lots, mulesLost, turns, moments, facts, outcomes } = tally;
+  return { state, seats, broke, auction, lots, mulesLost, decisions, turns, moments, facts, outcomes, playbooks };
 }
 
 /** What a run of phases counts for the game's report. */
@@ -341,7 +335,6 @@ interface PhaseTally {
   mulesLost: number;
   turns: DevTurn[];
   moments: FloorMomentCounts[];
-  month1: PlayedGame['month1'];
   /** The public facts as they settle, as MuleGame notifies them (C8). */
   facts: PhaseFact[];
   /** Each seat's PhaseOutcome as its development and its auction end, where it played a part (RULE-11). */
@@ -355,7 +348,6 @@ const newTally = (): PhaseTally => ({
   mulesLost: 0,
   turns: [],
   moments: [],
-  month1: null,
   facts: [],
   outcomes: [],
 });
@@ -432,7 +424,6 @@ function* playPhases(
           const phase = yield* playFloorPhase(state, seats);
           tally.turns.push(...phase.turns);
           tally.moments.push(phase.moments);
-          if (phase.waited !== null) tally.month1 = { waited: phase.waited, continued: phase.continued };
           tally.mulesLost += state.players.filter((p) => p.carriedMule !== null).length;
           break;
         }

@@ -236,8 +236,8 @@ describe('C2: the request and the reply', () => {
   });
 
   it("C2: a plan letter is resolved to that plan's ranking before validate sees it", async () => {
-    const { written, v, brief } = await write('trader', JSON.stringify({ edits: [{ path: '/landGrant/ranked', to: 'B', reason: 'Grow a patch.' }], line: '' }));
-    const plan = brief.plans.find((p) => p.id === 'B')!;
+    const { written, v, brief } = await write('trader', JSON.stringify({ edits: [{ path: '/landGrant/ranked', to: 'A', reason: 'Grow a patch.' }], line: '' }));
+    const plan = brief.plans.find((p) => p.id === 'A')!;
     expect(v.seen[0]).toEqual([{ path: '/landGrant/ranked', to: plan.ranked, reason: 'Grow a patch.' }]);
     expect(written.reply.edits).toEqual(v.seen[0]);
   });

@@ -1,6 +1,7 @@
 import { DEV_WALK } from '@mule/engine';
 import { ActionButton, cx, Joystick, Panel, SharedClock, YourPace, type Condition } from '@mule/ui';
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from 'react';
+import { useTableChat } from '../../chat/store';
 import { ThemeToggle } from '../../components/ThemeToggle';
 import { useClient } from '../../net/react';
 import { usePhoneGame } from '../game';
@@ -8,7 +9,7 @@ import { WIDE_PX } from '../Shell';
 import { keyDown, keyUp } from './controls';
 import { BANNER_CHAR_PX, bannerBox, colonistBox, css, FRAMES, freeRun, overlap, phoneLayout, tileBox, type Box } from './layout';
 import { PhoneLive, useArcade, useLive } from './live';
-import { CompactClock, GroundChip, GuideNote, LeadChip, Money, OverCard, PaceLine, PlotCard, PlotsLegend, Reconnecting, WaitWords } from './parts';
+import { ChatTicker, CompactClock, GroundChip, GuideNote, LeadChip, Money, OverCard, PaceLine, PlotCard, PlotsLegend, Reconnecting } from './parts';
 import { ScrambleBanner, scrambleWords } from './moments';
 import { arcadeSeat, type ArcadeSeat } from './seat';
 import { SeatProvider, YourStage } from './stages';
@@ -108,6 +109,30 @@ function useGameKeys() {
   return { ref, focused, focus: () => ref.current?.focus({ preventScroll: true }) };
 }
 
+/**
+ * Whether a speech bubble inside `stage` meets the `over` element: measured every frame while a bubble shows, since
+ * speakers move and a bubble slides to fit.
+ */
+function useBubbleMeets(stage: RefObject<HTMLElement | null>, over: RefObject<HTMLElement | null>, on: boolean): boolean {
+  const [meets, setMeets] = useState(false);
+  useBeforePaint(() => {
+    if (!on) {
+      setMeets(false);
+      return;
+    }
+    let raf = 0;
+    const measure = () => {
+      raf = requestAnimationFrame(measure);
+      const bubble = stage.current?.querySelector('[data-testid^=chat-bubble-]')?.getBoundingClientRect();
+      const box = over.current?.getBoundingClientRect();
+      setMeets(!!bubble && !!box && bubble.left < box.right && box.left < bubble.right && bubble.top < box.bottom && box.top < bubble.bottom);
+    };
+    measure();
+    return () => cancelAnimationFrame(raf);
+  }, [on, stage, over]);
+  return meets;
+}
+
 const near = (r: Box, p: { x: number; y: number } | null, by: number) => !!p && p.x > r.x - by && p.x < r.x + r.w + by && p.y > r.y - by && p.y < r.y + r.h + by;
 
 /** A control over a plot of yours (AM-20): translucent, so the plot's marks read through, and still plainly a control. */
@@ -168,7 +193,12 @@ export function PhoneLandscape({ frame }: { frame: { w: number; h: number } }) {
     const [c0, c1] = freeRun(view.width, blocked);
     bar = { x: L.stage.x + c0 * L.cell + 3, y: L.stage.y + 2, w: (c1 - c0 + 1) * L.cell - 6, h: L.cell - 6 };
   }
-  const barFaded = !!bar && near(bar, mePx, L.cell * 0.5);
+  // The bar fades while you walk under it, and while a speech bubble meets it: the bubble then paints above it.
+  const stageRef = useRef<HTMLDivElement>(null);
+  const barRef = useRef<HTMLDivElement>(null);
+  const { showing } = useTableChat();
+  const bubbleOverBar = useBubbleMeets(stageRef, barRef, !!bar && !!showing);
+  const barFaded = !!bar && (near(bar, mePx, L.cell * 0.5) || bubbleOverBar);
   // The card covers neither your colonist nor the target (AM-20): the first of its places clear of both. Under both
   // places at once (your plot in columns 5 to 9 of rows 1 to 3) it is not drawn: the button's words still say what a
   // press does there, and your colonist stays in sight (ruled with AM-20).
@@ -190,6 +220,13 @@ export function PhoneLandscape({ frame }: { frame: { w: number; h: number } }) {
   const bannerFaded = near(banner, mePx, L.cell * 0.4);
   const choosing = space === 'hall' && me.carriedMule === 'empty';
   const compactLeft = !!L.left && L.left.w < SIDE_ROOM_FULL;
+  // A full side room: the month's label, and the newest line wrapped under the clock.
+  const roomy = !compactLeft;
+  const keysHint = !keys.focused && !compactLeft && (
+    <span className="rounded-chip bg-panel/90 px-1 py-0.5 text-[10px] leading-tight text-ink-2 shadow-chip" data-testid="focus-hint">
+      Click the game to steer with the keys
+    </span>
+  );
   return (
     <SeatProvider value={seat}>
       <div
@@ -206,23 +243,30 @@ export function PhoneLandscape({ frame }: { frame: { w: number; h: number } }) {
         data-store={`${seat.store.x},${seat.store.y}`}
         data-my-plots={view.tiles.filter((t) => t.owner === me.id).map((t) => `${t.x},${t.y}`).join(' ')}
       >
-        <div className="absolute" style={css(L.stage)} data-testid="phone-stage">
-          <YourStage seat={seat} width={L.stage.w} height={L.stage.h} density="phone" guide />
+        <div ref={stageRef} className="absolute" style={css(L.stage)} data-testid="phone-stage">
+          <YourStage seat={seat} width={L.stage.w} height={L.stage.h} density="phone" guide walkersOnTop={bubbleOverBar} />
           <OverCard seat={seat} installs={installs} />
         </div>
         {/* The status: in the side room either side of the map (nothing of it over the map), or at 667 a bar over the
-            map's top edge, clear of your plots and the target. */}
+            map's top edge, clear of your plots and the target. The left room stops above the stick, and the phone always
+            shows the newest line: a speaker in the other space is drawn nowhere here. */}
         {L.left && (
-          <div className={cx('absolute flex flex-col gap-1.5', compactLeft ? 'p-1' : 'p-1.5')} style={{ left: L.left.x, top: L.left.y, width: L.left.w }} data-testid="phone-status-left" data-overlay="status-left">
-            {!compactLeft && <span className="label-caps text-[10px]! leading-tight">M{view.month} · Development</span>}
+          <div className={cx('absolute flex flex-col overflow-hidden', compactLeft ? 'gap-1.5 p-1' : 'gap-1.5 p-1.5')} style={{ left: L.left.x, top: L.left.y, width: L.left.w, height: L.left.h }} data-testid="phone-status-left" data-overlay="status-left">
+            {roomy && <span className="label-caps text-[10px]! leading-tight">M{view.month} · Development</span>}
             <Money seat={seat} className={compactLeft ? 'text-[11px] [&_*]:whitespace-nowrap' : 'text-base'} />
             {compactLeft ? <CompactClock seat={seat} /> : <SharedClock seconds={seat.seconds} total={seat.total} />}
-            <WaitWords seat={seat} short={compactLeft} />
-            {!keys.focused && !compactLeft && (
-              <span className="rounded-chip bg-panel/90 px-1 py-0.5 text-[10px] leading-tight text-ink-2 shadow-chip" data-testid="focus-hint">
-                Click the game to steer with the keys
-              </span>
+            {/* With room, the newest line wraps under the clock and keeps its rows. */}
+            {roomy && (
+              <div className="shrink-0">
+                <ChatTicker seat={seat} keep={1} wrap />
+              </div>
             )}
+            {!roomy && (
+              <div className={cx('min-h-0 overflow-hidden', compactLeft && 'mt-auto')} data-testid="chat-foot">
+                <ChatTicker seat={seat} keep={1} />
+              </div>
+            )}
+            {roomy && keysHint}
           </div>
         )}
         {L.right && (
@@ -239,6 +283,7 @@ export function PhoneLandscape({ frame }: { frame: { w: number; h: number } }) {
         )}
         {bar && (
           <div
+            ref={barRef}
             className={cx('absolute z-20 flex items-center gap-2 rounded-chip border border-holo-faint bg-panel/88 px-2 text-xs shadow-chip backdrop-blur-[2px] transition-opacity duration-200', barFaded && 'opacity-25')}
             style={{ left: bar.x, top: bar.y, width: bar.w, minHeight: bar.h }}
             data-testid="phone-status-bar"
@@ -247,12 +292,15 @@ export function PhoneLandscape({ frame }: { frame: { w: number; h: number } }) {
           >
             <Money seat={seat} className="text-xs" />
             <CompactClock seat={seat} />
-            <WaitWords seat={seat} short />
             <span className="relative min-w-0 shrink">
               <LeadChip seat={seat} className="px-1! text-[11px]!" />
             </span>
-            <span className="min-w-0 flex-1">
+            <span className="min-w-0 shrink">
               <PaceLine seat={seat} short />
+            </span>
+            {/* The newest line keeps a share of the bar however much the status says: the rest of it gives way first. */}
+            <span className="min-w-0 flex-[1_1_40%]">
+              <ChatTicker seat={seat} keep={1} />
             </span>
           </div>
         )}
@@ -343,6 +391,10 @@ export function LaptopArcade({ frame }: { frame: { w: number; h: number } }) {
             <span className="relative flex flex-col items-start">
               <LeadChip seat={seat} />
             </span>
+            {/* On a short window the chat panel is what folds, its older line first: Controls stays in sight. */}
+            <Panel title="Table chat" className="min-h-0 overflow-hidden">
+              <ChatTicker seat={seat} keep={2} wrap wide />
+            </Panel>
             <Panel title="Controls" className="mt-auto">
               <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-sm" data-testid="controls-legend">
                 {KEYS.map(([k, v]) => (

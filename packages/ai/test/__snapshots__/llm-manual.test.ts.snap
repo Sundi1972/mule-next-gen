@@ -6,7 +6,7 @@ The rules of the colony game you play, generated from the game itself.
 
 ## How a month goes
 - planning: Everyone reads the colony's stores, prices and plots. Players may send a geo drone over 2 free or listed plots for 60 credits (its results arrive when the land grant starts), and list up to 2 plots or MULEs for the land auction, 4 lots a month from all sellers. In months 1, 4, 7, 10 planning opens with an election for governor: announce, then a secret ballot if an office has two or more candidates, then the result. Planning ends when every player is Ready.
-- the land grant: The light passes over the free plots one at a time in reading order, 650 ms each, 1 pass; the first player to press claims the lit plot, up to 2 claims each. It ends after the pass, when no free land is left, or once every player has used their claims or is Done.
+- the land grant: The light passes over the free plots one at a time in reading order, 650 ms each, 1 pass; the first player to press claims the lit plot, up to 1 claims each. It ends after the pass, when no free land is left, or once every player has used their claims or is Done.
 - the land auction: The listed lots come up one at a time: an intro of 3000 ms, then a walk of 12000 ms where every player but the seller stands as a buyer, unless short of the minimum or leading a MULE when a MULE is up, and walks up to bid. The highest bid at the bell wins; a change of leader in the last 2000 ms sets the clock back to it. An unsold lot is kept, or sold to the store for 67% of the 300 a plot scores and 50% of the MULE price for a MULE, as the seller chose. Each month the colony puts one free plot up with a chance of 10%. With nothing listed it is skipped.
 - development: One clock of 60 s for every player. Each step from one map tile to the next takes 0.4 s; a hungry or sick colonist walks slower. You buy a MULE at the corral, outfit it, and install it on one of your plots; you may analyse ground, fit filters, or end at the pub for cash. Every development move first passes these checks: it is development (else: "Not allowed during <phase>"); your development time has not run out (else: "Your development time is up"); you have not gone to the pub this turn (else: "Your turn is over: you went to the pub"); your colonist is not still walking to the last place you sent it (else: "Still walking"); your colonist is not still assaying a plot (else: "Still assaying").
 - production: Every plot with a MULE makes its good, more on better ground, plus 1 when a neighbour of yours makes the same good, or 2 in a cluster of 4 or more. A raw plot burns Energy (Food 1, Water 1, Energy 0, Smithore 2, Crystite 2, Rare earth 2) and makes 50% without it; a Food plot also needs Water. A factory turns inputs from your stock into its good (Alloy: 2 Smithore + 2 Energy make 2; Electronics: 1 Rare earth + 1 Alloy + 1 Energy make 1; Medicine: 1 Food + 1 Water + 1 Energy make 2) and makes nothing without them.
@@ -31,8 +31,8 @@ Every move you can make, the phases it is legal in, its checks with the refusal 
 
 ### claim
 In: the land grant. Args: plot (plot).
-Does: Claims the free plot lit right now, free of charge; the light passes once over the free plots, 650 ms each, and you may claim 2 plots a grant.
-Legal when: it is the land grant (else: "Not allowed during <phase>"); you have claimed fewer than 2 plots this grant (else: "No claims left this month"); you have not pressed Done with land this month (else: "You are done with land this month"); it names a plot on the map, not the store (else: "Not a plot"); nobody owns the plot (else: "Plot already taken"); the plot is the one lit now (else: "That plot is not lit").
+Does: Claims the free plot lit right now, free of charge; the light passes once over the free plots, 650 ms each, and you may claim 1 plots a grant.
+Legal when: it is the land grant (else: "Not allowed during <phase>"); you have claimed fewer than 1 plots this grant (else: "No claims left this month"); you have not pressed Done with land this month (else: "You are done with land this month"); it names a plot on the map, not the store (else: "Not a plot"); nobody owns the plot (else: "Plot already taken"); the plot is the one lit now (else: "That plot is not lit").
 Cost: free.
 
 ### buyMule
@@ -81,12 +81,6 @@ Cost: free.
 In: the goods auction, the land auction. Args: dir (1 | 0 | -1).
 Does: Moves you on the board during a walk: 1 up, -1 down, 0 stand still. A buyer walks up to bid more, a seller down to ask less, and units trade while a buyer and a seller meet; at the land auction the highest bid at the bell wins the lot.
 Legal when: in the goods auction, a good is up (else: "The auction is not running"); the walk has started, after the good's status screen or the lot's intro (else: "Not walking yet"); in the goods auction, you did not pass on this good (else: "You passed on this good"); at the land auction, you stand as a buyer: not the seller, the minimum in hand, and no MULE in tow when a MULE is up (else: "You can't bid on this lot").
-Cost: free.
-
-### lineTrade
-In: the goods auction. Args: units (number).
-Does: At the store's or the ship's line during a good's walk: buys or sells that many units with it at its price, then you stop there.
-Legal when: in the goods auction, a good is up (else: "The auction is not running"); the walk has started, after the good's status screen (else: "Not walking yet"); a whole number of units, at least 1 (else: "Choose at least one unit"); you did not pass on this good (else: "You passed on this good"); you stand at the store's or the ship's line (else: "Walk to the store’s line first"); as a buyer, you can pay for one unit (else: "You can’t pay for one"); as a seller, you have one to sell (else: "You have none to sell").
 Cost: free.
 
 ### drone

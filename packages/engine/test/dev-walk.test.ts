@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createGame, foodShare, needsOf, pace, walkSeconds, type DevPlace, type GameState } from '../src/index.js';
+import { DEV_WALK, createGame, foodShare, needsOf, pace, walkSeconds, type DevPlace, type GameState } from '../src/index.js';
 
 /** A game with a Zipwing and a Bramblet, and two plots: one 3 across and 2 down from the store, one a step diagonal from it. */
 function walkers(): { state: GameState; plot: number; diagonal: number } {
@@ -41,18 +41,20 @@ describe('walking in development', () => {
   });
 
   it('T-AC-22: hunger and sickness slow the walk, and multiply', () => {
-    // Heiko's numbers: 5 of 10 Food 0.6, 2 of 10 0.36, none 0.2; sick and fed 0.5; none and sick 0.1. The corral to
-    // the plot is 2 s at full pace for the Bramblet.
+    // Pace = 1 − (1 − DEV_WALK.hungerPaceMin) × (1 − share of the month's Food held), times DEV_WALK.sickPace when
+    // sick: the two multiply. The corral to the plot is 2 s at full pace for the Bramblet.
     const { state, plot } = walkers();
     const bram = state.players.find((p) => p.id === 'bram')!;
     const need = needsOf(state, 'bram').food;
+    const fed = (share: number) => 1 - (1 - DEV_WALK.hungerPaceMin) * (1 - share);
     const rows: [string, number, boolean, number][] = [
       ['fed and well', need, false, 1],
-      ['5 of 10 Food', need * 0.5, false, 0.6],
-      ['2 of 10 Food', need * 0.2, false, 0.36],
-      ['no Food', 0, false, 0.2],
-      ['sick and fed', need, true, 0.5],
-      ['no Food and sick', 0, true, 0.1],
+      ['5 of 10 Food', need * 0.5, false, fed(0.5)],
+      ['2 of 10 Food', need * 0.2, false, fed(0.2)],
+      ['no Food', 0, false, DEV_WALK.hungerPaceMin],
+      ['sick and fed', need, true, DEV_WALK.sickPace],
+      ['2 of 10 Food and sick', need * 0.2, true, fed(0.2) * DEV_WALK.sickPace],
+      ['no Food and sick', 0, true, DEV_WALK.hungerPaceMin * DEV_WALK.sickPace],
     ];
     for (const [label, food, sick, expected] of rows) {
       bram.stock.food = food;
@@ -67,6 +69,6 @@ describe('walking in development', () => {
     const zip = state.players.find((p) => p.id === 'zip')!;
     zip.stock.food = 0;
     zip.sick = false;
-    expect(walkSeconds(state, 'zip', 'corral', plot)).toBeCloseTo(8, 9);
+    expect(walkSeconds(state, 'zip', 'corral', plot)).toBeCloseTo(1.6 / DEV_WALK.hungerPaceMin, 9);
   });
 });

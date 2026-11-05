@@ -1,9 +1,8 @@
 import type { RawGood } from '@mule/engine';
-import { cx, GoodIcon, MuleIcon, TERRAIN_NAME } from '@mule/ui';
+import { Creature, cx, GoodIcon, MuleIcon, SLOT_COLOR, TERRAIN_NAME } from '@mule/ui';
 import { useState, type CSSProperties } from 'react';
-import { waitingNow } from '../Develop';
-import type { Now } from '../Shell';
-import { groundPips, plotName } from '../../game/derive';
+import { useTableChat } from '../../chat/store';
+import { groundPips, plotName, toSlot } from '../../game/derive';
 import { bestHere, OUTFIT_WORD, RAW, plotTitle, suits, suitsLine } from './plots';
 import { assaySeconds, type ArcadeSeat } from './seat';
 
@@ -175,10 +174,15 @@ export function PlotCard({ seat, now, at }: { seat: ArcadeSeat; now: number; at:
 
 // --- V-2 · your plots, and what each suits, while you choose ---------------------------------------
 
+/** The most rows the hall's side room has for your plots above the button at 844. */
+const LEGEND_ROWS = 5;
+
 /** The side room, in the store while you choose: each plot of yours, what it suits, and what stands on it. */
 export function PlotsLegend({ seat, short = false }: { seat: ArcadeSeat; short?: boolean }) {
   if (seat.mine?.space !== 'hall' || seat.me.carriedMule !== 'empty') return null;
-  const mine = seat.view.tiles.filter((t) => t.owner === seat.me.id);
+  // Free plots first: they are what an empty MULE is outfitted for. Past five the side room would reach the button.
+  const all = seat.view.tiles.filter((t) => t.owner === seat.me.id).sort((a, b) => Number(!!a.outfit) - Number(!!b.outfit));
+  const mine = all.length > LEGEND_ROWS ? all.slice(0, LEGEND_ROWS - 1) : all;
   return (
     <div className="relative flex flex-col gap-1 rounded-control border border-holo-faint bg-panel/80 p-1 text-[10px] leading-tight" data-testid="my-plots-legend">
       <span className="label-caps text-[10px]!">Your plots</span>
@@ -190,6 +194,11 @@ export function PlotsLegend({ seat, short = false }: { seat: ArcadeSeat; short?:
           {t.outfit ? ` · ${short ? 'MULE' : `${OUTFIT_WORD[t.outfit]} MULE`}` : ''}
         </span>
       ))}
+      {all.length > mine.length && (
+        <span className="text-ink-3" data-testid="legend-more">
+          +{all.length - mine.length} more
+        </span>
+      )}
     </div>
   );
 }
@@ -234,35 +243,38 @@ export function Reconnecting({ seat }: { seat: ArcadeSeat }) {
 
 
 /**
- * Month 1's wait (A-1, spec AM-20), in today's Develop's own words (waitingNow): before your first MULE, no rush; once it
- * is in, whose are still to come. Null while the clock runs, and when the wait has nothing of its own to say.
+ * The table chat's newest lines, newest first, from the same chat state as the shell's ticker. Each line is cut to one
+ * row, or with `wrap` (a narrow column) runs on as one sentence, speaker and words together, over at most three rows.
+ * A line never gives up its rows: a holder short of room cuts the oldest first, at its foot.
  */
-export function waitWords(seat: ArcadeSeat): Now | null {
-  const waitsFor = seat.view.clockWaitsFor;
-  if (!waitsFor) return null;
-  const { me, view } = seat;
-  const youWait = !waitsFor.includes(me.id);
-  // Row 1, buying your first MULE, is the step waitingNow rewords; any other step it leaves as it is.
-  const toCorral = seat.guide?.space === 'map' ? seat.guide.spots[0]?.label === 'STORE · CORRAL' : seat.guide?.rooms.includes('corral');
-  const step: Now = toCorral ? { step: 1, of: 3, title: '' } : { title: '' };
-  const said = waitingNow(step, me.carriedMule, me.installedThisTurn || youWait, !view.tiles.some((t) => t.owner === me.id), view.storeMules, waitsFor, me.id, view.players);
-  return said === step ? null : said;
-}
-
-/** The wait's words in the side room, or its title alone in the small phone's bar. */
-export function WaitWords({ seat, short = false }: { seat: ArcadeSeat; short?: boolean }) {
-  const now = waitWords(seat);
-  if (!now) return null;
+export function ChatTicker({ seat, keep, wrap = false, wide = false }: { seat: ArcadeSeat; keep: number; wrap?: boolean; wide?: boolean }) {
+  const { lines } = useTableChat();
+  const players = new Map(seat.view.players.map((p) => [p.id, p]));
+  const said = lines.filter((l) => players.has(l.from)).slice(-keep).reverse();
   return (
-    <span className="flex min-w-0 flex-col gap-0.5" data-testid="wait-now">
-      <span className={cx('font-display font-semibold leading-tight text-holo', short ? 'truncate text-[11px]' : 'text-xs')} data-testid="wait-title">
-        {now.title}
-      </span>
-      {!short && now.detail && (
-        <span className="text-[10px] leading-tight text-ink-2" data-testid="wait-detail">
-          {now.detail}
-        </span>
-      )}
-    </span>
+    <ul className="flex min-w-0 flex-col gap-0.5 overflow-hidden" data-testid="chat-ticker" aria-label="Table chat" aria-live="polite">
+      {said.map((l, i) => {
+        const p = players.get(l.from)!;
+        return (
+          <li
+            key={l.id}
+            className={cx('min-w-0 shrink-0', wrap ? 'line-clamp-3 leading-tight' : 'flex items-center gap-1.5 truncate', wide ? 'text-sm' : 'text-[11px]', i === 0 ? 'animate-[show-card-in_0.25s_ease-out] text-ink' : 'text-ink-3')}
+            data-testid={`chat-line-${l.id}`}
+          >
+            <span className={wrap ? 'mr-1 inline-block align-[-3px]' : 'contents'}>
+              <Creature species={p.species} color={SLOT_COLOR[toSlot(p.slot)]} size={14} />
+            </span>
+            <strong className={wrap ? '' : 'shrink-0'}>
+              {p.name}
+              {l.to ? ' 🔒' : ''}:
+            </strong>
+            <span className={wrap ? '' : 'truncate'}>
+              {wrap ? ' ' : ''}
+              {l.text}
+            </span>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
