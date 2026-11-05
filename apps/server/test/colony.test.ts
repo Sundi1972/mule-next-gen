@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { GOOD_CONFIG, PRESTIGE, RuleError, type GameState } from '@mule/engine';
+import { advancePhase, callStrike, COLONY, GOOD_CONFIG, HAPPINESS, monthLedger, PRESTIGE, RuleError, type GameState } from '@mule/engine';
 import { MuleGame } from '../src/mule-game.js';
 import { fakeContext, seats } from './fake-context.js';
 
@@ -57,6 +57,39 @@ describe('the colony at the table', () => {
     for (const view of views) expect(view).toEqual(views[0]);
     const text = JSON.stringify(views[0]);
     expect(text).not.toMatch(/ballot|stock|drone|analysed/i);
+  });
+
+  it('B-AC-24: from 60, a month ending with two goods short and the air at 70 shows every screen happiness 55, Restless: the mood falls, by no more than maxStep', () => {
+    const { game, state } = governed();
+    expect(state.colony!.happiness).toBe(60);
+    while (state.phase !== 'auction') advancePhase(state);
+    state.air = 70;
+    state.store.stock.food = 0;
+    state.store.stock.water = 0;
+    advancePhase(state);
+    expect(state.history.at(-1)!.shortages.length, 'two goods short').toBe(2);
+    for (const viewer of [null, 's1', 's2']) {
+      expect(game.viewFor(viewer).colony!.gauges, `${viewer ?? 'the TV'}'s view`).toMatchObject({ happiness: 60 - HAPPINESS.maxStep, band: 'restless' });
+    }
+  });
+
+  it("B-AC-25: the Governor's phone pays off a Food strike from the fund; the ledger shows strikePay, every screen shows it paid, the news names it, and another phone's payment is refused with RULE-26's message", () => {
+    const { game, state } = governed();
+    state.treasury.money = 400;
+    callStrike(state, 'food');
+    expect(game.viewFor(null).colony!.strike).toEqual({ good: 'food', cost: COLONY.strike.cost, paid: false });
+    expect(refusal(() => game.handle('s2', { type: 'payStrike' }))).toBe('Only the Governor pays the strikers');
+
+    game.handle('s1', { type: 'payStrike' });
+    expect(state.treasury.money).toBe(400 - COLONY.strike.cost);
+    expect(monthLedger(state)!.out.strikePay).toBe(COLONY.strike.cost);
+    for (const viewer of [null, 's1', 's2']) expect(game.viewFor(viewer).colony!.strike).toEqual({ good: 'food', cost: COLONY.strike.cost, paid: true });
+    expect(game.viewFor(null).news).toContain(`Heiko pays the food strikers ${COLONY.strike.cost} cr.`);
+  });
+
+  it('B-AC-25: with no strike this month the colony view shows none', () => {
+    const { game } = governed();
+    expect(game.viewFor(null).colony!.strike).toBeNull();
   });
 
   it('the colony view is null with politics off', () => {
