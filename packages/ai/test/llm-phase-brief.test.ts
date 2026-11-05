@@ -102,6 +102,22 @@ describe("C2: the writer takes a phase brief's paths", () => {
     expect(sha(replySchema(false))).toBe('8425081cf9c0bb23b4d70a79080cb7fe1daf3f49ee676bbb74b71c566fe3abe0');
   });
 
+  it("C2: a full auction brief's schema compiles: offers with the same value type share one branch with a path enum, so 6 goods take 3 branches, not 30 (the API refused 30 in the PR-5 pilot), and every offered path is in exactly one", () => {
+    const state = table();
+    const many: Playbook = {
+      ...auctionDraft,
+      auction: Object.fromEntries(GOODS.map((g) => [g, { role: 'seller', hold: 1, walkAway: 1, start: 2, concedeCrPerS: 1, bluff: false, vsRival: 'hold' }])),
+    };
+    const brief = phaseBrief(state, mind, PERSONAS.trader, many, 'auction', [], {});
+    expect(brief.offers.length).toBe(Math.min(GOODS.length, BRAIN.brief.auctionGoods) * 5);
+    const branches = replySchema(brief.corners, brief.offers, brief.strategyOffered).properties.edits.items.anyOf as { properties: { path: { enum: string[] }; to: unknown } }[];
+    expect(branches.length).toBe(3);
+    const paths = branches.flatMap((v) => v.properties.path.enum);
+    expect([...paths].sort()).toEqual(brief.offers.map((o) => o.path).sort());
+    // Each branch's paths share its value type.
+    for (const v of branches) for (const path of v.properties.path.enum) expect(brief.offers.find((o) => o.path === path)!.to).toEqual(v.properties.to);
+  });
+
   it("C2: a phase brief's schema offers its paths and no strategy; the request carries that schema", async () => {
     const state = table();
     const brief = phaseBrief(state, mind, PERSONAS.trader, devDraft(state), 'development', [], {});
