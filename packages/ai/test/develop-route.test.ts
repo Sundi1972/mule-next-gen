@@ -122,15 +122,18 @@ interface TurnHooks {
   between?: (floor: DevFloor, run: number) => DevFloor;
   /** The seconds left as tick `run` ends, from the clock's own (steer only). */
   leftOf?: (run: number, left: number) => number;
+  /** After each tick the hand played, with the seconds left it was given. */
+  onTick?: (left: number) => void;
 }
 
 /** ai0's development turn under DEV_WALK's tap-to-walk, as play.ts's loop runs it (DEV_STEER.on false). */
-function tapTurn(state: GameState, hand: DevelopHand): void {
+function tapTurn(state: GameState, hand: DevelopHand, hooks: TurnHooks = {}): void {
   const dt = AI_HANDS.devTickMs;
   const clock: DevClock = { left: me(state).devSeconds, at: 'store' };
   while (clock.left > 0 && !me(state).doneDeveloping) {
     arrive(state, ME, clock);
     hand.tick(state, dt, clock.left, (a) => applyAction(state, ME, a, clock), { at: clock.at!, busy: !!clock.busy });
+    hooks.onTick?.(clock.left);
     clock.left -= dt / MS_PER_SECOND;
   }
   const then = clock.busy?.then;
@@ -147,6 +150,7 @@ function floorTurn(state: GameState, hand: DevelopHand, hooks: TurnHooks = {}): 
     const left = hooks.leftOf?.(run, clock) ?? clock;
     if (left <= 0) break;
     const inputs = { [ME]: hand.steer(state, floor, left, cfg) };
+    hooks.onTick?.(left);
     const spent = doorPresses(floor, state, inputs, cfg);
     floor = settleMoments(state, stepFloor(floor, state, inputs, cfg.steer.tickMs, cfg));
     if (inputs[ME]!.act && !spent.has(ME) && reachOf(floor, state, ME, cfg, { secondsLeft: left }).enabled) {
@@ -161,7 +165,7 @@ function floorTurn(state: GameState, hand: DevelopHand, hooks: TurnHooks = {}): 
 }
 
 function play(runner: Runner, state: GameState, hand: DevelopHand, hooks?: TurnHooks): void {
-  if (runner === 'tick') tapTurn(state, hand);
+  if (runner === 'tick') tapTurn(state, hand, hooks);
   else floorTurn(state, hand, hooks);
 }
 
@@ -225,6 +229,38 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
       expect(steps.get(1)).toEqual({ route: 1, outcome: 'skipped', note: 'time budget' });
       expect(steps.get(2)).toEqual({ route: 2, outcome: 'done' });
       expect(me(state).analysed).toEqual([a]);
+      expect(me(state).doneDeveloping).toBe(true);
+    });
+
+    it("T-AC-7 row 2: a budget spent as the first step ends skips the MULE after it and every later step to the pub, 'time budget'", () => {
+      /** An adopted route (no re-pick): analyse a, a MULE for b, analyse c, the pub; ai0 holds b. */
+      const turn = (timeBudgetMs: number, onTick?: (hand: DevelopHand, left: number) => void) => {
+        const { state, plots } = development(3);
+        const [a, b, c] = plots.map((t) => indexOf(state, t)) as [number, number, number];
+        plots[1]!.owner = ME;
+        const { hand } = seatAndHand();
+        const route: DevelopmentPlay['route'] = [{ act: 'analyse', plot: a }, { act: 'buyMule' }, { act: 'outfit', outfit: 'food' }, { act: 'install', plot: b }, { act: 'analyse', plot: c }, { act: 'pub' }];
+        hand.follow(state.month, routeOf(route, { timeBudgetMs }, false));
+        play(runner, state, hand, { onTick: (left) => onTick?.(hand, left) });
+        return { state, plots, hand, a };
+      };
+      // The budget: the route's time when the MULE comes up, the first step done.
+      let start: number | null = null;
+      let budget: number | null = null;
+      const probe = turn(DEVELOPMENT.fullSeconds * MS_PER_SECOND, (hand, left) => {
+        start ??= left;
+        if (budget === null && hand.plan()[0]?.startsWith('Buy a MULE')) budget = (start - left) * MS_PER_SECOND;
+      });
+      expect(budget, JSON.stringify(probe.hand.done)).not.toBeNull();
+      const { state, plots, hand, a } = turn(budget!);
+      const log = JSON.stringify(hand.done);
+      expect(hand.routeLog(state).steps, log).toEqual([
+        { route: 0, outcome: 'done' },
+        ...[1, 2, 3, 4].map((route) => ({ route, outcome: 'skipped', note: 'time budget' })),
+        { route: 5, outcome: 'done' },
+      ]);
+      expect(me(state).analysed).toEqual([a]);
+      expect(plots[1]!.outfit).toBeNull();
       expect(me(state).doneDeveloping).toBe(true);
     });
 
