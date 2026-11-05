@@ -128,6 +128,9 @@ export function harvests(production: ProductionView): Record<string, Partial<Rec
   return out;
 }
 
+/** A hit the board marks on its plot: one that changes its units, or the plot itself (taken, caved in, its MULE lost). */
+const marked = (h: ProductionView['events'][number]['hits'][number]) => h.delta !== 0 || h.becomes === 'idle' || h.becomes === 'plain' || (h.muleLost === true && h.becomes === 'crater');
+
 /** Every event's hits on a plot, in fired order: a month can fire more than one event, and each can reach the plot. */
 const hitsOn = (production: ProductionView, l: { x: number; y: number }) => production.events.flatMap((e) => e.hits.filter((h) => h.x === l.x && h.y === l.y));
 /** What a plot holds after each hit lands, never below 0, as the show plays them (RULE-2, plotStrikes). */
@@ -181,8 +184,9 @@ export async function checkTheShow({ tv, phone, event = false }: { tv: ShowWatch
     const id = `${l.x}-${l.y}`;
     const seen = seenTv.plots[id];
     check(seen, `B-AC-6: the TV drew plot ${id}`);
-    // The badges the plot should show: each event's non-zero delta, once each (the recorder keeps each text once).
-    const deltas = [...new Set(hitsOn(production, l).map((h) => h.delta).filter((d) => d !== 0))];
+    // The badges the plot should show, once each (the recorder keeps each text once): each hit that changes its units, and
+    // each that changes the plot itself even when its units stay ("TAKEN", "CAVED IN", a lost MULE: the board's marks).
+    const deltas = [...new Set(hitsOn(production, l).filter(marked).map((h) => h.delta))];
     const struck = deltas.length > 0;
     // A plot the event reached before it filled shows its bars only after the event.
     // RULE-3 (AM-19): before any event a plot peaks at its base and bonuses, before its losses land.
