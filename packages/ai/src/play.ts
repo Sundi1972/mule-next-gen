@@ -5,14 +5,15 @@ import {
   analysePlot,
   auctionDone,
   buyMule,
+  castLawVote,
   castVote,
+  commission,
   claimPlot,
   COLONY_SELLER,
   createGame,
   createRng,
   declareRole,
   DEV_STEER,
-  electionDone,
   fitFilter,
   GAME,
   grantDone,
@@ -28,7 +29,10 @@ import {
   RuleError,
   runFor,
   setLotWalk,
+  payStrike,
+  proposeLaw,
   setSalesTax,
+  votesDone,
   setWalk,
   SHIP_ID,
   SIM_TARGETS,
@@ -185,10 +189,23 @@ function applyRule(state: GameState, id: string, action: AiAction, clock?: DevCl
       case 'setTax':
         setSalesTax(state, id, action.percent);
         break;
+      case 'commission':
+        commission(state, id, action.id);
+        break;
+      case 'payStrike':
+        payStrike(state, id);
+        break;
+      case 'propose':
+        proposeLaw(state, id, action.proposal);
+        break;
+      case 'voteLaw':
+        castLawVote(state, id, action.yes);
+        break;
       case 'done':
         if (state.phase === 'landGrant') grantPass(state, id);
         else if (state.phase === 'landAuction') lotDone(state, id, action.done);
-        else if (state.phase === 'planning' && state.politics?.election) electionDone(state, id, action.done);
+        // The election's or the law ballot's Done, through the one votes facade, as the server's.
+        else if (state.phase === 'planning' && (state.politics?.election || state.politics?.council)) votesDone(state, id, action.done);
         else auctionDone(state, id, action.done);
         break;
       case 'drone':
