@@ -221,12 +221,7 @@ function fund(state: GameState, colony: Colony, project: Project): void {
 }
 
 /** A good's key as words for a message: rareEarth reads "rare earth". */
-/** A good's name in a sentence: "rare earth", "food". */
 export function goodWords(good: Good): string {
-  return words(good);
-}
-
-function words(good: Good): string {
   return good.replace(/[A-Z]/g, (c) => ` ${c.toLowerCase()}`);
 }
 
@@ -252,9 +247,9 @@ export function donate(state: GameState, playerId: string, id: PrestigeId, credi
   for (const [good, units] of given) {
     if (units === 0) continue;
     const missing = Object.hasOwn(needs.goods, good) ? needs.goods[good]! : undefined;
-    if (missing === undefined) throw new RuleError(`The ${name} needs no ${words(good)}`);
-    if (units > missing) throw new RuleError(`The ${name} still needs ${missing} ${words(good)}`);
-    if (units > donor.stock[good]) throw new RuleError(`You have ${donor.stock[good]} ${words(good)}`);
+    if (missing === undefined) throw new RuleError(`The ${name} needs no ${goodWords(good)}`);
+    if (units > missing) throw new RuleError(`The ${name} still needs ${missing} ${goodWords(good)}`);
+    if (units > donor.stock[good]) throw new RuleError(`You have ${donor.stock[good]} ${goodWords(good)}`);
   }
 
   const colony = edit(state);

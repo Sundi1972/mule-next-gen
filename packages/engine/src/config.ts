@@ -921,7 +921,6 @@ export const PRESTIGE = {
   spaceport: { name: 'Spaceport upgrade', credits: 1_380, goods: { alloy: 2, electronics: 2 }, buildMonths: 3, needsPlot: true, prestige: 5, upkeep: 100, repairCost: 500 },
 } satisfies Record<PrestigeId, { name: string; credits: number; goods: Partial<Record<Good, number>>; buildMonths: number; needsPlot: boolean; prestige: number; upkeep: number; repairCost: number }>;
 
-/** The colony fund's own rules. Placeholders until the colony's sim tuning. */
 /**
  * The colony's mood (G-5 RULE-20). Every number is a placeholder, tuned at the end (HC-25). Each month the mood moves
  * toward a target by at most `maxStep`; an event's moodShift moves it at once.
@@ -956,6 +955,7 @@ export const HAPPINESS = {
   },
 };
 
+/** The colony fund's own rules. Placeholders until the colony's sim tuning. */
 export const COLONY = {
   /** Projects commissioned or building at the same time. */
   maxOpen: 1,
