@@ -64,7 +64,7 @@ export type Reach =
   | { kind: 'leave'; enabled: true; door: HallDoor; leading: boolean }
   /**
    * On a plot that has a MULE, `replaces` is its outfit: installing swaps the new MULE in and the colonist leads the old
-   * one (AM-23); for the outfit it already has, the row dims (why: sameGood), nothing to swap.
+   * one (AM-35); for the outfit it already has, the row dims (why: sameGood), nothing to swap.
    */
   | { kind: 'install'; enabled: boolean; good: Outfit; plot: FloorPoint; fromShore: boolean; replaces: Outfit | null; why: ReachRefusal | null }
   | { kind: 'analyse'; enabled: true; plot: FloorPoint }
@@ -207,7 +207,7 @@ const install: Row = (s) => {
   const good = p.carriedMule;
   if (!tile || !good || good === 'empty' || p.muleBolted) return null;
   const plot = plotFor(s, (t) => t.owner === p.id);
-  // The plot the led MULE was just swapped off keeps the row, dimmed (AM-23, PM ruling A): a double tap on SWAP holds,
+  // The plot the led MULE was just swapped off keeps the row, dimmed (AM-35, PM ruling A): a double tap on SWAP holds,
   // and never falls through to the tile's next row (FILTER, ANALYSE, TAKE). Over a MULE with the outfit it leads there
   // is nothing to swap: dimmed too, as RE-OUTFIT's row is for its own good.
   const swappedOff = !!plot && justSwappedOff(p, plot.x, plot.y);

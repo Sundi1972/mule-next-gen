@@ -276,7 +276,7 @@ export function outfitMule(state: GameState, playerId: string, outfit: Outfit): 
   p.carriedMule = outfit;
 }
 
-/** True while the led MULE still has the outfit it was swapped off this plot with (AM-23): a press there would swap it back. */
+/** True while the led MULE still has the outfit it was swapped off this plot with (AM-35): a press there would swap it back. */
 export function justSwappedOff(p: Player, x: number, y: number): boolean {
   const taken = p.takenMule;
   return !!taken?.swapped && taken.x === x && taken.y === y && p.carriedMule === taken.outfit;
@@ -288,12 +288,12 @@ export function installMule(state: GameState, playerId: string, x: number, y: nu
   requireLed(p);
   const tile = plotAt(state, x, y);
   if (tile.owner !== playerId) throw new RuleError('Not your plot');
-  // Installing over a MULE with the outfit it already has changes nothing, so it is refused (AM-23).
+  // Installing over a MULE with the outfit it already has changes nothing, so it is refused (AM-35).
   if (tile.outfit === p.carriedMule) throw new RuleError('Same outfit: nothing to swap');
-  // Nor back onto the plot the led MULE was just swapped off (AM-23, PM ruling A), by the button or a direct action.
+  // Nor back onto the plot the led MULE was just swapped off (AM-35, PM ruling A), by the button or a direct action.
   // Re-outfitted since, it is a real swap, so it is allowed.
   if (justSwappedOff(p, x, y)) throw new RuleError('Just swapped: lead it to another plot');
-  // Installing over another MULE swaps them (AM-23, Heiko 5 Nov): the old one comes onto the lead with its outfit and
+  // Installing over another MULE swaps them (AM-35, Heiko 5 Nov): the old one comes onto the lead with its outfit and
   // run, as a MULE taken off the plot does (AM-2), marked swapped so the turn's end sends it to the corral.
   const old: TakenMule | null = tile.outfit ? { x, y, outfit: tile.outfit, runMonths: tile.runMonths, swapped: true } : null;
   tile.runMonths = 0;
@@ -356,7 +356,7 @@ export function reoutfitMule(state: GameState, playerId: string, outfit: Outfit)
 /**
  * The turn ends with a taken MULE still carried: it goes back to its plot with the outfit and run it had there. One
  * that came off by a swap goes to the corral instead, as a plot's MULE does at a lot sale: its plot has another MULE
- * (AM-23). No refund.
+ * (AM-35). No refund.
  */
 function returnTakenMule(state: GameState, p: Player): void {
   const taken = p.takenMule;
@@ -533,7 +533,7 @@ export function advancePhase(state: GameState): void {
   }
   if (next === 'production') {
     // A MULE nobody installed runs away at the end of development; one taken off a plot goes back to it (AM-2), and
-    // one that came off by a swap goes to the corral (AM-23).
+    // one that came off by a swap goes to the corral (AM-35).
     for (const p of state.players) endLead(state, p.id);
     const price = mulePrice(state);
     const soldOut = state.store.mules === 0;
@@ -621,14 +621,19 @@ export interface ScoreParts {
   muleValue: number;
   /** Points for terms served (POLITICS.termScore each), before any Collapse cut. 0 with politics off. */
   office: number;
-  /** What Collapse took off every line, office included: 0 unless the colony failed. */
+  /**
+   * What this player gave the colony's projects, as their plaques record it (credits plus goods at reference price),
+   * counted 1:1 (Heiko, G-5): a donation moves Worth from money and goods to this line. 0 with politics off.
+   */
+  donated: number;
+  /** What Collapse took off every line, office and donations included: 0 unless the colony failed. */
   cut: number;
   total: number;
 }
 
 /**
  * A final score line by line: money, goods at today's colony prices, land,
- * installed MULEs at the store price, terms in office, and the Collapse cut on all of them.
+ * installed MULEs at the store price, terms in office, donations to the colony, and the Collapse cut on all of them.
  * The lines add up to total + cut exactly; goods absorbs the rounding. See spec RULE-3.
  */
 export function scoreParts(state: GameState, playerId: string): ScoreParts {
@@ -645,9 +650,12 @@ export function scoreParts(state: GameState, playerId: string): ScoreParts {
   const before = Math.round(raw);
   // Outside Collapse the office line joins after the rounding, so it moves no existing total.
   const office = officeScore(state, playerId);
-  const total = colonyFailed(state) ? Math.round((raw + office) * POLLUTION.collapseScore) : before + office;
+  // Donations join the same way, whole credits, so a donation of credits leaves Worth as it was.
+  const donated = Math.round((state.colony?.projects ?? []).reduce((sum, project) => sum + (project.plaque[playerId] ?? 0), 0));
+  const added = office + donated;
+  const total = colonyFailed(state) ? Math.round((raw + added) * POLLUTION.collapseScore) : before + added;
   const money = Math.round(p.money);
-  return { money, goods: before - money - land - muleValue, plots, land, mules, muleValue, office, cut: before + office - total, total };
+  return { money, goods: before - money - land - muleValue, plots, land, mules, muleValue, office, donated, cut: before + added - total, total };
 }
 
 /** Final score: scoreParts().total. */
@@ -687,7 +695,7 @@ export function colonyScore(state: GameState): ColonyScore | null {
   return colonyScoreOf({ wealth: colonyWealth(state), air: state.air, prestige: colonyPrestige(state), happiness: state.colony.happiness });
 }
 
-/** A player's standing at the end (RULE-25): their Worth, and beside it, never in it, what their plaques hold. */
+/** A player's standing at the end (RULE-25): their Worth, which counts their plaques 1:1 (G-5, Heiko 5 Nov), and what the plaques hold. */
 export function playerStanding(state: GameState, playerId: string): { worth: number; plaques: number } {
   const plaques = (state.colony?.projects ?? []).reduce((sum, p) => sum + (p.plaque[playerId] ?? 0), 0);
   return { worth: score(state, playerId), plaques };

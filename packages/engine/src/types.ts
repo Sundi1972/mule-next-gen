@@ -89,7 +89,7 @@ export interface TakenMule {
   readonly outfit: Outfit;
   readonly runMonths: number;
   /**
-   * It came off by a swap (AM-23): another MULE stands on its plot now, so if the turn ends with it still carried it
+   * It came off by a swap (AM-35): another MULE stands on its plot now, so if the turn ends with it still carried it
    * goes to the corral, not back to the plot.
    */
   readonly swapped?: true;

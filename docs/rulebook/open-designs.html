@@ -19,7 +19,7 @@
 <h2 id="being-designed">Being designed <span class="pill open">Being designed</span></h2>
 <p>A design is under way or a question is open. Nothing is built yet.</p>
 <h3 id="food-supply">Is there enough Food in the economy? <span class="pill open">Being designed</span></h3>
-<p>Once computer players buy the Food they need, they empty the same store shelf the colonists buy from. With the buying fix (selling surplus, Heiko&#x27;s V3), colonists go short in about 62-68% of months, against about 50% before. The levers are Heiko&#x27;s: start Food, the store&#x27;s Food per player, Food spoilage (50%), farm yield.</p>
+<p>Once computer players buy the Food they need, they empty the same store shelf the colonists buy from. With the buying fix (Heiko&#x27;s &#x27;sell surplus&#x27;, the computer players also keeping back the Energy and, with a farm, the Water they need), colonists are short of Food or Water in about 66-70% of months, against 62-66% if they kept back only their Food and about 50% before. The levers are Heiko&#x27;s: start Food, the store&#x27;s Food per player, Food spoilage (50%), farm yield.</p>
 <p class="owner">Responsible: Heiko, at the balance pass at the end; measured by the Balance team (WS1) · Status: Recorded 5 Nov; measure now, tune at the end · The rule in full: <a href="production.html">production</a></p>
 <h3 id="inert-traits">Five plot traits do nothing yet <span class="pill open">Being designed</span></h3>
 <p>Bedrock, sheltered, unstable, infested and flood plain are drawn on the map but change nothing. Wanted or not is Heiko&#x27;s call; if wanted, a small design.</p>
@@ -40,13 +40,10 @@
 <p class="owner">Responsible: Auctions team (WS3), screens by the UX team (WS6) · Status: Heiko: hold the arrow 1 s; the stop covers all sales; no buyer stop (5 Nov). Rules amendment a33879c4 · The rule in full: <a href="goods-auction.html">goods auction</a></p>
 <h3 id="drone-and-geology">Plot info: scan, My plots, soil-test card, gems <span class="pill designed">Designed</span></h3>
 <p>Mark plots and tap Scan for an instant report in the side rail; every good at 0-3 dots, a gem for Crystite or Rare earth. A My plots list in planning and on the walking screen. A card after each soil test. Gems are private and never on the TV. Terrain hints stay.</p>
-<p class="owner">Responsible: UX &amp; Gameplay team (WS6), with WS3 (drone results at Scan) and WS4 (the map gem) · Status: Heiko chose option B with the report in the side rail (5 Nov); spec #397, teams reading it, then Heiko · The rule in full: <a href="land.html">land</a></p>
+<p class="owner">Responsible: UX &amp; Gameplay team (WS6), with WS3 (drone results at Scan) and WS4 (the map gem) · Status: Heiko chose option B with the report in the side rail (5 Nov); spec #397, teams reading it, then Heiko · The rule in full: <a href="land.html#drone-geology-redesign">land</a></p>
 <h3 id="water-base-resource">Water is a base resource: every plot uses it <span class="pill designed">Designed</span></h3>
 <p>Food farms use 2 Water, every other working plot 1. Energy is settled first, then Water: the biggest Water user is turned off first and makes 20%. Wells and plants take the other good last and are never turned off.</p>
 <p class="owner">Responsible: Balance team (WS1), rule AM-18 · Status: Designed by Heiko 5 Nov; built after the buying fix, about 1.5 to 2 days · The rule in full: <a href="production.html">production</a></p>
-<h3 id="donations-in-worth">Colony donations count 1:1 in your Worth <span class="pill designed">Designed</span></h3>
-<p>Giving to the colony no longer lowers your Worth; the cash is locked in the colony instead of in MULEs or land. Plaques still show what you gave.</p>
-<p class="owner">Responsible: Politics team (WS7), with the Auctions team (WS3) for the score line · Status: Heiko: &#x27;Yes, count 1:1&#x27; (5 Nov) · The rule in full: <a href="colony-and-politics.html">colony and politics</a></p>
 <h3 id="colony-score-monthly">The colony score shows every month <span class="pill designed">Designed</span></h3>
 <p>Shown next to the league at every month end, on the TV and the phones, not only at game over.</p>
 <p class="owner">Responsible: Politics team (WS7), screens by the Events team (WS8) · Status: Heiko: &#x27;Yes, every month&#x27; (5 Nov) · The rule in full: <a href="colony-and-politics.html">colony and politics</a></p>
@@ -55,12 +52,18 @@
 <p class="owner">Responsible: Brain team (WS2), with the Auctions team (WS3) for one seam · Status: Programme manager ruling, 5 Nov · The rule in full: <a href="computer-players.html">computer players</a></p>
 <h3 id="swap-warning">A warning before a swapped MULE goes back <span class="pill designed">Designed</span></h3>
 <p>While you lead a MULE you swapped out, the walking screen says: &quot;Turn ends: this MULE goes back to the corral&quot;.</p>
-<p class="owner">Responsible: UX team (WS6) · Status: Programme manager ruling, 5 Nov · The rule in full: <a href="development.html">development</a></p>
+<p class="owner">Responsible: UX team (WS6) · Status: Programme manager ruling, 5 Nov · The rule in full: <a href="development.html#swap-warning">development</a></p>
+<h3 id="tv-gauges-row">Every crowded TV header puts the gauges on their own row <span class="pill designed">Designed</span></h3>
+<p>Any TV header with a clock, a status badge or a ready count puts the colony's gauges on a full-width row of their own, so the development screen's clock no longer runs off the right edge.</p>
+<p class="owner">Responsible: Table team (WS4) · Status: Programme manager ruling, 5 Nov; next after the TV fit (#381) · The rule in full: <a href="table-and-phones.html#gauges-row">the table and the phones</a></p>
+<h3 id="lobby-species-perks">The lobby's species perks say the game's numbers <span class="pill designed">Designed</span></h3>
+<p>The Zipwing card will say a quarter faster (1.25 times), not twice as fast; the Gearling card 5% less (95% of the price), not a quarter less. Each reads its number from the balance settings.</p>
+<p class="owner">Responsible: Table team (WS4), with the Balance team (WS1) · Status: Programme manager ruling, 5 Nov · The rule in full: <a href="table-and-phones.html#species-perks">the table and the phones</a></p>
 <h2 id="being-built">Being built <span class="pill progress">Being built</span></h2>
 <p>A team is building it or it is in a pull request.</p>
-<h3 id="slower-auction-walk">A slower auction walk and a slower trade start <span class="pill progress">Being built</span></h3>
-<p>Walking up and down the board is about 25% slower; trades start at about one unit a second and speed up; the land auction&#x27;s lot clock stretches from 12 to 15 seconds.</p>
-<p class="owner">Responsible: Auctions team (WS3) · Status: Pull request #376; one check still red · The rule in full: <a href="goods-auction.html">goods auction</a></p>
+<h3 id="donations-in-worth">Colony donations count 1:1 in your Worth <span class="pill progress">Being built</span></h3>
+<p>Giving credits to the colony no longer lowers your Worth (goods count at their reference price, not today&#x27;s); the cash is locked in the colony instead of in MULEs or land. Plaques still show what you gave.</p>
+<p class="owner">Responsible: Politics team (WS7), with the Auctions team (WS3) for the score line · Status: Heiko: &#x27;Yes, count 1:1&#x27; (5 Nov); pull request #408. Your phone&#x27;s line-by-line Worth gets its Donations line from the Table team (WS4) and the UX team (WS6) · The rule in full: <a href="colony-and-politics.html">colony and politics</a></p>
 <h3 id="tv-fit">The TV fits every screen <span class="pill progress">Being built</span></h3>
 <p>On the auction walk no chat ticker, so two deals fit; the gauges get their own row; the month-end title on one line.</p>
 <p class="owner">Responsible: Table team (WS4) · Status: Pull request #381; being updated to the main build · The rule in full: <a href="table-and-phones.html">table and phones</a></p>

@@ -236,7 +236,7 @@ export function FallbackBubble() {
 }
 
 /** The last few lines, newest first: the phone keeps 2, the TV 3. */
-function Ticker({ size = 'phone' }: { size?: 'phone' | 'tv' }) {
+function Ticker({ size = 'phone', most }: { size?: 'phone' | 'tv'; most?: number }) {
   const { lines } = useTableChat();
   const { seats } = useSeats();
   const tv = size === 'tv';
@@ -244,7 +244,7 @@ function Ticker({ size = 'phone' }: { size?: 'phone' | 'tv' }) {
   return (
     <ul className={cx('flex flex-col overflow-hidden', tv ? 'gap-1' : 'gap-0.5')} data-testid="chat-ticker" aria-label="Table chat" aria-live="polite">
       {said
-        .slice(tv ? -3 : -2)
+        .slice(-(most ?? (tv ? 3 : 2)))
         .reverse()
         .map((l, i) => {
           const { player, slot } = seats.get(l.from)!;
@@ -287,13 +287,16 @@ export function TableChat({ under = false }: { under?: boolean }) {
   );
 }
 
-/** The TV's ticker, under its header. Nothing shows until someone speaks. */
-export function TvTicker() {
+/**
+ * The TV's ticker, under its header: its last three lines, newest first, or the `most` newest where a screen has less
+ * room. Nothing shows until someone speaks, or with `most` 0.
+ */
+export function TvTicker({ most }: { most?: number } = {}) {
   const { lines } = useTableChat();
-  if (lines.length === 0) return null;
+  if (lines.length === 0 || most === 0) return null;
   return (
     <div className="rounded-panel border border-holo-line bg-panel/60 px-4 py-2">
-      <Ticker size="tv" />
+      <Ticker size="tv" {...(most === undefined ? {} : { most })} />
     </div>
   );
 }

@@ -108,16 +108,16 @@
 
 <h3 id="walking-speed">How fast you walk</h3>
 <p>Hold <em>▲</em> or <em>▼</em> to walk; let go to stand. A quick tap (shorter than <span class="num">0.18</span> seconds) moves exactly one credit. You can also drag on the board.</p>
-<p>Walking speed is set per good so that crossing the whole board always takes the same time, whatever the good costs: the board's height divided by <code>WALK.crossSeconds</code>, today <span class="num">6</span> seconds, but never slower than <code>WALK.minSpeed</code>, <span class="num">2</span> credits a second. A cheap good's board is short and you walk slowly in credits; an expensive good's board is tall and you walk fast in credits, but both take 6 seconds end to end.</p>
+<p>Walking speed is set per good so that crossing the whole board always takes the same time, whatever the good costs: the board's height divided by <code>WALK.crossSeconds</code>, <span class="num">7.5</span> seconds, but never slower than <code>WALK.minSpeed</code>, <span class="num">1.6</span> credits a second. A cheap good's board is short and you walk slowly in credits; an expensive good's board is tall and you walk fast in credits, but both take 7.5 seconds end to end.</p>
 <div class="box example"><h4>Example: the Food board</h4>
 <p>Food's posted price is <span class="num">30</span>. The store sells at <span class="num">33</span> (10% above) and buys at <span class="num">27</span> (10% below).</p>
 <ul>
 <li>The outermost lines are 27 and 33, so they are 6 apart. Margin: 30% of 6 = 1.8, plus 10% of 30 = 3, so 4.8 on each side.</li>
 <li>The board runs from <span class="num">22</span> (27 − 4.8, rounded down) to <span class="num">38</span> (33 + 4.8, rounded up): 16 credits tall.</li>
-<li>Speed: 16 ÷ 6 = <span class="num">2.7</span> credits a second (above the minimum of 2).</li>
-<li>A buyer starting at 22 reaches the store's selling line at 33 in 11 ÷ 2.7 = about <span class="num">4</span> seconds of holding ▲.</li>
+<li>Speed: 16 ÷ 7.5 = <span class="num">2.1</span> credits a second (above the minimum of 1.6).</li>
+<li>A buyer starting at 22 reaches the store's selling line at 33 in 11 ÷ 2.1 = about <span class="num">5</span> seconds of holding ▲.</li>
 </ul>
-<p>After the slower walk being built (<a href="#slower-walk">below</a>), the same board takes 7.5 seconds to cross: 16 ÷ 7.5 = 2.1 credits a second, about 5 seconds from 22 to 33.</p></div>
+</div>
 
 <h3 id="what-stops-you">What stops you</h3>
 <ul>
@@ -148,38 +148,38 @@
 </ul>
 
 <h3 id="trade-speed">Slowly at first, then faster and faster</h3>
-<p>The first unit of a deal takes <code>WALK.tradeStartMs</code>, today <span class="num">400</span> ms. Each further unit takes <code>WALK.tradeSpeedUp</code> = <span class="num">0.8</span> times as long as the one before, down to a floor of <code>WALK.tradeFloorMs</code>, today <span class="num">60</span> ms. If the pair separates, the next meeting starts slow again. A house line keeps one running deal and keeps its speed while it serves players in turns.</p>
+<p>The first unit of a deal takes <code>WALK.tradeStartMs</code>, <span class="num">1,000</span> ms: about one unit a second. Each further unit takes <code>WALK.tradeSpeedUp</code> = <span class="num">0.8</span> times as long as the one before, down to a floor of <code>WALK.tradeFloorMs</code>, <span class="num">200</span> ms: at most five units a second. If the pair separates, the next meeting starts slow again. A house line keeps one running deal and keeps its speed while it serves players in turns.</p>
 <div class="table-wrap"><table>
-<thead><tr><th>Unit</th><th class="n">Wait today (ms)</th><th class="n">Wait after #376 (ms)</th></tr></thead>
+<thead><tr><th>Unit</th><th class="n">Wait (ms)</th></tr></thead>
 <tbody>
-<tr><td>1st</td><td class="n">400</td><td class="n">1,000</td></tr>
-<tr><td>2nd</td><td class="n">320</td><td class="n">800</td></tr>
-<tr><td>3rd</td><td class="n">256</td><td class="n">640</td></tr>
-<tr><td>4th</td><td class="n">205</td><td class="n">512</td></tr>
-<tr><td>5th</td><td class="n">164</td><td class="n">410</td></tr>
-<tr><td>6th</td><td class="n">131</td><td class="n">328</td></tr>
-<tr><td>7th</td><td class="n">105</td><td class="n">262</td></tr>
-<tr><td>8th</td><td class="n">84</td><td class="n">210</td></tr>
-<tr><td>9th</td><td class="n">67</td><td class="n">200</td></tr>
-<tr><td>10th and after</td><td class="n">60</td><td class="n">200</td></tr>
+<tr><td>1st</td><td class="n">1,000</td></tr>
+<tr><td>2nd</td><td class="n">800</td></tr>
+<tr><td>3rd</td><td class="n">640</td></tr>
+<tr><td>4th</td><td class="n">512</td></tr>
+<tr><td>5th</td><td class="n">410</td></tr>
+<tr><td>6th</td><td class="n">328</td></tr>
+<tr><td>7th</td><td class="n">262</td></tr>
+<tr><td>8th</td><td class="n">210</td></tr>
+<tr><td>9th</td><td class="n">200</td></tr>
+<tr><td>10th and after</td><td class="n">200</td></tr>
 </tbody>
 </table></div>
 <div class="table-wrap"><table>
-<thead><tr><th>Standing at the line for</th><th class="n">Units traded today</th><th class="n">Units after #376</th></tr></thead>
+<thead><tr><th>Standing at the line for</th><th class="n">Units traded</th></tr></thead>
 <tbody>
-<tr><td>1 second</td><td class="n">3</td><td class="n">1</td></tr>
-<tr><td>2 seconds</td><td class="n">13</td><td class="n">2</td></tr>
-<tr><td>5 seconds</td><td class="n">63</td><td class="n">12</td></tr>
-<tr><td>10 seconds</td><td class="n">146</td><td class="n">37</td></tr>
+<tr><td>1 second</td><td class="n">1</td></tr>
+<tr><td>2 seconds</td><td class="n">2</td></tr>
+<tr><td>5 seconds</td><td class="n">12</td></tr>
+<tr><td>10 seconds</td><td class="n">37</td></tr>
 </tbody>
 </table></div>
-<p>The server steps the auction every <code>WALK.tickMs</code> = <span class="num">100</span> ms, so at today's top speed up to two units can move in one step. While units move, the board shows chevrons that light up as the deal speeds up, your phone says "Selling Water to the store at 22 cr, faster and faster." with "Tap ▲ to stop.", and each phone clicks once per unit.</p>
+<p>The server steps the auction every <code>WALK.tickMs</code> = <span class="num">100</span> ms, so even at top speed at most one unit moves in one step. While units move, the board shows chevrons that light up as the deal speeds up, your phone says "Selling Water to the store at 22 cr, faster and faster." with "Tap ▲ to stop.", and each phone clicks once per unit.</p>
 
 <h3 id="stopping">Stopping</h3>
 <p>One tap away from the line stops the trade at once: the next unit does not move. A trade also stops when the seller runs out, the buyer can't pay the next unit, the house stops trading (the store has sold all it will sell, or bought all it wants) or the clock ends.</p>
 <div class="box example"><h4>Example: two players meet</h4>
 <p>Water is posted at 25: the store buys at 22 and sells at 28. Ana has 6 spare Water and sells; Ben is short 3 and buys. Ana walks down from the top; Ben walks up from the bottom. Ana stops walking at 26; Ben walks up until he meets her at 26.</p>
-<p>They trade at Ana's ask of 26. The first unit moves after 0.4 s, the second 0.32 s later, the third 0.26 s after that. Ben, now even, taps ▼ and the trade stops. Ben paid 3 × 26 = 78; the store would have charged him 3 × 28 = 84. Ana received 78 less the sales tax of 1 per unit (5% of 26, rounded) = 75; the store would have paid her 3 × 22 = 66, less 1 tax each = 63.</p></div>
+<p>They trade at Ana's ask of 26. The first unit moves after 1 s, the second 0.8 s later, the third 0.64 s after that. Ben, now even, taps ▼ and the trade stops. Ben paid 3 × 26 = 78; the store would have charged him 3 × 28 = 84. Ana received 78 less the sales tax of 1 per unit (5% of 26, rounded) = 75; the store would have paid her 3 × 22 = 66, less 1 tax each = 63.</p></div>
 <div class="box why"><h4>Why it is like this</h4><p>Heiko, 5 Nov, after playing the walking rig: "the selling and buying process should start automatically when the buy and sell lanes meet. They should start slowly and then get faster and faster so that even large quantities can be sold. The question (How much do you want to sell to the store) is unnecessary, we shouldn't have this." The PM approved WS3's amendment as written (C1: no amount and no confirm at a house's line; C3: the same speed-up curve governs house lines). Heiko picked variant A for the display: the speed shown on the board and the words in the rail.</p></div>
 <p class="code-ref">In the code: <code>packages/engine/src/walk.ts::stepBoard</code>, <code>tradeInterval</code>, <code>houseLineAt</code> · <code>auction.ts::goodsMarket</code> (Quibbit first in line) · <code>config.ts::WALK.tradeStartMs</code>, <code>tradeSpeedUp</code>, <code>tradeFloorMs</code>, <code>tickMs</code> · <code>AuctionParts.tsx::lineHint</code>, <code>dealSpeed</code></p>
 <p class="owner">Kept current by: WS3.</p>
@@ -300,10 +300,10 @@
 <p class="code-ref">In the code: <code>apps/web/src/table/TableApp.tsx::TvAuction</code> · <code>apps/web/src/components/AuctionParts.tsx::TvReadout</code>, <code>StoreBox</code>, <code>ShipWants</code>, <code>StatusTable</code> · <code>packages/ui</code> <code>WalkBoard</code></p>
 <p class="owner">Kept current by: WS4 (TV), with WS6 for the shared auction parts.</p>
 
-<h2 id="slower-walk">Slower walking and slower trading <span class="pill progress">Being built</span></h2>
-<p>Walking up and down will be about a quarter slower, and trading at a meeting will start at about one unit a second, speeding up to at most five a second.</p>
+<h2 id="slower-walk">Slower walking and slower trading <span class="pill built">In the game</span></h2>
+<p>Walking up and down is about a quarter slower than it was, and trading at a meeting starts at about one unit a second, speeding up to at most five a second.</p>
 <div class="table-wrap"><table>
-<thead><tr><th>Value</th><th class="n">Today</th><th class="n">After #376</th><th>What it changes</th></tr></thead>
+<thead><tr><th>Value</th><th class="n">Before</th><th class="n">Now</th><th>What it changes</th></tr></thead>
 <tbody>
 <tr><td><code>WALK.crossSeconds</code></td><td class="n">6</td><td class="n">7.5</td><td>Seconds to cross a whole board</td></tr>
 <tr><td><code>WALK.minSpeed</code></td><td class="n">2</td><td class="n">1.6</td><td>Slowest walk, credits a second</td></tr>
@@ -315,7 +315,7 @@
 </table></div>
 <p>With the new values a deal reaches full speed at its 9th unit, about 4.4 seconds in, and moves 12 units in its first 5 seconds instead of 63.</p>
 <div class="box why"><h4>Why it is like this</h4><p>Heiko, 5 Nov: "the movement speed at the auction needs to be slightly reduced, walking up and down must be a bit slower." And, selling Water at the table: it sold too fast; start at about one unit a second and ramp up to at most five a second, "guess numbers", to be tested. The PM set the values as a value ruling and ruled that the land auction slows too, with its clock stretched to match (Heiko was told and did not object).</p></div>
-<div class="box next"><h4>What is changing</h4><p>WS3's PR #376 carries all five values. The simulator, before and after: auction time 54 to 59 seconds a month; units sold to the store 29.1 to 26.5; land sold 13 to 16; colonists short of Food or Water 50% to 58% (already a miss before this change; balance is done at the end, not now). Status on 5 Nov 07:13Z: one test still expected the old speed and was sent back to WS3.</p></div>
+<div class="box example"><h4>What the simulator measured</h4><p>Before and after the change: auction time 54 to 71 seconds a month; units sold to the store 29.1 to 26.4; land sold 13 to 16 lots. Balance is tuned at the end, not now.</p></div>
 <p class="code-ref">In the code: <code>packages/engine/src/config.ts::WALK</code>, <code>LOTS.walkMs</code></p>
 <p class="owner">Kept current by: WS3.</p>
 
@@ -326,16 +326,17 @@
 <p class="code-ref">In the code: <code>apps/web/src/phone/Auction.tsx</code> · <code>apps/web/src/table/TableApp.tsx::TvAuction</code></p>
 <p class="owner">Kept current by: WS6, with WS3 and WS4.</p>
 
-<h2 id="heiko-auction-rules">Heiko's auction rules of 5 November <span class="pill open">Being designed</span></h2>
+<h2 id="heiko-auction-rules">Heiko's auction rules of 5 November <span class="pill designed">Designed</span></h2>
 <p>Selling a Water surplus at the table on 5 Nov, Heiko sold too much and ended up short. He asked for four changes, in his words (shortened): "When I am selling it should auto-stop when I reached my equilibrium, it should get me up the store lane. If I still want to sell (in shortage) it must be a conscious decision … It should be possible to flip sides (buy / sell) within the auction. Below the store buying lane and above the store selling lane there should be safe or rest areas … so that I am not participating in the auction accidentally. When the store has no more goods to sell, buyers can walk up and drive the prices up further, trying to convince a seller to sell. The sell lane of the store is representing the latest bid price of the buyers."</p>
-<p>WS3 has drafted the rules (an amendment to its goods-auction spec) and WS6 is drawing the screens. Both are due at 20:00Z on 5 Nov for Heiko's approval; nothing is built until he approves. The draft's proposals:</p>
+<p>Heiko approved the rules on 5 Nov after seeing WS6's screens, choosing <strong>hold ▼ for one second</strong> as the way to sell into a shortage. They are designed, not built yet: the Auctions team (WS3) builds them next. Until then the game plays as the sections above describe.</p>
 
 <h3 id="rule-b-stop-at-need">B · You stop at your need</h3>
 <ul>
-<li>A seller who holds more than their need sells down to their need and then stops: the unit that would take them below need does not sell, and they are moved one step up off the line.</li>
-<li>To sell on into a shortage, you press ▼ again. That second press is the conscious decision; from then on you sell for the rest of that good, starting slow again.</li>
-<li>It applies to sales to the store, the ship and other players. A good you don't need (Smithore, Crystite and the like, when no factory of yours uses them) has no stop.</li>
-<li>Computer players press down again only if they had already decided to sell past their need.</li>
+<li>A seller who holds more than their need sells down to their need and then stops: the unit that would take them below need does not sell, and they are moved <strong>one step</strong> up off the line. The phone and the TV mark them as keeping their need.</li>
+<li>To sell on into a shortage, <strong>hold ▼ for one second</strong>. A tap, or a shorter hold, does nothing, so a thumb resting on the arrow never sells you short by accident. After the one-second hold you sell for the rest of that good, starting slow again. The phone says "To sell more, hold ▼: you'd be short next month".</li>
+<li>It applies to <strong>every</strong> sale: to the store, to the ship and to other players (Heiko, 5 Nov). A good you don't need (Smithore, Crystite and the like, when no factory of yours uses them) has no stop.</li>
+<li>There is no matching stop for buyers (Heiko, 5 Nov).</li>
+<li>Computer players hold ▼ again only if they had already decided to sell past their need.</li>
 </ul>
 
 <h3 id="rule-c-flip-sides">C · Flip sides during the auction</h3>
@@ -344,7 +345,7 @@
 <h3 id="rule-d-rest-zones">D · Rest zones with hard edges</h3>
 <ul>
 <li>Below the best buying line (the store's, or the ship's if higher) is the <strong>buyers' rest zone</strong>; above the store's selling line is the <strong>sellers' rest zone</strong>. Standing in your own rest zone you can't trade, because the other side can't reach you.</li>
-<li>Buyers can't walk below the board's bottom edge; sellers can't walk above the top edge.</li>
+<li>Buyers can't walk below the board's bottom edge; sellers can't walk above the top edge. The edges are hard: there is no extra "click" at a line you are allowed to cross, because crossing one is always a deliberate hold, and the one crossing that can cost you, selling below your need, is caught by rule B.</li>
 <li>Sellers always stop at the old buying line, even after the store has bought all it wants and no ship is in. (Today they can then walk down into the buyers' area.)</li>
 </ul>
 
@@ -352,17 +353,14 @@
 <ul>
 <li>When the store has none of the good left to sell, buyers may walk above its old selling line, up to one step below the top.</li>
 <li>Walking up never trades with a seller resting in the sellers' zone: the buyer stops one step below them. A seller who wants the bid walks down onto it, and then they trade.</li>
-<li>The store's selling line then shows the <strong>highest bid</strong> on the board ("Highest bid N"), so every seller sees what walking down would fetch. The store itself sells nothing.</li>
+<li>The store's selling line stays at its old price until a bid passes it, then shows the <strong>highest bid</strong> on the board ("Highest bid N"), so every seller sees what walking down would fetch. The store itself sells nothing.</li>
+<li>Every seller above that line is still resting: since a buyer can never walk past a resting seller, the highest bid is always below every resting seller.</li>
 </ul>
 
 <div class="box next"><h4>What is changing</h4>
-<p>Owners: WS3 the rules (draft amendment AM-1 to the goods-auction spec), WS6 the mock, WS1 the computer players' part. Two questions are open for Heiko in the draft:</p>
-<ol>
-<li>Does the stop at your need apply to sales between players too, or only at the store's line? WS3 recommends both, since either can leave you short.</li>
-<li>Should a buyer have the mirror stop, no more buying once they have enough? Not asked for; WS3 recommends not now.</li>
-</ol>
+<p><strong>Designed, not built yet.</strong> Approved by Heiko on 5 Nov. He chose hold ▼ for one second, the stop covers every sale, and buyers get no matching stop. To be built by the Auctions team (WS3) for the rules, with the UX team (WS6) for the phone and TV screens (mock <code>design/mocks/auction-rules</code>) and the Strategy team (WS1) for the computer players.</p>
 <p>How the store sets its prices after it sells out, and a wider gap between its buying and selling prices, are part of WS5's <a href="store-and-prices.html#store-pricing-design">store-pricing design</a>, not this one.</p></div>
-<p class="code-ref">In the code (where it would land): <code>packages/engine/src/walk.ts::stepBoard</code>, <code>sellerFloor</code> · <code>auction.ts::declareRole</code> · <code>packages/ai/src/hands/auction.ts</code> · draft: <code>docs/specs/2026-11-05-ws3-auction-auto-trade.md</code> §10 (WS3's branch, not on trunk)</p>
+<p class="code-ref">In the code (where it would land): <code>packages/engine/src/walk.ts::stepBoard</code>, <code>sellerFloor</code> · <code>auction.ts::declareRole</code> · <code>packages/ai/src/hands/auction.ts</code> · rules: <code>docs/specs/2026-11-05-ws3-auction-auto-trade.md</code> §10 AM-1 (WS3's branch <code>ws3-auction-rules-b-e</code>, a33879c4)</p>
 <p class="owner">Kept current by: WS3 (rules), WS6 (screens), WS1 (AI).</p>
 </article>
 </main>

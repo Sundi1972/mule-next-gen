@@ -6,10 +6,13 @@ import {
   buyMule,
   claimPlot,
   colonyFailed,
+  commission,
   createGame,
   createRng,
+  donate,
   electionDone,
   GAME,
+  GOOD_CONFIG,
   GOODS,
   newPolitics,
   grantDone,
@@ -151,7 +154,7 @@ describe('T-AC-6: score parts add up and score() is unchanged', () => {
         expect(parts.total).toBe(withOffice(state, p.id, parts.office));
         expect(parts.money).toBe(Math.round(p.money));
         for (const line of Object.values(parts)) expect(Number.isInteger(line)).toBe(true);
-        expect(parts.money + parts.goods + parts.land + parts.muleValue + parts.office).toBe(parts.total + parts.cut);
+        expect(parts.money + parts.goods + parts.land + parts.muleValue + parts.office + parts.donated).toBe(parts.total + parts.cut);
         if (!colonyFailed(state)) expect(parts.cut).toBe(0);
       }
     }
@@ -185,6 +188,7 @@ describe('T-AC-6: score parts add up and score() is unchanged', () => {
       mules: 5,
       muleValue: 750,
       office: 0,
+      donated: 0,
       cut: 0,
       total: 5300,
     });
@@ -202,6 +206,7 @@ describe('T-AC-6: score parts add up and score() is unchanged', () => {
       mules: 5,
       muleValue: 750,
       office: 0,
+      donated: 0,
       cut: 1060,
       total: 4240,
     });
@@ -259,5 +264,36 @@ describe('T-AC-6: score parts add up and score() is unchanged', () => {
     } finally {
       (POLITICS as { termScore: number }).termScore = saved;
     }
+  });
+
+  it.each([
+    { air: 0, total: 5300, cut: 0 },
+    { air: COLLAPSE_AIR, total: 4240, cut: 1060 },
+  ])('G-5: donations count 1:1 in Worth: 200 cr to the hospital leaves the donor\'s Worth as it was, and Collapse cuts them with the rest (air $air)', ({ air, total, cut }) => {
+    const state = workedExample({ money: 2140, air, plots: 6, mules: 5 });
+    state.politics = { ...state.politics!, governor: 'a', election: null };
+    commission(state, 'a', 'hospital');
+    expect(scoreParts(state, 'a')).toMatchObject({ donated: 0, total, cut });
+
+    donate(state, 'a', 'hospital', 200);
+    donate(state, 'b', 'hospital', 50);
+    expect(scoreParts(state, 'a'), 'money 200 lower, donations 200 higher').toMatchObject({ money: 1940, donated: 200, total, cut });
+    const parts = scoreParts(state, 'a');
+    expect(parts.money + parts.goods + parts.land + parts.muleValue + parts.office + parts.donated).toBe(parts.total + parts.cut);
+    expect(scoreParts(state, 'b').donated, "only b's own plaque lines").toBe(50);
+  });
+
+  it('G-5: a gift of goods counts at its reference price, not today\'s store price: 1 Electronics posted 20 below reference raises Worth by 20', () => {
+    const state = workedExample({ money: 2140, air: 0, plots: 6, mules: 5 });
+    state.politics = { ...state.politics!, governor: 'a', election: null };
+    commission(state, 'a', 'hospital');
+    const ref = GOOD_CONFIG.electronics.refPrice;
+    state.store.posted.electronics = ref - 20;
+    player(state, 'a').stock.electronics = 1;
+    const before = scoreParts(state, 'a');
+    expect(allPrices(state).electronics, 'Worth reads the posted price').toBe(ref - 20);
+
+    donate(state, 'a', 'hospital', 0, { electronics: 1 });
+    expect(scoreParts(state, 'a')).toMatchObject({ goods: before.goods - (ref - 20), donated: ref, total: before.total + 20 });
   });
 });

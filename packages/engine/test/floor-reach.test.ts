@@ -610,7 +610,7 @@ const TABLE: Row[] = [
     press: {
       game: (was, now) => {
         expect(tileOf(now, 7, 4).outfit).toBe('energy');
-        expect(a(now).carriedMule, 'AM-23: the Smithore MULE comes onto the lead').toBe('smithore');
+        expect(a(now).carriedMule, 'AM-35: the Smithore MULE comes onto the lead').toBe('smithore');
         expect([tileOf(now, 7, 4).filter, a(now).stock.alloy]).toEqual([false, a(was).stock.alloy]);
       },
     },
@@ -624,7 +624,7 @@ const TABLE: Row[] = [
     press: { game: (_, now) => expect([tileOf(now, 2, 1).outfit, a(now).carriedMule]).toEqual(['food', 'rareEarth']) },
   },
   {
-    row: '10 SWAP for the same outfit: dimmed, nothing to swap, said so; a press changes nothing (AM-23)',
+    row: '10 SWAP for the same outfit: dimmed, nothing to swap, said so; a press changes nothing (AM-35)',
     at: () => onTile(7, 4),
     game: (s) => void ((tileOf(s, 7, 4).runMonths = 4), (a(s).carriedMule = 'smithore')),
     reach: () => ({ kind: 'install', enabled: false, good: 'smithore', plot: { x: 7, y: 4 }, fromShore: false, replaces: 'smithore', why: { kind: 'sameGood' } }),
@@ -640,7 +640,7 @@ const TABLE: Row[] = [
     press: 'nothing',
   },
   {
-    row: '10 SWAP on the plot the led MULE was just swapped off: dimmed, said so; a press holds and never falls through to FIT FILTER (AM-23, PM ruling A)',
+    row: '10 SWAP on the plot the led MULE was just swapped off: dimmed, said so; a press holds and never falls through to FIT FILTER (AM-35, PM ruling A)',
     at: () => onTile(7, 4),
     game: (s) => void ((tileOf(s, 7, 4).outfit = 'energy'), Object.assign(a(s), { carriedMule: 'smithore', takenMule: { x: 7, y: 4, outfit: 'smithore', runMonths: 0, swapped: true }, stock: { ...a(s).stock, alloy: DEVELOPMENT.filterAlloy } })),
     reach: () => ({ kind: 'install', enabled: false, good: 'smithore', plot: { x: 7, y: 4 }, fromShore: false, replaces: 'energy', why: { kind: 'justSwapped' } }),

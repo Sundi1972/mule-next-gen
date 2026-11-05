@@ -32,9 +32,9 @@ const PLAYERS: PlayerView[] = [
 ];
 
 /** Lena's own lines: 1,000 cash + 600 of goods (6 units) + 3 plots + 2 MULEs, no office. They add up to her 2,800. */
-const LENAS_PARTS: MyView['worthParts'] = { money: 1_000, goods: 600, plots: 3, land: 3 * GAME.plotScore, mules: 2, muleValue: 300, office: 0, cut: 0 };
+const LENAS_PARTS: MyView['worthParts'] = { money: 1_000, goods: 600, plots: 3, land: 3 * GAME.plotScore, mules: 2, muleValue: 300, office: 0, donated: 0, cut: 0 };
 /** Ossa's, on her own phone: they add up to her 5,600. */
-const OSSAS_PARTS: MyView['worthParts'] = { money: 4_000, goods: 0, plots: 4, land: 4 * GAME.plotScore, mules: 2, muleValue: 400, office: 0, cut: 0 };
+const OSSAS_PARTS: MyView['worthParts'] = { money: 4_000, goods: 0, plots: 4, land: 4 * GAME.plotScore, mules: 2, muleValue: 400, office: 0, donated: 0, cut: 0 };
 
 function myView(id: string, extra: Partial<MyView> = {}): MyView {
   return {
