@@ -163,11 +163,12 @@
 <ul>
 <li>Installing over a plot's MULE <strong>swaps</strong>: the new MULE goes on the plot and you now lead the old one, with its outfit, as if you had taken it off.</li>
 <li>If you still lead that old MULE when your turn ends, it goes back to the store's corral. You get no money for it.</li>
-<li>Installing the same outfit over itself is refused: "Same outfit: nothing to swap".</li>
+<li>Installing the same outfit over itself is refused: the button is dimmed and reads "same outfit, nothing to swap".</li>
+<li>No SWAP on the plot your MULE was just swapped off, so a double tap can't swap back.</li>
 <li>A button to hand a MULE back to the corral mid-turn for a refund is in the backlog, for Heiko to decide.</li>
 </ul>
 <div class="box example"><h4>Example</h4><p>Lena's plains plot has a Food MULE. She leads in a new Energy MULE and presses SWAP. The Energy MULE now works the plains plot; Lena leads the Food MULE. She walks it to her bare river plot and installs it there: two working plots for the price of one MULE. Had she gone to the pub still leading it, it would have gone back to the corral.</p></div>
-<div class="box next"><h4>What is changing</h4><p>Ruled by Heiko on 5 Nov; the details (corral at turn end, no refund, same outfit refused) are the PM's ruling AM-12 the same day. Being built by the Auctions team (WS3) in the game rules, with named edits by the Strategy team (WS1) for the button and the computer players; the first failing test is on branch ws3-install-swap.</p></div>
+<div class="box next"><h4>What is changing</h4><p>Ruled by Heiko on 5 Nov; the details (corral at turn end, no refund, same outfit refused) are the PM's rulings the same day (spec amendment AM-23 in the arcade-walking spec). <strong>Being built (WS3, #383)</strong> by the Auctions team in the game rules, with named edits by the Strategy team (WS1) for the button and the computer players.</p></div>
 <p class="code-ref">In the code: <code>game.ts::installMule</code> · <code>packages/engine/src/floor/reach.ts::reachWords</code> (the SWAP words)</p>
 <p class="owner">Kept current by: the Auctions team (WS3).</p>
 

@@ -326,16 +326,17 @@
 <p class="code-ref">In the code: <code>apps/web/src/phone/Auction.tsx</code> · <code>apps/web/src/table/TableApp.tsx::TvAuction</code></p>
 <p class="owner">Kept current by: WS6, with WS3 and WS4.</p>
 
-<h2 id="heiko-auction-rules">Heiko's auction rules of 5 November <span class="pill open">Being designed</span></h2>
+<h2 id="heiko-auction-rules">Heiko's auction rules of 5 November <span class="pill designed">Designed</span></h2>
 <p>Selling a Water surplus at the table on 5 Nov, Heiko sold too much and ended up short. He asked for four changes, in his words (shortened): "When I am selling it should auto-stop when I reached my equilibrium, it should get me up the store lane. If I still want to sell (in shortage) it must be a conscious decision … It should be possible to flip sides (buy / sell) within the auction. Below the store buying lane and above the store selling lane there should be safe or rest areas … so that I am not participating in the auction accidentally. When the store has no more goods to sell, buyers can walk up and drive the prices up further, trying to convince a seller to sell. The sell lane of the store is representing the latest bid price of the buyers."</p>
-<p>WS3 has drafted the rules (an amendment to its goods-auction spec) and WS6 is drawing the screens. Both are due at 20:00Z on 5 Nov for Heiko's approval; nothing is built until he approves. The draft's proposals:</p>
+<p>Heiko approved the rules on 5 Nov after seeing WS6's screens, choosing <strong>hold ▼ for one second</strong> as the way to sell into a shortage. They are designed, not built yet: the Auctions team (WS3) builds them next. Until then the game plays as the sections above describe.</p>
 
 <h3 id="rule-b-stop-at-need">B · You stop at your need</h3>
 <ul>
-<li>A seller who holds more than their need sells down to their need and then stops: the unit that would take them below need does not sell, and they are moved one step up off the line.</li>
-<li>To sell on into a shortage, you press ▼ again. That second press is the conscious decision; from then on you sell for the rest of that good, starting slow again.</li>
-<li>It applies to sales to the store, the ship and other players. A good you don't need (Smithore, Crystite and the like, when no factory of yours uses them) has no stop.</li>
-<li>Computer players press down again only if they had already decided to sell past their need.</li>
+<li>A seller who holds more than their need sells down to their need and then stops: the unit that would take them below need does not sell, and they are moved <strong>one step</strong> up off the line. The phone and the TV mark them as keeping their need.</li>
+<li>To sell on into a shortage, <strong>hold ▼ for one second</strong>. A tap, or a shorter hold, does nothing, so a thumb resting on the arrow never sells you short by accident. After the one-second hold you sell for the rest of that good, starting slow again. The phone says "To sell more, hold ▼: you'd be short next month".</li>
+<li>It applies to <strong>every</strong> sale: to the store, to the ship and to other players (Heiko, 5 Nov). A good you don't need (Smithore, Crystite and the like, when no factory of yours uses them) has no stop.</li>
+<li>There is no matching stop for buyers (Heiko, 5 Nov).</li>
+<li>Computer players hold ▼ again only if they had already decided to sell past their need.</li>
 </ul>
 
 <h3 id="rule-c-flip-sides">C · Flip sides during the auction</h3>
@@ -344,7 +345,7 @@
 <h3 id="rule-d-rest-zones">D · Rest zones with hard edges</h3>
 <ul>
 <li>Below the best buying line (the store's, or the ship's if higher) is the <strong>buyers' rest zone</strong>; above the store's selling line is the <strong>sellers' rest zone</strong>. Standing in your own rest zone you can't trade, because the other side can't reach you.</li>
-<li>Buyers can't walk below the board's bottom edge; sellers can't walk above the top edge.</li>
+<li>Buyers can't walk below the board's bottom edge; sellers can't walk above the top edge. The edges are hard: there is no extra "click" at a line you are allowed to cross, because crossing one is always a deliberate hold, and the one crossing that can cost you, selling below your need, is caught by rule B.</li>
 <li>Sellers always stop at the old buying line, even after the store has bought all it wants and no ship is in. (Today they can then walk down into the buyers' area.)</li>
 </ul>
 
@@ -352,17 +353,14 @@
 <ul>
 <li>When the store has none of the good left to sell, buyers may walk above its old selling line, up to one step below the top.</li>
 <li>Walking up never trades with a seller resting in the sellers' zone: the buyer stops one step below them. A seller who wants the bid walks down onto it, and then they trade.</li>
-<li>The store's selling line then shows the <strong>highest bid</strong> on the board ("Highest bid N"), so every seller sees what walking down would fetch. The store itself sells nothing.</li>
+<li>The store's selling line stays at its old price until a bid passes it, then shows the <strong>highest bid</strong> on the board ("Highest bid N"), so every seller sees what walking down would fetch. The store itself sells nothing.</li>
+<li>Every seller above that line is still resting: since a buyer can never walk past a resting seller, the highest bid is always below every resting seller.</li>
 </ul>
 
 <div class="box next"><h4>What is changing</h4>
-<p>Owners: WS3 the rules (draft amendment AM-1 to the goods-auction spec), WS6 the mock, WS1 the computer players' part. Two questions are open for Heiko in the draft:</p>
-<ol>
-<li>Does the stop at your need apply to sales between players too, or only at the store's line? WS3 recommends both, since either can leave you short.</li>
-<li>Should a buyer have the mirror stop, no more buying once they have enough? Not asked for; WS3 recommends not now.</li>
-</ol>
+<p><strong>Designed, not built yet.</strong> Approved by Heiko on 5 Nov. He chose hold ▼ for one second, the stop covers every sale, and buyers get no matching stop. To be built by the Auctions team (WS3) for the rules, with the UX team (WS6) for the phone and TV screens (mock <code>design/mocks/auction-rules</code>) and the Strategy team (WS1) for the computer players.</p>
 <p>How the store sets its prices after it sells out, and a wider gap between its buying and selling prices, are part of WS5's <a href="store-and-prices.html#store-pricing-design">store-pricing design</a>, not this one.</p></div>
-<p class="code-ref">In the code (where it would land): <code>packages/engine/src/walk.ts::stepBoard</code>, <code>sellerFloor</code> · <code>auction.ts::declareRole</code> · <code>packages/ai/src/hands/auction.ts</code> · draft: <code>docs/specs/2026-11-05-ws3-auction-auto-trade.md</code> §10 (WS3's branch, not on trunk)</p>
+<p class="code-ref">In the code (where it would land): <code>packages/engine/src/walk.ts::stepBoard</code>, <code>sellerFloor</code> · <code>auction.ts::declareRole</code> · <code>packages/ai/src/hands/auction.ts</code> · rules: <code>docs/specs/2026-11-05-ws3-auction-auto-trade.md</code> §10 AM-1 (WS3's branch <code>ws3-auction-rules-b-e</code>, a33879c4)</p>
 <p class="owner">Kept current by: WS3 (rules), WS6 (screens), WS1 (AI).</p>
 </article>
 </main>
