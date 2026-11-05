@@ -8,6 +8,7 @@
  * run per UTC day. Each game's Smart seats together spend at most the game budget (default BRAIN.gameBudgetUsd).
  */
 import fs from 'node:fs';
+import path from 'node:path';
 import { BRAIN } from '@mule/engine';
 import { playbookSource, playGameAsync, ReplyRejected, simSeats, type Choice, type Decider, type DecisionRecord, type SeatSpec } from '@mule/ai';
 import { alreadyRanToday, AUTH_STOPPED, claimLedger, day, dayLedgerPath, KINDS, numberFlags, resolveDeps, runAsScript, type MainDeps } from './cli.js';
@@ -197,8 +198,39 @@ export interface TrialFlags {
 }
 
 const USAGE =
-  `Usage: brain:trial [--games N] [--seed S] [--smart K] [--playbooks 0|1] [--max-usd X] [--game-budget-usd Y], ` +
+  `Usage: brain:trial [--games N] [--seed S] [--smart K] [--playbooks 0|1] [--max-usd X] [--game-budget-usd Y] [--run label], ` +
   `Y above 0 and at most ${BRAIN.gameBudgetUsd.toFixed(2)}; nothing played.`;
+
+/** A run label: lowercase letters, digits and dashes, so it can only name a file in the data folder. */
+const LABEL = /^[a-z0-9-]{1,32}$/;
+
+/** `--run <label>` taken out of the flags: the label, null when not given, or undefined for a bad one. */
+function runLabel(argv: readonly string[]): { label: string | null; rest: readonly string[] } | undefined {
+  const at = argv.indexOf('--run');
+  if (at < 0) return { label: null, rest: argv };
+  const label = argv[at + 1];
+  if (label === undefined || !LABEL.test(label) || argv.indexOf('--run', at + 1) >= 0) return undefined;
+  return { label, rest: [...argv.slice(0, at), ...argv.slice(at + 2)] };
+}
+
+/** A paid run's ledger: trial-<day>.jsonl, or trial-<day>-<label>.jsonl for a labelled run. */
+export function trialLedgerPath(dataDir: string, at: Date, label: string | null): string {
+  return label === null ? dayLedgerPath(dataDir, 'trial', at) : path.join(dataDir, `trial-${day(at)}-${label}.jsonl`);
+}
+
+/** What every brain:trial ledger in the data folder has spent, all days and labels: its call lines' dollars. */
+export function trialSpent(dataDir: string): number {
+  if (!fs.existsSync(dataDir)) return 0;
+  const ledgers = fs.readdirSync(dataDir).filter((f) => /^trial-.*\.jsonl$/.test(f));
+  return sum(ledgers.flatMap((f) => readLedgerLines(path.join(dataDir, f)).filter(isCallLine).map((l) => l.usd)));
+}
+
+/** Why a paid run with this cap may not start, or null: the trial ledgers' total plus the cap would pass BRAIN.proofCapUsd. */
+export function proofCapRefusal(dataDir: string, maxUsd: number): string | null {
+  const spent = trialSpent(dataDir);
+  if (spent + maxUsd <= BRAIN.proofCapUsd) return null;
+  return `brain:trial would pass the PR-5 cap: the trial ledgers hold $${spent.toFixed(5)}, --max-usd ${capText(maxUsd)}, cap ${capText(BRAIN.proofCapUsd)}; nothing called.`;
+}
 
 /** The flags, or null for anything numberFlags refuses or a value out of range. */
 function parseFlags(argv: readonly string[]): TrialFlags | null {
@@ -279,8 +311,9 @@ export async function trial(
   deps: MainDeps = {},
 ): Promise<{ code: number; report: TrialReport | null }> {
   const { dataDir, out, now } = resolveDeps(deps);
-  const flags = parseFlags(argv);
-  if (!flags) {
+  const run = runLabel(argv);
+  const flags = run ? parseFlags(run.rest) : null;
+  if (!run || !flags) {
     out(USAGE);
     return { code: 1, report: null };
   }
@@ -294,10 +327,21 @@ export async function trial(
       out(`brain:trial spends real money with ${API_KEY_ENV} set: give --max-usd, the cap that was cleared; nothing called.`);
       return { code: 1, report: null };
     }
-    const logPath = dayLedgerPath(dataDir, 'trial', at);
-    const ranToday = alreadyRanToday(logPath, 'brain:trial');
-    if (ranToday) {
-      out(ranToday);
+    const logPath = trialLedgerPath(dataDir, at, run.label);
+    const used =
+      run.label === null
+        ? alreadyRanToday(logPath, 'brain:trial')
+        : fs.existsSync(logPath)
+          ? `${logPath} exists: run "${run.label}" already ran, and each run needs its own clearance; nothing called.`
+          : null;
+    if (used) {
+      out(used);
+      return { code: 1, report: null };
+    }
+    // One run a day used to stop an accidental overspend; with labels, the PR-5 cap across every trial ledger does.
+    const overCap = proofCapRefusal(dataDir, flags.maxUsd);
+    if (overCap) {
+      out(overCap);
       return { code: 1, report: null };
     }
     paid = { logPath, cap: flags.maxUsd };

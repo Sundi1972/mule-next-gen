@@ -1690,6 +1690,11 @@ export const BRAIN = {
    * equal share of it; past its share a seat plays Classic.
    */
   gameBudgetUsd: 1.0,
+  /**
+   * The PR-5 proof's total, in US dollars, across every brain:trial ledger (all days, all --run labels): a paid run
+   * whose --max-usd would carry the total past it is refused before any call (Heiko's cap, via the PM, 5 Nov).
+   */
+  proofCapUsd: 10,
   /** Hard ceiling, in US dollars, for the latency spike command. */
   spikeCapUsd: 0.05,
   /** US dollars per million tokens, for `model` (Haiku 5.5). */
