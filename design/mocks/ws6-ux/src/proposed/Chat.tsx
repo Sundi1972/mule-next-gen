@@ -240,7 +240,7 @@ export function FallbackBubble({ anchored = [] }: { anchored?: string[] }) {
 }
 
 /** The last few lines, newest first fading in. */
-export function Ticker({ size = 'phone', lines: keep }: { size?: 'phone' | 'tv'; /** Off unless given: the phone keeps 2, the TV 3. */ lines?: number }) {
+export function Ticker({ size = 'phone', lines: keep, wrap = false }: { size?: 'phone' | 'tv'; /** Off unless given: the phone keeps 2, the TV 3. */ lines?: number; /** A narrow column: each line wraps to at most three rows instead of being cut. */ wrap?: boolean }) {
   const chat = useChat();
   const lines = chat?.ticker ?? [];
   const tv = size === 'tv';
@@ -256,12 +256,15 @@ export function Ticker({ size = 'phone', lines: keep }: { size?: 'phone' | 'tv';
           return (
             <li
               key={l.id}
-              className={cx('flex min-w-0 items-center gap-1.5 truncate', tv ? 'text-xl' : 'text-[11px] @min-[1100px]/shell:text-sm', i === 0 ? 'animate-[show-card-in_0.25s_ease-out] text-ink' : 'text-ink-3', i > 0 && oneLine && '@max-[1100px]/shell:hidden')}
+              className={cx('min-w-0', wrap ? 'line-clamp-3 leading-tight' : 'flex items-center gap-1.5 truncate', tv ? 'text-xl' : 'text-[11px] @min-[1100px]/shell:text-sm', i === 0 ? 'animate-[show-card-in_0.25s_ease-out] text-ink' : 'text-ink-3', i > 0 && oneLine && '@max-[1100px]/shell:hidden')}
               data-testid={`chat-line-${l.id}`}
             >
-              <Creature species={p.species} color={SLOT_COLOR[p.slot]} size={tv ? 22 : 14} />
-              <strong className="shrink-0">{p.name}{l.to ? ' 🔒' : ''}:</strong>
-              <span className="truncate">{l.text}</span>
+              {/* In a narrow column the speaker and the words run on as one wrapped sentence. */}
+              <span className={wrap ? 'mr-1 inline-block align-[-3px]' : 'contents'}>
+                <Creature species={p.species} color={SLOT_COLOR[p.slot]} size={tv ? 22 : 14} />
+              </span>
+              <strong className={wrap ? '' : 'shrink-0'}>{p.name}{l.to ? ' 🔒' : ''}:</strong>
+              <span className={wrap ? '' : 'truncate'}>{wrap ? ' ' : ''}{l.text}</span>
             </li>
           );
         })}

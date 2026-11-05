@@ -1,6 +1,6 @@
 import { BRAIN, GAME, GOODS, type GameState, type Playbook, type PlayerId, type RecordedWrite, type Strategy } from '@mule/engine';
 import { OPTION_IDS } from '../decider.js';
-import { LAND_PATHS, type LandBrief, type LandPath } from './brief.js';
+import { LAND_OFFERS, LAND_PATHS, type EditOffer, type WriterBrief } from './brief.js';
 import { cleanLine } from './reply.js';
 import type { PlanEdit, ValidatePlan } from '../playbook/index.js';
 
@@ -38,27 +38,15 @@ type StrategyField = (typeof STRATEGY_FIELDS)[number];
 const fieldsFor = (corners: boolean): readonly StrategyField[] => (corners ? STRATEGY_FIELDS : STRATEGY_FIELDS.filter((f) => f !== 'monopolyTarget'));
 const strategyPath = (f: StrategyField) => `/strategy/${f}`;
 const FIELD_OF = new Map(STRATEGY_FIELDS.map((f) => [strategyPath(f), f]));
-const KNOWN_PATHS: readonly string[] = [...FIELD_OF.keys(), ...LAND_PATHS];
+/** A path is recorded in a refusal only when some brief offers it; any other comes back as null. */
+const knownPath = (path: string, brief: WriterBrief) => FIELD_OF.has(path) || (LAND_PATHS as readonly string[]).includes(path) || brief.offers.some((o) => o.path === path);
 
 const goodOrNull = { anyOf: [{ type: 'string', enum: [...GOODS] }, { type: 'null' }] };
-const CLAIMS = Array.from({ length: GAME.claimsPerGrant + 1 }, (_, i) => i);
-
-/** What each land path's `to` is: a plan's letter, a claim count, a press share. */
-const LAND_TO: Record<LandPath, object> = {
-  '/landGrant/ranked': { type: 'string', enum: [...OPTION_IDS] },
-  '/landGrant/claims': { type: 'integer', enum: CLAIMS },
-  '/landGrant/pressShare': {
-    type: 'object',
-    properties: { start: { type: 'number' }, end: { type: 'number' } },
-    required: ['start', 'end'],
-    additionalProperties: false,
-  },
-};
 
 export interface WriterSchema {
   type: 'object';
   properties: {
-    strategy: {
+    strategy?: {
       type: 'object';
       properties: Partial<Record<StrategyField, object>> & { kind: { type: 'string'; enum: string[] } };
       required: string[];
@@ -72,11 +60,28 @@ export interface WriterSchema {
 }
 
 /**
- * The reply's JSON schema for a seat: one per level's corners flag, so the request stays byte-stable. A seat that never
- * corners is offered neither 'monopolist' nor monopolyTarget. Plan letters are any option letter; the writer checks
- * them against the brief, and checks each reason's length (structured outputs take no string-length constraint).
+ * The reply's JSON schema for a brief: one per level's corners flag and offered paths, so the request stays
+ * byte-stable (the land brief's, by default). A seat that never corners is offered neither 'monopolist' nor
+ * monopolyTarget; a brief that offers no strategy has none in its schema. Plan letters are any option letter; the writer
+ * checks them against the brief, and checks each reason's length (structured outputs take no string-length constraint).
  */
-export function replySchema(corners: boolean): WriterSchema {
+/**
+ * The offers as schema branches: offers whose value has the same type share one branch, its paths an enum, in first-offer
+ * order. The API refuses a schema of one branch per path past a few dozen (an auction of 6 goods offers 30 paths), and
+ * offers of distinct types keep a branch each, so the land schema's bytes are unchanged.
+ */
+function byValueType(offers: readonly EditOffer[]): { paths: string[]; to: object }[] {
+  const branches = new Map<string, { paths: string[]; to: object }>();
+  for (const { path, to } of offers) {
+    const key = JSON.stringify(to);
+    const branch = branches.get(key);
+    if (branch) branch.paths.push(path);
+    else branches.set(key, { paths: [path], to });
+  }
+  return [...branches.values()];
+}
+
+export function replySchema(corners: boolean, offers: readonly EditOffer[] = LAND_OFFERS, strategyOffered = true): WriterSchema {
   const field: Record<StrategyField, object> = {
     kind: { type: 'string', enum: corners ? [...STRATEGY_KINDS] : STRATEGY_KINDS.filter((k) => k !== 'monopolist') },
     moneyMaker: goodOrNull,
@@ -85,21 +90,22 @@ export function replySchema(corners: boolean): WriterSchema {
     reason: { type: 'string' },
   };
   const fields = fieldsFor(corners);
+  const strategy: NonNullable<WriterSchema['properties']['strategy']> = {
+    type: 'object',
+    properties: Object.fromEntries(fields.map((f) => [f, field[f]])) as NonNullable<WriterSchema['properties']['strategy']>['properties'],
+    required: [...fields],
+    additionalProperties: false,
+  };
   return {
     type: 'object',
     properties: {
-      strategy: {
-        type: 'object',
-        properties: Object.fromEntries(fields.map((f) => [f, field[f]])) as WriterSchema['properties']['strategy']['properties'],
-        required: [...fields],
-        additionalProperties: false,
-      },
+      ...(strategyOffered ? { strategy } : {}),
       edits: {
         type: 'array',
         items: {
-          anyOf: LAND_PATHS.map((path) => ({
+          anyOf: byValueType(offers).map(({ paths, to }) => ({
             type: 'object',
-            properties: { path: { type: 'string', enum: [path] }, to: LAND_TO[path], reason: { type: 'string' } },
+            properties: { path: { type: 'string', enum: paths }, to, reason: { type: 'string' } },
             required: ['path', 'to', 'reason'],
             additionalProperties: false,
           })),
@@ -124,7 +130,7 @@ export type WriteComplete = (prompt: WriterPrompt, waitMs: number) => Promise<{ 
 
 /** What a writer call needs: the brief, whose strategy the accepted strategy fields are set on, the system text and the wait. */
 export interface WriteAsk {
-  brief: LandBrief;
+  brief: WriterBrief;
   system: string;
   waitMs: number;
 }
@@ -178,10 +184,10 @@ function readReply(text: string, stopReason: string | null): { edits: Proposed[]
 }
 
 /** One proposed edit: accepted, with its `to` resolved, or refused with its cause. */
-function judgeEdit(e: Proposed, brief: LandBrief, seen: Set<string>): { edit: PlanEdit } | { cause: Cause } {
+function judgeEdit(e: Proposed, brief: WriterBrief, seen: Set<string>): { edit: PlanEdit } | { cause: Cause } {
   const cornering = e.path === strategyPath('monopolyTarget') || (e.path === strategyPath('kind') && e.to === 'monopolist');
   if (!brief.corners && cornering) return { cause: 'never_corners' };
-  const offered: readonly string[] = e.fromStrategy ? fieldsFor(brief.corners).map(strategyPath) : LAND_PATHS;
+  const offered: readonly string[] = e.fromStrategy ? (brief.strategyOffered ? fieldsFor(brief.corners).map(strategyPath) : []) : brief.offers.map((o) => o.path);
   if (!offered.includes(e.path)) return { cause: 'path_not_offered' };
   if (seen.has(e.path)) return { cause: 'path_repeated' };
   seen.add(e.path);
@@ -199,6 +205,11 @@ function judgeEdit(e: Proposed, brief: LandBrief, seen: Set<string>): { edit: Pl
       const plan = brief.plans.find((p) => p.id === e.to);
       return plan ? { edit: { ...edit, to: plan.ranked } } : { cause: 'plan_not_offered' };
     }
+    case '/development/route':
+      // The schema's nulls stand for a field the act takes none of: the playbook's step leaves it out.
+      return Array.isArray(e.to)
+        ? { edit: { ...edit, to: e.to.map((s) => (isObject(s) ? Object.fromEntries(Object.entries(s).filter(([, v]) => v !== null)) : s)) } }
+        : { edit };
     default:
       return { edit };
   }
@@ -215,7 +226,7 @@ export async function writeReply(complete: WriteComplete, ask: WriteAsk): Promis
   const { brief } = ask;
   let answer: Awaited<ReturnType<WriteComplete>>;
   try {
-    answer = await complete({ system: ask.system, user: brief.text, schema: replySchema(brief.corners) }, ask.waitMs);
+    answer = await complete({ system: ask.system, user: brief.text, schema: replySchema(brief.corners, brief.offers, brief.strategyOffered) }, ask.waitMs);
   } catch {
     return unusableReply('no_reply');
   }
@@ -227,7 +238,7 @@ export async function writeReply(complete: WriteComplete, ask: WriteAsk): Promis
   const refused: Refusal[] = [];
   for (const e of read.edits) {
     const judged = judgeEdit(e, brief, seen);
-    if ('cause' in judged) refused.push({ path: KNOWN_PATHS.includes(e.path) ? e.path : null, cause: judged.cause });
+    if ('cause' in judged) refused.push({ path: knownPath(e.path, brief) ? e.path : null, cause: judged.cause });
     else accepted.push(judged.edit);
   }
   // The draft's strategy with the accepted strategy fields set; none accepted, no strategy in the reply.

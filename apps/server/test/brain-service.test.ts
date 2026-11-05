@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import Anthropic from '@anthropic-ai/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AI_LEVELS, AI_PERSONAS, BRAIN, createGame, observe, type Strategy } from '@mule/engine';
-import { Brain, candidate, consider, PERSONAS, replySchema, shortlist, TopPickDecider, WAIT_MS, type Complete, type Decider, type DecisionRecord, type LandBrief, type Mind, type Prompt } from '@mule/ai';
+import { LAND_OFFERS, Brain, candidate, consider, PERSONAS, replySchema, shortlist, TopPickDecider, WAIT_MS, type Complete, type Decider, type DecisionRecord, type LandBrief, type Mind, type Prompt } from '@mule/ai';
 import { WRITE_CALLS, type HaikuSdk } from '../src/brain/client.js';
 import { API_KEY_ENV, createBrain, type BrainSeat, type BrainService, type WriteAsk } from '../src/brain/index.js';
 import { NO_USAGE, type Usage } from '../src/brain/ledger.js';
@@ -52,7 +52,7 @@ const list = () =>
 
 const STRATEGY: Strategy = { kind: 'builder', moneyMaker: 'food', monopolyTarget: null, cashFloor: 200, landTarget: { plots: 6, byMonth: 6 }, stances: {}, reason: 'Grow steady.' };
 /** A land brief as playbooks.ts will hand the writer: one plan to pick, the draft's strategy to edit. */
-const BRIEF: LandBrief = { text: 'You are P0. The land brief.', plans: [{ id: 'A', label: 'Take the river', ranked: [{ plot: 12, value: 410 }] }], corners: true, strategy: STRATEGY };
+const BRIEF: LandBrief = { text: 'You are P0. The land brief.', plans: [{ id: 'A', label: 'Take the river', ranked: [{ plot: 12, value: 410 }] }], corners: true, strategy: STRATEGY, offers: LAND_OFFERS, strategyOffered: true };
 const ASK: WriteAsk = { brief: BRIEF, system: 'The manual.', waitMs: 5_000 };
 /** A writer reply the model could send: a strategy and one plan pick. */
 const WRITER_TEXT = JSON.stringify({
@@ -528,6 +528,21 @@ describe('brain service', () => {
 });
 
 describe('the playbook writer port', () => {
+  it("PR-5 5.4: writeModel sends every write to that model, not its kind's, and the ledger line names it (brain:trial --write-model)", async () => {
+    const models: string[] = [];
+    const sdk = fakeSdk((_n, params) => (models.push(params.model), sdkMessage(WRITER_TEXT, USED)));
+    const service = createBrain({ gameId: GAME, env: KEY, logPath: file, sdkFactory: () => sdk, now: ticking(), writeModel: BRAIN.writeFallbackModel });
+    const writer = service.writerFor(SEAT)!;
+    await writer.write('strategy', ASK);
+    await writer.write('playbook', ASK);
+    expect(BRAIN.writeCalls.strategy.model).not.toBe(BRAIN.writeFallbackModel);
+    expect(models).toEqual([BRAIN.writeFallbackModel, BRAIN.writeFallbackModel]);
+    expect(lines().map((l) => [l.kind, l.model])).toEqual([
+      ['strategy', BRAIN.writeFallbackModel],
+      ['playbook', BRAIN.writeFallbackModel],
+    ]);
+  });
+
   const MARK = 'MARK-sdk-text-4q';
   const USED = { input: 410, cached_read: 620, cache_write: 50, output: 38 };
   const apiError = (status: number) =>

@@ -36,7 +36,7 @@ export const LENAS_PLOTS = [
 ];
 
 const WELL = { foodShare: 1, foodNeed: 3, sick: false, sickBecause: null, conditionPace: 1 } as const;
-const colonist = (c: Partial<ColonistView> = {}): ColonistView => ({ at: 'store', walk: null, assayUntil: null, pace: 1, pelts: 0, encounter: null, ...c });
+const colonist = (c: Partial<ColonistView> = {}): ColonistView => ({ at: 'store', assayUntil: null, pace: 1, pelts: 0, encounter: null, ...c });
 
 export const PLAYERS: PlayerView[] = [
   aPlayer({ id: 's1', name: 'Lena', slot: 0, species: 'zipwing', money: 600, plots: 3, condition: WELL, colonist: colonist({ pace: 1.25 }) }),
@@ -55,7 +55,7 @@ export function lenasMe(over: Partial<MyView> = {}): MyView {
     stock: STOCK,
     carriedMule: null,
     installedThisTurn: false,
-    worthParts: { money: 0, goods: 0, plots: 0, land: 0, mules: 0, muleValue: 0, office: 0, cut: 0 },
+    worthParts: { money: 0, goods: 0, plots: 0, land: 0, mules: 0, muleValue: 0, office: 0, donated: 0, cut: 0 },
     claimsLeft: 0,
     hungry: false,
     sick: false,

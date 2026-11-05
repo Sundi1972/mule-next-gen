@@ -180,6 +180,19 @@ describe('Haiku client', () => {
     expect(f.message).not.toContain('sk-ant');
   });
 
+  it("FM-api-error: an answered error keeps its status and the API's error type when that is a plain identifier, never the API's text", async () => {
+    const refusedBy = (type: string) =>
+      fakeSdk(() => {
+        throw Anthropic.APIError.generate(400, { type: 'error', error: { type, message: 'sk-ant-LEAK Schema is too complex' } }, 'sk-ant-LEAK', new Headers());
+      });
+    const f = (await createWriteComplete(refusedBy('invalid_request_error'))('playbook', WRITE).catch((e: unknown) => e)) as CallFailed;
+    expect(f).toMatchObject({ outcome: 'error', status: 400, errorType: 'invalid_request_error' });
+    expect(JSON.stringify(f)).not.toContain('sk-ant');
+    // A type that is not a plain lowercase identifier is dropped, so no free text reaches the ledger.
+    const odd = (await createWriteComplete(refusedBy('sk-ant-LEAK x'))('playbook', WRITE).catch((e: unknown) => e)) as CallFailed;
+    expect(odd.errorType).toBeNull();
+  });
+
   it("FM-api-error: a non-SDK throw is also CallFailed 'error' with a short message", async () => {
     const sdk = fakeSdk(() => {
       throw new Error('boom '.repeat(100));

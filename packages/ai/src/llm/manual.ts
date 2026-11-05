@@ -141,9 +141,11 @@ const WORTH: Record<keyof ScoreParts, () => string> = {
   mules: () => 'how many of your plots have a MULE installed.',
   muleValue: () => "each installed MULE at the store's MULE price that day.",
   office: () => `${POLITICS.termScore} for each term you have served in office; 0 in a game without politics.`,
+  donated: () =>
+    "what you gave the colony's projects, credits plus goods at their reference price, as your plaques record it, counted one for one: a donation moves Worth from money and goods to this line. 0 in a game without politics.",
   cut: () =>
-    `what Collapse takes off every line, office included: 0 unless the colony's air is in Collapse (${COLLAPSE_AIR} or more of ${POLLUTION.airMax}), when the whole sum is multiplied by ${POLLUTION.collapseScore}.`,
-  total: () => 'your Worth: money + goods + land + muleValue + office, less the cut. The highest total wins.',
+    `what Collapse takes off every line, office and donations included: 0 unless the colony's air is in Collapse (${COLLAPSE_AIR} or more of ${POLLUTION.airMax}), when the whole sum is multiplied by ${POLLUTION.collapseScore}.`,
+  total: () => 'your Worth: money + goods + land + muleValue + office + donated, less the cut. The highest total wins.',
 };
 
 export const ADVICE: readonly AdviceLine[] = [

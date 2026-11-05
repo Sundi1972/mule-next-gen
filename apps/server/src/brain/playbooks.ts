@@ -1,6 +1,24 @@
-/** When a seat's brain asks for its land-grant playbook, and which playbook takes effect when the land grant starts. */
+/**
+ * When a seat's brain asks for its playbooks, and which takes effect (spec A RULE-A2, AM-A16): the month's land write
+ * carries the land grant's and the development's edits, taken at each of those phases' start; the auction's is asked in
+ * the production show and taken at the auction's start.
+ */
 import { BRAIN, type GameState, type Playbook, type PlayerId } from '@mule/engine';
-import { landBrief, playbookFrom, toolsFor, WRITER_SYSTEM, type AiSeat, type Feedback, type PlaybookSource, type ValidatePlan, type WhatIfSim, type WriterReply } from '@mule/ai';
+import {
+  landBrief,
+  phaseBrief,
+  playbookFrom,
+  toolsFor,
+  WRITER_SYSTEM,
+  type AiSeat,
+  type EditPhase,
+  type Feedback,
+  type PhaseFact,
+  type PlaybookSource,
+  type ValidatePlan,
+  type WhatIfSim,
+  type WriterReply,
+} from '@mule/ai';
 import type { PlaybookNote } from '../mule-game.js';
 import { WRITE_CALLS } from './client.js';
 import { timeSlicer } from './slice.js';
@@ -28,6 +46,29 @@ interface Ask {
   written: WriterReply | null;
   started: boolean;
   controller: AbortController;
+  /** A land ask's draft development for the month, whose edits ride on the land write (PM ruling, 5 Nov, option C). */
+  development?: Playbook | null;
+}
+
+const isDevelopmentPath = (path: string | null) => path !== null && path.startsWith('/development/');
+
+/**
+ * A land write's reply as two: the land grant's (strategy, land edits, the line, every other refusal) and the
+ * development's (its edits and refusals), or null when it has none of either.
+ */
+function splitDevelopment(written: WriterReply): { land: WriterReply; development: WriterReply | null } {
+  const { reply, refused } = written;
+  const devEdits = reply.edits.filter((e) => isDevelopmentPath(e.path));
+  const devRefused = refused.filter((r) => isDevelopmentPath(r.path));
+  const land: WriterReply = { reply: { ...reply, edits: reply.edits.filter((e) => !isDevelopmentPath(e.path)) }, refused: refused.filter((r) => !isDevelopmentPath(r.path)) };
+  if (devEdits.length === 0 && devRefused.length === 0) return { land, development: null };
+  return { land, development: { reply: { edits: devEdits, line: null }, refused: devRefused } };
+}
+
+/** Two feedbacks as one: the land write's, and the development part's it carried. */
+function joined(a: Feedback | null, b: Feedback | null): Feedback | null {
+  if (!a || !b) return a ?? b;
+  return { refused: [...a.refused, ...b.refused], rejected: [...a.rejected, ...b.rejected] };
 }
 
 const messageOf = (err: unknown) => (err instanceof Error ? err.message : String(err));
@@ -44,6 +85,10 @@ export class Playbooks {
   private readonly feedback = new Map<PlayerId, Feedback>();
   /** The writes still open, so a trial can let them settle before the land grant (settle). */
   private readonly open = new Set<Promise<unknown>>();
+  /** Each seat's open ask for the development or the auction, by `${seat}/${phase}`. */
+  private readonly phaseAsks = new Map<string, Ask>();
+  /** What the last reply for each seat's development or auction had refused, for that phase's next brief. */
+  private readonly phaseFeedback = new Map<string, Feedback>();
 
   constructor(private readonly options: PlaybooksOptions) {
     if (!options.source) return;
@@ -69,9 +114,16 @@ export class Playbooks {
         // What the rules and the writer refused of last month's reply. The seat's last PhaseOutcome joins it once its
         // producers write one (land: WS3; development and auction: WS9's playbook/outcome.ts); until then the brief
         // says nothing of it.
-        const last = { feedback: this.feedback.get(seat.id) ?? null };
-        const brief = landBrief(state, seat.mind, seat.brain.persona, drafted.land, seat.brain.heard(), last);
-        const ask: Ask = { month, draft: drafted.playbook, written: null, started: false, controller: new AbortController() };
+        const last = { feedback: joined(this.feedback.get(seat.id) ?? null, this.phaseFeedback.get(`${seat.id}/development`) ?? null) };
+        // The month's development rides on the land write, so its edits land every month (PM ruling, 5 Nov, option C).
+        let development: Playbook | null = null;
+        try {
+          development = seat.draft(state, 'development', month);
+        } catch (err) {
+          console.error(`playbooks: seat ${seat.id} has no development draft for month ${month}: ${messageOf(err)}`);
+        }
+        const brief = landBrief(state, seat.mind, seat.brain.persona, drafted.land, seat.brain.heard(), last, development?.development ?? null);
+        const ask: Ask = { month, draft: drafted.playbook, written: null, started: false, controller: new AbortController(), development };
         this.asks.set(seat.id, ask);
         seat.playbookAsked(month);
         const waitMs = WRITE_CALLS.strategy.timeoutMs;
@@ -121,6 +173,14 @@ export class Playbooks {
       if (asked) {
         asked.started = true;
         asked.controller.abort();
+        // The land grant plays the land part; the development part waits for its phase's start (takePhase).
+        if (asked.written) {
+          const { land, development } = splitDevelopment(asked.written);
+          asked.written = land;
+          if (development && asked.development) {
+            this.phaseAsks.set(`${seat.id}/development`, { month: state.month, draft: asked.development, written: development, started: false, controller: new AbortController() });
+          }
+        }
       }
       this.feedback.delete(seat.id);
       let now: Playbook;
@@ -137,6 +197,73 @@ export class Playbooks {
       // month's, since adopt keeps the newest month's playbooks only (WS9).
       seat.adopt(playbook);
       this.options.record?.({ seat: seat.id, month: state.month, phase: 'landGrant', playbook });
+    }
+  }
+
+  /**
+   * Asks each Smart seat's writer for its edits to `phase` in the slack before it: the game asks the auction's in the
+   * production show (spec A RULE-A2, AM-A16), with the development's outcome from `facts`, its public facts read before
+   * they reset. Returns at once; the phase's start (takePhase) cancels a call still open. No whatIf: its month sim plays
+   * land-grant playbooks.
+   */
+  askPhase(state: GameState, phase: EditPhase, facts: readonly PhaseFact[]): void {
+    if (!this.options.source) return;
+    for (const seat of this.options.seats) {
+      const writer = this.writers.get(seat.id);
+      if (!writer) continue;
+      const key = `${seat.id}/${phase}`;
+      try {
+        const draft = seat.draft(state, phase);
+        const outcome = phase === 'auction' ? seat.outcome('development', state, facts) : null;
+        const brief = phaseBrief(state, seat.mind, seat.brain.persona, draft, phase, seat.brain.heard(), { outcome, feedback: this.phaseFeedback.get(key) ?? null });
+        const ask: Ask = { month: state.month, draft, written: null, started: false, controller: new AbortController() };
+        this.phaseAsks.set(key, ask);
+        const waitMs = WRITE_CALLS.playbook.timeoutMs;
+        const write = writer
+          .write('playbook', { brief, system: WRITER_SYSTEM, waitMs, late: () => ask.started, signal: ask.controller.signal, tools: toolsFor(state, seat.id) })
+          .then(
+            (written) => {
+              if (!ask.started) ask.written = written;
+            },
+            (err: unknown) => console.error(`playbooks: seat ${seat.id}'s ${phase} write failed: ${messageOf(err)}`),
+          );
+        this.open.add(write);
+        void write.finally(() => this.open.delete(write));
+      } catch (err) {
+        console.error(`playbooks: seat ${seat.id} could not ask for its ${phase}: ${messageOf(err)}`);
+      }
+    }
+  }
+
+  /**
+   * `phase` has started: a call still open for it is cancelled and its reply would be late. A reply that came in time
+   * is applied to the draft its brief showed (the development's, to its draft as it starts); only a playbook carrying Claude's accepted edits is adopted and
+   * recorded. Otherwise nothing is adopted, so the seat plays the phase its own way (today's hands while
+   * AI_PLANS.ownPhases is off). The reply's feedback is kept for that phase's next brief.
+   */
+  takePhase(state: GameState, phase: EditPhase): void {
+    for (const seat of this.options.seats) {
+      const key = `${seat.id}/${phase}`;
+      const ask = this.phaseAsks.get(key);
+      if (!ask || ask.month !== state.month) continue;
+      ask.started = true;
+      ask.controller.abort();
+      this.phaseAsks.delete(key);
+      if (!ask.written) continue;
+      let made: ReturnType<typeof playbookFrom>;
+      try {
+        // The development's edits go onto its draft as it starts: the land write's was drafted at upkeep, before the land
+        // grant and auction changed what the seat owns. The auction's draft was made after production, and holds.
+        const draft = phase === 'development' ? seat.draft(state, 'development') : ask.draft;
+        made = playbookFrom(seat.validator(), state, draft, ask.written);
+      } catch (err) {
+        console.error(`playbooks: seat ${seat.id}'s ${phase} could not be drafted or validated, it plays its own way: ${messageOf(err)}`);
+        continue;
+      }
+      if (made.feedback) this.phaseFeedback.set(key, made.feedback);
+      if (made.playbook.by !== 'llm') continue;
+      seat.adopt(made.playbook);
+      this.options.record?.({ seat: seat.id, month: state.month, phase, playbook: made.playbook });
     }
   }
 

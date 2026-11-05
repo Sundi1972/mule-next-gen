@@ -49,6 +49,8 @@ export interface ShowFrame {
   tiles: MapTile[];
   grid: ShowGrid;
   cast: ShowCast;
+  /** The store's stock after the phase's events, when the caller has it. */
+  storeStock?: Partial<Record<Good, number>> | undefined;
   /** A plot's box, as percentages of the map. */
   cell(x: number, y: number): CSSProperties;
   /** A plot's centre, as percentages of the map. */
@@ -83,11 +85,13 @@ export interface EventShowProps {
   height: number;
   tiles: MapTile[];
   players: ShowPlayer[];
+  /** The store's stock per good as the view's market sends it, after the phase's events: a riot's shelves count from it. */
+  storeStock?: Partial<Record<Good, number>>;
   children: ReactNode;
 }
 
 /** Gives the layers inside it the show at `t`. Draws nothing itself. */
-export function EventShow({ events, introMs, t, start = 0, mode = 'tv', reduced = false, width, height, tiles, players, children }: EventShowProps) {
+export function EventShow({ events, introMs, t, start = 0, mode = 'tv', reduced = false, width, height, tiles, players, storeStock, children }: EventShowProps) {
   const s = useMemo(() => eventScript({ events, introMs }, start, mode), [events, introMs, start, mode]);
   const cast = useMemo(() => eventCast(tiles, players), [tiles, players]);
   const frame = useMemo<ShowFrame>(
@@ -98,10 +102,11 @@ export function EventShow({ events, introMs, t, start = 0, mode = 'tv', reduced 
       tiles,
       grid: { width, height },
       cast,
+      storeStock,
       cell: (x, y) => ({ left: `${(x / width) * 100}%`, top: `${(y / height) * 100}%`, width: `${100 / width}%`, height: `${100 / height}%` }),
       centre: (x, y) => ({ left: `${((x + 0.5) / width) * 100}%`, top: `${((y + 0.5) / height) * 100}%` }),
     }),
-    [s, t, reduced, tiles, width, height, cast],
+    [s, t, reduced, tiles, width, height, cast, storeStock],
   );
   return <FrameContext.Provider value={frame}>{children}</FrameContext.Provider>;
 }

@@ -44,6 +44,8 @@ export class CallFailed extends Error {
     readonly ms: number,
     /** The HTTP status the API answered with; null when no answer came (timeout, lost connection), so the bill is unknown. */
     readonly status: number | null = null,
+    /** The API's error type (e.g. invalid_request_error) when it is a plain identifier; never its text. */
+    readonly errorType: string | null = null,
   ) {
     super(message.slice(0, MAX_MESSAGE));
     this.name = 'CallFailed';
@@ -59,6 +61,12 @@ export function billUnknown(reply: HaikuReply | null, failure: unknown): boolean
   return !(failure instanceof CallFailed) || failure.status === null;
 }
 
+/** The error type in an API error's body, when it is a plain lowercase identifier: an enum value, never free text. */
+function errorTypeOf(body: unknown): string | null {
+  const type = (body as { error?: { type?: unknown } } | undefined)?.error?.type;
+  return typeof type === 'string' && /^[a-z_]{1,40}$/.test(type) ? type : null;
+}
+
 /** A failed SDK call as a CallFailed: timeout, auth (401/403), an answered status, or no answer. */
 export function fail(e: unknown, ms: number, waitMs: number, aborted: boolean): CallFailed {
   // Our own abort is checked first: an abort during the body read surfaces as a raw DOMException, not an SDK error.
@@ -68,7 +76,7 @@ export function fail(e: unknown, ms: number, waitMs: number, aborted: boolean): 
   if (e instanceof Anthropic.APIError) {
     const auth = e.status === 401 || e.status === 403;
     const what = e.status === undefined ? 'connection failed' : `api status ${e.status}`;
-    return new CallFailed(`model call failed: ${what}`, 'error', auth, ms, e.status ?? null);
+    return new CallFailed(`model call failed: ${what}`, 'error', auth, ms, e.status ?? null, errorTypeOf(e.error));
   }
   return new CallFailed('model call failed', 'error', false, ms);
 }

@@ -100,6 +100,9 @@ describe('B-AC-46-10: the TV council panel', () => {
     expect(textOf(html, 'tv-council-voted-count')).toBe('Voted 2 of 3');
     expect(textOf(html, 'tv-council-voted')).toContain('LenaVOTED ✓OssaVOTINGKaiVOTED ✓');
     expect(textOf(html, 'tv-laws')).toBe('Laws in forceExport tax 20% · since month 2');
+    // RULE-42: the tally reads each vote's weight when the ballot closes, not as it stood at the election.
+    expect(html).toContain('Each vote weighs by what its voter holds when the ballot closes: land, good name, taxes paid, the Land Baron.');
+    expect(html).not.toContain('as it did at the election');
   });
 
   it('B-AC-46-10: the reveal shows the weighted totals, the stamp and the result line, and never a player beside a vote', () => {
