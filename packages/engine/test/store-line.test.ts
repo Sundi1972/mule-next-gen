@@ -246,6 +246,19 @@ describe('RULE-2 in the engine: everyone takes part', () => {
     expect(a(state).walkers.map((w) => w.side)).toEqual(['buyer', 'buyer', 'buyer', 'buyer']);
   });
 
+  it('a buyer standing at the bottom edge never trades, even once the store has stopped buying (C2 pin)', () => {
+    const state = newGame();
+    state.players[0]!.stock.smithore = 5;
+    startAuction(state, ['smithore']);
+    a(state).storeBudget = 0; // the store buys nothing: no buying line under the seller
+    toWalk(state, { p0: 'seller' });
+    a(state).clockMs = 600_000;
+    setWalk(state, 'p0', -1);
+    const trades = run(state, 60_000);
+    expect(trades, 'the idle buyers have money but stand at the edge').toEqual([]);
+    expect(Math.round(walker(state, 'p0').price)).toBeGreaterThan(a(state).lo);
+  });
+
   it("'pass' is refused with the rules' words, on the status screen and in the walk", () => {
     const state = newGame();
     state.store.stock.food = 200;
