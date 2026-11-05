@@ -71,7 +71,7 @@ describe('C31: the colony score (RULE-25)', () => {
   });
 
   it('T-AC-38: a game without the council has no colony score', () => {
-    const state = createGame({ seed: 7, players: SEATS.map((id) => ({ id, name: id, isAi: false })) });
+    const state = createGame({ seed: 7, players: SEATS.map((id) => ({ id, name: id, isAi: false })), politics: false });
     expect(colonyScore(state)).toBeNull();
   });
 });
