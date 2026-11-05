@@ -83,11 +83,21 @@ export function outcomeOf(state: GameState, seats: readonly { id: string }[]): N
  */
 export function crashOutcomeOf(state: GameState | null, seats: readonly { id: string }[]): NonNullable<MuleRecord['outcome']> {
   const hash = sha256(stableJson(state));
+  let scores: Record<string, number>;
   try {
-    return { ...outcomeOf(state!, seats), stateHash: hash };
+    scores = Object.fromEntries(seats.map((s) => [s.id, score(state!, s.id)]));
   } catch {
     return { stateHash: hash };
   }
+  // The colony score reads more of the state than a seat's score does: if it throws on what the error left, the
+  // seats' scores are kept without it.
+  let colony: number | undefined;
+  try {
+    colony = colonyScore(state!)?.total;
+  } catch {
+    colony = undefined;
+  }
+  return { scores, ...(colony !== undefined ? { colonyScore: colony } : {}), stateHash: hash };
 }
 
 /** The server's own user errors: a refusal shown to the player, never a game error that ends the room. */
