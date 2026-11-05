@@ -6,7 +6,7 @@
 | Author | WS9 (AI Strategy) |
 | Approach | B, one value per unit, the newsvendor per-unit model (Heiko, 5 Nov) |
 | Owners | WS1 owns `value.ts` and `strategist.ts` and builds or OKs every edit there. WS9 owns `packages/ai/src/playbook/**`. WS3 owns `packages/engine/src/playbook.ts` (named edit). WS5 owns the store's and the ship's pricing (the §3 contract) |
-| Order | WS1's stopgap (ruled A), then WS1's AM-13/AM-17 Energy-rule valuation commit, then WS9's built-state fixtures PR, then this spec's PR-1. PR-1 replaces the stopgap's hard rules and that valuation commit with one model |
+| Order | WS1's stopgap (ruled A), then WS1's AM-17 Energy turn-off rule (`docs/specs/2026-10-21-ws1-balance.md` AM-17; engine side built on `ws1-energy-off` at 68f21e9e) and its AI valuation commit, then WS9's built-state fixtures PR, then this spec's PR-1. PR-1 replaces the stopgap's hard rules and that valuation commit with one model |
 | Measured on | trunk f6f3a275 (5 Nov), 40 games × seeds 1/101/201, `pnpm sim` defaults |
 
 ## §0 · Business Goals & Value `[handoff: goal lines and proofs; review-only: Who, Today, Value, cost]`
@@ -36,7 +36,7 @@ Food and hunger:
 | Seats hungry at development; their median cash | 88%, 1,227 cr | 89%, 1,189 | 89%, 1,176 |
 | Food at or below its reference: decisions planning any unit beyond next month's need | 22% | 23% | 16% |
 
-Energy, under the 50% rule (to be re-measured after AM-13):
+Energy, under the 50% rule (to be re-measured after WS1's AM-17):
 
 | | seed 1 | 101 | 201 |
 |---|---|---|---|
@@ -63,7 +63,7 @@ What the numbers show:
 - **Value:**
   - No AI starves or stalls with cash in hand, which is the thing Heiko saw.
   - The balance sim's shortage checks measure the economy, not this AI flaw.
-- **Proof, UBER-AC-1:** on the sim's three seed sets, measured under AM-13:
+- **Proof, UBER-AC-1:** on the sim's three seed sets, measured under WS1's AM-17:
   - (a) Take the seat-months where a seat enters a good's auction short of what it needs, the store holds that good, and the seat has cash for the whole shortfall at the store's ask. Fewer than 5% of them end the auction still short.
   - (b) Seat-months with production lost for want of Energy, while the store held Energy and the seat could pay, are under 5%.
 
@@ -134,7 +134,7 @@ HC-4  Behind AI_VALUE.model ('today' | 'unit'), default 'today' until Heiko rule
       PR-1's measurement. With 'today' the sim is byte-identical to trunk.
       source: PM ruling 5 Nov                                       breach: fatal
 HC-5  The engine is the only source of a rule the value reads: needs (monthNeeds,
-      needsOf), the Energy turn-off order (AM-13), spoilage, the depot, prices
+      needsOf), the Energy turn-off order (WS1's AM-17), spoilage, the depot, prices
       (outlook). Never a copy of a formula.   source: two copies drift   breach: decision
 HC-6  Every PR's sim report shows the colony's Food/Water shortage beside UBER-AC-1.
       source: PM ruling 5 Nov (colonists buy only from the store)   breach: decision
@@ -163,15 +163,18 @@ seam         packages/ai/src/value.ts::unitValues: every trade value and the
 senior       junior would: add a "short → buy" branch in tradeDecision (WS1's stopgap,
              widened) · senior does: one per-unit value whose short cost floors at the
              replacement price, so tradeDecision's existing "buy while value > ask" loop
-             buys the shortfall; reads AM-13's turn-off order from the engine, not a copy.
+             buys the shortfall; reads AM-17's turn-off order from the engine, not a copy.
 mechanism    branch_by_abstraction: unitValues dispatches on AI_VALUE.model
              ('today' → today's body unchanged; 'unit' → the new model)
 call sites   strategist.ts::goodPlan (strategist.ts:484) ·
              playbook/validate.ts::validatePlaybook's floorUnits (validate.ts:353)
 pin          AI_VALUE.model 'today': default, `--plays today` and politics-off sims
              byte-identical to trunk on 1/101/201 (T-AC-9)
-depends_on   C3 (the belief; stubbable: outlook.price) · AM-13 engine export of the
-             Energy turn-off order (WS1; data, not stubbable for Energy's RULE-2 row)
+depends_on   C3 (the belief; stubbable: outlook.price) · WS1's AM-17 order, EXPORTED from
+             the engine: on ws1-energy-off (68f21e9e) it is production.ts's private
+             turnedOff; RULE-2 needs it as an exported function, e.g.
+             energyOffOrder(state, playerId) → the seat's plots in turn-off order with
+             each one's use (a WS1 named edit in production.ts; data, not stubbable)
 ```
 
 ```
@@ -324,11 +327,15 @@ examples   Food, need 5, 0 held, belief 72, ask 72: q(0..4) = 1, S ≥ 72 → v 
 ```
 RULE-2 · What going without a unit costs                   shape: decision table
 
-inputs     good · k · belief (RULE-6) · the seat's plots and recipes · AM-13's order
+inputs     good · k · belief (RULE-6) · the seat's plots and recipes · AM-17's order
 first match wins
   #  good                  S(k)
-  1  energy                max(replace, 0.8 × output value of the plot AM-13's order
-                           turns off at the k-th missing unit, or a factory's whole run)
+  1  energy                max(replace, what the plot AM-17's order turns off at the
+                           k-th missing unit loses): a raw plot makes 20% of its output
+                           (rounded half up), so it loses the rest, and it gains no
+                           experience that month; a factory turned off uses ⌈0.2 × each
+                           input⌉ and makes 20%, or makes 0 without those inputs, so it
+                           loses the rest of its run (WS1's AM-17 rulings, 5 Nov)
   2  a factory input       max(replace, the factory run's output value ÷ its input units)
   3  food                  max(replace, today's hunger walking cost)
   4  water                 max(replace, today's half-a-farm share)
@@ -340,7 +347,8 @@ unknown    the order is empty (no plot needs Energy) → row 1 gives replace onl
            the belief is unknown (game ends) → the store's posted price today (outlook.final)
 outcome    → C1
 examples   Energy, 3 short, plots ranked [factory 2 Energy, farm 1, farm 1]: S(0..1) =
-           the factory's run, S(2) = 0.8 × the farm's output
+           the factory's run less what ⌈0.2 × inputs⌉ makes, S(2) = the farm's output
+           less its 20%, plus the experience month it misses
 ```
 
 ```
@@ -436,7 +444,7 @@ Every test runs with `AI_VALUE.model = 'unit'`, except T-AC-9.
 | AC | Given · When · Then | Changes | observed_at | negative case |
 |---|---|---|---|---|
 | **B-AC-1** (G-1) | Given a seat with 0 Food, needing 5, holding 1,200 cr, and the store selling Food at 72 · When the Food auction plays · Then it ends holding at least 5 | C1, C2 | the seat's stock after the auction hand runs (built state, `AuctionHand`) | the store holds no Food: no trade, no refusal |
-| **B-AC-2** (G-1, Energy) | Given a seat whose plots need 6 Energy, holding 1 Energy and enough cash, the store selling 6 · When the Energy auction and production play · Then no plot is turned off for want of Energy | C1, C2 | production's lines for the seat (no `noEnergy` part) | cash below one unit: plots turn off in AM-13's order |
+| **B-AC-2** (G-1, Energy) | Given a seat whose plots need 6 Energy, holding 1 Energy and enough cash, the store selling 6 · When the Energy auction and production play · Then no plot is turned off for want of Energy | C1, C2 | production's lines for the seat (no `noEnergy` part) | cash below one unit: plots turn off in AM-17's order |
 | **B-AC-3** (G-2) | Given Food's ask at or below its reference, a belief above the ask after spoilage and tax, and depot room · When the Food auction plays · Then the seat holds more than next month's need; with the ask ≥ 2× reference, no more than its need | C1, C3 | the seat's stock after the auction | a good that spoils fully: no surplus |
 | **B-AC-4** (G-3) | Given a playbook setting `expect` on Food above the ask · When the auction plays · Then the seat buys beyond its need; with no `expect`, it doesn't | C3, C5 | the stock after the auction | `expect` beyond the bound: clamped and listed in `rejected` |
 | **T-AC-1** (UBER-AC-1, serves B-AC-1, B-AC-2) | `pnpm sim`, 40 games × 1/101/201, prints UBER-AC-1 (a) and (b) beside the colony's Food/Water shortage | C6 | the sim report | — |
@@ -444,7 +452,7 @@ Every test runs with `AI_VALUE.model = 'unit'`, except T-AC-9.
 | **T-AC-3** (serves B-AC-2) | RULE-3 row 2: own Energy plots forecast 10, need 8, holding 2 → the seat does not sell below 2 + the units its forecast alone covers × q > 0 | C1 | the stock after the Energy auction | Rookie (no outlook): q = 1 for every needed unit |
 | **T-AC-4** (serves B-AC-2) | WS1's reserve example (value 411, ask 214, 1,355 cr, old reserve 1,157) → it buys | C2 | the stock after the auction | — |
 | **T-AC-5** (serves B-AC-1) | Short and funded: the pass candidate's gain is below the buy's; no veto | C4 | tradeDecision's shortlist | not funded: pass gain 0 |
-| **T-AC-6** (serves B-AC-2) | RULE-2 row 1's example: S(k) follows AM-13's turn-off order | C1 | unitValues' keep | no plot needing Energy: S = replace |
+| **T-AC-6** (serves B-AC-2) | RULE-2 row 1's example: S(k) follows AM-17's turn-off order | C1 | unitValues' keep | no plot needing Energy: S = replace |
 | **T-AC-7** (serves B-AC-3) | RULE-4's example: Ck ≈ 29.8 | C1 | unitValues | spoilage 1 → Ck 0 |
 | **T-AC-8** (serves B-AC-4) | `expect` within bounds is the belief; beyond them, clamped and listed in `rejected` | C3, C5 | the validator result and the belief | — |
 | **T-AC-9** (HC-4) | `AI_VALUE.model` 'today': default, `--plays today` and politics-off sims byte-identical to trunk on 1/101/201 | C1–C6 | the sim report | — |
@@ -464,8 +472,8 @@ Every test runs with `AI_VALUE.model = 'unit'`, except T-AC-9.
 
 - **AI buyers compete with the colony for the store's Food.** WS1's stopgap raised colonists short of Food or Water to 55–61%.
   - Mitigation: HC-6 puts the colony's row beside every UBER-AC-1. Supply itself is C29's finding.
-- **AM-13's turn-off order isn't on trunk yet.**
-  - Mitigation: Energy's RULE-2 row is the only consumer. PR-1 waits on WS1's AM-13/AM-17 commit, which the PM ordered first.
+- **AM-17's turn-off order isn't on trunk yet, and isn't exported.**
+  - Mitigation: Energy's RULE-2 row is the only consumer. PR-1 waits on WS1's AM-17 (ws1-energy-off, ordered first), plus the export C1 names.
 - **WS5's price paths aren't specced.**
   - Mitigation: PR-3 only. It stubs on `outlook.later` until WS5 freezes §3's contract.
 - **Sim-searched fixtures break on every AI change.**
@@ -473,7 +481,7 @@ Every test runs with `AI_VALUE.model = 'unit'`, except T-AC-9.
 - **Sim speed.** RULE-5 adds one ranking per goodPlan. It reuses the outlook goodPlan already builds, with no new rollout.
   - Mitigation: PR-1 reports the sim's wall time against trunk.
 - **Heavy tests.** T-AC-1 and T-AC-10 are `pnpm sim` report rows, measured at each PR and quoted in its body, never vitest tests. The B-ACs use built states, which keeps CI lean (the standing lean-CI rule) and clear of the vitest worker's 60 s RPC timeout on long synchronous tests.
-- No spike is needed: every input exists in the engine, or in AM-13 (ordered first).
+- No spike is needed: every input exists in the engine, or in WS1's AM-17 (ordered first).
 
 ## §8 · Amendments `[review-only]`
 
