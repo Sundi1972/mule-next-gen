@@ -114,8 +114,8 @@ describe("C2: the writer takes a phase brief's paths", () => {
     expect(JSON.stringify(of(later))).toBe(JSON.stringify(a));
     expect(sha(a)).not.toBe(sha(replySchema(true)));
     // The land request's schema from 5 Nov (option C): pinned, so a change to it is a deliberate cache reset.
-    expect(sha(a)).toBe('9f12206b149b580d2f1115b44dc114024895ccdde0e48925b2da7a2ee53f37a7');
-    expect(sha(replySchema(false, [...LAND_OFFERS, ...DEVELOPMENT_OFFERS], true))).toBe('cf2458e506ca0b0197abd4a3701a123cbea04829f6d12d51ccfd4cdf380506a6');
+    expect(sha(a)).toBe('87e780aae59a57a6aa8f6d24f9ec32e7af301fb93426757dbb48acb235fcdb02');
+    expect(sha(replySchema(false, [...LAND_OFFERS, ...DEVELOPMENT_OFFERS], true))).toBe('9d2ecadba756d64bd6c8420fc7bae591fa8bddfd3116ee6a96d3abea6c459b7c');
   });
 
   it("C2: a phase brief's schema offers its paths and no strategy; the request carries that schema", async () => {
