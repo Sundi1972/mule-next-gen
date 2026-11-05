@@ -1,5 +1,5 @@
 import type { ColonyGaugesView, ColonyProjectView, ColonyView, PlayerView } from '@mule/protocol';
-import type { PrestigeId } from '@mule/engine';
+import { COLONY_SCORE, type PrestigeId } from '@mule/engine';
 import { fmt } from './derive';
 
 /** The colony screens' words: mood and stage labels, the score's verdict, and who gave what. */
@@ -37,14 +37,11 @@ export const STAGE: Record<Stage, { label: string; chip: string }> = {
   damaged: { label: 'Damaged', chip: 'border-alert text-alert' },
 };
 
-// Placeholders until RULE-25 (C31, WS3) sets the score's scale.
-export const SCORE_PROUD_FROM = 100;
-export const SCORE_HELD_FROM = 50;
-
-/** The colony's verdict on its score: one line the table can repeat. */
+/** The colony's verdict on its score, at engine config's thresholds (COLONY_SCORE.verdict): one line the table can repeat. */
 export function scoreVerdict(score: ColonyScore): { title: string; tone: string } {
-  if (score.total >= SCORE_PROUD_FROM) return { title: 'A colony to be proud of', tone: 'text-ok' };
-  if (score.total >= SCORE_HELD_FROM) return { title: 'A colony that held together', tone: 'text-ink' };
+  const { proud, held } = COLONY_SCORE.verdict;
+  if (score.total >= proud) return { title: 'A colony to be proud of', tone: 'text-ok' };
+  if (score.total >= held) return { title: 'A colony that held together', tone: 'text-ink' };
   return { title: 'A colony in ruins', tone: 'text-alert-ink' };
 }
 

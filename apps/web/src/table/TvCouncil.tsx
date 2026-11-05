@@ -81,7 +81,7 @@ function TvLawBallot({ game, c }: { game: MuleView; c: CouncilView }) {
               );
             })}
           </ul>
-          <span className="text-lg text-ink-2">Each vote weighs as it did at the election: land, good name, taxes paid, the Land Baron.</span>
+          <span className="text-lg text-ink-2">Each vote weighs by what its voter holds when the ballot closes: land, good name, taxes paid, the Land Baron.</span>
         </section>
       </div>
     </>

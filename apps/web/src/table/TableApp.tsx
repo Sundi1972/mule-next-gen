@@ -4,7 +4,7 @@ import { AirGauge, Button, cx, GOOD_NAME, GoodIcon, GoodTag, HoloMap, PlayerMark
 import { Speaker, TvTicker, tvSpeakerAt } from '../chat/Chat';
 import { boardWalkers, dealLine, dealSpeed, newestFirst, shipWants, ShipWants, SIDE_WORD, skippedLine, StatusTable, StoreBox, TvReadout, WaitingToPick, type DealRow } from '../components/AuctionParts';
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { BuildSite, ColonyGauges, ColonyScoreBand, TvWinner } from '../components/Colony';
+import { BuildSite, ColonyGauges, ColonyScoreBand, TvWinner, useMonthEndDrift, type GaugeLanding } from '../components/Colony';
 import { CollapseBanner, ColonyPanel, LeagueTable, WinnerCard } from '../components/MonthEnd';
 import { joinUrl, Qr } from '../components/Qr';
 import { Scaled } from '../components/Scaled';
@@ -131,11 +131,12 @@ function TvLobby({ table }: { table: TableView<MuleView> }) {
 }
 
 /**
- * The TV's header: the month and the phase's title (after its `icon`, where it has one), the theme toggle, the colony's gauges (or the air gauge alone when
- * `gauges` is false, as game over and the goods auction keep it) and the clock, then the table chat. `ready`, a screen's
- * ready count, sits beside the title; with the colony's gauges too, they move to a row of their own under it, full
- * width, since title, chip and gauges don't share 1280 px (PM ruling, 5 Nov). `chatLines` is how many chat lines show:
- * three, or fewer where a screen needs the height; none hides the ticker.
+ * The TV's header: the month and the phase's title (after its `icon`, where it has one), the theme toggle, the colony's
+ * gauges (or the air gauge alone when `gauges` is false, as game over and the goods auction keep it) and the clock, then
+ * the table chat. `ready`, a screen's ready count, sits beside the title; with the colony's gauges too, they move to a
+ * row of their own under it, full width, since title, chip and gauges don't share 1280 px (PM ruling, 5 Nov).
+ * `landing` counts changes onto the gauges, wherever they sit. `chatLines` is how many chat lines show: three, or fewer
+ * where a screen needs the height; none hides the ticker.
  */
 export function TvHeader({
   game,
@@ -145,6 +146,7 @@ export function TvHeader({
   extra,
   ready,
   gauges = true,
+  landing,
   chatLines,
 }: {
   game: MuleView;
@@ -154,9 +156,10 @@ export function TvHeader({
   extra?: ReactNode;
   ready?: ReactNode;
   gauges?: boolean;
+  landing?: GaugeLanding | undefined;
   chatLines?: number;
 }) {
-  const colony = game.colony && gauges ? <ColonyGauges colony={game.colony} size="tv" className={ready ? 'w-full' : 'w-[760px]'} /> : null;
+  const colony = game.colony && gauges ? <ColonyGauges colony={game.colony} size="tv" className={ready ? 'w-full' : 'w-[760px]'} landing={landing} /> : null;
   const ownRow = colony !== null && ready !== undefined;
   // With a ready chip the title keeps one line and the chip its size; without one the header is as it always was: the
   // gauges give way to a long title ("Election day · the result").
@@ -189,6 +192,8 @@ export function TvHeader({
 
 function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView }) {
   const now = useServerNow(200);
+  // Here, where the TV stays mounted across phases, so the drift plays when it sees the month end come (WS8 PR-E2).
+  const drift = useMonthEndDrift(game);
   const tiles = mapTiles(game);
   const lit = game.lit ? tileAt(game, game.lit.x, game.lit.y) : undefined;
   const phase = game.phase;
@@ -205,7 +210,7 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
   if (phase === 'upkeep')
     return (
       <SeatSpeciesProvider value={seatSpecies(game)}>
-        <TvMonthEnd game={game} />
+        <TvMonthEnd game={game} drift={drift} />
       </SeatSpeciesProvider>
     );
   if (phase === 'planning' && game.politics?.election && game.politics.election.stage !== 'over') return <TvElection table={table} game={game} />;
@@ -719,11 +724,11 @@ function FitHeight({ className, gives = false, children }: { className?: string;
  * change since last month, and how the colony is doing. Public: totals only, each player's own lines are on their
  * phone (HC-4). It stays up until everyone moves on, and counts who has, as planning does.
  */
-export function TvMonthEnd({ game }: { game: MuleView }) {
+export function TvMonthEnd({ game, drift }: { game: MuleView; drift?: GaugeLanding | undefined }) {
   return (
     <div className="flex h-[720px] w-[1280px] flex-col gap-4 bg-table p-10 text-ink" data-phase={game.phase} data-testid="tv-monthend">
       <div className="flex flex-col gap-3">
-        <TvHeader game={game} title="End of the month" ready={<ReadyCount players={game.players} tv />} />
+        <TvHeader game={game} title="End of the month" ready={<ReadyCount players={game.players} tv />} landing={drift} />
       </div>
       {inCollapse(game) && <CollapseBanner density="tv" />}
       <FitHeight className="flex-1">
