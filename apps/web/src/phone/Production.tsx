@@ -31,6 +31,7 @@ import {
 } from '@mule/ui';
 import { mapTiles, slotOf } from '../game/derive';
 import { useClient, useServerNow } from '../net/react';
+import { connectedIn } from './hub/ready';
 import { usePhoneGame } from './game';
 import { PhoneShell } from './Shell';
 
@@ -65,7 +66,8 @@ export function Production({ production }: { production: ProductionView }) {
   const done = t >= showEnd(production);
   // Speed up (B-AC-20): with a TV in the room the rest of the show plays faster once every person has asked; the
   // computer players always agree. A phone alone keeps its tap-the-map skip instead.
-  const people = view.players.filter((p) => !p.isAi);
+  const connected = connectedIn(table.seats);
+  const people = view.players.filter((p) => !p.isAi && connected(p.id));
   const asked = new Set(production.hurry?.asked ?? []);
 
   return (
