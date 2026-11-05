@@ -293,9 +293,8 @@ describe("B-AC-46-4: next month's vote on every other phone", () => {
     expect(findTestid('agenda-law')).toBeUndefined();
     act(() => root!.unmount());
     root = null;
-    // The law ballot's reveal: the hub keeps its This month (the election would take the stage and hide it anyway).
+    // The law ballot's reveal holds the stage (law-ballot.test.ts), and no agenda line is drawn under it.
     mount(viewFor('s2', politics({ proposal: pending, council: { stage: 'reveal', proposal: { kind: 'enact', law: 'exportTax', setting: 10 }, proposer: 's1', impact: {}, voted: [], done: [], waitingFor: [], clockMs: 0, revealMs: 4000, result: { passed: true, yes: 2, no: 1, tie: false } } })));
-    byTestid('agenda');
     expect(findTestid('agenda-law'), 'no agenda line while a vote is open').toBeUndefined();
   });
 });
@@ -308,10 +307,9 @@ describe('B-AC-46-6 (negative): without politics', () => {
     expect(findTestid('agenda-law')).toBeUndefined();
   });
 
-  it("B-AC-46-6: while the votes are open the desk keeps today's sales tax and says when a law can be proposed", () => {
+  it("B-AC-46-6: while the law ballot is open the Governor's phone has the ballot on its stage, no picker", () => {
     mount(viewFor('s1', politics({ council: { stage: 'ballot', proposal: { kind: 'enact', law: 'landTax', setting: 10 }, proposer: 's1', impact: {}, voted: [], done: [], waitingFor: [], clockMs: 0, revealMs: 4000, result: null } })));
     expect(findTestid('picker-a')).toBeUndefined();
-    expect(findTestid('gov-tax'), "today's sales tax").toBeDefined();
-    expect(text('gov-law')).toContain('Propose once the votes are over');
+    byTestid('phone-ballot');
   });
 });

@@ -1,7 +1,7 @@
 import { DEVELOPMENT } from '@mule/engine';
 import { ChatBadge, MarketDesk, MarketStrip, TalkDesk } from './desks';
 import { ColonyWithFacts } from './politics/Colony';
-import { COUNCIL_DESK, ELECTION_AGENDA, ELECTION_DAY_STAGE, electionNow, electionReadyWords, GOVERNOR_AGENDA, GOVERNOR_DESK, LAW_AGENDA, OFFICES_BANNER } from './politics/slots';
+import { COUNCIL_DESK, COUNCIL_STAGE, councilNow, councilReadyWords, ELECTION_AGENDA, ELECTION_DAY_STAGE, electionNow, electionReadyWords, GOVERNOR_AGENDA, GOVERNOR_DESK, LAW_AGENDA, OFFICES_BANNER } from './politics/slots';
 import type { HubSlots } from './slots';
 import { DroneMap, DronePanel, DroneSend, ListAction, LookMap, LookPanel, SellPlotMap } from './tools';
 
@@ -44,7 +44,7 @@ export const HUB_SLOTS: HubSlots = {
     { id: 'market', label: 'Market', icon: 'M3 12l9-9h8v8l-9 9z M16 7h.01', Body: MarketDesk, tool: 'list' },
     GOVERNOR_DESK,
   ],
-  nows: [electionNow],
-  stage: [ELECTION_DAY_STAGE],
-  readyWords: [electionReadyWords],
+  nows: [councilNow, electionNow],
+  stage: [ELECTION_DAY_STAGE, COUNCIL_STAGE],
+  readyWords: [electionReadyWords, councilReadyWords],
 };
