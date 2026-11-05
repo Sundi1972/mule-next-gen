@@ -361,6 +361,20 @@ describe('G-5 AM-12: the colony score at every month end (variant A)', () => {
     expect(has(tv, 'colony-score-uncut')).toBe(false);
   });
 
+  it('B-AC-27-2: at six seats the band keeps the total, the change and the sum, and drops the words line and some of its size, so the league keeps its scale', () => {
+    const six = [...PLAYERS, aPlayer({ id: 's5', name: 'Ossa', slot: 4, worth: 4_100, lastWorth: 4_000 }), aPlayer({ id: 's6', name: 'Vik', slot: 5, worth: 3_900, lastWorth: 3_950 })];
+    const band = element(onTv(end(MONTH_7, { players: six }), TvMonthEnd), 'colony-band');
+    expect(said(band, 'colony-total')).toBe('36,676');
+    expect(said(band, 'colony-score-change')).toBe('↑ +2,069 since month 6');
+    expect(has(band, 'score-sum')).toBe(true);
+    expect(has(band, 'colony-score-words')).toBe(false);
+    expect(element(band, 'colony-total')).toContain('text-5xl');
+    // Four seats keep the mock's band whole.
+    const four = element(onTv(end(MONTH_7), TvMonthEnd), 'colony-band');
+    expect(has(four, 'colony-score-words')).toBe(true);
+    expect(element(four, 'colony-total')).toContain('text-6xl');
+  });
+
   it('B-AC-27-2: month 1’s end has no last month, so the TV shows the total and the sum with no change line', () => {
     const band = element(onTv(firstEnd(MONTH_1), TvMonthEnd), 'colony-band');
     expect(said(band, 'colony-total')).toBe('36,676');

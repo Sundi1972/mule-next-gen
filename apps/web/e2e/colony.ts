@@ -11,6 +11,7 @@ import { PHASE_MS } from '../../server/src/mule-game.js';
 import type { MuleServer } from '../../server/src/server.js';
 import { check, doneWithLand, held, launch, PHONE, PHONE_SMALL, startServer, TV } from './harness';
 import { ELECTION_WAIT_MS, PRESS_MS, readyThroughTheElection, voteThroughTheElection } from './politics-steps';
+import { shownWhole, theTvHeaderFits } from './tv-fit-steps';
 
 const SCALE = 0.25;
 const within = (ms: number) => ms * SCALE + 5_000;
@@ -176,6 +177,7 @@ async function main(): Promise<void> {
 main()
   .then(theMonthEndsMoodDrift)
   .then(theColonyScoreEveryMonthEnd)
+  .then(theMonthEndScoreAtSixSeats)
   .then(
   () => process.exit(0),
   (err: unknown) => {
@@ -394,6 +396,99 @@ async function theColonyScoreEveryMonthEnd(): Promise<void> {
     console.log(`e2e colony score every month end: ok (room ${code}, seed ${SEED})`);
   } catch (err) {
     console.error(`e2e colony score every month end: FAILED (seed ${SEED})`);
+    if (errors.length > 0) console.error(`page errors: ${errors.join('; ')}`);
+    throw err;
+  } finally {
+    await browser.close();
+    await server.close();
+  }
+}
+
+/** Below this the month end's league is hard to read from the couch (WS4's fit condition for #416). */
+const COUCH_SCALE = 0.8;
+
+/**
+ * B-AC-27-2 at a full table (WS4's TV-FIT, 1920×1080): six seats, month 2's end, the colony band up under the league.
+ * The header still fits (the chip clear of the gauges, nothing past the foot), the band and the league show whole, and
+ * the log gives the month end's scale with and without the band, against COUCH_SCALE. `MULE_E2E_SHOTS=<dir>` saves the TV.
+ */
+async function theMonthEndScoreAtSixSeats(): Promise<void> {
+  const SEED = seedFrom(process.env.MULE_E2E_SEED);
+  const { server, base } = await startServer({ maxMonths: 3, phaseScale: SCALE, seed: () => SEED });
+  const browser = await launch().catch(async (err: unknown) => {
+    await server.close();
+    throw err;
+  });
+  const errors: string[] = [];
+  try {
+    const phone = await (await browser.newContext(PHONE)).newPage();
+    phone.on('pageerror', (e) => errors.push(`phone: ${e.message}`));
+    await phone.goto(base);
+    await phone.getByPlaceholder('Heiko').fill('Lena');
+    await phone.getByRole('button', { name: 'Start a new game' }).click();
+    await phone.getByText("You're at the table").waitFor();
+    const code = (await phone.getByTestId('room-code').textContent())?.trim() ?? '';
+    for (let seat = 1; seat < 6; seat++) {
+      await phone.getByRole('button', { name: 'Add AI player' }).click();
+      await phone.locator('[data-testid=seats] li').nth(seat).waitFor();
+    }
+    const tv = await (await browser.newContext(TV)).newPage();
+    tv.on('pageerror', (e) => errors.push(`tv: ${e.message}`));
+    await tv.goto(`${base}/table?room=${code}`);
+    await tv.getByTestId('room-code').waitFor();
+    await phone.getByRole('button', { name: 'Start game' }).click();
+    const board = (): MuleView => {
+      const g = server.registry.get(code)?.viewFor(null).game;
+      check(g, `room ${code} has a game running`);
+      return g;
+    };
+    const throughTheMonth = async () => {
+      await readyThroughTheElection(phone, within(ELECTION_WAIT_MS) + PRESS_MS);
+      await doneWithLand(phone);
+      await throughTheLandAuction(phone, board);
+      await goToThePub(phone);
+      await pressDoneThroughTheAuction(phone, board);
+      await tv.getByTestId('tv-monthend').waitFor({ timeout: MONTH_END_MS });
+    };
+    await throughTheMonth();
+    await phone.locator('[data-phase=upkeep]').getByTestId('ready').click({ timeout: MONTH_END_MS });
+    await phone.locator('[data-phase=planning]').waitFor({ timeout: MONTH_END_MS });
+    await throughTheMonth();
+
+    const end = tv.getByTestId('tv-monthend');
+    check(board().month === 2 && board().players.length === 6, `month 2's end at six seats, got month ${board().month}, ${board().players.length} seats`);
+    await end.getByTestId('colony-band').getByTestId('colony-score-change').waitFor({ timeout: PRESS_MS });
+    check((await end.locator('[data-testid^=league-row-]').count()) === 6, 'six league rows on the TV');
+    const header = await theTvHeaderFits(tv, 'six-seat month end');
+    // Settled: read the scale until two reads a beat apart agree.
+    let scale = Number(await end.locator('[data-fit]').getAttribute('data-fit'));
+    for (let i = 0; i < 10; i++) {
+      await tv.waitForTimeout(300);
+      const again = Number(await end.locator('[data-fit]').getAttribute('data-fit'));
+      if (again === scale) break;
+      scale = again;
+    }
+    // What the band costs: the scale the same screen would have without it, from the unscaled heights of its parts.
+    const parts = await end.evaluate((root) => {
+      const box = root.querySelector('[data-fit]')!;
+      const band = root.querySelector('[data-testid=colony-band]') as HTMLElement;
+      // The left column holds the league, then the band; the right column the colony panel and the build site.
+      const league = band.parentElement!.firstElementChild as HTMLElement;
+      const right = band.parentElement!.nextElementSibling as HTMLElement;
+      return { box: box.clientHeight, league: league.offsetHeight, band: band.offsetHeight, right: right.offsetHeight };
+    });
+    const without = Math.min(1, parts.box / Math.max(parts.league, parts.right));
+    if (process.env.MULE_E2E_SHOTS) await tv.screenshot({ path: `${process.env.MULE_E2E_SHOTS}/tv-monthend-six-seats-month2.png` });
+    await shownWhole(tv, 'six-seat month end', ['[data-testid=colony-band]', '[data-testid=league-table]']);
+    console.log(
+      `✓ B-AC-27-2: six seats, month 2's end: the band under six league rows at scale ${scale.toFixed(3)} (${without.toFixed(3)} without the band; box ${parts.box} px, league ${parts.league}, band ${parts.band}, right column ${parts.right}); TV-FIT ${header}`,
+    );
+    if (scale < COUCH_SCALE) console.log(`  note: below the couch scale ${COUCH_SCALE}; without the band it would be ${without.toFixed(3)}`);
+
+    check(errors.length === 0, `no page errors: ${errors.join('; ')}`);
+    console.log(`e2e colony six seats: ok (room ${code}, seed ${SEED})`);
+  } catch (err) {
+    console.error(`e2e colony six seats: FAILED (seed ${SEED})`);
     if (errors.length > 0) console.error(`page errors: ${errors.join('; ')}`);
     throw err;
   } finally {
