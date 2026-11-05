@@ -502,13 +502,16 @@ export class DevelopHand {
     const mind = this.brain.mind;
     if (this.stage === 'start') {
       const obs = observe(state, mind.me);
-      // On the floor, a MULE led into development (one won at the land auction) is installed first: while it is led a
-      // plot's button offers INSTALL, not ANALYSE, so an analysis ahead of it would be refused (FM-led-analyse). Paid for
-      // already, it goes where it gains most, if it earns anything there at all; the analyses follow while the clock fits.
+      // A MULE led into development (one won at the land auction) is installed first: on the floor, while it is led a
+      // plot's button offers INSTALL, not ANALYSE or FIT FILTER, and the corral no BUY (FM-led-analyse); off it, the
+      // corral refuses a seat that leads one. Paid for already, it goes on the idle plot where it gains most, even at no
+      // gain (a factory it can't feed included): on the floor a MULE taken off a plot can be re-outfitted next month
+      // (Reach row 8a), and one led into the pub is lost (FM-led-no-gain). The analyses follow while the clock fits.
       const led = state.players.find((p) => p.id === mind.me)!.carriedMule;
-      const target = this.onFloor && led && led !== 'empty' ? bestInstall(obs, mind, led) : null;
-      const install = target && target.gain + target.cost > 0 ? state.tiles[target.index]! : null;
-      if (install) this.push({ type: 'install', x: install.x, y: install.y }, AI_HANDS.develop.installTapMs, `Install the MULE it leads on ${plotName(install)}`, ++this.group);
+      const target = led && led !== 'empty' ? bestInstall(obs, mind, led) : null;
+      const install = target ? state.tiles[target.index]! : null;
+      const tapMs = this.onFloor || this.at !== undefined ? AI_HANDS.develop.installTapMs : AI_HANDS.develop.installMs;
+      if (install) this.push({ type: 'install', x: install.x, y: install.y }, tapMs, `Install the MULE it leads on ${plotName(install)}`, ++this.group);
       for (const index of analysesWanted(obs, mind, secondsLeft)) {
         if (install && index === target!.index) continue;
         const t = state.tiles[index]!;
@@ -606,8 +609,11 @@ export class DevelopHand {
 
   private finish(state: GameState): void {
     const mind = this.brain.mind;
-    const analysed = state.players.find((p) => p.id === mind.me)!.analysed;
-    for (const index of filtersWanted(observe(state, mind.me), mind)) {
+    const { analysed, carriedMule } = state.players.find((p) => p.id === mind.me)!;
+    // On the floor, a seat still leading a MULE (with no idle plot to put it on) is offered INSTALL on every own plot, not
+    // ANALYSE or FIT FILTER: it walks to none of them (FM-led-no-gain).
+    const filters = this.onFloor && carriedMule ? [] : filtersWanted(observe(state, mind.me), mind);
+    for (const index of filters) {
       const t = state.tiles[index]!;
       const g = ++this.group;
       // On the floor an own plot not yet analysed offers ANALYSE before FIT FILTER (RULE-3 rows 10 and 11), so its
