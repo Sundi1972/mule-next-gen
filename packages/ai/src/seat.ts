@@ -373,7 +373,7 @@ export class AiSeat {
     if (!playbook || !part) return;
     if (path.by === 'own') this.say(state, 'develop', null, routeLabel(state, part.route), 'development');
     this.devPlayed = playbook;
-    this.develop.follow(state.month, { part: structuredClone(part), seed: this.options.seed, moneyMaker: playbook.strategy.moneyMaker });
+    this.develop.follow(state.month, { part: structuredClone(part), seed: this.options.seed, moneyMaker: playbook.strategy.moneyMaker, own: path.by === 'own' });
   }
 
   /**

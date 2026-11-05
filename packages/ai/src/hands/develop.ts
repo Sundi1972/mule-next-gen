@@ -31,7 +31,7 @@ import {
 } from '@mule/engine';
 import type { Act, AiAction } from '../actions.js';
 import type { Brain, Pending } from '../brain.js';
-import { draftMulePick } from '../playbook/draft.js';
+import { draftMulePick, keptOutfitEarns } from '../playbook/draft.js';
 import type { DevelopmentLog, DevelopmentStepLog } from '../playbook/outcome.js';
 import { floorDevWalk, leading, mapFactor, planSeconds, plotErrandSeconds, pubDoor, pubMargin, pubSeconds, tileMiddle, tripSeconds, type PlanStop } from '../floor-time.js';
 import { analysesWanted, developDecision, filtersWanted, outfitName, plotName, walkVeto, type DevAction, type DevWalk } from '../strategist.js';
@@ -103,6 +103,11 @@ export interface RoutePlay {
   seed: number;
   /** The strategy's money-maker, the own pick's lean. */
   moneyMaker: Good | null;
+  /**
+   * The seat's own draft, on the own path; false for an adopted part (WS2's writer, Claude's edits). Only its own is
+   * re-picked after its analyses and has MULEs added (AM-27): an adopted route plays as adopted.
+   */
+  own: boolean;
 }
 
 /** What became of a route step (RULE-11). A route step absent from the log was not reached. */
@@ -756,15 +761,16 @@ export class DevelopHand {
   /**
    * Releases the route's next run into the queue in today's shape: the scouting steps up to its next MULE, or that
    * MULE alone; at the route's end, the pub if it has none (row 8). With ifSoldOut 'pub' fired, only its filters and
-   * pub. In a route with analyses each MULE after one is the own pick made as it is reached, and after the route's last
-   * MULE the own pick adds MULEs until it says 'stop' (AM-27). False when nothing was left to release.
+   * pub. In the seat's own route with analyses each MULE after one is the own pick made as it is reached, and after the
+   * route's last MULE the own pick adds MULEs until it says 'stop' (AM-27); an adopted route plays as adopted. False
+   * when nothing was left to release.
    */
   private release(state: GameState, walk?: () => DevWalk): boolean {
     const r = this.route!;
     const steps = r.play.part.route;
     const before = this.queue.length;
     const d = AI_HANDS.develop;
-    const scouted = (upTo: number) => steps.slice(0, upTo).some((s) => s.act === 'analyse');
+    const scouted = (upTo: number) => r.play.own && steps.slice(0, upTo).some((s) => s.act === 'analyse');
     const mayAdd = () => scouted(steps.length) && !r.soldOut && !r.noMore && !steps.slice(r.at).some((s) => s.act === 'buyMule');
     while (r.at < steps.length) {
       const s = steps[r.at]!;
@@ -811,17 +817,18 @@ export class DevelopHand {
 
   /**
    * AM-27: the route's MULE at step `at`, picked again now its analyses are done, by the own pick. The same pick plays
-   * the route's group; another replaces it, 'ground analysed'; 'stop' drops it. Whether a MULE was queued.
+   * the route's group; another replaces it, its steps 'replaced'; 'stop' drops it, its steps 'skipped'; either noted
+   * 'ground analysed'. Whether a MULE was queued.
    */
   private repick(state: GameState, at: number, walk?: () => DevWalk): boolean {
     const r = this.route!;
     const [, outfit, install] = r.play.part.route.slice(at, at + MULE_PRESSES);
     const pick = this.ownPick(state, walk);
-    if (pick.kind === 'stop') return false;
-    if (pick.index === install!.plot && pick.outfit === outfit!.outfit) return this.routeMule(state, at);
+    if (pick.kind === 'install' && pick.index === install!.plot && pick.outfit === outfit!.outfit) return this.routeMule(state, at);
     this.muleSteps(state, install!.plot!, outfit!.outfit!).forEach(({ action, label }, i) =>
-      this.log({ action, label, ms: 0, group: 0, route: at + i }, false, 'replaced', 'ground analysed'),
+      this.log({ action, label, ms: 0, group: 0, route: at + i }, false, pick.kind === 'stop' ? 'skipped' : 'replaced', 'ground analysed'),
     );
+    if (pick.kind === 'stop') return false;
     this.pushMule(state, pick.index, pick.outfit);
     r.mules++;
     return true;
@@ -865,11 +872,12 @@ export class DevelopHand {
       }
     }
     // AM-27: a MULE it already leads (won at the land auction) is this MULE: not bought, nor outfitted again as it is.
+    // Kept as it is where it makes nothing on any of the seat's idle plots, its outfit says so.
     const led = state.players.find((p) => p.id === me)!.carriedMule;
     if (led !== null && (a.type === 'buyMule' || (a.type === 'outfit' && a.outfit === led && this.ledGroup === head.group))) {
       if (a.type === 'buyMule') this.ledGroup = head.group;
       this.queue.shift();
-      this.log(head, true, 'done', 'led');
+      this.log(head, true, 'done', a.type === 'outfit' && !keptOutfitEarns(state, this.brain.mind) ? 'kept outfit, no gain' : 'led');
       return false;
     }
     // The steps the hand added (a replacement, the analyses after a sold-out corral) are its own picks, played as they come.

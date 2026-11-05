@@ -10,6 +10,7 @@ import {
   GOODS,
   installMule,
   MS_PER_SECOND,
+  mulePrice,
   observe,
   outfitMule,
   RuleError,
@@ -23,16 +24,17 @@ import {
   type Good,
   type GoodPlay,
   type LandGrantPlay,
+  type Outfit,
   type PlanningPlay,
   type Playbook,
   type PlayerId,
   type Strategy,
 } from '@mule/engine';
 import { OPTION_IDS, TopPickDecider, toOptions, type Choice, type DecisionContext, type ShortOption } from '../decider.js';
-import { outlook } from '../outlook.js';
+import { outlook, productionsLeft } from '../outlook.js';
 import { PERSONAS, type DecisionKind } from '../personas.js';
-import { analysesWanted, developDecision, filtersWanted, goodPlan, landDecision, leaderOf, sellWanted, tradeDecision, type DevAction, type DevWalk, type LandPlan } from '../strategist.js';
-import type { Shortlist } from '../utility.js';
+import { analysesWanted, developDecision, filtersWanted, goodPlan, landDecision, leaderOf, sellWanted, tradeDecision, walkVeto, type DevAction, type DevWalk, type LandPlan } from '../strategist.js';
+import { candidate, shortlist, type Shortlist } from '../utility.js';
 import { beforeTax, canFeed, cashReserve, installGain, type Mind } from '../value.js';
 
 /**
@@ -230,7 +232,55 @@ const midSeconds = ([lo, hi]: [number, number]) => (lo + hi) / 2 / MS_PER_SECOND
 export function draftMulePick(input: DraftInput, k: number, walk: DevWalk | undefined, focus: Good | null): DevAction {
   const at: DraftInput = { ...input, phase: 'development' };
   const obs = observe(at.state, at.seat);
-  return topPick(at, obs, 'develop', `mule:${k}`, developDecision(obs, at.mind, k, walk, focus));
+  return topPick(at, obs, 'develop', `mule:${k}`, keepOutfit(obs, at.mind, developDecision(obs, at.mind, k, walk, focus), walk));
+}
+
+/** The outfit of the MULE the seat leads already fitted (one won at the land auction), or null. */
+function ledOutfit(obs: GameState, me: PlayerId): Outfit | null {
+  const carried = obs.players.find((p) => p.id === me)!.carriedMule;
+  return carried === null || carried === 'empty' ? null : carried;
+}
+
+/**
+ * AM-27: the pick for a MULE the seat leads already fitted keeps its outfit, so only its plot is picked: on the floor
+ * it cannot be fitted again (OUTFIT takes an empty MULE, RE-OUTFIT one taken off a plot this turn), and on taps a
+ * re-fit pays for an outfit twice. It is paid for, so the purchase's vetoes (the corral, the cash, the month's count)
+ * are not its; only the walk's is. With no plot the walk allows, 'stop'.
+ */
+function keepOutfit(obs: GameState, mind: Mind, list: Shortlist<DevAction>, walk: DevWalk | undefined): Shortlist<DevAction> {
+  const outfit = ledOutfit(obs, mind.me);
+  if (outfit === null) return list;
+  const walkOf = (index: number): string | null => {
+    if (!walk) return null;
+    const legs = walk.floor?.(index, outfit);
+    // As developDecision prices it: on the floor by the live legs, where the game walks by the corral and out.
+    const there = legs ? legs.there : walkSeconds(obs, mind.me, walk.at!, 'corral') + walkSeconds(obs, mind.me, 'corral', index);
+    return walkVeto(walk, there, legs ? legs.pub : 0);
+  };
+  const kept = list.all.flatMap((c) =>
+    c.action.kind === 'install' && c.action.outfit === outfit ? [candidate(c.key, c.label, c.action, c.value, c.considerations, walkOf(c.action.index))] : [],
+  );
+  const stop = list.all.filter((c) => c.action.kind === 'stop');
+  return shortlist(kept.some((c) => !c.veto) ? kept : stop, mind.level.shortlist, mind.level.shortlistTolerance);
+}
+
+/**
+ * AM-27: whether the MULE the seat leads already fitted makes anything over the game on one of its idle plots, kept
+ * as it is: its install gain with nothing left to pay for it and without what the MULE itself is worth at the end.
+ * True when it leads no fitted MULE.
+ */
+export function keptOutfitEarns(state: GameState, mind: Mind): boolean {
+  const obs = observe(state, mind.me);
+  const outfit = ledOutfit(obs, mind.me);
+  if (outfit === null) return true;
+  const o = outlook(obs, mind.me, { lookAhead: mind.level.lookAhead });
+  // installGain's residual for an idle plot (value.ts): the MULE's worth at the end, not what it makes.
+  const residual = productionsLeft(obs) > 0 ? mulePrice(obs) * STRATEGIST.residual : 0;
+  return obs.tiles.some((t) => {
+    if (t.owner !== mind.me || t.outfit) return false;
+    const { gain, cost } = installGain(obs, o, t, outfit, mind);
+    return gain + cost - residual > 0;
+  });
 }
 
 /**
@@ -283,7 +333,8 @@ function developmentPart(input: DraftInput, obs: GameState, moneyMaker: Good | n
   }
   // On the arcade floor the hand prices the walk by the live floor, which this draft does not read.
   for (let k = 0; k < mind.level.mulesPerMonth && route.length + MULE_STEPS < cap; k++) {
-    const mule: DevAction = topPick(input, copy, 'develop', `mule:${k}`, developDecision(copy, mind, k, { at, left, taps }, moneyMaker));
+    const walk: DevWalk = { at, left, taps };
+    const mule: DevAction = topPick(input, copy, 'develop', `mule:${k}`, keepOutfit(copy, mind, developDecision(copy, mind, k, walk, moneyMaker), walk));
     if (mule.kind === 'stop') break;
     const led = leadOut(copy, me, mule);
     if (led instanceof RuleError) {
