@@ -191,34 +191,71 @@ export function energyUseOf(state: GameState, tile: Tile): number {
   return UPKEEP.energyUse[tile.outfit as RawGood];
 }
 
-/** One plot in AM-17's turn-off list: its Energy use this month and its full output. */
-export interface EnergyOffPlot {
+/** Water a working plot uses a month: by good for raw plots, by recipe for factories (a recipe's Water is its use). */
+export function waterUseOf(_state: GameState, tile: Tile): number {
+  if (!tile.owner || !tile.outfit || tile.outfit === 'greenBelt') return 0;
+  if (isFactory(tile.outfit)) return RECIPES[tile.outfit].inputs.water ?? 0;
+  return UPKEEP.waterUse[tile.outfit as RawGood];
+}
+
+/** The two base resources every working plot uses, and whose shortage turns plots off. */
+export type BaseGood = 'energy' | 'water';
+
+/** One plot in a turn-off list: its use of the base good this month and its full output. */
+export interface OffPlot {
   tile: Tile;
   use: number;
   full: number;
 }
+/** AM-17's name for an entry of the Energy list. */
+export type EnergyOffPlot = OffPlot;
+
+/** A plot that makes a base good: it pays its own use from its own output and is never turned off. */
+export function isBaseProducer(tile: Tile): boolean {
+  return tile.outfit === 'energy' || tile.outfit === 'water';
+}
+
+/** A plot's use of a base good this month; `cold` multiplies Energy only. */
+export function baseUseOf(state: GameState, tile: Tile, good: BaseGood, cold = 1): number {
+  return good === 'energy' ? energyUseOf(state, tile) * cold : waterUseOf(state, tile);
+}
 
 /**
- * An owner's working plots but its Energy plots, in AM-17's turn-off order: biggest use first, then the one whose full
- * output is worth least at the store's posted price, then tile order. A factory whose non-Energy inputs are not in
- * stock is left out: it runs in production's second pass, after the raw plots and the listed factories, on the inputs
- * made this month and the Energy left over, and so turns nothing else off. `cold` multiplies every use; by default it
- * is the cold snap's factor if one is among this month's filed events.
+ * An owner's working plots but its base producers (Energy and Water plots), in turn-off order for `good`: biggest use
+ * first, then the one whose full output is worth least at the store's posted price, then tile order. A factory whose
+ * inputs other than Energy and Water are not in stock is left out: it runs in production's second pass. `cold`
+ * multiplies every Energy use (not Water). `skip` leaves out plots already turned off for the other good.
  */
-export function energyOffOrder(state: GameState, playerId: string, cold = coldFactor(state.monthEvents)): EnergyOffPlot[] {
+export function baseOffOrder(
+  state: GameState,
+  playerId: string,
+  good: BaseGood,
+  cold = coldFactor(state.monthEvents),
+  skip: ReadonlySet<Tile> = new Set(),
+): OffPlot[] {
   const owner = state.players.find((p) => p.id === playerId);
   if (!owner) return [];
   const at = new Map(state.tiles.map((t, i) => [t, i]));
-  const worth = (p: EnergyOffPlot) => state.store.posted[p.tile.outfit as Good] * p.full;
+  const worth = (p: OffPlot) => state.store.posted[p.tile.outfit as Good] * p.full;
   return state.tiles
-    .filter((t) => t.owner === playerId && t.outfit && t.outfit !== 'energy' && t.outfit !== 'greenBelt')
+    .filter((t) => t.owner === playerId && t.outfit && t.outfit !== 'greenBelt' && !isBaseProducer(t) && !skip.has(t))
     .filter((t) => !isFactory(t.outfit!) || hasStock(owner.stock, feedOf(t.outfit)))
     .map((tile) => ({
       tile,
-      use: energyUseOf(state, tile) * cold,
+      use: baseUseOf(state, tile, good, cold),
       full: isFactory(tile.outfit!) ? factoryFit(state, tile, tile.outfit, playerId).output : rawOutput(state, tile),
     }))
     .sort((a, b) => b.use - a.use || worth(a) - worth(b) || at.get(a.tile)! - at.get(b.tile)!);
+}
+
+/** AM-17's Energy turn-off list (WS9's spec names it): baseOffOrder for Energy. */
+export function energyOffOrder(state: GameState, playerId: string, cold = coldFactor(state.monthEvents)): EnergyOffPlot[] {
+  return baseOffOrder(state, playerId, 'energy', cold);
+}
+
+/** Water an owner's household and crew drink at upkeep, kept back from the plots: the household drinks first. */
+export function drinkReserve(state: GameState, playerId: string): number {
+  return needsOf(state, playerId).water;
 }
 
 /** The factor every Energy use is multiplied by when a cold snap is among `events`, else 1. */
@@ -244,9 +281,9 @@ const offShare = (n: number) => Math.round(n * UPKEEP.offOutputShare);
 /** What a turned-off factory takes of an input: UPKEEP.offOutputShare of it, rounded up, so nothing is made from nothing. */
 const offInput = (n: number) => Math.ceil(n * UPKEEP.offOutputShare);
 
-/** A factory's recipe inputs but its Energy. */
-function feedOf(good: ProcessedGood): Partial<Stock> {
-  const { energy: _, ...feed } = RECIPES[good].inputs;
+/** A factory's recipe inputs but its Energy and Water, the base goods it uses. */
+export function feedOf(good: ProcessedGood): Partial<Stock> {
+  const { energy: _e, water: _w, ...feed } = RECIPES[good].inputs;
   return feed;
 }
 
@@ -309,81 +346,106 @@ export function runProduction(state: GameState): {
     lines.push({ tile: indexOf.get(tile)!, good, made, parts });
     ran.add(tile);
   };
-  /** Cuts what the parts add up to to UPKEEP.shortOutputShare, rounding down, as a part of its own. */
-  const halve = (parts: Part[], why: Part['why']) => {
-    const made = parts.reduce((n, p) => n + p.delta, 0);
-    if (made > 0) parts.push({ why, delta: Math.floor(made * UPKEEP.shortOutputShare) - made });
-  };
+  type OffWhy = 'energyOff' | 'waterOff';
   /** Cuts what the parts add up to to the turned-off share, as a part of its own. */
-  const switchOff = (parts: Part[]) => {
+  const switchOff = (parts: Part[], why: OffWhy) => {
     const made = parts.reduce((n, p) => n + p.delta, 0);
-    if (made > 0) parts.push({ why: 'energyOff', delta: offShare(made) - made });
+    if (made > 0) parts.push({ why, delta: offShare(made) - made });
   };
   const use = (tile: Tile) => energyUseOf(state, tile) * cold;
-  /** Runs a factory: on, from its full inputs and Energy, or not at all without them; off, from its share of inputs. */
-  const runFactory = (tile: Tile, good: ProcessedGood, isOff: boolean) => {
+  const drink = new Map(state.players.map((p) => [p.id, drinkReserve(state, p.id)]));
+  /** Water an owner may give its plots: what it holds above what the household will drink. */
+  const spare = (owner: { id: string; stock: Stock }) => Math.max(0, owner.stock.water - drink.get(owner.id)!);
+  /** Runs a factory: on, from its full inputs, Energy and Water, or not at all without them; off, from its share of inputs. */
+  const runFactory = (tile: Tile, good: ProcessedGood, offWhy: OffWhy | undefined) => {
     const owner = playerById.get(tile.owner!)!;
     const fit = factoryFit(state, tile, good, owner.id);
     const feed = feedOf(good);
     const parts: Part[] = [{ why: 'factory', delta: fit.output }];
-    if (isOff) {
+    if (offWhy) {
       // Turned off it still files its line: the share it made, or 0 when the factories before it took its inputs. A
       // share that rounds to 0 takes no inputs: nothing is spent for nothing.
       const share = Object.fromEntries(Object.entries(feed).map(([g, q]) => [g, offInput(q)]));
-      if (offShare(fit.output) === 0) parts.push({ why: 'energyOff', delta: 0 - fit.output });
+      if (offShare(fit.output) === 0) parts.push({ why: offWhy, delta: 0 - fit.output });
       else if (hasStock(owner.stock, share)) {
         addStock(owner.stock, share, -1);
-        switchOff(parts);
-      } else parts.push({ why: 'energyOff', delta: 0 - fit.output });
+        switchOff(parts, offWhy);
+      } else parts.push({ why: offWhy, delta: 0 - fit.output });
       credit(tile, good, parts);
       return;
     }
+    const water = waterUseOf(state, tile);
     const inputs = { ...feed, energy: fit.energy * cold };
-    if (!hasStock(owner.stock, inputs)) return;
-    addStock(owner.stock, inputs, -1);
+    if (!hasStock(owner.stock, inputs) || spare(owner) < water) return;
+    addStock(owner.stock, { ...inputs, water }, -1);
     credit(tile, good, parts);
   };
 
+  // Base producers first. Each pays its own use from what it just made, never more than that, so it never draws the
+  // stock for its own good; it is never turned off.
   for (const tile of working.filter((t) => t.outfit === 'energy')) {
     credit(tile, 'energy', rawOutputParts(state, tile));
-    // The plant pays its own use from what it just made: never more than that, so it never draws the stock.
     const made = lines.at(-1)!.made;
     playerById.get(tile.owner!)!.stock.energy -= Math.min(Math.max(0, made), use(tile));
   }
-
-  const off = new Set<Tile>();
-  const listed = new Set<Tile>();
-  for (const owner of state.players) {
-    const order = energyOffOrder(state, owner.id, cold);
-    for (const { tile } of order) listed.add(tile);
-    for (const tile of turnedOff(order, owner.stock.energy)) off.add(tile);
+  for (const tile of working.filter((t) => t.outfit === 'water')) {
+    credit(tile, 'water', rawOutputParts(state, tile));
+    const made = lines.at(-1)!.made;
+    playerById.get(tile.owner!)!.stock.water -= Math.min(Math.max(0, made), waterUseOf(state, tile));
+  }
+  // Cross-use: a well takes its Energy, a plant its Water (above the household's drink), from the stock before any other
+  // plot, as much as is there; short, it still runs.
+  for (const tile of working.filter((t) => t.outfit === 'water')) {
+    const owner = playerById.get(tile.owner!)!;
+    owner.stock.energy -= Math.min(Math.max(0, owner.stock.energy), use(tile));
+  }
+  for (const tile of working.filter((t) => t.outfit === 'energy')) {
+    const owner = playerById.get(tile.owner!)!;
+    owner.stock.water -= Math.min(spare(owner), waterUseOf(state, tile));
   }
 
-  // Who is short of Water is decided before anything runs, so a well
-  // harvested this month waters next month's crops, not this month's.
-  const dry = new Set(state.players.filter((p) => p.stock.water < needsOf(state, p.id).water).map((p) => p.id));
+  // The turn-off passes, per owner: Energy then Water (UPKEEP.waterPassFirst swaps them). A plot off in the first pass
+  // is not in the second's list: it uses neither good.
+  const off = new Map<Tile, OffWhy>();
+  const listed = new Set<Tile>();
+  const passes: BaseGood[] = UPKEEP.waterPassFirst ? ['water', 'energy'] : ['energy', 'water'];
+  for (const owner of state.players) {
+    for (const good of passes) {
+      const order = baseOffOrder(state, owner.id, good, cold, new Set(off.keys()));
+      for (const { tile } of order) listed.add(tile);
+      const stock = good === 'energy' ? owner.stock.energy : spare(owner);
+      for (const tile of turnedOff(order, stock)) off.set(tile, good === 'energy' ? 'energyOff' : 'waterOff');
+    }
+  }
 
-  for (const tile of working.filter((t) => t.outfit !== 'energy' && isRaw(t.outfit!))) {
+  for (const tile of working.filter((t) => !isBaseProducer(t) && isRaw(t.outfit!))) {
     const owner = playerById.get(tile.owner!)!;
     const good = tile.outfit as RawGood;
     const parts = rawOutputParts(state, tile);
-    if (off.has(tile)) switchOff(parts);
-    else owner.stock.energy -= use(tile);
-    if (dry.has(owner.id) && UPKEEP.irrigated.includes(good)) halve(parts, 'noWater');
+    const why = off.get(tile);
+    if (why) switchOff(parts, why);
+    else {
+      owner.stock.energy -= use(tile);
+      owner.stock.water -= waterUseOf(state, tile);
+    }
     credit(tile, good, parts);
   }
 
   for (const good of PROCESSED_GOODS) {
-    for (const tile of working.filter((t) => t.outfit === good && listed.has(t))) runFactory(tile, good, off.has(tile));
+    for (const tile of working.filter((t) => t.outfit === good && listed.has(t))) runFactory(tile, good, off.get(tile));
   }
-  // The second pass: the factories left out of the list, on this month's inputs and the Energy the rest left over.
+  // The second pass: the factories left out of the lists, on this month's inputs and the Energy and Water the rest left.
   for (const good of PROCESSED_GOODS) {
     for (const tile of working.filter((t) => t.outfit === good && !listed.has(t))) {
       const owner = playerById.get(tile.owner!)!;
       if (!hasStock(owner.stock, feedOf(good))) continue;
-      const short = owner.stock.energy < factoryFit(state, tile, good, owner.id).energy * cold;
-      if (short) off.add(tile);
-      runFactory(tile, good, short);
+      const noEnergy = owner.stock.energy < factoryFit(state, tile, good, owner.id).energy * cold;
+      const noWater = spare(owner) < waterUseOf(state, tile);
+      const why: OffWhy | undefined = UPKEEP.waterPassFirst
+        ? noWater ? 'waterOff' : noEnergy ? 'energyOff' : undefined
+        : noEnergy ? 'energyOff' : noWater ? 'waterOff' : undefined;
+      if (why) off.set(tile, why);
+      runFactory(tile, good, why);
     }
   }
 
@@ -427,8 +489,9 @@ export function monthNeeds(state: GameState, playerId: string): Stock {
   for (const t of state.tiles) {
     if (t.owner !== playerId || !t.outfit || t.outfit === 'greenBelt') continue;
     need.energy += energyUseOf(state, t);
+    need.water += waterUseOf(state, t);
     if (!isFactory(t.outfit)) continue;
-    for (const [g, q] of Object.entries(RECIPES[t.outfit].inputs) as [Good, number][]) if (g !== 'energy') need[g] += q;
+    for (const [g, q] of Object.entries(RECIPES[t.outfit].inputs) as [Good, number][]) if (g !== 'energy' && g !== 'water') need[g] += q;
   }
   if (airBand(state.air).sickens) need.medicine = 1;
   return need;

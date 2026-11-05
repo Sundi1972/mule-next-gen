@@ -1,7 +1,7 @@
 import { EXPORT_DEMAND, EXPORT_SHIP, GAME, GOOD_CONFIG, MULE, POLLUTION, PRICE, RECIPES, UPKEEP } from './config.js';
 import { fundIn } from './colony.js';
 import { airBand } from './pollution.js';
-import { energyUseOf, needsOf } from './production.js';
+import { energyUseOf, needsOf, waterUseOf } from './production.js';
 import { createRng } from './rng.js';
 import { emptyStock } from './stock.js';
 import { GOODS, type ExportShip, type GameState, type Good, type Stock } from './types.js';
@@ -83,7 +83,10 @@ export function playersUse(state: GameState): { food: number; water: number; ene
     use.food += needs.food;
     use.water += needs.water;
   }
-  for (const t of state.tiles) use.energy += energyUseOf(state, t);
+  for (const t of state.tiles) {
+    use.energy += energyUseOf(state, t);
+    use.water += waterUseOf(state, t);
+  }
   return use;
 }
 

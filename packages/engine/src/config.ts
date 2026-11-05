@@ -67,8 +67,8 @@ export const EXPORT_DEMAND: Partial<Record<Good, number>> = {
 
 /** Factory recipes: inputs consumed per unit of output. */
 export const RECIPES: Record<ProcessedGood, { inputs: Partial<Stock>; output: number }> = {
-  alloy: { inputs: { smithore: 2, energy: 2 }, output: 2 },
-  electronics: { inputs: { rareEarth: 1, alloy: 1, energy: 1 }, output: 1 },
+  alloy: { inputs: { smithore: 2, energy: 2, water: 1 }, output: 2 },
+  electronics: { inputs: { rareEarth: 1, alloy: 1, energy: 1, water: 1 }, output: 1 },
   medicine: { inputs: { food: 1, water: 1, energy: 1 }, output: 2 },
 };
 
@@ -227,6 +227,15 @@ export const UPKEEP = {
    * takes none when its share of output rounds to 0 (PM, 5 Nov: nothing spent for nothing).
    */
   offOutputShare: 0.2,
+  /**
+   * Water a raw plot uses a month, by what it makes (proposal, measured). Factories use what their recipe says: a
+   * recipe's Water is the factory's Water use, as its Energy is its Energy use. A Water plot pays its use from its own
+   * output and is never turned off; an owner short of Water after the household drinks turns its other plots off,
+   * biggest use first, until the rest fit.
+   */
+  waterUse: { food: 2, water: 1, energy: 1, smithore: 1, crystite: 1, rareEarth: 1 } satisfies Record<RawGood, number>,
+  /** Measurement switch: the Water pass runs before the Energy pass. */
+  waterPassFirst: false,
   /**
    * Plots that need irrigation: when their owner holds less Water than the
    * household and crew need, they make half (on top of any Energy shortfall).

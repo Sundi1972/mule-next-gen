@@ -334,7 +334,7 @@ export interface ProductionLine {
    * screens and fixtures that still name it; the engine no longer files it.
    */
   parts: {
-    why: 'ground' | 'trait' | 'species' | 'cluster' | 'pollution' | 'floor' | 'noEnergy' | 'energyOff' | 'noWater' | 'event' | 'factory' | 'special';
+    why: 'ground' | 'trait' | 'species' | 'cluster' | 'pollution' | 'floor' | 'noEnergy' | 'energyOff' | 'noWater' | 'waterOff' | 'event' | 'factory' | 'special';
     delta: number;
     event?: EventKey;
   }[];
