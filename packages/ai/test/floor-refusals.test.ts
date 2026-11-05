@@ -194,4 +194,28 @@ describe("the arcade floor's AI bugs of 5 Nov (FM-glint-install, FM-led-analyse,
     expect(me.carriedMule, 'no MULE left on the lead').toBeNull();
     expect(tileAt(state.tiles, state.width, plot.x, plot.y)!.outfit, 'the MULE on its plot').not.toBeNull();
   });
+
+  it('FM-led-analyse: a seat that starts development leading a lot MULE installs it first, and no analysis it sets off for is refused', () => {
+    // A MULE won at the land auction is led into development (lots.ts: carriedMule = the lot's outfit). While it leads one,
+    // a plot's button offers INSTALL, not ANALYSE, so analyses queued ahead of the install are refused on the plot.
+    const state = development(4);
+    const store = state.tiles.find((t) => t.terrain === 'store')!;
+    const near = state.tiles
+      .filter((t) => t.owner === null && t.terrain !== 'lake' && t.terrain !== 'store' && !t.special)
+      .sort((a, b) => Math.abs(a.x - store.x) + Math.abs(a.y - store.y) - (Math.abs(b.x - store.x) + Math.abs(b.y - store.y)));
+    for (const t of near.slice(0, 4)) t.owner = ME;
+    const me = state.players.find((p) => p.id === ME)!;
+    me.carriedMule = 'food';
+    const cfg = quietConfig();
+    const seat = new AiSeat({ id: ME, name: 'AI 1', persona: 'trader', level: 'trader', seed: 11 });
+    playTurn(state, cfg, seat);
+    const log = seat.developLog();
+    const shown = JSON.stringify(log);
+    expect(log.some((e) => e.action.type === 'analyse'), `it wanted an analysis: ${shown}`).toBe(true);
+    // The promise: no walk to an analysis the button then refuses, and the MULE it was given is on a plot of its own.
+    expect(log.filter((e) => e.action.type === 'analyse' && !e.ok && e.why !== 'no time'), shown).toEqual([]);
+    const first = log[0]?.action;
+    expect(first?.type === 'install' && log[0]!.ok, `the lot MULE installed first: ${shown}`).toBe(true);
+    if (first?.type === 'install') expect(tileAt(state.tiles, state.width, first.x, first.y)!.outfit, 'the lot MULE on its plot').toBe('food');
+  });
 });
