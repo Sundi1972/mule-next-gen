@@ -59,9 +59,9 @@ export type Reach =
   | { kind: 'leave'; enabled: true; door: HallDoor; leading: boolean }
   /**
    * On a plot that has a MULE, `replaces` is its outfit: installing swaps the new MULE in and the colonist leads the old
-   * one (AM-23); for the outfit it already has, the press is refused, nothing to swap.
+   * one (AM-23); for the outfit it already has, the row dims (why: sameGood), nothing to swap.
    */
-  | { kind: 'install'; enabled: true; good: Outfit; plot: FloorPoint; fromShore: boolean; replaces: Outfit | null }
+  | { kind: 'install'; enabled: boolean; good: Outfit; plot: FloorPoint; fromShore: boolean; replaces: Outfit | null; why: ReachRefusal | null }
   | { kind: 'analyse'; enabled: true; plot: FloorPoint }
   | { kind: 'filter'; enabled: true; plot: FloorPoint; alloy: number }
   /** The MULE off a plot of the seat's onto its lead (AM-2): `good`, the plot's outfit. */
@@ -202,7 +202,9 @@ const install: Row = (s) => {
   const good = p.carriedMule;
   if (!tile || !good || good === 'empty' || p.muleBolted) return null;
   const plot = plotFor(s, (t) => t.owner === p.id);
-  return plot && { kind: 'install', enabled: true, good, plot: at(plot), fromShore: plot !== tile, replaces: plot.outfit };
+  // Over a MULE with the outfit it leads there is nothing to swap (AM-23): the row dims, as RE-OUTFIT's does for its own good.
+  const why: ReachRefusal | null = plot?.outfit === good ? { kind: 'sameGood' } : null;
+  return plot && { kind: 'install', enabled: !why, good, plot: at(plot), fromShore: plot !== tile, replaces: plot.outfit, why };
 };
 
 /** Any plot, owned or free, with or without a MULE, led or on it: as analysePlot allows; a lake plot from its shore. */
