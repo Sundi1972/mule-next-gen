@@ -33,6 +33,8 @@ const harness = vi.hoisted(() => ({
   before: null as ((seat: unknown, state: unknown, point: 'planning' | 'development' | 'auction') => void) | null,
   /** At a seat's own tick, after it played it. */
   after: null as ((seat: unknown, state: unknown, point: 'planning' | 'development' | 'auction') => void) | null,
+  /** Each auction act a seat makes, and whether the rules took it. */
+  acted: null as ((seat: unknown, state: unknown, action: unknown, ok: boolean) => void) | null,
   seats: [] as unknown[],
 }));
 vi.mock('../src/seat.js', async (importOriginal) => {
@@ -59,7 +61,11 @@ vi.mock('../src/seat.js', async (importOriginal) => {
     }
     override auctionTick(state: GameState, dt: number, act: Act): void {
       harness.before?.(this, state, 'auction');
-      super.auctionTick(state, dt, act);
+      super.auctionTick(state, dt, (action) => {
+        const ok = act(action);
+        harness.acted?.(this, state, action, ok);
+        return ok;
+      });
       harness.after?.(this, state, 'auction');
     }
   }
@@ -102,6 +108,7 @@ afterEach(() => {
   harness.options = null;
   harness.before = null;
   harness.after = null;
+  harness.acted = null;
   harness.seats = [];
   seam.throwing = null;
   vi.restoreAllMocks();
@@ -131,6 +138,8 @@ interface Table {
   devStarts: Map<number, string>;
   /** Per month, the game as its auction ended. */
   auctionEnds: Map<number, string>;
+  /** Per seat, month and good, its auction acts in order, each with the stage and walk time it was made at. */
+  acts: Map<string, string[]>;
 }
 
 const key = (seat: string, month: number, more = '') => `${seat}/${month}${more && `/${more}`}`;
@@ -153,6 +162,12 @@ function playTable(o: TableOptions = {}): Table {
   harness.options = ({ id }) => ({ onPlaybook: (pb: Playbook) => written.push(structuredClone(pb)), onDecision: (r: DecisionRecord) => records.push(structuredClone(r)), ...o.seat?.(id) });
   const devStarts = new Map<number, string>();
   const auctionEnds = new Map<number, string>();
+  const acts = new Map<string, string[]>();
+  harness.acted = (seat, s, action, ok) => {
+    const a = (s as GameState).auction;
+    const k = key((seat as AiSeat).id, (s as GameState).month, a?.good ?? '');
+    acts.set(k, [...(acts.get(k) ?? []), stableJson({ stage: a?.stage, elapsed: a?.elapsed, action, ok })]);
+  };
   harness.before = (seat, s, point) => {
     const state = s as GameState;
     if (point === 'development' && !devStarts.has(state.month)) devStarts.set(state.month, stableJson(state));
@@ -189,7 +204,7 @@ function playTable(o: TableOptions = {}): Table {
       return Number(month) === state.month ? [{ kind: 'declare' as const, seat: seat!, good: good as Good, side, month: state.month, phase: 'auction' as const }] : [];
     });
   }
-  return { state: played.state, seats: played.seats, written, records, declared, installs, ownInstalls, outcomes, final: stableJson(played.state), devStarts, auctionEnds };
+  return { state: played.state, seats: played.seats, written, records, declared, installs, ownInstalls, outcomes, final: stableJson(played.state), devStarts, auctionEnds, acts };
 }
 
 const writesOf = (t: Table, seat: string, month: number, phase: Playbook['phase']) => t.written.filter((pb) => pb.seat === seat && pb.month === month && pb.phase === phase);
@@ -312,6 +327,44 @@ describe('the own path plays today’s development and auction while AI_PLANS.ow
     expect(adopted.outcomes.get(key(ME, MONTH, 'auction'))!.items.find((i) => i.path === `/auction/${out}/role`)).toMatchObject({ expected: 'out', actual: 'out' });
     expect(adopted.written.filter((pb) => pb.phase === 'development' || pb.phase === 'auction'), 'no own development or auction playbook').toEqual([]);
     expect(adopted.records.some((r) => r.id === 0)).toBe(false);
+  });
+
+  it("B-AC-6, T-AC-13 (AM-26, AI_PLANS.ownPhases off): a good an adopted auction part lacks plays today's hand, act for act, and the seat drafts and writes nothing for it", () => {
+    // ME's own auction draft, adopted at the month's first status screen without the good that is up.
+    const atStatus = (state: GameState) => state.auction?.good && state.auction.stage === 'status';
+    const statusAt = (into: Map<string, string>) => (seat: AiSeat, state: GameState) => {
+      if (seat.id === ME && state.month === MONTH && atStatus(state) && !into.size) into.set(state.auction!.good!, stableJson(state));
+    };
+    const baseAt = new Map<string, string>();
+    const base = playTable({ seat: () => ({ playbook: false }), before: statusAt(baseAt) });
+    const adoptedAt = new Map<string, string>();
+    let missing: Good | null = null;
+    let kept: Good[] = [];
+    const adopted = playTable({
+      before: (seat, state, point) => {
+        if (point !== 'auction') return;
+        statusAt(adoptedAt)(seat, state);
+        if (missing || seat.id !== ME || state.month !== MONTH || !atStatus(state)) return;
+        missing = state.auction!.good!;
+        const draft = seat.draft(state, 'auction');
+        const { [missing]: _, ...rest } = draft.auction!;
+        kept = Object.keys(rest) as Good[];
+        const { playbook } = seat.validator()(state, ME, { ...draft, auction: rest }, []);
+        expect(Object.keys(playbook.auction!), 'the gate keeps the good out').toEqual(kept);
+        seat.adopt({ ...playbook, by: 'llm' });
+      },
+    });
+    expect(missing, 'the good up at the first status screen').not.toBeNull();
+    expect(kept.length, 'the adopted part plays other goods').toBeGreaterThan(0);
+    expect(adoptedAt.get(missing!), 'the same game as the good comes up').toBe(baseAt.get(missing!));
+    const acts = adopted.acts.get(key(ME, MONTH, missing!));
+    expect(acts?.length, 'it acts on the good').toBeGreaterThan(0);
+    expect(acts, "its acts on the good: today's").toEqual(base.acts.get(key(ME, MONTH, missing!)));
+    expect(adopted.written.filter((pb) => pb.phase === 'auction'), 'no own auction entry').toEqual([]);
+    expect(adopted.records.some((r) => r.id === 0), 'no drafted line').toBe(false);
+    const items = adopted.outcomes.get(key(ME, MONTH, 'auction'))!.items;
+    expect(items.some((i) => i.path.startsWith(`/auction/${missing}/`)), 'the outcome names no part for it').toBe(false);
+    expect(items.some((i) => i.path.startsWith(`/auction/${kept[0]}/`)), 'the adopted goods are in it').toBe(true);
   });
 });
 
