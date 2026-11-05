@@ -114,14 +114,14 @@ export const SIDE_PICK_WORDS = {
   /**
    * After the seats' sides in the confirm, for `of` seats of which `away` are away (an away seat sits the walk out):
    * every one away, the walk starts without them; some away, the others start on the side shown; none away, `given`
-   * when every side is the one the numbers give.
+   * when every side is the one everyone starts on, Buy (RULE-2).
    */
   tail: (given: boolean, away = 0, of = 1) =>
     away >= of
       ? 'The walk starts without them.'
       : away > 0
         ? 'The others start on the side shown; the walk starts.'
-        : `${given ? 'That is the side the numbers give' : 'Each starts on the side shown'}; the walk starts for everyone.`,
+        : `${given ? 'Everyone starts as a buyer' : 'Each starts on the side shown'}; the walk starts for everyone.`,
   now: 'Move on',
   keep: 'Keep waiting',
   /** Once nobody is left. */

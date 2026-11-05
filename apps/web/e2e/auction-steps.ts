@@ -6,7 +6,7 @@
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { AI_HANDS, EXPORT_DEMAND, GAME, goodsMarket, LOTS, TAX, WALK, type Good } from '@mule/engine';
+import { AI_HANDS, EXPORT_DEMAND, freePlots, GAME, goodsMarket, LOTS, TAX, WALK, type GameState, type Good } from '@mule/engine';
 import type { AuctionView, MuleView } from '@mule/protocol';
 import { GOOD_NAME } from '@mule/ui';
 import { errors as playwrightErrors, type Browser, type Page } from 'playwright';
@@ -22,7 +22,6 @@ const PRESS_MS = 2_000;
 /** After a tap, how long the walker must stand still to show it was one step (A-6, G-2). */
 const TAP_SETTLE_MS = 600;
 /** How long the buyer stands at the store's line, let go, to show nothing trades there by itself (A-6, G-1). */
-const LINE_STAND_MS = 1_500;
 /** Once the month's last good has closed, how long a phone has to show the month end's "On to month N". */
 const MONTH_END_MS = 10_000;
 /** The minimum the Sell form starts at, which listPlot leaves unchanged. */
@@ -147,6 +146,7 @@ async function playTheLandAuction(browser: Browser, base: string, server: MuleSe
   console.log(`✓ three phones and a TV at table ${code}`);
   const truth = serverTruth(server, code);
   shipInPortThisMonth(server, code);
+  foodToSpare(server, code);
 
   // Month 1: everyone claims (Brix and Lena list theirs in month 2), so the grant ends early. Nothing is listed, so only the colony's lot can follow.
   // Month 1 opens on election day, which holds the desks until it is over.
@@ -183,6 +183,9 @@ async function playTheLandAuction(browser: Browser, base: string, server: MuleSe
   }
   console.log(`✓ UBER-AC-1 (WS6): month 1's goods went ${onServer.join(' → ')} on the server, with no declare stage on it, any phone or the TV`);
   console.log('✓ month 1: everyone claimed');
+  // A grant gives one claim a seat (5 Nov): Brix and Lena each list two plots later, so the test gives each a second.
+  givePlot(server, code, truth.idOf(brix));
+  givePlot(server, code, truth.idOf(lena));
 
   // Month 1's end has no clock (C20): every phone moves on to month 2.
   await everyone(phones, (p) => onToTheNextMonth(p.page));
@@ -288,8 +291,8 @@ async function playTheLandAuction(browser: Browser, base: string, server: MuleSe
 }
 
 /**
- * WS6 B-AC-4 with nothing to sell: someone who holds none of the first good and needs some opens its
- * status screen as a buyer, with Sell off, and a tap on Buy passes them. Leaves the status screen running.
+ * WS6 B-AC-4 with nothing to sell, under RULE-2: someone who holds none of the first good opens its status screen as a
+ * buyer, with Sell off, and a tap on Buy keeps Buy: there is no Pass. Leaves the status screen running.
  */
 async function readTheEmptyHandedStatus(phones: Phone[], truth: Truth): Promise<void> {
   const toStatus = within(SCALE, PHASE_MS.development + PHASE_MS.production);
@@ -300,8 +303,8 @@ async function readTheEmptyHandedStatus(phones: Phone[], truth: Truth): Promise<
   check(empty, `B-AC-4 needs a player with no ${a.good} who needs some, got ${phones.map((p) => `${p.name} ${truth.stockOf(p, a.good)}/${needOf(p)}`).join(', ')}`);
   check(sideOf(a, truth.idOf(empty)) === 'buyer', `B-AC-4: ${empty.name}, with no ${a.good} and a need of ${needOf(empty)}, opens the status screen as a buyer on the server, got ${sideOf(a, truth.idOf(empty))}`);
   await untilShows({ name: `${empty.name}'s phone`, page: empty.page }, readPicker, { side: 'buyer', sellOff: true }, 'B-AC-4: with none to sell, the status screen opens on Buy with Sell off');
-  await tapSide(truth, empty, 'buyer', 'pass', `B-AC-4: ${empty.name} taps Buy and sits ${a.good} out`);
-  console.log(`✓ B-AC-4 (WS6): ${empty.name}, with no ${a.good} and a need of ${needOf(empty)}, opens ${a.good}'s status screen on Buy with Sell off, as the server holds him; a tap on Buy passes`);
+  await tapSide(truth, empty, 'buyer', 'buyer', `RULE-2: ${empty.name} taps Buy and stays a buyer, with no Pass`);
+  console.log(`✓ B-AC-4 (WS6) and RULE-2: ${empty.name}, with no ${a.good} and a need of ${needOf(empty)}, opens ${a.good}'s status screen on Buy with Sell off, as the server holds him; a tap on Buy keeps Buy`);
 }
 
 /**
@@ -446,7 +449,7 @@ const sideOf = (a: AuctionView, id: string) => a.walkers.find((w) => w.id === id
  * Taps Buy or Sell on a phone's status screen and waits until the server holds `lands` for that seat,
  * still on the status screen, and the phone shows it. A status screen that closes first fails as timing.
  */
-async function tapSide(truth: Truth, p: Phone, tap: 'buyer' | 'seller', lands: 'buyer' | 'seller' | 'pass', what: string): Promise<void> {
+async function tapSide(truth: Truth, p: Phone, tap: 'buyer' | 'seller', lands: 'buyer' | 'seller', what: string): Promise<void> {
   const id = truth.idOf(p);
   const good = truth.board().auction?.good;
   await untilNoHeldShow(truth, p, what);
@@ -598,42 +601,29 @@ async function tapOneStep(truth: Truth, p: Phone, dir: 'up' | 'down'): Promise<v
 }
 
 /**
- * G-1 (A-6), at the store's selling line: the phone asks "Buy how many?" and nothing trades until it is answered; the
- * buyer raises the amount to what the store will sell, taps "Buy N for X cr", and exactly that many move.
+ * RULE-1 at the store's selling line: the phone asks nothing, and units move by themselves, one at a time, until the
+ * store is out; while they move the rail says she is buying and how to stop (the auto-trade amendment, B-AC-2).
  */
 async function buyAtTheStoreLine(truth: Truth, p: Phone, timeout: number): Promise<void> {
   const id = truth.idOf(p);
   const page = p.page;
-  await page.getByTestId('line-question').waitFor({ timeout: PRESS_MS });
-  const asked = await readText(page, 'line-question');
-  check(asked.startsWith('Buy how many?'), `G-1: at the store's line ${p.name}'s phone asks "Buy how many?", got "${asked}"`);
   const at = truth.board().auction!;
-  // Letting go at the line trades nothing: the store's count holds while she stands there.
-  await page.waitForTimeout(LINE_STAND_MS);
-  const still = truth.board().auction!;
-  check(
-    still.storeForSale === at.storeForSale && !still.deals.some((d) => d.seller === 'store' && d.buyer === id),
-    `G-1: standing at the store's line, ${p.name} buys nothing until she says how many: the store went ${at.storeForSale} → ${still.storeForSale}`,
-  );
-  const want = at.storeForSale;
-  const amount = async () => Number(await readText(page, 'amount'));
-  for (let i = 0; i < want && (await amount()) < want; i++) await page.getByTestId('amount-more').click();
-  const n = await amount();
-  check(n === want, `G-1: ${p.name} raises the amount to the store's ${want}, got ${n}`);
-  const go = await readText(page, 'line-go');
-  const label = `Buy ${n} for ${(n * at.storeSells!).toLocaleString('en')} cr`;
-  check(go === label, `G-1: the footer offers "${label}", got "${go}"`);
-  await page.getByTestId('line-go').click();
-  const done = await untilServer(truth, page, (a) => a.walkers.find((w) => w.id === id)?.order?.traded === n && a.deals.length === 0, `G-1: ${p.name}'s ${n} units move`, timeout);
+  check((await page.getByTestId('line-question').count()) === 0, `RULE-1: at the store's line ${p.name}'s phone asks nothing`);
+  // The first unit takes WALK.tradeStartMs, so the rail has time to say so; a store with only one or two to sell may be
+  // out before it is read, and then the server's count is the proof.
+  const said = await page
+    .getByTestId('line-hint')
+    .textContent({ timeout: PRESS_MS })
+    .catch(() => null);
+  if (said !== null) check(said.startsWith('Buying '), `RULE-1: while units move the rail says she is buying, got "${said}"`);
+  const done = await untilServer(truth, page, (a) => a.storeForSale === 0 && !a.deals.some((d) => d.seller === 'store' && d.buyer === id), `RULE-1: ${p.name}'s units move by themselves until the store is out`, timeout);
   check(done.storeForSale === 0, `B-AC-3: ${p.name} buys the store out, ${done.storeForSale} left`);
-  const said = await readText(page, 'line-hint');
-  check(said.startsWith(`You bought ${n} `), `G-1: the rail says what she bought, got "${said}"`);
-  console.log(`✓ G-1 (A-6): at the store's line "${asked.split('?')[0]}?" and nothing traded while ${p.name} stood there; "${label}" bought exactly ${n}: "${said}"`);
+  console.log(`✓ RULE-1 (auto-trade): at the store's line ${p.name} was asked nothing and bought the store's ${at.storeForSale} by standing there${said ? `: "${said}"` : ''}`);
 }
 
 /**
- * Month 1's first good, played so every step lands on a known price: on the status screen the buyer
- * switches from Sell to Buy; in the walk the stayer steps up out of the way, the buyer walks up to the
+ * Month 1's first good, played so every step lands on a known price: on the status screen everyone opens as a buyer
+ * (RULE-2) and the seller and the stayer switch to Sell; in the walk the stayer steps up out of the way, the buyer walks up to the
  * store's line and buys it out, then the seller walks down to the buyer and they trade. At each step every
  * phone and the TV must draw what the server holds (WS6 B-AC-1, B-AC-2, B-AC-3, B-AC-4, HC-2). Leaves the
  * walk running; the caller presses Done through the rest of the auction.
@@ -650,11 +640,13 @@ async function readTheGoodsWalk(cast: { seller: Phone; buyer: Phone; stayer: Pho
   for (const p of phones) {
     const row = opened.status.find((r) => r.id === truth.idOf(p));
     check(row && truth.stockOf(p, opened.good) > row.need, `B-AC-4 needs ${p.name} to have ${opened.good} to spare, got ${truth.stockOf(p, opened.good)} for a need of ${row?.need}`);
-    check(sideOf(opened, truth.idOf(p)) === 'seller', `B-AC-4: ${p.name}, with ${opened.good} to spare, opens the status screen as a seller on the server, got ${sideOf(opened, truth.idOf(p))}`);
+    check(sideOf(opened, truth.idOf(p)) === 'buyer', `RULE-2: ${p.name}, even with ${opened.good} to spare, opens the status screen as a buyer on the server, got ${sideOf(opened, truth.idOf(p))}`);
   }
-  await everyone(phones, (p) => untilShows({ name: `${p.name}'s phone`, page: p.page }, readPicker, { side: 'seller', sellOff: false }, 'B-AC-4: a player with some to spare opens the status screen on Sell'));
-  await tapSide(truth, buyer, 'buyer', 'buyer', `B-AC-4: ${buyer.name} taps Buy from Sell and buys`);
-  console.log(`✓ B-AC-4 (WS6): with ${opened.good} to spare, all three phones open ${opened.good}'s status screen on Sell, as the server holds them; ${buyer.name}'s tap on Buy makes her a buyer`);
+  await everyone(phones, (p) => untilShows({ name: `${p.name}'s phone`, page: p.page }, readPicker, { side: 'buyer', sellOff: false }, 'RULE-2: everyone opens the status screen on Buy, Sell open to whoever holds some'));
+  await tapSide(truth, seller, 'seller', 'seller', `RULE-2: ${seller.name} switches to Sell`);
+  await tapSide(truth, stayer, 'seller', 'seller', `RULE-2: ${stayer.name} switches to Sell`);
+  await tapSide(truth, buyer, 'buyer', 'buyer', `RULE-2: ${buyer.name} taps Buy and stays a buyer`);
+  console.log(`✓ B-AC-4 (WS6) and RULE-2: all three phones open ${opened.good}'s status screen on Buy, as the server holds them; ${seller.name} and ${stayer.name} switch to Sell, ${buyer.name}'s tap keeps Buy`);
   await truth.held(async () => {
     await readTheStatusWords(phones, tv, truth);
     await smallPhoneReads(buyer, 'status');
@@ -707,8 +699,8 @@ async function readTheGoodsWalk(cast: { seller: Phone; buyer: Phone; stayer: Pho
 
   // G-2 (A-6): one tap on Up is one price step.
   await tapOneStep(truth, buyer, 'up');
-  // The buyer stops at the store's selling line, under every ask, and lets go: nothing trades until she says how many
-  // (G-1, A-6). She chooses what the store will sell and buys it out from there.
+  // The buyer walks up to the store's selling line, under every ask, and stands there: the store's units come to her by
+  // themselves until it is out (RULE-1).
   const tradeBudget = within(SCALE, WALK.goodMs);
   await walkUntil(truth, buyer, 'up', (x) => x.walkers.find((w) => w.id === buyerId)?.line === 'store', `B-AC-3: ${buyer.name} walks up to the store's line`);
   await buyAtTheStoreLine(truth, buyer, tradeBudget);
@@ -1477,6 +1469,19 @@ async function keepEvidence(browser: Browser, seed: number): Promise<void> {
  * Test fixture: the export ship calls this month, so month 1's status screens have it in port. Its wishlist takes
  * Smithore too, the raw good most likely to come up in month 1, so a wanted good's own status screen is reached.
  */
+/** Gives a seat one more free plot, as a second claim would have. */
+function givePlot(server: MuleServer, code: string, seat: string): void {
+  const room = server.registry.get(code) as unknown as { game: { state: GameState; ctx: { changed(): void } } } | undefined;
+  check(room, `room ${code} is on the server`);
+  const plot = freePlots(room.game.state)[0];
+  check(plot, 'a free plot to give');
+  plot.owner = seat;
+  room.game.ctx.changed();
+}
+
+/** Enough Food that month 1's need (2 a seat) leaves some to sell. */
+const FOOD_TO_SPARE = 6;
+
 function shipInPortThisMonth(server: MuleServer, code: string): void {
   type Ship = { arrives: number; goods: Good[]; hold: Partial<Record<Good, number>> };
   const room = server.registry.get(code) as unknown as { game: { state: { month: number; players: unknown[]; ship: Ship }; ctx: { changed(): void } } } | undefined;
@@ -1485,6 +1490,17 @@ function shipInPortThisMonth(server: MuleServer, code: string): void {
   state.ship.arrives = state.month;
   if (!state.ship.goods.includes('smithore')) state.ship.goods.push('smithore');
   state.ship.hold.smithore ??= Math.ceil((EXPORT_DEMAND.smithore ?? 0) * state.players.length * GAME.exportShipEvery);
+  room.game.ctx.changed();
+}
+
+/**
+ * Every seat starts with Food to spare: the 5 Nov start values give each seat just the 2 its month-1 need asks for, and
+ * B-AC-4's cast (a seller, a buyer and a stayer) each needs some to sell.
+ */
+function foodToSpare(server: MuleServer, code: string): void {
+  const room = server.registry.get(code) as unknown as { game: { state: { players: { stock: Record<Good, number> }[] }; ctx: { changed(): void } } } | undefined;
+  check(room, `room ${code} is on the server`);
+  for (const p of room.game.state.players) p.stock.food = Math.max(p.stock.food, FOOD_TO_SPARE);
   room.game.ctx.changed();
 }
 

@@ -272,13 +272,16 @@ describe('T-AC-7, T-AC-8: an auction that fired events opens only when their sho
     const ticks = countTicks(game, 'auctionTick');
     const show = game.viewFor(null).eventShow!;
     expect(show).toEqual({ startsAt: enteredAt, showMs: 7_000, introMs: 1_800, endsAt: enteredAt + 7_000, held: true });
-    expectHeld(() => game.handle('s1', { type: 'declare', side: 'pass' }));
+    // A side is a declare like any other: switching to Sell is held, then applies (everyone holds some here).
+    const state = (game as unknown as { state: GameState }).state;
+    state.players.find((p) => p.id === 's1')!.stock[state.auction!.good!] = 5;
+    expectHeld(() => game.handle('s1', { type: 'declare', side: 'seller' }));
     advance(show.endsAt - 1 - ctx.now());
-    expectHeld(() => game.handle('s1', { type: 'declare', side: 'pass' }));
+    expectHeld(() => game.handle('s1', { type: 'declare', side: 'seller' }));
     expect(ticks()).toBe(0);
     advance(1);
-    game.handle('s1', { type: 'declare', side: 'pass' });
-    expect(game.viewFor(null).auction!.walkers.find((w) => w.id === 's1')!.side).toBe('pass');
+    game.handle('s1', { type: 'declare', side: 'seller' });
+    expect(game.viewFor(null).auction!.walkers.find((w) => w.id === 's1')!.side).toBe('seller');
     advance(WALK.tickMs);
     expect(ticks()).toBeGreaterThan(0);
   });
@@ -297,7 +300,7 @@ describe('T-AC-7, T-AC-8: an auction that fired events opens only when their sho
     const { game, advance } = toPhase('auction', []);
     const ticks = countTicks(game, 'auctionTick');
     expect(game.viewFor(null).eventShow).toBeNull();
-    game.handle('s1', { type: 'declare', side: 'pass' });
+    game.handle('s1', { type: 'declare', side: 'buyer' });
     advance(WALK.tickMs);
     expect(ticks()).toBeGreaterThan(0);
   });

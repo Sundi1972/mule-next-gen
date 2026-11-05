@@ -6,20 +6,13 @@ import {
   boardWalkers,
   dealLine,
   Hint,
-  LineAction,
-  lineAsk,
   lineHint,
-  lineLimits,
   lineMoment,
-  LineQuestion,
   MyStoreLine,
-  SellConfirm,
-  sellAsksFirst,
   shipWants,
   ShipWants,
   SIDE_WORD,
   skippedLine,
-  startAmount,
   StatusTable,
   toggleSide,
   WaitingToPick,
@@ -60,11 +53,9 @@ export function Auction() {
   const mine = auction?.walkers.find((w) => w.id === me.id);
   const onBoard = stage === 'walk' && mine !== undefined && mine.side !== 'pass';
   const walk = useWalkIntent(onBoard, auction?.good ?? '');
-  // At a house's line (A-6): the amount chosen and whether a sale past your spare is being asked about, for this line only.
-  const moment = lineMoment(stage === 'walk' ? mine : undefined);
-  const lineKey = `${auction?.good ?? ''}:${moment.kind === 'line' ? moment.house : ''}`;
-  const [choice, setChoice] = useState<{ key: string; amount: number | null; confirming: boolean }>({ key: '', amount: null, confirming: false });
-  const here = choice.key === lineKey ? choice : { key: lineKey, amount: null, confirming: false };
+  // At a house's line units trade by themselves (RULE-1): the rail says so while they move.
+  const canTrade = mine?.side === 'seller' ? (auction ? me.stock[auction.good] > 0 : false) : (view.players.find((p) => p.id === me.id)?.money ?? 0) >= (auction?.storeSells ?? Infinity);
+  const moment = lineMoment(stage === 'walk' ? mine : undefined, auction?.deals ?? [], canTrade);
 
   if (!auction) {
     return (
@@ -87,11 +78,10 @@ export function Auction() {
 
   const closed = stage === 'close';
   const nextWords = auction.upNext ? `Next: ${GOOD_NAME[auction.upNext]}…` : 'The auction is closing…';
-  const atLine = moment.kind === 'line';
   const doneButton = (
     <Button
       size="md"
-      variant={done || atLine ? 'outline' : 'holo'}
+      variant={done ? 'outline' : 'holo'}
       className="h-10 w-full"
       disabled={done || closed || moment.kind === 'trading'}
       data-testid="done"
@@ -149,7 +139,7 @@ export function Auction() {
                 ))}
               </div>
               <span className="text-center font-mono text-[10px] text-ink-3" data-testid="side-now">
-                {side === 'buyer' || side === 'seller' ? `✓ YOU ${side === 'buyer' ? 'BUY' : 'SELL'} · TAP AGAIN TO PASS` : '✓ YOU SIT THIS GOOD OUT'}
+                {side === 'seller' ? '✓ YOU SELL' : '✓ YOU BUY'}
               </span>
             </div>
             {/* Ready is the pick; once pressed it gives way to who is still picking, and the host's way on (G-7). */}
@@ -203,8 +193,8 @@ export function Auction() {
   }
 
   const sides = (
-    <div className={cx('grid grid-cols-3 gap-1 rounded-control border border-holo-line bg-void p-1')} role="radiogroup" aria-label="Your side">
-      {(['buyer', 'seller', 'pass'] as const).map((s) => (
+    <div className={cx('grid grid-cols-2 gap-1 rounded-control border border-holo-line bg-void p-1')} role="radiogroup" aria-label="Your side">
+      {(['buyer', 'seller'] as const).map((s) => (
         <button
           key={s}
           type="button"
@@ -214,7 +204,7 @@ export function Auction() {
           onClick={() => declare(s)}
           className={cx(
             'h-8 rounded-[8px] font-display text-xs font-semibold disabled:opacity-35',
-            mine?.side === s ? (s === 'seller' ? 'bg-rise text-on-holo' : s === 'buyer' ? 'bg-fall text-on-holo' : 'bg-raised text-ink') : 'text-ink-2',
+            mine?.side === s ? (s === 'seller' ? 'bg-rise text-on-holo' : 'bg-fall text-on-holo') : 'text-ink-2',
           )}
         >
           {SIDE_NAME[s]}
@@ -225,32 +215,12 @@ export function Auction() {
 
   const hint = walkHint(view, auction, me.id, have);
   const lineSide = mine?.side === 'seller' ? 'seller' : 'buyer';
-  const ask = (() => {
-    if (moment.kind !== 'line') return null;
-    const { aim, max } = lineLimits(auction, lineSide, moment.house, have, need, self.money);
-    // Nothing to choose (you can't pay for one, or there is none to trade): no question, no Buy (F5).
-    if (max < 1) return null;
-    return lineAsk(auction, lineSide, moment.house, here.amount ?? startAmount(aim, max), have, need, self.money);
-  })();
-  const confirming = ask !== null && here.confirming;
-  const trade = (units: number) => {
-    client.intent({ type: 'lineTrade', units });
-    setChoice({ ...here, confirming: false });
-  };
-  const go = () => {
-    if (!ask) return;
-    // Selling past your spare asks first (G-1).
-    if (sellAsksFirst(ask) && !confirming) setChoice({ ...here, amount: ask.amount, confirming: true });
-    else trade(ask.amount);
-  };
   const lineRail = (() => {
-    if (ask && confirming) return <SellConfirm ask={ask} onYes={() => trade(ask.amount)} onNo={() => setChoice({ ...here, amount: Math.max(1, ask.aim), confirming: false })} />;
-    if (ask) return <LineQuestion ask={ask} onAmount={(n) => setChoice({ ...here, amount: n })} />;
-    if (moment.kind === 'trading' || moment.kind === 'done') {
+    if (moment.kind === 'trading') {
       const h = lineHint(moment, lineSide, good, have, need);
-      return <Hint tone={moment.kind === 'trading' ? 'lit' : 'ok'} line={h.line} how={h.how} testid="line-hint" />;
+      return <Hint tone="lit" line={h.line} how={h.how} testid="line-hint" />;
     }
-    // At a line with nothing to choose, one plain reason, so a newcomer knows why nothing happens (F5, WS6's ruling).
+    // At a line with nothing moving, one plain reason, so a newcomer knows why nothing happens (F5, WS6's ruling).
     if (moment.kind === 'line') {
       const reason = lineSide === 'buyer' ? `You can't pay for one at ${auction.storeSells ?? 0} cr` : `You have no ${GOOD_NAME[good]} to sell`;
       return <Hint line={reason} testid="line-reason" />;
@@ -259,8 +229,7 @@ export function Auction() {
   })();
   const rail = (
     <>
-      {/* At the line the question says what you have and need, so the good's card gives it the room. */}
-      {!ask && (
+      {
         <div className="flex items-center justify-between gap-2 rounded-control border border-holo-faint bg-panel px-2.5 py-1.5" data-testid="good-row">
           <GoodTag good={good} name />
           <div className="grid grid-cols-3 gap-2.5 font-mono text-[10px] text-ink-3">
@@ -282,7 +251,7 @@ export function Auction() {
             </span>
           </div>
         </div>
-      )}
+      }
       {closed ? (
         <Hint line={`${GOOD_NAME[good]} is closed.`} how={auction.upNext ? `Next: ${GOOD_NAME[auction.upNext]}, buy or sell?` : null} />
       ) : (
@@ -296,20 +265,12 @@ export function Auction() {
   const hold = (dir: 'up' | 'down', disabled: boolean) => (
     <WalkHold key={dir} dir={dir} disabled={!onBoard || disabled} onHold={(on) => walk(on ? dir : 'stop')} onStep={() => client.intent({ type: 'walkStep', dir })} />
   );
-  const away = lineSide === 'buyer' ? 'down' : 'up';
   const footer = (
     <>
-      {ask && !confirming ? (
-        <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-2" data-testid="line-footer">
-          {hold(away, false)}
-          <LineAction ask={ask} onGo={go} />
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 gap-2">
-          {hold('up', confirming && lineSide === 'buyer')}
-          {hold('down', confirming && lineSide === 'seller')}
-        </div>
-      )}
+      <div className="grid grid-cols-2 gap-2">
+        {hold('up', false)}
+        {hold('down', false)}
+      </div>
       {doneButton}
     </>
   );
@@ -361,7 +322,7 @@ export function Auction() {
 
 /**
  * The side a seat starts the walk on if the host moves on now, in words: "Kai buys Food: 1 of 3, short 2." A dropped
- * phone sits the walk out, so it says so. `given` is whether it is the side the numbers give (the engine's defaultSide).
+ * phone sits the walk out, so it says so. `given` is whether it is the side everyone starts on, Buy.
  */
 export function sideWords(auction: AuctionView, seat: Seat, good: AuctionView['good']): { line: string; given: boolean } {
   const g = GOOD_NAME[good];
@@ -369,7 +330,8 @@ export function sideWords(auction: AuctionView, seat: Seat, good: AuctionView['g
   const now = row?.now ?? 0;
   const need = row?.need ?? 0;
   const side = auction.walkers.find((w) => w.id === seat.id)?.side ?? 'pass';
-  const given = side === (now > need ? 'seller' : now < need ? 'buyer' : 'pass');
+  // Everyone starts as a buyer (RULE-2): that is the side a seat has if it did not switch.
+  const given = side === 'buyer';
   if (seat.away) return { line: `${seat.name} is away and sits ${g} out.`, given: false };
   if (side === 'buyer') return { line: now < need ? `${seat.name} buys ${g}: ${now} of ${need}, short ${need - now}.` : `${seat.name} buys ${g}.`, given };
   if (side === 'seller') return { line: now > need ? `${seat.name} sells ${g}: ${now - need} spare.` : `${seat.name} sells ${g}.`, given };
