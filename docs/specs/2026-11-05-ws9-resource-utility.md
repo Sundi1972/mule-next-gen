@@ -134,7 +134,8 @@ HC-4  Behind AI_VALUE.model ('today' | 'unit'), default 'today' until Heiko rule
       PR-1's measurement. With 'today' the sim is byte-identical to trunk.
       source: PM ruling 5 Nov                                       breach: fatal
 HC-5  The engine is the only source of a rule the value reads: needs (monthNeeds,
-      needsOf), the Energy turn-off order (WS1's AM-17), spoilage, the depot, prices
+      needsOf) and the upkeep order that turns them into a target, the Energy turn-off
+      order (WS1's AM-17, energyOffOrder), spoilage, the depot, prices
       (outlook). Never a copy of a formula.   source: two copies drift   breach: decision
 HC-6  Every PR's sim report shows the colony's Food/Water shortage beside UBER-AC-1.
       source: PM ruling 5 Nov (colonists buy only from the store)   breach: decision
@@ -170,11 +171,10 @@ call sites   strategist.ts::goodPlan (strategist.ts:484) ·
              playbook/validate.ts::validatePlaybook's floorUnits (validate.ts:353)
 pin          AI_VALUE.model 'today': default, `--plays today` and politics-off sims
              byte-identical to trunk on 1/101/201 (T-AC-9)
-depends_on   C3 (the belief; stubbable: outlook.price) · WS1's AM-17 order, EXPORTED from
-             the engine: on ws1-energy-off (68f21e9e) it is production.ts's private
-             turnedOff; RULE-2 needs it as an exported function, e.g.
-             energyOffOrder(state, playerId) → the seat's plots in turn-off order with
-             each one's use (a WS1 named edit in production.ts; data, not stubbable)
+depends_on   C3 (the belief; stubbable: outlook.price) · WS1's exported
+             energyOffOrder(state, playerId), shipping in the AM-17 PR (PM ruling, 5 Nov;
+             data, not stubbable) · the upkeep target WS1's stopgap builds (ws1-food-short;
+             RULE-3 reuses it)
 ```
 
 ```
@@ -318,8 +318,9 @@ formula    v(k) = q(k) · S(k) + (1 − q(k)) · Ck(k)
            buy[k]  = v(k) with Ck at the buy side (RULE-4's speculate weight)
            floorUnits = units with q(k) = 1 for Food and Energy (never sold)
 boundaries keep and buy are non-increasing in k (sorted, as today)
-examples   Food, need 5, 0 held, belief 72, ask 72: q(0..4) = 1, S ≥ 72 → v ≥ 72 → the
-           seat buys 5 (today it values them at 32 and buys none) ·
+examples   Food, eat 3, spoilage 0.5, 0 held, belief 72, ask 72: target 9, q(0..8) = 1,
+           S ≥ 72 → v ≥ 72 → the seat buys up to 9, cash allowing (today it values a
+           unit at about 19–32 and buys none) ·
            need 5, k = 7, belief 40 and ask 30, keep rate 0.9: q = 0, Ck = 40 × 0.9 ×
            (1 − tax) − holding → a surplus unit when that beats 30 (G-2)
 ```
@@ -330,12 +331,13 @@ RULE-2 · What going without a unit costs                   shape: decision tabl
 inputs     good · k · belief (RULE-6) · the seat's plots and recipes · AM-17's order
 first match wins
   #  good                  S(k)
-  1  energy                max(replace, what the plot AM-17's order turns off at the
-                           k-th missing unit loses): a raw plot makes 20% of its output
-                           (rounded half up), so it loses the rest, and it gains no
-                           experience that month; a factory turned off uses ⌈0.2 × each
-                           input⌉ and makes 20%, or makes 0 without those inputs, so it
-                           loses the rest of its run (WS1's AM-17 rulings, 5 Nov)
+  1  energy                max(replace, (1 − UPKEEP.offOutputShare) × the output value
+                           of the plot energyOffOrder turns off at the k-th missing unit,
+                           plus the experience month it misses). Raw plot and factory
+                           alike: a turned-off plot makes offOutputShare of its output
+                           (rounded half up); a turned-off factory uses ⌈offOutputShare ×
+                           each input⌉ for it; a factory without its inputs is not in the
+                           order (WS1's AM-17 and its rulings, 5 Nov)
   2  a factory input       max(replace, the factory run's output value ÷ its input units)
   3  food                  max(replace, today's hunger walking cost)
   4  water                 max(replace, today's half-a-farm share)
@@ -344,30 +346,49 @@ first match wins
 replace    = belief(good) × (1 + PRICE.storeSpread) × AI_VALUE.shortFloorMarkup: buying it
            back next month, never valued below that
 unknown    the order is empty (no plot needs Energy) → row 1 gives replace only;
+           q(k) = 0 (RULE-3) → S never enters v(k): the replace floor never makes a seat
+           buy a good it doesn't need (a Water-less seat's Water, WS1 fix 5);
            the belief is unknown (game ends) → the store's posted price today (outlook.final)
 outcome    → C1
 examples   Energy, 3 short, plots ranked [factory 2 Energy, farm 1, farm 1]: S(0..1) =
-           the factory's run less what ⌈0.2 × inputs⌉ makes, S(2) = the farm's output
-           less its 20%, plus the experience month it misses
+           (1 − offOutputShare) × the factory's run, S(2) = (1 − offOutputShare) × the
+           farm's output, each plus the experience month it misses
 ```
 
 ```
-RULE-3 · The chance the month needs the k-th unit          shape: decision table
+RULE-3 · The chance the seat needs the k-th unit          shape: decision table
 
-inputs     need   monthNeeds(state, seat)[good] (household, plots, inputs, Energy rule)
-           held   units it holds now · own   the seat's own forecast output of the good
-           risk   persona.risk · AI_VALUE.forecastRisk (0..1)
+inputs     target  the stock after the auction that keeps the seat whole next month, in
+                   the engine's upkeep order (upkeep.ts::runUpkeep: eat and drink, then every
+                   good spoils, then the depot cap; then production spends Energy; then
+                   game.ts:224 marks a seat hungry when Food < the month's need):
+                     food    eat + ⌈eat / keep⌉
+                     water   drink + ⌈drink / keep⌉ for a seat with an irrigated plot
+                             (UPKEEP.irrigated); 0 otherwise: a player's Water shortfall
+                             costs only noWater on irrigated plots (production.ts:257)
+                     energy  ⌈(plots' use − ownNet) / keep⌉
+                     input   ⌈the factory's inputs / keep⌉
+                   READ, not copied (HC-5): the target WS1's stopgap builds from the
+                   engine's upkeep order (ws1-food-short) is reused as this input
+           ownNet  Energy only: Σ over the seat's Energy plants of max(0, output − use),
+                   the net they leave for the other plots (never the gross forecast)
+           held    units it holds now · keep = 1 − GOOD_CONFIG[good].spoilage
+           risk    persona.risk · AI_VALUE.forecastRisk (0..1)
 first match wins
-  #  when                          q(k)
-  1  k < need − own                1        (a shortfall stock or forecast can't cover)
-  2  k < need                      min(1, AI_VALUE.forecastRisk × risk)
-                                            (covered only by its own forecast output)
-  3  otherwise                     0
-unknown    own forecast unknown (outlook off, Rookie) → own = 0: every needed unit is q = 1
-outcome    → C1. Answers WS1's 30-of-47: forecast-covered units keep a share of S(k), so
-           the seat never sells them for less than q × S
-examples   need 8, own 10, k = 3: row 2 → q = forecastRisk × risk; today q = 0 and the
-           seat sold to 0
+  #  when                                   q(k)
+  1  k < target without own output's share  1   (a need no own output covers)
+  2  k < target                             min(1, AI_VALUE.forecastRisk × risk)
+                                                (covered only by its own forecast output)
+  3  otherwise                              0
+unknown    own output unknown (outlook off, Rookie) → none: every unit below target is q = 1
+           target above what the depot keeps after spoilage → q = 0 past the depot (the
+           unit is lost at upkeep, so holding it buys nothing)
+outcome    → C1. Answers WS1's 30-of-47 (forecast-covered units keep a share of S(k), so
+           the seat never sells them for less than q × S) and its 37 seat-months halved
+           after ending the auction at exactly the need (the target covers spoilage)
+examples   Energy, plots use 8, ownNet 10 − 2 = 8 → row 2 for k < ⌈8/0.75⌉ = 11 with
+           q = forecastRisk × risk; today q = 0 and the seat sold to 0 ·
+           Food, eat 3, spoilage 0.5 → target 3 + 6 = 9 · Water, no irrigated plot → q 0
 ```
 
 ```
@@ -443,13 +464,13 @@ Every test runs with `AI_VALUE.model = 'unit'`, except T-AC-9.
 
 | AC | Given · When · Then | Changes | observed_at | negative case |
 |---|---|---|---|---|
-| **B-AC-1** (G-1) | Given a seat with 0 Food, needing 5, holding 1,200 cr, and the store selling Food at 72 · When the Food auction plays · Then it ends holding at least 5 | C1, C2 | the seat's stock after the auction hand runs (built state, `AuctionHand`) | the store holds no Food: no trade, no refusal |
-| **B-AC-2** (G-1, Energy) | Given a seat whose plots need 6 Energy, holding 1 Energy and enough cash, the store selling 6 · When the Energy auction and production play · Then no plot is turned off for want of Energy | C1, C2 | production's lines for the seat (no `noEnergy` part) | cash below one unit: plots turn off in AM-17's order |
+| **B-AC-1** (G-1) | Given a seat with 0 Food, eating 5 a month, holding 1,200 cr, and the store selling enough Food at 72 · When the month plays on through the auction, upkeep and spoilage to the next development · Then the seat is not hungry at that development (`game.ts:224`) | C1, C2 | the seat's `hungry` at the next development (built state, played on). Not "holds ≥ 5 after the auction", which is the trap: upkeep eats, then spoils half | the store holds no Food: no trade, and it is hungry |
+| **B-AC-2** (G-1, Energy) | Given a seat whose plots need 6 Energy, holding 1 Energy and enough cash, the store selling 6 · When the Energy auction and production play · Then no plot is turned off for want of Energy | C1, C2 | production's lines for the seat (no `energyOff` part) | cash below one unit: plots turn off in AM-17's order |
 | **B-AC-3** (G-2) | Given Food's ask at or below its reference, a belief above the ask after spoilage and tax, and depot room · When the Food auction plays · Then the seat holds more than next month's need; with the ask ≥ 2× reference, no more than its need | C1, C3 | the seat's stock after the auction | a good that spoils fully: no surplus |
 | **B-AC-4** (G-3) | Given a playbook setting `expect` on Food above the ask · When the auction plays · Then the seat buys beyond its need; with no `expect`, it doesn't | C3, C5 | the stock after the auction | `expect` beyond the bound: clamped and listed in `rejected` |
 | **T-AC-1** (UBER-AC-1, serves B-AC-1, B-AC-2) | `pnpm sim`, 40 games × 1/101/201, prints UBER-AC-1 (a) and (b) beside the colony's Food/Water shortage | C6 | the sim report | — |
 | **T-AC-2** (serves B-AC-1) | RULE-5's example: 80 cr, Food short 2 (v 40, ask 30), Energy short 2 (v 120, ask 35) → Food's budget 0, and 70 cr kept for Energy | C2 | goodPlan's budget and the Energy auction's stock | all needs funded: budget is today's share |
-| **T-AC-3** (serves B-AC-2) | RULE-3 row 2: own Energy plots forecast 10, need 8, holding 2 → the seat does not sell below 2 + the units its forecast alone covers × q > 0 | C1 | the stock after the Energy auction | Rookie (no outlook): q = 1 for every needed unit |
+| **T-AC-3** (serves B-AC-2) | RULE-3: the target covers spoilage (Food eat + ⌈eat/keep⌉, Energy ⌈(use − ownNet)/keep⌉), and own output counts only as net per plant. An Energy seat with ownNet 8 for a use of 8, holding 2, keeps its 2 (q > 0) and does not sell to 0 | C1 | the stock after the Energy auction | Water, no irrigated plot: q = 0, so no Water is bought |
 | **T-AC-4** (serves B-AC-2) | WS1's reserve example (value 411, ask 214, 1,355 cr, old reserve 1,157) → it buys | C2 | the stock after the auction | — |
 | **T-AC-5** (serves B-AC-1) | Short and funded: the pass candidate's gain is below the buy's; no veto | C4 | tradeDecision's shortlist | not funded: pass gain 0 |
 | **T-AC-6** (serves B-AC-2) | RULE-2 row 1's example: S(k) follows AM-17's turn-off order | C1 | unitValues' keep | no plot needing Energy: S = replace |
