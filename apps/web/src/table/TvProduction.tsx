@@ -181,10 +181,13 @@ function Silo({ player, slot, got, fill, glow, asked, children }: { player: Mule
   const species = useSeatSpecies(slot);
   const colour = SLOT_COLOR[slot];
   return (
-    <div className={cx('flex h-[84px] items-stretch gap-3 rounded-panel border-2 bg-panel px-3 py-2 transition-shadow', glow && 'shadow-glow')} style={{ borderColor: colour }} data-testid={`silo-${player.id}`}>
-      <span className="flex w-16 shrink-0 flex-col items-center justify-center gap-1">
-        <Creature species={species} color={colour} size={36} />
-        <span className="max-w-full truncate font-display text-lg font-semibold leading-none">{player.name}</span>
+    <div className={cx('flex h-[84px] items-stretch gap-3 rounded-panel border-2 bg-panel px-3 py-1.5 transition-shadow', glow && 'shadow-glow')} style={{ borderColor: colour }} data-testid={`silo-${player.id}`}>
+      {/* The name on up to two lines, broken between words ("The / Accountant"), cut only past the second. */}
+      <span className="flex w-24 shrink-0 flex-col items-center justify-center gap-0.5">
+        <Creature species={species} color={colour} size={28} />
+        <span className="line-clamp-2 max-w-full break-words text-center font-display text-sm font-semibold leading-tight" data-testid={`silo-name-${player.id}`}>
+          {player.name}
+        </span>
       </span>
       {/* The silo: a vessel in the player's colour that fills as their goods land. */}
       <span data-fly-target={player.id} className="relative flex min-w-0 flex-1 flex-col justify-end overflow-hidden rounded-t-[22px] rounded-b-control border-2 bg-raised" style={{ borderColor: colour }}>
