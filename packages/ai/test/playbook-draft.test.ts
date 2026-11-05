@@ -8,7 +8,9 @@ import {
   MS_PER_SECOND,
   observe,
   stableJson,
+  stepAuction,
   STRATEGIST,
+  WALK,
   type AiLevelId,
   type AiPersonaId,
   type GameState,
@@ -18,7 +20,7 @@ import {
 } from '@mule/engine';
 import { Brain } from '../src/brain.js';
 import { PERSONAS } from '../src/personas.js';
-import { playGame } from '../src/play.js';
+import { applyAction, playGame } from '../src/play.js';
 import { draftPlaybook, type DraftPhase } from '../src/playbook/draft.js';
 import { AiSeat } from '../src/seat.js';
 import { applySets } from '../src/sim.js';
@@ -332,6 +334,46 @@ describe('the draft writes the parts of its phase', () => {
           expect(part.walkAway).toBe(Math.max(1, Math.floor(Math.min(plan.values.buy[h]!, essential ? me.money : Math.min(me.money, plan.budget)))));
         }
       }
+    }
+  });
+});
+
+/**
+ * Month 1's auction at `good`'s status screen, ai2 (a trader) owning a farm and a Smithore mine on seed 11's plains,
+ * holding none of `good` and `money`: the goods before it pass with every seat pressing Done.
+ */
+function shortAt(good: Good, money: number): GameState {
+  const state = createGame({ seed: 11, players: PERSONAS_AT_TABLE.map((_, i) => ({ id: `ai${i}`, name: `AI ${i + 1}`, isAi: true })) });
+  const plains = state.tiles.flatMap((t, i) => (t.terrain === 'plains' && t.owner === null ? [i] : []));
+  Object.assign(state.tiles[plains[0]!]!, { owner: 'ai2', outfit: 'food' });
+  Object.assign(state.tiles[plains[1]!]!, { owner: 'ai2', outfit: 'smithore' });
+  while (state.phase !== 'auction') advancePhase(state);
+  // literal-ok: a runaway guard on the auction's ticks, not a game clock
+  for (let t = 0; t < 100_000 && !(state.auction!.good === good && state.auction!.stage === 'status'); t++) {
+    for (const p of state.players) applyAction(state, p.id, { type: 'done', done: true });
+    stepAuction(state, WALK.tickMs);
+  }
+  expect(state.auction).toMatchObject({ good, stage: 'status' });
+  Object.assign(state.players[2]!, { money });
+  state.players[2]!.stock[good] = 0;
+  return state;
+}
+
+describe("the draft's auction part walks as the hand does (RULE-10)", () => {
+  it("T-AC-8 (RULE-5): short of what keeps it whole, a buyer's Water and Energy walk-away is capped by its money, as the hand's, not its budget", () => {
+    // Under its cash reserve, so its budget is 0: only the money it holds bounds what it pays for a unit it must hold.
+    const money = 60;
+    const mind = seats[2]!.mind;
+    for (const good of ['water', 'energy'] as const) {
+      const state = shortAt(good, money);
+      const obs = observe(state, 'ai2');
+      const plan = goodPlan(obs, mind, good);
+      expect(plan.mustHold, `${good}: it holds less than keeps it whole`).toBeGreaterThan(0);
+      expect(plan.budget, good).toBe(0);
+      const part = draftPlaybook({ state, seat: 'ai2', mind, seed: seats[2]!.seed, phase: 'auction' }).auction![good]!;
+      expect(part.role, good).toBe('buyer');
+      expect(part.walkAway, good).toBe(Math.floor(Math.min(plan.values.buy[0]!, money)));
+      expect(part.walkAway, `${good}: above the budget's floor of 1`).toBeGreaterThan(1);
     }
   });
 });
