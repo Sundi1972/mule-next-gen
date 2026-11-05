@@ -164,21 +164,18 @@ async function printEvidence(): Promise<void> {
 }
 
 /**
- * Logs every message the room's game takes, and every development press with whether it was refused and why, by
- * wrapping the game's handle and develop: the reason a press did nothing is otherwise only a toast on one phone.
+ * Logs every message the room's game takes, and every development press (`act`) with whether it was refused and why,
+ * by wrapping the game's handle: the reason a press did nothing is otherwise only a toast on one phone.
  */
 function logDevIntents(server: MuleServer, code: string): void {
-  const game = (server.registry.get(code) as unknown as { game: { handle(seat: string, intent: unknown): void; develop(seat: string, intent: unknown): void } }).game;
+  const game = (server.registry.get(code) as unknown as { game: { handle(seat: string, intent: { type: string }): void } }).game;
   const stamp = (seat: string, intent: unknown) => `${((Date.now() - started) / 1_000).toFixed(1)}s ${seat} ${JSON.stringify(intent).slice(0, 80)}`;
   const handle = game.handle.bind(game);
   game.handle = (seat, intent) => {
     handled.push(stamp(seat, intent));
-    handle(seat, intent);
-  };
-  const develop = game.develop.bind(game);
-  game.develop = (seat, intent) => {
+    if (intent.type !== 'act') return handle(seat, intent);
     try {
-      develop(seat, intent);
+      handle(seat, intent);
       devIntents.push(`${stamp(seat, intent)} ok`);
     } catch (err) {
       devIntents.push(`${stamp(seat, intent)} refused: ${(err as Error).message}`);
