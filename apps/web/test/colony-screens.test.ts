@@ -1,4 +1,5 @@
 import type { ColonyProjectView, ColonyView, MuleView, MyView, TableView } from '@mule/protocol';
+import { COLONY_SCORE } from '@mule/engine';
 import { createElement, type ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -165,6 +166,16 @@ describe('C34: the colony at game over', () => {
     expect(said(tv, 'plaques-s2')).toContain('450 cr');
     expect(said(tv, 'plaques-s3')).toContain('no plaques');
     expect(said(tv, 'tv-winner')).toMatch(/^The game goes to Mia wins with a Worth of 7,050 cr$/);
+    // The verdict reads the score on its credit scale (RULE-25), at the thresholds engine config sets.
+    const { proud, held } = COLONY_SCORE.verdict;
+    const verdictAt = (total: number) => said(onTv(over({ ...FINAL, score: { ...FINAL.score!, total } }), TvGameOver), 'colony-verdict');
+    for (const [total, verdict] of [
+      [proud, 'A colony to be proud of'],
+      [proud - 1, 'A colony that held together'],
+      [held, 'A colony that held together'],
+      [held - 1, 'A colony in ruins'],
+      [116, 'A colony in ruins'], // a total on the placeholders' scale is no longer proud
+    ] as const) expect(verdictAt(total), `score ${total}`).toBe(verdict);
   });
 
   it('UBER-AC-7 / B-AC-34-1: in Collapse the TV’s colony band carries the failed colony in alert above the score; passed, it has no verdict lines', () => {
