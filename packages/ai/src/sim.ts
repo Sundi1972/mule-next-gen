@@ -10,11 +10,13 @@
  *   pnpm sim -- --set SPECIES_PERK.zipwingSpeed=1.5   (a config number for this run; repeatable; the header lists them)
  *   pnpm sim -- --set DEV_STEER.on=true   (a switch: true or false; this one plays development on the arcade floor)
  *   pnpm sim -- --air smoggy           (also counts each month's events as if the air were Smoggy; the games play on unforced)
+ *   pnpm sim -- --plays pair           (seats' paths: playbook, today or pair, RULE-15; adds the plan lines. Unset: as config says)
  */
 import * as engine from '@mule/engine';
 import {
   AI_LEVELS,
   AI_PERSONAS,
+  COLONY_SELLER,
   colonyFailed,
   emptyStock,
   GOOD_CONFIG,
@@ -25,17 +27,19 @@ import {
   rollPlayerEvent,
   score,
   SIM_TARGETS,
+  STORE_ID,
   WOLVES,
   type AiLevelId,
   type AiPersonaId,
   type AirBand,
+  type Playbook,
   type EventKey,
   type GameState,
   type MonthReport,
 } from '@mule/engine';
-import { simSeats } from './lineup.js';
+import { simSeats, type TablePlays } from './lineup.js';
 import type { FloorMomentCounts } from './floor-turn.js';
-import { playGame, type DevTurn } from './play.js';
+import { playGame, type DevTurn, type PlayedGame, type SeatSpec } from './play.js';
 
 function arg(name: string, fallback: number): number {
   const i = process.argv.indexOf(`--${name}`);
@@ -70,6 +74,83 @@ export function applySets(sets: readonly string[]): string[] {
     block[key] = value;
   }
   return [...sets];
+}
+
+const PLAYS: readonly TablePlays[] = ['playbook', 'today', 'pair'];
+
+/** `--plays`: one of PLAYS, or null without the flag; anything else is refused, naming it. */
+export function playsArg(text: string | null): TablePlays | null {
+  if (text === null) return null;
+  if (!(PLAYS as readonly string[]).includes(text)) throw new Error(`Unknown --plays ${text}; use ${PLAYS.join(', ')}`);
+  return text as TablePlays;
+}
+
+/** The winner's seat: the best engine score, a tie to the lower seat (a stable sort). */
+export function winnerOf(state: GameState): number {
+  return state.players.map((p, i) => ({ p, i })).sort((a, b) => score(state, b.p.id) - score(state, a.p.id))[0]!.i;
+}
+
+/** What the plan lines (C14) count over a run. */
+export interface PlanTally {
+  games: number;
+  /** Wins, and seats sat, by seat kind: a seat's `plays`. */
+  wins: Record<'playbook' | 'today', number>;
+  seats: Record<'playbook' | 'today', number>;
+  /** Planning playbooks written, and those with a monopolyTarget. */
+  plans: number;
+  monopolyPlans: number;
+  /** Land-auction lots AI sellers listed; their sales by item and buyer, and the credits they fetched. */
+  listed: number;
+  sold: { plot: number; mule: number; toStore: number; cr: number };
+  /** Route steps played from a part, and those that fell back, by reason (RULE-9 / RULE-11). */
+  steps: number;
+  fallbacks: Record<string, number>;
+}
+
+export function newPlanTally(): PlanTally {
+  return { games: 0, wins: { playbook: 0, today: 0 }, seats: { playbook: 0, today: 0 }, plans: 0, monopolyPlans: 0, listed: 0, sold: { plot: 0, mule: 0, toStore: 0, cr: 0 }, steps: 0, fallbacks: {} };
+}
+
+const kindOf = (spec: SeatSpec): 'playbook' | 'today' => (spec.plays === 'playbook' ? 'playbook' : 'today');
+
+/** Adds one played game to the tally; `winner` is its winner's seat (winnerOf). */
+export function tallyGame(t: PlanTally, specs: readonly SeatSpec[], played: PlayedGame, winner: number): void {
+  t.games++;
+  t.wins[kindOf(specs[winner]!)]++;
+  for (const s of specs) t.seats[kindOf(s)]++;
+  const plans = played.playbooks.filter((pb: Playbook) => pb.phase === 'planning');
+  t.plans += plans.length;
+  t.monopolyPlans += plans.filter((pb) => pb.strategy.monopolyTarget !== null).length;
+  t.listed += played.lots.sold + played.lots.unsold - played.lots.colonyOffered;
+  for (const f of played.facts) {
+    if (f.kind !== 'sale' || f.seller === COLONY_SELLER) continue;
+    t.sold[f.item]++;
+    if (f.buyer === STORE_ID) t.sold.toStore++;
+    t.sold.cr += f.price;
+  }
+  for (const o of played.outcomes) {
+    for (const item of o.items) {
+      if (!item.path.startsWith('/development/route/')) continue;
+      t.steps++;
+      if (item.actual === 'done') continue;
+      // The reason's kind, without the plot or the numbers after its colon.
+      const reason = (item.note ?? String(item.actual)).split(':')[0]!;
+      t.fallbacks[reason] = (t.fallbacks[reason] ?? 0) + 1;
+    }
+  }
+}
+
+/** The plan lines (C14): wins by seat kind, monopoly plans at the level, AI listings and their sales, route fallbacks. */
+export function planLines(t: PlanTally, level: AiLevelId): string[] {
+  const seats = t.seats.playbook + t.seats.today;
+  const sales = t.sold.plot + t.sold.mule;
+  const reasons = Object.entries(t.fallbacks).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  return [
+    `     Wins by seat kind: playbook ${pct(t.wins.playbook, t.games)}, today ${pct(t.wins.today, t.games)} of ${t.games} games (fair share ${pct(t.seats.playbook, seats)} for playbook seats; no check)`,
+    `     Monopoly plans at ${level}: ${t.monopolyPlans} of ${t.plans} planning playbooks (no check)`,
+    `     AI listings: ${t.listed} lots listed by AI sellers; ${sales} sold (${t.sold.plot} plots, ${t.sold.mule} MULEs; ${t.sold.toStore} to the store) for ${t.sold.cr} cr (no check)`,
+    `     Route fallbacks: ${reasons.reduce((n, [, k]) => n + k, 0)} of ${t.steps} route steps${reasons.length > 0 ? `; ${reasons.map(([r, n]) => `${r} ${n}`).join(', ')}` : ''} (no check)`,
+  ];
 }
 
 const pct = (n: number, of: number) => `${((n / Math.max(1, of)) * 100).toFixed(0)}%`; // literal-ok: a share shown in percent, display only
@@ -212,6 +293,9 @@ function main() {
   const first = arg('seed', 1);
   const level = (argText('level') ?? 'trader') as AiLevelId;
   const persona = argText('persona') as AiPersonaId | null;
+  const plays = playsArg(argText('plays'));
+  // Under --plays playbook or pair the report adds the plan lines; --plays today and no flag print today's report.
+  const plan = plays === 'playbook' || plays === 'pair' ? newPlanTally() : null;
   if (!(level in AI_LEVELS)) throw new Error(`Unknown level ${level}; use ${Object.keys(AI_LEVELS).join(', ')}`);
   if (persona && !(persona in AI_PERSONAS)) throw new Error(`Unknown persona ${persona}; use ${Object.keys(AI_PERSONAS).join(', ')}`);
   // `--walking off` plays the game as it was before walking cost development time.
@@ -266,7 +350,7 @@ function main() {
   // Month offsets of a broke run: the check looks for SIM_TARGETS.broke.months in a row.
   const brokeRun = Array.from({ length: SIM_TARGETS.broke.months }, (_, k) => k);
   for (let seed = first; seed < first + games; seed++) {
-    const specs = simSeats(players, level, seed, persona);
+    const specs = simSeats(players, level, seed, persona, plays);
     // Who starts each development hungry, for the spiral: a player hungry SPIRAL_MONTHS months running.
     const hungryRun = new Map<string, { run: number; spiral: boolean }>();
     // This month's sickness and forced counts, read once development is played; production completes them.
@@ -293,7 +377,8 @@ function main() {
         hungryRun.set(p.id, h);
       }
     };
-    const { state, broke, auction: a, lots: l, mulesLost: lost, turns, month1, moments } = playGame(seed, specs, { politics, walking, onPhase: onEachPhase });
+    const played = playGame(seed, specs, { politics, walking, onPhase: onEachPhase });
+    const { state, broke, auction: a, lots: l, mulesLost: lost, turns, month1, moments } = played;
     mulesLost += lost;
     floorTurns.push(...turns);
     floorMoments.push(...moments);
@@ -339,11 +424,12 @@ function main() {
       afterFire.mulePrices.push(next.mulePrice);
       afterFire.developed.push(developedAt.get(next.month) ?? 0);
     });
-    const ranked = state.players.map((p, i) => ({ p, i })).sort((a, b) => score(state, b.p.id) - score(state, a.p.id));
-    const winner = ranked[0]!;
-    wins[winner.p.species] = (wins[winner.p.species] ?? 0) + 1;
-    const wp = specs[winner.i]!.persona;
+    const winner = winnerOf(state);
+    const species = state.players[winner]!.species;
+    wins[species] = (wins[species] ?? 0) + 1;
+    const wp = specs[winner]!.persona;
     byPersona[wp] = (byPersona[wp] ?? 0) + 1;
+    if (plan) tallyGame(plan, specs, played, winner);
   }
 
   const check = (ok: boolean) => (ok ? 'ok  ' : 'MISS');
@@ -371,6 +457,7 @@ function main() {
   console.log(`     Players hungry ${SPIRAL_MONTHS} or more months running: ${pct(spirals, playerGames)} (no check)`);
   console.log(`     Wins by species:${Object.entries(wins).map(([s, n]) => `${s} ${pct(n, games)}`).join(', ')}`);
   console.log(`     Wins by persona: ${Object.entries(byPersona).map(([s, n]) => `${s} ${pct(n, games)}`).join(', ')}`);
+  if (plan) for (const line of planLines(plan, level)) console.log(line);
   console.log(
     `     Live auction a month: ${(auction.between / months).toFixed(1)} units between players, ${(auction.store / months).toFixed(1)} with the store, ${(auction.ship / months).toFixed(1)} to the ship; ${(auction.ms / months / MS_PER_SECOND).toFixed(0)} s of auction time`,
   );

@@ -96,6 +96,8 @@ export interface AiSeatOptions {
   onDecision?: (record: DecisionRecord) => void;
   /** RULE-6 row 1: false plays every phase by today's asks. Unset, AI_PLANS.on decides. */
   playbook?: boolean;
+  /** AM-26: whether the own path plays its own development and auction parts. Unset, AI_PLANS.ownPhases decides. */
+  ownPhases?: boolean;
   /** Each playbook the seat plays itself, validated: what the game records for it. Unset, the seat writes none. */
   onPlaybook?: (playbook: Playbook) => void;
 }
@@ -216,13 +218,13 @@ export class AiSeat {
   }
 
   /**
-   * RULE-6's path for `key`. The own path's development and auction parts play only while AI_PLANS.ownPhases is on
-   * (AM-26): off, the own path plays today's for them, while an adopted part still plays. Read per call, so `--set`
-   * and a test that sets it switch it.
+   * RULE-6's path for `key`. The own path's development and auction parts play only while the seat's ownPhases is on,
+   * AI_PLANS.ownPhases unless its options say (AM-26): off, the own path plays today's for them, while an adopted part
+   * still plays. Read per call, so `--set` and a test that sets it switch it.
    */
   private playPath(month: number, key: PartKey): PlayPath {
     const path = pathFor({ on: AI_PLANS.on, playbook: this.options.playbook, hasDecider: !!this.options.decider, adopted: this.adopted, month, key });
-    return path.by === 'own' && OWN_PHASE_KEYS.has(key) && !AI_PLANS.ownPhases ? { by: 'today' } : path;
+    return path.by === 'own' && OWN_PHASE_KEYS.has(key) && !(this.options.ownPhases ?? AI_PLANS.ownPhases) ? { by: 'today' } : path;
   }
 
   /** A draft point: drafts, validates and writes. A draft or validator error is logged and the phase plays today's path (HC-9). */

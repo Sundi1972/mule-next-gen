@@ -45,6 +45,8 @@ import {
   type AiPersonaId,
   type DevPlace,
   type GameState,
+  type PhaseOutcome,
+  type Playbook,
 } from '@mule/engine';
 import type { Act, AiAction } from './actions.js';
 import type { DecisionRecord } from './brain.js';
@@ -52,7 +54,8 @@ import type { Decider } from './decider.js';
 import { playFloorPhase, type DevTurn, type FloorMomentCounts } from './floor-turn.js';
 import { LotHand } from './hands/lot.js';
 import { VoteHand } from './hands/vote.js';
-import { AiSeat } from './seat.js';
+import type { DraftPhase, PhaseFact, PlanEdit } from './playbook/index.js';
+import { AiSeat, type AiSeatOptions } from './seat.js';
 
 export type { DevTurn } from './floor-turn.js';
 
@@ -67,6 +70,12 @@ export type { DevTurn } from './floor-turn.js';
 export interface SeatSpec {
   persona: AiPersonaId;
   level: AiLevelId;
+  /**
+   * The seat's path (C14). 'today': today's path in every phase, planning included (playbook false). 'playbook': its
+   * playbook, its own development and auction parts included, whatever AI_PLANS.ownPhases says (AM-26). Unset: as the
+   * config says (AI_PLANS.on, AI_PLANS.ownPhases), the path that ships.
+   */
+  plays?: 'playbook' | 'today';
 }
 
 export interface PlayedGame {
@@ -87,6 +96,41 @@ export interface PlayedGame {
   month1: { waited: number; continued: boolean } | null;
   /** On the floor: what the moments came to, one a development phase, month by month; empty where the game walks. */
   moments: FloorMomentCounts[];
+  /** The public facts as they settled, in order, as MuleGame notifies them (C8): claims, declares, trades and sales. */
+  facts: PhaseFact[];
+  /** Each seat's PhaseOutcome as its development and its auction ended, where it played a part (RULE-11). */
+  outcomes: PhaseOutcome[];
+  /** Every playbook the 'playbook' seats wrote, in order (their onPlaybook). */
+  playbooks: Playbook[];
+}
+
+type Without<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
+/** A fact before it is stamped with its month and phase: what MuleGame's notify takes. */
+type UnstampedFact = Without<PhaseFact, 'month' | 'phase'>;
+
+/** The seat options a spec's `plays` sets; unset, none, so the seat plays as the config says. */
+function pathOptions(plays: SeatSpec['plays'], written: Playbook[]): Partial<AiSeatOptions> {
+  if (plays === 'today') return { playbook: false };
+  if (plays === 'playbook') return { playbook: true, ownPhases: true, onPlaybook: (pb) => written.push(structuredClone(pb)) };
+  return {};
+}
+
+/**
+ * PlayOptions.edits at a draft point: the seat's validated draft for the phase, edited, passed through the seat's own
+ * gate and adopted, as WS2's playbooks.ts does on the server. No edits (null), nothing is adopted; a draft error is
+ * logged and nothing is adopted (HC-9). A 'today' seat plays no playbook, so it is not asked.
+ */
+function adoptEdits(options: PlayOptions, seat: AiSeat, spec: SeatSpec, state: GameState, phase: DraftPhase): void {
+  if (!options.edits || spec.plays === 'today') return;
+  let draft: Playbook;
+  try {
+    draft = seat.draft(state, phase);
+  } catch (err) {
+    console.error(`AI seat ${seat.id}: no ${phase} draft to edit for month ${state.month}: ${err instanceof Error ? err.message : String(err)}`);
+    return;
+  }
+  const edits = options.edits(seat, draft, state);
+  if (edits) seat.adopt(seat.validator()(state, seat.id, draft, edits).playbook);
 }
 
 /** Seat i's place when the order is rotated by k; the period is the most seats a game has. */
@@ -225,6 +269,12 @@ export interface PlayOptions {
   deciderFor?: (seatId: string, spec: SeatSpec, index: number) => Decider | null;
   /** Awaited by playGameAsync at every tick step and at least once at the end of every phase; playGame ignores it. */
   between?: () => Promise<void> | void;
+  /**
+   * B-AC-6's harness (C14): at each draft point (planning once the seat has planned, development and the auction as
+   * they open) a seat's validated draft, and the edits to it; null adopts nothing. The edits pass the seat's validator
+   * and the result is adopted, as WS2's writer does on the server.
+   */
+  edits?: (seat: AiSeat, draft: Playbook, state: GameState) => readonly PlanEdit[] | null;
 }
 
 /** Plays one game to the end; the same game, step for step, as playGameAsync without hooks. */
@@ -252,6 +302,11 @@ function* playSteps(seed: number, specs: SeatSpec[], options: PlayOptions): Gene
   // Read per game, so a sim run's --set reaches it.
   const DEV_TICK_MS = AI_HANDS.devTickMs;
   let decisions = 0;
+  const playbooks: Playbook[] = [];
+  const facts: PhaseFact[] = [];
+  const outcomes: PhaseOutcome[] = [];
+  /** A public fact, stamped with the month and phase it settles in, as MuleGame's notify does. */
+  const notify = (fact: UnstampedFact) => facts.push({ ...fact, month: state.month, phase: state.phase } as PhaseFact);
   const seats = specs.map(
     (s, i) =>
       new AiSeat({
@@ -266,6 +321,7 @@ function* playSteps(seed: number, specs: SeatSpec[], options: PlayOptions): Gene
           decisions++;
           options.onDecision?.(r);
         },
+        ...pathOptions(s.plays, playbooks),
       }),
   );
   const broke: string[][] = [];
@@ -294,7 +350,10 @@ function* playSteps(seed: number, specs: SeatSpec[], options: PlayOptions): Gene
           stepElection(state, WALK.tickMs);
         }
         seats.forEach((_, i) => vote(i));
-        for (const s of seats) s.planMonth(state, (a) => applyAction(state, s.id, a));
+        seats.forEach((s, i) => {
+          s.planMonth(state, (a) => applyAction(state, s.id, a));
+          adoptEdits(options, s, specs[i]!, state, 'planning');
+        });
         break;
       }
       case 'landGrant': {
@@ -309,7 +368,11 @@ function* playSteps(seed: number, specs: SeatSpec[], options: PlayOptions): Gene
               .map((s, i) => ({ s, i, ms: s.onLit(state) }))
               .filter((b): b is { s: AiSeat; i: number; ms: number } => b.ms !== null && b.ms < GAME.grantTickMs)
               .sort((a, b) => a.ms - b.ms || rot(a.i, steps) - rot(b.i, steps));
-            for (const b of bids) if (applyAction(state, b.s.id, { type: 'claim', x: lit.x, y: lit.y })) break;
+            for (const b of bids) {
+              if (!applyAction(state, b.s.id, { type: 'claim', x: lit.x, y: lit.y })) continue;
+              notify({ kind: 'claim', seat: b.s.id, plot: tileIndex(state.width, lit.x, lit.y) });
+              break;
+            }
           }
           if (!grantDone(state)) advanceGrant(state);
           yield;
@@ -317,6 +380,7 @@ function* playSteps(seed: number, specs: SeatSpec[], options: PlayOptions): Gene
         break;
       }
       case 'development': {
+        seats.forEach((s, i) => adoptEdits(options, s, specs[i]!, state, 'development'));
         if (DEV_STEER.on && options.walking !== false) {
           // The arcade floor: every colonist steered by its hand and stepped by the engine, as on the server (C10).
           const phase = yield* playFloorPhase(state, seats);
@@ -360,10 +424,19 @@ function* playSteps(seed: number, specs: SeatSpec[], options: PlayOptions): Gene
         break;
       }
       case 'auction': {
+        seats.forEach((s, i) => adoptEdits(options, s, specs[i]!, state, 'auction'));
         // literal-ok: a runaway guard on the goods auction's ticks, not a game clock
         for (let ticks = 0; state.auction && state.auction.stage !== 'over' && ticks < 100_000; ticks++) {
+          const good = state.auction.good;
           for (const s of seats) s.auctionTick(state, WALK.tickMs, (a) => applyAction(state, s.id, a));
-          for (const t of stepAuction(state, WALK.tickMs)) {
+          // Read before the step, as MuleGame does: a status screen that ends with nobody trading moves straight on.
+          const sides = state.auction.stage === 'status' ? state.auction.walkers.map(({ id, side }) => ({ id, side })) : [];
+          const trades = stepAuction(state, WALK.tickMs);
+          if (good && sides.length > 0 && (state.auction.stage !== 'status' || state.auction.good !== good)) {
+            for (const { id, side } of sides) notify({ kind: 'declare', seat: id, good, side });
+          }
+          for (const t of trades) {
+            notify({ kind: 'trade', good: t.good, buyer: t.buyer, seller: t.seller, price: t.price, qty: t.quantity });
             if (t.buyer === SHIP_ID) auction.ship++;
             else if (t.buyer === STORE_ID || t.seller === STORE_ID) auction.store++;
             else auction.between++;
@@ -385,6 +458,10 @@ function* playSteps(seed: number, specs: SeatSpec[], options: PlayOptions): Gene
             else lots.unsold++;
             if (colony) lots.colonyOffered++;
             if (colony && result.kind === 'sold') lots.colonySold++;
+            if (result.kind !== 'kept') {
+              const buyer = result.kind === 'sold' ? result.buyer : STORE_ID;
+              notify({ kind: 'sale', item: lot.item.kind, plot: tileIndex(state.width, lot.item.x, lot.item.y), seller: lot.seller, buyer, price: result.price });
+            }
           }
           yield;
         }
@@ -395,9 +472,16 @@ function* playSteps(seed: number, specs: SeatSpec[], options: PlayOptions): Gene
         broke.push(state.players.filter((p) => p.money < SIM_TARGETS.broke.below && state.tiles.some((t) => t.owner === p.id && !t.outfit)).map((p) => p.id));
         break;
     }
+    // RULE-11: how each seat's development and auction went against the part it played, from the facts so far.
+    if (state.phase === 'development' || state.phase === 'auction') {
+      for (const s of seats) {
+        const outcome = s.outcome(state.phase, state, facts);
+        if (outcome) outcomes.push(outcome);
+      }
+    }
     yield;
     options.onPhase?.(state);
     advancePhase(state);
   }
-  return { state, seats, broke, auction, lots, mulesLost, decisions, turns, month1, moments };
+  return { state, seats, broke, auction, lots, mulesLost, decisions, turns, month1, moments, facts, outcomes, playbooks };
 }

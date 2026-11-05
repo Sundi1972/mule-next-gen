@@ -136,5 +136,6 @@ describe('the sim adopts edited playbooks through the seat’s gate (C14, B-AC-6
 });
 
 function declared(game: PlayedGame, seat: string, month: number, good: Good): string | undefined {
-  return game.facts.find((f) => f.kind === 'declare' && f.seat === seat && f.month === month && f.good === good)?.side as string | undefined;
+  for (const f of game.facts) if (f.kind === 'declare' && f.seat === seat && f.month === month && f.good === good) return f.side;
+  return undefined;
 }
