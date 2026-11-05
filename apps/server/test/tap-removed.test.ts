@@ -7,7 +7,7 @@ import { fakeContext, readyAll, seats } from './fake-context.js';
 /**
  * C14 (PR-12): the tap walk is gone. Every game steers its development, whatever options it was built with, so a record
  * made before the removal (its options say `devSteer: false`) replays on the floor; the colonist view carries no walk;
- * and a development tap is no intent at all.
+ * and a development tap is refused.
  */
 function inDevelopment(options: Record<string, unknown>) {
   const fake = fakeContext();
@@ -40,10 +40,10 @@ describe('C14: no tap walk left', () => {
     expect(colonist).toHaveProperty('assayUntil');
   });
 
-  it('C14-3: a development tap is not an intent: the game refuses it as unknown', () => {
+  it('C14-3: a development tap is refused in words: the floor plays every move through a press', () => {
     const { game } = inDevelopment({});
     for (const tap of [{ type: 'buyMule' }, { type: 'pub' }, { type: 'outfit', outfit: 'food' }, { type: 'analyse', x: 0, y: 0 }]) {
-      expect(() => game.handle(seats[0]!.id, tap as unknown as MuleIntent), tap.type).toThrow(/Unknown intent/);
+      expect(() => game.handle(seats[0]!.id, tap as unknown as MuleIntent), tap.type).toThrow(/walk there and press the button/);
     }
   });
 });

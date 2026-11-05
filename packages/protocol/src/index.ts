@@ -13,6 +13,17 @@ export type MuleIntent =
   | { type: 'drone'; plots: { x: number; y: number }[] }
   /** Land grant: claim the plot that is lit. The coordinates say which plot the player saw lit. */
   | { type: 'claim'; x: number; y: number }
+  /**
+   * Development's moves, by name. No screen sends them since development is steered (C14): the server refuses them,
+   * and the floor plays each through `act`. They stay while the AI's move catalogue (packages/ai actions.ts) names
+   * them as its moves' commands.
+   */
+  | { type: 'buyMule' }
+  | { type: 'outfit'; outfit: Outfit }
+  | { type: 'install'; x: number; y: number }
+  | { type: 'analyse'; x: number; y: number }
+  | { type: 'filter'; x: number; y: number }
+  | { type: 'pub' }
   /** Auction: buy, sell or pass on the good that is up. During the walk a switch jumps you to the new side's start edge. */
   | { type: 'declare'; side: AuctionSide }
   /** Auction, during the walk: hold up, hold down, or let go. The land auction's walk uses it too. */

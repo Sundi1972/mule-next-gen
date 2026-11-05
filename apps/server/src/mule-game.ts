@@ -562,6 +562,14 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         if (grantDone(state)) this.nextPhase();
         else this.maybeFastForward();
         return;
+      case 'buyMule':
+      case 'outfit':
+      case 'install':
+      case 'analyse':
+      case 'filter':
+      case 'pub':
+        // Development is steered (C14): the floor plays these moves through a press, never as an intent.
+        throw new RuleError('Development is steered: walk there and press the button');
       case 'declare':
         declareRole(state, seatId, intent.side);
         return;
@@ -600,9 +608,6 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         this.continuePlanning(seatId);
         return;
       }
-      default:
-        // An intent this game does not take, such as a development tap from before steering (C14).
-        throw new RuleError('Unknown intent');
     }
   }
 
