@@ -1388,8 +1388,11 @@ async function aFightLostWithAMule(t: ArcadeTable, store: { x: number; y: number
     const straight = Math.abs(c.x - a.x) < 1e-9 || Math.abs(c.y - a.y) < 1e-9;
     return straight ? [{ d: Number(d.toFixed(4)), led: Number(led.toFixed(4)), free: Number(free.toFixed(4)) }] : [];
   });
-  const full = paces.filter((k) => Math.abs(k.d - k.free) <= 0.0002);
-  check(paces.length >= 5 && full.length === paces.length, `B-AC-5: with his MULE bolted Heiko walks at full pace, not a led one: ${full.length} of ${paces.length} straight steps at full; the rest ${JSON.stringify(paces.filter((k) => !full.includes(k)).slice(0, 6))}`);
+  // A step shorter than both paces is an arrival or a tick boundary, never a pace: it says nothing about a lead. Every
+  // other step must be the full pace; one at the led pace, or between the two, is a walk still slowed by the MULE.
+  const measured = paces.filter((k) => k.d >= Math.min(k.led, k.free) - 0.0002);
+  const full = measured.filter((k) => Math.abs(k.d - k.free) <= 0.0002);
+  check(full.length >= 5 && full.length === measured.length, `B-AC-5: with his MULE bolted Heiko walks at full pace, not a led one: ${full.length} of ${measured.length} straight steps at full (${paces.length - measured.length} short of both left out); the rest ${JSON.stringify(measured.filter((k) => !full.includes(k)).slice(0, 6))}`);
   await heiko.waitForTimeout(300);
   const there = (await readMoments(heiko)).drawn['s1'];
   const truth = colonistOf(server, code, 's1');
