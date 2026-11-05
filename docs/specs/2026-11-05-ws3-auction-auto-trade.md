@@ -189,8 +189,9 @@ WS3 by today's split). WS1: `ai/src/hands/auction.ts` (named edit) and the sim. 
 
 ## §10 · Amendment AM-1: stop at your need, switch sides, rest zones, bid past a sold-out store `[handoff]`
 
-**Status:** DRAFT for Heiko's approval via the PM (2026-11-05). Nothing below is built until he approves; the build
-goes ahead of the MULE swap only if he says so. **Screens:** WS6 draws them (mock first); this section fixes the rules,
+**Status:** Heiko has seen WS6's mock (`design/mocks/auction-rules`, cde3ff61) and chose **A: hold ▼ for one
+second** to sell into a shortage (via the PM, 2026-11-05). WS6's three open questions are settled under RULE-4, RULE-6
+and RULE-7. The build goes ahead of the MULE swap only if he says so. **Screens:** WS6 draws them (mock first); this section fixes the rules,
 what the AI does and what the server sends. **Grounded on:** trunk `origin/feat/strategist` f6f3a275 (walk.ts,
 auction.ts read). **Out of scope:** the store's own price setting (another lane), and the trade pace, which is a value
 ruling already built (#376: `WALK.tradeStartMs` 1000, `tradeFloorMs` 200, `tradeSpeedUp` 0.8; RULE-3's examples above
@@ -241,7 +242,9 @@ inputs
   units(w)   the seller's units of this good now
   need(w)    next month's need of this good (the status row's `need`, auction.ts::monthNeeds), fixed at the walk's start
   held(w)    false | true: this seller was stopped at their need this good
-  conscious  the seller walks or taps down (a `walk` down or `walkStep` down intent) after held became true
+  conscious  after held became true, the seller holds ▼ (a `walk` down intent, not released) for WALK.shortHoldMs
+             (1000 ms) of the board's time (Heiko's choice A). A tap (`walkStep` down) or a shorter hold does not
+             count: it moves nothing while held, so a thumb resting on ▼ never sells short by accident
 
 several rows match → first match wins
 
@@ -250,8 +253,9 @@ several rows match → first match wins
   2   held(w) and conscious                                        sells on into shortage, for the rest of this good;
                                                                    the speed-up starts again from the first unit
   3   a unit would take units(w) below need(w), and not held(w)    that unit does not sell. The seller stops (dir 0), is
-                                                                   put one price step above the line it was trading at
-                                                                   (off every line), and held(w) becomes true
+                                                                   put ONE price step above the line it was trading at
+                                                                   (off every line), stays a seller, and held(w)
+                                                                   becomes true
   4   otherwise                                                    RULE-1 as above
 
 unknown
@@ -260,6 +264,13 @@ unknown
   their first sale into shortage takes the second, conscious press.
 ```
 
+- **WS6's question 2, settled: one step, not three.** The engine puts the seller one price step off the line, the
+  least that stops every trade. The phone and the TV show that the seller is holding (the KEEPS mark) from the view's
+  `held: true`, not from the distance. A gap of three steps would only be a drawing choice, and it would differ by
+  good.
+- While held, a hold of ▼ shorter than 1 s moves nothing and sells nothing; the rail says "To sell more, hold ▼: you'd
+  be short next month" (WS6's words). The 1 s counts from the hold's start on the server, in the board's own time, so
+  a replay counts it the same way. The hold then walks and sells on as RULE-1 and RULE-3.
 - It applies to every sale, at a house's line and to another player, since either can push a seller into shortage.
 - The stop is a state the server holds (`held`), so a replay stops at the same unit: the conscious act is a
   recorded intent.
@@ -298,6 +309,11 @@ unknown
   5   a buyer walks or taps up while the store is sold out        RULE-7
 ```
 
+- **WS6's question 1, settled: no detent.** The hard edges can't be crossed at all, so they need no detent: lo and hi,
+  B for sellers, S for buyers while the store sells. A line a player may cross (a buyer walking down past B into their
+  own zone, a seller walking down past S toward the trading floor) is crossed by a deliberate hold, and the one
+  crossing that costs something, selling below your need, is caught by RULE-4's stop. A detent would make every
+  ordinary sale take two holds.
 - Standing anywhere in your own rest zone, you can't trade: the other side can't reach you.
 - In the buyers' zone: sellers stop at B, and the zone lies below B.
 - In the sellers' zone: buyers stop at S while the store sells (row 4), and under RULE-7 they stop one step short of
@@ -322,6 +338,9 @@ unknown
                                                                    during its walk
 ```
 
+- **WS6's question 3, settled: yes.** Sold out, the line stays at the old S until a bid passes it, then follows the
+  top bid (row 4), and every seller above the line still rests. Row 2 means a buyer can never walk past a resting
+  seller, so the top bid is always below every resting ask: no seller is ever left between the old S and the line.
 - Row 4 is shown, not traded. The line reads "Highest bid N" (WS6's words), so a seller sees what a walk down would
   fetch. It also moves the sellers' rest zone's bottom up to that bid: a seller above it is resting.
 - On the trading floor below S, walking up into a seller still meets and trades, as today. Row 2 protects only the
@@ -340,14 +359,15 @@ unknown
 | game record | shape unchanged; `held` is derived on replay from the recorded intents | no | all |
 
 Config (WALK, named, for `pnpm sim -- --set`): `needStop: true` (RULE-4 off for a sweep), `soldOutBidding: true`
-(RULE-7 off). No new number: "one price step" is today's walk step.
+(RULE-7 off), `shortHoldMs: 1000` (the hold that sells into shortage, Heiko's A). "One price step" is today's walk
+step.
 
 ### Acceptance criteria
 
 | AC | Given · When · Then | Negative |
 |---|---|---|
 | B-AC-B1 | Heiko holds 12 Water and needs 4. He walks down to the store's line and stands. Then 8 sell, the next does not, and his walker stands one step above the line. Nothing more sells over the next 5 s | — |
-| B-AC-B2 | then he holds ▼ again (or taps it) · Then he sells on, one unit at a time, below his need | with no new press, no unit sells below need |
+| B-AC-B2 | then he holds ▼ for one second · Then he sells on, one unit at a time, below his need | a tap of ▼, or a hold shorter than 1 s, sells nothing and moves nothing |
 | B-AC-B3 | Brix holds 6 Smithore (need 0) and walks to the store's line · Then all 6 sell with no stop | — |
 | B-AC-C1 | Lena is a seller trading at the store's line mid-walk · She taps Buy · Then her trading stops at once, she is a buyer at the bottom edge, and walking up she buys from the store | tapping Sell with none is refused |
 | B-AC-D1 | A buyer holds ▼ · Then they stop at the bottom edge. A seller holds ▲ · Then they stop at the top edge. Neither trades | — |
