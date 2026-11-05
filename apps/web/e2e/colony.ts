@@ -360,10 +360,10 @@ async function theColonyScoreEveryMonthEnd(): Promise<void> {
       const rows = [...(end?.querySelectorAll('[data-testid=league-table] tbody tr') ?? [])].map((r) => r.getBoundingClientRect());
       const foot = end?.querySelector('[data-testid=colony-on-tv]')?.getBoundingClientRect() ?? null;
       const table = end?.querySelector('[data-testid=league-table]');
+      // The innermost clipping box is the tightest bound the league's rows must fit in.
       let clip: DOMRect | null = null;
-      for (let el = table?.parentElement; el && el !== end; el = el.parentElement) {
-        const o = getComputedStyle(el);
-        if (o.overflowY !== 'visible') clip = el.getBoundingClientRect();
+      for (let el = table?.parentElement; el && el !== end && !clip; el = el.parentElement) {
+        if (getComputedStyle(el).overflowY !== 'visible') clip = el.getBoundingClientRect();
       }
       return { rows: rows.map((r) => ({ top: r.top, bottom: r.bottom })), foot: foot && { top: foot.top, bottom: foot.bottom }, clipBottom: clip?.bottom ?? null, vh: innerHeight };
     });
