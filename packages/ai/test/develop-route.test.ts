@@ -675,6 +675,23 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
     expect(leftOut.map((p) => [p.mule, p.outfit])).toEqual([[1, 'food'], [2, 'food']]);
   });
 
+  it("T-AC-7 (AM-27): a replanned edit's re-draft logs the MULE picks it left out at the seat's gate, as the seat's own draft does", () => {
+    // The bolted led MULE above: every pick for it is refused, in the draft and in a re-draft under an edited strategy.
+    const { state } = wonMuleLot(2, 'food');
+    me(state).muleBolted = true;
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { seat } = seatAndHand();
+    const draft = seat.draft(state, 'development');
+    errors.mockClear();
+    const moneyMaker = draft.strategy.moneyMaker === 'smithore' ? 'crystite' : 'smithore';
+    const { playbook } = seat.validator()(state, ME, draft, [{ path: '/strategy/moneyMaker', to: moneyMaker, reason: 'This pays.' }]);
+    const notes = errors.mock.calls.map((c) => String(c[0]));
+    errors.mockRestore();
+    expect(playbook.strategy.moneyMaker, 'the edit plays, so the route is re-drafted').toBe(moneyMaker);
+    // No silent end: each pick the re-draft left out is logged once, with the seat.
+    expect(notes, JSON.stringify(playbook.development!.route)).toEqual([1, 2].map((k) => expect.stringMatching(new RegExp(`^AI seat ai0: the development draft left out MULE ${k} \\(\\w+ on plot \\d+\\), refused: Your MULE bolted`))));
+  });
+
   describe("on the floor, the runner's own rows (AM-19)", () => {
     beforeEach(() => {
       DEV_STEER.on = true;
