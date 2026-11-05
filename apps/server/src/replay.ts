@@ -28,6 +28,8 @@ export class RecordMismatch extends Error {
 export interface ReplayResult {
   identical: boolean;
   scores: { seat: string; recorded: number | null; replayed: number | null }[];
+  /** The colony score's total at the end (C32), recorded and replayed; null without the council. */
+  colonyScore: { recorded: number | null; replayed: number | null };
   stateHash: { recorded: string | null; replayed: string | null };
   /** Why the replay is not identical, when a step played otherwise than recorded without diverging (AM-5). */
   reason?: string;
@@ -239,8 +241,10 @@ export async function replay(record: MuleRecord): Promise<ReplayResult> {
   const outcome = replayed as MuleRecord['outcome'] | null;
   const scores = record.seats.map((s) => ({ seat: s.id, recorded: recorded?.scores?.[s.id] ?? null, replayed: outcome?.scores?.[s.id] ?? null }));
   const stateHash = { recorded: recorded?.stateHash ?? null, replayed: outcome?.stateHash ?? null };
-  const identical = reason === undefined && stateHash.recorded === stateHash.replayed && scores.every((s) => s.recorded === s.replayed);
-  return { identical, scores, stateHash, ...(reason !== undefined ? { reason } : {}) };
+  const colonyScore = { recorded: recorded?.colonyScore ?? null, replayed: outcome?.colonyScore ?? null };
+  const identical =
+    reason === undefined && stateHash.recorded === stateHash.replayed && scores.every((s) => s.recorded === s.replayed) && colonyScore.recorded === colonyScore.replayed;
+  return { identical, scores, colonyScore, stateHash, ...(reason !== undefined ? { reason } : {}) };
 }
 
 const isStep = (event: MuleRecord['events'][number]): event is StepEvent => event.type !== 'notice' && event.type !== 'playbook';

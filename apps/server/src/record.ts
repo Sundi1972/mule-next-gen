@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
+  colonyScore,
   configSnapshot,
   RuleError,
   score,
@@ -67,7 +68,13 @@ function recordedChoice({ optionId, line, by, note }: Choice): RecordedChoice {
 }
 
 export function outcomeOf(state: GameState, seats: readonly { id: string }[]): NonNullable<MuleRecord['outcome']> {
-  return { scores: Object.fromEntries(seats.map((s) => [s.id, score(state, s.id)])), stateHash: stateHash(state) };
+  const colony = colonyScore(state);
+  return {
+    scores: Object.fromEntries(seats.map((s) => [s.id, score(state, s.id)])),
+    // C32 (G-5 RULE-25): the end's colony score, so a replay is checked against it as against the seats' scores.
+    ...(colony ? { colonyScore: colony.total } : {}),
+    stateHash: stateHash(state),
+  };
 }
 
 /**
