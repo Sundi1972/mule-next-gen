@@ -146,7 +146,7 @@ function Harvest() {
       }
       footer={
         <Button size="lg" variant={self.ready ? 'outline' : 'holo'} className="w-full px-2" disabled={self.ready} onClick={() => client.intent({ type: 'ready' })}>
-          {self.ready ? 'Waiting for the others' : 'On to the auction'}
+          {self.ready ? 'Waiting for the others' : 'Ready for the auction'}
         </Button>
       }
     >

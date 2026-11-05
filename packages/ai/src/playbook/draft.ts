@@ -4,11 +4,13 @@ import {
   analysisSeconds,
   buyMule,
   cloneForSim,
+  createRng,
   GAME,
   GOOD_CONFIG,
   GOODS,
   installMule,
   MS_PER_SECOND,
+  mulePrice,
   observe,
   outfitMule,
   RuleError,
@@ -22,16 +24,17 @@ import {
   type Good,
   type GoodPlay,
   type LandGrantPlay,
+  type Outfit,
   type PlanningPlay,
   type Playbook,
   type PlayerId,
   type Strategy,
 } from '@mule/engine';
 import { OPTION_IDS, TopPickDecider, toOptions, type Choice, type DecisionContext, type ShortOption } from '../decider.js';
-import { outlook } from '../outlook.js';
+import { outlook, productionsLeft } from '../outlook.js';
 import { PERSONAS, type DecisionKind } from '../personas.js';
-import { analysesWanted, developDecision, filtersWanted, goodPlan, landDecision, leaderOf, sellWanted, tradeDecision, type DevAction, type LandPlan } from '../strategist.js';
-import type { Shortlist } from '../utility.js';
+import { analysesWanted, developDecision, filtersWanted, goodPlan, landDecision, leaderOf, sellWanted, tradeDecision, walkVeto, type DevAction, type DevWalk, type LandPlan } from '../strategist.js';
+import { candidate, shortlist, type Shortlist } from '../utility.js';
 import { beforeTax, canFeed, cashReserve, installGain, type Mind } from '../value.js';
 
 /**
@@ -80,10 +83,18 @@ const REASONS: Record<Kind, string> = {
 const monthOf = (input: DraftInput, obs: GameState) => input.month ?? obs.month;
 
 /** A pick's seed: the seat's seed, the month and the pick's key, hashed (FNV-1a). */
-function seedOf(input: DraftInput, month: number, key: string): number {
+function seedOf(input: Pick<DraftInput, 'seed'>, month: number, key: string): number {
   let h = 0x811c9dc5; // literal-ok: FNV-1a's offset basis, a hash constant
   for (const ch of `${input.seed}|${month}|${key}`) h = Math.imul(h ^ ch.charCodeAt(0), 0x01000193); // literal-ok: FNV-1a's prime
   return h >>> 0;
+}
+
+/**
+ * A roll in [0, 1) from the draft's own seeded stream: the seat's seed, the month and `key`, as every pick is seeded. The
+ * table line a seat says for a drafted part draws it (AM-22), so the line never touches the Brain's or a hand's stream.
+ */
+export function draftRoll(seed: number, month: number, key: string): number {
+  return createRng(seedOf({ seed }, month, `line|${key}`)).next();
 }
 
 /** One pick among options, as the Classic decider makes it, seeded by its key. */
@@ -215,13 +226,92 @@ const MULE_STEPS = 3; // literal-ok: RULE-1b's MULE is three steps
 const midSeconds = ([lo, hi]: [number, number]) => (lo + hi) / 2 / MS_PER_SECOND; // literal-ok: the midpoint of a range
 
 /**
- * RULE-5 · development: the analyses, then each MULE as a pick of developDecision on a what-if copy that already holds
- * the MULEs before it, then the filters and the pub. The walk is priced as where the game walks (DEV_WALK).
+ * RULE-9 row 3's own pick: MULE `k` as the development draft would pick it on `input.state`, the same seeded TopPick
+ * of developDecision under the same key, so a stale MULE is replaced by what a fresh draft holds in its place.
  */
-function developmentPart(input: DraftInput, obs: GameState): DevelopmentPlay {
+export function draftMulePick(input: DraftInput, k: number, walk: DevWalk | undefined, focus: Good | null): DevAction {
+  const at: DraftInput = { ...input, phase: 'development' };
+  const obs = observe(at.state, at.seat);
+  return topPick(at, obs, 'develop', `mule:${k}`, keepOutfit(obs, at.mind, developDecision(obs, at.mind, k, walk, focus), walk));
+}
+
+/** The outfit of the MULE the seat leads already fitted (one won at the land auction), or null. */
+export function ledOutfit(obs: GameState, me: PlayerId): Outfit | null {
+  const carried = obs.players.find((p) => p.id === me)!.carriedMule;
+  return carried === null || carried === 'empty' ? null : carried;
+}
+
+/**
+ * AM-27: the pick for a MULE the seat leads already fitted keeps its outfit, so only its plot is picked: on the floor
+ * it cannot be fitted again (OUTFIT takes an empty MULE, RE-OUTFIT one taken off a plot this turn), and on taps a
+ * re-fit pays for an outfit twice. It is paid for, so the purchase's vetoes (the corral, the cash, the month's count)
+ * are not its; only the walk's is. With no plot the walk allows, 'stop'.
+ */
+function keepOutfit(obs: GameState, mind: Mind, list: Shortlist<DevAction>, walk: DevWalk | undefined): Shortlist<DevAction> {
+  const outfit = ledOutfit(obs, mind.me);
+  if (outfit === null) return list;
+  const walkOf = (index: number): string | null => {
+    if (!walk) return null;
+    const legs = walk.floor?.(index, outfit);
+    // As developDecision prices it: on the floor by the live legs, where the game walks by the corral and out.
+    const there = legs ? legs.there : walkSeconds(obs, mind.me, walk.at!, 'corral') + walkSeconds(obs, mind.me, 'corral', index);
+    return walkVeto(walk, there, legs ? legs.pub : 0);
+  };
+  const kept = list.all.flatMap((c) =>
+    c.action.kind === 'install' && c.action.outfit === outfit ? [candidate(c.key, c.label, c.action, c.value, c.considerations, walkOf(c.action.index))] : [],
+  );
+  const stop = list.all.filter((c) => c.action.kind === 'stop');
+  return shortlist(kept.some((c) => !c.veto) ? kept : stop, mind.level.shortlist, mind.level.shortlistTolerance);
+}
+
+/**
+ * AM-27: whether the MULE the seat leads already fitted makes anything over the game on one of its idle plots, kept
+ * as it is: its install gain with nothing left to pay for it and without what the MULE itself is worth at the end.
+ * True when it leads no fitted MULE.
+ */
+export function keptOutfitEarns(state: GameState, mind: Mind): boolean {
+  const obs = observe(state, mind.me);
+  const outfit = ledOutfit(obs, mind.me);
+  if (outfit === null) return true;
+  const o = outlook(obs, mind.me, { lookAhead: mind.level.lookAhead });
+  // installGain's residual for an idle plot (value.ts): the MULE's worth at the end, not what it makes.
+  const residual = productionsLeft(obs) > 0 ? mulePrice(obs) * STRATEGIST.residual : 0;
+  return obs.tiles.some((t) => {
+    if (t.owner !== mind.me || t.outfit) return false;
+    const { gain, cost } = installGain(obs, o, t, outfit, mind);
+    return gain + cost - residual > 0;
+  });
+}
+
+/**
+ * MULE `mule` led out on `copy` as the hand plays it (AM-27): a MULE the seat already leads, won at the land auction,
+ * is that MULE, so it is not bought, and it is not outfitted again for the outfit it carries. The copy with it
+ * installed, or the rules' refusal, with `copy` unchanged.
+ */
+function leadOut(copy: GameState, me: PlayerId, mule: Extract<DevAction, { kind: 'install' }>): GameState | RuleError {
+  const trial = cloneForSim(copy);
+  const self = trial.players.find((p) => p.id === me)!;
+  const tile = trial.tiles[mule.index]!;
+  try {
+    if (self.carriedMule === null) buyMule(trial, me);
+    if (self.carriedMule !== mule.outfit) outfitMule(trial, me, mule.outfit);
+    installMule(trial, me, tile.x, tile.y);
+  } catch (err) {
+    if (err instanceof RuleError) return err;
+    throw err;
+  }
+  return trial;
+}
+
+/**
+ * RULE-5 · development: the analyses, then each MULE as a pick of developDecision, leaning to the money-maker, on a
+ * what-if copy that already holds the MULEs before it, then the filters and the pub. The walk is priced as where the
+ * game walks (DEV_WALK). A pick the copy's rules refuse is logged and left out, and the picks go on.
+ */
+function developmentPart(input: DraftInput, obs: GameState, moneyMaker: Good | null): DevelopmentPlay {
   const { mind } = input;
   const me = mind.me;
-  const copy = cloneForSim(obs);
+  let copy = cloneForSim(obs);
   const self = copy.players.find((p) => p.id === me)!;
   // Drafted ahead of development (WS2 may ask at any time), the copy plays the coming phase.
   if (copy.phase !== 'development') {
@@ -243,17 +333,15 @@ function developmentPart(input: DraftInput, obs: GameState): DevelopmentPlay {
   }
   // On the arcade floor the hand prices the walk by the live floor, which this draft does not read.
   for (let k = 0; k < mind.level.mulesPerMonth && route.length + MULE_STEPS < cap; k++) {
-    const mule: DevAction = topPick(input, copy, 'develop', `mule:${k}`, developDecision(copy, mind, k, { at, left, taps }));
+    const walk: DevWalk = { at, left, taps };
+    const mule: DevAction = topPick(input, copy, 'develop', `mule:${k}`, keepOutfit(copy, mind, developDecision(copy, mind, k, walk, moneyMaker), walk));
     if (mule.kind === 'stop') break;
-    const tile = copy.tiles[mule.index]!;
-    try {
-      buyMule(copy, me);
-      outfitMule(copy, me, mule.outfit);
-      installMule(copy, me, tile.x, tile.y);
-    } catch (err) {
-      if (err instanceof RuleError) break;
-      throw err;
+    const led = leadOut(copy, me, mule);
+    if (led instanceof RuleError) {
+      console.error(`AI seat ${me}: the development draft left out MULE ${k + 1} (${mule.outfit} on plot ${mule.index}), refused: ${led.message}`);
+      continue;
     }
+    copy = led;
     route.push({ act: 'buyMule' }, { act: 'outfit', outfit: mule.outfit }, { act: 'install', plot: mule.index });
     left -= walkSeconds(copy, me, at, 'corral') + walkSeconds(copy, me, 'corral', mule.index) + taps;
     at = mule.index;
@@ -308,9 +396,23 @@ export function draftPlanningPart(input: DraftInput): PlanningPlay {
  */
 export function draftPlaybook(input: DraftInput): Playbook {
   const obs = observe(input.state, input.seat);
-  const strategy = input.strategy ?? draftStrategy(input, obs);
-  const head = { v: 1 as const, seat: input.seat, month: monthOf(input, obs), phase: input.phase, strategy, by: 'engine' as const };
+  const head = headOf(input, obs);
   if (input.phase === 'planning') return { ...head, planning: planningPart(input, obs), landGrant: landGrantPart(input, obs) };
-  if (input.phase === 'development') return { ...head, development: developmentPart(input, obs) };
+  if (input.phase === 'development') return { ...head, development: developmentPart(input, obs, head.strategy.moneyMaker) };
   return { ...head, auction: auctionPart(input, obs) };
+}
+
+/**
+ * AM-20: the seat's auction playbook for one good, drafted at that good's status screen, so its unit values see the
+ * good's status rows and the money the earlier goods left. Its auction part carries only `good`.
+ */
+export function draftGoodPlaybook(input: Omit<DraftInput, 'phase'>, good: Good): Playbook {
+  const auction: DraftInput = { ...input, phase: 'auction' };
+  const obs = observe(auction.state, auction.seat);
+  return { ...headOf(auction, obs), auction: { [good]: goodPart(auction, obs, good) } };
+}
+
+function headOf(input: DraftInput, obs: GameState) {
+  const strategy = input.strategy ?? draftStrategy(input, obs);
+  return { v: 1 as const, seat: input.seat, month: monthOf(input, obs), phase: input.phase, strategy, by: 'engine' as const };
 }
