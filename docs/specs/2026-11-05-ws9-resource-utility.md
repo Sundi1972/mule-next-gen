@@ -171,8 +171,9 @@ call sites   strategist.ts::goodPlan (strategist.ts:484) ·
              playbook/validate.ts::validatePlaybook's floorUnits (validate.ts:353)
 pin          AI_VALUE.model 'today': default, `--plays today` and politics-off sims
              byte-identical to trunk on 1/101/201 (T-AC-9)
-depends_on   C3 (the belief; stubbable: outlook.price) · WS1's exported
-             energyOffOrder(state, playerId), shipping in the AM-17 PR (PM ruling, 5 Nov;
+depends_on   C3 (the belief; stubbable: outlook.price) · WS1's exported turn-off order
+             for Energy and Water, shipping in the AM-17 PR (energyOffOrder(state,
+             playerId) today; WS1 generalises it per good for Water; PM ruling, 5 Nov;
              data, not stubbable) · the upkeep target WS1's stopgap builds (ws1-food-short;
              RULE-3 reuses it)
 ```
@@ -341,7 +342,11 @@ first match wins
                            order (WS1's AM-17 and its rulings, 5 Nov)
   2  a factory input       max(replace, the factory run's output value ÷ its input units)
   3  food                  max(replace, today's hunger walking cost)
-  4  water                 max(replace, today's half-a-farm share)
+  4  water                 as row 1, Water's turn-off order: (1 − UPKEEP.offOutputShare) ×
+                           the output value of the plot the order turns off at the k-th
+                           missing unit (Heiko's ruling, 5 Nov: Water is a base resource,
+                           every plot uses some, the biggest user turned off first; WS1
+                           folds it into AM-17)
   5  medicine              max(replace, today's sickness cost)
   6  any other good        0 (no need)
 replace    = belief(good) × (1 + PRICE.storeSpread) × AI_VALUE.shortFloorMarkup: buying it
@@ -350,7 +355,7 @@ unknown    the store won't sell the good (storeQuotes(…).sell null, WS5 §3) �
            unknown: S(k) is the damage alone (the row's second term), no buy-back floor;
            the order is empty (no plot needs Energy) → row 1 gives replace only;
            q(k) = 0 (RULE-3) → S never enters v(k): the replace floor never makes a seat
-           buy a good it doesn't need (a Water-less seat's Water, WS1 fix 5);
+           buy a good it doesn't need;
            the belief is unknown (game ends) → the store's posted price today (outlook.final)
 outcome    → C1
 examples   Energy, 3 short, plots ranked [factory 2 Energy, farm 1, farm 1]: S(0..1) =
@@ -366,15 +371,17 @@ inputs     target  the stock after the auction that keeps the seat whole next mo
                    good spoils, then the depot cap; then production spends Energy; then
                    packages/engine/src/game.ts:224 marks a seat hungry when Food < the month's need):
                      food    eat + ⌈eat / keep⌉
-                     water   drink + ⌈drink / keep⌉ for a seat with an irrigated plot
-                             (UPKEEP.irrigated); 0 otherwise: a player's Water shortfall
-                             costs only noWater on irrigated plots (packages/engine/src/production.ts:257)
+                     water   drink + ⌈(plots' use − ownNet) / keep⌉, as Energy (Heiko's
+                             ruling, 5 Nov). Until WS1's AM-17 generalisation lands: today
+                             a shortfall costs only noWater on irrigated plots
+                             (packages/engine/src/production.ts:257)
                      energy  ⌈(plots' use − ownNet) / keep⌉
                      input   ⌈the factory's inputs / keep⌉
                    READ, not copied (HC-5): the target WS1's stopgap builds from the
                    engine's upkeep order (ws1-food-short) is reused as this input
-           ownNet  Energy only: Σ over the seat's Energy plants of max(0, output − use),
-                   the net they leave for the other plots (never the gross forecast)
+           ownNet  Energy and Water: Σ over the seat's plants of that good of
+                   max(0, output − use), the net they leave for the other plots (never the
+                   gross forecast)
            held    units it holds now · keep = 1 − GOOD_CONFIG[good].spoilage
            risk    persona.risk · AI_VALUE.forecastRisk (0..1)
 first match wins
@@ -391,7 +398,8 @@ outcome    → C1. Answers WS1's 30-of-47 (forecast-covered units keep a share o
            after ending the auction at exactly the need (the target covers spoilage)
 examples   Energy, plots use 8, ownNet 10 − 2 = 8 → row 2 for k < ⌈8/0.75⌉ = 11 with
            q = forecastRisk × risk; today q = 0 and the seat sold to 0 ·
-           Food, eat 3, spoilage 0.5 → target 3 + 6 = 9 · Water, no irrigated plot → q 0
+           Food, eat 3, spoilage 0.5 → target 3 + 6 = 9 · a seat with no plots: Water
+           and Energy targets cover only the household (Water's drink; Energy 0)
 ```
 
 ```
@@ -477,7 +485,7 @@ Every test runs with `AI_VALUE.model = 'unit'`, except T-AC-9.
 | **B-AC-4** (G-3) | Given a playbook setting `expect` on Food above the ask · When the auction plays · Then the seat buys beyond its need; with no `expect`, it doesn't | C3, C5 | the stock after the auction | `expect` beyond the bound: clamped and listed in `rejected` |
 | **T-AC-1** (UBER-AC-1, serves B-AC-1, B-AC-2) | `pnpm sim`, 40 games × 1/101/201, prints UBER-AC-1 (a) and (b) beside the colony's Food/Water shortage | C6 | the sim report | — |
 | **T-AC-2** (serves B-AC-1) | RULE-5's example: 80 cr, Food short 2 (v 40, ask 30), Energy short 2 (v 120, ask 35) → Food's budget 0, and 70 cr kept for Energy | C2 | goodPlan's budget and the Energy auction's stock | all needs funded: budget is today's share |
-| **T-AC-3** (serves B-AC-2) | RULE-3: the target covers spoilage (Food eat + ⌈eat/keep⌉, Energy ⌈(use − ownNet)/keep⌉), and own output counts only as net per plant. An Energy seat with ownNet 8 for a use of 8, holding 2, keeps its 2 (q > 0) and does not sell to 0 | C1 | the stock after the Energy auction | Water, no irrigated plot: q = 0, so no Water is bought |
+| **T-AC-3** (serves B-AC-2) | RULE-3: the target covers spoilage (Food eat + ⌈eat/keep⌉, Energy ⌈(use − ownNet)/keep⌉), and own output counts only as net per plant. An Energy seat with ownNet 8 for a use of 8, holding 2, keeps its 2 (q > 0) and does not sell to 0 | C1 | the stock after the Energy auction | a seat with no plots: no Energy is bought (target 0) |
 | **T-AC-4** (serves B-AC-2) | WS1's reserve example (value 411, ask 214, 1,355 cr, old reserve 1,157) → it buys | C2 | the stock after the auction | — |
 | **T-AC-5** (serves B-AC-1) | Short and funded: the pass candidate's gain is below the buy's; no veto | C4 | tradeDecision's shortlist | not funded: pass gain 0 |
 | **T-AC-6** (serves B-AC-2) | RULE-2 row 1's example: S(k) follows AM-17's turn-off order | C1 | unitValues' keep | no plot needing Energy: S = replace |
@@ -500,6 +508,8 @@ Every test runs with `AI_VALUE.model = 'unit'`, except T-AC-9.
 
 - **AI buyers compete with the colony for the store's Food.** WS1's stopgap raised colonists short of Food or Water to 55–61%.
   - Mitigation: HC-6 puts the colony's row beside every UBER-AC-1. Supply itself is C29's finding.
+- **Water becomes a base resource (Heiko, 5 Nov), not built yet.** RULE-2 row 4 and RULE-3's Water target are written to the new rule. WS1 folds it into AM-17, with numbers proposed, measured and confirmed by Heiko.
+  - Mitigation: until WS1's PR lands, PR-1 builds Water on today's rule (irrigated plots halve) behind the same export. This note is updated when WS1's PR lands.
 - **AM-17's turn-off order isn't on trunk yet, and isn't exported.**
   - Mitigation: Energy's RULE-2 row is the only consumer. PR-1 waits on WS1's AM-17 (ws1-energy-off, ordered first), plus the export C1 names.
 - **WS5's price paths aren't specced.**
