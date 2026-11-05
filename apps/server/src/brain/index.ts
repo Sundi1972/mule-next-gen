@@ -52,6 +52,8 @@ export interface PlaybookWriter {
 export interface MeteredBrain extends BrainService {
   /** The game's counted spend, as its budget checks it; after finish, the figure at finish. Classic: 0. */
   countedUsd(): number;
+  /** Whether a write was refused for its credentials (401/403): then no write calls again. */
+  authRefused(): boolean;
 }
 
 export interface BrainOptions {
@@ -102,6 +104,7 @@ const CLASSIC: MeteredBrain = {
   chatter: (seat, say) => chatter(seat.id, say),
   finish: () => {},
   countedUsd: () => 0,
+  authRefused: () => false,
 };
 
 /** The key's environment variable: the only place in production source its name is written. */
@@ -143,6 +146,8 @@ export function createBrain(options: BrainOptions): MeteredBrain {
     };
   };
   let finished = false;
+  /** A write came back 401/403: the key is refused, so no write calls again. */
+  let refused = false;
   // A game that never asked for a decider or a writer (a lobby abandoned before Start) leaves no game line.
   let asked = false;
   // finish releases the budget's figures, so the counted spend is kept from that moment.
@@ -219,7 +224,7 @@ export function createBrain(options: BrainOptions): MeteredBrain {
     return {
       async write(kind, ask) {
         const { signal } = ask;
-        if (finished || busy.has(seat.id) || !(ask.waitMs > 0) || signal?.aborted) return unusableReply('no_reply');
+        if (finished || refused || busy.has(seat.id) || !(ask.waitMs > 0) || signal?.aborted) return unusableReply('no_reply');
         // The abort frees the seat in its own tick: the decider the game calls next must find it free.
         const release = take(seat.id);
         signal?.addEventListener('abort', release, { once: true });
@@ -275,6 +280,7 @@ export function createBrain(options: BrainOptions): MeteredBrain {
         } finally {
           signal?.removeEventListener('abort', release);
           release();
+          if (failure instanceof CallFailed && failure.auth) refused = true;
           if (failure instanceof Stopped) {
             // Stopped before a round: out of share, a budget line (round 1's at the kind's model); out of time after a
             // round, a late line. Neither was sent, so neither is billed.
@@ -304,5 +310,6 @@ export function createBrain(options: BrainOptions): MeteredBrain {
       budget.release(gameId);
     },
     countedUsd: () => countedAtFinish ?? counted(),
+    authRefused: () => refused,
   };
 }

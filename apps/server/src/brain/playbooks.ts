@@ -42,6 +42,8 @@ export class Playbooks {
   private readonly asks = new Map<PlayerId, Ask>();
   private readonly playing = new Map<string, Playbook>();
   private readonly feedback = new Map<PlayerId, Feedback>();
+  /** The writes still open, so a trial can let them settle before the land grant (settle). */
+  private readonly open = new Set<Promise<unknown>>();
 
   constructor(private readonly options: PlaybooksOptions) {
     if (!options.source) return;
@@ -75,12 +77,14 @@ export class Playbooks {
         const waitMs = WRITE_CALLS.strategy.timeoutMs;
         // The tools answer from the game as it is now, when it is asked: a game that moves on changes no answer.
         const tools = toolsFor(state, seat.id, this.simFor(state, seat.id, drafted.playbook, source.validate));
-        writer.write('strategy', { brief, system: WRITER_SYSTEM, waitMs, late: () => ask.started, signal: ask.controller.signal, tools }).then(
+        const write = writer.write('strategy', { brief, system: WRITER_SYSTEM, waitMs, late: () => ask.started, signal: ask.controller.signal, tools }).then(
           (written) => {
             if (!ask.started) ask.written = written;
           },
           (err: unknown) => console.error(`playbooks: seat ${seat.id}'s write failed: ${messageOf(err)}`),
         );
+        this.open.add(write);
+        void write.finally(() => this.open.delete(write));
       } catch (err) {
         console.error(`playbooks: seat ${seat.id} could not ask: ${messageOf(err)}`);
       }
@@ -134,6 +138,14 @@ export class Playbooks {
       seat.adopt(playbook);
       this.options.record?.({ seat: seat.id, month: state.month, phase: 'landGrant', playbook });
     }
+  }
+
+  /**
+   * Settles once every write open now has: for the trial, which has no people to wait for in planning and so lets each
+   * write run to its wait before the land grant, as an untimed planning would. Each is bounded by its kind's timeout.
+   */
+  async settle(): Promise<void> {
+    if (this.open.size > 0) await Promise.allSettled([...this.open]);
   }
 
   /** The playbook in effect for a seat's land grant in `month`; null before it starts, or with no source. */

@@ -1,17 +1,20 @@
 /**
  * Plays Smart seats against strategist seats and reports whether the Smart AI decides and talks in character, never
  * stalls a game, and stays within its budget. See C6.
- * Usage: pnpm --filter @mule/server brain:trial -- --games 20 --seed 101 [--smart 2] [--max-usd X] [--game-budget-usd Y]
+ * Usage: pnpm --filter @mule/server brain:trial -- --games 20 --seed 101 [--smart 2] [--playbooks 1] [--max-usd X] [--game-budget-usd Y]
+ * With --playbooks 1 each Smart seat also writes its strategy and land-grant playbook each month (spec A C4), and the
+ * report adds UBER-AC-A's edit share; without it the seats only decide move by move, as before.
  * Without the key every seat plays Classic and nothing is called. With it, real money: --max-usd is required, and one
  * run per UTC day. Each game's Smart seats together spend at most the game budget (default BRAIN.gameBudgetUsd).
  */
 import fs from 'node:fs';
 import { BRAIN } from '@mule/engine';
-import { playGameAsync, ReplyRejected, simSeats, type Choice, type Decider, type DecisionRecord, type SeatSpec } from '@mule/ai';
-import { alreadyRanToday, AUTH_STOPPED, claimLedger, day, dayLedgerPath, numberFlags, resolveDeps, runAsScript, type MainDeps } from './cli.js';
+import { playbookSource, playGameAsync, ReplyRejected, simSeats, type Choice, type Decider, type DecisionRecord, type SeatSpec } from '@mule/ai';
+import { alreadyRanToday, AUTH_STOPPED, claimLedger, day, dayLedgerPath, KINDS, numberFlags, resolveDeps, runAsScript, type MainDeps } from './cli.js';
 import { CallFailed } from './client.js';
 import { API_KEY_ENV, apiKeyFrom, createBrain, type BrainSeat } from './index.js';
 import { isCallLine, readLedgerLines, type CallLine } from './ledger.js';
+import { Playbooks } from './playbooks.js';
 import { capText, cutOffPhase, renderTrialReport, sum, trialReport, type TrialGame, type TrialReport, type TrialStop } from './trial-report.js';
 
 /** AI seats per trial game. */
@@ -71,6 +74,8 @@ interface GameSetup {
   logPath: string | null;
   smart: number;
   gameBudgetUsd: number;
+  /** Whether the Smart seats write their playbooks. */
+  playbooks: boolean;
   out: (line: string) => void;
 }
 
@@ -83,7 +88,10 @@ const bump = (counts: number[], month: number) => {
 async function playTrialGame(setup: GameSetup): Promise<TrialGame> {
   const { id } = setup;
   const brain = createBrain({ gameId: id, env: setup.env, gameBudgetUsd: setup.gameBudgetUsd, ...(setup.logPath === null ? {} : { logPath: setup.logPath }) });
-  const game: TrialGame = { id, end: 'unfinished', months: 0, smart: [], decisions: [], lines: {}, modelLines: {}, cutOff: [], countedUsd: 0, settledCalls: 0 };
+  const game: TrialGame = { id, end: 'unfinished', months: 0, smart: [], decisions: [], lines: {}, modelLines: {}, cutOff: [], countedUsd: 0, settledCalls: 0, playbooks: [] };
+  // The Smart seats' playbooks (spec A C4): asked for at the start and as each upkeep ends, in effect from the land
+  // grant. The strategist seats play their own drafts; in whatIf they play as the engine's Trader would.
+  const held: { playbooks: Playbooks | null } = { playbooks: null };
   const calls = trackCalls();
   const chat = new Map<string, (record: DecisionRecord) => void>();
   // The record being routed to a seat's chatter, read by its say.
@@ -113,6 +121,17 @@ async function playTrialGame(setup: GameSetup): Promise<TrialGame> {
   try {
     const played = await playGameAsync(setup.seed, simSeats(SEATS, 'trader', setup.seed), {
       deciderFor,
+      onSeats: (seats, state) => {
+        const smart = seats.filter((s) => game.smart.includes(s.id));
+        if (!setup.playbooks || smart.length === 0) return;
+        held.playbooks = new Playbooks({
+          brain,
+          source: playbookSource(smart),
+          seats: smart,
+          record: (note) => game.playbooks.push({ seat: note.seat, month: note.month, by: note.playbook.by }),
+        });
+        held.playbooks.ask(state, state.month);
+      },
       onDecision: (r) => {
         game.decisions.push({ seat: r.seat, kind: r.kind, by: r.by, options: r.shortlist.length, ...(r.note === undefined ? {} : { note: r.note }) });
         const say = chat.get(r.seat);
@@ -124,12 +143,16 @@ async function playTrialGame(setup: GameSetup): Promise<TrialGame> {
       onPhase: (state) => {
         const cut = cutOffPhase(state);
         if (cut) game.cutOff.push(cut);
+        // Planning ends and the land grant comes next: this month's playbook takes effect. An upkeep ends: next month's is asked.
+        if (state.phase === 'planning') held.playbooks?.takeEffect(state);
+        if (state.phase === 'upkeep') held.playbooks?.ask(state, state.month + 1);
       },
       // Each call is bounded by its kind's wait, so this pauses simulated time for at most that long. See C6.
       between: async () => {
-        if (calls.authRefused()) throw new AuthRefused();
+        if (calls.authRefused() || brain.authRefused()) throw new AuthRefused();
         await calls.drain();
-        if (calls.authRefused()) throw new AuthRefused();
+        await held.playbooks?.settle();
+        if (calls.authRefused() || brain.authRefused()) throw new AuthRefused();
       },
     });
     game.months = played.state.month;
@@ -140,6 +163,7 @@ async function playTrialGame(setup: GameSetup): Promise<TrialGame> {
   } finally {
     // A call still open would bill after the game closed.
     await calls.drain();
+    await held.playbooks?.settle();
     brain.finish();
   }
   game.settledCalls = calls.settled();
@@ -154,7 +178,8 @@ function readCalls(file: string): CallLine[] {
 
 /** The stop message when the ledger holds fewer of a game's call lines than calls settled, or null when none is missing. */
 function ledgerShortfall(logPath: string, game: TrialGame): string | null {
-  const written = readCalls(logPath).filter((c) => c.game === game.id && c.outcome !== 'budget').length;
+  // Decision lines only: settledCalls counts the deciders' calls, and a write's lines must never cover for a lost one.
+  const written = readCalls(logPath).filter((c) => c.game === game.id && c.outcome !== 'budget' && (KINDS as readonly string[]).includes(c.kind)).length;
   if (written >= game.settledCalls) return null;
   return `Stopped: the ledger ${logPath} has ${written} of ${game.settledCalls} call lines for game ${game.id}; a write failed, so spend cannot be checked.`;
 }
@@ -167,15 +192,17 @@ export interface TrialFlags {
   maxUsd: number | null;
   /** The most each game's Smart seats together may spend. */
   gameBudgetUsd: number;
+  /** Whether the Smart seats write their playbooks (--playbooks 1). */
+  playbooks: boolean;
 }
 
 const USAGE =
-  `Usage: brain:trial [--games N] [--seed S] [--smart K] [--max-usd X] [--game-budget-usd Y], ` +
+  `Usage: brain:trial [--games N] [--seed S] [--smart K] [--playbooks 0|1] [--max-usd X] [--game-budget-usd Y], ` +
   `Y above 0 and at most ${BRAIN.gameBudgetUsd.toFixed(2)}; nothing played.`;
 
 /** The flags, or null for anything numberFlags refuses or a value out of range. */
 function parseFlags(argv: readonly string[]): TrialFlags | null {
-  const given = numberFlags(argv, ['--games', '--seed', '--smart', '--max-usd', '--game-budget-usd']);
+  const given = numberFlags(argv, ['--games', '--seed', '--smart', '--playbooks', '--max-usd', '--game-budget-usd']);
   if (!given) return null;
   const flags = {
     games: given.get('--games') ?? 20,
@@ -183,10 +210,12 @@ function parseFlags(argv: readonly string[]): TrialFlags | null {
     smart: given.get('--smart') ?? 2,
     maxUsd: given.get('--max-usd') ?? null,
     gameBudgetUsd: given.get('--game-budget-usd') ?? BRAIN.gameBudgetUsd,
+    playbooks: given.get('--playbooks') ?? 0,
   };
   const ok = Number.isInteger(flags.games) && flags.games >= 1 && Number.isInteger(flags.seed) && Number.isInteger(flags.smart);
   const budgetOk = flags.gameBudgetUsd > 0 && flags.gameBudgetUsd <= BRAIN.gameBudgetUsd;
-  return ok && budgetOk && flags.smart >= 1 && flags.smart <= SEATS && (flags.maxUsd === null || flags.maxUsd > 0) ? flags : null;
+  const playbooksOk = flags.playbooks === 0 || flags.playbooks === 1;
+  return ok && budgetOk && playbooksOk && flags.smart >= 1 && flags.smart <= SEATS && (flags.maxUsd === null || flags.maxUsd > 0) ? { ...flags, playbooks: flags.playbooks === 1 } : null;
 }
 
 /** A keyed run's ledger and cap. */
@@ -220,6 +249,7 @@ async function playRun(flags: TrialFlags, env: Readonly<Record<string, string | 
       logPath: paid?.logPath ?? null,
       smart: flags.smart,
       gameBudgetUsd: flags.gameBudgetUsd,
+      playbooks: flags.playbooks,
       out,
     });
     games.push(game);
@@ -288,6 +318,7 @@ export async function trial(
     gameBudgetUsd: flags.gameBudgetUsd,
     games,
     calls: paid ? readCalls(paid.logPath) : [],
+    playbooks: flags.playbooks,
   });
   for (const line of renderTrialReport(report)) out(line);
   if (paid && stopped === 'cap' && games.length === 0) {
