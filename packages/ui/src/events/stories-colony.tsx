@@ -410,8 +410,9 @@ const Riot: Scene = ({ ev, seg, size }) => {
             <span className="font-mono font-bold uppercase leading-none text-warn">Store storage</span>
             {shelves.map((f, r) => {
               const g = gone(r);
-              // A third of each shelf goes: what it held before is three times the loss.
-              const left = Math.round(-3 * f.delta + f.delta * g);
+              // Counted from the store's real stock when the caller has it; without it, only the loss, never a guessed count.
+              const after = frame.storeStock?.[f.what];
+              const count = after === undefined ? (g >= 1 ? `−${Math.abs(f.delta)}` : '') : String(Math.round(after - f.delta + f.delta * g));
               return (
                 <span key={f.what} className="flex items-center gap-1 leading-none">
                   <span className="flex w-[14%]">
@@ -424,7 +425,7 @@ const Riot: Scene = ({ ev, seg, size }) => {
                       </span>
                     ))}
                   </span>
-                  <span className={cx('w-[22%] text-right font-mono font-bold', g >= 1 ? 'text-warn' : 'text-ink')}>{left}</span>
+                  <span className={cx('w-[22%] text-right font-mono font-bold', g >= 1 ? 'text-warn' : 'text-ink')}>{count}</span>
                 </span>
               );
             })}
