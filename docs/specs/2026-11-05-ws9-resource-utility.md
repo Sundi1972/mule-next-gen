@@ -475,6 +475,8 @@ first match wins
   2  AI_VALUE.model 'unit', PR-3 built          outlook.price tilted by the PR-3 signals
                                                 and persona (weights in AI_VALUE)
   3  otherwise                                  outlook.price (outlook.final → posted)
+unknown    expect absent (the key omitted, §3) → row 2 or 3; expect not finite → the
+           validator has already dropped it (§3), so row 2 or 3
 outcome    → RULE-2 replace, RULE-4 carry, RULE-5 later goods' asks
 ```
 
@@ -482,7 +484,10 @@ outcome    → RULE-2 replace, RULE-4 carry, RULE-5 later goods' asks
 
 **`GoodPlay.expect?: number`** (C5): change_kind ADDED. Not breaking: the field is optional, and playbook v1 stays v1.
 - **Meaning:** the posted price the seat believes a good will have next month, in credits.
-- **Bound:** the validator clamps it to [`AI_VALUE.belief.min` × reference, `AI_VALUE.belief.max` × reference] and lists a clamp in `rejected`. It is the engine's draft value when absent.
+- **Bound:** the validator clamps it to [`AI_VALUE.belief.min` × reference, `AI_VALUE.belief.max` × reference] and lists a clamp in `rejected`.
+- **Shape, WS3's two conditions**, so the record replays equal:
+  - the draft omits the key when the seat holds no belief of its own, and never writes `expect: undefined`;
+  - the validator refuses NaN and ±Infinity (listed in `rejected`, the key dropped) and rounds an accepted value to whole credits.
 - **Owner:** WS3 (`engine/src/playbook.ts`, named edit); the validator is WS9's.
 - **Example:** `{ role: 'buyer', hold: 9, walkAway: 60, …, expect: 85 }`. The seat values Food as if it will cost 85 next month, so it buys a surplus at an ask of 50.
 
@@ -521,7 +526,7 @@ Every test runs with `AI_VALUE.model = 'unit'`, except T-AC-9.
 | **T-AC-5** (serves B-AC-1) | Short and funded: the pass candidate's gain is below the buy's; no veto | C4 | tradeDecision's shortlist | not funded: pass gain 0 |
 | **T-AC-6** (serves B-AC-2) | RULE-2 row 1's example: S(k) follows AM-17's turn-off order | C1 | unitValues' keep | no plot needing Energy: S = replace |
 | **T-AC-7** (serves B-AC-3) | RULE-4's example: Ck ≈ 29.8 | C1 | unitValues | spoilage 1 → Ck 0 |
-| **T-AC-8** (serves B-AC-4) | `expect` within bounds is the belief; beyond them, clamped and listed in `rejected` | C3, C5 | the validator result and the belief | — |
+| **T-AC-8** (serves B-AC-4) | `expect` within bounds is the belief, rounded to whole credits; beyond them, clamped and listed in `rejected`; NaN or ±Infinity refused (listed, the key dropped); a draft with no belief has no `expect` key (`'expect' in play` is false) | C3, C5 | the validator result, the drafted GoodPlay's JSON, and the belief | 72.4 → 72 |
 | **T-AC-12** (serves B-AC-5) | The sim reports plants (and wells, after AM-18) built per seat-game, beside the share of seat-months with a cut; under 'unit' both move against trunk on 1/101/201, reported and not tuned | C6, C8 | the sim report | — |
 | **T-AC-9** (HC-4) | `AI_VALUE.model` 'today': default, `--plays today` and politics-off sims byte-identical to trunk on 1/101/201 | C1–C6 | the sim report | — |
 | **T-AC-10** (UBER-AC-3, serves B-AC-4, PR-3) | The sim's speculation row: units beyond need, their realised margin after spoilage, storage and tax; bullish-belief seats positive on all 3 seed sets | C3, C6 | the sim report | — |
