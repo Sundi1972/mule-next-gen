@@ -253,13 +253,13 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
     });
 
     it("T-AC-7 row 2: a budget spent as the first step ends skips the MULE after it and every later step to the pub, 'time budget'", () => {
-      /** An adopted route (no re-pick): analyse a, a MULE for b, analyse c, the pub; ai0 holds b. */
+      /** An adopted route (no re-pick): analyse a, a MULE for b, a filter on b, analyse c, the pub; ai0 holds b. */
       const turn = (timeBudgetMs: number, onTick?: (hand: DevelopHand, left: number) => void) => {
         const { state, plots } = development(3);
         const [a, b, c] = plots.map((t) => indexOf(state, t)) as [number, number, number];
         plots[1]!.owner = ME;
         const { hand } = seatAndHand();
-        const route: DevelopmentPlay['route'] = [{ act: 'analyse', plot: a }, { act: 'buyMule' }, { act: 'outfit', outfit: 'food' }, { act: 'install', plot: b }, { act: 'analyse', plot: c }, { act: 'pub' }];
+        const route: DevelopmentPlay['route'] = [{ act: 'analyse', plot: a }, { act: 'buyMule' }, { act: 'outfit', outfit: 'food' }, { act: 'install', plot: b }, { act: 'filter', plot: b }, { act: 'analyse', plot: c }, { act: 'pub' }];
         hand.follow(state.month, routeOf(route, { timeBudgetMs }, false));
         play(runner, state, hand, { onTick: (left) => onTick?.(hand, left) });
         return { state, plots, hand, a };
@@ -276,8 +276,8 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
       const log = JSON.stringify(hand.done);
       expect(hand.routeLog(state).steps, log).toEqual([
         { route: 0, outcome: 'done' },
-        ...[1, 2, 3, 4].map((route) => ({ route, outcome: 'skipped', note: 'time budget' })),
-        { route: 5, outcome: 'done' },
+        ...[1, 2, 3, 4, 5].map((route) => ({ route, outcome: 'skipped', note: 'time budget' })),
+        { route: 6, outcome: 'done' },
       ]);
       expect(me(state).analysed).toEqual([a]);
       expect(plots[1]!.outfit).toBeNull();
@@ -547,6 +547,38 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
       expect(plots.map((t) => t.outfit)).toEqual(['smithore', null]);
     });
 
+    it("T-AC-7 (FM-led-no-gain): while it still leads a MULE, a route's filter is skipped, 'leading', and nothing is refused; one after the install plays", () => {
+      // A Food MULE led in, and an adopted route that fits a filter on the other plot before the led MULE's group, and one
+      // on its own plot after its install.
+      const { state, plots } = wonMuleLot(2, 'food');
+      const [home, other] = plots.map((t) => indexOf(state, t)) as [number, number];
+      me(state).analysed.push(home, other);
+      me(state).stock.alloy = DEVELOPMENT.filterAlloy;
+      const { hand } = seatAndHand();
+      const route: DevelopmentPlay['route'] = [{ act: 'filter', plot: other }, { act: 'buyMule' }, { act: 'outfit', outfit: 'food' }, { act: 'install', plot: home }, { act: 'filter', plot: home }, { act: 'pub' }];
+      hand.follow(state.month, routeOf(route, {}, false));
+      play(runner, state, hand);
+      const log = JSON.stringify(hand.done);
+      expect(hand.routeLog(state).steps, log).toEqual([
+        { route: 0, outcome: 'skipped', note: 'leading' },
+        { route: 1, outcome: 'done', note: 'led' },
+        { route: 2, outcome: 'done', note: 'led' },
+        { route: 3, outcome: 'done' },
+        { route: 4, outcome: 'done' },
+        { route: 5, outcome: 'done' },
+      ]);
+      expect(hand.done.filter((e) => e.outcome === 'refused'), log).toEqual([]);
+      // The promise: the lot MULE stands on its plot as it came; no filter went on while it was led, and the one after the
+      // install did.
+      expect(state.tiles[home]!.outfit, log).toBe('food');
+      expect(state.tiles[other]!.outfit, log).toBeNull();
+      expect(state.tiles[other]!.filter).toBe(false);
+      expect(state.tiles[home]!.filter, log).toBe(true);
+      expect(me(state).stock.alloy).toBe(0);
+      expect(me(state).carriedMule).toBeNull();
+      expect(me(state).doneDeveloping).toBe(true);
+    });
+
     /** The errors the seat logs while `run` plays with the hand's draft calls throwing. */
     function throwingDraft<T>(run: () => T): { result: T; logged: string[] } {
       const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -767,38 +799,6 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
         expect(me(state).doneDeveloping).toBe(true);
       },
     );
-
-    it("T-AC-7 (FM-led-no-gain): while it still leads a MULE, a route's filter is skipped, 'leading', and nothing is refused on the floor; one after the install plays", () => {
-      // A Food MULE led in, and an adopted route that fits a filter on the other plot before the led MULE's group, and one
-      // on its own plot after its install.
-      const { state, plots } = wonMuleLot(2, 'food');
-      const [home, other] = plots.map((t) => indexOf(state, t)) as [number, number];
-      me(state).analysed.push(home, other);
-      me(state).stock.alloy = DEVELOPMENT.filterAlloy;
-      const { hand } = seatAndHand();
-      const route: DevelopmentPlay['route'] = [{ act: 'filter', plot: other }, { act: 'buyMule' }, { act: 'outfit', outfit: 'food' }, { act: 'install', plot: home }, { act: 'filter', plot: home }, { act: 'pub' }];
-      hand.follow(state.month, routeOf(route, {}, false));
-      floorTurn(state, hand);
-      const log = JSON.stringify(hand.done);
-      expect(hand.routeLog(state).steps, log).toEqual([
-        { route: 0, outcome: 'skipped', note: 'leading' },
-        { route: 1, outcome: 'done', note: 'led' },
-        { route: 2, outcome: 'done', note: 'led' },
-        { route: 3, outcome: 'done' },
-        { route: 4, outcome: 'done' },
-        { route: 5, outcome: 'done' },
-      ]);
-      expect(hand.done.filter((e) => e.outcome === 'refused'), log).toEqual([]);
-      // The promise: the lot MULE stands on its plot as it came; no filter went on while it was led, and the one after the
-      // install did.
-      expect(state.tiles[home]!.outfit, log).toBe('food');
-      expect(state.tiles[other]!.outfit, log).toBeNull();
-      expect(state.tiles[other]!.filter).toBe(false);
-      expect(state.tiles[home]!.filter, log).toBe(true);
-      expect(me(state).stock.alloy).toBe(0);
-      expect(me(state).carriedMule).toBeNull();
-      expect(me(state).doneDeveloping).toBe(true);
-    });
 
     it("T-AC-7 (AM-27): a 'MULE added' whose errand no longer fits the clock is not bought, so no MULE is lost", () => {
       const { state, plots } = development(2);
