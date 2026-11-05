@@ -220,9 +220,9 @@ function readCalls(file: string): CallLine[] {
 }
 
 /** The stop message when the ledger holds fewer of a game's call lines than calls settled, or null when none is missing. */
-function ledgerShortfall(logPath: string, game: TrialGame): string | null {
+function ledgerShortfall(logPath: string, calls: readonly CallLine[], game: TrialGame): string | null {
   // Decision lines only: settledCalls counts the deciders' calls, and a write's lines must never cover for a lost one.
-  const written = readCalls(logPath).filter((c) => c.game === game.id && c.outcome !== 'budget' && (KINDS as readonly string[]).includes(c.kind)).length;
+  const written = calls.filter((c) => c.game === game.id && c.outcome !== 'budget' && (KINDS as readonly string[]).includes(c.kind)).length;
   if (written >= game.settledCalls) return null;
   return `Stopped: the ledger ${logPath} has ${written} of ${game.settledCalls} call lines for game ${game.id}; a write failed, so spend cannot be checked.`;
 }
@@ -366,15 +366,20 @@ function ledgersSpent(dataDir: string, kind: 'trial' | 'tourney'): number {
  * BRAIN.proofCapUsd, or a ledger cannot be read, so the total is unknown (fail closed).
  */
 export function proofCapRefusal(dataDir: string, maxUsd: number): string | null {
+  return ledgerCapRefusal(dataDir, maxUsd, { kind: 'trial', cap: BRAIN.proofCapUsd, name: 'the PR-5 cap', ledgers: 'the trial ledgers' });
+}
+
+/** Why a run may not start against one cap and its ledgers, or null; an unreadable ledger refuses it (fail closed). */
+function ledgerCapRefusal(dataDir: string, maxUsd: number, cap: { kind: 'trial' | 'tourney'; cap: number; name: string; ledgers: string }): string | null {
   let spent: number;
   try {
-    spent = trialSpent(dataDir);
+    spent = ledgersSpent(dataDir, cap.kind);
   } catch (err) {
-    if (err instanceof UnreadableLedger) return `brain:trial cannot check the PR-5 cap: ${err.file} is not a readable ledger; nothing called.`;
+    if (err instanceof UnreadableLedger) return `brain:trial cannot check ${cap.name}: ${err.file} is not a readable ledger; nothing called.`;
     throw err;
   }
-  if (spent + maxUsd <= BRAIN.proofCapUsd) return null;
-  return `brain:trial would pass the PR-5 cap: the trial ledgers hold $${spent.toFixed(5)}, --max-usd ${capText(maxUsd)}, cap ${capText(BRAIN.proofCapUsd)}; nothing called.`;
+  if (spent + maxUsd <= cap.cap) return null;
+  return `brain:trial would pass ${cap.name}: ${cap.ledgers} hold $${spent.toFixed(5)}, --max-usd ${capText(maxUsd)}, cap ${capText(cap.cap)}; nothing called.`;
 }
 
 /**
@@ -383,15 +388,7 @@ export function proofCapRefusal(dataDir: string, maxUsd: number): string | null 
  */
 export function capRefusal(dataDir: string, table: 'pair' | null, maxUsd: number): string | null {
   if (table !== 'pair') return proofCapRefusal(dataDir, maxUsd);
-  let spent: number;
-  try {
-    spent = tourneySpent(dataDir);
-  } catch (err) {
-    if (err instanceof UnreadableLedger) return `brain:trial cannot check the tournament cap: ${err.file} is not a readable ledger; nothing called.`;
-    throw err;
-  }
-  if (spent + maxUsd <= BRAIN.tournament.capUsd) return null;
-  return `brain:trial would pass the tournament cap: the tournament ledgers hold $${spent.toFixed(5)}, --max-usd ${capText(maxUsd)}, cap ${capText(BRAIN.tournament.capUsd)}; nothing called.`;
+  return ledgerCapRefusal(dataDir, maxUsd, { kind: 'tourney', cap: BRAIN.tournament.capUsd, name: 'the tournament cap', ledgers: 'the tournament ledgers' });
 }
 
 /** Both caps' totals for the report; null when a ledger cannot be read. */
@@ -481,18 +478,24 @@ async function playRun(
     games.push(game);
     out(`game ${i + 1}/${seeds.length} seed ${seed}: ${game.end}, ${game.cutOff.length} phases cut off, ${game.settledCalls} model calls`);
     if (game.end === 'auth') return { games, stopped: 'auth', lostLines: null };
-    const lostLines = paid ? ledgerShortfall(paid.logPath, game) : null;
+    if (!paid) continue;
+    const calls = readCalls(paid.logPath);
+    const lostLines = ledgerShortfall(paid.logPath, calls, game);
     if (lostLines) return { games, stopped: 'ledger', lostLines };
-    const refused = paid ? everyCallFailed(readCalls(paid.logPath), game.id) : null;
+    const refused = everyCallFailed(calls, game.id);
     if (refused) return { games, stopped: 'refused', lostLines: refused };
   }
   return { games, stopped: 'done', lostLines: null };
 }
 
-/** 2 on a 401/403, 1 on a lost ledger line; otherwise 0 with the key, and without it 0 only when the key-unset verdict passes. */
-function exitCode(keyed: boolean, stopped: TrialStop, report: TrialReport): number {
+/**
+ * 2 on a 401/403, 1 on a lost ledger line, a refused game, or a control that did not pass (WS1: the paid run waits on
+ * it); otherwise 0 with the key, and without it 0 only when the key-unset verdict passes.
+ */
+export function exitCode(keyed: boolean, stopped: TrialStop, report: Pick<TrialReport, 'ac2' | 'bar'>): number {
   if (stopped === 'auth') return 2;
   if (stopped === 'ledger' || stopped === 'refused') return 1;
+  if (report.bar?.kind === 'control' && report.bar.verdict !== 'pass') return 1;
   return keyed || report.ac2 === 'pass' ? 0 : 1;
 }
 
@@ -521,6 +524,9 @@ export async function trial(
   let paid: Paid | null = null;
   if (flags.control) {
     out(`brain:trial control: the Claude chairs play as engine seats on the pair table; ${planned} games, nothing is called.`);
+  } else if (!keyed && flags.table === 'pair') {
+    out(`${API_KEY_ENV} is not set, so no Claude would sit at the pair table; run --control 1 for the engine-only table; nothing played.`);
+    return { code: 1, report: null };
   } else if (!keyed) {
     out(`${API_KEY_ENV} is not set: every seat plays Classic and nothing is called.`);
   } else {

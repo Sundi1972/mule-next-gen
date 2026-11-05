@@ -362,7 +362,8 @@ const resultsText = (r: TrialReport['results']) =>
 const barText = (r: TrialReport) => {
   const { results: x, bar } = r;
   const { claim, control } = BRAIN.tournament;
-  const share = x.games === 0 ? 'n/a' : `${Math.round((100 * x.smartWins) / x.games)}%`;
+  // Floored, as pct is, so a share just under the bound never prints as the bound.
+  const share = x.games === 0 ? 'n/a' : `${(Math.floor((1000 * x.smartWins) / x.games) / 10).toFixed(1)}%`;
   const lead = x.games === 0 ? 'n/a' : (x.strategist.meanRank - x.smart.meanRank).toFixed(2);
   const bounds =
     bar!.kind === 'control'

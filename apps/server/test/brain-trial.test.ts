@@ -8,7 +8,7 @@ import { Brain, candidate, consider, parseReply, PERSONAS, ReplyRejected, shortl
 import { createHaikuComplete } from '../src/brain/client.js';
 import { isCallLine, readLedgerLines, type CallLine } from '../src/brain/ledger.js';
 import { cutOffPhase, fallbackReason, renderTrialReport, tournamentBar, trialReport, type TrialGame, type TrialInput } from '../src/brain/trial-report.js';
-import { capRefusal, everyCallFailed, proofCapRefusal, seedsFlag, tableSeats, tourneySpent, trial, trialLedgerPath, trialSeeds, trialSpent, writeModelFlag } from '../src/brain/trial.js';
+import { capRefusal, everyCallFailed, exitCode, proofCapRefusal, seedsFlag, tableSeats, tourneySpent, trial, trialLedgerPath, trialSeeds, trialSpent, writeModelFlag } from '../src/brain/trial.js';
 import { fakeSdk, KEY, neverAnswers, requestOf, sdkMessage, worstUsdOfRequest, type SdkModuleFake, type SdkParams } from './brain-fakes.js';
 
 /** The SDK module's client: records its options and answers through `sdk.create`; it never reaches the network. */
@@ -252,12 +252,22 @@ describe("brain:trial tournament (WS1's bar for UBER-AC-A: --table pair, --seeds
     const calls = called();
     const { out, result } = run(['--table', 'pair', '--control', '1', '--games', '1', '--seed', '1']);
     const { code, report } = await result;
-    expect(code).toBe(0);
+    expect(code).toBe(report!.bar!.verdict === 'pass' ? 0 : 1);
     expect(calls()).toBe(0);
     expect(fs.readdirSync(dir)).toEqual([]);
     expect(report!.results.games).toBe(1);
     expect(report!.bar).toEqual({ kind: 'control', verdict: tournamentBar(report!.results, true) });
     expect(out.join('\n')).toContain('control: the Claude chairs play as engine seats');
+  });
+
+  it('TOURNEY-4: a control that does not pass exits 1, so the paid run cannot follow it in a chain; a claim that fails is a result and exits 0; a pair claim without the key is refused before any game', async () => {
+    expect(exitCode(false, 'done', { ac2: 'pass', bar: { kind: 'control', verdict: 'fail' } })).toBe(1);
+    expect(exitCode(false, 'done', { ac2: 'pass', bar: { kind: 'control', verdict: 'not proven' } })).toBe(1);
+    expect(exitCode(false, 'done', { ac2: 'pass', bar: { kind: 'control', verdict: 'pass' } })).toBe(0);
+    expect(exitCode(true, 'done', { ac2: 'pass', bar: { kind: 'claim', verdict: 'fail' } })).toBe(0);
+    const { out, result } = run(['--table', 'pair', '--playbooks', '1', '--games', '1'], {});
+    expect((await result).code).toBe(1);
+    expect(out).toEqual([expect.stringContaining('no Claude would sit at the pair table')]);
   });
 
   it("TOURNEY-5: WS1's bar: the Claude chairs pass at 60% wins or more with a mean-rank lead of 0.3 or more, failing just short of either; the control passes at 45-55% wins within 0.15 mean rank, failing just outside", () => {
@@ -283,7 +293,7 @@ describe("brain:trial tournament (WS1's bar for UBER-AC-A: --table pair, --seeds
     expect(pair.bar).toEqual({ kind: 'claim', verdict: 'pass' });
     expect(trialReport({ ...input, stopped: 'cap', table: 'pair', control: false }).bar).toEqual({ kind: 'claim', verdict: 'not proven' });
     const text = renderTrialReport(pair);
-    expect(text).toContainEqual(expect.stringMatching(/^WS1's bar \(UBER-AC-A result\)\s+PASS: won 100% of 1 games \(at least 60%\); mean rank lead 2\.00 \(at least 0\.30\)$/));
+    expect(text).toContainEqual(expect.stringMatching(/^WS1's bar \(UBER-AC-A result\)\s+PASS: won 100\.0% of 1 games \(at least 60%\); mean rank lead 2\.00 \(at least 0\.30\)$/));
     expect(text).toContainEqual(expect.stringMatching(new RegExp(`^Spend so far, every ledger\\s+PR-5 proofs \\$8\\.50 of \\$${BRAIN.proofCapUsd.toFixed(2).replace('.', '\\.')}; tournament \\$0\\.40 of \\$${T.capUsd.toFixed(2).replace('.', '\\.')}$`)));
     const plain = renderTrialReport(trialReport(input));
     expect(plain.some((l) => l.startsWith("WS1's bar") || l.startsWith('Spend so far'))).toBe(false);
