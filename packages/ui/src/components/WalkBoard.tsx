@@ -260,6 +260,8 @@ export function WalkBoard({
             const right = house ? 1 : Math.max(...xs);
             // The counter sits under the trading creature, or between the two players trading.
             const at = house ? left : (left + right) / 2;
+            // Below the trading walker's stock caption ("3 (+1)"), which sits right under the creature, never over it.
+            const CAPTION_CLEAR = tv ? 28 : 18;
             return (
               <div key={`${d.buyer}-${d.seller}`} data-testid="deal">
                 {/* The bar pulses faster as the deal speeds up: 1.2 s a beat at its first unit, 0.25 s at the top speed. */}
@@ -275,7 +277,7 @@ export function WalkBoard({
                 <span
                   data-num
                   className={cx('absolute z-10 -translate-x-1/2 whitespace-nowrap rounded-chip border border-holo bg-void px-1.5 font-mono font-bold text-holo', tv ? 'text-lg' : 'text-[10px]')}
-                  style={{ top: `calc(${pct(d.price)}% + ${creature / 2 + 2}px)`, left: x(at) }}
+                  style={{ top: `calc(${pct(d.price)}% + ${creature / 2 + CAPTION_CLEAR}px)`, left: x(at) }}
                 >
                   ×{d.units} @ {d.price}
                   {house ? ` · ${house}` : ''}
