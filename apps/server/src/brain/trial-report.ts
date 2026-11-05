@@ -140,7 +140,7 @@ export interface TrialReport {
   acEdits: Verdict;
   /**
    * UBER-AC-A's result clause, as figures: Smart seats against strategist seats over finished games with scores. A
-   * seat's rank is 1 plus the seats that scored more, so a tie shares the rank; a Smart seat tied for first wins. No
+   * seat's rank is 1 plus the seats that scored more, so a tie shares the rank; a first place shared by both sides is half a win. No
    * verdict: the bar is set from WS1's tournament numbers.
    */
   results: { games: number; smartWins: number; smart: SeatResults; strategist: SeatResults };
@@ -152,10 +152,11 @@ export interface TrialReport {
 /**
  * WS1's bar over a tournament's results (BRAIN.tournament). The claim: the Claude chairs win at least winShare of the
  * games and their mean rank leads by at least rankLead. The control: wins between winShareLow and winShareHigh, mean
- * ranks within rankBand. Not proven without a scored game.
+ * ranks within rankBand. Not proven unless every one of the `planned` games was scored: a game the Claude seats leave
+ * unfinished, crash or are stopped in may not drop out of the count (WS1, 5 Nov).
  */
-export function tournamentBar(r: TrialReport['results'], control: boolean): Verdict {
-  if (r.games === 0) return 'not proven';
+export function tournamentBar(r: TrialReport['results'], control: boolean, planned: number): Verdict {
+  if (r.games === 0 || r.games !== planned) return 'not proven';
   const wins = r.smartWins / r.games;
   const lead = r.strategist.meanRank - r.smart.meanRank;
   const { claim, control: band } = BRAIN.tournament;
@@ -337,7 +338,7 @@ export function trialReport(input: TrialInput): TrialReport {
     edits,
     results: resultsOf(finished),
     ...(input.table === 'pair'
-      ? { bar: { kind: input.control ? ('control' as const) : ('claim' as const), verdict: complete ? tournamentBar(resultsOf(finished), input.control === true) : ('not proven' as const) } }
+      ? { bar: { kind: input.control ? ('control' as const) : ('claim' as const), verdict: complete ? tournamentBar(resultsOf(finished), input.control === true, input.planned) : ('not proven' as const) } }
       : {}),
     ...(input.table === 'pair' && input.totals ? { totals: input.totals } : {}),
     acEdits: input.keyed && input.playbooks ? verdict({ fails: false, proven: complete && edits.of > 0, holds: 5 * edits.model >= 4 * edits.of }) : 'n/a',
@@ -370,7 +371,8 @@ const barText = (r: TrialReport) => {
       ? [`between ${100 * control.winShareLow}% and ${100 * control.winShareHigh}%`, `within ${control.rankBand.toFixed(2)} either way`]
       : [`at least ${100 * claim.winShare}%`, `at least ${claim.rankLead.toFixed(2)}`];
   const label = bar!.kind === 'control' ? "WS1's bar, positive control" : "WS1's bar (UBER-AC-A result)";
-  return [label, `${verdictText(bar!.verdict)}: won ${share} of ${x.games} games (${bounds[0]}); mean rank lead ${lead} (${bounds[1]})`];
+  const unscored = `unscored ${r.planned - x.games} of ${r.planned} planned`;
+  return [label, `${verdictText(bar!.verdict)}: won ${share} of ${x.games} games (${bounds[0]}); mean rank lead ${lead} (${bounds[1]}); ${unscored}`];
 };
 const totalsText = (t: SpendTotals) =>
   `PR-5 proofs ${capText(Number(t.proofUsd.toFixed(2)))} of ${capText(BRAIN.proofCapUsd)}; tournament ${capText(Number(t.tourneyUsd.toFixed(2)))} of ${capText(BRAIN.tournament.capUsd)}`;
