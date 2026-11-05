@@ -535,8 +535,11 @@ export interface ProductionLineView {
   parts: { why: ProductionReason; delta: number }[];
 }
 
-/** What an event on screen is: one of the engine's month events, or a player falling sick at development's start. */
-export type ShowEventKey = EventKey | 'sickness';
+/** The colony's mood events (G-5 C26, WS1's frozen contract): shown once C26 sends them; harmless if EventKey takes them too. */
+export type ColonyEventKey = 'generalStrike' | 'festival' | 'riot' | 'emigrationWave' | 'volunteerCleanup' | 'storeStrike' | 'walkout' | 'loyalCrew' | 'blamedForUnrest';
+
+/** What an event on screen is: one of the engine's month events, a colony mood event, or a player falling sick at development's start. */
+export type ShowEventKey = EventKey | ColonyEventKey | 'sickness';
 
 /** One event as every screen shows it, whichever phase fired it: production's map and every other phase's show. */
 export interface EventView {
@@ -568,7 +571,9 @@ export interface EventView {
     good?: Good;
   }[];
   /** What it changed off the map, in the order it changed it: a player's (by id), the store's or the colony's. */
-  effects?: EventEffect[];
+  effects?: (Omit<EventEffect, 'what'> & { what: EventEffect['what'] | 'mood' | 'prestige' | 'air' | 'reputation' })[];
+  /** The colony's objects it damaged (a riot): with a plot, the plot is among its hits. */
+  objects?: { id: PrestigeId; becomes: 'damaged' }[];
   /** The phase whose show plays it. */
   phase: Phase;
   /** How big its story is on the TV. */
