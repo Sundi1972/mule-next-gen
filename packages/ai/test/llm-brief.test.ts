@@ -203,9 +203,9 @@ describe('T-AC-A10: the next brief carries what happened: this seat\'s last Phas
   it('T-AC-A10: the edits the rules refused and the ones the writer refused last time are in the next brief, by path and why', () => {
     const text = brief(OUTCOME, {
       rejected: [{ path: '/landGrant/claims', to: 9, why: 'at most 2' }],
-      refused: [{ path: '/landGrant/ranked', cause: 'unknown_option' }],
+      refused: [{ path: '/landGrant/ranked', cause: 'plan_not_offered' }],
     });
-    expect(text).toContain('Last time the rules refused: /landGrant/claims (at most 2); your reply was refused at /landGrant/ranked (unknown_option).');
+    expect(text).toContain('Last time the rules refused: /landGrant/claims (at most 2); your reply was refused at /landGrant/ranked (plan_not_offered).');
     expect(brief(OUTCOME, { rejected: [], refused: [] })).not.toContain('Last time the rules refused');
   });
 
