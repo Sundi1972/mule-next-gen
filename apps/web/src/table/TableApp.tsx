@@ -425,7 +425,7 @@ export function TvAuction({ table, game, auction }: { table: TableView<MuleView>
   const picked = game.players.map((p) => ({ ...p, ready: pickedIn(game, p.id) }));
   return (
     <div className="flex h-[720px] w-[1280px] flex-col gap-4 bg-table px-10 py-8 text-ink" data-phase="auction" data-stage={auction.stage} data-testid={status ? 'tv-status' : 'tv-walk'}>
-      <TvHeader game={game} title={`Auction · ${GOOD_NAME[auction.good]}`} />
+      <TvHeader game={game} title={`Auction · ${GOOD_NAME[auction.good]}`} gauges={false} />
       <div className="flex min-h-0 flex-1 gap-6">
         <div className={cx('flex min-w-0 flex-1 flex-col', status ? 'gap-3' : 'gap-2')}>
           {status ? (
