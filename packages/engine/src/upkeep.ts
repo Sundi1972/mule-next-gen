@@ -1,5 +1,5 @@
 import { GAME, GOOD_CONFIG, MULE, POLLUTION, PRICE, UPKEEP } from './config.js';
-import { monthlyDemand, planShip, shipInPort, shipPrice } from './economy.js';
+import { corralTarget, monthlyDemand, planShip, shipInPort, shipPrice } from './economy.js';
 import { airBand } from './pollution.js';
 import { needsOf } from './production.js';
 import { GOODS, type GameState, type Good } from './types.js';
@@ -70,9 +70,8 @@ export function runUpkeep(state: GameState): { shortages: Good[]; hungry: boolea
     state.ship = planShip(state.seed, state.month + GAME.exportShipEvery, state.players.length);
   }
 
-  // The store builds MULEs from Smithore, enough for every seat's MULE.corralPerPlayer next
-  // month plus a few.
-  const muleTarget = state.players.length * MULE.corralPerPlayer + MULE.spareInCorral;
+  // The store builds MULEs from Smithore, enough for next month's new land plus a few.
+  const muleTarget = corralTarget(state.players.length);
   const build = Math.max(0, Math.min(muleTarget - state.store.mules, Math.floor(state.store.stock.smithore / MULE.smithorePerMule)));
   state.store.stock.smithore -= build * MULE.smithorePerMule;
   state.store.mules += build;

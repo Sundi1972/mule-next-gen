@@ -1,12 +1,14 @@
 import {
   advancePhase,
   cloneForSim,
+  corralTarget,
   endAuction,
   endLead,
   exportDemand,
   GAME,
   isGameOver,
   monthlyDemand,
+  newLandMules,
   nextPostedPrice,
   runProduction,
   runUpkeep,
@@ -125,14 +127,14 @@ function rollForward(stage: GameState, months: number): Future {
   const from = sim.history.length;
   const asked = Math.min(sim.month + months, endMonth(sim));
   const target = Math.min(sim.month + Math.max(months, STRATEGIST.horizon), endMonth(sim));
-  const muleTarget = sim.players.length * MULE.corralPerPlayer + MULE.spareInCorral;
+  const muleTarget = corralTarget(sim.players.length);
   let prices: Stock = { ...sim.store.posted };
   let last: Stock = prices;
   let corralShort = false;
   // literal-ok: a month has seven phases, so eight a month bounds the loop: a guard, not balance
   for (let guard = 0; guard < (target - sim.month + 1) * 8 && sim.phase !== 'gameOver'; guard++) {
     advancePhase(sim);
-    if (sim.phase === 'production') sim.store.mules = Math.max(0, sim.store.mules - sim.players.length * MULE.corralPerPlayer);
+    if (sim.phase === 'production') sim.store.mules = Math.max(0, sim.store.mules - newLandMules(sim.players.length));
     if (sim.phase === 'planning' && sim.store.mules < muleTarget) corralShort = true;
     if (sim.phase === 'auction') {
       last = { ...sim.store.posted };
