@@ -1104,6 +1104,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       return;
     }
     if (state.phase === 'development') {
+      // Before the first development tick or steer: the development part the month's land write carried (RULE-7).
+      this.playbooks?.takePhase(state, 'development');
       this.startDevelopment();
       return;
     }

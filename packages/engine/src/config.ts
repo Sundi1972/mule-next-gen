@@ -1695,6 +1695,17 @@ export const BRAIN = {
    * whose --max-usd would carry the total past it is refused before any call (Heiko's cap, via the PM, 5 Nov).
    */
   proofCapUsd: 10,
+  /**
+   * The tournament behind UBER-AC-A's result clause, WS1's bar (Heiko, 5 Nov): Claude-playbook seats on the even chairs
+   * against engine-playbook seats on the odd. Its ledgers count against capUsd, apart from proofCapUsd. The claim: the
+   * Claude chairs win at least winShare of the games, with a mean rank at least rankLead better. The positive control,
+   * engine seats in the Claude chairs, lands between winShareLow and winShareHigh, within rankBand of mean rank.
+   */
+  tournament: {
+    capUsd: 60,
+    claim: { winShare: 0.6, rankLead: 0.3 },
+    control: { winShareLow: 0.45, winShareHigh: 0.55, rankBand: 0.15 },
+  },
   /** Hard ceiling, in US dollars, for the latency spike command. */
   spikeCapUsd: 0.05,
   /** US dollars per million tokens, for `model` (Haiku 5.5). */

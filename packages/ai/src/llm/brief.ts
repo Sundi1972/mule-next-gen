@@ -77,7 +77,7 @@ const ROUTE_STEP = {
   required: ['act', 'plot', 'outfit'],
   additionalProperties: false,
 };
-const DEVELOPMENT_OFFERS: readonly EditOffer[] = [
+export const DEVELOPMENT_OFFERS: readonly EditOffer[] = [
   { path: '/development/route', to: { type: 'array', items: ROUTE_STEP } },
   { path: '/development/timeBudgetMs', to: { type: 'integer' } },
   { path: '/development/ifSoldOut', to: { type: 'string', enum: [...IF_SOLD_OUT] } },
@@ -199,7 +199,16 @@ function changeLines(corners: boolean): string[] {
  * The land brief for one seat, from its observation only: no other seat's goods and no ground it has not analysed.
  * Deterministic for a given state, draft and talk, so the prompt can be cached up to it.
  */
-export function landBrief(state: GameState, mind: Mind, persona: Persona, draft: LandDraft, talk: readonly TableTalk[], last: LastPhase = {}): LandBrief {
+export function landBrief(
+  state: GameState,
+  mind: Mind,
+  persona: Persona,
+  draft: LandDraft,
+  talk: readonly TableTalk[],
+  last: LastPhase = {},
+  /** The month's draft development: shown and offered too, so one write a month edits both (PM ruling, 5 Nov, option C). */
+  development: DevelopmentPlay | null = null,
+): LandBrief {
   const obs = observe(state, mind.me);
   const me = obs.players.find((p) => p.id === mind.me)!;
   const corners = mind.level.corners;
@@ -234,8 +243,10 @@ export function landBrief(state: GameState, mind: Mind, persona: Persona, draft:
     'Your draft land grant:',
     ...draftLines(draft.landGrant),
     '',
+    ...(development ? ['Your draft development:', ...developmentLines(development), ''] : []),
     'What you may change:',
     ...changeLines(corners),
+    ...(development ? DEV_CHANGES : []),
     '',
     `Your character: ${persona.card}`,
     '',
@@ -243,8 +254,15 @@ export function landBrief(state: GameState, mind: Mind, persona: Persona, draft:
     '',
     'Write your strategy and your edits, and reply with the JSON.',
   ].join('\n');
-  return { text, plans, corners, strategy: draft.strategy, offers: LAND_OFFERS, strategyOffered: true };
+  return { text, plans, corners, strategy: draft.strategy, offers: development ? [...LAND_OFFERS, ...DEVELOPMENT_OFFERS] : LAND_OFFERS, strategyOffered: true };
 }
+
+/** What a brief that offers the development paths says of them. */
+const DEV_CHANGES = [
+  '- /development/route: the whole route, in order; each step {act, plot, outfit}, null where the act takes none.',
+  '- /development/timeBudgetMs: the time to spend, in ms.',
+  '- /development/ifSoldOut: pub, analyse or stop.',
+];
 
 /** The phase the brief edits: the slack before it is when it is asked (RULE-A2 rows 3-4). */
 export type EditPhase = 'development' | 'auction';
@@ -323,7 +341,7 @@ export function phaseBrief(state: GameState, mind: Mind, persona: Persona, draft
     '',
     'What you may change:',
     ...(phase === 'development'
-      ? ['- /development/route: the whole route, in order; each step {act, plot, outfit}, null where the act takes none.', '- /development/timeBudgetMs: the time to spend, in ms.', '- /development/ifSoldOut: pub, analyse or stop.']
+      ? DEV_CHANGES
       : ['- /auction/<good>/role, hold, walkAway, start, concedeCrPerS, for each good above.']),
     `Every edit says why, in at most ${BRAIN.writeReasonChars} characters.`,
     '',

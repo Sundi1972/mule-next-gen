@@ -5,7 +5,7 @@ import { AI_LEVELS, AI_PERSONAS, allPrices, BRAIN, createGame, GOODS, type GameS
 import { PERSONAS } from '../src/personas.js';
 import { GOOD_NAME } from '../src/strategist.js';
 import type { Mind } from '../src/value.js';
-import { phaseBrief } from '../src/llm/brief.js';
+import { DEVELOPMENT_OFFERS, LAND_OFFERS, landBrief, phaseBrief } from '../src/llm/brief.js';
 import { replySchema, writeReply, type WriteComplete, type WriterPrompt } from '../src/llm/writer.js';
 
 /** p0 owns two plots and holds a distinctive stock; p1 holds another, so a leak into p0's brief is unmistakable. */
@@ -100,6 +100,22 @@ describe("C2: the writer takes a phase brief's paths", () => {
     // Re-pinned for GAME.claimsPerGrant 2 → 1 (trunk, 5 Nov): the claims enum is [0, 1], so the land cache reset once.
     expect(sha(replySchema(true))).toBe('6975f613536e698b00b8751de3e7adae8a6dc6b121cc7bf63370192e75841e2f');
     expect(sha(replySchema(false))).toBe('8425081cf9c0bb23b4d70a79080cb7fe1daf3f49ee676bbb74b71c566fe3abe0');
+  });
+
+  it("C2 (option C): the month's land schema, land and development paths together, is the same bytes for every brief of a level", () => {
+    const DEV = { route: [], timeBudgetMs: 1_000, ifSoldOut: 'pub' as const };
+    const of = (state: GameState) => {
+      const b = landBrief(state, mind, PERSONAS.trader, { strategy: STRATEGY, landGrant: { ranked: [], pressShare: { start: 0.8, end: 0.4 }, deny: [], planB: [], claims: 1 } }, [], {}, DEV);
+      return replySchema(b.corners, b.offers, b.strategyOffered);
+    };
+    const a = of(table());
+    const later = table();
+    later.month = 4;
+    expect(JSON.stringify(of(later))).toBe(JSON.stringify(a));
+    expect(sha(a)).not.toBe(sha(replySchema(true)));
+    // The land request's schema from 5 Nov (option C): pinned, so a change to it is a deliberate cache reset.
+    expect(sha(a)).toBe('87e780aae59a57a6aa8f6d24f9ec32e7af301fb93426757dbb48acb235fcdb02');
+    expect(sha(replySchema(false, [...LAND_OFFERS, ...DEVELOPMENT_OFFERS], true))).toBe('9d2ecadba756d64bd6c8420fc7bae591fa8bddfd3116ee6a96d3abea6c459b7c');
   });
 
   it("C2: a full auction brief's schema compiles: offers with the same value type share one branch with a path enum, so 6 goods take 3 branches, not 30 (the API refused 30 in the PR-5 pilot), and every offered path is in exactly one", () => {

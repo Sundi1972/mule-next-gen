@@ -1,6 +1,7 @@
 /**
- * When a seat's brain asks for its playbooks, and which takes effect: the land grant's at the land grant's start, and the
- * auction's at the auction's start, asked in the production show (spec A RULE-A2, AM-A16).
+ * When a seat's brain asks for its playbooks, and which takes effect (spec A RULE-A2, AM-A16): the month's land write
+ * carries the land grant's and the development's edits, taken at each of those phases' start; the auction's is asked in
+ * the production show and taken at the auction's start.
  */
 import { BRAIN, type GameState, type Playbook, type PlayerId } from '@mule/engine';
 import {
@@ -45,6 +46,29 @@ interface Ask {
   written: WriterReply | null;
   started: boolean;
   controller: AbortController;
+  /** A land ask's draft development for the month, whose edits ride on the land write (PM ruling, 5 Nov, option C). */
+  development?: Playbook | null;
+}
+
+const isDevelopmentPath = (path: string | null) => path !== null && path.startsWith('/development/');
+
+/**
+ * A land write's reply as two: the land grant's (strategy, land edits, the line, every other refusal) and the
+ * development's (its edits and refusals), or null when it has none of either.
+ */
+function splitDevelopment(written: WriterReply): { land: WriterReply; development: WriterReply | null } {
+  const { reply, refused } = written;
+  const devEdits = reply.edits.filter((e) => isDevelopmentPath(e.path));
+  const devRefused = refused.filter((r) => isDevelopmentPath(r.path));
+  const land: WriterReply = { reply: { ...reply, edits: reply.edits.filter((e) => !isDevelopmentPath(e.path)) }, refused: refused.filter((r) => !isDevelopmentPath(r.path)) };
+  if (devEdits.length === 0 && devRefused.length === 0) return { land, development: null };
+  return { land, development: { reply: { edits: devEdits, line: null }, refused: devRefused } };
+}
+
+/** Two feedbacks as one: the land write's, and the development part's it carried. */
+function joined(a: Feedback | null, b: Feedback | null): Feedback | null {
+  if (!a || !b) return a ?? b;
+  return { refused: [...a.refused, ...b.refused], rejected: [...a.rejected, ...b.rejected] };
 }
 
 const messageOf = (err: unknown) => (err instanceof Error ? err.message : String(err));
@@ -90,9 +114,16 @@ export class Playbooks {
         // What the rules and the writer refused of last month's reply. The seat's last PhaseOutcome joins it once its
         // producers write one (land: WS3; development and auction: WS9's playbook/outcome.ts); until then the brief
         // says nothing of it.
-        const last = { feedback: this.feedback.get(seat.id) ?? null };
-        const brief = landBrief(state, seat.mind, seat.brain.persona, drafted.land, seat.brain.heard(), last);
-        const ask: Ask = { month, draft: drafted.playbook, written: null, started: false, controller: new AbortController() };
+        const last = { feedback: joined(this.feedback.get(seat.id) ?? null, this.phaseFeedback.get(`${seat.id}/development`) ?? null) };
+        // The month's development rides on the land write, so its edits land every month (PM ruling, 5 Nov, option C).
+        let development: Playbook | null = null;
+        try {
+          development = seat.draft(state, 'development', month);
+        } catch (err) {
+          console.error(`playbooks: seat ${seat.id} has no development draft for month ${month}: ${messageOf(err)}`);
+        }
+        const brief = landBrief(state, seat.mind, seat.brain.persona, drafted.land, seat.brain.heard(), last, development?.development ?? null);
+        const ask: Ask = { month, draft: drafted.playbook, written: null, started: false, controller: new AbortController(), development };
         this.asks.set(seat.id, ask);
         seat.playbookAsked(month);
         const waitMs = WRITE_CALLS.strategy.timeoutMs;
@@ -142,6 +173,14 @@ export class Playbooks {
       if (asked) {
         asked.started = true;
         asked.controller.abort();
+        // The land grant plays the land part; the development part waits for its phase's start (takePhase).
+        if (asked.written) {
+          const { land, development } = splitDevelopment(asked.written);
+          asked.written = land;
+          if (development && asked.development) {
+            this.phaseAsks.set(`${seat.id}/development`, { month: state.month, draft: asked.development, written: development, started: false, controller: new AbortController() });
+          }
+        }
       }
       this.feedback.delete(seat.id);
       let now: Playbook;
@@ -198,7 +237,7 @@ export class Playbooks {
 
   /**
    * `phase` has started: a call still open for it is cancelled and its reply would be late. A reply that came in time
-   * is validated against the draft its brief showed; only a playbook carrying Claude's accepted edits is adopted and
+   * is applied to the draft its brief showed (the development's, to its draft as it starts); only a playbook carrying Claude's accepted edits is adopted and
    * recorded. Otherwise nothing is adopted, so the seat plays the phase its own way (today's hands while
    * AI_PLANS.ownPhases is off). The reply's feedback is kept for that phase's next brief.
    */
@@ -213,9 +252,12 @@ export class Playbooks {
       if (!ask.written) continue;
       let made: ReturnType<typeof playbookFrom>;
       try {
-        made = playbookFrom(seat.validator(), state, ask.draft, ask.written);
+        // The development's edits go onto its draft as it starts: the land write's was drafted at upkeep, before the land
+        // grant and auction changed what the seat owns. The auction's draft was made after production, and holds.
+        const draft = phase === 'development' ? seat.draft(state, 'development') : ask.draft;
+        made = playbookFrom(seat.validator(), state, draft, ask.written);
       } catch (err) {
-        console.error(`playbooks: validatePlan failed for seat ${seat.id}'s ${phase}, it plays its own way: ${messageOf(err)}`);
+        console.error(`playbooks: seat ${seat.id}'s ${phase} could not be drafted or validated, it plays its own way: ${messageOf(err)}`);
         continue;
       }
       if (made.feedback) this.phaseFeedback.set(key, made.feedback);

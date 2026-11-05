@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AI_LEVELS, AI_PERSONAS, allPrices, BRAIN, createGame, GOODS, type GameState, type LandGrantPlay, type PhaseOutcome, type Strategy } from '@mule/engine';
+import { AI_LEVELS, AI_PERSONAS, allPrices, BRAIN, createGame, GOODS, type GameState, type DevelopmentPlay, type LandGrantPlay, type PhaseOutcome, type Strategy } from '@mule/engine';
 import { PERSONAS } from '../src/personas.js';
 import { GOOD_NAME } from '../src/strategist.js';
 import type { Mind } from '../src/value.js';
@@ -229,3 +229,27 @@ describe('T-AC-A10: the next brief carries what happened: this seat\'s last Phas
     expect(rival).toContain('and 3 more');
   });
 });
+
+describe("C1 (PM ruling, 5 Nov, option C): the month's land brief also carries the draft development and offers its paths", () => {
+  const DEV: DevelopmentPlay = { route: [{ act: 'buyMule' }, { act: 'outfit', outfit: 'energy' }, { act: 'install', plot: 12 }], timeBudgetMs: 25_000, ifSoldOut: 'analyse' };
+
+  it('C1: with a development draft the land brief shows it after the land grant and offers the land paths, then the development paths', () => {
+    const brief = landBrief(table(), mindOf('p0'), PERSONAS.trader, draftOf(12), TALK, {}, DEV);
+    expect(brief.text).toContain('Your draft development:');
+    expect(brief.text).toContain(`Route: buy a MULE, outfit it for ${GOOD_NAME.energy}, install it on plot 12.`);
+    expect(brief.text).toContain('Time budget: 25 s of your development time.');
+    expect(brief.text).toContain('- /development/route:');
+    expect(brief.text.indexOf('Your draft land grant:')).toBeLessThan(brief.text.indexOf('Your draft development:'));
+    expect(brief.text.indexOf('Your draft development:')).toBeLessThan(brief.text.indexOf('What you may change:'));
+    expect(brief.offers.map((o) => o.path)).toEqual(['/landGrant/ranked', '/landGrant/claims', '/landGrant/pressShare', '/development/route', '/development/timeBudgetMs', '/development/ifSoldOut']);
+    expect(brief.strategyOffered).toBe(true);
+  });
+
+  it('C1: without one the land brief is as before: no development section, the land paths only', () => {
+    const brief = landBrief(table(), mindOf('p0'), PERSONAS.trader, draftOf(12), TALK);
+    expect(brief.text).not.toContain('Your draft development:');
+    expect(brief.text).not.toContain('/development/');
+    expect(brief.offers.map((o) => o.path)).toEqual(['/landGrant/ranked', '/landGrant/claims', '/landGrant/pressShare']);
+  });
+});
+

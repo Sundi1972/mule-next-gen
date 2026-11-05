@@ -91,6 +91,12 @@ function writeOutcomeOf(reply: Pick<HaikuReply, 'stopReason'> | null, failure: u
   return outcome === 'llm' && written.reply.cause !== undefined ? 'unreadable' : outcome;
 }
 
+/** A failed call's answer for its ledger line: the status and the API's error type, never the message. */
+function answerOf(failure: unknown): { status?: number; error_type?: string } {
+  if (!(failure instanceof CallFailed)) return {};
+  return { ...(failure.status === null ? {} : { status: failure.status }), ...(failure.errorType === null ? {} : { error_type: failure.errorType }) };
+}
+
 /** A settled call's ledger outcome: from the reply's stop reason or the failure's type, never from message text. See RULE-4. */
 export function outcomeOf(reply: Pick<HaikuReply, 'stopReason'> | null, failure: unknown): Exclude<Outcome, 'budget'> {
   if (reply?.stopReason === 'refusal') return 'refused';
@@ -161,14 +167,14 @@ export function createBrain(options: BrainOptions): MeteredBrain {
     if (finished) return null;
     asked = true;
     seats.add(seat.id);
-    return (kind: LedgerKind, model: ModelId, outcome: Outcome, usage: Usage, ms: number, round?: number) =>
-      ledger.record({ game: gameId, seat: seat.id, persona: seat.persona, level: seat.level, model, kind, ms, outcome, ...usage, ...(round === undefined ? {} : { round }) });
+    return (kind: LedgerKind, model: ModelId, outcome: Outcome, usage: Usage, ms: number, round?: number, failure?: unknown) =>
+      ledger.record({ game: gameId, seat: seat.id, persona: seat.persona, level: seat.level, model, kind, ms, outcome, ...usage, ...(round === undefined ? {} : { round }), ...answerOf(failure) });
   }
 
   function deciderFor(seat: BrainSeat): Decider | null {
     const line = enter(seat);
     if (!line) return null;
-    const write = (kind: DecisionRecord['kind'], outcome: Outcome, usage: Usage, ms: number) => line(kind, BRAIN.model, outcome, usage, ms);
+    const write = (kind: DecisionRecord['kind'], outcome: Outcome, usage: Usage, ms: number, failure?: unknown) => line(kind, BRAIN.model, outcome, usage, ms, undefined, failure);
 
     const portFor =
       (slot: CallSlot): Complete =>
@@ -201,7 +207,7 @@ export function createBrain(options: BrainOptions): MeteredBrain {
             if (failure.lockedNow) write(context.kind, 'budget', NO_USAGE, 0);
           } else if (slot.called) {
             const ms = slot.reply?.ms ?? (failure instanceof CallFailed ? failure.ms : 0);
-            write(context.kind, outcomeOf(slot.reply, failure), slot.reply?.usage ?? NO_USAGE, ms);
+            write(context.kind, outcomeOf(slot.reply, failure), slot.reply?.usage ?? NO_USAGE, ms, failure);
             if (billUnknown(slot.reply, failure) && !finished) budget.countUnknownBill(gameId, seat.id, slot.worstUsd);
           }
         }
@@ -291,7 +297,7 @@ export function createBrain(options: BrainOptions): MeteredBrain {
           } else if (slot.called) {
             const ms = slot.reply?.ms ?? (failure instanceof CallFailed ? failure.ms : 0);
             const outcome = writeOutcomeOf(slot.reply, failure, written);
-            line(kind, model, outcome === 'llm' && model !== call.model ? 'fallback' : outcome, slot.reply?.usage ?? NO_USAGE, ms, slot.round);
+            line(kind, model, outcome === 'llm' && model !== call.model ? 'fallback' : outcome, slot.reply?.usage ?? NO_USAGE, ms, slot.round, failure);
             if (billUnknown(slot.reply, failure) && !finished) budget.countUnknownBill(gameId, seat.id, slot.worstUsd);
             if (slot.reply && ask.late?.()) line(kind, model, 'late', NO_USAGE, 0, slot.round);
           }
