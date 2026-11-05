@@ -16,6 +16,7 @@ import { useClient, useClientState, useServerNow } from '../net/react';
 import { connectedIn, hostMayContinue, pickedIn, readyRows, SIDE_PICK_WORDS, stillPicking, stillPlanning } from '../phone/hub/ready';
 import { ReadyCount, WaitingFor } from '../phone/hub/ReadyBar';
 import { steering } from '../phone/arcade/route';
+import { TvCouncil } from './TvCouncil';
 import { TvDevelop } from './TvDevelop';
 import { placesOf } from '../phone/hub/standing';
 import { TvEventLayer } from '../events/TvEventLayer';
@@ -179,6 +180,7 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
       </SeatSpeciesProvider>
     );
   if (phase === 'planning' && game.politics?.election && game.politics.election.stage !== 'over') return <TvElection table={table} game={game} />;
+  if (phase === 'planning' && game.politics?.council && game.politics.council.stage !== 'over') return <TvCouncil game={game} />;
   if (phase === 'development' && steering(game)) return <TvDevelop game={game} />;
 
   let side: ReactNode;
