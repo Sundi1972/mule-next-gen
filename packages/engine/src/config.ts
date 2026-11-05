@@ -945,9 +945,16 @@ export const POLITICS = {
     /** The AI Governor's colony acts and the mood-weighed vote (G-5 C25). Placeholders until the sim tunes them. */
     colony: {
       /** Whether an AI Governor of each persona commissions a prestige object the fund can pay for. */
-      commissions: { trader: true, cautious: true, aggressive: true, saboteur: false } satisfies Record<AiPersonaId, boolean>,
+      commissions: { trader: true, cautious: true, aggressive: true, saboteur: false } as Record<AiPersonaId, boolean>,
       /** Whether an AI Governor of each persona pays general strikers the fund can pay. */
-      paysStrike: { trader: true, cautious: true, aggressive: false, saboteur: false } satisfies Record<AiPersonaId, boolean>,
+      paysStrike: { trader: true, cautious: true, aggressive: false, saboteur: false } as Record<AiPersonaId, boolean>,
+      /** Whether an AI Governor of each persona repairs a damaged object the fund can pay for (AM-10). */
+      repairs: { trader: true, cautious: true, aggressive: true, saboteur: false } as Record<AiPersonaId, boolean>,
+      /**
+       * An AI Governor's top bid, in credits, for an object's site at the land auction (RULE-28, AM-10); null, it never
+       * bids, so it commissions only objects that need no plot. The engine caps the bid at the fund over its reserve.
+       */
+      siteBid: { trader: 400, cautious: 300, aggressive: 500, saboteur: null } as Record<AiPersonaId, number | null>,
       /** In these mood bands an AI voter will not vote for the sitting Governor if anyone else runs. */
       leanIn: ['unhappy', 'unrest'] as MoodBand[],
     },
