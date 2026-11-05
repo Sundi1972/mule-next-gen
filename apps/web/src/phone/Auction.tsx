@@ -269,7 +269,8 @@ export function Auction() {
       {!closed && (
         <div className="flex flex-col gap-1">
           {sides}
-          <span className="text-center text-[10px] leading-tight text-ink-3" data-testid="sides-caption">
+          {/* On a phone held sideways (390 px) the rail has no row to spare: the caption shows where it fits. */}
+          <span className="hidden text-center text-[10px] leading-tight text-ink-3 [@media(min-height:430px)]:block" data-testid="sides-caption">
             {lineSide === 'buyer' ? 'Sell puts you at the top, asking.' : 'Buy puts you at the bottom, bidding.'}
           </span>
         </div>

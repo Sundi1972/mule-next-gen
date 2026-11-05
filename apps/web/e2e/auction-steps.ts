@@ -548,8 +548,9 @@ async function linesGiveWayToTheTrade(s: Screen, timeout: number): Promise<void>
   try {
     await s.page.waitForFunction(
       () => {
-        // A house's trade bar is labelled "×2 @ 66 · STORE"; one between two players carries only units and price.
-        const players = [...document.querySelectorAll('[data-testid=deal]')].some((d) => /^×\d+ @ \d+$/.test(d.textContent?.trim() ?? ''));
+        // A house's trade bar is labelled "×2 @ 66 · STORE"; one between two players carries only units and price, and
+        // its speed-up's chevrons (WS6's variant A).
+        const players = [...document.querySelectorAll('[data-testid=deal]')].some((d) => /^×\d+ @ \d+›*$/.test(d.textContent?.trim() ?? ''));
         return players && !document.querySelector('[data-testid=line-ask], [data-testid=line-bid], [data-testid=gap-label]');
       },
       undefined,
