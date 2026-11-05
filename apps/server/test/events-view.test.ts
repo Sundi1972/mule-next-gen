@@ -86,13 +86,14 @@ const fourSeats = [
 // Found by playing seeds 1-480 through months 1-5 on fourSeats, as playRealMonths does, reading each production's report,
 // then the seeds whose month fired both stories on to month 10.
 // The seats (even their names) and the AIs' play move what fires, so these months hold only for fourSeats, and only for
-// the AIs and rules of their day: trunk's AI and rules changes (WS3's A-7, WS4's A-1, WS6's #218) moved what seed 26 fired.
-const REAL_SEED = 404;
+// the AIs and rules of their day: trunk's AI and rules changes (WS3's A-7, WS4's A-1, WS6's #218) moved what seed 26 fired,
+// and the slower auction walk and trade pace (#376, 5 Nov) moved seed 404's pest swarm: re-searched over seeds 1-120.
+const REAL_SEED = 17;
 /** Production fires a colony comet pass, then a personal pest swarm. */
-const TWO_EVENT_MONTH = 4;
+const TWO_EVENT_MONTH = 6;
 /** Production fires a colony comet pass and nothing else. */
 const ONE_EVENT_MONTH = 5;
-/** Nothing fires all month (wave 2's meteor strike took month 6, the quiet month before it). */
+/** Nothing fires all month. */
 const QUIET_MONTH = 3;
 
 /**
@@ -109,7 +110,8 @@ function playRealMonths(lastMonth: number) {
       const view = game?.viewFor(null);
       if (!view || view.phase !== 'production' || months.has(view.month)) return;
       const state = (game as unknown as { state: GameState }).state;
-      months.set(view.month, { view, at, report: state.history.at(-1)! });
+      // A copy: the month end adds its own events to the same report (an inheritance), after production has been shown.
+      months.set(view.month, { view, at, report: structuredClone(state.history.at(-1)!) });
     },
   });
   game = new MuleGame(fake.ctx, REAL_SEED);
@@ -129,7 +131,7 @@ function playRealMonths(lastMonth: number) {
 
 /** REAL_SEED's months, played once for every block that reads them: five months on the fake clock take seconds. */
 let realMonths: ReturnType<typeof playRealMonths> | null = null;
-const playedMonths = () => (realMonths ??= playRealMonths(ONE_EVENT_MONTH));
+const playedMonths = () => (realMonths ??= playRealMonths(Math.max(TWO_EVENT_MONTH, ONE_EVENT_MONTH, QUIET_MONTH)));
 /** Room for five months under a loaded full run, past the 10 s a hook gets by default. */
 const PLAY_MONTHS_MS = 60_000;
 
