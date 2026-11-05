@@ -251,7 +251,12 @@ export type EventKey =
   | 'storeFire'
   | 'ratsInSilo'
   | 'crookedAccountant'
-  | 'packageFromHome';
+  | 'packageFromHome'
+  // G-5 C26: the colony's social events, rolled in planning (a general strike also files a production event when unpaid).
+  | 'festival'
+  | 'generalStrike'
+  | 'emigrationWave'
+  | 'blamedForUnrest';
 
 /** How the screens animate an event; several events share a kind. */
 export type EventKind =
@@ -275,7 +280,8 @@ export type EventKind =
 /** One change an event made off the map: whose (a player's id, the store or the colony), of what, and by how much. */
 export interface EventEffect {
   on: string | 'store' | 'colony';
-  what: Good | 'money' | 'mules' | 'colonists' | 'energyNeed';
+  /** G-5 C26 adds 'mood' (moodShift's change), 'prestige' (lasting points), 'air' (the gauge) and 'reputation'. */
+  what: Good | 'money' | 'mules' | 'colonists' | 'energyNeed' | 'mood' | 'prestige' | 'air' | 'reputation';
   delta: number;
 }
 
@@ -328,9 +334,13 @@ export interface ProductionLine {
   tile: number;
   good: Good;
   made: number;
-  /** What made up the output, in order; the deltas sum to `made`. */
+  /**
+   * What made up the output, in order; the deltas sum to `made`. `energyOff`: the plot was turned off for want of
+   * Energy and made UPKEEP.offOutputShare of its output (AM-17). `noEnergy` is the halving it replaced, kept for
+   * screens and fixtures that still name it; the engine no longer files it.
+   */
   parts: {
-    why: 'ground' | 'trait' | 'species' | 'cluster' | 'pollution' | 'floor' | 'noEnergy' | 'noWater' | 'event' | 'factory' | 'special';
+    why: 'ground' | 'trait' | 'species' | 'cluster' | 'pollution' | 'floor' | 'noEnergy' | 'energyOff' | 'noWater' | 'event' | 'factory' | 'special';
     delta: number;
     event?: EventKey;
   }[];
@@ -445,6 +455,8 @@ export interface ColonyGauges {
   wealth: number;
   prestige: number;
   happiness: number | null;
+  /** The air as the month ended, 0..POLLUTION.airMax: with the other three, it scores the month end (G-5 AM-12). */
+  air: number;
 }
 
 export type Office = 'governor' | 'sheriff';

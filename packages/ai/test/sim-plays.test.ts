@@ -21,8 +21,11 @@ const SLOW = { timeout: 60_000 };
 const SEED = 3;
 const MONTHS = 2;
 
-/** Seed 4's third month is the first in which a seat runs short of cash, so it lists in planning and sells at the land auction. */
-const [LISTS, LIST_MONTHS] = [4, 3];
+/**
+ * Seed 4's fifth month is the first in which a seat runs short of cash, so it lists in planning and sells at the land
+ * auction. Re-picked 6 Nov for WS1's shortfall rule: it was the third month before seats bought what keeps them whole.
+ */
+const [LISTS, LIST_MONTHS] = [4, 5];
 /** With every seat on its playbook, seed 4's first sale by a seat is at the fourth month's land auction. */
 const SELL_MONTHS = 4;
 
@@ -136,6 +139,18 @@ describe('the sim adopts edited playbooks through the seat’s gate (C14, B-AC-6
     expect(edited.game.outcomes.find((o) => o.seat === 'ai0' && o.month === 1 && o.phase === 'auction')!.items.find((i) => i.path === `/auction/${out}/role`)).toMatchObject({ expected: 'out', actual: 'out' });
     // No edits, nothing adopted: the game is the one played without the hook.
     expect(play(specs, { edits: () => null }).print).toBe(base.print);
+    // A 'today' seat plays no playbook: the hook that edits ai0's auction is never asked of it, and its game is unchanged.
+    const today = withPlays('today');
+    const asked: string[] = [];
+    const hooked = play(today, {
+      edits: (seat, draft) => {
+        asked.push(`${seat.id}/${draft.month}/${draft.phase}`);
+        const good = (Object.keys(draft.auction ?? {}) as Good[])[0];
+        return seat.id === 'ai0' && good ? [{ path: `/auction/${good}/role`, to: 'out', reason: 'Sit this one out.' }] : null;
+      },
+    });
+    expect(asked).toEqual([]);
+    expect(hooked.print).toBe(play(today).print);
   });
 });
 

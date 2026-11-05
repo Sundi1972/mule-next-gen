@@ -23,6 +23,7 @@ import {
   type RecordedWrite,
 } from '@mule/engine';
 import { outlook } from '../outlook.js';
+import { outfitName } from '../strategist.js';
 import { capCodePoints } from '../text.js';
 import { unitValues, type Mind } from '../value.js';
 import { draftPlaybook, KINDS, ledOutfit, type DraftPhase, type LandPick } from './draft.js';
@@ -174,7 +175,7 @@ function routeFault(route: unknown, ctx: Ctx): [string, number] | null {
   return route.length > cap ? [`more than ${cap} steps`, cap] : null;
 }
 
-/** Why a route cannot give its first MULE group, the fitted MULE the seat leads, another outfit, or null (AM-29). */
+/** Why a route cannot give its first MULE group, the fitted MULE the seat leads, another outfit, or null. See AM-29. */
 function refitFault(route: DevelopmentPlay['route'], ctx: Ctx): string | null {
   const led = ledOutfit(ctx.state, ctx.seat);
   const first = route.findIndex((s) => s.act === 'buyMule');
@@ -188,7 +189,7 @@ function refitFault(route: DevelopmentPlay['route'], ctx: Ctx): string | null {
   // Asked with the money for it, so the refusal named is the re-fit's and not the purse's.
   self.money = Math.max(self.money, outfitCostFor(trial, ctx.seat, outfit));
   const engine = dryRun(() => outfitMule(trial, ctx.seat, outfit));
-  return engine && 'refused' in engine ? engine.refused : `the MULE it leads already carries ${led}`;
+  return engine && 'refused' in engine ? engine.refused : `the MULE it leads already carries ${outfitName(led)}`;
 }
 
 const goodOf = (ctx: Ctx, unit: string[]) => ctx.pb.auction![unit[1] as Good]!;

@@ -20,11 +20,15 @@ import {
   type LawProposal,
   type Office,
   type PrestigeId,
+  type Project,
   type Rng,
   type TaxPromise,
 } from '@mule/engine';
 import type { Act } from '../actions.js';
 import type { Mind } from '../value.js';
+
+/** A commissioned object still waiting for its plot: the colony can bid for its site (RULE-28). */
+const waitsForSite = (p: Project): boolean => p.stage === 'commissioned' && p.plot === null && PRESTIGE[p.id].needsPlot;
 
 function samePromise(a: TaxPromise | undefined, b: TaxPromise): boolean {
   return a?.kind === b.kind && (a.kind !== 'cap' || (b.kind === 'cap' && a.percent === b.percent));
@@ -177,7 +181,9 @@ export class VoteHand {
    * hashes the seat's own seed (the mind's salt), never the game's: that one drives the game's dice, which observe() hides.
    */
   private council(obs: GameState): Rng {
-    const seatSeed = (this.mind.salt ?? 0) ^ 0x2545f491; // literal-ok: a hash salt, so the council's stream is its own
+    // Every seat's mind carries its own salt (AiSeat); without one, seats would share a coin (INV-41).
+    if (this.mind.salt === undefined) throw new Error("A VoteHand's mind needs the seat's salt: build it with AiSeat");
+    const seatSeed = this.mind.salt ^ 0x2545f491; // literal-ok: a hash salt, so the council's stream is its own
     return createRng((Math.imul(seatSeed, 1_000_003) ^ Math.imul(obs.month, 7_919)) >>> 0); // literal-ok: hashing constants (primes) that make one stream per seat and month
   }
 
@@ -239,20 +245,31 @@ export class VoteHand {
     act({ type: 'propose', proposal });
   }
 
-  /** G-5 C25: an AI Governor pays a strike it can afford and commissions the most prestige the fund can pay for, by persona. */
+  /**
+   * G-5 C25 (AM-10): the AI Governor pays the strike, mends what is damaged, the most prestige first, then commissions
+   * the most prestige the fund still covers, with its site bid; and gives an object waiting for its site a bid.
+   */
   private colonyActs(obs: GameState, act: Act): void {
     const colony = obs.colony;
     if (!colony) return;
-    const { commissions, paysStrike } = POLITICS.ai.colony;
+    const { commissions, paysStrike, repairs, siteBid } = POLITICS.ai.colony;
+    const bid = siteBid[this.persona];
     const strike = colony.strike;
     let fund = obs.treasury.money;
     if (strike && strike.month === obs.month && !strike.paid && paysStrike[this.persona] && fund >= strike.cost && act({ type: 'payStrike' })) fund -= strike.cost;
+    if (repairs[this.persona]) {
+      const damaged = colony.projects.filter((p) => p.stage === 'damaged').sort((a, b) => PRESTIGE[b.id].prestige - PRESTIGE[a.id].prestige);
+      for (const { id } of damaged) if (PRESTIGE[id].repairCost <= fund && act({ type: 'repair', id })) fund -= PRESTIGE[id].repairCost;
+    }
+    if (bid !== null) {
+      for (const p of colony.projects) if (waitsForSite(p) && p.maxBid === null) act({ type: 'setSiteBid', id: p.id, maxBid: bid });
+    }
     if (!commissions[this.persona]) return;
-    // Plot-free objects only, until the AI Governor bids for a site (a later C25 step).
     const choices = (Object.keys(PRESTIGE) as PrestigeId[])
-      .filter((id) => !PRESTIGE[id].needsPlot && PRESTIGE[id].credits <= fund && commissionRefusal(obs, id) === null)
+      .filter((id) => (bid !== null || !PRESTIGE[id].needsPlot) && PRESTIGE[id].credits <= fund && commissionRefusal(obs, id) === null)
       .sort((a, b) => PRESTIGE[b].prestige - PRESTIGE[a].prestige || PRESTIGE[a].credits - PRESTIGE[b].credits);
-    if (choices[0]) act({ type: 'commission', id: choices[0] });
+    const pick = choices[0];
+    if (pick && act({ type: 'commission', id: pick }) && PRESTIGE[pick].needsPlot) act({ type: 'setSiteBid', id: pick, maxBid: bid });
   }
 
   private govern(obs: GameState, act: Act): void {

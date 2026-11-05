@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The goods auction · M.U.L.E. Rulebook</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="rulebook.css">
+</head>
+<body>
+<div class="rb-shell">
+<aside class="rb-rail"></aside>
+<main class="rb-main">
+<article>
+<h1>The goods auction</h1>
+<p class="rb-lede">After production, the colony trades. Goods come up one at a time; for each one you pick a side, then walk your creature up to bid or down to ask. Where a buyer and a seller meet, goods change hands by themselves, slowly at first and then faster and faster. The store and, every third month, the export ship stand on the board as lines you can trade with.</p>
+
+<h2 id="overview">The auction in one minute <span class="pill built">In the game</span></h2>
+<p>The goods auction is the sixth phase of every month: planning, land grant, land auction, development, production, <strong>auction</strong>, upkeep. It comes right after production, so everyone knows what they made, and right before upkeep, when everyone eats and goods spoil. It is played live, as in the original M.U.L.E.</p>
+<p>For each good, in a fixed order:</p>
+<ol>
+<li><strong>The status screen.</strong> A table shows what every player had, used, made and holds now, what they need next month and what would go bad. Everyone starts as a buyer; tap <em>Sell</em> to sell instead, then <em>Ready</em>. There is no clock on this screen.</li>
+<li><strong>The walk.</strong> Every player's creature stands on a tall board whose height is a price. Buyers start at the bottom and walk up to bid more; sellers start at the top and walk down to ask less. The store's selling line and buying line are drawn across the board, and so is the export ship's line when it is in port. The walk has a clock of <span class="num">20</span> seconds, which runs at a quarter of its speed while any goods are changing hands.</li>
+<li><strong>The close.</strong> The board stands still for <span class="num">2.5</span> seconds while each phone shows a receipt for that good: what you bought or sold, at what prices, the tax, and where you now stand against your need. Then the next good comes up.</li>
+</ol>
+<p>Nothing is asked and nothing is confirmed while you trade: standing where the lines meet is the trade. To stop, step one price off the line. To sit a good out, stand still at your starting edge and press <em>Done</em>.</p>
+<p class="code-ref">In the code: <code>packages/engine/src/auction.ts</code> · <code>packages/engine/src/walk.ts</code> · <code>packages/engine/src/game.ts::advancePhase</code> · <code>packages/engine/src/config.ts::WALK</code></p>
+<p class="owner">Kept current by: the Auctions team (WS3) for the rules, WS6 for the phone screens, WS4 for the TV.</p>
+
+<h2 id="order-of-goods">Which goods come up, and in what order <span class="pill built">In the game</span></h2>
+<p>All nine goods are auctioned every month, raw goods first and processed goods after, in this order:</p>
+<div class="table-wrap"><table>
+<thead><tr><th class="n">#</th><th>Good</th><th>Kind</th><th>Who needs it in the colony</th></tr></thead>
+<tbody>
+<tr><td class="n">1</td><td>Food</td><td>Grown</td><td>Every player's household and crew; colonists</td></tr>
+<tr><td class="n">2</td><td>Water</td><td>Grown</td><td>Every player's household and crew; Food farms for irrigation; colonists</td></tr>
+<tr><td class="n">3</td><td>Energy</td><td>Grown</td><td>Every working plot and factory; colonists</td></tr>
+<tr><td class="n">4</td><td>Smithore</td><td>Mined</td><td>Alloy smelters; the store, which builds MULEs from it</td></tr>
+<tr><td class="n">5</td><td>Crystite</td><td>Mined</td><td>Nobody in the colony: only the export ship buys it (see <a href="store-and-prices.html#crystite">Crystite</a>)</td></tr>
+<tr><td class="n">6</td><td>Rare earth</td><td>Mined</td><td>Electronics works</td></tr>
+<tr><td class="n">7</td><td>Alloy</td><td>Processed</td><td>Electronics works</td></tr>
+<tr><td class="n">8</td><td>Electronics</td><td>Processed</td><td>The export ship</td></tr>
+<tr><td class="n">9</td><td>Medicine</td><td>Processed</td><td>Colonists; players in dirty air</td></tr>
+</tbody>
+</table></div>
+
+<h3 id="skipped-goods">Goods that are skipped</h3>
+<p>A good with nothing to trade gets no status screen of its own. It is skipped, and the next screen shows one line such as <em>Skipped: Crystite, Medicine: nobody trading</em> (the TV names the goods only). There are three reasons:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Reason on screen</th><th>When</th></tr></thead>
+<tbody>
+<tr><td>nobody has any</td><td>No player holds any of the good, and the store has none for sale.</td></tr>
+<tr><td>nobody buys</td><td>The store does not want any more, the ship (if in port) does not want it, and no player who is short of it can afford the store's buying price.</td></tr>
+<tr><td>nobody trading</td><td>The status screen ended, but no seller has a possible buyer and no buyer a possible seller, so there is nothing to walk for.</td></tr>
+</tbody>
+</table></div>
+<p>A skipped good still teaches the market: its reference price drifts a little toward the off-world price, as described in <a href="store-and-prices.html#reference-and-off-world">reference and off-world prices</a>.</p>
+<div class="box example"><h4>Example</h4><p>In month 2 the export ship has announced it wants Smithore, Alloy and Medicine, but not Crystite. The store then wants no Crystite either (it only stocks Crystite for a ship that will take it), and no player needs Crystite. Even if you hold 6 Crystite, the good is skipped with "nobody buys". You can sell it in a month when the store is buying it again, or to the ship when Crystite is on its wishlist.</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/config.ts::WALK.order</code> · <code>packages/engine/src/auction.ts::skipBefore</code> · <code>auction.ts::nextGood</code></p>
+<p class="owner">Kept current by: WS3.</p>
+
+<h2 id="status-screen">Picking a side: the status screen <span class="pill built">In the game</span></h2>
+<p>When a good comes up, every screen shows its status table, as in the original. Your own row is highlighted and named "You".</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Column</th><th>What it says</th></tr></thead>
+<tbody>
+<tr><td>Had</td><td>What you held before production this month.</td></tr>
+<tr><td>Used</td><td>What production burnt: Energy for your plots, and the inputs your factories took.</td></tr>
+<tr><td>Made</td><td>What your plots and factories made this month.</td></tr>
+<tr><td>Now</td><td>What you hold now, in bold.</td></tr>
+<tr><td>Needs</td><td>What you need for next month: Food and Water for your household and crew, Energy for your plots, factory inputs, and 1 Medicine when the air makes people sick.</td></tr>
+<tr><td>Goes bad</td><td>What would be lost at month end if you kept everything above your need: the share that spoils, plus anything over the 10 units your home depot holds.</td></tr>
+<tr><td>Spare</td><td>Now minus Needs: green <em>+3</em> when you have more than you need, red <em>short 2</em> when you have less.</td></tr>
+</tbody>
+</table></div>
+<p>Beside the table your phone says, in one line, whether you are short, even or have a surplus ("You need 2 more Food this month." or "You have 3 more than you need."), what the store charges and pays ("You can buy from the store at 33 · sell to it at 27 · it has 12 for sale"), and, when the export ship is in port, what it still wants ("The ship wants 24 Crystite this month").</p>
+
+<h3 id="sides">Buy or Sell: everyone takes part</h3>
+<p>There are two buttons, <em>Buy</em> and <em>Sell</em>, and no <em>Pass</em>. <strong>Everyone starts every good as a buyer</strong>, standing at the bottom of the board. Tap <em>Sell</em> to become a seller; you can only sell a good you hold, so <em>Sell</em> is greyed out when you have none. Tapping your own side again changes nothing. A buyer who never walks up never buys anything, so standing still and pressing <em>Done</em> is how you sit a good out.</p>
+<p>You can change your side as often as you like until you press <em>Ready</em>, and also during the walk (see <a href="#switching-sides">switching sides</a>).</p>
+
+<h3 id="no-clock">No clock on the status screen</h3>
+<p>The status screen waits until every player has pressed <em>Ready</em>. A bar shows how many have picked ("3 / 4 PICKED", "No clock: the walk starts when everyone has picked."). Computer players pick on their own within a few seconds. If someone is slow or their phone has dropped, the host can tap <em>Move on for Kai</em>; the phone first says, in words, what each waiting player will do ("Kai buys Food: 1 of 3, short 2."), and moving on starts the walk with everyone on the side they stand on. A player whose phone has dropped sits the walk out.</p>
+<div class="box why"><h4>Why it is like this</h4><p>Heiko, 5 Nov, after playing: "in an auction always all players should participate; a player is a buyer by default." The PM approved WS3's amendment the same day (C2: everyone starts as a buyer, no Pass, sitting out is standing still plus Done). The status screen lost its clock in the UX audit (A-7, G-7) so that nobody is rushed into a side.</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/auction.ts::statusRows</code> · <code>auction.ts::seedSides</code> · <code>auction.ts::declareRole</code> · <code>config.ts::WALK.statusMs</code> (null: no clock) · <code>apps/web/src/phone/Auction.tsx</code> · <code>apps/web/src/components/AuctionParts.tsx::StatusTable</code> · <code>apps/server/src/mule-game.ts</code> (host Continue)</p>
+<p class="owner">Kept current by: WS3 (rules), WS6 (phone).</p>
+
+<h2 id="walk-board">The walk board <span class="pill built">In the game</span></h2>
+<p>The board is a tall lane. Its height is a price in credits: higher means dearer. Every player's creature stands on it at its own height. A buyer's height is their <strong>bid</strong>, a seller's height is their <strong>ask</strong>. The phone and the TV draw the same board, live.</p>
+
+<h3 id="lines">The lines on the board</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Line</th><th>Colour</th><th>What it is</th><th>Who it stops</th></tr></thead>
+<tbody>
+<tr><td>Sellers' asks</td><td>Red</td><td>The lowest ask any seller is making.</td><td>Buyers walking up meet it.</td></tr>
+<tr><td>Buyers' bids</td><td>Green</td><td>The highest bid any buyer is making.</td><td>Sellers walking down meet it.</td></tr>
+<tr><td>Store sells</td><td>Dashed, near the top</td><td>What the store charges. Shown only while it has some of the good for sale.</td><td>Buyers can't walk above it while the store sells.</td></tr>
+<tr><td>Store buys</td><td>Dashed, near the bottom</td><td>What the store pays. Shown only while it still wants the good.</td><td>Sellers can't walk below it.</td></tr>
+<tr><td>Ship buys</td><td>Amber</td><td>What the export ship pays for its next unit, only in a month it is in port and wants this good.</td><td>Sellers who reach it sell to the ship.</td></tr>
+</tbody>
+</table></div>
+<p>Above the board your phone says the store's prices from your side ("You can buy from the store at 33 · sell to it at 27 · the ship buys at 104") and what the colours mean: "Walk your bid up to a red line and you buy", or for a seller "Walk your ask down to a green line and you sell".</p>
+
+<h3 id="board-size">How tall the board is</h3>
+<p>When a good comes up, the board is sized around its prices. It takes the store's buying and selling prices, the store's posted price and the ship's price, and adds a margin on each side: <span class="num">30%</span> of the distance between the outermost lines (<code>WALK.boardMargin</code>), plus <span class="num">10%</span> of the posted price (<code>WALK.boardPostedMargin</code>). Sellers start at the top edge, buyers at the bottom edge. Because the bottom edge is always below the store's buying line, a buyer who stands still at the start never trades.</p>
+<p>The board on screen stretches further when someone walks beyond it, so every creature is always visible.</p>
+
+<h3 id="walking-speed">How fast you walk</h3>
+<p>Hold <em>▲</em> or <em>▼</em> to walk; let go to stand. A quick tap (shorter than <span class="num">0.18</span> seconds) moves exactly one credit. You can also drag on the board.</p>
+<p>Walking speed is set per good so that crossing the whole board always takes the same time, whatever the good costs: the board's height divided by <code>WALK.crossSeconds</code>, <span class="num">7.5</span> seconds, but never slower than <code>WALK.minSpeed</code>, <span class="num">1.6</span> credits a second. A cheap good's board is short and you walk slowly in credits; an expensive good's board is tall and you walk fast in credits, but both take 7.5 seconds end to end.</p>
+<div class="box example"><h4>Example: the Food board</h4>
+<p>Food's posted price is <span class="num">30</span>. The store sells at <span class="num">33</span> (10% above) and buys at <span class="num">27</span> (10% below).</p>
+<ul>
+<li>The outermost lines are 27 and 33, so they are 6 apart. Margin: 30% of 6 = 1.8, plus 10% of 30 = 3, so 4.8 on each side.</li>
+<li>The board runs from <span class="num">22</span> (27 − 4.8, rounded down) to <span class="num">38</span> (33 + 4.8, rounded up): 16 credits tall.</li>
+<li>Speed: 16 ÷ 7.5 = <span class="num">2.1</span> credits a second (above the minimum of 1.6).</li>
+<li>A buyer starting at 22 reaches the store's selling line at 33 in 11 ÷ 2.1 = about <span class="num">5</span> seconds of holding ▲.</li>
+</ul>
+</div>
+
+<h3 id="what-stops-you">What stops you</h3>
+<ul>
+<li>A buyer walking up stops at the store's selling line (while the store sells) and at the lowest ask of any seller who still has units. Meeting that seller is a trade.</li>
+<li>A seller walking down stops at the store's buying line (while the store buys) and at the highest bid of any buyer who can pay it. Meeting that buyer is a trade.</li>
+<li>When no house is buying at all, a seller can walk down to one credit above the board's bottom edge, so a buyer still standing at the start is never traded with.</li>
+<li>A buyer can walk down to 0; a seller can walk up without limit. Neither trades up there. (Heiko's rest zones, <a href="#heiko-auction-rules">being designed</a>, would put hard edges here.)</li>
+<li>A buyer who can no longer pay their own bid, or a seller with nothing left, no longer blocks anyone: the other side walks through them.</li>
+</ul>
+<p class="code-ref">In the code: <code>packages/engine/src/walk.ts::stepBoard</code>, <code>stepWalker</code>, <code>takeSide</code>, <code>sellerFloor</code> · <code>auction.ts::nextGood</code> (board range and speed) · <code>config.ts::WALK.crossSeconds</code>, <code>minSpeed</code>, <code>boardMargin</code>, <code>boardPostedMargin</code> · <code>apps/web/src/phone/Auction.tsx::WalkHold</code> (TAP_MS) · <code>AuctionParts.tsx::BoardKey</code></p>
+<p class="owner">Kept current by: WS3 (rules), WS6 (phone board), WS4 (TV board).</p>
+
+<h2 id="how-a-trade-happens">How a trade happens <span class="pill built">In the game</span></h2>
+<p>A trade happens wherever a bid reaches an ask. Nobody types an amount and nobody confirms: <strong>while you stand where the lines meet, units change hands one at a time, by themselves</strong>, until one of you steps off, runs out of goods or money, or the clock ends.</p>
+
+<h3 id="the-price">The price</h3>
+<ul>
+<li><strong>Between two players</strong>, a unit trades at the <strong>seller's ask</strong>, in whole credits. Because the buyer can't walk past the seller, the two stand at the same price when they meet.</li>
+<li><strong>With the store or the ship</strong>, a unit trades at the house's line: the store's selling price when you buy from it, the store's buying price or the ship's price when you sell to them.</li>
+</ul>
+
+<h3 id="who-trades-first">Who trades with whom</h3>
+<ul>
+<li>Only <strong>one pair of players</strong> trades at a time: the seller with the lowest ask, and the highest bidder who reaches that ask and can pay it. On a tie, whoever got to that price first goes first, then seat order.</li>
+<li>At the same time, each house line can be trading: the store selling, the store buying and the ship buying. So up to four deals can run at once.</li>
+<li>A seller standing at or under several buying lines sells to the one that <strong>pays most</strong>. With the ship in port that is usually the ship.</li>
+<li>When several players stand at the same house line, the house serves them <strong>in turns</strong>, one unit each per round. Within a round a <strong>Quibbit</strong> is served first (that species' perk at the goods auction), then whoever got to the line first, then seat order.</li>
+</ul>
+
+<h3 id="trade-speed">Slowly at first, then faster and faster</h3>
+<p>The first unit of a deal takes <code>WALK.tradeStartMs</code>, <span class="num">1,000</span> ms: about one unit a second. Each further unit takes <code>WALK.tradeSpeedUp</code> = <span class="num">0.8</span> times as long as the one before, down to a floor of <code>WALK.tradeFloorMs</code>, <span class="num">200</span> ms: at most five units a second. If the pair separates, the next meeting starts slow again. A house line keeps one running deal and keeps its speed while it serves players in turns.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Unit</th><th class="n">Wait (ms)</th></tr></thead>
+<tbody>
+<tr><td>1st</td><td class="n">1,000</td></tr>
+<tr><td>2nd</td><td class="n">800</td></tr>
+<tr><td>3rd</td><td class="n">640</td></tr>
+<tr><td>4th</td><td class="n">512</td></tr>
+<tr><td>5th</td><td class="n">410</td></tr>
+<tr><td>6th</td><td class="n">328</td></tr>
+<tr><td>7th</td><td class="n">262</td></tr>
+<tr><td>8th</td><td class="n">210</td></tr>
+<tr><td>9th</td><td class="n">200</td></tr>
+<tr><td>10th and after</td><td class="n">200</td></tr>
+</tbody>
+</table></div>
+<div class="table-wrap"><table>
+<thead><tr><th>Standing at the line for</th><th class="n">Units traded</th></tr></thead>
+<tbody>
+<tr><td>1 second</td><td class="n">1</td></tr>
+<tr><td>2 seconds</td><td class="n">2</td></tr>
+<tr><td>5 seconds</td><td class="n">12</td></tr>
+<tr><td>10 seconds</td><td class="n">37</td></tr>
+</tbody>
+</table></div>
+<p>The server steps the auction every <code>WALK.tickMs</code> = <span class="num">100</span> ms, so even at top speed at most one unit moves in one step. While units move, the board shows chevrons that light up as the deal speeds up, your phone says "Selling Water to the store at 22 cr, faster and faster." with "Tap ▲ to stop.", and each phone clicks once per unit.</p>
+
+<h3 id="stopping">Stopping</h3>
+<p>One tap away from the line stops the trade at once: the next unit does not move. A trade also stops when the seller runs out, the buyer can't pay the next unit, the house stops trading (the store has sold all it will sell, or bought all it wants) or the clock ends.</p>
+<div class="box example"><h4>Example: two players meet</h4>
+<p>Water is posted at 25: the store buys at 22 and sells at 28. Ana has 6 spare Water and sells; Ben is short 3 and buys. Ana walks down from the top; Ben walks up from the bottom. Ana stops walking at 26; Ben walks up until he meets her at 26.</p>
+<p>They trade at Ana's ask of 26. The first unit moves after 1 s, the second 0.8 s later, the third 0.64 s after that. Ben, now even, taps ▼ and the trade stops. Ben paid 3 × 26 = 78; the store would have charged him 3 × 28 = 84. Ana received 78 less the sales tax of 1 per unit (5% of 26, rounded) = 75; the store would have paid her 3 × 22 = 66, less 1 tax each = 63.</p></div>
+<div class="box why"><h4>Why it is like this</h4><p>Heiko, 5 Nov, after playing the walking rig: "the selling and buying process should start automatically when the buy and sell lanes meet. They should start slowly and then get faster and faster so that even large quantities can be sold. The question (How much do you want to sell to the store) is unnecessary, we shouldn't have this." The PM approved WS3's amendment as written (C1: no amount and no confirm at a house's line; C3: the same speed-up curve governs house lines). Heiko picked variant A for the display: the speed shown on the board and the words in the rail.</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/walk.ts::stepBoard</code>, <code>tradeInterval</code>, <code>houseLineAt</code> · <code>auction.ts::goodsMarket</code> (Quibbit first in line) · <code>config.ts::WALK.tradeStartMs</code>, <code>tradeSpeedUp</code>, <code>tradeFloorMs</code>, <code>tickMs</code> · <code>AuctionParts.tsx::lineHint</code>, <code>dealSpeed</code></p>
+<p class="owner">Kept current by: WS3.</p>
+
+<h2 id="deals-between-players">Deals between players <span class="pill built">In the game</span></h2>
+<p>Trading with another player is where the money is: a buyer usually pays less than the store's selling price and a seller usually gets more than the store's buying price, because the store keeps a margin of 10% on each side (see <a href="store-and-prices.html#spread">the spread</a>). The store's lines are the outer limits; deals between players happen in the space between them, and beyond them when the store has sold out.</p>
+<h3 id="what-the-market-learns">What the colony learns from your deals</h3>
+<p>Only deals between players teach the market. When a good closes, the average price players paid each other for it nudges that good's <strong>reference price</strong>, the price the store aims at when supply is normal. The store's and the ship's trades teach nothing, because they trade at their own prices. How far the nudge goes is explained in <a href="store-and-prices.html#reference-and-off-world">reference and off-world prices</a>.</p>
+<h3 id="sales-tax-at-auction">Sales tax</h3>
+<p>Every unit a player sells, to another player, the store or the ship, pays the sales tax: <span class="num">5%</span> at the start of the game (<code>TAX.salesTax</code>), set later by the Governor between 0% and 15%. It is worked out per unit, rounded to whole credits, and goes into the colony fund. Prices on the board are what the buyer pays; the seller keeps the price less the tax. Units sold to the ship also pay the export tax when that law is in force.</p>
+<h3 id="news-line">The news line</h3>
+<p>When a good's walk ends, the news ticker reports the biggest deal between players in that good, for example "Mia sold 4 food to Kai at 41." Trades with the store or the ship are not reported there.</p>
+<p class="code-ref">In the code: <code>packages/engine/src/auction.ts::learnFromGood</code> · <code>economy.ts::driftReference</code>, <code>taxSale</code> · <code>politics.ts::chargeExportTax</code> · <code>apps/server/src/mule-game.ts::reportGood</code></p>
+<p class="owner">Kept current by: WS3, with WS1 for the price learning.</p>
+
+<h2 id="trading-with-the-store">Trading with the store and the ship <span class="pill built">In the game</span></h2>
+<p>The store is always on the board as two lines, so there is always someone to trade with while it has stock and wants more. Its prices for the good are fixed when the good comes up and do not move during the walk.</p>
+<h3 id="buying-from-the-store">Buying from the store</h3>
+<ul>
+<li>The store sells at its posted price plus 10%, rounded up. Walk up to that line and you buy, one unit at a time.</li>
+<li>It sells only what it has <strong>for sale</strong>. For Food and Water it holds back what its colonists will buy at month end, one unit per <span class="num">20</span> colonists: the colony's own people come first, so in a shortage the shelf runs empty for the players first.</li>
+<li>When the store has nothing more for sale, its selling line disappears ("STORE SELLS out" on the TV) and buyers can walk higher, to tempt a player to sell.</li>
+</ul>
+<h3 id="selling-to-the-store">Selling to the store</h3>
+<ul>
+<li>The store buys at its posted price less 10%, rounded down. Walk down to that line and you sell.</li>
+<li>It buys only as many as it wants this month: enough to fill its shelves to <span class="num">3</span> months of demand, plus a full ship's load of a good the export ship buys. When it has bought that many, its buying line disappears.</li>
+<li>The store never runs out of money; only shelf room limits it.</li>
+<li><strong>Restocking a short shelf.</strong> When the store's Food or Water would not feed its colonists for a month, it bids up to <span class="num">1.5</span> times the posted price to restock, and sells at least one credit above that, so nobody can buy from it and sell straight back. The numbers are in <a href="store-and-prices.html#short-shelf">The store and prices</a>.</li>
+</ul>
+<h3 id="selling-to-the-ship">Selling to the export ship</h3>
+<p>Every third month the export ship is in port (months 3, 6, 9 and 12). For each good on its wishlist it stands on the board as an amber line at what it pays for the next unit: the off-world price for the first, 2% less for each further unit as its hold fills, and 10% more from a colony with clean air. Sellers who reach it sell to it. Your phone's status screen tells you how many it still wants. The store sells the ship its own surplus later, at upkeep, so players get first go. The details are in <a href="store-and-prices.html#export-ship">the export ship</a>.</p>
+<div class="box why"><h4>Why it is like this</h4><p>Heiko, 22 Oct: "the store should have unlimited amount of money". The store's buying is limited only by what it wants, never by its capital. The short-shelf bid (pricing B: <code>PRICE.shelfCover</code> 1, <code>restockPremium</code> 1.5) was approved by Heiko the same day, with WS3's fix that the store always sells above what it pays. Heiko, 28 Oct: "the store is the always available market buying what the settlers can offer to a calculated price, so the store will adjust the buying price based on scarcity."</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/auction.ts::comeUp</code>, <code>storeSellLine</code>, <code>storeBuyLine</code>, <code>shipLine</code> · <code>economy.ts::storeForSale</code>, <code>storeWants</code>, <code>shelfShort</code>, <code>shipPrice</code> · <code>config.ts::PRICE</code>, <code>UPKEEP.colonistsPerUnit</code>, <code>UPKEEP.colonistBudget</code></p>
+<p class="owner">Kept current by: WS3 (the lines), WS1 (the store's prices).</p>
+
+<h2 id="the-clock">The clock and how it slows <span class="pill built">In the game</span></h2>
+<div class="table-wrap"><table>
+<thead><tr><th>Stage</th><th>Clock</th><th>Ends when</th></tr></thead>
+<tbody>
+<tr><td>Status screen</td><td>None (<code>WALK.statusMs</code> is empty)</td><td>Every player pressed Ready, or the host moved on.</td></tr>
+<tr><td>Walk</td><td><span class="num">20</span> seconds (<code>WALK.goodMs</code>)</td><td>The clock runs out, every player on the board pressed Done, or no trade is possible any more.</td></tr>
+<tr><td>Close</td><td><span class="num">2.5</span> seconds (<code>WALK.closeMs</code>)</td><td>Always runs out; nothing trades in it.</td></tr>
+</tbody>
+</table></div>
+<p><strong>The clock slows while goods change hands.</strong> While any deal is running, the walk's clock runs at <code>WALK.tradeClockRate</code> = <span class="num">25%</span> of its speed, as in the original. The time bar says so ("Trading · clock slowed" on the TV). A good whose walk is trading the whole time can therefore last up to 80 seconds.</p>
+<p><strong>Done.</strong> Press <em>Done with Food</em> when you have finished with a good. The button is greyed out while you are trading at a line. Walking again takes your Done back. When everyone still on the board is done, the walk ends early. It also ends as soon as nobody could trade any more: no seller with a possible buyer and no buyer with a possible seller.</p>
+<p>The phone ticks with the clock and rings a bell when a good's walk ends. The whole auction has no fixed length; it runs good by good on these clocks. The simulator measures about <span class="num">54</span> seconds of auction a month today.</p>
+<p class="code-ref">In the code: <code>packages/engine/src/auction.ts::stepAuction</code>, <code>closeGood</code>, <code>auctionDone</code> · <code>walk.ts::stepBoard</code> (clock rate), <code>tradePossible</code> · <code>config.ts::WALK.goodMs</code>, <code>closeMs</code>, <code>tradeClockRate</code> · <code>apps/web/src/game/sound.ts::useAuctionSound</code></p>
+<p class="owner">Kept current by: WS3.</p>
+
+<h2 id="needs-and-surplus">Your needs and surplus on the phone <span class="pill built">In the game</span></h2>
+<p>Throughout a good your phone keeps three numbers in view: <strong>HAVE</strong>, <strong>NEED</strong> and <strong>SPARE</strong> (or <strong>SHORT</strong>), green when you have more than you need and red when you have less. Under them a hint tells you where to walk: "Walk up to the store's line at 33: it's the only seller.", "Walk up to Mia's ask at 30: Kai asks 32.", "Walk down to the ship's line at 104: it pays the most. The store pays 81." and how: "Hold ▲ to walk up; a tap moves 1 cr."</p>
+<p>When you stand at a line where nothing moves, the phone says why: "You can't pay for one at 33 cr" or "You have no Water to sell".</p>
+<h3 id="selling-into-shortage">Selling below your need</h3>
+<p>You may sell goods you need next month. The phone does not stop you or ask: it shows an amber note, "You keep 3 of the 5 Food you need next month.", and your HAVE turns amber. A shortage next month has real costs: a hungry colonist walks slower in development, a plot without its Energy makes only part of its output, and a Food farm without Water makes half (see <a href="production.html">Production</a> and <a href="development.html">Development</a>).</p>
+<h3 id="the-receipt">The receipt</h3>
+<p>When a good closes, each phone shows a receipt over the still board:</p>
+<ul>
+<li>"Water: you sold 5 for 117 cr", with each unit's price and who bought ("26 + 26 + 26 + 22 + 22 cr to Ben and the store"),</li>
+<li>on a sale, the tax spelled out: "122 cr, less 5 cr sales tax: 117. The tax goes to the colony fund." (and the export tax beside it when it applies),</li>
+<li>where you stand: "You have 4 Water, you need 2 ✓", or "short 1" in red,</li>
+<li>what comes next ("Next: Energy, buy or sell?") and your running total for the month's auction ("This month: +212 cr").</li>
+</ul>
+<p>If you bought and sold the same good, there is a line for each. If you did not trade, it says "Water: you didn't trade".</p>
+<div class="box why"><h4>Why it is like this</h4><p>The PM ruled WS3's open question "show, don't stop" on 5 Nov: selling below next month's need is allowed and shown, never asked, matching Heiko's words that day ("no question"). Heiko later asked for a stronger guard, an automatic stop at your need; that is <a href="#heiko-auction-rules">being designed</a>. The receipt comes from the UX audit (A-5, G-5).</p></div>
+<p class="code-ref">In the code: <code>apps/web/src/phone/Auction.tsx</code> (rail, <code>ReceiptCard</code>, <code>MonthTally</code>) · <code>apps/web/src/components/AuctionParts.tsx::walkHint</code>, <code>keepWords</code>, <code>lineMoment</code> · <code>packages/engine/src/auction.ts::noteUnit</code> (receipts and tally)</p>
+<p class="owner">Kept current by: WS6 (phone), WS3 (receipt data).</p>
+
+<h2 id="switching-sides">Switching sides during the walk <span class="pill built">In the game</span></h2>
+<p>During the walk your phone keeps the <em>Buyer</em> and <em>Seller</em> buttons under your numbers, with a caption: "Sell puts you at the top, asking." or "Buy puts you at the bottom, bidding." Switching sides moves your creature to the new side's starting edge, standing still, so a switch never trades at once. It also takes back your Done. You can't switch to Seller without any of the good.</p>
+<div class="box next"><h4>What is changing</h4><p>Heiko asked on 5 Nov to be able to flip sides within the auction (rule C, below). The engine and the phone on trunk already allow it; WS3's draft amendment (AM-1, RULE-5) writes the rule down and adds that a switch stops any trade at once. WS3's draft was grounded on an older trunk that showed the buttons only on the status screen; the PM should confirm whether anything is still to build.</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/auction.ts::declareRole</code> · <code>walk.ts::takeSide</code> · <code>apps/web/src/phone/Auction.tsx</code> (<code>sides</code>)</p>
+<p class="owner">Kept current by: WS3 (rules), WS6 (phone).</p>
+
+<h2 id="computer-players">The computer players at the auction <span class="pill built">In the game</span></h2>
+<p>Computer players walk the same board by the same rules, through the same moves a phone sends.</p>
+<ul>
+<li><strong>At the status screen</strong> each one values every unit of the good: what one more unit is worth to it as a buyer, and what the unit it would give up is worth as a seller. It then picks buy or sell and how many, and presses Ready. If its thinking takes more than <span class="num">2.5</span> seconds it plays its own top choice. It switches to Seller only to sell; one that wants nothing stays a buyer at the bottom edge and presses Done.</li>
+<li><strong>Its limit.</strong> A buyer never bids above what the next unit is worth to it or what it can spend; a seller never asks below what the unit is worth to it. Both follow its stock as units trade. It spends at most half its money on a good (<code>STRATEGIST.budgetShare</code>) and keeps a cash reserve, except that it may spend everything on Food and Energy it truly needs.</li>
+<li><strong>Its walk.</strong> If the best price on offer is inside its limit, it walks there and trades. If a rival on its side is ahead and its limit leaves room, it overtakes by one. If the gap to the other side is small (a few percent of the board, more for a patient temperament), it waits for them to close it. Otherwise it edges toward them, never past its limit.</li>
+<li><strong>Human timing.</strong> It starts 0.3 to 1.5 seconds after the walk begins (longer for a patient one), re-aims only after a reaction time that depends on its level (0.32 to 0.55 s for a rookie, 0.25 to 0.4 s for a trader, 0.2 to 0.32 s for a tycoon), and wanders its stopping point by up to 3% of the board, so there is no fixed habit to read.</li>
+<li><strong>At a house line</strong> it stands while units move, counts again after every unit, and steps off within one step of its last wanted unit.</li>
+<li><strong>Tricks.</strong> Higher levels may <em>corner</em> a good that other players are short of and that keeps well, bidding up to half above the expected price for up to 6 units, and may bid a little extra to keep the leader short (spite).</li>
+</ul>
+<p>How the computer players think in general is in <a href="computer-players.html">Computer players</a>.</p>
+<p class="code-ref">In the code: <code>packages/ai/src/hands/auction.ts::AuctionHand</code> · <code>packages/ai/src/strategist.ts::goodPlan</code>, <code>tradeDecision</code> · <code>config.ts::AI_HANDS.auction</code>, <code>AI_LEVELS</code>, <code>STRATEGIST</code></p>
+<p class="owner">Kept current by: WS1 (the AI), WS9 (playbooks).</p>
+
+<h2 id="ai-shortage-fix">Computer players buy what they are short of <span class="pill progress">Being built</span></h2>
+<p>Today a computer player short of Food sometimes stands still at the bottom of the board while the store has Food for sale and it has the money. It values Food mainly by how much a hungry walk costs it in development, which often comes out below the store's price, so it refuses.</p>
+<p>The fix being built: <strong>a computer player short of Food, Energy or Water values its shortfall at least at the store's selling price, and does not sell below its own need.</strong> It buys enough to cover next month as a whole: Food it will eat plus what will spoil, Energy its plots need allowing for spoilage, and Water only when it has an irrigated farm.</p>
+<div class="box why"><h4>Why it is like this</h4><p>Heiko, 5 Nov, watching a game: "two ai players had a shortage of energy (-3) which would most likely lead to that they won't produce anything next month ... i had a surplus and the store had stock but they didn't buy? they were just standing there not even bidding". WS9 measured that a seat comes to the Food auction short in 86–87% of seat-months, and in 76–85% it refuses on value (a median of 19 cr against a store ask of 49–56), though 99% could pay for a unit. WS1's first runs of the fix: payable no-buys fell to zero for Food, Energy and Water. The cost: colonists go short of Food or Water in more months (for example 52% to 60%), because players now buy the store's stock. The PM ruled to ship it and balance at the end.</p></div>
+<div class="box next"><h4>What is changing</h4><p>WS1 is building this (branch <code>ws1-food-short</code>), due about 17:00Z on 5 Nov. The longer-term answer is WS9's resource-utility design, which values goods by what they do for the seat.</p></div>
+<p class="code-ref">In the code: <code>packages/ai/src/strategist.ts::tradeDecision</code> (where the fix lands)</p>
+<p class="owner">Kept current by: WS1.</p>
+
+<h2 id="tv-board">The TV board <span class="pill built">In the game</span></h2>
+<p>On the big screen everyone sees the whole auction, as in the original. The title reads "Auction · Food".</p>
+<h3 id="tv-status">During the status screen</h3>
+<ul>
+<li>The status table, large, for every player.</li>
+<li>The store box: <strong>STORE SELLS</strong>, <strong>STORE BUYS</strong> and <strong>IN STOCK</strong> (red when 0); "out" when the store has none to sell.</li>
+<li>The ship panel when the export ship is in port and wants this good or one still to come.</li>
+<li>Every player with their side: <em>BUY ✓</em>, <em>SELL ✓</em>, or <em>PICKING</em> (<em>AWAY · PICKING</em> for a dropped phone), with "No clock: the walk starts when everyone has picked." and, while someone is still picking, which player is the host and can move on for them.</li>
+</ul>
+<h3 id="tv-walk">During the walk</h3>
+<ul>
+<li>The board, large, with every creature walking live and the store and ship lines; the time bar shows when the clock is slowed.</li>
+<li>A panel with the good, the stage (<em>Walk</em>, <em>Trading · clock slowed</em>, <em>Closed</em>) and the units traded so far.</li>
+<li>The readout: <strong>LOWEST ASK</strong> and who holds it, <strong>HIGHEST BID</strong> and who holds it (the store and the ship count), and the <strong>GAP</strong> ("4 apart", "they meet", or "MET: TRADING").</li>
+<li>The store's <strong>Sells</strong>, <strong>Buys</strong> and <strong>Stock</strong>, and "The ship buys Smithore at 50" when it is in port.</li>
+<li>Each running deal on a row ("Mia → Kai · 4 units @ 41") with its speed shown as chevrons, "faster and faster" until "full speed".</li>
+<li>When nothing trades, a reminder: "Sellers push the red line down, buyers push the green line up. When the two lines meet, the goods change hands."</li>
+<li>The room code and the goods still to come ("NEXT WATER, ENERGY, …").</li>
+</ul>
+<p>During the close stage the board dims for 2.5 seconds while the phones show their receipts. The TV never shows what a player holds, except in this status table.</p>
+<p class="code-ref">In the code: <code>apps/web/src/table/TableApp.tsx::TvAuction</code> · <code>apps/web/src/components/AuctionParts.tsx::TvReadout</code>, <code>StoreBox</code>, <code>ShipWants</code>, <code>StatusTable</code> · <code>packages/ui</code> <code>WalkBoard</code></p>
+<p class="owner">Kept current by: WS4 (TV), with WS6 for the shared auction parts.</p>
+
+<h2 id="slower-walk">Slower walking and slower trading <span class="pill built">In the game</span></h2>
+<p>Walking up and down is about a quarter slower than it was, and trading at a meeting starts at about one unit a second, speeding up to at most five a second.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Value</th><th class="n">Before</th><th class="n">Now</th><th>What it changes</th></tr></thead>
+<tbody>
+<tr><td><code>WALK.crossSeconds</code></td><td class="n">6</td><td class="n">7.5</td><td>Seconds to cross a whole board</td></tr>
+<tr><td><code>WALK.minSpeed</code></td><td class="n">2</td><td class="n">1.6</td><td>Slowest walk, credits a second</td></tr>
+<tr><td><code>LOTS.walkMs</code></td><td class="n">12 s</td><td class="n">15 s</td><td>The land auction's walk clock per lot, stretched the same 25%, because the land auction walks at the same speed</td></tr>
+<tr><td><code>WALK.tradeStartMs</code></td><td class="n">400 ms</td><td class="n">1,000 ms</td><td>The first unit of a deal: about one a second</td></tr>
+<tr><td><code>WALK.tradeFloorMs</code></td><td class="n">60 ms</td><td class="n">200 ms</td><td>The fastest a deal goes: five a second</td></tr>
+<tr><td><code>WALK.tradeSpeedUp</code></td><td class="n">0.8</td><td class="n">0.8</td><td>Unchanged</td></tr>
+</tbody>
+</table></div>
+<p>With the new values a deal reaches full speed at its 9th unit, about 4.4 seconds in, and moves 12 units in its first 5 seconds instead of 63.</p>
+<div class="box why"><h4>Why it is like this</h4><p>Heiko, 5 Nov: "the movement speed at the auction needs to be slightly reduced, walking up and down must be a bit slower." And, selling Water at the table: it sold too fast; start at about one unit a second and ramp up to at most five a second, "guess numbers", to be tested. The PM set the values as a value ruling and ruled that the land auction slows too, with its clock stretched to match (Heiko was told and did not object).</p></div>
+<div class="box example"><h4>What the simulator measured</h4><p>Before and after the change: auction time 54 to 71 seconds a month; units sold to the store 29.1 to 26.4; land sold 13 to 16 lots. Balance is tuned at the end, not now.</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/config.ts::WALK</code>, <code>LOTS.walkMs</code></p>
+<p class="owner">Kept current by: WS3.</p>
+
+<h2 id="headline-glyph">The good's symbol in the headline <span class="pill progress">Being built</span></h2>
+<p>Today the good being auctioned is named in small type: in the phone's title ("Food · buy or sell?", "Food auction") and in the corner of the TV. On every goods-auction screen, status, walk and close, on phone, laptop and TV, the headline will lead with the good's symbol and name, large.</p>
+<div class="box why"><h4>Why it is like this</h4><p>Heiko, 5 Nov, with a screenshot of the status screen: "we need to make it more prominent what the auction is currently about. currently it is a text at the top right corner. we should have it in the headline together with the resource symbol". The PM ruled it for every auction screen.</p></div>
+<div class="box next"><h4>What is changing</h4><p>PR #374 (WS6, with named edits in WS3's phone auction screen and WS4's TV) is green and reviewed, waiting for WS3's and WS4's OK before it merges.</p></div>
+<p class="code-ref">In the code: <code>apps/web/src/phone/Auction.tsx</code> · <code>apps/web/src/table/TableApp.tsx::TvAuction</code></p>
+<p class="owner">Kept current by: WS6, with WS3 and WS4.</p>
+
+<h2 id="heiko-auction-rules">Heiko's auction rules of 5 November <span class="pill designed">Designed</span></h2>
+<p>Selling a Water surplus at the table on 5 Nov, Heiko sold too much and ended up short. He asked for four changes, in his words (shortened): "When I am selling it should auto-stop when I reached my equilibrium, it should get me up the store lane. If I still want to sell (in shortage) it must be a conscious decision … It should be possible to flip sides (buy / sell) within the auction. Below the store buying lane and above the store selling lane there should be safe or rest areas … so that I am not participating in the auction accidentally. When the store has no more goods to sell, buyers can walk up and drive the prices up further, trying to convince a seller to sell. The sell lane of the store is representing the latest bid price of the buyers."</p>
+<p>Heiko approved the rules on 5 Nov after seeing WS6's screens, choosing <strong>hold ▼ for one second</strong> as the way to sell into a shortage. They are designed, not built yet: the Auctions team (WS3) builds them next. Until then the game plays as the sections above describe.</p>
+
+<h3 id="rule-b-stop-at-need">B · You stop at your need</h3>
+<ul>
+<li>A seller who holds more than their need sells down to their need and then stops: the unit that would take them below need does not sell, and they are moved <strong>one step</strong> up off the line. The phone and the TV mark them as keeping their need.</li>
+<li>To sell on into a shortage, <strong>hold ▼ for one second</strong>. A tap, or a shorter hold, does nothing, so a thumb resting on the arrow never sells you short by accident. After the one-second hold you sell for the rest of that good, starting slow again. The phone says "To sell more, hold ▼: you'd be short next month".</li>
+<li>It applies to <strong>every</strong> sale: to the store, to the ship and to other players (Heiko, 5 Nov). A good you don't need (Smithore, Crystite and the like, when no factory of yours uses them) has no stop.</li>
+<li>There is no matching stop for buyers (Heiko, 5 Nov).</li>
+<li>Computer players hold ▼ again only if they had already decided to sell past their need.</li>
+</ul>
+
+<h3 id="rule-c-flip-sides">C · Flip sides during the auction</h3>
+<p>Already possible on trunk (see <a href="#switching-sides">switching sides</a>). The draft writes it down: a switch stops any trade at once, takes back your Done, and keeps your stop-at-need for this good. Computer players do not switch mid-walk.</p>
+
+<h3 id="rule-d-rest-zones">D · Rest zones with hard edges</h3>
+<ul>
+<li>Below the best buying line (the store's, or the ship's if higher) is the <strong>buyers' rest zone</strong>; above the store's selling line is the <strong>sellers' rest zone</strong>. Standing in your own rest zone you can't trade, because the other side can't reach you.</li>
+<li>Buyers can't walk below the board's bottom edge; sellers can't walk above the top edge. The edges are hard: there is no extra "click" at a line you are allowed to cross, because crossing one is always a deliberate hold, and the one crossing that can cost you, selling below your need, is caught by rule B.</li>
+<li>Sellers always stop at the old buying line, even after the store has bought all it wants and no ship is in. (Today they can then walk down into the buyers' area.)</li>
+</ul>
+
+<h3 id="rule-e-sold-out">E · Bidding past a sold-out store</h3>
+<ul>
+<li>When the store has none of the good left to sell, buyers may walk above its old selling line, up to one step below the top.</li>
+<li>Walking up never trades with a seller resting in the sellers' zone: the buyer stops one step below them. A seller who wants the bid walks down onto it, and then they trade.</li>
+<li>The store's selling line stays at its old price until a bid passes it, then shows the <strong>highest bid</strong> on the board ("Highest bid N"), so every seller sees what walking down would fetch. The store itself sells nothing.</li>
+<li>Every seller above that line is still resting: since a buyer can never walk past a resting seller, the highest bid is always below every resting seller.</li>
+</ul>
+
+<div class="box next"><h4>What is changing</h4>
+<p><strong>Designed, not built yet.</strong> Approved by Heiko on 5 Nov. He chose hold ▼ for one second, the stop covers every sale, and buyers get no matching stop. To be built by the Auctions team (WS3) for the rules, with the UX team (WS6) for the phone and TV screens (mock <code>design/mocks/auction-rules</code>) and the Strategy team (WS1) for the computer players.</p>
+<p>How the store sets its prices after it sells out, and a wider gap between its buying and selling prices, are part of WS5's <a href="store-and-prices.html#store-pricing-design">store-pricing design</a>, not this one.</p></div>
+<p class="code-ref">In the code (where it would land): <code>packages/engine/src/walk.ts::stepBoard</code>, <code>sellerFloor</code> · <code>auction.ts::declareRole</code> · <code>packages/ai/src/hands/auction.ts</code> · rules: <code>docs/specs/2026-11-05-ws3-auction-auto-trade.md</code> §10 AM-1 (WS3's branch <code>ws3-auction-rules-b-e</code>, a33879c4)</p>
+<p class="owner">Kept current by: WS3 (rules), WS6 (screens), WS1 (AI).</p>
+</article>
+</main>
+</div>
+<script src="search-index.js"></script>
+<script src="rulebook.js"></script>
+</body>
+</html>

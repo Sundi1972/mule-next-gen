@@ -35,9 +35,10 @@ describe("planning's This month you need (RULE-8)", () => {
   });
 
   it('B-AC-14, H-1: Now says to plan and press Ready, names the land grant next with its claims from config, and lists the SHORT goods or says she has what she needs', () => {
-    // Energy is burned by the farm and the mine (UPKEEP.energyUse) and the Alloy factory (its recipe), not the power plant.
+    // Energy is burned by the farm and the mine (UPKEEP.energyUse) and the Alloy factory (its recipe), not the power plant:
+    // it pays its own use from its own output (AM-17, PM ruling A).
     const rows = needRows(stock({ food: 3, water: 2, energy: 5 }), stock({ food: 1, water: 2, energy: 3 }), plots('food', 'energy', 'smithore', 'alloy'));
-    expect(rows.find((r) => r.good === 'energy')).toMatchObject({ short: 2, why: 'a farm, a mine and a factory' });
+    expect(rows.find((r) => r.good === 'energy')).toMatchObject({ need: 5, short: 2, why: 'a farm, a mine and a factory' });
     const short = planNow(rows);
     expect(short.title).toBe('Plan your month, then press Ready');
     // The land grant's claims are config's, the same number the roadmap's next line gives.

@@ -1,5 +1,5 @@
 import { productionEventAtMs, productionShowMs } from '@mule/engine';
-import type { MuleView, PlayerView, ProductionView, TileView } from '@mule/protocol';
+import type { MuleView, PlayerView, ProductionView, TableView, TileView } from '@mule/protocol';
 import { ProductionMap, showEnd, showTime, showTimes, type MapTile } from '@mule/ui';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -52,17 +52,17 @@ const stateOf = (html: string) => /data-state="(\w+)"/.exec(html)?.[1];
 const countOf = (html: string) => Number(/data-testid="units"[^>]*>(\d+)</.exec(html)?.[1] ?? 0);
 const badges = (html: string) => [...html.matchAll(/data-why="(\w+)"/g)].map((m) => m[1]);
 
-function view(production: ProductionView, phaseEndsAt: number): MuleView {
+function view(production: ProductionView, phaseEndsAt: number, players: PlayerView[] = PLAYERS): MuleView {
   const tileViews: TileView[] = tiles.map((t) => ({ x: t.x, y: t.y, terrain: t.terrain as TileView['terrain'], peaks: 0, owner: null, outfit: null, pollution: 0, filter: false }));
   return {
     finished: false, month: 3, maxMonths: 12, lastAir: null, colonistsFed: null, phase: 'production', phaseEndsAt, width: W, height: H, tiles: tileViews, lit: null,
-    players: PLAYERS, me: null, market: [], storeMules: 0, mulePrice: 0, colonists: 0, air: { level: 22, band: 'clean' }, ship: { arrives: 3, inPort: false, wants: null },
+    players, me: null, market: [], storeMules: 0, mulePrice: 0, colonists: 0, air: { level: 22, band: 'clean' }, ship: { arrives: 3, inPort: false, wants: null },
     treasury: { money: 0, salesTax: 0.05 }, news: [], scores: null, auction: null, listings: [], lotSlots: { used: 0, max: 4 }, landAuction: null, production, politics: null,
   } as MuleView;
 }
 
 /** The TV's production screen when the server's clock says `t` show seconds have passed (no speed-up). */
-function tvAt(production: ProductionView, t: number, now?: number, phaseEndsAt = 5_000_000): string {
+function tvAt(production: ProductionView, t: number, now?: number, phaseEndsAt = 5_000_000, { players = PLAYERS, away = [] as string[] } = {}): string {
   const at = now ?? phaseEndsAt - production.lengthMs + t * 1000;
   const client = {
     subscribe: () => () => {},
@@ -70,7 +70,8 @@ function tvAt(production: ProductionView, t: number, now?: number, phaseEndsAt =
     serverNow: () => at,
     intent: () => {},
   } as unknown as TableClient;
-  return renderToStaticMarkup(createElement(ClientProvider, { client, children: createElement(TvProduction, { game: view(production, phaseEndsAt), production }) }));
+  const table = { code: 'MULE', status: 'playing', hostId: 's1', boards: 1, game: null, seats: players.map((p) => ({ id: p.id, name: p.name, isAi: p.isAi, connected: !away.includes(p.id), color: p.slot })) } as unknown as TableView<MuleView>;
+  return renderToStaticMarkup(createElement(ClientProvider, { client, children: createElement(TvProduction, { table, game: view(production, phaseEndsAt, players), production }) }));
 }
 
 describe('B-AC-6 (AM-19): good by good for every player at once, then every bonus, then every loss', () => {
@@ -151,6 +152,17 @@ describe('B-AC-20 (AM-19): everyone taps Speed up, and the rest plays 3× faster
     const html = tvAt(one, 2);
     expect(html).toContain('data-testid="speed-up"');
     expect(html).toMatch(/1 of 2 asked[^<]*Ossa/);
+  });
+
+  it('a dropped person is never waited for: with Brix away, Lena\'s tap makes it 1 of the 2 still here (#344 review, minor 3)', () => {
+    const three = [...PLAYERS, player('s3', 'Brix', 2)];
+    const html = tvAt(month({ hurry: { asked: ['s1'], from: null } }), 2, undefined, 5_000_000, { players: three, away: ['s3'] });
+    expect(html).toMatch(/1 of 2 asked to speed up\. Waiting for Ossa\./);
+    expect(html).not.toMatch(/Waiting for[^<]*Brix/);
+    // Brix's drop leaves nobody to wait for until the server's speed-up arrives: no empty "Waiting for".
+    const both = tvAt(month({ hurry: { asked: ['s1', 's2'], from: null } }), 2, undefined, 5_000_000, { players: three, away: ['s3'] });
+    expect(both).toMatch(/2 of 2 asked to speed up/);
+    expect(both).not.toMatch(/Waiting for/);
   });
 
   it('once both have asked, the TV says so and its clock runs 3× from the moment they did', () => {

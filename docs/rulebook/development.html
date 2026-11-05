@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Development · M.U.L.E. Rulebook</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="rulebook.css">
+</head>
+<body>
+<div class="rb-shell">
+<aside class="rb-rail"></aside>
+<main class="rb-main">
+<article>
+<h1>Development</h1>
+<p class="rb-lede">Your colonist's minute on the map: walk to the store, buy and outfit a MULE, lead it to your plot and install it, analyse ground, dodge wolves, race for glints, and cash out at the pub.</p>
+
+<h2 id="development-phase">The development phase and its clock <span class="pill built">In the game</span></h2>
+<p>Development comes after the land grant and the land auction, and before production. Every player's colonist is on the map at the same time, steered live from their phone (or by the computer for a computer player), and everyone watches it all on the TV.</p>
+<ul>
+<li><strong>One clock for everyone:</strong> <span class="num">60</span> seconds, the same for every player, every month. Hunger and sickness never shorten it; they slow your walk instead (see <a href="#pace">Pace</a>).</li>
+<li>Your turn ends when you go to the <a href="#pub">pub</a> or when the clock runs out.</li>
+<li>The phase ends early once every player is at the pub, out of time, or has dropped off the table.</li>
+<li>Everything costs time: walking, standing still for an analysis, waiting at the wolves. The time you have left when you reach the pub is paid out in cash.</li>
+</ul>
+<p>At the start, each colonist stands just outside one of the store's two doors, the seats taking the left and right doors in turn. A player who won a MULE at the land auction starts with it on the lead.</p>
+<p>The game steps every colonist together in small ticks of <span class="num">50</span> ms, on the server and in the simulator alike, so a replay of the same seed and the same moves plays the same.</p>
+<div class="box why"><h4>Why it is like this</h4><p>Heiko, 28 Oct: "if we just steer it via the walking then managing the time bars also gets easier. Then we only have one global time bar for all users, which is much better." From that the PM ruled that every per-player condition acts through walking pace, never the clock. The length, <span class="num">60</span> seconds, is Heiko's of 4 Nov.</p></div>
+<p class="code-ref">In the code: <code>config.ts::DEVELOPMENT.fullSeconds</code> · <code>config.ts::DEV_STEER.tickMs</code> · <code>packages/engine/src/game.ts::startDevelopment</code> · <code>packages/engine/src/floor/floor.ts::buildFloor</code> · <code>apps/server/src/mule-game.ts::startClock</code></p>
+<p class="owner">Kept current by: the Auctions team (WS3) for the clock and server, the Strategy team (WS1) for the floor.</p>
+
+<h2 id="month-one">Month 1: the clock counts from the start <span class="pill built">In the game</span></h2>
+<p>Month 1 is no different from any other month: the <span class="num">60</span>-second clock starts counting as development opens.</p>
+<div class="box why"><h4>Why it is like this</h4><p>For a week, month 1 worked differently. On 28 Oct Heiko approved that month 1's clock should wait until every player's first MULE was installed. A review then found that a player whose MULE was in could keep buying, installing and analysing for free while waiting. On 29 Oct Heiko ruled <strong>"Once in, you wait"</strong>: a player whose first MULE was in could only go to the pub, press Ready or walk home until the clock started. On 5 Nov Heiko was asked whether month 1's clock should simply count down like every other month and answered <strong>"Yes, always count"</strong>. The wait, the host's Continue for it and the "Once in, you wait" rule were all removed; none of them is in the game today.</p></div>
+<p class="code-ref">In the code: <code>apps/server/src/mule-game.ts::startDevelopment</code></p>
+<p class="owner">Kept current by: the Auctions team (WS3), with the UX team (WS6) for the words.</p>
+
+<h2 id="walking">Walking the map <span class="pill built">In the game</span></h2>
+<p>You steer your colonist with the stick (a thumb pad on the phone, arrow keys on a computer) and do things with one action button. You walk freely, in any direction, diagonals included (a diagonal is no faster). At full pace on plains a colonist covers <span class="num">2.5</span> plots a second. Other land is slower:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Land</th><th class="n">Share of full speed</th><th class="n">Plots a second at full pace</th><th>Wolves?</th></tr></thead>
+<tbody>
+<tr><td>Plains</td><td class="n">1</td><td class="n">2.5</td><td>no</td></tr>
+<tr><td>Desert</td><td class="n">0.9</td><td class="n">2.25</td><td>no</td></tr>
+<tr><td>Tundra</td><td class="n">0.85</td><td class="n">2.13</td><td>yes</td></tr>
+<tr><td>Crater</td><td class="n">0.8</td><td class="n">2.0</td><td>no</td></tr>
+<tr><td>Forest</td><td class="n">0.75</td><td class="n">1.88</td><td>yes</td></tr>
+<tr><td>Ice</td><td class="n">0.75</td><td class="n">1.88</td><td>no</td></tr>
+<tr><td>Hills</td><td class="n">0.7</td><td class="n">1.75</td><td>yes</td></tr>
+<tr><td>Volcanic</td><td class="n">0.6</td><td class="n">1.5</td><td>no</td></tr>
+<tr><td>River</td><td class="n">0.6</td><td class="n">1.5</td><td>no</td></tr>
+<tr><td>Swamp</td><td class="n">0.5</td><td class="n">1.25</td><td>no</td></tr>
+<tr><td>Mountains</td><td class="n">0.4</td><td class="n">1.0</td><td>no</td></tr>
+<tr><td>Lake</td><td class="n">0 (blocked)</td><td class="n">0</td><td>no</td></tr>
+</tbody>
+</table></div>
+<ul>
+<li><strong>Lakes block.</strong> A lake plot is worked from its shore: stand on the land beside it, within <span class="num">0.45</span> of a plot of its edge, and the button offers the lake plot (the words add "from the shore").</li>
+<li><strong>Other people's land</strong> may be walked across freely.</li>
+<li><strong>The store's own plot</strong> cannot be walked on; you go in through a door.</li>
+<li><strong>Leading a MULE</strong> slows you to <span class="num">0.9</span> of your speed. The MULE walks a little behind you.</li>
+</ul>
+<div class="box example"><h4>Example</h4><p>Your plot is four plots east of the store across plains, then one plot of swamp. Fed and well, you walk the plains at <span class="num">2.5</span> plots a second (<span class="num">1.6</span> s) and the swamp at <span class="num">1.25</span> (<span class="num">0.8</span> s): about <span class="num">2.4</span> seconds. Leading a MULE it takes <span class="num">2.4 ÷ 0.9</span> = about <span class="num">2.7</span> seconds.</p></div>
+<div class="box why"><h4>Why it is like this</h4><p>Heiko's walking rule R1 (28 Oct) set <span class="num">0.4</span> s a plot for the first, tap-to-walk version. When steering arrived, Heiko set the steered pace to the same, <span class="num">2.5</span> plots a second, on 4 Nov ("1.25 was half"). The land speeds are Heiko's starting values from the arcade walking design.</p></div>
+<p class="code-ref">In the code: <code>config.ts::DEV_STEER</code> (<code>mapTilesPerSecond</code>, <code>terrain</code>, <code>leadPace</code>, <code>lakeMode</code>, <code>shoreReachTiles</code>, <code>trespass</code>) · <code>packages/engine/src/floor/speed.ts::speedOf</code> · <code>packages/engine/src/floor/step.ts::stepFloor</code></p>
+<p class="owner">Kept current by: the Strategy team (WS1) for the floor, the UX team (WS6) for the phone controls.</p>
+
+<h2 id="pace">Pace: hunger, sickness and species <span class="pill built">In the game</span></h2>
+<p>Each colonist walks at a <strong>pace</strong>, a share of a fed, healthy colonist's speed. It is worked out once, when development starts, and applies on the map and in the store alike. Three things multiply together:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>What</th><th>Pace factor</th></tr></thead>
+<tbody>
+<tr><td>Fed (holding the month's Food)</td><td class="n">1</td></tr>
+<tr><td>Hungry</td><td>falls in a straight line from <span class="num">1</span> (all the Food you need) to <span class="num">0.6</span> (none)</td></tr>
+<tr><td>Sick, with no Medicine</td><td class="n">0.5</td></tr>
+<tr><td>Zipwing (species perk)</td><td class="n">1.25</td></tr>
+</tbody>
+</table></div>
+<h3 id="hunger">Hunger</h3>
+<p>The Food you need this month is <span class="num">2</span>, plus <span class="num">1</span> for every <span class="num">4</span> crew or part of four (a working raw plot has a crew of <span class="num">1</span>, a factory <span class="num">2</span>, a green belt none). At the start of development, if you hold less Food than that, you are hungry. The screens name how hungry by the share of Food missing:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Share of the month's Food missing</th><th>Shown as</th></tr></thead>
+<tbody>
+<tr><td>none</td><td>fed</td></tr>
+<tr><td>under 30%</td><td>peckish</td></tr>
+<tr><td>30% to under 70%</td><td>hungry</td></tr>
+<tr><td>70% or more</td><td>starving</td></tr>
+</tbody>
+</table></div>
+<p>The words are bands only; the pace itself slides smoothly with the Food you hold. Hunger and sickness are public: everyone can see who is hungry or sick.</p>
+<h3 id="sickness">Sickness</h3>
+<p>At the start of each development every player rolls for sickness: <span class="num">3</span>% at base, more in dirty air (<span class="num">+15</span>% from Smoggy, <span class="num">+30</span>% from Toxic, <span class="num">+50</span>% in Collapse) and <span class="num">+3</span>% for every air point your own plots caused last month (at most <span class="num">+40</span>%; a filter halves your points), never above <span class="num">90</span>%. A rare epidemic (<span class="num">0.5</span>% a month) makes everyone sick this development and the next. If you are sick and hold a Medicine, you take one and are well; otherwise you walk at half pace this turn.</p>
+<div class="box example"><h4>Example</h4><p>Brix has five working raw plots: a crew of <span class="num">5</span>, so he needs <span class="num">2 + 2</span> = <span class="num">4</span> Food. He holds <span class="num">1</span>: three quarters missing, "starving". His hunger factor is <span class="num">1 − 0.4 × 0.75</span> = <span class="num">0.7</span>. He is also sick with no Medicine: <span class="num">0.7 × 0.5</span> = <span class="num">0.35</span>. On plains he walks <span class="num">2.5 × 0.35</span> = under <span class="num">0.9</span> plots a second. A Zipwing in the same state would walk at <span class="num">0.35 × 1.25</span> = about <span class="num">0.44</span> of full pace.</p></div>
+<div class="box why"><h4>Why it is like this</h4><p>The slowest hunger pace, <span class="num">0.6</span>, is Heiko's of 4 Nov ("Yes, 60%"). It is the strongest slowdown with which a starving colony can still recover: at <span class="num">0.2</span> a starving colonist could not reach Food and the pub inside the turn, and the colony went short in 58% of months; from <span class="num">0.6</span>, under 15%. Sick pace <span class="num">0.5</span> and the sickness odds are Heiko's catalogue numbers (28 Oct). The Zipwing perk is <span class="num">1.25</span> because at <span class="num">1.5</span> Zipwings won 37% of four-player games instead of a fair 25%.</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/dev-walk.ts::pace</code> · <code>dev-walk.ts::hungerPace</code> · <code>config.ts::DEV_WALK</code> (<code>hungerPaceMin</code>, <code>sickPace</code>, <code>hungerLevels</code>) · <code>config.ts::SPECIES_PERK.zipwingSpeed</code> · <code>config.ts::EVENTS.player.sickness</code> · <code>packages/engine/src/production.ts::needsOf</code></p>
+<p class="owner">Kept current by: the Strategy team (WS1), with the Events team (WS1/WS8) for sickness.</p>
+
+<h2 id="store-floor">The store floor <span class="pill built">In the game</span></h2>
+<p>The store is one hall, entered by an airlock on its left or right side. Walk up to a door from outside and press <strong>ENTER STORE</strong>; inside, stand in a door and press <strong>LEAVE</strong> ("to the colony", or "with your MULE"). The hall has two rows of rooms off one walkway:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Row</th><th>Rooms, left to right</th></tr></thead>
+<tbody>
+<tr><td>Back wall (outfitters)</td><td>Food, Water, Energy, Smithore, Crystite, Rare earth</td></tr>
+<tr><td>Front row</td><td>The works (three bays: Alloy, Electronics, Medicine), Green belt, the corral, the pub</td></tr>
+</tbody>
+</table></div>
+<p>At full pace the walk from the left door to the corral takes <span class="num">3</span> seconds. Hunger, sickness, the Zipwing perk and a MULE on the lead change your speed in the hall too. Standing in a room is being at it: the action button changes to what that room offers. You can also sell wolf pelts at either door (see <a href="#wolves">Wolves</a>).</p>
+<div class="box why"><h4>Why it is like this</h4><p>Heiko's store layout "One hall, two rows" (21 Oct): six outfitters along the top, the corral in the middle of the bottom row, the works and green belt to one side, the pub by the door, all on one screen.</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/floor/hall.ts::HALL</code> · <code>config.ts::DEV_STEER.floorSeconds</code> · <code>config.ts::DEV_STEER.doorHalfTiles</code></p>
+<p class="owner">Kept current by: the Strategy team (WS1) for the hall plan, the Table team (WS4) for its drawing.</p>
+
+<h2 id="buying-a-mule">Buying a MULE <span class="pill built">In the game</span></h2>
+<p>Stand in the corral, not leading a MULE, and press <strong>BUY MULE · price</strong>. You pay at once and lead an empty MULE. You can lead only one MULE at a time. If you are short of money the button is dim and says by how much ("170 cr · 30 short"); if the corral is empty it reads "NO MULES LEFT · the pub pays now".</p>
+<h3 id="mule-price">The MULE price</h3>
+<p>A MULE costs its labour, <span class="num">120</span> cr, plus the Smithore it is built from (<span class="num">1</span> unit at the store's posted Smithore price), times a scarcity factor:</p>
+<p><code>price = (120 + Smithore price) × scarcity factor</code>, rounded.</p>
+<ul>
+<li>The factor starts at <span class="num">1</span>.</li>
+<li>Each month the corral sells out, it rises by <span class="num">15</span>% for the next month.</li>
+<li>Each month at least half of the MULEs that were in the corral when development began are left over, it falls by <span class="num">10</span>%, but never below <span class="num">0.6</span>.</li>
+<li>A Gearling pays <span class="num">95</span>% of the price (rounded), for MULEs and outfits alike.</li>
+</ul>
+<div class="box example"><h4>Example</h4><p>Smithore is posted at <span class="num">50</span>: a MULE costs <span class="num">120 + 50</span> = <span class="num">170</span>. Last month the corral sold out, so the factor is <span class="num">1.15</span>: <span class="num">170 × 1.15</span> = <span class="num">195.5</span>, so <span class="num">196</span>. A Gearling pays <span class="num">186</span>.</p></div>
+<h3 id="corral">The corral</h3>
+<p>The store starts every game with <span class="num">10</span> MULEs. At each month's end it builds new ones, up to <span class="num">2</span> per player plus <span class="num">2</span> spare (<span class="num">10</span> in a four-player game, <span class="num">14</span> with six), using <span class="num">1</span> unit of its own Smithore for each. Short of Smithore, it builds fewer. MULEs come back to the corral when the store buys one at the land auction, when the colony wins a plot with a MULE on it, and (soon) when you end your turn still leading a swapped-out MULE (see <a href="#mule-swap">the swap</a>).</p>
+<p class="code-ref">In the code: <code>game.ts::buyMule</code> · <code>game.ts::mulePriceFor</code> · <code>packages/engine/src/economy.ts::mulePrice</code> · <code>economy.ts::corralTarget</code> · <code>packages/engine/src/upkeep.ts</code> · <code>config.ts::MULE</code> · <code>config.ts::START.storeMules</code> · <code>config.ts::SPECIES_PERK.gearlingPrice</code></p>
+<p class="owner">Kept current by: the Auctions team (WS3) for the rule, the Strategy team (WS1) for the price and corral numbers.</p>
+
+<h2 id="outfitting">Outfitting <span class="pill built">In the game</span></h2>
+<p>An empty MULE does nothing. Lead it into an outfitter's room (or a bay of the works, or the Green belt room) and press <strong>OUTFIT · GOOD · price</strong>. A MULE bought this turn is outfitted once; to change its good later you take it off its plot and re-outfit it (below).</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Outfit</th><th>Where</th><th class="n">Price (cr)</th></tr></thead>
+<tbody>
+<tr><td>Food</td><td>Food outfitter</td><td class="n">25</td></tr>
+<tr><td>Water</td><td>Water outfitter</td><td class="n">25</td></tr>
+<tr><td>Energy</td><td>Energy outfitter</td><td class="n">50</td></tr>
+<tr><td>Smithore</td><td>Smithore outfitter</td><td class="n">75</td></tr>
+<tr><td>Crystite</td><td>Crystite outfitter</td><td class="n">100</td></tr>
+<tr><td>Rare earth</td><td>Rare earth outfitter</td><td class="n">100</td></tr>
+<tr><td>Alloy (factory)</td><td>Works, first bay</td><td class="n">150</td></tr>
+<tr><td>Electronics (factory)</td><td>Works, second bay</td><td class="n">200</td></tr>
+<tr><td>Medicine (factory)</td><td>Works, third bay</td><td class="n">150</td></tr>
+<tr><td>Green belt</td><td>Green belt room</td><td class="n">20</td></tr>
+</tbody>
+</table></div>
+<p>When politics is on and the colony's <strong>emission cap</strong> is in force and the air is above its level, Rare earth and Alloy outfits are refused; the button shows the cap and the air ("cap 50, air 57"). What each outfit makes on which ground is in <a href="production.html">Production</a>.</p>
+<p class="code-ref">In the code: <code>game.ts::outfitMule</code> · <code>game.ts::outfitCostFor</code> · <code>config.ts::MULE.outfitCost</code> · <code>packages/engine/src/politics.ts::outfitBlocked</code></p>
+<p class="owner">Kept current by: the Auctions team (WS3).</p>
+
+<h2 id="installing">Installing a MULE <span class="pill built">In the game</span></h2>
+<p>Lead an outfitted MULE onto one of your own plots (or to the shore of your lake plot) and press <strong>INSTALL · GOOD</strong>. The MULE stays there and works that plot every month from now on, until it is taken off, sold, stolen or struck by a meteor. A plot makes nothing without a MULE.</p>
+<p>A plot remembers how many months in a row its outfit has run (factories gain from experience). Installing a <em>different</em> outfit starts that count again from zero; putting the same outfit back on a plot it was taken off this turn keeps the old count.</p>
+<p>Important for the button: while you lead an outfitted MULE and stand on your own plot, the button offers INSTALL before anything else. So analyse a plot <em>before</em> you bring the MULE to it.</p>
+<p class="code-ref">In the code: <code>game.ts::installMule</code> · <code>packages/engine/src/floor/reach.ts</code> (row <code>install</code>)</p>
+<p class="owner">Kept current by: the Auctions team (WS3) for the rule, the Strategy team (WS1) for the button.</p>
+
+<h2 id="mule-swap">Installing over a MULE: the swap <span class="pill progress">Being built</span></h2>
+<h3 id="swap-today">Today</h3>
+<p>If the plot already has a MULE, the button reads <strong>SWAP</strong> and warns "your Food MULE runs away" (or "same outfit, nothing gained" if the outfits match). Pressing it puts the new MULE on the plot, and the old MULE simply vanishes. It is lost, with no refund.</p>
+<h3 id="swap-ruling">What Heiko ruled</h3>
+<p>Heiko met this on 5 Nov: he led a Water MULE to his Food plot, pressed install, and the Food MULE vanished. He expected to lead the Food MULE away. His ruling, built now:</p>
+<ul>
+<li>Installing over a plot's MULE <strong>swaps</strong>: the new MULE goes on the plot and you now lead the old one, with its outfit, as if you had taken it off.</li>
+<li>If you still lead that old MULE when your turn ends, it goes back to the store's corral. You get no money for it.</li>
+<li>Installing the same outfit over itself is refused: "Same outfit: nothing to swap".</li>
+<li>A button to hand a MULE back to the corral mid-turn for a refund is in the backlog, for Heiko to decide.</li>
+</ul>
+<div class="box example"><h4>Example</h4><p>Lena's plains plot has a Food MULE. She leads in a new Energy MULE and presses SWAP. The Energy MULE now works the plains plot; Lena leads the Food MULE. She walks it to her bare river plot and installs it there: two working plots for the price of one MULE. Had she gone to the pub still leading it, it would have gone back to the corral.</p></div>
+<h3 id="swap-warning">The warning while you lead it <span class="pill designed">Designed</span></h3>
+<p>While you lead a MULE you swapped off a plot, the walking screen on your phone says so: <strong>"Turn ends: this MULE goes back to the corral"</strong>. Install it on a plot of yours before your turn ends, or the store takes it back for nothing.</p>
+<div class="box why"><h4>Why it is like this</h4><p>Agreed by the PM on 5 Nov, from the UX team's read of the swap rule: nothing on screen told you that the MULE you were leading would go back at turn end. Not built yet.</p></div>
+<div class="box next"><h4>What is changing</h4><p>Ruled by Heiko on 5 Nov; the details (corral at turn end, no refund, same outfit refused) are the PM's ruling AM-12 the same day. Being built by the Auctions team (WS3) in the game rules, with named edits by the Strategy team (WS1) for the button and the computer players; the first failing test is on branch ws3-install-swap.</p></div>
+<p class="code-ref">In the code: <code>game.ts::installMule</code> · <code>packages/engine/src/floor/reach.ts::reachWords</code> (the SWAP words)</p>
+<p class="owner">Kept current by: the Auctions team (WS3); the warning on the phone: the UX team (WS6), not built yet.</p>
+
+<h2 id="take-and-reoutfit">Taking a MULE off and re-outfitting <span class="pill built">In the game</span></h2>
+<p>Stand on your own plot that has a MULE, not leading one, and the button can offer <strong>TAKE MULE</strong>: the MULE comes onto your lead and the plot stops working until a MULE is installed there again.</p>
+<p>With a MULE you took off this turn, go to another outfitter and press <strong>RE-OUTFIT · GOOD · price</strong>. It costs the full outfit price for the new good. The outfitter for the good it already has is dim ("already fitted"), and a MULE bought this turn cannot be re-outfitted. Then install it wherever you like.</p>
+<p>If your turn ends while you still lead a MULE you took off a plot (even one that bolted from wolves), it goes back to that plot with the outfit and run of months it had. Nothing is lost.</p>
+<p>The button offers one thing at a time on your own plot, in this order: install (when leading an outfitted MULE), analyse (if you have not analysed the plot), fit a filter (if you hold Alloy and the plot has none), take the MULE. So on a plot you have not analysed, TAKE MULE appears only after you analyse it.</p>
+<div class="box why"><h4>Why it is like this</h4><p>Heiko, 28 Oct, approved re-outfitting a MULE at the store for the outfit price, as a rule change (AM-2). Only taken-off MULEs re-outfit (AM-14) so an outfit is chosen once at purchase. The button order (AM-9, WS6, approved by Heiko with the arcade mocks on 29 Oct) puts TAKE after ANALYSE and FIT FILTER so those two are never hidden on a plot with a MULE.</p></div>
+<p class="code-ref">In the code: <code>game.ts::takeMule</code> · <code>game.ts::reoutfitMule</code> · <code>game.ts::returnTakenMule</code> · <code>config.ts::DEV_STEER.reoutfitCost</code> · <code>floor/reach.ts::ROWS</code></p>
+<p class="owner">Kept current by: the Auctions team (WS3), with the Strategy team (WS1) for the button order.</p>
+
+<h2 id="mule-runs-off">When a MULE runs off <span class="pill built">In the game</span></h2>
+<p>A MULE you bought (or won at the land auction) and did not install by the end of your turn <strong>runs off</strong> and is lost, with no refund. That happens when the clock runs out and when you walk into the pub leading it. The pub pays nothing back for it.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Still leading at turn end</th><th>What happens</th></tr></thead>
+<tbody>
+<tr><td>A MULE bought this turn, empty or outfitted</td><td>Runs off, lost</td></tr>
+<tr><td>A MULE won at the land auction</td><td>Runs off, lost</td></tr>
+<tr><td>A MULE taken off one of your plots this turn</td><td>Goes back to that plot, unchanged</td></tr>
+<tr><td>A MULE you led away in a swap</td><td>Today: it already vanished at the swap. Being built: back to the corral, no refund</td></tr>
+</tbody>
+</table></div>
+<p>Two other ways to lose a MULE are events: a <strong>MULE theft</strong> (a <span class="num">1</span>% chance in development and again at the month end) takes one installed MULE off one of your plots, and a <strong>meteor strike</strong> destroys the MULE on the plot it hits. See <a href="events.html">Events</a>.</p>
+<p class="code-ref">In the code: <code>game.ts::endLead</code> · <code>game.ts::visitPub</code> · <code>config.ts::DEV_STEER.pubLeadRefund</code> · <code>config.ts::EVENTS.player.muleTheft</code></p>
+<p class="owner">Kept current by: the Auctions team (WS3).</p>
+
+<h2 id="wolves">Wolves <span class="pill built">In the game</span></h2>
+<p>On forest, hills and tundra, a pack of <span class="num">3</span> wolves may come for your colonist: a <span class="num">10</span>% chance each second you are on that land, and not again for <span class="num">20</span> seconds after a pack. You have <span class="num">3</span> seconds to choose; doing nothing is a fight.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Choice</th><th>How it goes</th><th>Win</th><th>Lose</th></tr></thead>
+<tbody>
+<tr><td><strong>Run</strong> (push the stick)</td><td>The wolves chase at <span class="num">0.88</span> of full walking speed. They give up after <span class="num">5</span> seconds, <span class="num">4</span> plots, or when you reach the store.</td><td>You got away</td><td>Bitten: half speed until you reach the store or one of your own plots</td></tr>
+<tr><td><strong>Fight</strong> (press)</td><td>Up to <span class="num">10</span> seconds in place. A wolf crouches (<span class="num">0.8</span> s to dodge) then lunges; dodge with the stick, strike with the button at a wolf left open.</td><td><span class="num">3</span> strikes: <span class="num">2</span> pelts, which the store buys at either door for <span class="num">20</span> cr each</td><td><span class="num">3</span> bites: the MULE you lead <strong>bolts</strong>; with no MULE, you are stunned for <span class="num">4</span> seconds</td></tr>
+</tbody>
+</table></div>
+<p>A bolted MULE runs <span class="num">4</span> plots in a random direction and stands. It is still yours. Walk within <span class="num">0.6</span> of a plot of it and press <strong>CATCH MULE</strong>; until then you cannot outfit or install it.</p>
+<div class="box why"><h4>Why it is like this</h4><p>Heiko, 28 Oct, asked for more arcade in the walk: "when you are walking you are being attacked by wolves and you need to run away or spend 10 seconds fighting them". He approved wolves, the glint race and the corral scramble ("Yes, those three") the same day.</p></div>
+<p class="code-ref">In the code: <code>config.ts::WOLVES</code> · <code>packages/engine/src/floor/wolves.ts</code> · <code>game.ts::boltMule</code> · <code>game.ts::catchMule</code> · <code>game.ts::sellPelts</code></p>
+<p class="owner">Kept current by: the Strategy team (WS1).</p>
+
+<h2 id="glint">The glint race <span class="pill built">In the game</span></h2>
+<p>Now and then a Crystite sparkle lights one plot on every screen at once: "A Crystite glint at 7·3! First there wins". The first colonist to step onto that plot, or to press <strong>GRAB THE GLINT</strong> within <span class="num">1.2</span> plots of its middle, wins <span class="num">1</span> Crystite.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Rule</th><th class="n">Value</th></tr></thead>
+<tbody>
+<tr><td>No glint in a turn's first seconds</td><td class="n">6 s</td></tr>
+<tr><td>Average wait between glints while none is lit</td><td class="n">20 s</td></tr>
+<tr><td>A glint stays lit</td><td class="n">8 s</td></tr>
+<tr><td>Pause after one is won or fades</td><td class="n">5 s</td></tr>
+<tr><td>Prize</td><td class="n">1 Crystite</td></tr>
+</tbody>
+</table></div>
+<p>A glint can light any plot a colonist can stand on, owned or free, but never a lake, the store, or a plot someone is standing on as it lights. A player already at the pub cannot win it. Nobody there in time: "The glint faded". The prize goes straight into your stock.</p>
+<div class="box next"><h4>What is changing</h4><p><strong>Being built:</strong> a computer player that pressed GRAB on the very tick a glint faded had its press fall through to the next thing the button offered, which could be ANALYSE: it then stood still for a <span class="num">4</span>-second assay it never meant to do (measured 2 of 201 grabs before, 0 of 199 after). The fix is in the Strategy team's PR #366 (WS1), together with the land-grant fix in <a href="land.html#land-grant">Land</a>.</p></div>
+<p class="code-ref">In the code: <code>config.ts::GLINT</code> · <code>packages/engine/src/floor/glint.ts</code> · <code>game.ts::awardGlint</code></p>
+<p class="owner">Kept current by: the Strategy team (WS1).</p>
+
+<h2 id="scramble">The corral scramble <span class="pill built">In the game</span></h2>
+<p>When a sale leaves the corral with <span class="num">2</span> MULEs or fewer and somebody still needs one, every screen calls a race: "2 MULEs left! Race to the corral". It is first there, first served at the normal BUY MULE. Each sale is told ("Ossa got one: 1 left"), and the last one ends it: "Brix got the last one: the corral is empty", then who went without. Otherwise it ends after <span class="num">15</span> seconds, or once everyone who needed a MULE has one. There is at most one scramble a turn.</p>
+<p>A player "needs a MULE" when they are not at the pub, not leading one, own a plot with no MULE, and can afford the price.</p>
+<p class="code-ref">In the code: <code>config.ts::SCRAMBLE</code> · <code>packages/engine/src/floor/scramble.ts</code></p>
+<p class="owner">Kept current by: the Strategy team (WS1).</p>
+
+<h2 id="analysing">Analysing a plot <span class="pill built">In the game</span></h2>
+<p>Stand on any plot you have not analysed yet, owned or free, with or without a MULE, and press <strong>ANALYSE</strong>. Your colonist stands still while the button reads ASSAYING: <span class="num">8</span> seconds, or <span class="num">4</span> for a Mollox. Then you know the plot's rating for all six raw goods and its traits, privately and for the rest of the game. It costs no money, only time, which also lowers your pub payout. A lake plot is analysed from its shore.</p>
+<p>Ratings, rings and what the drone does are in <a href="land.html#hidden-ground">Land and geology</a>.</p>
+<p class="code-ref">In the code: <code>game.ts::analysePlot</code> · <code>game.ts::analysisSeconds</code> · <code>config.ts::DEVELOPMENT.analysisSeconds</code> · <code>config.ts::SPECIES_PERK.molloxAnalysis</code></p>
+<p class="owner">Kept current by: the Auctions team (WS3), with the UX team (WS6) for the ground card.</p>
+
+<h2 id="filters">Filters <span class="pill built">In the game</span></h2>
+<p>On your own plot with no filter, holding at least <span class="num">1</span> Alloy, the button offers <strong>FIT FILTER · 1 Alloy</strong>. The Alloy comes from your own stock. A filter halves the air pollution the plot's MULE causes and stops its pollution spreading to the plots around it. It stays on the plot (a meteor strike destroys it). See <a href="production.html">Production</a> and <a href="colony-and-politics.html">Colony and politics</a> for what pollution does.</p>
+<p class="code-ref">In the code: <code>game.ts::fitFilter</code> · <code>config.ts::DEVELOPMENT.filterAlloy</code> · <code>config.ts::POLLUTION.filterFactor</code></p>
+<p class="owner">Kept current by: the Auctions team (WS3).</p>
+
+<h2 id="pub">The pub <span class="pill built">In the game</span></h2>
+<p>Walk into the pub, in the store's front row, and press <strong>PUB · END TURN</strong>. The button shows what you will win. Your turn is over: you cannot do anything else this month. The earlier you go, and the later in the game, the more it pays:</p>
+<p><code>payout = 20 + (60 + 20 × month) × (seconds left ÷ 60)</code>, rounded.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Month</th><th class="n">60 s left</th><th class="n">30 s left</th><th class="n">10 s left</th><th class="n">0 s left</th></tr></thead>
+<tbody>
+<tr><td>1</td><td class="n">100</td><td class="n">60</td><td class="n">33</td><td class="n">20</td></tr>
+<tr><td>4</td><td class="n">160</td><td class="n">90</td><td class="n">43</td><td class="n">20</td></tr>
+<tr><td>8</td><td class="n">240</td><td class="n">130</td><td class="n">57</td><td class="n">20</td></tr>
+<tr><td>12</td><td class="n">320</td><td class="n">170</td><td class="n">70</td><td class="n">20</td></tr>
+</tbody>
+</table></div>
+<div class="box example"><h4>Example</h4><p>Month 4. Ossa buys, outfits and installs a MULE and reaches the pub with <span class="num">45</span> seconds left: <span class="num">20 + (60 + 80) × 45/60</span> = <span class="num">20 + 105</span> = <span class="num">125</span> cr. Had she stopped for an <span class="num">8</span>-second analysis on the way, she would have arrived with <span class="num">37</span> seconds and won <span class="num">106</span>: the analysis cost her <span class="num">19</span> cr.</p></div>
+<p>A MULE you lead into the pub runs off (unless you took it off your own plot this turn, which goes home). If the clock runs out before you reach the pub, you get nothing.</p>
+<p class="code-ref">In the code: <code>game.ts::pubPayoutFor</code> · <code>game.ts::visitPub</code> · <code>config.ts::DEVELOPMENT.pub</code></p>
+<p class="owner">Kept current by: the Auctions team (WS3).</p>
+
+<h2 id="computer-players-floor">Computer players on the floor <span class="pill built">In the game</span></h2>
+<p>Computer players walk the same floor under the same rules: the same speeds, the same pace from hunger and sickness, the same button. They differ only in how they choose.</p>
+<ul>
+<li>They stand <span class="num">0.5</span> seconds at a counter before pressing, like a person reading the button.</li>
+<li>They head for the pub when the clock shows no more than their walk there plus <span class="num">2</span> seconds, and buy a MULE only if the errand, allowed <span class="num">10</span>% longer than planned, still leaves that margin.</li>
+<li>At the default level (Trader) they lead at most <span class="num">2</span> MULEs out of the store a month (Rookie <span class="num">1</span>, Tycoon <span class="num">3</span>).</li>
+<li>They analyse an unknown plot of their own when its two best uses look close, at most <span class="num">2</span> a month (Rookie <span class="num">1</span>), never with under <span class="num">20</span> seconds left.</li>
+<li><strong>Glint:</strong> three in four race for a glint within <span class="num">8</span> plots, only if their errand still fits afterwards. <strong>Scramble:</strong> nine in ten who need a MULE race, from within <span class="num">10</span> plots of the store.</li>
+<li><strong>Wolves:</strong> half of them fight rather than run; they never lead a MULE across wolf land, and take wolf land on about half their other walks, so the table sees them meet packs.</li>
+</ul>
+<p>They know only what a phone in their seat would show; see <a href="land.html#ai-knowledge">What the computer players know</a> and <a href="computer-players.html">Computer players</a>.</p>
+<p class="code-ref">In the code: <code>config.ts::DEV_STEER</code> (<code>bot…</code> values) · <code>config.ts::WOLVES.botFightShare</code> · <code>config.ts::GLINT.botShare</code> · <code>config.ts::SCRAMBLE.botShare</code> · <code>config.ts::AI_LEVELS</code> · <code>packages/ai/src/hands/floor-walker.ts</code></p>
+<p class="owner">Kept current by: the Strategy team (WS1).</p>
+
+<h2 id="tap-walk-removed">The old tap walk and development screen <span class="pill progress">Being built</span></h2>
+<p>Before steering, development worked by tapping: you tapped a destination and an action (the corral, an outfitter, a plot, the pub), and the game walked your colonist there in grid steps, never diagonally, at <span class="num">0.4</span> seconds a plot, plus <span class="num">1</span> second across the store floor to the corral, divided by your pace. The move happened on arrival.</p>
+<p>Today every game at the table steers; the server refuses a tap move ("Development is steered: walk there and press the button"). The tap walk survives only inside the code: the old phone screen is still shown for a game started without steering, which only tests do.</p>
+<div class="box next"><h4>What is changing</h4><p>PR #369 (the Auctions team, WS3, arcade PR-12) deletes the tap walk from the server and the old development screen from the phone, so every game steers and there is one development screen. All owners have approved it; it is waiting to be brought up to date with trunk and merged. Afterwards the Strategy team (WS1) and the Brain team (WS2) retire what is left behind: the tap walk's time formula, the on/off switch for steering, and the computer players' tap branches.</p></div>
+<p class="code-ref">In the code: <code>config.ts::DEV_WALK.tileSeconds</code> · <code>config.ts::DEV_WALK.floorSeconds</code> · <code>config.ts::DEV_STEER.on</code> · <code>packages/engine/src/dev-walk.ts::walkSeconds</code> · <code>apps/web/src/phone/Develop.tsx</code> · <code>apps/web/src/phone/arcade/Develop.tsx</code></p>
+<p class="owner">Kept current by: the Auctions team (WS3), with the UX team (WS6) for the phone screen.</p>
+</article>
+</main>
+</div>
+<script src="search-index.js"></script>
+<script src="rulebook.js"></script>
+</body>
+</html>

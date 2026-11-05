@@ -52,7 +52,7 @@ const SHORT = { a1: 300, a2: 340, a3: 380 };
 function worthOf(state: GameState, mind: Mind, lot: Listing): Worth {
   const obs = observe(state, mind.me);
   const money = obs.players.find((p) => p.id === mind.me)!.money;
-  const value = lot.item.kind === 'plot' ? plotValue(obs, mind, lot.item.y * obs.width + lot.item.x) : muleValue(obs, mind);
+  const value = lot.item.kind === 'plot' ? plotValue(obs, mind, lot.item.y * obs.width + lot.item.x) : muleValue(obs, mind, lot.item.outfit);
   const kept = money - cashReserve(obs, mind);
   const room = lot.item.kind === 'plot' ? plotRoom(obs, mind) : Infinity;
   return { value, kept, room, limit: Math.max(0, Math.min(kept, value, room)) };
@@ -337,9 +337,9 @@ describe('AI seats at the land auction', () => {
       }
       expect(result?.kind).toBe('sold');
     }
-    // The plot's board runs from 140 to 400 and crosses it in 6 s. The AI's limit is 405; a1 climbs alongside from the
+    // The plot's board runs from 140 to 400 and crosses it in WALK.crossSeconds. The AI's limit is 405; a1 climbs alongside from the
     // start and through it, so the step that carries a1 past 400 is the one that doubles the speed under the AI.
-    const BASE = (400 - 140) / 6;
+    const BASE = (400 - 140) / WALK.crossSeconds;
     for (const seed of [7, 12]) {
       const probe = landAuction(seed);
       const reserve = cashReserve(observe(probe.state, probe.seats[1]!.mind.me), probe.seats[1]!.mind);

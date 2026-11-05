@@ -42,12 +42,10 @@ export interface MuleServer {
  * The game server: an HTTP server for the web client and `POST /rooms`, and a
  * WebSocket endpoint at `/ws` where phones and boards talk to their room.
  * Games play politics unless `politics` is false. With a `recordDir`, each game's record is written there at game over.
- * With `devSteer: true` every game it hosts steers its development (arcade C6), and with `false` none does, whatever
- * DEV_STEER.on says; without it, the flag decides. `forceWolves: true`, for tests, brings a pack to the first colonist
- * out on wolf land at once.
+ * `forceWolves: true`, for tests, brings a pack to the first colonist out on wolf land at once.
  */
 export function createMuleServer(
-  options: { staticDir?: string; seed?: () => number; maxMonths?: number; phaseScale?: number; politics?: boolean; recordDir?: string | null; devSteer?: boolean; forceWolves?: boolean } = {},
+  options: { staticDir?: string; seed?: () => number; maxMonths?: number; phaseScale?: number; politics?: boolean; recordDir?: string | null; forceWolves?: boolean } = {},
 ): MuleServer {
   const seed = options.seed ?? (() => Math.floor(Math.random() * 2 ** 31));
   const recordDir = options.recordDir ?? null;
@@ -57,8 +55,6 @@ export function createMuleServer(
       maxMonths: options.maxMonths,
       phaseScale: options.phaseScale,
       politics: options.politics ?? true,
-      // A game's own steered setting when the caller gives one; otherwise DEV_STEER.on decides, which is on.
-      ...(options.devSteer === undefined ? {} : { devSteer: options.devSteer }),
       // A test option: a pack for the first colonist out on wolf land at once.
       ...(options.forceWolves ? { forceWolves: true } : {}),
     };
@@ -243,11 +239,12 @@ function isIntent(v: unknown): v is MuleIntent {
   const int = (x: unknown) => Number.isInteger(x);
   switch (i.type) {
     case 'ready':
-    case 'buyMule':
-    case 'pub':
     case 'continue':
     case 'act':
     case 'hurry':
+    // Development's old taps reach the game, which refuses them in words (C14): an old bundle's phone is told why.
+    case 'buyMule':
+    case 'pub':
       return true;
     case 'steer':
       return isAxis(i.x) && isAxis(i.y) && (i.tick === undefined || (Number.isInteger(i.tick) && (i.tick as number) >= 0));

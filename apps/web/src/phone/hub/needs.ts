@@ -44,11 +44,12 @@ export function needRows(need: Stock, stock: Stock, plots: readonly { outfit: Ou
     const inputs = usedBy.length > 0 ? `${and(usedBy.map((f) => GOOD_NAME[f]))} inputs` : '';
     if (g === 'food' || g === 'water') return usedBy.length > 0 ? `upkeep and ${inputs}` : 'upkeep';
     if (g === 'energy') {
-      // Raw plots that burn Energy (UPKEEP.energyUse), counted by what they are called; factories by recipe.
+      // Raw plots that burn Energy (UPKEEP.energyUse), counted by what they are called; factories by recipe. Not a
+      // plant: it pays its own use from its own output, so the engine's monthNeeds leaves it out (AM-17, PM ruling A).
       const burners = new Map<string, [number, string]>();
       for (const raw of Object.keys(UPKEEP.energyUse) as RawGood[]) {
         const k = outfits.filter((o) => o === raw).length;
-        if (UPKEEP.energyUse[raw] <= 0 || k === 0) continue;
+        if (raw === 'energy' || UPKEEP.energyUse[raw] <= 0 || k === 0) continue;
         const [one, many] = PLOT[raw];
         burners.set(one, [(burners.get(one)?.[0] ?? 0) + k, many]);
       }
