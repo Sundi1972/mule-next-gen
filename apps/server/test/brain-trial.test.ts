@@ -678,6 +678,11 @@ describe.runIf(process.env.MULE_FULL === '1')('brain:trial', () => {
     expect(partial.fallbacks['too slow']).toBe(1);
     // No Smart seat-game played, nothing measured.
     expect(verdicts(input({ games: [game({ smart: [] })] }))[1]).toBe('not proven');
+    // Playbooks played every move (C7): no decision was asked, so the share has nothing to judge; n/a, not FAIL. A silent
+    // seat-month still fails, and a run cut short is still not proven.
+    expect(verdicts(input({ games: [game({ decisions: [] })] }))[0]).toBe('n/a');
+    expect(verdicts(input({ games: [game({ decisions: [], lines: { ai0: [0], ai1: [1] } })] }))[0]).toBe('fail');
+    expect(verdicts(input({ planned: 2, games: [game({ decisions: [] })] }))[0]).toBe('not proven');
     // RULE-2 counts template lines too, so a seat-month with only template lines is not silent.
     expect(verdicts(input({ games: [game({ modelLines: { ai0: [0] } })] }))[0]).toBe('pass');
     // Without the key, every decision must be the strategist's top pick.
