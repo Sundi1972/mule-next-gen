@@ -1,4 +1,4 @@
-import { advancePhase, COLONY_SELLER, createGame, DEV_STEER, type GameState } from '@mule/engine';
+import { advancePhase, boxOf, COLONY_SELLER, createGame, DEV_STEER, HALL, type GameState } from '@mule/engine';
 import type { MuleIntent } from '@mule/protocol';
 import type { GameContext, SeatInfo } from '@tabletop/core';
 import { afterEach, beforeEach } from 'vitest';
@@ -20,35 +20,9 @@ export const walkers: SeatInfo[] = [
 /**
  * Plays month 1 into development on the fake clock, seed 7. `prepare` runs once while planning is open, to set the
  * state up as a test needs it; then every human is Ready. With `claimer`, that seat claims the first plot lit in the
- * land grant, returned as `plot`. The clock runs from the start, as in any month after the first, unless
- * `firstMonthWaits` keeps month 1's rule: then it waits for every first MULE (A-1).
+ * land grant, returned as `plot`.
  */
-export function toDevelopment(options: { players?: SeatInfo[]; phaseScale?: number; claimer?: string; firstMonthWaits?: boolean; prepare?: (state: GameState) => void; onChanged?: (at: number) => void } = {}) {
-  const rule = DEV_STEER.month1WaitsForFirstMule;
-  DEV_STEER.month1WaitsForFirstMule = options.firstMonthWaits ?? false;
-  try {
-    return playToDevelopment(options);
-  } finally {
-    DEV_STEER.month1WaitsForFirstMule = rule;
-  }
-}
-
-/**
- * For a describe block whose tests are about the development clock itself, met in month 1 for convenience: month 1's
- * clock runs from the start, as it does in every later month, instead of waiting for every first MULE (A-1).
- */
-export function clockRunsInMonth1(): void {
-  let rule = DEV_STEER.month1WaitsForFirstMule;
-  beforeEach(() => {
-    rule = DEV_STEER.month1WaitsForFirstMule;
-    DEV_STEER.month1WaitsForFirstMule = false;
-  });
-  afterEach(() => {
-    DEV_STEER.month1WaitsForFirstMule = rule;
-  });
-}
-
-function playToDevelopment(options: { players?: SeatInfo[]; phaseScale?: number; claimer?: string; prepare?: (state: GameState) => void; onChanged?: (at: number) => void }) {
+export function toDevelopment(options: { players?: SeatInfo[]; phaseScale?: number; claimer?: string; prepare?: (state: GameState) => void; onChanged?: (at: number) => void } = {}) {
   const fake = fakeContext({ table: options.players ?? seats, onChanged: options.onChanged });
   const game = new MuleGame(fake.ctx, 7, options.phaseScale === undefined ? undefined : { phaseScale: options.phaseScale });
   game.start(options.players ?? seats);
@@ -246,6 +220,20 @@ export function steerTo(
 export function pressAct(game: Pick<MuleGame, 'handle'>, fake: { advance: (ms: number) => void }, seatId: string, { tickMs = DEV_STEER.tickMs }: { tickMs?: number } = {}): void {
   game.handle(seatId, { type: 'act' });
   fake.advance(tickMs);
+}
+
+/**
+ * A seat ends its turn as a phone does with walking on: from its start outside a store door, in (Act), along the
+ * walkway to the pub's room, and Act there. Its turn is over when this returns.
+ */
+export function steerToThePub(game: Pick<MuleGame, 'handle' | 'viewFor'>, fake: { advance: (ms: number) => void }, seatId: string): void {
+  const pub = boxOf('pub');
+  pressAct(game, fake, seatId);
+  steerTo(game, fake, seatId, [
+    { space: 'hall', ...HALL.spots.pub },
+    { space: 'hall', x: (pub.x0 + pub.x1) / 2, y: (pub.y0 + pub.y1) / 2 },
+  ]);
+  pressAct(game, fake, seatId);
 }
 
 /** The first seed whose month-1 roll brings a colony lot for these seats, found by playing the engine, never by mocking its RNG. */

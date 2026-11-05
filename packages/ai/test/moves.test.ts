@@ -256,7 +256,6 @@ const COVERAGE = {
   declare: { move: 'declare' },
   walk: { move: 'walk' },
   walkStep: { move: 'walk' },
-  lineTrade: { move: 'lineTrade' },
   list: { move: 'list' },
   unlist: { move: 'unlist' },
   run: { move: 'run' },

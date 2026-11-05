@@ -80,12 +80,10 @@ type WithAuction = { auction?: Pick<AuctionView, 'stage'> | null };
 
 /**
  * When the server takes the host's Continue: planning proper, the election's announce or ballot (never its ceremony),
- * the month end (upkeep), which also waits for every Ready; month 1's development while its clock waits for the first
- * MULEs; and a good's side pick (A-7), never its walk.
+ * the month end (upkeep), which also waits for every Ready; and a good's side pick (A-7), never its walk.
  */
-export function hostMayContinue(view: Pick<MuleView, 'phase' | 'politics' | 'clockWaitsFor'> & WithAuction): boolean {
+export function hostMayContinue(view: Pick<MuleView, 'phase' | 'politics'> & WithAuction): boolean {
   const stage = view.politics?.election?.stage;
-  if (view.phase === 'development') return !!view.clockWaitsFor;
   return planningProper(view) || (view.phase === 'planning' && (stage === 'announce' || stage === 'ballot')) || view.phase === 'upkeep' || sidePick(view);
 }
 
@@ -116,14 +114,14 @@ export const SIDE_PICK_WORDS = {
   /**
    * After the seats' sides in the confirm, for `of` seats of which `away` are away (an away seat sits the walk out):
    * every one away, the walk starts without them; some away, the others start on the side shown; none away, `given`
-   * when every side is the one the numbers give.
+   * when every side is the one everyone starts on, Buy (RULE-2).
    */
   tail: (given: boolean, away = 0, of = 1) =>
     away >= of
       ? 'The walk starts without them.'
       : away > 0
         ? 'The others start on the side shown; the walk starts.'
-        : `${given ? 'That is the side the numbers give' : 'Each starts on the side shown'}; the walk starts for everyone.`,
+        : `${given ? 'Everyone starts as a buyer' : 'Each starts on the side shown'}; the walk starts for everyone.`,
   now: 'Move on',
   keep: 'Keep waiting',
   /** Once nobody is left. */

@@ -30,7 +30,7 @@ import {
 import type { Act, AiAction } from '../actions.js';
 import type { Brain, Pending } from '../brain.js';
 import { floorDevWalk, leading, mapFactor, planSeconds, plotErrandSeconds, pubDoor, pubMargin, pubSeconds, tileMiddle, tripSeconds, type PlanStop } from '../floor-time.js';
-import { analysesWanted, developDecision, filtersWanted, outfitName, plotName, type DevAction, type DevWalk } from '../strategist.js';
+import { analysesWanted, bestInstall, developDecision, filtersWanted, outfitName, plotName, type DevAction, type DevWalk } from '../strategist.js';
 import { situation } from '../summary.js';
 import { FloorWalker, type FloorView } from './floor-walker.js';
 
@@ -71,8 +71,6 @@ const MULE_PRESSES = 3; // literal-ok: a count of the rule's steps, not balance
 /** How an AI level plays a pack of wolves (RULE-4's levels): a Rookie a rookie, a Trader a regular, a Tycoon a veteran. */
 const WOLF_LEVEL: Record<AiLevelId, WolfFightLevel> = { rookie: 'rookie', trader: 'regular', tycoon: 'veteran' };
 
-/** What a seat already in may not do while month 1's clock waits for the others' first MULEs (the server's rule). */
-const HELD: ReadonlySet<AiAction['type']> = new Set(['buyMule', 'install', 'analyse', 'filter']);
 
 export interface DevStep {
   action: AiAction;
@@ -183,10 +181,8 @@ export class DevelopHand {
 
   /**
    * One tick on the dev floor: the stick and the button for this seat's colonist, walking the to-do list `tick` taps.
-   * `held`: month 1's clock is waiting and this seat is in, so it may not start another MULE, analysis or filter yet
-   * (the referee refuses them); it stands until the clock starts.
    */
-  steer(state: GameState, floor: DevFloor, secondsLeft: number, cfg: FloorConfig, held = false): FloorInput {
+  steer(state: GameState, floor: DevFloor, secondsLeft: number, cfg: FloorConfig): FloorInput {
     const mind = this.brain.mind;
     if (state.phase !== 'development') return IDLE_INPUT;
     if (state.month !== this.month) this.reset(state.month);
@@ -201,7 +197,7 @@ export class DevelopHand {
     this.clock += dt;
     const view = { state, floor, cfg, secondsLeft };
     const colonist = floor.colonists.find((c) => c.id === mind.me)!;
-    const moment = this.moment(view, colonist, held);
+    const moment = this.moment(view, colonist);
     if (moment) {
       this.detoured = true;
       return moment;
@@ -218,7 +214,7 @@ export class DevelopHand {
     const holding = colonist.assayUntilTick === null ? 0 : (Math.max(0, colonist.assayUntilTick - floor.tick) * dt) / MS_PER_SECOND;
     // A MULE under way whose rest of errand, to its plot and on to the pub, still fits with the margin in hand is seen
     // through: dropping it for the pub would lose what it cost (FM-hurry-margin).
-    if (!held && !this.toPub && secondsLeft <= holding + pubSeconds(state, cfg, colonist) + this.margin(cfg, colonist) && !this.muleFits(view, colonist, secondsLeft - holding)) this.hurry(colonist);
+    if (!this.toPub && secondsLeft <= holding + pubSeconds(state, cfg, colonist) + this.margin(cfg, colonist) && !this.muleFits(view, colonist, secondsLeft - holding)) this.hurry(colonist);
     // Hurrying for the pub, it presses the moment it is there: a pause at the counter could cost it the pub.
     const pauseMs = this.toPub ? 0 : cfg.steer.botCounterPauseSeconds * MS_PER_SECOND * mind.level.devPace;
     // A step done this tick hands over to the next at once, so no tick is spent standing between them.
@@ -228,14 +224,12 @@ export class DevelopHand {
       const planLeft = (secondsLeft - holding - pubMargin(cfg, colonist, true)) / (1 + cfg.steer.botPlanSlackShare);
       const step = this.next(state, ticks, secondsLeft, () => floorDevWalk(state, cfg, colonist, planLeft, (MULE_PRESSES * pauseMs) / MS_PER_SECOND));
       if (!step) return IDLE_INPUT;
-      // Held, it starts none of these; one it is already walking (or has just pressed) it sees through.
-      if (held && HELD.has(step.action.type) && this.walking !== step) return IDLE_INPUT;
       // An analysis or a filter it sets off for, and presses, only while the walk there, the work and the walk on to the
       // pub still fit the clock (RULE-8's spare time): a walk there that ran long drops it before it costs the pub. A
       // MULE it buys only while its errand still fits with the hurry's margin (FM-hurry-margin).
       const starting = this.walking !== step;
       const committed = !starting && (this.walker.pressing() || colonist.assayUntilTick !== null);
-      if (!held && !committed && !this.fits(view, colonist, step, secondsLeft - holding)) {
+      if (!committed && !this.fits(view, colonist, step, secondsLeft - holding)) {
         if (!starting) this.walking = null;
         this.taken(step, false, 'no time');
         continue;
@@ -245,7 +239,7 @@ export class DevelopHand {
         this.walkPacks = this.packsMet;
         this.walker.reset();
       }
-      const via = !held && !this.toPub ? this.byWolfLand(view, colonist, step) : null;
+      const via = !this.toPub ? this.byWolfLand(view, colonist, step) : null;
       if (via) return via;
       const run = this.walker.run(view, step.action, pauseMs);
       if (run.kind === 'going') return run.input;
@@ -259,7 +253,7 @@ export class DevelopHand {
    * it stands; a glint or the scramble it races only with time to spare (RULE-8); a bolted MULE it goes to catch. The
    * input for the tick, or null to walk the list.
    */
-  private moment(view: FloorView, c: FloorColonist, held: boolean): FloorInput | null {
+  private moment(view: FloorView, c: FloorColonist): FloorInput | null {
     const { state, floor, cfg, secondsLeft } = view;
     const me = this.brain.mind.me;
     if (c.encounter) {
@@ -281,7 +275,7 @@ export class DevelopHand {
       this.glintSeen = g.sinceTick;
       this.glintWanted = this.rng.next() < cfg.glint.botShare;
     }
-    if (g && this.glintWanted && this.racingGlint !== g.sinceTick && !held) {
+    if (g && this.glintWanted && this.racingGlint !== g.sinceTick) {
       const to = glintMiddle(g);
       const from = this.raceFrom(view, c);
       if (Math.hypot(to.x - from.x, to.y - from.y) <= cfg.glint.botCareTiles && this.fitsDetour(view, c, to)) {
@@ -300,7 +294,7 @@ export class DevelopHand {
     // No way there after all, or no more time: it gives the race up.
     if (g && this.racingGlint === g.sinceTick) this.glintWanted = false;
     this.racingGlint = null;
-    this.raceScramble(view, c, held);
+    this.raceScramble(view, c);
     const p = state.players.find((x) => x.id === me)!;
     if (p.muleBolted && c.lead && !this.toPub && secondsLeft > pubSeconds(state, cfg, c) + this.margin(cfg, c)) return this.chaser.seek(view, c.lead, 'catch');
     return null;
@@ -399,10 +393,10 @@ export class DevelopHand {
    * The scramble called with this seat needing a MULE: it races by SCRAMBLE.botShare, from within botCareTiles of the
    * store and with time to spare (RULE-8), by dropping the analyses and filters ahead of its next MULE.
    */
-  private raceScramble(view: FloorView, c: FloorColonist, held: boolean): void {
+  private raceScramble(view: FloorView, c: FloorColonist): void {
     const s = view.floor.moments.scramble;
     const me = this.brain.mind.me;
-    if (!s || s.over || this.scrambleSeen === s.sinceTick || !s.needers.includes(me) || held) return;
+    if (!s || s.over || this.scrambleSeen === s.sinceTick || !s.needers.includes(me)) return;
     this.scrambleSeen = s.sinceTick;
     const store = this.raceFrom(view, { ...c, space: 'hall' });
     const care = Math.hypot(store.x - this.raceFrom(view, c).x, store.y - this.raceFrom(view, c).y) <= view.cfg.scramble.botCareTiles;
@@ -508,7 +502,15 @@ export class DevelopHand {
     const mind = this.brain.mind;
     if (this.stage === 'start') {
       const obs = observe(state, mind.me);
+      // On the floor, a MULE led into development (one won at the land auction) is installed first: while it is led a
+      // plot's button offers INSTALL, not ANALYSE, so an analysis ahead of it would be refused (FM-led-analyse). Paid for
+      // already, it goes where it gains most, if it earns anything there at all; the analyses follow while the clock fits.
+      const led = state.players.find((p) => p.id === mind.me)!.carriedMule;
+      const target = this.onFloor && led && led !== 'empty' ? bestInstall(obs, mind, led) : null;
+      const install = target && target.gain + target.cost > 0 ? state.tiles[target.index]! : null;
+      if (install) this.push({ type: 'install', x: install.x, y: install.y }, AI_HANDS.develop.installTapMs, `Install the MULE it leads on ${plotName(install)}`, ++this.group);
       for (const index of analysesWanted(obs, mind, secondsLeft)) {
+        if (install && index === target!.index) continue;
         const t = state.tiles[index]!;
         this.push({ type: 'analyse', x: t.x, y: t.y }, AI_HANDS.develop.analyseTapMs, `Analyse ${plotName(t)}`, ++this.group);
       }
@@ -604,9 +606,15 @@ export class DevelopHand {
 
   private finish(state: GameState): void {
     const mind = this.brain.mind;
+    const analysed = state.players.find((p) => p.id === mind.me)!.analysed;
     for (const index of filtersWanted(observe(state, mind.me), mind)) {
       const t = state.tiles[index]!;
-      this.push({ type: 'filter', x: t.x, y: t.y }, AI_HANDS.develop.filterMs, `Fit a filter on ${plotName(t)}`, ++this.group);
+      const g = ++this.group;
+      // On the floor an own plot not yet analysed offers ANALYSE before FIT FILTER (RULE-3 rows 10 and 11), so its
+      // analysis is planned first, in the filter's group: an analysis dropped (for time, or refused) drops its filter too
+      // (FM-floor-filter).
+      if (this.onFloor && !analysed.includes(index)) this.push({ type: 'analyse', x: t.x, y: t.y }, AI_HANDS.develop.analyseTapMs, `Analyse ${plotName(t)}`, g);
+      this.push({ type: 'filter', x: t.x, y: t.y }, AI_HANDS.develop.filterMs, `Fit a filter on ${plotName(t)}`, g);
     }
     this.push({ type: 'pub' }, AI_HANDS.develop.pubMs, 'Go to the pub', ++this.group);
     this.stage = 'steps';

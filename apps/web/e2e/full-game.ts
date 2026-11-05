@@ -1,7 +1,7 @@
 /**
  * G-3, the whole game at the kitchen table: three phones and a TV play a two-month game against the real server, from
  * the lobby to the final scores. Each family member joins by the room code and picks a species; everyone claims land;
- * Lena buys a MULE and installs it; in month 2 Brix lists a plot and Ossa buys it at the bell; at game over every
+ * development runs on its clock; in month 2 Brix lists a plot and Ossa buys it at the bell; at game over every
  * phone and the TV show each seat's final score as the server has it, best first.
  * Run with `pnpm --filter @mule/web exec tsx e2e/full-game.ts`; replay a red run's map with `MULE_E2E_SEED=<seed>`.
  */
@@ -11,7 +11,7 @@ import { errors as playwrightErrors, type Browser, type Page } from 'playwright'
 import { GRANT_PASS_MAX_MS, GRANT_TICK_MS, PHASE_MS } from '../../server/src/mule-game.js';
 import type { MuleServer } from '../../server/src/server.js';
 import { check, launch, PHONE, startServer, TV } from './harness';
-import { ELECTION_WAIT_MS, PRESS_MS, readyThroughTheElection } from './politics-steps';
+import { ELECTION_WAIT_MS, firstMulesThroughTheServer, PRESS_MS, readyThroughTheElection } from './politics-steps';
 
 /** Slow enough that a held Up can be let go a few board steps past its target; fast enough for CI. */
 const SCALE = 0.25;
@@ -69,16 +69,18 @@ try {
   for (const p of phones) check(truth.board().players.find((pl) => pl.id === p.id)?.species === p.species, `${p.name} plays the ${p.species} picked in the lobby`);
   console.log(`✓ lobby: Brix, Lena and Ossa at table ${code}, playing ${phones.map((p) => p.species).join(', ')}`);
 
-  // Month 1: through the election and planning, the land grant, a MULE for Lena, the goods auction, the month end.
+  // Month 1: through the election and planning, the land grant, development on its clock, the goods auction, the month end.
   await everyone(phones, (p) => readyThroughTheElection(p.page, within(ELECTION_WAIT_MS) + PRESS_MS));
   await everyone(phones, (p) => claimPlots(p.page));
   for (const p of phones) check(truth.plotsOf(p.id).length > 0, `month 1: ${p.name} owns a plot after the land grant`);
   console.log(`✓ month 1: everyone claimed land (${phones.map((p) => `${p.name} ${truth.plotsOf(p.id).length}`).join(', ')})`);
   await throughTheLandAuction(phones, truth, null);
-  await Promise.all([buyAndInstallAMule(phones.find((p) => p.name === 'Lena')!, truth), goToThePub(brix), goToThePub(ossa)]);
-  const lenaId = truth.seatOf('Lena');
-  check(truth.plotsOf(lenaId).some((t) => t.outfit === 'energy'), `month 1: Lena's plot has the Energy MULE she installed, ${JSON.stringify(truth.plotsOf(lenaId).map((t) => t.outfit))}`);
-  console.log(`✓ month 1: Lena bought a MULE, outfitted it for Energy and installed it on her plot`);
+  // Walking is on, so development is the arcade screen, and this game's promise is not the errand (walking it is
+  // store-steps.ts's B-AC-1, at the speed steering needs). Each phone's first MULE goes in through the server, Lena's
+  // for Energy, so month 1's clock, which waits for every first MULE, starts and runs out the turn.
+  await brix.locator('[data-phase=development]').waitFor({ timeout: within(LOTS.resultMs) + PRESS_MS * 5 });
+  firstMulesThroughTheServer(server, code, phones.map((p) => ({ seat: p.id, outfit: p.name === 'Lena' ? ('energy' as const) : ('food' as const) })));
+  await brix.locator('[data-phase=auction]').waitFor({ timeout: within(2 * PHASE_MS.development + PHASE_MS.production) });
   await everyone(phones, (p) => pressDoneThroughTheAuction(p.page, truth));
   await everyone(phones, (p) => p.page.locator('[data-phase=upkeep]').getByTestId('ready').click({ timeout: MONTH_END_MS }));
 
@@ -103,7 +105,7 @@ try {
   check(price >= listed.minimum, `month 2: Ossa paid at least the minimum ${listed.minimum}: ${before[buyer.id]} → ${after[buyer.id]}`);
   check(after[seller.id] === before[seller.id]! + proceeds, `month 2: Brix got ${proceeds} for ${price} after ${tax * 100}% tax: ${before[seller.id]} → ${after[seller.id]}`);
   console.log(`✓ month 2: Ossa bought Brix's plot at the bell for ${price}; Ossa −${price}, Brix +${proceeds}`);
-  await everyone(phones, (p) => goToThePub(p.page));
+  // Month 2's clock runs from the start, and ends every turn.
   await everyone(phones, (p) => pressDoneThroughTheAuction(p.page, truth));
 
   // Game over: every screen shows each seat's final score as the server has it, best first.
@@ -300,32 +302,6 @@ async function bidUntilLeading(buyer: Phone, truth: Truth, listing: { id: string
     await page.mouse.up();
   }
   await page.locator('[data-phase=landAuction] [data-testid=done]:not([disabled])').click({ timeout: PRESS_MS }).catch(() => undefined);
-}
-
-/**
- * Development: buys a MULE in the store's corral, outfits it for Energy, walks it out and installs it on the plot.
- * Install here starts a walk to the plot, and the MULE goes in on arrival; a hungry or sick colonist walks slowly, so
- * the wait is development's own clock, read first from the server's plot and then from the phone.
- */
-async function buyAndInstallAMule(phone: Phone, truth: Truth): Promise<void> {
-  const { page } = phone;
-  const dev = page.locator('[data-phase=development]');
-  await dev.waitFor({ timeout: within(LOTS.resultMs) + PRESS_MS * 5 });
-  await page.locator('[data-shop=corral]:not([disabled])').click({ timeout: PRESS_MS * 3 });
-  await page.locator('[data-shop=energy]:not([disabled])').click({ timeout: PRESS_MS });
-  await dev.getByRole('button', { name: 'Walk out to the map' }).click({ timeout: PRESS_MS });
-  await dev.getByRole('button', { name: 'Install here' }).click({ timeout: PRESS_MS });
-  const deadline = Date.now() + within(PHASE_MS.development);
-  while (!truth.plotsOf(phone.id).some((t) => t.outfit === 'energy')) {
-    check(Date.now() < deadline, `${phone.name}'s Install here puts the MULE on her plot within development`);
-    await new Promise((r) => setTimeout(r, 100));
-  }
-  await dev.getByText(/Your MULE here makes/).waitFor({ timeout: Math.max(PRESS_MS, deadline - Date.now()) });
-  await goToThePub(page);
-}
-
-async function goToThePub(page: Page): Promise<void> {
-  await page.locator('[data-phase=development]').getByRole('button', { name: 'Go to the pub and end your turn' }).click({ timeout: within(LOTS.resultMs) + PRESS_MS * 5 });
 }
 
 /**

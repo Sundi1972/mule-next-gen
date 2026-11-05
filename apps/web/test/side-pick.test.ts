@@ -93,9 +93,9 @@ describe("A-7's Move on confirm (review F3)", () => {
     expect(text).toContain('The others start on the side shown; the walk starts.');
   });
 
-  it('with nobody away, the sides are the ones the numbers give, and the walk starts for everyone', () => {
+  it('with nobody away and nobody switched, everyone starts as a buyer, and the walk starts for everyone', () => {
     const text = confirmFor(toSidePick().viewFor('s1'), []);
-    expect(text).toContain('That is the side the numbers give; the walk starts for everyone.');
+    expect(text).toContain('Everyone starts as a buyer; the walk starts for everyone.');
   });
 });
 

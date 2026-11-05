@@ -1,8 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   advancePhase,
+  boxOf,
   createGame,
   createRng,
+  doorOutside,
+  floorConfig,
+  HALL,
   list,
   LOTS,
   MULE,
@@ -10,20 +14,24 @@ import {
   lotLeader,
   mulePriceFor,
   observe,
+  pathTo,
   RuleError,
   setLotWalk,
   stepLandAuction,
   WALK,
   type AiPersonaId,
   type GameState,
+  type HallDoor,
+  type HallPlace,
   type Listing,
   type LotResult,
+  type Outfit,
   type Tile,
 } from '@mule/engine';
 import { AiSeat, Brain, cashReserve, LotHand, muleValue, overtakeTarget, plotRoom, plotValue, type Act, type Mind } from '@mule/ai';
 import type { MuleView } from '@mule/protocol';
 import { GRANT_TICK_MS, MuleGame } from '../src/mule-game.js';
-import { fakeContext, tapThere } from './fake-context.js';
+import { fakeContext, pressAct, steerTo, type SteerPoint } from './fake-context.js';
 
 const SELLER = 'h';
 const AIS: { id: string; name: string; persona: AiPersonaId }[] = [
@@ -364,13 +372,101 @@ describe('AI seats at the land auction', () => {
 const TABLE = [{ id: SELLER, name: 'Brix', isAi: false, color: 0 }, ...AIS.map(({ id, name }, i) => ({ id, name, isAi: true, color: i + 1 }))];
 type Plot = { x: number; y: number };
 
+// --- Steered development, walked as dev-steer.test.ts walks it: steerTo and pressAct, nothing tapped. ---
+
+/** A steered development as these tests drive it: the game, its fake clock, and its engine state for the map's routes. */
+type Floor = { game: MuleGame; advance: (ms: number) => void; state: GameState };
+
+/** Where a seat's colonist stands, as the TV reads it. */
+function standing(g: Floor, seat: string): SteerPoint {
+  const c = g.game.viewFor(null).players.find((p) => p.id === seat)!.colonist!;
+  return { space: c.space!, x: c.x!, y: c.y! };
+}
+
+/** The one button, once its words say `verb`: pressed as a phone presses it. */
+function press(g: Floor, seat: string, verb: string): void {
+  expect(g.game.viewFor(seat).me?.reach?.verb, `${seat}'s button`).toMatch(verb);
+  pressAct(g.game, g, seat);
+}
+
+/** In the hall: onto the walkway, along it, and into `place` (a door's own spot, else the middle of its room). */
+function hallTo(g: Floor, seat: string, place: HallPlace): void {
+  const walkway = HALL.floor[0]!;
+  const y = (walkway.y0 + walkway.y1) / 2;
+  const box = boxOf(place);
+  const to = place === 'doorL' || place === 'doorR' ? HALL.spots[place] : { x: (box.x0 + box.x1) / 2, y: (box.y0 + box.y1) / 2 };
+  const at = standing(g, seat);
+  steerTo(g.game, g, seat, [{ space: 'hall', x: at.x, y }, { space: 'hall', x: to.x, y }, { space: 'hall', ...to }]);
+}
+
+/** On the map: by the engine's quickest route (pathTo, the AI's own), tile centre by tile centre, to `to`. */
+function mapTo(g: Floor, seat: string, to: Plot, within?: number): void {
+  const path = pathTo(g.state, standing(g, seat), to, floorConfig());
+  if (!path) throw new Error(`no route for ${seat} to (${to.x}, ${to.y})`);
+  const turns = path.tiles.slice(1, -1).map((t): SteerPoint => ({ space: 'map', x: Math.floor(t.x) + 0.5, y: Math.floor(t.y) + 0.5 }));
+  steerTo(g.game, g, seat, [...turns, { space: 'map', ...to }], within === undefined ? {} : { within });
+}
+
+/**
+ * Where a colonist stands to work plot `p`: its middle, or for a lake plot a point on a land tile beside it, a quarter
+ * tile from the water, inside the shore's reach (DEV_STEER.shoreReachTiles). Null for a lake plot with no land beside it.
+ */
+function shoreOf(g: Floor, p: Plot): Plot | null {
+  const { width, height, tiles } = g.state;
+  if (tiles[p.y * width + p.x]!.terrain !== 'lake') return { x: p.x + 0.5, y: p.y + 0.5 };
+  for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+    const [x, y] = [p.x + dx, p.y + dy];
+    if (x < 0 || y < 0 || x >= width || y >= height || ['lake', 'store'].includes(tiles[y * width + x]!.terrain)) continue;
+    return { x: p.x + 0.5 + dx * 0.75, y: p.y + 0.5 + dy * 0.75 };
+  }
+  return null;
+}
+
+/** The store door on a point's side of the store. */
+const doorFor = (g: Floor, at: Plot): HallDoor => (at.x < g.state.tiles.find((t) => t.terrain === 'store')!.x ? 'doorL' : 'doorR');
+
+/** Into the store from wherever on the map the colonist stands: to the nearer door's mouth, and ENTER STORE. */
+function goIn(g: Floor, seat: string): void {
+  const at = standing(g, seat);
+  if (at.space === 'hall') return;
+  mapTo(g, seat, doorOutside(g.state, doorFor(g, at), floorConfig()), 0.1);
+  press(g, seat, 'ENTER STORE');
+}
+
+/** BUY MULE at the corral and OUTFIT at `outfit`'s shopfront; the colonist stays in the hall. */
+function buyAndOutfit(g: Floor, seat: string, outfit: Outfit): void {
+  goIn(g, seat);
+  hallTo(g, seat, 'corral');
+  press(g, seat, 'BUY MULE');
+  hallTo(g, seat, outfit);
+  press(g, seat, 'OUTFIT');
+}
+
+/** Out by the door on the plot's side with the MULE on its lead, to where the plot is worked, and INSTALL. */
+function installOn(g: Floor, seat: string, plot: Plot): void {
+  if (standing(g, seat).space === 'hall') {
+    hallTo(g, seat, doorFor(g, plot));
+    press(g, seat, 'LEAVE');
+  }
+  mapTo(g, seat, shoreOf(g, plot)!);
+  press(g, seat, 'INSTALL');
+}
+
+/** In by the nearer door, to the pub, and PUB · END TURN. */
+function toThePub(g: Floor, seat: string): void {
+  goIn(g, seat);
+  hallTo(g, seat, 'pub');
+  press(g, seat, 'PUB · END TURN');
+}
+
 /**
  * Plays month 1 through the moves Brix's phone sends, the AI seats playing
- * themselves: Brix claims the first two plots that light up and fits a Food
- * MULE to the first, then goes to the pub and stays Done in the auction.
- * The game stops in month 2's planning.
+ * themselves: Brix takes the first two plots that light up (the first given
+ * by the test, since a grant gives one claim a seat; the second claimed) and fits a Food
+ * MULE to the first, his colonist steered there, then walks to the pub and
+ * stays Done in the auction. The game stops in month 2's planning.
  */
-function toMonth2Planning(game: MuleGame, fake: Parameters<typeof tapThere>[1]): Plot[] {
+function toMonth2Planning(game: MuleGame, fake: { advance: (ms: number) => void }): Plot[] {
   const { advance } = fake;
   const phase = () => game.viewFor(null).phase;
   game.handle(SELLER, { type: 'ready' });
@@ -378,17 +474,22 @@ function toMonth2Planning(game: MuleGame, fake: Parameters<typeof tapThere>[1]):
   while (phase() === 'landGrant') {
     const lit = game.viewFor(SELLER).lit;
     if (lit && plots.length < 2) {
-      game.handle(SELLER, { type: 'claim', x: lit.x, y: lit.y });
+      if (plots.length === 0) (game as unknown as { state: GameState }).state.tiles.find((t) => t.x === lit.x && t.y === lit.y)!.owner = SELLER;
+      else game.handle(SELLER, { type: 'claim', x: lit.x, y: lit.y });
       plots.push(lit);
     }
     if (phase() === 'landGrant') advance(GRANT_TICK_MS);
   }
   expect(plots).toHaveLength(2);
   expect(phase()).toBe('development');
-  tapThere(game, fake, SELLER, { type: 'buyMule' });
-  tapThere(game, fake, SELLER, { type: 'outfit', outfit: 'food' });
-  tapThere(game, fake, SELLER, { type: 'install', ...plots[0]! });
-  game.handle(SELLER, { type: 'pub' });
+  const g = { game, advance, state: (game as unknown as { state: GameState }).state };
+  // A steered colonist installs where it stands, on the plot or on a lake plot's shore: the plot his MULE can go on
+  // is listed first, as his first plot.
+  const [mulePlot] = plots.splice(plots.findIndex((p) => shoreOf(g, p) !== null), 1);
+  plots.unshift(mulePlot!);
+  buyAndOutfit(g, SELLER, 'food');
+  installOn(g, SELLER, mulePlot!);
+  toThePub(g, SELLER);
   for (let i = 0; i < 1_000 && phase() !== 'auction'; i++) advance(1_000);
   for (let i = 0; i < 10_000 && phase() === 'auction'; i++) {
     game.handle(SELLER, { type: 'ready' });
@@ -432,7 +533,7 @@ describe('AI seats at the land auction, on the server', () => {
     const { ctx, advance } = fakeContext();
     const game = new MuleGame(ctx, 5);
     game.start(TABLE);
-    const plots = toMonth2Planning(game, { ctx, advance });
+    const plots = toMonth2Planning(game, { advance });
     game.handle(SELLER, { type: 'list', item: { kind: 'plot', ...plots[1]! }, minimum: PLOT_MIN, unsold: 'keep' });
     game.handle(SELLER, { type: 'list', item: { kind: 'mule', ...plots[0]! }, minimum: MULE_LOT_MIN, unsold: 'keep' });
     game.handle(SELLER, { type: 'ready' });
@@ -487,5 +588,7 @@ describe('AI seats at the land auction, on the server', () => {
       expect(s.price).toBeLessThanOrEqual(w.limit);
     }
     for (const id of new Set(sold.map((s) => s.buyer))) expect(paid(before, id) - paid(after, id)).toBe(sold.filter((s) => s.buyer === id).reduce((n, s) => n + s.price, 0));
-  });
+    // It plays month 1 at the arcade's 20 Hz tick on the fake clock: about a second alone, but CI's parallel check job
+    // ran it past 5 s.
+  }, 30_000);
 });
