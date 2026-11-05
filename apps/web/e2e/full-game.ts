@@ -150,9 +150,8 @@ async function printEvidence(): Promise<void> {
   const game = room?.viewFor(null).game;
   console.error(`server: ${game ? `month ${game.month}, ${game.phase}, land auction ${game.landAuction?.stage ?? '-'} ${game.landAuction?.lot.id ?? ''}` : 'no game'}`);
   if (game) {
-    // Where each colonist stands or walks on the server (at, walk, assayUntil), and the news, where a refusal on
-    // arrival lands ("<name> reached the plot: <reason>").
-    for (const p of game.players) console.error(`server ${p.id} ${p.name}: colonist ${JSON.stringify(p.colonist && { at: p.colonist.at, walk: p.colonist.walk, assayUntil: p.colonist.assayUntil })}`);
+    // Where each colonist stands on the server (at, space, x, y, assayUntil), and the news.
+    for (const p of game.players) console.error(`server ${p.id} ${p.name}: colonist ${JSON.stringify(p.colonist && { at: p.colonist.at, space: p.colonist.space, x: p.colonist.x, y: p.colonist.y, assayUntil: p.colonist.assayUntil })}`);
     console.error(`server news: ${game.news.slice(-6).join(' | ')}`);
   }
   console.error(`server got: ${handled.slice(-24).join(' | ') || 'nothing'}`);

@@ -148,7 +148,7 @@ const FLOOR_STARTS_MS = 15_000;
 /**
  * People's phones join a game on a server that steers its development (the first hosts), a TV watches unless `tv` is
  * false, and each claims a plot and is done with land; returns once the floor ticks. `server` must be started with
- * devSteer and phaseScale 1, so frames come at the tick's own 20 Hz and a stride never overshoots a reach.
+ * phaseScale 1, so frames come at the tick's own 20 Hz and a stride never overshoots a reach.
  */
 export async function arcadeTable(
   browser: Browser,
