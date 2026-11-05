@@ -134,6 +134,18 @@ describe('the sim adopts edited playbooks through the seat’s gate (C14, B-AC-6
     expect(edited.game.outcomes.find((o) => o.seat === 'ai0' && o.month === 1 && o.phase === 'auction')!.items.find((i) => i.path === `/auction/${out}/role`)).toMatchObject({ expected: 'out', actual: 'out' });
     // No edits, nothing adopted: the game is the one played without the hook.
     expect(play(specs, { edits: () => null }).print).toBe(base.print);
+    // A 'today' seat plays no playbook: the hook that edits ai0's auction is never asked of it, and its game is unchanged.
+    const today = withPlays('today');
+    const asked: string[] = [];
+    const hooked = play(today, {
+      edits: (seat, draft) => {
+        asked.push(`${seat.id}/${draft.month}/${draft.phase}`);
+        const good = (Object.keys(draft.auction ?? {}) as Good[])[0];
+        return seat.id === 'ai0' && good ? [{ path: `/auction/${good}/role`, to: 'out', reason: 'Sit this one out.' }] : null;
+      },
+    });
+    expect(asked).toEqual([]);
+    expect(hooked.print).toBe(play(today).print);
   });
 });
 

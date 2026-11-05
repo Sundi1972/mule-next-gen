@@ -691,7 +691,14 @@ describe('the seat plays its development and auction parts (C4, RULE-6, RULE-7)'
     const t = playTable();
     seam.throwing = null;
     for (const id of SPECS.map((_, i) => `ai${i}`)) for (let m = 1; m <= MONTHS; m++) expect(writesOf(t, id, m, 'auction'), key(id, m)).toHaveLength(1);
-    expect(logged.mock.calls.some((c) => c.join(' ').includes('draft broke'))).toBe(true);
+    const failed = logged.mock.calls.flatMap((c) => [...c.join(' ').matchAll(/^AI seat (ai\d): no auction playbook for month (\d+), .*draft broke$/g)].map((x) => ({ id: x[1]!, m: Number(x[2]) })));
+    expect(failed.length).toBeGreaterThan(0);
+    // Its auction outcome is read against the goods its part played, the first, not the stale parts of the goods after.
+    for (const { id, m } of failed) {
+      const first = Object.keys(writesOf(t, id, m, 'auction')[0]!.auction!)[0];
+      const goods = new Set(t.outcomes.get(key(id, m, 'auction'))!.items.map((i) => i.path.split('/')[2]));
+      expect([...goods], key(id, m)).toEqual([first]);
+    }
     logged.mockRestore();
   });
 });
