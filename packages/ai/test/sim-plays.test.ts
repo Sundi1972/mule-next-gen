@@ -22,10 +22,10 @@ const SEED = 3;
 const MONTHS = 2;
 
 /**
- * Seed 4's fourth month is the first in which a seat runs short of cash, so it lists in planning and sells at the land
- * auction. Re-picked 5 Nov for WS1's shortfall rule: it was the third month before seats bought what keeps them whole.
+ * Seed 4's fifth month is the first in which a seat runs short of cash, so it lists in planning and sells at the land
+ * auction. Re-picked 6 Nov for WS1's shortfall rule: it was the third month before seats bought what keeps them whole.
  */
-const [LISTS, LIST_MONTHS] = [4, 4];
+const [LISTS, LIST_MONTHS] = [4, 5];
 /** With every seat on its playbook, seed 4's first sale by a seat is at the fourth month's land auction. */
 const SELL_MONTHS = 4;
 
