@@ -103,11 +103,12 @@ PR-1 and PR-2 run one after the other (one wave each); the tasks inside PR-1 are
 `packages/engine/src/types.ts` (`Store`), `packages/engine/src/auction.ts::comeUp` (calls `storeQuotes`).
 Test: `packages/ai/test/store-quotes-contract.test.ts` (new).
 
-- [ ] **Step 1: Write the failing test `T-AC-2: outlook's next-month price is what postPrices posts`**
-  Altitude: contract (the AI's view against the store's). Observed at: `outlook(...).price(g)` against
-  `store.posted[g]` after the next `postPrices`, every good, 20 seeded games (spec §6 T-AC-2). Also asserts
+- [ ] **Step 1: Write the failing test `T-AC-2: at upkeep, outlook's next-month price is the store's own rule on its stage`**
+  Altitude: contract (the AI's view against the store's rule). Observed at: sampled at upkeep (every walk done),
+  `outlook(...).price(g)` against `nextPostedPrice(stage, g)`, and the stage's `store.lastWalk` against the state's,
+  every good, 20 seeded games (spec §6 T-AC-2 as amended, AM-3). Do NOT compare to the next posted price. Also asserts
   `expectedOffWorld(state, g, k)` equals `store.offWorld[g]` while off-world prices don't move yet (PR-2 changes this).
-  Trap: compare after the same month's shortages are on the report, or the test passes for the wrong reason.
+  Trap: sample at upkeep, not during the auction: a later good's walk writes lastWalk after an earlier sample.
   Also pins §3's null semantics: `sell` is null exactly when `storeForSale` is 0, `buy` exactly when `storeWants` is 0.
 - [ ] **Step 2: Run it, expect FAIL (`expectedOffWorld` is not exported)** —
   `pnpm --filter @mule/ai exec vitest run test/store-quotes-contract.test.ts` → FAIL.
@@ -144,7 +145,7 @@ price), `packages/ai/src/outlook.ts::rollForward`, `packages/ai/src/strategist.t
   Rewrite T-AC-13 (the restock-premium test) to the lean: the same promise, that the store bids up for a short
   Food shelf, still under the colonists' cap.
 - [ ] **Step 2: Run** `pnpm --filter @mule/engine exec vitest run test/store.test.ts` → FAIL.
-- [ ] **Step 3: Implement C2 (RULE-2), C6 and C7's PRICE values** per spec; remove `PRICE.storeSpread` and `restockPremium` from config
+- [ ] **Step 3: Implement C2 (RULE-2), C6 and C7's PRICE values** per spec (C6: energyPerNewMule averages only the outfits that draw from the stock, plants excluded; no Water term, that follows AM-18 in WS1's work); remove `PRICE.storeSpread` and `restockPremium` from config
   once nothing reads them (the HC-3 scan proves it). Every number is a PRICE value with a one-line comment (HC-2).
 - [ ] **Step 4: Run** engine + ai tests → PASS.
 - [ ] **Step 5: Commit** `feat(engine): the store leans on its stock and quotes a wider spread (verifies B-AC-4)`.
@@ -181,7 +182,7 @@ Test: `packages/engine/test/auction.test.ts`.
 **Depends on:** 1.5 · **ACs verified:** T-AC-4, UBER-AC-1, UBER-AC-2 · **Spec:** §6 T-AC-4, §7
 **Files:** Modify `packages/ai/src/sim.ts` (report lines: between-player share of Food/Water/Energy units, quoted
 spread p50, sold-out-floor and glut-step violations, posted above ceiling; colonists short of Food/Water).
-- [ ] **Step 1: Run the sim before the change on this branch's base** to keep Today's numbers on record:
+- [ ] **Step 1: Run the sim before the change on this branch's base** (trunk as it is then, not spec §0's Today, which predates #386, #393 and AM-18) and keep its numbers on record:
   `pnpm sim -- --games 200 --players 4` → paste the report into the PR body.
 - [ ] **Step 2: Add the report lines; run** `pnpm sim -- --games 200 --players 4` on PR-1's head → expect: 0
   floor/cap/ceiling violations (UBER-AC-1), quoted spread > 20% every good-month and between-player Food share
@@ -240,7 +241,7 @@ opening, where `state.month++`). Test: `packages/engine/test/off-world.test.ts` 
 
 ### Task 2.4 — UBER-AC-3 by sim, and the rulebook
 **Depends on:** 2.1–2.3 · **ACs verified:** B-AC-5, UBER-AC-3
-- [ ] **Step 1:** Add the sim report line (off-world Crystite median, share above 200, ≥ 280, ≤ 50; MULE price
+- [ ] **Step 1:** Run the sim on PR-2's base first (trunk then, not spec §0's numbers), then add the sim report line (off-world Crystite median, share above 200, ≥ 280, ≤ 50; MULE price
   p50/p90/max) and run `pnpm sim -- --games 200 --players 4` → median 85–95, never outside 40–300, above 200 under
   5%, ≥ 280 under 1%, ≤ 50 under 5%. Paste into the PR body.
 - [ ] **Step 2:** Rulebook: Crystite's and the export goods' ship prices, the MULE cap; `node docs/rulebook/build-index.mjs`.

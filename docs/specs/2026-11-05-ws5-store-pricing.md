@@ -8,6 +8,8 @@ Measured Today: trunk 43af74d2, the sim's own seats and loop (`simSeats` at trad
 200 games at 4 seats, 100 at 2 and at 6 (MULE: 100 / 50 / 50). Raw output and scripts: WS5's
 `.handover/ws5-findings/store-pricing-today.txt`, `store2.mts`, `report2.py`, `mule.mts`.
 Numbers are 4 seats unless marked.
+The Today numbers predate #386, #393 and AM-18: every sim check in the plan compares against trunk at the time
+it runs (the plan's first sim step records that base), never against these numbers.
 
 Heiko's words, the provenance of every goal:
 1. "we need to think about how the store sets its selling and buying prices based on this. also this needs to be a
@@ -215,8 +217,10 @@ depends_on   rule E (WS3's amendment E) for the "buyers walk past a sold-out sto
 ```
 today        storeWants(energy) fills to PRICE.storeMaxCover × demand.energy, where demand counts installed plots'
              use (playersUse) and colonists' share. verified_by: read; Energy sold out at come-up 26%, mid-walk 19%
-tomorrow     the Energy target adds newLandMules(players) × the mean energyUse of a MULE (config
-             PRICE.energyPerNewMule), so the lean (C2) pulls Energy in before the new MULEs need it.
+tomorrow     the Energy target adds newLandMules(players) × PRICE.energyPerNewMule, the mean energyUse of a new MULE
+             over the outfits that draw Energy from the stock: plants are excluded, because under AM-17 ruling A a
+             plant's own use is not demand on the stock. The lean (C2) then pulls Energy in before the new MULEs need
+             it. Water: the same new-MULE term follows AM-18 (WS1 adds it there, not this spec).
 logic        → §2 RULE-2 (target shelf)
 seam         packages/engine/src/economy.ts::monthlyDemand's energy line (the one demand every store function reads)
 senior       junior would: give the store free Energy each month · senior does: raise the target and let the
@@ -309,7 +313,7 @@ rewritten in PR-2 with its status pill, and `node docs/rulebook/build-index.mjs`
 | B-AC-5 | Given 200 sim games × 12 months | When the off-world Crystite price is read each month | Then the median is 85–95, it never leaves 40–300, above 200 in under 5%, ≥ 280 under 1%, ≤ 50 under 5%; the other export goods stay within ±50% of their reference. → C3 |
 | B-AC-6 | Given the corral sold out several months running | When the MULE price is posted | Then the factor is at most 2.0 and Smithore's price at most its ceiling. → C4 |
 | T-AC-1 (serves B-AC-5) | the same seed gives the same off-world path; a game with the walk and one without draw every other random number identically (events, map, AI). → C3, HC-1 |
-| T-AC-2 (serves all) | `outlook.ts`'s price for next month equals what `postPrices` then posts, for every good, in a 20-game sim. observed_at: outlook.price vs store.posted. → C1, HC-3 |
+| T-AC-2 (serves all) | Sampled at upkeep, once every good's walk has finished this month (so `store.lastWalk` is complete): for every good, `outlook.ts`'s next-month price equals `nextPostedPrice` on outlook's own rolled-forward stage, and that stage carries the real state's `store.lastWalk`, so the AI's forecast applies the same floors, caps and ceiling as the store. Over 20 seeded games. observed_at: outlook.price(g) vs nextPostedPrice(stage, g), and stage.store.lastWalk vs state.store.lastWalk. Not asserted: equality with the posted price itself, because production between upkeep and the next auction can differ from the outlook's roll. → C1, HC-3 |
 | T-AC-3 (serves B-AC-1) | a unit traded between players before the store's shelf emptied never sets soldOutHigh. → C5 |
 | T-AC-4 (serves UBER-AC-2) | `pnpm sim` (4 seats, 200 games) reports the between-player share of Food/Water/Energy units and the quoted spread; both above Today's. → C2, C7 |
 Invariant (every test above): `storeQuotes` buy < sell whenever both are non-null.
@@ -338,6 +342,18 @@ did       dryBudget = budget > 0 at come-up and 0 at finish; postPrices sets las
 because   WS3's three line changes: each makes the seam exact for the code that writes it
 goal      G-1 (the glut cap reads dryBudget), G-3 (the walk's seed) unchanged
 folded    C3, C5, §3; plan Tasks 1.4, 1.5, 2.1
+```
+```
+AM-3 · 2026-11-05 · lead (WS5) · WS1's read of #390
+target    §6 T-AC-2; §1 C6; the header's Today note
+said      T-AC-2: outlook's price equals what postPrices posts, every good; C6: the mean energyUse of a MULE
+did       T-AC-2 sampled at upkeep (all walks done), asserting outlook = nextPostedPrice on its stage and that the
+          stage carries lastWalk; C6 averages only over stock-drawing outfits (plants out, AM-17 ruling A), Water
+          follows AM-18; sim checks compare against trunk at run time
+because   RULE-1 reads lastWalk, which later goods' walks write this month, so the old T-AC-2 could not hold;
+          a plant's own Energy is not stock demand
+goal      G-1 unchanged (the AI and the store apply one rule, HC-3)
+folded    §6 T-AC-2, §1 C6, header; plan Tasks 1.1, 1.3, 1.6, 2.4
 ```
 
 ## §9 · Ownership Boundaries `[handoff]`
