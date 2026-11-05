@@ -227,6 +227,11 @@ export interface PlayOptions {
   deciderFor?: (seatId: string, spec: SeatSpec, index: number) => Decider | null;
   /** Awaited by playGameAsync at every tick step and at least once at the end of every phase; playGame ignores it. */
   between?: () => Promise<void> | void;
+  /**
+   * Handed the game's seats once, before the first phase: for the trial, which asks Smart seats for their playbooks
+   * and has them adopt one (spec A C4). A hook that only looks changes no play.
+   */
+  onSeats?: (seats: readonly AiSeat[], state: GameState) => void;
 }
 
 /** Plays one game to the end; the same game, step for step, as playGameAsync without hooks. */
@@ -270,6 +275,7 @@ function* playSteps(seed: number, specs: SeatSpec[], options: PlayOptions): Gene
         },
       }),
   );
+  options.onSeats?.(seats, state);
   const tally = newTally();
   yield* playPhases(state, seats, options, tally, () => false);
   const { broke, auction, lots, mulesLost, turns, month1, moments } = tally;

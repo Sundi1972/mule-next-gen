@@ -303,6 +303,26 @@ describe.runIf(process.env.MULE_FULL === '1')('brain:trial', () => {
   );
 
   it(
+    'FM-auth: with --playbooks 1, a 401 on the first write stops brain:trial at once with exit 2, and nothing more is called',
+    async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      let calls = 0;
+      sdk.create = () => {
+        calls++;
+        return Promise.reject(new Anthropic.AuthenticationError(401, { type: 'error', error: { message: 'x' } }, 'x', new Headers()));
+      };
+      const { out, result } = run(['--games', '3', '--smart', '1', '--playbooks', '1', '--max-usd', '1']);
+      const { code, report } = await result;
+      expect(code).toBe(2);
+      // The one Smart seat's month 1 write is the game's first call; nothing is called after it.
+      expect(calls).toBe(1);
+      expect(report).toMatchObject({ played: 1, stopped: 'auth' });
+      expect(out.at(-1)).toBe('Stopped: the API refused the credentials (401/403). Nothing more was called.');
+    },
+    GAMES_MS,
+  );
+
+  it(
     'INV-finish (trial): a game that throws with model calls still open is closed only after they settle, so its game line counts them, and the run reports it as a stall and not proven',
     async () => {
       let open = 0;
@@ -369,6 +389,30 @@ describe.runIf(process.env.MULE_FULL === '1')('brain:trial', () => {
       expect(out.at(-1)).toMatch(
         new RegExp(`^Stopped: the ledger .*trial-2026-10-22\\.jsonl has ${calls - 1} of ${calls} call lines for game trial-2026-10-22-101-0; a write failed, so spend cannot be checked\\.$`),
       );
+    },
+    GAMES_MS,
+  );
+
+  it(
+    "FM-ledger-write: with --playbooks 1 the write lines never cover for a decider's lost line: the run still stops after that game",
+    async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      let moves = 0;
+      sdk.create = (params) => {
+        const user = (params.messages[0]?.content ?? '') as string;
+        if (user.includes('What you may change:')) return Promise.resolve(sdkMessage(JSON.stringify({ edits: [], line: '' }), BILLED));
+        moves++;
+        // Only the first move call's line is lost: the file is read-only while that unreadable reply settles.
+        if (moves === 1) {
+          fs.chmodSync(file, 0o444);
+          return Promise.resolve(sdkMessage('not json at all', BILLED));
+        }
+        if (moves === 2) fs.chmodSync(file, 0o644);
+        return Promise.resolve(sdkMessage(USABLE, BILLED));
+      };
+      const { code, report } = await run(['--games', '2', '--smart', '1', '--playbooks', '1', '--max-usd', '1']).result;
+      expect(code).toBe(1);
+      expect(report).toMatchObject({ played: 1, stopped: 'ledger' });
     },
     GAMES_MS,
   );
@@ -487,6 +531,7 @@ describe.runIf(process.env.MULE_FULL === '1')('brain:trial', () => {
       cutOff: [],
       countedUsd: 0.9999,
       settledCalls: 2,
+      playbooks: [],
       ...over,
     });
     const call = (usd: number, seat = 'ai0', g = 'g') => ({ game: g, seat, usd, outcome: 'llm' }) as TrialInput['calls'][number];
@@ -500,6 +545,7 @@ describe.runIf(process.env.MULE_FULL === '1')('brain:trial', () => {
       gameBudgetUsd: 1,
       games: [game()],
       calls: [call(0.5), call(0.4999, 'ai1')],
+      playbooks: false,
       ...over,
     });
     const verdicts = (i: TrialInput) => {
@@ -547,4 +593,86 @@ describe.runIf(process.env.MULE_FULL === '1')('brain:trial', () => {
     expect(printed).toContainEqual(expect.stringMatching(/^ledger \$ per game, Smart seats together\s+max \$0\.99990, at or over the game budget \$1\.00: 0 of 1$/));
     expect(printed).toContain('UBER-AC-2 PASS: at most $0.99990 per game for all Smart seats together (needs under the game budget $1.00), 0 stalls (needs 0)');
   });
+
+  it("T-AC-A4 (report): rows for the strategy and playbook calls, the edit share of the playbooks that took effect, late writes, tool rounds per call, and the edit verdict at 80%", () => {
+    const took = (llm: number, of: number) => Array.from({ length: of }, (_, i) => ({ seat: i % 2 ? 'ai1' : 'ai0', month: 1 + Math.floor(i / 2), by: i < llm ? ('llm' as const) : ('engine' as const) }));
+    const game = (over: Partial<TrialGame> = {}): TrialGame => ({
+      id: 'g',
+      end: 'over',
+      months: 5,
+      smart: ['ai0', 'ai1'],
+      decisions: [],
+      lines: { ai0: [1, 1, 1, 1, 1], ai1: [1, 1, 1, 1, 1] },
+      modelLines: { ai0: [1, 1, 1, 1, 1], ai1: [1, 1, 1, 1, 1] },
+      cutOff: [],
+      countedUsd: 0.3,
+      settledCalls: 0,
+      playbooks: took(8, 10),
+      ...over,
+    });
+    const line = (kind: string, outcome: string, usd = 0.01, seat = 'ai0') => ({ game: 'g', seat, usd, outcome, kind }) as TrialInput['calls'][number];
+    const calls = [
+      line('strategy', 'tool'),
+      line('strategy', 'tool'),
+      line('strategy', 'llm'),
+      line('strategy', 'late', 0, 'ai1'),
+      line('strategy', 'llm', 0.02, 'ai1'),
+      line('land', 'llm'),
+      // A write its seat's budget refused: never made, so no call.
+      line('strategy', 'budget', 0, 'ai1'),
+    ];
+    const input = (over: Partial<TrialInput> = {}): TrialInput => ({ keyed: true, planned: 1, stopped: 'done', smartPerGame: 2, seatsPerGame: 4, cap: 2, gameBudgetUsd: 1, games: [game()], calls, playbooks: true, ...over });
+
+    const r = trialReport(input());
+    // A late reply's call line and its 'late' line are one call; tool rounds and the budget line are none.
+    expect(r.writes).toMatchObject({ calls: 2, late: 1, toolRounds: 2 });
+    expect(r.writes.usd).toBeCloseTo(0.05, 10);
+    expect(r.edits).toEqual({ model: 8, of: 10 });
+    expect(r.acEdits).toBe('pass');
+    expect(trialReport(input({ games: [game({ playbooks: took(7, 10) })] })).acEdits).toBe('fail');
+    expect(trialReport(input({ planned: 2 })).acEdits).toBe('not proven');
+    expect(trialReport(input({ keyed: false, cap: null, calls: [] })).acEdits).toBe('n/a');
+    // A run without --playbooks never tried the clause: n/a, and no rows for it.
+    const off = trialReport(input({ playbooks: false, games: [game({ playbooks: [] })] }));
+    expect(off.acEdits).toBe('n/a');
+    expect(renderTrialReport(off).some((l) => l.includes('UBER-AC-A'))).toBe(false);
+    // Only the playbooks of finished games count, as the decisions do.
+    expect(trialReport(input({ planned: 2, games: [game(), game({ id: 'b', end: 'crashed', playbooks: took(0, 6) })] })).edits).toEqual({ model: 8, of: 10 });
+
+    const printed = renderTrialReport(r);
+    expect(printed).toContainEqual(expect.stringMatching(/^strategy and playbook calls, each waited for\s+2, late 1 \(50\.0%\), tool rounds 1\.00 a call, \$0\.05000$/));
+    expect(printed).toContainEqual(expect.stringMatching(/^playbooks with Claude's edits\s+80\.0% \(8 of 10\)$/));
+    expect(printed).toContain("UBER-AC-A edits PASS: 80.0% (8 of 10) of the playbooks that took effect carry Claude's accepted edits (needs at least 80%)");
+  });
+
+  it(
+    'T-AC-A4 (trial): each Smart seat is asked for its playbook at the start and each upkeep, adopts it at its land grant, and the report counts the playbooks by llm and the strategy calls',
+    async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      const writes: string[] = [];
+      sdk.create = (params) => {
+        const user = (params.messages[0]?.content ?? '') as string;
+        if (user.includes('What you may change:')) {
+          writes.push(/^You are (.+)\. Month (\d+)/m.exec(user)!.slice(1, 3).join(' m'));
+          return Promise.resolve(sdkMessage(JSON.stringify({ edits: [{ path: '/landGrant/claims', to: 1, reason: 'One will do.' }], line: '' }), BILLED));
+        }
+        return Promise.resolve(sdkMessage(USABLE, BILLED));
+      };
+      const { code, report } = await drive(run(['--games', '1', '--seed', '101', '--playbooks', '1', '--max-usd', '2'], KEY).result);
+
+      expect(code).toBe(0);
+      const months = report!.edits.of / 2;
+      expect(months).toBeGreaterThan(1);
+      // Each of the two Smart seats wrote once a month, for month 1 at the start and each next month at its upkeep.
+      for (const seat of ['AI 1', 'AI 2']) expect(writes.filter((w) => w.startsWith(`${seat} m`)).length, seat).toBe(months);
+      // Every write came back in time with an accepted edit, so every playbook that took effect is Claude's.
+      expect(report!.edits).toEqual({ model: months * 2, of: months * 2 });
+      expect(report!.writes.calls).toBe(months * 2);
+      expect(report!.writes.late).toBe(0);
+      const strategyLines = callLines().filter((l) => l.kind === 'strategy');
+      expect(strategyLines).toHaveLength(months * 2);
+    },
+    GAMES_MS,
+  );
 });
+
