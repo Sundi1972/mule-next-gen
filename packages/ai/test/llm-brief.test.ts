@@ -200,13 +200,19 @@ describe('T-AC-A10: the next brief carries what happened: this seat\'s last Phas
     expect(text).not.toContain('p1 secret');
   });
 
-  it('T-AC-A10: the edits the rules refused and the ones the writer refused last time are in the next brief, by path and why', () => {
+  it('T-AC-A10: the edits the rules clamped or refused and the ones the writer refused last time are in the next brief, by path and why, each kind only when there is one', () => {
     const text = brief(OUTCOME, {
       rejected: [{ path: '/landGrant/claims', to: 9, why: 'at most 2' }],
       refused: [{ path: '/landGrant/ranked', cause: 'plan_not_offered' }],
     });
-    expect(text).toContain('Last time the rules refused: /landGrant/claims (at most 2); your reply was refused at /landGrant/ranked (plan_not_offered).');
-    expect(brief(OUTCOME, { rejected: [], refused: [] })).not.toContain('Last time the rules refused');
+    expect(text).toContain('Last time: the rules clamped or refused /landGrant/claims (at most 2); your reply was refused at /landGrant/ranked (plan_not_offered).');
+    // One kind alone names only that kind: never a 'none'.
+    const rulesOnly = brief(OUTCOME, { rejected: [{ path: '/landGrant/claims', to: 9, why: 'at most 2' }], refused: [] });
+    expect(rulesOnly).toContain('Last time: the rules clamped or refused /landGrant/claims (at most 2).');
+    const replyOnly = brief(OUTCOME, { rejected: [], refused: [{ path: null, cause: 'not_json' }] });
+    expect(replyOnly).toContain('Last time: your reply was refused at the reply (not_json).');
+    for (const t of [rulesOnly, replyOnly]) expect(t.split('\n').find((l) => l.startsWith('Last time:'))).not.toMatch(/\bnone\b/);
+    expect(brief(OUTCOME, { rejected: [], refused: [] })).not.toContain('Last time:');
   });
 
   it('T-AC-A10: what happened stays within its BRAIN caps', () => {
