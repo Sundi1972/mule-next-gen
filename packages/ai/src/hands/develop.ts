@@ -33,7 +33,7 @@ import type { Act, AiAction } from '../actions.js';
 import type { Brain, Pending } from '../brain.js';
 import { draftMulePick, keptOutfitEarns } from '../playbook/draft.js';
 import type { DevelopmentLog, DevelopmentStepLog } from '../playbook/outcome.js';
-import { floorDevWalk, leading, mapFactor, planSeconds, plotErrandSeconds, pubDoor, pubMargin, pubSeconds, tileMiddle, tripSeconds, type PlanStop } from '../floor-time.js';
+import { floorDevWalk, installable, leading, mapFactor, planSeconds, plotErrandSeconds, pubDoor, pubMargin, pubSeconds, tileMiddle, tripSeconds, type PlanStop } from '../floor-time.js';
 import { analysesWanted, bestInstall, developDecision, filtersWanted, outfitName, plotName, walkVeto, type DevAction, type DevWalk } from '../strategist.js';
 import { situation } from '../summary.js';
 import { FloorWalker, type FloorView } from './floor-walker.js';
@@ -178,6 +178,8 @@ export class DevelopHand {
   private scrambleRaced = 0;
   /** On the floor, where the tick's input must be pure (HC-4): decisions take the default pick, never the decider. */
   private onFloor = false;
+  /** On the floor, the floor's config, for the plots a led MULE can be installed on. */
+  private floorCfg: FloorConfig | null = null;
   /** This month's route, if the seat handed one in; null plays today's list. */
   private route: RouteRun | null = null;
   /** The route step RULE-9 last let through, so it is judged once, before its tap or walk starts. */
@@ -272,6 +274,7 @@ export class DevelopHand {
     if (state.phase !== 'development') return IDLE_INPUT;
     if (state.month !== this.month) this.reset(state.month);
     this.onFloor = true;
+    this.floorCfg = cfg;
     const me = state.players.find((p) => p.id === mind.me)!;
     if (me.doneDeveloping || this.stage === 'done') return IDLE_INPUT;
     if (secondsLeft <= 0) {
@@ -593,13 +596,19 @@ export class DevelopHand {
     const mind = this.brain.mind;
     if (this.stage === 'start') {
       const obs = observe(state, mind.me);
-      // On the floor, a MULE led into development (one won at the land auction) is installed first: while it is led a
-      // plot's button offers INSTALL, not ANALYSE, so an analysis ahead of it would be refused (FM-led-analyse). Paid for
-      // already, it goes where it gains most, if it earns anything there at all; the analyses follow while the clock fits.
+      // A MULE led into development (one won at the land auction) is installed first: on the floor, while it is led a
+      // plot's button offers INSTALL, not ANALYSE or FIT FILTER, and the corral no BUY (FM-led-analyse); off it, the
+      // corral refuses a seat that leads one. Paid for already, it goes on the idle plot where it gains most, even at no
+      // gain (a factory it can't feed included): on the floor a MULE taken off a plot can be re-outfitted next month
+      // (Reach row 8a), and one led into the pub is lost (FM-led-no-gain). On the floor only a plot with somewhere to stand
+      // for the install counts (a lake plot may have none). The analyses follow while the clock fits.
       const led = state.players.find((p) => p.id === mind.me)!.carriedMule;
-      const target = this.onFloor && led && led !== 'empty' ? bestInstall(obs, mind, led) : null;
-      const install = target && target.gain + target.cost > 0 ? state.tiles[target.index]! : null;
-      if (install) this.push({ type: 'install', x: install.x, y: install.y }, AI_HANDS.develop.installTapMs, `Install the MULE it leads on ${plotName(install)}`, ++this.group);
+      const cfg = this.onFloor ? this.floorCfg : null;
+      const can = cfg ? (index: number) => installable(state, cfg, mind.me, index) : undefined;
+      const target = led && led !== 'empty' ? bestInstall(obs, mind, led, can) : null;
+      const install = target ? state.tiles[target.index]! : null;
+      const tapMs = this.onFloor || this.at !== undefined ? AI_HANDS.develop.installTapMs : AI_HANDS.develop.installMs;
+      if (install) this.push({ type: 'install', x: install.x, y: install.y }, tapMs, `Install the MULE it leads on ${plotName(install)}`, ++this.group);
       for (const index of analysesWanted(obs, mind, secondsLeft)) {
         if (install && index === target!.index) continue;
         const t = state.tiles[index]!;
@@ -718,8 +727,11 @@ export class DevelopHand {
 
   private finish(state: GameState): void {
     const mind = this.brain.mind;
-    const analysed = state.players.find((p) => p.id === mind.me)!.analysed;
-    for (const index of filtersWanted(observe(state, mind.me), mind)) {
+    const { analysed, carriedMule } = state.players.find((p) => p.id === mind.me)!;
+    // On the floor, a seat still leading a MULE (with no idle plot to put it on) is offered INSTALL on every own plot, not
+    // ANALYSE or FIT FILTER: it walks to none of them (FM-led-no-gain).
+    const filters = this.onFloor && carriedMule ? [] : filtersWanted(observe(state, mind.me), mind);
+    for (const index of filters) {
       const t = state.tiles[index]!;
       const g = ++this.group;
       // On the floor an own plot not yet analysed offers ANALYSE before FIT FILTER (RULE-3 rows 10 and 11), so its

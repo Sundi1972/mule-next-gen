@@ -1,4 +1,4 @@
-import type { MuleView, ProductionView } from '@mule/protocol';
+import type { MuleView, ProductionView, TableView } from '@mule/protocol';
 import { useMemo, type ReactNode } from 'react';
 import {
   Creature,
@@ -36,6 +36,7 @@ import {
 } from '@mule/ui';
 import { mapTiles, seatSpecies, slotOf } from '../game/derive';
 import { useServerNow } from '../net/react';
+import { connectedIn } from '../phone/hub/ready';
 import { TvHeader } from './TableApp';
 
 /**
@@ -43,7 +44,9 @@ import { TvHeader } from './TableApp';
  * that names the step (the good being harvested, then Bonuses, then Losses, the month's events, then the flight); and
  * every player's silo along the foot, filling as their goods land.
  */
-export function TvProduction({ game, production }: { game: MuleView; production: ProductionView }) {
+export function TvProduction({ table, game, production }: { table?: TableView<MuleView>; game: MuleView; production: ProductionView }) {
+  // Who is still at the table: a seat the room doesn't list (no table given) counts as connected.
+  const connected = connectedIn(table?.seats ?? []);
   const show: ShowData = production;
   const t = showTime(game.phaseEndsAt, useServerNow(frameMs(production.lengthMs)), production.lengthMs, show);
   const tiles = useMemo(() => mapTiles(game), [game]);
@@ -61,7 +64,7 @@ export function TvProduction({ game, production }: { game: MuleView; production:
             <div className="shrink-0 self-start" style={{ width: `min(800px, calc(100cqh * ${game.width} / ${game.height}))` }}>
               <ProductionMap width={game.width} height={game.height} tiles={tiles} production={show} t={t} slots={slots} players={players} reduced={reduced} mode="tv" tv className="w-full" />
             </div>
-            <Rail game={game} show={show} t={t} />
+            <Rail game={game} show={show} t={t} connected={connected} />
           </div>
           <SiloBar game={game} show={show} t={t} slots={slots} />
         </EventShow>
@@ -88,7 +91,7 @@ const WHY: Record<string, { label: string; badge: string; tone: string; icon?: G
   noEnergy: { label: 'No Energy for the plot: half', badge: '½', tone: 'bg-alert text-white', icon: 'energy' },
 };
 
-function Rail({ game, show, t }: { game: MuleView; show: ShowData; t: number }) {
+function Rail({ game, show, t, connected }: { game: MuleView; show: ShowData; t: number; connected: (id: string) => boolean }) {
   const times = showTimes(show);
   const act = showActAt(show, t);
   const at = act === 'hold' ? 'flight' : act === 'intro' ? 'harvest' : act;
@@ -135,14 +138,15 @@ function Rail({ game, show, t }: { game: MuleView; show: ShowData; t: number }) 
           </ul>
         )
       )}
-      <SpeedUp game={game} show={show} />
+      <SpeedUp game={game} show={show} connected={connected} />
     </div>
   );
 }
 
 /** Who has asked to speed up, at the rail's foot; the computer players always agree, so only people are waited for. */
-function SpeedUp({ game, show }: { game: MuleView; show: ShowData }) {
-  const people = game.players.filter((p) => !p.isAi);
+function SpeedUp({ game, show, connected }: { game: MuleView; show: ShowData; connected: (id: string) => boolean }) {
+  // The server waits for every person still at the table: a dropped phone is never waited for.
+  const people = game.players.filter((p) => !p.isAi && connected(p.id));
   const asked = new Set(show.hurry?.asked ?? []);
   const fast = show.hurry?.from != null;
   const n = people.filter((p) => asked.has(p.id)).length;
@@ -152,7 +156,7 @@ function SpeedUp({ game, show }: { game: MuleView; show: ShowData }) {
     <div className={cx('mt-auto flex items-center gap-3 rounded-control px-3 py-2', fast ? 'bg-holo-soft' : 'bg-raised')} data-testid="speed-up">
       <span className="font-mono text-2xl text-holo">⏩</span>
       <span className="text-lg leading-snug text-ink">
-        {fast ? `Everyone asked: playing ${SHOW.fast}× faster` : `${n} of ${people.length} asked to speed up. Waiting for ${waiting.join(' and ')}.`}
+        {fast ? `Everyone asked: playing ${SHOW.fast}× faster` : `${n} of ${people.length} asked to speed up.${waiting.length > 0 ? ` Waiting for ${waiting.join(' and ')}.` : ''}`}
       </span>
     </div>
   );
