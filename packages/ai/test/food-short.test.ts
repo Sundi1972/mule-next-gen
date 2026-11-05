@@ -20,6 +20,7 @@ import {
   type Trade,
 } from '@mule/engine';
 import { applyAction } from '../src/play.js';
+import { draftPlaybook } from '../src/playbook/draft.js';
 import { AiSeat } from '../src/seat.js';
 import { goodPlan, tradeDecision } from '../src/strategist.js';
 
@@ -322,6 +323,24 @@ describe('B-AC-energy-short: a seat short of Energy buys from the store when it 
   });
 
   it('B-AC-energy-short: a seat that can pay for part of its shortfall buys what it can and never goes negative', () => buysWhatItCan('energy'));
+
+  it('FM-cross-good-ask: a draft made while Food is up does not price the seat’s Energy shortfall at Food’s line', () => {
+    // The playbook drafts every good at the first status screen. The store's line belongs to the good that is up; here
+    // Food's is set absurdly high, so a Food line read as Energy's price would show as Energy's walk-away.
+    const id = 'ai0';
+    // ai1 is short of Food, so the Food comes up.
+    const state = auctionOf('food', (s) => {
+      shortOf('energy', id, MONEY)(s);
+      shortOf('food', 'ai1', MONEY)(s);
+    });
+    state.auction!.queue = ['energy'];
+    state.auction!.storeSell = 999;
+    expect(state.players.find((p) => p.id === id)!.stock.energy, 'the premise: short of Energy').toBeLessThan(wholeEnergy(state, id));
+
+    const draft = draftPlaybook({ state, seat: id, mind: seatOf(0).mind, seed: SEED * 10, phase: 'auction' });
+
+    expect(draft.auction!.energy!.walkAway).toBeLessThan(999);
+  });
 });
 
 describe('B-AC-water-short: a seat short of Water buys from the store when it can pay', () => {
