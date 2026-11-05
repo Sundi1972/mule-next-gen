@@ -293,7 +293,9 @@ describe("B-AC-46-4: next month's vote on every other phone", () => {
     expect(findTestid('agenda-law')).toBeUndefined();
     act(() => root!.unmount());
     root = null;
-    mount(viewFor('s2', politics({ proposal: pending, election: { stage: 'announce', ceremony: null, candidates: { governor: [] }, promises: {}, voted: [], done: [], waitingFor: [], result: {} } })));
+    // The law ballot's reveal: the hub keeps its This month (the election would take the stage and hide it anyway).
+    mount(viewFor('s2', politics({ proposal: pending, council: { stage: 'reveal', proposal: { kind: 'enact', law: 'exportTax', setting: 10 }, proposer: 's1', impact: {}, voted: [], done: [], waitingFor: [], clockMs: 0, revealMs: 4000, result: { passed: true, yes: 2, no: 1, tie: false } } })));
+    byTestid('agenda');
     expect(findTestid('agenda-law'), 'no agenda line while a vote is open').toBeUndefined();
   });
 });
