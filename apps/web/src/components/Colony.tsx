@@ -37,11 +37,11 @@ function Mark({ player, size }: { player: PlayerView; size: number }) {
 
 // --- The four gauges ----------------------------------------------------------------------------------
 
-function Gauge({ label, value, band, tone, bar, fill, note, size, testid, pulse = false }: { label: string; value: string; band?: string; tone?: string; bar?: string; fill?: number; note?: ReactNode; size: Size; testid: string; pulse?: boolean }) {
+function Gauge({ label, value, band, tone, bar, fill, note, size, testid, pulse = false, change }: { label: string; value: string; band?: string; tone?: string; bar?: string; fill?: number; note?: ReactNode; size: Size; testid: string; pulse?: boolean; change?: GaugeChange | undefined }) {
   const tv = size === 'tv';
   return (
     // DS-GAP (WS8): the band flip's pulse, cev-pulse in packages/ui's events.css, until the design system has one.
-    <div className={cx('flex min-w-0 flex-col rounded-control border border-holo-line bg-panel', tv ? 'gap-1 px-3 py-1.5' : 'gap-0.5 px-2 py-1', pulse && 'animate-[cev-pulse_0.8s_ease-out]')} data-testid={testid}>
+    <div className={cx('flex min-w-0 flex-col rounded-control border border-holo-line bg-panel', tv ? 'gap-1 px-3 py-1.5' : 'gap-0.5 px-2 py-1', pulse && 'animate-[cev-pulse_0.8s_ease-out]')} data-testid={testid} data-from={change?.from} data-to={change?.to}>
       <span className="flex items-baseline justify-between gap-2">
         <span className={cx('label-caps', !tv && 'text-[10px]!')}>{label}</span>
         <span data-num className={cx('whitespace-nowrap font-mono font-bold', tv ? 'text-lg' : 'text-xs')}>
@@ -93,13 +93,13 @@ function countAt(c: GaugeChange, t: number, reduced: boolean): number {
 }
 
 /** A gauge's number at `t` under a landing, and whether its band flipped within the pulse's length. */
-function landed(id: GaugeId, value: number, landing: GaugeLanding | undefined): { value: number; pulse: boolean } {
+function landed(id: GaugeId, value: number, landing: GaugeLanding | undefined): { value: number; pulse: boolean; change?: GaugeChange } {
   const c = landing?.changes.find((x) => x.gauge === id);
   if (!landing || !c) return { value, pulse: false };
   const now = countAt(c, landing.t, landing.reduced);
   const band = BAND_AT[id];
   const flipped = band !== undefined && !landing.reduced && band(now) !== band(countAt(c, landing.t - LANDING.pulse, false));
-  return { value: now, pulse: flipped };
+  return { value: now, pulse: flipped, change: c };
 }
 
 /** The month end's drift, when there is one: Happiness from last month's to now's (RULE-20). Nothing without a colony. */
@@ -112,20 +112,21 @@ function driftOf(colony: ColonyView | null | undefined): GaugeChange | null {
 
 /** Seconds since `on` turned true, from the page's frames; it stops at `end`, and reads 0 while off. */
 function useFrameClock(on: boolean, end: number): number {
-  const [t, setT] = useState(0);
+  const [clock, setClock] = useState({ on, t: 0 });
+  // Turning on (or off) starts at 0 in this very render, so a new run never shows the last run's time, even for a frame.
+  if (clock.on !== on) setClock({ on, t: 0 });
   useEffect(() => {
-    setT(0);
     if (!on) return;
     let first: number | null = null;
     let raf = requestAnimationFrame(function tick(now) {
       first ??= now;
-      const s = Math.min(end, (now - first) / 1000);
-      setT(s);
-      if (s < end) raf = requestAnimationFrame(tick);
+      const t = Math.min(end, (now - first) / 1000);
+      setClock({ on: true, t });
+      if (t < end) raf = requestAnimationFrame(tick);
     });
     return () => cancelAnimationFrame(raf);
   }, [on, end]);
-  return t;
+  return clock.on === on ? clock.t : 0;
 }
 
 /**
@@ -138,7 +139,8 @@ export function useMonthEndDrift(game: MuleView): GaugeLanding | undefined {
   const seen = useRef<string | null>(null);
   const [drift, setDrift] = useState<GaugeChange | null>(null);
   const end = DRIFT_AT + LANDING.count + LANDING.pulse;
-  const t = useFrameClock(drift !== null, end);
+  // Reduced motion shows the end state, which needs no frames.
+  const t = useFrameClock(drift !== null && !reduced, end);
   // Before paint, so the month end never shows the new number before it counts to it.
   useLayoutEffect(() => {
     const before = seen.current;
@@ -147,7 +149,8 @@ export function useMonthEndDrift(game: MuleView): GaugeLanding | undefined {
     else if (before !== null && before !== 'upkeep') setDrift(driftOf(game.colony));
     // Only the phase and month: a new view of the same month end (someone readies) never replays it.
   }, [game.phase, game.month]);
-  if (drift === null || reduced || t >= end) return undefined;
+  // Held to the month end's last view once it has played, so the gauge keeps saying what it counted (data-from, data-to).
+  if (drift === null || reduced) return undefined;
   return { changes: [drift], t, reduced };
 }
 
@@ -166,9 +169,9 @@ export function ColonyGauges({ colony, size, className, landing }: { colony: Col
   const moodMove = last?.happiness == null || g.happiness === null ? null : g.happiness - last.happiness;
   return (
     <div className={cx('grid grid-cols-4', tv ? 'gap-2' : 'gap-1.5', className)} data-testid="colony-gauges">
-      <Gauge size={size} testid="gauge-wealth" label="Wealth" value={`${fmt(wealth.value)} cr`} note={`fund ${fmt(colony.fund)} cr`} />
-      <Gauge size={size} testid="gauge-environment" label="Environment" value={`${environment.value}`} band={air.label} tone={air.tone} bar={air.bar} fill={environment.value} pulse={environment.pulse} />
-      <Gauge size={size} testid="gauge-prestige" label="Prestige" value={`${prestige.value}`} note={`${standingCount(colony)} standing${last && g.prestige !== last.prestige ? ` · ${signed(g.prestige - last.prestige)}` : ''}`} />
+      <Gauge size={size} testid="gauge-wealth" label="Wealth" value={`${fmt(wealth.value)} cr`} note={`fund ${fmt(colony.fund)} cr`} change={wealth.change} />
+      <Gauge size={size} testid="gauge-environment" label="Environment" value={`${environment.value}`} band={air.label} tone={air.tone} bar={air.bar} fill={environment.value} pulse={environment.pulse} change={environment.change} />
+      <Gauge size={size} testid="gauge-prestige" label="Prestige" change={prestige.change} value={`${prestige.value}`} note={`${standingCount(colony)} standing${last && g.prestige !== last.prestige ? ` · ${signed(g.prestige - last.prestige)}` : ''}`} />
       {g.happiness === null || g.band === null ? (
         <Gauge size={size} testid="gauge-happiness" label="Happiness" value="—" note="not yet" />
       ) : (
@@ -180,7 +183,7 @@ export function ColonyGauges({ colony, size, className, landing }: { colony: Col
 
 /** Happiness at its landed number, in the band that number reads in, so the label flips as the count crosses. */
 function HappinessGauge({ size, happiness, band, moodMove, landing }: { size: Size; happiness: number; band: MoodBand; moodMove: number | null; landing: GaugeLanding | undefined }) {
-  const { value, pulse } = landed('happiness', happiness, landing);
+  const { value, pulse, change } = landed('happiness', happiness, landing);
   // The server's band, until a landing counts the number through another.
   const mood = MOOD[value === happiness ? band : moodBand(value)];
   return (
@@ -194,6 +197,7 @@ function HappinessGauge({ size, happiness, band, moodMove, landing }: { size: Si
       bar={mood.bar}
       fill={value}
       pulse={pulse}
+      change={change}
       {...(moodMove !== null ? { note: moodMove === 0 ? '± 0' : `${moodMove > 0 ? '↑' : '↓'} ${Math.abs(moodMove)} this month` } : {})}
     />
   );

@@ -241,8 +241,10 @@ async function theMonthEndsMoodDrift(): Promise<void> {
     await throughTheMonth();
     const first = colony();
     check(first.lastGauges === null && first.gauges.happiness !== null, `month 1 ends with a mood and no last gauges, got ${JSON.stringify(first.lastGauges)}`);
-    const opened = await happiness();
-    check(opened.includes(`${first.gauges.happiness}`), `B-AC-23-8: month 1's end shows the server's ${first.gauges.happiness} at once, got "${opened}"`);
+    const monthOne = tv.getByTestId('tv-monthend').getByTestId('gauge-happiness');
+    check((await monthOne.getAttribute('data-from', { timeout: PRESS_MS })) === null, 'B-AC-23-8: month 1’s end carries no drift on its Happiness gauge');
+    const opened = (await monthOne.locator('[data-num]').innerText({ timeout: PRESS_MS })).trim();
+    check(opened === `${first.gauges.happiness}`, `B-AC-23-8: month 1's end shows the server's ${first.gauges.happiness} at once, got "${opened}"`);
     console.log(`✓ B-AC-23-8: month 1's end has no last gauges, and the TV shows the server's mood ${first.gauges.happiness} at once`);
 
     // Month 2: the mood falls a band, as an event's moodShift would move it.
@@ -256,20 +258,21 @@ async function theMonthEndsMoodDrift(): Promise<void> {
     });
     await throughTheMonth();
 
-    // Month 2's end: the gauge opens on last month's number, then lands on the server's, in the server's band.
-    const opening = await happiness();
+    // Month 2's end: the gauge carries the drift it counts (data-from, data-to: stable, not caught mid-count), from the
+    // server's lastGauges to its gauges, and lands on exactly the server's number and band.
     const now = colony();
     const from = now.lastGauges?.happiness;
     const to = now.gauges.happiness!;
     check(from === first.gauges.happiness && to !== from, `the server's month 2 end moves the mood, ${from} → ${to}`);
-    check(opening.includes(`${from}`), `B-AC-23-6: the month end opens on last month's ${from}, got "${opening}"`);
     const band = { thriving: 'Thriving', content: 'Content', restless: 'Restless', unhappy: 'Unhappy', unrest: 'Unrest' }[now.gauges.band!];
     check(band && moodBand(to) === now.gauges.band, `the server's band ${now.gauges.band} is its number's`);
-    const landed = tv.getByTestId('tv-monthend').getByTestId('gauge-happiness').locator('[data-num]').filter({ hasText: new RegExp(`^${to}$`) });
-    await landed.waitFor({ timeout: MONTH_END_MS });
+    const gauge = tv.getByTestId('tv-monthend').getByTestId('gauge-happiness');
+    await gauge.and(tv.locator(`[data-from="${from}"][data-to="${to}"]`)).waitFor({ timeout: PRESS_MS });
+    await gauge.locator('[data-num]').filter({ hasText: new RegExp(`^${to}$`) }).waitFor({ timeout: MONTH_END_MS });
     const ended = await happiness();
-    check(ended.includes(band.toUpperCase()) || ended.includes(band), `B-AC-23-6: the gauge ends in the server's band ${band}, got "${ended}"`);
-    console.log(`✓ B-AC-23-6: at month 2's end the TV's Happiness counts ${from} → ${to} ("${opening}" → "${ended}")`);
+    const read = ended.match(/^happiness (\d+) (\w+)\b/i);
+    check(read && Number(read[1]) === to && read[2]!.toLowerCase() === band.toLowerCase(), `B-AC-23-6: the gauge ends on the server's ${to} ${band}, got "${ended}"`);
+    console.log(`✓ B-AC-23-6: at month 2's end the TV's Happiness counts ${from} → ${to} and ends "${ended}"`);
 
     check(errors.length === 0, `no page errors: ${errors.join('; ')}`);
     console.log(`e2e colony mood drift: ok (room ${code}, seed ${SEED})`);
