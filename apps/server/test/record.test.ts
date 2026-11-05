@@ -451,6 +451,21 @@ describe('the game record', { timeout: 60_000 }, () => {
     );
     expect(outcome).toBe(false);
   });
+
+  it('T-AC-39 (C32, G-5 RULE-25): the record keeps the colony score at game over, the replay scores the same, and a changed one is not identical', async () => {
+    const { record } = await recordedGame();
+    // GAME_OPTIONS plays with the council, so the game ends with a colony score.
+    expect(record.outcome!.colonyScore).toEqual(expect.any(Number));
+    const same = await replay(record);
+    expect(same.identical).toBe(true);
+    expect(same.colonyScore).toEqual({ recorded: record.outcome!.colonyScore, replayed: record.outcome!.colonyScore });
+
+    const changed = fileCopy(record);
+    changed.outcome!.colonyScore! += 1;
+    const byScore = await replay(changed);
+    expect(byScore.identical).toBe(false);
+    expect(byScore.colonyScore).toEqual({ recorded: record.outcome!.colonyScore! + 1, replayed: record.outcome!.colonyScore });
+  });
 });
 
 describe.runIf(FULL)('the recorder', { timeout: 60_000 }, () => {
