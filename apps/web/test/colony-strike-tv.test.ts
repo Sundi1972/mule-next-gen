@@ -92,6 +92,13 @@ describe('the general strike on the TV (C37)', () => {
     expect(onTv(game(colony(null)))).not.toContain('data-testid="strike-badge"');
   });
 
+  it('B-AC-37-1: while the badge shows, the gauges take their own row under the header, so the badge never sits on them; with no strike they stay in it', () => {
+    const below = (html: string) => html.indexOf('data-testid="colony-gauges"') > html.indexOf('</header>');
+    expect(below(onTv(game(colony(UNPAID), { phase: 'landGrant' })))).toBe(true);
+    expect(below(onTv(game(colony(PAID), { phase: 'landGrant' })))).toBe(true);
+    expect(below(onTv(game(colony(null), { phase: 'landGrant' })))).toBe(false);
+  });
+
   it('B-AC-37-1: the badge rides the header in every phase that draws the colony gauges, such as the month end', () => {
     expect(textOf(onTv(game(colony(UNPAID), { phase: 'upkeep' })), 'strike-badge')).toBe('STRIKE · Food 20%');
   });
