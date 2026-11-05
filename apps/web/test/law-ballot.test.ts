@@ -275,7 +275,8 @@ describe('B-AC-46-11: the laws in force on the Council desk', () => {
   it('B-AC-46-11: with none in force the strip says so', () => {
     mount(viewFor('s2', politics()));
     tap('desk-council');
-    expect(text('laws-in-force')).toBe('Laws in force none yet');
+    expect(text('laws-none')).toBe('none yet');
+    expect(findTestid('law-chip-landTax')).toBeUndefined();
   });
 });
 

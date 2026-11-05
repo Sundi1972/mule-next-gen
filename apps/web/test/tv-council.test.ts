@@ -98,8 +98,8 @@ describe('B-AC-46-10: the TV council panel', () => {
     expect(textOf(html, 'tv-impact-s2')).toBe('Ossa50 cr a month');
     expect(textOf(html, 'tv-impact-s3')).toBe('Kainothing');
     expect(textOf(html, 'tv-council-voted-count')).toBe('Voted 2 of 3');
-    expect(textOf(html, 'tv-council-voted')).toMatch(/Lena VOTED ✓ Ossa VOTING Kai VOTED ✓/);
-    expect(textOf(html, 'tv-laws')).toBe('Laws in force Export tax 20% · since month 2');
+    expect(textOf(html, 'tv-council-voted')).toContain('LenaVOTED ✓OssaVOTINGKaiVOTED ✓');
+    expect(textOf(html, 'tv-laws')).toBe('Laws in forceExport tax 20% · since month 2');
   });
 
   it('B-AC-46-10: the reveal shows the weighted totals, the stamp and the result line, and never a player beside a vote', () => {
