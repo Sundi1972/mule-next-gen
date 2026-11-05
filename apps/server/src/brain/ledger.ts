@@ -38,6 +38,9 @@ export interface CallRecord extends Usage {
   outcome: Outcome;
   /** A write call's round trip, from 1 (RULE-A4); absent on a move call. */
   round?: number;
+  /** A failed call's answer: the HTTP status and the API's error type, never its text; absent on a call that worked. */
+  status?: number;
+  error_type?: string;
 }
 
 /** A call's line in the ledger file. See RULE-4. */
@@ -54,6 +57,8 @@ export interface CallLine extends Usage {
   timed_out: boolean;
   outcome: Outcome;
   round?: number;
+  status?: number;
+  error_type?: string;
 }
 
 /** A game's total line in the ledger file: model calls only, settled before finish. See RULE-4. */
@@ -183,6 +188,8 @@ export function createLedger(opts: { path?: string; clock?: () => Date } = {}): 
         timed_out: call.outcome === 'timeout',
         outcome: call.outcome,
         ...(call.round === undefined ? {} : { round: call.round }),
+        ...(call.status === undefined ? {} : { status: call.status }),
+        ...(call.error_type === undefined ? {} : { error_type: call.error_type }),
       };
       append(line);
     },
