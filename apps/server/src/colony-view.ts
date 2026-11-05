@@ -1,5 +1,5 @@
 /** The colony as every screen sees it: gauges, fund, prestige objects and plaques. Public, so one view serves all. */
-import { colonyGauges, commissionRefusal, lastGauges, moodBand, PRESTIGE, type GameState, type PrestigeId } from '@mule/engine';
+import { colonyGauges, colonyScore, commissionRefusal, lastGauges, moodBand, PRESTIGE, type GameState, type PrestigeId } from '@mule/engine';
 import type { ColonyCatalogueView, ColonyProjectView, ColonyView } from '@mule/protocol';
 
 const IDS = Object.keys(PRESTIGE) as PrestigeId[];
@@ -42,7 +42,8 @@ export function colonyView(state: GameState): ColonyView | null {
       return { id, name: row.name, credits: row.credits, goods: { ...row.goods }, buildMonths: row.buildMonths, needsPlot: row.needsPlot, prestige: row.prestige, upkeep: row.upkeep, commissionable: why === null, why };
     }),
     strike: colony.strike && colony.strike.month === state.month ? { good: colony.strike.good, cost: colony.strike.cost, paid: colony.strike.paid } : null,
-    score: null,
+    // C31 (RULE-25): scored at game over from the final state, so every screen shows the same terms; none before.
+    score: state.phase === 'gameOver' ? colonyScore(state) : null,
   };
 }
 
