@@ -53,6 +53,9 @@ import {
   outfitMule,
   PHASES,
   playerEventReason,
+  PRODUCTION_SHOW,
+  productionEventAtMs,
+  productionShowMs,
   RuleError,
   runFor,
   score,
@@ -93,7 +96,7 @@ import {
   type Trade,
 } from '@mule/engine';
 import { AiSeat, GOOD_NAME, LotHand, personaFor, VoteHand, type AiAction } from '@mule/ai';
-import { PLAYER_COLORS, type EventView, type MuleIntent, type MuleView, type PlayerView, type ProductionReason, type ProductionView, type ScorePartsView } from '@mule/protocol';
+import { PLAYER_COLORS, type EventView, type MuleIntent, type MuleView, type PlayerView, type ProductionHurryView, type ProductionReason, type ProductionView, type ScorePartsView } from '@mule/protocol';
 import type { Game, GameContext, SeatInfo } from '@tabletop/core';
 import { createBrain, type BrainService } from './brain/index.js';
 import { devFrame, noStats, steerConfig, steeredColonistView, SteerInputs, stepTick, type Steering } from './dev-steer.js';
@@ -123,8 +126,9 @@ export const PHASE_MS: { readonly planning: number | null; readonly landGrant: n
   get development() {
     return DEVELOPMENT.fullSeconds * 1_000;
   },
+  // Production lasts its show (RULE-3, AM-19); this is the longest it can run: every good made, the events at their cap.
   get production() {
-    return PHASES.productionMs;
+    return productionShowMs(PRODUCTION_SHOW.order.length, EVENT_SHOW.capMs);
   },
   get upkeep() {
     return PHASES.upkeepMs;
@@ -150,9 +154,8 @@ function isSpecies(pick: string | undefined): pick is Species {
   return (SPECIES as readonly (string | undefined)[]).includes(pick);
 }
 
-/** The reasons a plot's badges may name; its ground, the output floor, a factory's fit and the event never get one. */
-const BADGE_REASONS: readonly ProductionReason[] = ['cluster', 'species', 'trait', 'pollution', 'noEnergy', 'noWater'];
-const MAX_BADGES = 2;
+/** The parts that are a plot's base: its ground's yield, or a factory's run. Every other part but an event is a reason. */
+const BASE_PARTS: readonly string[] = ['ground', 'factory'];
 /** The receipt of a seat that traded nothing in the good that closed. */
 const NO_RECEIPT: GoodReceipt = { bought: { units: 0, gross: 0, tax: 0, prices: [], with: [] }, sold: { units: 0, gross: 0, tax: 0, prices: [], with: [] } };
 
@@ -231,9 +234,6 @@ function holdsForEvents(phase: Phase): boolean {
       return false;
   }
 }
-
-/** Where production's map starts its event show, in ms into the phase at full pace: the client's SHOW.eventAt (4.8 s). */
-const PRODUCTION_SHOW_AT_MS = 4_800;
 
 /** A player who fell sick at development's start, told as a bulletin in its roll call (C11). */
 interface SickBulletin {
@@ -329,30 +329,33 @@ function sickView(state: GameState, { player }: SickBulletin): Omit<EventView, '
 }
 
 /**
- * The month's production as every screen may see it: each working plot with
- * what it made before the event and its biggest reasons, and the event's hits.
- * Built field by field from the report, so the stock players held never
- * reaches a screen through it.
+ * The month's production as every screen may see it: each working plot with its base, every reason its output moved
+ * from it and what it made before the events (ws6-ux AM-19: base + parts = made), and the events' hits. Built field by
+ * field from the report, so the stock players held never reaches a screen through it.
  */
-function productionView(state: GameState, lengthMs: number): ProductionView | null {
+function productionView(state: GameState, lengthMs: number, hurry: ProductionHurryView | null): ProductionView | null {
   const report = state.history.at(-1);
   if (!report) return null;
   const at = (index: number) => ({ x: index % state.width, y: Math.floor(index / state.width) });
-  const isBadge = (why: string): why is ProductionReason => (BADGE_REASONS as readonly string[]).includes(why);
   const lines = [...(report.lines ?? [])]
     .sort((a, b) => a.tile - b.tile)
     .map((line) => ({
       ...at(line.tile),
       owner: state.tiles[line.tile]!.owner!,
       good: line.good,
+      base: line.parts.reduce((n, p) => n + (BASE_PARTS.includes(p.why) ? p.delta : 0), 0),
       made: line.made - line.parts.reduce((n, p) => n + (p.why === 'event' ? p.delta : 0), 0),
-      parts: line.parts
-        .flatMap(({ why, delta }) => (isBadge(why) && delta !== 0 ? [{ why, delta }] : []))
-        .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
-        .slice(0, MAX_BADGES),
+      parts: line.parts.flatMap(({ why, delta }) => (why !== 'event' && !BASE_PARTS.includes(why) && delta !== 0 ? [{ why: why as ProductionReason, delta }] : [])),
     }));
   const fired = phaseEvents(state, 'production');
-  return { lines, events: eventViews(state, fired), lengthMs, introMs: eventShow(fired).introMs };
+  return { lines, events: eventViews(state, fired), lengthMs, introMs: eventShow(fired).introMs, hurry };
+}
+
+/** RULE-3's inputs for this month (ws6-ux AM-19): the distinct goods its plots made, and its events' show in ms (0: quiet). */
+function showInputs(state: GameState): { goods: number; eventsMs: number } {
+  const goods = new Set((state.history.at(-1)?.lines ?? []).map((l) => l.good)).size;
+  const fired = phaseEvents(state, 'production');
+  return { goods, eventsMs: fired.length > 0 ? eventShow(fired).showMs : 0 };
 }
 
 /**
@@ -419,6 +422,15 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   private heldUntil: number | null = null;
   /** This month's production length in real ms, as its timer was given: the production show stretches over it. */
   private productionMs = 0;
+  /** RULE-3's inputs as production's timer was given them: the hurry and the events' times read these, never live config. */
+  private productionShow = { goods: 0, endMs: 0 };
+  /**
+   * Speed up (ws6-ux AM-19, B-AC-20): who has asked this phase, and once every connected person has, the show second
+   * (full pace) the rest plays faster from and the server time that happened at. Cleared as every phase starts.
+   */
+  private hurry: { asked: Set<string>; from: number | null; at: number } = { asked: new Set(), from: null, at: 0 };
+  /** Cancels the running phase's end timer, so a hurry can bring it forward. */
+  private cancelPhaseEnd: (() => void) | null = null;
   /**
    * Each month's end as the views showed it, by month: every player's worth and the air level, recorded once when its
    * upkeep starts. The next month's views serve it as lastWorth and lastAir, so a change is shown against shown.
@@ -460,6 +472,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       phaseScale?: number;
       /** Steered development for this game only (PM ruling); absent, DEV_STEER.on decides. */
       devSteer?: boolean;
+      /** A test option: wolves on, and a pack for the first colonist out on wolf land at once (steerConfig). */
+      forceWolves?: boolean;
       politics?: boolean;
       brain?: BrainService;
       /** Called once, as the game ends, with its final state. */
@@ -531,6 +545,12 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         if (!this.steered) throw new RuleError('This game does not steer: tap where to go');
         // A press with nothing to do is ignored, as a dim button's is (RULE-1).
         this.steering?.inputs.press(seatId);
+        return;
+      case 'hurry':
+        if (state.phase !== 'production' || this.phaseEndsAt === null) throw new RuleError('Nothing to speed up now');
+        if (this.ai.has(seatId)) throw new RuleError('Only the people at the table ask to speed up');
+        this.hurry.asked.add(seatId);
+        this.hurryIfAllAsked();
         return;
       case 'ready':
         // During the election, ready is Done for the stage; it never ends planning.
@@ -816,7 +836,41 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     // A dropped phone's colonist stops where it is (C6); back, the phone steers it again.
     if (!connected) this.steering?.inputs.drop(seatId);
     // Nobody waits for a phone that dropped.
+    this.hurryIfAllAsked();
     this.checkAllReady();
+  }
+
+  /**
+   * B-AC-20: once every connected person has asked (at least one person connected and one ask, so a table of dropped phones never speeds up),
+   * the rest of the show plays PRODUCTION_SHOW.fast times faster: the phase ends that much sooner, and every screen,
+   * reading the show from the time left, plays the rest faster on that one clock.
+   */
+  private hurryIfAllAsked(): void {
+    const state = this.state;
+    const h = this.hurry;
+    if (state?.phase !== 'production' || this.phaseEndsAt === null || h.from !== null || h.asked.size === 0) return;
+    const people = this.seats.filter((s) => !s.isAi && !this.away.has(s.id));
+    if (people.length === 0 || !people.every((s) => h.asked.has(s.id))) return;
+    const now = this.ctx.now();
+    const end = this.productionShow.endMs / 1_000;
+    // A tap handled after the end but before its timer fires changes nothing past the end.
+    const left = Math.max(0, this.phaseEndsAt - now);
+    // The second the screens are at, from the time left (packages/ui showTime): the same second on every screen.
+    h.from = end - (left * end) / this.productionMs;
+    h.at = now;
+    this.schedulePhaseEnd(Math.round(left / PRODUCTION_SHOW.fast));
+  }
+
+  /** Who has asked to speed production up, as every screen shows it. */
+  private hurryView(): ProductionHurryView {
+    return { asked: [...this.hurry.asked], from: this.hurry.from };
+  }
+
+  /** Server time of a production show second (full pace), the hurry's speed-up included. */
+  private productionShowAt(second: number): number {
+    const h = this.hurry;
+    if (h.from === null || second <= h.from) return this.phaseEnteredAt + this.realMs(second);
+    return h.at + this.realMs((second - h.from) / PRODUCTION_SHOW.fast);
   }
 
   /** Stops the seat's auction walk: the old screen can't release it and the new one never pressed it. A move is neither Done nor a drop. */
@@ -929,6 +983,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     this.heldUntil = null;
     for (const cancel of this.cancels) cancel();
     this.cancels = [];
+    this.cancelPhaseEnd = null;
+    this.hurry = { asked: new Set(), from: null, at: 0 };
     this.ready.clear();
     this.notices = [];
 
@@ -1037,23 +1093,34 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     return null;
   }
 
-  /** Ends the phase when its PHASE_MS runs out; a phase whose PHASE_MS is null has no clock and waits for Ready. */
+  /**
+   * Ends the phase when its PHASE_MS runs out; a phase whose PHASE_MS is null has no clock and waits for Ready.
+   * Production lasts its show instead (ws6-ux AM-19, RULE-3): the goods made and the month's events set its length.
+   */
   private startPhaseTimer(phase: keyof typeof PHASE_MS): void {
-    // Production stretches past its own event window to play every event of the month (RULE-1).
-    const extraMs = phase === 'production' ? Math.max(0, eventShow(phaseEvents(this.requireState(), 'production')).showMs - EVENT_SHOW.productionWindowMs) : 0;
-    const base = PHASE_MS[phase];
-    const length = base === null ? null : base + extraMs;
+    const state = this.requireState();
+    const show = phase === 'production' ? showInputs(state) : null;
+    const length = show ? productionShowMs(show.goods, show.eventsMs) : PHASE_MS[phase];
     this.phaseEndsAt = null;
     if (length === null) return;
     const ms = length * this.phaseScale;
+    if (show) {
+      this.productionMs = ms;
+      this.productionShow = { goods: show.goods, endMs: length };
+    }
+    this.schedulePhaseEnd(ms);
+  }
+
+  /** (Re)sets the running phase's end, `ms` from now. */
+  private schedulePhaseEnd(ms: number): void {
+    this.cancelPhaseEnd?.();
     this.phaseEndsAt = this.ctx.now() + ms;
-    if (phase === 'production') this.productionMs = ms;
-    this.cancels.push(
-      this.ctx.schedule(ms, () => {
-        this.nextPhase();
-        this.ctx.changed();
-      }),
-    );
+    const cancel = this.ctx.schedule(ms, () => {
+      this.nextPhase();
+      this.ctx.changed();
+    });
+    this.cancelPhaseEnd = cancel;
+    this.cancels.push(cancel);
   }
 
   private startPlanning(): void {
@@ -1239,7 +1306,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   /** Steered development (C6): the floor at its start, every seat's reach words as its view shows them, the first tick. */
   private startSteering(month: number): void {
     const state = this.requireState();
-    const cfg = steerConfig();
+    const cfg = steerConfig({ forceWolves: this.options.forceWolves ?? false });
     const origin = this.ctx.now();
     const steering: Steering = { floor: buildFloor(state, cfg), inputs: new SteerInputs(), cfg, origin, at: origin, words: new Map(), stats: noStats() };
     this.steering = steering;
@@ -1727,7 +1794,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       listings: state.listings.map(listingView),
       lotSlots: { used: state.listings.length, max: LOTS.maxLotsPerMonth },
       landAuction: landAuctionView(state),
-      production: state.phase === 'production' || state.phase === 'upkeep' ? productionView(state, this.productionMs) : null,
+      production: state.phase === 'production' || state.phase === 'upkeep' ? productionView(state, this.productionMs, state.phase === 'production' ? this.hurryView() : null) : null,
       ...this.eventsView(state),
       politics: politicsView(state),
     };
@@ -1742,8 +1809,14 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     const fired = this.electionOpen() ? [] : phaseEvents(state, state.phase);
     if (fired.length === 0) return { events: [], eventShow: null };
     const { showMs, introMs } = eventShow(fired);
-    const startsAt = this.phaseEnteredAt + (state.phase === 'production' ? this.realMs(PRODUCTION_SHOW_AT_MS / 1_000) : 0);
-    const endsAt = startsAt + this.realMs(showMs / 1_000);
+    let startsAt = this.phaseEnteredAt;
+    let endsAt = startsAt + this.realMs(showMs / 1_000);
+    if (state.phase === 'production') {
+      // RULE-3: the events play after every loss has landed, and a hurry speeds them up with the rest.
+      const from = productionEventAtMs(this.productionShow.goods) / 1_000;
+      startsAt = this.productionShowAt(from);
+      endsAt = this.productionShowAt(from + showMs / 1_000);
+    }
     return { events: eventViews(state, fired), eventShow: { startsAt, showMs, introMs, endsAt, held: this.holdMs(state) > 0 } };
   }
 
