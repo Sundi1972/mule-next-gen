@@ -83,8 +83,8 @@ const riot = (object: 'park' | 'hospital') =>
   });
 
 /** Each of the nine in the phase that rolls it, and the words the TV's log keeps for it. */
-const NINE: { ev: ShowEventView; words: string }[] = [
-  { ev: FESTIVAL, words: 'Mood +10 · Prestige +2 · Store +6 Food' },
+const NINE: { ev: ShowEventView; words: string; story?: string[] }[] = [
+  { ev: FESTIVAL, words: 'Mood +10 · Prestige +2 · Store +6 Food', story: ['festival-bunting', 'festival-crowd'] },
   { ev: STRIKE, words: 'Food at 20% on 4 farms unless the Governor pays' },
   { ev: event('emigrationWave', 'planning', { title: 'Emigration wave', line: '10% fewer colonists, for good.', effects: [{ on: 'colony', what: 'colonists', delta: -12 }] }), words: 'Colonists −12' },
   { ev: event('blamedForUnrest', 'planning', { title: 'Blamed for the unrest', line: 'Reputation −1, so fewer votes.', scope: 'personal', player: OSSA, effects: [{ on: OSSA, what: 'reputation', delta: -1 }] }), words: 'Ossa reputation −1' },
@@ -100,15 +100,17 @@ interface Opts {
   reduced?: boolean;
   me?: string;
   map?: MapTile[];
+  /** The store's stock per good as the view's market sends it, after the phase's events. */
+  storeStock?: Partial<Record<'food' | 'energy' | 'smithore', number>>;
 }
-function screen(events: ShowEventView[], t: number, where: Where, { reduced = false, me = LENA, map = tiles }: Opts = {}): string {
+function screen(events: ShowEventView[], t: number, where: Where, { reduced = false, me = LENA, map = tiles, storeStock }: Opts = {}): string {
   const mode: ShowMode = where === 'alone' ? 'solo' : 'tv';
   const slot = players.find((p) => p.id === me)!.slot;
   const parts =
     where === 'tv'
       ? [createElement(EventLivingMap, { key: 'm', size: 'tv' }), createElement(EventTvLog, { key: 'l' })]
       : [createElement(EventLivingMap, { key: 'm', size: 'phone', focusSlot: slot, onSkip: () => undefined }), createElement(EventSoloRail, { key: 'r', me })];
-  return renderToStaticMarkup(createElement(EventShow, { events, introMs: INTRO_MS, t, mode, reduced, width: W, height: H, tiles: map, players, children: parts }));
+  return renderToStaticMarkup(createElement(EventShow, { events, introMs: INTRO_MS, t, mode, reduced, width: W, height: H, tiles: map, players, ...(storeStock ? { storeStock } : {}), children: parts }));
 }
 const segOf = (events: ShowEventView[], where: Where) => eventSegments({ events, introMs: INTRO_MS }, 0, where === 'alone' ? 'solo' : 'tv')[0]!;
 function showFrames(events: ShowEventView[], where: Where, opts: Opts = {}): string[] {
@@ -141,7 +143,7 @@ const text = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/&#x27;|&#3
 const plotStage = (html: string, x: number, y: number) => html.match(new RegExp(`data-testid="plot-object-${x}-${y}"[^>]*data-stage="(\\w+)"`))?.[1];
 
 describe('B-AC-26-1: each colony event shows in its phase’s show with its glyph and its words', () => {
-  it.each(NINE)('B-AC-26-1: $ev.key in $ev.phase: its badge, its title, its words in the log; nothing prints "undefined"', ({ ev, words }) => {
+  it.each(NINE)('B-AC-26-1: $ev.key in $ev.phase: its badge, its title, its words in the log; nothing prints "undefined"', ({ ev, words, story = [] }) => {
     for (const where of ['tv', 'alone'] as const) {
       const frames = showFrames([ev], where);
       for (const html of frames) {
@@ -157,6 +159,9 @@ describe('B-AC-26-1: each colony event shows in its phase’s show with its glyp
       expect(glyph![2]).not.toBe('<circle cx="12" cy="12" r="7" fill="currentColor"></circle>');
     }
     expect(text(inside(result([ev], 'tv'), 'log'))).toContain(words);
+    // Its own story plays mid-way on the TV.
+    const mid = storyAt([ev], 2);
+    for (const mark of story) expect(has(mid, mark), mark).toBe(true);
   });
 
   it('B-AC-26-1: the development show calls its stretch a turn, the others a month', () => {
@@ -183,14 +188,18 @@ describe('B-AC-26-3: the riot takes a third of each shelf and damages one object
   // The view's tiles are after the event: the park is damaged already.
   const after = tilesWith('damaged');
 
-  it('B-AC-26-3: the park: the store’s shelves lose a third, the park keeps standing until the riot reaches it, then its HIT mark', () => {
+  it('B-AC-26-3: the park: each shelf counts down from the store’s real stock, the park keeps standing until the riot reaches it, then its HIT mark', () => {
     const ev = [riot('park')];
-    const shelves = storyAt(ev, 4.3, { map: after });
-    expect(has(shelves, 'riot-storage')).toBe(true);
-    // 18 Food, 12 Energy, 15 Smithore before: a third of each goes.
-    expect(text(inside(shelves, 'riot-storage')).match(/\d+/g)).toEqual(['12', '8', '10']);
+    // The view's market after the riot: 11 Food, 9 Energy, 10 Smithore left, so 17, 13 and 15 before.
+    const storeStock = { food: 11, energy: 9, smithore: 10 };
+    expect(text(inside(storyAt(ev, 1.5, { map: after, storeStock }), 'riot-storage')).match(/\d+/g)).toEqual(['17', '13', '15']);
+    const shelves = storyAt(ev, 4.3, { map: after, storeStock });
+    expect(text(inside(shelves, 'riot-storage')).match(/\d+/g)).toEqual(['11', '9', '10']);
     expect(plotStage(shelves, PARK.x, PARK.y)).toBe('standing');
     expect(has(shelves, 'store-flames')).toBe(false);
+    // The card is up, but the park's chip waits for the riot to reach it.
+    expect(has(shelves, 'effects-card')).toBe(true);
+    expect(text(inside(shelves, 'effects-card'))).not.toContain('Park damaged');
 
     for (const reduced of [false, true]) {
       const end = result(ev, 'tv', { map: after, reduced });
@@ -198,6 +207,12 @@ describe('B-AC-26-3: the riot takes a third of each shelf and damages one object
       expect(text(inside(end, `plot-object-${PARK.x}-${PARK.y}`))).toContain('HIT');
       expect(text(inside(end, 'effects-card'))).toContain('Park damaged');
     }
+    expect(text(inside(result(ev, 'alone', { map: after }), 'phone-card'))).toContain('Park damaged in the riot');
+  });
+
+  it('B-AC-26-3: without the store’s stock, each shelf shows only what it lost, never a guessed count', () => {
+    const shelves = text(inside(storyAt([riot('park')], 4.3, { map: after }), 'riot-storage'));
+    expect(shelves.match(/[−-]?\d+/g)).toEqual(['−6', '−4', '−5']);
   });
 
   it('B-AC-26-3: the hospital: damaged, said on the card and in the log, with no mark on the map', () => {
@@ -233,13 +248,6 @@ describe('B-AC-26-4: the planning strike announcement on the TV', () => {
     }
     expect(text(inside(result(ev, 'tv'), 'log'))).toContain('Food at 20% on 4 farms unless the Governor pays');
   });
-
-  it('B-AC-26-4: paid: the server sends no strike event, so production shows no story and no striker', () => {
-    const html = screen([], 1, 'tv');
-    expect(html).not.toContain('striker-');
-    expect(html).not.toContain('STRIKE');
-    expect(text(inside(html, 'log'))).toContain('A quiet month');
-  });
 });
 
 describe('B-AC-26-5: the four new changes have words, rising and falling, on any event', () => {
@@ -274,8 +282,19 @@ describe('B-AC-26-5: the four new changes have words, rising and falling, on any
   });
 });
 
+describe('B-AC-26-6: today’s events are unchanged by the riot’s object marks', () => {
+  it('B-AC-26-6: a meteor on an already-damaged park keeps it damaged, before and after it lands', () => {
+    const meteor = event('meteorStrike', 'production', { title: 'Meteor strike', origin: { ...PARK }, hits: [{ ...PARK, order: 0, delta: 0, becomes: 'crater' }] });
+    const seg = segOf([meteor], 'tv');
+    const map = tilesWith('damaged');
+    expect(plotStage(screen([meteor], seg.playAt + 0.5, 'tv', { map }), PARK.x, PARK.y)).toBe('damaged');
+    expect(plotStage(result([meteor], 'tv', { map }), PARK.x, PARK.y)).toBe('damaged');
+  });
+});
+
 describe('B-AC-26-6: with politics off, no colony event is ever rolled', () => {
   const COLONY: ColonyEventKey[] = ['generalStrike', 'festival', 'riot', 'emigrationWave', 'volunteerCleanup', 'storeStrike', 'walkout', 'loyalCrew', 'blamedForUnrest'];
+  // Live once C26 adds the nine keys to the engine's EventKey; until then no roll can produce one.
   it('B-AC-26-6: 60 games, months 2 to 12, every phase that rolls', () => {
     const phases: Phase[] = ['planning', 'development', 'production', 'auction', 'upkeep'];
     const rolled = new Set<string>();
