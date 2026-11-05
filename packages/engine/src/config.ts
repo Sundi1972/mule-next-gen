@@ -1,4 +1,4 @@
-import type { Outfit, EventKey, GrownGood, Good, LawId, MinedGood, Office, PrestigeId, ProcessedGood, RawGood, SpecialKind, Species, Stock, Terrain, TileTrait } from './types.js';
+import type { Outfit, EventKey, GrownGood, Good, LawId, MinedGood, MoodBand, Office, PrestigeId, ProcessedGood, RawGood, SpecialKind, Species, Stock, Terrain, TileTrait } from './types.js';
 import type { Strategy } from './playbook.js';
 
 /**
@@ -920,8 +920,8 @@ export const POLITICS = {
       commissions: { trader: true, cautious: true, aggressive: true, saboteur: false } satisfies Record<AiPersonaId, boolean>,
       /** Whether an AI Governor of each persona pays general strikers the fund can pay. */
       paysStrike: { trader: true, cautious: true, aggressive: false, saboteur: false } satisfies Record<AiPersonaId, boolean>,
-      /** Below this happiness an AI voter will not vote for the sitting Governor if anyone else runs. */
-      leanBelow: 40,
+      /** In these mood bands an AI voter will not vote for the sitting Governor if anyone else runs. */
+      leanIn: ['unhappy', 'unrest'] as MoodBand[],
     },
   },
 };

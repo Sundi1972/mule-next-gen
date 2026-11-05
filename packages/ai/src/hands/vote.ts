@@ -3,6 +3,7 @@ import {
   commissionRefusal,
   createRng,
   lawImpact,
+  moodBand,
   nextElectionMonth,
   observe,
   PERCENT,
@@ -58,6 +59,8 @@ export class VoteHand {
   private acted = false;
   /** The election month it last decided its candidacy for. */
   private decidedFor: number | null = null;
+  /** The game's seed, read from the real state each tick: the council's stream is (seed, month, seat). */
+  private gameSeed = 0;
 
   constructor(
     readonly mind: Mind,
@@ -67,6 +70,8 @@ export class VoteHand {
   /** Call before stepElection, with the same (phaseScale-divided) dt. */
   tick(state: GameState, dt: number, act: Act): void {
     if (state.phase !== 'planning' || !state.politics) return;
+    // observe() hides the seed, so the council's stream takes the game's own here (HC-41).
+    this.gameSeed = state.seed;
     // The law ballot, once the election is over: it votes per RULE-46 and presses Done at once. Its draws come from
     // the council's own stream, so the election's seeded stream stays as it was (HC-41) and no ballot waits on an AI seat.
     const { council, election } = state.politics;
@@ -77,6 +82,8 @@ export class VoteHand {
       }
       return;
     }
+    // The reveal: votes are still open, so the Governor waits it out rather than spend its month's turn on refusals.
+    if (council?.stage === 'reveal') return;
     const stage: Election['stage'] | 'none' = state.politics.election?.stage ?? 'none';
     const key = `${state.month}:${stage}`;
     if (key !== this.key) {
@@ -160,10 +167,10 @@ export class VoteHand {
     return tied.length === 1 ? tied[0]! : this.rng.pick(tied);
   }
 
-  /** G-5 C25: below POLITICS.ai.colony.leanBelow it will not back the sitting Governor while anyone else runs. */
+  /** G-5 C25: in the bands POLITICS.ai.colony.leanIn it will not back the sitting Governor while anyone else runs. */
   private leanAgainst(obs: GameState, candidates: readonly string[], office: Office): readonly string[] {
     const sitting = obs.politics!.governor;
-    const unhappy = obs.colony !== null && obs.colony.happiness < POLITICS.ai.colony.leanBelow;
+    const unhappy = obs.colony !== null && POLITICS.ai.colony.leanIn.includes(moodBand(obs.colony.happiness));
     if (office !== 'governor' || !unhappy || sitting === null || !candidates.includes(sitting)) return candidates;
     const others = candidates.filter((id) => id !== sitting);
     return others.length > 0 ? others : candidates;
@@ -172,7 +179,7 @@ export class VoteHand {
   /** The council's own draws for this game, month and seat (slice 2a HC-41): the election's stream never moves for it. */
   private council(obs: GameState): Rng {
     const seat = obs.players.findIndex((p) => p.id === this.mind.me);
-    return createRng(((obs.seed * 1_000_003) ^ (obs.month * 7_919) ^ (seat * 104_729)) >>> 0); // literal-ok: hashing constants (primes) that make one stream per game, month and seat
+    return createRng(((this.gameSeed * 1_000_003) ^ (obs.month * 7_919) ^ (seat * 104_729)) >>> 0); // literal-ok: hashing constants (primes) that make one stream per game, month and seat
   }
 
   /** What a law costs a player a month: an enact at its setting, a repeal at the setting in force (slice 2a RULE-45). */
@@ -239,11 +246,12 @@ export class VoteHand {
     if (!colony) return;
     const { commissions, paysStrike } = POLITICS.ai.colony;
     const strike = colony.strike;
-    if (strike && strike.month === obs.month && !strike.paid && paysStrike[this.persona] && obs.treasury.money >= strike.cost) act({ type: 'payStrike' });
+    let fund = obs.treasury.money;
+    if (strike && strike.month === obs.month && !strike.paid && paysStrike[this.persona] && fund >= strike.cost && act({ type: 'payStrike' })) fund -= strike.cost;
     if (!commissions[this.persona]) return;
     // Plot-free objects only, until the AI Governor bids for a site (a later C25 step).
     const choices = (Object.keys(PRESTIGE) as PrestigeId[])
-      .filter((id) => !PRESTIGE[id].needsPlot && PRESTIGE[id].credits <= obs.treasury.money && commissionRefusal(obs, id) === null)
+      .filter((id) => !PRESTIGE[id].needsPlot && PRESTIGE[id].credits <= fund && commissionRefusal(obs, id) === null)
       .sort((a, b) => PRESTIGE[b].prestige - PRESTIGE[a].prestige || PRESTIGE[a].credits - PRESTIGE[b].credits);
     if (choices[0]) act({ type: 'commission', id: choices[0] });
   }
