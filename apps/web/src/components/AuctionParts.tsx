@@ -1,9 +1,11 @@
-import { COLONY_SELLER, SHIP_ID, STORE_ID, type AuctionRole, type AuctionSide, type Good } from '@mule/engine';
-import type { AuctionView, DealView, LandAuctionView, ListingView, MuleView } from '@mule/protocol';
-import { Creature, cx, GOOD_NAME, MuleIcon, PlayerMark, SLOT_COLOR, TERRAIN_NAME, useSeatSpecies, type BoardWalker, type Slot } from '@mule/ui';
+import { COLONY_SELLER, SHIP_ID, STORE_ID, tradeInterval, WALK, type AuctionRole, type AuctionSide, type Good } from '@mule/engine';
+import type { AuctionView, DealView, LandAuctionView, ListingView, MuleView, WalkerView } from '@mule/protocol';
+import { Button, Creature, cx, GOOD_NAME, GoodIcon, MuleIcon, PlayerMark, SLOT_COLOR, TERRAIN_NAME, useSeatSpecies, type BoardWalker, type Slot } from '@mule/ui';
 import type { ReactNode } from 'react';
 import { plotName, slotOf, TERRAIN_ODDS, tileAt } from '../game/derive';
 import { GroundCard } from '../phone/ground';
+import type { Seat } from '../phone/hub/ready';
+import { WaitingFor } from '../phone/hub/ReadyBar';
 import { SpecialLine } from './SpecialLine';
 
 /** The auction's walkers as the board draws them, in seat order, with their units and the surplus over this month's need. */
@@ -115,9 +117,9 @@ export function dealLine(view: MuleView, d: AuctionView['deals'][number], meId?:
 /** A side as the status screen names it, on the phone and the TV. */
 export const SIDE_WORD: Record<AuctionSide, string> = { buyer: 'Buy', seller: 'Sell', pass: 'Pass' };
 
-/** Two buttons and no Pass: a second tap on your side is how you sit a good out. */
-export function toggleSide(current: AuctionSide | undefined, tapped: AuctionRole): AuctionSide {
-  return current === tapped ? 'pass' : tapped;
+/** Two buttons and no Pass: everyone takes part, so a tap on your own side keeps it (RULE-2). */
+export function toggleSide(_current: AuctionSide | undefined, tapped: AuctionRole): AuctionSide {
+  return tapped;
 }
 
 /**
@@ -203,7 +205,7 @@ export function walkHint(view: MuleView, auction: AuctionView, meId: string, hav
   const good = GOOD_NAME[auction.good];
   if (side === 'pass') return { line: `You sit ${good} out.`, how: null };
   if (side === 'seller' && have === 0) return { line: 'You’ve sold all you have.', how: null };
-  const how = side === 'buyer' ? 'Hold ▲ to walk up.' : 'Hold ▼ to walk down.';
+  const how = side === 'buyer' ? 'Hold ▲ to walk up; a tap moves 1 cr.' : 'Hold ▼ to walk down; a tap moves 1 cr.';
   const list = pricesOn(auction, side === 'buyer' ? 'seller' : 'buyer', meId);
   const best = list[0];
   if (!best) return { line: side === 'buyer' ? `Nobody is selling ${good} now.` : `Nobody is buying ${good} now.`, how };
@@ -222,13 +224,13 @@ export function walkHint(view: MuleView, auction: AuctionView, meId: string, hav
   return { line: `Walk down to ${name(best)}’s bid at ${best.price}.`, how };
 }
 
-/** The hint's box: `lit` while your units change hands. */
-export function Hint({ line, how, tone = 'quiet', testid = 'hint' }: { line: ReactNode; how?: string | null; tone?: 'quiet' | 'lit'; testid?: string }) {
+/** The hint's box: `lit` while your units change hands, `ok` once a choice at a line is done. */
+export function Hint({ line, how, tone = 'quiet', testid = 'hint' }: { line: ReactNode; how?: string | null; tone?: 'quiet' | 'lit' | 'ok'; testid?: string }) {
   return (
     <div
       className={cx(
         'flex flex-col gap-0.5 rounded-control border px-2.5 py-1.5 text-xs leading-snug @min-[1100px]/shell:gap-1 @min-[1100px]/shell:px-4 @min-[1100px]/shell:py-3 @min-[1100px]/shell:text-base',
-        tone === 'lit' ? 'border-holo bg-holo-soft text-ink' : 'border-holo-faint text-ink',
+        tone === 'lit' ? 'border-holo bg-holo-soft text-ink' : tone === 'ok' ? 'border-ok/60 bg-panel text-ink' : 'border-holo-faint text-ink',
       )}
       data-testid={testid}
     >
@@ -480,3 +482,69 @@ export function LeaderBox({ view, lot, meId, className }: { view: MuleView; lot:
     </div>
   );
 }
+
+/** "Waiting for Kai to pick": planning's names line, each with its creature and an AWAY mark for a dropped phone. */
+export function WaitingToPick({ seats, tv = false }: { seats: readonly Seat[]; tv?: boolean }) {
+  return (
+    <span className={cx('flex flex-wrap items-center gap-x-1.5 gap-y-1', tv ? 'text-3xl' : 'text-sm @min-[1100px]/shell:text-lg')} data-testid="waiting-to-pick" aria-label={`Waiting for ${seats.map((s) => s.name).join(' and ')} to pick`}>
+      <WaitingFor seats={seats} me={null} tv={tv} />
+      <span className="text-ink-2">to pick</span>
+    </span>
+  );
+}
+
+// --- A-6 · at a house's line you choose how many (UX audit G-1; mock #audit-auction-store-line) ------------------
+
+/**
+ * Where this phone's walker stands, as the engine says: walking; at a house's line, where units trade by themselves
+ * (RULE-1); or at one with nothing moving, because you can't pay or have none. Players sharing a line take its units in
+ * turns, so the deal names whoever got the last one: a player who can trade there is trading while the line's deal runs.
+ */
+export type LineMoment = { kind: 'walk' } | { kind: 'line'; house: string } | { kind: 'trading'; house: string };
+
+export function lineMoment(mine: Pick<WalkerView, 'id' | 'side' | 'line'> | undefined, deals: readonly Pick<DealView, 'buyer' | 'seller'>[], canTrade = true): LineMoment {
+  if (!mine || mine.side === 'pass' || !mine.line) return { kind: 'walk' };
+  const house = mine.line;
+  const mineNow = deals.some((d) => (d.buyer === mine.id && d.seller === house) || (d.seller === mine.id && d.buyer === house));
+  const lineRuns = deals.some((d) => (mine.side === 'buyer' ? d.seller : d.buyer) === house);
+  const trading = mineNow || (canTrade && lineRuns);
+  return trading ? { kind: 'trading', house } : { kind: 'line', house };
+}
+
+const houseName = (house: string) => (house === SHIP_ID ? 'the ship' : 'the store');
+
+/**
+ * The rail while units move at a line: what is trading, and how to stop. Selling below next month's need is shown,
+ * never asked (the PM's ruling, "show, don't stop").
+ */
+export function lineHint(m: Extract<LineMoment, { kind: 'trading' }>, side: 'buyer' | 'seller', good: Good, price: number): { line: string; how: string } {
+  const name = GOOD_NAME[good];
+  const what = side === 'buyer' ? `Buying ${name} from ${houseName(m.house)}` : `Selling ${name} to ${houseName(m.house)}`;
+  // Variant A (Heiko's pick): the price, and that it speeds up; one tap away from the line stops it.
+  return { line: `${what} at ${price} cr, faster and faster.`, how: side === 'buyer' ? 'Tap ▼ to stop.' : 'Tap ▲ to stop.' };
+}
+
+/**
+ * The price at your line: its running deal's, whoever took the last unit, else the house's own line (the ship's when
+ * you sell to it). Never the store's price at the ship's line.
+ */
+export function linePrice(auction: Pick<AuctionView, 'deals' | 'storeSells' | 'storeBuys' | 'shipPays'>, side: 'buyer' | 'seller', house: string): number {
+  const deal = auction.deals.find((d) => (side === 'buyer' ? d.seller : d.buyer) === house);
+  if (deal) return deal.price;
+  if (house === SHIP_ID) return auction.shipPays ?? 0;
+  return (side === 'buyer' ? auction.storeSells : auction.storeBuys) ?? 0;
+}
+
+/**
+ * How fast a running deal moves now, 0 at its first unit to 1 at the top speed: from the units it has traded (the view's
+ * running count) and WALK's curve, so the board's chevrons light as the engine speeds up.
+ */
+export function dealSpeed(units: number): number {
+  return (WALK.tradeStartMs - tradeInterval(units)) / (WALK.tradeStartMs - WALK.tradeFloorMs);
+}
+
+/** "You keep 3 of the 5 Food you need next month.": selling into next month's need is shown, never asked. */
+export function keepWords(good: Good, have: number, need: number): string {
+  return `You keep ${have} of the ${need} ${GOOD_NAME[good]} you need next month.`;
+}
+

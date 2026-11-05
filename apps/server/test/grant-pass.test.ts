@@ -64,10 +64,9 @@ describe('the land grant is one pass with no clock', () => {
     expect(ticks).toBeLessThan(freePlots);
   });
 
-  it('Done with land: a human claims one plot and presses Ready once the AI has used its claims or pressed Done, and the grant ends at once', () => {
+  it('Done with land: a human with a claim left presses Ready once the AI has used its claims or pressed Done, and the grant ends at once', () => {
     const { game, freePlots, advance } = inTheGrant(withAnAi);
-    const lit = game.viewFor('s1').lit!;
-    game.handle('s1', { type: 'claim', x: lit.x, y: lit.y });
+    // A grant gives one claim a seat (5 Nov): the human keeps hers, so only Ready ends the grant for her.
     const aiDone = () => game.viewFor(null).players.find((p) => p.id === 's3')!.ready;
     let ticks = 0;
     while (game.viewFor(null).phase === 'landGrant' && !aiDone() && ticks <= freePlots) {

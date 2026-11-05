@@ -1,15 +1,16 @@
 import { GOOD_CONFIG, PRICE, UPKEEP, WALK } from './config.js';
 import { colonyPrice, driftReference, monthlyDemand, shelfShort, shipInPort, shipPrice, storeForSale, storeWants, taxSale } from './economy.js';
 import { RuleError } from './errors.js';
+import { chargeExportTax } from './politics.js';
 import { monthNeeds } from './production.js';
 import type { AuctionSide, GameState, Good, GoodReceipt, LiveAuction, ReceiptSide, SkipReason, StatusRow } from './types.js';
-import { stepBoard, takeSide, tradePossible, type WalkMarket } from './walk.js';
+import { houseLineAt, stepBoard, stepWalker, takeSide, tradePossible, type WalkMarket } from './walk.js';
 
 /**
  * The goods auction, played live as in the original M.U.L.E. Goods come up
  * one at a time. For each, a status screen shows what every player had,
- * used, made and now holds, and there each player picks Buyer, Seller or
- * Pass, starting from the side their numbers point to (defaultSide). At its
+ * used, made and now holds. Every player takes part: each starts as a
+ * buyer and may switch to seller (the auto-trade amendment, RULE-2). At its
  * bell they walk on the board (see walk.ts): sellers start at the top and
  * walk down to ask less, buyers start at the bottom and walk up to bid
  * more. The store's selling line is near the top, its buying line near the
@@ -57,17 +58,18 @@ export function shipLine(state: GameState): number | null {
   return a?.good && shipInPort(state) ? shipPrice(state, a.good) : null;
 }
 
-const emptySide = (): ReceiptSide => ({ units: 0, gross: 0, tax: 0, prices: [], with: [] });
+const emptySide = (): ReceiptSide => ({ units: 0, gross: 0, tax: 0, exportTax: 0, prices: [], with: [] });
 
 /** Writes one unit onto a seat's receipt for the good that is up, and its money onto the month's running total. */
-function noteUnit(a: LiveAuction, id: string, side: keyof GoodReceipt, price: number, tax: number, other: string): void {
+function noteUnit(a: LiveAuction, id: string, side: keyof GoodReceipt, price: number, tax: number, other: string, exportTax = 0): void {
   const r = (a.receipts[id] ??= { bought: emptySide(), sold: emptySide() })[side];
   r.units++;
   r.gross += price;
   r.tax += tax;
+  r.exportTax = (r.exportTax ?? 0) + exportTax;
   r.prices.push(price);
   if (!r.with.includes(other)) r.with.push(other);
-  a.tally[id] = (a.tally[id] ?? 0) + (side === 'bought' ? -price : price - tax);
+  a.tally[id] = (a.tally[id] ?? 0) + (side === 'bought' ? -price : price - tax - exportTax);
 }
 
 /** The good that is up, as a market for the walk board: players' stock and money, the store and the ship, and the sales tax. */
@@ -104,9 +106,11 @@ export function goodsMarket(state: GameState): WalkMarket {
       }
       if (s) {
         s.stock[good]--;
-        const net = taxSale(state, s.id, price);
-        s.money += net;
-        noteUnit(a, seller, 'sold', price, price - net, buyer);
+        const afterSalesTax = taxSale(state, s.id, price);
+        // The export tax comes out of the sale after the sales tax (RULE-43); the receipt names each (W2).
+        const exportTax = buyer === SHIP_ID ? chargeExportTax(state, s.id, price) : 0;
+        s.money += afterSalesTax - exportTax;
+        noteUnit(a, seller, 'sold', price, price - afterSalesTax, buyer, exportTax);
       } else {
         state.store.capital += price;
         state.store.stock[good]--;
@@ -158,13 +162,6 @@ export function statusRows(state: GameState, good: Good): StatusRow[] {
     const kept = Math.min(UPKEEP.depotCapacity, Math.floor(rest * (1 - GOOD_CONFIG[good].spoilage)));
     return { id: p.id, had, used: Math.max(0, had + made - now), made, now, need, spoils: rest - kept };
   });
-}
-
-/** Seller with units to spare, Buyer when short, Pass with none and no need (or exactly enough). */
-export function defaultSide(state: GameState, playerId: string, good: Good): AuctionSide {
-  const p = state.players.find((q) => q.id === playerId)!;
-  const need = monthNeeds(state, playerId)[good];
-  return p.stock[good] > need ? 'seller' : p.stock[good] < need ? 'buyer' : 'pass';
 }
 
 /**
@@ -224,7 +221,7 @@ function nextGood(state: GameState, skipped: LiveAuction['skipped']): void {
     Object.assign(a, {
       good,
       stage: 'status',
-      clockMs: WALK.statusMs,
+      clockMs: WALK.statusMs ?? 0,
       elapsed: 0,
       storeBuy,
       storeSell,
@@ -289,21 +286,34 @@ export function endAuction(state: GameState): void {
 }
 
 /**
- * Takes a side for the good that is up: Buyer, Seller or Pass. On the status
- * screen it sets where you start; during the walk you may switch, and your
- * creature jumps back to the new side's start edge (top for a seller,
- * bottom for a buyer), so a switch never trades at once. Pass leaves the board.
+ * Takes a side for the good that is up: Buyer or Seller; everyone takes part, so there is no Pass. On the status
+ * screen it sets where you start; during the walk you may switch, and your creature jumps back to the new side's
+ * start edge (top for a seller, bottom for a buyer), so a switch never trades at once. Taking your own side again
+ * changes nothing.
  */
 export function declareRole(state: GameState, playerId: string, side: AuctionSide): void {
   const a = live(state);
   const p = state.players.find((q) => q.id === playerId);
   if (!p) throw new RuleError(`Unknown player ${playerId}`);
+  if (side === 'pass') throw new RuleError('Everyone takes part in the auction');
   if (a.stage === 'close') throw new RuleError('This good has closed');
   if (side === 'seller' && p.stock[a.good!] <= 0) throw new RuleError('You have none to sell');
   const w = a.walkers.find((x) => x.id === playerId);
   if (!w || w.side === side) return;
   takeSide(a, goodsMarket(state), playerId, side);
   if (a.stage === 'walk') auctionDone(state, playerId, false);
+}
+
+/**
+ * The server's, never a player's: a dropped phone leaves the board for the rest of the good that is up, so it can't
+ * walk on or stand on a line where a house or a player keeps trading with it (FM-dropped-walker). Players can't pass
+ * (RULE-2); declaring a side again brings it back at that side's start edge. Nothing happens once the good has closed.
+ */
+export function leaveBoard(state: GameState, playerId: string): void {
+  const a = state.auction;
+  if (state.phase !== 'auction' || !a || !a.good || a.stage === 'over' || a.stage === 'close') return;
+  if (!a.walkers.some((w) => w.id === playerId)) return;
+  takeSide(a, goodsMarket(state), playerId, 'pass');
 }
 
 /** Hold up, hold down or stand still. Only during the walk, and only on the board. */
@@ -315,6 +325,21 @@ export function setWalk(state: GameState, playerId: string, dir: -1 | 0 | 1): vo
   w.dir = dir;
 }
 
+/** One tap on Up or Down during the walk: one price step (G-2). */
+export function stepWalk(state: GameState, playerId: string, dir: -1 | 1): void {
+  const a = live(state);
+  if (a.stage !== 'walk') throw new RuleError('Not walking yet');
+  stepWalker(a, goodsMarket(state), playerId, dir);
+}
+
+/** The house line a player stands at during the walk ('store' or 'ship', and its price), or null. */
+export function lineOf(state: GameState, playerId: string): { house: string; price: number } | null {
+  const a = state.auction;
+  const w = a?.walkers.find((x) => x.id === playerId);
+  if (state.phase !== 'auction' || a?.stage !== 'walk' || !a.good || !w) return null;
+  return houseLineAt(goodsMarket(state), w);
+}
+
 /** Done with this stage, or not done after all. */
 export function auctionDone(state: GameState, playerId: string, done = true): void {
   const a = state.auction;
@@ -324,18 +349,19 @@ export function auctionDone(state: GameState, playerId: string, done = true): vo
   if (!done && has) a.done = a.done.filter((id) => id !== playerId);
 }
 
-/** Puts every player on the board at their defaultSide's start edge, as the good's status screen opens. */
+/** Puts every player on the board as a buyer, at its start edge, as the good's status screen opens (RULE-2). */
 function seedSides(state: GameState): void {
   const a = state.auction!;
   const market = goodsMarket(state);
   a.walkers = state.players.map((p) => ({ id: p.id, side: 'pass', price: 0, dir: 0, since: 0 }));
-  for (const p of state.players) takeSide(a, market, p.id, defaultSide(state, p.id, a.good!));
+  for (const p of state.players) takeSide(a, market, p.id, 'buyer');
 }
 
 /**
- * Advances the live auction by dt ms of game time. The status screen runs
- * on its own clock and ends early once every player is done; then the walk
- * starts on the sides picked. The walk ends when its clock runs out, when
+ * Advances the live auction by dt ms of game time. The status screen waits
+ * for every player's Done (WALK.statusMs null: no clock; a number restores
+ * one, and the screen then also ends when it runs out); then the walk starts
+ * on the sides picked. The walk ends when its clock runs out, when
  * every player still on the board is done, or when no trade is possible any
  * more; then the close stage holds the board for WALK.closeMs, trading
  * nothing, and the next good comes up. Returns every unit traded in this step.
@@ -347,8 +373,9 @@ export function stepAuction(state: GameState, dt: number): Trade[] {
 
   if (a.stage === 'status') {
     a.ticks++;
-    a.clockMs -= dt;
-    if (a.clockMs > 0 && !state.players.every((p) => a.done.includes(p.id))) return [];
+    const timed = WALK.statusMs !== null;
+    if (timed) a.clockMs -= dt;
+    if ((!timed || a.clockMs > 0) && !state.players.every((p) => a.done.includes(p.id))) return [];
     Object.assign(a, { stage: 'walk', clockMs: WALK.goodMs, done: [], elapsed: 0 } satisfies Partial<LiveAuction>);
     // Everyone passed, or every seller lacks a buyer or every buyer a seller: nothing to walk for.
     if (!tradePossible(a, goodsMarket(state))) finishGood(state, 'nobody trading');

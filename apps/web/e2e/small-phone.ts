@@ -4,21 +4,22 @@
  * read with and without a TV, and the month end in Collapse too (C20).
  * Local tier: `pnpm --filter @mule/web build`, then `pnpm --filter @mule/web e2e:small`.
  */
-import { POLLUTION } from '@mule/engine';
+import { EVENT_SHOW, POLLUTION, type GameState } from '@mule/engine';
 import type { Locator, Page } from 'playwright';
-import { claimAPlot, CLAIM_MS, check, doneWithLand, held, launch, PHONE, PHONE_SMALL, SHOWN_MS, startServer, TV } from './harness';
+import { PHASE_MS } from '../../server/src/mule-game.js';
+import { claimAPlot, CLAIM_MS, check, doneWithLand, hallPlace, held, launch, PHONE, PHONE_SMALL, pressAct, SHOWN_MS, startServer, steerTo, throughDoor, TV } from './harness';
 import { ELECTION_WAIT_MS, readyThroughTheElection, voteThroughTheElection } from './politics-steps';
+import { railFits } from './shell-steps';
 import { AUDIT_JS, MONTH_END_JS, type AuditRead, type AuditScope } from './small-phone-audit';
+import { arcadeTable } from './store-steps';
 import { doneThroughTheElection } from './table-steps';
 
 const PHASE_SCALE = 0.1;
 /** A laptop, for the A-5 close read's third size. */
 const LAPTOP = { width: 1440, height: 900 };
 const PRESS_MS = 2_000;
-/** Development's one clock runs on wall time, held or not: enough for two MULEs and every read. */
-const DEV_MS = 120_000;
-/** Two MULEs and their outfits, whatever the seed deals. */
-const DEV_MONEY = 2_000;
+/** Month 1's development, left to run out at this table's scale: a month event's show (its intro and the cap) first. */
+const DEV_RUNS_OUT_MS = PHASE_MS.development * PHASE_SCALE + EVENT_SHOW.introMs + EVENT_SHOW.capMs + SHOWN_MS;
 const NAME = 'Heiko';
 /** A long AI name, so the tables are read with names that must give way. */
 const LONG_NAME = 'The Big Spender';
@@ -32,13 +33,20 @@ const WHOLE: AuditScope = { roots: ['[data-testid=game-shell]'], skip: ['[data-t
  * whole stage: at 667 its map tools are 28 px tall and the ballot's ELECTED tag is 9 px, owned by the hub and politics
  * work, so the stage joins this read once those meet B-AC-11.
  */
-const HUB: AuditScope = { roots: [...RAIL.roots, '[data-testid=desks]', '[data-testid=actions]'], skip: RAIL.skip };
+const HUB: AuditScope = {
+  roots: [...RAIL.roots, '[data-testid=desks]', '[data-testid=actions]'],
+  skip: RAIL.skip,
+  // H-9 in the approved mock: folded, the Now card keeps to one line, its long title truncating (whole one tap away).
+  truncates: ['[data-testid=now][aria-expanded=false] [data-testid=now-title]'],
+};
 /**
- * Out on the development map: the rail header and the map. The plot card (the rail's body and its footer) is excluded:
- * it retires in arcade C14, so it is measured and printed, not asserted. The plots are the map's own grid, 13 across
- * the stage, 31.8 px at 667: not counted as taps, since the map's zoom (C11) is what makes them bigger.
+ * Development, steered (walking on): the whole arcade screen, its HUD, the stage (map or hall) and the stick and the
+ * button over it. The chat ticker and its foot are WS6's chat, left out as everywhere else. The map stage is ruled to
+ * clip: each colonist is placed by a layer the stage's own size, moved to where it stands, so a colonist right or below
+ * the middle makes the stage's scroll box wider than the map it draws whole (measured: colonist-s2's layer at 368–1035
+ * in a 667 px stage). What the layers draw, the creature, is still read.
  */
-const DEV_MAP: AuditScope = { roots: [...RAIL.roots, '[data-testid=dev-map]'], skip: RAIL.skip, tapsNotCounted: ['[data-testid^=map-plot-]'] };
+const STEERED: AuditScope = { roots: ['[data-testid=phone-game]'], skip: ['[data-testid=chat-ticker]', '[data-testid=chat-foot]'], clips: ['[data-testid=map-stage]'] };
 /**
  * Month end and game over: the whole screen. WS6's fidelity rulings make two texts truncate, printed, not failed: the
  * folded Now card's title is one line (M-4), and a league table's name gives way so its numbers stay in the panel
@@ -63,10 +71,7 @@ try {
   /** Reads `scope` at 667×375, then 844×390, and leaves the phone at 667×375; with the clock held once in a room. */
   const both = async (screen: string, scope: AuditScope, prep?: () => Promise<unknown>) => {
     const step = async () => {
-      const small = await readAt(phone, PHONE_SMALL.viewport, scope, prep);
-      const wide = await readAt(phone, PHONE.viewport, scope, prep);
-      await phone.setViewportSize(PHONE_SMALL.viewport);
-      reads.push({ screen, small, base: wide });
+      reads.push({ screen, ...(await bothSizes(phone, scope, prep)) });
     };
     await (code ? held(server, code, step) : step());
   };
@@ -117,51 +122,20 @@ try {
   await claimAPlot(phone, CLAIM_MS, 'B-AC-11: the phone claims a plot for its plot card');
   await doneWithLand(phone);
 
-  const dev = phone.locator('[data-phase=development]');
-  await dev.waitFor({ timeout: 20_000 });
-  giveDevelopment(code);
-  await both('development, the store hall', WHOLE);
-  await phone.locator('[data-shop=corral]:not([disabled])').click({ timeout: PRESS_MS });
-  await phone.locator('[data-shop=energy]:not([disabled])').click({ timeout: PRESS_MS });
-  await dev.getByRole('button', { name: 'Walk out to the map' }).click({ timeout: PRESS_MS });
-  await dev.getByRole('button', { name: 'Install here' }).click({ timeout: PRESS_MS });
-  await dev.getByText(/Your MULE here makes/).waitFor({ timeout: PRESS_MS });
-  await startMonthOnesClock(phone, code);
-  await dev.getByRole('button', { name: 'Store', exact: true }).click({ timeout: PRESS_MS });
-  await phone.locator('[data-shop=corral]:not([disabled])').click({ timeout: PRESS_MS });
-  await phone.locator('[data-shop=food]:not([disabled])').click({ timeout: PRESS_MS });
-  await dev.getByRole('button', { name: 'Walk out to the map' }).click({ timeout: PRESS_MS });
-  const swap = dev.getByRole('button', { name: 'Replace MULE' });
-  await swap.waitFor({ timeout: PRESS_MS });
-  await both('development, your plot with a MULE', DEV_MAP);
-  const filter = dev.getByRole('button', { name: /^(Fit a filter|Filter fitted)/ });
-  for (const size of [PHONE_SMALL.viewport, PHONE.viewport]) {
-    await phone.setViewportSize(size);
-    const card: string[] = [];
-    for (const [what, button] of [['swap', swap], ['filter', filter]] as const) {
-      await button.evaluate((e) => e.scrollIntoView({ block: 'end' }));
-      const box = await button.boundingBox();
-      card.push(`${what} ${box ? `${box.width.toFixed(1)}×${box.height.toFixed(1)}` : 'absent'}${(await inView(phone, button)) ? ' in full' : ' cut'}`);
-    }
-    console.log(`  plot card at ${size.width}×${size.height}, measured, not asserted (retires in arcade C14): ${card.join(', ')}`);
-    const spill = await dev.getByRole('button', { name: 'Colony store' }).evaluate((plot) => {
-      const chip = [...plot.querySelectorAll('span')].find((s) => s.textContent === 'STORE');
-      if (!chip) return Infinity;
-      const p = plot.getBoundingClientRect();
-      const c = chip.getBoundingClientRect();
-      return Math.max(p.left - c.left, c.right - p.right, p.top - c.top, c.bottom - p.bottom);
-    });
-    check(spill <= 0.5, `B-AC-11: at ${size.width}×${size.height} the map's STORE chip sits inside its plot, out by ${spill} px`);
-  }
-  await phone.setViewportSize(PHONE_SMALL.viewport);
-  await phone.getByTestId('move-to-phone').click({ timeout: PRESS_MS });
-  await phone.getByTestId('host-dialog').waitFor({ timeout: PRESS_MS });
-  await both('the move-to-phone dialog', { roots: ['[data-testid=host-dialog]'], skip: [] });
-  await phone.keyboard.press('Escape');
-  await dev.getByRole('button', { name: 'Go to the pub and end your turn' }).click({ timeout: PRESS_MS });
-
-  await phone.locator('[data-phase=production]').waitFor({ timeout: 20_000 });
-  await both('production', RAIL);
+  // Walking is on (arcade PR-11): development is the steered arcade screen. At this table's speed a held key overshoots
+  // every reach, so its reads are taken on a table of its own at full pace (steeredDevelopment, after this game); here
+  // the turn's clock runs out, any month event's show first.
+  await phone.locator('[data-phase=development]').waitFor({ timeout: 20_000 });
+  installAMule(code);
+  await phone.locator('[data-phase=production]').waitFor({ timeout: DEV_RUNS_OUT_MS });
+  await held(server, code, async () => {
+    reads.push({ screen: 'production', ...(await bothSizes(phone, RAIL, async () => console.log(`  C20, production's harvest: ${await railFits(phone, { key: 'harvest', sizes: [phone.viewportSize()!] })}`))) });
+    // The move-to-phone dialog, from the shell's rail: development's arcade screen has no shell to open it from.
+    await phone.getByTestId('move-to-phone').click({ timeout: PRESS_MS });
+    await phone.getByTestId('host-dialog').waitFor({ timeout: PRESS_MS });
+    reads.push({ screen: 'the move-to-phone dialog', ...(await bothSizes(phone, { roots: ['[data-testid=host-dialog]'], skip: [] })) });
+    await phone.keyboard.press('Escape');
+  });
   const auction = phone.locator('[data-phase=auction]');
   await auction.waitFor({ timeout: 30_000 });
   await both('the goods auction', RAIL);
@@ -216,6 +190,7 @@ try {
   const air = setAir(code, collapseAir());
   await end.getByTestId('collapse-banner').waitFor({ timeout: PRESS_MS });
   await monthEnd('month end, Collapse');
+  console.log(`  C20, your Worth in Collapse: ${await held(server, code, () => railFits(phone, { key: 'worth-total', scrolls: true, stage: '[data-testid^=league-row-][data-mine]' }))}`);
   await tv.context().close();
   await end.getByTestId('phone-only-monthend').waitFor({ timeout: PRESS_MS });
   await monthEnd('month end, Collapse, no TV');
@@ -230,10 +205,12 @@ try {
   const over = phone.locator('[data-phase=gameOver]');
   await playToTheEnd(code, over);
   await monthEnd('game over');
+  console.log(`  C20, the final standings: ${await held(server, code, () => railFits(phone, { key: 'scores' }))}`);
   await tv.context().close();
   await over.getByTestId('phone-only-gameover').waitFor({ timeout: PRESS_MS });
   await monthEnd('game over, no TV');
 
+  await steeredDevelopment();
   report(reads);
   check(errors.length === 0, `no page errors: ${errors.join('; ')}`);
   console.log(`e2e small phone: ok (${((Date.now() - started) / 1_000).toFixed(1)} s)`);
@@ -251,44 +228,77 @@ async function readAt(phone: Page, size: { width: number; height: number }, scop
   // Two frames: the container queries and the map's plot size settle on the first.
   await phone.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
   await prep?.();
+  // Every surface is measured at rest: an entrance (a card dropping in from 40 px up) ends now, so its first frames are
+  // not read as off the screen. A looping animation has no end to jump to and is left running.
+  await phone.evaluate(`document.getAnimations().forEach((a) => { if (Number.isFinite(a.effect?.getComputedTiming().endTime)) a.finish(); })`);
   return (await phone.evaluate(`(${AUDIT_JS})(${JSON.stringify(scope)})`)) as AuditRead;
 }
 
-async function inView(phone: Page, button: ReturnType<Page['locator']>): Promise<boolean> {
-  return button.evaluate((el) => {
-    const b = el.getBoundingClientRect();
-    const rail = el.closest('[data-testid=guide] > .overflow-y-auto, [data-testid=actions]')?.getBoundingClientRect();
-    return !!rail && b.top >= rail.top - 1 && b.bottom <= rail.bottom + 1 && b.left >= rail.left - 1 && b.right <= rail.right + 1;
-  });
+/**
+ * Test fixture: an Energy MULE on the phone's first plot, put there through the server as installing leaves it, so
+ * production has a harvest of the phone's own to read. Walking it there is steeredDevelopment's, at full pace.
+ */
+function installAMule(code: string): void {
+  const room = server.registry.get(code) as unknown as { game: { state: GameState }; broadcast(): void };
+  const { state } = room.game;
+  check(state.phase === 'development', `a MULE goes in during development, not in ${state.phase}`);
+  const me = state.players.find((p) => p.name === NAME);
+  check(me, `${NAME} plays in the game`);
+  const plot = state.tiles.find((t) => t.owner === me.id && t.terrain !== 'store');
+  check(plot, `${NAME} owns a plot in month 1's development`);
+  plot.outfit = 'energy';
+  me.installedThisTurn = true;
+  room.broadcast();
 }
 
-/** Test fixture: development's clock and money for the walk-through, from now. */
-function giveDevelopment(code: string): void {
-  const room = server.registry.get(code) as unknown as { game: { devEndsAt: number; ctx: { now(): number; changed(): void }; state: { players: { name: string; money: number }[] } } };
-  const { game } = room;
-  game.devEndsAt = game.ctx.now() + DEV_MS;
-  const me = game.state.players.find((p) => p.name === NAME);
-  check(me, `${NAME} plays in the game`);
-  me.money += DEV_MONEY;
-  game.ctx.changed();
+/** Reads `scope` at 667×375, then 844×390, and leaves the phone at 667×375. */
+async function bothSizes(phone: Page, scope: AuditScope, prep?: () => Promise<unknown>): Promise<{ small: AuditRead; base: AuditRead }> {
+  const small = await readAt(phone, PHONE_SMALL.viewport, scope, prep);
+  const base = await readAt(phone, PHONE.viewport, scope, prep);
+  await phone.setViewportSize(PHONE_SMALL.viewport);
+  return { small, base };
 }
 
 /**
- * Month 1's clock waits for every first MULE (A-1), and a seat already in may only end its turn until it starts, so the
- * corral stays shut for a second MULE. The phone hosts: it starts the clock for the AIs still buying, as its player
- * would (first-mule.ts reads that card at both sizes), then development gets its long clock back.
+ * B-AC-11 on the steered arcade screen, development as it is played with walking on, on a table of its own at full
+ * pace (steerTo's strides overshoot at any other) with a TV in the room, as the main game has. Three reads, each at both
+ * sizes, with the clock held: out on the map by the store, where the turn starts; in the hall at the corral, with the
+ * MULE bought; and back on the map leading it, outfitted. The chat ticker is WS6's and left out. The server is closed
+ * here, whatever happens.
  */
-async function startMonthOnesClock(phone: Page, code: string): Promise<void> {
-  // The server says whether the clock still waits; if every AI is already in, it has started on its own.
-  const room = server.registry.get(code) as unknown as { game: { clockWaits: boolean } };
-  if (room.game.clockWaits) {
-    await phone.getByTestId('continue').click({ timeout: PRESS_MS });
-    await phone.getByTestId('continue-now').click({ timeout: PRESS_MS });
-    await phone.getByTestId('clock-waits').waitFor({ state: 'hidden', timeout: PRESS_MS });
-    check(!room.game.clockWaits, "A-1: the host's Start the clock starts month 1's clock");
+async function steeredDevelopment(): Promise<void> {
+  const steered = await startServer({ maxMonths: 1, politics: false, phaseScale: 1, seed: () => 1 });
+  const errors: string[] = [];
+  try {
+    const t = await arcadeTable(browser, steered.base, steered.server, errors, { names: [NAME, 'Mia'], tv: true });
+    const { heiko, code } = t;
+    const seat = 's1';
+    const read = (screen: string) => held(steered.server, code, async () => reads.push({ screen, ...(await bothSizes(heiko, STEERED)) }));
+    const press = async (verb: string) => {
+      await heiko.getByTestId('action-verb').filter({ hasText: new RegExp(`^\\s*${verb}\\s*$`) }).waitFor({ timeout: SHOWN_MS });
+      await pressAct(heiko);
+    };
+    const stage = (space: 'map' | 'hall') => heiko.locator(`[data-testid=your-stage][data-space=${space}]`).waitFor({ timeout: SHOWN_MS });
+
+    await heiko.setViewportSize(PHONE_SMALL.viewport);
+    await stage('map');
+    await read('steered development, the map');
+    await press('ENTER STORE');
+    await stage('hall');
+    await steerTo(heiko, steered.server, code, seat, hallPlace('corral'));
+    await press('BUY MULE');
+    await heiko.getByTestId('lead-chip').waitFor({ timeout: SHOWN_MS });
+    await read('steered development, the store hall');
+    await steerTo(heiko, steered.server, code, seat, hallPlace('food'));
+    await press('OUTFIT · FOOD');
+    await heiko.waitForFunction(() => !/OUTFIT/.test(document.querySelector('[data-testid=action-verb]')?.textContent ?? ''), null, { timeout: SHOWN_MS });
+    await throughDoor(heiko, steered.server, code, seat);
+    await stage('map');
+    await read('steered development, leading a MULE');
+  } finally {
+    await steered.server.close();
   }
-  // Starting the clock, by the host or by the last first MULE, set the phase's own short clock: the long one comes back.
-  giveDevelopment(code);
+  check(errors.length === 0, `steered development: no page errors: ${errors.join('; ')}`);
 }
 
 /** Test fixture: the last AI seat takes `name`. */
@@ -391,7 +401,7 @@ function report(all: Read[]): void {
   for (const { screen, small, base, c20 } of all) {
     console.log(`  ${screen}: rail ${small.railWindow ?? '-'} px at 667×375, ${base.railWindow ?? '-'} px at 844×390`);
     for (const [size, read, mine] of [['667×375', small, c20?.small], ['844×390', base, c20?.base]] as const) {
-      for (const r of read.ruled) console.log(`    ${size}, ruled to truncate: ${r}`);
+      for (const r of read.ruled) console.log(`    ${size}, ruled: ${r}`);
       for (const f of mine ?? []) fails.push(`C20: ${screen} at ${size}: ${f}`);
       for (const f of read.fails) fails.push(`B-AC-11: ${screen} at ${size}: ${f}`);
       if (read.name && !(read.name.text === NAME && read.name.whole)) fails.push(`B-AC-11: ${screen} at ${size}: the rail header shows "${read.name.text}" cut, not ${NAME} whole`);

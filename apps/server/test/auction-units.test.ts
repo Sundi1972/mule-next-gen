@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { storeForSale, UPKEEP, WALK, type AuctionSide, type GameState, type Good } from '@mule/engine';
 import type { MuleView } from '@mule/protocol';
 import { GRANT_TICK_MS, MuleGame } from '../src/mule-game.js';
-import { fakeContext, readyAll, seats } from './fake-context.js';
+import { fakeContext, pressThroughSidePick, readyAll, seats } from './fake-context.js';
 
 /** The engine's state behind the game: the source of truth the view must match. */
 const engineOf = (game: MuleGame) => (game as unknown as { state: GameState }).state;
@@ -33,13 +33,16 @@ function walkTogether(game: MuleGame) {
   game.handle('s2', { type: 'walk', dir: 'up' });
 }
 
-/** Plays the first month until the good is up in the auction; nobody presses anything after planning's Ready. */
+/** Plays the first month until the good is up in the auction; after planning's Ready nobody presses anything but Ready at each side pick (A-7). */
 function toGood(good: Good) {
   const { ctx, advance } = fakeContext();
   const game = new MuleGame(ctx, 7);
   game.start(seats);
   readyAll(game);
-  for (let i = 0; i < 20_000 && game.viewFor(null).auction?.good !== good; i++) advance(WALK.tickMs);
+  for (let i = 0; i < 20_000 && game.viewFor(null).auction?.good !== good; i++) {
+    pressThroughSidePick(game);
+    advance(WALK.tickMs);
+  }
   expect(game.viewFor(null).auction?.good, `${good} comes up in the first month's auction`).toBe(good);
   return game;
 }
@@ -57,12 +60,14 @@ const NEW_FIELD = 'a new board field: check it against HC-2';
 /** Every field the board's auction carries is one of these, so no other good's stock can ride along. */
 function expectBoardKeys(auction: NonNullable<MuleView['auction']>) {
   expect(keysOf(auction), NEW_FIELD).toEqual(
-    ['deals', 'good', 'hi', 'lo', 'next', 'receipt', 'seconds', 'shipPays', 'skipped', 'slowed', 'speed', 'stage', 'status', 'storeBuys', 'storeForSale', 'storeSells', 'tally', 'total', 'units', 'upNext', 'walkers'],
+    // A-6: shipQuote is the ship's prices for the good up, no stock.
+    ['deals', 'good', 'hi', 'lo', 'next', 'receipt', 'seconds', 'shipPays', 'shipQuote', 'skipped', 'slowed', 'speed', 'stage', 'status', 'storeBuys', 'storeForSale', 'storeSells', 'tally', 'total', 'units', 'upNext', 'walkers'],
   );
   // A-5: a seat's receipt and month's total ride only on its own view, never the board's.
   expect(auction.receipt, NEW_FIELD).toBeNull();
   expect(auction.tally, NEW_FIELD).toBeNull();
-  for (const w of auction.walkers) expect(keysOf(w), NEW_FIELD).toEqual(['at', 'dir', 'done', 'id', 'price', 'side', 'units']);
+  // A-6: `line` names a house ('store', 'ship') and `order` holds units of the good that is up: no other good's stock.
+  for (const w of auction.walkers) expect(keysOf(w), NEW_FIELD).toEqual(['at', 'dir', 'done', 'id', 'line', 'price', 'side', 'units']);
   for (const r of auction.status) expect(keysOf(r), NEW_FIELD).toEqual(['had', 'id', 'made', 'need', 'now', 'spoils', 'used']);
   for (const d of auction.deals) expect(keysOf(d), NEW_FIELD).toEqual(['buyer', 'price', 'seller', 'units']);
   for (const k of auction.skipped) expect(keysOf(k), NEW_FIELD).toEqual(['good', 'reason']);
@@ -97,14 +102,15 @@ describe('the goods auction walkers carry their units', () => {
   });
 
   it('T-AC-2: every walker carries units from the first frame of the walk, before any trade', () => {
-    const { game, good } = toWalk('pass');
+    // s2 stays a buyer at the bottom edge (RULE-2), holding some of the good and walking nowhere.
+    const { game, good } = toWalk('buyer');
     const view = game.viewFor(null);
     expect(view.auction!.walkers.length).toBe(seats.length);
     expectUnitsMatchEngine(view, engineOf(game));
-    const passer = view.auction!.walkers.find((w) => w.id === 's2')!;
-    expect(passer.side).toBe('pass');
-    expect(passer.units, "a passing player's holding, public like the status table").toBe(engineOf(game).players.find((p) => p.id === 's2')!.stock[good]);
-    expect(passer.units).toBeGreaterThan(0);
+    const stayer = view.auction!.walkers.find((w) => w.id === 's2')!;
+    expect(stayer.side).toBe('buyer');
+    expect(stayer.units, "a player's holding, public like the status table").toBe(engineOf(game).players.find((p) => p.id === 's2')!.stock[good]);
+    expect(stayer.units).toBeGreaterThan(0);
   });
 
   // trace-allow: guards the spec's HC-2 invariant, which has no INV id: the board's auction holds no player stock but the good up's

@@ -1,11 +1,14 @@
 import {
   advancePhase,
   cloneForSim,
+  corralTarget,
   endAuction,
+  endLead,
   exportDemand,
   GAME,
   isGameOver,
   monthlyDemand,
+  newLandMules,
   nextPostedPrice,
   runProduction,
   runUpkeep,
@@ -111,7 +114,7 @@ interface Future {
 
 /**
  * Plays the status quo forward on a copy: nobody claims, builds or trades,
- * except that the seats buy the MULEs they claim land for, so the corral
+ * except that the seats buy their MULE.corralPerPlayer MULEs a month, so the corral
  * drains as it does in play; plots produce, everyone eats, the store builds
  * MULEs and posts prices. Returns the prices posted `months` on, raised
  * where the rollout (run on to the horizon) shows a shortage the price
@@ -124,14 +127,14 @@ function rollForward(stage: GameState, months: number): Future {
   const from = sim.history.length;
   const asked = Math.min(sim.month + months, endMonth(sim));
   const target = Math.min(sim.month + Math.max(months, STRATEGIST.horizon), endMonth(sim));
-  const muleTarget = sim.players.length * GAME.claimsPerGrant + MULE.spareInCorral;
+  const muleTarget = corralTarget(sim.players.length);
   let prices: Stock = { ...sim.store.posted };
   let last: Stock = prices;
   let corralShort = false;
   // literal-ok: a month has seven phases, so eight a month bounds the loop: a guard, not balance
   for (let guard = 0; guard < (target - sim.month + 1) * 8 && sim.phase !== 'gameOver'; guard++) {
     advancePhase(sim);
-    if (sim.phase === 'production') sim.store.mules = Math.max(0, sim.store.mules - sim.players.length * GAME.claimsPerGrant);
+    if (sim.phase === 'production') sim.store.mules = Math.max(0, sim.store.mules - newLandMules(sim.players.length));
     if (sim.phase === 'planning' && sim.store.mules < muleTarget) corralShort = true;
     if (sim.phase === 'auction') {
       last = { ...sim.store.posted };
@@ -148,7 +151,8 @@ function rollForward(stage: GameState, months: number): Future {
 }
 
 function produce(sim: GameState, me: string): Stock {
-  for (const p of sim.players) p.carriedMule = null;
+  // Development's end, as the game plays it: a MULE taken off a plot goes back to it, any other carried MULE runs off.
+  for (const p of sim.players) endLead(sim, p.id);
   const { produced } = runProduction(sim);
   return produced[me] ?? emptyStock();
 }

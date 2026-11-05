@@ -10,6 +10,7 @@ import {
   mulePriceFor,
   observe,
   STRATEGIST,
+  takeMule,
   walkSeconds,
   type AiLevelConfig,
   type AiLevelId,
@@ -17,9 +18,11 @@ import {
   type GameState,
 } from '@mule/engine';
 import { outlook } from '../src/outlook.js';
+import { FOOD_TO_SPARE } from './store-food.js';
+import { applySets } from '../src/sim.js';
 import { AiSeat } from '../src/seat.js';
 import { developDecision, goodPlan, landDecision, muleValue, plotRoom, plotValue, tradeDecision, wantsAnyAhead, wantsPlot } from '../src/strategist.js';
-import { cashReserve, installGain, type Mind } from '../src/value.js';
+import { cashReserve, installGain, secondValue, type Mind } from '../src/value.js';
 
 const fourSeats = (seed: number) => createGame({ seed, players: [0, 1, 2, 3].map((i) => ({ id: `ai${i}`, name: `AI${i}`, isAi: true })) });
 
@@ -152,29 +155,38 @@ describe('land claims on a single pass', () => {
   });
 
   it('T-AC-31: the lit plot is weighed by the utility it is ranked by: within its claims and clearing grantShare of the best utility ahead, it is wanted', () => {
-    const state = fourSeatsWithWater(1, WATER_TO_SPARE);
-    while (state.phase !== 'landGrant') advancePhase(state);
-    const mind: Mind = { ...traderMind, levelId: 'tycoon', level: AI_LEVELS.tycoon, salt: 1 };
-    const obs = observe(state, 'ai0');
-    const plan = landDecision(obs, mind).all[0]!.action;
-    const order = state.grant!.order;
-    // A lit plot within its claims whose utility clears the share while its value falls short of it: the two metrics disagree.
-    const step = order.findIndex((index, k) => {
-      const ahead = new Set(order.slice(k));
-      const rivals = plan.ranking.filter((s) => ahead.has(s.index));
-      const rank = rivals.findIndex((s) => s.index === index);
-      const lit = rivals[rank];
-      if (!lit || lit.value <= 0 || rank >= GAME.claimsPerGrant + STRATEGIST.grantSpare) return false;
-      return lit.utility >= rivals[0]!.utility * STRATEGIST.grantShare && lit.value < Math.max(...rivals.map((s) => s.value)) * STRATEGIST.grantShare;
-    });
-    expect(step).toBeGreaterThanOrEqual(0);
-    expect(wantsPlot(plan, obs, order[step]!, order.slice(step), mind)).toBe(true);
+    // The ranking is by utility, so rank 0 clears the utility share by itself: the weighing shows only from rank 1, which
+    // one claim a grant (GAME.claimsPerGrant 1) leaves out of the window. Widen it one rank by STRATEGIST.grantSpare.
+    const spare = STRATEGIST.grantSpare;
+    applySets([`STRATEGIST.grantSpare=${spare + 1}`]);
+    try {
+      const state = fourSeatsWithWater(1, WATER_TO_SPARE);
+      while (state.phase !== 'landGrant') advancePhase(state);
+      const mind: Mind = { ...traderMind, levelId: 'tycoon', level: AI_LEVELS.tycoon, salt: 1 };
+      const obs = observe(state, 'ai0');
+      const plan = landDecision(obs, mind).all[0]!.action;
+      const order = state.grant!.order;
+      // A lit plot within its claims whose utility clears the share while its value falls short of it: the two metrics disagree.
+      const step = order.findIndex((index, k) => {
+        const ahead = new Set(order.slice(k));
+        const rivals = plan.ranking.filter((s) => ahead.has(s.index));
+        const rank = rivals.findIndex((s) => s.index === index);
+        const lit = rivals[rank];
+        if (!lit || lit.value <= 0 || rank >= GAME.claimsPerGrant + STRATEGIST.grantSpare) return false;
+        return lit.utility >= rivals[0]!.utility * STRATEGIST.grantShare && lit.value < Math.max(...rivals.map((s) => s.value)) * STRATEGIST.grantShare;
+      });
+      expect(step).toBeGreaterThanOrEqual(0);
+      expect(wantsPlot(plan, obs, order[step]!, order.slice(step), mind)).toBe(true);
+    } finally {
+      applySets([`STRATEGIST.grantSpare=${spare}`]);
+    }
   });
 });
 
-/** Month 1's land grant on seed 3, ai0 already fed by its own Food and Energy plots, Smithore posted at `smithore`. */
+/** Month 1's land grant on seed 3, ai0 already fed by its own Food and Energy plots, Smithore posted at `smithore`, Food to spare. */
 function grantWithFarms(smithore: number): GameState {
   const state = fourSeatsWithWater(3, WATER_TO_SPARE);
+  state.store.stock.food = FOOD_TO_SPARE;
   while (state.phase !== 'landGrant') advancePhase(state);
   state.store.posted.smithore = smithore;
   const [food, energy] = state.tiles.filter((t) => !t.owner && t.terrain === 'plains');
@@ -185,7 +197,7 @@ function grantWithFarms(smithore: number): GameState {
 
 describe('land plans by worth', () => {
   it('T-AC-14: a land plan worth a quarter of the best is not offered to the decider; plans close in worth still are', () => {
-    // Smithore at 400: two mountain mines are worth about 6,400, the best two farms about 1,700.
+    // Smithore at 400: a mountain mine is worth about 3,100, the best farm about 750.
     const rich = landDecision(observe(grantWithFarms(400), 'ai0'), traderMind);
     const best = Math.max(...rich.all.map((c) => c.value));
     expect(best).toBeGreaterThan(3 * Math.min(...rich.all.filter((c) => c.action.focus === 'grown').map((c) => c.value)));
@@ -342,11 +354,11 @@ describe('values for lot bids (WS3 caps AI bids at these)', () => {
   it('INV-WS3-2: a MULE is worth nothing without idle land, and at least the store price with a profitable use', () => {
     const state = developmentWithWater(0);
     state.players[0]!.money = 5_000;
-    expect(muleValue(observe(state, 'ai0'), traderMind)).toBe(0);
+    expect(muleValue(observe(state, 'ai0'), traderMind, 'water')).toBe(0);
     // A river plot with the colony out of Water: a Water farm there pays, so the MULE is worth its store price or more.
     state.tiles.find((t) => t.terrain === 'river' && !t.owner)!.owner = 'ai0';
     const obs = observe(state, 'ai0');
-    expect(muleValue(obs, traderMind)).toBeGreaterThanOrEqual(mulePriceFor(obs, 'ai0'));
+    expect(muleValue(obs, traderMind, 'water')).toBeGreaterThanOrEqual(mulePriceFor(obs, 'ai0'));
   });
 });
 
@@ -395,7 +407,16 @@ describe('the sales tax', () => {
     expect((taxed.action as { keep: number }).keep).toBe((free.action as { keep: number }).keep);
     expect(taxed.value).toBeCloseTo(free.value * 0.85, 0);
 
-    const food = (tax: number) => goodPlan(observe(auctionAtTax(tax, 'food', 20), 'ai0'), traderMind, 'food').values;
+    // Its own use of Food is next month's walking at full pace (value.ts unitValues), worth the most to a seat with land
+    // still to develop: an undeveloped plains plot of its own makes its development seconds worth the busy rate. With
+    // none, at the walk of 4 Nov (DEV_WALK.hungerPaceMin 0.6), the walking a unit keeps is worth less than its resale.
+    const food = (tax: number) => {
+      const state = auctionAtTax(tax, 'food', 20);
+      state.tiles.find((t) => t.terrain === 'plains' && !t.owner)!.owner = 'ai0';
+      const obs = observe(state, 'ai0');
+      expect(secondValue(obs, 'ai0'), 'a development second, with land to develop').toBe(STRATEGIST.secondValue.busy);
+      return goodPlan(obs, traderMind, 'food').values;
+    };
     const [v0, v15] = [food(0), food(0.15)];
     const resale0 = v0.keep[v0.block]!;
     const own = [...Array(v0.block).keys()].filter((k) => k >= v0.floorUnits && v0.keep[k]! > resale0);
@@ -449,6 +470,20 @@ describe('cornering', () => {
 });
 
 describe('production events and the outlook', () => {
+  it('T-AC-7 (F4): a MULE taken off its plot during development still makes the plot’s output in the outlook', () => {
+    const state = fourSeats(2);
+    while (state.phase !== 'development') advancePhase(state);
+    const plot = state.tiles.find((t) => !t.owner && t.terrain === 'plains')!;
+    Object.assign(plot, { owner: 'ai0', outfit: 'food' });
+    const made = () => outlook(observe(state, 'ai0'), 'ai0', { lookAhead: true }).made.food;
+    const before = made();
+    expect(before, 'the Food MULE makes Food').toBeGreaterThan(0);
+    // Taken off on the arcade floor (AM-2): if the turn ends with it on the lead, it goes back to the plot (endLead).
+    takeMule(state, 'ai0', plot.x, plot.y);
+    expect([plot.outfit, state.players[0]!.carriedMule]).toEqual([null, 'food']);
+    expect(made(), 'the plot is not counted empty').toBe(before);
+  });
+
   it('T-AC-7: a seat’s outlook forecasts the same with events on as off: it never sees next month’s event', () => {
     /** Gives an event row exactly these fields, dropping any others it had. */
     const reset = (row: object, fields: object) => {

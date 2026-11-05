@@ -6,7 +6,7 @@ import WebSocket from 'ws';
 import { ceremonyBeats, openPlanning, POLITICS, RuleError, WALK, type CeremonyBeat, type GameState, type Office, type TaxPromise } from '@mule/engine';
 import { GRANT_TICK_MS, MuleGame } from '../src/mule-game.js';
 import { createMuleServer, type MuleServer } from '../src/server.js';
-import { fakeContext, readyAll } from './fake-context.js';
+import { fakeContext, readyAll, throughSidePicks } from './fake-context.js';
 
 /** RULE-10: a Governor run carries a promise; tests about something else hold the tax. */
 const HOLD: TaxPromise = { kind: 'hold' };
@@ -197,7 +197,8 @@ function started(options: { phaseScale?: number; seed?: number; seats?: typeof p
   const fake = fakeContext({ onChanged, table: seats });
   const game = new MuleGame(fake.ctx, seed, { politics: true, ...rest });
   game.start(seats);
-  return { game, ...fake };
+  // A good's side pick has no clock (A-7): every step presses Ready there for the humans not yet Done.
+  return { game, ...fake, advance: throughSidePicks(game, fake.advance) };
 }
 type Started = ReturnType<typeof started>;
 
@@ -623,7 +624,8 @@ describe('the politics view', () => {
     expect(brix.politics!.weights.find((w) => w.id === 'brix'), 'month 1: no land, no taxes paid, no Baron').toEqual({ id: 'brix', votes: 1, parts: { base: 1, land: 0, reputation: 0, baron: 0, taxes: 0 } });
     expect(brix.politics!.tax).toEqual({ percent: 5, start: 5, low: 0, high: 10 });
     const reputation = engineOf(g.game).players.find((p) => p.id === 'brix')!.reputation;
-    expect(brix.me!.politics, 'running is open again, for the next election').toEqual({ running: null, ballot: { governor: 'brix' }, canRun: { governor: true, sheriff: true }, paid: 0, reputation });
+    expect(brix.me!.politics, 'running is open again, for the next election').toEqual({ running: null, ballot: { governor: 'brix' }, canRun: { governor: true, sheriff: true }, paid: 0, reputation, lawBallot: null, candidates: expect.any(Object) });
+    // C46: Brix governs, the votes are over: his own view carries each proposal's cost (politics-candidates.test.ts).
     expect(brix.politics!.election!.stage, 'planning proper has started, so the Governor can set the tax').toBe('over');
     expect(() => g.game.handle('lena', { type: 'setTax', percent: 8 })).toThrow('Only the Governor sets the tax');
     g.game.handle('brix', { type: 'setTax', percent: 8 });
@@ -687,14 +689,14 @@ describe('the politics view', () => {
     g.game.handle('lena', { type: 'setTax', percent: 8 });
     for (const view of screens(g.game)) expect(view.politics!.tax).toEqual({ percent: 8, start: 5, low: 0, high: 10 });
 
-    // On to the first good's walk: Lena sells, Brix buys, Ossa passes.
+    // On to the first good's walk: Lena sells, Brix buys, Ossa stays a buyer with no money, so she trades nothing.
     allReady(g.game);
     while (g.game.viewFor('lena').phase === 'landGrant') g.advance(GRANT_TICK_MS);
     while (g.game.viewFor('lena').phase === 'development' || g.game.viewFor('lena').phase === 'production') g.advance(1_000);
     expect(g.game.viewFor('lena').phase).toBe('auction');
     g.game.handle('lena', { type: 'declare', side: 'seller' });
     g.game.handle('brix', { type: 'declare', side: 'buyer' });
-    g.game.handle('ossa', { type: 'declare', side: 'pass' });
+    engineOf(g.game).players.find((p) => p.id === 'ossa')!.money = 0;
     allReady(g.game);
     g.advance(WALK.tickMs * 2);
     const good = g.game.viewFor(null).auction!.good;
@@ -1067,7 +1069,7 @@ const NEW_FIELD = 'a new board field: check it against HC-4 (secret ballots stay
 function expectBoardKeys(board: MuleView) {
   const politics = board.politics!;
   expect(board.me).toBeNull();
-  expect(keysOf(politics), NEW_FIELD).toEqual(['baron', 'candidates', 'election', 'fund', 'governor', 'next', 'pay', 'promise', 'promiseFrom', 'promises', 'sheriff', 'tax', 'term', 'weights']);
+  expect(keysOf(politics), NEW_FIELD).toEqual(['baron', 'candidates', 'council', 'election', 'fund', 'governor', 'laws', 'next', 'pay', 'promise', 'promiseFrom', 'promises', 'proposal', 'retry', 'sheriff', 'tax', 'term', 'weights']);
   expect(keysOf(politics.tax), NEW_FIELD).toEqual(['high', 'low', 'percent', 'start']);
   expect(keysOf(politics.pay), NEW_FIELD).toEqual(['governor', 'sheriff']);
   for (const w of politics.weights) {

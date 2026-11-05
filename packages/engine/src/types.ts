@@ -125,6 +125,8 @@ export interface Player {
   devSeconds: number;
   /** True when sickness cost development time this month (no Medicine to cure it). */
   sick: boolean;
+  /** True when an epidemic made the player sick: next development they are sick again unless they then hold a Medicine. */
+  sickNext: boolean;
   /** True once the player has gone to the pub: their development turn is over. */
   doneDeveloping: boolean;
   /** True once the player has installed a MULE in this development turn, so a reloaded phone still knows. */
@@ -133,6 +135,11 @@ export interface Player {
   analysed: number[];
   /** Free plots chosen for a geo drone this planning phase, analysed when the land grant starts. */
   droneOrder: number[];
+  /**
+   * The plots this month's drone surveyed: what droneOrder held when the land grant started, kept until the next month
+   * opens, so the player's phone can say "Your drone: …" while one is lit. Private to them, like analysed.
+   */
+  droneFound: number[];
 }
 
 export type Phase =
@@ -214,6 +221,8 @@ export interface MonthReport {
   events?: MonthEvent[];
   /** Events announced ahead of time. Absent in older reports. */
   warnings?: EventWarning[];
+  /** The colony fund's money in and out this month; absent when the game plays without politics. */
+  ledger?: FundLedger;
   /** Every working plot's output, part by part. Absent in older reports. */
   lines?: ProductionLine[];
 }
@@ -229,10 +238,46 @@ export type EventKey =
   | 'pestSwarm'
   | 'wildfire'
   | 'bumperHarvest'
-  | 'cavernCollapse';
+  | 'cavernCollapse'
+  | 'federationTax'
+  | 'federationGrant'
+  | 'immigrationWave'
+  | 'inheritance'
+  | 'muleTheft'
+  | 'epidemic'
+  | 'coldSnap'
+  | 'meteorStrike'
+  | 'pirateRaid'
+  | 'storeFire'
+  | 'ratsInSilo'
+  | 'crookedAccountant'
+  | 'packageFromHome';
 
 /** How the screens animate an event; several events share a kind. */
-export type EventKind = 'storm' | 'drought' | 'flare' | 'comet' | 'flood' | 'quake' | 'blight' | 'fire' | 'bounty';
+export type EventKind =
+  | 'storm'
+  | 'drought'
+  | 'flare'
+  | 'comet'
+  | 'flood'
+  | 'quake'
+  | 'blight'
+  | 'fire'
+  | 'bounty'
+  | 'ledger'
+  | 'colony'
+  | 'plot'
+  | 'colonists'
+  | 'sweep'
+  | 'strike'
+  | 'store';
+
+/** One change an event made off the map: whose (a player's id, the store or the colony), of what, and by how much. */
+export interface EventEffect {
+  on: string | 'store' | 'colony';
+  what: Good | 'money' | 'mules' | 'colonists' | 'energyNeed';
+  delta: number;
+}
 
 export interface MonthEvent {
   key: EventKey;
@@ -254,14 +299,21 @@ export interface MonthEvent {
     delta: number;
     /** The special field the plot had before the event, when the event removes it (a cavern collapse). */
     was?: SpecialKind;
-    /** What the plot is after the event, when the event changes what it is ('plain': its special is gone). */
-    becomes?: 'plain';
+    /**
+     * What the plot is after the event, when the event changes what it is: 'plain' its special is gone, 'crater' a meteor
+     * made it a crater, 'idle' its MULE was taken.
+     */
+    becomes?: 'plain' | 'crater' | 'idle';
+    /** True when the event destroyed or took the plot's MULE. */
+    muleLost?: true;
   }[];
   /** For a personal event, the player whose land it started on. */
   player?: string;
   sign: 'good' | 'bad' | 'mixed';
   /** The phase whose roll produced this event. */
   phase: Phase;
+  /** What the event changed off the map, in the order it changed it; absent when it changed nothing there. */
+  effects?: EventEffect[];
 }
 
 export interface EventWarning {
@@ -276,9 +328,13 @@ export interface ProductionLine {
   tile: number;
   good: Good;
   made: number;
-  /** What made up the output, in order; the deltas sum to `made`. */
+  /**
+   * What made up the output, in order; the deltas sum to `made`. `energyOff`: the plot was turned off for want of
+   * Energy and made UPKEEP.offOutputShare of its output (AM-17). `noEnergy` is the halving it replaced, kept for
+   * screens and fixtures that still name it; the engine no longer files it.
+   */
   parts: {
-    why: 'ground' | 'trait' | 'species' | 'cluster' | 'pollution' | 'floor' | 'noEnergy' | 'noWater' | 'event' | 'factory' | 'special';
+    why: 'ground' | 'trait' | 'species' | 'cluster' | 'pollution' | 'floor' | 'noEnergy' | 'energyOff' | 'noWater' | 'event' | 'factory' | 'special';
     delta: number;
     event?: EventKey;
   }[];
@@ -305,6 +361,11 @@ export interface GameState {
   /** Month in which the last free plot was claimed, if it happened. */
   landRanOutMonth: number | null;
   history: MonthReport[];
+  /**
+   * Every event fired this month, in fired order, whatever the phase. A new array when the month opens; a what-if copy
+   * gets its own copy (observe.ts::cloneForSim).
+   */
+  monthEvents: MonthEvent[];
   /** The live goods auction, while the auction phase runs. */
   auction: LiveAuction | null;
   /** This month's lots, in listing order. Made in planning, cleared when the land auction ends. */
@@ -316,6 +377,78 @@ export interface GameState {
    * Written only by politics.ts, which replaces the object on every write: re-read it, don't hold a reference.
    */
   politics: Politics | null;
+  /**
+   * The colony as a shared project: its fund's ledger and projects; null when the game plays without politics.
+   * Written only by colony.ts, which replaces the object on every write: re-read it, don't hold a reference.
+   */
+  colony: Colony | null;
+}
+
+/** Where money comes into the colony fund from. */
+export type FundSource = 'salesTax' | 'federationTax' | 'exportTax' | 'landTax' | 'pollutionTax' | 'donation' | 'grant';
+/** What the colony fund pays out for. */
+export type FundLine = 'officePay' | 'project' | 'upkeep' | 'repair' | 'strikePay' | 'siteBid';
+
+/** One month's money into and out of the colony fund. */
+export interface FundLedger {
+  month: number;
+  in: Partial<Record<FundSource, number>>;
+  out: Partial<Record<FundLine, number>>;
+}
+
+export type PrestigeId = 'park' | 'hospital' | 'observatory' | 'stadium' | 'spaceport';
+
+/** A prestige object from the moment the Governor commissions it. */
+export interface Project {
+  id: PrestigeId;
+  stage: 'commissioned' | 'building' | 'standing' | 'closed' | 'damaged';
+  funded: { credits: number; goods: Partial<Record<Good, number>> };
+  /** Upkeeps left until it stands; null unless building. */
+  monthsLeft: number | null;
+  /** The tile it stands on, for an object that needs one; null until sited. */
+  plot: number | null;
+  /** The month it was commissioned. */
+  since: number;
+  /** Each donor's credits plus goods at reference price. */
+  plaque: Record<string, number>;
+  /** The most the colony bids for this object's plot at the land auction; null, it does not bid. See G-5 RULE-28. */
+  maxBid: number | null;
+}
+
+export interface Colony {
+  ledger: FundLedger;
+  /** In commission order. */
+  projects: Project[];
+  /** Each month a sitting Governor's tax promise was kept or broken. */
+  promises: { month: number; governor: string; kind: TaxPromise['kind']; kept: boolean }[];
+  /** Prestige that stays whatever happens to the objects, such as a festival's. */
+  permanentPrestige: number;
+  /** The gauges as each of the last two months ended, oldest first: what the screens' "this month" change is read from. */
+  monthEnds: ColonyGauges[];
+  /** The colony's mood, a whole number 0..100: it drifts at upkeep and events move it at once. See G-5 RULE-20. */
+  happiness: number;
+  /** The latest general strike; one from an earlier month counts as none. Null before the first. See G-5 RULE-26. */
+  strike: Strike | null;
+}
+
+/** The colony's mood band, from happiness. See G-5 RULE-20. */
+export type MoodBand = 'thriving' | 'content' | 'restless' | 'unhappy' | 'unrest';
+
+/** A general strike on one good: every plot of it makes a fraction of its output this month, unless the fund pays. */
+export interface Strike {
+  month: number;
+  good: Good;
+  /** What the strikers want from the fund, in credits. */
+  cost: number;
+  paid: boolean;
+}
+
+/** The colony's gauges at one moment; happiness is null until the colony has a mood. */
+export interface ColonyGauges {
+  month: number;
+  wealth: number;
+  prestige: number;
+  happiness: number | null;
 }
 
 export type Office = 'governor' | 'sheriff';
@@ -388,6 +521,32 @@ export interface Politics {
   promiseFrom: number | null;
   /** This month's election, live or just finished; null in a month without one. */
   election: Election | null;
+  /** The Governor's law proposal, public from the moment it is made until the next planning opens its ballot. */
+  proposal: { by: string; month: number; proposal: LawProposal } | null;
+  /** This month's law ballot, live or just finished; null in a month without one. */
+  council: Council | null;
+  /** The laws in force, each at its setting since the month it passed. */
+  laws: Partial<Record<LawId, { setting: number; since: number }>>;
+  /** The month each failed proposal failed, by `kind:law`: it may not come back for POLITICS.council.retryMonths. */
+  failed: Record<string, number>;
+}
+
+export type LawId = 'exportTax' | 'landTax' | 'pollutionTax' | 'emissionCap';
+
+/** Enact a law at a setting (replacing one in force when three already are), or repeal one. */
+export type LawProposal = { kind: 'enact'; law: LawId; setting: number; replaces?: LawId } | { kind: 'repeal'; law: LawId };
+
+/** A law ballot: untimed until every player is Done, then a short reveal on its own clock. */
+export interface Council {
+  stage: 'ballot' | 'reveal' | 'over';
+  /** Ms of the reveal shown so far; 0 until it starts. */
+  clockMs: number;
+  proposal: LawProposal;
+  proposer: string;
+  /** Secret: each voter's yes or no. Only the voter may see their own. */
+  ballots: Record<string, boolean>;
+  done: string[];
+  result: { passed: boolean; yes: number; no: number; tie: boolean } | null;
 }
 
 export type AuctionRole = 'buyer' | 'seller';
@@ -466,7 +625,13 @@ export interface ReceiptSide {
   units: number;
   /** Before tax. */
   gross: number;
+  /** The sales tax the engine took, unit by unit. */
   tax: number;
+  /**
+   * The export tax on units sold to the export ship (slice 2a RULE-43), what chargeExportTax took; 0 without the law.
+   * The engine always sets it; optional so receipts built before it still type.
+   */
+  exportTax?: number;
   prices: number[];
   /** Counterparties in the order first traded with: player ids, 'store' or 'ship'. */
   with: string[];

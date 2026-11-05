@@ -4,18 +4,47 @@ import { useEffect } from 'react';
 import { usePhoneGame } from '../../game';
 import { useWide } from '../../Shell';
 import { useHub } from '../Hub';
-import { colorOf, OfficesCard, Person, Section } from './parts';
+import { LawsInForce } from './LawBallot';
+import { forYouWords, proposalWords } from './LawPicker';
+import { colorOf, OfficesCard, Person, Section, Who } from './parts';
 import { Blocks } from './Reveal';
 import { RunBlock } from './Run';
 import { howWords, OFFICE_NAME } from './words';
 
-/** Council: this month's result once the election is over, then running for office and what the Governor does. */
+/** Council: the laws in force, this month's result once the election is over, then running for office and what the Governor does. */
 export function CouncilDesk() {
   const { focus, takeFocus } = useHub();
+  const { view } = usePhoneGame();
   useEffect(() => {
     if (focus !== null) takeFocus();
   }, [focus]);
-  return <CouncilBody focus={focus} />;
+  return (
+    <>
+      {view.politics && <LawsInForce laws={view.politics.laws ?? {}} />}
+      <PendingLaw />
+      <CouncilBody focus={focus} />
+    </>
+  );
+}
+
+/** Next month's vote while a proposal is pending and no vote is open: the proposal, and what it costs this seat. */
+function PendingLaw() {
+  const { view, self } = usePhoneGame();
+  const politics = view.politics;
+  const pending = politics?.proposal;
+  const votesOpen = (!!politics?.council && politics.council.stage !== 'over') || (!!politics?.election && politics.election.stage !== 'over');
+  if (!pending || votesOpen) return null;
+  return (
+    <div className="flex flex-col gap-0.5 rounded-panel border border-holo-line bg-panel p-2" data-testid="council-pending">
+      <span className="label-caps text-[10px]!">Next month’s vote</span>
+      <span className="text-xs">
+        <Who view={view} id={pending.by} me={self.id} size={12} /> {pending.by === self.id ? 'propose' : 'proposes'} <strong>{proposalWords(pending.proposal)}</strong>
+      </span>
+      <span className="text-[11px] text-ink-2" data-testid="council-pending-for-you">
+        For you: {forYouWords(pending.proposal, pending.impact[self.id], view.air.level)}.
+      </span>
+    </div>
+  );
 }
 
 /** The desk's body. `focus` is the door it was opened by: 'run' asks for a promise, or shows your candidacy once you run. */
@@ -67,7 +96,7 @@ function ResultList() {
                 <span data-num className="font-mono font-bold">
                   {t.votes} vote{t.votes === 1 ? '' : 's'}
                 </span>
-                {t.id === r.winner && <span className="rounded-chip bg-holo px-1 font-mono text-[9px] font-bold leading-4 text-on-holo @min-[1100px]/shell:text-xs">ELECTED</span>}
+                {t.id === r.winner && <span className="rounded-chip bg-holo px-1 font-mono text-[10px] font-bold leading-4 text-on-holo @min-[1100px]/shell:text-xs">ELECTED</span>}
               </span>
             ))}
             <span className={cx('text-[11px] leading-snug @min-[1100px]/shell:text-sm', r.how === 'votes' ? 'text-ink-2' : 'text-warn')} data-testid={`result-how-${o}`}>

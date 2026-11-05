@@ -1,4 +1,4 @@
-import { AI_HANDS, MS_PER_SECOND, observe, shipLine, storeBuyLine, storeSellLine, type GameState, type Good, type Rng, type Walker } from '@mule/engine';
+import { AI_HANDS, lineOf, MS_PER_SECOND, observe, SHIP_ID, shipLine, shipPrice, storeBuyLine, storeSellLine, tradeInterval, type GameState, type Good, type GoodPlay, type Rng, type Walker } from '@mule/engine';
 import type { Act } from '../actions.js';
 import type { Brain, Pending } from '../brain.js';
 import { goodPlan, tradeDecision, type GoodPlan, type TradeAction } from '../strategist.js';
@@ -20,6 +20,15 @@ import { beforeTax } from '../value.js';
  * little inside the limit, so there is no fixed habit to read. A buyer's
  * limit is what one more unit is worth to it; a seller's floor is what the
  * unit it would give up is worth. Both follow its stock as units trade.
+ *
+ * Every seat takes part as a buyer and switches to seller only to sell; one
+ * that wants nothing of a good stands at the buyers' edge and presses Done.
+ * At the store's or the ship's line units trade by themselves (the auto-trade
+ * amendment, C4): it stands there while they move and steps off once the
+ * units it still wants are no more than will trade before it next re-aims.
+ *
+ * On the playbook path the good's play replaces the decider's pick and bounds the same walk: walkAway bounds the
+ * limit, at the line too; start and concedeCrPerS bound the target; vsRival and per say whom it overtakes. See RULE-10.
  */
 export interface AuctionDebug {
   good: Good;
@@ -31,10 +40,23 @@ export interface AuctionDebug {
   goal: number | null;
 }
 
+/** The good's play on the playbook path, asked once a good at its status screen; null plays today's ask. */
+export type GoodPlaySource = (state: GameState, good: Good) => GoodPlay | null;
+
+type Side = 'buyer' | 'seller';
+
+/** The TradeAction a play stands for: a seller never keeps under the Food or Energy it needs. */
+function tradeOf(play: GoodPlay, plan: GoodPlan): TradeAction {
+  if (play.role === 'seller') return { side: 'seller', keep: Math.max(play.hold, plan.values.floorUnits) };
+  if (play.role === 'buyer') return { side: 'buyer', upTo: play.hold };
+  return { side: 'pass' };
+}
+
 export class AuctionHand {
   private key = '';
   private plan: GoodPlan | null = null;
   private pending: Pending<TradeAction> | null = null;
+  private play: GoodPlay | null = null;
   private trade: TradeAction | null = null;
   private declared = false;
   private statusDone = false;
@@ -51,6 +73,7 @@ export class AuctionHand {
   constructor(
     private readonly brain: Brain,
     private readonly rng: Rng,
+    private readonly playOf: GoodPlaySource | null = null,
   ) {}
 
   debug(): AuctionDebug | null {
@@ -76,7 +99,9 @@ export class AuctionHand {
     if (!this.plan) {
       const obs = observe(state, mind.me);
       this.plan = goodPlan(obs, mind, a.good);
-      this.pending = this.brain.ask('trade', tradeDecision(obs, mind, this.plan), obs, AI_HANDS.auction.decideWaitMs, a.good, situation(obs, mind));
+      this.play = this.playOf?.(state, a.good) ?? null;
+      if (this.play) this.trade = tradeOf(this.play, this.plan);
+      else this.pending = this.brain.ask('trade', tradeDecision(obs, mind, this.plan), obs, AI_HANDS.auction.decideWaitMs, a.good, situation(obs, mind));
     }
     if (!this.trade && this.pending) {
       const settled = a.stage === 'status' ? this.brain.resolve(this.pending, dt, state) : this.brain.resolveNow(this.pending, state);
@@ -84,9 +109,9 @@ export class AuctionHand {
     }
 
     // Sides are picked on the status screen; a decision that only settles once the walk has begun is declared there.
+    // Everyone starts as a buyer: a seat switches only to sell, and one that wants nothing stays a buyer at the edge.
     if (this.trade && !this.declared) {
-      const side = this.trade.side === 'seller' && me.stock[a.good] <= 0 ? 'pass' : this.trade.side;
-      act({ type: 'declare', side });
+      if (this.trade.side === 'seller' && me.stock[a.good] > 0) act({ type: 'declare', side: 'seller' });
       this.declared = true;
     }
     if (a.stage === 'status') {
@@ -115,6 +140,7 @@ export class AuctionHand {
     this.key = key;
     this.plan = null;
     this.pending = null;
+    this.play = null;
     this.trade = null;
     this.declared = false;
     this.statusDone = false;
@@ -146,25 +172,34 @@ export class AuctionHand {
     const money = (id: string) => state.players.find((p) => p.id === id)?.money ?? 0;
     const stock = (id: string) => state.players.find((p) => p.id === id)?.stock[good] ?? 0;
     if (this.startMoney === 0) this.startMoney = me.money;
+    if (this.play?.bluff) {
+      this.target = w.side === 'seller' ? a.hi : a.lo;
+      this.doneFlag = true;
+      return;
+    }
+    const pricesOf = (rivals: Walker[], stance: GoodPlay['vsRival']) => rivals.filter((x) => this.stanceTo(x.id) === stance).map((x) => Math.round(x.price));
 
     if (w.side === 'seller') {
       // Units past the table are beyond what the depot keeps: they spoil, so they are worth nothing.
       // Unit values are what the seat keeps after the sales tax; the board shows the price before it.
-      const floor = Math.ceil(beforeTax(state, plan.values.keep[h - 1] ?? 0));
+      const floor = this.bounded('seller', Math.ceil(beforeTax(state, plan.values.keep[h - 1] ?? 0)));
       this.limit = floor;
-      const finished = trade.side !== 'seller' || h <= trade.keep || !Number.isFinite(floor);
+      const finished = trade.side !== 'seller' || h <= trade.keep || !Number.isFinite(floor) || this.enoughAtLine(state, w);
       const houses = Math.max(storeBuyLine(state) ?? 0, shipLine(state) ?? 0);
       const bids = others.filter((x) => x.side === 'buyer' && money(x.id) >= Math.max(1, Math.round(x.price))).map((x) => Math.round(x.price));
       const bestBid = Math.max(houses, ...bids, 0);
       if (finished) this.target = a.hi;
       else if (bestBid >= floor) this.target = bestBid;
       else {
-        const rivals = others.filter((x) => x.side === 'seller' && stock(x.id) > 0).map((x) => Math.round(x.price));
-        const lowest = Math.min(Infinity, ...rivals);
+        const rivals = others.filter((x) => x.side === 'seller' && stock(x.id) > 0);
+        const lowest = Math.min(Infinity, ...pricesOf(rivals, 'undercut1'));
+        const yielded = Math.min(Infinity, ...pricesOf(rivals, 'yield'));
         if (lowest <= mine && lowest - 1 >= floor) this.target = Math.max(floor, lowest - 1 - Math.abs(this.jitter));
+        else if (yielded <= mine) this.target = Math.max(floor, yielded + 1);
         else if (mine - bestBid <= gap) this.target = mine;
         else this.target = Math.max(floor, bestBid + gap + this.jitter);
       }
+      if (!finished) this.target = this.scheduled('seller', this.target, a.elapsed);
       this.doneFlag = finished || (this.target <= floor && a.deals.every((d) => d.seller !== me.id));
       return;
     }
@@ -175,23 +210,96 @@ export class AuctionHand {
     const value = plan.values.buy[h] ?? 0;
     const essential = h < plan.values.block && (good === 'food' || good === 'energy');
     const cap = essential ? me.money : Math.min(me.money, budgetLeft);
-    const ceiling = Math.floor(Math.min(value, cap));
+    const ceiling = this.bounded('buyer', Math.floor(Math.min(value, cap)));
     this.limit = ceiling;
-    const finished = trade.side !== 'buyer' || h >= trade.upTo || ceiling < 1;
+    const finished = trade.side !== 'buyer' || h >= trade.upTo || ceiling < 1 || this.enoughAtLine(state, w);
     const storeAsk = storeSellLine(state);
     const asks = others.filter((x) => x.side === 'seller' && stock(x.id) > 0).map((x) => Math.round(x.price));
     const bestAsk = Math.min(Infinity, storeAsk ?? Infinity, ...asks);
     if (finished) this.target = a.lo;
     else if (bestAsk <= ceiling) this.target = bestAsk;
     else {
-      const rivals = others.filter((x) => x.side === 'buyer' && money(x.id) >= Math.max(1, Math.round(x.price))).map((x) => Math.round(x.price));
-      const highest = Math.max(-Infinity, ...rivals);
+      const rivals = others.filter((x) => x.side === 'buyer' && money(x.id) >= Math.max(1, Math.round(x.price)));
+      const highest = Math.max(-Infinity, ...pricesOf(rivals, 'undercut1'));
+      const yielded = Math.max(-Infinity, ...pricesOf(rivals, 'yield'));
       if (highest >= mine && highest + 1 <= ceiling) this.target = Math.min(ceiling, highest + 1 + Math.abs(this.jitter));
+      else if (yielded >= mine) this.target = Math.min(ceiling, yielded - 1);
       else if (bestAsk - mine <= gap) this.target = mine;
       else this.target = Math.min(ceiling, (Number.isFinite(bestAsk) ? bestAsk : ceiling) - gap + this.jitter);
     }
+    if (!finished) this.target = this.scheduled('buyer', this.target, a.elapsed);
     this.target = Math.max(0, this.target);
     this.doneFlag = finished || (this.target >= ceiling && a.deals.every((d) => d.buyer !== me.id));
+  }
+
+  /** The play's limit: a buyer pays at most its walkAway, a seller asks at least it. */
+  private bounded(side: Side, today: number): number {
+    if (!this.play) return today;
+    return side === 'buyer' ? Math.min(today, this.play.walkAway) : Math.max(today, this.play.walkAway);
+  }
+
+  /** The play's schedule: from start, conceding concedeCrPerS a second of the walk, never past walkAway. */
+  private scheduled(side: Side, target: number, elapsedMs: number): number {
+    const p = this.play;
+    if (!p) return target;
+    const conceded = (p.concedeCrPerS * elapsedMs) / MS_PER_SECOND;
+    return side === 'buyer' ? Math.min(target, p.walkAway, p.start + conceded) : Math.max(target, p.walkAway, p.start - conceded);
+  }
+
+  /** How it meets this rival on its side: today's hand always overtakes by one. */
+  private stanceTo(rival: string): GoodPlay['vsRival'] {
+    return this.play ? (this.play.per?.[rival] ?? this.play.vsRival) : 'undercut1';
+  }
+
+  /**
+   * Whether to step off a house's line now, and, while staying, when to re-aim: it sets `reactIn`.
+   *
+   * Standing at a house's line, where units trade by themselves: true once it wants no more there, so it steps off. While
+   * it still wants some, it stays and re-aims when the line's next unit is due, so it counts again after every unit and
+   * steps off within a tick of the last, as a phone's stop lands; the replay makes the same stop at the same step. The
+   * line's deal is found by its house: players sharing a line take turns, and the deal names whoever got the last unit.
+   */
+  private enoughAtLine(state: GameState, w: Walker): boolean {
+    const line = lineOf(state, w.id);
+    if (!line) return false;
+    if (this.unitsAt(state, w.side, line) === 0) return true;
+    const deal = state.auction!.deals.find((d) => (w.side === 'buyer' ? d.seller : d.buyer) === line.house);
+    const due = tradeInterval(deal?.units ?? 0) - (deal?.progress ?? 0);
+    this.reactIn = Math.min(this.reactIn, Math.max(1, due));
+    return false;
+  }
+
+  /**
+   * The units it would trade one by one at this line, by the same limits `aim` walks to: a buyer's value and purse, a
+   * seller's floor, each bounded by the play's walkAway. The ship pays a little less for each further unit, so each is
+   * priced as the ship will pay it.
+   */
+  private unitsAt(state: GameState, side: Walker['side'], line: { house: string; price: number }): number {
+    if (this.play?.bluff) return 0;
+    const price = line.price;
+    const good = state.auction!.good!;
+    const plan = this.plan!;
+    const trade = this.trade!;
+    const me = state.players.find((p) => p.id === this.brain.mind.me)!;
+    let units = 0;
+    if (side === 'seller' && trade.side === 'seller') {
+      const bought = state.ship.bought[good] ?? 0;
+      const pays = (k: number) => (line.house === SHIP_ID ? shipPrice({ ...state, ship: { ...state.ship, bought: { ...state.ship.bought, [good]: bought + k } } }, good) : price);
+      for (let h = me.stock[good]; h > trade.keep && h > 0; h--, units++) {
+        const floor = this.bounded('seller', Math.ceil(beforeTax(state, plan.values.keep[h - 1] ?? 0)));
+        const unit = pays(units);
+        if (!Number.isFinite(floor) || unit === null || floor > unit) break;
+      }
+      return units;
+    }
+    if (side !== 'buyer' || trade.side !== 'buyer') return 0;
+    for (let h = me.stock[good], money = me.money; h < trade.upTo; h++, units++, money -= price) {
+      const budgetLeft = Math.max(0, plan.budget - (this.startMoney - money));
+      const essential = h < plan.values.block && (good === 'food' || good === 'energy');
+      const cap = essential ? money : Math.min(money, budgetLeft);
+      if (this.bounded('buyer', Math.floor(Math.min(plan.values.buy[h] ?? 0, cap))) < price) break;
+    }
+    return units;
   }
 
   /** Holds up or down until the rounded price is on the target, a step at most past it, so it never wobbles. */
@@ -210,3 +318,4 @@ export class AuctionHand {
     if (done !== a.done.includes(w.id)) act({ type: 'done', done });
   }
 }
+

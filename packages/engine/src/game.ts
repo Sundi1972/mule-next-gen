@@ -1,12 +1,13 @@
 import { endAuction, startAuction } from './auction.js';
 import { RuleError } from './errors.js';
-import { DEFAULT_SPECIES, DEV_STEER, DEVELOPMENT, GAME, GLINT, GOOD_CONFIG, mapSize, MULE, POLLUTION, SPECIES_PERK, START, TAX, UPKEEP, WOLVES } from './config.js';
+import { COLONY_SCORE, DEFAULT_SPECIES, DEV_STEER, DEVELOPMENT, GAME, GLINT, GOOD_CONFIG, mapSize, MULE, POLLUTION, SPECIES_PERK, START, storeStockFor, TAX, UPKEEP, WOLVES } from './config.js';
 import { allPrices, mulePrice, planShip, postPrices, targetPrice } from './economy.js';
-import { rollPlayerEvent } from './events.js';
+import { firePhase, rollPlayerEvent } from './events.js';
 import { colonyLot, endLandAuction, isListed, plotAt, startLandAuction } from './lots.js';
 import { generateMap, tileIndex } from './map.js';
+import { colonyPrestige, colonyWealth, keepPromise, monthLedger, newColony, payGrant, runColony } from './colony.js';
 import { airBand } from './pollution.js';
-import { closeElection, newPolitics, officeScore, openPlanning, payOffices } from './politics.js';
+import { closeVotes, collectLawTaxes, newPolitics, outfitBlocked, officeScore, openPlanning, payOffices } from './politics.js';
 import { needsOf, runProduction } from './production.js';
 import { createRng } from './rng.js';
 import { emptyStock } from './stock.js';
@@ -53,14 +54,16 @@ export function createGame(options: { seed: number; players: NewPlayer[]; maxMon
         hungry: false,
         devSeconds: DEVELOPMENT.fullSeconds,
         sick: false,
+        sickNext: false,
         doneDeveloping: false,
         installedThisTurn: false,
         analysed: [],
         droneOrder: [],
+        droneFound: [],
       }),
     ),
     store: {
-      stock: { ...START.storeStock },
+      stock: storeStockFor(options.players.length),
       mules: START.storeMules,
       mulesAtStart: START.storeMules,
       muleFactor: 1,
@@ -76,13 +79,17 @@ export function createGame(options: { seed: number; players: NewPlayer[]; maxMon
     grant: null,
     landRanOutMonth: null,
     history: [],
+    monthEvents: [],
     auction: null,
     listings: [],
     landAuction: null,
     politics: options.politics === false ? null : newPolitics(),
+    colony: options.politics === false ? null : newColony(1),
   };
   // The first month's prices start where supply and demand put them.
   for (const good of GOODS) state.store.posted[good] = Math.round(targetPrice(state, good));
+  // Month 1's planning rolls here, as every later month's does in advancePhase (none fires before EVENTS.firstMonth).
+  firePhase(state, 'planning');
   openPlanning(state);
   return state;
 }
@@ -207,21 +214,26 @@ function developer(state: GameState, playerId: string): Player {
  * Starts development: one clock, the same full time for every player. A
  * player short of the month's Food is hungry. Each player rolls for
  * sickness (events.ts, likelier in dirty air and for a big polluter); a
- * Medicine cures it, and is used up. Hunger and sickness slow the walk
- * (dev-walk.ts).
+ * player last month's epidemic made sick is sick again. One Medicine cures
+ * being sick this turn, whatever the cause, and is used up. Then
+ * development's events roll (an epidemic, a MULE theft). Hunger and
+ * sickness slow the walk (dev-walk.ts).
  */
 function startDevelopment(state: GameState): void {
   for (const p of state.players) {
     p.hungry = p.stock.food < Math.max(1, needsOf(state, p.id).food);
     p.sick = false;
-    if (rollPlayerEvent(state, 'sickness', 'development', p.id)) {
+    const rolled = rollPlayerEvent(state, 'sickness', 'development', p.id);
+    if (rolled || p.sickNext) {
       if (p.stock.medicine >= 1) p.stock.medicine--;
       else p.sick = true;
     }
+    p.sickNext = false;
     p.devSeconds = DEVELOPMENT.fullSeconds;
     p.doneDeveloping = false;
     p.installedThisTurn = false;
   }
+  firePhase(state, 'development');
 }
 
 /** What this player pays for an empty MULE. Gearlings pay less. */
@@ -253,8 +265,10 @@ export function outfitMule(state: GameState, playerId: string, outfit: Outfit): 
   const p = developer(state, playerId);
   if (!p.carriedMule) throw new RuleError('No MULE to outfit');
   requireLed(p);
-  // With the arcade on, a fitted MULE changes good only by RE-OUTFIT (AM-2), never by a full-price re-fit.
-  if (DEV_STEER.on && p.carriedMule !== 'empty') throw new RuleError('This MULE is outfitted: re-outfit it');
+  // A fitted MULE changes good only by RE-OUTFIT (AM-2), never by a full-price re-fit: every game steers (C14).
+  if (p.carriedMule !== 'empty') throw new RuleError('This MULE is outfitted: re-outfit it');
+  const capped = outfitBlocked(state, outfit);
+  if (capped) throw new RuleError(capped);
   const cost = outfitCostFor(state, playerId, outfit);
   if (p.money < cost) throw new RuleError('Not enough money');
   p.money -= cost;
@@ -312,6 +326,8 @@ export function reoutfitMule(state: GameState, playerId: string, outfit: Outfit)
   if (!p.takenMule) throw new RuleError('Only a MULE taken off a plot can be re-outfitted');
   requireLed(p);
   if (p.carriedMule === outfit) throw new RuleError('The MULE is already outfitted for that');
+  const capped = outfitBlocked(state, outfit);
+  if (capped) throw new RuleError(capped);
   const cost = reoutfitCostFor(state, playerId, outfit);
   if (p.money < cost) throw new RuleError('Not enough money');
   p.money -= cost;
@@ -458,7 +474,10 @@ const ORDER: Phase[] = ['planning', 'landGrant', 'landAuction', 'development', '
  */
 export function advancePhase(state: GameState): void {
   if (state.phase === 'gameOver') return;
-  if (state.phase === 'planning') closeElection(state);
+  if (state.phase === 'planning') {
+    keepPromise(state);
+    closeVotes(state);
+  }
   let next = ORDER[(ORDER.indexOf(state.phase) + 1) % ORDER.length]!;
   if (next === 'landAuction') colonyLot(state);
   if (next === 'landAuction' && state.listings.length === 0) next = 'development';
@@ -470,6 +489,8 @@ export function advancePhase(state: GameState): void {
       p.doneWithLand = false;
       // Drone results arrive in time to pick.
       for (const i of p.droneOrder) if (!p.analysed.includes(i)) p.analysed.push(i);
+      // Kept for the month, so the phone can still say which plots the drone surveyed (H-3).
+      p.droneFound = p.droneOrder;
       p.droneOrder = [];
     }
     newSweep(state, 0);
@@ -510,8 +531,12 @@ export function advancePhase(state: GameState): void {
       colonyFund: state.treasury.money,
       colonistsHungry: false,
     });
+    // What the report filed, so the month's list and the report hold the same production events.
+    state.monthEvents.push(...(state.history.at(-1)!.events ?? []));
   }
   if (next === 'auction') {
+    // A pirate raid or a store fire changes the stock before the prices are posted.
+    firePhase(state, 'auction');
     postPrices(state);
     startAuction(state);
   }
@@ -519,19 +544,31 @@ export function advancePhase(state: GameState): void {
     // Goods the auction didn't reach trade nothing.
     endAuction(state);
     state.auction = null;
+    firePhase(state, 'upkeep');
     const { shortages, hungry } = runUpkeep(state);
+    collectLawTaxes(state);
+    payGrant(state);
     payOffices(state);
+    runColony(state, shortages);
     const report = state.history.at(-1);
     if (report) {
       report.shortages = shortages;
       report.colonistsHungry = hungry;
       report.storeCapital = state.store.capital;
       report.colonyFund = state.treasury.money;
+      const ledger = monthLedger(state);
+      if (ledger) report.ledger = ledger;
+      // The month's report keeps every event the month fired, not production's alone; a what-if copy shares the report.
+      if (!state.whatIf) report.events = [...state.monthEvents];
     }
     if (isGameOver(state)) state.phase = 'gameOver';
   }
   if (next === 'planning') {
     state.month++;
+    state.monthEvents = [];
+    for (const p of state.players) p.droneFound = [];
+    // Planning's events roll as the month opens, with or without politics; they move cash and colonists, never land.
+    firePhase(state, 'planning');
     openPlanning(state);
   }
 }
@@ -587,4 +624,42 @@ export function scoreParts(state: GameState, playerId: string): ScoreParts {
 /** Final score: scoreParts().total. */
 export function score(state: GameState, playerId: string): number {
   return scoreParts(state, playerId).total;
+}
+
+/** The colony score's terms and total (G-5 RULE-25): each term in credits, the happiness factor, the rounded total. */
+export interface ColonyScore {
+  wealth: number;
+  environment: number;
+  prestige: number;
+  factor: number;
+  total: number;
+}
+
+/**
+ * RULE-25 over its four inputs: wealth in credits, the air (0..POLLUTION.airMax, higher is dirtier), prestige points
+ * and happiness 0..100. Clean air and prestige become credits at COLONY_SCORE's rates; the happiness factor runs from
+ * factor.low to factor.high; the total is rounded once.
+ */
+export function colonyScoreOf(inputs: { wealth: number; air: number; prestige: number; happiness: number }): ColonyScore {
+  const S = COLONY_SCORE;
+  const environment = S.perCleanPoint * (POLLUTION.airMax - inputs.air);
+  const prestige = S.perPrestige * inputs.prestige;
+  const factor = S.factor.low + ((S.factor.high - S.factor.low) * inputs.happiness) / 100; // literal-ok: the mood's scale is 0..100 by definition (G-5 RULE-20)
+  return { wealth: inputs.wealth, environment, prestige, factor, total: Math.round((inputs.wealth + environment + prestige) * factor) };
+}
+
+/**
+ * The colony score of this state (C31): a pure function of it, with no running total kept, so a replay of seed and moves
+ * scores the same (HC-27, C32). Null when the game plays without the council. A Collapse cuts the players' Worth, not
+ * these terms: the wealth gauge counts before any cut.
+ */
+export function colonyScore(state: GameState): ColonyScore | null {
+  if (!state.colony) return null;
+  return colonyScoreOf({ wealth: colonyWealth(state), air: state.air, prestige: colonyPrestige(state), happiness: state.colony.happiness });
+}
+
+/** A player's standing at the end (RULE-25): their Worth, and beside it, never in it, what their plaques hold. */
+export function playerStanding(state: GameState, playerId: string): { worth: number; plaques: number } {
+  const plaques = (state.colony?.projects ?? []).reduce((sum, p) => sum + (p.plaque[playerId] ?? 0), 0);
+  return { worth: score(state, playerId), plaques };
 }

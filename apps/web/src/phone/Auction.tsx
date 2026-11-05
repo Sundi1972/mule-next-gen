@@ -1,13 +1,35 @@
 import type { Good } from '@mule/engine';
 import type { AuctionView, MuleView } from '@mule/protocol';
 import { Button, cx, GOOD_NAME, GoodTag, TimeBar, WalkBoard } from '@mule/ui';
-import { BoardKey, boardWalkers, dealLine, Hint, MyStoreLine, shipWants, ShipWants, SIDE_WORD, skippedLine, StatusTable, toggleSide, walkHint } from '../components/AuctionParts';
+import {
+  BoardKey,
+  boardWalkers,
+  dealLine,
+  dealSpeed,
+  Hint,
+  keepWords,
+  lineHint,
+  linePrice,
+  lineMoment,
+  MyStoreLine,
+  shipWants,
+  ShipWants,
+  SIDE_WORD,
+  skippedLine,
+  StatusTable,
+  toggleSide,
+  WaitingToPick,
+  walkHint,
+} from '../components/AuctionParts';
 import { speakerAt } from '../chat/Chat';
 import { fmt, PHASE_NAME } from '../game/derive';
 import { useAuctionSound } from '../game/sound';
-import type { MouseEvent, PointerEvent } from 'react';
+import { useEffect, useRef, useState, type MouseEvent, type PointerEvent } from 'react';
 import { useClient } from '../net/react';
 import { usePhoneGame } from './game';
+import { connectedIn, pickedIn, SIDE_PICK_WORDS, stillPicking, type Seat } from './hub/ready';
+import { ReadyCount } from './hub/ReadyBar';
+import { AuctionHeadline } from '../components/AuctionHeadline';
 import { PhoneShell } from './Shell';
 import { stepDir, useWalkIntent } from './useWalkIntent';
 
@@ -17,7 +39,9 @@ const SIDE_NAME: Record<Side, string> = { buyer: 'Buyer', seller: 'Seller', pass
 /**
  * The goods auction, the original's walk: goods come up one at a time. A
  * status screen shows what everyone has, beside your side, already picked
- * from what you have and need: tap Buy or Sell to change it. Then you hold
+ * from what you have and need: tap Buy or Sell to change it, then Ready. It
+ * has no clock (A-7): the walk starts once everyone has picked, or when the
+ * host moves on for whoever is still picking. Then you hold
  * Up or Down (or drag on the board) to walk your creature. Your height is
  * your bid or your ask; meet someone and units change hands. When the walk
  * ends, the close stage shows your receipt for the good over the still board,
@@ -25,13 +49,17 @@ const SIDE_NAME: Record<Side, string> = { buyer: 'Buyer', seller: 'Seller', pass
  */
 export function Auction() {
   const client = useClient();
-  const { view, me, self } = usePhoneGame();
+  const { table, view, me, self } = usePhoneGame();
+  const [asking, setAsking] = useState(false);
   const auction = view.auction;
   useAuctionSound(auction);
   const stage = auction?.stage;
   const mine = auction?.walkers.find((w) => w.id === me.id);
   const onBoard = stage === 'walk' && mine !== undefined && mine.side !== 'pass';
   const walk = useWalkIntent(onBoard, auction?.good ?? '');
+  // At a house's line units trade by themselves (RULE-1): the rail says so while they move.
+  const canTrade = mine?.side === 'seller' ? (auction ? me.stock[auction.good] > 0 : false) : (view.players.find((p) => p.id === me.id)?.money ?? 0) >= (auction?.storeSells ?? Infinity);
+  const moment = lineMoment(stage === 'walk' ? mine : undefined, auction?.deals ?? [], canTrade);
 
   if (!auction) {
     return (
@@ -55,7 +83,14 @@ export function Auction() {
   const closed = stage === 'close';
   const nextWords = auction.upNext ? `Next: ${GOOD_NAME[auction.upNext]}…` : 'The auction is closing…';
   const doneButton = (
-    <Button size="md" variant={done ? 'outline' : 'holo'} className="h-10 w-full" disabled={done || closed} data-testid="done" onClick={() => client.intent({ type: 'ready' })}>
+    <Button
+      size="md"
+      variant={done ? 'outline' : 'holo'}
+      className="h-10 w-full"
+      disabled={done || closed || moment.kind === 'trading'}
+      data-testid="done"
+      onClick={() => client.intent({ type: 'ready' })}
+    >
       {closed ? nextWords : done ? 'Done · waiting' : stage === 'status' ? 'Ready' : `Done with ${GOOD_NAME[good]}`}
     </Button>
   );
@@ -63,6 +98,12 @@ export function Auction() {
   if (stage === 'status') {
     const side = mine?.side;
     const ship = shipWants(view, auction);
+    // A table the room has not listed yet counts every seat as connected.
+    const connected = connectedIn(table.seats ?? []);
+    const waiting = stillPicking(view, connected);
+    const others = waiting.filter((s) => s.id !== me.id);
+    const isHost = table.hostId === me.id;
+    const picked = view.players.map((p) => ({ ...p, ready: pickedIn(view, p.id) }));
     return (
       <PhoneShell
         phase={`${GOOD_NAME[good]} · buy or sell?`}
@@ -75,7 +116,7 @@ export function Auction() {
               </span>
             </div>
             <p className="text-xs leading-snug text-ink-2" data-testid="status-words">
-              {spare < 0 ? `You need ${-spare} more ${GOOD_NAME[good]} this month.` : spare > 0 ? `You have ${spare} more than you need.` : 'You have just what you need.'} Pick your side before the bell.
+              {spare < 0 ? `You need ${-spare} more ${GOOD_NAME[good]} this month.` : spare > 0 ? `You have ${spare} more than you need.` : 'You have just what you need.'} Pick your side; you can change it until everyone has.
             </p>
           </>
         }
@@ -102,14 +143,34 @@ export function Auction() {
                 ))}
               </div>
               <span className="text-center font-mono text-[10px] text-ink-3" data-testid="side-now">
-                {side === 'buyer' || side === 'seller' ? `YOU ${side === 'buyer' ? 'BUY' : 'SELL'} · TAP AGAIN TO PASS` : 'YOU SIT THIS GOOD OUT'}
+                {side === 'seller' ? '✓ YOU SELL' : '✓ YOU BUY'}
               </span>
             </div>
-            {doneButton}
+            {/* Ready is the pick; once pressed it gives way to who is still picking, and the host's way on (G-7). */}
+            {!done ? (
+              doneButton
+            ) : (
+              <div className="flex flex-col gap-1.5" data-testid="pick-wait">
+                {others.length > 0 ? <WaitingToPick seats={others} /> : <span className="text-sm font-semibold text-holo @min-[1100px]/shell:text-lg">{SIDE_PICK_WORDS.all}</span>}
+                {isHost && others.length > 0 && (
+                  <Button size="md" variant="outline" className="w-full @min-[1100px]/shell:h-14 @min-[1100px]/shell:text-lg" onClick={() => setAsking(true)} data-testid="move-on">
+                    {SIDE_PICK_WORDS.moveOn(others)}
+                  </Button>
+                )}
+              </div>
+            )}
           </>
         }
       >
-        <TimeBar seconds={auction.seconds} total={auction.total} slowed={auction.slowed} className="mb-1.5" />
+        {/* The good leads the headline (Heiko, 5 Nov); where the time bar was: no clock (G-7), the count of who has picked. */}
+        <AuctionHeadline good={good}>
+          <div className="flex min-w-0 items-center gap-2 @min-[1100px]/shell:gap-4" data-testid="pick-bar">
+            <ReadyCount players={picked} label="PICKED" />
+            <span className="min-w-0 text-xs leading-snug text-ink-2 @min-[1100px]/shell:text-lg">
+              <strong className="font-semibold text-ink">No clock:</strong> {SIDE_PICK_WORDS.noClock}
+            </span>
+          </div>
+        </AuctionHeadline>
         {skipped && (
           <p className="mb-1.5 shrink-0 truncate font-mono text-[11px] text-ink-3" data-testid="skipped">
             {skipped}
@@ -122,13 +183,24 @@ export function Auction() {
           <MyStoreLine auction={auction} />
           {ship && <ShipWants want={ship.first} also={ship.also} have={me.stock[ship.first.good]} />}
         </div>
+        {asking && isHost && others.length > 0 && (
+          <MoveOn
+            auction={auction}
+            seats={others}
+            onNow={() => {
+              setAsking(false);
+              client.intent({ type: 'continue' });
+            }}
+            onKeep={() => setAsking(false)}
+          />
+        )}
       </PhoneShell>
     );
   }
 
   const sides = (
-    <div className={cx('grid grid-cols-3 gap-1 rounded-control border border-holo-line bg-void p-1')} role="radiogroup" aria-label="Your side">
-      {(['buyer', 'seller', 'pass'] as const).map((s) => (
+    <div className={cx('grid grid-cols-2 gap-1 rounded-control border border-holo-line bg-void p-1')} role="radiogroup" aria-label="Your side">
+      {(['buyer', 'seller'] as const).map((s) => (
         <button
           key={s}
           type="button"
@@ -138,7 +210,7 @@ export function Auction() {
           onClick={() => declare(s)}
           className={cx(
             'h-8 rounded-[8px] font-display text-xs font-semibold disabled:opacity-35',
-            mine?.side === s ? (s === 'seller' ? 'bg-rise text-on-holo' : s === 'buyer' ? 'bg-fall text-on-holo' : 'bg-raised text-ink') : 'text-ink-2',
+            mine?.side === s ? (s === 'seller' ? 'bg-rise text-on-holo' : 'bg-fall text-on-holo') : 'text-ink-2',
           )}
         >
           {SIDE_NAME[s]}
@@ -148,45 +220,77 @@ export function Auction() {
   );
 
   const hint = walkHint(view, auction, me.id, have);
+  const lineSide = mine?.side === 'seller' ? 'seller' : 'buyer';
+  // Selling into next month's need: shown, never asked (variant A's amber note).
+  const keeping = lineSide === 'seller' && need > 0 && have < need;
+  const lineRail = (() => {
+    if (moment.kind === 'trading') {
+      const h = lineHint(moment, lineSide, good, linePrice(auction, lineSide, moment.house));
+      return <Hint tone="lit" line={h.line} how={h.how} testid="line-hint" />;
+    }
+    // At a line with nothing moving, one plain reason, so a newcomer knows why nothing happens (F5, WS6's ruling).
+    if (moment.kind === 'line') {
+      const reason = lineSide === 'buyer' ? `You can't pay for one at ${auction.storeSells ?? 0} cr` : `You have no ${GOOD_NAME[good]} to sell`;
+      return <Hint line={reason} testid="line-reason" />;
+    }
+    return null;
+  })();
   const rail = (
     <>
-      <div className="flex items-center justify-between gap-2 rounded-control border border-holo-faint bg-panel px-2.5 py-1.5" data-testid="good-row">
-        <GoodTag good={good} name />
-        <div className="grid grid-cols-3 gap-2.5 font-mono text-[10px] text-ink-3">
-          <span className="flex flex-col">
-            HAVE
-            <strong data-num className="text-sm text-ink" data-testid="have">
-              {have}
-            </strong>
-          </span>
-          <span className="flex flex-col">
-            NEED<strong data-num className="text-sm text-ink">{need}</strong>
-          </span>
-          <span className="flex flex-col">
-            {spare < 0 ? 'SHORT' : 'SPARE'}
-            <strong data-num className={cx('text-sm', spare < 0 ? 'text-alert' : spare > 0 ? 'text-ok' : 'text-ink')}>
-              {spare > 0 ? '+' : ''}
-              {spare}
-            </strong>
-          </span>
+      {
+        <div className="flex items-center justify-between gap-2 rounded-control border border-holo-faint bg-panel px-2.5 py-1.5" data-testid="good-row">
+          <GoodTag good={good} name />
+          <div className="grid grid-cols-3 gap-2.5 font-mono text-[10px] text-ink-3">
+            <span className="flex flex-col">
+              HAVE
+              <strong data-num className={cx('text-sm', keeping ? 'text-warn' : 'text-ink')} data-testid="have">
+                {have}
+              </strong>
+            </span>
+            <span className="flex flex-col">
+              NEED<strong data-num className="text-sm text-ink">{need}</strong>
+            </span>
+            <span className="flex flex-col">
+              {spare < 0 ? 'SHORT' : 'SPARE'}
+              <strong data-num className={cx('text-sm', spare < 0 ? 'text-alert' : spare > 0 ? 'text-ok' : 'text-ink')}>
+                {spare > 0 ? '+' : ''}
+                {spare}
+              </strong>
+            </span>
+          </div>
         </div>
-      </div>
+      }
       {closed ? (
         <Hint line={`${GOOD_NAME[good]} is closed.`} how={auction.upNext ? `Next: ${GOOD_NAME[auction.upNext]}, buy or sell?` : null} />
-      ) : myDeal ? (
-        <Hint tone="lit" line={dealLine(view, myDeal, me.id)} testid="my-deal" />
       ) : (
-        <Hint line={hint.line} how={hint.how} />
+        (lineRail ?? (myDeal ? <Hint tone="lit" line={dealLine(view, myDeal, me.id)} testid="my-deal" /> : <Hint line={hint.line} how={hint.how} />))
       )}
-      {!closed && sides}
+      {!closed && keeping && (
+        <p className="rounded-control border border-warn bg-warn/10 px-2.5 py-1.5 text-xs leading-snug text-warn" data-testid="keep">
+          {keepWords(good, have, need)}
+        </p>
+      )}
+      {!closed && (
+        <div className="flex flex-col gap-1">
+          {sides}
+          {/* On a phone held sideways (390 px) the rail has no row to spare: the caption shows where it fits. */}
+          <span className="hidden text-center text-[10px] leading-tight text-ink-3 [@media(min-height:430px)]:block" data-testid="sides-caption">
+            {lineSide === 'buyer' ? 'Sell puts you at the top, asking.' : 'Buy puts you at the bottom, bidding.'}
+          </span>
+        </div>
+      )}
     </>
   );
 
+  // G-2: a tap is one price step; a hold walks until let go.
+  const hold = (dir: 'up' | 'down', disabled: boolean) => (
+    <WalkHold key={dir} dir={dir} disabled={!onBoard || disabled} onHold={(on) => walk(on ? dir : 'stop')} onStep={() => client.intent({ type: 'walkStep', dir })} />
+  );
   const footer = (
     <>
       <div className="grid grid-cols-2 gap-2">
-        <WalkHold dir="up" disabled={!onBoard} onHold={(on) => walk(on ? 'up' : 'stop')} />
-        <WalkHold dir="down" disabled={!onBoard} onHold={(on) => walk(on ? 'down' : 'stop')} />
+        {hold('up', false)}
+        {hold('down', false)}
       </div>
       {doneButton}
     </>
@@ -194,7 +298,16 @@ export function Auction() {
 
   return (
     <PhoneShell phase={`${GOOD_NAME[good]} auction`} fill rail={rail} footer={footer}>
-      <TimeBar seconds={auction.seconds} total={auction.total} slowed={auction.slowed} className="mb-1.5" />
+      {/* The good leads the headline (Heiko, 5 Nov): the clock beside it while it trades, "closed" once it has. */}
+      <AuctionHeadline good={good}>
+        {closed ? (
+          <span className="label-caps text-ink-2" data-testid="auction-closed">
+            closed
+          </span>
+        ) : (
+          <TimeBar seconds={auction.seconds} total={auction.total} slowed={auction.slowed} className="min-w-0 flex-1" />
+        )}
+      </AuctionHeadline>
       {skipped && (
         <p className="mb-1.5 shrink-0 truncate font-mono text-[11px] text-ink-3" data-testid="skipped">
           {skipped}
@@ -215,7 +328,7 @@ export function Auction() {
           lo={auction.lo}
           hi={auction.hi}
           walkers={walkers}
-          deals={auction.deals}
+          deals={auction.deals.map((d) => ({ ...d, speed: dealSpeed(d.units) }))}
           storeBuys={auction.storeBuys}
           storeSells={auction.storeSells}
           shipPays={auction.shipPays}
@@ -234,6 +347,49 @@ export function Auction() {
         )}
       </div>
     </PhoneShell>
+  );
+}
+
+/**
+ * The side a seat starts the walk on if the host moves on now, in words: "Kai buys Food: 1 of 3, short 2." A dropped
+ * phone sits the walk out, so it says so. `given` is whether it is the side everyone starts on, Buy.
+ */
+export function sideWords(auction: AuctionView, seat: Seat, good: AuctionView['good']): { line: string; given: boolean } {
+  const g = GOOD_NAME[good];
+  const row = auction.status.find((r) => r.id === seat.id);
+  const now = row?.now ?? 0;
+  const need = row?.need ?? 0;
+  const side = auction.walkers.find((w) => w.id === seat.id)?.side ?? 'pass';
+  // Everyone starts as a buyer (RULE-2): that is the side a seat has if it did not switch.
+  const given = side === 'buyer';
+  if (seat.away) return { line: `${seat.name} is away and sits ${g} out.`, given: false };
+  if (side === 'buyer') return { line: now < need ? `${seat.name} buys ${g}: ${now} of ${need}, short ${need - now}.` : `${seat.name} buys ${g}.`, given };
+  if (side === 'seller') return { line: now > need ? `${seat.name} sells ${g}: ${now - need} spare.` : `${seat.name} sells ${g}.`, given };
+  return { line: now === need ? `${seat.name} sits ${g} out: ${now} of ${need}, just enough.` : `${seat.name} sits ${g} out.`, given };
+}
+
+/** The host's one confirming tap before moving on for the seats still picking. */
+export function MoveOn({ auction, seats, onNow, onKeep }: { auction: AuctionView; seats: readonly Seat[]; onNow: () => void; onKeep: () => void }) {
+  const words = seats.map((s) => sideWords(auction, s, auction.good));
+  return (
+    <div className="fixed inset-0 z-40 grid place-items-center bg-void/70 p-3" role="dialog" aria-modal aria-labelledby="move-on-title" data-testid="move-on-dialog">
+      <div className="flex w-full max-w-[420px] flex-col gap-2 rounded-sheet border-2 border-warn bg-panel p-3 shadow-glow @min-[1100px]/shell:max-w-[560px] @min-[1100px]/shell:gap-4 @min-[1100px]/shell:p-6">
+        <h2 id="move-on-title" className="font-display text-lg font-semibold @min-[1100px]/shell:text-3xl">
+          {SIDE_PICK_WORDS.title(seats)}
+        </h2>
+        <p className="text-sm text-ink-2 @min-[1100px]/shell:text-lg" data-testid="move-on-words">
+          {words.map((w) => w.line).join(' ')} {SIDE_PICK_WORDS.tail(words.every((w) => w.given), seats.filter((s) => s.away).length, seats.length)}
+        </p>
+        <div className="flex gap-2">
+          <Button size="md" className="flex-1" onClick={onNow} data-testid="move-on-now">
+            {SIDE_PICK_WORDS.now}
+          </Button>
+          <Button size="md" variant="ghost" className="flex-1" onClick={onKeep} data-testid="keep-waiting">
+            {SIDE_PICK_WORDS.keep}
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -307,7 +463,8 @@ export function ReceiptCard({
       )}
       {sides.map((kind) => {
         const r = receipt[kind];
-        const net = r.gross - r.tax;
+        const exportTax = r.exportTax ?? 0;
+        const net = r.gross - r.tax - exportTax;
         const each = r.prices.every((p) => p === r.prices[0]) ? `${r.units} × ${r.prices[0]} cr` : r.prices.map((p) => `${p}`).join(' + ') + ' cr';
         return (
           <div key={kind} className="contents">
@@ -320,8 +477,9 @@ export function ReceiptCard({
             {kind === 'sold' && (
               <span className="rounded-control border border-holo-line px-2 py-1 text-sm @min-[1100px]/shell:px-3 @min-[1100px]/shell:py-2 @min-[1100px]/shell:text-xl" data-testid="receipt-tax">
                 {/* The tax the engine took, rounded unit by unit, so the sentence adds up (a rate would not: 10% of 570 is not 60). */}
-                <strong data-num className="font-mono">{fmt(r.gross)} cr</strong>, less {fmt(r.tax)} cr sales tax: <strong data-num className="font-mono">{fmt(net)}</strong>
-                <span className="block text-[11px] text-ink-2 @min-[1100px]/shell:text-base">The tax goes to the colony fund.</span>
+                <strong data-num className="font-mono">{fmt(r.gross)} cr</strong>, less {fmt(r.tax)} cr sales tax
+                {exportTax > 0 && ` and ${fmt(exportTax)} cr export tax`}: <strong data-num className="font-mono">{fmt(net)}</strong>
+                <span className="block text-[11px] text-ink-2 @min-[1100px]/shell:text-base">{exportTax > 0 ? 'The taxes go' : 'The tax goes'} to the colony fund.</span>
               </span>
             )}
           </div>
@@ -357,16 +515,66 @@ export function Hold({ label, glyph, disabled, onHold }: { label: string; glyph:
   );
 }
 
-/** The goods walk's Hold: it says so on the button, "Hold ▲ to walk up". */
-function WalkHold({ dir, disabled, onHold }: { dir: 'up' | 'down'; disabled: boolean; onHold: (on: boolean) => void }) {
+/** A press shorter than this is a tap, which moves one step; a longer one walks until let go (G-2). */
+export const TAP_MS = 180;
+
+/**
+ * The goods walk's Hold: it says so on the button, "Hold ▲ to walk up", and a quick tap moves one step (G-2). Tap or
+ * hold is judged by the events' own timestamps, not by when they are handled: a busy phone can hand over a quick
+ * tap's release late, and that must still be a step.
+ */
+function WalkHold({ dir, disabled, onHold, onStep }: { dir: 'up' | 'down'; disabled: boolean; onHold: (on: boolean) => void; onStep: () => void }) {
+  const timer = useRef<number | null>(null);
+  const holding = useRef(false);
+  const down = useRef<number | null>(null);
+  const release = useRef(onHold);
+  release.current = onHold;
+  // At a house's line this button gives way to "Buy N for X cr" under the finger: going away while held lets go.
+  useEffect(
+    () => () => {
+      if (timer.current !== null) window.clearTimeout(timer.current);
+      if (holding.current) release.current(false);
+    },
+    [],
+  );
+  const end = (stamp: number) => {
+    if (down.current === null) return;
+    const tap = stamp - down.current < TAP_MS;
+    down.current = null;
+    if (timer.current !== null) window.clearTimeout(timer.current);
+    timer.current = null;
+    if (holding.current) {
+      holding.current = false;
+      onHold(false);
+    }
+    if (tap) onStep();
+  };
   return (
     <button
       type="button"
-      aria-label={`Hold to walk ${dir}`}
+      aria-label={`Hold to walk ${dir}; a tap moves one step`}
       disabled={disabled}
       data-testid={`hold-${dir}`}
       className="flex h-12 touch-none select-none flex-col items-center justify-center gap-1 rounded-control border-2 border-holo bg-holo-soft font-display text-holo active:bg-holo active:text-on-holo disabled:opacity-35 @min-[1100px]/shell:h-20"
-      {...holdHandlers(onHold)}
+      onPointerDown={(e) => {
+        e.preventDefault();
+        try {
+          e.currentTarget.setPointerCapture(e.pointerId);
+        } catch {
+          // A synthetic press has no pointer to capture.
+        }
+        holding.current = false;
+        down.current = e.timeStamp;
+        timer.current = window.setTimeout(() => {
+          timer.current = null;
+          holding.current = true;
+          onHold(true);
+        }, TAP_MS);
+      }}
+      onPointerUp={(e) => end(e.timeStamp)}
+      onPointerCancel={(e) => end(e.timeStamp + TAP_MS)}
+      onLostPointerCapture={(e) => end(e.timeStamp)}
+      onContextMenu={(e) => e.preventDefault()}
     >
       <span className="flex items-center gap-1 text-sm font-semibold leading-none @min-[1100px]/shell:text-xl">
         Hold{' '}

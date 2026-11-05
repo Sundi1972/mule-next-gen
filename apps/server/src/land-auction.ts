@@ -57,8 +57,10 @@ export function lotNews(lot: Listing, result: LotResult, nameOf: (seatId: string
   const { x, y } = lot.item;
   const what = lot.item.kind === 'plot' ? `plot ${x}·${y}` : `the MULE on plot ${x}·${y}`;
   const seller = lot.seller === COLONY_SELLER ? 'the colony' : nameOf(lot.seller);
+  // C30: the colony buys a plot for an object's site.
+  const buyer = (id: string) => (id === COLONY_SELLER ? 'The colony' : nameOf(id));
   return result.kind === 'sold'
-    ? `${nameOf(result.buyer)} bought ${what} from ${seller} for ${result.price}.`
+    ? `${buyer(result.buyer)} bought ${what} from ${seller} for ${result.price}.`
     : result.kind === 'store'
       ? `The store bought ${what} from ${seller} for ${result.price}.`
       : `Nobody bid ${lot.minimum} on ${what}: ${seller} keeps it.`;

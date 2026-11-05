@@ -2,16 +2,18 @@
  * B-AC-63, restating UBER-AC-2: two phones and an AI seat play month 1's election on the default server, with the TV,
  * the AI seat running and voting through its own hand. Both humans run in month 1's announce, each on a tax promise;
  * each phone casts, and nothing closes until the last Cast, though Ossa's phone drops first; every screen shows the
- * Governor's ceremony; the promise stays beside the tax; the next sale is taxed at the new Governor's rate.
+ * Governor's ceremony; the promise stays beside the tax; the next sale is taxed at the new Governor's rate. The
+ * Governor proposes a land tax, and month 2's planning opens with its ballot: the phones vote, the server's result is
+ * the votes cast, weighted, and the TV and both phones show it with totals only (C46).
  * Run with `pnpm --filter @mule/web e2e`; replay with `MULE_E2E_SEED=<seed>`.
  */
-import { GAME, POLITICS, storeQuotes, WALK, type GameState, type Good, type TaxPromise } from '@mule/engine';
+import { AI_HANDS, GAME, lawImpact, POLITICS, storeQuotes, voteWeight, WALK, type GameState, type Good, type LawProposal, type TaxPromise } from '@mule/engine';
 import type { MuleIntent, MuleView } from '@mule/protocol';
-import { errors as playwrightErrors, type Page } from 'playwright';
+import { errors as playwrightErrors, type Locator, type Page } from 'playwright';
 import { GRANT_TICK_MS, PHASE_MS } from '../../server/src/mule-game.js';
 import type { MuleServer } from '../../server/src/server.js';
 import { check, CLAIM_MS, doneWithLand, held, launch, PHONE, startServer, TV } from './harness';
-import { ELECTION_WAIT_MS, PRESS_MS } from './politics-steps';
+import { ELECTION_WAIT_MS, firstMulesThroughTheServer, PRESS_MS } from './politics-steps';
 
 const SCALE = 0.25;
 /** How long the last phone's Ready takes to land and the land grant to show; planning has no clock. */
@@ -22,6 +24,8 @@ const NEW_TAX = 8;
 const TICK_MS = 50;
 /** How long a ballot with every pick in, but one Cast missing, is watched for staying open: several election ticks. */
 const STILL_OPEN_MS = 1_000;
+/** How long month 1's end may take to come up and take the phones' Ready. */
+const MONTH_END_MS = 10_000;
 /** B-AC-6: Lena's promise, stepped up from today's tax. */
 const LENA_CAP = 8;
 
@@ -31,7 +35,7 @@ const within = (ms: number) => ms * SCALE + 3_000;
 
 async function main(): Promise<void> {
   const SEED = seedFrom(process.env.MULE_E2E_SEED);
-  const { server, base } = await startServer({ maxMonths: 1, phaseScale: SCALE, seed: () => SEED });
+  const { server, base } = await startServer({ maxMonths: 2, phaseScale: SCALE, seed: () => SEED });
   const browser = await launch();
   const errors: string[] = [];
   try {
@@ -230,28 +234,57 @@ async function main(): Promise<void> {
     await ossa.page.getByTestId('desk-colony').click({ timeout: PRESS_MS });
     await ossa.page.getByTestId('fund-in').filter({ hasText: `the ${NEW_TAX}% sales tax` }).waitFor({ timeout: PRESS_MS });
 
-    // On to the auction: ready, claim, the pub.
+    // B-AC-46-1, B-AC-46-4 (C46): the Governor proposes a law through the picker; its preview is the server's cost for
+    // each player, the server holds the proposal as picked, and Ossa's This month carries it with her own cost.
+    const setting = POLITICS.laws.landTax.settings[1]!;
+    const law: LawProposal = { kind: 'enact', law: 'landTax', setting };
+    await lena.page.getByTestId(`law-landTax-${setting}`).click({ timeout: PRESS_MS });
+    const costs = lawImpact(truth.state(), law);
+    for (const id of [lenaId, ossaId, ...aiIds]) {
+      const c = costs[id]!.cost;
+      await lena.page.getByTestId(`for-each-${id}`).filter({ hasText: c === 0 ? 'nothing' : `${c} cr a month` }).waitFor({ timeout: PRESS_MS });
+    }
+    await lena.page.getByTestId('propose').filter({ hasText: `Propose Land tax ${setting} cr a plot for next month’s vote` }).click({ timeout: PRESS_MS });
+    await untilServer(lena.page, () => JSON.stringify(truth.state().politics!.proposal?.proposal) === JSON.stringify(law) || null, `B-AC-46-1: the server's proposal is Land tax ${setting}`);
+    await lena.page.getByTestId('pending-words').filter({ hasText: `You propose Land tax ${setting} cr a plot` }).waitFor({ timeout: PRESS_MS });
+    const ossaCost = costs[ossaId]!.cost;
+    await ossa.page.getByTestId('agenda-law').filter({ hasText: `Lena proposes Land tax ${setting} cr a plot. For you: ${ossaCost === 0 ? 'nothing' : `about ${ossaCost} cr a month`}.` }).waitFor({ timeout: PRESS_MS });
+    check((await lena.page.getByTestId('agenda-law').count()) === 0, "B-AC-46-4: the Governor's own phone has no agenda line for it");
+    console.log(`✓ B-AC-46-1, B-AC-46-4: Lena proposed Land tax ${setting} through the picker; the server holds it; Ossa's This month reads her cost, ${ossaCost} cr`);
+
+    // On to the auction: ready, claim, then development. Walking is on, so development is the arcade screen; this
+    // test's promise is not the errand, so both phones' first MULEs go in through the server, month 1's clock (which
+    // waits for every first MULE, the AI seat's too) starts, and it runs out the turn.
     await everyone(phones, (p) => p.page.getByTestId('ready').click({ timeout: PRESS_MS }));
     await everyone(phones, (p) => claimPlots(p.page));
     await everyone(phones, (p) => doneWithLand(p.page));
-    await everyone(phones, (p) => goToThePub(p.page));
-    await lena.page.locator('[data-phase=auction]').waitFor({ timeout: within(PHASE_MS.development + PHASE_MS.production) });
+    await lena.page.locator('[data-phase=development]').waitFor({ timeout: within(PHASE_MS.development) });
+    firstMulesThroughTheServer(server, code, [lenaId, ossaId].map((seat) => ({ seat, outfit: 'food' as const })));
+    await lena.page.locator('[data-phase=auction]').waitFor({ timeout: within(2 * PHASE_MS.development + PHASE_MS.production) });
 
     // Lena holds one unit of a good the store buys for 100 cr or more, seeded as the auction opens and before that good
     // comes up, so 7%, 8% and 9% (and the old rate) each take a different tax from the sale.
-    const toAuction = within(WALK.statusMs);
+    // The side pick has no clock (A-7): it waits for every Ready, then the AI's Done within its decision wait.
+    const toAuction = within(AI_HANDS.auction.decideWaitMs);
     await untilServer(lena.page, () => truth.board().auction?.stage === 'status' || null, 'the goods auction opens on a status screen', toAuction);
     const good = aPinningGood(truth, [start, NEW_TAX - 1, NEW_TAX + 1]);
     holdOneUnit(server, code, lenaId, good);
-    const upNext = within(WALK.order.length * (WALK.statusMs + WALK.goodMs / WALK.tradeClockRate));
-    await untilServer(lena.page, () => { const a = truth.board().auction; return (a?.good === good && a.stage === 'status') || null; }, `UBER-AC-2: ${good} comes up at the auction`, upNext);
-    // With one to spare she opens on Sell; a second tap on Sell would pass.
+    const upNext = within(WALK.order.length * (AI_HANDS.auction.decideWaitMs + WALK.goodMs / WALK.tradeClockRate));
+    // Both phones press Ready at each good's side pick before it; never at its own, where Lena picks Sell first.
+    const isUp = () => { const a = truth.board().auction; return (a?.good === good && a.stage === 'status') || null; };
+    const passing = everyone(phones, (p) => readyAtSidePicksUntil(p.page, () => truth.board().auction?.good === good || truth.board().phase !== 'auction'));
+    await untilServer(lena.page, isUp, `UBER-AC-2: ${good} comes up at the auction`, upNext);
+    await passing;
+    // Everyone opens as a buyer (RULE-2): she switches to Sell.
     const sideOf = () => truth.board().auction?.walkers.find((w) => w.id === lenaId)?.side;
     if (sideOf() !== 'seller') await lena.page.getByTestId('side-seller').click({ timeout: PRESS_MS });
     await untilServer(lena.page, () => sideOf() === 'seller' || null, `UBER-AC-2: Lena sells ${good}`);
     const before = money(await lena.page.getByTestId('money').innerText());
     const paidBefore = truth.taxPaid(lenaId);
-    await hold(lena.page, 'down', within(WALK.statusMs));
+    await everyone(phones, (p) => p.page.locator('[data-phase=auction]').getByRole('button', { name: 'Ready', exact: true }).click({ timeout: PRESS_MS }));
+    await hold(lena.page, 'down', toAuction);
+    // At a house's line units sell by themselves (the auto-trade amendment, RULE-1): holding Down, she reaches the
+    // store's line and her one sells, nothing asked, even if it is one she needs ("show, don't stop").
     await untilServer(lena.page, () => truth.stockOf(lenaId, good) === 0 || null, `UBER-AC-2: Lena sells her one ${good}`, within(WALK.goodMs / WALK.tradeClockRate));
     await lena.page.mouse.up();
     await lena.page.waitForFunction((b) => Number((document.querySelector('[data-testid=money]')?.textContent ?? '').replace(/[^\d-]/g, '')) !== b, before, { timeout: PRESS_MS });
@@ -265,6 +298,55 @@ async function main(): Promise<void> {
       check(Math.round(total * (other / 100)) !== tax, `UBER-AC-2: at ${total} cr, ${other}% would take a tax other than ${tax}`);
     }
     console.log(`✓ UBER-AC-2: the winner sets 8% and the next auction sale is taxed at 8%: one ${good} sold for ${total}; Lena's phone ${before} → ${after}, ${tax} tax (${start}%, ${NEW_TAX - 1}% and ${NEW_TAX + 1}% would take ${[start, NEW_TAX - 1, NEW_TAX + 1].map((r) => Math.round((total * r) / 100)).join(', ')})`);
+
+    // B-AC-46-7..10 (C46): on through the rest of the auction and month 1's end to month 2's planning, which opens
+    // with Lena's land tax on its ballot, on both phones' stage and on the TV.
+    const onward = everyone(phones, (p) => readyAtSidePicksUntil(p.page, () => truth.board().phase !== 'auction'));
+    await untilServer(lena.page, () => truth.board().phase === 'upkeep' || null, "month 1's end", upNext);
+    await onward;
+    await everyone(phones, (p) => p.page.locator('[data-phase=upkeep]').getByTestId('ready').click({ timeout: MONTH_END_MS }));
+    const council = () => truth.board().politics!.council;
+    await untilServer(lena.page, () => (truth.board().month === 2 && council()?.stage === 'ballot') || null, "B-AC-46-7: month 2's planning opens with the law ballot", MONTH_END_MS);
+    await everyone(phones, (p) => p.page.getByTestId('ballot-proposal').filter({ hasText: `Land tax ${setting} cr a plot` }).waitFor({ timeout: PRESS_MS }));
+    await tv.getByTestId('tv-council-ballot').getByTestId('tv-proposal-words').filter({ hasText: `Land tax ${setting} cr a plot` }).waitFor({ timeout: PRESS_MS });
+    const ossaWeight = truth.board().politics!.weights.find((w) => w.id === ossaId)!.votes;
+    await ossa.page.getByTestId('ballot-weight').filter({ hasText: `Your vote weighs ${ossaWeight}` }).waitFor({ timeout: PRESS_MS });
+    check((await lena.page.getByTestId('ballot-yes').getAttribute('aria-pressed')) === 'true', "B-AC-46-7: the Governor's ballot starts at Yes");
+    // Ossa votes No; Lena keeps her Yes and presses Done. A month's opening event may hold the table: press until it lands.
+    const lawBallots = (): Record<string, boolean> => truth.state().politics!.council?.ballots ?? {};
+    await pressUntilServer(ossa.page.getByTestId('ballot-no'), () => lawBallots()[ossaId] === false, "B-AC-46-7: the server holds Ossa's No");
+    await pressUntilServer(lena.page.getByTestId('ready').filter({ hasText: 'Done' }), () => truth.state().politics!.council!.done.includes(lenaId) || council()?.stage !== 'ballot', 'B-AC-46-8: Lena is Done');
+    // The reveal runs on the game clock; the clock is held while every screen is read.
+    await untilServer(lena.page, () => council()?.stage === 'reveal' || null, 'B-AC-46-9: the ballot closes once everyone is Done', within(POLITICS.ai.actMs[1]));
+    await held(server, code, async () => {
+      const cast = lawBallots();
+      check(cast[lenaId] === true && cast[ossaId] === false, `B-AC-46-7: the server's ballots are the phones' votes, Lena yes and Ossa no, got ${JSON.stringify(cast)}`);
+      const sum = (yes: boolean) => Object.entries(cast).filter(([, b]) => b === yes).reduce((n, [id]) => n + voteWeight(truth.state(), id).total, 0);
+      const [yes, no] = [sum(true), sum(false)];
+      const r = council()!.result!;
+      check(r.yes === yes && r.no === no, `B-AC-46-9: the server's result is the votes cast, weighted: ${yes} to ${no}, got ${r.yes} to ${r.no}`);
+      const score = r.tie ? `${yes} to ${no} · the Governor’s vote decides` : `${r.passed ? yes : no} to ${r.passed ? no : yes}`;
+      const then = r.passed ? `Land tax ${setting} cr a plot is in force from now` : `it can come back in month ${2 + POLITICS.council.retryMonths + 1}`;
+      await tv.getByTestId('tv-council-reveal').waitFor({ timeout: PRESS_MS });
+      await tv.getByTestId('tv-yes').filter({ hasText: new RegExp(`^${yes}$`) }).waitFor({ timeout: PRESS_MS });
+      await tv.getByTestId('tv-no').filter({ hasText: new RegExp(`^${no}$`) }).waitFor({ timeout: PRESS_MS });
+      await tv.getByTestId('tv-stamp').filter({ hasText: r.passed ? 'Passed' : 'Failed' }).waitFor({ timeout: PRESS_MS });
+      const tvLine = (await tv.getByTestId('tv-result-line').innerText()).trim();
+      check(tvLine === `${r.passed ? 'Passed' : 'Failed'} ${score} · ${then}`, `B-AC-46-10: the TV's result line, got "${tvLine}"`);
+      const reveal = await tv.getByTestId('tv-reveal-a').innerText();
+      check(![lena.name, ossa.name].some((n) => reveal.includes(n)), `B-AC-46-10: the TV's reveal names nobody beside a vote (RULE-47): "${reveal}"`);
+      const phoneLine = r.tie ? `${score} · ${then}` : `${r.passed ? 'Passed' : 'Failed'} ${score} · ${then}`;
+      await everyone(phones, (p) => p.page.getByTestId('phone-reveal-line').filter({ hasText: phoneLine }).waitFor({ timeout: PRESS_MS }));
+      console.log(`✓ B-AC-46-7..10: month 2's ballot on both phones and the TV; Lena yes, Ossa no; the server's ${r.passed ? 'pass' : 'fail'} ${yes} to ${no} is the votes cast, weighted; the TV and both phones read "${tvLine}"`);
+    });
+    // B-AC-46-11: once the reveal is over a passed law is in force, and every Council desk carries its chip.
+    await untilServer(lena.page, () => council()?.stage === 'over' || null, 'B-AC-46-11: the reveal ends', within(POLITICS.council.revealMs));
+    if (council()!.result!.passed) {
+      check(JSON.stringify(truth.board().politics!.laws?.landTax) === JSON.stringify({ setting, since: 2 }), `B-AC-46-11: the server has Land tax ${setting} in force since month 2`);
+      await ossa.page.getByTestId('desk-council').click({ timeout: PRESS_MS });
+      await ossa.page.getByTestId('law-chip-landTax').filter({ hasText: `Land tax ${setting} cr · since month 2` }).waitFor({ timeout: PRESS_MS });
+      console.log(`✓ B-AC-46-11: Land tax ${setting} is in force on the server and on Ossa's Council desk, since month 2`);
+    }
 
     check(errors.length === 0, `no page errors: ${errors.join('; ')}`);
     console.log(`e2e politics: ok (room ${code}, seed ${SEED})`);
@@ -415,6 +497,15 @@ async function untilServer<T>(page: Page, read: () => T | false | null, what: st
   }
 }
 
+/** Presses until the server shows the press landed: a month's opening event can refuse the first. */
+async function pressUntilServer(button: Locator, landed: () => boolean, what: string): Promise<void> {
+  for (let tries = 0; !landed(); tries++) {
+    check(tries < 10, what);
+    await button.click({ timeout: PRESS_MS });
+    await button.page().waitForTimeout(PRESS_MS / 4);
+  }
+}
+
 async function everyone(phones: Phone[], step: (p: Phone) => Promise<unknown>): Promise<void> {
   await Promise.all(phones.map(step));
 }
@@ -438,8 +529,24 @@ async function claimPlots(page: Page): Promise<void> {
   }
 }
 
-async function goToThePub(page: Page): Promise<void> {
-  await page.locator('[data-phase=development]').getByRole('button', { name: 'Go to the pub and end your turn' }).click({ timeout: within(PHASE_MS.development) });
+/**
+ * At each good's side pick, which has no clock (A-7), presses Ready, as the player would, until `stop`; it reads
+ * `stop` right before each press, so it never presses on the side pick it stops at. Presses nothing in the walk.
+ */
+async function readyAtSidePicksUntil(page: Page, stop: () => boolean): Promise<void> {
+  const ready = page.locator('[data-phase=auction]').getByRole('button', { name: 'Ready', exact: true });
+  while (!stop()) {
+    if (await ready.count()) {
+      if (stop()) return;
+      try {
+        await ready.click({ timeout: PRESS_MS });
+      } catch (err) {
+        // The side pick moved on under the press.
+        if (!(err instanceof playwrightErrors.TimeoutError)) throw err;
+      }
+    }
+    await page.evaluate(() => new Promise((r) => requestAnimationFrame(r)));
+  }
 }
 
 /** Presses and holds Up or Down once the button is enabled. */

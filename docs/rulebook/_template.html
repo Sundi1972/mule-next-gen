@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CHAPTER TITLE · M.U.L.E. Rulebook</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="rulebook.css">
+</head>
+<body>
+<div class="rb-shell">
+<aside class="rb-rail"></aside>
+<main class="rb-main">
+<article>
+<h1>CHAPTER TITLE</h1>
+<p class="rb-lede">One or two sentences: what this chapter covers, in the player's words.</p>
+
+<!-- One <h2 id> per topic. Ids are lowercase-with-hyphens, unique in the page, never renamed (links and search use them).
+     Every h2 carries one status pill:
+       <span class="pill built">In the game</span>        on trunk today
+       <span class="pill progress">Being built</span>     a PR is open or a lane is building it
+       <span class="pill designed">Designed</span>        ruled or approved, not built yet
+       <span class="pill open">Being designed</span>      a design is in progress or a question is open
+       <span class="pill backlog">Backlog</span>          wanted, nobody on it yet -->
+<h2 id="example-topic">Example topic <span class="pill built">In the game</span></h2>
+<p>How it works today, in plain words a player understands. Name every number with its value, e.g. a MULE costs <span class="num">100</span> cr.</p>
+
+<h3 id="example-topic-detail">A detail</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Good</th><th class="n">Value</th><th>What it means</th></tr></thead>
+<tbody><tr><td>Food</td><td class="n">30</td><td>…</td></tr></tbody>
+</table></div>
+
+<div class="box example"><h4>Example</h4><p>A worked example from a real game situation.</p></div>
+<div class="box why"><h4>Why it is like this</h4><p>The ruling and its reason, with the date and who decided (Heiko, or the PM under his authority).</p></div>
+<div class="box next"><h4>What is changing</h4><p>Designed or open changes, with status and who is on it.</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/config.ts::GOOD_CONFIG</code> · <code>packages/engine/src/economy.ts::nextPostedPrice</code></p>
+<p class="owner">Kept current by: the Auctions team (WS3).</p>
+</article>
+</main>
+</div>
+<script src="search-index.js"></script>
+<script src="rulebook.js"></script>
+</body>
+</html>

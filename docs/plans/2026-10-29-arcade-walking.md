@@ -169,7 +169,7 @@ The standing line, verbatim, in every handoff:
 | PR-9 | `apps/web/src/phone/arcade/**`, `apps/web/src/table/TvDevelop.tsx`, its `packages/ui` pieces (Wolf/Glint sprites), `apps/web/e2e/store-steps.ts` | the arcade mock at ceedd23f (as PR-6) | `apps/server/**`, `packages/engine/**` |
 | PR-10 | each owner's own files only: WS3 `apps/server/test/**` and `apps/web/e2e/auction-steps.ts::goToThePub`; WS1 `packages/ai/test/play-walk.test.ts`, `balance.test.ts`; WS4 `harness.ts`, `smoke.ts`, `table-steps.ts`, `zoom.ts`; WS6 `store-steps.ts`, `screens.ts`, `shell.ts`; WS5 `specials.ts`, `special-steps.ts` | — | every other owner's files |
 | PR-11 | `packages/engine/src/config.ts` (`DEV_STEER.on`) | — | everything else |
-| PR-12 | WS6: removing `apps/web/src/phone/Develop.tsx` (a named edit, WS4 reviewing) and `next-step.ts`, `apps/web/test/next-step.test.ts`, `store-view.test.ts`; WS1: removing `packages/engine/src/dev-walk.ts`; WS3: removing `apps/server/src/dev-walking.ts` and ColonistView v1 fields in `packages/protocol/src/index.ts` | — | anything not removed by C14 |
+| PR-12 | WS6: removing `apps/web/src/phone/Develop.tsx` (a named edit, WS4 reviewing) and `next-step.ts`, `apps/web/test/next-step.test.ts`, `store-view.test.ts`; WS1: removing `packages/engine/src/dev-walk.ts`; WS3: removing `apps/server/src/dev-walking.ts`, ColonistView v1 fields in `packages/protocol/src/index.ts`, and the tap-path tests PR-11 pinned to `DEV_STEER.on` off (`apps/server/test/dev-walking.test.ts`, `walk-settle.test.ts`, the tap describes of `apps/web/test/first-mule-phone.test.ts`; PM ruling, 4 Nov) | — | anything not removed by C14 |
 
 ### Contention
 
@@ -699,18 +699,29 @@ promise. WS4's part first (harness.ts is shared), then the others at once.
 
 **Depends on:** PR-11 **Spec sections consumed:** §1 C14 (pins), §5 (the point of no return)
 
-- [ ] **Step 1 (WS6):** remove `apps/web/src/phone/Develop.tsx` (a named edit, WS4 reviewing), `next-step.ts`,
+**Built as one PR by WS3 (PM ruling, option A, 5 Nov).** One removal, one CI, one review, so trunk is never
+half-removed. Each other lane's files are a named edit, committed on its own so the owner OKs it by SHA through the
+PM; the PR body lists each SHA.
+
+- [ ] **Step 1 (WS6's files, named edit):** remove `apps/web/src/phone/Develop.tsx` (WS4 reviewing), `next-step.ts`,
   `apps/web/test/next-step.test.ts`, and `store-view.test.ts`'s tap cases.
-- [ ] **Step 2 (WS1):** remove `packages/engine/src/dev-walk.ts` and `DEV_STEER.on`'s other branch.
+- [ ] **Step 2 (WS1's files, named edit):** make `outfitMule`'s `DEV_STEER.on` check in game.ts unconditional.
+  `dev-walk.ts` stays, `pace` and `walkSeconds` with it, and `DEV_STEER.on` stays as the AI/sim switch (PM ruling,
+  5 Nov): the AI's walk estimate is a balance matter for its owners. Follow-up for WS1 + WS2: retire `walkSeconds`,
+  the switch and the AI's development intents, with a sim re-baseline.
 - [ ] **Step 3 (WS3):** remove `apps/server/src/dev-walking.ts`, the flag's other branch in mule-game.ts, and
-  ColonistView v1's `at`, `walk`, `assayUntil`.
+  ColonistView v1's `walk` and the tap path. **Keep `at` and `assayUntil`**: the steered view fills both, and the
+  steered phone (arcade `own.ts`, `predict.ts`, `seat.ts`, `parts.tsx`) and `packages/ui` `events/rollcall.tsx` read
+  them. Delete with them the tap-path tests PR-11 pinned to `DEV_STEER.on` off (`apps/server/test/dev-walking.test.ts`,
+  `walk-settle.test.ts`, and the tap describes of `apps/web/test/first-mule-phone.test.ts`): they guard the flag-off
+  rollback, which goes here (PM ruling, 4 Nov). Move the e2e readers of `walk` onto the steered view.
 - [ ] **Step 4: Run `pnpm typecheck && pnpm test`, the e2e and `pnpm sim`.** Expected: exit 0; C14's pins (the
   steering twins of PR-10) green. Commit `refactor: C14 tap-to-walk removed`.
 
 ### PR-12 merge gate
 
-- [ ] C14's pins green; no import of the removed files left (`git grep dev-walk dev-walking next-step Develop.tsx`
-  over apps and packages: none outside history)
+- [ ] C14's pins green; no import of the removed files left (`git grep -e dev-walking -e next-step -e
+  phone/Develop` over apps and packages: none outside history; `dev-walk.ts` stays, PM ruling 5 Nov)
 - [ ] typecheck, test, e2e, sim, CI green; WS1, WS3, WS4 reviewed their parts; Heiko's OK via the PM
 
 ## Execution ledger

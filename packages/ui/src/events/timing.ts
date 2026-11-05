@@ -1,5 +1,5 @@
-import { EVENT_ENTRY, STORY } from './catalogue';
-import type { ShowEventView, ShowHit, ShowMode, ShowPhase, ShowTimeline } from './types';
+import { motionOf, STORY } from './catalogue';
+import type { ShowEffect, ShowEventView, ShowHit, ShowMode, ShowPhase, ShowTimeline } from './types';
 
 /**
  * The show's timeline, in seconds on the caller's clock. The phase's intro plays first, as long as the server said
@@ -18,19 +18,43 @@ export const EVENT_SOLO_PACE = 0.75;
 export function playShare(ev: ShowEventView): number {
   const story = STORY[ev.key];
   if (story) return story.length;
-  switch (EVENT_ENTRY[ev.key].motion) {
+  switch (motionOf(ev.key)) {
     case 'sweep':
       return 3.6;
     case 'spread':
       return 0.6 + ev.hits.length * 0.9;
     case 'source':
       return 0.8 + ev.hits.length * 0.35;
+    case 'strike':
+      return 3;
     case 'plot':
       return 1.8;
+    case 'colonists':
+      return 1.6;
+    case 'ledger':
+      return 2;
+    case 'store':
+    case 'colony':
+      return 2.4;
   }
 }
 
-/** One event's stretch of the show. */
+/** A segment's motion in the gallery: one event's, or a roll call's, which gives each name after the first half a second. */
+const groupShare = (events: ShowEventView[]) => Math.max(...events.map(playShare)) + (events.length - 1) * 0.5;
+
+/**
+ * The show's beats: headlines and spotlights one by one in the order they fired, then every bulletin of the phase
+ * gathered into ONE roll call that closes it (RULE-1), so the personal news never interrupts the big news.
+ */
+export function eventGroups(events: ShowEventView[]): ShowEventView[][] {
+  const roll = events.filter((ev) => ev.weight === 'bulletin');
+  return [...events.filter((ev) => ev.weight !== 'bulletin').map((ev) => [ev]), ...(roll.length ? [roll] : [])];
+}
+
+/** A roll call: the segment of the phase's bulletins. */
+export const isRollCall = (seg: EventSegment) => seg.events[0]!.weight === 'bulletin';
+
+/** One event's stretch of the show, or the roll call of the phase's bulletins. */
 export interface EventSegment {
   events: ShowEventView[];
   /** How fast its motion plays: the gallery's seconds times this are the segment's. */
@@ -54,18 +78,20 @@ export function eventSegments({ events, introMs }: ShowTimeline, start = 0, mode
   // Each end is the start plus the intro and every length so far, so the show sums to the server's lengths exactly.
   // A length below 0 counts as 0: a moment, never time running back.
   let ms = Math.max(0, introMs);
-  return events.map((ev, i) => {
+  const groups = eventGroups(events);
+  return groups.map((group, i) => {
     const startAt = start + ms / 1000;
-    ms += Math.max(0, ev.playMs);
+    // A roll call plays as long as its bulletins' shares together.
+    for (const ev of group) ms += Math.max(0, ev.playMs);
     const endAt = start + ms / 1000;
-    const play = playShare(ev) * modePace;
+    const play = groupShare(group) * modePace;
     const k = (endAt - startAt) / (beat.announce + play + beat.settle);
     const announceAt = startAt;
     const playAt = announceAt + beat.announce * k;
     // The pace divides the clock in the layers (a story's seconds, a front's progress): never 0. A 0 ms segment's
     // hits still land at once, clamped to its settle.
     const pace = Math.max(k, MIN_SCALE) * modePace;
-    return { events: [ev], pace, n: i + 1, count: events.length, startAt, announceAt, playAt, settleAt: playAt + play * k, endAt };
+    return { events: group, pace, n: i + 1, count: groups.length, startAt, announceAt, playAt, settleAt: playAt + play * k, endAt };
   });
 }
 
@@ -96,6 +122,16 @@ export function eventScript(show: ShowTimeline, start = 0, mode: ShowMode = 'tv'
   };
 }
 
+/** How long before its settle an event counts as done: its result comes up as the motion ends. */
+const SETTLE_MARGIN = 0.2;
+/** How long the phone buzzes after an event is announced, in seconds. */
+const BUZZ_FOR = 1.2;
+
+/** Whether the segment's event is still playing at `t`: the map, the rails and the skip hint all ask this. */
+export const isPlaying = (seg: EventSegment, t: number) => t < seg.settleAt - SETTLE_MARGIN;
+/** Whether the phone buzzes for the segment's announcement at `t`. */
+export const isBuzzing = (seg: EventSegment, t: number) => t - seg.announceAt < BUZZ_FOR;
+
 export type EventStage = 'before' | 'intro' | 'announce' | 'play' | 'settle' | 'outro';
 
 export function eventStageAt(s: EventScript, t: number): { stage: EventStage; seg: EventSegment | null } {
@@ -113,7 +149,7 @@ export function eventStageAt(s: EventScript, t: number): { stage: EventStage; se
 export function eventSkipTo(s: EventScript, t: number): number | null {
   const { seg } = eventStageAt(s, t);
   if (!seg) return null;
-  return t < seg.settleAt - 0.05 ? seg.settleAt : seg.endAt;
+  return isPlaying(seg, t) ? seg.settleAt : seg.endAt;
 }
 
 /** How far a colony sweep has to travel to reach a plot: 0 at its edge, 1 at the far one. */
@@ -150,19 +186,28 @@ export function eventHitAt(seg: EventSegment, ev: ShowEventView, h: ShowHit | nu
   const story = STORY[ev.key];
   const after = (() => {
     if (story) return story.lands + (h?.order ?? 0) * (story.step ?? 0.15);
-    switch (EVENT_ENTRY[ev.key].motion) {
+    switch (motionOf(ev.key)) {
       case 'sweep':
         return h ? EVENT_FRONT.lead + sweepShare(ev, h, grid.width, grid.height) * EVENT_FRONT.cross : EVENT_FRONT.lead + EVENT_FRONT.cross / 2;
       case 'spread':
         return 0.4 + (h?.order ?? 0) * 0.9;
       case 'source':
         return 0.5 + (h?.order ?? 0) * 0.35;
+      case 'strike':
+        return EVENT_METEOR_FALL;
+      case 'colonists':
+        return 0.3 + nth * 0.5;
       default:
         return 0.5 + nth * 0.5 + (h?.order ?? 0) * 0.15;
     }
   })();
   return Math.min(seg.settleAt, p + after * seg.pace);
 }
+
+/** Seconds from the meteor's first glint to its impact, at the TV's pace. */
+export const EVENT_METEOR_FALL = 1.4;
+/** When a segment's meteor lands. */
+export const eventImpactAt = (seg: EventSegment) => Math.min(seg.settleAt, seg.playAt + EVENT_METEOR_FALL * seg.pace);
 
 export interface EventLandedHit {
   ev: ShowEventView;
@@ -218,4 +263,26 @@ export function plotUnitsAt(segments: EventSegment[], plot: ShowPlot, t: number,
   return plotStrikes(segments, plot, reduced, grid)
     .filter((s) => t >= s.at)
     .reduce((_, s) => s.after, plot.made);
+}
+
+/** One change off the map that has landed: with its event and segment, and when. */
+export interface EventLandedEffect {
+  ev: ShowEventView;
+  seg: EventSegment;
+  effect: ShowEffect;
+  at: number;
+}
+
+/**
+ * Every change off the map that has landed by `t`: with no plots, as the event lands; with plots, after the last; each
+ * after the one before by the story's step. Never after the segment's settle; without motion, all at once.
+ */
+export function eventEffectsAt(s: EventScript, t: number, reduced: boolean, grid: ShowGrid): EventLandedEffect[] {
+  return s.segments.flatMap((seg) =>
+    seg.events.flatMap((ev) => {
+      const at = Math.max(eventHitAt(seg, ev, null, reduced, grid), ...ev.hits.map((h) => eventHitAt(seg, ev, h, reduced, grid)));
+      const step = (STORY[ev.key]?.step ?? 0.15) * seg.pace;
+      return (ev.effects ?? []).map((effect, i) => ({ ev, seg, effect, at: reduced ? at : Math.min(seg.settleAt, at + i * step) })).filter((l) => t >= l.at);
+    }),
+  );
 }

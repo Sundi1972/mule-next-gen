@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, u
 import { GoodIcon } from './GoodIcon';
 import { Landscape } from './Landscape';
 import { PlayerMark } from './PlayerMark';
+import { objectLabel, PlotObjectMark, type MapObject } from './ObjectGlyph';
 import { SPECIAL_BADGE, SPECIAL_HANG, SpecialBadge } from './SpecialIcon';
 import { useTheme } from './theme';
 import { cx, GOOD_NAME, SLOT_COLOR, specialLabel, TERRAIN_NAME, type Good, type MapSpecial, type Slot, type Terrain } from './tokens';
@@ -23,6 +24,8 @@ export interface MapTile {
   pollution?: number;
   /** The plot's special field, public on every map: drawn as a badge on the plot's lower-right corner. */
   special?: MapSpecial;
+  /** The colony's object on its plot (a park, stadium or spaceport upgrade, from its site on), public on every map. */
+  object?: MapObject;
 }
 
 export interface MapAvatar {
@@ -129,7 +132,7 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
           const label = [
             TERRAIN_NAME[t.terrain],
             t.special ? specialLabel(t.special) : '',
-            t.owner !== null ? `owned by player ${t.owner + 1}` : t.terrain === 'store' ? '' : 'free',
+            t.owner !== null ? `owned by player ${t.owner + 1}` : t.object ? objectLabel(t.object) : t.terrain === 'store' ? '' : 'free',
             t.good ? `${GOOD_NAME[t.good]}${t.output ? ` +${t.output}` : ''}` : '',
             ...ground.map(([g, n]) => `${GOOD_NAME[g]} ${n} of 4`),
             t.pollution ? `pollution ${t.pollution} of 3` : '',
@@ -153,7 +156,8 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
                   style={{ background: `radial-gradient(circle at 50% 55%, rgb(110 82 40 / ${0.25 + t.pollution * 0.18}), rgb(110 82 40 / ${0.12 + t.pollution * 0.12}) 80%)` }}
                 />
               )}
-              {!t.good && ground.length > 0 && (
+              {/* An object's plot shows the object, not the ground under it: the plot's label still names the ground. */}
+              {!t.good && !t.object && ground.length > 0 && (
                 <span className={cx('relative flex flex-col items-center rounded-control bg-map-chip/90 shadow-chip', tv ? 'gap-0.5 px-1.5 py-1' : 'px-[3px] py-[2px]', fade)}>
                   {ground.map(([g, n]) => (
                     <span key={g} className={cx('flex items-center', tv ? 'gap-0.5' : 'flex-col gap-px')}>
@@ -176,6 +180,7 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
                   <PlayerMark slot={t.owner} size={size.mark} glow={false} />
                 </span>
               )}
+              {t.object && <PlotObjectMark object={t.object} density={density} at={`${t.x}-${t.y}`} className={fade} />}
               {t.terrain === 'store' && (
                 <span className={cx('relative rounded-chip bg-map-chip font-mono font-bold text-holo shadow-chip', tv ? 'px-2 py-0.5 text-sm' : 'px-0.5 text-[10px] tracking-tight')}>STORE</span>
               )}

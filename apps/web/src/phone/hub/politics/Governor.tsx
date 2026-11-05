@@ -5,13 +5,19 @@ import { useEffect, useId, useState, useSyncExternalStore } from 'react';
 import { fmt } from '../../../game/derive';
 import { useClient } from '../../../net/react';
 import { usePhoneGame } from '../../game';
+import { LawPicker } from './LawPicker';
 import { promiseBase, promiseKept, promisedWords } from './words';
 
-/** The Governor's desk: the sales tax, within the bounds the server gives for this month, with the promise in view (E-7). */
+/** The Governor's desk: the sales tax, within the bounds the server gives for this month, with the promise in view (E-7); then next month's law (C46). */
 export function GovernorDesk() {
   const { view } = usePhoneGame();
   if (!view.politics) return null;
-  return <SalesTax politics={view.politics} />;
+  return (
+    <>
+      <SalesTax politics={view.politics} />
+      <LawPicker />
+    </>
+  );
 }
 
 /** The last tax this phone sent: in which month, and whether Set still waits for it. */
@@ -86,7 +92,7 @@ function SalesTax({ politics }: { politics: PoliticsView }) {
             {tax}%
           </span>
           {verdict && (
-            <span className={cx('whitespace-nowrap rounded-chip border px-1 font-mono text-[9px] font-bold uppercase leading-3 @min-[1100px]/shell:text-xs @min-[1100px]/shell:leading-4', verdict.tone)} role="status" aria-live="polite" data-testid="governor-verdict">
+            <span className={cx('whitespace-nowrap rounded-chip border px-1 font-mono text-[10px] font-bold uppercase leading-3 @min-[1100px]/shell:text-xs @min-[1100px]/shell:leading-4', verdict.tone)} role="status" aria-live="polite" data-testid="governor-verdict">
               <span data-testid={verdict.id}>
                 <span aria-hidden="true">{verdict.chip}</span>
                 <span className="sr-only">{verdict.words}</span>

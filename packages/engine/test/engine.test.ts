@@ -62,6 +62,30 @@ describe('createGame', () => {
   it('is deterministic for a given seed', () => {
     expect(newGame().tiles).toEqual(newGame().tiles);
   });
+
+  it.each([2, 4, 6])('every seat of a %i-seat game starts with 2 Food (Heiko, 5 Nov)', (n) => {
+    expect(newGame(n).players.map((p) => p.stock.food)).toEqual(Array.from({ length: n }, () => 2));
+  });
+
+  it.each([2, 4, 6])('every seat of a %i-seat game starts with 2 Energy (Heiko, 5 Nov)', (n) => {
+    expect(newGame(n).players.map((p) => p.stock.energy)).toEqual(Array.from({ length: n }, () => 2));
+  });
+
+  it.each([
+    [2, 8],
+    [4, 16],
+    [6, 24],
+  ])("a %i-seat game's store starts with %i Food, 4 a seat (Heiko, 5 Nov)", (n, food) => {
+    expect(newGame(n).store.stock.food).toBe(food);
+  });
+
+  it.each([
+    [2, 10],
+    [4, 20],
+    [6, 30],
+  ])("a %i-seat game's store starts with %i Energy, 5 a seat (Heiko, 5 Nov)", (n, energy) => {
+    expect(newGame(n).store.stock.energy).toBe(energy);
+  });
 });
 
 describe('prices', () => {
@@ -135,18 +159,6 @@ describe('production', () => {
     const alone = rawOutput(state, a);
     b.outfit = 'energy';
     expect(rawOutput(state, a)).toBe(alone + 1);
-  });
-
-  it('halves output of plots whose owner has no Energy', () => {
-    const state = newGame();
-    const tile = plainTile(state, 0, 0, 'river');
-    tile.owner = 'p0';
-    tile.outfit = 'food';
-    const p0 = state.players[0]!;
-    p0.stock.energy = 0;
-    const full = rawOutput(state, tile);
-    const produced = runProduction(state);
-    expect(produced.produced.p0!.food).toBe(Math.floor(full / 2));
   });
 
   it('halves Food farms whose owner is short of Water', () => {

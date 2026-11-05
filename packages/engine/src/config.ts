@@ -1,4 +1,5 @@
-import type { Outfit, EventKey, GrownGood, Good, MinedGood, Office, ProcessedGood, RawGood, SpecialKind, Species, Stock, Terrain, TileTrait } from './types.js';
+import type { Outfit, EventKey, GrownGood, Good, LawId, MinedGood, MoodBand, Office, PrestigeId, ProcessedGood, RawGood, SpecialKind, Species, Stock, Terrain, TileTrait } from './types.js';
+import type { Strategy } from './playbook.js';
 
 /**
  * Every balancing number lives here, so playtests and the simulator can tune
@@ -215,16 +216,26 @@ export const UPKEEP = {
   crewPerWater: 6,
   crew: { raw: 1, factory: 2, greenBelt: 0 },
   /**
-   * Energy a raw plot burns a month, by what it makes. Factories burn what
-   * their recipe says. Without it a raw plot makes half, a factory nothing.
+   * Energy a raw plot burns a month, by what it makes. Factories burn what their recipe says. An Energy plot pays its
+   * use from its own output and is never turned off; an owner short of Energy turns its other plots off, biggest use
+   * first, until the rest fit (AM-17). Energy plots 1: Heiko, 5 Nov.
    */
-  energyUse: { food: 1, water: 1, energy: 0, smithore: 2, crystite: 2, rareEarth: 2 } satisfies Record<RawGood, number>,
+  energyUse: { food: 1, water: 1, energy: 1, smithore: 2, crystite: 2, rareEarth: 2 } satisfies Record<RawGood, number>,
+  /**
+   * Share of its output a plot turned off for want of Energy makes, rounded half up (Heiko, 5 Nov: 20%). A turned-off
+   * factory makes it from the same share of its non-Energy inputs, rounded up (PM, 5 Nov: nothing from nothing), and
+   * takes none when its share of output rounds to 0 (PM, 5 Nov: nothing spent for nothing).
+   */
+  offOutputShare: 0.2,
   /**
    * Plots that need irrigation: when their owner holds less Water than the
    * household and crew need, they make half (on top of any Energy shortfall).
    */
   irrigated: ['food'] as RawGood[],
-  /** Share of its output a plot makes without the Energy (or, for an irrigated plot, the Water) it needs. */
+  /**
+   * Share of its output an irrigated plot makes when its owner is short of Water, rounded down. (Energy no longer
+   * halves: offOutputShare, AM-17.)
+   */
   shortOutputShare: 0.5,
   /** Colonists need 1 Food and 1 Water a month per this many colonists. */
   colonistsPerUnit: 20,
@@ -245,8 +256,8 @@ export const UPKEEP = {
 
 export const START = {
   money: 1000,
-  /** Each player's depot at the start. */
-  playerStock: { food: 6, water: 6, energy: 4 } as Partial<Stock>,
+  /** Each player's depot at the start. Food 2 and Energy 2 (Heiko, 5 Nov). */
+  playerStock: { food: 2, water: 6, energy: 2 } as Partial<Stock>,
   /** Each player's reputation at the start, out of 100. */
   reputation: 50,
   colonists: 100,
@@ -257,17 +268,34 @@ export const START = {
    * prices Water at what colonists pay, so the seats build wells early. A few units more put the dry month past the
    * outlook, and the colonists go short later in the game. When this, START.colonists, UPKEEP.colonistGrowth or the
    * outlook changes, re-run `pnpm sim -- --games 40 --seed N --politics on|off` for seeds 1, 101 and 201 and read
-   * "Colonists short of Food or Water".
+   * "Colonists short of Food or Water". Food and Energy are per seat (storeFoodPerPlayer, storeEnergyPerPlayer);
+   * storeStockFor adds them.
    */
-  storeStock: { food: 30, water: 20, energy: 16, smithore: 20, crystite: 0, rareEarth: 4, alloy: 8, electronics: 0, medicine: 4 } satisfies Stock,
+  storeStock: { water: 20, smithore: 20, crystite: 0, rareEarth: 4, alloy: 8, electronics: 0, medicine: 4 } satisfies Omit<Stock, 'food' | 'energy'>,
+  /** The store's Food at the start, for each seat: 4 (Heiko, 5 Nov), so 16 in a 4-seat game. */
+  storeFoodPerPlayer: 4,
+  /** The store's Energy at the start, for each seat: 5 (Heiko, 5 Nov), so 20 in a 4-seat game. */
+  storeEnergyPerPlayer: 5,
 };
+
+/** The store's stock as a game of `players` seats starts: START.storeStock, with Food and Energy for each seat. */
+export function storeStockFor(players: number): Stock {
+  return { ...START.storeStock, food: players * START.storeFoodPerPlayer, energy: players * START.storeEnergyPerPlayer };
+}
 
 export const MULE = {
   /** Labour in an empty MULE. Its price is this plus the Smithore it is built from. */
   labour: 120,
   /** Smithore the store needs to build one MULE, as in the original. */
   smithorePerMule: 1,
-  /** The store builds MULEs for every plot claimed in a month, plus this many. */
+  /**
+   * MULEs the store builds for each seat a month: the land a seat gains in a month, by the land grant and the land
+   * auction, not by the grant alone. Sizes the corral (upkeep.ts, and its copy in the AI's outlook) and the MULEs'
+   * share of Smithore demand (economy.ts mulesWanted). 2 keeps the corral it had when a grant gave two claims, so
+   * GAME.claimsPerGrant 2 → 1 (Heiko, 5 Nov) shrinks neither.
+   */
+  corralPerPlayer: 2,
+  /** The store builds MULEs for every seat's corralPerPlayer, plus this many. */
   spareInCorral: 2,
   /** If the corral sold out, MULEs cost this much more next month; with surplusShare of the month's MULEs or more left over, surplusDown less. */
   scarcityUp: 0.15,
@@ -282,8 +310,12 @@ export const MULE = {
 };
 
 export const DEVELOPMENT = {
-  /** Seconds of development, the same for every player: hunger and sickness slow the walk instead (DEV_WALK). */
-  fullSeconds: 50,
+  /**
+   * Seconds of development, the same for every player: hunger and sickness slow the walk instead (DEV_WALK). 60 (Heiko,
+   * 4 Nov). With walking on, the clock alone doesn't save a starving colonist: at a fifth of its pace even the
+   * nearest Food errand and the pub take longer than 60 s, which is why DEV_WALK.hungerPaceMin is 0.6.
+   */
+  fullSeconds: 60,
   /** Seconds a colonist stands on a plot for a geo analysis. */
   analysisSeconds: 8,
   /** The pub pays base + (start + month * perMonth) * share of time left. */
@@ -298,7 +330,7 @@ export const DEVELOPMENT = {
 /**
  * Walking in development costs time off the one development clock (Heiko's R1, 0.4 s a tile). A walk goes in grid
  * steps on the map, never diagonally; the store and its corral are on the store's tile. A hungry or sick colonist
- * walks slower, and the two multiply: no Food and sick is a tenth of normal pace (Heiko's numbers).
+ * walks slower, and the two multiply: no Food and sick is 0.6 × 0.5 = 0.3 of normal pace (Heiko's numbers).
  * Not WALK, the goods auction's walk.
  */
 export const DEV_WALK = {
@@ -306,8 +338,13 @@ export const DEV_WALK = {
   tileSeconds: 0.4,
   /** Seconds to cross the store floor to the corral, from the door or any other room. */
   floorSeconds: 1,
-  /** Share of its pace a colonist with no Food walks at; it rises linearly to 1 with the share of the month's Food it holds. */
-  hungerPaceMin: 0.2,
+  /**
+   * Share of its pace a colonist with no Food walks at; it rises linearly to 1 with the share of the month's Food it holds.
+   * 0.6 (Heiko, 4 Nov, "Yes, 60%"): the strongest slowdown with which the colony escapes famine with walking on. At 0.2
+   * a starving colonist couldn't reach Food and the pub inside the turn and stayed starving (measured: 58% of months
+   * short of Food or Water; from 0.6, under 15% in every measured cell).
+   */
+  hungerPaceMin: 0.6,
   /** Share of its pace a sick colonist walks at (EVENTS.player.sickness rolled, and no Medicine held). */
   sickPace: 0.5,
   /**
@@ -329,10 +366,10 @@ export type LakeMode = 'shore' | 'wade';
  * Heiko's starting values (arcade spec RULE-7); DEV_WALK's hunger, sickness and Zipwing pace still apply.
  */
 export const DEV_STEER = {
-  /** Steered walking instead of DEV_WALK's tap-to-walk. Off until Heiko's OK on the rig. */
-  on: false as boolean,
-  /** Tiles a second on plains at full pace: half of today's 1 / DEV_WALK.tileSeconds. */
-  mapTilesPerSecond: 1.25,
+  /** Steered walking instead of DEV_WALK's tap-to-walk. On since Heiko's OK on the rig (arcade PR-11). */
+  on: true as boolean,
+  /** Tiles a second on plains at full pace: the tap walk's own pace, 1 / DEV_WALK.tileSeconds (Heiko, 4 Nov; 1.25 was half). */
+  mapTilesPerSecond: 2.5,
   /** Seconds across the store's hall at full pace, door to corral. */
   floorSeconds: 3,
   /** Share of its speed a colonist keeps while it leads a MULE. */
@@ -363,12 +400,22 @@ export const DEV_STEER = {
   botCounterPauseSeconds: 0.5,
   /** An AI colonist joins a glint race or the scramble only if its errand still fits the time left after the detour. */
   botsSpareTime: true as boolean,
+  /** An AI colonist drops its errand for the pub once the clock shows no more than its walk there and this many seconds. */
+  botPubMarginSeconds: 2,
+  /**
+   * An AI colonist buys a MULE only while its errand, this share longer than estimated, still leaves the pub margin
+   * (botPubMarginSeconds, as the hurry for the pub counts it): a walk that runs a little long then costs the margin
+   * nothing, and the MULE is installed, not walked into the pub (FM-hurry-margin).
+   */
+  botPlanSlackShare: 0.1,
+  /** Ticks an AI colonist may push its stick without moving before it gives that step of its errand up. */
+  botStuckTicks: 20,
+  /** An AI colonist installing on a lake plot from the shore stands this far from the shore tile's middle towards the lake, in tiles. */
+  botShoreTiles: 0.3,
   /** Share of what a MULE cost that the pub pays back when its owner walks in leading it. */
   pubLeadRefund: 0,
   /** A re-outfit's price, as a share of the outfitter's price for the new good: 1 is the outfit price. */
   reoutfitCost: 1,
-  /** Month 1's development clock stands full until every present seat's first MULE is installed. */
-  month1WaitsForFirstMule: true as boolean,
   /** A colonist's clearance from walls, lakes and the map's edge, in tiles. */
   bodyTiles: 0.18,
   /** How far the door reaches above and below the middle of each side face of the store's tile, in tiles. */
@@ -398,9 +445,17 @@ export const WOLVES = {
   cooldownSeconds: 20,
   /** Time to choose run or fight before they pounce, which is a fight. */
   chooseSeconds: 3,
-  /** A chasing wolf's speed, in tiles a second. */
-  chaseSpeed: 1.1,
-  /** A chase ends, got away, after this long or this far from where it started. */
+  /**
+   * A chasing wolf's speed, as a share of DEV_STEER.mapTilesPerSecond (AM-32). Relative, not tiles a second, so a change
+   * of walking pace cannot defang the pack: RULE-4 tuned 1.1 tiles a second against colonists at 1.25, and 0.88 is that.
+   */
+  chaseShare: 0.88,
+  /**
+   * A chase ends, got away, after this long, or this far from where it started. The distance stays in tiles at any pace
+   * (AM-32, corrected): the pack's distances (packRingTiles, chaseCatchTiles) are tiles and its speed is a share of the
+   * pace, so a give-up distance in tiles holds the chase's odds; scaled with the pace, it let the pack close twice the
+   * ground at 2.5 and escapes fell to 4 of 20.
+   */
   giveUpSeconds: 5,
   giveUpTiles: 4,
   /** Share of its speed a bitten colonist keeps, till it reaches the store or its own plot. */
@@ -419,10 +474,47 @@ export const WOLVES = {
   /** A lost fight's MULE bolts this many tiles at this many tiles a second. */
   boltTiles: 4,
   boltSpeed: 3.5,
+  /** The lands a pack comes on. */
+  lands: ['forest', 'hills', 'tundra'] as readonly WalkTerrain[],
+  /** Where a pack stands when it comes: this far from its colonist, spread over this arc from one side, in radians. */
+  packRingTiles: 1.6,
+  packArcRadians: 1.9,
+  /** A chase: the wolves set off after this head start, and catch a colonist they come this close to. */
+  headStartSeconds: 0.4,
+  chaseCatchTiles: 0.35,
+  /** A fight: the wolves circle this far from where it began, turning this fast; the colonist stays within arenaTiles of it. */
+  fightRingTiles: 1.3,
+  prowlRadiansPerSecond: 0.7,
+  arenaTiles: 1,
+  /** The fight's first lunge comes this long after it starts. */
+  firstLungeSeconds: 0.9,
+  /** A lunge takes this long to land, and bites a colonist still this close to the spot it aimed at. */
+  lungeSeconds: 0.22,
+  biteTiles: 0.38,
+  /** A wolf that missed stands open this long; one struck, or that has bitten, is out of the fight this long. */
+  openSeconds: 0.9,
+  hurtSeconds: 0.7,
+  /** A strike lands on a wolf this close; a strike at nothing leaves its colonist open this long. */
+  strikeTiles: 0.8,
+  whiffSeconds: 0.45,
+  /** A bolted MULE is caught by its colonist this close to it (arcade RULE-3 row 4). */
+  catchReachTiles: 0.6,
   /** Share of AI colonists that fight rather than run. */
   botFightShare: 0.5,
-  /** Share of an AI colonist's legs that go by wolf land. */
+  /** An AI colonist stands this long before it runs or fights, and dodges a lunge till it is this far beyond its bite. */
+  botChooseSeconds: 0.6,
+  botDodgeMarginTiles: 0.2,
+  /**
+   * Share of an AI colonist's legs, among those it walks with no MULE on the lead, that go by wolf land. A leg leading a
+   * MULE never does (a pack met then costs the install), so the share of all its legs is lower than this.
+   */
   botWolfLandShare: 0.5,
+  /**
+   * The share of development months with at least one AI wolf encounter that `pnpm sim`'s report asks for (AM-27), on
+   * each of seeds 1, 101 and 201 (40 games each, AI-only): UBER-AC-3 needs the table to see an AI colonist meet wolves
+   * on the TV in an ordinary game. Under it the report prints MISS.
+   */
+  simMonthsWithPack: 0.5,
   /** Each level's chance to dodge a lunge, and its delay before it strikes at a wolf that stands open. */
   levels: {
     rookie: { dodge: 0.4, strikeDelaySeconds: 0.5 },
@@ -446,6 +538,8 @@ export const GLINT = {
   /** The prize: this much Crystite, or these credits when prize is 'credits'. */
   crystite: 1,
   credits: 60,
+  /** GRAB THE GLINT reaches it from this far from its tile's middle, in tiles: about a step away (arcade RULE-3 row 3). */
+  grabReach: 1.2,
   /** Share of AI colonists that race, and only for a glint within botCareTiles. */
   botShare: 0.75,
   botCareTiles: 8,
@@ -722,7 +816,8 @@ export const GAME = {
   maxMonths: 12,
   /** Months the game continues after the last free plot is claimed. */
   landRushMonths: 3,
-  claimsPerGrant: 2,
+  /** Plots each seat may claim in a land grant: one (Heiko, 5 Nov). The corral is sized by MULE.corralPerPlayer, not this. */
+  claimsPerGrant: 1,
   /** The land grant is one pass of the light over the free plots, or ends earlier once every claim is used. */
   grantSweeps: 1,
   /** What each plot a player owns adds to their score, before any MULE on it. */
@@ -811,6 +906,26 @@ export const POLITICS = {
    */
   termScore: 1200,
   /** How Classic AI seats run, vote and set the tax (VoteHand). Placeholders until the sim balances them. */
+  /** The law ballot. Its only clock is the reveal's, a presentation; the ballot itself waits for every player. */
+  council: {
+    /** Ms the result is shown before a passed law takes effect. */
+    revealMs: 4_000,
+    /** Laws in force at once; a fourth must name the one it replaces. */
+    maxInForce: 3,
+    /** Months a failed proposal waits before it may be put again. */
+    retryMonths: 2,
+  },
+  /** The colony's book of laws, each with its settings. */
+  laws: {
+    /** Per cent of each unit a player sells to the export ship. */
+    exportTax: { settings: [10, 20, 30] },
+    /** Credits a plot owned, at each month end. */
+    landTax: { settings: [5, 10, 20] },
+    /** Credits per point of colony pollution a player caused that month, at its end. */
+    pollutionTax: { settings: [10, 20, 40] },
+    /** The air level above which no new mine or smelter of the listed outfits may be outfitted. */
+    emissionCap: { settings: [40, 50, 60], blocks: ['rareEarth', 'alloy'] as Outfit[] },
+  } satisfies Record<LawId, { settings: number[]; blocks?: Outfit[] }>,
   ai: {
     /** Ms a seat waits before acting in announce or the ballot, drawn per stage: a human's pause. */
     actMs: [800, 2_500] as [number, number],
@@ -826,7 +941,108 @@ export const POLITICS = {
     taxFundBump: 2,
     /** The fund is low under this many months of the elected offices' pay. */
     fundMonths: 3,
+    /** The AI in the council. Placeholders until the sim tunes them. */
+    council: {
+      /** Credits a month a law must cost the leader more than the AI Governor before it proposes it. */
+      minGap: 20,
+      /** Chance an AI Governor proposes its best law in a month it has one, per persona. */
+      proposeChance: { trader: 0.5, cautious: 0.3, aggressive: 0.7, saboteur: 0.6 } satisfies Record<AiPersonaId, number>,
+      /** Credits a month an AI counts for each of its plots an emission cap would stop it re-outfitting. */
+      capPlotCost: 40,
+      /** A Rookie's chance of a yes on a law ballot: a coin from the council's own stream. */
+      rookieYes: 0.5,
+    },
+    /** The AI Governor's colony acts and the mood-weighed vote (G-5 C25). Placeholders until the sim tunes them. */
+    colony: {
+      /** Whether an AI Governor of each persona commissions a prestige object the fund can pay for. */
+      commissions: { trader: true, cautious: true, aggressive: true, saboteur: false } as Record<AiPersonaId, boolean>,
+      /** Whether an AI Governor of each persona pays general strikers the fund can pay. */
+      paysStrike: { trader: true, cautious: true, aggressive: false, saboteur: false } as Record<AiPersonaId, boolean>,
+      /** Whether an AI Governor of each persona repairs a damaged object the fund can pay for (AM-10). */
+      repairs: { trader: true, cautious: true, aggressive: true, saboteur: false } as Record<AiPersonaId, boolean>,
+      /**
+       * An AI Governor's top bid, in credits, for an object's site at the land auction (RULE-28, AM-10); null, it never
+       * bids, so it commissions only objects that need no plot. The engine caps the bid at the fund over its reserve.
+       */
+      siteBid: { trader: 400, cautious: 300, aggressive: 500, saboteur: null } as Record<AiPersonaId, number | null>,
+      /** In these mood bands an AI voter will not vote for the sitting Governor if anyone else runs. */
+      leanIn: ['unhappy', 'unrest'] as MoodBand[],
+    },
   },
+};
+
+/**
+ * The colony as a shared project: its prestige objects, one table row each. Every number is a placeholder
+ * until the colony's sim tuning sets it and Heiko OKs it. An object's full cost is its credits plus its goods at
+ * their reference prices; upkeep and repair are in credits.
+ */
+export const PRESTIGE = {
+  park: { name: 'Park', credits: 420, goods: { alloy: 2 }, buildMonths: 1, needsPlot: true, prestige: 2, upkeep: 30, repairCost: 150 },
+  hospital: { name: 'Hospital', credits: 680, goods: { electronics: 1 }, buildMonths: 2, needsPlot: false, prestige: 3, upkeep: 45, repairCost: 225 },
+  observatory: { name: 'Observatory', credits: 700, goods: { crystite: 3 }, buildMonths: 2, needsPlot: false, prestige: 3, upkeep: 50, repairCost: 250 },
+  stadium: { name: 'Stadium', credits: 1_000, goods: { alloy: 2, electronics: 1 }, buildMonths: 3, needsPlot: true, prestige: 4, upkeep: 70, repairCost: 350 },
+  spaceport: { name: 'Spaceport upgrade', credits: 1_380, goods: { alloy: 2, electronics: 2 }, buildMonths: 3, needsPlot: true, prestige: 5, upkeep: 100, repairCost: 500 },
+} satisfies Record<PrestigeId, { name: string; credits: number; goods: Partial<Record<Good, number>>; buildMonths: number; needsPlot: boolean; prestige: number; upkeep: number; repairCost: number }>;
+
+/**
+ * The colony's mood (G-5 RULE-20). Every number is a placeholder, tuned at the end (HC-25). Each month the mood moves
+ * toward a target by at most `maxStep`; an event's moodShift moves it at once.
+ */
+export const HAPPINESS = {
+  /** Where a new colony's mood starts, 0..100. */
+  start: 60,
+  /** The target of a month with nothing wrong and nothing standing. */
+  base: 60,
+  /** The most the mood moves toward its target in one month. */
+  maxStep: 5,
+  /** The least happiness of each band; below `unhappy` is Unrest. */
+  bands: { thriving: 80, content: 60, restless: 40, unhappy: 20 },
+  weights: {
+    /** Off the target for each good the store ran short of this upkeep. */
+    shortage: 8,
+    /** Off the target for each point of air above `airFree`. */
+    air: 0.4,
+    airFree: 30,
+    /** Off the target for each whole percent of sales tax above `taxFree`. */
+    tax: 2,
+    taxFree: 5,
+    /** Off the target in a month the Governor broke their tax promise. */
+    broken: 10,
+    /** Onto the target for each point of prestige standing, up to `prestigeCap` points. */
+    prestige: 2,
+    prestigeCap: 15,
+    /** Off the target for each `gapUnit` credits between the richest and poorest player, up to `gapCap` units. */
+    gap: 2,
+    gapUnit: 1_000,
+    gapCap: 10,
+  },
+};
+
+/** The colony fund's own rules. Placeholders until the colony's sim tuning. */
+export const COLONY = {
+  /** Projects commissioned or building at the same time. */
+  maxOpen: 1,
+  /** Credits the fund keeps back from a project's funding, so next month's office pay is there. */
+  reserve: 100,
+  /** The fund buys an object's missing goods from the store at the store's price; off, only donors' goods fund it. */
+  fundBuysGoods: true,
+  /** The Federation's grant into the fund at each upkeep, in credits; flat until a scaling rule is tuned. */
+  grant: { perMonth: 150 },
+  /** What the strikers of a general strike want from the fund to go back to work, in credits (G-5 RULE-26). */
+  strike: { cost: 250 },
+};
+
+/**
+ * The colony score at game over (G-5 RULE-25): each term turned into credits, so they add. Placeholders, tuned at the
+ * end (HC-25).
+ */
+export const COLONY_SCORE = {
+  /** Credits for each point the air is cleaner than POLLUTION.airMax. */
+  perCleanPoint: 100,
+  /** Credits for each point of the colony's prestige. */
+  perPrestige: 1_000,
+  /** The happiness factor: `low` at happiness 0, `high` at 100, straight between. */
+  factor: { low: 0.8, high: 1.2 },
 };
 
 /**
@@ -837,8 +1053,12 @@ export const POLITICS = {
 export const WALK = {
   /** The order goods come up in: raw goods first, then processed ones. */
   order: ['food', 'water', 'energy', 'smithore', 'crystite', 'rareEarth', 'alloy', 'electronics', 'medicine'] as Good[],
-  /** The status screen before each good: what everyone had, used, made and is short of, and where each player picks a side for the walk. */
-  statusMs: 8_000,
+  /**
+   * The status screen before each good: what everyone had, used, made and is short of, and where each player picks a
+   * side for the walk. null: no clock (A-7, G-7), it waits for every player's Done or the host's Continue; a number
+   * restores a timer.
+   */
+  statusMs: null as number | null,
   /** The walk's clock for one good. */
   goodMs: 20_000,
   /** The close stage after a good's walk: each phone shows its receipt for the good (UX audit G-5), as the land auction's result does. Display and game time only. */
@@ -933,8 +1153,6 @@ export const PHASES = {
    * the grant's tick, phaseScale never changes it.
    */
   grantFastForwardMs: GAME.grantTickMs / 8,
-  /** Production: the show of what each plot made. */
-  productionMs: 15_000,
   /**
    * Upkeep, the month end: colonists eat and goods spoil, and the table reads the league table. null: it waits for
    * every player's Ready ("On to month N") or the host's Continue; a number restores a timer.
@@ -960,6 +1178,20 @@ export const EVENT_SHOW = {
     wildfire: 'spotlight',
     bumperHarvest: 'spotlight',
     cavernCollapse: 'spotlight',
+    // Wave 2, as the approved gallery sizes them (design/mocks/ws8-events, catalogue.ts `tier`).
+    federationTax: 'headline',
+    federationGrant: 'headline',
+    immigrationWave: 'headline',
+    inheritance: 'bulletin',
+    muleTheft: 'spotlight',
+    epidemic: 'headline',
+    coldSnap: 'headline',
+    meteorStrike: 'headline',
+    pirateRaid: 'headline',
+    storeFire: 'headline',
+    ratsInSilo: 'bulletin',
+    crookedAccountant: 'bulletin',
+    packageFromHome: 'bulletin',
   } as Partial<Record<EventKey, EventWeight>>,
   /** How long one headline or spotlight plays, in ms. */
   playMs: { headline: 7_000, spotlight: 5_200 },
@@ -967,10 +1199,38 @@ export const EVENT_SHOW = {
   introMs: 1_800,
   /** How long the one roll call that every bulletin of a phase shares plays, in ms. */
   rollCallMs: 4_000,
-  /** The event window production's 15 s show already has; only time beyond it lengthens production. */
-  productionWindowMs: 4_800,
   /** The most the events of one phase may play in all, in ms; past it each is cut in proportion. */
   capMs: 30_000,
+};
+
+/**
+ * The production show (ws6-ux spec AM-19, RULE-3; Heiko's order C, 2026-11-05): good by good for every player at
+ * once, then every bonus at once, then every loss at once, then the month's events, then the goods fly into the silos.
+ * The timeline is packages/engine/src/production-show.ts; its length is production's length, so it grows with the
+ * goods made, never the plots. Named edit in WS1's config, values WS6's (approved in the mock, b65c3972).
+ */
+export const PRODUCTION_SHOW = {
+  /** The order the goods harvest in: the crops, then the mines, then the factories. */
+  order: ['food', 'water', 'energy', 'smithore', 'crystite', 'rareEarth', 'alloy', 'electronics', 'medicine'] as const satisfies readonly Good[],
+  /** Before the first good lights. */
+  introMs: 1_000,
+  /** One good's turn: every plot of it lights and counts up together. */
+  goodBeatMs: 1_100,
+  /** One unit of a plot's base rising, so a 4-unit plot counts up as you watch. */
+  unitStepMs: 140,
+  /** Every bonus at once, then every loss at once: each held this long. */
+  allAtOnceMs: 1_600,
+  /** Before the bonuses, before the events and before the flight. */
+  gapMs: 500,
+  /** The plots take off for the silos over this long, the first gaps longest (`flightEase` below 1). */
+  flightsMs: 2_400,
+  flightEase: 0.7,
+  /** One plot's goods in the air. */
+  flightMs: 750,
+  /** The silos stand full to be read before the phase ends. */
+  holdMs: 2_000,
+  /** Once every person at the table has asked, the rest of the show plays this many times faster. */
+  fast: 3,
 };
 
 /**
@@ -1118,7 +1378,24 @@ export const EVENTS = {
      * the phase start; a collapse leaves a plain plot.
      */
     cavernCollapse: { phases: { production: 0.06 }, perPlot: true, cap: 0.9 },
-  } satisfies Record<string, import('./events.js').EventRow>,
+    // Wave 2 (the catalogue's chances; the two production rows x1.6 as every production base, wave-2 spec AM-1).
+    /** Share of each player's cash the Federation takes into the colony fund (floored). */
+    federationTax: { phases: { planning: 0.02 }, share: 0.1, cap: 0.9 },
+    /** Credits the Federation pays each of the `count` poorest players, new money. */
+    federationGrant: { phases: { planning: 0.02 }, amount: 150, count: 2, cap: 0.9 },
+    /** The colonists grow by this share, for good (rounded). */
+    immigrationWave: { phases: { planning: 0.02 }, growth: 0.1, cap: 0.9 },
+    /** Every player without a Medicine is sick this development and the next; one with a Medicine uses it. */
+    epidemic: { phases: { development: 0.005 }, cap: 0.9 },
+    /** Every plot's Energy need is `factor` times this production. */
+    coldSnap: { phases: { production: 0.032 }, factor: 2, cap: 0.9 },
+    /** After production's output, one tile (not the store) becomes a meteor crater and loses its MULE. */
+    meteorStrike: { phases: { production: 0.032 }, afterOutput: true, cap: 0.9 },
+    /** Every player's and the store's Crystite goes to 0 before the auction opens. */
+    pirateRaid: { phases: { auction: 0.01 }, cap: 0.9 },
+    /** The store's stock of every good and its MULEs go to 0 before the auction opens. */
+    storeFire: { phases: { auction: 0.01 }, cap: 0.9 },
+  } satisfies Record<string, import('./events.js').EventRow & import('./events.js').EventParams>,
   player: {
     /**
      * Sickness, at development start: the colonist walks at DEV_WALK.sickPace this turn unless it holds a Medicine,
@@ -1139,7 +1416,17 @@ export const EVENTS = {
       cap: 0.9,
     },
     bumperHarvest: { phases: { production: 0.024 }, wealth: { poorest: 0.015, richest: -0.01 }, cap: 0.9 },
-  } satisfies Record<string, import('./events.js').EventRow>,
+    /** Credits from min (the richest) to max (the poorest), linear in wealth rank (wave-2 AM-1 6a). */
+    inheritance: { phases: { planning: 0.015 }, min: 100, max: 300, cap: 0.9 },
+    /** One installed MULE is taken off one of the player's plots; rolls in development and again at the month end. */
+    muleTheft: { phases: { development: 0.01, upkeep: 0.01 }, cap: 0.9 },
+    /** Share of the player's Food the rats eat (floored); fires only when that is at least 1. */
+    ratsInSilo: { phases: { upkeep: 0.015 }, share: 0.5, cap: 0.9 },
+    /** Share of the player's cash the accountant takes (floored); fires only when that is at least 1. */
+    crookedAccountant: { phases: { upkeep: 0.01 }, share: 0.1, cap: 0.9 },
+    /** Food the package brings. */
+    packageFromHome: { phases: { upkeep: 0.015 }, amount: 3, cap: 0.9 },
+  } satisfies Record<string, import('./events.js').EventRow & import('./events.js').EventParams>,
   /** Pairs that never fire together in one phase: if both roll, the seeded dice keep one. */
   excludes: [
     ['drought', 'flood'],
@@ -1300,6 +1587,75 @@ export const AI_HANDS = {
   grant: {
     /** A go/no-go choice takes this much longer than a bare reaction. */
     choiceMs: [150, 300] as [number, number],
+  },
+};
+
+type PlanKind = Strategy['kind'];
+
+/**
+ * The AI's game plan (playbook.ts): which plan kind a seat drafts, the strategy fields it writes, and the bounds every
+ * playbook is held to, the engine's own draft and Claude's edits alike.
+ */
+export const AI_PLANS = {
+  /** Seats play their playbook; false: every seat plays the phase-by-phase asks, as before playbooks. */
+  on: true,
+  /** A feature switch, not a balance value: a seat's own path plays its drafted development and auction parts; false, today's. See AM-26. */
+  ownPhases: false,
+  /** How much each persona leans to each plan kind, 0 to 1: the draft picks the eligible kind it leans to most. */
+  leaning: {
+    cautious: { builder: 1, specialist: 0.5, monopolist: 0.2, landBaron: 0.3, politician: 0.4, spoiler: 0 },
+    aggressive: { builder: 0.3, specialist: 0.5, monopolist: 0.6, landBaron: 1, politician: 0.2, spoiler: 0.4 },
+    trader: { builder: 0.3, specialist: 1, monopolist: 1, landBaron: 0.3, politician: 0.2, spoiler: 0 },
+    saboteur: { builder: 0.2, specialist: 0.4, monopolist: 0.5, landBaron: 0.4, politician: 0.3, spoiler: 1 },
+  } satisfies Record<AiPersonaId, Record<PlanKind, number>>,
+  moneyMaker: {
+    /** A good's score sums its install gain over this many of the seat's best plots for it (own idle and free). */
+    plots: 3,
+    /** Each rival plot already making the good cuts its score by this share. */
+    rivalDiscount: 0.15,
+    /** Weight of the "My money-maker" consideration in a development pick. */
+    weight: 1,
+    /** That consideration's score, 0 to 1, for an outfit that makes another good (the money-maker scores 1). */
+    otherScore: 0.8,
+  },
+  monopoly: {
+    /** The goods a seat may try to corner. */
+    goods: ['food', 'energy', 'smithore'] as Good[],
+    /** A good is cornered only while at most this many rival plots make it. */
+    maxRivalPlots: 1,
+    /** And only with at least this many of its own idle or free plots whose best outfit is the good. */
+    minPlots: 2,
+  },
+  landBaron: {
+    /** The land baron is a plan while at least this share of all plots is free. */
+    minFreeShare: 0.3,
+  },
+  landTarget: {
+    /** The plot target is for this many months ahead, at most to the last month. */
+    months: 3,
+    /** Plots a month the target adds, by plan kind; `other` for every kind not named. */
+    perMonth: { landBaron: 2, other: 1 } as Partial<Record<PlanKind, number>> & { other: number },
+  },
+  /** A seat whose money is under its cash reserve lists a plot or a MULE for the land auction, unsold to the store. */
+  sell: {
+    /** Lots a seat lists a month when short, at most. LOTS.perPlayer still caps every seller. */
+    perMonth: 1,
+    /** A lot's minimum, as a share of what it is worth to the seat; never under one credit over what the store pays. */
+    minimumShare: 0.8,
+  },
+  /** What a playbook may hold: a value outside is clamped or refused. */
+  bounds: {
+    /** Credits a strategy's cash floor may ask, at most. */
+    cashFloorMax: 2000,
+    /** Notes on one rival, at most, and characters a note. */
+    rivalReadNotes: 3,
+    rivalReadChars: 140,
+    /** Notes for later months, at most. */
+    lessons: 5,
+    /** Steps a development route may have, at most. */
+    routeSteps: 24,
+    /** Credits a second of the auction clock a seat may concede, at most. */
+    concedeMaxCrPerS: 50,
   },
 };
 

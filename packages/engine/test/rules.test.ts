@@ -11,6 +11,7 @@ import {
   EVENTS,
   factoryFit,
   fitFilter,
+  GAME,
   grantDone,
   grantPass,
   litPlot,
@@ -145,7 +146,25 @@ describe('land grant', () => {
     const first = [...state.grant!.order];
     for (let i = 0; i < first.length; i++) advanceGrant(state);
     expect(state.grant!.sweep).toBe(1);
-    for (const p of state.players) p.claimsThisGrant = 2;
+    for (const p of state.players) p.claimsThisGrant = GAME.claimsPerGrant;
+    expect(grantDone(state)).toBe(true);
+  });
+
+  it('one claim a seat (Heiko, 5 Nov): a seat claims one plot, its second is refused, and the grant ends once every seat has claimed', () => {
+    const state = newGame();
+    toPhase(state, 'landGrant');
+    let lit = litPlot(state)!;
+    claimPlot(state, 'p0', lit.x, lit.y);
+    lit = advanceGrant(state)!;
+    expect(() => claimPlot(state, 'p0', lit.x, lit.y), 'a second claim in the same grant').toThrow('No claims left this month');
+    expect(lit.owner, 'the refused claim took nothing').toBeNull();
+    for (const p of state.players.slice(1)) {
+      expect(grantDone(state), `${p.id} has a claim left`).toBe(false);
+      claimPlot(state, p.id, lit.x, lit.y);
+      if (p !== state.players.at(-1)) lit = advanceGrant(state)!;
+    }
+    expect(state.players.map((p) => p.claimsThisGrant)).toEqual([1, 1, 1, 1]);
+    expect(state.tiles.filter((t) => t.owner).length, 'four seats, four plots').toBe(4);
     expect(grantDone(state)).toBe(true);
   });
 
@@ -223,8 +242,8 @@ describe('development', () => {
   it('quotes the pub payout without changing the game, and pays exactly that', () => {
     const state = newGame();
     toPhase(state, 'development');
-    // 33 of 50 seconds pays a fraction, so a quote that rounds differently from the pay shows.
-    for (const [id, left] of [['p0', 50], ['p1', 5], ['p2', 0], ['p3', 33]] as const) {
+    // 33.5 s left pays a fraction in the first three months, so a quote that rounds differently from the pay shows.
+    for (const [id, left] of [['p0', DEVELOPMENT.fullSeconds], ['p1', 5], ['p2', 0], ['p3', 33.5]] as const) {
       const before = structuredClone(state);
       const quote = pubPayoutFor(state, id, left);
       expect(state, `${id}: a quote changes nothing`).toEqual(before);

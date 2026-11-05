@@ -1,6 +1,7 @@
 import { GOODS, isFactory, RECIPES, UPKEEP, type Good, type Outfit, type RawGood, type Stock } from '@mule/engine';
 import { GOOD_NAME } from '@mule/ui';
 import type { Now } from '../Shell';
+import { freePlots } from './month-steps';
 
 /** One line of "This month you need" (RULE-8). */
 export interface NeedRow {
@@ -43,11 +44,12 @@ export function needRows(need: Stock, stock: Stock, plots: readonly { outfit: Ou
     const inputs = usedBy.length > 0 ? `${and(usedBy.map((f) => GOOD_NAME[f]))} inputs` : '';
     if (g === 'food' || g === 'water') return usedBy.length > 0 ? `upkeep and ${inputs}` : 'upkeep';
     if (g === 'energy') {
-      // Raw plots that burn Energy (UPKEEP.energyUse), counted by what they are called; factories by recipe.
+      // Raw plots that burn Energy (UPKEEP.energyUse), counted by what they are called; factories by recipe. Not a
+      // plant: it pays its own use from its own output, so the engine's monthNeeds leaves it out (AM-17, PM ruling A).
       const burners = new Map<string, [number, string]>();
       for (const raw of Object.keys(UPKEEP.energyUse) as RawGood[]) {
         const k = outfits.filter((o) => o === raw).length;
-        if (UPKEEP.energyUse[raw] <= 0 || k === 0) continue;
+        if (raw === 'energy' || UPKEEP.energyUse[raw] <= 0 || k === 0) continue;
         const [one, many] = PLOT[raw];
         burners.set(one, [(burners.get(one)?.[0] ?? 0) + k, many]);
       }
@@ -70,11 +72,18 @@ export function needRows(need: Stock, stock: Stock, plots: readonly { outfit: Ou
   }));
 }
 
-/** RULE-8's Now: plan, then Ready; the land grant is next; what she's short of, or that she has what she needs. */
+/** RULE-8's Now: plan, then Ready; the land grant is next, with its claims; what she's short of, or that she has what she needs. */
 export function planNow(rows: readonly NeedRow[]): Now & { detail: string } {
   const short = rows.filter((r) => r.short > 0).map((r) => GOOD_NAME[r.good]);
   return {
     title: 'Plan your month, then press Ready',
-    detail: `Next is the land grant: one free plot each. ${short.length > 0 ? `You're short of ${and(short)}: a plot for it, or buy it at the auction.` : 'You have what you need this month.'}`,
+    detail: `Next is the land grant: ${freePlots()} each. ${short.length > 0 ? `You're short of ${and(short)}: a plot for it, or buy it at the auction.` : 'You have what you need this month.'}`,
   };
+}
+
+/** The stage's needs strip: Food, Energy and Water, in that order, those she needs this month; the rest is the Colony desk's. */
+const STRIP: Good[] = ['food', 'energy', 'water'];
+
+export function stripRows(rows: readonly NeedRow[]): NeedRow[] {
+  return STRIP.flatMap((g) => rows.filter((r) => r.good === g));
 }

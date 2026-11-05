@@ -1,4 +1,5 @@
 import { Button, cx } from '@mule/ui';
+import { PhoneColonyScore } from '../components/Colony';
 import { ColonyPanel, LeagueTable, PhoneVerdict, WinnerCard, YourWorth } from '../components/MonthEnd';
 import { PHASE_NAME } from '../game/derive';
 import { league, ordinal, winnerWords } from '../game/month-end';
@@ -17,10 +18,10 @@ export function GameOver() {
   const tv = table.boards > 0;
   const lg = league(view);
   const mine = lg.rows.find((r) => r.player.id === self.id)!;
-  const won = mine.rank === 1 && lg.leader?.level.length === 1;
+  const shared = (lg.leader?.level.length ?? 0) > 1;
   const now: Now = {
     // One line in the rail: the card beside says the rest ("You finished 2nd of 4").
-    title: won ? 'Game over: you win' : `Game over: ${ordinal(mine.rank)} of ${view.players.length}`,
+    title: mine.rank === 1 ? (shared ? 'Game over: you share the win' : 'Game over: you win') : `Game over: ${ordinal(mine.rank)} of ${view.players.length}`,
     detail: `${winnerWords(view, lg)}.`,
   };
   const density = tv ? 'phone' : 'compact';
@@ -45,7 +46,12 @@ export function GameOver() {
         <div className={cx('grid min-h-0 grid-cols-[minmax(0,5fr)_minmax(0,6fr)]', tv ? 'flex-1 gap-2.5 @max-3xl/shell:grid-cols-[minmax(0,4fr)_minmax(0,7fr)] @max-3xl/shell:grid-rows-[auto_minmax(0,1fr)]' : 'gap-1.5')}>
           <div className={cx('flex min-h-0 flex-col', tv ? 'gap-2.5 @max-3xl/shell:contents' : 'gap-1.5')}>
             <WinnerCard view={view} density={density} selfId={self.id} {...(tv ? { className: '@max-3xl/shell:row-span-2' } : {})} />
-            {tv && <PhoneVerdict view={view} className="@max-3xl/shell:col-start-2 @max-3xl/shell:row-start-2" />}
+            {tv &&
+              (view.colony ? (
+                <PhoneColonyScore view={view} colony={view.colony} selfId={self.id} className="gap-1.5 p-2.5 @max-3xl/shell:col-start-2 @max-3xl/shell:row-start-2 @max-3xl/shell:gap-1 @max-3xl/shell:p-2" />
+              ) : (
+                <PhoneVerdict view={view} className="@max-3xl/shell:col-start-2 @max-3xl/shell:row-start-2" />
+              ))}
           </div>
           <YourWorth view={view} density={density} />
         </div>

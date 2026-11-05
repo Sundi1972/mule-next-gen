@@ -1,6 +1,6 @@
-import { EVENT_SHOW, PHASES } from '@mule/engine';
+import { EVENT_SHOW, productionShowMs } from '@mule/engine';
 import type { ProductionEventView, ProductionView } from '@mule/protocol';
-import { eventHitAt, eventSegments, fillAt, flyAt, harvest, landed, landing, ProductionMap, showEnd, showTime, type MapTile, type ShowEventKey, type ShowMode } from '@mule/ui';
+import { eventHitAt, eventSegments, fillAt, flyAt, harvest, landed, landing, ProductionMap, SHOW, showEnd, showTime, showTimes, type MapTile, type ShowEventKey, type ShowMode } from '@mule/ui';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -9,14 +9,10 @@ const W = 6;
 const H = 3;
 const GRID = { width: W, height: H };
 const tiles: MapTile[] = Array.from({ length: W * H }, (_, i) => ({ x: i % W, y: Math.floor(i / W), terrain: 'plains', owner: null }));
-/** The production show's event window opens 4.8 s in, and a quiet month flies its goods at 9.6 and ends at 15. */
-const EVENT_AT = 4.8;
-const QUIET_FLY = 9.6;
-const QUIET_END = 15;
 /** The phase's intro, as the server sends it whenever an event fired: it plays before the first event's segment. */
-const INTRO = 1.8;
-const FLIGHT = 0.9;
-const FLY_STEP = 0.09;
+const INTRO = EVENT_SHOW.introMs / 1000;
+/** One plot's goods in the air. */
+const FLIGHT = SHOW.flight;
 
 function fired(key: ProductionEventView['key'], playMs: number, hits: [x: number, y: number, delta: number][]): ProductionEventView {
   return {
@@ -37,11 +33,14 @@ function fired(key: ProductionEventView['key'], playMs: number, hits: [x: number
 
 /** The server's intro for these events: the engine's own number when any fired, none in a quiet month. */
 const introOf = (events: ProductionEventView[]) => (events.length > 0 ? EVENT_SHOW.introMs : 0);
-/** The server's production length for these events at phaseScale 1 (RULE-1), from the engine's own numbers. */
-const lengthOf = (events: ProductionEventView[]) =>
-  PHASES.productionMs + Math.max(0, introOf(events) + events.reduce((n, e) => n + e.playMs, 0) - EVENT_SHOW.productionWindowMs);
+/** How long the month's events play, intro included: 0 in a quiet month. */
+const eventsMsOf = (events: ProductionEventView[]) => (events.length > 0 ? introOf(events) + events.reduce((n, e) => n + e.playMs, 0) : 0);
+/** The server's production length (RULE-3, order C) at phaseScale 1: the engine's productionShowMs over the goods made and the events. */
+const lengthOf = (lines: ProductionView['lines'], events: ProductionEventView[]) => productionShowMs(new Set(lines.map((l) => l.good)).size, eventsMsOf(events));
 /** A month's view as the server builds it from its lines and events. */
-const viewOf = (lines: ProductionView['lines'], events: ProductionEventView[]): ProductionView => ({ lines, events, lengthMs: lengthOf(events), introMs: introOf(events) });
+const viewOf = (lines: ProductionView['lines'], events: ProductionEventView[]): ProductionView => ({ lines, events, lengthMs: lengthOf(lines, events), introMs: introOf(events) });
+/** When the month's events start: after the harvest, the bonuses and the losses. */
+const eventsAt = (production: ProductionView) => showTimes(production).eventsAt!;
 
 const render = (production: ProductionView, t: number, { mode, reduced = false, tv = true }: { mode?: ShowMode; reduced?: boolean; tv?: boolean } = {}) =>
   renderToStaticMarkup(createElement(ProductionMap, { width: W, height: H, tiles, production, t, slots: { lena: 0, ossa: 1 }, tv, reduced, ...(mode ? { mode } : {}) }));
@@ -72,6 +71,16 @@ const playing = (html: string) => [...html.matchAll(/data-event="([^"]+)"/g)].ma
 /** The events' chips on one plot, in the order they are drawn. */
 const chips = (html: string, x: number, y: number) => [...html.matchAll(new RegExp(`data-testid="mark-${x}-${y}"[^]*?data-delta="(-?\\d+)"`, 'g'))].map((m) => Number(m[1]));
 const camera = (html: string) => /<div[^>]*style="[^"]*transform[^"]*"[^>]*data-testid="event-map"/.test(html);
+/** The map's own transform: the camera's, the jolt's, or both. */
+const mapTransform = (html: string) => /<div[^>]*style="[^"]*transform:([^;"]*)[^"]*"[^>]*data-testid="event-map"/.exec(html)?.[1] ?? '';
+/** The jolt's shake, in cqw: the camera moves in % of the map, so a translate in cqw is the shake, with a camera or without. */
+const shakeOf = (html: string) => {
+  const m = /translate\((-?[\d.e+-]+)cqw, (-?[\d.e+-]+)cqw\)/.exec(mapTransform(html));
+  return m ? { x: Number(m[1]), y: Number(m[2]) } : null;
+};
+const jolted = (html: string) => shakeOf(html) !== null;
+/** The camera flown in: its zoom, whether or not the jolt shakes it. */
+const zoomed = (html: string) => mapTransform(html).includes('scale(');
 /** Show seconds from a to b, every `step`. */
 const frames = (a: number, b: number, step = 0.1) => Array.from({ length: Math.floor((b - a) / step) }, (_, i) => a + (i + 0.5) * step);
 
@@ -95,7 +104,9 @@ describe('the production show plays every event of the month', () => {
     ],
     [drought, acid],
   );
-  // The intro plays 4.8..6.6, the drought 6.6..9.6, the acid rain 9.6..12.6; the goods fly from 12.6.
+  // After the harvest, the bonuses and the losses the events start; the intro plays 1.8 s, the drought 3 s, then the
+  // acid rain 3 s; the goods fly after it.
+  const EVENT_AT = eventsAt(month);
   const droughtEnds = EVENT_AT + INTRO + 3;
   const windowEnds = EVENT_AT + INTRO + 6;
 
@@ -145,7 +156,11 @@ describe('the production show plays every event of the month', () => {
     const events = keys.map((k) => fired(k, 4000, [[1, 0, -1]]));
     const all = viewOf(month.lines, events);
     // The phase's intro card plays in its own slot (no event yet); then every segment plays from its first moment.
+    expect(eventsAt(all)).toBe(EVENT_AT);
     const first = EVENT_AT + INTRO;
+    // Nothing plays before the events start, in the harvest, the bonuses or the losses, nor inside the intro.
+    for (const t of [0.5, fillAt(all.lines[1]!, all) + 0.1, showTimes(all).bonusAt + 0.1, showTimes(all).lossAt + 0.1, EVENT_AT - 0.05])
+      expect(playing(render(all, t)), `before the events at ${t}`).toEqual([]);
     for (const t of [EVENT_AT + 0.05, first - 0.05]) expect(playing(render(all, t)), `intro at ${t}`).toEqual([]);
     keys.forEach((k, i) => {
       const at = [first + 4 * i + 0.05, first + 4 * i + 2, first + 4 * (i + 1) - 0.05];
@@ -156,22 +171,27 @@ describe('the production show plays every event of the month', () => {
 
     // The client's timeline is the server's length, intro included: no length of its own (HC-3).
     expect(showEnd(all) * 1000).toBeCloseTo(all.lengthMs, 6);
-    // The window W = max(4.8, (introMs + Σ playMs) / 1000), and the goods fly when it closes.
-    expect(flyAt(0, all)).toBeCloseTo(EVENT_AT + (all.introMs + 40_000) / 1000, 9);
+    // The events play for exactly their intro and their segments, no padding, and the goods fly one gap after the last.
+    expect(flyAt(0, all)).toBeCloseTo(EVENT_AT + (all.introMs + 40_000) / 1000 + SHOW.gap, 9);
+    expect(flyAt(0, all)).toBeGreaterThan(end);
     const start = 1_000_000;
     expect(showTime(start + all.lengthMs, start + all.lengthMs * (end / showEnd(all)), all.lengthMs, all)).toBeCloseTo(end, 9);
     expect(showTime(start + all.lengthMs, start + all.lengthMs, all.lengthMs, all)).toBeCloseTo(all.lengthMs / 1000, 9);
 
-    // Nothing has landed while the events play: the untouched Water plot (second in reading order) lands one step and
-    // one flight after the window, never before, and its landing lights up then, not at a quiet month's time.
+    // Nothing has landed while the events play: the untouched Water plot (second in harvest order) lands one flight
+    // after its take-off, never before, and its landing lights up then, not at a quiet month's time.
+    const waterLands = flyAt(1, all) + FLIGHT;
     expect(landed(all, end - 0.05, 'lena')).toEqual({});
-    expect(landed(all, end + FLY_STEP + FLIGHT - 0.01, 'lena')).toEqual({});
-    expect(landed(all, end + FLY_STEP + FLIGHT + 0.01, 'lena')).toEqual({ water: 2 });
-    expect(landing(all, end + FLY_STEP + FLIGHT + 0.01, 'lena')).toBe(true);
-    expect(landing(all, QUIET_FLY + FLIGHT + 0.01, 'lena')).toBe(false);
-    // The rendered bars fly on the same timeline: still at rest as the window closes, gone one step and one flight later.
-    expect(plot(render(all, end - 0.05), 4, 0)).not.toMatch(/opacity-0|transition:transform/);
-    expect(plot(render(all, end + FLY_STEP + FLIGHT + 0.01), 4, 0)).toContain('opacity-0');
+    expect(landed(all, waterLands - 0.01, 'lena')).toEqual({});
+    expect(landed(all, waterLands + 0.01, 'lena')).toEqual({ water: 2 });
+    expect(landing(all, waterLands + 0.01, 'lena')).toBe(true);
+    const quiet = viewOf(all.lines, []);
+    expect(landing(all, flyAt(0, quiet) + FLIGHT + 0.01, 'lena')).toBe(false);
+    // The rendered bars fly on the same timeline: still at rest as the last event ends, gone from the plot once it takes off.
+    expect(plot(render(all, end - 0.05), 4, 0)).toContain('data-bar="unit"');
+    expect(plot(render(all, end - 0.05), 4, 0)).not.toContain('data-state="flown"');
+    expect(plot(render(all, flyAt(1, all) + 0.01), 4, 0)).toContain('data-state="flown"');
+    expect(plot(render(all, flyAt(1, all) + 0.01), 4, 0)).not.toContain('data-bar="unit"');
 
     // While events play the bars sit in the map's frame (under the stories, with the camera); just before they fly they
     // leave it, already grown, so leaving does not grow them again.
@@ -181,8 +201,12 @@ describe('the production show plays every event of the month', () => {
     const handed = render(all, flyAt(0, all) - 0.1);
     expect(inside(handed, 'event-map')).not.toContain('data-testid="plot-');
     expect(plot(handed, 4, 0)).toContain('data-bar="unit"');
-    expect(plot(handed, 4, 0)).not.toContain('show-bar-in');
-    expect(plot(render(all, fillAt(1) + 0.1), 4, 0)).toContain('show-bar-in');
+    // The bars rise by the show clock: every one stands full (scaleY 1) as they leave, and one rises just after its good's turn.
+    const scales = (html: string) => [...html.matchAll(/data-bar="unit"[^>]*?scaleY\(([\d.e-]+)\)/g)].map((m) => Number(m[1]));
+    expect(scales(plot(handed, 4, 0))).toEqual([1, 1]);
+    const rising = scales(plot(render(all, fillAt(all.lines[1]!, all) + 0.1), 4, 0));
+    expect(rising[0]).toBeGreaterThan(0);
+    expect(rising[0]).toBeLessThan(1);
 
     // HC-6: the camera flies in to the bumper harvest's plot, never with reduced motion.
     const bumper = frames(first + 36, end);
@@ -190,9 +214,10 @@ describe('the production show plays every event of the month', () => {
     expect(bumper.some((t) => camera(render(all, t, { reduced: true })))).toBe(false);
   });
 
-  it('T-AC-4: each wave-1 key plays its own story inside its segment, and no other key’s', () => {
-    // The cavern collapse has its key and catalogue row; its story is still to come (PR-2), so it is not listed here.
-    const OWN: Record<Exclude<ShowEventKey, 'cavernCollapse'>, RegExp> = {
+  it('T-AC-4: each key plays its own story inside its segment, and no other key’s', () => {
+    // Every key production fires; sickness is development's, and its roll call is events-overlay's and the UI's roll-call test.
+    // Wave 1's production keys; wave 2's stories (and their entries here) come with PR-B.
+    const OWN: Partial<Record<Exclude<ShowEventKey, 'sickness'>, RegExp>> = {
       dustStorm: /data-testid="front-dustStorm"/,
       drought: /data-testid="front-drought"/,
       acidRain: /data-testid="front-acidRain"/,
@@ -203,6 +228,7 @@ describe('the production show plays every event of the month', () => {
       pestSwarm: /data-testid="swarm-1-0"/,
       wildfire: /data-testid="fire-1-0"/,
       bumperHarvest: /data-testid="bumper-stamp"/,
+      cavernCollapse: /data-testid="cave-in-1-0"/,
     };
     const keys = Object.keys(OWN) as (keyof typeof OWN)[];
     for (const k of keys) {
@@ -210,34 +236,122 @@ describe('the production show plays every event of the month', () => {
       const one = viewOf(month.lines, [ev]);
       const shown = frames(EVENT_AT + INTRO, EVENT_AT + INTRO + 4).map((t) => render(one, t));
       expect(
-        shown.some((html) => OWN[k].test(html)),
+        shown.some((html) => OWN[k]!.test(html)),
         `${k} draws its own story`,
       ).toBe(true);
-      for (const other of keys.filter((o) => o !== k)) expect(shown.some((html) => OWN[other].test(html)), `${k} draws ${other}'s story`).toBe(false);
+      for (const other of keys.filter((o) => o !== k)) expect(shown.some((html) => OWN[other]!.test(html)), `${k} draws ${other}'s story`).toBe(false);
+      // Only the cavern collapse jolts the camera.
+      if (k !== 'cavernCollapse') expect(shown.some(jolted), `${k} never jolts`).toBe(false);
     }
+
+    // The cavern collapse's story: the cavern rumbles and cracks, rocks fall in, the camera jolts, dust rises.
+    const caveIn = viewOf(month.lines, [fired('cavernCollapse', 4000, [[1, 0, 0]])]);
+    const story = frames(EVENT_AT + INTRO, EVENT_AT + INTRO + 4, 0.05);
+    const moving = story.map((t) => render(caveIn, t));
+    expect(moving.some((html) => html.includes('data-testid="cave-in-rock"')), 'rocks fall in').toBe(true);
+    expect(moving.some((html) => html.includes('data-testid="cave-in-dust"')), 'dust rises').toBe(true);
+    expect(moving.some((html) => jolted(html)), 'the camera jolts').toBe(true);
+    // Its timing, from the script: u seconds into the story are playAt + u × pace on the show's clock.
+    const seg = eventSegments(caveIn, EVENT_AT, 'tv')[0]!;
+    const at = (u: number) => seg.playAt + u * seg.pace;
+    // The jolt: 1.7 s into the story, for 0.6 s, never before.
+    const jolt = at(1.7);
+    for (const [t, on] of [
+      [jolt - 0.05, false],
+      [jolt + 0.05, true],
+      [jolt + 0.55, true],
+      [jolt + 0.65, false],
+    ] as const)
+      expect(jolted(render(caveIn, t)), `jolted at jolt ${(t - jolt).toFixed(2)}`).toBe(on);
+    // On the phone the shake is the gallery's smaller one: 2.5 and 1.5 of its 540 px map, against 5 and 3 of the TV's 820.
+    const tvShake = shakeOf(render(caveIn, jolt + 0.05))!;
+    const phoneShake = shakeOf(render(caveIn, jolt + 0.05, { tv: false }))!;
+    expect(Math.abs(tvShake.x)).toBeGreaterThan(0.01);
+    expect(phoneShake.x / tvShake.x).toBeCloseTo(2.5 / 5.4 / (5 / 8.2), 6);
+    expect(phoneShake.y / tvShake.y).toBeCloseTo(1.5 / 5.4 / (3 / 8.2), 6);
+    // The story's window: nothing before it starts, the cavern from its first moment, the dust to its last, nothing after.
+    const caveTestid = /data-testid="cave-in-/;
+    expect(render(caveIn, at(-0.05)), 'before the story').not.toMatch(caveTestid);
+    expect(render(caveIn, at(0.05)), 'the cavern, as the story starts').toContain('data-testid="cave-in-1-0"');
+    expect(render(caveIn, at(3.55)), 'the dust, as the story ends').toContain('data-testid="cave-in-dust"');
+    expect(render(caveIn, at(3.65)), 'after the story').not.toMatch(caveTestid);
+    // Its change lands 1.9 s in (a real loss, so the plot's chip shows it), and the camera pulls back from 2.9 s.
+    const loss = viewOf(month.lines, [fired('cavernCollapse', 4000, [[1, 0, -1]])]);
+    expect(render(loss, at(1.9) - 0.05), 'not landed yet').not.toContain('data-testid="mark-1-0"');
+    expect(render(loss, at(1.9) + 0.05), 'landed').toContain('data-testid="mark-1-0"');
+    expect(zoomed(render(caveIn, at(2.9) - 0.25)), 'the camera is in before the reveal').toBe(true);
+    expect(zoomed(render(caveIn, at(2.9) + 0.65)), 'and back out after it').toBe(false);
+    // HC-6: with reduced motion no rumble, no falling rocks, no jolt and no camera; the dust still shows where it caved in.
+    const still = story.map((t) => render(caveIn, t, { reduced: true }));
+    expect(still.some((html) => html.includes('data-testid="cave-in-1-0"')), 'reduced: no rumbling cavern').toBe(false);
+    expect(still.some((html) => html.includes('data-testid="cave-in-rock"')), 'reduced: no falling rocks').toBe(false);
+    expect(still.some((html) => camera(html)), 'reduced: no camera, no jolt').toBe(false);
+    expect(still.some((html) => html.includes('data-testid="cave-in-dust"')), 'reduced: the dust shows').toBe(true);
   });
 
-  it("T-AC-4: a quiet month's timeline is unchanged: the goods fly at 9.6 and the show ends at 15", () => {
+  it('T-AC-12: a cavern collapse hit shows a CAVED IN chip once it lands, and the cavern badge until then', () => {
+    // The view's tiles are the map after the month's events: the cavern at (1, 0) is already a plain plot.
+    const after = tiles.map((t) => (t.x === 1 && t.y === 0 ? { ...t, owner: 0 as const, good: 'food' as const } : t));
+    const collapse: ProductionEventView = { ...fired('cavernCollapse', 4000, []), scope: 'personal', hits: [{ x: 1, y: 0, order: 0, delta: 0, was: 'crystalCavern', becomes: 'plain' }] };
+    const caveIn = viewOf(month.lines, [collapse]);
+    const seg = eventSegments(caveIn, EVENT_AT, 'tv')[0]!;
+    const lands = eventHitAt(seg, seg.events[0]!, seg.events[0]!.hits[0]!, false, GRID);
+    const draw = (production: ProductionView, t: number, reduced = false) =>
+      renderToStaticMarkup(createElement(ProductionMap, { width: W, height: H, tiles: after, production, t, slots: { lena: 0, ossa: 1 }, tv: true, reduced }));
+    const badge = /data-testid="special-glyph-1-0" data-kind="crystalCavern"/;
+    const cavedIn = /data-testid="mark-1-0"[^]*?\u25BC<\/span>CAVED IN/;
+    // With reduced motion the hit lands sooner; the badge goes on that landing, not the full-motion one.
+    for (const reduced of [false, true]) {
+      const at = eventHitAt(seg, seg.events[0]!, seg.events[0]!.hits[0]!, reduced, GRID);
+      for (const t of [0, EVENT_AT, at - 0.05]) {
+        const html = draw(caveIn, t, reduced);
+        expect(html, `the badge at ${t}, reduced ${reduced}`).toMatch(badge);
+        expect(html, `no chip yet at ${t}, reduced ${reduced}`).not.toContain('data-testid="mark-1-0"');
+      }
+      // From the landing instant itself: the chip, never beside the badge.
+      for (const t of [at, at + 0.05, showEnd(caveIn)]) {
+        const html = draw(caveIn, t, reduced);
+        expect(html, `no badge at ${t}, reduced ${reduced}`).not.toContain('special-glyph-1-0');
+        expect(html, `the chip at ${t}, reduced ${reduced}`).toMatch(cavedIn);
+      }
+    }
+    // A hit that changes no plot's kind reads as its number, and keeps no badge the tiles lack.
+    const loss = draw(viewOf(month.lines, [fired('cavernCollapse', 4000, [[1, 0, -1]])]), lands - 0.05);
+    expect(loss).not.toContain('special-glyph-1-0');
+    expect(draw(viewOf(month.lines, [fired('cavernCollapse', 4000, [[1, 0, -1]])]), lands + 0.05)).not.toContain('CAVED IN');
+  });
+
+  it("T-AC-4: a quiet month has no events: the goods fly after the losses and the show ends at its end", () => {
     const quiet = viewOf(month.lines, []);
+    const q = showTimes(quiet);
     const start = 1_000_000;
     expect(quiet.introMs).toBe(0);
+    expect(q.eventsAt).toBeNull();
+    // The flight follows the losses' beat by one gap, with nothing between them: where a month with events starts them.
+    expect(q.flightAt).toBeCloseTo(q.lossAt + SHOW.allAtOnce + SHOW.gap, 9);
+    expect(q.flightAt).toBeCloseTo(EVENT_AT, 9);
     expect(showEnd(quiet) * 1000).toBe(quiet.lengthMs);
-    expect(showTime(start + 15_000, start + 15_000, 15_000, quiet)).toBe(QUIET_END);
-    expect(showTime(start + 15_000, start + 15_000 * (QUIET_FLY / QUIET_END), 15_000, quiet)).toBeCloseTo(QUIET_FLY, 9);
-    expect(landed(quiet, QUIET_FLY + FLIGHT - 0.01, 'lena')).toEqual({});
-    expect(landed(quiet, QUIET_FLY + FLIGHT + 0.01, 'lena')).toEqual({ food: 1 });
-    expect(playing(render(quiet, 7))).toEqual([]);
-    // No event ever frames the bars.
-    expect(inside(render(quiet, 7), 'event-map')).not.toContain('data-testid="plot-');
+    expect(showTime(start + quiet.lengthMs, start + quiet.lengthMs, quiet.lengthMs, quiet)).toBe(q.end);
+    expect(showTime(start + quiet.lengthMs, start + quiet.lengthMs * (q.flightAt / q.end), quiet.lengthMs, quiet)).toBeCloseTo(q.flightAt, 9);
+    expect(landed(quiet, flyAt(0, quiet) + FLIGHT - 0.01, 'lena')).toEqual({});
+    expect(landed(quiet, flyAt(0, quiet) + FLIGHT + 0.01, 'lena')).toEqual({ food: 1 });
+    // No event plays at any moment of it, and no event ever frames the bars.
+    for (const t of frames(0, q.end, 0.5)) {
+      const html = render(quiet, t);
+      expect(playing(html), `playing at ${t}`).toEqual([]);
+      expect(inside(html, 'event-map'), `framed at ${t}`).not.toContain('data-testid="plot-');
+    }
 
-    // A month whose events play shorter than the window keeps a quiet month's timeline.
-    // With its intro, 1.8 + 2.5 s fits inside the 4.8 s window.
+    // A month whose events play briefly is longer than a quiet one by exactly its events and one gap: no padding.
     const short = fired('drought', 2500, [[2, 2, -1]]);
     const brief = viewOf(month.lines, [short]);
-    expect(brief.lengthMs).toBe(15_000);
-    expect(showEnd(brief)).toBe(QUIET_END);
-    expect(landed(brief, QUIET_FLY + FLY_STEP + FLIGHT - 0.01, 'lena')).toEqual({ food: 1 });
-    expect(landed(brief, QUIET_FLY + FLY_STEP + FLIGHT + 0.01, 'lena')).toEqual({ food: 1, water: 2 });
+    const b = showTimes(brief);
+    expect(brief.lengthMs).toBe(quiet.lengthMs + EVENT_SHOW.introMs + 2500 + SHOW.gap * 1000);
+    expect(showEnd(brief) * 1000).toBeCloseTo(brief.lengthMs, 6);
+    expect(b.eventsAt).toBe(EVENT_AT);
+    expect(b.flightAt).toBeCloseTo(EVENT_AT + INTRO + 2.5 + SHOW.gap, 9);
+    expect(landed(brief, flyAt(1, brief) + FLIGHT - 0.01, 'lena')).toEqual({ food: 1 });
+    expect(landed(brief, flyAt(1, brief) + FLIGHT + 0.01, 'lena')).toEqual({ food: 1, water: 2 });
   });
 
   it("T-AC-4: ProductionMap plays at the TV's pace unless told otherwise", () => {
@@ -254,8 +368,49 @@ describe('the production show plays every event of the month', () => {
       { x: 4, y: 0, owner: 'lena', good: 'water', made: 2, parts: [{ why: 'cluster', delta: 1 }] },
     ];
     const rain = viewOf(lines, [fired('acidRain', 3000, [[1, 0, 0], [4, 0, -1]])]);
-    const after = render(rain, EVENT_AT + INTRO + 3 - 0.05, { tv: false });
+    const after = render(rain, eventsAt(rain) + INTRO + 3 - 0.05, { tv: false });
     expect(plot(after, 1, 0)).toContain('data-badge="reason"');
     expect(plot(after, 4, 0)).not.toContain('data-badge="reason"');
+  });
+});
+
+describe('G-1 / C4: a wave-2 production event with no story yet plays on the production map', () => {
+  // As the server sends them: a cold snap hits no plot and says so in effects; a meteor strike hits one plot, 0 delta,
+  // which becomes a crater and loses its MULE.
+  const cold: ProductionEventView = {
+    ...fired('coldSnap', 7000, []),
+    kind: 'sweep',
+    title: 'Cold snap',
+    line: 'A cold snap: every plot needs 2 times its Energy this month.',
+    effects: [{ on: 'colony', what: 'energyNeed', delta: 100 }],
+  };
+  const meteor: ProductionEventView = {
+    ...fired('meteorStrike', 7000, [[1, 0, 0]]),
+    kind: 'strike',
+    title: 'Meteor strike',
+    line: 'A meteor strikes: its MULE is lost and the plot becomes a crater rich in Crystite.',
+    scope: 'local',
+    hits: [{ x: 1, y: 0, order: 0, delta: 0, becomes: 'crater', muleLost: true }],
+  };
+  const lines: ProductionView['lines'] = [{ x: 1, y: 0, owner: 'lena', good: 'food', made: 2, parts: [] }];
+  const month = viewOf(lines, [cold, meteor]);
+
+  it.each([
+    { name: 'the TV', tv: true, mode: 'tv' as const },
+    { name: 'a phone with a TV', tv: false, mode: 'tv' as const },
+    { name: 'a phone alone', tv: false, mode: 'solo' as const },
+  ])('on $name, each shows its title in its segment and no frame throws', ({ tv, mode }) => {
+    const segments = eventSegments(month, eventsAt(month), mode);
+    expect(segments.map((s) => s.events.map((e) => e.key))).toEqual([['coldSnap'], ['meteorStrike']]);
+    for (const [i, ev] of [cold, meteor].entries()) {
+      const seg = segments[i]!;
+      const shown = frames(seg.startAt, seg.endAt).map((t) => render(month, t, { tv, mode }));
+      expect(
+        shown.some((html) => html.includes(ev.title)),
+        `${ev.key} shows its title`,
+      ).toBe(true);
+    }
+    // The goods still fly home after the last event: the show reaches its end.
+    expect(() => render(month, showEnd(month) + 0.1, { tv, mode })).not.toThrow();
   });
 });
