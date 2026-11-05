@@ -77,6 +77,12 @@ const midSeconds = ([lo, hi]: [number, number]) => (lo + hi) / 2 / 1_000; // lit
 /** The presses a MULE takes at the counters and its plot: buy, outfit, install. */
 const MULE_PRESSES = 3; // literal-ok: a count of the rule's steps, not balance
 
+/**
+ * Whether the lit glint fades in the floor's coming step: stepFloor steps the tick and fades a glint whose time is up
+ * (stepGlint) before the tick's presses apply, so a GRAB pressed now reaches nothing of the glint's.
+ */
+const fadesThisStep = (floor: DevFloor): boolean => floor.moments.glint !== null && floor.tick + 1 >= floor.moments.glint.untilTick;
+
 /** How an AI level plays a pack of wolves (RULE-4's levels): a Rookie a rookie, a Trader a regular, a Tycoon a veteran. */
 const WOLF_LEVEL: Record<AiLevelId, WolfFightLevel> = { rookie: 'rookie', trader: 'regular', tycoon: 'veteran' };
 
@@ -352,9 +358,12 @@ export class DevelopHand {
     this.pack = null;
     if (c.stunnedUntilTick !== undefined && floor.tick < c.stunnedUntilTick) return IDLE_INPUT;
     // A press that comes first wherever it stands: pelts at a store door (the door's LEAVE waits behind SELL), and a
-    // glint within reach, raced or not (ENTER, ANALYSE, INSTALL wait behind GRAB THE GLINT).
+    // glint within reach, raced or not (ENTER, ANALYSE, INSTALL wait behind GRAB THE GLINT). Never GRAB for a glint
+    // that fades in the coming step: the press applies after it, to the row below, such as ANALYSE of the land
+    // underfoot, an assay no plan priced (FM-glint-fade).
     const first = reachOf(floor, state, me, cfg, { secondsLeft }).kind;
-    if ((c.pelts > 0 && first === 'sell') || first === 'grab') return { x: 0, y: 0, act: true };
+    const fading = fadesThisStep(floor);
+    if ((c.pelts > 0 && first === 'sell') || (first === 'grab' && !fading)) return { x: 0, y: 0, act: true };
     if (c.assayUntilTick !== null && floor.tick < c.assayUntilTick) return null;
     const g = floor.moments.glint;
     // Whether it would race is drawn once a glint (GLINT.botShare); whether it can, every tick the glint is lit and it
@@ -375,7 +384,8 @@ export class DevelopHand {
     // the pub's, and every step left on the list after the glint (RULE-8).
     const racing = g !== null && this.racingGlint === g.sinceTick;
     const spare = !cfg.steer.botsSpareTime || (racing && secondsLeft > pubSeconds(state, cfg, c) + this.margin(cfg, c) && this.fitsDetour(view, c, glintMiddle(g)));
-    if (g && racing && spare) {
+    // A glint fading in the coming step can no longer be pressed for: the race is over.
+    if (g && racing && spare && !fading) {
       const input = this.chaser.seek(view, glintMiddle(g), 'grab');
       if (input) return input;
     }
