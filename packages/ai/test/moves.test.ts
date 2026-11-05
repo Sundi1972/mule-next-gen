@@ -268,6 +268,7 @@ const COVERAGE = {
   voteLaw: { move: 'voteLaw' },
   donate: { excluded: "AI donations are WS1's C28 (G-5), still to come" },
   repair: { excluded: "the AI Governor repairs in a later C25 step (G-5); a damaged object waits for a human Governor's repair" },
+  setSiteBid: { excluded: 'the AI Governor bids for a site in a later C25 step (G-5); until then it commissions only plot-free objects' },
   continue: { excluded: 'host only' },
   steer: { excluded: FLOOR_INPUT },
   act: { excluded: FLOOR_INPUT },
