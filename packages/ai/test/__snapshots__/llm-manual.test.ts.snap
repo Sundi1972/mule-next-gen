@@ -125,6 +125,42 @@ Does: Done with this stage, or with false not done after all: the election's ann
 Legal when: always, in those phases.
 Cost: free.
 
+### commission
+In: planning. Args: id (park | hospital | observatory | stadium | spaceport).
+Does: The Governor commissions a prestige object for the colony; the fund and donors pay for it from the next upkeep, and it builds once paid (and sited, if it needs a plot).
+Legal when: the game plays with the colony's council (else: "This game plays without the colony's council"); the votes are over (else: "Commission once the votes are over"); you are the Governor (else: "Only the Governor commissions for the colony"); the object is one the colony can build (else: "The colony can't build that"); the colony has none of it (else: "The colony already has a <name>"); the colony is not already building it (else: "The colony is already building the <name>").
+Cost: free.
+
+### payStrike
+In: planning.
+Does: The Governor pays this month's general strikers from the colony fund, so the struck good produces in full.
+Legal when: the game plays with the colony's council (else: "This game plays without the colony's council"); there is a strike this month (else: "There is no strike to pay off"); the votes are over (else: "Pay the strikers once the votes are over"); you are the Governor (else: "Only the Governor pays the strikers"); the strikers are not paid yet (else: "The strikers are already paid"); the fund covers what the strikers want (else: "The fund has <fund> cr; the strikers want <cost> cr").
+Cost: free.
+
+### repair
+In: planning. Args: id (park | hospital | observatory | stadium | spaceport).
+Does: The Governor pays from the colony fund to mend a damaged prestige object, so it stands again and counts its prestige.
+Legal when: the game plays with the colony's council (else: "This game plays without the colony's council"); the votes are over (else: "Repair once the votes are over"); you are the Governor (else: "Only the Governor repairs for the colony"); the object is damaged (else: "The <name> isn't damaged"); the fund covers the repair (else: "The fund has <fund> cr; the repair costs <cost> cr").
+Cost: free.
+
+### setSiteBid
+In: planning. Args: id (park | hospital | observatory | stadium | spaceport), maxBid (number).
+Does: The Governor sets the colony's top bid for a commissioned object's plot at the land auction, paid from the fund; null, the colony does not bid.
+Legal when: the game plays with the colony's council (else: "This game plays without the colony's council"); the votes are over (else: "Set the bid once the votes are over"); you are the Governor (else: "Only the Governor sets the colony's bid"); a commissioned object is waiting for a site (else: "Nothing is waiting for a site"); the object needs a plot (else: "The <name> needs no plot"); it has no site yet (else: "The <name> already has its site"); the bid is whole credits, or null (else: "Bid a whole number of credits").
+Cost: free.
+
+### propose
+In: planning. Args: proposal ({ kind: 'enact', law, setting, replaces? } | { kind: 'repeal', law } | null).
+Does: The Governor puts a law, a new setting or a repeal to the next planning's ballot; null withdraws it.
+Legal when: the game plays with a Governor (else: "This game plays without a Governor"); the votes are over (else: "Propose once the votes are over"); you are the Governor (else: "Only the Governor proposes a law"); the law is in the colony's book (else: "That law is not in the colony's book"); it did not fail too recently (else: "That proposal failed in month <month>; it can come back in month <month>"); a repeal names a law in force (else: "That law is not in force"); the setting is one the law has (else: "<law> is set to <settings>"); it changes what is in force (else: "That law is already in force at that setting"); with the book full, it names the law it replaces (else: "<count> laws are in force: pick the one this replaces").
+Cost: free.
+
+### voteLaw
+In: planning. Args: yes (boolean).
+Does: Votes yes or no on the open law ballot; a later vote replaces it until the ballot closes.
+Legal when: the law ballot is open (else: "The law ballot is not open").
+Cost: free.
+
 ## When a move is smart
 Each line names the move and the playbook field you set to play it.
 - claim (LandGrantPlay.ranked): a plot adds 300 to your Worth and makes goods every month after; rank by what it makes over the months left, and a plot beside your others making the same good makes 1 more.

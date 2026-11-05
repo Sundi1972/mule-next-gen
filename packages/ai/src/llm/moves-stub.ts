@@ -13,6 +13,7 @@ import {
   PERCENT,
   POLITICS,
   POLLUTION,
+  PRESTIGE,
   SPECIES_PERK,
   TAX,
   type GameState,
@@ -41,6 +42,12 @@ export type IntentType =
   | 'run'
   | 'vote'
   | 'setTax'
+  | 'commission'
+  | 'payStrike'
+  | 'repair'
+  | 'setSiteBid'
+  | 'propose'
+  | 'voteLaw'
   | 'continue'
   | 'steer'
   | 'act';
@@ -72,6 +79,7 @@ const refused = (condition: string, refusal: string) => `${condition} (else: "${
 const pct = (share: number) => `${Math.round(share * PERCENT)}%`;
 const OUTFITS = Object.keys(MULE.outfitCost) as Outfit[];
 const PLOT: MoveArg = { name: 'plot', kind: 'plot' };
+const PRESTIGE_IDS = Object.keys(PRESTIGE);
 const { min: TAX_MIN, max: TAX_MAX, maxStep: TAX_STEP } = POLITICS.tax;
 
 /** The checks every development move passes first, in the order the server and the engine make them. */
@@ -339,5 +347,102 @@ export const MOVES: MoveTable = {
     legalWhen: () => [],
     cost: null,
     args: [{ name: 'done', kind: 'boolean' }],
+  },
+  commission: {
+    type: 'commission',
+    command: 'commission',
+    phases: ['planning'],
+    does: () =>
+      'The Governor commissions a prestige object for the colony; the fund and donors pay for it from the next upkeep, and it builds once paid (and sited, if it needs a plot).',
+    legalWhen: () => [
+      refused("the game plays with the colony's council", "This game plays without the colony's council"),
+      refused('the votes are over', 'Commission once the votes are over'),
+      refused('you are the Governor', 'Only the Governor commissions for the colony'),
+      refused('the object is one the colony can build', "The colony can't build that"),
+      refused('the colony has none of it', 'The colony already has a <name>'),
+      refused('the colony is not already building it', 'The colony is already building the <name>'),
+    ],
+    cost: null,
+    args: [{ name: 'id', kind: 'enum', values: PRESTIGE_IDS }],
+  },
+  payStrike: {
+    type: 'payStrike',
+    command: 'payStrike',
+    phases: ['planning'],
+    does: () => "The Governor pays this month's general strikers from the colony fund, so the struck good produces in full.",
+    legalWhen: () => [
+      refused("the game plays with the colony's council", "This game plays without the colony's council"),
+      refused('there is a strike this month', 'There is no strike to pay off'),
+      refused('the votes are over', 'Pay the strikers once the votes are over'),
+      refused('you are the Governor', 'Only the Governor pays the strikers'),
+      refused('the strikers are not paid yet', 'The strikers are already paid'),
+      refused('the fund covers what the strikers want', 'The fund has <fund> cr; the strikers want <cost> cr'),
+    ],
+    cost: null,
+    args: [],
+  },
+  repair: {
+    type: 'repair',
+    command: 'repair',
+    phases: ['planning'],
+    does: () => 'The Governor pays from the colony fund to mend a damaged prestige object, so it stands again and counts its prestige.',
+    legalWhen: () => [
+      refused("the game plays with the colony's council", "This game plays without the colony's council"),
+      refused('the votes are over', 'Repair once the votes are over'),
+      refused('you are the Governor', 'Only the Governor repairs for the colony'),
+      refused('the object is damaged', "The <name> isn't damaged"),
+      refused('the fund covers the repair', 'The fund has <fund> cr; the repair costs <cost> cr'),
+    ],
+    cost: null,
+    args: [{ name: 'id', kind: 'enum', values: PRESTIGE_IDS }],
+  },
+  setSiteBid: {
+    type: 'setSiteBid',
+    command: 'setSiteBid',
+    phases: ['planning'],
+    does: () =>
+      "The Governor sets the colony's top bid for a commissioned object's plot at the land auction, paid from the fund; null, the colony does not bid.",
+    legalWhen: () => [
+      refused("the game plays with the colony's council", "This game plays without the colony's council"),
+      refused('the votes are over', 'Set the bid once the votes are over'),
+      refused('you are the Governor', "Only the Governor sets the colony's bid"),
+      refused('a commissioned object is waiting for a site', 'Nothing is waiting for a site'),
+      refused('the object needs a plot', 'The <name> needs no plot'),
+      refused('it has no site yet', 'The <name> already has its site'),
+      refused('the bid is whole credits, or null', 'Bid a whole number of credits'),
+    ],
+    cost: null,
+    args: [
+      { name: 'id', kind: 'enum', values: PRESTIGE_IDS },
+      { name: 'maxBid', kind: 'number' },
+    ],
+  },
+  propose: {
+    type: 'propose',
+    command: 'propose',
+    phases: ['planning'],
+    does: () => "The Governor puts a law, a new setting or a repeal to the next planning's ballot; null withdraws it.",
+    legalWhen: () => [
+      refused('the game plays with a Governor', 'This game plays without a Governor'),
+      refused('the votes are over', 'Propose once the votes are over'),
+      refused('you are the Governor', 'Only the Governor proposes a law'),
+      refused("the law is in the colony's book", "That law is not in the colony's book"),
+      refused('it did not fail too recently', 'That proposal failed in month <month>; it can come back in month <month>'),
+      refused('a repeal names a law in force', 'That law is not in force'),
+      refused('the setting is one the law has', '<law> is set to <settings>'),
+      refused('it changes what is in force', 'That law is already in force at that setting'),
+      refused('with the book full, it names the law it replaces', '<count> laws are in force: pick the one this replaces'),
+    ],
+    cost: null,
+    args: [{ name: 'proposal', kind: 'enum', values: ["{ kind: 'enact', law, setting, replaces? }", "{ kind: 'repeal', law }", 'null'] }],
+  },
+  voteLaw: {
+    type: 'voteLaw',
+    command: 'voteLaw',
+    phases: ['planning'],
+    does: () => 'Votes yes or no on the open law ballot; a later vote replaces it until the ballot closes.',
+    legalWhen: () => [refused('the law ballot is open', 'The law ballot is not open')],
+    cost: null,
+    args: [{ name: 'yes', kind: 'boolean' }],
   },
 };

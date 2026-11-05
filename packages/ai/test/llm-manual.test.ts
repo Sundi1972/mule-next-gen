@@ -22,6 +22,12 @@ const EVERY_MOVE: { readonly [T in AiAction['type']]: true } = {
   drone: true,
   list: true,
   unlist: true,
+  commission: true,
+  payStrike: true,
+  repair: true,
+  setSiteBid: true,
+  propose: true,
+  voteLaw: true,
 };
 
 /** The text under one `## ` heading, up to the next. */
