@@ -141,7 +141,7 @@ const text = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/&#x27;|&#3
 const plotStage = (html: string, x: number, y: number) => html.match(new RegExp(`data-testid="plot-object-${x}-${y}"[^>]*data-stage="(\\w+)"`))?.[1];
 
 describe('B-AC-26-1: each colony event shows in its phase’s show with its glyph and its words', () => {
-  it.each(NINE)('$ev.key in $ev.phase: its badge, its title, its words in the log; nothing prints "undefined"', ({ ev, words }) => {
+  it.each(NINE)('B-AC-26-1: $ev.key in $ev.phase: its badge, its title, its words in the log; nothing prints "undefined"', ({ ev, words }) => {
     for (const where of ['tv', 'alone'] as const) {
       const frames = showFrames([ev], where);
       for (const html of frames) {
@@ -159,14 +159,14 @@ describe('B-AC-26-1: each colony event shows in its phase’s show with its glyp
     expect(text(inside(result([ev], 'tv'), 'log'))).toContain(words);
   });
 
-  it('the development show calls its stretch a turn, the others a month', () => {
+  it('B-AC-26-1: the development show calls its stretch a turn, the others a month', () => {
     expect(text(inside(result([NINE[4]!.ev], 'tv'), 'log'))).toContain('This turn');
     expect(text(inside(result([FESTIVAL], 'tv'), 'log'))).toContain('This month');
   });
 });
 
 describe('B-AC-26-2: the festival on a phone alone reads as the colony’s mood', () => {
-  it('Lena’s phone, no TV: the colony’s news in mood and prestige, never "Not you: Store +6 Food"', () => {
+  it('B-AC-26-2: Lena’s phone, no TV: the colony’s news in mood and prestige, never "Not you: Store +6 Food"', () => {
     for (const reduced of [false, true]) {
       const card = text(inside(result([FESTIVAL], 'alone', { reduced }), 'phone-card'));
       expect(card).toContain('Festival');
@@ -183,7 +183,7 @@ describe('B-AC-26-3: the riot takes a third of each shelf and damages one object
   // The view's tiles are after the event: the park is damaged already.
   const after = tilesWith('damaged');
 
-  it('the park: the store’s shelves lose a third, the park keeps standing until the riot reaches it, then its HIT mark', () => {
+  it('B-AC-26-3: the park: the store’s shelves lose a third, the park keeps standing until the riot reaches it, then its HIT mark', () => {
     const ev = [riot('park')];
     const shelves = storyAt(ev, 4.3, { map: after });
     expect(has(shelves, 'riot-storage')).toBe(true);
@@ -200,7 +200,7 @@ describe('B-AC-26-3: the riot takes a third of each shelf and damages one object
     }
   });
 
-  it('the hospital: damaged, said on the card and in the log, with no mark on the map', () => {
+  it('B-AC-26-3: the hospital: damaged, said on the card and in the log, with no mark on the map', () => {
     const ev = [riot('hospital')];
     for (const html of showFrames(ev, 'tv')) expect(text(html)).not.toContain('HIT');
     const end = result(ev, 'tv');
@@ -209,7 +209,7 @@ describe('B-AC-26-3: the riot takes a third of each shelf and damages one object
     expect(text(inside(end, 'log'))).toContain('Hospital damaged');
   });
 
-  it('the damaged object’s build-site row says it counts 0 until repaired', () => {
+  it('B-AC-26-3: the damaged object’s build-site row says it counts 0 until repaired', () => {
     const park: ColonyProjectView = { id: 'park', name: 'Park', stage: 'damaged', cost: { credits: 420, goods: {} }, funded: { credits: 420, goods: {} }, buildMonths: 1, monthsLeft: null, plot: PARK.y * W + PARK.x, prestige: 2, upkeep: 30, repairCost: 150, plaque: [] };
     const row = renderToStaticMarkup(createElement(ProjectRow, { p: park, players: [], size: 'tv' }));
     expect(row).toContain('data-stage="damaged"');
@@ -218,7 +218,7 @@ describe('B-AC-26-3: the riot takes a third of each shelf and damages one object
 });
 
 describe('B-AC-26-4: the planning strike announcement on the TV', () => {
-  it('strikers walk out to every Food plot, each gets STRIKE · 20%, and the log says what it costs', () => {
+  it('B-AC-26-4: strikers walk out to every Food plot, each gets STRIKE · 20%, and the log says what it costs', () => {
     const ev = [STRIKE];
     const seg = segOf(ev, 'tv');
     expect(text(inside(screen(ev, seg.announceAt + 0.3, 'tv'), 'title-card'))).toContain('unless the Governor pays the strikers 240 cr');
@@ -234,7 +234,7 @@ describe('B-AC-26-4: the planning strike announcement on the TV', () => {
     expect(text(inside(result(ev, 'tv'), 'log'))).toContain('Food at 20% on 4 farms unless the Governor pays');
   });
 
-  it('paid: the server sends no strike event, so production shows no story and no striker', () => {
+  it('B-AC-26-4: paid: the server sends no strike event, so production shows no story and no striker', () => {
     const html = screen([], 1, 'tv');
     expect(html).not.toContain('striker-');
     expect(html).not.toContain('STRIKE');
@@ -254,13 +254,13 @@ describe('B-AC-26-5: the four new changes have words, rising and falling, on any
     { f: { on: 'colony', what: 'air', delta: 4 }, words: 'Air +4', good: false },
     { f: { on: OSSA, what: 'reputation', delta: 1 }, words: 'Reputation +1', good: true },
     { f: { on: OSSA, what: 'reputation', delta: -1 }, words: 'Reputation −1', good: false },
-  ] as { f: ShowEffect; words: string; good: boolean }[])('$words', ({ f, words, good }) => {
+  ] as { f: ShowEffect; words: string; good: boolean }[])('B-AC-26-5: $words', ({ f, words, good }) => {
     const html = chip(f);
     expect(text(html).trim()).toBe(`${good ? '▲' : '▼'} ${words}`);
     expect(html).toContain(`data-delta="${good ? 1 : -1}"`);
   });
 
-  it('a mood change on today’s events is said too: the immigration wave and a MULE theft', () => {
+  it('B-AC-26-5: a mood change on today’s events is said too: the immigration wave and a MULE theft', () => {
     const immigration = event('immigrationWave', 'planning', { title: 'Immigration wave', sign: 'good', effects: [{ on: 'colony', what: 'colonists', delta: 12 }, { on: 'colony', what: 'mood', delta: 3 }] });
     const end = result([immigration], 'tv');
     expect(text(inside(end, 'effects-card'))).toContain('Mood +3');
@@ -276,7 +276,7 @@ describe('B-AC-26-5: the four new changes have words, rising and falling, on any
 
 describe('B-AC-26-6: with politics off, no colony event is ever rolled', () => {
   const COLONY: ColonyEventKey[] = ['generalStrike', 'festival', 'riot', 'emigrationWave', 'volunteerCleanup', 'storeStrike', 'walkout', 'loyalCrew', 'blamedForUnrest'];
-  it('60 games, months 2 to 12, every phase that rolls', () => {
+  it('B-AC-26-6: 60 games, months 2 to 12, every phase that rolls', () => {
     const phases: Phase[] = ['planning', 'development', 'production', 'auction', 'upkeep'];
     const rolled = new Set<string>();
     for (let seed = 1; seed <= 60; seed++) {
