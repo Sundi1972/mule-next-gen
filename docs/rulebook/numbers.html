@@ -14,12 +14,12 @@
 <main class="rb-main">
 <article>
 <h1>Every number</h1>
-<p class="rb-lede">Every balancing value in the game, as the game's settings file holds it today: 1001 settings in 50 groups, each with what it does.</p>
+<p class="rb-lede">Every balancing value in the game, as the game's settings file holds it today: 1002 settings in 50 groups, each with what it does.</p>
 <p>This page is generated from the game's settings file, <code>packages/engine/src/config.ts</code>, on trunk. Each group below is one block of that file, named the way the code names it; the setting is its full path, and the note is the comment written beside it in the file. A setting without a note of its own points to the nearest note that explains it. The rules these numbers drive are explained in <a href="index.html">the other chapters</a>.</p>
 <p>Do not edit this page by hand. To regenerate it after <code>config.ts</code> changes, run from the repo root:</p>
 <p><code>pnpm --filter @mule/engine exec tsx ../../docs/rulebook/build-numbers.ts</code> then <code>node docs/rulebook/build-index.mjs</code></p>
 <div class="box next"><h4>Not on this page</h4><p><code>MAP_SIZE</code> is kept inside <code>config.ts</code> without being exported, so this page cannot read it.</p></div>
-<p class="code-ref">Built from <code>config.ts</code> with fingerprint <code>5e5d02291682</code> (the first 12 characters of its SHA-256).</p>
+<p class="code-ref">Built from <code>config.ts</code> with fingerprint <code>2c55d779dfcb</code> (the first 12 characters of its SHA-256).</p>
 
 <h2 id="good-config"><code>GOOD_CONFIG</code> <span class="pill built">In the game</span></h2>
 <div class="table-wrap"><table>
@@ -310,8 +310,9 @@
 <tr><td><code>UPKEEP.crew.raw</code></td><td class="n">1</td><td>No note in the settings file.</td></tr>
 <tr><td><code>UPKEEP.crew.factory</code></td><td class="n">2</td><td>No note in the settings file.</td></tr>
 <tr><td><code>UPKEEP.crew.greenBelt</code></td><td class="n">0</td><td>No note in the settings file.</td></tr>
+<tr><td><code>UPKEEP.offOutputShare</code></td><td class="n">0.2</td><td>Share of its output a plot turned off for want of Energy makes, rounded half up (Heiko, 5 Nov: 20%). A turned-off factory makes it from the same share of its non-Energy inputs, rounded up (PM, 5 Nov: nothing from nothing), and takes none when its share of output rounds to 0 (PM, 5 Nov: nothing spent for nothing).</td></tr>
 <tr><td><code>UPKEEP.irrigated</code></td><td class="n">[&quot;food&quot;]</td><td>Plots that need irrigation: when their owner holds less Water than the household and crew need, they make half (on top of any Energy shortfall).</td></tr>
-<tr><td><code>UPKEEP.shortOutputShare</code></td><td class="n">0.5</td><td>Share of its output a plot makes without the Energy (or, for an irrigated plot, the Water) it needs.</td></tr>
+<tr><td><code>UPKEEP.shortOutputShare</code></td><td class="n">0.5</td><td>Share of its output an irrigated plot makes when its owner is short of Water, rounded down. (Energy no longer halves: offOutputShare, AM-17.)</td></tr>
 <tr><td><code>UPKEEP.colonistsPerUnit</code></td><td class="n">20</td><td>Colonists need 1 Food and 1 Water a month per this many colonists.</td></tr>
 <tr><td><code>UPKEEP.colonistEnergyShare</code></td><td class="n">0.5</td><td>Colonists&#39; Energy demand, as a share of their Food and Water units.</td></tr>
 <tr><td><code>UPKEEP.colonistsPerMedicine</code></td><td class="n">50</td><td>Colonists need 1 Medicine a month per this many colonists (more when the air makes them sick).</td></tr>
@@ -328,13 +329,13 @@
 </table></div>
 
 <h3 id="upkeep-energy-use"><code>UPKEEP.energyUse</code></h3>
-<p>Energy a raw plot burns a month, by what it makes. Factories burn what their recipe says. Without it a raw plot makes half, a factory nothing.</p>
+<p>Energy a raw plot burns a month, by what it makes. Factories burn what their recipe says. An Energy plot pays its use from its own output and is never turned off; an owner short of Energy turns its other plots off, biggest use first, until the rest fit (AM-17). Energy plots 1: Heiko, 5 Nov.</p>
 <div class="table-wrap"><table>
 <thead><tr><th>Setting</th><th class="n">Value</th><th>What it does</th></tr></thead>
 <tbody>
 <tr><td><code>UPKEEP.energyUse.food</code></td><td class="n">1</td><td>See the note on <code>UPKEEP.energyUse</code>.</td></tr>
 <tr><td><code>UPKEEP.energyUse.water</code></td><td class="n">1</td><td>See the note on <code>UPKEEP.energyUse</code>.</td></tr>
-<tr><td><code>UPKEEP.energyUse.energy</code></td><td class="n">0</td><td>See the note on <code>UPKEEP.energyUse</code>.</td></tr>
+<tr><td><code>UPKEEP.energyUse.energy</code></td><td class="n">1</td><td>See the note on <code>UPKEEP.energyUse</code>.</td></tr>
 <tr><td><code>UPKEEP.energyUse.smithore</code></td><td class="n">2</td><td>See the note on <code>UPKEEP.energyUse</code>.</td></tr>
 <tr><td><code>UPKEEP.energyUse.crystite</code></td><td class="n">2</td><td>See the note on <code>UPKEEP.energyUse</code>.</td></tr>
 <tr><td><code>UPKEEP.energyUse.rareEarth</code></td><td class="n">2</td><td>See the note on <code>UPKEEP.energyUse</code>.</td></tr>
@@ -1707,7 +1708,7 @@
 <thead><tr><th>Setting</th><th class="n">Value</th><th>What it does</th></tr></thead>
 <tbody>
 <tr><td><code>AI_PLANS.on</code></td><td class="n">true</td><td>Seats play their playbook; false: every seat plays the phase-by-phase asks, as before playbooks.</td></tr>
-<tr><td><code>AI_PLANS.ownPhases</code></td><td class="n">false</td><td>A feature switch, not a balance value: a seat&#39;s own path plays its drafted development and auction parts; false, today&#39;s (AM-26).</td></tr>
+<tr><td><code>AI_PLANS.ownPhases</code></td><td class="n">false</td><td>A feature switch, not a balance value: a seat&#39;s own path plays its drafted development and auction parts; false, today&#39;s. See AM-26.</td></tr>
 <tr><td><code>AI_PLANS.moneyMaker.plots</code></td><td class="n">3</td><td>A good&#39;s score sums its install gain over this many of the seat&#39;s best plots for it (own idle and free).</td></tr>
 <tr><td><code>AI_PLANS.moneyMaker.rivalDiscount</code></td><td class="n">0.15</td><td>Each rival plot already making the good cuts its score by this share.</td></tr>
 <tr><td><code>AI_PLANS.moneyMaker.weight</code></td><td class="n">1</td><td>Weight of the &quot;My money-maker&quot; consideration in a development pick.</td></tr>
