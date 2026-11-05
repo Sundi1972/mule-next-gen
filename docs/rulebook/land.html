@@ -1,3 +1,21 @@
+<h3 id="redesign-designed">What you will see at the table</h3>
+<p>Heiko agreed the goals and four rules on 5 Nov: the land's hints stay; the marker for Crystite and Rare earth is yours alone, after geology; "the geologist" is Analyse on the plot; the 0 to 3 scale comes to the screen first, and the hidden numbers change only if the Strategy team's simulator says they hold. He chose approach B ("A plus My plots"), with the drone's report in the side rail.</p>
+<ul>
+<li><strong>Scan, and see at once.</strong> In planning, the Geo drone: tap up to <span class="num">2</span> free plots, then <em>Scan · 60 cr</em>. The plots pulse for a second and the report opens in the rail: each plot's land, what it is best for, any Crystite or Rare earth, and every good's dots. One drone each planning.</li>
+<li><strong>My plots.</strong> A tool beside Look in planning, and a <em>Plots</em> chip on the walking screen in development: every plot you own, one row each, with its MULE and every good's dots. A plot nobody analysed says how to find out. In the store, the "Your plots" box shows dots instead of words.</li>
+<li><strong>Analyse says what it found.</strong> After Analyse on any plot, not only your own, a card opens beside it for a few seconds with its dots and what it is best for.</li>
+<li><strong>The gem.</strong> On your own map only: a plot you analysed shows its best good as dots, and a gem on its corner if it holds Crystite or Rare earth. The TV never shows either.</li>
+<li><strong>One scale, 0 to 3.</strong> On every screen, as the table below. The production numbers do not change.</li>
+</ul>
+<div class="table-wrap"><table>
+<thead><tr><th>Good</th><th><span class="num">0</span></th><th><span class="num">1</span></th><th><span class="num">2</span></th><th><span class="num">3</span></th></tr></thead>
+<tbody>
+<tr><td>Food, Water, Energy</td><td>rating <span class="num">-2</span> or <span class="num">-1</span> (makes <span class="num">1</span>)</td><td><span class="num">0</span> (makes <span class="num">2</span>)</td><td><span class="num">+1</span> (makes <span class="num">3</span>)</td><td><span class="num">+2</span> or <span class="num">+3</span> (makes <span class="num">4</span> to <span class="num">5</span>)</td></tr>
+<tr><td>Smithore, Crystite, Rare earth</td><td><span class="num">0</span> (nothing to mine)</td><td><span class="num">1</span></td><td><span class="num">2</span></td><td><span class="num">3</span> or <span class="num">4</span></td></tr>
+</tbody>
+</table></div>
+<div class="box why"><h4>Why it is like this</h4><p>Heiko at the table, 5 Nov: "I failed to use the drone … mark two plots first then click on scan and then I would get a detailed report", and "an easy way for me to always look at my lots and see the plots' resources". He chose B over the thinner A because A had no list of your plots. The report sits in the rail, not on the map, because two reports on the map cover a sixth of it on a sideways phone.</p></div>
+<div class="box next"><h4>What is changing</h4><p>Designed, not yet built. Three pieces, each usable on its own: Scan and the report; My plots; the card after Analyse, the gem and the 0 to 3 dots. The drone's results landing at Scan instead of at the land grant is a rule change for the Auctions team (WS3); the gem on the map is the Table team's map (WS4); the computer players simply learn their drone's results earlier, which the Strategy team (WS1) checks with the simulator.</p></div>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -327,7 +345,7 @@
 <p class="code-ref">In the code: <code>packages/engine/src/observe.ts::observe</code> · <code>packages/engine/src/map.ts::expectedGround</code> · <code>apps/server/src/mule-game.ts::viewFor</code> · <code>config.ts::STRATEGIST.analyseWhenClose</code> · <code>config.ts::STRATEGIST.analysesPerMonth</code></p>
 <p class="owner">Kept current by: the Auctions team (WS3) for the views, the Strategy team (WS1) for the computer players.</p>
 
-<h2 id="drone-geology-redesign">Drone and geology redesign <span class="pill open">Being designed</span></h2>
+<h2 id="drone-geology-redesign">Drone and geology redesign <span class="pill designed">Designed</span></h2>
 <p>On 5 Nov Heiko played a game, could not get the drone to work as he expected, and asked for a redesign of how players learn about the ground. In his words, condensed:</p>
 <ol>
 <li><strong>Pick, then scan.</strong> Mark the plots first, press Scan, and get a detailed report.</li>
@@ -348,7 +366,7 @@
 </tbody>
 </table></div>
 <div class="box next"><h4>What is changing</h4><p>Routed by the PM on 5 Nov to the UX team (WS6), which writes a plain "how it works today" with screenshots from the real build and the design goals, due 5 Nov 23:00Z, for Heiko to read before any approaches. Changing every rating to <span class="num">0</span> to <span class="num">3</span> moves production and needs a balance measurement from the Strategy team (WS1) first. The engine and server side (drone, analysis, the rating type) is the Auctions team's (WS3); the rings and the map maker are the Maps team's (WS5); the computer players' use of ratings is WS1's and WS9's; the TV is WS4's. Nothing here is decided yet.</p></div>
-<p class="code-ref">In the code: <code>game.ts::orderGeoDrone</code> · <code>game.ts::analysePlot</code> · <code>packages/engine/src/types.ts::Ground</code> · <code>apps/web/src/game/derive.ts::groundPips</code> · <code>apps/web/src/phone/ground.tsx::GroundCard</code></p>
+<p class="code-ref">In the code: <code>game.ts::orderGeoDrone</code> · <code>game.ts::analysePlot</code> · <code>packages/engine/src/types.ts::Ground</code> · <code>apps/web/src/game/derive.ts::groundPips</code> · <code>apps/web/src/phone/ground.tsx::GroundCard</code> · spec <code>docs/specs/2026-11-05-ws6-plot-info.md</code> · mock <code>design/mocks/plot-info</code> at d3f64a51</p>
 <p class="owner">Kept current by: the UX team (WS6), with WS3 and WS5.</p>
 </article>
 </main>
