@@ -310,10 +310,9 @@ describe('MuleGame', () => {
     it("B-AC-A7-3 (F5): a Continue at a side pick where nobody can trade says it moved on, not that a walk started", () => {
       const { game } = toAuction();
       const first = good(game)!;
-      // Everyone passes: there is nobody to walk for.
-      for (const id of ['s1', 's2']) game.handle(id, { type: 'declare', side: 'pass' });
+      // Everyone is a buyer (RULE-2) and none can pay: there is nobody to walk for.
       const state = (game as unknown as { state: GameState }).state;
-      declareRole(state, 's3', 'pass');
+      for (const p of state.players) p.money = 0;
       game.handle('s1', { type: 'continue' });
       expect(game.viewFor(null).news[0]).toBe(`Heiko moved on from ${GOOD_NAME[first]} without Mia.`);
     });

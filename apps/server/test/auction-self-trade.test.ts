@@ -1,4 +1,4 @@
-import { RuleError, WALK, type GameState } from '@mule/engine';
+import { RuleError, WALK, type GameState, type Good } from '@mule/engine';
 import { describe, expect, it } from 'vitest';
 import { GRANT_TICK_MS, MuleGame } from '../src/mule-game.js';
 import { fakeContext, readyAll, seats } from './fake-context.js';
@@ -28,7 +28,7 @@ function toStatus() {
  * Into the walk on the good that is up, the store with plenty and room to buy, `arrange` setting purses and stock on
  * the status screen. The AI seat holds none and has no money, so it can neither sell to nor buy from anyone here.
  */
-function toWalk(arrange: (state: GameState, good: GameState['auction'] extends infer A ? NonNullable<A>['good'] & string : never) => void = () => {}) {
+function toWalk(arrange: (state: GameState, good: Good) => void = () => {}) {
   const g = toStatus();
   const { game, advance, state, good } = g;
   state.store.stock[good] = 500;
@@ -49,7 +49,7 @@ function toWalk(arrange: (state: GameState, good: GameState['auction'] extends i
 }
 
 const walker = (game: MuleGame, id: string) => game.viewFor(id).auction!.walkers.find((w) => w.id === id)!;
-const stock = (state: GameState, id: string, good: string) => state.players.find((p) => p.id === id)!.stock[good as keyof GameState['players'][number]['stock']];
+const stock = (state: GameState, id: string, good: Good) => state.players.find((p) => p.id === id)!.stock[good];
 
 /** Holds Up or Down until the view says the walker stands at the store's line, then lets go. */
 function toTheLine(game: MuleGame, advance: (ms: number) => void, id: string, dir: 'up' | 'down') {
@@ -92,6 +92,8 @@ describe('RULE-1 and RULE-3: at the store\'s line units trade by themselves, one
   it('B-AC-1: Brix walks his 12 down to the store\'s line and does nothing else: they sell one by one, faster, past his need, until one tap up stops them', () => {
     const { game, advance, state, good, walk } = toWalk((s, g) => {
       s.players.find((p) => p.id === 's2')!.stock[g] = 12;
+      // The store buys only as many as it is willing to this month (storeBudget); here it will take all twelve.
+      s.auction!.storeBudget = 50;
     });
     game.handle('s2', { type: 'declare', side: 'seller' });
     walk();

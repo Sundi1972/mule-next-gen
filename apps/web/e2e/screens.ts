@@ -158,13 +158,9 @@ try {
   // Keep walking until units change hands, then picture the trade.
   // A trade is quick, so both screens are taken the moment units start changing hands.
   const deal = phone.getByTestId('my-deal').filter({ hasText: /[2-9] units/ });
-  const go = phone.getByTestId('line-go');
-  await deal.or(go).first().waitFor({ timeout: 20_000 });
-  // With the store the only buyer, at its line the phone first asks how many (A-6): sell what it offers.
-  if ((await go.count()) > 0) {
-    await go.click();
-    await phone.getByText(/Selling to the store: [1-9] of/).or(phone.getByText(/^You sold/)).first().waitFor({ timeout: 10_000 });
-  }
+  // With the store the only buyer, at its line units sell by themselves (the auto-trade amendment): the rail says so.
+  const selling = phone.getByTestId('line-hint').filter({ hasText: /^Selling / });
+  await deal.or(selling).first().waitFor({ timeout: 20_000 });
   await Promise.all([phone.screenshot({ path: join(out, 'phone-land-6-auction-trade.png') }), tv.screenshot({ path: join(out, 'tv-6-auction-trade.png') })]);
   await phone.keyboard.up('ArrowDown');
   await phone.getByRole('button', { name: 'Night' }).click();

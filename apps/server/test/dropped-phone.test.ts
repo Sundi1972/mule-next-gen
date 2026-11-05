@@ -76,8 +76,8 @@ describe('a dropped phone in the goods auction', () => {
     expect(walker().at, 'back at the bottom edge').toBeLessThanOrEqual(game.viewFor(null).auction!.lo);
     game.handle('s2', { type: 'walk', dir: 'up' });
     for (let i = 0; i < 2_000 && game.viewFor(null).auction?.good === good && holdings(game, good).stock === before.stock; i++) {
-      // At the store's line nothing trades until the phone says how many (A-6).
-      if (walker().line && !walker().order) game.handle('s2', { type: 'lineTrade', units: 1 });
+      // At the store's line units trade by themselves (RULE-1): standing there is enough.
+      if (walker().line && walker().dir !== 0) game.handle('s2', { type: 'walk', dir: 'stop' });
       advance(WALK.tickMs);
       expect(walker(), `tick ${i} after rejoining`).toMatchObject({ side: 'buyer', done: false });
     }
@@ -86,7 +86,7 @@ describe('a dropped phone in the goods auction', () => {
 
   it.each([
     ['on a side', () => {}],
-    ['after passing', (game: MuleGame) => game.handle('s2', { type: 'declare', side: 'pass' })],
+    ['after switching to Sell', (game: MuleGame) => game.handle('s2', { type: 'declare', side: 'seller' })],
   ])('FM-dropped-status (A-7): a phone dropped on the status screen %s is held there, on its side and not Done; once s1, the host, moves on the walk starts on the next tick, and the dropped phone sits it out', (_, before) => {
     const { game, advance, good } = toStatus();
     const s2 = () => game.viewFor(null).auction!.walkers.find((w) => w.id === 's2')!;
