@@ -115,13 +115,13 @@ describe('B-AC-20 (AM-19): the phone asks to speed the show up', () => {
     }
   });
 
-  it('Ready waits for the show (the PM\'s ruling, option B): "Watching the show" while it plays, "On to the auction" once it has ended, alone or with a TV', () => {
+  it('Ready waits for the show (the PM\'s ruling, option B): "Watching the show" while it plays, "Ready for the auction" once it has ended, alone or with a TV', () => {
     for (const boards of [0, 1]) {
       const playing = render(boards, MID);
       expect(text(playing, 'ready')).toBe('Watching the show');
       expect(tag(playing, 'ready')).toMatch(/ disabled=""/);
       const over = render(boards, END + 0.5);
-      expect(text(over, 'ready')).toBe('On to the auction');
+      expect(text(over, 'ready')).toBe('Ready for the auction');
       expect(tag(over, 'ready')).not.toMatch(/ disabled=""/);
     }
   });
