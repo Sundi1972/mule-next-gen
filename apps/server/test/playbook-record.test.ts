@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { AI_HANDS, RuleError, type GameRecord, type GameState, type Good } from '@mule/engine';
+import { AI_HANDS, AI_PLANS, RuleError, type GameRecord, type GameState, type Good } from '@mule/engine';
 import type { Decider } from '@mule/ai';
 import type { MuleIntent, MuleView } from '@mule/protocol';
 import { Room, TableError, type ClientEnvelope, type Connection, type GameContext, type ServerEnvelope } from '@tabletop/core';
@@ -137,6 +137,16 @@ const isStep = (e: MuleRecord['events'][number]) => e.type !== 'notice' && e.typ
 const playbooksOf = (record: MuleRecord) => record.events.flatMap((e) => (e.type === 'playbook' ? [e] : []));
 
 describe('AI playbooks in a keyless game record', { timeout: 60_000 }, () => {
+  // The Classic seat's own development and auction parts are recorded only with AI_PLANS.ownPhases on (AM-26), the path
+  // a later PM ruling switches on; these promises are proved there, the record and its replay alike.
+  const ownPhases = AI_PLANS.ownPhases;
+  beforeEach(() => {
+    AI_PLANS.ownPhases = true;
+  });
+  afterEach(() => {
+    AI_PLANS.ownPhases = ownPhases;
+  });
+
   it("B-AC-7: a keyless server game records each AI seat's planning, development and auction playbooks, by 'engine'", async () => {
     const record = await recordedGame();
     expect(record.seats.filter((s) => s.isAi).map((s) => [s.id, s.smart])).toEqual([[SMART, true], [CLASSIC, false]]);

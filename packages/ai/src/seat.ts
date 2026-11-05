@@ -77,6 +77,9 @@ interface AuctionRun {
 /** The `id` of a DecisionRecord the seat builds itself, for a drafted part: no Brain decision, so no Brain id (AM-22). */
 export const DRAFTED_RECORD_ID = 0;
 
+/** The parts AI_PLANS.ownPhases holds back on the own path (AM-26). */
+const OWN_PHASE_KEYS: ReadonlySet<PartKey> = new Set(['development', 'auction']);
+
 const xyOf = (state: GameState, plot: number) => ({ x: state.tiles[plot]!.x, y: state.tiles[plot]!.y });
 const sameSquare = (state: GameState, l: Listing, plot: number) => l.item.x === state.tiles[plot]?.x && l.item.y === state.tiles[plot]?.y;
 
@@ -116,7 +119,8 @@ export interface AiSeatDebug {
  *
  * It drafts lazily at its own ticks (RULE-7): the month's first developTick or developSteer drafts the development
  * part and hands its route to the development hand; each good's first auctionTick, at the good's status screen, plays
- * that good's part (AM-20). So the server and the sim draft at the same step, with no hook of their own.
+ * that good's part (AM-20). So the server and the sim draft at the same step, with no hook of their own. Its own
+ * development and auction drafts wait behind AI_PLANS.ownPhases (AM-26); adopted parts play either way.
  */
 export class AiSeat {
   readonly mind: Mind;
@@ -211,8 +215,14 @@ export class AiSeat {
     if (!ok) p.refused.add(key);
   }
 
+  /**
+   * RULE-6's path for `key`. The own path's development and auction parts play only while AI_PLANS.ownPhases is on
+   * (AM-26): off, the own path plays today's for them, while an adopted part still plays. Read per call, so `--set`
+   * and a test that sets it switch it.
+   */
   private playPath(month: number, key: PartKey): PlayPath {
-    return pathFor({ on: AI_PLANS.on, playbook: this.options.playbook, hasDecider: !!this.options.decider, adopted: this.adopted, month, key });
+    const path = pathFor({ on: AI_PLANS.on, playbook: this.options.playbook, hasDecider: !!this.options.decider, adopted: this.adopted, month, key });
+    return path.by === 'own' && OWN_PHASE_KEYS.has(key) && !AI_PLANS.ownPhases ? { by: 'today' } : path;
   }
 
   /** A draft point: drafts, validates and writes. A draft or validator error is logged and the phase plays today's path (HC-9). */

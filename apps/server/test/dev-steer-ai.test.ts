@@ -128,23 +128,24 @@ function parity(seed: number, politics: boolean): void {
 }
 
 describe('the AI walks the floor on the server as in the sim (arcade C9, HC-4)', () => {
-  // Since PR-3 the seats play their development and auction parts here (the default path), the draft point inside the
-  // floor tick's recorded step on the server and at the same step in the sim (C4, RULE-7).
+  // The default path: the seats play their planning parts, and today's development and auction (AI_PLANS.ownPhases
+  // off, AM-26).
   for (const { seed, politics } of GAMES) {
     it(`T-AC-1 (HC-4): seed ${seed}${politics ? ', politics on' : ''}: an AI-only game ends every development on the server as in the sim`, { timeout: 60_000 }, () => {
       parity(seed, politics);
     });
   }
 
-  // AM-24: the parity runs both ways. Today's path (AI_PLANS.on false) on the first game, a whole game like its
-  // neighbours (a few seconds).
-  it(`T-AC-1 (HC-4, AM-24): seed ${GAMES[0]!.seed} on today's path: an AI-only game ends every development on the server as in the sim`, { timeout: 60_000 }, () => {
-    const saved = AI_PLANS.on;
-    AI_PLANS.on = false;
+  // AM-24: the parity runs both ways. The playbook path (AI_PLANS.ownPhases on) on the first game, the seats' draft
+  // points inside the floor tick's recorded step on the server and at the same step in the sim (C4, RULE-7): a whole
+  // game like its neighbours (a few seconds).
+  it(`T-AC-1 (HC-4, AM-24): seed ${GAMES[0]!.seed} on the playbook path: an AI-only game ends every development on the server as in the sim`, { timeout: 60_000 }, () => {
+    const saved = AI_PLANS.ownPhases;
+    AI_PLANS.ownPhases = true;
     try {
       parity(GAMES[0]!.seed, GAMES[0]!.politics);
     } finally {
-      AI_PLANS.on = saved;
+      AI_PLANS.ownPhases = saved;
     }
   });
 

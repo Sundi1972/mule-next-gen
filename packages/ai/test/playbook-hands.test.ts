@@ -96,7 +96,9 @@ vi.mock('../src/playbook/validate.js', async (importOriginal) => {
   };
 });
 
+const OWN_PHASES = AI_PLANS.ownPhases;
 afterEach(() => {
+  AI_PLANS.ownPhases = OWN_PHASES;
   harness.options = null;
   harness.before = null;
   harness.after = null;
@@ -226,24 +228,18 @@ const ME = 'ai0';
 const MONTH = 2;
 
 /**
- * Runs `fn` with AI_PLANS.ownPhases set to `on`, then puts it back (playbook-draft.test.ts's withPlans, for the one
- * switch). The own path's development and auction parts play only with it on (AM-26); C4's promises for them are
- * proved there, on the path a later PM ruling switches on.
+ * The own path's development and auction parts play only with AI_PLANS.ownPhases on (AM-26). C4's promises for them
+ * are proved with it on, the path a later PM ruling switches on: a test calls this first, and afterEach puts it back.
  */
-function withOwnPhases<T>(on: boolean, fn: () => T): T {
-  const saved = AI_PLANS.ownPhases;
-  AI_PLANS.ownPhases = on;
-  try {
-    return fn();
-  } finally {
-    AI_PLANS.ownPhases = saved;
-  }
+function ownPhasesOn(): void {
+  AI_PLANS.ownPhases = true;
 }
 
 describe('the own path plays today’s development and auction while AI_PLANS.ownPhases is off (AM-26, RULE-6)', { timeout: SLOW_MS }, () => {
   it("B-AC-6, T-AC-13 (RULE-6, AI_PLANS.ownPhases off): a Classic seat's own path plays today's development and auction and writes neither; its planning still writes and plays; an adopted part still plays", () => {
     expect(AI_PLANS.ownPhases, 'the default').toBe(false);
-    const months = 3;
+    // Seed 4's third month is the first in which a seat runs short of cash, so it lists in planning.
+    const [seed, months] = [4, 3];
     /** Per seat and month, the planning acts it played, read at its first development tick. */
     const planningLogs = (into: Map<string, string>) => {
       const first = once();
@@ -256,8 +252,8 @@ describe('the own path plays today’s development and auction while AI_PLANS.ow
       [...starts].map(([month, start]) => ({ month, start, end: t.auctionEnds.get(month)!, records: stableJson(t.records.filter((r) => r.month === month && (r.phase === 'development' || r.phase === 'auction'))) }));
 
     const ownLogs = new Map<string, string>();
-    const own = playTable({ months, before: planningLogs(ownLogs) });
-    const today = playTable({ months, seat: () => ({ playbook: false }) });
+    const own = playTable({ seed, months, before: planningLogs(ownLogs) });
+    const today = playTable({ seed, months, seat: () => ({ playbook: false }) });
 
     // Writes: its planning playbook each month, and no development or auction one; and it says no drafted line.
     for (const id of SPECS.map((_, i) => `ai${i}`)) {
@@ -269,7 +265,7 @@ describe('the own path plays today’s development and auction while AI_PLANS.ow
     }
     expect(own.written.filter((pb) => pb.phase !== 'planning')).toEqual([]);
     expect(own.records.some((r) => r.id === 0)).toBe(false);
-    // Its planning part plays: a seat short of cash lists in it (seed 3's third month, as T-AC-10).
+    // Its planning part plays: the seat short of cash lists in it.
     expect([...ownLogs.values()].some((log) => log.includes('"type":"list"')), 'a planning act played').toBe(true);
 
     // Each month whose development opens on the same game as today's plays its development and auction as today's:
@@ -285,6 +281,7 @@ describe('the own path plays today’s development and auction while AI_PLANS.ow
 
     // An adopted part still plays (B-AC-6's adopted case, RULE-6 row 2): ME's own drafts, adopted at its draft points
     // with one good it trades today set 'out'. It follows the route and declares the edited role; it writes neither.
+    const base = playTable({ seat: () => ({ playbook: false }) });
     let out: Good | null = null;
     let adoptedRoute: NonNullable<Playbook['development']>['route'] = [];
     const first = once();
@@ -296,7 +293,7 @@ describe('the own path plays today’s development and auction while AI_PLANS.ow
           adoptedRoute = draft.development!.route;
           return seat.adopt({ ...draft, by: 'llm' });
         }
-        out = (Object.keys(draft.auction!) as Good[]).find((g) => draft.auction![g]!.role !== 'out' && today.declared.get(key(ME, MONTH, g)) === draft.auction![g]!.role) ?? null;
+        out = (Object.keys(draft.auction!) as Good[]).find((g) => draft.auction![g]!.role !== 'out' && base.declared.get(key(ME, MONTH, g)) === draft.auction![g]!.role) ?? null;
         expect(out, 'a good the seat trades today and by its draft').not.toBeNull();
         const { playbook, rejected } = seat.validator()(state, ME, draft, [{ path: `/auction/${out}/role`, to: 'out', reason: 'Sit this one out.' }]);
         expect(rejected).toEqual([]);
@@ -309,15 +306,17 @@ describe('the own path plays today’s development and auction while AI_PLANS.ow
     const done = adoptedRoute.flatMap((s, i) => (s.act === 'install' && dev!.items[i]!.actual === 'done' ? [s.plot] : []));
     expect(adopted.installs.get(key(ME, MONTH))!.map((x) => x.plot), 'its installs: the adopted route’s').toEqual(done);
     expect(adopted.declared.get(key(ME, MONTH, out!)), 'the declare fact: the adopted role').toBe('pass');
-    expect(today.declared.get(key(ME, MONTH, out!)), 'today’s path trades it').not.toBe('pass');
+    expect(base.declared.get(key(ME, MONTH, out!)), 'today’s path trades it').not.toBe('pass');
     expect(adopted.outcomes.get(key(ME, MONTH, 'auction'))!.items.find((i) => i.path === `/auction/${out}/role`)).toMatchObject({ expected: 'out', actual: 'out' });
     expect(adopted.written.filter((pb) => pb.phase === 'development' || pb.phase === 'auction'), 'no own development or auction playbook').toEqual([]);
     expect(adopted.records.some((r) => r.id === 0)).toBe(false);
   });
 });
 
+// The own-path promises switch AI_PLANS.ownPhases on (ownPhasesOn); the adopted-path ones play with the default.
 describe('the seat plays its development and auction parts (C4, RULE-6, RULE-7)', { timeout: SLOW_MS }, () => {
   it("B-AC-7: a keyless seat writes its validated development and auction drafts, by 'engine', and plays them", () => {
+    ownPhasesOn();
     const t = playTable();
     for (const id of SPECS.map((_, i) => `ai${i}`)) {
       for (let month = 1; month <= MONTHS; month++) {
@@ -356,6 +355,7 @@ describe('the seat plays its development and auction parts (C4, RULE-6, RULE-7)'
   });
 
   it('B-AC-6: an adopted playbook that differs in moneyMaker, an auction role or the route is followed, or the outcome names the fallback', () => {
+    ownPhasesOn();
     // (a) moneyMaker. WS2 edits the money-maker through the seat's gate, which re-drafts the route under it (RULE-1's
     // re-plan); adopted just ahead of the month's first development tick, its MULEs that month are outfitted for the
     // edited good. The first seat and month whose re-drafted route outfits every MULE for the edited good, on plots that
@@ -465,6 +465,7 @@ describe('the seat plays its development and auction parts (C4, RULE-6, RULE-7)'
   });
 
   it('T-AC-12: one DecisionRecord per drafted development and auction playbook', () => {
+    ownPhasesOn();
     const t = playTable();
     for (const id of SPECS.map((_, i) => `ai${i}`)) {
       const persona = PERSONAS[t.seats.find((s) => s.id === id)!.mind.personaId as keyof typeof PERSONAS];
@@ -564,6 +565,7 @@ describe('the seat plays its development and auction parts (C4, RULE-6, RULE-7)'
 
   // trace-allow: HC-9, the spec's own failure-mode id for a draft or validator error (spec §4, "Retry, poison, page?"); trace-check reads no HC- ids
   it('HC-9: a development or auction draft or validator that throws is logged, writes nothing, and the seat plays today’s path', () => {
+    ownPhasesOn();
     const today = playTable({ seat: () => ({ playbook: false }) });
     for (const broke of ['draft', 'validator'] as const) {
       const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -614,6 +616,9 @@ describe.runIf(FULL)('the playbook path never waits (UBER-AC-2)', { timeout: 120
   const FULL_MONTHS = 4;
 
   it('B-AC-8: development and the auction end at the keyless game time when the decider never answers', async () => {
+    // Its keyless game is the own path's, so the seat's own drafts adopted play it exactly: with the switch off the
+    // keyless seat plays today's, and the adopted drafts make another game (measured 5 Nov, AM-26).
+    ownPhasesOn();
     const keyless = await phaseEnds({});
     const asked: string[] = [];
     const first = once(true);
