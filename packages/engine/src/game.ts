@@ -1,6 +1,6 @@
 import { endAuction, startAuction } from './auction.js';
 import { RuleError } from './errors.js';
-import { DEFAULT_SPECIES, DEV_STEER, DEVELOPMENT, GAME, GLINT, GOOD_CONFIG, mapSize, MULE, POLLUTION, SPECIES_PERK, START, TAX, UPKEEP, WOLVES } from './config.js';
+import { DEFAULT_SPECIES, DEV_STEER, DEVELOPMENT, GAME, GLINT, GOOD_CONFIG, mapSize, MULE, POLLUTION, SPECIES_PERK, START, storeStockFor, TAX, UPKEEP, WOLVES } from './config.js';
 import { allPrices, mulePrice, planShip, postPrices, targetPrice } from './economy.js';
 import { firePhase, rollPlayerEvent } from './events.js';
 import { colonyLot, endLandAuction, isListed, plotAt, startLandAuction } from './lots.js';
@@ -62,7 +62,7 @@ export function createGame(options: { seed: number; players: NewPlayer[]; maxMon
       }),
     ),
     store: {
-      stock: { ...START.storeStock },
+      stock: storeStockFor(options.players.length),
       mules: START.storeMules,
       mulesAtStart: START.storeMules,
       muleFactor: 1,
