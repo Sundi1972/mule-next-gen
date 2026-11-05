@@ -234,7 +234,7 @@ export const UPKEEP = {
   irrigated: ['food'] as RawGood[],
   /**
    * Share of its output an irrigated plot makes when its owner is short of Water, rounded down. (Energy no longer
-   * halves: offOutputShare, AM-17. packages/ai's value.ts still reads this for Energy until its valuation follows.)
+   * halves: offOutputShare, AM-17.)
    */
   shortOutputShare: 0.5,
   /** Colonists need 1 Food and 1 Water a month per this many colonists. */
