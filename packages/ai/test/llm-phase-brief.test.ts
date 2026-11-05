@@ -5,7 +5,7 @@ import { AI_LEVELS, AI_PERSONAS, allPrices, BRAIN, createGame, GOODS, type GameS
 import { PERSONAS } from '../src/personas.js';
 import { GOOD_NAME } from '../src/strategist.js';
 import type { Mind } from '../src/value.js';
-import { landBrief, phaseBrief } from '../src/llm/brief.js';
+import { DEVELOPMENT_OFFERS, LAND_OFFERS, landBrief, phaseBrief } from '../src/llm/brief.js';
 import { replySchema, writeReply, type WriteComplete, type WriterPrompt } from '../src/llm/writer.js';
 
 /** p0 owns two plots and holds a distinctive stock; p1 holds another, so a leak into p0's brief is unmistakable. */
@@ -112,6 +112,9 @@ describe("C2: the writer takes a phase brief's paths", () => {
     later.month = 4;
     expect(JSON.stringify(of(later))).toBe(JSON.stringify(a));
     expect(sha(a)).not.toBe(sha(replySchema(true)));
+    // The land request's schema from 5 Nov (option C): pinned, so a change to it is a deliberate cache reset.
+    expect(sha(a)).toBe('9f12206b149b580d2f1115b44dc114024895ccdde0e48925b2da7a2ee53f37a7');
+    expect(sha(replySchema(false, [...LAND_OFFERS, ...DEVELOPMENT_OFFERS], true))).toBe('cf2458e506ca0b0197abd4a3701a123cbea04829f6d12d51ccfd4cdf380506a6');
   });
 
   it("C2: a phase brief's schema offers its paths and no strategy; the request carries that schema", async () => {
