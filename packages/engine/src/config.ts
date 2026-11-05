@@ -263,6 +263,11 @@ export const START = {
   storeStock: { food: 30, water: 20, energy: 16, smithore: 20, crystite: 0, rareEarth: 4, alloy: 8, electronics: 0, medicine: 4 } satisfies Stock,
 };
 
+/** The store's stock as a game of `players` seats starts. */
+export function storeStockFor(_players: number): Stock {
+  return { ...START.storeStock };
+}
+
 export const MULE = {
   /** Labour in an empty MULE. Its price is this plus the Smithore it is built from. */
   labour: 120,
