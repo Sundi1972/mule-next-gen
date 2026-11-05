@@ -102,12 +102,15 @@ function outcomeLines(outcome: PhaseOutcome | null | undefined, me: string, name
   return [`What happened in your last phase (month ${outcome.month}, ${outcome.phase}):`, ...shown, ...rivals, ''];
 }
 
-/** What the rules clamped or refused of the seat's last reply, and what the writer refused before the rules saw it. */
+/**
+ * What the rules clamped or refused of the seat's last reply (a clamped edit played, at the bound), and what the writer
+ * refused before the rules saw it; each kind only when there is one.
+ */
 function refusalLines(feedback: Feedback | null | undefined): string[] {
-  if (!feedback || (feedback.rejected.length === 0 && feedback.refused.length === 0)) return [];
-  const rules = capped(feedback.rejected, BRAIN.brief.refusals, (r) => `${r.path} (${r.why})`);
-  const reply = capped(feedback.refused, BRAIN.brief.refusals, (r) => `${r.path ?? 'the reply'} (${r.cause})`);
-  return [`Last time the rules refused: ${rules}; your reply was refused at ${reply}.`, ''];
+  const parts: string[] = [];
+  if (feedback?.rejected.length) parts.push(`the rules clamped or refused ${capped(feedback.rejected, BRAIN.brief.refusals, (r) => `${r.path} (${r.why})`)}`);
+  if (feedback?.refused.length) parts.push(`your reply was refused at ${capped(feedback.refused, BRAIN.brief.refusals, (r) => `${r.path ?? 'the reply'} (${r.cause})`)}`);
+  return parts.length > 0 ? [`Last time: ${parts.join('; ')}.`, ''] : [];
 }
 
 function strategyLine(s: Strategy, corners: boolean): string {

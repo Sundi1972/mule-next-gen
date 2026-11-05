@@ -65,7 +65,8 @@ export class Playbooks {
       try {
         const drafted = source.draft(state, seat.id);
         // What the rules and the writer refused of last month's reply. The seat's last PhaseOutcome joins it once its
-        // producers (WS1, WS3) write one; until then the brief says nothing of it.
+        // producers write one (land: WS3; development and auction: WS9's playbook/outcome.ts); until then the brief
+        // says nothing of it.
         const last = { feedback: this.feedback.get(seat.id) ?? null };
         const brief = landBrief(state, seat.mind, seat.brain.persona, drafted.land, seat.brain.heard(), last);
         const ask: Ask = { month, draft: drafted.playbook, written: null, started: false, controller: new AbortController() };
