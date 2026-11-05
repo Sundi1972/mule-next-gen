@@ -748,6 +748,8 @@ export interface ColonyView {
   refPrice?: Partial<Record<Good, number>>;
   /** This month's general strike: the good it holds back, what the strikers want, and whether the fund paid; null when none. Optional, so views built before W3 still type. */
   strike?: { good: Good; cost: number; paid: boolean } | null;
-  /** The colony score at game over (G-5 RULE-25: wealth, environment and prestige in credits, the happiness factor, the rounded total); null before. */
+  /** The colony score every month, as the state stands (G-5 RULE-25, AM-12: wealth, environment and prestige in credits, the happiness factor, the rounded total). */
   score: { wealth: number; environment: number; prestige: number; factor: number; total: number } | null;
+  /** The colony score's total as the last month ended, for "+N since last month"; null in month 1 or before the colony has a mood (AM-12). */
+  lastScore?: number | null;
 }
