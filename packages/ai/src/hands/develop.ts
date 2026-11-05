@@ -59,10 +59,9 @@ import { FloorWalker, type FloorView } from './floor-walker.js';
  * moves the colonist. The list's source (`next`, `taken` and the stages) and
  * its runner (a tap, or a walk) are apart, so either can change alone.
  *
- * The list has two sources (spec C6). Today's decides as it goes. A route
- * handed in with `follow` (the seat's development part) is released into the
- * same list in the same shape, and RULE-9 decides each of its steps' fate, so
- * both runners play it unchanged.
+ * The list has two sources: today's decides as it goes; a route handed in with
+ * `follow` is released into the same list in the same shape, so both runners
+ * play it unchanged. See spec C6, RULE-9.
  */
 
 /** Where the colonist stands (or is walking to), and whether it is still walking or assaying, when the game walks. */
@@ -73,6 +72,8 @@ export interface DevWalking {
 
 /** The middle of a ms range, in seconds. */
 const midSeconds = ([lo, hi]: [number, number]) => (lo + hi) / 2 / 1_000; // literal-ok: midpoint of a range, ms to s
+
+const STOP: DevAction = { kind: 'stop' };
 
 /** The presses a MULE takes at the counters and its plot: buy, outfit, install. */
 const MULE_PRESSES = 3; // literal-ok: a count of the rule's steps, not balance
@@ -90,28 +91,25 @@ export interface DevStep {
   group: number;
   /** Its index in the route it came from; unset for today's steps and for those the hand adds. */
   route?: number;
-  /** RULE-9's note, logged when the step is done ('pub added'). */
+  /** The note logged when the step is done ('pub added'). See RULE-9. */
   note?: string;
 }
 
-/** A development route for the hand to play (spec C6), and what RULE-9 row 3's own pick is drafted from. */
+/** A development route for the hand to play, and what its own picks are drafted from. See spec C6, RULE-9 row 3. */
 export interface RoutePlay {
   part: DevelopmentPlay;
   /** The seat's draft seed, which seeds the own pick. */
   seed: number;
   /** The strategy's money-maker, the own pick's lean. */
   moneyMaker: Good | null;
-  /**
-   * The seat's own draft, on the own path; false for an adopted part (WS2's writer, Claude's edits). Only its own is
-   * re-picked after its analyses and has MULEs added (AM-27): an adopted route plays as adopted.
-   */
+  /** The seat's own draft; false for an adopted part, which plays as adopted: no re-pick, no MULE added. See AM-27. */
   own: boolean;
 }
 
-/** What became of a route step (RULE-11). A route step absent from the log was not reached. */
+/** What became of a route step; one absent from the log was not reached. See RULE-11. */
 type StepOutcome = DevelopmentStepLog['outcome'];
 
-/** A step taken this month. On a route, also its index and outcome; `why` then holds RULE-9's note. */
+/** A step taken this month. On a route, also its index and outcome; `why` then holds the route's note. */
 export interface DevLogEntry {
   label: string;
   ok: boolean;
@@ -129,7 +127,7 @@ interface RouteRun {
   mules: number;
   /** ifSoldOut 'pub' has fired: only the route's filters and pub are still released. */
   soldOut: boolean;
-  /** The own pick for a MULE after the route's last said 'stop' (AM-27): none is added any more. */
+  /** The own pick for a MULE after the route's last said 'stop': none is added any more. */
   noMore: boolean;
   startLeft: number | null;
   left: number;
@@ -182,7 +180,7 @@ export class DevelopHand {
   private floorCfg: FloorConfig | null = null;
   /** This month's route, if the seat handed one in; null plays today's list. */
   private route: RouteRun | null = null;
-  /** The route step RULE-9 last let through, so it is judged once, before its tap or walk starts. */
+  /** The route step last let through, so it is judged once, before its tap or walk starts. */
   private vetted: DevStep | null = null;
   /** The MULE group whose buy was the MULE the seat already led ('led'). */
   private ledGroup: number | null = null;
@@ -500,7 +498,7 @@ export class DevelopHand {
       this.walking = null;
       this.taken(view.state, step, false, 'scramble');
     }
-    // A route logs every step the race drops, not only the one it was walking (RULE-11 'skipped').
+    // A route logs every step the race drops, not only the one it was walking. See RULE-11.
     if (this.route) for (const step of this.queue) if (dropped.has(step)) this.log(step, false, 'skipped', 'scramble');
     this.queue = this.queue.filter((step) => !dropped.has(step));
     this.scrambleRaced++;
@@ -744,7 +742,7 @@ export class DevelopHand {
     this.stage = 'steps';
     this.then = 'done';
   }
-  // --- The route's source (RULE-9) -------------------------------------------
+  // --- The route's source. See RULE-9. ----------------------------------------
 
   /** Whether a MULE is still to come after the queue: one to decide, or one of the route's still to be released. */
   private muleToCome(): boolean {
@@ -753,7 +751,7 @@ export class DevelopHand {
     return this.then === 'decide' && !r.soldOut && r.play.part.route.slice(r.at).some((s) => s.act === 'buyMule');
   }
 
-  /** The route's head step once RULE-9 lets it play, releasing the route as the queue empties; null when it is played out. */
+  /** The route's head step once it may play, releasing the route as the queue empties; null when it is played out. */
   private routeNext(state: GameState, secondsLeft: number, walk?: () => DevWalk): DevStep | null {
     const r = this.route!;
     r.startLeft ??= secondsLeft;
@@ -778,13 +776,7 @@ export class DevelopHand {
     }
   }
 
-  /**
-   * Releases the route's next run into the queue in today's shape: the scouting steps up to its next MULE, or that
-   * MULE alone; at the route's end, the pub if it has none (row 8). With ifSoldOut 'pub' fired, only its filters and
-   * pub. In the seat's own route with analyses each MULE after one is the own pick made as it is reached, and after the
-   * route's last MULE the own pick adds MULEs until it says 'stop' (AM-27); an adopted route plays as adopted. False
-   * when nothing was left to release.
-   */
+  /** Releases the route's next run into the queue in today's shape; false when nothing was left. See RULE-9, AM-27. */
   private release(state: GameState, walk?: () => DevWalk): boolean {
     const r = this.route!;
     const steps = r.play.part.route;
@@ -812,9 +804,8 @@ export class DevelopHand {
         const from = { route: r.at };
         if (s.act === 'pub') this.push({ type: 'pub' }, d.pubMs, 'Go to the pub', ++this.group, from);
         else {
-          const t = state.tiles[s.plot!]!;
-          if (s.act === 'analyse') this.push({ type: 'analyse', x: t.x, y: t.y }, d.analyseTapMs, `Analyse ${plotName(t)}`, ++this.group, from);
-          else this.push({ type: 'filter', x: t.x, y: t.y }, d.filterMs, `Fit a filter on ${plotName(t)}`, ++this.group, from);
+          const { action, range, label } = this.scoutStep(state, s.act === 'analyse' ? 'analyse' : 'filter', s.plot!);
+          this.push(action, range, label, ++this.group, from);
         }
       }
       r.at++;
@@ -827,7 +818,7 @@ export class DevelopHand {
     return this.queue.length > before;
   }
 
-  /** The route's MULE whose buyMule is route step `at`, queued as drafted; RULE-1b: its outfit and install follow it. */
+  /** The route's MULE whose buyMule is route step `at`, queued as drafted, with the outfit and install after it. */
   private routeMule(state: GameState, at: number): boolean {
     const [, outfit, install] = this.route!.play.part.route.slice(at, at + MULE_PRESSES);
     this.pushMule(state, install!.plot!, outfit!.outfit!, at);
@@ -835,11 +826,7 @@ export class DevelopHand {
     return true;
   }
 
-  /**
-   * AM-27: the route's MULE at step `at`, picked again now its analyses are done, by the own pick. The same pick plays
-   * the route's group; another replaces it, its steps 'replaced'; 'stop' drops it, its steps 'skipped'; either noted
-   * 'ground analysed'. Whether a MULE was queued.
-   */
+  /** The route's MULE at step `at`, picked again now its analyses are done; whether a MULE was queued. See AM-27. */
   private repick(state: GameState, at: number, walk?: () => DevWalk): boolean {
     const r = this.route!;
     const [, outfit, install] = r.play.part.route.slice(at, at + MULE_PRESSES);
@@ -854,7 +841,7 @@ export class DevelopHand {
     return true;
   }
 
-  /** AM-27: one more MULE after the route's last, the own pick's, its steps noted 'MULE added'; false once it says 'stop'. */
+  /** One more MULE after the route's last, the own pick's, noted 'MULE added'; false once it says 'stop'. See AM-27. */
   private addMule(state: GameState, walk?: () => DevWalk): boolean {
     const r = this.route!;
     const pick = this.ownPick(state, walk);
@@ -872,16 +859,26 @@ export class DevelopHand {
     const r = this.route!;
     const mind = this.brain.mind;
     const input = { state, seat: mind.me, mind, seed: r.play.seed, phase: 'development' as const, month: state.month };
-    return draftMulePick(input, r.mules, walk?.(), r.play.moneyMaker);
+    return this.drafting('own MULE pick', "taken as 'stop'", STOP, () => draftMulePick(input, r.mules, walk?.(), r.play.moneyMaker));
   }
 
-  /** RULE-9 rows 2 to 4 for the head step, read before its tap or walk starts: true plays it, false has dealt with it. */
+  /** A draft call inside the tick: an error is logged with the seat and gives `fallback`, never reaching the game (HC-9). */
+  private drafting<T>(what: string, fallbackNote: string, fallback: T, draft: () => T): T {
+    try {
+      return draft();
+    } catch (err) {
+      console.error(`AI seat ${this.brain.mind.me}: no ${what} for month ${this.month}, ${fallbackNote}: ${err instanceof Error ? err.message : String(err)}`);
+      return fallback;
+    }
+  }
+
+  /** Judges the head step before its tap or walk starts: true plays it, false has dealt with it. See RULE-9 rows 2-4. */
   private vet(state: GameState, head: DevStep, walk?: () => DevWalk): boolean {
     const r = this.route!;
     const a = head.action;
     const me = this.brain.mind.me;
     if (a.type !== 'pub' && r.usedMs >= r.play.part.timeBudgetMs) {
-      this.skipToPub();
+      this.skipToPub(state);
       return false;
     }
     if (a.type === 'buyMule' && head.route !== undefined) {
@@ -891,13 +888,13 @@ export class DevelopHand {
         return false;
       }
     }
-    // AM-27: a MULE it already leads (won at the land auction) is this MULE: not bought, nor outfitted again as it is.
-    // Kept as it is where it makes nothing on any of the seat's idle plots, its outfit says so.
+    // A MULE it already leads (won at the land auction) is this MULE: not bought, nor outfitted again as it is.
     const led = state.players.find((p) => p.id === me)!.carriedMule;
     if (led !== null && (a.type === 'buyMule' || (a.type === 'outfit' && a.outfit === led && this.ledGroup === head.group))) {
       if (a.type === 'buyMule') this.ledGroup = head.group;
       this.queue.shift();
-      this.log(head, true, 'done', a.type === 'outfit' && !keptOutfitEarns(state, this.brain.mind) ? 'kept outfit, no gain' : 'led');
+      const earns = a.type === 'buyMule' || this.drafting('kept-outfit check', 'noted led', true, () => keptOutfitEarns(state, this.brain.mind));
+      this.log(head, true, 'done', earns ? 'led' : 'kept outfit, no gain');
       return false;
     }
     // The steps the hand added (a replacement, the analyses after a sold-out corral) are its own picks, played as they come.
@@ -908,6 +905,12 @@ export class DevelopHand {
       this.log(head, false, 'skipped', `stale: plot ${plotOf(a)}`);
       return false;
     }
+    // No filter while it still leads a MULE: on the floor the plot's button offers install. See FM-led-no-gain, AM-27.
+    if (a.type === 'filter' && led !== null) {
+      this.queue.shift();
+      this.log(head, false, 'skipped', 'leading');
+      return false;
+    }
     if (a.type === 'analyse' && state.players.find((p) => p.id === me)!.analysed.includes(plotOf(a))) {
       this.queue.shift();
       this.log(head, false, 'skipped', 'already analysed');
@@ -916,10 +919,7 @@ export class DevelopHand {
     return true;
   }
 
-  /**
-   * Row 3 for a route MULE about to be bought: why its group is stale, or null. Its plot is no longer the seat's idle
-   * plot; or, on the floor, the live walk vetoes it as developDecision would (AM-25), such as a lake with no stand.
-   */
+  /** Why a route MULE about to be bought is stale, or null: its plot is not its idle plot, or the floor's walk vetoes it. See AM-25. */
   private staleMule(state: GameState, group: number, walk?: () => DevWalk): string | null {
     let plot = -1;
     let outfit: Outfit | null = null;
@@ -937,7 +937,7 @@ export class DevelopHand {
     return veto ? `stale: ${veto}` : null;
   }
 
-  /** Row 3: the stale MULE's group, replaced once by the seat's own pick for that MULE (the draft's seeded pick), ahead of the rest. */
+  /** The stale MULE's group, replaced once by the seat's own pick for that MULE, ahead of the rest. See RULE-9 row 3. */
   private replace(state: GameState, group: number, note: string, walk?: () => DevWalk): void {
     const r = this.route!;
     for (const s of this.queue.filter((q) => q.group === group)) this.log(s, false, 'replaced', note);
@@ -945,20 +945,45 @@ export class DevelopHand {
     this.queue = [];
     const mind = this.brain.mind;
     const input = { state, seat: mind.me, mind, seed: r.play.seed, phase: 'development' as const, month: state.month };
-    const pick = draftMulePick(input, r.mules - 1, walk?.(), r.play.moneyMaker);
+    const pick = this.drafting('replacement MULE pick', "taken as 'stop'", STOP, () => draftMulePick(input, r.mules - 1, walk?.(), r.play.moneyMaker));
     if (pick.kind !== 'stop') this.pushMule(state, pick.index, pick.outfit);
     this.queue.push(...rest);
   }
 
-  /** Row 2: the time budget is spent, so every step still queued is skipped for the route's pub (or an added one). */
-  private skipToPub(): void {
+  /** The time budget is spent: every step left, queued or not, is skipped for the route's pub, or an added one. See RULE-9 row 2. */
+  private skipToPub(state: GameState): void {
     const r = this.route!;
     for (const s of this.queue) if (s.action.type !== 'pub') this.log(s, false, 'skipped', 'time budget');
+    this.skipUnreleased(state, 'time budget');
     const pub = this.queue.find((s) => s.action.type === 'pub');
     this.queue = pub ? [pub] : [];
     r.at = r.play.part.route.length;
     if (!pub) this.push({ type: 'pub' }, AI_HANDS.develop.pubMs, 'Go to the pub', ++this.group, this.routePub());
     this.then = 'done';
+  }
+
+  /** Logs the route's steps not yet released, but its pub, as skipped. */
+  private skipUnreleased(state: GameState, why: string): void {
+    const steps = this.route!.play.part.route;
+    for (let i = this.route!.at; i < steps.length; i++) {
+      const s = steps[i]!;
+      if (s.act === 'buyMule') {
+        const [, outfit, install] = steps.slice(i, i + MULE_PRESSES);
+        this.muleSteps(state, install!.plot!, outfit!.outfit!).forEach(({ action, label }, k) => this.log({ action, label, ms: 0, group: 0, route: i + k }, false, 'skipped', why));
+        i += MULE_PRESSES - 1;
+      } else if (s.act === 'analyse' || s.act === 'filter') {
+        const { action, label } = this.scoutStep(state, s.act, s.plot!);
+        this.log({ action, label, ms: 0, group: 0, route: i }, false, 'skipped', why);
+      }
+    }
+  }
+
+  /** An analysis or a filter of `plot`, with its tap time's range and label. */
+  private scoutStep(state: GameState, act: 'analyse' | 'filter', plot: number): { action: AiAction; range: [number, number]; label: string } {
+    const t = state.tiles[plot]!;
+    const d = AI_HANDS.develop;
+    if (act === 'analyse') return { action: { type: 'analyse', x: t.x, y: t.y }, range: d.analyseTapMs, label: `Analyse ${plotName(t)}` };
+    return { action: { type: 'filter', x: t.x, y: t.y }, range: d.filterMs, label: `Fit a filter on ${plotName(t)}` };
   }
 
   /** The route's own pub, for a pub the hand pushes in its place: its index, or 'pub added' when the route has none. */
@@ -968,9 +993,8 @@ export class DevelopHand {
   }
 
   /**
-   * The head step of a route was taken (rows 5 to 7, and AM-19's runner drops). A refused buy, or an outfit refused
-   * with no MULE come (an empty corral under DEV_WALK), is 'sold out' and plays ifSoldOut; any other refusal drops its
-   * group and the route goes on.
+   * The head step of a route was taken. A refused buy, or an outfit refused with no MULE come (an empty corral under
+   * DEV_WALK), is 'sold out'; any other refusal drops its group and the route goes on. See RULE-9 rows 5-7, AM-19.
    */
   private routeTaken(state: GameState, step: DevStep, ok: boolean, why?: string): void {
     if (this.walking === step) this.walking = null;
@@ -992,7 +1016,7 @@ export class DevelopHand {
     this.log(step, false, 'refused', why ?? 'refused');
   }
 
-  /** Row 5's ifSoldOut: 'pub' goes on to the route's filters and pub; 'analyse' plays analysesWanted, then the pub; 'stop' ends the turn. */
+  /** ifSoldOut: 'pub' goes on to the route's filters and pub; 'analyse' plays analysesWanted, then the pub; 'stop' ends the turn. */
   private soldOut(state: GameState): void {
     const r = this.route!;
     const mode = r.play.part.ifSoldOut;
@@ -1016,7 +1040,7 @@ export class DevelopHand {
     this.push({ type: 'pub' }, AI_HANDS.develop.pubMs, 'Go to the pub', ++this.group);
   }
 
-  /** Logs a route step's end: `why` is RULE-9's note. */
+  /** Logs a route step's end, with its note. */
   private log(step: DevStep, ok: boolean, outcome: StepOutcome, why?: string): void {
     this.done.push(this.entry(step, ok, outcome, why));
   }

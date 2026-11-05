@@ -260,7 +260,10 @@ describe('the validator holds every playbook to RULE-1', () => {
     const { state: led, plots } = ledInFromLot('food');
     const group = (outfit: string, plot: number) => [{ act: 'buyMule' }, { act: 'outfit', outfit }, { act: 'install', plot }];
     const handed = { ...draftOf(led, 'development', mindOf(2), 102), development: { route: [...group('food', plots[0]!), ...group('smithore', plots[1]!), { act: 'pub' }], timeBudgetMs: 1000, ifSoldOut: 'pub' } } as Playbook;
-    // The engine refuses a full-price re-fit of a led MULE in every game (C14), with its own words, whatever the switch.
+    const broke = structuredClone(led);
+    broke.players.find((p) => p.id === 'ai2')!.money = 0;
+    // The engine refuses a full-price re-fit of a led MULE in every game (C14), with its own words, whatever the switch,
+    // and with no money on hand the why is still the re-fit's, not the purse's.
     const steering = DEV_STEER.on;
     for (const on of [false, true]) {
       DEV_STEER.on = on;
@@ -270,6 +273,7 @@ describe('the validator holds every playbook to RULE-1', () => {
         expect(refit.r.playbook.by).toBe('engine');
         const whole = one('development', '/development/route', group('energy', plots[0]!), { state: led, draft: handed });
         expect(whole, `DEV_STEER.on ${on}`).toMatchObject({ plays: handed.development!.route, why: 'This MULE is outfitted: re-outfit it' });
+        expect(one('development', '/development/route/1/outfit', 'energy', { state: broke, draft: handed }).why, `DEV_STEER.on ${on}, no money`).toBe('This MULE is outfitted: re-outfit it');
       } finally {
         DEV_STEER.on = steering;
       }

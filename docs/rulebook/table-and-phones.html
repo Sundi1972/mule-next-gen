@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The table and the phones · M.U.L.E. Rulebook</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="rulebook.css">
+</head>
+<body>
+<div class="rb-shell">
+<aside class="rb-rail"></aside>
+<main class="rb-main">
+<article>
+<h1>The table and the phones</h1>
+<p class="rb-lede">What the big screen shows in every phase, what each phone shows, how you join and get back in after a drop, how chat and the event shows reach everyone, and how the game plays on a phone alone.</p>
+
+<h2 id="one-rule">Public on the TV, private on the phone <span class="pill built">In the game</span></h2>
+<p>The game is played with one shared big screen and a phone in every player's hand. The rule behind every screen: <strong>public things go on the big screen, private things stay on the phone.</strong> The TV never shows what a player could want to hide: the goods you hold, your ground surveys, your vote, your whispers, your Worth line by line. Money, plots and each player's Worth total are public, as in the original.</p>
+<p>The big screen is optional. The game runs on the server; the TV and every phone are just screens connected to it. The TV has no seat and no controls, and it never mirrors a phone. Without a TV, each phone shows everything it needs, and the game plays the same (see <a href="#solo-play">A phone alone</a>).</p>
+<p>Any screen with a browser can be the TV: a laptop, a PC on an HDMI cable, a smart TV's browser. The TV page is drawn at 1280 × 720 and scaled to fit the screen, so it reads the same on any size. The phone page also works on a laptop: from a window 1100 px wide the same screens grow a wider side rail and larger type, and development can be steered with the keyboard.</p>
+<div class="box why"><h4>Why it is like this</h4><p>From the design doc on big-screen mode: "If a phone ever needs the big screen to make a private decision, or the big screen ever needs a phone to follow the game, the design is wrong."</p></div>
+<p class="code-ref">In the code: <code>apps/web/src/main.tsx</code> (the TV at <code>/table</code>, everything else the phone) · <code>apps/web/src/table/TableApp.tsx</code> · <code>apps/web/src/phone/PhoneApp.tsx</code> · <code>docs/design/07-big-screen-mode.md</code></p>
+<p class="owner">Kept current by: the Table team (WS4) for the TV and the shell, the UX team (WS6) for the phone.</p>
+
+<h2 id="joining">Joining, the lobby and starting <span class="pill built">In the game</span></h2>
+<h3 id="joining-phone">On a phone</h3>
+<p>Open the game's address. The first screen, "Pull up a chair", asks for your name and either a room code to join or Start a new game. It also says: "Got a TV or laptop? Open /table on it for the big screen." Whoever starts a new game gets a four-letter room code (no vowels, so codes never spell words) and becomes the host.</p>
+<p>In the lobby, step 1 of 2 is "Make your colonist": pick one of the six species and one of the six colours. You are drawn large on the stage, in your colour, with your species' perk. The side rail is the table: "At the table · N of 6", every seat with its creature, name and what it is (a computer player, the host, or AWAY when its phone has gone). A colour a person has taken is theirs; a computer player's colour can be taken, and the computer player moves to another.</p>
+<p>The host's rail also has Add AI, a ✕ to remove a seat, Close the table and Start. Removing a seat or closing the table asks for one confirming tap first. Start needs at least <span class="num">2</span> seats. Anyone else can leave the table before the game starts.</p>
+<h3 id="joining-tv">On the TV</h3>
+<p>Open <code>/table</code> on the big screen. It asks for the room code shown on the host's phone ("Show this table"); a link with the code in it opens the table straight away. The TV lobby shows a large QR code to scan, the join address, the room code in big letters, every seat with its creature and whether it is a computer player, the host, Ready or Away, and "Waiting for the host to start".</p>
+<p>With a TV connected, the phone's QR card is small (the TV carries the big one). With no TV, the phone draws its QR big and puts it first, under the next-step card, because it is the only way in.</p>
+<div class="box why"><h4>Why it is like this</h4><p>Heiko ruled on 21 Oct to keep the compact lobby (version 1 of the approved mocks) and, when no TV is connected, to use the bigger room card with a larger QR in the same spot.</p></div>
+<p class="code-ref">In the code: <code>apps/web/src/phone/Lobby.tsx::Entry, Lobby, JoinCard</code> · <code>apps/web/src/table/TableApp.tsx::PickRoom, TvLobby</code> · <code>packages/tabletop/src/registry.ts</code> (codes) · <code>packages/tabletop/src/room.ts</code></p>
+<p class="owner">Kept current by: the Table team (WS4).</p>
+
+<h2 id="tv-screens">The TV, phase by phase <span class="pill built">In the game</span></h2>
+<p>Every TV screen has the same header: "Month N / 12" above the phase's title, a Day/Night switch, and at the right the colony's gauges (Wealth, Environment, Prestige, Happiness) when the council is on, or the air gauge alone when it is off, and the clock when the phase has one. The table chat's ticker runs under the header once someone has spoken.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Phase</th><th>Title on the TV</th><th>What the TV shows</th></tr></thead>
+<tbody>
+<tr><td>Planning</td><td>Planning</td><td>The colony map; the Governor's tax promise and whether it was kept; how many are ready; who the table is waiting for (and that the host can continue without them); the market; the news; every player's place by Worth and whether they are still planning, ready or away</td></tr>
+<tr><td>Election day</td><td>Election day, then "· vote", then "· the result"</td><td>The candidates and their promises; who has voted, never how; then the reveal ceremony, vote block by vote block</td></tr>
+<tr><td>Law vote</td><td>The law vote, then "· the result"</td><td>The proposal and what it costs each player; who has voted, never how; then the result as one weighted bar, totals only, with the laws in force</td></tr>
+<tr><td>Land grant</td><td>Land grant</td><td>The map with the lit plot; "Lit now: Plot …" with its terrain; every player's plot count; how the grant works</td></tr>
+<tr><td>Land auction</td><td>Land auction · 2 of 3</td><td>Intro: the map large with the plot lit, the lot's card, "Bidding starts in … s", who can bid. Walk and result: the bidding board large with every bidder walking live and the minimum line, the leader or the result, the lot's card and the map small</td></tr>
+<tr><td>Development</td><td>Development</td><td>The whole colony with every colonist walking live, named; the store's hall beside it with whoever is shopping; the shared clock; each colonist's pace and what they are doing; along the map's foot, the moments: the corral scramble, a glint, wolves</td></tr>
+<tr><td>Production</td><td>Production</td><td>The harvest show on the map; a rail naming each step (the good being harvested, Bonuses, Losses, the events, the flight); every player's silo along the foot, filling as their goods land; who has asked to speed up</td></tr>
+<tr><td>Goods auction</td><td>Auction · Food</td><td>Status: how many have picked, "No clock", the status table, the store's prices and stock, what the ship wants, each player's side or PICKING. Walk: the time bar, the whole walk board with every creature, the store's lines and the ship's; at the side the stage (Walk, Trading · clock slowed, Closed), units traded, the store's Sells, Buys and Stock, the running deals, the goods still to come</td></tr>
+<tr><td>Month end</td><td>End of the month</td><td>How many are on; the league table by Worth with the leader and each change since last month; the colony panel (air, fund, who went hungry) and the colony's buildings; a Collapse banner while the air is in Collapse; the Worth rule in one line</td></tr>
+<tr><td>Game over</td><td>Game over</td><td>The winner (several, if tied); the final table by Worth; with the council on, the colony's score and who gave most, otherwise the colony's verdict on its air</td></tr>
+</tbody>
+</table></div>
+<h3 id="tv-planning">Planning on the TV</h3>
+<p>The ready list shows each person's place by Worth ("1st", "2nd"), their creature and one word: PLANNING, READY, or AWAY · PLANNING for a dropped phone. Computer players, always ready, share one dimmed row. The map's caption reads the room code, the colonists, the MULEs in the corral and their price. The market tiles show six goods with their price and how many months of demand the store holds, amber under one month and red under half a month.</p>
+<h3 id="tv-auction">The goods auction on the TV</h3>
+<p>Each running deal is a row ("Lena buys from the store at 34", for example) with its speed: chevrons that fill as the pair stays matched, "faster and faster" until "full speed". When no deal runs, a help line explains the board: "Sellers push the red line down, buyers push the green line up. When the two lines meet, the goods change hands." The TV plays the auction's sounds: a tick-tock clock that speeds up as time runs out and slows while trading, a click for every unit, a bell struck three times when a good's walk ends.</p>
+<h3 id="tv-events">Events on the TV</h3>
+<p>When events strike, the TV plays their show over the phase screen: the header with a pip for each event, the living map where each event lands on its plots, a log of what happened, and a colony bar with every player's slot glowing while their spotlight plays and a "sick" tag once their sickness lands. Production plays its events inside its own show. See <a href="#event-shows">Event shows</a>.</p>
+<p class="code-ref">In the code: <code>apps/web/src/table/TableApp.tsx::TvHeader, TvGame, TvAuction, TvMonthEnd, TvGameOver</code> · <code>apps/web/src/table/TvElection.tsx, TvCouncil.tsx, TvLandAuction.tsx, TvDevelop.tsx, TvProduction.tsx</code> · <code>apps/web/src/events/TvEventLayer.tsx</code> · <code>apps/web/src/game/sound.ts</code></p>
+<p class="owner">Kept current by: the Table team (WS4); WS7 for the election and law screens, WS8 for the event layer, WS3 for the auction's content.</p>
+
+<h2 id="tv-fit">The TV fits a real table <span class="pill progress">Being built</span></h2>
+<p>Played at a real table, some TV screens ran out of room. The PM ruled the fixes on 5 Nov:</p>
+<ul>
+<li><strong>The goods auction's walk</strong> shows one chat line, the newest, and none while a deal runs; during a trade, the speaker's bubble on the board carries what was said. The newest deal keeps its speed line; older deals take one line each, so two deals fit under the store's box. The status stage keeps three chat lines.</li>
+<li><strong>The header</strong>: the ready count sits beside the title. When the colony's gauges also show, they move to a full-width row of their own under it whenever a ready chip or a status badge (such as a strike) is shown.</li>
+<li><strong>The month end's title</strong>, "End of the month", stays on one line.</li>
+<li><strong>Planning's side column</strong> scales to fit, so its last standings row never runs off the screen.</li>
+</ul>
+<div class="box next"><h4>What is changing</h4><p>PR #381 (the Table team, WS4), with a named edit in WS6's chat ticker. Being built; checked by screen rows in CI. The small captions on the development and month-end screens stay in the Table team's backlog, and the computer players' bubbles that can cover board labels were passed to the UX team (WS6).</p></div>
+<p class="code-ref">In the code: <code>apps/web/src/table/TableApp.tsx::TvHeader, TvAuction</code> · <code>apps/web/src/chat/Chat.tsx::TvTicker</code></p>
+<p class="owner">Kept current by: the Table team (WS4).</p>
+
+<h2 id="auction-headline">The good leads every auction screen <span class="pill progress">Being built</span></h2>
+<p>Heiko at the table: "we need to make it more prominent what the auction is currently about … in the headline together with the resource symbol". So the good's glyph and name lead every goods-auction screen, large:</p>
+<ul>
+<li><strong>Phone and laptop</strong>: a headline at the top of the main pane. On the status screen "🌾 Food" with the picked count; during the walk "🌾 Food" beside the clock; at the close "🌾 Food closed". The rail keeps its small line.</li>
+<li><strong>TV</strong>: the title reads "🌾 Food auction" (today "Auction · Food", without the glyph).</li>
+</ul>
+<div class="box next"><h4>What is changing</h4><p>PR #374 (the UX team, WS6), reviewed. It goes into the same trunk batch as the TV fit, before it, since both touch the TV auction's title line.</p></div>
+<p class="code-ref">In the code: <code>apps/web/src/phone/Auction.tsx</code> · <code>apps/web/src/table/TableApp.tsx::TvAuction</code></p>
+<p class="owner">Kept current by: the UX team (WS6), with the Table team (WS4) for the TV.</p>
+
+<h2 id="phone-shell">The phone: always sideways <span class="pill built">In the game</span></h2>
+<p>The phone is played held sideways for the whole game. Held upright it shows only "turn your phone"; the game stays loaded underneath, so nothing is lost while you turn it. The screens are drawn for a phone of 844 × 390 and still fit a small one of 667 × 375.</p>
+<p>Every phone screen has the same frame. The <strong>stage</strong> on the left holds the phase's content: the map, the board, the hall. The <strong>rail</strong> on the right holds, from the top:</p>
+<ul>
+<li>the month ("Month 3 / 12") and the phase's name, with the clock when the phase has one, or a ready count when it has none;</li>
+<li>your creature and name, the Day/Night switch, "Move to my phone", and your money; in planning, under your money, your place ("2nd of 4"), which opens the standings;</li>
+<li><strong>Now</strong>: the one next step and why;</li>
+<li>the screen's own controls;</li>
+<li>the table chat: everyone's seat and the last two lines;</li>
+<li>at the bottom, within thumb reach, the main action.</li>
+</ul>
+<div class="box why"><h4>Why it is like this</h4><p>Heiko, 28 Oct: "phone is always landscape btw and the steering control should be laying over the card", then "Whole game" when asked whether that meant every screen. This replaced the design doc's earlier "Phones stay portrait".</p></div>
+<p class="code-ref">In the code: <code>apps/web/src/phone/Shell.tsx::PhoneShell, NowCard, TurnSideways</code> · <code>apps/web/src/phone/PhoneApp.tsx</code></p>
+<p class="owner">Kept current by: the Table team (WS4) for the shell, the UX team (WS6) for its content.</p>
+
+<h2 id="phone-hub">Planning on the phone: the hub <span class="pill built">In the game</span></h2>
+<p>Planning opens the month's hub (the team calls its built parts "Today"). The stage holds:</p>
+<ul>
+<li><strong>The month's roadmap</strong>: Plan, Land grant, Land auction (only in a month with a lot), Develop, Produce, Goods auction, this step lit, and one plain line on what to do now and what comes next. With the council on, the offices sit under it.</li>
+<li><strong>What you need this month</strong>: Food, Energy and Water against what you hold, red where you are short. A tap opens the Colony desk.</li>
+<li><strong>This month</strong>: everything the month allows, each a door into a desk or a map tool. It heads with the export ship ("Export ship in month 6: it buys the colony's leftovers", or "in port"). Its items: Next month's vote, Throw your hat in the ring (before an election), Geo drone, Sell a plot or MULE, and the Governor's desk for the Governor.</li>
+<li><strong>The colony map</strong> with its tools: Look (tap a plot to see what it can make and whose it is), Geo drone (pick up to 2 free plots and send it) and Sell a plot (tap your plot or one with your MULE).</li>
+<li>Under the map: the store's prices and stock in one row of goods.</li>
+</ul>
+<p>The rail holds Now, the open tool's panel, and the desks: <strong>Colony</strong> (what you need, the news, the colony), <strong>Talk</strong> (the table chat, with an unread badge), <strong>Council</strong> (with the council on), <strong>Market</strong> (put a plot or MULE up; the month's line-up of lots) and, for the Governor, the <strong>Governor's desk</strong> (set the tax, propose a law). In an election month, election day takes the stage until the votes are over.</p>
+<p>At the foot, "I'm ready". Once you are, it shows who the table still waits for; the host can then continue without them after one confirming tap ("End planning for everyone now? … stop where they are, and the land grant starts.").</p>
+<p class="code-ref">In the code: <code>apps/web/src/phone/hub/today.tsx::HUB_SLOTS</code> · <code>apps/web/src/phone/hub/Hub.tsx</code> · <code>apps/web/src/phone/hub/Roadmap.tsx, NeedsStrip.tsx, desks.tsx, tools.tsx, ReadyBar.tsx, ready.ts</code> · <code>apps/web/src/phone/hub/politics/</code></p>
+<p class="owner">Kept current by: the UX team (WS6); the Politics team (WS7) for the politics slots.</p>
+
+<h2 id="phone-phases">The phone, phase by phase <span class="pill built">In the game</span></h2>
+<div class="table-wrap"><table>
+<thead><tr><th>Phase</th><th>What your phone shows</th><th>What you press</th></tr></thead>
+<tbody>
+<tr><td>Land grant</td><td>The map with the lit plot; "Your drone: 12·5 Desert, good for Energy" while a plot your drone surveyed is lit; who is still choosing</td><td>CLAIM (the big button) and "I'm ready" side by side; once you are done, "You're done with land"</td></tr>
+<tr><td>Land auction</td><td>Intro: the plot lit on the map and what you will be doing on this lot. Walk: the board fills the stage. Result: sold to you, to someone else, or unsold, and what that means for you. The seller sees the same screens without Up and Down</td><td>Hold Up to raise your bid</td></tr>
+<tr><td>Development</td><td>The sideways arcade screen (see below)</td><td>The stick and the action button</td></tr>
+<tr><td>Production</td><td>The same show as the TV's, but only your own plots fill and your harvest flies into your private stock strip; the rail lists what each good made you (+3 Food, and so on)</td><td>⏩ Speed up (with a TV), then "Ready for the auction" once the show ends</td></tr>
+<tr><td>Goods auction</td><td>Status: what everyone has, used, made and is short of, and your side, already picked from what you hold and need. Walk: the board with your creature. Close: your receipt for the good, with the tax spelled out on a sale and the month's running total</td><td>Buy or Sell, then Ready; then hold Up or Down, or drag on the board</td></tr>
+<tr><td>Month end</td><td>"End of the month": the league table by Worth with each change since last month; your own Worth line by line in the rail, marked as only yours; with no TV, the colony panel too</td><td>"On to month N"; then "Waiting for the others"</td></tr>
+<tr><td>Game over</td><td>Your place and your Worth beside your own lines, the colony's verdict, the final standings in the rail; with no TV, the colony's report</td><td>Nothing</td></tr>
+</tbody>
+</table></div>
+<p>The goods auction's side pick has no clock. If the host moves on for players still picking, the host's confirm says what each of them will do ("Kai buys Food: 1 of 3, short 2."; a dropped phone sits the good out), and the host taps once more to go on. Phones play the auction's sounds too.</p>
+<p class="code-ref">In the code: <code>apps/web/src/phone/LandGrant.tsx, LandAuction.tsx, Production.tsx, Auction.tsx, Results.tsx, GameOver.tsx</code> · <code>apps/web/src/components/MonthEnd.tsx</code></p>
+<p class="owner">Kept current by: the UX team (WS6), with the Auctions team (WS3) for the auction screens and the Table team (WS4) for the month end and game over.</p>
+
+<h2 id="arcade-phone">Development on the sideways phone <span class="pill built">In the game</span></h2>
+<p>In development the phone becomes an arcade controller. The <strong>whole colony map fills the screen</strong>, with every colonist walking live. A translucent <strong>stick</strong> lies over the bottom-left corner and the <strong>action button</strong> over the bottom-right. When you walk into the store, the stage becomes the store's hall: six shopfronts for the raw goods along the top, the works for the factories, the corral and the pub.</p>
+<ul>
+<li><strong>The button says what it will do</strong> where you stand: BUY MULE, ANALYSE, FIT FILTER, TAKE MULE, CATCH MULE, FIGHT, GRAB THE GLINT, PUB · END TURN and so on. It is dim when there is nothing to do. The server decides; a press is a request.</li>
+<li><strong>A ring shows your next step</strong>: the store and its corral when you have no MULE, the outfitters you can pay when it is empty, then the best of your free plots for its good. When you cannot afford a MULE, it points to what you can do instead: analyse a plot, or the pub.</li>
+<li><strong>The side rooms</strong> beside the map hold the clock, your money and your pace line, for example "Your pace 47%: you ate 1 of the 3 Food you need", with a tap for what to do about it next month. On a small phone the status lies in a bar over the map's top edge.</li>
+<li><strong>When your turn ends</strong>, a card says "In the pub: your turn is over" or "Development over", with how many MULEs you installed and how long the others still walk.</li>
+<li>If no update has arrived for <span class="num">1</span> s, the phone shows "reconnecting" and stops guessing where you are.</li>
+</ul>
+<p>On a laptop, the arrow keys steer and SPACE presses the button; you can also hold the mouse on a spot to walk there and click the lit thing to act.</p>
+<div class="box why"><h4>Why it is like this</h4><p>Heiko, 28 Oct, on the walking phone: the whole map in full on the phone, "the steering control should be laying over the card". He passed the arcade design gate the same day ("Yes, build this") and approved the walking build at his table on 5 Nov ("Walking is good").</p></div>
+<p class="code-ref">In the code: <code>apps/web/src/phone/arcade/Develop.tsx, stages.tsx, guide.ts, parts.tsx::paceWords, layout.ts, controls.ts</code> · <code>packages/engine/src/floor/reach.ts::reachWords</code> · <code>packages/engine/src/config.ts::DEV_STEER</code></p>
+<p class="owner">Kept current by: the UX team (WS6). Rules in <a href="development.html">Development</a>.</p>
+
+<h2 id="sick-line">The sick line on the sideways phone <span class="pill built">In the game</span></h2>
+<p>When you are sick, the pace line in the walking screen's side room says that you are sick, why, and your pace this turn:</p>
+<ul>
+<li>the sickness and its cause, with a cross in the Medicine colour: "✚ Sick: the air is toxic.", "… your own pollution fouled the air.", or "Sick this month.";</li>
+<li>then "50% pace this turn", adding "· you ate 2 of 5 Food" when you are hungry too;</li>
+<li>a tap adds that it struck as your turn began with no Medicine to cure it, and that a Medicine in hand when a turn begins stops it (it is used up);</li>
+<li>on a small phone the bar reads "✚ Sick · 50% pace".</li>
+</ul>
+<div class="box why"><h4>Why it is like this</h4><p>The PM's ruling A, 5 Nov: the line says it and why, in the place you already look for your pace, rather than a banner competing with the guide's first note. Before it, the line only said "Pace 50%: sick". The tap screen's start card, which explained sickness, went with the tap screen.</p></div>
+<p class="code-ref">In the code: <code>apps/web/src/phone/arcade/parts.tsx::PaceLine, SickLine</code> · <code>packages/ui</code> <code>sickReason</code> · spec ws6-ux AM-21</p>
+<p class="owner">Kept current by: the UX team (WS6).</p>
+
+<h2 id="chat">Chat, whispers, emotes and bubbles <span class="pill built">In the game</span></h2>
+<p>You type in the <strong>Talk</strong> desk in planning: to the whole table, or whispered to one player ("WHISPER · ONLY YOU AND KAI SEE THIS"). Five quick emotes sit above the box: Deal?, Nice!, Traitor!, Ha! and Help!. A line holds up to <span class="num">280</span> characters. A whisper reaches only its two ends, never the TV; a whisper between two people stays hidden from the computer players too.</p>
+<p>Every screen, the TV included, shows what was said:</p>
+<ul>
+<li><strong>A speech bubble</strong> pops at the speaker's creature wherever the screen draws it (on the map, on the auction board, in the store's hall). Where the screen does not draw the speaker, the bubble opens at their place in the seat row. One bubble shows at a time on each screen, so they never cover each other: each shows for at least <span class="num">2</span> s and at most <span class="num">4.5</span> s, and a line that would wait more than <span class="num">4</span> s for its turn gets no bubble. A new phase ends every bubble. A bubble opens above its speaker, or below or beside where above would cover a name, a caption or a price, sliding along its side to stay clear and inside its screen; on a crowded screen it takes the place that covers least.</li>
+<li><strong>The ticker</strong> keeps the last lines, newest first: two on a phone (in the rail, under its content), three on the TV (under the header). A whisper is marked 🔒.</li>
+<li><strong>Emotes</strong> float at the top of every phone's stage for <span class="num">3.5</span> s.</li>
+</ul>
+<p>Computer players talk too: each says at most <span class="num">3</span> lines a month and one a phase, up to <span class="num">140</span> characters, about what it just decided. A public line from a person reaches every computer player, a whisper only the one it was for.</p>
+<div class="box why"><h4>Why it is like this</h4><p>Heiko, 22 Oct: live table chat "Live on every screen", a speech bubble at the speaker and a short ticker on the phones and the TV in every phase. He approved the design the same day (ticker 2 lines on a phone, 3 on the TV; whispers only on the two screens involved, with a lock, never on the TV), with the PM's condition that bubbles never cover each other or the ticker.</p></div>
+<div class="box next"><h4>What is changing</h4><p>Only the planning hub has a place to type. In every other phase you can read the chat and see bubbles but not write, and no ruling says whether that is intended. Owner: the UX team (WS6).</p></div>
+<p class="code-ref">In the code: <code>apps/web/src/chat/Chat.tsx, store.ts, queue.ts</code> · <code>apps/web/src/phone/parts.tsx</code> (the Talk desk's chat, <code>EmoteBubbles</code>) · <code>packages/protocol/src/index.ts::EMOTES</code> · <code>packages/tabletop/src/room.ts</code> · <code>apps/server/src/brain/chat.ts</code> · <code>packages/engine/src/config.ts::BRAIN</code></p>
+<p class="owner">Kept current by: the UX team (WS6); the Brain team (WS2) for the computer players' lines.</p>
+
+<h2 id="event-shows">Event shows on the TV and on the phone <span class="pill built">In the game</span></h2>
+<p>An event's story is sized as a <strong>headline</strong> (<span class="num">7</span> s), a <strong>spotlight</strong> (<span class="num">5.2</span> s) or a <strong>bulletin</strong>; all of a phase's bulletins share one roll call of <span class="num">4</span> s. A <span class="num">1.8</span> s intro opens the show, and one phase's events never play longer than <span class="num">30</span> s in all; past that each is cut in proportion. While the show plays at the start of development or the goods auction, that phase's clocks wait.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Where</th><th>With a TV at the table</th><th>A phone alone</th></tr></thead>
+<tbody>
+<tr><td>TV</td><td>The full show over the phase screen: pips, the living map, the log, the colony bar</td><td>Not there</td></tr>
+<tr><td>Phone, a held phase</td><td>Covers the screen until the show ends: your own plots marked on the map and a light card of what happened to you; the phone vibrates once as each event is announced</td><td>Plays the whole show itself on its own map; a tap skips ahead to the result</td></tr>
+<tr><td>Phone, planning</td><td>The light card floats over the hub, which stays usable</td><td>Plays the show; the first tap folds it to the light card</td></tr>
+<tr><td>Production</td><td>Plays inside the production show; the phone vibrates per event and carries its light card</td><td>The phone plays each event on its own map; a tap on the map skips this phone's show to the result</td></tr>
+</tbody>
+</table></div>
+<p>A skip only moves your own phone's show ahead; it never moves the table's clock.</p>
+<p class="code-ref">In the code: <code>apps/web/src/events/PhoneEventOverlay.tsx, TvEventLayer.tsx</code> · <code>apps/web/src/phone/Production.tsx</code> · <code>packages/engine/src/config.ts::EVENT_SHOW</code></p>
+<p class="owner">Kept current by: the Events team (WS8). Every event is in <a href="events.html">Events</a>.</p>
+
+<h2 id="solo-play">A phone alone <span class="pill built">In the game</span></h2>
+<p>The game plays without a TV. A phone on its own (one person against computer players, or several people each on their own phone with no big screen) notices that no TV is connected and takes over what the TV would show:</p>
+<ul>
+<li><strong>The lobby</strong> draws the room's QR big, first on the screen.</li>
+<li><strong>Every phase</strong> already shows the whole map: the hub's colony map, the land grant's lit plot, the arcade's whole colony, the auction board.</li>
+<li><strong>Production and events</strong> play their full show on the phone, and a tap skips ahead, instead of the light card and the buzz.</li>
+<li><strong>The month end</strong> fits the league table and the colony panel on one stage.</li>
+<li><strong>Game over</strong> shows the colony's report under your result.</li>
+</ul>
+<p>This follows the TV live: if the TV disconnects mid-game, the phones switch to these screens; when it comes back, they switch back.</p>
+<div class="box next"><h4>What is changing</h4><p>From the design doc, not built: a remote player in a big-screen game seeing both the board and their controller on one device. Owner: the Table team (WS4).</p></div>
+<p class="code-ref">In the code: <code>table.boards</code> read in <code>apps/web/src/phone/Lobby.tsx, Production.tsx, Results.tsx, GameOver.tsx</code> and <code>apps/web/src/events/PhoneEventOverlay.tsx</code></p>
+<p class="owner">Kept current by: the Table team (WS4), with the UX team (WS6).</p>
+
+<h2 id="reconnect">Dropping out and getting back in <span class="pill built">In the game</span></h2>
+<ul>
+<li><strong>A dropped connection</strong>: the phone shows "CONNECTION LOST · REJOINING…" and tries again by itself, waiting a little longer each time, up to <span class="num">5</span> s between tries. It takes its seat back with the seat's own key.</li>
+<li><strong>A reload</strong>: the phone remembers its seat and takes it back by itself, unless you opened a link to another table.</li>
+<li><strong>A new device</strong>: "Move to my phone" (in every game screen's rail, and in the lobby) shows a QR and a one-time code. Opened on the other device within <span class="num">2</span> minutes, it moves your seat there, with your money, goods and plots, and the old screen steps aside ("You're playing on another device now"). The game does not pause meanwhile.</li>
+<li><strong>Nobody new</strong> can join a game that has started. A seat whose device is lost and has no saved key cannot be taken back.</li>
+<li><strong>The host</strong> passes to the next connected person while the host's phone is gone, and back when it returns.</li>
+<li><strong>A room</strong> that nobody has been connected to for <span class="num">30</span> minutes is closed.</li>
+</ul>
+<p>While you are away, the table treats you by phase: planning, the votes, the goods auction's side pick and the month end wait for you (the host can go on without you); in the land grant you just do not claim; your colonist stands still in development; in the walks you stop where you stand; production does not wait for you. The TV and the other phones mark you AWAY.</p>
+<p class="code-ref">In the code: <code>apps/web/src/net/client.ts</code> (reconnect, saved seat, <code>REMOVED</code> messages) · <code>apps/web/src/components/Toasts.tsx::ConnectionBar</code> · <code>apps/web/src/phone/MoveToPhone.tsx</code> · <code>packages/tabletop/src/room.ts</code> (<code>handoffCodeMs</code>, <code>hostId</code>) · <code>apps/server/src/server.ts</code> (<code>IDLE_ROOM_MS</code>) · <code>apps/server/src/mule-game.ts::connectionChanged, checkAllReady</code></p>
+<p class="owner">Kept current by: the Table team (WS4).</p>
+
+<h2 id="accessibility">Reduced motion and accessibility <span class="pill built">In the game</span></h2>
+<ul>
+<li><strong>Reduced motion</strong>: on a device set to reduce motion, the event shows' looping effects hold still and their entrances become a plain fade; the store and the MULEs stop animating; creatures stop their walking cycle and hold a still lean; the show's vibrate icon stops shaking. The production show, the election reveal and the event shows all follow the setting live.</li>
+<li><strong>Telling players apart</strong>: every player has both a colour and a species shape, so colour is never the only clue. Changes in the league table carry an arrow and a sign (↑ +120, ↓ −40), never colour alone.</li>
+<li><strong>Day and Night</strong>: every screen has a Day/Night switch; the phone remembers its choice.</li>
+<li><strong>Screen readers</strong>: the chat ticker is announced as it changes; private lines carry an "only you see this" label; the creature in your header is named ("You, Bramblet").</li>
+<li><strong>Keyboard</strong>: on a laptop, development is played with the arrow keys and SPACE.</li>
+<li><strong>Readable from the couch</strong>: the TV is drawn for 3 metres: large type, few words.</li>
+</ul>
+<div class="box next"><h4>What is changing</h4><p>The design doc's host Pause button (for dinner and phone calls, shown on the TV) is not built: the game never pauses, and a move to another phone says so. Owner: the Table team (WS4).</p></div>
+<p class="code-ref">In the code: <code>packages/ui/src/theme.css, events/events.css, events/motion.ts</code> (<code>prefers-reduced-motion</code>) · <code>apps/web/src/components/ThemeToggle.tsx</code> · <code>apps/web/src/components/MonthEnd.tsx::ChangeTag</code></p>
+<p class="owner">Kept current by: the Table team (WS4), with the UX team (WS6).</p>
+
+<h2 id="colony-on-the-tv">The colony on the TV: mood drift and strikes <span class="pill progress">Being built</span></h2>
+<p>Two colony shows are built in the colony branch and are not on trunk yet.</p>
+<h3 id="mood-drift">The month end's mood drift</h3>
+<p>At the month end, the TV's Happiness gauge opens on last month's value and, about 1.2 s later, counts to this month's. When the count crosses into another band (Restless into Unhappy, for example), the band's name flips and the gauge pulses. It shows no reasons, only "↓ n this month". It plays once, as the TV sees the month end arrive; a TV that reloads into the month end, or a device set to reduce motion, shows the end state at once. Nothing plays in month 1, with an unchanged mood, or with the council off.</p>
+<h3 id="strikes">Strikes</h3>
+<p>During a general strike, the TV header carries a strike badge ("STRIKE · Food 20%", then "PAID · −250 cr" once paid), the TV shows whose choice the strike waits on ("Waiting for Kai, the Governor"), and strikers with placards stand over every plot of the struck good on the map. The Governor's phone shows the strike in its Now card, with "Pay the strikers" and "Let them strike"; everyone else's phone shows a line saying the strike is on and who decides.</p>
+<div class="box next"><h4>What is changing</h4><p>Mood drift: PR #365. Strikes: PR #368. Both by the Events team (WS8) into the colony branch, with the Table team's OK on the TV header. When the colony branch reaches trunk, the TV fit's header row (PR #381) keeps the drift. The strike badge is one of the status badges that move the gauges to their own row.</p></div>
+<p class="code-ref">In the code: <code>apps/web/src/table/TableApp.tsx::TvHeader, TvMonthEnd</code> · <code>apps/web/src/components/Colony.tsx::ColonyGauges</code></p>
+<p class="owner">Kept current by: the Events team (WS8), with the Table team (WS4).</p>
+</article>
+</main>
+</div>
+<script src="search-index.js"></script>
+<script src="rulebook.js"></script>
+</body>
+</html>
