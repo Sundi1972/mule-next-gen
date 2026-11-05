@@ -78,6 +78,8 @@ describe('C23: the colony\'s happiness (RULE-20)', () => {
     expect(moodStep(60, target)).toBe(60 - HAPPINESS.maxStep);
     expect(moodBand(60 - HAPPINESS.maxStep)).toBe('restless');
     expect(moodTarget(QUIET), 'a quiet month aims at the base').toBe(HAPPINESS.base);
+    expect(moodTarget({ ...QUIET, prestige: W.prestigeCap + 10 }), 'prestige past its cap adds nothing').toBe(moodTarget({ ...QUIET, prestige: W.prestigeCap }));
+    expect(moodTarget({ ...QUIET, gap: 1_000_000 }), 'the gap past its cap takes nothing more').toBe(moodTarget({ ...QUIET, gap: W.gapCap * W.gapUnit }));
   });
 
   it('T-AC-31: moodInputs reads the month: the shortages given, the air, the tax in whole %, standing prestige and the gap', () => {
