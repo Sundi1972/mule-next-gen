@@ -437,7 +437,8 @@ export function monthNeeds(state: GameState, playerId: string): Stock {
   need.water = water;
   for (const t of state.tiles) {
     if (t.owner !== playerId || !t.outfit || t.outfit === 'greenBelt') continue;
-    need.energy += energyUseOf(state, t);
+    // A plant pays its own use from its own output (AM-17 R2, PM ruling A): it is nobody's need.
+    if (t.outfit !== 'energy') need.energy += energyUseOf(state, t);
     if (!isFactory(t.outfit)) continue;
     for (const [g, q] of Object.entries(RECIPES[t.outfit].inputs) as [Good, number][]) if (g !== 'energy') need[g] += q;
   }
