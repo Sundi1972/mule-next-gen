@@ -201,6 +201,8 @@ export class AuctionHand {
   }
 
   /**
+   * Whether to step off a house's line now, and, while staying, when to re-aim: it sets `reactIn`.
+   *
    * Standing at a house's line, where units trade by themselves: true once it wants no more there, so it steps off. While
    * it still wants some, it stays and re-aims when the line's next unit is due, so it counts again after every unit and
    * steps off within a tick of the last, as a phone's stop lands; the replay makes the same stop at the same step. The
