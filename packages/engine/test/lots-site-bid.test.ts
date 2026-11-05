@@ -81,10 +81,15 @@ describe('C30: the colony bids for an object’s site at the land auction (RULE-
     brixLists(state, 100);
     expect(lotLeader(state)).toEqual({ id: COLONY_SELLER, bid: 100 });
     const brix = money(state, 'brix');
+    const fund = state.treasury.money;
+    const taxIn = state.colony!.ledger.in.salesTax ?? 0;
     expect(bell(state)).toEqual({ kind: 'sold', buyer: COLONY_SELLER, price: 100 });
     // The fund's site-bid line pays the price; the sale's tax comes back in as tax, as on any sale.
+    const tax = Math.round(100 * state.treasury.salesTax);
     expect(state.colony!.ledger.out.siteBid).toBe(100);
-    expect(money(state, 'brix')).toBeGreaterThan(brix);
+    expect(money(state, 'brix')).toBe(brix + 100 - tax);
+    expect(state.treasury.money).toBe(fund - 100 + tax);
+    expect((state.colony!.ledger.in.salesTax ?? 0) - taxIn).toBe(tax);
     const tile = tileOf(state, 2, 1);
     expect(tile).toMatchObject({ owner: COLONY_SELLER, outfit: null });
     expect(project(state, 'park').plot).toBe(state.width + 2);
@@ -141,6 +146,19 @@ describe('C30: the colony bids for an object’s site at the land auction (RULE-
     const mule = governed(300);
     brixLists(mule, 100, 2, 1, 'mule');
     expect(lotLeader(mule)).toBeNull();
+  });
+
+  it('a plot with a MULE on it: the colony takes the plot bare and the MULE goes back to the corral, never out of the game', () => {
+    const state = governed(300);
+    const mules = () => state.store.mules + state.tiles.filter((t) => t.outfit).length + state.players.filter((p) => p.carriedMule).length;
+    brixLists(state, 100);
+    Object.assign(tileOf(state, 2, 1), { outfit: 'food', runMonths: 4 });
+    const before = mules();
+    const corral = state.store.mules;
+    expect(bell(state)).toMatchObject({ buyer: COLONY_SELLER });
+    expect(tileOf(state, 2, 1)).toMatchObject({ owner: COLONY_SELLER, outfit: null, runMonths: 0 });
+    expect(state.store.mules).toBe(corral + 1);
+    expect(mules()).toBe(before);
   });
 
   it('once it has won a site it bids on no later lot, though its maximum stays set (WS7, #334)', () => {
