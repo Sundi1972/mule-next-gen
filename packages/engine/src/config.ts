@@ -1139,8 +1139,6 @@ export const PHASES = {
    * the grant's tick, phaseScale never changes it.
    */
   grantFastForwardMs: GAME.grantTickMs / 8,
-  /** Production: the show of what each plot made. */
-  productionMs: 15_000,
   /**
    * Upkeep, the month end: colonists eat and goods spoil, and the table reads the league table. null: it waits for
    * every player's Ready ("On to month N") or the host's Continue; a number restores a timer.
@@ -1187,10 +1185,38 @@ export const EVENT_SHOW = {
   introMs: 1_800,
   /** How long the one roll call that every bulletin of a phase shares plays, in ms. */
   rollCallMs: 4_000,
-  /** The event window production's 15 s show already has; only time beyond it lengthens production. */
-  productionWindowMs: 4_800,
   /** The most the events of one phase may play in all, in ms; past it each is cut in proportion. */
   capMs: 30_000,
+};
+
+/**
+ * The production show (ws6-ux spec AM-19, RULE-3; Heiko's order C, 2026-11-05): good by good for every player at
+ * once, then every bonus at once, then every loss at once, then the month's events, then the goods fly into the silos.
+ * The timeline is packages/engine/src/production-show.ts; its length is production's length, so it grows with the
+ * goods made, never the plots. Named edit in WS1's config, values WS6's (approved in the mock, b65c3972).
+ */
+export const PRODUCTION_SHOW = {
+  /** The order the goods harvest in: the crops, then the mines, then the factories. */
+  order: ['food', 'water', 'energy', 'smithore', 'crystite', 'rareEarth', 'alloy', 'electronics', 'medicine'] as const satisfies readonly Good[],
+  /** Before the first good lights. */
+  introMs: 1_000,
+  /** One good's turn: every plot of it lights and counts up together. */
+  goodBeatMs: 1_100,
+  /** One unit of a plot's base rising, so a 4-unit plot counts up as you watch. */
+  unitStepMs: 140,
+  /** Every bonus at once, then every loss at once: each held this long. */
+  allAtOnceMs: 1_600,
+  /** Before the bonuses, before the events and before the flight. */
+  gapMs: 500,
+  /** The plots take off for the silos over this long, the first gaps longest (`flightEase` below 1). */
+  flightsMs: 2_400,
+  flightEase: 0.7,
+  /** One plot's goods in the air. */
+  flightMs: 750,
+  /** The silos stand full to be read before the phase ends. */
+  holdMs: 2_000,
+  /** Once every person at the table has asked, the rest of the show plays this many times faster. */
+  fast: 3,
 };
 
 /**
@@ -1559,6 +1585,8 @@ type PlanKind = Strategy['kind'];
 export const AI_PLANS = {
   /** Seats play their playbook; false: every seat plays the phase-by-phase asks, as before playbooks. */
   on: true,
+  /** A feature switch, not a balance value: a seat's own path plays its drafted development and auction parts; false, today's (AM-26). */
+  ownPhases: false,
   /** How much each persona leans to each plan kind, 0 to 1: the draft picks the eligible kind it leans to most. */
   leaning: {
     cautious: { builder: 1, specialist: 0.5, monopolist: 0.2, landBaron: 0.3, politician: 0.4, spoiler: 0 },

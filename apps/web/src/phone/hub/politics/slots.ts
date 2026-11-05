@@ -4,6 +4,7 @@ import type { AgendaSlot, BannerSlot, DeskSlot, HubSeat, ReadyBarWords, StageSlo
 import { CouncilDesk } from './Council';
 import { ballotComplete, contested, ElectionDay, ElectionDayRail } from './ElectionDay';
 import { GovernorDesk } from './Governor';
+import { forYouWords, proposalWords } from './LawPicker';
 import { Offices } from './Offices';
 import { listNames, namer, officeNames, promiseBase, promiseWords, termEnd, youPromised } from './words';
 
@@ -35,7 +36,26 @@ export const ELECTION_AGENDA: AgendaSlot = {
   show: ({ view, me }) => view.politics?.next != null && (me.politics?.running != null || me.politics?.canRun.governor === true),
 };
 
-export const GOVERNOR_AGENDA: AgendaSlot = { key: 'governor', title: () => "Governor's desk", sub: () => 'Set the sales tax', opens: { desk: 'governor' } };
+/** The proposal pending for next month's vote while no vote is open, on a phone other than its Governor's; else null. */
+const pendingFor = ({ view, self }: HubSeat) => {
+  const politics = view.politics;
+  const votesOpen = (!!politics?.council && politics.council.stage !== 'over') || (!!politics?.election && politics.election.stage !== 'over');
+  return politics?.proposal && !votesOpen && politics.governor !== self.id ? politics.proposal : null;
+};
+
+/** C46: every other phone's This month carries the pending law and what it costs them; the Governor's own desk has it. */
+export const LAW_AGENDA: AgendaSlot = {
+  key: 'law',
+  title: () => 'Next month’s vote',
+  sub: (seat) => {
+    const p = pendingFor(seat)!;
+    return `${namer(seat.view)(p.by)} proposes ${proposalWords(p.proposal)}. For you: ${forYouWords(p.proposal, p.impact[seat.self.id], seat.view.air.level)}.`;
+  },
+  opens: { desk: 'council' },
+  show: (seat) => pendingFor(seat) !== null,
+};
+
+export const GOVERNOR_AGENDA: AgendaSlot = { key: 'governor', title: () => "Governor's desk", sub: () => 'Set the sales tax · propose a law', opens: { desk: 'governor' } };
 
 export const COUNCIL_DESK: DeskSlot = { id: 'council', label: 'Council', icon: 'M4 10h16 M6 10v8 M10 10v8 M14 10v8 M18 10v8 M3 20h18 M12 3l9 5H3z', Body: CouncilDesk, show: politicsOn };
 

@@ -1,11 +1,11 @@
 /**
  * UBER-AC-7 at promise altitude (C34): a real game with politics on, one phone, an AI seat and the TV. A project is
- * commissioned and donated to through the game's own intents; the TV's four gauges, its month-end build site and the
+ * commissioned and donated to through the phone's Colony desk (C35); the TV's four gauges, its month-end build site and the
  * game over's colony band, and the phone's colony score card, all carry the server's ColonyView.
  * Run with `pnpm --filter @mule/web exec tsx e2e/colony.ts`; replay with `MULE_E2E_SEED=<seed>`.
  */
 import { callStrike, COLONY, PRESTIGE, type GameState, type PrestigeId } from '@mule/engine';
-import type { ColonyView, MuleIntent, MuleView } from '@mule/protocol';
+import type { ColonyView, MuleView } from '@mule/protocol';
 import { errors as playwrightErrors, type Page } from 'playwright';
 import { PHASE_MS } from '../../server/src/mule-game.js';
 import type { MuleServer } from '../../server/src/server.js';
@@ -18,7 +18,7 @@ const within = (ms: number) => ms * SCALE + 5_000;
 const MONTH_END_MS = 10_000;
 /** What the phone gives to the project: well under any object's price, so it stays a donation. */
 const DONATION = 100;
-let PROJECT: PrestigeId = 'hospital';
+const PROJECT: PrestigeId = 'hospital';
 
 type Room = NonNullable<ReturnType<MuleServer['registry']['get']>>;
 const fmt = (n: number) => Math.round(n).toLocaleString('en');
@@ -71,21 +71,36 @@ async function main(): Promise<void> {
 
     // Month 1: through the election to planning proper, where the Governor commissions and anyone donates.
     await voteThroughTheElection(phone, within(ELECTION_WAIT_MS) + PRESS_MS);
+    // Commissioning needs a sitting Governor. When nobody ran, or another seat won, there is none for Lena; so she is
+    // seated the way the server's colony tests do it. The AI never commissions, so the colony has no project yet.
     await held(server, code, async () => {
-      const game = (room() as unknown as { game: { state: GameState; handle(seat: string, intent: MuleIntent): void } }).game;
+      const game = (room() as unknown as { game: { state: GameState } }).game;
       const politics = game.state.politics!;
-      // Commissioning needs a sitting Governor. When nobody ran in the election there is none, and the Governor's desk
-      // (C35) that would commission is not built yet; so the Governor is seated the way the server's colony tests do it.
-      if (!politics.governor) game.state.politics = { ...politics, governor: lenaId };
-      // An AI Governor may have commissioned already; the colony funds one project at a time, so Lena gives to that one.
-      const open = game.state.colony!.projects.find((p) => p.stage === 'commissioned');
-      if (open) PROJECT = open.id;
-      else game.handle(game.state.politics!.governor!, { type: 'commission', id: PROJECT });
-      game.handle(lenaId, { type: 'donate', id: PROJECT, credits: DONATION });
+      if (politics.governor !== lenaId) game.state.politics = { ...politics, governor: lenaId };
+      check(game.state.colony!.projects.length === 0, `no project before Lena commissions, got ${JSON.stringify(game.state.colony!.projects)}`);
       room().broadcast();
     });
+    // B-AC-35-1, front to back: the Governor's phone commissions through the Colony desk.
+    const planning = phone.locator('[data-phase=planning]');
+    await planning.getByTestId('desk-colony').click({ timeout: PRESS_MS });
+    await planning.getByTestId('commission-open').click({ timeout: PRESS_MS });
+    await planning.getByTestId(`cat-${PROJECT}`).click({ timeout: PRESS_MS });
+    await planning.getByTestId('commission-go').click({ timeout: PRESS_MS });
+    await until(() => colony().projects.some((p) => p.id === PROJECT && p.stage === 'commissioned'), `B-AC-35-1: the server has the ${PRESTIGE[PROJECT].name} commissioned`);
+    await planning.getByTestId('commission-news').filter({ hasText: `Lena commissions a ${PRESTIGE[PROJECT].name}` }).waitFor({ timeout: PRESS_MS });
+    console.log(`✓ B-AC-35-1: Lena's phone commissions the ${PRESTIGE[PROJECT].name} from the Colony desk; the server's ColonyView has it`);
+
+    // B-AC-35-2, front to back: she donates through the chips, and the plaque the preview promised is the server's.
+    await planning.getByTestId(`donate-${PROJECT}`).click({ timeout: PRESS_MS });
+    await planning.getByTestId(`chip-cr-${DONATION}`).click({ timeout: PRESS_MS });
+    const preview = (await planning.getByTestId('donate-preview').innerText({ timeout: PRESS_MS })).replace(/\s+/g, ' ');
+    check(preview.includes(`0 → ${fmt(DONATION)} cr`), `B-AC-35-2: the preview shows the plaque 0 → ${DONATION} cr, got "${preview}"`);
+    await planning.getByTestId('donate-give').click({ timeout: PRESS_MS });
+    await until(() => colony().projects.find((p) => p.id === PROJECT)?.plaque.some((d) => d.playerId === lenaId) ?? false, "B-AC-35-2: the server has Lena's gift on the plaque");
     const project = colony().projects.find((p) => p.id === PROJECT);
-    check(project?.plaque.some((d) => d.playerId === lenaId && d.value >= DONATION), `the server has Lena's ${DONATION} cr on the ${PRESTIGE[PROJECT].name}'s plaque, got ${JSON.stringify(project?.plaque)}`);
+    check(project?.plaque.some((d) => d.playerId === lenaId && d.value === DONATION), `the server has Lena's ${DONATION} cr on the ${PRESTIGE[PROJECT].name}'s plaque, got ${JSON.stringify(project?.plaque)}`);
+    await planning.getByTestId(`donate-hint-${PROJECT}`).filter({ hasText: `Your plaque ${fmt(DONATION)} cr` }).waitFor({ timeout: PRESS_MS });
+    console.log(`✓ B-AC-35-2: Lena gives ${DONATION} cr through the chips; the server's plaque and her phone both read ${DONATION} cr`);
 
     // 1. The TV's header carries the four gauges, its wealth the server's, happiness "not yet" while it has none.
     const gauges = tv.getByTestId('colony-gauges');
@@ -229,6 +244,15 @@ async function pressDoneThroughTheAuction(page: Page, board: () => MuleView): Pr
       // The stage moved on under the press.
       if (!(err instanceof playwrightErrors.TimeoutError)) throw err;
     }
+  }
+}
+
+/** Waits for the server to get there. */
+async function until(ok: () => boolean, what: string): Promise<void> {
+  const deadline = Date.now() + PRESS_MS;
+  while (!ok()) {
+    check(Date.now() < deadline, what);
+    await new Promise((r) => setTimeout(r, 50));
   }
 }
 
