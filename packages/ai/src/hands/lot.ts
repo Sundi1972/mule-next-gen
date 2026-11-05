@@ -1,4 +1,4 @@
-import { lotLeader, LOTS, MS_PER_SECOND, observe, WALK, type GameState, type LandAuction, type Listing, type Rng, type Walker } from '@mule/engine';
+import { COLONY_SELLER, colonyBid, lotLeader, LOTS, MS_PER_SECOND, observe, WALK, type GameState, type LandAuction, type Listing, type Rng, type Walker } from '@mule/engine';
 import type { Act } from '../actions.js';
 import { muleValue, plotRoom, plotValue } from '../strategist.js';
 import { cashReserve, type Mind } from '../value.js';
@@ -89,7 +89,14 @@ export class LotHand {
     else if (leader?.id === w.id) {
       if (this.target === null || Math.round(w.price) >= this.target) this.standStill(false);
     } else if (!leader) this.walkTo(lot.minimum, null);
-    else if (leader.bid + 1 <= this.limit) {
+    else if (leader.id === COLONY_SELLER) {
+      // The colony bids as a proxy (C30) up to a cap every screen shows: it follows any bid up to it, so only the cap
+      // itself takes the lot. Walk straight there if it is within the limit; otherwise the lot is the colony's.
+      const cap = colonyBid(state, lot)!.cap;
+      if (cap <= this.limit) {
+        if (this.target !== cap) this.walkTo(cap, cap);
+      } else this.standStill(true);
+    } else if (leader.bid + 1 <= this.limit) {
       if (this.beating !== leader.bid) this.walkTo(overtakeTarget(this.limit, leader.bid, this.overshootShare()), leader.bid);
     } else this.standStill(true);
   }

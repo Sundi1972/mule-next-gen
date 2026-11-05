@@ -12,6 +12,8 @@ export type AuditScope = {
   tapsNotCounted?: string[];
   /** Text ruled to truncate, as `selector`s: its truncation is reported in `ruled`, not failed; see the step for why. */
   truncates?: string[];
+  /** Boxes ruled to clip what they hold, as `selector`s: their clipping is reported in `ruled`, not failed; see the step for why. */
+  clips?: string[];
 };
 
 export type AuditRead = {
@@ -54,6 +56,7 @@ export const AUDIT_JS = String.raw`(scope) => {
   const fails = [];
   const ruled = [];
   const truncates = scope.truncates || [];
+  const clips = scope.clips || [];
 
   const INTERACTIVE = 'button,a[href],input:not([type=hidden]),select,textarea,summary,[role=button],[role=radio],[role=tab],[role=checkbox],[role=switch],[role=slider],[tabindex]:not([tabindex="-1"])';
   const notCounted = scope.tapsNotCounted || [];
@@ -76,8 +79,9 @@ export const AUDIT_JS = String.raw`(scope) => {
     else {
       const hx = cs.overflowX === 'hidden' || cs.overflowX === 'clip';
       const hy = cs.overflowY === 'hidden' || cs.overflowY === 'clip';
-      if (hx && el.scrollWidth > el.clientWidth + 1) fails.push(id(el) + ': clipped across, ' + el.scrollWidth + ' in ' + el.clientWidth + ' px');
-      if (hy && el.scrollHeight > el.clientHeight + 1) fails.push(id(el) + ': clipped down, ' + el.scrollHeight + ' in ' + el.clientHeight + ' px');
+      const clipTo = clips.some((s) => el.matches(s)) ? ruled : fails;
+      if (hx && el.scrollWidth > el.clientWidth + 1) clipTo.push(id(el) + ': clipped across, ' + el.scrollWidth + ' in ' + el.clientWidth + ' px');
+      if (hy && el.scrollHeight > el.clientHeight + 1) clipTo.push(id(el) + ': clipped down, ' + el.scrollHeight + ' in ' + el.clientHeight + ' px');
     }
   }
 

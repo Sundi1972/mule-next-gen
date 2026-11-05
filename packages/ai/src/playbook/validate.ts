@@ -9,9 +9,12 @@ import {
   MS_PER_SECOND,
   observe,
   orderGeoDrone,
+  outfitCostFor,
+  outfitMule,
   RuleError,
   STRATEGIST,
   unlist,
+  type DevelopmentPlay,
   type GameState,
   type Good,
   type Outfit,
@@ -22,7 +25,7 @@ import {
 import { outlook } from '../outlook.js';
 import { capCodePoints } from '../text.js';
 import { unitValues, type Mind } from '../value.js';
-import { draftPlaybook, KINDS, type DraftPhase, type LandPick } from './draft.js';
+import { draftPlaybook, KINDS, ledOutfit, type DraftPhase, type LandPick } from './draft.js';
 
 /**
  * The gate every playbook passes before it plays (spec C1, RULE-1, RULE-2): each edit is accepted, clamped to the
@@ -171,6 +174,23 @@ function routeFault(route: unknown, ctx: Ctx): [string, number] | null {
   return route.length > cap ? [`more than ${cap} steps`, cap] : null;
 }
 
+/** Why a route cannot give its first MULE group, the fitted MULE the seat leads, another outfit, or null (AM-29). */
+function refitFault(route: DevelopmentPlay['route'], ctx: Ctx): string | null {
+  const led = ledOutfit(ctx.state, ctx.seat);
+  const first = route.findIndex((s) => s.act === 'buyMule');
+  const outfit = first < 0 ? undefined : route[first + 1]!.outfit!;
+  if (led === null || outfit === undefined || outfit === led) return null;
+  const trial = cloneForSim(ctx.state);
+  const self = trial.players.find((p) => p.id === ctx.seat)!;
+  // Drafted ahead of development, the route plays in the coming phase.
+  trial.phase = 'development';
+  self.doneDeveloping = false;
+  // Asked with the money for it, so the refusal named is the re-fit's and not the purse's.
+  self.money = Math.max(self.money, outfitCostFor(trial, ctx.seat, outfit));
+  const engine = dryRun(() => outfitMule(trial, ctx.seat, outfit));
+  return engine && 'refused' in engine ? engine.refused : `the MULE it leads already carries ${led}`;
+}
+
 const goodOf = (ctx: Ctx, unit: string[]) => ctx.pb.auction![unit[1] as Good]!;
 
 const STRATEGY_ROWS: Record<string, Row> = {
@@ -274,7 +294,9 @@ const PART_ROWS: Record<'planning' | 'landGrant' | 'development', Record<string,
   development: {
     route: (v, ctx) => {
       const fault = routeFault(v, ctx);
-      return fault ? refuse(`route: ${fault[0]}, step ${fault[1]}`) : ok(v);
+      if (fault) return refuse(`route: ${fault[0]}, step ${fault[1]}`);
+      const refit = refitFault(v as DevelopmentPlay['route'], ctx);
+      return refit ? refuse(refit) : ok(v);
     },
     timeBudgetMs: (v, ctx) => {
       const me = ctx.state.players.find((p) => p.id === ctx.seat)!;

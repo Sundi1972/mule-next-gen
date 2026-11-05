@@ -1,4 +1,5 @@
-import { DEVELOPMENT } from '@mule/engine';
+import { COLONY_SELLER, DEVELOPMENT } from '@mule/engine';
+import type { MuleView, TileView } from '@mule/protocol';
 import { Button, GOOD_NAME, HoloMap, TERRAIN_NAME, type MapTile } from '@mule/ui';
 import { mapTiles, player, plotName, TERRAIN_ODDS, tileAt } from '../../game/derive';
 import { SpecialLine } from '../../components/SpecialLine';
@@ -12,7 +13,15 @@ import { useToday } from './state';
 
 /* Today's map tools: Look, the geo drone (planning's drone flow) and selling a plot (the Sell form's map). */
 
-const free = (t: MapTile) => t.owner === null && t.terrain !== 'store';
+/** A plot the drone may fly over: nobody's, not the store, and not the colony's (a sited object's plot is no player's). */
+export const freeForDrone = (t: MapTile) => t.owner === null && !t.object && t.terrain !== 'store';
+
+/** Whose a plot is, in the Look panel's words: yours, a player's name, the colony's, or free. */
+export function ownerWord(view: MuleView, tile: Pick<TileView, 'owner'>, meId: string): string {
+  if (tile.owner === meId) return 'YOURS';
+  if (tile.owner === COLONY_SELLER) return 'COLONY';
+  return player(view, tile.owner)?.name.toUpperCase() ?? 'FREE';
+}
 
 /** Look: tap a plot to see what it is and whose. */
 export function LookMap() {
@@ -36,7 +45,6 @@ export function LookPanel() {
   const { looked, setLooked } = useToday();
   const tile = looked ? tileAt(view, looked.x, looked.y) : undefined;
   if (!tile) return null;
-  const owner = player(view, tile.owner);
   return (
     <section className="flex flex-col gap-0.5 rounded-control border border-holo-line bg-panel p-2 @min-[1100px]/shell:p-3" data-testid="look-plot">
       <span className="label-caps flex justify-between gap-2">
@@ -46,7 +54,7 @@ export function LookPanel() {
         </button>
       </span>
       <span className="font-display text-lg font-semibold leading-tight">
-        {TERRAIN_NAME[tile.terrain]} <span className="font-mono text-xs text-holo">{tile.owner === me.id ? 'YOURS' : owner ? owner.name.toUpperCase() : 'FREE'}</span>
+        {TERRAIN_NAME[tile.terrain]} <span className="font-mono text-xs text-holo">{ownerWord(view, tile, me.id)}</span>
       </span>
       <SpecialLine special={tile.special} />
       {tile.outfit && <span className="text-xs text-ink-2">A MULE here makes {tile.outfit === 'greenBelt' ? 'a green belt' : GOOD_NAME[tile.outfit]}.</span>}
@@ -76,7 +84,7 @@ export function DroneMap() {
   const wide = useWide();
   const tiles: MapTile[] = mapTiles(view).map((t) => (chosen.some((p) => p.x === t.x && p.y === t.y) ? { ...t, flag: 'survey' } : t));
   const toggle = (t: MapTile) => {
-    if (ordered || !free(t)) return;
+    if (ordered || !freeForDrone(t)) return;
     setPicked((p) => (p.some((q) => q.x === t.x && q.y === t.y) ? p.filter((q) => q.x !== t.x || q.y !== t.y) : [...p, { x: t.x, y: t.y }].slice(-DEVELOPMENT.dronePlots)));
   };
   return (

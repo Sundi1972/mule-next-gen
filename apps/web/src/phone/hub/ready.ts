@@ -1,4 +1,4 @@
-import type { AuctionView, ElectionView, MuleIntent, MuleView, PlayerView, TableView } from '@mule/protocol';
+import type { AuctionView, CouncilView, ElectionView, MuleIntent, MuleView, PlayerView, TableView } from '@mule/protocol';
 
 /** Planning has no clock: who it still waits for, and what the planning footer shows and sends. */
 
@@ -72,7 +72,9 @@ export function readyNowIn(view: Pick<MuleView, 'phase' | 'politics'>, ready: bo
 /** Planning with no election running: the time Ready ends planning. */
 export function planningProper(view: Pick<MuleView, 'phase' | 'politics'>): boolean {
   const election = view.politics?.election;
-  return view.phase === 'planning' && !(election && election.stage !== 'over');
+  // The law ballot (C40) is a vote like the election: while it or its reveal is open, Ready means Done with it.
+  const council = view.politics?.council;
+  return view.phase === 'planning' && !(election && election.stage !== 'over') && !(council && council.stage !== 'over');
 }
 
 /** The view's auction, where it carries one: only the stage matters here. */
@@ -84,7 +86,9 @@ type WithAuction = { auction?: Pick<AuctionView, 'stage'> | null };
  */
 export function hostMayContinue(view: Pick<MuleView, 'phase' | 'politics'> & WithAuction): boolean {
   const stage = view.politics?.election?.stage;
-  return planningProper(view) || (view.phase === 'planning' && (stage === 'announce' || stage === 'ballot')) || view.phase === 'upkeep' || sidePick(view);
+  // The host continues the law ballot as they do the election's (RULE-40), never its reveal.
+  const lawBallot = view.politics?.council?.stage === 'ballot';
+  return planningProper(view) || (view.phase === 'planning' && (stage === 'announce' || stage === 'ballot' || lawBallot)) || view.phase === 'upkeep' || sidePick(view);
 }
 
 /** A good's side pick, the auction's status screen: no clock, it waits for every Done or the host's Continue (A-7). */
@@ -152,8 +156,9 @@ export const PLANNING_WORDS: ReadyWords = {
   confirm: (names, n) => `End planning for everyone now? ${names} stop${n === 1 ? 's' : ''} where they are, and the land grant starts.`,
 };
 
-/** Planning's words at this election stage, for when no slot gives the stage its own: the confirm says what Continue does there. */
-export function stageWords(stage: ElectionView['stage'] | null | undefined): ReadyWords {
+/** Planning's words at this election (or law ballot) stage, for when no slot gives the stage its own: the confirm says what Continue does there. */
+export function stageWords(stage: ElectionView['stage'] | null | undefined, council?: CouncilView['stage'] | null): ReadyWords {
+  if (council === 'ballot') return { ...PLANNING_WORDS, confirm: (names, n) => `Go on without ${names}? ${names} ${n === 1 ? "doesn't" : "don't"} vote on this law.` };
   if (stage === 'announce') return { ...PLANNING_WORDS, confirm: (names) => `Go on without ${names}? The candidates close as they are.` };
   if (stage === 'ballot') return { ...PLANNING_WORDS, confirm: (names, n) => `Go on without ${names}? ${names} ${n === 1 ? "doesn't" : "don't"} vote this time.` };
   return PLANNING_WORDS;
