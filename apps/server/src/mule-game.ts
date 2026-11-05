@@ -429,6 +429,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   private heldUntil: number | null = null;
   /** This month's production length in real ms, as its timer was given: the production show stretches over it. */
   private productionMs = 0;
+  /** RULE-3's inputs as production's timer was given them: the hurry and the events' times read these, never live config. */
+  private productionShow = { goods: 0, endMs: 0 };
   /**
    * Speed up (ws6-ux AM-19, B-AC-20): who has asked this phase, and once every connected person has, the show second
    * (full pace) the rest plays faster from and the server time that happened at. Cleared as every phase starts.
@@ -874,7 +876,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   }
 
   /**
-   * B-AC-20: once every connected person has asked (at least one has, so a table of dropped phones never speeds up),
+   * B-AC-20: once every connected person has asked (at least one person connected and one ask, so a table of dropped phones never speeds up),
    * the rest of the show plays PRODUCTION_SHOW.fast times faster: the phase ends that much sooner, and every screen,
    * reading the show from the time left, plays the rest faster on that one clock.
    */
@@ -883,11 +885,11 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     const h = this.hurry;
     if (state?.phase !== 'production' || this.phaseEndsAt === null || h.from !== null || h.asked.size === 0) return;
     const people = this.seats.filter((s) => !s.isAi && !this.away.has(s.id));
-    if (!people.every((s) => h.asked.has(s.id))) return;
+    if (people.length === 0 || !people.every((s) => h.asked.has(s.id))) return;
     const now = this.ctx.now();
-    const { goods, eventsMs } = showInputs(state);
-    const end = productionShowMs(goods, eventsMs) / 1_000;
-    const left = this.phaseEndsAt - now;
+    const end = this.productionShow.endMs / 1_000;
+    // A tap handled after the end but before its timer fires changes nothing past the end.
+    const left = Math.max(0, this.phaseEndsAt - now);
     // The second the screens are at, from the time left (packages/ui showTime): the same second on every screen.
     h.from = end - (left * end) / this.productionMs;
     h.at = now;
@@ -1176,11 +1178,15 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
    */
   private startPhaseTimer(phase: keyof typeof PHASE_MS): void {
     const state = this.requireState();
-    const length = phase === 'production' ? productionShowMs(showInputs(state).goods, showInputs(state).eventsMs) : PHASE_MS[phase];
+    const show = phase === 'production' ? showInputs(state) : null;
+    const length = show ? productionShowMs(show.goods, show.eventsMs) : PHASE_MS[phase];
     this.phaseEndsAt = null;
     if (length === null) return;
     const ms = length * this.phaseScale;
-    if (phase === 'production') this.productionMs = ms;
+    if (show) {
+      this.productionMs = ms;
+      this.productionShow = { goods: show.goods, endMs: length };
+    }
     this.schedulePhaseEnd(ms);
   }
 
@@ -1904,7 +1910,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     let endsAt = startsAt + this.realMs(showMs / 1_000);
     if (state.phase === 'production') {
       // RULE-3: the events play after every loss has landed, and a hurry speeds them up with the rest.
-      const from = productionEventAtMs(showInputs(state).goods) / 1_000;
+      const from = productionEventAtMs(this.productionShow.goods) / 1_000;
       startsAt = this.productionShowAt(from);
       endsAt = this.productionShowAt(from + showMs / 1_000);
     }
