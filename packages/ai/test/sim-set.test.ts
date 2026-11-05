@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { DEV_STEER, score, SPECIES_PERK } from '@mule/engine';
+import { colonyScore, DEV_STEER, score, SPECIES_PERK, type GameState } from '@mule/engine';
 import { ROTATION, simSeats } from '../src/lineup.js';
 import { playGame } from '../src/play.js';
-import { applySets, newPlanTally, planLines, playsArg, tallyGame, winnerOf } from '../src/sim.js';
+import { applySets, colonyScoreLines, colonyScoreRecorder, newPlanTally, planLines, playsArg, tallyGame, winnerOf } from '../src/sim.js';
 
 describe('a sweep sets config without editing it', () => {
   it('T-AC-26: sim --set sets a config number or switch, names it in the header, and refuses an unknown path', () => {
@@ -65,5 +65,41 @@ describe('the sim seats mixed tables (C14, RULE-15)', () => {
     }
     const share = (k: string) => `${(kinds.filter((x) => x === k).length / kinds.length) * 100}%`;
     expect(planLines(tally, 'trader')).toContain(`     Wins by seat kind: playbook ${share('playbook')}, today ${share('today')} of 2 games (fair share 50% for playbook seats; no check)`);
+  });
+});
+
+describe("the sim reports the colony score (C29's baseline, RULE-25)", () => {
+  it("T-AC-22, C29: the colony score lines read the engine's colony score at each month's end; politics off prints none", { timeout: 60_000 }, () => {
+    const paths: number[][] = [];
+    const truth: number[][] = [];
+    for (const seed of [1, 2, 3]) {
+      const recorder = colonyScoreRecorder();
+      // Ground truth from the engine: a copy of the state as each upkeep ends, scored after the game.
+      const monthEnds: GameState[] = [];
+      const onPhase = (s: GameState) => {
+        recorder.onPhase(s);
+        if (s.phase === 'upkeep') monthEnds.push(structuredClone(s));
+      };
+      const { state } = playGame(seed, simSeats(4, 'trader', seed), { politics: true, maxMonths: 2, onPhase });
+      // The last month ends the game: its upkeep moves straight to game over, so the final state is its month end.
+      truth.push([...monthEnds, state].map((s) => colonyScore(s)!.total));
+      paths.push(recorder.end(state));
+    }
+    expect(paths).toEqual(truth);
+    expect(truth.every((t) => t.length === 2)).toBe(true);
+    // Three games: the median is the middle one, the 90th percentile the top one.
+    const sorted = (month: number) => truth.map((t) => t[month]!).sort((a, b) => a - b);
+    const [end, first] = [sorted(1), sorted(0)];
+    expect(end[1]).toBeLessThan(end[2]!);
+    expect(colonyScoreLines(paths)).toEqual([
+      `     Colony score at game end: median ${end[1]}, 90th percentile ${end[2]} over 3 games (no check)`,
+      `     Colony score by month (median across games), months 1-2: ${first[1]} / ${end[1]} (no check)`,
+    ]);
+
+    // HC-22: politics off, no colony, so no score and no line.
+    const recorder = colonyScoreRecorder();
+    const off = playGame(1, simSeats(4, 'trader', 1), { politics: false, maxMonths: 1, onPhase: recorder.onPhase });
+    expect(recorder.end(off.state)).toEqual([]);
+    expect(colonyScoreLines([recorder.end(off.state)])).toEqual([]);
   });
 });

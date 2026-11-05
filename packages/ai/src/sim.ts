@@ -161,6 +161,14 @@ const quantile = (values: number[], q: number) => {
   return sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))] ?? 0;
 };
 
+export function colonyScoreRecorder(): { onPhase: (s: GameState) => void; end: (state: GameState) => number[] } {
+  throw new Error('NotImplemented: colony-score-recorder');
+}
+
+export function colonyScoreLines(_games: readonly (readonly number[])[]): string[] {
+  throw new Error('NotImplemented: colony-score-lines');
+}
+
 /**
  * The arcade floor's report lines (spec §4), only when development played on it: MULEs installed and pub times a turn,
  * the pub payout, the presses the referee refused, the moments (packs, glints, scrambles),
