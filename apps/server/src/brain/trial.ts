@@ -1,11 +1,13 @@
 /**
  * Plays Smart seats against strategist seats and reports whether the Smart AI decides and talks in character, never
  * stalls a game, and stays within its budget. See C6.
- * Usage: pnpm --filter @mule/server brain:trial -- --games 20 --seed 101 [--smart 2] [--playbooks 1] [--max-usd X] [--game-budget-usd Y]
+ * Usage: pnpm --filter @mule/server brain:trial -- --games 20 --seed 101 [--smart 2] [--playbooks 1] [--max-usd X] [--game-budget-usd Y] [--run label]
  * With --playbooks 1 each Smart seat also writes its strategy and land-grant playbook each month (spec A C4), and the
  * report adds UBER-AC-A's edit share; without it the seats only decide move by move, as before.
- * Without the key every seat plays Classic and nothing is called. With it, real money: --max-usd is required, and one
- * run per UTC day. Each game's Smart seats together spend at most the game budget (default BRAIN.gameBudgetUsd).
+ * Without the key every seat plays Classic and nothing is called. With it, real money: --max-usd is required; one
+ * unlabelled run per UTC day, or one per --run label (each cleared on its own); and no run may carry the spend of every
+ * trial ledger past BRAIN.proofCapUsd. Each game's Smart seats together spend at most the game budget (default
+ * BRAIN.gameBudgetUsd).
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -218,16 +220,41 @@ export function trialLedgerPath(dataDir: string, at: Date, label: string | null)
   return label === null ? dayLedgerPath(dataDir, 'trial', at) : path.join(dataDir, `trial-${day(at)}-${label}.jsonl`);
 }
 
-/** What every brain:trial ledger in the data folder has spent, all days and labels: its call lines' dollars. */
+/** A trial ledger that could not be read, so the spend behind the cap is unknown. */
+class UnreadableLedger extends Error {
+  constructor(readonly file: string) {
+    super(`${file} is not a readable ledger`);
+  }
+}
+
+/** What every brain:trial ledger in the data folder has spent, all days and labels: its call lines' dollars. Throws UnreadableLedger. */
 export function trialSpent(dataDir: string): number {
   if (!fs.existsSync(dataDir)) return 0;
   const ledgers = fs.readdirSync(dataDir).filter((f) => /^trial-.*\.jsonl$/.test(f));
-  return sum(ledgers.flatMap((f) => readLedgerLines(path.join(dataDir, f)).filter(isCallLine).map((l) => l.usd)));
+  return sum(
+    ledgers.flatMap((f) => {
+      const file = path.join(dataDir, f);
+      try {
+        return readLedgerLines(file).filter(isCallLine).map((l) => l.usd);
+      } catch {
+        throw new UnreadableLedger(file);
+      }
+    }),
+  );
 }
 
-/** Why a paid run with this cap may not start, or null: the trial ledgers' total plus the cap would pass BRAIN.proofCapUsd. */
+/**
+ * Why a paid run with this cap may not start, or null: the trial ledgers' total plus the cap would pass
+ * BRAIN.proofCapUsd, or a ledger cannot be read, so the total is unknown (fail closed).
+ */
 export function proofCapRefusal(dataDir: string, maxUsd: number): string | null {
-  const spent = trialSpent(dataDir);
+  let spent: number;
+  try {
+    spent = trialSpent(dataDir);
+  } catch (err) {
+    if (err instanceof UnreadableLedger) return `brain:trial cannot check the PR-5 cap: ${err.file} is not a readable ledger; nothing called.`;
+    throw err;
+  }
   if (spent + maxUsd <= BRAIN.proofCapUsd) return null;
   return `brain:trial would pass the PR-5 cap: the trial ledgers hold $${spent.toFixed(5)}, --max-usd ${capText(maxUsd)}, cap ${capText(BRAIN.proofCapUsd)}; nothing called.`;
 }
