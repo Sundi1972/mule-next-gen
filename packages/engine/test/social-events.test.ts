@@ -200,7 +200,7 @@ describe('C26: the colony\'s planning social events, fired through the planning 
     };
     const made = (report: ReturnType<typeof produce>, tiles: number[]) => tiles.map((i) => report.lines!.find((l) => l.tile === i)!.made);
 
-    it('unpaid: every Food plot makes COLONY.strike.output of its output, and production files a generalStrike event with each plot and its delta', () => {
+    it('B-AC-25 (production clause): unpaid, every Food plot makes COLONY.strike.output of its output, and production files a generalStrike event with each plot and its delta', () => {
       const { state, twin } = struck();
       const food = foodPlots(state);
       const full = made(produce(twin), food);
@@ -216,7 +216,7 @@ describe('C26: the colony\'s planning social events, fired through the planning 
       expect(made(report, [energy])).toEqual(made(produce(colonyAt(AT.unhappy)), [energy]));
     });
 
-    it('paid: the Governor pays the strikers, so there is no production event and the Food plots produce in full', () => {
+    it('B-AC-25 (production clause): paid, the Governor pays the strikers, so there is no production event and the Food plots produce in full', () => {
       const { state, twin } = struck();
       state.treasury.money = 400;
       payStrike(state, 'p0');

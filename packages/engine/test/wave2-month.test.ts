@@ -81,18 +81,20 @@ describe('C1: the month keeps every event it fires', () => {
 
   it("month 1's planning rolls as a new game opens, as every later month's does in advancePhase (WS3's review)", () => {
     const row = EVENTS.colony.federationTax;
-    const before = { firstMonth: EVENTS.firstMonth, phases: row.phases };
+    // C26's blamed-for-the-unrest rolls for the richest seat even in a content colony (base 0, the richest raises it); its
+    // cap holds its planning chance at 0 here, so only the tax fires.
+    const blamed = EVENTS.player.blamedForUnrest;
+    const before = { firstMonth: EVENTS.firstMonth, phases: row.phases, blamedCap: blamed.cap };
     try {
       (EVENTS as { firstMonth: number }).firstMonth = 1;
       (row as { phases: typeof row.phases }).phases = { planning: 1 };
+      (blamed as { cap: number }).cap = 0;
       const state = fourPlayers();
-      // The other rows roll at their real odds (C26's blamed-for-the-unrest may fire for the richest seat): every event is
-      // planning's, and the certain tax is among them.
-      expect(state.monthEvents.every((e) => e.phase === 'planning')).toBe(true);
-      expect(state.monthEvents.filter((e) => e.key === 'federationTax').map((e) => [e.key, e.phase])).toEqual([['federationTax', 'planning']]);
+      expect(state.monthEvents.map((e) => [e.key, e.phase])).toEqual([['federationTax', 'planning']]);
     } finally {
       (EVENTS as { firstMonth: number }).firstMonth = before.firstMonth;
       (row as { phases: typeof row.phases }).phases = before.phases;
+      (blamed as { cap: number }).cap = before.blamedCap;
     }
   });
 });
