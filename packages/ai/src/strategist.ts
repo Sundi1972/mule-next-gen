@@ -1,6 +1,7 @@
 import {
   AI_PLANS,
   airPoints,
+  allPrices,
   DEVELOPMENT,
   GAME,
   GOOD_CONFIG,
@@ -16,7 +17,7 @@ import {
   RAW_GOODS,
   STRATEGIST,
   UPKEEP,
-  score,
+  scoreParts,
   shipInPort,
   shipPrice,
   storePaysFor,
@@ -64,11 +65,19 @@ function me(obs: GameState, mind: Mind) {
 }
 
 /**
- * The rival with the highest Worth as the seat sees it: the engine's score on the seat's observation, where a rival's
- * goods are what the public market panel implies.
+ * The rival with the highest Worth as the seat sees it: the engine's score lines on the seat's observation, less the
+ * goods line, plus the good on the auction's status screen, the one good whose holdings are public. Elsewhere a
+ * rival's goods are the market panel's even split, which says nothing about that rival.
  */
 export function leaderOf(obs: GameState, self: string): string | null {
-  const rivals = obs.players.filter((p) => p.id !== self).map((p) => ({ id: p.id, worth: score(obs, p.id) }));
+  const status = obs.auction && obs.auction.stage !== 'over' ? obs.auction.good : null;
+  const prices = allPrices(obs);
+  const worth = (id: string) => {
+    const parts = scoreParts(obs, id);
+    const shown = status ? obs.players.find((p) => p.id === id)!.stock[status] * prices[status] : 0;
+    return parts.total - parts.goods + shown;
+  };
+  const rivals = obs.players.filter((p) => p.id !== self).map((p) => ({ id: p.id, worth: worth(p.id) }));
   rivals.sort((a, b) => b.worth - a.worth);
   return rivals[0]?.id ?? null;
 }
