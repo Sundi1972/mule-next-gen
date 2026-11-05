@@ -375,10 +375,7 @@ function playCollapse() {
   const rows: EventRow[] = [...Object.values(EVENTS.colony), ...Object.values(EVENTS.player)];
   const saved = rows.map((row) => structuredClone(row));
   const firstMonth = EVENTS.firstMonth;
-  const waits = DEV_STEER.month1WaitsForFirstMule;
   try {
-    // Month 1 would wait for each owner's first MULE; these plots come with theirs.
-    DEV_STEER.month1WaitsForFirstMule = false;
     for (const row of rows) row.phases = {};
     EVENTS.colony.cavernCollapse.phases = { production: 1 };
     EVENTS.colony.drought.phases = { production: 1 };
@@ -406,7 +403,6 @@ function playCollapse() {
       Object.assign(row, saved[i]!);
     });
     EVENTS.firstMonth = firstMonth;
-    DEV_STEER.month1WaitsForFirstMule = waits;
   }
 }
 

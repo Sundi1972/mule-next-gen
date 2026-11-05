@@ -25,12 +25,15 @@ import {
   type FloorWolf,
   type MomentsOut,
 } from './floor.js';
-import { terrainShare } from './speed.js';
+import { speedOf, terrainShare } from './speed.js';
 
 const HALF = 0.5; // literal-ok: geometry, the middle of a range
+const ROUNDING = 1e-9; // literal-ok: float rounding, not balance: a point put on the arena's edge may land a hair past it
 const dist = (a: FloorPoint, b: FloorPoint) => Math.hypot(a.x - b.x, a.y - b.y);
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 const secondsPerTick = (cfg: FloorConfig) => cfg.steer.tickMs / MS_PER_SECOND;
+/** A chasing wolf's speed: a share of the walking pace (AM-32), so the chase's odds do not hang on the pace. */
+const chaseSpeed = (cfg: FloorConfig) => cfg.wolves.chaseShare * cfg.steer.mapTilesPerSecond;
 
 /** A point `r` from `centre` at `angle`, kept on the map. */
 function ring(state: GameState, centre: FloorPoint, angle: number, r: number): FloorPoint {
@@ -141,7 +144,7 @@ export function stepEncounter(state: GameState, c0: FloorColonist, input: FloorI
   if (e.stage === 'chase') {
     const moved = walk(c, input);
     if (moved.space !== 'map') return end(state, moved, tick, cfg, out, 'reached the store: the wolves gave up');
-    const step = tick - e.sinceTick < ticksOf(W.headStartSeconds, cfg) ? 0 : W.chaseSpeed * secondsPerTick(cfg);
+    const step = tick - e.sinceTick < ticksOf(W.headStartSeconds, cfg) ? 0 : chaseSpeed(cfg) * secondsPerTick(cfg);
     const wolves = e.wolves.map((w) => {
       const d = toward(w, moved);
       return d ? { ...w, x: w.x + d.x * Math.min(step, dist(w, moved)), y: w.y + d.y * Math.min(step, dist(w, moved)) } : w;
@@ -154,20 +157,29 @@ export function stepEncounter(state: GameState, c0: FloorColonist, input: FloorI
   return stepFight(state, c, e, input, tick, cfg, walk, out);
 }
 
-/** Within arenaTiles of the fight's middle: a step that would leave it ends on its edge, or not at all on closed land. */
-function inArena(state: GameState, from: FloorColonist, to: FloorColonist, centre: FloorPoint, cfg: FloorConfig): FloorColonist {
+/**
+ * Within arenaTiles of the fight's middle: a step that would leave it ends on its edge, walked there by the walk itself
+ * (a stick pushed short of full), so it ends only where a walk may: never on closed land, nor in the band a body's
+ * width round the store's walls (FM-arena-wall). Where the walk, sliding along a wall, would leave the arena, it stands.
+ */
+function inArena(state: GameState, from: FloorColonist, to: FloorColonist, centre: FloorPoint, cfg: FloorConfig, walk: Walk): FloorColonist {
+  const R = cfg.wolves.arenaTiles;
   const d = dist(to, centre);
-  if (d <= cfg.wolves.arenaTiles) return to;
-  const edge = { x: centre.x + ((to.x - centre.x) / d) * cfg.wolves.arenaTiles, y: centre.y + ((to.y - centre.y) / d) * cfg.wolves.arenaTiles };
-  const tile = tileAt(state.tiles, state.width, Math.floor(edge.x), Math.floor(edge.y));
-  return tile && terrainShare(tile.terrain, cfg) > 0 ? { ...to, ...edge } : { ...from, moving: false };
+  if (d <= R) return to;
+  const edge = { x: centre.x + ((to.x - centre.x) / d) * R, y: centre.y + ((to.y - centre.y) / d) * R };
+  // The edge is nearer `from` than `to` was, so the push is a full one's share, at most: the walk scales nothing.
+  const step = (speedOf(from, state, cfg) * cfg.steer.tickMs) / MS_PER_SECOND;
+  const walked = step > 0 ? walk(from, { x: (edge.x - from.x) / step, y: (edge.y - from.y) / step, act: false }) : from;
+  const kept = walked.space === 'map' && dist(walked, centre) <= R + ROUNDING;
+  // The push is the edge's, not the stick's: the colonist still faces the way the stick points.
+  return kept ? { ...walked, facing: to.facing } : { ...from, moving: false };
 }
 
 function stepFight(state: GameState, c0: FloorColonist, e: FloorEncounter, input: FloorInput, tick: number, cfg: FloorConfig, walk: Walk, out: MomentsOut): FloorColonist {
   const W = cfg.wolves;
   const walked = walk(c0, input);
   if (walked.space !== 'map') return end(state, walked, tick, cfg, out, 'reached the store: the wolves gave up');
-  const c = inArena(state, c0, walked, e.centre, cfg);
+  const c = inArena(state, c0, walked, e.centre, cfg, walk);
   const turn = W.prowlRadiansPerSecond * secondsPerTick(cfg);
   let { strikes, bites, nextLungeTick, recoverUntilTick } = e;
   let wolves = e.wolves.map((w, i): FloorWolf => {

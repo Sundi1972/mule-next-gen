@@ -532,6 +532,7 @@ Code-only; no existing state to reach: games live in server memory and the sim i
 | T-AC-43 (serves B-AC-41) | the pollution tax uses this month's pollutionBy; a short payer pays what they have and never goes below 0 | C41 | engine |
 | T-AC-44 (serves all) | politics off: no council, no law tax, WS1's politics-off rows byte-identical | C40-C42 | sim report diff |
 | T-AC-45 (serves B-AC-40) | the AI's council draws leave slice 1's election fixtures unchanged | C44 | ai tests |
+| INV-41 (HC-41) | no AI hand reads `state.seed`: the council's stream hashes the seat's own seed (the AiSeat mind's salt) and the month, so games that differ only in the game seed get the same council coin and proposal | C44 | ai test |
 | T-AC-46 (serves B-AC-40) | the game leaves planning with the council open: a ballot is tallied, a proposal-less council ends with no law | C40 | engine |
 | T-AC-47 (serves UBER-AC-8, -10) | the sim's politics row prints laws passed and law income by source and checks both proofs | C47 | `pnpm sim` |
 | T-AC-48 (serves B-AC-42) | the strategist never plans a blocked outfit | C42 | ai test |
@@ -594,6 +595,19 @@ did       the arcade added reoutfitMule and the floor's store reach (floor/reach
           which comes first; HC-43 already matches A-7's no-clock rule
 because   trunk moved through 16 batches since 2026-10-28
 goal      S2-1 — unchanged
+```
+
+```
+AM-4 · 2026-11-05 · PM ruling (WS1's finding on #338) · during build
+
+target    §0.2 HC-41, §1 C44, §6 (INV-41 added)
+said      the council's draws come from their own seeded stream
+did       that stream had been seeded from state.seed, read off the real state because observe() hides
+          it. The game's seed drives its dice (events, wolves, glints), so an AI hand holding it could know
+          what the game will roll. The stream now hashes the seat's own seed and the month; no AI hand
+          reads state.seed (INV-41)
+because   the PM ruled it a fix before trunk, not a deferral
+goal      S2-1 — unchanged; replay holds (the seat seed comes from the game seed and the seat)
 ```
 
 ## §9 · Ownership Boundaries `[handoff]`

@@ -95,11 +95,21 @@ export function colonistDemand(state: GameState, good: Good, need: number): numb
   return need * Math.min(1, budget / Math.max(1, price));
 }
 
-/** MULEs the colony will want next month: one for each idle plot, plus the plots still to be granted. */
+/** MULEs a month's new land takes from the corral, by grant and by auction: MULE.corralPerPlayer for every seat. */
+export function newLandMules(players: number): number {
+  return players * MULE.corralPerPlayer;
+}
+
+/** The corral's build target: a month's new land and MULE.spareInCorral more. upkeep builds to it; the AI's outlook reads it. */
+export function corralTarget(players: number): number {
+  return newLandMules(players) + MULE.spareInCorral;
+}
+
+/** MULEs the colony will want next month: one for each idle plot, plus a month's new land while land is still to be granted. */
 export function mulesWanted(state: GameState): number {
   const idle = state.tiles.filter((t) => t.owner && !t.outfit).length;
   const free = state.tiles.some((t) => t.terrain !== 'store' && !t.owner);
-  return idle + (free ? state.players.length * GAME.claimsPerGrant : 0);
+  return idle + (free ? newLandMules(state.players.length) : 0);
 }
 
 /**

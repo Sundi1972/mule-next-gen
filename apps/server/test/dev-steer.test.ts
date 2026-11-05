@@ -4,15 +4,11 @@ import {
   buildFloor,
   DEV_STEER,
   DEVELOPMENT,
-  doorOutside,
   doorPresses,
   floorConfig,
   GAME,
-  GOODS,
   HALL,
   IDLE_INPUT,
-  mulePriceFor,
-  outfitCostFor,
   pressOrder,
   pubPayoutFor,
   reachOf,
@@ -74,14 +70,13 @@ const toLeftDoor = (from: HallPlace): SteerPoint[] => [spot(from), spot('doorL')
 /**
  * Development with flag on, Lena (Zipwing, seat 0, at the left door) and Ossa (Mollox, seat 1, at the right door), both
  * fed and holding Medicine. Every plot is plains, so a straight steer is a straight walk, and Lena owns `home`, two
- * tiles left of the store on its row. Month 1's clock runs from the start unless `firstMonthWaits`.
+ * tiles left of the store on its row.
  */
-function steered(options: { firstMonthWaits?: boolean; ossaHome?: boolean } = {}) {
+function steered() {
   let home = { x: 0, y: 0 };
   const changes: number[] = [];
   const g = toDevelopment({
     players: walkers,
-    firstMonthWaits: options.firstMonthWaits,
     onChanged: (at) => changes.push(at),
     prepare: (state) => {
       for (const p of state.players) Object.assign(p.stock, { food: 20, medicine: 2 });
@@ -92,7 +87,6 @@ function steered(options: { firstMonthWaits?: boolean; ossaHome?: boolean } = {}
       const store = state.tiles.find((t) => t.terrain === 'store')!;
       home = { x: store.x - 2, y: store.y };
       state.tiles[tileIndex(state.width, home.x, home.y)]!.owner = LENA;
-      if (options.ossaHome) state.tiles[tileIndex(state.width, store.x + 2, store.y)]!.owner = OSSA;
     },
   });
   const start = g.ctx.now();
@@ -122,13 +116,6 @@ function lenaBuysAndOutfits(g: Steered): void {
   pressAct(g.game, g, LENA); // OUTFIT · FOOD
   steerTo(g.game, g, LENA, toLeftDoor('food'));
   pressAct(g.game, g, LENA); // LEAVE
-}
-
-/** The whole turn Lena plays: into the store, a fitted MULE, out, and installed on her plot. */
-function lenaInstalls(g: Steered): void {
-  lenaBuysAndOutfits(g);
-  steerTo(g.game, g, LENA, [g.homeMiddle]);
-  pressAct(g.game, g, LENA); // INSTALL · FOOD
 }
 
 describe('T-AC-1 (server part): the server steps the same floor as stepFloor', () => {
@@ -561,57 +548,6 @@ describe('T-AC-9: development never stalls on a phone', () => {
     expect(g.frames.length).toBe(floorOf(g.game).tick);
     g.advanceTo(endsAt);
     expect(g.game.viewFor(null).phase).toBe('production');
-  });
-
-  it("T-AC-9 (AM-3, flag on): in month 1 with Ossa away the clock stands full until Lena's first MULE is in, then starts from that tick", () => {
-    const g = steered({ firstMonthWaits: true, ossaHome: true });
-    g.game.connectionChanged(OSSA, false);
-    expect(g.game.viewFor(null).clockWaitsFor).toEqual([LENA]);
-    expect(g.game.viewFor(LENA).me!.devEndsAt).toBeNull();
-    lenaInstalls(g);
-    const installedAt = g.ctx.now();
-    expect(g.state.tiles[tileIndex(g.state.width, g.home.x, g.home.y)]!.outfit).toBe('food');
-    expect(g.game.viewFor(null).clockWaitsFor).toBeUndefined();
-    expect(g.game.viewFor(LENA).me!.devEndsAt).toBe(installedAt + DEVELOPMENT.fullSeconds * 1_000);
-    expect(installedAt - g.start, 'the wait outlasted nothing: the tick ran meanwhile').toBe(floorOf(g.game).tick * TICK);
-  });
-});
-
-describe('T-AC-9 (AM-3): month 1 refuses a seat already in on the floor too', () => {
-  it("while the clock waits for Ossa's first MULE, Lena, already in, presses BUY MULE at the corral: refused, her money and her lead unchanged, and the press counted refused", () => {
-    const g = steered({ firstMonthWaits: true, ossaHome: true });
-    lenaInstalls(g);
-    expect(g.game.viewFor(null).clockWaitsFor, 'Ossa is present and not in').toEqual([OSSA]);
-    const mouth: SteerPoint = { space: 'map', ...doorOutside(g.state, 'doorL', serverCfg()) };
-    steerTo(g.game, g, LENA, [mouth], { within: 0.1 });
-    pressAct(g.game, g, LENA);
-    steerTo(g.game, g, LENA, toRoom('corral'));
-    expect(reachOfSeat(g, LENA)).toMatchObject({ verb: 'BUY MULE', enabled: true });
-    const stats = (g.game as unknown as { steering: { stats: { acts: number; refused: number } } }).steering.stats;
-    const { acts, refused } = stats;
-    // Money for a MULE but not an outfit: in for her install, she still waits, whatever she could pay for.
-    meOf(g, LENA).money = mulePriceFor(g.state, LENA);
-    const before = { money: meOf(g, LENA).money, mule: meOf(g, LENA).carriedMule, corral: g.state.store.mules };
-    pressAct(g.game, g, LENA);
-    expect({ money: meOf(g, LENA).money, mule: meOf(g, LENA).carriedMule, corral: g.state.store.mules }).toEqual(before);
-    expect([stats.acts, stats.refused], 'counted as refused, for the phase log').toEqual([acts, refused + 1]);
-    expect(g.game.viewFor(null).clockWaitsFor).toEqual([OSSA]);
-  });
-});
-
-describe('AM-33 (flag on): a seat that can never install a first MULE does not hold the clock, and may still buy', () => {
-  it('Lena can pay for a MULE but for no outfit: she is not waited for, and her BUY MULE at the corral goes through', () => {
-    const g = steered({ firstMonthWaits: true, ossaHome: true });
-    const cheapest = Math.min(...[...GOODS, 'greenBelt' as const].map((o) => outfitCostFor(g.state, LENA, o)));
-    meOf(g, LENA).money = mulePriceFor(g.state, LENA) + cheapest - 1;
-    g.advance(TICK);
-    expect(g.game.viewFor(null).clockWaitsFor, 'only Ossa can still install one').toEqual([OSSA]);
-    pressAct(g.game, g, LENA); // ENTER STORE
-    steerTo(g.game, g, LENA, toRoom('corral'));
-    const stats = (g.game as unknown as { steering: { stats: { refused: number } } }).steering.stats;
-    const { refused } = stats;
-    pressAct(g.game, g, LENA); // BUY MULE
-    expect([meOf(g, LENA).carriedMule, stats.refused], 'sold, not refused for waiting').toEqual(['empty', refused]);
   });
 });
 

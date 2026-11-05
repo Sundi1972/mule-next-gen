@@ -56,7 +56,7 @@ export function createMuleServer(
       maxMonths: options.maxMonths,
       phaseScale: options.phaseScale,
       politics: options.politics ?? true,
-      // Steered development for this server's games only; trunk's DEV_STEER.on stays off (PM ruling).
+      // A game's own steered setting when the caller gives one; otherwise DEV_STEER.on decides, which is on.
       ...(options.devSteer === undefined ? {} : { devSteer: options.devSteer }),
     };
     if (recordDir === null) return new MuleGame(ctx, gameSeed, gameOptions);
@@ -262,8 +262,6 @@ function isIntent(v: unknown): v is MuleIntent {
       return i.dir === 'up' || i.dir === 'down' || i.dir === 'stop';
     case 'walkStep':
       return i.dir === 'up' || i.dir === 'down';
-    case 'lineTrade':
-      return int(i.units) && (i.units as number) >= 1;
     case 'list': {
       const item = i.item as Record<string, unknown> | null;
       return typeof item === 'object' && item !== null && typeof item.kind === 'string' && int(item.x) && int(item.y) && typeof i.minimum === 'number' && typeof i.unsold === 'string';

@@ -31,8 +31,6 @@ export type AiAction =
   | { type: 'pub' }
   | { type: 'declare'; side: AuctionSide }
   | { type: 'walk'; dir: -1 | 0 | 1 }
-  /** At the store's or the ship's line in the goods walk: trade this many units with it, then stop (A-6). */
-  | { type: 'lineTrade'; units: number }
   /** Run for an office; null withdraws. A Governor run carries a promise (RULE-10). */
   | { type: 'run'; office: Office | null; promise?: TaxPromise }
   /** A secret ballot for a contested office; null clears it. */
@@ -163,10 +161,10 @@ const DESCRIBED = {
     type: 'declare',
     command: 'declare',
     phases: ['auction'],
-    does: () => "Buys, sells or passes on the good that is up; during the walk a switch jumps it to the new side's start edge.",
-    legalWhen: () => [AUCTION, 'This good has closed', 'You have none to sell'],
+    does: () => "Buys or sells the good that is up (everyone starts as a buyer); during the walk a switch jumps it to the new side's start edge.",
+    legalWhen: () => [AUCTION, 'This good has closed', 'You have none to sell', 'Everyone takes part in the auction'],
     cost: null,
-    args: { side: "'buyer', 'seller' or 'pass'" },
+    args: { side: "'buyer' or 'seller'" },
   },
   walk: {
     type: 'walk',
@@ -176,15 +174,6 @@ const DESCRIBED = {
     legalWhen: () => [AUCTION, 'Not walking yet', 'You passed on this good', "You can't bid on this lot"],
     cost: null,
     args: { dir: '1 up, -1 down, 0 let go' },
-  },
-  lineTrade: {
-    type: 'lineTrade',
-    command: 'lineTrade',
-    phases: ['auction'],
-    does: () => "At the store's or the ship's line, trades this many units with it, then stops.",
-    legalWhen: () => [AUCTION, 'Not walking yet', 'Choose at least one unit', 'You passed on this good', 'Walk to the store’s line first', 'You can’t pay for one', 'You have none to sell'],
-    cost: null,
-    args: { units: 'how many units, at least one; it trades what it can pay for or has' },
   },
   run: {
     type: 'run',
