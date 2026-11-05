@@ -357,3 +357,29 @@ export function wealthGap(state: GameState): number {
   const worth = state.players.map((p) => p.money + state.tiles.filter((t) => t.owner === p.id).length * GAME.plotScore);
   return worth.length === 0 ? 0 : Math.max(...worth) - Math.min(...worth);
 }
+
+/** A general strike on `good` starts this month; WS1's strike event calls it. See G-5 RULE-26. */
+export function callStrike(state: GameState, good: Good): void {
+  if (!state.colony) return;
+  edit(state).strike = { month: state.month, good, cost: COLONY.strike.cost, paid: false };
+}
+
+/** Whether this month's strike holds `good` back: production makes a fraction of it while the strikers are unpaid. */
+export function strikeHolds(state: GameState, good: Good): boolean {
+  const strike = state.colony?.strike;
+  return !!strike && strike.month === state.month && strike.good === good && !strike.paid;
+}
+
+/** The Governor pays this month's strikers from the fund; the reserve does not hold back. See G-5 RULE-26. */
+export function payStrike(state: GameState, playerId: string): void {
+  if (!state.colony) throw new RuleError("This game plays without the colony's council");
+  const strike = state.colony.strike;
+  if (!strike || strike.month !== state.month) throw new RuleError('There is no strike to pay off');
+  if (state.phase !== 'planning' || votesOpen(state)) throw new RuleError('Pay the strikers once the votes are over');
+  if (state.politics?.governor !== playerId) throw new RuleError('Only the Governor pays the strikers');
+  if (strike.paid) throw new RuleError('The strikers are already paid');
+  if (state.treasury.money < strike.cost) throw new RuleError(`The fund has ${state.treasury.money} cr; the strikers want ${strike.cost} cr`);
+  const colony = edit(state);
+  payOut(state, colony, 'strikePay', strike.cost);
+  colony.strike = { ...strike, paid: true };
+}
