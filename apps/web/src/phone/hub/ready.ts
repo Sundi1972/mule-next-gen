@@ -72,7 +72,9 @@ export function readyNowIn(view: Pick<MuleView, 'phase' | 'politics'>, ready: bo
 /** Planning with no election running: the time Ready ends planning. */
 export function planningProper(view: Pick<MuleView, 'phase' | 'politics'>): boolean {
   const election = view.politics?.election;
-  return view.phase === 'planning' && !(election && election.stage !== 'over');
+  // The law ballot (C40) is a vote like the election: while it or its reveal is open, Ready means Done with it.
+  const council = view.politics?.council;
+  return view.phase === 'planning' && !(election && election.stage !== 'over') && !(council && council.stage !== 'over');
 }
 
 /** The view's auction, where it carries one: only the stage matters here. */
@@ -86,7 +88,9 @@ type WithAuction = { auction?: Pick<AuctionView, 'stage'> | null };
 export function hostMayContinue(view: Pick<MuleView, 'phase' | 'politics' | 'clockWaitsFor'> & WithAuction): boolean {
   const stage = view.politics?.election?.stage;
   if (view.phase === 'development') return !!view.clockWaitsFor;
-  return planningProper(view) || (view.phase === 'planning' && (stage === 'announce' || stage === 'ballot')) || view.phase === 'upkeep' || sidePick(view);
+  // The host continues the law ballot as they do the election's (RULE-40), never its reveal.
+  const lawBallot = view.politics?.council?.stage === 'ballot';
+  return planningProper(view) || (view.phase === 'planning' && (stage === 'announce' || stage === 'ballot' || lawBallot)) || view.phase === 'upkeep' || sidePick(view);
 }
 
 /** A good's side pick, the auction's status screen: no clock, it waits for every Done or the host's Continue (A-7). */
