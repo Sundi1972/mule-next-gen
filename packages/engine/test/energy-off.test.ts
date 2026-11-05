@@ -301,10 +301,24 @@ describe('AM-17: a turned-off factory', () => {
     expect(p(state).stock.smithore).toBe(1);
   });
 
+  it('FM-factory-off: turned off where 20% of its output rounds to 0 (makes 2), it takes no inputs: nothing is spent for nothing', () => {
+    const state = colony();
+    const [tile] = lay(state, [{ good: 'alloy' }]);
+    expect(factoryFit(state, tile!, 'alloy', 'p0').output).toBe(2);
+    p(state).stock.smithore = 2;
+
+    const run = runProduction(state);
+
+    expect(isOff(run, state, tile!)).toBe(true);
+    expect(lineOf(run, state, tile!)?.made).toBe(0);
+    expect(p(state).stock.smithore).toBe(2);
+    expect(p(state).stock.alloy).toBe(0);
+  });
+
   it('FM-factory-off: turned off without its share of inputs (the one left on took them) it makes 0 and takes nothing', () => {
     const state = colony();
-    // A (hills, 3 months: makes 4) and B (plains: makes 2) each use 2; 2 Energy runs one. B is worth less: B goes off.
-    const [a, b] = lay(state, [{ good: 'alloy', terrain: 'hills', runMonths: 3 }, { good: 'alloy' }]);
+    // A (hills, 3 months: makes 4) and B (hills: makes 3, so 20% is 1) each use 2; 2 Energy runs one. B is worth less.
+    const [a, b] = lay(state, [{ good: 'alloy', terrain: 'hills', runMonths: 3 }, { good: 'alloy', terrain: 'hills' }]);
     Object.assign(p(state).stock, { energy: 2, smithore: 2 });
 
     const run = runProduction(state);
