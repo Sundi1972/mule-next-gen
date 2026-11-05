@@ -48,6 +48,8 @@ export type MuleIntent =
   | { type: 'repair'; id: PrestigeId }
   /** Planning, after the votes: the Governor pays this month's general strikers from the fund. */
   | { type: 'payStrike' }
+  /** Planning, after the votes: the Governor's top bid for a waiting object's plot; null, the colony does not bid. */
+  | { type: 'setSiteBid'; id: PrestigeId; maxBid: number | null }
   /** Planning, once the votes are over: the Governor puts a law, a new setting or a repeal to the next planning's ballot; null withdraws it. */
   | { type: 'propose'; proposal: LawProposal | null }
   /** The law ballot: yes or no; a later vote replaces it until the ballot closes. */
@@ -698,6 +700,8 @@ export interface ColonyProjectView {
   repairCost: number | null;
   /** Donors, largest first: credits plus goods at reference price. */
   plaque: { playerId: string; value: number }[];
+  /** The colony's top bid for this object's plot at the land auction; null, it does not bid. Optional, so views built before it still type. */
+  maxBid?: number | null;
 }
 
 /** One object the Governor could commission, and why not when they can't now. */

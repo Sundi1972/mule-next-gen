@@ -40,6 +40,8 @@ describe("the wire for the colony's and the council's intents", () => {
     { type: 'propose', proposal: null },
     { type: 'voteLaw', yes: false },
     { type: 'payStrike' },
+    { type: 'setSiteBid', id: 'park', maxBid: 300 },
+    { type: 'setSiteBid', id: 'park', maxBid: null },
   ] as unknown[])('isIntent accepts %o', async (intent) => {
     expect(await (await phone())(intent)).toBe('Join a game first');
   });
@@ -53,6 +55,9 @@ describe("the wire for the colony's and the council's intents", () => {
     { type: 'propose', proposal: { kind: 'enact', law: 'landTax', setting: 'ten' } },
     { type: 'propose', proposal: { kind: 'abolish', law: 'landTax' } },
     { type: 'voteLaw', yes: 'yes' },
+    { type: 'setSiteBid', id: 'park' },
+    { type: 'setSiteBid', id: 'park', maxBid: '300' },
+    { type: 'setSiteBid', maxBid: 300 },
   ] as unknown[])('isIntent refuses %o at the boundary (WS3: a non-good key corrupted state)', async (intent) => {
     expect(await (await phone())(intent)).toBe('Bad message');
   });
