@@ -143,3 +143,23 @@ describe("MyView.installedThisTurn: the store's Now line after a reload", () => 
     for (const [at, installed] of seen) expect(installed, at).toBe(at !== '2 development');
   });
 });
+
+describe('Installing over a MULE swaps it (Heiko at the table, 5 Nov)', () => {
+  /** The plot's MULE as every screen sees it. */
+  const outfitOn = (g: Floor, plot: Spot) => g.game.viewFor(null).tiles.find((t) => t.x === plot.x && t.y === plot.y)!.outfit;
+
+  it('B-AC-SWAP-1: after installing a Water MULE over her Food MULE, Heiko leads the Food MULE, and the plot makes Water', () => {
+    const g = toDevelopment();
+    const { game, plot } = g;
+    buyAndOutfit(g, 's1', 'food');
+    installOn(g, 's1', plot);
+    expect(outfitOn(g, plot)).toBe('food');
+    buyAndOutfit(g, 's1', 'water');
+    hallTo(g, 's1', doorFor(g, plot));
+    press(g, 's1', 'LEAVE');
+    mapTo(g, 's1', { x: plot.x + 0.5, y: plot.y + 0.5 });
+    press(g, 's1', 'SWAP');
+    expect(outfitOn(g, plot)).toBe('water');
+    expect(game.viewFor('s1').me!.carriedMule, 'the Food MULE is on his lead, not gone').toBe('food');
+  });
+});
