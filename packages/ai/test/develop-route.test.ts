@@ -605,8 +605,7 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
       expect(me(state).doneDeveloping).toBe(true);
     });
 
-    // trace-allow: HC-9, the spec's own failure-mode id for a draft or validator error (spec §4, "Retry, poison, page?"); trace-check reads no HC- ids
-    it("HC-9: a stale MULE whose replacement draft throws is logged with the seat and dropped, its steps 'skipped', and the route goes on to the pub", () => {
+    it("T-AC-7 row 3 (HC-9): a stale MULE whose replacement draft throws is logged with the seat and dropped, its steps 'skipped', and the route goes on to the pub", () => {
       const { state, plots } = development(2);
       const [stale, spare] = plots as [Tile, Tile];
       stale.owner = ME;
