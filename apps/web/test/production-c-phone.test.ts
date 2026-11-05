@@ -15,7 +15,7 @@ import { Production } from '../src/phone/Production';
 /**
  * The phone's footer during the production show in Heiko's order C (ws6-ux AM-19, mock b65c3972 variant C): with a
  * TV in the room, ⏩ Speed up asks for the rest to play faster and then says how many have asked. A phone alone keeps
- * its tap-the-map skip and has no Speed up.
+ * its tap-the-map skip and has no Speed up. Ready waits for the end of the show: the table always sees its month.
  */
 
 // The fake document has no dataset and no layout (the shell and the fly targets measure).
@@ -112,6 +112,17 @@ describe('B-AC-20 (AM-19): the phone asks to speed the show up', () => {
       root.unmount();
       document.body.removeChild(host);
       delete (window as { matchMedia?: unknown }).matchMedia;
+    }
+  });
+
+  it('Ready waits for the show (the PM\'s ruling, option B): "Watching the show" while it plays, "On to the auction" once it has ended, alone or with a TV', () => {
+    for (const boards of [0, 1]) {
+      const playing = render(boards, MID);
+      expect(text(playing, 'ready')).toBe('Watching the show');
+      expect(tag(playing, 'ready')).toMatch(/ disabled=""/);
+      const over = render(boards, END + 0.5);
+      expect(text(over, 'ready')).toBe('On to the auction');
+      expect(tag(over, 'ready')).not.toMatch(/ disabled=""/);
     }
   });
 
