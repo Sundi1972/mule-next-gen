@@ -83,7 +83,7 @@
 <tbody>
 <tr><td>Food</td><td>Every player's household and crew (2 each, plus 1 per 4 crew); colonists, 1 per 20, fewer if the price is above what their wages pay (150)</td></tr>
 <tr><td>Water</td><td>Every player's household and crew (1 each, plus 1 per 6 crew); colonists, 1 per 20 (wages pay up to 120)</td></tr>
-<tr><td>Energy</td><td>What every working plot and factory burns; colonists, half a unit per 20 (wages pay up to 100)</td></tr>
+<tr><td>Energy</td><td>What every working plot and factory burns, but an Energy plant, which pays its own 1 from its own output; colonists, half a unit per 20 (wages pay up to 100)</td></tr>
 <tr><td>Medicine</td><td>Colonists, 1 per 50, half as much again while the air makes people sick (wages pay up to 400)</td></tr>
 <tr><td>Smithore</td><td>2 for every Alloy smelter; 1 for every MULE the colony will want (one per idle plot, plus a month's new land while free land is left); the export ship</td></tr>
 <tr><td>Alloy</td><td>1 for every Electronics works; the export ship</td></tr>
@@ -376,38 +376,32 @@
 <p class="code-ref">In the code: <code>economy.ts::taxSale</code> · <code>politics.ts::chargeExportTax</code> · <code>colony.ts::fundIn</code>, <code>fund</code> · <code>config.ts::TAX.salesTax</code>, <code>POLITICS.tax</code>, <code>POLITICS.laws</code>, <code>COLONY</code></p>
 <p class="owner">Kept current by: WS7 (fund and laws), WS1 (sales tax in trades).</p>
 
-<h2 id="store-pricing-design">The store-pricing design <span class="pill open">Being designed</span></h2>
-<p>Heiko asked on 5 Nov for one complete design of how the store sets its prices. In his words:</p>
-<ul>
-<li>"we need to think about how the store sets its selling and buying prices … also this needs to be a good clever algorithm" (after his auction rules, especially a sold-out store being bid past; see <a href="goods-auction.html#heiko-auction-rules">the goods auction</a>).</li>
-<li>"Also we need to think about the bid and ask spread of the store. i think the spread can be wider than what we are having currently. … I want to get a complete design there."</li>
-<li>Crystite: "the prices should vary from 40 to 300 getting more and more unlikely the higher they get. so a normal price should be about 90 with extremes that can go up to 300 very rare and lower extremes of 40."</li>
-</ul>
-<h3 id="pricing-today">What WS5 measured today</h3>
-<p>On trunk, 200 four-seat games plus 100 each at 2 and 6 seats, no tuning:</p>
-<ul>
-<li>Prices lurch: the median month-on-month change for Food, Water and Energy is 41–50%, the full momentum step most months.</li>
-<li>No ceiling: Food peaks at 1,985 and Medicine at 10,389 (four seats); at two seats Food reaches 3,078. Food's median price is 59 against a reference of 30.</li>
-<li>The store is sold out when the good comes up in 30% of Food, 43% of Water and 26% of Energy auctions. Colonists go short of Water in 30% of months and of Food in 13%.</li>
-<li>One spread for every good, 20% wide in all. Players sell to the store far more than to each other: 21,734 Food units into the store against 2,041 traded between players.</li>
-<li>When the store is sold out, players pay each other far above its last price, but next month's store price learns from that only through the slow reference drift.</li>
-<li>Crystite's off-world price never moves; its posted price sits at 100.</li>
-</ul>
-<h3 id="pricing-goals">The goals put to Heiko</h3>
+<h2 id="store-pricing-design">The store-pricing design: a market-maker store <span class="pill designed">Designed</span></h2>
+<p><strong>Not in the game yet.</strong> Heiko chose this design on 5 Nov (option B, "market-maker store", a ceiling of "12x", Crystite "As proposed"). The Maps team (WS5) owns the design; it is built in two pull requests after Heiko has read the written spec. Until then the sections above describe the game as it plays.</p>
+<p>Heiko asked for it in his own words: "we need to think about how the store sets its selling and buying prices … also this needs to be a good clever algorithm", "i think the spread can be wider than what we are having currently … I want to get a complete design there", and for Crystite "a normal price should be about 90 with extremes that can go up to 300 very rare and lower extremes of 40".</p>
+<h3 id="pricing-designed-at-the-table">What you will see at the table</h3>
 <div class="table-wrap"><table>
-<thead><tr><th>Goal</th><th>What it means at the table</th></tr></thead>
+<thead><tr><th>Part</th><th>Today</th><th>Designed</th></tr></thead>
 <tbody>
-<tr><td>G-1: prices answer the table</td><td>One rule a player can learn: a shortage shows as a rising line, a sold-out bid-up moves next month's price up to at least what was paid, a glut pulls it down, and Food, Water and Energy have a named ceiling.</td></tr>
-<tr><td>G-2: a wider spread</td><td>The store buys clearly lower and sells clearly higher than today's 20%, so a fair deal between players beats the store, and more trade happens between players. Possibly per good, or widening with scarcity.</td></tr>
-<tr><td>G-3: Crystite 40 to 300</td><td>Crystite's off-world price moves month to month from the seed: median about 90, never below 40 or above 300, above 200 in under 5% of months.</td></tr>
+<tr><td>Ceiling</td><td>None: Food has reached 1,985 and Medicine 10,389</td><td>No posted price above 12 times the good's usual price (Food 360, Water and Energy 300, Smithore 600)</td></tr>
+<tr><td>Monthly move</td><td>Up to +50% or −40% a month, and most months move by the full step</td><td>Up to +30% or −25% a month, except right after a sell-out</td></tr>
+<tr><td>Spread</td><td>The store buys 10% under its price and sells 10% over, for every good</td><td>15% under and 15% over at normal stock (30% wide), widening to 25% each side as the shelf runs short</td></tr>
+<tr><td>Short or full shelf</td><td>Only a short Food or Water shelf raises the store's buying price</td><td>Every good: a short shelf moves both the store's lines up before it is empty, a full one moves both down</td></tr>
+<tr><td>Sold out and bid past</td><td>Next month's price ignores what the players just paid each other</td><td>Next month the store sells at no less than the highest price paid while it was sold out (up to the ceiling)</td></tr>
+<tr><td>Glut</td><td>The store stops buying and its price stays put</td><td>After a month its budget ran dry, it opens buying about 15% lower</td></tr>
+<tr><td>Energy</td><td>Sold out when it comes up in 26% of Energy auctions</td><td>The store aims to hold Energy for the MULEs the players will add too, and bids it in when short; nothing is imported</td></tr>
+<tr><td>Crystite's ship price</td><td>Never moves (100)</td><td>Moves every month, typically about 90 (most months 57 to 142), never below 40 or above 300; above 200 in about 1 month in 90, 280 or more about 1 in 1,600, 50 or less about 1 in 20; a good month tends to follow a good month</td></tr>
+<tr><td>Other export goods</td><td>Never move</td><td>Smithore, Rare earth, Alloy, Electronics and Medicine move too, about half as much, within half their usual price either way</td></tr>
+<tr><td>MULE price</td><td>Labour plus the Smithore in it, times a sell-out surcharge with no limit (up to 7,087 measured)</td><td>The same, under Smithore's ceiling, and the surcharge stops at 2 times</td></tr>
+<tr><td>Colonists first</td><td>The store keeps their month-end Food and Water back</td><td>Unchanged, and the store never buys Food or Water above what colonists can pay</td></tr>
 </tbody>
 </table></div>
-<div class="box next"><h4>What is changing</h4>
-<p>WS5 owns the design; WS1 will build it in the store's code. Goals and today's measurement were due at 19:00Z on 5 Nov (ready by 07:25Z), the options at 21:00–22:00Z. Nothing is decided yet.</p>
-<p>Questions for Heiko: is the MULE price part of the design? Should other goods' off-world prices move too, or only Crystite's? Is Energy supply at the store in scope? What number is the ceiling (to be set with the options)?</p>
-<p>PM lean for Crystite: an off-world price that wanders and is pulled back toward its normal level month by month, rather than a fresh draw each month, so that holding Crystite and selling when the ship pays well rewards a player who reads the trend.</p></div>
-<p class="code-ref">In the code (what it would change): <code>economy.ts::storeQuotes</code>, <code>nextPostedPrice</code>, <code>driftReference</code> · <code>game.ts::createGame</code> (<code>offWorld</code>) · <code>config.ts::PRICE</code>, <code>GOOD_CONFIG</code></p>
-<p class="owner">Kept current by: WS5 (design), WS1 (code).</p>
+<h3 id="pricing-example">Worked example: a Food sell-out</h3>
+<p>Food's store price is 40. The store sells out during the walk, and two players then trade Food at 90. Next month the store opens selling Food at 90 or more. Today it could reach at most 66 (one +50% step to 60, plus its 10%), whatever the players paid. Its buying line moves up with it. If the shelf is empty, both lines move up further and the gap widens toward 25% each side.</p>
+<div class="box next"><h4>What is next</h4>
+<p>The written design is on pull request #390, read by the Strategy (WS1), Auctions (WS3) and AI-utility (WS9) teams, then by Heiko. Build: the first pull request brings the ceiling, the spread, the shelf lean, the sell-out and glut rules and Energy; the second brings the moving ship prices and the MULE cap. When each lands, its parts here become "In the game".</p></div>
+<p class="code-ref">Spec: <code>docs/specs/2026-11-05-ws5-store-pricing.md</code> · plan: <code>docs/plans/2026-11-05-ws5-store-pricing.md</code> · code it changes: <code>economy.ts::nextPostedPrice</code>, <code>storeQuotes</code>, <code>storeWants</code>, new <code>expectedOffWorld</code> · <code>auction.ts::comeUp</code>, <code>finishGood</code> · <code>game.ts</code> (month opening, MULE factor) · <code>config.ts::PRICE</code>, <code>MULE</code>, new <code>OFF_WORLD</code></p>
+<p class="owner">Kept current by: the Maps team (WS5) for the design; built as named edits in the Strategy team's (WS1) economy code and the Auctions team's (WS3) auction and game code.</p>
 
 <h2 id="not-in-the-game">In the economy design, not in the game <span class="pill backlog">Backlog</span></h2>
 <p>The economy design (<code>docs/design/01-economy-model.md</code>) describes several things the code does not have. Some were replaced by later rulings.</p>
