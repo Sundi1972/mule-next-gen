@@ -294,5 +294,11 @@ describe('WS6 variant A: the auction trades by itself, faster and faster, on the
     const html = renderToStaticMarkup(createElement(ClientProvider, { client, children: createElement(TvAuction, { table, game: board, auction: board.auction! }) }));
     expect(textOf(html, 'tv-deal')).toMatch(/faster and faster/);
     expect(tagOf(html, 'tv-deal-speed')).toMatch(/aria-label="speed [1-4] of 4"/);
+    // At the top step the row stops promising more speed (WS4's note on #335).
+    const top = { ...board.auction!, deals: board.auction!.deals.map((d) => ({ ...d, units: 20 })) };
+    const fast = renderToStaticMarkup(createElement(ClientProvider, { client, children: createElement(TvAuction, { table, game: { ...board, auction: top }, auction: top }) }));
+    expect(tagOf(fast, 'tv-deal-speed')).toMatch(/aria-label="speed 4 of 4"/);
+    expect(textOf(fast, 'tv-deal')).toMatch(/full speed/);
+    expect(textOf(fast, 'tv-deal')).not.toMatch(/faster and faster/);
   });
 });
