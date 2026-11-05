@@ -31,7 +31,7 @@ import { draftPlaybook, type DraftPhase } from '../src/playbook/draft.js';
 import { validatorFor, type PlanEdit } from '../src/playbook/validate.js';
 import { AiSeat } from '../src/seat.js';
 import { applySets } from '../src/sim.js';
-import { goodPlan } from '../src/strategist.js';
+import { goodPlan, shortfallHold } from '../src/strategist.js';
 import type { Mind } from '../src/value.js';
 
 const PERSONAS_AT_TABLE: AiPersonaId[] = ['cautious', 'aggressive', 'trader', 'saboteur'];
@@ -321,7 +321,7 @@ describe('the validator holds every playbook to RULE-1', () => {
 
     // P11-P17, on the good that is up.
     expect(one('auction', food('role'), 'broker', at)).toMatchObject({ plays: part.role, why: 'no such role' });
-    expect(one('auction', food('hold'), -3, at).plays).toBe(0);
+    expect(one('auction', food('hold'), -3, at)).toMatchObject({ plays: 0, why: 'clamped to 0: a hold of 0 or more' });
     const need = goodPlan(observe(state, 'ai2'), mindOf(2), 'food').values.floorUnits;
     expect(need).toBeGreaterThan(0);
     const seller = run('auction', [edit(food('role'), 'seller'), edit(food('hold'), 0)], at);
@@ -352,7 +352,7 @@ describe('the validator holds every playbook to RULE-1', () => {
       const r = run('auction', [edit(`/auction/${staple}/role`, 'seller'), edit(`/auction/${staple}/hold`, 0)], { state, mind });
       expect(read(r.playbook, `/auction/${staple}/hold`), staple).toBe(kept);
       expect(r.rejected, staple).toEqual([{ path: `/auction/${staple}/hold`, to: 0, why: `clamped to ${kept}: what its hands keep for next month` }]);
-      // At what its hands keep, the hold plays as sent, and the hands keep exactly it.
+      // At what its hands keep, the hold plays as sent.
       expect(run('auction', [edit(`/auction/${staple}/role`, 'seller'), edit(`/auction/${staple}/hold`, kept)], { state, mind }).rejected, staple).toEqual([]);
     }
   });
@@ -661,17 +661,15 @@ describe("the engine's own draft passes the gate", { timeout: SLOW_MS }, () => {
     food.auction!.food = { ...food.auction!.food!, role: 'seller', walkAway: 62, start: NaN };
     const fed = fixedPoint('auction', 2, food, 'probe: a seller with no start').playbook.auction!.food!;
     expect(fed.start).toBeGreaterThanOrEqual(fed.walkAway);
-    // What its hands keep (goodPlan's floorUnits), on a seat with Energy to sell whose own power plant makes some of its
-    // need, so the engine's Energy play is a seller's.
+    // A seller with no hold, on a seat with Energy to sell whose own power plant makes some of its need, so the engine's
+    // Energy play is a seller's: the hold that plays is at least what its hands keep.
     const plant = structuredClone(at.auction);
     plant.tiles.find((t) => t.owner === 'ai2')!.outfit = 'energy';
     // A second plot that draws Energy, so the plant makes some of the need, not all of it: a grant gives one claim
     // (GAME.claimsPerGrant), so it comes as the land auction would give it.
     if (ownPlots(plant, 'ai2').length < 2) Object.assign(plant.tiles[freePlots(plant)[0]!]!, { owner: 'ai2', outfit: 'food' });
     plant.players.find((p) => p.id === 'ai2')!.stock.energy = 25;
-    const obs = observe(plant, 'ai2');
-    const floor = goodPlan(obs, mindOf(2), 'energy').values.floorUnits;
-    const gross = monthNeeds(plant, 'ai2').energy;
+    const floor = goodPlan(observe(plant, 'ai2'), mindOf(2), 'energy').values.floorUnits;
     expect(floor).toBeGreaterThan(0);
     const energy = draftOf(plant, 'auction', mindOf(2), 102);
     expect(energy.auction!.energy!.role).toBe('seller');
@@ -679,11 +677,17 @@ describe("the engine's own draft passes the gate", { timeout: SLOW_MS }, () => {
     const powered = fixedPoint('auction', 2, energy, 'probe: a seller with no hold', { state: plant }).playbook.auction!.energy!;
     expect(powered.role).toBe('seller');
     expect(powered.hold).toBeGreaterThanOrEqual(floor);
-    const holdAtFloor = (mind: Mind) => read(validatorFor({ mind, seed: 102 })(plant, 'ai2', draftOf(plant, 'auction', mindOf(2), 102), [edit('/auction/energy/hold', floor)]).playbook, '/auction/energy/hold');
-    expect(holdAtFloor(mindOf(2))).toBe(floor);
-    expect(read(validatorFor({ mind: mindOf(2), seed: 102 })(plant, 'ai2', draftOf(plant, 'auction', mindOf(2), 102), [edit('/auction/energy/hold', floor - 1)]).playbook, '/auction/energy/hold')).toBe(floor);
-    // A profile with no level reads the gross monthNeeds.
-    expect(holdAtFloor({ ...mindOf(2), level: undefined } as unknown as Mind)).toBe(gross);
+    // The same seat holding 1 Energy: its hands keep what keeps it whole next month, above the gross need a profile with
+    // no level reads.
+    const short = structuredClone(plant);
+    short.players.find((p) => p.id === 'ai2')!.stock.energy = 1;
+    const holdAt = (mind: Mind) =>
+      read(validatorFor({ mind, seed: 102 })(short, 'ai2', draftOf(short, 'auction', mindOf(2), 102), [edit('/auction/energy/role', 'seller'), edit('/auction/energy/hold', 0)]).playbook, '/auction/energy/hold');
+    const whole = shortfallHold(observe(short, 'ai2'), 'ai2', 'energy').mustHold;
+    const gross = monthNeeds(short, 'ai2').energy;
+    expect(whole).toBeGreaterThan(gross);
+    expect(holdAt(mindOf(2))).toBe(whole);
+    expect(holdAt({ ...mindOf(2), level: undefined } as unknown as Mind)).toBe(gross);
     // A Rookie handed a playbook set on cornering Smithore.
     const cornering = draftFor('auction', 2);
     cornering.strategy = { ...cornering.strategy, kind: 'monopolist', monopolyTarget: 'smithore' };
