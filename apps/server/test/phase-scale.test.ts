@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { PHASES, WALK } from '@mule/engine';
 import { GRANT_TICK_MS, MuleGame, PHASE_MS } from '../src/mule-game.js';
-import { clockRunsInMonth1, fakeContext, pressThroughSidePick, readyAll, seats, throughSidePicks } from './fake-context.js';
+import { fakeContext, pressThroughSidePick, readyAll, seats, throughSidePicks } from './fake-context.js';
 
 type Options = ConstructorParameters<typeof MuleGame>[2];
 
@@ -48,6 +48,8 @@ function toAuction(options?: Options) {
 function toWalk(options?: Options) {
   const g = toAuction(options);
   const good = g.game.viewFor(null).auction!.good;
+  // Heiko buys from the store, so the good has a walk (with 2 Food each, nobody's numbers ask for one).
+  g.game.handle('s1', { type: 'declare', side: 'buyer' });
   for (let i = 0; i < 1_000 && g.game.viewFor(null).auction?.stage === 'status'; i++) {
     pressThroughSidePick(g.game);
     g.advance(WALK.tickMs);
@@ -58,7 +60,6 @@ function toWalk(options?: Options) {
 
 describe('phaseScale and maxMonths', () => {
   // The clock as such, met in month 1: it runs from the start, as in any later month.
-  clockRunsInMonth1();
 
   it('T-AC-2: with no options, production waits its full PHASES.productionMs and the game runs 12 months', () => {
     const { game, waits, advance, ctx } = toProduction();

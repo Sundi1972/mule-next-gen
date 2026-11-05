@@ -67,7 +67,7 @@ function expectBoardKeys(auction: NonNullable<MuleView['auction']>) {
   expect(auction.receipt, NEW_FIELD).toBeNull();
   expect(auction.tally, NEW_FIELD).toBeNull();
   // A-6: `line` names a house ('store', 'ship') and `order` holds units of the good that is up: no other good's stock.
-  for (const w of auction.walkers) expect(keysOf(w), NEW_FIELD).toEqual(['at', 'dir', 'done', 'id', 'line', 'order', 'price', 'side', 'units']);
+  for (const w of auction.walkers) expect(keysOf(w), NEW_FIELD).toEqual(['at', 'dir', 'done', 'id', 'line', 'price', 'side', 'units']);
   for (const r of auction.status) expect(keysOf(r), NEW_FIELD).toEqual(['had', 'id', 'made', 'need', 'now', 'spoils', 'used']);
   for (const d of auction.deals) expect(keysOf(d), NEW_FIELD).toEqual(['buyer', 'price', 'seller', 'units']);
   for (const k of auction.skipped) expect(keysOf(k), NEW_FIELD).toEqual(['good', 'reason']);
@@ -102,14 +102,15 @@ describe('the goods auction walkers carry their units', () => {
   });
 
   it('T-AC-2: every walker carries units from the first frame of the walk, before any trade', () => {
-    const { game, good } = toWalk('pass');
+    // s2 stays a buyer at the bottom edge (RULE-2), holding some of the good and walking nowhere.
+    const { game, good } = toWalk('buyer');
     const view = game.viewFor(null);
     expect(view.auction!.walkers.length).toBe(seats.length);
     expectUnitsMatchEngine(view, engineOf(game));
-    const passer = view.auction!.walkers.find((w) => w.id === 's2')!;
-    expect(passer.side).toBe('pass');
-    expect(passer.units, "a passing player's holding, public like the status table").toBe(engineOf(game).players.find((p) => p.id === 's2')!.stock[good]);
-    expect(passer.units).toBeGreaterThan(0);
+    const stayer = view.auction!.walkers.find((w) => w.id === 's2')!;
+    expect(stayer.side).toBe('buyer');
+    expect(stayer.units, "a player's holding, public like the status table").toBe(engineOf(game).players.find((p) => p.id === 's2')!.stock[good]);
+    expect(stayer.units).toBeGreaterThan(0);
   });
 
   // trace-allow: guards the spec's HC-2 invariant, which has no INV id: the board's auction holds no player stock but the good up's

@@ -9,10 +9,7 @@ import { hostMayContinue, planningProper, readyNowIn, stageWords } from '../src/
  */
 type Stage = 'ballot' | 'reveal' | 'over';
 const withCouncil = (stage: Stage | null, phase: MuleView['phase'] = 'planning') =>
-  ({ phase, politics: { election: { stage: 'over' }, council: stage === null ? null : { stage } }, clockWaitsFor: undefined }) as unknown as Pick<
-    MuleView,
-    'phase' | 'politics' | 'clockWaitsFor'
-  >;
+  ({ phase, politics: { election: { stage: 'over' }, council: stage === null ? null : { stage } } }) as unknown as Pick<MuleView, 'phase' | 'politics'>;
 
 describe('the law ballot on the phone: a vote, not planning proper (C40, RULE-40)', () => {
   it('B-AC-40-1: while the law ballot or its reveal is open, planning proper has not begun; once it is over, it has', () => {

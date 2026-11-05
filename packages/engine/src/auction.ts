@@ -4,13 +4,13 @@ import { RuleError } from './errors.js';
 import { chargeExportTax } from './politics.js';
 import { monthNeeds } from './production.js';
 import type { AuctionSide, GameState, Good, GoodReceipt, LiveAuction, ReceiptSide, SkipReason, StatusRow } from './types.js';
-import { chooseAtLine, houseLineAt, stepBoard, stepWalker, stopAtLine, takeSide, tradePossible, type WalkMarket } from './walk.js';
+import { houseLineAt, stepBoard, stepWalker, takeSide, tradePossible, type WalkMarket } from './walk.js';
 
 /**
  * The goods auction, played live as in the original M.U.L.E. Goods come up
  * one at a time. For each, a status screen shows what every player had,
- * used, made and now holds, and there each player picks Buyer, Seller or
- * Pass, starting from the side their numbers point to (defaultSide). At its
+ * used, made and now holds. Every player takes part: each starts as a
+ * buyer and may switch to seller (the auto-trade amendment, RULE-2). At its
  * bell they walk on the board (see walk.ts): sellers start at the top and
  * walk down to ask less, buyers start at the bottom and walk up to bid
  * more. The store's selling line is near the top, its buying line near the
@@ -161,13 +161,6 @@ export function statusRows(state: GameState, good: Good): StatusRow[] {
   });
 }
 
-/** Seller with units to spare, Buyer when short, Pass with none and no need (or exactly enough). */
-export function defaultSide(state: GameState, playerId: string, good: Good): AuctionSide {
-  const p = state.players.find((q) => q.id === playerId)!;
-  const need = monthNeeds(state, playerId)[good];
-  return p.stock[good] > need ? 'seller' : p.stock[good] < need ? 'buyer' : 'pass';
-}
-
 /**
  * Why a good is skipped before its status screen, or null when it comes up:
  * when no player holds any and the store has none to sell, or when nobody
@@ -290,21 +283,34 @@ export function endAuction(state: GameState): void {
 }
 
 /**
- * Takes a side for the good that is up: Buyer, Seller or Pass. On the status
- * screen it sets where you start; during the walk you may switch, and your
- * creature jumps back to the new side's start edge (top for a seller,
- * bottom for a buyer), so a switch never trades at once. Pass leaves the board.
+ * Takes a side for the good that is up: Buyer or Seller; everyone takes part, so there is no Pass. On the status
+ * screen it sets where you start; during the walk you may switch, and your creature jumps back to the new side's
+ * start edge (top for a seller, bottom for a buyer), so a switch never trades at once. Taking your own side again
+ * changes nothing.
  */
 export function declareRole(state: GameState, playerId: string, side: AuctionSide): void {
   const a = live(state);
   const p = state.players.find((q) => q.id === playerId);
   if (!p) throw new RuleError(`Unknown player ${playerId}`);
+  if (side === 'pass') throw new RuleError('Everyone takes part in the auction');
   if (a.stage === 'close') throw new RuleError('This good has closed');
   if (side === 'seller' && p.stock[a.good!] <= 0) throw new RuleError('You have none to sell');
   const w = a.walkers.find((x) => x.id === playerId);
   if (!w || w.side === side) return;
   takeSide(a, goodsMarket(state), playerId, side);
   if (a.stage === 'walk') auctionDone(state, playerId, false);
+}
+
+/**
+ * The server's, never a player's: a dropped phone leaves the board for the rest of the good that is up, so it can't
+ * walk on or stand on a line where a house or a player keeps trading with it (FM-dropped-walker). Players can't pass
+ * (RULE-2); declaring a side again brings it back at that side's start edge. Nothing happens once the good has closed.
+ */
+export function leaveBoard(state: GameState, playerId: string): void {
+  const a = state.auction;
+  if (state.phase !== 'auction' || !a || !a.good || a.stage === 'over' || a.stage === 'close') return;
+  if (!a.walkers.some((w) => w.id === playerId)) return;
+  takeSide(a, goodsMarket(state), playerId, 'pass');
 }
 
 /** Hold up, hold down or stand still. Only during the walk, and only on the board. */
@@ -314,15 +320,6 @@ export function setWalk(state: GameState, playerId: string, dir: -1 | 0 | 1): vo
   const w = a.walkers.find((x) => x.id === playerId);
   if (!w || w.side === 'pass') throw new RuleError('You passed on this good');
   w.dir = dir;
-  // Touching Up or Down, or letting go, stops a choice made at a house's line (G-1).
-  stopAtLine(w);
-}
-
-/** At the store's or the ship's line during the walk: trade this many units with it, then stop (A-6, G-1). */
-export function lineTrade(state: GameState, playerId: string, units: number): void {
-  const a = live(state);
-  if (a.stage !== 'walk') throw new RuleError('Not walking yet');
-  chooseAtLine(a, goodsMarket(state), playerId, units);
 }
 
 /** One tap on Up or Down during the walk: one price step (G-2). */
@@ -349,12 +346,12 @@ export function auctionDone(state: GameState, playerId: string, done = true): vo
   if (!done && has) a.done = a.done.filter((id) => id !== playerId);
 }
 
-/** Puts every player on the board at their defaultSide's start edge, as the good's status screen opens. */
+/** Puts every player on the board as a buyer, at its start edge, as the good's status screen opens (RULE-2). */
 function seedSides(state: GameState): void {
   const a = state.auction!;
   const market = goodsMarket(state);
   a.walkers = state.players.map((p) => ({ id: p.id, side: 'pass', price: 0, dir: 0, since: 0 }));
-  for (const p of state.players) takeSide(a, market, p.id, defaultSide(state, p.id, a.good!));
+  for (const p of state.players) takeSide(a, market, p.id, 'buyer');
 }
 
 /**

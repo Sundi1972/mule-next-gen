@@ -135,7 +135,7 @@ function stepColonist(c: FloorColonist, input: FloorInput, dtMs: number, ctx: St
   return follow({ ...moved, moving: moved.space !== c.space || moved.x !== c.x || moved.y !== c.y }, cfg);
 }
 
-const inStore = (store: Tile, body: number, x: number, y: number) =>
+export const inStore = (store: Tile, body: number, x: number, y: number) =>
   x > store.x - body && x < store.x + 1 + body && y > store.y - body && y < store.y + 1 + body;
 
 /** The map tiles under a body standing at p, one under each of its corners; undefined off the map's edge. */

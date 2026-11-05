@@ -13,7 +13,7 @@ import { errors as playwrightErrors, type Locator, type Page } from 'playwright'
 import { GRANT_TICK_MS, PHASE_MS } from '../../server/src/mule-game.js';
 import type { MuleServer } from '../../server/src/server.js';
 import { check, CLAIM_MS, doneWithLand, held, launch, PHONE, startServer, TV } from './harness';
-import { ELECTION_WAIT_MS, PRESS_MS } from './politics-steps';
+import { ELECTION_WAIT_MS, firstMulesThroughTheServer, PRESS_MS } from './politics-steps';
 
 const SCALE = 0.25;
 /** How long the last phone's Ready takes to land and the land grant to show; planning has no clock. */
@@ -252,12 +252,15 @@ async function main(): Promise<void> {
     check((await lena.page.getByTestId('agenda-law').count()) === 0, "B-AC-46-4: the Governor's own phone has no agenda line for it");
     console.log(`✓ B-AC-46-1, B-AC-46-4: Lena proposed Land tax ${setting} through the picker; the server holds it; Ossa's This month reads her cost, ${ossaCost} cr`);
 
-    // On to the auction: ready, claim, the pub.
+    // On to the auction: ready, claim, then development. Walking is on, so development is the arcade screen; this
+    // test's promise is not the errand, so both phones' first MULEs go in through the server, month 1's clock (which
+    // waits for every first MULE, the AI seat's too) starts, and it runs out the turn.
     await everyone(phones, (p) => p.page.getByTestId('ready').click({ timeout: PRESS_MS }));
     await everyone(phones, (p) => claimPlots(p.page));
     await everyone(phones, (p) => doneWithLand(p.page));
-    await everyone(phones, (p) => goToThePub(p.page));
-    await lena.page.locator('[data-phase=auction]').waitFor({ timeout: within(PHASE_MS.development + PHASE_MS.production) });
+    await lena.page.locator('[data-phase=development]').waitFor({ timeout: within(PHASE_MS.development) });
+    firstMulesThroughTheServer(server, code, [lenaId, ossaId].map((seat) => ({ seat, outfit: 'food' as const })));
+    await lena.page.locator('[data-phase=auction]').waitFor({ timeout: within(2 * PHASE_MS.development + PHASE_MS.production) });
 
     // Lena holds one unit of a good the store buys for 100 cr or more, seeded as the auction opens and before that good
     // comes up, so 7%, 8% and 9% (and the old rate) each take a different tax from the sale.
@@ -272,7 +275,7 @@ async function main(): Promise<void> {
     const passing = everyone(phones, (p) => readyAtSidePicksUntil(p.page, () => truth.board().auction?.good === good || truth.board().phase !== 'auction'));
     await untilServer(lena.page, isUp, `UBER-AC-2: ${good} comes up at the auction`, upNext);
     await passing;
-    // With one to spare she opens on Sell; a second tap on Sell would pass.
+    // Everyone opens as a buyer (RULE-2): she switches to Sell.
     const sideOf = () => truth.board().auction?.walkers.find((w) => w.id === lenaId)?.side;
     if (sideOf() !== 'seller') await lena.page.getByTestId('side-seller').click({ timeout: PRESS_MS });
     await untilServer(lena.page, () => sideOf() === 'seller' || null, `UBER-AC-2: Lena sells ${good}`);
@@ -280,13 +283,10 @@ async function main(): Promise<void> {
     const paidBefore = truth.taxPaid(lenaId);
     await everyone(phones, (p) => p.page.locator('[data-phase=auction]').getByRole('button', { name: 'Ready', exact: true }).click({ timeout: PRESS_MS }));
     await hold(lena.page, 'down', toAuction);
-    // At a house's line nothing trades until she says how many (A-6): she sells her one, confirming if it is one she needs.
-    await lena.page.getByTestId('line-go').waitFor({ timeout: within(WALK.goodMs) });
-    await lena.page.mouse.up();
-    await lena.page.getByTestId('line-go').click({ timeout: PRESS_MS });
-    const need = truth.board().auction?.status.find((r) => r.id === lenaId)?.need ?? 0;
-    if (need >= 1) await lena.page.getByTestId('sell-anyway').click({ timeout: PRESS_MS });
+    // At a house's line units sell by themselves (the auto-trade amendment, RULE-1): holding Down, she reaches the
+    // store's line and her one sells, nothing asked, even if it is one she needs ("show, don't stop").
     await untilServer(lena.page, () => truth.stockOf(lenaId, good) === 0 || null, `UBER-AC-2: Lena sells her one ${good}`, within(WALK.goodMs / WALK.tradeClockRate));
+    await lena.page.mouse.up();
     await lena.page.waitForFunction((b) => Number((document.querySelector('[data-testid=money]')?.textContent ?? '').replace(/[^\d-]/g, '')) !== b, before, { timeout: PRESS_MS });
     const after = money(await lena.page.getByTestId('money').innerText());
     // The sale's gross: what reached Lena's phone plus what the fund took from her, measured apart.
@@ -527,10 +527,6 @@ async function claimPlots(page: Page): Promise<void> {
       if (!(err instanceof playwrightErrors.TimeoutError)) throw err;
     }
   }
-}
-
-async function goToThePub(page: Page): Promise<void> {
-  await page.locator('[data-phase=development]').getByRole('button', { name: 'Go to the pub and end your turn' }).click({ timeout: within(PHASE_MS.development) });
 }
 
 /**

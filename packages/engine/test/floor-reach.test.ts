@@ -238,8 +238,12 @@ const PROWLING = [wolf(1.2, 4.5), wolf(3.8, 4.5), wolf(2.5, 3.2)];
 
 /** 'a' has taken its Smithore MULE off 7·4 this turn, by game.ts's own takeMule, and leads it. */
 const tookSmithore = (s: GameState) => takeMule(s, 'a', 7, 4);
-/** The shore spot west of 'a''s lake plot at 5·1, within DEV_STEER.shoreReachTiles of it, on land nobody owns. */
-const SHORE = { space: 'map' as const, x: 4.75, y: 1.5 };
+/**
+ * The shore spot west of 'a''s lake plot at 5·1, within DEV_STEER.shoreReachTiles of it, on land nobody owns: halfway
+ * between its body touching the lake and the end of the shore's reach, so a tick's walk right still fits before the
+ * lake (a step into it is refused whole) and ANALYSE's "walking again" walks.
+ */
+const SHORE = { space: 'map' as const, x: 5 - (DEV_STEER.bodyTiles + DEV_STEER.shoreReachTiles) / 2, y: 1.5 };
 /** 'a' has analysed the land underfoot at the shore, so nothing there comes first. */
 const analysedShore = (s: GameState) => void (a(s).analysed = [1 * s.width + 4]);
 

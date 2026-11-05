@@ -146,12 +146,15 @@ describe('the validator holds every playbook to RULE-1', () => {
     const listing = (plot: number) => ({ item: 'plot', plot, minimum: 100, unsold: 'store' });
     expect(one('planning', '/planning/list', [listing(f1!)])).toMatchObject({ plays: undefined, why: 'Not your plot' });
     expect(stableJson(at.planning)).toBe(before);
-    const [mine1, mine2] = ownPlots(planning2, 'ai2');
-    const before2 = stableJson(planning2);
-    expect(one('planning', '/planning/list', [listing(mine1!)], { state: planning2 })).toMatchObject({ plays: [listing(mine1!)], why: null });
-    expect(one('planning', '/planning/list', [listing(mine1!), listing(mine1!)], { state: planning2 }).why).toBe('That plot is already up for auction');
-    expect(one('planning', '/planning/list', [listing(mine2!), { ...listing(mine1!), minimum: 0 }], { state: planning2 }).why).toBe('Pick a minimum of 1 or more');
-    expect(stableJson(planning2)).toBe(before2);
+    // Two plots of its own to list: a grant gives GAME.claimsPerGrant, so a second comes as the land auction would give it.
+    const twoOwned = structuredClone(planning2);
+    for (const plot of freePlots(twoOwned).slice(0, Math.max(0, 2 - ownPlots(twoOwned, 'ai2').length))) twoOwned.tiles[plot]!.owner = 'ai2';
+    const [mine1, mine2] = ownPlots(twoOwned, 'ai2');
+    const before2 = stableJson(twoOwned);
+    expect(one('planning', '/planning/list', [listing(mine1!)], { state: twoOwned })).toMatchObject({ plays: [listing(mine1!)], why: null });
+    expect(one('planning', '/planning/list', [listing(mine1!), listing(mine1!)], { state: twoOwned }).why).toBe('That plot is already up for auction');
+    expect(one('planning', '/planning/list', [listing(mine2!), { ...listing(mine1!), minimum: 0 }], { state: twoOwned }).why).toBe('Pick a minimum of 1 or more');
+    expect(stableJson(twoOwned)).toBe(before2);
 
     // P4: free plots, listed once, whole values of 0 or more; the bad entries dropped; none left, refused.
     const [p1, p2, p3] = freePlots(planning2);
@@ -386,16 +389,19 @@ describe('the level bound', () => {
     const stale = structuredClone(fresh);
     stale.strategy = { ...stale.strategy, kind: 'monopolist', monopolyTarget: 'smithore' };
     stale.auction!.smithore = { ...stale.auction!.smithore!, role: 'buyer', hold: 999 };
-    stale.auction![good] = { ...stale.auction![good]!, role: 'buyer', hold: 3.6, start: 1, walkAway: 1 };
-    expect(fresh.auction![good]!.hold).toBeGreaterThanOrEqual(4);
+    // A fraction under the fresh draft's hold, so only the whole-number rule clamps it, whatever the seat starts with.
+    const whole = fresh.auction![good]!.hold;
+    const fractional = whole - 0.4;
+    stale.auction![good] = { ...stale.auction![good]!, role: 'buyer', hold: fractional, start: 1, walkAway: 1 };
+    expect(whole).toBeGreaterThanOrEqual(1);
     const cornered = validatorFor({ mind: rookieMind, seed: 102 })(at.auction, 'ai2', stale, []);
     const ore = fresh.auction!.smithore!.hold;
     expect(read(cornered.playbook, '/auction/smithore/hold')).toBe(ore);
-    expect(read(cornered.playbook, `/auction/${good}/hold`)).toBe(4);
+    expect(read(cornered.playbook, `/auction/${good}/hold`)).toBe(whole);
     expect(cornered.rejected).toEqual([
       { path: '/strategy/kind', to: 'monopolist', why: `level never corners; the engine's draft plays ${fresh.strategy.kind}` },
       { path: '/strategy/monopolyTarget', to: 'smithore', why: "level never corners; the engine's draft plays null" },
-      { path: `/auction/${good}/hold`, to: 3.6, why: 'clamped to 4: a whole number' },
+      { path: `/auction/${good}/hold`, to: fractional, why: `clamped to ${whole}: a whole number` },
       { path: '/auction/smithore/hold', to: 999, why: `clamped to ${ore}: level never corners` },
     ]);
     // Positive control: the same Rookie with corners forced true accepts the target.
@@ -529,6 +535,9 @@ describe("the engine's own draft passes the gate", { timeout: SLOW_MS }, () => {
     // makes some of that need, so the engine's Energy play is a seller's and the floor is below the gross monthNeeds.
     const plant = structuredClone(at.auction);
     plant.tiles.find((t) => t.owner === 'ai2')!.outfit = 'energy';
+    // A second plot that draws Energy, so the plant makes some of the need, not all of it: a grant gives one claim
+    // (GAME.claimsPerGrant), so it comes as the land auction would give it.
+    if (ownPlots(plant, 'ai2').length < 2) Object.assign(plant.tiles[freePlots(plant)[0]!]!, { owner: 'ai2', outfit: 'food' });
     plant.players.find((p) => p.id === 'ai2')!.stock.energy = 25;
     const obs = observe(plant, 'ai2');
     const floor = unitValues(obs, outlook(obs, 'ai2', { lookAhead: mindOf(2).level.lookAhead }), 'energy', mindOf(2)).floorUnits;

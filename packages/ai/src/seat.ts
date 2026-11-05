@@ -284,12 +284,11 @@ export class AiSeat {
 
   /**
    * One tick of development on the arcade floor (DEV_STEER.on): this seat's input for the floor's next stepFloor, the
-   * stick and the button, as a phone's would be; `secondsLeft` the game seconds left on the one clock. `held`: month
-   * 1's clock waits and this seat is in, so the referee refuses its next MULE, analysis or filter until it starts. The
+   * stick and the button, as a phone's would be; `secondsLeft` the game seconds left on the one clock. The
    * server's tick and the sim call it the same way, every DEV_STEER.tickMs, with the same floor (HC-4).
    */
-  developSteer(state: GameState, floor: DevFloor, secondsLeft: number, cfg: FloorConfig = floorConfig(), held = false): FloorInput {
-    return this.develop.steer(state, floor, secondsLeft, cfg, held);
+  developSteer(state: GameState, floor: DevFloor, secondsLeft: number, cfg: FloorConfig = floorConfig()): FloorInput {
+    return this.develop.steer(state, floor, secondsLeft, cfg);
   }
 
   auctionTick(state: GameState, dt: number, act: Act): void {

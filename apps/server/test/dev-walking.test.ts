@@ -1,11 +1,26 @@
-import { AI_HANDS, AI_LEVELS, analysisSeconds, DEVELOPMENT, RuleError, SPECIES_PERK, tileIndex, walkSeconds, type GameState, type Outfit } from '@mule/engine';
+import { AI_HANDS, AI_LEVELS, analysisSeconds, DEV_STEER, DEVELOPMENT, RuleError, SPECIES_PERK, tileIndex, walkSeconds, type GameState, type Outfit } from '@mule/engine';
 import type { MuleIntent, MuleView } from '@mule/protocol';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { DEFAULT_AI_LEVEL, PHASE_MS, type MuleGame } from '../src/mule-game.js';
 import { pressThroughSidePick, readyAll, seats, tapThere, toDevelopment, walkers } from './fake-context.js';
 
 const LENA = 's1';
 const OSSA = 's2';
+
+/**
+ * Pins a describe to the tap path: DEV_STEER.on off for each test, as on a flag-off server, so its games are built with
+ * devSteer false and its AI seats walk by taps; the flag is put back after.
+ */
+function onTheTapPath(): void {
+  let flag = DEV_STEER.on;
+  beforeEach(() => {
+    flag = DEV_STEER.on;
+    DEV_STEER.on = false;
+  });
+  afterEach(() => {
+    DEV_STEER.on = flag;
+  });
+}
 
 type Plot = { x: number; y: number; index: number };
 
@@ -98,6 +113,9 @@ function leadOutfitted(w: ReturnType<typeof walking>, outfit: Outfit = 'food') {
 }
 
 describe('T-AC-7: colonists walk at their own pace, and the action applies on arrival', () => {
+  // the tap path (devSteer: false), kept while it remains the flag-off fallback
+  onTheTapPath();
+
   it("T-AC-7: a Zipwing and a Mollox analyse the same plot from the store; each arrives at its walkSeconds, the Zipwing in 1 / zipwingSpeed of the Mollox's time, and the ground shows only on arrival", () => {
     const { game, state, ctx, advanceTo, far } = walking();
     const t0 = ctx.now();
@@ -183,6 +201,9 @@ describe('T-AC-7: colonists walk at their own pace, and the action applies on ar
 });
 
 describe('B-AC-11: Lena walks to the corral on the one clock (the server half)', () => {
+  // the tap path (devSteer: false), kept while it remains the flag-off fallback
+  onTheTapPath();
+
   it('B-AC-11: Lena taps the corral and walks there; the MULE is hers only on arrival, walkSeconds later, while the clock runs on, and every other phone and the TV show her walking', () => {
     const { game, state, ctx, advanceTo } = walking();
     const t0 = ctx.now();
@@ -237,6 +258,9 @@ describe('B-AC-11: Lena walks to the corral on the one clock (the server half)',
 });
 
 describe('FM-corral-race: two colonists head for the corral with one MULE left', () => {
+  // the tap path (devSteer: false), kept while it remains the flag-off fallback
+  onTheTapPath();
+
   it('FM-corral-race: the earlier arrival gets the MULE although it is the higher seat and the slower walker; the other keeps its money and the news says so', () => {
     const { game, state, advanceTo } = walking();
     state.store.mules = 1;
@@ -275,6 +299,9 @@ describe('FM-corral-race: two colonists head for the corral with one MULE left',
 });
 
 describe('FM-one-clock: one development clock for every seat', () => {
+  // the tap path (devSteer: false), kept while it remains the flag-off fallback
+  onTheTapPath();
+
   it.each([1, 0.1])("FM-one-clock: at phaseScale %s every seat's devEndsAt, the AI's too, is development's start + fullSeconds × 1_000 × phaseScale; the phase ends there, with no grace", (scale) => {
     const { game, ctx, advance } = toDevelopment({ phaseScale: scale });
     const end = ctx.now() + DEVELOPMENT.fullSeconds * 1_000 * scale;
@@ -433,6 +460,9 @@ describe('FM-one-clock: one development clock for every seat', () => {
 });
 
 describe('FM-scaled-clock: development time is game seconds at any phaseScale', () => {
+  // the tap path (devSteer: false), kept while it remains the flag-off fallback
+  onTheTapPath();
+
   it.each([1, 0.1])('FM-scaled-clock: at phaseScale %s an assay keeps the colonist busy analysisSeconds × 1_000 × phaseScale, and never shortens the clock', (scale) => {
     const { game, ctx, advance, advanceTo, far, home, start } = walking(scale);
     game.handle(LENA, { type: 'analyse', ...xy(far) });
@@ -474,6 +504,9 @@ describe('FM-scaled-clock: development time is game seconds at any phaseScale', 
 });
 
 describe('FM-pub-late: the pub pays for the time left when the colonist gets there', () => {
+  // the tap path (devSteer: false), kept while it remains the flag-off fallback
+  onTheTapPath();
+
   it("FM-pub-late: a pub tap with less time left than its walk is accepted, and a colonist still walking there at the clock's end is paid with 0 left", () => {
     const { game, state, advanceTo, far } = walking();
     game.handle(LENA, { type: 'analyse', ...xy(far) });
@@ -524,6 +557,9 @@ describe('FM-pub-late: the pub pays for the time left when the colonist gets the
 });
 
 describe('FM-ai-still-walking: AI seats walk too', () => {
+  // the tap path (devSteer: false), kept while it remains the flag-off fallback
+  onTheTapPath();
+
   it.each([1, 0.1])('FM-ai-still-walking: at phaseScale %s an AI seat sets off within its decide wait and longest tap of game time, buys, outfits and installs a MULE without one "Still walking" or "Still assaying" refusal, and each install lands on its arrival', (scale) => {
     const AI = 's3';
     // The AI is given land: the land grant's light keeps its real pace, so at 0.1 it wins none of its own.
