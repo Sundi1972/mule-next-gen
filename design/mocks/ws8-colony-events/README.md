@@ -1,6 +1,6 @@
 # WS8 mock: the colony's mood events in the event show (G-5 C26–C28, C37)
 
-**Status: for review.** This isn't approved yet. Once approved, it becomes the binding scaffold for WS8's colony-event visuals.
+**Status: APPROVED at c0e2fae3 (PM, design authority, 5 Nov 2026), option A**: the Governor's strike card sits in the phone's Now slot. It keeps the map in view, uses the Now pattern Heiko already plays, and has no "Later" escape that lets the decision drift past the votes. Option B (the sheet) is not chosen. This is the binding scaffold for WS8's colony-event visuals. WS6 checks hub consistency on the build PR.
 
 It is real React that composes the real event-show parts (`EventShow`, `EventLivingMap`, `EventTvLog`,
 `EventSoloRail`, `ProductionMap` and its timeline), C34's `ColonyGauges` and `BuildSite`, the phone's `NowCard`
