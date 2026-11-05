@@ -109,7 +109,8 @@ describe("T-AC-A2: the brief holds only public facts in a deterministic order; t
 
   it('T-AC-A2: prices carry their trend over BRAIN.brief.trendMonths past months, the store\'s stock, and the export ship\'s wishlist once announced', () => {
     const state = table();
-    const past = (month: number, food: number) => ({ ...structuredClone(state.history[0] ?? ({} as GameState['history'][number])), month, prices: { ...allPrices(state), food } });
+    // Only what the brief and observe read of a month's report.
+    const past = (month: number, food: number) => ({ month, before: {}, produced: {}, prices: { ...allPrices(state), food } }) as unknown as GameState['history'][number];
     state.history = [past(1, 11), past(2, 22), past(3, 33), past(4, 44)].slice(0, BRAIN.brief.trendMonths + 1);
     state.month = 5;
     const now = allPrices(state).food;
