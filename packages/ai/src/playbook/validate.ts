@@ -194,6 +194,7 @@ function refitFault(route: DevelopmentPlay['route'], ctx: Ctx): string | null {
   // Asked with the money for it, so the refusal named is the re-fit's and not the purse's.
   self.money = Math.max(self.money, outfitCostFor(trial, ctx.seat, outfit));
   const engine = dryRun(() => outfitMule(trial, ctx.seat, outfit));
+  // The engine refuses the re-fit first today; this fallback keeps the bound for an engine that stops refusing it.
   return engine && 'refused' in engine ? engine.refused : `the MULE it leads already carries ${outfitName(led)}`;
 }
 
