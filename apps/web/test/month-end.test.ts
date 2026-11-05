@@ -277,7 +277,7 @@ describe('B-AC-12 (WS4, month end): the league table and the colony, on the phon
     const html = onPhone(gave, Results);
     const order = [...html.matchAll(/data-testid="worth-line-([a-z]+)"/g)].map((m) => m[1]);
     expect(order).toEqual(['cash', 'goods', 'land', 'mules', 'offices', 'donations']);
-    expect(said(html, 'worth-line-donations')).toBe('Donations250');
+    expect(said(html, 'worth-line-donations')).toBe('Donations 250');
     const lines = ['cash', 'goods', 'land', 'mules', 'offices', 'donations'].map((k) => num(said(html, `worth-cr-${k}`)));
     expect(lines.reduce((a, b) => a + b, 0)).toBe(3_650);
     expect(num(said(html, 'worth-total-cr'))).toBe(3_650);
