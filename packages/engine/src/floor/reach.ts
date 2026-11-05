@@ -36,7 +36,11 @@ import { HALL_BAYS, HALL_DOORS, HALL_OUTFITTERS, placeAt, type HallDoor, type Ha
 import { afterSale } from './scramble.js';
 import { strikeTarget } from './wolves.js';
 
-/** Why a row's press is refused: money short by `short` credits, the corral empty, or a re-outfit for the good it has. */
+/**
+ * Why a row's press is refused: money short by `short` credits, the corral empty, the same good (a re-outfit, or a SWAP
+ * over a MULE with that outfit), a SWAP back onto the plot the led MULE was just swapped off, or the colony's emission
+ * cap stopping that outfit (its level and the air now).
+ */
 export type ReachRefusal = { kind: 'money'; short: number } | { kind: 'soldOut' } | { kind: 'sameGood' } | { kind: 'justSwapped' } | { kind: 'capped'; level: number; air: number };
 
 /** Where a dim button points when nothing is in reach, or why the seat has nothing to press now. */
