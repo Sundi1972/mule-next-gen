@@ -25,6 +25,7 @@ import { applySets } from '../src/sim.js';
 import { goodPlan, landDecision, leaderOf, tradeDecision } from '../src/strategist.js';
 import { beforeTax, canFeed, cashReserve, installGain, type Mind } from '../src/value.js';
 import { outlook } from '../src/outlook.js';
+import { FOOD_TO_SPARE } from './store-food.js';
 
 const PERSONAS_AT_TABLE: AiPersonaId[] = ['cautious', 'aggressive', 'trader', 'saboteur'];
 
@@ -256,13 +257,16 @@ describe('the draft writes the parts of its phase', () => {
     expect(new Set(grant.ranked.map((r) => r.plot)).size).toBe(grant.ranked.length);
     for (const r of grant.ranked) expect(at.planning.tiles[r.plot]).toMatchObject({ owner: null }), expect(at.planning.tiles[r.plot]!.terrain).not.toBe('store');
 
-    // With the seat's pending pick, the plan it answered, else its fallback; the pick stays unsettled.
-    const obs = observe(at.planning, 'ai2');
+    // With the seat's pending pick, the plan it answered, else its fallback; the pick stays unsettled. With Food to
+    // spare, so the land plans differ and there is a pick to make.
+    const choice = structuredClone(at.planning);
+    choice.store.stock.food = FOOD_TO_SPARE;
+    const obs = observe(choice, 'ai2');
     const pending = new Brain(mind, PERSONAS.trader, 'AI 3', 7, null).ask('land', landDecision(obs, mind), obs, Infinity, null, '');
     expect(pending.options.length).toBeGreaterThan(1);
     const rankingOf = (k: number) => pending.list.options[k]!.action.ranking.map((s) => ({ plot: s.index, value: Math.round(s.value) }));
     const withPick = (answer: typeof pending.answer) =>
-      draftPlaybook({ state: at.planning, seat: 'ai2', mind, seed: seats[2]!.seed, phase: 'planning', land: { ...pending, answer } }).landGrant!.ranked;
+      draftPlaybook({ state: choice, seat: 'ai2', mind, seed: seats[2]!.seed, phase: 'planning', land: { ...pending, answer } }).landGrant!.ranked;
     expect(withPick({ optionId: 'B', line: null, by: 'llm' })).toEqual(rankingOf(1));
     const fallback = pending.options.findIndex((o) => o.id === pending.fallback.optionId);
     expect(withPick(null)).toEqual(rankingOf(fallback));

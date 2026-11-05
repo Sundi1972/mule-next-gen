@@ -18,6 +18,7 @@ import {
   type GameState,
 } from '@mule/engine';
 import { outlook } from '../src/outlook.js';
+import { FOOD_TO_SPARE } from './store-food.js';
 import { applySets } from '../src/sim.js';
 import { AiSeat } from '../src/seat.js';
 import { developDecision, goodPlan, landDecision, muleValue, plotRoom, plotValue, tradeDecision, wantsAnyAhead, wantsPlot } from '../src/strategist.js';
@@ -182,9 +183,10 @@ describe('land claims on a single pass', () => {
   });
 });
 
-/** Month 1's land grant on seed 3, ai0 already fed by its own Food and Energy plots, Smithore posted at `smithore`. */
+/** Month 1's land grant on seed 3, ai0 already fed by its own Food and Energy plots, Smithore posted at `smithore`, Food to spare. */
 function grantWithFarms(smithore: number): GameState {
   const state = fourSeatsWithWater(3, WATER_TO_SPARE);
+  state.store.stock.food = FOOD_TO_SPARE;
   while (state.phase !== 'landGrant') advancePhase(state);
   state.store.posted.smithore = smithore;
   const [food, energy] = state.tiles.filter((t) => !t.owner && t.terrain === 'plains');
@@ -195,7 +197,7 @@ function grantWithFarms(smithore: number): GameState {
 
 describe('land plans by worth', () => {
   it('T-AC-14: a land plan worth a quarter of the best is not offered to the decider; plans close in worth still are', () => {
-    // Smithore at 400: two mountain mines are worth about 6,400, the best two farms about 1,700.
+    // Smithore at 400: a mountain mine is worth about 3,100, the best farm about 750.
     const rich = landDecision(observe(grantWithFarms(400), 'ai0'), traderMind);
     const best = Math.max(...rich.all.map((c) => c.value));
     expect(best).toBeGreaterThan(3 * Math.min(...rich.all.filter((c) => c.action.focus === 'grown').map((c) => c.value)));
