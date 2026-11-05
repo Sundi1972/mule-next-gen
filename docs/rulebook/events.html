@@ -267,10 +267,10 @@
 <p class="owner">Kept current by: the Balance team (WS1), with the Politics team (WS7).</p>
 
 <h2 id="colony-event-shows">Strikes, mood events and gauges on screen <span class="pill built">In the game</span></h2>
-<p>The colony's events play on the TV and the phones like every other event. The mood events' stories and the Happiness gauge's month-end count are in the game. The general strike's badge, the Governor's pay prompt and the TV's waiting side are still being built (below). Each story is built against the frozen event contract, so a story whose event is not rolled yet plays once that event reaches the game. With politics off, every screen stays as it was.</p>
-<h3 id="strike-on-screen">The general strike <span class="pill progress">Being built</span></h3>
+<p>The colony's events show on the TV and the phones. Each event's story plays when the event itself rolls in the game. With politics off, or with no strike, every screen stays as it is without them.</p>
+<h3 id="strike-on-screen">The general strike</h3>
 <ul>
-<li><strong>TV header:</strong> a badge beside the month: "STRIKE · Food 20%" while unpaid, "PAID · −250 cr" once paid. No strike, no badge.</li>
+<li><strong>TV header:</strong> a badge beside the month: "STRIKE · Food 20%" while unpaid, "PAID · −250 cr" once paid. No strike, no badge. While the badge shows, the colony's gauges sit on a row of their own under the title, as they do beside a ready count.</li>
 <li><strong>TV planning map and the phone's Look map:</strong> in planning, a striker with a placard on every plot of the struck good; on the TV each also carries a "STRIKE · 20%" chip. They leave once the strike is paid.</li>
 <li><strong>The Governor's phone:</strong> once the votes are over, the Now card is the strike: "General strike on Food", "Unpaid: Food plots make 20% this month.", the fund before and after (Fund 400 → 150 cr), then <strong>Pay the strikers 250 cr</strong> and <strong>Let them strike</strong>. While an election or a law ballot is open, the vote keeps the Now card. Let them strike sends nothing to the game: the card turns into "You let them strike" and keeps a pay button until planning ends. Paid, it reads "You paid the strikers · −250 cr".</li>
 <li><strong>A Governor who is already Ready:</strong> the Now card belongs to the ready bar, so a pay line, "Pay the Food strikers 250 cr", sits under Now instead, until the strike is paid or planning ends.</li>
@@ -278,9 +278,9 @@
 <li><strong>The TV while it waits:</strong> in planning, while the strike is unpaid, the TV's side shows the Governor's mark and "Waiting for Kai, the Governor", with "Pay the strikers 250 cr from the fund, or let them strike. After the votes."</li>
 <li><strong>Paid:</strong> the game's own news line shows in the TV news, for example "Lena pays the food strikers 250 cr."</li>
 </ul>
-<p>The 250 cr is <span class="num">COLONY.strike.cost</span> = <span class="num">250</span> and the 20% is <span class="num">COLONY.strike.output</span> = <span class="num">0.2</span>, both on trunk. The badge, the Now card, the pay line and the TV's waiting side are PR #368 (Events team, WS8), open.</p>
-<h3 id="mood-events-on-screen">The mood events' stories <span class="pill built">In the game</span></h3>
-<p>Each of the colony's mood events plays in the show of the phase that rolls it, like every other event (see <a href="#event-show">How the TV and the phone show events</a>). Each has its own badge symbol and colour, a title card and words in the TV log and on the phones. The festival, the general strike's announcement, the emigration wave and "blamed for the unrest" roll in the game today. The store strike, walkout, loyal crew, riot and volunteer clean-up have their stories ready, but their events are still designed, not rolled (see <a href="#colony-social-events-next">More social events</a>).</p>
+<p>The 250 cr is <span class="num">COLONY.strike.cost</span> = <span class="num">250</span>; the 20% is <span class="num">COLONY.strike.output</span> = <span class="num">0.2</span>, the same number production reads.</p>
+<h3 id="mood-events-on-screen">The mood events' stories</h3>
+<p>Each of the colony's mood events plays in the show of the phase that rolls it, like every other event (see <a href="#event-show">How the TV and the phone show events</a>). Each has its own badge symbol and colour, a title card and words in the TV log and on the phones.</p>
 <div class="table-wrap"><table>
 <thead><tr><th>Phase</th><th>Event</th><th>What you see</th></tr></thead>
 <tbody>
@@ -307,8 +307,8 @@
 <li>Band names come from the engine's own mood bands (<code>colony.ts::moodBand</code>), not from a copy in the screen.</li>
 </ul>
 <div class="box why"><h4>Why it is like this</h4><p>Heiko asked on 28 October for the riot to be seen ("maybe an angry mob walking on the map?") and for every event to get its animation. The strike's look is WS8's option A, approved by the PM on 5 Nov: the Governor's choice sits in the phone's Now card, so the map stays in view. The screens follow the approved scaffold <code>design/mocks/ws8-colony-events</code>.</p></div>
-<div class="box next"><h4>What is changing</h4><p>The mood events in the show (PR #364) and the Happiness gauge's count at the month end (PR #365) reached trunk with the colony batch (#413) on 5 Nov. <strong>Being built</strong> by the Events team (WS8): PR #368, the strike on the TV and the phones and the Governor paying it, open. Until the riot's caller passes the store's stock, its shelves show only what was lost, not the count before and after (a later WS8 step, PR-E4). The strike in the production show is PR-E4 too, and a gauge chip flying from the event card to the gauges is PR-E2; neither is built yet.</p></div>
-<p class="code-ref">In the code: <code>packages/ui/src/events/</code> (<code>stories-colony.tsx</code>, <code>copy.ts</code>, <code>glyphs.tsx</code>, <code>catalogue.ts</code>) · <code>apps/web/src/components/Colony.tsx::ColonyGauges</code> · <code>::useMonthEndDrift</code> · branch <code>ws8-cev-strike</code> (PR #368): <code>apps/web/src/components/Strike.tsx</code> · <code>apps/web/src/table/TableApp.tsx</code> · <code>apps/web/src/phone/hub/today.tsx</code> · B-AC-26, B-AC-23-6..8, B-AC-37</p>
+<div class="box next"><h4>What is changing</h4><p><strong>Designed</strong>, next from the Events team (WS8), PR-E4: the strike in the production show, and the riot's shelves with the count before and after once its caller passes the store's stock. Until then a riot's shelves show only what was lost. A gauge chip flying from the event card to the gauges is not built yet either.</p></div>
+<p class="code-ref">In the code: <code>packages/ui/src/events/</code> (<code>stories-colony.tsx</code>, <code>copy.ts</code>, <code>glyphs.tsx</code>, <code>catalogue.ts</code>) · <code>apps/web/src/components/Strike.tsx</code> · <code>apps/web/src/components/Colony.tsx::ColonyGauges</code> · <code>apps/web/src/table/TableApp.tsx</code> · <code>apps/web/src/phone/hub/today.tsx</code> · B-AC-26, B-AC-23-6..8, B-AC-37</p>
 <p class="owner">Kept current by: the Events team (WS8).</p>
 
 <h2 id="events-later">Warnings, forecasts, hedges and chains <span class="pill backlog">Backlog</span></h2>

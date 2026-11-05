@@ -5,6 +5,7 @@ import { Speaker, TvTicker, tvSpeakerAt } from '../chat/Chat';
 import { boardWalkers, dealLine, dealSpeed, newestFirst, shipWants, ShipWants, SIDE_WORD, skippedLine, StatusTable, StoreBox, TvReadout, WaitingToPick, type DealRow } from '../components/AuctionParts';
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { BuildSite, ColonyGauges, ColonyScoreBand, MonthScoreColumn, TvWinner, useMonthEndDrift, type GaugeLanding } from '../components/Colony';
+import { StrikeBadge, StrikeMap, StrikeWaiting } from '../components/Strike';
 import { CollapseBanner, ColonyPanel, LeagueTable, WinnerCard } from '../components/MonthEnd';
 import { joinUrl, Qr } from '../components/Qr';
 import { Scaled } from '../components/Scaled';
@@ -160,7 +161,7 @@ export function TvHeader({
   chatLines?: number;
 }) {
   const colony = game.colony && gauges ? <ColonyGauges colony={game.colony} size="tv" className={ready ? 'w-full' : 'w-[760px]'} landing={landing} /> : null;
-  const ownRow = colony !== null && ready !== undefined;
+  const ownRow = colony !== null && (ready !== undefined || !!game.colony?.strike);
   // With a ready chip the title keeps one line and the chip its size; without one the header is as it always was: the
   // gauges give way to a long title ("Election day · the result").
   const fixed = ready !== undefined;
@@ -168,8 +169,11 @@ export function TvHeader({
     <>
       <header className="flex items-end justify-between gap-6" data-testid="tv-header">
         <div className={cx('flex flex-col gap-1', fixed && 'min-w-0')}>
-          <span className="label-caps text-base!">
-            Month {game.month} / {game.maxMonths}
+          <span className="flex items-center gap-3">
+            <span className="label-caps whitespace-nowrap text-base!">
+              Month {game.month} / {game.maxMonths}
+            </span>
+            {gauges && <StrikeBadge strike={game.colony?.strike} />}
           </span>
           <h1 className={cx('flex items-center gap-4 font-display text-5xl font-semibold leading-none', fixed && 'whitespace-nowrap')} data-testid="tv-phase">
             {icon}
@@ -257,6 +261,7 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
         ) : (
           <div className="shrink-0 rounded-panel border-2 border-holo bg-holo-soft p-5 font-display text-3xl font-semibold shadow-glow">Everyone is ready</div>
         )}
+        <StrikeWaiting game={game} />
         <div className="shrink-0">
           <MarketTiles game={game} />
         </div>
@@ -343,7 +348,9 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
         )}
         <div className="flex min-h-0 flex-1 gap-6">
           <div className="flex w-[700px] shrink-0 flex-col gap-3">
-            <HoloMap width={game.width} height={game.height} tiles={tiles} cursor={game.lit} density="tv" hideGround className="w-full" />
+            <StrikeMap view={game} size="tv">
+              <HoloMap width={game.width} height={game.height} tiles={tiles} cursor={game.lit} density="tv" hideGround className="w-full" />
+            </StrikeMap>
             <div className="flex items-center justify-between font-mono text-sm text-ink-3">
               <span>ROOM {table.code}</span>
               <span>
