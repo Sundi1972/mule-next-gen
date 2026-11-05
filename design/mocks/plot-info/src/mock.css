@@ -1,0 +1,6 @@
+/* The app's own entry: Tailwind, the @mule/ui theme and the app's base styles. Never copy token values here. */
+@import "../../../../apps/web/src/index.css";
+@source "../../../../apps/web/src";
+@source "./";
+/* The Analyse progress bar's fill, for the mock's scripted timing only. */
+@keyframes mock-grow { from { width: 0; } to { width: 100%; } }
