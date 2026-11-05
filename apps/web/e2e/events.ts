@@ -10,7 +10,7 @@ import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { buildEvent, createRng, eventOutput, EVENTS, type EventKey, type GameState, type MonthEvent, type MonthReport } from '@mule/engine';
 import type { EventView, MuleView, ProductionView, ServerEnvelope, TableView } from '@mule/protocol';
-import { eventScript, finalUnits, GOOD_NAME, SHOW, showEnd, type Good } from '@mule/ui';
+import { eventScript, finalUnits, GOOD_NAME, showEnd, showTimes, type Good } from '@mule/ui';
 import { errors as playwrightErrors, type Browser, type Page } from 'playwright';
 import { check, held, launch, PHONE, startServer, TV } from './harness';
 import { watchShow, type ShowWatch } from './production-steps';
@@ -135,7 +135,7 @@ async function theTvPlaysEachStory(browser: Browser): Promise<string> {
     await theTvFitsWithChat(tv, code, tvShow.view()!.players);
     checkStories((await tvShow.recording())?.layers ?? [], order, 'the TV');
     check(!((await phoneShow.recording())?.layers ?? []).some((l) => l.startsWith('event:')), 'B-AC-2 negative: with a TV the phone never played an event on its map');
-    return `the TV played ${order.join(' then ')} over ${view.lines.length} working plots, logging "${lines.join('" and "')}"; the colony bar holds the view's figures; the phone kept the light card`;
+    return `the TV played ${order.join(' then ')} over ${view.lines.length} working plots, logging "${lines.join('" and "')}"; the silo bar holds the view's figures; the phone kept the light card`;
   });
 }
 
@@ -146,7 +146,7 @@ async function thePhoneAlonePlaysAndSkips(browser: Browser): Promise<string> {
 
   const view = await productionOn(phoneShow, 'phone room');
   const [first, second] = view.events.map((e) => e.key) as [EventKey, EventKey];
-  const s = eventScript(view, SHOW.eventAt, 'solo');
+  const s = eventScript(view, showTimes(view).eventsAt!, 'solo');
   const endsAt = phoneShow.view()!.phaseEndsAt!;
   const realAt = (t: number) => endsAt - view.lengthMs + (t / showEnd(view)) * view.lengthMs;
   const map = phone.locator('[data-testid=event-map]');
@@ -551,7 +551,7 @@ function checkStories(layers: string[], order: EventView['key'][], who: string):
   }
 }
 
-/** With three chat lines under the TV's header, the map ends at or above the colony bar, and both sit inside the stage. */
+/** With three chat lines under the TV's header, the map ends at or above the silo bar, and both sit inside the stage. */
 async function theTvFitsWithChat(tv: Page, code: string, players: MuleView['players']): Promise<void> {
   const ticker = tv.locator('[data-testid=chat-ticker] [data-testid^=chat-line-]');
   const room = server.registry.get(code) as unknown as { deliver(from: string, text: string): unknown };
@@ -565,11 +565,11 @@ async function theTvFitsWithChat(tv: Page, code: string, players: MuleView['play
   };
   const stage = await box('[data-phase=production]');
   const map = await box('[data-phase=production] [data-testid=map-show]');
-  const bar = await box('[data-testid=colony-bar]');
+  const bar = await box('[data-testid=silo-bar]');
   const inside = (b: typeof stage) => b.x >= stage.x - 0.5 && b.y >= stage.y - 0.5 && b.x + b.width <= stage.x + stage.width + 0.5 && b.y + b.height <= stage.y + stage.height + 0.5;
   const at = (b: typeof stage) => `${Math.round(b.y)}..${Math.round(b.y + b.height)}`;
-  check(map.y + map.height <= bar.y + 0.5, `F4: with three chat lines the map (${at(map)}) ends at or above the colony bar (${at(bar)})`);
-  check(inside(map) && inside(bar), `F4: the map (${at(map)}) and the colony bar (${at(bar)}) sit inside the stage (${at(stage)})`);
+  check(map.y + map.height <= bar.y + 0.5, `F4: with three chat lines the map (${at(map)}) ends at or above the silo bar (${at(bar)})`);
+  check(inside(map) && inside(bar), `F4: the map (${at(map)}) and the silo bar (${at(bar)}) sit inside the stage (${at(stage)})`);
 }
 
 /** What the log calls the plots: by their one good's kind, "plots" when the goods mix. */
@@ -605,14 +605,14 @@ function checkLogLine(text: string, ev: ProductionView['events'][number], view: 
   }
 }
 
-/** B-AC-1: each player's slot carries what the month's events did to their plots (RULE-2), per good, and nothing else. */
+/** B-AC-1: each player's silo carries what the month's events did to their plots (RULE-2), per good, and nothing else. */
 async function checkColonyChips(tv: Page, view: ProductionView): Promise<void> {
   for (const owner of new Set(view.lines.map((l) => l.owner))) {
     const change = new Map<Good, number>();
     for (const l of view.lines.filter((x) => x.owner === owner)) change.set(l.good, (change.get(l.good) ?? 0) + finalUnits(l, view.events) - l.made);
     const want = [...change.values()].filter((n) => n !== 0).sort((a, b) => a - b);
-    const got = (await tv.getByTestId(`slot-${owner}`).locator('[data-delta]').evaluateAll((els) => els.map((el) => Number(el.getAttribute('data-delta'))))).sort((a, b) => a - b);
-    check(JSON.stringify(got) === JSON.stringify(want), `B-AC-1: ${owner}'s slot shows ${got.join()} from the events, the view holds ${want.join()}`);
+    const got = (await tv.getByTestId(`silo-${owner}`).locator('[data-delta]').evaluateAll((els) => els.map((el) => Number(el.getAttribute('data-delta'))))).sort((a, b) => a - b);
+    check(JSON.stringify(got) === JSON.stringify(want), `B-AC-1: ${owner}'s silo shows ${got.join()} from the events, the view holds ${want.join()}`);
   }
 }
 

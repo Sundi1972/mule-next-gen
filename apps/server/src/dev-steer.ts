@@ -30,9 +30,15 @@ const WIRE_DECIMALS = 100; // literal-ok: 10^2, the wire's 2 decimals, not balan
 
 export const onWire = (n: number): number => Math.round(n * WIRE_DECIMALS) / WIRE_DECIMALS;
 
-/** The floor config the server steps with: the live config objects, the store's hall, and game.ts's pub payout. */
-export function steerConfig(): FloorConfig {
-  return { ...floorConfig(), pubPayout: pubPayoutFor };
+/**
+ * The floor config the server steps with: the live config objects, the store's hall, and game.ts's pub payout. With
+ * `forceWolves` (a per-game test option), wolves are on and every tick's roll on wolf land brings a pack, so the first
+ * colonist out meets one at once; the cooldown and every other WOLVES value stay as they are.
+ */
+export function steerConfig(options: { forceWolves?: boolean } = {}): FloorConfig {
+  const cfg = floorConfig();
+  const wolves = options.forceWolves ? { ...cfg.wolves, on: true, chancePerSecond: Number.POSITIVE_INFINITY } : cfg.wolves;
+  return { ...cfg, wolves, pubPayout: pubPayoutFor };
 }
 
 interface Stamped {

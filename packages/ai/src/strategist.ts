@@ -260,35 +260,18 @@ export function plotRoom(obs: GameState, mind: Mind): number {
   return Math.max(0, Math.round(me(obs, mind).money - (idle + 1) * mulePriceFor(obs, mind.me)));
 }
 
-/** The outfit of the MULE up at the land auction, when the lot up is a MULE. */
-const lotOutfit = (obs: GameState): Outfit | undefined => (obs.landAuction?.lot?.item.kind === 'mule' ? obs.landAuction.lot.item.outfit : undefined);
-
 /**
- * What one more MULE is worth to the seat, in credits: its best use on an
- * idle plot of its own, before paying the store's price for it. Nothing
- * without idle land. The most the seat bids for a MULE at a lot.
- *
- * A lot MULE comes outfitted, `outfit` (by default the one up at the land auction), and is never re-outfitted on the
- * floor (only a MULE taken off a plot is): it is worth what installGain says a MULE of that outfit gains on the seat's
- * best idle plot for it, with installGain's cost added back, the price and the outfit the bid stands in for. Nothing
- * where no idle plot of the seat's gains from it, so it is never bid above zero (FM-lot-mule-gain).
+ * What a lot MULE outfitted for `outfit` is worth to the seat, in credits: the most the seat bids for it. A lot MULE
+ * comes outfitted and is never re-outfitted on the floor (only a MULE taken off a plot is): it is worth what
+ * installGain says a MULE of that outfit gains on the seat's best idle plot for it, with installGain's cost added back,
+ * the price and the outfit the bid stands in for. Nothing without idle land, for a factory it can't feed (as
+ * developDecision vetoes), or where no idle plot of the seat's gains from it, so it is never bid above zero
+ * (FM-lot-mule-gain).
  */
-export function muleValue(obs: GameState, mind: Mind, outfit: Outfit | undefined = lotOutfit(obs)): number {
-  if (outfit) {
-    const best = bestInstall(obs, mind, outfit);
-    return best && best.gain > 0 ? Math.round(best.gain + best.cost) : 0;
-  }
-  const o = outlook(obs, mind.me, { lookAhead: mind.level.lookAhead });
-  const price = mulePriceFor(obs, mind.me);
-  let best = 0;
-  for (const tile of obs.tiles) {
-    if (tile.owner !== mind.me || tile.outfit) continue;
-    for (const outfit of OUTFITS) {
-      if ((isFactoryGood(outfit) && !canFeed(obs, mind.me, outfit)) || outfitBlocked(obs, outfit)) continue;
-      best = Math.max(best, installGain(obs, o, tile, outfit, mind).gain + price);
-    }
-  }
-  return Math.round(best);
+export function muleValue(obs: GameState, mind: Mind, outfit: Outfit): number {
+  if (isFactoryGood(outfit) && !canFeed(obs, mind.me, outfit)) return 0;
+  const best = bestInstall(obs, mind, outfit);
+  return best && best.gain > 0 ? Math.round(best.gain + best.cost) : 0;
 }
 
 export type SellListing = NonNullable<PlanningPlay['list']>[number];
@@ -326,12 +309,6 @@ export function sellWanted(obs: GameState, mind: Mind): SellListing[] {
 export type DevAction = { kind: 'install'; index: number; outfit: Outfit } | { kind: 'stop' };
 
 /**
- * The next MULE, or none: per idle plot of the seat, every outfit and
- * factory, plus keeping the cash. Hard rules: no MULE the cash can't pay for
- * without leaving the reserve, no factory it can't feed, nothing when the
- * corral is empty or the month's MULEs are used.
- */
-/**
  * A walk-aware seat's development clock: the seconds it has left and the seconds its taps for one MULE take, and where
  * it is (where the game walks, DEV_WALK), or, where the game steers (the arcade floor), the floor's own estimate.
  */
@@ -343,7 +320,23 @@ export type DevWalk = { left: number; taps: number } & ({ at: DevPlace; floor?: 
  */
 export type FloorLegs = (index: number, outfit: Outfit) => { there: number; pub: number };
 
-export function developDecision(obs: GameState, mind: Mind, mulesSoFar: number, walk?: DevWalk): Shortlist<DevAction> {
+/**
+ * The walk's veto on a MULE: the walk out to its plot (`there`), back to the pub (`back`) and the taps take more than
+ * the seconds left. developDecision's, and RULE-9 row 3's on the floor (AM-25): a route MULE it vetoes is stale.
+ */
+export function walkVeto(walk: DevWalk, there: number, back: number): string | null {
+  const seconds = there + back + walk.taps;
+  return seconds > walk.left ? `the walk takes ${Math.round(seconds)} s, ${Math.round(walk.left)} s left` : null;
+}
+
+/**
+ * The next MULE, or none: per idle plot of the seat, every outfit and
+ * factory, plus keeping the cash. Hard rules: no MULE the cash can't pay for
+ * without leaving the reserve, no factory it can't feed, nothing when the
+ * corral is empty or the month's MULEs are used. A `focus` good (the seat's
+ * money-maker) leans every pick toward its outfits; null leaves every utility as without one.
+ */
+export function developDecision(obs: GameState, mind: Mind, mulesSoFar: number, walk?: DevWalk, focus: Good | null = null): Shortlist<DevAction> {
   const o = outlook(obs, mind.me, { lookAhead: mind.level.lookAhead });
   const p = me(obs, mind);
   const reserve = cashReserve(obs, mind, o);
@@ -352,11 +345,24 @@ export function developDecision(obs: GameState, mind: Mind, mulesSoFar: number, 
   const needEnergy = !obs.tiles.some((t) => t.owner === mind.me && t.outfit === 'energy');
   const analysed = new Set(p.analysed);
   const cands: Candidate<DevAction>[] = [];
-  const common = (cashAfter: number, known: boolean, feeds: boolean, gain: number, why: string) => [
+  // Added only with a focus: a consideration scoring 1 for all still changes every utility (utilityOf's make-up counts them).
+  const leaning = (makes: Outfit | null) =>
+    focus === null
+      ? []
+      : [
+          consider(
+            'My money-maker',
+            makes === focus ? 1 : AI_PLANS.moneyMaker.otherScore,
+            AI_PLANS.moneyMaker.weight,
+            makes === focus ? `${GOOD_NAME[focus]} is my money-maker` : `not ${GOOD_NAME[focus]}, my money-maker`,
+          ),
+        ];
+  const common = (cashAfter: number, known: boolean, feeds: boolean, gain: number, why: string, makes: Outfit | null) => [
     consider('Gain', curve.gain(gain, STRATEGIST.gainScale.develop), mind.persona.greed, why),
     consider('Cash left', curve.floor(curve.ramp(cashAfter, reserve, reserve * STRATEGIST.cashLeftFull), STRATEGIST.cashLeftFloor), mind.persona.reserve, `${cr(cashAfter)} left, ${cr(reserve)} kept back`),
     consider('Known ground', known ? 1 : STRATEGIST.develop.unknownGround, mind.persona.risk, known ? 'ground analysed' : 'ground not analysed'),
     consider('Feeds me', feeds ? 1 : STRATEGIST.develop.feedsMe.other, mind.persona.reserve * STRATEGIST.develop.feedsMe.reserveShare, feeds ? 'covers my own Food or Energy' : 'I buy my Food and Energy'),
+    ...leaning(makes),
   ];
   for (const tile of idle) {
     const index = tileIndex(obs.width, tile.x, tile.y);
@@ -377,10 +383,11 @@ export function developDecision(obs: GameState, mind: Mind, mulesSoFar: number, 
       // A farm for a good it is short of is the cure, not a risk: it needn't keep cash back to buy that good.
       const cures = outfit === 'food' || outfit === 'water' || outfit === 'energy' ? outfit : undefined;
       const keepBack = cures ? cashReserve(obs, mind, o, cures) : reserve;
+      const tooFar = walk ? walkVeto(walk, walking, back) : null;
       let veto: string | null = null;
       if (obs.store.mules <= 0) veto = 'the corral is empty';
       else if (mulesSoFar >= mind.level.mulesPerMonth) veto = `already led ${mulesSoFar} MULEs out this month`;
-      else if (walk && walking + back + walk.taps > walk.left) veto = `the walk takes ${Math.round(walking + back + walk.taps)} s, ${Math.round(walk.left)} s left`;
+      else if (tooFar) veto = tooFar;
       else if (cashAfter < 0) veto = `it costs ${cr(cost)}, more than the ${cr(p.money)} on hand`;
       // What the MULE makes arrives before the auction the reserve is kept for, so it counts toward it.
       else if (cashAfter + Math.max(0, net) < keepBack) veto = `it would leave ${cr(cashAfter)}, under the ${cr(keepBack)} kept for upkeep`;
@@ -391,26 +398,26 @@ export function developDecision(obs: GameState, mind: Mind, mulesSoFar: number, 
           `${outfitName(outfit)} on ${plotName(tile)}`,
           { kind: 'install', index, outfit },
           gain,
-          common(cashAfter, analysed.has(index) || outfit === 'greenBelt', feeds, gain, `makes about ${cr(net)} a month, costs ${cr(cost)}, worth ${cr(gain)} over the game`),
+          common(cashAfter, analysed.has(index) || outfit === 'greenBelt', feeds, gain, `makes about ${cr(net)} a month, costs ${cr(cost)}, worth ${cr(gain)} over the game`, outfit),
           veto,
         ),
       );
     }
   }
-  cands.push(candidate<DevAction>('stop', 'Keep the cash', { kind: 'stop' }, 0, common(p.money, true, false, 0, 'no new MULE: the money stays in the bank')));
+  cands.push(candidate<DevAction>('stop', 'Keep the cash', { kind: 'stop' }, 0, common(p.money, true, false, 0, 'no new MULE: the money stays in the bank', null)));
   return shortlist(cands, mind.level.shortlist, mind.level.shortlistTolerance);
 }
 
 /**
  * The seat's own idle plot where a MULE outfitted for `outfit` gains most, by installGain: its index and the gain and
- * cost installGain gives there. Null without an idle plot, or for a factory it can't feed (as developDecision vetoes).
+ * cost installGain gives there, whatever the gain (a factory it can't feed included). Only plots `can` allows count (on
+ * the floor, those with somewhere to stand for the install). Null without such an idle plot.
  */
-export function bestInstall(obs: GameState, mind: Mind, outfit: Outfit): { index: number; gain: number; cost: number } | null {
-  if (isFactoryGood(outfit) && !canFeed(obs, mind.me, outfit)) return null;
+export function bestInstall(obs: GameState, mind: Mind, outfit: Outfit, can: (index: number) => boolean = () => true): { index: number; gain: number; cost: number } | null {
   const o = outlook(obs, mind.me, { lookAhead: mind.level.lookAhead });
   let best: { index: number; gain: number; cost: number } | null = null;
   for (const tile of obs.tiles) {
-    if (tile.owner !== mind.me || tile.outfit) continue;
+    if (tile.owner !== mind.me || tile.outfit || !can(tileIndex(obs.width, tile.x, tile.y))) continue;
     const { gain, cost } = installGain(obs, o, tile, outfit, mind);
     if (!best || gain > best.gain) best = { index: tileIndex(obs.width, tile.x, tile.y), gain, cost };
   }
