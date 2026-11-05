@@ -8,9 +8,12 @@ import {
   factoryFit,
   GROWN_BASE,
   isFactory,
+  monthlyDemand,
+  monthNeeds,
   RECIPES,
   rawOutput,
   runProduction,
+  statusRows,
   type GameState,
   type Good,
   type Outfit,
@@ -482,5 +485,29 @@ describe('AM-17: invariants over generated owners', () => {
       expect(runProduction(replay)).toEqual(run);
       expect(replay.players.map((pl) => pl.stock)).toEqual(state.players.map((pl) => pl.stock));
     }
+  });
+});
+
+describe('AM-17, PM ruling A: a plant counts net, so its own use is nobody\'s need', () => {
+  it('B-AC-energy-off: a seat whose only plot is a plant needs no Energy on the auction\'s status screen; a farm beside it needs 1', () => {
+    const state = colony();
+    lay(state, [{ good: 'energy', out: 2 }]);
+
+    expect(monthNeeds(state, 'p0').energy).toBe(0);
+    expect(statusRows(state, 'energy').find((r) => r.id === 'p0')!.need).toBe(0);
+
+    lay(state, [{ good: 'energy', out: 2 }, { good: 'food', out: 3 }]);
+    expect(statusRows(state, 'energy').find((r) => r.id === 'p0')!.need).toBe(1);
+  });
+
+  it('B-AC-energy-off: the store\'s Energy demand counts the players\' plots but never a plant\'s own use', () => {
+    const bare = colony();
+    const planted = colony();
+    lay(planted, [{ good: 'energy', out: 2 }, { good: 'energy', out: 3, owner: 'p1' }]);
+    const farmed = colony();
+    lay(farmed, [{ good: 'food', out: 3 }]);
+
+    expect(monthlyDemand(planted).energy).toBe(monthlyDemand(bare).energy);
+    expect(monthlyDemand(farmed).energy).toBe(monthlyDemand(bare).energy + 1);
   });
 });
