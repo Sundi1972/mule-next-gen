@@ -560,7 +560,7 @@ export function TvAuction({ table, game, auction }: { table: TableView<MuleView>
                         </span>
                       ))}
                     </span>
-                    faster and faster
+                    {steps === SPEED_STEPS ? 'full speed' : 'faster and faster'}
                   </span>
                 </li>
               );
