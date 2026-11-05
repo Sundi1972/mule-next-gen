@@ -42,6 +42,7 @@ describe('forceWolves: a pack at once, for tests', () => {
     const g = inDevelopment({ forceWolves: true });
     g.advance(TICK);
     const id = g.floor().colonists.find((c) => c.space === 'map' && c.encounter)!.id;
+    const first = g.floor().tick;
     const met: number[] = [];
     let had = true;
     for (let i = 0; i < 600 && g.game.viewFor(null).phase === 'development'; i++) {
@@ -51,7 +52,7 @@ describe('forceWolves: a pack at once, for tests', () => {
       if (has && !had) met.push(g.floor().tick);
       had = has;
     }
-    const first = 1;
+    expect(met.length, 'forced, the next pack comes once the cooldown is over').toBeGreaterThan(0);
     for (const tick of met) expect((tick - first) * TICK, 'a second pack only past the cooldown').toBeGreaterThanOrEqual(WOLVES.cooldownSeconds * 1_000);
   });
 
