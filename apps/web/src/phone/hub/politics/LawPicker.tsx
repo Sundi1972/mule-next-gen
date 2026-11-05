@@ -255,8 +255,10 @@ function PickerA({ pol, candidates, start, onPropose }: { pol: PoliticsView; can
           const inForce = laws[law];
           const wait = waitOf(pol, view.month, 'enact', law);
           const repealWait = waitOf(pol, view.month, 'repeal', law);
+          // RULE-41 row 4 keys a wait by kind: a waiting enact leaves the repeal of a law in force open, so the row stays lit for it.
+          const canRepeal = !!inForce && repealWait === null;
           return (
-            <li key={law} className={cx('flex flex-col gap-0.5 rounded-control border p-1.5', pick?.law === law ? 'border-holo' : 'border-holo-line', wait !== null && 'opacity-50')} data-testid={`law-row-${law}`}>
+            <li key={law} className={cx('flex flex-col gap-0.5 rounded-control border p-1.5', pick?.law === law ? 'border-holo' : 'border-holo-line', wait !== null && !canRepeal && 'opacity-50')} data-testid={`law-row-${law}`}>
               <span className="flex items-baseline gap-1.5">
                 <span className="text-xs font-semibold">{LAW_NAME[law]}</span>
                 {inForce && (
@@ -288,10 +290,17 @@ function PickerA({ pol, candidates, start, onPropose }: { pol: PoliticsView; can
                       </Chip>
                     );
                   })}
-                  {inForce && (
-                    <Chip on={pick?.law === law && pick.kind === 'repeal'} disabled={repealWait !== null} onClick={() => setPick({ law, kind: 'repeal', setting: null })} testid={`law-repeal-${law}`}>
-                      Repeal
-                    </Chip>
+                </span>
+              )}
+              {inForce && (
+                <span className="flex flex-wrap items-center gap-1">
+                  <Chip on={pick?.law === law && pick.kind === 'repeal'} disabled={repealWait !== null} onClick={() => setPick({ law, kind: 'repeal', setting: null })} testid={`law-repeal-${law}`}>
+                    Repeal
+                  </Chip>
+                  {repealWait !== null && (
+                    <span className="text-[11px] font-semibold text-warn" data-testid={`law-repeal-wait-${law}`}>
+                      {retryWords(repealWait)}
+                    </span>
                   )}
                 </span>
               )}

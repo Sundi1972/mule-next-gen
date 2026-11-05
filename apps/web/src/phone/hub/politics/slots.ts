@@ -55,7 +55,7 @@ export const LAW_AGENDA: AgendaSlot = {
   show: (seat) => pendingFor(seat) !== null,
 };
 
-export const GOVERNOR_AGENDA: AgendaSlot = { key: 'governor', title: () => "Governor's desk", sub: () => 'Set the sales tax', opens: { desk: 'governor' } };
+export const GOVERNOR_AGENDA: AgendaSlot = { key: 'governor', title: () => "Governor's desk", sub: () => 'Set the sales tax · propose a law', opens: { desk: 'governor' } };
 
 export const COUNCIL_DESK: DeskSlot = { id: 'council', label: 'Council', icon: 'M4 10h16 M6 10v8 M10 10v8 M14 10v8 M18 10v8 M3 20h18 M12 3l9 5H3z', Body: CouncilDesk, show: politicsOn };
 
