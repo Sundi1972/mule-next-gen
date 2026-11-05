@@ -11,10 +11,12 @@ import {
   doorPresses,
   MS_PER_SECOND,
   mulePriceFor,
+  outfitCostFor,
   reachOf,
   RuleError,
   settleMoments,
   stepFloor,
+  tileAt,
   tileIndex,
   type DevelopmentPlay,
   type DevFloor,
@@ -349,6 +351,57 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
       expect(steps.has(1)).toBe(false);
       expect(steps.get(2)).toEqual({ route: 2, outcome: 'done' });
       expect(me(state).analysed).toEqual([]);
+      expect(me(state).doneDeveloping).toBe(true);
+    });
+
+    /**
+     * FM-floor-lake-stand's map: seed 14's for four seats, ai0 holding the lake at 12·8 (0-based), whose shores are its
+     * own swamps at 11·7 and 11·8 (each with a MULE, so Reach there works the swamp) and plains the lakes wall off from
+     * the store; and an idle plains plot by the store. No walk reaches a spot to install on the lake from.
+     */
+    function lakeWithNoStand(): { state: GameState; lake: Tile; spare: Tile } {
+      const state = createGame({ seed: 14, players: [0, 1, 2, 3].map((i) => ({ id: `ai${i}`, name: `AI ${i + 1}`, isAi: true })) });
+      while (state.phase !== 'development') advancePhase(state);
+      for (const t of state.tiles) if (t.owner === ME) t.owner = null;
+      const at = (x: number, y: number) => tileAt(state.tiles, state.width, x, y)!;
+      const lake = at(12, 8);
+      lake.owner = ME;
+      for (const t of [at(11, 7), at(11, 8)]) {
+        t.owner = ME;
+        t.outfit = 'water';
+      }
+      const store = state.tiles.find((t) => t.terrain === 'store')!;
+      const far = (t: Tile) => Math.abs(t.x - store.x) + Math.abs(t.y - store.y);
+      const spare = state.tiles.filter((t) => t.terrain === 'plains' && t.owner === null).sort((a, b) => far(a) - far(b))[0]!;
+      spare.owner = ME;
+      return { state, lake, spare };
+    }
+
+    it("T-AC-7 row 3 (AM-25): a MULE for a plot the floor's walk vetoes is replaced by its own pick, 'stale: <the veto>', and none is lost", () => {
+      const { state, lake, spare } = lakeWithNoStand();
+      const { hand } = seatAndHand();
+      const price = mulePriceFor(state, ME);
+      const money = me(state).money;
+      hand.follow(state.month, routeOf([{ act: 'buyMule' }, { act: 'outfit', outfit: 'water' }, { act: 'install', plot: indexOf(state, lake) }, { act: 'pub' }]));
+      // The money just before the pub pays out: what the MULEs cost.
+      let beforePub = money;
+      floorTurn(state, hand, {
+        between: (floor) => {
+          if (!me(state).doneDeveloping) beforePub = me(state).money;
+          return floor;
+        },
+      });
+      const log = JSON.stringify(hand.done);
+      const steps = hand.routeLog(state).steps;
+      expect(steps.slice(0, 3).map((s) => s.outcome), log).toEqual(['replaced', 'replaced', 'replaced']);
+      expect(steps.slice(0, 3).every((s) => /^stale: the walk takes/.test(s.note ?? '')), log).toBe(true);
+      // The promise: no MULE paid for and lost. Every MULE bought stands on a plot, and the money went on those alone.
+      const ok = (type: string) => hand.done.filter((e) => e.action.type === type && e.ok).length;
+      expect(ok('buyMule'), log).toBe(ok('install'));
+      expect(me(state).carriedMule, 'no MULE on the lead').toBeNull();
+      expect(lake.outfit, 'none on the lake').toBeNull();
+      expect(spare.outfit, `the own pick's MULE: ${log}`).not.toBeNull();
+      expect(money - beforePub).toBe(price + outfitCostFor(state, ME, spare.outfit!));
       expect(me(state).doneDeveloping).toBe(true);
     });
 
