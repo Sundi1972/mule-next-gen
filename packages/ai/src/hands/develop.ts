@@ -34,7 +34,7 @@ import type { Brain, Pending } from '../brain.js';
 import { draftMulePick } from '../playbook/draft.js';
 import type { DevelopmentLog, DevelopmentStepLog } from '../playbook/outcome.js';
 import { floorDevWalk, leading, mapFactor, planSeconds, plotErrandSeconds, pubDoor, pubMargin, pubSeconds, tileMiddle, tripSeconds, type PlanStop } from '../floor-time.js';
-import { analysesWanted, developDecision, filtersWanted, outfitName, plotName, type DevAction, type DevWalk } from '../strategist.js';
+import { analysesWanted, developDecision, filtersWanted, outfitName, plotName, walkVeto, type DevAction, type DevWalk } from '../strategist.js';
 import { situation } from '../summary.js';
 import { FloorWalker, type FloorView } from './floor-walker.js';
 
@@ -795,10 +795,9 @@ export class DevelopHand {
     if (head.route === undefined) return true;
     const plotOf = (s: AiAction) => (s.type === 'install' || s.type === 'filter' || s.type === 'analyse' ? tileIndex(state.width, s.x, s.y) : -1);
     if (a.type === 'buyMule') {
-      const install = this.queue.find((s) => s.group === head.group && s.action.type === 'install');
-      const tile = install && state.tiles[plotOf(install.action)]!;
-      if (tile && (tile.owner !== me || tile.outfit !== null)) {
-        this.replace(state, head.group, plotOf(install.action), walk);
+      const stale = this.staleMule(state, head.group, walk);
+      if (stale !== null) {
+        this.replace(state, head.group, stale, walk);
         return false;
       }
     }
@@ -815,10 +814,31 @@ export class DevelopHand {
     return true;
   }
 
+  /**
+   * Row 3 for a route MULE about to be bought: why its group is stale, or null. Its plot is no longer the seat's idle
+   * plot; or, on the floor, the live walk vetoes it as developDecision would (AM-25), such as a lake with no stand.
+   */
+  private staleMule(state: GameState, group: number, walk?: () => DevWalk): string | null {
+    let plot = -1;
+    let outfit: Outfit | null = null;
+    for (const { group: g, action: a } of this.queue) {
+      if (g === group && a.type === 'install') plot = tileIndex(state.width, a.x, a.y);
+      if (g === group && a.type === 'outfit') outfit = a.outfit;
+    }
+    if (plot < 0) return null;
+    const tile = state.tiles[plot]!;
+    if (tile.owner !== this.brain.mind.me || tile.outfit !== null) return `stale: plot ${plot}`;
+    // Only the floor's walk: where the game walks (DEV_WALK) the draft priced the route by that same walk.
+    const w = walk?.();
+    const legs = outfit === null ? undefined : w?.floor?.(plot, outfit);
+    const veto = legs && walkVeto(w!, legs.there, legs.pub);
+    return veto ? `stale: ${veto}` : null;
+  }
+
   /** Row 3: the stale MULE's group, replaced once by the seat's own pick for that MULE (the draft's seeded pick), ahead of the rest. */
-  private replace(state: GameState, group: number, plot: number, walk?: () => DevWalk): void {
+  private replace(state: GameState, group: number, note: string, walk?: () => DevWalk): void {
     const r = this.route!;
-    for (const s of this.queue.filter((q) => q.group === group)) this.log(s, false, 'replaced', `stale: plot ${plot}`);
+    for (const s of this.queue.filter((q) => q.group === group)) this.log(s, false, 'replaced', note);
     const rest = this.queue.filter((q) => q.group !== group);
     this.queue = [];
     const mind = this.brain.mind;

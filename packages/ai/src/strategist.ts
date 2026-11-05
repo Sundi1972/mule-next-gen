@@ -325,6 +325,15 @@ export type DevWalk = { left: number; taps: number } & ({ at: DevPlace; floor?: 
 export type FloorLegs = (index: number, outfit: Outfit) => { there: number; pub: number };
 
 /**
+ * The walk's veto on a MULE: the walk out to its plot (`there`), back to the pub (`back`) and the taps take more than
+ * the seconds left. developDecision's, and RULE-9 row 3's on the floor (AM-25): a route MULE it vetoes is stale.
+ */
+export function walkVeto(walk: DevWalk, there: number, back: number): string | null {
+  const seconds = there + back + walk.taps;
+  return seconds > walk.left ? `the walk takes ${Math.round(seconds)} s, ${Math.round(walk.left)} s left` : null;
+}
+
+/**
  * The next MULE, or none: per idle plot of the seat, every outfit and
  * factory, plus keeping the cash. Hard rules: no MULE the cash can't pay for
  * without leaving the reserve, no factory it can't feed, nothing when the
@@ -376,10 +385,11 @@ export function developDecision(obs: GameState, mind: Mind, mulesSoFar: number, 
       // A farm for a good it is short of is the cure, not a risk: it needn't keep cash back to buy that good.
       const cures = outfit === 'food' || outfit === 'water' || outfit === 'energy' ? outfit : undefined;
       const keepBack = cures ? cashReserve(obs, mind, o, cures) : reserve;
+      const tooFar = walk ? walkVeto(walk, walking, back) : null;
       let veto: string | null = null;
       if (obs.store.mules <= 0) veto = 'the corral is empty';
       else if (mulesSoFar >= mind.level.mulesPerMonth) veto = `already led ${mulesSoFar} MULEs out this month`;
-      else if (walk && walking + back + walk.taps > walk.left) veto = `the walk takes ${Math.round(walking + back + walk.taps)} s, ${Math.round(walk.left)} s left`;
+      else if (tooFar) veto = tooFar;
       else if (cashAfter < 0) veto = `it costs ${cr(cost)}, more than the ${cr(p.money)} on hand`;
       // What the MULE makes arrives before the auction the reserve is kept for, so it counts toward it.
       else if (cashAfter + Math.max(0, net) < keepBack) veto = `it would leave ${cr(cashAfter)}, under the ${cr(keepBack)} kept for upkeep`;
