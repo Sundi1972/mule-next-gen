@@ -134,7 +134,7 @@ describe('RULE-A2 rows 3-4: the next phase is edited in the slack before it', { 
   it("C4: the auction playbook adopted at the auction's start carries every drafted good, the ones past the brief's cap too", async () => {
     let edited: string | null = null;
     const sdk = fakeSdk((_n, params) => {
-      const offered = (params.output_config?.format?.schema as { properties: { edits: { items: { anyOf: { properties: { path: { enum: string[] } } }[] } } } }).properties.edits.items.anyOf.map((v) => v.properties.path.enum[0]!);
+      const offered = (params.output_config?.format?.schema as { properties: { edits: { items: { anyOf: { properties: { path: { enum: string[] } } }[] } } } }).properties.edits.items.anyOf.flatMap((v) => v.properties.path.enum);
       edited = offered.find((p) => p.endsWith('/hold'))!;
       return sdkMessage(JSON.stringify({ edits: [{ path: edited, to: 0, reason: 'None.' }], line: '' }), USED);
     });
