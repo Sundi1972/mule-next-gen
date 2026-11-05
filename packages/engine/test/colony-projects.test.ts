@@ -48,7 +48,7 @@ function standing(state: GameState, id: PrestigeId): void {
   const row = PRESTIGE[id];
   state.colony = {
     ...state.colony!,
-    projects: [{ id, stage: 'standing', funded: { credits: row.credits, goods: { ...row.goods } }, monthsLeft: null, plot: null, since: 1, plaque: {} }],
+    projects: [{ id, stage: 'standing', funded: { credits: row.credits, goods: { ...row.goods } }, monthsLeft: null, plot: null, since: 1, plaque: {}, maxBid: null }],
   };
 }
 

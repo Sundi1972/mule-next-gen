@@ -70,6 +70,7 @@ import {
   repair,
   payStrike,
   goodWords,
+  setSiteBid,
   setWalk,
   shipAnnounced,
   shipInPort,
@@ -637,6 +638,9 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         return;
       case 'repair':
         repair(state, seatId, intent.id);
+        return;
+      case 'setSiteBid':
+        setSiteBid(state, seatId, intent.id, intent.maxBid);
         return;
       case 'payStrike': {
         payStrike(state, seatId);

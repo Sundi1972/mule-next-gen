@@ -281,6 +281,8 @@ function isIntent(v: unknown): v is MuleIntent {
       return typeof i.id === 'string';
     case 'payStrike':
       return true;
+    case 'setSiteBid':
+      return typeof i.id === 'string' && (i.maxBid === null || typeof i.maxBid === 'number');
     case 'propose':
       return i.proposal === null || isProposal(i.proposal);
     case 'voteLaw':

@@ -30,6 +30,7 @@ export function colonyView(state: GameState): ColonyView | null {
         prestige: row.prestige,
         upkeep: row.upkeep,
         repairCost: p.stage === 'damaged' ? row.repairCost : null,
+        maxBid: p.maxBid,
         plaque: Object.entries(p.plaque)
           .map(([playerId, value]) => ({ playerId, value }))
           .sort((a, b) => b.value - a.value),
