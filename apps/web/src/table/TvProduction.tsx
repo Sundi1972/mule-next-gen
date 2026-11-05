@@ -129,7 +129,7 @@ function Rail({ game, show, t, connected }: { game: MuleView; show: ShowData; t:
           <ul className="flex flex-col gap-1.5" data-testid="why-legend">
             {reasons.map((w) => (
               <li key={w} className={cx('flex items-center gap-3 text-base leading-snug', seen.has(w) ? 'text-ink-2' : 'opacity-30')}>
-                <span className={cx('flex w-11 shrink-0 items-center justify-center gap-0.5 rounded-chip px-1 py-0.5 font-mono text-sm font-bold', WHY[w]!.tone)}>
+                <span className={cx('flex w-13 shrink-0 items-center justify-center gap-0.5 rounded-chip px-1 py-0.5 font-mono text-sm font-bold', WHY[w]!.tone)}>
                   {WHY[w]!.icon && <GoodIcon good={WHY[w]!.icon!} size={12} />}
                   {WHY[w]!.badge}
                 </span>
