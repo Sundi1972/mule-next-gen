@@ -299,8 +299,9 @@ export class AiSeat {
   }
 
   /**
-   * The gate this seat's playbooks pass: its mind, its seed and, for the month it holds one, its pending land pick. The
-   * MULE picks a re-draft under an edited strategy left out are logged here, where the playbook is adopted from.
+   * The gate this seat's playbooks pass: its mind, its seed and, for the month it holds one, its pending land pick. A
+   * writer's edits and the server's what-if checks both pass it; the MULE picks a re-draft under an edited strategy left
+   * out are logged on each pass, with the seat.
    */
   validator(): ValidatePlan {
     return (state, seat, draft, edits) => {
