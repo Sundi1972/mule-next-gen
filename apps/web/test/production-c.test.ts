@@ -51,11 +51,11 @@ function plot(html: string, x: number, y: number): string {
   return html.slice(start, next < 0 ? undefined : next);
 }
 const stateOf = (html: string) => /data-state="(\w+)"/.exec(html)?.[1];
-const countOf = (html: string) => Number(/data-testid="plot-count"[^>]*>(\d+)</.exec(html)?.[1] ?? 0);
-const badges = (html: string) => [...html.matchAll(/data-badge="(\w+)"/g)].map((m) => m[1]);
+const countOf = (html: string) => Number(/data-testid="units"[^>]*>(\d+)</.exec(html)?.[1] ?? 0);
+const badges = (html: string) => [...html.matchAll(/data-why="(\w+)"/g)].map((m) => m[1]);
 
 function view(production: ProductionView, phaseEndsAt: number): MuleView {
-  const tileViews: TileView[] = tiles.map((t) => ({ x: t.x, y: t.y, terrain: t.terrain, peaks: 0, owner: null, outfit: null, pollution: 0, filter: false }));
+  const tileViews: TileView[] = tiles.map((t) => ({ x: t.x, y: t.y, terrain: t.terrain as TileView['terrain'], peaks: 0, owner: null, outfit: null, pollution: 0, filter: false }));
   return {
     finished: false, month: 3, maxMonths: 12, lastAir: null, colonistsFed: null, phase: 'production', phaseEndsAt, width: W, height: H, tiles: tileViews, lit: null,
     players: PLAYERS, me: null, market: [], storeMules: 0, mulePrice: 0, colonists: 0, air: { level: 22, band: 'clean' }, ship: { arrives: 3, inPort: false, wants: null },

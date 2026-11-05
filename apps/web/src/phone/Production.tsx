@@ -21,7 +21,9 @@ import {
   ShowRoot,
   showEnd,
   showTime,
+  SLOT_COLOR,
   type Good,
+  type ShowData,
   type ShowMode,
   type Slot,
   useEventReducedMotion,
@@ -45,7 +47,9 @@ const GOODS: Good[] = ['food', 'water', 'energy', 'smithore', 'crystite', 'rareE
 export function Production({ production }: { production: ProductionView }) {
   const client = useClient();
   const { table, view, me, self } = usePhoneGame();
-  const serverT = showTime(view.phaseEndsAt, useServerNow(frameMs(production.lengthMs)), production.lengthMs, production);
+  // Until WS3's view carries `base` and `hurry` (ws6-ux AM-19), the screen reads them where present.
+  const show = production as typeof production & ShowData;
+  const serverT = showTime(view.phaseEndsAt, useServerNow(frameMs(production.lengthMs)), production.lengthMs, show);
   const solo = table.boards === 0;
   // A skip is this phone's alone: it moves the phone's show ahead of the server's clock, never the clock itself. With
   // a TV in the room the phone is back on the TV's clock, whatever it skipped while alone. The offset is kept, so a
@@ -123,9 +127,13 @@ export function Production({ production }: { production: ProductionView }) {
           </div>
           <div
             data-fly-target={me.id}
-            className={cx('mt-1.5 flex h-8 shrink-0 items-center justify-between rounded-control border border-holo-line bg-panel px-2 transition-shadow', landing(production, t, me.id) && 'shadow-glow')}
+            className={cx('mt-1.5 flex h-8 shrink-0 items-center gap-2 rounded-control border-2 bg-panel px-2 transition-shadow', landing(production, t, me.id) && 'shadow-glow')}
+            style={{ borderColor: SLOT_COLOR[slots[me.id] ?? 0] }}
             data-testid="stock-strip"
           >
+            {/* Your silo (AM-19): everything you hold, this month's harvest counting in as it lands. */}
+            <span className="label-caps shrink-0">Your silo</span>
+            <span className="flex flex-1 items-center justify-between">
             {GOODS.map((g) => {
               // Your stock already holds this month's harvest; what is still in the air is not shown yet.
               const n = Math.max(0, me.stock[g] - ((mine[g] ?? 0) - (arrived[g] ?? 0)));
@@ -138,6 +146,7 @@ export function Production({ production }: { production: ProductionView }) {
                 </span>
               );
             })}
+            </span>
           </div>
         </ShowRoot>
       </PhoneShell>

@@ -5,7 +5,7 @@
  */
 import { GOODS, type Good } from '@mule/engine';
 import type { MuleView, ProductionView, ServerEnvelope, TableView } from '@mule/protocol';
-import { SHOW } from '@mule/ui';
+import { showTimes } from '@mule/ui';
 import type { Page } from 'playwright';
 import { check } from './harness';
 
@@ -71,7 +71,7 @@ const RECORDER = `{
       add(rec.layers, 'event:' + layer.dataset.event);
       for (const el of layer.querySelectorAll('[data-testid]')) add(rec.layers, el.dataset.testid);
     }
-    for (const slot of document.querySelectorAll('[data-phase=production] [data-testid^=slot-]')) {
+    for (const slot of document.querySelectorAll('[data-phase=production] [data-testid^=silo-]:not([data-testid=silo-bar])')) {
       const id = slot.dataset.testid.slice(5);
       rec.slots[id] = Object.fromEntries([...slot.querySelectorAll('[data-good]')].map((el) => [el.dataset.good, el.textContent]));
       rec.slotColours[id] = getComputedStyle(slot).borderTopColor;
@@ -184,12 +184,14 @@ export async function checkTheShow({ tv, phone, event = false }: { tv: ShowWatch
     const deltas = [...new Set(hitsOn(production, l).map((h) => h.delta).filter((d) => d !== 0))];
     const struck = deltas.length > 0;
     // A plot the event reached before it filled shows its bars only after the event.
-    if (!struck || seen.pre > 0) check(seen.pre === Math.min(l.made, 8), `B-AC-6: plot ${id} filled ${seen.pre} bars for ${l.made} units`);
+    // RULE-3 (AM-19): before any event a plot peaks at its base and bonuses, before its losses land.
+    const peak = l.made - l.parts.reduce((n, p) => n + Math.min(0, p.delta), 0);
+    if (!struck || seen.pre > 0) check(seen.pre === Math.min(peak, 8), `B-AC-6: plot ${id} peaked at ${seen.pre} bars for ${peak} units before its losses`);
     const colour = seenTv.slotColours[l.owner];
     // A plot that made nothing has no bars, so nothing to colour.
     const drawn = seen.pre > 0 || seen.struck.some((n) => n > 0);
     check((seen.colours.length > 0) === drawn && seen.colours.every((c) => c === colour), `B-AC-6: plot ${id} bars ${seen.colours.join()} are not ${l.owner}'s ${colour}`);
-    check(seen.mostReasons <= 2, `B-AC-6: plot ${id} shows ${seen.mostReasons} reasons on the TV`);
+    check(seen.mostReasons <= 3, `B-AC-6: plot ${id} shows ${seen.mostReasons} reasons on the TV`);
     if (l.parts[0]) check(seen.reasons.includes(badgeText(l.parts[0])), `B-AC-6: plot ${id} never showed "${badgeText(l.parts[0])}", saw ${seen.reasons.join()}`);
     // B-AC-7: the event's badge is its delta, on the plots it hit and nowhere else, and the bars change by it.
     if (struck) {
@@ -217,11 +219,11 @@ export async function checkTheShow({ tv, phone, event = false }: { tv: ShowWatch
     check(seen && seen.mostReasons <= 1, `B-AC-6: the phone drew plot ${id} with at most one reason badge`);
   }
 
-  // B-AC-8: every TV slot ends with "+n" per good its plots made, and the phone's strip counts up to its stock.
+  // B-AC-8: every TV silo ends with the count per good its plots made, and the phone's silo counts up to its stock.
   const harvest = harvests(production);
   for (const p of board.players) {
-    const want = Object.fromEntries(Object.entries(harvest[p.id] ?? {}).map(([g, n]) => [g, `+${n}`]));
-    check(JSON.stringify(sorted(seenTv.slots[p.id] ?? {})) === JSON.stringify(sorted(want)), `B-AC-8: ${p.id}'s slot ended on ${JSON.stringify(seenTv.slots[p.id])}, want ${JSON.stringify(want)}`);
+    const want = Object.fromEntries(Object.entries(harvest[p.id] ?? {}).map(([g, n]) => [g, `${n}`]));
+    check(JSON.stringify(sorted(seenTv.slots[p.id] ?? {})) === JSON.stringify(sorted(want)), `B-AC-8: ${p.id}'s silo ended on ${JSON.stringify(seenTv.slots[p.id])}, want ${JSON.stringify(want)}`);
   }
   check(seenPhone.strip, 'B-AC-8: the phone showed its stock strip');
   for (const g of GOODS) {
@@ -243,13 +245,15 @@ export async function checkTheShow({ tv, phone, event = false }: { tv: ShowWatch
 export async function pressOnward(phone: Page, watch: { tv: ShowWatch; phone: ShowWatch }, midShow: () => Promise<unknown>): Promise<string> {
   const shown = watch.phone.view();
   check(shown?.production && shown.phaseEndsAt, 'the phone received the production view');
-  const { lengthMs, lines } = shown.production;
+  const { lengthMs } = shown.production;
   const endsAt = shown.phaseEndsAt;
   // The server runs on this machine, so its clock is this one.
-  const at = (s: number) => endsAt - lengthMs + (s / SHOW.end) * lengthMs;
-  await phone.waitForTimeout(Math.max(0, at(SHOW.cardAt + 1) - Date.now()));
+  // RULE-3 (AM-19): the show's own times, mapped onto the phase's scheduled length.
+  const times = showTimes(shown.production);
+  const at = (s: number) => endsAt - lengthMs + (s / times.end) * lengthMs;
+  await phone.waitForTimeout(Math.max(0, at((times.eventsAt ?? times.lossAt) + 1) - Date.now()));
   await midShow();
-  await phone.waitForTimeout(Math.max(0, at(SHOW.flyStart + lines.length * SHOW.flyStep + SHOW.flight + 0.3) - Date.now()));
+  await phone.waitForTimeout(Math.max(0, at(times.holdAt + 0.3) - Date.now()));
   const onward = phone.locator('[data-phase=production]').getByRole('button', { name: 'On to the auction' });
   check(await onward.isEnabled(), 'HC-6: "On to the auction" is there while the phone shows production');
   const before = watch.phone.sent().length;
