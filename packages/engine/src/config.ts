@@ -1081,18 +1081,21 @@ export const WALK = {
    * While a buyer and a seller (or a player and the store or the ship) stay
    * matched, the first unit takes tradeStartMs, each further one tradeSpeedUp
    * times as long as the one before, down to tradeFloorMs, so big lots don't
-   * take ages. The speed-up starts again when the pair separates.
+   * take ages. The speed-up starts again when the pair separates. 1000 and 200, from 400 and 60: start slow, about one
+   * unit a second, then faster to at most 5 a second, about 7 units in (Heiko at the table, 5 Nov; guess numbers, to be
+   * tested).
    */
-  tradeStartMs: 400,
+  tradeStartMs: 1_000,
   tradeSpeedUp: 0.8,
-  tradeFloorMs: 60,
+  tradeFloorMs: 200,
   /**
    * Walking speed in price units per second, set when a good comes up: its
    * board's starting height divided by this, so crossing the board takes
-   * this many seconds whatever the good costs. Never under minSpeed.
+   * this many seconds whatever the good costs. Never under minSpeed. The land auction walks at the same speed.
+   * 7.5 and 1.6, 25% slower than 6 and 2 (Heiko at the table, 5 Nov: walking up and down must be a bit slower).
    */
-  crossSeconds: 6,
-  minSpeed: 2,
+  crossSeconds: 7.5,
+  minSpeed: 1.6,
   /** The board reaches this share beyond the outermost price line; sellers start at its top, buyers at its bottom. */
   boardMargin: 0.3,
   /** And this share of the posted price more, so a board whose price lines sit close together still has room to walk. */
@@ -1113,8 +1116,11 @@ export const LOTS = {
   maxLotsPerMonth: 4,
   /** The intro: the lot lit on the map with its seller and minimum. */
   introMs: 3_000,
-  /** The walk's clock for one lot. */
-  walkMs: 12_000,
+  /**
+   * The walk's clock for one lot. 15 s, 25% longer than 12, with WALK's 25% slower walk (Heiko at the table, 5 Nov:
+   * walking up and down must be a bit slower), so a second bidder still reaches its limit before the bell.
+   */
+  walkMs: 15_000,
   /** The result on screen before the next lot comes up. */
   resultMs: 2_500,
   /** The board runs from this share of the minimum (where buyers start) to boardHigh's. */
@@ -1594,6 +1600,12 @@ export const STRATEGIST = {
   outlookMonths: 2,
   /** When it sizes its cash reserve, a short unit counts at most this many times the reference price. */
   reservePriceCap: 3,
+  /**
+   * Goods it keeps itself whole in for next month (Heiko, 5 Nov; Water only with a farm): while it holds less and
+   * the store sells the good, it buys up to that, as far as its money goes, at no more than the store's ask, and sells
+   * none of it; otherwise it keeps the status screen's need and may sell the rest.
+   */
+  buyShortfall: ['food', 'energy', 'water'] as Good[],
   /**
    * A new farm's Food, Water or Energy that covers the seat's own shortfall is
    * worth at least this many times the reference price: going short costs

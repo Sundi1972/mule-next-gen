@@ -168,6 +168,13 @@ function andList(names: string[]): string {
   return names.length < 2 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
 }
 
+/** The game-over line, from the seats in seat order: every player tied for the best score is named, as the screens show. */
+export function gameOverNews(seats: readonly { name: string; score: number }[]): string {
+  const best = Math.max(...seats.map((s) => s.score));
+  const winners = seats.filter((s) => s.score === best).map((s) => s.name);
+  return winners.length === 1 ? `Game over. ${winners[0]} wins the colony!` : `Game over. ${andList(winners)} share the win!`;
+}
+
 /** A player's Worth line by line, without the total their public row carries as `worth`. Only for their own `me`. */
 function worthPartsOf(state: GameState, playerId: string): ScorePartsView {
   const { total: _total, ...parts } = scoreParts(state, playerId);
@@ -883,8 +890,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
 
     if (state.phase === 'gameOver') {
       this.phaseEndsAt = null;
-      const ranking = [...this.seats].sort((a, b) => score(state, b.id) - score(state, a.id));
-      this.news = [`Game over. ${ranking[0]?.name} wins the colony!`];
+      this.news = [gameOverNews(this.seats.map((s) => ({ name: s.name, score: score(state, s.id) })))];
       this.brain.finish();
       this.options.onGameOver?.(state);
       return;
