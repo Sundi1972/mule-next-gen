@@ -885,6 +885,8 @@ export const POLITICS = {
     taxPerVote: 300,
     taxCap: 2,
   },
+  /** A player's reputation stays within these bounds, in whole points (START.reputation is where it starts). */
+  reputation: { min: 0, max: 100 },
   /** The sales tax the Governor may set, in whole percent, and how far it may move from the month's starting rate. */
   tax: { min: 0, max: 15, maxStep: 5 },
   /** Paid from the colony fund to each officeholder at upkeep, as far as the fund reaches. */
