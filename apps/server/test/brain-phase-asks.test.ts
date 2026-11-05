@@ -130,4 +130,64 @@ describe('RULE-A2 rows 3-4: the next phase is edited in the slack before it', { 
     playbooks.takePhase(state, 'development');
     expect(notes).toEqual([]);
   });
+
+  it("C4 (option C): the month's land write carries the development edits; the land grant plays its land part, and the development's start adopts the development part, each recorded by llm under its own phase", async () => {
+    const asked: SdkParams[] = [];
+    const reply = JSON.stringify({
+      edits: [
+        { path: '/landGrant/claims', to: 1, reason: 'One will do.' },
+        { path: '/development/timeBudgetMs', to: 1_000, reason: 'Quick.' },
+      ],
+      line: '',
+    });
+    const sdk = fakeSdk((_n, params) => (asked.push(params), new Promise((resolve) => setTimeout(() => resolve(sdkMessage(reply, USED)), 500))));
+    const state: GameState = createGame({ seed: 10, players: PLAYERS });
+    const seat = new AiSeat({ id: 'p0', name: 'Ada', persona: 'trader', level: 'trader', seed: 1 });
+    const notes: PlaybookNote[] = [];
+    const playbooks = new Playbooks({ brain: smartOn(sdk), source: playbookSource([seat]), seats: [seat], record: (n) => notes.push(n) });
+
+    playbooks.ask(state, 1);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(promptOf(asked[0]!).user).toContain('Your draft development:');
+    advanceTo(state, 'landGrant');
+    playbooks.takeEffect(state);
+    // The land grant's playbook carries the land edit only: the development edit waits for its phase.
+    expect(notes.map((n) => [n.phase, n.playbook.by])).toEqual([['landGrant', 'llm']]);
+    expect(notes[0]!.playbook.landGrant?.claims).toBe(1);
+    expect(notes[0]!.playbook.edits?.map((e) => e.path)).toEqual(['/landGrant/claims']);
+    expect(notes[0]!.playbook.development).toBeUndefined();
+
+    advanceTo(state, 'development');
+    playbooks.takePhase(state, 'development');
+    expect(notes.map((n) => [n.phase, n.playbook.by])).toEqual([
+      ['landGrant', 'llm'],
+      ['development', 'llm'],
+    ]);
+    expect(notes[1]!.playbook.development?.timeBudgetMs).toBe(1_000);
+    expect(notes[1]!.playbook.edits?.map((e) => e.path)).toEqual(['/development/timeBudgetMs']);
+    expect(seat.part(state, 'development')?.part.timeBudgetMs).toBe(1_000);
+    // One write for both: the month's land write is the only call.
+    expect(sdk.calls).toBe(1);
+  });
+
+  it('C4 (option C): a land reply with no development edit adopts no development part; a late land reply plays neither', async () => {
+    const landOnly = JSON.stringify({ edits: [{ path: '/landGrant/claims', to: 1, reason: 'One.' }], line: '' });
+    const { state, seat, notes, playbooks } = (() => {
+      const st: GameState = createGame({ seed: 10, players: PLAYERS });
+      const se = new AiSeat({ id: 'p0', name: 'Ada', persona: 'trader', level: 'trader', seed: 1 });
+      const ns: PlaybookNote[] = [];
+      const pb = new Playbooks({ brain: smartOn(answersAt(500, landOnly)), source: playbookSource([se]), seats: [se], record: (n) => ns.push(n) });
+      return { state: st, seat: se, notes: ns, playbooks: pb };
+    })();
+    playbooks.ask(state, 1);
+    await vi.advanceTimersByTimeAsync(1_000);
+    advanceTo(state, 'landGrant');
+    playbooks.takeEffect(state);
+    advanceTo(state, 'development');
+    const before = seat.part(state, 'development');
+    playbooks.takePhase(state, 'development');
+    expect(notes.map((n) => n.phase)).toEqual(['landGrant']);
+    expect(seat.part(state, 'development')).toEqual(before);
+  });
 });
+

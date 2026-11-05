@@ -5,7 +5,7 @@ import { AI_LEVELS, AI_PERSONAS, allPrices, BRAIN, createGame, GOODS, type GameS
 import { PERSONAS } from '../src/personas.js';
 import { GOOD_NAME } from '../src/strategist.js';
 import type { Mind } from '../src/value.js';
-import { phaseBrief } from '../src/llm/brief.js';
+import { landBrief, phaseBrief } from '../src/llm/brief.js';
 import { replySchema, writeReply, type WriteComplete, type WriterPrompt } from '../src/llm/writer.js';
 
 /** p0 owns two plots and holds a distinctive stock; p1 holds another, so a leak into p0's brief is unmistakable. */
@@ -99,6 +99,19 @@ describe("C2: the writer takes a phase brief's paths", () => {
   it("C2: the land reply schema is byte for byte what it was, for both corners flags, so the land request's cache holds", () => {
     expect(sha(replySchema(true))).toBe('b8006ff54c2efe4e5776ac65c30716f7282d141e93c2351dad0246c37c1ca886');
     expect(sha(replySchema(false))).toBe('401b966df2f96fb250b014420cf2eeacce62f90b359968f6ffa57a93f368fec1');
+  });
+
+  it("C2 (option C): the month's land schema, land and development paths together, is the same bytes for every brief of a level", () => {
+    const DEV = { route: [], timeBudgetMs: 1_000, ifSoldOut: 'pub' as const };
+    const of = (state: GameState) => {
+      const b = landBrief(state, mind, PERSONAS.trader, { strategy: STRATEGY, landGrant: { ranked: [], pressShare: { start: 0.8, end: 0.4 }, deny: [], planB: [], claims: 1 } }, [], {}, DEV);
+      return replySchema(b.corners, b.offers, b.strategyOffered);
+    };
+    const a = of(table());
+    const later = table();
+    later.month = 4;
+    expect(JSON.stringify(of(later))).toBe(JSON.stringify(a));
+    expect(sha(a)).not.toBe(sha(replySchema(true)));
   });
 
   it("C2: a phase brief's schema offers its paths and no strategy; the request carries that schema", async () => {
