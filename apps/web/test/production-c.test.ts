@@ -115,6 +115,18 @@ describe('B-AC-6 (AM-19): good by good for every player at once, then every bonu
     expect(tvAt(m, s.bonusAt + 0.2)).toMatch(/data-testid="act-bonus"[^>]*data-now="true"/);
     expect(tvAt(m, s.lossAt + 0.2)).toMatch(/data-testid="act-loss"[^>]*data-now="true"/);
   });
+
+  it("the floor that lifts a plot back to 0 lands with its losses, never as a bonus: no green +1 and no badge of its own (#344 review)", () => {
+    // Lena's farm makes 2, loses 3 to pollution, and the floor lifts it back to 0: it made nothing.
+    const polluted = month({ lines: [{ x: 1, y: 0, owner: 's1', good: 'food', base: 2, made: 0, parts: [{ why: 'pollution', delta: -3 }, { why: 'floor', delta: 1 }] }] });
+    const t = showTimes(polluted);
+    const atBonus = plot(tvAt(polluted, t.bonusAt + 0.8), 1, 0);
+    expect(countOf(atBonus), 'during the bonuses the farm stands at what it made before any part').toBe(2);
+    expect(badges(atBonus)).toEqual([]);
+    const afterLoss = plot(tvAt(polluted, t.lossAt + 1.2), 1, 0);
+    expect(countOf(afterLoss)).toBe(0);
+    expect(badges(afterLoss)).toEqual(['pollution']);
+  });
 });
 
 describe('B-AC-8 (AM-19): the goods fly into each player’s silo', () => {
