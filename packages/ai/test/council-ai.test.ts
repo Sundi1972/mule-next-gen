@@ -15,7 +15,7 @@ import {
   type LawProposal,
   type Rng,
 } from '@mule/engine';
-import type { Act } from '../src/actions.js';
+import type { Act, AiAction } from '../src/actions.js';
 import { VoteHand } from '../src/hands/vote.js';
 import { applyAction } from '../src/play.js';
 import type { Mind } from '../src/value.js';
@@ -57,9 +57,11 @@ function give(state: GameState, id: string, plots: number): void {
 
 const act = (state: GameState, id: string): Act => (action) => applyAction(state, id, action);
 
-/** One tick of a hand at planning's pace; the council and the colony act at once. */
-function tick(hand: VoteHand, state: GameState): void {
-  hand.tick(state, 0, act(state, hand.mind.me));
+/** One tick of a hand at planning's pace; the council and the colony act at once. Returns every move it sent. */
+function tick(hand: VoteHand, state: GameState): AiAction[] {
+  const sent: AiAction[] = [];
+  hand.tick(state, 0, (action) => (sent.push(action), applyAction(state, hand.mind.me, action)));
+  return sent;
 }
 
 function ballot(state: GameState, proposal: LawProposal, proposer = 'ai0'): void {
@@ -96,8 +98,8 @@ describe("C44: the AI's council acts (slice 2a RULE-46)", () => {
     const waiting = governed();
     give(waiting, 'ai1', 12);
     waiting.politics = { ...waiting.politics!, failed: { 'enact:landTax': 1 } };
-    tick(new VoteHand(mindOf('ai0', 'aggressive'), createRng(1)), waiting);
-    expect(waiting.politics!.proposal?.proposal.law).not.toBe('landTax');
+    const sent = tick(new VoteHand(mindOf('ai0', 'aggressive'), createRng(1)), waiting);
+    expect(sent.filter((a) => a.type === 'propose' && a.proposal?.law === 'landTax'), 'it never even tries the waiting law').toEqual([]);
   });
 
   it('T-AC-50: a fourth law names as replaces the law in force that costs the AI Governor the most', () => {
@@ -199,8 +201,9 @@ describe('C25: AI Governors build and pay, AI voters weigh the mood (G-5)', () =
       const state = governed();
       state.treasury.money = fund;
       callStrike(state, 'food');
-      tick(new VoteHand(mindOf('ai0', persona), createRng(1)), state);
+      const sent = tick(new VoteHand(mindOf('ai0', persona), createRng(1)), state);
       expect(state.colony!.strike!.paid, `${persona} with ${fund} cr`).toBe(paid);
+      expect(sent.some((a) => a.type === 'payStrike'), `${persona} with ${fund} cr only tries when it means to pay`).toBe(paid);
     }
   });
 
