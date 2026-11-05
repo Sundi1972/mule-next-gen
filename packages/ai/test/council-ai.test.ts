@@ -22,6 +22,7 @@ import {
 import type { Act, AiAction } from '../src/actions.js';
 import { VoteHand } from '../src/hands/vote.js';
 import { applyAction } from '../src/play.js';
+import { AiSeat } from '../src/seat.js';
 import type { Mind } from '../src/value.js';
 
 const SEATS = ['ai0', 'ai1', 'ai2', 'ai3'];
@@ -36,8 +37,9 @@ afterEach(() => {
   Object.assign(POLITICS.ai.colony, structuredClone(savedColony));
 });
 
-function mindOf(me: string, persona: AiPersonaId, level: AiLevelId = 'trader'): Mind {
-  return { me, personaId: persona, persona: AI_PERSONAS[persona], levelId: level, level: AI_LEVELS[level] };
+/** A seat's mind as the sim and the server build it (AiSeat), so it carries the seat's own seed. */
+function mindOf(me: string, persona: AiPersonaId, level: AiLevelId = 'trader', seed = 1): Mind {
+  return new AiSeat({ id: me, name: me, persona, level, seed }).mind;
 }
 
 /** The seat's election stream, wrapped so a test can count every draw from it. */
@@ -176,12 +178,12 @@ describe("C44: the AI's council acts (slice 2a RULE-46)", () => {
     expect(state.colony!.projects.length, 'and an object commissioned').toBe(1);
   });
 
-  it("T-AC-45 (HC-41): the council's stream is the game's: across 40 seeds a Rookie's coin for the same month and seat comes up both ways", () => {
+  it("T-AC-45 (HC-41): the council's stream is the seat's: across 40 seat seeds a Rookie's coin for the same month comes up both ways", () => {
     const votes = new Set<boolean>();
     for (let seed = 1; seed <= 40; seed++) {
-      const state = governed(seed);
+      const state = governed();
       ballot(state, LAND_10);
-      tick(new VoteHand(mindOf('ai2', 'trader', 'rookie'), createRng(99)), state);
+      tick(new VoteHand(mindOf('ai2', 'trader', 'rookie', seed), createRng(99)), state);
       votes.add(state.politics!.council!.ballots.ai2!);
     }
     expect([...votes].sort()).toEqual([false, true]);
@@ -226,6 +228,22 @@ describe("C44: the AI's council acts (slice 2a RULE-46)", () => {
     expect(governor.draws(), "the proposal's chance comes from the council's own stream").toBe(0);
   });
 
+  it("INV-41: no AI hand reads the game's seed — games that differ only in it get the same council coin and the same proposal", () => {
+    POLITICS.ai.council.proposeChance.aggressive = 0.5;
+    const plays = [3, 41, 977, 65_521, 2_147_483_647].map((gameSeed) => {
+      const voting = governed();
+      voting.seed = gameSeed;
+      ballot(voting, LAND_10);
+      tick(new VoteHand(mindOf('ai2', 'trader', 'rookie'), createRng(99)), voting);
+      const proposing = governed();
+      proposing.seed = gameSeed;
+      give(proposing, 'ai1', 12);
+      tick(new VoteHand(mindOf('ai0', 'aggressive'), createRng(1)), proposing);
+      return { coin: voting.politics!.council!.ballots.ai2, proposal: proposing.politics!.proposal?.proposal ?? null };
+    });
+    expect(new Set(plays.map((p) => JSON.stringify(p))).size).toBe(1);
+  });
+
   it("T-AC-45: a Rookie's council coin is the same for the same game, month and seat", () => {
     const votes = [0, 1].map(() => {
       const state = governed();
@@ -244,6 +262,17 @@ describe('C25: AI Governors build and pay, AI voters weigh the mood (G-5)', () =
     state.treasury.money = 700;
     tick(new VoteHand(mindOf('ai0', 'trader'), createRng(1)), state);
     expect(state.colony!.projects.map((p) => p.id)).toEqual(['hospital']);
+  });
+
+  it('T-AC-36: a strike paid this tick leaves less to build with — the Governor commissions only from the fund that is left', () => {
+    POLITICS.ai.colony.commissions.trader = true;
+    POLITICS.ai.colony.paysStrike.trader = true;
+    const state = governed();
+    state.treasury.money = 700; // the Hospital's price is within it, but not once the strike is paid
+    callStrike(state, 'food');
+    const sent = tick(new VoteHand(mindOf('ai0', 'trader'), createRng(1)), state);
+    expect(state.colony!.strike!.paid).toBe(true);
+    expect(sent.some((a) => a.type === 'commission'), 'it does not try a commission the fund can no longer pay').toBe(false);
   });
 
   it("T-AC-36: no commission when the persona doesn't build, when nothing plot-free is affordable, or while an object is open", () => {
