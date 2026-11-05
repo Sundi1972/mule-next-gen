@@ -39,8 +39,7 @@ describe('C30: the AI land hand against the colony’s proxy bid', () => {
       hand.tick(state, 10, act as never);
       // The hand sets its limit from the plot's worth on its first tick of the lot; the test holds it at the cap.
       internals.limit = 300;
-      // The people at the table stand still and are done, so only the AI and the colony bid.
-      if (state.landAuction?.stage === 'walk') for (const id of ['lena', 'kai']) lotDone(state, id);
+      // The people at the table stand still at the bottom, so only the AI and the colony bid until the bell.
       stepLandAuction(state, 10);
     }
     expect(state.landAuction!.result).toEqual({ kind: 'sold', buyer: 'ossa', price: 300 });
