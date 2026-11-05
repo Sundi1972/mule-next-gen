@@ -329,6 +329,9 @@ lands at the land grant (droneOrder is kept until then).
 - **R-1 · The computer players learn the drone's results in planning, not at the land grant.** Claude-driven players
   (packages/ai) may now pick land from them. Mitigation: WS1 runs `pnpm sim` on both seed sets before PR-1 merges, and
   WS2's action text says the truth (C1).
+  WS1's read, 5 Nov: the strategist orders drones in its planning part and reads ground only at the grant, so none
+  of its decisions sees different information; the 0–3 scale is display-only (HC-2). WS1 confirms with a
+  byte-identical `pnpm sim` on both seed sets once PR-1 has a head. Claude-driven players stay WS2's to check (C1).
 - **R-2 · Dot counts change in existing tests** (0–4 → 0–3). Mitigation: C6 changes them in the same PR, named.
 - No spike needed.
 
