@@ -129,6 +129,23 @@ describe('C26: the colony\'s planning social events, fired through the planning 
     expect(runUpkeep(plain).shortages).not.toContain('food');
   });
 
+  it("FM-C26-4 (review of #370): the festival's Food counts only until the colonists' meal; the export ship after it buys as in a plain month", () => {
+    only(['festival']);
+    const state = colonyAt(AT.content);
+    firePhase(state, 'planning');
+    const units = state.monthEvents[0]!.effects!.find((f) => f.what === 'food')!.delta;
+    const plain = colonyAt(AT.content);
+    // The festival month's shelf holds its extra Food, so after the meal both shelves are the same; a ship in port wants Food.
+    for (const [s, food] of [[state, 60 + units], [plain, 60]] as const) {
+      Object.assign(s.store, { stock: { ...s.store.stock, food }, posted: { ...s.store.posted, food: 1 } });
+      s.ship = { ...s.ship, arrives: s.month, goods: ['food'], hold: { food: 100 }, bought: {} };
+    }
+    runUpkeep(state);
+    runUpkeep(plain);
+    expect(plain.store.stock.food, 'the ship took some Food in the plain month').toBeLessThan(60);
+    expect(state.store.stock.food, "the ship's Food demand is the plain month's").toBe(plain.store.stock.food);
+  });
+
   it('INV-C26-2 (emigration): 10% fewer colonists for good, as an effect on the colony; no mood delta', () => {
     only(['emigrationWave']);
     const state = colonyAt(AT.unrest);
