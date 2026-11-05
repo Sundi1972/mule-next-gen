@@ -1,8 +1,8 @@
 // A browser's document before react-dom loads, for the client-mounted HC-6 case; the server renders ignore it.
 import { document, type FakeElement } from './fake-dom';
-import { EVENT_SHOW, PHASES } from '@mule/engine';
+import { EVENT_SHOW, productionShowMs } from '@mule/engine';
 import type { MuleView, PlayerView, ProductionEventView, ProductionView, TileView } from '@mule/protocol';
-import { eventSegments, plotStrikes } from '@mule/ui';
+import { eventSegments, plotStrikes, showTimes } from '@mule/ui';
 import { createElement } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
@@ -20,11 +20,6 @@ Object.assign(globalThis, { MutationObserver: class { observe() {} disconnect() 
 
 const W = 6;
 const H = 3;
-/** The production show's event window opens 4.8 s in; the phase's intro plays first, then each event's segment. */
-const EVENT_AT = 4.8;
-/** A plot's bars have all grown in by then; the goods fly one step apart. */
-const FLY_STEP = 0.09;
-
 const player = (id: string, name: string, slot: number): PlayerView => ({ id, name, isAi: false, color: '', species: 'zipwing', money: 1000, worth: 0, lastWorth: null, worthBeforeCut: null, plots: 0, ready: false, doneDeveloping: false, condition: null, colonist: null, slot });
 const PLAYERS = [player('s1', 'Lena', 0), player('s2', 'Ossa', 1)];
 
@@ -71,12 +66,15 @@ const hungry = fired('pestSwarm', { title: 'Pest swarm', scope: 'personal', orig
 // The one story the camera flies in to: on Lena's (1, 0).
 const bumper = fired('bumperHarvest', { title: 'Bumper harvest', scope: 'personal', origin: { x: 1, y: 0 }, sign: 'good' }, [[1, 0, 2]]);
 
-/** The month as the server builds it: the intro whenever an event fired, and production lengthened past the window (RULE-1). */
+/** The month as the server builds it: the intro whenever an event fired, and production as long as its show (RULE-3, order C). */
 function month(events: ProductionEventView[]): ProductionView {
   const introMs = events.length > 0 ? EVENT_SHOW.introMs : 0;
-  const lengthMs = PHASES.productionMs + Math.max(0, introMs + events.reduce((n, e) => n + e.playMs, 0) - EVENT_SHOW.productionWindowMs);
+  const eventsMs = events.length > 0 ? introMs + events.reduce((n, e) => n + e.playMs, 0) : 0;
+  const lengthMs = productionShowMs(new Set(lines.map((l) => l.good)).size, eventsMs);
   return { lines, events, lengthMs, introMs };
 }
+/** The month's events start after the harvest, the bonuses and the losses: the same moment for every month of these lines. */
+const EVENT_AT = showTimes(month([drought])).eventsAt!;
 
 // --- What the fixture says, derived from its hits ------------------------------------------------------------------
 
@@ -170,14 +168,14 @@ const openTag = (html: string, attr: string) => {
 const text = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 /** What the map is playing. */
 const playing = (html: string) => [...html.matchAll(/data-event="([^"]+)"/g)].map((m) => m[1]);
-/** The rail's card for the event playing now, by its key. */
-const now = (html: string) => [...html.matchAll(/data-now="([^"]+)"/g)].map((m) => m[1]);
+/** The rail's card for the event playing now, by its key (the rail's steps carry data-now="true" or "false": not a card). */
+const now = (html: string) => [...html.matchAll(/data-now="(?!true"|false")([^"]+)"/g)].map((m) => m[1]);
 /** The rail's log of what already happened: each entry's key and its words. */
 const log = (html: string) => [...html.matchAll(/data-log="([^"]+)"/g)].map((m) => ({ key: m[1], words: text(inside(html.slice(html.lastIndexOf('<', m.index)), 'data-log=')) }));
 /** One event's pip in the header: 'next', 'now' or 'done'. */
 const pip = (html: string, key: string) => /data-state="(\w+)"/.exec(openTag(html, `data-pip="${key}"`))?.[1];
-/** The event chips on one player's slot of the colony bar. */
-const chips = (html: string, id: string) => [...inside(html, `data-testid="slot-${id}"`).matchAll(/data-delta="(-?\d+)"/g)].map((m) => Number(m[1]));
+/** The event chips on one player's silo, along the foot of the screen. */
+const chips = (html: string, id: string) => [...inside(html, `data-testid="silo-${id}"`).matchAll(/data-delta="(-?\d+)"/g)].map((m) => Number(m[1]));
 /** One plot's bars on the map, from its test id to the next plot's. */
 function bars(html: string, x: number, y: number): number {
   const start = html.indexOf(`data-testid="plot-${x}-${y}"`);
@@ -190,7 +188,7 @@ const frames = (a: number, b: number, step: number) => Array.from({ length: Math
 
 describe("the TV's production screen follows the event that is playing", () => {
   const both = month([drought, pests]);
-  // The intro plays 4.8..6.6, the drought (a headline) 6.6..13.6, the pest swarm (a spotlight) 13.6..18.8; the goods fly from 18.8.
+  // From EVENT_AT the intro plays 1.8 s, the drought (a headline) 7 s, the pest swarm (a spotlight) 5.2 s; the goods fly after it.
   const droughtAt = EVENT_AT + EVENT_SHOW.introMs / 1000;
   const pestsAt = droughtAt + drought.playMs / 1000;
   const windowEnds = pestsAt + pests.playMs / 1000;
@@ -203,9 +201,10 @@ describe("the TV's production screen follows the event that is playing", () => {
     expect(openTag(mid, 'data-now="drought"')).toContain('border-alert');
     expect(text(inside(mid, 'data-now="drought"'))).toContain('The whole colony');
     expect(log(mid)).toEqual([]);
-    // The pips sit in the header (the gallery's headerExtra); the rail opens on the log.
+    // The pips sit in the header (the gallery's headerExtra); the rail names the show's steps, then the log right under them.
     expect(inside(mid, '<header')).toContain('data-testid="pips"');
-    expect(inside(mid, 'data-testid="rail"')).toMatch(/^<div[^>]*data-testid="log"/);
+    expect(inside(mid, 'data-testid="rail"')).toMatch(/^<ol[^>]*data-testid="acts"[^]*?<\/ol><div[^>]*data-testid="log"/);
+    expect(openTag(mid, 'data-testid="act-events"')).toContain('data-now="true"');
     // The pip of the event playing is lit; the one still to come waits.
     expect([pip(mid, 'drought'), pip(mid, 'pestSwarm')]).toEqual(['now', 'next']);
 
@@ -236,8 +235,8 @@ describe("the TV's production screen follows the event that is playing", () => {
     expect([pip(later, 'drought'), pip(later, 'pestSwarm')]).toEqual(['done', 'now']);
     expect(inside(later, 'data-pip="drought"')).toContain('✓');
     expect(inside(later, 'data-pip="pestSwarm"')).not.toContain('✓');
-    expect(openTag(later, 'data-testid="slot-s1"')).toContain('shadow-glow');
-    expect(openTag(later, 'data-testid="slot-s2"')).not.toContain('shadow-glow');
+    expect(openTag(later, 'data-testid="silo-s1"')).toContain('shadow-glow');
+    expect(openTag(later, 'data-testid="silo-s2"')).not.toContain('shadow-glow');
 
     // Both have settled, the goods not yet flown: the log keeps both, in fired order, each with the report's figures.
     const settled = tvAt(both, windowEnds - 0.05);
@@ -251,8 +250,8 @@ describe("the TV's production screen follows the event that is playing", () => {
     // The old one-event card and its line are gone; the goods' line comes only as they fly.
     expect(settled).not.toContain('data-testid="event-card"');
     expect(settled).not.toContain('watch the map');
-    expect(settled).not.toContain('The goods fly home');
-    expect(tvAt(both, windowEnds + 0.05)).toContain('The goods fly home');
+    expect(text(settled)).not.toContain('goods fly home');
+    expect(text(tvAt(both, showTimes(both).flightAt + 0.05))).toContain('goods fly home');
   });
 
   it('B-AC-1: a drought on farms and a well logs each good’s own figure, on plots, never every hit under the first one’s good, and never a hit that changed nothing', () => {
@@ -289,9 +288,9 @@ describe("the TV's production screen follows the event that is playing", () => {
     const starved = month([drought, hungry]);
     expect(chips(tvAt(starved, windowEnds - 0.05), 's1')).toEqual([-3]);
 
-    // At every moment of the window, each player's chip is the change in their bars on the map.
+    // At every moment of the events, until the goods fly, each player's chip is the change in their bars on the map.
     for (const m of [both, starved])
-      for (const t of frames(EVENT_AT, windowEnds - FLY_STEP, 0.1)) {
+      for (const t of frames(EVENT_AT, showTimes(m).flightAt, 0.1)) {
         const html = tvAt(m, t);
         for (const { id } of PLAYERS) {
           const onMap = lines.filter((l) => l.owner === id).reduce((n, l) => n + bars(html, l.x, l.y) - l.made, 0);
@@ -319,7 +318,10 @@ describe("the TV's production screen follows the event that is playing", () => {
 
   it('B-AC-1: the rail plays the map’s script: one of title card, card or log entry per moment, the log a prefix of fired order', () => {
     const keys: string[] = both.events.map((e) => e.key);
-    for (const t of frames(EVENT_AT, windowEnds + 0.5, 0.05)) {
+    // Through the events' step: from their start until the rail moves on to the flight, a moment before the goods fly.
+    const flightStep = showTimes(both).flightAt - 0.2;
+    expect(flightStep).toBeGreaterThan(windowEnds);
+    for (const t of frames(EVENT_AT, flightStep, 0.05)) {
       const html = tvAt(both, t);
       const [on] = playing(html);
       const logged = log(html).map((l) => l.key);
@@ -336,6 +338,14 @@ describe("the TV's production screen follows the event that is playing", () => {
       expect(shown.filter(Boolean).length, `${at}: title card, card, log entry ${shown}`).toBe(1);
       expect(now(html).every((k) => k === on), at).toBe(true);
     }
+    // Before the events and once the rail is on the flight: no story, no card, no log; the rail names the step it is on.
+    for (const [t, step] of [[showTimes(both).lossAt + 0.5, 'loss'], [showTimes(both).flightAt + 0.1, 'flight']] as const) {
+      const html = tvAt(both, t);
+      expect(playing(html), `${step}`).toEqual([]);
+      expect(now(html), `${step}`).toEqual([]);
+      expect(log(html), `${step}`).toEqual([]);
+      expect(openTag(html, `data-testid="act-${step}"`), `${step}`).toContain('data-now="true"');
+    }
   });
 
   it('B-AC-1: inside the phase’s intro no story plays yet, and the drought plays from the moment the intro ends', () => {
@@ -351,10 +361,12 @@ describe("the TV's production screen follows the event that is playing", () => {
 
   it('B-AC-1: a quiet month shows no event card, no log entry, no pips row and no chip', () => {
     const quiet = month([]);
-    // Before the card's time there is no log at all.
-    expect(tvAt(quiet, 2)).not.toContain('data-testid="log"');
-    for (const t of [EVENT_AT + 1, 9]) {
+    const q = showTimes(quiet);
+    expect(q.eventsAt).toBeNull();
+    // At no moment of the show, the harvest to the hold.
+    for (const t of [0.5, 2, q.bonusAt + 0.5, q.lossAt + 0.5, q.flightAt + 0.5, q.holdAt + 0.5]) {
       const html = tvAt(quiet, t);
+      expect(html, `at ${t}`).not.toContain('data-testid="log"');
       expect(playing(html), `at ${t}`).toEqual([]);
       expect(now(html), `at ${t}`).toEqual([]);
       expect(log(html), `at ${t}`).toEqual([]);
@@ -364,7 +376,9 @@ describe("the TV's production screen follows the event that is playing", () => {
       expect(chips(html, 's1')).toEqual([]);
       expect(chips(html, 's2')).toEqual([]);
     }
-    expect(text(tvAt(quiet, 9))).toContain('A quiet month');
+    // The rail names no events step at all: order C goes from the losses straight to the flight.
+    expect(tvAt(quiet, q.lossAt + 0.5)).not.toContain('data-testid="act-events"');
+    expect(tvAt(month([drought]), EVENT_AT + 0.5)).toContain('data-testid="act-events"');
   });
 });
 
@@ -467,7 +481,7 @@ describe('a broken show never takes the TV screen under it down (§4)', () => {
       flushSync(() => root.render(screen(month([broken]), t)));
       expect(byTestId('holo-map'), `the map at ${t}`).toBeDefined();
       expect(byTestId('plot-1-0')?.findAll('span').some((b) => b.getAttribute('data-bar') === 'unit'), `Lena's plot at ${t}`).toBe(true);
-      for (const id of ['s1', 's2']) expect(byTestId(`slot-${id}`), `the colony bar's ${id} at ${t}`).toBeDefined();
+      for (const id of ['s1', 's2']) expect(byTestId(`silo-${id}`), `the silo bar's ${id} at ${t}`).toBeDefined();
     }
     expect(errors.mock.calls.some((c) => String(c[0]).includes('event show')), 'the boundary logs what broke').toBe(true);
     errors.mockRestore();
