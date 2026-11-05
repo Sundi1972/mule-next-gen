@@ -129,7 +129,7 @@
 <tbody>
 <tr><td>Food</td><td>Walking slower in development. A colonist without Food walks at <span class="num">0.6</span> of its pace, so the month's walking takes longer; each second lost is priced at what a second of development is worth to the seat.</td><td>This month's eating, plus next month's eating grossed up for spoilage</td></tr>
 <tr><td>Water</td><td>Only with a Food farm: an unwatered farm makes half. The half lost, at the Food price, spread over the units.</td><td>As Food, only while it owns a farm</td></tr>
-<tr><td>Energy</td><td>Every plot short of Energy makes half: the half of all its other plots' output, at their prices, spread over the need.</td><td>Its plots' need minus what its own Energy plots make, grossed up for spoilage</td></tr>
+<tr><td>Energy</td><td>A unit short keeps on the plot the game would turn off at that point (biggest Energy user first): it is worth what that plot loses turned off, 80% of its output at the store's price after tax, spread over the plot's use. A factory waiting for this month's inputs is covered last, as it runs last. An approximation: it leaves out the inputs a turned-off factory saves.</td><td>Its plots' use minus what its own Energy plots make after their own 1, grossed up for spoilage</td></tr>
 <tr><td>Medicine</td><td>Only when the air makes people sick: the chance of falling sick, times the walking lost at half pace.</td><td>The month's need</td></tr>
 <tr><td>Factory inputs</td><td>A factory's run is worth its output; that worth is shared over its inputs.</td><td>One run's inputs, grossed up for spoilage</td></tr>
 </tbody>
