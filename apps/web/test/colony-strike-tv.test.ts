@@ -103,6 +103,17 @@ describe('the general strike on the TV (C37)', () => {
     expect(strikers(onTv(game(colony(PAID))))).toEqual([]);
   });
 
+  it('B-AC-37-3: the strikers stand in planning only: the month end shows none', () => {
+    expect(strikers(onTv(game(colony(UNPAID), { phase: 'upkeep' })))).toEqual([]);
+  });
+
+  it("B-AC-37-2: the TV's rail names who decides while the strike is unpaid in planning, and drops it once paid", () => {
+    const html = onTv(game(colony(UNPAID)));
+    expect(textOf(html, 'waiting-governor')).toBe('Waiting for Kai, the Governor Pay the strikers 240 cr from the fund, or let them strike. After the votes.');
+    expect(onTv(game(colony(PAID)))).not.toContain('data-testid="waiting-governor"');
+    expect(onTv(game(colony(null)))).not.toContain('data-testid="waiting-governor"');
+  });
+
   it('B-AC-37-3: an Energy strike stands on the Energy plot alone', () => {
     expect(strikers(onTv(game(colony({ ...UNPAID, good: 'energy' }))))).toEqual(['1,0']);
   });

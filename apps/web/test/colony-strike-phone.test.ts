@@ -1,5 +1,5 @@
 import { document, FakeElement } from './fake-dom';
-import type { ColonyView, CouncilView, MuleView, MyView, PlayerView, PoliticsView, TableView, TileView } from '@mule/protocol';
+import type { ColonyView, CouncilView, ElectionView, MuleView, MyView, PlayerView, PoliticsView, TableView, TileView } from '@mule/protocol';
 import type { Slot } from '@mule/ui';
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -92,9 +92,14 @@ const UNPAID = { good: 'food' as const, cost: 240, paid: false };
 const PAID = { ...UNPAID, paid: true };
 
 /** Month 5's planning, Lena's phone; `governor` holds the office. */
-const view = (strike: ColonyView['strike'], p: Partial<PoliticsView> = {}): MuleView =>
-  aMuleView({ players: PLAYERS, me: ME, politics: politics(p), month: 5, width: 4, height: 1, tiles: TILES, colony: colony(strike) });
+const view = (strike: ColonyView['strike'], p: Partial<PoliticsView> = {}, c: Partial<ColonyView> = {}): MuleView =>
+  aMuleView({ players: PLAYERS, me: ME, politics: politics(p), month: 5, width: 4, height: 1, tiles: TILES, colony: { ...colony(strike), ...c } });
+/** The same, with Lena Ready: her seat's ready flag is what the hub reads. */
+const ready = (v: MuleView): MuleView => ({ ...v, players: v.players.map((p) => (p.id === 's1' ? { ...p, ready: true } : p)) });
 const KAI_GOVERNS = { governor: 's2' };
+
+/** Election day's secret ballot, Lena and Kai standing. */
+const BALLOT: ElectionView = { stage: 'ballot', ceremony: null, candidates: { governor: ['s1', 's2'] }, promises: {}, voted: [], done: [], waitingFor: ['s1', 's2', 's3'], result: {} };
 
 const COUNCIL: CouncilView = { stage: 'ballot', proposal: { kind: 'repeal', law: 'landTax' }, proposer: 's1', impact: {}, voted: [], done: [], waitingFor: ['s1', 's2', 's3'], clockMs: 0, revealMs: 0, result: null };
 
@@ -167,16 +172,42 @@ describe("the general strike on the phones (C37)", () => {
     expect(text('fund-line')).toBe('Fund 2,340 → 2,100 cr');
     expect(text('pay-strike')).toBe('Pay the strikers 240 cr');
     expect(findTestid('after-votes')).toBeUndefined();
+    expect(findTestid('strike-alert'), 'the Governor has the card, not the line').toBeUndefined();
     tap('pay-strike');
     expect(sent).toEqual([{ type: 'payStrike' }]);
   });
 
-  it('B-AC-37-2: while the law ballot is open both choices are disabled, labelled "After the votes", and nothing is sent', () => {
+  it("B-AC-37-2: while the law ballot is open the Governor's Now is the vote's, and no strike card shows", () => {
     mount(view(UNPAID, { council: COUNCIL }));
-    expect(text('after-votes')).toBe('After the votes');
-    expect(props('pay-strike').disabled).toBe(true);
-    expect(props('let-strike').disabled).toBe(true);
+    expect(text('now-title')).toBe('Vote on the law');
+    expect(findTestid('strike-now')).toBeUndefined();
     expect(sent).toEqual([]);
+  });
+
+  it("B-AC-37-2: on election day the Governor's Now is the election's, and no strike card shows", () => {
+    mount(view(UNPAID, { election: BALLOT }));
+    expect(text('now-title')).toBe('Vote in secret');
+    expect(findTestid('strike-now')).toBeUndefined();
+  });
+
+  it('B-AC-37-2: a Governor who is Ready can still pay: a pay line under Now sends payStrike', () => {
+    mount(ready(view(UNPAID)));
+    expect(findTestid('strike-now')).toBeUndefined();
+    expect(text('strike-pay-line')).toBe('Pay the Food strikers 240 cr');
+    tap('strike-pay-line');
+    expect(sent).toEqual([{ type: 'payStrike' }]);
+  });
+
+  it('B-AC-37-2: a Ready Governor gets no pay line once the strike is paid, nor while the law ballot is open', () => {
+    mount(ready(view(PAID)));
+    expect(findTestid('strike-pay-line')).toBeUndefined();
+    act(() => root!.render(onPhone(ready(view(UNPAID, { council: COUNCIL })))));
+    expect(findTestid('strike-pay-line')).toBeUndefined();
+  });
+
+  it('B-AC-37-2: a fund short of the cost shows the fund as it is, with no negative figure; the engine refuses with its own words', () => {
+    mount(view(UNPAID, {}, { fund: 100 }));
+    expect(text('fund-line')).toBe('Fund 100 cr');
   });
 
   it("B-AC-37-2: Let them strike sends nothing and leaves the Governor a way to pay until planning ends", () => {
