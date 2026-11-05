@@ -28,27 +28,3 @@ export function GroundCard({ ground }: { ground: NonNullable<TileView['ground']>
     </div>
   );
 }
-
-const TRAIT_TEXT: Record<NonNullable<TileView['traits']>[number], string> = {
-  bedrock: 'Bedrock: hard to dig',
-  sheltered: 'Sheltered from storms',
-  hotSpring: 'Hot spring below',
-  thinVein: 'Thin vein: mines run out',
-  toxic: 'Toxic ground',
-  unstable: 'Unstable ground',
-  infested: 'Infested with pests',
-  floodPlain: 'Flood plain',
-};
-
-export function Traits({ traits }: { traits: TileView['traits'] }) {
-  if (!traits || traits.length === 0) return null;
-  return (
-    <ul className="flex flex-wrap gap-1.5">
-      {traits.map((t) => (
-        <li key={t} className="rounded-chip bg-raised px-2 py-0.5 font-mono text-[11px] text-ink-2">
-          {TRAIT_TEXT[t] ?? t}
-        </li>
-      ))}
-    </ul>
-  );
-}

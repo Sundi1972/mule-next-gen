@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The store and prices · M.U.L.E. Rulebook</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="rulebook.css">
+</head>
+<body>
+<div class="rb-shell">
+<aside class="rb-rail"></aside>
+<main class="rb-main">
+<article>
+<h1>The store and prices</h1>
+<p class="rb-lede">The colony store is the colony's merchant: it sells MULEs, buys what you make and sells what you lack. Nobody sets its prices by hand. Each month it reads how much of every good the colony holds against what the colony will need, and moves its price toward where that puts it. This chapter explains how, with the numbers.</p>
+
+<h2 id="overview">The store in one minute <span class="pill built">In the game</span></h2>
+<ul>
+<li><strong>One price per good.</strong> Before every goods auction the store posts a price for each good. It sells at <span class="num">10%</span> above that price and buys at <span class="num">10%</span> below it.</li>
+<li><strong>Prices follow cover.</strong> Cover is how many months the colony's whole supply of a good (the store's shelf plus every player's depot) would last at next month's demand. The store aims to see <span class="num">2</span> months of cover. Less cover pushes the price up, more pushes it down.</li>
+<li><strong>Prices move with momentum and have no ceiling.</strong> A posted price can rise by half a month and fall by 40% a month. In a real shortage it keeps climbing until supply comes back.</li>
+<li><strong>The colony is self-contained.</strong> Nothing is imported. Every unit on the store's shelf was made by a player and sold to the store. The only way out is the export ship, which calls every third month.</li>
+<li><strong>The store never runs out of money.</strong> It buys as much as it wants, limited only by shelf room.</li>
+<li><strong>Crystite is for export.</strong> The colony has no use for it except one prestige building; its price is set by what the export ship pays.</li>
+</ul>
+<p>How you trade with the store at the auction is in <a href="goods-auction.html#trading-with-the-store">The goods auction</a>.</p>
+<p class="code-ref">In the code: <code>packages/engine/src/economy.ts</code> · <code>packages/engine/src/config.ts::PRICE</code>, <code>GOOD_CONFIG</code></p>
+<p class="owner">Kept current by: WS1 (the store's code), WS5 (the store-pricing design).</p>
+
+<h2 id="store-stock">The store's stock <span class="pill built">In the game</span></h2>
+<h3 id="starting-stock">What the store starts with</h3>
+<p>Food and Energy are stocked per seat; everything else is the same for any table.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Good</th><th class="n">2 seats</th><th class="n">4 seats</th><th class="n">6 seats</th><th>Setting</th></tr></thead>
+<tbody>
+<tr><td>Food</td><td class="n">8</td><td class="n">16</td><td class="n">24</td><td><code>START.storeFoodPerPlayer</code> 4 a seat</td></tr>
+<tr><td>Water</td><td class="n">20</td><td class="n">20</td><td class="n">20</td><td><code>START.storeStock</code></td></tr>
+<tr><td>Energy</td><td class="n">10</td><td class="n">20</td><td class="n">30</td><td><code>START.storeEnergyPerPlayer</code> 5 a seat</td></tr>
+<tr><td>Smithore</td><td class="n">20</td><td class="n">20</td><td class="n">20</td><td><code>START.storeStock</code></td></tr>
+<tr><td>Crystite</td><td class="n">0</td><td class="n">0</td><td class="n">0</td><td><code>START.storeStock</code></td></tr>
+<tr><td>Rare earth</td><td class="n">4</td><td class="n">4</td><td class="n">4</td><td><code>START.storeStock</code></td></tr>
+<tr><td>Alloy</td><td class="n">8</td><td class="n">8</td><td class="n">8</td><td><code>START.storeStock</code></td></tr>
+<tr><td>Electronics</td><td class="n">0</td><td class="n">0</td><td class="n">0</td><td><code>START.storeStock</code></td></tr>
+<tr><td>Medicine</td><td class="n">4</td><td class="n">4</td><td class="n">4</td><td><code>START.storeStock</code></td></tr>
+<tr><td>MULEs in the corral</td><td class="n">10</td><td class="n">10</td><td class="n">10</td><td><code>START.storeMules</code></td></tr>
+<tr><td>Store capital (credits)</td><td class="n">4,000</td><td class="n">4,000</td><td class="n">4,000</td><td><code>START.storeCapital</code></td></tr>
+</tbody>
+</table></div>
+<p>Each player starts with <span class="num">1,000</span> credits, <span class="num">2</span> Food, <span class="num">6</span> Water and <span class="num">2</span> Energy. The colony starts with <span class="num">100</span> colonists.</p>
+<div class="box why"><h4>Why it is like this</h4><p>Water is kept short on purpose: Heiko ruled on 29 Oct that the colony should feel a coming Water shortage from the first month, so players build wells early. Food 4 a seat in the store, Energy 5 a seat, and each player's 2 Food and 2 Energy are Heiko's numbers of 5 Nov.</p></div>
+
+<h3 id="colonists-reserve">The colonists come first</h3>
+<p>The colonists buy their Food and Water from the store at the end of every month, at its selling price, one unit of each per <span class="num">20</span> colonists. The store keeps that much back: at the auction it sells players only what is above its colonists' reserve. In a shortage the shelf therefore runs empty for the players first. The status screen and the TV show the store's stock <em>for sale</em>, after the reserve.</p>
+
+<h3 id="store-spoilage">The store's goods spoil slowly</h3>
+<p>The store has proper storage, so at month end its goods lose only a quarter of the usual spoilage (<code>PRICE.storeSpoilage</code> = <span class="num">0.25</span>). The loss is rounded so that whole units are lost.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Good</th><th class="n">In a player's depot</th><th class="n">In the store</th><th>Example in the store</th></tr></thead>
+<tbody>
+<tr><td>Food</td><td class="n">50%</td><td class="n">12.5%</td><td>16 become 14</td></tr>
+<tr><td>Energy</td><td class="n">25%</td><td class="n">6.25%</td><td>20 become 18</td></tr>
+<tr><td>Medicine</td><td class="n">20%</td><td class="n">5%</td><td>4 become 3</td></tr>
+<tr><td>Water</td><td class="n">5%</td><td class="n">1.25%</td><td>20 become 19</td></tr>
+<tr><td>Smithore, Crystite, Rare earth, Alloy, Electronics</td><td class="n">0%</td><td class="n">0%</td><td>Keep forever</td></tr>
+</tbody>
+</table></div>
+<p>Because the result is rounded down, a small stock loses at least one unit a month of any good that spoils at all: 3 Water become 2.</p>
+
+<h3 id="store-capital">The store's money</h3>
+<p>The store has its own working money, its capital, separate from the colony fund. It earns from MULEs, outfits and drone fees, from selling goods to players, colonists and the export ship, and from colony plots sold at the land auction; it pays for goods, unsold plots and MULEs it buys, and for wolf pelts. Its buying is never limited by its capital, and the capital may go below zero. It is never shown to players and does not count toward anyone's score.</p>
+<p class="code-ref">In the code: <code>config.ts::START</code>, <code>storeStockFor</code>, <code>PRICE.storeSpoilage</code> · <code>economy.ts::storeForSale</code> · <code>upkeep.ts::runUpkeep</code></p>
+<p class="owner">Kept current by: WS1.</p>
+
+<h2 id="posted-price">How the posted price is set <span class="pill built">In the game</span></h2>
+<p>The store posts its prices once a month, as the goods auction opens, after production and after any auction-phase event (a pirate raid or a store fire changes the stock first). The prices stay fixed for the whole auction. In month 1 the game also starts with each price where supply and demand put it.</p>
+
+<h3 id="demand">Step 1: next month's demand</h3>
+<p>For each good the store estimates what the colony will need next month:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Good</th><th>Who counts as demand</th></tr></thead>
+<tbody>
+<tr><td>Food</td><td>Every player's household and crew (2 each, plus 1 per 4 crew); colonists, 1 per 20, fewer if the price is above what their wages pay (150)</td></tr>
+<tr><td>Water</td><td>Every player's household and crew (1 each, plus 1 per 6 crew); colonists, 1 per 20 (wages pay up to 120)</td></tr>
+<tr><td>Energy</td><td>What every working plot and factory burns, but an Energy plant, which pays its own 1 from its own output; colonists, half a unit per 20 (wages pay up to 100)</td></tr>
+<tr><td>Medicine</td><td>Colonists, 1 per 50, half as much again while the air makes people sick (wages pay up to 400)</td></tr>
+<tr><td>Smithore</td><td>2 for every Alloy smelter; 1 for every MULE the colony will want (one per idle plot, plus a month's new land while free land is left); the export ship</td></tr>
+<tr><td>Alloy</td><td>1 for every Electronics works; the export ship</td></tr>
+<tr><td>Rare earth</td><td>1 for every Electronics works; the export ship</td></tr>
+<tr><td>Crystite</td><td>Only the export ship</td></tr>
+<tr><td>Electronics</td><td>Only the export ship</td></tr>
+</tbody>
+</table></div>
+<p>The export ship's part: once its wishlist is announced (the month before it calls, and the month it is in port), each wishlist good counts a third of what the ship still wants, and goods not on the list count nothing. Before that, each good the ship might want counts its average share. See <a href="#export-ship">the export ship</a>.</p>
+<p>Colonists' demand bends with price: they need a fixed amount, but when the store's selling price is above what their wages pay per unit, they buy only the share they can afford. That is the colony's demand curve.</p>
+
+<h3 id="cover">Step 2: cover</h3>
+<p><strong>Supply</strong> is everything the colony holds of the good: the store's shelf plus every player's depot. MULEs standing in the corral count as the Smithore they were built from. <strong>Cover</strong> is supply divided by next month's demand: how many months it would last. A good with no demand has endless cover.</p>
+
+<h3 id="target">Step 3: the target price</h3>
+<p>The target price is the good's reference price times a scarcity factor:</p>
+<p><code>target = reference × (2 ÷ cover) ^ k</code></p>
+<ul>
+<li><strong>2</strong> is the cover the store aims for, <code>PRICE.targetCover</code>. At exactly 2 months of cover the target is the reference price.</li>
+<li><strong>cover</strong> never counts as less than <code>PRICE.minCover</code> = <span class="num">0.25</span> month in this formula, so even an empty colony gives a finite target.</li>
+<li><strong>k</strong> is the good's sensitivity (<code>GOOD_CONFIG</code>): how hard its price reacts. Essentials react strongly, because people can't stop eating.</li>
+</ul>
+<div class="table-wrap"><table>
+<thead><tr><th>Cover</th><th class="n">k = 1.5 (Food, Water)</th><th class="n">k = 1.2 (Energy, Smithore)</th><th class="n">k = 0.5 (Crystite, Electronics)</th></tr></thead>
+<tbody>
+<tr><td>0.25 month or less</td><td class="n">× 22.6</td><td class="n">× 12.1</td><td class="n">× 2.8</td></tr>
+<tr><td>0.5 month</td><td class="n">× 8.0</td><td class="n">× 5.3</td><td class="n">× 2.0</td></tr>
+<tr><td>1 month</td><td class="n">× 2.8</td><td class="n">× 2.3</td><td class="n">× 1.4</td></tr>
+<tr><td>2 months</td><td class="n">× 1.0</td><td class="n">× 1.0</td><td class="n">× 1.0</td></tr>
+<tr><td>4 months</td><td class="n">× 0.35</td><td class="n">× 0.44</td><td class="n">× 0.71</td></tr>
+</tbody>
+</table></div>
+
+<h3 id="momentum">Step 4: momentum</h3>
+<p>The posted price does not jump to the target. Each month it moves toward it, but:</p>
+<ul>
+<li>it rises by at most <code>PRICE.maxRise</code> = <span class="num">50%</span> of the current price, or of the reference price if the good has become cheaper than that, so a crashed good recovers in a couple of months;</li>
+<li>it falls by at most <code>PRICE.maxFall</code> = <span class="num">40%</span>;</li>
+<li>it is a whole number of credits, and never below 1.</li>
+</ul>
+
+<h3 id="short-goods">Step 5: when a good is really short, there is no target</h3>
+<p>In three cases the price ignores its target and climbs the full 50% step every month, until supply comes back:</p>
+<ul>
+<li>cover is below <span class="num">0.25</span> month;</li>
+<li>the colonists went short of the good last month;</li>
+<li>for Food and Water only, the store's own shelf holds less than one month of its colonists' need (<code>PRICE.shelfCover</code> = <span class="num">1</span>), so the price starts climbing before anyone goes hungry.</li>
+</ul>
+<p><strong>There is no ceiling.</strong> A good that stays short reaches very high prices. WS5 measured, over 200 four-seat games on trunk, a Food peak of 1,985 and a Medicine peak of 10,389, with Food's median at 59 against its reference of 30.</p>
+
+<h3 id="export-only-cap">Goods only the ship wants</h3>
+<p>For a good that nobody in the colony uses, only the export ship (Crystite and Electronics today), the target is never above the <strong>off-world price</strong>: the store will not aim higher than the ship pays. The momentum rule still applies, so a price that starts above it falls to it by at most 40% a month.</p>
+
+<div class="table-wrap"><table>
+<thead><tr><th>Setting</th><th class="n">Value</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td><code>PRICE.targetCover</code></td><td class="n">2</td><td>Months of demand the store aims to see; at this cover the target is the reference price</td></tr>
+<tr><td><code>PRICE.minCover</code></td><td class="n">0.25</td><td>Cover never counts as lower than this in the formula; below it the price climbs without a target</td></tr>
+<tr><td><code>PRICE.maxRise</code></td><td class="n">0.5</td><td>Most a posted price rises in a month, as a share of the price (or of the reference, if higher)</td></tr>
+<tr><td><code>PRICE.maxFall</code></td><td class="n">0.4</td><td>Most a posted price falls in a month</td></tr>
+<tr><td><code>PRICE.storeSpread</code></td><td class="n">0.1</td><td>The store sells this much above and buys this much below its posted price</td></tr>
+<tr><td><code>PRICE.storeMaxCover</code></td><td class="n">3</td><td>The store buys until its shelf holds this many months of demand</td></tr>
+<tr><td><code>PRICE.shelfCover</code></td><td class="n">1</td><td>Food or Water counts as short when the store's shelf holds less than this many months of colonists' need</td></tr>
+<tr><td><code>PRICE.restockPremium</code></td><td class="n">1.5</td><td>With that shelf short, the store bids up to this times the posted price</td></tr>
+<tr><td><code>PRICE.storeSpoilage</code></td><td class="n">0.25</td><td>Share of normal spoilage the store suffers</td></tr>
+<tr><td><code>PRICE.refDrift</code></td><td class="n">0.25</td><td>How fast the reference price follows what players pay each other</td></tr>
+<tr><td><code>PRICE.worldPull</code></td><td class="n">0.1</td><td>How fast the reference price drifts back toward the off-world price</td></tr>
+</tbody>
+</table></div>
+<div class="box why"><h4>Why it is like this</h4><p>The design doc's rule: prices are never set by hand; they come from supply and demand inside a self-contained colony (Heiko, 21 Oct: no imports). Supply counts the whole colony, as in the original, not only the store's shelf. Momentum makes a shortage build over two or three months, which is the speculator's window. The short-shelf rule and the restock bid (pricing B) were approved by Heiko on 22 Oct to get the price climbing before the colonists go hungry.</p></div>
+<div class="box next"><h4>Worth knowing (from reading the code)</h4>
+<ul>
+<li>Colonists' Energy and Medicine count as demand in the price, but colonists only ever buy Food and Water from the store. Their Energy and Medicine raise those prices without taking any units off the shelf.</li>
+<li>A Medicine works' Food and Water inputs are not counted as demand for Food and Water (Smithore for smelters, and Alloy and Rare earth for Electronics works, are).</li>
+</ul>
+<p>Whether these are intended is for WS1 to say; WS5's store-pricing design may take them up.</p></div>
+<p class="code-ref">In the code: <code>economy.ts::monthlyDemand</code>, <code>exportDemand</code>, <code>colonistDemand</code>, <code>colonySupply</code>, <code>cover</code>, <code>scarcity</code>, <code>targetPrice</code>, <code>nextPostedPrice</code>, <code>riseCap</code>, <code>postPrices</code> · <code>game.ts::createGame</code> (month 1) · <code>game.ts::advancePhase</code> (when prices are posted)</p>
+<p class="owner">Kept current by: WS1.</p>
+
+<h2 id="price-example">Worked example: Food over three months <span class="pill built">In the game</span></h2>
+<p>A four-seat game with 100 colonists. To keep the arithmetic simple, next month's Food demand stays at <strong>13</strong> throughout: 8 for the four households (2 each) and 5 for the colonists (1 per 20). Food's reference price is 30, the same as its off-world price, and players trade Food only with the store, so the reference does not move.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Month</th><th class="n">Last price</th><th class="n">Supply</th><th class="n">Cover</th><th>Short?</th><th class="n">Target</th><th class="n">Allowed range</th><th class="n">Posted</th><th class="n">Store buys / sells</th></tr></thead>
+<tbody>
+<tr><td>A</td><td class="n">34</td><td class="n">24</td><td class="n">1.85</td><td>No</td><td class="n">33.8</td><td class="n">20.4 to 51</td><td class="n">34</td><td class="n">30 / 38</td></tr>
+<tr><td>B</td><td class="n">34</td><td class="n">8</td><td class="n">0.62</td><td>Yes: shelf 3, under 5</td><td class="n">none</td><td class="n">20.4 to 51</td><td class="n">51</td><td class="n">77 / 78 (restocking)</td></tr>
+<tr><td>C</td><td class="n">51</td><td class="n">20</td><td class="n">1.54</td><td>Yes: colonists went short in B</td><td class="n">none</td><td class="n">30.6 to 76.5</td><td class="n">77</td><td class="n">69 / 85</td></tr>
+</tbody>
+</table></div>
+<div class="box example"><h4>Month by month</h4>
+<p><strong>Month A, a normal month.</strong> The store holds 12 Food and the players 12: supply 24, cover 24 ÷ 13 = 1.85 months. Scarcity: (2 ÷ 1.85)^1.5 = 1.13, so the target is 30 × 1.13 = 33.8. The last price was 34, which may move between 34 × 0.6 = 20.4 and 34 + 34 × 0.5 = 51. The target is inside, so Food is posted at <strong>34</strong>. The store buys at 30 (34 less 10%, rounded down) and sells at 38 (34 plus 10%, rounded up).</p>
+<p><strong>Month B, a drought.</strong> Harvests fail: the store holds 3 Food and the players 5, supply 8. Cover is 0.62, which alone would give a target of about 176. But the store's shelf (3) is under one month of its colonists' need (5), so Food counts as short: the price climbs the full step, 34 + 17 = <strong>51</strong>. To restock, the store bids 51 × 1.5 = 77 (well under the colonists' ceiling of 150 ÷ 1.1² = 123) and sells at 78, one above what it pays. Nobody sells it enough in time: at month end it has only 3 Food for the colonists' 5, and the colonists go short.</p>
+<p><strong>Month C, the harvest is back.</strong> Supply is 20 again (store 8, players 12): cover 1.54, which would give a target of 44.5. But the colonists went short last month, so Food still counts as short and the price climbs the full step again: 51 + 25.5 = 76.5, posted <strong>77</strong>. The shelf now holds 8, more than a month of colonists' need, so there is no restock bid: the store buys at 69 and sells at 85.</p>
+<p><strong>And after.</strong> In month D, with the same supply of 20 and nobody short, the target is 44.5. The price may fall only 40%, to 77 × 0.6 = 46.2, so Food is posted at <strong>46</strong>, and reaches its target the month after.</p></div>
+<p>The pattern is the design's: a shortage shows up as a rising price over two or three months, and the price stays high for a month after supply returns, which is when a player holding Food sells well.</p>
+<p class="code-ref">In the code: <code>economy.ts::nextPostedPrice</code>, <code>shelfShort</code> · <code>auction.ts::comeUp</code> (restock bid)</p>
+<p class="owner">Kept current by: WS1.</p>
+
+<h2 id="reference-and-off-world">Reference and off-world prices <span class="pill built">In the game</span></h2>
+<p>Every good has two background prices:</p>
+<ul>
+<li>The <strong>reference price</strong> is what the good is worth at normal supply (2 months of cover). It is the base of the target price, and it learns from what players pay each other.</li>
+<li>The <strong>off-world price</strong> is what the export ship pays for its first unit. It is also where the reference price drifts back to.</li>
+</ul>
+<div class="table-wrap"><table>
+<thead><tr><th>Good</th><th class="n">Reference and off-world price at the start</th><th class="n">Sensitivity k</th><th class="n">Spoilage a month (depot)</th></tr></thead>
+<tbody>
+<tr><td>Food</td><td class="n">30</td><td class="n">1.5</td><td class="n">50%</td></tr>
+<tr><td>Water</td><td class="n">25</td><td class="n">1.5</td><td class="n">5%</td></tr>
+<tr><td>Energy</td><td class="n">25</td><td class="n">1.2</td><td class="n">25%</td></tr>
+<tr><td>Smithore</td><td class="n">50</td><td class="n">1.2</td><td class="n">0%</td></tr>
+<tr><td>Crystite</td><td class="n">100</td><td class="n">0.5</td><td class="n">0%</td></tr>
+<tr><td>Rare earth</td><td class="n">60</td><td class="n">0.8</td><td class="n">0%</td></tr>
+<tr><td>Alloy</td><td class="n">90</td><td class="n">0.8</td><td class="n">0%</td></tr>
+<tr><td>Electronics</td><td class="n">220</td><td class="n">0.5</td><td class="n">0%</td></tr>
+<tr><td>Medicine</td><td class="n">120</td><td class="n">1.0</td><td class="n">20%</td></tr>
+</tbody>
+</table></div>
+<p><strong>The off-world price never moves today.</strong> It is set from <code>GOOD_CONFIG.refPrice</code> when the game starts and stays there for the whole game, for every good.</p>
+
+<h3 id="reference-learning">How the reference price learns</h3>
+<p>Once a month, when each good closes at the auction (or is skipped), its reference price moves:</p>
+<p><code>new reference = reference + (implied − reference) × 0.25 + (off-world − reference) × 0.1</code></p>
+<ul>
+<li><strong>implied</strong> is the average price players paid each other for the good this month, divided by the scarcity factor at that moment. A trade at a shortage price raises the reference only by as much as players paid above what the shortage alone explains. With no trades between players, implied is the reference itself and only the pull toward the off-world price is left.</li>
+<li>Trades with the store and the ship teach nothing: they happen at the store's and the ship's own prices.</li>
+<li>The result is rounded to whole credits, and is never below 1. There is no other bound.</li>
+</ul>
+<div class="box example"><h4>Example</h4>
+<p><strong>Paying above the shortage.</strong> Alloy, reference 90, cover 2 months (scarcity 1). Players pay each other 130 on average. Implied is 130, so the reference becomes 90 + 40 × 0.25 + 0 = <strong>100</strong>. Next month the pull alone takes it to 99.</p>
+<p><strong>Paying less than the shortage explains.</strong> Food in month B above: cover 0.62, scarcity 5.86. Two players trade Food at 60. Implied is 60 ÷ 5.86 = 10.2, below the reference of 30, so the reference falls: 30 + (10.2 − 30) × 0.25 = <strong>25</strong>. The players paid twice the reference, but much less than the shortage would justify, and the market reads that as Food being worth less.</p></div>
+<div class="box next"><h4>Worth knowing (from reading the code)</h4><p>Because the reference is rounded every month, the pull toward the off-world price stops a few credits short: a gap of 5 credits or less above it (4 or less below it) moves by less than half a credit and rounds back. A reference that drifted to 34 for Food stays at 34 until players trade Food with each other again. WS1 owns the rule; the store-pricing design may change it.</p></div>
+<p class="code-ref">In the code: <code>config.ts::GOOD_CONFIG</code> · <code>economy.ts::driftReference</code> · <code>auction.ts::learnFromGood</code>, <code>nextGood</code> (skipped goods) · <code>game.ts::createGame</code> (<code>offWorld</code> set once)</p>
+<p class="owner">Kept current by: WS1.</p>
+
+<h2 id="spread">Buying and selling at the store: the spread <span class="pill built">In the game</span></h2>
+<p>The store sells at its posted price plus <code>PRICE.storeSpread</code> = <span class="num">10%</span>, rounded up, and buys at the posted price less 10%, rounded down (never below 1). The two together are about 20% wide. Its quotes at the reference prices:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Good</th><th class="n">Posted</th><th class="n">Store buys</th><th class="n">Store sells</th></tr></thead>
+<tbody>
+<tr><td>Food</td><td class="n">30</td><td class="n">27</td><td class="n">33</td></tr>
+<tr><td>Water</td><td class="n">25</td><td class="n">22</td><td class="n">28</td></tr>
+<tr><td>Energy</td><td class="n">25</td><td class="n">22</td><td class="n">28</td></tr>
+<tr><td>Smithore</td><td class="n">50</td><td class="n">45</td><td class="n">56</td></tr>
+<tr><td>Crystite</td><td class="n">100</td><td class="n">90</td><td class="n">111</td></tr>
+<tr><td>Rare earth</td><td class="n">60</td><td class="n">54</td><td class="n">66</td></tr>
+<tr><td>Alloy</td><td class="n">90</td><td class="n">81</td><td class="n">100</td></tr>
+<tr><td>Electronics</td><td class="n">220</td><td class="n">198</td><td class="n">243</td></tr>
+<tr><td>Medicine</td><td class="n">120</td><td class="n">108</td><td class="n">132</td></tr>
+</tbody>
+</table></div>
+<p>When a buyer and a seller meet between the store's lines, both do better than with the store. The store's lines are the fallback: a seller can always sell while the store wants the good, and a buyer can always buy while it has some for sale.</p>
+<ul>
+<li>With nothing for sale, the store shows no selling price ("out").</li>
+<li>When it wants no more, it shows no buying price.</li>
+<li>While a Food or Water shelf is short it bids more and sells dearer, always at least one credit apart (see <a href="#restocking">restocking</a>).</li>
+</ul>
+<div class="box next"><h4>Worth knowing (from reading the code)</h4><p>For Smithore, Crystite, Alloy and Electronics at their reference prices the selling price comes out one credit higher than 10% would give (56 rather than 55 for Smithore, 111 rather than 110 for Crystite). The computer's arithmetic makes 50 × 1.1 a hair over 55, and the store always rounds its selling price up. Small, but a player who checks will notice. WS1 owns it.</p></div>
+<div class="box why"><h4>Why it is like this</h4><p>The design doc: "The store sells at 10% above the posted price and buys at 10% below it, so selling to another player is usually better than selling to the store." Heiko asked on 5 Nov for a wider spread; see <a href="#store-pricing-design">the store-pricing design</a>.</p></div>
+<p class="code-ref">In the code: <code>economy.ts::storeQuotes</code>, <code>colonyPrice</code> · <code>auction.ts::comeUp</code> (the auction's lines)</p>
+<p class="owner">Kept current by: WS1.</p>
+
+<h2 id="restocking">How the store restocks <span class="pill built">In the game</span></h2>
+<p>Nothing is ever imported. The store's shelf fills in only two ways: players sell to it at the auction, and goods it already holds. It empties when players and the colony fund buy from it, when colonists buy Food and Water at month end, when goods spoil, when it sells its surplus to the export ship, when it builds MULEs from Smithore, and when an event strikes.</p>
+<h3 id="how-much-it-buys">How much it buys</h3>
+<p>At each good's auction the store wants enough to fill its shelf to <code>PRICE.storeMaxCover</code> = <span class="num">3</span> months of next month's demand, plus, for a good the export ship takes, a full ship's load to sell when the ship calls. Once it has bought that many its buying line goes. Its money never limits it.</p>
+<div class="box example"><h4>Example</h4><p>Food demand is 13 a month and the store holds 12. It will buy up to 13 × 3 − 12 = <strong>27</strong> Food at this auction. For Crystite in a four-seat game in a month when the ship has not announced its wishlist, demand is 4 (the ship's average) and a ship's load is 12, so the store wants up to 4 × 3 + 12 = 24 Crystite, less what it holds.</p></div>
+<h3 id="short-shelf">A short shelf of Food or Water</h3>
+<p>When the store's Food or Water would not feed its colonists for a month (under <code>PRICE.shelfCover</code> = 1 month of their need):</p>
+<ul>
+<li>the posted price counts as short and climbs the full step (see <a href="#short-goods">step 5</a>);</li>
+<li>at the auction the store bids up to <code>PRICE.restockPremium</code> = <span class="num">1.5</span> times the posted price, but never more than its colonists could pay after the store's two margins: 150 ÷ 1.1² = <span class="num">123</span> for Food and 120 ÷ 1.1² = <span class="num">99</span> for Water;</li>
+<li>its selling price rises with it, to at least one credit above what it pays, so a player can't buy from it and sell straight back.</li>
+</ul>
+<h3 id="colonists-buy">The colonists buy at month end</h3>
+<p>At upkeep the colonists buy 1 Food and 1 Water per 20 colonists at the store's selling price, paid from their off-world wages: at most 150 a unit for Food and 120 for Water. If the shelf is short, or the price is above their wages, they buy less and go hungry. A fed colony grows 4% a month; a hungry one shrinks 5%. A month the store couldn't feed its colonists is recorded as a shortage, which keeps that good's price climbing the next month.</p>
+<h3 id="events-and-stock">Events that empty the shelf</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Event</th><th>Chance</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td>Store fire</td><td>1 in 100 a month, as the auction opens</td><td>The store's stock of every good and all its MULEs go to 0, before prices are posted</td></tr>
+<tr><td>Pirate raid</td><td>1 in 100 a month, as the auction opens</td><td>All Crystite, the store's and every player's, goes to 0, before prices are posted</td></tr>
+</tbody>
+</table></div>
+<p>See <a href="events.html">Events</a> for the full list.</p>
+<div class="box why"><h4>Why it is like this</h4><p>Heiko, 21 Oct: no imports, the colony is self-contained; every unit of Food, Water and Energy has to be grown by a player, so a shortage is the players' own doing. Heiko, 22 Oct: "the store should have unlimited amount of money".</p></div>
+<p class="code-ref">In the code: <code>economy.ts::storeWants</code>, <code>shelfShort</code> · <code>auction.ts::comeUp</code> · <code>upkeep.ts::runUpkeep</code> · <code>events.ts</code> (<code>storeFire</code>, <code>pirateRaid</code>) · <code>config.ts::UPKEEP.colonistBudget</code>, <code>UPKEEP.colonistGrowth</code>, <code>EVENTS.colony</code></p>
+<p class="owner">Kept current by: WS1.</p>
+
+<h2 id="mule-price">The MULE price and the corral <span class="pill built">In the game</span></h2>
+<p>A MULE costs its labour plus the Smithore it is built from, times a scarcity factor:</p>
+<p><code>MULE price = (120 + 1 × Smithore's posted price) × scarcity factor</code>, rounded.</p>
+<ul>
+<li>Labour is <code>MULE.labour</code> = <span class="num">120</span> credits; each MULE takes <code>MULE.smithorePerMule</code> = <span class="num">1</span> Smithore. So whoever mines Smithore sets the price of MULEs, as in the original.</li>
+<li>The scarcity factor starts at 1. Each month the corral sold out during development, it goes up by <code>MULE.scarcityUp</code> = <span class="num">15%</span>. Each month at least half the corral's MULEs were left over (<code>MULE.surplusShare</code>), it goes down by <code>MULE.surplusDown</code> = <span class="num">10%</span>, never below <code>MULE.minFactor</code> = <span class="num">0.6</span>. It compounds, so a long MULE shortage gets steadily dearer.</li>
+<li>Gearlings pay <span class="num">95%</span> of the price for MULEs and outfits (<code>SPECIES_PERK.gearlingPrice</code>).</li>
+</ul>
+<div class="box example"><h4>Example</h4>
+<p>Smithore is posted at 50: a MULE costs 120 + 50 = <strong>170</strong> (a Gearling pays 162). The corral sells out: next month it costs 170 × 1.15 = <strong>195</strong>. It sells out again: 170 × 1.15 × 1.15 = <strong>225</strong>. In a month with half the MULEs left over, the factor drops by 10% instead.</p>
+<p>In month 1 of a four-seat game, reading the code: the colony holds 20 Smithore in the store plus 10 MULEs in the corral (counted as Smithore), against a demand of 10 (8 MULEs for a month's new land and 2 for the export ship's average), so cover is 3 and Smithore starts at about 31. The first MULEs cost about <strong>151</strong>.</p></div>
+<h3 id="corral">The corral</h3>
+<p>At every month end the store builds MULEs from its own Smithore, one Smithore each, up to its corral target: 2 MULEs for every seat (a month's new land, by grant and land auction) plus 2 spare (<code>MULE.corralPerPlayer</code>, <code>MULE.spareInCorral</code>). That is 6 at 2 seats, 10 at 4 seats and 14 at 6 seats. Without enough Smithore it builds fewer, and the corral may sell out.</p>
+<h3 id="outfits">Outfitting</h3>
+<p>Fitting a MULE for a job costs, at the store:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Outfit</th><th class="n">Credits</th></tr></thead>
+<tbody>
+<tr><td>Green belt</td><td class="n">20</td></tr>
+<tr><td>Food, Water</td><td class="n">25</td></tr>
+<tr><td>Energy</td><td class="n">50</td></tr>
+<tr><td>Smithore</td><td class="n">75</td></tr>
+<tr><td>Crystite, Rare earth</td><td class="n">100</td></tr>
+<tr><td>Alloy, Medicine</td><td class="n">150</td></tr>
+<tr><td>Electronics</td><td class="n">200</td></tr>
+</tbody>
+</table></div>
+<p>An unsold MULE listed at the land auction with "the store buys it" fetches half the month's MULE price (<code>LOTS.storeMuleShare</code>); see <a href="land.html">Land and geology</a>. Buying and leading MULEs is in <a href="development.html">Development</a>.</p>
+<div class="box why"><h4>Why it is like this</h4><p>The design doc, after the original: Smithore sets the MULE price, and starving the store of Smithore is a strategy with a cost for everyone. Heiko, 28 Oct: "when the store runs out of mules and there is no smithore it needs to raise the prices". Heiko, 5 Nov: one claim per land grant, with the corral kept at 2 per seat so it doesn't shrink.</p></div>
+<p class="code-ref">In the code: <code>economy.ts::mulePrice</code>, <code>corralTarget</code>, <code>mulesWanted</code> · <code>game.ts::advancePhase</code> (scarcity factor), <code>mulePriceFor</code>, <code>outfitCostFor</code> · <code>upkeep.ts::runUpkeep</code> (building) · <code>config.ts::MULE</code></p>
+<p class="owner">Kept current by: WS1.</p>
+
+<h2 id="export-ship">The export ship <span class="pill built">In the game</span></h2>
+<p>The colony's only outlet. The export ship calls every <code>GAME.exportShipEvery</code> = <span class="num">3</span> months: in a 12-month game, in months 3, 6, 9 and 12.</p>
+<h3 id="wishlist">Its wishlist</h3>
+<p>For each call the ship wants <code>EXPORT_SHIP.wishlist</code> = <span class="num">3</span> goods, drawn from the game's seed from the six it ever buys. Food, Water and Energy don't travel, so the ship never wants them. The wishlist is announced the month before it calls (months 2, 5, 8, 11), and from then on what it wants counts as demand in the store's prices, so the wishlist goods' prices rise ahead of the ship.</p>
+<p>How many it wants of each is <code>EXPORT_DEMAND</code> × seats × 3 months, rounded up:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Good</th><th class="n"><code>EXPORT_DEMAND</code> a seat a month</th><th class="n">2 seats</th><th class="n">4 seats</th><th class="n">6 seats</th></tr></thead>
+<tbody>
+<tr><td>Smithore</td><td class="n">1</td><td class="n">6</td><td class="n">12</td><td class="n">18</td></tr>
+<tr><td>Crystite</td><td class="n">2</td><td class="n">12</td><td class="n">24</td><td class="n">36</td></tr>
+<tr><td>Rare earth</td><td class="n">0.5</td><td class="n">3</td><td class="n">6</td><td class="n">9</td></tr>
+<tr><td>Alloy</td><td class="n">1</td><td class="n">6</td><td class="n">12</td><td class="n">18</td></tr>
+<tr><td>Electronics</td><td class="n">1</td><td class="n">6</td><td class="n">12</td><td class="n">18</td></tr>
+<tr><td>Medicine</td><td class="n">0.5</td><td class="n">3</td><td class="n">6</td><td class="n">9</td></tr>
+</tbody>
+</table></div>
+<h3 id="what-the-ship-pays">What it pays</h3>
+<ul>
+<li>The off-world price for its first unit of a good.</li>
+<li><code>EXPORT_SHIP.stepDown</code> = <span class="num">2%</span> less for each further unit of that good, as its hold fills.</li>
+<li><span class="num">10%</span> more from a colony whose air is clean (<code>POLLUTION.cleanExportBonus</code>).</li>
+<li>Rounded down to whole credits.</li>
+</ul>
+<p>Players sell to it first, at the auction in the month it is in port, where it stands on the board as an amber line. At that month's upkeep the store sells the ship its own surplus, everything above 2 months of demand, while the ship still has room. Then the ship leaves and the next call is planned.</p>
+<p>A player's sale to the ship pays the sales tax, and the export tax when that law is in force (10%, 20% or 30%), taken after the sales tax. The store's sales to the ship pay no tax; they go into its capital.</p>
+<div class="box example"><h4>Example: 24 Crystite</h4><p>A four-seat colony with clean air; the ship wants 24 Crystite at an off-world price of 100. The first unit fetches 110, the second 107, the third 105, … the 24th 59. All 24 fetch <strong>2,023</strong> credits before tax. With dirty air the same 24 fetch 100 down to 54, <strong>1,847</strong> in all. At the 5% sales tax a seller keeps about 95% of that.</p></div>
+<div class="box why"><h4>Why it is like this</h4><p>The design doc: the ship has limited cargo space and every extra unit of a good sells for a little less, so flooding the ship with one good lowers what each unit earns. The clean-air bonus rewards a colony that keeps its air clean.</p></div>
+<p class="code-ref">In the code: <code>economy.ts::planShip</code>, <code>shipAnnounced</code>, <code>shipInPort</code>, <code>exportDemand</code>, <code>shipPrice</code> · <code>upkeep.ts::runUpkeep</code> (the store's surplus) · <code>politics.ts::chargeExportTax</code> · <code>config.ts::EXPORT_DEMAND</code>, <code>EXPORT_SHIP</code>, <code>GAME.exportShipEvery</code></p>
+<p class="owner">Kept current by: WS1.</p>
+
+<h2 id="crystite">Crystite <span class="pill built">In the game</span></h2>
+<p>Crystite is a pure off-world luxury. Mining it costs a Crystite outfit (100 credits) and 2 Energy a plot a month, and it never spoils.</p>
+<ul>
+<li><strong>No colony use in the price.</strong> Nobody in the colony consumes Crystite, so its colony demand is 0; only the export ship's demand counts.</li>
+<li><strong>One building needs it.</strong> The Observatory, a colony prestige object, needs <span class="num">3</span> Crystite and 700 credits. The colony fund buys missing goods for a project from the store at the store's selling price. This purchase is not counted in the store's demand.</li>
+<li><strong>Its price is held to the off-world price.</strong> Because only the ship wants it, its target is never above the off-world price of 100. When the colony holds a lot of Crystite against the ship's demand, the target falls below 100: with 10 months of cover it is 100 × (2 ÷ 10)^0.5 = 45.</li>
+<li><strong>The store buys it only for a ship.</strong> In a month when the ship has announced a wishlist without Crystite, and in the month it calls without wanting Crystite, the store wants none: nobody buys Crystite and the good is skipped. In the other months the store stocks up to a ship's load.</li>
+<li><strong>Selling to the ship.</strong> In port with Crystite on its list, the ship pays 100 for the first unit (110 from a clean colony), 2% less for each after.</li>
+<li><strong>Pirate raid.</strong> With a chance of 1 in 100 each month, as the auction opens, pirates take all the Crystite, the store's and every player's, before prices are posted. Nothing protects it today.</li>
+</ul>
+<h3 id="crystite-month-one">Crystite's first months</h3>
+<p>Reading the code: in month 1 the colony holds no Crystite, so the starting price (which is set before the off-world limit applies) is 100 × (2 ÷ 0.25)^0.5 = <strong>283</strong>. From the first auction it falls by the most it may, 40% a month: 170, then 102, then 100. Electronics starts the same way at 622 and falls to 373, 224, then its off-world price of 220. WS5 measured a Crystite maximum of 170 and a 90th percentile of 102 at the auction, which agrees.</p>
+<div class="box why"><h4>Why it is like this</h4><p>Heiko, 5 Nov: "Please confirm crystite is a pure luxury good, it has no purpose, correct? crystite is there for export only". The PM confirmed from the code: colony demand 0, the price capped at the off-world price, the off-world price fixed at 100; the one colony use is the Observatory's 3 Crystite.</p></div>
+<div class="box next"><h4>What is changing</h4><p>Heiko wants Crystite's off-world price to vary from 40 to 300, usually about 90, with the higher prices more and more unlikely. Today it never moves from 100, so the store's price barely moves either and holding Crystite is not a bet. This is part of WS5's <a href="#store-pricing-design">store-pricing design</a>.</p></div>
+<p class="code-ref">In the code: <code>economy.ts::monthlyDemand</code> (<code>demand.crystite = 0</code>), <code>nextPostedPrice</code> (the off-world limit), <code>storeWants</code> · <code>game.ts::createGame</code> · <code>config.ts::PRESTIGE.observatory</code>, <code>COLONY.fundBuysGoods</code>, <code>EVENTS.colony.pirateRaid</code>, <code>MULE.outfitCost</code></p>
+<p class="owner">Kept current by: WS1, with WS5 for the design.</p>
+
+<h2 id="colony-fund-and-taxes">The colony fund and taxes <span class="pill built">In the game</span></h2>
+<p>The colony has two pots of money, and neither can spend the other's:</p>
+<div class="table-wrap"><table>
+<thead><tr><th></th><th>Store capital</th><th>Colony fund</th></tr></thead>
+<tbody>
+<tr><td>What it is</td><td>The merchant's working money</td><td>The colony government's money</td></tr>
+<tr><td>Filled by</td><td>Selling MULEs, outfits and goods to players, colonists, the fund and the ship</td><td>Taxes, the Federation's grant, donations</td></tr>
+<tr><td>Spent on</td><td>Buying goods, unsold plots and MULEs, and wolf pelts</td><td>Office pay, prestige projects and their goods</td></tr>
+<tr><td>Starts with</td><td class="n">4,000</td><td class="n">0</td></tr>
+<tr><td>Limits</td><td>None: it may go below zero</td><td>See <a href="colony-and-politics.html">Colony and politics</a></td></tr>
+</tbody>
+</table></div>
+<h3 id="taxes-on-trade">Taxes on trade</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Tax</th><th>Who pays</th><th class="n">Rate</th><th>Set by</th></tr></thead>
+<tbody>
+<tr><td>Sales tax</td><td>The seller, on every unit a player sells to another player, the store or the ship</td><td class="n">5% at the start, 0 to 15%</td><td>The Governor, at most 5 points up or down a month (<code>POLITICS.tax</code>)</td></tr>
+<tr><td>Export tax (a law)</td><td>The seller, on units sold to the export ship, after the sales tax</td><td class="n">10%, 20% or 30%</td><td>A colony vote</td></tr>
+</tbody>
+</table></div>
+<p>Each tax is worked out per unit and rounded to whole credits: at 5%, a sale at 26 pays 1 and a sale at 30 pays 2 (1.5 rounds up). Prices on the board are what the buyer pays; the seller's receipt shows the tax taken. Colonists and the store pay no tax. Taxes paid also earn extra votes; land and pollution taxes, fines and how the fund is spent are in <a href="colony-and-politics.html">Colony and politics</a>.</p>
+<p class="code-ref">In the code: <code>economy.ts::taxSale</code> · <code>politics.ts::chargeExportTax</code> · <code>colony.ts::fundIn</code>, <code>fund</code> · <code>config.ts::TAX.salesTax</code>, <code>POLITICS.tax</code>, <code>POLITICS.laws</code>, <code>COLONY</code></p>
+<p class="owner">Kept current by: WS7 (fund and laws), WS1 (sales tax in trades).</p>
+
+<h2 id="store-pricing-design">The store-pricing design: a market-maker store <span class="pill designed">Designed</span></h2>
+<p><strong>Not in the game yet.</strong> Heiko chose this design on 5 Nov (option B, "market-maker store", a ceiling of "12x", Crystite "As proposed"). The Maps team (WS5) owns the design; it is built in two pull requests after Heiko has read the written spec. Until then the sections above describe the game as it plays.</p>
+<p>Heiko asked for it in his own words: "we need to think about how the store sets its selling and buying prices … also this needs to be a good clever algorithm", "i think the spread can be wider than what we are having currently … I want to get a complete design there", and for Crystite "a normal price should be about 90 with extremes that can go up to 300 very rare and lower extremes of 40".</p>
+<h3 id="pricing-designed-at-the-table">What you will see at the table</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Part</th><th>Today</th><th>Designed</th></tr></thead>
+<tbody>
+<tr><td>Ceiling</td><td>None: Food has reached 1,985 and Medicine 10,389</td><td>No posted price above 12 times the good's usual price (Food 360, Water and Energy 300, Smithore 600)</td></tr>
+<tr><td>Monthly move</td><td>Up to +50% or −40% a month, and most months move by the full step</td><td>Up to +30% or −25% a month, except right after a sell-out</td></tr>
+<tr><td>Spread</td><td>The store buys 10% under its price and sells 10% over, for every good</td><td>15% under and 15% over at normal stock (30% wide), widening to 25% each side as the shelf runs short</td></tr>
+<tr><td>Short or full shelf</td><td>Only a short Food or Water shelf raises the store's buying price</td><td>Every good: a short shelf moves both the store's lines up before it is empty, a full one moves both down</td></tr>
+<tr><td>Sold out and bid past</td><td>Next month's price ignores what the players just paid each other</td><td>Next month the store sells at no less than the highest price paid while it was sold out (up to the ceiling)</td></tr>
+<tr><td>Glut</td><td>The store stops buying and its price stays put</td><td>After a month its budget ran dry, it opens buying about 15% lower</td></tr>
+<tr><td>Energy</td><td>Sold out when it comes up in 26% of Energy auctions</td><td>The store aims to hold Energy for the MULEs the players will add too, and bids it in when short; nothing is imported</td></tr>
+<tr><td>Crystite's ship price</td><td>Never moves (100)</td><td>Moves every month, typically about 90 (most months 57 to 142), never below 40 or above 300; above 200 in about 1 month in 90, 280 or more about 1 in 1,600, 50 or less about 1 in 20; a good month tends to follow a good month</td></tr>
+<tr><td>Other export goods</td><td>Never move</td><td>Smithore, Rare earth, Alloy, Electronics and Medicine move too, about half as much, within half their usual price either way</td></tr>
+<tr><td>MULE price</td><td>Labour plus the Smithore in it, times a sell-out surcharge with no limit (up to 7,087 measured)</td><td>The same, under Smithore's ceiling, and the surcharge stops at 2 times</td></tr>
+<tr><td>Colonists first</td><td>The store keeps their month-end Food and Water back</td><td>Unchanged, and the store never buys Food or Water above what colonists can pay</td></tr>
+</tbody>
+</table></div>
+<h3 id="pricing-example">Worked example: a Food sell-out</h3>
+<p>Food's store price is 40. The store sells out during the walk, and two players then trade Food at 90. Next month the store opens selling Food at 90 or more. Today it could reach at most 66 (one +50% step to 60, plus its 10%), whatever the players paid. Its buying line moves up with it. If the shelf is empty, both lines move up further and the gap widens toward 25% each side.</p>
+<div class="box next"><h4>What is next</h4>
+<p>The written design is on pull request #390, read by the Strategy (WS1), Auctions (WS3) and AI-utility (WS9) teams, then by Heiko. Build: the first pull request brings the ceiling, the spread, the shelf lean, the sell-out and glut rules and Energy; the second brings the moving ship prices and the MULE cap. When each lands, its parts here become "In the game".</p></div>
+<p class="code-ref">Spec: <code>docs/specs/2026-11-05-ws5-store-pricing.md</code> · plan: <code>docs/plans/2026-11-05-ws5-store-pricing.md</code> · code it changes: <code>economy.ts::nextPostedPrice</code>, <code>storeQuotes</code>, <code>storeWants</code>, new <code>expectedOffWorld</code> · <code>auction.ts::comeUp</code>, <code>finishGood</code> · <code>game.ts</code> (month opening, MULE factor) · <code>config.ts::PRICE</code>, <code>MULE</code>, new <code>OFF_WORLD</code></p>
+<p class="owner">Kept current by: the Maps team (WS5) for the design; built as named edits in the Strategy team's (WS1) economy code and the Auctions team's (WS3) auction and game code.</p>
+
+<h2 id="not-in-the-game">In the economy design, not in the game <span class="pill backlog">Backlog</span></h2>
+<p>The economy design (<code>docs/design/01-economy-model.md</code>) describes several things the code does not have. Some were replaced by later rulings.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>The design says</th><th>The game today</th></tr></thead>
+<tbody>
+<tr><td>Off-world prices drift each month, with trends and events</td><td>Fixed at the reference price for the whole game (see <a href="#store-pricing-design">the store-pricing design</a>)</td></tr>
+<tr><td>Emergency purchase: the Governor orders goods at 3 times the off-world price</td><td>Not built; nothing is ever imported</td></tr>
+<tr><td>Storage buildings: warehouse, silo, cold store, tank, battery bank, vault (safe from pirates)</td><td>Not built; every player has only the home depot of 10 a good</td></tr>
+<tr><td>Forward contracts and short sales</td><td>Not built</td></tr>
+<tr><td>Windfall tax law</td><td>Not built; the laws are export, land and pollution tax and an emission cap</td></tr>
+<tr><td>A store low on capital posts no buying price</td><td>Replaced: the store never runs out of money (Heiko, 22 Oct)</td></tr>
+<tr><td>The store starts with 30 Food</td><td>Replaced: 4 Food a seat (Heiko, 5 Nov)</td></tr>
+</tbody>
+</table></div>
+<div class="box next"><h4>What is changing</h4><p>Whether any of these is still wanted, and by whom, is not recorded in the rulings read for this chapter. The PM keeps <a href="open-designs.html">Open designs and backlog</a>.</p></div>
+<p class="owner">Kept current by: the PM, with WS1.</p>
+</article>
+</main>
+</div>
+<script src="search-index.js"></script>
+<script src="rulebook.js"></script>
+</body>
+</html>

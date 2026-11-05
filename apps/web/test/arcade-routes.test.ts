@@ -1,5 +1,4 @@
 import { document, FakeElement } from './fake-dom';
-import { DEV_STEER } from '@mule/engine';
 import type { MuleView, MyView } from '@mule/protocol';
 import { act, createElement, type ComponentType } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -60,7 +59,7 @@ function clientFor(view: MuleView, role: 'player' | 'board'): TableClient {
 let root: Root | null = null;
 const host = document.createElement('div');
 
-/** What an ordinary server sends in development: no Reach for the seat, no places for the colonists. */
+/** A development view with no Reach for the seat and no places for the colonists, as before the floor's first tick. */
 function ordinary(): MuleView {
   const { reach: _none, ...me } = lenasMe();
   return devView(me as MyView);
@@ -80,49 +79,30 @@ function mount(app: ComponentType<{ room: string }>, role: 'player' | 'board', v
 afterEach(() => {
   act(() => root?.unmount());
   root = null;
-  DEV_STEER.on = false;
 });
 
 function has(testid: string, node: FakeElement = host): boolean {
   if (node.getAttribute('data-testid') === testid) return true;
   return node.childNodes.some((c) => c instanceof FakeElement && has(testid, c));
 }
-function phaseShown(node: FakeElement = host): string | null {
-  const own = node.getAttribute('data-phase');
-  if (own) return own;
-  for (const c of node.childNodes) {
-    const hit = c instanceof FakeElement ? phaseShown(c) : null;
-    if (hit) return hit;
-  }
-  return null;
-}
-
-describe('C11, C12 (AM-20): the route follows the server, not the bundle', () => {
-  it('C11: an ordinary server: development on the phone is today\'s screen, even with the browser\'s own flag on', () => {
+describe('C11, C12, C14: development is the arcade on every screen', () => {
+  it('C14: the phone never shows the tap screen in development, even for a view with no Reach yet', () => {
     mount(PhoneApp, 'player', ordinary());
-    expect(phaseShown()).toBe('development');
-    expect(has('phone-game')).toBe(false);
-    act(() => root?.unmount());
-    DEV_STEER.on = true;
-    mount(PhoneApp, 'player', ordinary());
-    expect(has('phone-game')).toBe(false);
+    expect(has('phone-game')).toBe(true);
   });
 
-  it('C11: a steering server (its Reach in the view): development on the phone is the arcade\'s landscape screen', () => {
-    expect(DEV_STEER.on).toBe(false);
+  it('C11: development on the phone is the arcade\'s landscape screen', () => {
     mount(PhoneApp, 'player', steered('player'));
     expect(has('phone-game')).toBe(true);
     expect(has('action-button')).toBe(true);
   });
 
-  it('C12: an ordinary server: the TV\'s development is today\'s, even with the browser\'s own flag on', () => {
-    DEV_STEER.on = true;
+  it('C14: the TV never shows the tap board in development, even for a view with no places yet', () => {
     mount(TableApp, 'board', ordinary());
-    expect(phaseShown()).toBe('development');
-    expect(has('tv-game')).toBe(false);
+    expect(has('tv-game')).toBe(true);
   });
 
-  it('C12: a steering server (the colonists\' places in the view): the TV draws every colonist live', () => {
+  it('C12: the TV draws every colonist live', () => {
     mount(TableApp, 'board', steered('board'));
     expect(has('tv-game')).toBe(true);
     expect(has('tv-map-stage')).toBe(true);

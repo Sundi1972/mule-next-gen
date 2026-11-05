@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Colony and politics · M.U.L.E. Rulebook</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="rulebook.css">
+</head>
+<body>
+<div class="rb-shell">
+<aside class="rb-rail"></aside>
+<main class="rb-main">
+<article>
+<h1>Colony and politics</h1>
+<p class="rb-lede">The colony is a second thing to play for. It has a fund, a mood, buildings the table pays for together, a Governor you elect and a council that votes laws. At game over it gets a score of its own. This chapter covers how each part works today and what is still being built.</p>
+
+<p>Everything in this chapter happens only when the host plays with politics, which is on by default. With politics off there is no Governor, no council, no colony fund ledger, no mood and no colony score. The sales tax still goes into the fund, and the game plays exactly as it did before politics existed. Almost every number below is a placeholder that will be tuned near the end and then shown to Heiko (ruled 4 Nov).</p>
+
+<!-- ============================================================ -->
+<h2 id="colony-gauges">The colony's four gauges <span class="pill built">In the game</span></h2>
+<p>The TV's header and the Colony desk on every phone show four gauges. Everyone sees the same numbers.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Gauge</th><th>What it counts</th><th>Good is</th></tr></thead>
+<tbody>
+<tr><td>Wealth</td><td>Everything the colony owns, in credits: the colony fund plus every player's money, goods, land and installed MULEs, valued the way Worth values them (before office credit and any Collapse cut). The note under it shows the fund alone.</td><td>High</td></tr>
+<tr><td>Environment</td><td>The air gauge, <span class="num">0</span> to <span class="num">100</span>, with its bands: Clean from <span class="num">0</span>, Smoggy from <span class="num">30</span>, Toxic from <span class="num">60</span>, Collapse from <span class="num">80</span>. Higher is dirtier.</td><td>Low</td></tr>
+<tr><td>Prestige</td><td>Points from the colony's buildings that are standing, plus lasting points from events. The note shows how many buildings stand.</td><td>High</td></tr>
+<tr><td>Happiness</td><td>The colony's mood, <span class="num">0</span> to <span class="num">100</span>, with its band name: Thriving, Content, Restless, Unhappy or Unrest. On the TV it also shows how far it moved this month.</td><td>High</td></tr>
+</tbody>
+</table></div>
+<p>Each month end the game keeps a snapshot of the gauges, so the screens can show the change since the last month. The colony score at game over is built from the same four (see <a href="#colony-score">The colony score</a>).</p>
+<div class="box why"><h4>Why it is like this</h4><p>Heiko approved WS8's colony screens on 4 Nov ("Yes, A"): four gauges in the TV header, project cards by stage at month end, the Colony desk on the phone, and the colony score as a band under the winner screen at game over.</p></div>
+<div class="box next"><h4>What is changing</h4><p><strong>Being built</strong> in the colony branch (PR #365, approved, not merged yet): at the month end the TV's Happiness gauge opens on last month's number and counts to this month's; as it crosses a band the label flips and the gauge pulses. It plays once per month end, and nothing moves in month 1 or when the mood did not change. See <a href="events.html#gauges-month-end">The Happiness gauge at the month end</a>. WS8 has also noted that the phone's air gauge keeps its own copy of the air bands and will drift if the engine's bands change; that is in the backlog.</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/colony.ts::colonyGauges</code> · <code>::colonyWealth</code> · <code>apps/server/src/colony-view.ts::colonyView</code> · <code>apps/web/src/components/Colony.tsx::ColonyGauges</code> · <code>config.ts::POLLUTION.bands</code></p>
+<p class="owner">Kept current by: WS7 (rules), WS8 (screens).</p>
+
+<!-- ============================================================ -->
+<h2 id="mood">Mood: happiness and its bands <span class="pill built">In the game</span></h2>
+<p>The colony starts every game at happiness <span class="num">60</span> (Content). At each month end it moves toward a <em>target</em> set by how the month went, but by at most <span class="num">5</span> points a month. One bad month dents the mood; a run of them sinks it. Events can also move it at once, by any amount, without that limit.</p>
+
+<h3 id="mood-bands">The bands</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Band</th><th class="n">Happiness</th></tr></thead>
+<tbody>
+<tr><td>Thriving</td><td class="n">80 to 100</td></tr>
+<tr><td>Content</td><td class="n">60 to 79</td></tr>
+<tr><td>Restless</td><td class="n">40 to 59</td></tr>
+<tr><td>Unhappy</td><td class="n">20 to 39</td></tr>
+<tr><td>Unrest</td><td class="n">0 to 19</td></tr>
+</tbody>
+</table></div>
+
+<h3 id="mood-target">What sets the month's target</h3>
+<p>The target starts at <span class="num">60</span> and each of these moves it. The result is kept between <span class="num">0</span> and <span class="num">100</span>.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Input</th><th>Effect on the target</th></tr></thead>
+<tbody>
+<tr><td>Goods the store ran short of this month</td><td><span class="num">−8</span> for each good</td></tr>
+<tr><td>Dirty air</td><td><span class="num">−0.4</span> for each air point above <span class="num">30</span></td></tr>
+<tr><td>A high sales tax</td><td><span class="num">−2</span> for each percent above <span class="num">5</span>%</td></tr>
+<tr><td>The Governor broke their tax promise this month</td><td><span class="num">−10</span></td></tr>
+<tr><td>Prestige standing</td><td><span class="num">+2</span> for each point, counting at most <span class="num">15</span> points (so at most <span class="num">+30</span>)</td></tr>
+<tr><td>The gap between the richest and the poorest player, by cash plus land (<span class="num">300</span> cr a plot)</td><td><span class="num">−2</span> for each <span class="num">1,000</span> cr of gap, counting at most <span class="num">10</span> (so at most <span class="num">−20</span>)</td></tr>
+</tbody>
+</table></div>
+<div class="box example"><h4>Example</h4><p>The mood is <span class="num">60</span>. This month the store ran out of Food and Energy (<span class="num">−16</span>), the air is at <span class="num">45</span> (<span class="num">15</span> points over, <span class="num">−6</span>), the Governor set the tax at <span class="num">7</span>% (<span class="num">−4</span>), the Hospital stands (prestige <span class="num">3</span>, <span class="num">+6</span>), and the richest player is <span class="num">2,500</span> cr ahead of the poorest (<span class="num">−5</span>). The target is 60 − 16 − 6 − 4 + 6 − 5 = <span class="num">35</span>. The mood can move only <span class="num">5</span> a month, so it ends the month at <span class="num">55</span>: Restless. If nothing changes, it keeps falling by 5 a month: 50, 45, 40, then 35, where it stops.</p></div>
+<p>The mood already changes how computer players vote: in an Unhappy or Unrest colony they will not back the sitting Governor if anyone else runs (see <a href="#ai-governor">Computer players in politics</a>). Next it will change which events happen (see <a href="#social-events">Social events</a>) and how fast the colony grows (see <a href="#migration">Mood and migration</a>).</p>
+<div class="box why"><h4>Why it is like this</h4><p>The mood is one gauge whose value shapes events, not a second event system (G-5, approved by Heiko 28 Oct). The monthly cap stops it flip-flopping. Welfare spending counts 0 until the budget lines exist (Heiko, G-5 card, 4 Nov: "5. ok"). The weights are WS1's placeholders, tuned at the end.</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/colony.ts::moodTarget</code> · <code>::moodStep</code> · <code>::moodBand</code> · <code>::wealthGap</code> · <code>config.ts::HAPPINESS</code> · G-5 RULE-20</p>
+<p class="owner">Kept current by: WS7 (the rule), WS1 (the numbers).</p>
+
+<!-- ============================================================ -->
+<h2 id="colony-fund">The colony fund and its ledger <span class="pill built">In the game</span></h2>
+<p>The colony fund is the colony's own money. It is separate from the store, which trades with its own capital. The fund never goes below <span class="num">0</span> and never borrows: when it cannot pay a bill in full, it pays what it has. Every credit in or out is recorded under where it came from or what it paid for, and each month's report carries that ledger.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Money in</th><th>How much</th></tr></thead>
+<tbody>
+<tr><td>Sales tax</td><td>On every sale a player makes, at the rate the Governor sets (it starts at <span class="num">5</span>%). The seller pays it out of the sale.</td></tr>
+<tr><td>The Federation's grant</td><td><span class="num">150</span> cr every month end. Flat for now; a rule that scales it is part of the final tuning.</td></tr>
+<tr><td>Law taxes</td><td>Export tax, land tax and pollution tax, when those laws are in force (see <a href="#council">The council</a>).</td></tr>
+<tr><td>Donations</td><td>What players give toward a building (see <a href="#donations">Donations</a>).</td></tr>
+<tr><td>The Federation tax event</td><td>When it fires, <span class="num">10</span>% of each player's cash.</td></tr>
+</tbody>
+</table></div>
+<div class="table-wrap"><table>
+<thead><tr><th>Money out</th><th>How much</th></tr></thead>
+<tbody>
+<tr><td>Office pay</td><td>The Governor, <span class="num">50</span> cr a month.</td></tr>
+<tr><td>Projects</td><td>Credits and missing goods for the building being funded.</td></tr>
+<tr><td>Upkeep</td><td>Each standing building's monthly upkeep.</td></tr>
+<tr><td>Repairs</td><td>Mending a damaged building.</td></tr>
+<tr><td>Strike pay</td><td>Paying off a general strike, <span class="num">250</span> cr.</td></tr>
+<tr><td>Site bids</td><td>A plot the colony wins at the land auction for a building.</td></tr>
+</tbody>
+</table></div>
+
+<h3 id="fund-month-end">The month end, in order</h3>
+<ol>
+<li>The land tax, then the pollution tax, from each player in seat order.</li>
+<li>The Federation's grant of <span class="num">150</span> cr.</li>
+<li>The Governor's pay.</li>
+<li>The colony's buildings: upkeep is paid, buildings under construction tick on, and the building being funded gets money (see <a href="#commissioning">Commissioning</a>).</li>
+<li>The mood moves toward its target, and the gauges' month-end snapshot is taken.</li>
+</ol>
+
+<h3 id="fund-reserve">The reserve</h3>
+<p>When the fund pays toward a building or bids for a site, it keeps <span class="num">100</span> cr back, so next month's office pay is there. The reserve does not hold back a repair or strike pay: the Governor may empty the fund for those.</p>
+<div class="box why"><h4>Why it is like this</h4><p>Heiko ruled the income mix on 4 Nov ("3. all three"): the three law taxes, donations and the Federation's grant. One place in the engine writes to the fund, so the ledger can never miss a payment.</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/colony.ts::fundIn</code> · <code>::fundOut</code> · <code>::payGrant</code> · <code>economy.ts::taxSale</code> · <code>game.ts</code> (upkeep order) · <code>config.ts::COLONY</code> · <code>::TAX</code> · G-5 RULE-27</p>
+<p class="owner">Kept current by: WS7.</p>
+
+<!-- ============================================================ -->
+<h2 id="prestige-objects">Prestige objects: what the colony can build <span class="pill built">In the game</span></h2>
+<p>The Governor can commission one of five buildings, called prestige objects. Each costs credits plus some goods, takes months to build, earns prestige while it stands, and costs upkeep every month.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Building</th><th class="n">Credits</th><th>Goods</th><th class="n">Build months</th><th>Needs a plot</th><th class="n">Prestige</th><th class="n">Upkeep a month</th><th class="n">Repair</th></tr></thead>
+<tbody>
+<tr><td>Park</td><td class="n">420</td><td>2 Alloy</td><td class="n">1</td><td>Yes</td><td class="n">2</td><td class="n">30</td><td class="n">150</td></tr>
+<tr><td>Hospital</td><td class="n">680</td><td>1 Electronics</td><td class="n">2</td><td>No</td><td class="n">3</td><td class="n">45</td><td class="n">225</td></tr>
+<tr><td>Observatory</td><td class="n">700</td><td>3 Crystite</td><td class="n">2</td><td>No</td><td class="n">3</td><td class="n">50</td><td class="n">250</td></tr>
+<tr><td>Stadium</td><td class="n">1,000</td><td>2 Alloy, 1 Electronics</td><td class="n">3</td><td>Yes</td><td class="n">4</td><td class="n">70</td><td class="n">350</td></tr>
+<tr><td>Spaceport upgrade</td><td class="n">1,380</td><td>2 Alloy, 2 Electronics</td><td class="n">3</td><td>Yes</td><td class="n">5</td><td class="n">100</td><td class="n">500</td></tr>
+</tbody>
+</table></div>
+<p>At the goods' reference prices (Alloy <span class="num">90</span>, Electronics <span class="num">220</span>, Crystite <span class="num">100</span>) the full costs are <span class="num">600</span>, <span class="num">900</span>, <span class="num">1,000</span>, <span class="num">1,400</span> and <span class="num">2,000</span> cr; about 30% of each is goods.</p>
+
+<h3 id="object-perks">What each one does besides prestige</h3>
+<p>The phone shows each building's perk. The perks belong to the social events and only work once those are in the game.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Building</th><th>Perk as the phone shows it</th><th>Built?</th></tr></thead>
+<tbody>
+<tr><td>Park</td><td>Calms the colony in a riot</td><td>Waits for the riot (designed)</td></tr>
+<tr><td>Hospital</td><td>Softens an epidemic</td><td>Not built; no rule reads it yet</td></tr>
+<tr><td>Observatory</td><td>Prestige only</td><td>Nothing to build</td></tr>
+<tr><td>Stadium</td><td>Festivals come more often</td><td>Being built: each standing Stadium adds <span class="num">5</span> points to the festival's chance (colony branch)</td></tr>
+<tr><td>Spaceport upgrade</td><td>Prestige only</td><td>Nothing to build</td></tr>
+</tbody>
+</table></div>
+
+<h3 id="object-stages">A building's life</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Stage (phone label)</th><th>What it means</th><th>Counts prestige?</th></tr></thead>
+<tbody>
+<tr><td>Commissioned ("Collecting")</td><td>Being paid for: credits, goods and, if it needs one, a plot.</td><td>No</td></tr>
+<tr><td>Building</td><td>Fully paid and sited; counts down its build months, one per month end.</td><td>No</td></tr>
+<tr><td>Standing</td><td>Built and open. Pays its upkeep at each month end.</td><td>Yes</td></tr>
+<tr><td>Closed</td><td>The fund could not pay its upkeep. It reopens at the first month end the fund can pay.</td><td>No</td></tr>
+<tr><td>Damaged</td><td>Damaged by a riot. Pays no upkeep. Open again once the Governor pays the repair.</td><td>No</td></tr>
+</tbody>
+</table></div>
+<p>Nobody ever spends prestige. The only way it falls is a building that closes or is damaged, and it counts again once reopened or repaired.</p>
+<div class="box why"><h4>Why it is like this</h4><p>Heiko, G-5 card, 4 Nov: "6. zero" (nobody spends prestige; a closed or damaged building counts 0 until it works again). The table's starting rows are WS1's affordability study; upkeep is about 5% of the credit cost a month and a repair about 25%. All are placeholders until the final tuning.</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/config.ts::PRESTIGE</code> · <code>colony.ts::colonyPrestige</code> · <code>::runColony</code> · <code>apps/web/src/game/colony.ts::PERK</code> · G-5 RULE-21</p>
+<p class="owner">Kept current by: WS7.</p>
+
+<!-- ============================================================ -->
+<h2 id="commissioning">Commissioning, funding and building <span class="pill built">In the game</span></h2>
+<p>Only the Governor commissions, in planning, once any vote that month is over. The colony works on one building at a time: while one is being paid for or built, the Governor cannot start another. Each building can be built once per game, and there is no cancel. The phone's catalogue dims a building the Governor cannot start and says why, in the engine's words, for example "The colony is already building the Hospital".</p>
+<p>From the next month end on, the fund pays toward the commissioned building:</p>
+<ol>
+<li>It pays as many of the missing credits as it can, keeping its <span class="num">100</span> cr reserve.</li>
+<li>For each missing good, it buys what it can from the store at the store's selling price: no more than is missing, no more than the store will sell, and no more than the fund can pay above its reserve. No sales tax is charged on these.</li>
+<li>Once every credit and every good is in, and the building has its plot if it needs one, building starts. It does not count down until the next month end.</li>
+</ol>
+<p>Players can speed this up by donating credits or the goods it still needs (see <a href="#donations">Donations</a>).</p>
+<div class="box example"><h4>Example: the Observatory needs 3 Crystite</h4><p>The Governor commissions the Observatory in month 4. At that month end, after the grant and the Governor's pay, the fund holds <span class="num">900</span> cr. It pays the <span class="num">700</span> cr at once and has <span class="num">200</span> left, so only <span class="num">100</span> above its reserve. The store sells Crystite at about <span class="num">110</span> cr and starts the game with none on its shelves, so the fund buys nothing. The Observatory waits, fully paid in credits, for its 3 Crystite. In month 5 a player who mines Crystite donates 3 units: the plaque gets their name with <span class="num">300</span> cr (3 × the reference price of <span class="num">100</span>), and building starts. It stands after two more month ends, at the end of month 7, and pays <span class="num">50</span> cr upkeep from the end of month 8.</p></div>
+<div class="box why"><h4>Why it is like this</h4><p>"One project open at a time" keeps the colony's money from being spread thin. The fund buying missing goods from the store was a question put to Heiko on 4 Nov; the engine has it on behind a switch (<code>COLONY.fundBuysGoods</code>), so that only donors' goods count once it is turned off.</p></div>
+<div class="box next"><h4>What is changing</h4><p>Whether the fund should buy goods from the store at all is still listed as open with Heiko in the PM's log of 4 Nov (the switch is on today). Owner: WS7, decision Heiko.</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/colony.ts::commission</code> · <code>::commissionRefusal</code> · <code>::stillNeeds</code> · <code>::runColony</code> · <code>config.ts::COLONY.maxOpen</code> · <code>::COLONY.reserve</code> · G-5 RULE-21, RULE-22</p>
+<p class="owner">Kept current by: WS7.</p>
+
+<!-- ============================================================ -->
+<h2 id="donations">Donations and plaques <span class="pill built">In the game</span></h2>
+<p>Any player can donate in planning toward the building being funded: credits, or units of a good it still needs, or both. You cannot give more credits than it still needs, a good it does not need, more units than are missing, or more than you have. Each refusal says exactly why ("The Observatory still needs 2 crystite").</p>
+<p>Every donation goes on the building's plaque under your name, valued at credits plus each good at its reference price. The same value counts as taxes you have paid, which can earn you votes (see <a href="#vote-weight">Your votes</a>). At game over, each player's plaques are shown beside their Worth.</p>
+<div class="box example"><h4>Example</h4><p>Kai gives the Hospital <span class="num">200</span> cr and 1 Electronics (reference price <span class="num">220</span>). His plaque reads <span class="num">420</span>, and <span class="num">420</span> is added to his taxes paid. That alone takes him past <span class="num">300</span>, worth one extra vote.</p></div>
+<div class="box next"><h4>What is changing</h4><p>Computer players do not donate yet. WS9 has an approved plan for it (C28): placeholders per persona in the politics config, a decision of how much to give, and a test. Status: designed, not on any branch I could find.</p><p>Open question for Heiko: his scoring decision of 28 Oct said "colony donations count 1:1" in Worth. The colony score rule approved by the PM on 5 Nov shows plaques <em>beside</em> Worth, never in it, and that is what the game does: a donation lowers your Worth by what you gave. Owner: WS7, decision Heiko.</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/colony.ts::donate</code> · <code>game.ts::playerStanding</code> · <code>apps/web/src/components/ColonyActions.tsx</code> (Donate) · G-5 RULE-23</p>
+<p class="owner">Kept current by: WS7; WS9 for computer players' donations.</p>
+
+<!-- ============================================================ -->
+<h2 id="site-bid">The colony's site and its bid <span class="pill built">In the game</span></h2>
+<p>The Park, the Stadium and the Spaceport upgrade need a plot. The colony gets one at the land auction, bidding from the fund like a player, up to a top bid the Governor sets on the phone (in steps of <span class="num">25</span> cr). A newly commissioned building has no bid, so the colony does not bid until the Governor sets one; everyone's phone shows "Waits for a plot: the Governor sets the colony's bid" until then.</p>
+<p>The colony bids as a <em>proxy</em>, the way an auction site bids for you: on any player's plot that comes up, it leads at one credit over the best player's bid (or at the lot's minimum if nobody bids), as long as that stays under its cap. Its cap is the Governor's top bid or what the fund holds above its <span class="num">100</span> cr reserve, whichever is lower. A player who bids up to the cap takes the lead. It never bids for MULEs or for the colony's own lots.</p>
+<p>If the colony wins, the fund pays the seller (who pays sales tax as on any sale), any MULE on the plot goes back to the corral, and the plot becomes the colony's, bare, as the building's site. A plot with a building on it produces nothing.</p>
+<div class="box example"><h4>Example</h4><p>The Park waits for a plot. The Governor sets the bid to <span class="num">300</span> cr; the fund holds <span class="num">350</span>, so the cap is <span class="num">250</span> (350 minus the 100 reserve). Brix lists a plot with a minimum of <span class="num">120</span>. Lena bids <span class="num">180</span>: the colony leads at <span class="num">181</span>. Lena walks to <span class="num">250</span>, the cap: now she leads, and the colony stops. Had she stopped at 200, the colony would have won at <span class="num">201</span>.</p></div>
+<div class="box why"><h4>Why it is like this</h4><p>Heiko, G-5 card, 4 Nov: "4. it bids". The proxy rule was approved by the PM on 5 Nov (G-5 AM-8).</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/colony.ts::setSiteBid</code> · <code>::siteProject</code> · <code>lots.ts::colonyBid</code> · <code>::lotLeader</code> · G-5 RULE-28</p>
+<p class="owner">Kept current by: WS7 (the bid), WS3 (the land auction).</p>
+
+<!-- ============================================================ -->
+<h2 id="elections">Offices and elections <span class="pill built">In the game</span></h2>
+<p>The colony elects a Governor in months <span class="num">1</span>, <span class="num">4</span>, <span class="num">7</span> and <span class="num">10</span>. A term runs until the next election. The Governor is paid <span class="num">50</span> cr a month from the fund (as far as it reaches), and every term served adds <span class="num">1,200</span> cr to that player's Worth, about one good month's income.</p>
+
+<h3 id="running">Running for office</h3>
+<p>You can declare in any month's planning, not only in election months: "Throw your hat in the ring" on the phone. Running for Governor carries a tax promise, one of three:</p>
+<ul>
+<li><strong>Cap:</strong> the tax will be no higher than a percent you name (<span class="num">0</span> to <span class="num">15</span>).</li>
+<li><strong>Lower:</strong> the tax will be below where it is when you take office.</li>
+<li><strong>Hold:</strong> the tax will stay where it is when you take office.</li>
+</ul>
+<p>You can change your promise or withdraw until the field closes. It closes as an election month opens (in month 1, whose planning is the first, it stays open through the announcement). Nobody may serve more than <span class="num">2</span> Governor terms in a row; after that someone else must hold it before they can run again.</p>
+
+<h3 id="election-day">Election day</h3>
+<ol>
+<li><strong>The announcement.</strong> Every phone and the TV show who runs and on what promise. Each player taps Ready to vote.</li>
+<li><strong>The secret ballot.</strong> If two or more people run, each player picks one or abstains, then taps Cast my vote. Nobody, not even the TV, sees whom you chose. There is no clock: it closes once everyone has voted, or when the host closes it for someone who is away.</li>
+<li><strong>The reveal.</strong> On the TV and every phone at once: the office's title, the candidates, then one block per vote growing beside each name, then the winner and the congratulations. One office with two candidates and six votes takes about <span class="num">13</span> seconds.</li>
+</ol>
+<p>Votes are weighted (see <a href="#vote-weight">Your votes</a>). Weights are taken as the ballot closes. The Governor then sets the sales tax.</p>
+
+<h3 id="election-outcomes">How the winner is found</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Situation</th><th>Result</th></tr></thead>
+<tbody>
+<tr><td>Nobody runs</td><td>The richest player (by cash) is appointed. An appointed Governor made no promise.</td></tr>
+<tr><td>One person runs</td><td>Unopposed; no ballot.</td></tr>
+<tr><td>Most weighted votes</td><td>Wins.</td></tr>
+<tr><td>A tie</td><td>The Land Baron's ballot decides, if the Baron voted for one of the tied; otherwise the tied candidate with the most plots; otherwise a fair draw.</td></tr>
+</tbody>
+</table></div>
+
+<h3 id="sheriff-office">The Sheriff and the Land Baron</h3>
+<p>Only the Governor is elected today. The Sheriff comes back when it has powers (see <a href="#sabotage-sheriff">Sabotage and the Sheriff</a>); its pay of <span class="num">30</span> cr a month is in the config but nobody draws it. The Land Baron is not an office: it is a title, fixed at the start of each planning phase, for whoever owns strictly the most plots. On a tie for most, the current Baron keeps it if they are among the tied; otherwise nobody holds it. The Baron gets <span class="num">1</span> extra vote and breaks tied elections. The Baron's 10% discount at the land auction and choosing which lot goes first (design 05) are not built.</p>
+<div class="box why"><h4>Why it is like this</h4><p>Heiko, 28 Oct: "I should be able to run for office anytime. Even in no election months ... time for diplomacy and to adjust my promise", and the ballot closes once everybody has voted, then a dramatic reveal, office by office. On the Sheriff, Heiko 28 Oct: "Governor only for now". The month-1 tie-break used to favour the host's seat; the PM approved the Baron-then-land-then-draw order on 28 Oct. Office credit of 1,200 a term was WS1's measurement of a good month's Worth gain, accepted the same day.</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/politics.ts::runFor</code> · <code>::canRun</code> · <code>::stepElection</code> · <code>::decide</code> · <code>::appointee</code> · <code>::landBaron</code> · <code>::officeScore</code> · <code>config.ts::POLITICS</code> (electionMonths, offices, maxGovernorTermsInRow, pay, termScore, ceremony) · <code>apps/web/src/phone/hub/politics/ElectionDay.tsx</code> · <code>Reveal.tsx</code> · <code>Run.tsx</code></p>
+<p class="owner">Kept current by: WS7.</p>
+
+<!-- ============================================================ -->
+<h2 id="vote-weight">Your votes: vote weight <span class="pill built">In the game</span></h2>
+<p>Everyone has <span class="num">1</span> vote, plus extras worked out fresh every time a ballot closes. The same weights count in elections and law votes. The TV's election screen shows everyone's votes, and your phone shows your own on each ballot.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Part</th><th>Votes</th></tr></thead>
+<tbody>
+<tr><td>Base</td><td><span class="num">1</span></td></tr>
+<tr><td>Land</td><td><span class="num">+1</span> per <span class="num">10</span> plots you own</td></tr>
+<tr><td>Reputation</td><td><span class="num">+1</span> at <span class="num">70</span> or more, <span class="num">−1</span> below <span class="num">30</span> (everyone starts at <span class="num">50</span>)</td></tr>
+<tr><td>Land Baron</td><td><span class="num">+1</span></td></tr>
+<tr><td>Taxes and donations paid into the fund</td><td><span class="num">+1</span> per <span class="num">300</span> cr paid over the game, at most <span class="num">+2</span></td></tr>
+</tbody>
+</table></div>
+<p>"Taxes paid" counts the sales tax you paid on your sales, the export, land and pollution taxes you paid, and the value of your donations.</p>
+<div class="box example"><h4>Example</h4><p>Lena owns 12 plots, the most, so she is the Land Baron. Her reputation is 50. She has paid <span class="num">650</span> cr in taxes and donations. Her votes: 1 base + 1 land + 0 reputation + 1 Baron + 2 taxes (650 ÷ 300, rounded down) = <span class="num">5</span>.</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/politics.ts::voteWeight</code> · <code>config.ts::POLITICS.weight</code> · <code>::START.reputation</code></p>
+<p class="owner">Kept current by: WS7.</p>
+
+<!-- ============================================================ -->
+<h2 id="sales-tax">The Governor's sales tax and promises <span class="pill built">In the game</span></h2>
+<p>The sales tax starts at <span class="num">5</span>%. Once the month's votes are over, the Governor can set it on the Governor desk, in whole percent from <span class="num">0</span> to <span class="num">15</span>, and at most <span class="num">5</span> points up or down from where it stood when the month began. The desk shows the allowed range and the promise the Governor ran on.</p>
+<p>At the end of each planning phase the game checks the Governor's promise against the tax as it stands. A broken promise lowers that month's mood target by <span class="num">10</span>. Nothing is checked in a planning phase whose election was still open, since the Governor could not set the tax yet.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Promise</th><th>Broken when the tax is</th><th>Example</th></tr></thead>
+<tbody>
+<tr><td>Cap at N%</td><td>above N</td><td>cap 6, tax 7: broken</td></tr>
+<tr><td>Lower</td><td>at or above the rate when the term began</td><td>lower from 5, tax 4: kept</td></tr>
+<tr><td>Hold</td><td>anything but the rate when the term began</td><td>hold at 5, tax 5: kept</td></tr>
+</tbody>
+</table></div>
+<p class="code-ref">In the code: <code>packages/engine/src/politics.ts::setSalesTax</code> · <code>::taxBounds</code> · <code>colony.ts::keepPromise</code> · <code>config.ts::POLITICS.tax</code> · <code>::TAX.salesTax</code> · <code>apps/web/src/phone/hub/politics/Governor.tsx</code> · G-5 RULE-24</p>
+<p class="owner">Kept current by: WS7.</p>
+
+<!-- ============================================================ -->
+<h2 id="council">The council and its four laws <span class="pill built">In the game</span></h2>
+<p>Once a month, after the votes are over, the Governor may propose one law, a new setting for a law in force, or the repeal of one. The proposal is voted on at the start of the <em>next</em> month's planning, after that month's election if there is one. If the proposer is no longer Governor by then, the proposal is dropped.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Law</th><th>Settings</th><th>What it does</th><th>When it is charged</th></tr></thead>
+<tbody>
+<tr><td>Export tax</td><td><span class="num">10</span>, <span class="num">20</span> or <span class="num">30</span>%</td><td>That share of each unit a player sells to the export ship goes into the fund, after the sales tax and out of the sale. Sales to the store or to another player pay none.</td><td>At each sale to the ship</td></tr>
+<tr><td>Land tax</td><td><span class="num">5</span>, <span class="num">10</span> or <span class="num">20</span> cr a plot</td><td>Every owner pays per plot owned.</td><td>Month end</td></tr>
+<tr><td>Pollution tax</td><td><span class="num">10</span>, <span class="num">20</span> or <span class="num">40</span> cr a point</td><td>Each player pays per point of colony pollution their plots caused that month.</td><td>Month end</td></tr>
+<tr><td>Emission cap</td><td>Air level <span class="num">40</span>, <span class="num">50</span> or <span class="num">60</span></td><td>No MULE may be outfitted for Rare earth or Alloy (no new Rare earth mines or smelters) while the air is above the level. The refusal comes before you pay.</td><td>When outfitting</td></tr>
+</tbody>
+</table></div>
+<p>A player who cannot pay a land or pollution tax pays what they have; the rest is waived, not owed. Every law tax counts toward that player's taxes paid, and so toward votes.</p>
+
+<h3 id="council-rules">Rules for laws</h3>
+<ul>
+<li>At most <span class="num">3</span> laws are in force at once. A fourth must name the law it replaces.</li>
+<li>A proposal that fails cannot be put again for <span class="num">2</span> months: one that fails in month 3 can come back in month 6.</li>
+<li>A law stays in force until it is replaced or repealed. A repeal is a normal proposal.</li>
+<li>The sales tax is not a law: the Governor sets it alone.</li>
+</ul>
+<div class="box example"><h4>Example</h4><p>A land tax of <span class="num">10</span> is in force. At month end Ossa owns 7 plots and has <span class="num">500</span> cr: she pays <span class="num">70</span>. If she had only <span class="num">40</span> she would pay 40 and the other 30 would be waived. With an export tax of <span class="num">20</span>% and the sales tax at <span class="num">5</span>%, a unit sold to the ship for <span class="num">100</span> leaves the seller <span class="num">75</span>.</p></div>
+<div class="box why"><h4>Why it is like this</h4><p>Heiko, G-5 card, 4 Nov: "2. thous four now": the first laws are the land tax, export tax, pollution tax and emission cap, the four that only move money or block an action. The sabotage ban and the Sheriff's fines come with the Sheriff. The other laws in design 05 (price cap, strategic reserve, anti-hoarding, windfall tax, anti-monopoly, eminent domain, green zone) wait for the systems they need. Slice 2a and the colony joined the MVP the same day ("7. yes i want them in").</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/politics.ts::proposeLaw</code> · <code>::collectLawTaxes</code> · <code>::chargeExportTax</code> · <code>::emissionCapped</code> · <code>::outfitBlocked</code> · <code>config.ts::POLITICS.laws</code> · <code>::POLITICS.council</code> · slice 2a RULE-41, RULE-43, RULE-44</p>
+<p class="owner">Kept current by: WS7.</p>
+
+<!-- ============================================================ -->
+<h2 id="law-ballot">The law ballot on the phones and the TV council <span class="pill built">In the game</span></h2>
+<p>All month, every phone except the Governor's carries the pending proposal under This month as "Next month's vote", with what it would cost that player ("For you"). When the ballot opens it takes the stage on every phone and on the TV.</p>
+<ul>
+<li><strong>On your phone:</strong> the proposal, what it costs you a month (or saves you, for a repeal), Yes or No, then Done. You can change your vote until the last vote is in. There is no clock; the host can close the vote for someone who is away, and the votes as they stand are counted.</li>
+<li><strong>On the TV:</strong> "Vote on your phone. Nobody sees how." The Governor's proposal in large type, what it means, each player's cost, and who has voted, never how.</li>
+<li><strong>The result:</strong> after everyone is Done, the weighted Yes and No totals and Passed or Failed show on every screen at once for <span class="num">4</span> seconds. A passed law takes effect when that ends. The laws in force then sit as chips along the TV's foot and on the Council desk ("Land tax 10 cr · since month 3").</li>
+</ul>
+<p>The Governor's own ballot starts at Yes, and the Governor's ballot breaks a tie: a tie passes if the Governor voted Yes.</p>
+
+<h3 id="law-cost-preview">What a law would cost you</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Law</th><th>"For you", a month</th></tr></thead>
+<tbody>
+<tr><td>Land tax</td><td>The setting × the plots you own.</td></tr>
+<tr><td>Pollution tax</td><td>The setting × the pollution your plots caused last month (0 before the first production).</td></tr>
+<tr><td>Export tax</td><td>The setting's share of what your stock of the goods the ship wants would fetch off-world, if you sold it to the ship.</td></tr>
+<tr><td>Emission cap</td><td>Whether it would block outfits now, and how many of your plots are Rare earth mines or smelters.</td></tr>
+<tr><td>A repeal</td><td>The same figure, as a saving.</td></tr>
+</tbody>
+</table></div>
+<h3 id="law-ballot-weight">How much each vote weighs <span class="pill progress">Being built</span></h3>
+<p>Each vote is weighed when the ballot closes, from what its voter holds at that moment: land, good name (reputation), taxes paid and the Land Baron's extra vote (see <a href="#vote-weight">Your votes</a>). A player who bought land since the election may carry more votes than at the election. Your phone's "Your vote weighs N" already reads this live weight.</p>
+<p>Today the TV's line under the vote count still says "Each vote weighs as it did at the election", which is wrong. In the colony branch it reads: "Each vote weighs by what its voter holds when the ballot closes: land, good name, taxes paid, the Land Baron."</p>
+<div class="box why"><h4>Why it is like this</h4><p>The engine's count (<code>tally</code>, RULE-42) asks for each voter's weight as the ballot closes, and the weight is always worked out from the game as it stands (RULE-4). The rulebook writers found the TV's words disagreed. WS7, which owns the rule, has been asked to confirm the new wording.</p></div>
+<div class="box next"><h4>What is changing</h4><p><strong>Being built:</strong> the new TV line is PR #392 (Events team, WS8), open into the colony branch (<code>ws7-politics</code>). Once merged there, it reaches trunk with the next colony batch.</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/politics.ts::castLawVote</code> · <code>::stepVotes</code> · <code>::tally</code> · <code>::lawImpact</code> · <code>apps/web/src/phone/hub/politics/LawBallot.tsx</code> · <code>LawPicker.tsx</code> · <code>slots.ts</code> · <code>apps/web/src/table/TvCouncil.tsx</code> · <code>politics.ts::voteWeight</code> · slice 2a RULE-40, RULE-42, RULE-45, RULE-47</p>
+<p class="owner">Kept current by: WS7 (rules), WS8 (the picker, the ballot and the TV council).</p>
+
+<!-- ============================================================ -->
+<h2 id="colony-desks">The colony desks on your phone <span class="pill built">In the game</span></h2>
+<p>In planning, politics lives on three desks of the phone's hub. All three appear only in a politics game.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Desk</th><th>Who sees it</th><th>What is on it</th></tr></thead>
+<tbody>
+<tr><td>Colony</td><td>Everyone</td><td>The colony fund: how much is in it, what fills it (the sales tax and who sets it) and the Governor's pay. For the Governor, "Commission a project": the five buildings with their cost, build months, plot need and upkeep, one the colony cannot start dimmed with the reason. The colony card: the four gauges, then the build site, each building at its stage with its buttons: Donate, the site bid (the Governor sets it; others see it), Repair (the Governor). Then the Land Baron and the air.</td></tr>
+<tr><td>Council</td><td>Everyone</td><td>The laws in force, this month's result once the election is over, the pending proposal with your cost, the last election's result with each candidate's votes and how the office was won, running for office with your promise, and what the Governor does.</td></tr>
+<tr><td>Governor</td><td>The Governor only; it opens first</td><td>The sales tax within this month's range, with the promise in view; then next month's law: all four laws with their settings as chips, "This replaces:" when three are in force, each player's cost before Propose, and Change or Withdraw while it is pending.</td></tr>
+</tbody>
+</table></div>
+<p>The hub's This month list also carries "Throw your hat in the ring" (while an election is still to come and you may run), "Next month's vote" and, for the Governor, "Governor's desk". Every button sends one request; the server decides, and a refusal comes back in the engine's own words.</p>
+<div class="box why"><h4>Why it is like this</h4><p>The desks are grafted from WS8's approved desk mock (C35 and C46 share one mock). The colony screens follow the mock Heiko approved on 4 Nov.</p></div>
+<div class="box next"><h4>What is changing</h4><p><strong>Being built</strong> for the colony branch: the general strike on the phones and the TV (PR #368, open). Once the votes are over, the Governor's Now card offers Pay the strikers and Let them strike; a Governor who has already pressed Ready gets a pay line under Now instead; everyone else gets an alert line under Now. See <a href="events.html#strike-on-screen">The general strike on screen</a>. The colony's mood events in the event show, with their changes to the gauges in words, are PR #364 (approved, open).</p></div>
+<p class="code-ref">In the code: <code>apps/web/src/phone/hub/politics/Colony.tsx::ColonyWithFacts</code> · <code>Council.tsx</code> · <code>Governor.tsx</code> · <code>slots.ts</code> · <code>apps/web/src/components/ColonyActions.tsx</code> · <code>apps/web/src/components/Colony.tsx::ColonyDeskCard</code></p>
+<p class="owner">Kept current by: WS7 (desks), WS8 (colony card), WS6 (hub).</p>
+
+<!-- ============================================================ -->
+<h2 id="ai-governor">Computer players in politics <span class="pill built">In the game</span></h2>
+<p>Every computer seat, Classic or Smart, plays politics with the same built-in rules; Claude does not take politics decisions yet. What a computer player does depends on its persona: Trader, Cautious, Aggressive or Saboteur. On election day it waits a human's pause (<span class="num">0.8</span> to <span class="num">2.5</span> seconds) before it acts and presses Done; on a law ballot it votes and presses Done at once, so no ballot waits for a computer seat.</p>
+
+<h3 id="ai-running">Running and voting</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Persona</th><th class="n">Runs for Governor</th><th class="n">Tax it steers toward</th><th class="n">Proposes its best law</th></tr></thead>
+<tbody>
+<tr><td>Trader</td><td class="n">50%</td><td class="n">5%</td><td class="n">50%</td></tr>
+<tr><td>Cautious</td><td class="n">30%</td><td class="n">4%</td><td class="n">30%</td></tr>
+<tr><td>Aggressive</td><td class="n">80%</td><td class="n">8%</td><td class="n">70%</td></tr>
+<tr><td>Saboteur</td><td class="n">60%</td><td class="n">10%</td><td class="n">60%</td></tr>
+</tbody>
+</table></div>
+<ul>
+<li><strong>When it runs:</strong> it decides once per election, in the planning phase one month before (for month 1, at month 1's announcement). Its promise follows its tax target: a cap at its target if that is above today's tax, "lower" if below, "hold" if equal. (There are chances for running for Sheriff too, but no Sheriff is elected.)</li>
+<li><strong>How it votes for Governor:</strong> for itself if it runs; otherwise for the candidate with the fewest plots, so the table leans against the leader (a tie is a fair draw; a Rookie picks at random). In an Unhappy or Unrest colony it will not vote for the sitting Governor if anyone else runs.</li>
+<li><strong>How it votes on a law:</strong> the Governor always votes Yes. The Land Baron always votes No to a land tax. A Rookie flips a coin. Otherwise it votes Yes to a new law if the law costs it no more than the middle player's cost, and Yes to a repeal if the law costs it more than the middle player.</li>
+</ul>
+
+<h3 id="ai-as-governor">What a computer Governor does</h3>
+<p>Each planning phase, once the votes are over, a computer Governor acts in this order:</p>
+<ol>
+<li><strong>Sets the tax.</strong> One step toward its persona's target, at most <span class="num">5</span> points, plus <span class="num">2</span> points when the fund is low (from month 2, under three months of the Governor's pay, so under <span class="num">150</span> cr), always inside the month's allowed range.</li>
+<li><strong>Proposes a law.</strong> It looks at every law: each law not in force at its middle setting (export tax 20%, land tax 10, pollution tax 20, emission cap 50) and the repeal of each law in force. It picks the one that costs the leader (the other player with the highest Worth) most compared with itself. It proposes only if that gap is at least <span class="num">20</span> cr a month, and then only with its persona's chance. With three laws in force, the new one replaces the law that costs it most.</li>
+<li><strong>Pays a general strike</strong> if its persona does and the fund holds the <span class="num">250</span> cr.</li>
+<li><strong>Repairs</strong> damaged buildings, the most prestige first, while the fund covers the cost, if its persona does.</li>
+<li><strong>Bids for sites:</strong> gives every building waiting for a plot its persona's top bid.</li>
+<li><strong>Commissions</strong> the building with the most prestige whose credits the fund holds now (the cheaper one on a tie), if its persona commissions and the colony is free to start one. It picks a building that needs a plot only if its persona bids for sites, and sets that bid at once.</li>
+</ol>
+<div class="table-wrap"><table>
+<thead><tr><th>Persona</th><th>Commissions</th><th>Pays strikers</th><th>Repairs</th><th class="n">Top site bid</th></tr></thead>
+<tbody>
+<tr><td>Trader</td><td>Yes</td><td>Yes</td><td>Yes</td><td class="n">400</td></tr>
+<tr><td>Cautious</td><td>Yes</td><td>Yes</td><td>Yes</td><td class="n">300</td></tr>
+<tr><td>Aggressive</td><td>Yes</td><td>No</td><td>Yes</td><td class="n">500</td></tr>
+<tr><td>Saboteur</td><td>No</td><td>No</td><td>No</td><td>Never bids</td></tr>
+</tbody>
+</table></div>
+<div class="box example"><h4>Example</h4><p>An Aggressive computer is Governor in month 5. The tax stands at 5% and the fund at <span class="num">1,100</span> cr. Its target is 8%, so it sets 8% (a step of 3). The fund is not low, so there is no bump. Nothing is damaged and there is no strike. The Spaceport upgrade's <span class="num">1,380</span> cr is more than the fund holds; the Stadium's <span class="num">1,000</span> is not, and it has the most prestige of the rest (4). It commissions the Stadium and bids up to <span class="num">500</span> cr for its plot. Had a Saboteur been Governor, it would have raised the tax toward 10% and built nothing.</p></div>
+<div class="box why"><h4>Why it is like this</h4><p>The PM approved the computer Governor's colony steps on 5 Nov under Heiko's design authority: pay the strike, then repair the most prestige first, then commission the most prestige it can afford (plot-needing only with a site budget), then set the site bid. The council's own draws use a separate seeded stream per seat and month, so adding the council moved no other dice in a replay. All persona numbers are placeholders until the sim tunes them.</p></div>
+<div class="box next"><h4>What is changing</h4><p>Computer players donating (C28, WS9, designed). Claude taking politics decisions for Smart seats, and making deals, waits for the deal cards (see <a href="#reputation-deals">Reputation and deal cards</a>).</p></div>
+<p class="code-ref">In the code: <code>packages/ai/src/hands/vote.ts::VoteHand</code> · <code>::nextTax</code> · <code>config.ts::POLITICS.ai</code> (runGovernor, taxTarget, taxFundBump, fundMonths, council, colony) · slice 2a RULE-46 · G-5 C25</p>
+<p class="owner">Kept current by: WS7 (rules), WS1 (the hands and the numbers).</p>
+
+<!-- ============================================================ -->
+<h2 id="general-strike">The general strike <span class="pill progress">Being built</span></h2>
+<p>A general strike is a colony event announced in planning. The colonists who work one good stop: this month every working plot of that good makes only <span class="num">20</span>% of its output, unless the Governor pays the strikers <span class="num">250</span> cr from the fund. Paid, the plots produce in full.</p>
+<ul>
+<li>The strike hits the good that the most working plots make (a tie is settled on the event's dice). With no working plots there is no strike.</li>
+<li>Only the Governor can pay, in that month's planning, once the votes are over. The reserve does not hold back: paying may empty the fund. If the fund holds less than <span class="num">250</span>, the Governor cannot pay and the strike holds. With no Governor, nobody can pay.</li>
+<li>Unpaid, production makes <span class="num">20</span>% (rounded down) of each struck plot's output, after every other effect on it.</li>
+<li>Its chance rises with a bad mood: <span class="num">+2</span> points a month when Restless, <span class="num">+5</span> Unhappy, <span class="num">+10</span> in Unrest, <span class="num">+3</span> more when the store's Food costs more than <span class="num">1.5</span> times its usual <span class="num">30</span> cr. It never happens in a Thriving colony, and never in the same month as a festival.</li>
+</ul>
+<div class="box example"><h4>Example</h4><p>The colony is Unhappy and Food sells at <span class="num">55</span>. The strike's chance this planning is 5 + 3 = <span class="num">8</span> points. It fires on Food. Lena, the Governor, has <span class="num">400</span> in the fund and pays: the fund drops to <span class="num">150</span>, the news says "Lena pays the food strikers 250 cr", and every Food plot produces in full. Had she not, a plot that would make 5 Food makes 1.</p></div>
+<h3 id="strike-status">What is on trunk and what is not</h3>
+<p>On trunk today: the pay-off rule, the server's pay request and the computer Governor paying by persona. But no event starts a strike on trunk yet, and the phone has no button to pay one, so a strike cannot happen in a trunk game.</p>
+<div class="box why"><h4>Why it is like this</h4><p>The catalogue Heiko approved (rev 22) says a strike is announced now and this month every plot of one good makes 20% unless the Governor pays. The share has one number, <code>COLONY.strike.output</code>, beside the cost (PM ruling 5 Nov). On how it looks, the PM approved WS8's option A on 5 Nov: the Governor's choice sits in the phone's Now card, so the map stays in view and the decision cannot drift.</p></div>
+<div class="box next"><h4>What is changing</h4><p>The event and its production effect (C26 PR-A, PR #370) merged into the colony branch on 5 Nov; it reaches trunk with the next colony batch. <strong>Being built:</strong> the strike on the TV and phones is PR #368 (Events team, WS8; open, into the colony branch): a STRIKE or PAID badge in the TV header, strikers on the struck good's plots in planning, the Governor's Now card with Pay and Let them strike once the votes are over (or a pay line under Now for a Governor already Ready), everyone else's alert line, "Waiting for Kai, the Governor" on the TV, and the paid news line. Every screen is described in <a href="events.html#strike-on-screen">The general strike on screen</a>.</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/colony.ts::callStrike</code> · <code>::strikeHolds</code> · <code>::payStrike</code> · <code>config.ts::COLONY.strike</code> (trunk: <code>cost</code>; colony branch adds <code>output: 0.2</code>) · colony branch <code>events.ts::strikeEvent</code>, <code>config.ts::SOCIAL_EVENTS.colony.generalStrike</code> · G-5 RULE-26</p>
+<p class="owner">Kept current by: WS7 (the pay-off), WS1 (the event), WS8 (screens).</p>
+
+<!-- ============================================================ -->
+<h2 id="social-events">Social events: the mood shapes what happens <span class="pill progress">Being built</span></h2>
+<p>The colony's mood tilts the odds of the colony's social events. It does not make more events in total: it changes which ones come. Each event rolls on its own dice like every other event. A mood band can add to an event's chance, and some events can never happen in some bands. None of these happen with politics off.</p>
+
+<h3 id="planning-social-events">The planning events (PR-A, in the colony branch)</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Event</th><th>Chance a month</th><th>Never in</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td>Festival</td><td><span class="num">1</span>%; <span class="num">+5</span> Thriving, <span class="num">+1</span> Content, <span class="num">+5</span> for each standing Stadium</td><td>Unhappy, Unrest; never with a strike</td><td>Mood <span class="num">+10</span> at once; <span class="num">+2</span> prestige for good; the colonists eat <span class="num">25</span>% more Food this month</td></tr>
+<tr><td>General strike</td><td>0; <span class="num">+2</span> Restless, <span class="num">+5</span> Unhappy, <span class="num">+10</span> Unrest, <span class="num">+3</span> when Food is dear</td><td>Thriving</td><td>See <a href="#general-strike">The general strike</a></td></tr>
+<tr><td>Emigration wave</td><td>0; <span class="num">+1</span> Restless, <span class="num">+4</span> Unhappy, <span class="num">+8</span> Unrest, <span class="num">+3</span> when the air is Toxic or in Collapse</td><td>none</td><td><span class="num">10</span>% of the colonists leave for good</td></tr>
+<tr><td>Immigration wave (its mood part)</td><td>its <span class="num">2</span>%; <span class="num">+6</span> Thriving, <span class="num">+1</span> Content</td><td>Unhappy, Unrest</td><td>The colony grows by <span class="num">10</span>% (as today)</td></tr>
+<tr><td>Blamed for the unrest (each player's own roll)</td><td>0; <span class="num">+2</span> Unhappy, <span class="num">+5</span> Unrest, <span class="num">+2</span> for the richest player</td><td>none yet (see below)</td><td>That player loses <span class="num">1</span> reputation</td></tr>
+</tbody>
+</table></div>
+<p>Every chance is capped at <span class="num">90</span>%. Chances are in percentage points per month, and all are placeholders.</p>
+
+<h3 id="riot">Riots and the other events (PR-B, designed)</h3>
+<p>PR-B adds the events that roll in development, production and the month end: the store strike, MULE theft's mood part (development); the walkout and the loyal crew (production, personal); the riot and the volunteer clean-up (month end). Ruled so far:</p>
+<ul>
+<li><strong>The riot:</strong> for each good, the store loses a third of its stock, rounded down, so a shelf of 1 or 2 loses nothing. The share is a named config fraction, <span class="num">1/3</span>. A riot can also damage a colony building (which then counts no prestige until repaired; see <a href="#prestige-objects">Prestige objects</a>); the event picks the building on its own dice. A standing Park calms the colony in a riot.</li>
+<li><strong>Blamed for the unrest</strong> will never happen in a Thriving or Content colony.</li>
+<li><strong>The immigration wave</strong> gets air parts: more likely in clean air, never when the air is Toxic.</li>
+</ul>
+<div class="box example"><h4>Example: a riot at the store</h4><p>The store holds 7 Food, 2 Water and 12 Smithore. A riot takes 2 Food (7 ÷ 3, rounded down), no Water (2 ÷ 3 rounds to 0) and 4 Smithore. The event's line shows exactly what was lost.</p></div>
+<div class="box why"><h4>Why it is like this</h4><p>G-5 (Heiko, 28 Oct) asks that unhappy months draw at least twice the strikes and thefts of thriving months, and that a strike cuts the struck good's plots to 20%. The rows come from the event catalogue Heiko approved (rev 22). The riot's store loss is a third of the stock (catalogue 04:149); how it rounds is WS1's to set with PR-B. The PM ruled "blamed" never in Thriving or Content, and the immigration wave's air parts, on 5 Nov.</p></div>
+<div class="box next"><h4>What is changing</h4><p>PR-A (#370) merged into the colony branch on 5 Nov and reaches trunk with the next colony batch. PR-B is designed, due from WS1 next. Not yet settled in what I could read: the riot's chance by mood band, which building it damages and by how much the Park calms it; and the immigration wave's exact clean-air figure (the ruling reads "Clean air +1"). Owner: WS1.</p><p>Balance question: "blamed for the unrest" costs <span class="num">1</span> reputation, and reputation only changes votes below <span class="num">30</span>, from a start of <span class="num">50</span>. As built it would take 21 blamings to lose a vote. Owner: WS1 and WS7, at the final tuning.</p><p>The colony's mood events landing on the TV's Happiness gauge (PR #364) and the event shows for all of these (WS8) are being built.</p></div>
+<p class="code-ref">In the code (colony branch): <code>packages/engine/src/config.ts::SOCIAL_EVENTS</code> · <code>events.ts</code> (mood, neverIn, objects, foodPrice in the chance) · <code>colony.ts::addPrestige</code> · <code>::moodShift</code> · <code>politics.ts::reputationShift</code> · G-5 C26, AM-11</p>
+<p class="owner">Kept current by: WS1 (events), WS7 (the colony's writers), WS8 (event shows).</p>
+
+<!-- ============================================================ -->
+<h2 id="migration">Mood and migration <span class="pill designed">Designed</span></h2>
+<p>Today the colony grows by <span class="num">4</span>% in a month its colonists were fed and shrinks by <span class="num">5</span>% when they went hungry, whatever the mood. The design says the mood will scale that growth and shrinkage: a happy colony attracts settlers, an unhappy one loses them. How much is not set yet; the numbers will live with the mood's.</p>
+<div class="box next"><h4>What is changing</h4><p>C27, after C26's PR-B, on WS1's queue (it was planned for the evening of 5 Nov). Owner: WS1.</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/upkeep.ts::runUpkeep</code> · <code>config.ts::UPKEEP.colonistGrowth</code> · G-5 C27</p>
+<p class="owner">Kept current by: WS1.</p>
+
+<!-- ============================================================ -->
+<h2 id="colony-score">The colony score at game over <span class="pill built">In the game</span></h2>
+<p>At game over the colony gets its own score, beside the players' Worth. The winner is still the player with the highest Worth; the colony score says how the colony did. It is worked out from the final state alone, so a replay of the same seed and moves gives the same score.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Term</th><th>How it is counted</th></tr></thead>
+<tbody>
+<tr><td>Wealth</td><td>The Wealth gauge: the fund plus everything every player owns, in credits.</td></tr>
+<tr><td>Environment</td><td><span class="num">100</span> cr for each point the air is cleaner than <span class="num">100</span>.</td></tr>
+<tr><td>Prestige</td><td><span class="num">1,000</span> cr for each point of prestige standing.</td></tr>
+<tr><td>Happiness factor</td><td>From <span class="num">0.8</span> at happiness 0 to <span class="num">1.2</span> at happiness 100, in a straight line.</td></tr>
+</tbody>
+</table></div>
+<p><strong>Colony score = (Wealth + Environment + Prestige) × the happiness factor</strong>, rounded once. Each player's standing at the end is their Worth, with the plaques they earned shown beside it, not added to it. The TV shows the colony score as a band under the winner screen, with the sum, and who gave most.</p>
+<div class="box example"><h4>Example</h4><p>The colony ends with Wealth <span class="num">26,400</span>, air at <span class="num">34</span>, the Park standing (prestige <span class="num">2</span>) and happiness <span class="num">64</span>. Environment is 100 × (100 − 34) = <span class="num">6,600</span>. Prestige is 1,000 × 2 = <span class="num">2,000</span>. The factor is 0.8 + 0.4 × 0.64 = <span class="num">1.056</span>. The score is (26,400 + 6,600 + 2,000) × 1.056 = <span class="num">36,960</span>. The same colony at happiness 0 would score 28,000; at 100, 42,000.</p></div>
+<p>A colony whose air ends in Collapse still cuts every player's Worth by the Collapse rule (× <span class="num">0.8</span>); that cut does not touch the colony score's terms.</p>
+<div class="box why"><h4>Why it is like this</h4><p>Heiko's scoring model, 28 Oct: one Worth number decides the winner; the colony score is separate, "colony wealth + air + prestige, × mood (~0.8 unrest .. 1.2 thriving)". The PM approved the exact formula on 5 Nov (RULE-25). The rates are placeholders, tuned at the end.</p></div>
+<h3 id="colony-score-monthly">The colony score at every month end <span class="pill designed">Designed</span></h3>
+<p>The colony score is shown at every month end, next to the league, on the TV and on every phone: the same sum as at game over (wealth + environment + prestige, × the happiness factor), worked out from the month just ended. Today it appears only at game over, and the four gauges stand in for it during the game.</p>
+<div class="box why"><h4>Why it is like this</h4><p>Heiko's scoring model, 28 Oct, said the colony score is "shown every month next to the league"; on 5 Nov Heiko confirmed: "Yes, every month".</p></div>
+<p class="owner">Responsible: Politics team (WS7) for the score in the colony view every month (<code>apps/server/src/colony-view.ts</code>); Events team (WS8) for the screens (the TV's and the phones' month end). Status: Designed, not built; WS8 drafts the screen mock first.</p>
+<h3 id="colony-verdict">The verdict line <span class="pill progress">Being built</span></h3>
+<p>Under the colony score, the end screen gives the colony a verdict, read from the score's total in credits:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Colony score</th><th>Verdict</th><th>Setting</th></tr></thead>
+<tbody>
+<tr><td><span class="num">100,000</span> cr or more</td><td>A colony to be proud of</td><td><code>COLONY_SCORE.verdict.proud</code></td></tr>
+<tr><td><span class="num">60,000</span> to <span class="num">99,999</span> cr</td><td>A colony that held together</td><td><code>COLONY_SCORE.verdict.held</code></td></tr>
+<tr><td>below <span class="num">60,000</span> cr</td><td>A colony in ruins</td><td></td></tr>
+</tbody>
+</table></div>
+<p>The colony in the example above, at <span class="num">36,960</span>, reads "A colony in ruins". These two settings are in PR #392's <code>config.ts</code>, not yet on the colony branch or on trunk. Trunk still uses old placeholders inside the end screen (100 and 50), so on trunk every colony not in Collapse reads "A colony to be proud of".</p>
+<div class="box why"><h4>Why it is like this</h4><p>The old thresholds were set before the score was in credits. The new ones come from 100 computer games (seeds 1 to 100, four Trader seats, politics on): half the colonies scored under 73,565, a quarter under 60,650 and a quarter over 99,193. "Held together" sits near the bottom quarter and "proud" near the top. They are named placeholders, tuned at the end (HC-25); WS7, which owns the score's settings, has been asked to OK them.</p></div>
+<div class="box next"><h4>What is changing</h4><p><strong>Being built:</strong> PR #392 (Events team, WS8), open into the colony branch, moves the thresholds into <code>COLONY_SCORE.verdict</code>. Once merged there, it reaches trunk with the next colony batch. Known gap: the thresholds fit full-length games, so a shortened game (such as the two-month test game) reads "A colony in ruins". Owner: WS7 at the final tuning.</p><p>The score every month end is designed: see <a href="#colony-score-monthly">The colony score at every month end</a>.</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/game.ts::colonyScoreOf</code> · <code>::colonyScore</code> · <code>::playerStanding</code> · <code>config.ts::COLONY_SCORE</code> (PR #392 adds <code>verdict</code>) · <code>apps/web/src/game/colony.ts::scoreVerdict</code> · <code>apps/web/src/components/Colony.tsx</code> · G-5 RULE-25</p>
+<p class="owner">Kept current by: WS7 (the rule), WS3 (the score in the engine and the replay), WS8 (the end screen).</p>
+
+<!-- ============================================================ -->
+<h2 id="reputation-deals">Reputation and deal cards <span class="pill backlog">Backlog</span></h2>
+<p>Every player has a reputation from <span class="num">0</span> to <span class="num">100</span>, starting at <span class="num">50</span>, and it already counts in vote weight (<span class="num">+1</span> at 70 or more, <span class="num">−1</span> below 30). On trunk nothing changes it yet, so it is 50 for everyone all game. In the colony branch, "blamed for the unrest" takes 1 point.</p>
+<p>The design (politics slice 3) makes reputation move: a deal card attached to a whisper turns a promise into something one tap accepts ("a non-aggression pact", "my vote for your law"), and breaking a signed card costs reputation, so it costs votes next time. Deal cards carry pacts, votes and promises only; nothing of value ever changes hands outside an auction. Borrowed votes (another player's votes for one month, by deal card) are part of the same design. Computer players may bluff about their own intentions, never about facts (Heiko, 28 Oct).</p>
+<div class="box next"><h4>What is changing</h4><p>Slice 3 is outside the MVP and runs in parallel after it (Heiko, 4 Nov); no lane is on it now. Claude seats winning allies through deal cards (WS2's social play) waits for it. Owner: WS7.</p></div>
+<p class="code-ref">In the code: <code>config.ts::START.reputation</code> · <code>::POLITICS.weight</code> · design <code>docs/design/05-colony-politics.md</code> · <code>docs/specs/2026-10-22-ws7-politics.md</code> (P-2, slice 3)</p>
+<p class="owner">Kept current by: WS7.</p>
+
+<!-- ============================================================ -->
+<h2 id="sabotage-sheriff">Sabotage and the Sheriff <span class="pill backlog">Backlog</span></h2>
+<p>There is no sabotage order and no Sheriff in the game today. The design (politics slice 4): players order sabotage in secret; the elected Sheriff guards plots (a sabotage against a guarded plot fails and reveals the saboteur), investigates one past sabotage, theft or broken deal a month, fines a revealed culprit (half to the victim, half to the fund), inspects one player a month for a broken law, and can open an inquiry into the Governor. The sabotage ban law (fines doubled or tripled) comes with it. The Sheriff is paid <span class="num">30</span> cr a month; nobody may hold Governor and Sheriff at once.</p>
+<p>Computer personas already carry a spite weight and a per-level sabotage switch (off for Rookie), used today only to bid up the leader in the auction.</p>
+<div class="box why"><h4>Why it is like this</h4><p>Heiko, 28 Oct: "Governor only for now": the Sheriff is elected only once slice 4 gives it powers. Heiko, 4 Nov: the sabotage ban and the Sheriff's fines go with slice 4, outside the MVP.</p></div>
+<p class="code-ref">In the code: <code>config.ts::POLITICS.offices</code> · <code>::POLITICS.pay.sheriff</code> · <code>::AI_PERSONAS</code> (spite) · <code>::AI_LEVELS</code> (sabotage) · design 05 "The Sheriff"</p>
+<p class="owner">Kept current by: WS7.</p>
+
+<!-- ============================================================ -->
+<h2 id="budget-overrule">The budget lines, overrule and inquiry <span class="pill backlog">Backlog</span></h2>
+<p>Today the Governor spends the fund only on buildings, repairs, site bids and strike pay. The design (politics slice 5) has the Governor split the fund each month across five budget lines (Reserve for emergency imports, Security for the Sheriff's guards, Environment for clean-up squads, Welfare for the last-placed player, Projects for building and upkeep), with a protective kind of colony project (reservoir, levee, meteor shield and others) on the same pipeline as the prestige objects. Any player could call an overrule vote against the Governor's tax or budget once a month; twice overruled in a term means a snap election. The Sheriff's inquiry could lead to a no-confidence vote.</p>
+<div class="box next"><h4>What is changing</h4><p>Outside the MVP; no lane is on it. Welfare will then feed the mood (it counts 0 until then). Owner: WS7.</p></div>
+<p class="code-ref">In the code: design <code>docs/design/05-colony-politics.md</code> "Taxes and the budget", "Colony projects" · G-5 non-goals</p>
+<p class="owner">Kept current by: WS7.</p>
+
+</article>
+</main>
+</div>
+<script src="search-index.js"></script>
+<script src="rulebook.js"></script>
+</body>
+</html>

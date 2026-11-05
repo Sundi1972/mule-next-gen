@@ -54,7 +54,7 @@ process.exit(0);
  */
 async function arcade(): Promise<void> {
   const room = async (names: string[], tv: boolean, run: (table: Awaited<ReturnType<typeof arcadeTable>>) => Promise<void>) => {
-    const steered = await startServer({ maxMonths: 1, politics: false, devSteer: true, phaseScale: 1, seed: () => 1 });
+    const steered = await startServer({ maxMonths: 1, politics: false, phaseScale: 1, seed: () => 1 });
     try {
       await run(await arcadeTable(browser, steered.base, steered.server, errors, { names, tv }));
     } finally {

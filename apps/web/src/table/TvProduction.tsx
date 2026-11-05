@@ -89,6 +89,7 @@ const WHY: Record<string, { label: string; badge: string; tone: string; icon?: G
   pollution: { label: 'Polluted ground', badge: '−1', tone: 'bg-warn text-void' },
   noWater: { label: 'A farm with no Water makes half', badge: '½', tone: 'bg-alert text-white', icon: 'water' },
   noEnergy: { label: 'No Energy for the plot: half', badge: '½', tone: 'bg-alert text-white', icon: 'energy' },
+  energyOff: { label: 'Turned off: not enough Energy (20%)', badge: '20%', tone: 'bg-alert text-white', icon: 'energy' },
 };
 
 function Rail({ game, show, t, connected }: { game: MuleView; show: ShowData; t: number; connected: (id: string) => boolean }) {
@@ -128,7 +129,7 @@ function Rail({ game, show, t, connected }: { game: MuleView; show: ShowData; t:
           <ul className="flex flex-col gap-1.5" data-testid="why-legend">
             {reasons.map((w) => (
               <li key={w} className={cx('flex items-center gap-3 text-base leading-snug', seen.has(w) ? 'text-ink-2' : 'opacity-30')}>
-                <span className={cx('flex w-11 shrink-0 items-center justify-center gap-0.5 rounded-chip px-1 py-0.5 font-mono text-sm font-bold', WHY[w]!.tone)}>
+                <span className={cx('flex w-13 shrink-0 items-center justify-center gap-0.5 rounded-chip px-1 py-0.5 font-mono text-sm font-bold', WHY[w]!.tone)}>
                   {WHY[w]!.icon && <GoodIcon good={WHY[w]!.icon!} size={12} />}
                   {WHY[w]!.badge}
                 </span>
