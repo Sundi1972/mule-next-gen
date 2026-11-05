@@ -222,12 +222,16 @@ describe('the seat plays its planning part (C4, RULE-13)', () => {
   // Two whole sim games, walking off and on: 1 to 2.5 s alone, past vitest's 5 s default in CI's parallel run.
   it("T-AC-10: the sim's planning loop hands each seat its act, so a seat short of cash lists, unsold to the store", { timeout: 20_000 }, () => {
     // The row makes its own seats short: whether a sim seat runs short by itself depends on the economy (walking on or off).
+    // Seed 5: at month 2's planning, walking off and on, its seats hold something to sell (three listings in each).
+    // Re-picked for #366, the plotless-seat fix: on seed 3 every seat now ends month 1 with one plot holding its only
+    // Food MULE, which a seat never sells, so no seat had anything to list.
+    const seed = 5;
     const saved = DEV_STEER.on;
     try {
       for (const walking of [false, true]) {
         DEV_STEER.on = walking;
         const listed: Listing[] = [];
-        playGame(3, simSeats(4, 'trader', 3), {
+        playGame(seed, simSeats(4, 'trader', seed), {
           maxMonths: 2,
           onPhase: (state) => {
             // Month 1's upkeep leaves every seat with no cash, so month 2's planning finds each one short.
