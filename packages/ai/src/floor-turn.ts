@@ -18,7 +18,6 @@ import {
   type FloorInput,
   type FloorColonist,
   type GameState,
-  type ReachKind,
 } from '@mule/engine';
 import { pubSeconds } from './floor-time.js';
 import type { AiSeat } from './seat.js';
@@ -30,10 +29,7 @@ import type { AiSeat } from './seat.js';
  *
  * A tick, in RULE-1's order: each seat's input from its hand; stepFloor, which spends the presses that reached a door
  * or the wolves; settleMoments, which pays what the moments decided (the glint's prize, a bolted MULE); every other
- * press applied in pressOrder at the stepped position; the clock. In month 1 the clock stands until every
- * seat is in (DEV_STEER.month1WaitsForFirstMule, AM-3): a seat already in may not start another MULE, analysis or
- * filter meanwhile, as the server refuses them. The host's Continue has no AI-only stand-in but time:
- * DEV_STEER.simHostContinueSeconds of standing start the clock anyway.
+ * press applied in pressOrder at the stepped position; the clock, which counts down from the start in every month.
  */
 
 /** One seat's development turn on the floor, for the sim's report and the tests. */
@@ -69,7 +65,7 @@ export interface DevTurn {
   scoutsCut: number;
   /** Analyses of lake plots its hand gave up on the way (failed), and dropped before setting off as not fitting the clock. */
   lakeAnalyses: { failed: number; noTime: number };
-  /** Presses the referee refused this turn (spec §4, as the server's tick counts them): held while month 1's clock waits, or a rule's RuleError. */
+  /** Presses the referee refused this turn (spec §4, as the server's tick counts them): a rule's RuleError. */
   refused: number;
 }
 
@@ -134,19 +130,6 @@ function countScramble(n: FloorMomentCounts, before: DevFloor, after: DevFloor):
 export interface FloorPhase {
   turns: DevTurn[];
   moments: FloorMomentCounts;
-  /** Seconds month 1's clock stood waiting for first MULEs; null in a month whose clock never waits. */
-  waited: number | null;
-  /** Whether the stand-in for the host's Continue started the waiting clock. */
-  continued: boolean;
-}
-
-/** A press a seat already in may not make while month 1's clock waits (the server's WAIT_REFUSES). */
-const HELD: ReadonlySet<ReachKind> = new Set(['buy', 'install', 'analyse', 'filter']);
-
-/** The server's "in" for month 1's clock: a MULE installed this turn, at the pub, or no land to put one on. */
-export function isIn(state: GameState, id: string): boolean {
-  const p = player(state, id);
-  return p.installedThisTurn || p.doneDeveloping || !state.tiles.some((t) => t.owner === id);
 }
 
 /** The floor's config as the server's tick uses it: the live config objects, and the pub priced by game.ts. */
@@ -174,15 +157,11 @@ function lakeFailures(state: GameState, log: ReturnType<AiSeat['developLog']>): 
 /** Plays one development phase on the floor, yielding after every tick; returns each seat's turn. */
 export function* playFloorPhase(state: GameState, seats: readonly AiSeat[]): Generator<void, FloorPhase, void> {
   const cfg = simFloorConfig();
-  const tickSeconds = cfg.steer.tickMs / MS_PER_SECOND;
   let floor: DevFloor = buildFloor(state, cfg);
   const ids = seats.map((s) => s.id);
   const turns = new Map(ids.map((id): [string, DevTurn] => [id, { month: state.month, id, pubAt: null, payout: null, quoted: null, installs: 0, bought: 0, lostMules: [], scoutsCut: 0, biteCostPub: false, lakeAnalyses: { failed: 0, noTime: 0 }, refused: 0 }]));
-  let waiting = state.month === 1 && cfg.steer.month1WaitsForFirstMule;
-  // Whole ticks, so the clock never drifts in floating point: stood waiting, and run.
-  let stood = 0;
+  // Whole ticks, so the clock never drifts in floating point.
   let run = 0;
-  let continued = false;
   const done = (id: string) => player(state, id).doneDeveloping;
   const moments = noMoments();
   const raced = new Set<number>();
@@ -190,18 +169,13 @@ export function* playFloorPhase(state: GameState, seats: readonly AiSeat[]): Gen
   const mules = new Map(ids.map((id): [string, { installed: boolean; packLeading: boolean; stepFailed: boolean }[]] => [id, []]));
   const read = new Map(ids.map((id): [string, number] => [id, 0]));
   for (;;) {
-    if (waiting && ids.every((id) => isIn(state, id))) waiting = false;
-    if (waiting && stood * tickSeconds >= cfg.steer.simHostContinueSeconds) {
-      waiting = false;
-      continued = true;
-    }
     // The seconds left as this tick ends, where its presses apply and the pub is priced, counted in whole ms as the
-    // server's clock counts them (HC-4); all of them while month 1's clock waits.
-    const left = waiting ? DEVELOPMENT.fullSeconds : (DEVELOPMENT.fullSeconds * MS_PER_SECOND - (run + 1) * cfg.steer.tickMs) / MS_PER_SECOND;
+    // server's clock counts them (HC-4).
+    const left = (DEVELOPMENT.fullSeconds * MS_PER_SECOND - (run + 1) * cfg.steer.tickMs) / MS_PER_SECOND;
     // AM-19: the tick this step makes, run + 1, runs only while it falls before the clock's end, as on the server.
     if ((run + 1) * cfg.steer.tickMs >= DEVELOPMENT.fullSeconds * MS_PER_SECOND || ids.every(done)) break;
     const inputs: Record<string, FloorInput> = {};
-    for (const s of seats) if (!done(s.id)) inputs[s.id] = s.developSteer(state, floor, left, cfg, waiting && isIn(state, s.id));
+    for (const s of seats) if (!done(s.id)) inputs[s.id] = s.developSteer(state, floor, left, cfg);
     const spent = doorPresses(floor, state, inputs, cfg);
     const before = floor;
     floor = settleMoments(state, stepFloor(floor, state, inputs, cfg.steer.tickMs, cfg));
@@ -226,11 +200,6 @@ export function* playFloorPhase(state: GameState, seats: readonly AiSeat[]): Gen
       // refuses changes nothing and is counted for the seat.
       const reach = reachOf(floor, state, id, cfg, { secondsLeft: left });
       if (!reach.enabled) continue;
-      // The server refuses these to a seat already in while the clock waits.
-      if (waiting && isIn(state, id) && HELD.has(reach.kind)) {
-        turn.refused++;
-        continue;
-      }
       try {
         const press = applyReach(state, floor, id, left, cfg);
         const pressed = floor;
@@ -268,8 +237,7 @@ export function* playFloorPhase(state: GameState, seats: readonly AiSeat[]): Gen
       }
       read.set(s.id, log.length);
     }
-    if (waiting) stood++;
-    else run++;
+    run++;
     yield;
   }
   for (const s of seats) {
@@ -280,6 +248,5 @@ export function* playFloorPhase(state: GameState, seats: readonly AiSeat[]): Gen
   }
   moments.raced = raced.size;
   moments.scrambleRacers = seats.reduce((n, s) => n + s.developScramblesRaced(), 0);
-  const waits = state.month === 1 && cfg.steer.month1WaitsForFirstMule;
-  return { turns: [...turns.values()], moments, waited: waits ? stood * tickSeconds : null, continued };
+  return { turns: [...turns.values()], moments };
 }
