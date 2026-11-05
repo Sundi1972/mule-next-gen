@@ -26,6 +26,8 @@ export function StandingsSheet({ onClose }: { onClose: () => void }) {
   const p = view.me ? yourLines(view) : null;
   // Your lines as the month end's YourWorth gives them: in Collapse the cut line before the offices, so they add up.
   const collapse = inCollapse(view);
+  // Donations only where there is a colony to give to (politics on); the engine counts them 1:1, cut too in Collapse.
+  const donations = !!view.colony;
   const line = 'flex justify-between gap-3';
   return (
     <div className="absolute inset-0 z-40 grid place-items-center bg-void/70 p-3" role="dialog" aria-modal aria-labelledby="standings-title" data-testid="standings-sheet">
@@ -120,6 +122,14 @@ export function StandingsSheet({ onClose }: { onClose: () => void }) {
                   {fmt(p.office)}
                 </span>
               </span>
+              {donations && (
+                <span className={line}>
+                  <span>Donations{collapse && ', cut too'}</span>
+                  <span data-num className="font-mono">
+                    {fmt(p.donated)}
+                  </span>
+                </span>
+              )}
               <span className={cx(line, 'mt-0.5 border-t border-holo-faint pt-0.5 font-semibold')}>
                 <span>Your worth</span>
                 <span data-num className="font-mono font-bold">
@@ -130,7 +140,7 @@ export function StandingsSheet({ onClose }: { onClose: () => void }) {
           )}
         </div>
         <p className="text-xs leading-snug text-ink-2 @min-[1100px]/shell:text-base" data-testid="standings-rule">
-          Worth, in credits: cash, goods at the store&apos;s price, land at {GAME.plotScore} cr a plot, MULEs at the store&apos;s price, and {POLITICS.termScore} cr a term in office. Everyone sees each other&apos;s total; nobody sees which goods anyone holds.
+          Worth, in credits: cash, goods at the store&apos;s price, land at {GAME.plotScore} cr a plot, MULEs at the store&apos;s price, {POLITICS.termScore} cr a term in office, and donations to the colony. Everyone sees each other&apos;s total; nobody sees which goods anyone holds.
           {collapse && ` Every Worth is cut by ${collapseCutWords()}, offices too: the scores if the game ended now.`}
         </p>
       </div>

@@ -423,6 +423,8 @@ export function YourWorth({ view, density }: { view: MuleView; density: Exclude<
     { key: 'mules', old: 'part-mules', label: `MULEs · ${p.mules} × ${view.mulePrice}`, cr: p.muleValue },
     ...(collapse ? [{ key: 'cut', old: 'part-collapse', label: `Collapse cut · ${collapseCutWords()}`, cr: -p.cut, tone: 'text-alert' }] : []),
     { key: 'offices', old: 'part-office', label: `Offices · ${p.terms} ${p.terms === 1 ? 'term' : 'terms'} × ${POLITICS.termScore}${collapse ? ', cut too' : ''}`, cr: p.office },
+    // Only where there is a colony to give to; counted 1:1 by the engine, and cut too in Collapse.
+    ...(view.colony ? [{ key: 'donations', old: 'part-donated', label: `Donations${collapse ? ', cut too' : ''}`, cr: p.donated }] : []),
   ];
   const tight = density === 'compact' || collapse;
   return (
