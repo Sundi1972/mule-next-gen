@@ -303,6 +303,26 @@ describe.runIf(process.env.MULE_FULL === '1')('brain:trial', () => {
   );
 
   it(
+    'FM-auth: with --playbooks 1, a 401 on the first write stops brain:trial at once with exit 2, and nothing more is called',
+    async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      let calls = 0;
+      sdk.create = () => {
+        calls++;
+        return Promise.reject(new Anthropic.AuthenticationError(401, { type: 'error', error: { message: 'x' } }, 'x', new Headers()));
+      };
+      const { out, result } = run(['--games', '3', '--smart', '1', '--playbooks', '1', '--max-usd', '1']);
+      const { code, report } = await result;
+      expect(code).toBe(2);
+      // The one Smart seat's month 1 write is the game's first call; nothing is called after it.
+      expect(calls).toBe(1);
+      expect(report).toMatchObject({ played: 1, stopped: 'auth' });
+      expect(out.at(-1)).toBe('Stopped: the API refused the credentials (401/403). Nothing more was called.');
+    },
+    GAMES_MS,
+  );
+
+  it(
     'INV-finish (trial): a game that throws with model calls still open is closed only after they settle, so its game line counts them, and the run reports it as a stall and not proven',
     async () => {
       let open = 0;
@@ -369,6 +389,30 @@ describe.runIf(process.env.MULE_FULL === '1')('brain:trial', () => {
       expect(out.at(-1)).toMatch(
         new RegExp(`^Stopped: the ledger .*trial-2026-10-22\\.jsonl has ${calls - 1} of ${calls} call lines for game trial-2026-10-22-101-0; a write failed, so spend cannot be checked\\.$`),
       );
+    },
+    GAMES_MS,
+  );
+
+  it(
+    "FM-ledger-write: with --playbooks 1 the write lines never cover for a decider's lost line: the run still stops after that game",
+    async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      let moves = 0;
+      sdk.create = (params) => {
+        const user = (params.messages[0]?.content ?? '') as string;
+        if (user.includes('What you may change:')) return Promise.resolve(sdkMessage(JSON.stringify({ edits: [], line: '' }), BILLED));
+        moves++;
+        // Only the first move call's line is lost: the file is read-only while that unreadable reply settles.
+        if (moves === 1) {
+          fs.chmodSync(file, 0o444);
+          return Promise.resolve(sdkMessage('not json at all', BILLED));
+        }
+        if (moves === 2) fs.chmodSync(file, 0o644);
+        return Promise.resolve(sdkMessage(USABLE, BILLED));
+      };
+      const { code, report } = await run(['--games', '2', '--smart', '1', '--playbooks', '1', '--max-usd', '1']).result;
+      expect(code).toBe(1);
+      expect(report).toMatchObject({ played: 1, stopped: 'ledger' });
     },
     GAMES_MS,
   );
@@ -573,8 +617,10 @@ describe.runIf(process.env.MULE_FULL === '1')('brain:trial', () => {
       line('strategy', 'late', 0, 'ai1'),
       line('strategy', 'llm', 0.02, 'ai1'),
       line('land', 'llm'),
+      // A write its seat's budget refused: never made, so no call.
+      line('strategy', 'budget', 0, 'ai1'),
     ];
-    const input = (over: Partial<TrialInput> = {}): TrialInput => ({ keyed: true, planned: 1, stopped: 'done', smartPerGame: 2, seatsPerGame: 4, cap: 2, gameBudgetUsd: 1, games: [game()], calls, ...over });
+    const input = (over: Partial<TrialInput> = {}): TrialInput => ({ keyed: true, planned: 1, stopped: 'done', smartPerGame: 2, seatsPerGame: 4, cap: 2, gameBudgetUsd: 1, games: [game()], calls, playbooks: true, ...over });
 
     const r = trialReport(input());
     expect(r.writes).toMatchObject({ calls: 3, late: 1, toolRounds: 2 });
@@ -584,11 +630,15 @@ describe.runIf(process.env.MULE_FULL === '1')('brain:trial', () => {
     expect(trialReport(input({ games: [game({ playbooks: took(7, 10) })] })).acEdits).toBe('fail');
     expect(trialReport(input({ planned: 2 })).acEdits).toBe('not proven');
     expect(trialReport(input({ keyed: false, cap: null, calls: [] })).acEdits).toBe('n/a');
+    // A run without --playbooks never tried the clause: n/a, and no rows for it.
+    const off = trialReport(input({ playbooks: false, games: [game({ playbooks: [] })] }));
+    expect(off.acEdits).toBe('n/a');
+    expect(renderTrialReport(off).some((l) => l.includes('UBER-AC-A'))).toBe(false);
     // Only the playbooks of finished games count, as the decisions do.
     expect(trialReport(input({ planned: 2, games: [game(), game({ id: 'b', end: 'crashed', playbooks: took(0, 6) })] })).edits).toEqual({ model: 8, of: 10 });
 
     const printed = renderTrialReport(r);
-    expect(printed).toContainEqual(expect.stringMatching(/^strategy and playbook calls\s+3, late 1 \(33\.3%\), tool rounds 0\.67 a call, \$0\.05000$/));
+    expect(printed).toContainEqual(expect.stringMatching(/^strategy and playbook calls, each waited for\s+3, late 1 \(33\.3%\), tool rounds 0\.67 a call, \$0\.05000$/));
     expect(printed).toContainEqual(expect.stringMatching(/^playbooks with Claude's edits\s+80\.0% \(8 of 10\)$/));
     expect(printed).toContain("UBER-AC-A edits PASS: 80.0% (8 of 10) of the playbooks that took effect carry Claude's accepted edits (needs at least 80%)");
   });
