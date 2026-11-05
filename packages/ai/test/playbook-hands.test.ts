@@ -256,8 +256,9 @@ function ownPhasesOn(): void {
 describe('the own path plays today’s development and auction while AI_PLANS.ownPhases is off (AM-26, RULE-6)', { timeout: SLOW_MS }, () => {
   it("B-AC-6, T-AC-13 (RULE-6, AI_PLANS.ownPhases off): a Classic seat's own path plays today's development and auction and writes neither; its planning still writes and plays; an adopted part still plays", () => {
     expect(AI_PLANS.ownPhases, 'the default').toBe(false);
-    // Seed 4's third month is the first in which a seat runs short of cash, so it lists in planning.
-    const [seed, months] = [4, 3];
+    // Seed 1 has a seat run short of cash, so it lists in planning, within its first four months. Re-picked for WS1's
+    // shortfall rule (#386): seed 4 then needed a fifth month, which took this test past its CI budget.
+    const [seed, months] = [1, 4];
     /** Per seat and month, the planning acts it played, read at its first development tick. */
     const planningLogs = (into: Map<string, string>) => {
       const first = once();
@@ -484,8 +485,9 @@ describe('the seat plays its development and auction parts (C4, RULE-6, RULE-7)'
     // The first seat and month whose draft leads two MULEs out, and installs both when it plays alone, is the one edited.
     // Measured on the merge of #291 (one claim a grant, walking on: a draft's second MULE may be dropped for the clock,
     // and a swap of it then shows nothing), seeds 1-8, months 1-4: 12 such drafts, 3 installing both, the first in seed
-    // 8's month 3; seed 3 has none. So this row plays seed 8.
-    const C_SEED = 8;
+    // 8's month 3; seed 3 has none. Re-picked 5 Nov (WS1's shortfall rule, OK'd by WS9): of seeds 1-12, only 1 and 10
+    // qualify, so this row plays seed 1.
+    const C_SEED = 1;
     const baseC = playTable({ seed: C_SEED, months: ROW_MONTHS });
     let route: { seat: string; month: number; part: NonNullable<Playbook['development']> } | null = null;
     const firstC = once();
@@ -554,16 +556,17 @@ describe('the seat plays its development and auction parts (C4, RULE-6, RULE-7)'
     // G-2: an adopted playbook (WS2's writer, Claude's edits) reaches the board as adopted; the hand's own picks after
     // the analyses are for the seat's own draft only. The case: the first seat-month on seed 11 whose own route
     // analyses before its MULEs and whose own play replaced a route MULE on the analysed ground, so the route's MULE
-    // differs from the seat's own pick there. The same route, adopted at the same tick, plays as it stands.
+    // differs from the seat's own pick there. The same route, adopted at the same tick, plays as it stands. Re-picked
+    // 5 Nov (WS1's shortfall rule, OK'd by WS9): seed 11's first such seat-month now falls in month 4, not 3.
     const SEED_11 = 11;
-    const MONTHS_3 = 3;
+    const MONTHS_4 = 4;
     const scoutsFirst = (pb: Playbook) => {
       const route = pb.development!.route;
       const buy = route.findIndex((s) => s.act === 'buyMule');
       return buy > 0 && route.slice(0, buy).some((s) => s.act === 'analyse');
     };
     const routeItems = (t: Table, seat: string, month: number) => t.outcomes.get(key(seat, month, 'development'))!.items.filter((i) => i.path.startsWith('/development/route/'));
-    const own = playTable({ seed: SEED_11, months: MONTHS_3 });
+    const own = playTable({ seed: SEED_11, months: MONTHS_4 });
     const theCase = own.written.find(
       (pb) => pb.phase === 'development' && scoutsFirst(pb) && routeItems(own, pb.seat, pb.month).some((i) => i.actual === 'replaced' && i.note === 'ground analysed'),
     );
@@ -575,7 +578,7 @@ describe('the seat plays its development and auction parts (C4, RULE-6, RULE-7)'
     let adopted: Playbook | null = null;
     const t = playTable({
       seed: SEED_11,
-      months: MONTHS_3,
+      months: MONTHS_4,
       before: (seat, state, point) => {
         if (seat.id !== who || state.month !== when || point !== 'development' || !first(seat, state, point)) return;
         adopted = seat.draft(state, 'development');
