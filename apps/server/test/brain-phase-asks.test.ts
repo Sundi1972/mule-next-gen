@@ -19,6 +19,14 @@ const PLAYERS = [
 ];
 const USED = { input: 900, output: 120 };
 const DEV_EDIT = JSON.stringify({ edits: [{ path: '/development/timeBudgetMs', to: 1_000, reason: 'Quick.' }], line: '' });
+/** Claude's lines in its land and auction plans. */
+const LAND_LINE = 'The north field is mine.';
+const AUCTION_LINE = 'Selling my Food dear today.';
+/** The paths a write's schema offers, or [] for a request that is not a write. */
+const offeredPaths = (params: SdkParams) =>
+  ((params.output_config?.format?.schema as { properties?: { edits?: { items: { anyOf: { properties: { path: { enum: string[] } } }[] } } } } | undefined)?.properties?.edits?.items.anyOf ?? []).flatMap(
+    (v) => v.properties.path.enum,
+  );
 
 let dir: string;
 beforeEach(() => {
@@ -188,6 +196,70 @@ describe('RULE-A2 rows 3-4: the next phase is edited in the slack before it', { 
     playbooks.takePhase(state, 'development');
     expect(notes.map((n) => n.phase)).toEqual(['landGrant']);
     expect(seat.part(state, 'development')).toEqual(before);
+  });
+
+  it("B-AC-1 (a'): Claude's line in each plan it wrote is said as that plan's phase starts: the land write's at the land grant, the auction's at the auction, each with real adopted edits; the development part says nothing", async () => {
+    const sdk = fakeSdk((_n, params) => {
+      const hold = offeredPaths(params).find((p) => p.endsWith('/hold'));
+      if (hold) return sdkMessage(JSON.stringify({ edits: [{ path: hold, to: 0, reason: 'None.' }], line: AUCTION_LINE }), USED);
+      const edits = [
+        { path: '/landGrant/claims', to: 1, reason: 'One will do.' },
+        { path: '/development/timeBudgetMs', to: 1_000, reason: 'Quick.' },
+      ];
+      return sdkMessage(JSON.stringify({ edits, line: LAND_LINE }), USED);
+    });
+    const state: GameState = createGame({ seed: 10, players: PLAYERS });
+    const seat = new AiSeat({ id: 'p0', name: 'Ada', persona: 'trader', level: 'trader', seed: 1 });
+    const notes: PlaybookNote[] = [];
+    const spoken: { seat: string; line: string; month: number; phase: string }[] = [];
+    const playbooks = new Playbooks({ brain: smartOn(sdk), source: playbookSource([seat]), seats: [seat], record: (n) => notes.push(n), speak: (id, said) => spoken.push({ seat: id, ...said }) });
+
+    playbooks.ask(state, 1);
+    await vi.advanceTimersByTimeAsync(1_000);
+    advanceTo(state, 'landGrant');
+    // Asked and answered, but not said until its phase starts.
+    expect(spoken).toEqual([]);
+    playbooks.takeEffect(state);
+    expect(spoken).toEqual([{ seat: 'p0', line: LAND_LINE, month: 1, phase: 'landGrant' }]);
+    advanceTo(state, 'development');
+    playbooks.takePhase(state, 'development');
+    expect(spoken).toHaveLength(1);
+    advanceTo(state, 'production');
+    playbooks.askPhase(state, 'auction', []);
+    await vi.advanceTimersByTimeAsync(1_000);
+    advanceTo(state, 'auction');
+    playbooks.takePhase(state, 'auction');
+    expect(spoken).toEqual([
+      { seat: 'p0', line: LAND_LINE, month: 1, phase: 'landGrant' },
+      { seat: 'p0', line: AUCTION_LINE, month: 1, phase: 'auction' },
+    ]);
+    // Each line rode on a plan whose edits were adopted.
+    expect(notes.map((n) => [n.phase, n.playbook.by])).toEqual([
+      ['landGrant', 'llm'],
+      ['development', 'llm'],
+      ['auction', 'llm'],
+    ]);
+  });
+
+  it("B-AC-1 (a'): a plan reply that came too late, or whose line is blank, says nothing", async () => {
+    /** Asks month 1's land plan of a model answering `line` at `atMs`, takes it at the land grant, and returns what was said. */
+    const saidAt = async (atMs: number, line: string) => {
+      const said: string[] = [];
+      const seat = new AiSeat({ id: 'p0', name: 'Ada', persona: 'trader', level: 'trader', seed: 1 });
+      const reply = JSON.stringify({ edits: [{ path: '/landGrant/claims', to: 1, reason: 'One.' }], line });
+      const playbooks = new Playbooks({ brain: smartOn(answersAt(atMs, reply)), source: playbookSource([seat]), seats: [seat], speak: (_id, s) => said.push(s.line) });
+      const state: GameState = createGame({ seed: 10, players: PLAYERS });
+      playbooks.ask(state, 1);
+      await vi.advanceTimersByTimeAsync(1_000);
+      advanceTo(state, 'landGrant');
+      playbooks.takeEffect(state);
+      await vi.advanceTimersByTimeAsync(10_000);
+      return said;
+    };
+    // Positive control: the same reply in time is said.
+    expect(await saidAt(100, LAND_LINE)).toEqual([LAND_LINE]);
+    expect(await saidAt(5_000, LAND_LINE)).toEqual([]);
+    expect(await saidAt(100, '   ')).toEqual([]);
   });
 
   it("C4: the auction playbook adopted at the auction's start carries every drafted good, the ones past the brief's cap too", async () => {

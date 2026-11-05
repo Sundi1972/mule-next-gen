@@ -942,12 +942,12 @@ describe.runIf(process.env.MULE_FULL === '1')('brain:trial', () => {
         if (user.includes('Your draft land grant:')) {
           land.push(who());
           const edits = [{ path: '/landGrant/claims', to: 1, reason: 'One will do.' }, { path: '/development/timeBudgetMs', to: 1_000, reason: 'Quick.' }];
-          return Promise.resolve(sdkMessage(JSON.stringify({ edits, line: '' }), BILLED));
+          return Promise.resolve(sdkMessage(JSON.stringify({ edits, line: 'The north field is mine.' }), BILLED));
         }
         if (user.includes('Your draft auction:')) {
           auction.push(who());
           const hold = offered(params as never).find((path) => path.endsWith('/hold'))!;
-          return Promise.resolve(sdkMessage(JSON.stringify({ edits: [{ path: hold, to: 0, reason: 'Sell it all.' }], line: '' }), BILLED));
+          return Promise.resolve(sdkMessage(JSON.stringify({ edits: [{ path: hold, to: 0, reason: 'Sell it all.' }], line: 'Selling my Food dear today.' }), BILLED));
         }
         return Promise.resolve(sdkMessage(USABLE, BILLED));
       };
@@ -969,6 +969,9 @@ describe.runIf(process.env.MULE_FULL === '1')('brain:trial', () => {
       expect(report!.results.games).toBe(1);
       expect(Number.isFinite(report!.results.smart.meanScore) && Number.isFinite(report!.results.strategist.meanScore)).toBe(true);
       expect(report!.writes.late).toBe(0);
+      // Ruling (a'): each month's land plan carries Claude's line, said as the land grant starts, so no Smart seat-month is
+      // without a model-written line.
+      expect(report!.modelLines.silent).toBe(0);
     },
     GAMES_MS,
   );
