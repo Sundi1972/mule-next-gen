@@ -240,7 +240,7 @@ export async function checkTheShow({ tv, phone, event = false }: { tv: ShowWatch
  * During a full-speed show: calls `midShow` once the event card is up, then,
  * once every plot's goods are home, checks that the phone's Ready still waits
  * for the show ("Watching the show") and that the show itself moves the game on
- * to the auction (HC-6, AM-35). Returns checkTheShow's summary of what both
+ * to the auction (HC-6, AM-20). Returns checkTheShow's summary of what both
  * screens drew.
  */
 export async function pressOnward(phone: Page, watch: { tv: ShowWatch; phone: ShowWatch }, midShow: () => Promise<unknown>): Promise<string> {
@@ -255,7 +255,7 @@ export async function pressOnward(phone: Page, watch: { tv: ShowWatch; phone: Sh
   await phone.waitForTimeout(Math.max(0, at((times.eventsAt ?? times.lossAt) + 1) - Date.now()));
   await midShow();
   await phone.waitForTimeout(Math.max(0, at(times.holdAt + 0.3) - Date.now()));
-  // HC-6 (AM-35, the PM's ruling B): Ready waits for the end of the show, so even with every good home the phone's
+  // HC-6 (AM-20, the PM's ruling B): Ready waits for the end of the show, so even with every good home the phone's
   // Ready is still "Watching the show", and nothing it sends ends production; the show ends it, on time.
   const ready = phone.locator('[data-phase=production] [data-testid=ready]');
   check((await ready.textContent())?.trim() === 'Watching the show' && (await ready.isDisabled()), 'HC-6: Ready waits for the end of the show ("Watching the show")');
