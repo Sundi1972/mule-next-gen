@@ -89,6 +89,7 @@ const WHY: Record<string, { label: string; badge: string; tone: string; icon?: G
   pollution: { label: 'Polluted ground', badge: '−1', tone: 'bg-warn text-void' },
   noWater: { label: 'A farm with no Water makes half', badge: '½', tone: 'bg-alert text-white', icon: 'water' },
   noEnergy: { label: 'No Energy for the plot: half', badge: '½', tone: 'bg-alert text-white', icon: 'energy' },
+  energyOff: { label: 'Turned off: not enough Energy (20%)', badge: '⅕', tone: 'bg-alert text-white', icon: 'energy' },
 };
 
 function Rail({ game, show, t, connected }: { game: MuleView; show: ShowData; t: number; connected: (id: string) => boolean }) {
