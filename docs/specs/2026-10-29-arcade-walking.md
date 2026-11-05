@@ -740,6 +740,18 @@ inside a wall; money and stock change only through game.ts rules; development en
 
 ## §8 · Amendments `[review-only]`
 
+- **AM-23 (2026-11-05, Heiko at the table, ruled by the PM; built by WS3).** **Installing over a MULE swaps it.**
+  Heiko led a Water MULE to his Food plot and pressed SWAP: the Water MULE went in and the Food MULE vanished ("the
+  old one runs away, as in the original"). Now `game.ts::installMule` on a plot with a MULE of another outfit puts the
+  new MULE in and the old one onto the lead, with its outfit and run months, on AM-2's take path (`takenMule`,
+  `takenRuns`): it can be re-outfitted, installed on another plot, or put back on its own plot with the same outfit by
+  any route, keeping its run. It is marked `swapped`: if the turn ends (pub or clock) with it still led, it goes to the
+  corral (`store.mules++`, no refund, as a plot's MULE does at a lot sale), never home over the new MULE. Over a MULE
+  with the **same** outfit the press is refused, "Same outfit: nothing to swap": the player keeps the lead, the plot is
+  unchanged. Reach row 10's notes: "you lead your <good> MULE" and "same outfit, nothing to swap". Pins:
+  `apps/server/test/installed-this-turn.test.ts` B-AC-SWAP-1..3, `floor-reach.test.ts` rows 10. Not in scope: a
+  mid-turn "return to the corral" press with a refund (backlog, put to Heiko).
+
 - **AM-22 (2026-11-04, WS1's findings at arcade PR-8, ruled by WS6).** (1) **T-AC-5's glints:** with RULE-8 honoured
   (a bot races only if its errand still fits the clock after the detour, `botsSpareTime`), the real AI races 44–47%
   of glints (252 of 565 in 40 games; the mock's one-MULE bots 63%), because it plans its MULEs to fill the clock.
