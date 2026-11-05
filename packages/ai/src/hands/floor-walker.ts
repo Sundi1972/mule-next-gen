@@ -189,8 +189,15 @@ export class FloorWalker {
       this.paused = 0;
     } else if (this.pressed) {
       const ok = took(state, this.me, action);
-      this.reset();
-      return ok ? { kind: 'ok' } : { kind: 'failed', why: 'the press did not take' };
+      if (!ok && this.glintTook(floor)) {
+        // The step that carried the press lit a glint in GRAB's reach, which ranks above the step's row (RULE-3): the
+        // press grabbed it (FM-glint-install). Nothing of the step's is done, so it presses again, the counter's pause
+        // already stood; the hand's clock checks still hold it to the time left.
+        this.pressed = false;
+      } else {
+        this.reset();
+        return ok ? { kind: 'ok' } : { kind: 'failed', why: 'the press did not take' };
+      }
     }
     const c = floor.colonists.find((x) => x.id === this.me);
     if (!c) return { kind: 'failed', why: 'no colonist on the floor' };
@@ -220,6 +227,14 @@ export class FloorWalker {
       return this.going({ x: 0, y: 0, act: true });
     }
     return goal.space === 'hall' ? this.toPlace(view, c, goal.place, reach) : this.toPlot(view, c, goal.plot, action, reach);
+  }
+
+  /**
+   * Whether this seat won a glint on the last tick, read from the floor's beats for it (the step's, settleMoments' and
+   * the presses'): its press went to GRAB THE GLINT, not to the step.
+   */
+  private glintTook(floor: DevFloor): boolean {
+    return floor.moments.beats.some((b) => b.kind === 'glint' && b.who === this.me);
   }
 
   /**
