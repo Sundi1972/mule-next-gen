@@ -4,7 +4,7 @@
  * read with and without a TV, and the month end in Collapse too (C20).
  * Local tier: `pnpm --filter @mule/web build`, then `pnpm --filter @mule/web e2e:small`.
  */
-import { DEV_WALK, GAME, mapSize, POLLUTION } from '@mule/engine';
+import { DEV_WALK, EVENT_SHOW, GAME, mapSize, POLLUTION } from '@mule/engine';
 import type { Locator, Page } from 'playwright';
 import { claimAPlot, CLAIM_MS, check, doneWithLand, held, launch, PHONE, PHONE_SMALL, SHOWN_MS, startServer, TV } from './harness';
 import { ELECTION_WAIT_MS, readyThroughTheElection, voteThroughTheElection } from './politics-steps';
@@ -136,6 +136,9 @@ try {
 
   const dev = phone.locator('[data-phase=development]');
   await dev.waitFor({ timeout: 20_000 });
+  // A month event can hold development for its show; with a TV in the room the phone's overlay covers the store until
+  // it ends, so the walk-through starts once it has (the intro plus at most EVENT_SHOW.capMs of events).
+  await phone.getByTestId('phone-event-overlay').waitFor({ state: 'hidden', timeout: EVENT_SHOW.introMs + EVENT_SHOW.capMs + SHOWN_MS });
   giveDevelopment(code);
   await both('development, the store hall', WHOLE);
   await phone.locator('[data-shop=corral]:not([disabled])').click({ timeout: STORE_STEP_MS });
@@ -143,7 +146,9 @@ try {
   await dev.getByRole('button', { name: 'Walk out to the map' }).click({ timeout: PRESS_MS });
   await dev.getByRole('button', { name: 'Install here' }).click({ timeout: PRESS_MS });
   await dev.getByText(/Your MULE here makes/).waitFor({ timeout: PLOT_WALK_MS });
-  await startMonthOnesClock(phone, code);
+  // Month 1's clock counts from the start (Heiko, 5 Nov), so the second MULE needs no wait: the walk-through's long
+  // clock is topped up for the plot card's reads.
+  giveDevelopment(code);
   await dev.getByRole('button', { name: 'Store', exact: true }).click({ timeout: PRESS_MS });
   await phone.locator('[data-shop=corral]:not([disabled])').click({ timeout: STORE_STEP_MS });
   await phone.locator('[data-shop=food]:not([disabled])').click({ timeout: STORE_STEP_MS });
@@ -293,24 +298,6 @@ function giveDevelopment(code: string): void {
   check(me, `${NAME} plays in the game`);
   me.money += DEV_MONEY;
   game.ctx.changed();
-}
-
-/**
- * Month 1's clock waits for every first MULE (A-1), and a seat already in may only end its turn until it starts, so the
- * corral stays shut for a second MULE. The phone hosts: it starts the clock for the AIs still buying, as its player
- * would (first-mule.ts reads that card at both sizes), then development gets its long clock back.
- */
-async function startMonthOnesClock(phone: Page, code: string): Promise<void> {
-  // The server says whether the clock still waits; if every AI is already in, it has started on its own.
-  const room = server.registry.get(code) as unknown as { game: { clockWaits: boolean } };
-  if (room.game.clockWaits) {
-    await phone.getByTestId('continue').click({ timeout: PRESS_MS });
-    await phone.getByTestId('continue-now').click({ timeout: PRESS_MS });
-    await phone.getByTestId('clock-waits').waitFor({ state: 'hidden', timeout: PRESS_MS });
-    check(!room.game.clockWaits, "A-1: the host's Start the clock starts month 1's clock");
-  }
-  // Starting the clock, by the host or by the last first MULE, set the phase's own short clock: the long one comes back.
-  giveDevelopment(code);
 }
 
 /** Test fixture: the last AI seat takes `name`. */
