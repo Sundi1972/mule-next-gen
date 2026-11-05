@@ -138,7 +138,7 @@ export function TvHeader({ game, title, seconds, extra, gauges = true }: { game:
       <header className="flex items-end justify-between gap-6">
         <div className="flex flex-col gap-1">
           <span className="flex items-center gap-3">
-            <span className="label-caps text-base!">
+            <span className="label-caps whitespace-nowrap text-base!">
               Month {game.month} / {game.maxMonths}
             </span>
             {gauges && <StrikeBadge strike={game.colony?.strike} />}
