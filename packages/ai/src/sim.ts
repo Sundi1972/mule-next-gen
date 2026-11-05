@@ -82,7 +82,7 @@ const quantile = (values: number[], q: number) => {
 
 /**
  * The arcade floor's report lines (spec §4), only when development played on it: MULEs installed and pub times a turn,
- * the pub payout, the presses the referee refused, month 1's waiting clock, the moments (packs, glints, scrambles),
+ * the pub payout, the presses the referee refused, the moments (packs, glints, scrambles),
  * and the AI's lake analyses.
  */
 function floorLines(turns: readonly DevTurn[], moments: readonly FloorMomentCounts[], seats: number): string[] {
@@ -214,7 +214,7 @@ function main() {
   // `--walking off` plays the game as it was before walking cost development time.
   const walking = argText('walking') !== 'off';
   let mulesLost = 0;
-  // On the arcade floor (DEV_STEER.on): every seat's development turn, and month 1's waiting clock per game.
+  // On the arcade floor (DEV_STEER.on): every seat's development turn.
   const floorTurns: DevTurn[] = [];
   const floorMoments: FloorMomentCounts[] = [];
   let playerGames = 0;

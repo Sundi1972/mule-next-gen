@@ -386,8 +386,8 @@ function shipQuote(state: GameState, good: Good): number[] {
 
 /**
  * Whether a seat's development turn is over by a given time `at`: it went to the pub, or the clock ended by then. A
- * steered tick passes its own time, so a tick that runs late is still judged at its own time, as the sim's is (HC-4);
- * month 1's waiting clock (`devEndsAt` null) ends no turn by time.
+ * steered tick passes its own time, so a tick that runs late is still judged at its own time, as the sim's is (HC-4).
+ * `devEndsAt` is null only outside development, and then ends no turn by time.
  */
 export function turnOverAt(doneDeveloping: boolean, devEndsAt: number | null, at: number): boolean {
   return doneDeveloping || (devEndsAt !== null && devEndsAt <= at);
@@ -1298,9 +1298,9 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   /**
    * One tick of RULE-1: each seat's input (an away seat's stands still; an AI seat's from its hand), the step and the
    * presses it reaches, the frame to every screen, then development's early ends. True when the views must go: the
-   * game changed, month 1's clock started, the phase ended, or a seat's reach words changed (AM-11). Null, stepping
+   * game changed, the phase ended, or a seat's reach words changed (AM-11). Null, stepping
    * nothing and taking no input, for a tick at or after the clock's end: no press, AI input or moment applies then,
-   * as in the sim (AM-19). Month 1's waiting clock (devEndsAt null) ends no tick.
+   * as in the sim (AM-19).
    */
   private steerTick(steering: Steering): boolean | null {
     const state = this.requireState();
