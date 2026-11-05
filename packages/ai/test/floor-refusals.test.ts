@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   advancePhase,
+  analysisSeconds,
   applyReach,
   buildFloor,
   createGame,
@@ -20,7 +21,7 @@ import {
   type GameState,
   type Outfit,
 } from '@mule/engine';
-import { installable, placePoint } from '../src/floor-time.js';
+import { installable, placePoint, plotErrandSeconds, pubMargin } from '../src/floor-time.js';
 import { simFloorConfig } from '../src/floor-turn.js';
 import { FloorWalker, type StepRun } from '../src/hands/floor-walker.js';
 import { outlook } from '../src/outlook.js';
@@ -53,7 +54,7 @@ function development(seed: number, seats = 2): GameState {
 /**
  * ai0's development turn on the floor, as the sim's referee plays it (floor-turn.ts): its input, the step, the moments,
  * then its press where Reach offers one; `between` may change the floor after each tick, and `stepped` the floor the
- * step left, before the press (as stepGlint lights a glint there). The other seats stand.
+ * step left, before the press (as stepGlint lights a glint there). The other seats stand. The turn is `seconds` long.
  */
 function playTurn(
   state: GameState,
@@ -61,11 +62,12 @@ function playTurn(
   seat: AiSeat,
   between: (floor: DevFloor) => DevFloor = (f) => f,
   stepped: (floor: DevFloor, input: FloorInput, left: number) => DevFloor = (f) => f,
+  seconds: number = DEVELOPMENT.fullSeconds,
 ): DevFloor {
   let floor = buildFloor(state, cfg);
-  const ticks = (DEVELOPMENT.fullSeconds * MS_PER_SECOND) / cfg.steer.tickMs;
+  const ticks = (seconds * MS_PER_SECOND) / cfg.steer.tickMs;
   for (let run = 0; run + 1 < ticks && !state.players.find((p) => p.id === ME)!.doneDeveloping; run++) {
-    const left = (DEVELOPMENT.fullSeconds * MS_PER_SECOND - (run + 1) * cfg.steer.tickMs) / MS_PER_SECOND;
+    const left = (seconds * MS_PER_SECOND - (run + 1) * cfg.steer.tickMs) / MS_PER_SECOND;
     const inputs = { [ME]: seat.developSteer(state, floor, left, cfg) };
     const spent = doorPresses(floor, state, inputs, cfg);
     floor = stepped(settleMoments(state, stepFloor(floor, state, inputs, cfg.steer.tickMs, cfg)), inputs[ME]!, left);
@@ -81,13 +83,17 @@ function playTurn(
   return floor;
 }
 
+/** The free plots off lakes and specials, nearest the store first. */
+function nearestFree(state: GameState) {
+  const store = state.tiles.find((t) => t.terrain === 'store')!;
+  return state.tiles
+    .filter((t) => t.owner === null && t.terrain !== 'lake' && t.terrain !== 'store' && !t.special)
+    .sort((a, b) => Math.abs(a.x - store.x) + Math.abs(a.y - store.y) - (Math.abs(b.x - store.x) + Math.abs(b.y - store.y)));
+}
+
 /** Gives ai0 the `n` free plots nearest the store, off lakes and specials, and returns them. */
 function ownNearest(state: GameState, n: number) {
-  const store = state.tiles.find((t) => t.terrain === 'store')!;
-  const near = state.tiles
-    .filter((t) => t.owner === null && t.terrain !== 'lake' && t.terrain !== 'store' && !t.special)
-    .sort((a, b) => Math.abs(a.x - store.x) + Math.abs(a.y - store.y) - (Math.abs(b.x - store.x) + Math.abs(b.y - store.y)))
-    .slice(0, n);
+  const near = nearestFree(state).slice(0, n);
   for (const t of near) t.owner = ME;
   return near;
 }
@@ -225,24 +231,24 @@ describe("the arcade floor's AI bugs of 5 Nov (FM-glint-install, FM-led-analyse,
     // A MULE won at the land auction is led into development (lots.ts: carriedMule = the lot's outfit). While it leads one,
     // a plot's button offers INSTALL, not ANALYSE, so analyses queued ahead of the install are refused on the plot.
     const state = development(4);
-    const store = state.tiles.find((t) => t.terrain === 'store')!;
-    const near = state.tiles
-      .filter((t) => t.owner === null && t.terrain !== 'lake' && t.terrain !== 'store' && !t.special)
-      .sort((a, b) => Math.abs(a.x - store.x) + Math.abs(a.y - store.y) - (Math.abs(b.x - store.x) + Math.abs(b.y - store.y)));
-    for (const t of near.slice(0, 4)) t.owner = ME;
+    ownNearest(state, 4);
     const me = state.players.find((p) => p.id === ME)!;
     me.carriedMule = 'food';
     const cfg = quietConfig();
     const seat = new AiSeat({ id: ME, name: 'AI 1', persona: 'trader', level: 'trader', seed: 11 });
+    const gains = idleGains(state, seat, 'food');
+    const best = state.tiles[bestOf(gains)]!;
+    expect(Math.min(...gains.values()), 'the plots differ for a Food MULE').toBeLessThan(gains.get(state.tiles.indexOf(best))!);
     playTurn(state, cfg, seat);
     const log = seat.developLog();
     const shown = JSON.stringify(log);
     expect(log.some((e) => e.action.type === 'analyse'), `it wanted an analysis: ${shown}`).toBe(true);
-    // The promise: no walk to an analysis the button then refuses, and the MULE it was given is on a plot of its own.
+    // The promise: no walk to an analysis the button then refuses, and the MULE it was given is on the plot it gains most
+    // on, installed first. That plot, developed, is not walked back to for an analysis.
     expect(log.filter((e) => e.action.type === 'analyse' && !e.ok && e.why !== 'no time'), shown).toEqual([]);
-    const first = log[0]?.action;
-    expect(first?.type === 'install' && log[0]!.ok, `the lot MULE installed first: ${shown}`).toBe(true);
-    if (first?.type === 'install') expect(tileAt(state.tiles, state.width, first.x, first.y)!.outfit, 'the lot MULE on its plot').toBe('food');
+    expect(log[0], `the lot MULE installed first: ${shown}`).toMatchObject({ ok: true, action: { type: 'install', x: best.x, y: best.y } });
+    expect(best.outfit, 'the lot MULE on its best plot').toBe('food');
+    expect(log.filter((e) => e.action.type === 'analyse' && e.action.x === best.x && e.action.y === best.y), shown).toEqual([]);
   });
 
   it('FM-floor-filter: a filter for an own polluter not yet analysed is fitted, not refused at the plot', () => {
@@ -268,6 +274,58 @@ describe("the arcade floor's AI bugs of 5 Nov (FM-glint-install, FM-led-analyse,
     // The promise: the filter it walked to is on its plot.
     expect(log.filter((e) => e.action.type === 'filter' && !e.ok), shown).toEqual([]);
     expect(mine.filter, 'the filter on the mine').toBe(true);
+  });
+
+  it('FM-floor-filter: a filter whose analysis the clock drops is dropped with it, never walked to', () => {
+    // The turn is cut so the walk to the mine and back to the pub fits the clock with the analysis's assay left out, and
+    // not with it: the analysis is dropped for time. ANALYSE still outranks FIT FILTER on the plot, so the filter alone
+    // would be walked to and refused there.
+    const state = development(4);
+    const mine = nearestFree(state)[2]!;
+    Object.assign(mine, { owner: ME, outfit: 'rareEarth', runMonths: 2 });
+    const me = state.players.find((p) => p.id === ME)!;
+    me.stock.alloy = 1;
+    state.air = 25;
+    const cfg = quietConfig();
+    const c = buildFloor(state, cfg).colonists.find((x) => x.id === ME)!;
+    const index = state.tiles.indexOf(mine);
+    const errand = (work: number) => plotErrandSeconds(state, cfg, c, index, work) + pubMargin(cfg, c);
+    // Halfway between the two, and the ticks the hand spends deciding before it sets off.
+    const seconds = (errand(0) + errand(analysisSeconds(state, ME))) / 2 + (3 * cfg.steer.tickMs) / MS_PER_SECOND; // literal-ok: the start, the decision and the first step's tick
+    const seat = new AiSeat({ id: ME, name: 'AI 1', persona: 'trader', level: 'trader', seed: 11 });
+    playTurn(state, cfg, seat, undefined, undefined, seconds);
+    const log = seat.developLog();
+    const shown = JSON.stringify(log);
+    expect(log.filter((e) => e.action.type === 'analyse').map((e) => e.why), `the analysis dropped for time: ${shown}`).toEqual(['no time']);
+    // The promise: no walk to a filter the plot then refuses; the turn ends at the pub.
+    expect(log.filter((e) => e.action.type === 'filter'), shown).toEqual([]);
+    expect(me.doneDeveloping, 'at the pub').toBe(true);
+  });
+
+  it("FM-glint-install: a press that did not take is pressed again only for this seat's own glint, not another seat's", () => {
+    // The walker reads a press that did not take as GRAB THE GLINT's only when the tick's glint beat is this seat's.
+    const state = development(4);
+    const plot = state.tiles.find((t) => t.terrain === 'plains' && t.owner === null)!;
+    plot.owner = ME;
+    state.players.find((p) => p.id === ME)!.carriedMule = 'energy';
+    const cfg = quietConfig();
+    const action = { type: 'install' as const, x: plot.x, y: plot.y };
+    const run = (who: string) => {
+      const built = buildFloor(state, cfg);
+      // Standing on the plot, leading the MULE: Reach offers INSTALL there.
+      let floor: DevFloor = { ...built, colonists: built.colonists.map((c) => (c.id === ME ? { ...c, space: 'map' as const, x: plot.x + 0.5, y: plot.y + 0.5, lead: { good: 'energy' as const, x: plot.x + 0.5, y: plot.y + 0.5 } } : c)) };
+      expect(reachOf(floor, state, ME, cfg, { secondsLeft: 40 }).kind, 'INSTALL offered').toBe('install');
+      const walker = new FloorWalker(ME);
+      let out: StepRun = walker.run({ state, floor, cfg, secondsLeft: 40 }, action, 0);
+      // literal-ok: a bound in ticks, many times a counter's pause
+      for (let i = 0; i < 200 && out.kind === 'going' && !out.input.act; i++) out = walker.run({ state, floor, cfg, secondsLeft: 40 }, action, 0);
+      expect(out, 'it pressed INSTALL').toMatchObject({ kind: 'going', input: { act: true } });
+      // The press is not applied, and the tick's beats hold a glint won by `who`.
+      floor = { ...floor, moments: { ...floor.moments, beats: [{ kind: 'glint', who, text: 'a glint won' }] } };
+      return walker.run({ state, floor, cfg, secondsLeft: 40 }, action, 0);
+    };
+    expect(run('ai1'), "another seat's glint: the press failed").toEqual({ kind: 'failed', why: 'the press did not take' });
+    expect(run(ME), 'its own glint: it presses again').toMatchObject({ kind: 'going' });
   });
 });
 
@@ -308,8 +366,10 @@ describe('a MULE led into development is never lost to the lead (FM-led-no-gain)
     const seat = new AiSeat({ id: ME, name: 'AI 1', persona: 'trader', level: 'trader', seed: 11 });
     playTurn(state, quietConfig(), seat);
     const log = seat.developLog();
-    // The promise: no walk the lead wastes; the turn ends at the pub, the mine's MULE where it was.
-    expect(log.map((e) => [e.action.type, e.ok])).toEqual([['pub', true]]);
+    // The promise: no walk the lead wastes; the turn ends at the pub (its press is the turn's last, never logged), the
+    // mine's MULE where it was.
+    expect(log.map((e) => [e.action.type, e.ok])).toEqual([]);
+    expect(me.doneDeveloping, 'at the pub').toBe(true);
     expect(mine!.outfit).toBe('rareEarth');
   });
 
