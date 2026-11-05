@@ -246,8 +246,8 @@ export const UPKEEP = {
 
 export const START = {
   money: 1000,
-  /** Each player's depot at the start. Food 2 (Heiko, 5 Nov). */
-  playerStock: { food: 2, water: 6, energy: 4 } as Partial<Stock>,
+  /** Each player's depot at the start. Food 2 and Energy 2 (Heiko, 5 Nov). */
+  playerStock: { food: 2, water: 6, energy: 2 } as Partial<Stock>,
   /** Each player's reputation at the start, out of 100. */
   reputation: 50,
   colonists: 100,
