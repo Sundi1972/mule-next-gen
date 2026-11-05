@@ -13,16 +13,22 @@
  * W-4 (B-AC-2, T-AC-4, the wire half): every connection is sent the same frame for every tick, in order, one a tick.
  * In all of them no colonist stands on land that blocks it, and development ends by its clock at the latest.
  */
-import { boxOf, DEV_STEER, HALL, type HallPlace, type Terrain } from '@mule/engine';
+import { boxOf, DEV_STEER, DEVELOPMENT, HALL, type HallPlace, type Terrain } from '@mule/engine';
 import type { DevFrame, MuleView } from '@mule/protocol';
 import { check } from './harness';
 import { connect, keepsPlaying, me, press, reachOf, steerHall, steerTo, steeredTable, until, type Wire } from './walking-wire';
 
 /** A map where the store's left door opens onto a river plot and then plains, and its right door onto mountains. */
 const SEED = 24;
-/** Development at a quarter of its game time: 50 s of clock in 12.5 s. */
+/** Development at a quarter of its game time: each game second passes in a quarter of a real one. */
 const PHASE_SCALE = 0.25;
 const TO_DEVELOPMENT_MS = 60_000;
+/**
+ * The turn this test stages, in game seconds. The clock runs from the first frame of development, and the route
+ * (W-6's flood, W-1's two holds, W-3's store and plot, W-5's drop and back, the pub) walks about 60 of them at full
+ * pace: more than a real turn leaves. Twice that fits a slower runner or a hungry colonist; restored at the end.
+ */
+const STAGED_TURN_S = 120;
 const DEVELOPMENT_MS = 60_000;
 /** A real development tick at PHASE_SCALE. */
 const TICK_MS = DEV_STEER.tickMs * PHASE_SCALE;
@@ -80,6 +86,9 @@ function terrainAt(view: MuleView, x: number, y: number): Terrain | null {
 }
 
 const started = Date.now();
+// Staged before the table starts: createGame and each development read the turn's length from config.
+const turnSeconds = DEVELOPMENT.fullSeconds;
+DEVELOPMENT.fullSeconds = STAGED_TURN_S;
 // Ossa stays at the table doing nothing: with no human left playing, development would end at once (HC-3), and W-5
 // drops Brix.
 const table = await steeredTable({ seed: SEED, ais: 2, phaseScale: PHASE_SCALE, maxMonths: 1, guests: ['Ossa'] });
@@ -194,7 +203,7 @@ try {
 
   // W-5: the clock runs; the host drops, its colonist stops; back with its token, it steers again.
   host.intent({ type: 'continue' });
-  check(await until(() => board.view()?.phaseEndsAt != null, 2_000), 'W-5: the host\'s Continue did not start the clock');
+  check(await until(() => board.view()?.phaseEndsAt != null, 2_000), 'W-5: the development clock is not running');
   const endsAt = board.view()!.phaseEndsAt!;
   host.intent({ type: 'steer', x: 0, y: 1 });
   await sleep(10 * TICK_MS);
@@ -243,6 +252,7 @@ try {
 } catch (err) {
   errors.push(err instanceof Error ? err.message : String(err));
 } finally {
+  DEVELOPMENT.fullSeconds = turnSeconds;
   stopHost();
   stopOssa();
   host.close();
