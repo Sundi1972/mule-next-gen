@@ -699,13 +699,20 @@ promise. WS4's part first (harness.ts is shared), then the others at once.
 
 **Depends on:** PR-11 **Spec sections consumed:** §1 C14 (pins), §5 (the point of no return)
 
-- [ ] **Step 1 (WS6):** remove `apps/web/src/phone/Develop.tsx` (a named edit, WS4 reviewing), `next-step.ts`,
+**Built as one PR by WS3 (PM ruling, option A, 5 Nov).** One removal, one CI, one review, so trunk is never
+half-removed. Each other lane's files are a named edit, committed on its own so the owner OKs it by SHA through the
+PM; the PR body lists each SHA.
+
+- [ ] **Step 1 (WS6's files, named edit):** remove `apps/web/src/phone/Develop.tsx` (WS4 reviewing), `next-step.ts`,
   `apps/web/test/next-step.test.ts`, and `store-view.test.ts`'s tap cases.
-- [ ] **Step 2 (WS1):** remove `packages/engine/src/dev-walk.ts` and `DEV_STEER.on`'s other branch.
+- [ ] **Step 2 (WS1's files, named edit):** remove `packages/engine/src/dev-walk.ts` (move `pace` into the floor,
+  which imports it) and `DEV_STEER.on`'s other branch.
 - [ ] **Step 3 (WS3):** remove `apps/server/src/dev-walking.ts`, the flag's other branch in mule-game.ts, and
-  ColonistView v1's `at`, `walk`, `assayUntil`. Delete with them the tap-path tests PR-11 pinned to `DEV_STEER.on`
-  off (`apps/server/test/dev-walking.test.ts`, `walk-settle.test.ts`, and the tap describes of
-  `apps/web/test/first-mule-phone.test.ts`): they guard the flag-off rollback, which goes here (PM ruling, 4 Nov).
+  ColonistView v1's `walk` and the tap path. **Keep `at` and `assayUntil`**: the steered view fills both, and the
+  steered phone (arcade `own.ts`, `predict.ts`, `seat.ts`, `parts.tsx`) and `packages/ui` `events/rollcall.tsx` read
+  them. Delete with them the tap-path tests PR-11 pinned to `DEV_STEER.on` off (`apps/server/test/dev-walking.test.ts`,
+  `walk-settle.test.ts`, and the tap describes of `apps/web/test/first-mule-phone.test.ts`): they guard the flag-off
+  rollback, which goes here (PM ruling, 4 Nov). Move the e2e readers of `walk` onto the steered view.
 - [ ] **Step 4: Run `pnpm typecheck && pnpm test`, the e2e and `pnpm sim`.** Expected: exit 0; C14's pins (the
   steering twins of PR-10) green. Commit `refactor: C14 tap-to-walk removed`.
 
