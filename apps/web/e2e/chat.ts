@@ -211,8 +211,18 @@ try {
 
   // The auction: two lines within a second while the TV draws the walk.
   await Promise.all([phase(lena, 'auction'), phase(kai, 'auction')]);
-  for (const p of [lena, kai]) await p.locator('[data-phase=auction]').getByRole('button', { name: 'Ready', exact: true }).click({ timeout: 5_000 });
-  await tv.locator('[data-phase=auction] [data-testid=walk-board]').waitFor({ timeout: REACH.walk });
+  // Each phone presses Ready on the good that is up, and again if the good moves on under the press: with 2 Food a seat
+  // (5 Nov) month 1's Food is skipped as the auction opens, and a press that met Food's screen counted for nothing.
+  const walk = tv.locator('[data-phase=auction] [data-testid=walk-board]');
+  const until = Date.now() + REACH.walk + 5_000;
+  while ((await walk.count()) === 0) {
+    check(Date.now() < until, 'chat: the walk starts once both phones have pressed Ready on the good that is up');
+    for (const p of [lena, kai]) {
+      const ready = p.locator('[data-phase=auction]').getByRole('button', { name: 'Ready', exact: true });
+      if (await ready.count()) await ready.click({ timeout: 1_000 }).catch(() => undefined);
+    }
+    await tv.waitForTimeout(200);
+  }
   await lena.waitForTimeout(PHASE_SETTLES_MS);
   await burst(lena, kai, 'auction');
 
