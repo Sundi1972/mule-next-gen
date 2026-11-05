@@ -52,7 +52,7 @@ const SHORT = { a1: 300, a2: 340, a3: 380 };
 function worthOf(state: GameState, mind: Mind, lot: Listing): Worth {
   const obs = observe(state, mind.me);
   const money = obs.players.find((p) => p.id === mind.me)!.money;
-  const value = lot.item.kind === 'plot' ? plotValue(obs, mind, lot.item.y * obs.width + lot.item.x) : muleValue(obs, mind);
+  const value = lot.item.kind === 'plot' ? plotValue(obs, mind, lot.item.y * obs.width + lot.item.x) : muleValue(obs, mind, lot.item.outfit);
   const kept = money - cashReserve(obs, mind);
   const room = lot.item.kind === 'plot' ? plotRoom(obs, mind) : Infinity;
   return { value, kept, room, limit: Math.max(0, Math.min(kept, value, room)) };
