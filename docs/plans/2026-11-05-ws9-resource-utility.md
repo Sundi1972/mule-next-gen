@@ -150,8 +150,12 @@ The standing authority line goes with every handoff:
 
 A finding from #408's review, outside this spec's changes. `strategist.ts::leaderOf` hand-sums money, land and MULEs, so it misses goods, office and donations. It ships separately because it changes today's spite and cornering, so the sim moves, which PR-0's and PR-1's byte-identical gates can't carry.
 
-- [ ] **Step 1:** Write the failing test: a rival richer only in goods (as the observation estimates them) or in office terms is the leader. Observed at `leaderOf(obs, self)`. Altitude: unit, because the leader is a pure read of the observation.
-- [ ] **Step 2:** `leaderOf` ranks rivals by the engine's `score(obs, id)`, which is `scoreParts` on the seat's observation, so it is public by construction (`engine/observe.ts`). A WS1 named edit. PASS.
+**FM-leader-worth** (the failure mode the tests name): the seat's leader is not the rival with the highest Worth it can see. Two ways it happens:
+- a hand sum that misses score lines (office, donations once #408 lands);
+- ranking by the market panel's even split of goods, whose remainder goes to rivals in seat order.
+
+- [ ] **Step 1:** Write the failing tests for FM-leader-worth: a rival ahead only by office terms is the leader; the even goods split doesn't rank rivals by seat order (only the status screen's good is a real holding). Observed at `leaderOf(obs, self)`. Altitude: unit, because the leader is a pure read of the observation.
+- [ ] **Step 2:** `leaderOf` ranks rivals by the engine's `scoreParts` on the seat's observation, less the goods line, plus the status screen's good. It is public by construction (`engine/observe.ts`). A WS1 named edit. PASS.
 - [ ] **Step 3:** Report the sim delta on 1/101/201 in the PR body, never tuned. Then one review, WS1's OK, and the head to the PM. PR-1's T-AC-9 base is re-recorded on the trunk that carries it.
 
 ### PR-0 merge gate
