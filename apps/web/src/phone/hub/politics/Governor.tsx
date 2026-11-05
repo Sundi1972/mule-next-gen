@@ -5,13 +5,19 @@ import { useEffect, useId, useState, useSyncExternalStore } from 'react';
 import { fmt } from '../../../game/derive';
 import { useClient } from '../../../net/react';
 import { usePhoneGame } from '../../game';
+import { LawPicker } from './LawPicker';
 import { promiseBase, promiseKept, promisedWords } from './words';
 
-/** The Governor's desk: the sales tax, within the bounds the server gives for this month, with the promise in view (E-7). */
+/** The Governor's desk: the sales tax, within the bounds the server gives for this month, with the promise in view (E-7); then next month's law (C46). */
 export function GovernorDesk() {
   const { view } = usePhoneGame();
   if (!view.politics) return null;
-  return <SalesTax politics={view.politics} />;
+  return (
+    <>
+      <SalesTax politics={view.politics} />
+      <LawPicker />
+    </>
+  );
 }
 
 /** The last tax this phone sent: in which month, and whether Set still waits for it. */

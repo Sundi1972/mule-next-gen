@@ -354,11 +354,11 @@ describe('values for lot bids (WS3 caps AI bids at these)', () => {
   it('INV-WS3-2: a MULE is worth nothing without idle land, and at least the store price with a profitable use', () => {
     const state = developmentWithWater(0);
     state.players[0]!.money = 5_000;
-    expect(muleValue(observe(state, 'ai0'), traderMind)).toBe(0);
+    expect(muleValue(observe(state, 'ai0'), traderMind, 'water')).toBe(0);
     // A river plot with the colony out of Water: a Water farm there pays, so the MULE is worth its store price or more.
     state.tiles.find((t) => t.terrain === 'river' && !t.owner)!.owner = 'ai0';
     const obs = observe(state, 'ai0');
-    expect(muleValue(obs, traderMind)).toBeGreaterThanOrEqual(mulePriceFor(obs, 'ai0'));
+    expect(muleValue(obs, traderMind, 'water')).toBeGreaterThanOrEqual(mulePriceFor(obs, 'ai0'));
   });
 });
 
