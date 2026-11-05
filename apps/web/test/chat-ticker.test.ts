@@ -45,6 +45,15 @@ describe('the table chat ticker, exported for other screens', () => {
     expect(linesOf(render({ lines: 0 }))).toEqual([]);
   });
 
+  it("`wide` sets each line in text-sm where no /shell container is around it; every line keeps its rows whole (shrink-0), so a short holder loses its oldest line", () => {
+    const wide = linesOf(render({ lines: 2, wide: true }));
+    for (const l of wide) {
+      expect(l.cls.split(' ')).toContain('text-sm');
+      expect(l.cls).not.toContain('text-[11px]');
+    }
+    for (const l of [...linesOf(render({ lines: 2 })), ...linesOf(render({ lines: 2, wrap: true })), ...wide]) expect(l.cls.split(' ')).toContain('shrink-0');
+  });
+
   it('cuts each line to one row; with `wrap` a line runs on, speaker and words as one sentence, over at most three rows', () => {
     const [cut] = linesOf(render({ lines: 1 }));
     expect(cut!.cls.split(' ')).toContain('truncate');
