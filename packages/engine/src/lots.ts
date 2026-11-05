@@ -1,10 +1,11 @@
-import { GAME, LOTS, WALK } from './config.js';
+import { fundOut, siteProject } from './colony.js';
+import { COLONY, GAME, LOTS, PRESTIGE, WALK } from './config.js';
 import { mulePrice, taxSale } from './economy.js';
 import { RuleError } from './errors.js';
 import { freePlots } from './game.js';
 import { tileAt } from './map.js';
 import { createRng } from './rng.js';
-import type { GameState, LandAuction, Listing, LotItem, LotResult, Tile } from './types.js';
+import type { GameState, LandAuction, Listing, LotItem, LotResult, PrestigeId, Tile } from './types.js';
 import { stepBoard, takeSide, type WalkMarket } from './walk.js';
 
 /**
@@ -184,7 +185,25 @@ function lotMarket(state: GameState): WalkMarket {
   };
 }
 
-/** The highest rounded bid at or over the minimum and who holds it (first there, then seat order), or null if no bid reaches it. */
+/**
+ * C30 (G-5 RULE-28): the object that bids for this plot, and the most it bids: a commissioned object waiting for its
+ * site with a bid the Governor set, up to that bid and to what the fund can spare over its reserve. Only on a player's
+ * plot (never a MULE, never the colony's own lot); null when the colony does not bid. lots.ts reads the colony and
+ * never writes it: siteProject and fundOut do.
+ */
+export function colonyBid(state: GameState, lot: Listing): { id: PrestigeId; cap: number } | null {
+  if (!state.colony || lot.item.kind !== 'plot' || lot.seller === COLONY_SELLER) return null;
+  const project = state.colony.projects.find((p) => p.stage === 'commissioned' && p.plot === null && p.maxBid !== null && PRESTIGE[p.id].needsPlot);
+  if (!project) return null;
+  const cap = Math.min(project.maxBid!, state.treasury.money - COLONY.reserve);
+  return cap >= lot.minimum ? { id: project.id, cap } : null;
+}
+
+/**
+ * The lot's leader: the highest rounded bid at or over the minimum and who holds it (first there, then seat order), or
+ * null if no bid reaches it. The colony bids as a proxy (C30): it leads at one credit over the best player's bid, or at
+ * the minimum, while that is under its cap; a player who reaches the cap leads.
+ */
 export function lotLeader(state: GameState): { id: string; bid: number } | null {
   const a = state.landAuction;
   if (!a?.lot) return null;
@@ -192,7 +211,10 @@ export function lotLeader(state: GameState): { id: string; bid: number } | null 
   const best = a.walkers
     .filter((w) => w.side === 'buyer' && Math.round(w.price) >= minimum)
     .sort((x, y) => Math.round(y.price) - Math.round(x.price) || x.since - y.since || seatOf(state, x.id) - seatOf(state, y.id))[0];
-  return best ? { id: best.id, bid: Math.round(best.price) } : null;
+  const player = best ? { id: best.id, bid: Math.round(best.price) } : null;
+  const colony = colonyBid(state, a.lot);
+  if (colony && (!player || player.bid < colony.cap)) return { id: COLONY_SELLER, bid: player ? player.bid + 1 : minimum };
+  return player;
 }
 
 function startWalk(state: GameState): void {
@@ -219,6 +241,14 @@ function resolve(state: GameState, lot: Listing, leader: { id: string; bid: numb
     tile.outfit = null;
     tile.runMonths = 0;
   };
+  if (leader?.id === COLONY_SELLER) {
+    // C30: the fund pays the seller, and the plot becomes the colony's, bare, for the object that bid.
+    const { id } = colonyBid(state, lot)!;
+    fundOut(state, 'siteBid', leader.bid);
+    if (seller) seller.money += taxSale(state, seller.id, leader.bid);
+    siteProject(state, id, lot.item.y * state.width + lot.item.x);
+    return { kind: 'sold', buyer: COLONY_SELLER, price: leader.bid };
+  }
   if (leader) {
     const winner = state.players.find((p) => p.id === leader.id)!;
     winner.money -= leader.bid;
