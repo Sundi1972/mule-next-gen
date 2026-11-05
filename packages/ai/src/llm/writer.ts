@@ -65,6 +65,22 @@ export interface WriterSchema {
  * monopolyTarget; a brief that offers no strategy has none in its schema. Plan letters are any option letter; the writer
  * checks them against the brief, and checks each reason's length (structured outputs take no string-length constraint).
  */
+/**
+ * The offers as schema branches: offers whose value has the same type share one branch, its paths an enum, in first-offer
+ * order. The API refuses a schema of one branch per path past a few dozen (an auction of 6 goods offers 30 paths), and
+ * offers of distinct types keep a branch each, so the land schema's bytes are unchanged.
+ */
+function byValueType(offers: readonly EditOffer[]): { paths: string[]; to: object }[] {
+  const branches = new Map<string, { paths: string[]; to: object }>();
+  for (const { path, to } of offers) {
+    const key = JSON.stringify(to);
+    const branch = branches.get(key);
+    if (branch) branch.paths.push(path);
+    else branches.set(key, { paths: [path], to });
+  }
+  return [...branches.values()];
+}
+
 export function replySchema(corners: boolean, offers: readonly EditOffer[] = LAND_OFFERS, strategyOffered = true): WriterSchema {
   const field: Record<StrategyField, object> = {
     kind: { type: 'string', enum: corners ? [...STRATEGY_KINDS] : STRATEGY_KINDS.filter((k) => k !== 'monopolist') },
@@ -87,9 +103,9 @@ export function replySchema(corners: boolean, offers: readonly EditOffer[] = LAN
       edits: {
         type: 'array',
         items: {
-          anyOf: offers.map(({ path, to }) => ({
+          anyOf: byValueType(offers).map(({ paths, to }) => ({
             type: 'object',
-            properties: { path: { type: 'string', enum: [path] }, to, reason: { type: 'string' } },
+            properties: { path: { type: 'string', enum: paths }, to, reason: { type: 'string' } },
             required: ['path', 'to', 'reason'],
             additionalProperties: false,
           })),

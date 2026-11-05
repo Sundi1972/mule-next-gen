@@ -60,7 +60,7 @@ describe('a written playbook through the record and the replay', { timeout: 30_0
       const { user } = promptOf(params);
       if (user.includes('Your draft auction:')) {
         // The first good the brief offers: its hold, one unit lower.
-        const offered = (params.output_config?.format?.schema as { properties: { edits: { items: { anyOf: { properties: { path: { enum: string[] } } }[] } } } }).properties.edits.items.anyOf.map((v) => v.properties.path.enum[0]!);
+        const offered = (params.output_config?.format?.schema as { properties: { edits: { items: { anyOf: { properties: { path: { enum: string[] } } }[] } } } }).properties.edits.items.anyOf.flatMap((v) => v.properties.path.enum);
         edited = offered.find((p) => p.endsWith('/hold'))!;
         return sdkMessage(JSON.stringify({ edits: [{ path: edited, to: 0, reason: 'Keep none.' }], line: '' }));
       }
