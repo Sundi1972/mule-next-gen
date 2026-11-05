@@ -397,8 +397,9 @@ describe('T-AC-10 display / C11: two sick players play in ONE roll call, on the 
   it('T-AC-10: the sick status line on the sick player’s development screen is unchanged, under the overlay', async () => {
     for (const boards of [0, 1]) {
       const html = await render(await phone(LENA, boards, viewAt(ROLL_S)));
-      expect(html).toContain('data-testid="sick-cause"');
-      expect(inside(html, 'phone-event-overlay')).not.toContain('sick-cause');
+      // The side room's pace line is the sick line (its short form while she picks an outfit in the hall).
+      expect(html).toMatch(/data-testid="pace-line"[^>]*data-sick="true"/);
+      expect(inside(html, 'phone-event-overlay')).not.toContain('pace-line');
     }
   });
 });
