@@ -18,7 +18,8 @@ lanes read it to build. It is plain HTML with search, published for Heiko and li
 - Start from `_template.html`. One `<h2 id>` per topic; ids are permanent (links and search use them).
 - Write for a player at the kitchen table: what happens, what you see, what it costs. Lane codes, AC ids and file
   paths go only in the `code-ref` and `owner` lines at the end of a section.
-- Every number is the value in `packages/engine/src/config.ts` on trunk, named the way the game names it. Never from memory.
+- Every number in an "In the game" section is the value in `packages/engine/src/config.ts` on trunk, named the way the game names it. Never from memory.
+- A number that exists only on a lane branch or in an open PR goes in a "What is changing" box (or a Being built / Designed section), naming the branch or PR and saying what trunk has today. It moves into the main text when it merges.
 - "Why it is like this" quotes the ruling: who decided and when (Heiko's words where he gave them; SEAMS.md dates).
 - Use tables for anything with more than three values. Use a worked example where a rule has arithmetic.
 - No invented facts. If something is unclear in the code, say so in a `box next` and name who owns the answer.
