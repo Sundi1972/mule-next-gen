@@ -469,7 +469,7 @@ describe('T-AC-4 at the room (AM-21): a press sends at most one full view, the t
     try {
       const r = new Room<MuleIntent, MuleView>({
         code: 'PRESS',
-        createGame: (ctx) => new MuleGame(ctx, 7, { devSteer: true, politics: false, maxMonths: 1, brain: createBrain({ gameId: 'press', env: {} }), log: () => {} }),
+        createGame: (ctx) => new MuleGame(ctx, 7, { politics: false, maxMonths: 1, brain: createBrain({ gameId: 'press', env: {} }), log: () => {} }),
         aiNames: AI_NAMES,
         isUserError: (err) => err instanceof RuleError || err instanceof TableError,
       });
@@ -562,7 +562,7 @@ describe('the steered view (flag on)', () => {
     expect(c.assayUntilTick).not.toBeNull();
     expect(meOf(g, LENA).devSeconds, 'the floor holds the assay; the server takes no seconds off the clock').toBe(devSeconds);
     const view = g.game.viewFor(null).players[0]!.colonist!;
-    expect(view).toMatchObject({ at: tileIndex(g.state.width, g.home.x, g.home.y), walk: null, assayUntil: g.start + c.assayUntilTick! * TICK, space: 'map', facing: c.facing, pace: c.pace, pelts: 0, encounter: null, lead: null });
+    expect(view).toMatchObject({ at: tileIndex(g.state.width, g.home.x, g.home.y), assayUntil: g.start + c.assayUntilTick! * TICK, space: 'map', facing: c.facing, pace: c.pace, pelts: 0, encounter: null, lead: null });
     expect(view.x).toBe(Math.round(c.x * 100) / 100);
     expect('bitten' in view).toBe(false);
     const bitten = (game: MuleGame) => {
@@ -602,9 +602,8 @@ describe('the steered view (flag on)', () => {
     expect(atNow.detail, 'the row means something: priced at the clock, the payout would differ').not.toBe(view.detail);
   });
 
-  it('with the flag on, the old taps are refused, and steer or act outside development changes nothing', () => {
+  it('steer or act outside development changes nothing', () => {
     const g = steered();
-    expect(() => g.game.handle(LENA, { type: 'buyMule' })).toThrow(/steer/i);
     g.advanceTo(g.game.viewFor(LENA).me!.devEndsAt!);
     expect(g.game.viewFor(null).phase).toBe('production');
     const view = g.game.viewFor(LENA);

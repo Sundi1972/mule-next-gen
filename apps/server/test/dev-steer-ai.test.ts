@@ -70,7 +70,6 @@ interface Inside {
   state: GameState;
   finishDevelopment: () => void;
   checkAllReady: () => void;
-  scheduleAiDevelop: (...a: unknown[]) => void;
   aiAct: (...a: unknown[]) => boolean;
 }
 
@@ -90,12 +89,7 @@ function serverGame(seed: number, politics: boolean) {
     outcomes.push(floorOutcome(inside.state));
     finish();
   };
-  const taps = { scheduled: 0, acts: 0 };
-  const schedule = inside.scheduleAiDevelop.bind(game);
-  inside.scheduleAiDevelop = (...a: unknown[]) => {
-    taps.scheduled++;
-    schedule(...a);
-  };
+  const taps = { acts: 0 };
   const aiAct = inside.aiAct.bind(game);
   inside.aiAct = (...a: unknown[]) => {
     if (inside.state.phase === 'development') taps.acts++;
@@ -149,11 +143,11 @@ describe('the AI walks the floor on the server as in the sim (arcade C9, HC-4)',
     }
   });
 
-  it('C9 (WS3 condition 3): in a steered development the tap path never runs: no scheduleAiDevelop, no aiAct', { timeout: 60_000 }, () => {
+  it('C9 (WS3 condition 3): in development the AI never plays a move through aiAct: it walks the floor', { timeout: 60_000 }, () => {
     const server = serverGame(1, false);
     expect(server.outcomes).toHaveLength(MONTHS);
     expect(server.outcomes.some((o) => o.players.some((p) => p.mules > 0)), 'the AI developed, by walking').toBe(true);
-    expect(server.taps).toEqual({ scheduled: 0, acts: 0 });
+    expect(server.taps).toEqual({ acts: 0 });
   });
 });
 

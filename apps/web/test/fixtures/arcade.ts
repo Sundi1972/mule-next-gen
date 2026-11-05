@@ -36,7 +36,7 @@ export const LENAS_PLOTS = [
 ];
 
 const WELL = { foodShare: 1, foodNeed: 3, sick: false, sickBecause: null, conditionPace: 1 } as const;
-const colonist = (c: Partial<ColonistView> = {}): ColonistView => ({ at: 'store', walk: null, assayUntil: null, pace: 1, pelts: 0, encounter: null, ...c });
+const colonist = (c: Partial<ColonistView> = {}): ColonistView => ({ at: 'store', assayUntil: null, pace: 1, pelts: 0, encounter: null, ...c });
 
 export const PLAYERS: PlayerView[] = [
   aPlayer({ id: 's1', name: 'Lena', slot: 0, species: 'zipwing', money: 600, plots: 3, condition: WELL, colonist: colonist({ pace: 1.25 }) }),
