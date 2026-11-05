@@ -201,19 +201,27 @@ function cannotPay(good: Good): void {
   expect(state.players.find((p) => p.id === id)!.money).toBe(money);
 }
 
-/** A seat holding exactly what keeps it whole, beside a short rival with money: it sells none, so it stays whole. */
-function keepsWhole(good: 'food' | 'energy', id: string): GameState {
+/**
+ * A seat holding what keeps it whole and `surplus` more, beside a short rival with money: it sells at most the surplus,
+ * so it stays whole. With a surplus it walks to the rival and must stop selling before a unit it needs goes, though the
+ * rival keeps bidding up after it.
+ */
+function keepsWhole(good: 'food' | 'energy', id: string, surplus = 0): GameState {
   const whole = good === 'food' ? wholeFood : wholeEnergy;
   const state = auctionOf(good, (s) => {
-    shortOf(good, id, MONEY, (t) => whole(t, id))(s);
+    shortOf(good, id, MONEY, (t) => whole(t, id) + surplus)(s);
     shortOf(good, RIVAL(id), MONEY)(s);
   });
   const held = state.players.find((p) => p.id === id)!.stock[good];
-  expect(held, 'the premise: it holds what keeps it whole, more than the screen’s need').toBeGreaterThan(monthNeeds(state, id)[good]);
+  expect(held - surplus, 'the premise: it holds what keeps it whole, more than the screen’s need').toBeGreaterThan(monthNeeds(state, id)[good]);
 
   const trades = play(state);
 
-  expect(sold(trades, id), 'it sold none of what keeps it whole').toEqual([]);
+  const units = sold(trades, id).length;
+  if (surplus === 0) expect(sold(trades, id), 'it sold none of what keeps it whole').toEqual([]);
+  else expect(units, `it sold at most its ${surplus} spare`).toBeLessThanOrEqual(surplus);
+  expect(state.players.find((p) => p.id === id)!.stock[good], 'it ends holding what keeps it whole').toBe(held - units);
+  expect(held - units).toBeGreaterThanOrEqual(whole(state, id));
   return state;
 }
 
@@ -231,6 +239,13 @@ describe('B-AC-food-short: a seat short of Food buys from the store when it can 
 
   it.each(ROWS)('B-AC-food-short: %s (%s) holding exactly what keeps it whole sells none to a short rival and starts next month fed', (id) => {
     const state = keepsWhole('food', id!);
+    playOn(state, 'development');
+
+    expect(state.players.find((p) => p.id === id)!.hungry, `${id} starts next month's development fed`).toBe(false);
+  });
+
+  it.each(ROWS)('B-AC-food-short: %s (%s) holding 3 more than keeps it whole sells at most those 3 to a short rival and starts next month fed', (id) => {
+    const state = keepsWhole('food', id!, 3);
     playOn(state, 'development');
 
     expect(state.players.find((p) => p.id === id)!.hungry, `${id} starts next month's development fed`).toBe(false);
@@ -298,6 +313,13 @@ describe('B-AC-energy-short: a seat short of Energy buys from the store when it 
 
   it.each(ROWS)('B-AC-energy-short: %s (%s) holding exactly what keeps it whole sells none to a short rival and no farm goes half next month', (id) => {
     const state = keepsWhole('energy', id!);
+    playOn(state, 'production', true);
+
+    expect(halvedFor(state, id!, 'noEnergy'), `${id}'s plots halved for Energy next month`).toBe(0);
+  });
+
+  it.each(ROWS)('B-AC-energy-short: %s (%s) holding 3 more than keeps it whole sells at most those 3 to a short rival and no farm goes half next month', (id) => {
+    const state = keepsWhole('energy', id!, 3);
     playOn(state, 'production', true);
 
     expect(halvedFor(state, id!, 'noEnergy'), `${id}'s plots halved for Energy next month`).toBe(0);
