@@ -195,17 +195,32 @@
 </table></div>
 <p>For Food the value itself is the problem: median 19 cr against asks of 49 to 56 (see the <a href="#value-of-goods">worked example</a>).</p>
 <h3 id="shortfall-rule">The stopgap</h3>
-<p>For Food, Energy and Water, while the seat holds less than next month's need as the status screen shows it and the store is selling the good:</p>
+<p>For Food, Energy and Water a computer player works out how much it must hold when the auction ends to be <strong>all right next month</strong>: fed when next month's development starts, and no plot of its making half for want of Energy or Water at next month's production. It counts what it holds, not what its plots may make. The game eats, drinks and spoils in that order (upkeep straight after the auction), so this is more than the need on the status screen:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Good</th><th>Enough for next month</th><th>Example</th></tr></thead>
+<tbody>
+<tr><td>Food</td><td>What upkeep eats now, plus next month's eating again once half of what is left has spoiled (Food spoils <span class="num">50%</span>)</td><td>Eats 3: 3 + 3 / 0.5 = <strong>9</strong></td></tr>
+<tr><td>Energy</td><td>Next month's need for its plots, once a quarter of what it holds has spoiled (Energy spoils <span class="num">25%</span>)</td><td>Needs 4: 4 / 0.75, rounded up = <strong>6</strong></td></tr>
+<tr><td>Water</td><td>As Food, with Water spoiling <span class="num">5%</span>, and only for a player with a Food farm, since an unwatered farm makes half. Without a farm, going short of Water costs it nothing, and it values Water as before</td><td>Drinks 2: 2 + 2 / 0.95, rounded up = <strong>5</strong></td></tr>
+</tbody>
+</table></div>
+<p>The home depot keeps at most <span class="num">10</span> units of a good, so it never counts on keeping more than that.</p>
 <ul>
-<li>it counts what it <em>holds</em>, not what its plots may make;</li>
-<li>each unit of the shortfall is worth at least the store's asking price, so it buys there, or cheaper from a player, never dearer;</li>
-<li>it buys those units as far as its money goes: the cash reserve and the per-good budget do not stop it;</li>
-<li>it never sells below the need;</li>
-<li>Pass is ruled out while it is short and can pay.</li>
+<li><strong>When it buys.</strong> While it holds less than enough for next month, the store is selling the good and it can pay for a unit, it buys up to enough: at the store's price, or cheaper from a player, never dearer. Its cash reserve and its spending limit per good do not stop it; only its money does. It cannot pass. If its money covers only part, it buys what it can.</li>
+<li><strong>What it won't sell.</strong> While it holds less than enough for next month, it sells none of it, whether the store is selling or not. Once it holds enough, it keeps what upkeep is about to eat (Food and Water) or its plots are about to burn (Energy), the need on the status screen, and sells its surplus above that if the price suits it.</li>
+<li><strong>Stopping on time.</strong> A seller that reaches the last unit it may sell steps over to the buyers' edge before the next unit can trade, so a buyer bidding up after it cannot take a unit it means to keep.</li>
 </ul>
-<p>Measured on 5 games: the payable no-buys fell from 47 to 0 for Food, 54 to 0 for Energy and 6 to 0 for Water. A hand bug that pressed Done before a trade at its limit was fixed on the way. The cost: with the seats now buying from the store, the colonists go short more often (52% to 60% of months on one measured cell) and Food stands above 3 times its usual price in more games (78% to 92%). The PM ruled to ship it anyway and balance at the end; Food supply is recorded for Heiko as a balancing finding.</p>
-<div class="box next"><h4>What is changing</h4><p>Built and measured on the WS1 branch, not yet on trunk (WS1, about 17:00Z, 5 November). An approved correction follows: the target becomes next month's whole need (Food: eating plus what spoils; Energy: need grossed up for spoilage; Water only with a farm). The Energy turn-off rule (AM-17, plots switched off biggest user first, an off plot makes 20%) changes what an Energy shortage costs; the AI's valuation of it comes in the same WS1 PR. The stopgap is replaced by the <a href="#resource-utility">resource-utility model</a> once that is designed and built.</p></div>
-<p class="code-ref">In the code: branch <code>ws1-food-short</code> · <code>packages/ai/src/strategist.ts::goodPlan (mustHold), tradeDecision</code> · <code>packages/engine/src/config.ts::STRATEGIST.buyShortfall</code> (on the branch)</p>
+<div class="box example"><h4>Example: The Gambler's Food</h4>
+<p>The Gambler eats 3 Food a month, so enough for next month is 9. The store sells Food at 50.</p>
+<ul>
+<li>It holds 2 Food and 1,000 cr. It is short by 7, so it buys 7 at the store's line for 350 cr and ends with 9. With only 120 cr it would buy 2 and end with 4.</li>
+<li>It holds 9 Food and a hungry rival bids 60. It holds enough, so it sells its surplus above the status screen's 3 if 60 is worth more to it than a unit: it may sell down to 3, but never lower.</li>
+<li>It holds 5 Food, the store has none to sell and a rival bids 60. It is short of the 9, so it sells none.</li>
+</ul></div>
+<p>Measured on 20 games: a seat short for next month that could pay now always buys (before: it passed in 443 of 485 such months for Food), hungry seat-months fell from 842 to 757, and no seller lets a deal take a unit past where it meant to stop. The cost, on 100 games on each of four settings: colonists go short in 68 to 76% of months (46 to 54% before) and Food stands above 3 times its usual price in 93 to 99% of games (78 to 82% before). Players hungry 3 or more months running stay at 99 to 100%: what keeps a seat fed often is not in the store to buy.</p>
+<div class="box why"><h4>Why it is like this</h4><p>The PM ruled on 5 November, on Heiko's report from the table: a computer player short for next month must buy at the store's price when it can afford it, and treat the shortage as the loss it is. A first version filled only the status screen's need; upkeep then ate it, so the seats went hungry anyway, and the target became enough for next month. Never selling below enough for next month, even with a surplus, kept the seats fed but starved the colony (colonists short in 83 to 86% of months, Food above 3 times its price in 99 to 100% of games). On 6 November Heiko chose “sell surplus”: keep everything while short, sell the surplus above the status screen's need once it has enough.</p></div>
+<div class="box next"><h4>What is changing</h4><p>Built on the WS1 branch, in PR #386, not yet on trunk. It is a stopgap: the <a href="#resource-utility">resource-utility model</a> replaces it once that is designed and built, and the balance round (Heiko, 4 November: functions first, balance at the end) takes up the colony's Food supply. A seat's own playbook drafts (off by default) and the playbook check still read the status screen's need as the floor; WS9 aligns them.</p></div>
+<p class="code-ref">In the code: branch <code>ws1-food-short</code> · <code>packages/ai/src/strategist.ts::goodPlan (mustHold), wholeNextMonth, tradeDecision</code> · <code>packages/ai/src/hands/auction.ts::AuctionHand.oversells</code> · <code>packages/engine/src/config.ts::STRATEGIST.buyShortfall</code> (on the branch)</p>
 <p class="owner">Kept current by: WS1.</p>
 
 <h2 id="land">Claiming land <span class="pill built">In the game</span></h2>
