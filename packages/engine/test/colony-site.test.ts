@@ -40,6 +40,7 @@ describe("C21/C30: the colony's site for an object (RULE-28)", () => {
       return s;
     }, by: 'lena', id: 'park' as PrestigeId, bid: 300, then: 'Set the bid once the votes are over' },
     { row: 3, why: 'not the Governor', make: () => governed(), by: 'kai', id: 'park' as PrestigeId, bid: 300, then: "Only the Governor sets the colony's bid" },
+    { row: 3, why: 'first match wins: Kai on the hospital, which also trips row 5', make: () => governed(['hospital']), by: 'kai', id: 'hospital' as PrestigeId, bid: 300, then: "Only the Governor sets the colony's bid" },
     { row: 4, why: 'nothing commissioned', make: () => governed([]), by: 'lena', id: 'park' as PrestigeId, bid: 300, then: 'Nothing is waiting for a site' },
     { row: 4, why: 'a project already building', make: () => {
       const s = governed();

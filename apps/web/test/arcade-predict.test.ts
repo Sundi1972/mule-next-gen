@@ -1,7 +1,7 @@
-import { applyReach, buildFloor, createGame, DEV_STEER, floorConfig, stepFloor, type DevFloor, type FloorInput, type GameState, type Terrain } from '@mule/engine';
+import { applyReach, buildFloor, createGame, DEV_STEER, floorConfig, GLINT, speedOf, stepFloor, WOLVES, type DevFloor, type FloorConfig, type FloorInput, type GameState, type Terrain } from '@mule/engine';
 import type { DevFrame, MuleView, TileView } from '@mule/protocol';
 import { describe, expect, it } from 'vitest';
-import { advanceTo, assayTick, holdUntil, markStale, phoneTick, predictWorld, receiveFrame, shownAt, startPrediction, steerFrom, steerStep, type Prediction, type PredictWorld } from '../src/phone/arcade/predict';
+import { advanceTo, assayTick, boltedNow, holdUntil, markStale, phoneTick, predictWorld, receiveFrame, serverHolds, shownAt, startPrediction, steerFrom, steerStep, wolvesHold, type Prediction, type PredictWorld } from '../src/phone/arcade/predict';
 import { msPerTick, pushFrame, startFrameLog } from '../src/phone/arcade/frames';
 import { gateSteer, heldBack, quantise, startGate, type SteerGate } from '../src/phone/arcade/steer';
 
@@ -431,5 +431,142 @@ describe('C11: the stick on the wire (HC-5, spec §3)', () => {
     // Nothing held back: the server has what the stick wants, or the change may go now.
     expect(heldBack(walking, { x: -1, y: 0 }, 1_030)).toBeNull();
     expect(heldBack(walking, { x: 0, y: 0 }, 1_000 + step)).toBe(0);
+  });
+});
+
+/** Lena on a map of forest round the store, the wolves certain every tick and a glint due from the first. */
+function wolfLand(): { state: GameState; cfg: FloorConfig } {
+  const state = game();
+  state.tiles = state.tiles.map((t) => (t.terrain === 'store' ? t : { ...t, terrain: 'forest' }));
+  const cfg = { ...floorConfig(), wolves: { ...WOLVES, on: true, chancePerSecond: 1_000, cooldownSeconds: 0 }, glint: { ...GLINT, on: true, firstAfterSeconds: 0, meanGapSeconds: 1 } };
+  return { state, cfg };
+}
+
+/** The copy stepped on to `tick`, catchUpTicks at a call as the screen's frames do. */
+function upTo(p: Prediction, tick: number, world: PredictWorld): Prediction {
+  while (p.tick < tick) p = advanceTo(p, tick, world);
+  return p;
+}
+
+/** A frame with Lena alone at x, y on the map. */
+const lenaAt = (tick: number, x: number, y: number): DevFrame => ({ tick, at: tick * TICK, colonists: [{ id: 'lena', x, y, space: 'map', facing: 'right', moving: false, lead: null }], beats: [] });
+
+describe('C11: the moments are the server\'s, never the phone\'s copy (RULE-4, RULE-5, RULE-6, RULE-10)', () => {
+  it('C11: on forest with a pack certain each tick and a glint due, the server\'s floor meets both; the phone\'s copy steps with neither', () => {
+    const { state, cfg } = wolfLand();
+    // Positive control: the engine's own floor on this land and config meets wolves at once and lights a glint.
+    let floor = buildFloor(state, cfg);
+    floor = { ...floor, colonists: floor.colonists.map((c) => (c.id === 'lena' ? { ...c, x: 2.5, y: 2.5 } : c)) };
+    let glints = 0;
+    for (let i = 0; i < 200; i++) {
+      floor = stepFloor(floor, state, { lena: { x: 1, y: 0, act: false } }, TICK, cfg);
+      if (floor.moments.glint) glints++;
+    }
+    expect(floor.colonists[0]!.encounter ?? glints).toBeTruthy();
+    expect(glints).toBeGreaterThan(0);
+
+    const world = predictWorld(viewOf(state), { id: 'lena', carriedMule: null }, cfg);
+    expect([world.cfg.wolves.on, world.cfg.glint.on, world.cfg.scramble.on]).toEqual([false, false, false]);
+    const base = { pace: 1, bitten: false, pelts: 0 };
+    let p = steerFrom(receiveFrame(startPrediction(), lenaAt(0, 2.5, 2.5), 0, world, base), { x: 1, y: 0 });
+    p = upTo(p, 200, world);
+    expect(p.tick).toBe(200);
+    expect(p.past.every((e) => e.me.encounter === null)).toBe(true);
+    expect(p.me!.encounter).toBeNull();
+    // It walked the whole way, at forest's speed: nothing stopped it to choose run or fight.
+    expect(p.me!.x).toBeGreaterThan(2.5 + 0.9 * 200 * (TICK / 1_000) * speedOf(p.me!, world.state, world.cfg));
+  });
+
+  /** Lena's copy live on forest at 2.5·2.5 at tick 40, her stick pushed right. */
+  function onWolfLand() {
+    const { state, cfg } = wolfLand();
+    const world = predictWorld(viewOf(state), { id: 'lena', carriedMule: null }, cfg);
+    const base = { pace: 1, bitten: false, pelts: 0 };
+    const p = steerFrom(receiveFrame(startPrediction(), lenaAt(40, 2.5, 2.5), 2_000, world, base), { x: 1, y: 0 });
+    return { world, base, p };
+  }
+
+  it('C11: while a pack has her, the copy never runs ahead on her stick: it stands where each frame puts her, and no frame counts as a correction', () => {
+    const { world, base, p } = onWolfLand();
+    let held = wolvesHold(p, true, base, null, 2_000, world.cfg);
+    held = upTo(held, 60, world);
+    expect(held.tick).toBe(60);
+    expect(held.me!.x).toBe(2.5);
+    // The chase moves her on the server's terms: the next frame has her further on, and the copy stands there.
+    held = receiveFrame(held, lenaAt(50, 3.1, 2.4), 2_500, world, base);
+    held = upTo(held, 70, world);
+    expect([held.me!.x, held.me!.y]).toEqual([3.1, 2.4]);
+    expect(held.stats).toMatchObject({ corrected: 0, snapped: 0 });
+    expect(shownAt(held, 2_500, world.cfg)!.x).toBe(3.1);
+  });
+
+  it('C11 (negative): without the hold the copy walks ahead of the frames on her stick while the server holds her choosing', () => {
+    const { world, p } = onWolfLand();
+    const ahead = upTo(p, 60, world);
+    expect(ahead.me!.x).toBeGreaterThan(2.5 + 0.2);
+  });
+
+  it('C11: let go bitten, the copy walks on from the frames\' last place at the bitten pace; let go unbitten, at full pace; the shown colonist eases from where the frames drew it', () => {
+    const { world, base, p } = onWolfLand();
+    const held = receiveFrame(upTo(wolvesHold(p, true, base, null, 2_000, world.cfg), 60, world), lenaAt(55, 3, 2.5), 2_750, world, base);
+    const walked = (bitten: boolean) => {
+      const free = wolvesHold(held, false, { ...base, bitten }, { x: 2.9, y: 2.5, space: 'map' }, 3_000, world.cfg);
+      expect(free.wolves).toBe(false);
+      expect(free.me!.bitten).toBe(bitten);
+      expect(shownAt(free, 3_000, world.cfg)!.x).toBeCloseTo(2.9, 6);
+      const on = upTo(free, 70, world);
+      return { dx: on.me!.x - 3, speed: speedOf(free.me!, world.state, world.cfg) };
+    };
+    const limping = walked(true);
+    const well = walked(false);
+    expect(limping.dx).toBeCloseTo(10 * (TICK / 1_000) * limping.speed, 6);
+    expect(limping.speed).toBeCloseTo(well.speed * WOLVES.bittenPace, 6);
+    expect(well.dx).toBeGreaterThan(limping.dx);
+  });
+});
+
+describe('C11: a lost fight, as the frames say: the stun holds the copy, a bolted MULE leaves it free (RULE-4)', () => {
+  const frameWith = (moments: Partial<NonNullable<DevFrame['moments']>>): Pick<DevFrame, 'moments'> => ({ moments: { packs: [], glint: null, scramble: null, bolted: [], stunned: [], ...moments } });
+
+  it('C11: the server holds her while the frame has a pack round her or a stun on her, and not otherwise', () => {
+    const lenas = { who: 'lena', stage: 'choose' as const, sinceTick: 1, centre: { x: 1, y: 1 }, strikes: 0, bites: 0, wolves: [] };
+    expect(serverHolds('lena', frameWith({ packs: [lenas] }))).toBe(true);
+    expect(serverHolds('lena', frameWith({ packs: [{ ...lenas, who: 'kai' }] }))).toBe(false);
+    expect(serverHolds('lena', frameWith({ stunned: [{ who: 'lena', untilTick: 90 }] }))).toBe(true);
+    expect(serverHolds('lena', frameWith({ stunned: [{ who: 'kai', untilTick: 90 }] }))).toBe(false);
+    expect(serverHolds('lena', {})).toBe(false);
+    expect(serverHolds('lena', undefined)).toBe(false);
+  });
+
+  /** Lena leading a Food MULE on plains, live at tick 40, her stick pushed right. */
+  function leading() {
+    const state = game();
+    state.players = state.players.map((p) => (p.id === 'lena' ? { ...p, carriedMule: 'food' } : p));
+    const cfg = floorConfig();
+    const world = predictWorld(viewOf(state), { id: 'lena', carriedMule: 'food' }, cfg);
+    const base = { pace: 1, bitten: false, pelts: 0, bolted: false };
+    const f: DevFrame = { tick: 40, at: 40 * TICK, colonists: [{ id: 'lena', x: 2.5, y: 7.5, space: 'map', facing: 'right', moving: false, lead: { good: 'food', x: 2, y: 7.5 } }], beats: [] };
+    const p = steerFrom(receiveFrame(startPrediction(), f, 2_000, world, base), { x: 1, y: 0 });
+    return { world, p };
+  }
+
+  it('C11: her MULE bolted, the copy walks at full pace and leaves the MULE where it stands; caught, at the lead\'s pace again', () => {
+    const { world, p } = leading();
+    const led = upTo(p, 60, world);
+    const bolted = upTo(boltedNow(p, true, null), 60, world);
+    expect(bolted.me!.lead).toEqual({ good: 'food', x: 2, y: 7.5 });
+    expect(bolted.me!.x - 2.5).toBeCloseTo((led.me!.x - 2.5) / DEV_STEER.leadPace, 6);
+    const caught = upTo(boltedNow(bolted, false, null), 80, world);
+    expect(caught.me!.x - bolted.me!.x).toBeCloseTo(led.me!.x - 2.5, 6);
+    // Unchanged, the copy is the same copy.
+    expect(boltedNow(p, false, null)).toBe(p);
+  });
+
+  it('C11: caught, the copy leads the MULE from where the frames have it, not from where it bolted', () => {
+    const { world, p } = leading();
+    const bolted = upTo(boltedNow(p, true, { good: 'food', x: 6, y: 7.2 }), 50, world);
+    const caught = boltedNow(bolted, false, { good: 'food', x: bolted.me!.x - 0.4, y: 7.5 });
+    expect(caught.me!.lead).toEqual({ good: 'food', x: bolted.me!.x - 0.4, y: 7.5 });
+    expect(upTo(caught, 60, world).me!.lead!.x).toBeLessThan(upTo(caught, 60, world).me!.x);
   });
 });

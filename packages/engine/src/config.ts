@@ -1,4 +1,5 @@
-import type { Outfit, EventKey, GrownGood, Good, LawId, MinedGood, Office, PrestigeId, ProcessedGood, RawGood, SpecialKind, Species, Stock, Terrain, TileTrait } from './types.js';
+import type { Outfit, EventKey, GrownGood, Good, LawId, MinedGood, MoodBand, Office, PrestigeId, ProcessedGood, RawGood, SpecialKind, Species, Stock, Terrain, TileTrait } from './types.js';
+import type { Strategy } from './playbook.js';
 
 /**
  * Every balancing number lives here, so playtests and the simulator can tune
@@ -368,6 +369,12 @@ export const DEV_STEER = {
   botsSpareTime: true as boolean,
   /** An AI colonist drops its errand for the pub once the clock shows no more than its walk there and this many seconds. */
   botPubMarginSeconds: 2,
+  /**
+   * An AI colonist buys a MULE only while its errand, this share longer than estimated, still leaves the pub margin
+   * (botPubMarginSeconds, as the hurry for the pub counts it): a walk that runs a little long then costs the margin
+   * nothing, and the MULE is installed, not walked into the pub (FM-hurry-margin).
+   */
+  botPlanSlackShare: 0.1,
   /** Ticks an AI colonist may push its stick without moving before it gives that step of its errand up. */
   botStuckTicks: 20,
   /** An AI colonist installing on a lake plot from the shore stands this far from the shore tile's middle towards the lake, in tiles. */
@@ -904,6 +911,17 @@ export const POLITICS = {
       proposeChance: { trader: 0.5, cautious: 0.3, aggressive: 0.7, saboteur: 0.6 } satisfies Record<AiPersonaId, number>,
       /** Credits a month an AI counts for each of its plots an emission cap would stop it re-outfitting. */
       capPlotCost: 40,
+      /** A Rookie's chance of a yes on a law ballot: a coin from the council's own stream. */
+      rookieYes: 0.5,
+    },
+    /** The AI Governor's colony acts and the mood-weighed vote (G-5 C25). Placeholders until the sim tunes them. */
+    colony: {
+      /** Whether an AI Governor of each persona commissions a prestige object the fund can pay for. */
+      commissions: { trader: true, cautious: true, aggressive: true, saboteur: false } satisfies Record<AiPersonaId, boolean>,
+      /** Whether an AI Governor of each persona pays general strikers the fund can pay. */
+      paysStrike: { trader: true, cautious: true, aggressive: false, saboteur: false } satisfies Record<AiPersonaId, boolean>,
+      /** In these mood bands an AI voter will not vote for the sitting Governor if anyone else runs. */
+      leanIn: ['unhappy', 'unrest'] as MoodBand[],
     },
   },
 };
@@ -967,6 +985,19 @@ export const COLONY = {
   grant: { perMonth: 150 },
   /** What the strikers of a general strike want from the fund to go back to work, in credits (G-5 RULE-26). */
   strike: { cost: 250 },
+};
+
+/**
+ * The colony score at game over (G-5 RULE-25): each term turned into credits, so they add. Placeholders, tuned at the
+ * end (HC-25).
+ */
+export const COLONY_SCORE = {
+  /** Credits for each point the air is cleaner than POLLUTION.airMax. */
+  perCleanPoint: 100,
+  /** Credits for each point of the colony's prestige. */
+  perPrestige: 1_000,
+  /** The happiness factor: `low` at happiness 0, `high` at 100, straight between. */
+  factor: { low: 0.8, high: 1.2 },
 };
 
 /**
@@ -1485,6 +1516,73 @@ export const AI_HANDS = {
   grant: {
     /** A go/no-go choice takes this much longer than a bare reaction. */
     choiceMs: [150, 300] as [number, number],
+  },
+};
+
+type PlanKind = Strategy['kind'];
+
+/**
+ * The AI's game plan (playbook.ts): which plan kind a seat drafts, the strategy fields it writes, and the bounds every
+ * playbook is held to, the engine's own draft and Claude's edits alike.
+ */
+export const AI_PLANS = {
+  /** Seats play their playbook; false: every seat plays the phase-by-phase asks, as before playbooks. */
+  on: true,
+  /** How much each persona leans to each plan kind, 0 to 1: the draft picks the eligible kind it leans to most. */
+  leaning: {
+    cautious: { builder: 1, specialist: 0.5, monopolist: 0.2, landBaron: 0.3, politician: 0.4, spoiler: 0 },
+    aggressive: { builder: 0.3, specialist: 0.5, monopolist: 0.6, landBaron: 1, politician: 0.2, spoiler: 0.4 },
+    trader: { builder: 0.3, specialist: 1, monopolist: 1, landBaron: 0.3, politician: 0.2, spoiler: 0 },
+    saboteur: { builder: 0.2, specialist: 0.4, monopolist: 0.5, landBaron: 0.4, politician: 0.3, spoiler: 1 },
+  } satisfies Record<AiPersonaId, Record<PlanKind, number>>,
+  moneyMaker: {
+    /** A good's score sums its install gain over this many of the seat's best plots for it (own idle and free). */
+    plots: 3,
+    /** Each rival plot already making the good cuts its score by this share. */
+    rivalDiscount: 0.15,
+    /** Weight of the "My money-maker" consideration in a development pick. */
+    weight: 1,
+    /** That consideration's score, 0 to 1, for an outfit that makes another good (the money-maker scores 1). */
+    otherScore: 0.8,
+  },
+  monopoly: {
+    /** The goods a seat may try to corner. */
+    goods: ['food', 'energy', 'smithore'] as Good[],
+    /** A good is cornered only while at most this many rival plots make it. */
+    maxRivalPlots: 1,
+    /** And only with at least this many of its own idle or free plots whose best outfit is the good. */
+    minPlots: 2,
+  },
+  landBaron: {
+    /** The land baron is a plan while at least this share of all plots is free. */
+    minFreeShare: 0.3,
+  },
+  landTarget: {
+    /** The plot target is for this many months ahead, at most to the last month. */
+    months: 3,
+    /** Plots a month the target adds, by plan kind; `other` for every kind not named. */
+    perMonth: { landBaron: 2, other: 1 } as Partial<Record<PlanKind, number>> & { other: number },
+  },
+  /** A seat whose money is under its cash reserve lists a plot or a MULE for the land auction, unsold to the store. */
+  sell: {
+    /** Lots a seat lists a month when short, at most. LOTS.perPlayer still caps every seller. */
+    perMonth: 1,
+    /** A lot's minimum, as a share of what it is worth to the seat; never under one credit over what the store pays. */
+    minimumShare: 0.8,
+  },
+  /** What a playbook may hold: a value outside is clamped or refused. */
+  bounds: {
+    /** Credits a strategy's cash floor may ask, at most. */
+    cashFloorMax: 2000,
+    /** Notes on one rival, at most, and characters a note. */
+    rivalReadNotes: 3,
+    rivalReadChars: 140,
+    /** Notes for later months, at most. */
+    lessons: 5,
+    /** Steps a development route may have, at most. */
+    routeSteps: 24,
+    /** Credits a second of the auction clock a seat may concede, at most. */
+    concedeMaxCrPerS: 50,
   },
 };
 

@@ -577,6 +577,8 @@ export interface EventView {
     becomes?: 'plain' | 'crater' | 'idle';
     /** True when the hit destroyed or took the plot's MULE. */
     muleLost?: true;
+    /** With muleLost: the good that MULE made. The view's tile has lost it already, so this is the only place it is named. */
+    good?: Good;
   }[];
   /** What it changed off the map, in the order it changed it: a player's (by id), the store's or the colony's. */
   effects?: EventEffect[];
@@ -735,6 +737,6 @@ export interface ColonyView {
   catalogue: ColonyCatalogueView[];
   /** This month's general strike: the good it holds back, what the strikers want, and whether the fund paid; null when none. Optional, so views built before W3 still type. */
   strike?: { good: Good; cost: number; paid: boolean } | null;
-  /** The colony score at game over; null before. Its terms are the end score's (WS3), still to be written. */
+  /** The colony score at game over (G-5 RULE-25: wealth, environment and prestige in credits, the happiness factor, the rounded total); null before. */
   score: { wealth: number; environment: number; prestige: number; factor: number; total: number } | null;
 }

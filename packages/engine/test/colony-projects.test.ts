@@ -123,6 +123,9 @@ describe('prestige objects: commissioned, funded, built, kept up', () => {
     expect(refused(() => commission(state, 'lena', 'hospital'))).toBe('accepted');
     expect(refused(() => commission(state, 'lena', 'hospital'))).toBe('The colony already has a Hospital');
     expect(refused(() => commission(state, 'lena', 'park'))).toBe('The colony is already building the Hospital');
+    const vowel = governedGame();
+    commission(vowel, 'lena', 'observatory');
+    expect(refused(() => commission(vowel, 'lena', 'observatory')), 'a name with a vowel sound takes "an"').toBe('The colony already has an Observatory');
     expect(project(state, 'hospital')).toMatchObject({ stage: 'commissioned', funded: { credits: 0, goods: {} }, since: state.month, plaque: {} });
   });
 

@@ -5,6 +5,7 @@ export * from './lineup.js';
 export * from './outlook.js';
 export * from './personas.js';
 export * from './play.js';
+export * from './playbook/index.js';
 export * from './seat.js';
 export * from './strategist.js';
 export * from './summary.js';
