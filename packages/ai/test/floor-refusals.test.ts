@@ -7,6 +7,7 @@ import {
   DEVELOPMENT,
   doorPresses,
   MS_PER_SECOND,
+  observe,
   reachOf,
   RuleError,
   settleMoments,
@@ -17,11 +18,15 @@ import {
   type FloorConfig,
   type FloorInput,
   type GameState,
+  type Outfit,
 } from '@mule/engine';
 import { installable, placePoint } from '../src/floor-time.js';
 import { simFloorConfig } from '../src/floor-turn.js';
 import { FloorWalker, type StepRun } from '../src/hands/floor-walker.js';
+import { outlook } from '../src/outlook.js';
+import { applyAction } from '../src/play.js';
 import { AiSeat } from '../src/seat.js';
+import { canFeed, installGain } from '../src/value.js';
 
 const ME = 'ai0';
 
@@ -75,6 +80,27 @@ function playTurn(
   }
   return floor;
 }
+
+/** Gives ai0 the `n` free plots nearest the store, off lakes and specials, and returns them. */
+function ownNearest(state: GameState, n: number) {
+  const store = state.tiles.find((t) => t.terrain === 'store')!;
+  const near = state.tiles
+    .filter((t) => t.owner === null && t.terrain !== 'lake' && t.terrain !== 'store' && !t.special)
+    .sort((a, b) => Math.abs(a.x - store.x) + Math.abs(a.y - store.y) - (Math.abs(b.x - store.x) + Math.abs(b.y - store.y)))
+    .slice(0, n);
+  for (const t of near) t.owner = ME;
+  return near;
+}
+
+/** What installGain says a MULE of `outfit` gains on each of ai0's idle plots, by tile index, as the seat sees it now. */
+function idleGains(state: GameState, seat: AiSeat, outfit: Outfit): Map<number, number> {
+  const obs = observe(state, ME);
+  const o = outlook(obs, ME, { lookAhead: seat.mind.level.lookAhead });
+  return new Map(obs.tiles.filter((t) => t.owner === ME && !t.outfit).map((t) => [obs.tiles.indexOf(t), installGain(obs, o, t, outfit, seat.mind).gain]));
+}
+
+/** The index the gains rank first. */
+const bestOf = (gains: Map<number, number>) => [...gains].sort((a, b) => b[1] - a[1])[0]![0];
 
 /** The MULE steps the hand gave up on the floor: an outfit or an install the button did not offer. */
 const refused = (seat: AiSeat) => seat.developLog().filter((e) => !e.ok && (e.action.type === 'outfit' || e.action.type === 'install'));
@@ -242,5 +268,65 @@ describe("the arcade floor's AI bugs of 5 Nov (FM-glint-install, FM-led-analyse,
     // The promise: the filter it walked to is on its plot.
     expect(log.filter((e) => e.action.type === 'filter' && !e.ok), shown).toEqual([]);
     expect(mine.filter, 'the filter on the mine').toBe(true);
+  });
+});
+
+describe('a MULE led into development is never lost to the lead (FM-led-no-gain)', () => {
+  it("FM-led-no-gain: a led Medicine MULE with nothing to feed it is installed on the seat's best idle plot, not lost at the pub", () => {
+    // Review of 5 Nov: with no gain to be had (a factory it can't feed, or no plot it earns on), nothing was planned for
+    // the led MULE. While it is led INSTALL outranks ANALYSE and FIT FILTER on every own plot and the corral offers no BUY,
+    // so the seat lost its turn and the MULE ran off at the pub. It is paid for, and on the floor a MULE taken off a plot
+    // can be re-outfitted next month (Reach row 8a).
+    const state = development(4);
+    ownNearest(state, 4);
+    const me = state.players.find((p) => p.id === ME)!;
+    me.carriedMule = 'medicine';
+    me.stock.food = 0;
+    me.stock.water = 0;
+    const seat = new AiSeat({ id: ME, name: 'AI 1', persona: 'trader', level: 'trader', seed: 11 });
+    expect(canFeed(observe(state, ME), ME, 'medicine'), 'nothing to feed it').toBe(false);
+    const best = bestOf(idleGains(state, seat, 'medicine'));
+    playTurn(state, quietConfig(), seat);
+    const log = seat.developLog();
+    const shown = JSON.stringify(log);
+    // The promise: the MULE it was given is on the plot it gains most on, and no step the lead made impossible was walked.
+    expect(me.carriedMule, `no MULE left on the lead: ${shown}`).toBeNull();
+    expect(state.tiles[best]!.outfit, `the Medicine MULE on its best idle plot: ${shown}`).toBe('medicine');
+    expect(log.filter((e) => !e.ok), shown).toEqual([]);
+  });
+
+  it('FM-led-no-gain: with no idle plot, a seat leading a MULE walks to no plot or counter the lead closes, and goes to the pub', () => {
+    // Every own plot has a MULE, so there is nowhere to install it without driving one off. INSTALL outranks ANALYSE and
+    // FIT FILTER on every own plot, so the filter the air calls for (and its analysis) can't be had while it leads.
+    const state = development(4);
+    const [mine] = ownNearest(state, 1);
+    Object.assign(mine!, { outfit: 'rareEarth', runMonths: 2 });
+    const me = state.players.find((p) => p.id === ME)!;
+    me.stock.alloy = 1;
+    state.air = 25;
+    me.carriedMule = 'food';
+    const seat = new AiSeat({ id: ME, name: 'AI 1', persona: 'trader', level: 'trader', seed: 11 });
+    playTurn(state, quietConfig(), seat);
+    const log = seat.developLog();
+    // The promise: no walk the lead wastes; the turn ends at the pub, the mine's MULE where it was.
+    expect(log.map((e) => [e.action.type, e.ok])).toEqual([['pub', true]]);
+    expect(mine!.outfit).toBe('rareEarth');
+  });
+
+  it('FM-led-no-gain: off the floor too, a seat that starts development leading a lot MULE installs it', () => {
+    // The tap path: buyMule refuses a seat already leading a MULE, so a lot MULE never installed ran off at the pub.
+    const state = development(4);
+    ownNearest(state, 4);
+    const me = state.players.find((p) => p.id === ME)!;
+    me.carriedMule = 'food';
+    const seat = new AiSeat({ id: ME, name: 'AI 1', persona: 'trader', level: 'trader', seed: 11 });
+    const best = bestOf(idleGains(state, seat, 'food'));
+    const tick = 100;
+    for (let ms = 0; ms < DEVELOPMENT.fullSeconds * MS_PER_SECOND && !me.doneDeveloping; ms += tick) {
+      seat.developTick(state, tick, DEVELOPMENT.fullSeconds - ms / MS_PER_SECOND, (a) => applyAction(state, ME, a));
+    }
+    const shown = JSON.stringify(seat.developLog());
+    expect(me.doneDeveloping, `it went to the pub: ${shown}`).toBe(true);
+    expect(state.tiles[best]!.outfit, `the lot MULE on its best idle plot: ${shown}`).toBe('food');
   });
 });
