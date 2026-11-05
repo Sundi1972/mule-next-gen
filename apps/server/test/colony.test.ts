@@ -37,6 +37,12 @@ describe('the colony at the table', () => {
     for (const seat of [null, 's1']) expect(game.viewFor(seat).colony!.lastScore, `seen by ${seat ?? 'the TV'}`).toBe(expected);
     state.colony!.monthEnds = [{ ...end, happiness: null }];
     expect(game.viewFor(null).colony!.lastScore, 'no mood yet, no score').toBeNull();
+
+    // At the month end (upkeep) this month's snapshot is already in: lastScore is still the month before's.
+    state.phase = 'upkeep';
+    const thisEnd = { month: 2, wealth: 12_000, prestige: 5, happiness: 40, air: 30 };
+    state.colony!.monthEnds = [end, thisEnd];
+    expect(game.viewFor(null).colony!.lastScore, "the month end compares with last month's, not its own").toBe(expected);
   });
 
   it('AM-12 (RULE-25): every screen carries the colony score every month, as the state scores now, not only at game over', () => {
