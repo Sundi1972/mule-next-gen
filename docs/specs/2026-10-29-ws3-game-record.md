@@ -614,6 +614,15 @@ stay local.
     good's status step. The month's first entry is the whole month's draft; its later-good parts are stale by design.
   - **Owed by WS9's PR-3:** a T-AC-11 row with two goods and two auction entries for one seat, whose replay is
     identical.
+- **AM-7 (2026-11-05, WS3, for G-5 C32 / T-AC-39): the outcome keeps the colony score.**
+  - **The shape (still `v: 1`):** `outcome.colonyScore?: number` is the colony score's total at game over (G-5
+    RULE-25, `colonyScore(state).total`). It is present in a game with the council and absent without one. A crashed
+    game's outcome keeps its seats' scores even if scoring the colony throws on the state the error left.
+  - **The replay** reports `colonyScore: { recorded, replayed }`. It is identical only if they match, as the seats'
+    scores must (T-AC-30 extended to the end score).
+  - **Old records:** none can disagree here. COLONY_SCORE is config, so a record made before it carries another
+    config fingerprint and is refused before any game is built (T-AC-3).
+  - **Built in:** #346 (C31/C32, into ws7-politics).
 
 ## §9 · Ownership Boundaries `[handoff]`
 
