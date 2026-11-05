@@ -32,6 +32,7 @@ import {
 } from '@mule/engine';
 import { simFloorConfig } from '../src/floor-turn.js';
 import { DevelopHand, type RoutePlay } from '../src/hands/develop.js';
+import { draftPlaybook, type LeftOutPick } from '../src/playbook/draft.js';
 import { applyAction, arrive, type DevClock } from '../src/play.js';
 import { AiSeat } from '../src/seat.js';
 
@@ -596,6 +597,12 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
     errors.mockRestore();
     // Both picks, each logged: the first refusal did not end the picks.
     expect(notes, JSON.stringify(route)).toEqual([1, 2].map((k) => expect.stringMatching(new RegExp(`^AI seat ai0: the development draft left out MULE ${k} \\(food on plot \\d+\\), refused: Your MULE bolted`))));
+    // The draft itself logs nothing: it hands the picks it left out to its caller.
+    const leftOut: LeftOutPick[] = [];
+    const quiet = vi.spyOn(console, 'error').mockImplementation(() => {});
+    draftPlaybook({ state, seat: ME, mind: seat.mind, seed: SEED, phase: 'development' }, leftOut);
+    expect(quiet).not.toHaveBeenCalled();
+    expect(leftOut.map((p) => [p.mule, p.outfit])).toEqual([[1, 'food'], [2, 'food']]);
   });
 
   describe("on the floor, the runner's own rows (AM-19)", () => {
