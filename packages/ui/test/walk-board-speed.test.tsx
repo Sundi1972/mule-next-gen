@@ -19,7 +19,7 @@ const board = (deals: BoardDeal[]) =>
 function chevrons(html: string): { lit: number; of: number } | null {
   const m = html.match(/data-testid="deal-speed"[^>]*>([\s\S]*?)<\/span><\/span>/);
   if (!m) return null;
-  const all = [...m[1]!.matchAll(/<span class="([^"]*)">›<\/span>/g)].map((x) => x[1]!);
+  const all = [...m[0].matchAll(/<span class="([^"]*)">›<\/span>/g)].map((x) => x[1]!);
   return { lit: all.filter((c) => c.includes('text-holo')).length, of: all.length };
 }
 

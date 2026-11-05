@@ -26,7 +26,13 @@ export interface BoardDeal {
   seller: string;
   price: number;
   units: number;
+  /** How fast its units move now: 0 at its first unit, 1 at the top speed. Without it, no speed is shown. */
+  speed?: number;
 }
+
+/** A deal's speed on the board: one chevron per step, so the table sees units go faster and faster. */
+export const SPEED_STEPS = 4;
+export const speedStep = (speed: number) => Math.min(SPEED_STEPS, 1 + Math.floor(Math.max(0, speed) * SPEED_STEPS));
 
 /** Which of the two moving lines to draw: the lowest ask and the highest bid. */
 export interface BoardMarks {
@@ -256,9 +262,15 @@ export function WalkBoard({
             const at = house ? left : (left + right) / 2;
             return (
               <div key={`${d.buyer}-${d.seller}`} data-testid="deal">
+                {/* The bar pulses faster as the deal speeds up: 1.2 s a beat at its first unit, 0.25 s at the top speed. */}
                 <div
                   className="absolute h-1.5 -translate-y-1/2 animate-pulse rounded-full bg-holo shadow-glow"
-                  style={{ top: `${pct(d.price)}%`, left: x(left), width: house ? `calc(100% - ${x(left)})` : x(Math.max(0.02, right - left)) }}
+                  style={{
+                    top: `${pct(d.price)}%`,
+                    left: x(left),
+                    width: house ? `calc(100% - ${x(left)})` : x(Math.max(0.02, right - left)),
+                    ...(d.speed !== undefined ? { animationDuration: `${1.2 - Math.min(1, Math.max(0, d.speed)) * 0.95}s` } : {}),
+                  }}
                 />
                 <span
                   data-num
@@ -267,6 +279,15 @@ export function WalkBoard({
                 >
                   ×{d.units} @ {d.price}
                   {house ? ` · ${house}` : ''}
+                  {d.speed !== undefined && (
+                    <span className="ml-1 tracking-[-0.15em]" aria-label={`speed ${speedStep(d.speed)} of ${SPEED_STEPS}`} data-testid="deal-speed">
+                      {Array.from({ length: SPEED_STEPS }, (_, k) => (
+                        <span key={k} className={k < speedStep(d.speed!) ? 'text-holo' : 'text-ink-3/40'}>
+                          ›
+                        </span>
+                      ))}
+                    </span>
+                  )}
                 </span>
               </div>
             );
