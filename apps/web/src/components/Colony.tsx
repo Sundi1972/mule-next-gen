@@ -515,26 +515,32 @@ function NotCut({ size }: { size: Size }) {
 
 const monthScoreOf = (view: MuleView) => (view.colony?.score ? { colony: view.colony, score: view.colony.score, last: view.colony.lastScore ?? null } : null);
 
+/** From this many seats the band gives up its words line and some size, so the league's rows keep their scale. */
+const TIGHT_AT_SEATS = 6;
+
 /** The colony score under the league at a month end: the total, the change, the sum and its words. No verdict: that is game over's. */
 function MonthScoreBand({ view, colony, score, last }: { view: MuleView; colony: ColonyView; score: ColonyScore; last: number | null }) {
+  const tight = view.players.length >= TIGHT_AT_SEATS;
   return (
-    <section className="relative flex shrink-0 flex-col gap-2 rounded-panel border border-holo-line bg-panel p-5" aria-label="The colony’s score" data-testid="colony-band" data-month={view.month}>
+    <section className={cx('relative flex shrink-0 flex-col gap-2 rounded-panel border border-holo-line bg-panel', tight ? 'p-4' : 'p-5')} aria-label="The colony’s score" data-testid="colony-band" data-month={view.month}>
       <header className="flex items-baseline justify-between gap-4">
         <h2 className="label-caps text-sm!">Colony score · month {view.month}</h2>
         <span className="text-lg text-ink-3">counted again at game over</span>
       </header>
       <div className="flex flex-wrap items-end gap-x-6 gap-y-2" data-testid="colony-score">
         <span className="flex flex-col gap-1">
-          <span data-num className="font-mono text-6xl font-bold leading-none text-holo" data-testid="colony-total">
+          <span data-num className={cx('font-mono font-bold leading-none text-holo', tight ? 'text-5xl' : 'text-6xl')} data-testid="colony-total">
             {fmt(score.total)}
           </span>
           <SinceLast score={score} last={last} month={view.month} size="tv" />
         </span>
         <ScoreSum score={score} colony={colony} size="band" />
       </div>
-      <span className="text-base leading-snug text-ink-2" data-testid="colony-score-words">
-        {scoreWords(colony, score)}
-      </span>
+      {!tight && (
+        <span className="text-base leading-snug text-ink-2" data-testid="colony-score-words">
+          {scoreWords(colony, score)}
+        </span>
+      )}
       {inCollapse(view) && <NotCut size="tv" />}
     </section>
   );
