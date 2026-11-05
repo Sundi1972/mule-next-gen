@@ -140,8 +140,8 @@ export function StandingsSheet({ onClose }: { onClose: () => void }) {
           )}
         </div>
         <p className="text-xs leading-snug text-ink-2 @min-[1100px]/shell:text-base" data-testid="standings-rule">
-          Worth, in credits: cash, goods at the store&apos;s price, land at {GAME.plotScore} cr a plot, MULEs at the store&apos;s price, {POLITICS.termScore} cr a term in office, and donations to the colony. Everyone sees each other&apos;s total; nobody sees which goods anyone holds.
-          {collapse && ` Every Worth is cut by ${collapseCutWords()}, offices too: the scores if the game ended now.`}
+          Worth, in credits: cash, goods at the store&apos;s price, land at {GAME.plotScore} cr a plot, MULEs at the store&apos;s price, {POLITICS.termScore} cr a term in office{donations ? ', and donations to the colony' : ''}. Everyone sees each other&apos;s total; nobody sees which goods anyone holds.
+          {collapse && ` Every Worth is cut by ${collapseCutWords()}, ${donations ? 'offices and donations' : 'offices'} too: the scores if the game ended now.`}
         </p>
       </div>
     </div>

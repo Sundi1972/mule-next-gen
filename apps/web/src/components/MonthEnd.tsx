@@ -244,13 +244,13 @@ export function PhoneVerdict({ view, className }: { view: MuleView; className?: 
 
 // --- Collapse -----------------------------------------------------------------------------------------
 
-/** While the air is in Collapse: why every Worth is lower, in one line. */
-export function CollapseBanner({ density }: { density: Density }) {
+/** While the air is in Collapse: why every Worth is lower, in one line. With a colony, donations are cut too. */
+export function CollapseBanner({ density, donations = false }: { density: Density; donations?: boolean }) {
   const tv = density === 'tv';
   return (
     <div role="status" className={cx('relative flex shrink-0 flex-wrap items-baseline rounded-panel border-2 border-alert bg-alert-bg', tv ? 'gap-x-3 px-5 py-2' : 'gap-x-1.5 px-2.5 py-0.5')} data-testid="collapse-banner">
       <span className={cx('font-display font-semibold text-alert-ink', tv ? 'text-xl' : 'text-xs')}>The air is in Collapse.</span>
-      <span className={cx('text-ink', tv ? 'text-lg' : 'text-[11px]')}>Every Worth is cut by {collapseCutWords()}, offices too: the scores if the game ended now.</span>
+      <span className={cx('text-ink', tv ? 'text-lg' : 'text-[11px]')}>Every Worth is cut by {collapseCutWords()}, {donations ? 'offices and donations' : 'offices'} too: the scores if the game ended now.</span>
     </div>
   );
 }
