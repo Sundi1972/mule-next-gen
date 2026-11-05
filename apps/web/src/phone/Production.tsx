@@ -62,6 +62,11 @@ export function Production({ production }: { production: ProductionView }) {
   const players = useMemo(() => view.players.map((p) => ({ id: p.id, name: p.name, slot: (slotOf(view, p.id) ?? 0) as Slot })), [view]);
   const mine = harvest(production, me.id);
   const arrived = landed(production, t, me.id);
+  const done = t >= showEnd(production);
+  // Speed up (B-AC-20): with a TV in the room the rest of the show plays faster once every person has asked; the
+  // computer players always agree. A phone alone keeps its tap-the-map skip instead.
+  const people = view.players.filter((p) => !p.isAi);
+  const asked = new Set(production.hurry?.asked ?? []);
 
   return (
     // One show for the whole screen: the map, the rail, the skip hint and the buzz read the same script.
@@ -99,6 +104,18 @@ export function Production({ production }: { production: ProductionView }) {
           <>
             {/* Alone, what a tap on the map does now, by the screen's actions (AM-2: the rail's foot). */}
             {solo && <EventSkipHint className="self-end" />}
+            {!solo && !done && (
+              <Button
+                size="md"
+                variant={asked.has(me.id) ? 'outline' : 'ghost'}
+                className="w-full"
+                disabled={asked.has(me.id)}
+                onClick={() => client.intent({ type: 'hurry' })}
+                data-testid="speed-up-button"
+              >
+                {asked.has(me.id) ? `⏩ Asked: ${people.filter((p) => asked.has(p.id)).length} of ${people.length}` : '⏩ Speed up'}
+              </Button>
+            )}
             <Button size="lg" variant={self.ready ? 'outline' : 'holo'} className="w-full px-2" disabled={self.ready} onClick={() => client.intent({ type: 'ready' })}>
               {self.ready ? 'Waiting for the others' : 'On to the auction'}
             </Button>

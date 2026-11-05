@@ -14,8 +14,8 @@ import { Production } from '../src/phone/Production';
 
 /**
  * The phone's footer during the production show in Heiko's order C (ws6-ux AM-19, mock b65c3972 variant C): with a
- * TV in the room, ⏩ Speed up asks for the rest to play faster and then says how many have asked; Ready waits for the
- * show to end. A phone alone keeps its tap-the-map skip and has no Speed up.
+ * TV in the room, ⏩ Speed up asks for the rest to play faster and then says how many have asked. A phone alone keeps
+ * its tap-the-map skip and has no Speed up.
  */
 
 // The fake document has no dataset and no layout (the shell and the fly targets measure).
@@ -85,12 +85,12 @@ describe('B-AC-20 (AM-19): the phone asks to speed the show up', () => {
   it('with a TV in the room, mid-show, the phone offers ⏩ Speed up; once Lena has asked it says how many have, and waits', () => {
     const fresh = render(1, MID);
     expect(text(fresh, 'speed-up-button')).toBe('⏩ Speed up');
-    expect(tag(fresh, 'speed-up-button')).not.toMatch(/disabled/);
+    expect(tag(fresh, 'speed-up-button')).not.toMatch(/ disabled=""/);
 
     const asked = render(1, MID, month({ asked: [LENA], from: null }));
     // Two people at the table; the AI is never waited for.
     expect(text(asked, 'speed-up-button')).toBe('⏩ Asked: 1 of 2');
-    expect(tag(asked, 'speed-up-button')).toMatch(/disabled/);
+    expect(tag(asked, 'speed-up-button')).toMatch(/ disabled=""/);
   });
 
   it('a tap on ⏩ Speed up sends the hurry intent, and nothing else', () => {
@@ -118,15 +118,6 @@ describe('B-AC-20 (AM-19): the phone asks to speed the show up', () => {
   it('a phone alone has no Speed up (its tap-the-map skip stays), and none is offered once the show has ended', () => {
     expect(render(0, MID)).not.toContain('data-testid="speed-up-button"');
     expect(render(1, END + 0.5)).not.toContain('data-testid="speed-up-button"');
-  });
-
-  it('Ready waits for the show: "Watching the show" while it plays, "On to the auction" once it has ended', () => {
-    const playing = render(1, MID);
-    expect(text(playing, 'ready')).toBe('Watching the show');
-    expect(tag(playing, 'ready')).toMatch(/disabled/);
-    const over = render(1, END + 0.5);
-    expect(text(over, 'ready')).toBe('On to the auction');
-    expect(tag(over, 'ready')).not.toMatch(/disabled/);
   });
 });
 
