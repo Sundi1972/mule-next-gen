@@ -74,6 +74,8 @@ export interface DevWalking {
 /** The middle of a ms range, in seconds. */
 const midSeconds = ([lo, hi]: [number, number]) => (lo + hi) / 2 / 1_000; // literal-ok: midpoint of a range, ms to s
 
+const STOP: DevAction = { kind: 'stop' };
+
 /** The presses a MULE takes at the counters and its plot: buy, outfit, install. */
 const MULE_PRESSES = 3; // literal-ok: a count of the rule's steps, not balance
 
@@ -851,7 +853,17 @@ export class DevelopHand {
     const r = this.route!;
     const mind = this.brain.mind;
     const input = { state, seat: mind.me, mind, seed: r.play.seed, phase: 'development' as const, month: state.month };
-    return draftMulePick(input, r.mules, walk?.(), r.play.moneyMaker);
+    return this.drafting('own MULE pick', "taken as 'stop'", STOP, () => draftMulePick(input, r.mules, walk?.(), r.play.moneyMaker));
+  }
+
+  /** A draft call inside the tick: an error is logged with the seat and gives `fallback`, never reaching the game (HC-9). */
+  private drafting<T>(what: string, fallbackNote: string, fallback: T, draft: () => T): T {
+    try {
+      return draft();
+    } catch (err) {
+      console.error(`AI seat ${this.brain.mind.me}: no ${what} for month ${this.month}, ${fallbackNote}: ${err instanceof Error ? err.message : String(err)}`);
+      return fallback;
+    }
   }
 
   /** RULE-9 rows 2 to 4 for the head step, read before its tap or walk starts: true plays it, false has dealt with it. */
@@ -876,7 +888,8 @@ export class DevelopHand {
     if (led !== null && (a.type === 'buyMule' || (a.type === 'outfit' && a.outfit === led && this.ledGroup === head.group))) {
       if (a.type === 'buyMule') this.ledGroup = head.group;
       this.queue.shift();
-      this.log(head, true, 'done', a.type === 'outfit' && !keptOutfitEarns(state, this.brain.mind) ? 'kept outfit, no gain' : 'led');
+      const earns = a.type === 'buyMule' || this.drafting('kept-outfit check', 'noted led', true, () => keptOutfitEarns(state, this.brain.mind));
+      this.log(head, true, 'done', earns ? 'led' : 'kept outfit, no gain');
       return false;
     }
     // The steps the hand added (a replacement, the analyses after a sold-out corral) are its own picks, played as they come.
@@ -924,7 +937,7 @@ export class DevelopHand {
     this.queue = [];
     const mind = this.brain.mind;
     const input = { state, seat: mind.me, mind, seed: r.play.seed, phase: 'development' as const, month: state.month };
-    const pick = draftMulePick(input, r.mules - 1, walk?.(), r.play.moneyMaker);
+    const pick = this.drafting('replacement MULE pick', "taken as 'stop'", STOP, () => draftMulePick(input, r.mules - 1, walk?.(), r.play.moneyMaker));
     if (pick.kind !== 'stop') this.pushMule(state, pick.index, pick.outfit);
     this.queue.push(...rest);
   }
