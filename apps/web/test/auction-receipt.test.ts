@@ -119,6 +119,12 @@ describe('A-5 the receipt words, from hand-built views (the review fix round)', 
     expect(textOf(html, 'receipt-tax')).toBe('570 cr, less 60 cr sales tax: 510The tax goes to the colony fund.');
   });
 
+  it('W2 (RULE-43): a sale to the ship under the export tax spells both taxes out, and the words add up', () => {
+    const html = phoneScreen(closeWith({ bought: none, sold: { ...side(2, 100, 5, 's2', 'ship'), exportTax: 20 } }), 's1');
+    expect(textOf(html, 'receipt-title-sold')).toBe('Food: you sold 2 for 170 cr');
+    expect(textOf(html, 'receipt-tax')).toBe('200 cr, less 10 cr sales tax and 20 cr export tax: 170The taxes go to the colony fund.');
+  });
+
   it('B-AC-A5-7: a seat that bought and sold in one good gets a line for each side', () => {
     const html = phoneScreen(closeWith({ bought: side(2, 30, 0, 'store'), sold: side(1, 40, 4, 's2') }), 's1');
     expect(textOf(html, 'receipt-title-bought')).toBe('Food: you bought 2 for 60 cr');
