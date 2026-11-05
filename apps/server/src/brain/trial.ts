@@ -2,6 +2,9 @@
  * Plays Smart seats against strategist seats and reports whether the Smart AI decides and talks in character, never
  * stalls a game, and stays within its budget. See C6.
  * Usage: pnpm --filter @mule/server brain:trial -- --games 20 --seed 101 [--smart 2] [--playbooks 1] [--max-usd X] [--game-budget-usd Y] [--run label]
+ * The tournament (WS1's bar for UBER-AC-A): --table pair --playbooks 1 --seeds 1,101,201 --games 40, Claude on the even
+ * chairs, every seat on its playbook, its ledgers under BRAIN.tournament.capUsd; --control 1 plays the same table with
+ * engine seats in the Claude chairs and calls nothing.
  * With --playbooks 1 each Smart seat also writes its strategy and land-grant playbook each month (spec A C4), and the
  * report adds UBER-AC-A's edit share; without it the seats only decide move by move, as before.
  * Without the key every seat plays Classic and nothing is called. With it, real money: --max-usd is required; one
@@ -18,7 +21,7 @@ import { CallFailed } from './client.js';
 import { API_KEY_ENV, apiKeyFrom, createBrain, type BrainSeat } from './index.js';
 import { isCallLine, readLedgerLines, type CallLine, type ModelId } from './ledger.js';
 import { Playbooks } from './playbooks.js';
-import { capText, cutOffPhase, renderTrialReport, sum, trialReport, type TrialGame, type TrialReport, type TrialStop } from './trial-report.js';
+import { capText, cutOffPhase, renderTrialReport, sum, trialReport, type SpendTotals, type TrialGame, type TrialReport, type TrialStop } from './trial-report.js';
 
 /** AI seats per trial game. */
 const SEATS = 4;
@@ -81,6 +84,10 @@ interface GameSetup {
   gameBudgetUsd: number;
   /** Whether the Smart seats write their playbooks. */
   playbooks: boolean;
+  /** 'pair' for the tournament table, or null. */
+  table: 'pair' | null;
+  /** The positive control: the Claude chairs play as engine seats, and nothing is called. */
+  control: boolean;
   out: (line: string) => void;
 }
 
@@ -109,8 +116,12 @@ async function playTrialGame(setup: GameSetup): Promise<TrialGame> {
   // The record being routed to a seat's chatter, read by its say.
   let routing: DecisionRecord | null = null;
 
+  const table = tableSeats(setup.table, setup.seed, setup.smart);
+  game.chairs = [];
   const deciderFor = (seatId: string, spec: SeatSpec, index: number): Decider | null => {
-    if (index >= setup.smart) return null;
+    if (!table.claude.includes(index)) return null;
+    game.chairs!.push(seatId);
+    if (setup.control) return null;
     const seat: BrainSeat = { id: seatId, persona: spec.persona, level: spec.level };
     const decider = brain.deciderFor(seat);
     if (!decider) return null;
@@ -131,7 +142,7 @@ async function playTrialGame(setup: GameSetup): Promise<TrialGame> {
   };
 
   try {
-    const played = await playGameAsync(setup.seed, simSeats(SEATS, 'trader', setup.seed), {
+    const played = await playGameAsync(setup.seed, table.specs, {
       deciderFor,
       onSeats: (seats, state) => {
         const smart = seats.filter((s) => game.smart.includes(s.id));
@@ -216,6 +227,18 @@ function ledgerShortfall(logPath: string, game: TrialGame): string | null {
   return `Stopped: the ledger ${logPath} has ${written} of ${game.settledCalls} call lines for game ${game.id}; a write failed, so spend cannot be checked.`;
 }
 
+/**
+ * The stop message when the API refused every call of a game, or null: one answered call, or a game that called
+ * nothing, plays on. A 400 for every call is the account, not the game (uber17s, 5 Nov: from game 11 every call was
+ * refused, and the run played on for an hour on drafts).
+ */
+export function everyCallFailed(calls: readonly Pick<CallLine, 'game' | 'outcome' | 'status' | 'error_type'>[], gameId: string): string | null {
+  const own = calls.filter((c) => c.game === gameId && c.outcome !== 'tool' && c.outcome !== 'late' && c.outcome !== 'budget');
+  if (own.length === 0 || !own.every((c) => c.status !== undefined)) return null;
+  const first = own[0]!;
+  return `Stopped: the API refused every call in game ${gameId} (${first.status}${first.error_type === undefined ? '' : ` ${first.error_type}`}); check the account before more is played.`;
+}
+
 export interface TrialFlags {
   games: number;
   seed: number;
@@ -226,10 +249,17 @@ export interface TrialFlags {
   gameBudgetUsd: number;
   /** Whether the Smart seats write their playbooks (--playbooks 1). */
   playbooks: boolean;
+  /** --seeds: `games` from each, or null to play from --seed. */
+  seeds: number[] | null;
+  /** --table pair, or null. */
+  table: 'pair' | null;
+  /** --control 1: the pair table's positive control. */
+  control: boolean;
 }
 
 const USAGE =
-  `Usage: brain:trial [--games N] [--seed S] [--smart K] [--playbooks 0|1] [--max-usd X] [--game-budget-usd Y] [--run label] [--write-model sonnet|haiku], ` +
+  `Usage: brain:trial [--games N] [--seed S | --seeds S1,S2,...] [--smart K] [--playbooks 0|1] [--max-usd X] [--game-budget-usd Y] [--run label] [--write-model sonnet|haiku] ` +
+  `[--table pair [--control 1]], --table pair with --playbooks 1 unless --control 1, and --smart 2 if given; ` +
   `Y above 0 and at most ${BRAIN.gameBudgetUsd.toFixed(2)}; nothing played.`;
 
 /** A run label: lowercase letters, digits and dashes, so it can only name a file in the data folder. */
@@ -249,20 +279,53 @@ export function writeModelFlag(name: string): ModelId | undefined {
   return Object.hasOwn(BRAIN.strategySpike.models, name) ? BRAIN.strategySpike.models[name as keyof typeof BRAIN.strategySpike.models] : undefined;
 }
 
-/** The word flags (`--run <label>`, `--write-model <name>`) taken out, or undefined for a bad one. */
-function wordFlags(argv: readonly string[]): { label: string | null; writeModel: ModelId | null; rest: readonly string[] } | undefined {
+/** The word flags (`--run`, `--write-model`, `--table`, `--seeds`) taken out, or undefined for a bad one. */
+function wordFlags(
+  argv: readonly string[],
+): { label: string | null; writeModel: ModelId | null; table: 'pair' | null; seeds: number[] | null; rest: readonly string[] } | undefined {
   const run = wordFlag(argv, '--run');
   if (!run || (run.value !== null && !LABEL.test(run.value))) return undefined;
   const model = wordFlag(run.rest, '--write-model');
   if (!model) return undefined;
   const writeModel = model.value === null ? null : writeModelFlag(model.value);
   if (writeModel === undefined) return undefined;
-  return { label: run.value, writeModel, rest: model.rest };
+  const table = wordFlag(model.rest, '--table');
+  if (!table || (table.value !== null && table.value !== 'pair')) return undefined;
+  const seedList = wordFlag(table.rest, '--seeds');
+  if (!seedList) return undefined;
+  const seeds = seedList.value === null ? null : seedsFlag(seedList.value);
+  if (seeds === undefined) return undefined;
+  return { label: run.value, writeModel, table: table.value as 'pair' | null, seeds, rest: seedList.rest };
 }
 
-/** A paid run's ledger: trial-<day>.jsonl, or trial-<day>-<label>.jsonl for a labelled run. */
-export function trialLedgerPath(dataDir: string, at: Date, label: string | null): string {
-  return label === null ? dayLedgerPath(dataDir, 'trial', at) : path.join(dataDir, `trial-${day(at)}-${label}.jsonl`);
+/** A paid run's ledger: <kind>-<day>.jsonl, or <kind>-<day>-<label>.jsonl for a labelled run; 'tourney' for a pair run. */
+export function trialLedgerPath(dataDir: string, at: Date, label: string | null, kind: 'trial' | 'tourney' = 'trial'): string {
+  return label === null ? dayLedgerPath(dataDir, kind, at) : path.join(dataDir, `${kind}-${day(at)}-${label}.jsonl`);
+}
+
+/**
+ * A game's seats: under 'pair' Claude sits on the even chairs and every seat plays its playbook, its own development and
+ * auction parts included, as the sim's pair table seats them (RULE-15); otherwise the first `smart` chairs, every seat as
+ * the config says. Personas rotate by seat and seed either way.
+ */
+export function tableSeats(table: 'pair' | null, seed: number, smart: number): { specs: SeatSpec[]; claude: number[] } {
+  if (table === 'pair') {
+    // literal-ok: RULE-15's pairing, even chairs and odd, not balance
+    return { specs: simSeats(SEATS, 'trader', seed, null, 'playbook'), claude: Array.from({ length: SEATS }, (_, i) => i).filter((i) => i % 2 === 0) };
+  }
+  return { specs: simSeats(SEATS, 'trader', seed), claude: Array.from({ length: smart }, (_, i) => i) };
+}
+
+/** `--seeds 1,101,201`: distinct whole seeds, at least one, or undefined. */
+export function seedsFlag(text: string): number[] | undefined {
+  if (!/^\d+(,\d+)*$/.test(text)) return undefined;
+  const seeds = text.split(',').map(Number);
+  return new Set(seeds).size === seeds.length ? seeds : undefined;
+}
+
+/** The seeds a run plays: `games` from each of --seeds, as the sim plays from one --seed, or `games` from --seed. */
+export function trialSeeds(flags: { seeds: number[] | null; seed: number; games: number }): number[] {
+  return (flags.seeds ?? [flags.seed]).flatMap((first) => Array.from({ length: flags.games }, (_, i) => first + i));
 }
 
 /** A trial ledger that could not be read, so the spend behind the cap is unknown. */
@@ -272,10 +335,20 @@ class UnreadableLedger extends Error {
   }
 }
 
-/** What every brain:trial ledger in the data folder has spent, all days and labels: its call lines' dollars. Throws UnreadableLedger. */
+/** What every brain:trial PR-5 ledger (trial-*.jsonl) has spent, all days and labels. Throws UnreadableLedger. */
 export function trialSpent(dataDir: string): number {
+  return ledgersSpent(dataDir, 'trial');
+}
+
+/** What every tournament ledger (tourney-*.jsonl) has spent, all days and labels. Throws UnreadableLedger. */
+export function tourneySpent(dataDir: string): number {
+  return ledgersSpent(dataDir, 'tourney');
+}
+
+/** The call lines' dollars across every <kind>-*.jsonl ledger in the data folder. Throws UnreadableLedger. */
+function ledgersSpent(dataDir: string, kind: 'trial' | 'tourney'): number {
   if (!fs.existsSync(dataDir)) return 0;
-  const ledgers = fs.readdirSync(dataDir).filter((f) => /^trial-.*\.jsonl$/.test(f));
+  const ledgers = fs.readdirSync(dataDir).filter((f) => f.startsWith(`${kind}-`) && f.endsWith('.jsonl'));
   return sum(
     ledgers.flatMap((f) => {
       const file = path.join(dataDir, f);
@@ -304,10 +377,46 @@ export function proofCapRefusal(dataDir: string, maxUsd: number): string | null 
   return `brain:trial would pass the PR-5 cap: the trial ledgers hold $${spent.toFixed(5)}, --max-usd ${capText(maxUsd)}, cap ${capText(BRAIN.proofCapUsd)}; nothing called.`;
 }
 
-/** The flags, or null for anything numberFlags refuses or a value out of range. */
-function parseFlags(argv: readonly string[]): TrialFlags | null {
-  const given = numberFlags(argv, ['--games', '--seed', '--smart', '--playbooks', '--max-usd', '--game-budget-usd']);
+/**
+ * Why a paid run may not start, or null: a pair run counts against the tournament cap and its ledgers, any other
+ * against the PR-5 cap and the trial ledgers. An unreadable ledger refuses it (fail closed).
+ */
+export function capRefusal(dataDir: string, table: 'pair' | null, maxUsd: number): string | null {
+  if (table !== 'pair') return proofCapRefusal(dataDir, maxUsd);
+  let spent: number;
+  try {
+    spent = tourneySpent(dataDir);
+  } catch (err) {
+    if (err instanceof UnreadableLedger) return `brain:trial cannot check the tournament cap: ${err.file} is not a readable ledger; nothing called.`;
+    throw err;
+  }
+  if (spent + maxUsd <= BRAIN.tournament.capUsd) return null;
+  return `brain:trial would pass the tournament cap: the tournament ledgers hold $${spent.toFixed(5)}, --max-usd ${capText(maxUsd)}, cap ${capText(BRAIN.tournament.capUsd)}; nothing called.`;
+}
+
+/** Both caps' totals for the report; null when a ledger cannot be read. */
+function spendTotals(dataDir: string): SpendTotals | null {
+  try {
+    return { proofUsd: trialSpent(dataDir), tourneyUsd: tourneySpent(dataDir) };
+  } catch (err) {
+    if (err instanceof UnreadableLedger) return null;
+    throw err;
+  }
+}
+
+/** The flags, or null for anything numberFlags refuses, a value out of range, or a tournament flag out of place. */
+function parseFlags(argv: readonly string[], words: { table: 'pair' | null; seeds: number[] | null }): TrialFlags | null {
+  const given = numberFlags(argv, ['--games', '--seed', '--smart', '--playbooks', '--max-usd', '--game-budget-usd', '--control']);
   if (!given) return null;
+  const control = given.get('--control') ?? 0;
+  const pair = words.table === 'pair';
+  const tourneyOk =
+    (control === 0 || control === 1) &&
+    (pair || control === 0) &&
+    (!pair || (given.get('--smart') ?? SEATS / 2) === SEATS / 2) &&
+    (!pair || control === 1 || given.get('--playbooks') === 1) &&
+    (words.seeds === null || !given.has('--seed'));
+  if (!tourneyOk) return null;
   const flags = {
     games: given.get('--games') ?? 20,
     seed: given.get('--seed') ?? 101,
@@ -319,7 +428,9 @@ function parseFlags(argv: readonly string[]): TrialFlags | null {
   const ok = Number.isInteger(flags.games) && flags.games >= 1 && Number.isInteger(flags.seed) && Number.isInteger(flags.smart);
   const budgetOk = flags.gameBudgetUsd > 0 && flags.gameBudgetUsd <= BRAIN.gameBudgetUsd;
   const playbooksOk = flags.playbooks === 0 || flags.playbooks === 1;
-  return ok && budgetOk && playbooksOk && flags.smart >= 1 && flags.smart <= SEATS && (flags.maxUsd === null || flags.maxUsd > 0) ? { ...flags, playbooks: flags.playbooks === 1 } : null;
+  return ok && budgetOk && playbooksOk && flags.smart >= 1 && flags.smart <= SEATS && (flags.maxUsd === null || flags.maxUsd > 0)
+    ? { ...flags, playbooks: flags.playbooks === 1, seeds: words.seeds, table: words.table, control: control === 1 }
+    : null;
 }
 
 /** A keyed run's ledger and cap. */
@@ -331,7 +442,7 @@ interface Paid {
 interface PlayedRun {
   games: TrialGame[];
   stopped: TrialStop;
-  /** The stop message when a ledger write was lost. */
+  /** The stop message when a ledger write was lost or the API refused a whole game. */
   lostLines: string | null;
 }
 
@@ -345,30 +456,35 @@ async function playRun(
   writeModel: ModelId | null = null,
 ): Promise<PlayedRun> {
   const games: TrialGame[] = [];
-  for (let i = 0; i < flags.games; i++) {
+  const seeds = trialSeeds(flags);
+  for (let i = 0; i < seeds.length; i++) {
     if (paid) {
       // The brain's table check holds a game to the game budget, unknown bills included. !(<=) refuses a NaN.
       if (!(sum(games.map((g) => g.countedUsd)) + flags.gameBudgetUsd <= paid.cap)) return { games, stopped: 'cap', lostLines: null };
       // The day's clearance is used once, by the run that starts the first game.
       if (i === 0) claimLedger(paid.logPath);
     }
-    const seed = flags.seed + i;
+    const seed = seeds[i]!;
     const game = await playTrialGame({
       writeModel,
       seed,
-      id: `trial-${today}-${flags.seed}-${i}`,
+      id: `trial-${today}-${seeds[0]}-${i}`,
       env,
       logPath: paid?.logPath ?? null,
       smart: flags.smart,
       gameBudgetUsd: flags.gameBudgetUsd,
       playbooks: flags.playbooks,
+      table: flags.table,
+      control: flags.control,
       out,
     });
     games.push(game);
-    out(`game ${i + 1}/${flags.games} seed ${seed}: ${game.end}, ${game.cutOff.length} phases cut off, ${game.settledCalls} model calls`);
+    out(`game ${i + 1}/${seeds.length} seed ${seed}: ${game.end}, ${game.cutOff.length} phases cut off, ${game.settledCalls} model calls`);
     if (game.end === 'auth') return { games, stopped: 'auth', lostLines: null };
     const lostLines = paid ? ledgerShortfall(paid.logPath, game) : null;
     if (lostLines) return { games, stopped: 'ledger', lostLines };
+    const refused = paid ? everyCallFailed(readCalls(paid.logPath), game.id) : null;
+    if (refused) return { games, stopped: 'refused', lostLines: refused };
   }
   return { games, stopped: 'done', lostLines: null };
 }
@@ -376,7 +492,7 @@ async function playRun(
 /** 2 on a 401/403, 1 on a lost ledger line; otherwise 0 with the key, and without it 0 only when the key-unset verdict passes. */
 function exitCode(keyed: boolean, stopped: TrialStop, report: TrialReport): number {
   if (stopped === 'auth') return 2;
-  if (stopped === 'ledger') return 1;
+  if (stopped === 'ledger' || stopped === 'refused') return 1;
   return keyed || report.ac2 === 'pass' ? 0 : 1;
 }
 
@@ -392,22 +508,27 @@ export async function trial(
 ): Promise<{ code: number; report: TrialReport | null }> {
   const { dataDir, out, now } = resolveDeps(deps);
   const run = wordFlags(argv);
-  const flags = run ? parseFlags(run.rest) : null;
+  const flags = run ? parseFlags(run.rest, run) : null;
   if (!run || !flags) {
     out(USAGE);
     return { code: 1, report: null };
   }
-  const keyed = apiKeyFrom(env) !== null;
+  // The control calls nothing: its games get no key, so no seat can reach the model.
+  const gameEnv = flags.control ? {} : env;
+  const keyed = apiKeyFrom(gameEnv) !== null;
   const at = now();
+  const planned = trialSeeds(flags).length;
   let paid: Paid | null = null;
-  if (!keyed) {
+  if (flags.control) {
+    out(`brain:trial control: the Claude chairs play as engine seats on the pair table; ${planned} games, nothing is called.`);
+  } else if (!keyed) {
     out(`${API_KEY_ENV} is not set: every seat plays Classic and nothing is called.`);
   } else {
     if (flags.maxUsd === null) {
       out(`brain:trial spends real money with ${API_KEY_ENV} set: give --max-usd, the cap that was cleared; nothing called.`);
       return { code: 1, report: null };
     }
-    const logPath = trialLedgerPath(dataDir, at, run.label);
+    const logPath = trialLedgerPath(dataDir, at, run.label, flags.table === 'pair' ? 'tourney' : 'trial');
     const used =
       run.label === null
         ? alreadyRanToday(logPath, 'brain:trial')
@@ -418,23 +539,27 @@ export async function trial(
       out(used);
       return { code: 1, report: null };
     }
-    // One run a day used to stop an accidental overspend; with labels, the PR-5 cap across every trial ledger does.
-    const overCap = proofCapRefusal(dataDir, flags.maxUsd);
+    // One run a day used to stop an accidental overspend; with labels, the cap across every ledger of the run's kind does.
+    const overCap = capRefusal(dataDir, flags.table, flags.maxUsd);
     if (overCap) {
       out(overCap);
       return { code: 1, report: null };
     }
     paid = { logPath, cap: flags.maxUsd };
     out(
-      `brain:trial model ${BRAIN.model}, cap ${capText(paid.cap)}, planned ${flags.games} games with ${flags.smart} Smart seats ` +
+      `brain:trial model ${BRAIN.model}, cap ${capText(paid.cap)}, planned ${planned} games with ${flags.table === 'pair' ? 'Claude on chairs 0 and 2 of the pair table' : `${flags.smart} Smart seats`} ` +
         `(together held to ${capText(flags.gameBudgetUsd)} a game, an equal share each)${run.writeModel === null ? '' : `, every write on ${run.writeModel}`}, ledger ${logPath}`,
     );
   }
 
-  const { games, stopped, lostLines } = await playRun(flags, env, paid, day(at), out, run.writeModel);
+  const { games, stopped, lostLines } = await playRun(flags, gameEnv, paid, day(at), out, run.writeModel);
+  const totals = flags.table === 'pair' ? spendTotals(dataDir) : null;
   const report = trialReport({
     keyed,
-    planned: flags.games,
+    planned,
+    table: flags.table,
+    control: flags.control,
+    ...(totals ? { totals } : {}),
     stopped,
     smartPerGame: keyed ? flags.smart : 0,
     seatsPerGame: SEATS,

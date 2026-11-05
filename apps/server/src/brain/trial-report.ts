@@ -1,5 +1,5 @@
 /** The trial's figures and verdicts from what its games left behind: pure, so the tests read the report itself. */
-import { grantDone, type GameState } from '@mule/engine';
+import { BRAIN, grantDone, type GameState } from '@mule/engine';
 import type { Choice, DecisionKind } from '@mule/ai';
 import { KINDS, nearest, table, type StopReason } from './cli.js';
 import type { CallLine } from './ledger.js';
@@ -38,10 +38,12 @@ export interface TrialGame {
   playbooks: { seat: string; month: number; by: 'engine' | 'llm' }[];
   /** Every seat's final score, by seat id; absent where the game left none. */
   scores?: Record<string, number>;
+  /** The seats in the Claude chairs, Claude's or, in the control, the engine's; absent, the Smart seats. */
+  chairs?: string[];
 }
 
-/** Why a run stopped: the commands' reasons, or a ledger write that was lost. */
-export type TrialStop = StopReason | 'ledger';
+/** Why a run stopped: the commands' reasons, a ledger write that was lost, or a game in which the API refused every call. */
+export type TrialStop = StopReason | 'ledger' | 'refused';
 
 export interface TrialInput {
   keyed: boolean;
@@ -58,6 +60,18 @@ export interface TrialInput {
   calls: Pick<CallLine, 'game' | 'seat' | 'usd' | 'outcome' | 'kind'>[];
   /** Whether the Smart seats wrote playbooks (--playbooks 1): UBER-AC-A's edit clause is judged only then. */
   playbooks: boolean;
+  /** 'pair' for the tournament (--table pair): the report judges WS1's bar. */
+  table?: 'pair' | null;
+  /** The positive control (--control): engine seats in the Claude chairs, judged against the control bar. */
+  control?: boolean;
+  /** What every ledger has spent so far, against each cap. */
+  totals?: SpendTotals;
+}
+
+/** The PR-5 proof ledgers' spend and the tournament ledgers', each against its own cap. */
+export interface SpendTotals {
+  proofUsd: number;
+  tourneyUsd: number;
 }
 
 export type FallbackReason = 'too slow' | 'busy' | 'budget' | 'off-list' | 'unreadable' | 'error';
@@ -130,6 +144,25 @@ export interface TrialReport {
    * verdict: the bar is set from WS1's tournament numbers.
    */
   results: { games: number; smartWins: number; smart: SeatResults; strategist: SeatResults };
+  /** WS1's bar for a pair run: the claim, or the positive control; absent without --table pair. */
+  bar?: { kind: 'claim' | 'control'; verdict: Verdict };
+  totals?: SpendTotals;
+}
+
+/**
+ * WS1's bar over a tournament's results (BRAIN.tournament). The claim: the Claude chairs win at least winShare of the
+ * games and their mean rank leads by at least rankLead. The control: wins between winShareLow and winShareHigh, mean
+ * ranks within rankBand. Not proven without a scored game.
+ */
+export function tournamentBar(r: TrialReport['results'], control: boolean): Verdict {
+  if (r.games === 0) return 'not proven';
+  const wins = r.smartWins / r.games;
+  const lead = r.strategist.meanRank - r.smart.meanRank;
+  const { claim, control: band } = BRAIN.tournament;
+  const holds = control
+    ? wins >= band.winShareLow && wins <= band.winShareHigh && Math.abs(lead) <= band.rankBand
+    : wins >= claim.winShare && lead >= claim.rankLead;
+  return holds ? 'pass' : 'fail';
 }
 
 /** Mean final score and mean rank of a group of seats; NaN where the group played no finished game. */
@@ -138,7 +171,7 @@ export interface SeatResults {
   meanRank: number;
 }
 
-/** Smart seats against strategist seats over the finished games that have final scores. */
+/** The Claude chairs (the Smart seats, unless the game names its chairs) against the rest, over finished games with final scores. */
 function resultsOf(finished: readonly TrialGame[]): TrialReport['results'] {
   const scored = finished.filter((g) => g.scores !== undefined && Object.keys(g.scores).length > 0);
   const smart: { score: number; rank: number }[] = [];
@@ -146,9 +179,13 @@ function resultsOf(finished: readonly TrialGame[]): TrialReport['results'] {
   let smartWins = 0;
   for (const g of scored) {
     const scores = Object.entries(g.scores!);
+    const claude = g.chairs ?? g.smart;
     const rankOf = (score: number) => 1 + scores.filter(([, s]) => s > score).length;
-    for (const [seat, score] of scores) (g.smart.includes(seat) ? smart : strategist).push({ score, rank: rankOf(score) });
-    if (scores.some(([seat, score]) => g.smart.includes(seat) && rankOf(score) === 1)) smartWins++;
+    for (const [seat, score] of scores) (claude.includes(seat) ? smart : strategist).push({ score, rank: rankOf(score) });
+    // A first place shared by both sides counts half a win to each, so a fair table stays at 50% (WS1, 5 Nov).
+    const winners = scores.filter(([, score]) => rankOf(score) === 1);
+    const claudeWinners = winners.filter(([seat]) => claude.includes(seat)).length;
+    smartWins += claudeWinners === 0 ? 0 : claudeWinners === winners.length ? 1 : 0.5;
   }
   const mean = (xs: number[]) => (xs.length === 0 ? Number.NaN : sum(xs) / xs.length);
   const group = (xs: { score: number; rank: number }[]): SeatResults => ({ meanScore: mean(xs.map((x) => x.score)), meanRank: mean(xs.map((x) => x.rank)) });
@@ -299,6 +336,10 @@ export function trialReport(input: TrialInput): TrialReport {
     playbooks: input.playbooks,
     edits,
     results: resultsOf(finished),
+    ...(input.table === 'pair'
+      ? { bar: { kind: input.control ? ('control' as const) : ('claim' as const), verdict: complete ? tournamentBar(resultsOf(finished), input.control === true) : ('not proven' as const) } }
+      : {}),
+    ...(input.table === 'pair' && input.totals ? { totals: input.totals } : {}),
     acEdits: input.keyed && input.playbooks ? verdict({ fails: false, proven: complete && edits.of > 0, holds: 5 * edits.model >= 4 * edits.of }) : 'n/a',
   };
 }
@@ -317,6 +358,23 @@ const resultsText = (r: TrialReport['results']) =>
   r.games === 0
     ? 'n/a'
     : `won ${r.smartWins} of ${r.games} games; mean score ${Math.round(r.smart.meanScore)} against ${Math.round(r.strategist.meanScore)}; mean rank ${r.smart.meanRank.toFixed(2)} against ${r.strategist.meanRank.toFixed(2)}`;
+/** WS1's bar as printed: the verdict, the win share and the mean-rank lead, each against its bound. */
+const barText = (r: TrialReport) => {
+  const { results: x, bar } = r;
+  const { claim, control } = BRAIN.tournament;
+  const share = x.games === 0 ? 'n/a' : `${Math.round((100 * x.smartWins) / x.games)}%`;
+  const lead = x.games === 0 ? 'n/a' : (x.strategist.meanRank - x.smart.meanRank).toFixed(2);
+  const bounds =
+    bar!.kind === 'control'
+      ? [`between ${100 * control.winShareLow}% and ${100 * control.winShareHigh}%`, `within ${control.rankBand.toFixed(2)} either way`]
+      : [`at least ${100 * claim.winShare}%`, `at least ${claim.rankLead.toFixed(2)}`];
+  const label = bar!.kind === 'control' ? "WS1's bar, positive control" : "WS1's bar (UBER-AC-A result)";
+  return [label, `${verdictText(bar!.verdict)}: won ${share} of ${x.games} games (${bounds[0]}); mean rank lead ${lead} (${bounds[1]})`];
+};
+const totalsText = (t: SpendTotals) =>
+  `PR-5 proofs ${capText(Number(t.proofUsd.toFixed(2)))} of ${capText(BRAIN.proofCapUsd)}; tournament ${capText(Number(t.tourneyUsd.toFixed(2)))} of ${capText(BRAIN.tournament.capUsd)}`;
+const tourneyRows = (r: TrialReport): string[][] =>
+  r.bar ? [['Claude chairs against engine chairs', resultsText(r.results)], barText(r), ...(r.totals ? [['Spend so far, every ledger', totalsText(r.totals)]] : [])] : [];
 const monthText = (c: MonthCounts, of: number) => `min ${c.min}, median ${c.median}, months with none ${c.silent} of ${of}`;
 
 /** The report as printed: the run, the figures for each acceptance criterion, then one verdict line for each. */
@@ -334,6 +392,7 @@ export function renderTrialReport(r: TrialReport): string[] {
         ['decisions by the model', `${r.allDecisions.model} of ${r.allDecisions.of} (every seat Classic)`],
         ["decisions by the strategist's top pick", `${r.topPicks} of ${r.allDecisions.of}`],
         ['stalls', stallText],
+        ...tourneyRows(r),
       ]),
       ...stallDetail,
       '',
@@ -370,6 +429,7 @@ export function renderTrialReport(r: TrialReport): string[] {
       ['ledger spend', usdText(r.ledgerUsd)],
       [`counted spend (cap ${capText(r.cap ?? 0)})`, usdText(r.countedUsd)],
       ['stalls', stallText],
+      ...tourneyRows(r),
     ]).map((l) => l.trimEnd()),
     ...stallDetail,
     '',
