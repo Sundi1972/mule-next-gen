@@ -92,9 +92,8 @@ HC-1  packages/engine stays pure: no Date.now(), no Math.random(); time enters a
 HC-2  Every number is a named value in packages/engine/src/config.ts (DEV_STEER, WOLVES, GLINT, SCRAMBLE), never
       inline; `pnpm sim --set` can move each one.        source: CLAUDE.md, memory "configurable balance"  breach: fatal
 HC-3  Never stall a game: development ends on its one clock whatever a phone does (dropped, silent, flooding);
-      an away seat's colonist stands still and counts as done, as today. The one exception (AM-3): in month 1 the
-      clock stands full until every present seat's first MULE is in; the host's Continue starts it past anyone not
-      in, and an away seat counts as in. The clock is the only thing that waits: the tick, the moments and the AI run.
+      an away seat's colonist stands still and counts as done, as today. No exception: month 1's clock counts down
+      from the start like any month's (AM-34 withdrew AM-3's first-MULE wait and its Continue).
                                                         source: ws2-brain G-2b; mule-game.ts::checkDevelopmentOver  breach: fatal
 HC-4  The server, the sim and the phone's prediction call the SAME engine step with the SAME tick length; a seeded
       AI-only game in the sim and on the server ends in the same state.
@@ -591,8 +590,8 @@ RULE-7 · Heiko's starting values (config)                         shape: table
     .terrain plains 1, desert 0.9, tundra 0.85, forest 0.75, ice 0.75, crater 0.8, hills 0.7, volcanic 0.6,
     river 0.6, swamp 0.5, mountains 0.4, lake 0 (lakeMode 'shore', wading 0.3) · .tickMs 50 · .catchUpTicks 10 ·
     .steerMaxPerSecond 10 · .botSpeed 1 · .botCounterPauseSeconds 0.5 · .trespass true · .mountainsImpassable false ·
-    .pubLeadRefund 0 · .reoutfitCost = the outfitter's price (AM-2) ·
-    .month1WaitsForFirstMule true (AM-3)
+    .pubLeadRefund 0 · .reoutfitCost = the outfitter's price (AM-2)
+    (.month1WaitsForFirstMule removed: AM-34)
   WOLVES.on true · chancePerSecond 0.1 · packSize 3 · cooldownSeconds 20 · chooseSeconds 3 · chaseShare 0.88 (of mapTilesPerSecond; AM-32) ·
     giveUpSeconds 5 · giveUpTiles 4 · bittenPace 0.5 · fightSeconds 10 · lungeEverySeconds 1.6 · warnSeconds 0.8 ·
     strikesToWin 3 · bitesToLose 3 · pelts 2 · peltPrice 20 · stunSeconds 4 · boltTiles 4 · boltSpeed 3.5 ·
@@ -741,7 +740,14 @@ inside a wall; money and stock change only through game.ts rules; development en
 
 ## §8 · Amendments `[review-only]`
 
-- **AM-33 (2026-11-04, the PM's G-3 play on #285, ruled by WS6; AM-3's gap).** Month 1's clock waits for every
+- **AM-34 (2026-11-05, Heiko: "Yes, always count", via the PM).** Month 1's development clock counts down from the
+  start, like any month's. **Withdrawn:** AM-3's first-MULE wait and the host's Continue that ended it, AM-6's
+  "in force now" for that wait, and AM-33's who-counts-as-in rule (`mule-game.ts::isIn`); the config value
+  `DEV_STEER.month1WaitsForFirstMule`; on the screens, the side room's wait words (`waitingNow`, AM-20 (4)), the
+  ticker's one-row fold under them (AM-31) and the TV's hidden header clock while month 1 waits (AM-24 (4));
+  T-AC-9's month-1 case (AM-3) goes with it, and T-AC-9 keeps its away-seat and flood cases. HC-3 has no
+  exception. Owner of the removal: WS3, on arcade-pr11-walking-on (server, config, the screens' copy in one change).
+- **AM-33 (2026-11-04, the PM's G-3 play on #285, ruled by WS6; AM-3's gap). WITHDRAWN by AM-34.** Month 1's clock waits for every
   seat's first MULE (AM-3), and a seat already counts as in once it installed, is at the pub, is away, is Ready, or
   owns no plot. A seat the scramble left out (the corral empty, no MULE on its lead) could never bring one, so the
   clock stood at 60 s with every AI waiting at the pub door until that human walked to the pub. **A seat also counts as
@@ -774,8 +780,8 @@ inside a wall; money and stock change only through game.ts rules; development en
   Heiko's approval of the arcade mock, named to him at the walking table test): at 844 only the newest line, wrapped to
   at most three rows (a cut line was unreadable at the side room's 98 px); the laptop's rail the newest two, wrapped.
   **Built (WS6, on #291's branch):** the ticker follows the status: the side room where the layout has one (844 with
-  four seats), else the top bar (one cut line; 667, and 844 on the 13×7 and 19×11 maps). While month 1's wait words
-  show, the side-room ticker drops to one cut row: the wait words are never cut. In the hall at 667 one cut row at the
+  four seats), else the top bar (one cut line; 667, and 844 on the 13×7 and 19×11 maps). (Withdrawn with AM-34: the
+  side-room ticker's one-row fold under month 1's wait words; there are no wait words.) In the hall at 667 one cut row at the
   compact room's foot: every development layout has a ticker. A speaker the screen does not draw (in the other space,
   or done) is anchored by their ticker line, creature and name: the walking screen has no seat row, so no fallback
   bubble.
@@ -850,8 +856,8 @@ inside a wall; money and stock change only through game.ts rules; development en
   earlier, within that seat's largest one-tick move plus the wire's 0.01 rounding; measured 0.065 tiles worst over
   four seats. (2) **"Translucent" over your other plots (AM-20) is 60% opacity,** the scaffold's fade near you or the
   target staying at 25%. (3) **A released stick sends its stop by timer and on hide or blur,** not on the next
-  animation frame: a phone put away mid-walk otherwise left its colonist walking on the server. (4) **The TV shows no
-  header clock while month 1's clock waits** (`phaseEndsAt` null), as the flag-off TV does, never a red 0:00.
+  animation frame: a phone put away mid-walk otherwise left its colonist walking on the server. (4) ~~The TV shows no
+  header clock while month 1's clock waits~~ (withdrawn, AM-34: month 1's clock always counts).
 - **AM-23 (2026-11-04, WS1's PR-8 numbers, ruled by WS6).** `botWolfLandShare` is built at its specced 0.5 (AI wolf
   months were 46% without it). On T-AC-5's own sample (20 seeded AI-only games, its `observed_at`): wolf months
   61.7%, glints raced 43.1%, pub missed 7 of 960 turns (0.7%), each a colonist a late pack still held at the bell.
@@ -881,8 +887,8 @@ inside a wall; money and stock change only through game.ts rules; development en
   your colonist or the target: when either is under its box (the mock's columns 5–14, rows 1–4), it moves to the
   map's other half (columns 0–9). (3) **The route follows the server:** the phone and the TV show the arcade screen
   when the view says the floor is on (its Reach and frames are present), not by the bundle's own `DEV_STEER.on`, so
-  a flag-on server needs no flag-on build. (4) **Month 1's wait:** while the clock waits for every first MULE (A-1),
-  the side room says so in A-1's own words (`waitingNow`), not a full clock and nothing else. (5) **Reconnecting:**
+  a flag-on server needs no flag-on build. (4) ~~**Month 1's wait** (`waitingNow` in the
+  side room)~~ withdrawn, AM-34: month 1's clock always counts, so there is no wait to put into words. (5) **Reconnecting:**
   the app's ConnectionBar look with "RECONNECTING…" is the stale state RULE-10 asks for. (6) **Deferred, not PR-6:**
   the second choice on one spot (V-3/V-5's alt button; it needs a second verb in ReachView and the act, a protocol
   change; installing first and then analysing reaches the same result today), and the chips with no data on the wire
@@ -979,7 +985,7 @@ inside a wall; money and stock change only through game.ts rules; development en
   to the record's §3. Coupling into C8: WS3's recorder and replay pass `frame` through (to the room when recording, a
   no-op on replay), two WS3 lines in C8's wave that WS6 reviews, with a test row that a recorded game's frames still
   reach a client. S-1 still settles 20 Hz against 10 Hz.
-- **AM-6 (2026-10-29, PM ruling).** AM-3's month-1 clock does not wait for the arcade switch: Heiko approved it for
+- **AM-6 (2026-10-29, PM ruling; its month-1 wait WITHDRAWN by AM-34).** AM-3's month-1 clock does not wait for the arcade switch: Heiko approved it for
   the game now. It is a clock rule in mule-game.ts, not the tick, so it applies with `DEV_STEER.on` false, on
   today's walk. It is built as its own small WS3 PR in the audit build split, after WS1 measures month 1's
   development time on today's walk with the existing sim (AI-only, and with one idle human plus the host's
@@ -1010,7 +1016,7 @@ inside a wall; money and stock change only through game.ts rules; development en
   audit mock's dashed "Or re-outfit it at the store" (#audit-dev-swap, V-4). Serves G-1 (no menus) and lands in C3
   and C11; T-AC-3 gains rows 8a and 11a; game.ts's outfit rule gains the re-outfit as a named edit (WS3 owns game.ts
   edits, per the ruling).
-- **AM-3 (2026-10-29, Heiko's Q3 "yes", via the PM).** Month 1's development clock stands full until every present
+- **AM-3 (2026-10-29, Heiko's Q3 "yes", via the PM). WITHDRAWN by AM-34 (Heiko, 2026-11-05).** Month 1's development clock stands full until every present
   seat's first MULE is installed; the host's Continue (the approved planning pattern: host only, one confirming tap,
   a news line naming who was passed) starts it past anyone not in, and an away seat counts as in. HC-3 carries the
   exception; the tick, the moments and the AI run while the clock waits. The TV shows whose first MULE is still to
