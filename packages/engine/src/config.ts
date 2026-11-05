@@ -1492,6 +1492,11 @@ export const STRATEGIST = {
   /** When it sizes its cash reserve, a short unit counts at most this many times the reference price. */
   reservePriceCap: 3,
   /**
+   * Goods it buys up to next month's need, as far as its money goes, while it holds less and the store sells them:
+   * each unit of the shortfall is worth at least the store's ask, and it never sells under the need (Heiko, 5 Nov).
+   */
+  buyShortfall: ['food', 'energy', 'water'] as Good[],
+  /**
    * A new farm's Food, Water or Energy that covers the seat's own shortfall is
    * worth at least this many times the reference price: going short costs
    * development time (Food), half of every farm (Water) or half of every plot

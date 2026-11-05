@@ -494,7 +494,10 @@ export interface GoodPlan {
   spiteBid: number;
   /** Extra value per unit, up to the others' shortfall, for cornering a scarce good. */
   corner: { units: number; premium: number };
-  /** Food it buys up to, as far as its money goes, while short of next month's need and the store sells Food; 0 otherwise. */
+  /**
+   * Units it buys up to, as far as its money goes, and never sells under: next month's need while it holds less and the
+   * store sells the good (STRATEGIST.buyShortfall); 0 otherwise.
+   */
   mustHold: number;
 }
 
@@ -510,11 +513,16 @@ export function goodPlan(obs: GameState, mind: Mind, good: Good): GoodPlan {
     const now = afterTax(obs, expectedPrices(obs, good).sell);
     for (let k = values.block; k < values.keep.length; k++) values.keep[k] = Math.min(values.keep[k]!, now - 1);
   }
-  // Short of next month's Food is a loss, not a small pace cost (Heiko, 5 Nov): while the store sells Food, each unit of
-  // the shortfall is worth at least the store's ask, so the seat buys it there or cheaper from a player, never dearer.
-  const ask = good === 'food' ? storeSellLine(obs) : null;
-  const mustHold = ask !== null && p.stock.food < values.need ? values.need : 0;
-  for (let k = 0; k < mustHold; k++) values.buy[k] = Math.max(values.buy[k]!, ask!);
+  // Short of next month's need is a loss, not a small cost (Heiko, 5 Nov): while the store sells the good, each unit of
+  // the shortfall is worth at least the store's ask, so the seat buys it there or cheaper from a player, never dearer,
+  // and sells none of the units it needs. The need is the status screen's, whatever its own plots may make.
+  const ask = STRATEGIST.buyShortfall.includes(good) ? storeSellLine(obs) : null;
+  const mustHold = ask !== null && p.stock[good] < values.need ? values.need : 0;
+  for (let k = 0; k < mustHold; k++) {
+    values.buy[k] = Math.max(values.buy[k]!, ask!);
+    values.keep[k] = Infinity;
+  }
+  values.floorUnits = Math.max(values.floorUnits, mustHold);
   const reserve = cashReserve(obs, mind);
   const budget = Math.max(0, Math.min(p.money * STRATEGIST.budgetShare, p.money - reserve));
   const a = obs.auction;
@@ -600,13 +608,13 @@ export function tradeDecision(obs: GameState, mind: Mind, plan: GoodPlan): Short
     let gain = 0;
     for (let k = h; k < target; k++) gain += (v.buy[k] ?? 0) - buy;
     const cost = (target - h) * buy;
-    const essential = target <= v.block && (good === 'food' || good === 'energy');
+    const essential = (target <= v.block && (good === 'food' || good === 'energy')) || target <= plan.mustHold;
     const veto = !essential && p.money - cost < plan.reserve ? `it would dip into the ${cr(plan.reserve)} kept for upkeep` : null;
     cands.push(candidate<TradeAction>(key, label, { side: 'buyer', upTo: target }, gain, gainCons(gain, p.money - cost, sure, `buys ${target - h} at about ${buy}, worth ${cr(gain)} more to it`, sureWhy), veto));
   };
   if (upTo > h) {
-    const needOnly = Math.min(upTo, Math.max(h, v.block));
-    const speculative = upTo > Math.max(h, v.block);
+    const needOnly = Math.min(upTo, Math.max(h, v.block, plan.mustHold));
+    const speculative = upTo > Math.max(h, v.block, plan.mustHold);
     buyTo(upTo, `Buy ${upTo - h} ${GOOD_NAME[good]}${speculative ? ' (some to resell)' : ''}`, 'buy', speculative ? sure.resale : sure.need, speculative ? 'resale next month is a forecast' : 'it needs them');
     if (speculative && needOnly > h) buyTo(needOnly, `Buy ${needOnly - h} ${GOOD_NAME[good]}, just what I need`, 'buy:need', sure.need, 'it needs them');
   }

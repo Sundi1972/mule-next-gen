@@ -208,7 +208,7 @@ export class AuctionHand {
     const spent = this.startMoney - me.money;
     const budgetLeft = Math.max(0, plan.budget - spent);
     const value = plan.values.buy[h] ?? 0;
-    const essential = h < plan.values.block && (good === 'food' || good === 'energy');
+    const essential = h < plan.values.block && (good === 'food' || good === 'energy') || h < plan.mustHold;
     const cap = essential ? me.money : Math.min(me.money, budgetLeft);
     const ceiling = this.bounded('buyer', Math.floor(Math.min(value, cap)));
     this.limit = ceiling;
@@ -229,7 +229,8 @@ export class AuctionHand {
     }
     if (!finished) this.target = this.scheduled('buyer', this.target, a.elapsed);
     this.target = Math.max(0, this.target);
-    this.doneFlag = finished || (this.target >= ceiling && a.deals.every((d) => d.buyer !== me.id));
+    // At its limit with nobody meeting it, it is done; an ask inside the limit (at the limit, too) it walks on to take.
+    this.doneFlag = finished || (bestAsk > ceiling && this.target >= ceiling && a.deals.every((d) => d.buyer !== me.id));
   }
 
   /** RULE-10's limit: a buyer pays at most the play's walkAway, a seller asks at least it. */
@@ -295,7 +296,7 @@ export class AuctionHand {
     if (side !== 'buyer' || trade.side !== 'buyer') return 0;
     for (let h = me.stock[good], money = me.money; h < trade.upTo; h++, units++, money -= price) {
       const budgetLeft = Math.max(0, plan.budget - (this.startMoney - money));
-      const essential = h < plan.values.block && (good === 'food' || good === 'energy');
+      const essential = h < plan.values.block && (good === 'food' || good === 'energy') || h < plan.mustHold;
       const cap = essential ? money : Math.min(money, budgetLeft);
       if (this.bounded('buyer', Math.floor(Math.min(plan.values.buy[h] ?? 0, cap))) < price) break;
     }
