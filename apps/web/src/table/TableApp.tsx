@@ -1,10 +1,10 @@
-import { DEV_WALK, DEVELOPMENT, GAME, POLITICS } from '@mule/engine';
+import { GAME, POLITICS } from '@mule/engine';
 import type { DealView, MuleView, TableView } from '@mule/protocol';
-import { AirGauge, Button, cx, GOOD_NAME, GoodIcon, GoodTag, HoloMap, PaceList, PlayerMark, SPEED_STEPS, speedStep, SeatSpeciesProvider, SharedClock, StoreInterior, TERRAIN_NAME, TimeBar, Timer, WalkBoard, type CreatureWrap } from '@mule/ui';
+import { AirGauge, Button, cx, GOOD_NAME, GoodIcon, GoodTag, HoloMap, PlayerMark, SPEED_STEPS, speedStep, SeatSpeciesProvider, TERRAIN_NAME, TimeBar, Timer, WalkBoard, type CreatureWrap } from '@mule/ui';
 import { Speaker, TvTicker, tvSpeakerAt } from '../chat/Chat';
 import { boardWalkers, dealLine, dealSpeed, newestFirst, shipWants, ShipWants, SIDE_WORD, skippedLine, StatusTable, StoreBox, TvReadout, WaitingToPick, type DealRow } from '../components/AuctionParts';
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { BuildSite, ColonyGauges, ColonyScoreBand, TvWinner } from '../components/Colony';
+import { BuildSite, ColonyGauges, ColonyScoreBand, TvWinner, useMonthEndDrift, type GaugeLanding } from '../components/Colony';
 import { CollapseBanner, ColonyPanel, LeagueTable, WinnerCard } from '../components/MonthEnd';
 import { joinUrl, Qr } from '../components/Qr';
 import { Scaled } from '../components/Scaled';
@@ -15,7 +15,6 @@ import { useAuctionSound } from '../game/sound';
 import { useClient, useClientState, useServerNow } from '../net/react';
 import { connectedIn, hostMayContinue, pickedIn, readyRows, SIDE_PICK_WORDS, stillPicking, stillPlanning } from '../phone/hub/ready';
 import { ReadyCount, WaitingFor } from '../phone/hub/ReadyBar';
-import { steering } from '../phone/arcade/route';
 import { TvCouncil } from './TvCouncil';
 import { TvDevelop } from './TvDevelop';
 import { placesOf } from '../phone/hub/standing';
@@ -131,8 +130,8 @@ function TvLobby({ table }: { table: TableView<MuleView> }) {
   );
 }
 
-/** `gauges` false keeps the air gauge alone even with a colony, as game over does. */
-export function TvHeader({ game, title, icon, seconds, extra, gauges = true }: { game: MuleView; title: string; icon?: ReactNode; seconds?: number | undefined; extra?: ReactNode; gauges?: boolean }) {
+/** `gauges` false keeps the air gauge alone even with a colony, as game over does; `landing` counts changes onto them. */
+export function TvHeader({ game, title, icon, seconds, extra, gauges = true, landing }: { game: MuleView; title: string; icon?: ReactNode; seconds?: number | undefined; extra?: ReactNode; gauges?: boolean; landing?: GaugeLanding | undefined }) {
   return (
     <>
       <header className="flex items-end justify-between gap-6">
@@ -148,7 +147,7 @@ export function TvHeader({ game, title, icon, seconds, extra, gauges = true }: {
         <div className="flex items-center gap-4">
           {extra}
           <ThemeToggle />
-          {game.colony && gauges ? <ColonyGauges colony={game.colony} size="tv" className="w-[760px]" /> : <AirGauge level={game.air.level} band={game.air.band} tv />}
+          {game.colony && gauges ? <ColonyGauges colony={game.colony} size="tv" className="w-[760px]" landing={landing} /> : <AirGauge level={game.air.level} band={game.air.band} tv />}
           {seconds !== undefined && <Timer seconds={seconds} className="h-14! px-5! text-3xl!" />}
         </div>
       </header>
@@ -159,6 +158,8 @@ export function TvHeader({ game, title, icon, seconds, extra, gauges = true }: {
 
 function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView }) {
   const now = useServerNow(200);
+  // Here, where the TV stays mounted across phases, so the drift plays when it sees the month end come (WS8 PR-E2).
+  const drift = useMonthEndDrift(game);
   const tiles = mapTiles(game);
   const lit = game.lit ? tileAt(game, game.lit.x, game.lit.y) : undefined;
   const phase = game.phase;
@@ -175,12 +176,12 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
   if (phase === 'upkeep')
     return (
       <SeatSpeciesProvider value={seatSpecies(game)}>
-        <TvMonthEnd game={game} />
+        <TvMonthEnd game={game} drift={drift} />
       </SeatSpeciesProvider>
     );
   if (phase === 'planning' && game.politics?.election && game.politics.election.stage !== 'over') return <TvElection table={table} game={game} />;
   if (phase === 'planning' && game.politics?.council && game.politics.council.stage !== 'over') return <TvCouncil game={game} />;
-  if (phase === 'development' && steering(game)) return <TvDevelop game={game} />;
+  if (phase === 'development') return <TvDevelop game={game} />;
 
   let side: ReactNode;
   if (phase === 'landGrant')
@@ -201,23 +202,6 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
         </div>
         <Players game={game} right={(p) => <span className="font-mono text-lg text-ink-2">{p.plots} plots</span>} />
         <p className="mt-auto font-display text-2xl leading-snug text-ink-2">Free plots light up one by one, row by row from the top. Tap CLAIM on your phone when yours is lit.</p>
-      </>
-    );
-  else if (phase === 'development')
-    side = (
-      <>
-        <div className="h-[240px]">
-          <StoreInterior mules={game.storeMules} mulePrice={game.mulePrice} prices={{}} tv />
-        </div>
-        {/* The roster's rows carry each colonist's pace: one column, so every name shows in full. */}
-        <div className="mt-auto">
-          <PaceList
-            rule={DEV_WALK}
-            columns={1}
-            wrapMark={tvSpeakerAt}
-            rows={game.players.map((p) => ({ id: p.id, name: p.name, slot: toSlot(p.slot), condition: p.condition, note: p.doneDeveloping ? 'PUB' : 'BUILDING', done: p.doneDeveloping }))}
-          />
-        </div>
       </>
     );
   else if (phase === 'production') side = <HarvestSide game={game} />;
@@ -326,7 +310,6 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
         ) : (
           <TvHeader game={game} title={PHASE_NAME[phase]} seconds={secondsUntil(game.phaseEndsAt, now)} />
         )}
-        {phase === 'development' && <SharedClock seconds={secondsUntil(game.phaseEndsAt, now) ?? 0} total={DEVELOPMENT.fullSeconds} size="tv" />}
         <div className="flex min-h-0 flex-1 gap-6">
           <div className="flex w-[700px] shrink-0 flex-col gap-3">
             <HoloMap width={game.width} height={game.height} tiles={tiles} cursor={game.lit} density="tv" hideGround className="w-full" />
@@ -658,12 +641,12 @@ function FitHeight({ className, children }: { className?: string; children: Reac
  * change since last month, and how the colony is doing. Public: totals only, each player's own lines are on their
  * phone (HC-4). It stays up until everyone moves on, and counts who has, as planning does.
  */
-export function TvMonthEnd({ game }: { game: MuleView }) {
+export function TvMonthEnd({ game, drift }: { game: MuleView; drift?: GaugeLanding | undefined }) {
   return (
     <div className="flex h-[720px] w-[1280px] flex-col gap-4 bg-table p-10 text-ink" data-phase={game.phase} data-testid="tv-monthend">
       <div className="flex items-start gap-4">
         <div className="min-w-0 flex-1">
-          <TvHeader game={game} title="End of the month" />
+          <TvHeader game={game} title="End of the month" landing={drift} />
         </div>
         <ReadyCount players={game.players} tv />
       </div>
