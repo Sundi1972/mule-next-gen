@@ -1038,6 +1038,13 @@ export const COLONY_SCORE = {
   perPrestige: 1_000,
   /** The happiness factor: `low` at happiness 0, `high` at 100, straight between. */
   factor: { low: 0.8, high: 1.2 },
+  /**
+   * The score's verdict at game over, in credits like the total: from `proud` "A colony to be proud of", from `held` "A
+   * colony that held together", below it "A colony in ruins". Set from 100 politics-on 4-seat trader games (seeds
+   * 1–100): a quarter score under 60,650 and a quarter over 99,193, so held sits near the bottom quartile and proud
+   * near the top one.
+   */
+  verdict: { proud: 100_000, held: 60_000 },
 };
 
 /**
