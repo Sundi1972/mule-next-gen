@@ -830,8 +830,6 @@ describe('the seat plays its development and auction parts (C4, RULE-6, RULE-7)'
   });
 });
 
-
-
 const FULL = !!process.env.MULE_FULL;
 
 describe.runIf(FULL)('the playbook path never waits (UBER-AC-2)', { timeout: 120_000 }, () => {
