@@ -296,14 +296,17 @@ export function trialReport(input: TrialInput): TrialReport {
   const edits = { model: took.filter((p) => p.by === 'llm').length, of: took.length + phaseFailed };
 
   // A silent seat-month, a stall or a game at its budget fails outright; the rest is judged on a complete run only.
+  // The line clause is judged only with playbooks, the path the game ships: without them a Smart seat's top picks say
+  // nothing (ruling a), and its plans' lines (a') never come, so a silent seat-month is shown but not failed (PM, 5 Nov).
   // With playbooks playing every move (C7) nothing may be asked: the share then has nothing to judge, n/a, unless a
   // silent seat-month fails it or the run was cut short.
+  const silentFails = input.playbooks && lines.silent > 0;
   const nothingAsked = all.of === 0 && lines.seatMonths > 0;
   const ac1 = !input.keyed
     ? 'n/a'
-    : nothingAsked && lines.silent === 0 && complete
+    : nothingAsked && !silentFails && complete
       ? 'n/a'
-      : verdict({ fails: lines.silent > 0, proven: complete, holds: all.of > 0 && 5 * all.model >= 4 * all.of && lines.seatMonths > 0 });
+      : verdict({ fails: silentFails, proven: complete, holds: all.of > 0 && 5 * all.model >= 4 * all.of && lines.seatMonths > 0 });
   const ac2 = input.keyed
     ? verdict({ fails: stalled || gameUsd.atOrOverBudget > 0, proven: complete && gameUsd.games > 0, holds: true })
     : verdict({ fails: stalled || topPicks !== allDecisions.of, proven: complete, holds: true });
@@ -436,7 +439,7 @@ export function renderTrialReport(r: TrialReport): string[] {
     ]).map((l) => l.trimEnd()),
     ...stallDetail,
     '',
-    `UBER-AC-1 ${verdictText(r.ac1)}: ${pct(r.asked.all)} of asked Smart decisions by the model (needs 80%), ${r.lines.silent} Smart seat-months without a line (needs 0)`,
+    `UBER-AC-1 ${verdictText(r.ac1)}: ${pct(r.asked.all)} of asked Smart decisions by the model (needs 80%), ${r.lines.silent} Smart seat-months without a line (${r.playbooks ? 'needs 0' : 'not judged without playbooks'})`,
     `UBER-AC-2 ${verdictText(r.ac2)}: at most ${usdText(r.gameUsd.max)} per game for all Smart seats together ` +
       `(needs under the game budget ${capText(r.gameBudgetUsd)}), ${r.stalls.unfinished.length + r.stalls.cutOff.length} stalls (needs 0)`,
     ...(r.playbooks ? [`UBER-AC-A edits ${verdictText(r.acEdits)}: ${pct(r.edits)} of the playbooks that took effect carry Claude's accepted edits (needs at least 80%)`] : []),
