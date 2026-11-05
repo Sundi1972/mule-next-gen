@@ -313,6 +313,26 @@ describe('C11: the store\'s promises on the walking screen (B-AC-9, B-AC-10)', (
     expect(tag(inside(html, 'walkers-map'), 'condition-s1')).toMatch(/data-hunger="2"/);
   });
 
+  it('B-AC-9 (sick, the PM\'s ruling A): fed but sick, the side room says she is sick, why, and her pace this turn, in the roll call\'s medicine colour', () => {
+    const players = PLAYERS.map((p) => (p.id === 's1' ? { ...p, condition: { ...p.condition!, sick: true, sickBecause: 'air' as const, conditionPace: 0.5 } } : p));
+    const html = phone(devView(lenasMe(), { players }), live(mine(5.5, 4.5)));
+    expect(tag(html, 'pace-line')).toMatch(/data-sick="true"/);
+    expect(text(html, 'sick-cause')).toBe('✚ Sick: the air is toxic.');
+    expect(text(html, 'pace-line')).toMatch(/50% pace this turn/);
+    // Never the hunger words when she ate what she needs.
+    expect(text(html, 'pace-line')).not.toMatch(/Food/);
+    // At 667 the bar says it short.
+    expect(text(phone(devView(lenasMe(), { players }), live(mine(5.5, 4.5)), 667), 'pace-line')).toMatch(/^✚ Sick · 50% pace/);
+  });
+
+  it('B-AC-9 (sick and hungry): the line names the sickness first, then the pace and the Food she ate', () => {
+    const players = PLAYERS.map((p) => (p.id === 's1' ? { ...p, condition: { ...p.condition!, sick: true, sickBecause: 'pollution' as const, conditionPace: 0.35 } } : p));
+    const me = lenasMe();
+    const html = phone(devView(lenasMe({ stock: { ...me.stock, food: 2 }, needs: { ...me.needs, food: 5 } }), { players }), live(mine(5.5, 4.5)));
+    expect(text(html, 'sick-cause')).toBe('✚ Sick: your own pollution fouled the air.');
+    expect(text(html, 'pace-line')).toMatch(/35% pace this turn · you ate 2 of 5 Food/);
+  });
+
   /** The engine's words for Lena's press at `place` in the hall, leading `mule`. */
   function wordsAt(place: HallPlace, mule: Player['carriedMule']) {
     const state = createGame({ seed: 1, players: [{ id: 's1', name: 'Lena', isAi: false, species: 'zipwing' }, { id: 's2', name: 'Ossa', isAi: false, species: 'gearling' }] });
