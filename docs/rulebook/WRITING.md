@@ -4,6 +4,14 @@ The rulebook (`docs/rulebook/`) is the game's living documentation: how every ru
 and what is **designed, being built, being designed or wanted** next. Heiko reads it to understand and decide;
 lanes read it to build. It is plain HTML with search, published for Heiko and linked from the MVP tracker.
 
+## Heiko's rule: the book always shows the latest decisions
+
+Heiko, 5 Nov: "It shoudl always reflect the latest dsign decisiosn even if not imolementended . if not implemented yet we need to mark it as not implemented in the rule book together with the lane that is responsbile fo rit".
+
+- **A design decision goes into the book the day it is made**, whether Heiko ruled it or the PM did. Don't wait for the build: write a "Designed" (or "Being designed") section in the chapter it belongs to, and add a line to open-designs.html.
+- **Every section that is not in the game yet says so and names the responsible lane**: its pill (Designed, Being designed, Being built or Backlog) and an owner line saying who builds it.
+- The lane that owns the decision writes the section in a docs-only PR (no review) the same day, or the PM does. A build PR then flips it to "In the game" when it merges.
+
 ## The rule for every PR
 
 **A PR that changes a rule, a number, a screen or a behaviour updates the chapter that describes it, in the same PR.**

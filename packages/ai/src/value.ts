@@ -8,7 +8,6 @@ import {
   floorConfig,
   GOOD_CONFIG,
   isFactory,
-  isRaw,
   monthNeeds,
   mulePrice,
   mulePriceFor,
@@ -18,6 +17,7 @@ import {
   playerEventChance,
   POLLUTION,
   PRICE,
+  PROCESSED_GOODS,
   rawOutput,
   RECIPES,
   SPECIES_PERK,
@@ -25,12 +25,14 @@ import {
   tileIndex,
   UPKEEP,
   walkSeconds,
+  energyOffOrder,
   energyUseOf,
   type AiLevelConfig,
   type AiPersonaWeights,
   type GameState,
   type Good,
   type Outfit,
+  type ProcessedGood,
   type Stock,
   type Tile,
 } from '@mule/engine';
@@ -90,18 +92,30 @@ export const afterTax = (obs: GameState, price: number) => price * (1 - obs.trea
 /** The sale price that leaves a seller `kept` after the sales tax. */
 export const beforeTax = (obs: GameState, kept: number) => kept / Math.max(0.01, 1 - obs.treasury.salesTax); // literal-ok: keeps the division finite at a 100% tax
 
+/**
+ * What the seat's own plots supply of a good next month, by the outlook: what they make, but for Energy what the plants
+ * have left after paying their own use (AM-17 R2, PM ruling A: monthNeeds leaves that use out, so supply must too).
+ */
+export function ownSupply(obs: GameState, me: string, made: Stock, good: Good): number {
+  if (good !== 'energy') return made[good];
+  const plantsUse = obs.tiles.filter((t) => t.owner === me && t.outfit === 'energy').reduce((n, t) => n + energyUseOf(obs, t), 0);
+  return Math.max(0, made.energy - plantsUse);
+}
+
 /** Net credits a month from running this outfit here, at the given prices (the outlook's by default, its own extra supply included). */
 export function monthlyNet(obs: GameState, o: Outlook, y: Yield, outfit: Outfit, mind: Mind, price?: PriceOf): number {
   const full = mind.level.fullScoring;
   if (outfit === 'greenBelt') return full ? POLLUTION.greenBeltAir * airUnitCost(obs) - STRATEGIST.greenBeltCost : -STRATEGIST.greenBeltCost;
   const P: PriceOf = price ?? ((g, extra = 0) => o.price(g, extra));
-  let revenue = afterTax(obs, y.made * P(outfit, y.made));
+  // A plant pays its own use from what it makes (AM-17 R2): only the rest is its to sell or to use.
+  const made = outfit === 'energy' ? Math.max(0, y.made - y.energy) : y.made;
+  let revenue = afterTax(obs, made * P(outfit, made));
   if (full && (outfit === 'food' || outfit === 'water' || outfit === 'energy')) {
     // The units that cover its own shortfall are worth what going short would cost it, and pay no tax.
-    const short = Math.max(0, monthNeeds(obs, mind.me)[outfit] - o.made[outfit]);
-    const own = Math.min(y.made, short);
+    const short = Math.max(0, monthNeeds(obs, mind.me)[outfit] - ownSupply(obs, mind.me, o.made, outfit));
+    const own = Math.min(made, short);
     const floor = obs.store.refPrice[outfit] * STRATEGIST.selfSupply;
-    revenue += own * Math.max(0, floor - afterTax(obs, P(outfit, y.made)));
+    revenue += own * Math.max(0, floor - afterTax(obs, P(outfit, made)));
   }
   const energy = outfit === 'energy' ? 0 : y.energy * P('energy', -y.energy);
   const inputs = (Object.entries(y.inputs) as [Good, number][]).reduce((n, [g, q]) => n + q * P(g, -q), 0);
@@ -215,7 +229,7 @@ export function cashReserve(obs: GameState, mind: Mind, o?: Outlook, except?: Go
   let cost = 0;
   for (const g of ['food', 'water', 'energy'] as const) {
     if (g === except) continue;
-    const short = Math.max(0, need[g] - p.stock[g] - (o?.made[g] ?? 0));
+    const short = Math.max(0, need[g] - p.stock[g] - (o ? ownSupply(obs, mind.me, o.made, g) : 0));
     cost += short * Math.min(obs.store.posted[g] * (1 + PRICE.storeSpread), obs.store.refPrice[g] * STRATEGIST.reservePriceCap);
   }
   return Math.round((STRATEGIST.cashFloor + cost) * mind.persona.reserve);
@@ -224,8 +238,9 @@ export function cashReserve(obs: GameState, mind: Mind, o?: Outlook, except?: Go
 /**
  * The value of each unit of a good the seat could hold after the auction,
  * most valuable first: the units next month needs are worth what going short
- * would cost (development time for Food, half a farm for Water, half a plot
- * for Energy, a factory's run for its inputs, sickness for Medicine), the
+ * would cost (development time for Food, half a farm for Water, for Energy
+ * what the plot it keeps on loses turned off (AM-17), a factory's run for its
+ * inputs, sickness for Medicine), the
  * rest what they fetch next month after spoilage, and nothing past what the
  * depot keeps. `keep` values a unit the seat already holds (its sell floor);
  * `buy` values one more (its buy ceiling), which needs a reason to speculate.
@@ -253,9 +268,10 @@ export function unitValues(obs: GameState, o: Outlook, good: Good, mind: Mind): 
   const P = (g: Good) => (o.final ? obs.store.posted[g] : o.price(g));
   const sec = secondValue(obs, me);
 
-  // Units next month's needs take, and what each is worth to the seat.
+  // Units next month's needs take, and what each is worth to the seat (`perUnit`, where the units differ).
   let block = 0;
   let use = 0;
+  let perUnit: number[] | null = null;
   if (good === 'food' && need > 0) {
     // Eaten at upkeep, then what is left (after spoilage) keeps next month's walking at full pace.
     const eat = needsOf(obs, me).food;
@@ -269,14 +285,26 @@ export function unitValues(obs: GameState, o: Outlook, good: Good, mind: Mind): 
       use = (farms.reduce((n, t) => n + rawOutput(obs, t), 0) * (1 - UPKEEP.shortOutputShare) * afterTax(obs, P('food'))) / block;
     }
   } else if (good === 'energy') {
-    const own = mine.filter((t) => t.outfit === 'energy').reduce((n, t) => n + rawOutput(obs, t), 0);
-    const short = Math.max(0, need - own);
+    // AM-17: the plants' net output covers the plots first; a unit short keeps on the plot energyOffOrder would turn
+    // off at that point, worth what that plot loses turned off, over each unit of its use. Next month, so no cold snap.
+    const order = energyOffOrder(obs, me, 1);
+    const net = mine.filter((t) => t.outfit === 'energy').reduce((n, t) => n + Math.max(0, rawOutput(obs, t) - energyUseOf(obs, t)), 0);
+    // What a plot loses turned off, a unit of its use at a time. An approximation until #385: it leaves out the inputs
+    // a turned-off factory saves, and that one whose 20% rounds to 0 makes nothing (and takes nothing).
+    const lost = (good: Good, full: number, use: number) => Array<number>(use).fill(afterTax(obs, (1 - UPKEEP.offOutputShare) * full * P(good)) / use);
+    // Each unit of use, from the plot that goes off last (the back of the order) to the one that goes off first; then
+    // the factories the stock can't feed now, which run in production's second pass on what is left, so are covered last.
+    const listed = new Set(order.map((p) => p.tile));
+    const unfed = PROCESSED_GOODS.flatMap((g) => mine.filter((t) => t.outfit === g && !listed.has(t)));
+    const units = [
+      ...order.flatMap((p) => lost(p.tile.outfit as Good, p.full, p.use)).reverse(),
+      ...unfed.flatMap((t) => lost(t.outfit as Good, factoryFit(obs, t, t.outfit as ProcessedGood, me).output, energyUseOf(obs, t))),
+    ];
+    const short = Math.max(0, units.length - net);
     if (short > 0) {
       block = Math.ceil(short / keepRate);
-      const runs = mine
-        .filter((t) => t.outfit !== 'energy')
-        .reduce((n, t) => n + (isRaw(t.outfit!) ? (1 - UPKEEP.shortOutputShare) * rawOutput(obs, t) * P(t.outfit as Good) : factoryFit(obs, t, t.outfit as never, me).output * P(t.outfit as Good)), 0);
-      use = afterTax(obs, runs) / Math.max(1, need);
+      // The seat's k-th unit covers the plots' (net + k)-th; the units spoilage takes count as the last one short.
+      perUnit = Array.from({ length: block }, (_, k) => units[net + Math.min(k, short - 1)]!);
     }
   } else if (good === 'medicine' && need > 0) {
     block = Math.ceil(need / keepRate);
@@ -310,8 +338,9 @@ export function unitValues(obs: GameState, o: Outlook, good: Good, mind: Mind): 
   const buy: number[] = [];
   for (let k = 0; k < length; k++) {
     if (k < block) {
-      keep.push(k < floorUnits ? Infinity : Math.max(use, resale));
-      buy.push(Math.max(use, resaleBuy));
+      const worth = perUnit?.[k] ?? use;
+      keep.push(k < floorUnits ? Infinity : Math.max(worth, resale));
+      buy.push(Math.max(worth, resaleBuy));
     } else if (k < eaten + depot) {
       keep.push(resale);
       buy.push(resaleBuy);
