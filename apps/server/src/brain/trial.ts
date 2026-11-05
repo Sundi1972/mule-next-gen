@@ -1,19 +1,22 @@
 /**
  * Plays Smart seats against strategist seats and reports whether the Smart AI decides and talks in character, never
  * stalls a game, and stays within its budget. See C6.
- * Usage: pnpm --filter @mule/server brain:trial -- --games 20 --seed 101 [--smart 2] [--playbooks 1] [--max-usd X] [--game-budget-usd Y]
+ * Usage: pnpm --filter @mule/server brain:trial -- --games 20 --seed 101 [--smart 2] [--playbooks 1] [--max-usd X] [--game-budget-usd Y] [--run label]
  * With --playbooks 1 each Smart seat also writes its strategy and land-grant playbook each month (spec A C4), and the
  * report adds UBER-AC-A's edit share; without it the seats only decide move by move, as before.
- * Without the key every seat plays Classic and nothing is called. With it, real money: --max-usd is required, and one
- * run per UTC day. Each game's Smart seats together spend at most the game budget (default BRAIN.gameBudgetUsd).
+ * Without the key every seat plays Classic and nothing is called. With it, real money: --max-usd is required; one
+ * unlabelled run per UTC day, or one per --run label (each cleared on its own); and no run may carry the spend of every
+ * trial ledger past BRAIN.proofCapUsd. Each game's Smart seats together spend at most the game budget (default
+ * BRAIN.gameBudgetUsd).
  */
 import fs from 'node:fs';
+import path from 'node:path';
 import { BRAIN } from '@mule/engine';
 import { playbookSource, playGameAsync, ReplyRejected, simSeats, type Choice, type Decider, type DecisionRecord, type SeatSpec } from '@mule/ai';
 import { alreadyRanToday, AUTH_STOPPED, claimLedger, day, dayLedgerPath, KINDS, numberFlags, resolveDeps, runAsScript, type MainDeps } from './cli.js';
 import { CallFailed } from './client.js';
 import { API_KEY_ENV, apiKeyFrom, createBrain, type BrainSeat } from './index.js';
-import { isCallLine, readLedgerLines, type CallLine } from './ledger.js';
+import { isCallLine, readLedgerLines, type CallLine, type ModelId } from './ledger.js';
 import { Playbooks } from './playbooks.js';
 import { capText, cutOffPhase, renderTrialReport, sum, trialReport, type TrialGame, type TrialReport, type TrialStop } from './trial-report.js';
 
@@ -68,6 +71,8 @@ function trackCalls() {
 }
 
 interface GameSetup {
+  /** The model every write goes to, or null for each kind's own. */
+  writeModel: ModelId | null;
   seed: number;
   id: string;
   env: Readonly<Record<string, string | undefined>>;
@@ -87,7 +92,13 @@ const bump = (counts: number[], month: number) => {
 /** Plays one game with its own brain; pauses simulated time while a model call is open, and always closes the brain. */
 async function playTrialGame(setup: GameSetup): Promise<TrialGame> {
   const { id } = setup;
-  const brain = createBrain({ gameId: id, env: setup.env, gameBudgetUsd: setup.gameBudgetUsd, ...(setup.logPath === null ? {} : { logPath: setup.logPath }) });
+  const brain = createBrain({
+    gameId: id,
+    env: setup.env,
+    gameBudgetUsd: setup.gameBudgetUsd,
+    ...(setup.logPath === null ? {} : { logPath: setup.logPath }),
+    ...(setup.writeModel === null ? {} : { writeModel: setup.writeModel }),
+  });
   const game: TrialGame = { id, end: 'unfinished', months: 0, smart: [], decisions: [], lines: {}, modelLines: {}, cutOff: [], countedUsd: 0, settledCalls: 0, playbooks: [] };
   // The Smart seats' playbooks (spec A C4): asked for at the start and as each upkeep ends, in effect from the land
   // grant. The strategist seats play their own drafts; in whatIf they play as the engine's Trader would.
@@ -197,8 +208,80 @@ export interface TrialFlags {
 }
 
 const USAGE =
-  `Usage: brain:trial [--games N] [--seed S] [--smart K] [--playbooks 0|1] [--max-usd X] [--game-budget-usd Y], ` +
+  `Usage: brain:trial [--games N] [--seed S] [--smart K] [--playbooks 0|1] [--max-usd X] [--game-budget-usd Y] [--run label] [--write-model sonnet|haiku], ` +
   `Y above 0 and at most ${BRAIN.gameBudgetUsd.toFixed(2)}; nothing played.`;
+
+/** A run label: lowercase letters, digits and dashes, so it can only name a file in the data folder. */
+const LABEL = /^[a-z0-9-]{1,32}$/;
+
+/** A word flag taken out of the flags: its value, null when not given, or undefined for a missing or repeated one. */
+function wordFlag(argv: readonly string[], name: string): { value: string | null; rest: readonly string[] } | undefined {
+  const at = argv.indexOf(name);
+  if (at < 0) return { value: null, rest: argv };
+  const value = argv[at + 1];
+  if (value === undefined || argv.indexOf(name, at + 1) >= 0) return undefined;
+  return { value, rest: [...argv.slice(0, at), ...argv.slice(at + 2)] };
+}
+
+/** `--write-model sonnet|haiku`: the model every write goes to in a paired run (PR-5 5.4), or undefined for another name. */
+export function writeModelFlag(name: string): ModelId | undefined {
+  return Object.hasOwn(BRAIN.strategySpike.models, name) ? BRAIN.strategySpike.models[name as keyof typeof BRAIN.strategySpike.models] : undefined;
+}
+
+/** The word flags (`--run <label>`, `--write-model <name>`) taken out, or undefined for a bad one. */
+function wordFlags(argv: readonly string[]): { label: string | null; writeModel: ModelId | null; rest: readonly string[] } | undefined {
+  const run = wordFlag(argv, '--run');
+  if (!run || (run.value !== null && !LABEL.test(run.value))) return undefined;
+  const model = wordFlag(run.rest, '--write-model');
+  if (!model) return undefined;
+  const writeModel = model.value === null ? null : writeModelFlag(model.value);
+  if (writeModel === undefined) return undefined;
+  return { label: run.value, writeModel, rest: model.rest };
+}
+
+/** A paid run's ledger: trial-<day>.jsonl, or trial-<day>-<label>.jsonl for a labelled run. */
+export function trialLedgerPath(dataDir: string, at: Date, label: string | null): string {
+  return label === null ? dayLedgerPath(dataDir, 'trial', at) : path.join(dataDir, `trial-${day(at)}-${label}.jsonl`);
+}
+
+/** A trial ledger that could not be read, so the spend behind the cap is unknown. */
+class UnreadableLedger extends Error {
+  constructor(readonly file: string) {
+    super(`${file} is not a readable ledger`);
+  }
+}
+
+/** What every brain:trial ledger in the data folder has spent, all days and labels: its call lines' dollars. Throws UnreadableLedger. */
+export function trialSpent(dataDir: string): number {
+  if (!fs.existsSync(dataDir)) return 0;
+  const ledgers = fs.readdirSync(dataDir).filter((f) => /^trial-.*\.jsonl$/.test(f));
+  return sum(
+    ledgers.flatMap((f) => {
+      const file = path.join(dataDir, f);
+      try {
+        return readLedgerLines(file).filter(isCallLine).map((l) => l.usd);
+      } catch {
+        throw new UnreadableLedger(file);
+      }
+    }),
+  );
+}
+
+/**
+ * Why a paid run with this cap may not start, or null: the trial ledgers' total plus the cap would pass
+ * BRAIN.proofCapUsd, or a ledger cannot be read, so the total is unknown (fail closed).
+ */
+export function proofCapRefusal(dataDir: string, maxUsd: number): string | null {
+  let spent: number;
+  try {
+    spent = trialSpent(dataDir);
+  } catch (err) {
+    if (err instanceof UnreadableLedger) return `brain:trial cannot check the PR-5 cap: ${err.file} is not a readable ledger; nothing called.`;
+    throw err;
+  }
+  if (spent + maxUsd <= BRAIN.proofCapUsd) return null;
+  return `brain:trial would pass the PR-5 cap: the trial ledgers hold $${spent.toFixed(5)}, --max-usd ${capText(maxUsd)}, cap ${capText(BRAIN.proofCapUsd)}; nothing called.`;
+}
 
 /** The flags, or null for anything numberFlags refuses or a value out of range. */
 function parseFlags(argv: readonly string[]): TrialFlags | null {
@@ -232,7 +315,14 @@ interface PlayedRun {
 }
 
 /** Plays the planned games in order, starting each only while the cap allows it; stops on a 401/403 or a lost ledger line. */
-async function playRun(flags: TrialFlags, env: Readonly<Record<string, string | undefined>>, paid: Paid | null, today: string, out: (line: string) => void): Promise<PlayedRun> {
+async function playRun(
+  flags: TrialFlags,
+  env: Readonly<Record<string, string | undefined>>,
+  paid: Paid | null,
+  today: string,
+  out: (line: string) => void,
+  writeModel: ModelId | null = null,
+): Promise<PlayedRun> {
   const games: TrialGame[] = [];
   for (let i = 0; i < flags.games; i++) {
     if (paid) {
@@ -243,6 +333,7 @@ async function playRun(flags: TrialFlags, env: Readonly<Record<string, string | 
     }
     const seed = flags.seed + i;
     const game = await playTrialGame({
+      writeModel,
       seed,
       id: `trial-${today}-${flags.seed}-${i}`,
       env,
@@ -279,8 +370,9 @@ export async function trial(
   deps: MainDeps = {},
 ): Promise<{ code: number; report: TrialReport | null }> {
   const { dataDir, out, now } = resolveDeps(deps);
-  const flags = parseFlags(argv);
-  if (!flags) {
+  const run = wordFlags(argv);
+  const flags = run ? parseFlags(run.rest) : null;
+  if (!run || !flags) {
     out(USAGE);
     return { code: 1, report: null };
   }
@@ -294,20 +386,31 @@ export async function trial(
       out(`brain:trial spends real money with ${API_KEY_ENV} set: give --max-usd, the cap that was cleared; nothing called.`);
       return { code: 1, report: null };
     }
-    const logPath = dayLedgerPath(dataDir, 'trial', at);
-    const ranToday = alreadyRanToday(logPath, 'brain:trial');
-    if (ranToday) {
-      out(ranToday);
+    const logPath = trialLedgerPath(dataDir, at, run.label);
+    const used =
+      run.label === null
+        ? alreadyRanToday(logPath, 'brain:trial')
+        : fs.existsSync(logPath)
+          ? `${logPath} exists: run "${run.label}" already ran, and each run needs its own clearance; nothing called.`
+          : null;
+    if (used) {
+      out(used);
+      return { code: 1, report: null };
+    }
+    // One run a day used to stop an accidental overspend; with labels, the PR-5 cap across every trial ledger does.
+    const overCap = proofCapRefusal(dataDir, flags.maxUsd);
+    if (overCap) {
+      out(overCap);
       return { code: 1, report: null };
     }
     paid = { logPath, cap: flags.maxUsd };
     out(
       `brain:trial model ${BRAIN.model}, cap ${capText(paid.cap)}, planned ${flags.games} games with ${flags.smart} Smart seats ` +
-        `(together held to ${capText(flags.gameBudgetUsd)} a game, an equal share each), ledger ${logPath}`,
+        `(together held to ${capText(flags.gameBudgetUsd)} a game, an equal share each)${run.writeModel === null ? '' : `, every write on ${run.writeModel}`}, ledger ${logPath}`,
     );
   }
 
-  const { games, stopped, lostLines } = await playRun(flags, env, paid, day(at), out);
+  const { games, stopped, lostLines } = await playRun(flags, env, paid, day(at), out, run.writeModel);
   const report = trialReport({
     keyed,
     planned: flags.games,
