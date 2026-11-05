@@ -26,6 +26,11 @@ export type ShowEventKey =
   | 'ratsInSilo'
   | 'crookedAccountant'
   | 'packageFromHome'
+  // G-5 C26's planning social events (a general strike also files a production event when unpaid).
+  | 'festival'
+  | 'generalStrike'
+  | 'emigrationWave'
+  | 'blamedForUnrest'
   // Not an EventKey: development's sick players, each sent as a bulletin (C11; the protocol's EventView widens to match).
   | 'sickness';
 
@@ -78,7 +83,7 @@ export interface ShowEventView {
 export interface ShowEffect {
   /** A player's id, 'store' or 'colony'. */
   on: string;
-  what: Good | 'money' | 'mules' | 'colonists' | 'energyNeed';
+  what: Good | 'money' | 'mules' | 'colonists' | 'energyNeed' | 'mood' | 'prestige' | 'air' | 'reputation';
   delta: number;
 }
 
