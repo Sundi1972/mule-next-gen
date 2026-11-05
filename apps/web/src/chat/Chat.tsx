@@ -195,7 +195,8 @@ export function Ticker({ size = 'phone', lines: keep, wrap = false }: { size?: '
   return (
     <ul className={cx('flex min-w-0 flex-col overflow-hidden', tv ? 'gap-1' : 'gap-0.5')} data-testid="chat-ticker" aria-label="Table chat" aria-live="polite">
       {said
-        .slice(-(keep ?? (tv ? 3 : 2)))
+        // From the end, by count: slice(-0) would keep them all, so none is an empty slice.
+        .slice(Math.max(0, said.length - (keep ?? (tv ? 3 : 2))))
         .reverse()
         .map((l, i) => {
           const { player, slot } = seats.get(l.from)!;

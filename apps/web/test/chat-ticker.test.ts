@@ -42,6 +42,7 @@ describe('the table chat ticker, exported for other screens', () => {
     expect(linesOf(render({ size: 'tv' })).map((l) => l.id)).toEqual([3, 2, 1]);
     expect(linesOf(render({ lines: 1 })).map((l) => l.id)).toEqual([3]);
     expect(linesOf(render({ lines: 3 })).map((l) => l.id)).toEqual([3, 2, 1]);
+    expect(linesOf(render({ lines: 0 }))).toEqual([]);
   });
 
   it('cuts each line to one row; with `wrap` a line runs on, speaker and words as one sentence, over at most three rows', () => {
