@@ -522,7 +522,8 @@ export function goodPlan(obs: GameState, mind: Mind, good: Good): GoodPlan {
   const whole = STRATEGIST.buyShortfall.includes(good) ? wholeNextMonth(obs, mind.me, good) : 0;
   for (let k = 0; k < whole; k++) values.keep[k] = Infinity;
   values.floorUnits = Math.max(values.floorUnits, whole);
-  const ask = whole > 0 ? storeSellLine(obs) : null;
+  // The store's line is the good's that is up: a draft of a good still in the queue has no ask yet, and keeps its values.
+  const ask = whole > 0 && obs.auction?.good === good ? storeSellLine(obs) : null;
   const mustHold = ask !== null && p.stock[good] < whole ? whole : 0;
   for (let k = 0; k < mustHold; k++) values.buy[k] = Math.max(values.buy[k] ?? 0, ask!);
   const reserve = cashReserve(obs, mind);
