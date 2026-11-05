@@ -1,8 +1,10 @@
 /** The colony as every screen sees it: gauges, fund, prestige objects and plaques. Public, so one view serves all. */
-import { colonyGauges, commissionRefusal, lastGauges, moodBand, PRESTIGE, type GameState, type PrestigeId } from '@mule/engine';
+import { colonyGauges, commissionRefusal, GOOD_CONFIG, lastGauges, moodBand, PRESTIGE, type GameState, type Good, type PrestigeId } from '@mule/engine';
 import type { ColonyCatalogueView, ColonyProjectView, ColonyView } from '@mule/protocol';
 
 const IDS = Object.keys(PRESTIGE) as PrestigeId[];
+/** Every good some object needs: the goods a donor can give. */
+const NEEDED = [...new Set(IDS.flatMap((id) => Object.keys(PRESTIGE[id].goods) as Good[]))];
 
 /** The colony view; null when the game plays without politics. */
 export function colonyView(state: GameState): ColonyView | null {
@@ -41,6 +43,8 @@ export function colonyView(state: GameState): ColonyView | null {
       const why = commissionRefusal(state, id);
       return { id, name: row.name, credits: row.credits, goods: { ...row.goods }, buildMonths: row.buildMonths, needsPlot: row.needsPlot, prestige: row.prestige, upkeep: row.upkeep, commissionable: why === null, why };
     }),
+    // The config's price, not the store's drifting refPrice: it is what donate() values a gift at on the plaque.
+    refPrice: Object.fromEntries(NEEDED.map((g) => [g, GOOD_CONFIG[g].refPrice])),
     strike: colony.strike && colony.strike.month === state.month ? { good: colony.strike.good, cost: colony.strike.cost, paid: colony.strike.paid } : null,
     score: null,
   };
