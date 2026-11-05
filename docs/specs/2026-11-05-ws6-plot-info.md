@@ -4,8 +4,8 @@
 WS3 and named edits in WS4's and WS2's files, no new contract, no new sole owner) · approach **B** (Heiko, 5 Nov:
 "A plus My plots") · report **A, in the side rail** (Heiko, 5 Nov)
 
-**The approved mock is this spec's screens.** The binding scaffold is `design/mocks/plot-info/` at **d3f64a51**
-(branch `ws6-mock-auction-rules`; Heiko chose the report in the rail, `#scan-a`; `#scan-b` was set aside). Routes:
+**The approved mock is this spec's screens.** The binding scaffold is `design/mocks/plot-info/` at **a3f8e3e3**
+(branch `ws6-mock-auction-rules`; d3f64a51 plus WS4's gem placement and size and the scanning chip, §8; Heiko chose the report in the rail, `#scan-a`; `#scan-b` was set aside). Routes:
 `#scan-a` (C2), `#plots` (C3), `#dev-plots` and `#store` (C4), `#analyse` (C5), `#gem` (C7). Where this text and the
 mock disagree on layout, components or states, the mock wins. "How it works today", with pictures from the real build:
 https://claude.ai/artifact/Ht3DuRAuhuJYLBRFEmubmU (WS6, 5 Nov; Heiko read it and agreed §0 from it).
@@ -126,8 +126,8 @@ today        The Geo drone tool: tap up to 2 free plots, "Send the drone · 2 of
              on its way … when the land grant starts". The hub's tile says "On its way · read at the land grant".
              anchors: apps/web/src/phone/hub/tools.tsx::DroneSend · tools.tsx::DronePanel · tools.tsx::useDrone ·
              apps/web/src/phone/hub/today.tsx::HUB_SLOTS (the drone tile's sub line)     verified_by: executed
-tomorrow     The button reads "Scan · n of 2 plots · 60 cr". After it, the picked plots pulse for about a second
-             ("Scanning…"), then the rail shows the Drone report: per plot its land, "best for …" with any Crystite or
+tomorrow     The button reads "Scan · n of 2 plots · 60 cr". After it, for about a second the picked plots keep today's
+             SCAN chip (MapTile.flag 'survey', as DroneMap sets it now; no new map mark) and the rail says "Scanning…", then the rail shows the Drone report: per plot its land, "best for …" with any Crystite or
              Rare earth, and every good's 0–3 dots (C6), with ONLY YOU. Then "One drone each planning". The hub tile
              says the drone was used this month.
 logic        → §2 RULE-1, RULE-2 · the report shows once the view holds ground for every plot in droneOrder
@@ -205,9 +205,17 @@ today        groundPips draws 0–4 (a grown rating + 1; a mined rating as is). 
              arcade/plots.ts (bestHere, suits ≥ 3, fit).                                       verified_by: read
 tomorrow     groundDots (RULE-1) replaces groundPips everywhere; every dot row draws 3. suits keeps "3 or more", which
              RULE-1 maps to the same plots (grown +2/+3, mined 3/4). The engine's ratings are untouched (HC-2).
+             The helpers live in ONE new module both the phone and HoloMap import, packages/ui/src/ground-dots.ts,
+             exported from @mule/ui (index.ts, one line, as events.ts is): groundDots(good, rating) → 0..3 · dotsOf(ground)
+             → every raw good's dots · bestOf(dots) → the most dots, Food first on a tie (the outfitters' order) ·
+             gemsIn(dots) → Crystite and Rare earth at 1 or more (RULE-2). mapTiles passes dots in MapTile.ground, so
+             HoloMap reads dots and never a rating. The mock's proposed/dots.ts is its source.
 logic        → §2 RULE-1
-seam         derive.ts::groundPips — the one place a rating becomes dots
-mechanism    in_place (rename to groundDots)
+seam         derive.ts::groundPips — the one place a rating becomes dots; it moves to packages/ui so HoloMap shares it
+senior       junior would: a groundDots in apps/web and a second best-good sort in HoloMap (today's sort breaks ties by
+             key order) · senior does: one module in @mule/ui both import, so the rail's "best for" and the map's pip
+             can never disagree
+mechanism    extract (groundPips → @mule/ui ground-dots.ts::groundDots)
 call sites   the list above, enumerated by grep (the repo is not prism-indexed)
 pin          arcade-screens and land-grant tests that read dots (their counts change from /4 to /3, deliberately)
 depends_on   none
@@ -219,14 +227,19 @@ C7 · MODIFIED · the map: a 0–3 pip and the gem                              
 today        HoloMap draws an analysed plot's best good with 4 pips (`Pips`), labelled "… n of 4"; nothing marks
              Crystite or Rare earth.  anchors: packages/ui/src/components/HoloMap.tsx::HoloMap · HoloMap.tsx::Pips ·
              HoloMap.tsx::MapTile (ground, "Ratings 1 to 4")                                   verified_by: read
-tomorrow     Pips draws 3; the label says "of 3". A gem on the plot's top-left corner when its ground has Crystite or Rare
-             earth at 1 or more (RULE-2), in that good's colour with its icon; both when both. Only tiles with ground get
+tomorrow     Pips draws 3; the label says "of 3". The pip's good is ground-dots.ts::bestOf (C6), not HoloMap's own sort.
+             A gem when the plot's dots have Crystite or Rare earth at 1 or more (gemsIn, RULE-2), in that good's colour
+             with its icon; both when both. Where: at the plot's top, at left 4% on a free plot, and just right of the
+             owner's tab (left 54%; the tab is 46% wide at 4%) on an owned one. Size: 40% of the plot, scaling with it as
+             the tab does; two gems overlap by half, and on an owned plot a pair is 30% each so it fits right of the tab
+             (measured on the mock at a 30 px plot: inside the plot, clear of the tab). With a MULE installed the gem
+             stays and the pip hides (HoloMap hides its pips under an installed good today). Only tiles with ground get
              either, so the TV (no ground) never shows one.
 logic        → §2 RULE-2
 seam         HoloMap's marks — the map every phone and the TV draw
 mechanism    in_place
 ux           design/mocks/plot-info · #gem (the mock's proposed/PlotInfo.tsx MapMarks, laid over HoloMap) · GRAFT TARGET: HoloMap.tsx
-depends_on   C6 (mapTiles passes dots)
+depends_on   C6 (mapTiles passes dots; ground-dots.ts exists)
 ```
 
 ```
@@ -344,7 +357,13 @@ lands at the land grant (droneOrder is kept until then).
 - 5 Nov, from the lane reads before approval: C1's land-grant step stops setting droneFound and the two types.ts
   comments change (WS3); WS2's drone text includes llm/moves-stub.ts and ships in the same PR as the engine change
   (WS2); R-1 records WS1's sim read (WS1).
+- 5 Nov, WS4's read of C7: the gem moves right of the owner's tab on an owned plot (the mock's top-left sat on the
+  tab) and scales with the plot; C6 names one shared module for the dots, best and gems; the scanning second keeps
+  today's SCAN chip (C2), so no new map mark; with a MULE the gem stays and the pip hides. Mock a3f8e3e3.
 
 ## §9 · Ownership Boundaries
 
-No ownership change: the engine's drone stays WS3's, HoloMap WS4's, packages/ai WS2's, the phone screens WS6's.
+One new file: packages/ui/src/ground-dots.ts, written by WS6 in C6 and owned by WS6, in WS4's package, so WS4
+reviews it (as the MULE character in packages/ui). Its export line in packages/ui/src/index.ts is a named edit, WS4
+reviews. Otherwise no ownership change: the engine's drone stays WS3's, HoloMap WS4's, packages/ai WS2's, the phone
+screens WS6's.
