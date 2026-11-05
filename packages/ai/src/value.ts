@@ -275,7 +275,8 @@ export function unitValues(obs: GameState, o: Outlook, good: Good, mind: Mind): 
     const order = baseOffOrder(obs, me, good, 1);
     const net = mine.filter((t) => t.outfit === good).reduce((n, t) => n + Math.max(0, rawOutput(obs, t) - baseUseOf(obs, t, good)), 0);
     const first =
-      (good === 'water' ? needsOf(obs, me).water : 0) + mine.filter((t) => t.outfit === other).reduce((n, t) => n + baseUseOf(obs, t, good), 0);
+      (good === 'water' ? needsOf(obs, me).water : 0) +
+      (UPKEEP.crossLast ? 0 : mine.filter((t) => t.outfit === other).reduce((n, t) => n + baseUseOf(obs, t, good), 0));
     // Each unit of use, from the plot that goes off last (the back of the order) to the one that goes off first.
     const units = order
       .flatMap((p) => Array<number>(p.use).fill(afterTax(obs, (1 - UPKEEP.offOutputShare) * p.full * P(p.tile.outfit as Good)) / p.use))

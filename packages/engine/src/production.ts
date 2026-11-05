@@ -394,15 +394,18 @@ export function runProduction(state: GameState): {
     playerById.get(tile.owner!)!.stock.water -= Math.min(Math.max(0, made), waterUseOf(state, tile));
   }
   // Cross-use: a well takes its Energy, a plant its Water (above the household's drink), from the stock before any other
-  // plot, as much as is there; short, it still runs.
-  for (const tile of working.filter((t) => t.outfit === 'water')) {
-    const owner = playerById.get(tile.owner!)!;
-    owner.stock.energy -= Math.min(Math.max(0, owner.stock.energy), use(tile));
-  }
-  for (const tile of working.filter((t) => t.outfit === 'energy')) {
-    const owner = playerById.get(tile.owner!)!;
-    owner.stock.water -= Math.min(spare(owner), waterUseOf(state, tile));
-  }
+  // plot, as much as is there; short, it still runs. (UPKEEP.crossLast: after every other plot, from what is left.)
+  const crossUse = () => {
+    for (const tile of working.filter((t) => t.outfit === 'water')) {
+      const owner = playerById.get(tile.owner!)!;
+      owner.stock.energy -= Math.min(Math.max(0, owner.stock.energy), use(tile));
+    }
+    for (const tile of working.filter((t) => t.outfit === 'energy')) {
+      const owner = playerById.get(tile.owner!)!;
+      owner.stock.water -= Math.min(spare(owner), waterUseOf(state, tile));
+    }
+  };
+  if (!UPKEEP.crossLast) crossUse();
 
   // The turn-off passes, per owner: Energy then Water (UPKEEP.waterPassFirst swaps them). A plot off in the first pass
   // is not in the second's list: it uses neither good.
@@ -448,6 +451,7 @@ export function runProduction(state: GameState): {
       runFactory(tile, good, why);
     }
   }
+  if (UPKEEP.crossLast) crossUse();
 
   // Green belts don't produce, but they count as running. A factory turned off gains no experience that month: its
   // count holds. A raw plot turned off still counts, so a thin vein wears as it mines.

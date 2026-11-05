@@ -236,6 +236,8 @@ export const UPKEEP = {
   waterUse: { food: 2, water: 1, energy: 1, smithore: 1, crystite: 1, rareEarth: 1 } satisfies Record<RawGood, number>,
   /** Measurement switch: the Water pass runs before the Energy pass. */
   waterPassFirst: false,
+  /** Measurement switch: a well's Energy and a plant's Water are taken after every other plot's, from what is left. */
+  crossLast: false,
   /**
    * Plots that need irrigation: when their owner holds less Water than the
    * household and crew need, they make half (on top of any Energy shortfall).
