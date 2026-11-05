@@ -295,6 +295,11 @@ export interface MyPoliticsView {
   reputation: number;
   /** Their own vote on the open law ballot, yes or no; null when they have cast none. Never anyone else's. */
   lawBallot?: boolean | null;
+  /**
+   * The Governor's own view only, in planning while no vote is open: what each proposal they may make would cost each
+   * player a month (RULE-45), keyed `<law>:<setting>` for each enact and `repeal:<law>` for each law in force.
+   */
+  candidates?: Record<string, Record<string, LawImpact>>;
 }
 
 /** The law ballot as every screen sees it: who has voted, never how; the totals only from the reveal. */
@@ -734,6 +739,8 @@ export interface ColonyView {
   ledger: { month: number; in: Partial<Record<FundSource, number>>; out: Partial<Record<FundLine, number>> } | null;
   projects: ColonyProjectView[];
   catalogue: ColonyCatalogueView[];
+  /** What a unit of each good the catalogue needs adds to a donor's plaque: the price the engine values a gift at. Optional, so views built before it still type. */
+  refPrice?: Partial<Record<Good, number>>;
   /** This month's general strike: the good it holds back, what the strikers want, and whether the fund paid; null when none. Optional, so views built before W3 still type. */
   strike?: { good: Good; cost: number; paid: boolean } | null;
   /** The colony score at game over (G-5 RULE-25: wealth, environment and prestige in credits, the happiness factor, the rounded total); null before. */

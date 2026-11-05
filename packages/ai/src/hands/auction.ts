@@ -27,8 +27,8 @@ import { beforeTax } from '../value.js';
  * amendment, C4): it stands there while they move and steps off once the
  * units it still wants are no more than will trade before it next re-aims.
  *
- * On the playbook path the good's play replaces the decider's pick and bounds the same walk (RULE-10): walkAway bounds
- * the limit, at the line too; start and concedeCrPerS bound the target; vsRival and per say whom it overtakes.
+ * On the playbook path the good's play replaces the decider's pick and bounds the same walk: walkAway bounds the
+ * limit, at the line too; start and concedeCrPerS bound the target; vsRival and per say whom it overtakes. See RULE-10.
  */
 export interface AuctionDebug {
   good: Good;
@@ -45,7 +45,7 @@ export type GoodPlaySource = (state: GameState, good: Good) => GoodPlay | null;
 
 type Side = 'buyer' | 'seller';
 
-/** RULE-10's TradeAction for a play: a seller never keeps under the Food or Energy it needs. */
+/** The TradeAction a play stands for: a seller never keeps under the Food or Energy it needs. */
 function tradeOf(play: GoodPlay, plan: GoodPlan): TradeAction {
   if (play.role === 'seller') return { side: 'seller', keep: Math.max(play.hold, plan.values.floorUnits) };
   if (play.role === 'buyer') return { side: 'buyer', upTo: play.hold };
@@ -237,13 +237,13 @@ export class AuctionHand {
     this.doneFlag = finished || (bestAsk > ceiling && this.target >= ceiling && a.deals.every((d) => d.buyer !== me.id));
   }
 
-  /** RULE-10's limit: a buyer pays at most the play's walkAway, a seller asks at least it. */
+  /** The play's limit: a buyer pays at most its walkAway, a seller asks at least it. */
   private bounded(side: Side, today: number): number {
     if (!this.play) return today;
     return side === 'buyer' ? Math.min(today, this.play.walkAway) : Math.max(today, this.play.walkAway);
   }
 
-  /** RULE-10's schedule: from start, conceding concedeCrPerS a second of the walk, never past walkAway. */
+  /** The play's schedule: from start, conceding concedeCrPerS a second of the walk, never past walkAway. */
   private scheduled(side: Side, target: number, elapsedMs: number): number {
     const p = this.play;
     if (!p) return target;
