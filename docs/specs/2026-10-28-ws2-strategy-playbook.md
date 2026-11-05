@@ -242,10 +242,11 @@ examples → §6: no key → engine (B-AC-3) · reply 1 s before the land grant 
 
 ```
 RULE-A2 · When the brain asks                                        shape: event table
-  upkeep opens (month m)                → strategy + landGrant edits for month m+1, deadline: m+1's land grant
-  game start                            → strategy + landGrant edits for month 1, deadline: month 1's land grant
-  land grant ends / production show     → development edits (deadline: development start) and auction edits
-                                          (deadline: auction start), with the land grant's PhaseOutcome
+  upkeep opens (month m)                → strategy + landGrant + development edits for month m+1, one write:
+                                          landGrant's deadline m+1's land grant, the development part's taken at
+                                          m+1's development start (AM-A16)
+  game start                            → the same for month 1
+  development ends / production show    → auction edits, deadline: auction start, with the development's PhaseOutcome
   WS1 re-plan trigger                   → strategy (+ the next phase's edits), deadline: the next phase start
   at most one open call per seat (INV-one-in-flight stays)
 ```
@@ -402,6 +403,14 @@ Code-only; no existing state to reach. The record starts with WS3's build.
   BRAIN; the capability-first re-run rule → C3, §7. The spike's cause codes → C2.
 - **AM-A6 · 29 Oct · lead:** C4's seam renamed playbooks.ts (no clash with packages/ai's strategist.ts); C3 promotes
   the S-A1 port instead of a second client. Cost note for §0: C8 and C9 add about 2 PRs, so about 5 in all (in §0 since the goal gate).
+- **AM-A16 · 5 Nov · PM ruling (option C), on WS2's PR-4b finding:** RULE-A2 row 3 asked for the development's edits
+  as the land grant ended, but development starts in the same tick unless a land auction or an event show comes
+  between, so the reply was always late in most months (measured: a 1-month recorded game's reply settled at step 97,
+  after the development's take). The development now rides on the month's land write at upkeep (game start for
+  month 1): the land brief shows and offers the draft development; the land grant's start plays the land part, and the
+  development's start validates and adopts the development part (one call a month fewer, which serves the under-$1
+  goal). The land request's schema changes once (its cache resets once). The auction's ask stays in the production
+  show's slack. Built in PR-4c; PR-4b ships the auction half.
 - **AM-A15 · 29 Oct · WS3's review of Task 1.4a (OK at a970975):** the record keeps one `smart` flag per seat for deciders and writers, and the replay builds a writer for every smart seat; so `writerFor(seat)` is non-null exactly when `deciderFor(seat)` is (INV-writer-decider-parity). A spent budget, a busy seat or a finished game stays a `cause` on the reply, never a null writer.
 - **AM-A14 · 29 Oct · lead (Task 1.4a review):** RULE-A5 is evaluated inside the writer port (`BrainService.writerFor`, apps/server/src/brain/index.ts), not in playbooks.ts: only the brain's budget can price a candidate model without locking the seat, and a refused Sonnet check used to lock the seat before Haiku was tried. The port picks Sonnet, then Haiku, then no call by a non-locking fit check; a write never locks the seat. A wait of 0 or less makes no call. `write`'s signature, sent to WS3, is unchanged; the recorder copies each reply. T-AC-A11 moves from Task 1.4b to 1.4a.
 - **AM-A13 · 29 Oct · lead:** `writerFor(seat): PlaybookWriter | null`, `write(kind, {brief, system, waitMs})` never
