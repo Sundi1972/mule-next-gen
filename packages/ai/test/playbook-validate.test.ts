@@ -389,16 +389,19 @@ describe('the level bound', () => {
     const stale = structuredClone(fresh);
     stale.strategy = { ...stale.strategy, kind: 'monopolist', monopolyTarget: 'smithore' };
     stale.auction!.smithore = { ...stale.auction!.smithore!, role: 'buyer', hold: 999 };
-    stale.auction![good] = { ...stale.auction![good]!, role: 'buyer', hold: 3.6, start: 1, walkAway: 1 };
-    expect(fresh.auction![good]!.hold).toBeGreaterThanOrEqual(4);
+    // A fraction under the fresh draft's hold, so only the whole-number rule clamps it, whatever the seat starts with.
+    const whole = fresh.auction![good]!.hold;
+    const fractional = whole - 0.4;
+    stale.auction![good] = { ...stale.auction![good]!, role: 'buyer', hold: fractional, start: 1, walkAway: 1 };
+    expect(whole).toBeGreaterThanOrEqual(1);
     const cornered = validatorFor({ mind: rookieMind, seed: 102 })(at.auction, 'ai2', stale, []);
     const ore = fresh.auction!.smithore!.hold;
     expect(read(cornered.playbook, '/auction/smithore/hold')).toBe(ore);
-    expect(read(cornered.playbook, `/auction/${good}/hold`)).toBe(4);
+    expect(read(cornered.playbook, `/auction/${good}/hold`)).toBe(whole);
     expect(cornered.rejected).toEqual([
       { path: '/strategy/kind', to: 'monopolist', why: `level never corners; the engine's draft plays ${fresh.strategy.kind}` },
       { path: '/strategy/monopolyTarget', to: 'smithore', why: "level never corners; the engine's draft plays null" },
-      { path: `/auction/${good}/hold`, to: 3.6, why: 'clamped to 4: a whole number' },
+      { path: `/auction/${good}/hold`, to: fractional, why: `clamped to ${whole}: a whole number` },
       { path: '/auction/smithore/hold', to: 999, why: `clamped to ${ore}: level never corners` },
     ]);
     // Positive control: the same Rookie with corners forced true accepts the target.

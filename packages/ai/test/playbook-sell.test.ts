@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { advancePhase, AI_PLANS, createGame, LOTS, observe, stableJson, storePaysFor, type GameState, type Outfit } from '@mule/engine';
+import { advancePhase, AI_PLANS, createGame, LOTS, monthNeeds, observe, stableJson, STRATEGIST, storePaysFor, type GameState, type Outfit } from '@mule/engine';
 import { outlook } from '../src/outlook.js';
 import { draftPlaybook, validatePlaybook } from '../src/playbook/index.js';
 import { AiSeat } from '../src/seat.js';
@@ -20,11 +20,17 @@ function seller(): Mind {
   return { ...mind, persona: { ...mind.persona, reserve: 2 } };
 }
 
-/** Month 1's planning on seed 11, ai0 holding `money` and the given plots: an outfit puts a MULE on it, null leaves it idle. */
+/**
+ * Month 1's planning on seed 11, ai0 holding `money` and the given plots: an outfit puts a MULE on it, null leaves it
+ * idle. ai0 holds next month's Food, Water and Energy, so nothing is short and its reserve is the cash floor alone.
+ */
 function holding(money: number, plots: [number, Outfit | null][]): GameState {
   const state = createGame({ seed: 11, players: [0, 1, 2, 3].map((i) => ({ id: `ai${i}`, name: `AI ${i + 1}`, isAi: true })) });
   for (const [index, outfit] of plots) Object.assign(state.tiles[index]!, { owner: 'ai0', outfit });
-  state.players[0]!.money = money;
+  const p = state.players[0]!;
+  p.money = money;
+  const need = monthNeeds(state, 'ai0');
+  for (const g of ['food', 'water', 'energy'] as const) p.stock[g] = Math.max(p.stock[g], need[g]);
   return state;
 }
 
@@ -62,7 +68,8 @@ describe('selling when short of cash (C10, RULE-12)', () => {
   it("T-AC-10: RULE-12's rows and examples", () => {
     const mind = seller();
     const short = holding(40, [[DESERT, null], [MOUNTAIN, 'smithore']]);
-    expect(cashReserve(observe(short, 'ai0'), mind)).toBe(120);
+    expect(cashReserve(observe(short, 'ai0'), mind)).toBe(STRATEGIST.cashFloor * mind.persona.reserve);
+    expect(STRATEGIST.cashFloor * mind.persona.reserve, "RULE-12's example reserve").toBe(120);
 
     // Example: money 40, reserve 120, an idle plot and a Smithore MULE → lists the idle plot, for the store if unsold.
     const worth = plotWorth(short, DESERT);
