@@ -19,10 +19,11 @@ const DECISIONS = [
   'The month’s events keep WS8’s show, unchanged, between the bonuses and the flight: they are the month’s biggest bonus or loss, and they play after the plots’ own.',
   'Each plot rings in its owner’s colour while it works, its bars rise one unit at a time and its count sits bottom right, big enough to read from the couch.',
   'A cluster bonus draws a green line to the neighbours it comes from, then the extra unit arrives glowing. A loss rings the plot red and its units fall away in grey.',
-  'The steps start slow and speed up, so the first plots read one by one and a big colony still finishes in time: about 18 s in a quiet month, against 15 s today. Every length is one named config value.',
+  'Length, C: about 17 s in a quiet month (15 s today): 1 s intro, 1.1 s per good that anyone makes (6 here, 6.6 s), 1.6 s of bonuses, 1.6 s of losses, 3.2 s of flight, 2 s to read the silos. An event adds its own length. Every length is one named config value. (A and B start slow and speed up instead: about 19 s.)',
   'The silos run along the TV’s foot, one per player, and fill as goods land. They show this month’s harvest only, never what anyone already holds. On the phone, your silo is your stock strip, counting in.',
   'Speed up: everyone taps ⏩ on their phone; the computer players always agree. Once every person has tapped, the rest plays 3× faster (about 6 s). It is never a skip: the table still sees what happened. A phone alone keeps today’s tap-the-map skip.',
-  'The question for Heiko: A, the harvest scans the map in reading order, or B, it goes player by player with each player’s silo lit while theirs make.',
+  'Heiko’s pick, C (5 Nov: “resource by resource for all players in parallel… then for all players the bonuses first, and then for all players the maluses”): the harvest goes good by good in a fixed order (Food, Water, Energy, Smithore, Crystite, …, the factories last), every player’s plots of that good lighting and counting up at once; then every bonus lands at once, every player; then every loss at once; then the event; then the flight, unchanged.',
+  'A (reading order) and B (player by player) stay below for comparison; C is the approved order.',
 ];
 
 function Page({ title, children }: { title: string; children: ReactNode }) {
@@ -44,8 +45,10 @@ function Index() {
         ))}
       </ol>
       <ul className="flex flex-wrap gap-3" data-testid="screens">
-        <li><a className="rounded-control border border-holo px-3 py-2 text-holo" href="#a">A · reading order: TV and phone</a></li>
-        <li><a className="rounded-control border border-holo px-3 py-2 text-holo" href="#b">B · player by player: TV and phone</a></li>
+        <li><a className="rounded-control border-2 border-holo bg-holo-soft px-3 py-2 font-semibold text-holo" href="#c">C · good by good (Heiko’s pick): TV and phone</a></li>
+        <li><a className="rounded-control border border-holo px-3 py-2 text-holo" href="#c-event">C with an event</a></li>
+        <li><a className="rounded-control border border-holo-line px-3 py-2" href="#a">A · reading order</a></li>
+        <li><a className="rounded-control border border-holo-line px-3 py-2" href="#b">B · player by player</a></li>
         <li><a className="rounded-control border border-holo-line px-3 py-2" href="#a-event">A with an event</a></li>
         <li><a className="rounded-control border border-holo-line px-3 py-2" href="#b-event">B with an event</a></li>
       </ul>
@@ -69,7 +72,7 @@ function Variant({ order, withEvent }: { order: Order; withEvent: boolean }) {
   };
   const act = actAt(tl, clock.t);
   return (
-    <Page title={`${order === 'scan' ? 'A · reading order' : 'B · player by player'}${withEvent ? ', with an event' : ''}`}>
+    <Page title={`${order === 'good' ? 'C · good by good (Heiko’s pick)' : order === 'scan' ? 'A · reading order' : 'B · player by player'}${withEvent ? ', with an event' : ''}`}>
       <div className="flex flex-wrap items-center gap-3 font-mono text-xs" data-testid="controls">
         <button type="button" className="rounded-control border border-holo px-2 py-1 text-holo" onClick={clock.playing ? clock.pause : clock.play}>
           {clock.playing ? 'pause' : 'play'}
@@ -113,6 +116,8 @@ function Variant({ order, withEvent }: { order: Order; withEvent: boolean }) {
 
 export default function App() {
   const hash = useHash();
+  if (hash === 'c') return <Variant key="c" order="good" withEvent={false} />;
+  if (hash === 'c-event') return <Variant key="ce" order="good" withEvent />;
   if (hash === 'a') return <Variant key="a" order="scan" withEvent={false} />;
   if (hash === 'b') return <Variant key="b" order="player" withEvent={false} />;
   if (hash === 'a-event') return <Variant key="ae" order="scan" withEvent />;

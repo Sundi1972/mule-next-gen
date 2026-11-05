@@ -123,23 +123,27 @@ export function ShowMap({ tl, t, tv, only }: { tl: Timeline; t: number; tv: bool
     <div ref={map} className="relative" data-testid="show-map">
       <HoloMap width={W} height={H} tiles={TILES} density={tv ? 'tv' : 'phone'} hideGround {...(focus !== undefined ? { focusSlot: focus } : {})} className="w-full" />
       {/* The bonus pass dims the map a little, so the plot being worked on stands out. */}
-      <div className={cx('pointer-events-none absolute inset-0 rounded-panel bg-void transition-opacity duration-500', act === 'bonus' ? 'opacity-30' : 'opacity-0')} />
+      <div className={cx('pointer-events-none absolute inset-0 rounded-panel bg-void transition-opacity duration-500', act === 'bonus' || act === 'loss' ? 'opacity-30' : 'opacity-0')} />
       <ClusterLinks tl={tl} t={t} />
-      {tl.beats.map((b) => (only === undefined || b.plot.owner === only) && <PlotShow key={`${b.plot.x},${b.plot.y}`} beat={b} t={t} tv={tv} act={act} />)}
+      {tl.beats.map((b) => (only === undefined || b.plot.owner === only) && <PlotShow key={`${b.plot.x},${b.plot.y}`} beat={b} t={t} tv={tv} act={act} hold={modHold(tl)} />)}
       {geom && tl.beats.map((b) => (only === undefined || b.plot.owner === only) && <Flight key={`f${b.plot.x},${b.plot.y}`} beat={b} t={t} tv={tv} geom={geom} />)}
     </div>
   );
 }
 
+/** How long a landed bonus or loss stays lit: C lands them all at once, so they stay up for its whole beat. */
+const modHold = (tl: Timeline) => (tl.order === 'good' ? PACE.allAtOnce - 0.2 : 0.6);
+
 /** While a cluster bonus lands, a glowing line joins the plot to the neighbours it comes from. */
 function ClusterLinks({ tl, t }: { tl: Timeline; t: number }) {
-  const live = tl.mods.filter((m) => m.mod.why === 'cluster' && t >= m.at - 0.15 && t < m.at + 0.9);
+  const hold = modHold(tl);
+  const live = tl.mods.filter((m) => m.mod.why === 'cluster' && t >= m.at - 0.15 && t < m.at + hold + 0.3);
   return (
     <svg aria-hidden className="pointer-events-none absolute inset-0 h-full w-full" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" data-testid="cluster-links">
       {live.flatMap((m) =>
         clusterMates(m.plot).map((o) => {
           const k = clamp01((t - (m.at - 0.15)) / 0.25);
-          const fade = 1 - clamp01((t - m.at - 0.5) / 0.4);
+          const fade = 1 - clamp01((t - m.at - hold + 0.1) / 0.4);
           const x1 = m.plot.x + 0.5;
           const y1 = m.plot.y + 0.5;
           return (
@@ -164,12 +168,12 @@ function ClusterLinks({ tl, t }: { tl: Timeline; t: number }) {
 }
 
 /** One plot: its spotlight while it works, its bars counting up, its badges as they land. */
-function PlotShow({ beat, t, tv, act }: { beat: Beat; t: number; tv: boolean; act: Act }) {
+function PlotShow({ beat, t, tv, act, hold }: { beat: Beat; t: number; tv: boolean; act: Act; hold: number }) {
   const { plot } = beat;
   const colour = SLOT_COLOR[byId(plot.owner).slot];
   const units = unitsAt(beat, t);
-  const making = t >= beat.harvestAt && t < beat.harvestAt + plot.base * PACE.unitStep + 0.35;
-  const modLanding = beat.modAt.findIndex((at) => t >= at - 0.1 && t < at + 0.6);
+  const making = t >= beat.harvestAt && t < beat.harvestAt + plot.base * beat.unitStep + 0.35;
+  const modLanding = beat.modAt.findIndex((at) => t >= at - 0.1 && t < at + hold);
   const lit = making || modLanding >= 0;
   const flown = t >= beat.flyAt;
   // What the last loss took, falling away in grey for a moment.
@@ -180,7 +184,7 @@ function PlotShow({ beat, t, tv, act }: { beat: Beat; t: number; tv: boolean; ac
   const gainIdx = beat.modAt.findLastIndex((at, i) => plot.mods[i]!.delta > 0 && t >= at && t < at + 0.7);
   const gained = gainIdx >= 0 ? plot.mods[gainIdx]!.delta : 0;
   const bar = tv ? 'h-3.5 w-1.5' : 'h-3 w-1.5 ring-1 ring-void/70';
-  const dim = act === 'bonus' && !lit && plot.mods.length === 0;
+  const dim = (act === 'bonus' || act === 'loss') && !lit && plot.mods.length === 0;
 
   return (
     <div
@@ -232,7 +236,7 @@ function PlotShow({ beat, t, tv, act }: { beat: Beat; t: number; tv: boolean; ac
         <span className={cx('flex w-fit flex-wrap-reverse items-end', tv ? 'max-w-[44px] gap-[3px]' : 'max-w-[30px] gap-px')}>
           {Array.from({ length: Math.min(units, 8) }, (_, k) => {
             const fresh = gained > 0 && k >= units - gained;
-            const rise = clamp01((t - beat.harvestAt - k * PACE.unitStep) / 0.18);
+            const rise = clamp01((t - beat.harvestAt - k * beat.unitStep) / 0.18);
             return (
               <span
                 key={k}
@@ -325,15 +329,25 @@ function Silo({ id, got, fill, glow, making, asked }: { id: string; got: Partial
 // --- The TV rail ------------------------------------------------------------------------------
 
 const ACTS: { id: Act; n: number; title: string; line: (tl: Timeline) => string }[] = [
-  { id: 'harvest', n: 1, title: 'Harvest', line: (tl) => (tl.order === 'scan' ? 'Every plot makes what its ground gives, one after the next.' : 'Player by player, every plot makes what its ground gives.') },
+  {
+    id: 'harvest',
+    n: 1,
+    title: 'Harvest',
+    line: (tl) => (tl.order === 'scan' ? 'Every plot makes what its ground gives, one after the next.' : tl.order === 'player' ? 'Player by player, every plot makes what its ground gives.' : 'Good by good, every player’s plots at once.'),
+  },
   { id: 'bonus', n: 2, title: 'Bonuses and losses', line: () => 'Plots next to their own kind make more. Plots short of Energy or Water, or on polluted ground, make less.' },
+  { id: 'loss', n: 3, title: 'Losses', line: () => 'Plots short of Energy or Water, or on polluted ground, make less.' },
   { id: 'events', n: 3, title: 'This month on Irata', line: () => 'The month’s events play over the map.' },
   { id: 'flight', n: 4, title: 'Into the silos', line: () => 'Every plot’s goods fly home to its owner’s silo.' },
 ];
 
 function Rail({ tl, t, asked, fast }: { tl: Timeline; t: number; asked: Asked; fast: boolean }) {
   const act = actAt(tl, t);
-  const acts = ACTS.filter((a) => a.id !== 'events' || tl.acts.events !== null);
+  const c = tl.acts.loss !== null;
+  const acts = ACTS.filter((a) => (a.id !== 'events' || tl.acts.events !== null) && (a.id !== 'loss' || c)).map((a) =>
+    c && a.id === 'bonus' ? { ...a, title: 'Bonuses', line: () => 'Plots next to their own plot of the same good, and species good at it, make more. Every player at once.' } : a,
+  );
+  const good = tl.order === 'good' && act === 'harvest' ? [...tl.goods].reverse().find((g) => t >= g.at)?.good : undefined;
   const at = act === 'hold' ? 'flight' : act === 'intro' ? 'harvest' : act;
   const seen = new Set(tl.mods.filter((m) => t >= m.at).map((m) => m.mod.why));
   const turn = tl.order === 'player' && act === 'harvest' ? [...tl.turns].reverse().find((x) => t >= x.at)?.owner : undefined;
@@ -348,14 +362,19 @@ function Rail({ tl, t, asked, fast }: { tl: Timeline; t: number; asked: Asked; f
               <span className={cx('font-mono text-lg font-bold', now ? 'text-holo' : done ? 'text-ok' : 'text-ink-3')}>{done ? '✓' : i + 1}</span>
               <span className="flex flex-col gap-1">
                 <span className={cx('font-display text-2xl font-semibold leading-none', now ? 'text-ink' : 'text-ink-3')}>{a.title}</span>
-                {now && <span className="text-lg leading-snug text-ink-2">{turn ? `${byId(turn).name}’s plots.` : a.line(tl)}</span>}
+                {now && (
+                  <span className="flex items-center gap-2 text-lg leading-snug text-ink-2">
+                    {good && <GoodIcon good={good} size={22} />}
+                    {turn ? `${byId(turn).name}’s plots.` : good ? `${GOOD_NAME[good]}: every player’s plots at once.` : a.line(tl)}
+                  </span>
+                )}
               </span>
             </li>
           );
         })}
       </ol>
       {/* The reasons light up as each first appears on the map. */}
-      {(act === 'bonus' || seen.size > 0) && act !== 'hold' && act !== 'flight' && (
+      {(act === 'bonus' || act === 'loss' || seen.size > 0) && act !== 'hold' && act !== 'flight' && (
         <ul className="flex flex-col gap-1.5" data-testid="why-legend">
           {(Object.keys(BADGE) as Why[])
             .filter((w) => tl.mods.some((m) => m.mod.why === w))
@@ -431,7 +450,8 @@ export function PhoneShow({ order, withEvent, t, asked, onAsk }: { order: Order;
   const words: Record<Act, string> = {
     intro: 'Your plots are about to work.',
     harvest: 'Your plots are making their goods.',
-    bonus: 'Bonuses and losses: watch your plots.',
+    bonus: 'Bonuses: watch your plots.',
+    loss: 'Losses: watch your plots.',
     events: 'An event is playing on the TV.',
     flight: 'Your goods are flying into your silo.',
     hold: 'In your silo.',

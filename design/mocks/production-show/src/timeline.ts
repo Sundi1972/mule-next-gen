@@ -112,8 +112,14 @@ export const finalUnits = (p: Plot) => Math.max(0, p.base + p.mods.reduce((n, m)
 
 // --- The timeline, in show seconds at full pace ----------------------------------
 
-/** A: the harvest scans the map in reading order. B: it goes player by player, each one's silo lit while theirs make. */
-export type Order = 'scan' | 'player';
+/**
+ * C (Heiko's pick, 2026-11-05): good by good, every player's plots of that good at once; then every bonus at once,
+ * then every loss at once. A: the harvest scans the map in reading order. B: player by player.
+ */
+export type Order = 'good' | 'scan' | 'player';
+
+/** C's fixed order of goods: the crops, then the mines, then the factories. */
+export const GOOD_ORDER: Good[] = ['food', 'water', 'energy', 'smithore', 'crystite', 'rareEarth', 'alloy', 'electronics', 'medicine'];
 
 /**
  * Every length in one place, as named config would hold them (DEV: engine config.ts once approved). The steps start
@@ -130,6 +136,11 @@ export const PACE = {
   ease: 0.7,
   /** In the player-by-player order, the beat between one player and the next. */
   playerBeat: 0.35,
+  /** C: one good's turn: its plots light together and count up a unit at a time, slower than A's, then a beat. */
+  goodBeat: 1.1,
+  goodUnitStep: 0.14,
+  /** C: every bonus lands at once, then every loss at once, each held this long. */
+  allAtOnce: 1.6,
   gap: 0.5,
   bonus: 4.0,
   bonusStepMax: 0.5,
@@ -146,6 +157,8 @@ export interface Beat {
   plot: Plot;
   /** When the plot starts making its base output. */
   harvestAt: number;
+  /** How long each unit of its base takes to rise. */
+  unitStep: number;
   /** When each of its bonuses and losses lands, in its mods' order. */
   modAt: number[];
   /** When its goods take off for the silo. */
@@ -159,7 +172,10 @@ export interface Timeline {
   mods: { plot: Plot; mod: Mod; at: number }[];
   /** In the player-by-player order, when each player's turn starts. */
   turns: { owner: string; at: number }[];
-  acts: { harvest: number; bonus: number; events: number | null; flight: number; hold: number; end: number };
+  /** In C, when each good's turn starts. */
+  goods: { good: Good; at: number }[];
+  /** `loss` is C's own act: every loss at once, after every bonus; null in A and B, which land them in one pass. */
+  acts: { harvest: number; bonus: number; loss: number | null; events: number | null; flight: number; hold: number; end: number };
 }
 
 /** n items over `length` seconds, the first gaps longest; never more than `stepMax` apart. */
@@ -170,6 +186,7 @@ function spread(n: number, length: number, stepMax: number): number[] {
 }
 
 export function timeline(order: Order, withEvent: boolean): Timeline {
+  if (order === 'good') return byGood(withEvent);
   const ordered = order === 'scan' ? PLOTS : PLAYERS.flatMap((p) => PLOTS.filter((l) => l.owner === p.id));
   const harvest = PACE.intro;
   const at = spread(ordered.length, PACE.harvest, PACE.harvestStepMax);
@@ -197,20 +214,56 @@ export function timeline(order: Order, withEvent: boolean): Timeline {
 
   return {
     order,
-    beats: ordered.map((plot, i) => ({ plot, harvestAt: harvestAt[i]!, modAt: plot.mods.map((m) => mods.find((x) => x.plot === plot && x.mod === m)!.at), flyAt: flyAt.get(plot)! })),
+    beats: ordered.map((plot, i) => ({ plot, harvestAt: harvestAt[i]!, unitStep: PACE.unitStep, modAt: plot.mods.map((m) => mods.find((x) => x.plot === plot && x.mod === m)!.at), flyAt: flyAt.get(plot)! })),
     mods,
     turns,
-    acts: { harvest, bonus, events, flight, hold, end },
+    goods: [],
+    acts: { harvest, bonus, loss: null, events, flight, hold, end },
+  };
+}
+
+/** C: good by good for every player at once, then every bonus at once, then every loss at once. */
+function byGood(withEvent: boolean): Timeline {
+  const harvest = PACE.intro;
+  const present = GOOD_ORDER.filter((g) => PLOTS.some((p) => p.good === g));
+  const goods = present.map((good, i) => ({ good, at: harvest + i * PACE.goodBeat }));
+  const startOf = new Map(goods.map((g) => [g.good, g.at]));
+  const ordered = present.flatMap((g) => PLOTS.filter((p) => p.good === g));
+  const lastHarvest = Math.max(...ordered.map((p) => startOf.get(p.good)! + p.base * PACE.goodUnitStep));
+
+  const bonus = Math.max(lastHarvest, harvest + present.length * PACE.goodBeat) + PACE.gap;
+  const loss = bonus + PACE.allAtOnce;
+  const mods = [
+    ...PLOTS.flatMap((plot) => plot.mods.filter((m) => m.delta > 0).map((mod) => ({ plot, mod, at: bonus }))),
+    ...PLOTS.flatMap((plot) => plot.mods.filter((m) => m.delta < 0).map((mod) => ({ plot, mod, at: loss }))),
+  ];
+  const lossEnd = loss + PACE.allAtOnce;
+
+  const events = withEvent ? lossEnd + PACE.gap : null;
+  const flight = (events !== null ? events + PACE.eventSlot : lossEnd) + PACE.gap;
+  const flySpread = spread(ordered.length, PACE.flights, 0.3);
+  const flyAt = new Map(ordered.map((p, i) => [p, flight + flySpread[i]!]));
+  const hold = flight + PACE.flights + PACE.flight;
+  const end = hold + PACE.hold;
+
+  return {
+    order: 'good',
+    beats: ordered.map((plot) => ({ plot, harvestAt: startOf.get(plot.good)!, unitStep: PACE.goodUnitStep, modAt: plot.mods.map((m) => mods.find((x) => x.plot === plot && x.mod === m)!.at), flyAt: flyAt.get(plot)! })),
+    mods,
+    turns: [],
+    goods,
+    acts: { harvest, bonus, loss, events, flight, hold, end },
   };
 }
 
 /** The act the show is in at t. */
-export type Act = 'intro' | 'harvest' | 'bonus' | 'events' | 'flight' | 'hold';
+export type Act = 'intro' | 'harvest' | 'bonus' | 'loss' | 'events' | 'flight' | 'hold';
 export function actAt(tl: Timeline, t: number): Act {
   const a = tl.acts;
   if (t >= a.hold) return 'hold';
   if (t >= a.flight - 0.2) return 'flight';
   if (a.events !== null && t >= a.events) return 'events';
+  if (a.loss !== null && t >= a.loss - 0.3) return 'loss';
   if (t >= a.bonus - 0.3) return 'bonus';
   if (t >= a.harvest) return 'harvest';
   return 'intro';
@@ -219,7 +272,7 @@ export function actAt(tl: Timeline, t: number): Act {
 /** Units standing on the plot at t: its base counting up, then each bonus and loss as it lands. */
 export function unitsAt(beat: Beat, t: number): number {
   if (t < beat.harvestAt) return 0;
-  const counted = Math.min(beat.plot.base, Math.floor((t - beat.harvestAt) / PACE.unitStep) + 1);
+  const counted = Math.min(beat.plot.base, Math.floor((t - beat.harvestAt) / beat.unitStep) + 1);
   return Math.max(0, counted + beat.plot.mods.reduce((n, m, i) => n + (t >= beat.modAt[i]! ? m.delta : 0), 0));
 }
 
