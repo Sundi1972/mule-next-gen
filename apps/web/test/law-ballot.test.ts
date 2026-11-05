@@ -230,7 +230,8 @@ describe('B-AC-46-8: Done in the ballot, and the host’s Continue', () => {
   it('B-AC-46-8: the host, Done, sees Continue during the ballot, with its confirm', () => {
     mount(viewFor('s1', politics({ council: council({ done: ['s1'], waitingFor: ['s2', 's3'] }) }), true));
     tap('continue');
-    expect(text('continue-confirm')).toContain('Close the vote now? The votes of Ossa and Kai won’t count, and the result is shown.');
+    expect(text('continue-confirm')).toContain('Close the vote now? The votes as they stand are counted, and the result is shown.');
+    expect(text('continue-confirm')).not.toContain('won’t count');
     tap('continue-now');
     expect(sent).toEqual([{ type: 'continue' }]);
   });
@@ -239,6 +240,14 @@ describe('B-AC-46-8: Done in the ballot, and the host’s Continue', () => {
     mount(viewFor('s1', politics({ council: council({ stage: 'reveal', voted: ['s1', 's2', 's3'], done: ['s1', 's2', 's3'], waitingFor: [], result: { passed: true, yes: 5, no: 1, tie: false } }) })));
     expect(findTestid('continue')).toBeUndefined();
     expect(text('now-title')).toBe('The result');
+    expect(findTestid('ready') && text('ready'), "the reveal's ready bar is not the ballot's Done").not.toBe('Done');
+    expect(findTestid('you-are-ready') && text('you-are-ready')).not.toBe('You voted');
+  });
+
+  it("B-AC-46-8: in an election month, the new Governor's Now during the open ballot is the ballot's, not the sales tax", () => {
+    const pol = politics({ term: [MONTH, MONTH + 2], election: { stage: 'over', ceremony: null, candidates: {}, promises: {}, voted: [], done: [], waitingFor: [], result: {} }, council: council() });
+    mount(viewFor('s1', pol, true));
+    expect(text('now-title')).toBe('Vote on the law');
   });
 });
 
@@ -264,6 +273,28 @@ describe('B-AC-46-9: the reveal on the phone', () => {
 });
 
 describe('B-AC-46-11: the laws in force on the Council desk', () => {
+  const pending = { by: 's1', month: MONTH, proposal: LAND_TAX_10, impact: IMPACT };
+
+  it("B-AC-46-11: a pending proposal is on the Council desk, with this seat's own For you", () => {
+    mount(viewFor('s2', politics({ proposal: pending })));
+    tap('desk-council');
+    expect(text('council-pending')).toContain('Lena proposes Land tax 10 cr a plot');
+    expect(text('council-pending-for-you')).toBe('For you: about 50 cr a month.');
+    unmount();
+    mount(viewFor('s3', politics({ proposal: pending })));
+    tap('desk-council');
+    expect(text('council-pending-for-you')).toBe('For you: nothing.');
+  });
+
+  it('B-AC-46-11 (negative): no card with nothing pending, nor while a vote is open', () => {
+    mount(viewFor('s2', politics()));
+    tap('desk-council');
+    expect(findTestid('council-pending')).toBeUndefined();
+    unmount();
+    mount(viewFor('s2', politics({ proposal: pending, council: council() })));
+    expect(findTestid('council-pending')).toBeUndefined();
+  });
+
   it('B-AC-46-11: each law in force is a chip with its setting and "since month N"', () => {
     mount(viewFor('s2', politics({ laws: { landTax: { setting: 10, since: 3 }, exportTax: { setting: 20, since: 2 } } })));
     tap('desk-council');

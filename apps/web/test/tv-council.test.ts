@@ -127,6 +127,14 @@ describe('B-AC-46-10: the TV council panel', () => {
   });
 });
 
+describe('B-AC-46-10: the reveal starts where the room is', () => {
+  it('B-AC-46-10: at clockMs 0 the bar is empty and the stamp not yet on', () => {
+    const html = onTv(game(politics({ council: council({ stage: 'reveal', voted: ['s1', 's2', 's3'], done: ['s1', 's2', 's3'], waitingFor: [], clockMs: 0, result: { passed: true, yes: 7, no: 3, tie: false } }) })));
+    expect(textOf(html, 'tv-yes')).toBe('0');
+    expect(tagOf(html, 'tv-stamp')).toContain('opacity-0');
+  });
+});
+
 describe('B-AC-46-12 (negative): with politics off, or no council, the TV is today’s', () => {
   it.each<[string, PoliticsView | null]>([
     ['politics off', null],
