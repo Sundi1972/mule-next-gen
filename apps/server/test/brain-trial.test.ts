@@ -289,7 +289,7 @@ describe.runIf(process.env.MULE_FULL === '1')('brain:trial', () => {
       let calls = 0;
       sdk.create = () => {
         calls++;
-        return Promise.reject(new Anthropic.AuthenticationError(401, { type: 'error', error: { message: SDK_TEXT } }, SDK_TEXT, new Headers()));
+        return Promise.reject(new Anthropic.AuthenticationError(401, { type: 'error', error: { type: 'authentication_error', message: SDK_TEXT } }, SDK_TEXT, new Headers()));
       };
       const { out, result } = run(['--games', '3', '--smart', '1', '--max-usd', '1']);
       const { code, report } = await result;
@@ -300,7 +300,9 @@ describe.runIf(process.env.MULE_FULL === '1')('brain:trial', () => {
       expect(text).not.toContain(SDK_TEXT);
       expect(text).not.toContain(KEY.ANTHROPIC_API_KEY);
       expect(out.at(-1)).toBe('Stopped: the API refused the credentials (401/403). Nothing more was called.');
-      expect(callLines()).toEqual([expect.objectContaining({ outcome: 'error' })]);
+      // The ledger line names the answer, not its text: the status and the API's error type.
+      expect(callLines()).toEqual([expect.objectContaining({ outcome: 'error', status: 401, error_type: 'authentication_error' })]);
+      expect(JSON.stringify(callLines())).not.toContain(SDK_TEXT);
       expect(gameLines()).toEqual([expect.objectContaining({ calls: 1 })]);
     },
     GAMES_MS,
