@@ -13,6 +13,7 @@ import {
   moodBand,
   payStrike,
   runUpkeep,
+  COLONY,
   SOCIAL_EVENTS,
   START,
   UPKEEP,
@@ -182,13 +183,13 @@ describe('C26: the colony\'s planning social events, fired through the planning 
     };
     const made = (report: ReturnType<typeof produce>, tiles: number[]) => tiles.map((i) => report.lines!.find((l) => l.tile === i)!.made);
 
-    it('unpaid: every Food plot makes SOCIAL_EVENTS.strikeShare of its output, and production files a generalStrike event with each plot and its delta', () => {
+    it('unpaid: every Food plot makes COLONY.strike.output of its output, and production files a generalStrike event with each plot and its delta', () => {
       const { state, twin } = struck();
       const food = foodPlots(state);
       const full = made(produce(twin), food);
       expect(full.every((n) => n > 0)).toBe(true);
       const report = produce(state);
-      const share = full.map((n) => Math.floor(n * SOCIAL_EVENTS.strikeShare));
+      const share = full.map((n) => Math.floor(n * COLONY.strike.output));
       expect(made(report, food)).toEqual(share);
       const strike = report.events!.filter((e: MonthEvent) => e.key === 'generalStrike');
       expect(strike).toMatchObject([{ phase: 'production', scope: 'colony', sign: 'bad' }]);

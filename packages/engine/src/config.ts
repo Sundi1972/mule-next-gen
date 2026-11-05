@@ -1013,8 +1013,11 @@ export const COLONY = {
   fundBuysGoods: true,
   /** The Federation's grant into the fund at each upkeep, in credits; flat until a scaling rule is tuned. */
   grant: { perMonth: 150 },
-  /** What the strikers of a general strike want from the fund to go back to work, in credits (G-5 RULE-26). */
-  strike: { cost: 250 },
+  /**
+   * A general strike (G-5 RULE-26): what the strikers want from the fund to go back to work, in credits, and the share
+   * of its output each plot of the struck good makes while they are unpaid (UBER-AC-6).
+   */
+  strike: { cost: 250, output: 0.2 },
 };
 
 /**
@@ -1305,8 +1308,6 @@ export type AiLevelId = keyof typeof AI_LEVELS;
  * slice 5 (D-G5-5: nothing is paid yet), so no row reads them.
  */
 export const SOCIAL_EVENTS = {
-  /** Share of its output each plot of the struck good makes in production while the strikers are unpaid (RULE-26). */
-  strikeShare: 0.2,
   /** The mood part of the existing immigration wave (EVENTS.colony.immigrationWave). */
   immigrationWave: {
     mood: { thriving: 0.06, content: 0.01 },
@@ -1330,7 +1331,7 @@ export const SOCIAL_EVENTS = {
     },
     /**
      * Announced in planning (callStrike) on the good the most colony plots work, a tie on the row's dice; unpaid, every
-     * plot of it makes strikeShare in production. Raised when Food is dearer than foodPrice.factor times its usual price.
+     * plot of it makes COLONY.strike.output in production. Raised when Food is dearer than foodPrice.factor times its usual price.
      */
     generalStrike: {
       phases: { planning: 0 },

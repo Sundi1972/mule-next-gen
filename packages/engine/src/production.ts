@@ -221,7 +221,7 @@ export function runProduction(state: GameState): {
   const lines: ProductionLine[] = [];
   const events = rollPhase(state, 'production');
   applyEvents(state, events);
-  // A general strike announced in planning and still unpaid (G-5 RULE-26): its good's plots make SOCIAL_EVENTS.strikeShare,
+  // A general strike announced in planning and still unpaid (G-5 RULE-26): its good's plots make COLONY.strike.output,
   // last, on what everything else left; paid, the good produces in full and production files no strike.
   const strike = strikeEvent(state);
   if (strike) events.push(strike);

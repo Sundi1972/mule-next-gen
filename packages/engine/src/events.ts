@@ -1,4 +1,4 @@
-import { EVENTS, GAME, GOOD_CONFIG, SOCIAL_EVENTS, UPKEEP } from './config.js';
+import { COLONY, EVENTS, GAME, GOOD_CONFIG, SOCIAL_EVENTS, UPKEEP } from './config.js';
 import { addPrestige, callStrike, fundIn, goodWords, moodBand, moodShift, strikeHolds } from './colony.js';
 import { neighbours } from './grid.js';
 import { reputationShift } from './politics.js';
@@ -60,7 +60,7 @@ const SHAPE: Record<EventKey, { kind: EventKind; title: string; scope: MonthEven
 /** A general strike's line, naming its good when it has one. */
 function strikeLine(good: Good | null): string {
   const plots = good ? `every ${goodWords(good)} plot` : 'every plot of one good';
-  return `A general strike: this month ${plots} makes ${pct(SOCIAL_EVENTS.strikeShare)}, unless the Governor pays the strikers.`;
+  return `A general strike: this month ${plots} makes ${pct(COLONY.strike.output)}, unless the Governor pays the strikers.`;
 }
 
 /** The goods a colony-wide event touches. */
@@ -89,7 +89,7 @@ export function eventOutput(key: EventKey, before: number, first: boolean): numb
     wildfire: () => (first ? 0 : before - EVENTS.wildfire.loss),
     bumperHarvest: () => before * EVENTS.bumperHarvest.factor,
     cavernCollapse: () => before,
-    generalStrike: () => Math.floor(before * SOCIAL_EVENTS.strikeShare),
+    generalStrike: () => Math.floor(before * COLONY.strike.output),
   };
   // An event with no rule here changes no plot's output.
   return Math.max(0, rules[key]?.() ?? before);
