@@ -239,8 +239,13 @@ export class AiSeat {
   draft(state: GameState, phase: DraftPhase, month = state.month): Playbook {
     const leftOut: LeftOutPick[] = [];
     const drafted = draftPlaybook(this.draftInput(state, phase, month), leftOut);
-    for (const p of leftOut) console.error(`AI seat ${this.id}: the development draft left out MULE ${p.mule} (${p.outfit} on plot ${p.plot}), refused: ${p.refused}`);
+    this.logLeftOut(leftOut);
     return validatePlaybook(this.profileFor(month))(state, this.id, drafted, []).playbook;
+  }
+
+  /** The MULE picks a development draft left out, one line each: a pick never ends unlogged. See AM-27. */
+  private logLeftOut(leftOut: readonly LeftOutPick[]): void {
+    for (const p of leftOut) console.error(`AI seat ${this.id}: the development draft left out MULE ${p.mule} (${p.outfit} on plot ${p.plot}), refused: ${p.refused}`);
   }
 
   /** What the seat's drafts are drafted from. */
@@ -285,9 +290,16 @@ export class AiSeat {
     if (played) this.playListings(p.state, played.part);
   }
 
-  /** The gate this seat's playbooks pass: its mind, its seed and, for the month it holds one, its pending land pick. */
+  /**
+   * The gate this seat's playbooks pass: its mind, its seed and, for the month it holds one, its pending land pick. The
+   * MULE picks a re-draft under an edited strategy left out are logged here, where the playbook is adopted from.
+   */
   validator(): ValidatePlan {
-    return (state, seat, draft, edits) => validatorFor(this.profileFor(draft.month))(state, seat, draft, edits);
+    return (state, seat, draft, edits) => {
+      const result = validatorFor(this.profileFor(draft.month))(state, seat, draft, edits);
+      this.logLeftOut(result.leftOut ?? []);
+      return result;
+    };
   }
 
   private profileFor(month: number): ValidatorProfile {
