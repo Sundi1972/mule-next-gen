@@ -1,6 +1,6 @@
 # WS8 desks mock: the Colony and Council desks on the phone, and the TV's law reveal
 
-**Status: for review (PM rules 15:00, 5 Nov 2026).** G-5 C35 and slice 2a C46. Branch `ws8-desks-mock`, cut from
+**Status: APPROVED at c4f4cc42 (PM, design authority, 5 Nov 2026), with WS8's three picks: Donate B (quick chips; "Other…" opens the steppers), law picker A (one list; the rail scrolls at 844×390 with three laws in force, accepted), TV reveal A (the weighted bar, then the stamp, with the tie line). The binding scaffold for the C35 + C46 build. Heiko may still look and veto.** (Was: for review, PM rules 15:00, 5 Nov 2026.) G-5 C35 and slice 2a C46. Branch `ws8-desks-mock`, cut from
 `origin/ws7-politics` and fast-forwarded to `415836b2` for `setSiteBid` and `ColonyProjectView.maxBid` (#334).
 
 Real React composing the real hub: `Hub` with `HUB_SLOTS` and WS7's politics slots, inside the app's
