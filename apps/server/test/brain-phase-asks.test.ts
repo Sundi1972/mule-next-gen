@@ -51,13 +51,13 @@ const answersAt = (atMs: number, text: string) =>
       }),
   );
 
-/** One Smart seat at a game, its playbooks heard: the land grant just ended (the slack before development). */
+/** One Smart seat at a game, its playbooks heard, at month 1's land grant: as it ends, the slack before development. */
 function table(brain: MeteredBrain) {
   const state: GameState = createGame({ seed: 10, players: PLAYERS });
   const seat = new AiSeat({ id: 'p0', name: 'Ada', persona: 'trader', level: 'trader', seed: 1 });
   const notes: PlaybookNote[] = [];
   const playbooks = new Playbooks({ brain, source: playbookSource([seat]), seats: [seat], record: (n) => notes.push(n) });
-  advanceTo(state, 'landAuction');
+  advanceTo(state, 'landGrant');
   return { state, seat, notes, playbooks };
 }
 
@@ -118,7 +118,7 @@ describe('RULE-A2 rows 3-4: the next phase is edited in the slack before it', { 
     expect(sdk.calls).toBe(2);
   });
 
-  it("C4: the auction brief carries the development's outcome when the seat played a part, and an ask for another phase's month is not taken", async () => {
+  it("C4: the ask in production's slack sends the auction brief, and the development's start takes nothing it never asked for", async () => {
     const asked: SdkParams[] = [];
     const spy = fakeSdk((_n, params, options) => (asked.push(params), neverAnswers(options)));
     const { state, playbooks, notes } = table(smartOn(spy));

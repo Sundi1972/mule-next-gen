@@ -573,7 +573,10 @@ async function recordedToMonth2(recordPlaybook = true, until: (view: MuleView) =
   await runTable(hosted, fake, until);
   hosted.dispose?.();
   const ai = THREE.find((s) => s.isAi)!.id;
-  return { record: recorder.record, writes: sdk.requests.filter((r) => isWrite(r.params)), drafts, ai };
+  // The land briefs only: since PR-4b the seat is also asked for its development and auction edits (whose replies here,
+  // land edits, are refused as not offered, so nothing of theirs plays or is recorded).
+  const landWrites = sdk.requests.filter((r) => isWrite(r.params) && promptOf(r.params).user.includes('Your draft land grant:'));
+  return { record: recorder.record, writes: landWrites, drafts, ai };
 }
 
 describe('Claude plans the land grant', { timeout: 30_000 }, () => {

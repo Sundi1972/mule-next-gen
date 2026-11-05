@@ -1009,6 +1009,10 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     const state = this.requireState();
     if (state.phase === 'gameOver') return;
     if (state.phase === 'development') this.finishDevelopment();
+    // The slack before the next phase is when its edits are asked (spec A RULE-A2 rows 3-4): the development's as the
+    // land grant ends, the auction's as the development ends, each with this phase's facts, read before they reset.
+    if (state.phase === 'landGrant') this.playbooks?.askPhase(state, 'development', this.notices);
+    if (state.phase === 'development') this.playbooks?.askPhase(state, 'auction', this.notices);
     advancePhase(state);
     this.enterPhase();
   }
@@ -1059,6 +1063,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     // Game over has no clocks; enterPhase finished it before any hold.
     if (state.phase === 'gameOver') return;
     if (state.phase === 'auction') {
+      // Before the first good's status screen: a playbook adopted now plays from the first good (AM-20).
+      this.playbooks?.takePhase(state, 'auction');
       this.phaseEndsAt = null;
       this.dealsInGood = [];
       this.news = ['The auction opens. Walk up to buy, down to sell.'];
@@ -1079,6 +1085,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       return;
     }
     if (state.phase === 'development') {
+      // Before the first development tick or steer: after it the hand keeps the route it has (RULE-7).
+      this.playbooks?.takePhase(state, 'development');
       this.startDevelopment();
       return;
     }
