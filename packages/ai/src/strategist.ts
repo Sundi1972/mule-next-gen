@@ -16,6 +16,7 @@ import {
   RAW_GOODS,
   STRATEGIST,
   UPKEEP,
+  score,
   shipInPort,
   shipPrice,
   storePaysFor,
@@ -62,15 +63,13 @@ function me(obs: GameState, mind: Mind) {
   return obs.players.find((p) => p.id === mind.me)!;
 }
 
-/** The rival with the most public wealth: money, land and MULEs. */
+/**
+ * The rival with the highest Worth as the seat sees it: the engine's score on the seat's observation, where a rival's
+ * goods are what the public market panel implies.
+ */
 export function leaderOf(obs: GameState, self: string): string | null {
-  const price = mulePrice(obs);
-  const worth = (id: string) => {
-    const p = obs.players.find((q) => q.id === id)!;
-    const plots = obs.tiles.filter((t) => t.owner === id);
-    return p.money + plots.length * GAME.plotScore + plots.filter((t) => t.outfit).length * price;
-  };
-  const rivals = obs.players.filter((p) => p.id !== self).sort((a, b) => worth(b.id) - worth(a.id));
+  const rivals = obs.players.filter((p) => p.id !== self).map((p) => ({ id: p.id, worth: score(obs, p.id) }));
+  rivals.sort((a, b) => b.worth - a.worth);
   return rivals[0]?.id ?? null;
 }
 
