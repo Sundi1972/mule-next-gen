@@ -114,11 +114,14 @@ describe('the general strike on the TV (C37)', () => {
     expect(strikers(onTv(game(colony(UNPAID), { phase: 'landGrant' })))).toEqual([]);
   });
 
-  it("B-AC-37-2: the TV's rail names who decides while the strike is unpaid in planning, and drops it once paid", () => {
-    const html = onTv(game(colony(UNPAID)));
+  it("B-AC-37-2: the TV's rail names who decides once the Governor is Ready with the strike unpaid, and not while the ready card still waits for them, nor once paid", () => {
+    expect(onTv(game(colony(UNPAID))), 'the ready card already names Kai').not.toContain('data-testid="waiting-governor"');
+    const kaiReady = { players: PLAYERS.map((p) => (p.id === 's2' ? { ...p, ready: true } : p)) };
+    const html = onTv(game(colony(UNPAID), kaiReady));
+    expect(html.match(/data-testid="waiting-governor"/g)).toHaveLength(1);
     expect(textOf(html, 'waiting-governor')).toBe('Waiting for Kai, the Governor Pay the strikers 240 cr from the fund, or let them strike. After the votes.');
-    expect(onTv(game(colony(PAID)))).not.toContain('data-testid="waiting-governor"');
-    expect(onTv(game(colony(null)))).not.toContain('data-testid="waiting-governor"');
+    expect(onTv(game(colony(PAID), kaiReady))).not.toContain('data-testid="waiting-governor"');
+    expect(onTv(game(colony(null), kaiReady))).not.toContain('data-testid="waiting-governor"');
   });
 
   it('B-AC-37-3: an Energy strike stands on the Energy plot alone', () => {
