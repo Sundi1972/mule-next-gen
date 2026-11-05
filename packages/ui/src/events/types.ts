@@ -1,6 +1,9 @@
 import type { Good, Slot, SpecialKind } from '../components/tokens';
 
-/** The events the show draws: the engine's EventKey union (packages/engine/src/types.ts). */
+/** The colony's mood events C26's second engine PR adds (the protocol's ColonyEventKey); harmless once EventKey takes them. */
+export type ColonyEventKey = 'storeStrike' | 'walkout' | 'loyalCrew' | 'riot' | 'volunteerCleanup';
+
+/** The events the show draws: the engine's EventKey union (packages/engine/src/types.ts), mirrored (AM-17), and C26's still to come. */
 export type ShowEventKey =
   | 'dustStorm'
   | 'drought'
@@ -31,6 +34,7 @@ export type ShowEventKey =
   | 'generalStrike'
   | 'emigrationWave'
   | 'blamedForUnrest'
+  | ColonyEventKey
   // Not an EventKey: development's sick players, each sent as a bulletin (C11; the protocol's EventView widens to match).
   | 'sickness';
 
@@ -77,6 +81,8 @@ export interface ShowEventView {
   playMs: number;
   /** Whose event it is, when it is one player's and on no plot: a sick player (C11). */
   player?: string;
+  /** The colony's objects it damaged (a riot), by ObjectKind (types.ts stays free of .tsx imports): one with a plot is among its hits. */
+  objects?: { id: 'park' | 'hospital' | 'observatory' | 'stadium' | 'spaceport'; becomes: 'damaged' }[];
 }
 
 /** One change an event made off the map (the protocol's EventEffect, structurally): whose, of what, by how much. */

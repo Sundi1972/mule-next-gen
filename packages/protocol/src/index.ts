@@ -555,8 +555,11 @@ export interface ProductionHurryView {
   from: number | null;
 }
 
-/** What an event on screen is: one of the engine's month events, or a player falling sick at development's start. */
-export type ShowEventKey = EventKey | 'sickness';
+/** The colony's mood events C26's second engine PR adds (WS1's frozen contract): harmless once EventKey takes them. */
+export type ColonyEventKey = 'storeStrike' | 'walkout' | 'loyalCrew' | 'riot' | 'volunteerCleanup';
+
+/** What an event on screen is: one of the engine's month events, a colony mood event, or a player falling sick at development's start. */
+export type ShowEventKey = EventKey | ColonyEventKey | 'sickness';
 
 /** One event as every screen shows it, whichever phase fired it: production's map and every other phase's show. */
 export interface EventView {
@@ -589,6 +592,8 @@ export interface EventView {
   }[];
   /** What it changed off the map, in the order it changed it: a player's (by id), the store's or the colony's. */
   effects?: EventEffect[];
+  /** The colony's objects it damaged (a riot): with a plot, the plot is among its hits. */
+  objects?: { id: PrestigeId; becomes: 'damaged' }[];
   /** The phase whose show plays it. */
   phase: Phase;
   /** How big its story is on the TV. */
