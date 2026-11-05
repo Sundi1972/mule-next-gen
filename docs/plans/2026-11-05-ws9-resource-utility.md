@@ -146,6 +146,14 @@ The standing authority line goes with every handoff:
 - [ ] **Step 2:** Write the failing test. On the playbook path, Water's and Energy's walk-away is capped by the money, not the budget, because `draft.ts` goodPart's `essential` honours `mustHold`. Then fix it.
 - [ ] **Step 3:** Run the gates. Open PR-0, with one review once CI is green, then WS1's OK on its named edits.
 
+### Task 0.4: `leaderOf` reads the engine's Worth (its own small PR, `ws9-leader-worth`, after PR-0)
+
+A finding from #408's review, outside this spec's changes. `strategist.ts::leaderOf` hand-sums money, land and MULEs, so it misses goods, office and donations. It ships separately because it changes today's spite and cornering, so the sim moves, which PR-0's and PR-1's byte-identical gates can't carry.
+
+- [ ] **Step 1:** Write the failing test: a rival richer only in goods (as the observation estimates them) or in office terms is the leader. Observed at `leaderOf(obs, self)`. Altitude: unit, because the leader is a pure read of the observation.
+- [ ] **Step 2:** `leaderOf` ranks rivals by the engine's `score(obs, id)`, which is `scoreParts` on the seat's observation, so it is public by construction (`engine/observe.ts`). A WS1 named edit. PASS.
+- [ ] **Step 3:** Report the sim delta on 1/101/201 in the PR body, never tuned. Then one review, WS1's OK, and the head to the PM. PR-1's T-AC-9 base is re-recorded on the trunk that carries it.
+
 ### PR-0 merge gate
 
 - [ ] Every moved fixture asserts what it did before, and each is positive-controlled once.
