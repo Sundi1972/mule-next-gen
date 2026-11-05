@@ -131,7 +131,7 @@ function SickLine({ seat, short }: { seat: ArcadeSeat; short: boolean }) {
       <span className="absolute right-0 top-0 font-mono text-[10px] text-ink-3">{open ? '▴' : '▾'}</span>
       {open && (
         <span className="mt-0.5 block font-sans text-[11px] font-normal text-ink-2" data-testid="sick-why">
-          It struck as your turn began, with no Medicine to cure it. Hold one Medicine and sickness can’t slow you.
+          It struck as your turn began, with no Medicine to cure it. Have a Medicine in hand when a turn begins and sickness can’t slow you (it’s used up).
         </span>
       )}
     </button>
