@@ -62,6 +62,10 @@ describe('createGame', () => {
   it('is deterministic for a given seed', () => {
     expect(newGame().tiles).toEqual(newGame().tiles);
   });
+
+  it.each([2, 4, 6])('every seat of a %i-seat game starts with 2 Food (Heiko, 5 Nov)', (n) => {
+    expect(newGame(n).players.map((p) => p.stock.food)).toEqual(Array.from({ length: n }, () => 2));
+  });
 });
 
 describe('prices', () => {
