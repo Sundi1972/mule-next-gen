@@ -15,6 +15,7 @@ import {
   setLotWalk,
   stableJson,
   stepAuction,
+  STRATEGIST,
   stepLandAuction,
   WALK,
   type AiLevelId,
@@ -717,6 +718,16 @@ describe("the engine's own draft passes the gate", { timeout: SLOW_MS }, () => {
     expect(whole).toBeGreaterThan(gross);
     expect(holdAt(mindOf(2))).toBe(whole);
     expect(holdAt({ ...mindOf(2), level: undefined } as unknown as Mind)).toBe(gross);
+    // Only for STRATEGIST.buyShortfall's goods, as on the level's path: with an Alloy factory that eats Smithore, a
+    // Smithore seller with no level keeps none.
+    const factory = structuredClone(short);
+    Object.assign(factory.tiles[freePlots(factory)[0]!]!, { owner: 'ai2', outfit: 'alloy' });
+    expect(monthNeeds(factory, 'ai2').smithore).toBeGreaterThan(0);
+    expect(STRATEGIST.buyShortfall).not.toContain('smithore');
+    const levelless = validatorFor({ mind: { ...mindOf(2), level: undefined } as unknown as Mind, seed: 102 });
+    const ore = levelless(factory, 'ai2', draftOf(factory, 'auction', mindOf(2), 102), [edit('/auction/smithore/role', 'seller'), edit('/auction/smithore/hold', 0)]);
+    expect(read(ore.playbook, '/auction/smithore/hold')).toBe(0);
+    expect(ore.rejected.filter((x) => x.path.startsWith('/auction/smithore/'))).toEqual([]);
     // A Rookie handed a playbook set on cornering Smithore.
     const cornering = draftFor('auction', 2);
     cornering.strategy = { ...cornering.strategy, kind: 'monopolist', monopolyTarget: 'smithore' };
