@@ -545,6 +545,7 @@ describe.runIf(process.env.MULE_FULL === '1')('brain:trial', () => {
       gameBudgetUsd: 1,
       games: [game()],
       calls: [call(0.5), call(0.4999, 'ai1')],
+      playbooks: false,
       ...over,
     });
     const verdicts = (i: TrialInput) => {
@@ -623,7 +624,8 @@ describe.runIf(process.env.MULE_FULL === '1')('brain:trial', () => {
     const input = (over: Partial<TrialInput> = {}): TrialInput => ({ keyed: true, planned: 1, stopped: 'done', smartPerGame: 2, seatsPerGame: 4, cap: 2, gameBudgetUsd: 1, games: [game()], calls, playbooks: true, ...over });
 
     const r = trialReport(input());
-    expect(r.writes).toMatchObject({ calls: 3, late: 1, toolRounds: 2 });
+    // A late reply's call line and its 'late' line are one call; tool rounds and the budget line are none.
+    expect(r.writes).toMatchObject({ calls: 2, late: 1, toolRounds: 2 });
     expect(r.writes.usd).toBeCloseTo(0.05, 10);
     expect(r.edits).toEqual({ model: 8, of: 10 });
     expect(r.acEdits).toBe('pass');
@@ -638,7 +640,7 @@ describe.runIf(process.env.MULE_FULL === '1')('brain:trial', () => {
     expect(trialReport(input({ planned: 2, games: [game(), game({ id: 'b', end: 'crashed', playbooks: took(0, 6) })] })).edits).toEqual({ model: 8, of: 10 });
 
     const printed = renderTrialReport(r);
-    expect(printed).toContainEqual(expect.stringMatching(/^strategy and playbook calls, each waited for\s+3, late 1 \(33\.3%\), tool rounds 0\.67 a call, \$0\.05000$/));
+    expect(printed).toContainEqual(expect.stringMatching(/^strategy and playbook calls, each waited for\s+2, late 1 \(50\.0%\), tool rounds 1\.00 a call, \$0\.05000$/));
     expect(printed).toContainEqual(expect.stringMatching(/^playbooks with Claude's edits\s+80\.0% \(8 of 10\)$/));
     expect(printed).toContain("UBER-AC-A edits PASS: 80.0% (8 of 10) of the playbooks that took effect carry Claude's accepted edits (needs at least 80%)");
   });

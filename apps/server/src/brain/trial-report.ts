@@ -54,6 +54,8 @@ export interface TrialInput {
   games: TrialGame[];
   /** The run's call lines from its ledger file. */
   calls: Pick<CallLine, 'game' | 'seat' | 'usd' | 'outcome' | 'kind'>[];
+  /** Whether the Smart seats wrote playbooks (--playbooks 1): UBER-AC-A's edit clause is judged only then. */
+  playbooks: boolean;
 }
 
 export type FallbackReason = 'too slow' | 'busy' | 'budget' | 'off-list' | 'unreadable' | 'error';
@@ -109,10 +111,12 @@ export interface TrialReport {
   ac1: Verdict;
   ac2: Verdict;
   /**
-   * The strategy and playbook calls (C6): one call per write, however many tool rounds it took; late ones answered after
-   * their land grant had started; tool rounds are the intermediate round trips, a ledger line each.
+   * The strategy and playbook calls (C6): one per write that reached the model, however many tool rounds it took; a
+   * budget line is a write never made. Late: the 'late' lines, each after its call's line, or alone when the deadline
+   * came between rounds. In the trial each write is waited for, so late counts only writes past their own wait.
    */
   writes: { calls: number; late: number; toolRounds: number; usd: number };
+  playbooks: boolean;
   /** Of the Smart seats' playbooks that took effect in finished games, those carrying Claude's accepted edits. */
   edits: Share;
   /** UBER-AC-A's edit clause: at least 80% of them. */
@@ -204,7 +208,7 @@ export function trialReport(input: TrialInput): TrialReport {
   const all = shareOf(asked);
   const writeLines = calls.filter(isWrite);
   const writes = {
-    calls: writeLines.filter((c) => c.outcome !== 'tool').length,
+    calls: writeLines.filter((c) => c.outcome !== 'tool' && c.outcome !== 'late' && c.outcome !== 'budget').length,
     late: writeLines.filter((c) => c.outcome === 'late').length,
     toolRounds: writeLines.filter((c) => c.outcome === 'tool').length,
     usd: sum(writeLines.map((c) => c.usd)),
@@ -246,8 +250,9 @@ export function trialReport(input: TrialInput): TrialReport {
     ac1,
     ac2,
     writes,
+    playbooks: input.playbooks,
     edits,
-    acEdits: input.keyed ? verdict({ fails: false, proven: complete && edits.of > 0, holds: 5 * edits.model >= 4 * edits.of }) : 'n/a',
+    acEdits: input.keyed && input.playbooks ? verdict({ fails: false, proven: complete && edits.of > 0, holds: 5 * edits.model >= 4 * edits.of }) : 'n/a',
   };
 }
 
@@ -297,9 +302,13 @@ export function renderTrialReport(r: TrialReport): string[] {
       ['refused calls (ledger)', String(r.refusedCalls)],
       ['lines per Smart seat-month', monthText(r.lines, r.lines.seatMonths)],
       ['model-written lines per Smart seat-month', monthText(r.modelLines, r.lines.seatMonths)],
-      ['UBER-AC-A, Claude playbooks', ''],
-      ['strategy and playbook calls', writesText(r.writes)],
-      ["playbooks with Claude's edits", pct(r.edits)],
+      ...(r.playbooks
+        ? [
+            ['UBER-AC-A, Claude playbooks', ''],
+            ['strategy and playbook calls, each waited for', writesText(r.writes)],
+            ["playbooks with Claude's edits", pct(r.edits)],
+          ]
+        : []),
       ['UBER-AC-2', ''],
       ['ledger $ per Smart seat-game', `max ${usdText(r.seatGameUsd.max)}, mean ${usdText(r.seatGameUsd.mean)}`],
       [
@@ -315,6 +324,6 @@ export function renderTrialReport(r: TrialReport): string[] {
     `UBER-AC-1 ${verdictText(r.ac1)}: ${pct(r.asked.all)} of asked Smart decisions by the model (needs 80%), ${r.lines.silent} Smart seat-months without a line (needs 0)`,
     `UBER-AC-2 ${verdictText(r.ac2)}: at most ${usdText(r.gameUsd.max)} per game for all Smart seats together ` +
       `(needs under the game budget ${capText(r.gameBudgetUsd)}), ${r.stalls.unfinished.length + r.stalls.cutOff.length} stalls (needs 0)`,
-    `UBER-AC-A edits ${verdictText(r.acEdits)}: ${pct(r.edits)} of the playbooks that took effect carry Claude's accepted edits (needs at least 80%)`,
+    ...(r.playbooks ? [`UBER-AC-A edits ${verdictText(r.acEdits)}: ${pct(r.edits)} of the playbooks that took effect carry Claude's accepted edits (needs at least 80%)`] : []),
   ];
 }

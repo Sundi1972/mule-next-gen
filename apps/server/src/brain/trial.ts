@@ -10,7 +10,7 @@
 import fs from 'node:fs';
 import { BRAIN } from '@mule/engine';
 import { playbookSource, playGameAsync, ReplyRejected, simSeats, type Choice, type Decider, type DecisionRecord, type SeatSpec } from '@mule/ai';
-import { alreadyRanToday, AUTH_STOPPED, claimLedger, day, dayLedgerPath, numberFlags, resolveDeps, runAsScript, type MainDeps } from './cli.js';
+import { alreadyRanToday, AUTH_STOPPED, claimLedger, day, dayLedgerPath, KINDS, numberFlags, resolveDeps, runAsScript, type MainDeps } from './cli.js';
 import { CallFailed } from './client.js';
 import { API_KEY_ENV, apiKeyFrom, createBrain, type BrainSeat } from './index.js';
 import { isCallLine, readLedgerLines, type CallLine } from './ledger.js';
@@ -149,10 +149,10 @@ async function playTrialGame(setup: GameSetup): Promise<TrialGame> {
       },
       // Each call is bounded by its kind's wait, so this pauses simulated time for at most that long. See C6.
       between: async () => {
-        if (calls.authRefused()) throw new AuthRefused();
+        if (calls.authRefused() || brain.authRefused()) throw new AuthRefused();
         await calls.drain();
         await held.playbooks?.settle();
-        if (calls.authRefused()) throw new AuthRefused();
+        if (calls.authRefused() || brain.authRefused()) throw new AuthRefused();
       },
     });
     game.months = played.state.month;
@@ -178,7 +178,8 @@ function readCalls(file: string): CallLine[] {
 
 /** The stop message when the ledger holds fewer of a game's call lines than calls settled, or null when none is missing. */
 function ledgerShortfall(logPath: string, game: TrialGame): string | null {
-  const written = readCalls(logPath).filter((c) => c.game === game.id && c.outcome !== 'budget').length;
+  // Decision lines only: settledCalls counts the deciders' calls, and a write's lines must never cover for a lost one.
+  const written = readCalls(logPath).filter((c) => c.game === game.id && c.outcome !== 'budget' && (KINDS as readonly string[]).includes(c.kind)).length;
   if (written >= game.settledCalls) return null;
   return `Stopped: the ledger ${logPath} has ${written} of ${game.settledCalls} call lines for game ${game.id}; a write failed, so spend cannot be checked.`;
 }
@@ -317,6 +318,7 @@ export async function trial(
     gameBudgetUsd: flags.gameBudgetUsd,
     games,
     calls: paid ? readCalls(paid.logPath) : [],
+    playbooks: flags.playbooks,
   });
   for (const line of renderTrialReport(report)) out(line);
   if (paid && stopped === 'cap' && games.length === 0) {
