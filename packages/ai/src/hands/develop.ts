@@ -794,7 +794,7 @@ export class DevelopHand {
         const from = { route: r.at };
         if (s.act === 'pub') this.push({ type: 'pub' }, d.pubMs, 'Go to the pub', ++this.group, from);
         else {
-          const { action, range, label } = this.scoutStep(state, s.act, s.plot!);
+          const { action, range, label } = this.scoutStep(state, s.act === 'analyse' ? 'analyse' : 'filter', s.plot!);
           this.push(action, range, label, ++this.group, from);
         }
       }
