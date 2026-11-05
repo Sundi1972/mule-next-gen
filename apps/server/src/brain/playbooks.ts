@@ -237,7 +237,7 @@ export class Playbooks {
 
   /**
    * `phase` has started: a call still open for it is cancelled and its reply would be late. A reply that came in time
-   * is validated against the draft its brief showed; only a playbook carrying Claude's accepted edits is adopted and
+   * is applied to the draft its brief showed (the development's, to its draft as it starts); only a playbook carrying Claude's accepted edits is adopted and
    * recorded. Otherwise nothing is adopted, so the seat plays the phase its own way (today's hands while
    * AI_PLANS.ownPhases is off). The reply's feedback is kept for that phase's next brief.
    */
@@ -252,9 +252,12 @@ export class Playbooks {
       if (!ask.written) continue;
       let made: ReturnType<typeof playbookFrom>;
       try {
-        made = playbookFrom(seat.validator(), state, ask.draft, ask.written);
+        // The development's edits go onto its draft as it starts: the land write's was drafted at upkeep, before the land
+        // grant and auction changed what the seat owns. The auction's draft was made after production, and holds.
+        const draft = phase === 'development' ? seat.draft(state, 'development') : ask.draft;
+        made = playbookFrom(seat.validator(), state, draft, ask.written);
       } catch (err) {
-        console.error(`playbooks: validatePlan failed for seat ${seat.id}'s ${phase}, it plays its own way: ${messageOf(err)}`);
+        console.error(`playbooks: seat ${seat.id}'s ${phase} could not be drafted or validated, it plays its own way: ${messageOf(err)}`);
         continue;
       }
       if (made.feedback) this.phaseFeedback.set(key, made.feedback);
