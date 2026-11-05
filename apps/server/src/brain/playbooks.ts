@@ -1,8 +1,9 @@
 /** When a seat's brain asks for its land-grant playbook, and which playbook takes effect when the land grant starts. */
-import type { GameState, Playbook, PlayerId } from '@mule/engine';
+import { BRAIN, type GameState, type Playbook, type PlayerId } from '@mule/engine';
 import { landBrief, playbookFrom, toolsFor, WRITER_SYSTEM, type AiSeat, type Feedback, type PlaybookSource, type ValidatePlan, type WhatIfSim, type WriterReply } from '@mule/ai';
 import type { PlaybookNote } from '../mule-game.js';
 import { WRITE_CALLS } from './client.js';
+import { timeSlicer } from './slice.js';
 import type { BrainService, PlaybookWriter } from './index.js';
 
 export type { PlaybookSource };
@@ -95,7 +96,8 @@ export class Playbooks {
       // literal-ok: a person's seat in a what-if month is a Trader, seeded by seat order: not balance
       return { id: p.id, persona: 'trader' as const, level: 'trader' as const, seed: (i * 7_919 + 1) >>> 0 };
     });
-    return { seats, playbook: (edits) => validate(asked, seat, draft, edits) };
+    // A month takes about 0.3s: played in slices, so every other room's ticks keep their cadence meanwhile.
+    return { seats, playbook: (edits) => validate(asked, seat, draft, edits), pause: timeSlicer(BRAIN.whatIfSliceMs) };
   }
 
   /**

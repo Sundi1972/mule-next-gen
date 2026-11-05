@@ -1,5 +1,5 @@
 import { allPrices, BRAIN, observe, scoreParts, type GameState, type Phase, type Playbook, type PlayerId } from '@mule/engine';
-import { playMonthFrom, type MonthSeat } from '../play.js';
+import { monthSteps, type MonthSeat } from '../play.js';
 import type { PlanEdit } from '../playbook/index.js';
 import { MOVES } from './moves-stub.js';
 
@@ -83,11 +83,13 @@ export interface WhatIfSim {
   seats: readonly MonthSeat[];
   /** The playbook the edits make of the seat's draft, stamped for the month played, and the edits the rules refused. */
   playbook(edits: readonly PlanEdit[]): { playbook: Playbook; rejected: NonNullable<Playbook['rejected']> };
+  /** Awaited between the month's steps, so the caller can let other work run; without it the month plays straight through. */
+  pause?: () => Promise<void> | undefined;
 }
 
 const isEdit = (e: unknown): e is PlanEdit => isObject(e) && typeof e.path === 'string' && 'to' in e;
 
-export function toolsFor(state: GameState, seat: PlayerId, sim?: WhatIfSim): { definitions: readonly ToolDef[]; run(name: string, input: unknown): ToolResult } {
+export function toolsFor(state: GameState, seat: PlayerId, sim?: WhatIfSim): { definitions: readonly ToolDef[]; run(name: string, input: unknown): Promise<ToolResult> } {
   const obs = observe(state, seat);
   let played = 0;
   // Public on every row of the board, so read from the game itself: the totals only.
@@ -95,7 +97,7 @@ export function toolsFor(state: GameState, seat: PlayerId, sim?: WhatIfSim): { d
     .map((p) => ({ seat: p.id, name: p.name, worth: scoreParts(state, p.id).total }))
     .sort((a, b) => b.worth - a.worth);
 
-  const handlers: Record<string, (input: Record<string, unknown>) => ToolResult> = {
+  const handlers: Record<string, (input: Record<string, unknown>) => ToolResult | Promise<ToolResult>> = {
     legalMoves: (input) => {
       const phase = input.phase === undefined ? obs.phase : input.phase;
       if (typeof phase !== 'string' || !(PHASES as readonly string[]).includes(phase)) return error('bad_input');
@@ -107,7 +109,7 @@ export function toolsFor(state: GameState, seat: PlayerId, sim?: WhatIfSim): { d
     worth: () => ok(scoreParts(obs, seat)),
     standings: () => ok(standings),
     // The month is played on what the seat can see, every rival as the engine would play it, with no production event.
-    whatIf: (input) => {
+    whatIf: async (input) => {
       if (!Array.isArray(input.edits) || !input.edits.every(isEdit)) return error('bad_input');
       if (!sim) return error('unavailable');
       if (played >= BRAIN.whatIfsPerWrite) return error('limit');
@@ -116,19 +118,24 @@ export function toolsFor(state: GameState, seat: PlayerId, sim?: WhatIfSim): { d
       const { playbook, rejected } = sim.playbook(edits);
       const seats = sim.seats.map((s) => (s.id === seat ? { ...s, playbook } : s));
       // observe() zeroes the seed: the month's dice are none of the live game's.
-      const month = playMonthFrom(obs, seats, 0);
-      return ok({ month: month.month, worth: scoreParts(month.state, seat), rejected });
+      const steps = monthSteps(obs, seats, 0);
+      let step = steps.next();
+      while (!step.done) {
+        await sim.pause?.();
+        step = steps.next();
+      }
+      return ok({ month: step.value.month, worth: scoreParts(step.value.state, seat), rejected });
     },
   };
 
   return {
     definitions: sim ? OFFERED : WITHOUT_SIM,
-    run(name, input) {
+    async run(name, input) {
       const handler = handlers[name];
       if (!handler) return error('unknown_tool');
       if (!isObject(input)) return error('bad_input');
       try {
-        return handler(input);
+        return await handler(input);
       } catch {
         return error('tool_failed');
       }

@@ -456,6 +456,17 @@ export interface MonthPlayed {
  * from `seats` (the caller's mistake), and a RuleError for a playbook stamped for another month than the one played.
  */
 export function playMonthFrom(start: GameState, seats: readonly MonthSeat[], seed: number, options: { walking?: boolean } = {}): MonthPlayed {
+  const steps = monthSteps(start, seats, seed, options);
+  let step = steps.next();
+  while (!step.done) step = steps.next();
+  return step.value;
+}
+
+/**
+ * playMonthFrom's month, one step at a time: it yields after every tick a decider may wait on, so a caller can let
+ * other work run between steps, and returns what playMonthFrom returns. Its checks throw on the first step.
+ */
+export function* monthSteps(start: GameState, seats: readonly MonthSeat[], seed: number, options: { walking?: boolean } = {}): Generator<void, MonthPlayed, void> {
   const month = start.phase === 'upkeep' ? start.month + 1 : start.month;
   for (const p of start.players) if (!seats.some((s) => s.id === p.id)) throw new Error(`No seat for player ${p.id}`);
   for (const s of seats) {
@@ -468,7 +479,6 @@ export function playMonthFrom(start: GameState, seats: readonly MonthSeat[], see
     if (spec.playbook) seat.adopt(spec.playbook);
     return seat;
   });
-  const game = playPhases(state, played, options, newTally(), (s) => s.month > month);
-  while (!game.next().done);
+  yield* playPhases(state, played, options, newTally(), (s) => s.month > month);
   return { state, month };
 }
