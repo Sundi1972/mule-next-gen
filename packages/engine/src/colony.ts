@@ -122,7 +122,8 @@ export function commission(state: GameState, playerId: string, id: PrestigeId): 
 function objectRefusal(state: GameState, id: PrestigeId): string | null {
   if (!Object.hasOwn(PRESTIGE, id)) return "The colony can't build that";
   const projects = state.colony!.projects;
-  if (projects.some((p) => p.id === id)) return `The colony already has a ${PRESTIGE[id].name}`;
+  const { name } = PRESTIGE[id];
+  if (projects.some((p) => p.id === id)) return `The colony already has ${/^[AEIOU]/.test(name) ? 'an' : 'a'} ${name}`;
   const open = projects.filter((p) => OPEN.includes(p.stage));
   return open.length >= COLONY.maxOpen ? `The colony is already building the ${PRESTIGE[open[0]!.id].name}` : null;
 }

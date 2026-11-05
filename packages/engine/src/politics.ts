@@ -458,6 +458,9 @@ export function votesOpen(state: GameState): boolean {
   return state.phase === 'planning' && (electionLive(state) || councilLive(state));
 }
 
+/** A small count as the sentence's first word, as RULE-41 writes it ("Three laws are in force"); digits past ten. */
+const COUNT_WORD = ['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten'];
+
 function inWords(settings: readonly number[]): string {
   return settings.length === 1 ? `${settings[0]}` : `${settings.slice(0, -1).join(', ')} or ${settings.at(-1)}`;
 }
@@ -487,7 +490,7 @@ export function proposeLaw(state: GameState, playerId: string, proposal: LawProp
     if (inForce?.setting === proposal.setting) throw new RuleError('That law is already in force at that setting');
     const replacing = proposal.replaces !== undefined && Object.hasOwn(politics.laws, proposal.replaces);
     if (!inForce && Object.keys(politics.laws).length >= maxInForce && !replacing) {
-      throw new RuleError(`${maxInForce} laws are in force: pick the one this replaces`);
+      throw new RuleError(`${COUNT_WORD[maxInForce] ?? maxInForce} laws are in force: pick the one this replaces`);
     }
   }
   // Only the proposal's own fields are kept: the rest of an intent never reaches the state or the screens.
