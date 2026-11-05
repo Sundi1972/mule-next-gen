@@ -391,6 +391,8 @@ describe('the phone plays the show alone (C7)', () => {
     for (const boards of [0, 1]) {
       expect(text(await render(boards, lenaFlies + 0.2), 'harvest'), `boards ${boards}, the goods fly`).toContain('flying home');
     }
+    // From the flight's first take-off, whichever plot it is, not only once Lena's own line 0 leaves (WS8's port, AM-19).
+    expect(text(await render(1, FLY_AT + 0.2), 'harvest'), 'with a TV, the first plot in the air').toContain('flying home');
     expect(text(await render(1, DROUGHT_AT + 1), 'harvest'), 'with a TV, mid-drought').not.toContain('flying home');
     expect(text(await render(1, EVENTS_END - 0.1), 'harvest'), 'with a TV, the last event ending').not.toContain('flying home');
   });
