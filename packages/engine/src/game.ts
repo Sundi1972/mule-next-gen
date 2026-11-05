@@ -646,7 +646,7 @@ export function colonyScoreOf(inputs: { wealth: number; air: number; prestige: n
   const S = COLONY_SCORE;
   const environment = S.perCleanPoint * (POLLUTION.airMax - inputs.air);
   const prestige = S.perPrestige * inputs.prestige;
-  const factor = S.factor.low + ((S.factor.high - S.factor.low) * inputs.happiness) / 100;
+  const factor = S.factor.low + ((S.factor.high - S.factor.low) * inputs.happiness) / 100; // literal-ok: the mood's scale is 0..100 by definition (G-5 RULE-20)
   return { wealth: inputs.wealth, environment, prestige, factor, total: Math.round((inputs.wealth + environment + prestige) * factor) };
 }
 
