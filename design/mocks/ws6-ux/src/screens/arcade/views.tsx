@@ -9,6 +9,7 @@ import { GuideInHall, GuideOnMap, MyPlots, PlotsByOutfitter } from './GuideLayer
 import { GlintOnMap, GlintPointer, GlintSightlines, GlintStrip, GlintTurn } from './GlintLayer';
 import { ScrambleBanner, ScrambleCorral, ScrambleLines, ScramblePointer } from './ScrambleLayer';
 import { WolfCallout, WolfMarks, WolvesOnMap } from './WolfLayer';
+import { Speaker } from '../../proposed/Chat';
 
 /** The DS's condition, from the sim's pace: what the colonist tags and the pace lines read. */
 export function conditionOf(c: Colonist, tun: Tunables): Condition {
@@ -71,7 +72,9 @@ function Walkers({ world, space, cell, density, names, own }: { world: World; sp
                   className={cx('relative block rounded-full', mine && 'ring-2 ring-holo ring-offset-1 ring-offset-table', c.moving && 'animate-[store-waddle_0.36s_ease-in-out_infinite]')}
                   style={c.moving ? { animationDuration: `${waddleSeconds(Math.max(0.1, pace.ground * pace.pace.total))}s` } : undefined}
                 >
-                  <PlayerMark slot={c.slot} species={c.species} size={size} glow={mine} label={c.name} className="block" />
+                  <Speaker id={c.id}>
+                    <PlayerMark slot={c.slot} species={c.species} size={size} glow={mine} label={c.name} className="block" />
+                  </Speaker>
                   {names && <GlintTurn world={world} c={c} size={size} />}
                   <ConditionTag id={c.id} condition={conditionOf(c, tun)} rule={rule} size={density} />
                 </span>
