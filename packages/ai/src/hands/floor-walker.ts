@@ -3,6 +3,7 @@ import {
   doorOutside,
   HALL_DOORS,
   IDLE_INPUT,
+  inStore,
   MS_PER_SECOND,
   pathTo,
   placeAt,
@@ -117,6 +118,31 @@ const THERE = 1e-3; // literal-ok: geometry, a tolerance on floating-point posit
 
 const isDoor = (place: HallPlace | null): place is HallDoor => place === 'doorL' || place === 'doorR';
 
+/**
+ * On the map inside the band a body's width round the store's walls, where the floor stops every step that ends in it:
+ * no walk puts a colonist there, nor since FM-arena-wall a fight's arena edge (game 18 of T-AC-5's sample, AM-26): a
+ * guard, for a colonist the floor ever leaves there by another way. From there only a
+ * step straight out moves it, so the walker makes that first: the spot just past the band's nearest edge on open land.
+ * Null where the colonist is clear of the band.
+ */
+export function outOfWallBand(state: GameState, cfg: FloorConfig, c: FloorPoint): FloorPoint | null {
+  const store = state.tiles.find((t) => t.terrain === 'store')!;
+  const body = cfg.steer.bodyTiles;
+  const band = { x0: store.x - body, x1: store.x + 1 + body, y0: store.y - body, y1: store.y + 1 + body };
+  if (!inStore(store, body, c.x, c.y)) return null;
+  const open = (p: FloorPoint) => {
+    const t = tileAt(state.tiles, state.width, Math.floor(p.x), Math.floor(p.y));
+    return t !== undefined && terrainShare(t.terrain, cfg) > 0;
+  };
+  const outs = [
+    { gap: c.y - band.y0, at: { x: c.x, y: band.y0 - THERE } },
+    { gap: band.y1 - c.y, at: { x: c.x, y: band.y1 + THERE } },
+    { gap: c.x - band.x0, at: { x: band.x0 - THERE, y: c.y } },
+    { gap: band.x1 - c.x, at: { x: band.x1 + THERE, y: c.y } },
+  ];
+  return outs.filter((o) => open(o.at)).sort((a, b) => a.gap - b.gap)[0]?.at ?? null;
+}
+
 
 export class FloorWalker {
   /** Ms stood at the counter before the press. */
@@ -163,8 +189,15 @@ export class FloorWalker {
       this.paused = 0;
     } else if (this.pressed) {
       const ok = took(state, this.me, action);
-      this.reset();
-      return ok ? { kind: 'ok' } : { kind: 'failed', why: 'the press did not take' };
+      if (!ok && this.glintTook(floor)) {
+        // The step that carried the press lit a glint in GRAB's reach, which ranks above the step's row (RULE-3): the
+        // press grabbed it (FM-glint-install). Nothing of the step's is done, so it presses again, the counter's pause
+        // already stood; the hand's clock checks still hold it to the time left.
+        this.pressed = false;
+      } else {
+        this.reset();
+        return ok ? { kind: 'ok' } : { kind: 'failed', why: 'the press did not take' };
+      }
     }
     const c = floor.colonists.find((x) => x.id === this.me);
     if (!c) return { kind: 'failed', why: 'no colonist on the floor' };
@@ -194,6 +227,14 @@ export class FloorWalker {
       return this.going({ x: 0, y: 0, act: true });
     }
     return goal.space === 'hall' ? this.toPlace(view, c, goal.place, reach) : this.toPlot(view, c, goal.plot, action, reach);
+  }
+
+  /**
+   * Whether this seat won a glint on the last tick, read from the floor's beats for it (the step's, settleMoments' and
+   * the presses'): its press went to GRAB THE GLINT, not to the step.
+   */
+  private glintTook(floor: DevFloor): boolean {
+    return floor.moments.beats.some((b) => b.kind === 'glint' && b.who === this.me);
   }
 
   /**
@@ -360,6 +401,8 @@ export class FloorWalker {
   /** Across the map to a point: along pathTo's quickest walk tile by tile, then onto the point within its tile. */
   private onMap(view: FloorView, c: FloorColonist, to: FloorPoint): StepRun {
     const { state, cfg } = view;
+    const out = outOfWallBand(state, cfg, c);
+    if (out) return this.toward(view, c, out);
     if (Math.floor(c.x) === Math.floor(to.x) && Math.floor(c.y) === Math.floor(to.y)) return this.toward(view, c, to);
     const path = pathTo(state, c, to, cfg);
     const next = path?.tiles[1];

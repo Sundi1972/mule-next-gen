@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { advancePhase, createGame, nextPostedPrice, PRICE, startAuction, storeBuyLine, storeWants, UPKEEP, type GameState } from '../src/index.js';
+import { advancePhase, createGame, MULE, mulesWanted, nextPostedPrice, PRICE, runUpkeep, startAuction, storeBuyLine, storeWants, UPKEEP, type GameState } from '../src/index.js';
 
 const SEATS = ['brix', 'ossa', 'lena', 'tam'];
 
@@ -69,5 +69,25 @@ describe('pricing B', () => {
     const full = bid(Math.ceil(monthOfNeed(auctionWithFood(0))) + 2);
     expect(full.buy).toBeGreaterThan(0);
     expect(full.buy).toBe(Math.max(1, Math.floor(full.posted * (1 - PRICE.storeSpread))));
+  });
+});
+
+describe('the corral keeps its size when a grant gives one claim (Heiko, 5 Nov)', () => {
+  /** Today's corral: two MULEs a seat, for the land a seat gains in a month by grant and auction, plus MULE.spareInCorral. */
+  const corralFor = (seats: number) => seats * 2 + MULE.spareInCorral;
+  const game = (seats: number) => createGame({ seed: 11, players: [...SEATS, 'ivo', 'noor'].slice(0, seats).map((id) => ({ id, name: id, isAi: false })) });
+
+  it.each([2, 4, 6])('upkeep builds a %i-seat corral up to two MULEs a seat plus the spares', (seats) => {
+    const state = game(seats);
+    state.store.mules = 0;
+    state.store.stock.smithore = 100;
+    runUpkeep(state);
+    expect(state.store.mules).toBe(corralFor(seats));
+  });
+
+  it.each([2, 4, 6])('a %i-seat colony with land still to grant wants two MULEs a seat of Smithore', (seats) => {
+    const state = game(seats);
+    expect(state.tiles.some((t) => t.terrain !== 'store' && !t.owner), 'free land is left').toBe(true);
+    expect(mulesWanted(state)).toBe(seats * 2);
   });
 });

@@ -60,7 +60,10 @@ export function auctionOutcome(playbook: Playbook, state: GameState, facts: read
     const own = declared.filter((d) => d.good === good);
     const side = own.filter((d) => !d.refused).at(-1)?.side ?? declares.find((d) => d.seat === seat && d.good === good)?.side;
     const notes = [...(play.bluff ? ['bluff'] : []), ...own.flatMap((d) => (d.refused ? [d.refused] : []))];
-    const role = side === undefined ? 'skipped' : side === 'pass' ? 'out' : side;
+    // There is no Pass (#335, the auto-trade amendment's RULE-2): a seat sits a good out by staying the buyer everyone
+    // starts as and trading none of it, so an 'out' play stood as a buyer that traded nothing is met as 'out'.
+    const satOut = play.role === 'out' && side === 'buyer' && !trades.some((t) => t.good === good && (t.buyer === seat || t.seller === seat));
+    const role = side === undefined ? 'skipped' : side === 'pass' || satOut ? 'out' : side;
     const priced = side === 'buyer' || side === 'seller' ? side : play.role === 'out' ? null : play.role;
     items.push(
       { path: `/auction/${good}/role`, expected: play.role, actual: role, ...(notes.length > 0 && { note: notes.join('; ') }) },

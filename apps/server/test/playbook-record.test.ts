@@ -122,7 +122,6 @@ async function recordedGame(): Promise<MuleRecord> {
       send(phones[0]!, { t: 'intent', intent: { type: 'claim', x: v.lit.x, y: v.lit.y } });
     }
     // Month 1's development clock waits for every seat (A-1); the host starts it.
-    if (v.phase === 'development' && v.clockWaitsFor) send(phones[0]!, { t: 'intent', intent: { type: 'continue' } });
   }
   expect(view().finished, 'the game reached game over').toBe(true);
   await vi.advanceTimersByTimeAsync(5_000);

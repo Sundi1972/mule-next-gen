@@ -37,7 +37,7 @@ export { meetWolves, strikeTarget, wolfInput, type WolfPlay } from './floor/wolv
 export { pathTo, type MapPath } from './floor/path.js';
 export { applyReach, reachOf, reachWords, type Press, type Reach, type ReachHint, type ReachKind, type ReachRefusal, type ReachWords } from './floor/reach.js';
 export { speedOf, terrainShare } from './floor/speed.js';
-export { doorPresses, pressOrder, stepFloor } from './floor/step.js';
+export { doorPresses, inStore, pressOrder, stepFloor } from './floor/step.js';
 export * from './floor/hall.js';
 export * from './auction.js';
 export * from './lots.js';

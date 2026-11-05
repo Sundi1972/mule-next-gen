@@ -41,10 +41,11 @@ function earlyClock(earlyMs: number) {
 }
 
 describe('a walk settles on arrival even when its timer fires a little early (the frozen colonist, #262)', () => {
+  // the tap path (devSteer: false), kept while it remains the flag-off fallback
   /** Month 1 to development on a clock that fires `earlyMs` early; then Ossa goes to the pub, and nobody else acts. */
   function ossaAtThePub(earlyMs: number) {
     const clock = earlyClock(earlyMs);
-    const game = new MuleGame(clock.ctx, 7);
+    const game = new MuleGame(clock.ctx, 7, { devSteer: false });
     game.start(walkers);
     readyAll(game);
     for (let i = 0; i < 10_000 && game.viewFor(null).phase !== 'development'; i++) clock.advance(100);

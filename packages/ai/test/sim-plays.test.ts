@@ -125,12 +125,14 @@ describe('the sim adopts edited playbooks through the seat’s gate (C14, B-AC-6
       edits: (seat, draft, state) => {
         if (seat.id !== 'ai0' || state.month !== 1 || draft.phase !== 'auction') return null;
         const goods = Object.keys(draft.auction ?? {}) as Good[];
-        out = goods.find((g) => draft.auction![g]!.role !== 'out' && declared(base.game, 'ai0', 1, g) === draft.auction![g]!.role) ?? null;
+        out = goods.find((g) => draft.auction![g]!.role !== 'out' && declared(base.game, 'ai0', 1, g) === draft.auction![g]!.role && traded(base.game, 'ai0', 1, g) > 0) ?? null;
         return out ? [{ path: `/auction/${out}/role`, to: 'out', reason: 'Sit this one out.' }] : null;
       },
     });
     expect(out, 'a good the seat trades today and by its draft').not.toBeNull();
-    expect(declared(edited.game, 'ai0', 1, out!)).toBe('pass');
+    // There is no Pass (#335): 'out' sits the good out as the buyer everyone starts as, trading none of it.
+    expect(declared(edited.game, 'ai0', 1, out!)).toBe('buyer');
+    expect(traded(edited.game, 'ai0', 1, out!), 'it trades none of it').toBe(0);
     expect(edited.game.outcomes.find((o) => o.seat === 'ai0' && o.month === 1 && o.phase === 'auction')!.items.find((i) => i.path === `/auction/${out}/role`)).toMatchObject({ expected: 'out', actual: 'out' });
     // No edits, nothing adopted: the game is the one played without the hook.
     expect(play(specs, { edits: () => null }).print).toBe(base.print);
@@ -148,6 +150,11 @@ describe('the sim adopts edited playbooks through the seat’s gate (C14, B-AC-6
     expect(hooked.print).toBe(play(today).print);
   });
 });
+
+/** The units of `good` the seat bought or sold in that month's auction, from the trade facts. */
+function traded(game: PlayedGame, seat: string, month: number, good: Good): number {
+  return game.facts.reduce((n, f) => n + (f.kind === 'trade' && f.month === month && f.good === good && (f.buyer === seat || f.seller === seat) ? f.qty : 0), 0);
+}
 
 function declared(game: PlayedGame, seat: string, month: number, good: Good): string | undefined {
   for (const f of game.facts) if (f.kind === 'declare' && f.seat === seat && f.month === month && f.good === good) return f.side;

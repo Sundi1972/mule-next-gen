@@ -14,6 +14,7 @@ import {
   placeAt,
   pressOrder,
   RuleError,
+  SPECIES_PERK,
   speedOf,
   stepFloor,
   type DevFloor,
@@ -312,10 +313,13 @@ describe('the dev floor: the step', () => {
     const wet = waded.floors.map((f, i) => misplaced(waded.state, f, waded.floors[i - 1]));
     expect(wet[0]!.length, 'in the lake at the start').toBe(2);
     expect(wet.slice(2_000 / DEV_STEER.tickMs).flat(), 'out of it within two seconds, for good').toEqual([]);
-    // Held down from the door onto the plains, 'a' walks out on its own feet: half a tile at 1.25 × the lake's wading 0.3
-    // × its 1.25, then the 0.18 of its body at the plains' 1, off it after 25 ticks.
+    // Held down from the door onto the plains, 'a' walks out on its own feet: half a tile at mapTilesPerSecond × the
+    // lake's wading × its Zipwing pace, then its body's bodyTiles at the plains' 1: off it after that many ticks and
+    // one more, the tick that crosses the shore stepping at the lake's pace all through (25 ticks at 1.25, 13 at 2.5).
+    const zip = DEV_STEER.mapTilesPerSecond * SPECIES_PERK.zipwingSpeed;
+    const wadeOut = 0.5 / (zip * DEV_STEER.wading) + DEV_STEER.bodyTiles / zip;
     let held = waded.floors[0]!;
-    for (let t = 0; t < 2_000 / DEV_STEER.tickMs; t++) {
+    for (let t = 0; t < Math.ceil((wadeOut * 1_000) / DEV_STEER.tickMs) + 1; t++) {
       const next = stepFloor(held, waded.state, { a: go(0, 1) }, DEV_STEER.tickMs, floorConfig(HALL));
       expect(next.colonists[0]!.y, `tick ${next.tick}: 'a' walks down while it wades out`).toBeGreaterThan(held.colonists[0]!.y);
       held = next;
@@ -405,8 +409,8 @@ describe('the dev floor: the step', () => {
       expect(path.tiles.map((p) => land(state, p)), label).not.toContain('lake');
       expect(path.tiles.map((p) => land(state, p)), label).not.toContain('mountains');
       expect(path.tiles.every((p, i) => i === 0 || Math.abs(p.x - path.tiles[i - 1]!.x) + Math.abs(p.y - path.tiles[i - 1]!.y) === 1), label).toBe(true);
-      // Nine plains tiles entered at 1.25 tiles a second.
-      expect(path.seconds, label).toBeCloseTo(7.2, 9);
+      // Nine plains tiles entered at mapTilesPerSecond.
+      expect(path.seconds, label).toBeCloseTo(9 / DEV_STEER.mapTilesPerSecond, 9);
     }
 
     // From a colonist's position, part way across a tile, to a plot's: the walk is from the tile under it.
@@ -417,7 +421,7 @@ describe('the dev floor: the step', () => {
     const state = game(SEED, across('.........', '.........'));
     const shore = pathTo(state, from, { x: 4, y: 3 }, cfg)!;
     expect(shore.tiles).toEqual([from, { x: 3, y: 3 }, { x: 4, y: 3 }]);
-    expect(shore.seconds).toBeCloseTo(0.8, 9);
+    expect(shore.seconds, 'one plains tile entered, the lake step free').toBeCloseTo(1 / DEV_STEER.mapTilesPerSecond, 9);
 
     // Negative: a plot walled in by lakes has no path.
     expect(pathTo(game(SEED, ['.....', '..~..', '.~.~.', '..~..', 'S....']), { x: 0, y: 0 }, { x: 2, y: 2 }, cfg)).toBeNull();
@@ -427,13 +431,13 @@ describe('the dev floor: the step', () => {
     expect(pathTo(walled, { x: 0, y: 0 }, { x: 2, y: 2 }, { ...cfg, steer: { ...DEV_STEER, mountainsImpassable: true } }), 'mountains, impassable').toBeNull();
     const wade = pathTo(state, from, plot, { ...cfg, steer: { ...DEV_STEER, lakeMode: 'wade' } })!;
     expect(wade.tiles.map((p) => land(state, p)), 'a lake, waded: straight through it').toContain('lake');
-    // Four plains tiles at 0.8 s and one of lake at 1.25 × 0.3 tiles a second.
-    expect(wade.seconds, 'a lake, waded').toBeCloseTo(4 * 0.8 + 1 / (1.25 * 0.3), 9);
+    // Four plains tiles at mapTilesPerSecond and one of lake at mapTilesPerSecond × wading.
+    expect(wade.seconds, 'a lake, waded').toBeCloseTo(4 / DEV_STEER.mapTilesPerSecond + 1 / (DEV_STEER.mapTilesPerSecond * DEV_STEER.wading), 9);
 
     // The store between the two ends: round it, never through it.
     const store = game(SEED, ['...', '.S.', '...']);
     const round = pathTo(store, { x: 0, y: 1 }, { x: 2, y: 1 }, cfg)!;
     expect(round.tiles.map((p) => land(store, p)), 'round the store').not.toContain('store');
-    expect(round.seconds, 'round the store: four plains tiles').toBeCloseTo(3.2, 9);
+    expect(round.seconds, 'round the store: four plains tiles').toBeCloseTo(4 / DEV_STEER.mapTilesPerSecond, 9);
   });
 });
