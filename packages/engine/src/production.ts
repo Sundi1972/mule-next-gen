@@ -192,13 +192,36 @@ export function energyUseOf(state: GameState, tile: Tile): number {
 }
 
 /**
+ * The plots an owner turns off this month for want of Energy (AM-17): its working plots but the Energy plots, raw and
+ * factories in one list, biggest use first, then the one whose full output is worth least at the store's posted
+ * price, then tile order; off from the front until the uses of the rest fit `stock`.
+ */
+function turnedOff(state: GameState, plots: { tile: Tile; use: number; full: number }[], stock: number): Set<Tile> {
+  const at = (t: Tile) => state.tiles.indexOf(t);
+  const worth = (p: { tile: Tile; full: number }) => state.store.posted[p.tile.outfit as Good] * p.full;
+  const order = [...plots].sort((a, b) => b.use - a.use || worth(a) - worth(b) || at(a.tile) - at(b.tile));
+  let need = plots.reduce((n, p) => n + p.use, 0);
+  const off = new Set<Tile>();
+  for (const p of order) {
+    if (need <= stock) break;
+    off.add(p.tile);
+    need -= p.use;
+  }
+  return off;
+}
+
+/** `n` cut to UPKEEP.offOutputShare, rounded half up: a plot making 3 or 4 still gives 1. */
+const offShare = (n: number) => Math.round(n * UPKEEP.offOutputShare);
+
+/**
  * Runs one production phase. Order matters and mirrors the design:
- * 1. Energy plots produce first, so their output can power the rest;
- * 2. every other working raw plot needs its Energy, or produces half, and a
- *    farm whose owner is short of Water produces half again;
- * 3. factories convert inputs from the owner's stock, Alloy first because
- *    Electronics needs it; in an Energy shortage they are served last;
- * 4. special fields settle (ruins pay, a mined cavern may collapse), then
+ * 1. Energy plots produce first and each pays its own Energy from its own output, never from the stock (AM-17);
+ * 2. an owner whose Energy can't cover the uses of all its other plots turns plots off, biggest use first, until the
+ *    rest fit (turnedOff); a plot turned off makes UPKEEP.offOutputShare of its output and pays no Energy;
+ * 3. every other working raw plot pays its Energy, and a farm whose owner is short of Water produces half;
+ * 4. factories convert inputs from the owner's stock, Alloy first because Electronics needs it; one turned off
+ *    makes its share from the same share of its non-Energy inputs;
+ * 5. special fields settle (ruins pay, a mined cavern may collapse), then
  *    pollution spreads and the air gauge moves.
  * Every event the phase fires (rollPhase) works on the plots it reaches, on
  * top of what made each plot's output. Returns what each player produced, the
@@ -249,8 +272,31 @@ export function runProduction(state: GameState): {
     const made = parts.reduce((n, p) => n + p.delta, 0);
     if (made > 0) parts.push({ why, delta: Math.floor(made * UPKEEP.shortOutputShare) - made });
   };
+  /** Cuts what the parts add up to to the turned-off share, as a part of its own. */
+  const switchOff = (parts: Part[]) => {
+    const made = parts.reduce((n, p) => n + p.delta, 0);
+    if (made > 0) parts.push({ why: 'energyOff', delta: offShare(made) - made });
+  };
+  const use = (tile: Tile) => energyUseOf(state, tile) * cold;
 
-  for (const tile of working.filter((t) => t.outfit === 'energy')) credit(tile, 'energy', rawOutputParts(state, tile));
+  for (const tile of working.filter((t) => t.outfit === 'energy')) {
+    credit(tile, 'energy', rawOutputParts(state, tile));
+    // The plant pays its own use from what it just made: never more than that, so it never draws the stock.
+    const made = lines.at(-1)!.made;
+    playerById.get(tile.owner!)!.stock.energy -= Math.min(Math.max(0, made), use(tile));
+  }
+
+  const off = new Set<Tile>();
+  for (const owner of state.players) {
+    const plots = working
+      .filter((t) => t.owner === owner.id && t.outfit !== 'energy' && t.outfit !== 'greenBelt')
+      .map((tile) => ({
+        tile,
+        use: use(tile),
+        full: isFactory(tile.outfit!) ? factoryFit(state, tile, tile.outfit, owner.id).output : rawOutput(state, tile),
+      }));
+    for (const tile of turnedOff(state, plots, owner.stock.energy)) off.add(tile);
+  }
 
   // Who is short of Water is decided before anything runs, so a well
   // harvested this month waters next month's crops, not this month's.
@@ -260,9 +306,8 @@ export function runProduction(state: GameState): {
     const owner = playerById.get(tile.owner!)!;
     const good = tile.outfit as RawGood;
     const parts = rawOutputParts(state, tile);
-    const energy = energyUseOf(state, tile) * cold;
-    if (owner.stock.energy >= energy) owner.stock.energy -= energy;
-    else halve(parts, 'noEnergy');
+    if (off.has(tile)) switchOff(parts);
+    else owner.stock.energy -= use(tile);
     if (dry.has(owner.id) && UPKEEP.irrigated.includes(good)) halve(parts, 'noWater');
     credit(tile, good, parts);
   }
@@ -271,10 +316,16 @@ export function runProduction(state: GameState): {
     for (const tile of working.filter((t) => t.outfit === good)) {
       const owner = playerById.get(tile.owner!)!;
       const fit = factoryFit(state, tile, good, owner.id);
-      const inputs = { ...RECIPES[good].inputs, energy: fit.energy * cold };
+      const { energy: _, ...feed } = RECIPES[good].inputs;
+      const on = !off.has(tile);
+      const inputs: Partial<Stock> = on
+        ? { ...feed, energy: fit.energy * cold }
+        : Object.fromEntries(Object.entries(feed).map(([g, q]) => [g, offShare(q)]));
       if (!hasStock(owner.stock, inputs)) continue;
       addStock(owner.stock, inputs, -1);
-      credit(tile, good, [{ why: 'factory', delta: fit.output }]);
+      const parts: Part[] = [{ why: 'factory', delta: fit.output }];
+      if (!on) switchOff(parts);
+      credit(tile, good, parts);
     }
   }
 

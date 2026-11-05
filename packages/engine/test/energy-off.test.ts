@@ -272,7 +272,7 @@ describe('AM-17: a turned-off factory', () => {
     // The mine is worth 2 × 50, the furnace 4 × 100: the mine goes off (makes round(0.4) = 0), the furnace runs in full.
     expect(isOff(run, state, mine!)).toBe(true);
     expect(lineOf(run, state, mine!)!.made).toBe(0);
-    expect(lineOf(run, state, tile)!.made).toBe(4);
+    expect(lineOf(run, state, tile!)!.made).toBe(4);
     expect(p(state).stock.energy).toBe(0);
   });
 });
