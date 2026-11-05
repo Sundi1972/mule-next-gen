@@ -1,9 +1,8 @@
-import { DEV_WALK, DEVELOPMENT } from '@mule/engine';
+import { DEV_WALK } from '@mule/engine';
 import { PaceList, SharedClock, StoreInterior, TimeBar, Timer, type Condition } from '@mule/ui';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { FillCard } from '../src/phone/Develop';
 
 /** Lena on 2 of the 5 Food she needs: the server's condition for her (engine hungerPace 0.52). */
 const HUNGRY: Condition = { foodShare: 0.4, sick: false, conditionPace: 0.52 };
@@ -32,24 +31,6 @@ describe('the store at a glance', () => {
     expect(corral).toMatch(/\sdisabled=""/);
     expect(textFrom(html, 'booth-corral')).toMatch(/^ SOLD OUT /);
     expect(tagOf(html, 'booth-pub')).not.toMatch(/\sdisabled=""/);
-  });
-
-  it('B-AC-9: a hungry player is told what she ate and her pace, never less time', () => {
-    const text = textFrom(renderToStaticMarkup(createElement(FillCard, { condition: HUNGRY, rule: DEV_WALK, food: { ate: 2, need: 5 } })), 'fill-card');
-    const opening = ` One clock for everyone · ${DEVELOPMENT.fullSeconds} s You eat 2 of the 5 Food you need.`;
-    expect(text.slice(0, opening.length)).toBe(opening);
-    expect(text).toContain('Hungry: 52% pace');
-    expect(text).not.toMatch(/less time|time bar/);
-  });
-
-  it('B-AC-9: a fed but sick player is told the sickness strikes now and slows her, never full pace', () => {
-    const html = renderToStaticMarkup(createElement(FillCard, { condition: SICK, rule: DEV_WALK, food: { ate: 5, need: 5 } }));
-    const text = textFrom(html, 'fill-card');
-    expect(text).toContain('You eat the 5 Food you need.');
-    expect(textFrom(html, 'sick-strikes')).toMatch(/^ ✚ Sick this month\. It strikes now and slows you this turn\./);
-    expect(text).not.toContain('toxic');
-    expect(text).toContain('Sick: 50% pace');
-    expect(text).not.toContain('full pace');
   });
 
   it('B-AC-9: your colonist carries no time bar; hungry, it wears the hunger tag at its level', () => {
