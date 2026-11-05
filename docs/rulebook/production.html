@@ -169,15 +169,19 @@
 </tbody></table></div>
 <div class="box next"><h4>Still to design: are these the right numbers?</h4>
 <p>Heiko asked for the Energy use per plot type and per factory to be designed. The table is the earlier set plus the new 1 for Energy plants. It is the starting proposal, not a final balance. Every number is a named setting (<code>UPKEEP.energyUse</code> for farms, wells, plants and mines, and each factory's recipe), so it can change without touching the rules.</p>
-<p>First measurement with these numbers (40 simulated games, 5 Nov), before the computer players learned the new rule:</p>
+<p>Measured with the rule as built, the computer players pricing Energy by it (40 simulated games on each of seeds 1, 101 and 201 with politics on, and seed 1 with politics off; 5 Nov). Each cell gives the range over the four runs.</p>
 <div class="table-wrap"><table>
-<thead><tr><th></th><th class="n">Today's rule</th><th class="n">New rule</th><th class="n">New rule, plants use 0</th></tr></thead>
+<thead><tr><th></th><th class="n">Old rule</th><th class="n">Now</th></tr></thead>
 <tbody>
-<tr><td>Player months with a plot cut</td><td class="n">42%</td><td class="n">53%</td><td class="n">50%</td></tr>
-<tr><td>Output lost in such a month (median)</td><td class="n">41%</td><td class="n">67%</td><td class="n">67%</td></tr>
-<tr><td>Months colonists go short of Food or Water</td><td class="n">53%</td><td class="n">69%</td><td class="n">65%</td></tr>
+<tr><td>Player months with a plot cut</td><td class="n">39–46%</td><td class="n">48–56%</td></tr>
+<tr><td>Output lost in such a month (median)</td><td class="n">33–41%</td><td class="n">46–58%</td></tr>
+<tr><td>Months colonists go short of Food or Water</td><td class="n">41–55%</td><td class="n">58–70%</td></tr>
+<tr><td>Energy's posted price after the auction, median</td><td class="n">63–71</td><td class="n">83–99</td></tr>
+<tr><td>Energy's posted price, 90th percentile</td><td class="n">188–251</td><td class="n">323–449</td></tr>
+<tr><td>Energy traded at the auction, units a game</td><td class="n">82–98</td><td class="n">51–68</td></tr>
+<tr><td>Factory output, units a game</td><td class="n">28–33</td><td class="n">21–23</td></tr>
 </tbody></table></div>
-<p>The 20% output does most of the extra damage; the plants' use of 1 mainly raises Energy's price. The computer players still price a shortage at today's half, and they learn the 20% rule in the same change, so these numbers will move.</p></div>
+<p>The 20% output does most of the extra damage; an earlier run with plants using 0 cut nearly as many player months. Shortages bite harder and Energy gets dearer: these are the numbers the balance work starts from.</p></div>
 
 <h3 id="factory-energy">What factories need</h3>
 <p>A factory turns goods from your own stock into something worth more. Each run takes its inputs and its Energy together.</p>
