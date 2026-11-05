@@ -32,6 +32,11 @@ export interface PlaybooksOptions {
   seats: readonly AiSeat[];
   /** Hears each playbook that takes effect for a Smart seat. */
   record?: (note: PlaybookNote) => void;
+  /**
+   * Hears Claude's line from a plan that came in time, as the plan's phase starts: the land write's at the land grant,
+   * the auction's at the auction (PM ruling a', 5 Nov). The game says it through the seat's chat, inside its caps.
+   */
+  speak?: (seat: PlayerId, said: { line: string; month: number; phase: 'landGrant' | EditPhase }) => void;
 }
 
 export type { Feedback };
@@ -175,6 +180,7 @@ export class Playbooks {
         asked.controller.abort();
         // The land grant plays the land part; the development part waits for its phase's start (takePhase).
         if (asked.written) {
+          this.speak(seat.id, asked.written.reply.line, state.month, 'landGrant');
           const { land, development } = splitDevelopment(asked.written);
           asked.written = land;
           if (development && asked.development) {
@@ -250,6 +256,8 @@ export class Playbooks {
       ask.controller.abort();
       this.phaseAsks.delete(key);
       if (!ask.written) continue;
+      // The development part carries no line: the land write's was said at the land grant.
+      this.speak(seat.id, ask.written.reply.line, state.month, phase);
       let made: ReturnType<typeof playbookFrom>;
       try {
         // The development's edits go onto its draft as it starts: the land write's was drafted at upkeep, before the land
@@ -264,6 +272,16 @@ export class Playbooks {
       if (made.playbook.by !== 'llm') continue;
       seat.adopt(made.playbook);
       this.options.record?.({ seat: seat.id, month: state.month, phase, playbook: made.playbook });
+    }
+  }
+
+  /** Hands a plan's line to the game's speak; a blank or absent line says nothing, and a speak that throws stops no play. */
+  private speak(seat: PlayerId, line: string | null, month: number, phase: 'landGrant' | EditPhase): void {
+    if (!line?.trim() || !this.options.speak) return;
+    try {
+      this.options.speak(seat, { line, month, phase });
+    } catch (err) {
+      console.error(`playbooks: seat ${seat}'s plan line could not be said: ${messageOf(err)}`);
     }
   }
 

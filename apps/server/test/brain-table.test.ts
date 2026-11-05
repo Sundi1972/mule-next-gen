@@ -6,6 +6,7 @@ import { BRAIN, RuleError, type Playbook } from '@mule/engine';
 import { personaFor, type DecisionRecord } from '@mule/ai';
 import type { MuleIntent, MuleView } from '@mule/protocol';
 import { Room, TableError, type ChatMessage, type ClientEnvelope, type Connection, type GameContext, type ServerEnvelope } from '@tabletop/core';
+import type { Spoken } from '../src/brain/chat.js';
 import { createBrain, type BrainService } from '../src/brain/index.js';
 import type { PlaybookSource } from '../src/brain/playbooks.js';
 import { AI_NAMES, MuleGame, type PlaybookNote } from '../src/mule-game.js';
@@ -304,7 +305,7 @@ describe('the brain at the table', { timeout: 30_000 }, () => {
     const brain: BrainService = {
       ...classic,
       chatter: (seat, say) => {
-        let deciding: DecisionRecord | null = null;
+        let deciding: Spoken | null = null;
         const onDecision = classic.chatter(seat, (line) => {
           said.push({ seat: seat.id, phase: deciding!.phase });
           say(line);

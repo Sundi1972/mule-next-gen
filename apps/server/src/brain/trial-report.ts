@@ -368,8 +368,8 @@ const barText = (r: TrialReport) => {
   const lead = x.games === 0 ? 'n/a' : (x.strategist.meanRank - x.smart.meanRank).toFixed(2);
   const bounds =
     bar!.kind === 'control'
-      ? [`between ${100 * control.winShareLow}% and ${100 * control.winShareHigh}%`, `within ${control.rankBand.toFixed(2)} either way`]
-      : [`at least ${100 * claim.winShare}%`, `at least ${claim.rankLead.toFixed(2)}`];
+      ? [`between ${Math.round(100 * control.winShareLow)}% and ${Math.round(100 * control.winShareHigh)}%`, `within ${control.rankBand.toFixed(2)} either way`]
+      : [`at least ${Math.round(100 * claim.winShare)}%`, `at least ${claim.rankLead.toFixed(2)}`];
   const label = bar!.kind === 'control' ? "WS1's bar, positive control" : "WS1's bar (UBER-AC-A result)";
   const unscored = `unscored ${r.planned - x.games} of ${r.planned} planned`;
   return [label, `${verdictText(bar!.verdict)}: won ${share} of ${x.games} games (${bounds[0]}); mean rank lead ${lead} (${bounds[1]}); ${unscored}`];
