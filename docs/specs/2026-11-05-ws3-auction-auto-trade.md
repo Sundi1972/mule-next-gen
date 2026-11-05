@@ -191,7 +191,7 @@ WS3 by today's split). WS1: `ai/src/hands/auction.ts` (named edit) and the sim. 
 
 **Status:** Heiko has seen WS6's mock (`design/mocks/auction-rules`, cde3ff61) and chose **A: hold ▼ for one
 second** to sell into a shortage (via the PM, 2026-11-05). WS6's three open questions are settled under RULE-4, RULE-6
-and RULE-7. The build goes ahead of the MULE swap only if he says so. **Screens:** WS6 draws them (mock first); this section fixes the rules,
+and RULE-7. He then ruled on the two open questions (the need stop covers every sale, to players too; buyers get no mirror stop) and said building is a go, the same day: see "Heiko's rulings" at the end of this section. **Screens:** WS6 draws them (mock first); this section fixes the rules,
 what the AI does and what the server sends. **Grounded on:** trunk `origin/feat/strategist` f6f3a275 (walk.ts,
 auction.ts read). **Out of scope:** the store's own price setting (another lane), and the trade pace, which is a value
 ruling already built (#376: `WALK.tradeStartMs` 1000, `tradeFloorMs` 200, `tradeSpeedUp` 0.8; RULE-3's examples above
@@ -271,7 +271,8 @@ unknown
 - While held, a hold of ▼ shorter than 1 s moves nothing and sells nothing; the rail says "To sell more, hold ▼: you'd
   be short next month" (WS6's words). The 1 s counts from the hold's start on the server, in the board's own time, so
   a replay counts it the same way. The hold then walks and sells on as RULE-1 and RULE-3.
-- It applies to every sale, at a house's line and to another player, since either can push a seller into shortage.
+- It applies to every sale, at a house's line and to another player, since either can push a seller into shortage. Heiko ruled so.
+- Buyers have no mirror stop (Heiko's ruling): RULE-4 is for sellers only.
 - The stop is a state the server holds (`held`), so a replay stops at the same unit: the conscious act is a
   recorded intent.
 - Switching to buyer and back (C) does not reset `held` for this good.
@@ -387,9 +388,10 @@ Front to back: `apps/web/e2e/auction-steps.ts` drives B-AC-B1 and B2, and B-AC-E
 | The phone and TV screens (the held words, Buy/Sell during the walk, the zones, "Highest bid") | WS6 (mock first) |
 | The AI hand's rows (`hands/auction.ts`) and the sim | WS1 (named edit) |
 
-### Open for Heiko
+### Heiko's rulings (via the PM, 2026-11-05) — CLOSED
 
-1. **Does the stop at your need apply to player-to-player sales too, or only to the store's line?** Recommended:
-   both, since either can leave you short.
-2. **Should a buyer have the mirror stop at their need (stop buying once they have enough)?** Not asked for.
-   Recommended: not now.
+1. **The stop at your need covers every sale**: at the store's line and to another player. Either can leave you short
+   next month (RULE-4, "It applies to every sale").
+2. **No mirror stop for buyers.** A buyer walks and buys as today until they stop or the walk ends; nothing stops them
+   at their need.
+3. **Building AM-1 is a go.**
