@@ -357,6 +357,21 @@ describe('the validator holds every playbook to RULE-1', () => {
     }
   });
 
+  it("T-AC-1: RULE-1 P12, a queued staple's seller hold is clamped to what its hands keep at its own status screen, and listed", () => {
+    // Validated once at Food's status screen, an auction part plays good by good: ai2, holding 1 Water and 1 Energy, is
+    // short of each, and at each one's own status screen its hands keep what keeps it whole next month.
+    const mind = mindOf(2);
+    const state = upAt('food');
+    Object.assign(state.players.find((p) => p.id === 'ai2')!.stock, { water: 1, energy: 1 });
+    for (const staple of ['water', 'energy'] as const) {
+      const kept = goodPlan(observe(upAt(staple), 'ai2'), mind, staple).values.floorUnits;
+      expect(kept, `${staple}: its hands keep more than it holds`).toBeGreaterThan(1);
+      const r = run('auction', [edit(`/auction/${staple}/role`, 'seller'), edit(`/auction/${staple}/hold`, 0)], { state, mind });
+      expect(read(r.playbook, `/auction/${staple}/hold`), staple).toBe(kept);
+      expect(r.rejected, staple).toEqual([{ path: `/auction/${staple}/hold`, to: 0, why: `clamped to ${kept}: what its hands keep for next month` }]);
+    }
+  });
+
   it('T-AC-1: RULE-1 step 6, an edit counts as accepted only if its own value plays', () => {
     const month = at.planning.month;
     const draft = draftOf(at.planning, 'planning', mindOf(2), 102);
