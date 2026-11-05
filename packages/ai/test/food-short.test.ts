@@ -229,7 +229,7 @@ function sellsSurplus(good: Good, id: string, surplus: number, o: Surplus = {}):
     (s) => {
       shortOf(good, id, MONEY, o.held ?? ((t) => whole(t) + surplus), o.plots ?? PLOTS[good]!)(s);
       if (o.rival ?? true) shortOf(good, RIVAL(id), MONEY)(s);
-      if (o.coSeller && co !== RIVAL(id)) s.players.find((p) => p.id === co)!.stock[good] = o.coSeller;
+      if (o.coSeller) s.players.find((p) => p.id === co)!.stock[good] = o.coSeller;
     },
     o.shelf ?? 40,
   );
