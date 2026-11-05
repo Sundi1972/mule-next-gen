@@ -64,13 +64,19 @@ const SIZE: Record<Density, Size> = {
  * Everyone by Worth, the leader called out, the change since last month. Totals only. `final` (game over): the final
  * standings, no callout (the winner card has it) and no change column.
  */
+/** From this many players the TV's league is set a step tighter. */
+const FULL_TABLE = 5;
+
 export function LeagueTable({ view, density, selfId, final = false }: { view: MuleView; density: Density; selfId?: string; final?: boolean }) {
   const lg = league(view);
   const collapse = inCollapse(view);
   // The change since last month, when there was a last month: none in month 1, none at game over.
   const changes = !final && lg.hasLastMonth;
   const tv = density === 'tv';
-  const s = final && tv ? { ...SIZE.tv, mark: 36, cell: 'px-3 py-1.5' } : SIZE[density];
+  const full = tv && !final && view.players.length >= FULL_TABLE;
+  // At a full table the TV's rows and callout are a step tighter, the type the same, so six rows and the colony's score
+  // fit the month end without scaling it down (PM ruling C, 5 Nov).
+  const s = final && tv ? { ...SIZE.tv, mark: 36, cell: 'px-3 py-1.5' } : full ? { ...SIZE.tv, mark: 32, cell: 'px-3 py-1', callMark: 36, call: 'text-3xl' } : SIZE[density];
   const words = leaderWords(view, lg, selfId);
   const top = lg.rows[0];
   const th = cx('label-caps align-bottom font-normal', s.head);
@@ -82,7 +88,7 @@ export function LeagueTable({ view, density, selfId, final = false }: { view: Mu
       </header>
 
       {top && !final && (
-        <div className={cx('relative flex items-center', tv ? 'gap-4 rounded-panel border-2 border-holo bg-holo-soft px-5 py-2.5 shadow-glow' : 'gap-2')} data-testid="leader">
+        <div className={cx('relative flex items-center', tv ? cx('gap-4 rounded-panel border-2 border-holo bg-holo-soft px-5 shadow-glow', full ? 'py-1.5' : 'py-2.5') : 'gap-2')} data-testid="leader">
           <PlayerMark slot={top.slot} species={top.player.species} size={s.callMark} label={top.player.name} />
           <span className={cx('min-w-0 font-display font-semibold leading-tight', s.call)} data-testid="leader-line">
             {words.lead}

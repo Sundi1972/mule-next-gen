@@ -132,7 +132,8 @@ function TvLobby({ table }: { table: TableView<MuleView> }) {
 
 /**
  * The TV's header: the month and the phase's title (after its `icon`, where it has one), the theme toggle, the colony's
- * gauges (or the air gauge alone when `gauges` is false, as game over and the goods auction keep it) and the clock, then
+ * gauges (or the air gauge alone when `gauges` is false, as game over and the goods auction keep it; none at all with
+ * 'none', where the screen draws them itself, as the month end does) and the clock, then
  * the table chat. `ready`, a screen's ready count, sits beside the title; with the colony's gauges too, they move to a
  * row of their own under it, full width, since title, chip and gauges don't share 1280 px (PM ruling, 5 Nov).
  * `landing` counts changes onto the gauges, wherever they sit. `chatLines` is how many chat lines show: three, or fewer
@@ -155,11 +156,11 @@ export function TvHeader({
   seconds?: number | undefined;
   extra?: ReactNode;
   ready?: ReactNode;
-  gauges?: boolean;
+  gauges?: boolean | 'none';
   landing?: GaugeLanding | undefined;
   chatLines?: number;
 }) {
-  const colony = game.colony && gauges ? <ColonyGauges colony={game.colony} size="tv" className={ready ? 'w-full' : 'w-[760px]'} landing={landing} /> : null;
+  const colony = game.colony && gauges === true ? <ColonyGauges colony={game.colony} size="tv" className={ready ? 'w-full' : 'w-[760px]'} landing={landing} /> : null;
   const ownRow = colony !== null && ready !== undefined;
   // With a ready chip the title keeps one line and the chip its size; without one the header is as it always was: the
   // gauges give way to a long title ("Election day · the result").
@@ -179,7 +180,7 @@ export function TvHeader({
         <div className={cx('flex items-center gap-4', fixed && 'shrink-0')}>
           {extra}
           <ThemeToggle />
-          {ownRow ? null : (colony ?? <AirGauge level={game.air.level} band={game.air.band} tv />)}
+          {ownRow || gauges === 'none' ? null : (colony ?? <AirGauge level={game.air.level} band={game.air.band} tv />)}
           {seconds !== undefined && <Timer seconds={seconds} className="h-14! px-5! text-3xl!" />}
           {ready}
         </div>
@@ -745,9 +746,11 @@ function FitHeight({ className, gives = false, children }: { className?: string;
  */
 export function TvMonthEnd({ game, drift }: { game: MuleView; drift?: GaugeLanding | undefined }) {
   return (
-    <div className="flex h-[720px] w-[1280px] flex-col gap-4 bg-table p-10 text-ink" data-phase={game.phase} data-testid="tv-monthend">
+    <div className="flex h-[720px] w-[1280px] flex-col gap-3 bg-table px-10 py-8 text-ink" data-phase={game.phase} data-testid="tv-monthend">
+      {/* The league and the colony's score need the height (six seats, PM ruling C, 5 Nov): the colony's gauges sit at the
+          top of the right column, not in a row of their own, and the chat ticker shows its newest line only. */}
       <div className="flex flex-col gap-3">
-        <TvHeader game={game} title="End of the month" ready={<ReadyCount players={game.players} tv />} landing={drift} />
+        <TvHeader game={game} title="End of the month" ready={<ReadyCount players={game.players} tv />} gauges={game.colony ? 'none' : true} chatLines={1} />
       </div>
       {inCollapse(game) && <CollapseBanner density="tv" />}
       <FitHeight className="flex-1">
@@ -755,6 +758,7 @@ export function TvMonthEnd({ game, drift }: { game: MuleView; drift?: GaugeLandi
           <div className="grid flex-1 grid-cols-[minmax(0,6fr)_minmax(0,6fr)] gap-6">
             <LeagueTable view={game} density="tv" />
             <div className="flex flex-col gap-4">
+              <ColonyGauges colony={game.colony} size="tv" className="grid-cols-2!" landing={drift} />
               <ColonyPanel view={game} density="tv" />
               <BuildSite colony={game.colony} players={game.players} size="tv" />
             </div>
@@ -766,8 +770,8 @@ export function TvMonthEnd({ game, drift }: { game: MuleView; drift?: GaugeLandi
           </div>
         )}
       </FitHeight>
-      <p className="text-lg leading-snug text-ink-2" data-testid="worth-rule">
-        Worth: cash + goods at the store’s price + land at {GAME.plotScore} cr a plot + MULEs at {game.mulePrice} cr + {POLITICS.termScore} cr a term in office. Each player’s own lines are on their phone.
+      <p className="truncate text-base leading-snug text-ink-2" data-testid="worth-rule">
+        Worth: cash + goods at the store’s price + land at {GAME.plotScore} cr a plot + MULEs at {game.mulePrice} cr + {POLITICS.termScore} cr a term in office. Your own lines are on your phone.
       </p>
     </div>
   );
