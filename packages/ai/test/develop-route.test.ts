@@ -285,16 +285,17 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
     });
 
     it.each(['sold', 'built on'])("T-AC-7 row 3 (example 2): its plot %s since the draft, that MULE is replaced by its own pick, 'stale'", (how) => {
-      const { state, plots } = development(3);
-      const [drafted0, ...spares] = plots as [Tile, Tile, Tile];
+      const { state, plots } = development(4);
+      const [drafted0, ...spares] = plots as [Tile, Tile, Tile, Tile];
       drafted0.owner = ME;
       // Known ground: a route with no analyses keeps its drafted MULE until row 3 reads it (AM-27 re-picks one after an analysis).
       me(state).analysed.push(...plots.map((t) => indexOf(state, t)));
       const { seat, hand } = seatAndHand();
       const play0 = drafted(seat, state);
       expect(play0.part.route.some((s) => s.act === 'analyse')).toBe(false);
-      // After the draft: the plot goes to a rival at the land auction, or gets a MULE; the seat holds two other idle
-      // plots, so the replacement is a pick between them.
+      // After the draft: the plot goes to a rival at the land auction, or gets a MULE; the seat holds three other idle
+      // plots, so the replacement is a pick between them (with two, under the 5 Nov start values, the picks for the
+      // first MULE and the second fall alike).
       if (how === 'sold') drafted0.owner = RIVAL;
       else drafted0.outfit = 'food';
       for (const t of spares) t.owner = ME;
