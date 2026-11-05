@@ -1,0 +1,12 @@
+/* The app's own entry: Tailwind, the @mule/ui theme and the app's base styles. Never copy token values here. */
+@import "../../../../apps/web/src/index.css";
+@source "../../../../packages/ui/src";
+@source "../../../../apps/web/src";
+
+/*
+ * DS-GAP (WS8): the gauge's band flip. A pulse round the Happiness (or Prestige) gauge when its band changes, to move
+ * into packages/ui/src/events/events.css with the gauge landing. Only transform, opacity and shadow move.
+ */
+@keyframes cev-pulse { 0% { box-shadow: 0 0 0 0 var(--color-holo); transform: scale(1); } 40% { box-shadow: 0 0 0 6px var(--color-holo-line), var(--shadow-glow); transform: scale(1.05); } 100% { box-shadow: 0 0 0 0 transparent; transform: scale(1); } }
+[data-reduced='true'] [class*='animate-[cev-'] { animation: none !important; }
+@media (prefers-reduced-motion: reduce) { [class*='animate-[cev-'] { animation: none !important; } }
