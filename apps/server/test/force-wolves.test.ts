@@ -5,15 +5,15 @@ import { createRecordedGame } from '../src/record.js';
 import { fakeContext, readyAll, seats } from './fake-context.js';
 
 /**
- * forceWolves, a per-game test option like devSteer (WS5's ask for the arcade moments; WS6's B-AC-5 browser step):
+ * forceWolves, a per-game test option (WS5's ask for the arcade moments; WS6's B-AC-5 browser step):
  * the first colonist out on wolf land meets a pack at once, the seeded roll forced to a pack, the cooldown kept. Off,
  * or absent, WOLVES' chance decides as before. A recorded game keeps it, so its replay meets the same packs.
  */
 const TICK = DEV_STEER.tickMs;
 
-function inDevelopment(options: { forceWolves?: boolean; devSteer?: boolean; politics?: boolean }) {
+function inDevelopment(options: { forceWolves?: boolean; politics?: boolean }) {
   const fake = fakeContext();
-  const game = new MuleGame(fake.ctx, 7, { devSteer: true, ...options });
+  const game = new MuleGame(fake.ctx, 7, options);
   game.start(seats);
   const state: GameState = game['state']!;
   // Every plot forest, wolf land: the colonists come out of the store onto it.
@@ -59,7 +59,7 @@ describe('forceWolves: a pack at once, for tests', () => {
 
   it('a recorded game keeps the option, and a game built from its options, as the replay builds one, is forced', () => {
     const fake = fakeContext();
-    const { game, recorder } = createRecordedGame({ ctx: fake.ctx, seed: 7, options: { devSteer: true, forceWolves: true, politics: false }, dir: null });
+    const { game, recorder } = createRecordedGame({ ctx: fake.ctx, seed: 7, options: { forceWolves: true, politics: false }, dir: null });
     game.start(seats);
     expect(recorder.record.options).toMatchObject({ forceWolves: true });
     // replay.ts builds its MuleGame from `{ ...record.options }`: the same options force the same packs.

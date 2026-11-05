@@ -27,9 +27,13 @@
     return e;
   }
 
+  // The way back to Mission Control (the MVP tracker), on every page: Heiko switches between the two often.
+  var MISSION_CONTROL = 'https://claude.ai/artifact/SHprLG18TEmQCHiy8eJVzi';
+
   function buildRail() {
     var rail = document.querySelector('.rb-rail');
     if (!rail) return;
+    rail.appendChild(el('a', { href: MISSION_CONTROL, class: 'rb-back', target: '_blank', rel: 'noopener' }, '\u25C2 Mission Control'));
     var brand = el('a', { href: 'index.html', class: 'rb-brand' }, 'M.U.L.E. Next Gen');
     brand.appendChild(el('small', null, 'Rulebook and design book'));
     rail.appendChild(brand);

@@ -203,6 +203,7 @@
 </table></div>
 <p>Outside production the phone draws the event over whatever phase screen is up. While a phase is held, it covers the screen until the show ends; in planning the screen stays usable, with the light card floating over it.</p>
 <div class="box why"><h4>Why it is like this</h4><p>Heiko: "I would like to see the event and the event ux and the cool event animations"; "make this really entertaining and all should get their animations". And for a player alone: "it could be that a player is playing alone on his phone. how would that look then for him". Heiko approved the "Living weather" gallery on 29 October as the design to build, and the server owns every length so the clock and the animation cannot disagree.</p></div>
+<p>The colony's mood events, the general strike and the month end's mood drift are being built into this same show; see <a href="#colony-event-shows">Strikes, mood events and gauges on screen</a>.</p>
 <p class="code-ref">In the code: <code>config.ts::EVENT_SHOW</code> · <code>apps/server/src/mule-game.ts::eventShow</code>, <code>::weightOf</code>, <code>::holdsForEvents</code> · <code>packages/ui/src/events/</code> (<code>tv.tsx</code>, <code>phone.tsx</code>, <code>stories.tsx</code>, <code>stories-ledger.tsx</code>) · <code>apps/web/src/events/TvEventLayer.tsx</code>, <code>PhoneEventOverlay.tsx</code></p>
 <p class="owner">Kept current by: the Events team (WS8), with the Table team (WS4) for the TV and the UX team (WS6) for the phone.</p>
 
@@ -266,25 +267,48 @@
 <p class="owner">Kept current by: the Balance team (WS1), with the Politics team (WS7).</p>
 
 <h2 id="colony-event-shows">Strikes, mood events and gauges on screen <span class="pill progress">Being built</span></h2>
-<p>Three pull requests by the Events team bring the colony's events to the TV and the phones. They are built against the frozen event contract, so the stories go live when the events themselves land.</p>
+<p>Three pull requests by the Events team bring the colony's events to the TV and the phones. None is on trunk yet. They are built against the frozen event contract, so the stories go live when the events themselves reach the game. With politics off, or with no strike, every screen stays as it is today.</p>
 <h3 id="strike-on-screen">The general strike</h3>
 <ul>
-<li><strong>TV header:</strong> a badge beside the month: "STRIKE · Food 20%" while unpaid, "PAID · −250 cr" once paid.</li>
-<li><strong>TV planning map and the phone's map:</strong> a striker with a placard on every plot of the struck good, each with a "STRIKE · 20%" chip, gone once paid.</li>
-<li><strong>The Governor's phone:</strong> a strike card with the fund before and after, "Pay the strikers" and "Let them strike" (which keeps the way to pay open until planning ends). While a vote is open both read "After the votes".</li>
-<li><strong>Everyone else's phone:</strong> "General strike on Food: Kai decides whether the fund pays 250 cr", then "Kai pays the Food strikers 250 cr: the strike is off."</li>
+<li><strong>TV header:</strong> a badge beside the month: "STRIKE · Food 20%" while unpaid, "PAID · −250 cr" once paid. No strike, no badge.</li>
+<li><strong>TV planning map and the phone's Look map:</strong> in planning, a striker with a placard on every plot of the struck good; on the TV each also carries a "STRIKE · 20%" chip. They leave once the strike is paid.</li>
+<li><strong>The Governor's phone:</strong> once the votes are over, the Now card is the strike: "General strike on Food", "Unpaid: Food plots make 20% this month.", the fund before and after (Fund 400 → 150 cr), then <strong>Pay the strikers 250 cr</strong> and <strong>Let them strike</strong>. While an election or a law ballot is open, the vote keeps the Now card. Let them strike sends nothing to the game: the card turns into "You let them strike" and keeps a pay button until planning ends. Paid, it reads "You paid the strikers · −250 cr".</li>
+<li><strong>A Governor who is already Ready:</strong> the Now card belongs to the ready bar, so a pay line, "Pay the Food strikers 250 cr", sits under Now instead, until the strike is paid or planning ends.</li>
+<li><strong>Everyone else's phone:</strong> an alert line under Now: "General strike on Food: Kai decides whether the fund pays 250 cr", then "Kai pays the Food strikers 250 cr: the strike is off." With no Governor it reads "General strike on Food: Food plots make 20% this month."</li>
+<li><strong>The TV while it waits:</strong> in planning, while the strike is unpaid, the TV's side shows the Governor's mark and "Waiting for Kai, the Governor", with "Pay the strikers 250 cr from the fund, or let them strike. After the votes."</li>
+<li><strong>Paid:</strong> the game's own news line shows in the TV news, for example "Lena pays the food strikers 250 cr."</li>
 </ul>
+<p>The 250 cr is <span class="num">COLONY.strike.cost</span> on trunk. The 20% is <span class="num">COLONY.strike.output</span> = <span class="num">0.2</span>, which is in the colony branch only.</p>
 <h3 id="mood-events-on-screen">The mood events' stories</h3>
-<ul>
-<li><strong>Festival:</strong> bunting over the colony, lanterns, a crowd at the store; the changes card reads "Mood +10 · Prestige +2".</li>
-<li><strong>General strike (planning):</strong> strikers walk out to every plot of the struck good; the log reads, for example, "Food at 20% on 4 farms unless the Governor pays".</li>
-<li><strong>Riot:</strong> a third of each shelf goes; a damaged object gets the map's hit mark (or, for the hospital, which has no plot, a line in the log).</li>
-<li><strong>Any event that moves a gauge</strong> (mood, prestige, air, reputation) says so in words, for example "Lena's Food farm stands idle · Mood −2".</li>
-</ul>
+<p>Each of the colony's mood events plays in the show of the phase that rolls it, like every other event (see <a href="#event-show">How the TV and the phone show events</a>). Each has its own badge symbol and colour, a title card and words in the TV log and on the phones.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Phase</th><th>Event</th><th>What you see</th></tr></thead>
+<tbody>
+<tr><td>Planning</td><td>Festival</td><td>Bunting over the colony, lanterns, a crowd dancing at the store. The changes card reads "Mood +10 · Prestige +2". A phone alone reads it as the colony's news: "For everyone: the colony's mood lifts, and the store buys more Food this month."</td></tr>
+<tr><td>Planning</td><td>General strike (the announcement)</td><td>Strikers with placards walk out to every plot of the struck good, each plot reading "STRIKE · 20%". The log says, for example, "Food at 20% on 4 farms unless the Governor pays". A paid strike has no story, only the news line.</td></tr>
+<tr><td>Planning</td><td>Emigration wave</td><td>Colonists leave for good, and the colony's head count ticks down.</td></tr>
+<tr><td>Planning</td><td>Blamed for the unrest</td><td>The player's reputation chip drops: "The colony blames you for the unrest: fewer votes at the next election."</td></tr>
+<tr><td>Development</td><td>Store strike</td><td>The store's MULE corral greys out: no MULEs this turn.</td></tr>
+<tr><td>Production</td><td>Walkout</td><td>The player's plots of one good are struck in turn, each down to 20%.</td></tr>
+<tr><td>Production</td><td>Loyal crew</td><td>One plot glows and makes 1 more.</td></tr>
+<tr><td>Month end</td><td>Riot</td><td>An angry crowd at the store; a third of each shelf goes, and one colony object is damaged (see below).</td></tr>
+<tr><td>Month end</td><td>Volunteer clean-up</td><td>Volunteers clean up and the air gauge drops; less pollution reads as good news.</td></tr>
+</tbody>
+</table></div>
+<p><strong>The riot's damage.</strong> A damaged object that has a plot, such as the park, stands on the map until the riot reaches it, then takes the map's HIT mark. The hospital has no plot, so it gets no map mark: the changes card and the log say "Hospital damaged". The build site's row then shows "Damaged in the riot", as it does today.</p>
+<p><strong>The gauges on the card.</strong> Any event that moves mood, prestige, air or reputation says so on its changes card, up or down, wherever the change comes from (this includes the mood parts of the immigration wave and MULE theft). A plot event that moves a gauge also gets the changes card, and its log line ends with the gauge, for example "Lena's Food farm stands idle · Mood −2".</p>
+<p>The event show's look for all of these comes from the event gallery Heiko approved (<code>design/mocks/ws8-events</code>, the riot's angry mob among them).</p>
 <h3 id="gauges-month-end">The Happiness gauge at the month end</h3>
-<p>At the month end the TV's Happiness gauge opens on last month's number and counts to this month's; as it crosses a band the label flips (Restless to Unhappy, say) and the gauge pulses. It plays once; a TV that reconnects, or reduced motion, shows the end state at once. With politics off there is no gauge.</p>
-<div class="box next"><h4>What is changing</h4><p>Being built in the colony branch (<code>ws7-politics</code>) by the Events team (WS8): PR #368 (the strike on the TV and phones, and the Governor paying it), PR #364 (the mood events in the show; approved, CI green), PR #365 (the gauges count and land at the month end). The scaffolds are <code>design/mocks/ws8-colony-events</code>.</p></div>
-<p class="code-ref">In the code (branches <code>ws8-cev-strike</code>, <code>ws8-cev-stories</code>, <code>ws8-cev-gauges</code>): <code>packages/ui/src/events/</code> (<code>stories-colony.tsx</code>, <code>copy.ts</code>, <code>glyphs.tsx</code>) · <code>apps/web/src/table/TableApp.tsx</code> · <code>apps/web/src/phone/hub/today.tsx</code></p>
+<p>At the month end the TV's Happiness gauge opens on last month's number and, a moment later, counts to this month's. As it crosses a band the label flips (Restless to Unhappy, say) and the gauge pulses. It gives no reasons, only the usual "↓ n this month".</p>
+<ul>
+<li>It plays once per month end. Someone pressing Ready does not replay it; the next month end plays again.</li>
+<li>A TV that reloads or reconnects during the month end, or one with reduced motion, shows the end state at once.</li>
+<li>In month 1, or when the mood did not change, nothing moves. With politics off there is no gauge.</li>
+<li>Band names come from the engine's own mood bands (<code>colony.ts::moodBand</code>), not from a copy in the screen.</li>
+</ul>
+<div class="box why"><h4>Why it is like this</h4><p>Heiko asked on 28 October for the riot to be seen ("maybe an angry mob walking on the map?") and for every event to get its animation. The strike's look is WS8's option A, approved by the PM on 5 Nov: the Governor's choice sits in the phone's Now card, so the map stays in view. The screens follow the approved scaffold <code>design/mocks/ws8-colony-events</code>.</p></div>
+<div class="box next"><h4>What is changing</h4><p><strong>Being built</strong> in the colony branch (<code>ws7-politics</code>) by the Events team (WS8), all three open: PR #368 (the strike on the TV and phones, and the Governor paying it), PR #364 (the mood events in the show; approved), PR #365 (the Happiness gauge counts and lands at the month end; approved). Until the riot's caller passes the store's stock, its shelves show only what was lost, not the count before and after (a later WS8 step, PR-E4). The strike in the production show is PR-E4 too, and a gauge chip flying from the event card to the gauges is PR-E2; neither is built yet.</p></div>
+<p class="code-ref">In the code (branches <code>ws8-cev-strike</code>, <code>ws8-cev-stories</code>, <code>ws8-cev-gauges</code>): <code>packages/ui/src/events/</code> (<code>stories-colony.tsx</code>, <code>copy.ts</code>, <code>glyphs.tsx</code>, <code>catalogue.ts</code>) · <code>apps/web/src/components/Strike.tsx</code> · <code>apps/web/src/components/Colony.tsx::ColonyGauges</code> · <code>apps/web/src/table/TableApp.tsx</code> · <code>apps/web/src/phone/hub/today.tsx</code> · B-AC-26, B-AC-23-6..8, B-AC-37</p>
 <p class="owner">Kept current by: the Events team (WS8).</p>
 
 <h2 id="events-later">Warnings, forecasts, hedges and chains <span class="pill backlog">Backlog</span></h2>
