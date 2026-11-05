@@ -84,13 +84,13 @@ describe('prestige objects: commissioned, funded, built, kept up', () => {
     const row = PRESTIGE.hospital;
     const state = governedGame(row.upkeep - 1);
     standing(state, 'hospital');
-    runColony(state);
+    runColony(state, []);
     expect(project(state, 'hospital').stage).toBe('closed');
     expect(colonyPrestige(state)).toBe(0);
     expect(state.treasury.money).toBe(row.upkeep - 1);
 
     state.treasury.money = row.upkeep;
-    runColony(state);
+    runColony(state, []);
     expect(project(state, 'hospital').stage).toBe('standing');
     expect(state.treasury.money).toBe(0);
 
@@ -130,7 +130,7 @@ describe('prestige objects: commissioned, funded, built, kept up', () => {
     const state = governedGame(10_000);
     state.store.stock.alloy = 10;
     commission(state, 'lena', 'park');
-    for (let i = 0; i < 3; i++) runColony(state);
+    for (let i = 0; i < 3; i++) runColony(state, []);
     expect(project(state, 'park')).toMatchObject({ stage: 'commissioned', plot: null, funded: { credits: PRESTIGE.park.credits, goods: PRESTIGE.park.goods } });
   });
 });

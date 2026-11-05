@@ -21,11 +21,11 @@ const SEATS = ['lena', 'brix', 'ossa', 'kai'];
 const W = HAPPINESS.weights;
 
 /** A politics game in month 1 with Lena governing and no election open; the air clean and the tax at its free level. */
-function colony(seats = SEATS): GameState {
-  const state = createGame({ seed: 7, players: seats.map((id) => ({ id, name: id, isAi: false })) });
+function colony(): GameState {
+  const state = createGame({ seed: 7, players: SEATS.map((id) => ({ id, name: id, isAi: false })) });
   state.politics = { ...state.politics!, governor: 'lena', election: null };
   state.treasury.salesTax = W.taxFree / PERCENT;
-  state.history.at(-1)!.air = 0;
+  state.air = 0;
   return state;
 }
 
@@ -81,7 +81,7 @@ describe('C23: the colony\'s happiness (RULE-20)', () => {
 
   it('T-AC-31: moodInputs reads the month: the shortages given, the air, the tax in whole %, standing prestige and the gap', () => {
     const state = colony();
-    state.history.at(-1)!.air = 55;
+    state.air = 55;
     state.treasury.salesTax = 9 / PERCENT;
     state.players[0]!.money += 2_500;
     expect(moodInputs(state, ['food', 'energy'])).toEqual({ short: 2, air: 55, tax: 9, broken: 0, prestige: 0, gap: 2_500 });
@@ -103,7 +103,9 @@ describe('C23: the colony\'s happiness (RULE-20)', () => {
     broken.colony!.promises.push({ month: broken.month, governor: 'lena', kind: 'hold', kept: false });
     expect(moodInputs(broken, []).broken).toBe(1);
 
-    const alone = colony(['lena']);
+    // A game needs two players at least; the helper is asked of one, as a colony down to its last settler would be.
+    const alone = colony();
+    alone.players = alone.players.slice(0, 1);
     alone.players[0]!.money += 5_000;
     expect(wealthGap(alone)).toBe(0);
   });
