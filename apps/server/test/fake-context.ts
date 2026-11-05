@@ -7,7 +7,7 @@ import { MuleGame } from '../src/mule-game.js';
 export const seats = [
   { id: 's1', name: 'Heiko', isAi: false, color: 0 },
   { id: 's2', name: 'Mia', isAi: false, color: 1 },
-  { id: 's3', name: 'The Baron', isAi: true, color: 2 },
+  { id: 's3', name: 'The Big Spender', isAi: true, color: 2 },
 ];
 
 /** Two human seats whose species walk at different paces: Lena a Zipwing, Ossa a Mollox. */
