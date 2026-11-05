@@ -254,7 +254,7 @@ export interface UnitValues {
   block: number;
   /** Next month's need as the status screen shows it. */
   need: number;
-  /** Units it never sells: the Food and Energy it needs. */
+  /** Units it never sells: the Food and Energy it needs. strategist.ts goodPlan raises it for STRATEGIST.buyShortfall. */
   floorUnits: number;
 }
 

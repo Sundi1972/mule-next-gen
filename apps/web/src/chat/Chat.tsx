@@ -303,13 +303,16 @@ export function TableChat({ under = false }: { under?: boolean }) {
   );
 }
 
-/** The TV's ticker, under its header. Nothing shows until someone speaks. */
-export function TvTicker() {
+/**
+ * The TV's ticker, under its header: its last three lines, newest first, or the `most` newest where a screen has less
+ * room. Nothing shows until someone speaks, or with `most` 0.
+ */
+export function TvTicker({ most }: { most?: number } = {}) {
   const { lines } = useTableChat();
-  if (lines.length === 0) return null;
+  if (lines.length === 0 || most === 0) return null;
   return (
     <div className="rounded-panel border border-holo-line bg-panel/60 px-4 py-2">
-      <Ticker size="tv" />
+      <Ticker size="tv" {...(most === undefined ? {} : { lines: most })} />
     </div>
   );
 }
