@@ -3,10 +3,12 @@ import {
   doorOutside,
   HALL_DOORS,
   pathTo,
+  reachOf,
   speedOf,
   terrainShare,
   tileAt,
   tileIndex,
+  type DevFloor,
   type FloorColonist,
   type FloorConfig,
   type FloorPoint,
@@ -17,6 +19,8 @@ import {
   type HallPoint,
   type HallRect,
   type Outfit,
+  type Player,
+  type Reach,
 } from '@mule/engine';
 import type { DevWalk, FloorLegs } from './strategist.js';
 
@@ -82,6 +86,16 @@ export function hallSpeed(state: GameState, cfg: FloorConfig, pace: number, lead
 /** The share of pathTo's full-pace map speed a colonist walks at: RULE-2's pace, lead, bot and bitten factors, off its land. */
 export function mapFactor(cfg: FloorConfig, pace: number, lead: boolean, bot: boolean, bitten = false): number {
   return pace * (lead ? cfg.steer.leadPace : 1) * (bot ? cfg.steer.botSpeed : 1) * (bitten ? cfg.wolves.bittenPace : 1);
+}
+
+/**
+ * The seconds an AI colonist keeps in hand for the pub (DEV_STEER.botPubMarginSeconds at full pace, more as hunger,
+ * sickness, a bite or a MULE on the lead slows it): the hurry for the pub keeps it, and every plan the hands make is
+ * priced with it, so no MULE is bought on a plan the hurry would then drop (FM-hurry-margin). `lead`: as if leading a
+ * MULE, or not; absent, as it stands.
+ */
+export function pubMargin(cfg: FloorConfig, c: FloorColonist, lead = leading(c)): number {
+  return cfg.steer.botPubMarginSeconds / Math.min(1, mapFactor(cfg, c.pace, lead, c.bot, c.bitten));
 }
 
 /** Whether a colonist leads its MULE: one that bolted is off the rope. */
@@ -360,22 +374,66 @@ export function planSeconds(state: GameState, cfg: FloorConfig, c: FloorColonist
 
 const AROUND = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]] as const;
 
+/** The presses the develop hand makes on a lake plot from its shore (AM-18). */
+export type ShorePress = 'install' | 'analyse' | 'filter';
+
+/** A spot to work a lake plot from, and whether Reach there offers the land underfoot first (an analysis, AM-18). */
+export interface ShoreStand {
+  at: FloorPoint;
+  landFirst: boolean;
+}
+
+/** The floor with only the seat's colonist on it, standing at a point on the map, and no moments. */
+function standingAt(me: string, at: FloorPoint): DevFloor {
+  const c: FloorColonist = { ...probe('map', at, 1, false, true), id: me };
+  return { tick: 0, colonists: [c], moments: { glint: null, glintAfterTick: 0, scramble: null, scrambled: false, beats: [], due: [] } };
+}
+
 /**
- * The spots a lake plot can be installed on from, in shore mode: on each open neighbour, side or corner, that is not
- * the seat's own plot (there Reach installs on the land underfoot), DEV_STEER.botShoreTiles from its middle towards the
- * lake.
+ * The game as Reach sees it for a seat about to press: in development, the seat not at the pub, and for an install
+ * leading an outfitted MULE, as it will be when it walks one to its plot. A plan may be priced at any time (a test reads
+ * one after the pub); what Reach offers at a spot is the same.
  */
-export function shoreStands(state: GameState, cfg: FloorConfig, me: string, plot: FloorPoint): FloorPoint[] {
-  return AROUND.flatMap(([dx, dy]) => {
+function atWork(state: GameState, me: string, press: ShorePress): GameState {
+  const ready = (p: Player): Player => {
+    const mule = press === 'install' && !(p.carriedMule && p.carriedMule !== 'empty');
+    return { ...p, doneDeveloping: false, ...(mule && { carriedMule: 'food' as const, muleBolted: false }) };
+  };
+  return { ...state, phase: 'development', players: state.players.map((p) => (p.id === me ? ready(p) : p)) };
+}
+
+/**
+ * The spots a seat can work lake plot `plot` from with `press`, in shore mode (AM-18): on each open neighbour, side or
+ * corner, DEV_STEER.botShoreTiles from its middle towards the lake, that a walk from the store reaches, and where the
+ * engine's Reach offers that press on this plot: not on the land underfoot (a plot of the seat's own, for an install),
+ * nor on another lake plot nearer. An analysis may also stand where Reach offers the land underfoot first and the lake
+ * after it (landFirst): it costs an analysis more. The plans (installable) and the walker (FloorWalker) stand by these
+ * alike, so no MULE is bought for a plot the floor then gives nowhere to install it from (FM-floor-lake-stand).
+ */
+export function shoreStands(state: GameState, cfg: FloorConfig, me: string, plot: FloorPoint, press: ShorePress): ShoreStand[] {
+  if (cfg.steer.lakeMode !== 'shore') return [];
+  const walks = [...doorTable(state, cfg).values()];
+  const game = atWork(state, me, press);
+  const on = (r: Reach, p: FloorPoint) => r.kind === press && r.plot.x === p.x && r.plot.y === p.y;
+  return AROUND.flatMap(([dx, dy]): ShoreStand[] => {
     const t = tileAt(state.tiles, state.width, plot.x + dx, plot.y + dy);
-    if (!t || terrainShare(t.terrain, cfg) <= 0 || t.owner === me) return [];
+    if (!t || terrainShare(t.terrain, cfg) <= 0) return [];
+    const index = tileIndex(state.width, t.x, t.y);
+    if (!walks.some((map) => Number.isFinite(map[index]!.seconds))) return [];
     const middle = tileMiddle(t.x, t.y);
-    return [{ x: middle.x - dx * cfg.steer.botShoreTiles, y: middle.y - dy * cfg.steer.botShoreTiles }];
+    const at = { x: middle.x - dx * cfg.steer.botShoreTiles, y: middle.y - dy * cfg.steer.botShoreTiles };
+    const floor = standingAt(me, at);
+    const reach = reachOf(floor, game, me, cfg);
+    if (on(reach, plot)) return [{ at, landFirst: false }];
+    if (press !== 'analyse' || !on(reach, t)) return [];
+    // With the land underfoot analysed first.
+    const after = { ...game, players: game.players.map((p) => (p.id === me ? { ...p, analysed: [...p.analysed, index] } : p)) };
+    return on(reachOf(floor, after, me, cfg), plot) ? [{ at, landFirst: true }] : [];
   });
 }
 
-/** Whether a colonist can stand where Reach offers installing on the plot: on it, or (a lake plot) on its shore. */
+/** Whether a colonist can stand where Reach offers installing on the plot: on it, or (a lake plot) at a spot on its shore. */
 export function installable(state: GameState, cfg: FloorConfig, me: string, index: number): boolean {
   const t = state.tiles[index]!;
-  return terrainShare(t.terrain, cfg) > 0 || (cfg.steer.lakeMode === 'shore' && shoreStands(state, cfg, me, t).length > 0);
+  return terrainShare(t.terrain, cfg) > 0 || shoreStands(state, cfg, me, t, 'install').length > 0;
 }

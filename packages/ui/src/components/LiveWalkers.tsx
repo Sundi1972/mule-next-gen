@@ -1,4 +1,5 @@
 import { DEV_STEER, WOLVES } from '@mule/engine';
+import type { ReactNode } from 'react';
 import { ConditionTag, type Condition, type PaceRule } from './Condition';
 import { Creature } from './Creature';
 import { Mule, type MuleGood } from './Mule';
@@ -85,6 +86,14 @@ export interface LiveWalkersProps {
   fan?: ReadonlyMap<string, { dx: number; dy: number }>;
   /** The device time (Date.now) these positions are for, written as each colonist's data-at. */
   at?: number;
+  /** What a screen draws with a colonist, moving with it: over its head, at its shoulder, under its name. */
+  marks?: (w: LiveWalker) => WalkerMarks | null;
+}
+
+export interface WalkerMarks {
+  above?: ReactNode;
+  shoulder?: ReactNode;
+  below?: ReactNode;
 }
 
 /**
@@ -95,7 +104,7 @@ export interface LiveWalkersProps {
  * #195's gait (motionOf, cycleSeconds), its MULE on the same stride. Pointer-transparent: the stage under it takes the
  * mouse and the taps.
  */
-export function LiveWalkers({ walkers, space, cols, rows, cell, density, names = false, rule, fan = fanOut(walkers, space), at: drawnAt }: LiveWalkersProps) {
+export function LiveWalkers({ walkers, space, cols, rows, cell, density, names = false, rule, fan = fanOut(walkers, space), at: drawnAt, marks }: LiveWalkersProps) {
   const map = space === 'map';
   const size = Math.round(cell * SPRITE[space]);
   const muleSize = Math.round(size * (map ? 1.35 : 1.1));
@@ -122,6 +131,7 @@ export function LiveWalkers({ walkers, space, cols, rows, cell, density, names =
         const color = SLOT_COLOR[w.slot];
         // Drawn aside when it shares a spot; its MULE keeps beside it. data-x and data-y still say where it stands.
         const off = fan.get(w.id) ?? { dx: 0, dy: 0 };
+        const m = marks?.(w) ?? null;
         return (
           <div key={w.id}>
             {w.lead && (
@@ -144,6 +154,7 @@ export function LiveWalkers({ walkers, space, cols, rows, cell, density, names =
               data-fanned={off.dx !== 0 || off.dy !== 0 || undefined}
             >
               <div className="absolute left-0 top-0 flex -translate-x-1/2 -translate-y-[85%] flex-col items-center">
+                {m?.above}
                 <span
                   role="img"
                   aria-label={w.name}
@@ -153,12 +164,14 @@ export function LiveWalkers({ walkers, space, cols, rows, cell, density, names =
                 >
                   <Creature species={w.species} color={color} size={size} motion={motionOf(gait)} cycle={stride} facing={w.facing} />
                   {rule && w.condition !== undefined && <ConditionTag id={w.id} condition={w.condition} rule={rule} size={density} />}
+                  {m?.shoulder}
                 </span>
                 {names && (
                   <span className={cx('mt-0.5 whitespace-nowrap rounded-chip bg-map-chip px-1 font-mono font-bold leading-tight text-ink shadow-chip', density === 'tv' ? 'text-xs' : 'text-[10px]')} data-testid={`colonist-name-${w.id}`}>
                     {w.name}
                   </span>
                 )}
+                {m?.below}
               </div>
             </div>
           </div>

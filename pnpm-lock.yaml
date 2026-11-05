@@ -180,6 +180,9 @@ importers:
         specifier: workspace:*
         version: link:../engine
     devDependencies:
+      '@mule/protocol':
+        specifier: workspace:*
+        version: link:../protocol
       '@types/node':
         specifier: ^22.20.5
         version: 22.20.5

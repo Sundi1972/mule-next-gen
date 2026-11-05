@@ -570,6 +570,8 @@ export interface EventView {
     becomes?: 'plain' | 'crater' | 'idle';
     /** True when the hit destroyed or took the plot's MULE. */
     muleLost?: true;
+    /** With muleLost: the good that MULE made. The view's tile has lost it already, so this is the only place it is named. */
+    good?: Good;
   }[];
   /** What it changed off the map, in the order it changed it: a player's (by id), the store's or the colony's. */
   effects?: EventEffect[];

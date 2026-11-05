@@ -6,9 +6,10 @@ import { useClient } from '../../net/react';
 import { usePhoneGame } from '../game';
 import { WIDE_PX } from '../Shell';
 import { keyDown, keyUp } from './controls';
-import { colonistBox, css, FRAMES, freeRun, overlap, phoneLayout, tileBox, type Box } from './layout';
+import { BANNER_CHAR_PX, bannerBox, colonistBox, css, FRAMES, freeRun, overlap, phoneLayout, tileBox, type Box } from './layout';
 import { PhoneLive, useArcade, useLive } from './live';
 import { CompactClock, GroundChip, GuideNote, LeadChip, Money, OverCard, PaceLine, PlotCard, PlotsLegend, Reconnecting, WaitWords } from './parts';
+import { ScrambleBanner, scrambleWords } from './moments';
 import { arcadeSeat, type ArcadeSeat } from './seat';
 import { SeatProvider, YourStage } from './stages';
 
@@ -181,7 +182,12 @@ export function PhoneLandscape({ frame }: { frame: { w: number; h: number } }) {
     space === 'map'
       ? (CARDS.map((c) => ({ x: L.stage.x + c.x * L.stage.w, y: L.stage.y + c.y * L.stage.h, w: c.w * L.stage.w, h: c.h * L.stage.h })).find((b) => clearOf.every((k) => overlap(b, k) === 0)) ?? null)
       : null;
-  const bannerFaded = near(L.banner, mePx, L.cell * 0.4);
+  // The banner's box keeps off your plots and the store (B-AC-4's measurement, for the moments' banner too).
+  const { moments = null } = useLive();
+  const scramble = moments?.scramble ?? null;
+  const words = (scramble ? scrambleWords(seat, scramble)?.text : seat.guide?.note) ?? '';
+  const banner = bannerBox(L, space, view.height, [...myPlots, seat.store], words.length * BANNER_CHAR_PX);
+  const bannerFaded = near(banner, mePx, L.cell * 0.4);
   const choosing = space === 'hall' && me.carriedMule === 'empty';
   const compactLeft = !!L.left && L.left.w < SIDE_ROOM_FULL;
   return (
@@ -251,10 +257,10 @@ export function PhoneLandscape({ frame }: { frame: { w: number; h: number } }) {
           </div>
         )}
         {card && <PlotCard seat={seat} now={now} at={{ left: card.x, top: card.y, width: card.w, maxHeight: card.h }} />}
-        {/* The banner box: the guide's note (V-7); on the map along the bottom row between the stick and the button, in
-            the hall across the walkway. It fades while you walk under it. */}
-        <div className="pointer-events-none absolute z-20 flex items-center justify-center" style={css(L.banner)} data-testid="scramble-banner-box">
-          <GuideNote seat={seat} faded={bannerFaded} />
+        {/* The banner box: the scramble's banner, or the guide's note (V-7); on the map along the bottom rows between the
+            stick and the button, clear of your plots, in the hall across the walkway. It fades while you walk under it. */}
+        <div className="pointer-events-none absolute z-20 flex items-center justify-center" style={css(banner)} data-testid="scramble-banner-box">
+          {scramble ? <ScrambleBanner seat={seat} scramble={scramble} at={{ maxWidth: '100%' }} faded={bannerFaded} /> : <GuideNote seat={seat} faded={bannerFaded} />}
         </div>
         {/* The controls, over the bottom corners. */}
         <span
@@ -320,7 +326,7 @@ export function LaptopArcade({ frame }: { frame: { w: number; h: number } }) {
         </header>
         <div className="flex min-h-0 flex-1 gap-6">
           <div className="relative shrink-0">
-            <YourStage seat={seat} width={stageW} height={stageH} density="wide" />
+            <YourStage seat={seat} width={stageW} height={stageH} density="wide" banner />
             {!keys.focused && (
               <span className="pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2 rounded-full bg-panel/90 px-3 py-1 text-sm text-ink-2 shadow-chip" data-testid="focus-hint">
                 Click the game to steer

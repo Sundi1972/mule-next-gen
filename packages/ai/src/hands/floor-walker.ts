@@ -334,28 +334,24 @@ export class FloorWalker {
   }
 
   /**
-   * For a lake plot: the spot on its quickest open neighbour, towards the lake, from which Reach offers the step's press
-   * on it. Not on a plot of the seat's own: there Reach works the land underfoot first, not the lake beside it. For an
-   * analysis, a spot whose land is not analysed yet offers that land first, then the lake: it costs an analysis more.
+   * For a lake plot: of the spots on its shore the plans count on (floor-time.ts shoreStands, by the engine's Reach), the
+   * quickest to walk to. One where Reach offers an analysis of the land underfoot first costs that analysis more.
    */
   private shore(view: FloorView, c: FloorColonist, plot: FloorPoint, action: AiAction): FloorPoint | null {
-    const { state, floor, cfg } = view;
-    const from = c.space === 'map' ? c : doorOutside(state, HALL_DOORS[0], cfg);
-    const me = state.players.find((p) => p.id === this.me)!;
+    const { state, cfg } = view;
+    if (action.type !== 'install' && action.type !== 'analyse' && action.type !== 'filter') return null;
+    // From the hall, out of whichever open door walks there quickest: doorTable's doors, the ones shoreStands keeps a
+    // spot for, so a spot the plan counts on is one the walker can walk to.
+    const lead = leading(c);
+    const walk = (at: FloorPoint): number => {
+      if (c.space === 'map') return pathTo(state, c, at, cfg)?.seconds ?? Infinity;
+      const out = (door: HallDoor) => hallSeconds(state, cfg, c, door, c.pace, lead) + (pathTo(state, doorOutside(state, door, cfg), at, cfg)?.seconds ?? Infinity) / mapFactor(cfg, c.pace, lead, c.bot);
+      return Math.min(Infinity, ...[...doorTable(state, cfg).keys()].map(out));
+    };
     let best: { at: FloorPoint; s: number } | null = null;
-    for (const at of shoreStands(state, cfg, this.me, plot)) {
-      // Reach itself says whether this spot offers this plot, and not another lake plot of the seat's nearer to it.
-      const there = { ...floor, colonists: floor.colonists.map((x) => (x.id === this.me ? { ...x, space: 'map' as const, ...at } : x)) };
-      let extra = 0;
-      if (!offers(reachOf(there, state, this.me, cfg), action)) {
-        if (action.type !== 'analyse') continue;
-        // With the land underfoot analysed first.
-        const land = tileIndex(state.width, Math.floor(at.x), Math.floor(at.y));
-        const after = { ...state, players: state.players.map((p) => (p.id === this.me ? { ...p, analysed: [...p.analysed, land] } : p)) };
-        if (!offers(reachOf(there, after, this.me, cfg), action)) continue;
-        extra = analysisSeconds(state, me.id);
-      }
-      const s = (pathTo(state, from, at, cfg)?.seconds ?? Infinity) + extra;
+    for (const { at, landFirst } of shoreStands(state, cfg, this.me, plot, action.type)) {
+      const extra = landFirst ? analysisSeconds(state, this.me) : 0;
+      const s = walk(at) + extra;
       if (Number.isFinite(s) && (!best || s < best.s)) best = { at, s };
     }
     return best?.at ?? null;

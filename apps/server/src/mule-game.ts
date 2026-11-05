@@ -173,6 +173,8 @@ const WAIT_REFUSES: ReadonlySet<DevIntent['type']> = new Set(['buyMule', 'instal
 /** The same presses on the steered floor (DEV_STEER.on). */
 const WAIT_REFUSES_REACH: ReadonlySet<Reach['kind']> = new Set(['buy', 'install', 'analyse', 'filter']);
 const WAITING_FOR_FIRST_MULES = "Waiting for the others' first MULEs";
+/** Every outfit a seat can choose, in the order its view lists their costs. */
+const OUTFITS: readonly Outfit[] = [...GOODS, 'greenBelt'];
 
 /** Names in reading order: "A", "A and B", "A, B and C". */
 function andList(names: string[]): string {
@@ -316,7 +318,7 @@ function monthEventView(state: GameState, e: MonthEvent): Omit<EventView, 'weigh
     origin: { ...e.origin },
     ...(e.direction ? { from: e.direction } : {}),
     ...(e.player ? { player: e.player } : {}),
-    hits: e.plots.map((p) => ({ ...at(p.index), order: p.order, delta: p.delta, ...(p.was ? { was: p.was } : {}), ...(p.becomes ? { becomes: p.becomes } : {}), ...(p.muleLost ? { muleLost: p.muleLost } : {}) })),
+    hits: e.plots.map((p) => ({ ...at(p.index), order: p.order, delta: p.delta, ...(p.was ? { was: p.was } : {}), ...(p.becomes ? { becomes: p.becomes } : {}), ...(p.muleLost ? { muleLost: p.muleLost, ...(p.good ? { good: p.good } : {}) } : {}) })),
     phase: e.phase,
     ...(e.effects ? { effects: e.effects.map((f) => ({ ...f })) } : {}),
   };
@@ -513,6 +515,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         // From the game seed and the seat, so a replay plays the same AI.
         seed: (this.seed * 7_919 + i * 104_729 + 17) >>> 0,
         decider: this.brain.deciderFor(brainSeat),
+        onPlaybook: (playbook) => this.recordPlaybook({ seat: s.id, month: playbook.month, phase: playbook.phase, playbook }),
         // A decision can come in the tick that enters a phase, before that phase's view goes out; its line waits for it.
         onDecision: (record) => {
           this.ctx.schedule(0, () => chat(record));
@@ -728,7 +731,10 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     if (colonist.walk) throw new RuleError('Still walking');
     if (colonist.assayUntil !== null) throw new RuleError('Still assaying');
     // Once in, you wait: the time before month 1's clock is for first MULEs only.
-    if (this.clockWaits && WAIT_REFUSES.has(intent.type) && this.isIn(seatId)) throw new RuleError("Waiting for the others' first MULEs");
+    // A seat in only because it cannot install a first MULE may still buy one; the engine says why it can't ("Not enough
+    // money"), not that it waits.
+    const mayBuyWhileWaiting = intent.type === 'buyMule' && this.inOnlyForWantOfAMule(seatId);
+    if (this.clockWaits && WAIT_REFUSES.has(intent.type) && !mayBuyWhileWaiting && this.isIn(seatId)) throw new RuleError("Waiting for the others' first MULEs");
     const to = walkTarget(state, intent);
     if (to === null) {
       this.act(seatId, intent, now);
@@ -945,12 +951,36 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   /**
    * Whether a seat counts as in for month 1's clock: away, or present with its first MULE installed, no plot, or its
    * turn ended at the pub or by Ready. The last two keep a seat that cannot or will not install from holding the table.
+   * So does a seat that can never install a first MULE: see cannotInstallFirstMule. Money that comes later
+   * needs no special case: counting a seat in only starts the clock, and it may still buy and install while it runs.
    */
   private isIn(seatId: string): boolean {
+    return this.inForItsTurn(seatId) || this.cannotInstallFirstMule(seatId);
+  }
+
+  /** In for what it did or has: away, Ready, its first MULE installed, its turn over, or no plot. */
+  private inForItsTurn(seatId: string): boolean {
     const state = this.requireState();
     if (this.away.has(seatId) || this.ready.has(seatId)) return true;
     const p = state.players.find((q) => q.id === seatId)!;
     return p.installedThisTurn || p.doneDeveloping || !state.tiles.some((t) => t.owner === seatId);
+  }
+
+  /** In only because it can never install a first MULE: such a seat may still buy one while the clock waits. */
+  private inOnlyForWantOfAMule(seatId: string): boolean {
+    return !this.inForItsTurn(seatId) && this.cannotInstallFirstMule(seatId);
+  }
+
+  /**
+   * Whether a seat can never install a first MULE with what it has, at its own prices: it leads none and the
+   * corral is empty or it can't pay for a MULE and its cheapest outfit, or it leads an empty MULE it can't outfit.
+   */
+  private cannotInstallFirstMule(seatId: string): boolean {
+    const state = this.requireState();
+    const p = state.players.find((q) => q.id === seatId)!;
+    const outfit = Math.min(...OUTFITS.map((o) => outfitCostFor(state, seatId, o)));
+    if (p.carriedMule === 'empty') return p.money < outfit;
+    return !p.carriedMule && (state.store.mules <= 0 || p.money < mulePriceFor(state, seatId) + outfit);
   }
 
   private seatsNotIn(): SeatInfo[] {
@@ -1152,7 +1182,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     const state = this.requireState();
     // At once, so an AI Governor's tax lands before a quick table can press ready.
     this.tickVoteHands(0);
-    for (const seat of this.ai.values()) seat.planMonth(state);
+    for (const seat of this.ai.values()) seat.planMonth(state, (action) => this.aiAct(seat.id, action));
   }
 
   /** True while the colony votes in planning (this month's election, then its law ballot), before planning proper. */
@@ -1444,7 +1474,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
 
   /** Why the rules hold back a press the floor would make, or null: in month 1 a seat already in waits (AM-3). */
   private refusal(seatId: string, reach: Reach): string | null {
-    return this.clockWaits && WAIT_REFUSES_REACH.has(reach.kind) && this.isIn(seatId) ? WAITING_FOR_FIRST_MULES : null;
+    const mayBuyWhileWaiting = reach.kind === 'buy' && this.inOnlyForWantOfAMule(seatId);
+    return this.clockWaits && WAIT_REFUSES_REACH.has(reach.kind) && !mayBuyWhileWaiting && this.isIn(seatId) ? WAITING_FOR_FIRST_MULES : null;
   }
 
   /** A seat's button as its view shows it at `at`, epoch ms, compared as text. */
@@ -1715,7 +1746,6 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     const me = seatId ? state.players.find((p) => p.id === seatId) : undefined;
     const lit = litPlot(state);
     const band = airBand(state.air).name;
-    const outfits: Outfit[] = [...GOODS, 'greenBelt'];
     // While the election runs, the one "I'm ready" button stands for Done in the stage; planning's own ready set is untouched.
     // In the land grant a seat is ready once it has used its claims or pressed Done with land.
     const doneWithLand = (id: string) => {
@@ -1788,7 +1818,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
             devSeconds: me.devSeconds,
             produced: state.history.at(-1)?.produced[me.id] ?? null,
             mulePrice: mulePriceFor(state, me.id),
-            outfitCosts: Object.fromEntries(outfits.map((o) => [o, outfitCostFor(state, me.id, o)])) as Record<Outfit, number>,
+            outfitCosts: Object.fromEntries(OUTFITS.map((o) => [o, outfitCostFor(state, me.id, o)])) as Record<Outfit, number>,
             droneOrder: me.droneOrder.map((i) => ({ x: i % state.width, y: Math.floor(i / state.width) })),
             droneFound: me.droneFound.map((i) => ({ x: i % state.width, y: Math.floor(i / state.width) })),
             politics: myPoliticsView(state, me.id),
