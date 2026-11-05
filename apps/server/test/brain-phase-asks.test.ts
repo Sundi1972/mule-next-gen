@@ -262,6 +262,49 @@ describe('RULE-A2 rows 3-4: the next phase is edited in the slack before it', { 
     expect(await saidAt(100, '   ')).toEqual([]);
   });
 
+  it("B-AC-1 (a'): a plan whose every edit was refused says nothing, so the table never hears a plan the seat does not play; a plan that changes nothing, and refused nothing, is said", async () => {
+    const saidFor = async (edits: unknown[]) => {
+      const said: string[] = [];
+      const notes: PlaybookNote[] = [];
+      const seat = new AiSeat({ id: 'p0', name: 'Ada', persona: 'trader', level: 'trader', seed: 1 });
+      const reply = JSON.stringify({ edits, line: LAND_LINE });
+      const playbooks = new Playbooks({ brain: smartOn(answersAt(100, reply)), source: playbookSource([seat]), seats: [seat], record: (n) => notes.push(n), speak: (_id, s) => said.push(s.line) });
+      const state: GameState = createGame({ seed: 10, players: PLAYERS });
+      playbooks.ask(state, 1);
+      await vi.advanceTimersByTimeAsync(1_000);
+      advanceTo(state, 'landGrant');
+      playbooks.takeEffect(state);
+      return { said, by: notes.map((n) => n.playbook.by) };
+    };
+    // A path no draft has: refused, so the engine's draft plays and the line is not said.
+    expect(await saidFor([{ path: '/landGrant/nothingLikeThis', to: 1, reason: 'Odd.' }])).toEqual({ said: [], by: ['engine'] });
+    // No edit at all: Claude keeps the draft as it is, and its line is said.
+    expect((await saidFor([])).said).toEqual([LAND_LINE]);
+  });
+
+  it("B-AC-1 (a'): a speak that throws stops no play: the seat still adopts the plan, and the game goes on", async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const seat = new AiSeat({ id: 'p0', name: 'Ada', persona: 'trader', level: 'trader', seed: 1 });
+    const notes: PlaybookNote[] = [];
+    const reply = JSON.stringify({ edits: [{ path: '/landGrant/claims', to: 1, reason: 'One.' }], line: LAND_LINE });
+    const playbooks = new Playbooks({
+      brain: smartOn(answersAt(100, reply)),
+      source: playbookSource([seat]),
+      seats: [seat],
+      record: (n) => notes.push(n),
+      speak: () => {
+        throw new Error('no chat');
+      },
+    });
+    const state: GameState = createGame({ seed: 10, players: PLAYERS });
+    playbooks.ask(state, 1);
+    await vi.advanceTimersByTimeAsync(1_000);
+    advanceTo(state, 'landGrant');
+    expect(() => playbooks.takeEffect(state)).not.toThrow();
+    expect(notes.map((n) => [n.phase, n.playbook.by])).toEqual([['landGrant', 'llm']]);
+    expect(errors.mock.calls.map((c) => String(c[0]))).toEqual(["playbooks: seat p0's plan line could not be said: no chat"]);
+  });
+
   it("C4: the auction playbook adopted at the auction's start carries every drafted good, the ones past the brief's cap too", async () => {
     let edited: string | null = null;
     const sdk = fakeSdk((_n, params) => {
