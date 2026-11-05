@@ -1,6 +1,6 @@
 import { DEV_WALK, DEVELOPMENT, GAME, POLITICS } from '@mule/engine';
 import type { DealView, MuleView, TableView } from '@mule/protocol';
-import { AirGauge, Button, cx, GOOD_NAME, GoodTag, HoloMap, PaceList, PlayerMark, SPEED_STEPS, speedStep, SeatSpeciesProvider, SharedClock, StoreInterior, TERRAIN_NAME, TimeBar, Timer, WalkBoard, type CreatureWrap } from '@mule/ui';
+import { AirGauge, Button, cx, GOOD_NAME, GoodIcon, GoodTag, HoloMap, PaceList, PlayerMark, SPEED_STEPS, speedStep, SeatSpeciesProvider, SharedClock, StoreInterior, TERRAIN_NAME, TimeBar, Timer, WalkBoard, type CreatureWrap } from '@mule/ui';
 import { Speaker, TvTicker, tvSpeakerAt } from '../chat/Chat';
 import { boardWalkers, dealLine, dealSpeed, newestFirst, shipWants, ShipWants, SIDE_WORD, skippedLine, StatusTable, StoreBox, TvReadout, WaitingToPick, type DealRow } from '../components/AuctionParts';
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
@@ -132,7 +132,7 @@ function TvLobby({ table }: { table: TableView<MuleView> }) {
 }
 
 /**
- * The TV's header: the month and the phase's title, the theme toggle, the colony's gauges (or the air gauge alone when
+ * The TV's header: the month and the phase's title (after its `icon`, where it has one), the theme toggle, the colony's gauges (or the air gauge alone when
  * `gauges` is false, as game over and the goods auction keep it) and the clock, then the table chat. `ready`, a screen's
  * ready count, sits beside the title; with the colony's gauges too, they move to a row of their own under it, full
  * width, since title, chip and gauges don't share 1280 px (PM ruling, 5 Nov). `chatLines` is how many chat lines show:
@@ -141,6 +141,7 @@ function TvLobby({ table }: { table: TableView<MuleView> }) {
 export function TvHeader({
   game,
   title,
+  icon,
   seconds,
   extra,
   ready,
@@ -149,6 +150,7 @@ export function TvHeader({
 }: {
   game: MuleView;
   title: string;
+  icon?: ReactNode;
   seconds?: number | undefined;
   extra?: ReactNode;
   ready?: ReactNode;
@@ -167,7 +169,8 @@ export function TvHeader({
           <span className="label-caps text-base!">
             Month {game.month} / {game.maxMonths}
           </span>
-          <h1 className={cx('font-display text-5xl font-semibold leading-none', fixed && 'whitespace-nowrap')} data-testid="tv-phase">
+          <h1 className={cx('flex items-center gap-4 font-display text-5xl font-semibold leading-none', fixed && 'whitespace-nowrap')} data-testid="tv-phase">
+            {icon}
             {title}
           </h1>
         </div>
@@ -463,10 +466,10 @@ export function TvAuction({ table, game, auction }: { table: TableView<MuleView>
   const picked = game.players.map((p) => ({ ...p, ready: pickedIn(game, p.id) }));
   return (
     <div className="flex h-[720px] w-[1280px] flex-col gap-3 bg-table px-10 py-6 text-ink" data-phase="auction" data-stage={auction.stage} data-testid={status ? 'tv-status' : 'tv-walk'}>
-      {/* On the board the deal rows and the help need the height, and a board that stays one size as deals come and go:
-          no chat ticker for the whole walk, the speakers' bubbles on the board carry it (PM rulings, 5 Nov). The status
-          stage keeps three lines, which it has room for (G-6). */}
-      <TvHeader game={game} title={`Auction · ${GOOD_NAME[auction.good]}`} gauges={false} {...(status ? {} : { chatLines: 0 })} />
+      {/* The good leads the headline, its glyph first (Heiko, 5 Nov). On the board the deal rows and the help need the
+          height, and a board that stays one size as deals come and go: no chat ticker for the whole walk, the speakers'
+          bubbles on the board carry it (PM rulings, 5 Nov). The status stage keeps three lines, which it has room for (G-6). */}
+      <TvHeader game={game} title={`${GOOD_NAME[auction.good]} auction`} icon={<GoodIcon good={auction.good} size={52} />} gauges={false} {...(status ? {} : { chatLines: 0 })} />
       <div className="flex min-h-0 flex-1 gap-6">
         <div className={cx('flex min-w-0 flex-1 flex-col', status ? 'gap-3' : 'gap-2')}>
           {status ? (
