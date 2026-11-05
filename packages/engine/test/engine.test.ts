@@ -67,6 +67,10 @@ describe('createGame', () => {
     expect(newGame(n).players.map((p) => p.stock.food)).toEqual(Array.from({ length: n }, () => 2));
   });
 
+  it.each([2, 4, 6])('every seat of a %i-seat game starts with 2 Energy (Heiko, 5 Nov)', (n) => {
+    expect(newGame(n).players.map((p) => p.stock.energy)).toEqual(Array.from({ length: n }, () => 2));
+  });
+
   it.each([
     [2, 8],
     [4, 16],
