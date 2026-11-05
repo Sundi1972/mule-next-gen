@@ -4,6 +4,7 @@ import { AirGauge, Button, cx, GOOD_NAME, GoodTag, HoloMap, PaceList, PlayerMark
 import { Speaker, TvTicker, tvSpeakerAt } from '../chat/Chat';
 import { boardWalkers, dealLine, newestFirst, shipWants, ShipWants, SIDE_WORD, skippedLine, StatusTable, StoreBox, TvReadout, WaitingToPick, type DealRow } from '../components/AuctionParts';
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { BuildSite, ColonyGauges, ColonyScoreBand, TvWinner } from '../components/Colony';
 import { CollapseBanner, ColonyPanel, LeagueTable, WinnerCard } from '../components/MonthEnd';
 import { joinUrl, Qr } from '../components/Qr';
 import { Scaled } from '../components/Scaled';
@@ -129,7 +130,8 @@ function TvLobby({ table }: { table: TableView<MuleView> }) {
   );
 }
 
-export function TvHeader({ game, title, seconds, extra }: { game: MuleView; title: string; seconds?: number | undefined; extra?: ReactNode }) {
+/** `gauges` false keeps the air gauge alone even with a colony, as game over does. */
+export function TvHeader({ game, title, seconds, extra, gauges = true }: { game: MuleView; title: string; seconds?: number | undefined; extra?: ReactNode; gauges?: boolean }) {
   return (
     <>
       <header className="flex items-end justify-between gap-6">
@@ -144,7 +146,7 @@ export function TvHeader({ game, title, seconds, extra }: { game: MuleView; titl
         <div className="flex items-center gap-4">
           {extra}
           <ThemeToggle />
-          <AirGauge level={game.air.level} band={game.air.band} tv />
+          {game.colony && gauges ? <ColonyGauges colony={game.colony} size="tv" className="w-[760px]" /> : <AirGauge level={game.air.level} band={game.air.band} tv />}
           {seconds !== undefined && <Timer seconds={seconds} className="h-14! px-5! text-3xl!" />}
         </div>
       </header>
@@ -691,10 +693,20 @@ export function TvMonthEnd({ game }: { game: MuleView }) {
       </div>
       {inCollapse(game) && <CollapseBanner density="tv" />}
       <FitHeight className="flex-1">
-        <div className="grid flex-1 grid-cols-[minmax(0,7fr)_minmax(0,5fr)] gap-6">
-          <LeagueTable view={game} density="tv" />
-          <ColonyPanel view={game} density="tv" />
-        </div>
+        {game.colony ? (
+          <div className="grid flex-1 grid-cols-[minmax(0,6fr)_minmax(0,6fr)] gap-6">
+            <LeagueTable view={game} density="tv" />
+            <div className="flex flex-col gap-4">
+              <ColonyPanel view={game} density="tv" />
+              <BuildSite colony={game.colony} players={game.players} size="tv" />
+            </div>
+          </div>
+        ) : (
+          <div className="grid flex-1 grid-cols-[minmax(0,7fr)_minmax(0,5fr)] gap-6">
+            <LeagueTable view={game} density="tv" />
+            <ColonyPanel view={game} density="tv" />
+          </div>
+        )}
       </FitHeight>
       <p className="text-lg leading-snug text-ink-2" data-testid="worth-rule">
         Worth: cash + goods at the store’s price + land at {GAME.plotScore} cr a plot + MULEs at {game.mulePrice} cr + {POLITICS.termScore} cr a term in office. Each player’s own lines are on their phone.
@@ -710,16 +722,16 @@ export function TvMonthEnd({ game }: { game: MuleView }) {
 export function TvGameOver({ game }: { game: MuleView }) {
   return (
     <div className="flex h-[720px] w-[1280px] flex-col gap-4 bg-table p-10 text-ink" data-phase={game.phase} data-testid="tv-gameover">
-      <TvHeader game={game} title={PHASE_NAME.gameOver} />
+      <TvHeader game={game} title={PHASE_NAME.gameOver} gauges={false} />
       <FitHeight className="flex-1">
         <div className="flex flex-1 flex-col gap-4">
           <div className="grid flex-1 grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-6">
-            <WinnerCard view={game} density="tv" />
+            {game.colony ? <TvWinner view={game} className="self-start" /> : <WinnerCard view={game} density="tv" />}
             <div className="flex flex-col" data-testid="tv-scores">
               <LeagueTable view={game} density="tv" final />
             </div>
           </div>
-          <ColonyPanel view={game} density="tv" layout="row" verdict />
+          {game.colony ? <ColonyScoreBand view={game} colony={game.colony} /> : <ColonyPanel view={game} density="tv" layout="row" verdict />}
         </div>
       </FitHeight>
     </div>
