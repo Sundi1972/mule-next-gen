@@ -752,7 +752,8 @@ inside a wall; money and stock change only through game.ts rules; development en
   onto the plot the led MULE was just swapped off** (PM ruling A, so a double tap can't swap back and lose the new
   MULE): the row stays on that plot, dimmed (why `justSwapped`, "just swapped: lead it to another plot"), so a second
   press holds and never falls through to the tile's next row (FILTER, ANALYSE, TAKE); `installMule` refuses it too,
-  "Just swapped: lead it to another plot", for a direct action such as the AI's. Reach row 10's notes: "you lead your
+  "Just swapped: lead it to another plot", for a direct action such as the AI's. The block holds only while the led MULE keeps the outfit it was swapped off with
+  (`game.ts::justSwappedOff`); re-outfitted since, it is a real swap and allowed (review finding on #383). Reach row 10's notes: "you lead your
   <good> MULE", "same outfit, nothing to swap" and "just swapped: lead it to another plot". Pins:
   `apps/server/test/installed-this-turn.test.ts` B-AC-SWAP-1..4, `floor-reach.test.ts` rows 10. Not in scope: a
   mid-turn "return to the corral" press with a refund (backlog, put to Heiko).

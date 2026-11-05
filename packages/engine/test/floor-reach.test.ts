@@ -1149,6 +1149,23 @@ describe('the dev floor: the action button', () => {
     expect(state).toEqual(was);
   });
 
+  it('B-AC-SWAP-4: re-outfitted since, the MULE swapped off a plot may go back there: a Food MULE over the Energy MULE is a real swap', () => {
+    const { state } = world({ at: () => onTile(7, 4), game: (s) => void ((tileOf(s, 7, 4).outfit = 'energy'), Object.assign(a(s), { carriedMule: 'food', takenMule: { x: 7, y: 4, outfit: 'smithore', runMonths: 0, swapped: true } })) });
+    installMule(state, 'a', 7, 4);
+    expect([tileOf(state, 7, 4).outfit, a(state).carriedMule]).toEqual(['food', 'energy']);
+  });
+
+  it('B-AC-SWAP-2: the swapped-out MULE installed on another plot is no longer led, so the turn end sends nothing to the corral', () => {
+    const { state } = world({ at: () => onTile(7, 4), game: (s) => void (a(s).carriedMule = 'energy') });
+    const corral = state.store.mules;
+    installMule(state, 'a', 7, 4);
+    expect(a(state).takenMule?.swapped).toBe(true);
+    installMule(state, 'a', 2, 4);
+    expect([tileOf(state, 7, 4).outfit, tileOf(state, 2, 4).outfit, a(state).carriedMule, a(state).takenMule]).toEqual(['energy', 'smithore', null, undefined]);
+    visitPub(state, 'a', 0);
+    expect(state.store.mules, 'no MULE back to the corral').toBe(corral);
+  });
+
   it('T-AC-3: with the arcade on, OUTFIT is offered for no fitted MULE at any outfitter, and outfitMule refuses one', () => {
     const saved = DEV_STEER.on;
     DEV_STEER.on = true;

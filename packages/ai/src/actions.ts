@@ -130,7 +130,7 @@ const DESCRIBED = {
     command: 'install',
     phases: ['development'],
     does: () => 'Installs the outfitted MULE it leads on one of its plots; a MULE already there comes onto its lead, and goes to the corral if the turn ends with it still led.',
-    legalWhen: () => [...DEVELOPER, 'The MULE is not outfitted', 'Your MULE bolted: catch it first', 'Not a plot', 'Not your plot', 'Same outfit: nothing to swap'],
+    legalWhen: () => [...DEVELOPER, 'The MULE is not outfitted', 'Your MULE bolted: catch it first', 'Not a plot', 'Not your plot', 'Same outfit: nothing to swap', 'Just swapped: lead it to another plot'],
     cost: null,
     args: PLOT,
   },

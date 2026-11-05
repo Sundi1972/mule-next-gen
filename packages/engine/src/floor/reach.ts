@@ -15,6 +15,7 @@ import {
   fitFilter,
   hasAnalysed,
   installMule,
+  justSwappedOff,
   mulePriceFor,
   outfitCostFor,
   outfitMule,
@@ -209,7 +210,7 @@ const install: Row = (s) => {
   // The plot the led MULE was just swapped off keeps the row, dimmed (AM-23, PM ruling A): a double tap on SWAP holds,
   // and never falls through to the tile's next row (FILTER, ANALYSE, TAKE). Over a MULE with the outfit it leads there
   // is nothing to swap: dimmed too, as RE-OUTFIT's row is for its own good.
-  const swappedOff = !!plot && !!p.takenMule?.swapped && p.takenMule.x === plot.x && p.takenMule.y === plot.y;
+  const swappedOff = !!plot && justSwappedOff(p, plot.x, plot.y);
   const why: ReachRefusal | null = swappedOff ? { kind: 'justSwapped' } : plot?.outfit === good ? { kind: 'sameGood' } : null;
   return plot && { kind: 'install', enabled: !why, good, plot: at(plot), fromShore: plot !== tile, replaces: plot.outfit, why };
 };
