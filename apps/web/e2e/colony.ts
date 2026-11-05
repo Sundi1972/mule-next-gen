@@ -115,27 +115,7 @@ async function main(): Promise<void> {
     else await happiness.locator('[data-num]').filter({ hasText: String(mood) }).waitFor({ timeout: PRESS_MS });
     console.log(`✓ B-AC-34-3: the TV header shows the four gauges, wealth ${wealth} and happiness ${mood ?? 'not yet'} as the server has them`);
 
-    // 1b. The general strike (C37): C26's event that calls it is not built yet, so it starts as the server's tests start
-    // it, with Lena governing and the fund able to pay. Her phone's Now card pays; the server and the TV agree.
-    const fundBefore = await held(server, code, async () => {
-      const state = (room() as unknown as { game: { state: GameState } }).game.state;
-      state.politics = { ...state.politics!, governor: lenaId };
-      state.treasury.money = Math.max(state.treasury.money, COLONY.strike.cost * 2);
-      callStrike(state, 'food');
-      room().broadcast();
-      return state.treasury.money;
-    });
-    const badge = tv.getByTestId('strike-badge');
-    await badge.filter({ hasText: 'STRIKE · Food 20%' }).waitFor({ timeout: PRESS_MS });
-    await phone.getByTestId('pay-strike').click({ timeout: PRESS_MS });
-    await phone.getByTestId('strike-paid').waitFor({ timeout: PRESS_MS });
-    check(colony().strike?.paid === true, `B-AC-37-2: the server has the strike paid, got ${JSON.stringify(colony().strike)}`);
-    check(colony().fund === fundBefore - COLONY.strike.cost, `B-AC-37-2: the fund drops by ${COLONY.strike.cost} cr, from ${fundBefore} to ${colony().fund}`);
-    const paid = `PAID · −${fmt(COLONY.strike.cost)} cr`;
-    await badge.filter({ hasText: paid }).waitFor({ timeout: PRESS_MS });
-    const news = `Lena pays the food strikers ${COLONY.strike.cost} cr.`;
-    await tv.getByTestId('tv-news').getByText(news).waitFor({ timeout: PRESS_MS });
-    console.log(`✓ B-AC-37-2/4: Lena's phone pays the Food strikers; the server has it paid, the fund ${fmt(fundBefore)} → ${fmt(colony().fund)} cr, the TV reads "${paid}" and "${news}"`);
+    await theGovernorPaysTheStrike({ server, code, phone, tv, lenaId, room, colony });
 
     // On through the month: ready, done with land, development on its clock, the auction.
     await phone.locator('[data-phase=planning] [data-testid=ready]').click({ timeout: PRESS_MS });
@@ -212,6 +192,32 @@ async function throughTheLandAuction(page: Page, board: () => MuleView): Promise
     if (board().landAuction?.stage === 'walk') await page.locator('[data-phase=landAuction] [data-testid=done]:not([disabled])').click({ timeout: 200 }).catch(() => undefined);
     await new Promise((r) => setTimeout(r, 50));
   }
+}
+
+/**
+ * The general strike (C37), front to back: C26's event that calls it is not built yet, so it starts as the server's
+ * tests start it, with Lena governing and the fund able to pay. Her phone's Now card pays; the server and the TV agree.
+ */
+async function theGovernorPaysTheStrike({ server, code, phone, tv, lenaId, room, colony }: { server: MuleServer; code: string; phone: Page; tv: Page; lenaId: string; room: () => Room; colony: () => ColonyView }): Promise<void> {
+  const fundBefore = await held(server, code, async () => {
+    const state = (room() as unknown as { game: { state: GameState } }).game.state;
+    state.politics = { ...state.politics!, governor: lenaId };
+    state.treasury.money = Math.max(state.treasury.money, COLONY.strike.cost * 2);
+    callStrike(state, 'food');
+    room().broadcast();
+    return state.treasury.money;
+  });
+  const badge = tv.getByTestId('strike-badge');
+  await badge.filter({ hasText: 'STRIKE · Food 20%' }).waitFor({ timeout: PRESS_MS });
+  await phone.getByTestId('pay-strike').click({ timeout: PRESS_MS });
+  await phone.getByTestId('strike-paid').waitFor({ timeout: PRESS_MS });
+  check(colony().strike?.paid === true, `B-AC-37-2: the server has the strike paid, got ${JSON.stringify(colony().strike)}`);
+  check(colony().fund === fundBefore - COLONY.strike.cost, `B-AC-37-2: the fund drops by ${COLONY.strike.cost} cr, from ${fundBefore} to ${colony().fund}`);
+  const paid = `PAID · −${fmt(COLONY.strike.cost)} cr`;
+  await badge.filter({ hasText: paid }).waitFor({ timeout: PRESS_MS });
+  const news = `Lena pays the food strikers ${COLONY.strike.cost} cr.`;
+  await tv.getByTestId('tv-news').getByText(news).waitFor({ timeout: PRESS_MS });
+  console.log(`✓ B-AC-37-2/4: Lena's phone pays the Food strikers; the server has it paid, the fund ${fmt(fundBefore)} → ${fmt(colony().fund)} cr, the TV reads "${paid}" and "${news}"`);
 }
 
 /** Development is the arcade's floor, with no pub button on the phone: the turn runs out on its clock, as in full-game.ts. */
