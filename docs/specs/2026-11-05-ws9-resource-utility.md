@@ -130,8 +130,8 @@ HC-2  Every number is a named value in packages/engine/src/config.ts (the new
       sweeps them; config-guard stays green.           source: CLAUDE.md   breach: fatal
 HC-3  AI only. No engine rule changes; packages/engine stays pure; a game replays
       from seed + actions.                             source: CLAUDE.md   breach: fatal
-HC-4  Behind AI_VALUE.model ('today' | 'unit'), default 'today' until Heiko rules on
-      PR-1's measurement. With 'today' the sim is byte-identical to trunk.
+HC-4  Behind the switch AI_VALUE.unit, default false until Heiko rules on PR-1's
+      measurement. With it false the sim is byte-identical to trunk.
       source: PM ruling 5 Nov                                       breach: fatal
 HC-5  The engine is the only source of a rule the value reads: needs (monthNeeds,
       needsOf) and the upkeep order that turns them into a target, the Energy turn-off
@@ -165,11 +165,11 @@ senior       junior would: add a "short → buy" branch in tradeDecision (WS1's 
              widened) · senior does: one per-unit value whose short cost floors at the
              replacement price, so tradeDecision's existing "buy while value > ask" loop
              buys the shortfall; reads AM-17's turn-off order from the engine, not a copy.
-mechanism    branch_by_abstraction: unitValues dispatches on AI_VALUE.model
-             ('today' → today's body unchanged; 'unit' → the new model)
+mechanism    branch_by_abstraction: unitValues dispatches on AI_VALUE.unit
+             (false → today's body unchanged; true → the new model)
 call sites   strategist.ts::goodPlan (strategist.ts:484) ·
              playbook/validate.ts::validatePlaybook's floorUnits (validate.ts:353)
-pin          AI_VALUE.model 'today': default, `--plays today` and politics-off sims
+pin          AI_VALUE.unit false: default, `--plays today` and politics-off sims
              byte-identical to trunk on 1/101/201 (T-AC-9)
 depends_on   C3 (the belief; stubbable: outlook.price) · WS1's exported turn-off order
              for Energy and Water, shipping in the AM-17 PR #393 (energyOffOrder(state,
@@ -200,7 +200,7 @@ seam         packages/ai/src/strategist.ts::goodPlan and ::tradeDecision; value.
 senior       junior would: exempt the shortfall from the reserve (the stopgap's rule) ·
              senior does: one λ ranks units across goods, so the 80-cr seat buys its most
              vital units first and the reserve can't fence off the unit it protects.
-mechanism    branch_by_abstraction on AI_VALUE.model
+mechanism    branch_by_abstraction on AI_VALUE.unit
 call sites   cashReserve: strategist.ts:159 (landDecision), :285 (sellWanted), :342 and
              :385 (developDecision), :493 (goodPlan); hands/lot.ts:72; playbook/draft.ts:175
              (cashFloor) · goodPlan: hands/auction.ts:101, playbook/draft.ts:364 ·
@@ -229,7 +229,7 @@ mechanism    sprout
 reuse check  grep "price(\|later(" packages/ai/src → outlook.ts::Outlook.price/later
              (the neighbour, reused as the phase-1 belief); no other forecaster exists.
 call sites   C1, C2 (new)
-pin          none: new, and with AI_VALUE.model 'today' nothing calls it
+pin          none: new, and with AI_VALUE.unit false nothing calls it
 depends_on   §3 WS5 price contract (frozen in WS5's PR-1; PR-3's expectedOffWorld,
              stubbable on outlook.later until it lands)
 ```
@@ -247,7 +247,7 @@ logic        → RULE-5's outcome
 seam         strategist.ts::tradeDecision
 senior       junior would: veto pass while short · senior does: the pass's own gain
              carries the shortfall it leaves, so a playbook can still choose it knowingly.
-mechanism    in_place, gated on AI_VALUE.model
+mechanism    in_place, gated on AI_VALUE.unit
 call sites   hands/auction.ts:104, playbook/draft.ts:365
 pin          as C1
 depends_on   C1, C2
@@ -288,7 +288,7 @@ seam         packages/ai/src/sim.ts (WS1, named edit), beside its "short of Food
              Water" row
 mechanism    in_place
 call sites   pnpm sim
-pin          the new rows print only under AI_VALUE.model 'unit', so with 'today' the
+pin          the new rows print only with AI_VALUE.unit true, so with it false the
              whole report stays byte-identical to trunk (T-AC-9)
 depends_on   C1, C2 (PR-1) · C1 RULE-4 (PR-2) · C3 PR-3
 ```
@@ -296,7 +296,7 @@ depends_on   C1, C2 (PR-1) · C1 RULE-4 (PR-2) · C3 PR-3
 ```
 C7 · ADDED · AI_VALUE, the config block
 
-tomorrow     MUST hold model ('today' | 'unit'), forecastRisk, shortFloorMarkup,
+tomorrow     MUST hold unit (the switch, default false), forecastRisk, shortFloorMarkup,
              holdMonths, the belief's tilt weights and bounds (§3), each with unit and
              meaning. Placeholders (HC-2).
 seam         packages/engine/src/config.ts, a new block beside STRATEGIST (WS1's)
@@ -326,7 +326,7 @@ seam         packages/ai/src/value.ts::monthlyNet, the single place a plot's val
 senior       junior would: raise STRATEGIST.selfSupply (a WS1 stopgap the PM ruled out) ·
              senior does: one short-cost function prices both buying a unit and building the
              plant that makes it, so trading and building can't disagree.
-mechanism    branch_by_abstraction on AI_VALUE.model
+mechanism    branch_by_abstraction on AI_VALUE.unit
 call sites   value.ts::installGain (value.ts:136, :138), which feeds developDecision, bestInstall,
              landDecision, plotValue and muleValue
 pin          as C1 (T-AC-9)
@@ -472,7 +472,7 @@ inputs     the playbook's GoodPlay.expect · outlook.price · PR-3: trend, warni
 first match wins
   #  when                                       belief(good)
   1  the seat's playbook sets expect            expect (validator-bounded, §3)
-  2  AI_VALUE.model 'unit', PR-3 built          outlook.price tilted by the PR-3 signals
+  2  AI_VALUE.unit true, PR-3 built            outlook.price tilted by the PR-3 signals
                                                 and persona (weights in AI_VALUE)
   3  otherwise                                  outlook.price (outlook.final → posted)
 unknown    expect absent (the key omitted, §3) → row 2 or 3; expect not finite → the
@@ -506,11 +506,11 @@ No external dependency: the model runs in-process and seeded.
 
 ## §5 · Delivery
 
-Code-only; no existing state to reach. `AI_VALUE.model` defaults to 'today' (HC-4). Rollback is the switch.
+Code-only; no existing state to reach. `AI_VALUE.unit` defaults to false (HC-4). Rollback is the switch.
 
 ## §6 · Acceptance Criteria `[handoff]`
 
-Every test runs with `AI_VALUE.model = 'unit'`, except T-AC-9.
+Every test runs with `AI_VALUE.unit = true`, except T-AC-9.
 
 | AC | Given · When · Then | Changes | observed_at | negative case |
 |---|---|---|---|---|
@@ -527,10 +527,10 @@ Every test runs with `AI_VALUE.model = 'unit'`, except T-AC-9.
 | **T-AC-6** (serves B-AC-2) | RULE-2 row 1's example: S(k) follows AM-17's turn-off order | C1 | unitValues' keep | no plot needing Energy: S = replace |
 | **T-AC-7** (serves B-AC-3) | RULE-4's example: Ck ≈ 29.8 | C1 | unitValues | spoilage 1 → Ck 0 |
 | **T-AC-8** (serves B-AC-4) | `expect` within bounds is the belief, rounded to whole credits; beyond them, clamped and listed in `rejected`; NaN or ±Infinity refused (listed, the key dropped); a draft with no belief has no `expect` key (`'expect' in play` is false) | C3, C5 | the validator result, the drafted GoodPlay's JSON, and the belief | 72.4 → 72 |
-| **T-AC-12** (serves B-AC-5) | The sim reports plants (and wells, after AM-18) built per seat-game, beside the share of seat-months with a cut; under 'unit' both move against trunk on 1/101/201, reported and not tuned | C6, C8 | the sim report | — |
-| **T-AC-9** (HC-4) | `AI_VALUE.model` 'today': default, `--plays today` and politics-off sims byte-identical to trunk on 1/101/201 | C1–C6 | the sim report | — |
+| **T-AC-12** (serves B-AC-5) | The sim reports plants (and wells, after AM-18) built per seat-game, beside the share of seat-months with a cut; with the switch on, both move against trunk on 1/101/201, reported and not tuned | C6, C8 | the sim report | — |
+| **T-AC-9** (HC-4) | `AI_VALUE.unit` false: default, `--plays today` and politics-off sims byte-identical to trunk on 1/101/201 | C1–C6 | the sim report | — |
 | **T-AC-10** (UBER-AC-3, serves B-AC-4, PR-3) | The sim's speculation row: units beyond need, their realised margin after spoilage, storage and tax; bullish-belief seats positive on all 3 seed sets | C3, C6 | the sim report | — |
-| **T-AC-11** (HC-3) | A game with `AI_VALUE.model` 'unit' replays from seed + actions to the same state hash | C1–C5 | the record replay | — |
+| **T-AC-11** (HC-3) | A game with `AI_VALUE.unit` true replays from seed + actions to the same state hash | C1–C5 | the record replay | — |
 
 **Invariants**, asserted by every relevant test:
 - keep and buy are non-increasing in k;
@@ -561,7 +561,17 @@ Every test runs with `AI_VALUE.model = 'unit'`, except T-AC-9.
 
 ## §8 · Amendments `[review-only]`
 
-(none yet)
+```
+AM-1 · 2026-11-05 · WS9 · at plan time
+
+target    HC-4, C1–C8 mechanism lines, §5, §6
+said      AI_VALUE.model, a string 'today' | 'unit'
+did       AI_VALUE.unit, a switch (default false)
+because   packages/ai/src/sim.ts::applySets takes only numbers and true/false, so
+          `pnpm sim --set AI_VALUE.model=unit` would be refused, and every PR's sim rows
+          (UBER-AC-1..3) are measured with the switch on. G-1..G-3 unchanged.
+folded    every mention renamed; the rulebook section (#400) follows
+```
 
 ## §9 · Ownership Boundaries
 
