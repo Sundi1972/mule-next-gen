@@ -234,14 +234,34 @@ export function draftMulePick(input: DraftInput, k: number, walk: DevWalk | unde
 }
 
 /**
+ * MULE `mule` led out on `copy` as the hand plays it (AM-27): a MULE the seat already leads, won at the land auction,
+ * is that MULE, so it is not bought, and it is not outfitted again for the outfit it carries. The copy with it
+ * installed, or the rules' refusal, with `copy` unchanged.
+ */
+function leadOut(copy: GameState, me: PlayerId, mule: Extract<DevAction, { kind: 'install' }>): GameState | RuleError {
+  const trial = cloneForSim(copy);
+  const self = trial.players.find((p) => p.id === me)!;
+  const tile = trial.tiles[mule.index]!;
+  try {
+    if (self.carriedMule === null) buyMule(trial, me);
+    if (self.carriedMule !== mule.outfit) outfitMule(trial, me, mule.outfit);
+    installMule(trial, me, tile.x, tile.y);
+  } catch (err) {
+    if (err instanceof RuleError) return err;
+    throw err;
+  }
+  return trial;
+}
+
+/**
  * RULE-5 · development: the analyses, then each MULE as a pick of developDecision, leaning to the money-maker, on a
  * what-if copy that already holds the MULEs before it, then the filters and the pub. The walk is priced as where the
- * game walks (DEV_WALK).
+ * game walks (DEV_WALK). A pick the copy's rules refuse is logged and left out, and the picks go on.
  */
 function developmentPart(input: DraftInput, obs: GameState, moneyMaker: Good | null): DevelopmentPlay {
   const { mind } = input;
   const me = mind.me;
-  const copy = cloneForSim(obs);
+  let copy = cloneForSim(obs);
   const self = copy.players.find((p) => p.id === me)!;
   // Drafted ahead of development (WS2 may ask at any time), the copy plays the coming phase.
   if (copy.phase !== 'development') {
@@ -265,15 +285,12 @@ function developmentPart(input: DraftInput, obs: GameState, moneyMaker: Good | n
   for (let k = 0; k < mind.level.mulesPerMonth && route.length + MULE_STEPS < cap; k++) {
     const mule: DevAction = topPick(input, copy, 'develop', `mule:${k}`, developDecision(copy, mind, k, { at, left, taps }, moneyMaker));
     if (mule.kind === 'stop') break;
-    const tile = copy.tiles[mule.index]!;
-    try {
-      buyMule(copy, me);
-      outfitMule(copy, me, mule.outfit);
-      installMule(copy, me, tile.x, tile.y);
-    } catch (err) {
-      if (err instanceof RuleError) break;
-      throw err;
+    const led = leadOut(copy, me, mule);
+    if (led instanceof RuleError) {
+      console.error(`AI seat ${me}: the development draft left out MULE ${k + 1} (${mule.outfit} on plot ${mule.index}), refused: ${led.message}`);
+      continue;
     }
+    copy = led;
     route.push({ act: 'buyMule' }, { act: 'outfit', outfit: mule.outfit }, { act: 'install', plot: mule.index });
     left -= walkSeconds(copy, me, at, 'corral') + walkSeconds(copy, me, 'corral', mule.index) + taps;
     at = mule.index;
