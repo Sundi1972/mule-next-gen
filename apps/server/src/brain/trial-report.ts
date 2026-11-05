@@ -227,9 +227,14 @@ export function trialReport(input: TrialInput): TrialReport {
   const edits = { model: took.filter((p) => p.by === 'llm').length, of: took.length + phaseFailed };
 
   // A silent seat-month, a stall or a game at its budget fails outright; the rest is judged on a complete run only.
-  const ac1 = input.keyed
-    ? verdict({ fails: lines.silent > 0, proven: complete, holds: all.of > 0 && 5 * all.model >= 4 * all.of && lines.seatMonths > 0 })
-    : 'n/a';
+  // With playbooks playing every move (C7) nothing may be asked: the share then has nothing to judge, n/a, unless a
+  // silent seat-month fails it or the run was cut short.
+  const nothingAsked = all.of === 0 && lines.seatMonths > 0;
+  const ac1 = !input.keyed
+    ? 'n/a'
+    : nothingAsked && lines.silent === 0 && complete
+      ? 'n/a'
+      : verdict({ fails: lines.silent > 0, proven: complete, holds: all.of > 0 && 5 * all.model >= 4 * all.of && lines.seatMonths > 0 });
   const ac2 = input.keyed
     ? verdict({ fails: stalled || gameUsd.atOrOverBudget > 0, proven: complete && gameUsd.games > 0, holds: true })
     : verdict({ fails: stalled || topPicks !== allDecisions.of, proven: complete, holds: true });
