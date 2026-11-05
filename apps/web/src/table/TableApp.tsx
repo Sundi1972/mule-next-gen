@@ -169,7 +169,7 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
     );
   }
 
-  if (phase === 'production' && game.production) return <TvProduction game={game} production={game.production} />;
+  if (phase === 'production' && game.production) return <TvProduction table={table} game={game} production={game.production} />;
   if (phase === 'upkeep')
     return (
       <SeatSpeciesProvider value={seatSpecies(game)}>
