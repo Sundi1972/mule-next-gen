@@ -151,7 +151,8 @@ const LAW_BALLOT_WORDS: ReadyWords = {
   done: 'You voted',
   waiting: STILL,
   all: 'Everyone has voted. The result is shown.',
-  confirm: (names, n) => `Close the vote now? ${n === 1 ? `${names}’s vote` : `The votes of ${names}`} won’t count, and the result is shown.`,
+  // A Governor not yet Done still has their Yes counted, so nobody's vote is dropped.
+  confirm: () => 'Close the vote now? The votes as they stand are counted, and the result is shown.',
 };
 
 /** The ready bar in the law ballot: Done, live once this seat has a vote in (the Governor's starts at Yes). */

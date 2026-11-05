@@ -5,7 +5,8 @@ import { usePhoneGame } from '../../game';
 import { useWide } from '../../Shell';
 import { useHub } from '../Hub';
 import { LawsInForce } from './LawBallot';
-import { colorOf, OfficesCard, Person, Section } from './parts';
+import { forYouWords, proposalWords } from './LawPicker';
+import { colorOf, OfficesCard, Person, Section, Who } from './parts';
 import { Blocks } from './Reveal';
 import { RunBlock } from './Run';
 import { howWords, OFFICE_NAME } from './words';
@@ -20,8 +21,29 @@ export function CouncilDesk() {
   return (
     <>
       {view.politics && <LawsInForce laws={view.politics.laws ?? {}} />}
+      <PendingLaw />
       <CouncilBody focus={focus} />
     </>
+  );
+}
+
+/** Next month's vote while a proposal is pending and no vote is open: the proposal, and what it costs this seat. */
+function PendingLaw() {
+  const { view, self } = usePhoneGame();
+  const politics = view.politics;
+  const pending = politics?.proposal;
+  const votesOpen = (!!politics?.council && politics.council.stage !== 'over') || (!!politics?.election && politics.election.stage !== 'over');
+  if (!pending || votesOpen) return null;
+  return (
+    <div className="flex flex-col gap-0.5 rounded-panel border border-holo-line bg-panel p-2" data-testid="council-pending">
+      <span className="label-caps text-[10px]!">Next month’s vote</span>
+      <span className="text-xs">
+        <Who view={view} id={pending.by} me={self.id} size={12} /> {pending.by === self.id ? 'propose' : 'proposes'} <strong>{proposalWords(pending.proposal)}</strong>
+      </span>
+      <span className="text-[11px] text-ink-2" data-testid="council-pending-for-you">
+        For you: {forYouWords(pending.proposal, pending.impact[self.id], view.air.level)}.
+      </span>
+    </div>
   );
 }
 
