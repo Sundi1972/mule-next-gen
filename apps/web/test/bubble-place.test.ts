@@ -36,6 +36,17 @@ describe('T-AC-15: a bubble covers no label when a free place exists', () => {
     expect(fit.dx).toBe(0);
   });
 
+  it('a long line beside the plot list: every side meets text centred, so it slides down off the map’s “STORE”', () => {
+    // Measured in Chromium (the chat e2e): a three-line bubble beside the middle row, the map's STORE label to its left.
+    const store = box(553.5, 620.2, 616.5, 647.2);
+    const labels = [store, box(1197, 589.5, 1266.5, 628.5), box(1197, 643.5, 1240.8, 682.5), box(1197, 697.5, 1429.8, 736.5), box(1146, 873, 1801.3, 919.5)];
+    const fit = placeBubble({ at: box(1146, 700.5, 1179, 733.5), w: 540, h: 141.75, within: SCREEN, labels, gap: GAP, edge: EDGE });
+    expect(fit.place).toBe('left');
+    for (const l of labels) expect(fit.box.t >= l.b || fit.box.b <= l.t || fit.box.l >= l.r || fit.box.r <= l.l, JSON.stringify(l)).toBe(true);
+    // The tail, at the speaker's middle, is still on the bubble's side.
+    expect(fit.box.t + 14).toBeLessThanOrEqual(717);
+  });
+
   it('nothing to avoid: above, as before', () => {
     expect(placeBubble({ at: box(500, 500, 540, 540), w: 200, h: 40, within: SCREEN, labels: [], gap: GAP, edge: EDGE }).place).toBe('above');
   });

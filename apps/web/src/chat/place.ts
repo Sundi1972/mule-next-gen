@@ -1,3 +1,13 @@
+/**
+ * What a creature's bubble must stay inside: the nearest of these around it. A stage that clips its creatures marks
+ * itself with data-bubble-bounds.
+ */
+export const BOUNDS = '[data-bubble-bounds],[data-testid=store-hall],[data-testid=walk-board],[data-testid=stage],[data-phase]';
+/** Kept clear inside the frame's edge, in screen px. */
+export const EDGE = 4;
+/** Between a speaker and its bubble, in css px: room for the tail. */
+export const GAP = 8;
+
 /** A rectangle on screen: left, top, right, bottom. */
 export type Box = { l: number; t: number; r: number; b: number };
 
@@ -5,7 +15,7 @@ export type Box = { l: number; t: number; r: number; b: number };
 export type Place = 'above' | 'below' | 'right' | 'left';
 const PLACES: readonly Place[] = ['above', 'below', 'right', 'left'];
 
-/** A bubble's place and how far it slid to stay inside its frame: dx for above and below, dy for the sides. */
+/** A bubble's place and how far it slid from centred on its speaker: dx for above and below, dy for the sides. */
 export type Fit = { place: Place; dx: number; dy: number };
 
 type Ask = {
@@ -21,14 +31,12 @@ type Ask = {
   gap: number;
   /** Kept clear inside the frame's edge. */
   edge: number;
-  /** Where it is now: kept while it still covers nothing, so a bubble doesn't hop between free places. */
+  /** Where it is now: kept while it can still cover nothing there, so a bubble doesn't hop between free places. */
   current?: Place | undefined;
 };
 
-/** How far to move a span [from, from + size] so it lies inside [lo, hi]; the low side wins if it can't. */
-function slide(from: number, size: number, lo: number, hi: number): number {
-  return Math.max(Math.min(0, hi - (from + size)), lo - from);
-}
+/** How far the tail stays from the bubble's corners when it slides. */
+const TAIL_ROOM = 14;
 
 function area(a: Box, b: Box): number {
   const w = Math.min(a.r, b.r) - Math.max(a.l, b.l);
@@ -36,13 +44,60 @@ function area(a: Box, b: Box): number {
   return w > 0 && h > 0 ? w * h : 0;
 }
 
+/** `moved`: how far it slid to clear a label, past what the frame's edge asked. */
+type Option = Fit & { box: Box; covers: number; moved: number };
+
 /**
- * Where a creature's speech bubble goes (RULE-9's companion, AM-22): above its speaker, unless that covers a label's
- * text, then the first of below, right and left that covers none. Above and below slide sideways and the sides slide
- * up or down to stay inside the frame; a place that would still cross the frame's edge across its slide is not
- * tried. If every place covers some text, the one covering least; if none fits at all, below when above doesn't fit.
+ * One place's options: centred on the speaker, then slid along its side just clear of each label in its way, never
+ * so far the tail leaves the bubble, and never across the frame's edge. None if it can't stay inside.
  */
-export function placeBubble({ at, h, gap, edge, within }: Ask): Fit {
-  // Today's rule: above, or below when above crosses the frame's top.
-  return { place: at.t - gap - h < within.t + edge ? 'below' : 'above', dx: 0, dy: 0 };
+function options(place: Place, { at, w, h, within, labels, gap, edge }: Ask): Option[] {
+  const side = place === 'left' || place === 'right';
+  const l0 = side ? (place === 'right' ? at.r + gap : at.l - gap - w) : (at.l + at.r) / 2 - w / 2;
+  const t0 = side ? (at.t + at.b) / 2 - h / 2 : place === 'above' ? at.t - gap - h : at.b + gap;
+  // The slide that keeps it inside the frame along its side, and as far as the tail allows.
+  const lo = side ? within.t + edge - t0 : within.l + edge - l0;
+  const hi = side ? within.b - edge - (t0 + h) : within.r - edge - (l0 + w);
+  const reach = Math.max(0, (side ? h : w) / 2 - TAIL_ROOM);
+  const from = Math.max(lo, -reach);
+  const to = Math.min(hi, reach);
+  // Across its side, sliding can't help.
+  const across = side ? l0 < within.l + edge - 0.5 || l0 + w > within.r - edge + 0.5 : t0 < within.t + edge - 0.5 || t0 + h > within.b - edge + 0.5;
+  if (across || from > to + 0.5) return [];
+  const centred = Math.min(Math.max(0, from), to);
+  const box = (s: number): Box => (side ? { l: l0, t: t0 + s, r: l0 + w, b: t0 + s + h } : { l: l0 + s, t: t0, r: l0 + s + w, b: t0 + h });
+  // Every label in the band it can slide through: just past its near or far edge, which finds the gaps between them.
+  const band = side ? { l: l0, t: t0 + from, r: l0 + w, b: t0 + to + h } : { l: l0 + from, t: t0, r: l0 + to + w, b: t0 + h };
+  const slides = [centred];
+  for (const label of labels) {
+    if (area(band, label) === 0) continue;
+    if (side) slides.push(label.b + 1 - t0, label.t - 1 - (t0 + h));
+    else slides.push(label.r + 1 - l0, label.l - 1 - (l0 + w));
+  }
+  return slides
+    .filter((s) => s >= from - 0.5 && s <= to + 0.5)
+    .map((s) => {
+      const b = box(s);
+      return { place, dx: side ? 0 : s, dy: side ? s : 0, box: b, covers: labels.reduce((sum, label) => sum + area(b, label), 0), moved: Math.abs(s - centred) };
+    });
+}
+
+/**
+ * Where a creature's speech bubble goes (AM-22): the place around its speaker that covers no label's text and slides
+ * least to do it, above first, then below, right and left on a tie; so above, as before, wherever above is free. Every
+ * place slides along its side to stay inside the frame, and may slide on to clear a label, never so far its tail
+ * leaves it. While its place stays free it stays. If no option is free, the one covering least; if none stays inside
+ * the frame, above, or below where above crosses the top.
+ */
+export function placeBubble(ask: Ask): Fit & { box: Box; covers: number } {
+  const all = PLACES.flatMap((place) => options(place, ask));
+  const free = all.filter((o) => o.covers === 0).sort((a, b) => a.moved - b.moved);
+  const pick = free.find((o) => o.place === ask.current) ?? free[0] ?? [...all].sort((a, b) => a.covers - b.covers)[0];
+  if (pick) return { place: pick.place, dx: pick.dx, dy: pick.dy, box: pick.box, covers: pick.covers };
+  const { at, w, h, gap, edge, within } = ask;
+  const above = at.t - gap - h >= within.t + edge;
+  const l = (at.l + at.r) / 2 - w / 2;
+  const t = above ? at.t - gap - h : at.b + gap;
+  const box = { l, t, r: l + w, b: t + h };
+  return { place: above ? 'above' : 'below', dx: 0, dy: 0, box, covers: ask.labels.reduce((sum, label) => sum + area(box, label), 0) };
 }
