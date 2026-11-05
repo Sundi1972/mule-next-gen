@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { advancePhase, callStrike, COLONY, GOOD_CONFIG, HAPPINESS, monthLedger, PRESTIGE, RuleError, type GameState } from '@mule/engine';
+import { advancePhase, callStrike, COLONY, colonyScore, GOOD_CONFIG, HAPPINESS, monthLedger, PRESTIGE, RuleError, type GameState } from '@mule/engine';
 import { MuleGame } from '../src/mule-game.js';
 import { fakeContext, seats } from './fake-context.js';
 
@@ -26,6 +26,17 @@ function refusal(run: () => void): string {
 }
 
 describe('the colony at the table', () => {
+  it('AM-12 (RULE-25): every screen carries the colony score every month, as the state scores now, not only at game over', () => {
+    const { game, state } = governed();
+    expect(state.phase).not.toBe('gameOver');
+    const now = colonyScore(state)!;
+    expect(now.total).toBeGreaterThan(0);
+    for (const seat of [null, 's1', 's2']) expect(game.viewFor(seat).colony!.score, `seen by ${seat ?? 'the TV'}`).toEqual(now);
+    state.colony!.happiness = 0;
+    expect(game.viewFor(null).colony!.score, 'it follows the state, not a stored total').toEqual(colonyScore(state));
+    expect(game.viewFor(null).colony!.score!.total).toBeLessThan(now.total);
+  });
+
   it("B-AC-23: the Governor's phone commissions and another phone donates; every screen's colony view shows the project and the plaque at once, and a non-Governor's commission is refused with RULE-22's message", () => {
     const { game, state } = governed();
     expect(refusal(() => game.handle('s2', { type: 'commission', id: 'hospital' }))).toBe('Only the Governor commissions for the colony');
