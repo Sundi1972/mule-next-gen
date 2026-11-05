@@ -1,5 +1,5 @@
 import { ADJACENCY, EVENTS, FACTORY, FACTORY_FIT, GROWN_BASE, GROWN_MIN, POLLUTION, RECIPES, SPECIES_PERK, THIN_VEIN_MONTHS, TRAIT_EFFECT, UPKEEP } from './config.js';
-import { applyEvents, eventOutput, plotEvent, rollAfterOutput, rollPhase } from './events.js';
+import { applyEvents, eventOutput, plotEvent, rollAfterOutput, rollPhase, strikeEvent } from './events.js';
 import { neighbours } from './map.js';
 import { airBand, runPollution } from './pollution.js';
 import { formMeteorCrater, relicFit, settleSpecials, specialBonus } from './specials.js';
@@ -221,6 +221,10 @@ export function runProduction(state: GameState): {
   const lines: ProductionLine[] = [];
   const events = rollPhase(state, 'production');
   applyEvents(state, events);
+  // A general strike announced in planning and still unpaid (G-5 RULE-26): its good's plots make SOCIAL_EVENTS.strikeShare,
+  // last, on what everything else left; paid, the good produces in full and production files no strike.
+  const strike = strikeEvent(state);
+  if (strike) events.push(strike);
   // A cold snap multiplies every plot's Energy need for this run only.
   const cold = events.some((e) => e.key === 'coldSnap') ? EVENTS.colony.coldSnap.factor : 1;
   const reaching = new Map<number, { key: EventKey; plot: MonthEvent['plots'][number] }[]>();

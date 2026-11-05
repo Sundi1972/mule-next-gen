@@ -1294,6 +1294,76 @@ export const AI_LEVELS = {
 export type AiLevelId = keyof typeof AI_LEVELS;
 
 /**
+ * G-5 C26: the colony's social events, rows of the event table (EVENTS.colony and EVENTS.player hold them, so they roll
+ * as every row does) and their effects' sizes. Source: the M.U.L.E. Event Catalogue (rev 22, approved by Heiko
+ * 2026-10-28), its planning rows Festival, General strike, Emigration wave, Immigration wave (the mood part) and
+ * Blamed for the unrest, its points read as shares. Every number is a G-5 placeholder, tuned at the end (HC-25).
+ *
+ * The mood bands are HAPPINESS.bands (moodBand). Happiness tilts an event's odds, not the event rate: a row's `mood`
+ * adds to its chance in that band, and `neverIn` is a hard zero there, whatever else raises it. `needsColony` rows never
+ * roll with politics off: no colony, no mood (HC-22). The catalogue's Security and Welfare budget lowers wait for
+ * slice 5 (D-G5-5: nothing is paid yet), so no row reads them.
+ */
+export const SOCIAL_EVENTS = {
+  /** Share of its output each plot of the struck good makes in production while the strikers are unpaid (RULE-26). */
+  strikeShare: 0.2,
+  /** The mood part of the existing immigration wave (EVENTS.colony.immigrationWave). */
+  immigrationWave: {
+    mood: { thriving: 0.06, content: 0.01 },
+    neverIn: ['unhappy', 'unrest'],
+  } satisfies Pick<import('./events.js').EventRow, 'mood' | 'neverIn'>,
+  colony: {
+    /**
+     * Mood +moodShift at once (moodShift, uncapped), +prestige lasting points (addPrestige), and the colonists ask
+     * foodDemand more Food this month (of their need, rounded to whole units). Never with a general strike (EVENTS.excludes).
+     */
+    festival: {
+      phases: { planning: 0.01 },
+      needsColony: true,
+      mood: { thriving: 0.05, content: 0.01 },
+      objects: { stadium: 0.05 },
+      neverIn: ['unhappy', 'unrest'],
+      moodShift: 10,
+      prestige: 2,
+      foodDemand: 0.25,
+      cap: 0.9,
+    },
+    /**
+     * Announced in planning (callStrike) on the good the most colony plots work, a tie on the row's dice; unpaid, every
+     * plot of it makes strikeShare in production. Raised when Food is dearer than foodPrice.factor times its usual price.
+     */
+    generalStrike: {
+      phases: { planning: 0 },
+      needsColony: true,
+      mood: { restless: 0.02, unhappy: 0.05, unrest: 0.1 },
+      foodPrice: { factor: 1.5, points: 0.03 },
+      neverIn: ['thriving'],
+      cap: 0.9,
+    },
+    /** The colonists shrink by `shrink`, for good (rounded). */
+    emigrationWave: {
+      phases: { planning: 0 },
+      needsColony: true,
+      mood: { restless: 0.01, unhappy: 0.04, unrest: 0.08 },
+      air: { toxic: 0.03, collapse: 0.03 },
+      shrink: 0.1,
+      cap: 0.9,
+    },
+  } satisfies Record<string, import('./events.js').EventRow & import('./events.js').EventParams>,
+  player: {
+    /** Each player's own roll: `reputation` points (reputationShift), so fewer votes. The richest is likelier. */
+    blamedForUnrest: {
+      phases: { planning: 0 },
+      needsColony: true,
+      mood: { unhappy: 0.02, unrest: 0.05 },
+      wealth: { richest: 0.02 },
+      reputation: -1,
+      cap: 0.9,
+    },
+  } satisfies Record<string, import('./events.js').EventRow & import('./events.js').EventParams>,
+};
+
+/**
  * Events: each row of the table below rolls on its own seeded dice, so several can fire in one phase and their effects
  * stack on the same plots. Each event's effect numbers sit under its key.
  */
@@ -1343,7 +1413,7 @@ export const EVENTS = {
     /** Credits the Federation pays each of the `count` poorest players, new money. */
     federationGrant: { phases: { planning: 0.02 }, amount: 150, count: 2, cap: 0.9 },
     /** The colonists grow by this share, for good (rounded). */
-    immigrationWave: { phases: { planning: 0.02 }, growth: 0.1, cap: 0.9 },
+    immigrationWave: { phases: { planning: 0.02 }, growth: 0.1, cap: 0.9, ...SOCIAL_EVENTS.immigrationWave },
     /** Every player without a Medicine is sick this development and the next; one with a Medicine uses it. */
     epidemic: { phases: { development: 0.005 }, cap: 0.9 },
     /** Every plot's Energy need is `factor` times this production. */
@@ -1354,6 +1424,8 @@ export const EVENTS = {
     pirateRaid: { phases: { auction: 0.01 }, cap: 0.9 },
     /** The store's stock of every good and its MULEs go to 0 before the auction opens. */
     storeFire: { phases: { auction: 0.01 }, cap: 0.9 },
+    // G-5 C26, after every older row so none of their dice or table order moves (SOCIAL_EVENTS).
+    ...SOCIAL_EVENTS.colony,
   } satisfies Record<string, import('./events.js').EventRow & import('./events.js').EventParams>,
   player: {
     /**
@@ -1385,11 +1457,15 @@ export const EVENTS = {
     crookedAccountant: { phases: { upkeep: 0.01 }, share: 0.1, cap: 0.9 },
     /** Food the package brings. */
     packageFromHome: { phases: { upkeep: 0.015 }, amount: 3, cap: 0.9 },
+    // G-5 C26 (SOCIAL_EVENTS).
+    ...SOCIAL_EVENTS.player,
   } satisfies Record<string, import('./events.js').EventRow & import('./events.js').EventParams>,
   /** Pairs that never fire together in one phase: if both roll, the seeded dice keep one. */
   excludes: [
     ['drought', 'flood'],
     ['dustStorm', 'solarFlare'],
+    // The catalogue: "festival and general strike can't fall in the same month"; both roll in planning only.
+    ['festival', 'generalStrike'],
   ] satisfies [string, string][],
 };
 

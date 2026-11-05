@@ -86,7 +86,10 @@ describe('C1: the month keeps every event it fires', () => {
       (EVENTS as { firstMonth: number }).firstMonth = 1;
       (row as { phases: typeof row.phases }).phases = { planning: 1 };
       const state = fourPlayers();
-      expect(state.monthEvents.map((e) => [e.key, e.phase])).toEqual([['federationTax', 'planning']]);
+      // The other rows roll at their real odds (C26's blamed-for-the-unrest may fire for the richest seat): every event is
+      // planning's, and the certain tax is among them.
+      expect(state.monthEvents.every((e) => e.phase === 'planning')).toBe(true);
+      expect(state.monthEvents.filter((e) => e.key === 'federationTax').map((e) => [e.key, e.phase])).toEqual([['federationTax', 'planning']]);
     } finally {
       (EVENTS as { firstMonth: number }).firstMonth = before.firstMonth;
       (row as { phases: typeof row.phases }).phases = before.phases;

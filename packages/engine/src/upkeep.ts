@@ -1,5 +1,5 @@
 import { GAME, GOOD_CONFIG, MULE, POLLUTION, PRICE, UPKEEP } from './config.js';
-import { corralTarget, monthlyDemand, planShip, shipInPort, shipPrice } from './economy.js';
+import { corralTarget, festivalFood, monthlyDemand, planShip, shipInPort, shipPrice } from './economy.js';
 import { airBand } from './pollution.js';
 import { needsOf } from './production.js';
 import { GOODS, type GameState, type Good } from './types.js';
@@ -25,9 +25,11 @@ export function runUpkeep(state: GameState): { shortages: Good[]; hungry: boolea
   // Colonists buy their Food and Water from the store at its selling price,
   // out of wages paid from off-world. When the shelf is empty or the price is
   // more than they can pay, they go short.
-  const colonistNeed = state.colonists / UPKEEP.colonistsPerUnit;
+  const colonistBase = state.colonists / UPKEEP.colonistsPerUnit;
   let fed = true;
   for (const good of ['food', 'water'] as const) {
+    // A festival month the colonists eat more Food (G-5 C26).
+    const colonistNeed = colonistBase + (good === 'food' ? festivalFood(state) : 0);
     // The store's selling price; the share it kept back is theirs to buy.
     const price = Math.ceil(state.store.posted[good] * (1 + PRICE.storeSpread));
     const budget = colonistNeed * (UPKEEP.colonistBudget[good] ?? 0);

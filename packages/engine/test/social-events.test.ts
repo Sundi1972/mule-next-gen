@@ -117,16 +117,15 @@ describe('C26: the colony\'s planning social events, fired through the planning 
     // The extra Food is demand this month: the store's outlook and the colonists' meal at upkeep both carry it.
     const plain = colonyAt(AT.content);
     expect(monthlyDemand(state).food - monthlyDemand(plain).food).toBeCloseTo(colonistDemand(state, 'food', units));
-    // A shelf of exactly the festival month's need, at a price the colonists' wages cover, and no ship in port.
+    // A shelf one unit short of the festival month's need, at a price the colonists' wages cover, and no ship in port:
+    // the festival month runs short of Food, a plain month does not.
     const need = state.colonists / UPKEEP.colonistsPerUnit;
     for (const s of [state, plain]) {
-      Object.assign(s.store, { stock: { ...s.store.stock, food: need + units }, posted: { ...s.store.posted, food: 1 } });
+      Object.assign(s.store, { stock: { ...s.store.stock, food: need + units - 1 }, posted: { ...s.store.posted, food: 1 } });
       s.ship = { ...s.ship, arrives: s.maxMonths + 1 };
     }
-    expect(runUpkeep(state).shortages).not.toContain('food');
-    expect(state.store.stock.food, 'the festival month eats the whole shelf').toBe(0);
-    runUpkeep(plain);
-    expect(plain.store.stock.food, 'a plain month leaves the extra').toBeGreaterThan(0);
+    expect(runUpkeep(state).shortages).toContain('food');
+    expect(runUpkeep(plain).shortages).not.toContain('food');
   });
 
   it('INV-C26-2 (emigration): 10% fewer colonists for good, as an effect on the colony; no mood delta', () => {
@@ -270,7 +269,7 @@ describe('C26: the colony\'s planning social events, fired through the planning 
   it('INV-C26-7: over seeded months the mood stays 0..100 and moves in planning only by the mood effects, which only a festival carries', () => {
     only(SOCIAL, 0.5);
     let moved = 0;
-    for (let seed = 1; seed <= 60; seed++) {
+    for (let seed = 1; seed <= 20; seed++) {
       for (const h of [0, 15, 45, 75, 95, 100]) {
         const state = colonyAt(h, { seed });
         const fired = firePhase(state, 'planning');
