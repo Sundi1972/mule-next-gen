@@ -49,16 +49,16 @@ type Option = Fit & { box: Box; covers: number; moved: number };
 
 /**
  * One place's options: centred on the speaker, then slid along its side just clear of each label in its way, never
- * so far the tail leaves the bubble, and never across the frame's edge. None if it can't stay inside.
+ * so far the tail leaves the bubble (unless `loose`), and never across the frame's edge. None if it can't stay inside.
  */
-function options(place: Place, { at, w, h, within, labels, gap, edge }: Ask): Option[] {
+function options(place: Place, { at, w, h, within, labels, gap, edge }: Ask, loose = false): Option[] {
   const side = place === 'left' || place === 'right';
   const l0 = side ? (place === 'right' ? at.r + gap : at.l - gap - w) : (at.l + at.r) / 2 - w / 2;
   const t0 = side ? (at.t + at.b) / 2 - h / 2 : place === 'above' ? at.t - gap - h : at.b + gap;
   // The slide that keeps it inside the frame along its side, and as far as the tail allows.
   const lo = side ? within.t + edge - t0 : within.l + edge - l0;
   const hi = side ? within.b - edge - (t0 + h) : within.r - edge - (l0 + w);
-  const reach = Math.max(0, (side ? h : w) / 2 - TAIL_ROOM);
+  const reach = loose ? Infinity : Math.max(0, (side ? h : w) / 2 - TAIL_ROOM);
   const from = Math.max(lo, -reach);
   const to = Math.min(hi, reach);
   // Across its side, sliding can't help.
@@ -90,14 +90,26 @@ function options(place: Place, { at, w, h, within, labels, gap, edge }: Ask): Op
  * the frame, above, or below where above crosses the top.
  */
 export function placeBubble(ask: Ask): Fit & { box: Box; covers: number } {
-  const all = PLACES.flatMap((place) => options(place, ask));
+  const tight = PLACES.flatMap((place) => options(place, ask));
+  // Near a narrow frame's edge no place may keep its tail on the bubble: then staying inside the frame comes first.
+  const all = tight.length > 0 ? tight : PLACES.flatMap((place) => options(place, ask, true));
   const free = all.filter((o) => o.covers === 0).sort((a, b) => a.moved - b.moved);
-  const pick = free.find((o) => o.place === ask.current) ?? free[0] ?? [...all].sort((a, b) => a.covers - b.covers)[0];
+  const pick = free.find((o) => o.place === ask.current) ?? free[0] ?? leastCovering(all, ask.current);
   if (pick) return { place: pick.place, dx: pick.dx, dy: pick.dy, box: pick.box, covers: pick.covers };
+  // A frame narrower than the bubble: above (or below at the top), slid as far inside as it goes.
   const { at, w, h, gap, edge, within } = ask;
   const above = at.t - gap - h >= within.t + edge;
-  const l = (at.l + at.r) / 2 - w / 2;
+  const l0 = (at.l + at.r) / 2 - w / 2;
+  const dx = Math.max(Math.min(0, within.r - edge - (l0 + w)), within.l + edge - l0);
   const t = above ? at.t - gap - h : at.b + gap;
-  const box = { l, t, r: l + w, b: t + h };
-  return { place: above ? 'above' : 'below', dx: 0, dy: 0, box, covers: ask.labels.reduce((sum, label) => sum + area(box, label), 0) };
+  const box = { l: l0 + dx, t, r: l0 + dx + w, b: t + h };
+  return { place: above ? 'above' : 'below', dx, dy: 0, box, covers: ask.labels.reduce((sum, label) => sum + area(box, label), 0) };
+}
+
+/** Crowded: the option covering least, but the current place while it covers within about 5 % of that, so it doesn't flicker. */
+function leastCovering(all: readonly Option[], current: Place | undefined): Option | undefined {
+  const least = all.reduce<Option | undefined>((a, b) => (a === undefined || b.covers < a.covers ? b : a), undefined);
+  if (!least) return undefined;
+  const near = all.filter((o) => o.place === current && o.covers <= least.covers * 1.05 + 1).sort((a, b) => a.covers - b.covers)[0];
+  return near ?? least;
 }

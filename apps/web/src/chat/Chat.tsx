@@ -33,6 +33,9 @@ const boxOf = (r: DOMRect): Box => ({ l: r.left, t: r.top, r: r.right, b: r.bott
  * (AM-22). The chat e2e measures the same way.
  */
 function labelsIn(frame: Element): Box[] {
+  const now = performance.now();
+  const kept = measured.get(frame);
+  if (kept && now - kept.at < LABELS_EVERY_MS) return kept.labels;
   const out: Box[] = [];
   const range = document.createRange();
   const walk = document.createTreeWalker(frame, NodeFilter.SHOW_TEXT);
@@ -43,8 +46,13 @@ function labelsIn(frame: Element): Box[] {
     range.selectNodeContents(n);
     for (const r of range.getClientRects()) if (r.width > 1 && r.height > 1) out.push(boxOf(r));
   }
+  measured.set(frame, { at: now, labels: out });
   return out;
 }
+
+/** The labels are walked at most this often per frame, shared by its bubbles; the bubble itself is placed every frame. */
+const LABELS_EVERY_MS = 33;
+const measured = new WeakMap<Element, { at: number; labels: Box[] }>();
 
 /**
  * Where a creature's bubble goes (placeBubble): above it unless that covers a name or caption, sliding to stay inside

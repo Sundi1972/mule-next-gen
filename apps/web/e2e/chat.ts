@@ -389,7 +389,7 @@ function meets(a: Rect, b: Rect): boolean {
   return a.l < b.r && b.l < a.r && a.t < b.b && b.t < a.b;
 }
 
-/** A bubble less its 1 px border's edge: touching a label is not covering it. */
+/** A bubble less a pixel all round: touching a label is not covering it. */
 function shrunk(a: Rect): Rect {
   return { l: a.l + 1, t: a.t + 1, r: a.r - 1, b: a.b - 1 };
 }
