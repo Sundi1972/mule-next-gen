@@ -1,0 +1,194 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`the manual of moves > T-AC-A7: the default config's manual is pinned, so the cached system block moves only with the config 1`] = `
+"# The manual
+The rules of the colony game you play, generated from the game itself.
+
+## How a month goes
+- planning: Everyone reads the colony's stores, prices and plots. Players may send a geo drone over 2 free or listed plots for 60 credits (its results arrive when the land grant starts), and list up to 2 plots or MULEs for the land auction, 4 lots a month from all sellers. In months 1, 4, 7, 10 planning opens with an election for governor: announce, then a secret ballot if an office has two or more candidates, then the result. Planning ends when every player is Ready.
+- the land grant: The light passes over the free plots one at a time in reading order, 650 ms each, 1 pass; the first player to press claims the lit plot, up to 1 claims each. It ends after the pass, when no free land is left, or once every player has used their claims or is Done.
+- the land auction: The listed lots come up one at a time: an intro of 3000 ms, then a walk of 15000 ms where every player but the seller stands as a buyer, unless short of the minimum or leading a MULE when a MULE is up, and walks up to bid. The highest bid at the bell wins; a change of leader in the last 2000 ms sets the clock back to it. An unsold lot is kept, or sold to the store for 67% of the 300 a plot scores and 50% of the MULE price for a MULE, as the seller chose. Each month the colony puts one free plot up with a chance of 10%. With nothing listed it is skipped.
+- development: One clock of 60 s for every player. Each step from one map tile to the next takes 0.4 s; a hungry or sick colonist walks slower. You buy a MULE at the corral, outfit it, and install it on one of your plots; you may analyse ground, fit filters, or end at the pub for cash. Every development move first passes these checks: it is development (else: "Not allowed during <phase>"); your development time has not run out (else: "Your development time is up"); you have not gone to the pub this turn (else: "Your turn is over: you went to the pub"); your colonist is not still walking to the last place you sent it (else: "Still walking"); your colonist is not still assaying a plot (else: "Still assaying").
+- production: Every plot with a MULE makes its good, more on better ground, plus 1 when a neighbour of yours makes the same good, or 2 in a cluster of 4 or more. A raw plot burns Energy (Food 1, Water 1, Energy 1, Smithore 2, Crystite 2, Rare earth 2) and makes 50% without it; a Food plot also needs Water. A factory turns inputs from your stock into its good (Alloy: 2 Smithore + 2 Energy make 2; Electronics: 1 Rare earth + 1 Alloy + 1 Energy make 1; Medicine: 1 Food + 1 Water + 1 Energy make 2) and makes nothing without them.
+- the goods auction: Goods come up one at a time (Food, Water, Energy, Smithore, Crystite, Rare earth, Alloy, Electronics, Medicine). Each has a status screen where players pick buyer, seller or pass, with no clock: it waits for every player's Done or the host's Continue, then a walk of 20000 ms: buyers walk up, sellers down, and units trade while a buyer and a seller meet. The store buys and sells there too, and every sale pays the sales tax into the colony fund.
+- upkeep: Each player eats 2 Food and drinks 1 Water, plus 1 Food per 4 crew and 1 Water per 6, from their own stock. Your goods spoil (Food 50%, Water 5%, Energy 25%, Medicine 20%, rounded down), and anything above 10 units of a good is lost. Every 3 months an export ship calls, buying the 3 goods on its wishlist, announced one month before.
+The game ends after month 12, or 3 months after the last free plot is claimed.
+
+## How the game is won
+At the end the highest Worth wins. Worth is counted line by line:
+- money: credits in hand, rounded.
+- goods: every unit in your stock at the colony's price for it that day; it also takes the rounding.
+- plots: how many plots you own.
+- land: 300 for each plot you own.
+- mules: how many of your plots have a MULE installed.
+- muleValue: each installed MULE at the store's MULE price that day.
+- office: 1200 for each term you have served in office; 0 in a game without politics.
+- donated: what you gave the colony's projects, credits plus goods at their reference price, as your plaques record it, counted one for one: a donation moves Worth from money and goods to this line. 0 in a game without politics.
+- cut: what Collapse takes off every line, office and donations included: 0 unless the colony's air is in Collapse (80 or more of 100), when the whole sum is multiplied by 0.8.
+- total: your Worth: money + goods + land + muleValue + office + donated, less the cut. The highest total wins.
+
+## Moves
+Every move you can make, the phases it is legal in, its checks with the refusal each one sends, and whether it costs.
+
+### claim
+In: the land grant. Args: plot (plot).
+Does: Claims the free plot lit right now, free of charge; the light passes once over the free plots, 650 ms each, and you may claim 1 plots a grant.
+Legal when: it is the land grant (else: "Not allowed during <phase>"); you have claimed fewer than 1 plots this grant (else: "No claims left this month"); you have not pressed Done with land this month (else: "You are done with land this month"); it names a plot on the map, not the store (else: "Not a plot"); nobody owns the plot (else: "Plot already taken"); the plot is the one lit now (else: "That plot is not lit").
+Cost: free.
+
+### buyMule
+In: development.
+Does: Walks to the corral and buys an empty MULE to lead; it costs 120 plus 1 Smithore at the posted price, times the store's scarcity factor (up 15% after a month the corral sold out), and Gearlings pay 95% of it.
+Legal when: the development checks above; in month 1, before the clock starts, you are not already in with your first MULE (else: "Waiting for the others' first MULEs"); the walk there ends before the clock does (else: "Not enough time to walk there"); you are not already leading a MULE (else: "Already leading a MULE"); the corral has a MULE left (else: "The store is out of MULEs"); you have the price in hand (else: "Not enough money").
+Cost: yes, as it says under Does.
+
+### outfit
+In: development. Args: outfit (food | water | energy | smithore | crystite | rareEarth | alloy | electronics | medicine | greenBelt).
+Does: Fits the MULE you lead where you stand: for a raw good or a green belt at its outfitter, for a factory good at the works counter. It costs Food MULE 25, Water MULE 25, Energy MULE 50, Smithore MULE 75, Crystite MULE 100, Rare earth MULE 100, Alloy works 150, Electronics works 200, Medicine works 150, green belt 20; Gearlings pay 95% of it.
+Legal when: the development checks above; you are leading a MULE (else: "No MULE to outfit"); you have the outfit price in hand (else: "Not enough money").
+Cost: yes, as it says under Does.
+
+### install
+In: development. Args: plot (plot).
+Does: Walks the outfitted MULE you lead to one of your plots and installs it; a MULE already there is replaced and runs away. A plot without a MULE makes nothing.
+Legal when: the development checks above; in month 1, before the clock starts, you are not already in with your first MULE (else: "Waiting for the others' first MULEs"); it names a plot on the map, not the store (else: "Not a plot"); the walk there ends before the clock does (else: "Not enough time to walk there"); the MULE you lead is outfitted (else: "The MULE is not outfitted"); you own the plot (else: "Not your plot").
+Cost: free.
+
+### analyse
+In: development. Args: plot (plot).
+Does: Walks to any plot, owned or free, and analyses its ground: you alone learn its real rating for every good and its hazards. It takes 8 s of your 60 s, a Mollox 50% of that.
+Legal when: the development checks above; in month 1, before the clock starts, you are not already in with your first MULE (else: "Waiting for the others' first MULEs"); it names a plot on the map, not the store (else: "Not a plot"); the walk there ends before the clock does (else: "Not enough time to walk there").
+Cost: yes, as it says under Does.
+
+### filter
+In: development. Args: plot (plot).
+Does: Walks to one of your plots and fits a filter for 1 Alloy from your stock; it multiplies the plot's air pollution by 0.5 and stops it spreading.
+Legal when: the development checks above; in month 1, before the clock starts, you are not already in with your first MULE (else: "Waiting for the others' first MULEs"); it names a plot on the map, not the store (else: "Not a plot"); the walk there ends before the clock does (else: "Not enough time to walk there"); you own the plot (else: "Not your plot"); the plot has no filter yet (else: "This plot already has a filter"); you hold 1 Alloy (else: "A filter needs 1 Alloy").
+Cost: yes, as it says under Does.
+
+### pub
+In: development.
+Does: Walks to the pub and ends your development turn for cash: 20 plus (60 + 20 times the month) times the share of your time left when you get there. A MULE you lead runs off.
+Legal when: the development checks above.
+Cost: free.
+
+### declare
+In: the goods auction. Args: side (buyer | seller | pass).
+Does: Takes a side for the good that is up: buyer, seller or pass. On the status screen it sets where you start; during the walk a switch jumps you back to the new side's start edge, so it never trades at once, and takes back your Done.
+Legal when: a good is up in the goods auction (else: "The auction is not running"); to sell, you hold at least one unit of the good (else: "You have none to sell").
+Cost: free.
+
+### walk
+In: the goods auction, the land auction. Args: dir (1 | 0 | -1).
+Does: Moves you on the board during a walk: 1 up, -1 down, 0 stand still. A buyer walks up to bid more, a seller down to ask less, and units trade while a buyer and a seller meet; at the land auction the highest bid at the bell wins the lot.
+Legal when: in the goods auction, a good is up (else: "The auction is not running"); the walk has started, after the good's status screen or the lot's intro (else: "Not walking yet"); in the goods auction, you did not pass on this good (else: "You passed on this good"); at the land auction, you stand as a buyer: not the seller, the minimum in hand, and no MULE in tow when a MULE is up (else: "You can't bid on this lot").
+Cost: free.
+
+### drone
+In: planning. Args: plots (plot).
+Does: Sends the geo drone over 1 to 2 free or listed plots for 60 credits: its results arrive when the land grant starts.
+Legal when: it is planning (else: "Not allowed during <phase>"); no drone of yours is on its way (else: "A drone is already on its way"); 1 to 2 plots (else: "Pick 1 to 2 plots"); each plot is free or listed (else: "The drone only flies over free or listed plots"); you have 60 credits (else: "Not enough money").
+Cost: yes, as it says under Does.
+
+### list
+In: planning. Args: item (plot | mule), plot (plot), minimum (number), unsold (store | keep).
+Does: Puts one of your plots, or the MULE on it, up for this month's land auction at a minimum you set; unsold, the lot is kept or sold to the store, as you chose. Up to 2 lots each, 4 a month from all sellers.
+Legal when: it is planning (else: "Listings are made in planning"); it names one of your plots (else: "Not your plot"); for a MULE, the plot has one (else: "No MULE on that plot"); the plot is not up for auction already (else: "That plot is already up for auction"); you have fewer than 2 lots up (else: "You can list 2 lots a month"); fewer than 4 lots are up (else: "The auction is full this month"); the minimum is a whole number, 1 or more (else: "Pick a minimum of 1 or more"); unsold is store or keep (else: "Pick store or keep").
+Cost: free.
+
+### unlist
+In: planning. Args: id (enum).
+Does: Takes one of your listings back before the land auction.
+Legal when: it is planning (else: "Listings are made in planning"); the listing exists (else: "No such listing"); it is yours (else: "Not your listing").
+Cost: free.
+
+### run
+In: planning. Args: office (governor), promise (lower | hold | cap).
+Does: Runs for an office in the next election, moving any run for the other one; null withdraws. Elections open planning in months 1, 4, 7, 10. A Governor run carries a tax promise: lower, hold, or a cap of 0% to 15%.
+Legal when: the game plays with a Governor (else: "This game plays without a Governor"); it is planning (else: "You can run for office in planning"); candidates are open: not from the ballot until the result, nor in an election month's announce after month 1 (else: "Candidates are closed until the result"); for Governor, you have not served 2 Governor terms in a row (else: "2 Governor terms in a row"); the office is one that is elected: governor (else: "The <office> is not elected yet"); a Sheriff run carries no promise (else: "Sheriff candidates make no promise yet"); a cap promise is a whole 0% to 15% (else: "A tax promise is 0% to 15%"); a Governor run carries a promise (else: "Pick a promise to run for Governor").
+Cost: free.
+
+### vote
+In: planning. Args: office (governor), candidate (player).
+Does: Casts or changes your secret vote for a contested office in the ballot; null clears it. A pick after Done still counts.
+Legal when: it is planning in an election month (else: "No election this month"); the ballot has opened (else: "The ballot is not open yet"); the ballot has not closed (else: "The ballot is closed"); the office has two or more candidates (else: "There is no vote for this office"); the candidate runs for it (else: "Not a candidate").
+Cost: free.
+
+### setTax
+In: planning. Args: percent (number).
+Does: The Governor sets the sales tax on every sale, paid into the colony fund, in whole percent; it starts at 5%, stays within 0% to 15%, and moves at most 5 points from the month's starting rate.
+Legal when: the game plays with a Governor (else: "This game plays without a Governor"); it is planning (else: "The tax is set in planning"); this month's election, if any, is over (else: "Wait for the election to end"); you are the Governor (else: "Only the Governor sets the tax"); the percent is whole, at most 5 from the month's starting rate, and 0% to 15% (else: "The tax can be <low>% to <high>% this month").
+Cost: free.
+
+### done
+In: planning, the land grant, the land auction, the goods auction. Args: done (boolean).
+Does: Done with this stage, or with false not done after all: the election's announce or ballot, a lot's intro or walk, a good's status screen or walk. In the land grant it ends your claims for the month and cannot be taken back.
+Legal when: always, in those phases.
+Cost: free.
+
+### commission
+In: planning. Args: id (park | hospital | observatory | stadium | spaceport).
+Does: The Governor commissions a prestige object for the colony; the fund and donors pay for it from the next upkeep, and it builds once paid (and sited, if it needs a plot).
+Legal when: the game plays with the colony's council (else: "This game plays without the colony's council"); the votes are over (else: "Commission once the votes are over"); you are the Governor (else: "Only the Governor commissions for the colony"); the object is one the colony can build (else: "The colony can't build that"); the colony has none of it (else: "The colony already has a <name>"); the colony is not already building it (else: "The colony is already building the <name>").
+Cost: free.
+
+### payStrike
+In: planning.
+Does: The Governor pays this month's general strikers from the colony fund, so the struck good produces in full.
+Legal when: the game plays with the colony's council (else: "This game plays without the colony's council"); there is a strike this month (else: "There is no strike to pay off"); the votes are over (else: "Pay the strikers once the votes are over"); you are the Governor (else: "Only the Governor pays the strikers"); the strikers are not paid yet (else: "The strikers are already paid"); the fund covers what the strikers want (else: "The fund has <fund> cr; the strikers want <cost> cr").
+Cost: free.
+
+### repair
+In: planning. Args: id (park | hospital | observatory | stadium | spaceport).
+Does: The Governor pays from the colony fund to mend a damaged prestige object, so it stands again and counts its prestige.
+Legal when: the game plays with the colony's council (else: "This game plays without the colony's council"); the votes are over (else: "Repair once the votes are over"); you are the Governor (else: "Only the Governor repairs for the colony"); the object is damaged (else: "The <name> isn't damaged"); the fund covers the repair (else: "The fund has <fund> cr; the repair costs <cost> cr").
+Cost: free.
+
+### setSiteBid
+In: planning. Args: id (park | hospital | observatory | stadium | spaceport), maxBid (number).
+Does: The Governor sets the colony's top bid for a commissioned object's plot at the land auction, paid from the fund; null, the colony does not bid.
+Legal when: the game plays with the colony's council (else: "This game plays without the colony's council"); the votes are over (else: "Set the bid once the votes are over"); you are the Governor (else: "Only the Governor sets the colony's bid"); a commissioned object is waiting for a site (else: "Nothing is waiting for a site"); the object needs a plot (else: "The <name> needs no plot"); it has no site yet (else: "The <name> already has its site"); the bid is whole credits, or null (else: "Bid a whole number of credits").
+Cost: free.
+
+### propose
+In: planning. Args: proposal ({ kind: 'enact', law, setting, replaces? } | { kind: 'repeal', law } | null).
+Does: The Governor puts a law, a new setting or a repeal to the next planning's ballot; null withdraws it.
+Legal when: the game plays with a Governor (else: "This game plays without a Governor"); the votes are over (else: "Propose once the votes are over"); you are the Governor (else: "Only the Governor proposes a law"); the law is in the colony's book (else: "That law is not in the colony's book"); it did not fail too recently (else: "That proposal failed in month <month>; it can come back in month <month>"); a repeal names a law in force (else: "That law is not in force"); the setting is one the law has (else: "<law> is set to <settings>"); it changes what is in force (else: "That law is already in force at that setting"); with the book full, it names the law it replaces (else: "<count> laws are in force: pick the one this replaces").
+Cost: free.
+
+### voteLaw
+In: planning. Args: yes (boolean).
+Does: Votes yes or no on the open law ballot; a later vote replaces it until the ballot closes.
+Legal when: the law ballot is open (else: "The law ballot is not open").
+Cost: free.
+
+## When a move is smart
+Each line names the move and the playbook field you set to play it.
+- claim (LandGrantPlay.ranked): a plot adds 300 to your Worth and makes goods every month after; rank by what it makes over the months left, and a plot beside your others making the same good makes 1 more.
+- claim (LandGrantPlay.deny): take a plot before a rival does when it is worth more to them than it costs you to hold.
+- done (LandGrantPlay.claims): claim fewer when you cannot pay for a MULE on the plot (120 plus Smithore, then the outfit): a plot without one makes nothing.
+- buyMule (DevelopmentPlay.route): buy early: the corral has a MULE for each plot claimed this month plus 2, and a sold-out corral raises next month's price by 15%.
+- analyse (DevelopmentPlay.route): before outfitting a plot whose ground you do not know; it costs 8 s of 60, so analyse only where the answer changes the outfit.
+- outfit (Strategy.moneyMaker): for the good the colony is short of or the export ship wants (3 goods, every 3 months): a scarce good sells dear.
+- pub (DevelopmentPlay.ifSoldOut): when the corral is out or your route is done: the pub pays more the earlier you go, 20 plus up to 60 + 20 times the month.
+- filter (DevelopmentPlay.route): when the air nears Collapse (80): Collapse multiplies every player's Worth by 0.8, and a filter multiplies a polluting plot's air points by 0.5.
+- declare (GoodPlay.role): sell what you hold above next month's needs and the depot's 10, buy what you will be short of, and pass on the rest; goods that spoil lose value in stock.
+- walk (GoodPlay.walkAway): never walk past your walk-away price; concede toward it over the 20000 ms walk rather than at once.
+- declare (GoodPlay.market): hold units for the export ship's month when its wishlist names the good; it calls every 3 months.
+- declare (Strategy.monopolyTarget): only if your level may corner: buy up a scarce good that spoils less than 50% a month, so the others must buy it from you.
+- run (Strategy.kind): as a politician: each term adds 1200 to Worth, and the Governor is paid 50 a month from the colony fund."
+`;
+
+exports[`the manual of moves > T-AC-A7: the writer's system block is the manual plus a pinned role and reply, so no wording moves the cache unseen 1`] = `
+"You play one seat in a colony trading game in the spirit of M.U.L.E.: a few players share a young colony and each tries to end with the highest Worth.
+
+<the manual>
+
+## Your reply
+You write your seat's strategy and your edits to the engine's draft playbook, in character. The brief shows the draft and what you may change.
+- Strategy.kind is the plan you play to. builder: develop many plots and grow steady production. specialist: concentrate on one good, your moneyMaker, and sell it. monopolist: corner one good, your monopolyTarget, so others must buy it from you. landBaron: gather plots, since each one counts toward Worth. politician: win office, since each term adds to Worth. spoiler: hold the leader back.
+- moneyMaker is the good you mean to earn most from, or null. monopolyTarget is the good you mean to corner, or null: only a monopolist names one, and only a seat whose level may corner. cashFloor is the credits you keep back and do not spend below, a whole number from 0 to the money you have.
+- Each edit names a path the brief offers, the value to set and why. A plan letter must be one the brief lists. An edit past what the rules allow is clamped to the nearest value they allow and plays, or is refused and the draft's value plays; your next brief lists each one with why.
+- line is one short sentence you say at the table, at most 140 characters, in the character's voice, or empty. Keep it family-friendly.
+Reply with JSON only, in the shape the schema gives."
+`;

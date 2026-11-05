@@ -22,7 +22,7 @@ import {
 import { alreadyRanToday, AUTH_STOPPED, claimLedger, day, dayLedgerPath, KINDS, nearest, numberFlags, resolveDeps, runAsScript, table, type MainDeps, type StopReason } from './cli.js';
 import { billUnknown, CallFailed, createAnthropicSdk, createHaikuComplete, type HaikuReply } from './client.js';
 import { API_KEY_ENV, apiKeyFrom, outcomeOf } from './index.js';
-import { promptChars, worstCaseUsd } from './budget.js';
+import { MOVE_CALL, promptChars, worstCaseUsd } from './budget.js';
 import { createLedger, NO_USAGE, usd, type Ledger, type Outcome } from './ledger.js';
 
 /** One real decision turned into a prompt, with what is needed to rebuild and attribute it. */
@@ -253,7 +253,7 @@ export async function runSpike(options: SpikeOptions): Promise<SpikeReport> {
     const auth = failed?.auth ?? false;
     settled.push({ kind: it.kind, outcome, ms });
     ledger.record({ game, seat: it.seat, persona: it.persona, level: it.level, model: BRAIN.model, kind: it.kind, ms, outcome, ...usage });
-    ledgerUsd += usd(usage);
+    ledgerUsd += usd(usage, BRAIN.model);
     if (billUnknown(reply, failure)) unknownUsd += worst;
     cacheRead += usage.cached_read;
     cacheWrite += usage.cache_write;
@@ -366,7 +366,7 @@ export async function main(argv: readonly string[], env: Readonly<Record<string,
     prompts,
     complete: createHaikuComplete(createAnthropicSdk(key)),
     ledger,
-    worstCase: worstCaseUsd,
+    worstCase: (prompt) => worstCaseUsd(prompt, MOVE_CALL),
     cap,
     claim,
     now,

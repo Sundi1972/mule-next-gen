@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BRAIN, type AiLevelId, type AiPersonaId } from '@mule/engine';
 import type { DecisionKind, RejectOutcome } from '@mule/ai';
+import type { WriteKind } from './client.js';
 
 export interface Usage {
   input: number;
@@ -13,17 +14,33 @@ export interface Usage {
 
 export const NO_USAGE: Readonly<Usage> = Object.freeze({ input: 0, cached_read: 0, cache_write: 0, output: 0 });
 
-export type Outcome = RejectOutcome | 'llm' | 'refused' | 'timeout' | 'error' | 'budget';
+/**
+ * 'fallback' is a write call's usable reply from the fallback model, sent because its kind's model did not fit the budget.
+ * 'late' is a second line for a write call whose reply came after its phase started: no usage, never played.
+ * 'tool' is a write call's round trip that ended asking for the game's tools: billed, and the loop went on.
+ */
+export type Outcome = RejectOutcome | 'llm' | 'fallback' | 'refused' | 'timeout' | 'error' | 'budget' | 'late' | 'tool';
+
+/** What a call was for: a move (land, develop, trade), or writing a seat's strategy or playbook. */
+export type LedgerKind = DecisionKind | WriteKind;
+
+/** A model BRAIN has a price table for: the only models a call may name. */
+export type ModelId = keyof typeof BRAIN.priceTable;
 
 export interface CallRecord extends Usage {
   game: string;
   seat: string;
   persona: AiPersonaId;
   level: AiLevelId;
-  model: string;
-  kind: DecisionKind;
+  model: ModelId;
+  kind: LedgerKind;
   ms: number;
   outcome: Outcome;
+  /** A write call's round trip, from 1 (RULE-A4); absent on a move call. */
+  round?: number;
+  /** A failed call's answer: the HTTP status and the API's error type, never its text; absent on a call that worked. */
+  status?: number;
+  error_type?: string;
 }
 
 /** A call's line in the ledger file. See RULE-4. */
@@ -34,11 +51,14 @@ export interface CallLine extends Usage {
   persona: AiPersonaId;
   level: AiLevelId;
   model: string;
-  kind: DecisionKind;
+  kind: LedgerKind;
   usd: number;
   ms: number;
   timed_out: boolean;
   outcome: Outcome;
+  round?: number;
+  status?: number;
+  error_type?: string;
 }
 
 /** A game's total line in the ledger file: model calls only, settled before finish. See RULE-4. */
@@ -80,9 +100,23 @@ export interface Ledger {
 
 const PER_MILLION = 1_000_000;
 
-/** Dollars for one call's usage, at BRAIN's prices per million tokens. See RULE-4. */
-export function usd(u: Usage): number {
-  const p = BRAIN.pricesPerMTok;
+/** US dollars per million tokens. */
+export type Prices = Readonly<Record<keyof typeof BRAIN.pricesPerMTok, number>>;
+
+const TABLES: readonly Prices[] = Object.values(BRAIN.priceTable).map((t) => BRAIN[t]);
+const RATES = Object.keys(BRAIN.pricesPerMTok) as (keyof Prices)[];
+
+/** The dearest rate of every table: what a model with no table of its own is billed at, so it is never undercounted. */
+const DEAREST: Prices = Object.fromEntries(RATES.map((r) => [r, Math.max(...TABLES.map((t) => t[r]))])) as Prices;
+
+/** A model's prices: its own table in BRAIN.priceTable, or the dearest rates for a model with none. */
+export function pricesOf(model: string): Prices {
+  return Object.hasOwn(BRAIN.priceTable, model) ? BRAIN[BRAIN.priceTable[model as ModelId]] : DEAREST;
+}
+
+/** Dollars for one call's usage, at its model's prices per million tokens. See RULE-4. */
+export function usd(u: Usage, model: string): number {
+  const p = pricesOf(model);
   return (u.input * p.input + u.cached_read * p.cacheRead + u.cache_write * p.cacheWrite + u.output * p.output) / PER_MILLION;
 }
 
@@ -126,15 +160,15 @@ export function createLedger(opts: { path?: string; clock?: () => Date } = {}): 
 
   return {
     record(call) {
-      const cost = usd(call);
+      const cost = usd(call, call.model);
       // A call that settles after finish still gets its line, but the finished game's totals stay closed.
       if (!finished.has(call.game)) {
         const seats = games.get(call.game) ?? new Map<string, Total>();
         games.set(call.game, seats);
         const total = seats.get(call.seat) ?? { calls: 0, usd: 0 };
         seats.set(call.seat, total);
-        // A budget refusal is a line, not a model call.
-        if (call.outcome !== 'budget') total.calls += 1;
+        // A budget refusal and a late reply are lines, not model calls.
+        if (call.outcome !== 'budget' && call.outcome !== 'late') total.calls += 1;
         total.usd += cost;
       }
       const line: CallLine = {
@@ -153,6 +187,9 @@ export function createLedger(opts: { path?: string; clock?: () => Date } = {}): 
         ms: call.ms,
         timed_out: call.outcome === 'timeout',
         outcome: call.outcome,
+        ...(call.round === undefined ? {} : { round: call.round }),
+        ...(call.status === undefined ? {} : { status: call.status }),
+        ...(call.error_type === undefined ? {} : { error_type: call.error_type }),
       };
       append(line);
     },
