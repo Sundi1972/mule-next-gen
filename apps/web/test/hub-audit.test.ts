@@ -302,11 +302,13 @@ describe('the planning hub, rendered (UX audit)', () => {
     const lines = yourLinesIn(sheet);
     expect(lines.map(([label]) => label).slice(-3)).toEqual([`Offices · 0 terms × ${POLITICS.termScore}, cut too`, 'Donations, cut too', 'Your worth']);
     expect(lines.slice(0, -1).reduce((sum, [, v]) => sum + credits(v), 0)).toBe(2_440);
+    expect(textOf(sheet, 'standings-rule')).toContain('offices and donations too');
   });
 
   it('H-4 (G-5 AM-12, negative): a game without a colony has no Donations line: nobody can give', () => {
     const sheet = onPhone(month4({ colony: null }), () => createElement(StandingsSheet, { onClose: () => {} }));
     expect(textOf(sheet, 'standings-mine')).not.toContain('Donations');
+    expect(textOf(sheet, 'standings-rule'), 'the rule names no line the sheet does not draw').not.toMatch(/donation/i);
   });
 
   it("H-6: the ship's line is plain words, and no code is left on this screen", () => {
