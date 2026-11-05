@@ -9,7 +9,7 @@ import { replay } from '../src/replay.js';
 import { fakeContext, seats } from './fake-context.js';
 
 /** Every seat plays Classic: no Claude call to record. */
-const classic: BrainService = { deciderFor: () => null, chatter: (seat, say) => chatter(seat.id, say), finish: () => {} };
+const classic: BrainService = { deciderFor: () => null, writerFor: () => null, chatter: (seat, say) => chatter(seat.id, say), finish: () => {} };
 const KEY_VAR = 'ANTHROPIC_API_KEY';
 
 describe('T-AC-30: the record replays the colony', () => {
