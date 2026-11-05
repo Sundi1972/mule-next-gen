@@ -26,6 +26,7 @@ import {
   visitPub,
 } from '../game.js';
 import { tileAt } from '../grid.js';
+import { emissionCapped } from '../politics.js';
 import type { GameState, Outfit, Player, Tile } from '../types.js';
 import { MS_PER_SECOND } from '../units.js';
 import { nameOf } from './chance.js';
@@ -36,7 +37,7 @@ import { afterSale } from './scramble.js';
 import { strikeTarget } from './wolves.js';
 
 /** Why a row's press is refused: money short by `short` credits, the corral empty, or a re-outfit for the good it has. */
-export type ReachRefusal = { kind: 'money'; short: number } | { kind: 'soldOut' } | { kind: 'sameGood' };
+export type ReachRefusal = { kind: 'money'; short: number } | { kind: 'soldOut' } | { kind: 'sameGood' } | { kind: 'capped'; level: number; air: number };
 
 /** Where a dim button points when nothing is in reach, or why the seat has nothing to press now. */
 export type ReachHint = 'over' | 'done' | 'assaying' | 'stunned' | 'run' | 'dodge' | 'catch' | 'corral' | 'outfitter' | 'door' | 'store' | 'outfitFirst' | 'plot' | 'noMules';
@@ -103,6 +104,12 @@ type Row = (s: Standing) => Reach | null;
 const isDoor = (place: HallPlace | null): place is HallDoor => place === 'doorL' || place === 'doorR';
 const at = (tile: Tile): FloorPoint => ({ x: tile.x, y: tile.y });
 const shortBy = (p: Player, price: number): ReachRefusal | null => (p.money < price ? { kind: 'money', short: price - p.money } : null);
+
+/** The colony's emission cap, when it stops this outfit now. */
+const cappedBy = (state: GameState, good: Outfit): ReachRefusal | null => {
+  const capped = emissionCapped(state, good);
+  return capped && { kind: 'capped', ...capped };
+};
 
 const AROUND = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]] as const;
 
@@ -171,7 +178,7 @@ const outfit: Row = ({ state, player: p, place }) => {
   const good = OUTFITTERS.find((g) => g === place);
   if (!good || p.carriedMule !== 'empty' || p.muleBolted) return null;
   const cost = outfitCostFor(state, p.id, good);
-  const why = shortBy(p, cost);
+  const why = cappedBy(state, good) ?? shortBy(p, cost);
   return { kind: 'outfit', enabled: !why, good, cost, why };
 };
 
@@ -181,7 +188,7 @@ const reoutfit: Row = ({ state, player: p, place }) => {
   if (!good || !p.takenMule || !p.carriedMule || p.carriedMule === 'empty' || p.muleBolted) return null;
   const cost = reoutfitCostFor(state, p.id, good);
   if (p.carriedMule === good) return { kind: 'reoutfit', enabled: false, good, cost, why: { kind: 'sameGood' } };
-  const why = shortBy(p, cost);
+  const why = cappedBy(state, good) ?? shortBy(p, cost);
   return { kind: 'reoutfit', enabled: !why, good, cost, why };
 };
 
@@ -367,7 +374,8 @@ const HINT: Record<ReachHint, readonly [string, string | null]> = {
 /** A good inside a sentence: "Rare earth". */
 const inWords = (good: Outfit) => NAME[good].charAt(0) + NAME[good].slice(1).toLowerCase();
 const credits = (n: number) => `${n} cr`;
-const priced = (price: number, why: ReachRefusal | null) => (why?.kind === 'money' ? `${credits(price)} · ${Math.ceil(why.short)} short` : credits(price));
+const priced = (price: number, why: ReachRefusal | null) =>
+  why?.kind === 'money' ? `${credits(price)} · ${Math.ceil(why.short)} short` : why?.kind === 'capped' ? `${credits(price)} · cap ${why.level}, air ${why.air}` : credits(price);
 
 /** The button's words for a reach; a dim row keeps its words, with what it is short of. */
 export function reachWords(reach: Reach): ReachWords {
