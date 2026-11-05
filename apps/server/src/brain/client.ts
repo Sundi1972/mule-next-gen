@@ -191,10 +191,12 @@ export function createThinkingComplete(
   };
 }
 
+type ToolAnswer = { content: string; is_error?: true };
+
 /** The game's tools for one call, as packages/ai's toolsFor makes them: MCP-shaped definitions and a handler that never throws. */
 export interface ToolBox {
   definitions: readonly { name: string; description: string; input_schema: object }[];
-  run(name: string, input: unknown): { content: string; is_error?: true };
+  run(name: string, input: unknown): ToolAnswer | Promise<ToolAnswer>;
 }
 
 /** What the tool loop asks its caller around each round trip: the budget before it, the ledger after it. */
@@ -295,18 +297,19 @@ export function createToolLoop(
       messages.push({ role: 'assistant', content: res.content as unknown as Anthropic.ContentBlockParam[] });
       // Resent as input next round, so it counts toward the next round's worst case, thinking and tool inputs included.
       seen += JSON.stringify(res.content);
-      const results: Anthropic.ContentBlockParam[] = res.content.flatMap((b) => {
-        if (b.type !== 'tool_use') return [];
+      const results: Anthropic.ContentBlockParam[] = [];
+      for (const b of res.content) {
+        if (b.type !== 'tool_use') continue;
         // A handler that throws answers a code, never its text (RULE-A4 unknown); the loop goes on.
-        let r: ReturnType<ToolBox['run']>;
+        let r: ToolAnswer;
         try {
-          r = tools.run(b.name, b.input);
+          r = await tools.run(b.name, b.input);
         } catch {
           r = { content: JSON.stringify({ error: 'tool_failed' }), is_error: true };
         }
         seen += r.content;
-        return [{ type: 'tool_result' as const, tool_use_id: b.id, content: r.content, ...(r.is_error ? { is_error: true } : {}) }];
-      });
+        results.push({ type: 'tool_result' as const, tool_use_id: b.id, content: r.content, ...(r.is_error ? { is_error: true } : {}) });
+      }
       if (round + 1 > BRAIN.toolRounds) results.push({ type: 'text', text: ANSWER_NOW });
       messages.push({ role: 'user', content: results });
     }

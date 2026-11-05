@@ -119,14 +119,20 @@ describe('the tool loop (C9, RULE-A4)', () => {
     expect(callLines().map((l) => [l.round, l.outcome])).toEqual([[1, 'llm']]);
   });
 
-  it("the game's own write offers its tools end to end: the model calls standings, and the next request carries every seat's public Worth", async () => {
+  it("the game's own write offers its tools end to end: the model calls standings and whatIf, and the next request carries every seat's public Worth and a played month's", async () => {
     vi.useFakeTimers();
     try {
       const isWrite = (params: SdkParams) => promptOf(params).user.includes('What you may change:');
       const sdk = fakeSdk((_n, params) => {
         if (!isWrite(params)) return sdkMessage(JSON.stringify({ option: 'A', line: '' }));
         if (params.messages.length === 1)
-          return { ...sdkMessage('', {}, 'tool_use'), content: [{ type: 'tool_use', id: 's1', name: 'standings', input: {} }] } as unknown as SdkMessage;
+          return {
+            ...sdkMessage('', {}, 'tool_use'),
+            content: [
+              { type: 'tool_use', id: 's1', name: 'standings', input: {} },
+              { type: 'tool_use', id: 'w1', name: 'whatIf', input: { edits: [] } },
+            ],
+          } as unknown as SdkMessage;
         return sdkMessage(JSON.stringify({ edits: [], line: '' }));
       });
       const fake = fakeContext({ table: THREE });
@@ -136,13 +142,18 @@ describe('the tool loop (C9, RULE-A4)', () => {
 
       const writes = sdk.requests.filter((r) => isWrite(r.params));
       expect(writes.map((r) => (r.params.tools ?? []).map((t) => ('name' in t ? t.name : '')).sort())).toEqual([
-        ['legalMoves', 'standings', 'worth'],
-        ['legalMoves', 'standings', 'worth'],
+        ['legalMoves', 'standings', 'whatIf', 'worth'],
+        ['legalMoves', 'standings', 'whatIf', 'worth'],
       ]);
-      const [result] = resultsIn(writes[1]!.params) as { content: string }[];
-      const rows = JSON.parse(result!.content) as { seat: string; name: string; worth: number }[];
+      const [standings, whatIf] = resultsIn(writes[1]!.params) as { content: string; is_error?: boolean }[];
+      const rows = JSON.parse(standings!.content) as { seat: string; name: string; worth: number }[];
       expect(rows.map((r) => r.seat).sort()).toEqual(THREE.map((s) => s.id).sort());
       for (const row of rows) expect(row.worth).toBeGreaterThan(0);
+      // The month the write's playbook is for, played on what the seat could see when it was asked.
+      expect(whatIf!.is_error).toBeUndefined();
+      const played = JSON.parse(whatIf!.content) as { month: number; worth: { total: number } };
+      expect(played.month).toBe(1);
+      expect(played.worth.total).toBeGreaterThan(0);
     } finally {
       vi.useRealTimers();
     }

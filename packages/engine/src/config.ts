@@ -1537,6 +1537,14 @@ export const BRAIN = {
    */
   toolRounds: 3,
   /**
+   * Months whatIf may play for one strategy or playbook call. Each is a whole month played in process on the server
+   * (about 0.3s with the walking floor), so a model asking for many cannot stall every game's ticks; past it whatIf
+   * answers `limit`.
+   */
+  whatIfsPerWrite: 4,
+  /** How long a whatIf month plays on the server before it lets the event loop run, so every other room keeps ticking. */
+  whatIfSliceMs: 10,
+  /**
    * Spike S-A1 (WS2 spec A §7), brain:strategy-spike: Haiku 5.5 with adaptive thinking against Sonnet 5.5 writing a
    * seat's strategy. `models.haiku` is priced at pricesPerMTok, `models.sonnet` at sonnetPricesPerMTok.
    */

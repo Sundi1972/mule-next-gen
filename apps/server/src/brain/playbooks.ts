@@ -1,8 +1,9 @@
 /** When a seat's brain asks for its land-grant playbook, and which playbook takes effect when the land grant starts. */
-import type { GameState, Playbook, PlayerId } from '@mule/engine';
-import { landBrief, playbookFrom, toolsFor, WRITER_SYSTEM, type AiSeat, type Feedback, type PlaybookSource, type ValidatePlan, type WriterReply } from '@mule/ai';
+import { BRAIN, type GameState, type Playbook, type PlayerId } from '@mule/engine';
+import { landBrief, playbookFrom, toolsFor, WRITER_SYSTEM, type AiSeat, type Feedback, type PlaybookSource, type ValidatePlan, type WhatIfSim, type WriterReply } from '@mule/ai';
 import type { PlaybookNote } from '../mule-game.js';
 import { WRITE_CALLS } from './client.js';
+import { timeSlicer } from './slice.js';
 import type { BrainService, PlaybookWriter } from './index.js';
 
 export type { PlaybookSource };
@@ -69,7 +70,7 @@ export class Playbooks {
         seat.playbookAsked(month);
         const waitMs = WRITE_CALLS.strategy.timeoutMs;
         // The tools answer from the game as it is now, when it is asked: a game that moves on changes no answer.
-        const tools = toolsFor(state, seat.id);
+        const tools = toolsFor(state, seat.id, this.simFor(state, seat.id, drafted.playbook, source.validate));
         writer.write('strategy', { brief, system: WRITER_SYSTEM, waitMs, late: () => ask.started, signal: ask.controller.signal, tools }).then(
           (written) => {
             if (!ask.started) ask.written = written;
@@ -80,6 +81,23 @@ export class Playbooks {
         console.error(`playbooks: seat ${seat.id} could not ask: ${messageOf(err)}`);
       }
     }
+  }
+
+  /**
+   * What whatIf plays a month with for `seat`: every AI seat as it plays, with its own seed, and each person's seat as
+   * the engine's Trader would play it; and the seat's draft with the model's edits, checked by the validator against
+   * the game as it was when it was asked.
+   */
+  private simFor(state: GameState, seat: PlayerId, draft: Playbook, validate: ValidatePlan): WhatIfSim {
+    const asked = structuredClone(state);
+    const seats = state.players.map((p, i) => {
+      const ai = this.options.seats.find((s) => s.id === p.id);
+      if (ai) return { id: p.id, persona: ai.options.persona, level: ai.options.level, seed: ai.options.seed };
+      // literal-ok: a person's seat in a what-if month is a Trader, seeded by seat order: not balance
+      return { id: p.id, persona: 'trader' as const, level: 'trader' as const, seed: (i * 7_919 + 1) >>> 0 };
+    });
+    // A month takes about 0.3s: played in slices, so every other room's ticks keep their cadence meanwhile.
+    return { seats, playbook: (edits) => validate(asked, seat, draft, edits), pause: timeSlicer(BRAIN.whatIfSliceMs) };
   }
 
   /**

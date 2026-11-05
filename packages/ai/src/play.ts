@@ -43,6 +43,8 @@ import {
   WALK,
   type AiLevelId,
   type AiPersonaId,
+  type Playbook,
+  type PlayerId,
   type DevPlace,
   type GameState,
 } from '@mule/engine';
@@ -268,20 +270,48 @@ function* playSteps(seed: number, specs: SeatSpec[], options: PlayOptions): Gene
         },
       }),
   );
-  const broke: string[][] = [];
-  const auction = { between: 0, store: 0, ship: 0, ms: 0 };
+  const tally = newTally();
+  yield* playPhases(state, seats, options, tally, () => false);
+  const { broke, auction, lots, mulesLost, turns, month1, moments } = tally;
+  return { state, seats, broke, auction, lots, mulesLost, decisions, turns, month1, moments };
+}
+
+/** What a run of phases counts for the game's report. */
+interface PhaseTally {
+  broke: string[][];
+  auction: { between: number; store: number; ship: number; ms: number };
+  lots: { sold: number; unsold: number; colonyOffered: number; colonySold: number; stalled: number };
+  mulesLost: number;
+  turns: DevTurn[];
+  moments: FloorMomentCounts[];
+  month1: PlayedGame['month1'];
+}
+
+const newTally = (): PhaseTally => ({
+  broke: [],
+  auction: { between: 0, store: 0, ship: 0, ms: 0 },
+  lots: { sold: 0, unsold: 0, colonyOffered: 0, colonySold: 0, stalled: 0 },
+  mulesLost: 0,
+  turns: [],
+  moments: [],
+  month1: null,
+});
+
+/**
+ * Plays phase after phase from the state's current one, each to its end and then on to the next, until `done` holds
+ * between phases or the game is over; yielding after every tick where a decider may be waiting, and once at the end
+ * of each phase. The game loop of playGame and of playMonthFrom.
+ */
+function* playPhases(state: GameState, seats: readonly AiSeat[], options: PlayOptions, tally: PhaseTally, done: (state: GameState) => boolean): Generator<void, void, void> {
+  // Read per run, so a sim run's --set reaches it.
+  const DEV_TICK_MS = AI_HANDS.devTickMs;
   const lotHands = seats.map((s) => new LotHand(s.mind, createRng((s.options.seed ^ 0xc2b2ae35) >>> 0))); // literal-ok: a hash salt for the lot hand's rng stream
   const voteHands = seats.map((s) => new VoteHand(s.mind, createRng((s.options.seed ^ 0x165667b1) >>> 0))); // literal-ok: a hash salt for the vote hand's rng stream
-  const lots = { sold: 0, unsold: 0, colonyOffered: 0, colonySold: 0, stalled: 0 };
-  let mulesLost = 0;
-  const turns: DevTurn[] = [];
-  const moments: FloorMomentCounts[] = [];
-  let month1: PlayedGame['month1'] = null;
   let guard = 0;
   // A runaway guard that can never bind before a game of any length ends: it follows the months this game plays.
   // literal-ok: a month has seven phases, so eight a month bounds the loop: a guard, not balance
   const maxSteps = (state.maxMonths + 1) * 8;
-  while (state.phase !== 'gameOver' && guard++ < maxSteps) {
+  while (state.phase !== 'gameOver' && !done(state) && guard++ < maxSteps) {
     switch (state.phase) {
       case 'planning': {
         // The election comes first: hands act before each step, with the same dt, until every seat is Done and the
@@ -320,10 +350,10 @@ function* playSteps(seed: number, specs: SeatSpec[], options: PlayOptions): Gene
         if (DEV_STEER.on && options.walking !== false) {
           // The arcade floor: every colonist steered by its hand and stepped by the engine, as on the server (C10).
           const phase = yield* playFloorPhase(state, seats);
-          turns.push(...phase.turns);
-          moments.push(phase.moments);
-          if (phase.waited !== null) month1 = { waited: phase.waited, continued: phase.continued };
-          mulesLost += state.players.filter((p) => p.carriedMule !== null).length;
+          tally.turns.push(...phase.turns);
+          tally.moments.push(phase.moments);
+          if (phase.waited !== null) tally.month1 = { waited: phase.waited, continued: phase.continued };
+          tally.mulesLost += state.players.filter((p) => p.carriedMule !== null).length;
           break;
         }
         // Everyone starts the month in the store.
@@ -356,7 +386,7 @@ function* playSteps(seed: number, specs: SeatSpec[], options: PlayOptions): Gene
           else if (then && clock.busy!.until >= 0) applyRule(state, id, then, clock);
         }
         // A MULE still led when time runs out runs off.
-        mulesLost += state.players.filter((p) => p.carriedMule !== null).length;
+        tally.mulesLost += state.players.filter((p) => p.carriedMule !== null).length;
         break;
       }
       case 'auction': {
@@ -364,11 +394,11 @@ function* playSteps(seed: number, specs: SeatSpec[], options: PlayOptions): Gene
         for (let ticks = 0; state.auction && state.auction.stage !== 'over' && ticks < 100_000; ticks++) {
           for (const s of seats) s.auctionTick(state, WALK.tickMs, (a) => applyAction(state, s.id, a));
           for (const t of stepAuction(state, WALK.tickMs)) {
-            if (t.buyer === SHIP_ID) auction.ship++;
-            else if (t.buyer === STORE_ID || t.seller === STORE_ID) auction.store++;
-            else auction.between++;
+            if (t.buyer === SHIP_ID) tally.auction.ship++;
+            else if (t.buyer === STORE_ID || t.seller === STORE_ID) tally.auction.store++;
+            else tally.auction.between++;
           }
-          auction.ms += WALK.tickMs;
+          tally.auction.ms += WALK.tickMs;
           yield;
         }
         break;
@@ -381,23 +411,74 @@ function* playSteps(seed: number, specs: SeatSpec[], options: PlayOptions): Gene
           const result = stepLandAuction(state, WALK.tickMs);
           if (lot && result) {
             const colony = lot.seller === COLONY_SELLER;
-            if (result.kind === 'sold') lots.sold++;
-            else lots.unsold++;
-            if (colony) lots.colonyOffered++;
-            if (colony && result.kind === 'sold') lots.colonySold++;
+            if (result.kind === 'sold') tally.lots.sold++;
+            else tally.lots.unsold++;
+            if (colony) tally.lots.colonyOffered++;
+            if (colony && result.kind === 'sold') tally.lots.colonySold++;
           }
           yield;
         }
-        if (state.landAuction && state.landAuction.stage !== 'over') lots.stalled++;
+        if (state.landAuction && state.landAuction.stage !== 'over') tally.lots.stalled++;
         break;
       }
       case 'upkeep':
-        broke.push(state.players.filter((p) => p.money < SIM_TARGETS.broke.below && state.tiles.some((t) => t.owner === p.id && !t.outfit)).map((p) => p.id));
+        tally.broke.push(state.players.filter((p) => p.money < SIM_TARGETS.broke.below && state.tiles.some((t) => t.owner === p.id && !t.outfit)).map((p) => p.id));
         break;
     }
     yield;
     options.onPhase?.(state);
     advancePhase(state);
   }
-  return { state, seats, broke, auction, lots, mulesLost, decisions, turns, month1, moments };
+}
+
+/** A seat for playMonthFrom: who plays it, with the live seat's own seed, and the playbook it plays the month by. */
+export interface MonthSeat {
+  id: PlayerId;
+  persona: AiPersonaId;
+  level: AiLevelId;
+  /** The live seat's seed (AiSeat options.seed), so its drafts break ties as the live seat's do. */
+  seed: number;
+  /** Adopted before play; stamped for the month played. */
+  playbook?: Playbook;
+}
+
+export interface MonthPlayed {
+  /** The state as the next month begins (that month's upkeep advanced out of), or at game over. */
+  state: GameState;
+  /** The month it played. */
+  month: number;
+}
+
+/**
+ * One month of keyless play from `start`, in process: from an upkeep the whole next month, from any other phase the
+ * rest of this one, through its upkeep. Every player is an AiSeat with no decider, so nothing waits. Pure: it plays
+ * on a clone whose seed is `seed`, draws only from seeds, and reads no clock. Throws an Error for a player missing
+ * from `seats` (the caller's mistake), and a RuleError for a playbook stamped for another month than the one played.
+ */
+export function playMonthFrom(start: GameState, seats: readonly MonthSeat[], seed: number, options: { walking?: boolean } = {}): MonthPlayed {
+  const steps = monthSteps(start, seats, seed, options);
+  let step = steps.next();
+  while (!step.done) step = steps.next();
+  return step.value;
+}
+
+/**
+ * playMonthFrom's month, one step at a time: it yields after every tick a decider may wait on, so a caller can let
+ * other work run between steps, and returns what playMonthFrom returns. Its checks throw on the first step.
+ */
+export function* monthSteps(start: GameState, seats: readonly MonthSeat[], seed: number, options: { walking?: boolean } = {}): Generator<void, MonthPlayed, void> {
+  const month = start.phase === 'upkeep' ? start.month + 1 : start.month;
+  for (const p of start.players) if (!seats.some((s) => s.id === p.id)) throw new Error(`No seat for player ${p.id}`);
+  for (const s of seats) {
+    if (s.playbook && s.playbook.month !== month) throw new RuleError(`Seat ${s.id}'s playbook is for month ${s.playbook.month}, not ${month}`);
+  }
+  const state: GameState = { ...structuredClone(start), seed };
+  const played = start.players.map((p) => {
+    const spec = seats.find((s) => s.id === p.id)!;
+    const seat = new AiSeat({ id: p.id, name: p.name, persona: spec.persona, level: spec.level, seed: spec.seed, decider: null });
+    if (spec.playbook) seat.adopt(spec.playbook);
+    return seat;
+  });
+  yield* playPhases(state, played, options, newTally(), (s) => s.month > month);
+  return { state, month };
 }
