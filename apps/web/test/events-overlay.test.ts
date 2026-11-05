@@ -392,6 +392,15 @@ describe('T-AC-10 display / C11: two sick players play in ONE roll call, on the 
       expect(count(roll, '>Brix<'), id).toBe(1);
     }
   });
+
+  // Re-adopted on the arcade screen (named edit, WS6, ws6-ux AM-21): the sick player's own line in the side room.
+  it('T-AC-10: the sick status line on the sick player’s development screen is unchanged, under the overlay', async () => {
+    for (const boards of [0, 1]) {
+      const html = await render(await phone(LENA, boards, viewAt(ROLL_S)));
+      expect(html).toContain('data-testid="sick-cause"');
+      expect(inside(html, 'phone-event-overlay')).not.toContain('sick-cause');
+    }
+  });
 });
 
 describe('RULE-3 for the overlay (T-AC-5 style): boards 0/1 × reduced, and a tap', () => {
