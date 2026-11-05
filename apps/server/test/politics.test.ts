@@ -688,14 +688,14 @@ describe('the politics view', () => {
     g.game.handle('lena', { type: 'setTax', percent: 8 });
     for (const view of screens(g.game)) expect(view.politics!.tax).toEqual({ percent: 8, start: 5, low: 0, high: 10 });
 
-    // On to the first good's walk: Lena sells, Brix buys, Ossa passes.
+    // On to the first good's walk: Lena sells, Brix buys, Ossa stays a buyer with no money, so she trades nothing.
     allReady(g.game);
     while (g.game.viewFor('lena').phase === 'landGrant') g.advance(GRANT_TICK_MS);
     while (g.game.viewFor('lena').phase === 'development' || g.game.viewFor('lena').phase === 'production') g.advance(1_000);
     expect(g.game.viewFor('lena').phase).toBe('auction');
     g.game.handle('lena', { type: 'declare', side: 'seller' });
     g.game.handle('brix', { type: 'declare', side: 'buyer' });
-    g.game.handle('ossa', { type: 'declare', side: 'pass' });
+    engineOf(g.game).players.find((p) => p.id === 'ossa')!.money = 0;
     allReady(g.game);
     g.advance(WALK.tickMs * 2);
     const good = g.game.viewFor(null).auction!.good;

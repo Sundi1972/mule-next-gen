@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { advancePhase, AI_LEVELS, BRAIN, createGame, observe, type GameState, type Playbook } from '@mule/engine';
+import { advancePhase, AI_LEVELS, BRAIN, createGame, GAME, observe, type GameState, type Playbook } from '@mule/engine';
 import { AiSeat, candidate, consider, defaultManual, seatBounds, shortlist, WRITER_SYSTEM, type ValidatePlan } from '@mule/ai';
 import { createBrain, type BrainService, type MeteredBrain } from '../src/brain/index.js';
 import { MuleGame } from '../src/mule-game.js';
@@ -162,7 +162,7 @@ describe('RULE-A1: which playbook takes effect at the land grant', () => {
     expect(sdk.requests[0]!.options.timeout).toBe(BRAIN.writeCalls.strategy.timeoutMs);
     const planA = planInBrief(sdk.requests[0]!.params, 'A');
     expect(planA.length).toBeGreaterThan(0);
-    expect(engine?.landGrant?.claims).toBe(2);
+    expect(engine?.landGrant?.claims).toBe(GAME.claimsPerGrant);
     expect(inEffectAtStart?.by).toBe('llm');
     expect(inEffectAtStart?.landGrant?.ranked.slice(0, planA.length)).toEqual(planA);
     expect(inEffectAtStart?.landGrant?.claims).toBe(1);
@@ -356,10 +356,12 @@ describe('HC-1: no phase waits for a model', { timeout: 30_000 }, () => {
     expect(starts.at(-1)?.[1]).toBe('gameOver');
     for (const month of [1, 2]) expect(opened(month, 'landGrant')! - opened(month, 'planning')!, `month ${month}'s land grant`).toBe(READ_MS);
     expect(opened(2, 'planning')! - opened(1, 'upkeep')!, "month 2's planning").toBe(READ_MS);
-    // The model was asked to write at game start and never answered; month 1's land grant cancelled that call, and the
-    // seat's next decision opened the call that then stayed open all game, so every later write found the seat busy.
-    expect(silent.requests.map((r) => isWrite(r.params))).toEqual([true, false]);
+    // The model was asked to write at game start and never answered: month 1's land grant cancelled that call. The
+    // auction's write, asked in the production show (AM-A16), the auction's start cancelled. The seat's next decision
+    // then opened the call that stayed open all game, so every later write found the seat busy.
+    expect(silent.requests.map((r) => isWrite(r.params))).toEqual([true, true, false]);
     expect(silent.requests[0]!.options.signal?.aborted).toBe(true);
+    expect(silent.requests[1]!.options.signal?.aborted).toBe(true);
   });
 });
 

@@ -5,6 +5,7 @@ import {
   DEV_STEER,
   floorConfig,
   HALL,
+  SPECIES_PERK,
   speedOf,
   stepFloor,
   terrainShare,
@@ -14,6 +15,7 @@ import {
   type FloorInput,
   type GameState,
   type Terrain,
+  WOLVES,
 } from '../src/index.js';
 
 const LAND: Record<string, Terrain> = { '.': 'plains', '^': 'mountains', s: 'swamp', '~': 'lake', S: 'store' };
@@ -56,21 +58,25 @@ const placed = (floor: DevFloor, id: string, change: Partial<FloorColonist>): De
 const onTile = (x: number, y: number): Partial<FloorColonist> => ({ space: 'map', x: x + 0.5, y: y + 0.5 });
 const leading: Partial<FloorColonist> = { lead: { good: null, x: 0.5, y: 1.5 } };
 
+/** RULE-2's map speed: DEV_STEER.mapTilesPerSecond × the land's share × the colonist's pace (a fed Zipwing's SPECIES_PERK). */
+const ZIP = DEV_STEER.mapTilesPerSecond * SPECIES_PERK.zipwingSpeed;
+const T = DEV_STEER.terrain;
+
 describe('the dev floor: speed', () => {
   it("T-AC-2: speeds per RULE-2's examples", () => {
     const state = game();
     const cfg = floorConfig(HALL);
     const floor = buildFloor(state, cfg);
     const rows: [string, string, Partial<FloorColonist>, Partial<FloorConfig['steer']>, number, number][] = [
-      ['plains, a fed Zipwing, no MULE', 'zip', onTile(0, 1), {}, 1.5625, 9],
-      ['mountains', 'zip', onTile(1, 0), {}, 0.625, 9],
-      ['swamp', 'zip', onTile(2, 0), {}, 0.78, 2],
-      ['leading a MULE on plains', 'zip', { ...onTile(0, 1), ...leading }, {}, 1.41, 2],
-      ['bitten, on plains', 'zip', { ...onTile(0, 1), bitten: true }, {}, 0.78, 2],
-      ['standing on a lake worked from its shore: its listed wading 0.3, to get off it', 'zip', onTile(3, 0), {}, 0.46875, 9],
-      ['a lake, waded', 'zip', onTile(3, 0), { lakeMode: 'wade' }, 0.47, 2],
-      ['standing on mountains made impassable: their 0.4, to get off them', 'zip', onTile(1, 0), { mountainsImpassable: true }, 0.625, 9],
-      ['an AI Bramblet on plains, bots at 0.8', 'bot', onTile(0, 1), { botSpeed: 0.8 }, 1, 9],
+      ['plains, a fed Zipwing, no MULE', 'zip', onTile(0, 1), {}, ZIP, 9],
+      ['mountains', 'zip', onTile(1, 0), {}, ZIP * T.mountains, 9],
+      ['swamp', 'zip', onTile(2, 0), {}, ZIP * T.swamp, 9],
+      ['leading a MULE on plains', 'zip', { ...onTile(0, 1), ...leading }, {}, ZIP * DEV_STEER.leadPace, 9],
+      ['bitten, on plains', 'zip', { ...onTile(0, 1), bitten: true }, {}, ZIP * WOLVES.bittenPace, 9],
+      ['standing on a lake worked from its shore: its listed wading 0.3, to get off it', 'zip', onTile(3, 0), {}, ZIP * DEV_STEER.wading, 9],
+      ['a lake, waded', 'zip', onTile(3, 0), { lakeMode: 'wade' }, ZIP * DEV_STEER.wading, 9],
+      ['standing on mountains made impassable: their 0.4, to get off them', 'zip', onTile(1, 0), { mountainsImpassable: true }, ZIP * T.mountains, 9],
+      ['an AI Bramblet on plains, bots at 0.8', 'bot', onTile(0, 1), { botSpeed: 0.8 }, DEV_STEER.mapTilesPerSecond * 0.8, 9],
       // The hall: 8.893 units from the left door's spot to the corral's, in floorSeconds 3: 2.9643 units a second.
       ['in the hall: door to corral in 3 s, × the Zipwing', 'zip', { space: 'hall', x: 8, y: 6 }, {}, 3.7054, 4],
       ['in the hall, leading a MULE', 'zip', { space: 'hall', x: 8, y: 6, ...leading }, {}, 3.3349, 4],
@@ -92,35 +98,35 @@ describe('the dev floor: speed', () => {
       return f.colonists.find((c) => c.id === 'zip')!;
     };
     const right = second(onTile(0, 5), { x: 1, y: 0, act: false });
-    expect([right.x, right.y], 'held right on plains').toEqual([expect.closeTo(2.0625, 9), 5.5]);
+    expect([right.x, right.y], 'held right on plains').toEqual([expect.closeTo(0.5 + ZIP, 9), 5.5]);
     const diagonal = second(onTile(0, 5), { x: 1, y: -1, act: false });
-    expect(Math.hypot(diagonal.x - 0.5, diagonal.y - 5.5), 'held up and right on plains').toBeCloseTo(1.5625, 9);
+    expect(Math.hypot(diagonal.x - 0.5, diagonal.y - 5.5), 'held up and right on plains').toBeCloseTo(ZIP, 9);
     const half = second(onTile(0, 5), { x: 0.5, y: 0, act: false });
-    expect(half.x - 0.5, 'a half stick right on plains').toBeCloseTo(0.78125, 9);
+    expect(half.x - 0.5, 'a half stick right on plains').toBeCloseTo(ZIP / 2, 9);
     const shore = second(onTile(3, 1), { x: 0, y: -1, act: false });
     expect(Math.floor(shore.y), 'held up into the lake: stays on its shore').toBe(1);
     expect(shore.y, 'held up into the lake: its body clear of it').toBeGreaterThanOrEqual(1 + DEV_STEER.bodyTiles);
     expect(shore.y, 'held up into the lake: walked up to it').toBeLessThan(1.3);
     // Down and left into the lake's right side: blocked across, it slides down the shore at the stick's full down share.
     const along = second(onTile(5, 0), { x: -1, y: 1, act: false });
-    expect(along.y - 0.5, 'held down and left into the side of the lake: slid along its shore').toBeCloseTo(1.5625 * Math.SQRT1_2, 9);
+    expect(along.y - 0.5, 'held down and left into the side of the lake: slid along its shore').toBeCloseTo(ZIP * Math.SQRT1_2, 9);
 
     // Leading is the game's carriedMule: a MULE won at the land auction leads from the start, one bought from the next tick.
     const won = game();
     won.players[0]!.carriedMule = 'empty';
     const fromStart = placed(buildFloor(won, cfg), 'zip', onTile(0, 1)).colonists[0]!;
-    expect(speedOf(fromStart, won, cfg), 'a MULE won at the land auction').toBeCloseTo(1.41, 2);
+    expect(speedOf(fromStart, won, cfg), 'a MULE won at the land auction').toBeCloseTo(ZIP * DEV_STEER.leadPace, 9);
     const bought = game();
     let f = placed(buildFloor(bought, cfg), 'zip', onTile(0, 1));
     bought.players[0]!.carriedMule = 'empty';
     f = stepFloor(f, bought, {}, DEV_STEER.tickMs, cfg);
-    expect(speedOf(f.colonists[0]!, bought, cfg), 'a MULE bought at the corral').toBeCloseTo(1.41, 2);
+    expect(speedOf(f.colonists[0]!, bought, cfg), 'a MULE bought at the corral').toBeCloseTo(ZIP * DEV_STEER.leadPace, 9);
     bought.players[0]!.carriedMule = 'food';
     f = stepFloor(f, bought, {}, DEV_STEER.tickMs, cfg);
     expect(f.colonists[0]!.lead?.good, 'the MULE outfitted for Food').toBe('food');
     bought.players[0]!.carriedMule = null;
     f = stepFloor(f, bought, {}, DEV_STEER.tickMs, cfg);
     expect(f.colonists[0]!.lead, 'the MULE installed: none on the lead').toBeNull();
-    expect(speedOf(f.colonists[0]!, bought, cfg), 'the MULE installed: full speed again').toBeCloseTo(1.5625, 9);
+    expect(speedOf(f.colonists[0]!, bought, cfg), 'the MULE installed: full speed again').toBeCloseTo(ZIP, 9);
   });
 });

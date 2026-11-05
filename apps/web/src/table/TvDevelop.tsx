@@ -5,12 +5,12 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { tvSpeakerAt } from '../chat/Chat';
 import { secondsUntil, seatSpecies, toSlot } from '../game/derive';
 import { useServerNow } from '../net/react';
-import { BEAT_MS, BoardLive, useLive } from '../phone/arcade/live';
-import { stillNeeding, tvLines, tvLinesPlace, TV_LINE, type TvLine } from '../phone/arcade/moments';
+import { BoardLive, useLive } from '../phone/arcade/live';
+import { stillNeeding, tvLines, tvLinesPlace, TV_LINE } from '../phone/arcade/moments';
 import type { DrawnMoments } from '../phone/arcade/frames';
 import { colonistsOf, type ArcadeColonist } from '../phone/arcade/seat';
 import { HallStage, MapStage } from '../phone/arcade/stages';
-import { ClockWaits, FirstMules, TvHeader } from './TableApp';
+import { TvHeader } from './TableApp';
 
 /**
  * The big screen in development, steered (arcade spec C12): the approved mock's TV (Tv.tsx::TvArcade at d30ae057) on
@@ -76,9 +76,8 @@ export function TvArcade({ game }: { game: MuleView }) {
   const hall = fitHall(room);
   return (
     <div className="flex h-[720px] w-[1280px] flex-col gap-3 bg-table px-10 py-6 text-ink" data-phase="development" data-testid="tv-game">
-      {/* While month 1's clock waits there is no time running down: no clock, as the flag-off TV. */}
       <TvHeader game={game} title="Development" seconds={game.phaseEndsAt === null ? undefined : Math.ceil(seconds)} />
-      {game.clockWaitsFor ? <ClockWaits /> : <SharedClock seconds={seconds} total={DEVELOPMENT.fullSeconds} size="tv" />}
+      <SharedClock seconds={seconds} total={DEVELOPMENT.fullSeconds} size="tv" />
       <div className="flex min-h-0 flex-1 gap-6">
         <div className="relative shrink-0 self-start" data-testid="tv-map">
           <MapStage data={data} width={MAP_W} density="tv" names testid="tv-map-stage" />
@@ -89,31 +88,23 @@ export function TvArcade({ game }: { game: MuleView }) {
           <div ref={box} className="min-h-0 flex-1" data-testid="tv-hall-box">
             <HallStage data={data} width={hall.w} density="tv" store="phone" names testid="tv-hall-stage" />
           </div>
-          <div className="shrink-0">{game.clockWaitsFor ? <FirstMules game={game} wrapMark={tvSpeakerAt} /> : <PaceList rows={rows} rule={DEV_WALK} columns={1} wrapMark={tvSpeakerAt} />}</div>
+          <div className="shrink-0">
+            <PaceList rows={rows} rule={DEV_WALK} columns={1} wrapMark={tvSpeakerAt} />
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-/** The news line the host's Continue writes when it starts month 1's clock without someone (mule-game.ts). */
-const STARTED_THE_CLOCK = / started the clock( without |\.)/;
-
 /**
  * The TV's lines along the map's foot, clear of the store (above it when the store sits too low): the moments now (the
- * scramble's call, the glint, each colonist meeting wolves), then the frames' latest beats, and for a few seconds the
- * host starting the clock (A-1). Everyone at the table sees every pack, every fight and every race.
+ * scramble's call, the glint, each colonist meeting wolves), then the frames' latest beats. Everyone at the table sees every pack, every fight and every race.
  */
 function TvBeats({ game, colonists, mapW }: { game: MuleView; colonists: ArcadeColonist[]; mapW: number }) {
   const live = useLive();
-  // The device time each news line was first seen here: a line is a beat for BEAT_MS from then.
-  const seen = useRef(new Map<string, number>());
-  const now = Date.now();
-  const started = game.news.filter((n) => STARTED_THE_CLOCK.test(n)).at(-1);
-  if (started && !seen.current.has(started)) seen.current.set(started, now);
-  const host: TvLine[] = started && now - seen.current.get(started)! < BEAT_MS ? [{ key: 'started', text: started, tone: 'warn' }] : [];
   const place = tvLinesPlace(game, mapW);
-  const lines = [...tvLines({ drawn: live.moments ?? null, colonists, beats: live.beats.map((b) => b.text), mulesLeft: game.storeMules }), ...host].slice(0, place.most);
+  const lines = [...tvLines({ drawn: live.moments ?? null, colonists, beats: live.beats.map((b) => b.text), mulesLeft: game.storeMules })].slice(0, place.most);
   if (lines.length === 0) return null;
   return (
     <div

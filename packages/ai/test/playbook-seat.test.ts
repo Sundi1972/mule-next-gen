@@ -27,6 +27,7 @@ import { applyAction } from '../src/play.js';
 import { draftPlaybook, playbookSource } from '../src/playbook/index.js';
 import { AiSeat, type AiSeatOptions } from '../src/seat.js';
 import { plotName } from '../src/strategist.js';
+import { FOOD_TO_SPARE } from './store-food.js';
 
 // The HC-9 seams: a draft or a validator that throws, switched on per test; otherwise the real ones.
 const seam = vi.hoisted(() => ({ throwing: null as 'draft' | 'validator' | null }));
@@ -80,6 +81,8 @@ interface TableOptions {
   seat?: (i: number) => Partial<AiSeatOptions>;
   /** At each phase's opening, before the seats play it. */
   opening?: (state: GameState, seats: AiSeat[]) => void;
+  /** The store opens with FOOD_TO_SPARE Food, so the seats' land plans differ and a decider has a pick to make. */
+  foodToSpare?: boolean;
   /** Between the land grant's steps. */
   between?: (state: GameState, seats: AiSeat[]) => void;
 }
@@ -90,6 +93,7 @@ interface TableOptions {
  */
 function playTable(months: number, o: TableOptions = {}) {
   const state = createGame({ seed: 11, players: IDS.map((id, i) => ({ id, name: `AI ${i + 1}`, isAi: true })), politics: o.politics ?? false });
+  if (o.foodToSpare) state.store.stock.food = FOOD_TO_SPARE;
   const written: Playbook[] = [];
   const records: DecisionRecord[] = [];
   const acts: string[] = [];
@@ -195,9 +199,9 @@ describe('the seat drafts, validates and writes its planning playbook (C4, RULE-
 
   it("RULE-6 (B-AC-7's negative): a Smart seat with nothing adopted writes nothing and plays today's asks", () => {
     const asked: string[] = [];
-    const smart = playTable(2, { seat: () => ({ decider: countingDecider(asked) }) });
+    const smart = playTable(2, { foodToSpare: true, seat: () => ({ decider: countingDecider(asked) }) });
     const today: string[] = [];
-    const onToday = playTable(2, { seat: () => ({ decider: countingDecider(today), playbook: false }) });
+    const onToday = playTable(2, { foodToSpare: true, seat: () => ({ decider: countingDecider(today), playbook: false }) });
     expect(smart.written).toEqual([]);
     // Its decider is asked exactly what today's path asks it, the land plan among them.
     expect(asked).toEqual(today);
@@ -400,6 +404,7 @@ describe("playbookSource, WS2's PlaybookSource (AM-1)", () => {
     // A Smart seat whose decider takes the last land plan offered, where the draft's own pick would take the top one.
     const lastPlan: Decider = { name: 'last', decide: (options) => ({ optionId: options.at(-1)!.id, line: null, by: 'llm' }) };
     const t = playTable(1, {
+      foodToSpare: true,
       seat: (i) => (i === 2 ? { decider: lastPlan } : {}),
       opening: (state, seats) => {
         source ??= playbookSource(seats);

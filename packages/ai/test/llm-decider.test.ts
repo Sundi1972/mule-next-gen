@@ -126,7 +126,9 @@ describe('LlmDecider behind Brain', () => {
       return ask.apply(this, args);
     } as typeof ask);
     try {
-      expect(() => playGame(7, simSeats(4, 'trader', 7))).toThrow(monthOnePlayed);
+      // On the arcade floor development asks nothing (it plays the default pick), so the game runs with walking off,
+      // where the develop hand still asks and passes its wait.
+      expect(() => playGame(7, simSeats(4, 'trader', 7), { walking: false })).toThrow(monthOnePlayed);
       for (const kind of ['develop', 'trade'] as const) {
         const ofKind = waits.filter((w) => w.kind === kind);
         expect(ofKind.length).toBeGreaterThan(0);

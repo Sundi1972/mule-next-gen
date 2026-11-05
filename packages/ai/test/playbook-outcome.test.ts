@@ -208,4 +208,19 @@ describe('RULE-11, the PhaseOutcome builders (pure)', () => {
 
     expect(outcome.items.find((i) => i.path === '/auction/crystite/role')).toEqual({ path: '/auction/crystite/role', expected: 'buyer', actual: 'out' });
   });
+
+  it("T-AC-9 (no Pass, #335): an 'out' play stood as the buyer everyone starts as is met as 'out' while it trades none of the good", () => {
+    const outPlay = playbook({ auction: { food: play('out', 5, 40), energy: play('out', 2, 25), water: play('buyer', 2, 20) } });
+    const facts: PhaseFact[] = [
+      declare('ai0', 'food', 'buyer'),
+      declare('ai0', 'energy', 'buyer'),
+      trade('energy', 'ai0', 'store', 30),
+      declare('ai0', 'water', 'buyer'),
+    ];
+    const role = (good: Good) => auctionOutcome(outPlay, endOfAuction(0), facts, 'ai0').items.find((i) => i.path === `/auction/${good}/role`)!.actual;
+
+    expect(role('food'), 'sat out: a buyer that traded nothing').toBe('out');
+    expect(role('energy'), 'it bought: not out').toBe('buyer');
+    expect(role('water'), "a buyer's play that bought nothing is still a buyer").toBe('buyer');
+  });
 });

@@ -30,9 +30,15 @@ const WIRE_DECIMALS = 100; // literal-ok: 10^2, the wire's 2 decimals, not balan
 
 export const onWire = (n: number): number => Math.round(n * WIRE_DECIMALS) / WIRE_DECIMALS;
 
-/** The floor config the server steps with: the live config objects, the store's hall, and game.ts's pub payout. */
-export function steerConfig(): FloorConfig {
-  return { ...floorConfig(), pubPayout: pubPayoutFor };
+/**
+ * The floor config the server steps with: the live config objects, the store's hall, and game.ts's pub payout. With
+ * `forceWolves` (a per-game test option), wolves are on and every tick's roll on wolf land brings a pack, so the first
+ * colonist out meets one at once; the cooldown and every other WOLVES value stay as they are.
+ */
+export function steerConfig(options: { forceWolves?: boolean } = {}): FloorConfig {
+  const cfg = floorConfig();
+  const wolves = options.forceWolves ? { ...cfg.wolves, on: true, chancePerSecond: Number.POSITIVE_INFINITY } : cfg.wolves;
+  return { ...cfg, wolves, pubPayout: pubPayoutFor };
 }
 
 interface Stamped {
@@ -100,7 +106,7 @@ export interface TickPress {
 /**
  * RULE-1's steps 3 and 4, as the floor's own tests run them: the step, then every press the step did not spend, at
  * the stepped position in pressOrder, each on the floor the press before it left. A press with nothing in reach is
- * ignored; one `allow` refuses, or its rule refuses with a RuleError, changes nothing and is reported with its message.
+ * ignored; one its rule refuses with a RuleError changes nothing and is reported with its message.
  * Mutates `state` as the rules do.
  */
 export function stepTick(
@@ -109,7 +115,6 @@ export function stepTick(
   inputs: Readonly<Record<string, FloorInput>>,
   cfg: FloorConfig,
   secondsLeft: number,
-  allow: (seat: string, reach: Reach) => string | null,
 ): { floor: DevFloor; presses: TickPress[] } {
   const spent = doorPresses(floor, state, inputs, cfg);
   const stepped = settleMoments(state, stepFloor(floor, state, inputs, cfg.steer.tickMs, cfg));
@@ -120,11 +125,6 @@ export function stepTick(
     const reach = reachOf(after, state, seat, cfg, { secondsLeft });
     // A press with nothing in reach is ignored: the button was dim (RULE-1's unknowns).
     if (!reach.enabled) continue;
-    const refusal = allow(seat, reach);
-    if (refusal !== null) {
-      presses.push({ seat, reach, payout: null, refused: refusal });
-      continue;
-    }
     try {
       const press = applyReach(state, after, seat, secondsLeft, cfg);
       presses.push({ seat, reach: press.reach, payout: press.payout, refused: null });

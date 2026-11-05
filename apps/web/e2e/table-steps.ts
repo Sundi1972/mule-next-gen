@@ -2,14 +2,12 @@
  * WS4's steps in smoke.ts's whole game: a picked colour (B-AC-8), map zoom (B-AC-2, T-AC-9), the move to another device
  * (B-AC-7, B-AC-13) and plots you can read from the couch (B-AC-9, look A).
  */
-import { GOODS, type GameState, type Stock, type Tile } from '@mule/engine';
+import { GOODS, type GameState, type Stock } from '@mule/engine';
 import type { MuleView, ServerEnvelope, TableView } from '@mule/protocol';
 import type { Locator, Page } from 'playwright';
 import { COLOUR_NAME, SLOT_COLOR, type Slot } from '@mule/ui';
-import { check, checkLink, EXPIRED, gone, headerSlot, MOVED, onStartScreen, PHONE, qrLink, seatToken, shows, SHOWN_MS, type GameStepContext } from './harness';
+import { check, checkLink, EXPIRED, gone, MOVED, onStartScreen, PHONE, qrLink, seatToken, shows, SHOWN_MS, type GameStepContext } from './harness';
 
-/** B-AC-2: a zoomed plot is at least this wide, a thumb's width. */
-const MIN_PLOT_PX = 44;
 /** B-AC-9 (WS4, plot look A): a mark's width as a share of its plot's, with slack for rounding and the 2 px minimums. */
 const LOOK_A = { tab: 0.46, disc: 0.62 };
 const SHARE_SLACK = 0.06;
@@ -117,21 +115,26 @@ export async function thePhonePicksRose(ctx: GameStepContext): Promise<void> {
   await ctx.held(() => checkRoster(tv.locator('li'), name, `B-AC-8: the TV lobby draws ${name}'s mark in ${COLOUR_NAME[ROSE]}`));
 }
 
-/** B-AC-8, held: the TV's roster in `phase` draws the phone's player in Rose; in development the TV map draws every plot of theirs in Rose too. */
-export async function theTvDrawsRose(ctx: GameStepContext, phase: 'planning' | 'development'): Promise<void> {
-  await ctx.held(async () => {
+/**
+ * B-AC-8, held: the TV's roster in `phase` draws the phone's player in Rose; in development the TV map draws every plot
+ * of theirs in Rose too. The player is read from the phone's header, or given as `player`: the arcade screen, which
+ * development is with walking on, has no such header. Returns the player's name.
+ */
+export async function theTvDrawsRose(ctx: GameStepContext, phase: 'planning' | 'development', player?: string): Promise<string> {
+  return ctx.held(async () => {
     const { phone, tv } = ctx;
-    const { name } = await playingAs(phone);
+    const name = player ?? (await playingAs(phone)).name;
     const screen = tv.locator(`[data-phase=${phase}]`);
     check(await shows(screen), `B-AC-8: the TV shows ${phase}`);
     await checkRoster(screen.locator('li'), name, `B-AC-8: the TV's ${phase} roster draws ${name} in ${COLOUR_NAME[ROSE]}`);
-    if (phase !== 'development') return;
+    if (phase !== 'development') return name;
     const { state } = gameOf(ctx);
     const seat = state.players.find((p) => p.name === name);
     check(seat, `B-AC-8: ${name} plays in the game`);
     const plots = state.tiles.filter((t) => t.owner === seat.id).length;
     const drawn = await tvPlotsIn(tv, ROSE);
     check(plots > 0 && drawn.length === plots && drawn.every((s) => s === String(ROSE)), `B-AC-8: the TV map draws ${name}'s ${plots} plots in ${COLOUR_NAME[ROSE]}, got [${drawn.join(', ')}]`);
+    return name;
   });
 }
 
@@ -169,47 +172,6 @@ export async function zoomButtonOnceYouOwnAPlot(ctx: GameStepContext, intents: (
     check((await grant.count()) === 1, 'B-AC-2: the land grant still shows right after the claim, to look for the zoom button');
     check((await grant.getByTestId('zoom-button').count()) === 1, 'B-AC-2: once you own a plot the grant map shows the zoom button');
   });
-}
-
-/**
- * B-AC-2 and T-AC-9 in development, unheld, on the map inside the phone's own turn: a double-tap on your plot zooms to
- * your land, selects that plot and sends nothing; the zoom survives a store trip; a second double-tap, and the corner
- * button twice, go back and forth. Returns the sizes and the turn left, for the log.
- */
-export async function doubleTapZoomsToYourLand(ctx: GameStepContext, intents: () => number): Promise<string> {
-  const { phone } = ctx;
-  const dev = phone.locator('[data-phase=development]');
-  await dev.getByTestId('map-viewport').waitFor({ timeout: PRESS_MS });
-  const { width, height } = mapOf(ctx);
-  const cells = width * height;
-  const mine = ownedBy(await headerSlot(phone, 'B-AC-2'));
-  const own = dev.getByTestId('map-viewport').getByRole('button', { name: mine });
-  const labels = await plots(dev).evaluateAll((els) => els.map((e) => e.getAttribute('aria-label') ?? ''));
-  const index = labels.findIndex((label) => mine.test(label));
-  check(index >= 0, `B-AC-2: the phone owns a plot on its development map, matching ${mine}`);
-  const target = { x: index % width, y: Math.floor(index / width) };
-  const whole = await widths(own);
-
-  const sent = intents();
-  await doubleTap(phone, plots(dev).nth(index));
-  const tapped = Date.now();
-  const zoomed = await checkZoomedToOwnLand(dev, own, whole, 'B-AC-2: after a double-tap');
-  await checkReadout(dev, target, 'T-AC-9: the double-tap selects the tapped plot');
-  await phone.waitForTimeout(Math.max(0, tapped + QUIET_MS - Date.now()));
-  check(intents() === sent, `T-AC-9: a double-tap sends no intent, sent ${intents() - sent}`);
-
-  await dev.getByRole('button', { name: 'Store', exact: true }).tap({ timeout: PRESS_MS });
-  await dev.getByRole('button', { name: 'Walk out to the map' }).tap({ timeout: PRESS_MS });
-  const back = await checkZoomedToOwnLand(dev, own, whole, 'B-AC-2: the zoom survives a store trip:');
-  check(back.every((w, i) => Math.abs(w - zoomed[i]!) < 0.5), `B-AC-2: the zoom survives a store trip: your plots are ${zoomed.map(px).join(', ')} before it, ${back.map(px).join(', ')} after`);
-
-  await doubleTap(phone, plots(dev).nth(index));
-  await checkWholeMap(dev, own, whole, cells, 'B-AC-2: after a second double-tap');
-  await dev.getByTestId('zoom-button').tap({ timeout: PRESS_MS });
-  await checkZoomedToOwnLand(dev, own, whole, 'B-AC-2: after the zoom button');
-  await dev.getByTestId('zoom-button').tap({ timeout: PRESS_MS });
-  await checkWholeMap(dev, own, whole, cells, 'B-AC-2: after the zoom button again');
-  return `plot ${plotName(target)}, whole ${px(whole[0]!)}, zoomed ${px(zoomed[0]!)}; ${turnLeft(ctx)}`;
 }
 
 /**
@@ -321,64 +283,6 @@ export async function moveDialogOutlivedThePhase(ctx: GameStepContext, link: str
 /** B-AC-9 (WS4, plot look A), held in development: the TV map shows who owns each plot and what is installed on it. */
 export async function theTvShowsWhoOwnsEachPlot(ctx: GameStepContext): Promise<string> {
   return ctx.held(() => checkPlotLook(ctx.tv.locator('[data-phase=development]'), 'TV, development', { installed: true }));
-}
-
-/**
- * B-AC-9 (WS4, plot look A) on the phone's development map, right after the phone has selected a plot of its own and
- * installed a MULE this turn: its owners, its installed goods, and the plot its rail reads out as selected. Then, held,
- * plots another player owns: the test gives the first AI a free interior plot and one on each side of the map (none a
- * corner) for the moment, as store-steps seeds hunger, and the phone selects each in turn. Every failure of every read
- * is reported at once. Returns a line for the log, with how long the hold took.
- */
-export async function thePhoneShowsItsSelectedPlot(ctx: GameStepContext): Promise<string> {
-  const dev = ctx.phone.locator('[data-phase=development]');
-  const map = dev.getByTestId('dev-map');
-  const heading = (await dev.getByTestId('plot-title').textContent({ timeout: PRESS_MS })) ?? '';
-  const named = heading.match(/(\d+)·(\d+)/);
-  check(named, `B-AC-9 (WS4, plot look A, phone): the rail names the selected plot, got "${heading}"`);
-  const own = await readPlotLook(map, 'phone, its own plot', { installed: true, selected: { x: Number(named[1]) - 1, y: Number(named[2]) - 1 } });
-  const theirs = await ctx.held(async () => {
-    const room = ctx.server.registry.get(ctx.code) as unknown as { game: Game; broadcast(): void };
-    const { game } = room;
-    const { width, height, tiles } = game.state;
-    const ai = game.state.players.find((p) => p.isAi);
-    const free = (t: Tile) => t.owner === null && t.terrain !== 'store' && !t.special;
-    // The zoom button covers the top right: the last column's plot is its lowest, the top row's its leftmost.
-    const plots = [
-      tiles.find((t) => free(t) && t.x > 0 && t.y > 0 && t.x < width - 1 && t.y < height - 1),
-      [...tiles].reverse().find((t) => free(t) && t.x === width - 1 && t.y > 0 && t.y < height - 1),
-      tiles.find((t) => free(t) && t.y === height - 1 && t.x > 0 && t.x < width - 1),
-      tiles.find((t) => free(t) && t.x === 0 && t.y > 0 && t.y < height - 1),
-      tiles.find((t) => free(t) && t.y === 0 && t.x > 0 && t.x < width - 1),
-    ];
-    check(
-      ai && plots.every(Boolean),
-      `B-AC-9 (WS4, plot look A, phone): an AI seat, and free plots to give it inside the map and on the last column, the bottom row, the first column and the top row, got [${plots.map((t) => (t ? plotName(t) : 'none')).join(', ')}]`,
-    );
-    const given = plots as Tile[];
-    const started = Date.now();
-    for (const t of given) t.owner = ai.id;
-    room.broadcast();
-    try {
-      const reads: { read: string; fails: string[] }[] = [];
-      for (const t of given) {
-        const at = `${t.x}-${t.y}`;
-        await map.getByTestId(`owner-${at}`).waitFor({ timeout: PRESS_MS });
-        await map.getByTestId(`map-plot-${at}`).click({ timeout: PRESS_MS });
-        await dev.getByTestId('plot-title').filter({ hasText: plotName(t) }).waitFor({ timeout: PRESS_MS });
-        reads.push(await readPlotLook(map, `phone, another player's plot ${plotName(t)}`, { installed: true, selected: t, faded: true }));
-      }
-      return { reads, ms: Date.now() - started };
-    } finally {
-      for (const t of given) t.owner = null;
-      // The table's one development clock runs on wall time, held or not: give back what these reads took.
-      game.devEndsAt = (game.devEndsAt ?? game.ctx.now()) + Date.now() - started;
-      room.broadcast();
-    }
-  });
-  const fails = [own, ...theirs.reads].flatMap((r) => r.fails);
-  check(fails.length === 0, fails.join('\n'));
-  return `${[own, ...theirs.reads].map((r) => r.read).join('. ')}; held ${theirs.ms} ms`;
 }
 
 /** readPlotLook's read, failing with every check that failed. Returns a line for the log. */
@@ -599,40 +503,6 @@ async function playingAs(page: Page): Promise<{ name: string; mark: string; slot
   };
 }
 
-/** B-AC-2: each of your plots is at least MIN_PLOT_PX wide, larger than on the whole map, and inside the map's viewport. */
-async function checkZoomedToOwnLand(dev: Locator, own: Locator, whole: number[], when: string): Promise<number[]> {
-  await settled(dev);
-  const sizes = await widths(own);
-  check(sizes.every((w) => w >= MIN_PLOT_PX), `${when} each of your plots is ≥ ${MIN_PLOT_PX} px wide, got ${sizes.map(px).join(', ')}`);
-  check(sizes.every((w, i) => w > whole[i]! + 0.5), `${when} your plots grew from the whole map's ${whole.map(px).join(', ')}, got ${sizes.map(px).join(', ')}`);
-  const view = await viewport(dev);
-  const outside = (await boxes(own)).filter((b) => !inside(b, view)).length;
-  check(outside === 0, `${when} all your plots are inside the map's viewport, ${outside} are not`);
-  return sizes;
-}
-
-/** B-AC-2: the map draws all `cells` plots, every one inside its viewport, and yours are back to their whole-map size. */
-async function checkWholeMap(dev: Locator, own: Locator, whole: number[], cells: number, when: string): Promise<void> {
-  await settled(dev);
-  const all = await boxes(plots(dev));
-  check(all.length === cells, `${when} the map draws ${cells} plots, got ${all.length}`);
-  const view = await viewport(dev);
-  const outside = all.filter((b) => !inside(b, view)).length;
-  check(outside === 0, `${when} all ${all.length} plots are inside the map's viewport, ${outside} are not`);
-  const sizes = await widths(own);
-  check(sizes.every((w, i) => Math.abs(w - whole[i]!) < 0.5), `${when} your plots are back to ${whole.map(px).join(', ')}, got ${sizes.map(px).join(', ')}`);
-}
-
-async function checkReadout(dev: Locator, plot: Plot, message: string): Promise<void> {
-  const heading = (await dev.getByTestId('plot-title').textContent({ timeout: PRESS_MS })) ?? '';
-  check(heading.includes(plotName(plot)), `${message}: the rail shows "${heading}", not plot ${plotName(plot)}`);
-}
-
-/** Waits for the map's zoom to finish easing; a map that mounted zoomed has nothing to wait for. */
-async function settled(screen: Locator): Promise<void> {
-  await screen.getByTestId('map').evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished)), undefined, { timeout: PRESS_MS });
-}
-
 /** The game behind the room on the in-process server. */
 function gameOf(ctx: GameStepContext): Game {
   const room = ctx.server.registry.get(ctx.code);
@@ -643,14 +513,6 @@ function gameOf(ctx: GameStepContext): Game {
 function mapOf(ctx: GameStepContext): { width: number; height: number } {
   const { width, height } = gameOf(ctx).state;
   return { width, height };
-}
-
-/** Seconds left of the phone's development turn: the one development clock. */
-function turnLeft(ctx: GameStepContext): string {
-  const game = gameOf(ctx);
-  const now = game.ctx.now();
-  const ends = game.devEndsAt ?? now;
-  return `${((ends - now) / 1_000).toFixed(2)} s of the development turn left`;
 }
 
 /** The colour slots drawn on the TV map's plots whose label names this colour slot as the owner. */
@@ -667,6 +529,10 @@ async function rosterSlots(rows: Locator, name: string): Promise<string[]> {
   return mine.evaluateAll((els) => els.map((e) => e.querySelector('[role=img][data-slot]')?.getAttribute('data-slot') ?? 'none'));
 }
 
+function px(width: number): string {
+  return `${width.toFixed(1)} px`;
+}
+
 /** Every plot on the map, row by row: each is labelled with its terrain; player marks are images. */
 function plots(screen: Locator): Locator {
   return screen.getByTestId('map-viewport').locator('[aria-label]:not([role=img]):not([data-testid=zoom-button])');
@@ -677,36 +543,8 @@ function ownedBy(slot: number): RegExp {
   return new RegExp(`owned by player ${slot + 1}\\b`);
 }
 
-function plotName(plot: Plot): string {
-  return `${plot.x + 1}·${plot.y + 1}`;
-}
-
-function px(width: number): string {
-  return `${width.toFixed(1)} px`;
-}
-
-async function viewport(screen: Locator): Promise<Box> {
-  const box = await screen.getByTestId('map-viewport').boundingBox({ timeout: PRESS_MS });
-  check(box, 'B-AC-2: the map has a viewport');
-  return box;
-}
-
-function inside(b: Box, v: Box): boolean {
-  return b.x >= v.x - 0.5 && b.y >= v.y - 0.5 && b.x + b.width <= v.x + v.width + 0.5 && b.y + b.height <= v.y + v.height + 0.5;
-}
-
 async function boxes(list: Locator): Promise<Box[]> {
   return list.evaluateAll((els) => els.map((e) => e.getBoundingClientRect()).map(({ x, y, width, height }) => ({ x, y, width, height })));
-}
-
-async function widths(list: Locator): Promise<number[]> {
-  return (await boxes(list)).map((b) => b.width);
-}
-
-async function doubleTap(phone: Page, plot: Locator): Promise<void> {
-  const box = await plot.boundingBox({ timeout: PRESS_MS });
-  check(box, 'B-AC-2: the plot to double-tap is on screen');
-  await doubleTapAt(phone, box.x + box.width / 2, box.y + box.height / 2);
 }
 
 /** Two taps at one point, sent back to back: well inside RULE-4's 300 ms. */
