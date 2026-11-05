@@ -187,6 +187,18 @@ describe("C44: the AI's council acts (slice 2a RULE-46)", () => {
     expect([...votes].sort()).toEqual([false, true]);
   });
 
+  it("T-AC-45 (HC-41): and it is the month's: over 20 months of one game a Rookie's coin for the same seat comes up both ways", () => {
+    const votes = new Set<boolean>();
+    for (let month = 2; month <= 21; month++) {
+      const state = governed();
+      state.month = month;
+      ballot(state, LAND_10);
+      tick(new VoteHand(mindOf('ai2', 'trader', 'rookie'), createRng(99)), state);
+      votes.add(state.politics!.council!.ballots.ai2!);
+    }
+    expect([...votes].sort()).toEqual([false, true]);
+  });
+
   it('T-AC-50: RULE-46 vote rows 4-5 against the median — an enact passes for the cheap half, a repeal for the dear half', () => {
     const state = governed();
     give(state, 'ai2', 2);
