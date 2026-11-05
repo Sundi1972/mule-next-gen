@@ -72,7 +72,7 @@ const RECORDER = `{
       add(rec.layers, 'event:' + layer.dataset.event);
       for (const el of layer.querySelectorAll('[data-testid]')) add(rec.layers, el.dataset.testid);
     }
-    for (const slot of document.querySelectorAll('[data-phase=production] [data-testid^=silo-]:not([data-testid=silo-bar])')) {
+    for (const slot of document.querySelectorAll('[data-phase=production] [data-testid^=silo-]:not([data-testid=silo-bar]):not([data-testid^=silo-name-])')) {
       const id = slot.dataset.testid.slice(5);
       rec.slots[id] = Object.fromEntries([...slot.querySelectorAll('[data-good]')].map((el) => [el.dataset.good, el.textContent]));
       rec.slotColours[id] = getComputedStyle(slot).borderTopColor;
@@ -186,7 +186,8 @@ export async function checkTheShow({ tv, phone, event = false }: { tv: ShowWatch
     const struck = deltas.length > 0;
     // A plot the event reached before it filled shows its bars only after the event.
     // RULE-3 (AM-19): before any event a plot peaks at its base and bonuses, before its losses land.
-    const peak = l.made - l.parts.reduce((n, p) => n + Math.min(0, p.delta), 0);
+    // The floor that lifts a plot back to 0 lands with the losses, so it is no part of the peak.
+    const peak = l.made - l.parts.reduce((n, p) => n + (p.delta < 0 || p.why === 'floor' ? p.delta : 0), 0);
     if (!struck || seen.pre > 0) check(seen.pre === Math.min(peak, 8), `B-AC-6: plot ${id} peaked at ${seen.pre} bars for ${peak} units before its losses`);
     const colour = seenTv.slotColours[l.owner];
     // A plot that made nothing has no bars, so nothing to colour.
