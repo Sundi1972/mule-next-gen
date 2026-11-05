@@ -90,8 +90,8 @@ function seedOf(input: Pick<DraftInput, 'seed'>, month: number, key: string): nu
 }
 
 /**
- * A roll in [0, 1) from the draft's own seeded stream: the seat's seed, the month and `key`, as every pick is seeded. The
- * table line a seat says for a drafted part draws it (AM-22), so the line never touches the Brain's or a hand's stream.
+ * A roll in [0, 1) from the draft's own seeded stream: the seat's seed, the month and `key`. A drafted part's table line
+ * draws it, so the line never touches the Brain's or a hand's stream. See AM-22.
  */
 export function draftRoll(seed: number, month: number, key: string): number {
   return createRng(seedOf({ seed }, month, `line|${key}`)).next();
@@ -225,10 +225,7 @@ function pendingPlan(land: LandPick): LandPlan {
 const MULE_STEPS = 3; // literal-ok: RULE-1b's MULE is three steps
 const midSeconds = ([lo, hi]: [number, number]) => (lo + hi) / 2 / MS_PER_SECOND; // literal-ok: the midpoint of a range
 
-/**
- * RULE-9 row 3's own pick: MULE `k` as the development draft would pick it on `input.state`, the same seeded TopPick
- * of developDecision under the same key, so a stale MULE is replaced by what a fresh draft holds in its place.
- */
+/** MULE `k` as the development draft picks it on `input.state`, under the draft's own key. See RULE-9 row 3. */
 export function draftMulePick(input: DraftInput, k: number, walk: DevWalk | undefined, focus: Good | null): DevAction {
   const at: DraftInput = { ...input, phase: 'development' };
   const obs = observe(at.state, at.seat);
@@ -242,10 +239,9 @@ export function ledOutfit(obs: GameState, me: PlayerId): Outfit | null {
 }
 
 /**
- * AM-27: the pick for a MULE the seat leads already fitted keeps its outfit, so only its plot is picked: on the floor
- * it cannot be fitted again (OUTFIT takes an empty MULE, RE-OUTFIT one taken off a plot this turn), and on taps a
- * re-fit pays for an outfit twice. It is paid for, so the purchase's vetoes (the corral, the cash, the month's count)
- * are not its; only the walk's is. With no plot the walk allows, 'stop'.
+ * The pick for a MULE the seat leads already fitted keeps its outfit, so only its plot is picked: the floor cannot fit
+ * it again, and on taps a re-fit pays twice. It is paid for, so of the purchase's vetoes only the walk's is its own;
+ * with no plot the walk allows, 'stop'. See AM-27.
  */
 function keepOutfit(obs: GameState, mind: Mind, list: Shortlist<DevAction>, walk: DevWalk | undefined): Shortlist<DevAction> {
   const outfit = ledOutfit(obs, mind.me);
@@ -264,11 +260,7 @@ function keepOutfit(obs: GameState, mind: Mind, list: Shortlist<DevAction>, walk
   return shortlist(kept.some((c) => !c.veto) ? kept : stop, mind.level.shortlist, mind.level.shortlistTolerance);
 }
 
-/**
- * AM-27: whether the MULE the seat leads already fitted makes anything over the game on one of its idle plots, kept
- * as it is: its install gain with nothing left to pay for it and without what the MULE itself is worth at the end.
- * True when it leads no fitted MULE.
- */
+/** Whether the fitted MULE the seat leads makes anything over the game on one of its idle plots; true when it leads none. See AM-27. */
 export function keptOutfitEarns(state: GameState, mind: Mind): boolean {
   const obs = observe(state, mind.me);
   const outfit = ledOutfit(obs, mind.me);
@@ -284,9 +276,8 @@ export function keptOutfitEarns(state: GameState, mind: Mind): boolean {
 }
 
 /**
- * MULE `mule` led out on `copy` as the hand plays it (AM-27): a MULE the seat already leads, won at the land auction,
- * is that MULE, so it is not bought, and it is not outfitted again for the outfit it carries. The copy with it
- * installed, or the rules' refusal, with `copy` unchanged.
+ * MULE `mule` led out on a copy of `copy` as the hand plays it: a MULE the seat already leads is not bought, nor
+ * outfitted again for the outfit it carries. The copy with it installed, or the rules' refusal. See AM-27.
  */
 function leadOut(copy: GameState, me: PlayerId, mule: Extract<DevAction, { kind: 'install' }>): GameState | RuleError {
   const trial = cloneForSim(copy);
@@ -303,12 +294,21 @@ function leadOut(copy: GameState, me: PlayerId, mule: Extract<DevAction, { kind:
   return trial;
 }
 
+/** A MULE pick the development draft left out because the what-if copy's rules refused it. */
+export interface LeftOutPick {
+  /** Its place among the month's MULEs, from 1. */
+  mule: number;
+  outfit: Outfit;
+  plot: number;
+  refused: string;
+}
+
 /**
  * RULE-5 · development: the analyses, then each MULE as a pick of developDecision, leaning to the money-maker, on a
  * what-if copy that already holds the MULEs before it, then the filters and the pub. The walk is priced as where the
- * game walks (DEV_WALK). A pick the copy's rules refuse is logged and left out, and the picks go on.
+ * game walks (DEV_WALK). A pick the copy's rules refuse is left out, into `leftOut`, and the picks go on.
  */
-function developmentPart(input: DraftInput, obs: GameState, moneyMaker: Good | null): DevelopmentPlay {
+function developmentPart(input: DraftInput, obs: GameState, moneyMaker: Good | null, leftOut: LeftOutPick[]): DevelopmentPlay {
   const { mind } = input;
   const me = mind.me;
   let copy = cloneForSim(obs);
@@ -338,7 +338,7 @@ function developmentPart(input: DraftInput, obs: GameState, moneyMaker: Good | n
     if (mule.kind === 'stop') break;
     const led = leadOut(copy, me, mule);
     if (led instanceof RuleError) {
-      console.error(`AI seat ${me}: the development draft left out MULE ${k + 1} (${mule.outfit} on plot ${mule.index}), refused: ${led.message}`);
+      leftOut.push({ mule: k + 1, outfit: mule.outfit, plot: mule.index, refused: led.message });
       continue;
     }
     copy = led;
@@ -392,19 +392,20 @@ export function draftPlanningPart(input: DraftInput): PlanningPlay {
 
 /**
  * The seat's playbook for a phase, complete, by 'engine' with no edits: the strategy, and the phase's parts drafted
- * under it. Given a strategy, it plays that one; the same input always drafts the same playbook.
+ * under it. Given a strategy, it plays that one; the same input always drafts the same playbook. The MULE picks the
+ * development draft left out go into `leftOut`, for the caller to log.
  */
-export function draftPlaybook(input: DraftInput): Playbook {
+export function draftPlaybook(input: DraftInput, leftOut: LeftOutPick[] = []): Playbook {
   const obs = observe(input.state, input.seat);
   const head = headOf(input, obs);
   if (input.phase === 'planning') return { ...head, planning: planningPart(input, obs), landGrant: landGrantPart(input, obs) };
-  if (input.phase === 'development') return { ...head, development: developmentPart(input, obs, head.strategy.moneyMaker) };
+  if (input.phase === 'development') return { ...head, development: developmentPart(input, obs, head.strategy.moneyMaker, leftOut) };
   return { ...head, auction: auctionPart(input, obs) };
 }
 
 /**
- * AM-20: the seat's auction playbook for one good, drafted at that good's status screen, so its unit values see the
- * good's status rows and the money the earlier goods left. Its auction part carries only `good`.
+ * The seat's auction playbook for `good` alone, drafted at its status screen, so its unit values see the good's status
+ * rows and the money the earlier goods left. See AM-20.
  */
 export function draftGoodPlaybook(input: Omit<DraftInput, 'phase'>, good: Good): Playbook {
   const auction: DraftInput = { ...input, phase: 'auction' };
