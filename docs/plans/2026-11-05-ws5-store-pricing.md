@@ -108,6 +108,7 @@ Test: `packages/ai/test/store-quotes-contract.test.ts` (new).
   `store.posted[g]` after the next `postPrices`, every good, 20 seeded games (spec §6 T-AC-2). Also asserts
   `expectedOffWorld(state, g, k)` equals `store.offWorld[g]` while off-world prices don't move yet (PR-2 changes this).
   Trap: compare after the same month's shortages are on the report, or the test passes for the wrong reason.
+  Also pins §3's null semantics: `sell` is null exactly when `storeForSale` is 0, `buy` exactly when `storeWants` is 0.
 - [ ] **Step 2: Run it, expect FAIL (`expectedOffWorld` is not exported)** —
   `pnpm --filter @mule/ai exec vitest run test/store-quotes-contract.test.ts` → FAIL.
 - [ ] **Step 3: Implement C2's extract and the §3 contract per spec**: add `expectedOffWorld` (returns today's off-world price until
