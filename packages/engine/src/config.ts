@@ -1414,6 +1414,8 @@ type PlanKind = Strategy['kind'];
 export const AI_PLANS = {
   /** Seats play their playbook; false: every seat plays the phase-by-phase asks, as before playbooks. */
   on: true,
+  /** A feature switch, not a balance value: a seat's own path plays its drafted development and auction parts; false, today's (AM-26). */
+  ownPhases: false,
   /** How much each persona leans to each plan kind, 0 to 1: the draft picks the eligible kind it leans to most. */
   leaning: {
     cautious: { builder: 1, specialist: 0.5, monopolist: 0.2, landBaron: 0.3, politician: 0.4, spoiler: 0 },
