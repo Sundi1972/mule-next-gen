@@ -33,6 +33,8 @@ const harness = vi.hoisted(() => ({
   before: null as ((seat: unknown, state: unknown, point: 'planning' | 'development' | 'auction') => void) | null,
   /** At a seat's own tick, after it played it. */
   after: null as ((seat: unknown, state: unknown, point: 'planning' | 'development' | 'auction') => void) | null,
+  /** Each auction act a seat makes, and whether the rules took it. */
+  acted: null as ((seat: unknown, state: unknown, action: unknown, ok: boolean) => void) | null,
   seats: [] as unknown[],
 }));
 vi.mock('../src/seat.js', async (importOriginal) => {
@@ -59,7 +61,11 @@ vi.mock('../src/seat.js', async (importOriginal) => {
     }
     override auctionTick(state: GameState, dt: number, act: Act): void {
       harness.before?.(this, state, 'auction');
-      super.auctionTick(state, dt, act);
+      super.auctionTick(state, dt, (action) => {
+        const ok = act(action);
+        harness.acted?.(this, state, action, ok);
+        return ok;
+      });
       harness.after?.(this, state, 'auction');
     }
   }
@@ -72,9 +78,9 @@ vi.mock('../src/playbook/draft.js', async (importOriginal) => {
   const real = await importOriginal<typeof import('../src/playbook/draft.js')>();
   return {
     ...real,
-    draftPlaybook: (input: Parameters<typeof real.draftPlaybook>[0]) => {
+    draftPlaybook: (...args: Parameters<typeof real.draftPlaybook>) => {
       if (seam.throwing === 'draft') throw new Error('draft broke');
-      return real.draftPlaybook(input);
+      return real.draftPlaybook(...args);
     },
     draftGoodPlaybook: (...args: Parameters<typeof real.draftGoodPlaybook>) => {
       if (seam.throwing === 'draft' || seam.throwing === 'goodDraft') throw new Error('draft broke');
@@ -102,6 +108,7 @@ afterEach(() => {
   harness.options = null;
   harness.before = null;
   harness.after = null;
+  harness.acted = null;
   harness.seats = [];
   seam.throwing = null;
   vi.restoreAllMocks();
@@ -133,6 +140,8 @@ interface Table {
   devStarts: Map<number, string>;
   /** Per month, the game as its auction ended. */
   auctionEnds: Map<number, string>;
+  /** Per seat, month and good, its auction acts in order, each with the stage and walk time it was made at. */
+  acts: Map<string, string[]>;
 }
 
 const key = (seat: string, month: number, more = '') => `${seat}/${month}${more && `/${more}`}`;
@@ -155,6 +164,12 @@ function playTable(o: TableOptions = {}): Table {
   harness.options = ({ id }) => ({ onPlaybook: (pb: Playbook) => written.push(structuredClone(pb)), onDecision: (r: DecisionRecord) => records.push(structuredClone(r)), ...o.seat?.(id) });
   const devStarts = new Map<number, string>();
   const auctionEnds = new Map<number, string>();
+  const acts = new Map<string, string[]>();
+  harness.acted = (seat, s, action, ok) => {
+    const a = (s as GameState).auction;
+    const k = key((seat as AiSeat).id, (s as GameState).month, a?.good ?? '');
+    acts.set(k, [...(acts.get(k) ?? []), stableJson({ stage: a?.stage, elapsed: a?.elapsed, action, ok })]);
+  };
   harness.before = (seat, s, point) => {
     const state = s as GameState;
     if (point === 'development' && !devStarts.has(state.month)) devStarts.set(state.month, stableJson(state));
@@ -193,7 +208,7 @@ function playTable(o: TableOptions = {}): Table {
   }
   const traded = (seat: string, month: number, good: Good) =>
     played.facts.reduce((n, f) => n + (f.kind === 'trade' && f.month === month && f.good === good && (f.buyer === seat || f.seller === seat) ? f.qty : 0), 0);
-  return { state: played.state, seats: played.seats, written, records, declared, traded, installs, ownInstalls, outcomes, final: stableJson(played.state), devStarts, auctionEnds };
+  return { state: played.state, seats: played.seats, written, records, declared, traded, installs, ownInstalls, outcomes, final: stableJson(played.state), devStarts, auctionEnds, acts };
 }
 
 const writesOf = (t: Table, seat: string, month: number, phase: Playbook['phase']) => t.written.filter((pb) => pb.seat === seat && pb.month === month && pb.phase === phase);
@@ -233,10 +248,7 @@ const SLOW_MS = 20_000;
 const ME = 'ai0';
 const MONTH = 2;
 
-/**
- * The own path's development and auction parts play only with AI_PLANS.ownPhases on (AM-26). C4's promises for them
- * are proved with it on, the path a later PM ruling switches on: a test calls this first, and afterEach puts it back.
- */
+/** C4's own-path promises are proved with AI_PLANS.ownPhases on: a test calls this first, and afterEach puts it back. See AM-26. */
 function ownPhasesOn(): void {
   AI_PLANS.ownPhases = true;
 }
@@ -319,6 +331,44 @@ describe('the own path plays today’s development and auction while AI_PLANS.ow
     expect(adopted.written.filter((pb) => pb.phase === 'development' || pb.phase === 'auction'), 'no own development or auction playbook').toEqual([]);
     expect(adopted.records.some((r) => r.id === 0)).toBe(false);
   });
+
+  it("B-AC-6, T-AC-13 (AM-26, AI_PLANS.ownPhases off): a good an adopted auction part lacks plays today's hand, act for act, and the seat drafts and writes nothing for it", () => {
+    // ME's own auction draft, adopted at the month's first status screen without the good that is up.
+    const atStatus = (state: GameState) => state.auction?.good && state.auction.stage === 'status';
+    const statusAt = (into: Map<string, string>) => (seat: AiSeat, state: GameState) => {
+      if (seat.id === ME && state.month === MONTH && atStatus(state) && !into.size) into.set(state.auction!.good!, stableJson(state));
+    };
+    const baseAt = new Map<string, string>();
+    const base = playTable({ seat: () => ({ playbook: false }), before: statusAt(baseAt) });
+    const adoptedAt = new Map<string, string>();
+    let missing: Good | null = null;
+    let kept: Good[] = [];
+    const adopted = playTable({
+      before: (seat, state, point) => {
+        if (point !== 'auction') return;
+        statusAt(adoptedAt)(seat, state);
+        if (missing || seat.id !== ME || state.month !== MONTH || !atStatus(state)) return;
+        missing = state.auction!.good!;
+        const draft = seat.draft(state, 'auction');
+        const { [missing]: _, ...rest } = draft.auction!;
+        kept = Object.keys(rest) as Good[];
+        const { playbook } = seat.validator()(state, ME, { ...draft, auction: rest }, []);
+        expect(Object.keys(playbook.auction!), 'the gate keeps the good out').toEqual(kept);
+        seat.adopt({ ...playbook, by: 'llm' });
+      },
+    });
+    expect(missing, 'the good up at the first status screen').not.toBeNull();
+    expect(kept.length, 'the adopted part plays other goods').toBeGreaterThan(0);
+    expect(adoptedAt.get(missing!), 'the same game as the good comes up').toBe(baseAt.get(missing!));
+    const acts = adopted.acts.get(key(ME, MONTH, missing!));
+    expect(acts?.length, 'it acts on the good').toBeGreaterThan(0);
+    expect(acts, "its acts on the good: today's").toEqual(base.acts.get(key(ME, MONTH, missing!)));
+    expect(adopted.written.filter((pb) => pb.phase === 'auction'), 'no own auction entry').toEqual([]);
+    expect(adopted.records.some((r) => r.id === 0), 'no drafted line').toBe(false);
+    const items = adopted.outcomes.get(key(ME, MONTH, 'auction'))!.items;
+    expect(items.some((i) => i.path.startsWith(`/auction/${missing}/`)), 'the outcome names no part for it').toBe(false);
+    expect(items.some((i) => i.path.startsWith(`/auction/${kept[0]}/`)), 'the adopted goods are in it').toBe(true);
+  });
 });
 
 // The own-path promises switch AI_PLANS.ownPhases on (ownPhasesOn); the adopted-path ones play with the default.
@@ -372,12 +422,10 @@ describe('the seat plays its development and auction parts (C4, RULE-6, RULE-7)'
     // (a) moneyMaker. WS2 edits the money-maker through the seat's gate, which re-drafts the route under it (RULE-1's
     // re-plan); adopted just ahead of the month's first development tick, its MULEs that month are outfitted for the
     // edited good. The first seat and month whose re-drafted route outfits every MULE for the edited good, on plots that
-    // grow it well (TERRAIN_ODDS 'good': where a plot can make it), is the one edited.
-    // Measured 5 Nov (seeds 1-8, months 1-4, edits to a good the drafted plots grow well): the re-draft does so for 29
-    // of 117, part of its MULEs for 37,
-    // none for 51; developDecision's lean (C5, AI_PLANS.moneyMaker) decides that, not the hand, and it is reported.
-    // Under the 5 Nov start values (#291: one claim a grant, 2 Food and 2 Energy a seat) seed 3's months 1 and 2 have no
-    // such seat and edit; its months 1-4 have 5 (seeds 1-8, months 1-4: 35), so rows (a) and (c) play four months.
+    // grow it well (TERRAIN_ODDS 'good': where a plot can make it), is the one edited. Most re-drafts outfit only some
+    // MULEs, or none, for the edited good: developDecision's lean decides that, not the hand. Under the 5 Nov start values
+    // (#291: one claim a grant, 2 Food and 2 Energy a seat) seed 3's months 1 and 2 have no such seat and edit, so rows
+    // (a) and (c) play four months.
     const ROW_MONTHS = 4;
     let edited: { seat: string; month: number; good: Good } | null = null;
     const first = once();
@@ -669,7 +717,14 @@ describe('the seat plays its development and auction parts (C4, RULE-6, RULE-7)'
     const t = playTable();
     seam.throwing = null;
     for (const id of SPECS.map((_, i) => `ai${i}`)) for (let m = 1; m <= MONTHS; m++) expect(writesOf(t, id, m, 'auction'), key(id, m)).toHaveLength(1);
-    expect(logged.mock.calls.some((c) => c.join(' ').includes('draft broke'))).toBe(true);
+    const failed = logged.mock.calls.flatMap((c) => [...c.join(' ').matchAll(/^AI seat (ai\d): no auction playbook for month (\d+), .*draft broke$/g)].map((x) => ({ id: x[1]!, m: Number(x[2]) })));
+    expect(failed.length).toBeGreaterThan(0);
+    // Its auction outcome is read against the goods its part played, the first, not the stale parts of the goods after.
+    for (const { id, m } of failed) {
+      const first = Object.keys(writesOf(t, id, m, 'auction')[0]!.auction!)[0];
+      const goods = new Set(t.outcomes.get(key(id, m, 'auction'))!.items.map((i) => i.path.split('/')[2]));
+      expect([...goods], key(id, m)).toEqual([first]);
+    }
     logged.mockRestore();
   });
 });
@@ -699,7 +754,7 @@ describe.runIf(FULL)('the playbook path never waits (UBER-AC-2)', { timeout: 120
 
   it('B-AC-8: development and the auction end at the keyless game time when the decider never answers', async () => {
     // Its keyless game is the own path's, so the seat's own drafts adopted play it exactly: with the switch off the
-    // keyless seat plays today's, and the adopted drafts make another game (measured 5 Nov, AM-26).
+    // keyless seat plays today's, and the adopted drafts make another game. See AM-26.
     ownPhasesOn();
     const keyless = await phaseEnds({});
     const asked: string[] = [];

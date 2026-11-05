@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Events · M.U.L.E. Rulebook</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="rulebook.css">
+</head>
+<body>
+<div class="rb-shell">
+<aside class="rb-rail"></aside>
+<main class="rb-main">
+<article>
+<h1>Events</h1>
+<p class="rb-lede">Storms, pests, pirates, inheritances and strikes: the things that happen to the colony and to you by chance. This chapter says how an event is rolled, every event in the game with its chance and its numbers, how the TV and your phone play them, and the colony's mood events that are being built now.</p>
+
+<h2 id="event-model">How events work <span class="pill built">In the game</span></h2>
+<p>Heiko's model, in his words (28 October): "We just throw a dice for each event and see whether it fires. So we can have multiple events happening in the same turn." Every event has its own row in the game's settings and its own dice.</p>
+<ul>
+<li><strong>Colony events and player events.</strong> A colony event rolls once for the whole colony. A player event rolls once for each player, and hits only that player's land, cash or stock. Colony events roll first, in table order; then each player's events, seat by seat.</li>
+<li><strong>Each event belongs to a phase.</strong> It rolls at the start of that phase: planning, development, production, the goods auction or the month end. The land grant and the land auction have no events today. MULE theft is the one event that rolls in two phases.</li>
+<li><strong>Several can fire at once.</strong> Each row rolls on its own, so a month can bring none, one or several events, even in the same phase.</li>
+<li><strong>No events in month 1.</strong> The rolled events start in month <span class="num">EVENTS.firstMonth</span> = <span class="num">2</span>: in month 1 there is nothing developed to hit. Sickness is the exception and rolls from month 1.</li>
+<li><strong>Some pairs never fire together.</strong> Drought and flood, and dust storm and solar flare: if both roll in one phase, the pair's own dice keep one of them.</li>
+<li><strong>An event needs something to hit.</strong> A personal event starts on that player's land; if they have no plot it could hit (a pest swarm with no farm), it does not fire. Rats and the crooked accountant fire only when they would take at least 1.</li>
+<li><strong>Events that roll after production's output.</strong> A meteor strike rolls once, after every plot has produced. A cavern collapse rolls once for each crystal cavern that was mined for Crystite this month, also after the output.</li>
+<li><strong>Replays.</strong> Every roll is seeded from the game's seed, the month, the event, the phase and whose roll it is, so a game replays exactly, and retuning one event never moves another's dice. A computer player's look-ahead never sees events.</li>
+</ul>
+<div class="box why"><h4>Why it is like this</h4><p>Heiko, 28 October: "We distinguish player events from colony events. each event has a likelihood", then "or we have events per phase". Before this, at most one event fired a month, from one dice, always in production, and events came in about 45% of months. One row per event means a new event or a retune is a line in the settings, not code. Heiko's four rulings of 28 October on the catalogue: keep the catalogue's amount of events; count a player's own pollution per air point; build wave 1, then wave 2, then the colony's mood events, then the rest; and lean bad luck toward the richest and good luck toward the poorest.</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/events.ts::rollPhase</code>, <code>::rowDice</code>, <code>::keepOneOfEachPair</code>, <code>::rollAfterOutput</code>, <code>::firePhase</code> · <code>config.ts::EVENTS</code> (<code>firstMonth</code>, <code>colony</code>, <code>player</code>, <code>excludes</code>)</p>
+<p class="owner">Kept current by: the Balance team (WS1), with the Events team (WS8) for the shows.</p>
+
+<h2 id="event-chance">How likely an event is <span class="pill built">In the game</span></h2>
+<p>Each row has a base chance for its phase. Things that make it likelier or less likely are added as points (a point is one percent), and the result is held between <span class="num">0</span> and the row's cap, <span class="num">90%</span> for every event today.</p>
+<p><strong>chance = base + air band + own pollution + wealth + follows, never below 0, never above 90%</strong></p>
+<div class="table-wrap"><table>
+<thead><tr><th>Influence</th><th>What it reads</th><th>Used by</th></tr></thead>
+<tbody>
+<tr><td>Air band</td><td>The colony's air gauge band: Clean, Smoggy, Toxic or Collapse.</td><td>Sickness, drought, acid rain</td></tr>
+<tr><td>Own pollution</td><td>The air points the player's own plots caused last month (a filter halves them), so many points each, up to a cap.</td><td>Sickness</td></tr>
+<tr><td>Wealth</td><td>Whether the player is the richest or the poorest, by cash plus <span class="num">300</span> per plot owned. A tie goes to the first seat.</td><td>Pest swarm, wildfire, bumper harvest</td></tr>
+<tr><td>Follows</td><td>Whether another event fired earlier in this phase, or last month. It counts once even if both.</td><td>Flood, wildfire</td></tr>
+</tbody>
+</table></div>
+<div class="box example"><h4>Example: how likely is Kai to fall sick?</h4><p>The air is Smoggy (gauge 34). Last month Kai's Rare earth mine and his unfiltered smelter caused 7 air points. Sickness: base <span class="num">3</span> + Smoggy <span class="num">15</span> + 7 × 3 = <span class="num">21</span> = <span class="num">39%</span>. Had he fitted filters, his points would have been 3.5, worth 10.5: about 29%. In Clean air with no industry he would be at 3%.</p></div>
+<div class="box example"><h4>Example: a fire after a drought</h4><p>Lena is the richest player. Last month a drought hit the colony. Wildfire for Lena: base <span class="num">2.4</span> + richest <span class="num">1</span> + follows a drought <span class="num">3</span> = <span class="num">6.4%</span>. For the other players it is 2.4% + 3 = 5.4%.</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/events.ts::eventChance</code>, <code>::influences</code>, <code>::wealthShare</code> · <code>config.ts::EVENTS</code>, <code>GAME.plotScore</code></p>
+<p class="owner">Kept current by: the Balance team (WS1).</p>
+
+<h2 id="event-phases">When each phase rolls <span class="pill built">In the game</span></h2>
+<div class="table-wrap"><table>
+<thead><tr><th>Phase</th><th>When it rolls</th><th>Events</th><th>Does the phase wait for the show?</th></tr></thead>
+<tbody>
+<tr><td>Planning</td><td>As the month opens, before the hub and any election</td><td>Federation tax, Federation grant, immigration wave, inheritance</td><td>No: events play while people act</td></tr>
+<tr><td>Development</td><td>At the start, after each player's sickness roll</td><td>Sickness, epidemic, MULE theft</td><td>Yes</td></tr>
+<tr><td>Production</td><td>At the start; meteor and cavern after the output</td><td>Dust storm, drought, acid rain, solar flare, comet pass, flood, volcanic ash, cold snap, pest swarm, wildfire, bumper harvest; then cavern collapse and meteor strike</td><td>The show is part of production, which grows to fit it</td></tr>
+<tr><td>Goods auction</td><td>Before the store posts its prices</td><td>Pirate raid, store fire</td><td>Yes: nobody can trade until the show ends</td></tr>
+<tr><td>Month end</td><td>Before anyone eats and before goods spoil</td><td>MULE theft, rats in the silo, crooked accountant, package from home</td><td>No, today (the month end has no clock)</td></tr>
+</tbody>
+</table></div>
+<p>The order inside the month end matters: rats eat before your household does, and the Food from a package from home is then eaten or half of it spoils like any other Food.</p>
+<p class="code-ref">In the code: <code>packages/engine/src/game.ts::advancePhase</code>, <code>::startDevelopment</code> · <code>packages/engine/src/production.ts::runProduction</code> · <code>apps/server/src/mule-game.ts::holdsForEvents</code></p>
+<p class="owner">Kept current by: the Balance team (WS1); the phase hooks with the Auctions team (WS3).</p>
+
+<h2 id="catalogue-planning">Planning's events <span class="pill built">In the game</span></h2>
+<p>Planning's events move cash and colonists, never land.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Event</th><th>Who</th><th class="n">Chance</th><th>What it does</th><th>On the TV</th></tr></thead>
+<tbody>
+<tr><td>Federation tax</td><td>Colony</td><td class="n">2%</td><td>The Federation takes <span class="num">10%</span> of every player's cash (rounded down) into the colony fund.</td><td>Headline</td></tr>
+<tr><td>Federation grant</td><td>Colony</td><td class="n">2%</td><td>The Federation pays the <span class="num">2</span> poorest players (cash plus land) <span class="num">150</span> cr each. New money, from no one.</td><td>Headline</td></tr>
+<tr><td>Immigration wave</td><td>Colony</td><td class="n">2%</td><td>A ship brings <span class="num">10%</span> more colonists, for good (rounded). The store then has more mouths to feed.</td><td>Headline</td></tr>
+<tr><td>Inheritance</td><td>Each player</td><td class="n">1.5%</td><td>From <span class="num">100</span> cr for the richest to <span class="num">300</span> cr for the poorest, in a straight line by wealth rank. Players tied on wealth share the average of their ranks' amounts, rounded down. Ranks are read once, before any of the phase's payouts. A player alone gets 300.</td><td>Bulletin</td></tr>
+</tbody>
+</table></div>
+<div class="box example"><h4>Example: an inheritance in a four-player game</h4><p>The ranks from richest to poorest get 100, 166, 233 and 300 cr (100 + 200 × rank ÷ 3, rounded down). If the two middle players are tied, each gets the amount at rank 1.5: 200 cr.</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/events.ts::applyEvents</code>, <code>::grantees</code>, <code>::inheritanceAmount</code> · <code>config.ts::EVENTS.colony.federationTax</code>, <code>.federationGrant</code>, <code>.immigrationWave</code>, <code>EVENTS.player.inheritance</code></p>
+<p class="owner">Kept current by: the Balance team (WS1).</p>
+
+<h2 id="catalogue-development">Development's events <span class="pill built">In the game</span></h2>
+<div class="table-wrap"><table>
+<thead><tr><th>Event</th><th>Who</th><th class="n">Chance</th><th>What it does</th><th>On the TV</th></tr></thead>
+<tbody>
+<tr><td>Sickness</td><td>Each player</td><td class="n">3% + air + own pollution</td><td>Your colonist walks at half pace (<span class="num">DEV_WALK.sickPace</span> <span class="num">0.5</span>) this turn, unless you hold a Medicine, which is then used up and cures it.</td><td>Bulletin, with the reason</td></tr>
+<tr><td>Epidemic</td><td>Colony</td><td class="n">0.5%</td><td>Every player who holds a Medicine uses one. Everyone else is sick this development and the next (unless they then hold a Medicine, which cures it).</td><td>Headline</td></tr>
+<tr><td>MULE theft</td><td>Each player</td><td class="n">1%</td><td>One installed MULE is taken off one of your plots at random. The plot stands idle until you outfit it again; its run in a row and any filter go with it. Rolls again at the month end.</td><td>Spotlight</td></tr>
+</tbody>
+</table></div>
+<h3 id="sickness-numbers">Sickness in numbers</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Part of the chance</th><th class="n">Points</th></tr></thead>
+<tbody>
+<tr><td>Base</td><td class="n">3</td></tr>
+<tr><td>Clean air</td><td class="n">0</td></tr>
+<tr><td>Smoggy air</td><td class="n">+15</td></tr>
+<tr><td>Toxic air</td><td class="n">+30</td></tr>
+<tr><td>Collapse</td><td class="n">+50</td></tr>
+<tr><td>Each air point your plots caused last month</td><td class="n">+3, at most +40</td></tr>
+<tr><td>Cap</td><td class="n">90</td></tr>
+</tbody>
+</table></div>
+<p>The sickness bulletin says why: "fell sick: the air is bad", "their plots foul the air", "bad luck" or "the epidemic", whichever raised the chance most. Hunger and sickness are public: everyone sees who is hungry and who is sick.</p>
+<div class="box why"><h4>Why it is like this</h4><p>Heiko, 28 October: "is there a general event that a player can get sick? if not we should add it. we should make this more likely if the general air pollution is high, and we should make this much more likely when he is a big polluter." His catalogue numbers: base 3%, +3 per own air point last month up to +40. On pace: "sickness half your walking speed". Measured at these odds (WS1, 28 Oct): sick in 4 to 5% of player-months; last month's top polluter 7 to 11%.</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/game.ts::startDevelopment</code> · <code>packages/engine/src/events.ts::rollPlayerEvent</code>, <code>::playerEventReason</code> · <code>apps/server/src/mule-game.ts::sickView</code> · <code>config.ts::EVENTS.player.sickness</code>, <code>EVENTS.colony.epidemic</code>, <code>EVENTS.player.muleTheft</code>, <code>DEV_WALK.sickPace</code></p>
+<p class="owner">Kept current by: the Balance team (WS1).</p>
+
+<h2 id="catalogue-production">Production's events <span class="pill built">In the game</span></h2>
+<p>Production's events change what plots make. They act last on each plot's line, after the ground, the bonuses, pollution and any shortage; several can hit the same plot, each on what the ones before it left, never below 0. They only reach farms, wells, Energy plots and mines, never factories (a meteor strike is the exception). See <a href="production.html#production-events">Production</a>.</p>
+<h3 id="production-colony-events">Colony events</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Event</th><th class="n">Chance</th><th>Hits</th><th>What it does</th><th>On the TV</th></tr></thead>
+<tbody>
+<tr><td>Dust storm</td><td class="n">8%</td><td>Every Energy plot on the map, sweeping in from one edge</td><td>Takes <span class="num">50%</span> of each plot's output (it keeps half, rounded down).</td><td>Headline</td></tr>
+<tr><td>Drought</td><td class="n">8% (+2 Toxic, +4 Collapse)</td><td>Every Food and Water plot, sweeping in</td><td>Each makes <span class="num">1</span> less.</td><td>Headline</td></tr>
+<tr><td>Acid rain</td><td class="n">1.6% (+4 Smoggy, +8 Toxic, +12 Collapse)</td><td>Every Energy and Food plot, sweeping in</td><td>Each makes <span class="num">1</span> less.</td><td>Headline</td></tr>
+<tr><td>Solar flare</td><td class="n">8%</td><td>Every Energy plot, sweeping in</td><td>Each makes <span class="num">2</span> more.</td><td>Headline</td></tr>
+<tr><td>Comet pass</td><td class="n">8%</td><td>Every Water plot, sweeping in</td><td>Each makes <span class="num">2</span> more.</td><td>Headline</td></tr>
+<tr><td>Flood season</td><td class="n">8% (+10 after a drought last month)</td><td>Every Food plot on river ground</td><td>They make nothing this month.</td><td>Headline</td></tr>
+<tr><td>Volcanic ash</td><td class="n">6.4%</td><td>Every farm, well, Energy plot and mine within <span class="num">2</span> steps (diagonals count) of one volcanic or mountain plot</td><td>Each makes <span class="num">1</span> less.</td><td>Headline</td></tr>
+<tr><td>Cold snap</td><td class="n">3.2%</td><td>Every plot</td><td>Every plot needs <span class="num">2</span> times its Energy this month. Output is not touched directly; plots left short of Energy make half (factories nothing).</td><td>Headline</td></tr>
+<tr><td>Cavern collapse</td><td class="n">6% per cavern</td><td>Each crystal cavern mined for Crystite this month, after the output</td><td>The cavern caves in and becomes a plain plot: it loses its +4 Crystite. The mine and this month's output stay.</td><td>Spotlight</td></tr>
+<tr><td>Meteor strike</td><td class="n">3.2%</td><td>One tile at random, owned or not, never the store; after the output</td><td>The plot made its output and counted its pollution; then its MULE, run count and filter are destroyed, any special field gives way, and it becomes a meteor crater with Crystite rated <span class="num">4</span>. The owner keeps the plot.</td><td>Headline</td></tr>
+</tbody>
+</table></div>
+<p>The sweeping events (dust storm, drought, acid rain, solar flare, comet pass) come in from a random edge of the map and reach the plots nearest that edge first; they hit every player's plots of their goods. Flood and volcanic ash spread from one source, nearest plots first. A colony event with nothing to hit (no Energy plot anywhere for a dust storm) does not fire.</p>
+<h3 id="production-player-events">Player events</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Event</th><th class="n">Chance</th><th>Hits</th><th>What it does</th><th>On the TV</th></tr></thead>
+<tbody>
+<tr><td>Pest swarm</td><td class="n">2.4% (richest +1, poorest −1)</td><td>One of the player's Food plots, then their touching Food plots, up to <span class="num">4</span> plots</td><td>Pests eat <span class="num">50%</span>: each plot keeps half, rounded down.</td><td>Spotlight</td></tr>
+<tr><td>Wildfire</td><td class="n">2.4% (richest +1; +3 after a drought this phase or last month)</td><td>One of the player's Food plots and every Food plot of theirs joined to it</td><td>The burnt plot makes nothing; every other farm in that group makes <span class="num">1</span> less.</td><td>Spotlight</td></tr>
+<tr><td>Bumper harvest</td><td class="n">2.4% (poorest +1.5, richest −1)</td><td>One of the player's farms, wells, Energy plots or mines</td><td>It makes <span class="num">2</span> times its output (after any shortage).</td><td>Spotlight</td></tr>
+</tbody>
+</table></div>
+<div class="box example"><h4>Example: two events on one plot</h4><p>A farm makes 3 before events. A drought takes 1 (2 left), then a pest swarm eats half (1 left). The order is the order the events fired: colony events first, then each player's.</p></div>
+<div class="box why"><h4>Why it is like this</h4><p>Heiko, 29 October, chose option "b": every production chance at 1.6 times the catalogue's, keeping the catalogue's relative odds, for the liveliness he asked for. Measured with these odds (40 games a cell): about 1 event a month in Clean air (0.93 to 1.01), about 2 in Smoggy air (2.02 to 2.15), about 2.8 in Toxic air (2.71 to 2.83). The cold snap and the meteor strike take the same 1.6 (2% × 1.6 = 3.2%), as the PM picked and Heiko accepted on 4 November. The meteor strikes after the output so the MULE produces this month, then is destroyed (Heiko, 4 November).</p></div>
+<div class="box next"><h4>What is changing</h4><p>Unclear in the code: the cavern collapse's roll is not held back in month 1 (the other rolled events are), because it is rolled from the special fields' settlement, which does not read <code>EVENTS.firstMonth</code>. In practice a cavern is rarely mined in month 1. Owner of the answer: the Balance team (WS1).</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/events.ts::buildEvent</code>, <code>::eventOutput</code>, <code>::spread</code>, <code>::plotEvent</code> · <code>packages/engine/src/specials.ts::settleSpecials</code>, <code>::formMeteorCrater</code> · <code>config.ts::EVENTS</code> (<code>dustStorm</code>, <code>drought</code>, <code>acidRain</code>, <code>solarFlare</code>, <code>cometPass</code>, <code>volcanicAsh</code>, <code>pestSwarm</code>, <code>wildfire</code>, <code>bumperHarvest</code>, <code>colony</code>, <code>player</code>), <code>MAP.meteorCrater</code></p>
+<p class="owner">Kept current by: the Balance team (WS1); craters and caverns with the Maps team (WS5).</p>
+
+<h2 id="catalogue-auction">The goods auction's events <span class="pill built">In the game</span></h2>
+<p>Both roll before the store posts its prices, so the prices already follow the loss.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Event</th><th>Who</th><th class="n">Chance</th><th>What it does</th><th>On the TV</th></tr></thead>
+<tbody>
+<tr><td>Pirate raid</td><td>Colony</td><td class="n">1%</td><td>Every player's Crystite and the store's Crystite go to 0.</td><td>Headline</td></tr>
+<tr><td>Store fire</td><td>Colony</td><td class="n">1%</td><td>The store's stock of every good goes to 0, and the MULEs in its corral too. At the month end the store rebuilds the corral only from the Smithore it holds by then (what players sold it at that auction), so the next month may be short of MULEs.</td><td>Headline</td></tr>
+</tbody>
+</table></div>
+<div class="box why"><h4>Why it is like this</h4><p>Heiko, 28 October: "pirates take all crystite", the players' and the store's; and "store fire burns all store storage, not only food, all the storage that the store had". The PM ruled the corral's MULEs burn too.</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/events.ts::applyEvents</code> (<code>pirateRaid</code>, <code>storeFire</code>) · <code>packages/engine/src/game.ts::advancePhase</code> (auction branch) · <code>config.ts::EVENTS.colony.pirateRaid</code>, <code>.storeFire</code></p>
+<p class="owner">Kept current by: the Balance team (WS1).</p>
+
+<h2 id="catalogue-upkeep">The month end's events <span class="pill built">In the game</span></h2>
+<div class="table-wrap"><table>
+<thead><tr><th>Event</th><th>Who</th><th class="n">Chance</th><th>What it does</th><th>On the TV</th></tr></thead>
+<tbody>
+<tr><td>MULE theft</td><td>Each player</td><td class="n">1%</td><td>As in development: one installed MULE taken, the plot idle.</td><td>Spotlight</td></tr>
+<tr><td>Rats in the silo</td><td>Each player</td><td class="n">1.5%</td><td>Rats eat <span class="num">50%</span> of your stored Food, rounded down. Only when that is at least 1 (you hold 2 Food or more).</td><td>Bulletin</td></tr>
+<tr><td>Crooked accountant</td><td>Each player</td><td class="n">1%</td><td>Takes <span class="num">10%</span> of your cash, rounded down. Only when that is at least 1 (you hold 10 cr or more).</td><td>Bulletin</td></tr>
+<tr><td>Package from home</td><td>Each player</td><td class="n">1.5%</td><td><span class="num">+3</span> Food.</td><td>Bulletin</td></tr>
+</tbody>
+</table></div>
+<p>Nothing an event takes ever goes below 0.</p>
+<p class="code-ref">In the code: <code>packages/engine/src/events.ts::applyEvents</code>, <code>OFF_MAP</code> · <code>config.ts::EVENTS.player</code> (<code>muleTheft</code>, <code>ratsInSilo</code>, <code>crookedAccountant</code>, <code>packageFromHome</code>)</p>
+<p class="owner">Kept current by: the Balance team (WS1).</p>
+
+<h2 id="event-show">How the TV and the phone show events <span class="pill built">In the game</span></h2>
+<p>Every event plays its own story where it happens: a dust wall sweeps in from its edge, the river swells and spills, a pirate ship lands at the store and carries the Crystite up its ramp, the store burns shelf by shelf. The show is a pure function of the server's clock, so a phone that reconnects lands in the same place as everyone else.</p>
+<h3 id="event-show-order">What plays, and for how long</h3>
+<p>When a phase fires events, its show opens with a short card of what fired, then plays the events in the order they fired. Each event has a weight that sets how big its story is.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Weight</th><th>How it plays</th><th class="n">Length</th><th>Events</th></tr></thead>
+<tbody>
+<tr><td>Intro</td><td>The phase's opening card of what fired. None in a quiet phase.</td><td class="n">1.8 s</td><td>Every phase with an event</td></tr>
+<tr><td>Headline</td><td>The full story over the whole map.</td><td class="n">7.0 s</td><td>Dust storm, drought, acid rain, solar flare, comet pass, flood season, volcanic ash, Federation tax, Federation grant, immigration wave, epidemic, cold snap, meteor strike, pirate raid, store fire. Any event the table forgets plays as a headline.</td></tr>
+<tr><td>Spotlight</td><td>A shorter story on the plots it hits.</td><td class="n">5.2 s</td><td>Pest swarm, wildfire, bumper harvest, cavern collapse, MULE theft</td></tr>
+<tr><td>Bulletin</td><td>One line in a roll call that every bulletin of the phase shares.</td><td class="n">4.0 s shared</td><td>Inheritance, rats in the silo, crooked accountant, package from home, sickness</td></tr>
+</tbody>
+</table></div>
+<p>A phase's events play for at most <span class="num">30</span> s in all. Past that, the intro keeps its length and every event's share is cut in the same proportion.</p>
+<div class="box example"><h4>Example: a busy development</h4><p>An epidemic fires, and two players fall sick. Show: intro 1.8 s + epidemic 7.0 s + one roll call 4.0 s naming both sick players = <span class="num">12.8</span> s. Development's clock starts when the show ends.</p></div>
+<h3 id="event-show-hold">Who waits</h3>
+<ul>
+<li><strong>Land grant, land auction, development, goods auction:</strong> every clock of the phase starts when the show ends. Until then nothing can be done; a press is refused with "The event is still playing".</li>
+<li><strong>Planning:</strong> not held. The events play over the hub while people act.</li>
+<li><strong>Production:</strong> its events play in the production show's "This month on Irata" beat, and production grows by their length (see <a href="production.html#production-show">the production show</a>).</li>
+<li><strong>The month end:</strong> not held today, because it has no clock.</li>
+</ul>
+<h3 id="event-show-tv">On the TV</h3>
+<p>The TV plays every story on the big map. A row of badges, one per event of the phase, lights the one playing and ticks off the ones done. A log beside the map keeps what is playing now and what already happened, in words. Changes off the map (cash, Crystite, colonists, the store's shelves) show as chips on each player's slot and the colony bar.</p>
+<h3 id="event-show-phone">On the phone</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>When</th><th>What your phone does</th></tr></thead>
+<tbody>
+<tr><td>A TV is in the room</td><td>A light card for each event as it plays, your own plots marked, a short buzz as each is announced, and "what it did to you".</td></tr>
+<tr><td>Alone, no TV</td><td>The phone plays each event on its own map at its own pace, then the result.</td></tr>
+<tr><td>Alone, and you tap</td><td>It skips to the result: the card of what every event did to you.</td></tr>
+<tr><td>Alone, with reduced motion</td><td>The same show without camera moves or shaking.</td></tr>
+</tbody>
+</table></div>
+<p>Outside production the phone draws the event over whatever phase screen is up. While a phase is held, it covers the screen until the show ends; in planning the screen stays usable, with the light card floating over it.</p>
+<div class="box why"><h4>Why it is like this</h4><p>Heiko: "I would like to see the event and the event ux and the cool event animations"; "make this really entertaining and all should get their animations". And for a player alone: "it could be that a player is playing alone on his phone. how would that look then for him". Heiko approved the "Living weather" gallery on 29 October as the design to build, and the server owns every length so the clock and the animation cannot disagree.</p></div>
+<p>The colony's mood events, the general strike and the month end's mood drift are being built into this same show; see <a href="#colony-event-shows">Strikes, mood events and gauges on screen</a>.</p>
+<p class="code-ref">In the code: <code>config.ts::EVENT_SHOW</code> · <code>apps/server/src/mule-game.ts::eventShow</code>, <code>::weightOf</code>, <code>::holdsForEvents</code> · <code>packages/ui/src/events/</code> (<code>tv.tsx</code>, <code>phone.tsx</code>, <code>stories.tsx</code>, <code>stories-ledger.tsx</code>) · <code>apps/web/src/events/TvEventLayer.tsx</code>, <code>PhoneEventOverlay.tsx</code></p>
+<p class="owner">Kept current by: the Events team (WS8), with the Table team (WS4) for the TV and the UX team (WS6) for the phone.</p>
+
+<h2 id="event-waves">Wave 1 and wave 2 <span class="pill built">In the game</span></h2>
+<p>Events reached the game in steps, in the order Heiko ruled on 28 October.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Step</th><th>What it brought</th><th>Status</th></tr></thead>
+<tbody>
+<tr><td>Wave 1 (28 and 29 Oct)</td><td>Every event on its own dice; several a month; phases; personal events per player with the lean toward the richest and poorest; sickness as the first player event; cavern collapse as an event. The ten production events kept their effects, with every chance at 1.6 times the catalogue's.</td><td>In the game</td></tr>
+<tr><td>Wave 2 (4 Nov)</td><td>Thirteen more events across the month: Federation tax and grant, immigration wave, inheritance, epidemic, MULE theft, cold snap, meteor strike, pirate raid, store fire, rats in the silo, crooked accountant, package from home. Every phase can now surprise you. Each plays its own story.</td><td>In the game</td></tr>
+<tr><td>The colony's mood events (G-5)</td><td>Festival, general strike, emigration, blamed for the unrest, then riot, store strike, walkout, loyal crew, volunteer clean-up, and the mood parts of immigration and MULE theft.</td><td>Being built; see below</td></tr>
+<tr><td>Later</td><td>Warnings, forecasts, hedges, insurance, chains.</td><td>Backlog</td></tr>
+</tbody>
+</table></div>
+<div class="box why"><h4>Why it is like this</h4><p>Heiko's "steer to completion, a functional playable game first" (4 November) put wave 2 into the first milestone. Wave 2 brought no new balancing: its chances are the catalogue's, apart from the 1.6 on the two production rows. Heiko's six picks on wave 2 (4 November, "I go with your picks"): the meteor after the output; cold snap and meteor at 3.2%; MULE theft can fire twice a month; the epidemic makes you sick next development only if you then still hold no Medicine; the Federation grant is new money; inheritance by wealth rank, 300 for the poorest to 100 for the richest.</p></div>
+<p class="code-ref">In the code: <code>config.ts::EVENTS</code> · specs <code>docs/specs/2026-10-28-ws1-event-model.md</code>, <code>docs/specs/2026-11-04-ws8-wave2-events.md</code></p>
+<p class="owner">Kept current by: the Balance team (WS1).</p>
+
+<h2 id="colony-social-events">The colony's social events in planning <span class="pill progress">Being built</span></h2>
+<p>When politics is on, the colony has a mood, from <span class="num">0</span> to <span class="num">100</span>, starting at <span class="num">60</span>. Its band is Thriving (80 and up), Content (60 to 79), Restless (40 to 59), Unhappy (20 to 39) or Unrest (below 20); see <a href="colony-and-politics.html">Colony and politics</a>. The first set of social events lets the mood tilt the odds: a happy colony throws festivals, an unhappy one strikes and leaves. They roll in planning, use the same dice and influences as every other event, and add two more: the mood band, and a hard "never in" list of bands where the event cannot fire whatever raises it. With politics off they never fire.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Event</th><th>Who</th><th>Chance (points)</th><th>Never in</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td>Festival</td><td>Colony</td><td>1 base; Thriving +5, Content +1; +5 with a stadium standing</td><td>Unhappy, Unrest</td><td>The mood jumps <span class="num">+10</span> at once (beyond the month's usual step), the colony gains <span class="num">2</span> prestige for good, and the colonists eat <span class="num">25%</span> more Food this month. Never in the same month as a general strike.</td></tr>
+<tr><td>General strike</td><td>Colony</td><td>0 base; Restless +2, Unhappy +5, Unrest +10; +3 when the store's Food price is above 1.5 times its usual price</td><td>Thriving</td><td>Announced in planning on the good the most plots in the colony make (a tie on the dice). Unless the Governor pays the strikers, every plot of that good makes <span class="num">20%</span> of its output in production, rounded down.</td></tr>
+<tr><td>Emigration wave</td><td>Colony</td><td>0 base; Restless +1, Unhappy +4, Unrest +8; Toxic air +3, Collapse +3</td><td>none</td><td><span class="num">10%</span> of the colonists leave, for good (rounded).</td></tr>
+<tr><td>Immigration wave (its mood part)</td><td>Colony</td><td>2 base as today; Thriving +6, Content +1</td><td>Unhappy, Unrest</td><td>As today: 10% more colonists, for good.</td></tr>
+<tr><td>Blamed for the unrest</td><td>Each player</td><td>0 base; Unhappy +2, Unrest +5; the richest +2 in every band</td><td>none in this step (see below)</td><td>The player loses <span class="num">1</span> reputation, so fewer votes.</td></tr>
+</tbody>
+</table></div>
+<h3 id="general-strike">The general strike, step by step</h3>
+<ol>
+<li>Planning: the strike is announced on one good. Everyone sees it.</li>
+<li>Still in planning, once the votes are over, the Governor may pay the strikers <span class="num">COLONY.strike.cost</span> = <span class="num">250</span> cr from the colony fund. The fund's reserve does not hold this back: paying may empty the fund. Nobody else can pay; with no Governor the strike holds.</li>
+<li>Production: if unpaid, every plot of the struck good makes <span class="num">COLONY.strike.output</span> = <span class="num">0.2</span> of its output, rounded down, and the production show plays a "General strike" event on those plots. If paid, everything runs in full and only a news line says so.</li>
+</ol>
+<div class="box example"><h4>Example: a Food strike</h4><p>The colony is Unhappy and Food sells at 50 (above 1.5 × 30 = 45). Strike chance: 0 + 5 + 3 = <span class="num">8%</span>. It fires on Food, the good most plots make. Lena governs and the fund holds 400 cr. If she pays, the fund falls to 150 and every farm works. If not, a farm that would have made 4 makes 0.8, rounded down to <span class="num">0</span>, and one that would have made 6 makes 1.</p></div>
+<div class="box why"><h4>Why it is like this</h4><p>From the colony design (G-5): running the colony badly has visible consequences (strikes, theft, emigration), and happiness tilts the odds of social events, not the overall event rate. The Governor's choice to pay is G-5's rule 26. Measured in the build (40 games on each of 3 seeds, politics on): strikes fired 10 to 16 times in Restless months and 5 to 7 in Unhappy ones, and no game reached Thriving or Unrest, so festivals were rare (1 to 4). The tuning belongs to the colony's balance pass at the end.</p></div>
+<div class="box next"><h4>What is changing</h4><p>Being built: C26 PR-A, PR #370 into the colony branch (<code>ws7-politics</code>), by the Balance team (WS1); reviewed and approved, merging when CI is green. It adds <code>SOCIAL_EVENTS</code> in <code>config.ts</code>, <code>COLONY.strike.output</code> 0.2 beside <code>cost</code>, and the four event keys. Not on trunk yet: today the strike's pay-off rule (<code>colony.ts::payStrike</code>, <code>strikeHolds</code>) exists but no event calls a strike, and production does not read it.</p></div>
+<p class="code-ref">In the code (branch <code>ws1-c26a</code>): <code>packages/engine/src/events.ts</code> (<code>festival</code>, <code>generalStrike</code>, <code>emigrationWave</code>, <code>blamedForUnrest</code>) · <code>config.ts::SOCIAL_EVENTS</code>, <code>COLONY.strike</code> · on trunk: <code>packages/engine/src/colony.ts::callStrike</code>, <code>::strikeHolds</code>, <code>::payStrike</code>, <code>::moodShift</code>, <code>::moodBand</code>, <code>config.ts::HAPPINESS</code></p>
+<p class="owner">Kept current by: the Balance team (WS1), with the Politics team (WS7) for the colony.</p>
+
+<h2 id="colony-social-events-next">More social events: riot, strikes, walkout, loyal crew, clean-up <span class="pill designed">Designed</span></h2>
+<p>The second set of the colony's social events rolls in development, production and the month end, and two rulings of 5 November change the first set.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Event</th><th>Phase</th><th>Who</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td>Store strike</td><td>Development</td><td>Colony</td><td>The store sells no MULEs this turn.</td></tr>
+<tr><td>Walkout</td><td>Production</td><td>Each player</td><td>The player's plots of one good make 20% this month.</td></tr>
+<tr><td>Loyal crew</td><td>Production</td><td>Each player</td><td>One of the player's plots makes 1 more this month.</td></tr>
+<tr><td>Riot</td><td>Month end</td><td>Colony</td><td>For each good, the store loses its stock × 1/3, rounded down, a named fraction in the settings (so a shelf of 1 or 2 loses nothing). One prestige object is damaged and earns no prestige until it is repaired.</td></tr>
+<tr><td>Volunteer clean-up</td><td>Month end</td><td>Colony</td><td>The air gauge drops.</td></tr>
+<tr><td>MULE theft (its mood part)</td><td>Development, month end</td><td>Each player</td><td>Its chance follows the mood.</td></tr>
+<tr><td>Blamed for the unrest</td><td>Planning</td><td>Each player</td><td>PM ruling, 5 Nov: it never fires in a Thriving or Content colony.</td></tr>
+<tr><td>Immigration wave</td><td>Planning</td><td>Colony</td><td>PM ruling, 5 Nov: its air parts, +1 point in Clean air and never when the air is Toxic.</td></tr>
+</tbody>
+</table></div>
+<div class="box why"><h4>Why it is like this</h4><p>The riot rule is the PM's ruling of 5 November, from the catalogue's "the store loses a third of its stock": per good, so the loss is exact and a small shelf is spared. Heiko asked on 28 October for the riot to be seen: "also we need something for riots, maybe an angry mob walking on the map?"; the gallery's riot is a mob of every species that gathers, loots the store and smashes a prestige object.</p></div>
+<div class="box next"><h4>What is changing</h4><p>Designed; built next as C26 PR-B by the Balance team (WS1), with <code>damageObject</code> for the riot's object (the Politics team, WS7). The chances, the walkout's and loyal crew's details and the clean-up's size come from the approved catalogue and land with PR-B; this page gives them once they are in the settings. Not yet clear from the ruling: whether "never when Toxic" for the immigration wave also covers Collapse.</p></div>
+<p class="code-ref">Specs: <code>docs/specs/2026-10-28-g5-colony.md</code> (C26, RULE-26) · the gallery <code>design/mocks/ws8-events</code></p>
+<p class="owner">Kept current by: the Balance team (WS1), with the Politics team (WS7).</p>
+
+<h2 id="colony-event-shows">Strikes, mood events and gauges on screen <span class="pill progress">Being built</span></h2>
+<p>Three pull requests by the Events team bring the colony's events to the TV and the phones. None is on trunk yet. They are built against the frozen event contract, so the stories go live when the events themselves reach the game. With politics off, or with no strike, every screen stays as it is today.</p>
+<h3 id="strike-on-screen">The general strike</h3>
+<ul>
+<li><strong>TV header:</strong> a badge beside the month: "STRIKE · Food 20%" while unpaid, "PAID · −250 cr" once paid. No strike, no badge.</li>
+<li><strong>TV planning map and the phone's Look map:</strong> in planning, a striker with a placard on every plot of the struck good; on the TV each also carries a "STRIKE · 20%" chip. They leave once the strike is paid.</li>
+<li><strong>The Governor's phone:</strong> once the votes are over, the Now card is the strike: "General strike on Food", "Unpaid: Food plots make 20% this month.", the fund before and after (Fund 400 → 150 cr), then <strong>Pay the strikers 250 cr</strong> and <strong>Let them strike</strong>. While an election or a law ballot is open, the vote keeps the Now card. Let them strike sends nothing to the game: the card turns into "You let them strike" and keeps a pay button until planning ends. Paid, it reads "You paid the strikers · −250 cr".</li>
+<li><strong>A Governor who is already Ready:</strong> the Now card belongs to the ready bar, so a pay line, "Pay the Food strikers 250 cr", sits under Now instead, until the strike is paid or planning ends.</li>
+<li><strong>Everyone else's phone:</strong> an alert line under Now: "General strike on Food: Kai decides whether the fund pays 250 cr", then "Kai pays the Food strikers 250 cr: the strike is off." With no Governor it reads "General strike on Food: Food plots make 20% this month."</li>
+<li><strong>The TV while it waits:</strong> in planning, while the strike is unpaid, the TV's side shows the Governor's mark and "Waiting for Kai, the Governor", with "Pay the strikers 250 cr from the fund, or let them strike. After the votes."</li>
+<li><strong>Paid:</strong> the game's own news line shows in the TV news, for example "Lena pays the food strikers 250 cr."</li>
+</ul>
+<p>The 250 cr is <span class="num">COLONY.strike.cost</span> on trunk. The 20% is <span class="num">COLONY.strike.output</span> = <span class="num">0.2</span>, which is in the colony branch only.</p>
+<h3 id="mood-events-on-screen">The mood events' stories</h3>
+<p>Each of the colony's mood events plays in the show of the phase that rolls it, like every other event (see <a href="#event-show">How the TV and the phone show events</a>). Each has its own badge symbol and colour, a title card and words in the TV log and on the phones.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Phase</th><th>Event</th><th>What you see</th></tr></thead>
+<tbody>
+<tr><td>Planning</td><td>Festival</td><td>Bunting over the colony, lanterns, a crowd dancing at the store. The changes card reads "Mood +10 · Prestige +2". A phone alone reads it as the colony's news: "For everyone: the colony's mood lifts, and the store buys more Food this month."</td></tr>
+<tr><td>Planning</td><td>General strike (the announcement)</td><td>Strikers with placards walk out to every plot of the struck good, each plot reading "STRIKE · 20%". The log says, for example, "Food at 20% on 4 farms unless the Governor pays". A paid strike has no story, only the news line.</td></tr>
+<tr><td>Planning</td><td>Emigration wave</td><td>Colonists leave for good, and the colony's head count ticks down.</td></tr>
+<tr><td>Planning</td><td>Blamed for the unrest</td><td>The player's reputation chip drops: "The colony blames you for the unrest: fewer votes at the next election."</td></tr>
+<tr><td>Development</td><td>Store strike</td><td>The store's MULE corral greys out: no MULEs this turn.</td></tr>
+<tr><td>Production</td><td>Walkout</td><td>The player's plots of one good are struck in turn, each down to 20%.</td></tr>
+<tr><td>Production</td><td>Loyal crew</td><td>One plot glows and makes 1 more.</td></tr>
+<tr><td>Month end</td><td>Riot</td><td>An angry crowd at the store; a third of each shelf goes, and one colony object is damaged (see below).</td></tr>
+<tr><td>Month end</td><td>Volunteer clean-up</td><td>Volunteers clean up and the air gauge drops; less pollution reads as good news.</td></tr>
+</tbody>
+</table></div>
+<p><strong>The riot's damage.</strong> A damaged object that has a plot, such as the park, stands on the map until the riot reaches it, then takes the map's HIT mark. The hospital has no plot, so it gets no map mark: the changes card and the log say "Hospital damaged". The build site's row then shows "Damaged in the riot", as it does today.</p>
+<p><strong>The gauges on the card.</strong> Any event that moves mood, prestige, air or reputation says so on its changes card, up or down, wherever the change comes from (this includes the mood parts of the immigration wave and MULE theft). A plot event that moves a gauge also gets the changes card, and its log line ends with the gauge, for example "Lena's Food farm stands idle · Mood −2".</p>
+<p>The event show's look for all of these comes from the event gallery Heiko approved (<code>design/mocks/ws8-events</code>, the riot's angry mob among them).</p>
+<h3 id="gauges-month-end">The Happiness gauge at the month end</h3>
+<p>At the month end the TV's Happiness gauge opens on last month's number and, a moment later, counts to this month's. As it crosses a band the label flips (Restless to Unhappy, say) and the gauge pulses. It gives no reasons, only the usual "↓ n this month".</p>
+<ul>
+<li>It plays once per month end. Someone pressing Ready does not replay it; the next month end plays again.</li>
+<li>A TV that reloads or reconnects during the month end, or one with reduced motion, shows the end state at once.</li>
+<li>In month 1, or when the mood did not change, nothing moves. With politics off there is no gauge.</li>
+<li>Band names come from the engine's own mood bands (<code>colony.ts::moodBand</code>), not from a copy in the screen.</li>
+</ul>
+<div class="box why"><h4>Why it is like this</h4><p>Heiko asked on 28 October for the riot to be seen ("maybe an angry mob walking on the map?") and for every event to get its animation. The strike's look is WS8's option A, approved by the PM on 5 Nov: the Governor's choice sits in the phone's Now card, so the map stays in view. The screens follow the approved scaffold <code>design/mocks/ws8-colony-events</code>.</p></div>
+<div class="box next"><h4>What is changing</h4><p><strong>Being built</strong> in the colony branch (<code>ws7-politics</code>) by the Events team (WS8), all three open: PR #368 (the strike on the TV and phones, and the Governor paying it), PR #364 (the mood events in the show; approved), PR #365 (the Happiness gauge counts and lands at the month end; approved). Until the riot's caller passes the store's stock, its shelves show only what was lost, not the count before and after (a later WS8 step, PR-E4). The strike in the production show is PR-E4 too, and a gauge chip flying from the event card to the gauges is PR-E2; neither is built yet.</p></div>
+<p class="code-ref">In the code (branches <code>ws8-cev-strike</code>, <code>ws8-cev-stories</code>, <code>ws8-cev-gauges</code>): <code>packages/ui/src/events/</code> (<code>stories-colony.tsx</code>, <code>copy.ts</code>, <code>glyphs.tsx</code>, <code>catalogue.ts</code>) · <code>apps/web/src/components/Strike.tsx</code> · <code>apps/web/src/components/Colony.tsx::ColonyGauges</code> · <code>apps/web/src/table/TableApp.tsx</code> · <code>apps/web/src/phone/hub/today.tsx</code> · B-AC-26, B-AC-23-6..8, B-AC-37</p>
+<p class="owner">Kept current by: the Events team (WS8).</p>
+
+<h2 id="events-later">Warnings, forecasts, hedges and chains <span class="pill backlog">Backlog</span></h2>
+<p>The event design goes further than the game. None of this is built, and nobody is on it.</p>
+<ul>
+<li><strong>Warnings and forecasts.</strong> Most events announced before they hit: dust on the horizon, a pirate sighting, or an observatory's forecast. The month report already has a place for warnings, but it is always empty.</li>
+<li><strong>Hedges.</strong> Insurance, silos, vaults against pirates, levees against floods, storm shutters, firebreaks, Medicine reserves.</li>
+<li><strong>Lasting effects.</strong> A flood's fertile silt, an eruption's new mountain, a comet's falling Water price.</li>
+<li><strong>Chains.</strong> Storylines over several months: the Long Drought, Pirate Season, the Crystite Rush, the Plague Ship, the Long Winter, Colonist Unrest, the Federation Audit, the Alien Signal.</li>
+<li><strong>More events</strong> from the design catalogue: planetquake, ice melt, meteor shower, derelict ship crash, off-world recession, Crystite crash, land speculator and others.</li>
+<li><strong>Plot traits that change event risks.</strong> Bedrock, sheltered, unstable, infested and flood plain are on the map but no event reads them (see <a href="production.html#raw-output-traits">Production</a>).</li>
+</ul>
+<p class="code-ref">Design: <code>docs/design/04-event-catalogue.md</code> · <code>packages/engine/src/types.ts::EventWarning</code> (unused)</p>
+<p class="owner">Kept current by: the PM, with the Balance team (WS1).</p>
+</article>
+</main>
+</div>
+<script src="search-index.js"></script>
+<script src="rulebook.js"></script>
+</body>
+</html>

@@ -260,24 +260,23 @@ describe('the validator holds every playbook to RULE-1', () => {
     const { state: led, plots } = ledInFromLot('food');
     const group = (outfit: string, plot: number) => [{ act: 'buyMule' }, { act: 'outfit', outfit }, { act: 'install', plot }];
     const handed = { ...draftOf(led, 'development', mindOf(2), 102), development: { route: [...group('food', plots[0]!), ...group('smithore', plots[1]!), { act: 'pub' }], timeBudgetMs: 1000, ifSoldOut: 'pub' } } as Playbook;
-    // Where the game walks (DEV_STEER.on false; walking is on by default since arcade PR-11) the validator's own words.
+    const broke = structuredClone(led);
+    broke.players.find((p) => p.id === 'ai2')!.money = 0;
+    // The engine refuses a full-price re-fit of a led MULE in every game (C14), with its own words, whatever the switch,
+    // and with no money on hand the why is still the re-fit's, not the purse's.
     const steering = DEV_STEER.on;
-    DEV_STEER.on = false;
-    try {
-      const refit = one('development', '/development/route/1/outfit', 'energy', { state: led, draft: handed });
-      expect(refit).toMatchObject({ plays: 'food', why: 'the MULE it leads already carries food' });
-      expect(refit.r.playbook.by).toBe('engine');
-      const whole = one('development', '/development/route', group('energy', plots[0]!), { state: led, draft: handed });
-      expect(whole).toMatchObject({ plays: handed.development!.route, why: 'the MULE it leads already carries food' });
-    } finally {
-      DEV_STEER.on = steering;
-    }
-    // On the floor the engine has its own words for it.
-    DEV_STEER.on = true;
-    try {
-      expect(one('development', '/development/route/1/outfit', 'energy', { state: led, draft: handed }).why).toBe('This MULE is outfitted: re-outfit it');
-    } finally {
-      DEV_STEER.on = steering;
+    for (const on of [false, true]) {
+      DEV_STEER.on = on;
+      try {
+        const refit = one('development', '/development/route/1/outfit', 'energy', { state: led, draft: handed });
+        expect(refit, `DEV_STEER.on ${on}`).toMatchObject({ plays: 'food', why: 'This MULE is outfitted: re-outfit it' });
+        expect(refit.r.playbook.by).toBe('engine');
+        const whole = one('development', '/development/route', group('energy', plots[0]!), { state: led, draft: handed });
+        expect(whole, `DEV_STEER.on ${on}`).toMatchObject({ plays: handed.development!.route, why: 'This MULE is outfitted: re-outfit it' });
+        expect(one('development', '/development/route/1/outfit', 'energy', { state: broke, draft: handed }).why, `DEV_STEER.on ${on}, no money`).toBe('This MULE is outfitted: re-outfit it');
+      } finally {
+        DEV_STEER.on = steering;
+      }
     }
     // The bound is the led MULE's: the same edit with none led, and an edit to a later group, both play.
     const unled = structuredClone(led);
