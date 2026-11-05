@@ -369,11 +369,12 @@ describe.runIf(process.env.MULE_FULL === '1')('brain:trial', () => {
       }
       expect(report!.refusedCalls).toBe(0);
 
-      // Both Smart seats spoke in every month of both games.
+      // Every Smart seat-month of both games is counted. Without playbooks a Smart seat's top picks say nothing (ruling
+      // a), so some seat-months are silent: the report shows them, and UBER-AC-1 does not fail on them (PM, 5 Nov).
       const seatMonths = 2 * 2 * GAME.maxMonths;
       expect(report!.lines.seatMonths).toBe(seatMonths);
-      expect(report!.lines.silent).toBe(0);
-      expect(report!.lines.min).toBeGreaterThanOrEqual(1);
+      expect(report!.lines.silent).toBeGreaterThan(0);
+      expect(out).toContainEqual(expect.stringMatching(/Smart seat-months without a line \(not judged without playbooks\)$/));
       expect(report!.lines.median).toBeLessThanOrEqual(BRAIN.linesPerMonth);
       // The slow seat's lines are all templates; the fast seat's model wrote some of its own.
       expect(report!.modelLines.silent).toBeGreaterThanOrEqual(2 * GAME.maxMonths);
@@ -789,7 +790,10 @@ describe.runIf(process.env.MULE_FULL === '1')('brain:trial', () => {
 
     expect(verdicts(input())).toEqual(['pass', 'pass']);
     expect(verdicts(input({ games: [game({ decisions: decisions(79, 100) })] }))).toEqual(['fail', 'pass']);
-    expect(verdicts(input({ games: [game({ lines: { ai0: [0], ai1: [1] } })] }))).toEqual(['fail', 'pass']);
+    // PM ruling, 5 Nov: the line clause is judged only with playbooks, the path the game ships. Without them a Smart seat's
+    // top picks say nothing (ruling a), so a silent seat-month is shown but does not fail.
+    expect(verdicts(input({ playbooks: true, games: [game({ lines: { ai0: [0], ai1: [1] } })] }))).toEqual(['fail', 'pass']);
+    expect(verdicts(input({ playbooks: false, games: [game({ lines: { ai0: [0], ai1: [1] } })] }))).toEqual(['pass', 'pass']);
     // Each seat at its share puts the game at its budget: that is not under it.
     expect(verdicts(input({ calls: [call(0.5), call(0.5, 'ai1')] }))).toEqual(['pass', 'fail']);
     // Judged per game: two games each under the budget pass, though the run spent more than one budget.
@@ -816,7 +820,12 @@ describe.runIf(process.env.MULE_FULL === '1')('brain:trial', () => {
     // Playbooks played every move (C7): no decision was asked, so the share has nothing to judge; n/a, not FAIL. A silent
     // seat-month still fails, and a run cut short is still not proven.
     expect(verdicts(input({ games: [game({ decisions: [] })] }))[0]).toBe('n/a');
-    expect(verdicts(input({ games: [game({ decisions: [], lines: { ai0: [0], ai1: [1] } })] }))[0]).toBe('fail');
+    expect(verdicts(input({ playbooks: true, games: [game({ decisions: [], lines: { ai0: [0], ai1: [1] } })] }))[0]).toBe('fail');
+    expect(verdicts(input({ playbooks: false, games: [game({ decisions: [], lines: { ai0: [0], ai1: [1] } })] }))[0]).toBe('n/a');
+    // The printed verdict says the silent months were not judged.
+    expect(renderTrialReport(trialReport(input({ playbooks: false, games: [game({ lines: { ai0: [0], ai1: [1] } })] })))).toContainEqual(
+      expect.stringMatching(/^UBER-AC-1 PASS: .*1 Smart seat-months without a line \(not judged without playbooks\)$/),
+    );
     expect(verdicts(input({ planned: 2, games: [game({ decisions: [] })] }))[0]).toBe('not proven');
     // RULE-2 counts template lines too, so a seat-month with only template lines is not silent.
     expect(verdicts(input({ games: [game({ modelLines: { ai0: [0] } })] }))[0]).toBe('pass');
