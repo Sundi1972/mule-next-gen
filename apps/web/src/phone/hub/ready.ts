@@ -1,4 +1,4 @@
-import type { AuctionView, ElectionView, MuleIntent, MuleView, PlayerView, TableView } from '@mule/protocol';
+import type { AuctionView, CouncilView, ElectionView, MuleIntent, MuleView, PlayerView, TableView } from '@mule/protocol';
 
 /** Planning has no clock: who it still waits for, and what the planning footer shows and sends. */
 
@@ -158,8 +158,9 @@ export const PLANNING_WORDS: ReadyWords = {
   confirm: (names, n) => `End planning for everyone now? ${names} stop${n === 1 ? 's' : ''} where they are, and the land grant starts.`,
 };
 
-/** Planning's words at this election stage, for when no slot gives the stage its own: the confirm says what Continue does there. */
-export function stageWords(stage: ElectionView['stage'] | null | undefined): ReadyWords {
+/** Planning's words at this election (or law ballot) stage, for when no slot gives the stage its own: the confirm says what Continue does there. */
+export function stageWords(stage: ElectionView['stage'] | null | undefined, council?: CouncilView['stage'] | null): ReadyWords {
+  if (council === 'ballot') return { ...PLANNING_WORDS, confirm: (names, n) => `Go on without ${names}? ${names} ${n === 1 ? "doesn't" : "don't"} vote on this law.` };
   if (stage === 'announce') return { ...PLANNING_WORDS, confirm: (names) => `Go on without ${names}? The candidates close as they are.` };
   if (stage === 'ballot') return { ...PLANNING_WORDS, confirm: (names, n) => `Go on without ${names}? ${names} ${n === 1 ? "doesn't" : "don't"} vote this time.` };
   return PLANNING_WORDS;
