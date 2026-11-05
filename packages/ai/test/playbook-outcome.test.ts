@@ -62,7 +62,7 @@ const AUCTION_FACTS: PhaseFact[] = [
   trade('food', 'store', 'ai1', 20),
   declare('ai0', 'energy', 'seller'),
   declare('ai1', 'energy', 'buyer'),
-  declare('ai2', 'energy', 'buyer'),
+  declare('ai2', 'energy', 'seller'),
   declare('ai3', 'energy', 'pass'),
   trade('energy', 'ai1', 'ai0', 28),
   trade('energy', 'ship', 'ai0', 26),
@@ -182,14 +182,14 @@ describe('RULE-11, the PhaseOutcome builders (pure)', () => {
             { good: 'energy', side: 'buyer', price: 28, qty: 1 },
           ],
         },
+        // It declared Sell for energy and sold none: idle.
         ai2: {
           traded: [{ good: 'crystite', side: 'seller', price: 90, qty: 1 }],
           declaredButIdle: ['energy'],
         },
-        // Its pass fact stands for crystite, so only food counts as idle.
+        // It stood a buyer for food and bought none: not idle, as everyone starts a buyer (no Pass, #335).
         ai3: {
           traded: [{ good: 'crystite', side: 'buyer', price: 95, qty: 1 }],
-          declaredButIdle: ['food'],
         },
       },
     });
@@ -207,6 +207,22 @@ describe('RULE-11, the PhaseOutcome builders (pure)', () => {
     const outcome = auctionOutcome(AUCTION, endOfAuction(0), AUCTION_FACTS, 'ai0');
 
     expect(outcome.items.find((i) => i.path === '/auction/crystite/role')).toEqual({ path: '/auction/crystite/role', expected: 'buyer', actual: 'out' });
+  });
+
+  it('T-AC-9 (no Pass, #335): declaredButIdle names the goods a rival declared Sell for and traded none of; a rival that stayed a buyer and traded nothing is not idle', () => {
+    const facts: PhaseFact[] = [
+      declare('ai1', 'food', 'seller'),
+      declare('ai2', 'food', 'buyer'),
+      declare('ai3', 'food', 'seller'),
+      trade('food', 'store', 'ai3', 20),
+      declare('ai1', 'energy', 'buyer'),
+      declare('ai2', 'energy', 'seller'),
+    ];
+    const { rivals } = auctionOutcome(AUCTION, endOfAuction(0), facts, 'ai0');
+
+    expect(rivals.ai1, 'a declared seller that sold none of food; a buyer of energy that bought none').toEqual({ declaredButIdle: ['food'] });
+    expect(rivals.ai2, 'a buyer of food that bought none; a declared seller that sold none of energy').toEqual({ declaredButIdle: ['energy'] });
+    expect(rivals.ai3, 'a declared seller that sold').toEqual({ traded: [{ good: 'food', side: 'seller', price: 20, qty: 1 }] });
   });
 
   it("T-AC-9 (no Pass, #335): an 'out' play stood as the buyer everyone starts as is met as 'out' while it trades none of the good", () => {
