@@ -188,7 +188,7 @@ export function colonyWealth(state: GameState): number {
 
 /** The colony's gauges now. */
 export function colonyGauges(state: GameState): ColonyGauges {
-  return { month: state.month, wealth: colonyWealth(state), prestige: colonyPrestige(state), happiness: state.colony?.happiness ?? null };
+  return { month: state.month, wealth: colonyWealth(state), prestige: colonyPrestige(state), happiness: state.colony?.happiness ?? null, air: state.air };
 }
 
 /** Last month's gauges for the "this month" change: the latest month end before this month's, or null in month 1. */
