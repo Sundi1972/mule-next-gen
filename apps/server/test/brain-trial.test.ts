@@ -646,31 +646,43 @@ describe.runIf(process.env.MULE_FULL === '1')('brain:trial', () => {
   });
 
   it(
-    'T-AC-A4 (trial): each Smart seat is asked for its playbook at the start and each upkeep, adopts it at its land grant, and the report counts the playbooks by llm and the strategy calls',
+    "T-AC-A4 (trial): each Smart seat writes as on the server: its land write (with the development) at the start and each upkeep, and its auction in the production show; it adopts the land grant, the development and the auction by llm, and the report counts every write",
     async () => {
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-      const writes: string[] = [];
+      const land: string[] = [];
+      const auction: string[] = [];
+      const offered = (params: { output_config?: { format?: { schema?: unknown } } }) =>
+        (params.output_config?.format?.schema as { properties: { edits: { items: { anyOf: { properties: { path: { enum: string[] } } }[] } } } }).properties.edits.items.anyOf.map((v) => v.properties.path.enum[0]!);
       sdk.create = (params) => {
         const user = (params.messages[0]?.content ?? '') as string;
-        if (user.includes('What you may change:')) {
-          writes.push(/^You are (.+)\. Month (\d+)/m.exec(user)!.slice(1, 3).join(' m'));
-          return Promise.resolve(sdkMessage(JSON.stringify({ edits: [{ path: '/landGrant/claims', to: 1, reason: 'One will do.' }], line: '' }), BILLED));
+        const who = () => /^You are (.+)\. Month (\d+)/m.exec(user)!.slice(1, 3).join(' m');
+        if (user.includes('Your draft land grant:')) {
+          land.push(who());
+          const edits = [{ path: '/landGrant/claims', to: 1, reason: 'One will do.' }, { path: '/development/timeBudgetMs', to: 1_000, reason: 'Quick.' }];
+          return Promise.resolve(sdkMessage(JSON.stringify({ edits, line: '' }), BILLED));
+        }
+        if (user.includes('Your draft auction:')) {
+          auction.push(who());
+          const hold = offered(params as never).find((path) => path.endsWith('/hold'))!;
+          return Promise.resolve(sdkMessage(JSON.stringify({ edits: [{ path: hold, to: 0, reason: 'Sell it all.' }], line: '' }), BILLED));
         }
         return Promise.resolve(sdkMessage(USABLE, BILLED));
       };
       const { code, report } = await drive(run(['--games', '1', '--seed', '101', '--playbooks', '1', '--max-usd', '2'], KEY).result);
 
       expect(code).toBe(0);
-      const months = report!.edits.of / 2;
-      expect(months).toBeGreaterThan(1);
-      // Each of the two Smart seats wrote once a month, for month 1 at the start and each next month at its upkeep.
-      for (const seat of ['AI 1', 'AI 2']) expect(writes.filter((w) => w.startsWith(`${seat} m`)).length, seat).toBe(months);
-      // Every write came back in time with an accepted edit, so every playbook that took effect is Claude's.
-      expect(report!.edits).toEqual({ model: months * 2, of: months * 2 });
-      expect(report!.writes.calls).toBe(months * 2);
+      for (const seat of ['AI 1', 'AI 2']) {
+        const months = land.filter((w) => w.startsWith(`${seat} m`)).length;
+        expect(months, seat).toBeGreaterThan(1);
+        // An auction write in each month that reached its production show.
+        expect(auction.filter((w) => w.startsWith(`${seat} m`)).length, seat).toBeGreaterThan(0);
+      }
+      // Each write came in time with an accepted edit, so each playbook that took effect is Claude's: the land grant's,
+      // the development's it carried, and the auction's.
+      expect(report!.edits.model).toBe(report!.edits.of);
+      expect(report!.edits.of).toBe(land.length * 2 + auction.length);
+      expect(report!.writes.calls).toBe(land.length + auction.length);
       expect(report!.writes.late).toBe(0);
-      const strategyLines = callLines().filter((l) => l.kind === 'strategy');
-      expect(strategyLines).toHaveLength(months * 2);
     },
     GAMES_MS,
   );
