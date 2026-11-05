@@ -23,6 +23,8 @@ const MONTHS = 2;
 
 /** Seed 4's third month is the first in which a seat runs short of cash, so it lists in planning and sells at the land auction. */
 const [LISTS, LIST_MONTHS] = [4, 3];
+/** With every seat on its playbook, seed 4's first sale by a seat is at the fourth month's land auction. */
+const SELL_MONTHS = 4;
 
 const withPlays = (plays: SeatSpec['plays'], seed = SEED): SeatSpec[] => simSeats(4, 'trader', seed).map((s) => ({ ...s, plays }));
 
@@ -76,11 +78,11 @@ describe('the sim collects the public facts the server notifies (C8, C14)', () =
     // The owners as each planning and each land grant ends: only a claim changes them in between.
     const owners = new Map<string, (string | null)[]>();
     const onPhase = (s: GameState) => void ((s.phase === 'planning' || s.phase === 'landGrant') && owners.set(`${s.month}/${s.phase}`, s.tiles.map((t) => t.owner)));
-    const { game } = play(withPlays('playbook', LISTS), { onPhase }, LISTS, LIST_MONTHS);
+    const { game } = play(withPlays('playbook', LISTS), { onPhase }, LISTS, SELL_MONTHS);
     const facts = game.facts;
     // A claim fact for every plot the grant gave, and none else.
     expect(facts.filter((f) => f.kind === 'claim').every((f) => f.phase === 'landGrant')).toBe(true);
-    for (let month = 1; month <= LIST_MONTHS; month++) {
+    for (let month = 1; month <= SELL_MONTHS; month++) {
       const [before, after] = [owners.get(`${month}/planning`)!, owners.get(`${month}/landGrant`)!];
       const gained = after.flatMap((o, plot) => (o !== before[plot] ? [`${o}@${plot}`] : []));
       const claimed = facts.flatMap((f) => (f.kind === 'claim' && f.month === month ? [`${f.seat}@${f.plot}`] : []));
