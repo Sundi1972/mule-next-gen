@@ -162,4 +162,39 @@ describe('Installing over a MULE swaps it (Heiko at the table, 5 Nov)', () => {
     expect(outfitOn(g, plot)).toBe('water');
     expect(game.viewFor('s1').me!.carriedMule, 'the Food MULE is on his lead, not gone').toBe('food');
   });
+
+  it('B-AC-SWAP-2: Heiko ends his turn still leading the swapped-out Food MULE: it goes to the corral, and his plot keeps the Water MULE', () => {
+    const g = toDevelopment();
+    const { game, state, plot } = g;
+    buyAndOutfit(g, 's1', 'food');
+    installOn(g, 's1', plot);
+    buyAndOutfit(g, 's1', 'water');
+    hallTo(g, 's1', doorFor(g, plot));
+    press(g, 's1', 'LEAVE');
+    mapTo(g, 's1', { x: plot.x + 0.5, y: plot.y + 0.5 });
+    press(g, 's1', 'SWAP');
+    const corral = state.store.mules;
+    goIn(g, 's1');
+    hallTo(g, 's1', 'pub');
+    press(g, 's1', 'PUB');
+    for (let i = 0; i < 10_000 && game.viewFor(null).phase === 'development'; i++) g.advance(100);
+    expect(outfitOn(g, plot), 'never sent home over the new MULE').toBe('water');
+    expect(state.store.mules, 'the Food MULE is in the corral').toBe(corral + 1);
+    expect(game.viewFor('s1').me!.carriedMule).toBeNull();
+  });
+
+  it('B-AC-SWAP-3: over a MULE with the same outfit the button says so and the press is refused: Heiko keeps his MULE, the plot keeps its own', () => {
+    const g = toDevelopment();
+    const { game, plot } = g;
+    buyAndOutfit(g, 's1', 'food');
+    installOn(g, 's1', plot);
+    buyAndOutfit(g, 's1', 'food');
+    hallTo(g, 's1', doorFor(g, plot));
+    press(g, 's1', 'LEAVE');
+    mapTo(g, 's1', { x: plot.x + 0.5, y: plot.y + 0.5 });
+    expect(game.viewFor('s1').me?.reach?.detail).toMatch('same outfit, nothing to swap');
+    expect(() => press(g, 's1', 'SWAP')).not.toThrow();
+    expect(outfitOn(g, plot)).toBe('food');
+    expect(game.viewFor('s1').me!.carriedMule, 'still on his lead').toBe('food');
+  });
 });
