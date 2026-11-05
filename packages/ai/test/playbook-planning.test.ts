@@ -22,8 +22,8 @@ function holding(money: number, plots: [number, Outfit | null][]): GameState {
   return state;
 }
 
-/** Short of cash: a trader's reserve is 60 cr with nothing short, and it holds 40, an idle plot and a Smithore MULE. */
-const short = () => holding(40, [[DESERT, null], [MOUNTAIN, 'smithore']]);
+/** Short of cash whatever its reserve: it holds no money, an idle plot and a Smithore MULE. */
+const short = () => holding(0, [[DESERT, null], [MOUNTAIN, 'smithore']]);
 
 const seatOf = (options: Partial<AiSeatOptions> = {}) => new AiSeat({ id: 'ai0', name: 'AI 1', persona: 'trader', level: 'trader', seed: 100, ...options });
 
@@ -221,7 +221,9 @@ describe('the seat plays its planning part (C4, RULE-13)', () => {
 
   // Two whole sim games, walking off and on: 1 to 2.5 s alone, past vitest's 5 s default in CI's parallel run.
   it("T-AC-10: the sim's planning loop hands each seat its act, so a seat short of cash lists, unsold to the store", { timeout: 20_000 }, () => {
-    // The row makes its own seats short: whether a sim seat runs short by itself depends on the economy (walking on or off).
+    // The row builds its own case: as month 1 ends every seat holds no cash and an idle plot it may sell, so month 2's
+    // planning finds each one short with a lot to list, whatever the economy left it (walking on or off).
+    const seats = ['ai0', 'ai1', 'ai2', 'ai3'];
     const saved = DEV_STEER.on;
     try {
       for (const walking of [false, true]) {
@@ -230,12 +232,17 @@ describe('the seat plays its planning part (C4, RULE-13)', () => {
         playGame(3, simSeats(4, 'trader', 3), {
           maxMonths: 2,
           onPhase: (state) => {
-            // Month 1's upkeep leaves every seat with no cash, so month 2's planning finds each one short.
-            if (state.phase === 'upkeep' && state.month === 1) for (const p of state.players) p.money = 0;
+            if (state.phase === 'upkeep' && state.month === 1) {
+              const free = state.tiles.filter((t) => t.owner === null && t.terrain !== 'store');
+              state.players.forEach((p, i) => {
+                p.money = 0;
+                Object.assign(free[i]!, { owner: p.id, outfit: null });
+              });
+            }
             if (state.phase === 'planning') listed.push(...state.listings.filter((l) => l.seller.startsWith('ai')));
           },
         });
-        expect(listed.length, `walking ${walking}`).toBeGreaterThan(0);
+        expect([...new Set(listed.map((l) => l.seller))].sort(), `walking ${walking}`).toEqual(seats);
         expect(listed.every((l) => l.unsold === 'store'), `walking ${walking}`).toBe(true);
       }
     } finally {
