@@ -108,12 +108,18 @@ function idleGains(state: GameState, seat: AiSeat, outfit: Outfit): Map<number, 
 /** The index the gains rank first. */
 const bestOf = (gains: Map<number, number>) => [...gains].sort((a, b) => b[1] - a[1])[0]![0];
 
+/** The steps today's hand gives up before pressing them, by why: the clock, the scramble's race, the hurry to the pub. */
+const HAND_DROPS = new Set(['no time', 'scramble', 'hurry', 'hurry after a pack']);
+
 /**
- * The MULE steps the floor refused: an outfit or an install the button did not offer. Today's hand logs a refused press
- * with no outcome, a route with 'refused'. A route step the hand replaced, skipped or never reached was not pressed.
+ * The MULE steps the floor refused: an outfit or an install pressed and not taken. Today's hand logs a press refused
+ * with no outcome, a route with 'refused'. A step the hand dropped before pressing it (HAND_DROPS), or a route step it
+ * replaced, skipped or never reached, was not pressed.
  */
 const refused = (seat: AiSeat) =>
-  seat.developLog().filter((e) => !e.ok && (e.outcome === undefined || e.outcome === 'refused') && (e.action.type === 'outfit' || e.action.type === 'install'));
+  seat
+    .developLog()
+    .filter((e) => !e.ok && (e.outcome === 'refused' || (e.outcome === undefined && !HAND_DROPS.has(e.why ?? ''))) && (e.action.type === 'outfit' || e.action.type === 'install'));
 
 describe('the floor never refuses a MULE step the AI planned (FM-floor-refusals)', () => {
   it('FM-floor-outfit-offer: a MULE outfitted just before a glint detour is installed, not dropped at its outfitter', () => {
