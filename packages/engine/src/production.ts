@@ -191,6 +191,23 @@ export function energyUseOf(state: GameState, tile: Tile): number {
   return UPKEEP.energyUse[tile.outfit as RawGood];
 }
 
+/** One plot in AM-17's turn-off list: its Energy use this month and its full output. */
+export interface EnergyOffPlot {
+  tile: Tile;
+  use: number;
+  full: number;
+}
+
+/**
+ * An owner's working plots but its Energy plots, in AM-17's turn-off order: biggest use first, then the one whose full
+ * output is worth least at the store's posted price, then tile order. A factory whose non-Energy inputs are not in
+ * stock is no working plot and is left out. `cold` multiplies every use; by default it is the cold snap's factor if
+ * one is among this month's filed events.
+ */
+export function energyOffOrder(state: GameState, playerId: string, cold?: number): EnergyOffPlot[] {
+  throw new Error('NotImplemented: energyOffOrder');
+}
+
 /**
  * The plots an owner turns off this month for want of Energy (AM-17): its working plots but the Energy plots, raw and
  * factories in one list, biggest use first, then the one whose full output is worth least at the store's posted

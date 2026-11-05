@@ -2,12 +2,14 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   createGame,
   createRng,
+  energyOffOrder,
   energyUseOf,
   EVENTS,
   factoryFit,
   GROWN_BASE,
   isFactory,
   RECIPES,
+  rawOutput,
   runProduction,
   type GameState,
   type Good,
@@ -382,7 +384,7 @@ describe('AM-17: invariants over generated owners', () => {
     return state;
   }
 
-  it('INV-energy-off: uses paid never exceed the Energy available; the turned-off plots are a minimal prefix of biggest-use-first; a replay is identical', () => {
+  it('INV-energy-off: uses paid never exceed the Energy available; the turned-off plots are exactly the minimal prefix of energyOffOrder; a replay is identical', () => {
     for (let seed = 1; seed <= 50; seed++) {
       const state = generated(seed);
       const replay = structuredClone(state);
@@ -390,6 +392,9 @@ describe('AM-17: invariants over generated owners', () => {
       // A factory whose non-Energy inputs are not in stock before production is no working plot this month.
       const fed = new Map(state.tiles.map((t) => [t, !isFactory(t.outfit ?? 'food') || Object.entries(RECIPES[t.outfit as 'alloy'].inputs).every(([g, q]) => g === 'energy' || p(state, t.owner!).stock[g as Good] >= q!)]));
       const uses = new Map(state.tiles.map((t) => [t, energyUseOf(state, t)]));
+      // Read before production, on the replay copy (production moves run counts, and so a factory's experience).
+      const orders = new Map(replay.players.map((pl) => [pl.id, energyOffOrder(replay, pl.id).map((e) => replay.tiles.indexOf(e.tile))]));
+      const fullBefore = new Map(state.tiles.map((t, i) => [t, !t.outfit || !t.owner || t.outfit === 'greenBelt' ? 0 : isFactory(t.outfit) ? factoryFit(replay, replay.tiles[i]!, t.outfit, t.owner).output : rawOutput(replay, replay.tiles[i]!)]));
 
       const run = runProduction(state);
 
@@ -402,11 +407,12 @@ describe('AM-17: invariants over generated owners', () => {
         expect(plants.some((t) => isOff(run, state, t)), `seed ${seed}: an Energy plot is never off`).toBe(false);
 
         // The list: every other working plot, biggest use first, then least worth (posted × full output), then tile order.
-        const full = (t: Tile) => (isFactory(t.outfit!) ? factoryFit(state, t, t.outfit, pl.id).output : lineOf(run, state, t)!.parts.filter((x) => x.why !== 'energyOff' && x.why !== 'noWater' && x.why !== 'event').reduce((n, x) => n + x.delta, 0));
         const list = own
           .filter((t) => t.outfit !== 'energy' && fed.get(t))
-          .map((t) => ({ t, use: uses.get(t)!, worth: state.store.posted[t.outfit as Good] * full(t), at: state.tiles.indexOf(t) }))
+          .map((t) => ({ t, use: uses.get(t)!, worth: state.store.posted[t.outfit as Good] * fullBefore.get(t)!, at: state.tiles.indexOf(t) }))
           .sort((a, b) => b.use - a.use || a.worth - b.worth || a.at - b.at);
+        // energyOffOrder, as the AI and WS9 read it, is this very list: the off plots are exactly its turned-off prefix.
+        expect(orders.get(pl.id), `seed ${seed} ${pl.id}: energyOffOrder`).toEqual(list.map((e) => e.at));
         // A factory left out of the list files no line. A turned-off one always files one with energyOff, even when the
         // factories before it took its share of the inputs and it makes 0.
         expect(own.filter((t) => !fed.get(t)).every((t) => !lineOf(run, state, t)), `seed ${seed} ${pl.id}: unfed factories run not`).toBe(true);
