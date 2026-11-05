@@ -201,7 +201,9 @@ const install: Row = (s) => {
   const { player: p, tile } = s;
   const good = p.carriedMule;
   if (!tile || !good || good === 'empty' || p.muleBolted) return null;
-  const plot = plotFor(s, (t) => t.owner === p.id);
+  // Never onto the plot the led MULE was just swapped off (AM-23, PM ruling A): a double tap on SWAP can't swap back.
+  const swappedOff = p.takenMule?.swapped ? p.takenMule : null;
+  const plot = plotFor(s, (t) => t.owner === p.id && !(swappedOff && t.x === swappedOff.x && t.y === swappedOff.y));
   // Over a MULE with the outfit it leads there is nothing to swap (AM-23): the row dims, as RE-OUTFIT's does for its own good.
   const why: ReachRefusal | null = plot?.outfit === good ? { kind: 'sameGood' } : null;
   return plot && { kind: 'install', enabled: !why, good, plot: at(plot), fromShore: plot !== tile, replaces: plot.outfit, why };
