@@ -1599,10 +1599,13 @@ export async function theScramble(t: ArcadeTable): Promise<string> {
     const me = (game as unknown as { viewFor(s: string): { me?: { devSeconds: number } } }).viewFor('s4').me!;
     const secondsLeft = game.devEndsAt === null ? [me.devSeconds] : [0, 1, 2].map((d) => Math.max(0, (game.devEndsAt! - game.ctx.now()) / 1_000 + d));
     const pays = secondsLeft.map((s) => pubPayoutFor(game.state, 's4', s));
+    // The payout falls as the clock runs (about 1.5 cr a second), and the banner was drawn before these reads: any
+    // payout between the samples' lowest and highest is the pub's at some moment in that window.
+    const said = Number(/\+(\d+) cr/.exec(left.lena.banner?.text ?? '')?.[1] ?? NaN);
     owed.push({
       tag: "Lena's phone tells her she is left out, with the pub's payout",
-      ok: left.lena.banner?.tone === 'warn' && !!left.lena.banner.text.includes('no MULE for you this turn') && pays.some((n) => left.lena.banner!.text.includes(`+${n} cr`)),
-      said: `${framesSay(heardMoments(wires.phones[3]!))}; her banner ${JSON.stringify(left.lena.banner?.text ?? null)}, the pub pays ${pays.join(' or ')}`,
+      ok: left.lena.banner?.tone === 'warn' && !!left.lena.banner.text.includes('no MULE for you this turn') && said >= Math.min(...pays) && said <= Math.max(...pays),
+      said: `${framesSay(heardMoments(wires.phones[3]!))}; her banner ${JSON.stringify(left.lena.banner?.text ?? null)}, the pub pays ${Math.min(...pays)} to ${Math.max(...pays)}`,
     });
     // Her left-out line, the phone's longest banner: inside the screen, and over none of the store, her plots and the
     // controls, at both sizes, in the hall and out on the map.
