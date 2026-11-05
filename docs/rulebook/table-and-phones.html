@@ -80,7 +80,7 @@
 <li><strong>Phone and laptop</strong>: a headline at the top of the main pane. On the status screen "🌾 Food" with the picked count; during the walk "🌾 Food" beside the clock; at the close "🌾 Food closed". The rail keeps its small line.</li>
 <li><strong>TV</strong>: the title reads "🌾 Food auction" (today "Auction · Food", without the glyph).</li>
 </ul>
-<div class="box next"><h4>What is changing</h4><p>PR #374 (the UX team, WS6), reviewed. It goes into the same trunk batch as the TV fit, before it, since both touch the TV auction's title line.</p></div>
+<div class="box next"><h4>What is changing</h4><p>PR #374 (the UX team, WS6), reviewed. It goes into the next trunk batch, once the Auctions team's sign-off arrives. The TV fit (PR #381) then rebases onto it, since both touch the TV auction's title line.</p></div>
 <p class="code-ref">In the code: <code>apps/web/src/phone/Auction.tsx</code> · <code>apps/web/src/table/TableApp.tsx::TvAuction</code></p>
 <p class="owner">Kept current by: the UX team (WS6), with the Table team (WS4) for the TV.</p>
 
@@ -166,7 +166,7 @@
 </ul>
 <p>Computer players talk too: each says at most <span class="num">3</span> lines a month and one a phase, up to <span class="num">140</span> characters, about what it just decided. A public line from a person reaches every computer player, a whisper only the one it was for.</p>
 <div class="box why"><h4>Why it is like this</h4><p>Heiko, 22 Oct: live table chat "Live on every screen", a speech bubble at the speaker and a short ticker on the phones and the TV in every phase. He approved the design the same day (ticker 2 lines on a phone, 3 on the TV; whispers only on the two screens involved, with a lock, never on the TV), with the PM's condition that bubbles never cover each other or the ticker.</p></div>
-<div class="box next"><h4>What is changing</h4><p>Only the planning hub has a place to type. In every other phase you can read the chat and see bubbles but not write, and no ruling says whether that is intended. Owner: the UX team (WS6).</p></div>
+<div class="box next"><h4>What is changing</h4><p>Only the planning hub has a place to type. In every other phase you can read the chat and see bubbles but not write. This is intended (UX ruling C20): in development and the auction your hands are on the controls and the side rail has no room. One-tap phrases on the auction status screen and in the pub are in the backlog. Owner: the UX team (WS6).</p></div>
 <p class="code-ref">In the code: <code>apps/web/src/chat/Chat.tsx, store.ts, queue.ts</code> · <code>apps/web/src/phone/parts.tsx</code> (the Talk desk's chat, <code>EmoteBubbles</code>) · <code>packages/protocol/src/index.ts::EMOTES</code> · <code>packages/tabletop/src/room.ts</code> · <code>apps/server/src/brain/chat.ts</code> · <code>packages/engine/src/config.ts::BRAIN</code></p>
 <p class="owner">Kept current by: the UX team (WS6); the Brain team (WS2) for the computer players' lines.</p>
 
