@@ -78,6 +78,10 @@ function knownMonth(state: GameState) {
 describe('the production view', () => {
   it("T-AC-5: the production view carries plots and events and never a player's stock", () => {
     const { game, state } = inProduction();
+    // Production's timer was set from the month as it opened (ws6-ux AM-19 RULE-3): its goods made and its events' show.
+    const opened = game.viewFor(null).production!;
+    const openedEventsMs = opened.events.length > 0 ? opened.introMs + opened.events.reduce((n, e) => n + e.playMs, 0) : 0;
+    const lengthMs = productionShowMs(new Set(opened.lines.map((l) => l.good)).size, openedEventsMs);
     knownMonth(state);
 
     for (const seat of [null, 's1']) {
@@ -117,7 +121,7 @@ describe('the production view', () => {
           },
         ],
         // The length production's timer was given as it opened, on the month's real report (ws6-ux AM-19 RULE-3).
-        lengthMs: game['productionMs'],
+        lengthMs,
         introMs: 1_800,
         hurry: { asked: [], from: null },
       });
