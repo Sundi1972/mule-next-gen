@@ -7,7 +7,7 @@ import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ColonyGauges } from '../src/components/Colony';
+import { ColonyGauges, LANDING } from '../src/components/Colony';
 import type { TableClient } from '../src/net/client';
 import { ClientProvider } from '../src/net/react';
 import { TableApp } from '../src/table/TableApp';
@@ -174,14 +174,27 @@ describe('B-AC-23-6: at the month end the TV’s Happiness gauge counts from las
     expect(seen.at(-1)!.said).toBe('Happiness 31 Unhappy ↓ 13 this month');
   });
 
-  it('B-AC-23-6: it plays once; the next view of the same month end, and a TV that joins at the month end, show 31 at once', () => {
+  it('B-AC-23-6: it plays once per month end; the next view of the same month end, and a TV that joins at the month end, show 31 at once', async () => {
+    const yieldToThePage = () => new Promise((r) => setTimeout(r, 0));
     const screen = tv(planning(colony(44, 50)));
     screen.send(monthEnd(FALL));
     play(screen, 6_000);
+    await yieldToThePage();
     // A player readies: the server sends the month end again. It does not play again.
     screen.send(monthEnd(FALL, { players: PLAYERS.map((p) => ({ ...p, ready: true })) }));
     expect(screen.happiness()?.value).toBe(31);
     expect(play(screen, 3_000).every((s) => s.value === 31)).toBe(true);
+    await yieldToThePage();
+
+    // The next month's end plays its own drift, 31 → 25, from its first frame: never this one's or its own end value.
+    screen.send({ ...planning(colony(31, 31)), month: MONTH + 1 });
+    await yieldToThePage();
+    screen.send({ ...monthEnd(colony(25, 31)), month: MONTH + 1 });
+    expect(screen.happiness()?.value).toBe(31);
+    const next = play(screen, 6_000).map((s) => s.value);
+    expect(next[0]).toBe(31);
+    expect(new Set(next).size).toBeGreaterThan(3);
+    expect(next.at(-1)).toBe(25);
 
     // A TV that reloads or reconnects into the month end never saw it come: it shows the end state, at once.
     const joined = tv(monthEnd(FALL));
@@ -192,7 +205,10 @@ describe('B-AC-23-6: at the month end the TV’s Happiness gauge counts from las
   it('B-AC-23-6: under reduced motion it lands at once: 31 and Unhappy from the first frame, no count and no pulse', () => {
     device.reduced = true;
     const screen = tv(planning(colony(44, 50)));
+    frames.clear();
     screen.send(monthEnd(FALL));
+    // The end state needs no frames: none is asked for.
+    expect(frames.size).toBe(0);
     expect(screen.happiness()?.said).toBe('Happiness 31 Unhappy ↓ 13 this month');
     expect(play(screen, 3_000).every((s) => s.value === 31 && !s.pulses)).toBe(true);
   });
@@ -253,6 +269,10 @@ describe('B-AC-23-7: a change given to ColonyGauges lands on its gauge and count
     const flipAt = values.findIndex((v) => v >= HAPPINESS.bands.thriving);
     expect(seen[flipAt]!.pulses).toBe(true);
     expect(seen.slice(0, flipAt).some((s) => s.pulses)).toBe(false);
+    // The pulse lasts its length after the flip, then stops though the band stays Thriving.
+    const over = Math.ceil((flipAt * 0.05 + LANDING.pulse) / 0.05) + 1;
+    expect(seen.length).toBeGreaterThan(over);
+    expect(seen.slice(over).some((s) => s.pulses)).toBe(false);
 
     expect(said(at(c, landing(0.9, true)), 'gauge-happiness').said).toContain('72 Content');
     expect(said(at(c, landing(1, true)), 'gauge-happiness')).toEqual({ said: expect.stringContaining('82 Thriving'), pulses: false });
