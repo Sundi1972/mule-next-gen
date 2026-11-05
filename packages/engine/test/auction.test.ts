@@ -639,8 +639,8 @@ describe('A-5 the close stage: a receipt after each good (G-5)', () => {
     const state = closedWater();
     const tax = Math.round(95 * state.treasury.salesTax);
     expect(tax).toBeGreaterThan(0);
-    expect(a(state).receipts.p1).toEqual({ bought: { units: 1, gross: 95, tax: 0, prices: [95], with: ['p0'] }, sold: { units: 0, gross: 0, tax: 0, prices: [], with: [] } });
-    expect(a(state).receipts.p0).toEqual({ bought: { units: 0, gross: 0, tax: 0, prices: [], with: [] }, sold: { units: 1, gross: 95, tax, prices: [95], with: ['p1'] } });
+    expect(a(state).receipts.p1).toEqual({ bought: { units: 1, gross: 95, tax: 0, exportTax: 0, prices: [95], with: ['p0'] }, sold: { units: 0, gross: 0, tax: 0, exportTax: 0, prices: [], with: [] } });
+    expect(a(state).receipts.p0).toEqual({ bought: { units: 0, gross: 0, tax: 0, exportTax: 0, prices: [], with: [] }, sold: { units: 1, gross: 95, tax, exportTax: 0, prices: [95], with: ['p1'] } });
     expect(a(state).receipts.p2).toBeUndefined();
     expect(a(state).tally).toEqual({ p1: -95, p0: 95 - tax });
     // The next good starts a new receipt; the month's total carries on.
