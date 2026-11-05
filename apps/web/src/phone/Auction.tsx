@@ -5,8 +5,11 @@ import {
   BoardKey,
   boardWalkers,
   dealLine,
+  dealSpeed,
   Hint,
+  keepWords,
   lineHint,
+  linePrice,
   lineMoment,
   MyStoreLine,
   shipWants,
@@ -215,9 +218,11 @@ export function Auction() {
 
   const hint = walkHint(view, auction, me.id, have);
   const lineSide = mine?.side === 'seller' ? 'seller' : 'buyer';
+  // Selling into next month's need: shown, never asked (variant A's amber note).
+  const keeping = lineSide === 'seller' && need > 0 && have < need;
   const lineRail = (() => {
     if (moment.kind === 'trading') {
-      const h = lineHint(moment, lineSide, good, have, need);
+      const h = lineHint(moment, lineSide, good, linePrice(auction, lineSide, moment.house));
       return <Hint tone="lit" line={h.line} how={h.how} testid="line-hint" />;
     }
     // At a line with nothing moving, one plain reason, so a newcomer knows why nothing happens (F5, WS6's ruling).
@@ -235,7 +240,7 @@ export function Auction() {
           <div className="grid grid-cols-3 gap-2.5 font-mono text-[10px] text-ink-3">
             <span className="flex flex-col">
               HAVE
-              <strong data-num className="text-sm text-ink" data-testid="have">
+              <strong data-num className={cx('text-sm', keeping ? 'text-warn' : 'text-ink')} data-testid="have">
                 {have}
               </strong>
             </span>
@@ -257,7 +262,20 @@ export function Auction() {
       ) : (
         (lineRail ?? (myDeal ? <Hint tone="lit" line={dealLine(view, myDeal, me.id)} testid="my-deal" /> : <Hint line={hint.line} how={hint.how} />))
       )}
-      {!closed && sides}
+      {!closed && keeping && (
+        <p className="rounded-control border border-warn bg-warn/10 px-2.5 py-1.5 text-xs leading-snug text-warn" data-testid="keep">
+          {keepWords(good, have, need)}
+        </p>
+      )}
+      {!closed && (
+        <div className="flex flex-col gap-1">
+          {sides}
+          {/* On a phone held sideways (390 px) the rail has no row to spare: the caption shows where it fits. */}
+          <span className="hidden text-center text-[10px] leading-tight text-ink-3 [@media(min-height:430px)]:block" data-testid="sides-caption">
+            {lineSide === 'buyer' ? 'Sell puts you at the top, asking.' : 'Buy puts you at the bottom, bidding.'}
+          </span>
+        </div>
+      )}
     </>
   );
 
@@ -298,7 +316,7 @@ export function Auction() {
           lo={auction.lo}
           hi={auction.hi}
           walkers={walkers}
-          deals={auction.deals}
+          deals={auction.deals.map((d) => ({ ...d, speed: dealSpeed(d.units) }))}
           storeBuys={auction.storeBuys}
           storeSells={auction.storeSells}
           shipPays={auction.shipPays}
