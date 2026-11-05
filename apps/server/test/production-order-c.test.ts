@@ -1,4 +1,4 @@
-import { PRODUCTION_SHOW, productionEventAtMs, productionShowMs, RuleError, type GameState } from '@mule/engine';
+import { PRODUCTION_SHOW, productionEventAtMs, productionShowMs, RuleError, type GameState, type MonthEvent, type MonthReport } from '@mule/engine';
 import { describe, expect, it } from 'vitest';
 import { GRANT_TICK_MS, MuleGame } from '../src/mule-game.js';
 import { fakeContext, readyAll, seats } from './fake-context.js';
@@ -9,10 +9,16 @@ import { fakeContext, readyAll, seats } from './fake-context.js';
  * phase lasts RULE-3's length; and once every person at the table has asked, the rest of the show plays
  * PRODUCTION_SHOW.fast times faster on every screen, because the server ends the phase that much sooner.
  */
-function inProduction(phaseScale = 1) {
+function inProduction(phaseScale = 1, events: MonthEvent[] | null = null) {
   const fake = fakeContext();
   const game = new MuleGame(fake.ctx, 7, { phaseScale });
   game.start(seats);
+  if (events) {
+    // The month's report fires `events` in production, so production is timed with them from its first moment.
+    const history = (game['state'] as GameState).history;
+    const add = history.push.bind(history);
+    history.push = (...reports: MonthReport[]) => add(...reports.map((r) => ({ ...r, events: events.map((e) => ({ ...e })) })));
+  }
   readyAll(game);
   while (game.viewFor(null).phase === 'landGrant') fake.advance(GRANT_TICK_MS);
   // Small steps, so the AI seat develops its land.
@@ -178,6 +184,30 @@ describe('AM-19 B-AC-20: everyone taps ⏩ and the rest plays 3× faster', () =>
     advance(game.viewFor(null).phaseEndsAt! - ctx.now());
     expect(game.viewFor(null).phase).not.toBe('production');
     expect(() => game.handle('s1', { type: 'hurry' })).toThrow(new RuleError('Nothing to speed up now'));
+  });
+
+  it("the month's events speed up with the rest: one still to come starts and ends sooner; one playing keeps its start and ends sooner", () => {
+    const comet: MonthEvent = { key: 'cometPass', kind: 'storm', title: 'Comet', line: 'A comet passes.', scope: 'colony', origin: { x: 0, y: 0 }, plots: [], sign: 'good', phase: 'production' };
+    // Hurry before the events: both ends come forward by the time left over fast.
+    const early = inProduction(1, [comet]);
+    const before = early.game.viewFor(null).eventShow!;
+    early.game.handle('s1', { type: 'hurry' });
+    early.advance(1_000);
+    early.game.handle('s2', { type: 'hurry' });
+    const now = early.ctx.now();
+    const after = early.game.viewFor(null).eventShow!;
+    expect(after.startsAt).toBeCloseTo(now + (before.startsAt - now) / PRODUCTION_SHOW.fast, 0);
+    expect(after.endsAt).toBeCloseTo(now + (before.endsAt - now) / PRODUCTION_SHOW.fast, 0);
+    expect(after.endsAt).toBeLessThanOrEqual(early.game.viewFor(null).phaseEndsAt!);
+    // Hurry while the event plays: its start stays where it was, its end comes forward.
+    const late = inProduction(1, [comet]);
+    const show = late.game.viewFor(null).eventShow!;
+    late.advance(show.startsAt - late.ctx.now() + 500);
+    late.game.handle('s1', { type: 'hurry' });
+    late.game.handle('s2', { type: 'hurry' });
+    const sped = late.game.viewFor(null).eventShow!;
+    expect(sped.startsAt).toBe(show.startsAt);
+    expect(sped.endsAt).toBeCloseTo(late.ctx.now() + (show.endsAt - late.ctx.now()) / PRODUCTION_SHOW.fast, 0);
   });
 
   it('the next month starts fresh: nobody has asked', () => {
