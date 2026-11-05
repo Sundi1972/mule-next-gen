@@ -35,6 +35,17 @@ import { DevelopHand, type RoutePlay } from '../src/hands/develop.js';
 import { applyAction, arrive, type DevClock } from '../src/play.js';
 import { AiSeat } from '../src/seat.js';
 
+// The HC-9 seam: the hand's in-tick draft calls throw, switched on per test; otherwise the real ones.
+const seam = vi.hoisted(() => ({ throwing: false }));
+vi.mock('../src/playbook/draft.js', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../src/playbook/draft.js')>();
+  const broken = <A extends unknown[], R>(f: (...args: A) => R) => (...args: A): R => {
+    if (seam.throwing) throw new Error('draft broke');
+    return f(...args);
+  };
+  return { ...real, draftMulePick: broken(real.draftMulePick), keptOutfitEarns: broken(real.keptOutfitEarns) };
+});
+
 const ME = 'ai0';
 const RIVAL = 'ai1';
 const SEED = 11;
@@ -178,6 +189,8 @@ beforeEach(() => {
 });
 afterEach(() => {
   DEV_STEER.on = steer;
+  seam.throwing = false;
+  vi.restoreAllMocks();
 });
 
 describe("T-AC-7: RULE-9's rows, with their examples", () => {
@@ -496,6 +509,68 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
       const { state, plots, hand, log } = smithoreRoute(false);
       expect(hand.routeLog(state).steps, log).toEqual([0, 1, 2, 3].map((route) => ({ route, outcome: 'done' })));
       expect(plots.map((t) => t.outfit)).toEqual(['smithore', null]);
+    });
+
+    /** The errors the seat logs while `run` plays with the hand's draft calls throwing. */
+    function throwingDraft<T>(run: () => T): { result: T; logged: string[] } {
+      const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+      seam.throwing = true;
+      try {
+        return { result: run(), logged: errors.mock.calls.map((c) => String(c[0])) };
+      } finally {
+        seam.throwing = false;
+      }
+    }
+
+    it("HC-9: an own re-pick after the analyses whose draft throws is logged with the seat and plays as 'stop'; no MULE is added", () => {
+      const { result, logged } = throwingDraft(() => smithoreRoute(true));
+      const { state, plots, hand, log } = result;
+      expect(hand.routeLog(state).steps, log).toEqual([
+        { route: 0, outcome: 'done' },
+        ...[1, 2, 3].map((route) => ({ route, outcome: 'skipped', note: 'ground analysed' })),
+        { route: 4, outcome: 'done' },
+      ]);
+      expect(logged.length, log).toBeGreaterThan(0);
+      for (const line of logged) expect(line).toMatch(/^AI seat ai0: .*draft broke$/);
+      expect(plots.map((t) => t.outfit)).toEqual([null, null]);
+      expect(me(state).doneDeveloping).toBe(true);
+    });
+
+    it("HC-9: a stale MULE whose replacement draft throws is logged with the seat and dropped, and the route goes on to the pub", () => {
+      const { state, plots } = development(2);
+      const [stale, spare] = plots as [Tile, Tile];
+      stale.owner = ME;
+      me(state).analysed.push(...plots.map((t) => indexOf(state, t)));
+      const { seat, hand } = seatAndHand();
+      const play0 = drafted(seat, state);
+      stale.owner = RIVAL;
+      spare.owner = ME;
+      hand.follow(state.month, play0);
+      const { logged } = throwingDraft(() => play(runner, state, hand));
+      const log = JSON.stringify(hand.done);
+      expect(hand.routeLog(state).steps.filter((s) => s.note === `stale: plot ${indexOf(state, stale)}`).map((s) => s.outcome), log).toEqual(['replaced', 'replaced', 'replaced']);
+      expect(logged, log).toEqual([expect.stringMatching(/^AI seat ai0: .*draft broke$/)]);
+      expect(hand.done.some((e) => e.action.type === 'buyMule' && e.ok), 'no MULE bought in its place').toBe(false);
+      expect(spare.outfit).toBeNull();
+      expect(me(state).doneDeveloping).toBe(true);
+    });
+
+    it("HC-9: a led MULE's kept-outfit check that throws is logged with the seat, and the MULE is still installed, 'led'", () => {
+      const { state, plots } = wonMuleLot(2, 'smithore');
+      me(state).analysed.push(...plots.map((t) => indexOf(state, t)));
+      const { seat, hand } = seatAndHand();
+      const play0 = drafted(seat, state);
+      const route = play0.part.route;
+      const first = route.findIndex((s) => s.act === 'buyMule');
+      hand.follow(state.month, play0);
+      const { logged } = throwingDraft(() => play(runner, state, hand));
+      const steps = byIndex(hand, state);
+      const log = JSON.stringify(hand.done);
+      expect(logged, log).toEqual([expect.stringMatching(/^AI seat ai0: .*draft broke$/)]);
+      expect(steps.get(first + 1), log).toEqual({ route: first + 1, outcome: 'done', note: 'led' });
+      expect(steps.get(first + 2), log).toEqual({ route: first + 2, outcome: 'done' });
+      expect(state.tiles[route[first + 2]!.plot!]!.outfit, log).toBe('smithore');
+      expect(me(state).carriedMule).toBeNull();
     });
   });
 
