@@ -163,7 +163,7 @@ describe('Installing over a MULE swaps it (Heiko at the table, 5 Nov)', () => {
     expect(game.viewFor('s1').me!.carriedMule, 'the Food MULE is on his lead, not gone').toBe('food');
   });
 
-  it('B-AC-SWAP-4: a double tap on SWAP never swaps back: right after the swap the plot offers no SWAP, and a second press changes nothing', () => {
+  it('B-AC-SWAP-4: a double tap on SWAP never swaps back: right after the swap the plot\'s SWAP is dimmed ("just swapped"), and a second press changes nothing', () => {
     const g = toDevelopment();
     const { game, plot } = g;
     buyAndOutfit(g, 's1', 'food');
@@ -173,10 +173,13 @@ describe('Installing over a MULE swaps it (Heiko at the table, 5 Nov)', () => {
     press(g, 's1', 'LEAVE');
     mapTo(g, 's1', { x: plot.x + 0.5, y: plot.y + 0.5 });
     press(g, 's1', 'SWAP');
-    expect(game.viewFor('s1').me?.reach?.verb, 'no SWAP on the plot the Food MULE just came off').not.toBe('SWAP');
+    expect(game.viewFor('s1').me?.reach, 'SWAP stays on the plot the Food MULE just came off, dimmed').toMatchObject({ verb: 'SWAP', enabled: false, detail: expect.stringMatching(/just swapped/i) });
+    const seat = () => (game as unknown as { state: GameState }).state.players.find((p) => p.id === 's1')!;
+    const before = { money: seat().money, alloy: seat().stock.alloy, analysed: seat().analysed.slice() };
     pressAct(game, g, 's1');
     expect(outfitOn(g, plot), 'the Water MULE stays').toBe('water');
     expect(game.viewFor('s1').me!.carriedMule, 'he still leads the Food MULE').toBe('food');
+    expect({ money: seat().money, alloy: seat().stock.alloy, analysed: seat().analysed }, 'the press fell through to nothing else on the tile').toEqual(before);
   });
 
   it.each(['the pub', 'the clock'] as const)('B-AC-SWAP-2: Heiko\'s turn ends at %s with the swapped-out Food MULE still on his lead: it goes to the corral, and his plot keeps the Water MULE', (end) => {
