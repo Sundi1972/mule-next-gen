@@ -17,6 +17,7 @@ import {
   shipInPort,
   shipPrice,
   storePaysFor,
+  storeSellLine,
   tileIndex,
   walkSeconds,
   type DevPlace,
@@ -493,6 +494,8 @@ export interface GoodPlan {
   spiteBid: number;
   /** Extra value per unit, up to the others' shortfall, for cornering a scarce good. */
   corner: { units: number; premium: number };
+  /** Food it buys up to, as far as its money goes, while short of next month's need and the store sells Food; 0 otherwise. */
+  mustHold: number;
 }
 
 /** What the seat makes of the good that is up: the value of every unit, the cash it spends, and whether it corners or spites. */
@@ -507,6 +510,11 @@ export function goodPlan(obs: GameState, mind: Mind, good: Good): GoodPlan {
     const now = afterTax(obs, expectedPrices(obs, good).sell);
     for (let k = values.block; k < values.keep.length; k++) values.keep[k] = Math.min(values.keep[k]!, now - 1);
   }
+  // Short of next month's Food is a loss, not a small pace cost (Heiko, 5 Nov): while the store sells Food, each unit of
+  // the shortfall is worth at least the store's ask, so the seat buys it there or cheaper from a player, never dearer.
+  const ask = good === 'food' ? storeSellLine(obs) : null;
+  const mustHold = ask !== null && p.stock.food < values.need ? values.need : 0;
+  for (let k = 0; k < mustHold; k++) values.buy[k] = Math.max(values.buy[k]!, ask!);
   const reserve = cashReserve(obs, mind);
   const budget = Math.max(0, Math.min(p.money * STRATEGIST.budgetShare, p.money - reserve));
   const a = obs.auction;
@@ -528,7 +536,7 @@ export function goodPlan(obs: GameState, mind: Mind, good: Good): GoodPlan {
     }
     values.buy.sort((x, y) => y - x);
   }
-  return { good, values, budget, reserve, spiteBid, corner };
+  return { good, values, budget, reserve, spiteBid, corner, mustHold };
 }
 
 /** The price the seat expects to get for a unit, and to pay: the houses' lines while they trade, otherwise around the posted price. */
@@ -580,10 +588,11 @@ export function tradeDecision(obs: GameState, mind: Mind, plan: GoodPlan): Short
     if (buffer > keepAt && buffer < h) sellTo(buffer, `Sell ${h - buffer} ${GOOD_NAME[good]}, keep a buffer of ${buffer}`, 'sell:buffer');
   }
 
-  // Buy: up to the last unit worth more than its price, within the budget.
+  // Buy: up to the last unit worth more than its price, within the budget; the Food it must hold, as far as its money goes.
   let upTo = h;
   let spent = 0;
-  while (upTo < v.buy.length && (v.buy[upTo] ?? 0) > buy && spent + buy <= plan.budget) {
+  const wanted = (k: number) => (k < plan.mustHold ? spent + buy <= p.money : (v.buy[k] ?? 0) > buy && spent + buy <= plan.budget);
+  while (upTo < v.buy.length && wanted(upTo)) {
     spent += buy;
     upTo++;
   }
@@ -602,6 +611,7 @@ export function tradeDecision(obs: GameState, mind: Mind, plan: GoodPlan): Short
     if (speculative && needOnly > h) buyTo(needOnly, `Buy ${needOnly - h} ${GOOD_NAME[good]}, just what I need`, 'buy:need', sure.need, 'it needs them');
   }
 
-  cands.push(candidate<TradeAction>('pass', `Pass on ${GOOD_NAME[good]}`, { side: 'pass' }, 0, gainCons(0, p.money, 1, 'no trade', 'nothing at stake')));
+  const short = upTo > h && h < plan.mustHold ? `it is ${plan.mustHold - h} ${GOOD_NAME[good]} short of next month's need and can pay the store's ${buy}` : null;
+  cands.push(candidate<TradeAction>('pass', `Pass on ${GOOD_NAME[good]}`, { side: 'pass' }, 0, gainCons(0, p.money, 1, 'no trade', 'nothing at stake'), short));
   return shortlist(cands, mind.level.shortlist, mind.level.shortlistTolerance);
 }
