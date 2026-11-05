@@ -167,7 +167,7 @@ function isSpecies(pick: string | undefined): pick is Species {
 const BADGE_REASONS: readonly ProductionReason[] = ['cluster', 'species', 'trait', 'pollution', 'noEnergy', 'noWater'];
 const MAX_BADGES = 2;
 /** The receipt of a seat that traded nothing in the good that closed. */
-const NO_RECEIPT: GoodReceipt = { bought: { units: 0, gross: 0, tax: 0, prices: [], with: [] }, sold: { units: 0, gross: 0, tax: 0, prices: [], with: [] } };
+const NO_RECEIPT: GoodReceipt = { bought: { units: 0, gross: 0, tax: 0, exportTax: 0, prices: [], with: [] }, sold: { units: 0, gross: 0, tax: 0, exportTax: 0, prices: [], with: [] } };
 
 /** What a seat already in may not do while month 1's clock waits; the pub stays open. */
 const WAIT_REFUSES: ReadonlySet<DevIntent['type']> = new Set(['buyMule', 'install', 'analyse', 'filter']);

@@ -749,12 +749,17 @@ async function readTheReceipt(cast: { seller: Phone; buyer: Phone }, tv: Page, t
     const sold = truth.auctionOf(seller)!.receipt!.sold;
     const bought = truth.auctionOf(buyer)!.receipt!.bought;
     check(sold.units > 0 && bought.units > 0, `A-5 needs ${seller.name} to have sold and ${buyer.name} to have bought, got ${sold.units} and ${bought.units}`);
-    const net = sold.gross - sold.tax;
+    // W2: under the export tax law a sale to the ship pays it too, and the receipt names it beside the sales tax.
+    const exportTax = sold.exportTax ?? 0;
+    const net = sold.gross - sold.tax - exportTax;
     const text = async (p: Page, id: string) => (await p.getByTestId(id).first().innerText({ timeout: PRESS_MS })).replace(/\s+/g, ' ').trim();
     const sellerTitle = await text(seller.page, 'receipt-title-sold');
     check(sellerTitle === `${GOOD_NAME[good]}: you sold ${sold.units} for ${fmtCr(net)} cr`, `A-5: ${seller.name}'s receipt says what he sold after tax, got "${sellerTitle}"`);
     const tax = await text(seller.page, 'receipt-tax');
-    const taxWords = `${fmtCr(sold.gross)} cr, less ${fmtCr(sold.tax)} cr sales tax: ${fmtCr(net)} The tax goes to the colony fund.`;
+    const taxWords =
+      exportTax > 0
+        ? `${fmtCr(sold.gross)} cr, less ${fmtCr(sold.tax)} cr sales tax and ${fmtCr(exportTax)} cr export tax: ${fmtCr(net)} The taxes go to the colony fund.`
+        : `${fmtCr(sold.gross)} cr, less ${fmtCr(sold.tax)} cr sales tax: ${fmtCr(net)} The tax goes to the colony fund.`;
     check(tax === taxWords, `A-5: ${seller.name}'s receipt spells out the tax, "${taxWords}", got "${tax}"`);
     const buyerTitle = await text(buyer.page, 'receipt-title-bought');
     check(buyerTitle === `${GOOD_NAME[good]}: you bought ${bought.units} for ${fmtCr(bought.gross)} cr`, `A-5: ${buyer.name}'s receipt says what she bought, got "${buyerTitle}"`);
