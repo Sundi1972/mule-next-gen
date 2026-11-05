@@ -236,7 +236,7 @@ export function draftMulePick(input: DraftInput, k: number, walk: DevWalk | unde
 }
 
 /** The outfit of the MULE the seat leads already fitted (one won at the land auction), or null. */
-function ledOutfit(obs: GameState, me: PlayerId): Outfit | null {
+export function ledOutfit(obs: GameState, me: PlayerId): Outfit | null {
   const carried = obs.players.find((p) => p.id === me)!.carriedMule;
   return carried === null || carried === 'empty' ? null : carried;
 }
