@@ -2,13 +2,14 @@ import type { ColonyProjectView, ColonyView, MuleView, MyView, TableView } from 
 import { COLONY_SCORE } from '@mule/engine';
 import { createElement, type ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { TableClient } from '../src/net/client';
 import { ClientProvider } from '../src/net/react';
 import { PhoneGameProvider } from '../src/phone/game';
 import { GameOver } from '../src/phone/GameOver';
 import { Results } from '../src/phone/Results';
-import { TvGameOver, TvHeader, TvMonthEnd } from '../src/table/TableApp';
+import { ColonyPanel, LeagueTable } from '../src/components/MonthEnd';
+import { TableApp, TvGameOver, TvHeader, TvMonthEnd } from '../src/table/TableApp';
 import { aMuleView, aPlayer } from './fixtures/views';
 
 /**
@@ -129,6 +130,18 @@ function onPhone(view: MuleView, boards = 1, screen: () => ReactElement = GameOv
 
 function onTv(view: MuleView, screen: (props: { game: MuleView }) => ReactElement): string {
   return renderToStaticMarkup(createElement(ClientProvider, { client, children: createElement(screen, { game: { ...view, me: null } }) }));
+}
+
+// The server renderer has no getServerSnapshot for the client's store, so the router reads its state from here (as hub-tv-rank does).
+let boardState: unknown = null;
+vi.mock('../src/net/react', async (actual) => ({ ...(await actual<typeof import('../src/net/react')>()), useClientState: () => boardState }));
+
+/** The TV as the table drives it: TableApp's router over a board's view of the room. */
+function onTvRouter(view: MuleView): string {
+  const game = { ...view, me: null };
+  const table = { code: 'MULE', status: 'playing', hostId: 's1', seats: [], boards: 1, game } as unknown as TableView<MuleView>;
+  boardState = { status: 'open', role: 'board', code: 'MULE', seatId: null, view: table, notice: null, chat: [], emotes: [], toasts: [], clockOffset: 0 };
+  return renderToStaticMarkup(createElement(ClientProvider, { client: { ...client, watch: () => {} } as unknown as TableClient, children: createElement(TableApp, { room: 'MULE' }) }));
 }
 
 const header = (view: MuleView) => onTv(view, ({ game: g }) => createElement(TvHeader, { game: g, title: 'Planning' }));
@@ -400,6 +413,12 @@ describe('G-5 AM-12: the colony score at every month end (variant A)', () => {
     const phone = onPhone(over({ ...FINAL, score, lastScore: 52_000 }));
     expect(said(phone, 'colony-total')).toBe('55,718');
     expect(said(phone, 'score-sum')).toContain('31,200');
+    // Through the TV's own router, as the table reaches game over: C34's band once, no month-end band beside it.
+    const routed = onTvRouter(over({ ...FINAL, score, lastScore: 52_000 }));
+    expect(has(routed, 'tv-gameover')).toBe(true);
+    expect(routed.match(/data-testid="colony-band"/g)).toHaveLength(1);
+    expect(text(routed)).not.toContain('counted again at game over');
+    expect(has(routed, 'colony-score-change')).toBe(false);
     // No month-end part leaks into game over.
     for (const html of [tv, phone]) for (const id of ['colony-score-change', 'phone-month-score', 'colony-score-uncut']) expect(has(html, id), `game over has no ${id}`).toBe(false);
   });
@@ -411,6 +430,19 @@ describe('G-5 AM-12: the colony score at every month end (variant A)', () => {
       expect(said(screens[1]!, 'colony-on-tv')).toBe('How the colony is doing is on the TV. Worth is cash + goods + land + MULEs + offices; your own lines are beside, for you only.');
     }
     expect(onTv(end(null), TvMonthEnd)).toBe(onTv(end(undefined), TvMonthEnd));
+    // HC-22 to the tag: with no score, the footnote is today's bare <p>, and no wrapper sits around the league or the panel.
+    for (const colony of [null, { ...MONTH_7, score: null }]) {
+      const view = end(colony);
+      const footnote = '<p class="mt-auto text-[11px] leading-snug text-ink-3" data-testid="colony-on-tv">How the colony is doing is on the TV. Worth is cash + goods + land + MULEs + offices; your own lines are beside, for you only.</p>';
+      const phoneLeague = renderToStaticMarkup(createElement(LeagueTable, { view, density: 'phone', selfId: 's1' }));
+      // The footnote is the month end's last child, straight after the league: no wrapper around it.
+      expect(element(onPhone(view, 1, Results), 'phone-monthend').endsWith(`${phoneLeague}${footnote}</div>`)).toBe(true);
+      const panel = renderToStaticMarkup(createElement(ColonyPanel, { view, density: 'compact' }));
+      expect(element(onPhone(view, 0, Results), 'phone-only-colony')).toBe(`<div class="relative" data-testid="phone-only-colony">${panel}</div>`);
+    }
+    const unscoredView = end({ ...MONTH_7, score: null });
+    const league = renderToStaticMarkup(createElement(LeagueTable, { view: { ...unscoredView, me: null }, density: 'tv' }));
+    expect(onTv(unscoredView, TvMonthEnd)).toContain(`<div class="grid flex-1 grid-cols-[minmax(0,6fr)_minmax(0,6fr)] gap-6">${league}<div class="flex flex-col gap-4">`);
     // With the colony on but its score not counted, the month end is the screen before this change: no band, today's footnote.
     const unscored = onPhone(end({ ...MONTH_7, score: null }), 1, Results);
     expect(has(unscored, 'phone-month-score')).toBe(false);
