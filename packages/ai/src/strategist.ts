@@ -4,8 +4,10 @@ import {
   DEVELOPMENT,
   GAME,
   GOOD_CONFIG,
+  monthNeeds,
   mulePrice,
   mulePriceFor,
+  needsOf,
   neighbours,
   outfitBlocked,
   POLLUTION,
@@ -495,8 +497,8 @@ export interface GoodPlan {
   /** Extra value per unit, up to the others' shortfall, for cornering a scarce good. */
   corner: { units: number; premium: number };
   /**
-   * Units it buys up to, as far as its money goes, and never sells under: next month's need while it holds less and the
-   * store sells the good (STRATEGIST.buyShortfall); 0 otherwise.
+   * Units it buys up to, as far as its money goes, and never sells under: what keeps it whole next month (wholeNextMonth)
+   * while it holds less and the store sells the good (STRATEGIST.buyShortfall); 0 otherwise.
    */
   mustHold: number;
 }
@@ -513,13 +515,14 @@ export function goodPlan(obs: GameState, mind: Mind, good: Good): GoodPlan {
     const now = afterTax(obs, expectedPrices(obs, good).sell);
     for (let k = values.block; k < values.keep.length; k++) values.keep[k] = Math.min(values.keep[k]!, now - 1);
   }
-  // Short of next month's need is a loss, not a small cost (Heiko, 5 Nov): while the store sells the good, each unit of
-  // the shortfall is worth at least the store's ask, so the seat buys it there or cheaper from a player, never dearer,
-  // and sells none of the units it needs. The need is the status screen's, whatever its own plots may make.
+  // Short for next month is a loss, not a small cost (Heiko, 5 Nov): while the store sells the good, each unit up to
+  // what keeps the seat whole is worth at least the store's ask, so it buys it there or cheaper from a player, never
+  // dearer, and it sells none of them.
   const ask = STRATEGIST.buyShortfall.includes(good) ? storeSellLine(obs) : null;
-  const mustHold = ask !== null && p.stock[good] < values.need ? values.need : 0;
+  const whole = wholeNextMonth(obs, mind.me, good);
+  const mustHold = ask !== null && p.stock[good] < whole ? whole : 0;
   for (let k = 0; k < mustHold; k++) {
-    values.buy[k] = Math.max(values.buy[k]!, ask!);
+    values.buy[k] = Math.max(values.buy[k] ?? 0, ask!);
     values.keep[k] = Infinity;
   }
   values.floorUnits = Math.max(values.floorUnits, mustHold);
@@ -545,6 +548,21 @@ export function goodPlan(obs: GameState, mind: Mind, good: Good): GoodPlan {
     values.buy.sort((x, y) => y - x);
   }
   return { good, values, budget, reserve, spiteBid, corner, mustHold };
+}
+
+/**
+ * What the seat must hold of a good at the auction to be whole next month, in the engine's order: upkeep eats its Food
+ * and drinks its Water, then every good spoils and the depot keeps what it can; next development is hungry under the
+ * household's Food, and next production halves a plot short of its Energy, or a farm whose owner is short of Water.
+ * Water counts only for a seat with a farm to water: without one, going short costs it nothing. 0 for other goods.
+ */
+export function wholeNextMonth(obs: GameState, me: string, good: Good): number {
+  const kept = (n: number) => Math.ceil(Math.min(n, UPKEEP.depotCapacity) / (1 - GOOD_CONFIG[good].spoilage));
+  if (good === 'food') return needsOf(obs, me).food + kept(needsOf(obs, me).food);
+  if (good === 'energy') return kept(monthNeeds(obs, me).energy);
+  const farms = obs.tiles.some((t) => t.owner === me && UPKEEP.irrigated.includes(t.outfit as never));
+  if (good === 'water' && farms) return needsOf(obs, me).water + kept(needsOf(obs, me).water);
+  return 0;
 }
 
 /** The price the seat expects to get for a unit, and to pay: the houses' lines while they trade, otherwise around the posted price. */
