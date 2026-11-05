@@ -295,6 +295,11 @@ export interface MyPoliticsView {
   reputation: number;
   /** Their own vote on the open law ballot, yes or no; null when they have cast none. Never anyone else's. */
   lawBallot?: boolean | null;
+  /**
+   * The Governor's own view only, in planning while no vote is open: what each proposal they may make would cost each
+   * player a month (RULE-45), keyed `<law>:<setting>` for each enact and `repeal:<law>` for each law in force.
+   */
+  candidates?: Record<string, Record<string, LawImpact>>;
 }
 
 /** The law ballot as every screen sees it: who has voted, never how; the totals only from the reveal. */
