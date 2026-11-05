@@ -123,14 +123,18 @@ describe.runIf(process.env.MULE_FULL === '1')('brain:trial', () => {
 
       // Every asked Smart decision made a call: the fast seat's are the model's, the slow seat's fell back as too slow.
       expect(report!.asked.all).toEqual({ model: fast.length, of: fast.length + slow.length });
-      for (const kind of ['land', 'develop', 'trade'] as const) {
+      // On the arcade floor the development plays its seeded default pick with no ask (trunk; the gap is with Heiko), so
+      // only land and trade are asked.
+      expect(requests.filter((r) => r.kind === 'develop')).toEqual([]);
+      expect(report!.asked.develop).toEqual({ model: 0, of: 0 });
+      for (const kind of ['land', 'trade'] as const) {
         const n = (rs: typeof requests) => rs.filter((r) => r.kind === kind).length;
         expect(report!.asked[kind], kind).toEqual({ model: n(fast), of: n(fast) + n(slow) });
       }
       expect(report!.smartAll.model).toBe(fast.length);
       expect(report!.smartAll.of).toBeGreaterThanOrEqual(fast.length + slow.length);
       expect(report!.fallbacks).toEqual({ 'too slow': slow.length, busy: 0, budget: 0, 'off-list': 0, unreadable: 0, error: 0 });
-      for (const kind of ['land', 'develop', 'trade'] as const) {
+      for (const kind of ['land', 'trade'] as const) {
         const tooSlow = slow.filter((r) => r.kind === kind).length;
         expect(tooSlow, kind).toBeGreaterThan(0);
         expect(report!.fallbacksByKind[kind], kind).toEqual({ 'too slow': tooSlow, busy: 0, budget: 0, 'off-list': 0, unreadable: 0, error: 0 });

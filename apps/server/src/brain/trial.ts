@@ -8,8 +8,8 @@
  * run per UTC day. Each game's Smart seats together spend at most the game budget (default BRAIN.gameBudgetUsd).
  */
 import fs from 'node:fs';
-import { BRAIN } from '@mule/engine';
-import { playbookSource, playGameAsync, ReplyRejected, simSeats, type Choice, type Decider, type DecisionRecord, type SeatSpec } from '@mule/ai';
+import { BRAIN, type GameState, type Playbook } from '@mule/engine';
+import { playbookSource, playGameAsync, type AiSeat, ReplyRejected, simSeats, type Choice, type Decider, type DecisionRecord, type SeatSpec } from '@mule/ai';
 import { alreadyRanToday, AUTH_STOPPED, claimLedger, day, dayLedgerPath, KINDS, numberFlags, resolveDeps, runAsScript, type MainDeps } from './cli.js';
 import { CallFailed } from './client.js';
 import { API_KEY_ENV, apiKeyFrom, createBrain, type BrainSeat } from './index.js';
@@ -91,7 +91,8 @@ async function playTrialGame(setup: GameSetup): Promise<TrialGame> {
   const game: TrialGame = { id, end: 'unfinished', months: 0, smart: [], decisions: [], lines: {}, modelLines: {}, cutOff: [], countedUsd: 0, settledCalls: 0, playbooks: [] };
   // The Smart seats' playbooks (spec A C4): asked for at the start and as each upkeep ends, in effect from the land
   // grant. The strategist seats play their own drafts; in whatIf they play as the engine's Trader would.
-  const held: { playbooks: Playbooks | null } = { playbooks: null };
+  // The game's live state (from onSeats), and the month whose auction was last asked.
+  const held: { playbooks: Playbooks | null; state: GameState | null; auctionAsked: number } = { playbooks: null, state: null, auctionAsked: -1 };
   const calls = trackCalls();
   const chat = new Map<string, (record: DecisionRecord) => void>();
   // The record being routed to a seat's chatter, read by its say.
@@ -124,6 +125,7 @@ async function playTrialGame(setup: GameSetup): Promise<TrialGame> {
       onSeats: (seats, state) => {
         const smart = seats.filter((s) => game.smart.includes(s.id));
         if (!setup.playbooks || smart.length === 0) return;
+        held.state = state;
         held.playbooks = new Playbooks({
           brain,
           source: playbookSource(smart),
@@ -147,9 +149,27 @@ async function playTrialGame(setup: GameSetup): Promise<TrialGame> {
         if (state.phase === 'planning') held.playbooks?.takeEffect(state);
         if (state.phase === 'upkeep') held.playbooks?.ask(state, state.month + 1);
       },
+      // A phase's draft point, before its first tick: the development part the land write carried, and the auction's
+      // edits, are taken there, as MuleGame takes them at the phase's start. Nothing else is edited here.
+      ...(setup.playbooks
+        ? {
+            edits: (_seat: AiSeat, _draft: Playbook, state: GameState) => {
+              if (state.phase === 'development' || state.phase === 'auction') held.playbooks?.takePhase(state, state.phase);
+              return null;
+            },
+          }
+        : {}),
       // Each call is bounded by its kind's wait, so this pauses simulated time for at most that long. See C6.
       between: async () => {
         if (calls.authRefused() || brain.authRefused()) throw new AuthRefused();
+        // Production has run: the auction's edits are asked, as the server asks them in the production show (AM-A16),
+        // and settled below before the auction opens. The development's facts stay inside the game loop, so the brief
+        // has no development outcome here.
+        const state = held.state;
+        if (held.playbooks && state?.phase === 'production' && held.auctionAsked !== state.month) {
+          held.auctionAsked = state.month;
+          held.playbooks.askPhase(state, 'auction', []);
+        }
         await calls.drain();
         await held.playbooks?.settle();
         if (calls.authRefused() || brain.authRefused()) throw new AuthRefused();

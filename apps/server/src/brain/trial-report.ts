@@ -81,7 +81,7 @@ export interface TrialReport {
   stopped: TrialStop;
   smartPerGame: number;
   seatsPerGame: number;
-  /** Smart decisions in finished games the model was asked (two or more options), overall and per kind. */
+  /** Smart decisions in finished games the model was asked (two or more options, not a default pick), overall and per kind. */
   asked: Record<'all' | DecisionKind, Share>;
   /** Every Smart decision, single-option ones included. */
   smartAll: Share;
@@ -176,7 +176,9 @@ export function trialReport(input: TrialInput): TrialReport {
   // A game cut short has a partial last month and a partial record, so the decision and line figures cover finished games only.
   const finished = games.filter((g) => g.end === 'over');
   const smartDecisions = finished.flatMap((g) => g.decisions.filter((d) => g.smart.includes(d.seat)));
-  const asked = smartDecisions.filter((d) => d.options >= 2);
+  // A Smart decision by 'top' was never put to the model: a failed or late ask is a fallback. On the arcade floor the
+  // development plays its seeded default pick with no ask.
+  const asked = smartDecisions.filter((d) => d.options >= 2 && d.by !== 'top');
   const perMonth = (of: (g: TrialGame) => Record<string, number[]>) =>
     finished.flatMap((g) => g.smart.flatMap((seat) => Array.from({ length: g.months }, (_, m) => of(g)[seat]?.[m] ?? 0)));
   const allLines = perMonth((g) => g.lines);
