@@ -134,25 +134,42 @@ export function AnalyseCard({ t, style }: { t: TileView; style?: CSSProperties }
 }
 
 /**
- * PROPOSED (WS4's named edit in HoloMap's marks): on the map of the player who did the geology, a known plot shows its
- * best good as 0–3 dots (today 0–4), and a gem on the plot's top-left corner when it holds Crystite or Rare earth.
- * Laid over HoloMap here (hideGround) on the same grid; in the build it is HoloMap's own mark.
+ * A gem on the map: about 40% of the plot, like the owner's tab, so it scales with the map (WS4's read, 5 Nov). Two on
+ * an owned plot are 30% each, so the pair still fits right of the tab (54% + 30% + 15% = 99%).
  */
-export function MapMarks({ tiles, width, height, scanning = [] }: { tiles: TileView[]; width: number; height: number; scanning?: { x: number; y: number }[] }) {
+function MapGem({ good, nth, share }: { good: RawGood; nth: number; share: number }) {
+  return (
+    <span
+      className="relative grid aspect-square shrink-0 place-items-center rounded-full shadow-chip ring-1 ring-white/80"
+      style={{ width: `${share}%`, background: `var(--color-g-${good})`, marginLeft: nth > 0 ? `-${share / 2}%` : 0, zIndex: 2 - nth }}
+      title={`${GOOD_NAME[good]} here`}
+      data-testid={`gem-${good}`}
+    >
+      <GoodIcon good={good} color="white" className="h-[62%] w-[62%]" />
+    </span>
+  );
+}
+
+/**
+ * PROPOSED (WS4's named edit in HoloMap's marks): on the map of the player who did the geology, a known plot shows its
+ * best good as 0–3 dots (today 0–4), and a gem when it holds Crystite or Rare earth: top-left on a free plot, just right
+ * of the owner's tab on an owned one (the tab is 46% wide at 4%), two gems overlapping by half. With a MULE on the plot
+ * the gem stays and the dots hide, as HoloMap hides its pips under an installed good. Laid over HoloMap here
+ * (hideGround) on the same grid; in the build it is HoloMap's own mark.
+ */
+export function MapMarks({ tiles, width, height }: { tiles: TileView[]; width: number; height: number }) {
   return (
     <div className="pointer-events-none absolute inset-0 grid" style={{ gridTemplateColumns: `repeat(${width}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${height}, minmax(0, 1fr))` }} data-testid="map-marks">
       {tiles.map((t) => {
-        const scan = scanning.some((p) => p.x === t.x && p.y === t.y);
-        if (!t.ground && !scan) return <span key={`${t.x},${t.y}`} />;
+        if (!t.ground) return <span key={`${t.x},${t.y}`} />;
         const gems = t.ground ? gemsIn(t.ground) : [];
         const best = t.ground ? bestOf(t.ground) : null;
         return (
           <span key={`${t.x},${t.y}`} className="relative" style={{ gridColumn: t.x + 1, gridRow: t.y + 1 }}>
-            {scan && <span className="absolute inset-[6%] animate-ping rounded-[12%] border-2 border-holo" />}
             {gems.length > 0 && (
-              <span className="absolute left-[4%] top-[4%] flex gap-px" data-testid={`map-gem-${t.x}-${t.y}`}>
-                {gems.map((g) => (
-                  <Gem key={g} good={g} size={9} />
+              <span className={cx('absolute top-[4%] flex w-full', t.owner ? 'left-[54%]' : 'left-[4%]')} data-testid={`map-gem-${t.x}-${t.y}`}>
+                {gems.map((g, i) => (
+                  <MapGem key={g} good={g} nth={i} share={t.owner && gems.length > 1 ? 30 : 40} />
                 ))}
               </span>
             )}

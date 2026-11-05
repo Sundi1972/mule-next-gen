@@ -18,12 +18,12 @@ type Pt = { x: number; y: number };
 const same = (a: Pt, b: Pt) => a.x === b.x && a.y === b.y;
 
 /** The map as the phone draws it, with the proposed marks over it. */
-function Map({ tiles, view, selected = null, onTile, scanning, children }: { tiles: MapTile[]; view: TileView[]; selected?: Pt | null; onTile?: (t: MapTile) => void; scanning?: Pt[]; children?: ReactNode }) {
+function Map({ tiles, view, selected = null, onTile, children }: { tiles: MapTile[]; view: TileView[]; selected?: Pt | null; onTile?: (t: MapTile) => void; children?: ReactNode }) {
   return (
     <MapFit width={W} height={H}>
       <div className="relative" style={{ aspectRatio: `${W} / ${H}` }}>
         <HoloMap width={W} height={H} tiles={tiles} selected={selected} focusSlot={0} hideGround {...(onTile ? { onTile } : {})} className="absolute inset-0" />
-        <MapMarks tiles={view} width={W} height={H} {...(scanning ? { scanning } : {})} />
+        <MapMarks tiles={view} width={W} height={H} />
         {children}
       </div>
     </MapFit>
@@ -99,14 +99,14 @@ export function PlanningScan({ variant, scan }: { variant: Variant; scan: Return
   const known = new Set(KNOWN);
   if (scan.stage === 'report') for (const p of scan.picked) known.add(`${p.x},${p.y}`);
   const view = viewWith(known);
-  const tiles = mapTiles(view).map((t) => (scan.stage === 'pick' && scan.picked.some((p) => same(p, t)) ? { ...t, flag: 'survey' as const } : t));
+  const tiles = mapTiles(view).map((t) => (scan.stage !== 'report' && scan.picked.some((p) => same(p, t)) ? { ...t, flag: 'survey' as const } : t));
   const scanned = scan.picked.map((p) => tileOf(view, p.x, p.y));
   const free = (t: MapTile) => t.owner === null && t.terrain !== 'store';
   return (
     <PlanningFrame
       tool="drone"
       map={
-        <Map tiles={tiles} view={view.tiles} onTile={(t) => free(t) && scan.toggle(t)} {...(scan.stage === 'scanning' ? { scanning: scan.picked } : {})}>
+        <Map tiles={tiles} view={view.tiles} onTile={(t) => free(t) && scan.toggle(t)} >
           {variant === 'B' && scan.stage === 'report' && scanned.map((t) => <MapCallout key={`${t.x},${t.y}`} t={t} />)}
         </Map>
       }
@@ -359,7 +359,7 @@ export function GemMap() {
             A plot you've analysed shows its best good, 0–3 dots, on its lower edge (a plot with a MULE shows the MULE's good, as today).
           </span>
           <span>
-            A <b>gem</b> on its top-left corner: it holds Crystite or Rare earth, whatever else it's best for. Here:{' '}
+            A <b>gem</b> at its top, left on a free plot and beside your mark on your own: it holds Crystite or Rare earth, whatever else it's best for. A plot with a MULE keeps its gem. Here:{' '}
             {gemPlots(view.tiles)}.
           </span>
           <span className="text-ink-3">The TV and the other phones never show either.</span>

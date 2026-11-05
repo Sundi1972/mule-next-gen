@@ -68,7 +68,7 @@ export const GROUND: Record<string, Ground> = {
   '7,2': g(2, 2, -1, 0, 2),
   '7,3': g(1, 1, 0, 0, 0, 1),
   '6,5': g(1, -1, 2),
-  '5,5': g(0, -1, 3, 0, 0, 3),
+  '5,5': g(0, -1, 3, 0, 1, 3),
   '4,3': g(2, 3, -1),
   '5,6': g(0, -2, 1, 0, 3),
   // Free plots: two for the drone, one to Analyse in development, one analysed last month.
