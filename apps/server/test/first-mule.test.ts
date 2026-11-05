@@ -138,11 +138,7 @@ describe("Heiko 5 Nov, 'Yes, always count': month 1's development clock counts d
   it('month 1: the full clock starts as development opens, though nobody has a MULE yet', () => {
     const { game, ctx } = firstMonth();
     const view = game.viewFor(LENA);
-    expect({ devEndsAt: view.me?.devEndsAt ?? null, phaseEndsAt: view.phaseEndsAt, waitsFor: view.clockWaitsFor }).toEqual({
-      devEndsAt: ctx.now() + FULL_MS,
-      phaseEndsAt: ctx.now() + FULL_MS,
-      waitsFor: undefined,
-    });
+    expect({ devEndsAt: view.me?.devEndsAt ?? null, phaseEndsAt: view.phaseEndsAt }).toEqual({ devEndsAt: ctx.now() + FULL_MS, phaseEndsAt: ctx.now() + FULL_MS });
   });
 
   it('month 1: with its first MULE in, a seat buys a second at once while the other has none', () => {

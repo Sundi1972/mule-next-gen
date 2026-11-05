@@ -64,9 +64,6 @@ const allRows = (): [string, Row][] => [...Object.entries(EVENTS.colony), ...Obj
 function forceOnly(key: EventKey, from: number): () => void {
   const saved = allRows().map(([, row]) => ({ row, phases: { ...row.phases }, cap: row.cap }));
   const firstMonth = EVENTS.firstMonth;
-  // Month 1's clock runs from the start, as every later month's does, instead of waiting for first MULEs (A-1).
-  const waits = DEV_STEER.month1WaitsForFirstMule;
-  DEV_STEER.month1WaitsForFirstMule = false;
   for (const [k, row] of allRows()) {
     row.phases = Object.fromEntries(Object.keys(row.phases).map((p) => [p, k === key ? 1 : 0]));
     if (k === key) row.cap = 1;
@@ -75,7 +72,6 @@ function forceOnly(key: EventKey, from: number): () => void {
   return () => {
     for (const { row, phases, cap } of saved) Object.assign(row, { phases, cap });
     EVENTS.firstMonth = firstMonth;
-    DEV_STEER.month1WaitsForFirstMule = waits;
   };
 }
 

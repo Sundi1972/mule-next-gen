@@ -30,7 +30,6 @@ function playTwoMonths(look: (game: MuleGame, state: GameState) => void): Set<Ph
     look(game, state);
     if (state.phase === 'planning' || state.phase === 'upkeep') readyAll(game);
     // s1 never installs on its plot: as host it starts month 1's waiting development clock (A-1).
-    if (game.viewFor(null).clockWaitsFor) game.handle('s1', { type: 'continue' });
     const lit = state.phase === 'landGrant' && claimedIn !== state.month ? game.viewFor('s1').lit : null;
     if (lit) {
       game.handle('s1', { type: 'claim', ...lit });

@@ -12,7 +12,7 @@ import { fakeContext, pressAct, readyAll, steerTo, type SteerPoint } from './fak
  */
 
 const TICK = DEV_STEER.tickMs;
-/** A whole game: twelve developments, month 1's wait for first MULEs among them. */
+/** A whole game: twelve developments. */
 const MONTHS = 12;
 const GAMES: { seed: number; politics: boolean }[] = [
   { seed: 1, politics: false },
@@ -150,38 +150,32 @@ const toPub: SteerPoint[] = [
 ];
 
 /**
- * The mixed table played into month 1's development, its clock running from the start as in any later month; and,
+ * The mixed table played into month 1's development, its clock running from the start as in every month; and,
  * once development ends, whether the AI seat was done then and whether the clock had run out.
  */
 function mixedDevelopment() {
-  const rule = DEV_STEER.month1WaitsForFirstMule;
-  DEV_STEER.month1WaitsForFirstMule = false;
-  try {
-    const fake = fakeContext({ table: mixed });
-    const game = new MuleGame(fake.ctx, 7, { brain: createBrain({ gameId: 'ai-wait', env: {} }), log: () => {} });
-    const inside = game as unknown as Inside & { devEndsAt: number | null };
-    const ended: { aiDone: boolean; timeUp: boolean }[] = [];
-    const finish = inside.finishDevelopment.bind(game);
-    inside.finishDevelopment = () => {
-      const ai = inside.state.players.find((p) => p.id === BARON)!;
-      ended.push({ aiDone: ai.doneDeveloping, timeUp: inside.devEndsAt !== null && inside.devEndsAt <= fake.ctx.now() });
-      finish();
-    };
-    game.start(mixed);
-    readyAll(game);
-    for (let i = 0; i < 10_000 && inside.state.phase !== 'development'; i++) fake.advance(100);
-    if (inside.state.phase !== 'development') throw new Error('month 1 never reached development');
-    const aiOf = () => inside.state.players.find((p) => p.id === BARON)!;
-    /** The AI seat still has its turn and the clock time left. */
-    const aiStillWalking = () => !aiOf().doneDeveloping && inside.devEndsAt !== null && inside.devEndsAt > fake.ctx.now();
-    /** Runs the ticks until development ends, at most a full clock and a second more. */
-    const runOut = () => {
-      for (let i = 0; i < 2_000 && inside.state.phase === 'development'; i++) fake.advance(TICK);
-    };
-    return { game, fake, inside, ended, aiOf, aiStillWalking, runOut };
-  } finally {
-    DEV_STEER.month1WaitsForFirstMule = rule;
-  }
+  const fake = fakeContext({ table: mixed });
+  const game = new MuleGame(fake.ctx, 7, { brain: createBrain({ gameId: 'ai-wait', env: {} }), log: () => {} });
+  const inside = game as unknown as Inside & { devEndsAt: number | null };
+  const ended: { aiDone: boolean; timeUp: boolean }[] = [];
+  const finish = inside.finishDevelopment.bind(game);
+  inside.finishDevelopment = () => {
+    const ai = inside.state.players.find((p) => p.id === BARON)!;
+    ended.push({ aiDone: ai.doneDeveloping, timeUp: inside.devEndsAt !== null && inside.devEndsAt <= fake.ctx.now() });
+    finish();
+  };
+  game.start(mixed);
+  readyAll(game);
+  for (let i = 0; i < 10_000 && inside.state.phase !== 'development'; i++) fake.advance(100);
+  if (inside.state.phase !== 'development') throw new Error('month 1 never reached development');
+  const aiOf = () => inside.state.players.find((p) => p.id === BARON)!;
+  /** The AI seat still has its turn and the clock time left. */
+  const aiStillWalking = () => !aiOf().doneDeveloping && inside.devEndsAt !== null && inside.devEndsAt > fake.ctx.now();
+  /** Runs the ticks until development ends, at most a full clock and a second more. */
+  const runOut = () => {
+    for (let i = 0; i < 2_000 && inside.state.phase === 'development'; i++) fake.advance(TICK);
+  };
+  return { game, fake, inside, ended, aiOf, aiStillWalking, runOut };
 }
 
 describe('a table with a human waits for its AI colonists in a steered development', () => {

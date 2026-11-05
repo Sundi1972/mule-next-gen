@@ -21,7 +21,7 @@ function playedOut() {
   game.handle('s1', { type: 'claim', x: lit.x, y: lit.y });
   while (game.viewFor(null).phase !== 'development') step();
   // The score parts are this test's subject, not the errand (walking it is dev-steer.test.ts's): the food MULE goes on
-  // s1's plot as installing leaves it, and month 1's clock, waiting for first MULEs, counts s1 in.
+  // s1's plot as installing leaves it.
   const state = (game as unknown as { state: GameState }).state;
   state.tiles.find((t) => t.x === lit.x && t.y === lit.y)!.outfit = 'food';
   state.players.find((p) => p.id === 's1')!.installedThisTurn = true;

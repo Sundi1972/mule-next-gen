@@ -137,17 +137,14 @@ describe('the AI walks the floor, and the sim plays it (arcade C9, C10)', () => 
   });
 
   it('T-AC-5 negative: with a store floor that takes longer than the clock to cross, no colonist reaches the pub', { timeout: 120_000 }, async () => {
-    const saved = { floorSeconds: DEV_STEER.floorSeconds, waits: DEV_STEER.month1WaitsForFirstMule };
+    const saved = { floorSeconds: DEV_STEER.floorSeconds };
     // The pub is three hall units in from the right door, a third of the door-to-corral walk: four clocks a crossing.
     DEV_STEER.floorSeconds = DEVELOPMENT.fullSeconds * 4;
-    // Month 1's waiting clock would give them the time: this is the clock alone.
-    DEV_STEER.month1WaitsForFirstMule = false;
     try {
       const [first] = await steeredTurns(1);
       expect(first!.map((t) => t.pubAt)).toEqual(LEVELS.map(() => null));
     } finally {
       DEV_STEER.floorSeconds = saved.floorSeconds;
-      DEV_STEER.month1WaitsForFirstMule = saved.waits;
     }
   });
 });
@@ -322,60 +319,19 @@ describe('the sim referees the floor as the server will (arcade C10)', () => {
     });
   });
 
-  it("AM-19: a turn steps tick n only while n × tickMs is under the clock, so the bell comes first, as on the server", () => {
-    const saved = DEV_STEER.month1WaitsForFirstMule;
-    DEV_STEER.month1WaitsForFirstMule = false;
-    try {
-      steered(() => {
-        const state = createGame({ seed: 4, players: LEVELS.map((_, i) => ({ id: `ai${i}`, name: `AI ${i + 1}`, isAi: true })) });
-        while (state.phase !== 'development') advancePhase(state);
-        // Seats that stand still and never press: nobody goes to the pub, so the turn runs to the bell.
-        // They log no steps, race nothing.
-        const idle = state.players.map((p) => ({ id: p.id, developSteer: () => ({ x: 0, y: 0, act: false }), developLog: () => [], developRacing: () => null, developScramblesRaced: () => 0 })) as unknown as AiSeat[];
-        const phase = playFloorPhase(state, idle);
-        let ticks = 0;
-        for (let step = phase.next(); !step.done; step = phase.next()) ticks++;
-        expect(ticks).toBe((DEVELOPMENT.fullSeconds * MS_PER_SECOND) / DEV_STEER.tickMs - 1);
-      });
-    } finally {
-      DEV_STEER.month1WaitsForFirstMule = saved;
-    }
-  });
-
-  it('AM-3: in month 1 the clock stands until every seat has its first MULE in, and runs at once without the rule', { timeout: 120_000 }, async () => {
-    const month1 = (waits: boolean) => {
-      const saved = DEV_STEER.month1WaitsForFirstMule;
-      DEV_STEER.month1WaitsForFirstMule = waits;
-      try {
-        return steered(() => playGame(1, seatsFor(1)));
-      } finally {
-        DEV_STEER.month1WaitsForFirstMule = saved;
-      }
-    };
-    const waited = month1(true);
-    await yieldToWorker();
-    // The seats got in by themselves (no host's stand-in), and the time they took stood off the clock.
-    expect(waited.month1).toMatchObject({ continued: false });
-    expect(waited.month1!.waited).toBeGreaterThan(0);
-    const first = waited.turns.filter((t) => t.month === 1);
-    expect(first.every((t) => t.installs > 0), JSON.stringify(first)).toBe(true);
-    // The hands' `held` is the referee's own refusal: a seat already in never presses one, so none is refused.
-    expect(waited.turns.map((t) => t.refused)).toEqual(waited.turns.map(() => 0));
-    expect(month1(false).month1).toBeNull();
-    await yieldToWorker();
-    // While ai3 stands idle, never in, the clock waits; the others, told nothing is held, press what it refuses: each
-    // refused press is counted, per turn (§4).
-    const original = AiSeat.prototype.developSteer;
-    const spy = vi.spyOn(AiSeat.prototype, 'developSteer').mockImplementation(function (this: AiSeat, state, floor, secondsLeft, cfg) {
-      return this.id === 'ai3' ? { x: 0, y: 0, act: false } : original.call(this, state, floor, secondsLeft, cfg, false);
+  it("AM-19 (and Heiko 5 Nov, 'always count'): month 1's turn steps tick n only while n × tickMs is under the clock, from the start, so the bell comes first, as on the server", () => {
+    steered(() => {
+      const state = createGame({ seed: 4, players: LEVELS.map((_, i) => ({ id: `ai${i}`, name: `AI ${i + 1}`, isAi: true })) });
+      while (state.phase !== 'development') advancePhase(state);
+      expect(state.month).toBe(1);
+      // Seats that stand still and never press: nobody goes to the pub or installs a MULE, so the turn runs to the bell.
+      // They log no steps, race nothing.
+      const idle = state.players.map((p) => ({ id: p.id, developSteer: () => ({ x: 0, y: 0, act: false }), developLog: () => [], developRacing: () => null, developScramblesRaced: () => 0 })) as unknown as AiSeat[];
+      const phase = playFloorPhase(state, idle);
+      let ticks = 0;
+      for (let step = phase.next(); !step.done; step = phase.next()) ticks++;
+      expect(ticks).toBe((DEVELOPMENT.fullSeconds * MS_PER_SECOND) / DEV_STEER.tickMs - 1);
     });
-    try {
-      const unheld = month1(true).turns.filter((t) => t.month === 1);
-      expect(unheld.find((t) => t.id === 'ai3')!.refused).toBe(0);
-      expect(unheld.reduce((n, t) => n + t.refused, 0), JSON.stringify(unheld)).toBeGreaterThan(0);
-    } finally {
-      spy.mockRestore();
-    }
   });
 });
 
@@ -391,7 +347,7 @@ type Leg = 'corral' | 'outfitter' | 'plot' | 'pub' | 'mule';
  * Every MULE the AI seats walked in `games` steered games from seed 1: per leg, the estimate (floor-time.ts muleLegs,
  * what developDecision's veto adds up, plus the counter's pause before the press) from where the colonist stood when
  * it set off, against the floor ticks it took. A leg runs from the tick the seat first sees its last press taken to the
- * tick it sees this one taken. MULEs whose walk ran through anything else (an analysis, a filter, month 1's hold, a
+ * tick it sees this one taken. MULEs whose walk ran through anything else (an analysis, a filter, a
  * moment: wolves, a bite, a stun, a bolted MULE, pelts to sell, a glint race, a leg by wolf land) are left out: their
  * time is not the walk's.
  */
@@ -404,7 +360,7 @@ async function muleWalks(games: number): Promise<Record<Leg, LegTime[]>> {
   const own = (state: GameState, me: string) => state.tiles.map((t, i) => ({ t, i })).filter(({ t }) => t.owner === me);
   const filters = (state: GameState, me: string) => own(state, me).filter(({ t }) => t.filter).length;
   const original = AiSeat.prototype.developSteer;
-  const spy = vi.spyOn(AiSeat.prototype, 'developSteer').mockImplementation(function (this: AiSeat, state, floor, secondsLeft, cfg = simFloorConfig(), held = false) {
+  const spy = vi.spyOn(AiSeat.prototype, 'developSteer').mockImplementation(function (this: AiSeat, state, floor, secondsLeft, cfg = simFloorConfig()) {
     const me = this.mind.me;
     const p = state.players.find((q) => q.id === me)!;
     const c = floor.colonists.find((x) => x.id === me)!;
@@ -415,12 +371,12 @@ async function muleWalks(games: number): Promise<Record<Leg, LegTime[]>> {
     if (!s || s.month !== state.month) {
       s = { month: state.month, carried: p.carriedMule, trip: null, pub: null, lastAct: -1, last: -1 };
       seats.set(me, s);
-      if (p.carriedMule === null) s.trip = { at: t, c, analysed: p.analysed.length, held };
+      if (p.carriedMule === null) s.trip = { at: t, c, analysed: p.analysed.length, held: false };
     }
     const was = s.carried;
     const now = p.carriedMule;
     const moment = c.encounter !== null || c.bitten || (c.stunnedUntilTick ?? -1) > t || !!c.bolt || c.pelts > 0 || this.developDetouring();
-    if (held || moment) {
+    if (moment) {
       if (s.trip) s.trip.held = true;
       if (s.pub) s.pub.held = true;
     }
@@ -445,10 +401,10 @@ async function muleWalks(games: number): Promise<Record<Leg, LegTime[]>> {
           s.pub = { at: t, index, pause, c, analysed: p.analysed.length, filters: filters(state, me), held: false };
         }
       }
-      s.trip = now === null ? { at: t, c, analysed: p.analysed.length, held } : trip;
+      s.trip = now === null ? { at: t, c, analysed: p.analysed.length, held: false } : trip;
       s.carried = now;
     }
-    const input = original.call(this, state, floor, secondsLeft, cfg, held);
+    const input = original.call(this, state, floor, secondsLeft, cfg);
     s.last = t;
     if (input.act) s.lastAct = t;
     return input;

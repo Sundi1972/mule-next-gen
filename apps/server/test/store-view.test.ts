@@ -1,7 +1,7 @@
 import { airBand, DEV_WALK, DEVELOPMENT, foodShare, hungerPace, needsOf, POLLUTION, sickPace, type GameState } from '@mule/engine';
 import { describe, expect, it } from 'vitest';
 import { GRANT_TICK_MS, MuleGame } from '../src/mule-game.js';
-import { clockRunsInMonth1, fakeContext, readyAll, seats } from './fake-context.js';
+import { fakeContext, readyAll, seats } from './fake-context.js';
 
 /** Nine working farms give a crew of nine, so s1 needs 5 Food a month. */
 const FARMS = 9;
@@ -30,7 +30,6 @@ function hungryWithAnEmptyCorral() {
 
 describe('the store view at the start of development', () => {
   // The clock as such, met in month 1: it runs from the start, as in any later month.
-  clockRunsInMonth1();
 
   it("B-AC-9 / B-AC-10: a hungry seat and an empty corral reach the phone's view", () => {
     const { game, state } = hungryWithAnEmptyCorral();

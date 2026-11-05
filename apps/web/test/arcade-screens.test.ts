@@ -287,23 +287,6 @@ describe('C11: the phone, held sideways', () => {
     expect(phone(devView(), live(mine(5.5, 4.5)))).not.toContain('data-testid="reconnecting"');
   });
 
-  it('C11 (AM-20, A-1): while month 1\'s clock waits, the side room says so in A-1\'s words, not only a full clock', () => {
-    const waits = (me: MyView, size: 844 | 667 = 844, waitsFor = ['s2']) => phone(devView(me, { month: 1, clockWaitsFor: waitsFor }), live(mine(5.5, 4.5)), size);
-    // Your MULE is in and Ossa's still to come.
-    const inAt844 = waits(lenasMe({ installedThisTurn: true }));
-    expect(text(inside(inAt844, 'phone-status-left'), 'wait-title')).toBe('Your MULE is in · waiting for Ossa');
-    expect(text(inAt844, 'wait-detail')).toBe('Buying, installing and analysing wait for the clock.');
-    expect(inside(inAt844, 'phone-status-left')).toContain('data-testid="shared-clock"');
-    // At 667 the status is a bar over the map: the title goes there.
-    expect(text(inside(waits(lenasMe({ installedThisTurn: true }), 667), 'phone-status-bar'), 'wait-title')).toBe('Your MULE is in · waiting for Ossa');
-    // Before your first MULE (the clock waits for you too), no rush: the corral, and why.
-    const before = waits(lenasMe(), 844, ['s1', 's2']);
-    expect(text(before, 'wait-title')).toBe('Buy a MULE at the corral');
-    expect(text(before, 'wait-detail')).toBe('Your first month: no rush. The clock starts when your first MULE is in.');
-    // Once the clock runs, no wait words.
-    expect(phone(devView(lenasMe({ installedThisTurn: true }), { month: 1 }), live(mine(5.5, 4.5)))).not.toContain('wait-title');
-  });
-
   it('C11: the turn over in the pub: the card says so, and how many MULEs went in', () => {
     const view = devView(lenasMe({ installedThisTurn: true, reach: reach('IN THE PUB', 'turn over', false) }), { players: PLAYERS.map((p) => (p.id === 's1' ? { ...p, doneDeveloping: true } : p)) });
     const html = phone(view, live(null));
@@ -520,27 +503,6 @@ describe('C12: the TV', () => {
     expect(html).toContain('data-testid="chat-ticker"');
   });
 
-  it('C12: month 1\'s clock waits for the first MULEs, as today', () => {
-    const html = onTv(devView(lenasMe(), { month: 1, clockWaitsFor: ['s2'] }), everyone());
-    expect(html).toContain('data-testid="tv-clock-label"');
-    expect(html).toContain('data-testid="tv-first-mules"');
-    expect(html).not.toContain('data-testid="shared-clock"');
-  });
-
-  it("C12 (A-1): while month 1's clock waits the TV's header shows no clock, as the flag-off TV; once it runs, it does", () => {
-    const header = (html: string) => /<header[\s\S]*?<\/header>/.exec(html)?.[0] ?? '';
-    const waiting = onTv(devView(lenasMe(), { month: 1, clockWaitsFor: ['s2'], phaseEndsAt: null }), everyone());
-    expect(header(waiting)).not.toBe('');
-    expect(header(waiting)).not.toContain('role="timer"');
-    expect(header(onTv(devView(lenasMe(), { month: 1, phaseEndsAt: Date.now() + 30_000 }), everyone()))).toContain('role="timer"');
-  });
-
-  it('C12 (A-1): the host started the clock: the news shows on the TV as a beat; other news does not', () => {
-    const started = onTv(devView(lenasMe(), { month: 1, news: ['Kai installed a MULE.', 'Lena started the clock without Ossa.'] }), everyone());
-    expect([...started.matchAll(/data-testid="tv-beat"[^>]*>([^<]+)</g)].map((m) => m[1])).toEqual(['Lena started the clock without Ossa.']);
-    expect(onTv(devView(lenasMe(), { news: ['Kai installed a MULE.'] }), everyone())).not.toContain('tv-beat');
-  });
-
   it('C12 (A-1): six seats: the hall takes the height the pace list leaves it, at 4:3, never more', () => {
     expect(fitHall({ w: 424, h: 400 })).toEqual({ w: 424, h: 318 });
     expect(fitHall({ w: 424, h: 206 })).toEqual({ w: (206 * 4) / 3, h: 206 });
@@ -688,15 +650,6 @@ describe('C11 (AM-31): the table chat on the walking screen', () => {
     expect(tv).not.toContain('data-bubble-bounds');
   });
 
-  it('C11 (AM-31, A-1): while month 1\'s clock waits, the keys hint goes to the right side room, so the wait and the line keep the left', () => {
-    const waiting = phone(devView(lenasMe(), { month: 1, clockWaitsFor: ['s1', 's2'] }), live(mine(5.5, 4.5)), 844, CHAT);
-    expect(tag(inside(waiting, 'phone-status-left'), 'focus-hint')).toBeNull();
-    expect(tag(inside(waiting, 'phone-status-right'), 'focus-hint')).not.toBeNull();
-    const running = phone(devView(), live(mine(5.5, 4.5)), 844, CHAT);
-    expect(tag(inside(running, 'phone-status-left'), 'focus-hint')).not.toBeNull();
-    expect(tag(inside(running, 'phone-status-right'), 'focus-hint')).toBeNull();
-  });
-
   it('C11 (AM-31): on a short laptop the chat panel folds, its older line first, so Controls stays in the window', () => {
     const rail = inside(laptop(devView(), live(mine(5.5, 4.5)), CHAT), 'laptop-rail');
     const panel = /<section class="([^"]*)"[^>]*><header[^>]*><h2[^>]*>Table chat/.exec(rail)?.[1] ?? '';
@@ -743,29 +696,6 @@ describe('C11 (AM-31): the table chat on the walking screen', () => {
     expect(tag(html, 'phone-status-left')).toMatch(/overflow-hidden/);
     // The hall is the store: the side room lies beside it.
     for (const kept of [L.stick, L.button, L.stage]) expect(overlap(box, kept), JSON.stringify(kept)).toBe(0);
-  });
-
-  it('C11 (AM-31, A-1): while month 1\'s clock waits, the wait words keep their room and the newest line drops to one cut row under them', () => {
-    const waiting = devView(lenasMe(), { month: 1, clockWaitsFor: ['s1', 's2'] });
-    const html = phone(waiting, live(mine(5.5, 4.5)), 844, CHAT);
-    const room = inside(html, 'phone-status-left');
-    expect(text(room, 'wait-detail')).toBe('Your first month: no rush. The clock starts when your first MULE is in.');
-    expect(room.indexOf('data-testid="chat-ticker"')).toBeGreaterThan(room.indexOf('data-testid="wait-now"'));
-    expect(tickerLines(html)).toEqual([2]);
-    expect(tag(html, 'chat-line-2')).toMatch(/\btruncate\b/);
-    expect(tag(html, 'chat-line-2')).not.toMatch(/line-clamp/);
-    // The wait never gives way; when the room runs short, the line's row does.
-    expect(tag(room, 'wait-room')).toMatch(/\bshrink-0\b/);
-    expect(tag(room, 'chat-foot')).toMatch(/\bmin-h-0\b/);
-    expect(tag(room, 'chat-foot')).toMatch(/\boverflow-hidden\b/);
-    // The room keeps no padding under the line's row, so the row can go to nothing without the room overflowing.
-    expect(tag(html, 'phone-status-left')).toMatch(/\bpb-0\b/);
-    // The month's label gives its rows to the wait words, which say it is the first month.
-    expect(room).not.toContain('· Development');
-    // Once the clock runs, the label is back and the line wraps under the clock.
-    const running = inside(phone(devView(lenasMe(), { month: 1 }), live(mine(5.5, 4.5)), 844, CHAT), 'phone-status-left');
-    expect(running).toContain('M1 · Development');
-    expect(tag(running, 'chat-line-2')).toMatch(/line-clamp-3/);
   });
 
   it.each([844, 667] as const)('C11 (AM-31): at %i the ticker covers 0 px² of the store, Lena\'s plots and the controls', (size) => {

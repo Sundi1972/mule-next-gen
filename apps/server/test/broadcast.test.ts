@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { GRANT_TICK_MS, MuleGame, PHASE_MS } from '../src/mule-game.js';
-import { clockRunsInMonth1, fakeContext, readyAll, seats, steerToThePub } from './fake-context.js';
+import { fakeContext, readyAll, seats, steerToThePub } from './fake-context.js';
 
 const humans = ['s1', 's2'];
 
@@ -32,7 +32,6 @@ function developmentEnds(seed: number, humansGoToPub: boolean) {
 
 describe('broadcasts', () => {
   // The clock as such, met in month 1: it runs from the start, as in any later month.
-  clockRunsInMonth1();
 
   it('FM-1: when an AI\'s pub ends development, every screen hears production', () => {
     const { productionAt, aiEndsAt, broadcasts } = developmentEnds(7, true);

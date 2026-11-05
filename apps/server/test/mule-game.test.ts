@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { AI_HANDS, boxOf, declareRole, DEV_STEER, doorOutside, floorConfig, HALL, pathTo, RuleError, WALK, type GameState, type HallDoor, type HallPlace } from '@mule/engine';
 import { GOOD_NAME } from '@mule/ai';
 import { GRANT_TICK_MS, MuleGame } from '../src/mule-game.js';
-import { clockRunsInMonth1, pressAct, readyAll, steerTo, type SteerPoint } from './fake-context.js';
+import { pressAct, readyAll, steerTo, type SteerPoint } from './fake-context.js';
 
 /** A context with a manual clock, so phase timers run instantly. */
 function fakeContext() {
@@ -94,7 +94,6 @@ function toThePub(g: Floor, seat: string): void {
 
 describe('MuleGame', () => {
   // The clock as such, met in month 1: it runs from the start, as in any later month.
-  clockRunsInMonth1();
 
   it('shows each player only their own stock and land secrets', () => {
     const { ctx, advance } = fakeContext();

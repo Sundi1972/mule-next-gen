@@ -385,14 +385,10 @@ export const DEV_STEER = {
   botStuckTicks: 20,
   /** An AI colonist installing on a lake plot from the shore stands this far from the shore tile's middle towards the lake, in tiles. */
   botShoreTiles: 0.3,
-  /** The sim's stand-in for the host's Continue (AM-3): month 1's waiting clock starts after this many seconds anyway. */
-  simHostContinueSeconds: 120,
   /** Share of what a MULE cost that the pub pays back when its owner walks in leading it. */
   pubLeadRefund: 0,
   /** A re-outfit's price, as a share of the outfitter's price for the new good: 1 is the outfit price. */
   reoutfitCost: 1,
-  /** Month 1's development clock stands full until every present seat's first MULE is installed. */
-  month1WaitsForFirstMule: true as boolean,
   /** A colonist's clearance from walls, lakes and the map's edge, in tiles. */
   bodyTiles: 0.18,
   /** How far the door reaches above and below the middle of each side face of the store's tile, in tiles. */

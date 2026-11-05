@@ -9,7 +9,7 @@ import { WIDE_PX } from '../Shell';
 import { keyDown, keyUp } from './controls';
 import { BANNER_CHAR_PX, bannerBox, colonistBox, css, FRAMES, freeRun, overlap, phoneLayout, tileBox, type Box } from './layout';
 import { PhoneLive, useArcade, useLive } from './live';
-import { ChatTicker, CompactClock, GroundChip, GuideNote, LeadChip, Money, OverCard, PaceLine, PlotCard, PlotsLegend, Reconnecting, WaitWords, waitWords } from './parts';
+import { ChatTicker, CompactClock, GroundChip, GuideNote, LeadChip, Money, OverCard, PaceLine, PlotCard, PlotsLegend, Reconnecting } from './parts';
 import { ScrambleBanner, scrambleWords } from './moments';
 import { arcadeSeat, type ArcadeSeat } from './seat';
 import { SeatProvider, YourStage } from './stages';
@@ -220,9 +220,8 @@ export function PhoneLandscape({ frame }: { frame: { w: number; h: number } }) {
   const bannerFaded = near(banner, mePx, L.cell * 0.4);
   const choosing = space === 'hall' && me.carriedMule === 'empty';
   const compactLeft = !!L.left && L.left.w < SIDE_ROOM_FULL;
-  const waits = !!waitWords(seat);
-  // A full side room with nothing waiting: the month's label, and the newest line wrapped under the clock.
-  const roomy = !compactLeft && !waits;
+  // A full side room: the month's label, and the newest line wrapped under the clock.
+  const roomy = !compactLeft;
   const keysHint = !keys.focused && !compactLeft && (
     <span className="rounded-chip bg-panel/90 px-1 py-0.5 text-[10px] leading-tight text-ink-2 shadow-chip" data-testid="focus-hint">
       Click the game to steer with the keys
@@ -252,7 +251,7 @@ export function PhoneLandscape({ frame }: { frame: { w: number; h: number } }) {
             map's top edge, clear of your plots and the target. The left room stops above the stick, and the phone always
             shows the newest line: a speaker in the other space is drawn nowhere here. */}
         {L.left && (
-          <div className={cx('absolute flex flex-col overflow-hidden', compactLeft ? 'gap-1.5 p-1' : waits ? 'gap-1 px-1.5 pb-0 pt-1.5' : 'gap-1.5 p-1.5')} style={{ left: L.left.x, top: L.left.y, width: L.left.w, height: L.left.h }} data-testid="phone-status-left" data-overlay="status-left">
+          <div className={cx('absolute flex flex-col overflow-hidden', compactLeft ? 'gap-1.5 p-1' : 'gap-1.5 p-1.5')} style={{ left: L.left.x, top: L.left.y, width: L.left.w, height: L.left.h }} data-testid="phone-status-left" data-overlay="status-left">
             {roomy && <span className="label-caps text-[10px]! leading-tight">M{view.month} · Development</span>}
             <Money seat={seat} className={compactLeft ? 'text-[11px] [&_*]:whitespace-nowrap' : 'text-base'} />
             {compactLeft ? <CompactClock seat={seat} /> : <SharedClock seconds={seat.seconds} total={seat.total} />}
@@ -260,13 +259,6 @@ export function PhoneLandscape({ frame }: { frame: { w: number; h: number } }) {
             {roomy && (
               <div className="shrink-0">
                 <ChatTicker seat={seat} keep={1} wrap />
-              </div>
-            )}
-            {/* The wait words say why the clock waits, so they never give way: the month's label makes room for them,
-                and the newest line drops to one cut row under them, the first thing cut should the room run short. */}
-            {waits && (
-              <div className="shrink-0" data-testid="wait-room">
-                <WaitWords seat={seat} short={compactLeft} />
               </div>
             )}
             {!roomy && (
@@ -287,8 +279,6 @@ export function PhoneLandscape({ frame }: { frame: { w: number; h: number } }) {
             </span>
             <PaceLine seat={seat} short={choosing || L.small} />
             {choosing && <PlotsLegend seat={seat} short={L.small} />}
-            {/* While the wait fills the left room, the keys hint stands here instead. */}
-            {waits && keysHint}
           </div>
         )}
         {bar && (
@@ -302,7 +292,6 @@ export function PhoneLandscape({ frame }: { frame: { w: number; h: number } }) {
           >
             <Money seat={seat} className="text-xs" />
             <CompactClock seat={seat} />
-            <WaitWords seat={seat} short />
             <span className="relative min-w-0 shrink">
               <LeadChip seat={seat} className="px-1! text-[11px]!" />
             </span>

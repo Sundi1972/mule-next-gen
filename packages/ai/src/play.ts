@@ -83,8 +83,6 @@ export interface PlayedGame {
   decisions: number;
   /** On the arcade floor (DEV_STEER.on): every seat's development turn, month by month; empty where the game walks. */
   turns: DevTurn[];
-  /** On the floor: the seconds month 1's clock stood for first MULEs, and whether the host's stand-in had to start it. */
-  month1: { waited: number; continued: boolean } | null;
   /** On the floor: what the moments came to, one a development phase, month by month; empty where the game walks. */
   moments: FloorMomentCounts[];
 }
@@ -276,7 +274,6 @@ function* playSteps(seed: number, specs: SeatSpec[], options: PlayOptions): Gene
   let mulesLost = 0;
   const turns: DevTurn[] = [];
   const moments: FloorMomentCounts[] = [];
-  let month1: PlayedGame['month1'] = null;
   let guard = 0;
   // A runaway guard that can never bind before a game of any length ends: it follows the months this game plays.
   // literal-ok: a month has seven phases, so eight a month bounds the loop: a guard, not balance
@@ -322,7 +319,6 @@ function* playSteps(seed: number, specs: SeatSpec[], options: PlayOptions): Gene
           const phase = yield* playFloorPhase(state, seats);
           turns.push(...phase.turns);
           moments.push(phase.moments);
-          if (phase.waited !== null) month1 = { waited: phase.waited, continued: phase.continued };
           mulesLost += state.players.filter((p) => p.carriedMule !== null).length;
           break;
         }
@@ -399,5 +395,5 @@ function* playSteps(seed: number, specs: SeatSpec[], options: PlayOptions): Gene
     options.onPhase?.(state);
     advancePhase(state);
   }
-  return { state, seats, broke, auction, lots, mulesLost, decisions, turns, month1, moments };
+  return { state, seats, broke, auction, lots, mulesLost, decisions, turns, moments };
 }
