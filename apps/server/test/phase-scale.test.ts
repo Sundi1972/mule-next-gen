@@ -184,6 +184,7 @@ describe('phaseScale and maxMonths', () => {
     expect(fast.game.viewFor(null).phaseEndsAt! - fast.ctx.now()).toBeCloseTo(fastLength, 6);
     expect(fast.game.viewFor('s1').production!.lengthMs).toBeCloseTo(fastLength, 6);
 
+    // Every player's Ready still ends production; only a phone alone that has skipped its show can offer it (ws6-ux AM-20).
     const early = toProduction();
     early.game.handle('s1', { type: 'ready' });
     expect(early.game.viewFor(null).phase).toBe('production');
