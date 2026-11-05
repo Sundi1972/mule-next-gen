@@ -467,7 +467,10 @@ describe('the brain at the table', { timeout: 30_000 }, () => {
     expect(finishes()).toBe(1);
     expect(gameLines()).toHaveLength(1);
     const reports = errors.mock.calls.map((c) => String(c[0])).filter((m) => m.startsWith('brain chat:'));
-    expect(reports.sort()).toEqual(t.ais.map((ai) => `brain chat: seat ${ai.id} cannot say a line: say failed`).sort());
+    // A seat tries to say only a fallback's template: its top picks speak no line (ruling a). Each that tried reports once.
+    const tried = t.ais.filter((ai) => records.some((r) => r.seat === ai.id && r.by === 'fallback' && r.line));
+    expect(tried.length).toBeGreaterThan(0);
+    expect(reports.sort()).toEqual(tried.map((ai) => `brain chat: seat ${ai.id} cannot say a line: say failed`).sort());
   });
 
   it('INV-heard: heard from an unknown speaker, or to an unknown seat, does not throw, before or after start; an AI\'s own line goes to the other AIs only', async () => {

@@ -302,7 +302,8 @@ export function createBrain(options: BrainOptions): MeteredBrain {
   return {
     deciderFor,
     writerFor,
-    chatter: (seat, say) => chatter(seat.id, say),
+    // Every AI seat of a Smart brain gets a decider, so its routine top picks stay quiet.
+    chatter: (seat, say) => chatter(seat.id, say, 'smart'),
     finish() {
       countedAtFinish ??= counted();
       finished = true;
