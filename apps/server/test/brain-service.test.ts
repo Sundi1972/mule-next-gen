@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import Anthropic from '@anthropic-ai/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AI_LEVELS, AI_PERSONAS, BRAIN, createGame, observe, type Strategy } from '@mule/engine';
-import { Brain, candidate, consider, PERSONAS, replySchema, shortlist, TopPickDecider, WAIT_MS, type Complete, type Decider, type DecisionRecord, type LandBrief, type Mind, type Prompt } from '@mule/ai';
+import { LAND_OFFERS, Brain, candidate, consider, PERSONAS, replySchema, shortlist, TopPickDecider, WAIT_MS, type Complete, type Decider, type DecisionRecord, type LandBrief, type Mind, type Prompt } from '@mule/ai';
 import { WRITE_CALLS, type HaikuSdk } from '../src/brain/client.js';
 import { API_KEY_ENV, createBrain, type BrainSeat, type BrainService, type WriteAsk } from '../src/brain/index.js';
 import { NO_USAGE, type Usage } from '../src/brain/ledger.js';
@@ -52,7 +52,7 @@ const list = () =>
 
 const STRATEGY: Strategy = { kind: 'builder', moneyMaker: 'food', monopolyTarget: null, cashFloor: 200, landTarget: { plots: 6, byMonth: 6 }, stances: {}, reason: 'Grow steady.' };
 /** A land brief as playbooks.ts will hand the writer: one plan to pick, the draft's strategy to edit. */
-const BRIEF: LandBrief = { text: 'You are P0. The land brief.', plans: [{ id: 'A', label: 'Take the river', ranked: [{ plot: 12, value: 410 }] }], corners: true, strategy: STRATEGY };
+const BRIEF: LandBrief = { text: 'You are P0. The land brief.', plans: [{ id: 'A', label: 'Take the river', ranked: [{ plot: 12, value: 410 }] }], corners: true, strategy: STRATEGY, offers: LAND_OFFERS, strategyOffered: true };
 const ASK: WriteAsk = { brief: BRIEF, system: 'The manual.', waitMs: 5_000 };
 /** A writer reply the model could send: a strategy and one plan pick. */
 const WRITER_TEXT = JSON.stringify({

@@ -70,10 +70,10 @@ describe("T-AC-A5: a Rookie seat's edits that would corner are refused; the same
   it("T-AC-A5: a Rookie seat's reply schema offers neither 'monopolist' nor monopolyTarget; a Trader seat's offers both, and each is what the request carries", async () => {
     const rookie = replySchema(false);
     const trader = replySchema(true);
-    expect(rookie.properties.strategy.properties.kind.enum).not.toContain('monopolist');
-    expect(rookie.properties.strategy.properties).not.toHaveProperty('monopolyTarget');
-    expect(trader.properties.strategy.properties.kind.enum).toContain('monopolist');
-    expect(trader.properties.strategy.properties).toHaveProperty('monopolyTarget');
+    expect(rookie.properties.strategy!.properties.kind.enum).not.toContain('monopolist');
+    expect(rookie.properties.strategy!.properties).not.toHaveProperty('monopolyTarget');
+    expect(trader.properties.strategy!.properties.kind.enum).toContain('monopolist');
+    expect(trader.properties.strategy!.properties).toHaveProperty('monopolyTarget');
     expect(JSON.stringify(rookie)).not.toMatch(/monopol/);
 
     const r = await write('rookie', replyText());

@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BRAIN, type Strategy } from '@mule/engine';
-import type { LandBrief, ToolDef, ToolResult } from '@mule/ai';
+import { LAND_OFFERS, type LandBrief, type ToolDef, type ToolResult } from '@mule/ai';
 import { createBrain, type BrainSeat, type PlaybookAsk } from '../src/brain/index.js';
 import { MuleGame } from '../src/mule-game.js';
 import { fakeSdk, KEY, promptOf, readLedger, sdkMessage, type SdkMessage, type SdkParams } from './brain-fakes.js';
@@ -13,7 +13,7 @@ import { runTable } from './playbook-fakes.js';
 
 const SEAT: BrainSeat = { id: 'p0', persona: 'trader', level: 'trader' };
 const STRATEGY: Strategy = { kind: 'builder', moneyMaker: 'food', monopolyTarget: null, cashFloor: 200, landTarget: { plots: 6, byMonth: 6 }, stances: {}, reason: 'Grow steady.' };
-const BRIEF: LandBrief = { text: 'You are P0. The land brief.', plans: [{ id: 'A', label: 'Take the river', ranked: [{ plot: 12, value: 410 }] }], corners: true, strategy: STRATEGY };
+const BRIEF: LandBrief = { text: 'You are P0. The land brief.', plans: [{ id: 'A', label: 'Take the river', ranked: [{ plot: 12, value: 410 }] }], corners: true, strategy: STRATEGY, offers: LAND_OFFERS, strategyOffered: true };
 const ANSWER = JSON.stringify({ strategy: { kind: 'builder', moneyMaker: 'food', monopolyTarget: null, cashFloor: 200, reason: 'Grow.' }, edits: [{ path: '/landGrant/ranked', to: 'A', reason: 'River.' }], line: '' });
 
 /** One tool the model may call; `answer` is what it returns, or what it throws. */
