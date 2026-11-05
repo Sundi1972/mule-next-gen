@@ -528,6 +528,21 @@ describe('brain service', () => {
 });
 
 describe('the playbook writer port', () => {
+  it("PR-5 5.4: writeModel sends every write to that model, not its kind's, and the ledger line names it (brain:trial --write-model)", async () => {
+    const models: string[] = [];
+    const sdk = fakeSdk((_n, params) => (models.push(params.model), sdkMessage(WRITER_TEXT, USED)));
+    const service = createBrain({ gameId: GAME, env: KEY, logPath: file, sdkFactory: () => sdk, now: ticking(), writeModel: BRAIN.writeFallbackModel });
+    const writer = service.writerFor(SEAT)!;
+    await writer.write('strategy', ASK);
+    await writer.write('playbook', ASK);
+    expect(BRAIN.writeCalls.strategy.model).not.toBe(BRAIN.writeFallbackModel);
+    expect(models).toEqual([BRAIN.writeFallbackModel, BRAIN.writeFallbackModel]);
+    expect(lines().map((l) => [l.kind, l.model])).toEqual([
+      ['strategy', BRAIN.writeFallbackModel],
+      ['playbook', BRAIN.writeFallbackModel],
+    ]);
+  });
+
   const MARK = 'MARK-sdk-text-4q';
   const USED = { input: 410, cached_read: 620, cache_write: 50, output: 38 };
   const apiError = (status: number) =>

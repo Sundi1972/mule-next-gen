@@ -8,7 +8,7 @@ import { Brain, candidate, consider, parseReply, PERSONAS, ReplyRejected, shortl
 import { createHaikuComplete } from '../src/brain/client.js';
 import { isCallLine, readLedgerLines } from '../src/brain/ledger.js';
 import { cutOffPhase, fallbackReason, renderTrialReport, trialReport, type TrialGame, type TrialInput } from '../src/brain/trial-report.js';
-import { proofCapRefusal, trial, trialLedgerPath, trialSpent } from '../src/brain/trial.js';
+import { proofCapRefusal, trial, trialLedgerPath, trialSpent, writeModelFlag } from '../src/brain/trial.js';
 import { fakeSdk, KEY, neverAnswers, requestOf, sdkMessage, worstUsdOfRequest, type SdkModuleFake, type SdkParams } from './brain-fakes.js';
 
 /** The SDK module's client: records its options and answers through `sdk.create`; it never reaches the network. */
@@ -156,6 +156,18 @@ describe('brain:trial paid-run guard (PR-5: --run label, the proof cap)', () => 
     expect((await result).code).toBe(1);
     expect(calls()).toBe(0);
     expect(out).toEqual([`brain:trial cannot check the PR-5 cap: ${path.join(dir, 'trial-2026-10-20.jsonl')} is not a readable ledger; nothing called.`]);
+  });
+
+  it('PR-5 5.4: --write-model is sonnet or haiku, named in the run line; anything else, or twice, is a bad flag', async () => {
+    expect(writeModelFlag('sonnet')).toBe(BRAIN.strategySpike.models.sonnet);
+    expect(writeModelFlag('haiku')).toBe(BRAIN.strategySpike.models.haiku);
+    expect(writeModelFlag('opus')).toBeUndefined();
+    const calls = called();
+    for (const argv of [['--write-model', 'opus'], ['--write-model'], ['--write-model', 'haiku', '--write-model', 'sonnet']]) {
+      const { result } = run(['--games', '1', '--max-usd', '1', ...argv]);
+      expect((await result).code, argv.join(' ')).toBe(1);
+    }
+    expect(calls()).toBe(0);
   });
 
   it('PR-5: a label of anything but lowercase letters, digits and dashes (1 to 32) is refused as a bad flag', async () => {
