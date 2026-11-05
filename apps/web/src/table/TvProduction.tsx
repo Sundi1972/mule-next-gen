@@ -156,7 +156,7 @@ function SpeedUp({ game, show, connected }: { game: MuleView; show: ShowData; co
     <div className={cx('mt-auto flex items-center gap-3 rounded-control px-3 py-2', fast ? 'bg-holo-soft' : 'bg-raised')} data-testid="speed-up">
       <span className="font-mono text-2xl text-holo">⏩</span>
       <span className="text-lg leading-snug text-ink">
-        {fast ? `Everyone asked: playing ${SHOW.fast}× faster` : `${n} of ${people.length} asked to speed up. Waiting for ${waiting.join(' and ')}.`}
+        {fast ? `Everyone asked: playing ${SHOW.fast}× faster` : `${n} of ${people.length} asked to speed up.${waiting.length > 0 ? ` Waiting for ${waiting.join(' and ')}.` : ''}`}
       </span>
     </div>
   );

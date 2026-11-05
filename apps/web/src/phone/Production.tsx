@@ -67,7 +67,8 @@ export function Production({ production }: { production: ProductionView }) {
   // Speed up (B-AC-20): with a TV in the room the rest of the show plays faster once every person has asked; the
   // computer players always agree. A phone alone keeps its tap-the-map skip instead.
   const connected = connectedIn(table.seats);
-  const people = view.players.filter((p) => !p.isAi && connected(p.id));
+  // Your own seat always counts, even while your phone reconnects.
+  const people = view.players.filter((p) => !p.isAi && (connected(p.id) || p.id === me.id));
   const asked = new Set(production.hurry?.asked ?? []);
 
   return (
