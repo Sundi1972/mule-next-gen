@@ -189,5 +189,24 @@ describe('RULE-A2 rows 3-4: the next phase is edited in the slack before it', { 
     expect(notes.map((n) => n.phase)).toEqual(['landGrant']);
     expect(seat.part(state, 'development')).toEqual(before);
   });
+
+  it("C4: the auction playbook adopted at the auction's start carries every drafted good, the ones past the brief's cap too", async () => {
+    let edited: string | null = null;
+    const sdk = fakeSdk((_n, params) => {
+      const offered = (params.output_config?.format?.schema as { properties: { edits: { items: { anyOf: { properties: { path: { enum: string[] } } }[] } } } }).properties.edits.items.anyOf.map((v) => v.properties.path.enum[0]!);
+      edited = offered.find((p) => p.endsWith('/hold'))!;
+      return sdkMessage(JSON.stringify({ edits: [{ path: edited, to: 0, reason: 'None.' }], line: '' }), USED);
+    });
+    const { state, seat, notes, playbooks } = table(smartOn(sdk));
+    advanceTo(state, 'production');
+    const drafted = Object.keys(seat.draft(state, 'auction').auction ?? {}).sort();
+    playbooks.askPhase(state, 'auction', []);
+    await vi.advanceTimersByTimeAsync(1_000);
+    advanceTo(state, 'auction');
+    playbooks.takePhase(state, 'auction');
+    expect(edited).not.toBeNull();
+    expect(notes.map((n) => [n.phase, n.playbook.by])).toEqual([['auction', 'llm']]);
+    expect(Object.keys(notes[0]!.playbook.auction ?? {}).sort()).toEqual(drafted);
+  });
 });
 

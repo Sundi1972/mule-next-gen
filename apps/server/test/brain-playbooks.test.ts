@@ -363,6 +363,19 @@ describe('HC-1: no phase waits for a model', { timeout: 30_000 }, () => {
   });
 });
 
+describe('RULE-A2 (AM-A16): the auction is asked in the production show, after production', { timeout: 30_000 }, () => {
+  it("C4: the game asks for each month's auction edits once production has run, with the development's facts, so the auction draft sees this month's stock", async () => {
+    const asked: { phase: GameState['phase']; month: number; facts: number }[] = [];
+    vi.spyOn(Playbooks.prototype, 'askPhase').mockImplementation(function (state, _phase, facts) {
+      asked.push({ phase: state.phase, month: state.month, facts: facts.length });
+    });
+    const silent = fakeSdk((_n, _params, options) => neverAnswers(options));
+    await phaseStarts(smartOn(silent));
+    expect(asked.length).toBeGreaterThan(0);
+    for (const a of asked) expect(a.phase, `month ${a.month}`).toBe('production');
+  });
+});
+
 describe("C8: the writer's system block is the manual", () => {
   it('T-AC-A7: every write sends the manual as its system text, the same bytes for a Trader and a Rookie in every month', async () => {
     const sdk = answersAt(1_000, EDITS);
