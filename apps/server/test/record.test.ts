@@ -86,7 +86,12 @@ const GAME_LIMIT_MS = 30 * 60_000;
  * later), or by rejecting at once, as the real decider does when the seat is busy.
  */
 const ANSWERS: readonly (number | 'busy')[] = [40, 'busy', 1_300, 260, 3_100, 90, 700];
-const GAME_OPTIONS = { maxMonths: 1, politics: true };
+/**
+ * Three months: under the 5 Nov start values (2 Food and 2 Energy a seat, one claim a grant) the Smart seat meets no
+ * close call in month 1, so it would never ask the stand-in; by month 3 it has asked, and been answered busy, at least
+ * once (WS1's B-AC-2 plays four months for the same reason).
+ */
+const GAME_OPTIONS = { maxMonths: 3, politics: true };
 /** Units of a good T-AC-10's market hands Mia to spare as each production opens. */
 const SPARE = 20;
 /**

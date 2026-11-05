@@ -138,7 +138,9 @@ const at = (p: Plot) => `${p.x}·${p.y}`;
 
 /**
  * Plays month 1 through the same moves the phones send: in the land grant
- * Brix, then Lena, then Ossa each claim the next two plots that light up;
+ * Brix, then Lena, then Ossa each take the next two plots that light up, the
+ * first given by the test (a grant gives one claim a seat since 5 Nov; these
+ * tests list one plot and keep the other), the second claimed as a phone does;
  * with `mule`, Brix fits a Food MULE to his first plot in development, his
  * colonist steered there. Everyone walks to the pub, the goods auction runs
  * out, and the game stops in month 2's planning.
@@ -155,9 +157,11 @@ function toMonth2Planning(opts: { mule?: boolean; phaseScale?: number } = {}) {
   for (const id of humans) game.handle(id, { type: 'ready' });
   note();
   const plots: Record<string, Plot[]> = { b: [], o: [], l: [] };
-  for (const id of ['b', 'b', 'l', 'l', 'o', 'o']) {
+  const state = (game as unknown as { state: GameState }).state;
+  for (const [i, id] of ['b', 'b', 'l', 'l', 'o', 'o'].entries()) {
     const lit = game.viewFor(id).lit!;
-    game.handle(id, { type: 'claim', x: lit.x, y: lit.y });
+    if (i % 2 === 0) state.tiles.find((t) => t.x === lit.x && t.y === lit.y)!.owner = id;
+    else game.handle(id, { type: 'claim', x: lit.x, y: lit.y });
     plots[id]!.push({ x: lit.x, y: lit.y });
     note();
     if (game.viewFor(null).phase === 'landGrant') advance(GRANT_TICK_MS);
@@ -166,7 +170,7 @@ function toMonth2Planning(opts: { mule?: boolean; phaseScale?: number } = {}) {
   expect(game.viewFor(null).phase).toBe('development');
   // A seat that fell sick plays the roll call first, and nobody acts until it ends.
   advance(Math.max(0, (game.viewFor(null).eventShow?.endsAt ?? 0) - ctx.now()));
-  const g = { game, advance, state: (game as unknown as { state: GameState }).state, tickMs: DEV_STEER.tickMs * (opts.phaseScale ?? 1) };
+  const g = { game, advance, state, tickMs: DEV_STEER.tickMs * (opts.phaseScale ?? 1) };
   // A steered colonist installs where it stands, on the plot or on a lake plot's shore. Seed 7 lights Brix two lake
   // plots, and only the second has a shore: the plot his MULE can go on is listed first, as his first plot.
   const [mulePlot] = plots.b!.splice(plots.b!.findIndex((p) => shoreOf(g, p) !== null), 1);

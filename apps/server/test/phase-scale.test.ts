@@ -48,6 +48,8 @@ function toAuction(options?: Options) {
 function toWalk(options?: Options) {
   const g = toAuction(options);
   const good = g.game.viewFor(null).auction!.good;
+  // Heiko buys from the store, so the good has a walk (with 2 Food each, nobody's numbers ask for one).
+  g.game.handle('s1', { type: 'declare', side: 'buyer' });
   for (let i = 0; i < 1_000 && g.game.viewFor(null).auction?.stage === 'status'; i++) {
     pressThroughSidePick(g.game);
     g.advance(WALK.tickMs);

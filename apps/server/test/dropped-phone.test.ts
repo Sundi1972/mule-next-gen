@@ -90,6 +90,8 @@ describe('a dropped phone in the goods auction', () => {
   ])('FM-dropped-status (A-7): a phone dropped on the status screen %s is held there, on its side and not Done; once s1, the host, moves on the walk starts on the next tick, and the dropped phone sits it out', (_, before) => {
     const { game, advance, good } = toStatus();
     const s2 = () => game.viewFor(null).auction!.walkers.find((w) => w.id === 's2')!;
+    // Heiko buys from the store, so the good has a walk to start (with 2 Food each, nobody's numbers ask for one).
+    game.handle('s1', { type: 'declare', side: 'buyer' });
     before(game);
     const side = s2().side;
     game.connectionChanged('s2', false);
@@ -163,7 +165,7 @@ describe('a dropped phone in the land grant', () => {
     expect(dropped.lasted, 'one pass of the light, one tick a plot').toBe(dropped.lit.length * GRANT_TICK_MS);
   });
 
-  it('FM-grant-reload: the only human claims, drops and reconnects while the grant runs: their phone is back on the grant with the claim intact, and they claim the next lit plot', () => {
+  it('FM-grant-reload: the only human drops and reconnects while the grant runs: their phone is back on the grant with their claim still to use, and they claim the next lit plot', () => {
     const { ctx, advance } = fakeContext();
     const game = new MuleGame(ctx, 7);
     game.start(alone);
@@ -177,22 +179,20 @@ describe('a dropped phone in the land grant', () => {
       }
       throw new Error('no free plot lit');
     };
-    const first = nextFreeLit();
-    game.handle('s1', { type: 'claim', ...first });
-
+    // A grant gives one claim a seat (5 Nov): the drop comes before it is used.
+    nextFreeLit();
     game.connectionChanged('s1', false);
     advance(GRANT_TICK_MS * 2);
     game.connectionChanged('s1', true);
     const back = game.viewFor('s1');
     expect(back.phase).toBe('landGrant');
-    expect(back.me!.claimsLeft).toBe(GAME.claimsPerGrant - 1);
-    expect(back.tiles.filter((t) => t.owner === 's1').map(({ x, y }) => ({ x, y }))).toEqual([first]);
+    expect(back.me!.claimsLeft).toBe(GAME.claimsPerGrant);
+    expect(back.tiles.filter((t) => t.owner === 's1')).toEqual([]);
 
-    const second = nextFreeLit();
-    game.handle('s1', { type: 'claim', ...second });
+    const lit = nextFreeLit();
+    game.handle('s1', { type: 'claim', ...lit });
     const after = game.viewFor('s1');
-    expect(after.tiles.filter((t) => t.owner === 's1')).toHaveLength(2);
-    expect(after.me!.claimsLeft).toBe(GAME.claimsPerGrant - 2);
+    expect(after.tiles.filter((t) => t.owner === 's1').map(({ x, y }) => ({ x, y }))).toEqual([lit]);
   });
 
   it('FM-grant-reload negative: the only human presses Ready in the land grant: Done with land, it ends once the AI is done too, before the pass does', () => {

@@ -461,7 +461,8 @@ function toThePub(g: Floor, seat: string): void {
 
 /**
  * Plays month 1 through the moves Brix's phone sends, the AI seats playing
- * themselves: Brix claims the first two plots that light up and fits a Food
+ * themselves: Brix takes the first two plots that light up (the first given
+ * by the test, since a grant gives one claim a seat; the second claimed) and fits a Food
  * MULE to the first, his colonist steered there, then walks to the pub and
  * stays Done in the auction. The game stops in month 2's planning.
  */
@@ -473,7 +474,8 @@ function toMonth2Planning(game: MuleGame, fake: { advance: (ms: number) => void 
   while (phase() === 'landGrant') {
     const lit = game.viewFor(SELLER).lit;
     if (lit && plots.length < 2) {
-      game.handle(SELLER, { type: 'claim', x: lit.x, y: lit.y });
+      if (plots.length === 0) (game as unknown as { state: GameState }).state.tiles.find((t) => t.x === lit.x && t.y === lit.y)!.owner = SELLER;
+      else game.handle(SELLER, { type: 'claim', x: lit.x, y: lit.y });
       plots.push(lit);
     }
     if (phase() === 'landGrant') advance(GRANT_TICK_MS);

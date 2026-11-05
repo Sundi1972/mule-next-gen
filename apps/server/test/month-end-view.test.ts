@@ -39,7 +39,7 @@ interface MonthEnd {
  * Plays a three-month game on the fake clock, seed 7, so months 1 and 2 both have a month end; the last month's end
  * is game over. Every human presses Ready in planning and at each month's end, as their phones would. s1 claims the
  * first plot lit in each land grant, so the players' worths differ. In month 2's planning s1 is left one Food, short of
- * what its household eats, so the month's condition says hungry.
+ * what its household eats, so the month's condition says hungry, and s2 is given its need, so it is fed.
  */
 function playThreeMonths(options: { dearFoodIn?: number; stockedIn?: number } = {}): { ends: MonthEnd[]; over: MuleView; state: GameState } {
   const { ctx, advance } = fakeContext();
@@ -54,6 +54,8 @@ function playThreeMonths(options: { dearFoodIn?: number; stockedIn?: number } = 
   for (let n = 0; n < 100_000 && !game.viewFor(null).finished; n++) {
     if (state.phase === 'planning' && state.month === 2 && starvedIn !== 2) {
       player(state, 's1').stock.food = 1;
+      // And s2 its month's Food, so the fed row has someone fed under the 5 Nov start values (2 Food a seat).
+      player(state, 's2').stock.food = Math.max(player(state, 's2').stock.food, needsOf(state, 's2').food);
       starvedIn = 2;
     }
     // Food on the shelf at a price no colonist's wage reaches, in that month's goods auction.

@@ -338,6 +338,8 @@ describe('MuleGame', () => {
 
     it("B-AC-A7-4: the walk keeps its clock: the host's Continue is refused there", () => {
       const { game, advance } = toAuction();
+      // Heiko buys from the store, so the good has a walk (with 2 Food each, nobody's numbers ask for one).
+      game.handle('s1', { type: 'declare', side: 'buyer' });
       game.handle('s1', { type: 'ready' });
       game.handle('s2', { type: 'ready' });
       for (let i = 0; i < 100 && stage(game) === 'status'; i++) advance(WALK.tickMs);
@@ -350,6 +352,8 @@ describe('MuleGame', () => {
       const first = good(game)!;
       const side = game.viewFor(null).auction!.walkers.find((w) => w.id === 's2')!.side;
       game.connectionChanged('s2', false);
+      // Heiko buys from the store, so there is a walk to start (with 2 Food each, nobody's numbers ask for one).
+      game.handle('s1', { type: 'declare', side: 'buyer' });
       game.handle('s1', { type: 'ready' });
       for (let t = 0; t < 20_000; t += WALK.tickMs) advance(WALK.tickMs);
       const held = game.viewFor(null).auction!;
