@@ -217,14 +217,15 @@ export class AiSeat {
     if (!ok) p.refused.add(key);
   }
 
-  /**
-   * RULE-6's path for `key`. The own path's development and auction parts play only while the seat's ownPhases is on,
-   * AI_PLANS.ownPhases unless its options say (AM-26): off, the own path plays today's for them, while an adopted part
-   * still plays. Read per call, so `--set` and a test that sets it switch it.
-   */
+  /** RULE-6's path for `key`; the own path's development and auction parts play only with ownPhases on. See AM-26. */
   private playPath(month: number, key: PartKey): PlayPath {
     const path = pathFor({ on: AI_PLANS.on, playbook: this.options.playbook, hasDecider: !!this.options.decider, adopted: this.adopted, month, key });
-    return path.by === 'own' && OWN_PHASE_KEYS.has(key) && !(this.options.ownPhases ?? AI_PLANS.ownPhases) ? { by: 'today' } : path;
+    return path.by === 'own' && OWN_PHASE_KEYS.has(key) && !this.ownPhasesOn() ? { by: 'today' } : path;
+  }
+
+  /** Read per call: `--set` and a test switch AI_PLANS.ownPhases while seats exist. */
+  private ownPhasesOn(): boolean {
+    return this.options.ownPhases ?? AI_PLANS.ownPhases;
   }
 
   /** A draft point: drafts, validates and writes. A draft or validator error is logged and the phase plays today's path (HC-9). */
@@ -377,10 +378,9 @@ export class AiSeat {
   }
 
   /**
-   * The auction hand's source, asked once a good at its status screen (AM-20, RULE-10). On the playbook path: the
-   * adopted part's play for the good; else its own: at the month's first good the whole auction draft, written; at
-   * each later good a fresh one-good draft, written as its own entry. Null plays today's ask. A draft or validator
-   * error is logged and the rest of the month's auction plays today's path (HC-9).
+   * The auction hand's source for `good`, asked at its status screen: the adopted part's play, else the seat's own
+   * draft, written; null plays today's ask. A good the adopted part lacks is drafted only with ownPhases on. A draft or
+   * validator error is logged, and the month's later goods play today's ask. See AM-20, AM-26, HC-9.
    */
   private goodPlay(state: GameState, good: Good): GoodPlay | null {
     const run = this.auctionFor(state.month);
@@ -388,6 +388,7 @@ export class AiSeat {
     if (run.failed || path.by === 'today') return null;
     let play = path.by === 'adopted' ? path.playbook.auction?.[good] : undefined;
     if (path.by === 'adopted') run.head ??= path.playbook;
+    if (!play && path.by === 'adopted' && !this.ownPhasesOn()) return null;
     if (!play) {
       const whole = !run.head;
       const playbook = this.ownDraft(state, 'auction', () => (whole ? this.draft(state, 'auction') : this.draftGood(state, good)));
