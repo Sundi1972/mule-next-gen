@@ -84,7 +84,7 @@ const RECORDER = `{
   requestAnimationFrame(frame);
 }`;
 
-/** What the phone's "On to the auction" sends, as the client puts it on the wire. */
+/** What the phone's "Ready for the auction" sends, as the client puts it on the wire. */
 const READY = JSON.stringify({ t: 'intent', intent: { type: 'ready' } });
 /** Only stops a hang; nothing is asserted about how long a wait takes. */
 const HANG_MS = 15_000;

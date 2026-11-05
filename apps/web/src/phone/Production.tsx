@@ -125,7 +125,7 @@ export function Production({ production }: { production: ProductionView }) {
               onClick={() => client.intent({ type: 'ready' })}
               data-testid="ready"
             >
-              {!done ? 'Watching the show' : self.ready ? 'Waiting for the others' : 'On to the auction'}
+              {!done ? 'Watching the show' : self.ready ? 'Waiting for the others' : 'Ready for the auction'}
             </Button>
           </>
         }
