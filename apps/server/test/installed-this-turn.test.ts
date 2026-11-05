@@ -163,9 +163,9 @@ describe('Installing over a MULE swaps it (Heiko at the table, 5 Nov)', () => {
     expect(game.viewFor('s1').me!.carriedMule, 'the Food MULE is on his lead, not gone').toBe('food');
   });
 
-  it('B-AC-SWAP-2: Heiko ends his turn still leading the swapped-out Food MULE: it goes to the corral, and his plot keeps the Water MULE', () => {
+  it.each(['the pub', 'the clock'] as const)('B-AC-SWAP-2: Heiko\'s turn ends at %s with the swapped-out Food MULE still on his lead: it goes to the corral, and his plot keeps the Water MULE', (end) => {
     const g = toDevelopment();
-    const { game, state, plot } = g;
+    const { game, plot } = g;
     buyAndOutfit(g, 's1', 'food');
     installOn(g, 's1', plot);
     buyAndOutfit(g, 's1', 'water');
@@ -173,13 +173,15 @@ describe('Installing over a MULE swaps it (Heiko at the table, 5 Nov)', () => {
     press(g, 's1', 'LEAVE');
     mapTo(g, 's1', { x: plot.x + 0.5, y: plot.y + 0.5 });
     press(g, 's1', 'SWAP');
-    const corral = state.store.mules;
-    goIn(g, 's1');
-    hallTo(g, 's1', 'pub');
-    press(g, 's1', 'PUB');
+    const corral = game.viewFor(null).storeMules;
+    if (end === 'the pub') {
+      goIn(g, 's1');
+      hallTo(g, 's1', 'pub');
+      press(g, 's1', 'PUB');
+    }
     for (let i = 0; i < 10_000 && game.viewFor(null).phase === 'development'; i++) g.advance(100);
     expect(outfitOn(g, plot), 'never sent home over the new MULE').toBe('water');
-    expect(state.store.mules, 'the Food MULE is in the corral').toBe(corral + 1);
+    expect(game.viewFor(null).storeMules, 'the Food MULE is in the corral, on every screen').toBe(corral + 1);
     expect(game.viewFor('s1').me!.carriedMule).toBeNull();
   });
 
