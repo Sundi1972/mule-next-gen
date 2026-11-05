@@ -1,8 +1,10 @@
 /**
  * Steps shared by the e2e scripts on a table that plays politics. Scripts import these; only scripts run.
  */
-import { ceremonyBeats, GAME, POLITICS, type ElectionResult } from '@mule/engine';
+import { ceremonyBeats, GAME, POLITICS, type ElectionResult, type GameState, type Outfit } from '@mule/engine';
 import { errors as playwrightErrors, type Locator, type Page } from 'playwright';
+import type { MuleServer } from '../../server/src/server.js';
+import { check } from './harness';
 
 /** How long a press may take to land. */
 export const PRESS_MS = 2_000;
@@ -64,4 +66,24 @@ async function pressUntil(phone: Page, over: Locator, timeout: number): Promise<
       if (!(err instanceof playwrightErrors.TimeoutError)) throw err;
     }
   }
+}
+
+/**
+ * Month 1's development with walking on: each phone's first MULE goes on its first plot through the server, as
+ * installing leaves it. Month 1's clock waits for every first MULE, so this lets it start and run out the turn. For a
+ * test whose promise is not the errand: walking the errand is store-steps.ts's B-AC-1, at the speed steering needs.
+ */
+export function firstMulesThroughTheServer(server: MuleServer, code: string, mules: readonly { seat: string; outfit: Outfit }[]): void {
+  const room = server.registry.get(code);
+  check(room, `a room ${code} on the server`);
+  const state = (room as unknown as { game: { state: GameState } }).game.state;
+  check(state.phase === 'development', `first MULEs go in during development, not in ${state.phase}`);
+  for (const { seat, outfit } of mules) {
+    const plot = state.tiles.find((t) => t.owner === seat && t.terrain !== 'store' && t.outfit === null);
+    check(plot, `${seat} owns an empty plot in month 1's development`);
+    plot.outfit = outfit;
+    state.players.find((p) => p.id === seat)!.installedThisTurn = true;
+  }
+  // Changed behind the game's back: the room's broadcast is the one way every screen sees it.
+  (room as unknown as { broadcast(): void }).broadcast();
 }

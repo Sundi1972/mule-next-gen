@@ -7,10 +7,19 @@ import { createMuleServer, type MuleServer } from '../src/server.js';
 
 const servers: MuleServer[] = [];
 const sockets: WebSocket[] = [];
+let flag: boolean | null = null;
 afterEach(async () => {
   for (const s of sockets.splice(0)) s.terminate();
   await Promise.all(servers.splice(0).map((s) => s.close()));
+  if (flag !== null) DEV_STEER.on = flag;
+  flag = null;
 });
+
+/** DEV_STEER.on off until the test's afterEach puts it back, as on a server with the flag off. */
+function flagOffUntilAfter(): void {
+  flag = DEV_STEER.on;
+  DEV_STEER.on = false;
+}
 
 /** Fast enough that development comes round in a few seconds, slow enough that a tick is still a timer of its own. */
 const PHASE_SCALE = 0.1;
@@ -80,7 +89,10 @@ describe('createMuleServer({ devSteer }): steering for one game, with DEV_STEER.
   });
 
   it('a devSteer game ticks and takes steer intents; a default game on the same seed refuses steer and sends no frames', async () => {
-    expect(DEV_STEER.on, "trunk's flag stays off").toBe(false);
+    expect(DEV_STEER.on, "trunk's flag is on since arcade PR-11").toBe(true);
+    // The default is the flag: this test turns it off for its own games, read as each is built, and puts it back.
+    // (An explicit devSteer: false game needs createMuleServer to pass false on; today it passes only true.)
+    flagOffUntilAfter();
     // Both at once: the steered game's AI walks and gets its first MULE in, so its month-1 clock runs while it waits.
     const [steered, plain] = await Promise.all([phoneInDevelopment(true), phoneInDevelopment(undefined)]);
     for (const p of [steered, plain]) {

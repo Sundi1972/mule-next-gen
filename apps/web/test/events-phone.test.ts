@@ -1,5 +1,5 @@
 import { document, FakeElement } from './fake-dom';
-import { EVENT_SHOW, PHASES } from '@mule/engine';
+import { EVENT_SHOW, productionShow, productionShowMs } from '@mule/engine';
 import type { MuleView, MyView, PlayerView, ProductionEventView, ProductionView, TableView } from '@mule/protocol';
 import { createElement } from 'react';
 import { flushSync } from 'react-dom';
@@ -52,27 +52,32 @@ const lines: ProductionView['lines'] = [
   { x: 1, y: 0, owner: LENA, good: 'energy', made: 4, parts: [] },
   { x: 2, y: 2, owner: OSSA, good: 'food', made: 3, parts: [] },
 ];
-/** The server's view of a month (RULE-1): a quiet month's length, plus what the intro and events run past its window. */
+/** The goods these lines make: Energy and Food. */
+const GOODS = new Set(lines.map((l) => l.good)).size;
+/** How long a month's events play, intro included: 0 in a quiet month. */
+const eventsMsOf = (evs: ProductionEventView[]) => (evs.length > 0 ? introMs + evs.reduce((n, e) => n + e.playMs, 0) : 0);
+/** The server's view of a month (RULE-3, order C): production as long as its show, the events' intro and play included. */
 function monthOf(evs: ProductionEventView[]): ProductionView {
-  const intro = evs.length > 0 ? introMs : 0;
-  const play = evs.reduce((n, e) => n + e.playMs, 0);
-  return { lines, events: evs, lengthMs: PHASES.productionMs + Math.max(0, intro + play - EVENT_SHOW.productionWindowMs), introMs: intro };
+  return { lines, events: evs, lengthMs: productionShowMs(GOODS, eventsMsOf(evs)), introMs: evs.length > 0 ? introMs : 0 };
 }
 const production = monthOf(events);
 const quiet = monthOf([]);
 
-// Show seconds, worked by hand: the events open at 4.8, the intro runs to 6.6, the dust storm 6.6..9.6, the drought
-// 9.6..12.6, the bumper harvest 12.6..15.6; the goods fly after it and the phase ends at 21 (15 + the 6 s the events
-// run past a quiet window).
-const INTRO_AT = 4.8;
-const DUST_AT = 6.6;
-const DROUGHT_AT = 9.6;
-const BUMPER_AT = 12.6;
-const EVENTS_END = 15.6;
-const END = 21;
-// The drought's result card, by the beats: the TV's (announce 2.2, sweep 3.6, settle 1.2 over 3 s) shows it from
-// 11.886; a phone alone's (1.4, 3.6 × 0.75, 0.8) from 11.910. At 11.9 only the TV's beat has it up.
-const BEATS_DIFFER = 11.9;
+// Show seconds, from the engine's timeline: the harvest, the bonuses and the losses, then the events open with the
+// intro (1.8 s), the dust storm, the drought and the bumper harvest (3 s each); the goods fly a gap after the last.
+const TIMES = productionShow(GOODS, eventsMsOf(events));
+const INTRO_AT = TIMES.eventsAtMs! / 1000;
+const DUST_AT = INTRO_AT + introMs / 1000;
+const DROUGHT_AT = DUST_AT + 3;
+const BUMPER_AT = DROUGHT_AT + 3;
+const EVENTS_END = BUMPER_AT + 3;
+const FLY_AT = TIMES.flightAtMs / 1000;
+const END = TIMES.endMs / 1000;
+/** A quiet month's timeline: no events, the flight after the losses. */
+const QUIET = productionShow(GOODS, 0);
+// The drought's result card, by the beats: the TV's (announce 2.2, sweep 3.6, settle 1.2 over 3 s) shows it 2.286 s
+// in; a phone alone's (1.4, 3.6 × 0.75, 0.8) 2.310 s in. 2.3 s in only the TV's beat has it up.
+const BEATS_DIFFER = DROUGHT_AT + 2.3;
 
 const person = (id: string, name: string, slot: number): PlayerView =>
   ({ id, name, isAi: false, color: '', slot, species: 'mollox', money: 1000, worth: 0, plots: 1, ready: false, doneDeveloping: false, colonist: null, condition: null }) as PlayerView;
@@ -85,9 +90,9 @@ const tiles = Array.from({ length: W * H }, (_, i) => {
 });
 
 function game(boards: number, t: number, month: ProductionView = production): PhoneGame {
-  const end = 15 + Math.max(0, (month.introMs + month.events.reduce((n, e) => n + e.playMs, 0) - EVENT_SHOW.productionWindowMs) / 1000);
-  // The phase's end, so that the show stands at `t` seconds when the client reads the server time NOW.
-  const phaseEndsAt = NOW + month.lengthMs * (1 - t / end);
+  // The phase's end, so that the show stands at `t` seconds when the client reads the server time NOW: the show's
+  // seconds are the server's length (HC-3).
+  const phaseEndsAt = NOW + month.lengthMs - t * 1000;
   const view = { phase: 'production', month: 5, maxMonths: 12, phaseEndsAt, width: W, height: H, tiles, players, production: month } as unknown as MuleView;
   const me = { id: LENA, stock: { food: 2, water: 0, energy: 4, smithore: 0, crystite: 0, rareEarth: 0, alloy: 0, electronics: 0, medicine: 0 } } as unknown as MyView;
   return { table: { code: 'ABCD', status: 'playing', hostId: LENA, boards, seats: [], game: null } as TableView<MuleView>, view, me, self: players[0]!, slot: 0 };
@@ -302,8 +307,10 @@ describe('the phone plays the show alone (C7)', () => {
     expect(text(await render(0, INTRO_AT + 0.5), 'intro-card'), "the intro card names the phase's month").toMatch(/^ ?This month 3 things happen this month/);
     const story = await Promise.all(frames(BUMPER_AT, EVENTS_END, 0.25).map((t) => render(0, t)));
     expect(story.some(camera), 'alone, the camera flies in').toBe(true);
-    expect(await render(0, DUST_AT + 0.4, quiet), 'a quiet month').toContain('Your plots are working');
-    expect(card(await render(0, DUST_AT + 0.4, quiet))).toBeNull();
+    for (const t of [QUIET.lossAtMs / 1000 + 0.4, QUIET.flightAtMs / 1000 + 0.4]) {
+      expect(await render(0, t, quiet), `a quiet month at ${t}`).toContain('Your plots are working');
+      expect(card(await render(0, t, quiet)), `a quiet month at ${t}`).toBeNull();
+    }
     for (const t of [EVENTS_END + 0.5, END - 0.5, END]) {
       const held = await render(0, t);
       expect(card(held), `the result holds at ${t}`).toEqual({ event: 'bumperHarvest', at: 'you' });
@@ -375,11 +382,19 @@ describe('the phone plays the show alone (C7)', () => {
   });
 
   it('B-AC-2: the harvest says its goods are flying home only once they fly, after the last event, never while one plays', async () => {
-    // The drought plays at 10.6, past a quiet month's fly start (9.6); the goods fly from 15.6, when the events end.
+    // The drought plays past a quiet month's fly start; the goods fly a gap after the last event ends, never before.
+    expect(DROUGHT_AT + 1).toBeGreaterThan(QUIET.flightAtMs / 1000);
+    expect(FLY_AT).toBeGreaterThan(EVENTS_END);
+    // Lena's Energy takes off second of the two plots (the harvest's order: Food, then Energy), and is in the air 0.75 s.
+    const lenaFlies = TIMES.flyAtMs(1, 2) / 1000;
+    expect(lenaFlies).toBeGreaterThanOrEqual(FLY_AT);
     for (const boards of [0, 1]) {
-      expect(text(await render(boards, EVENTS_END + 0.2), 'harvest'), `boards ${boards}, the goods fly`).toContain('flying home');
+      expect(text(await render(boards, lenaFlies + 0.2), 'harvest'), `boards ${boards}, the goods fly`).toContain('flying home');
     }
+    // From the flight's first take-off, whichever plot it is, not only once Lena's own line 0 leaves (WS8's port, AM-19).
+    expect(text(await render(1, FLY_AT + 0.2), 'harvest'), 'with a TV, the first plot in the air').toContain('flying home');
     expect(text(await render(1, DROUGHT_AT + 1), 'harvest'), 'with a TV, mid-drought').not.toContain('flying home');
+    expect(text(await render(1, EVENTS_END - 0.1), 'harvest'), 'with a TV, the last event ending').not.toContain('flying home');
   });
 
   it('T-AC-5: alone, the rail is the show’s while it plays; the harvest returns as the show ends or is skipped past, and with a TV it stays', async () => {
@@ -388,7 +403,7 @@ describe('the phone plays the show alone (C7)', () => {
       expect(text(await render(1, t), 'harvest'), `with a TV at ${t}`).toContain('+3');
     }
     expect(text(await render(0, EVENTS_END + 0.2), 'harvest'), 'alone, the show over').toContain('+3');
-    expect(text(await render(0, DUST_AT + 0.4, quiet), 'harvest'), 'alone, a quiet month').toContain('+4');
+    expect(text(await render(0, QUIET.flightAtMs / 1000 + 0.4, quiet), 'harvest'), 'alone, a quiet month').toContain('+4');
     const phone = await mount(0, BUMPER_AT + 0.5);
     phone.tap();
     expect(phone.html(), 'on the last result').not.toContain('data-testid="harvest"');
@@ -423,7 +438,8 @@ describe('a broken show never takes the screen under it down (§4)', () => {
         expect(html, `boards ${boards}, the map at ${t}`).toContain('data-testid="holo-map"');
         expect(inside(html, 'plot-1-0'), `boards ${boards}, Lena's plot at ${t}`).toContain('data-bar="unit"');
         expect(html, `boards ${boards}, the stock strip at ${t}`).toContain('data-testid="stock-strip"');
-        expect(text(html, 'actions'), `boards ${boards}, the actions at ${t}`).toContain('On to the auction');
+        // Mid-show the actions' Ready waits for the show to end (the PM's ruling B on ws6-ux AM-19).
+        expect(text(html, 'actions'), `boards ${boards}, the actions at ${t}`).toContain('Watching the show');
         if (boards === 1) expect(text(html, 'harvest'), `with a TV, the harvest at ${t}`).toContain('+3');
       }
       // The broken show is logged, and the screen goes on to the harvest at the phase's end.

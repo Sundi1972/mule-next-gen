@@ -1,9 +1,9 @@
-import { boxOf, createGame, HALL, pubPayoutFor } from '@mule/engine';
+import { boxOf, buildFloor, createGame, DEV_WALK, floorConfig, HALL, pubPayoutFor, reachOf, reachWords, type HallPlace, type Player } from '@mule/engine';
 import type { ChatMessage, MuleView, MyView, TileView } from '@mule/protocol';
 import { ActionButton, FAN, Joystick, LiveWalkers, SeatSpeciesProvider, type Slot } from '@mule/ui';
 import { createElement, type ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { seatSpecies } from '../src/game/derive';
 import type { TableClient } from '../src/net/client';
 import { ClientProvider } from '../src/net/react';
@@ -15,6 +15,7 @@ import { pubPay } from '../src/phone/arcade/seat';
 import { StaticLive, type Live } from '../src/phone/arcade/live';
 import { PhoneGameProvider } from '../src/phone/game';
 import { fitHall, TvArcade } from '../src/table/TvDevelop';
+import { BUBBLE_MAX_MS } from '../src/chat/queue';
 import { at, devView, FRAMED, LENAS_PLOTS, lenasMe, NOW, PLAYERS, reach, STORE, tableOf, TILES } from './fixtures/arcade';
 
 /**
@@ -40,18 +41,23 @@ function clientFor(view: MuleView, role: 'player' | 'board' = 'player', chat: Ch
 const live = (me: Live['me'], others = FRAMED.filter((c) => c.id !== 's1'), status: Live['status'] = 'live'): Live => ({ me, others: new Map(others.map((c) => [c.id, c])), status, beats: [] });
 const mine = (x: number, y: number, over: Partial<NonNullable<Live['me']>> = {}): NonNullable<Live['me']> => ({ x, y, space: 'map', facing: 'right', moving: false, lead: null, ...over });
 
-function onPhone(view: MuleView, now: Live, child: ReactElement): string {
+/** The screen in the providers the game gives it: the client, the seats' species, your seat and the live frames. */
+function seated(view: MuleView, now: Live, child: ReactElement, client: TableClient = clientFor(view)): ReactElement {
   const me = view.me!;
   const self = view.players.find((p) => p.id === me.id)!;
   const value = { table: tableOf(view), view, me, self, slot: self.slot as Slot };
-  const tree = createElement(ClientProvider, {
-    client: clientFor(view),
+  return createElement(ClientProvider, {
+    client,
     children: createElement(SeatSpeciesProvider, { value: seatSpecies(view), children: createElement(PhoneGameProvider, { value, children: createElement(StaticLive, { live: now, children: child }) }) }),
   });
-  return renderToStaticMarkup(tree).replaceAll('<!-- -->', '');
 }
 
-const phone = (view: MuleView, now: Live, size: 844 | 667 = 844) => onPhone(view, now, createElement(PhoneLandscape, { frame: { w: FRAMES[size].w, h: FRAMES[size].h } }));
+function onPhone(view: MuleView, now: Live, child: ReactElement, chat: ChatMessage[] = []): string {
+  return renderToStaticMarkup(seated(view, now, child, clientFor(view, 'player', chat))).replaceAll('<!-- -->', '');
+}
+
+const phone = (view: MuleView, now: Live, size: 844 | 667 = 844, chat: ChatMessage[] = []) => onPhone(view, now, createElement(PhoneLandscape, { frame: { w: FRAMES[size].w, h: FRAMES[size].h } }), chat);
+const laptop = (view: MuleView, now: Live, chat: ChatMessage[] = []) => onPhone(view, now, createElement(LaptopArcade, { frame: { w: 1440, h: 900 } }), chat);
 
 /** The opening tag of the element with this testid, or null. */
 const tag = (html: string, testid: string) => new RegExp(`<[^>]*data-testid="${testid}"[^>]*>`).exec(html)?.[0] ?? null;
@@ -84,6 +90,27 @@ function inside(html: string, testid: string): string {
   return html.slice(open);
 }
 const text = (html: string, testid: string) => inside(html, testid).replace(/<[^>]+>/g, '');
+
+describe('C11: the plots legend in the hall fits above the button', () => {
+  // Lena's plots along row 8, the free ones last on the map (x 4, 5, 6) so only the legend's own order puts them first.
+  const many = (n: number) => TILES.map((t) => (t.y === 8 && t.x < n ? { ...t, owner: 's1', outfit: t.x >= 4 ? null : ('food' as const) } : t.owner === 's1' ? { ...t, owner: null, outfit: null } : t));
+  const order = (html: string) => [...inside(html, 'my-plots-legend').matchAll(/data-testid="legend-(\d+)-8"/g)].map((m) => Number(m[1]));
+  const rows = (html: string) => (inside(html, 'my-plots-legend').match(/data-testid="legend-\d+-\d+"/g) ?? []).length;
+
+  it('C11 (B-AC-4): with up to five plots every one is listed', () => {
+    const html = phone(devView(lenasMe({ carriedMule: 'empty' }), { tiles: many(5) }), live(mine(4, 6, { space: 'hall' })));
+    expect(rows(html)).toBe(5);
+    expect(order(html)).toEqual([4, 0, 1, 2, 3]);
+    expect(text(html, 'my-plots-legend')).not.toContain('more');
+  });
+
+  it('C11 (B-AC-4): with six or more the free plots come first, four rows, the rest as "+N more", so it never reaches the button', () => {
+    const html = phone(devView(lenasMe({ carriedMule: 'empty' }), { tiles: many(7) }), live(mine(4, 6, { space: 'hall' })));
+    expect(rows(html)).toBe(4);
+    expect(order(html)).toEqual([4, 5, 6, 0]);
+    expect(text(html, 'my-plots-legend')).toContain('+3 more');
+  });
+});
 
 describe('C11: the phone, held sideways', () => {
   it('C11: the whole map, every colonist where the frames have them, and yours where your own prediction is', () => {
@@ -260,27 +287,52 @@ describe('C11: the phone, held sideways', () => {
     expect(phone(devView(), live(mine(5.5, 4.5)))).not.toContain('data-testid="reconnecting"');
   });
 
-  it('C11 (AM-20, A-1): while month 1\'s clock waits, the side room says so in A-1\'s words, not only a full clock', () => {
-    const waits = (me: MyView, size: 844 | 667 = 844, waitsFor = ['s2']) => phone(devView(me, { month: 1, clockWaitsFor: waitsFor }), live(mine(5.5, 4.5)), size);
-    // Your MULE is in and Ossa's still to come.
-    const inAt844 = waits(lenasMe({ installedThisTurn: true }));
-    expect(text(inside(inAt844, 'phone-status-left'), 'wait-title')).toBe('Your MULE is in · waiting for Ossa');
-    expect(text(inAt844, 'wait-detail')).toBe('Buying, installing and analysing wait for the clock.');
-    expect(inside(inAt844, 'phone-status-left')).toContain('data-testid="shared-clock"');
-    // At 667 the status is a bar over the map: the title goes there.
-    expect(text(inside(waits(lenasMe({ installedThisTurn: true }), 667), 'phone-status-bar'), 'wait-title')).toBe('Your MULE is in · waiting for Ossa');
-    // Before your first MULE (the clock waits for you too), no rush: the corral, and why.
-    const before = waits(lenasMe(), 844, ['s1', 's2']);
-    expect(text(before, 'wait-title')).toBe('Buy a MULE at the corral');
-    expect(text(before, 'wait-detail')).toBe('Your first month: no rush. The clock starts when your first MULE is in.');
-    // Once the clock runs, no wait words.
-    expect(phone(devView(lenasMe({ installedThisTurn: true }), { month: 1 }), live(mine(5.5, 4.5)))).not.toContain('wait-title');
-  });
-
   it('C11: the turn over in the pub: the card says so, and how many MULEs went in', () => {
     const view = devView(lenasMe({ installedThisTurn: true, reach: reach('IN THE PUB', 'turn over', false) }), { players: PLAYERS.map((p) => (p.id === 's1' ? { ...p, doneDeveloping: true } : p)) });
     const html = phone(view, live(null));
     expect(text(html, 'over-card')).toMatch(/^In the pub: your turn is over/);
+  });
+});
+
+describe('C11: the store\'s promises on the walking screen (B-AC-9, B-AC-10)', () => {
+  it('B-AC-9: fed and well, the pace line says full pace and her colonist wears no tag', () => {
+    const html = phone(devView(), live(mine(5.5, 4.5)));
+    expect(tag(html, 'pace-line')).toMatch(/data-pct="100"/);
+    expect(text(html, 'pace-line')).toBe('Your pace 100%: fed and well');
+    expect(tag(inside(html, 'walkers-map'), 'condition-s1')).toBeNull();
+  });
+
+  it('B-AC-9: hungry, the pace line says her pace and the Food she ate, and her colonist wears the hunger tag at its level', () => {
+    const { hungryFrom, starvingFrom } = DEV_WALK.hungerLevels;
+    const hungry = { foodShare: 1 - (hungryFrom + starvingFrom) / 2, conditionPace: 0.7 };
+    const players = PLAYERS.map((p) => (p.id === 's1' ? { ...p, condition: { ...p.condition!, ...hungry } } : p));
+    const me = lenasMe();
+    const html = phone(devView(lenasMe({ stock: { ...me.stock, food: 2 }, needs: { ...me.needs, food: 5 } }), { players }), live(mine(5.5, 4.5)));
+    expect(tag(html, 'pace-line')).toMatch(/data-pct="70"/);
+    expect(text(html, 'pace-line')).toMatch(/^Your pace 70%: you ate 2 of the 5 Food you need/);
+    expect(tag(inside(html, 'walkers-map'), 'condition-s1')).toMatch(/data-hunger="2"/);
+  });
+
+  /** The engine's words for Lena's press at `place` in the hall, leading `mule`. */
+  function wordsAt(place: HallPlace, mule: Player['carriedMule']) {
+    const state = createGame({ seed: 1, players: [{ id: 's1', name: 'Lena', isAi: false, species: 'zipwing' }, { id: 's2', name: 'Ossa', isAi: false, species: 'gearling' }] });
+    state.phase = 'development';
+    state.players[0]!.carriedMule = mule;
+    const floor = buildFloor(state, floorConfig());
+    const b = boxOf(place);
+    const there = { space: 'hall' as const, x: (b.x0 + b.x1) / 2, y: (b.y0 + b.y1) / 2 };
+    return { there, words: reachWords(reachOf({ ...floor, colonists: floor.colonists.map((c) => (c.id === 's1' ? { ...c, ...there } : c)) }, state, 's1')) };
+  }
+
+  it.each<HallPlace>(['energy', 'alloy'])('B-AC-10: with no MULE in tow the %s outfitter is shut: its button is dim and points to the corral; leading an empty MULE it outfits', (place) => {
+    const shut = wordsAt(place, null);
+    const dim = phone(devView(lenasMe({ reach: shut.words })), live(mine(shut.there.x, shut.there.y, { space: 'hall' })));
+    expect(text(dim, 'action-verb')).toBe('TO THE CORRAL');
+    expect(tag(dim, 'action-button')).toMatch(/\sdisabled=""/);
+    const open = wordsAt(place, 'empty');
+    const lit = phone(devView(lenasMe({ carriedMule: 'empty', reach: open.words })), live(mine(open.there.x, open.there.y, { space: 'hall' })));
+    expect(text(lit, 'action-verb')).toBe(`OUTFIT · ${place.toUpperCase()}`);
+    expect(tag(lit, 'action-button')).toMatch(/data-enabled="true"/);
   });
 });
 
@@ -385,7 +437,7 @@ describe('C11: it fits the phone (B-AC-4\'s layout half, B-AC-11\'s text floor)'
 
 describe('C11: the laptop', () => {
   it('C11: the stage, the one button with SPACE on it, and the controls legend', () => {
-    const html = onPhone(devView(lenasMe({ reach: reach('BUY MULE', '148 cr') })), live(mine(5.5, 4.5)), createElement(LaptopArcade, { frame: { w: 1440, h: 900 } }));
+    const html = laptop(devView(lenasMe({ reach: reach('BUY MULE', '148 cr') })), live(mine(5.5, 4.5)));
     expect(tag(html, 'laptop-game')).not.toBeNull();
     expect(text(inside(html, 'laptop-rail'), 'action-verb')).toBe('BUY MULE');
     expect(text(html, 'controls-legend')).toContain('← ↑ → ↓');
@@ -449,27 +501,6 @@ describe('C12: the TV', () => {
     expect(html).toContain('data-testid="shared-clock"');
     for (const p of PLAYERS) expect(html).toContain(`data-testid="pace-${p.id}"`);
     expect(html).toContain('data-testid="chat-ticker"');
-  });
-
-  it('C12: month 1\'s clock waits for the first MULEs, as today', () => {
-    const html = onTv(devView(lenasMe(), { month: 1, clockWaitsFor: ['s2'] }), everyone());
-    expect(html).toContain('data-testid="tv-clock-label"');
-    expect(html).toContain('data-testid="tv-first-mules"');
-    expect(html).not.toContain('data-testid="shared-clock"');
-  });
-
-  it("C12 (A-1): while month 1's clock waits the TV's header shows no clock, as the flag-off TV; once it runs, it does", () => {
-    const header = (html: string) => /<header[\s\S]*?<\/header>/.exec(html)?.[0] ?? '';
-    const waiting = onTv(devView(lenasMe(), { month: 1, clockWaitsFor: ['s2'], phaseEndsAt: null }), everyone());
-    expect(header(waiting)).not.toBe('');
-    expect(header(waiting)).not.toContain('role="timer"');
-    expect(header(onTv(devView(lenasMe(), { month: 1, phaseEndsAt: Date.now() + 30_000 }), everyone()))).toContain('role="timer"');
-  });
-
-  it('C12 (A-1): the host started the clock: the news shows on the TV as a beat; other news does not', () => {
-    const started = onTv(devView(lenasMe(), { month: 1, news: ['Kai installed a MULE.', 'Lena started the clock without Ossa.'] }), everyone());
-    expect([...started.matchAll(/data-testid="tv-beat"[^>]*>([^<]+)</g)].map((m) => m[1])).toEqual(['Lena started the clock without Ossa.']);
-    expect(onTv(devView(lenasMe(), { news: ['Kai installed a MULE.'] }), everyone())).not.toContain('tv-beat');
   });
 
   it('C12 (A-1): six seats: the hall takes the height the pace list leaves it, at 4:3, never more', () => {
@@ -538,5 +569,300 @@ describe('C11: the controls, as WS4 reviewed them', () => {
     expect(tag(html, 'joystick')).toMatch(/role="application"/);
     expect(tag(html, 'joystick')).toMatch(/aria-label="Joystick: drag to walk"/);
     expect(html).not.toMatch(/aria-valuenow|role="slider"/);
+  });
+});
+
+describe('C11 (AM-31): the table chat on the walking screen', () => {
+  const CHAT: ChatMessage[] = [
+    { id: 1, from: 's3', text: 'Crystite is up north', at: 0 },
+    { id: 2, from: 's2', text: 'Race you to the corral, Lena, and the last one buys', at: 0 },
+  ];
+  /** The ticker's lines, newest first: each line's id and its words. */
+  const tickerLines = (html: string) => [...inside(html, 'chat-ticker').matchAll(/data-testid="chat-line-(\d+)"/g)].map((m) => Number(m[1]));
+
+  it('C11 (AM-31): at 844 the side room, under the clock, carries the newest line as one sentence wrapped to at most three rows', () => {
+    for (const where of ['map', 'hall'] as const) {
+      const html = phone(devView(), live(mine(where === 'map' ? 5.5 : 4, where === 'map' ? 4.5 : 6, { space: where })), 844, CHAT);
+      const room = inside(html, 'phone-status-left');
+      expect(tag(room, 'chat-ticker'), where).not.toBeNull();
+      expect(room.indexOf('data-testid="chat-ticker"')).toBeGreaterThan(room.indexOf('data-testid="shared-clock"'));
+      expect(tickerLines(html)).toEqual([2]);
+      expect(tag(html, 'chat-line-2')).toMatch(/line-clamp-3/);
+      expect(text(html, 'chat-line-2')).toBe('Ossa: Race you to the corral, Lena, and the last one buys');
+    }
+  });
+
+  it('C11 (AM-31): at 667 the status bar over the map carries the newest line on one row, cut, after the pace line', () => {
+    const html = phone(devView(), live(mine(5.5, 4.5)), 667, CHAT);
+    const bar = inside(html, 'phone-status-bar');
+    expect(tag(bar, 'chat-ticker')).not.toBeNull();
+    expect(bar.indexOf('data-testid="chat-ticker"')).toBeGreaterThan(bar.indexOf('data-testid="pace-line"'));
+    expect(tickerLines(html)).toEqual([2]);
+    expect(tag(html, 'chat-line-2')).toMatch(/\btruncate\b/);
+    expect(tag(html, 'chat-line-2')).not.toMatch(/line-clamp/);
+  });
+
+  it('C11 (AM-31): the laptop\'s rail has a Table chat panel above Controls with the newest two lines, each wrapped', () => {
+    const html = laptop(devView(), live(mine(5.5, 4.5)), CHAT);
+    const rail = inside(html, 'laptop-rail');
+    expect(rail).toContain('Table chat');
+    expect(rail.indexOf('data-testid="chat-ticker"')).toBeGreaterThan(-1);
+    expect(rail.indexOf('data-testid="chat-ticker"')).toBeLessThan(rail.indexOf('data-testid="controls-legend"'));
+    expect(tickerLines(html)).toEqual([2, 1]);
+    for (const id of [1, 2]) expect(tag(html, `chat-line-${id}`)).toMatch(/line-clamp-3/);
+    expect(text(html, 'chat-line-1')).toBe('Kai: Crystite is up north');
+  });
+
+  /** The fixture's map cut or grown to `w` × `h`: a table of 2–3 seats plays on 13 × 7, of 5–6 on 19 × 11. */
+  const sized = (w: number, h: number): Partial<MuleView> => ({
+    width: w,
+    height: h,
+    tiles: Array.from({ length: w * h }, (_, i) => {
+      const x = i % w;
+      const y = Math.floor(i / w);
+      return TILES.find((t) => t.x === x && t.y === y) ?? { ...TILES.find((t) => t.terrain === 'plains')!, x, y, owner: null, outfit: null };
+    }),
+  });
+
+  it.each([
+    [13, 7],
+    [19, 11],
+  ])('C11 (AM-31): at 844 on a %i × %i map the status is a bar over the map, and the bar carries the newest line', (w, h) => {
+    const html = phone(devView(lenasMe(), sized(w, h)), live(mine(5.5, 4.5)), 844, CHAT);
+    expect(tag(html, 'phone-game')).toMatch(/data-mode="top"/);
+    expect(tag(inside(html, 'phone-status-bar'), 'chat-ticker')).not.toBeNull();
+    expect(tickerLines(html)).toEqual([2]);
+  });
+
+  it('C11 (AM-31): a line from someone not at this table is not drawn, and draws nothing in its place', () => {
+    const stranger: ChatMessage = { id: 9, from: 'zz', text: 'Who am I', at: 0 };
+    for (const html of [phone(devView(), live(mine(5.5, 4.5)), 844, [...CHAT, stranger]), laptop(devView(), live(mine(5.5, 4.5)), [...CHAT, stranger])]) {
+      expect(tickerLines(html)).toEqual(tickerLines(html).length === 1 ? [2] : [2, 1]);
+      expect(html).not.toContain('Who am I');
+    }
+  });
+
+  it('C11 (AM-31): your own map and hall bound their colonists\' bubbles, which they clip; the TV\'s stages draw none', () => {
+    expect(tag(phone(devView(), live(mine(5.5, 4.5))), 'map-stage')).toMatch(/data-bubble-bounds/);
+    expect(tag(phone(devView(), live(mine(4, 6, { space: 'hall' }))), 'hall-stage')).toMatch(/data-bubble-bounds/);
+    expect(tag(laptop(devView(), live(mine(5.5, 4.5))), 'map-stage')).toMatch(/data-bubble-bounds/);
+    const tv = renderToStaticMarkup(createElement(ClientProvider, { client: clientFor(devView(), 'board'), children: createElement(StaticLive, { live: live(null, FRAMED), children: createElement(TvArcade, { game: devView() }) }) }));
+    expect(tv).not.toContain('data-bubble-bounds');
+  });
+
+  it('C11 (AM-31): on a short laptop the chat panel folds, its older line first, so Controls stays in the window', () => {
+    const rail = inside(laptop(devView(), live(mine(5.5, 4.5)), CHAT), 'laptop-rail');
+    const panel = /<section class="([^"]*)"[^>]*><header[^>]*><h2[^>]*>Table chat/.exec(rail)?.[1] ?? '';
+    expect(panel).toMatch(/\bmin-h-0\b/);
+    expect(panel).toMatch(/\boverflow-hidden\b/);
+    // Newest first, and no line gives up its rows: the panel folds from the bottom, the older line first.
+    expect(tickerLines(rail)).toEqual([2, 1]);
+    for (const id of [1, 2]) expect(tag(rail, `chat-line-${id}`)).toMatch(/\bshrink-0\b/);
+  });
+
+  it('C11 (AM-31): a whisper carries its lock in the ticker', () => {
+    const html = phone(devView(), live(mine(5.5, 4.5)), 844, [{ id: 3, from: 's2', to: 's1', text: 'Psst', at: 0 }]);
+    expect(text(html, 'chat-line-3')).toBe('Ossa 🔒: Psst');
+  });
+
+  /** A box from an element's inline left, top, width and one of its heights, in px (React writes a zero bare). */
+  function styleBox(html: string, testid: string, height: 'height' | 'min-height' | 'max-height'): Box {
+    const t = tag(html, testid)!;
+    const px = (prop: string) => Number(new RegExp(`(?:^|[;"])${prop}:([\\d.]+)(?:px)?[;"]`).exec(t)?.[1] ?? NaN);
+    return { x: px('left'), y: px('top'), w: px('width'), h: px(height) };
+  }
+
+  it.each<[844 | 667, 'map' | 'hall']>([
+    [844, 'map'],
+    [844, 'hall'],
+    [667, 'map'],
+    [667, 'hall'],
+  ])('C11 (AM-31): at %i on the %s the phone shows the ticker, so a line from a speaker it doesn\'t draw still reaches it', (size, where) => {
+    const html = phone(devView(), live(mine(where === 'map' ? 5.5 : 4, where === 'map' ? 4.5 : 6, { space: where })), size, CHAT);
+    expect(tickerLines(html)).toEqual([2]);
+    expect(text(html, 'chat-line-2')).toMatch(/^Ossa:/);
+  });
+
+  it('C11 (AM-31): at 667 in the hall the compact side room carries the newest line on one cut row at its foot, and it covers 0 px² of the store and the controls', () => {
+    const L = phoneLayout(FRAMES[667], 'hall');
+    const html = phone(devView(), live(mine(4, 6, { space: 'hall' })), 667, CHAT);
+    const room = inside(html, 'phone-status-left');
+    expect(tag(room, 'chat-ticker')).not.toBeNull();
+    expect(tag(html, 'chat-line-2')).toMatch(/\btruncate\b/);
+    expect(tag(room, 'chat-foot')).toMatch(/\bmt-auto\b/);
+    expect(inside(room, 'chat-foot')).toContain('data-testid="chat-ticker"');
+    const box = styleBox(html, 'phone-status-left', 'height');
+    expect(box).toEqual(L.left);
+    expect(tag(html, 'phone-status-left')).toMatch(/overflow-hidden/);
+    // The hall is the store: the side room lies beside it.
+    for (const kept of [L.stick, L.button, L.stage]) expect(overlap(box, kept), JSON.stringify(kept)).toBe(0);
+  });
+
+  it.each([844, 667] as const)('C11 (AM-31): at %i the ticker covers 0 px² of the store, Lena\'s plots and the controls', (size) => {
+    const L = phoneLayout(FRAMES[size], 'map', 15, 9);
+    const html = phone(devView(), live(mine(5.5, 4.5)), size, CHAT);
+    // The ticker lies in its holder's box, which keeps to it: the side room clips at its height, the bar is one row.
+    const holder = size === 844 ? 'phone-status-left' : 'phone-status-bar';
+    expect(tag(inside(html, holder), 'chat-ticker')).not.toBeNull();
+    const box = styleBox(html, holder, size === 844 ? 'height' : 'min-height');
+    if (size === 844) {
+      expect(box).toEqual(L.left);
+      expect(tag(html, holder)).toMatch(/overflow-hidden/);
+    }
+    for (const b of Object.values(box)) expect(Number.isFinite(b)).toBe(true);
+    const tile = (p: { x: number; y: number }): Box => ({ x: L.stage.x + p.x * L.cell, y: L.stage.y + p.y * L.cell, w: L.cell, h: L.cell });
+    for (const kept of [L.stick, L.button, tile(STORE), ...LENAS_PLOTS.map(tile)]) expect(overlap(box, kept), JSON.stringify(kept)).toBe(0);
+  });
+});
+
+/**
+ * A bubble hangs at its speaker only once the speaker's creature has registered as its anchor, which a static render
+ * never runs: these mount the screen into the fake DOM, last in this file, since the fake DOM stays for what follows.
+ */
+describe('C11 (AM-31): a speaking colonist\'s bubble, at that colonist (mounted)', () => {
+  type Dom = typeof import('./fake-dom');
+  let dom: Dom;
+  let act: typeof import('react').act;
+  let createRoot: typeof import('react-dom/client').createRoot;
+
+  beforeAll(async () => {
+    dom = await import('./fake-dom');
+    ({ act } = await import('react'));
+    ({ createRoot } = await import('react-dom/client'));
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    const doc = dom.document as unknown as { createElementNS?: (ns: string, tag: string) => InstanceType<Dom['FakeElement']> };
+    doc.createElementNS ??= (_ns, tag) => dom.document.createElement(tag);
+    (dom.document.documentElement as unknown as { dataset?: object }).dataset ??= {};
+    // What the screen and the bubble reach for that the fake DOM lacks: focus, a box, no layout to fit into, animation
+    // frames (none run) and a mutation observer.
+    const element = dom.FakeElement.prototype as unknown as { focus(): void; getBoundingClientRect(): object; closest(): null };
+    element.focus = () => {};
+    element.getBoundingClientRect = () => ({ x: 0, y: 0, left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0 });
+    element.closest = () => null;
+    class Observer {
+      observe() {}
+      disconnect() {}
+      takeRecords() {
+        return [];
+      }
+    }
+    Object.assign(globalThis, { requestAnimationFrame: () => 0, cancelAnimationFrame: () => {}, MutationObserver: Observer });
+  });
+
+  /** A client whose chat grows as the table speaks, telling its listeners as the real one does. */
+  function talkingClient(view: MuleView) {
+    const listeners = new Set<() => void>();
+    let state = { ...clientFor(view).getState(), chat: [] as ChatMessage[] };
+    const client = { ...clientFor(view), subscribe: (l: () => void) => (listeners.add(l), () => listeners.delete(l)), getState: () => state } as unknown as TableClient;
+    const say = (line: ChatMessage) => {
+      state = { ...state, chat: [...state.chat, line] };
+      for (const l of [...listeners]) l();
+    };
+    return { client, say };
+  }
+
+  function element(node: InstanceType<Dom['FakeElement']>, testid: string): InstanceType<Dom['FakeElement']> | null {
+    if (node.getAttribute('data-testid') === testid) return node;
+    for (const c of node.childNodes) {
+      const hit = c instanceof dom.FakeElement ? element(c, testid) : null;
+      if (hit) return hit;
+    }
+    return null;
+  }
+
+  /** Mounts Lena's phone where `me` stands, lets `from` say a line, and returns the screen. */
+  function speak(me: NonNullable<Live['me']>, from: string, child: (view: MuleView) => ReactElement = () => createElement(PhoneLandscape, { frame: { w: FRAMES[844].w, h: FRAMES[844].h } })) {
+    const view = devView();
+    const { client, say } = talkingClient(view);
+    const host = dom.document.createElement('div');
+    const root = createRoot(host as unknown as HTMLElement);
+    act(() => root.render(seated(view, live(me), child(view), client)));
+    act(() => say({ id: 1, from, text: 'Race you to the corral', at: Date.now() }));
+    return { host, unmount: () => act(() => root.unmount()) };
+  }
+
+  it.each<[string, NonNullable<Live['me']>, string, string]>([
+    ['on the map, at another colonist', mine(5.5, 4.5), 's2', 'walkers-map'],
+    ['on the map, at your own', mine(5.5, 4.5), 's1', 'walkers-map'],
+    ['in the hall, at another colonist', mine(4, 6, { space: 'hall' }), 's3', 'walkers-hall'],
+  ])('C11 (AM-31): %s', (_, me, from, layer) => {
+    const { host, unmount } = speak(me, from);
+    const colonist = element(element(host, layer)!, `colonist-${from}`);
+    expect(colonist).not.toBeNull();
+    expect(element(colonist!, `chat-bubble-${from}`)?.textContent).toBe('Race you to the corral');
+    unmount();
+  });
+
+  it('C11 (AM-31): in the hall, at your own colonist, the store\'s own visitor', () => {
+    const { host, unmount } = speak(mine(4, 6, { space: 'hall' }), 's1');
+    expect(element(element(host, 'visitor-s1')!, 'chat-bubble-s1')?.textContent).toBe('Race you to the corral');
+    unmount();
+  });
+
+  /** Boxes the fake DOM reports, by testid (a prefix for the bubbles), and the stage's search for a bubble. */
+  function boxes(by: Record<string, { left: number; top: number; right: number; bottom: number }>) {
+    const proto = dom.FakeElement.prototype as unknown as { getBoundingClientRect(): object; querySelector(sel: string): unknown };
+    const before = { rect: proto.getBoundingClientRect, query: proto.querySelector };
+    proto.getBoundingClientRect = function (this: InstanceType<Dom['FakeElement']>) {
+      const id = this.getAttribute('data-testid') ?? '';
+      const hit = Object.entries(by).find(([k]) => (k.endsWith('*') ? id.startsWith(k.slice(0, -1)) : id === k))?.[1];
+      const r = hit ?? { left: 0, top: 0, right: 0, bottom: 0 };
+      return { ...r, x: r.left, y: r.top, width: r.right - r.left, height: r.bottom - r.top };
+    };
+    proto.querySelector = function (this: InstanceType<Dom['FakeElement']>, sel: string) {
+      const prefix = /^\[data-testid\^=([\w-]+)\]$/.exec(sel)?.[1];
+      const find = (n: InstanceType<Dom['FakeElement']>): InstanceType<Dom['FakeElement']> | null => {
+        for (const c of n.childNodes) {
+          if (!(c instanceof dom.FakeElement)) continue;
+          if (prefix && (c.getAttribute('data-testid') ?? '').startsWith(prefix)) return c;
+          const deeper = find(c);
+          if (deeper) return deeper;
+        }
+        return null;
+      };
+      return find(this);
+    };
+    return () => Object.assign(proto, { getBoundingClientRect: before.rect, querySelector: before.query });
+  }
+  const at667 = () => createElement(PhoneLandscape, { frame: { w: FRAMES[667].w, h: FRAMES[667].h } });
+
+  it('C11 (AM-31): at 667 a bubble that meets the status bar fades the bar and paints above it, until the bubble ends', () => {
+    // The chat store's clock: a bubble ends on its own timer, at most BUBBLE_MAX_MS after it starts.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    const restore = boxes({ 'phone-status-bar': { left: 200, top: 2, right: 600, bottom: 37 }, 'chat-bubble-*': { left: 300, top: 10, right: 420, bottom: 44 } });
+    try {
+      const { host, unmount } = speak(mine(5.5, 4.5), 's2', at667);
+      expect(element(host, 'phone-status-bar')!.getAttribute('data-faded')).toBe('true');
+      const walkers = element(host, 'walkers-layer')!;
+      expect(walkers.getAttribute('data-over-bar')).toBe('true');
+      expect(walkers.getAttribute('class')).toMatch(/\bz-\[25\]/);
+      expect(element(host, 'phone-status-bar')!.getAttribute('class')).toMatch(/\bz-20\b/);
+      act(() => vi.advanceTimersByTime(BUBBLE_MAX_MS + 100));
+      expect(element(host, 'chat-bubble-s2')).toBeNull();
+      expect(element(host, 'phone-status-bar')!.getAttribute('data-faded')).toBeNull();
+      expect(element(host, 'walkers-layer')!.getAttribute('data-over-bar')).toBeNull();
+      expect(element(host, 'walkers-layer')!.getAttribute('class')).toMatch(/\bz-\[7\]/);
+      unmount();
+    } finally {
+      restore();
+      vi.useRealTimers();
+    }
+  });
+
+  it('C11 (AM-31): at 667 a bubble clear of the bar leaves it, and the colonists stay under it', () => {
+    const restore = boxes({ 'phone-status-bar': { left: 200, top: 2, right: 600, bottom: 37 }, 'chat-bubble-*': { left: 300, top: 120, right: 420, bottom: 154 } });
+    const { host, unmount } = speak(mine(5.5, 4.5), 's2', at667);
+    expect(element(host, 'chat-bubble-s2')).not.toBeNull();
+    expect(element(host, 'phone-status-bar')!.getAttribute('data-faded')).toBeNull();
+    expect(element(host, 'walkers-layer')!.getAttribute('data-over-bar')).toBeNull();
+    expect(element(host, 'walkers-layer')!.getAttribute('class')).toMatch(/\bz-\[7\]/);
+    unmount();
+    restore();
+  });
+
+  it('C11 (AM-31): on the laptop, at the colonist on its map', () => {
+    const { host, unmount } = speak(mine(5.5, 4.5), 's2', () => createElement(LaptopArcade, { frame: { w: 1440, h: 900 } }));
+    expect(element(element(element(host, 'walkers-map')!, 'colonist-s2')!, 'chat-bubble-s2')).not.toBeNull();
+    unmount();
   });
 });

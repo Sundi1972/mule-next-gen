@@ -246,8 +246,8 @@ export const UPKEEP = {
 
 export const START = {
   money: 1000,
-  /** Each player's depot at the start. */
-  playerStock: { food: 6, water: 6, energy: 4 } as Partial<Stock>,
+  /** Each player's depot at the start. Food 2 and Energy 2 (Heiko, 5 Nov). */
+  playerStock: { food: 2, water: 6, energy: 2 } as Partial<Stock>,
   /** Each player's reputation at the start, out of 100. */
   reputation: 50,
   colonists: 100,
@@ -258,17 +258,34 @@ export const START = {
    * prices Water at what colonists pay, so the seats build wells early. A few units more put the dry month past the
    * outlook, and the colonists go short later in the game. When this, START.colonists, UPKEEP.colonistGrowth or the
    * outlook changes, re-run `pnpm sim -- --games 40 --seed N --politics on|off` for seeds 1, 101 and 201 and read
-   * "Colonists short of Food or Water".
+   * "Colonists short of Food or Water". Food and Energy are per seat (storeFoodPerPlayer, storeEnergyPerPlayer);
+   * storeStockFor adds them.
    */
-  storeStock: { food: 30, water: 20, energy: 16, smithore: 20, crystite: 0, rareEarth: 4, alloy: 8, electronics: 0, medicine: 4 } satisfies Stock,
+  storeStock: { water: 20, smithore: 20, crystite: 0, rareEarth: 4, alloy: 8, electronics: 0, medicine: 4 } satisfies Omit<Stock, 'food' | 'energy'>,
+  /** The store's Food at the start, for each seat: 4 (Heiko, 5 Nov), so 16 in a 4-seat game. */
+  storeFoodPerPlayer: 4,
+  /** The store's Energy at the start, for each seat: 5 (Heiko, 5 Nov), so 20 in a 4-seat game. */
+  storeEnergyPerPlayer: 5,
 };
+
+/** The store's stock as a game of `players` seats starts: START.storeStock, with Food and Energy for each seat. */
+export function storeStockFor(players: number): Stock {
+  return { ...START.storeStock, food: players * START.storeFoodPerPlayer, energy: players * START.storeEnergyPerPlayer };
+}
 
 export const MULE = {
   /** Labour in an empty MULE. Its price is this plus the Smithore it is built from. */
   labour: 120,
   /** Smithore the store needs to build one MULE, as in the original. */
   smithorePerMule: 1,
-  /** The store builds MULEs for every plot claimed in a month, plus this many. */
+  /**
+   * MULEs the store builds for each seat a month: the land a seat gains in a month, by the land grant and the land
+   * auction, not by the grant alone. Sizes the corral (upkeep.ts, and its copy in the AI's outlook) and the MULEs'
+   * share of Smithore demand (economy.ts mulesWanted). 2 keeps the corral it had when a grant gave two claims, so
+   * GAME.claimsPerGrant 2 → 1 (Heiko, 5 Nov) shrinks neither.
+   */
+  corralPerPlayer: 2,
+  /** The store builds MULEs for every seat's corralPerPlayer, plus this many. */
   spareInCorral: 2,
   /** If the corral sold out, MULEs cost this much more next month; with surplusShare of the month's MULEs or more left over, surplusDown less. */
   scarcityUp: 0.15,
@@ -285,7 +302,8 @@ export const MULE = {
 export const DEVELOPMENT = {
   /**
    * Seconds of development, the same for every player: hunger and sickness slow the walk instead (DEV_WALK). 60 (Heiko,
-   * 4 Nov), so a starving colonist has the time to put Food on a plot next to the store.
+   * 4 Nov). With walking on, the clock alone doesn't save a starving colonist: at a fifth of its pace even the
+   * nearest Food errand and the pub take longer than 60 s, which is why DEV_WALK.hungerPaceMin is 0.6.
    */
   fullSeconds: 60,
   /** Seconds a colonist stands on a plot for a geo analysis. */
@@ -302,7 +320,7 @@ export const DEVELOPMENT = {
 /**
  * Walking in development costs time off the one development clock (Heiko's R1, 0.4 s a tile). A walk goes in grid
  * steps on the map, never diagonally; the store and its corral are on the store's tile. A hungry or sick colonist
- * walks slower, and the two multiply: no Food and sick is a tenth of normal pace (Heiko's numbers).
+ * walks slower, and the two multiply: no Food and sick is 0.6 × 0.5 = 0.3 of normal pace (Heiko's numbers).
  * Not WALK, the goods auction's walk.
  */
 export const DEV_WALK = {
@@ -310,8 +328,13 @@ export const DEV_WALK = {
   tileSeconds: 0.4,
   /** Seconds to cross the store floor to the corral, from the door or any other room. */
   floorSeconds: 1,
-  /** Share of its pace a colonist with no Food walks at; it rises linearly to 1 with the share of the month's Food it holds. */
-  hungerPaceMin: 0.2,
+  /**
+   * Share of its pace a colonist with no Food walks at; it rises linearly to 1 with the share of the month's Food it holds.
+   * 0.6 (Heiko, 4 Nov, "Yes, 60%"): the strongest slowdown with which the colony escapes famine with walking on. At 0.2
+   * a starving colonist couldn't reach Food and the pub inside the turn and stayed starving (measured: 58% of months
+   * short of Food or Water; from 0.6, under 15% in every measured cell).
+   */
+  hungerPaceMin: 0.6,
   /** Share of its pace a sick colonist walks at (EVENTS.player.sickness rolled, and no Medicine held). */
   sickPace: 0.5,
   /**
@@ -333,10 +356,10 @@ export type LakeMode = 'shore' | 'wade';
  * Heiko's starting values (arcade spec RULE-7); DEV_WALK's hunger, sickness and Zipwing pace still apply.
  */
 export const DEV_STEER = {
-  /** Steered walking instead of DEV_WALK's tap-to-walk. Off until Heiko's OK on the rig. */
-  on: false as boolean,
-  /** Tiles a second on plains at full pace: half of today's 1 / DEV_WALK.tileSeconds. */
-  mapTilesPerSecond: 1.25,
+  /** Steered walking instead of DEV_WALK's tap-to-walk. On since Heiko's OK on the rig (arcade PR-11). */
+  on: true as boolean,
+  /** Tiles a second on plains at full pace: the tap walk's own pace, 1 / DEV_WALK.tileSeconds (Heiko, 4 Nov; 1.25 was half). */
+  mapTilesPerSecond: 2.5,
   /** Seconds across the store's hall at full pace, door to corral. */
   floorSeconds: 3,
   /** Share of its speed a colonist keeps while it leads a MULE. */
@@ -379,14 +402,10 @@ export const DEV_STEER = {
   botStuckTicks: 20,
   /** An AI colonist installing on a lake plot from the shore stands this far from the shore tile's middle towards the lake, in tiles. */
   botShoreTiles: 0.3,
-  /** The sim's stand-in for the host's Continue (AM-3): month 1's waiting clock starts after this many seconds anyway. */
-  simHostContinueSeconds: 120,
   /** Share of what a MULE cost that the pub pays back when its owner walks in leading it. */
   pubLeadRefund: 0,
   /** A re-outfit's price, as a share of the outfitter's price for the new good: 1 is the outfit price. */
   reoutfitCost: 1,
-  /** Month 1's development clock stands full until every present seat's first MULE is installed. */
-  month1WaitsForFirstMule: true as boolean,
   /** A colonist's clearance from walls, lakes and the map's edge, in tiles. */
   bodyTiles: 0.18,
   /** How far the door reaches above and below the middle of each side face of the store's tile, in tiles. */
@@ -416,9 +435,17 @@ export const WOLVES = {
   cooldownSeconds: 20,
   /** Time to choose run or fight before they pounce, which is a fight. */
   chooseSeconds: 3,
-  /** A chasing wolf's speed, in tiles a second. */
-  chaseSpeed: 1.1,
-  /** A chase ends, got away, after this long or this far from where it started. */
+  /**
+   * A chasing wolf's speed, as a share of DEV_STEER.mapTilesPerSecond (AM-32). Relative, not tiles a second, so a change
+   * of walking pace cannot defang the pack: RULE-4 tuned 1.1 tiles a second against colonists at 1.25, and 0.88 is that.
+   */
+  chaseShare: 0.88,
+  /**
+   * A chase ends, got away, after this long, or this far from where it started. The distance stays in tiles at any pace
+   * (AM-32, corrected): the pack's distances (packRingTiles, chaseCatchTiles) are tiles and its speed is a share of the
+   * pace, so a give-up distance in tiles holds the chase's odds; scaled with the pace, it let the pack close twice the
+   * ground at 2.5 and escapes fell to 4 of 20.
+   */
   giveUpSeconds: 5,
   giveUpTiles: 4,
   /** Share of its speed a bitten colonist keeps, till it reaches the store or its own plot. */
@@ -779,7 +806,8 @@ export const GAME = {
   maxMonths: 12,
   /** Months the game continues after the last free plot is claimed. */
   landRushMonths: 3,
-  claimsPerGrant: 2,
+  /** Plots each seat may claim in a land grant: one (Heiko, 5 Nov). The corral is sized by MULE.corralPerPlayer, not this. */
+  claimsPerGrant: 1,
   /** The land grant is one pass of the light over the free plots, or ends earlier once every claim is used. */
   grantSweeps: 1,
   /** What each plot a player owns adds to their score, before any MULE on it. */
@@ -994,8 +1022,6 @@ export const PHASES = {
    * the grant's tick, phaseScale never changes it.
    */
   grantFastForwardMs: GAME.grantTickMs / 8,
-  /** Production: the show of what each plot made. */
-  productionMs: 15_000,
   /**
    * Upkeep, the month end: colonists eat and goods spoil, and the table reads the league table. null: it waits for
    * every player's Ready ("On to month N") or the host's Continue; a number restores a timer.
@@ -1042,10 +1068,38 @@ export const EVENT_SHOW = {
   introMs: 1_800,
   /** How long the one roll call that every bulletin of a phase shares plays, in ms. */
   rollCallMs: 4_000,
-  /** The event window production's 15 s show already has; only time beyond it lengthens production. */
-  productionWindowMs: 4_800,
   /** The most the events of one phase may play in all, in ms; past it each is cut in proportion. */
   capMs: 30_000,
+};
+
+/**
+ * The production show (ws6-ux spec AM-19, RULE-3; Heiko's order C, 2026-11-05): good by good for every player at
+ * once, then every bonus at once, then every loss at once, then the month's events, then the goods fly into the silos.
+ * The timeline is packages/engine/src/production-show.ts; its length is production's length, so it grows with the
+ * goods made, never the plots. Named edit in WS1's config, values WS6's (approved in the mock, b65c3972).
+ */
+export const PRODUCTION_SHOW = {
+  /** The order the goods harvest in: the crops, then the mines, then the factories. */
+  order: ['food', 'water', 'energy', 'smithore', 'crystite', 'rareEarth', 'alloy', 'electronics', 'medicine'] as const satisfies readonly Good[],
+  /** Before the first good lights. */
+  introMs: 1_000,
+  /** One good's turn: every plot of it lights and counts up together. */
+  goodBeatMs: 1_100,
+  /** One unit of a plot's base rising, so a 4-unit plot counts up as you watch. */
+  unitStepMs: 140,
+  /** Every bonus at once, then every loss at once: each held this long. */
+  allAtOnceMs: 1_600,
+  /** Before the bonuses, before the events and before the flight. */
+  gapMs: 500,
+  /** The plots take off for the silos over this long, the first gaps longest (`flightEase` below 1). */
+  flightsMs: 2_400,
+  flightEase: 0.7,
+  /** One plot's goods in the air. */
+  flightMs: 750,
+  /** The silos stand full to be read before the phase ends. */
+  holdMs: 2_000,
+  /** Once every person at the table has asked, the rest of the show plays this many times faster. */
+  fast: 3,
 };
 
 /**
@@ -1417,6 +1471,8 @@ type PlanKind = Strategy['kind'];
 export const AI_PLANS = {
   /** Seats play their playbook; false: every seat plays the phase-by-phase asks, as before playbooks. */
   on: true,
+  /** A feature switch, not a balance value: a seat's own path plays its drafted development and auction parts; false, today's (AM-26). */
+  ownPhases: false,
   /** How much each persona leans to each plan kind, 0 to 1: the draft picks the eligible kind it leans to most. */
   leaning: {
     cautious: { builder: 1, specialist: 0.5, monopolist: 0.2, landBaron: 0.3, politician: 0.4, spoiler: 0 },

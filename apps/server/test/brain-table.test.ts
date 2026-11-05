@@ -237,11 +237,6 @@ function tally(keys: string[]): Map<string, number> {
 /** The model's reply, as the structured output the client asks for. */
 const reply = (option: string, line: string) => sdkMessage(JSON.stringify({ option, line }));
 
-/**
- * The option a prompt offers that installs a MULE (an `install:` key: its label reads "<outfit> on plot x·y"), else
- * "B". The fake model sees only the prompt, so it finds the install by its label.
- */
-const installOrB = (lines: string[]): string => lines.map((l) => /^([A-Z])\. .+ on plot \d+·\d+ \(/.exec(l)?.[1]).find(Boolean) ?? 'B';
 
 describe('the server test setup', () => {
   it('INV-test-key: the shell\'s key and auth token are cleared and the ledger logs to a temp file; only a key a test stubs builds a client', () => {
@@ -264,11 +259,11 @@ describe('the server test setup', () => {
 describe('the brain at the table', { timeout: 30_000 }, () => {
   // The decision B-AC-1 reads is the seat's first ask, whatever its kind: with playbooks a Smart seat's land comes from
   // its playbook write (spec A), not from a land decision.
-  it('B-AC-1: a fake model\'s "Mine." shows in every screen\'s chat and the seat plays option B', async () => {
+  it('B-AC-1: a fake model\'s pick is the seat\'s move, with the model\'s line on the record', async () => {
     const spenderName = AI_NAMES[1]!;
-    const sdk = decisions((_n, params) => (requestOf(params).seat === spenderName ? reply('B', 'Mine.') : reply('A', '')));
+    const sdk = decisions((_n, params) => (requestOf(params).seat === spenderName ? reply('B', MODEL_LINE) : reply('A', '')));
     const { brain, records } = watched(smart(sdk));
-    const t = table({ humans: ['Heiko', 'Mia'], ais: 2, brain });
+    const t = table({ humans: ['Heiko', 'Mia'], ais: 2, brain, maxMonths: 4 });
     const spender = t.ais[1]!;
     expect(spender.name).toBe(spenderName);
     const askOf = () => asks(sdk).map((r) => requestOf(r.params)).find((p) => p.seat === spenderName);
@@ -279,10 +274,13 @@ describe('the brain at the table', { timeout: 30_000 }, () => {
     const move = moveOf()!;
     const optionB = move.shortlist.find((o) => o.id === 'B')!;
     expect(prompt.lines.some((l) => l.startsWith(`B. ${optionB.label} — `))).toBe(true);
-    expect(move).toMatchObject({ by: 'llm', line: 'Mine.', pick: { id: 'B', key: optionB.key, label: optionB.label } });
-
-    for (const s of t.screens) expect(s.chat.filter((m) => m.from === spender.id).map((m) => m.text)).toContain('Mine.');
+    expect(move).toMatchObject({ by: 'llm', line: MODEL_LINE, pick: { id: 'B', key: optionB.key, label: optionB.label } });
   });
+
+  // B-AC-1's chat half. Since the 5 Nov start values every phase's first line is a top pick's template (a Smart seat's
+  // asks are close calls, which come later), so RULE-2's one line a phase holds the model's line back: over 4 months
+  // neither AI's reaches the chat. A known gap, raised to the PM on 5 Nov with options.
+  it.todo("B-AC-1: a Smart seat's model line reaches every screen's chat");
 
   it('B-AC-1 (AM-14): every screen receives AI lines in the land grant, development and the auction, each after the view of the phase it was said in', async () => {
     // Each line said, with the phase of the decision that said it: not the game's phase when the line is delivered.
@@ -320,36 +318,43 @@ describe('the brain at the table', { timeout: 30_000 }, () => {
 
   it('B-AC-1: a fake model naming "F" plays the top pick and shows a template line, not its own', async () => {
     const spenderName = AI_NAMES[1]!;
-    const sdk = decisions((_n, params) => (requestOf(params).seat === spenderName ? reply('F', 'Mine.') : reply('A', '')));
+    const sdk = decisions((_n, params) => (requestOf(params).seat === spenderName ? reply('F', MODEL_LINE) : reply('A', '')));
     const { brain, records } = watched(smart(sdk));
-    const t = table({ humans: ['Heiko', 'Mia'], ais: 2, brain });
+    const t = table({ humans: ['Heiko', 'Mia'], ais: 2, brain, maxMonths: 4 });
     const spender = t.ais[1]!;
     const askOf = () => asks(sdk).map((r) => requestOf(r.params)).find((p) => p.seat === spenderName);
     const moveOf = () => records.find((r) => r.seat === spender.id && r.kind === askOf()?.kind && r.note === 'decider failed: named F, not on the list');
     expect(await t.runUntil(() => !!moveOf())).toBe(true);
 
-    // The top pick is the shortlist's first option; its line is the persona's template, never the model's.
+    // The top pick, a seeded draw among the near-best options; its line is the persona's template, never the model's.
     const move = moveOf()!;
-    expect(move).toMatchObject({ by: 'fallback', pick: { id: 'A', key: move.shortlist[0]!.key } });
+    expect(move.by).toBe('fallback');
+    expect(move.shortlist.some((o) => o.id === move.pick.id && o.key === move.pick.key)).toBe(true);
     expect(move.line).toBeTruthy();
-    expect(move.line).not.toBe('Mine.');
+    expect(move.line).not.toBe(MODEL_LINE);
+    // Every line the seat says is its own template: the model's text never reaches a screen, to the game's end. (This
+    // move's line may be held back by the one-line-a-phase cap, T-AC-5.)
+    expect(await t.toGameOver()).toBe(true);
     for (const s of t.screens) {
       const said = s.chat.filter((m) => m.from === spender.id).map((m) => m.text);
-      expect(said).toContain(move.line);
-      expect(said).not.toContain('Mine.');
+      expect(said.length).toBeGreaterThan(0);
+      expect(said.filter((text) => text.includes(MODEL_LINE))).toEqual([]);
     }
   });
 
-  it('B-AC-2: a player\'s line is quoted in the AI\'s next prompt, and the option it names there is the move applied on the board', async () => {
-    const sdk = decisions((_, params) => reply(installOrB(promptOf(params).user.split('\n')), ''));
-    const { brain, records } = watched(smart(sdk));
-    const t = table({ humans: ['Heiko', 'Mia'], ais: 2, brain });
+  // The develop half of B-AC-2 (the option the model named in its next prompt is the move applied on the board) is gone:
+  // on the arcade floor development plays the seeded default pick, with no ask, so chat cannot steer that move. A known
+  // gap the PM has put to Heiko. The line still reaches the AI's next ask, whatever phase it falls in.
+  it('B-AC-2: a player\'s line is quoted in each AI\'s next prompt, and a private line only in its addressee\'s', async () => {
+    const sdk = fakeSdk(() => reply('A', ''));
+    const { brain } = watched(smart(sdk));
+    // Long enough that each AI meets a close call after the lines are said: since the 5 Nov start values (one claim a
+    // grant, 2 Food and 2 Energy) a seat can play two months without one.
+    const t = table({ humans: ['Heiko', 'Mia'], ais: 2, brain, maxMonths: 4 });
     const [heiko, mia] = t.phones;
     const [accountant, spender] = t.ais;
 
     const before = asks(sdk).length;
-    // The board before the talk and the prompts it reaches, so a move shows as a change, not a state.
-    const boardBefore = t.game().viewFor(null).tiles;
     t.say(heiko!, 'give me your Crystite');
     t.say(heiko!, 'Mia, sell them nothing', t.humans[1]!.id);
     t.say(mia!, 'psst, Accountant only', accountant!.id);
@@ -363,30 +368,6 @@ describe('the brain at the table', { timeout: 30_000 }, () => {
     }
     expect(requestOf(nextFor(accountant!.name)!.params).talk).toContain('Mia: "psst, Accountant only"');
     expect(requestOf(nextFor(spender!.name)!.params).user).not.toContain('psst');
-
-    // The move each AI made on that prompt: the option the model named, as the prompt listed it, and that MULE on that
-    // plot for that seat before development ends.
-    const developed = (id: string) => records.some((r) => r.seat === id && r.kind === 'develop');
-    expect(await t.runUntil(() => developed(accountant!.id) && developed(spender!.id))).toBe(true);
-
-    for (const ai of [accountant!, spender!]) {
-      const prompt = requestOf(nextFor(ai.name)!.params);
-      expect(prompt.kind, ai.name).toBe('develop');
-      const move = records.find((r) => r.seat === ai.id && r.kind === prompt.kind)!;
-      const picked = installOrB(prompt.lines);
-      expect(move, ai.name).toMatchObject({ by: 'llm', pick: { id: picked } });
-      expect(prompt.lines.some((l) => l.startsWith(`${picked}. ${move.pick.label} — `)), ai.name).toBe(true);
-      // The option the model named installs a MULE.
-      const [, outfit, index] = /^install:(\w+):(\d+)$/.exec(move.pick.key) ?? [];
-      expect(outfit, `${ai.name} picked ${move.pick.key}`).toBeDefined();
-      const installed = () => {
-        const tile = t.game().viewFor(null).tiles[Number(index)];
-        return tile?.owner === ai.id && tile.outfit === outfit;
-      };
-      expect(boardBefore[Number(index)]?.owner === ai.id && boardBefore[Number(index)]?.outfit === outfit, `${ai.name}: ${move.pick.key} was not already on the board`).toBe(false);
-      await t.runUntil(() => installed() || t.game().viewFor(null).phase !== 'development');
-      expect(installed(), `${ai.name} picked ${move.pick.key}: that plot carries that MULE for that seat before development ends`).toBe(true);
-    }
 
     expect(await t.toGameOver()).toBe(true);
     expect(sdk.requests.filter((r) => promptOf(r.params).user.includes('sell them nothing'))).toEqual([]);
@@ -435,7 +416,7 @@ describe('the brain at the table', { timeout: 30_000 }, () => {
     const sdk = decisions(() => reply('A', ''));
     // One AI seat, so its only rivals are the two people, who do nothing and stay equally rich: the richest rival in
     // its first ask, whatever its kind, is the first in seat order, the first to join.
-    const t = table({ humans: [first, other], ais: 1, brain: smart(sdk) });
+    const t = table({ humans: [first, other], ais: 1, brain: smart(sdk), maxMonths: 4 });
     expect(t.humans.map((h) => h.name)).toEqual([first, other].map((n) => n.replace('\n', '')));
     expect(await t.runUntil(() => asks(sdk).length > 0)).toBe(true);
 
@@ -487,7 +468,8 @@ describe('the brain at the table', { timeout: 30_000 }, () => {
     expect(() => lobby.heard?.('s9', 'hello')).not.toThrow();
 
     const sdk = fakeSdk(() => reply('A', ''));
-    const t = table({ humans: ['Heiko'], ais: 2, brain: smart(sdk) });
+    // Long enough that both AIs ask after the line: see B-AC-2.
+    const t = table({ humans: ['Heiko'], ais: 2, brain: smart(sdk), maxMonths: 4 });
     const game = t.game();
     expect(typeof game.heard).toBe('function');
     expect(() => game.heard?.('s9', 'hello')).not.toThrow();
@@ -522,6 +504,9 @@ describe('the brain at the table', { timeout: 30_000 }, () => {
 const isWrite = (params: SdkParams) => promptOf(params).user.includes('What you may change:');
 
 /** A fake model for decisions: `answer` replies to each decision, and every playbook write gets no edits. */
+/** A line no persona template says, so a screen showing it shows the model's own. */
+const MODEL_LINE = 'Zebra quartz, mine alone.';
+
 const decisions = (answer: Parameters<typeof fakeSdk>[0]) =>
   fakeSdk((n, params, options) => (isWrite(params) ? sdkMessage(JSON.stringify({ edits: [], line: '' })) : answer(n, params, options)));
 

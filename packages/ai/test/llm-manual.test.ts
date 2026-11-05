@@ -15,7 +15,6 @@ const EVERY_MOVE: { readonly [T in AiAction['type']]: true } = {
   pub: true,
   declare: true,
   walk: true,
-  lineTrade: true,
   run: true,
   vote: true,
   setTax: true,

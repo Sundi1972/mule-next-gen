@@ -15,6 +15,7 @@ import {
   createGame,
   createRng,
   declareRole,
+  leaveBoard,
   electionDone,
   DEV_STEER,
   buildFloor,
@@ -23,7 +24,6 @@ import {
   reachWords,
   stableJson,
   type FloorInput,
-  type Reach,
   EVENT_SHOW,
   DEVELOPMENT,
   fitFilter,
@@ -39,7 +39,6 @@ import {
   hungerPace,
   installMule,
   isElectionDone,
-  lineTrade,
   list as listLot,
   litPlot,
   lotDone,
@@ -54,6 +53,9 @@ import {
   outfitMule,
   PHASES,
   playerEventReason,
+  PRODUCTION_SHOW,
+  productionEventAtMs,
+  productionShowMs,
   RuleError,
   runFor,
   score,
@@ -94,7 +96,7 @@ import {
   type Trade,
 } from '@mule/engine';
 import { AiSeat, GOOD_NAME, LotHand, personaFor, playbookSource, VoteHand, type AiAction } from '@mule/ai';
-import { PLAYER_COLORS, type EventView, type MuleIntent, type MuleView, type PlayerView, type ProductionReason, type ProductionView, type ScorePartsView } from '@mule/protocol';
+import { PLAYER_COLORS, type EventView, type MuleIntent, type MuleView, type PlayerView, type ProductionHurryView, type ProductionReason, type ProductionView, type ScorePartsView } from '@mule/protocol';
 import type { Game, GameContext, SeatInfo } from '@tabletop/core';
 import { createBrain, type BrainService } from './brain/index.js';
 import { Playbooks, type PlaybookSource } from './brain/playbooks.js';
@@ -125,8 +127,9 @@ export const PHASE_MS: { readonly planning: number | null; readonly landGrant: n
   get development() {
     return DEVELOPMENT.fullSeconds * 1_000;
   },
+  // Production lasts its show (RULE-3, AM-19); this is the longest it can run: every good made, the events at their cap.
   get production() {
-    return PHASES.productionMs;
+    return productionShowMs(PRODUCTION_SHOW.order.length, EVENT_SHOW.capMs);
   },
   get upkeep() {
     return PHASES.upkeepMs;
@@ -152,17 +155,11 @@ function isSpecies(pick: string | undefined): pick is Species {
   return (SPECIES as readonly (string | undefined)[]).includes(pick);
 }
 
-/** The reasons a plot's badges may name; its ground, the output floor, a factory's fit and the event never get one. */
-const BADGE_REASONS: readonly ProductionReason[] = ['cluster', 'species', 'trait', 'pollution', 'noEnergy', 'noWater'];
-const MAX_BADGES = 2;
+/** The parts that are a plot's base: its ground's yield, or a factory's run. Every other part but an event is a reason. */
+const BASE_PARTS: readonly string[] = ['ground', 'factory'];
 /** The receipt of a seat that traded nothing in the good that closed. */
 const NO_RECEIPT: GoodReceipt = { bought: { units: 0, gross: 0, tax: 0, prices: [], with: [] }, sold: { units: 0, gross: 0, tax: 0, prices: [], with: [] } };
 
-/** What a seat already in may not do while month 1's clock waits; the pub stays open. */
-const WAIT_REFUSES: ReadonlySet<DevIntent['type']> = new Set(['buyMule', 'install', 'analyse', 'filter']);
-/** The same presses on the steered floor (DEV_STEER.on). */
-const WAIT_REFUSES_REACH: ReadonlySet<Reach['kind']> = new Set(['buy', 'install', 'analyse', 'filter']);
-const WAITING_FOR_FIRST_MULES = "Waiting for the others' first MULEs";
 /** Every outfit a seat can choose, in the order its view lists their costs. */
 const OUTFITS: readonly Outfit[] = [...GOODS, 'greenBelt'];
 
@@ -238,9 +235,6 @@ function holdsForEvents(phase: Phase): boolean {
       return false;
   }
 }
-
-/** Where production's map starts its event show, in ms into the phase at full pace: the client's SHOW.eventAt (4.8 s). */
-const PRODUCTION_SHOW_AT_MS = 4_800;
 
 /** A player who fell sick at development's start, told as a bulletin in its roll call (C11). */
 interface SickBulletin {
@@ -336,30 +330,33 @@ function sickView(state: GameState, { player }: SickBulletin): Omit<EventView, '
 }
 
 /**
- * The month's production as every screen may see it: each working plot with
- * what it made before the event and its biggest reasons, and the event's hits.
- * Built field by field from the report, so the stock players held never
- * reaches a screen through it.
+ * The month's production as every screen may see it: each working plot with its base, every reason its output moved
+ * from it and what it made before the events (ws6-ux AM-19: base + parts = made), and the events' hits. Built field by
+ * field from the report, so the stock players held never reaches a screen through it.
  */
-function productionView(state: GameState, lengthMs: number): ProductionView | null {
+function productionView(state: GameState, lengthMs: number, hurry: ProductionHurryView | null): ProductionView | null {
   const report = state.history.at(-1);
   if (!report) return null;
   const at = (index: number) => ({ x: index % state.width, y: Math.floor(index / state.width) });
-  const isBadge = (why: string): why is ProductionReason => (BADGE_REASONS as readonly string[]).includes(why);
   const lines = [...(report.lines ?? [])]
     .sort((a, b) => a.tile - b.tile)
     .map((line) => ({
       ...at(line.tile),
       owner: state.tiles[line.tile]!.owner!,
       good: line.good,
+      base: line.parts.reduce((n, p) => n + (BASE_PARTS.includes(p.why) ? p.delta : 0), 0),
       made: line.made - line.parts.reduce((n, p) => n + (p.why === 'event' ? p.delta : 0), 0),
-      parts: line.parts
-        .flatMap(({ why, delta }) => (isBadge(why) && delta !== 0 ? [{ why, delta }] : []))
-        .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
-        .slice(0, MAX_BADGES),
+      parts: line.parts.flatMap(({ why, delta }) => (why !== 'event' && !BASE_PARTS.includes(why) && delta !== 0 ? [{ why: why as ProductionReason, delta }] : [])),
     }));
   const fired = phaseEvents(state, 'production');
-  return { lines, events: eventViews(state, fired), lengthMs, introMs: eventShow(fired).introMs };
+  return { lines, events: eventViews(state, fired), lengthMs, introMs: eventShow(fired).introMs, hurry };
+}
+
+/** RULE-3's inputs for this month (ws6-ux AM-19): the distinct goods its plots made, and its events' show in ms (0: quiet). */
+function showInputs(state: GameState): { goods: number; eventsMs: number } {
+  const goods = new Set((state.history.at(-1)?.lines ?? []).map((l) => l.good)).size;
+  const fired = phaseEvents(state, 'production');
+  return { goods, eventsMs: fired.length > 0 ? eventShow(fired).showMs : 0 };
 }
 
 /**
@@ -393,8 +390,8 @@ function shipQuote(state: GameState, good: Good): number[] {
 
 /**
  * Whether a seat's development turn is over by a given time `at`: it went to the pub, or the clock ended by then. A
- * steered tick passes its own time, so a tick that runs late is still judged at its own time, as the sim's is (HC-4);
- * month 1's waiting clock (`devEndsAt` null) ends no turn by time.
+ * steered tick passes its own time, so a tick that runs late is still judged at its own time, as the sim's is (HC-4).
+ * `devEndsAt` is null only outside development, and then ends no turn by time.
  */
 export function turnOverAt(doneDeveloping: boolean, devEndsAt: number | null, at: number): boolean {
   return doneDeveloping || (devEndsAt !== null && devEndsAt <= at);
@@ -407,10 +404,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   private readonly away = new Set<string>();
   /** Trades between players in the good that is up, for the news when it closes. */
   private dealsInGood: Trade[] = [];
-  /** When the one development clock runs out for every seat, epoch ms; null outside development and while it waits. */
+  /** When the one development clock runs out for every seat, epoch ms; null outside development. */
   private devEndsAt: number | null = null;
-  /** Month 1's clock stands full until every seat is in, or the host continues. See A-1. */
-  private clockWaits = false;
   /** Each seat's colonist during development, keyed by seat id. */
   private readonly colonists = new Map<string, Colonist>();
   /** Steered development's floor, inputs and tick (DEV_STEER.on); null otherwise and outside development. */
@@ -428,6 +423,15 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   private heldUntil: number | null = null;
   /** This month's production length in real ms, as its timer was given: the production show stretches over it. */
   private productionMs = 0;
+  /** RULE-3's inputs as production's timer was given them: the hurry and the events' times read these, never live config. */
+  private productionShow = { goods: 0, endMs: 0 };
+  /**
+   * Speed up (ws6-ux AM-19, B-AC-20): who has asked this phase, and once every connected person has, the show second
+   * (full pace) the rest plays faster from and the server time that happened at. Cleared as every phase starts.
+   */
+  private hurry: { asked: Set<string>; from: number | null; at: number } = { asked: new Set(), from: null, at: 0 };
+  /** Cancels the running phase's end timer, so a hurry can bring it forward. */
+  private cancelPhaseEnd: (() => void) | null = null;
   /**
    * Each month's end as the views showed it, by month: every player's worth and the air level, recorded once when its
    * upkeep starts. The next month's views serve it as lastWorth and lastAir, so a change is shown against shown.
@@ -471,6 +475,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       phaseScale?: number;
       /** Steered development for this game only (PM ruling); absent, DEV_STEER.on decides. */
       devSteer?: boolean;
+      /** A test option: wolves on, and a pack for the first colonist out on wolf land at once (steerConfig). */
+      forceWolves?: boolean;
       politics?: boolean;
       brain?: BrainService;
       /** Called once, as the game ends, with its final state. */
@@ -548,6 +554,12 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         // A press with nothing to do is ignored, as a dim button's is (RULE-1).
         this.steering?.inputs.press(seatId);
         return;
+      case 'hurry':
+        if (state.phase !== 'production' || this.phaseEndsAt === null) throw new RuleError('Nothing to speed up now');
+        if (this.ai.has(seatId)) throw new RuleError('Only the people at the table ask to speed up');
+        this.hurry.asked.add(seatId);
+        this.hurryIfAllAsked();
+        return;
       case 'ready':
         // During the election, ready is Done for the stage; it never ends planning.
         if (this.electionOpen()) {
@@ -570,7 +582,6 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
           return;
         }
         this.ready.add(seatId);
-        this.startClockOnceAllIn();
         this.checkAllReady();
         return;
       case 'drone':
@@ -607,10 +618,6 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         stepWalk(state, seatId, intent.dir === 'up' ? 1 : -1);
         auctionDone(state, seatId, false);
         return;
-      case 'lineTrade':
-        lineTrade(state, seatId, intent.units);
-        auctionDone(state, seatId, false);
-        return;
       case 'list':
         listLot(state, seatId, intent);
         return;
@@ -628,8 +635,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         return;
       case 'continue': {
         if (seatId !== this.ctx.hostId()) throw new RuleError('Only the host can continue');
-        if (state.phase === 'development') this.continueDevelopment(seatId);
-        else this.continuePlanning(seatId);
+        this.continuePlanning(seatId);
         return;
       }
     }
@@ -673,16 +679,6 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     goneOn('continued', left);
   }
 
-  /** The host's Continue while month 1's clock waits: starts it, and the news names the others not yet in. */
-  private continueDevelopment(hostId: string): void {
-    if (!this.clockWaits) throw new RuleError('The clock is already running');
-    const left = this.seatsNotIn()
-      .filter((s) => s.id !== hostId)
-      .map((s) => s.name);
-    this.startClock();
-    if (left.length > 0) this.addNews(`${this.nameOf(hostId)} started the clock without ${andList(left)}.`);
-  }
-
   /**
    * A development tap names where to go and what to do there: the colonist walks there (walkSeconds) and the move
    * applies on arrival; an outfit applies where it stands. Refused while it walks or assays, and when the walk would
@@ -698,18 +694,13 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     if (state.players.find((p) => p.id === seatId)?.doneDeveloping) throw new RuleError('Your turn is over: you went to the pub');
     if (colonist.walk) throw new RuleError('Still walking');
     if (colonist.assayUntil !== null) throw new RuleError('Still assaying');
-    // Once in, you wait: the time before month 1's clock is for first MULEs only.
-    // A seat in only because it cannot install a first MULE may still buy one; the engine says why it can't ("Not enough
-    // money"), not that it waits.
-    const mayBuyWhileWaiting = intent.type === 'buyMule' && this.inOnlyForWantOfAMule(seatId);
-    if (this.clockWaits && WAIT_REFUSES.has(intent.type) && !mayBuyWhileWaiting && this.isIn(seatId)) throw new RuleError("Waiting for the others' first MULEs");
     const to = walkTarget(state, intent);
     if (to === null) {
       this.act(seatId, intent, now);
       return;
     }
     const arrivesAt = now + this.realMs(walkSeconds(state, seatId, colonist.at, to));
-    if (arrivesAt > this.clockEndsAt(now) && intent.type !== 'pub') throw new RuleError('Not enough time to walk there');
+    if (arrivesAt > this.devEndsAt! && intent.type !== 'pub') throw new RuleError('Not enough time to walk there');
     colonist.walk = { from: colonist.at, startedAt: now, arrivesAt, then: intent };
     colonist.at = to;
     if (arrivesAt > now) {
@@ -747,7 +738,6 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
    * its own time `at`, so a late tick judges the clock's end as the sim does (HC-4); everyone else, the wall clock.
    */
   private checkEarlyEnd(at?: number): void {
-    this.startClockOnceAllIn();
     if (this.endWhenSettled) this.checkAllReady();
     this.checkDevelopmentOver(at);
   }
@@ -816,18 +806,11 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     this.monthCondition = { month: state.month, byId: new Map(this.seats.map((s) => [s.id, this.conditionOf(state, s.id)])) };
     this.colonists.clear();
     this.devEndsAt = null;
-    this.clockWaits = false;
   }
 
-  /** Game seconds left on the development clock at `at`, epoch ms: all of them while it waits; 0 outside development. */
+  /** Game seconds left on the development clock at `at`, epoch ms; 0 outside development. */
   private secondsLeft(at: number): number {
-    if (this.clockWaits) return DEVELOPMENT.fullSeconds;
     return this.devEndsAt === null ? 0 : this.gameSeconds(this.devEndsAt - at);
-  }
-
-  /** While the clock waits, a walk may take as long as a full clock from when it sets off. */
-  private clockEndsAt(at: number): number {
-    return this.clockWaits ? at + this.realMs(DEVELOPMENT.fullSeconds) : this.devEndsAt!;
   }
 
   /** Real ms that `seconds` of game time last at this table's phaseScale, in whole ms like the server's clock. */
@@ -861,8 +844,41 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     // A dropped phone's colonist stops where it is (C6); back, the phone steers it again.
     if (!connected) this.steering?.inputs.drop(seatId);
     // Nobody waits for a phone that dropped.
-    this.startClockOnceAllIn();
+    this.hurryIfAllAsked();
     this.checkAllReady();
+  }
+
+  /**
+   * B-AC-20: once every connected person has asked (at least one person connected and one ask, so a table of dropped phones never speeds up),
+   * the rest of the show plays PRODUCTION_SHOW.fast times faster: the phase ends that much sooner, and every screen,
+   * reading the show from the time left, plays the rest faster on that one clock.
+   */
+  private hurryIfAllAsked(): void {
+    const state = this.state;
+    const h = this.hurry;
+    if (state?.phase !== 'production' || this.phaseEndsAt === null || h.from !== null || h.asked.size === 0) return;
+    const people = this.seats.filter((s) => !s.isAi && !this.away.has(s.id));
+    if (people.length === 0 || !people.every((s) => h.asked.has(s.id))) return;
+    const now = this.ctx.now();
+    const end = this.productionShow.endMs / 1_000;
+    // A tap handled after the end but before its timer fires changes nothing past the end.
+    const left = Math.max(0, this.phaseEndsAt - now);
+    // The second the screens are at, from the time left (packages/ui showTime): the same second on every screen.
+    h.from = end - (left * end) / this.productionMs;
+    h.at = now;
+    this.schedulePhaseEnd(Math.round(left / PRODUCTION_SHOW.fast));
+  }
+
+  /** Who has asked to speed production up, as every screen shows it. */
+  private hurryView(): ProductionHurryView {
+    return { asked: [...this.hurry.asked], from: this.hurry.from };
+  }
+
+  /** Server time of a production show second (full pace), the hurry's speed-up included. */
+  private productionShowAt(second: number): number {
+    const h = this.hurry;
+    if (h.from === null || second <= h.from) return this.phaseEnteredAt + this.realMs(second);
+    return h.at + this.realMs((second - h.from) / PRODUCTION_SHOW.fast);
   }
 
   /** Stops the seat's auction walk: the old screen can't release it and the new one never pressed it. A move is neither Done nor a drop. */
@@ -916,51 +932,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     return turnOverAt(!!p?.doneDeveloping, this.devEndsAt, at);
   }
 
-  /**
-   * Whether a seat counts as in for month 1's clock: away, or present with its first MULE installed, no plot, or its
-   * turn ended at the pub or by Ready. The last two keep a seat that cannot or will not install from holding the table.
-   * So does a seat that can never install a first MULE: see cannotInstallFirstMule. Money that comes later
-   * needs no special case: counting a seat in only starts the clock, and it may still buy and install while it runs.
-   */
-  private isIn(seatId: string): boolean {
-    return this.inForItsTurn(seatId) || this.cannotInstallFirstMule(seatId);
-  }
-
-  /** In for what it did or has: away, Ready, its first MULE installed, its turn over, or no plot. */
-  private inForItsTurn(seatId: string): boolean {
-    const state = this.requireState();
-    if (this.away.has(seatId) || this.ready.has(seatId)) return true;
-    const p = state.players.find((q) => q.id === seatId)!;
-    return p.installedThisTurn || p.doneDeveloping || !state.tiles.some((t) => t.owner === seatId);
-  }
-
-  /** In only because it can never install a first MULE: such a seat may still buy one while the clock waits. */
-  private inOnlyForWantOfAMule(seatId: string): boolean {
-    return !this.inForItsTurn(seatId) && this.cannotInstallFirstMule(seatId);
-  }
-
-  /**
-   * Whether a seat can never install a first MULE with what it has, at its own prices: it leads none and the
-   * corral is empty or it can't pay for a MULE and its cheapest outfit, or it leads an empty MULE it can't outfit.
-   */
-  private cannotInstallFirstMule(seatId: string): boolean {
-    const state = this.requireState();
-    const p = state.players.find((q) => q.id === seatId)!;
-    const outfit = Math.min(...OUTFITS.map((o) => outfitCostFor(state, seatId, o)));
-    if (p.carriedMule === 'empty') return p.money < outfit;
-    return !p.carriedMule && (state.store.mules <= 0 || p.money < mulePriceFor(state, seatId) + outfit);
-  }
-
-  private seatsNotIn(): SeatInfo[] {
-    return this.seats.filter((s) => !this.isIn(s.id));
-  }
-
-  private startClockOnceAllIn(): void {
-    if (this.clockWaits && this.seatsNotIn().length === 0) this.startClock();
-  }
-
   private startClock(): void {
-    this.clockWaits = false;
     this.devEndsAt = this.ctx.now() + this.realMs(DEVELOPMENT.fullSeconds);
     this.scheduleDevelopmentEnd(this.requireState().month);
   }
@@ -1019,6 +991,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     this.heldUntil = null;
     for (const cancel of this.cancels) cancel();
     this.cancels = [];
+    this.cancelPhaseEnd = null;
+    this.hurry = { asked: new Set(), from: null, at: 0 };
     this.ready.clear();
     this.notices = [];
 
@@ -1129,23 +1103,34 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     return null;
   }
 
-  /** Ends the phase when its PHASE_MS runs out; a phase whose PHASE_MS is null has no clock and waits for Ready. */
+  /**
+   * Ends the phase when its PHASE_MS runs out; a phase whose PHASE_MS is null has no clock and waits for Ready.
+   * Production lasts its show instead (ws6-ux AM-19, RULE-3): the goods made and the month's events set its length.
+   */
   private startPhaseTimer(phase: keyof typeof PHASE_MS): void {
-    // Production stretches past its own event window to play every event of the month (RULE-1).
-    const extraMs = phase === 'production' ? Math.max(0, eventShow(phaseEvents(this.requireState(), 'production')).showMs - EVENT_SHOW.productionWindowMs) : 0;
-    const base = PHASE_MS[phase];
-    const length = base === null ? null : base + extraMs;
+    const state = this.requireState();
+    const show = phase === 'production' ? showInputs(state) : null;
+    const length = show ? productionShowMs(show.goods, show.eventsMs) : PHASE_MS[phase];
     this.phaseEndsAt = null;
     if (length === null) return;
     const ms = length * this.phaseScale;
+    if (show) {
+      this.productionMs = ms;
+      this.productionShow = { goods: show.goods, endMs: length };
+    }
+    this.schedulePhaseEnd(ms);
+  }
+
+  /** (Re)sets the running phase's end, `ms` from now. */
+  private schedulePhaseEnd(ms: number): void {
+    this.cancelPhaseEnd?.();
     this.phaseEndsAt = this.ctx.now() + ms;
-    if (phase === 'production') this.productionMs = ms;
-    this.cancels.push(
-      this.ctx.schedule(ms, () => {
-        this.nextPhase();
-        this.ctx.changed();
-      }),
-    );
+    const cancel = this.ctx.schedule(ms, () => {
+      this.nextPhase();
+      this.ctx.changed();
+    });
+    this.cancelPhaseEnd = cancel;
+    this.cancels.push(cancel);
   }
 
   private startPlanning(): void {
@@ -1207,8 +1192,9 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     const cancel = this.ctx.schedule(this.fastForward ? PHASES.grantFastForwardMs : GRANT_TICK_MS, () => {
       if (state.phase !== 'landGrant') return;
       advanceGrant(state);
-      // An AI seat that wants nothing still ahead of the light presses Done with land, as a phone's Ready.
-      for (const seat of this.ai.values()) if (seat.passesGrant(state)) this.aiAct(seat.id, { type: 'done', done: true });
+      // An AI seat that wants nothing still ahead of the light presses Done with land, as a phone's Ready; not once
+      // the light's last pass is over, which ends the grant before anyone presses, as in the sim.
+      if (!grantDone(state)) for (const seat of this.ai.values()) if (seat.passesGrant(state)) this.aiAct(seat.id, { type: 'done', done: true });
       // The pass ends when the last plot's tick does, so the light never comes back round to the first.
       if (grantDone(state)) this.nextPhase();
       else if (this.fastForward || this.humansDoneWithLand()) {
@@ -1306,8 +1292,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   }
 
   /**
-   * One clock for every seat, DEVELOPMENT.fullSeconds long: hunger and sickness slow the walk, never the clock. In
-   * month 1 it waits until every seat is in; the colonists, the AI and every timer but the clock's run meanwhile.
+   * One clock for every seat, DEVELOPMENT.fullSeconds long: hunger and sickness slow the walk, never the clock. It
+   * counts down from the start in every month, the first included (Heiko, 2026-11-05).
    */
   private startDevelopment(): void {
     const state = this.requireState();
@@ -1317,9 +1303,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     this.endWhenSettled = false;
     if (this.steered) this.startSteering(state.month);
     else for (const s of this.seats) this.colonists.set(s.id, { at: 'store', walk: null, assayUntil: null });
-    this.clockWaits = state.month === 1 && DEV_STEER.month1WaitsForFirstMule;
-    if (this.clockWaits) this.startClockOnceAllIn();
-    else this.startClock();
+    this.startClock();
     // Steered, the AI seats walk the floor by their hands inside the tick (C9, steerTick); the tap hands never run.
     if (this.ai.size > 0 && !this.steered) this.scheduleAiDevelop(state.month, now);
   }
@@ -1332,7 +1316,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   /** Steered development (C6): the floor at its start, every seat's reach words as its view shows them, the first tick. */
   private startSteering(month: number): void {
     const state = this.requireState();
-    const cfg = steerConfig();
+    const cfg = steerConfig({ forceWolves: this.options.forceWolves ?? false });
     const origin = this.ctx.now();
     const steering: Steering = { floor: buildFloor(state, cfg), inputs: new SteerInputs(), cfg, origin, at: origin, words: new Map(), stats: noStats() };
     this.steering = steering;
@@ -1387,9 +1371,9 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   /**
    * One tick of RULE-1: each seat's input (an away seat's stands still; an AI seat's from its hand), the step and the
    * presses it reaches, the frame to every screen, then development's early ends. True when the views must go: the
-   * game changed, month 1's clock started, the phase ended, or a seat's reach words changed (AM-11). Null, stepping
+   * game changed, the phase ended, or a seat's reach words changed (AM-11). Null, stepping
    * nothing and taking no input, for a tick at or after the clock's end: no press, AI input or moment applies then,
-   * as in the sim (AM-19). Month 1's waiting clock (devEndsAt null) ends no tick.
+   * as in the sim (AM-19).
    */
   private steerTick(steering: Steering): boolean | null {
     const state = this.requireState();
@@ -1401,8 +1385,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     const inputs: Record<string, FloorInput> = {};
     for (const s of this.seats) inputs[s.id] = this.away.has(s.id) ? IDLE_INPUT : this.seatInput(steering, s.id, tick, at, secondsLeft);
     const before = Object.values(inputs).some((i) => i.act) ? stableJson(state) : null;
-    const waited = this.clockWaits;
-    const { floor, presses } = stepTick(steering.floor, state, inputs, steering.cfg, secondsLeft, (seat, reach) => this.refusal(seat, reach));
+    const { floor, presses } = stepTick(steering.floor, state, inputs, steering.cfg, secondsLeft);
     steering.floor = floor;
     steering.stats.ticks++;
     for (const press of presses) {
@@ -1416,7 +1399,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     steering.stats.frames++;
     this.checkEarlyEnd(at);
     if (this.steering !== steering) return true;
-    let changed = (before !== null && stableJson(state) !== before) || waited !== this.clockWaits;
+    let changed = (before !== null && stableJson(state) !== before);
     for (const s of this.seats) {
       if (s.isAi) continue;
       const words = this.wordsAt(steering, s.id, at);
@@ -1438,13 +1421,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     const ai = this.ai.get(seatId);
     if (!ai) return steering.inputs.take(seatId, tick);
     if (this.doneDeveloping(seatId, at)) return IDLE_INPUT;
-    return ai.developSteer(this.requireState(), steering.floor, secondsLeft, steering.cfg, this.clockWaits && this.isIn(seatId));
-  }
-
-  /** Why the rules hold back a press the floor would make, or null: in month 1 a seat already in waits (AM-3). */
-  private refusal(seatId: string, reach: Reach): string | null {
-    const mayBuyWhileWaiting = reach.kind === 'buy' && this.inOnlyForWantOfAMule(seatId);
-    return this.clockWaits && WAIT_REFUSES_REACH.has(reach.kind) && !mayBuyWhileWaiting && this.isIn(seatId) ? WAITING_FOR_FIRST_MULES : null;
+    return ai.developSteer(this.requireState(), steering.floor, secondsLeft, steering.cfg);
   }
 
   /** A seat's button as its view shows it at `at`, epoch ms, compared as text. */
@@ -1537,10 +1514,6 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
           if (state.phase === 'landAuction') setLotWalk(state, seatId, action.dir);
           else setWalk(state, seatId, action.dir);
           break;
-        case 'lineTrade':
-          // As walking: the hands keep their own Done, the same as in the simulator.
-          lineTrade(state, seatId, action.units);
-          break;
         case 'done':
           if (this.electionOpen()) electionDone(state, seatId, action.done);
           else if (state.phase === 'landGrant') grantPass(state, seatId);
@@ -1614,13 +1587,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
    */
   private sitOut(seatId: string): void {
     const state = this.requireState();
-    // Passing also stops the walker: it leaves the board.
-    try {
-      declareRole(state, seatId, 'pass');
-    } catch (err) {
-      if (!(err instanceof RuleError)) throw err;
-    }
-    // Last, because passing during the walk takes a Done back.
+    // Leaving the board also stops the walker. Players can't pass (RULE-2); this is the server's, for a dropped phone.
+    leaveBoard(state, seatId);
     auctionDone(state, seatId);
   }
 
@@ -1836,10 +1804,9 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       listings: state.listings.map(listingView),
       lotSlots: { used: state.listings.length, max: LOTS.maxLotsPerMonth },
       landAuction: landAuctionView(state),
-      production: state.phase === 'production' || state.phase === 'upkeep' ? productionView(state, this.productionMs) : null,
+      production: state.phase === 'production' || state.phase === 'upkeep' ? productionView(state, this.productionMs, state.phase === 'production' ? this.hurryView() : null) : null,
       ...this.eventsView(state),
       politics: politicsView(state),
-      ...(this.clockWaits ? { clockWaitsFor: this.seatsNotIn().map((s) => s.id) } : {}),
     };
   }
 
@@ -1852,8 +1819,14 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     const fired = this.electionOpen() ? [] : phaseEvents(state, state.phase);
     if (fired.length === 0) return { events: [], eventShow: null };
     const { showMs, introMs } = eventShow(fired);
-    const startsAt = this.phaseEnteredAt + (state.phase === 'production' ? this.realMs(PRODUCTION_SHOW_AT_MS / 1_000) : 0);
-    const endsAt = startsAt + this.realMs(showMs / 1_000);
+    let startsAt = this.phaseEnteredAt;
+    let endsAt = startsAt + this.realMs(showMs / 1_000);
+    if (state.phase === 'production') {
+      // RULE-3: the events play after every loss has landed, and a hurry speeds them up with the rest.
+      const from = productionEventAtMs(this.productionShow.goods) / 1_000;
+      startsAt = this.productionShowAt(from);
+      endsAt = this.productionShowAt(from + showMs / 1_000);
+    }
     return { events: eventViews(state, fired), eventShow: { startsAt, showMs, introMs, endsAt, held: this.holdMs(state) > 0 } };
   }
 
@@ -1892,7 +1865,6 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         done: a.done.includes(w.id),
         units: market.units(w.id),
         line: a.stage === 'walk' ? (houseLineAt(market, w)?.house ?? null) : null,
-        order: w.order ? { ...w.order } : null,
       })),
       deals: a.deals.map(({ buyer, seller, price, units }) => ({ buyer, seller, price, units })),
       units: a.units,

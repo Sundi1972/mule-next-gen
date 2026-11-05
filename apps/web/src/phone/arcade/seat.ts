@@ -46,10 +46,9 @@ export interface ArcadeSeat {
   /** Your colonist, where your screen shows it; null before the server has placed it. */
   mine: Where | null;
   colonists: ArcadeColonist[];
-  /** Development seconds left on the one clock, and its length. While month 1's clock waits it stands full. */
+  /** Development seconds left on the one clock, and its length. */
   seconds: number;
   total: number;
-  waiting: boolean;
   over: boolean;
   reach: ReachView;
   target: Target;
@@ -141,10 +140,9 @@ export function targetOf(reach: ReachView, mine: Where | null, store: { x: numbe
 }
 
 export function arcadeSeat(view: MuleView, me: MyView, self: PlayerView, live: Live, serverNow: number, cfg: FloorConfig = floorConfig()): ArcadeSeat {
-  const waiting = !!view.clockWaitsFor;
   const total = me.devSeconds;
-  const seconds = waiting ? total : me.devEndsAt === null ? 0 : Math.max(0, (me.devEndsAt - serverNow) / 1000);
-  const over = !waiting && seconds <= 0;
+  const seconds = me.devEndsAt === null ? 0 : Math.max(0, (me.devEndsAt - serverNow) / 1000);
+  const over = seconds <= 0;
   const colonists = colonistsOf(view, live, me.id, cfg);
   const at = colonists.find((c) => c.id === me.id);
   const mine: Where | null = at ? { x: at.x, y: at.y, space: at.space } : null;
@@ -162,7 +160,6 @@ export function arcadeSeat(view: MuleView, me: MyView, self: PlayerView, live: L
     colonists,
     seconds,
     total,
-    waiting,
     over,
     reach,
     target: targetOf(reach, mine, store),

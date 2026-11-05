@@ -24,8 +24,11 @@ function useSeats(): { seats: Map<string, Seat>; me: string | null } {
   return { seats, me: seatId };
 }
 
-/** What a creature's bubble must stay inside: the nearest of these around it. */
-const BOUNDS = '[data-testid=store-hall],[data-testid=walk-board],[data-testid=stage],[data-phase]';
+/**
+ * What a creature's bubble must stay inside: the nearest of these around it. A stage that clips its creatures marks
+ * itself with data-bubble-bounds.
+ */
+const BOUNDS = '[data-bubble-bounds],[data-testid=store-hall],[data-testid=walk-board],[data-testid=stage],[data-phase]';
 const EDGE = 4;
 
 /**
