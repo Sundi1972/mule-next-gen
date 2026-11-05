@@ -497,14 +497,17 @@ export function WaitingToPick({ seats, tv = false }: { seats: readonly Seat[]; t
 
 /**
  * Where this phone's walker stands, as the engine says: walking; at a house's line, where units trade by themselves
- * (RULE-1); or at one with nothing moving, because you can't pay or have none.
+ * (RULE-1); or at one with nothing moving, because you can't pay or have none. Players sharing a line take its units in
+ * turns, so the deal names whoever got the last one: a player who can trade there is trading while the line's deal runs.
  */
 export type LineMoment = { kind: 'walk' } | { kind: 'line'; house: string } | { kind: 'trading'; house: string };
 
-export function lineMoment(mine: Pick<WalkerView, 'id' | 'side' | 'line'> | undefined, deals: readonly Pick<DealView, 'buyer' | 'seller'>[]): LineMoment {
+export function lineMoment(mine: Pick<WalkerView, 'id' | 'side' | 'line'> | undefined, deals: readonly Pick<DealView, 'buyer' | 'seller'>[], canTrade = true): LineMoment {
   if (!mine || mine.side === 'pass' || !mine.line) return { kind: 'walk' };
   const house = mine.line;
-  const trading = deals.some((d) => (d.buyer === mine.id && d.seller === house) || (d.seller === mine.id && d.buyer === house));
+  const mineNow = deals.some((d) => (d.buyer === mine.id && d.seller === house) || (d.seller === mine.id && d.buyer === house));
+  const lineRuns = deals.some((d) => (mine.side === 'buyer' ? d.seller : d.buyer) === house);
+  const trading = mineNow || (canTrade && lineRuns);
   return trading ? { kind: 'trading', house } : { kind: 'line', house };
 }
 

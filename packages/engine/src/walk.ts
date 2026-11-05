@@ -150,7 +150,9 @@ export function stepBoard(board: WalkBoard, market: WalkMarket, dt: number): Sal
   for (const w of board.walkers) {
     if (w.side !== 'seller' || w.dir === 0) continue;
     const before = rounded(w);
-    if (w.dir < 0) w.price = Math.min(w.price, Math.max(w.price - step, floor ?? 1, maxBid(board, market), 1));
+    // With no house buying, a seller walks down no lower than just above the buyers' edge: a buyer standing there never
+    // trades (everyone starts there as a buyer, so standing still is how you buy nothing).
+    if (w.dir < 0) w.price = Math.min(w.price, Math.max(w.price - step, floor ?? board.lo + 1, maxBid(board, market), 1));
     else w.price += step;
     if (rounded(w) !== before) w.since = board.elapsed;
   }

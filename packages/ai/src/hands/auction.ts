@@ -201,18 +201,19 @@ export class AuctionHand {
   }
 
   /**
-   * Standing at a house's line, where units trade by themselves: true once the units it still wants there are no more
-   * than will move before it next re-aims, so it steps off then rather than after. A stop lands within a tick either
-   * way, as a phone's does; the replay makes the same stop at the same step.
+   * Standing at a house's line, where units trade by themselves: true once it wants no more there, so it steps off. While
+   * it still wants some, it stays and re-aims when the line's next unit is due, so it counts again after every unit and
+   * steps off within a tick of the last, as a phone's stop lands; the replay makes the same stop at the same step. The
+   * line's deal is found by its house: players sharing a line take turns, and the deal names whoever got the last unit.
    */
   private enoughAtLine(state: GameState, w: Walker): boolean {
     const line = lineOf(state, w.id);
     if (!line) return false;
-    const a = state.auction!;
-    const deal = a.deals.find((d) => d.buyer === w.id || d.seller === w.id);
-    let soon = 0;
-    for (let ms = 0, n = deal?.units ?? 0; ms + tradeInterval(n) <= this.reactIn; ms += tradeInterval(n), n++) soon++;
-    return this.unitsAt(state, w.side, line) <= soon;
+    if (this.unitsAt(state, w.side, line) === 0) return true;
+    const deal = state.auction!.deals.find((d) => (w.side === 'buyer' ? d.seller : d.buyer) === line.house);
+    const due = tradeInterval(deal?.units ?? 0) - (deal?.progress ?? 0);
+    this.reactIn = Math.min(this.reactIn, Math.max(1, due));
+    return false;
   }
 
   /**
