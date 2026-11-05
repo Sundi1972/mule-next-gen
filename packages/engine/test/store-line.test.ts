@@ -188,7 +188,9 @@ describe('RULE-3: slow at first, then faster and faster, to the floor', () => {
     const gaps = at.slice(1).map((x, i) => x - at[i]!);
     expect(gaps.length).toBeGreaterThan(12);
     // Stepped 1 ms at a time, a deal carries its leftover into the next unit, so each gap is within 1 ms of the curve.
-    gaps.forEach((g, n) => expect(Math.abs(g - tradeInterval(n + 1)), `gap ${n + 1}: ${g} ms`).toBeLessThan(1));
+    // The curve itself, from WALK alone, so a wrong formula in tradeInterval fails here too.
+    const curve = (n: number) => Math.max(WALK.tradeFloorMs, WALK.tradeStartMs * WALK.tradeSpeedUp ** n);
+    gaps.forEach((g, n) => expect(Math.abs(g - curve(n + 1)), `gap ${n + 1}: ${g} ms`).toBeLessThan(1));
     expect(Math.min(...gaps)).toBe(WALK.tradeFloorMs);
   });
 
