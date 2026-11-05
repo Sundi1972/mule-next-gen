@@ -218,4 +218,29 @@ describe("the arcade floor's AI bugs of 5 Nov (FM-glint-install, FM-led-analyse,
     expect(first?.type === 'install' && log[0]!.ok, `the lot MULE installed first: ${shown}`).toBe(true);
     if (first?.type === 'install') expect(tileAt(state.tiles, state.width, first.x, first.y)!.outfit, 'the lot MULE on its plot').toBe('food');
   });
+
+  it('FM-floor-filter: a filter for an own polluter not yet analysed is fitted, not refused at the plot', () => {
+    // On an own plot not yet analysed Reach offers ANALYSE (row 10) before FIT FILTER (row 11), so a filter planned for
+    // such a plot was walked to and refused there.
+    const state = development(4);
+    const store = state.tiles.find((t) => t.terrain === 'store')!;
+    const mine = state.tiles
+      .filter((t) => t.owner === null && t.terrain !== 'lake' && t.terrain !== 'store' && !t.special)
+      .sort((a, b) => Math.abs(a.x - store.x) + Math.abs(a.y - store.y) - (Math.abs(b.x - store.x) + Math.abs(b.y - store.y)))[2]!;
+    Object.assign(mine, { owner: ME, outfit: 'rareEarth', runMonths: 2 });
+    const me = state.players.find((p) => p.id === ME)!;
+    expect(me.analysed.includes(state.tiles.indexOf(mine)), 'the plot not analysed').toBe(false);
+    me.stock.alloy = 1;
+    // The air near Smoggy: the strategist wants a filter on its Rare earth mine.
+    state.air = 25;
+    const cfg = quietConfig();
+    const seat = new AiSeat({ id: ME, name: 'AI 1', persona: 'trader', level: 'trader', seed: 11 });
+    playTurn(state, cfg, seat);
+    const log = seat.developLog();
+    const shown = JSON.stringify(log);
+    expect(log.some((e) => e.action.type === 'filter'), `it wanted a filter: ${shown}`).toBe(true);
+    // The promise: the filter it walked to is on its plot.
+    expect(log.filter((e) => e.action.type === 'filter' && !e.ok), shown).toEqual([]);
+    expect(mine.filter, 'the filter on the mine').toBe(true);
+  });
 });
