@@ -705,8 +705,10 @@ PM; the PR body lists each SHA.
 
 - [ ] **Step 1 (WS6's files, named edit):** remove `apps/web/src/phone/Develop.tsx` (WS4 reviewing), `next-step.ts`,
   `apps/web/test/next-step.test.ts`, and `store-view.test.ts`'s tap cases.
-- [ ] **Step 2 (WS1's files, named edit):** remove `packages/engine/src/dev-walk.ts` (move `pace` into the floor,
-  which imports it) and `DEV_STEER.on`'s other branch.
+- [ ] **Step 2 (WS1's files, named edit):** make `outfitMule`'s `DEV_STEER.on` check in game.ts unconditional.
+  `dev-walk.ts` stays, `pace` and `walkSeconds` with it, and `DEV_STEER.on` stays as the AI/sim switch (PM ruling,
+  5 Nov): the AI's walk estimate is a balance matter for its owners. Follow-up for WS1 + WS2: retire `walkSeconds`,
+  the switch and the AI's development intents, with a sim re-baseline.
 - [ ] **Step 3 (WS3):** remove `apps/server/src/dev-walking.ts`, the flag's other branch in mule-game.ts, and
   ColonistView v1's `walk` and the tap path. **Keep `at` and `assayUntil`**: the steered view fills both, and the
   steered phone (arcade `own.ts`, `predict.ts`, `seat.ts`, `parts.tsx`) and `packages/ui` `events/rollcall.tsx` read
@@ -718,8 +720,8 @@ PM; the PR body lists each SHA.
 
 ### PR-12 merge gate
 
-- [ ] C14's pins green; no import of the removed files left (`git grep dev-walk dev-walking next-step Develop.tsx`
-  over apps and packages: none outside history)
+- [ ] C14's pins green; no import of the removed files left (`git grep -e dev-walking -e next-step -e
+  phone/Develop` over apps and packages: none outside history; `dev-walk.ts` stays, PM ruling 5 Nov)
 - [ ] typecheck, test, e2e, sim, CI green; WS1, WS3, WS4 reviewed their parts; Heiko's OK via the PM
 
 ## Execution ledger
