@@ -228,7 +228,8 @@ reuse check  grep "price(\|later(" packages/ai/src → outlook.ts::Outlook.price
              (the neighbour, reused as the phase-1 belief); no other forecaster exists.
 call sites   C1, C2 (new)
 pin          none: new, and with AI_VALUE.model 'today' nothing calls it
-depends_on   §3 WS5 price-path contract (PR-3 only; stubbable: outlook.later)
+depends_on   §3 WS5 price contract (frozen in WS5's PR-1; PR-3's expectedOffWorld,
+             stubbable on outlook.later until it lands)
 ```
 
 ```
@@ -345,7 +346,9 @@ first match wins
   6  any other good        0 (no need)
 replace    = belief(good) × (1 + PRICE.storeSpread) × AI_VALUE.shortFloorMarkup: buying it
            back next month, never valued below that
-unknown    the order is empty (no plot needs Energy) → row 1 gives replace only;
+unknown    the store won't sell the good (storeQuotes(…).sell null, WS5 §3) → replace is
+           unknown: S(k) is the damage alone (the row's second term), no buy-back floor;
+           the order is empty (no plot needs Energy) → row 1 gives replace only;
            q(k) = 0 (RULE-3) → S never enters v(k): the replace floor never makes a seat
            buy a good it doesn't need (a Water-less seat's Water, WS1 fix 5);
            the belief is unknown (game ends) → the store's posted price today (outlook.final)
@@ -445,10 +448,14 @@ outcome    → RULE-2 replace, RULE-4 carry, RULE-5 later goods' asks
 - **Owner:** WS3 (`engine/src/playbook.ts`, named edit); the validator is WS9's.
 - **Example:** `{ role: 'buyer', hold: 9, walkAway: 60, …, expect: 85 }`. The seat values Food as if it will cost 85 next month, so it buys a surplus at an ask of 50.
 
-**WS5's price-path contract** (PR-3): a freeze point. WS5's widened store design has no spec yet.
-- **What the belief reads:** through `outlook.ts` only, the store's next posted price per good, with `extra` units (`Outlook.price`, as today), and the ship's offer per export good for the next months.
-- **Who publishes it:** WS5, as an engine function the AI calls. The AI copies no formula (HC-5).
-- **Until WS5 freezes it:** PR-3 stubs on `outlook.later`.
+**WS5's price contract**: frozen in WS5's store-pricing PR-1 (`docs/specs/2026-11-05-ws5-store-pricing.md` §3, on `ws5-store-pricing-spec` at 43723204). These are the four functions in `packages/engine/src/economy.ts` the belief reads, through `outlook.ts` only (HC-5):
+
+| Function | WS5 kind | What the AI reads it for |
+|---|---|---|
+| `nextPostedPrice(state, good, demand?, lastShortages?, off?)` | MODIFIED behaviour, same signature | RULE-6 rows 2–3. `outlook.price` already calls it, so PR-1 and PR-2 pick up the new pricing with no AI edit |
+| `storeQuotes(state, good)` → `{ buy, sell }`, each `number \| null` | MODIFIED behaviour | `expectedPrices`. A `null` side means the store won't trade that way: RULE-2's replace is then unknown (see RULE-2) |
+| `storeWants(state, good, demand?)` | MODIFIED behaviour | how many units a seller can place with the store (RULE-4's sell side) |
+| `expectedOffWorld(state, good, monthsAhead)` | ADDED, pure, never draws | PR-3's belief for export goods (RULE-6 row 2) |
 
 ## §4 · Failure & Ops
 
