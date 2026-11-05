@@ -4,15 +4,22 @@ import {
   AI_PLANS,
   createGame,
   createRng,
+  DEV_STEER,
   GAME,
+  list,
+  lotDone,
+  lotLeader,
   monthNeeds,
   MS_PER_SECOND,
   observe,
+  setLotWalk,
   stableJson,
+  stepLandAuction,
   type AiLevelId,
   type AiPersonaId,
   type GameState,
   type LandGrantPlay,
+  type Outfit,
   type Phase,
   type Playbook,
 } from '@mule/engine';
@@ -58,6 +65,38 @@ const at: Record<DraftPhase, GameState> = {
 };
 /** Month 2's planning: the seats own land from month 1. */
 const planning2 = kept.planning2!;
+
+/**
+ * Month 1's development after ai2 won ai1's `outfit` MULE at the land auction, so it starts development leading that
+ * MULE; ai2's land is two free plains plots, analysed.
+ */
+function ledInFromLot(outfit: Outfit): { state: GameState; plots: number[] } {
+  const state = createGame({ seed: 11, players });
+  const plains = () => state.tiles.flatMap((t, i) => (t.terrain === 'plains' && t.owner === null ? [i] : []));
+  const lot = state.tiles[plains()[0]!]!;
+  Object.assign(lot, { owner: 'ai1', outfit });
+  list(state, 'ai1', { item: { kind: 'mule', x: lot.x, y: lot.y }, minimum: 1, unsold: 'keep' });
+  while (state.phase !== 'landAuction') advancePhase(state);
+  const ai2 = state.players.find((p) => p.id === 'ai2')!;
+  // Any other lot goes unbid; on the MULE lot ai2 walks up until it leads, then presses Done.
+  for (let t = 0; ai2.carriedMule === null && state.landAuction!.stage !== 'over' && t < 100_000; t++) {
+    const a = state.landAuction!;
+    if (a.stage === 'walk' && a.lot!.item.kind === 'mule') {
+      const leads = lotLeader(state)?.id === 'ai2';
+      setLotWalk(state, 'ai2', leads ? 0 : 1);
+      if (leads) lotDone(state, 'ai2');
+    } else for (const p of state.players) lotDone(state, p.id);
+    stepLandAuction(state, 10);
+  }
+  expect(ai2.carriedMule, 'ai2 won the MULE lot').toBe(outfit);
+  advancePhase(state);
+  expect(state.phase).toBe('development');
+  for (const t of state.tiles) if (t.owner === 'ai2') t.owner = null;
+  const plots = plains().slice(0, 2);
+  for (const i of plots) state.tiles[i]!.owner = 'ai2';
+  ai2.analysed.push(...plots);
+  return { state, plots };
+}
 
 const mindOf = (i: number, level: AiLevelId = 'trader'): Mind => new AiSeat({ id: `ai${i}`, name: `AI ${i + 1}`, persona: PERSONAS_AT_TABLE[i]!, level, seed: 100 + i }).mind;
 const draftOf = (state: GameState, phase: DraftPhase, mind: Mind, seed: number) => draftPlaybook({ state, seat: mind.me, mind, seed, phase });
@@ -213,6 +252,29 @@ describe('the validator holds every playbook to RULE-1', () => {
     expect(one('development', '/development/timeBudgetMs', devMs + 40 * MS_PER_SECOND)).toMatchObject({ plays: devMs, why: `clamped to ${devMs}: the seat's development time` });
     expect(one('development', '/development/ifSoldOut', 'analyse')).toMatchObject({ plays: 'analyse', why: null });
     expect(one('development', '/development/ifSoldOut', 'wait').why).toBe('no such choice');
+
+    // AM-29: a MULE the seat leads in from a lot keeps its outfit, so an edit giving the first group another is refused.
+    const { state: led, plots } = ledInFromLot('food');
+    const group = (outfit: string, plot: number) => [{ act: 'buyMule' }, { act: 'outfit', outfit }, { act: 'install', plot }];
+    const handed = { ...draftOf(led, 'development', mindOf(2), 102), development: { route: [...group('food', plots[0]!), ...group('smithore', plots[1]!), { act: 'pub' }], timeBudgetMs: 1000, ifSoldOut: 'pub' } } as Playbook;
+    const refit = one('development', '/development/route/1/outfit', 'energy', { state: led, draft: handed });
+    expect(refit).toMatchObject({ plays: 'food', why: 'the MULE it leads already carries food' });
+    expect(refit.r.playbook.by).toBe('engine');
+    const whole = one('development', '/development/route', group('energy', plots[0]!), { state: led, draft: handed });
+    expect(whole).toMatchObject({ plays: handed.development!.route, why: 'the MULE it leads already carries food' });
+    // On the floor the engine has its own words for it.
+    const steering = DEV_STEER.on;
+    DEV_STEER.on = true;
+    try {
+      expect(one('development', '/development/route/1/outfit', 'energy', { state: led, draft: handed }).why).toBe('This MULE is outfitted: re-outfit it');
+    } finally {
+      DEV_STEER.on = steering;
+    }
+    // The bound is the led MULE's: the same edit with none led, and an edit to a later group, both play.
+    const unled = structuredClone(led);
+    unled.players.find((p) => p.id === 'ai2')!.carriedMule = null;
+    expect(one('development', '/development/route/1/outfit', 'energy', { state: unled, draft: handed })).toMatchObject({ plays: 'energy', why: null });
+    expect(one('development', '/development/route/4/outfit', 'energy', { state: led, draft: handed })).toMatchObject({ plays: 'energy', why: null });
   });
 
   it('T-AC-1: RULE-1 P11-P17 and step 5, the auction rows', () => {
@@ -433,7 +495,10 @@ describe('the validator never lets an error reach the game', () => {
   });
 });
 
-describe("the engine's own draft passes the gate", () => {
+/** About 0.8 s alone, a draft and a gate pass per seat and phase; five times that or more in CI's parallel run. */
+const SLOW_MS = 20_000;
+
+describe("the engine's own draft passes the gate", { timeout: SLOW_MS }, () => {
   it("INV-1 (spot): the engine's draft with no edits passes unchanged, nothing rejected, and so does the gate's output for any draft", () => {
     const passes = (label: string) => {
       for (const phase of ['planning', 'development', 'auction'] as const) {
