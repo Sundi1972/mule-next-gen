@@ -475,7 +475,10 @@ async function theMonthEndScoreAtSixSeats(): Promise<void> {
       // The left column holds the league, then the band; the right column the colony panel and the build site.
       const league = band.parentElement!.firstElementChild as HTMLElement;
       const right = band.parentElement!.nextElementSibling as HTMLElement;
-      return { box: box.clientHeight, league: league.offsetHeight, band: band.offsetHeight, right: right.offsetHeight };
+      // The grid stretches the right column to the row; its content runs from its first child's top to its last's foot.
+      const first = right.firstElementChild as HTMLElement;
+      const last = right.lastElementChild as HTMLElement;
+      return { box: box.clientHeight, league: league.offsetHeight, band: band.offsetHeight, right: last.offsetTop + last.offsetHeight - first.offsetTop };
     });
     const without = Math.min(1, parts.box / Math.max(parts.league, parts.right));
     if (process.env.MULE_E2E_SHOTS) await tv.screenshot({ path: `${process.env.MULE_E2E_SHOTS}/tv-monthend-six-seats-month2.png` });
