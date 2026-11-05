@@ -471,7 +471,8 @@ export function ReceiptCard({
       )}
       {sides.map((kind) => {
         const r = receipt[kind];
-        const net = r.gross - r.tax;
+        const exportTax = r.exportTax ?? 0;
+        const net = r.gross - r.tax - exportTax;
         const each = r.prices.every((p) => p === r.prices[0]) ? `${r.units} × ${r.prices[0]} cr` : r.prices.map((p) => `${p}`).join(' + ') + ' cr';
         return (
           <div key={kind} className="contents">
@@ -484,8 +485,9 @@ export function ReceiptCard({
             {kind === 'sold' && (
               <span className="rounded-control border border-holo-line px-2 py-1 text-sm @min-[1100px]/shell:px-3 @min-[1100px]/shell:py-2 @min-[1100px]/shell:text-xl" data-testid="receipt-tax">
                 {/* The tax the engine took, rounded unit by unit, so the sentence adds up (a rate would not: 10% of 570 is not 60). */}
-                <strong data-num className="font-mono">{fmt(r.gross)} cr</strong>, less {fmt(r.tax)} cr sales tax: <strong data-num className="font-mono">{fmt(net)}</strong>
-                <span className="block text-[11px] text-ink-2 @min-[1100px]/shell:text-base">The tax goes to the colony fund.</span>
+                <strong data-num className="font-mono">{fmt(r.gross)} cr</strong>, less {fmt(r.tax)} cr sales tax
+                {exportTax > 0 && ` and ${fmt(exportTax)} cr export tax`}: <strong data-num className="font-mono">{fmt(net)}</strong>
+                <span className="block text-[11px] text-ink-2 @min-[1100px]/shell:text-base">{exportTax > 0 ? 'The taxes go' : 'The tax goes'} to the colony fund.</span>
               </span>
             )}
           </div>
