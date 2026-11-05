@@ -163,6 +163,22 @@ describe('Installing over a MULE swaps it (Heiko at the table, 5 Nov)', () => {
     expect(game.viewFor('s1').me!.carriedMule, 'the Food MULE is on his lead, not gone').toBe('food');
   });
 
+  it('B-AC-SWAP-4: a double tap on SWAP never swaps back: right after the swap the plot offers no SWAP, and a second press changes nothing', () => {
+    const g = toDevelopment();
+    const { game, plot } = g;
+    buyAndOutfit(g, 's1', 'food');
+    installOn(g, 's1', plot);
+    buyAndOutfit(g, 's1', 'water');
+    hallTo(g, 's1', doorFor(g, plot));
+    press(g, 's1', 'LEAVE');
+    mapTo(g, 's1', { x: plot.x + 0.5, y: plot.y + 0.5 });
+    press(g, 's1', 'SWAP');
+    expect(game.viewFor('s1').me?.reach?.verb, 'no SWAP on the plot the Food MULE just came off').not.toBe('SWAP');
+    pressAct(game, g, 's1');
+    expect(outfitOn(g, plot), 'the Water MULE stays').toBe('water');
+    expect(game.viewFor('s1').me!.carriedMule, 'he still leads the Food MULE').toBe('food');
+  });
+
   it.each(['the pub', 'the clock'] as const)('B-AC-SWAP-2: Heiko\'s turn ends at %s with the swapped-out Food MULE still on his lead: it goes to the corral, and his plot keeps the Water MULE', (end) => {
     const g = toDevelopment();
     const { game, plot } = g;
