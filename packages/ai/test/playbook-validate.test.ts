@@ -495,7 +495,10 @@ describe('the validator never lets an error reach the game', () => {
   });
 });
 
-describe("the engine's own draft passes the gate", () => {
+/** About 0.8 s alone, a draft and a gate pass per seat and phase; five times that or more in CI's parallel run. */
+const SLOW_MS = 20_000;
+
+describe("the engine's own draft passes the gate", { timeout: SLOW_MS }, () => {
   it("INV-1 (spot): the engine's draft with no edits passes unchanged, nothing rejected, and so does the gate's output for any draft", () => {
     const passes = (label: string) => {
       for (const phase of ['planning', 'development', 'auction'] as const) {
