@@ -8,7 +8,7 @@ import { Brain, candidate, consider, parseReply, PERSONAS, ReplyRejected, shortl
 import { createHaikuComplete } from '../src/brain/client.js';
 import { isCallLine, readLedgerLines } from '../src/brain/ledger.js';
 import { cutOffPhase, fallbackReason, renderTrialReport, trialReport, type TrialGame, type TrialInput } from '../src/brain/trial-report.js';
-import { trial } from '../src/brain/trial.js';
+import { proofCapRefusal, trial, trialLedgerPath, trialSpent } from '../src/brain/trial.js';
 import { fakeSdk, KEY, neverAnswers, requestOf, sdkMessage, worstUsdOfRequest, type SdkModuleFake, type SdkParams } from './brain-fakes.js';
 
 /** The SDK module's client: records its options and answers through `sdk.create`; it never reaches the network. */
@@ -88,6 +88,78 @@ async function drive<T>(promise: Promise<T>): Promise<T> {
 const callLines = (at = file) => readLedgerLines(at).filter(isCallLine);
 const gameLines = (at = file) => readLedgerLines(at).filter((l) => !isCallLine(l));
 const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
+
+// The paid-run guard: fast, no game played, so it runs in CI (it guards money).
+describe('brain:trial paid-run guard (PR-5: --run label, the proof cap)', () => {
+  /** A prior run's ledger: one call line of `usd`, and its game line. */
+  const ledger = (name: string, usd: number) =>
+    fs.writeFileSync(
+      path.join(dir, name),
+      [
+        JSON.stringify({ t: '2026-10-20T09:00:00.000Z', game: 'g', seat: 'ai0', persona: 'trader', level: 'trader', model: BRAIN.writeCalls.strategy.model, kind: 'strategy', input: 0, cached_read: 0, cache_write: 0, output: 0, usd, ms: 1, timed_out: false, outcome: 'llm' }),
+        JSON.stringify({ t: '2026-10-20T09:00:01.000Z', game: 'g', type: 'game', seats: 1, calls: 1, usd, by_seat: {} }),
+      ].join('\n') + '\n',
+    );
+  const called = () => {
+    let calls = 0;
+    sdk.create = () => {
+      calls++;
+      return Promise.resolve(sdkMessage(USABLE, BILLED));
+    };
+    return () => calls;
+  };
+
+  it('PR-5: --run <label> names the ledger trial-<day>-<label>.jsonl; with no label it is trial-<day>.jsonl, as before', () => {
+    expect(trialLedgerPath(dir, TODAY, 'rerun1')).toBe(path.join(dir, 'trial-2026-10-22-rerun1.jsonl'));
+    expect(trialLedgerPath(dir, TODAY, null)).toBe(file);
+  });
+
+  it('PR-5: a label whose ledger exists is refused, and nothing is called', async () => {
+    const calls = called();
+    fs.writeFileSync(path.join(dir, 'trial-2026-10-22-rerun1.jsonl'), '');
+    const { out, result } = run(['--games', '1', '--max-usd', '1', '--run', 'rerun1']);
+    expect((await result).code).toBe(1);
+    expect(calls()).toBe(0);
+    expect(out.join('\n')).toContain('trial-2026-10-22-rerun1.jsonl exists');
+  });
+
+  it('PR-5: with no label, a second paid run on the same day is refused as before, and nothing is called', async () => {
+    const calls = called();
+    fs.writeFileSync(file, '');
+    const { out, result } = run(['--games', '1', '--max-usd', '1']);
+    expect((await result).code).toBe(1);
+    expect(calls()).toBe(0);
+    expect(out).toEqual([`${file} exists: brain:trial already ran today, and each run needs its own clearance; nothing called.`]);
+  });
+
+  it('PR-5: a run whose --max-usd would carry every trial ledger past BRAIN.proofCapUsd is refused before any call; up to the cap it may start', async () => {
+    ledger('trial-2026-10-20.jsonl', 6);
+    ledger('trial-2026-10-21-a.jsonl', 3.5);
+    // Spike ledgers are not trial runs: they do not count.
+    ledger('strategy-spike-2026-10-21.jsonl', 5);
+    expect(trialSpent(dir)).toBeCloseTo(9.5, 10);
+    expect(proofCapRefusal(dir, BRAIN.proofCapUsd - 9.5)).toBeNull();
+    expect(proofCapRefusal(dir, 1)).toContain('nothing called');
+
+    const calls = called();
+    const { out, result } = run(['--games', '1', '--max-usd', '1', '--run', 'rerun1']);
+    expect((await result).code).toBe(1);
+    expect(calls()).toBe(0);
+    expect(out).toEqual([`brain:trial would pass the PR-5 cap: the trial ledgers hold $9.50000, --max-usd $1.00, cap $${BRAIN.proofCapUsd.toFixed(2)}; nothing called.`]);
+    expect(fs.existsSync(path.join(dir, 'trial-2026-10-22-rerun1.jsonl'))).toBe(false);
+  });
+
+  it('PR-5: a label of anything but lowercase letters, digits and dashes (1 to 32) is refused as a bad flag', async () => {
+    const calls = called();
+    for (const label of ['Rerun', 'a b', '../x', '']) {
+      const { result } = run(['--games', '1', '--max-usd', '1', '--run', label]);
+      expect((await result).code, label).toBe(1);
+    }
+    const { result } = run(['--games', '1', '--max-usd', '1', '--run']);
+    expect((await result).code).toBe(1);
+    expect(calls()).toBe(0);
+  });
+});
 
 // Local only (MULE_FULL=1, `pnpm test:full`): brain:trial is a command run by hand, and only with the PM's clearance.
 describe.runIf(process.env.MULE_FULL === '1')('brain:trial', () => {
