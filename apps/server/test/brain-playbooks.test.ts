@@ -356,10 +356,12 @@ describe('HC-1: no phase waits for a model', { timeout: 30_000 }, () => {
     expect(starts.at(-1)?.[1]).toBe('gameOver');
     for (const month of [1, 2]) expect(opened(month, 'landGrant')! - opened(month, 'planning')!, `month ${month}'s land grant`).toBe(READ_MS);
     expect(opened(2, 'planning')! - opened(1, 'upkeep')!, "month 2's planning").toBe(READ_MS);
-    // The model was asked to write at game start and never answered; month 1's land grant cancelled that call, and the
-    // seat's next decision opened the call that then stayed open all game, so every later write found the seat busy.
-    expect(silent.requests.map((r) => isWrite(r.params))).toEqual([true, false]);
+    // The model was asked to write at game start and never answered: month 1's land grant cancelled that call. The
+    // auction's write, asked in the production show (AM-A16), the auction's start cancelled. The seat's next decision
+    // then opened the call that stayed open all game, so every later write found the seat busy.
+    expect(silent.requests.map((r) => isWrite(r.params))).toEqual([true, true, false]);
     expect(silent.requests[0]!.options.signal?.aborted).toBe(true);
+    expect(silent.requests[1]!.options.signal?.aborted).toBe(true);
   });
 });
 

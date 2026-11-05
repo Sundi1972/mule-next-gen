@@ -97,8 +97,9 @@ describe("C2: the writer takes a phase brief's paths", () => {
   const sha = (v: unknown) => createHash('sha256').update(JSON.stringify(v)).digest('hex');
 
   it("C2: the land reply schema is byte for byte what it was, for both corners flags, so the land request's cache holds", () => {
-    expect(sha(replySchema(true))).toBe('b8006ff54c2efe4e5776ac65c30716f7282d141e93c2351dad0246c37c1ca886');
-    expect(sha(replySchema(false))).toBe('401b966df2f96fb250b014420cf2eeacce62f90b359968f6ffa57a93f368fec1');
+    // Re-pinned for GAME.claimsPerGrant 2 → 1 (trunk, 5 Nov): the claims enum is [0, 1], so the land cache reset once.
+    expect(sha(replySchema(true))).toBe('6975f613536e698b00b8751de3e7adae8a6dc6b121cc7bf63370192e75841e2f');
+    expect(sha(replySchema(false))).toBe('8425081cf9c0bb23b4d70a79080cb7fe1daf3f49ee676bbb74b71c566fe3abe0');
   });
 
   it("C2: a phase brief's schema offers its paths and no strategy; the request carries that schema", async () => {
