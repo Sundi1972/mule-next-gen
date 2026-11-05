@@ -419,6 +419,22 @@ export interface Colony {
   permanentPrestige: number;
   /** The gauges as each of the last two months ended, oldest first: what the screens' "this month" change is read from. */
   monthEnds: ColonyGauges[];
+  /** The colony's mood, a whole number 0..100: it drifts at upkeep and events move it at once. See G-5 RULE-20. */
+  happiness: number;
+  /** The latest general strike; one from an earlier month counts as none. Null before the first. See G-5 RULE-26. */
+  strike: Strike | null;
+}
+
+/** The colony's mood band, from happiness. See G-5 RULE-20. */
+export type MoodBand = 'thriving' | 'content' | 'restless' | 'unhappy' | 'unrest';
+
+/** A general strike on one good: every plot of it makes a fraction of its output this month, unless the fund pays. */
+export interface Strike {
+  month: number;
+  good: Good;
+  /** What the strikers want from the fund, in credits. */
+  cost: number;
+  paid: boolean;
 }
 
 /** The colony's gauges at one moment; happiness is null until the colony has a mood. */
