@@ -278,6 +278,10 @@ move 18%. The first month starts at the centre.
 | `storeWants(state, good, demand?)` | MODIFIED behaviour, same signature | units the store will buy (Energy per C6) |
 | `expectedOffWorld(state, good, monthsAhead)` | ADDED, pure | `centre × (offWorld ÷ centre)^(φ^monthsAhead)`, never draws |
 Example: Crystite offWorld 160, centre 90, φ 0.7 → in 1 month 134, in 3 months 109.
+Null semantics (a consumer dependency, WS9 RULE-2): `storeQuotes(…).sell === null` means exactly "the store won't
+sell this good now" (storeForSale = 0), and `buy === null` exactly "the store won't buy" (storeWants = 0). Neither
+is ever null for any other reason; no price rule here (lean, ceiling, floors) makes a line null. A test pins it
+(T-AC-2's contract test).
 
 **The rule-E seam (WS3).** `Store.lastWalk: Partial<Record<Good, { soldOutHigh: number | null; dryBudget: boolean
 }>>` in `packages/engine/src/types.ts` (ADDED, optional, so older records load). WS3 writes it at
