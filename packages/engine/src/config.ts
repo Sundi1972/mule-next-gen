@@ -268,7 +268,14 @@ export const MULE = {
   labour: 120,
   /** Smithore the store needs to build one MULE, as in the original. */
   smithorePerMule: 1,
-  /** The store builds MULEs for every plot claimed in a month, plus this many. */
+  /**
+   * MULEs the store builds for each seat a month: the land a seat gains in a month, by the land grant and the land
+   * auction, not by the grant alone. Sizes the corral (upkeep.ts, and its copy in the AI's outlook) and the MULEs'
+   * share of Smithore demand (economy.ts mulesWanted). 2 keeps the corral it had when a grant gave two claims, so
+   * GAME.claimsPerGrant 2 → 1 (Heiko, 5 Nov) shrinks neither.
+   */
+  corralPerPlayer: 2,
+  /** The store builds MULEs for every seat's corralPerPlayer, plus this many. */
   spareInCorral: 2,
   /** If the corral sold out, MULEs cost this much more next month; with surplusShare of the month's MULEs or more left over, surplusDown less. */
   scarcityUp: 0.15,
@@ -789,7 +796,8 @@ export const GAME = {
   maxMonths: 12,
   /** Months the game continues after the last free plot is claimed. */
   landRushMonths: 3,
-  claimsPerGrant: 2,
+  /** Plots each seat may claim in a land grant: one (Heiko, 5 Nov). The corral is sized by MULE.corralPerPlayer, not this. */
+  claimsPerGrant: 1,
   /** The land grant is one pass of the light over the free plots, or ends earlier once every claim is used. */
   grantSweeps: 1,
   /** What each plot a player owns adds to their score, before any MULE on it. */

@@ -94,11 +94,11 @@ export function colonistDemand(state: GameState, good: Good, need: number): numb
   return need * Math.min(1, budget / Math.max(1, price));
 }
 
-/** MULEs the colony will want next month: one for each idle plot, plus the plots still to be granted. */
+/** MULEs the colony will want next month: one for each idle plot, plus each seat's MULE.corralPerPlayer while land is still to be granted. */
 export function mulesWanted(state: GameState): number {
   const idle = state.tiles.filter((t) => t.owner && !t.outfit).length;
   const free = state.tiles.some((t) => t.terrain !== 'store' && !t.owner);
-  return idle + (free ? state.players.length * GAME.claimsPerGrant : 0);
+  return idle + (free ? state.players.length * MULE.corralPerPlayer : 0);
 }
 
 /**

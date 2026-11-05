@@ -112,7 +112,7 @@ interface Future {
 
 /**
  * Plays the status quo forward on a copy: nobody claims, builds or trades,
- * except that the seats buy the MULEs they claim land for, so the corral
+ * except that the seats buy their MULE.corralPerPlayer MULEs a month, so the corral
  * drains as it does in play; plots produce, everyone eats, the store builds
  * MULEs and posts prices. Returns the prices posted `months` on, raised
  * where the rollout (run on to the horizon) shows a shortage the price
@@ -125,14 +125,14 @@ function rollForward(stage: GameState, months: number): Future {
   const from = sim.history.length;
   const asked = Math.min(sim.month + months, endMonth(sim));
   const target = Math.min(sim.month + Math.max(months, STRATEGIST.horizon), endMonth(sim));
-  const muleTarget = sim.players.length * GAME.claimsPerGrant + MULE.spareInCorral;
+  const muleTarget = sim.players.length * MULE.corralPerPlayer + MULE.spareInCorral;
   let prices: Stock = { ...sim.store.posted };
   let last: Stock = prices;
   let corralShort = false;
   // literal-ok: a month has seven phases, so eight a month bounds the loop: a guard, not balance
   for (let guard = 0; guard < (target - sim.month + 1) * 8 && sim.phase !== 'gameOver'; guard++) {
     advancePhase(sim);
-    if (sim.phase === 'production') sim.store.mules = Math.max(0, sim.store.mules - sim.players.length * GAME.claimsPerGrant);
+    if (sim.phase === 'production') sim.store.mules = Math.max(0, sim.store.mules - sim.players.length * MULE.corralPerPlayer);
     if (sim.phase === 'planning' && sim.store.mules < muleTarget) corralShort = true;
     if (sim.phase === 'auction') {
       last = { ...sim.store.posted };

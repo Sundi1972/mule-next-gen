@@ -90,8 +90,10 @@ describe('the draft picks a plan kind and writes its strategy', () => {
     expect(builder.cashFloor).toBe(cashReserve(observe(state, cautious.mind.me), cautious.mind));
     expect(builder.stances).toEqual(Object.fromEntries(others(cautious.mind.me).map((id) => [id, 'neutral'])));
 
-    // landBaron: while free plots are at least minFreeShare of all; 2 plots a month. Out of reach, the next leaning.
-    expect(strategyOf(state, aggressive.mind, aggressive.seed)).toMatchObject({ kind: 'landBaron', landTarget: { plots: 6, byMonth: 4 } });
+    // landBaron: while free plots are at least minFreeShare of all; its plots a month, at most what a grant gives
+    // (GAME.claimsPerGrant). Out of reach, the next leaning.
+    const baronPerMonth = Math.min(AI_PLANS.landTarget.perMonth.landBaron!, GAME.claimsPerGrant);
+    expect(strategyOf(state, aggressive.mind, aggressive.seed)).toMatchObject({ kind: 'landBaron', landTarget: { plots: baronPerMonth * AI_PLANS.landTarget.months, byMonth: 4 } });
     expect(withPlans(['AI_PLANS.landBaron.minFreeShare=1.01'], () => strategyOf(state, aggressive.mind, aggressive.seed).kind)).not.toBe('landBaron');
 
     // specialist: RULE-4 finds a money-maker, the good the rule's own formula scores best.
@@ -283,8 +285,16 @@ describe('the draft writes the parts of its phase', () => {
       expect(timeBudgetMs).toBe(at.development.players[i]!.devSeconds * MS_PER_SECOND);
       expect(ifSoldOut).toBe('pub');
     }
-    // After month 1's grant every seat holds idle land and the cash for a MULE: at least one seat drafts two.
-    expect(seats.map((_, i) => draftAt('development', i).development!.route.filter((s) => s.act === 'buyMule').length)).toContain(2);
+    // After month 1's grant every seat holds idle land and the cash for a MULE: each drafts one for every plot the grant
+    // gave it (GAME.claimsPerGrant), up to its level's. Given a second idle plot, as the land auction can, at least one drafts two.
+    const buys = (state: GameState, i: number) => draftAt('development', i, state).development!.route.filter((s) => s.act === 'buyMule').length;
+    const idleOf = (state: GameState, i: number) => state.tiles.filter((t) => t.owner === `ai${i}` && !t.outfit).length;
+    expect(seats.map((_, i) => idleOf(at.development, i))).toEqual(seats.map(() => GAME.claimsPerGrant));
+    expect(seats.map((s, i) => buys(at.development, i))).toEqual(seats.map((s, i) => Math.min(idleOf(at.development, i), s.mind.level.mulesPerMonth)));
+    const twoEach = structuredClone(at.development);
+    const free = twoEach.tiles.filter((t) => !t.owner && t.terrain !== 'store');
+    seats.forEach((_, i) => (free[i]!.owner = `ai${i}`));
+    expect(seats.map((_, i) => buys(twoEach, i))).toContain(2);
     // Negative: with no idle plot of its own, no MULE at all.
     const bare = advanceTo(at.planning, 'development');
     expect(bare.tiles.some((t) => t.owner === 'ai0')).toBe(false);

@@ -70,9 +70,9 @@ export function runUpkeep(state: GameState): { shortages: Good[]; hungry: boolea
     state.ship = planShip(state.seed, state.month + GAME.exportShipEvery, state.players.length);
   }
 
-  // The store builds MULEs from Smithore, enough for every plot claimed next
+  // The store builds MULEs from Smithore, enough for every seat's MULE.corralPerPlayer next
   // month plus a few.
-  const muleTarget = state.players.length * GAME.claimsPerGrant + MULE.spareInCorral;
+  const muleTarget = state.players.length * MULE.corralPerPlayer + MULE.spareInCorral;
   const build = Math.max(0, Math.min(muleTarget - state.store.mules, Math.floor(state.store.stock.smithore / MULE.smithorePerMule)));
   state.store.stock.smithore -= build * MULE.smithorePerMule;
   state.store.mules += build;

@@ -18,6 +18,7 @@ import {
   type GameState,
 } from '@mule/engine';
 import { outlook } from '../src/outlook.js';
+import { applySets } from '../src/sim.js';
 import { AiSeat } from '../src/seat.js';
 import { developDecision, goodPlan, landDecision, muleValue, plotRoom, plotValue, tradeDecision, wantsAnyAhead, wantsPlot } from '../src/strategist.js';
 import { cashReserve, installGain, secondValue, type Mind } from '../src/value.js';
@@ -153,23 +154,31 @@ describe('land claims on a single pass', () => {
   });
 
   it('T-AC-31: the lit plot is weighed by the utility it is ranked by: within its claims and clearing grantShare of the best utility ahead, it is wanted', () => {
-    const state = fourSeatsWithWater(1, WATER_TO_SPARE);
-    while (state.phase !== 'landGrant') advancePhase(state);
-    const mind: Mind = { ...traderMind, levelId: 'tycoon', level: AI_LEVELS.tycoon, salt: 1 };
-    const obs = observe(state, 'ai0');
-    const plan = landDecision(obs, mind).all[0]!.action;
-    const order = state.grant!.order;
-    // A lit plot within its claims whose utility clears the share while its value falls short of it: the two metrics disagree.
-    const step = order.findIndex((index, k) => {
-      const ahead = new Set(order.slice(k));
-      const rivals = plan.ranking.filter((s) => ahead.has(s.index));
-      const rank = rivals.findIndex((s) => s.index === index);
-      const lit = rivals[rank];
-      if (!lit || lit.value <= 0 || rank >= GAME.claimsPerGrant + STRATEGIST.grantSpare) return false;
-      return lit.utility >= rivals[0]!.utility * STRATEGIST.grantShare && lit.value < Math.max(...rivals.map((s) => s.value)) * STRATEGIST.grantShare;
-    });
-    expect(step).toBeGreaterThanOrEqual(0);
-    expect(wantsPlot(plan, obs, order[step]!, order.slice(step), mind)).toBe(true);
+    // The ranking is by utility, so rank 0 clears the utility share by itself: the weighing shows only from rank 1, which
+    // one claim a grant (GAME.claimsPerGrant 1) leaves out of the window. Widen it one rank by STRATEGIST.grantSpare.
+    const spare = STRATEGIST.grantSpare;
+    applySets([`STRATEGIST.grantSpare=${spare + 1}`]);
+    try {
+      const state = fourSeatsWithWater(1, WATER_TO_SPARE);
+      while (state.phase !== 'landGrant') advancePhase(state);
+      const mind: Mind = { ...traderMind, levelId: 'tycoon', level: AI_LEVELS.tycoon, salt: 1 };
+      const obs = observe(state, 'ai0');
+      const plan = landDecision(obs, mind).all[0]!.action;
+      const order = state.grant!.order;
+      // A lit plot within its claims whose utility clears the share while its value falls short of it: the two metrics disagree.
+      const step = order.findIndex((index, k) => {
+        const ahead = new Set(order.slice(k));
+        const rivals = plan.ranking.filter((s) => ahead.has(s.index));
+        const rank = rivals.findIndex((s) => s.index === index);
+        const lit = rivals[rank];
+        if (!lit || lit.value <= 0 || rank >= GAME.claimsPerGrant + STRATEGIST.grantSpare) return false;
+        return lit.utility >= rivals[0]!.utility * STRATEGIST.grantShare && lit.value < Math.max(...rivals.map((s) => s.value)) * STRATEGIST.grantShare;
+      });
+      expect(step).toBeGreaterThanOrEqual(0);
+      expect(wantsPlot(plan, obs, order[step]!, order.slice(step), mind)).toBe(true);
+    } finally {
+      applySets([`STRATEGIST.grantSpare=${spare}`]);
+    }
   });
 });
 
