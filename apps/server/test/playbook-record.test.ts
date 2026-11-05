@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { AI_HANDS, RuleError, type GameRecord, type GameState } from '@mule/engine';
+import { AI_HANDS, RuleError, type GameRecord, type GameState, type Good } from '@mule/engine';
 import type { Decider } from '@mule/ai';
 import type { MuleIntent, MuleView } from '@mule/protocol';
 import { Room, TableError, type ClientEnvelope, type Connection, type GameContext, type ServerEnvelope } from '@tabletop/core';
@@ -196,12 +196,13 @@ describe('AI playbooks in a keyless game record', { timeout: 60_000 }, () => {
     await expect(replay(altered), 'the replay compares every playbook it rewrites').rejects.toMatchObject({ name: 'ReplayDiverged', seq: last.seq });
   });
 
+  // Records its own whole two-month game, as its neighbours do (about 2.5 s), so no test reads another's spies.
   it("T-AC-11 (AM-20): two goods' auction entries for one seat, each written at its good's own step, and the replay passes", async () => {
     const record = await recordedGame();
     const auction = playbooksOf(record).filter((e) => e.seat === CLASSIC && e.month === 1 && e.phase === 'auction');
     expect(auction.length, "the month's draft and at least one later good").toBeGreaterThanOrEqual(2);
     const [whole, later] = [auction[0]!, auction[1]!];
-    const good = Object.keys(later.playbook.auction!)[0]!;
+    const good = Object.keys(later.playbook.auction!)[0]! as Good;
     expect(Object.keys(later.playbook.auction!)).toEqual([good]);
     expect(Object.keys(whole.playbook.auction!), "the month's draft holds the later good too, stale by design").toContain(good);
     expect(later.seq, 'each at its seq: the later good at a later step').toBeGreaterThan(whole.seq);
@@ -213,7 +214,7 @@ describe('AI playbooks in a keyless game record', { timeout: 60_000 }, () => {
     // The replay checks the later good's entry where it was written: one changed field diverges at that seq.
     const altered = JSON.parse(JSON.stringify(record)) as MuleRecord;
     const entry = playbooksOf(altered).find((e) => e.seq === later.seq && e.seat === CLASSIC && e.phase === 'auction')!;
-    entry.playbook.auction![good as keyof typeof entry.playbook.auction]!.walkAway += 1;
+    entry.playbook.auction![good]!.walkAway += 1;
     await expect(replay(altered)).rejects.toMatchObject({ name: 'ReplayDiverged', seq: later.seq });
   });
 });

@@ -4,6 +4,7 @@ import {
   analysisSeconds,
   buyMule,
   cloneForSim,
+  createRng,
   GAME,
   GOOD_CONFIG,
   GOODS,
@@ -80,10 +81,18 @@ const REASONS: Record<Kind, string> = {
 const monthOf = (input: DraftInput, obs: GameState) => input.month ?? obs.month;
 
 /** A pick's seed: the seat's seed, the month and the pick's key, hashed (FNV-1a). */
-function seedOf(input: DraftInput, month: number, key: string): number {
+function seedOf(input: Pick<DraftInput, 'seed'>, month: number, key: string): number {
   let h = 0x811c9dc5; // literal-ok: FNV-1a's offset basis, a hash constant
   for (const ch of `${input.seed}|${month}|${key}`) h = Math.imul(h ^ ch.charCodeAt(0), 0x01000193); // literal-ok: FNV-1a's prime
   return h >>> 0;
+}
+
+/**
+ * A roll in [0, 1) from the draft's own seeded stream: the seat's seed, the month and `key`, as every pick is seeded. The
+ * table line a seat says for a drafted part draws it (AM-22), so the line never touches the Brain's or a hand's stream.
+ */
+export function draftRoll(seed: number, month: number, key: string): number {
+  return createRng(seedOf({ seed }, month, `line|${key}`)).next();
 }
 
 /** One pick among options, as the Classic decider makes it, seeded by its key. */

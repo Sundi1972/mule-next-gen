@@ -4,6 +4,7 @@ import {
   BRAIN,
   GOODS,
   stableJson,
+  TERRAIN_ODDS,
   tileIndex,
   type AuctionSide,
   type GameState,
@@ -253,26 +254,41 @@ describe('the seat plays its development and auction parts (C4, RULE-6, RULE-7)'
   });
 
   it('B-AC-6: an adopted playbook that differs in moneyMaker, an auction role or the route is followed, or the outcome names the fallback', () => {
-    // (a) moneyMaker. WS2 edits the money-maker through the seat's gate, which re-drafts the route under it; adopted just
-    // ahead of the month's first development tick, its MULEs that month are outfitted for the edited good.
-    let edited: Good | null = null;
+    // (a) moneyMaker. WS2 edits the money-maker through the seat's gate, which re-drafts the route under it (RULE-1's
+    // re-plan); adopted just ahead of the month's first development tick, its MULEs that month are outfitted for the
+    // edited good. The first seat and month whose re-drafted route outfits every MULE for the edited good, on plots that
+    // grow it well (TERRAIN_ODDS 'good': where a plot can make it), is the one edited.
+    // Measured 5 Nov (seeds 1-8, months 1-4, edits to a good the drafted plots grow well): the re-draft does so for 29
+    // of 117, part of its MULEs for 37,
+    // none for 51; developDecision's lean (C5, AI_PLANS.moneyMaker) decides that, not the hand, and it is reported.
+    let edited: { seat: string; month: number; good: Good } | null = null;
     const first = once();
     const base = playTable();
     const a = playTable({
       before: (seat, state, point) => {
-        if (seat.id !== ME || state.month !== MONTH || point !== 'development' || !first(seat, state, point)) return;
+        if (edited || point !== 'development' || !first(seat, state, point)) return;
         const draft = seat.draft(state, 'development');
-        edited = (['smithore', 'energy', 'food'] as const).find((g) => g !== draft.strategy.moneyMaker)!;
-        const { playbook, rejected } = seat.validator()(state, ME, draft, [{ path: '/strategy/moneyMaker', to: edited, reason: 'Ore pays.' }]);
-        expect(rejected).toEqual([]);
-        seat.adopt(playbook);
+        const outfits = (pb: Playbook) => pb.development!.route.flatMap((s) => (s.act === 'outfit' ? [s.outfit] : []));
+        const plots = (pb: Playbook) => pb.development!.route.flatMap((s) => (s.act === 'install' ? [state.tiles[s.plot!]!] : []));
+        const grows = (pb: Playbook, g: Good) => plots(pb).every((t) => t.terrain !== 'store' && TERRAIN_ODDS[t.terrain].grown[g as keyof (typeof TERRAIN_ODDS)['plains']['grown']] === 'good');
+        for (const good of GOODS.filter((g) => g !== draft.strategy.moneyMaker)) {
+          const { playbook, rejected } = seat.validator()(state, seat.id, draft, [{ path: '/strategy/moneyMaker', to: good, reason: 'This pays.' }]);
+          const all = outfits(playbook);
+          const mine = outfits(draft);
+          if (rejected.length > 0 || all.length === 0 || !grows(playbook, good) || all.some((o) => o !== good) || (mine.length > 0 && mine.every((o) => o === good))) continue;
+          edited = { seat: seat.id, month: state.month, good };
+          seat.adopt(playbook);
+          return;
+        }
       },
     });
-    const mine = a.installs.get(key(ME, MONTH))!;
+    expect(edited, 'a seat whose gate re-drafts its MULEs for the edited money-maker').not.toBeNull();
+    const { seat: who, month: when, good: maker } = edited!;
+    const mine = a.installs.get(key(who, when))!;
     expect(mine.length, 'it installed MULEs that month').toBeGreaterThan(0);
-    expect(mine.map((m) => m.outfit), 'outfitted for the edited money-maker').toEqual(mine.map(() => edited));
-    expect(base.installs.get(key(ME, MONTH))!.map((m) => m.outfit), 'the draft alone outfits otherwise').not.toEqual(mine.map(() => edited));
-    expect(a.written.filter((pb) => pb.seat === ME && pb.month === MONTH && pb.phase === 'development'), 'an adopted part is written by its writer, not the seat').toEqual([]);
+    expect(mine.map((m) => m.outfit), 'outfitted for the edited money-maker').toEqual(mine.map(() => maker));
+    expect(base.installs.get(key(who, when))!.map((m) => m.outfit), 'the draft alone outfits otherwise').not.toEqual(mine.map(() => maker));
+    expect(a.written.filter((pb) => pb.seat === who && pb.month === when && pb.phase === 'development'), 'an adopted part is written by its writer, not the seat').toEqual([]);
 
     // (b) an auction role. The seat's own draft for a good it would trade, edited to 'out' and adopted ahead of the
     // auction's first status screen: its declare fact for that good is a pass, and its outcome says so.
@@ -296,31 +312,35 @@ describe('the seat plays its development and auction parts (C4, RULE-6, RULE-7)'
 
     // (c) the route. Two MULEs' plots swapped: its installs fall on the edited route's plots, in order, each with the
     // outfit the edited route gives it; any step that could not play is named in the outcome with why.
-    let route: Playbook['development'] | null = null;
+    // The first seat and month whose draft leads two MULEs out is the one edited.
+    let route: { seat: string; month: number; part: NonNullable<Playbook['development']> } | null = null;
     const firstC = once();
     const c = playTable({
       before: (seat, state, point) => {
-        if (seat.id !== ME || state.month !== MONTH || point !== 'development' || !firstC(seat, state, point)) return;
+        if (route || point !== 'development' || !firstC(seat, state, point)) return;
         const draft = seat.draft(state, 'development');
         const at = draft.development!.route.flatMap((s, i) => (s.act === 'install' ? [i] : []));
-        expect(at.length, 'a route with two MULEs to swap').toBeGreaterThanOrEqual(2);
+        if (at.length < 2) return;
         const [i, j] = [at[0]!, at[1]!];
         const plotOf = (k: number) => draft.development!.route[k]!.plot!;
-        const { playbook, rejected } = seat.validator()(state, ME, draft, [
+        const { playbook, rejected } = seat.validator()(state, seat.id, draft, [
           { path: `/development/route/${i}/plot`, to: plotOf(j), reason: 'That one first.' },
           { path: `/development/route/${j}/plot`, to: plotOf(i), reason: 'And this one second.' },
         ]);
         expect(rejected).toEqual([]);
-        route = playbook.development!;
+        route = { seat: seat.id, month: state.month, part: playbook.development! };
         seat.adopt(playbook);
       },
     });
-    const out = c.outcomes.get(key(ME, MONTH, 'development'))!;
+    expect(route, 'a seat whose draft leads two MULEs out').not.toBeNull();
+    const { seat: swapped, month: then } = route!;
+    expect(c.installs.get(key(swapped, then)), 'the draft alone installs otherwise').not.toEqual(base.installs.get(key(swapped, then)));
+    const out = c.outcomes.get(key(swapped, then, 'development'))!;
     expect(out, 'an outcome for the adopted part').not.toBeNull();
-    const steps = route!.route;
+    const steps = route!.part.route;
     const wanted = steps.flatMap((s, i) => (s.act === 'install' ? [{ i, plot: s.plot!, outfit: steps[i - 1]!.outfit! }] : []));
     const playedOut = wanted.filter((w) => out!.items[w.i]!.actual === 'done');
-    expect(c.installs.get(key(ME, MONTH)), 'its installs: the edited route, in order').toEqual(playedOut.map((w) => ({ plot: w.plot, outfit: w.outfit })));
+    expect(c.installs.get(key(swapped, then)), 'its installs: the edited route, in order').toEqual(playedOut.map((w) => ({ plot: w.plot, outfit: w.outfit })));
     expect(playedOut.length, 'the swapped MULEs were installed').toBeGreaterThanOrEqual(2);
     for (const item of out!.items.filter((x) => x.path.startsWith('/development/route/') && x.actual !== 'done' && x.actual !== 'not reached')) expect(item.note, item.path).toBeTruthy();
 
