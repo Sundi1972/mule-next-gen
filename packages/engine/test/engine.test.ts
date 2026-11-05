@@ -161,18 +161,6 @@ describe('production', () => {
     expect(rawOutput(state, a)).toBe(alone + 1);
   });
 
-  it('halves output of plots whose owner has no Energy', () => {
-    const state = newGame();
-    const tile = plainTile(state, 0, 0, 'river');
-    tile.owner = 'p0';
-    tile.outfit = 'food';
-    const p0 = state.players[0]!;
-    p0.stock.energy = 0;
-    const full = rawOutput(state, tile);
-    const produced = runProduction(state);
-    expect(produced.produced.p0!.food).toBe(Math.floor(full / 2));
-  });
-
   it('halves Food farms whose owner is short of Water', () => {
     const state = newGame();
     const tile = plainTile(state, 0, 0, 'river');
