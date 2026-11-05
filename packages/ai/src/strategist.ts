@@ -185,12 +185,19 @@ export function landDecision(obs: GameState, mind: Mind): Shortlist<LandPlan> {
   return shortlist(plans, mind.level.shortlist, mind.level.shortlistTolerance);
 }
 
+/** The other seats still claiming in this grant: claims left and not Done with land, both public on the grant. */
+export function rivalsStillClaiming(obs: GameState, mind: Mind): number {
+  return obs.players.filter((p) => p.id !== mind.me && !p.doneWithLand && p.claimsThisGrant < GAME.claimsPerGrant).length;
+}
+
 /**
  * Whether the hands should press for the lit plot. The grant is one pass, so the seat weighs the lit plot only against
  * the free plots still ahead of the light (`ahead`: the pass's order from the lit plot on): plots it has gone by never
- * come back. It wants the lit plot when that ranks within its claims left plus STRATEGIST.grantSpare among them by the
- * plan's utility, and its utility is at least STRATEGIST.grantShare of the best of theirs; a plot it values at nothing
- * it never wants. Early in the pass better plots lie ahead and it waits;
+ * come back. It wants the lit plot when that ranks within its claims left plus STRATEGIST.grantSpare plus the rivals
+ * still claiming (rivalsStillClaiming) among them by the plan's utility, and its utility is at least
+ * STRATEGIST.grantShare of the best of theirs; a plot it values at nothing it never wants. Seats rank the board nearly
+ * alike, so each rival still claiming may take one of the plots it ranks higher before the light reaches it
+ * (FM-grant-plotless). Early in the pass better plots lie ahead and it waits;
  * late, few do and it takes the best that is left. Never while the seat already holds a month's worth of idle plots
  * it can't pay to develop: hoarded land earns nothing and every idle plot counts as Smithore demand.
  */
@@ -203,7 +210,7 @@ export function wantsPlot(plan: LandPlan, obs: GameState, index: number, ahead: 
   const lit = rivals[rank];
   if (!lit || lit.value <= 0) return false;
   const claimsLeft = GAME.claimsPerGrant - me(obs, mind).claimsThisGrant;
-  if (rank >= claimsLeft + STRATEGIST.grantSpare) return false;
+  if (rank >= claimsLeft + STRATEGIST.grantSpare + rivalsStillClaiming(obs, mind)) return false;
   return lit.utility >= (rivals[0]?.utility ?? 0) * STRATEGIST.grantShare;
 }
 
@@ -215,7 +222,7 @@ export function wantsPlot(plan: LandPlan, obs: GameState, index: number, ahead: 
 export function wantsAnyAhead(plan: LandPlan, obs: GameState, ahead: readonly number[], mind: Mind): boolean {
   const idle = obs.tiles.filter((t) => t.owner === mind.me && !t.outfit).length;
   if (idle >= mind.level.mulesPerMonth && me(obs, mind).money < (idle + 1) * mulePriceFor(obs, mind.me)) return false;
-  const room = GAME.claimsPerGrant - me(obs, mind).claimsThisGrant + STRATEGIST.grantSpare;
+  const room = GAME.claimsPerGrant - me(obs, mind).claimsThisGrant + STRATEGIST.grantSpare + rivalsStillClaiming(obs, mind);
   if (room <= 0) return false;
   const rankOf = new Map(plan.ranking.map((s, rank) => [s.index, rank]));
   // The ranks, best first, of the `room` best plots later in the pass than the one being weighed.
