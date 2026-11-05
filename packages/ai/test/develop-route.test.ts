@@ -279,28 +279,56 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
     });
 
     it.each(['sold', 'built on'])("T-AC-7 row 3 (example 2): its plot %s since the draft, that MULE is replaced by its own pick, 'stale'", (how) => {
-      const { state, plots } = development(2);
-      const [drafted0, spare] = plots as [Tile, Tile];
+      const { state, plots } = development(3);
+      const [drafted0, ...spares] = plots as [Tile, Tile, Tile];
       drafted0.owner = ME;
       // Known ground: a route with no analyses keeps its drafted MULE until row 3 reads it (AM-27 re-picks one after an analysis).
       me(state).analysed.push(...plots.map((t) => indexOf(state, t)));
       const { seat, hand } = seatAndHand();
       const play0 = drafted(seat, state);
       expect(play0.part.route.some((s) => s.act === 'analyse')).toBe(false);
-      // After the draft: the plot goes to a rival at the land auction, or gets a MULE; the seat holds another idle plot.
+      // After the draft: the plot goes to a rival at the land auction, or gets a MULE; the seat holds two other idle
+      // plots, so the replacement is a pick between them.
       if (how === 'sold') drafted0.owner = RIVAL;
       else drafted0.outfit = 'food';
-      spare.owner = ME;
+      for (const t of spares) t.owner = ME;
+      // What a fresh draft on the changed state holds for that MULE, the route's first.
+      const fresh = drafted(seat, state).part.route;
+      const buy = fresh.findIndex((s) => s.act === 'buyMule');
+      expect(buy, JSON.stringify(fresh)).toBeGreaterThanOrEqual(0);
+      const [, { outfit }, { plot: freshPlot }] = fresh.slice(buy, buy + 3) as [unknown, { outfit: Outfit }, { plot: number }];
       hand.follow(state.month, play0);
       play(runner, state, hand);
       const plot = indexOf(state, drafted0);
+      const log = JSON.stringify(hand.done);
       const stale = hand.routeLog(state).steps.filter((s) => s.note === `stale: plot ${plot}`);
-      expect(stale.length, JSON.stringify(hand.done)).toBe(3);
+      expect(stale.length, log).toBe(3);
       expect(stale.every((s) => s.outcome === 'replaced')).toBe(true);
-      // The promise: the MULE went onto the plot it does hold, idle, and none onto the stale one.
-      expect(spare.outfit, JSON.stringify(hand.done)).not.toBeNull();
+      // The promise: the MULE went onto a plot it does hold, idle, as the fresh draft puts it, and none onto the stale one.
+      expect(spares.map((t) => indexOf(state, t)), log).toContain(freshPlot);
+      expect(state.tiles[freshPlot]!.outfit, log).toBe(outfit);
       expect(drafted0.outfit).toBe(how === 'sold' ? null : 'food');
       expect(me(state).doneDeveloping).toBe(true);
+    });
+
+    it("T-AC-7 row 3: a filter whose plot was sold since the draft is skipped, 'stale: plot <n>', and the route goes on to the pub", () => {
+      const { state, plots } = development(1);
+      const sold = plots[0]!;
+      const plot = indexOf(state, sold);
+      sold.owner = ME;
+      me(state).analysed.push(plot);
+      me(state).stock.alloy = DEVELOPMENT.filterAlloy;
+      const { hand } = seatAndHand();
+      const play0 = routeOf([{ act: 'filter', plot }, { act: 'pub' }]);
+      sold.owner = RIVAL;
+      hand.follow(state.month, play0);
+      play(runner, state, hand);
+      expect(hand.routeLog(state).steps, JSON.stringify(hand.done)).toEqual([
+        { route: 0, outcome: 'skipped', note: `stale: plot ${plot}` },
+        { route: 1, outcome: 'done' },
+      ]);
+      expect(sold.filter).toBe(false);
+      expect(me(state).stock.alloy).toBe(DEVELOPMENT.filterAlloy);
     });
 
     it("T-AC-7 row 4: an analysis of a plot it already analysed is skipped, 'already analysed'", () => {
