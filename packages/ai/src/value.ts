@@ -8,7 +8,6 @@ import {
   floorConfig,
   GOOD_CONFIG,
   isFactory,
-  isRaw,
   monthNeeds,
   mulePrice,
   mulePriceFor,
@@ -25,6 +24,7 @@ import {
   tileIndex,
   UPKEEP,
   walkSeconds,
+  energyOffOrder,
   energyUseOf,
   type AiLevelConfig,
   type AiPersonaWeights,
@@ -224,8 +224,9 @@ export function cashReserve(obs: GameState, mind: Mind, o?: Outlook, except?: Go
 /**
  * The value of each unit of a good the seat could hold after the auction,
  * most valuable first: the units next month needs are worth what going short
- * would cost (development time for Food, half a farm for Water, half a plot
- * for Energy, a factory's run for its inputs, sickness for Medicine), the
+ * would cost (development time for Food, half a farm for Water, for Energy
+ * what the plot it keeps on loses turned off (AM-17), a factory's run for its
+ * inputs, sickness for Medicine), the
  * rest what they fetch next month after spoilage, and nothing past what the
  * depot keeps. `keep` values a unit the seat already holds (its sell floor);
  * `buy` values one more (its buy ceiling), which needs a reason to speculate.
@@ -253,9 +254,10 @@ export function unitValues(obs: GameState, o: Outlook, good: Good, mind: Mind): 
   const P = (g: Good) => (o.final ? obs.store.posted[g] : o.price(g));
   const sec = secondValue(obs, me);
 
-  // Units next month's needs take, and what each is worth to the seat.
+  // Units next month's needs take, and what each is worth to the seat (`perUnit`, where the units differ).
   let block = 0;
   let use = 0;
+  let perUnit: number[] | null = null;
   if (good === 'food' && need > 0) {
     // Eaten at upkeep, then what is left (after spoilage) keeps next month's walking at full pace.
     const eat = needsOf(obs, me).food;
@@ -269,14 +271,19 @@ export function unitValues(obs: GameState, o: Outlook, good: Good, mind: Mind): 
       use = (farms.reduce((n, t) => n + rawOutput(obs, t), 0) * (1 - UPKEEP.shortOutputShare) * afterTax(obs, P('food'))) / block;
     }
   } else if (good === 'energy') {
-    const own = mine.filter((t) => t.outfit === 'energy').reduce((n, t) => n + rawOutput(obs, t), 0);
-    const short = Math.max(0, need - own);
+    // AM-17: the plants' net output covers the plots first; a unit short keeps on the plot energyOffOrder would turn
+    // off at that point, worth what that plot loses turned off, over each unit of its use. Next month, so no cold snap.
+    const order = energyOffOrder(obs, me, 1);
+    const net = mine.filter((t) => t.outfit === 'energy').reduce((n, t) => n + Math.max(0, rawOutput(obs, t) - energyUseOf(obs, t)), 0);
+    // Each unit of use, from the plot that goes off last (the back of the order) to the one that goes off first.
+    const units = order
+      .flatMap((p) => Array<number>(p.use).fill(afterTax(obs, (1 - UPKEEP.offOutputShare) * p.full * P(p.tile.outfit as Good)) / p.use))
+      .reverse();
+    const short = Math.max(0, units.length - net);
     if (short > 0) {
       block = Math.ceil(short / keepRate);
-      const runs = mine
-        .filter((t) => t.outfit !== 'energy')
-        .reduce((n, t) => n + (isRaw(t.outfit!) ? (1 - UPKEEP.shortOutputShare) * rawOutput(obs, t) * P(t.outfit as Good) : factoryFit(obs, t, t.outfit as never, me).output * P(t.outfit as Good)), 0);
-      use = afterTax(obs, runs) / Math.max(1, need);
+      // The seat's k-th unit covers the plots' (net + k)-th; the units spoilage takes count as the last one short.
+      perUnit = Array.from({ length: block }, (_, k) => units[net + Math.min(k, short - 1)]!);
     }
   } else if (good === 'medicine' && need > 0) {
     block = Math.ceil(need / keepRate);
@@ -310,8 +317,9 @@ export function unitValues(obs: GameState, o: Outlook, good: Good, mind: Mind): 
   const buy: number[] = [];
   for (let k = 0; k < length; k++) {
     if (k < block) {
-      keep.push(k < floorUnits ? Infinity : Math.max(use, resale));
-      buy.push(Math.max(use, resaleBuy));
+      const worth = perUnit?.[k] ?? use;
+      keep.push(k < floorUnits ? Infinity : Math.max(worth, resale));
+      buy.push(Math.max(worth, resaleBuy));
     } else if (k < eaten + depot) {
       keep.push(resale);
       buy.push(resaleBuy);
