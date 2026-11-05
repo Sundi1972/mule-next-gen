@@ -22,10 +22,9 @@ import {
   type PlayerId,
   type RecordedWrite,
 } from '@mule/engine';
-import { outlook } from '../outlook.js';
-import { outfitName } from '../strategist.js';
+import { goodPlan, outfitName } from '../strategist.js';
 import { capCodePoints } from '../text.js';
-import { unitValues, type Mind } from '../value.js';
+import type { Mind } from '../value.js';
 import { draftPlaybook, KINDS, ledOutfit, type DraftPhase, type LandPick, type LeftOutPick } from './draft.js';
 
 /**
@@ -326,9 +325,8 @@ const GOOD_ROWS: Record<string, Row> = {
       const most = ctx.freshHold(good);
       if (hold > most) [hold, why] = [most, 'level never corners'];
     }
-    const staple = role === 'seller' && (good === 'food' || good === 'energy');
-    const least = staple ? stapleFloor(ctx, good) : 0;
-    if (hold < least) [hold, why] = [least, staple ? "next month's need" : 'a hold of 0 or more'];
+    const least = role === 'seller' && STAPLES.includes(good) ? stapleFloor(ctx, good) : 0;
+    if (hold < least) [hold, why] = [least, least > 0 ? 'what its hands keep for next month' : 'a hold of 0 or more'];
     return hold === v ? ok(v) : clamped(hold, why);
   },
   walkAway: (v) => whole(v, 1, Infinity, 'a price of 1 or more', ''),
@@ -350,14 +348,18 @@ const GOOD_ROWS: Record<string, Row> = {
   bluff: (v) => (typeof v === 'boolean' ? ok(v) : refuse('not a boolean')),
 };
 
+/** The goods a seller keeps a floor of for next month (P12). */
+const STAPLES: readonly Good[] = ['food', 'water', 'energy'];
+
 /**
- * P12's floor: the Food or Energy the seat needs next month, as its hands measure it (unitValues' floorUnits): Energy
- * its own power plants will make is not needed from stock. A profile with no level reads the gross monthNeeds.
+ * P12's floor: the units of a staple the seat's auction hand keeps whatever hold it is handed (goodPlan's floorUnits,
+ * which tradeOf keeps). While it holds less than keeps it whole next month and the store sells the good that is up,
+ * that is wholeNextMonth; otherwise next month's need, less what its own plants make. A profile with no level reads
+ * the gross monthNeeds.
  */
 function stapleFloor(ctx: Ctx, good: Good): number {
   if (!ctx.mind.level) return monthNeeds(ctx.state, ctx.seat)[good];
-  const obs = observe(ctx.state, ctx.seat);
-  return unitValues(obs, outlook(obs, ctx.seat, { lookAhead: ctx.mind.level.lookAhead }), good, ctx.mind).floorUnits;
+  return goodPlan(observe(ctx.state, ctx.seat), ctx.mind, good).values.floorUnits;
 }
 
 const perRow: Row = (v, ctx, unit) => (!ctx.others.has(unit[3]!) ? refuse('no such player') : oneOf(TACTICS, 'no such tactic')(v, ctx, unit));
