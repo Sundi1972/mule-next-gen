@@ -15,7 +15,7 @@ import type { TableClient } from '../src/net/client';
 
 // The fake document has no dataset (the map's theme reads the page's) and no layout (the shell measures).
 Object.assign(document.documentElement, { dataset: {} });
-Object.assign(FakeElement.prototype, { getBoundingClientRect: () => ({ left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0, x: 0, y: 0 }), offsetWidth: 0, offsetHeight: 0, querySelectorAll: () => [] });
+Object.assign(FakeElement.prototype, { getBoundingClientRect: () => ({ left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0, x: 0, y: 0 }), offsetWidth: 0, offsetHeight: 0, querySelectorAll: () => [], focus: () => undefined });
 
 const W = 9;
 const H = 5;
@@ -153,6 +153,9 @@ function client(state: object): TableClient {
     watch: () => undefined,
     intent: () => undefined,
     chat: () => undefined,
+    // Development is the arcade's screen (C14), which listens for the floor's frames and its round trip.
+    onFrame: () => () => undefined,
+    roundTripMs: () => null,
   } as unknown as TableClient;
 }
 const base = { status: 'playing', chat: [], emotes: [], toasts: [], notice: null, clockOffset: 0, handoffCode: null, code: 'ABCD' };
@@ -250,7 +253,7 @@ describe('B-AC-4 (C10): a phase’s events play over its screen on the phone', (
     expect(tag(html, 'phone-event-overlay')).toContain('data-mode="solo"');
     expect(tag(html, 'phone-event-overlay')).toContain('data-event-phase="development"');
     // Over the development screen: the screen is still there under it, and the show plays its own map.
-    expect(html).toContain('data-testid="game-shell"');
+    expect(html).toContain('data-testid="phone-game"');
     expect(inside(html, 'phone-event-overlay')).toContain('data-testid="event-map"');
     expect(inside(html, 'phone-event-overlay')).toContain('data-testid="roll-call"');
     expect(inside(html, 'phone-event-overlay')).toContain('data-testid="skip"');
@@ -390,11 +393,13 @@ describe('T-AC-10 display / C11: two sick players play in ONE roll call, on the 
     }
   });
 
+  // Re-adopted on the arcade screen (named edit, WS6, ws6-ux AM-21): the sick player's own line in the side room.
   it('T-AC-10: the sick status line on the sick player’s development screen is unchanged, under the overlay', async () => {
     for (const boards of [0, 1]) {
       const html = await render(await phone(LENA, boards, viewAt(ROLL_S)));
-      expect(html).toContain('data-testid="sick-strikes"');
-      expect(inside(html, 'phone-event-overlay')).not.toContain('sick-strikes');
+      // The side room's pace line is the sick line (its short form while she picks an outfit in the hall).
+      expect(html).toMatch(/data-testid="pace-line"[^>]*data-sick="true"/);
+      expect(inside(html, 'phone-event-overlay')).not.toContain('pace-line');
     }
   });
 });
@@ -427,7 +432,7 @@ describe('RULE-3 for the overlay (T-AC-5 style): boards 0/1 × reduced, and a ta
     expect(tag(m.html(), 'phone-event-overlay')).toMatch(/class="absolute inset-0 z-40 /);
     expect(inside(m.html(), 'phone-event-overlay')).toContain('data-testid="phone-card"');
     expect(inside(m.html(), 'phone-event-overlay')).not.toContain('data-testid="skip"');
-    expect(m.html()).toContain('data-testid="game-shell"');
+    expect(m.html()).toContain('data-testid="phone-game"');
   });
 
   it('T-AC-5: with a TV the phone buzzes as the roll call is announced; alone it does not', async () => {

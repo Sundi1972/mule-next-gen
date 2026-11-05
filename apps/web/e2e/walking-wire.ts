@@ -76,12 +76,10 @@ export interface SteeredTable {
 }
 
 /**
- * A started table with steering on: a host seat named Brix, `ais` AI seats, and a board. The server is built with
- * `devSteer`, the per-game switch for steered development; on a server without it development walks by taps and no
- * frame is ever sent.
+ * A started table: a host seat named Brix, `ais` AI seats, and a board. Every game steers its development.
  */
 export async function steeredTable(options: { seed: number; ais: number; phaseScale: number; maxMonths: number; guests?: string[] }): Promise<SteeredTable> {
-  const serverOptions = { seed: () => options.seed, phaseScale: options.phaseScale, maxMonths: options.maxMonths, politics: false, devSteer: true };
+  const serverOptions = { seed: () => options.seed, phaseScale: options.phaseScale, maxMonths: options.maxMonths, politics: false };
   const { server, base } = await startServer(serverOptions);
   const { code } = (await (await fetch(`${base}/rooms`, { method: 'POST' })).json()) as { code: string };
   const host = await connect(base);

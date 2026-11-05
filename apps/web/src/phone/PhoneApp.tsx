@@ -4,9 +4,7 @@ import { PhoneEventOverlay } from '../events/PhoneEventOverlay';
 import { player, seatSpecies, slotOf } from '../game/derive';
 import { useClient, useClientState } from '../net/react';
 import { ArcadeDevelop } from './arcade/Develop';
-import { steering } from './arcade/route';
 import { Auction } from './Auction';
-import { Develop } from './Develop';
 import { GameOver } from './GameOver';
 import { PhoneGameProvider } from './game';
 import { LandAuction } from './LandAuction';
@@ -63,7 +61,7 @@ function PhoneScreens({ room, moving }: { room: string; moving: boolean }) {
   ) : view.phase === 'landGrant' ? (
     <LandGrant />
   ) : view.phase === 'development' ? (
-    steering(view) ? <ArcadeDevelop /> : <Develop />
+    <ArcadeDevelop />
   ) : view.phase === 'auction' ? (
     <Auction />
   ) : view.phase === 'landAuction' ? (
