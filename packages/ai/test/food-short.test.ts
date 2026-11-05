@@ -202,27 +202,27 @@ function cannotPay(good: Good): void {
 }
 
 /**
- * A seat holding what keeps it whole and `surplus` more, beside a short rival with money: it sells at most the surplus,
- * so it stays whole. With a surplus it walks to the rival and must stop selling before a unit it needs goes, though the
- * rival keeps bidding up after it.
+ * A seat holding what keeps it whole and `surplus` more, beside a short rival with money. It is not short, so its
+ * surplus is for sale (Heiko's choice of 6 Nov, "sell surplus"): it may sell down to the screen's need, what upkeep or
+ * production is about to take, and never lower, though the rival keeps bidding up after it. Returns the units sold.
  */
-function keepsWhole(good: 'food' | 'energy', id: string, surplus = 0): GameState {
+function sellsSurplus(good: 'food' | 'energy', id: string, surplus: number): { state: GameState; units: number } {
   const whole = good === 'food' ? wholeFood : wholeEnergy;
   const state = auctionOf(good, (s) => {
     shortOf(good, id, MONEY, (t) => whole(t, id) + surplus)(s);
     shortOf(good, RIVAL(id), MONEY)(s);
   });
   const held = state.players.find((p) => p.id === id)!.stock[good];
-  expect(held - surplus, 'the premise: it holds what keeps it whole, more than the screen’s need').toBeGreaterThan(monthNeeds(state, id)[good]);
+  const need = monthNeeds(state, id)[good];
+  expect(held - surplus, 'the premise: what keeps it whole is more than the screen’s need').toBeGreaterThan(need);
 
   const trades = play(state);
 
   const units = sold(trades, id).length;
-  if (surplus === 0) expect(sold(trades, id), 'it sold none of what keeps it whole').toEqual([]);
-  else expect(units, `it sold at most its ${surplus} spare`).toBeLessThanOrEqual(surplus);
-  expect(state.players.find((p) => p.id === id)!.stock[good], 'it ends holding what keeps it whole').toBe(held - units);
-  expect(held - units).toBeGreaterThanOrEqual(whole(state, id));
-  return state;
+  const left = state.players.find((p) => p.id === id)!.stock[good];
+  expect(left, 'it sold only what it held').toBe(held - units);
+  expect(left, `it keeps the screen's need of ${need}`).toBeGreaterThanOrEqual(need);
+  return { state, units };
 }
 
 describe('B-AC-food-short: a seat short of Food buys from the store when it can pay', () => {
@@ -237,18 +237,12 @@ describe('B-AC-food-short: a seat short of Food buys from the store when it can 
     expect(state.players.find((p) => p.id === id)!.hungry, `${id} starts next month's development fed`).toBe(false);
   });
 
-  it.each(ROWS)('B-AC-food-short: %s (%s) holding exactly what keeps it whole sells none to a short rival and starts next month fed', (id) => {
-    const state = keepsWhole('food', id!);
-    playOn(state, 'development');
-
-    expect(state.players.find((p) => p.id === id)!.hungry, `${id} starts next month's development fed`).toBe(false);
+  it.each(ROWS)('B-AC-food-short: %s (%s) holding 3 more than keeps it whole sells to a short rival no lower than the screen need, keeping what upkeep eats', (id) => {
+    sellsSurplus('food', id!, 3);
   });
 
-  it.each(ROWS)('B-AC-food-short: %s (%s) holding 3 more than keeps it whole sells at most those 3 to a short rival and starts next month fed', (id) => {
-    const state = keepsWhole('food', id!, 3);
-    playOn(state, 'development');
-
-    expect(state.players.find((p) => p.id === id)!.hungry, `${id} starts next month's development fed`).toBe(false);
+  it('B-AC-food-short: the trader holding exactly what keeps it whole sells its surplus above the screen need to a short rival', () => {
+    expect(sellsSurplus('food', 'ai0', 0).units, 'it sold some of its surplus').toBeGreaterThan(0);
   });
 
   it('B-AC-food-short: a seat that can pay for part of its shortfall buys what it can and never goes negative', () => buysWhatItCan('food'));
@@ -311,18 +305,8 @@ describe('B-AC-energy-short: a seat short of Energy buys from the store when it 
     expect(halvedFor(state, id!, 'noEnergy'), `${id}'s plots halved for Energy next month`).toBe(0);
   });
 
-  it.each(ROWS)('B-AC-energy-short: %s (%s) holding exactly what keeps it whole sells none to a short rival and no farm goes half next month', (id) => {
-    const state = keepsWhole('energy', id!);
-    playOn(state, 'production', true);
-
-    expect(halvedFor(state, id!, 'noEnergy'), `${id}'s plots halved for Energy next month`).toBe(0);
-  });
-
-  it.each(ROWS)('B-AC-energy-short: %s (%s) holding 3 more than keeps it whole sells at most those 3 to a short rival and no farm goes half next month', (id) => {
-    const state = keepsWhole('energy', id!, 3);
-    playOn(state, 'production', true);
-
-    expect(halvedFor(state, id!, 'noEnergy'), `${id}'s plots halved for Energy next month`).toBe(0);
+  it.each(ROWS)('B-AC-energy-short: %s (%s) holding 3 more than keeps it whole sells to a short rival no lower than the screen need, keeping what its plots burn', (id) => {
+    sellsSurplus('energy', id!, 3);
   });
 
   it('B-AC-energy-short: a seat whose own Energy plots cover the need on paper keeps its Energy and buys what upkeep would spoil', () => {
