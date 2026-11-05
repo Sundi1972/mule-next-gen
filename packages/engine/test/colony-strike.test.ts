@@ -86,13 +86,21 @@ describe('C37: the Governor pays off a general strike (RULE-26)', () => {
     callStrike(state, 'food');
     expect(strikeHolds(state, 'food')).toBe(true);
     payStrike(state, 'lena');
-    expect(state.treasury.money).toBe(0);
+    expect(state.treasury.money, 'the reserve does not hold any back').toBe(0);
     expect(state.colony!.strike).toMatchObject({ month: state.month, good: 'food', cost: COLONY.strike.cost, paid: true });
     expect(strikeHolds(state, 'food')).toBe(false);
     const ledger = monthLedger(state)!;
     expect(ledger.out.strikePay).toBe(COLONY.strike.cost);
     const sum = (xs: Record<string, number | undefined>) => Object.values(xs).reduce<number>((a, b) => a + (b ?? 0), 0);
     expect(COLONY.strike.cost + sum(ledger.in) - sum(ledger.out), "T-AC-20: the month's ledger still balances").toBe(state.treasury.money);
+  });
+
+  it('T-AC-35 (T-AC-20): with more in the fund than the strikers want, exactly the cost leaves, under strikePay alone', () => {
+    const state = governed(1_000);
+    callStrike(state, 'food');
+    payStrike(state, 'lena');
+    expect(state.treasury.money).toBe(1_000 - COLONY.strike.cost);
+    expect(monthLedger(state)!.out).toEqual({ strikePay: COLONY.strike.cost });
   });
 
   it("T-AC-35: strikeHolds is true only for this month's struck good while unpaid; with politics off nothing holds", () => {

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   advancePhase,
+  callStrike,
+  cloneForSim,
   createGame,
   createRng,
   GAME,
@@ -12,6 +14,7 @@ import {
   moodTarget,
   PERCENT,
   POLITICS,
+  PRESTIGE,
   runColony,
   wealthGap,
   type GameState,
@@ -87,7 +90,8 @@ describe('C23: the colony\'s happiness (RULE-20)', () => {
     state.air = 55;
     state.treasury.salesTax = 9 / PERCENT;
     state.players[0]!.money += 2_500;
-    expect(moodInputs(state, ['food', 'energy'])).toEqual({ short: 2, air: 55, tax: 9, broken: 0, prestige: 0, gap: 2_500 });
+    state.colony!.projects.push({ id: 'park', stage: 'standing', funded: { credits: 0, goods: {} }, monthsLeft: null, plot: null, since: 1, plaque: {} });
+    expect(moodInputs(state, ['food', 'energy'])).toEqual({ short: 2, air: 55, tax: 9, broken: 0, prestige: PRESTIGE.park.prestige, gap: 2_500 });
   });
 
   it("T-AC-31: a real upkeep feeds the mood that upkeep's shortages, not the report's empty list from production", () => {
@@ -160,6 +164,23 @@ describe('C23: the colony\'s happiness (RULE-20)', () => {
     expect(state.colony!.happiness).toBe(100);
     moodShift(state, -150);
     expect(state.colony!.happiness).toBe(0);
+  });
+
+  it.each([
+    { what: 'moodShift', write: (s: GameState) => moodShift(s, 10), read: (s: GameState) => s.colony!.happiness },
+    { what: 'callStrike', write: (s: GameState) => callStrike(s, 'food'), read: (s: GameState) => s.colony!.strike },
+  ])("INV-whatif (HC-21): $what on a what-if copy never reaches the real game, and the real game's never reaches a copy", ({ write, read }) => {
+    // The real game has written once, so it owns its colony, which a fresh copy then shares until either side writes.
+    const real = colony();
+    moodShift(real, -1);
+    const before = read(real);
+    const copy = cloneForSim(real);
+    write(copy);
+    expect(read(real), "the copy's write stays in the copy").toEqual(before);
+
+    const later = cloneForSim(real);
+    write(real);
+    expect(read(later), "the real game's later write stays out of a copy").toEqual(before);
   });
 
   it('T-AC-34: a new colony starts at HAPPINESS.start; with politics off there is no colony and moodShift does nothing', () => {

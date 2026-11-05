@@ -87,9 +87,20 @@ describe('the colony at the table', () => {
     expect(game.viewFor(null).news).toContain(`Heiko pays the food strikers ${COLONY.strike.cost} cr.`);
   });
 
-  it('B-AC-25: with no strike this month the colony view shows none', () => {
-    const { game } = governed();
+  it("B-AC-25: with no strike this month the colony view shows none, and last month's strike is gone from it", () => {
+    const { game, state } = governed();
     expect(game.viewFor(null).colony!.strike).toBeNull();
+    callStrike(state, 'food');
+    state.month++;
+    expect(game.viewFor(null).colony!.strike, "last month's strike").toBeNull();
+  });
+
+  it('B-AC-25: the news names the struck good in words: a Rare earth strike reads "rare earth"', () => {
+    const { game, state } = governed();
+    state.treasury.money = 400;
+    callStrike(state, 'rareEarth');
+    game.handle('s1', { type: 'payStrike' });
+    expect(game.viewFor(null).news).toContain(`Heiko pays the rare earth strikers ${COLONY.strike.cost} cr.`);
   });
 
   it('the colony view is null with politics off', () => {
