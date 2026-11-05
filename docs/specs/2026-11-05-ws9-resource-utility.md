@@ -280,7 +280,8 @@ C6 · MODIFIED · the sim reports the goals' proofs and the colony beside them
 today        packages/ai/src/sim.ts: "short of Food or Water" and "hungry 3 months
              running" rows; no per-auction short-and-could-pay row, no surplus band, no
              speculation row.   verified_by: executed
-tomorrow     MUST print UBER-AC-1's (a) and (b) rows (PR-1), UBER-AC-2's band row (PR-2),
+tomorrow     MUST print UBER-AC-1's (a) and (b) rows and plants and wells built per seat-game
+             beside the share of seat-months with a cut (PR-1), UBER-AC-2's band row (PR-2),
              UBER-AC-3's speculation row (PR-3), each next to the colony's Food/Water
              shortage (HC-6).
 seam         packages/ai/src/sim.ts (WS1, named edit), beside its "short of Food or
@@ -305,6 +306,31 @@ reuse check  grep "AI_PLANS\|STRATEGIST\|AI_HANDS" config.ts: STRATEGIST holds t
              its placeholders are reviewable as one block.
 mechanism    in_place
 depends_on   —
+```
+
+```
+C8 · MODIFIED · a power plant or well is worth what its output saves
+
+today        value.ts::monthlyNet: the units of a Food, Water or Energy plot that cover the
+             seat's own shortfall are valued at a flat refPrice × STRATEGIST.selfSupply (3);
+             installGain reads it. Measured on WS1's AM-17 numbers (#393, cd1893c0): seat-months
+             with an Energy cut rise to 55–60% and Energy traded falls from 82–98 to 46–54 a
+             game, because the AI under-builds plants.   verified_by: read + WS1's measurement
+tomorrow     MUST value each own-use unit a plant or well would make at RULE-2's S(k) for
+             that good (the output it saves through the turn-off order), the rest at its
+             carry (RULE-4), so a plant is built when what it keeps running beats the
+             alternative.
+logic        → RULE-2 rows 1 and 4, RULE-3's target and ownNet
+seam         packages/ai/src/value.ts::monthlyNet, the single place a plot's value counts own
+             supply
+senior       junior would: raise STRATEGIST.selfSupply (a WS1 stopgap the PM ruled out) ·
+             senior does: one short-cost function prices both buying a unit and building the
+             plant that makes it, so trading and building can't disagree.
+mechanism    branch_by_abstraction on AI_VALUE.model
+call sites   value.ts::installGain (value.ts:136, :138), which feeds developDecision, bestInstall,
+             landDecision, plotValue and muleValue
+pin          as C1 (T-AC-9)
+depends_on   C1
 ```
 
 ## §2 · The Logic `[handoff]`
@@ -344,10 +370,9 @@ first match wins
   2  a factory input       max(replace, the factory run's output value ÷ its input units)
   3  food                  max(replace, today's hunger walking cost)
   4  water                 as row 1, Water's turn-off order: (1 − UPKEEP.offOutputShare) ×
-                           the output value of the plot the order turns off at the k-th
-                           missing unit (Heiko's ruling, 5 Nov: Water is a base resource,
-                           every plot uses some, the biggest user turned off first; WS1
-                           folds it into AM-17)
+                           the output value of the plot baseOffOrder turns off at the k-th
+                           missing unit, after Energy's turn-off has settled (AM-18: Energy
+                           first, then Water; wells and plants are never turned off)
   5  medicine              max(replace, today's sickness cost)
   6  any other good        0 (no need)
 replace    = belief(good) × (1 + PRICE.storeSpread) × AI_VALUE.shortFloorMarkup: buying it
@@ -372,9 +397,13 @@ inputs     target  the stock after the auction that keeps the seat whole next mo
                    good spoils, then the depot cap; then production spends Energy; then
                    packages/engine/src/game.ts:224 marks a seat hungry when Food < the month's need):
                      food    eat + ⌈eat / keep⌉
-                     water   drink + ⌈(plots' use − ownNet) / keep⌉, as Energy (Heiko's
-                             ruling, 5 Nov). Until WS1's AM-17 generalisation lands: today
-                             a shortfall costs only noWater on irrigated plots
+                     water   drink + ⌈(plots' use − ownNet) / keep⌉, as Energy. Heiko's
+                             AM-18 rulings, 5 Nov: every working plot uses 1 Water, Food
+                             farms 2; wells and plants take the other good last and are
+                             never turned off; Energy is settled first, then Water. The
+                             use is read from the engine's order (baseOffOrder), never
+                             re-derived. Until WS1's AM-18 lands: a shortfall costs only
+                             noWater on irrigated plots
                              (packages/engine/src/production.ts:257)
                      energy  ⌈(plots' use − ownNet) / keep⌉
                      input   ⌈the factory's inputs / keep⌉
@@ -484,6 +513,7 @@ Every test runs with `AI_VALUE.model = 'unit'`, except T-AC-9.
 | **B-AC-2** (G-1, Energy) | Given a seat whose plots need 6 Energy, holding 1 Energy and enough cash, the store selling 6 · When the Energy auction and production play · Then no plot is turned off for want of Energy | C1, C2 | production's lines for the seat (no `energyOff` part) | cash below one unit: plots turn off in AM-17's order |
 | **B-AC-3** (G-2) | Given Food's ask at or below its reference, a belief above the ask after spoilage and tax, and depot room · When the Food auction plays · Then the seat holds more than next month's need; with the ask ≥ 2× reference, no more than its need | C1, C3 | the seat's stock after the auction | a good that spoils fully: no surplus |
 | **B-AC-4** (G-3) | Given a playbook setting `expect` on Food above the ask · When the auction plays · Then the seat buys beyond its need; with no `expect`, it doesn't | C3, C5 | the stock after the auction | `expect` beyond the bound: clamped and listed in `rejected` |
+| **B-AC-5** (G-1, building) | Given a seat whose plots need more Energy than it holds or makes, no plant, Energy dear or short at the store, an idle plot rated for Energy, and cash for a MULE · When it develops · Then it installs an Energy plant; with a cheap, stocked store and a markedly better Food plot, it outfits Food instead | C8 | the plot's outfit after development (built state) | no idle plot: nothing to install |
 | **T-AC-1** (UBER-AC-1, serves B-AC-1, B-AC-2) | `pnpm sim`, 40 games × 1/101/201, prints UBER-AC-1 (a) and (b) beside the colony's Food/Water shortage | C6 | the sim report | — |
 | **T-AC-2** (serves B-AC-1) | RULE-5's example: 80 cr, Food short 2 (v 40, ask 30), Energy short 2 (v 120, ask 35) → Food's budget 0, and 70 cr kept for Energy | C2 | goodPlan's budget and the Energy auction's stock | all needs funded: budget is today's share |
 | **T-AC-3** (serves B-AC-2) | RULE-3: the target covers spoilage (Food eat + ⌈eat/keep⌉, Energy ⌈(use − ownNet)/keep⌉), and own output counts only as net per plant. An Energy seat with ownNet 8 for a use of 8, holding 2, keeps its 2 (q > 0) and does not sell to 0 | C1 | the stock after the Energy auction | a seat with no plots: no Energy is bought (target 0) |
@@ -492,6 +522,7 @@ Every test runs with `AI_VALUE.model = 'unit'`, except T-AC-9.
 | **T-AC-6** (serves B-AC-2) | RULE-2 row 1's example: S(k) follows AM-17's turn-off order | C1 | unitValues' keep | no plot needing Energy: S = replace |
 | **T-AC-7** (serves B-AC-3) | RULE-4's example: Ck ≈ 29.8 | C1 | unitValues | spoilage 1 → Ck 0 |
 | **T-AC-8** (serves B-AC-4) | `expect` within bounds is the belief; beyond them, clamped and listed in `rejected` | C3, C5 | the validator result and the belief | — |
+| **T-AC-12** (serves B-AC-5) | The sim reports plants (and wells, after AM-18) built per seat-game, beside the share of seat-months with a cut; under 'unit' both move against trunk on 1/101/201, reported and not tuned | C6, C8 | the sim report | — |
 | **T-AC-9** (HC-4) | `AI_VALUE.model` 'today': default, `--plays today` and politics-off sims byte-identical to trunk on 1/101/201 | C1–C6 | the sim report | — |
 | **T-AC-10** (UBER-AC-3, serves B-AC-4, PR-3) | The sim's speculation row: units beyond need, their realised margin after spoilage, storage and tax; bullish-belief seats positive on all 3 seed sets | C3, C6 | the sim report | — |
 | **T-AC-11** (HC-3) | A game with `AI_VALUE.model` 'unit' replays from seed + actions to the same state hash | C1–C5 | the record replay | — |
@@ -509,7 +540,8 @@ Every test runs with `AI_VALUE.model = 'unit'`, except T-AC-9.
 
 - **AI buyers compete with the colony for the store's Food.** WS1's stopgap raised colonists short of Food or Water to 55–61%.
   - Mitigation: HC-6 puts the colony's row beside every UBER-AC-1. Supply itself is C29's finding.
-- **Water becomes a base resource (Heiko, 5 Nov), not built yet.** RULE-2 row 4 and RULE-3's Water target are written to the new rule. WS1 folds it into AM-17, with numbers proposed, measured and confirmed by Heiko.
+- **Plants under-built under AM-17** (WS1's #393 numbers: cut seat-months 55–60%, Energy traded down to 46–54 a game). The PM ruled no stopgap: C8 in PR-1 is the fix, and T-AC-12 reports it.
+- **Water becomes a base resource (Heiko, 5 Nov; AM-18), not built yet.** RULE-2 row 4 and RULE-3's Water target are written to the new rule. WS1 folds it into AM-17, with numbers proposed, measured and confirmed by Heiko.
   - Mitigation: until WS1's PR lands, PR-1 builds Water on today's rule (irrigated plots halve) behind the same export. This note is updated when WS1's PR lands.
 - **AM-17's turn-off order isn't on trunk yet, and isn't exported.**
   - Mitigation: Energy's RULE-2 row is the only consumer. PR-1 waits on WS1's AM-17 (ws1-energy-off, ordered first), plus the export C1 names.
