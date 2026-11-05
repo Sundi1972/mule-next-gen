@@ -83,10 +83,12 @@ export function useEventLivingView() {
 
 /**
  * The hits that change what a plot shows and have not landed by `t`: a cavern caves in, a meteor leaves a crater, a
- * MULE is taken or destroyed.
+ * MULE is taken or destroyed, a riot damages the colony's object on the plot.
  */
 export function hitsStanding({ s, t, reduced, grid }: ShowFrame): ShowHit[] {
-  return s.segments.flatMap((seg) => seg.events.flatMap((ev) => ev.hits.filter((hit) => (hit.was || hit.becomes === 'crater' || (hit.muleLost && hit.good)) && t < eventHitAt(seg, ev, hit, reduced, grid))));
+  return s.segments.flatMap((seg) =>
+    seg.events.flatMap((ev) => ev.hits.filter((hit) => (hit.was || hit.becomes === 'crater' || (hit.muleLost && hit.good) || ev.objects?.length) && t < eventHitAt(seg, ev, hit, reduced, grid))),
+  );
 }
 
 /**
@@ -111,6 +113,8 @@ export function useLiveTiles(frame: ShowFrame): MapTile[] {
         before = rest;
       }
       if (hit.muleLost && hit.good) before = { ...before, good: hit.good };
+      // Only an event that damages objects stands here with an object hit: until it lands the object still stands.
+      if (before.object?.stage === 'damaged') before = { ...before, object: { ...before.object, stage: 'standing' } };
       return before;
     });
   }, [key, tiles]);

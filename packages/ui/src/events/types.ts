@@ -1,4 +1,3 @@
-import type { ObjectKind } from '../components/ObjectGlyph';
 import type { Good, Slot, SpecialKind } from '../components/tokens';
 
 /** The colony's mood events (G-5 C26; the protocol's ColonyEventKey). */
@@ -77,8 +76,8 @@ export interface ShowEventView {
   playMs: number;
   /** Whose event it is, when it is one player's and on no plot: a sick player (C11). */
   player?: string;
-  /** The colony's objects it damaged (a riot): one with a plot is among its hits. */
-  objects?: { id: ObjectKind; becomes: 'damaged' }[];
+  /** The colony's objects it damaged (a riot), by ObjectKind (types.ts stays free of .tsx imports): one with a plot is among its hits. */
+  objects?: { id: 'park' | 'hospital' | 'observatory' | 'stadium' | 'spaceport'; becomes: 'damaged' }[];
 }
 
 /** One change an event made off the map (the protocol's EventEffect, structurally): whose, of what, by how much. */
