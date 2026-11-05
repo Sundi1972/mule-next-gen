@@ -57,7 +57,10 @@ export type Reach =
   /** A MULE taken off a plot this turn, fitted for another good here (AM-2); its own good's outfitter dims it. */
   | { kind: 'reoutfit'; enabled: boolean; good: Outfit; cost: number; why: ReachRefusal | null }
   | { kind: 'leave'; enabled: true; door: HallDoor; leading: boolean }
-  /** On a plot that has a MULE, `replaces` is its outfit: installing swaps the new MULE in and the old one runs away. */
+  /**
+   * On a plot that has a MULE, `replaces` is its outfit: installing swaps the new MULE in and the colonist leads the old
+   * one (AM-23); for the outfit it already has, the press is refused, nothing to swap.
+   */
   | { kind: 'install'; enabled: true; good: Outfit; plot: FloorPoint; fromShore: boolean; replaces: Outfit | null }
   | { kind: 'analyse'; enabled: true; plot: FloorPoint }
   | { kind: 'filter'; enabled: true; plot: FloorPoint; alloy: number }
@@ -404,7 +407,7 @@ export function reachWords(reach: Reach): ReachWords {
     case 'leave':
       return say('LEAVE', reach.leading ? 'with your MULE' : 'to the colony');
     case 'install': {
-      const notes = [reach.fromShore && 'from the shore', reach.replaces && (reach.replaces === reach.good ? 'same outfit, nothing gained' : `your ${inWords(reach.replaces)} MULE runs away`)].filter((n) => n);
+      const notes = [reach.fromShore && 'from the shore', reach.replaces && (reach.replaces === reach.good ? 'same outfit, nothing to swap' : `you lead your ${inWords(reach.replaces)} MULE`)].filter((n) => n);
       return say(reach.replaces ? 'SWAP' : `INSTALL · ${NAME[reach.good]}`, notes.join(' · ') || null);
     }
     case 'analyse':
