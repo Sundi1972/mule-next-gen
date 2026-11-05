@@ -57,6 +57,16 @@ export const EVENT_ENTRY = {
   ratsInSilo: { key: 'ratsInSilo', motion: 'ledger', look: 'Rats scurry across the player’s slot; half the Food chip goes.' },
   crookedAccountant: { key: 'crookedAccountant', motion: 'ledger', look: 'The ledger snaps shut and a tenth of the player’s credits slips away.' },
   packageFromHome: { key: 'packageFromHome', motion: 'ledger', look: 'A parcel drops into the player’s slot and opens: +3 Food.' },
+  // The colony's mood events (C26), the approved mock's (design/mocks/ws8-colony-events).
+  festival: { key: 'festival', motion: 'colony', look: 'Bunting goes up over the colony and a crowd dances at the store; the mood and prestige chips come up.' },
+  generalStrike: { key: 'generalStrike', motion: 'plot', look: 'Strikers with placards walk out of the store to every plot of the struck good; each plot says STRIKE · 20%.' },
+  riot: { key: 'riot', motion: 'store', look: 'An angry crowd at the store; a third of each shelf goes, and one colony object is damaged.' },
+  emigrationWave: { key: 'emigrationWave', motion: 'colony', look: 'Colonists leave for good; the colony’s head count ticks down.' },
+  volunteerCleanup: { key: 'volunteerCleanup', motion: 'colony', look: 'Volunteers clean up; the air gauge drops.' },
+  storeStrike: { key: 'storeStrike', motion: 'store', look: 'The store’s MULE corral greys out: no MULEs this turn.' },
+  walkout: { key: 'walkout', motion: 'plot', look: 'The player’s plots of one good are struck in turn, each down to 20%.' },
+  loyalCrew: { key: 'loyalCrew', motion: 'plot', look: 'One plot glows and makes 1 more.' },
+  blamedForUnrest: { key: 'blamedForUnrest', motion: 'ledger', look: 'The player’s reputation chip drops: fewer votes.' },
 } satisfies { [K in ShowEventKey]?: EventEntry & { key: K } };
 
 /** How an event moves: its entry's motion, or 'plot' (no travel) for a key with no entry yet. */
@@ -99,6 +109,13 @@ export const STORY: Partial<Record<ShowEventKey, StoryTime>> = {
   immigrationWave: { length: 6, focus: 'store', zoom: 1.7, lands: 4.2, reveal: 4.9 },
   // A pink haze from the store; everyone without Medicine sneezes and is sick; Medicine shields the rest.
   epidemic: { length: 4.6, focus: 'store', zoom: 1.9, lands: 1.8, step: 0.45, reveal: 3.9 },
+
+  // Strikers walk out of the store to the struck good's plots, one after the other; each plot's chip goes up as they arrive.
+  generalStrike: { length: 5.4, lands: 2.6, step: 0.35, reveal: 4.6 },
+  // Bunting goes up over the colony and a crowd gathers at the store; then the changes come up.
+  festival: { length: 5.2, focus: 'store', zoom: 1.6, lands: 3.6, step: 0.35, reveal: 3.6 },
+  // A crowd at the store; a third of each shelf goes, shelf by shelf; the camera pulls back and the damaged object is hit.
+  riot: { length: 6, focus: 'store', zoom: 1.7, lands: 4.6, step: 0.45, reveal: 4.2 },
 
   // Spotlight: the camera goes to the plot.
   muleTheft: { length: 4.2, focus: 'origin', zoom: 2, lands: 2.2, reveal: 3.4 },
