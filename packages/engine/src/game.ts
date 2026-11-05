@@ -265,10 +265,8 @@ export function outfitMule(state: GameState, playerId: string, outfit: Outfit): 
   const p = developer(state, playerId);
   if (!p.carriedMule) throw new RuleError('No MULE to outfit');
   requireLed(p);
-  // With the arcade on, a fitted MULE changes good only by RE-OUTFIT (AM-2), never by a full-price re-fit.
-  // It reads the global flag, not a game's own devSteer, so a `devSteer: false` game (the tap path, kept for the pinned
-  // tests until it is deleted) is refused a full-price re-fit too. No server game passes `devSteer: false`.
-  if (DEV_STEER.on && p.carriedMule !== 'empty') throw new RuleError('This MULE is outfitted: re-outfit it');
+  // A fitted MULE changes good only by RE-OUTFIT (AM-2), never by a full-price re-fit: every game steers (C14).
+  if (p.carriedMule !== 'empty') throw new RuleError('This MULE is outfitted: re-outfit it');
   const capped = outfitBlocked(state, outfit);
   if (capped) throw new RuleError(capped);
   const cost = outfitCostFor(state, playerId, outfit);

@@ -18,6 +18,7 @@ import {
   AI_PERSONAS,
   COLONY_SELLER,
   colonyFailed,
+  colonyScore,
   emptyStock,
   GOOD_CONFIG,
   GOODS,
@@ -160,6 +161,42 @@ const quantile = (values: number[], q: number) => {
   const sorted = [...values].sort((a, b) => a - b);
   return sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))] ?? 0;
 };
+
+/**
+ * One game's colony score total (the engine's colonyScore, RULE-25) at each month's end, month 1 first: read as each
+ * upkeep ends, and the last month's from the final state, since its upkeep moves straight to game over. Empty when the
+ * game plays without the council.
+ */
+export function colonyScoreRecorder(): { onPhase: (s: GameState) => void; end: (state: GameState) => number[] } {
+  const totals: number[] = [];
+  return {
+    onPhase: (s) => {
+      const score = s.phase === 'upkeep' ? colonyScore(s) : null;
+      if (score) totals.push(score.total);
+    },
+    end: (state) => {
+      const score = colonyScore(state);
+      return score ? [...totals, score.total] : [];
+    },
+  };
+}
+
+/**
+ * The colony score lines (C29's baseline; no check, no target yet): the median and 90th percentile at game end, and the
+ * median across games at each month's end. None when no game had a colony (politics off), so that report is unchanged.
+ */
+export function colonyScoreLines(games: readonly (readonly number[])[]): string[] {
+  const played = games.filter((g) => g.length > 0);
+  if (played.length === 0) return [];
+  const ends = played.map((g) => g.at(-1)!);
+  const months = Math.max(...played.map((g) => g.length));
+  const path = Array.from({ length: months }, (_, m) => quantile(played.flatMap((g) => (m < g.length ? [g[m]!] : [])), 0.5)); // literal-ok: the median the line names
+  return [
+    // literal-ok: the median and 90th percentile the line names
+    `     Colony score at game end: median ${quantile(ends, 0.5)}, 90th percentile ${quantile(ends, 0.9)} over ${played.length} games (no check)`,
+    `     Colony score by month (median across games), months 1-${months}: ${path.join(' / ')} (no check)`,
+  ];
+}
 
 /**
  * The arcade floor's report lines (spec §4), only when development played on it: MULEs installed and pub times a turn,
@@ -332,6 +369,8 @@ function main() {
   const forcedMonthEvents: PhaseEvents[] = [];
   const politics = argText('politics') !== 'off';
   const pol = { elections: 0, filled: 0, taxes: [] as number[], taxPaid: 0, terms: 0 };
+  /** Each game's colony score at each month's end; empty games without the council. */
+  const colonyPaths: number[][] = [];
   // Read once the land grant opens: by then the month's election is closed and the Governor has set the tax.
   const onPhase = (s: Parameters<NonNullable<Parameters<typeof playGame>[2]>['onPhase'] & {}>[0]) => {
     if (s.phase !== 'landGrant' || !s.politics) return;
@@ -352,8 +391,10 @@ function main() {
     let pending: { sickness: number; forced: PhaseEvents | null } | null = null;
     /** Plots developed as each month's production runs, by month. */
     const developedAt = new Map<number, number>();
+    const colony = colonyScoreRecorder();
     const onEachPhase = (s: GameState) => {
       onPhase(s);
+      colony.onPhase(s);
       if (s.phase === 'production') developedAt.set(s.month, s.tiles.filter((t) => t.owner && t.outfit).length);
       if (s.phase === 'production' && pending) {
         const events = s.history.at(-1)!.events ?? [];
@@ -375,6 +416,7 @@ function main() {
     const played = playGame(seed, specs, { politics, walking, onPhase: onEachPhase });
     const { state, broke, auction: a, lots: l, mulesLost: lost, turns, moments } = played;
     mulesLost += lost;
+    colonyPaths.push(colony.end(state));
     floorTurns.push(...turns);
     floorMoments.push(...moments);
     playerGames += state.players.length;
@@ -483,6 +525,7 @@ function main() {
       ? `     Politics: ${pol.elections} elections, ${pct(pol.filled, pol.elections * 2)} of offices filled; Governor's tax ${quantile(pol.taxes, 0)} / ${quantile(pol.taxes, 0.5)} / ${quantile(pol.taxes, 1)}% (min / median / max); ${(pol.taxPaid / games).toFixed(0)} cr sales tax and ${(pol.terms / games).toFixed(1)} terms a game` // literal-ok: an election fills two offices (Governor, Sheriff); 0.5 is the median tax
       : '     Politics: off',
   );
+  for (const line of colonyScoreLines(colonyPaths)) console.log(line);
   console.log('\nPosted prices (min / median / 90th percentile / max):');
   for (const good of GOODS) {
     const all = prices[good]!;

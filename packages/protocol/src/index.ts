@@ -13,14 +13,16 @@ export type MuleIntent =
   | { type: 'drone'; plots: { x: number; y: number }[] }
   /** Land grant: claim the plot that is lit. The coordinates say which plot the player saw lit. */
   | { type: 'claim'; x: number; y: number }
+  /**
+   * Development's moves, by name. No screen sends them since development is steered (C14): the server refuses them,
+   * and the floor plays each through `act`. They stay while the AI's move catalogue (packages/ai actions.ts) names
+   * them as its moves' commands.
+   */
   | { type: 'buyMule' }
   | { type: 'outfit'; outfit: Outfit }
   | { type: 'install'; x: number; y: number }
-  /** Development: analyse any plot's ground. Costs development time. */
   | { type: 'analyse'; x: number; y: number }
-  /** Development: fit a filter to one of your plots, paid in Alloy. */
   | { type: 'filter'; x: number; y: number }
-  /** Development: end your turn at the pub for cash. */
   | { type: 'pub' }
   /** Auction: buy, sell or pass on the good that is up. During the walk a switch jumps you to the new side's start edge. */
   | { type: 'declare'; side: AuctionSide }
@@ -135,9 +137,8 @@ export interface PlayerView {
 
 /** A colonist in development. Times are the server's epoch ms, like phaseEndsAt. */
 export interface ColonistView {
-  /** Where it stands, or where it is walking to. */
+  /** The tile under it, or the store while it is in the hall. */
   at: DevPlace;
-  walk: { from: DevPlace; startedAt: number; arrivesAt: number } | null;
   /** While it stands on a plot for a geo analysis: when the analysis is done. */
   assayUntil: number | null;
   /**
