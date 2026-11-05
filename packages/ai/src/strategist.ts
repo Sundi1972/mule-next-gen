@@ -481,7 +481,7 @@ export interface GoodPlan {
   corner: { units: number; premium: number };
   /**
    * Units it buys up to, as far as its money goes: what keeps it whole next month (wholeNextMonth), while it holds less
-   * and the store sells the good (STRATEGIST.buyShortfall); 0 otherwise. While short it sells none of them either.
+   * and the store sells the good (STRATEGIST.buyShortfall); 0 otherwise. While it is above 0 it sells none of them.
    */
   mustHold: number;
 }
@@ -498,21 +498,19 @@ export function goodPlan(obs: GameState, mind: Mind, good: Good): GoodPlan {
     const now = afterTax(obs, expectedPrices(obs, good).sell);
     for (let k = values.block; k < values.keep.length; k++) values.keep[k] = Math.min(values.keep[k]!, now - 1);
   }
-  // Short for next month is a loss, not a small cost (Heiko, 5 Nov). While it holds less than what keeps it whole it
-  // sells none of it, store or no store: with the store out it could not buy a unit back. At or above that it sells its
-  // surplus down to the screen's need, unitValues' own floor (Heiko's choice of 6 Nov, "sell surplus"). While the store
-  // sells the good and it is short, each unit up to that is worth at least the store's ask, so it buys it there or
-  // cheaper from a player, never dearer.
+  // Short for next month is a loss, not a small cost (Heiko, 5 Nov). While it holds less than what keeps it whole and the
+  // store sells the good, each unit up to that is worth at least the store's ask, so it buys it there or cheaper from a
+  // player, never dearer, and it sells none of them. Otherwise its floor is the screen's need, unitValues' own, and the
+  // rest is for sale (Heiko's choice of 6 Nov, "sell surplus").
   const whole = STRATEGIST.buyShortfall.includes(good) ? wholeNextMonth(obs, mind.me, good) : 0;
-  const short = p.stock[good] < whole;
-  if (short) {
-    for (let k = 0; k < whole; k++) values.keep[k] = Infinity;
-    values.floorUnits = Math.max(values.floorUnits, whole);
-  }
   // The store's line is the good's that is up: a draft of a good still in the queue has no ask yet, and keeps its values.
   const ask = whole > 0 && obs.auction?.good === good ? storeSellLine(obs) : null;
-  const mustHold = ask !== null && short ? whole : 0;
-  for (let k = 0; k < mustHold; k++) values.buy[k] = Math.max(values.buy[k] ?? 0, ask!);
+  const mustHold = ask !== null && p.stock[good] < whole ? whole : 0;
+  for (let k = 0; k < mustHold; k++) {
+    values.buy[k] = Math.max(values.buy[k] ?? 0, ask!);
+    values.keep[k] = Infinity;
+  }
+  values.floorUnits = Math.max(values.floorUnits, mustHold);
   const reserve = cashReserve(obs, mind);
   const budget = Math.max(0, Math.min(p.money * STRATEGIST.budgetShare, p.money - reserve));
   const a = obs.auction;
