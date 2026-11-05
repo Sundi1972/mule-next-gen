@@ -30,7 +30,7 @@ import {
 import type { Act, AiAction } from '../actions.js';
 import type { Brain, Pending } from '../brain.js';
 import { floorDevWalk, leading, mapFactor, planSeconds, plotErrandSeconds, pubDoor, pubMargin, pubSeconds, tileMiddle, tripSeconds, type PlanStop } from '../floor-time.js';
-import { analysesWanted, developDecision, filtersWanted, outfitName, plotName, type DevAction, type DevWalk } from '../strategist.js';
+import { analysesWanted, bestInstall, developDecision, filtersWanted, outfitName, plotName, type DevAction, type DevWalk } from '../strategist.js';
 import { situation } from '../summary.js';
 import { FloorWalker, type FloorView } from './floor-walker.js';
 
@@ -502,7 +502,15 @@ export class DevelopHand {
     const mind = this.brain.mind;
     if (this.stage === 'start') {
       const obs = observe(state, mind.me);
+      // On the floor, a MULE led into development (one won at the land auction) is installed first: while it is led a
+      // plot's button offers INSTALL, not ANALYSE, so an analysis ahead of it would be refused (FM-led-analyse). Paid for
+      // already, it goes where it gains most, if it earns anything there at all; the analyses follow while the clock fits.
+      const led = state.players.find((p) => p.id === mind.me)!.carriedMule;
+      const target = this.onFloor && led && led !== 'empty' ? bestInstall(obs, mind, led) : null;
+      const install = target && target.gain + target.cost > 0 ? state.tiles[target.index]! : null;
+      if (install) this.push({ type: 'install', x: install.x, y: install.y }, AI_HANDS.develop.installTapMs, `Install the MULE it leads on ${plotName(install)}`, ++this.group);
       for (const index of analysesWanted(obs, mind, secondsLeft)) {
+        if (install && index === target!.index) continue;
         const t = state.tiles[index]!;
         this.push({ type: 'analyse', x: t.x, y: t.y }, AI_HANDS.develop.analyseTapMs, `Analyse ${plotName(t)}`, ++this.group);
       }
@@ -598,9 +606,15 @@ export class DevelopHand {
 
   private finish(state: GameState): void {
     const mind = this.brain.mind;
+    const analysed = state.players.find((p) => p.id === mind.me)!.analysed;
     for (const index of filtersWanted(observe(state, mind.me), mind)) {
       const t = state.tiles[index]!;
-      this.push({ type: 'filter', x: t.x, y: t.y }, AI_HANDS.develop.filterMs, `Fit a filter on ${plotName(t)}`, ++this.group);
+      const g = ++this.group;
+      // On the floor an own plot not yet analysed offers ANALYSE before FIT FILTER (RULE-3 rows 10 and 11), so its
+      // analysis is planned first, in the filter's group: an analysis dropped (for time, or refused) drops its filter too
+      // (FM-floor-filter).
+      if (this.onFloor && !analysed.includes(index)) this.push({ type: 'analyse', x: t.x, y: t.y }, AI_HANDS.develop.analyseTapMs, `Analyse ${plotName(t)}`, g);
+      this.push({ type: 'filter', x: t.x, y: t.y }, AI_HANDS.develop.filterMs, `Fit a filter on ${plotName(t)}`, g);
     }
     this.push({ type: 'pub' }, AI_HANDS.develop.pubMs, 'Go to the pub', ++this.group);
     this.stage = 'steps';
