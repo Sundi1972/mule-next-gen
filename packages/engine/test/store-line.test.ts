@@ -257,6 +257,11 @@ describe('RULE-2 in the engine: everyone takes part', () => {
     const trades = run(state, 60_000);
     expect(trades, 'the idle buyers have money but stand at the edge').toEqual([]);
     expect(Math.round(walker(state, 'p0').price)).toBeGreaterThan(a(state).lo);
+    // A tap down from there is held at the same place: it never steps onto the buyers' edge.
+    setWalk(state, 'p0', 0);
+    stepWalk(state, 'p0', -1);
+    expect(run(state, 10_000)).toEqual([]);
+    expect(Math.round(walker(state, 'p0').price)).toBe(a(state).lo + 1);
   });
 
   it("'pass' is refused with the rules' words, on the status screen and in the walk", () => {
