@@ -1,11 +1,11 @@
 import { DEV_WALK } from '@mule/engine';
 import { ActionButton, cx, Joystick, Panel, SharedClock, YourPace, type Condition } from '@mule/ui';
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from 'react';
+import { useContext, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from 'react';
 import { useTableChat } from '../../chat/store';
 import { ThemeToggle } from '../../components/ThemeToggle';
 import { useClient } from '../../net/react';
 import { usePhoneGame } from '../game';
-import { WIDE_PX } from '../Shell';
+import { ShellLayer, WIDE_PX } from '../Shell';
 import { keyDown, keyUp } from './controls';
 import { BANNER_CHAR_PX, bannerBox, colonistBox, css, FRAMES, freeRun, overlap, phoneLayout, tileBox, type Box } from './layout';
 import { PhoneLive, useArcade, useLive } from './live';
@@ -22,9 +22,11 @@ import { SeatProvider, YourStage } from './stages';
 export function ArcadeDevelop() {
   const box = useRef<HTMLDivElement>(null);
   const frame = useFrameSize(box);
+  const layer = useContext(ShellLayer);
   return (
-    <div ref={box} className="h-full w-full">
+    <div ref={box} className="relative h-full w-full">
       <PhoneLive>{frame.w >= WIDE_PX ? <LaptopArcade frame={frame} /> : <PhoneLandscape frame={frame} />}</PhoneLive>
+      {layer}
     </div>
   );
 }
