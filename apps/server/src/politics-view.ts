@@ -8,11 +8,15 @@ import {
   PERCENT,
   POLITICS,
   taxBounds,
+  votesOpen,
   voteWeight,
   type CeremonyBeat,
   type CeremonyBeats,
   type ElectionHow,
   type GameState,
+  type LawId,
+  type LawImpact,
+  type LawProposal,
   type Office,
 } from '@mule/engine';
 import type { CeremonyView, CouncilView, ElectionView, MyPoliticsView, OfficeReveal, PoliticsView } from '@mule/protocol';
@@ -169,7 +173,19 @@ export function myPoliticsView(state: GameState, playerId: string): MyPoliticsVi
     paid: state.treasury.paid[playerId] ?? 0,
     reputation: state.players.find((pl) => pl.id === playerId)!.reputation,
     lawBallot: p.council?.stage === 'ballot' ? (p.council.ballots[playerId] ?? null) : null,
+    ...(p.governor === playerId && state.phase === 'planning' && !votesOpen(state) ? { candidates: candidates(state) } : {}),
   };
+}
+
+/** Every proposal the Governor may weigh, each with lawImpact's cost per player: every law at each setting, and a repeal of each in force. See C46. */
+function candidates(state: GameState): Record<string, Record<string, LawImpact>> {
+  const out: Record<string, Record<string, LawImpact>> = {};
+  const add = (key: string, proposal: LawProposal) => (out[key] = lawImpact(state, proposal));
+  for (const law of Object.keys(POLITICS.laws) as LawId[]) {
+    for (const setting of POLITICS.laws[law].settings) add(`${law}:${setting}`, { kind: 'enact', law, setting });
+  }
+  for (const law of Object.keys(state.politics!.laws) as LawId[]) add(`repeal:${law}`, { kind: 'repeal', law });
+  return out;
 }
 
 const HOW: Record<ElectionHow, string> = {
