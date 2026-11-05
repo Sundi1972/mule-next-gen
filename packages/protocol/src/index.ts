@@ -46,6 +46,8 @@ export type MuleIntent =
   | { type: 'donate'; id: PrestigeId; credits: number; goods?: Partial<Record<Good, number>> }
   /** Planning, after the votes: the Governor repairs a damaged object from the fund. */
   | { type: 'repair'; id: PrestigeId }
+  /** Planning, after the votes: the Governor pays this month's general strikers from the fund. */
+  | { type: 'payStrike' }
   /** Planning, once the votes are over: the Governor puts a law, a new setting or a repeal to the next planning's ballot; null withdraws it. */
   | { type: 'propose'; proposal: LawProposal | null }
   /** The law ballot: yes or no; a later vote replaces it until the ballot closes. */
@@ -722,6 +724,8 @@ export interface ColonyView {
   ledger: { month: number; in: Partial<Record<FundSource, number>>; out: Partial<Record<FundLine, number>> } | null;
   projects: ColonyProjectView[];
   catalogue: ColonyCatalogueView[];
+  /** This month's general strike: the good it holds back, what the strikers want, and whether the fund paid; null when none. Optional, so views built before W3 still type. */
+  strike?: { good: Good; cost: number; paid: boolean } | null;
   /** The colony score at game over; null before. Its terms are the end score's (WS3), still to be written. */
   score: { wealth: number; environment: number; prestige: number; factor: number; total: number } | null;
 }

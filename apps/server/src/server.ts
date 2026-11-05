@@ -278,6 +278,8 @@ function isIntent(v: unknown): v is MuleIntent {
     case 'commission':
     case 'repair':
       return typeof i.id === 'string';
+    case 'payStrike':
+      return true;
     case 'propose':
       return i.proposal === null || isProposal(i.proposal);
     case 'voteLaw':

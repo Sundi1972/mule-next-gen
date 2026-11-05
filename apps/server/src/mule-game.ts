@@ -68,6 +68,8 @@ import {
   commission,
   donate,
   repair,
+  payStrike,
+  goodWords,
   setWalk,
   shipAnnounced,
   shipInPort,
@@ -633,6 +635,12 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       case 'repair':
         repair(state, seatId, intent.id);
         return;
+      case 'payStrike': {
+        payStrike(state, seatId);
+        const { good, cost } = state.colony!.strike!;
+        this.addNews(`${this.nameOf(seatId)} pays the ${goodWords(good)} strikers ${cost} cr.`);
+        return;
+      }
       case 'propose':
         proposeLaw(state, seatId, intent.proposal);
         return;

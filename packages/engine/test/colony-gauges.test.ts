@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { advancePhase, colonyGauges, colonyWealth, createGame, lastGauges, scoreParts, type GameState } from '../src/index.js';
+import { advancePhase, colonyGauges, HAPPINESS, colonyWealth, createGame, lastGauges, scoreParts, type GameState } from '../src/index.js';
 
 const SEATS = ['lena', 'brix', 'ossa', 'kai'];
 const newGame = (): GameState => createGame({ seed: 7, players: SEATS.map((id) => ({ id, name: id, isAi: false })) });
@@ -36,6 +36,6 @@ describe("the colony's gauges and last month's", () => {
       return sum + p.money + p.goods + p.land + p.muleValue;
     }, 0);
     expect(colonyWealth(state)).toBe(300 + players);
-    expect(colonyGauges(state)).toMatchObject({ month: 1, wealth: 300 + players, prestige: 0, happiness: null });
+    expect(colonyGauges(state)).toMatchObject({ month: 1, wealth: 300 + players, prestige: 0, happiness: HAPPINESS.start });
   });
 });

@@ -3,17 +3,17 @@
  * Governor commissions. The only writer of GameState.colony and, through fundIn and fundOut, of treasury.money.
  * With politics off there is no colony, and the fund moves exactly as it always has, with no ledger.
  */
-import { COLONY, GOOD_CONFIG, PRESTIGE } from './config.js';
+import { COLONY, GAME, GOOD_CONFIG, HAPPINESS, PRESTIGE } from './config.js';
 import { storeForSale, storeQuotes } from './economy.js';
 import { RuleError } from './errors.js';
 import { votesOpen } from './politics.js';
 import { PERCENT } from './units.js';
 import { scoreParts } from './game.js';
-import { GOODS, type Colony, type ColonyGauges, type FundLedger, type FundLine, type FundSource, type GameState, type Good, type PrestigeId, type Project } from './types.js';
+import { GOODS, type Colony, type ColonyGauges, type FundLedger, type FundLine, type FundSource, type GameState, type Good, type MoodBand, type PrestigeId, type Project } from './types.js';
 
 /** The colony at the start of a game played with politics. */
 export function newColony(month: number): Colony {
-  return { ledger: emptyLedger(month), projects: [], promises: [], permanentPrestige: 0, monthEnds: [] };
+  return { ledger: emptyLedger(month), projects: [], promises: [], permanentPrestige: 0, monthEnds: [], happiness: HAPPINESS.start, strike: null };
 }
 
 function emptyLedger(month: number): FundLedger {
@@ -152,7 +152,7 @@ export function repair(state: GameState, playerId: string, id: PrestigeId): void
 }
 
 /** At upkeep, after the offices are paid: objects pay their upkeep, buildings go up, and the open project is funded. See G-5 RULE-21. */
-export function runColony(state: GameState): void {
+export function runColony(state: GameState, shortages: readonly Good[]): void {
   if (!state.colony) return;
   const colony = edit(state);
   for (const p of colony.projects) {
@@ -168,6 +168,7 @@ export function runColony(state: GameState): void {
   }
   const open = colony.projects.find((p) => p.stage === 'commissioned');
   if (open) fund(state, colony, open);
+  colony.happiness = moodStep(colony.happiness, moodTarget(moodInputs(state, shortages)));
   // literal-ok: the last two month ends, the window lastGauges reads (this month's and the one before)
   colony.monthEnds = [...colony.monthEnds, colonyGauges(state)].slice(-2);
 }
@@ -185,7 +186,7 @@ export function colonyWealth(state: GameState): number {
 
 /** The colony's gauges now. */
 export function colonyGauges(state: GameState): ColonyGauges {
-  return { month: state.month, wealth: colonyWealth(state), prestige: colonyPrestige(state), happiness: null };
+  return { month: state.month, wealth: colonyWealth(state), prestige: colonyPrestige(state), happiness: state.colony?.happiness ?? null };
 }
 
 /** Last month's gauges for the "this month" change: the latest month end before this month's, or null in month 1. */
@@ -220,7 +221,7 @@ function fund(state: GameState, colony: Colony, project: Project): void {
 }
 
 /** A good's key as words for a message: rareEarth reads "rare earth". */
-function words(good: Good): string {
+export function goodWords(good: Good): string {
   return good.replace(/[A-Z]/g, (c) => ` ${c.toLowerCase()}`);
 }
 
@@ -246,9 +247,9 @@ export function donate(state: GameState, playerId: string, id: PrestigeId, credi
   for (const [good, units] of given) {
     if (units === 0) continue;
     const missing = Object.hasOwn(needs.goods, good) ? needs.goods[good]! : undefined;
-    if (missing === undefined) throw new RuleError(`The ${name} needs no ${words(good)}`);
-    if (units > missing) throw new RuleError(`The ${name} still needs ${missing} ${words(good)}`);
-    if (units > donor.stock[good]) throw new RuleError(`You have ${donor.stock[good]} ${words(good)}`);
+    if (missing === undefined) throw new RuleError(`The ${name} needs no ${goodWords(good)}`);
+    if (units > missing) throw new RuleError(`The ${name} still needs ${missing} ${goodWords(good)}`);
+    if (units > donor.stock[good]) throw new RuleError(`You have ${donor.stock[good]} ${goodWords(good)}`);
   }
 
   const colony = edit(state);
@@ -279,4 +280,106 @@ export function keepPromise(state: GameState): void {
   const { promise, promiseFrom: from } = politics;
   const kept = promise.kind === 'cap' ? tax <= promise.percent : promise.kind === 'lower' ? tax < from : tax === from;
   edit(state).promises.push({ month: state.month, governor: politics.governor, kind: promise.kind, kept });
+}
+
+/** What a month's mood target reads. See G-5 RULE-20. */
+export interface MoodInputs {
+  /** Goods the store ran short of this upkeep. */
+  short: number;
+  /** The air gauge, 0..100, higher is dirtier. */
+  air: number;
+  /** The sales tax in whole percent. */
+  tax: number;
+  /** 1 in a month the Governor broke their tax promise. */
+  broken: 0 | 1;
+  /** Prestige standing, objects and permanent. */
+  prestige: number;
+  /** Credits between the richest and poorest player, by cash and land. */
+  gap: number;
+}
+
+/** The month's inputs. `shortages` are this upkeep's, which the month's report only receives once upkeep is done. */
+export function moodInputs(state: GameState, shortages: readonly Good[]): MoodInputs {
+  const brokeNow = state.colony?.promises.some((p) => p.month === state.month && !p.kept) ?? false;
+  return {
+    short: shortages.length,
+    air: state.air,
+    tax: Math.round(state.treasury.salesTax * PERCENT),
+    broken: brokeNow ? 1 : 0,
+    prestige: colonyPrestige(state),
+    gap: wealthGap(state),
+  };
+}
+
+/** The mood a month aims for, 0..100. See G-5 RULE-20. */
+export function moodTarget(i: MoodInputs): number {
+  const w = HAPPINESS.weights;
+  const target =
+    HAPPINESS.base -
+    w.shortage * i.short -
+    w.air * Math.max(0, i.air - w.airFree) -
+    w.tax * Math.max(0, i.tax - w.taxFree) -
+    w.broken * i.broken +
+    w.prestige * Math.min(i.prestige, w.prestigeCap) -
+    w.gap * Math.min(i.gap / w.gapUnit, w.gapCap);
+  return clampMood(target);
+}
+
+/** One month's move from `h` toward `target`, at most HAPPINESS.maxStep, as a whole number. */
+export function moodStep(h: number, target: number): number {
+  const step = Math.max(-HAPPINESS.maxStep, Math.min(HAPPINESS.maxStep, target - h));
+  return clampMood(Math.round(h + step));
+}
+
+function clampMood(h: number): number {
+  return Math.max(0, Math.min(100, h)); // literal-ok: the mood's scale is 0..100 by definition (G-5 RULE-20)
+}
+
+/** An event's change to the mood, at once and uncapped; the only writer of happiness besides the monthly drift. */
+export function moodShift(state: GameState, delta: number): void {
+  if (!state.colony) return;
+  const colony = edit(state);
+  colony.happiness = clampMood(Math.round(colony.happiness + delta));
+}
+
+/** The band a mood falls in. */
+export function moodBand(h: number): MoodBand {
+  const { bands } = HAPPINESS;
+  if (h >= bands.thriving) return 'thriving';
+  if (h >= bands.content) return 'content';
+  if (h >= bands.restless) return 'restless';
+  if (h >= bands.unhappy) return 'unhappy';
+  return 'unrest';
+}
+
+/** Credits between the richest and the poorest player, by cash and land: the one measure the mood and migration share. */
+export function wealthGap(state: GameState): number {
+  const worth = state.players.map((p) => p.money + state.tiles.filter((t) => t.owner === p.id).length * GAME.plotScore);
+  return worth.length === 0 ? 0 : Math.max(...worth) - Math.min(...worth);
+}
+
+/** A general strike on `good` starts this month; WS1's strike event calls it. See G-5 RULE-26. */
+export function callStrike(state: GameState, good: Good): void {
+  if (!state.colony) return;
+  edit(state).strike = { month: state.month, good, cost: COLONY.strike.cost, paid: false };
+}
+
+/** Whether this month's strike holds `good` back: production makes a fraction of it while the strikers are unpaid. */
+export function strikeHolds(state: GameState, good: Good): boolean {
+  const strike = state.colony?.strike;
+  return !!strike && strike.month === state.month && strike.good === good && !strike.paid;
+}
+
+/** The Governor pays this month's strikers from the fund; the reserve does not hold back. See G-5 RULE-26. */
+export function payStrike(state: GameState, playerId: string): void {
+  if (!state.colony) throw new RuleError("This game plays without the colony's council");
+  const strike = state.colony.strike;
+  if (!strike || strike.month !== state.month) throw new RuleError('There is no strike to pay off');
+  if (state.phase !== 'planning' || votesOpen(state)) throw new RuleError('Pay the strikers once the votes are over');
+  if (state.politics?.governor !== playerId) throw new RuleError('Only the Governor pays the strikers');
+  if (strike.paid) throw new RuleError('The strikers are already paid');
+  if (state.treasury.money < strike.cost) throw new RuleError(`The fund has ${state.treasury.money} cr; the strikers want ${strike.cost} cr`);
+  const colony = edit(state);
+  payOut(state, colony, 'strikePay', strike.cost);
+  colony.strike = { ...strike, paid: true };
 }

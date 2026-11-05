@@ -921,6 +921,40 @@ export const PRESTIGE = {
   spaceport: { name: 'Spaceport upgrade', credits: 1_380, goods: { alloy: 2, electronics: 2 }, buildMonths: 3, needsPlot: true, prestige: 5, upkeep: 100, repairCost: 500 },
 } satisfies Record<PrestigeId, { name: string; credits: number; goods: Partial<Record<Good, number>>; buildMonths: number; needsPlot: boolean; prestige: number; upkeep: number; repairCost: number }>;
 
+/**
+ * The colony's mood (G-5 RULE-20). Every number is a placeholder, tuned at the end (HC-25). Each month the mood moves
+ * toward a target by at most `maxStep`; an event's moodShift moves it at once.
+ */
+export const HAPPINESS = {
+  /** Where a new colony's mood starts, 0..100. */
+  start: 60,
+  /** The target of a month with nothing wrong and nothing standing. */
+  base: 60,
+  /** The most the mood moves toward its target in one month. */
+  maxStep: 5,
+  /** The least happiness of each band; below `unhappy` is Unrest. */
+  bands: { thriving: 80, content: 60, restless: 40, unhappy: 20 },
+  weights: {
+    /** Off the target for each good the store ran short of this upkeep. */
+    shortage: 8,
+    /** Off the target for each point of air above `airFree`. */
+    air: 0.4,
+    airFree: 30,
+    /** Off the target for each whole percent of sales tax above `taxFree`. */
+    tax: 2,
+    taxFree: 5,
+    /** Off the target in a month the Governor broke their tax promise. */
+    broken: 10,
+    /** Onto the target for each point of prestige standing, up to `prestigeCap` points. */
+    prestige: 2,
+    prestigeCap: 15,
+    /** Off the target for each `gapUnit` credits between the richest and poorest player, up to `gapCap` units. */
+    gap: 2,
+    gapUnit: 1_000,
+    gapCap: 10,
+  },
+};
+
 /** The colony fund's own rules. Placeholders until the colony's sim tuning. */
 export const COLONY = {
   /** Projects commissioned or building at the same time. */
@@ -931,6 +965,8 @@ export const COLONY = {
   fundBuysGoods: true,
   /** The Federation's grant into the fund at each upkeep, in credits; flat until a scaling rule is tuned. */
   grant: { perMonth: 150 },
+  /** What the strikers of a general strike want from the fund to go back to work, in credits (G-5 RULE-26). */
+  strike: { cost: 250 },
 };
 
 /**
