@@ -37,7 +37,7 @@
 <p class="owner">Kept current by: the Table team (WS4).</p>
 
 <h2 id="tv-screens">The TV, phase by phase <span class="pill built">In the game</span></h2>
-<p>Every TV screen has the same header: "Month N / 12" above the phase's title, a Day/Night switch, and at the right the colony's gauges (Wealth, Environment, Prestige, Happiness) when the council is on, or the air gauge alone when it is off, and the clock when the phase has one. The table chat's ticker runs under the header once someone has spoken.</p>
+<p>Every TV screen has the same header: "Month N / 12" above the phase's title, a Day/Night switch, and at the right the colony's gauges (Wealth, Environment, Prestige, Happiness) when the council is on, or the air gauge alone when it is off, and the clock when the phase has one. Where the screen shows a ready count, the gauges take a row of their own under the title. The table chat's ticker runs under the header once someone has spoken, except on the goods auction's walk (see <a href="#tv-fit">The TV fits a real table</a>).</p>
 <div class="table-wrap"><table>
 <thead><tr><th>Phase</th><th>Title on the TV</th><th>What the TV shows</th></tr></thead>
 <tbody>
@@ -56,22 +56,23 @@
 <h3 id="tv-planning">Planning on the TV</h3>
 <p>The ready list shows each person's place by Worth ("1st", "2nd"), their creature and one word: PLANNING, READY, or AWAY · PLANNING for a dropped phone. Computer players, always ready, share one dimmed row. The map's caption reads the room code, the colonists, the MULEs in the corral and their price. The market tiles show six goods with their price and how many months of demand the store holds, amber under one month and red under half a month.</p>
 <h3 id="tv-auction">The goods auction on the TV</h3>
-<p>Each running deal is a row ("Lena buys from the store at 34", for example) with its speed: chevrons that fill as the pair stays matched, "faster and faster" until "full speed". When no deal runs, a help line explains the board: "Sellers push the red line down, buyers push the green line up. When the two lines meet, the goods change hands." The TV plays the auction's sounds: a tick-tock clock that speeds up as time runs out and slows while trading, a click for every unit, a bell struck three times when a good's walk ends.</p>
+<p>Each running deal is a row ("Lena buys from the store at 34", for example), newest first. The newest shows its speed: chevrons that fill as the pair stays matched, "faster and faster" until "full speed"; older deals take one line each. When no deal runs, a help line explains the board: "Sellers push the red line down, buyers push the green line up. When the two lines meet, the goods change hands." The TV plays the auction's sounds: a tick-tock clock that speeds up as time runs out and slows while trading, a click for every unit, a bell struck three times when a good's walk ends.</p>
 <h3 id="tv-events">Events on the TV</h3>
 <p>When events strike, the TV plays their show over the phase screen: the header with a pip for each event, the living map where each event lands on its plots, a log of what happened, and a colony bar with every player's slot glowing while their spotlight plays and a "sick" tag once their sickness lands. Production plays its events inside its own show. See <a href="#event-shows">Event shows</a>.</p>
 <p class="code-ref">In the code: <code>apps/web/src/table/TableApp.tsx::TvHeader, TvGame, TvAuction, TvMonthEnd, TvGameOver</code> · <code>apps/web/src/table/TvElection.tsx, TvCouncil.tsx, TvLandAuction.tsx, TvDevelop.tsx, TvProduction.tsx</code> · <code>apps/web/src/events/TvEventLayer.tsx</code> · <code>apps/web/src/game/sound.ts</code></p>
 <p class="owner">Kept current by: the Table team (WS4); WS7 for the election and law screens, WS8 for the event layer, WS3 for the auction's content.</p>
 
-<h2 id="tv-fit">The TV fits a real table <span class="pill progress">Being built</span></h2>
-<p>Played at a real table, some TV screens ran out of room. The PM ruled the fixes on 5 Nov:</p>
+<h2 id="tv-fit">The TV fits a real table <span class="pill built">In the game</span></h2>
+<p>Played at a real table, some TV screens ran out of room. Every screen below is checked at 1920 × 1080: nothing runs off the bottom, and every row it promises is shown whole.</p>
 <ul>
-<li><strong>The goods auction's walk</strong> shows one chat line, the newest, and none while a deal runs; during a trade, the speaker's bubble on the board carries what was said. The newest deal keeps its speed line; older deals take one line each, so two deals fit under the store's box. The status stage keeps three chat lines.</li>
-<li><strong>The header</strong>: the ready count sits beside the title. When the colony's gauges also show, they move to a full-width row of their own under it whenever a ready chip or a status badge (such as a strike) is shown.</li>
-<li><strong>The month end's title</strong>, "End of the month", stays on one line.</li>
-<li><strong>Planning's side column</strong> scales to fit, so its last standings row never runs off the screen.</li>
+<li><strong>The goods auction's walk</strong> has no chat ticker at all. The speakers' bubbles on the board carry what is said, and the board stays one size as deals start and stop. The newest deal keeps its speed line; older deals take one line each, so two deals fit under the store's box. The help line shows only while no deal runs. The status stage, before the walk, keeps its three chat lines.</li>
+<li><strong>Planning and the month end</strong>: the ready count ("2 / 3 READY") sits beside the title, and the colony's four gauges move to a full-width row of their own under it, so the count never covers a gauge.</li>
+<li><strong>Titles stay on one line</strong>: "End of the month" no longer wraps, and a long title never runs under the buttons at the header's right.</li>
+<li><strong>Planning's side column</strong> fits the screen: the news gives way first, down to its newest item, and only then does the column scale, so the last standings row never runs off the screen.</li>
 </ul>
-<div class="box next"><h4>What is changing</h4><p>PR #381 (the Table team, WS4), with a named edit in WS6's chat ticker. Being built; checked by screen rows in CI. The small captions on the development and month-end screens stay in the Table team's backlog, and the computer players' bubbles that can cover board labels were passed to the UX team (WS6).</p></div>
-<p class="code-ref">In the code: <code>apps/web/src/table/TableApp.tsx::TvHeader, TvAuction</code> · <code>apps/web/src/chat/Chat.tsx::TvTicker</code></p>
+<div class="box why"><h4>Why it is like this</h4><p>The PM ruled the fixes on 5 Nov, after the TV couch read (every TV screen from one real game): first one chat line on the walk and none during a trade, then, so the board would stop changing size, no ticker for the whole walk ("the bubbles carry chat").</p></div>
+<div class="box next"><h4>What is changing</h4><p>Next, the Table team (WS4): every TV header with a clock, a status badge (such as a strike) or a ready count puts the colony's gauges on their own row. Today the development screen's clock runs off the right edge when the gauges show. The small captions on the development and month-end screens stay in the Table team's backlog.</p></div>
+<p class="code-ref">In the code: <code>apps/web/src/table/TableApp.tsx::TvHeader, TvAuction, FitHeight</code> · <code>apps/web/src/chat/Chat.tsx::TvTicker</code> · checked by <code>apps/web/e2e/tv-fit-steps.ts</code> in the smoke run (PR #381)</p>
 <p class="owner">Kept current by: the Table team (WS4).</p>
 
 <h2 id="auction-headline">The good leads every auction screen <span class="pill progress">Being built</span></h2>
@@ -161,7 +162,7 @@
 <p>Every screen, the TV included, shows what was said:</p>
 <ul>
 <li><strong>A speech bubble</strong> pops at the speaker's creature wherever the screen draws it (on the map, on the auction board, in the store's hall). Where the screen does not draw the speaker, the bubble opens at their place in the seat row. One bubble shows at a time on each screen, so they never cover each other: each shows for at least <span class="num">2</span> s and at most <span class="num">4.5</span> s, and a line that would wait more than <span class="num">4</span> s for its turn gets no bubble. A new phase ends every bubble.</li>
-<li><strong>The ticker</strong> keeps the last lines, newest first: two on a phone (in the rail, under its content), three on the TV (under the header). A whisper is marked 🔒.</li>
+<li><strong>The ticker</strong> keeps the last lines, newest first: two on a phone (in the rail, under its content), three on the TV (under the header). The TV's goods-auction walk has none; its bubbles carry the chat. A whisper is marked 🔒.</li>
 <li><strong>Emotes</strong> float at the top of every phone's stage for <span class="num">3.5</span> s.</li>
 </ul>
 <p>Computer players talk too: each says at most <span class="num">3</span> lines a month and one a phase, up to <span class="num">140</span> characters, about what it just decided. A public line from a person reaches every computer player, a whisper only the one it was for.</p>
