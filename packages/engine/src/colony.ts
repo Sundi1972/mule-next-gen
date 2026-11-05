@@ -6,6 +6,7 @@
 import { COLONY, GAME, GOOD_CONFIG, HAPPINESS, PRESTIGE } from './config.js';
 import { storeForSale, storeQuotes } from './economy.js';
 import { RuleError } from './errors.js';
+import { COLONY_SELLER } from './lots.js';
 import { votesOpen } from './politics.js';
 import { PERCENT } from './units.js';
 import { scoreParts } from './game.js';
@@ -114,7 +115,7 @@ export function commission(state: GameState, playerId: string, id: PrestigeId): 
   governorActs(state, playerId, 'Commission');
   const refused = objectRefusal(state, id);
   if (refused) throw new RuleError(refused);
-  edit(state).projects.push({ id, stage: 'commissioned', funded: { credits: 0, goods: {} }, monthsLeft: null, plot: null, since: state.month, plaque: {} });
+  edit(state).projects.push({ id, stage: 'commissioned', funded: { credits: 0, goods: {} }, monthsLeft: null, plot: null, since: state.month, plaque: {}, maxBid: null });
 }
 
 /** Why the colony can't take on this object now, whoever asks (RULE-22 rows 4-6), or null. */
@@ -382,4 +383,31 @@ export function payStrike(state: GameState, playerId: string): void {
   const colony = edit(state);
   payOut(state, colony, 'strikePay', strike.cost);
   colony.strike = { ...strike, paid: true };
+}
+
+/** A commissioned project that waits for its plot, or why there is none. See G-5 RULE-28. */
+function waitingForSite(state: GameState, id: PrestigeId): Project {
+  const project = state.colony?.projects.find((p) => p.id === id && p.stage === 'commissioned');
+  if (!project) throw new RuleError('Nothing is waiting for a site');
+  const { name, needsPlot } = PRESTIGE[id];
+  if (!needsPlot) throw new RuleError(`The ${name} needs no plot`);
+  if (project.plot !== null) throw new RuleError(`The ${name} already has its site`);
+  return project;
+}
+
+/** The Governor's top bid for an object's plot at the land auction; null, the colony does not bid. See G-5 RULE-28. */
+export function setSiteBid(state: GameState, playerId: string, id: PrestigeId, maxBid: number | null): void {
+  if (!state.colony) throw new RuleError("This game plays without the colony's council");
+  if (state.phase !== 'planning' || votesOpen(state)) throw new RuleError('Set the bid once the votes are over');
+  if (state.politics?.governor !== playerId) throw new RuleError("Only the Governor sets the colony's bid");
+  waitingForSite(state, id);
+  if (maxBid !== null && !whole(maxBid)) throw new RuleError('Bid a whole number of credits');
+  edit(state).projects.find((p) => p.id === id)!.maxBid = maxBid;
+}
+
+/** The colony won a plot for an object: lots.ts calls this at the lot's settle. The tile becomes the colony's, bare. */
+export function siteProject(state: GameState, id: PrestigeId, tile: number): void {
+  waitingForSite(state, id);
+  edit(state).projects.find((p) => p.id === id)!.plot = tile;
+  Object.assign(state.tiles[tile]!, { owner: COLONY_SELLER, outfit: null });
 }

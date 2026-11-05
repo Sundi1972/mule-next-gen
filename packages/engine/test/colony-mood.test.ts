@@ -90,7 +90,7 @@ describe('C23: the colony\'s happiness (RULE-20)', () => {
     state.air = 55;
     state.treasury.salesTax = 9 / PERCENT;
     state.players[0]!.money += 2_500;
-    state.colony!.projects.push({ id: 'park', stage: 'standing', funded: { credits: 0, goods: {} }, monthsLeft: null, plot: null, since: 1, plaque: {} });
+    state.colony!.projects.push({ id: 'park', stage: 'standing', funded: { credits: 0, goods: {} }, monthsLeft: null, plot: null, since: 1, plaque: {}, maxBid: null });
     expect(moodInputs(state, ['food', 'energy'])).toEqual({ short: 2, air: 55, tax: 9, broken: 0, prestige: PRESTIGE.park.prestige, gap: 2_500 });
   });
 
@@ -144,7 +144,7 @@ describe('C23: the colony\'s happiness (RULE-20)', () => {
     const state = colony();
     state.colony!.happiness = 30;
     state.treasury.money = 10_000;
-    state.colony!.projects.push({ id: 'park', stage: 'standing', funded: { credits: 0, goods: {} }, monthsLeft: null, plot: null, since: 1, plaque: {} });
+    state.colony!.projects.push({ id: 'park', stage: 'standing', funded: { credits: 0, goods: {} }, monthsLeft: null, plot: null, since: 1, plaque: {}, maxBid: null });
     const seen: number[] = [];
     for (let month = 0; month < 6; month++) {
       runColony(state, []);
