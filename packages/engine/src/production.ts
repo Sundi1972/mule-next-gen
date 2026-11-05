@@ -200,19 +200,30 @@ export interface EnergyOffPlot {
 
 /**
  * An owner's working plots but its Energy plots, in AM-17's turn-off order: biggest use first, then the one whose full
- * output is worth least at the store's posted price, then tile order. A factory whose non-Energy inputs are not in
- * stock is left out: it runs in production's second pass, after the raw plots and the listed factories, on the inputs
- * made this month and the Energy left over, and so turns nothing else off. `cold` multiplies every use; by default it
- * is the cold snap's factor if one is among this month's filed events.
+ * output is worth least at the store's posted price, then tile order. Factories are fed from the owner's stock in
+ * factory order, then tile order, each reserving its non-Energy inputs; one the stock left can't feed is left out: it
+ * runs in production's second pass, after the raw plots and the listed factories, on the inputs made this month and
+ * the Energy left over, and so turns nothing else off. `cold` multiplies every use and is the caller's to give:
+ * production passes the cold snap's factor for the month it runs; a reader valuing next month passes 1 (no snap is
+ * known ahead; this month's filed events describe the month just produced).
  */
-export function energyOffOrder(state: GameState, playerId: string, cold = coldFactor(state.monthEvents)): EnergyOffPlot[] {
+export function energyOffOrder(state: GameState, playerId: string, cold: number): EnergyOffPlot[] {
   const owner = state.players.find((p) => p.id === playerId);
   if (!owner) return [];
   const at = new Map(state.tiles.map((t, i) => [t, i]));
   const worth = (p: EnergyOffPlot) => state.store.posted[p.tile.outfit as Good] * p.full;
+  const fed = new Set<Tile>();
+  const left = { ...owner.stock };
+  for (const good of PROCESSED_GOODS) {
+    for (const tile of state.tiles.filter((t) => t.owner === playerId && t.outfit === good)) {
+      if (!hasStock(left, feedOf(good))) continue;
+      addStock(left, feedOf(good), -1);
+      fed.add(tile);
+    }
+  }
   return state.tiles
     .filter((t) => t.owner === playerId && t.outfit && t.outfit !== 'energy' && t.outfit !== 'greenBelt')
-    .filter((t) => !isFactory(t.outfit!) || hasStock(owner.stock, feedOf(t.outfit)))
+    .filter((t) => !isFactory(t.outfit!) || fed.has(t))
     .map((tile) => ({
       tile,
       use: energyUseOf(state, tile) * cold,
@@ -327,11 +338,11 @@ export function runProduction(state: GameState): {
     const feed = feedOf(good);
     const parts: Part[] = [{ why: 'factory', delta: fit.output }];
     if (isOff) {
-      // Turned off it still files its line: the share it made, or 0 when the factories before it took its inputs. A
-      // share that rounds to 0 takes no inputs: nothing is spent for nothing.
+      // Turned off it still files its line. Its inputs are there: a listed factory's were reserved for it
+      // (energyOffOrder), a second-pass one is turned off only when it holds them. A share of output that rounds to 0
+      // takes no inputs: nothing is spent for nothing.
       const share = Object.fromEntries(Object.entries(feed).map(([g, q]) => [g, offInput(q)]));
-      if (offShare(fit.output) === 0) parts.push({ why: 'energyOff', delta: 0 - fit.output });
-      else if (hasStock(owner.stock, share)) {
+      if (offShare(fit.output) > 0 && hasStock(owner.stock, share)) {
         addStock(owner.stock, share, -1);
         switchOff(parts);
       } else parts.push({ why: 'energyOff', delta: 0 - fit.output });

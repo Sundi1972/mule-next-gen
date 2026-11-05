@@ -329,23 +329,6 @@ describe('AM-17: a turned-off factory', () => {
     expect(p(state).stock.alloy).toBe(0);
   });
 
-  it('FM-factory-off: turned off without its share of inputs (the one left on took them) it makes 0 and takes nothing', () => {
-    const state = colony();
-    // A (hills, 3 months: makes 4) and B (hills: makes 3, so 20% is 1) each use 2; 2 Energy runs one. B is worth less.
-    const [a, b] = lay(state, [{ good: 'alloy', terrain: 'hills', runMonths: 3 }, { good: 'alloy', terrain: 'hills' }]);
-    Object.assign(p(state).stock, { energy: 2, smithore: 2 });
-
-    const run = runProduction(state);
-
-    // A runs first in tile order and takes both Smithore; B's ⌈0.2 × 2⌉ = 1 is gone.
-    expect(lineOf(run, state, a!)?.made).toBe(4);
-    expect(isOff(run, state, b!)).toBe(true);
-    expect(lineOf(run, state, b!)?.made).toBe(0);
-    expect(p(state).stock.alloy).toBe(4);
-    expect(p(state).stock.smithore).toBe(0);
-    expect(p(state).stock.energy).toBe(0);
-  });
-
   it('B-AC-energy-off: a factory and a mine in one list: the factory (use 2) and the mine (use 2) tie, the one worth less goes off', () => {
     const state = colony();
     const [mine, tile] = lay(state, [{ good: 'smithore', out: 2 }, { good: 'alloy', terrain: 'hills', runMonths: 3 }]);
