@@ -970,6 +970,19 @@ export const COLONY = {
 };
 
 /**
+ * The colony score at game over (G-5 RULE-25): each term turned into credits, so they add. Placeholders, tuned at the
+ * end (HC-25).
+ */
+export const COLONY_SCORE = {
+  /** Credits for each point the air is cleaner than POLLUTION.airMax. */
+  perCleanPoint: 100,
+  /** Credits for each point of the colony's prestige. */
+  perPrestige: 1_000,
+  /** The happiness factor: `low` at happiness 0, `high` at 100, straight between. */
+  factor: { low: 0.8, high: 1.2 },
+};
+
+/**
  * The goods auction, played live as in the original: goods come up one at a
  * time, each with a status screen and then a walk. Times are in
  * milliseconds of game time; the server steps the auction on a fixed tick.
