@@ -481,7 +481,7 @@ export interface GoodPlan {
   corner: { units: number; premium: number };
   /**
    * Units it buys up to, as far as its money goes: what keeps it whole next month (wholeNextMonth), while it holds less
-   * and the store sells the good (STRATEGIST.buyShortfall); 0 otherwise. It never sells under that, short or not.
+   * and the store sells the good (STRATEGIST.buyShortfall); 0 otherwise. While short it sells none of them either.
    */
   mustHold: number;
 }
@@ -498,16 +498,20 @@ export function goodPlan(obs: GameState, mind: Mind, good: Good): GoodPlan {
     const now = afterTax(obs, expectedPrices(obs, good).sell);
     for (let k = values.block; k < values.keep.length; k++) values.keep[k] = Math.min(values.keep[k]!, now - 1);
   }
-  // Short for next month is a loss, not a small cost (Heiko, 5 Nov). It never sells under what keeps it whole, short or
-  // not, and whether or not the store sells: a unit sold there is next month's loss, and with the store out it can't buy
-  // it back. While the store sells the good and it holds less, each unit up to that is worth at least the store's ask,
-  // so it buys it there or cheaper from a player, never dearer.
+  // Short for next month is a loss, not a small cost (Heiko, 5 Nov). While it holds less than what keeps it whole it
+  // sells none of it, store or no store: with the store out it could not buy a unit back. At or above that it sells its
+  // surplus down to the screen's need, unitValues' own floor (Heiko's choice of 6 Nov, "sell surplus"). While the store
+  // sells the good and it is short, each unit up to that is worth at least the store's ask, so it buys it there or
+  // cheaper from a player, never dearer.
   const whole = STRATEGIST.buyShortfall.includes(good) ? wholeNextMonth(obs, mind.me, good) : 0;
-  for (let k = 0; k < whole; k++) values.keep[k] = Infinity;
-  values.floorUnits = Math.max(values.floorUnits, whole);
+  const short = p.stock[good] < whole;
+  if (short) {
+    for (let k = 0; k < whole; k++) values.keep[k] = Infinity;
+    values.floorUnits = Math.max(values.floorUnits, whole);
+  }
   // The store's line is the good's that is up: a draft of a good still in the queue has no ask yet, and keeps its values.
   const ask = whole > 0 && obs.auction?.good === good ? storeSellLine(obs) : null;
-  const mustHold = ask !== null && p.stock[good] < whole ? whole : 0;
+  const mustHold = ask !== null && short ? whole : 0;
   for (let k = 0; k < mustHold; k++) values.buy[k] = Math.max(values.buy[k] ?? 0, ask!);
   const reserve = cashReserve(obs, mind);
   const budget = Math.max(0, Math.min(p.money * STRATEGIST.budgetShare, p.money - reserve));
@@ -534,11 +538,11 @@ export function goodPlan(obs: GameState, mind: Mind, good: Good): GoodPlan {
 }
 
 /**
- * What the seat must hold of a good at the auction to be whole next month, in the engine's order: upkeep eats its Food
- * and drinks its Water, then every good spoils and the depot keeps what it can; next development is hungry under the
- * household's Food, and next production halves a plot short of its Energy, or a farm whose owner is short of Water.
- * Water counts only for a seat with a farm to water: without one, going short costs it nothing. 0 for other goods.
- * Its twin is value.ts unitValues' `block` (the units next month's needs take); #385's resource-value model replaces both.
+ * The units of a good the seat must hold at the auction to be whole next month; #385's resource-value model replaces it
+ * and its twin, value.ts unitValues' `block`. In the engine's order: upkeep eats its Food and drinks its Water, then
+ * every good spoils and the depot keeps what it can; next development is hungry under the household's Food, and next
+ * production halves a plot short of its Energy, or a farm whose owner is short of Water. Water counts only for a seat
+ * with a farm to water: without one, going short costs it nothing. 0 for other goods.
  */
 export function wholeNextMonth(obs: GameState, me: string, good: Good): number {
   const kept = (n: number) => Math.ceil(Math.min(n, UPKEEP.depotCapacity) / (1 - GOOD_CONFIG[good].spoilage));
