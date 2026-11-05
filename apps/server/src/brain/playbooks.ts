@@ -1,6 +1,6 @@
 /**
  * When a seat's brain asks for its playbooks, and which takes effect: the land grant's at the land grant's start, and the
- * development's and the auction's (RULE-A2 rows 3-4) at each of those phases' start.
+ * auction's at the auction's start, asked in the production show (spec A RULE-A2, AM-A16).
  */
 import { BRAIN, type GameState, type Playbook, type PlayerId } from '@mule/engine';
 import {
@@ -162,10 +162,10 @@ export class Playbooks {
   }
 
   /**
-   * Asks each Smart seat's writer for its edits to `phase` in the slack before it (RULE-A2 rows 3-4): the development
-   * as the land grant ends, the auction as the development ends, with the development's outcome from `facts`, the
-   * phase's public facts read before the next phase opens. Returns at once; the phase's start (takePhase) cancels a
-   * call still open. No whatIf: its month sim plays land-grant playbooks.
+   * Asks each Smart seat's writer for its edits to `phase` in the slack before it: the game asks the auction's in the
+   * production show (spec A RULE-A2, AM-A16), with the development's outcome from `facts`, its public facts read before
+   * they reset. Returns at once; the phase's start (takePhase) cancels a call still open. No whatIf: its month sim plays
+   * land-grant playbooks.
    */
   askPhase(state: GameState, phase: EditPhase, facts: readonly PhaseFact[]): void {
     if (!this.options.source) return;
