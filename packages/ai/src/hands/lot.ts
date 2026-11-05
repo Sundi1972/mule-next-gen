@@ -66,7 +66,7 @@ export class LotHand {
   private reset(state: GameState, key: string, lot: Listing): void {
     const obs = observe(state, this.mind.me);
     const money = obs.players.find((p) => p.id === this.mind.me)!.money;
-    const value = lot.item.kind === 'plot' ? plotValue(obs, this.mind, lot.item.y * obs.width + lot.item.x) : muleValue(obs, this.mind);
+    const value = lot.item.kind === 'plot' ? plotValue(obs, this.mind, lot.item.y * obs.width + lot.item.x) : muleValue(obs, this.mind, lot.item.outfit);
     this.key = key;
     const room = lot.item.kind === 'plot' ? plotRoom(obs, this.mind) : Infinity;
     this.limit = Math.max(0, Math.min(money - cashReserve(obs, this.mind), value, room));
