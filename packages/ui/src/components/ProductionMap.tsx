@@ -26,7 +26,7 @@ import { cx, SLOT_COLOR, type Good, type Slot } from './tokens';
  */
 
 /** Why a plot's output moved from its base. The view may carry reasons this list lacks: they still show by sign. */
-export type ShowReason = 'cluster' | 'species' | 'trait' | 'pollution' | 'noEnergy' | 'noWater' | 'special' | 'floor' | (string & {});
+export type ShowReason = 'cluster' | 'species' | 'trait' | 'pollution' | 'noEnergy' | 'energyOff' | 'noWater' | 'special' | 'floor' | (string & {});
 
 export interface ShowLine {
   x: number;
@@ -249,12 +249,13 @@ function useTargets(map: RefObject<HTMLDivElement>, t: number, flyStart: number)
 
 const signed = (n: number) => (n > 0 ? `+${n}` : `−${-n}`);
 const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
-const HALVES = new Set<ShowReason>(['noWater', 'noEnergy']);
-const HALF_ICON: Partial<Record<ShowReason, Good>> = { noWater: 'water', noEnergy: 'energy' };
+/** A cut for a missing good reads as its share, not a number: half without Water, a fifth for a plot turned off (AM-17). */
+const CUTS: Partial<Record<ShowReason, string>> = { noWater: '½', noEnergy: '½', energyOff: '⅕' };
+const HALF_ICON: Partial<Record<ShowReason, Good>> = { noWater: 'water', noEnergy: 'energy', energyOff: 'energy' };
 
-/** A part's badge: green for a bonus; amber for a loss; red with the missing good for a halving. */
+/** A part's badge: green for a bonus; amber for a loss; red with the missing good for a cut. */
 function badgeTone(why: ShowReason, delta: number): string {
-  if (HALVES.has(why)) return 'bg-alert text-white';
+  if (CUTS[why]) return 'bg-alert text-white';
   return delta > 0 ? 'bg-ok text-on-holo' : 'bg-warn text-void';
 }
 
@@ -435,7 +436,7 @@ function PlotBars({ line, t, times, flyAt: flyStart, tv, colour }: { line: ShowL
               className={cx('flex items-center rounded-chip font-mono font-bold leading-none shadow-chip animate-[show-badge-in_0.3s_ease-out]', badgeTone(p.why, p.delta), tv ? 'gap-0.5' : '', chip)}
             >
               {HALF_ICON[p.why] && <GoodIcon good={HALF_ICON[p.why]!} size={tv ? 10 : 6} />}
-              {HALVES.has(p.why) ? '½' : signed(p.delta)}
+              {CUTS[p.why] ?? signed(p.delta)}
             </span>
           ))}
         </span>
