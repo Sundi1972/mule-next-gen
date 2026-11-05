@@ -1,4 +1,4 @@
-import { RuleError, WALK, type GameState, type Good } from '@mule/engine';
+import { RuleError, tradeInterval, WALK, type GameState, type Good } from '@mule/engine';
 import { describe, expect, it } from 'vitest';
 import { GRANT_TICK_MS, MuleGame } from '../src/mule-game.js';
 import { fakeContext, readyAll, seats } from './fake-context.js';
@@ -59,6 +59,9 @@ function toTheLine(game: MuleGame, advance: (ms: number) => void, id: string, di
   expect(walker(game, id).line).toBe('store');
 }
 
+/** The time n units take at one line, on RULE-3's curve (tradeInterval), rounded up to whole ticks. */
+const unitsMs = (n: number) => Math.ceil(Array.from({ length: n }, (_, i) => tradeInterval(i)).reduce((x, y) => x + y, 0) / WALK.tickMs) * WALK.tickMs;
+
 /** The fake clock runs one auction tick per call: step it a tick at a time. */
 const ticks = (advance: (ms: number) => void, ms: number) => {
   for (let t = 0; t < ms; t += WALK.tickMs) advance(WALK.tickMs);
@@ -100,15 +103,16 @@ describe('RULE-1 and RULE-3: at the store\'s line units trade by themselves, one
     const need = game.viewFor('s2').auction!.status.find((r) => r.id === 's2')!.need;
     toTheLine(game, advance, 's2', 'down');
     const at = stock(state, 's2', good);
-    ticks(advance, 1_000);
+    // Two equal windows, the first as long as its first two units take: at a steady pace the second would sell the same.
+    const window = unitsMs(2);
+    ticks(advance, window);
     const afterOne = at - stock(state, 's2', good);
-    ticks(advance, 1_000);
+    ticks(advance, window);
     const afterTwo = at - stock(state, 's2', good);
-    // Speeding up: the second second sells more than the first (at a steady 400 ms it would sell the same).
-    expect(afterOne, 'the first second sells a few').toBeGreaterThanOrEqual(2);
-    expect(afterTwo - afterOne, 'the next second sells more').toBeGreaterThan(afterOne);
+    expect(afterOne, 'the first window sells a few').toBeGreaterThanOrEqual(2);
+    expect(afterTwo - afterOne, 'the next window sells more').toBeGreaterThan(afterOne);
     // Selling below next month's need is allowed and shown, never asked: nothing stops it but the player.
-    ticks(advance, 2_000);
+    ticks(advance, unitsMs(12));
     expect(stock(state, 's2', good), 'sold down past the need, with nothing asked').toBeLessThan(Math.max(1, need));
     game.handle('s2', { type: 'ready' });
     const left = stock(state, 's2', good);
@@ -126,9 +130,9 @@ describe('RULE-1 and RULE-3: at the store\'s line units trade by themselves, one
     walk();
     const shelf = state.store.stock[good];
     toTheLine(game, advance, 's2', 'up');
-    ticks(advance, 2_000);
+    ticks(advance, unitsMs(10));
     const bought = shelf - state.store.stock[good];
-    expect(bought, 'two seconds at the line, with nothing chosen').toBeGreaterThanOrEqual(10);
+    expect(bought, 'ten units\' time at the line, with nothing chosen').toBeGreaterThanOrEqual(10);
     expect(stock(state, 's2', good)).toBeGreaterThanOrEqual(bought);
     game.handle('s2', { type: 'walkStep', dir: 'down' });
     const after = state.store.stock[good];
@@ -157,7 +161,7 @@ describe('RULE-1 and RULE-3: at the store\'s line units trade by themselves, one
     toTheLine(game, advance, 's2', 'up');
     for (let i = 0; i < 400 && walker(game, 's1').line !== 'store'; i++) advance(WALK.tickMs);
     game.handle('s1', { type: 'walk', dir: 'stop' });
-    ticks(advance, 2_000);
+    ticks(advance, unitsMs(10));
     const got = { s1: stock(state, 's1', good) - had.s1, s2: stock(state, 's2', good) - had.s2 };
     expect(got.s1, 'Heiko was served').toBeGreaterThan(0);
     expect(got.s2, 'Mia was served').toBeGreaterThan(0);
