@@ -22,6 +22,8 @@ import {
   emptyStock,
   GOOD_CONFIG,
   GOODS,
+  HAPPINESS,
+  moodBand,
   MS_PER_SECOND,
   POLLUTION,
   rollPhase,
@@ -37,6 +39,7 @@ import {
   type EventKey,
   type GameState,
   type MonthReport,
+  type MoodBand,
 } from '@mule/engine';
 import { simSeats, type TablePlays } from './lineup.js';
 import type { FloorMomentCounts } from './floor-turn.js';
@@ -251,6 +254,17 @@ const WAVE_TWO: readonly EventKey[] = [
   'packageFromHome',
 ];
 
+/** G-5 C26's planning social events (C29: the sim reports them by mood band). */
+const SOCIAL: readonly EventKey[] = ['festival', 'generalStrike', 'emigrationWave', 'immigrationWave', 'blamedForUnrest'];
+const MOOD_BANDS: readonly MoodBand[] = ['thriving', 'content', 'restless', 'unhappy', 'unrest'];
+
+/** The mood a month's planning roll read: last month's month end, or HAPPINESS.start in month 1; null without a colony. */
+function rollMood(state: GameState): MoodBand | null {
+  if (!state.colony) return null;
+  const last = state.colony.monthEnds.find((g) => g.month === state.month - 1);
+  return moodBand(last?.happiness ?? HAPPINESS.start);
+}
+
 /** Months with this many events or more share the report's last column. */
 const EVENT_COLUMNS = 4; // literal-ok: the report's last column, 4 or more events a month; presentation only
 
@@ -369,10 +383,21 @@ function main() {
   const forcedMonthEvents: PhaseEvents[] = [];
   const politics = argText('politics') !== 'off';
   const pol = { elections: 0, filled: 0, taxes: [] as number[], taxPaid: 0, terms: 0 };
+  /** Planning months by the mood their roll read, each social event's count by that band, and the strikes production felt. */
+  const zero = () => Object.fromEntries(MOOD_BANDS.map((b) => [b, 0])) as Record<MoodBand, number>;
+  const mood = { months: zero(), events: Object.fromEntries(SOCIAL.map((k) => [k, zero()])) as Record<string, Record<MoodBand, number>>, strikesFelt: 0 };
   /** Each game's colony score at each month's end; empty games without the council. */
   const colonyPaths: number[][] = [];
   // Read once the land grant opens: by then the month's election is closed and the Governor has set the tax.
   const onPhase = (s: Parameters<NonNullable<Parameters<typeof playGame>[2]>['onPhase'] & {}>[0]) => {
+    if (s.phase === 'planning') {
+      const band = rollMood(s);
+      if (band) {
+        mood.months[band]++;
+        for (const e of s.monthEvents) if (e.phase === 'planning' && mood.events[e.key]) mood.events[e.key]![band]++;
+      }
+    }
+    if (s.phase === 'production') mood.strikesFelt += (s.history.at(-1)?.events ?? []).filter((e) => e.key === 'generalStrike').length;
     if (s.phase !== 'landGrant' || !s.politics) return;
     pol.taxes.push(Math.round(s.treasury.salesTax * 100)); // literal-ok: the tax in whole percent for the report, display only
     if (s.politics.election) {
@@ -525,6 +550,16 @@ function main() {
       ? `     Politics: ${pol.elections} elections, ${pct(pol.filled, pol.elections * 2)} of offices filled; Governor's tax ${quantile(pol.taxes, 0)} / ${quantile(pol.taxes, 0.5)} / ${quantile(pol.taxes, 1)}% (min / median / max); ${(pol.taxPaid / games).toFixed(0)} cr sales tax and ${(pol.terms / games).toFixed(1)} terms a game` // literal-ok: an election fills two offices (Governor, Sheriff); 0.5 is the median tax
       : '     Politics: off',
   );
+  if (politics) {
+    const bands = (counts: Record<MoodBand, number>) => MOOD_BANDS.map((b) => counts[b]).join(' / ');
+    console.log(`     Social events by the mood their roll read (${MOOD_BANDS.join(' / ')}): planning months ${bands(mood.months)} (no check)`);
+    for (const key of SOCIAL) {
+      const rates = MOOD_BANDS.map((b) => pct(mood.events[key]![b], mood.months[b])).join(' / ');
+      console.log(`       ${key}: ${bands(mood.events[key]!)}, a month ${rates}`);
+    }
+    const called = MOOD_BANDS.reduce((n, b) => n + mood.events.generalStrike![b], 0);
+    console.log(`       general strikes called ${called}, felt unpaid in production ${mood.strikesFelt}`);
+  }
   for (const line of colonyScoreLines(colonyPaths)) console.log(line);
   console.log('\nPosted prices (min / median / 90th percentile / max):');
   for (const good of GOODS) {

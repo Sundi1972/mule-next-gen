@@ -245,7 +245,6 @@ export class VoteHand {
     act({ type: 'propose', proposal });
   }
 
-  /** G-5 C25: an AI Governor pays a strike it can afford and commissions the most prestige the fund can pay for, by persona. */
   /**
    * G-5 C25 (AM-10): the AI Governor pays the strike, mends what is damaged, the most prestige first, then commissions
    * the most prestige the fund still covers, with its site bid; and gives an object waiting for its site a bid.
