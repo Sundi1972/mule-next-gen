@@ -229,7 +229,8 @@ export const STRIKE_PAY_LINE: BannerSlot = {
 export function StrikeWaiting({ game }: { game: MuleView }) {
   const strike = strikeOf(game);
   const governor = game.players.find((p) => p.id === game.politics?.governor);
-  if (game.phase !== 'planning' || !strike || strike.paid || !governor) return null;
+  // While the Governor is still planning, the ready card's waiting list names them already: one card, not two.
+  if (game.phase !== 'planning' || !strike || strike.paid || !governor || !(governor.ready || governor.isAi)) return null;
   return (
     <div className="flex shrink-0 items-center gap-3 rounded-panel border border-holo-line bg-panel p-3" data-testid="waiting-governor">
       <PlayerMark slot={toSlot(governor.slot)} size={40} />

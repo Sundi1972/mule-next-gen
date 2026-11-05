@@ -298,7 +298,6 @@ async function throughTheLandAuction(page: Page, board: () => MuleView): Promise
   }
 }
 
-/** Walking is on, so development is the arcade screen; like politics.ts and full-game.ts, it runs on its clock. */
 /**
  * The general strike (C37), front to back: C26's event that calls it is not built yet, so it starts as the server's
  * tests start it, with Lena governing and the fund able to pay. Her phone's Now card pays; the server and the TV agree.
@@ -325,6 +324,7 @@ async function theGovernorPaysTheStrike({ server, code, phone, tv, lenaId, room,
   console.log(`✓ B-AC-37-2/4: Lena's phone pays the Food strikers; the server has it paid, the fund ${fmt(fundBefore)} → ${fmt(colony().fund)} cr, the TV reads "${paid}" and "${news}"`);
 }
 
+/** Walking is on, so development is the arcade screen; like politics.ts and full-game.ts, it runs on its clock. */
 async function goToThePub(page: Page): Promise<void> {
   await page.locator('[data-phase=development]').waitFor({ timeout: within(PHASE_MS.development) });
 }
