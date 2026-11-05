@@ -277,10 +277,17 @@ describe('the brain at the table', { timeout: 30_000 }, () => {
     expect(move).toMatchObject({ by: 'llm', line: MODEL_LINE, pick: { id: 'B', key: optionB.key, label: optionB.label } });
   });
 
-  // B-AC-1's chat half. Since the 5 Nov start values every phase's first line is a top pick's template (a Smart seat's
-  // asks are close calls, which come later), so RULE-2's one line a phase holds the model's line back: over 4 months
-  // neither AI's reaches the chat. A known gap, raised to the PM on 5 Nov with options.
-  it.todo("B-AC-1: a Smart seat's model line reaches every screen's chat");
+  // A Smart seat's asks are close calls, which come after its routine top picks in a phase; those speak no template
+  // line (PM ruling, 5 Nov, option a), so the phase's one line waits for the model's.
+  it("B-AC-1: a Smart seat's model line reaches every screen's chat", async () => {
+    const spenderName = AI_NAMES[1]!;
+    const sdk = decisions((_n, params) => (requestOf(params).seat === spenderName ? reply('B', MODEL_LINE) : reply('A', '')));
+    const { brain } = watched(smart(sdk));
+    const t = table({ humans: ['Heiko', 'Mia'], ais: 2, brain, maxMonths: 4 });
+    const spender = t.ais[1]!;
+    const shownEverywhere = () => t.screens.every((s) => s.chat.some((m) => m.from === spender.id && m.text === MODEL_LINE));
+    expect(await t.runUntil(shownEverywhere)).toBe(true);
+  });
 
   it('B-AC-1 (AM-14): every screen receives AI lines in the land grant, development and the auction, each after the view of the phase it was said in', async () => {
     // Each line said, with the phase of the decision that said it: not the game's phase when the line is delivered.
