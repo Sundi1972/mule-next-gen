@@ -603,6 +603,18 @@ stay local.
   - **The test** is T-AC-13: a forced throw mid-game gives a file with `ended: 'error'`, and its replay throws at the
     same step and is identical. Positive control: a replay that swallows the throw is not identical.
 
+- **AM-6 (2026-11-05, WS3 ruling for WS9's AM-20): per-good goods-auction playbooks need no new field.**
+  - **The shape (still `v: 1`):** a seat's goods-auction play is one `PlaybookEntry` per good, per seat, per month:
+    `{ seat, month, phase: 'auction', playbook }`, whose `auction` part carries only that good. It is written at that
+    good's status step. No `good` marker, no new phase value.
+  - **The replay** matches playbooks strictly by order, `seq` and content (`replay.ts::ReplayScript.playbook`), never
+    by `(seat, month, phase)`, so several auction entries for one seat in one month replay as recorded.
+  - **Condition 1:** seats write in seat order within one step.
+  - **Condition 2:** a good's play is the latest auction entry for that seat and month written at or before that
+    good's status step. The month's first entry is the whole month's draft; its later-good parts are stale by design.
+  - **Owed by WS9's PR-3:** a T-AC-11 row with two goods and two auction entries for one seat, whose replay is
+    identical.
+
 ## §9 · Ownership Boundaries `[handoff]`
 
 No ownership change.
