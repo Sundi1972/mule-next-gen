@@ -24,8 +24,10 @@ import {
   tileIndex,
   UPKEEP,
   walkSeconds,
-  energyOffOrder,
+  baseOffOrder,
+  baseUseOf,
   energyUseOf,
+  waterUseOf,
   type AiLevelConfig,
   type AiPersonaWeights,
   type GameState,
@@ -70,7 +72,8 @@ export function yieldOf(obs: GameState, tile: Tile, outfit: Outfit, me: string):
       const { energy: _e, ...inputs } = RECIPES[outfit].inputs;
       return { made: fit.output, energy: fit.energy, inputs, air, crew: UPKEEP.crew.factory };
     }
-    return { made: rawOutput(obs, probe), energy: energyUseOf(obs, probe), inputs: {}, air, crew: UPKEEP.crew.raw };
+    const inputs: Partial<Stock> = outfit === 'water' ? {} : { water: waterUseOf(obs, probe) };
+    return { made: rawOutput(obs, probe), energy: energyUseOf(obs, probe), inputs, air, crew: UPKEEP.crew.raw };
   } finally {
     obs.tiles[index] = tile;
   }
@@ -263,27 +266,26 @@ export function unitValues(obs: GameState, o: Outlook, good: Good, mind: Mind): 
     const eat = needsOf(obs, me).food;
     block = eat + Math.ceil(eat / keepRate);
     use = (monthWalkSeconds(obs, mind) * (1 / DEV_WALK.hungerPaceMin - 1) * sec) / block;
-  } else if (good === 'water' && need > 0) {
-    const farms = mine.filter((t) => UPKEEP.irrigated.includes(t.outfit as never));
-    const drink = needsOf(obs, me).water;
-    if (farms.length > 0) {
-      block = drink + Math.ceil(drink / keepRate);
-      use = (farms.reduce((n, t) => n + rawOutput(obs, t), 0) * (1 - UPKEEP.shortOutputShare) * afterTax(obs, P('food'))) / block;
-    }
-  } else if (good === 'energy') {
-    // AM-17: the plants' net output covers the plots first; a unit short keeps on the plot energyOffOrder would turn
-    // off at that point, worth what that plot loses turned off, over each unit of its use. Next month, so no cold snap.
-    const order = energyOffOrder(obs, me, 1);
-    const net = mine.filter((t) => t.outfit === 'energy').reduce((n, t) => n + Math.max(0, rawOutput(obs, t) - energyUseOf(obs, t)), 0);
+  } else if (good === 'energy' || good === 'water') {
+    // AM-17 and its Water twin: the own producers' net output covers, in order, the household's drink (Water), the
+    // other base good's producers (a well's Energy, a plant's Water), then the plots; a unit short keeps on the plot
+    // baseOffOrder would turn off at that point, worth what that plot loses turned off, over each unit of its use.
+    // Next month, so no cold snap.
+    const other = good === 'energy' ? 'water' : 'energy';
+    const order = baseOffOrder(obs, me, good, 1);
+    const net = mine.filter((t) => t.outfit === good).reduce((n, t) => n + Math.max(0, rawOutput(obs, t) - baseUseOf(obs, t, good)), 0);
+    const first =
+      (good === 'water' ? needsOf(obs, me).water : 0) + mine.filter((t) => t.outfit === other).reduce((n, t) => n + baseUseOf(obs, t, good), 0);
     // Each unit of use, from the plot that goes off last (the back of the order) to the one that goes off first.
     const units = order
       .flatMap((p) => Array<number>(p.use).fill(afterTax(obs, (1 - UPKEEP.offOutputShare) * p.full * P(p.tile.outfit as Good)) / p.use))
       .reverse();
-    const short = Math.max(0, units.length - net);
-    if (short > 0) {
+    const short = Math.max(0, first + units.length - net);
+    if (short > 0 && units.length > 0) {
       block = Math.ceil(short / keepRate);
-      // The seat's k-th unit covers the plots' (net + k)-th; the units spoilage takes count as the last one short.
-      perUnit = Array.from({ length: block }, (_, k) => units[net + Math.min(k, short - 1)]!);
+      // The seat's k-th unit covers the (net + k)-th of the month's uses; one the drink or a producer takes counts as
+      // the plot that goes off last; the units spoilage takes count as the last one short.
+      perUnit = Array.from({ length: block }, (_, k) => units[Math.max(0, Math.min(units.length - 1, net + Math.min(k, short - 1) - first))]!);
     }
   } else if (good === 'medicine' && need > 0) {
     block = Math.ceil(need / keepRate);
@@ -295,7 +297,7 @@ export function unitValues(obs: GameState, o: Outlook, good: Good, mind: Mind): 
   for (const t of mine) {
     if (!isFactory(t.outfit!)) continue;
     const q = RECIPES[t.outfit].inputs[good];
-    if (!q || good === 'energy') continue;
+    if (!q || good === 'energy' || good === 'water') continue;
     const units = Object.values(RECIPES[t.outfit].inputs).reduce((n, x) => n + (x ?? 0), 0);
     const each = afterTax(obs, factoryFit(obs, t, t.outfit, me).output * P(t.outfit)) / units;
     const add = Math.ceil(q / keepRate);
@@ -311,7 +313,7 @@ export function unitValues(obs: GameState, o: Outlook, good: Good, mind: Mind): 
   const depot = full ? Math.ceil(UPKEEP.depotCapacity / Math.max(0.05, keepRate)) : 99;
   const eaten = good === 'food' || good === 'water' ? needsOf(obs, me)[good] : 0;
   const length = Math.max(block, eaten + depot) + 1;
-  const floorUnits = good === 'food' || good === 'energy' ? Math.min(block, need) : 0;
+  const floorUnits = good === 'food' || good === 'energy' || good === 'water' ? Math.min(block, need) : 0;
 
   const keep: number[] = [];
   const buy: number[] = [];
