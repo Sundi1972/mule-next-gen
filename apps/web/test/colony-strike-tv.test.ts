@@ -80,7 +80,7 @@ function textOf(html: string, testid: string): string {
     depth += m[1] ? -1 : 1;
     end = m.index;
   }
-  return html.slice(from, end).replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+  return html.slice(from, end).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
 const strikers = (html: string) => [...html.matchAll(/data-testid="striker-(\d+)-(\d+)"/g)].map((m) => `${m[1]},${m[2]}`).sort();

@@ -1011,8 +1011,11 @@ export const COLONY = {
   fundBuysGoods: true,
   /** The Federation's grant into the fund at each upkeep, in credits; flat until a scaling rule is tuned. */
   grant: { perMonth: 150 },
-  /** What the strikers of a general strike want from the fund to go back to work, in credits (G-5 RULE-26). */
-  strike: { cost: 250 },
+  /**
+   * A general strike (G-5 RULE-26): what the strikers want from the fund to go back to work, in credits, and the share
+   * of its output each plot of the struck good makes while they are unpaid (UBER-AC-6).
+   */
+  strike: { cost: 250, output: 0.2 },
 };
 
 /**

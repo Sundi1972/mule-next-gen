@@ -5,6 +5,7 @@ import { Speaker, TvTicker, tvSpeakerAt } from '../chat/Chat';
 import { boardWalkers, dealLine, dealSpeed, newestFirst, shipWants, ShipWants, SIDE_WORD, skippedLine, StatusTable, StoreBox, TvReadout, WaitingToPick, type DealRow } from '../components/AuctionParts';
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { BuildSite, ColonyGauges, ColonyScoreBand, TvWinner } from '../components/Colony';
+import { StrikeBadge, StrikeMap } from '../components/Strike';
 import { CollapseBanner, ColonyPanel, LeagueTable, WinnerCard } from '../components/MonthEnd';
 import { joinUrl, Qr } from '../components/Qr';
 import { Scaled } from '../components/Scaled';
@@ -136,8 +137,11 @@ export function TvHeader({ game, title, seconds, extra, gauges = true }: { game:
     <>
       <header className="flex items-end justify-between gap-6">
         <div className="flex flex-col gap-1">
-          <span className="label-caps text-base!">
-            Month {game.month} / {game.maxMonths}
+          <span className="flex items-center gap-3">
+            <span className="label-caps text-base!">
+              Month {game.month} / {game.maxMonths}
+            </span>
+            {gauges && <StrikeBadge strike={game.colony?.strike} />}
           </span>
           <h1 className="font-display text-5xl font-semibold leading-none" data-testid="tv-phase">
             {title}
@@ -326,7 +330,9 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
         {phase === 'development' && <SharedClock seconds={secondsUntil(game.phaseEndsAt, now) ?? 0} total={DEVELOPMENT.fullSeconds} size="tv" />}
         <div className="flex min-h-0 flex-1 gap-6">
           <div className="flex w-[700px] shrink-0 flex-col gap-3">
-            <HoloMap width={game.width} height={game.height} tiles={tiles} cursor={game.lit} density="tv" hideGround className="w-full" />
+            <StrikeMap view={game} size="tv">
+              <HoloMap width={game.width} height={game.height} tiles={tiles} cursor={game.lit} density="tv" hideGround className="w-full" />
+            </StrikeMap>
             <div className="flex items-center justify-between font-mono text-sm text-ink-3">
               <span>ROOM {table.code}</span>
               <span>
