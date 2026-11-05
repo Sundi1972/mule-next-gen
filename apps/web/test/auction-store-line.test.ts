@@ -5,7 +5,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { MuleGame } from '../../server/src/mule-game.js';
-import { lineHint, lineMoment, toggleSide, walkHint } from '../src/components/AuctionParts';
+import { dealSpeed, keepWords, lineHint, lineMoment, toggleSide, walkHint } from '../src/components/AuctionParts';
 import type { TableClient } from '../src/net/client';
 import { ClientProvider } from '../src/net/react';
 import { Auction } from '../src/phone/Auction';
@@ -124,7 +124,7 @@ describe('the auto-trade amendment on the phone: at the store line units trade b
     const view = game.viewFor('s1');
     const html = phoneScreen(view, 's1');
     const name = { food: 'Food', water: 'Water', energy: 'Energy' }[view.auction!.good as 'food'] ?? '';
-    expect(textOf(html, 'line-hint')).toBe(`Buying ${name} from the store… Step down off the line to stop.`);
+    expect(textOf(html, 'line-hint')).toBe(`Buying ${name} from the store at ${view.auction!.storeSells} cr, faster and faster. Tap ▼ to stop.`);
     for (const gone of ['line-question', 'line-go', 'amount', 'sell-confirm']) expect(tagOf(html, gone), gone).toBeNull();
     expect(tagOf(html, 'hold-up')).not.toBeNull();
     expect(tagOf(html, 'hold-down')).not.toBeNull();
@@ -188,10 +188,11 @@ describe('the line, in pure parts', () => {
     expect(lineMoment({ id: 'a', side: 'buyer', line: 'store' }, [deal('b', 'store')])).toEqual({ kind: 'line', house: 'store' });
   });
 
-  it('"show, don\'t stop": selling below next month\'s need says what you keep, and never asks', () => {
-    expect(lineHint({ kind: 'trading', house: 'store' }, 'seller', 'water', 1, 3)).toEqual({ line: 'Selling Water to the store: you keep 1 of the 3 you need.', how: 'Step up off the line to stop.' });
-    expect(lineHint({ kind: 'trading', house: 'ship' }, 'seller', 'crystite', 4, 0)).toEqual({ line: 'Selling Crystite to the ship…', how: 'Step up off the line to stop.' });
-    expect(lineHint({ kind: 'trading', house: 'store' }, 'buyer', 'food', 0, 2).how).toBe('Step down off the line to stop.');
+  it('variant A: the hint says what trades, at what price, faster and faster; what you keep is its own note, never a question', () => {
+    expect(lineHint({ kind: 'trading', house: 'store' }, 'seller', 'water', 27)).toEqual({ line: 'Selling Water to the store at 27 cr, faster and faster.', how: 'Tap ▲ to stop.' });
+    expect(lineHint({ kind: 'trading', house: 'ship' }, 'seller', 'crystite', 120)).toEqual({ line: 'Selling Crystite to the ship at 120 cr, faster and faster.', how: 'Tap ▲ to stop.' });
+    expect(lineHint({ kind: 'trading', house: 'store' }, 'buyer', 'food', 36).how).toBe('Tap ▼ to stop.');
+    expect(keepWords('water', 1, 3)).toBe('You keep 1 of the 3 Water you need next month.');
   });
 
   it('RULE-2: a tap on your own side keeps it; there is no Pass to toggle into', () => {
@@ -257,6 +258,12 @@ describe('WS6 variant A: the auction trades by itself, faster and faster, on the
     expect(textOf(html, 'keep')).toBe(`You keep ${have} of the ${need} ${name} you need next month.`);
     expect(tagOf(html, 'have')).toContain('text-warn');
     expect(textOf(html, 'line-hint')).not.toContain('you keep');
+  });
+
+  it('the speed follows WALK’s curve: 0 at the first unit, 1 from the floor on', () => {
+    expect(dealSpeed(0)).toBe(0);
+    expect(dealSpeed(1)).toBeGreaterThan(0);
+    expect(dealSpeed(20)).toBe(1);
   });
 
   it('RULE-2 (variant A): the switch says where a tap puts you', () => {

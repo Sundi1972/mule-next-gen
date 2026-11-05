@@ -1,4 +1,4 @@
-import { COLONY_SELLER, SHIP_ID, STORE_ID, type AuctionRole, type AuctionSide, type Good } from '@mule/engine';
+import { COLONY_SELLER, SHIP_ID, STORE_ID, tradeInterval, WALK, type AuctionRole, type AuctionSide, type Good } from '@mule/engine';
 import type { AuctionView, DealView, LandAuctionView, ListingView, MuleView, WalkerView } from '@mule/protocol';
 import { Button, Creature, cx, GOOD_NAME, GoodIcon, MuleIcon, PlayerMark, SLOT_COLOR, TERRAIN_NAME, useSeatSpecies, type BoardWalker, type Slot } from '@mule/ui';
 import type { ReactNode } from 'react';
@@ -514,10 +514,23 @@ const houseName = (house: string) => (house === SHIP_ID ? 'the ship' : 'the stor
  * The rail while units move at a line: what is trading, and how to stop. Selling below next month's need is shown,
  * never asked (the PM's ruling, "show, don't stop").
  */
-export function lineHint(m: Extract<LineMoment, { kind: 'trading' }>, side: 'buyer' | 'seller', good: Good, have: number, need: number): { line: string; how: string } {
+export function lineHint(m: Extract<LineMoment, { kind: 'trading' }>, side: 'buyer' | 'seller', good: Good, price: number): { line: string; how: string } {
   const name = GOOD_NAME[good];
-  const stop = side === 'buyer' ? 'Step down off the line to stop.' : 'Step up off the line to stop.';
-  if (side === 'seller' && need > 0 && have < need) return { line: `Selling ${name} to ${houseName(m.house)}: you keep ${have} of the ${need} you need.`, how: stop };
-  return { line: `${side === 'buyer' ? 'Buying' : 'Selling'} ${name} ${side === 'buyer' ? 'from' : 'to'} ${houseName(m.house)}…`, how: stop };
+  const what = side === 'buyer' ? `Buying ${name} from ${houseName(m.house)}` : `Selling ${name} to ${houseName(m.house)}`;
+  // Variant A (Heiko's pick): the price, and that it speeds up; one tap away from the line stops it.
+  return { line: `${what} at ${price} cr, faster and faster.`, how: side === 'buyer' ? 'Tap ▼ to stop.' : 'Tap ▲ to stop.' };
+}
+
+/**
+ * How fast a running deal moves now, 0 at its first unit to 1 at the top speed: from the units it has traded (the view's
+ * running count) and WALK's curve, so the board's chevrons light as the engine speeds up.
+ */
+export function dealSpeed(units: number): number {
+  return (WALK.tradeStartMs - tradeInterval(units)) / (WALK.tradeStartMs - WALK.tradeFloorMs);
+}
+
+/** "You keep 3 of the 5 Food you need next month.": selling into next month's need is shown, never asked. */
+export function keepWords(good: Good, have: number, need: number): string {
+  return `You keep ${have} of the ${need} ${GOOD_NAME[good]} you need next month.`;
 }
 

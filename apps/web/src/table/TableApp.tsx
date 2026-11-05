@@ -1,8 +1,8 @@
 import { DEV_WALK, DEVELOPMENT, GAME, POLITICS } from '@mule/engine';
 import type { DealView, MuleView, TableView } from '@mule/protocol';
-import { AirGauge, Button, cx, GOOD_NAME, GoodTag, HoloMap, PaceList, PlayerMark, SeatSpeciesProvider, SharedClock, StoreInterior, TERRAIN_NAME, TimeBar, Timer, WalkBoard, type CreatureWrap } from '@mule/ui';
+import { AirGauge, Button, cx, GOOD_NAME, GoodTag, HoloMap, PaceList, PlayerMark, SPEED_STEPS, speedStep, SeatSpeciesProvider, SharedClock, StoreInterior, TERRAIN_NAME, TimeBar, Timer, WalkBoard, type CreatureWrap } from '@mule/ui';
 import { Speaker, TvTicker, tvSpeakerAt } from '../chat/Chat';
-import { boardWalkers, dealLine, newestFirst, shipWants, ShipWants, SIDE_WORD, skippedLine, StatusTable, StoreBox, TvReadout, WaitingToPick, type DealRow } from '../components/AuctionParts';
+import { boardWalkers, dealLine, dealSpeed, newestFirst, shipWants, ShipWants, SIDE_WORD, skippedLine, StatusTable, StoreBox, TvReadout, WaitingToPick, type DealRow } from '../components/AuctionParts';
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { CollapseBanner, ColonyPanel, LeagueTable, WinnerCard } from '../components/MonthEnd';
 import { joinUrl, Qr } from '../components/Qr';
@@ -469,7 +469,7 @@ export function TvAuction({ table, game, auction }: { table: TableView<MuleView>
               lo={auction.lo}
               hi={auction.hi}
               walkers={walkers}
-              deals={auction.deals}
+              deals={auction.deals.map((d) => ({ ...d, speed: dealSpeed(d.units) }))}
               storeBuys={auction.storeBuys}
               storeSells={auction.storeSells}
               shipPays={auction.shipPays}
@@ -546,11 +546,25 @@ export function TvAuction({ table, game, auction }: { table: TableView<MuleView>
           )}
           {/* Each row is one line. A row that doesn't fit below the others wraps into a second column, which the clip hides. */}
           <ul className="flex min-h-0 flex-1 flex-col flex-wrap gap-2 overflow-hidden">
-            {deals.map(({ key, deal }) => (
-              <li key={key} className="w-full truncate rounded-control border border-holo bg-holo-soft px-3 py-2 font-mono text-lg font-bold text-holo">
-                {dealLine(game, deal)}
-              </li>
-            ))}
+            {deals.map(({ key, deal }) => {
+              // Variant A (Heiko's pick): each running deal shows its speed-up, as the board's counter does.
+              const steps = speedStep(dealSpeed(deal.units));
+              return (
+                <li key={key} className="flex w-full flex-col rounded-control border border-holo bg-holo-soft px-3 py-2 font-mono text-lg font-bold text-holo" data-testid="tv-deal">
+                  <span className="truncate">{dealLine(game, deal)}</span>
+                  <span className="flex items-center gap-2 text-base font-normal text-ink-2">
+                    <span className="text-2xl font-bold tracking-[-0.1em]" aria-label={`speed ${steps} of ${SPEED_STEPS}`} data-testid="tv-deal-speed">
+                      {Array.from({ length: SPEED_STEPS }, (_, k) => (
+                        <span key={k} className={k < steps ? 'text-holo' : 'text-ink-3/30'}>
+                          ›
+                        </span>
+                      ))}
+                    </span>
+                    faster and faster
+                  </span>
+                </li>
+              );
+            })}
           </ul>
           <p className={cx('mt-auto text-base leading-snug text-ink-2', auction.deals.length > 0 && 'hidden')}>
             {status
