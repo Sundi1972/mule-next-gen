@@ -311,7 +311,15 @@ and B-AC-4's negative case; WS1's colonist-shortage numbers are re-measured in P
 Heiko as a finding, not a silent tune.
 
 ## §8 · Amendments `[review-only]`
-None yet.
+```
+AM-1 · 2026-11-05 · lead (WS5) · at plan time
+target    §5 Delivery (rulebook)
+said      the rulebook chapter is rewritten in PR-2
+did       both PRs update docs/rulebook/store-and-prices.html#store-pricing-design and run build-index
+because   Heiko's rulebook rule: every PR that changes a rule or a number updates its chapter in the same PR
+goal      G-1, G-2, G-3 unchanged
+folded    plan Tasks 1.7 and 2.4
+```
 
 ## §9 · Ownership Boundaries `[handoff]`
 No ownership change. WS1 remains sole owner of `economy.ts`, `upkeep.ts` and its `config.ts` blocks (PRICE, MULE,
