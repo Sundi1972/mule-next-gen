@@ -78,6 +78,14 @@ describe('createGame', () => {
   ])("a %i-seat game's store starts with %i Food, 4 a seat (Heiko, 5 Nov)", (n, food) => {
     expect(newGame(n).store.stock.food).toBe(food);
   });
+
+  it.each([
+    [2, 10],
+    [4, 20],
+    [6, 30],
+  ])("a %i-seat game's store starts with %i Energy, 5 a seat (Heiko, 5 Nov)", (n, energy) => {
+    expect(newGame(n).store.stock.energy).toBe(energy);
+  });
 });
 
 describe('prices', () => {
