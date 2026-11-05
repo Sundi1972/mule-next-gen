@@ -254,31 +254,30 @@
 <p class="code-ref">In the code: <code>packages/engine/src/production.ts::runProduction</code> (the raw-plot loop and <code>halve</code>) · <code>config.ts::UPKEEP.shortOutputShare</code></p>
 <p class="owner">Kept current by: the Balance team (WS1).</p>
 
-<h2 id="water-use">Water: every plot uses it <span class="pill open">Being designed</span></h2>
+<h2 id="water-use">Water: every plot uses it <span class="pill designed">Designed</span></h2>
 <p>Heiko set this on 5 November: Water is a base resource like Food and Energy, so every plot uses some, not only farms. In his words: "Each plott should conusme some water. water is like food and energy a base ressource we msut ensure that this is reflected . not that only food plots need water".</p>
-<div class="box"><h4>The rules Heiko chose</h4>
+<div class="box"><h4>The rules</h4>
 <ol>
-<li><strong>Every working plot uses Water</strong>, by what it produces, the same way it uses Energy. Your household and crew still drink as today.</li>
-<li><strong>Short of Water works like short of Energy:</strong> the plot that uses most Water is turned off first, then the next, until the rest fit.</li>
-<li><strong>A turned-off plot produces 20%</strong> and uses neither Water nor Energy.</li>
+<li><strong>Your household and crew drink first</strong>, as today. Your plots get only the Water left after this month's drinking.</li>
+<li><strong>Every working plot uses Water</strong>: Food farms 2 ("crops drink most"), every other plot 1.</li>
+<li><strong>Energy is settled first, then Water.</strong> After any Energy cuts, if your Water can't cover the plots still running, the biggest Water user is turned off first, then the next, until the rest fit. A plot is never cut twice.</li>
+<li><strong>A turned-off plot produces 20%</strong> and uses neither Water nor Energy. Its line reads "Turned off: not enough Water (20%)".</li>
+<li><strong>Wells and power plants are never turned off.</strong> A well pays its own Water from its own output, as a plant pays its own Energy. A well's Energy and a plant's Water are taken last, from whatever your other plots leave.</li>
+<li>Today's rule, where only Food farms make half when you're short, goes away.</li>
 </ol></div>
 <div class="table-wrap"><table>
-<thead><tr><th>Plot, by what it produces</th><th class="n">Water a month today</th><th class="n">Water a month, new</th></tr></thead>
+<thead><tr><th>Plot, by what it produces</th><th class="n">Water a month</th><th class="n">Energy a month</th><th>Notes</th></tr></thead>
 <tbody>
-<tr><td>Food farm</td><td class="n">0 (but makes half if you are short)</td><td class="n">to be proposed</td></tr>
-<tr><td>Water well</td><td class="n">0</td><td class="n">to be proposed</td></tr>
-<tr><td>Energy plant</td><td class="n">0</td><td class="n">to be proposed</td></tr>
-<tr><td>Smithore, Crystite and Rare earth mines</td><td class="n">0</td><td class="n">to be proposed</td></tr>
-<tr><td>Alloy smelter, Electronics works</td><td class="n">0</td><td class="n">to be proposed</td></tr>
-<tr><td>Medicine lab</td><td class="n">1 as an input</td><td class="n">to be proposed</td></tr>
+<tr><td>Food farm</td><td class="n">2</td><td class="n">1</td><td>Crops drink most</td></tr>
+<tr><td>Water well</td><td class="n">1</td><td class="n">1</td><td>Pays its Water from its own output; its Energy is taken last</td></tr>
+<tr><td>Energy plant</td><td class="n">1</td><td class="n">1</td><td>Pays its Energy from its own output; its Water is taken last</td></tr>
+<tr><td>Smithore, Crystite, Rare earth mine</td><td class="n">1</td><td class="n">2</td><td>Water washes the ore</td></tr>
+<tr><td>Alloy smelter</td><td class="n">1</td><td class="n">2</td><td>1 Water added to its recipe (quenching)</td></tr>
+<tr><td>Electronics works</td><td class="n">1</td><td class="n">1</td><td>1 Water added to its recipe (rinsing)</td></tr>
+<tr><td>Medicine lab</td><td class="n">1</td><td class="n">1</td><td>The 1 Water already in its recipe is its use</td></tr>
 </tbody></table></div>
-<div class="box next"><h4>What is being designed</h4>
-<p>Heiko chose to have the Balance team (WS1) propose the Water use per plot type and per factory, recheck the Energy table at the same time, and measure both in the simulator before he confirms the numbers. Still to settle:</p>
-<ul>
-<li>Whether a well pays its own Water from its own output, as an Energy plant pays its Energy.</li>
-<li>The order when a player is short of both, so that no plot is cut twice.</li>
-</ul>
-<p>Today's rule (below) stays until it lands, and it goes with it: only Food farms make half when you are short. This joins the Energy rule as one change about base resources.</p></div>
+<div class="box why"><h4>Why it is like this</h4><p>Heiko, 5 Nov: Water is a base resource, so every plot uses it, and a shortage works the same way as Energy: one rule to learn. He chose 2 for farms over the proposed 1. Measured before building (40 simulated games, farms at 1): months with a plot cut fell from 71&ndash;77% under the Energy rule alone to 59&ndash;68%, because the cross-use comes last. Taking it first deepened shortages to 72&ndash;76%. Without the computer players learning the rule, cuts reached 85&ndash;87%, so Water ships together with their valuation.</p></div>
+<div class="box next"><h4>What is changing</h4><p>Designed; the Balance team (WS1) builds it as AM-18 in its own pull request, about 1.5 to 2 days, after the Energy rule and the computer players' buying fix land. It is re-measured with farms at 2 before it merges.</p></div>
 <p class="owner">Kept current by: the Balance team (WS1).</p>
 
 <h2 id="water-shortage">Short of Water today, until the new rule lands: farms make half <span class="pill built">In the game</span></h2>
