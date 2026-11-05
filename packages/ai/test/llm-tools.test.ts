@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createGame, type GameState, type Playbook } from '@mule/engine';
+import { BRAIN, createGame, type GameState, type Playbook } from '@mule/engine';
 import { OFFERED, TOOL_DEFS, toolsFor, type WhatIfSim } from '../src/llm/tools.js';
 
 const fixture = (): GameState =>
@@ -20,16 +20,19 @@ const SAMPLE: Record<string, unknown> = {
   whatIf: { edits: [] },
 };
 
-/** The month sim for seat `a` of `state`: every player a Trader with its own seed; the edits ignored, its playbook a bare strategy. */
+/** The month sim for seat `a` of `state`: every player a Trader with its own seed; its playbook a bare strategy, and every edit refused. */
 const simFor = (state: GameState): WhatIfSim => ({
   seats: state.players.map((p, i) => ({ id: p.id, persona: 'trader', level: 'trader', seed: 500 + i })),
-  playbook: (): Playbook => ({
-    v: 1,
-    seat: 'a',
-    month: state.phase === 'upkeep' ? state.month + 1 : state.month,
-    phase: 'planning',
-    strategy: { kind: 'builder', moneyMaker: null, monopolyTarget: null, cashFloor: 0, landTarget: { plots: 3, byMonth: 3 }, stances: {}, reason: 'test' },
-    by: 'engine',
+  playbook: (edits) => ({
+    playbook: {
+      v: 1,
+      seat: 'a',
+      month: state.phase === 'upkeep' ? state.month + 1 : state.month,
+      phase: 'planning',
+      strategy: { kind: 'builder', moneyMaker: null, monopolyTarget: null, cashFloor: 0, landTarget: { plots: 3, byMonth: 3 }, stances: {}, reason: 'test' },
+      by: 'engine',
+    } satisfies Playbook,
+    rejected: edits.map((e) => ({ path: e.path, to: e.to, why: 'out of bounds' })),
   }),
 });
 
@@ -98,6 +101,27 @@ describe("Claude's tools (C9)", () => {
     expect(answer.month).toBe(1);
     expect(typeof answer.worth.total).toBe('number');
     expect(tools.run('whatIf', { edits: [] })).toEqual(first);
+  });
+
+  it('whatIf names the edits the validator refused, so the Worth it answers is not taken for theirs', () => {
+    const state = fixture();
+    const answer = JSON.parse(toolsFor(state, 'a', simFor(state)).run('whatIf', { edits: [{ path: '/strategy/cashFloor', to: -5 }] }).content) as {
+      rejected: { path: string; why: string }[];
+    };
+    expect(answer.rejected).toEqual([{ path: '/strategy/cashFloor', to: -5, why: 'out of bounds' }]);
+  });
+
+  it('whatIf plays at most BRAIN.whatIfsPerWrite months for one set of tools, then answers limit', () => {
+    const state = fixture();
+    const tools = toolsFor(state, 'a', simFor(state));
+    for (let i = 0; i < BRAIN.whatIfsPerWrite; i++) expect(tools.run('whatIf', { edits: [] }).is_error).toBeUndefined();
+    expect(JSON.parse(tools.run('whatIf', { edits: [] }).content)).toEqual({ error: 'limit' });
+  });
+
+  it('a sim whose playbook throws answers tool_failed, never an exception', () => {
+    const state = fixture();
+    const sim: WhatIfSim = { ...simFor(state), playbook: () => { throw new Error('refused'); } };
+    expect(JSON.parse(toolsFor(state, 'a', sim).run('whatIf', { edits: [] }).content)).toEqual({ error: 'tool_failed' });
   });
 
   it('T-AC-A9: an unknown tool or a malformed input answers is_error with a code, never an exception', () => {
