@@ -1,4 +1,4 @@
-import { allPrices, BRAIN, GAME, GOODS, observe, type DevelopmentPlay, type GameState, type Good, type GoodPlay, type LandGrantPlay, type Outfit, type PhaseOutcome, type Playbook, type Strategy } from '@mule/engine';
+import { allPrices, BRAIN, GAME, GOODS, MS_PER_SECOND, observe, type DevelopmentPlay, type GameState, type Good, type GoodPlay, type LandGrantPlay, type Outfit, type PhaseOutcome, type Playbook, type Strategy } from '@mule/engine';
 import { OPTION_IDS, toOptions, type TableTalk } from '../decider.js';
 import type { Persona } from '../personas.js';
 import { GOOD_NAME, landDecision, outfitName } from '../strategist.js';
@@ -288,7 +288,7 @@ function developmentLines(d: DevelopmentPlay | undefined): string[] {
   if (!d) return ['No development play is drafted.'];
   return [
     `Route: ${d.route.length === 0 ? 'none' : d.route.map(ACT_TEXT).join(', ')}.`,
-    `Time budget: ${Math.round(d.timeBudgetMs / 1_000)} s of your development time.`,
+    `Time budget: ${Math.round(d.timeBudgetMs / MS_PER_SECOND)} s of your development time.`,
     `If the corral is sold out: ${d.ifSoldOut}.`,
   ];
 }
