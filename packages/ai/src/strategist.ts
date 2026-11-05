@@ -500,8 +500,8 @@ export function goodPlan(obs: GameState, mind: Mind, good: Good): GoodPlan {
   }
   // Short for next month is a loss, not a small cost (Heiko, 5 Nov). While it holds less than what keeps it whole and the
   // store sells the good, each unit up to that is worth at least the store's ask, so it buys it there or cheaper from a
-  // player, never dearer, and it sells none of them. Otherwise its floor is the screen's need, unitValues' own, and the
-  // rest is for sale (Heiko's choice of 6 Nov, "sell surplus").
+  // player, never dearer, and it sells none of them. Otherwise its floor is the screen's need and the rest is for sale
+  // (Heiko's choice of 5 Nov, "sell surplus").
   const whole = STRATEGIST.buyShortfall.includes(good) ? wholeNextMonth(obs, mind.me, good) : 0;
   // The store's line is the good's that is up: a draft of a good still in the queue has no ask yet, and keeps its values.
   const ask = whole > 0 && obs.auction?.good === good ? storeSellLine(obs) : null;
@@ -510,7 +510,11 @@ export function goodPlan(obs: GameState, mind: Mind, good: Good): GoodPlan {
     values.buy[k] = Math.max(values.buy[k] ?? 0, ask!);
     values.keep[k] = Infinity;
   }
-  values.floorUnits = Math.max(values.floorUnits, mustHold);
+  // Otherwise it keeps the screen's need, what upkeep eats or its plots burn, whatever its own plots may make: Water
+  // only for a seat with a farm to water, as wholeNextMonth counts it.
+  const floor = mustHold > 0 ? mustHold : whole > 0 ? values.need : 0;
+  for (let k = 0; k < floor; k++) values.keep[k] = Infinity;
+  values.floorUnits = Math.max(values.floorUnits, floor);
   const reserve = cashReserve(obs, mind);
   const budget = Math.max(0, Math.min(p.money * STRATEGIST.budgetShare, p.money - reserve));
   const a = obs.auction;

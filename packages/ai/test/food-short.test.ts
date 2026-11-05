@@ -203,7 +203,7 @@ function cannotPay(good: Good): void {
 
 /**
  * A seat holding what keeps it whole and `surplus` more, beside a short rival with money. It is not short, so its
- * surplus is for sale (Heiko's choice of 6 Nov, "sell surplus"): it may sell down to the screen's need, what upkeep or
+ * surplus is for sale (Heiko's choice of 5 Nov, "sell surplus"): it may sell down to the screen's need, what upkeep or
  * production is about to take, and never lower, though the rival keeps bidding up after it. Returns the units sold.
  */
 interface Surplus {
@@ -215,8 +215,8 @@ interface Surplus {
   shelf?: number;
   /** A short rival with money bids for it. */
   rival?: boolean;
-  /** A second seller (ai3, or ai2 when ai3 is the seat) holds 20 and shares the store's buying line with it. */
-  coSeller?: boolean;
+  /** A second seller (ai3, or ai2 when ai3 is the seat) holds this many units and shares the store's buying line with it. */
+  coSeller?: number;
   /** The store buys at this many times the good's reference price, for up to 20 units, and sells a credit above. */
   storeBuys?: number;
 }
@@ -229,7 +229,7 @@ function sellsSurplus(good: Good, id: string, surplus: number, o: Surplus = {}):
     (s) => {
       shortOf(good, id, MONEY, o.held ?? ((t) => whole(t) + surplus), o.plots ?? PLOTS[good]!)(s);
       if (o.rival ?? true) shortOf(good, RIVAL(id), MONEY)(s);
-      if (o.coSeller && co !== RIVAL(id)) s.players.find((p) => p.id === co)!.stock[good] = 20;
+      if (o.coSeller && co !== RIVAL(id)) s.players.find((p) => p.id === co)!.stock[good] = o.coSeller;
     },
     o.shelf ?? 40,
   );
@@ -272,8 +272,8 @@ describe('B-AC-food-short: a seat short of Food buys from the store when it can 
     keepsNeed('food', id!, 3);
   });
 
-  it.each(ROWS)('B-AC-food-short: %s (%s) holding 3 more than keeps it whole, sharing the store’s buying line with another seller, sells no lower than the screen need', (id) => {
-    keepsNeed('food', id!, 3, { shelf: 0, coSeller: true });
+  it.each(ROWS)('B-AC-food-short: %s (%s) holding 3 more than keeps it whole, sharing the store’s buying line at 3 times the reference price with another seller, sells no lower than the screen need', (id) => {
+    keepsNeed('food', id!, 3, { shelf: 0, coSeller: 20, storeBuys: 3, rival: false });
   });
 
   /** A seat holding the screen's need and 2 more, under what keeps it whole, beside a short rival; the store sells `shelf`. */
@@ -387,8 +387,8 @@ describe('B-AC-energy-short: a seat short of Energy buys from the store when it 
     keepsNeed('energy', id!, 3);
   });
 
-  it.each(ROWS)('B-AC-energy-short: %s (%s) holding 3 more than keeps it whole, sharing the store’s buying line with another seller, sells no lower than the screen need', (id) => {
-    keepsNeed('energy', id!, 3, { shelf: 0, coSeller: true });
+  it.each(ROWS)('B-AC-energy-short: %s (%s) holding 3 more than keeps it whole, sharing the store’s buying line at 3 times the reference price with another seller, sells no lower than the screen need', (id) => {
+    keepsNeed('energy', id!, 3, { shelf: 0, coSeller: 20, storeBuys: 3, rival: false });
   });
 
   it.each(ROWS)('B-AC-energy-short: %s (%s) with its own Energy plots, not short, keeps the screen need when the store buys at the reference price', (id) => {
