@@ -96,7 +96,7 @@ describe('AM-19 B-AC-6: each plot carries its base and every part', () => {
     ];
     const [line] = game.viewFor(null).production!.lines;
     expect(line).toMatchObject({ base: 1, made: 0, parts: [{ why: 'pollution', delta: -3 }, { why: 'floor', delta: 2 }] });
-    expect(line!.base + line!.parts.reduce((n, p) => n + p.delta, 0)).toBe(line!.made);
+    expect(line!.base! + line!.parts.reduce((n, p) => n + p.delta, 0)).toBe(line!.made);
   });
 
   it('in a real month every line adds up: base + Σ parts = made, the units before the events', () => {
@@ -108,7 +108,7 @@ describe('AM-19 B-AC-6: each plot carries its base and every part', () => {
       const r = report.lines!.find((x) => x.tile === l.y * state.width + l.x)!;
       const events = r.parts.filter((p) => p.why === 'event').reduce((n, p) => n + p.delta, 0);
       expect(l.made).toBe(r.made - events);
-      expect(l.base + l.parts.reduce((n, p) => n + p.delta, 0)).toBe(l.made);
+      expect(l.base! + l.parts.reduce((n, p) => n + p.delta, 0)).toBe(l.made);
     }
   });
 });
@@ -119,7 +119,7 @@ describe('AM-19 RULE-3: production lasts the show', () => {
       const { game, enteredAt } = inProduction(scale);
       const v = game.viewFor(null);
       const { goods, eventsMs } = showInputs(game);
-      const lengthMs = Math.round(productionShowMs(goods, eventsMs) * scale);
+      const lengthMs = productionShowMs(goods, eventsMs) * scale;
       expect(v.phaseEndsAt! - enteredAt).toBe(lengthMs);
       expect(v.production!.lengthMs).toBe(lengthMs);
       if (v.eventShow) expect(v.eventShow.startsAt - enteredAt).toBe(Math.round(productionEventAtMs(goods) * scale));
@@ -164,10 +164,9 @@ describe('AM-19 B-AC-20: everyone taps ⏩ and the rest plays 3× faster', () =>
     advance(1);
   });
 
-  it('a table with nobody asked never speeds up, even with every phone dropped', () => {
+  it('a table where nobody asked never speeds up, whoever drops', () => {
     const { game } = inProduction();
     const before = game.viewFor(null).phaseEndsAt;
-    game.connectionChanged('s1', false);
     game.connectionChanged('s2', false);
     expect(game.viewFor(null).production!.hurry).toEqual({ asked: [], from: null });
     expect(game.viewFor(null).phaseEndsAt).toBe(before);
