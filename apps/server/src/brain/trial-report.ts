@@ -114,8 +114,9 @@ export interface TrialReport {
    * The strategy and playbook calls (C6): one per write that reached the model, however many tool rounds it took; a
    * budget line is a write never made. Late: the 'late' lines, each after its call's line, or alone when the deadline
    * came between rounds. In the trial each write is waited for, so late counts only writes past their own wait.
+   * Failed: a call that brought back no usable reply (refused by the API, an error, a timeout or an unusable reply).
    */
-  writes: { calls: number; late: number; toolRounds: number; usd: number };
+  writes: { calls: number; late: number; failed: number; toolRounds: number; usd: number };
   playbooks: boolean;
   /** Of the Smart seats' playbooks that took effect in finished games, those carrying Claude's accepted edits. */
   edits: Share;
@@ -209,14 +210,21 @@ export function trialReport(input: TrialInput): TrialReport {
   };
   const all = shareOf(asked);
   const writeLines = calls.filter(isWrite);
+  const notACall = (c: Pick<CallLine, 'outcome'>) => c.outcome === 'tool' || c.outcome === 'late' || c.outcome === 'budget';
+  const failedWrite = (c: Pick<CallLine, 'outcome'>) => !notACall(c) && c.outcome !== 'llm' && c.outcome !== 'fallback';
   const writes = {
-    calls: writeLines.filter((c) => c.outcome !== 'tool' && c.outcome !== 'late' && c.outcome !== 'budget').length,
+    calls: writeLines.filter((c) => !notACall(c)).length,
     late: writeLines.filter((c) => c.outcome === 'late').length,
+    failed: writeLines.filter(failedWrite).length,
     toolRounds: writeLines.filter((c) => c.outcome === 'tool').length,
     usd: sum(writeLines.map((c) => c.usd)),
   };
   const took = finished.flatMap((g) => g.playbooks.filter((p) => g.smart.includes(p.seat)));
-  const edits = { model: took.filter((p) => p.by === 'llm').length, of: took.length };
+  // A failed phase write (kind 'playbook') leaves the seat its own draft and records nothing, so it counts here as a
+  // playbook Claude did not edit; a failed land write is already here, as the engine's land playbook.
+  const finishedIds = new Set(finished.map((g) => g.id));
+  const phaseFailed = writeLines.filter((c) => c.kind === 'playbook' && failedWrite(c) && finishedIds.has(c.game)).length;
+  const edits = { model: took.filter((p) => p.by === 'llm').length, of: took.length + phaseFailed };
 
   // A silent seat-month, a stall or a game at its budget fails outright; the rest is judged on a complete run only.
   const ac1 = input.keyed
@@ -267,7 +275,7 @@ const verdictText = (v: Verdict) => v.toUpperCase();
 const reasonsText = (f: Record<FallbackReason, number>) =>
   `too slow ${f['too slow']}, busy ${f.busy}, budget ${f.budget}, off-list ${f['off-list']}, unreadable ${f.unreadable}, error ${f.error}`;
 const writesText = (w: TrialReport['writes']) =>
-  `${w.calls}, late ${w.late}${w.calls === 0 ? '' : ` (${((100 * w.late) / w.calls).toFixed(1)}%)`}, tool rounds ${w.calls === 0 ? 'n/a' : (w.toolRounds / w.calls).toFixed(2)} a call, ${usdText(w.usd)}`;
+  `${w.calls}, late ${w.late}${w.calls === 0 ? '' : ` (${((100 * w.late) / w.calls).toFixed(1)}%)`}, failed ${w.failed}, tool rounds ${w.calls === 0 ? 'n/a' : (w.toolRounds / w.calls).toFixed(2)} a call, ${usdText(w.usd)}`;
 const monthText = (c: MonthCounts, of: number) => `min ${c.min}, median ${c.median}, months with none ${c.silent} of ${of}`;
 
 /** The report as printed: the run, the figures for each acceptance criterion, then one verdict line for each. */
