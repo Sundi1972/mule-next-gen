@@ -461,10 +461,10 @@ export function TvAuction({ table, game, auction }: { table: TableView<MuleView>
   const picked = game.players.map((p) => ({ ...p, ready: pickedIn(game, p.id) }));
   return (
     <div className="flex h-[720px] w-[1280px] flex-col gap-3 bg-table px-10 py-6 text-ink" data-phase="auction" data-stage={auction.stage} data-testid={status ? 'tv-status' : 'tv-walk'}>
-      {/* On the board the deal rows and the help need the height (PM ruling, 5 Nov): one chat line, the newest, and
-          none while a deal runs, when the speaker's bubble on the board carries it. The status stage keeps three, which
-          it has room for (G-6). */}
-      <TvHeader game={game} title={`Auction · ${GOOD_NAME[auction.good]}`} gauges={false} {...(status ? {} : { chatLines: auction.deals.length > 0 ? 0 : 1 })} />
+      {/* On the board the deal rows and the help need the height, and a board that stays one size as deals come and go:
+          no chat ticker for the whole walk, the speakers' bubbles on the board carry it (PM rulings, 5 Nov). The status
+          stage keeps three lines, which it has room for (G-6). */}
+      <TvHeader game={game} title={`Auction · ${GOOD_NAME[auction.good]}`} gauges={false} {...(status ? {} : { chatLines: 0 })} />
       <div className="flex min-h-0 flex-1 gap-6">
         <div className={cx('flex min-w-0 flex-1 flex-col', status ? 'gap-3' : 'gap-2')}>
           {status ? (
