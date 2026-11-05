@@ -184,8 +184,11 @@ describe('the line, in pure parts', () => {
     expect(lineMoment({ id: 'a', side: 'buyer', line: 'store' }, [])).toEqual({ kind: 'line', house: 'store' });
     expect(lineMoment({ id: 'a', side: 'buyer', line: 'store' }, [deal('a', 'store')])).toEqual({ kind: 'trading', house: 'store' });
     expect(lineMoment({ id: 'a', side: 'seller', line: 'ship' }, [deal('ship', 'a')])).toEqual({ kind: 'trading', house: 'ship' });
-    // Someone else's deal at the store is not yours.
-    expect(lineMoment({ id: 'a', side: 'buyer', line: 'store' }, [deal('b', 'store')])).toEqual({ kind: 'line', house: 'store' });
+    // Two at one line take its units in turns: the deal names whoever got the last one, and the rail holds still.
+    expect(lineMoment({ id: 'a', side: 'buyer', line: 'store' }, [deal('b', 'store')])).toEqual({ kind: 'trading', house: 'store' });
+    expect(lineMoment({ id: 'a', side: 'seller', line: 'store' }, [deal('store', 'b')])).toEqual({ kind: 'trading', house: 'store' });
+    // One who can't pay (or holds none) is not trading, whoever else is.
+    expect(lineMoment({ id: 'a', side: 'buyer', line: 'store' }, [deal('b', 'store')], false)).toEqual({ kind: 'line', house: 'store' });
   });
 
   it('variant A: the hint says what trades, at what price, faster and faster; what you keep is its own note, never a question', () => {

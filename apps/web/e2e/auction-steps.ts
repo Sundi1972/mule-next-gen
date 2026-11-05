@@ -6,7 +6,7 @@
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { AI_HANDS, EXPORT_DEMAND, GAME, goodsMarket, LOTS, TAX, WALK, type Good } from '@mule/engine';
+import { AI_HANDS, EXPORT_DEMAND, freePlots, GAME, goodsMarket, LOTS, TAX, WALK, type GameState, type Good } from '@mule/engine';
 import type { AuctionView, MuleView } from '@mule/protocol';
 import { GOOD_NAME } from '@mule/ui';
 import { errors as playwrightErrors, type Browser, type Page } from 'playwright';
@@ -146,6 +146,7 @@ async function playTheLandAuction(browser: Browser, base: string, server: MuleSe
   console.log(`✓ three phones and a TV at table ${code}`);
   const truth = serverTruth(server, code);
   shipInPortThisMonth(server, code);
+  foodToSpare(server, code);
 
   // Month 1: everyone claims (Brix and Lena list theirs in month 2), so the grant ends early. Nothing is listed, so only the colony's lot can follow.
   // Month 1 opens on election day, which holds the desks until it is over.
@@ -182,6 +183,9 @@ async function playTheLandAuction(browser: Browser, base: string, server: MuleSe
   }
   console.log(`✓ UBER-AC-1 (WS6): month 1's goods went ${onServer.join(' → ')} on the server, with no declare stage on it, any phone or the TV`);
   console.log('✓ month 1: everyone claimed');
+  // A grant gives one claim a seat (5 Nov): Brix and Lena each list two plots later, so the test gives each a second.
+  givePlot(server, code, truth.idOf(brix));
+  givePlot(server, code, truth.idOf(lena));
 
   // Month 1's end has no clock (C20): every phone moves on to month 2.
   await everyone(phones, (p) => onToTheNextMonth(p.page));
@@ -1466,6 +1470,19 @@ async function keepEvidence(browser: Browser, seed: number): Promise<void> {
  * Test fixture: the export ship calls this month, so month 1's status screens have it in port. Its wishlist takes
  * Smithore too, the raw good most likely to come up in month 1, so a wanted good's own status screen is reached.
  */
+/** Gives a seat one more free plot, as a second claim would have. */
+function givePlot(server: MuleServer, code: string, seat: string): void {
+  const room = server.registry.get(code) as unknown as { game: { state: GameState; ctx: { changed(): void } } } | undefined;
+  check(room, `room ${code} is on the server`);
+  const plot = freePlots(room.game.state)[0];
+  check(plot, 'a free plot to give');
+  plot.owner = seat;
+  room.game.ctx.changed();
+}
+
+/** Enough Food that month 1's need (2 a seat) leaves some to sell. */
+const FOOD_TO_SPARE = 6;
+
 function shipInPortThisMonth(server: MuleServer, code: string): void {
   type Ship = { arrives: number; goods: Good[]; hold: Partial<Record<Good, number>> };
   const room = server.registry.get(code) as unknown as { game: { state: { month: number; players: unknown[]; ship: Ship }; ctx: { changed(): void } } } | undefined;
@@ -1474,6 +1491,17 @@ function shipInPortThisMonth(server: MuleServer, code: string): void {
   state.ship.arrives = state.month;
   if (!state.ship.goods.includes('smithore')) state.ship.goods.push('smithore');
   state.ship.hold.smithore ??= Math.ceil((EXPORT_DEMAND.smithore ?? 0) * state.players.length * GAME.exportShipEvery);
+  room.game.ctx.changed();
+}
+
+/**
+ * Every seat starts with Food to spare: the 5 Nov start values give each seat just the 2 its month-1 need asks for, and
+ * B-AC-4's cast (a seller, a buyer and a stayer) each needs some to sell.
+ */
+function foodToSpare(server: MuleServer, code: string): void {
+  const room = server.registry.get(code) as unknown as { game: { state: { players: { stock: Record<Good, number> }[] }; ctx: { changed(): void } } } | undefined;
+  check(room, `room ${code} is on the server`);
+  for (const p of room.game.state.players) p.stock.food = Math.max(p.stock.food, FOOD_TO_SPARE);
   room.game.ctx.changed();
 }
 

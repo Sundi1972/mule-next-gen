@@ -488,11 +488,11 @@ describe('the store and the ship on the board', () => {
     const store = trades.filter((t) => t.buyer === 'store');
     expect(store).toHaveLength(4);
     expect(store.every((t) => t.price === a(state).storeBuy)).toBe(true);
-    // Then the seller walks on down to the buyers waiting at the bottom.
+    // Then the seller walks on down, but the buyers standing at the bottom edge never trade (C2's pin).
     setWalk(state, 'p0', -1);
     trades.push(...run(state, 7_000));
-    expect(trades.slice(4).every((t) => t.seller === 'p0' && t.buyer !== 'store' && t.price < a(state).storeBuy)).toBe(true);
-    expect(trades.length).toBeGreaterThan(4);
+    expect(trades).toHaveLength(4);
+    expect(Math.round(walker(state, 'p0').price)).toBe(a(state).lo + 1);
   });
 
   it('lets the export ship in port buy from sellers at or under its price, paying a little less per unit', () => {

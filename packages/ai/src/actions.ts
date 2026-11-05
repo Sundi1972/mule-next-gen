@@ -151,10 +151,10 @@ const DESCRIBED = {
     type: 'declare',
     command: 'declare',
     phases: ['auction'],
-    does: () => "Buys, sells or passes on the good that is up; during the walk a switch jumps it to the new side's start edge.",
-    legalWhen: () => [AUCTION, 'This good has closed', 'You have none to sell'],
+    does: () => "Buys or sells the good that is up (everyone starts as a buyer); during the walk a switch jumps it to the new side's start edge.",
+    legalWhen: () => [AUCTION, 'This good has closed', 'You have none to sell', 'Everyone takes part in the auction'],
     cost: null,
-    args: { side: "'buyer', 'seller' or 'pass'" },
+    args: { side: "'buyer' or 'seller'" },
   },
   walk: {
     type: 'walk',

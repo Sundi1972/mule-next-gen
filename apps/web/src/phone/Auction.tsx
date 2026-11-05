@@ -56,7 +56,8 @@ export function Auction() {
   const onBoard = stage === 'walk' && mine !== undefined && mine.side !== 'pass';
   const walk = useWalkIntent(onBoard, auction?.good ?? '');
   // At a house's line units trade by themselves (RULE-1): the rail says so while they move.
-  const moment = lineMoment(stage === 'walk' ? mine : undefined, auction?.deals ?? []);
+  const canTrade = mine?.side === 'seller' ? (auction ? me.stock[auction.good] > 0 : false) : (view.players.find((p) => p.id === me.id)?.money ?? 0) >= (auction?.storeSells ?? Infinity);
+  const moment = lineMoment(stage === 'walk' ? mine : undefined, auction?.deals ?? [], canTrade);
 
   if (!auction) {
     return (

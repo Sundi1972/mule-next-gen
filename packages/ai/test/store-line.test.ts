@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { advancePhase, createGame, RuleError, shipPrice, stepAuction, WALK, type GameState, type Good, type Trade } from '@mule/engine';
+import { advancePhase, createGame, lineOf, RuleError, shipLine, shipPrice, storeBuyLine, storeSellLine, stepAuction, WALK, type GameState, type Good, type Trade } from '@mule/engine';
 import type { AiAction } from '../src/actions.js';
 import { applyAction } from '../src/play.js';
 import { AiSeat } from '../src/seat.js';
@@ -26,6 +26,13 @@ function auction(seed: number, arrange: (state: GameState) => void) {
   const trades: Trade[] = [];
   /** Per seat and good: the most units it said it wanted to end with during the walk, and what it ended with. */
   const goals = new Map<string, { goal: number; end: number }>();
+  /** Steps off a house line while the units it would still trade there had not moved: each one a unit given up. */
+  const abandoned: { seat: string; good: Good; wanted: number }[] = [];
+  const wantAtLine = new Map<string, { want: number; house: string; price: number }>();
+  const unitsAt = (s: AiSeat, line: { house: string; price: number }, side: string) => {
+    const hand = (s as unknown as { auction: { unitsAt: (st: GameState, side: string, l: typeof line) => number } }).auction;
+    return hand.unitsAt(state, side, line);
+  };
   for (let i = 0; i < 40_000 && state.auction!.stage !== 'over'; i++) {
     for (const s of seats)
       s.auctionTick(state, WALK.tickMs, (action) => {
@@ -50,8 +57,19 @@ function auction(seed: number, arrange: (state: GameState) => void) {
         else if (goals.has(key)) goals.get(key)!.end = end;
       }
     trades.push(...stepAuction(state, WALK.tickMs));
+    const b = state.auction!;
+    if (b.stage !== 'walk' || !b.good) continue;
+    for (const s of seats) {
+      const w = b.walkers.find((x) => x.id === s.id)!;
+      const line = lineOf(state, s.id);
+      const before = wantAtLine.get(s.id);
+      // Only a walk off a line that is still there counts: a house selling out or a good closing is not the hand's stop.
+      const stillThere = before && (before.house === 'store' ? (w.side === 'buyer' ? storeSellLine(state) : storeBuyLine(state)) : shipLine(state)) === before.price;
+      if (!line && before && before.want > 0 && stillThere) abandoned.push({ seat: s.id, good: b.good, wanted: before.want });
+      wantAtLine.set(s.id, line ? { want: unitsAt(s, line, w.side), ...line } : { want: 0, house: '', price: 0 });
+    }
   }
-  return { sent, trades, goals };
+  return { sent, trades, goals, abandoned };
 }
 
 describe('C4: the AI hands play the self-trading auction', () => {
@@ -70,6 +88,17 @@ describe('C4: the AI hands play the self-trading auction', () => {
     }
     expect(sent.some((s) => s.action.type === 'declare' && s.refused)).toBe(false);
   });
+
+  for (const seed of [5, 7, 11]) {
+    it(`C4: an AI stays at a house's line until the units it still wants there have traded, never stepping off first (seed ${seed})`, () => {
+      const { abandoned } = auction(seed, (state) => {
+        state.store.stock.food = 200;
+        for (const p of state.players) p.stock.food = 0;
+        for (const p of state.players) p.money = 2_000;
+      });
+      expect(abandoned).toEqual([]);
+    });
+  }
 
   it('B-AC-1 (AI): an AI with spare Smithore switches to sell and sells to the store at its line', () => {
     const { sent, trades } = auction(6, (state) => {

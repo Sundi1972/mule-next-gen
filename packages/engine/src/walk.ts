@@ -82,6 +82,14 @@ export function houseLineAt(market: WalkMarket, w: Walker): { house: string; pri
 }
 
 /**
+ * The lowest a seller walks or taps to: the house's buying line, or with no house buying, just above the buyers' edge,
+ * so a buyer standing there never trades (everyone starts there as a buyer, so standing still is how you buy nothing).
+ */
+function sellerFloor(board: WalkBoard, market: WalkMarket): number {
+  return market.floor() ?? board.lo + 1;
+}
+
+/**
  * One tap (G-2): one price step up or down from the walker's rounded price, within the same limits as walking (the
  * house lines, meeting the other side), and standing still after.
  */
@@ -95,7 +103,7 @@ export function stepWalker(board: WalkBoard, market: WalkMarket, playerId: strin
     const sellLine = market.houseSells?.price() ?? null;
     w.price = dir > 0 ? Math.max(w.price, Math.min(to, sellLine ?? Infinity, minAsk(board, market))) : Math.max(0, to);
   } else {
-    w.price = dir < 0 ? Math.min(w.price, Math.max(to, market.floor() ?? 1, maxBid(board, market), 1)) : to;
+    w.price = dir < 0 ? Math.min(w.price, Math.max(to, sellerFloor(board, market), maxBid(board, market), 1)) : to;
   }
   if (rounded(w) !== before) w.since = board.elapsed;
 }
@@ -136,7 +144,6 @@ export function stepBoard(board: WalkBoard, market: WalkMarket, dt: number): Sal
   board.ticks++;
   board.elapsed += dt;
   const sellLine = market.houseSells?.price() ?? null;
-  const floor = market.floor();
   const step = (board.speed * dt) / MS_PER_SECOND;
 
   // Walk. Buyers first, then sellers; nobody walks through an active walker of the other side: they meet.
@@ -150,7 +157,7 @@ export function stepBoard(board: WalkBoard, market: WalkMarket, dt: number): Sal
   for (const w of board.walkers) {
     if (w.side !== 'seller' || w.dir === 0) continue;
     const before = rounded(w);
-    if (w.dir < 0) w.price = Math.min(w.price, Math.max(w.price - step, floor ?? 1, maxBid(board, market), 1));
+    if (w.dir < 0) w.price = Math.min(w.price, Math.max(w.price - step, sellerFloor(board, market), maxBid(board, market), 1));
     else w.price += step;
     if (rounded(w) !== before) w.since = board.elapsed;
   }
