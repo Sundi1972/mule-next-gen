@@ -200,6 +200,12 @@ describe('B-AC-46-2: laws in force, three in force, and the retry wait', () => {
     expect(isDisabled('propose')).toBe(false);
     tap('propose');
     expect(sent).toEqual([{ type: 'propose', proposal: { kind: 'enact', law: 'emissionCap', setting: 50, replaces: 'exportTax' } }]);
+    // RULE-41 row 9: a new setting for a law already in force replaces nothing.
+    sent.length = 0;
+    tap('law-landTax-20');
+    expect(findTestid('replaces'), 'a law in force at a new setting asks no "This replaces:"').toBeUndefined();
+    tap('propose');
+    expect(sent).toEqual([{ type: 'propose', proposal: { kind: 'enact', law: 'landTax', setting: 20 } }]);
   });
 
   it("B-AC-46-2: a law in its retry wait is dimmed with the engine's words, and no setting can be picked", () => {
@@ -208,6 +214,24 @@ describe('B-AC-46-2: laws in force, three in force, and the retry wait', () => {
     mount(viewFor('s1', politics({ retry: { 'enact:pollutionTax': back } }), back - 1));
     expect(text('law-wait-pollutionTax')).toBe(`That proposal failed in month 3; it can come back in month ${back}`);
     for (const s of POLITICS.laws.pollutionTax.settings) expect(findTestid(`law-pollutionTax-${s}`)).toBeUndefined();
+  });
+
+  it("B-AC-46-2: a repeal in its retry wait is disabled, with the engine's words beside it", () => {
+    const back = 3 + POLITICS.council.retryMonths + 1;
+    mount(viewFor('s1', politics({ laws: { landTax: { setting: 10, since: 2 } }, retry: { 'repeal:landTax': back } }), back - 1));
+    expect(isDisabled('law-repeal-landTax')).toBe(true);
+    expect(text('law-repeal-wait-landTax')).toBe(`That proposal failed in month 3; it can come back in month ${back}`);
+    expect(isDisabled('law-landTax-20'), 'its enact does not wait').toBe(false);
+  });
+
+  it('B-AC-46-2: a law in force whose enact waits can still be repealed (RULE-41 row 4 keys the wait by kind)', () => {
+    const back = 3 + POLITICS.council.retryMonths + 1;
+    mount(viewFor('s1', politics({ laws: { landTax: { setting: 10, since: 2 } }, retry: { 'enact:landTax': back } }), back - 1));
+    byTestid('law-wait-landTax');
+    expect(isDisabled('law-repeal-landTax')).toBe(false);
+    tap('law-repeal-landTax');
+    tap('propose');
+    expect(sent).toEqual([{ type: 'propose', proposal: { kind: 'repeal', law: 'landTax' } }]);
   });
 
   it('B-AC-46-2 (negative): from its comeback month the law can be picked again', () => {
@@ -237,6 +261,12 @@ describe('B-AC-46-3: a pending proposal on the desk', () => {
     expect(props(byTestid('law-landTax-10'))['aria-pressed']).toBe(true);
     tap('change-cancel');
     byTestid('pending');
+    tap('pending-change');
+    tap('law-landTax-20');
+    tap('propose');
+    expect(sent).toEqual([{ type: 'propose', proposal: { kind: 'enact', law: 'landTax', setting: 20 } }]);
+    byTestid('pending');
+    expect(findTestid('picker-a'), 'once proposed, the desk is back on the pending card').toBeUndefined();
   });
 });
 
@@ -261,6 +291,10 @@ describe("B-AC-46-4: next month's vote on every other phone", () => {
     root = null;
     mount(viewFor('s2', politics()));
     expect(findTestid('agenda-law')).toBeUndefined();
+    act(() => root!.unmount());
+    root = null;
+    mount(viewFor('s2', politics({ proposal: pending, election: { stage: 'announce', ceremony: null, candidates: { governor: [] }, promises: {}, voted: [], done: [], waitingFor: [], result: {} } })));
+    expect(findTestid('agenda-law'), 'no agenda line while a vote is open').toBeUndefined();
   });
 });
 
@@ -275,5 +309,7 @@ describe('B-AC-46-6 (negative): without politics', () => {
   it("B-AC-46-6: while the votes are open the desk keeps today's sales tax and says when a law can be proposed", () => {
     mount(viewFor('s1', politics({ council: { stage: 'ballot', proposal: { kind: 'enact', law: 'landTax', setting: 10 }, proposer: 's1', impact: {}, voted: [], done: [], waitingFor: [], clockMs: 0, revealMs: 4000, result: null } })));
     expect(findTestid('picker-a')).toBeUndefined();
+    expect(findTestid('gov-tax'), "today's sales tax").toBeDefined();
+    expect(text('gov-law')).toContain('Propose once the votes are over');
   });
 });
