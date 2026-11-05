@@ -1,5 +1,5 @@
 import type { RawGood } from '@mule/engine';
-import { Creature, cx, GoodIcon, MuleIcon, SLOT_COLOR, TERRAIN_NAME } from '@mule/ui';
+import { Creature, cx, GoodIcon, MuleIcon, sickReason, SLOT_COLOR, TERRAIN_NAME } from '@mule/ui';
 import { useState, type CSSProperties } from 'react';
 import { useTableChat } from '../../chat/store';
 import { groundPips, plotName, toSlot } from '../../game/derive';
@@ -85,10 +85,64 @@ export function paceWords(seat: ArcadeSeat): { pct: number; line: string; short:
   return { pct, line: `Your pace ${pct}%: ${why}${andSick}`, short: hungry ? `Pace ${pct}%: ate ${food} of ${need} Food` : sick ? `Pace ${pct}%: sick` : `Pace ${pct}%`, next, slow: pct < 100 };
 }
 
-/** In the side room: the line always, the next month with a tap (a phone has no hover). */
+/** The roll call's sick tag, small: a white cross on the medicine colour, so it reads without the colour too. */
+function SickTag({ size }: { size: number }) {
+  return (
+    <span className="inline-flex shrink-0 items-center justify-center rounded-[4px] bg-g-medicine font-bold leading-none text-void" style={{ width: size, height: size, fontSize: size - 2 }} aria-hidden>
+      ✚
+    </span>
+  );
+}
+
+/**
+ * Sick this turn (ws6-ux AM-21, the PM's ruling A): the line names the sickness and its cause in the roll call's
+ * medicine colour, then the pace this turn (and the Food she ate, if she is hungry too); a tap says it struck as the
+ * turn began and what prevents it. At 667 the bar says it short.
+ */
+function SickLine({ seat, short }: { seat: ArcadeSeat; short: boolean }) {
+  const [open, setOpen] = useState(false);
+  const { me, self } = seat;
+  const pct = Math.round((self.condition?.conditionPace ?? 1) * 100);
+  const food = Math.min(me.stock.food, me.needs.food);
+  const hungry = food < me.needs.food;
+  return (
+    <button
+      type="button"
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={() => setOpen((o) => !o)}
+      className={cx('relative flex w-full flex-col pr-4 text-left font-display font-semibold leading-tight', short ? 'text-[11px]' : 'text-xs')}
+      data-testid="pace-line"
+      data-pct={pct}
+      data-sick="true"
+      aria-expanded={open}
+    >
+      {short ? (
+        <span className="flex items-center gap-1 text-g-medicine">
+          <SickTag size={11} /> {hungry ? `Sick · ate ${food} of ${me.needs.food} · ${pct}%` : `Sick · ${pct}% pace`}
+        </span>
+      ) : (
+        <>
+          <span className="flex items-start gap-1 text-g-medicine" data-testid="sick-cause">
+            <SickTag size={12} /> {sickReason(self.condition?.sickBecause)}
+          </span>
+          <span className="text-alert">{hungry ? `${pct}% pace this turn · you ate ${food} of ${me.needs.food} Food` : `${pct}% pace this turn`}</span>
+        </>
+      )}
+      <span className="absolute right-0 top-0 font-mono text-[10px] text-ink-3">{open ? '▴' : '▾'}</span>
+      {open && (
+        <span className="mt-0.5 block font-sans text-[11px] font-normal text-ink-2" data-testid="sick-why">
+          It struck as your turn began, with no Medicine to cure it. Have a Medicine in hand when a turn begins and sickness can’t slow you (it’s used up).
+        </span>
+      )}
+    </button>
+  );
+}
+
+/** In the side room: the line always, the next month with a tap (a phone has no hover). Sick, it says so and why. */
 export function PaceLine({ seat, short = false }: { seat: ArcadeSeat; short?: boolean }) {
   const [open, setOpen] = useState(false);
   const p = paceWords(seat);
+  if (seat.self.condition?.sick) return <SickLine seat={seat} short={short} />;
   return (
     <button
       type="button"
