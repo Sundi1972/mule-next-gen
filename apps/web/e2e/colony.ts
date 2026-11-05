@@ -4,7 +4,7 @@
  * game over's colony band, and the phone's colony score card, all carry the server's ColonyView.
  * Run with `pnpm --filter @mule/web exec tsx e2e/colony.ts`; replay with `MULE_E2E_SEED=<seed>`.
  */
-import { PRESTIGE, type GameState, type PrestigeId } from '@mule/engine';
+import { HAPPINESS, moodBand, PRESTIGE, type GameState, type PrestigeId } from '@mule/engine';
 import type { ColonyView, MuleIntent, MuleView } from '@mule/protocol';
 import { errors as playwrightErrors, type Page } from 'playwright';
 import { PHASE_MS } from '../../server/src/mule-game.js';
@@ -93,10 +93,10 @@ async function main(): Promise<void> {
     check((await gauges.locator('[data-testid^=gauge-]').count()) === 4, 'B-AC-34-3: the TV header shows four gauges');
     const wealth = `${fmt(colony().gauges.wealth)} cr`;
     await gauges.getByTestId('gauge-wealth').locator('[data-num]').filter({ hasText: wealth }).waitFor({ timeout: PRESS_MS });
-    check(colony().gauges.happiness === null, 'this base has no mood yet: the server’s happiness is null');
+    const mood = colony().gauges.happiness;
     const happiness = (await gauges.getByTestId('gauge-happiness').innerText()).replace(/\s+/g, ' ').trim();
-    check(happiness.includes('—') && happiness.includes('not yet'), `B-AC-34-3: happiness reads "—" and "not yet", got "${happiness}"`);
-    console.log(`✓ B-AC-34-3: the TV header shows the four gauges, wealth ${wealth} as the server has it, happiness not yet`);
+    check(mood === null ? happiness.includes('not yet') : happiness.includes(`${mood}`), `B-AC-34-3: happiness reads the server's ${mood ?? '"not yet"'}, got "${happiness}"`);
+    console.log(`✓ B-AC-34-3: the TV header shows the four gauges, wealth ${wealth} and happiness ${mood ?? 'not yet'} as the server has them`);
 
     // On through the month: ready, done with land, the pub, the auction.
     await phone.locator('[data-phase=planning] [data-testid=ready]').click({ timeout: PRESS_MS });
@@ -131,11 +131,16 @@ async function main(): Promise<void> {
     await tv.getByTestId('colony-band').waitFor({ timeout: PRESS_MS });
     const winner = (await tv.getByTestId('tv-winner').innerText()).replace(/\s+/g, ' ').trim();
     check(/^the game goes to/i.test(winner), `UBER-AC-7: the TV's winner card reads "The game goes to", got "${winner}"`);
-    check(colony().score === null, 'this base counts no colony score yet: the server’s score is null');
-    check((await tv.getByTestId('colony-band').getByTestId('colony-score-pending').count()) === 1, 'B-AC-34-6: with the score null the band shows the pending line');
-    check((await tv.getByTestId('colony-total').count()) === 0, 'B-AC-34-6: with the score null the TV shows no total');
+    const score = colony().score;
+    if (score === null) {
+      check((await tv.getByTestId('colony-band').getByTestId('colony-score-pending').count()) === 1, 'B-AC-34-6: with the score null the band shows the pending line');
+      check((await tv.getByTestId('colony-total').count()) === 0, 'B-AC-34-6: with the score null the TV shows no total');
+    } else {
+      const total = (await tv.getByTestId('colony-band').getByTestId('colony-total').innerText({ timeout: PRESS_MS })).trim();
+      check(Number(total.replace(/[^\d-]/g, '')) === score.total, `UBER-AC-7: the TV's colony total is the server's ${score.total}, got "${total}"`);
+    }
     await phone.locator('[data-phase=gameOver]').getByTestId('phone-colony-score').waitFor({ timeout: PRESS_MS });
-    console.log('✓ UBER-AC-7: game over shows the colony band, the score pending, "The game goes to", and the phone’s colony card');
+    console.log(`✓ UBER-AC-7: game over shows the colony band, the score ${score?.total ?? 'pending'}, "The game goes to", and the phone’s colony card`);
 
     // 4. No page errors on either screen.
     check(errors.length === 0, `no page errors: ${errors.join('; ')}`);
@@ -151,13 +156,115 @@ async function main(): Promise<void> {
 }
 
 // Rooms keep their phase timers running after the test, so the process ends here.
-main().then(
+main()
+  .then(theMonthEndsMoodDrift)
+  .then(
   () => process.exit(0),
   (err: unknown) => {
     console.error(err);
     process.exit(1);
   },
 );
+
+/**
+ * B-AC-23-6 / B-AC-23-8 front to back (WS8 PR-E2), a game of its own: three months, so month 2 has a month end with a
+ * month before it. Month 1's end has no last gauges, so the TV shows the server's mood at once. In month 2 the mood is
+ * moved a band down (as an event's moodShift would); at its end the TV's Happiness gauge opens on last month's number
+ * and counts to the server's gauges.happiness, ending in the server's band.
+ */
+async function theMonthEndsMoodDrift(): Promise<void> {
+  const SEED = seedFrom(process.env.MULE_E2E_SEED);
+  const { server, base } = await startServer({ maxMonths: 3, phaseScale: SCALE, seed: () => SEED });
+  const browser = await launch().catch(async (err: unknown) => {
+    await server.close();
+    throw err;
+  });
+  const errors: string[] = [];
+  try {
+    const phone = await (await browser.newContext(PHONE)).newPage();
+    phone.on('pageerror', (e) => errors.push(`phone: ${e.message}`));
+    await phone.goto(base);
+    await phone.getByPlaceholder('Heiko').fill('Lena');
+    await phone.getByRole('button', { name: 'Start a new game' }).click();
+    await phone.getByText("You're at the table").waitFor();
+    const code = (await phone.getByTestId('room-code').textContent())?.trim() ?? '';
+    await phone.getByRole('button', { name: 'Add AI player' }).click();
+    await phone.locator('[data-testid=seats] li').nth(1).waitFor();
+    const tv = await (await browser.newContext(TV)).newPage();
+    tv.on('pageerror', (e) => errors.push(`tv: ${e.message}`));
+    await tv.goto(`${base}/table?room=${code}`);
+    await tv.getByTestId('room-code').waitFor();
+    await phone.getByRole('button', { name: 'Start game' }).click();
+    const room = (): Room => {
+      const r = server.registry.get(code);
+      check(r, `room ${code} is on the server`);
+      return r;
+    };
+    const board = (): MuleView => {
+      const g = room().viewFor(null).game;
+      check(g, `room ${code} has a game running`);
+      return g;
+    };
+    const colony = (): ColonyView => {
+      const c = board().colony;
+      check(c, 'the server plays with the colony (politics on)');
+      return c;
+    };
+    const happiness = async () => (await tv.getByTestId('tv-monthend').getByTestId('gauge-happiness').innerText({ timeout: PRESS_MS })).replace(/\s+/g, ' ').trim();
+    const throughTheMonth = async () => {
+      await readyThroughTheElection(phone, within(ELECTION_WAIT_MS) + PRESS_MS);
+      await doneWithLand(phone);
+      await throughTheLandAuction(phone, board);
+      await goToThePub(phone);
+      await pressDoneThroughTheAuction(phone, board);
+      await tv.getByTestId('tv-monthend').waitFor({ timeout: MONTH_END_MS });
+    };
+
+    // Month 1's end: no month before it, so no drift; the gauge reads the server's mood from the start.
+    await throughTheMonth();
+    const first = colony();
+    check(first.lastGauges === null && first.gauges.happiness !== null, `month 1 ends with a mood and no last gauges, got ${JSON.stringify(first.lastGauges)}`);
+    const opened = await happiness();
+    check(opened.includes(`${first.gauges.happiness}`), `B-AC-23-8: month 1's end shows the server's ${first.gauges.happiness} at once, got "${opened}"`);
+    console.log(`✓ B-AC-23-8: month 1's end has no last gauges, and the TV shows the server's mood ${first.gauges.happiness} at once`);
+
+    // Month 2: the mood falls a band, as an event's moodShift would move it.
+    await phone.locator('[data-phase=upkeep]').getByTestId('ready').click({ timeout: MONTH_END_MS });
+    await phone.locator('[data-phase=planning]').waitFor({ timeout: MONTH_END_MS });
+    const fallen = first.gauges.happiness! - (HAPPINESS.bands.content - HAPPINESS.bands.restless);
+    await held(server, code, async () => {
+      const game = (room() as unknown as { game: { state: GameState } }).game;
+      game.state.colony = { ...game.state.colony!, happiness: fallen };
+      room().broadcast();
+    });
+    await throughTheMonth();
+
+    // Month 2's end: the gauge opens on last month's number, then lands on the server's, in the server's band.
+    const opening = await happiness();
+    const now = colony();
+    const from = now.lastGauges?.happiness;
+    const to = now.gauges.happiness!;
+    check(from === first.gauges.happiness && to !== from, `the server's month 2 end moves the mood, ${from} → ${to}`);
+    check(opening.includes(`${from}`), `B-AC-23-6: the month end opens on last month's ${from}, got "${opening}"`);
+    const band = { thriving: 'Thriving', content: 'Content', restless: 'Restless', unhappy: 'Unhappy', unrest: 'Unrest' }[now.gauges.band!];
+    check(band && moodBand(to) === now.gauges.band, `the server's band ${now.gauges.band} is its number's`);
+    const landed = tv.getByTestId('tv-monthend').getByTestId('gauge-happiness').locator('[data-num]').filter({ hasText: new RegExp(`^${to}$`) });
+    await landed.waitFor({ timeout: MONTH_END_MS });
+    const ended = await happiness();
+    check(ended.includes(band.toUpperCase()) || ended.includes(band), `B-AC-23-6: the gauge ends in the server's band ${band}, got "${ended}"`);
+    console.log(`✓ B-AC-23-6: at month 2's end the TV's Happiness counts ${from} → ${to} ("${opening}" → "${ended}")`);
+
+    check(errors.length === 0, `no page errors: ${errors.join('; ')}`);
+    console.log(`e2e colony mood drift: ok (room ${code}, seed ${SEED})`);
+  } catch (err) {
+    console.error(`e2e colony mood drift: FAILED (seed ${SEED})`);
+    if (errors.length > 0) console.error(`page errors: ${errors.join('; ')}`);
+    throw err;
+  } finally {
+    await browser.close();
+    await server.close();
+  }
+}
 
 /** Presses Done at each land auction lot's walk until the phase moves on; with nothing listed it is skipped. */
 async function throughTheLandAuction(page: Page, board: () => MuleView): Promise<void> {
@@ -169,8 +276,9 @@ async function throughTheLandAuction(page: Page, board: () => MuleView): Promise
   }
 }
 
+/** Walking is on, so development is the arcade screen; like politics.ts and full-game.ts, it runs on its clock. */
 async function goToThePub(page: Page): Promise<void> {
-  await page.locator('[data-phase=development]').getByRole('button', { name: 'Go to the pub and end your turn' }).click({ timeout: within(PHASE_MS.development) });
+  await page.locator('[data-phase=development]').waitFor({ timeout: within(PHASE_MS.development) });
 }
 
 /** The goods auction: presses Ready or Done at every stage it shows, until the phone leaves the auction. */
