@@ -286,6 +286,8 @@ export function installMule(state: GameState, playerId: string, x: number, y: nu
   if (tile.owner !== playerId) throw new RuleError('Not your plot');
   // Installing over a MULE with the outfit it already has changes nothing, so it is refused (AM-23).
   if (tile.outfit === p.carriedMule) throw new RuleError('Same outfit: nothing to swap');
+  // Nor back onto the plot the led MULE was just swapped off (AM-23, PM ruling A), by the button or a direct action.
+  if (p.takenMule?.swapped && p.takenMule.x === x && p.takenMule.y === y) throw new RuleError('Just swapped: lead it to another plot');
   // Installing over another MULE swaps them (AM-23, Heiko 5 Nov): the old one comes onto the lead with its outfit and
   // run, as a MULE taken off the plot does (AM-2), marked swapped so the turn's end sends it to the corral.
   const old: TakenMule | null = tile.outfit ? { x, y, outfit: tile.outfit, runMonths: tile.runMonths, swapped: true } : null;

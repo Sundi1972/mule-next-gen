@@ -640,6 +640,14 @@ const TABLE: Row[] = [
     press: 'nothing',
   },
   {
+    row: '10 SWAP on the plot the led MULE was just swapped off: dimmed, said so; a press holds and never falls through to FIT FILTER (AM-23, PM ruling A)',
+    at: () => onTile(7, 4),
+    game: (s) => void ((tileOf(s, 7, 4).outfit = 'energy'), Object.assign(a(s), { carriedMule: 'smithore', takenMule: { x: 7, y: 4, outfit: 'smithore', runMonths: 0, swapped: true }, stock: { ...a(s).stock, alloy: DEVELOPMENT.filterAlloy } })),
+    reach: () => ({ kind: 'install', enabled: false, good: 'smithore', plot: { x: 7, y: 4 }, fromShore: false, replaces: 'energy', why: { kind: 'justSwapped' } }),
+    words: () => words('SWAP', 'just swapped: lead it to another plot', false),
+    press: 'nothing',
+  },
+  {
     row: '11 ANALYSE: on an own plot, no MULE, not analysed',
     at: () => onTile(2, 4),
     reach: () => ({ kind: 'analyse', enabled: true, plot: { x: 2, y: 4 } }),
@@ -1132,6 +1140,13 @@ describe('the dev floor: the action button', () => {
     expect([tileOf(state, 7, 4).outfit, a(state).carriedMule]).toEqual([null, 'smithore']);
     // Leading it, on the plot it came off, now empty: row 10 puts it back.
     expect(reachWords(reachNow(taken, state))).toEqual(words('INSTALL · SMITHORE'));
+  });
+
+  it('B-AC-SWAP-4: installMule refuses the swap back onto the plot the led MULE was just swapped off, for a direct action too', () => {
+    const { state } = world({ at: () => onTile(7, 4), game: (s) => void ((tileOf(s, 7, 4).outfit = 'energy'), Object.assign(a(s), { carriedMule: 'smithore', takenMule: { x: 7, y: 4, outfit: 'smithore', runMonths: 0, swapped: true } })) });
+    const was = structuredClone(state);
+    expect(() => installMule(state, 'a', 7, 4)).toThrow('Just swapped: lead it to another plot');
+    expect(state).toEqual(was);
   });
 
   it('T-AC-3: with the arcade on, OUTFIT is offered for no fitted MULE at any outfitter, and outfitMule refuses one', () => {

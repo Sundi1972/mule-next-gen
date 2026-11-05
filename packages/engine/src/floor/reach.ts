@@ -37,7 +37,7 @@ import { afterSale } from './scramble.js';
 import { strikeTarget } from './wolves.js';
 
 /** Why a row's press is refused: money short by `short` credits, the corral empty, or a re-outfit for the good it has. */
-export type ReachRefusal = { kind: 'money'; short: number } | { kind: 'soldOut' } | { kind: 'sameGood' } | { kind: 'capped'; level: number; air: number };
+export type ReachRefusal = { kind: 'money'; short: number } | { kind: 'soldOut' } | { kind: 'sameGood' } | { kind: 'justSwapped' } | { kind: 'capped'; level: number; air: number };
 
 /** Where a dim button points when nothing is in reach, or why the seat has nothing to press now. */
 export type ReachHint = 'over' | 'done' | 'assaying' | 'stunned' | 'run' | 'dodge' | 'catch' | 'corral' | 'outfitter' | 'door' | 'store' | 'outfitFirst' | 'plot' | 'noMules';
@@ -201,11 +201,12 @@ const install: Row = (s) => {
   const { player: p, tile } = s;
   const good = p.carriedMule;
   if (!tile || !good || good === 'empty' || p.muleBolted) return null;
-  // Never onto the plot the led MULE was just swapped off (AM-23, PM ruling A): a double tap on SWAP can't swap back.
-  const swappedOff = p.takenMule?.swapped ? p.takenMule : null;
-  const plot = plotFor(s, (t) => t.owner === p.id && !(swappedOff && t.x === swappedOff.x && t.y === swappedOff.y));
-  // Over a MULE with the outfit it leads there is nothing to swap (AM-23): the row dims, as RE-OUTFIT's does for its own good.
-  const why: ReachRefusal | null = plot?.outfit === good ? { kind: 'sameGood' } : null;
+  const plot = plotFor(s, (t) => t.owner === p.id);
+  // The plot the led MULE was just swapped off keeps the row, dimmed (AM-23, PM ruling A): a double tap on SWAP holds,
+  // and never falls through to the tile's next row (FILTER, ANALYSE, TAKE). Over a MULE with the outfit it leads there
+  // is nothing to swap: dimmed too, as RE-OUTFIT's row is for its own good.
+  const swappedOff = !!plot && !!p.takenMule?.swapped && p.takenMule.x === plot.x && p.takenMule.y === plot.y;
+  const why: ReachRefusal | null = swappedOff ? { kind: 'justSwapped' } : plot?.outfit === good ? { kind: 'sameGood' } : null;
   return plot && { kind: 'install', enabled: !why, good, plot: at(plot), fromShore: plot !== tile, replaces: plot.outfit, why };
 };
 
@@ -411,7 +412,7 @@ export function reachWords(reach: Reach): ReachWords {
     case 'leave':
       return say('LEAVE', reach.leading ? 'with your MULE' : 'to the colony');
     case 'install': {
-      const notes = [reach.fromShore && 'from the shore', reach.replaces && (reach.replaces === reach.good ? 'same outfit, nothing to swap' : `you lead your ${inWords(reach.replaces)} MULE`)].filter((n) => n);
+      const notes = [reach.fromShore && 'from the shore', reach.why?.kind === 'justSwapped' ? 'just swapped: lead it to another plot' : reach.replaces && (reach.replaces === reach.good ? 'same outfit, nothing to swap' : `you lead your ${inWords(reach.replaces)} MULE`)].filter((n) => n);
       return say(reach.replaces ? 'SWAP' : `INSTALL · ${NAME[reach.good]}`, notes.join(' · ') || null);
     }
     case 'analyse':
