@@ -185,7 +185,7 @@ describe('Installing over a MULE swaps it (Heiko at the table, 5 Nov)', () => {
     expect(game.viewFor('s1').me!.carriedMule).toBeNull();
   });
 
-  it('B-AC-SWAP-3: over a MULE with the same outfit the button says so and the press is refused: Heiko keeps his MULE, the plot keeps its own', () => {
+  it('B-AC-SWAP-3: over a MULE with the same outfit the button is dimmed and says so, and a press changes nothing: Heiko keeps his MULE, the plot keeps its own', () => {
     const g = toDevelopment();
     const { game, plot } = g;
     buyAndOutfit(g, 's1', 'food');
@@ -194,7 +194,7 @@ describe('Installing over a MULE swaps it (Heiko at the table, 5 Nov)', () => {
     hallTo(g, 's1', doorFor(g, plot));
     press(g, 's1', 'LEAVE');
     mapTo(g, 's1', { x: plot.x + 0.5, y: plot.y + 0.5 });
-    expect(game.viewFor('s1').me?.reach?.detail).toMatch('same outfit, nothing to swap');
+    expect(game.viewFor('s1').me?.reach).toMatchObject({ verb: 'SWAP', detail: 'same outfit, nothing to swap', enabled: false });
     expect(() => press(g, 's1', 'SWAP')).not.toThrow();
     expect(outfitOn(g, plot)).toBe('food');
     expect(game.viewFor('s1').me!.carriedMule, 'still on his lead').toBe('food');
