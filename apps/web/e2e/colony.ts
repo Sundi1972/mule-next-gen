@@ -4,7 +4,7 @@
  * game over's colony band, and the phone's colony score card, all carry the server's ColonyView.
  * Run with `pnpm --filter @mule/web exec tsx e2e/colony.ts`; replay with `MULE_E2E_SEED=<seed>`.
  */
-import { PRESTIGE, type GameState, type PrestigeId } from '@mule/engine';
+import { callStrike, COLONY, PRESTIGE, type GameState, type PrestigeId } from '@mule/engine';
 import type { ColonyView, MuleIntent, MuleView } from '@mule/protocol';
 import { errors as playwrightErrors, type Page } from 'playwright';
 import { PHASE_MS } from '../../server/src/mule-game.js';
@@ -93,16 +93,40 @@ async function main(): Promise<void> {
     check((await gauges.locator('[data-testid^=gauge-]').count()) === 4, 'B-AC-34-3: the TV header shows four gauges');
     const wealth = `${fmt(colony().gauges.wealth)} cr`;
     await gauges.getByTestId('gauge-wealth').locator('[data-num]').filter({ hasText: wealth }).waitFor({ timeout: PRESS_MS });
-    check(colony().gauges.happiness === null, 'this base has no mood yet: the server’s happiness is null');
-    const happiness = (await gauges.getByTestId('gauge-happiness').innerText()).replace(/\s+/g, ' ').trim();
-    check(happiness.includes('—') && happiness.includes('not yet'), `B-AC-34-3: happiness reads "—" and "not yet", got "${happiness}"`);
-    console.log(`✓ B-AC-34-3: the TV header shows the four gauges, wealth ${wealth} as the server has it, happiness not yet`);
+    // The mood (C23) has its first value once planning opens; the gauge shows the server's, or "not yet" while it is null.
+    const mood = colony().gauges.happiness;
+    const happiness = gauges.getByTestId('gauge-happiness');
+    if (mood === null) await happiness.filter({ hasText: 'not yet' }).waitFor({ timeout: PRESS_MS });
+    else await happiness.locator('[data-num]').filter({ hasText: String(mood) }).waitFor({ timeout: PRESS_MS });
+    console.log(`✓ B-AC-34-3: the TV header shows the four gauges, wealth ${wealth} and happiness ${mood ?? 'not yet'} as the server has them`);
 
-    // On through the month: ready, done with land, the pub, the auction.
+    // 1b. The general strike (C37): C26's event that calls it is not built yet, so it starts as the server's tests start
+    // it, with Lena governing and the fund able to pay. Her phone's Now card pays; the server and the TV agree.
+    const fundBefore = await held(server, code, async () => {
+      const state = (room() as unknown as { game: { state: GameState } }).game.state;
+      state.politics = { ...state.politics!, governor: lenaId };
+      state.treasury.money = Math.max(state.treasury.money, COLONY.strike.cost * 2);
+      callStrike(state, 'food');
+      room().broadcast();
+      return state.treasury.money;
+    });
+    const badge = tv.getByTestId('strike-badge');
+    await badge.filter({ hasText: 'STRIKE · Food 20%' }).waitFor({ timeout: PRESS_MS });
+    await phone.getByTestId('pay-strike').click({ timeout: PRESS_MS });
+    await phone.getByTestId('strike-paid').waitFor({ timeout: PRESS_MS });
+    check(colony().strike?.paid === true, `B-AC-37-2: the server has the strike paid, got ${JSON.stringify(colony().strike)}`);
+    check(colony().fund === fundBefore - COLONY.strike.cost, `B-AC-37-2: the fund drops by ${COLONY.strike.cost} cr, from ${fundBefore} to ${colony().fund}`);
+    const paid = `PAID · −${fmt(COLONY.strike.cost)} cr`;
+    await badge.filter({ hasText: paid }).waitFor({ timeout: PRESS_MS });
+    const news = `Lena pays the food strikers ${COLONY.strike.cost} cr.`;
+    await tv.getByTestId('tv-news').getByText(news).waitFor({ timeout: PRESS_MS });
+    console.log(`✓ B-AC-37-2/4: Lena's phone pays the Food strikers; the server has it paid, the fund ${fmt(fundBefore)} → ${fmt(colony().fund)} cr, the TV reads "${paid}" and "${news}"`);
+
+    // On through the month: ready, done with land, development on its clock, the auction.
     await phone.locator('[data-phase=planning] [data-testid=ready]').click({ timeout: PRESS_MS });
     await doneWithLand(phone);
     await throughTheLandAuction(phone, board);
-    await goToThePub(phone);
+    await waitOutDevelopment(phone);
     await pressDoneThroughTheAuction(phone, board);
 
     // 2. The month end: the build site's row for the project at the server's stage, with Lena on its plaque.
@@ -122,20 +146,26 @@ async function main(): Promise<void> {
     await readyThroughTheElection(phone, within(ELECTION_WAIT_MS) + PRESS_MS);
     await doneWithLand(phone);
     await throughTheLandAuction(phone, board);
-    await goToThePub(phone);
+    await waitOutDevelopment(phone);
     await pressDoneThroughTheAuction(phone, board);
 
-    // 3. Game over: the TV's colony band with the score still to count, "The game goes to", the phone's colony card.
+    // 3. Game over: the TV's colony band with the server's score, "The game goes to", the phone's colony card.
     await tv.getByTestId('tv-gameover').waitFor({ timeout: MONTH_END_MS });
     check(board().phase === 'gameOver', `the game is over on the server, got ${board().phase}`);
     await tv.getByTestId('colony-band').waitFor({ timeout: PRESS_MS });
     const winner = (await tv.getByTestId('tv-winner').innerText()).replace(/\s+/g, ' ').trim();
     check(/^the game goes to/i.test(winner), `UBER-AC-7: the TV's winner card reads "The game goes to", got "${winner}"`);
-    check(colony().score === null, 'this base counts no colony score yet: the server’s score is null');
-    check((await tv.getByTestId('colony-band').getByTestId('colony-score-pending').count()) === 1, 'B-AC-34-6: with the score null the band shows the pending line');
-    check((await tv.getByTestId('colony-total').count()) === 0, 'B-AC-34-6: with the score null the TV shows no total');
+    // The colony score (C31) counts at game over; the band shows the server's total, or the pending line while it is null.
+    const score = colony().score;
+    if (score === null) {
+      check((await tv.getByTestId('colony-band').getByTestId('colony-score-pending').count()) === 1, 'B-AC-34-6: with the score null the band shows the pending line');
+      check((await tv.getByTestId('colony-total').count()) === 0, 'B-AC-34-6: with the score null the TV shows no total');
+    } else {
+      const total = (await tv.getByTestId('colony-band').getByTestId('colony-total').innerText({ timeout: PRESS_MS })).trim();
+      check(total === String(score.total), `B-AC-34-6: the TV's band shows the server's colony score ${score.total}, got "${total}"`);
+    }
     await phone.locator('[data-phase=gameOver]').getByTestId('phone-colony-score').waitFor({ timeout: PRESS_MS });
-    console.log('✓ UBER-AC-7: game over shows the colony band, the score pending, "The game goes to", and the phone’s colony card');
+    console.log(`✓ UBER-AC-7: game over shows the colony band, the score ${score?.total ?? 'pending'} as the server has it, "The game goes to", and the phone’s colony card`);
 
     // 4. No page errors on either screen.
     check(errors.length === 0, `no page errors: ${errors.join('; ')}`);
@@ -169,8 +199,9 @@ async function throughTheLandAuction(page: Page, board: () => MuleView): Promise
   }
 }
 
-async function goToThePub(page: Page): Promise<void> {
-  await page.locator('[data-phase=development]').getByRole('button', { name: 'Go to the pub and end your turn' }).click({ timeout: within(PHASE_MS.development) });
+/** Development is the arcade's floor, with no pub button on the phone: the turn runs out on its clock, as in full-game.ts. */
+async function waitOutDevelopment(page: Page): Promise<void> {
+  await page.locator('[data-phase=auction]').waitFor({ timeout: within(2 * PHASE_MS.development + PHASE_MS.production) });
 }
 
 /** The goods auction: presses Ready or Done at every stage it shows, until the phone leaves the auction. */
