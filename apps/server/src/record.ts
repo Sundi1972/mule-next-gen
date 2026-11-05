@@ -36,6 +36,8 @@ export interface RecordOptions {
   phaseScale?: number;
   /** The game steered its development; the replay steers it too. */
   devSteer?: boolean;
+  /** The game forced its wolves (a test option); the replay forces them too. */
+  forceWolves?: boolean;
   politics: boolean;
 }
 

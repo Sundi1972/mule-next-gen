@@ -5,6 +5,7 @@ export * from './rng.js';
 export * from './stock.js';
 export * from './map.js';
 export * from './production.js';
+export * from './production-show.js';
 export * from './events.js';
 export * from './economy.js';
 export * from './walk.js';
