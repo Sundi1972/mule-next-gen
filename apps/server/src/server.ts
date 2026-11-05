@@ -242,13 +242,21 @@ function isIntent(v: unknown): v is MuleIntent {
     case 'continue':
     case 'act':
     case 'hurry':
+    // Development's old taps reach the game, which refuses them in words (C14): an old bundle's phone is told why.
+    case 'buyMule':
+    case 'pub':
       return true;
     case 'steer':
       return isAxis(i.x) && isAxis(i.y) && (i.tick === undefined || (Number.isInteger(i.tick) && (i.tick as number) >= 0));
     case 'claim':
+    case 'install':
+    case 'analyse':
+    case 'filter':
       return int(i.x) && int(i.y);
     case 'drone':
       return Array.isArray(i.plots) && i.plots.length <= 4 && i.plots.every((p: unknown) => typeof p === 'object' && p !== null && int((p as Record<string, unknown>).x) && int((p as Record<string, unknown>).y));
+    case 'outfit':
+      return typeof i.outfit === 'string';
     case 'declare':
       return i.side === 'buyer' || i.side === 'seller' || i.side === 'pass';
     case 'walk':

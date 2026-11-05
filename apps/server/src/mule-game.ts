@@ -693,14 +693,6 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     goneOn('continued', left);
   }
 
-  /**
-   * Development's early end, checked after every tick. The tick passes its own time `at`, so a late tick judges the
-   * clock's end as the sim does (HC-4).
-   */
-  private checkEarlyEnd(at: number): void {
-    this.checkDevelopmentOver(at);
-  }
-
   /** Development is over: the tick stops, and the month keeps each colonist's condition for its end. */
   private finishDevelopment(): void {
     this.finishSteering();
@@ -1285,7 +1277,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     // presses' follow, so the floor after the presses holds the tick's, in order, and no earlier tick's.
     this.ctx.frame(devFrame(floor, floor.moments.beats.map((b) => b.text)));
     steering.stats.frames++;
-    this.checkEarlyEnd(at);
+    this.checkDevelopmentOver(at);
     if (this.steering !== steering) return true;
     let changed = (before !== null && stableJson(state) !== before);
     for (const s of this.seats) {
