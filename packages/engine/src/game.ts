@@ -11,7 +11,7 @@ import { closeVotes, collectLawTaxes, newPolitics, outfitBlocked, officeScore, o
 import { needsOf, runProduction } from './production.js';
 import { createRng } from './rng.js';
 import { emptyStock } from './stock.js';
-import { GOODS, type GameState, type Good, type Outfit, type Phase, type Player, type Species, type Tile } from './types.js';
+import { GOODS, type GameState, type Good, type Outfit, type Phase, type Player, type Species, type TakenMule, type Tile } from './types.js';
 import { runUpkeep } from './upkeep.js';
 
 export interface NewPlayer {
@@ -276,14 +276,27 @@ export function outfitMule(state: GameState, playerId: string, outfit: Outfit): 
   p.carriedMule = outfit;
 }
 
+/** True while the led MULE still has the outfit it was swapped off this plot with (AM-35): a press there would swap it back. */
+export function justSwappedOff(p: Player, x: number, y: number): boolean {
+  const taken = p.takenMule;
+  return !!taken?.swapped && taken.x === x && taken.y === y && p.carriedMule === taken.outfit;
+}
+
 export function installMule(state: GameState, playerId: string, x: number, y: number): void {
   const p = developer(state, playerId);
   if (!p.carriedMule || p.carriedMule === 'empty') throw new RuleError('The MULE is not outfitted');
   requireLed(p);
   const tile = plotAt(state, x, y);
   if (tile.owner !== playerId) throw new RuleError('Not your plot');
-  // Installing over an existing MULE replaces it; the old one runs away, as in the original.
-  if (tile.outfit !== p.carriedMule) tile.runMonths = 0;
+  // Installing over a MULE with the outfit it already has changes nothing, so it is refused (AM-35).
+  if (tile.outfit === p.carriedMule) throw new RuleError('Same outfit: nothing to swap');
+  // Nor back onto the plot the led MULE was just swapped off (AM-35, PM ruling A), by the button or a direct action.
+  // Re-outfitted since, it is a real swap, so it is allowed.
+  if (justSwappedOff(p, x, y)) throw new RuleError('Just swapped: lead it to another plot');
+  // Installing over another MULE swaps them (AM-35, Heiko 5 Nov): the old one comes onto the lead with its outfit and
+  // run, as a MULE taken off the plot does (AM-2), marked swapped so the turn's end sends it to the corral.
+  const old: TakenMule | null = tile.outfit ? { x, y, outfit: tile.outfit, runMonths: tile.runMonths, swapped: true } : null;
+  tile.runMonths = 0;
   // A MULE taken off this plot this turn and put back with the same outfit, by any route, keeps the plot's run
   // from before the first take (AM-2: nothing lost; review F3: nor wiped by a hop through another plot).
   const before = p.takenRuns?.find((r) => r.x === x && r.y === y);
@@ -292,6 +305,11 @@ export function installMule(state: GameState, playerId: string, x: number, y: nu
   p.carriedMule = null;
   delete p.takenMule;
   p.installedThisTurn = true;
+  if (old) {
+    p.takenMule = old;
+    if (!p.takenRuns?.some((r) => r.x === x && r.y === y)) p.takenRuns = [...(p.takenRuns ?? []), old];
+    p.carriedMule = old.outfit;
+  }
 }
 
 // --- Re-outfitting (arcade spec AM-2): take a MULE off a plot, fit it for another good, install it again --------
@@ -335,10 +353,20 @@ export function reoutfitMule(state: GameState, playerId: string, outfit: Outfit)
   p.carriedMule = outfit;
 }
 
-/** The turn ends with a taken MULE still carried: it goes back to its plot with the outfit and run it had there. */
+/**
+ * The turn ends with a taken MULE still carried: it goes back to its plot with the outfit and run it had there. One
+ * that came off by a swap goes to the corral instead, as a plot's MULE does at a lot sale: its plot has another MULE
+ * (AM-35). No refund.
+ */
 function returnTakenMule(state: GameState, p: Player): void {
   const taken = p.takenMule;
   if (!taken) return;
+  if (taken.swapped) {
+    state.store.mules++;
+    p.carriedMule = null;
+    delete p.takenMule;
+    return;
+  }
   const tile = plotAt(state, taken.x, taken.y);
   tile.outfit = taken.outfit;
   tile.runMonths = taken.runMonths;
@@ -504,7 +532,8 @@ export function advancePhase(state: GameState): void {
     startDevelopment(state);
   }
   if (next === 'production') {
-    // A MULE nobody installed runs away at the end of development; one taken off a plot goes back to it (AM-2).
+    // A MULE nobody installed runs away at the end of development; one taken off a plot goes back to it (AM-2), and
+    // one that came off by a swap goes to the corral (AM-35).
     for (const p of state.players) endLead(state, p.id);
     const price = mulePrice(state);
     const soldOut = state.store.mules === 0;
