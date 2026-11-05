@@ -149,6 +149,15 @@ describe('brain:trial paid-run guard (PR-5: --run label, the proof cap)', () => 
     expect(fs.existsSync(path.join(dir, 'trial-2026-10-22-rerun1.jsonl'))).toBe(false);
   });
 
+  it('PR-5: a trial ledger that cannot be read (a torn last line) refuses the run, naming the file, and nothing is called', async () => {
+    fs.writeFileSync(path.join(dir, 'trial-2026-10-20.jsonl'), '{"game":"g","usd":0.5,');
+    const calls = called();
+    const { out, result } = run(['--games', '1', '--max-usd', '1', '--run', 'rerun1']);
+    expect((await result).code).toBe(1);
+    expect(calls()).toBe(0);
+    expect(out).toEqual([`brain:trial cannot check the PR-5 cap: ${path.join(dir, 'trial-2026-10-20.jsonl')} is not a readable ledger; nothing called.`]);
+  });
+
   it('PR-5: a label of anything but lowercase letters, digits and dashes (1 to 32) is refused as a bad flag', async () => {
     const calls = called();
     for (const label of ['Rerun', 'a b', '../x', '']) {
