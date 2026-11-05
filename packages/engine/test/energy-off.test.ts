@@ -91,6 +91,8 @@ describe('AM-17: an owner short of Energy turns plots off, biggest use first', (
     made: (number | undefined)[];
     off: boolean[];
     energyAfter: number;
+    /** Goods a factory takes as it runs: their stock after, which their lines alone don't give. */
+    stockAfter?: Partial<Record<Good, number>>;
   }[] = [
     {
       name: 'exactly enough: nothing is turned off',
@@ -159,18 +161,40 @@ describe('AM-17: an owner short of Energy turns plots off, biggest use first', (
       energyAfter: 1,
     },
     {
-      name: 'a factory without its inputs is no working plot: beside the mine it neither runs nor pushes the mine off',
-      // The fed furnace would use 1, the mine 2; 2 covers the mine alone. Without Smithore the furnace is not in the list.
+      name: 'same month: a furnace holding no Smithore runs in full on what the mine beside it made, on the Energy left over',
+      // The mine (use 2) is the only listed plot; 3 Energy leaves 1, which runs the fed furnace (use 1) after the mine.
       plots: [{ good: 'smithore', out: 4 }, { good: 'alloy', beside: true }],
-      energy: 2,
+      energy: 3,
       stock: { smithore: 0 },
-      made: [4, undefined],
+      made: [4, 2],
       off: [false, false],
       energyAfter: 0,
+      stockAfter: { smithore: 2, alloy: 2 },
+    },
+    {
+      name: 'same month, too little left over: the mine runs in full, the furnace fed by it is turned off (never the mine)',
+      // 2 Energy covers the mine alone; the furnace (hills, 3 months: makes 4) comes after it and is turned off: it takes
+      // ⌈0.2 × 2⌉ = 1 of the mine's Smithore and makes round(0.8) = 1.
+      plots: [{ good: 'smithore', out: 4 }, { good: 'alloy', beside: true, terrain: 'hills', runMonths: 3 }],
+      energy: 2,
+      stock: { smithore: 0 },
+      made: [4, 1],
+      off: [false, true],
+      energyAfter: 0,
+      stockAfter: { smithore: 3, alloy: 1 },
+    },
+    {
+      name: 'a furnace whose Smithore never comes neither runs nor files a line, and its Energy stays',
+      plots: [{ good: 'alloy' }],
+      energy: 5,
+      stock: { smithore: 0 },
+      made: [undefined],
+      off: [false],
+      energyAfter: 5,
     },
   ];
 
-  it.each(rows)('B-AC-energy-off: $name', ({ plots, energy, posted, stock, made, off, energyAfter }) => {
+  it.each(rows)('B-AC-energy-off: $name', ({ plots, energy, posted, stock, made, off, energyAfter, stockAfter }) => {
     const state = colony();
     const tiles = lay(state, plots);
     Object.assign(state.store.posted, posted ?? {});
@@ -189,12 +213,15 @@ describe('AM-17: an owner short of Energy turns plots off, biggest use first', (
     }
     expect(p(state).stock.energy).toBe(energyAfter);
     // Every other good lands in the owner's stock as its lines made it.
-    for (const good of new Set(tiles.map((t) => t.outfit as Good).filter((g) => g !== 'energy'))) {
+    for (const [good, n] of Object.entries(stockAfter ?? {})) expect(p(state).stock[good as Good], good).toBe(n);
+    for (const good of new Set(tiles.map((t) => t.outfit as Good).filter((g) => g !== 'energy' && !(g in (stockAfter ?? {}))))) {
       const lines = tiles.flatMap((t, i) => (t.outfit === good ? [made[i] ?? 0] : []));
       expect(p(state).stock[good] - before[good], good).toBe(lines.reduce((n, m) => n + m, 0));
     }
-    // A raw plot keeps its run count, on or off (a thin vein still wears); a factory that did not run starts again.
-    expect(tiles.map((t) => t.runMonths)).toEqual(tiles.map((t, i) => (isFactory(t.outfit!) ? (made[i] === undefined ? 0 : 1) : 1)));
+    // A raw plot keeps its run count, on or off (a thin vein still wears); a factory that ran gains a month, one turned
+    // off holds its count, one that did not run starts again.
+    const runs = (t: Tile, i: number) => (!isFactory(t.outfit!) ? 1 : made[i] === undefined ? 0 : (plots[i]!.runMonths ?? 0) + (off[i] ? 0 : 1));
+    expect(tiles.map((t) => t.runMonths)).toEqual(tiles.map(runs));
   });
 
   it('B-AC-energy-off: owners are judged apart: one owner short of Energy turns nothing of another off', () => {
@@ -413,9 +440,9 @@ describe('AM-17: invariants over generated owners', () => {
           .sort((a, b) => b.use - a.use || a.worth - b.worth || a.at - b.at);
         // energyOffOrder, as the AI and WS9 read it, is this very list: the off plots are exactly its turned-off prefix.
         expect(orders.get(pl.id), `seed ${seed} ${pl.id}: energyOffOrder`).toEqual(list.map((e) => e.at));
-        // A factory left out of the list files no line. A turned-off one always files one with energyOff, even when the
-        // factories before it took its share of the inputs and it makes 0.
-        expect(own.filter((t) => !fed.get(t)).every((t) => !lineOf(run, state, t)), `seed ${seed} ${pl.id}: unfed factories run not`).toBe(true);
+        // A turned-off listed plot always files a line with energyOff, even when the factories before it took its share
+        // of the inputs and it makes 0. A factory left out of the list runs after them on what is left, turning nothing
+        // else off.
         const offAt = list.map((e) => isOff(run, state, e.t));
         const k = offAt.filter(Boolean).length;
         expect(offAt.slice(0, k).every(Boolean), `seed ${seed} ${pl.id}: off is a prefix (${offAt})`).toBe(true);
@@ -423,7 +450,8 @@ describe('AM-17: invariants over generated owners', () => {
         expect(onUse, `seed ${seed} ${pl.id}: the plots left on fit`).toBeLessThanOrEqual(available);
         if (k > 0) expect(onUse + list[k - 1]!.use, `seed ${seed} ${pl.id}: no plot went off that need not`).toBeGreaterThan(available);
         // What was paid is the uses of the plots left on that ran (a factory without its inputs runs not and pays not).
-        const paid = list.slice(k).filter((e) => lineOf(run, state, e.t)).reduce((n, e) => n + e.use, 0);
+        const late = own.filter((t) => !fed.get(t) && lineOf(run, state, t) && !isOff(run, state, t));
+        const paid = list.slice(k).filter((e) => lineOf(run, state, e.t)).reduce((n, e) => n + e.use, 0) + late.reduce((n, t) => n + uses.get(t)!, 0);
         expect(available - pl.stock.energy, `seed ${seed} ${pl.id}: paid`).toBe(paid);
       }
 
