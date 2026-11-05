@@ -24,7 +24,7 @@ import { applyAction, playGame } from '../src/play.js';
 import { draftPlaybook, type DraftPhase } from '../src/playbook/draft.js';
 import { AiSeat } from '../src/seat.js';
 import { applySets } from '../src/sim.js';
-import { goodPlan, landDecision, leaderOf, tradeDecision } from '../src/strategist.js';
+import { goodPlan, landDecision, leaderOf, shortfallHold, tradeDecision } from '../src/strategist.js';
 import { beforeTax, canFeed, cashReserve, installGain, type Mind } from '../src/value.js';
 import { outlook } from '../src/outlook.js';
 import { FOOD_TO_SPARE } from './store-food.js';
@@ -319,8 +319,10 @@ describe('the draft writes the parts of its phase', () => {
         const part = auction.auction![good]!;
         const plan = goodPlan(sobs, seats[i]!.mind, good);
         const h = me.stock[good];
+        // A seller keeps at least what its hands will keep at the good's status screen (shortfallHold).
+        const raised = shortfallHold(sobs, `ai${i}`, good).mustHold;
         const options = tradeDecision(sobs, seats[i]!.mind, plan).options.map(({ action: t }) =>
-          t.side === 'seller' ? { role: 'seller', hold: t.keep } : t.side === 'buyer' ? { role: 'buyer', hold: t.upTo } : { role: 'out', hold: h },
+          t.side === 'seller' ? { role: 'seller', hold: Math.max(t.keep, raised) } : t.side === 'buyer' ? { role: 'buyer', hold: t.upTo } : { role: 'out', hold: h },
         );
         expect(options, `ai${i} ${good}`).toContainEqual({ role: part.role, hold: part.hold });
         expect(part).toMatchObject({ start: part.walkAway, concedeCrPerS: 0, bluff: false, vsRival: 'undercut1' });

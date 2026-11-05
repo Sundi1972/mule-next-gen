@@ -33,7 +33,7 @@ import {
 import { OPTION_IDS, TopPickDecider, toOptions, type Choice, type DecisionContext, type ShortOption } from '../decider.js';
 import { outlook, productionsLeft } from '../outlook.js';
 import { PERSONAS, type DecisionKind } from '../personas.js';
-import { analysesWanted, developDecision, filtersWanted, goodPlan, landDecision, leaderOf, sellWanted, tradeDecision, walkVeto, type DevAction, type DevWalk, type LandPlan } from '../strategist.js';
+import { analysesWanted, developDecision, filtersWanted, goodPlan, landDecision, leaderOf, sellWanted, shortfallHold, tradeDecision, walkVeto, type DevAction, type DevWalk, type LandPlan } from '../strategist.js';
 import { candidate, shortlist, type Shortlist } from '../utility.js';
 import { beforeTax, canFeed, cashReserve, installGain, type Mind } from '../value.js';
 
@@ -377,7 +377,8 @@ function goodPart(input: DraftInput, obs: GameState, good: Good): GoodPlay {
   const walkAway = Math.max(1, Number.isFinite(limit) ? limit : Math.round(obs.store.posted[good]));
   return {
     role: trade.side === 'pass' ? 'out' : trade.side,
-    hold: trade.side === 'seller' ? trade.keep : trade.side === 'buyer' ? trade.upTo : h,
+    // A seller keeps at least what its hands will keep at the good's status screen, as the gate holds it (P12).
+    hold: trade.side === 'seller' ? Math.max(trade.keep, shortfallHold(obs, mind.me, good).mustHold) : trade.side === 'buyer' ? trade.upTo : h,
     walkAway,
     start: walkAway,
     concedeCrPerS: 0,
