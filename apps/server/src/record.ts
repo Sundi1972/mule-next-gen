@@ -34,7 +34,7 @@ type NewStep = StepEvent extends infer E ? (E extends StepEvent ? Omit<E, 'at' |
 export interface RecordOptions {
   maxMonths?: number;
   phaseScale?: number;
-  /** The game steered its development; the replay steers it too. */
+  /** Written by games before C14 (PR-12), when a game could walk by taps; every game steers now, so a replay ignores it. */
   devSteer?: boolean;
   /** The game forced its wolves (a test option); the replay forces them too. */
   forceWolves?: boolean;

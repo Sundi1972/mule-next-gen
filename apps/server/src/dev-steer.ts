@@ -191,7 +191,7 @@ export function devFrame(floor: DevFloor, beats: readonly string[] = []): DevFra
 
 /**
  * A colonist as every screen sees it in steered development: its place (rounded as on the wire), with v1's fields
- * filled from it, `at` the tile under it or the store, no walk, and the assay's end in the server's epoch ms. `bitten`
+ * filled from it, `at` the tile under it or the store, and the assay's end in the server's epoch ms. `bitten`
  * goes only while true.
  */
 export function steeredColonistView(state: GameState, floor: DevFloor, seat: string, assayEndsAt: (tick: number) => number): ColonistView | null {
@@ -200,7 +200,6 @@ export function steeredColonistView(state: GameState, floor: DevFloor, seat: str
   const { id: _id, ...where } = placed(c);
   return {
     at: c.space === 'hall' ? 'store' : tileIndex(state.width, Math.floor(c.x), Math.floor(c.y)),
-    walk: null,
     assayUntil: c.assayUntilTick === null ? null : assayEndsAt(c.assayUntilTick),
     ...where,
     pace: c.pace,

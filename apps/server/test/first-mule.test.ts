@@ -1,8 +1,8 @@
-import { boxOf, DEV_STEER, DEVELOPMENT, doorOutside, floorConfig, HALL, pathTo, RuleError, tileIndex, type GameState, type HallDoor, type HallPlace, type Outfit } from '@mule/engine';
+import { boxOf, DEVELOPMENT, doorOutside, floorConfig, HALL, pathTo, RuleError, tileIndex, type GameState, type HallDoor, type HallPlace, type Outfit } from '@mule/engine';
 import type { SeatInfo } from '@tabletop/core';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { MuleGame } from '../src/mule-game.js';
-import { fakeContext, pressAct, pressThroughSidePick, readyAll, steerTo, tapThere, toDevelopment, walkers, type SteerPoint } from './fake-context.js';
+import { fakeContext, pressAct, pressThroughSidePick, readyAll, steerTo, walkers, type SteerPoint } from './fake-context.js';
 
 /**
  * Heiko's ruling of 2026-11-05 ("Yes, always count"): month 1's development clock counts down from the start, as in
@@ -198,23 +198,4 @@ describe('month 1 with AI seats ends on its own clock (WS1’s stall seeds)', ()
     expect(game.viewFor(null).month, 'month 1 ended').toBe(2);
     expect(devMs, 'at most the full clock and the last walks settling, never a wait on idle Hal').toBeLessThanOrEqual(FULL_MS + 10_000);
   }, SLOW_ROW_MS);
-});
-
-describe("a seat that can't pay is told why (the tap path)", () => {
-  let was = DEV_STEER.on;
-  beforeAll(() => {
-    was = DEV_STEER.on;
-    DEV_STEER.on = false;
-  });
-  afterAll(() => {
-    DEV_STEER.on = was;
-  });
-
-  it("month 1: Lena with no money taps BUY MULE and the news says 'Not enough money'", () => {
-    const g = toDevelopment({ players: walkers, prepare: (state) => void (state.players.find((p) => p.id === LENA)!.money = 0) });
-    tapThere(g.game, g, LENA, { type: 'buyMule' });
-    const news = g.game.viewFor(null).news.join(' | ');
-    expect(news).toContain('Not enough money');
-    expect(news).not.toContain('Waiting for the others');
-  });
 });
