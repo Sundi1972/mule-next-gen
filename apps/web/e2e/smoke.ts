@@ -10,6 +10,7 @@ import { PHASE_MS } from '../../server/src/mule-game.js';
 import type { MuleServer } from '../../server/src/server.js';
 import { check, CLAIM_MS, claimAPlot, doneWithLand, held, launch, PHONE, startServer, TV, type AuctionSteps, type GameStepContext } from './harness';
 import { planningIsTheHub } from './hub-steps';
+import { theAuctionTvFits, theTvHeaderFits } from './tv-fit-steps';
 import { gameOverIsInCredits, theLeagueTableAtTheMonthEnd, theMonthEndHoldsForThePhone } from './month-end-steps';
 import { ELECTION_WAIT_MS, readyThroughTheElection } from './politics-steps';
 import { checkTheShow, watchShow, type ShowWatch } from './production-steps';
@@ -156,19 +157,27 @@ try {
   await phone.locator('[data-phase=auction]').waitFor({ timeout: within(2 * PHASE_MS.development + PHASE_MS.production) });
   console.log(`production show, month 1: ${await checkTheShow({ tv: tvShow, phone: phoneShow })}`);
   let measured = false;
+  let fits = '';
   await pressDoneThroughTheAuction(phone, async (button) => {
     if (!measured && button.startsWith('Done with')) measured = await checkTheFloorClearsTheNames(phone, tv);
+    if (!fits && button.startsWith('Done with') && (await tv.locator('[data-testid=tv-walk]').count()) > 0) fits = await theAuctionTvFits(tv, server, code);
   });
   check(measured, 'FM-2: the month-1 auction reached a walk to measure');
+  check(fits !== '', 'TV-FIT: the month-1 auction reached a walk to measure the TV in');
+  console.log(`TV-FIT, the auction: ${fits}`);
 
   // B-AC-12 at month 1's end, the one a two-month game has; then it holds until the phone moves on (B-AC-13).
   console.log(`league table: ${await theLeagueTableAtTheMonthEnd(ctx)}`);
+  await tv.getByTestId('tv-monthend').waitFor({ timeout: PRESS_MS });
+  console.log(`TV-FIT, the month end: ${await theTvHeaderFits(tv, 'month end')}`);
   console.log(`month end: ${(await theMonthEndHoldsForThePhone(ctx, 1)).line}`);
 
   // Month 2.
   await steps.listedSale?.({ phone, tv, check });
   makeHungry(server, code);
   // B-AC-14: planning is the hub, its needs read from that seed; with B-AC-12's planning part.
+  await tv.getByTestId('tv-planning').waitFor({ timeout: READY_MS });
+  console.log(`TV-FIT, planning: ${await theTvHeaderFits(tv, 'planning')}`);
   console.log(`hub: ${await planningIsTheHub(phone, server, code)}`);
   // B-AC-7 (in game): the player moves to a second device, which plays the rest of the game.
   const second = await newPhone('second device');
