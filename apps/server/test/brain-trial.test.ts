@@ -642,9 +642,17 @@ describe.runIf(process.env.MULE_FULL === '1')('brain:trial', () => {
     expect(renderTrialReport(off).some((l) => l.includes('UBER-AC-A'))).toBe(false);
     // Only the playbooks of finished games count, as the decisions do.
     expect(trialReport(input({ planned: 2, games: [game(), game({ id: 'b', end: 'crashed', playbooks: took(0, 6) })] })).edits).toEqual({ model: 8, of: 10 });
+    // A write the API refused is a failed call, never a success: counted and printed, and a failed phase write (an
+    // auction's) is a playbook Claude did not edit, so it joins the clause's denominator (the PR-5 pilot's 24 refused
+    // auction writes read as 100%). A failed land write already counts there, as the engine's land playbook.
+    const failed = trialReport(input({ calls: [...calls, line('playbook', 'error'), line('playbook', 'error'), line('strategy', 'error')] }));
+    expect(failed.writes).toMatchObject({ calls: 5, failed: 3 });
+    expect(failed.edits).toEqual({ model: 8, of: 12 });
+    expect(failed.acEdits).toBe('fail');
+    expect(renderTrialReport(failed)).toContainEqual(expect.stringMatching(/^strategy and playbook calls, each waited for\s+5, late 1 \(20\.0%\), failed 3, tool rounds/));
 
     const printed = renderTrialReport(r);
-    expect(printed).toContainEqual(expect.stringMatching(/^strategy and playbook calls, each waited for\s+2, late 1 \(50\.0%\), tool rounds 1\.00 a call, \$0\.05000$/));
+    expect(printed).toContainEqual(expect.stringMatching(/^strategy and playbook calls, each waited for\s+2, late 1 \(50\.0%\), failed 0, tool rounds 1\.00 a call, \$0\.05000$/));
     expect(printed).toContainEqual(expect.stringMatching(/^playbooks with Claude's edits\s+80\.0% \(8 of 10\)$/));
     expect(printed).toContain("UBER-AC-A edits PASS: 80.0% (8 of 10) of the playbooks that took effect carry Claude's accepted edits (needs at least 80%)");
   });
