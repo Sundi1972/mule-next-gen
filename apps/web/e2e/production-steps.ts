@@ -238,10 +238,10 @@ export async function checkTheShow({ tv, phone, event = false }: { tv: ShowWatch
 
 /**
  * During a full-speed show: calls `midShow` once the event card is up, then,
- * once every plot's goods are home, presses the phone's "On to the auction"
- * and checks that the button is there, that the press sends the ready message
- * and that the game moves on to the auction (HC-6). Returns checkTheShow's
- * summary of what both screens drew.
+ * once every plot's goods are home, checks that the phone's Ready still waits
+ * for the show ("Watching the show") and that the show itself moves the game on
+ * to the auction (HC-6, AM-35). Returns checkTheShow's summary of what both
+ * screens drew.
  */
 export async function pressOnward(phone: Page, watch: { tv: ShowWatch; phone: ShowWatch }, midShow: () => Promise<unknown>): Promise<string> {
   const shown = watch.phone.view();
@@ -255,15 +255,13 @@ export async function pressOnward(phone: Page, watch: { tv: ShowWatch; phone: Sh
   await phone.waitForTimeout(Math.max(0, at((times.eventsAt ?? times.lossAt) + 1) - Date.now()));
   await midShow();
   await phone.waitForTimeout(Math.max(0, at(times.holdAt + 0.3) - Date.now()));
-  const onward = phone.locator('[data-phase=production]').getByRole('button', { name: 'On to the auction' });
-  check(await onward.isEnabled(), 'HC-6: "On to the auction" is there while the phone shows production');
+  // HC-6 (AM-35, the PM's ruling B): Ready waits for the end of the show, so even with every good home the phone's
+  // Ready is still "Watching the show", and nothing it sends ends production; the show ends it, on time.
+  const ready = phone.locator('[data-phase=production] [data-testid=ready]');
+  check((await ready.textContent())?.trim() === 'Watching the show' && (await ready.isDisabled()), 'HC-6: Ready waits for the end of the show ("Watching the show")');
   const before = watch.phone.sent().length;
-  await onward.click();
-  // That it ends production early is proven by the server's T-AC-6, with a fake clock; here the page only has to send the message.
-  const sentReady = () => watch.phone.sent().slice(before).some((m) => JSON.stringify(m) === READY);
-  for (let i = 0; i < HANG_MS / 50 && !sentReady(); i++) await phone.waitForTimeout(50);
-  check(sentReady(), 'HC-6: pressing "On to the auction" sends the ready message');
-  await phone.locator('[data-phase=auction]').waitFor({ timeout: HANG_MS });
+  await phone.locator('[data-phase=auction]').waitFor({ timeout: Math.max(0, endsAt - Date.now()) + HANG_MS });
+  check(!watch.phone.sent().slice(before).some((m) => JSON.stringify(m) === READY), 'HC-6: the phone sent no Ready while the show played');
   return checkTheShow(watch);
 }
 

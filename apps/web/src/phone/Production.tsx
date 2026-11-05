@@ -116,8 +116,16 @@ export function Production({ production }: { production: ProductionView }) {
                 {asked.has(me.id) ? `⏩ Asked: ${people.filter((p) => asked.has(p.id)).length} of ${people.length}` : '⏩ Speed up'}
               </Button>
             )}
-            <Button size="lg" variant={self.ready ? 'outline' : 'holo'} className="w-full px-2" disabled={self.ready} onClick={() => client.intent({ type: 'ready' })}>
-              {self.ready ? 'Waiting for the others' : 'On to the auction'}
+            {/* Ready waits for the end of the show, so the table always sees its month; ⏩ is the way to shorten it. */}
+            <Button
+              size="lg"
+              variant={done && !self.ready ? 'holo' : 'outline'}
+              className="w-full px-2"
+              disabled={!done || self.ready}
+              onClick={() => client.intent({ type: 'ready' })}
+              data-testid="ready"
+            >
+              {!done ? 'Watching the show' : self.ready ? 'Waiting for the others' : 'On to the auction'}
             </Button>
           </>
         }

@@ -438,7 +438,8 @@ describe('a broken show never takes the screen under it down (§4)', () => {
         expect(html, `boards ${boards}, the map at ${t}`).toContain('data-testid="holo-map"');
         expect(inside(html, 'plot-1-0'), `boards ${boards}, Lena's plot at ${t}`).toContain('data-bar="unit"');
         expect(html, `boards ${boards}, the stock strip at ${t}`).toContain('data-testid="stock-strip"');
-        expect(text(html, 'actions'), `boards ${boards}, the actions at ${t}`).toContain('On to the auction');
+        // Mid-show the actions' Ready waits for the show to end (the PM's ruling B on ws6-ux AM-19).
+        expect(text(html, 'actions'), `boards ${boards}, the actions at ${t}`).toContain('Watching the show');
         if (boards === 1) expect(text(html, 'harvest'), `with a TV, the harvest at ${t}`).toContain('+3');
       }
       // The broken show is logged, and the screen goes on to the harvest at the phase's end.
