@@ -204,8 +204,8 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
       const { state, plots } = development(2);
       for (const t of plots) t.owner = ME;
       // Its plots' ground already known, so the draft scouts none: an own route with analyses re-picks its MULEs after
-      // them (AM-27, its own rows below), and under the 5 Nov start stock (2 Food, 2 Energy) these plots' best two uses
-      // are close enough that the draft would analyse them.
+      // them (AM-27, its own rows below), and with the start stock (2 Food, 2 Energy) these plots' best two uses are
+      // close enough that the draft would analyse them.
       me(state).analysed.push(...plots.map((t) => indexOf(state, t)));
       const { seat, hand } = seatAndHand();
       const money = me(state).money;
@@ -294,8 +294,8 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
       const play0 = drafted(seat, state);
       expect(play0.part.route.some((s) => s.act === 'analyse')).toBe(false);
       // After the draft: the plot goes to a rival at the land auction, or gets a MULE; the seat holds three other idle
-      // plots, so the replacement is a pick between them (with two, under the 5 Nov start values, the picks for the
-      // first MULE and the second fall alike).
+      // plots, so the replacement is a pick between them (with two, the picks for the first MULE and the second fall
+      // alike).
       if (how === 'sold') drafted0.owner = RIVAL;
       else drafted0.outfit = 'food';
       for (const t of spares) t.owner = ME;

@@ -501,8 +501,8 @@ describe('the seat plays its development and auction parts (C4, RULE-6, RULE-7)'
         if (own.length > 0) expect(route.some((s) => s.act === 'analyse'), key(id, month)).toBe(true);
         // AM-20: the month's draft carries every good; each later good's own entry carries only that good.
         for (const pb of auction.slice(1)) expect(Object.keys(pb.auction!), key(id, month)).toHaveLength(1);
-        // It declared each good's drafted side where the good had a status screen. There is no Pass (#335): everyone
-        // starts as a buyer, so a buyer, an 'out' and a seller with nothing stand as buyers, and an 'out' trades none.
+        // It declared each good's drafted side where the good had a status screen. There is no Pass: everyone starts as
+        // a buyer, so a buyer, an 'out' and a seller with nothing stand as buyers, and an 'out' trades none.
         const play = (g: Good) => [...auction].reverse().find((pb) => pb.auction![g])!.auction![g]!;
         for (const g of GOODS) {
           const side = t.declared.get(key(id, month, g));
