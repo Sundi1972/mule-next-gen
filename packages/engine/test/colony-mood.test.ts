@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  advancePhase,
   createGame,
   createRng,
   GAME,
@@ -85,6 +86,19 @@ describe('C23: the colony\'s happiness (RULE-20)', () => {
     state.treasury.salesTax = 9 / PERCENT;
     state.players[0]!.money += 2_500;
     expect(moodInputs(state, ['food', 'energy'])).toEqual({ short: 2, air: 55, tax: 9, broken: 0, prestige: 0, gap: 2_500 });
+  });
+
+  it("T-AC-31: a real upkeep feeds the mood that upkeep's shortages, not the report's empty list from production", () => {
+    const state = colony();
+    while (state.phase !== 'auction') advancePhase(state);
+    state.store.stock.food = 0;
+    state.store.stock.water = 0;
+    advancePhase(state);
+    expect(state.phase).toBe('upkeep');
+    const short = state.history.at(-1)!.shortages;
+    expect(short.length, 'an empty shelf leaves the colonists short').toBeGreaterThan(0);
+    expect(state.colony!.happiness).toBe(moodStep(HAPPINESS.start, moodTarget(moodInputs(state, short))));
+    expect(state.colony!.happiness).toBeLessThan(moodStep(HAPPINESS.start, moodTarget(moodInputs(state, []))));
   });
 
   it('T-AC-32: the unknowns contribute 0 — no Governor, no promise this month, one player, nothing short', () => {
