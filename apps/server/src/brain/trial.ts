@@ -15,7 +15,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { BRAIN, score, type GameState, type Playbook } from '@mule/engine';
-import { playbookSource, playGameAsync, type AiSeat, ReplyRejected, simSeats, type Choice, type Decider, type DecisionRecord, type SeatSpec } from '@mule/ai';
+import { playbookSource, playGameAsync, type AiSeat, ReplyRejected, simSeats, type Choice, type Decider, type SeatSpec } from '@mule/ai';
 import { alreadyRanToday, AUTH_STOPPED, claimLedger, day, dayLedgerPath, KINDS, numberFlags, resolveDeps, runAsScript, type MainDeps } from './cli.js';
 import type { Spoken } from './chat.js';
 import { CallFailed } from './client.js';
@@ -116,6 +116,14 @@ async function playTrialGame(setup: GameSetup): Promise<TrialGame> {
   const chat = new Map<string, (record: Spoken) => void>();
   // The record being routed to a seat's chatter, read by its say.
   let routing: Spoken | null = null;
+  /** Says a decision's or a plan's line through the seat's chat, so its say counts it under the record's month. */
+  const route = (seat: string, record: Spoken) => {
+    const say = chat.get(seat);
+    if (!say) return;
+    routing = record;
+    say(record);
+    routing = null;
+  };
 
   const table = tableSeats(setup.table, setup.seed, setup.smart);
   game.chairs = [];
@@ -155,23 +163,13 @@ async function playTrialGame(setup: GameSetup): Promise<TrialGame> {
           seats: smart,
           record: (note) => game.playbooks.push({ seat: note.seat, month: note.month, by: note.playbook.by }),
           // Ruling (a'): a plan's line is said as its phase starts, through the seat's chat, as MuleGame says it.
-          speak: (seat, said) => {
-            const say = chat.get(seat);
-            if (!say) return;
-            routing = { ...said, by: 'llm' };
-            say(routing);
-            routing = null;
-          },
+          speak: (seat, said) => route(seat, { ...said, by: 'llm' }),
         });
         held.playbooks.ask(state, state.month);
       },
       onDecision: (r) => {
         game.decisions.push({ seat: r.seat, kind: r.kind, by: r.by, options: r.shortlist.length, ...(r.note === undefined ? {} : { note: r.note }) });
-        const say = chat.get(r.seat);
-        if (!say) return;
-        routing = r;
-        say(r);
-        routing = null;
+        route(r.seat, r);
       },
       onPhase: (state) => {
         const cut = cutOffPhase(state);
