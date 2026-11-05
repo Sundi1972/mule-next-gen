@@ -472,6 +472,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       phaseScale?: number;
       /** Steered development for this game only (PM ruling); absent, DEV_STEER.on decides. */
       devSteer?: boolean;
+      /** A test option: wolves on, and a pack for the first colonist out on wolf land at once (steerConfig). */
+      forceWolves?: boolean;
       politics?: boolean;
       brain?: BrainService;
       /** Called once, as the game ends, with its final state. */
@@ -1304,7 +1306,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   /** Steered development (C6): the floor at its start, every seat's reach words as its view shows them, the first tick. */
   private startSteering(month: number): void {
     const state = this.requireState();
-    const cfg = steerConfig();
+    const cfg = steerConfig({ forceWolves: this.options.forceWolves ?? false });
     const origin = this.ctx.now();
     const steering: Steering = { floor: buildFloor(state, cfg), inputs: new SteerInputs(), cfg, origin, at: origin, words: new Map(), stats: noStats() };
     this.steering = steering;
