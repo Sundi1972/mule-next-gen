@@ -470,11 +470,11 @@ describe('the seat plays its development and auction parts (C4, RULE-6, RULE-7)'
     expect(d.installs.get(key(ME, MONTH)), 'the draft’s installs play').toEqual(base.installs.get(key(ME, MONTH)));
   });
 
-  it('B-AC-6 (AM-27): an accepted moneyMaker edit still leans the MULEs re-picked after the route’s analyses', () => {
+  it('B-AC-6 (AM-27): an accepted moneyMaker edit still leans the MULEs the hand picks after the route’s analyses', () => {
     ownPhasesOn();
     // A seat and month whose draft analyses before its MULEs and whose edited route outfits each for the edited good,
-    // adopted as accepted, and again under the same route with the draft's own money-maker. The re-pick after the
-    // analyses leans to the playbook's money-maker, so only the edit's keeps the MULEs on the edited good.
+    // adopted as accepted, and again under the same route with the draft's own money-maker. The own picks after the
+    // analyses (re-picked or added) lean to the playbook's money-maker, so only the edit's keeps them on the edited good.
     // Seed 11's first seat-month that qualifies is one where the two leans part.
     const CASE = { seed: 11, nth: 0 };
     const scoutsFirst = (pb: Playbook) => {
@@ -517,8 +517,8 @@ describe('the seat plays its development and auction parts (C4, RULE-6, RULE-7)'
     const { seat: who, month: when, good: maker } = a.edited!;
     const mine = a.table.installs.get(key(who, when))!;
     expect(mine.length, 'it installed MULEs that month').toBeGreaterThan(0);
-    expect(mine.map((m) => m.outfit), 'the re-picked MULEs: the edited money-maker').toEqual(mine.map(() => maker));
-    expect(b.table.installs.get(key(who, when))!.map((m) => m.outfit), 'leaning to the draft’s money-maker instead, the re-pick outfits otherwise').not.toEqual(mine.map(() => maker));
+    expect(mine.map((m) => m.outfit), 'its MULEs: the edited money-maker').toEqual(mine.map(() => maker));
+    expect(b.table.installs.get(key(who, when))!.map((m) => m.outfit), 'leaning to the draft’s money-maker instead, its own picks outfit otherwise').not.toEqual(mine.map(() => maker));
   });
 
   it('T-AC-12: one DecisionRecord per drafted development and auction playbook', () => {
