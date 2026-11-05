@@ -15,6 +15,7 @@ import {
   tileAt,
   type DevFloor,
   type FloorConfig,
+  type FloorInput,
   type GameState,
 } from '@mule/engine';
 import { installable, placePoint } from '../src/floor-time.js';
@@ -46,16 +47,23 @@ function development(seed: number, seats = 2): GameState {
 
 /**
  * ai0's development turn on the floor, as the sim's referee plays it (floor-turn.ts): its input, the step, the moments,
- * then its press where Reach offers one; `between` may change the floor after each tick. The other seats stand.
+ * then its press where Reach offers one; `between` may change the floor after each tick, and `stepped` the floor the
+ * step left, before the press (as stepGlint lights a glint there). The other seats stand.
  */
-function playTurn(state: GameState, cfg: FloorConfig, seat: AiSeat, between: (floor: DevFloor) => DevFloor = (f) => f): DevFloor {
+function playTurn(
+  state: GameState,
+  cfg: FloorConfig,
+  seat: AiSeat,
+  between: (floor: DevFloor) => DevFloor = (f) => f,
+  stepped: (floor: DevFloor, input: FloorInput, left: number) => DevFloor = (f) => f,
+): DevFloor {
   let floor = buildFloor(state, cfg);
   const ticks = (DEVELOPMENT.fullSeconds * MS_PER_SECOND) / cfg.steer.tickMs;
   for (let run = 0; run + 1 < ticks && !state.players.find((p) => p.id === ME)!.doneDeveloping; run++) {
     const left = (DEVELOPMENT.fullSeconds * MS_PER_SECOND - (run + 1) * cfg.steer.tickMs) / MS_PER_SECOND;
     const inputs = { [ME]: seat.developSteer(state, floor, left, cfg) };
     const spent = doorPresses(floor, state, inputs, cfg);
-    floor = settleMoments(state, stepFloor(floor, state, inputs, cfg.steer.tickMs, cfg));
+    floor = stepped(settleMoments(state, stepFloor(floor, state, inputs, cfg.steer.tickMs, cfg)), inputs[ME]!, left);
     if (inputs[ME]!.act && !spent.has(ME) && reachOf(floor, state, ME, cfg, { secondsLeft: left }).enabled) {
       try {
         floor = applyReach(state, floor, ME, left, cfg).floor;
@@ -156,5 +164,34 @@ describe('the floor never refuses a MULE step the AI planned (FM-floor-refusals)
     // The promise: the walk agrees with the plan, and the MULE is on its plot.
     expect(run).toEqual({ kind: 'ok' });
     expect(lake.outfit).toBe('energy');
+  });
+});
+
+describe("the arcade floor's AI bugs of 5 Nov (FM-glint-install, FM-led-analyse, FM-floor-filter)", () => {
+  it('FM-glint-install: a glint lit in reach as the install is pressed takes the press, and the hand presses again to install', () => {
+    // Seen in FM-hurry-margin's sample with WS9's ownPhases on (game 11, month 2, ai3): the step that carried the install
+    // press lit a glint within GRAB's reach, and GRAB THE GLINT ranks above INSTALL (RULE-3). The install did not take
+    // and the hand led the MULE into the pub, where it was lost.
+    const state = development(4);
+    const plot = state.tiles.find((t) => t.terrain === 'plains' && t.owner === null)!;
+    plot.owner = ME;
+    const cfg = quietConfig();
+    const seat = new AiSeat({ id: ME, name: 'AI 1', persona: 'trader', level: 'trader', seed: 11 });
+    const me = state.players.find((p) => p.id === ME)!;
+    let crystite: number | null = null;
+    playTurn(state, cfg, seat, undefined, (floor, input, left) => {
+      if (crystite !== null || !input.act || reachOf(floor, state, ME, cfg, { secondsLeft: left }).kind !== 'install') return floor;
+      const c = floor.colonists.find((x) => x.id === ME)!;
+      const under = (t: { x: number; y: number }) => Math.floor(c.x) === t.x && Math.floor(c.y) === t.y;
+      const beside = state.tiles.find((t) => t.terrain !== 'store' && terrainShare(t.terrain, cfg) > 0 && !under(t) && Math.hypot(t.x + 0.5 - c.x, t.y + 0.5 - c.y) <= cfg.glint.grabReach)!;
+      crystite = me.stock.crystite;
+      return { ...floor, moments: { ...floor.moments, glint: { x: beside.x, y: beside.y, sinceTick: floor.tick, untilTick: floor.tick + 3 } } };
+    });
+    expect(crystite, 'a glint lit as the install was pressed').not.toBeNull();
+    expect(me.stock.crystite, 'the press grabbed the glint').toBeGreaterThan(crystite!);
+    // The promise: the MULE it paid for is on its plot, not walked into the pub.
+    expect(refused(seat), JSON.stringify(seat.developLog())).toEqual([]);
+    expect(me.carriedMule, 'no MULE left on the lead').toBeNull();
+    expect(tileAt(state.tiles, state.width, plot.x, plot.y)!.outfit, 'the MULE on its plot').not.toBeNull();
   });
 });
