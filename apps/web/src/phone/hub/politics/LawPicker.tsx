@@ -155,13 +155,8 @@ export function LawPicker() {
   const [changing, setChanging] = useState(false);
   if (!pol || pol.governor !== self.id) return null;
   const votesOpen = (!!pol.council && pol.council.stage !== 'over') || (!!pol.election && pol.election.stage !== 'over');
-  if (votesOpen) {
-    return (
-      <Section title="Next month’s law" testid="gov-law">
-        <span className="text-[11px] text-ink-2">Propose once the votes are over</span>
-      </Section>
-    );
-  }
+  // While a vote is open its stage holds the phone (the election or the law ballot), so the picker never shows then.
+  if (votesOpen) return null;
   if (pending && !changing) {
     return (
       <Section title="Next month’s vote" testid="gov-law">
