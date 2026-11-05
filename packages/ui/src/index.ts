@@ -21,6 +21,7 @@ export * from './components/motion/gait';
 export * from './components/MuleIcon';
 export * from './components/species';
 export * from './components/SpecialIcon';
+export * from './components/ObjectGlyph';
 export * from './components/Stat';
 export * from './components/Store';
 export * from './components/Ticker';

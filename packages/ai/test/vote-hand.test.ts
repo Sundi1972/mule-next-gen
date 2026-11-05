@@ -4,15 +4,22 @@ import {
   AI_PERSONAS,
   advancePhase,
   canRun,
+  castLawVote,
   castVote,
+  commission,
   createGame,
   createRng,
   electionDone,
+  payStrike,
+  repair,
+  setSiteBid,
   POLITICS,
+  proposeLaw,
   RuleError,
   runFor,
   setSalesTax,
   stepElection,
+  votesDone,
   WALK,
   type AiLevelId,
   type AiPersonaId,
@@ -66,8 +73,26 @@ function engineAct(state: GameState, id: string, refused: AiAction[], sent: AiAc
         case 'setTax':
           setSalesTax(state, id, action.percent);
           break;
+        case 'commission':
+          commission(state, id, action.id);
+          break;
+        case 'payStrike':
+          payStrike(state, id);
+          break;
+        case 'repair':
+          repair(state, id, action.id);
+          break;
+        case 'setSiteBid':
+          setSiteBid(state, id, action.id, action.maxBid);
+          break;
+        case 'propose':
+          proposeLaw(state, id, action.proposal);
+          break;
+        case 'voteLaw':
+          castLawVote(state, id, action.yes);
+          break;
         case 'done':
-          electionDone(state, id, action.done);
+          votesDone(state, id, action.done);
           break;
         default:
           throw new Error(`VoteHand sent a non-politics move: ${action.type}`);
@@ -236,9 +261,11 @@ describe('VoteHand on a Classic table', () => {
     expect(rate()).toBe(month2);
 
     expect(refused).toEqual([]);
-    // Once per planning, only to change the rate, and nobody else touches it.
+    // Once per planning, only to change the rate, and nobody else touches it. (The Governor's colony acts, G-5 C25,
+    // are its other moves and not about the tax.)
     const percents = month1 === null ? [month2] : [month1, month2];
-    expect(sent.get('ai2')).toEqual(percents.map((percent) => ({ type: 'setTax', percent })));
+    const taxMoves = (id: string) => sent.get(id)!.filter((a) => a.type === 'setTax');
+    expect(taxMoves('ai2')).toEqual(percents.map((percent) => ({ type: 'setTax', percent })));
     for (const id of ['ai0', 'ai1', 'ai3']) expect(sent.get(id)).toEqual([]);
   });
 });

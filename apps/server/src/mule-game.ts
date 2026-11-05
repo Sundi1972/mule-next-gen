@@ -17,6 +17,10 @@ import {
   declareRole,
   leaveBoard,
   electionDone,
+  votesDone,
+  votesOpen,
+  proposeLaw,
+  castLawVote,
   DEV_STEER,
   buildFloor,
   IDLE_INPUT,
@@ -39,6 +43,7 @@ import {
   hungerPace,
   installMule,
   isElectionDone,
+  isVotesDone,
   list as listLot,
   litPlot,
   lotDone,
@@ -62,6 +67,12 @@ import {
   scoreParts,
   setLotWalk,
   setSalesTax,
+  commission,
+  donate,
+  repair,
+  payStrike,
+  goodWords,
+  setSiteBid,
   setWalk,
   shipAnnounced,
   shipInPort,
@@ -71,7 +82,7 @@ import {
   SPECIES,
   type Species,
   stepAuction,
-  stepElection,
+  stepVotes,
   stepLandAuction,
   stepWalk,
   storeBuyLine,
@@ -103,7 +114,8 @@ import { Playbooks, type PlaybookSource } from './brain/playbooks.js';
 import { devFrame, noStats, steerConfig, steeredColonistView, SteerInputs, stepTick, type Steering } from './dev-steer.js';
 import { colonistView, dueArrivals, placeName, walkTarget, type Colonist, type DevIntent } from './dev-walking.js';
 import { boardRange, landAuctionView, listingView, lotNews } from './land-auction.js';
-import { ceremonyNews, myPoliticsView, politicsView } from './politics-view.js';
+import { colonyView } from './colony-view.js';
+import { ceremonyNews, councilNews, myPoliticsView, politicsView } from './politics-view.js';
 
 /**
  * The longest each phase lasts, in milliseconds, from the engine's PHASES.
@@ -158,7 +170,7 @@ function isSpecies(pick: string | undefined): pick is Species {
 /** The parts that are a plot's base: its ground's yield, or a factory's run. Every other part but an event is a reason. */
 const BASE_PARTS: readonly string[] = ['ground', 'factory'];
 /** The receipt of a seat that traded nothing in the good that closed. */
-const NO_RECEIPT: GoodReceipt = { bought: { units: 0, gross: 0, tax: 0, prices: [], with: [] }, sold: { units: 0, gross: 0, tax: 0, prices: [], with: [] } };
+const NO_RECEIPT: GoodReceipt = { bought: { units: 0, gross: 0, tax: 0, exportTax: 0, prices: [], with: [] }, sold: { units: 0, gross: 0, tax: 0, exportTax: 0, prices: [], with: [] } };
 
 /** Every outfit a seat can choose, in the order its view lists their costs. */
 const OUTFITS: readonly Outfit[] = [...GOODS, 'greenBelt'];
@@ -561,9 +573,9 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         this.hurryIfAllAsked();
         return;
       case 'ready':
-        // During the election, ready is Done for the stage; it never ends planning.
+        // While a vote is open (the election, then the law ballot), ready is Done for its stage; it never ends planning.
         if (this.electionOpen()) {
-          electionDone(state, seatId);
+          votesDone(state, seatId);
           return;
         }
         if (state.phase === 'auction') {
@@ -633,6 +645,30 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       case 'setTax':
         setSalesTax(state, seatId, intent.percent);
         return;
+      case 'commission':
+        commission(state, seatId, intent.id);
+        return;
+      case 'donate':
+        donate(state, seatId, intent.id, intent.credits, intent.goods);
+        return;
+      case 'repair':
+        repair(state, seatId, intent.id);
+        return;
+      case 'setSiteBid':
+        setSiteBid(state, seatId, intent.id, intent.maxBid);
+        return;
+      case 'payStrike': {
+        payStrike(state, seatId);
+        const { good, cost } = state.colony!.strike!;
+        this.addNews(`${this.nameOf(seatId)} pays the ${goodWords(good)} strikers ${cost} cr.`);
+        return;
+      }
+      case 'propose':
+        proposeLaw(state, seatId, intent.proposal);
+        return;
+      case 'voteLaw':
+        castLawVote(state, seatId, intent.yes);
+        return;
       case 'continue': {
         if (seatId !== this.ctx.hostId()) throw new RuleError('Only the host can continue');
         this.continuePlanning(seatId);
@@ -653,6 +689,14 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     const goneOn = (did: string, left: string[]) => {
       if (left.length > 0) this.addNews(`${this.nameOf(hostId)} ${did} without ${andList(left)}.`);
     };
+    const council = state.politics?.council;
+    if (this.electionOpen() && council && council.stage !== 'over') {
+      if (council.stage === 'reveal') throw new RuleError('The result is being announced');
+      const waiting = this.seats.filter((s) => !s.isAi && !isVotesDone(state, s.id));
+      for (const s of waiting) votesDone(state, s.id);
+      goneOn('closed the law ballot', waiting.filter((s) => s.id !== hostId).map((s) => s.name));
+      return;
+    }
     if (this.electionOpen()) {
       const { stage } = state.politics!.election!;
       if (stage === 'ceremony') throw new RuleError('The result is being announced');
@@ -1147,11 +1191,9 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     for (const seat of this.ai.values()) seat.planMonth(state, (action) => this.aiAct(seat.id, action));
   }
 
-  /** True while this month's election runs, before planning proper. */
+  /** True while the colony votes in planning (this month's election, then its law ballot), before planning proper. */
   private electionOpen(): boolean {
-    const state = this.state;
-    const election = state?.politics?.election;
-    return state?.phase === 'planning' && !!election && election.stage !== 'over';
+    return !!this.state && votesOpen(this.state);
   }
 
   /**
@@ -1169,9 +1211,12 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         // A stalled server loop must not skip a stage.
         const dt = Math.min(Math.max(0, now - last), WALK.tickMs * 3) / this.phaseScale;
         this.tickVoteHands(dt);
-        const before = state.politics!.election!.ceremony?.elapsedMs ?? -1;
-        stepElection(state, dt);
+        const before = state.politics!.election?.ceremony?.elapsedMs ?? -1;
+        const revealed = !!state.politics!.council?.result;
+        stepVotes(state, dt);
         for (const line of ceremonyNews(state, before, (id) => this.nameOf(id))) this.addNews(line);
+        const news = revealed ? null : councilNews(state);
+        if (news) this.addNews(news);
         if (this.electionOpen()) this.scheduleElectionTick(now);
         else {
           // Planning proper opens now: its show, were it to fire one, starts here and not at the election's start.
@@ -1522,7 +1567,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
           else setWalk(state, seatId, action.dir);
           break;
         case 'done':
-          if (this.electionOpen()) electionDone(state, seatId, action.done);
+          if (this.electionOpen()) votesDone(state, seatId, action.done);
           else if (state.phase === 'landGrant') grantPass(state, seatId);
           else if (state.phase === 'landAuction') lotDone(state, seatId, action.done);
           else auctionDone(state, seatId, action.done);
@@ -1697,7 +1742,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       return !!p && (p.doneWithLand || p.claimsThisGrant >= GAME.claimsPerGrant);
     };
     const isReady = (id: string) =>
-      this.electionOpen() ? isElectionDone(state, id) : state.phase === 'landGrant' ? doneWithLand(id) : this.ready.has(id);
+      this.electionOpen() ? isVotesDone(state, id) : state.phase === 'landGrant' ? doneWithLand(id) : this.ready.has(id);
     const lastEnd = this.monthEnds.get(state.month - 1) ?? null;
     return {
       finished: state.phase === 'gameOver',
@@ -1814,6 +1859,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       production: state.phase === 'production' || state.phase === 'upkeep' ? productionView(state, this.productionMs, state.phase === 'production' ? this.hurryView() : null) : null,
       ...this.eventsView(state),
       politics: politicsView(state),
+      colony: colonyView(state),
     };
   }
 

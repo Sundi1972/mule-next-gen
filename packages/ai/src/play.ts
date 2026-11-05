@@ -5,14 +5,15 @@ import {
   analysePlot,
   auctionDone,
   buyMule,
+  castLawVote,
   castVote,
+  commission,
   claimPlot,
   COLONY_SELLER,
   createGame,
   createRng,
   declareRole,
   DEV_STEER,
-  electionDone,
   fitFilter,
   GAME,
   grantDone,
@@ -27,12 +28,18 @@ import {
   RuleError,
   runFor,
   setLotWalk,
+  payStrike,
+  repair,
+  setSiteBid,
+  proposeLaw,
   setSalesTax,
+  votesDone,
+  votesOpen,
   setWalk,
   SHIP_ID,
   SIM_TARGETS,
   stepAuction,
-  stepElection,
+  stepVotes,
   stepLandAuction,
   STORE_ID,
   tileIndex,
@@ -224,10 +231,29 @@ function applyRule(state: GameState, id: string, action: AiAction, clock?: DevCl
       case 'setTax':
         setSalesTax(state, id, action.percent);
         break;
+      case 'commission':
+        commission(state, id, action.id);
+        break;
+      case 'payStrike':
+        payStrike(state, id);
+        break;
+      case 'repair':
+        repair(state, id, action.id);
+        break;
+      case 'setSiteBid':
+        setSiteBid(state, id, action.id, action.maxBid);
+        break;
+      case 'propose':
+        proposeLaw(state, id, action.proposal);
+        break;
+      case 'voteLaw':
+        castLawVote(state, id, action.yes);
+        break;
       case 'done':
         if (state.phase === 'landGrant') grantPass(state, id);
         else if (state.phase === 'landAuction') lotDone(state, id, action.done);
-        else if (state.phase === 'planning' && state.politics?.election) electionDone(state, id, action.done);
+        // The election's or the law ballot's Done, through the one votes facade, as the server's.
+        else if (state.phase === 'planning' && (state.politics?.election || state.politics?.council)) votesDone(state, id, action.done);
         else auctionDone(state, id, action.done);
         break;
       case 'drone':
@@ -378,14 +404,14 @@ function* playPhases(
   while (state.phase !== 'gameOver' && !done(state) && guard++ < maxSteps) {
     switch (state.phase) {
       case 'planning': {
-        // The election comes first: hands act before each step, with the same dt, until every seat is Done and the
-        // ceremony is over; one more tick lets the Governor set the tax and a seat declare ahead of the next election
-        // (every month, with or without an election).
+        // The votes come first, as on the server: the election, then the law ballot and its reveal. Hands act before
+        // each step, with the same dt, until every vote is over; one more tick lets the Governor set the tax, propose and
+        // act for the colony, and a seat declare ahead of the next election (every month, with or without a vote).
         const vote = (i: number) => voteHands[i]!.tick(state, WALK.tickMs, (a) => applyAction(state, seats[i]!.id, a));
-        // literal-ok: a runaway guard on the election's ticks, not a game clock
-        for (let ticks = 0; state.politics?.election && state.politics.election.stage !== 'over' && ticks < 100_000; ticks++) {
+        // literal-ok: a runaway guard on the votes' ticks, not a game clock
+        for (let ticks = 0; votesOpen(state) && ticks < 100_000; ticks++) {
           seats.forEach((_, i) => vote(i));
-          stepElection(state, WALK.tickMs);
+          stepVotes(state, WALK.tickMs);
         }
         seats.forEach((_, i) => vote(i));
         seats.forEach((s, i) => {

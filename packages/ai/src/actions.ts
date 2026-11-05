@@ -8,9 +8,11 @@ import {
   POLITICS,
   type AuctionSide,
   type GameState,
+  type LawProposal,
   type Office,
   type Outfit,
   type Phase,
+  type PrestigeId,
   type TaxPromise,
 } from '@mule/engine';
 
@@ -42,7 +44,19 @@ export type AiAction =
   /** Planning: put a plot, or the MULE on one, up for the land auction. */
   | { type: 'list'; item: { kind: 'plot' | 'mule'; x: number; y: number }; minimum: number; unsold: 'store' | 'keep' }
   /** Planning: take one of its listings back. */
-  | { type: 'unlist'; id: string };
+  | { type: 'unlist'; id: string }
+  /** Planning, the Governor once the votes are over: commission a prestige object for the colony (G-5 RULE-22). */
+  | { type: 'commission'; id: PrestigeId }
+  /** Planning, the Governor once the votes are over: pay this month's general strikers from the fund (G-5 RULE-26). */
+  | { type: 'payStrike' }
+  /** Planning, the Governor once the votes are over: mend a damaged prestige object from the fund (G-5 RULE-22). */
+  | { type: 'repair'; id: PrestigeId }
+  /** Planning, the Governor once the votes are over: the colony's top bid for an object's site; null, no bid (G-5 RULE-28). */
+  | { type: 'setSiteBid'; id: PrestigeId; maxBid: number | null }
+  /** Planning, the Governor once the votes are over: put a law to the next planning's ballot; null withdraws it (slice 2a RULE-41). */
+  | { type: 'propose'; proposal: LawProposal | null }
+  /** The law ballot: yes or no; a later vote replaces it until the ballot closes (slice 2a RULE-40). */
+  | { type: 'voteLaw'; yes: boolean };
 
 /** Plays one action. Returns false when the rules refused it (a RuleError), so the hands move on to the next item. */
 export type Act = (action: AiAction) => boolean;
@@ -269,6 +283,98 @@ const DESCRIBED = {
     legalWhen: () => ['Listings are made in planning', 'No such listing', 'Not your listing'],
     cost: null,
     args: { id: "the listing's id" },
+  },
+  commission: {
+    type: 'commission',
+    command: 'commission',
+    phases: ['planning'],
+    does: () => 'The Governor commissions a prestige object; the fund and donors pay for it from the next upkeep, and it builds once paid (and sited, if it needs a plot).',
+    legalWhen: () => [
+      "This game plays without the colony's council",
+      'Commission once the votes are over',
+      'Only the Governor commissions for the colony',
+      "The colony can't build that",
+      'The colony already has {a or an} {name}',
+      'The colony is already building the {name}',
+    ],
+    cost: null,
+    args: { id: "the object: 'park', 'hospital', 'observatory', 'stadium' or 'spaceport'" },
+  },
+  payStrike: {
+    type: 'payStrike',
+    command: 'payStrike',
+    phases: ['planning'],
+    does: () => "The Governor pays this month's general strikers from the colony fund, so the struck good produces in full.",
+    legalWhen: () => [
+      "This game plays without the colony's council",
+      'There is no strike to pay off',
+      'Pay the strikers once the votes are over',
+      'Only the Governor pays the strikers',
+      'The strikers are already paid',
+      'The fund has {fund} cr; the strikers want {cost} cr',
+    ],
+    cost: null,
+    args: {},
+  },
+  repair: {
+    type: 'repair',
+    command: 'repair',
+    phases: ['planning'],
+    does: () => 'The Governor pays from the colony fund to mend a damaged prestige object, so it stands again and counts its prestige.',
+    legalWhen: () => [
+      "This game plays without the colony's council",
+      'Repair once the votes are over',
+      'Only the Governor repairs for the colony',
+      "The {name} isn't damaged",
+      'The fund has {fund} cr; the repair costs {cost} cr',
+    ],
+    cost: null,
+    args: { id: "the damaged object: 'park', 'hospital', 'observatory', 'stadium' or 'spaceport'" },
+  },
+  setSiteBid: {
+    type: 'setSiteBid',
+    command: 'setSiteBid',
+    phases: ['planning'],
+    does: () => "The Governor sets the colony's top bid for a commissioned object's plot at the land auction, paid from the fund; null, the colony does not bid.",
+    legalWhen: () => [
+      "This game plays without the colony's council",
+      'Set the bid once the votes are over',
+      "Only the Governor sets the colony's bid",
+      'Nothing is waiting for a site',
+      'The {name} needs no plot',
+      'The {name} already has its site',
+      'Bid a whole number of credits',
+    ],
+    cost: null,
+    args: { id: 'the commissioned object that needs a plot', maxBid: 'whole credits, or null for no bid' },
+  },
+  propose: {
+    type: 'propose',
+    command: 'propose',
+    phases: ['planning'],
+    does: () => "The Governor puts a law, a new setting or a repeal to the next planning's ballot, or withdraws it.",
+    legalWhen: () => [
+      'This game plays without a Governor',
+      'Propose once the votes are over',
+      'Only the Governor proposes a law',
+      "That law is not in the colony's book",
+      'That proposal failed in month {month}; it can come back in month {month}',
+      'That law is not in force',
+      '{law} is set to {settings}',
+      'That law is already in force at that setting',
+      '{count, in words} laws are in force: pick the one this replaces',
+    ],
+    cost: null,
+    args: { proposal: "{ kind: 'enact', law, setting, replaces? } or { kind: 'repeal', law }, or null to withdraw" },
+  },
+  voteLaw: {
+    type: 'voteLaw',
+    command: 'voteLaw',
+    phases: ['planning'],
+    does: () => 'Votes yes or no on the open law ballot; a later vote replaces it until the ballot closes.',
+    legalWhen: () => ['The law ballot is not open'],
+    cost: null,
+    args: { yes: 'true for yes, false for no' },
   },
 } satisfies Described;
 

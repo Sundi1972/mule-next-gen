@@ -61,9 +61,10 @@ export interface GameRecord<Intent> {
   events: RecordEvent<Intent>[];
   /**
    * The state when the game ended: at game over, or, with `ended: 'error'`, when the error ended the room. Then the
-   * scores are what `score` gives on that state, and absent if scoring itself threw.
+   * scores are what `score` gives on that state, and absent if scoring itself threw. `colonyScore` is the colony
+   * score's total (G-5 RULE-25, C32) in a game with the council, absent without one.
    */
-  outcome?: { scores?: Record<PlayerId, number>; stateHash: string };
+  outcome?: { scores?: Record<PlayerId, number>; colonyScore?: number; stateHash: string };
   /** Absent: the game ended normally (or not yet). 'error': a game error ended the room at the record's last step. */
   ended?: 'error';
   /** With `ended: 'error'`: the error's message only, never its stack, so no path or env reaches the file. */
