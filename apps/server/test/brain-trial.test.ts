@@ -258,7 +258,7 @@ describe("brain:trial tournament (WS1's bar for UBER-AC-A: --table pair, --seeds
     expect(report!.results.games).toBe(1);
     expect(report!.bar).toEqual({ kind: 'control', verdict: tournamentBar(report!.results, true, 1) });
     expect(out.join('\n')).toContain('control: the Claude chairs play as engine seats');
-  });
+  }, GAMES_MS);
 
   it('TOURNEY-4: a control that does not pass exits 1, so the paid run cannot follow it in a chain; a claim that fails is a result and exits 0; a pair claim without the key is refused before any game', async () => {
     expect(exitCode(false, 'done', { ac2: 'pass', bar: { kind: 'control', verdict: 'fail' } })).toBe(1);
