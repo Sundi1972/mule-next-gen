@@ -3,7 +3,7 @@ import type { MuleView } from '@mule/protocol';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 // The client's own reading of a sick line: the reason crosses the seam as prose, so the two must agree.
 import { sickBecause } from '../../../packages/ui/src/events/sick.js';
-import { AI_DEV_TICK_MS, MuleGame } from '../src/mule-game.js';
+import { MuleGame } from '../src/mule-game.js';
 import { fakeContext, pressThroughSidePick, readyAll, seats, toDevelopment } from './fake-context.js';
 
 /** A month event of `key` that hit one plot; its words and shape don't matter to how long it plays. */
@@ -193,7 +193,7 @@ describe('T-AC-7: nobody acts while a timed phase\'s events play; the same press
     advance(1);
     expect(game.viewFor(null).phaseEndsAt).toBe(heldUntil + DEVELOPMENT.fullSeconds * 1_000);
     movesOnStick(game, advance, 's2');
-    advance(AI_DEV_TICK_MS);
+    advance(DEV_STEER.tickMs);
     expect(ticks()).toBeGreaterThan(0);
   });
 
@@ -221,7 +221,7 @@ describe('T-AC-7: nobody acts while a timed phase\'s events play; the same press
     ctx.changed = () => changed++;
     const { endsAt } = game.viewFor(null).eventShow!;
     game.dispose();
-    advance(endsAt - ctx.now() + AI_DEV_TICK_MS * 3);
+    advance(endsAt - ctx.now() + DEV_STEER.tickMs * 3);
     expect({ ticks: ticks(), phaseEndsAt: game.viewFor(null).phaseEndsAt, changed }).toEqual({ ticks: 0, phaseEndsAt: null, changed: 0 });
   });
 
@@ -318,7 +318,7 @@ describe('T-AC-8: an untimed phase and a phase without events are not held (RULE
     expect(ctx.now()).toBe(enteredAt);
     const ticks = countTicks(game, 'developSteer');
     movesOnStick(game, advance, 's1');
-    advance(AI_DEV_TICK_MS);
+    advance(DEV_STEER.tickMs);
     expect(ticks()).toBeGreaterThan(0);
   });
 

@@ -43,11 +43,12 @@ const person = (id: string, name: string, slot: number, isAi = false): PlayerVie
 const players = [person(LENA, 'Lena', 0), person(BRIX, 'Brix', 1), person('s3', 'The Baron', 2, true)];
 const tiles = Array.from({ length: W * H }, (_, i) => ({ x: i % W, y: Math.floor(i / W), terrain: 'plains', owner: i === 1 ? LENA : null, outfit: i === 1 ? 'food' : null }));
 
-function game(boards: number, t: number, production: ProductionView): PhoneGame {
+function game(boards: number, t: number, production: ProductionView, { cast = players, away = [] as string[] } = {}): PhoneGame {
   const phaseEndsAt = NOW + production.lengthMs - t * 1000;
-  const view = { phase: 'production', month: 2, maxMonths: 12, phaseEndsAt, width: W, height: H, tiles, players, production } as unknown as MuleView;
+  const view = { phase: 'production', month: 2, maxMonths: 12, phaseEndsAt, width: W, height: H, tiles, players: cast, production } as unknown as MuleView;
+  const seats = cast.map((p) => ({ id: p.id, name: p.name, isAi: p.isAi, connected: !away.includes(p.id), color: p.slot }));
   const me = { id: LENA, stock: { food: 3, water: 0, energy: 0, smithore: 0, crystite: 0, rareEarth: 0, alloy: 0, electronics: 0, medicine: 0 } } as unknown as MyView;
-  return { table: { code: 'ABCD', status: 'playing', hostId: LENA, boards, seats: [], game: null } as TableView<MuleView>, view, me, self: players[0]!, slot: 0 };
+  return { table: { code: 'ABCD', status: 'playing', hostId: LENA, boards, seats, game: null } as TableView<MuleView>, view, me, self: cast[0]!, slot: 0 };
 }
 
 const sent: unknown[] = [];
@@ -92,6 +93,19 @@ describe('B-AC-20 (AM-19): the phone asks to speed the show up', () => {
     // Two people at the table; the AI is never waited for.
     expect(text(asked, 'speed-up-button')).toBe('⏩ Asked: 1 of 2');
     expect(tag(asked, 'speed-up-button')).toMatch(/ disabled=""/);
+  });
+
+  it('a dropped person is never counted: with Kai away, Lena\'s ask is 1 of the 2 still here (#344 review, minor 3)', () => {
+    const withKai = [...players, person('s4', 'Kai', 3)];
+    const html = renderToStaticMarkup(
+      createElement(ClientProvider, { client, children: createElement(PhoneGameProvider, { value: game(1, MID, month({ asked: [LENA], from: null }), { cast: withKai, away: ['s4'] }), children: createElement(Production, { production: month({ asked: [LENA], from: null }) }) }) }),
+    );
+    expect(text(html, 'speed-up-button')).toBe('⏩ Asked: 1 of 2');
+    // Her own phone, reconnecting, is still counted: never "Asked: 0 of 0".
+    const self = renderToStaticMarkup(
+      createElement(ClientProvider, { client, children: createElement(PhoneGameProvider, { value: game(1, MID, month({ asked: [LENA], from: null }), { cast: withKai, away: ['s4', LENA] }), children: createElement(Production, { production: month({ asked: [LENA], from: null }) }) }) }),
+    );
+    expect(text(self, 'speed-up-button')).toBe('⏩ Asked: 1 of 2');
   });
 
   it('a tap on ⏩ Speed up sends the hurry intent, and nothing else', () => {

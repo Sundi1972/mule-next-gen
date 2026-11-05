@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { advancePhase, callStrike, COLONY, GOOD_CONFIG, HAPPINESS, monthLedger, PRESTIGE, RuleError, type GameState } from '@mule/engine';
+import { advancePhase, callStrike, COLONY, colonyScore, colonyScoreOf, GOOD_CONFIG, HAPPINESS, monthLedger, PRESTIGE, RuleError, type GameState } from '@mule/engine';
 import { MuleGame } from '../src/mule-game.js';
 import { fakeContext, seats } from './fake-context.js';
 
@@ -26,6 +26,36 @@ function refusal(run: () => void): string {
 }
 
 describe('the colony at the table', () => {
+  it('AM-12: lastScore is the colony score as the last month ended, from its own snapshot (air included); none in month 1', () => {
+    const { game, state } = governed();
+    expect(game.viewFor(null).colony!.lastScore ?? null, 'month 1 has no last month end').toBeNull();
+    state.month = 2;
+    const end = { month: 1, wealth: 9_000, prestige: 3, happiness: 70, air: 12 };
+    state.colony!.monthEnds = [end];
+    state.air = 80; // the air now is not the air that month ended at
+    const expected = colonyScoreOf({ wealth: end.wealth, air: end.air, prestige: end.prestige, happiness: end.happiness }).total;
+    for (const seat of [null, 's1']) expect(game.viewFor(seat).colony!.lastScore, `seen by ${seat ?? 'the TV'}`).toBe(expected);
+    state.colony!.monthEnds = [{ ...end, happiness: null }];
+    expect(game.viewFor(null).colony!.lastScore, 'no mood yet, no score').toBeNull();
+
+    // At the month end (upkeep) this month's snapshot is already in: lastScore is still the month before's.
+    state.phase = 'upkeep';
+    const thisEnd = { month: 2, wealth: 12_000, prestige: 5, happiness: 40, air: 30 };
+    state.colony!.monthEnds = [end, thisEnd];
+    expect(game.viewFor(null).colony!.lastScore, "the month end compares with last month's, not its own").toBe(expected);
+  });
+
+  it('AM-12 (RULE-25): every screen carries the colony score every month, as the state scores now, not only at game over', () => {
+    const { game, state } = governed();
+    expect(state.phase).not.toBe('gameOver');
+    const now = colonyScore(state)!;
+    expect(now.total).toBeGreaterThan(0);
+    for (const seat of [null, 's1', 's2']) expect(game.viewFor(seat).colony!.score, `seen by ${seat ?? 'the TV'}`).toEqual(now);
+    state.colony!.happiness = 0;
+    expect(game.viewFor(null).colony!.score, 'it follows the state, not a stored total').toEqual(colonyScore(state));
+    expect(game.viewFor(null).colony!.score!.total).toBeLessThan(now.total);
+  });
+
   it("B-AC-23: the Governor's phone commissions and another phone donates; every screen's colony view shows the project and the plaque at once, and a non-Governor's commission is refused with RULE-22's message", () => {
     const { game, state } = governed();
     expect(refusal(() => game.handle('s2', { type: 'commission', id: 'hospital' }))).toBe('Only the Governor commissions for the colony');
@@ -113,6 +143,22 @@ describe('the colony at the table', () => {
     for (const viewer of [null, 's1', 's2']) expect(game.viewFor(viewer).colony!.projects[0]!.maxBid, `${viewer ?? 'the TV'}'s view`).toBe(300);
     game.handle('s1', { type: 'setSiteBid', id: 'park', maxBid: null });
     expect(game.viewFor(null).colony!.projects[0]!.maxBid, 'the Governor can take the bid back').toBeNull();
+  });
+
+  it("C35: the colony view carries refPrice for every good the catalogue needs, and a gift's plaque grows by exactly units × that price, after the store's prices have moved", () => {
+    const { game, state } = governed();
+    const needed = [...new Set(Object.values(PRESTIGE).flatMap((row) => Object.keys(row.goods)))].sort();
+    // The store's reference drifts with trade; the plaque values goods as the engine does, so the view must too.
+    for (const good of needed) state.store.refPrice[good as keyof typeof state.store.refPrice] += 37;
+    const view = game.viewFor('s2').colony!;
+    expect(Object.keys(view.refPrice ?? {}).sort()).toEqual(needed);
+    for (const viewer of [null, 's1']) expect(game.viewFor(viewer).colony!.refPrice, `${viewer ?? 'the TV'}'s view`).toEqual(view.refPrice);
+
+    game.handle('s1', { type: 'commission', id: 'hospital' });
+    state.players.find((p) => p.id === 's2')!.stock.electronics = 1;
+    game.handle('s2', { type: 'donate', id: 'hospital', credits: 50, goods: { electronics: 1 } });
+    const [project] = game.viewFor('s2').colony!.projects;
+    expect(project!.plaque).toEqual([{ playerId: 's2', value: 50 + 1 * view.refPrice!.electronics! }]);
   });
 
   it('the colony view is null with politics off', () => {

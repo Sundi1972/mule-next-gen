@@ -13,14 +13,16 @@ export type MuleIntent =
   | { type: 'drone'; plots: { x: number; y: number }[] }
   /** Land grant: claim the plot that is lit. The coordinates say which plot the player saw lit. */
   | { type: 'claim'; x: number; y: number }
+  /**
+   * Development's moves, by name. No screen sends them since development is steered (C14): the server refuses them,
+   * and the floor plays each through `act`. They stay while the AI's move catalogue (packages/ai actions.ts) names
+   * them as its moves' commands.
+   */
   | { type: 'buyMule' }
   | { type: 'outfit'; outfit: Outfit }
   | { type: 'install'; x: number; y: number }
-  /** Development: analyse any plot's ground. Costs development time. */
   | { type: 'analyse'; x: number; y: number }
-  /** Development: fit a filter to one of your plots, paid in Alloy. */
   | { type: 'filter'; x: number; y: number }
-  /** Development: end your turn at the pub for cash. */
   | { type: 'pub' }
   /** Auction: buy, sell or pass on the good that is up. During the walk a switch jumps you to the new side's start edge. */
   | { type: 'declare'; side: AuctionSide }
@@ -106,7 +108,7 @@ export interface PlayerView {
   lastWorth: number | null;
   /**
    * While the air is in Collapse, this player's Worth before the cut (scoreParts' total plus its cut: money + goods +
-   * land + muleValue + office, rounded as scoreParts rounds); null outside Collapse. Public like `worth`, a total only.
+   * land + muleValue + office + donated, rounded as scoreParts rounds); null outside Collapse. Public like `worth`, a total only.
    */
   worthBeforeCut: number | null;
   plots: number;
@@ -135,9 +137,8 @@ export interface PlayerView {
 
 /** A colonist in development. Times are the server's epoch ms, like phaseEndsAt. */
 export interface ColonistView {
-  /** Where it stands, or where it is walking to. */
+  /** The tile under it, or the store while it is in the hall. */
   at: DevPlace;
-  walk: { from: DevPlace; startedAt: number; arrivesAt: number } | null;
   /** While it stands on a plot for a geo analysis: when the analysis is done. */
   assayUntil: number | null;
   /**
@@ -295,6 +296,11 @@ export interface MyPoliticsView {
   reputation: number;
   /** Their own vote on the open law ballot, yes or no; null when they have cast none. Never anyone else's. */
   lawBallot?: boolean | null;
+  /**
+   * The Governor's own view only, in planning while no vote is open: what each proposal they may make would cost each
+   * player a month (RULE-45), keyed `<law>:<setting>` for each enact and `repeal:<law>` for each law in force.
+   */
+  candidates?: Record<string, Record<string, LawImpact>>;
 }
 
 /** The law ballot as every screen sees it: who has voted, never how; the totals only from the reveal. */
@@ -523,7 +529,7 @@ export interface ShipView {
 export type ScorePartsView = Omit<ScoreParts, 'total'>;
 
 /** A reason a plot made more or less than its base, as a badge on the map: every one the engine names but the base and the events. */
-export type ProductionReason = 'cluster' | 'species' | 'trait' | 'special' | 'pollution' | 'floor' | 'noEnergy' | 'noWater';
+export type ProductionReason = 'cluster' | 'species' | 'trait' | 'special' | 'pollution' | 'floor' | 'noEnergy' | 'energyOff' | 'noWater';
 
 /** One working plot in the month's production show. Public, like the auction's status table. */
 export interface ProductionLineView {
@@ -550,8 +556,11 @@ export interface ProductionHurryView {
   from: number | null;
 }
 
-/** What an event on screen is: one of the engine's month events, or a player falling sick at development's start. */
-export type ShowEventKey = EventKey | 'sickness';
+/** The colony's mood events C26's second engine PR adds (WS1's frozen contract): harmless once EventKey takes them. */
+export type ColonyEventKey = 'storeStrike' | 'walkout' | 'loyalCrew' | 'riot' | 'volunteerCleanup';
+
+/** What an event on screen is: one of the engine's month events, a colony mood event, or a player falling sick at development's start. */
+export type ShowEventKey = EventKey | ColonyEventKey | 'sickness';
 
 /** One event as every screen shows it, whichever phase fired it: production's map and every other phase's show. */
 export interface EventView {
@@ -584,6 +593,8 @@ export interface EventView {
   }[];
   /** What it changed off the map, in the order it changed it: a player's (by id), the store's or the colony's. */
   effects?: EventEffect[];
+  /** The colony's objects it damaged (a riot): with a plot, the plot is among its hits. */
+  objects?: { id: PrestigeId; becomes: 'damaged' }[];
   /** The phase whose show plays it. */
   phase: Phase;
   /** How big its story is on the TV. */
@@ -734,8 +745,12 @@ export interface ColonyView {
   ledger: { month: number; in: Partial<Record<FundSource, number>>; out: Partial<Record<FundLine, number>> } | null;
   projects: ColonyProjectView[];
   catalogue: ColonyCatalogueView[];
+  /** What a unit of each good the catalogue needs adds to a donor's plaque: the price the engine values a gift at. Optional, so views built before it still type. */
+  refPrice?: Partial<Record<Good, number>>;
   /** This month's general strike: the good it holds back, what the strikers want, and whether the fund paid; null when none. Optional, so views built before W3 still type. */
   strike?: { good: Good; cost: number; paid: boolean } | null;
-  /** The colony score at game over (G-5 RULE-25: wealth, environment and prestige in credits, the happiness factor, the rounded total); null before. */
+  /** The colony score every month, as the state stands (G-5 RULE-25, AM-12: wealth, environment and prestige in credits, the happiness factor, the rounded total). */
   score: { wealth: number; environment: number; prestige: number; factor: number; total: number } | null;
+  /** The colony score's total as the last month ended, for "+N since last month"; null in month 1 or before the colony has a mood (AM-12). */
+  lastScore?: number | null;
 }
