@@ -295,6 +295,11 @@ export interface MyPoliticsView {
   reputation: number;
   /** Their own vote on the open law ballot, yes or no; null when they have cast none. Never anyone else's. */
   lawBallot?: boolean | null;
+  /**
+   * The Governor's own view only, in planning while no vote is open: what each proposal they may make would cost each
+   * player a month (RULE-45), keyed `<law>:<setting>` for each enact and `repeal:<law>` for each law in force.
+   */
+  candidates?: Record<string, Record<string, LawImpact>>;
 }
 
 /** The law ballot as every screen sees it: who has voted, never how; the totals only from the reveal. */
@@ -550,8 +555,8 @@ export interface ProductionHurryView {
   from: number | null;
 }
 
-/** The colony's mood events (G-5 C26, WS1's frozen contract): shown once C26 sends them; harmless if EventKey takes them too. */
-export type ColonyEventKey = 'generalStrike' | 'festival' | 'riot' | 'emigrationWave' | 'volunteerCleanup' | 'storeStrike' | 'walkout' | 'loyalCrew' | 'blamedForUnrest';
+/** The colony's mood events C26's second engine PR adds (WS1's frozen contract): harmless once EventKey takes them. */
+export type ColonyEventKey = 'storeStrike' | 'walkout' | 'loyalCrew' | 'riot' | 'volunteerCleanup';
 
 /** What an event on screen is: one of the engine's month events, a colony mood event, or a player falling sick at development's start. */
 export type ShowEventKey = EventKey | ColonyEventKey | 'sickness';
@@ -586,7 +591,7 @@ export interface EventView {
     good?: Good;
   }[];
   /** What it changed off the map, in the order it changed it: a player's (by id), the store's or the colony's. */
-  effects?: (Omit<EventEffect, 'what'> & { what: EventEffect['what'] | 'mood' | 'prestige' | 'air' | 'reputation' })[];
+  effects?: EventEffect[];
   /** The colony's objects it damaged (a riot): with a plot, the plot is among its hits. */
   objects?: { id: PrestigeId; becomes: 'damaged' }[];
   /** The phase whose show plays it. */

@@ -43,6 +43,7 @@ export function effectWords(f: ShowEffect): string {
     case 'mules':
       // A store strike sends the corral with no change: the store sells none this turn.
       return f.delta === 0 ? 'No MULEs this turn' : `${n} MULEs`;
+    // G-5 C26's effects.
     case 'mood':
       return `Mood ${n}`;
     case 'prestige':

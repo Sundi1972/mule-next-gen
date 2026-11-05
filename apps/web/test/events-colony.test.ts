@@ -1,6 +1,6 @@
 import { createGame, EVENT_SHOW, rollPhase, type Phase } from '@mule/engine';
 import type { ColonyProjectView, EventView } from '@mule/protocol';
-import { EventEffectChip, EventLivingMap, EventShow, EventSoloRail, EventTvLog, eventSegments, type ColonyEventKey, type MapTile, type ShowEffect, type ShowEventView, type ShowMode, type ShowPlayer, type Slot } from '@mule/ui';
+import { EventEffectChip, EventLivingMap, EventShow, EventSoloRail, EventTvLog, eventSegments, type MapTile, type ShowEffect, type ShowEventView, type ShowMode, type ShowPlayer, type Slot } from '@mule/ui';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -55,6 +55,7 @@ const FOOD_PLOTS = [
   { x: 2, y: 3 },
 ];
 const FESTIVAL = event('festival', 'planning', {
+  kind: 'colony',
   title: 'Festival',
   line: 'Mood +10, prestige +2, Food demand +25% this month.',
   sign: 'good',
@@ -64,7 +65,10 @@ const FESTIVAL = event('festival', 'planning', {
     { on: 'store', what: 'food', delta: 6 },
   ],
 });
+// As #370 builds it: kind 'colony', from the first struck plot, every working plot of the good at delta 0.
 const STRIKE = event('generalStrike', 'planning', {
+  kind: 'colony',
+  origin: { ...FOOD_PLOTS[0]! },
   title: 'General strike',
   line: 'This month every Food plot makes 20%, unless the Governor pays the strikers 240 cr from the colony fund.',
   hits: FOOD_PLOTS.map((p, order) => ({ ...p, order, delta: 0 })),
@@ -86,8 +90,8 @@ const riot = (object: 'park' | 'hospital') =>
 const NINE: { ev: ShowEventView; words: string; story?: string[] }[] = [
   { ev: FESTIVAL, words: 'Mood +10 · Prestige +2 · Store +6 Food', story: ['festival-bunting', 'festival-crowd'] },
   { ev: STRIKE, words: 'Food at 20% on 4 farms unless the Governor pays' },
-  { ev: event('emigrationWave', 'planning', { title: 'Emigration wave', line: '10% fewer colonists, for good.', effects: [{ on: 'colony', what: 'colonists', delta: -12 }] }), words: 'Colonists −12' },
-  { ev: event('blamedForUnrest', 'planning', { title: 'Blamed for the unrest', line: 'Reputation −1, so fewer votes.', scope: 'personal', player: OSSA, effects: [{ on: OSSA, what: 'reputation', delta: -1 }] }), words: 'Ossa reputation −1' },
+  { ev: event('emigrationWave', 'planning', { kind: 'colony', title: 'Emigration wave', line: '10% fewer colonists, for good.', effects: [{ on: 'colony', what: 'colonists', delta: -12 }] }), words: 'Colonists −12' },
+  { ev: event('blamedForUnrest', 'planning', { kind: 'ledger', title: 'Blamed for the unrest', line: 'Reputation −1, so fewer votes.', scope: 'personal', player: OSSA, effects: [{ on: OSSA, what: 'reputation', delta: -1 }] }), words: 'Ossa reputation −1' },
   { ev: event('storeStrike', 'development', { title: 'Store strike', line: 'The store sells no MULEs this turn.', effects: [{ on: 'store', what: 'mules', delta: 0 }] }), words: 'No MULEs this turn' },
   { ev: event('walkout', 'production', { title: 'Walkout', line: 'Your plots of one good make 20% this month.', scope: 'personal', player: BRIX, origin: { x: 2, y: 3 }, weight: 'spotlight', hits: [{ x: 2, y: 3, order: 0, delta: -3 }] }), words: 'Brix: −3 Food on 1 farm' },
   { ev: event('loyalCrew', 'production', { title: 'Loyal crew', line: 'One of your plots makes 1 more this month.', sign: 'good', scope: 'personal', player: LENA, origin: { x: 1, y: 1 }, weight: 'spotlight', hits: [{ x: 1, y: 1, order: 0, delta: 1 }] }), words: 'Lena: +1 Food on 1 farm' },
@@ -293,8 +297,8 @@ describe('B-AC-26-6: today’s events are unchanged by the riot’s object marks
 });
 
 describe('B-AC-26-6: with politics off, no colony event is ever rolled', () => {
-  const COLONY: ColonyEventKey[] = ['generalStrike', 'festival', 'riot', 'emigrationWave', 'volunteerCleanup', 'storeStrike', 'walkout', 'loyalCrew', 'blamedForUnrest'];
-  // Live once C26 adds the nine keys to the engine's EventKey; until then no roll can produce one.
+  const COLONY: string[] = ['generalStrike', 'festival', 'riot', 'emigrationWave', 'volunteerCleanup', 'storeStrike', 'walkout', 'loyalCrew', 'blamedForUnrest'];
+  // Live for festival, generalStrike, emigrationWave and blamedForUnrest since C26 PR-A; the other five once PR-B adds them.
   it('B-AC-26-6: 60 games, months 2 to 12, every phase that rolls', () => {
     const phases: Phase[] = ['planning', 'development', 'production', 'auction', 'upkeep'];
     const rolled = new Set<string>();
@@ -307,6 +311,6 @@ describe('B-AC-26-6: with politics off, no colony event is ever rolled', () => {
     }
     // The roll is real: today's events do fire in these games.
     expect(rolled.size).toBeGreaterThan(0);
-    expect([...rolled].filter((k) => (COLONY as string[]).includes(k))).toEqual([]);
+    expect([...rolled].filter((k) => COLONY.includes(k))).toEqual([]);
   });
 });

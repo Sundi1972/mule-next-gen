@@ -1,9 +1,9 @@
 import type { Good, Slot, SpecialKind } from '../components/tokens';
 
-/** The colony's mood events (G-5 C26; the protocol's ColonyEventKey). */
-export type ColonyEventKey = 'generalStrike' | 'festival' | 'riot' | 'emigrationWave' | 'volunteerCleanup' | 'storeStrike' | 'walkout' | 'loyalCrew' | 'blamedForUnrest';
+/** The colony's mood events C26's second engine PR adds (the protocol's ColonyEventKey); harmless once EventKey takes them. */
+export type ColonyEventKey = 'storeStrike' | 'walkout' | 'loyalCrew' | 'riot' | 'volunteerCleanup';
 
-/** The events the show draws: the engine's EventKey union (packages/engine/src/types.ts). */
+/** The events the show draws: the engine's EventKey union (packages/engine/src/types.ts), mirrored (AM-17), and C26's still to come. */
 export type ShowEventKey =
   | 'dustStorm'
   | 'drought'
@@ -29,6 +29,11 @@ export type ShowEventKey =
   | 'ratsInSilo'
   | 'crookedAccountant'
   | 'packageFromHome'
+  // G-5 C26's planning social events (a general strike also files a production event when unpaid).
+  | 'festival'
+  | 'generalStrike'
+  | 'emigrationWave'
+  | 'blamedForUnrest'
   | ColonyEventKey
   // Not an EventKey: development's sick players, each sent as a bulletin (C11; the protocol's EventView widens to match).
   | 'sickness';

@@ -344,6 +344,12 @@ export function moodShift(state: GameState, delta: number): void {
   colony.happiness = clampMood(Math.round(colony.happiness + delta));
 }
 
+/** An event's lasting prestige (a festival's points, G-5 C26), whole points; colonyPrestige counts them. */
+export function addPrestige(state: GameState, points: number): void {
+  if (!state.colony) return;
+  edit(state).permanentPrestige += Math.round(points);
+}
+
 /** The band a mood falls in. */
 export function moodBand(h: number): MoodBand {
   const { bands } = HAPPINESS;
