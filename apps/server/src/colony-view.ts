@@ -46,8 +46,8 @@ export function colonyView(state: GameState): ColonyView | null {
     // The config's price, not the store's drifting refPrice: it is what donate() values a gift at on the plaque.
     refPrice: Object.fromEntries(NEEDED.map((g) => [g, GOOD_CONFIG[g].refPrice])),
     strike: colony.strike && colony.strike.month === state.month ? { good: colony.strike.good, cost: colony.strike.cost, paid: colony.strike.paid } : null,
-    // C31 (RULE-25): scored at game over from the final state, so every screen shows the same terms; none before.
-    score: state.phase === 'gameOver' ? colonyScore(state) : null,
+    // RULE-25, every month (AM-12): scored from the state as it stands, so every screen shows the same terms.
+    score: colonyScore(state),
   };
 }
 
