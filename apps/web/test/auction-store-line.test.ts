@@ -9,6 +9,7 @@ import { lineHint, lineMoment, toggleSide, walkHint } from '../src/components/Au
 import type { TableClient } from '../src/net/client';
 import { ClientProvider } from '../src/net/react';
 import { Auction } from '../src/phone/Auction';
+import { TvAuction } from '../src/table/TableApp';
 import { PhoneGameProvider } from '../src/phone/game';
 
 /**
@@ -203,5 +204,74 @@ describe('the line, in pure parts', () => {
     const view = { players: [], me: null } as unknown as MuleView;
     const auction = { good: 'water', storeSells: 30, storeBuys: 8, storeForSale: 4, shipQuote: [], walkers: [{ id: 'lena', side: 'seller', price: 40, at: 40, dir: 0, done: false, units: 3 }] } as unknown as AuctionView;
     expect(walkHint(view, auction, 'lena', 3).how).toBe('Hold ▼ to walk down; a tap moves 1 cr.');
+  });
+});
+
+/**
+ * WS6's screen for the auto-trade amendment (mock design/mocks/goods-auction at b0279fd8, variant A, Heiko's pick):
+ * the deal's speed-up on the board, the rail's words while units trade, the keep note when selling into your need,
+ * the switch's caption, and the TV's deal row. Supersedes the interim rows above where their words changed.
+ */
+describe('WS6 variant A: the auction trades by itself, faster and faster, on the board', () => {
+  /** s1 a seller with `extra` units over its need, walked down to the store's buying line. */
+  function sellingAtTheLine(extra: number) {
+    const t = toWalk();
+    const s1 = t.state.players.find((p) => p.id === 's1')!;
+    const need = t.game.viewFor('s1').auction!.status.find((r) => r.id === 's1')!.need;
+    s1.stock[t.good] = need + extra;
+    t.game.handle('s1', { type: 'declare', side: 'seller' });
+    t.game.handle('s1', { type: 'walk', dir: 'down' });
+    for (let i = 0; i < 400 && mine(t.game).line !== 'store'; i++) t.advance(WALK.tickMs);
+    t.game.handle('s1', { type: 'walk', dir: 'stop' });
+    return { ...t, need };
+  }
+  const lit = (html: string) => Number(/aria-label="speed (\d) of 4"/.exec(html)?.[1] ?? 0);
+
+  it('B-AC-1 (variant A): while units trade the board lights the deal’s chevrons, more of them as it speeds up', () => {
+    const { game, advance } = atTheLine();
+    for (let i = 0; i < 400 && game.viewFor('s1').auction!.deals.length === 0; i++) advance(WALK.tickMs);
+    const first = lit(phoneScreen(game.viewFor('s1'), 's1'));
+    expect(first).toBeGreaterThanOrEqual(1);
+    for (let i = 0; i < 30 && game.viewFor('s1').auction!.deals[0]!.units < 9; i++) advance(WALK.tickMs);
+    const later = lit(phoneScreen(game.viewFor('s1'), 's1'));
+    expect(later).toBe(4);
+    expect(later).toBeGreaterThan(first);
+  });
+
+  it('B-AC-1 (variant A): the rail says what is trading, at what price, faster and faster, and how to stop', () => {
+    const { game, advance } = atTheLine();
+    for (let i = 0; i < 400 && game.viewFor('s1').auction!.deals.length === 0; i++) advance(WALK.tickMs);
+    const view = game.viewFor('s1');
+    const name = { food: 'Food', water: 'Water', energy: 'Energy' }[view.auction!.good as 'food'] ?? '';
+    expect(textOf(phoneScreen(view, 's1'), 'line-hint')).toBe(`Buying ${name} from the store at ${view.auction!.storeSells} cr, faster and faster. Tap ▼ to stop.`);
+  });
+
+  it('"show, don\'t stop" (variant A): selling into next month’s need turns HAVE amber and says what you keep, apart from the hint', () => {
+    const { game, advance, need } = sellingAtTheLine(1);
+    expect(need).toBeGreaterThan(0);
+    for (let i = 0; i < 400 && (game.viewFor('s1').me!.stock[game.viewFor('s1').auction!.good] ?? 0) >= need; i++) advance(WALK.tickMs);
+    const view = game.viewFor('s1');
+    const have = view.me!.stock[view.auction!.good];
+    const html = phoneScreen(view, 's1');
+    const name = { food: 'Food', water: 'Water', energy: 'Energy', smithore: 'Smithore' }[view.auction!.good as 'food'];
+    expect(textOf(html, 'keep')).toBe(`You keep ${have} of the ${need} ${name} you need next month.`);
+    expect(tagOf(html, 'have')).toContain('text-warn');
+    expect(textOf(html, 'line-hint')).not.toContain('you keep');
+  });
+
+  it('RULE-2 (variant A): the switch says where a tap puts you', () => {
+    const { game } = toWalk();
+    expect(textOf(phoneScreen(game.viewFor('s1'), 's1'), 'sides-caption')).toBe('Sell puts you at the top, asking.');
+  });
+
+  it('B-AC-1 (variant A, TV): each running deal’s row shows its speed and says faster and faster', () => {
+    const { game, advance } = atTheLine();
+    for (let i = 0; i < 400 && game.viewFor(null).auction!.deals.length === 0; i++) advance(WALK.tickMs);
+    const board = game.viewFor(null);
+    const client = { intent: () => {}, subscribe: () => () => {}, getState: () => ({ chat: [], view: null, seatId: null }), serverNow: () => 0 } as unknown as TableClient;
+    const table = { seats: [], hostId: 's1' } as unknown as TableView<MuleView>;
+    const html = renderToStaticMarkup(createElement(ClientProvider, { client, children: createElement(TvAuction, { table, game: board, auction: board.auction! }) }));
+    expect(textOf(html, 'tv-deal')).toMatch(/faster and faster/);
+    expect(tagOf(html, 'tv-deal-speed')).toMatch(/aria-label="speed [1-4] of 4"/);
   });
 });
