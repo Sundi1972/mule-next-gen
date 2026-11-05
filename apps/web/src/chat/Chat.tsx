@@ -3,6 +3,7 @@ import { Creature, cx, SLOT_COLOR, type CreatureWrap, type Slot } from '@mule/ui
 import { useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { toSlot } from '../game/derive';
 import { useClient } from '../net/react';
+import { BOUNDS, EDGE, GAP, placeBubble, type Box, type Fit, type Place } from './place';
 import { useAnchor, useTableChat } from './store';
 
 /**
@@ -24,37 +25,67 @@ function useSeats(): { seats: Map<string, Seat>; me: string | null } {
   return { seats, me: seatId };
 }
 
-/**
- * What a creature's bubble must stay inside: the nearest of these around it. A stage that clips its creatures marks
- * itself with data-bubble-bounds.
- */
-const BOUNDS = '[data-bubble-bounds],[data-testid=store-hall],[data-testid=walk-board],[data-testid=stage],[data-phase]';
-const EDGE = 4;
+
+const boxOf = (r: DOMRect): Box => ({ l: r.left, t: r.top, r: r.right, b: r.bottom });
 
 /**
- * Where a creature's bubble fits inside its bounds: slid sideways by dx (css px), and below the creature if not above.
- * Measured from the speaker (the bubble's parent) every frame while the bubble shows, because speakers move.
+ * The text a bubble should not cover inside its frame: every visible line of text there but the bubbles' own
+ * (AM-22). The chat e2e measures the same way.
+ */
+function labelsIn(frame: Element): Box[] {
+  const now = performance.now();
+  const kept = measured.get(frame);
+  if (kept && now - kept.at < LABELS_EVERY_MS) return kept.labels;
+  const out: Box[] = [];
+  const range = document.createRange();
+  const walk = document.createTreeWalker(frame, NodeFilter.SHOW_TEXT);
+  for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+    const el = n.parentElement;
+    if (!n.textContent?.trim() || !el || el.closest('[data-testid^=chat-bubble-]')) continue;
+    if (el.checkVisibility && !el.checkVisibility({ opacityProperty: true, visibilityProperty: true })) continue;
+    range.selectNodeContents(n);
+    for (const r of range.getClientRects()) if (r.width > 1 && r.height > 1) out.push(boxOf(r));
+  }
+  measured.set(frame, { at: now, labels: out });
+  return out;
+}
+
+/** The labels are walked at most this often per frame, shared by its bubbles; the bubble itself is placed every frame. */
+const LABELS_EVERY_MS = 33;
+const measured = new WeakMap<Element, { at: number; labels: Box[] }>();
+
+/**
+ * Where a creature's bubble goes (placeBubble): above it unless that covers a name or caption, sliding to stay inside
+ * its bounds (dx, dy in css px). Measured from the speaker (the bubble's parent) every frame while the bubble shows,
+ * because speakers and labels move.
  */
 function useFit(on: boolean) {
   const ref = useRef<HTMLSpanElement>(null);
-  const [fit, setFit] = useState({ dx: 0, below: false });
+  const placed = useRef<Place>('above');
+  const [fit, setFit] = useState<Fit>({ place: 'above', dx: 0, dy: 0 });
   useLayoutEffect(() => {
     if (!on) return;
     let raf = 0;
     const measure = () => {
       raf = requestAnimationFrame(measure);
       const el = ref.current;
-      const box = el?.closest(BOUNDS);
-      if (!el?.parentElement || !box) return;
+      const frame = el?.closest(BOUNDS);
+      if (!el?.parentElement || !frame) return;
       const b = el.getBoundingClientRect();
-      const at = el.parentElement.getBoundingClientRect();
-      const s = box.getBoundingClientRect();
       const k = b.width / el.offsetWidth || 1; // the TV is scaled
-      const left = at.left + at.width / 2 - b.width / 2;
-      let dx = Math.min(0, s.right - EDGE - (left + b.width));
-      dx = Math.max(dx, s.left + EDGE - left);
-      const next = { dx: Math.round(dx / k), below: at.top - b.height - 8 * k < s.top + EDGE };
-      setFit((f) => (f.dx === next.dx && f.below === next.below ? f : next));
+      const at = placeBubble({
+        at: boxOf(el.parentElement.getBoundingClientRect()),
+        w: b.width,
+        h: b.height,
+        within: boxOf(frame.getBoundingClientRect()),
+        labels: labelsIn(frame),
+        gap: GAP * k,
+        edge: EDGE,
+        current: placed.current,
+      });
+      placed.current = at.place;
+      const next = { place: at.place, dx: Math.round(at.dx / k), dy: Math.round(at.dy / k) };
+      setFit((f) => (f.place === next.place && f.dx === next.dx && f.dy === next.dy ? f : next));
     };
     measure();
     return () => cancelAnimationFrame(raf);
@@ -62,40 +93,58 @@ function useFit(on: boolean) {
   return { ref, ...fit };
 }
 
-/** A speech bubble pointing at its speaker: above it (or below, near the top), or to its left in the guide. */
-function Bubble({ line, seat, me, size = 'phone', left = false }: { line: ChatMessage; seat: Seat; me: string | null; size?: 'phone' | 'tv'; left?: boolean }) {
+/** Each place's offset from its speaker is GAP (8 px), as placeBubble reckons it; the bubble fades in where it stays. */
+const AT: Record<Place, string> = {
+  above: 'left-1/2 -translate-x-1/2 bottom-full mb-2',
+  below: 'left-1/2 -translate-x-1/2 top-full mt-2',
+  right: 'left-full top-1/2 -translate-y-1/2 ml-2',
+  left: 'right-full top-1/2 -translate-y-1/2 mr-2',
+};
+const TAIL: Record<Place, string> = {
+  above: 'top-full -translate-x-1/2 border-x-[6px] border-t-[7px] border-x-transparent',
+  below: 'bottom-full -translate-x-1/2 border-x-[6px] border-b-[7px] border-x-transparent',
+  right: 'right-full -translate-y-1/2 border-y-[6px] border-r-[7px] border-y-transparent',
+  left: 'left-full -translate-y-1/2 border-y-[6px] border-l-[7px] border-y-transparent',
+};
+const TAIL_COLOR: Record<Place, 'borderTopColor' | 'borderBottomColor' | 'borderRightColor' | 'borderLeftColor'> = {
+  above: 'borderTopColor',
+  below: 'borderBottomColor',
+  right: 'borderRightColor',
+  left: 'borderLeftColor',
+};
+
+/**
+ * A speech bubble pointing at its speaker: above it, or below or beside it where above would cover a label (or cross
+ * the top); `guide` puts it to the guide's left, always.
+ */
+function Bubble({ line, seat, me, size = 'phone', guide = false }: { line: ChatMessage; seat: Seat; me: string | null; size?: 'phone' | 'tv'; guide?: boolean }) {
   const { seats } = useSeats();
   const whisper = !!line.to;
-  const { ref, dx, below } = useFit(!left);
+  const fit = useFit(!guide);
+  const { ref } = fit;
+  const { place, dx, dy } = guide ? { place: 'left' as const, dx: 0, dy: 0 } : fit;
+  const side = place === 'left' || place === 'right';
   const edge = whisper ? 'var(--color-holo)' : SLOT_COLOR[seat.slot];
   const to = line.to === me ? 'YOU' : (seats.get(line.to ?? '')?.player.name.toUpperCase() ?? '');
   return (
     <span
       ref={ref}
       className={cx(
-        'pointer-events-none absolute z-30 w-max max-w-[220px] animate-[show-card-in_0.25s_ease-out] rounded-panel border-2 bg-panel px-2.5 py-1 font-semibold leading-snug shadow-chip',
-        left ? 'right-full top-1/2 mr-2 -translate-y-1/2' : cx('left-1/2 -translate-x-1/2', below ? 'top-full mt-1.5' : 'bottom-full mb-1.5'),
+        'pointer-events-none absolute z-30 w-max max-w-[220px] animate-[fade-in_0.25s_ease-out] rounded-panel border-2 bg-panel px-2.5 py-1 font-semibold leading-snug shadow-chip',
+        AT[place],
         whisper ? 'border-holo border-dashed' : '',
         size === 'tv' ? 'max-w-[360px] text-xl' : 'text-xs @min-[1100px]/shell:text-sm',
       )}
-      style={{ ...(whisper ? {} : { borderColor: SLOT_COLOR[seat.slot] }), ...(dx ? { marginLeft: dx } : {}) }}
+      style={{ ...(whisper ? {} : { borderColor: SLOT_COLOR[seat.slot] }), ...(dx ? { marginLeft: dx } : {}), ...(dy ? { marginTop: dy } : {}) }}
       data-testid={`chat-bubble-${line.from}`}
       data-line={line.id}
+      data-place={place}
       role="status"
     >
       {whisper && <span className="mr-1 font-mono text-[10px] font-bold text-holo">🔒 TO {to}</span>}
       {line.text}
       {/* The tail still points at the speaker when the bubble has slid. */}
-      <span
-        aria-hidden
-        className={cx(
-          'absolute',
-          left
-            ? 'left-full top-1/2 -translate-y-1/2 border-y-[6px] border-l-[7px] border-y-transparent'
-            : cx('-translate-x-1/2 border-x-[6px] border-x-transparent', below ? 'bottom-full border-b-[7px]' : 'top-full border-t-[7px]'),
-        )}
-        style={left ? { borderLeftColor: edge } : { left: `calc(50% - ${dx}px)`, ...(below ? { borderBottomColor: edge } : { borderTopColor: edge }) }}
-      />
+      <span aria-hidden className={cx('absolute', TAIL[place])} style={{ ...(side ? { top: `calc(50% - ${dy}px)` } : { left: `calc(50% - ${dx}px)` }), [TAIL_COLOR[place]]: edge }} />
     </span>
   );
 }
@@ -134,7 +183,7 @@ function useFallback(): { line: ChatMessage; seat: Seat; me: string | null } | n
 function FallbackAt({ line, seat, me }: { line: ChatMessage; seat: Seat; me: string | null }) {
   return (
     <span className="pointer-events-none absolute right-full top-0 mr-3 h-[34px] @min-[1100px]/shell:mr-5" data-fallback>
-      <Bubble line={line} seat={seat} me={me} left />
+      <Bubble line={line} seat={seat} me={me} guide />
     </span>
   );
 }

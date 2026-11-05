@@ -1,6 +1,6 @@
 import { DEV_WALK, DEVELOPMENT, GAME, POLITICS } from '@mule/engine';
 import type { DealView, MuleView, TableView } from '@mule/protocol';
-import { AirGauge, Button, cx, GOOD_NAME, GoodTag, HoloMap, PaceList, PlayerMark, SPEED_STEPS, speedStep, SeatSpeciesProvider, SharedClock, StoreInterior, TERRAIN_NAME, TimeBar, Timer, WalkBoard, type CreatureWrap } from '@mule/ui';
+import { AirGauge, Button, cx, GOOD_NAME, GoodIcon, GoodTag, HoloMap, PaceList, PlayerMark, SPEED_STEPS, speedStep, SeatSpeciesProvider, SharedClock, StoreInterior, TERRAIN_NAME, TimeBar, Timer, WalkBoard, type CreatureWrap } from '@mule/ui';
 import { Speaker, TvTicker, tvSpeakerAt } from '../chat/Chat';
 import { boardWalkers, dealLine, dealSpeed, newestFirst, shipWants, ShipWants, SIDE_WORD, skippedLine, StatusTable, StoreBox, TvReadout, WaitingToPick, type DealRow } from '../components/AuctionParts';
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
@@ -16,6 +16,7 @@ import { useClient, useClientState, useServerNow } from '../net/react';
 import { connectedIn, hostMayContinue, pickedIn, readyRows, SIDE_PICK_WORDS, stillPicking, stillPlanning } from '../phone/hub/ready';
 import { ReadyCount, WaitingFor } from '../phone/hub/ReadyBar';
 import { steering } from '../phone/arcade/route';
+import { TvCouncil } from './TvCouncil';
 import { TvDevelop } from './TvDevelop';
 import { placesOf } from '../phone/hub/standing';
 import { TvEventLayer } from '../events/TvEventLayer';
@@ -131,7 +132,7 @@ function TvLobby({ table }: { table: TableView<MuleView> }) {
 }
 
 /** `gauges` false keeps the air gauge alone even with a colony, as game over does. */
-export function TvHeader({ game, title, seconds, extra, gauges = true }: { game: MuleView; title: string; seconds?: number | undefined; extra?: ReactNode; gauges?: boolean }) {
+export function TvHeader({ game, title, icon, seconds, extra, gauges = true }: { game: MuleView; title: string; icon?: ReactNode; seconds?: number | undefined; extra?: ReactNode; gauges?: boolean }) {
   return (
     <>
       <header className="flex items-end justify-between gap-6">
@@ -139,7 +140,8 @@ export function TvHeader({ game, title, seconds, extra, gauges = true }: { game:
           <span className="label-caps text-base!">
             Month {game.month} / {game.maxMonths}
           </span>
-          <h1 className="font-display text-5xl font-semibold leading-none" data-testid="tv-phase">
+          <h1 className="flex items-center gap-4 font-display text-5xl font-semibold leading-none" data-testid="tv-phase">
+            {icon}
             {title}
           </h1>
         </div>
@@ -169,7 +171,7 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
     );
   }
 
-  if (phase === 'production' && game.production) return <TvProduction game={game} production={game.production} />;
+  if (phase === 'production' && game.production) return <TvProduction table={table} game={game} production={game.production} />;
   if (phase === 'upkeep')
     return (
       <SeatSpeciesProvider value={seatSpecies(game)}>
@@ -177,6 +179,7 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
       </SeatSpeciesProvider>
     );
   if (phase === 'planning' && game.politics?.election && game.politics.election.stage !== 'over') return <TvElection table={table} game={game} />;
+  if (phase === 'planning' && game.politics?.council && game.politics.council.stage !== 'over') return <TvCouncil game={game} />;
   if (phase === 'development' && steering(game)) return <TvDevelop game={game} />;
 
   let side: ReactNode;
@@ -425,7 +428,8 @@ export function TvAuction({ table, game, auction }: { table: TableView<MuleView>
   const picked = game.players.map((p) => ({ ...p, ready: pickedIn(game, p.id) }));
   return (
     <div className="flex h-[720px] w-[1280px] flex-col gap-4 bg-table px-10 py-8 text-ink" data-phase="auction" data-stage={auction.stage} data-testid={status ? 'tv-status' : 'tv-walk'}>
-      <TvHeader game={game} title={`Auction · ${GOOD_NAME[auction.good]}`} gauges={false} />
+      {/* The good leads the headline, its glyph first (Heiko, 5 Nov). */}
+      <TvHeader game={game} title={`${GOOD_NAME[auction.good]} auction`} icon={<GoodIcon good={auction.good} size={52} />} gauges={false} />
       <div className="flex min-h-0 flex-1 gap-6">
         <div className={cx('flex min-w-0 flex-1 flex-col', status ? 'gap-3' : 'gap-2')}>
           {status ? (

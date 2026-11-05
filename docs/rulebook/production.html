@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Production · M.U.L.E. Rulebook</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="rulebook.css">
+</head>
+<body>
+<div class="rb-shell">
+<aside class="rb-rail"></aside>
+<main class="rb-main">
+<article>
+<h1>Production</h1>
+<p class="rb-lede">After development every plot with a MULE works for a month. This chapter says what each plot makes and why: the ground, the factories, the Energy and Water every plot needs, what spoils, what your crew eats, how industry fouls the land and the air, and how the TV and your phone show it all.</p>
+
+<h2 id="production-order">What happens in production, step by step <span class="pill built">In the game</span></h2>
+<p>Production runs once a month, between development and the goods auction. Nobody acts during it: the whole table watches the production show while the game works through a fixed order. The order matters, because each step can only use what the steps before it left in your depot.</p>
+<div class="table-wrap"><table>
+<thead><tr><th class="n">Step</th><th>What happens</th><th>Why it comes here</th></tr></thead>
+<tbody>
+<tr><td class="n">1</td><td>The month's production events roll: dust storm, drought, acid rain, solar flare, comet pass, flood, volcanic ash, cold snap, and each player's pest swarm, wildfire and bumper harvest.</td><td>Events work on the plots they reach, on top of everything else that plot made.</td></tr>
+<tr><td class="n">2</td><td>Every Energy plant produces and pays its own 1 Energy from what it made, never from your depot; the rest goes into its owner's depot.</td><td>So this month's Energy can power this month's other plots.</td></tr>
+<tr><td class="n">3</td><td>For each player, the game checks whether the Energy in their depot covers all their other plots. If not, it turns plots off, the biggest Energy user first, until the rest fit (see <a href="#energy-use">Energy</a>). A factory counts only if your depot holds its inputs: smelters first, then works, then labs, each in map order, each setting its inputs aside.</td><td>Settled once, before anything else runs, so a shortage goes by size, not by where a plot stands on the map.</td></tr>
+<tr><td class="n">4</td><td>The game checks, for each player, whether they hold the Water their household and crew need this month.</td><td>Decided before any well runs: a well harvested this month waters next month's crops, not this month's.</td></tr>
+<tr><td class="n">5</td><td>Every other farm, well and mine produces, in map order (row by row from the top left). One still on pays its Energy from its owner's depot; one turned off makes 20% and pays nothing. A Food farm whose owner is short of Water makes half again.</td><td>Raw goods come before factories, because factories turn them.</td></tr>
+<tr><td class="n">6</td><td>The factories counted in step 3 run: every Alloy smelter first, then every Electronics works, then every Medicine lab, each in map order. One still on takes its inputs and its Energy; one turned off makes 20% from 20% of each input.</td><td>Alloy first because Electronics needs it.</td></tr>
+<tr><td class="n">7</td><td>The factories that didn't count, because their inputs only arrive this month, run in the same order on the Energy left over: in full if enough is left, turned off if their inputs are there but the Energy isn't, not at all without their inputs.</td><td>Smithore mined this month still feeds this month's smelter, and such a factory never turns another plot off.</td></tr>
+<tr><td class="n">8</td><td>Run counts move on: a plot that worked adds one month to its run, one that didn't starts again at 0. A green belt counts as working. A turned-off factory keeps its count; a turned-off farm, well or mine still adds its month.</td><td>Factories gain experience and thin veins run out by how long a plot has worked in a row; a factory turned off gains no experience.</td></tr>
+<tr><td class="n">9</td><td>Special fields settle: ruins pay their salvage to their owner, and a crystal cavern that was mined for Crystite this month may collapse.</td><td>They pay or collapse after the month's output is made.</td></tr>
+<tr><td class="n">10</td><td>Pollution spreads around polluters and the colony's air gauge moves.</td><td>It counts what ran this month, and changes what next month makes.</td></tr>
+<tr><td class="n">11</td><td>A meteor strike, if one rolls: the struck plot already made its output; then its MULE is lost and the plot becomes a crater.</td><td>Heiko's ruling (4 Nov): the MULE produced this month, then is destroyed.</td></tr>
+</tbody>
+</table></div>
+<p>Everything you made lands in your depot at once. There is no buying or selling during production: Energy or Water you are short of now can only be bought at the goods auction that follows, for next month.</p>
+<div class="box example"><h4>What this means at the table</h4><p>The goods auction comes after production. Energy you buy there is held over the month end, loses a quarter to spoilage, and powers next month's plots. So the Energy that matters for this month's production is what you held when the month started plus what your own Energy plots make now.</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/production.ts::runProduction</code> · <code>packages/engine/src/game.ts::advancePhase</code> (production branch) · <code>packages/engine/src/specials.ts::settleSpecials</code> · <code>packages/engine/src/pollution.ts::runPollution</code></p>
+<p class="owner">Kept current by: the Balance team (WS1).</p>
+
+<h2 id="raw-output">What a farm, well, plant or mine makes <span class="pill built">In the game</span></h2>
+<p>The six raw goods come out of the ground. Food, Water and Energy are <em>grown</em>; Smithore, Crystite and Rare earth are <em>mined</em>. A plot's output is built up from a base and a list of pluses and minuses, always in the same order, and the game keeps every part so it can tell you why a plot made what it made.</p>
+
+<h3 id="raw-output-base">The base: the ground</h3>
+<ul>
+<li><strong>Grown goods.</strong> A farm, well or Energy plot makes <span class="num">GROWN_BASE</span> (<span class="num">2</span>) plus the plot's rating for that good, but never less than <span class="num">GROWN_MIN</span> (<span class="num">1</span>). Ratings run from <span class="num">−2</span> to <span class="num">+3</span>, so the base runs from <span class="num">1</span> to <span class="num">5</span>. A poor plot still works, just badly.</li>
+<li><strong>Mined goods.</strong> A mine makes exactly its deposit rating, <span class="num">0</span> to <span class="num">4</span>. A deposit of <span class="num">0</span> means there is nothing to mine: the plot makes <span class="num">0</span> and no bonus of any kind is added.</li>
+</ul>
+<p>The rating is rolled once per plot when the map is made, from odds set by the terrain, and stays hidden until you analyse it. The <a href="land.html">Land and geology</a> chapter has the odds.</p>
+
+<h3 id="raw-output-parts">The pluses and minuses, in order</h3>
+<div class="table-wrap"><table>
+<thead><tr><th class="n">Order</th><th>Part</th><th>What it does</th><th class="n">Value</th></tr></thead>
+<tbody>
+<tr><td class="n">1</td><td>Thin vein (mines only)</td><td>A thin vein's output drops by 1 for every <span class="num">THIN_VEIN_MONTHS</span> months the mine has run in a row before this one.</td><td class="n">−1 per 3 months</td></tr>
+<tr><td class="n">2</td><td>Mollox (mines only)</td><td>A Mollox owner's every working mine makes more.</td><td class="n">+1</td></tr>
+<tr><td class="n">2</td><td>Bramblet (Food only)</td><td>A Bramblet owner's every farm makes more Food.</td><td class="n">+1</td></tr>
+<tr><td class="n">3</td><td>Hot spring (trait)</td><td>Energy plot makes more; a well makes less.</td><td class="n">Energy +2, Water −1</td></tr>
+<tr><td class="n">3</td><td>Toxic ground (trait)</td><td>A farm on toxic ground makes less Food. This is a plot trait, not the Toxic air band.</td><td class="n">Food −2</td></tr>
+<tr><td class="n">4</td><td>Crystal cavern (special field)</td><td>Mined for Crystite.</td><td class="n">+4</td></tr>
+<tr><td class="n">4</td><td>Geyser (special field)</td><td>Outfitted for Water or Energy.</td><td class="n">+2</td></tr>
+<tr><td class="n">4</td><td>Oasis (special field)</td><td>Outfitted for Food.</td><td class="n">+3</td></tr>
+<tr><td class="n">4</td><td>Alien relic next door</td><td>For each relic among the four plots touching this one, whoever owns them. A relic on the plot itself does not count.</td><td class="n">+1 each</td></tr>
+<tr><td class="n">5</td><td>Neighbour bonus</td><td>Only if the plot makes something so far. At least one of your own plots touching it makes the same good: +1. Your connected group of plots of that good has 4 or more plots: +2 instead.</td><td class="n">+1 or +2</td></tr>
+<tr><td class="n">6</td><td>Polluted plot (Food, Water, Medicine)</td><td>Loses 1 per pollution level of the plot (0 to 3).</td><td class="n">−0 to −3</td></tr>
+<tr><td class="n">6</td><td>Toxic air (Food and Water)</td><td>From the Toxic band of the air gauge (60 and up), every farm and well loses 1 more.</td><td class="n">−1</td></tr>
+<tr><td class="n">7</td><td>Floor</td><td>If the minuses took the total below 0, it is set back to 0.</td><td class="n">to 0</td></tr>
+<tr><td class="n">8</td><td>Turned off for want of Energy</td><td>20%, rounded to the nearest unit, halves up (see <a href="#energy-use">Energy</a>).</td><td class="n">×0.2</td></tr>
+<tr><td class="n">9</td><td>Short of Water (Food only)</td><td>Half again, rounded down (see <a href="#water-shortage">Short of Water</a>).</td><td class="n">×0.5</td></tr>
+<tr><td class="n">10</td><td>Events</td><td>Each event that reaches the plot, in the order they fired, each working on what the ones before it left. Never below 0.</td><td class="n">see <a href="events.html">Events</a></td></tr>
+</tbody>
+</table></div>
+<p>"Touching" always means the four plots that share a side: north, east, south and west, never diagonals. A "connected group" is every plot you can reach from this one by stepping through touching plots that you own and that make the same good. Groups count for Energy plots and mines as well as farms.</p>
+
+<div class="box example"><h4>Example: one Food farm, line by line</h4>
+<p>Lena plays a Bramblet. Her farm is on a river plot with a Food rating of <span class="num">+2</span>. It touches one other farm of hers. A Rare earth mine next door has raised the plot's pollution to level <span class="num">1</span>. Her household and crew need <span class="num">2</span> Water this month, but she holds only <span class="num">1</span>. She has the Energy. A drought hits the colony.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Line</th><th class="n">Change</th><th class="n">Running total</th></tr></thead>
+<tbody>
+<tr><td>Ground: 2 + rating 2</td><td class="n">4</td><td class="n">4</td></tr>
+<tr><td>Bramblet</td><td class="n">+1</td><td class="n">5</td></tr>
+<tr><td>Next to her own farm</td><td class="n">+1</td><td class="n">6</td></tr>
+<tr><td>Polluted plot, level 1</td><td class="n">−1</td><td class="n">5</td></tr>
+<tr><td>Energy: 1 paid from her depot</td><td class="n">0</td><td class="n">5</td></tr>
+<tr><td>Short of Water: half of 5, rounded down</td><td class="n">−3</td><td class="n">2</td></tr>
+<tr><td>Drought</td><td class="n">−1</td><td class="n">1</td></tr>
+</tbody>
+</table></div>
+<p>The farm makes <span class="num">1</span> Food. One missing unit of Water cost her three units of Food.</p></div>
+
+<h3 id="raw-output-traits">Traits that change nothing yet</h3>
+<p>A plot can carry other traits: bedrock, sheltered, unstable, infested and flood plain. The settings say these "only change event risks", but no event reads them today, so in the game they change nothing at all.</p>
+<div class="box next"><h4>What is changing</h4><p>Open: what bedrock, sheltered, unstable, infested and flood plain should do. The event model reads no plot trait (<code>events.ts</code> has none of them), so the comment on <code>TRAIT_EFFECT</code> describes a plan, not the game. Owner of the answer: the Balance team (WS1), with the Maps team (WS5) for the traits themselves.</p></div>
+<div class="box why"><h4>Why it is like this</h4><p>Grown goods always make at least 1, so cheap land is never worthless; mined goods make exactly what is in the ground, so a 0 deposit is a real loss and assays matter. Both rules are in the design's starting numbers. The neighbour bonus rewards building clusters, and the minus for pollution makes industry next to farms a cost the farmer pays.</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/production.ts::rawOutputParts</code> · <code>::adjacencyBonus</code> · <code>::pollutionLoss</code> · <code>packages/engine/src/specials.ts::specialBonus</code> · <code>config.ts::GROWN_BASE</code>, <code>GROWN_MIN</code>, <code>TRAIT_EFFECT</code>, <code>THIN_VEIN_MONTHS</code>, <code>SPECIES_PERK</code>, <code>ADJACENCY</code>, <code>MAP.specialEffect</code></p>
+<p class="owner">Kept current by: the Balance team (WS1); special fields with the Maps team (WS5).</p>
+
+<h2 id="factories">Factories and recipes <span class="pill built">In the game</span></h2>
+<p>Three goods are made in factories from other goods. A factory takes its whole recipe from its owner's depot in one go. If any input is missing, Energy included, the factory makes nothing that month, takes nothing, and its run in a row starts again at 0.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Factory</th><th>Takes each month</th><th class="n">Makes</th><th>Energy with a feeder next door</th></tr></thead>
+<tbody>
+<tr><td>Alloy smelter</td><td>2 Smithore, 2 Energy</td><td class="n">2 Alloy</td><td>1 (next to your Smithore mine)</td></tr>
+<tr><td>Electronics works</td><td>1 Rare earth, 1 Alloy, 1 Energy</td><td class="n">1 Electronics</td><td>0 (next to your Rare earth mine or Alloy smelter)</td></tr>
+<tr><td>Medicine lab</td><td>1 Food, 1 Water, 1 Energy</td><td class="n">2 Medicine</td><td>0 (next to your farm or well)</td></tr>
+</tbody>
+</table></div>
+<p>The inputs never change with the factory's output: a smelter that makes 3 Alloy still takes 2 Smithore. What changes is the output, from the base above:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>What helps or hurts</th><th class="n">Output</th><th>When</th></tr></thead>
+<tbody>
+<tr><td>Good ground for this factory</td><td class="n">+1</td><td>See the terrain table below.</td></tr>
+<tr><td>Poor ground for this factory</td><td class="n">−1</td><td>See the terrain table below.</td></tr>
+<tr><td>Feeder plot</td><td class="n">saves 1 Energy</td><td>One of your own plots touching it makes one of its inputs (not Energy). Only once, however many feeders.</td></tr>
+<tr><td>Industrial park</td><td class="n">+1</td><td>One of your own plots touching it is the same kind of factory.</td></tr>
+<tr><td>Experience</td><td class="n">+1</td><td>It has run 3 months in a row before this one, so from its 4th month running.</td></tr>
+<tr><td>Alien relic next door</td><td class="n">+1 each</td><td>For each relic among the four touching plots, whoever owns them.</td></tr>
+<tr><td>Polluted plot (Medicine only)</td><td class="n">−1 per level</td><td>The plot's pollution level, 0 to 3. Smelters and Electronics works don't mind.</td></tr>
+</tbody>
+</table></div>
+<p>Output never goes below 0. Your phone lists every one of these lines, in words, before you install a factory, and the same numbers drive production.</p>
+
+<h3 id="factory-terrain">Which ground suits which factory</h3>
+<p>Every terrain not listed is neutral for that factory. Plains are neutral for a smelter and a lab (the phone says "Plains suit any factory") and good ground for an Electronics works.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Factory</th><th>Good ground (+1)</th><th>Poor ground (−1)</th></tr></thead>
+<tbody>
+<tr><td>Alloy smelter</td><td>Volcanic ("Geothermal heat helps the furnace"); hills and mountains ("Firm rock under the furnace")</td><td>Swamp ("Soft ground: the furnace sinks"); ice ("Too cold for the furnace"); lake ("Wet ground")</td></tr>
+<tr><td>Electronics works</td><td>Tundra ("Cold air cools the works"); desert ("Dry air, no damp"); plains ("Flat and dry")</td><td>Swamp and river ("Damp gets into the circuits"); volcanic ("Quakes and ash")</td></tr>
+<tr><td>Medicine lab</td><td>Forest and swamp ("Herbs nearby"); river ("Clean water")</td><td>Desert ("No herbs, little water"); volcanic ("Ash in the air"); crater ("Dust in the air")</td></tr>
+</tbody>
+</table></div>
+
+<div class="box example"><h4>Example: a Medicine lab that runs well</h4><p>Kai's Medicine lab stands on forest (+1, "Herbs nearby"). It touches his own well (a feeder: its Energy drops from 1 to 0) and another Medicine lab of his (industrial park, +1). It has run 4 months in a row (experience, +1). A neighbour's smelter has raised the plot's pollution to level 1 (−1). Output: 2 + 1 + 1 + 1 − 1 = <span class="num">5</span> Medicine, for 1 Food and 1 Water and no Energy.</p></div>
+
+<h3 id="ruins-salvage">Ruins pay once</h3>
+<p>Ruins are a special field that makes nothing by itself. At the end of the first production after someone owns them, they pay their owner their salvage and become a plain plot: <span class="num">2</span> Alloy or <span class="num">1</span> Electronics, whichever the map drew.</p>
+<div class="box why"><h4>Why it is like this</h4><p>Factories are where the money is (Electronics' usual price is <span class="num">220</span>), so they cost: 2 crew instead of 1, inputs every month, and they run last in a shortage. The feeder, park and experience bonuses reward building an industrial estate in one place and keeping it running, which is also where pollution builds up.</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/production.ts::factoryFit</code> · <code>packages/engine/src/specials.ts::relicFit</code>, <code>::settleSpecials</code> · <code>config.ts::RECIPES</code>, <code>FACTORY_FIT</code>, <code>FACTORY</code>, <code>MAP.specialEffect.salvage</code></p>
+<p class="owner">Kept current by: the Balance team (WS1).</p>
+
+<h2 id="energy-use">Energy: what each plot uses, and what happens when you run short <span class="pill built">In the game</span></h2>
+<p>Heiko set the Energy rules on 5 November; they replaced the old halving rule (<a href="#energy-turn-off">how it changed</a>). In his words: "if i am not having enugh energy i first turn off the plot that uses most until i end up with enoguh energy. enrgey prodcuing plots use energy as well ... A plot that is turned off only produces 20%".</p>
+<div class="box"><h4>The rules in one place</h4>
+<ol>
+<li><strong>Every plot uses Energy</strong>, by what it produces: the table below. Energy plants use Energy too.</li>
+<li><strong>Energy plants produce first</strong> and pay their own use from their own output. They are never turned off, because that would only deepen the shortage.</li>
+<li><strong>If your Energy can't cover all your other plots, the plot that uses most is turned off first</strong>, then the next biggest, until the plots still running fit what you have.</li>
+<li><strong>A turned-off plot produces 20%</strong> of its normal output and uses no Energy.</li>
+<li>The plot's line says why: "Turned off: not enough Energy (20%)".</li>
+</ol></div>
+
+<h3 id="energy-use-table">Energy use per plot and resource type</h3>
+<p>Each working plot uses this much Energy a month, paid during production. A cold snap (a colony event, 3.2% a month) doubles every plot's use for that month.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Plot, by what it produces</th><th class="n">Energy a month</th><th class="n">Before 5 Nov</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td>Food farm</td><td class="n">1</td><td class="n">1</td><td>Also needs Water if irrigated</td></tr>
+<tr><td>Water well</td><td class="n">1</td><td class="n">1</td><td></td></tr>
+<tr><td>Energy plant</td><td class="n">1</td><td class="n">0</td><td><strong>New.</strong> Paid from its own output, never from your stock, so it is not in your need on the auction's status screen</td></tr>
+<tr><td>Smithore mine</td><td class="n">2</td><td class="n">2</td><td></td></tr>
+<tr><td>Crystite mine</td><td class="n">2</td><td class="n">2</td><td></td></tr>
+<tr><td>Rare earth mine</td><td class="n">2</td><td class="n">2</td><td></td></tr>
+<tr><td>Alloy smelter</td><td class="n">2</td><td class="n">2</td><td>1 next to your own Smithore mine (a feeder)</td></tr>
+<tr><td>Electronics works</td><td class="n">1</td><td class="n">1</td><td>0 next to your own Rare earth mine or Alloy smelter</td></tr>
+<tr><td>Medicine lab</td><td class="n">1</td><td class="n">1</td><td>0 next to your own farm or well</td></tr>
+<tr><td>Green belt</td><td class="n">0</td><td class="n">0</td><td>Grows nothing, uses nothing</td></tr>
+</tbody></table></div>
+<div class="box next"><h4>Still to design: are these the right numbers?</h4>
+<p>Heiko asked for the Energy use per plot type and per factory to be designed. The table is the earlier set plus the new 1 for Energy plants. It is the starting proposal, not a final balance. Every number is a named setting (<code>UPKEEP.energyUse</code> for farms, wells, plants and mines, and each factory's recipe), so it can change without touching the rules.</p>
+<p>Measured with the rule as built, the computer players pricing Energy by it (40 simulated games on each of seeds 1, 101 and 201 with politics on, and seed 1 with politics off; 5 Nov). Each cell gives the range over the four runs.</p>
+<div class="table-wrap"><table>
+<thead><tr><th></th><th class="n">Old rule</th><th class="n">Now</th></tr></thead>
+<tbody>
+<tr><td>Player months with a plot cut</td><td class="n">39–46%</td><td class="n">55–60%</td></tr>
+<tr><td>Output lost in such a month (median)</td><td class="n">33–41%</td><td class="n">60–70%</td></tr>
+<tr><td>Months colonists go short of Food or Water</td><td class="n">41–55%</td><td class="n">62–71%</td></tr>
+<tr><td>Energy's posted price after the auction, median</td><td class="n">63–71</td><td class="n">86–105</td></tr>
+<tr><td>Energy's posted price, 90th percentile</td><td class="n">188–251</td><td class="n">394–437</td></tr>
+<tr><td>Energy traded at the auction, units a game</td><td class="n">82–98</td><td class="n">46–54</td></tr>
+<tr><td>Factory output, units a game</td><td class="n">28–33</td><td class="n">16–23</td></tr>
+</tbody></table></div>
+<p>The 20% output does most of the extra damage; an earlier run with plants using 0 cut nearly as many player months. Shortages bite harder and Energy gets dearer: these are the numbers the balance work starts from.</p></div>
+
+<h3 id="factory-energy">What factories need</h3>
+<p>A factory turns goods from your own stock into something worth more. Each run takes its inputs and its Energy together.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Factory</th><th>Takes per run</th><th class="n">Energy</th><th class="n">Makes</th></tr></thead>
+<tbody>
+<tr><td>Alloy smelter</td><td>2 Smithore</td><td class="n">2</td><td class="n">2 Alloy</td></tr>
+<tr><td>Electronics works</td><td>1 Rare earth, 1 Alloy</td><td class="n">1</td><td class="n">1 Electronics</td></tr>
+<tr><td>Medicine lab</td><td>1 Food, 1 Water</td><td class="n">1</td><td class="n">2 Medicine</td></tr>
+</tbody></table></div>
+<p>Ground, a neighbouring factory of the same kind, experience and relics can raise what a factory makes; see <a href="#factories">Factories and recipes</a>. Under the new rule:</p>
+<ul>
+<li>A factory that holds its inputs is in the turn-off list like any other plot. Factories set their inputs aside in turn (smelters, then works, then labs, each in map order), so two smelters sharing Smithore for one count as one: the other waits, and no mine is turned off to make room for it.</li>
+<li>A factory whose inputs only arrive this month (Smithore mined this month for your smelter) runs after your farms, wells and mines, on whatever Energy is left. It never causes another plot to be turned off. If too little Energy is left, it is turned off itself.</li>
+<li>A turned-off factory makes 20% of its output and uses 20% of each input, rounded up. If 20% of its output rounds to nothing, it takes no inputs.</li>
+<li>A factory missing its inputs doesn't run and doesn't count.</li>
+</ul>
+
+<h3 id="turn-off-order">Which plot is turned off first</h3>
+<ul>
+<li>The plot that uses the most Energy goes first.</li>
+<li>When two use the same, the one whose output is worth less at the store's current price goes first, so your most valuable plot keeps running.</li>
+<li>Still tied: map order.</li>
+<li>Your farms, wells, mines and factories are all in one list. Each player's plots are settled on their own.</li>
+<li>A turned-off plot gains no experience that month.</li>
+</ul>
+<p>20% is rounded to the nearest whole unit, halves up: a plot making 3 or 4 still gives 1; a plot making 2 or less gives 0.</p>
+<div class="box example"><h4>Example</h4>
+<p>Lena holds no Energy. She owns one Energy plant making 3, a Crystite mine (makes 3), a Smithore mine (makes 3), farm A (makes 3) and farm B (makes 4). Prices: Smithore 50, Crystite 100.</p>
+<ol>
+<li>The plant makes 3 and pays its own 1: 2 Energy go into her stock.</li>
+<li>Her other plots need 2 + 2 + 1 + 1 = 6. She has 2. Too little.</li>
+<li>The two mines use most, 2 each. The Smithore mine's output is worth 3 × 50 = 150, the Crystite mine's 3 × 100 = 300, so the Smithore mine is turned off first. The rest need 4: still too much.</li>
+<li>The Crystite mine is turned off next. The rest need 2: that fits.</li>
+<li>Both farms work in full and use her 2 Energy. Each mine makes 20% of 3 = 0.6, rounded to 1.</li>
+</ol>
+<p>Result: farms 3 and 4, mines 1 and 1. Under the old rule the farms' place on the map decided it, and farm B made only 2.</p></div>
+<div class="box why"><h4>Why it is like this</h4><p>Heiko, 5 Nov: the biggest users stop first, so a shortage is predictable and the cheap staples keep running, and a plant that pays its own Energy makes Energy a real cost of every estate. The PM settled the details on 5 Nov: plants pay from their own output and are never turned off; ties go by value; factories in the same list; inputs rounded up so nothing is made from nothing; no experience while off.</p></div>
+<p>The phone and the TV show a turned-off plot with a red "20%" badge and the Energy icon, and the words "Turned off: not enough Energy (20%)". The computer players price a missing unit of Energy at what the plot it keeps on would lose turned off: 80% of that plot's output at the store's price, spread over the plot's use.</p>
+<p class="code-ref">In the code: <code>packages/engine/src/production.ts::energyOffOrder</code>, <code>::runProduction</code>, <code>::monthNeeds</code> · <code>economy.ts::playersUse</code> · <code>packages/ai/src/value.ts::unitValues</code> · <code>config.ts::UPKEEP.energyUse</code>, <code>UPKEEP.offOutputShare</code>, <code>RECIPES</code>, <code>FACTORY.feederEnergySaving</code> · spec <code>ws1-balance</code> AM-17</p>
+<p class="owner">Kept current by: the Balance team (WS1).</p>
+
+<h2 id="energy-turn-off">How the Energy rule changed on 5 November <span class="pill built">In the game</span></h2>
+<p>Before 5 November a shortage was settled in map order and a short plot made half. The rule now is the one in <a href="#energy-use">Energy</a> above; this is what changed.</p>
+<div class="table-wrap"><table>
+<thead><tr><th></th><th>Before 5 Nov</th><th>Now</th></tr></thead>
+<tbody>
+<tr><td>Which plot loses out</td><td>Whichever comes later on the map</td><td>The biggest Energy user, then the next, until the rest fit; ties by value, then map order</td></tr>
+<tr><td>What a short plot makes</td><td>Half, rounded down</td><td>20%, rounded to the nearest unit, halves up</td></tr>
+<tr><td>Energy plants</td><td>Use nothing</td><td>Use 1 each, from their own output; never turned off</td></tr>
+<tr><td>A factory without its Energy</td><td>Makes nothing</td><td>Turned off: makes 20% from 20% of each input, rounded up; takes nothing when 20% of its output rounds to 0</td></tr>
+<tr><td>A factory whose inputs arrive this month</td><td>Ran after all raw plots, if Energy was left</td><td>Runs after the counted plots and factories, on the Energy left over; never turns another plot off</td></tr>
+<tr><td>Experience while short</td><td>A factory that didn't run started again at 0</td><td>A turned-off factory keeps its count, gaining nothing that month</td></tr>
+<tr><td>Cost of one missing unit</td><td>Half of the plot it reaches</td><td>80% of the plot turned off</td></tr>
+</tbody></table></div>
+
+<h3 id="energy-shortage">The old rule: half, in map order</h3>
+<p>Each farm, well and mine, in map order, asked for its Energy. If the depot held enough it paid and worked in full; if not, it paid nothing and made half its output, rounded down. Factories came after every raw plot and made nothing without their full Energy. So a plot's place on the map decided who went short: with 3 Energy, a Crystite mine (needs 2) high on the map ran in full while farm B lower down made half. Measured on 5 Nov (WS9, 40 games on each of 3 seeds): in 40 to 43% of seat-months a seat lost production this way, 33 to 40% of the month's output value. That is why Heiko ruled the change.</p>
+<p class="owner">Kept current by: the Balance team (WS1).</p>
+
+<h2 id="water-use">Water: every plot uses it <span class="pill open">Being designed</span></h2>
+<p>Heiko set this on 5 November: Water is a base resource like Food and Energy, so every plot uses some, not only farms. In his words: "Each plott should conusme some water. water is like food and energy a base ressource we msut ensure that this is reflected . not that only food plots need water".</p>
+<div class="box"><h4>The rules Heiko chose</h4>
+<ol>
+<li><strong>Every working plot uses Water</strong>, by what it produces, the same way it uses Energy. Your household and crew still drink as today.</li>
+<li><strong>Short of Water works like short of Energy:</strong> the plot that uses most Water is turned off first, then the next, until the rest fit.</li>
+<li><strong>A turned-off plot produces 20%</strong> and uses neither Water nor Energy.</li>
+</ol></div>
+<div class="table-wrap"><table>
+<thead><tr><th>Plot, by what it produces</th><th class="n">Water a month today</th><th class="n">Water a month, new</th></tr></thead>
+<tbody>
+<tr><td>Food farm</td><td class="n">0 (but makes half if you are short)</td><td class="n">to be proposed</td></tr>
+<tr><td>Water well</td><td class="n">0</td><td class="n">to be proposed</td></tr>
+<tr><td>Energy plant</td><td class="n">0</td><td class="n">to be proposed</td></tr>
+<tr><td>Smithore, Crystite and Rare earth mines</td><td class="n">0</td><td class="n">to be proposed</td></tr>
+<tr><td>Alloy smelter, Electronics works</td><td class="n">0</td><td class="n">to be proposed</td></tr>
+<tr><td>Medicine lab</td><td class="n">1 as an input</td><td class="n">to be proposed</td></tr>
+</tbody></table></div>
+<div class="box next"><h4>What is being designed</h4>
+<p>Heiko chose to have the Balance team (WS1) propose the Water use per plot type and per factory, recheck the Energy table at the same time, and measure both in the simulator before he confirms the numbers. Still to settle:</p>
+<ul>
+<li>Whether a well pays its own Water from its own output, as an Energy plant pays its Energy.</li>
+<li>The order when a player is short of both, so that no plot is cut twice.</li>
+</ul>
+<p>Today's rule (below) stays until it lands, and it goes with it: only Food farms make half when you are short. This joins the Energy rule as one change about base resources.</p></div>
+<p class="owner">Kept current by: the Balance team (WS1).</p>
+
+<h2 id="water-shortage">Short of Water today, until the new rule lands: farms make half <span class="pill built">In the game</span></h2>
+<p>Food farms need irrigation. When production starts, the game compares the Water you hold with the Water your household and crew need this month (see <a href="#upkeep-and-crew">Upkeep and crew</a>). If you hold less, every one of your Food farms makes half, rounded down. This comes on top of any Energy shortfall: a farm short of both makes a quarter, rounded down at each step.</p>
+<ul>
+<li>Only Food farms are irrigated. Wells, Energy plots and mines don't care about Water.</li>
+<li>The check is made once, before any plot runs. Water your wells make this month counts for next month.</li>
+<li>The Water is not taken at this point. You pay it at the month end, when your household and crew drink.</li>
+</ul>
+<div class="box why"><h4>Why it is like this</h4><p>Heiko's ruling of 21 October 2026 (economy design): "Short of Water, your Food farms make half, because they can't irrigate." It makes Water a real need for a Food grower and gives wells a reason to exist beyond the colonists' demand.</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/production.ts::runProduction</code> (the <code>dry</code> set) · <code>config.ts::UPKEEP.irrigated</code>, <code>UPKEEP.shortOutputShare</code></p>
+<p class="owner">Kept current by: the Balance team (WS1).</p>
+
+<h2 id="production-events">Events during production <span class="pill built">In the game</span></h2>
+<p>Production is the busiest phase for events. Its events roll at the start of the phase and act at the end of each plot's line: after the ground, the bonuses, pollution and any shortage. Several can hit one plot; each works on what the ones before it left, and no plot goes below 0.</p>
+<ul>
+<li>Events only reach farms, wells, Energy plots and mines. Factories are never hit by a production event, except a meteor strike.</li>
+<li>Energy plots are credited first, events included: a dust storm leaves you less Energy for your other plots that same month, and a solar flare more.</li>
+<li>A cold snap does not touch output directly; it doubles every plot's Energy need, which can push you into a shortage.</li>
+<li>A crystal cavern that was mined for Crystite may collapse after production (<span class="num">6%</span> each), and a meteor may strike after it (<span class="num">3.2%</span>).</li>
+</ul>
+<p>The <a href="events.html">Events</a> chapter has every event, its chance and its numbers.</p>
+<div class="box next"><h4>What is changing</h4><p>A general strike, announced in planning when the colony is restless, will bite in production: every plot of the struck good makes 20% of its output, rounded down, unless the Governor pays the strikers. Being built in the colony branch (C26 PR-A, PR #370, the Balance team WS1). See <a href="events.html#colony-social-events">the colony's social events</a>.</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/production.ts::runProduction</code> (<code>credit</code>) · <code>packages/engine/src/events.ts::eventOutput</code>, <code>::rollPhase</code></p>
+<p class="owner">Kept current by: the Balance team (WS1).</p>
+
+<h2 id="spoilage-and-storage">Spoilage and storage <span class="pill built">In the game</span></h2>
+<p>At the month end, after you have eaten and drunk, your goods spoil and anything above your home depot's space is lost. Each step rounds down.</p>
+<ol>
+<li>Each good loses its spoilage share: what is left is your stock × (1 − spoilage), rounded down.</li>
+<li>Your home depot holds <span class="num">UPKEEP.depotCapacity</span> = <span class="num">10</span> units of each good. Anything above that is gone.</li>
+</ol>
+<div class="table-wrap"><table>
+<thead><tr><th>Good</th><th class="n">Lost each month (yours)</th><th class="n">Lost each month (the store's)</th></tr></thead>
+<tbody>
+<tr><td>Food</td><td class="n">50%</td><td class="n">12.5%</td></tr>
+<tr><td>Water</td><td class="n">5%</td><td class="n">1.25%</td></tr>
+<tr><td>Energy</td><td class="n">25%</td><td class="n">6.25%</td></tr>
+<tr><td>Medicine</td><td class="n">20%</td><td class="n">5%</td></tr>
+<tr><td>Smithore, Crystite, Rare earth, Alloy, Electronics</td><td class="n">0%</td><td class="n">0%</td></tr>
+</tbody>
+</table></div>
+<p>The store has proper storage, so its goods spoil at <span class="num">PRICE.storeSpoilage</span> = <span class="num">0.25</span> of the normal rate, and it has no depot limit.</p>
+<div class="box example"><h4>Example: holding Food and Energy over the month end</h4><p>After eating, Kai holds 7 Food, 4 Energy and 14 Smithore. Food: 7 × 0.5 = 3.5, rounded down to <span class="num">3</span>. Energy: 4 × 0.75 = 3. Smithore doesn't spoil, but the depot holds 10: <span class="num">4</span> Smithore are lost. Selling the extra Smithore at the auction was his decision to make.</p></div>
+<div class="box why"><h4>Why it is like this</h4><p>The economy design: holding goods to sell later is allowed, but storing them costs space and spoilage, so every speculation is a real bet. Spoilage rates are the design's starting numbers.</p></div>
+<div class="box next"><h4>What is changing</h4><p>The storage buildings of the economy design (warehouse, silo, cold store, tank, battery bank, vault) are not in the game: the engine has none of them. Backlog, no team on it.</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/upkeep.ts::runUpkeep</code> · <code>config.ts::GOOD_CONFIG</code> (<code>spoilage</code>), <code>UPKEEP.depotCapacity</code>, <code>PRICE.storeSpoilage</code></p>
+<p class="owner">Kept current by: the Balance team (WS1).</p>
+
+<h2 id="upkeep-and-crew">Upkeep and crew <span class="pill built">In the game</span></h2>
+<p>Every plot you work has a crew, and your household and crew eat and drink at the month end. A bigger estate costs more to feed.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Plot</th><th class="n">Crew</th></tr></thead>
+<tbody>
+<tr><td>Farm, well, Energy plot or mine</td><td class="n">1</td></tr>
+<tr><td>Factory</td><td class="n">2</td></tr>
+<tr><td>Green belt</td><td class="n">0</td></tr>
+</tbody>
+</table></div>
+<ul>
+<li><strong>Food a month:</strong> <span class="num">2</span> for you, plus 1 for every <span class="num">4</span> crew or part of 4.</li>
+<li><strong>Water a month:</strong> <span class="num">1</span> for you, plus 1 for every <span class="num">6</span> crew or part of 6.</li>
+</ul>
+<p>At the month end both are taken from your depot; if you don't have enough, you go down to 0. Being short of Food shows up at the next development, where a hungry colonist walks slower (see <a href="development.html">Development</a>). Being short of Water shows up at the next production, where your farms make half. Energy is not part of upkeep: your plots paid it during production.</p>
+<div class="box example"><h4>Example: what an estate eats</h4><p>Five raw plots and one factory: a crew of 5 + 2 = 7. Food: 2 + 2 (7 crew is one full 4 and part of another) = <span class="num">4</span>. Water: 1 + 2 = <span class="num">3</span>. To keep your farms irrigated next month you need to hold 3 Water when production starts.</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/production.ts::crewOf</code>, <code>::needsOf</code> · <code>packages/engine/src/upkeep.ts::runUpkeep</code> · <code>config.ts::UPKEEP</code> (<code>baseFood</code>, <code>baseWater</code>, <code>crewPerFood</code>, <code>crewPerWater</code>, <code>crew</code>)</p>
+<p class="owner">Kept current by: the Balance team (WS1).</p>
+
+<h2 id="pollution">Pollution and the air gauge <span class="pill built">In the game</span></h2>
+<p>Industry fouls the land and the air. Pollution has two levels: each plot has its own level, and the colony shares one air gauge. Both move once a month, right after production.</p>
+
+<h3 id="pollution-sources">Who pollutes</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Plot</th><th class="n">Air points a month</th><th class="n">With a filter</th><th>Fouls the plots around it</th></tr></thead>
+<tbody>
+<tr><td>Rare earth mine</td><td class="n">4</td><td class="n">2</td><td>Yes (not with a filter)</td></tr>
+<tr><td>Alloy smelter</td><td class="n">3</td><td class="n">1.5</td><td>Yes (not with a filter)</td></tr>
+<tr><td>Electronics works</td><td class="n">1</td><td class="n">0.5</td><td>No</td></tr>
+<tr><td>Smithore mine</td><td class="n">1</td><td class="n">0.5</td><td>No</td></tr>
+<tr><td>Crystite mine</td><td class="n">1</td><td class="n">0.5</td><td>No</td></tr>
+<tr><td>Farm, well, Energy plot, Medicine lab</td><td class="n">0</td><td class="n">0</td><td>No</td></tr>
+</tbody>
+</table></div>
+<p>A plot pollutes because a MULE is installed on it, whether or not it produced: the game counts every outfitted plot, so a smelter that stood idle for want of Smithore still adds its 3 points. A filter costs 1 Alloy and is fitted in development.</p>
+
+<h3 id="pollution-plots">Pollution on a plot</h3>
+<ul>
+<li>A polluter that fouls raises its own plot and the four touching it by 1 level each month, up to level <span class="num">3</span>, whoever owns them. The store's plot never takes pollution.</li>
+<li>Every other plot recovers by <span class="num">1</span> level a month. Untouched forest and swamp (no MULE on it) recovers by <span class="num">2</span>.</li>
+<li>A green belt (a MULE outfit costing <span class="num">20</span> cr) makes nothing, but cleans its own plot and the four touching it by <span class="num">1</span> more each month, and takes <span class="num">2</span> points off the air.</li>
+<li>Food, Water and Medicine made on a plot lose 1 per level. Mines, Energy plots, smelters and Electronics works don't mind.</li>
+</ul>
+
+<h3 id="air-gauge">The colony's air gauge</h3>
+<p>The gauge runs from <span class="num">0</span> to <span class="num">100</span>. Each month it adds every polluter's points, takes off <span class="num">2</span> for each green belt, then nature cleans <span class="num">2</span> points for each player in the game (a bigger colony has a bigger map). It never goes below 0 or above 100, and can hold half points because of filters.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Band</th><th class="n">Gauge</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td>Clean</td><td class="n">0 to 29</td><td>The export ship pays <span class="num">10%</span> more.</td></tr>
+<tr><td>Smoggy</td><td class="n">30 to 59</td><td>The air sickens: sickness is <span class="num">15</span> points likelier for every player, the colonists' Medicine demand is ×<span class="num">1.5</span>, the auction's status screen counts 1 Medicine in your need, and acid rain is <span class="num">4</span> points likelier.</td></tr>
+<tr><td>Toxic</td><td class="n">60 to 79</td><td>As Smoggy, with sickness <span class="num">30</span> points likelier; every farm and well makes <span class="num">1</span> less; drought is <span class="num">2</span> and acid rain <span class="num">8</span> points likelier.</td></tr>
+<tr><td>Collapse</td><td class="n">80 to 100</td><td>As Toxic, with sickness <span class="num">50</span> points likelier, drought <span class="num">4</span> and acid rain <span class="num">12</span> points likelier; <span class="num">5%</span> of the colonists leave each month whether fed or not; every final score is multiplied by <span class="num">0.8</span>.</td></tr>
+</tbody>
+</table></div>
+<p>The air points each player caused this month are recorded. They make that player likelier to fall sick next month: <span class="num">3</span> points of chance per air point, at most <span class="num">40</span> (see <a href="events.html#catalogue-development">Events</a>).</p>
+<div class="box example"><h4>Example: does the air move?</h4><p>Four players, so nature cleans 8 a month. On the map: one Rare earth mine (4), one Alloy smelter with a filter (1.5), two Smithore mines (2), one green belt (−2). The total is 4 + 1.5 + 2 − 2 − 8 = −2.5: the air gets cleaner. With three Rare earth mines and two unfiltered smelters instead (12 + 6 = 18), the gauge rises by 10 a month and reaches Smoggy in three months.</p></div>
+<div class="box why"><h4>Why it is like this</h4><p>From the pollution design: one player can get rich from a dirty mine while the whole table pays for it, which makes the colony's health something to deal, vote and argue about. The design said nature cleans 3 a month; the game cleans 2 per player, because a bigger colony has a bigger map. Measured on 28 October (WS1, 120 computer-player games): the gauge never reached Smoggy in any game; the highest month anywhere was 22. Computer players rarely build enough heavy industry to foul the air.</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/pollution.ts::runPollution</code>, <code>::airBand</code>, <code>::airPoints</code> · <code>packages/engine/src/production.ts::pollutionLoss</code> · <code>config.ts::POLLUTION</code>, <code>MULE.outfitCost.greenBelt</code>, <code>DEVELOPMENT.filterAlloy</code></p>
+<p class="owner">Kept current by: the Balance team (WS1).</p>
+
+<h2 id="production-show">The production show on the TV and the phone <span class="pill built">In the game</span></h2>
+<p>Production is played as a show, in the order Heiko chose on 5 November ("order C"): good by good for every player at once, then every bonus at once, then every loss at once, then the month's events, then the goods fly into the silos. The show's length is production's length: it grows with the number of goods made, never with the number of plots.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Beat</th><th>What you see</th><th class="n">How long</th></tr></thead>
+<tbody>
+<tr><td>Intro</td><td>The map, before the first good lights.</td><td class="n">1.0 s</td></tr>
+<tr><td>Harvest</td><td>One good at a time (Food, Water, Energy, Smithore, Crystite, Rare earth, Alloy, Electronics, Medicine), only the goods made this month. Every plot of that good lights and counts up its base together, a unit every 0.14 s.</td><td class="n">1.1 s a good</td></tr>
+<tr><td>Bonuses</td><td>Every plus at once: neighbours, species, special fields. Green badges.</td><td class="n">1.6 s</td></tr>
+<tr><td>Losses</td><td>Every minus at once: pollution in amber, an Energy or Water shortage as a red "½" badge with the missing good.</td><td class="n">1.6 s</td></tr>
+<tr><td>This month on Irata</td><td>The month's production events play over the map, one after the other (see <a href="events.html#event-show">the event show</a>). Skipped in a quiet month.</td><td class="n">their own length</td></tr>
+<tr><td>Into the silos</td><td>Every plot's goods fly to its owner's silo, the first gaps longest.</td><td class="n">3.15 s</td></tr>
+<tr><td>Hold</td><td>The silos stand full to be read.</td><td class="n">2.0 s</td></tr>
+</tbody>
+</table></div>
+<p>A short gap of <span class="num">0.5</span> s sits before the bonuses, before the events and before the flight.</p>
+<div class="box example"><h4>Example: how long a month's show lasts</h4><p>A month where five goods were made and nothing fired: 1.0 + 5 × 1.1 + 0.5 + 1.6 + 1.6 + 0.5 + 3.15 + 2.0 = about <span class="num">15.9</span> s. Add one drought (a headline: 1.8 s intro + 7.0 s) and it is about <span class="num">25.2</span> s.</p></div>
+<h3 id="production-show-tv">On the TV</h3>
+<p>The whole map plays, every player's plots. Beside it a rail lists the beats (Harvest, Bonuses, Losses, This month on Irata, Into the silos) and ticks them off. During Bonuses and Losses it lists, in words, the reasons that appear this month, for example "Next to your own plot of the same good", "Polluted ground", "A farm with no Water makes half", "No Energy for the plot: half". During the events it keeps a log of what played. A silo bar along the bottom fills as the goods land.</p>
+<h3 id="production-show-phone">On the phone</h3>
+<p>Your phone plays the same map but fills only your plots, and your harvest flies into "Your silo", a strip showing everything you hold. The rail lists what you made, good by good (on a phone alone, once the show ends). With a TV in the room the phone shows each event as a light card and buzzes as it is announced. Alone, with no TV connected, the phone plays each event on its own map, and a tap on the map skips to the result.</p>
+<p>Ready waits for the end of the show, so the table always sees its month. With a TV in the room every person can press "Speed up"; once everyone has, the rest of the show plays <span class="num">3</span> times faster. Computer players always agree.</p>
+<p class="code-ref">In the code: <code>packages/engine/src/production-show.ts::productionShow</code> · <code>config.ts::PRODUCTION_SHOW</code> · <code>apps/web/src/table/TvProduction.tsx</code> · <code>apps/web/src/phone/Production.tsx</code> · <code>packages/ui/src/components/ProductionMap.tsx</code></p>
+<p class="owner">Kept current by: the Balance team (WS1) for the numbers; the UX team (WS6) for the phone and the Table team (WS4) for the TV.</p>
+
+<h2 id="month-report">Why a plot made what it made <span class="pill built">In the game</span></h2>
+<p>For every working plot the game files a line in the month's report: the plot, the good, what it made, and every part that made it up, in order. The parts always add up exactly to what the plot made.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Part</th><th>Meaning</th><th>On screen</th></tr></thead>
+<tbody>
+<tr><td>ground</td><td>The base from the ground rating or deposit.</td><td>The base the plot counts up to in the harvest.</td></tr>
+<tr><td>factory</td><td>A factory's whole run (its base and every fit line).</td><td>The base the plot counts up to.</td></tr>
+<tr><td>trait</td><td>Hot spring, toxic ground or a thin vein.</td><td>A badge with the change.</td></tr>
+<tr><td>species</td><td>The Bramblet's Food or the Mollox's mining perk.</td><td>"Your species is good at this", +1.</td></tr>
+<tr><td>special</td><td>A crystal cavern, geyser, oasis or touching relic.</td><td>"A special field".</td></tr>
+<tr><td>cluster</td><td>The neighbour bonus.</td><td>"Next to your own plot of the same good".</td></tr>
+<tr><td>pollution</td><td>The plot's pollution level, and Toxic air on farms and wells.</td><td>"Polluted ground", amber.</td></tr>
+<tr><td>floor</td><td>The total was set back up to 0.</td><td>A badge with the change.</td></tr>
+<tr><td>energyOff</td><td>Turned off for want of Energy: the plot made 20%.</td><td>"Turned off: not enough Energy (20%)", a red "20%" with the Energy icon.</td></tr>
+<tr><td>noEnergy</td><td>The old rule's half for want of Energy; no longer filed, kept so older months still read.</td><td>"No Energy for the plot: half", a red ½ with the Energy icon.</td></tr>
+<tr><td>noWater</td><td>Half for want of Water.</td><td>"A farm with no Water makes half", a red ½ with the Water icon.</td></tr>
+<tr><td>event</td><td>One event's change, naming the event.</td><td>Played in the events beat, not as a badge.</td></tr>
+</tbody>
+</table></div>
+<p>Every screen sees the same lines: what each plot made is public, like the auction's status table. The lines are also what the simulator and the computer players read. A factory's own reasons (terrain, feeder, park, experience, relic, pollution) are shown in words on the phone before you install it, not in the month's line.</p>
+<div class="box next"><h4>Still open</h4><p>There is no written month report that lists each plot's parts in words outside the show; whether one is wanted is open (PM).</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/types.ts::ProductionLine</code> · <code>packages/engine/src/production.ts::rawOutputParts</code> · <code>apps/server/src/mule-game.ts::productionView</code> · <code>packages/protocol/src/index.ts::ProductionLineView</code></p>
+<p class="owner">Kept current by: the Balance team (WS1).</p>
+</article>
+</main>
+</div>
+<script src="search-index.js"></script>
+<script src="rulebook.js"></script>
+</body>
+</html>

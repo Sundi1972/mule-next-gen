@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Computer players · M.U.L.E. Rulebook</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="rulebook.css">
+</head>
+<body>
+<div class="rb-shell">
+<aside class="rb-rail"></aside>
+<main class="rb-main">
+<article>
+<h1>Computer players</h1>
+<p class="rb-lede">How the computer players think, value goods, bid, claim land and build; how Claude can sit in a seat and decide in character; and how the simulator plays thousands of games to check the balance.</p>
+
+<h2 id="how-it-is-built">How a computer player is built <span class="pill built">In the game</span></h2>
+<p>A computer player is a seat at the table like yours. It sees only what a person in that seat would see (its own goods and money, the public board, the plots it has analysed) and it plays only the moves a phone can send. It never reads another player's stock, the game's dice or ground it has not assayed. Every move it makes is checked by the same rules as yours.</p>
+<p>Inside, it has layers. The thinking happens once per decision; the hands then carry it out in real time, tick by tick, at a person's speed.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Layer</th><th>What it does</th><th>When it runs</th></tr></thead>
+<tbody>
+<tr><td>Strategist</td><td>Lists every option for the decision (which plan for land, which MULE on which plot, buy or sell how much), scores each with named reasons, throws out the ones a hard rule forbids, and hands the best few to the decider.</td><td>At each decision</td></tr>
+<tr><td>Value model</td><td>Says what each unit of each good, each plot and each MULE is worth to this seat, in credits.</td><td>Inside the strategist</td></tr>
+<tr><td>Outlook</td><td>Plays the rest of the month forward on a private copy of what the seat can see, to forecast next month's prices.</td><td>Inside the value model</td></tr>
+<tr><td>Utility scoring</td><td>Turns each option's reasons into one score from 0 to 1, shaped by the seat's persona.</td><td>Inside the strategist</td></tr>
+<tr><td>Decider</td><td>Picks one option from the shortlist and says a line at the table. The built-in decider (Classic) picks by weighted chance among the near-best; Claude can pick instead (Smart).</td><td>At each decision</td></tr>
+<tr><td>Hands</td><td>Carry the pick out: press Claim when a good plot lights up, walk the floor to the corral and the plots, walk the auction board up to a price limit and never past it, bid on lots, vote.</td><td>Every server tick</td></tr>
+<tr><td>Playbook</td><td>A whole month's plan in one document: the strategy, what to list, which plots to want, the development route, and per good how to trade. The engine always drafts one; Claude may edit it.</td><td>At the start of each phase</td></tr>
+</tbody>
+</table></div>
+<div class="box why"><h4>Why it is like this</h4><p>Heiko decided on 21 October 2026 that real strength comes from a strategist written in code that uses the game's own engine to look ahead, with a small language model making the final call in character. Code does the arithmetic well and costs nothing; the model makes the seat feel like a person. The game must never wait for a model, so if it is slow, broken or out of budget, the strategist's own top pick plays. Also decided that day: light look-ahead only (no deep search), and the model picks from 3 to 5 near-best options.</p></div>
+<p class="code-ref">In the code: <code>packages/ai/src/seat.ts::AiSeat</code> · <code>packages/ai/src/strategist.ts</code> · <code>packages/ai/src/brain.ts::Brain</code> · <code>docs/design/06-ai-players.md</code></p>
+<p class="owner">Kept current by: WS1 (strategist), WS9 (playbooks, utility), WS2 (Claude).</p>
+
+<h2 id="seats-and-levels">Seats: Classic and Smart, levels and names <span class="pill built">In the game</span></h2>
+<p>Every empty seat at a table can be filled by a computer player. Each one has a name, which fixes its persona, and a level.</p>
+<h3 id="seat-names">Names and personas</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Name at the table</th><th>Persona</th></tr></thead>
+<tbody>
+<tr><td>The Accountant</td><td>Cautious (“The careful one”)</td></tr>
+<tr><td>The Baron</td><td>Aggressive (“The baron”)</td></tr>
+<tr><td>The Grudge</td><td>Saboteur (“The grudge”)</td></tr>
+<tr><td>The Gambler</td><td>Trader (“The trader”)</td></tr>
+<tr><td>The Good Neighbour</td><td>Cautious</td></tr>
+</tbody>
+</table></div>
+<p>A seat with any other name gets a persona by its seat number: trader, aggressive, cautious, saboteur, in turn.</p>
+<h3 id="classic-and-smart">Classic and Smart</h3>
+<ul>
+<li><strong>Classic</strong>: the strategist and the built-in decider. It costs nothing, always answers at once, and its chat lines come from short templates per persona.</li>
+<li><strong>Smart</strong>: the same strategist, but Claude makes the pick and writes the chat line in character (see <a href="#claude-decider">Claude as a player</a>).</li>
+</ul>
+<p>Today the lobby has no Smart or Classic switch. If the server holds an API key, every computer seat at the table is Smart; without a key, every seat is Classic. A Smart seat that runs out of budget, or whose call fails or is late, plays that decision as Classic, so the game never stalls.</p>
+<h3 id="levels">Levels</h3>
+<p>There are three levels. They differ in how complete the scoring is and how quick the hands are, never in what the seat may see. Real tables play at <strong>Trader</strong> level today; the lobby does not offer a choice yet. The simulator can run any level.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Setting</th><th>Rookie</th><th>Trader</th><th>Tycoon</th></tr></thead>
+<tbody>
+<tr><td>Forecasts next month's prices (look-ahead)</td><td>no, uses today's</td><td>yes</td><td>yes</td></tr>
+<tr><td>Counts spoilage, the depot limit and the air (full scoring)</td><td>no</td><td>yes</td><td>yes</td></tr>
+<tr><td>Options on the shortlist, at most</td><td class="n">3</td><td class="n">4</td><td class="n">5</td></tr>
+<tr><td>Shortlist takes options within this share of the best</td><td class="n">0.35</td><td class="n">0.2</td><td class="n">0.12</td></tr>
+<tr><td>The built-in decider picks within this share of the best</td><td class="n">0.25</td><td class="n">0.1</td><td class="n">0.04</td></tr>
+<tr><td>Reaction time, ms</td><td class="n">320–550</td><td class="n">250–400</td><td class="n">200–320</td></tr>
+<tr><td>Development pace (times a quick human's step time)</td><td class="n">1.4</td><td class="n">1.1</td><td class="n">1</td></tr>
+<tr><td>MULEs it leads out a month, at most</td><td class="n">1</td><td class="n">2</td><td class="n">3</td></tr>
+<tr><td>Chance it misses a plot it wanted in the land grant</td><td class="n">0.25</td><td class="n">0.05</td><td class="n">0</td></tr>
+<tr><td>May corner a good</td><td>no</td><td>yes</td><td>yes</td></tr>
+<tr><td>May act on spite against the leader</td><td>no</td><td>yes</td><td>yes</td></tr>
+</tbody>
+</table></div>
+<div class="box next"><h4>What is changing</h4><p>A lobby picker for Smart and Classic seats and for the level was a non-goal of the first Claude build; it is not designed yet. Until then the server's key decides Smart for every computer seat, and <code>DEFAULT_AI_LEVEL</code> is Trader. Owner: WS2 (Smart) and WS4 (lobby).</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/config.ts::AI_LEVELS</code> · <code>apps/server/src/mule-game.ts::AI_NAMES, DEFAULT_AI_LEVEL</code> · <code>packages/ai/src/personas.ts::personaFor</code> · <code>apps/server/src/brain/index.ts::createBrain</code></p>
+<p class="owner">Kept current by: WS1, with WS2 for Smart seats.</p>
+
+<h2 id="personas">Personas <span class="pill built">In the game</span></h2>
+<p>A persona is a set of weights that tilt every decision. A weight of 1 is neutral; above 1 that reason matters more, below 1 less, 0 ignores it. The same weights also drive a few direct numbers (how much cash to keep back, how much to pay for a corner).</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Weight</th><th>What it changes</th><th class="n">Cautious</th><th class="n">Aggressive</th><th class="n">Trader</th><th class="n">Saboteur</th></tr></thead>
+<tbody>
+<tr><td>risk</td><td>Dislike of guesses: unanalysed ground, forecasts, buying to resell</td><td class="n">1.6</td><td class="n">0.6</td><td class="n">1.0</td><td class="n">0.9</td></tr>
+<tr><td>greed</td><td>How much the gain in credits counts</td><td class="n">0.8</td><td class="n">1.4</td><td class="n">1.1</td><td class="n">0.9</td></tr>
+<tr><td>reserve</td><td>Cash kept back (it multiplies the cash reserve) and how much feeding itself counts</td><td class="n">1.6</td><td class="n">0.7</td><td class="n">1.0</td><td class="n">1.0</td></tr>
+<tr><td>spite</td><td>Fencing in and bidding against the leader</td><td class="n">0</td><td class="n">0.3</td><td class="n">0</td><td class="n">1.5</td></tr>
+<tr><td>speculate</td><td>Willingness to buy now to sell next month</td><td class="n">0.3</td><td class="n">1.0</td><td class="n">1.4</td><td class="n">0.6</td></tr>
+<tr><td>corner</td><td>Buying up a scarce good to sell it dear</td><td class="n">0</td><td class="n">1.0</td><td class="n">0.4</td><td class="n">0.6</td></tr>
+<tr><td>patience</td><td>How long it waits in an auction before it moves</td><td class="n">1.4</td><td class="n">0.6</td><td class="n">1.0</td><td class="n">0.9</td></tr>
+</tbody>
+</table></div>
+<p>Each persona also has a short character card (who it is, how it talks), which Claude reads, and two template lines per kind of decision for Classic seats. For example the cautious seat says “Better safe than sorry: …” when it builds, and the saboteur “Not so fast, leader.” in the auction.</p>
+<p class="code-ref">In the code: <code>packages/engine/src/config.ts::AI_PERSONAS</code> · <code>packages/ai/src/personas.ts::PERSONAS</code></p>
+<p class="owner">Kept current by: WS1 (weights), WS2 (cards and lines).</p>
+
+<h2 id="utility">How it scores a choice <span class="pill built">In the game</span></h2>
+<p>Every option gets a handful of <strong>considerations</strong>: one fact about the game turned into a score from 0 to 1, with a reason a person can read (“makes about 40 cr a month, costs 175 cr”, “ground not analysed”). The persona's weight raises each score to a power. The scores are multiplied together, with a correction so an option with many considerations is not punished for having them. The result is the option's <strong>utility</strong>.</p>
+<p>Some options are not scored at all because a <strong>hard rule</strong> forbids them: a MULE the seat cannot pay for without dipping into its cash reserve, a factory it cannot feed, a fifth MULE when its level allows two a month, selling Food it needs. A forbidden option never reaches the shortlist, and the log says why (“Ruled out: it would leave 40 cr, under the 210 cr kept for upkeep”).</p>
+<h3 id="gain-curve">The gain curve</h3>
+<p>Gains in credits are scored on an S-shaped curve: no gain scores 0.5, a gain of one “scale” scores 0.75, a loss of one scale 0.25. The scale differs per decision, because a plot is worth much more over a game than one auction trade.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Decision</th><th class="n">Gain that scores 0.75</th></tr></thead>
+<tbody>
+<tr><td>A plot (land plans)</td><td class="n">1,200 cr</td></tr>
+<tr><td>A MULE (development)</td><td class="n">300 cr</td></tr>
+<tr><td>A trade (auction)</td><td class="n">80 cr</td></tr>
+</tbody>
+</table></div>
+<h3 id="shortlist">The shortlist and the pick</h3>
+<p>The options are sorted by utility. The <strong>shortlist</strong> keeps the best one and any others within the level's tolerance of it, up to the level's maximum (see <a href="#levels">Levels</a>). The decider picks one. The built-in decider keeps only those within its own, tighter tolerance and draws one at random, each with a chance in proportion to its utility. The draw is seeded from the game, so a replay picks the same, yet the seat has no fixed habit a person could learn and exploit.</p>
+<div class="box example"><h4>Example</h4><p>Say a Trader-level seat in development has three options left after the hard rules (the numbers are made up to show the arithmetic): a Food MULE on its river plot (utility 0.62), an Energy MULE on the same plot (0.58) and keep the cash (0.41). The shortlist takes options within 0.2 of the best (above 0.496): Food and Energy. The built-in decider takes options within 0.1 of the best (above 0.558): still both. It draws Food with chance 0.62 / 1.20, about 52%, and Energy about 48%. A Tycoon would have kept only Food on its decider list (within 0.04: above 0.595).</p></div>
+<p class="code-ref">In the code: <code>packages/ai/src/utility.ts</code> · <code>packages/ai/src/decider.ts::TopPickDecider</code> · <code>packages/engine/src/config.ts::STRATEGIST.gainScale</code></p>
+<p class="owner">Kept current by: WS1.</p>
+
+<h2 id="outlook">Looking ahead: the outlook <span class="pill built">In the game</span></h2>
+<p>To value anything the seat needs next month's prices. The <strong>outlook</strong> takes a copy of what the seat can see and plays the rest of the month as if nobody builds or trades any more: this month's production, the auction, upkeep (eating, spoilage, the depot limit, the ship), and next month's production. Then it asks the store's own pricing rule what it would post, with or without a few more units of a good. One run of the status quo, no sampling.</p>
+<p>For the months after next, it plays the same status quo forward <span class="num">2</span> more months (and on to the <span class="num">6</span>-month horizon to look for shortages). Where that run shows colonists going short of Food or Water, or the corral unable to build its MULEs for want of Smithore, it raises the later price even if today's price has not caught up. A seat at Rookie level does not look ahead: it values everything at today's posted price, which is its built-in mistake.</p>
+<p class="code-ref">In the code: <code>packages/ai/src/outlook.ts::outlook, rollForward</code> · <code>packages/engine/src/config.ts::STRATEGIST.outlookMonths, horizon</code></p>
+<p class="owner">Kept current by: WS1.</p>
+
+<h2 id="value-of-goods">What a good is worth to it <span class="pill built">In the game</span></h2>
+<p>For each good, the seat builds a list: what each unit it could hold after the auction is worth to it, most valuable first. It keeps two versions: what a unit it already holds is worth (its <strong>keep</strong> value, the least it will sell for) and what one more unit is worth (its <strong>buy</strong> value, the most it will pay).</p>
+<h3 id="value-needed-units">Units it needs</h3>
+<p>The units next month's needs will use are worth what going short would cost the seat:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Good</th><th>What going short costs it</th><th>How many units count as needed</th></tr></thead>
+<tbody>
+<tr><td>Food</td><td>Walking slower in development. A colonist without Food walks at <span class="num">0.6</span> of its pace, so the month's walking takes longer; each second lost is priced at what a second of development is worth to the seat.</td><td>This month's eating, plus next month's eating grossed up for spoilage</td></tr>
+<tr><td>Water</td><td>Only with a Food farm: an unwatered farm makes half. The half lost, at the Food price, spread over the units.</td><td>As Food, only while it owns a farm</td></tr>
+<tr><td>Energy</td><td>A unit short keeps on the plot the game would turn off at that point (biggest Energy user first): it is worth what that plot loses turned off, 80% of its output at the store's price after tax, spread over the plot's use. A factory waiting for this month's inputs is covered last, as it runs last. An approximation: it leaves out the inputs a turned-off factory saves.</td><td>Its plots' use minus what its own Energy plots make after their own 1, grossed up for spoilage</td></tr>
+<tr><td>Medicine</td><td>Only when the air makes people sick: the chance of falling sick, times the walking lost at half pace.</td><td>The month's need</td></tr>
+<tr><td>Factory inputs</td><td>A factory's run is worth its output; that worth is shared over its inputs.</td><td>One run's inputs, grossed up for spoilage</td></tr>
+</tbody>
+</table></div>
+<p>A second of development time is worth <span class="num">10</span> cr while the seat has idle land and the money for a MULE, otherwise <span class="num">3</span> cr, and never less than what the pub would pay for it.</p>
+<h3 id="value-spare-units">Spare units</h3>
+<p>A unit beyond the need is worth what it would fetch next month: the forecast price, less the sales tax, less what spoils by then, less a safety cut of <span class="num">0.05</span> per point of the persona's risk weight because the forecast may be wrong. To <em>buy</em> a spare unit just to resell it the seat also needs a reason to speculate: the resale value is multiplied by its speculate weight (at most 1) and cut a further <span class="num">0.1</span> per point of risk. Past what the depot keeps (<span class="num">10</span> units, more for a good that spoils) a unit is worth nothing. A Rookie ignores spoilage, the depot and the air.</p>
+<p>Food and Energy the seat needs are never sold at any price. When the store cannot feed the colonists, spare Food and Water held for next month's price are capped at what the store pays now, so the seat sells to the hungry colony instead of hoarding.</p>
+<h3 id="cash-reserve">The cash reserve</h3>
+<p>The seat always keeps cash back: <span class="num">60</span> cr, plus what next month's Food, Water and Energy shortfall would cost at the store's selling price (but no more than <span class="num">3</span> times the reference price per unit, so a price spike does not freeze all its cash), all times its persona's reserve weight. It will not spend into this reserve, except to buy the Food and Energy it needs.</p>
+<div class="box example"><h4>Example: how a computer player values one unit of Food</h4>
+<p>The Gambler (trader persona, Trader level) in month 3 owns a Food plot and an Energy plot and holds no Food. It has idle land and the money for a MULE, so a second of development is worth 10 cr to it. Its month's walking takes about 20 seconds (WS1 measured about this).</p>
+<ul>
+<li>It eats 2 + 1 for its crew of 2 = <strong>3</strong> Food a month. The needed block is 3 now plus 3 / 0.5 = 6 for next month (Food spoils by half) = <strong>9</strong> units.</li>
+<li>Going hungry: 20 s × (1 / 0.6 − 1) = 13.3 s lost, × 10 cr = 133 cr, over 9 units = <strong>about 15 cr a unit</strong>.</li>
+<li>Resale: the outlook says Food posts 45 next month. After the 5% tax 42.75, half spoils: 21.4, the risk cut (1 − 0.05) leaves <strong>about 20 cr</strong> (its keep value). For buying it is cut again (× 1 for speculate, × 0.9 for risk): <strong>about 18 cr</strong>.</li>
+<li>Its buy value for each of the 9 needed units is the higher of the two: <strong>18 cr</strong>.</li>
+</ul>
+<p>The store sells Food at its posted price plus 10%: at 45 posted, about 50. The seat's limit is 18, so it does not buy, and goes hungry with money in the bank (WS9 measured hungry seats holding about 1,200 cr). This is exactly what Heiko saw at the table on 5 November. See <a href="#shortfall-stopgap">Buying what it is short of</a> for the fix being built.</p></div>
+<div class="box why"><h4>Why it is like this</h4><p>The design (21 October) asked each unit to be valued by what it does for the seat, not by its market price, so that the seat sells what it does not need and keeps what it does. For Food the only cost of hunger the engine had was slower walking, so that is all the value model counted. Measured on 5 November (WS9, 40 games on each of 3 seeds): a seat came to the Food auction short in 86–87% of its months; in 76–85% it refused on value (its median value 19 cr against store asks of 49–56), although in 99% it could have paid for a unit.</p></div>
+<p class="code-ref">In the code: <code>packages/ai/src/value.ts::unitValues, cashReserve, secondValue</code> · <code>packages/engine/src/config.ts::STRATEGIST.forecastHaircut, resaleRisk, cashFloor, reservePriceCap, secondValue</code> · <code>DEV_WALK.hungerPaceMin</code></p>
+<p class="owner">Kept current by: WS1 (value.ts), WS9 (the utility design).</p>
+
+<h2 id="auction">Buying and selling in the goods auction <span class="pill built">In the game</span></h2>
+<p>When a good comes up, the seat makes a plan for it on the status screen and decides there whether to be a buyer, a seller or stay out, and how far to go. Then its hands walk the board.</p>
+<h3 id="auction-decision">The decision</h3>
+<ul>
+<li><strong>Sell</strong>: sell down to the last unit worth less to it than the sale would bring after tax. A second option keeps a buffer of half next month's need (at least 1 unit) on top.</li>
+<li><strong>Buy</strong>: buy up to the last unit worth more to it than the store's selling price, within its budget for the good. If some of those units are only for resale, a second option buys just what it needs.</li>
+<li><strong>Pass</strong>.</li>
+</ul>
+<p>The budget for one good is half its money, and never so much that it dips into the cash reserve. A sale counts as fairly sure (0.9), a buy of what it needs too (0.9), a buy partly to resell less so (0.6), and the persona's risk weight sharpens that. It expects a sale to fetch at least <span class="num">0.85</span> of the posted price, or what the store or the ship pays if more.</p>
+<h3 id="auction-hands">On the board: the buyer's limit</h3>
+<p>A buyer's limit for its next unit is</p>
+<p><strong>limit = the lower of (what one more unit is worth to it) and (the money it may spend)</strong></p>
+<p>where the money it may spend is all its money for Food or Energy it needs, and otherwise what is left of the good's budget. A seller's floor is the keep value of the unit it would give up, raised to cover the sales tax. Both follow its stock as units trade. Then, on every tick:</p>
+<ol>
+<li>If the best price on the other side is inside its limit, it walks there and trades.</li>
+<li>If a rival on its own side is ahead and the limit leaves room, it overtakes by one credit and a little more.</li>
+<li>If the gap to the other side is small (<span class="num">3–8%</span> of the board, times its patience), it waits for them to close it.</li>
+<li>Otherwise it edges toward them, never past its limit.</li>
+</ol>
+<p>It re-aims only after its reaction time, starts after a delay of <span class="num">300–1,500</span> ms times its patience, and wanders its stopping point by up to <span class="num">3%</span> of the board inside its limit, so its stops are hard to read. At the store's or the ship's line, units trade by themselves; it stays while it still wants units there and steps off after the last.</p>
+<h3 id="auction-corner-spite">Cornering and spite</h3>
+<p>At Trader and Tycoon level, a seat with a corner weight may try to <strong>corner</strong> a good: when the store holds no more than the other players are short of, and the good spoils less than half a month, it adds <span class="num">0.5</span> of next month's price times its corner weight to the value of up to <span class="num">6</span> units the others lack. A seat with spite, while the leader is short of the good, adds <span class="num">0.1</span> of next month's price times its spite to the next <span class="num">2</span> units, to keep them from the leader.</p>
+<div class="box next"><h4>Unclear in the code</h4><p>Cornering needs a good that spoils less than half a month (<code>STRATEGIST.cornerMaxSpoilage</code> 0.5), and Food spoils exactly half (<code>GOOD_CONFIG.food.spoilage</code> 0.5). So Food is never cornered, although the monopoly plan's list (<code>AI_PLANS.monopoly.goods</code>) names it. Whether that is meant is for WS1 (strategist) and WS9 (playbooks) to say.</p></div>
+<div class="box next"><h4>What is changing</h4><p>The buyer's limit uses the value model above, which values needed Food far below the store's price. The stopgap in the next section is being built. Heiko's 5 November table notes on the auction itself (slower selling, auto-stop at equilibrium, rest zones) are WS3's; the store's pricing rule is being redesigned by WS5. Both will need the hands checked again. Owner: WS1 for the hands.</p></div>
+<p class="code-ref">In the code: <code>packages/ai/src/strategist.ts::goodPlan, tradeDecision, expectedPrices</code> · <code>packages/ai/src/hands/auction.ts::AuctionHand</code> · <code>packages/engine/src/config.ts::AI_HANDS.auction, STRATEGIST.budgetShare, trade, cornerPremium, spiteShare</code></p>
+<p class="owner">Kept current by: WS1.</p>
+
+<h2 id="shortfall-stopgap">Buying what it is short of <span class="pill progress">Being built</span></h2>
+<p>Heiko, 5 November, at the table: all the computer players were short of Food while he and the store were selling, and none of them bought. Later two were short of Energy, “which would most likely lead to them not producing anything next month, the worst case”, and stood still in the auction. The PM ruled the same morning: <strong>a computer player short of Food or Energy must buy at the store's price when it can afford it.</strong> Water was added to the same fix.</p>
+<h3 id="shortfall-cause">What was measured</h3>
+<p>WS1 measured the Energy case over 5 seeds: 167 seat-months short of Energy. In 47 of them the store was selling and the seat could pay, but did not buy:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Why it did not buy</th><th class="n">Seat-months</th></tr></thead>
+<tbody>
+<tr><td>It counted its own plots' forecast output as already held</td><td class="n">30</td></tr>
+<tr><td>Its cash reserve blocked the buy (and the reserve counts that same Energy shortfall)</td><td class="n">7</td></tr>
+<tr><td>The decider chose Pass</td><td class="n">5</td></tr>
+<tr><td>It valued a unit below the ask</td><td class="n">5</td></tr>
+</tbody>
+</table></div>
+<p>For Food the value itself is the problem: median 19 cr against asks of 49 to 56 (see the <a href="#value-of-goods">worked example</a>).</p>
+<h3 id="shortfall-rule">The stopgap</h3>
+<p>For Food, Energy and Water, while the seat holds less than next month's need as the status screen shows it and the store is selling the good:</p>
+<ul>
+<li>it counts what it <em>holds</em>, not what its plots may make;</li>
+<li>each unit of the shortfall is worth at least the store's asking price, so it buys there, or cheaper from a player, never dearer;</li>
+<li>it buys those units as far as its money goes: the cash reserve and the per-good budget do not stop it;</li>
+<li>it never sells below the need;</li>
+<li>Pass is ruled out while it is short and can pay.</li>
+</ul>
+<p>Measured on 5 games: the payable no-buys fell from 47 to 0 for Food, 54 to 0 for Energy and 6 to 0 for Water. A hand bug that pressed Done before a trade at its limit was fixed on the way. The cost: with the seats now buying from the store, the colonists go short more often (52% to 60% of months on one measured cell) and Food stands above 3 times its usual price in more games (78% to 92%). The PM ruled to ship it anyway and balance at the end; Food supply is recorded for Heiko as a balancing finding.</p>
+<div class="box next"><h4>What is changing</h4><p>Built and measured on the WS1 branch, not yet on trunk (WS1, about 17:00Z, 5 November). An approved correction follows: the target becomes next month's whole need (Food: eating plus what spoils; Energy: need grossed up for spoilage; Water only with a farm). The Energy turn-off rule (AM-17, plots switched off biggest user first, an off plot makes 20%) changes what an Energy shortage costs; the AI's valuation of it comes in the same WS1 PR. The stopgap is replaced by the <a href="#resource-utility">resource-utility model</a> once that is designed and built.</p></div>
+<p class="code-ref">In the code: branch <code>ws1-food-short</code> · <code>packages/ai/src/strategist.ts::goodPlan (mustHold), tradeDecision</code> · <code>packages/engine/src/config.ts::STRATEGIST.buyShortfall</code> (on the branch)</p>
+<p class="owner">Kept current by: WS1.</p>
+
+<h2 id="land">Claiming land <span class="pill built">In the game</span></h2>
+<h3 id="land-plans">Land plans</h3>
+<p>At planning the seat weighs up to six land plans and ranks every free plot under each:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Plan</th><th>Which outfits count</th></tr></thead>
+<tbody>
+<tr><td>Take the most valuable land</td><td>Any</td></tr>
+<tr><td>Farms and power first: feed myself</td><td>Food, Water, Energy</td></tr>
+<tr><td>Mines for the export trade</td><td>Smithore, Crystite, Rare earth</td></tr>
+<tr><td>Ground for a factory</td><td>Alloy, Electronics, Medicine</td></tr>
+<tr><td>Grow my own patch</td><td>Any, with plots next to its own counting double</td></tr>
+<tr><td>Fence in the leader</td><td>Any, with plots next to the leader's counting (only with spite, Trader level up)</td></tr>
+</tbody>
+</table></div>
+<p>A plot is worth the best gain the seat sees from a MULE on it over the game (the MULE's monthly earnings for up to <span class="num">6</span> months, each month counting <span class="num">0.9</span> of the one before, less the MULE's and outfit's price, plus <span class="num">0.6</span> of the MULE price for what the developed plot adds to the score) plus the <span class="num">300</span> the plot itself adds to the score. From Trader level, a Food, Water or Energy MULE that covers the seat's own shortfall counts each such unit at <span class="num">3</span> times the reference price at least. Unanalysed ground scores lower (0.8), weighted by risk.</p>
+<p>The plans themselves are scored by what their best plots are worth (weighted by greed), whether they feed the seat (weighted by reserve) and whether it has the cash to develop them.</p>
+<h3 id="land-grant">The land grant</h3>
+<p>The grant is one pass of the light, and each seat may claim <span class="num">1</span> plot. When a plot lights up, the seat presses Claim only if, among the free plots still ahead of the light, the lit one is within its claims left and its utility is at least <span class="num">0.75</span> of the best one ahead. Early in the pass better plots lie ahead and it waits; late it takes the best that is left. It never presses while it already holds idle plots it cannot pay to develop. It presses after its reaction time plus <span class="num">150–300</span> ms for the choice, and a Rookie misses a wanted plot one time in four. When it wants nothing still ahead, it is done with land.</p>
+<h3 id="land-auction">The land auction</h3>
+<p>For a plot up for auction, the seat bids up to the lowest of: what the plot is worth to it, its money minus the cash reserve, and its money minus the price of a MULE for this plot and each idle plot it already holds. For a MULE lot, up to what a MULE of that outfit gains on its best idle plot. Against a player it overtakes by <span class="num">10–35%</span> of the gap to its limit; against the colony's proxy bid it walks straight to the colony's cap if that is within its limit, otherwise leaves the lot to the colony. When its money is under its cash reserve it lists one lot a month itself (an idle plot or a MULE, the one worth least to it, never its last Food or Energy MULE) at a minimum of <span class="num">0.8</span> of its worth, sold to the store if nobody bids.</p>
+<div class="box next"><h4>What is changing</h4><p>Since the grant gives one claim (Heiko, 5 November), the seats' rankings nearly match, so four to six seats queue for the same few plots and a loser could end month 1 with no land (75 cases in 400 games). The fix (WS1, PR #366, being built) makes a seat count rivals still claiming when it judges which plots are within reach; measured 75 to 0 plotless seats. A MULE won at the land auction is installed first at development (fixed on trunk since the 5 November floor fixes).</p></div>
+<p class="code-ref">In the code: <code>packages/ai/src/strategist.ts::landDecision, wantsPlot, plotValue, plotRoom, muleValue, sellWanted</code> · <code>packages/ai/src/value.ts::installGain</code> · <code>packages/ai/src/hands/lot.ts::LotHand</code> · <code>packages/engine/src/config.ts::STRATEGIST.land, grantShare, LOTS.aiOvershoot, AI_PLANS.sell</code></p>
+<p class="owner">Kept current by: WS1, with WS3 for the grant and auction rules.</p>
+
+<h2 id="development">Developing land <span class="pill built">In the game</span></h2>
+<p>In development the seat works through a to-do list: analyse the plots worth it, then for each MULE the strategist picks, buy it, outfit it and install it; then fit filters and go to the pub. A MULE it led out of the land auction goes in first.</p>
+<ul>
+<li><strong>Which MULE</strong>: for each idle plot and each outfit, the gain over the game (as for land) minus the walk there at what its time is worth; plus “keep the cash”. Hard rules: the corral has a MULE, the level's MULEs a month are not used up, the walk fits the clock, it can pay without dipping into the reserve, and a factory has inputs for <span class="num">2</span> months. A farm for a good it is short of may use the cash kept back for that good. After each MULE it decides again.</li>
+<li><strong>Analyses</strong>: an unknown plot of its own is analysed when its best and second-best uses are within <span class="num">25%</span> of each other; at most <span class="num">2</span> a month (Rookie <span class="num">1</span>), never with fewer than <span class="num">20</span> seconds left.</li>
+<li><strong>Filters</strong>: only once the air is within <span class="num">10</span> points of Smoggy, on its own plots putting out more than <span class="num">1</span> air point a month, worst first, as far as its Alloy goes.</li>
+<li><strong>Air</strong>: at full scoring each air point a plot puts out costs it <span class="num">10</span> cr, rising as the air gets dirtier (doubled by Smoggy).</li>
+</ul>
+<p class="code-ref">In the code: <code>packages/ai/src/strategist.ts::developDecision, analysesWanted, filtersWanted</code> · <code>packages/ai/src/hands/develop.ts::DevelopHand</code> · <code>packages/engine/src/config.ts::STRATEGIST, AI_HANDS.develop</code></p>
+<p class="owner">Kept current by: WS1.</p>
+
+<h2 id="floor-walker">On the floor: walking, wolves and glints <span class="pill built">In the game</span></h2>
+<p>Development is walked on the arcade floor, and computer players walk it like you: one step of the to-do list at a time, by stick and button, at the same speed (<span class="num">1</span> times a person's), along the quickest path on the map and through the store's doors. They stand <span class="num">0.5</span> s at a counter before pressing. A step fails, and what depends on it is dropped, when its place cannot be reached, the counter offers something else (the corral sold out, money short) or the colonist pushes without moving for <span class="num">20</span> ticks.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Moment</th><th>What a computer player does</th></tr></thead>
+<tbody>
+<tr><td>Time is running out</td><td>Drops its errand for the pub once the clock shows its walk there plus <span class="num">2</span> s; buys a MULE only if its errand, <span class="num">10%</span> longer than estimated, still leaves that margin</td></tr>
+<tr><td>Wolves</td><td>Half of its legs without a MULE go by wolf land (never while leading a MULE); half of the colonists fight, half run; it stands <span class="num">0.6</span> s before choosing. Rookies fight as rookies, Traders as regulars, Tycoons as veterans</td></tr>
+<tr><td>A glint lights</td><td><span class="num">75%</span> of computer colonists race for it if it is within <span class="num">8</span> tiles and their errand still fits</td></tr>
+<tr><td>The corral scramble</td><td><span class="num">90%</span> of those still needing a MULE race, from within <span class="num">10</span> tiles of the store</td></tr>
+</tbody>
+</table></div>
+<p>On the floor the development pick is made inside the server's tick, so a replay can compute it again. That means <strong>a Smart seat's development choice on the floor is the built-in pick, not Claude's</strong> (see <a href="#claude-playbook-writer">Claude writes the plan</a> for how this changes).</p>
+<p class="code-ref">In the code: <code>packages/ai/src/hands/floor-walker.ts</code> · <code>packages/ai/src/hands/develop.ts</code> · <code>packages/engine/src/config.ts::DEV_STEER.bot*, WOLVES.bot*, GLINT.botShare, SCRAMBLE.botShare</code></p>
+<p class="owner">Kept current by: WS1.</p>
+
+<h2 id="playbook">The playbook: a month's plan <span class="pill built">In the game</span></h2>
+<p>A <strong>playbook</strong> is one seat's plan for a month, as data: its strategy, what it lists in planning and where it flies the drone, which plots it wants in the grant, its development route, and per good its role, how many units to end with, its walk-away price, its opening price and how fast it concedes. The engine always drafts a complete, legal one; every value is checked against bounds; the final playbook goes into the game record, so a replay plays it without calling any model.</p>
+<h3 id="strategies">Strategies</h3>
+<p>Each month the seat drafts a strategy of one of six kinds. It takes the kind its persona leans to most among those it can play now:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Kind</th><th>Plays when</th><th class="n">Cautious</th><th class="n">Aggressive</th><th class="n">Trader</th><th class="n">Saboteur</th></tr></thead>
+<tbody>
+<tr><td>Builder: farms and power first</td><td>Always</td><td class="n">1</td><td class="n">0.3</td><td class="n">0.3</td><td class="n">0.2</td></tr>
+<tr><td>Specialist: one money-maker good</td><td>A good earns on its best plots</td><td class="n">0.5</td><td class="n">0.5</td><td class="n">1</td><td class="n">0.4</td></tr>
+<tr><td>Monopolist: corner a good</td><td>Trader level up; Energy or Smithore with at most 1 rival plot making it, and at least 2 free or idle plots where it is the best use</td><td class="n">0.2</td><td class="n">0.6</td><td class="n">1</td><td class="n">0.5</td></tr>
+<tr><td>Land baron: grab land</td><td>At least 30% of plots free</td><td class="n">0.3</td><td class="n">1</td><td class="n">0.3</td><td class="n">0.4</td></tr>
+<tr><td>Politician: run for office</td><td>Politics on</td><td class="n">0.4</td><td class="n">0.2</td><td class="n">0.2</td><td class="n">0.3</td></tr>
+<tr><td>Spoiler: bring down the leader</td><td>Spite, Trader level up</td><td class="n">0</td><td class="n">0.4</td><td class="n">0</td><td class="n">1</td></tr>
+</tbody>
+</table></div>
+<p>The strategy also names its money-maker good (scored over its best <span class="num">3</span> plots, cut <span class="num">15%</span> per rival plot making it), a cash floor (its reserve, at most <span class="num">2,000</span>), a land target for the next <span class="num">3</span> months (<span class="num">2</span> plots a month for a land baron and <span class="num">1</span> otherwise, but never more than the grant's <span class="num">1</span> claim, so today it is 1 a month for every kind) and a stance toward each rival. A Trader seat thus usually plays Specialist or Monopolist, the Baron plays Land baron while land is free.</p>
+<h3 id="who-plays-the-playbook">Who plays it</h3>
+<ul>
+<li>A Classic seat plays its own draft for <strong>planning</strong> (listings, the drone). A Smart seat plays today's asks unless it has adopted a playbook. For <strong>development and the auction</strong> its own draft waits behind a switch that is off: measured on 5 November, the drafted route and trades were weaker than today's hands (on seed 1: developed 74% to 68%, Food above 3 times its price in 28% to 45% of games), because the draft plans the month's MULEs once where the hand re-decides after each. So today the hands still decide those phases as described above. In the land grant the hands claim by the land plan.</li>
+<li>A playbook that Claude has edited and the seat has adopted plays for every part it carries, switch or not.</li>
+</ul>
+<div class="box why"><h4>Why it is like this</h4><p>Heiko's two layers (PM ruling, 28 October): Claude writes the seat's strategy and its next phase's playbook, starting from the engine's draft and setting only fields within the validator's bounds; the hands play it in real time with no model call. The switch for the seat's own development and auction drafts (PM ruling, 5 November, on WS9's measurement) is a feature switch, not a balance value.</p></div>
+<div class="box next"><h4>What is changing</h4><p>PR #379 (WS9, the playbook follow-ups) goes to trunk in batch 32: a route plays no filter while the seat still leads a MULE, a rival counts as “declared but idle” only for a declared Sell that traded nothing, more tests (among them a bluffing seller never selling under value) and spec amendments that tick the switch's preconditions. Turning the switch on waits for the draft to re-decide after each MULE. Owner: WS9.</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/playbook.ts::Playbook, Strategy</code> · <code>packages/ai/src/playbook/draft.ts, validate.ts, path.ts</code> · <code>packages/engine/src/config.ts::AI_PLANS</code> (<code>ownPhases: false</code>)</p>
+<p class="owner">Kept current by: WS9 (playbooks), WS1 (hands).</p>
+
+<h2 id="ai-politics">In politics <span class="pill built">In the game</span></h2>
+<p>Computer players run for office, vote and, as Governor, set the tax, propose laws and spend the colony fund. In short: a persona runs for Governor with a set chance per election (the aggressive seat most often); it votes for itself if it runs, otherwise for the smallest landowner, so the table leans against the leader; in an unhappy colony it will not back the sitting Governor if anyone else runs. As Governor it steers the sales tax toward its persona's target, proposes the law that costs the leader most against itself, pays a general strike and repairs damage when its persona does, and commissions the most prestige the fund can pay for. On a law ballot it votes for a new law when it costs it no more than the table's median, and for a repeal when the law costs it more (a Governor always votes yes, a Rookie flips a coin). The full rules and numbers are in <a href="colony-and-politics.html#ai-governor">Colony and politics: the computer Governor</a>.</p>
+<p class="code-ref">In the code: <code>packages/ai/src/hands/vote.ts::VoteHand</code> · <code>packages/engine/src/config.ts::POLITICS.ai</code></p>
+<p class="owner">Kept current by: WS7, with WS1 for the hands.</p>
+
+<h2 id="claude-decider">Claude as a player: the decider <span class="pill built">In the game</span></h2>
+<p>A Smart seat asks Claude (the model <code>claude-haiku-5-5</code>) to make three kinds of decision: which land plan to play, which MULE to build, and buy, sell or pass in the auction. Development is walked on the floor at every table today, where the pick stays the built-in one (see <a href="#floor-walker">On the floor</a>), so in practice Claude decides land and the auction. For each, Claude receives:</p>
+<ul>
+<li>a fixed primer on how a month goes and how to reply, plus the persona's character card (the same for every call of that persona, so it is cached and cheap);</li>
+<li>a few lines on the seat's situation: month, money, plots, goods and needs, the MULE price, who looks like the richest rival;</li>
+<li>the shortlist of up to <span class="num">5</span> options, lettered A to E, each with its label, its reasons and its score;</li>
+<li>the last <span class="num">6</span> lines of table talk, each cut to <span class="num">200</span> characters and marked as quoted speech.</li>
+</ul>
+<p>Claude answers with one letter and one line to say at the table (at most <span class="num">140</span> characters, or nothing). It may pick a weaker option when the character would. It can never name an option off the list, never invent a move, and never act on what someone says in chat: table talk is quoted, never an instruction. A reply that is late (the hands wait <span class="num">2.5</span> s in development and the auction, <span class="num">5</span> s for land), unreadable or off the list is dropped, and the built-in pick plays.</p>
+<h3 id="claude-chat">Chat</h3>
+<p>A computer seat says at most <span class="num">3</span> lines a game month and at most one a phase. A Smart seat's line is Claude's; a Classic seat's is its persona's template.</p>
+<div class="box next"><h4>What is changing</h4><p>PM ruling (a), 5 November: a Smart seat's built-in picks say no template line, so the phase's one chat slot waits for Claude's own line. Classic seats are unchanged. Being built in the brain branch (WS2).</p></div>
+<div class="box why"><h4>Why it is like this</h4><p>Heiko, 21 October: a hosted small model called by our server, with the cost of every call tracked and built into pricing. The safety rules (quoted table talk, only the moves a human has, the engine checks everything) are so that “a clever kid cannot talk an AI into handing over its Crystite”.</p></div>
+<p class="code-ref">In the code: <code>packages/ai/src/llm/prompt.ts::buildPrompt, PRIMER</code> · <code>packages/ai/src/llm/decider.ts::LlmDecider, WAIT_MS</code> · <code>packages/ai/src/llm/reply.ts::parseReply</code> · <code>apps/server/src/brain/chat.ts</code> · <code>packages/engine/src/config.ts::BRAIN</code></p>
+<p class="owner">Kept current by: WS2.</p>
+
+<h2 id="claude-cost">What Claude costs, and the cap <span class="pill built">In the game</span></h2>
+<p>Every call is written to a cost ledger: game, seat, persona, level, model, decision kind, tokens in, cached and out, dollars, time taken and how it ended (answered, refused, timed out, error, unreadable, off the list, out of budget). Each game also gets a total line.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Price per million tokens (Haiku 5.5)</th><th class="n">US dollars</th></tr></thead>
+<tbody>
+<tr><td>Input</td><td class="n">0.10</td></tr>
+<tr><td>Cached input read</td><td class="n">0.01</td></tr>
+<tr><td>Cache write</td><td class="n">0.125</td></tr>
+<tr><td>Output</td><td class="n">0.50</td></tr>
+</tbody>
+</table></div>
+<p>Before each call the server works out the worst case it could cost (the whole prompt at the dearer input rate and a full <span class="num">200</span>-token reply). On trunk, each Smart seat may spend <span class="num">$0.06</span> a game. A call that would go past it is refused, and the seat plays Classic for the rest of the game, so it never flips back and forth. A call whose bill is unknown (a timeout, a lost connection) counts at its worst case.</p>
+<div class="box next"><h4>What is changing</h4><p>Approved by the PM within Heiko's limit (28 October): the per-seat budget is replaced by <strong>$1.00 a game</strong> for all Smart seats together, each holding an equal share (half a dollar each at 2 Smart seats). It is in the brain branch, with Sonnet 5.5 prices for the playbook writer. The paid proof, inside Heiko's $10 cap: step 1 is cleared (at most about $1.10); a game with 2 Smart seats costs about $0.85; the full 20-game proof (about $20) needs Heiko. Owner: WS2.</p></div>
+<div class="box why"><h4>Why it is like this</h4><p>Heiko asked (21 October) that adding a computer player is priced so the game never loses money on model costs. The design proposes Smart seats at about $0.10 a seat a game, about three times the estimated cost, with the budget as the no-loss guarantee. On 28 October Heiko noted that with players bringing their own key “we can be more generous with the AI budgets”; that is parked until a host can bring a key, so the cap stays.</p></div>
+<p class="code-ref">In the code: <code>apps/server/src/brain/budget.ts::worstCaseUsd, createBudget</code> · <code>apps/server/src/brain/ledger.ts</code> · <code>packages/engine/src/config.ts::BRAIN.seatBudgetUsd, pricesPerMTok</code></p>
+<p class="owner">Kept current by: WS2.</p>
+
+<h2 id="claude-playbook-writer">Claude writes the plan <span class="pill progress">Being built</span></h2>
+<p>The next step lets Claude do more than pick a letter: it writes the seat's strategy and edits its playbook, which the hands then play in real time. This is built in the brain branch and not yet on trunk.</p>
+<ul>
+<li><strong>The manual</strong>: every phase, how Worth is counted, every move and when it is smart, generated from the game's own move list and config so a rule change cannot leave it stale. It is the same for every seat, so it is cached.</li>
+<li><strong>The brief</strong>: the seat's moment, from its own view only: who owns what land, this month's prices with the last <span class="num">3</span> months', the export ship's wishlist, up to <span class="num">5</span> land plans with their best plots, the engine's draft, how its last phase went against its plan, what the rules refused of its last reply, and the table talk.</li>
+<li><strong>Tools</strong> it may call while it thinks: <em>legalMoves</em> (the moves of a phase and what they cost now), <em>worth</em> (its Worth line by line), <em>standings</em> (every seat's Worth) and <em>whatIf</em> (plays its playbook with proposed edits over one month on a copy and returns its Worth after). At most <span class="num">3</span> tool rounds and <span class="num">4</span> whatIf months per call.</li>
+<li><strong>The playbook writer</strong>: Claude (Sonnet 5.5 by default, Haiku 5.5 as the cheaper fallback, up to 30 s a call) replies with strategy fields and edits, each with a reason of at most <span class="num">140</span> characters. The validator clamps or refuses each edit; a refused edit keeps the draft's value. The playbook that plays is the draft unless at least one edit is accepted.</li>
+<li><strong>When</strong>: the land-grant playbook is asked for at game start and as each upkeep opens, without waiting, and taken when the grant starts from the reply that came in time, else from the draft. PR #377 (PR-4b) adjusts the auction just before it; PR #378 (PR-4c) adjusts development as it starts, which is how a Smart seat's own choices reach the floor.</li>
+</ul>
+<div class="box next"><h4>What is changing</h4><p>PR #377 and PR #378 are open into the brain branch (WS2, 5 November), each with one review. The paid proof needs Heiko for its full 20-game run. A lobby choice of brain, players' own keys and MCP seats remain ideas in the design, not planned.</p></div>
+<p class="code-ref">In the code: branch <code>ws2-brain</code> · <code>packages/ai/src/llm/manual.ts, brief.ts, tools.ts, writer.ts, system.ts</code> · <code>apps/server/src/brain/playbooks.ts</code> · <code>BRAIN.writeCalls, toolRounds, whatIfsPerWrite, gameBudgetUsd</code> (on the branch)</p>
+<p class="owner">Kept current by: WS2.</p>
+
+<h2 id="resource-utility">Next: a resource-utility model <span class="pill open">Being designed</span></h2>
+<p>Heiko, 5 November: the seats need “a more clear algorithm”. A seat should look at its whole shortage, understand the overall price level, know every resource it needs, the store's prices and how much is available, and get utility from having enough or even a surplus, which can make sense when prices are cheap and it can store. Later they might speculate: “they might believe prices go up and buy cheap to sell more expensive later. This is what would make them clever.” This is the base, which Claude can later overrule by defining strategies.</p>
+<h3 id="resource-utility-goals">Proposed goals (awaiting Heiko's confirmation)</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Goal</th><th>What it means at the table</th><th>How it is measured</th></tr></thead>
+<tbody>
+<tr><td>G-1 Keep yourself supplied</td><td>A computer player is not caught short of Food or Energy when the store had stock and it could pay</td><td>Short (or plots halved for want of Energy) while the store had stock and it could pay, in under 5% of months</td></tr>
+<tr><td>G-2 Value having enough and a surplus</td><td>It holds a buffer, larger when the good is cheap</td><td>By price band</td></tr>
+<tr><td>G-3 Speculate (phase 2)</td><td>It buys cheap under a belief that the price will rise, and sells dear; persona-shaped and settable by Claude</td><td>The margin it makes</td></tr>
+</tbody>
+</table></div>
+<p>WS9 measured today's play for the design (40 games on each of 3 seeds): Energy shortages cost 40–43% of seat-months some production, a median of 2 of 5 plots halved, about 265 cr of output; 44–47% of seats that wanted to buy still ended short. The store's own supply and pricing are not part of this design (WS5 is designing store pricing separately).</p>
+<div class="box next"><h4>What is changing</h4><p>Three approaches are drafted, due 20:00Z on 5 November: A, thin needs-first; B, the value of each extra unit set by what running short costs against what holding costs, with a price on cash and a price belief (WS9 recommends B); C, a monthly planner. The goals await Heiko. Owner: WS9 designs; WS1 owns <code>value.ts</code> and builds with it.</p></div>
+<p class="owner">Kept current by: WS9.</p>
+
+<h2 id="simulator">The simulator <span class="pill built">In the game</span></h2>
+<p>The simulator plays whole games with only computer seats (Classic, no model) and checks them against the balance targets. Every balance change is checked with it.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Command</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td><code>pnpm sim</code></td><td>100 games, 4 seats, seed 1, Trader level, personas rotating by seat and seed, politics on</td></tr>
+<tr><td><code>--games 40 --players 6 --seed 101</code></td><td>How many games, how many seats, the first seed</td></tr>
+<tr><td><code>--level rookie</code>, <code>--persona cautious</code></td><td>One level for all; one persona for every seat</td></tr>
+<tr><td><code>--plays playbook | today | pair</code></td><td>Every seat on its playbook, every seat on today's hands, or even seats on the playbook and odd on today's; adds the plan lines to the report</td></tr>
+<tr><td><code>--set STRATEGIST.cashFloor=80</code></td><td>Any config number or switch for this run; repeatable; the report's header lists them</td></tr>
+<tr><td><code>--politics off</code>, <code>--walking off</code>, <code>--air smoggy</code></td><td>No offices or Governor's tax; development as before walking cost time; count events as if the air were in a band</td></tr>
+</tbody>
+</table></div>
+<h3 id="sim-targets">What it checks</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Check</th><th>Target</th></tr></thead>
+<tbody>
+<tr><td>MULE price median</td><td>150 to 300 cr</td></tr>
+<tr><td>MULE price, 90th percentile</td><td>under 500 cr</td></tr>
+<tr><td>Corral sold out</td><td>in under 10% of months</td></tr>
+<tr><td>Food above 3 times its reference price</td><td>in 10% to 50% of games</td></tr>
+<tr><td>Colonists short of Food or Water</td><td>in under 15% of months</td></tr>
+<tr><td>Owned plots developed at the end</td><td>70% or more</td></tr>
+<tr><td>No computer player broke (under 100 cr with idle land for 3 months in a row)</td><td>in no game</td></tr>
+<tr><td>Ended in Collapse</td><td>10% of games or fewer</td></tr>
+</tbody>
+</table></div>
+<p>For Smart seats there is a separate trial: <code>pnpm --filter @mule/server brain:trial -- --games 20 --seed 101</code>. Without the key every seat plays Classic and nothing is paid; with it, Smart seats play against strategist seats, a spending cap is required, and only one paid run a day is allowed.</p>
+<div class="box next"><h4>What is changing</h4><p>Heiko, 4 November: first make the functional parts work, tune balance at the end. Several checks miss today (on 5 November's start values roughly half of games have colonists short, and the stopgap raises that); these are recorded for the balancing round, not fixed now.</p></div>
+<p class="code-ref">In the code: <code>packages/ai/src/sim.ts</code> · <code>packages/ai/src/lineup.ts::simSeats</code> · <code>packages/engine/src/config.ts::SIM_TARGETS</code> · <code>apps/server/src/brain/trial.ts</code></p>
+<p class="owner">Kept current by: WS1 (sim), WS2 (trial).</p>
+</article>
+</main>
+</div>
+<script src="search-index.js"></script>
+<script src="rulebook.js"></script>
+</body>
+</html>
