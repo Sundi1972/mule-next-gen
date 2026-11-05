@@ -103,6 +103,18 @@ describe('the colony at the table', () => {
     expect(game.viewFor(null).news).toContain(`Heiko pays the rare earth strikers ${COLONY.strike.cost} cr.`);
   });
 
+  it("B-AC-26: the Governor's phone sets the colony's bid for the park's site; every screen's colony view shows it, and another phone is refused with RULE-28's message", () => {
+    const { game } = governed();
+    game.handle('s1', { type: 'commission', id: 'park' });
+    expect(game.viewFor(null).colony!.projects[0]!.maxBid, 'a new object has no bid').toBeNull();
+    expect(refusal(() => game.handle('s2', { type: 'setSiteBid', id: 'park', maxBid: 300 }))).toBe("Only the Governor sets the colony's bid");
+
+    game.handle('s1', { type: 'setSiteBid', id: 'park', maxBid: 300 });
+    for (const viewer of [null, 's1', 's2']) expect(game.viewFor(viewer).colony!.projects[0]!.maxBid, `${viewer ?? 'the TV'}'s view`).toBe(300);
+    game.handle('s1', { type: 'setSiteBid', id: 'park', maxBid: null });
+    expect(game.viewFor(null).colony!.projects[0]!.maxBid, 'the Governor can take the bid back').toBeNull();
+  });
+
   it('the colony view is null with politics off', () => {
     const { ctx } = fakeContext();
     const game = new MuleGame(ctx, 7, { politics: false });
