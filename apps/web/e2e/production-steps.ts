@@ -60,7 +60,8 @@ const RECORDER = `{
       // One chip per hit that landed, in fired order, each staying up to the end of the show.
       const chips = [...map.querySelectorAll('[data-testid="mark-' + id + '"] [data-delta]')];
       const reasons = [...plot.querySelectorAll('[data-badge=reason]')];
-      if (chips.length) { seen.struckOnce = true; seen.struck.push(bars.length); for (const c of chips) add(seen.hits, c.dataset.delta); }
+      // Once a plot's goods have flown home (RULE-3: the flight follows the events) its bars are gone; only what it stood at before counts.
+      if (chips.length) { seen.struckOnce = true; if (plot.dataset.state !== 'flown') seen.struck.push(bars.length); for (const c of chips) add(seen.hits, c.dataset.delta); }
       else if (!seen.struckOnce) seen.pre = Math.max(seen.pre, bars.length);
       if (bars[0]) add(seen.colours, getComputedStyle(bars[0]).backgroundColor);
       for (const r of reasons) add(seen.reasons, r.textContent);
