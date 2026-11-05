@@ -24,6 +24,7 @@ import { draftGoodPlaybook, draftPlaybook } from '../src/playbook/draft.js';
 import { validatePlaybook } from '../src/playbook/validate.js';
 import { AiSeat } from '../src/seat.js';
 import { goodPlan } from '../src/strategist.js';
+import { beforeTax } from '../src/value.js';
 
 /**
  * C7 · RULE-10: on the playbook path the auction hand plays the good's part. The parity half builds today's hand and the
@@ -397,6 +398,21 @@ describe('C7 · RULE-10: the auction hand plays the good part', () => {
     expect(bluffSeller.acts.some((x) => x.includes('{"done":true,"type":"done"}'))).toBe(true);
     expect(sold(bluffSeller, 'ai0')).toEqual([]);
     expect(bluffSeller.path.at(-1)!.price).toBe(screen.auction!.hi);
+    // With the store sold out mid-walk the bluffing seller may sell at the top edge, to a buyer that walks up to it (WS1's
+    // ruling, accepted): each such unit goes at or over the value the hand puts on it (a unit past the table spoils, so is
+    // worth nothing), and over every unit's worth it could give up; it keeps the Food it needs.
+    const soldOut = runGood(screen, 5, 0, () => ({ ...seller, bluff: true }));
+    const topSales = sold(soldOut, 'ai0');
+    expect(topSales.length, 'the store sells out and a buyer meets the bluff at the top').toBeGreaterThan(0);
+    const sellerValues = goodPlan(observe(screen, 'ai0'), seatsFor(5)[0]!.mind, 'food').values;
+    const unitFloor = (h: number) => Math.ceil(beforeTax(screen, sellerValues.keep[h - 1] ?? 0));
+    const dearest = Math.max(...sellerValues.keep.filter((v) => Number.isFinite(v)).map((v) => Math.ceil(beforeTax(screen, v))));
+    topSales.forEach((t, i) => {
+      expect(t.price, `unit ${i + 1}`).toBe(screen.auction!.hi);
+      expect(t.price, `unit ${i + 1}`).toBeGreaterThanOrEqual(unitFloor(had - i));
+      expect(t.price, `unit ${i + 1}`).toBeGreaterThanOrEqual(dearest);
+    });
+    expect(stockOf(soldOut, 'ai0', 'food')).toBeGreaterThanOrEqual(sellerValues.floorUnits);
     // A bluffing buyer is the buyer it starts as (no declare under the no-Pass auction): it aims at lo, presses Done and
     // buys nothing.
     const bluffBuyer = runGood(screen, 5, 1, () => ({ ...buyer, bluff: true }));
