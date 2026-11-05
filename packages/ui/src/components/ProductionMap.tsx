@@ -23,7 +23,7 @@ import { cx, SLOT_COLOR, type Good, type Slot } from './tokens';
  * element marked `data-fly-target=<owner>`. A pure function of the clock `t`.
  */
 
-export type ShowReason = 'cluster' | 'species' | 'trait' | 'pollution' | 'noEnergy' | 'noWater';
+export type ShowReason = 'cluster' | 'species' | 'trait' | 'special' | 'pollution' | 'floor' | 'noEnergy' | 'noWater';
 
 export interface ShowLine {
   x: number;
@@ -186,6 +186,9 @@ const REASON_BADGE: Record<ShowReason, { text: (d: number) => string; tone: (d: 
   cluster: { text: signed, tone: (d) => (d > 0 ? 'bg-ok text-on-holo' : 'bg-warn text-void') },
   species: { text: signed, tone: (d) => (d > 0 ? 'bg-ok text-on-holo' : 'bg-warn text-void') },
   trait: { text: signed, tone: (d) => (d > 0 ? 'bg-ok text-on-holo' : 'bg-warn text-void') },
+  // A special field's bonus, and the floor that lifts a plot back to 0: shown by sign until order C's badges land (AM-19).
+  special: { text: signed, tone: (d) => (d > 0 ? 'bg-ok text-on-holo' : 'bg-warn text-void') },
+  floor: { text: signed, tone: (d) => (d > 0 ? 'bg-ok text-on-holo' : 'bg-warn text-void') },
   pollution: { text: signed, tone: () => 'bg-warn text-void' },
   noWater: { text: () => '½', tone: () => 'bg-alert text-white', icon: 'water' },
   noEnergy: { text: () => '½', tone: () => 'bg-alert text-white', icon: 'energy' },
