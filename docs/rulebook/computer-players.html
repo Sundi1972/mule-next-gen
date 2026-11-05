@@ -204,7 +204,7 @@
 <li>Pass is ruled out while it is short and can pay.</li>
 </ul>
 <p>Measured on 5 games: the payable no-buys fell from 47 to 0 for Food, 54 to 0 for Energy and 6 to 0 for Water. A hand bug that pressed Done before a trade at its limit was fixed on the way. The cost: with the seats now buying from the store, the colonists go short more often (52% to 60% of months on one measured cell) and Food stands above 3 times its usual price in more games (78% to 92%). The PM ruled to ship it anyway and balance at the end; Food supply is recorded for Heiko as a balancing finding.</p>
-<div class="box next"><h4>What is changing</h4><p>Built and measured on the WS1 branch, not yet on trunk (WS1, about 17:00Z, 5 November). An approved correction follows: the target becomes next month's whole need (Food: eating plus what spoils; Energy: need grossed up for spoilage; Water only with a farm). The Energy turn-off rule (AM-17, plots switched off biggest user first, an off plot makes 20%) changes what an Energy shortage costs; the AI's valuation of it comes in the same WS1 PR. The stopgap is replaced by the <a href="#resource-utility">resource-utility model</a> once that is designed and built.</p></div>
+<div class="box next"><h4>What is changing</h4><p>Built and measured on the WS1 branch, not yet on trunk (WS1, about 17:00Z, 5 November). An approved correction follows: the target becomes next month's whole need (Food: eating plus what spoils; Energy: need grossed up for spoilage; Water only with a farm). The Energy turn-off rule (AM-17, plots switched off biggest user first, an off plot makes 20%) changes what an Energy shortage costs; the AI's valuation of it comes in the same WS1 PR. The stopgap is replaced by the <a href="#resource-utility">resource-utility model</a> (designed 5 November, WS9) when it is built.</p></div>
 <p class="code-ref">In the code: branch <code>ws1-food-short</code> · <code>packages/ai/src/strategist.ts::goodPlan (mustHold), tradeDecision</code> · <code>packages/engine/src/config.ts::STRATEGIST.buyShortfall</code> (on the branch)</p>
 <p class="owner">Kept current by: WS1.</p>
 
@@ -335,20 +335,37 @@
 <p class="code-ref">In the code: branch <code>ws2-brain</code> · <code>packages/ai/src/llm/manual.ts, brief.ts, tools.ts, writer.ts, system.ts</code> · <code>apps/server/src/brain/playbooks.ts</code> · <code>BRAIN.writeCalls, toolRounds, whatIfsPerWrite, gameBudgetUsd</code> (on the branch)</p>
 <p class="owner">Kept current by: WS2.</p>
 
-<h2 id="resource-utility">Next: a resource-utility model <span class="pill open">Being designed</span></h2>
-<p>Heiko, 5 November: the seats need “a more clear algorithm”. A seat should look at its whole shortage, understand the overall price level, know every resource it needs, the store's prices and how much is available, and get utility from having enough or even a surplus, which can make sense when prices are cheap and it can store. Later they might speculate: “they might believe prices go up and buy cheap to sell more expensive later. This is what would make them clever.” This is the base, which Claude can later overrule by defining strategies.</p>
-<h3 id="resource-utility-goals">Proposed goals (awaiting Heiko's confirmation)</h3>
+<h2 id="resource-utility">Next: what every good is worth to a computer player <span class="pill designed">Designed</span></h2>
+<p>Heiko, 5 November: the seats need &#8220;a more clear algorithm&#8221;. A seat should look at its whole shortage, understand the overall price level, know every resource it needs, the store's prices and how much is on the shelf, and get utility from having enough or even a surplus. Later it might speculate: &#8220;buy cheap to sell more expensive later. This is what would make them clever.&#8221; This is the base layer, which Claude can overrule by setting its own price view. He chose this design (option B) and said &#8220;Yes, build it&#8221; on 5 November.</p>
+
+<h3 id="resource-utility-goals">What you will see at the table</h3>
 <div class="table-wrap"><table>
-<thead><tr><th>Goal</th><th>What it means at the table</th><th>How it is measured</th></tr></thead>
+<thead><tr><th>Goal</th><th>At the table</th><th>How it is checked</th></tr></thead>
 <tbody>
-<tr><td>G-1 Keep yourself supplied</td><td>A computer player is not caught short of Food or Energy when the store had stock and it could pay</td><td>Short (or plots halved for want of Energy) while the store had stock and it could pay, in under 5% of months</td></tr>
-<tr><td>G-2 Value having enough and a surplus</td><td>It holds a buffer, larger when the good is cheap</td><td>By price band</td></tr>
-<tr><td>G-3 Speculate (phase 2)</td><td>It buys cheap under a belief that the price will rise, and sells dear; persona-shaped and settable by Claude</td><td>The margin it makes</td></tr>
+<tr><td>Keep yourself supplied</td><td>A computer player short of Food, Water, Energy, a factory's inputs or Medicine buys what it is short of when it can pay. It no longer stands still, short, with cash in hand. An Energy or Water shortage counts at its real cost: next month's output.</td><td>Still short after the auction, although the store had stock and it could pay: under 5% of the times it went in short. Plots cut for want of Energy while it could have bought: under 5% of months.</td></tr>
+<tr><td>Value enough, and a surplus when cheap</td><td>It holds what keeps it whole through next month, eating and spoilage included. It stocks up when a good is cheap and keeps well, and sells its surplus when the price is dear.</td><td>The Food it holds after the auction, against next month's need: over 1 in cheap months, no more than 1 in dear ones.</td></tr>
+<tr><td>Speculate (later)</td><td>A trader buys ahead of a drought, a rival leaving Food or a rising ship price, and sells later. Its view of prices follows the store's stock, the trend, the coming events, the other players' farms and the off-world prices, and its persona's appetite for risk.</td><td>The profit it makes on what it bought beyond its needs, after spoilage, storage and tax.</td></tr>
 </tbody>
 </table></div>
-<p>WS9 measured today's play for the design (40 games on each of 3 seeds): Energy shortages cost 40–43% of seat-months some production, a median of 2 of 5 plots halved, about 265 cr of output; 44–47% of seats that wanted to buy still ended short. The store's own supply and pricing are not part of this design (WS5 is designing store pricing separately).</p>
-<div class="box next"><h4>What is changing</h4><p>Three approaches are drafted, due 20:00Z on 5 November: A, thin needs-first; B, the value of each extra unit set by what running short costs against what holding costs, with a price on cash and a price belief (WS9 recommends B); C, a monthly planner. The goals await Heiko. Owner: WS9 designs; WS1 owns <code>value.ts</code> and builds with it.</p></div>
-<p class="owner">Kept current by: WS9.</p>
+
+<h3 id="resource-utility-how">How a computer player will value a good</h3>
+<p>Every unit it could hold after the auction gets one value:</p>
+<p><strong>value = chance it is needed &#215; what going without it costs + chance it is not needed &#215; what it fetches later</strong></p>
+<ul>
+<li><strong>Needed</strong> means the stock that keeps it whole until next month: what it eats and drinks at the month's end, what spoils after that (half its Food, a quarter of its Energy), and what its plots will burn. What its own farms and plants will make counts too, but as less than certain, since an event or a shortage can cut it.</li>
+<li><strong>Going without</strong> is never cheaper than buying the unit back next month. For Energy and Water it is exact: one unit short switches off the next plot in the order the game uses (the biggest user first), and that plot makes only a fifth of its output.</li>
+<li><strong>What it fetches later</strong> is next month's price after the store's cut, the tax and spoilage, and nothing past what its depot keeps.</li>
+<li><strong>Its cash</strong> goes to the most valuable units across the whole month first, so a player with little money buys Energy before a second sack of Food, even though Food is auctioned first.</li>
+<li><strong>Building</strong> uses the same values: a power plant or a well is worth what its output saves. A player short of Energy builds a plant when that beats buying.</li>
+</ul>
+<p>Example: a player eats 3 Food a month and has none. Upkeep eats 3, then half the rest spoils, so it needs 9 to stay fed. With Food at 72 and 1,200 cr in hand, each of those 9 units is worth at least 72 to it, so it buys them. Today it values each at about 20 and buys none.</p>
+
+<h3 id="resource-utility-why">Why it is like this</h3>
+<p>Measured on today's game (40 games on each of 3 seeds, 5 November): a computer player went into the Food auction short in 86&#8211;87% of months, and refused to buy in most of them because it valued a needed unit at about 19 cr against an asking price near 50. It was hungry at 88&#8211;89% of developments with about 1,200 cr in hand. Energy shortages cut some production in 40&#8211;43% of months. Today a needed Food unit is worth only the walking time hunger costs, which takes no account of the price level. A short buying fix from the Balance team (WS1) covers Food, Water and Energy until this design ships.</p>
+
+<div class="box next"><h4>What is changing</h4><p>Not in the game yet. The first piece (keep supplied, plants and wells valued at what they save) ships switched off behind <code>AI_VALUE.model</code>, and is switched on only when Heiko rules on its measured numbers. The surplus comes second and speculation third. It replaces the Balance team's short buying fix and its Energy valuation when it ships.</p></div>
+<p class="code-ref">In the code: spec <code>docs/specs/2026-11-05-ws9-resource-utility.md</code> (PR #385) · <code>packages/ai/src/value.ts::unitValues, monthlyNet</code> · <code>packages/ai/src/strategist.ts::goodPlan, tradeDecision</code> · <code>packages/ai/src/outlook.ts</code> · the playbook's <code>GoodPlay.expect</code></p>
+<p class="owner">Responsible: AI Strategy team (WS9), which builds it, with the Balance team (WS1) for <code>value.ts</code> and <code>strategist.ts</code>. Status: Designed, 5 November.</p>
 
 <h2 id="simulator">The simulator <span class="pill built">In the game</span></h2>
 <p>The simulator plays whole games with only computer seats (Classic, no model) and checks them against the balance targets. Every balance change is checked with it.</p>
