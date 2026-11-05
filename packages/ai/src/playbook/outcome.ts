@@ -1,4 +1,4 @@
-/** How a phase went against the seat's playbook (RULE-11): its own items beside the plan, and the rivals' public facts. */
+/** How a phase went against the seat's playbook: its own items beside the plan, and the rivals' public facts. See RULE-11. */
 import { observe, type AuctionSide, type GameState, type Good, type NoticeEntry, type PhaseOutcome, type Playbook, type PlayerId } from '@mule/engine';
 
 type Without<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
@@ -14,7 +14,7 @@ type Traded = NonNullable<Rival['traded']>[number];
 export interface DevelopmentStepLog {
   route?: number;
   outcome: 'done' | 'refused' | 'skipped' | 'replaced' | 'not reached';
-  /** RULE-9's log note, or the runner's named drop. */
+  /** The route's log note, or the runner's named drop. */
   note?: string;
 }
 
@@ -30,7 +30,7 @@ export interface OwnDeclare {
   refused?: string;
 }
 
-/** RULE-11's development row: each route step beside what became of it, and the time used against the budget. */
+/** The development outcome: each route step beside what became of it, and the time used against the budget. See RULE-11. */
 export function developmentOutcome(playbook: Playbook, log: DevelopmentLog): PhaseOutcome {
   const part = playbook.development;
   const items: PhaseOutcome['items'] = [];
@@ -46,8 +46,8 @@ export function developmentOutcome(playbook: Playbook, log: DevelopmentLog): Pha
 }
 
 /**
- * RULE-11's auction row, with AM-23's edges. The seat's side is its own last accepted declare, else its declare fact
- * (a late declare has none); its hold is read from `observe(state, seat)`. Rivals come from the facts only.
+ * The auction outcome. The seat's side is its own last accepted declare, else its declare fact (a late declare has
+ * none); its hold is read from `observe(state, seat)`. Rivals come from the facts only. See RULE-11, AM-23.
  */
 export function auctionOutcome(playbook: Playbook, state: GameState, facts: readonly PhaseFact[], seat: PlayerId, declared: readonly OwnDeclare[] = []): PhaseOutcome {
   const phaseFacts = facts.filter((f) => f.month === playbook.month && f.phase === 'auction');

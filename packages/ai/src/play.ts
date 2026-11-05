@@ -71,9 +71,9 @@ export interface SeatSpec {
   persona: AiPersonaId;
   level: AiLevelId;
   /**
-   * The seat's path (C14). 'today': today's path in every phase, planning included (playbook false). 'playbook': its
-   * playbook, its own development and auction parts included, whatever AI_PLANS.ownPhases says (AM-26). Unset: as the
-   * config says (AI_PLANS.on, AI_PLANS.ownPhases), the path that ships.
+   * The seat's path. 'today': today's path in every phase, planning included. 'playbook': its playbook, its own
+   * development and auction parts included, whatever AI_PLANS.ownPhases says. Unset: as the config says, the path that
+   * ships. See C14, AM-26.
    */
   plays?: 'playbook' | 'today';
 }
@@ -96,9 +96,9 @@ export interface PlayedGame {
   month1: { waited: number; continued: boolean } | null;
   /** On the floor: what the moments came to, one a development phase, month by month; empty where the game walks. */
   moments: FloorMomentCounts[];
-  /** The public facts as they settled, in order, as MuleGame notifies them (C8): claims, declares, trades and sales. */
+  /** The public facts as they settled, in order, as MuleGame notifies them: claims, declares, trades and sales. See C8. */
   facts: PhaseFact[];
-  /** Each seat's PhaseOutcome as its development and its auction ended, where it played a part (RULE-11). */
+  /** Each seat's PhaseOutcome as its development and its auction ended, where it played a part. See RULE-11. */
   outcomes: PhaseOutcome[];
   /** Every playbook the 'playbook' seats wrote, in order (their onPlaybook). */
   playbooks: Playbook[];
@@ -118,7 +118,7 @@ function pathOptions(plays: SeatSpec['plays'], written: Playbook[]): Partial<AiS
 /**
  * PlayOptions.edits at a draft point: the seat's validated draft for the phase, edited, passed through the seat's own
  * gate and adopted, as WS2's playbooks.ts does on the server. No edits (null), nothing is adopted; a draft error is
- * logged and nothing is adopted (HC-9). A 'today' seat plays no playbook, so it is not asked.
+ * logged and nothing is adopted. A 'today' seat plays no playbook, so it is not asked. See HC-9.
  */
 function adoptEdits(options: PlayOptions, seat: AiSeat, spec: SeatSpec, state: GameState, phase: DraftPhase): void {
   if (!options.edits || spec.plays === 'today') return;
@@ -270,9 +270,9 @@ export interface PlayOptions {
   /** Awaited by playGameAsync at every tick step and at least once at the end of every phase; playGame ignores it. */
   between?: () => Promise<void> | void;
   /**
-   * B-AC-6's harness (C14): at each draft point (planning once the seat has planned, development and the auction as
-   * they open) a seat's validated draft, and the edits to it; null adopts nothing. The edits pass the seat's validator
-   * and the result is adopted, as WS2's writer does on the server.
+   * At each draft point (planning once the seat has planned, development and the auction as they open) a seat's
+   * validated draft, and the edits to it; null adopts nothing. The edits pass the seat's validator and the result is
+   * adopted, as WS2's writer does on the server. See C14.
    */
   edits?: (seat: AiSeat, draft: Playbook, state: GameState) => readonly PlanEdit[] | null;
 }
@@ -472,7 +472,7 @@ function* playSteps(seed: number, specs: SeatSpec[], options: PlayOptions): Gene
         broke.push(state.players.filter((p) => p.money < SIM_TARGETS.broke.below && state.tiles.some((t) => t.owner === p.id && !t.outfit)).map((p) => p.id));
         break;
     }
-    // RULE-11: how each seat's development and auction went against the part it played, from the facts so far.
+    // How each seat's development and auction went against the part it played, from the facts so far. See RULE-11.
     if (state.phase === 'development' || state.phase === 'auction') {
       for (const s of seats) {
         const outcome = s.outcome(state.phase, state, facts);

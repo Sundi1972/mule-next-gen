@@ -175,7 +175,7 @@ function routeFault(route: unknown, ctx: Ctx): [string, number] | null {
   return route.length > cap ? [`more than ${cap} steps`, cap] : null;
 }
 
-/** Why a route cannot give its first MULE group, the fitted MULE the seat leads, another outfit, or null (AM-29). */
+/** Why a route cannot give its first MULE group, the fitted MULE the seat leads, another outfit, or null. See AM-29. */
 function refitFault(route: DevelopmentPlay['route'], ctx: Ctx): string | null {
   const led = ledOutfit(ctx.state, ctx.seat);
   const first = route.findIndex((s) => s.act === 'buyMule');

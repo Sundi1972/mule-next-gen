@@ -90,7 +90,7 @@ export function winnerOf(state: GameState): number {
   return state.players.map((p, i) => ({ p, i })).sort((a, b) => score(state, b.p.id) - score(state, a.p.id))[0]!.i;
 }
 
-/** What the plan lines (C14) count over a run. */
+/** What the plan lines count over a run. See C14. */
 export interface PlanTally {
   games: number;
   /** Wins, and seats sat, by seat kind: a seat's `plays`. */
@@ -102,7 +102,7 @@ export interface PlanTally {
   /** Land-auction lots AI sellers listed; their sales by item and buyer, and the credits they fetched. */
   listed: number;
   sold: { plot: number; mule: number; toStore: number; cr: number };
-  /** Route steps played from a part, and those that fell back, by reason (RULE-9 / RULE-11). */
+  /** Route steps played from a part, and those that fell back, by reason. See RULE-9, RULE-11. */
   steps: number;
   fallbacks: Record<string, number>;
 }
@@ -140,7 +140,7 @@ export function tallyGame(t: PlanTally, specs: readonly SeatSpec[], played: Play
   }
 }
 
-/** The plan lines (C14): wins by seat kind, monopoly plans at the level, AI listings and their sales, route fallbacks. */
+/** The plan lines: wins by seat kind, monopoly plans at the level, AI listings and their sales, route fallbacks. See C14. */
 export function planLines(t: PlanTally, level: AiLevelId): string[] {
   const seats = t.seats.playbook + t.seats.today;
   const sales = t.sold.plot + t.sold.mule;

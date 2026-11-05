@@ -3,13 +3,13 @@ import type { SeatSpec } from './play.js';
 
 export const ROTATION: AiPersonaId[] = ['trader', 'aggressive', 'cautious', 'saboteur'];
 
-/** The sim's `--plays`: every seat on its playbook, every seat on today's path, or a pair table (RULE-15). */
+/** The sim's `--plays`: every seat on its playbook, every seat on today's path, or a pair table. See RULE-15. */
 export type TablePlays = 'playbook' | 'today' | 'pair';
 
 /**
  * Seats for a simulator game: one level, personas rotating by seat (and by seed, so no persona always sits first).
- * `plays` names each seat's path; under 'pair' the even seats play their playbook and the odd today's (RULE-15). Null
- * names none, so the seats play as the config says (AI_PLANS).
+ * `plays` names each seat's path; under 'pair' the even seats play their playbook and the odd today's. Null names
+ * none, so the seats play as the config says (AI_PLANS). See RULE-15.
  */
 export function simSeats(players: number, level: AiLevelId, seed: number, persona: AiPersonaId | null = null, plays: TablePlays | null = null): SeatSpec[] {
   return Array.from({ length: players }, (_, i) => ({

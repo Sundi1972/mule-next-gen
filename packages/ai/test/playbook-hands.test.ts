@@ -244,10 +244,7 @@ const SLOW_MS = 20_000;
 const ME = 'ai0';
 const MONTH = 2;
 
-/**
- * The own path's development and auction parts play only with AI_PLANS.ownPhases on (AM-26). C4's promises for them
- * are proved with it on, the path a later PM ruling switches on: a test calls this first, and afterEach puts it back.
- */
+/** C4's own-path promises are proved with AI_PLANS.ownPhases on: a test calls this first, and afterEach puts it back. See AM-26. */
 function ownPhasesOn(): void {
   AI_PLANS.ownPhases = true;
 }
@@ -417,10 +414,8 @@ describe('the seat plays its development and auction parts (C4, RULE-6, RULE-7)'
     // (a) moneyMaker. WS2 edits the money-maker through the seat's gate, which re-drafts the route under it (RULE-1's
     // re-plan); adopted just ahead of the month's first development tick, its MULEs that month are outfitted for the
     // edited good. The first seat and month whose re-drafted route outfits every MULE for the edited good, on plots that
-    // grow it well (TERRAIN_ODDS 'good': where a plot can make it), is the one edited.
-    // Measured 5 Nov (seeds 1-8, months 1-4, edits to a good the drafted plots grow well): the re-draft does so for 29
-    // of 117, part of its MULEs for 37,
-    // none for 51; developDecision's lean (C5, AI_PLANS.moneyMaker) decides that, not the hand, and it is reported.
+    // grow it well (TERRAIN_ODDS 'good': where a plot can make it), is the one edited. Most re-drafts outfit only some
+    // MULEs, or none, for the edited good: developDecision's lean decides that, not the hand.
     let edited: { seat: string; month: number; good: Good } | null = null;
     const first = once();
     const base = playTable();
@@ -728,7 +723,7 @@ describe.runIf(FULL)('the playbook path never waits (UBER-AC-2)', { timeout: 120
 
   it('B-AC-8: development and the auction end at the keyless game time when the decider never answers', async () => {
     // Its keyless game is the own path's, so the seat's own drafts adopted play it exactly: with the switch off the
-    // keyless seat plays today's, and the adopted drafts make another game (measured 5 Nov, AM-26).
+    // keyless seat plays today's, and the adopted drafts make another game. See AM-26.
     ownPhasesOn();
     const keyless = await phaseEnds({});
     const asked: string[] = [];
