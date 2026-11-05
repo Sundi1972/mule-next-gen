@@ -237,6 +237,7 @@ function isIntent(v: unknown): v is MuleIntent {
     case 'pub':
     case 'continue':
     case 'act':
+    case 'hurry':
       return true;
     case 'steer':
       return isAxis(i.x) && isAxis(i.y) && (i.tick === undefined || (Number.isInteger(i.tick) && (i.tick as number) >= 0));
