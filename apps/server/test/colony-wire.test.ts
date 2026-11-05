@@ -39,6 +39,7 @@ describe("the wire for the colony's and the council's intents", () => {
     { type: 'propose', proposal: { kind: 'repeal', law: 'landTax' } },
     { type: 'propose', proposal: null },
     { type: 'voteLaw', yes: false },
+    { type: 'payStrike' },
   ] as unknown[])('isIntent accepts %o', async (intent) => {
     expect(await (await phone())(intent)).toBe('Join a game first');
   });
