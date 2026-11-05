@@ -29,6 +29,7 @@ import { useClient } from '../net/react';
 import { usePhoneGame } from './game';
 import { connectedIn, pickedIn, SIDE_PICK_WORDS, stillPicking, type Seat } from './hub/ready';
 import { ReadyCount } from './hub/ReadyBar';
+import { AuctionHeadline } from '../components/AuctionHeadline';
 import { PhoneShell } from './Shell';
 import { stepDir, useWalkIntent } from './useWalkIntent';
 
@@ -161,13 +162,15 @@ export function Auction() {
           </>
         }
       >
-        {/* Where the time bar was: no clock (G-7), the count of who has picked. */}
-        <div className="mb-1.5 flex items-center gap-2 @min-[1100px]/shell:gap-4" data-testid="pick-bar">
-          <ReadyCount players={picked} label="PICKED" />
-          <span className="text-xs leading-snug text-ink-2 @min-[1100px]/shell:text-lg">
-            <strong className="font-semibold text-ink">No clock:</strong> {SIDE_PICK_WORDS.noClock}
-          </span>
-        </div>
+        {/* The good leads the headline (Heiko, 5 Nov); where the time bar was: no clock (G-7), the count of who has picked. */}
+        <AuctionHeadline good={good}>
+          <div className="flex min-w-0 items-center gap-2 @min-[1100px]/shell:gap-4" data-testid="pick-bar">
+            <ReadyCount players={picked} label="PICKED" />
+            <span className="min-w-0 text-xs leading-snug text-ink-2 @min-[1100px]/shell:text-lg">
+              <strong className="font-semibold text-ink">No clock:</strong> {SIDE_PICK_WORDS.noClock}
+            </span>
+          </div>
+        </AuctionHeadline>
         {skipped && (
           <p className="mb-1.5 shrink-0 truncate font-mono text-[11px] text-ink-3" data-testid="skipped">
             {skipped}
@@ -295,7 +298,16 @@ export function Auction() {
 
   return (
     <PhoneShell phase={`${GOOD_NAME[good]} auction`} fill rail={rail} footer={footer}>
-      <TimeBar seconds={auction.seconds} total={auction.total} slowed={auction.slowed} className="mb-1.5" />
+      {/* The good leads the headline (Heiko, 5 Nov): the clock beside it while it trades, "closed" once it has. */}
+      <AuctionHeadline good={good}>
+        {closed ? (
+          <span className="label-caps text-ink-2" data-testid="auction-closed">
+            closed
+          </span>
+        ) : (
+          <TimeBar seconds={auction.seconds} total={auction.total} slowed={auction.slowed} className="min-w-0 flex-1" />
+        )}
+      </AuctionHeadline>
       {skipped && (
         <p className="mb-1.5 shrink-0 truncate font-mono text-[11px] text-ink-3" data-testid="skipped">
           {skipped}
