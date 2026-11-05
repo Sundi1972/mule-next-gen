@@ -551,6 +551,7 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
       }
     }
 
+    // trace-allow: HC-9, the spec's own failure-mode id for a draft or validator error (spec §4, "Retry, poison, page?"); trace-check reads no HC- ids
     it("HC-9: an own re-pick after the analyses whose draft throws is logged with the seat and plays as 'stop'; no MULE is added", () => {
       const { result, logged } = throwingDraft(() => smithoreRoute(true));
       const { state, plots, hand, log } = result;
@@ -565,6 +566,7 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
       expect(me(state).doneDeveloping).toBe(true);
     });
 
+    // trace-allow: HC-9, the spec's own failure-mode id for a draft or validator error (spec §4, "Retry, poison, page?"); trace-check reads no HC- ids
     it("HC-9: a stale MULE whose replacement draft throws is logged with the seat and dropped, and the route goes on to the pub", () => {
       const { state, plots } = development(2);
       const [stale, spare] = plots as [Tile, Tile];
@@ -584,6 +586,7 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
       expect(me(state).doneDeveloping).toBe(true);
     });
 
+    // trace-allow: HC-9, the spec's own failure-mode id for a draft or validator error (spec §4, "Retry, poison, page?"); trace-check reads no HC- ids
     it("HC-9: a led MULE's kept-outfit check that throws is logged with the seat, and the MULE is still installed, 'led'", () => {
       const { state, plots } = wonMuleLot(2, 'smithore');
       me(state).analysed.push(...plots.map((t) => indexOf(state, t)));
