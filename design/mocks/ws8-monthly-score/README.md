@@ -34,6 +34,32 @@ is the same as today's real screen. The build-site column is what sets the scale
 measures 0.459 and B 0.466. A keeps the sum and the words, which B has no room for, and A doesn't
 put a 36,538 beside Worths of around 6,000 as if they ranked together.
 
+## Open: the six-seat fallback (B), `#/tv-six-band-right`
+
+The PM ruled variant A for the common table. This page is the fallback, used only if WS4's fix to
+the 5+-seat month end still leaves six seats under 0.8. In variant C the league has the left
+column to itself, and #416's `MonthScoreColumn` card sits under the build site on the right. The
+page shows it beside A (the built `TvMonthEnd`, trunk + #416), for six seats at month 2, with the
+ticker full (three lines) and empty.
+
+FitHeight's scale, measured on this page (the page also reads it live):
+
+| | ticker empty | ticker full |
+|---|---|---|
+| A, the band under the league (built) | 0.520 | 0.360 |
+| C, the band under the build site | 0.490 | 0.340 |
+
+A's numbers match WS4's read of the real six-seat month 2 TV, 0.520 and 0.360. **C is lower than
+A, so it is no fallback at this table.** At six seats the right column (the colony panel and the
+build site, with two projects here) is already taller than the six-row league. Moving the band
+there lengthens the column that sets the scale. The build site grows with each project, so C only
+gets worse later in a game.
+
+To rebase onto trunk, `origin/feat/strategist` (5eb20a81, with #381) and #416's
+`origin/ws8-monthly-score` (852ca404, still open) are merged into this branch. That puts
+`MonthScoreColumn` under the mock: #416 is not on trunk yet. The copied `TvMonthEnd` and
+`FitHeight` now follow trunk's versions.
+
 ## CONTRACT: ws7-score-monthly (WS7, settled 5 Nov)
 
 Neither field is in the protocol on this base (`origin/ws7-politics`) yet. Both are being built
@@ -47,7 +73,7 @@ on WS7's `ws7-score-monthly`, and the mock extends the type locally (`ColonyView
 
 The fixture's scores come from the engine's own `colonyScoreOf` (RULE-25), so the sums add up.
 
-## FINDING (Colony.tsx, WS8's)
+## FINDING (Colony.tsx, WS8's), fixed in #416
 
 C34's `ScoreSum` and `ScoreHero` print the terms and the total raw ("31200", "55718"), as the
 `over-tv` page shows. C34's fixture used two-digit numbers, but RULE-25's terms are credits. The

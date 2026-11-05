@@ -30,7 +30,7 @@ const ME: MyView = {
   droneOrder: [],
   politics: null,
   installedThisTurn: false,
-  worthParts: { money: 2_900, goods: 220, plots: 7, land: 2_100, mules: 6, muleValue: 900, office: 300, cut: 0 },
+  worthParts: { money: 2_900, goods: 220, plots: 7, land: 2_100, mules: 6, muleValue: 900, office: 300, cut: 0, donated: 0 },
 };
 
 function project(over: Partial<ColonyProjectView> & Pick<ColonyProjectView, 'id' | 'name' | 'stage'>): ColonyProjectView {
@@ -119,6 +119,8 @@ const NAMES: [string, string, 'zipwing' | 'bramblet' | 'gearling' | 'mollox', bo
   ['s2', 'Mia', 'bramblet', false],
   ['s3', 'Kai', 'gearling', false],
   ['s4', 'Ruth', 'mollox', true],
+  ['s5', 'Pip', 'zipwing', false],
+  ['s6', 'Ossa', 'bramblet', true],
 ];
 
 /**
@@ -129,7 +131,7 @@ export function monthEnd(m: Month, { politics = true, withScore = true }: { poli
   const score = scoreOf(m.gauges, m.air.level);
   const colony: ColonyViewNext = { gauges: m.gauges, lastGauges: m.lastGauges, fund: m.fund, ledger: null, projects: m.projects, catalogue: [], score: withScore ? score : null, ...(withScore ? { lastScore: lastScoreOf(m) } : {}) };
   return aMuleView({
-    players: NAMES.map(([id, name, species, isAi], slot) => {
+    players: NAMES.filter(([id]) => id in m.worths).map(([id, name, species, isAi], slot) => {
       const [worth, lastWorth, worthBeforeCut] = m.worths[id]!;
       return aPlayer({ id, name, slot, species, isAi, worth, lastWorth, worthBeforeCut, ready: isAi });
     }),
@@ -152,6 +154,21 @@ function lastScoreOf(m: Month): number | null {
   if (!m.lastGauges || !m.lastAir) return null;
   return scoreOf(m.lastGauges, m.lastAir.level).total;
 }
+
+/**
+ * Month 2's end at a full table, six seats (WS4's TV-FIT case, B-AC-27-2): the stadium collecting, the park building.
+ * The numbers are this mock's; the e2e's scales come from a real seeded game.
+ */
+export const SIX_MONTH_2: Month = {
+  month: 2,
+  air: { level: 27, band: 'clean' },
+  lastAir: { level: 24, band: 'clean' },
+  gauges: { wealth: 21_300, environment: 27, prestige: 0, happiness: 55, band: 'content' },
+  lastGauges: { wealth: 19_800, prestige: 0, happiness: 50 },
+  worths: { s1: [4_610, 4_120, null], s2: [4_980, 4_460, null], s3: [4_020, 3_980, null], s4: [4_330, 4_050, null], s5: [3_870, 3_940, null], s6: [4_720, 4_200, null] },
+  projects: [STADIUM, { ...PARK, stage: 'building', monthsLeft: 1 }],
+  fund: 940,
+};
 
 /** Game over, for the "unchanged" pages: the real TvGameOver and the real phone GameOver with C34's score. */
 export function gameOver(): MuleView {

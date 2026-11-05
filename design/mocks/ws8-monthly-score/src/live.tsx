@@ -1,4 +1,4 @@
-import type { MuleIntent, MuleView, TableView } from '@mule/protocol';
+import type { ChatMessage, MuleIntent, MuleView, TableView } from '@mule/protocol';
 import { cx, SeatSpeciesProvider, type Slot } from '@mule/ui';
 import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { seatSpecies } from '../../../../apps/web/src/game/derive';
@@ -74,12 +74,19 @@ export function TvFrame({ children, scale = 0.75 }: { children: ReactNode; scale
   );
 }
 
-/** The TV's providers: the client is only read, never written. */
-export function TvGame({ view, scale, children }: { view: MuleView; scale?: number; children: ReactNode }) {
-  const client = useMemo(
-    () => ({ subscribe: () => () => {}, getState: () => ({ status: 'open', role: 'board', code: 'MULE', seatId: null, view: null, chat: [], emotes: [], toasts: [], clockOffset: 0 }), serverNow: () => Date.now(), intent: () => {} }) as unknown as TableClient,
-    [],
-  );
+/** Three lines of table talk: enough to fill the TV's ticker (it shows three), as on a TV that has watched the game. */
+export const TICKER_FULL: ChatMessage[] = [
+  { id: 1, from: 's2', text: 'Who is buying smithore this month?', at: 0 },
+  { id: 2, from: 's5', text: 'Not me, I need every credit for land', at: 0 },
+  { id: 3, from: 's3', text: 'The stadium will be worth it, give to it!', at: 0 },
+];
+
+/** The TV's providers: the client is only read, never written. `chat` fills the ticker; none is a TV that joined just now. */
+export function TvGame({ view, scale, chat = [], children }: { view: MuleView; scale?: number; chat?: ChatMessage[]; children: ReactNode }) {
+  const client = useMemo(() => {
+    const state = { status: 'open', role: 'board', code: 'MULE', seatId: null, view: { game: view }, chat, emotes: [], toasts: [], clockOffset: 0 };
+    return { subscribe: () => () => {}, getState: () => state, serverNow: () => Date.now(), intent: () => {} } as unknown as TableClient;
+  }, []);
   return (
     <ClientProvider client={client}>
       <SeatSpeciesProvider value={seatSpecies(view)}>

@@ -1,8 +1,8 @@
 import { GAME, POLITICS } from '@mule/engine';
 import type { MuleView } from '@mule/protocol';
 import { Button, cx } from '@mule/ui';
-import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { BuildSite } from '../../../../apps/web/src/components/Colony';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { BuildSite, MonthScoreColumn } from '../../../../apps/web/src/components/Colony';
 import { CollapseBanner, ColonyPanel, LeagueTable, YourWorth } from '../../../../apps/web/src/components/MonthEnd';
 import { inCollapse, league, leaderWords, ordinal } from '../../../../apps/web/src/game/month-end';
 import { useClient } from '../../../../apps/web/src/net/react';
@@ -11,42 +11,68 @@ import { ReadyCount, WaitingFor } from '../../../../apps/web/src/phone/hub/Ready
 import { connectedIn, hostMayContinue, namesOf, press, readyFooter, type Press } from '../../../../apps/web/src/phone/hub/ready';
 import { PhoneShell, type Now } from '../../../../apps/web/src/phone/Shell';
 import { TvHeader } from '../../../../apps/web/src/table/TableApp';
-import { ColonyLeagueRow, MonthScoreBand, PhoneMonthScore } from './score';
+import { ColonyLeagueRow, PhoneMonthScore } from './score';
 
-export type TvVariant = 'A' | 'B';
+/** A is the built TvMonthEnd itself (trunk + #416); B and C are this file's copy. */
+export type TvVariant = 'A' | 'B' | 'C';
 
 // --- The TV -------------------------------------------------------------------------------------------
 
+const useBeforePaint = typeof document === 'undefined' ? useEffect : useLayoutEffect;
+
 /**
- * COPY: TableApp.tsx's FitHeight (it is not exported), with useLayoutEffect in place of its server-render switch. The month end's content at full size when it fits,
- * scaled down as a whole when it doesn't.
+ * COPY: TableApp.tsx's FitHeight, verbatim from feat/strategist 5eb20a81 (#381's version; it is not exported). Its
+ * content at full size when it fits, scaled down as a whole when it doesn't; `data-fit` carries the scale.
  */
-function FitHeight({ className, children }: { className?: string; children: ReactNode }) {
+function FitHeight({ className, gives = false, children }: { className?: string; gives?: boolean; children: ReactNode }) {
   const box = useRef<HTMLDivElement>(null);
   const inner = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
-  useLayoutEffect(() => {
-    const fit = () => {
-      const b = box.current;
-      const i = inner.current;
-      if (!b || !i) return;
-      const stretch = i.style.minHeight;
-      i.style.minHeight = '0px';
-      const natural = i.offsetHeight;
-      i.style.minHeight = stretch;
-      if (natural === 0) return;
-      const next = Math.min(1, b.clientHeight / natural);
-      setScale((s) => (Math.abs(s - next) < 0.005 ? s : next));
-    };
-    fit();
-    const ro = new ResizeObserver(fit);
+  const current = useRef(1);
+  const changes = useRef(0);
+  const fit = useRef(() => {});
+  fit.current = () => {
+    const b = box.current;
+    const i = inner.current;
+    if (!b || !i) return;
+    const size = gives ? 'height' : 'minHeight';
+    const stretch = i.style[size];
+    const giving = gives ? [...i.querySelectorAll<HTMLElement>('[data-fit-gives]')].map((g) => [g, g.style.cssText] as const) : [];
+    i.style[size] = gives ? 'auto' : '0px';
+    for (const [g] of giving) {
+      const keep = [...g.querySelectorAll<HTMLElement>('[data-fit-keep]')].reduce((h, k) => h + k.offsetHeight, 0);
+      g.style.cssText += `;flex:none;height:${keep}px`;
+    }
+    const natural = i.offsetHeight;
+    for (const [g, css] of giving) g.style.cssText = css;
+    i.style[size] = stretch;
+    if (natural === 0) return;
+    const next = Math.min(1, b.clientHeight / natural);
+    const s = current.current;
+    if (s <= next && next - s < 0.005) {
+      changes.current = 0;
+      return;
+    }
+    changes.current += 1;
+    current.current = next;
+    setScale(next);
+  };
+  useBeforePaint(() => {
+    if (!gives) return;
+    if (changes.current >= 3) changes.current = 0;
+    else fit.current();
+  });
+  useBeforePaint(() => {
+    const run = () => fit.current();
+    run();
+    const ro = new ResizeObserver(run);
     if (box.current) ro.observe(box.current);
-    if (inner.current) ro.observe(inner.current);
+    if (inner.current && !gives) ro.observe(inner.current);
     return () => ro.disconnect();
   }, []);
   return (
     <div ref={box} className={cx('min-h-0 overflow-hidden', className)} data-fit={scale.toFixed(3)}>
-      <div ref={inner} className="flex flex-col" style={{ transform: `scale(${scale})`, transformOrigin: '0 0', width: `${100 / scale}%`, minHeight: `${100 / scale}%` }}>
+      <div ref={inner} className="flex flex-col" style={{ transform: `scale(${scale})`, transformOrigin: '0 0', width: `${100 / scale}%`, [gives ? 'height' : 'minHeight']: `${100 / scale}%` }}>
         {children}
       </div>
     </div>
@@ -54,36 +80,39 @@ function FitHeight({ className, children }: { className?: string; children: Reac
 }
 
 /**
- * COPY: TableApp.tsx's TvMonthEnd (WS4's), with the colony score added. Every line of the original is kept; the
- * additions are marked GRAFT. With no score in the view (politics off, or the server not yet filling it at month end)
- * it is today's screen exactly.
+ * COPY: TableApp.tsx's TvMonthEnd as on feat/strategist 5eb20a81 with #416 merged (WS4's file; #381's header with the
+ * ready chip in it). Variant A there is the built screen, mounted as is; this copy draws the two alternatives:
+ * - B: the colony as one more league row (a portal into the real LeagueTable; GRAFT: a `footer` prop on LeagueTable);
+ * - C (the six-seat fallback): the league alone on the left, and #416's MonthScoreColumn wrapping the right column, so
+ *   its band sits under the build site. GRAFT: one line moves MonthScoreColumn from the left column to the right.
+ * With no score in the view it is today's screen exactly.
  */
-export function TvMonthEndScore({ game, variant }: { game: MuleView; variant: TvVariant }) {
+export function TvMonthEndScore({ game, variant }: { game: MuleView; variant: Exclude<TvVariant, 'A'> }) {
   const score = game.colony?.score ?? null;
   const root = useRef<HTMLDivElement>(null);
   return (
     <div ref={root} className="flex h-[720px] w-[1280px] flex-col gap-4 bg-table p-10 text-ink" data-phase={game.phase} data-testid="tv-monthend" data-variant={variant}>
-      <div className="flex items-start gap-4">
-        <div className="min-w-0 flex-1">
-          <TvHeader game={game} title="End of the month" />
-        </div>
-        <ReadyCount players={game.players} tv />
+      <div className="flex flex-col gap-3">
+        <TvHeader game={game} title="End of the month" ready={<ReadyCount players={game.players} tv />} />
       </div>
       {inCollapse(game) && <CollapseBanner density="tv" />}
       <FitHeight className="flex-1">
         {game.colony ? (
           <div className="grid flex-1 grid-cols-[minmax(0,6fr)_minmax(0,6fr)] gap-6">
-            {/* GRAFT (A): the league and the score band share the left column, the band under the league. */}
-            <div className="flex min-h-0 flex-col gap-4">
-              <LeagueTable view={game} density="tv" />
-              {variant === 'A' && score && <MonthScoreBand view={game} colony={game.colony} score={score} />}
-            </div>
-            {/* GRAFT (B): the colony's row in the league's own table. */}
-            {variant === 'B' && game.colony && score && <ColonyLeagueRow view={game} colony={game.colony} score={score} root={root} />}
-            <div className="flex flex-col gap-4">
-              <ColonyPanel view={game} density="tv" />
-              <BuildSite colony={game.colony} players={game.players} size="tv" />
-            </div>
+            <LeagueTable view={game} density="tv" />
+            {variant === 'B' && score && <ColonyLeagueRow view={game} colony={game.colony} score={score} root={root} />}
+            {variant === 'C' ? (
+              // GRAFT (C): the band under the build site; MonthScoreColumn is #416's own, unchanged.
+              <MonthScoreColumn view={game}>
+                <ColonyPanel view={game} density="tv" />
+                <BuildSite colony={game.colony} players={game.players} size="tv" />
+              </MonthScoreColumn>
+            ) : (
+              <div className="flex flex-col gap-4">
+                <ColonyPanel view={game} density="tv" />
+                <BuildSite colony={game.colony} players={game.players} size="tv" />
+              </div>
+            )}
           </div>
         ) : (
           <div className="grid flex-1 grid-cols-[minmax(0,7fr)_minmax(0,5fr)] gap-6">

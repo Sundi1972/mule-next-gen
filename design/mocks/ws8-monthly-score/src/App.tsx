@@ -4,20 +4,62 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { GameOver } from '../../../../apps/web/src/phone/GameOver';
 import { Results } from '../../../../apps/web/src/phone/Results';
 import { TvGameOver, TvMonthEnd } from '../../../../apps/web/src/table/TableApp';
-import { COLLAPSE, gameOver, monthEnd, MONTH_1, MONTH_7, type Month } from './fixture';
-import { LivePhone, TvGame } from './live';
+import { COLLAPSE, gameOver, monthEnd, MONTH_1, MONTH_7, SIX_MONTH_2, type Month } from './fixture';
+import { LivePhone, TICKER_FULL, TvGame } from './live';
 import { PhoneMonthEndScore, TvMonthEndScore, type TvVariant } from './screens';
 
 // --- The pages ----------------------------------------------------------------------------------------
 
 const tvOf = (v: MuleView): MuleView => ({ ...v, me: null });
 
-function Tv({ m, variant, politics = true, scale }: { m: Month; variant: TvVariant; politics?: boolean; scale?: number }) {
+/** A is the built TvMonthEnd (trunk + #416), mounted as is; B and C are this mock's copy. `ticker`: three chat lines up. */
+function Tv({ m, variant, politics = true, scale, ticker = false }: { m: Month; variant: TvVariant; politics?: boolean; scale?: number; ticker?: boolean }) {
   const v = tvOf(monthEnd(m, { politics }));
   return (
-    <TvGame view={v} {...(scale ? { scale } : {})}>
-      <TvMonthEndScore game={v} variant={variant} />
+    <TvGame view={v} {...(scale ? { scale } : {})} {...(ticker ? { chat: TICKER_FULL } : {})}>
+      {variant === 'A' ? <TvMonthEnd game={v} /> : <TvMonthEndScore game={v} variant={variant} />}
     </TvGame>
+  );
+}
+
+/** FitHeight's scale as the screen inside `id` reports it (data-fit), read live, so the page states what it shows. */
+function FitReadout({ id }: { id: string }) {
+  const [fit, setFit] = useState('…');
+  useEffect(() => {
+    const t = setInterval(() => setFit(document.querySelector(`[data-testid="${id}"] [data-fit]`)?.getAttribute('data-fit') ?? '…'), 300);
+    return () => clearInterval(t);
+  }, [id]);
+  const n = Number(fit);
+  return (
+    <span className={cx('font-mono text-sm font-bold', Number.isNaN(n) ? 'text-ink-3' : n < 0.8 ? 'text-alert' : 'text-ok')} data-testid={`${id}-fit`}>
+      scale {fit}
+    </span>
+  );
+}
+
+/** The six-seat month end: C (the band under the build site) beside A (the band under the league), ticker full and empty. */
+function SixSeats() {
+  const cells = [
+    ['C', true, 'C · ticker full'],
+    ['A', true, 'A · ticker full'],
+    ['C', false, 'C · ticker empty'],
+    ['A', false, 'A · ticker empty'],
+  ] as const;
+  return (
+    <div className="grid grid-cols-2 gap-4" data-testid="six-seats">
+      {cells.map(([k, ticker, label]) => {
+        const id = `six-${k}-${ticker ? 'full' : 'empty'}`;
+        return (
+          <div key={id} className={cx('flex flex-col gap-1 rounded-panel border p-2', k === 'C' ? 'border-holo' : 'border-holo-line')} data-testid={id}>
+            <span className="flex items-baseline justify-between gap-2">
+              <span className="text-sm font-semibold">{label}</span>
+              <FitReadout id={id} />
+            </span>
+            <Tv m={SIX_MONTH_2} variant={k} ticker={ticker} scale={0.5} />
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -42,7 +84,16 @@ const PHONE = 'The phone at the month end';
 const OVER = 'Game over: unchanged';
 const OFF = 'Politics off: today’s screens (HC-22)';
 
+const SIX = 'Open: the six-seat fallback (B)';
+
 const PAGES: Page[] = [
+  {
+    id: 'tv-six-band-right',
+    group: SIX,
+    title: 'C-fallback · at 5+ seats the band sits under the build site in the right column',
+    note: 'Used only if WS4’s 5+-seat month-end fix still leaves six seats under 0.8. Six seats, month 2. The league has the left column to itself; #416’s MonthScoreColumn card sits under the build site. Beside it, the same month end as built (A). Measured here (a two-project build site): C 0.490 with the ticker empty and 0.340 with it full; A 0.520 and 0.360, the same as WS4’s read of the real six-seat month 2. C scores lower than A: at six seats the right column (colony panel and build site) is already the taller one, so the band adds to the column that sets the scale. The live scale is read on each TV.',
+    render: () => <SixSeats />,
+  },
   { id: 'tv-a', group: TV, title: 'A · the band under the league (WS8’s pick), month 7', note: 'C34’s band frame in the left column’s spare room: the total, “↑ +2,069 since month 6”, the sum, and scoreWords’ line. No verdict, no plaques (the build site beside it has them).', render: () => <Tv m={MONTH_7} variant="A" /> },
   { id: 'tv-b', group: TV, title: 'B · the colony as a league row, month 7', note: 'One more row in the league’s own table, under a double rule: no rank, the colony glyph, “The colony”, its score in the Worth column and its change in the change column.', render: () => <Tv m={MONTH_7} variant="B" /> },
   { id: 'tv-a-month1', group: TV, title: 'A · month 1’s end', note: 'No last month (lastScore null): the total and the sum, no change line.', render: () => <Tv m={MONTH_1} variant="A" /> },
@@ -201,6 +252,16 @@ export default function App() {
             </div>
           ))}
         </div>
+      </section>
+      <section className="flex max-w-5xl flex-col gap-1 rounded-panel border border-warn/60 bg-panel p-5" data-testid="six-seat-fallback">
+        <h2 className="label-caps">Open: the six-seat fallback (B)</h2>
+        <p className="text-sm">
+          The PM ruled A for the common table. If WS4’s fix still leaves six seats under 0.8:{' '}
+          <a href="#/tv-six-band-right" className="font-semibold text-holo underline" data-testid="link-tv-six-band-right-inline">
+            C-fallback · at 5+ seats the band sits under the build site in the right column
+          </a>
+          , shown beside A with the ticker full and empty.
+        </p>
       </section>
       <section className="flex max-w-5xl flex-col gap-1 rounded-panel border border-holo-line bg-panel p-5" data-testid="c34-link">
         <h2 className="label-caps">Game over: C34’s approved pages</h2>
