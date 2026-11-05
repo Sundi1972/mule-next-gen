@@ -335,7 +335,9 @@ describe('the brain at the table', { timeout: 30_000 }, () => {
   it('B-AC-2: a player\'s line is quoted in each AI\'s next prompt, and a private line only in its addressee\'s', async () => {
     const sdk = fakeSdk(() => reply('A', ''));
     const { brain } = watched(smart(sdk));
-    const t = table({ humans: ['Heiko', 'Mia'], ais: 2, brain, maxMonths: 2 });
+    // Long enough that each AI meets a close call after the lines are said: since the 5 Nov start values (one claim a
+    // grant, 2 Food and 2 Energy) a seat can play two months without one.
+    const t = table({ humans: ['Heiko', 'Mia'], ais: 2, brain, maxMonths: 4 });
     const [heiko, mia] = t.phones;
     const [accountant, baron] = t.ais;
 
@@ -452,7 +454,8 @@ describe('the brain at the table', { timeout: 30_000 }, () => {
     expect(() => lobby.heard?.('s9', 'hello')).not.toThrow();
 
     const sdk = fakeSdk(() => reply('A', ''));
-    const t = table({ humans: ['Heiko'], ais: 2, brain: smart(sdk) });
+    // Long enough that both AIs ask after the line: see B-AC-2.
+    const t = table({ humans: ['Heiko'], ais: 2, brain: smart(sdk), maxMonths: 4 });
     const game = t.game();
     expect(typeof game.heard).toBe('function');
     expect(() => game.heard?.('s9', 'hello')).not.toThrow();
