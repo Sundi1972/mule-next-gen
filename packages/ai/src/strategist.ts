@@ -259,35 +259,18 @@ export function plotRoom(obs: GameState, mind: Mind): number {
   return Math.max(0, Math.round(me(obs, mind).money - (idle + 1) * mulePriceFor(obs, mind.me)));
 }
 
-/** The outfit of the MULE up at the land auction, when the lot up is a MULE. */
-const lotOutfit = (obs: GameState): Outfit | undefined => (obs.landAuction?.lot?.item.kind === 'mule' ? obs.landAuction.lot.item.outfit : undefined);
-
 /**
- * What one more MULE is worth to the seat, in credits: its best use on an
- * idle plot of its own, before paying the store's price for it. Nothing
- * without idle land. The most the seat bids for a MULE at a lot.
- *
- * A lot MULE comes outfitted, `outfit` (by default the one up at the land auction), and is never re-outfitted on the
- * floor (only a MULE taken off a plot is): it is worth what installGain says a MULE of that outfit gains on the seat's
- * best idle plot for it, with installGain's cost added back, the price and the outfit the bid stands in for. Nothing
- * where no idle plot of the seat's gains from it, so it is never bid above zero (FM-lot-mule-gain).
+ * What a lot MULE outfitted for `outfit` is worth to the seat, in credits: the most the seat bids for it. A lot MULE
+ * comes outfitted and is never re-outfitted on the floor (only a MULE taken off a plot is): it is worth what
+ * installGain says a MULE of that outfit gains on the seat's best idle plot for it, with installGain's cost added back,
+ * the price and the outfit the bid stands in for. Nothing without idle land, for a factory it can't feed (as
+ * developDecision vetoes), or where no idle plot of the seat's gains from it, so it is never bid above zero
+ * (FM-lot-mule-gain).
  */
-export function muleValue(obs: GameState, mind: Mind, outfit: Outfit | undefined = lotOutfit(obs)): number {
-  if (outfit) {
-    const best = bestInstall(obs, mind, outfit);
-    return best && best.gain > 0 ? Math.round(best.gain + best.cost) : 0;
-  }
-  const o = outlook(obs, mind.me, { lookAhead: mind.level.lookAhead });
-  const price = mulePriceFor(obs, mind.me);
-  let best = 0;
-  for (const tile of obs.tiles) {
-    if (tile.owner !== mind.me || tile.outfit) continue;
-    for (const outfit of OUTFITS) {
-      if (isFactoryGood(outfit) && !canFeed(obs, mind.me, outfit)) continue;
-      best = Math.max(best, installGain(obs, o, tile, outfit, mind).gain + price);
-    }
-  }
-  return Math.round(best);
+export function muleValue(obs: GameState, mind: Mind, outfit: Outfit): number {
+  if (isFactoryGood(outfit) && !canFeed(obs, mind.me, outfit)) return 0;
+  const best = bestInstall(obs, mind, outfit);
+  return best && best.gain > 0 ? Math.round(best.gain + best.cost) : 0;
 }
 
 export type SellListing = NonNullable<PlanningPlay['list']>[number];
@@ -400,10 +383,9 @@ export function developDecision(obs: GameState, mind: Mind, mulesSoFar: number, 
 
 /**
  * The seat's own idle plot where a MULE outfitted for `outfit` gains most, by installGain: its index and the gain and
- * cost installGain gives there. Null without an idle plot, or for a factory it can't feed (as developDecision vetoes).
+ * cost installGain gives there, whatever the gain (a factory it can't feed included). Null without an idle plot.
  */
 export function bestInstall(obs: GameState, mind: Mind, outfit: Outfit): { index: number; gain: number; cost: number } | null {
-  if (isFactoryGood(outfit) && !canFeed(obs, mind.me, outfit)) return null;
   const o = outlook(obs, mind.me, { lookAhead: mind.level.lookAhead });
   let best: { index: number; gain: number; cost: number } | null = null;
   for (const tile of obs.tiles) {
