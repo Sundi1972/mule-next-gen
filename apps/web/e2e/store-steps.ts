@@ -1,5 +1,5 @@
-/** The development store's checks, run as development starts by smoke.ts (scaled clocks) and screens.ts (real time). */
-import { DEV_STEER, DEV_WALK, DEVELOPMENT, floorConfig, foodShare, GLINT, HALL, isOpenFloor, mulePrice, needsMule, placeAt, hungerPace, monthNeeds, needsOf, pubPayoutFor, SCRAMBLE, sickPace, START, speedOf, strikeTarget, terrainShare, WOLVES, type DevFloor, type FloorColonist as EngineColonist, type GameState } from '@mule/engine';
+/** Development's steps: smoke.ts's hunger seed, the steered floor's checks shell.ts and screens.ts run, and the moments'. */
+import { DEV_STEER, DEV_WALK, DEVELOPMENT, floorConfig, foodShare, GLINT, HALL, isOpenFloor, mulePrice, needsMule, pathTo, placeAt, hungerPace, monthNeeds, needsOf, pubPayoutFor, SCRAMBLE, sickPace, START, speedOf, strikeTarget, terrainShare, WOLVES, type DevFloor, type FloorColonist as EngineColonist, type GameState } from '@mule/engine';
 import type { DevFrame } from '@mule/protocol';
 import type { Browser, Page } from 'playwright';
 import type { MuleServer } from '../../server/src/server.js';
@@ -7,28 +7,10 @@ import type { FrameMoments } from '@mule/protocol';
 import { momentsOf } from '../src/phone/arcade/frames';
 import { check, CLAIM_MS, claimAPlot, doneWithLand, hallPlace, PHONE, PHONE_SMALL, plotCentre, pressAct, steerTo, throughDoor, type SteerTarget } from './harness';
 
-const OUTFITTERS = ['food', 'water', 'energy', 'smithore', 'crystite', 'rareEarth'];
-const SERVICES = ['door-L', 'booth-works', 'booth-greenBelt', 'booth-corral', 'booth-pub', 'door-R'];
-const FITS = ['alloy', 'electronics', 'medicine'];
 /** Nine working farms give a crew of nine, so the seat needs 5 Food. */
 const HUNGRY_FARMS = 9;
-/** Heiko's laptop, and the small phone on its side the rest of smoke.ts runs at. */
+/** Heiko's laptop, and the small phone on its side the rest of the steered steps run at. */
 const LAPTOP = { width: 1440, height: 900 };
-/** Wall-clock seconds of development the store's walk-through needs; smoke's scaled clock gives a fed seat only 5. */
-const STORE_WALK_SECONDS = 30;
-/** B-AC-15's row 7 once her MULE is in and the clock runs. */
-const INSTALLED = 'MULE installed. What next?';
-/** A-1: row 7 instead while month 1's clock waits for another seat ("… waiting for X" or "… X +1"). */
-const WAIT_TITLE = 'Your MULE is in · waiting for ';
-/** How long the other seats may take to get their first MULEs in once hers is. */
-const FIRST_MULES_MS = 15_000;
-
-/** The pace line the start-of-turn card shows from its first frame. */
-async function firstLabel(phone: Page, timeout: number): Promise<string> {
-  const card = phone.getByTestId('fill-card');
-  await card.waitFor({ timeout });
-  return (await card.locator('[data-num]').textContent()) ?? '';
-}
 
 /**
  * Seats the human at 2 Food against a need of 5 for the next development, through the in-process
@@ -53,112 +35,6 @@ export function makeHungry(server: MuleServer, code: string, seat = 's1'): void 
   seeded.broadcast();
 }
 
-/** What the engine says of the seat this month: the Food it ate and needs, the share it went without, and its pace in %. */
-function seatCondition(server: MuleServer, code: string, seat: string) {
-  const state = gameOf(server, code).state;
-  const p = state.players.find((q) => q.id === seat);
-  check(p, `seat ${seat} in the game`);
-  const need = needsOf(state, seat).food;
-  return { ate: Math.min(p.stock.food, need), need, missing: 1 - foodShare(state, seat), sick: p.sick, pace: Math.round(hungerPace(state, seat) * sickPace(state, seat) * 100) };
-}
-
-/** The condition tag on the seat's colonist in the store, or null when it wears none. */
-async function tagOn(phone: Page, seat: string): Promise<{ hunger: string | null; sick: string | null } | null> {
-  const tag = phone.getByTestId(`visitor-${seat}`).getByTestId(`condition-${seat}`);
-  if ((await tag.count()) === 0) return null;
-  return { hunger: await tag.getAttribute('data-hunger'), sick: await tag.getAttribute('data-sick') };
-}
-
-/**
- * B-AC-9: a hungry player's start card says what she ate and, from its first frame, her pace at her hunger level;
- * her colonist wears the hunger tag at that level. Call as development starts after makeHungry.
- */
-export async function hungryPlayerSeesHerPace(phone: Page, server: MuleServer, code: string, timeout = 3_000, seat = 's1'): Promise<void> {
-  const label = await firstLabel(phone, timeout);
-  const c = seatCondition(server, code, seat);
-  const { hungryFrom, starvingFrom } = DEV_WALK.hungerLevels;
-  check(c.missing >= hungryFrom && c.missing < starvingFrom && !c.sick, `B-AC-9: makeHungry leaves ${seat} hungry and well, missing ${c.missing} of its Food, sick ${c.sick}`);
-  check(label === `Hungry: ${c.pace}% pace`, `B-AC-9: from its first frame the card states the hungry player's pace, "Hungry: ${c.pace}% pace", got "${label}"`);
-  const text = (await phone.getByTestId('fill-card').innerText()).replace(/\s+/g, ' ');
-  check(text.includes(`You eat ${c.ate} of the ${c.need} Food you need.`), `B-AC-9: the card says she ate ${c.ate} of the ${c.need} she needs, got "${text}"`);
-  const tag = await tagOn(phone, seat);
-  check(tag?.hunger === '2' && tag.sick === null, `B-AC-9: her colonist wears the hunger tag at level 2, hungry, got ${JSON.stringify(tag)}`);
-}
-
-/**
- * B-AC-9 (negative case): a fed player is told she ate the Food she needs, and neither her card nor her colonist
- * shows hunger; a sickness the seed rolled shows as the sick cross and its pace. The card never costs time: a tap on
- * the corral while it shows buys the MULE and ends the card. Call as development starts, with no MULE in tow.
- */
-export async function fedPlayerSeesNoHunger(phone: Page, server: MuleServer, code: string, timeout = 3_000, seat = 's1'): Promise<void> {
-  const label = await firstLabel(phone, timeout);
-  const c = seatCondition(server, code, seat);
-  check(c.missing === 0, `B-AC-9: ${seat} is fed this month, missing ${c.missing} of its Food`);
-  const want = c.sick ? `Sick: ${c.pace}% pace` : 'Fed: full pace';
-  check(label === want, `B-AC-9: from its first frame the card states a fed player's pace, "${want}", got "${label}"`);
-  const text = (await phone.getByTestId('fill-card').innerText()).replace(/\s+/g, ' ');
-  check(text.includes(`You eat the ${c.need} Food you need.`), `B-AC-9: a fed player is told she ate the ${c.need} Food she needs, got "${text}"`);
-  const tag = await tagOn(phone, seat);
-  check(c.sick ? tag?.hunger === '0' && tag.sick === 'true' : tag === null, `B-AC-9: a fed player's colonist wears ${c.sick ? 'only the sick cross' : 'no tag'}, got ${JSON.stringify(tag)}`);
-
-  // A raw pointer tap at the corral's centre; the page notes whether the card was up when it landed.
-  const corral = await phone.locator('[data-shop=corral]').boundingBox();
-  check(corral, 'B-AC-9: the corral is on the floor under the card');
-  await phone.evaluate(() =>
-    window.addEventListener(
-      'pointerdown',
-      (e) => {
-        const shop = (e.target as Element).closest('[data-shop]')?.getAttribute('data-shop') ?? null;
-        document.body.dataset.tapWhileCard = `${!!document.querySelector('[data-testid=fill-card]')} ${shop}`;
-      },
-      { capture: true, once: true },
-    ),
-  );
-  await phone.mouse.click(corral.x + corral.width / 2, corral.y + corral.height / 2);
-  const tap = await phone.evaluate(() => document.body.dataset.tapWhileCard);
-  check(tap === 'true corral', `B-AC-9: the tap reached the corral while the card was up, got "${tap}"`);
-  const bought = await phone
-    .getByTestId('mule')
-    .filter({ hasText: 'Empty MULE in tow' })
-    .waitFor({ timeout: 2_000 })
-    .then(() => true, () => false);
-  check(bought, 'B-AC-9: a tap on the corral while the card shows buys the MULE');
-  check((await phone.getByTestId('fill-card').count()) === 0, 'B-AC-9: a tap on a room ends the card');
-}
-
-/** B-AC-10: the store is one hall, two rows, and the outfitters stay shut with no MULE in tow. Call as development starts. */
-export async function storeIsOneHallWithTwoRows(phone: Page, timeout = 3_000): Promise<void> {
-  // Checked while the start-of-turn card is up: the rooms work from the first frame.
-  await phone.getByTestId('fill-card').waitFor({ timeout });
-  const hall = phone.getByTestId('store-hall');
-  const ids = (row: string) => hall.getByTestId(row).evaluate((el) => [...el.children].map((c) => c.getAttribute('data-testid')).filter(Boolean));
-  const top = await ids('row-outfitters');
-  check(JSON.stringify(top) === JSON.stringify(OUTFITTERS.map((g) => `booth-${g}`)), `B-AC-10: the top row is the six outfitters, crops first, got ${top.join(', ')}`);
-  const bottom = await ids('row-services');
-  check(JSON.stringify(bottom) === JSON.stringify(SERVICES), `B-AC-10: the bottom row is the works, green belt, corral and pub between two doors, got ${bottom.join(', ')}`);
-  const [topBox, bottomBox] = [await hall.getByTestId('row-outfitters').boundingBox(), await hall.getByTestId('row-services').boundingBox()];
-  check(topBox && bottomBox && topBox.y + topBox.height <= bottomBox.y, 'B-AC-10: the outfitters stand above the services');
-  for (const fit of FITS) check((await hall.getByTestId('booth-works').getByTestId(`fit-${fit}`).count()) === 1, `B-AC-10: the works carries the ${fit} fit`);
-
-  const corral = hall.getByTestId('booth-corral');
-  check((await phone.locator('[data-shop=corral]').getAttribute('data-testid')) === 'booth-corral', 'B-AC-10: [data-shop=corral] is the corral booth');
-  const left = Number((await corral.innerText()).match(/(\d+) left/)?.[1]);
-  check(left > 0, `B-AC-10: the corral counts the MULEs it has left, got "${await corral.innerText()}"`);
-  check(await corral.isEnabled(), 'B-AC-10: a corral with MULEs left can be used');
-  check(!(await corral.innerText()).includes('SOLD OUT'), 'B-AC-10: a corral with MULEs left is not sold out');
-
-  for (const g of OUTFITTERS) check(await hall.getByTestId(`booth-${g}`).isDisabled(), `B-AC-10: the ${g} outfitter is disabled with no MULE in tow`);
-  for (const fit of FITS) check(await hall.getByTestId(`fit-${fit}`).isDisabled(), `B-AC-10: the ${fit} fit is disabled with no MULE in tow`);
-}
-
-/** B-AC-10: the outfitters open once she leads an empty MULE. Call right after buying one. */
-export async function outfittersOpenWithAnEmptyMule(phone: Page): Promise<void> {
-  const hall = phone.getByTestId('store-hall');
-  await phone.locator('[data-shop=food]:not([disabled])').waitFor({ timeout: 3_000 });
-  for (const g of OUTFITTERS) check(await hall.getByTestId(`booth-${g}`).isEnabled(), `B-AC-10: the ${g} outfitter opens once she leads an empty MULE`);
-  for (const fit of FITS) check(await hall.getByTestId(`fit-${fit}`).isEnabled(), `B-AC-10: the ${fit} fit opens once she leads an empty MULE`);
-}
-
 type Game = { state: GameState; devEndsAt: number | null; ctx: { now(): number; changed(): void } };
 
 /** The game behind a room on the in-process server: its state, the one development clock and the room's context. */
@@ -168,241 +44,6 @@ function gameOf(server: MuleServer, code: string): Game {
   const game = (room as unknown as { game: Game }).game;
   check(typeof game?.ctx?.now === 'function' && typeof game.ctx.changed === 'function' && (typeof game.devEndsAt === 'number' || game.devEndsAt === null), 'the room game still exposes ctx and devEndsAt');
   return game;
-}
-
-/**
- * Test fixture: gives development STORE_WALK_SECONDS of wall time from now, on the one clock every seat shares. Smoke
- * runs at phaseScale 0.1, so development lasts 5 s of wall time, too short to walk the whole store. Call once
- * development has started.
- */
-function giveStoreTime(server: MuleServer, code: string, seat: string): void {
-  const game = gameOf(server, code);
-  check(game.state.phase === 'development', `the store walk-through for ${seat} starts in development, not ${game.state.phase}`);
-  // Month 1's clock waits, full, until every first MULE is in: no time to give yet.
-  if (game.devEndsAt === null) return;
-  game.devEndsAt = game.ctx.now() + STORE_WALK_SECONDS * 1_000;
-  // Send every phone the new clock now, rather than at the next AI tick.
-  game.ctx.changed();
-}
-
-/** One read of what the hall shows, in one pass. */
-type HallRead = {
-  next: string[];
-  taps: string[];
-  locks: Record<string, string>;
-  corralMules: { state: string | null; good: string | null; saddled: boolean }[];
-  led: { good: string | null; saddled: boolean; slot: string | null }[];
-  nowTitle: string;
-  nowStep: string | null;
-};
-
-/** Kept a string: tsx would wrap named functions in a helper the page lacks. */
-const READ_HALL = `(() => {
-  const hall = document.querySelector('[data-testid=store-hall]');
-  if (!hall) return null;
-  const id = (el) => el.getAttribute('data-testid');
-  const locks = {};
-  for (const el of hall.querySelectorAll('[data-lock]')) locks[id(el.closest('[data-testid]'))] = el.textContent;
-  const mule = (svg) => ({ state: svg.getAttribute('data-mule-state'), good: svg.getAttribute('data-good'), saddled: !!svg.querySelector('[data-part=saddle]'), slot: svg.querySelector('[data-part=saddle]')?.getAttribute('data-slot') ?? null });
-  return {
-    next: [...hall.querySelectorAll('[data-next]')].map(id),
-    taps: [...hall.querySelectorAll('[data-testid=tap-here]')].map((t) => id(t.parentElement)),
-    locks,
-    corralMules: [...hall.querySelectorAll('[data-testid=booth-corral] svg[data-mule-state]')].map(mule),
-    led: [...hall.querySelectorAll('[data-testid^=visitor-] svg[data-mule-state]')].map(mule),
-    nowTitle: document.querySelector('[data-testid=now-title]')?.textContent ?? '',
-    nowStep: document.querySelector('[data-testid=now-steps]')?.getAttribute('aria-label') ?? null,
-  };
-})()`;
-
-async function readHall(phone: Page): Promise<HallRead> {
-  const read = (await phone.evaluate(READ_HALL)) as HallRead | null;
-  check(read, 'the store hall is on the stage');
-  return read;
-}
-
-/** Waits until the hall shows what `ok` wants, then returns that read; on time out, the last read. */
-async function hallWhen(phone: Page, ok: (r: HallRead) => boolean, timeout = 3_000): Promise<HallRead> {
-  const end = Date.now() + timeout;
-  for (;;) {
-    const r = await readHall(phone);
-    if (ok(r) || Date.now() > end) return r;
-    await phone.waitForTimeout(50);
-  }
-}
-
-/**
- * B-AC-15 and B-AC-16 with no MULE in tow: the corral glows and says TAP, every outfitter, the works and the green belt
- * say "needs a MULE", Now is step 1 of 3, and the corral is a pen of MULE characters with no saddle cloth. Read in
- * one pass while the start-of-turn card is still up, so smoke's next step can tap through it. Gives the seat the
- * time the rest of the walk-through needs.
- */
-export async function theCorralGlowsWithNoMule(phone: Page, server: MuleServer, code: string, seat = 's1'): Promise<void> {
-  giveStoreTime(server, code, seat);
-  const r = await readHall(phone);
-  check(JSON.stringify(r.next) === '["booth-corral"]', `B-AC-15: with no MULE only the corral carries data-next, got ${r.next.join(', ')}`);
-  check(JSON.stringify(r.taps) === '["booth-corral"]', `B-AC-15: the corral says TAP, got ${r.taps.join(', ')}`);
-  for (const room of [...OUTFITTERS.map((g) => `booth-${g}`), 'booth-works', 'booth-greenBelt'])
-    check(r.locks[room] === 'needs a MULE', `B-AC-15: with no MULE ${room} says "needs a MULE", got "${r.locks[room]}"`);
-  check(r.nowStep === 'Step 1 of 3', `B-AC-15: Now says step 1 of 3, got ${r.nowStep} ("${r.nowTitle}")`);
-  check(r.corralMules.length > 0, 'B-AC-16: the corral shows MULE characters');
-  check(r.corralMules.every((m) => m.good === 'empty' && m.state === 'idle'), `B-AC-16: the corral's MULEs stand idle and empty, got ${JSON.stringify(r.corralMules)}`);
-  check(r.corralMules.every((m) => !m.saddled), 'B-AC-16 (negative): a store MULE has no saddle cloth');
-  check(r.led.length === 0, `B-AC-16: with no MULE in tow your colonist leads none, got ${r.led.length}`);
-}
-
-/** The seat's colour slot: the colour it chose in the lobby, the room seat's colour % 6, as derive.ts slotOf reads it. */
-function seatSlot(server: MuleServer, code: string, seat: string): number {
-  const seats = (gameOf(server, code) as unknown as { seats: { id: string; color: number }[] }).seats;
-  const s = seats.find((q) => q.id === seat);
-  check(s, `seat ${seat} in the game`);
-  return s.color % 6;
-}
-
-/** The engine's raw good with the largest shortfall for the seat this month, or null with none short (RULE-7 row 3). */
-function largestRawShortfall(server: MuleServer, code: string, seat: string): string | null {
-  const { state } = gameOf(server, code);
-  const need = monthNeeds(state, seat);
-  const have = state.players.find((p) => p.id === seat)!.stock;
-  let best: string | null = null;
-  let most = 0;
-  for (const g of OUTFITTERS) {
-    const short = need[g as keyof typeof need] - have[g as keyof typeof have];
-    if (short > most) [best, most] = [g, short];
-  }
-  return best;
-}
-
-/** How far the hall is from filling the stage's content box, in px, at the current viewport. */
-async function hallGap(phone: Page): Promise<{ w: number; h: number; wide: string | null; nowFirst: boolean }> {
-  return phone.evaluate(`(() => {
-    const stage = document.querySelector('[data-testid=stage]');
-    const hall = document.querySelector('[data-testid=store-hall]').getBoundingClientRect();
-    const cs = getComputedStyle(stage);
-    const w = stage.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
-    const h = stage.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
-    const guide = document.querySelector('[data-testid=guide]');
-    const now = guide.querySelector('[data-testid=now]');
-    return {
-      w: Math.abs(w - hall.width),
-      h: Math.abs(h - hall.height),
-      wide: document.querySelector('[data-testid=game-shell]').getAttribute('data-wide'),
-      // The rail's body, right after its header, opens with Now (shell-steps' probe).
-      nowFirst: !!now && guide.querySelector('header')?.nextElementSibling?.firstElementChild === now,
-    };
-  })()`);
-}
-
-/**
- * B-AC-15 and B-AC-16 from an empty MULE to an installed one: the led MULE is empty and wears her seat's colour
- * (step 2); RULE-7 row 3 glows exactly the engine's largest raw shortfall; outfitted for Energy it is lit with
- * Energy, both doors glow (step 3); the hall fills the stage at 1440×900 and 844×390, and the rail opens with Now
- * (B-AC-12); walking out lands on the map with a plot of hers selected; installed, Now says what next (row 7).
- * Ends back in the store, at 844×390. Call right after buying the MULE.
- */
-export async function theLedMuleLightsUp(phone: Page, server: MuleServer, code: string, seat = 's1'): Promise<string> {
-  const empty = await hallWhen(phone, (r) => r.led[0]?.good === 'empty');
-  check(empty.led.length === 1 && empty.led[0]!.good === 'empty', `B-AC-16: the MULE she leads is empty, got ${JSON.stringify(empty.led)}`);
-  check(empty.led[0]!.saddled, 'B-AC-16: the MULE she leads wears a saddle cloth');
-  const slot = String(seatSlot(server, code, seat));
-  check(empty.led[0]!.slot === slot, `B-AC-16: the MULE she leads wears her seat's colour (slot ${slot}), got slot ${empty.led[0]!.slot}`);
-  check(empty.nowStep === 'Step 2 of 3' && empty.nowTitle === 'Choose what your MULE makes', `B-AC-15: Now says step 2, choose what it makes, got ${empty.nowStep} "${empty.nowTitle}"`);
-  check(empty.locks['booth-corral'] === 'one at a time', `B-AC-15: with a MULE in tow the corral says "one at a time", got "${empty.locks['booth-corral']}"`);
-  // Row 3 glows the outfitter of the largest raw shortfall in the engine's monthNeeds; with none short, nothing.
-  const short = largestRawShortfall(server, code, seat);
-  const want = short === null ? [] : [`booth-${short}`];
-  check(JSON.stringify(empty.next) === JSON.stringify(want), `B-AC-15: an empty MULE glows ${short === null ? 'nothing (no shortfall)' : `the ${short} outfitter (largest shortfall)`}, got [${empty.next.join(', ')}]`);
-  // Both branches every run: with her Water emptied for a moment there is a shortfall, and its outfitter glows.
-  const seeded = await withNoWater(server, code, seat, async (lack) => {
-    const r = await hallWhen(phone, (h) => JSON.stringify(h.next) === JSON.stringify([`booth-${lack}`]));
-    check(JSON.stringify(r.next) === JSON.stringify([`booth-${lack}`]), `B-AC-15: short of ${lack}, an empty MULE glows the ${lack} outfitter, got [${r.next.join(', ')}]`);
-    check(r.nowTitle === 'Choose what your MULE makes', `B-AC-15: Now still says choose what it makes, got "${r.nowTitle}"`);
-    return lack;
-  });
-  const back = await hallWhen(phone, (h) => JSON.stringify(h.next) === JSON.stringify(want));
-  check(JSON.stringify(back.next) === JSON.stringify(want), `B-AC-15: with her Water back the glow returns to [${want.join(', ')}], got [${back.next.join(', ')}]`);
-
-  await phone.locator('[data-shop=energy]:not([disabled])').click({ timeout: 2_000 });
-  const lit = await hallWhen(phone, (r) => r.led[0]?.good === 'energy' && r.next.length === 2);
-  check(lit.led[0]?.good === 'energy', `B-AC-16: outfitted, the MULE she leads is lit with Energy, got ${JSON.stringify(lit.led)}`);
-  check(lit.led[0]!.saddled && lit.led[0]!.slot === slot, `B-AC-16: the outfitted MULE she leads keeps her saddle cloth (slot ${slot}), got ${lit.led[0]!.slot}`);
-  check(JSON.stringify(lit.next) === '["door-L","door-R"]', `B-AC-15: with an Energy MULE in the store both doors carry data-next, got ${lit.next.join(', ')}`);
-  check(lit.nowStep === 'Step 3 of 3' && lit.nowTitle === 'Walk out and install it', `B-AC-15: Now says step 3, walk out, got ${lit.nowStep} "${lit.nowTitle}"`);
-  check(lit.corralMules.every((m) => !m.saddled), 'B-AC-16 (negative): the corral MULEs stay unsaddled');
-
-  // In the store the hall fills the stage at both sizes.
-  const sizes: string[] = [];
-  for (const [name, size, wide] of [['1440×900', LAPTOP, 'true'], ['844×390', PHONE.viewport, 'false']] as const) {
-    await phone.setViewportSize(size);
-    await phone.waitForFunction((w) => document.querySelector('[data-testid=game-shell]')?.getAttribute('data-wide') === w, wide, { timeout: 2_000 });
-    const gap = await hallGap(phone);
-    check(gap.w <= 1 && gap.h <= 1, `B-AC-15: at ${name} the hall fills the stage, off by ${gap.w} × ${gap.h} px`);
-    check(gap.nowFirst, `B-AC-12: at ${name} the development rail opens with Now`);
-    sizes.push(`${name} ±${Math.max(gap.w, gap.h).toFixed(1)} px`);
-  }
-
-  // Walking out lands on the map with a plot of hers selected and ready to install on.
-  const dev = phone.locator('[data-phase=development]');
-  await dev.getByRole('button', { name: 'Walk out to the map' }).click({ timeout: 2_000 });
-  await dev.getByText('YOURS', { exact: true }).waitFor({ timeout: 2_000 });
-  const install = dev.getByRole('button', { name: /^(Install here|Replace MULE)$/ });
-  check(await install.isEnabled(), 'B-AC-15: walked out with an Energy MULE, a plot of hers is selected to install on');
-  const title = (await phone.getByTestId('now-title').textContent()) ?? '';
-  check(title === 'Install your Energy MULE here', `B-AC-15: on her selected plot Now says install it here, got "${title}"`);
-  // Installed, Now moves on to row 7 in the same frame the MULE leaves her: never back to "Buy a MULE". A-1: while
-  // month 1's clock still waits for another seat's first MULE, row 7 is the wait title instead.
-  const titles = phone.evaluate(`new Promise((resolve) => {
-    const seen = [];
-    const read = () => document.querySelector('[data-testid=now-title]')?.textContent ?? '';
-    const watch = new MutationObserver(() => {
-      seen.push(read());
-      if (seen.at(-1) === ${JSON.stringify(INSTALLED)} || seen.at(-1).startsWith(${JSON.stringify(WAIT_TITLE)})) { watch.disconnect(); resolve(seen); }
-    });
-    watch.observe(document.body, { subtree: true, childList: true, characterData: true });
-    setTimeout(() => { watch.disconnect(); resolve(seen); }, 3000);
-  })`) as Promise<string[]>;
-  await install.click({ timeout: 2_000 });
-  let after = await titles;
-  // The server's month-1 clock, read as giveStoreTime reads it: null in development while it waits for a first MULE.
-  const waits = gameOf(server, code).devEndsAt === null;
-  if (waits) check(after.at(-1)?.startsWith(WAIT_TITLE), `B-AC-15 (A-1): after installing while month 1's clock waits, Now says "${WAIT_TITLE}…", saw ${JSON.stringify(after)}`);
-  // Row 7 once the clock runs: at once when she was the last seat in, else once the last first MULE is in. The steps
-  // after this one need the clock running, as they had it before A-1.
-  if (after.at(-1) !== INSTALLED) {
-    await phone.getByTestId('now-title').filter({ hasText: INSTALLED }).waitFor({ timeout: waits ? FIRST_MULES_MS : 2_000 }).catch(() => undefined);
-    after = [...after, (await phone.getByTestId('now-title').textContent()) ?? ''];
-  }
-  if (waits) check(gameOf(server, code).devEndsAt !== null, `A-1: month 1's clock did not start within ${FIRST_MULES_MS / 1_000} s of her MULE going in (devEndsAt still null)`);
-  check(after.at(-1) === INSTALLED, `B-AC-15: once the clock runs Now says "${INSTALLED}", saw ${JSON.stringify(after)}`);
-  // The clock runs now, started by the last first MULE, hers or another's; the earlier giveStoreTime gave nothing if it
-  // still waited then. Giving it again only moves the end later (now + STORE_WALK_SECONDS), so give it either way.
-  giveStoreTime(server, code, seat);
-  check(!after.includes('Buy a MULE at the corral'), `B-AC-15: no frame shows "Buy a MULE" between the install and row 7, saw ${JSON.stringify(after)}`);
-  await dev.getByRole('button', { name: 'Store', exact: true }).click({ timeout: 2_000 });
-  await phone.getByTestId('store-hall').waitFor({ timeout: 2_000 });
-  return `${sizes.join(', ')}; row 3 glowed ${short ?? 'nothing (no shortfall)'}, then ${seeded} when short`;
-}
-
-/**
- * Test fixture: empties the seat's Water while `fn` runs, so monthNeeds has a shortfall, then puts it back. Nothing
- * is produced or eaten during development, so the game goes on as if it never happened. `fn` gets the engine's
- * largest raw shortfall at that moment.
- */
-async function withNoWater<T>(server: MuleServer, code: string, seat: string, fn: (lack: string) => Promise<T>): Promise<T> {
-  const game = gameOf(server, code);
-  const p = game.state.players.find((q) => q.id === seat);
-  check(p, `seat ${seat} in the game`);
-  const kept = p.stock.water;
-  p.stock.water = 0;
-  game.ctx.changed();
-  try {
-    const lack = largestRawShortfall(server, code, seat);
-    check(lack !== null, 'with no Water the seat is short of something this month');
-    return await fn(lack);
-  } finally {
-    p.stock.water = kept;
-    game.ctx.changed();
-  }
 }
 
 // --- Steered development (arcade spec C6, C11, C12): the phones, the laptop and the TV against a flag-on server ------
@@ -1298,6 +939,30 @@ export async function theTvDrawsEveryoneLive(t: ArcadeTable): Promise<string> {
   return `${samples.length} TV reads (drawings at most ${oldest} ms old, ${instants.size} instants), ${compared} compared; worst/allowed in tiles, interpolateMs behind: ${worst.join(', ')} (${worstNow.toFixed(3)} at most from the same moment); Kai away stood at ${[...stills][0]}`;
 }
 
+// --- Where to stand to install ----------------------------------------------------------------------------------------
+
+/** Within this of a lake plot's edge, on the shore, Act works the plot (DEV_STEER.shoreReachTiles is 0.45). */
+const SHORE_GAP = 0.2;
+
+/** Where to stand to install on plot x, y: its centre, or for a lake plot the nearest shore Act works it from. */
+export function installSpot(server: MuleServer, code: string, seat: string, x: number, y: number): { at: SteerTarget; within?: number } {
+  const { state } = gameOf(server, code);
+  const plot = state.tiles.find((t) => t.x === x && t.y === y);
+  check(plot, `a plot at ${x},${y}`);
+  if (plot.terrain !== 'lake') return { at: plotCentre(x, y) };
+  const cfg = floorConfig();
+  const from = onFloor(server, code, seat);
+  const toward = 0.5 - SHORE_GAP;
+  // Any of the eight tiles round it that a colonist can stand on, at the point SHORE_GAP from the lake's edge or corner.
+  const shores = state.tiles
+    .filter((t) => Math.max(Math.abs(t.x - x), Math.abs(t.y - y)) === 1 && terrainShare(t.terrain, cfg) > 0)
+    .map((t) => ({ at: { space: 'map' as const, x: t.x + 0.5 + (x - t.x) * toward, y: t.y + 0.5 + (y - t.y) * toward }, path: pathTo(state, from, plotCentre(t.x, t.y), cfg) }))
+    .filter((s) => s.path !== null)
+    .sort((a, b) => a.path!.seconds - b.path!.seconds);
+  check(shores[0], `a shore to reach lake plot ${x},${y} from`);
+  return { at: shores[0].at, within: SHORE_GAP / 2 };
+}
+
 // --- The moments (arcade PR-9): wolves, the glint race and the corral scramble, on the phones and the TV -----------
 
 /** The server's whole floor, the moments with it. */
@@ -1454,6 +1119,16 @@ async function fightWell(page: Page, server: MuleServer, code: string, seat: str
   return score;
 }
 
+/** Whether Heiko's fight ended by time, as the engine said on his frames: "held them off", not "beat" or "lost". */
+async function heldOff(page: Page, wire: Wire | null, sinceMs: number): Promise<boolean> {
+  const end = Date.now() + 1_000;
+  for (;;) {
+    const said = heardBeats(wire, sinceMs).find((b) => /^Heiko (beat the wolves|held them off|lost the fight)/.test(b));
+    if (said || Date.now() > end) return !!said && said.startsWith('Heiko held them off');
+    await page.waitForTimeout(TICK_MS);
+  }
+}
+
 /**
  * B-AC-5: wolves forced on (a pack certain each tick on wolf land, by setting the in-process server's WOLVES). Mia,
  * on forest, pushes the stick and runs: she is bitten and slowed, or gets away. Heiko presses and fights: he wins pelts
@@ -1548,6 +1223,7 @@ export async function wolvesRunOrFight(t: ArcadeTable): Promise<string> {
       fight.heiko.callouts.some((c) => c.id === 'fight-hud-s1') && fight.tv.callouts.some((c) => c.id === 'fight-hud-s1') && fight.tv.wolves.some((w) => w.who === 's1'),
       `${framesSay(fight.frames)}; his phone drew ${JSON.stringify(fight.heiko.callouts)}; the TV ${JSON.stringify(fight.tv.callouts)} and ${fight.tv.wolves.length} wolves`,
     );
+    const fightFrom = Date.now();
     const score = await fightWell(heiko, server, code, 's1');
     const after = colonistOf(server, code, 's1');
     const fought = `${score.strikes} strikes, ${score.bites} bites, ${score.presses} presses at an open wolf`;
@@ -1573,13 +1249,14 @@ export async function wolvesRunOrFight(t: ArcadeTable): Promise<string> {
       const sold = await playerWhen(heiko, server, code, 's1', (p) => p.money > m0);
       check(sold.money === m0 + after.pelts * WOLVES.peltPrice && colonistOf(server, code, 's1').pelts === 0, `B-AC-5: the pelts sell at the store's door for ${after.pelts * WOLVES.peltPrice} cr, money ${m0} → ${sold.money}`);
       out.push(`Heiko fought and won ${after.pelts} pelts (${fought}), sold for ${sold.money - m0} cr`);
-    } else if (score.bites < WOLVES.bitesToLose - 1) {
-      // Neither side won in fightSeconds: the wolves slink away and nothing is paid.
+    } else if (await heldOff(heiko, wires.heiko, fightFrom)) {
+      // Neither side won in fightSeconds: the wolves slink away and nothing is paid. Told by the engine's own line, not
+      // fightWell's count, which can miss the last bite: 2 bites is either held off or lost.
       check(after.pelts === 0 && after.stunnedUntilTick === undefined, `B-AC-5: held off, Heiko carries no pelts and stands free, got pelts ${after.pelts}, stunned until ${after.stunnedUntilTick}`);
       out.push(`Heiko held them off (${fought})`);
     } else {
       const tick = floorOf(server, code).tick;
-      check((after.stunnedUntilTick ?? 0) > tick, `B-AC-5: a fight lost with no MULE on the lead stuns Heiko, got pelts ${after.pelts}, stunned until ${after.stunnedUntilTick} (${fought})`);
+      check((after.stunnedUntilTick ?? 0) > tick, `B-AC-5: a fight lost with no MULE on the lead stuns Heiko, got pelts ${after.pelts}, stunned until ${after.stunnedUntilTick} (${fought}); his frames' beats ${JSON.stringify(heardBeats(wires.heiko, fightFrom))}`);
       await heiko.waitForTimeout(200);
       const stunned = await readMoments(heiko);
       owe("Heiko's phone says he is stunned", stunned.callouts.some((c) => c.id === 'stunned-s1'), `${framesSay(heardMoments(wires.heiko))}; it drew ${JSON.stringify(stunned.callouts)}`);
@@ -1762,7 +1439,8 @@ export async function theGlintRace(t: ArcadeTable): Promise<string> {
   const out: string[] = [];
   try {
     WOLVES.on = false;
-    Object.assign(GLINT, { on: true, prize: 'crystite', meanGapSeconds: 1, showSeconds: 8, pauseSeconds: 0.5 });
+    const raceShow = 8;
+    Object.assign(GLINT, { on: true, prize: 'crystite', meanGapSeconds: 1, showSeconds: raceShow, pauseSeconds: 0.5 });
     const store = gameOf(server, code).state.tiles.find((k) => k.terrain === 'store')!;
     const walk = HALL.floor[0]!;
     placeOnFloor(server, code, 's1', { space: 'hall', x: HALL.w * 0.4, y: (walk.y0 + walk.y1) / 2 });
@@ -1778,6 +1456,13 @@ export async function theGlintRace(t: ArcadeTable): Promise<string> {
       ok: lit.mia.glint?.x === g.x && lit.mia.glint.y === g.y && lit.tv.glint?.x === g.x && lit.tv.glint.y === g.y && !!lit.heiko.strip?.includes(words),
       said: `${framesSay(lit.frames)}; Mia's phone ${JSON.stringify(lit.mia.glint)}, the TV ${JSON.stringify(lit.tv.glint)}, Heiko's strip ${JSON.stringify(lit.heiko.strip)}`,
     });
+    // A glint once won or faded is gone; the next can light pauseSeconds later (0.5), so "gone" is never "no glint".
+    const gone = (was: { untilTick: number }) => floorOf(server, code).moments.glint?.untilTick !== was.untilTick;
+    // What a screen draws once one is gone: none, or the server's next, never the one that went.
+    const drawsNotThe = (was: { untilTick: number }, d: { x: number; y: number } | null) => {
+      const next = floorOf(server, code).moments.glint;
+      return d === null || (!!next && next.untilTick !== was.untilTick && d.x === next.x && d.y === next.y);
+    };
     // The race: Mia, a step away, walks onto it with the stick.
     const c0 = playerOf(server, code, 's2').stock.crystite;
     const h0 = playerOf(server, code, 's1').stock.crystite;
@@ -1786,27 +1471,33 @@ export async function theGlintRace(t: ArcadeTable): Promise<string> {
     await mia.waitForTimeout(200);
     await steerTo(mia, server, code, 's2', plotCentre(g.x, g.y), { via: 'stick', within: 0.3 }).catch(() => undefined);
     const won = await playerWhen(mia, server, code, 's2', (p) => p.stock.crystite > c0);
-    check(won.stock.crystite === c0 + GLINT.crystite && floorOf(server, code).moments.glint === null, `B-AC-6: the first onto the glint, Mia, gets +${GLINT.crystite} Crystite, ${c0} → ${won.stock.crystite}`);
+    check(won.stock.crystite === c0 + GLINT.crystite && gone(g), `B-AC-6: the first onto the glint, Mia, gets +${GLINT.crystite} Crystite, ${c0} → ${won.stock.crystite}`);
     check(playerOf(server, code, 's1').stock.crystite === h0, 'B-AC-6: and nobody else does');
     await tv.waitForTimeout(300);
     const after = await readMoments(tv);
     check(after.beats.some((b) => b.startsWith('Mia got the glint')), `B-AC-6: the TV says who got it; the frames' beats ${JSON.stringify(heardBeats(wires.tv, raced))}, the TV shows ${JSON.stringify(after.beats)}`);
-    owed.push({ tag: 'once won the glint is drawn on no screen', ok: after.glint === null && (await readMoments(mia)).glint === null, said: `the TV ${JSON.stringify(after.glint)}` });
+    const afterMia = (await readMoments(mia)).glint;
+    owed.push({ tag: 'once won the glint is drawn on no screen', ok: drawsNotThe(g, after.glint) && drawsNotThe(g, afterMia), said: `the TV ${JSON.stringify(after.glint)}, Mia ${JSON.stringify(afterMia)}, the server's next ${JSON.stringify(floorOf(server, code).moments.glint)}` });
     out.push(`lit at ${words}, Mia got it`);
 
     // Negative: the next, with nobody on the way, fades and nobody gets it.
     GLINT.showSeconds = 2;
+    // The next may have lit under the race's 8 s before that took: wait it out, so the one measured lit under 2 s.
+    const stale = Date.now() + (raceShow + 2) * 1_000;
+    while (floorOf(server, code).moments.glint && Date.now() < stale) await mia.waitForTimeout(TICK_MS);
     const g2 = await glintWhen(mia, server, code, 20_000);
     check(g2, 'B-AC-6 (negative): a second glint lights within 20 s');
+    const lasts = g2.untilTick - floorOf(server, code).tick;
+    check(lasts <= (GLINT.showSeconds * 1_000) / TICK_MS, `B-AC-6 (negative): the glint measured lit under showSeconds ${GLINT.showSeconds}, ${lasts} ticks left`);
     const lit2 = Date.now();
     const before = ['s1', 's2'].map((s) => playerOf(server, code, s).stock.crystite);
     const end = Date.now() + (GLINT.showSeconds + 2) * 1_000;
-    while (floorOf(server, code).moments.glint && Date.now() < end) await mia.waitForTimeout(TICK_MS);
-    check(floorOf(server, code).moments.glint === null, `B-AC-6 (negative): after showSeconds the glint at ${g2.x + 1}·${g2.y + 1} fades`);
+    while (!gone(g2) && Date.now() < end) await mia.waitForTimeout(TICK_MS);
+    check(gone(g2), `B-AC-6 (negative): after showSeconds the glint at ${g2.x + 1}·${g2.y + 1} fades`);
     check(['s1', 's2'].every((s, i) => playerOf(server, code, s).stock.crystite === before[i]), 'B-AC-6 (negative): and nobody gets it');
     await tv.waitForTimeout(300);
     const faded = { tv: await readMoments(tv), mia: await readMoments(mia) };
-    check(faded.tv.glint === null && faded.mia.glint === null, 'B-AC-6 (negative): faded, it is drawn on no screen');
+    check(drawsNotThe(g2, faded.tv.glint) && drawsNotThe(g2, faded.mia.glint), `B-AC-6 (negative): faded, it is drawn on no screen; the TV ${JSON.stringify(faded.tv.glint)}, Mia ${JSON.stringify(faded.mia.glint)}`);
     check(faded.tv.beats.includes('The glint faded'), `B-AC-6 (negative): the TV says the glint faded; the frames' beats ${JSON.stringify(heardBeats(wires.tv, lit2))}, the TV shows ${JSON.stringify(faded.tv.beats)}`);
     out.push(`the next at ${g2.x + 1}·${g2.y + 1} faded`);
   } finally {

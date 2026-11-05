@@ -6,7 +6,6 @@ import {
   declareRole,
   endAuction,
   lineOf,
-  lineTrade,
   monthlyDemand,
   PRICE,
   RuleError,
@@ -41,8 +40,13 @@ function a(state: GameState) {
 }
 
 /** Picks the given sides on the status screen, then everyone presses Done. */
+/**
+ * Ends the status screen: everyone starts as a buyer (RULE-2), so a player holding more than this month's need switches
+ * to seller here, as the walk tests below want them, unless `roles` says otherwise; then everyone presses Done.
+ */
 function endStatus(state: GameState, roles: Record<string, AuctionSide> = {}) {
   expect(a(state).stage).toBe('status');
+  for (const r of a(state).status) if (!(r.id in roles) && r.now > r.need) declareRole(state, r.id, 'seller');
   for (const [id, role] of Object.entries(roles)) declareRole(state, id, role);
   for (const p of state.players) auctionDone(state, p.id);
   stepAuction(state, TICK);
@@ -58,15 +62,15 @@ function walker(state: GameState, id: string) {
 }
 
 /**
- * Steps for `ms` while the same good is up, the given players walking toward the other side; one that reaches a
- * house's line stops there and chooses `units` (A-6, G-1: nothing trades at a house's line until then).
+ * Steps for `ms` while the same good is up, the given players walking toward the other side; one standing at a
+ * house's line stands still there, where units trade by themselves (RULE-1), and walks on once it is off it (the ship
+ * pays a little less after each unit).
  */
-function walkToLines(state: GameState, ids: string[], units: number, ms: number): Trade[] {
+function walkToLines(state: GameState, ids: string[], ms: number): Trade[] {
   const good = a(state).good;
   const trades: Trade[] = [];
-  for (const id of ids) setWalk(state, id, walker(state, id).side === 'seller' ? -1 : 1);
   for (let t = 0; t < ms && a(state).good === good && a(state).stage === 'walk'; t += TICK) {
-    for (const id of ids) if (lineOf(state, id) && !walker(state, id).order) lineTrade(state, id, units);
+    for (const id of ids) setWalk(state, id, lineOf(state, id) ? 0 : walker(state, id).side === 'seller' ? -1 : 1);
     trades.push(...stepAuction(state, TICK));
   }
   return trades;
@@ -113,12 +117,13 @@ describe('the live auction: goods one at a time', () => {
     expect(a(state).good).toBe('food');
   });
 
-  it('T-AC-3: skips a good when everyone passes on its status screen', () => {
+  it('T-AC-3: skips a good at the end of its status screen when nobody can trade: everyone stays a buyer and none can pay', () => {
     const state = newGame();
     state.players[0]!.stock.food = 6;
     state.players[0]!.stock.water = 5;
     startAuction(state, ['food', 'water']);
-    endStatus(state, Object.fromEntries(state.players.map((p) => [p.id, 'pass'])));
+    for (const p of state.players) p.money = 0;
+    endStatus(state, Object.fromEntries(state.players.map((p) => [p.id, 'buyer' as const])));
     expect(a(state).good).toBe('water');
     expect(a(state).skipped).toEqual([{ good: 'food', reason: 'nobody trading' }]);
   });
@@ -128,7 +133,8 @@ describe('the live auction: goods one at a time', () => {
     state.store.stock.energy = 0;
     state.players[0]!.stock.energy = 3;
     startAuction(state, ['energy']);
-    endStatus(state, { p0: 'pass', p1: 'buyer' });
+    // p0 holds Energy but stays a buyer: there is no seller.
+    endStatus(state, { p0: 'buyer' });
     expect(a(state).stage).toBe('over');
     expect(a(state).skipped).toEqual([{ good: 'energy', reason: 'nobody trading' }]);
   });
@@ -159,7 +165,7 @@ describe('the live auction: goods one at a time', () => {
     expect(a(state).status.find((r) => r.id === 'p1')).toMatchObject({ had: 4, made: 0, now: 0, used: 4 });
   });
 
-  it('T-AC-3: when a good\'s status opens, every walker already holds defaultSide: surplus sells from the top, short buys from the bottom, even passes', () => {
+  it('T-AC-3 (RULE-2): when a good\'s status opens, every walker is a buyer at the bottom edge, whatever it holds or needs', () => {
     const state = newGame();
     // Food: p0 has spare, p1 none, p2 exactly its need. Water opens after Food, inside stepAuction.
     state.players[0]!.stock.food = 6;
@@ -170,15 +176,12 @@ describe('the live auction: goods one at a time', () => {
     stepAuction(state, TICK);
     expect(a(state)).toMatchObject({ good: 'food', stage: 'status' });
     expect(a(state).walkers.map((w) => w.id)).toEqual(['p0', 'p1', 'p2', 'p3']);
-    expect(walker(state, 'p0')).toMatchObject({ side: 'seller', price: a(state).hi });
-    expect(walker(state, 'p1')).toMatchObject({ side: 'buyer', price: a(state).lo });
-    expect(walker(state, 'p2').side).toBe('pass');
+    for (const w of a(state).walkers) expect(w, w.id).toMatchObject({ side: 'buyer', price: a(state).lo });
 
-    endStatus(state, Object.fromEntries(state.players.map((p) => [p.id, 'pass'])));
+    for (const p of state.players) p.money = 0;
+    endStatus(state, Object.fromEntries(state.players.map((p) => [p.id, 'buyer' as const])));
     expect(a(state)).toMatchObject({ good: 'water', stage: 'status' });
-    expect(walker(state, 'p3')).toMatchObject({ side: 'seller', price: a(state).hi });
-    expect(walker(state, 'p0')).toMatchObject({ side: 'buyer', price: a(state).lo });
-    expect(walker(state, 'p1').side).toBe('pass');
+    for (const w of a(state).walkers) expect(w, w.id).toMatchObject({ side: 'buyer', price: a(state).lo });
   });
 
   it('T-AC-3: declareRole works during status: the side sent is taken at its start edge, and Sell needs units', () => {
@@ -193,18 +196,18 @@ describe('the live auction: goods one at a time', () => {
     expect(walker(state, 'p0')).toMatchObject({ side: 'buyer', price: a(state).lo });
     declareRole(state, 'p2', 'seller');
     expect(walker(state, 'p2')).toMatchObject({ side: 'seller', price: a(state).hi });
-    declareRole(state, 'p1', 'pass');
-    expect(walker(state, 'p1').side).toBe('pass');
+    expect(() => declareRole(state, 'p1', 'pass')).toThrow(new RuleError('Everyone takes part in the auction'));
+    expect(walker(state, 'p1').side).toBe('buyer');
     expect(() => declareRole(state, 'p3', 'seller')).toThrow(new RuleError('You have none to sell'));
     expect(walker(state, 'p3').side).toBe('buyer');
     // Picking a side neither presses Done nor takes it back: p0 stays done, the others are not.
     expect(a(state).done).toEqual(['p0']);
     stepAuction(state, TICK);
     expect(a(state).stage).toBe('status');
-    toWalk(state);
+    toWalk(state, { p0: 'buyer' });
     expect(a(state).walkers.map((w) => [w.id, w.side])).toEqual([
       ['p0', 'buyer'],
-      ['p1', 'pass'],
+      ['p1', 'buyer'],
       ['p2', 'seller'],
       ['p3', 'buyer'],
     ]);
@@ -269,7 +272,8 @@ describe('the live auction: goods one at a time', () => {
     auctionDone(state, 'p0');
     stepAuction(state, TICK);
     expect(a(state)).toMatchObject({ stage: 'walk', clockMs: WALK.goodMs, done: [] });
-    expect(walker(state, 'p0')).toMatchObject({ side: 'seller', price: a(state).hi });
+    // Nobody switched: p0, holding Food, starts the walk a buyer at the bottom edge like everyone else (RULE-2).
+    expect(walker(state, 'p0')).toMatchObject({ side: 'buyer', price: a(state).lo });
   });
 
   it('T-AC-3: declareRole before a good is up still throws', () => {
@@ -283,7 +287,7 @@ describe('the live auction: goods one at a time', () => {
   });
 
   it('T-AC-3: the same seed and intents replay to the same trades', () => {
-    /** One auction where two players change their side during status and everyone on the board walks toward the others. */
+    /** One auction where two players switch side during status and everyone walks toward the others, standing at a house's line. */
     function play() {
       const state = newGame();
       state.players[0]!.stock.food = 8;
@@ -293,17 +297,12 @@ describe('the live auction: goods one at a time', () => {
       const stages: string[] = [];
       for (let i = 0; a(state).stage !== 'over' && i < 20_000; i++) {
         const { stage, good } = a(state);
-        if (stage === 'status' && good === 'food') declareRole(state, 'p2', 'pass');
-        if (stage === 'status' && good === 'water') declareRole(state, 'p1', 'pass');
+        if (stage === 'status' && good === 'food') declareRole(state, 'p0', 'seller');
+        if (stage === 'status' && good === 'water') declareRole(state, 'p1', 'seller');
         // The status screen has no clock (A-7): everyone presses Done once the sides are picked.
         if (stage === 'status') for (const p of state.players) auctionDone(state, p.id);
-        // At a house's line each says how many once (A-6); elsewhere they walk on.
-        if (stage === 'walk')
-          for (const w of a(state).walkers) {
-            if (w.side === 'pass') continue;
-            if (!lineOf(state, w.id)) setWalk(state, w.id, w.side === 'seller' ? -1 : 1);
-            else if (!w.order) lineTrade(state, w.id, 3);
-          }
+        // At a house's line each stands still while units trade (RULE-1); elsewhere they walk on.
+        if (stage === 'walk') for (const w of a(state).walkers) setWalk(state, w.id, lineOf(state, w.id) ? 0 : w.side === 'seller' ? -1 : 1);
         trades.push(...stepAuction(state, TICK));
         stages.push(`${a(state).good}:${a(state).stage}`);
       }
@@ -312,11 +311,9 @@ describe('the live auction: goods one at a time', () => {
     const first = play();
     const food = first.trades.filter((t) => t.good === 'food');
     const water = first.trades.filter((t) => t.good === 'water');
-    // p2 is short of Food and p1 has spare Water, but both passed on the status screen.
-    expect(food.some((t) => t.buyer === 'p1' && t.seller === 'p0')).toBe(true);
-    expect(food.some((t) => t.buyer === 'p2')).toBe(false);
-    expect(water.length).toBeGreaterThan(0);
-    expect(water.some((t) => t.seller === 'p1')).toBe(false);
+    // p0 sells its Food and p1 its Water; the buyers walk up to meet them, or to the store's line.
+    expect(food.some((t) => t.seller === 'p0')).toBe(true);
+    expect(water.some((t) => t.seller === 'p1')).toBe(true);
     expect(play()).toEqual(first);
   });
 
@@ -449,8 +446,9 @@ describe('the store and the ship on the board', () => {
     const reserve = state.colonists / 20;
     state.store.stock.food = reserve + 3;
     startAuction(state, ['food']);
-    toWalk(state, { p3: 'pass' });
-    const trades = walkToLines(state, ['p0', 'p1', 'p2'], 5, 10_000);
+    // p3 stays at the buyers' edge: everyone takes part, and standing there buys nothing.
+    toWalk(state);
+    const trades = walkToLines(state, ['p0', 'p1', 'p2'], 10_000);
     expect(trades.map((t) => t.buyer)).toEqual(['p2', 'p0', 'p1']);
     expect(trades.every((t) => t.seller === 'store' && t.price === a(state).storeSell)).toBe(true);
     expect(state.store.stock.food).toBe(reserve);
@@ -462,7 +460,7 @@ describe('the store and the ship on the board', () => {
     state.store.stock.food = reserve + 2;
     startAuction(state, ['food']);
     toWalk(state);
-    expect(walkToLines(state, ['p0', 'p1', 'p2', 'p3'], 5, 10_000)).toHaveLength(2);
+    expect(walkToLines(state, ['p0', 'p1', 'p2', 'p3'], 10_000)).toHaveLength(2);
     expect(state.store.stock.food).toBe(reserve);
   });
 
@@ -485,16 +483,16 @@ describe('the store and the ship on the board', () => {
     state.players[0]!.stock.smithore = 10;
     startAuction(state, ['smithore']);
     a(state).storeBudget = 4;
-    toWalk(state, { p1: 'buyer', p2: 'buyer' });
-    const trades = walkToLines(state, ['p0'], 10, 8_000);
+    toWalk(state, { p0: 'seller' });
+    const trades = walkToLines(state, ['p0'], 8_000);
     const store = trades.filter((t) => t.buyer === 'store');
     expect(store).toHaveLength(4);
     expect(store.every((t) => t.price === a(state).storeBuy)).toBe(true);
-    // Then the seller walks on down to the buyers waiting at the bottom.
+    // Then the seller walks on down, but the buyers standing at the bottom edge never trade (C2's pin).
     setWalk(state, 'p0', -1);
     trades.push(...run(state, 7_000));
-    expect(trades.slice(4).every((t) => t.seller === 'p0' && t.buyer !== 'store' && t.price < a(state).storeBuy)).toBe(true);
-    expect(trades.length).toBeGreaterThan(4);
+    expect(trades).toHaveLength(4);
+    expect(Math.round(walker(state, 'p0').price)).toBe(a(state).lo + 1);
   });
 
   it('lets the export ship in port buy from sellers at or under its price, paying a little less per unit', () => {
@@ -503,8 +501,8 @@ describe('the store and the ship on the board', () => {
     state.store.offWorld.crystite = state.store.posted.crystite * 2;
     state.players[0]!.stock.crystite = 5;
     startAuction(state, ['crystite']);
-    toWalk(state);
-    const trades = walkToLines(state, ['p0'], 5, 15_000).filter((t) => t.buyer === 'ship');
+    toWalk(state, { p0: 'seller' });
+    const trades = walkToLines(state, ['p0'], 15_000).filter((t) => t.buyer === 'ship');
     expect(trades).toHaveLength(3);
     expect(trades[1]!.price).toBeLessThan(trades[0]!.price);
     expect(state.ship.hold.crystite).toBe(0);
@@ -538,13 +536,14 @@ describe('changing sides and ending early', () => {
     expect(run(state, WALK.tradeStartMs * 2)).toEqual([]);
   });
 
-  it('lets a player pass mid-walk: they leave the board and can no longer walk', () => {
+  it('refuses a pass mid-walk: everyone stays on the board, and the good ends once every player is done', () => {
     const state = waterPair();
-    declareRole(state, 'p2', 'pass');
-    expect(walker(state, 'p2').side).toBe('pass');
-    expect(() => setWalk(state, 'p2', 1)).toThrow(RuleError);
-    // Done counts only the players still on the board.
+    expect(() => declareRole(state, 'p2', 'pass')).toThrow(new RuleError('Everyone takes part in the auction'));
+    expect(walker(state, 'p2').side).toBe('buyer');
     for (const id of ['p0', 'p1', 'p3']) auctionDone(state, id);
+    stepAuction(state, TICK);
+    expect(a(state).stage, 'p2 is still on the board, not done').toBe('walk');
+    auctionDone(state, 'p2');
     stepAuction(state, TICK);
     expect(a(state).stage).toBe('close');
   });
@@ -673,7 +672,8 @@ describe('A-5 the close stage: a receipt after each good (G-5)', () => {
     state.players[0]!.stock.food = 6;
     state.players[0]!.stock.water = 5;
     startAuction(state, ['food', 'water']);
-    endStatus(state, Object.fromEntries(state.players.map((p) => [p.id, 'pass'])));
+    for (const p of state.players) p.money = 0;
+    endStatus(state, Object.fromEntries(state.players.map((p) => [p.id, 'buyer' as const])));
     expect(a(state)).toMatchObject({ stage: 'status', good: 'water' });
   });
 
