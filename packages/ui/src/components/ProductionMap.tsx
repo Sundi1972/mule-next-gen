@@ -250,7 +250,7 @@ function useTargets(map: RefObject<HTMLDivElement>, t: number, flyStart: number)
 const signed = (n: number) => (n > 0 ? `+${n}` : `−${-n}`);
 const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
 /** A cut for a missing good reads as its share, not a number: half without Water, a fifth for a plot turned off (AM-17). */
-const CUTS: Partial<Record<ShowReason, string>> = { noWater: '½', noEnergy: '½', energyOff: '⅕' };
+const CUTS: Partial<Record<ShowReason, string>> = { noWater: '½', noEnergy: '½', energyOff: '20%' };
 const HALF_ICON: Partial<Record<ShowReason, Good>> = { noWater: 'water', noEnergy: 'energy', energyOff: 'energy' };
 
 /** A part's badge: green for a bonus; amber for a loss; red with the missing good for a cut. */
