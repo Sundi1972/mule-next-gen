@@ -213,14 +213,25 @@ function turnedOff(state: GameState, plots: { tile: Tile; use: number; full: num
 /** `n` cut to UPKEEP.offOutputShare, rounded half up: a plot making 3 or 4 still gives 1. */
 const offShare = (n: number) => Math.round(n * UPKEEP.offOutputShare);
 
+/** What a turned-off factory takes of an input: UPKEEP.offOutputShare of it, rounded up, so nothing is made from nothing. */
+const offInput = (n: number) => Math.ceil(n * UPKEEP.offOutputShare);
+
+/** A factory's recipe inputs but its Energy. */
+function feedOf(good: ProcessedGood): Partial<Stock> {
+  const { energy: _, ...feed } = RECIPES[good].inputs;
+  return feed;
+}
+
 /**
  * Runs one production phase. Order matters and mirrors the design:
  * 1. Energy plots produce first and each pays its own Energy from its own output, never from the stock (AM-17);
  * 2. an owner whose Energy can't cover the uses of all its other plots turns plots off, biggest use first, until the
- *    rest fit (turnedOff); a plot turned off makes UPKEEP.offOutputShare of its output and pays no Energy;
+ *    rest fit (turnedOff); a plot turned off makes UPKEEP.offOutputShare of its output and pays no Energy. A factory
+ *    whose non-Energy inputs are not in stock is no working plot this month: it is not in the list and does not run;
  * 3. every other working raw plot pays its Energy, and a farm whose owner is short of Water produces half;
  * 4. factories convert inputs from the owner's stock, Alloy first because Electronics needs it; one turned off
- *    makes its share from the same share of its non-Energy inputs;
+ *    makes its share from the same share of its non-Energy inputs (rounded up), or 0 without them, and gains no
+ *    experience that month;
  * 5. special fields settle (ruins pay, a mined cavern may collapse), then
  *    pollution spreads and the air gauge moves.
  * Every event the phase fires (rollPhase) works on the plots it reaches, on
@@ -287,14 +298,17 @@ export function runProduction(state: GameState): {
   }
 
   const off = new Set<Tile>();
+  const listed = new Set<Tile>();
   for (const owner of state.players) {
     const plots = working
       .filter((t) => t.owner === owner.id && t.outfit !== 'energy' && t.outfit !== 'greenBelt')
+      .filter((t) => !isFactory(t.outfit!) || hasStock(owner.stock, feedOf(t.outfit)))
       .map((tile) => ({
         tile,
         use: use(tile),
         full: isFactory(tile.outfit!) ? factoryFit(state, tile, tile.outfit, owner.id).output : rawOutput(state, tile),
       }));
+    for (const { tile } of plots) listed.add(tile);
     for (const tile of turnedOff(state, plots, owner.stock.energy)) off.add(tile);
   }
 
@@ -313,25 +327,33 @@ export function runProduction(state: GameState): {
   }
 
   for (const good of PROCESSED_GOODS) {
-    for (const tile of working.filter((t) => t.outfit === good)) {
+    for (const tile of working.filter((t) => t.outfit === good && listed.has(t))) {
       const owner = playerById.get(tile.owner!)!;
       const fit = factoryFit(state, tile, good, owner.id);
-      const { energy: _, ...feed } = RECIPES[good].inputs;
-      const on = !off.has(tile);
-      const inputs: Partial<Stock> = on
-        ? { ...feed, energy: fit.energy * cold }
-        : Object.fromEntries(Object.entries(feed).map(([g, q]) => [g, offShare(q)]));
+      const feed = feedOf(good);
+      const parts: Part[] = [{ why: 'factory', delta: fit.output }];
+      if (off.has(tile)) {
+        // Turned off it still files its line: the share it made, or 0 when the factories before it took its inputs.
+        const share = Object.fromEntries(Object.entries(feed).map(([g, q]) => [g, offInput(q)]));
+        if (hasStock(owner.stock, share)) {
+          addStock(owner.stock, share, -1);
+          switchOff(parts);
+        } else parts.push({ why: 'energyOff', delta: 0 - fit.output });
+        credit(tile, good, parts);
+        continue;
+      }
+      const inputs = { ...feed, energy: fit.energy * cold };
       if (!hasStock(owner.stock, inputs)) continue;
       addStock(owner.stock, inputs, -1);
-      const parts: Part[] = [{ why: 'factory', delta: fit.output }];
-      if (!on) switchOff(parts);
       credit(tile, good, parts);
     }
   }
 
-  // Green belts don't produce, but they count as running.
+  // Green belts don't produce, but they count as running. A factory turned off gains no experience that month: its
+  // count holds. A raw plot turned off still counts, so a thin vein wears as it mines.
   for (const tile of working) {
     if (tile.outfit === 'greenBelt') ran.add(tile);
+    if (off.has(tile) && isFactory(tile.outfit!)) continue;
     tile.runMonths = ran.has(tile) ? tile.runMonths + 1 : 0;
   }
 
