@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BRAIN, createGame, type GameState, type Playbook } from '@mule/engine';
-import { OFFERED, TOOL_DEFS, toolsFor, type WhatIfSim } from '../src/llm/tools.js';
+import { OFFERED, TOOL_DEFS, toolsFor, type ToolResult, type WhatIfSim } from '../src/llm/tools.js';
 
 const fixture = (): GameState =>
   createGame({
@@ -37,10 +37,14 @@ const simFor = (state: GameState): WhatIfSim => ({
 });
 
 /** What every tool answers seat `a`, by tool name. */
-function answers(state: GameState): Record<string, { content: string; is_error?: boolean }> {
+async function answers(state: GameState): Promise<Record<string, ToolResult>> {
   const tools = toolsFor(state, 'a', simFor(state));
-  return Object.fromEntries(TOOL_DEFS.map((d) => [d.name, tools.run(d.name, SAMPLE[d.name])]));
+  const out: Record<string, ToolResult> = {};
+  for (const d of TOOL_DEFS) out[d.name] = await tools.run(d.name, SAMPLE[d.name]);
+  return out;
 }
+
+const parsed = async (answer: Promise<ToolResult>) => JSON.parse((await answer).content) as unknown;
 
 describe("Claude's tools (C9)", () => {
   it('T-AC-A9: every tool is MCP-shaped and has a sample here', () => {
@@ -51,7 +55,7 @@ describe("Claude's tools (C9)", () => {
     }
   });
 
-  it("T-AC-A9: no tool result carries another seat's goods or unanalysed ground: changing only those changes no answer but standings' public totals", () => {
+  it("T-AC-A9: no tool result carries another seat's goods or unanalysed ground: changing only those changes no answer but standings' public totals", async () => {
     const plain = fixture();
     const hidden = fixture();
     // A rival's goods, moved between the two rivals so the colony's total (public, as market cover) stays the same,
@@ -62,8 +66,8 @@ describe("Claude's tools (C9)", () => {
     hidden.tiles[unanalysed]!.ground = { ...hidden.tiles[unanalysed]!.ground, crystite: 4 };
     hidden.tiles[unanalysed]!.traits = ['hotSpring'];
 
-    const a = answers(plain);
-    const b = answers(hidden);
+    const a = await answers(plain);
+    const b = await answers(hidden);
     for (const name of Object.keys(a)) {
       if (name === 'standings') continue;
       expect(b[name], name).toEqual(a[name]);
@@ -74,60 +78,75 @@ describe("Claude's tools (C9)", () => {
     for (const row of rows) expect(Object.keys(row).sort(), JSON.stringify(row)).toEqual(['name', 'seat', 'worth']);
   });
 
-  it('T-AC-A9: no tool, whatIf included, changes the live game state', () => {
+  it('T-AC-A9: no tool, whatIf included, changes the live game state', async () => {
     const state = fixture();
     const before = structuredClone(state);
     const tools = toolsFor(state, 'a', simFor(state));
-    for (const d of TOOL_DEFS) tools.run(d.name, SAMPLE[d.name]);
-    tools.run('nope', {});
-    tools.run('worth', 'not an object');
+    for (const d of TOOL_DEFS) await tools.run(d.name, SAMPLE[d.name]);
+    await tools.run('nope', {});
+    await tools.run('worth', 'not an object');
     expect(state).toEqual(before);
   });
 
-  it('whatIf is offered only with a month sim to play on; without one it answers unavailable', () => {
+  it('whatIf is offered only with a month sim to play on; without one it answers unavailable', async () => {
     const state = fixture();
     expect(toolsFor(state, 'a').definitions.map((d) => d.name).sort()).toEqual(['legalMoves', 'standings', 'worth']);
-    expect(toolsFor(state, 'a').run('whatIf', { edits: [] })).toMatchObject({ is_error: true });
+    expect(await toolsFor(state, 'a').run('whatIf', { edits: [] })).toMatchObject({ is_error: true });
     expect(toolsFor(state, 'a', simFor(state)).definitions).toEqual(OFFERED);
     expect(OFFERED.map((d) => d.name).sort()).toEqual(['legalMoves', 'standings', 'whatIf', 'worth']);
   });
 
-  it("whatIf plays the month on what the seat can see and answers its Worth after it, the same for the same edits", () => {
+  it('whatIf plays the month on what the seat can see and answers its Worth after it, the same for the same edits', async () => {
     const state = fixture();
     const tools = toolsFor(state, 'a', simFor(state));
-    const first = tools.run('whatIf', { edits: [] });
+    const first = await tools.run('whatIf', { edits: [] });
     expect(first.is_error).toBeUndefined();
     const answer = JSON.parse(first.content) as { month: number; worth: { total: number } };
     expect(answer.month).toBe(1);
     expect(typeof answer.worth.total).toBe('number');
-    expect(tools.run('whatIf', { edits: [] })).toEqual(first);
+    expect(await tools.run('whatIf', { edits: [] })).toEqual(first);
   });
 
-  it('whatIf names the edits the validator refused, so the Worth it answers is not taken for theirs', () => {
+  it("whatIf hands the month back to the sim's pause between its steps, and answers the same Worth as played straight through", async () => {
     const state = fixture();
-    const answer = JSON.parse(toolsFor(state, 'a', simFor(state)).run('whatIf', { edits: [{ path: '/strategy/cashFloor', to: -5 }] }).content) as {
+    let pauses = 0;
+    const paused: WhatIfSim = { ...simFor(state), pause: () => { pauses++; return Promise.resolve(); } };
+    const straight = await toolsFor(state, 'a', simFor(state)).run('whatIf', { edits: [] });
+    expect(await toolsFor(state, 'a', paused).run('whatIf', { edits: [] })).toEqual(straight);
+    // A month is many ticks: a pause at each is what lets the server's other rooms tick between them.
+    expect(pauses).toBeGreaterThan(100);
+  });
+
+  it('whatIf names the edits the validator refused, so the Worth it answers is not taken for theirs', async () => {
+    const state = fixture();
+    const answer = (await parsed(toolsFor(state, 'a', simFor(state)).run('whatIf', { edits: [{ path: '/strategy/cashFloor', to: -5 }] }))) as {
       rejected: { path: string; why: string }[];
     };
     expect(answer.rejected).toEqual([{ path: '/strategy/cashFloor', to: -5, why: 'out of bounds' }]);
   });
 
-  it('whatIf plays at most BRAIN.whatIfsPerWrite months for one set of tools, then answers limit', () => {
+  it('whatIf plays at most BRAIN.whatIfsPerWrite months for one set of tools, then answers limit', async () => {
     const state = fixture();
     const tools = toolsFor(state, 'a', simFor(state));
-    for (let i = 0; i < BRAIN.whatIfsPerWrite; i++) expect(tools.run('whatIf', { edits: [] }).is_error).toBeUndefined();
-    expect(JSON.parse(tools.run('whatIf', { edits: [] }).content)).toEqual({ error: 'limit' });
+    for (let i = 0; i < BRAIN.whatIfsPerWrite; i++) expect((await tools.run('whatIf', { edits: [] })).is_error).toBeUndefined();
+    expect(await parsed(tools.run('whatIf', { edits: [] }))).toEqual({ error: 'limit' });
   });
 
-  it('a sim whose playbook throws answers tool_failed, never an exception', () => {
+  it('a sim whose playbook throws answers tool_failed, never an exception', async () => {
     const state = fixture();
-    const sim: WhatIfSim = { ...simFor(state), playbook: () => { throw new Error('refused'); } };
-    expect(JSON.parse(toolsFor(state, 'a', sim).run('whatIf', { edits: [] }).content)).toEqual({ error: 'tool_failed' });
+    const sim: WhatIfSim = {
+      ...simFor(state),
+      playbook: () => {
+        throw new Error('refused');
+      },
+    };
+    expect(await parsed(toolsFor(state, 'a', sim).run('whatIf', { edits: [] }))).toEqual({ error: 'tool_failed' });
   });
 
-  it('T-AC-A9: an unknown tool or a malformed input answers is_error with a code, never an exception', () => {
+  it('T-AC-A9: an unknown tool or a malformed input answers is_error with a code, never an exception', async () => {
     const tools = toolsFor(fixture(), 'a');
-    expect(tools.run('nope', {})).toMatchObject({ is_error: true });
-    expect(JSON.parse(tools.run('nope', {}).content)).toEqual({ error: 'unknown_tool' });
-    expect(tools.run('whatIf', { edits: 'not a list' })).toMatchObject({ is_error: true });
+    expect(await tools.run('nope', {})).toMatchObject({ is_error: true });
+    expect(await parsed(tools.run('nope', {}))).toEqual({ error: 'unknown_tool' });
+    expect(await tools.run('whatIf', { edits: 'not a list' })).toMatchObject({ is_error: true });
   });
 });
