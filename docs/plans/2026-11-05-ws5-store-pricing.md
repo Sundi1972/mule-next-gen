@@ -154,15 +154,15 @@ price), `packages/ai/src/outlook.ts::rollForward`, `packages/ai/src/strategist.t
 **Files:** Modify `packages/engine/src/auction.ts` (where a unit trades between players, and `finishGood`).
 Test: `packages/engine/test/auction.test.ts`.
 - [ ] **Step 1: Write the failing test `T-AC-3: a unit traded before the shelf emptied never sets soldOutHigh`**
-  plus the positive case (a unit traded at 90 while `storeForSale` is 0 sets it to 90) and `dryBudget` true when
-  `storeBudget` reaches 0. Altitude: unit at the engine's auction step functions; observed at `store.lastWalk[g]`
+  plus the positive case (a unit traded at 90 while `storeForSale` is 0 sets it to 90) and `dryBudget` true exactly when
+  `storeBudget` was > 0 at come-up and is 0 at finish (spec §3). Altitude: unit at the engine's auction step functions; observed at `store.lastWalk[g]`
   after `finishGood`.
 - [ ] **Step 2: Run** → FAIL. **Step 3: Implement C5** (sprout beside `between`). **Step 4: Run** → PASS.
 - [ ] **Step 5: Commit** `feat(engine): the walk keeps each good's sold-out high and dry budget (verifies T-AC-3)`.
 
 ### Task 1.5 — C1: next month's mid (RULE-1): smaller steps, the sold-out floor, the glut cap, the 12× ceiling
 **Depends on:** 1.3, 1.4 · **ACs verified:** B-AC-1, B-AC-2, B-AC-3 · **Spec:** §1 C1, §2 RULE-1
-**Files:** Modify `economy.ts::nextPostedPrice`, `economy.ts::postPrices` (clears `lastWalk` after reading),
+**Files:** Modify `economy.ts::nextPostedPrice`, `economy.ts::postPrices` (sets `store.lastWalk = {}` after reading),
 `config.ts` PRICE (`maxRise` 0.3, `maxFall` 0.25, `ceiling` 12, `glutStep` 0.15). Test:
 `packages/engine/test/store.test.ts`.
 - [ ] **Step 1a: Write the failing test** `B-AC-1: after a sell-out bid to 90, next month's Food sell line is at least 90`
@@ -222,7 +222,8 @@ opening, where `state.month++`). Test: `packages/engine/test/off-world.test.ts` 
 - [ ] **Step 2: Run** → FAIL.
 - [ ] **Step 3: Implement C3 (RULE-3) and C7's OFF_WORLD block** (sprout; Box–Muller from `rng.next()` of
   `createRng(seedOf(seed, month, 'offWorld', good))`; plan-drift: `seedOf` is private in
-  `packages/engine/src/events.ts`; export it rather than copy it). **Step 4: Run** → PASS.
+  `packages/engine/src/events.ts`; export it from there or move it to `packages/engine/src/rng.ts` beside
+  `createRng`, never copy it). **Step 4: Run** → PASS.
 - [ ] **Step 5: Commit** `feat(engine): export goods' off-world prices walk from seeded draws (verifies T-AC-1)`.
 
 ### Task 2.2 — `expectedOffWorld` follows the walk (§3)

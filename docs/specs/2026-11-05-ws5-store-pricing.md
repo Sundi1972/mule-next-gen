@@ -157,7 +157,9 @@ depends_on   C6 (the Energy target feeds the lean)
 today        store.offWorld set once in game.ts::createGame, never moves (100% of games). verified_by: executed
 tomorrow     at each month's opening, each export good's offWorld steps: log p' = log c + φ (log p − log c) + s·z,
              z ~ N(0,1) from seedOf(seed, month, 'offWorld', good), clamped; Crystite c 90 φ 0.7 σ 0.35 clamp 40–300;
-             the others c = GOOD_CONFIG refPrice, φ 0.7, σ 0.18, clamp ±50%; s = σ √(1 − φ²).
+             the others c = GOOD_CONFIG refPrice, φ 0.7, σ 0.18, clamp ±50%; s = σ √(1 − φ²). seedOf is private
+             in packages/engine/src/events.ts today: it is exported from there or moved to packages/engine/src/rng.ts
+             beside createRng, never copied (the owners pick at PR-2).
 logic        → §2 RULE-3 · evaluated at the month's opening (game.ts, where state.month++) · writes store.offWorld
 seam         economy.ts (new stepOffWorld) called from game.ts at month opening
 senior       junior would: draw a fresh price each month from the main rng · senior does: a mean-reverting walk
@@ -194,8 +196,9 @@ pin          mulePrice formula unchanged (economy tests)
 today        packages/engine/src/auction.ts::learnFromGood passes only between-player units and value to driftReference; nothing keeps
              the walk's high or a dry budget past the good. verified_by: read
 tomorrow     when a good finishes, the store keeps for it: soldOutHigh (the highest unit price paid between players
-             while storeForSale was 0 at the time of that unit, or null) and dryBudget (storeBudget reached 0 this
-             walk); C1 reads them at the next postPrices, then they reset.
+             while storeForSale was 0 at the time of that unit, or null) and dryBudget (true exactly when
+             storeBudget was > 0 when the good came up and is 0 when it finishes); C1 reads them at the next
+             postPrices, which then sets store.lastWalk = {}.
 logic        → §2 RULE-1 inputs · written at packages/engine/src/auction.ts::finishGood (with learnFromGood) · read by nextPostedPrice
 seam         packages/engine/src/auction.ts::learnFromGood — where the walk already teaches the market; WS3 records where rule E runs
 senior       junior would: rebuild the high from receipts at month end · senior does: note it unit by unit where
@@ -285,7 +288,9 @@ is ever null for any other reason; no price rule here (lean, ceiling, floors) ma
 
 **The rule-E seam (WS3).** `Store.lastWalk: Partial<Record<Good, { soldOutHigh: number | null; dryBudget: boolean
 }>>` in `packages/engine/src/types.ts` (ADDED, optional, so older records load). WS3 writes it at
-`packages/engine/src/auction.ts::finishGood`; RULE-1 reads it at the next `postPrices`, then it is cleared.
+`packages/engine/src/auction.ts::finishGood`: `soldOutHigh` as C5 says, and `dryBudget` true exactly when the
+store's budget was > 0 when the good came up and is 0 when it finishes. RULE-1 reads it at the next `postPrices`,
+which then sets `store.lastWalk = {}`.
 
 ## §4 · Failure & Ops
 No external dependency — the whole rule is in-process engine code.
@@ -323,6 +328,16 @@ did       both PRs update docs/rulebook/store-and-prices.html#store-pricing-desi
 because   Heiko's rulebook rule: every PR that changes a rule or a number updates its chapter in the same PR
 goal      G-1, G-2, G-3 unchanged
 folded    plan Tasks 1.7 and 2.4
+```
+```
+AM-2 · 2026-11-05 · lead (WS5) · WS3's read of #390
+target    §1 C3, C5; §3 the rule-E seam
+said      dryBudget "reached 0 this walk"; lastWalk "then they reset"; seedOf unnamed as to where it lives
+did       dryBudget = budget > 0 at come-up and 0 at finish; postPrices sets lastWalk = {} after reading;
+          seedOf exported from events.ts or moved to rng.ts, never copied
+because   WS3's three line changes: each makes the seam exact for the code that writes it
+goal      G-1 (the glut cap reads dryBudget), G-3 (the walk's seed) unchanged
+folded    C3, C5, §3; plan Tasks 1.4, 1.5, 2.1
 ```
 
 ## §9 · Ownership Boundaries `[handoff]`
