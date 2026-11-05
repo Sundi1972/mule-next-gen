@@ -103,8 +103,8 @@ describe('the general strike on the TV (C37)', () => {
     expect(strikers(onTv(game(colony(PAID))))).toEqual([]);
   });
 
-  it('B-AC-37-3: the strikers stand in planning only: the month end shows none', () => {
-    expect(strikers(onTv(game(colony(UNPAID), { phase: 'upkeep' })))).toEqual([]);
+  it('B-AC-37-3: the strikers stand in planning only: the land grant, on the same map, shows none', () => {
+    expect(strikers(onTv(game(colony(UNPAID), { phase: 'landGrant' })))).toEqual([]);
   });
 
   it("B-AC-37-2: the TV's rail names who decides while the strike is unpaid in planning, and drops it once paid", () => {

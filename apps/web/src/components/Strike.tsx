@@ -1,8 +1,8 @@
 import { COLONY } from '@mule/engine';
 import type { ColonyView, MuleView } from '@mule/protocol';
-import { Button, cx, EVENT_TOWN, EventColonist, GOOD_NAME } from '@mule/ui';
+import { Button, cx, EVENT_TOWN, EventColonist, GOOD_NAME, PlayerMark } from '@mule/ui';
 import { useState, type ReactNode } from 'react';
-import { fmt } from '../game/derive';
+import { fmt, toSlot } from '../game/derive';
 import { useClient } from '../net/react';
 import { usePhoneGame } from '../phone/game';
 import type { Now } from '../phone/Shell';
@@ -97,10 +97,11 @@ export function StrikeMap({ view, size, children }: { view: MuleView; size: Size
   );
 }
 
+/** The fund, and after the pay-off while it can cover it; short, it shows as it is and the engine's refusal says why. */
 function Fund({ fund, cost, paid }: { fund: number; cost: number; paid: boolean }) {
   return (
     <span data-num className="font-mono text-xs font-bold text-ink" data-testid="fund-line">
-      {paid ? `Fund ${fmt(fund)} cr` : `Fund ${fmt(fund)} → ${fmt(fund - cost)} cr`}
+      {paid || fund < cost ? `Fund ${fmt(fund)} cr` : `Fund ${fmt(fund)} → ${fmt(fund - cost)} cr`}
     </span>
   );
 }
@@ -140,6 +141,7 @@ function StrikeCard() {
         </Button>
       </section>
     );
+  // A guard: while the votes hold the Now (councilNow, electionNow) this card is not drawn, so it never shows shut.
   const open = !votesOpen(view);
   return (
     <section className="flex flex-col gap-1.5 rounded-panel border-2 border-alert bg-alert-bg p-2.5" data-testid="strike-now" aria-live="polite">
@@ -171,7 +173,7 @@ const electionDay = (view: MuleView) => {
   return stage !== undefined && stage !== 'over';
 };
 
-/** The Governor's Now while this month's strike stands, paid or not; election day keeps its own steps. */
+/** The Governor's Now while this month's strike stands, paid or not; the votes keep their own Now. */
 export function strikeNow({ view, self }: HubSeat): Now | null {
   const strike = strikeOf(view);
   if (!strike || view.politics?.governor !== self.id || electionDay(view)) return null;
@@ -201,3 +203,40 @@ export const STRIKE_ALERT: BannerSlot = {
   Body: StrikeAlert,
   show: ({ view, self }) => strikeOf(view) !== null && view.politics?.governor !== self.id,
 };
+
+/** A Ready Governor's Now is the ready bar's, so the strike's pay-off moves under it: payStrike holds all planning. */
+function StrikePayLine() {
+  const { view } = usePhoneGame();
+  const client = useClient();
+  const strike = strikeOf(view)!;
+  return (
+    <Button size="md" variant="outline" onClick={() => client.intent({ type: 'payStrike' })} data-testid="strike-pay-line">
+      Pay the {goodName(strike)} strikers {fmt(strike.cost)} cr
+    </Button>
+  );
+}
+
+export const STRIKE_PAY_LINE: BannerSlot = {
+  id: 'strike-pay-line',
+  Body: StrikePayLine,
+  show: ({ view, self }) => {
+    const strike = strikeOf(view);
+    return view.phase === 'planning' && !!strike && !strike.paid && self.ready && view.politics?.governor === self.id && !votesOpen(view);
+  },
+};
+
+/** DS-GAP (WS8): the TV rail's line while the unpaid strike waits in planning: who decides, and what they choose. */
+export function StrikeWaiting({ game }: { game: MuleView }) {
+  const strike = strikeOf(game);
+  const governor = game.players.find((p) => p.id === game.politics?.governor);
+  if (game.phase !== 'planning' || !strike || strike.paid || !governor) return null;
+  return (
+    <div className="flex shrink-0 items-center gap-3 rounded-panel border border-holo-line bg-panel p-3" data-testid="waiting-governor">
+      <PlayerMark slot={toSlot(governor.slot)} size={40} />
+      <span className="flex min-w-0 flex-col">
+        <span className="font-display text-xl font-semibold leading-tight">Waiting for {governor.name}, the Governor</span>
+        <span className="text-base leading-snug text-ink-2">Pay the strikers {fmt(strike.cost)} cr from the fund, or let them strike. After the votes.</span>
+      </span>
+    </div>
+  );
+}
