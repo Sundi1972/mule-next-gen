@@ -48,7 +48,9 @@ export type MuleIntent =
    */
   | { type: 'steer'; x: number; y: number; tick?: number }
   /** Development: the one button; it does what the player's `reach` says. */
-  | { type: 'act' };
+  | { type: 'act' }
+  /** Production: this person asks to speed the show up; once every person at the table has, the rest plays faster (ws6-ux AM-19, B-AC-20). */
+  | { type: 'hurry' };
 
 export const EMOTES = ['Deal?', 'Nice!', 'Traitor!', 'Ha!', 'Help!'] as const;
 export type Emote = (typeof EMOTES)[number];
@@ -489,8 +491,8 @@ export interface ShipView {
 /** A player's own score, line by line, as only their phone receives it: `me.worthParts`, and their `scores` entry at game over. */
 export type ScorePartsView = Omit<ScoreParts, 'total'>;
 
-/** A reason a plot made more or less than its ground gives, as a badge on the map. */
-export type ProductionReason = 'cluster' | 'species' | 'trait' | 'pollution' | 'noEnergy' | 'noWater';
+/** A reason a plot made more or less than its base, as a badge on the map: every one the engine names but the base and the events. */
+export type ProductionReason = 'cluster' | 'species' | 'trait' | 'special' | 'pollution' | 'floor' | 'noEnergy' | 'noWater';
 
 /** One working plot in the month's production show. Public, like the auction's status table. */
 export interface ProductionLineView {
@@ -498,10 +500,23 @@ export interface ProductionLineView {
   y: number;
   owner: string;
   good: Good;
-  /** Units the plot made before the month's event; an event hit adds its delta on top. */
+  /**
+   * What the plot makes before any bonus or loss: its ground's yield, or a factory's run (ws6-ux AM-19). The server
+   * always sets it; optional so screens and fixtures built before AM-19 still type.
+   */
+  base?: number;
+  /** Units the plot made before the month's events: base plus every part. An event hit adds its delta on top. */
   made: number;
-  /** Its badges: at most two reasons, biggest change first. */
+  /** Every reason its output moved from the base, in the engine's order; none is zero. */
   parts: { why: ProductionReason; delta: number }[];
+}
+
+/** Who has asked to speed the production show up (ws6-ux AM-19, B-AC-20). */
+export interface ProductionHurryView {
+  /** The people who tapped Speed up, in the order they did. An AI seat never asks: it counts as yes. */
+  asked: string[];
+  /** The show second (at full pace) from which the rest plays PRODUCTION_SHOW.fast times faster: null until every person asked. */
+  from: number | null;
 }
 
 /** What an event on screen is: one of the engine's month events, or a player falling sick at development's start. */
@@ -572,6 +587,8 @@ export interface ProductionView {
   lengthMs: number;
   /** How long the phase's intro plays before the first event, in ms: 0 in a quiet month. */
   introMs: number;
+  /** Who has asked to speed it up, during production; null in upkeep. The server always sets it; optional as `base` is. */
+  hurry?: ProductionHurryView | null;
 }
 
 /** One screen's view of the game: a player's private view, or the public one for a board. */

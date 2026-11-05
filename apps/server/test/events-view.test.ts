@@ -1,10 +1,24 @@
-import { DEV_STEER, EVENT_SHOW, EVENTS, type EventKey, type EventRow, type GameState, type MonthEvent, type MonthReport, type Phase } from '@mule/engine';
-import type { EventView, MuleView } from '@mule/protocol';
+import { DEV_STEER, EVENT_SHOW, EVENTS, productionEventAtMs, productionShowMs, type EventKey, type EventRow, type GameState, type MonthEvent, type MonthReport, type Phase } from '@mule/engine';
+import type { EventView, MuleView, ProductionView } from '@mule/protocol';
 import { beforeAll, describe, expect, it } from 'vitest';
 // Types only, erased at run time: the show's own shapes, which @mule/ui keeps structural so it never imports the protocol.
 import type { ShowEventView, ShowTimeline } from '../../../packages/ui/src/events/types.js';
 import { MuleGame } from '../src/mule-game.js';
 import { fakeContext, pressThroughSidePick, readyAll, seats } from './fake-context.js';
+
+/**
+ * Production's length at full pace, RULE-3 of ws6-ux AM-19: from the goods its plots made and its events' whole show
+ * (intro and every play), as the server sets it. The numbers themselves are the engine's productionShow, pinned by
+ * T-AC-14; these rows hold that the server plays a month's events within that length.
+ */
+function showLength(production: ProductionView): number {
+  const goods = new Set(production.lines.map((l) => l.good)).size;
+  const eventsMs = production.events.length > 0 ? production.introMs + production.events.reduce((n, e) => n + e.playMs, 0) : 0;
+  return productionShowMs(goods, eventsMs);
+}
+
+/** Where production's events start, in ms into the phase at full pace: after the harvest, the bonuses and the losses. */
+const eventsAt = (production: ProductionView) => productionEventAtMs(new Set(production.lines.map((l) => l.good)).size);
 
 /** A month event of `key` that hit one plot; its words and shape don't matter to how long it plays. */
 function event(key: EventKey, phase: Phase = 'production'): MonthEvent {
@@ -125,7 +139,7 @@ describe('the event show on real engine months: the view plays exactly what the 
     month = playedMonths();
   }, PLAY_MONTHS_MS);
 
-  it('T-AC-1, T-AC-2: a real month firing comet pass and pest swarm runs production 24 200 ms, each event its own share', () => {
+  it('T-AC-1, T-AC-2: a real month firing comet pass and pest swarm runs production its show, the events 14 000 ms of it, each event its own share', () => {
     const { report, production, length } = month(TWO_EVENT_MONTH);
     expect(report.events?.map(({ key, scope }) => ({ key, scope }))).toEqual([
       { key: 'cometPass', scope: 'colony' },
@@ -135,28 +149,28 @@ describe('the event show on real engine months: the view plays exactly what the 
       { key: 'cometPass', phase: 'production', weight: 'headline', playMs: 7_000 },
       { key: 'pestSwarm', phase: 'production', weight: 'spotlight', playMs: 5_200 },
     ]);
-    // RULE-1: a 1 800 ms intro and 12 200 ms of stories make a 14 000 ms show, 9 200 past the 4 800 window.
+    // RULE-1: a 1 800 ms intro and 12 200 ms of stories make a 14 000 ms show, inside production's (AM-19 RULE-3).
     expect(production.introMs).toBe(1_800);
-    expect(length).toBe(24_200);
+    expect(length).toBe(showLength(production));
     expect(production.lengthMs).toBe(length);
     expect(production.introMs + production.events.reduce((sum, e) => sum + e.playMs, 0)).toBe(14_000);
   });
 
-  it('T-AC-1, T-AC-2: a real month firing only a comet pass runs production 19 000 ms, the comet a 7 000 ms headline', () => {
+  it('T-AC-1, T-AC-2: a real month firing only a comet pass runs production its show, the comet a 7 000 ms headline', () => {
     const { report, production, length } = month(ONE_EVENT_MONTH);
     expect(report.events?.map((e) => e.key)).toEqual(['cometPass']);
     expect(production.events.map(({ key, weight, playMs }) => ({ key, weight, playMs }))).toEqual([{ key: 'cometPass', weight: 'headline', playMs: 7_000 }]);
     expect(production.introMs).toBe(1_800);
-    expect(length).toBe(19_000);
-    expect(production.lengthMs).toBe(19_000);
+    expect(length).toBe(showLength(production));
+    expect(production.lengthMs).toBe(length);
   });
 
-  it('T-AC-1, T-AC-2: a real quiet month runs production its 15 000 ms and lists no events', () => {
+  it('T-AC-1, T-AC-2: a real quiet month runs production its quiet show and lists no events', () => {
     const { report, production, length } = month(QUIET_MONTH);
     expect(report.events).toEqual([]);
     expect(production.events).toEqual([]);
     expect(production.introMs).toBe(0);
-    expect(length).toBe(15_000);
+    expect(length).toBe(showLength(production));
   });
 });
 
@@ -166,20 +180,20 @@ describe('the event show: production lasts long enough for every event, and the 
   // fit under it, so the second row caps only because the cap counts the intro.
   const capped: EventKey[] = ['drought', 'dustStorm', 'pestSwarm', 'wildfire', 'bumperHarvest'];
   it.each([
-    { scale: 1, keys: [] as EventKey[], ms: 15_000 },
-    { scale: 1, keys: ['dustStorm'] as EventKey[], ms: 19_000 },
-    { scale: 1, keys: ['drought', 'pestSwarm'] as EventKey[], ms: 24_200 },
-    { scale: 1, keys: ['dustStorm', 'drought', 'acidRain', 'solarFlare', 'flood'] as EventKey[], ms: 40_200 },
-    { scale: 1, keys: capped, ms: 40_200 },
-    { scale: 0.1, keys: [] as EventKey[], ms: 1_500 },
-    { scale: 0.1, keys: ['dustStorm'] as EventKey[], ms: 1_900 },
-    { scale: 0.1, keys: ['drought', 'pestSwarm'] as EventKey[], ms: 2_420 },
-    { scale: 0.1, keys: ['dustStorm', 'drought', 'acidRain', 'solarFlare', 'flood'] as EventKey[], ms: 4_020 },
-    { scale: 0.1, keys: capped, ms: 4_020 },
-  ])('T-AC-1: at phaseScale $scale, a month with $keys runs production $ms ms and the view says so', ({ scale, keys, ms }) => {
+    { scale: 1, keys: [] as EventKey[] },
+    { scale: 1, keys: ['dustStorm'] as EventKey[] },
+    { scale: 1, keys: ['drought', 'pestSwarm'] as EventKey[] },
+    { scale: 1, keys: ['dustStorm', 'drought', 'acidRain', 'solarFlare', 'flood'] as EventKey[] },
+    { scale: 1, keys: capped },
+    { scale: 0.1, keys: [] as EventKey[] },
+    { scale: 0.1, keys: ['dustStorm'] as EventKey[] },
+    { scale: 0.1, keys: ['drought', 'pestSwarm'] as EventKey[] },
+    { scale: 0.1, keys: ['dustStorm', 'drought', 'acidRain', 'solarFlare', 'flood'] as EventKey[] },
+    { scale: 0.1, keys: capped },
+  ])('T-AC-1: at phaseScale $scale, a month with $keys runs production its whole show and the view says so', ({ scale, keys }) => {
     const { production, length } = playMonth(keys, scale);
-    expect(length('production')).toBe(ms);
-    expect(production.lengthMs).toBe(ms);
+    expect(length('production')).toBe(showLength(production) * scale);
+    expect(production.lengthMs).toBe(showLength(production) * scale);
   });
 
   it('T-AC-1: when the cap bites the intro keeps its 1 800 ms and the events share the rest, adding up to the cap exactly', () => {
@@ -208,7 +222,7 @@ describe('the event show: production lasts long enough for every event, and the 
     // A key the weight table lacks plays as a headline, in the view and in production's length.
     const unknown = playMonth(['pirateRaid' as EventKey]);
     expect(unknown.production.events.map(({ weight, playMs }) => ({ weight, playMs }))).toEqual([{ weight: 'headline', playMs: 7_000 }]);
-    expect(unknown.length('production')).toBe(19_000);
+    expect(unknown.length('production')).toBe(showLength(unknown.production));
   });
 
   it('T-AC-2: when the cap bites, five headlines share what the intro leaves of it equally, 5 640 each, unscaled at phaseScale 0.1', () => {
@@ -224,15 +238,15 @@ describe('the event show: production lasts long enough for every event, and the 
     expect(uneven.introMs + uneven.events.reduce((sum, e) => sum + e.playMs, 0)).toBe(30_000);
   });
 
-  it('T-AC-1: with headlines tuned to 0 ms, a lone dust storm plays 0 ms after its intro and production keeps its 15 000 ms', () => {
+  it('T-AC-1: with headlines tuned to 0 ms, a lone dust storm plays 0 ms after its intro and production lasts its show with that intro', () => {
     const headlineMs = EVENT_SHOW.playMs.headline;
     EVENT_SHOW.playMs.headline = 0;
     try {
       const { production, length } = playMonth(['dustStorm']);
       expect(production.events.map((e) => e.playMs)).toEqual([0]);
       expect(production.introMs).toBe(1_800);
-      expect(length('production')).toBe(15_000);
-      expect(production.lengthMs).toBe(15_000);
+      expect(length('production')).toBe(showLength(production));
+      expect(production.lengthMs).toBe(showLength(production));
     } finally {
       EVENT_SHOW.playMs.headline = headlineMs;
     }
@@ -245,14 +259,6 @@ describe('the event show: production lasts long enough for every event, and the 
   });
 });
 
-/**
- * Where the production show's intro starts, in ms into the phase at full pace: the client's own SHOW.eventAt, read at
- * run time so the server's start and the client's timeline cannot drift apart. The path is a variable so the server's
- * typecheck does not compile the client's JSX.
- */
-const CLIENT_TIMELINE: string = '../../../packages/ui/src/components/ProductionMap.tsx';
-const { SHOW } = (await import(CLIENT_TIMELINE)) as { SHOW: { eventAt: number } };
-const PRODUCTION_SHOW_AT = SHOW.eventAt * 1000;
 
 describe('T-AC-10: the view carries the current phase\'s events, when their show starts and how long it plays', () => {
   let month: ReturnType<typeof playRealMonths>;
@@ -268,8 +274,9 @@ describe('T-AC-10: the view carries the current phase\'s events, when their show
     ]);
     // One shape for every phase: production's own list is the same list, field for field.
     expect(view.events).toEqual(production.events);
-    // RULE-1: the 1 800 ms intro and 12 200 ms of stories; the intro starts 4.8 s into production, where the client plays it.
-    expect(view.eventShow).toEqual({ startsAt: at + PRODUCTION_SHOW_AT, showMs: 14_000, introMs: 1_800, endsAt: at + PRODUCTION_SHOW_AT + 14_000, held: false });
+    // RULE-1: the 1 800 ms intro and 12 200 ms of stories; the intro starts once every loss has landed (AM-19 RULE-3).
+    const from = eventsAt(production);
+    expect(view.eventShow).toEqual({ startsAt: at + from, showMs: 14_000, introMs: 1_800, endsAt: at + from + 14_000, held: false });
     expect(view.eventShow!.startsAt).toBeLessThan(view.phaseEndsAt!);
   });
 
@@ -288,7 +295,8 @@ describe('T-AC-10: the view carries the current phase\'s events, when their show
     const { view, at, production } = month(ONE_EVENT_MONTH);
     expect(view.events).toEqual(production.events);
     expect(view.events!.map((e) => e.key)).toEqual(['cometPass']);
-    expect(view.eventShow).toEqual({ startsAt: at + PRODUCTION_SHOW_AT, showMs: 8_800, introMs: 1_800, endsAt: at + PRODUCTION_SHOW_AT + 8_800, held: false });
+    const from = eventsAt(production);
+    expect(view.eventShow).toEqual({ startsAt: at + from, showMs: 8_800, introMs: 1_800, endsAt: at + from + 8_800, held: false });
   });
 
   it('T-AC-10: a real quiet month carries no events and no show', () => {
@@ -300,7 +308,8 @@ describe('T-AC-10: the view carries the current phase\'s events, when their show
   it('T-AC-10: the show starts on the server clock at the table\'s pace; showMs and playMs stay at full pace', () => {
     const { seen } = playMonth(['drought', 'pestSwarm'], 0.1);
     const { view, at } = seen('production');
-    expect(view.eventShow).toEqual({ startsAt: at + PRODUCTION_SHOW_AT * 0.1, showMs: 14_000, introMs: 1_800, endsAt: at + (PRODUCTION_SHOW_AT + 14_000) * 0.1, held: false });
+    const from = eventsAt(view.production!);
+    expect(view.eventShow).toEqual({ startsAt: at + Math.round(from * 0.1), showMs: 14_000, introMs: 1_800, endsAt: at + Math.round((from + 14_000) * 0.1), held: false });
     expect(view.events!.map((e) => e.playMs)).toEqual([7_000, 5_200]);
   });
 
@@ -324,8 +333,8 @@ describe('T-AC-10: the view carries the current phase\'s events, when their show
     const production = seen('production').view;
     expect(production.events!.map(({ key, phase }) => ({ key, phase }))).toEqual([{ key: 'drought', phase: 'production' }]);
     expect(production.production!.events).toEqual(production.events);
-    // Production stretches for its own drought only: 15 000 + (1 800 + 7 000 − 4 800).
-    expect(length('production')).toBe(19_000);
+    // Production lasts its show with its own drought only: 1 800 + 7 000 of events.
+    expect(length('production')).toBe(productionShowMs(new Set(production.production!.lines.map((l) => l.good)).size, 8_800));
     const auction = seen('auction');
     expect(auction.view.events!.map(({ key, phase, weight, playMs }) => ({ key, phase, weight, playMs }))).toEqual([
       { key: 'pestSwarm', phase: 'auction', weight: 'spotlight', playMs: 5_200 },

@@ -265,6 +265,7 @@ const COVERAGE = {
   continue: { excluded: 'host only' },
   steer: { excluded: FLOOR_INPUT },
   act: { excluded: FLOOR_INPUT },
+  hurry: { excluded: 'a person asks to speed production up; an AI seat counts as yes (ws6-ux AM-19)' },
 } satisfies Record<MuleIntent['type'], { move: AiAction['type'] } | { excluded: string }>;
 
 /** MuleIntent's command names, read from the protocol's source: the compiler's view is gone by the time a test runs. */
