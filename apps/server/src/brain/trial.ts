@@ -16,7 +16,7 @@ import { playbookSource, playGameAsync, ReplyRejected, simSeats, type Choice, ty
 import { alreadyRanToday, AUTH_STOPPED, claimLedger, day, dayLedgerPath, KINDS, numberFlags, resolveDeps, runAsScript, type MainDeps } from './cli.js';
 import { CallFailed } from './client.js';
 import { API_KEY_ENV, apiKeyFrom, createBrain, type BrainSeat } from './index.js';
-import { isCallLine, readLedgerLines, type CallLine } from './ledger.js';
+import { isCallLine, readLedgerLines, type CallLine, type ModelId } from './ledger.js';
 import { Playbooks } from './playbooks.js';
 import { capText, cutOffPhase, renderTrialReport, sum, trialReport, type TrialGame, type TrialReport, type TrialStop } from './trial-report.js';
 
@@ -71,6 +71,8 @@ function trackCalls() {
 }
 
 interface GameSetup {
+  /** The model every write goes to, or null for each kind's own. */
+  writeModel: ModelId | null;
   seed: number;
   id: string;
   env: Readonly<Record<string, string | undefined>>;
@@ -90,7 +92,13 @@ const bump = (counts: number[], month: number) => {
 /** Plays one game with its own brain; pauses simulated time while a model call is open, and always closes the brain. */
 async function playTrialGame(setup: GameSetup): Promise<TrialGame> {
   const { id } = setup;
-  const brain = createBrain({ gameId: id, env: setup.env, gameBudgetUsd: setup.gameBudgetUsd, ...(setup.logPath === null ? {} : { logPath: setup.logPath }) });
+  const brain = createBrain({
+    gameId: id,
+    env: setup.env,
+    gameBudgetUsd: setup.gameBudgetUsd,
+    ...(setup.logPath === null ? {} : { logPath: setup.logPath }),
+    ...(setup.writeModel === null ? {} : { writeModel: setup.writeModel }),
+  });
   const game: TrialGame = { id, end: 'unfinished', months: 0, smart: [], decisions: [], lines: {}, modelLines: {}, cutOff: [], countedUsd: 0, settledCalls: 0, playbooks: [] };
   // The Smart seats' playbooks (spec A C4): asked for at the start and as each upkeep ends, in effect from the land
   // grant. The strategist seats play their own drafts; in whatIf they play as the engine's Trader would.
@@ -200,19 +208,35 @@ export interface TrialFlags {
 }
 
 const USAGE =
-  `Usage: brain:trial [--games N] [--seed S] [--smart K] [--playbooks 0|1] [--max-usd X] [--game-budget-usd Y] [--run label], ` +
+  `Usage: brain:trial [--games N] [--seed S] [--smart K] [--playbooks 0|1] [--max-usd X] [--game-budget-usd Y] [--run label] [--write-model sonnet|haiku], ` +
   `Y above 0 and at most ${BRAIN.gameBudgetUsd.toFixed(2)}; nothing played.`;
 
 /** A run label: lowercase letters, digits and dashes, so it can only name a file in the data folder. */
 const LABEL = /^[a-z0-9-]{1,32}$/;
 
-/** `--run <label>` taken out of the flags: the label, null when not given, or undefined for a bad one. */
-function runLabel(argv: readonly string[]): { label: string | null; rest: readonly string[] } | undefined {
-  const at = argv.indexOf('--run');
-  if (at < 0) return { label: null, rest: argv };
-  const label = argv[at + 1];
-  if (label === undefined || !LABEL.test(label) || argv.indexOf('--run', at + 1) >= 0) return undefined;
-  return { label, rest: [...argv.slice(0, at), ...argv.slice(at + 2)] };
+/** A word flag taken out of the flags: its value, null when not given, or undefined for a missing or repeated one. */
+function wordFlag(argv: readonly string[], name: string): { value: string | null; rest: readonly string[] } | undefined {
+  const at = argv.indexOf(name);
+  if (at < 0) return { value: null, rest: argv };
+  const value = argv[at + 1];
+  if (value === undefined || argv.indexOf(name, at + 1) >= 0) return undefined;
+  return { value, rest: [...argv.slice(0, at), ...argv.slice(at + 2)] };
+}
+
+/** `--write-model sonnet|haiku`: the model every write goes to in a paired run (PR-5 5.4), or undefined for another name. */
+export function writeModelFlag(name: string): ModelId | undefined {
+  return Object.hasOwn(BRAIN.strategySpike.models, name) ? BRAIN.strategySpike.models[name as keyof typeof BRAIN.strategySpike.models] : undefined;
+}
+
+/** The word flags (`--run <label>`, `--write-model <name>`) taken out, or undefined for a bad one. */
+function wordFlags(argv: readonly string[]): { label: string | null; writeModel: ModelId | null; rest: readonly string[] } | undefined {
+  const run = wordFlag(argv, '--run');
+  if (!run || (run.value !== null && !LABEL.test(run.value))) return undefined;
+  const model = wordFlag(run.rest, '--write-model');
+  if (!model) return undefined;
+  const writeModel = model.value === null ? null : writeModelFlag(model.value);
+  if (writeModel === undefined) return undefined;
+  return { label: run.value, writeModel, rest: model.rest };
 }
 
 /** A paid run's ledger: trial-<day>.jsonl, or trial-<day>-<label>.jsonl for a labelled run. */
@@ -291,7 +315,14 @@ interface PlayedRun {
 }
 
 /** Plays the planned games in order, starting each only while the cap allows it; stops on a 401/403 or a lost ledger line. */
-async function playRun(flags: TrialFlags, env: Readonly<Record<string, string | undefined>>, paid: Paid | null, today: string, out: (line: string) => void): Promise<PlayedRun> {
+async function playRun(
+  flags: TrialFlags,
+  env: Readonly<Record<string, string | undefined>>,
+  paid: Paid | null,
+  today: string,
+  out: (line: string) => void,
+  writeModel: ModelId | null = null,
+): Promise<PlayedRun> {
   const games: TrialGame[] = [];
   for (let i = 0; i < flags.games; i++) {
     if (paid) {
@@ -302,6 +333,7 @@ async function playRun(flags: TrialFlags, env: Readonly<Record<string, string | 
     }
     const seed = flags.seed + i;
     const game = await playTrialGame({
+      writeModel,
       seed,
       id: `trial-${today}-${flags.seed}-${i}`,
       env,
@@ -338,7 +370,7 @@ export async function trial(
   deps: MainDeps = {},
 ): Promise<{ code: number; report: TrialReport | null }> {
   const { dataDir, out, now } = resolveDeps(deps);
-  const run = runLabel(argv);
+  const run = wordFlags(argv);
   const flags = run ? parseFlags(run.rest) : null;
   if (!run || !flags) {
     out(USAGE);
@@ -374,11 +406,11 @@ export async function trial(
     paid = { logPath, cap: flags.maxUsd };
     out(
       `brain:trial model ${BRAIN.model}, cap ${capText(paid.cap)}, planned ${flags.games} games with ${flags.smart} Smart seats ` +
-        `(together held to ${capText(flags.gameBudgetUsd)} a game, an equal share each), ledger ${logPath}`,
+        `(together held to ${capText(flags.gameBudgetUsd)} a game, an equal share each)${run.writeModel === null ? '' : `, every write on ${run.writeModel}`}, ledger ${logPath}`,
     );
   }
 
-  const { games, stopped, lostLines } = await playRun(flags, env, paid, day(at), out);
+  const { games, stopped, lostLines } = await playRun(flags, env, paid, day(at), out, run.writeModel);
   const report = trialReport({
     keyed,
     planned: flags.games,

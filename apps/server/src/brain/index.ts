@@ -66,6 +66,8 @@ export interface BrainOptions {
   now?: () => number;
   /** The most the game's Smart seats together may spend, above 0 and at most BRAIN.gameBudgetUsd (the default). */
   gameBudgetUsd?: number;
+  /** Every write call goes to this model instead of its kind's: brain:trial --write-model, for a paired run (PR-5 5.4). */
+  writeModel?: ModelId;
 }
 
 /** The port refused before calling. `lockedNow` is true for the refusal that locked the seat, the only one with a line. */
@@ -228,7 +230,7 @@ export function createBrain(options: BrainOptions): MeteredBrain {
         // The abort frees the seat in its own tick: the decider the game calls next must find it free.
         const release = take(seat.id);
         signal?.addEventListener('abort', release, { once: true });
-        const call = WRITE_CALLS[kind];
+        const call = options.writeModel === undefined ? WRITE_CALLS[kind] : { ...WRITE_CALLS[kind], model: options.writeModel };
         // The last round trip: its reply, or the failure it threw. The rounds before it that asked for tools are
         // ledgered as they end.
         const slot: CallSlot & { round: number } = { called: false, worstUsd: 0, reply: null, round: 1 };
