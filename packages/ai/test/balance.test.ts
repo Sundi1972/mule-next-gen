@@ -21,6 +21,8 @@ import { outlook } from '../src/outlook.js';
 import { FOOD_TO_SPARE } from './store-food.js';
 import { applySets } from '../src/sim.js';
 import { AiSeat } from '../src/seat.js';
+import { simSeats } from '../src/lineup.js';
+import { playGame } from '../src/play.js';
 import { developDecision, goodPlan, landDecision, muleValue, plotRoom, plotValue, tradeDecision, wantsAnyAhead, wantsPlot } from '../src/strategist.js';
 import { cashReserve, installGain, secondValue, type Mind } from '../src/value.js';
 
@@ -180,6 +182,40 @@ describe('land claims on a single pass', () => {
     } finally {
       applySets([`STRATEGIST.grantSpare=${spare}`]);
     }
+  });
+});
+
+/** The board as month 1's land grant ends, in a game of `seats` trader-level AI seats played from `seed` as the sim plays it. */
+function afterFirstGrant(seats: number, seed: number): GameState {
+  class Stop extends Error {}
+  let end: GameState | null = null;
+  try {
+    playGame(seed, simSeats(seats, 'trader', seed), {
+      onPhase: (s) => {
+        if (s.phase !== 'landGrant' || s.month !== 1) return;
+        end = structuredClone(s);
+        throw new Stop();
+      },
+    });
+  } catch (err) {
+    if (!(err instanceof Stop)) throw err;
+  }
+  return end!;
+}
+
+describe('land claims when every seat wants the same plots', () => {
+  // Seats rank the board nearly alike, so with one claim a grant they queue for the same few plots. A seat that lost
+  // each of them, waiting for its own top plot still ahead, ended the pass with no plot while most of the board was free
+  // (traced: 4 seats, seed 46, seat 1; 6 seats, seed 5, seats 0, 3 and 5).
+  it.each([
+    [4, 46],
+    [6, 5],
+  ])('FM-grant-plotless: at %i seats, seed %i, every AI seat holds a plot when month 1 grant ends with plots still free', (seats, seed) => {
+    const end = afterFirstGrant(seats, seed);
+    const free = end.tiles.filter((t) => t.owner === null && t.terrain !== 'store').length;
+    expect(free, 'plots are still free').toBeGreaterThan(0);
+    const plotless = end.players.filter((p) => !end.tiles.some((t) => t.owner === p.id)).map((p) => p.id);
+    expect(plotless, `seats with no plot, ${free} plots still free`).toEqual([]);
   });
 });
 
