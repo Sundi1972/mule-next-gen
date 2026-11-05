@@ -11,6 +11,7 @@ import type { TableClient } from '../src/net/client';
 import { ClientProvider } from '../src/net/react';
 import { PhoneGameProvider, type PhoneGame } from '../src/phone/game';
 import { Production } from '../src/phone/Production';
+import { Results } from '../src/phone/Results';
 
 /**
  * The phone's footer during the production show in Heiko's order C (ws6-ux AM-19, mock b65c3972 variant C): with a
@@ -124,6 +125,15 @@ describe('B-AC-20 (AM-19): the phone asks to speed the show up', () => {
       expect(text(over, 'ready')).toBe('Ready for the auction');
       expect(tag(over, 'ready')).not.toMatch(/ disabled=""/);
     }
+  });
+
+  it('before the show arrives, the phone\'s harvest card says "Ready for the auction" too: one word for production\'s Ready', () => {
+    const g = game(1, MID, month());
+    const empty = { food: 0, water: 0, energy: 0, smithore: 0, crystite: 0, rareEarth: 0, alloy: 0, electronics: 0, medicine: 0 };
+    const before = { ...g, me: { ...g.me, needs: empty, produced: null }, view: { ...g.view, production: null, scores: null, news: [], market: [], air: { level: 0, band: 'clean' }, treasury: { money: 0, salesTax: 0.05 }, ship: { arrives: 3, inPort: false, wants: null }, colonists: 0, storeMules: 0, mulePrice: 0, listings: [], lastAir: null, colonistsFed: null, politics: null } as unknown as MuleView };
+    const html = renderToStaticMarkup(createElement(ClientProvider, { client, children: createElement(PhoneGameProvider, { value: before, children: createElement(Results) }) }));
+    expect(html).toContain('Ready for the auction');
+    expect(html).not.toContain('On to the auction');
   });
 
   it('a phone alone has no Speed up (its tap-the-map skip stays), and none is offered once the show has ended', () => {
