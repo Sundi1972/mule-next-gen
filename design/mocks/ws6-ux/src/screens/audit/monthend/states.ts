@@ -20,10 +20,22 @@ export interface MonthEndState {
   tv: boolean;
 }
 
-/** The month just ended: the fixture's month 5, after the auction. */
-const ENDED: MuleView = { ...VIEW, phase: 'upkeep', auction: null };
+/**
+ * The table's names as a real game has them (a real build exposed it, 2026-10-29): the three AI seats carry the
+ * personas' names (packages/ai/src/personas.ts) and Lena typed a name at the lobby's 16-character limit, so every table
+ * here is tested with long names. The ids stay, so the rest of the fixture reads as before.
+ */
+const NAMES: Record<string, { name: string; isAi: boolean }> = {
+  lena: { name: 'Lena-Marie Kranz', isAi: false },
+  ossa: { name: 'The Accountant', isAi: true },
+  brix: { name: 'The Grudge', isAi: true },
+  kai: { name: 'The Baron', isAi: true },
+};
 
-/** How each Worth moved over month 5, outside Collapse: Ossa and Brix gained, Lena and Kai lost a little. */
+/** The month just ended: the fixture's month 5, after the auction. */
+const ENDED: MuleView = { ...VIEW, phase: 'upkeep', auction: null, players: VIEW.players.map((p) => ({ ...p, ...NAMES[p.id] })) };
+
+/** How each Worth moved over month 5, outside Collapse: The Accountant and The Grudge gained, Lena and The Baron lost a little. */
 const MONTH_5: Record<string, number> = { ossa: 120, lena: -40, brix: 65, kai: -85 };
 /**
  * Each player's Worth at month 4's end, as it showed then (the air was not in Collapse): this month's Worth less the
@@ -68,10 +80,29 @@ export const MONTHEND_STATES: MonthEndState[] = [
   },
   {
     id: 'monthend-hungry',
-    title: 'Kai went hungry; the air got worse',
-    intro: 'The same month, but Kai went hungry at upkeep (he ate 1 of the 3 Food his household needs), and the air got worse, from Clean (27) into Smoggy (34).',
+    title: 'The Baron went hungry; the air got worse',
+    intro: 'The same month, but The Baron went hungry at upkeep (he ate 1 of the 3 Food his household needs), and the air got worse, from Clean (27) into Smoggy (34).',
     view: { ...ENDED, air: { level: 34, band: 'smoggy' } },
     facts: { ...NORMAL, lastAir: 27, hungry: [{ id: 'kai', ate: 1, need: 3 }] },
+    tv: true,
+  },
+  {
+    id: 'monthend-hungry4',
+    title: 'All four went hungry: two lines, then “+2 more”',
+    intro:
+      'A bad month: all four households went hungry at upkeep. The colony panel names the first two, in seat order (WS3 settles the order with the view field), and then one line, “+2 more went hungry”, so the panel keeps its height on the TV and on a phone with no TV. Who exactly is on each player’s own phone and in the hub’s standings.',
+    view: { ...ENDED, air: { level: 34, band: 'smoggy' } },
+    facts: {
+      ...NORMAL,
+      lastAir: 27,
+      hungry: [
+        { id: 'lena', ate: 2, need: 5 },
+        { id: 'ossa', ate: 3, need: 4 },
+        { id: 'brix', ate: 2, need: 3 },
+        { id: 'kai', ate: 1, need: 3 },
+      ],
+      colonistsFed: false,
+    },
     tv: true,
   },
   {

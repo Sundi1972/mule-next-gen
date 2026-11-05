@@ -5,10 +5,11 @@
  * gives it one. Run with `pnpm --filter @mule/web e2e`. With E2E_AI_LINES=1 every page must also receive an AI seat's
  * line in the land grant, development and the auction (for a branch whose AI players talk).
  */
-import { LOTS, WALK } from '@mule/engine';
+import { AI_HANDS, LOTS } from '@mule/engine';
 import type { Page } from 'playwright';
 import { GRANT_PASS_MAX_MS, PHASE_MS } from '../../server/src/mule-game.js';
-import { check, launch, PHONE, startServer, TV } from './harness';
+import { BOUNDS, EDGE, GAP, placeBubble } from '../src/chat/place';
+import { check, hallPlace, launch, PHONE, pressAct, startServer, steerTo, throughDoor, TV } from './harness';
 
 const LAPTOP = { width: 1440, height: 900 };
 const AI_LINES = process.env.E2E_AI_LINES === '1';
@@ -59,7 +60,8 @@ const REACH = {
   // The land grant has no clock: one pass over the free plots at most.
   development: within(GRANT_PASS_MAX_MS + LAND_AUCTION_MS),
   auction: within(PHASE_MS.development + PHASE_MS.production),
-  walk: within(WALK.statusMs),
+  // The side pick has no clock (A-7): once both phones press Ready it waits only for the AI's decision.
+  walk: within(AI_HANDS.auction.decideWaitMs),
 };
 
 type Said = { id: number; from: string; to?: string; text: string };
@@ -71,12 +73,27 @@ type Line = Said & { at: number; phase: number; tvDraws: string[] };
 type Phase = { key: string; name: string; at: number };
 type Wire = { lines: Line[]; phases: Phase[]; seatId: string | null; ai: Set<string> };
 type Rect = { l: number; t: number; r: number; b: number };
-type Bubble = { seat: string; line: number; text: string; anchor: string | null; rect: Rect };
+type Label = Rect & { text: string };
+/**
+ * `room`, on the TV (AM-22): what a creature's bubble had to place itself by, measured as the app measures it: its
+ * speaker, its frame, the screen's scale and every visible line of text in that frame but the bubbles' own.
+ */
+type Room = { at: Rect; within: Rect; k: number; labels: Label[] };
+type Bubble = { seat: string; line: number; text: string; anchor: string | null; rect: Rect; place: string | null; room: Room | null };
 type Sample = {
   t: number;
   phase: string | null;
   ticker: { id: number; text: string; rect: Rect; visible: boolean }[];
   tickerRect: Rect | null;
+  /**
+   * When the ticker is in the rail's body (`header + div`, a phone under C20): where that body's scroll content ends,
+   * scrolled or not, and whether the chat is the body's last child. Null in the header or on the TV.
+   */
+  tickerReach: { end: number; last: boolean } | null;
+  /** The ticker lies in a bar that has faded: the walking screen's status bar, under a bubble or a colonist. */
+  tickerFaded: boolean;
+  /** The walking screen: a speaker it doesn't draw has its ticker line only, no bubble. */
+  walking: boolean;
   viewport: { w: number; h: number };
   bubbles: Bubble[];
   speakers: string[];
@@ -86,7 +103,8 @@ type Sample = {
 
 /**
  * In the page: every 50 ms, what the chat shows: the ticker's lines, each bubble with its line, anchor and rect, which
- * seats the screen draws as speakers, and the frame bubbles must stay inside (the phone's stage, the TV's screen).
+ * seats the screen draws as speakers, and the frame bubbles must stay inside (the stage that clips them, the phone's
+ * stage, the TV's screen).
  * Kept a string: tsx would wrap named functions in a helper the page lacks.
  */
 const SAMPLE = `{
@@ -94,7 +112,7 @@ const SAMPLE = `{
     window.__chatSamples = [];
     const rect = (el) => { if (!el) return null; const r = el.getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom }; };
     setInterval(() => {
-      const bounds = document.querySelector('[data-testid=stage]') ?? document.querySelector('[data-phase]');
+      const bounds = document.querySelector('[data-bubble-bounds]') ?? document.querySelector('[data-testid=stage]') ?? document.querySelector('[data-phase]');
       window.__chatSamples.push({
         t: Date.now(),
         phase: document.querySelector('[data-phase]')?.getAttribute('data-phase') ?? null,
@@ -105,13 +123,37 @@ const SAMPLE = `{
           visible: li.checkVisibility ? li.checkVisibility({ visibilityProperty: true }) : true,
         })),
         tickerRect: rect(document.querySelector('[data-testid=chat-ticker]')),
+        tickerReach: (() => {
+          const t = document.querySelector('[data-testid=chat-ticker]');
+          const body = t?.closest('[data-testid=guide]')?.querySelector('header + div');
+          if (!body || !body.contains(t)) return null;
+          return { end: body.getBoundingClientRect().top - body.scrollTop + body.scrollHeight, last: !!body.lastElementChild?.contains(t) };
+        })(),
+        tickerFaded: !!document.querySelector('[data-testid=chat-ticker]')?.closest('[data-faded]'),
+        walking: !!document.querySelector('[data-testid=phone-game], [data-testid=laptop-game]'),
         viewport: { w: window.innerWidth, h: window.innerHeight },
         bubbles: [...document.querySelectorAll('[data-testid^=chat-bubble-]')].map((b) => ({
           seat: b.getAttribute('data-testid').slice(12),
           line: Number(b.getAttribute('data-line')),
           text: b.textContent,
-          anchor: b.closest('[data-speaker]')?.getAttribute('data-speaker') ?? (b.closest('[data-testid=table-chat]') ? 'seat-row' : null),
+          anchor: b.closest('[data-speaker]')?.getAttribute('data-speaker') ?? (b.closest('[data-testid=table-chat], [data-fallback]') ? 'seat-row' : null),
           rect: rect(b),
+          place: b.getAttribute('data-place'),
+          room: (() => {
+            const frame = b.closest(${JSON.stringify(BOUNDS)});
+            if (!location.pathname.startsWith('/table') || !b.closest('[data-speaker]') || !frame) return null;
+            const labels = [];
+            const range = document.createRange();
+            const walk = document.createTreeWalker(frame, NodeFilter.SHOW_TEXT);
+            for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+              const el = n.parentElement;
+              if (!n.textContent.trim() || !el || el.closest('[data-testid^=chat-bubble-]')) continue;
+              if (el.checkVisibility && !el.checkVisibility({ opacityProperty: true, visibilityProperty: true })) continue;
+              range.selectNodeContents(n);
+              for (const r of range.getClientRects()) if (r.width > 1 && r.height > 1) labels.push({ l: r.left, t: r.top, r: r.right, b: r.bottom, text: n.textContent.trim().slice(0, 30) });
+            }
+            return { at: rect(b.parentElement), within: rect(frame), k: b.getBoundingClientRect().width / b.offsetWidth || 1, labels };
+          })(),
         })),
         speakers: [...document.querySelectorAll('[data-speaker]')].map((s) => s.getAttribute('data-speaker')),
         speaking: [...document.querySelectorAll('[data-testid=seat-row] [data-speaking]')].map((s) => s.getAttribute('data-testid').slice(5)),
@@ -188,11 +230,22 @@ try {
   await Promise.all([phase(lena, 'development'), phase(kai, 'development'), phase(tv, 'development')]);
   await lena.waitForTimeout(PHASE_SETTLES_MS);
   await burst(lena, kai, 'dev');
-  for (const p of [lena, kai]) await p.locator('[data-phase=development]').getByRole('button', { name: 'Go to the pub and end your turn' }).click({ timeout: 5_000 });
+  await Promise.all([lena, kai].map((p) => toThePub(p, code, wires.get(p)!.seatId!)));
 
   // The auction: two lines within a second while the TV draws the walk.
   await Promise.all([phase(lena, 'auction'), phase(kai, 'auction')]);
-  await tv.locator('[data-phase=auction] [data-testid=walk-board]').waitFor({ timeout: REACH.walk });
+  // Each phone presses Ready on the good that is up, and again if the good moves on under the press: with 2 Food a seat
+  // (5 Nov) month 1's Food is skipped as the auction opens, and a press that met Food's screen counted for nothing.
+  const walk = tv.locator('[data-phase=auction] [data-testid=walk-board]');
+  const until = Date.now() + REACH.walk + 5_000;
+  while ((await walk.count()) === 0) {
+    check(Date.now() < until, 'chat: the walk starts once both phones have pressed Ready on the good that is up');
+    for (const p of [lena, kai]) {
+      const ready = p.locator('[data-phase=auction]').getByRole('button', { name: 'Ready', exact: true });
+      if (await ready.count()) await ready.click({ timeout: 1_000 }).catch(() => undefined);
+    }
+    await tv.waitForTimeout(200);
+  }
   await lena.waitForTimeout(PHASE_SETTLES_MS);
   await burst(lena, kai, 'auction');
 
@@ -298,6 +351,15 @@ async function burst(a: Page, b: Page, tag: string): Promise<void> {
   await a.waitForTimeout(BURST_SETTLES_MS);
 }
 
+/** Ends a seat's development turn as a steering player does: in through the store's door, to the pub, and a press. */
+async function toThePub(p: Page, code: string, seat: string): Promise<void> {
+  await throughDoor(p, server, code, seat);
+  await steerTo(p, server, code, seat, hallPlace('pub'));
+  await pressAct(p);
+  // The last seat's press ends development at once, so its screen may go straight on to the next phase.
+  await p.getByTestId('over-card').or(p.locator('[data-phase]:not([data-phase=development])')).first().waitFor({ timeout: 5_000 });
+}
+
 /** Claims the next free plot that lights up. */
 async function claimOne(p: Page): Promise<void> {
   const grant = p.locator('[data-phase=landGrant]');
@@ -327,24 +389,53 @@ function meets(a: Rect, b: Rect): boolean {
   return a.l < b.r && b.l < a.r && a.t < b.b && b.t < a.b;
 }
 
+/** A bubble less a pixel all round: touching a label is not covering it. */
+function shrunk(a: Rect): Rect {
+  return { l: a.l + 1, t: a.t + 1, r: a.r - 1, b: a.b - 1 };
+}
+
 function inside(a: Rect, box: Rect): boolean {
   return a.l >= box.l - 0.5 && a.r <= box.r + 0.5 && a.t >= box.t - 0.5 && a.b <= box.b + 0.5;
 }
 
-/** B-AC-18: in every sample, no two bubbles meet, no bubble meets the ticker, and each bubble stays inside its frame. */
+/**
+ * B-AC-18: in every sample, no two bubbles meet, no bubble meets the ticker unless the ticker's bar has faded under it,
+ * and each bubble stays inside its frame. On the TV (AM-22), where its frame leaves a creature's bubble a place that
+ * covers no text (RULE-9's companion, placeBubble, over what the sample measured), the bubble covers none: no name,
+ * caption or price. A label that moves into a bubble is allowed one sample, the frame the bubble takes to move away.
+ */
 function noOverlaps(who: string, samples: Sample[]): string {
   let withBubble = 0;
+  let roomy = 0;
+  let crowded = 0;
+  /** What each line's bubble covered in the sample before, where it had room. */
+  const covers = new Map<number, string[]>();
   for (const s of samples) {
     if (s.bubbles.length === 0) continue;
     withBubble++;
     for (const [i, a] of s.bubbles.entries()) {
       for (const b of s.bubbles.slice(i + 1)) check(!meets(a.rect, b.rect), `B-AC-18: on ${who} (${s.phase}) the bubbles of lines ${a.line} and ${b.line} overlap`);
-      check(!s.tickerRect || !meets(a.rect, s.tickerRect), `B-AC-18: on ${who} (${s.phase}) the bubble of line ${a.line} covers the ticker`);
+      // The walking screen's status bar, ticker and all, fades under a bubble that meets it, as under a colonist.
+      check(!s.tickerRect || !meets(a.rect, s.tickerRect) || s.tickerFaded, `B-AC-18: on ${who} (${s.phase}) the bubble of line ${a.line} covers the ticker${s.walking ? ', and its bar has not faded' : ''}`);
       check(s.bounds && inside(a.rect, s.bounds), `B-AC-18: on ${who} (${s.phase}) the bubble of line ${a.line} crosses its frame's edge: ${JSON.stringify(a.rect)} in ${JSON.stringify(s.bounds)}`);
+      if (!a.room) continue;
+      const { at, within, k, labels } = a.room;
+      const free = placeBubble({ at, w: a.rect.r - a.rect.l, h: a.rect.b - a.rect.t, within, labels, gap: GAP * k, edge: EDGE }).covers === 0;
+      if (!free) {
+        crowded++;
+        covers.delete(a.line);
+        continue;
+      }
+      roomy++;
+      const covered = labels.filter((l) => meets(shrunk(a.rect), l)).map((l) => l.text);
+      const before = covers.get(a.line);
+      check(covered.length === 0 || !before || !before.some((t) => covered.includes(t)), `B-AC-18: on ${who} (${s.phase}) the bubble of line ${a.line} covers "${covered.join('", "')}" in two samples running, with a free place beside its speaker (${a.place} at ${JSON.stringify(a.rect)})`);
+      covers.set(a.line, covered);
     }
   }
+  if (who === 'tv') check(roomy >= 20, `B-AC-18: on the TV bubbles with room were checked against its labels, got ${roomy} samples (${crowded} crowded)`);
   check(withBubble >= 20, `B-AC-18: on ${who} bubbles were sampled through their lifetime, got ${withBubble} samples with one`);
-  return `${withBubble} samples with a bubble, none overlapping`;
+  return `${withBubble} samples with a bubble, none overlapping${roomy + crowded ? `; ${roomy} with room covered no label, ${crowded} crowded` : ''}`;
 }
 
 /**
@@ -391,7 +482,7 @@ function deadline(samples: Sample[], phase: string, t: number): number {
 /**
  * B-AC-17: every line this page received shows in its ticker within ~1 s and in the same phase; each bubble RULE-9
  * schedules shows within ~1 s of its start at the speaker's anchor (the creature when the screen draws one, else the
- * seat row, which the TV has none of); no bubble shows a line from an earlier phase.
+ * seat row, which the TV and the walking screen have none of); no bubble shows a line from an earlier phase.
  */
 function everyLineShows(who: string, wire: Wire, samples: Sample[]): string {
   const tv = who === 'tv';
@@ -407,7 +498,10 @@ function everyLineShows(who: string, wire: Wire, samples: Sample[]): string {
     timing(seen.t <= due, `B-AC-17: on ${who} line ${line.id} shown in the ticker +${seen.t - line.at} ms (deadline +${due - line.at} ms)`);
     const entry = seen.ticker.find((l) => l.id === line.id)!;
     const box = seen.tickerRect;
-    check(box && box.r > box.l && box.b > box.t && inside(box, { l: 0, t: 0, r: seen.viewport.w, b: seen.viewport.h }), `B-AC-17: on ${who} the ticker that shows line ${line.id} has a size and lies inside the viewport, got ${JSON.stringify(box)} in ${seen.viewport.w}×${seen.viewport.h}`);
+    // On a phone the ticker follows the rail's content in its scroll (C20): inside the viewport, or one scroll away in that rail.
+    const reach = Math.max(seen.viewport.h, seen.tickerReach?.end ?? 0);
+    if (seen.tickerReach) check(seen.tickerReach.last, `B-AC-17: on ${who} a ticker in the rail's body is its last part (C20), got it before other content`);
+    check(box && box.r > box.l && box.b > box.t && inside(box, { l: 0, t: 0, r: seen.viewport.w, b: reach }), `B-AC-17: on ${who} the ticker that shows line ${line.id} has a size and lies inside the viewport or the rail's scroll, got ${JSON.stringify(box)} in ${seen.viewport.w}×${seen.viewport.h} (the rail body's content ends at ${seen.tickerReach?.end})`);
     check(entry.rect.r > entry.rect.l && entry.rect.b > entry.rect.t && entry.visible, `B-AC-17: on ${who} line ${line.id}'s ticker entry is drawn and visible, got ${JSON.stringify(entry.rect)} visible=${entry.visible}`);
     // Its phase may end before the page paints it again; then it shows in the next.
     if (firstIn(samples, phase, line.at)) timing(seen.phase === phase, `B-AC-17: on ${who} line ${line.id} first shown in the ticker in ${seen.phase}, said in ${phase}`);
@@ -422,6 +516,9 @@ function everyLineShows(who: string, wire: Wire, samples: Sample[]): string {
     const line = wire.lines.find((l) => l.id === b.id)!;
     // The TV has no seat row: a speaker it doesn't draw (by the views it received) has only the ticker there.
     if (tv && !line.tvDraws.includes(line.from)) continue;
+    // Nor has the walking screen: a speaker it doesn't draw when the bubble is due has its ticker line only.
+    const atStart = samples.find((s) => s.t >= b.from);
+    if (atStart?.walking && !atStart.speakers.includes(line.from)) continue;
     const shown = samples.find((s) => s.t >= b.from && s.bubbles.some((x) => x.line === b.id));
     const due = Math.min(b.to, deadline(samples, name(line), b.from));
     timing(!!shown && shown.t <= due, `B-AC-17: on ${who} line ${b.id}'s bubble shown ${shown ? `+${shown.t - b.from} ms` : 'never'} after its start (deadline +${due - b.from} ms)`);

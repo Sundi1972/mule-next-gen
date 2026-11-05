@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { GAME, WALK, type Good } from '@mule/engine';
 import { GRANT_TICK_MS, MuleGame } from '../src/mule-game.js';
-import { fakeContext, readyAll, seats } from './fake-context.js';
+import { fakeContext, pressThroughSidePick, readyAll, seats } from './fake-context.js';
 
 /** Month 1 to the first good's status screen, nobody pressing anything before it. */
 function toStatus() {
@@ -76,6 +76,8 @@ describe('a dropped phone in the goods auction', () => {
     expect(walker().at, 'back at the bottom edge').toBeLessThanOrEqual(game.viewFor(null).auction!.lo);
     game.handle('s2', { type: 'walk', dir: 'up' });
     for (let i = 0; i < 2_000 && game.viewFor(null).auction?.good === good && holdings(game, good).stock === before.stock; i++) {
+      // At the store's line units trade by themselves (RULE-1): standing there is enough.
+      if (walker().line && walker().dir !== 0) game.handle('s2', { type: 'walk', dir: 'stop' });
       advance(WALK.tickMs);
       expect(walker(), `tick ${i} after rejoining`).toMatchObject({ side: 'buyer', done: false });
     }
@@ -84,17 +86,24 @@ describe('a dropped phone in the goods auction', () => {
 
   it.each([
     ['on a side', () => {}],
-    ['after passing', (game: MuleGame) => game.handle('s2', { type: 'declare', side: 'pass' })],
-  ])('FM-dropped-status: a phone dropped on the status screen %s passes and counts as Done there and again in the walk; once s1 presses Ready the walk starts on the next tick', (_, before) => {
+    ['after switching to Sell', (game: MuleGame) => game.handle('s2', { type: 'declare', side: 'seller' })],
+  ])('FM-dropped-status (A-7): a phone dropped on the status screen %s is held there, on its side and not Done; once s1, the host, moves on the walk starts on the next tick, and the dropped phone sits it out', (_, before) => {
     const { game, advance, good } = toStatus();
     const s2 = () => game.viewFor(null).auction!.walkers.find((w) => w.id === 's2')!;
+    // Heiko buys from the store, so the good has a walk to start (with 2 Food each, nobody's numbers ask for one).
+    game.handle('s1', { type: 'declare', side: 'buyer' });
     before(game);
+    const side = s2().side;
     game.connectionChanged('s2', false);
     advance(WALK.tickMs);
     expect(game.viewFor(null).auction).toMatchObject({ good, stage: 'status' });
-    expect(s2()).toMatchObject({ side: 'pass', done: true });
+    expect(s2()).toMatchObject({ side, done: false });
 
+    // s1's Ready alone does not end it: the side pick waits for the dropped phone.
     game.handle('s1', { type: 'ready' });
+    advance(WALK.tickMs * 5);
+    expect(game.viewFor(null).auction).toMatchObject({ good, stage: 'status' });
+    game.handle('s1', { type: 'continue' });
     advance(WALK.tickMs);
     expect(game.viewFor(null).auction).toMatchObject({ good, stage: 'walk' });
     // The walk starts with nobody Done, so the next tick marks the dropped phone again.
@@ -103,20 +112,21 @@ describe('a dropped phone in the goods auction', () => {
     expect(s2()).toMatchObject({ side: 'pass', done: true });
   });
 
-  it('FM-dropped-status: a phone dropped in the first good sits out every later good too: each status screen ends on the tick after s1 presses Ready', () => {
+  it('FM-dropped-status (A-7): a phone dropped in the first good sits out every later walk too: each status screen ends on the tick after s1, the host, moves on', () => {
     const { game, advance, good: first } = toStatus();
     game.connectionChanged('s2', false);
-    // Ticks each good spent on its status screen, s1 pressing Ready on every one of them.
+    // Ticks each good spent on its status screen, s1 pressing Ready and moving on for s2 on every one of them.
     const statusTicks = new Map<Good, number>();
     for (let i = 0; i < 5_000 && game.viewFor(null).phase === 'auction'; i++) {
       const a = game.viewFor(null).auction;
       if (a?.stage === 'status') statusTicks.set(a.good, (statusTicks.get(a.good) ?? 0) + 1);
       game.handle('s1', { type: 'ready' });
+      pressThroughSidePick(game, { host: 's1' });
       advance(WALK.tickMs);
     }
     const later = [...statusTicks].filter(([g]) => g !== first);
     expect(later.length, 'goods after the first reached their status screen').toBeGreaterThanOrEqual(3);
-    // Each new good gives every seat a fresh side; that tick's sitOut passes it again, so the status ends at once.
+    // The side pick holds the dropped phone; the host's Continue ends it, so the walk starts on the next tick.
     for (const [g, ticks] of later) expect(ticks, g).toBe(1);
   });
 });
@@ -155,7 +165,7 @@ describe('a dropped phone in the land grant', () => {
     expect(dropped.lasted, 'one pass of the light, one tick a plot').toBe(dropped.lit.length * GRANT_TICK_MS);
   });
 
-  it('FM-grant-reload: the only human claims, drops and reconnects while the grant runs: their phone is back on the grant with the claim intact, and they claim the next lit plot', () => {
+  it('FM-grant-reload: the only human drops and reconnects while the grant runs: their phone is back on the grant with their claim still to use, and they claim the next lit plot', () => {
     const { ctx, advance } = fakeContext();
     const game = new MuleGame(ctx, 7);
     game.start(alone);
@@ -169,22 +179,20 @@ describe('a dropped phone in the land grant', () => {
       }
       throw new Error('no free plot lit');
     };
-    const first = nextFreeLit();
-    game.handle('s1', { type: 'claim', ...first });
-
+    // A grant gives one claim a seat (5 Nov): the drop comes before it is used.
+    nextFreeLit();
     game.connectionChanged('s1', false);
     advance(GRANT_TICK_MS * 2);
     game.connectionChanged('s1', true);
     const back = game.viewFor('s1');
     expect(back.phase).toBe('landGrant');
-    expect(back.me!.claimsLeft).toBe(GAME.claimsPerGrant - 1);
-    expect(back.tiles.filter((t) => t.owner === 's1').map(({ x, y }) => ({ x, y }))).toEqual([first]);
+    expect(back.me!.claimsLeft).toBe(GAME.claimsPerGrant);
+    expect(back.tiles.filter((t) => t.owner === 's1')).toEqual([]);
 
-    const second = nextFreeLit();
-    game.handle('s1', { type: 'claim', ...second });
+    const lit = nextFreeLit();
+    game.handle('s1', { type: 'claim', ...lit });
     const after = game.viewFor('s1');
-    expect(after.tiles.filter((t) => t.owner === 's1')).toHaveLength(2);
-    expect(after.me!.claimsLeft).toBe(GAME.claimsPerGrant - 2);
+    expect(after.tiles.filter((t) => t.owner === 's1').map(({ x, y }) => ({ x, y }))).toEqual([lit]);
   });
 
   it('FM-grant-reload negative: the only human presses Ready in the land grant: Done with land, it ends once the AI is done too, before the pass does', () => {

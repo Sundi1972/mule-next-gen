@@ -1,4 +1,4 @@
-import { emptyStock, RuleError, type GameState, type MonthEvent, type ProductionLine } from '@mule/engine';
+import { emptyStock, productionShowMs, RuleError, type GameState, type MonthEvent, type ProductionLine } from '@mule/engine';
 import { describe, expect, it } from 'vitest';
 import { GRANT_TICK_MS, MuleGame } from '../src/mule-game.js';
 import { fakeContext, readyAll, seats } from './fake-context.js';
@@ -50,7 +50,7 @@ function knownMonth(state: GameState) {
     origin: { x: 6, y: 0 },
     plots: [{ index: plant, order: 0, good: 'energy', delta: -2 }],
     sign: 'bad',
-    when: 'afterProduction',
+    phase: 'production',
   };
   const storm: MonthEvent = {
     key: 'dustStorm',
@@ -62,11 +62,12 @@ function knownMonth(state: GameState) {
     direction: 'e',
     plots: [{ index: farm, order: 0, good: 'food', delta: -1 }],
     sign: 'bad',
-    when: 'afterProduction',
+    phase: 'production',
   };
   const report = state.history.at(-1)!;
   report.lines = lines;
   report.events = [quake, storm];
+  state.monthEvents = [quake, storm];
   report.before = {
     s1: { ...emptyStock(), food: SECRET_FOOD },
     s2: { ...emptyStock(), energy: SECRET_ENERGY },
@@ -77,14 +78,18 @@ function knownMonth(state: GameState) {
 describe('the production view', () => {
   it("T-AC-5: the production view carries plots and events and never a player's stock", () => {
     const { game, state } = inProduction();
+    // Production's timer was set from the month as it opened (ws6-ux AM-19 RULE-3): its goods made and its events' show.
+    const opened = game.viewFor(null).production!;
+    const openedEventsMs = opened.events.length > 0 ? opened.introMs + opened.events.reduce((n, e) => n + e.playMs, 0) : 0;
+    const lengthMs = productionShowMs(new Set(opened.lines.map((l) => l.good)).size, openedEventsMs);
     knownMonth(state);
 
     for (const seat of [null, 's1']) {
       const view = game.viewFor(seat);
       expect(view.production).toStrictEqual({
         lines: [
-          { x: 5, y: 0, owner: 's2', good: 'energy', made: 4, parts: [] },
-          { x: 3, y: 1, owner: 's1', good: 'food', made: 2, parts: [{ why: 'noWater', delta: -2 }, { why: 'cluster', delta: 1 }] },
+          { x: 5, y: 0, owner: 's2', good: 'energy', base: 4, made: 4, parts: [] },
+          { x: 3, y: 1, owner: 's1', good: 'food', base: 3, made: 2, parts: [{ why: 'cluster', delta: 1 }, { why: 'noWater', delta: -2 }] },
         ],
         events: [
           {
@@ -96,6 +101,9 @@ describe('the production view', () => {
             scope: 'local',
             origin: { x: 6, y: 0 },
             hits: [{ x: 5, y: 0, order: 0, delta: -2 }],
+            phase: 'production',
+            weight: 'headline',
+            playMs: 7_000,
           },
           {
             key: 'dustStorm',
@@ -107,9 +115,15 @@ describe('the production view', () => {
             origin: { x: state.width - 1, y: 1 },
             from: 'e',
             hits: [{ x: 3, y: 1, order: 0, delta: -1 }],
+            phase: 'production',
+            weight: 'headline',
+            playMs: 7_000,
           },
         ],
-        lengthMs: 15_000,
+        // The length production's timer was given as it opened, on the month's real report (ws6-ux AM-19 RULE-3).
+        lengthMs,
+        introMs: 1_800,
+        hurry: { asked: [], from: null },
       });
       expect(Object.keys(view.production!.events[0]!)).not.toContain('from');
       expect(keysOf(view.production)).not.toContainEqual(expect.stringMatching(/before|stock/i));
@@ -122,7 +136,7 @@ describe('the production view', () => {
     expect(tv).not.toContain(String(SECRET_ENERGY));
   });
 
-  it('B-AC-6: a plot shows at most two of its reasons, biggest first, never its ground, floor, factory or a zero', () => {
+  it('B-AC-6 (AM-19): a plot shows every reason in the engine\'s order, never its ground, a factory run or a zero; base + reasons = made', () => {
     const { game, state } = inProduction();
     knownMonth(state);
     const farm = state.history.at(-1)!.lines![0]!;
@@ -135,12 +149,16 @@ describe('the production view', () => {
       { why: 'factory', delta: 5 },
       { why: 'noEnergy', delta: -3 },
     ];
-    farm.made = 2;
+    farm.made = 7;
     const line = game.viewFor(null).production!.lines.find((l) => l.owner === 's1')!;
     expect(line.parts).toEqual([
-      { why: 'noEnergy', delta: -3 },
+      { why: 'species', delta: 1 },
+      { why: 'pollution', delta: -1 },
       { why: 'cluster', delta: 2 },
+      { why: 'noEnergy', delta: -3 },
     ]);
+    expect(line.base).toBe(3 + 5);
+    expect(line.base! + line.parts.reduce((sum, p) => sum + p.delta, 0)).toBe(line.made);
   });
 
   it('B-AC-6: through a whole month, the view carries production in production and upkeep and in no other phase', () => {

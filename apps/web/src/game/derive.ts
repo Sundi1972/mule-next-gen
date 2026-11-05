@@ -1,6 +1,6 @@
-import { DEFAULT_SPECIES, MAP, TERRAIN_ODDS as ENGINE_TERRAIN_ODDS, type MINERAL_ODDS, type SpecialKind as EngineSpecialKind } from '@mule/engine';
+import { DEFAULT_SPECIES, EVENTS, MAP, TERRAIN_ODDS as ENGINE_TERRAIN_ODDS, type MINERAL_ODDS, type SpecialKind as EngineSpecialKind } from '@mule/engine';
 import type { MuleView, PlayerView, TableView, TileView } from '@mule/protocol';
-import { GOOD_NAME, SPECIES, type Good, type MapSpecial, type MapTile, type Slot, type SpecialKind, type Species } from '@mule/ui';
+import { GOOD_NAME, SPECIES, type Good, type MapObject, type MapSpecial, type MapTile, type Slot, type SpecialKind, type Species } from '@mule/ui';
 
 /**
  * Small, pure readings of the view for the screens. No rules live here: the
@@ -51,9 +51,25 @@ export function groundPips(good: Good, rating: number): number {
   return Math.max(0, Math.min(4, grown ? rating + 1 : rating));
 }
 
+/**
+ * The colony's objects by the plot they stand on (a tile index): a project holds its plot from its site on, at every
+ * stage, and an object that needs no plot has none. A building site counts its months built.
+ */
+function objectsByPlot(view: MuleView): Map<number, MapObject> {
+  const out = new Map<number, MapObject>();
+  for (const p of view.colony?.projects ?? []) {
+    if (p.plot === null) continue;
+    const built = p.stage === 'building' && p.monthsLeft !== null ? { built: p.buildMonths - p.monthsLeft } : {};
+    out.set(p.plot, { kind: p.id, name: p.name, stage: p.stage, buildMonths: p.buildMonths, ...built });
+  }
+  return out;
+}
+
 /** The view's tiles as the map draws them. */
 export function mapTiles(view: MuleView): MapTile[] {
-  return view.tiles.map((t) => {
+  const objects = objectsByPlot(view);
+  return view.tiles.map((t, i) => {
+    const object = objects.get(i);
     const owner = slotOf(view, t.owner);
     const good = t.outfit && t.outfit !== 'greenBelt' ? t.outfit : undefined;
     const ground = t.ground ? (Object.fromEntries(Object.entries(t.ground).map(([g, n]) => [g, groundPips(g as Good, n)])) as Partial<Record<Good, number>>) : undefined;
@@ -67,6 +83,7 @@ export function mapTiles(view: MuleView): MapTile[] {
       ...(ground ? { ground } : {}),
       ...(t.pollution ? { pollution: t.pollution } : {}),
       ...(t.special ? { special: t.special } : {}),
+      ...(object ? { object } : {}),
     };
   });
 }
@@ -146,10 +163,10 @@ export const SPECIAL_KINDS_MATCH: SameKinds = true;
 const FX = MAP.specialEffect;
 const pct = (n: number) => `${Math.round(n * 100)}%`;
 
-/** What a kind does, in general. The numbers are the engine's, MAP.specialEffect. */
+/** What a kind does, in general. The numbers are the engine's, MAP.specialEffect and the cavern's EVENTS row. */
 export const SPECIAL_EFFECT: Record<SpecialKind, string> = {
   ruins: `pays its first owner ${FX.salvage.alloy} Alloy or ${FX.salvage.electronics} Electronics, once, then is gone.`,
-  crystalCavern: `+${FX.crystalCavern} Crystite when mined. Each month it's mined, a ${pct(FX.collapseChance)} chance it caves in.`,
+  crystalCavern: `+${FX.crystalCavern} Crystite when mined. Each month it's mined, a ${pct(EVENTS.colony.cavernCollapse.phases.production)} chance it caves in.`,
   geyser: `+${FX.geyser} Water or Energy.`,
   oasis: `+${FX.oasis} Food.`,
   relic: `+${FX.relic} to every working plot touching it, anyone's.`,

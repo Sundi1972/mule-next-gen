@@ -1,0 +1,27 @@
+/* The app's own entry: Tailwind, the @mule/ui theme and the app's base styles. Never copy token values here. */
+@import "../../../../apps/web/src/index.css";
+@source "../../../../packages/ui/src";
+
+/*
+ * DS-GAP (WS8): the event show's motion. To move into packages/ui/src/theme.css beside the production show's
+ * keyframes once a direction is approved. Only transform and opacity move, so a phone never repaints the map.
+ */
+@keyframes ev-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes ev-drop { from { transform: translateY(-40px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes ev-rise { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes ev-pop { 0% { transform: scale(0.3); opacity: 0; } 70% { transform: scale(1.12); opacity: 1; } 100% { transform: scale(1); } }
+@keyframes ev-flip { from { transform: perspective(900px) rotateY(-100deg) translateX(-30px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes ev-stamp { 0% { transform: translateY(-60%) scale(1.8); opacity: 0; } 60% { transform: scale(0.92); opacity: 1; } 100% { transform: none; } }
+@keyframes ev-buzz { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-2px) rotate(-4deg); } 40% { transform: translateX(2px) rotate(4deg); } 60% { transform: translateX(-2px); } 80% { transform: translateX(2px); } }
+@keyframes ev-stripes { to { background-position: 28px 0; } }
+@keyframes ev-throb { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
+
+/* Without motion, every looping effect holds still; entrances become a plain fade (the components also skip travel). */
+@media (prefers-reduced-motion: reduce) {
+  [class*='animate-[ev-'] { animation-name: ev-fade !important; }
+  [class*='animate-[ev-stripes'], [class*='animate-[ev-throb'], [class*='animate-[ev-buzz'] { animation: none !important; }
+}
+/* The mock's own reduced-motion switch does the same, so Heiko can see it without changing his OS setting. */
+[data-reduced='true'] [class*='animate-[ev-'] { animation-name: ev-fade !important; }
+[data-reduced='true'] [class*='animate-[ev-stripes'], [data-reduced='true'] [class*='animate-[ev-throb'], [data-reduced='true'] [class*='animate-[ev-buzz'] { animation: none !important; }
+[data-reduced='true'] [class*='animate-[show-'], [data-reduced='true'] [class*='animate-[pulse-glow'] { animation: none !important; }

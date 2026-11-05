@@ -1,0 +1,140 @@
+/* The workspace's own styles (the app's Tailwind, the @mule/ui theme, the mock's keyframes), unchanged. */
+@import "../../mock.css";
+
+/*
+ * DS-GAP (WS6, character motion): the colonists' gait, to move into packages/ui/src/theme.css beside mule-* once Heiko
+ * picks a variant. Every duration is the stride's --cycle (gait.ts::cycleSeconds), set inline per creature, so pace
+ * shows: half the speed, twice the cycle. Everything here animates `transform` or `opacity` only.
+ *
+ * The wrappers, outside in: cm-face (facing flip) > cm-glance (looking back while running) > cm-lean (the static lean
+ * into travel; also the reduced-motion pose) > cm-hit (the bite's flinch, the own strike: one-shots) > cm-body (bob,
+ * breathe, limp, bounce) > cm-sway (side to side, the jab) > the SVG. Variant B adds cmB-* roles on SVG parts.
+ */
+
+.cm { --rm: 0; vertical-align: bottom; }
+.cm-face, .cm-glance, .cm-lean, .cm-hit, .cm-body, .cm-sway { display: block; width: 100%; height: 100%; transform-origin: 50% 92%; }
+.cm-face { transform-origin: 50% 50%; transition: transform 160ms ease-in-out; }
+.cm[data-facing='left'] .cm-face { transform: scaleX(-1); }
+.cm-shadow {
+  position: absolute; left: 18%; right: 18%; bottom: -5%; height: 12%; border-radius: 50%;
+  background: var(--color-mark-edge); opacity: 0.35; transform-origin: 50% 50%;
+}
+.cm-swipe {
+  position: absolute; top: 8%; right: -34%; width: 44%; height: 72%; border-radius: 50%;
+  border-right: 2.5px solid var(--color-ink); opacity: 0; pointer-events: none;
+}
+.cm-bite {
+  position: absolute; inset: -14%; border-radius: 50%; border: 2px solid var(--color-alert); opacity: 0; pointer-events: none;
+}
+
+/* --- The lean: static, and the whole of the reduced-motion pose ------------------------------------------------- */
+.cm-lean { transform: translateY(calc(var(--rm) * var(--rise, 0%))) rotate(calc(var(--lean, 0deg) + var(--rm) * var(--lean-rm, 0deg))); }
+.cm[data-motion='walk'] { --lean: 3deg; --lean-rm: 7deg; }
+.cm[data-motion='run'] { --lean: 9deg; --lean-rm: 9deg; --rise: -7%; }
+.cm[data-motion='fight'] { --lean: 4deg; --lean-rm: 6deg; --rise: -3%; }
+.cm[data-motion='hurt'] { --lean: -2deg; --lean-rm: -6deg; --rise: 4%; }
+
+/* --- Variant A · bob and waddle: one keyframe set, whole-body ---------------------------------------------------- */
+@keyframes cm-breathe { 0%, 100% { transform: translateY(0) scale(1, 1); } 50% { transform: translateY(-1.5%) scale(1.012, 1.035); } }
+@keyframes cm-hop { 0%, 100% { transform: translateY(0) scale(1.07, 0.93); } 20% { transform: translateY(-5%) scale(0.98, 1.03); } 50% { transform: translateY(-11%) scale(0.97, 1.04); } 80% { transform: translateY(-4%) scale(1, 1); } }
+@keyframes cm-hop-run { 0%, 100% { transform: translateY(0) scale(1.1, 0.9); } 45% { transform: translateY(-19%) scale(0.95, 1.07); } }
+@keyframes cm-sway { 0%, 100% { transform: rotate(-6deg); } 50% { transform: rotate(6deg); } }
+@keyframes cm-sway-small { 0%, 100% { transform: rotate(-2.5deg); } 50% { transform: rotate(2.5deg); } }
+@keyframes cm-glance { 0%, 64%, 100% { transform: scaleX(1); } 72%, 86% { transform: scaleX(-1); } }
+@keyframes cm-bounce { 0%, 100% { transform: translateY(0) scale(1.04, 0.96); } 50% { transform: translateY(-5%) scale(0.98, 1.02); } }
+@keyframes cm-jab { 0%, 52%, 100% { transform: translateX(0) rotate(0); } 66% { transform: translateX(-7%) rotate(-7deg) scale(0.95, 1.04); } 76% { transform: translateX(24%) rotate(12deg) scale(1.1, 0.92); } 86% { transform: translateX(6%) rotate(3deg); } }
+@keyframes cm-swipe { 0%, 70%, 100% { opacity: 0; transform: scale(0.6) rotate(-30deg); } 77% { opacity: 1; transform: scale(1) rotate(0deg); } 88% { opacity: 0; transform: scale(1.15) rotate(15deg); } }
+@keyframes cm-limp { 0%, 100% { transform: translateY(0) rotate(0); } 22% { transform: translateY(-9%) rotate(-3deg); } 45% { transform: translateY(0) rotate(0) scale(1.04, 0.96); } 62% { transform: translateY(-2%) rotate(6deg); } 80% { transform: translateY(4%) rotate(10deg) scale(1.03, 0.93); } }
+@keyframes cm-shadow-hop { 0%, 100% { transform: scaleX(1.08); opacity: 0.4; } 50% { transform: scaleX(0.78); opacity: 0.22; } }
+
+.cm[data-motion='idle'] .cm-body { animation: cm-breathe var(--cycle) ease-in-out infinite; }
+
+.cm[data-variant='A'][data-motion='walk'] .cm-body { animation: cm-hop calc(var(--cycle) / 2) ease-in-out infinite; }
+.cm[data-variant='A'][data-motion='walk'] .cm-sway { animation: cm-sway var(--cycle) ease-in-out infinite; }
+.cm[data-variant='A'][data-motion='walk'] .cm-shadow { animation: cm-shadow-hop calc(var(--cycle) / 2) ease-in-out infinite; }
+.cm[data-variant='A'][data-motion='run'] .cm-body { animation: cm-hop-run calc(var(--cycle) / 2) ease-in-out infinite; }
+.cm[data-variant='A'][data-motion='run'] .cm-sway { animation: cm-sway-small var(--cycle) ease-in-out infinite; }
+.cm[data-variant='A'][data-motion='run'] .cm-shadow { animation: cm-shadow-hop calc(var(--cycle) / 2) ease-in-out infinite; }
+.cm[data-variant='A'][data-motion='run'] .cm-glance { animation: cm-glance 1.8s ease-in-out infinite; }
+.cm[data-motion='fight'] .cm-body { animation: cm-bounce calc(var(--cycle) / 4) ease-in-out infinite; }
+.cm[data-motion='fight'] .cm-sway { animation: cm-jab var(--cycle) ease-in-out infinite; }
+.cm[data-motion='fight'] .cm-swipe:not(.cm-swipe-once) { animation: cm-swipe var(--cycle) ease-out infinite; opacity: calc(var(--rm) * 0.9); }
+.cm[data-motion='hurt'] .cm-body { animation: cm-limp var(--cycle) ease-in-out infinite; }
+
+/* --- Variant B · feet: per-species parts swinging in pairs, like mule-step; a smaller bob ------------------------ */
+@keyframes cmB-hop { 0%, 100% { transform: translateY(0) scale(1.03, 0.97); } 50% { transform: translateY(-4%) scale(0.99, 1.01); } }
+@keyframes cmB-step {
+  0%, 100% { transform: translate(calc(var(--stride) * -1.6px), 0); }
+  25% { transform: translate(0, calc(var(--stride) * -2.2px)); }
+  50% { transform: translate(calc(var(--stride) * 1.6px), 0); }
+}
+@keyframes cmB-swing { 0%, 100% { transform: rotate(calc(var(--amp) * -1)); } 50% { transform: rotate(var(--amp)); } }
+@keyframes cmB-flap { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(calc(var(--dir) * var(--flap))); } }
+@keyframes cmB-wobble { 0%, 100% { transform: rotate(calc(var(--wob) * -1)); } 50% { transform: rotate(var(--wob)); } }
+@keyframes cmB-blink { 0%, 94%, 100% { transform: scaleY(1); } 97% { transform: scaleY(0.1); } }
+@keyframes cmB-look { 0%, 62%, 100% { transform: translateX(0); } 70%, 88% { transform: translateX(-1.8px); } }
+@keyframes cmB-coin { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-1.6px); } }
+@keyframes cmB-coin-flip { 0%, 80%, 100% { transform: scaleX(1); } 88% { transform: scaleX(-1); } }
+@keyframes cmB-strike-limb { 0%, 62%, 100% { transform: rotate(0deg); } 76% { transform: rotate(-80deg); } 86% { transform: rotate(-30deg); } }
+@keyframes cmB-strike-wing { 0%, 62%, 100% { transform: rotate(-10deg); } 76% { transform: rotate(32deg); } 86% { transform: rotate(8deg); } }
+@keyframes cmB-strike-foot { 0%, 62%, 100% { transform: translate(0, 0); } 76% { transform: translate(4px, -4px) rotate(-25deg); } 86% { transform: translate(1px, -1px); } }
+
+.cm[data-variant='B'] { --stride: 1; --amp: 16deg; --flap: 24deg; --wob: 7deg; }
+.cmB-wing { --dir: 1; }
+.cmB-wing.cmB-b { --dir: -1; }
+.cm[data-variant='B'][data-motion='run'] { --stride: 1.5; --amp: 26deg; --flap: 34deg; --wob: 12deg; }
+.cm[data-variant='B'][data-motion='idle'] { --amp: 4deg; --flap: 9deg; --wob: 4deg; }
+
+/* The eyes blink in every state, as the MULE's do; reduced motion holds them open. */
+.cm[data-variant='B'] .cmB-blink { animation: cmB-blink 4.2s linear infinite; }
+
+.cm[data-variant='B'][data-motion='idle'] .cmB-limb { animation: cmB-swing var(--cycle) ease-in-out infinite; }
+.cm[data-variant='B'][data-motion='idle'] .cmB-wing { animation: cmB-flap calc(var(--cycle) / 2) ease-in-out infinite; }
+.cm[data-variant='B'][data-motion='idle'] .cmB-sprig { animation: cmB-wobble var(--cycle) ease-in-out infinite; }
+.cm[data-variant='B'][data-motion='idle'] .cmB-coin { animation: cmB-coin-flip 3.2s ease-in-out infinite; }
+
+.cm[data-variant='B']:is([data-motion='walk'], [data-motion='run'], [data-motion='hurt']) .cm-body { animation: cmB-hop calc(var(--cycle) / 2) ease-in-out infinite; }
+.cm[data-variant='B']:is([data-motion='walk'], [data-motion='run']) .cm-sway { animation: cm-sway-small var(--cycle) ease-in-out infinite; }
+.cm[data-variant='B']:is([data-motion='walk'], [data-motion='run']) .cm-shadow { animation: cm-shadow-hop calc(var(--cycle) / 2) ease-in-out infinite; }
+.cm[data-variant='B']:is([data-motion='walk'], [data-motion='run'], [data-motion='hurt']) .cmB-foot { animation: cmB-step var(--cycle) linear infinite; }
+.cm[data-variant='B']:is([data-motion='walk'], [data-motion='run'], [data-motion='hurt']) .cmB-limb { animation: cmB-swing var(--cycle) ease-in-out infinite; }
+.cm[data-variant='B']:is([data-motion='walk'], [data-motion='run'], [data-motion='hurt']) :is(.cmB-foot, .cmB-limb).cmB-b { animation-delay: calc(var(--cycle) / -2); }
+.cm[data-variant='B']:is([data-motion='walk'], [data-motion='run'], [data-motion='hurt']) .cmB-wing { animation: cmB-flap calc(var(--cycle) / 2) ease-in-out infinite; }
+.cm[data-variant='B']:is([data-motion='walk'], [data-motion='run'], [data-motion='hurt'], [data-motion='fight']) :is(.cmB-sprig, .cmB-tail) { animation: cmB-wobble var(--cycle) ease-in-out infinite; }
+.cm[data-variant='B']:is([data-motion='walk'], [data-motion='run'], [data-motion='hurt']) .cmB-sprig.cmB-b { animation-delay: calc(var(--cycle) / -4); }
+.cm[data-variant='B']:is([data-motion='walk'], [data-motion='run']) .cmB-coin { animation: cmB-coin calc(var(--cycle) / 2) ease-in-out infinite; }
+.cm[data-variant='B'][data-motion='run'] .cmB-look { animation: cmB-look 1.8s ease-in-out infinite; }
+/* The limp: the bad leg (the b side) barely strides and drags. */
+.cm[data-variant='B'][data-motion='hurt'] :is(.cmB-foot, .cmB-limb).cmB-b { --stride: 0.3; --amp: 5deg; }
+/* The fight: bounce on the toes, the front part jabs on the wolf's rhythm. */
+.cm[data-variant='B'][data-motion='fight'] .cmB-foot { --stride: 0.5; animation: cmB-step calc(var(--cycle) / 4) linear infinite; }
+.cm[data-variant='B'][data-motion='fight'] .cmB-foot.cmB-b { animation-delay: calc(var(--cycle) / -8); }
+.cm[data-variant='B'][data-motion='fight'] .cmB-wing { animation: cmB-flap calc(var(--cycle) / 4) ease-in-out infinite; }
+.cm[data-variant='B'][data-motion='fight'] .cmB-limb { transform: rotate(-24deg); }
+.cm[data-variant='B'][data-motion='fight'] .cmB-limb.cmB-strike { animation: cmB-strike-limb var(--cycle) ease-in-out infinite; }
+.cm[data-variant='B'][data-motion='fight'] .cmB-wing.cmB-strike { animation: cmB-strike-wing var(--cycle) ease-in-out infinite; }
+.cm[data-variant='B'][data-motion='fight'] .cmB-foot.cmB-strike { animation: cmB-strike-foot var(--cycle) ease-in-out infinite; }
+/* B's whole-body part of the fight is smaller than A's: the parts carry it. */
+.cm[data-variant='B'][data-motion='fight'] .cm-sway { animation-name: cm-sway-small; }
+
+/* --- The MULE on its lead, in step: its legs and bob take the colonist's stride ---------------------------------- */
+.cm-mule [class*='animate-[mule-step'],
+.cm-mule [class*='animate-[mule-bob'] { animation-duration: var(--cycle) !important; }
+
+/* --- Reduced motion: no looping cycle; facing still flips (at once); moving is a static lean and a stride pose ---- */
+@media (prefers-reduced-motion: reduce) {
+  .cm { --rm: 1; }
+  .cm *, .cm-mule * { animation: none !important; transition: none !important; }
+}
+[data-reduced] .cm { --rm: 1; }
+[data-reduced] .cm *,
+[data-reduced] .cm-mule *,
+[data-reduced] [class*='animate-[mule-'],
+[data-reduced] [class*='animate-[store-'] { animation: none !important; transition: none !important; }
+/* B's stride pose, held: one foot forward, one back; run wider; the strike part raised in a fight; the bad leg trails. */
+.cm[data-variant='B']:is([data-motion='walk'], [data-motion='run'], [data-motion='hurt']) .cmB-foot { transform: translate(calc(var(--rm) * var(--stride) * -1.6px), 0); }
+.cm[data-variant='B']:is([data-motion='walk'], [data-motion='run'], [data-motion='hurt']) .cmB-foot.cmB-b { transform: translate(calc(var(--rm) * var(--stride) * 1.6px), calc(var(--rm) * -1px)); }
+.cm[data-variant='B']:is([data-motion='walk'], [data-motion='run'], [data-motion='hurt']) .cmB-limb { transform: rotate(calc(var(--rm) * var(--amp) * -0.7)); }
+.cm[data-variant='B']:is([data-motion='walk'], [data-motion='run'], [data-motion='hurt']) .cmB-limb.cmB-b { transform: rotate(calc(var(--rm) * var(--amp) * 0.7)); }
+.cm[data-variant='B'][data-motion='fight'] .cmB-limb.cmB-strike { transform: rotate(calc(var(--rm) * -60deg)); }
+.cm[data-variant='B'][data-motion='fight'] .cmB-foot.cmB-strike { transform: translate(calc(var(--rm) * 3px), calc(var(--rm) * -3px)); }

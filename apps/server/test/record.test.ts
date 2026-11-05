@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
-import { configSnapshot, RuleError, stableJson, type GameRecord, type Playbook, type PlaybookEntry } from '@mule/engine';
+import { AI_HANDS, configSnapshot, GAME, RuleError, stableJson, type GameRecord, type GameState, type Playbook, type PlaybookEntry } from '@mule/engine';
 import type { Decider } from '@mule/ai';
 import type { MuleIntent, MuleView } from '@mule/protocol';
 import { Room, TableError, type ClientEnvelope, type Connection, type GameContext, type ServerEnvelope } from '@tabletop/core';
@@ -24,6 +24,12 @@ const spies = vi.hoisted(() => ({
   viewReadsClock: false,
   /** The playbook a game writes after accepting an intent, as a playbook builder would; null writes none. */
   playbookFor: null as ((seat: string, intent: MuleIntent) => PlaybookNote | null) | null,
+  /**
+   * Sets up the game state as each phase opens, before the game's own opening runs; the replay's game runs it too. It
+   * runs after the engine has entered the phase (production is already applied), so that month's history snapshot
+   * predates the arrangement.
+   */
+  arrange: null as ((state: GameState) => void) | null,
 }));
 vi.mock('../src/mule-game.js', async (original) => {
   const real = await original<typeof import('../src/mule-game.js')>();
@@ -45,6 +51,12 @@ vi.mock('../src/mule-game.js', async (original) => {
       return super.viewFor(seatId);
     }
   }
+  type Phases = { enterPhase(this: InstanceType<typeof real.MuleGame>): void };
+  const enterPhase = (real.MuleGame.prototype as unknown as Phases).enterPhase;
+  (CountedMuleGame.prototype as unknown as Phases).enterPhase = function () {
+    spies.arrange?.((this as unknown as { state: GameState }).state);
+    enterPhase.call(this);
+  };
   return { ...real, MuleGame: CountedMuleGame };
 });
 vi.mock('../src/brain/client.js', async (original) => ({
@@ -58,20 +70,51 @@ vi.mock('../src/brain/client.js', async (original) => ({
 
 const CODE = 'RECRD';
 const SEED = 10;
-/** Three months, so the export ship calls, and a lot sells to a player at the land auction: found by a seed sweep. */
-const NOTICE_GAME = { seed: 4, maxMonths: 3 };
+/** Up to the export ship's first call (month 2 at least, for the lot). The seed no longer matters: arrangeMarket and `market` make every notice T-AC-10 asks for (seeds 1-32 swept). */
+const NOTICE_GAME = { seed: 8, maxMonths: Math.max(2, GAME.exportShipEvery) };
 /** Game time per step of the fake clock; every timer due in a step runs, with promises settled between them. */
 const STEP_MS = 100;
 const PLANNING_READY_MS = 3_000;
+/**
+ * A good's side pick has no clock (A-7): the phones read it this long, past the AI seats' decision wait, before pressing
+ * Ready, so the AIs decide and speak there as they did under the old 8 s clock, not in the tick that ends the game.
+ */
+const SIDE_PICK_READ_MS = AI_HANDS.auction.decideWaitMs + 500;
 const GAME_LIMIT_MS = 30 * 60_000;
 /**
  * How the Claude stand-in answers each call, in turn: after a delay in ms (some land within a tick, some many ticks
  * later), or by rejecting at once, as the real decider does when the seat is busy.
  */
 const ANSWERS: readonly (number | 'busy')[] = [40, 'busy', 1_300, 260, 3_100, 90, 700];
-const GAME_OPTIONS = { maxMonths: 1, politics: true };
+/**
+ * Three months: under the 5 Nov start values (2 Food and 2 Energy a seat, one claim a grant) the Smart seat meets no
+ * close call in month 1, so it would never ask the stand-in; by month 3 it has asked, and been answered busy, at least
+ * once (WS1's B-AC-2 plays four months for the same reason).
+ */
+const GAME_OPTIONS = { maxMonths: 3, politics: true };
+/** Units of a good T-AC-10's market hands Mia to spare as each production opens. */
+const SPARE = 20;
+/**
+ * T-AC-10's market, set from state as each month's production opens, so every notice it asks for happens by
+ * construction, whatever the seed, the prices or the month the ship calls: Heiko (s1) has no food and Mia (s2) has food and the export
+ * ship's first good to spare. The script does the rest (`market` in TableOptions).
+ */
+const arrangeMarket = (state: GameState) => {
+  if (state.phase !== 'production') return;
+  const heiko = state.players.find((p) => p.id === 's1')!;
+  const mia = state.players.find((p) => p.id === 's2')!;
+  heiko.stock.food = 0;
+  mia.stock.food += SPARE;
+  mia.stock[state.ship.goods[0]!] += SPARE;
+};
 /** The rows beyond T-AC-1 run locally only (MULE_FULL=1, `pnpm test:full`); each plays one or two whole games. */
 const FULL = process.env.MULE_FULL === '1';
+/** What the script says: a public line from s1 and a whisper from s2 to the Smart seat, in words no record holds otherwise. */
+const CHAT = {
+  public: { from: 's1', text: 'Quokka keeps the riverbank.' },
+  whisper: { from: 's2', to: 's3', text: 'psst Marzipan, sell me smithore' },
+} as const;
+const CHAT_WORDS = ['Quokka', 'riverbank', 'psst', 'Marzipan'];
 
 type MuleRecord = GameRecord<MuleIntent>;
 type PlaybookNote = Omit<PlaybookEntry, 'type' | 'at' | 'seq'>;
@@ -129,6 +172,12 @@ interface TableOptions {
   /** Default SEED and GAME_OPTIONS' month count. */
   seed?: number;
   maxMonths?: number;
+  /**
+   * The phones trade, for T-AC-10, with `arrangeMarket` on: in month 2's planning Heiko lists his plot at a minimum
+   * of 1, and at its lot Mia bids up to the minimum. In the auction Heiko passes every good but food; Mia sells food to
+   * Heiko, who walks up to buy it, and sells any good the ship wants down to its line.
+   */
+  market?: boolean;
 }
 
 let rooms: Room<MuleIntent, MuleView>[];
@@ -197,11 +246,61 @@ function table(options: TableOptions = {}) {
   const view = () => room.viewFor(null).game!;
   const finished = () => room.viewFor(null).game?.finished ?? false;
   let planningFor = 0;
+  let sidePickFor = 0;
+  let sidePickOf = '';
   let claimed = false;
   let refusedSent = false;
   let hostContinued = false;
   let dropAt: number | null = null;
+  let sidePickDropAt: number | null = null;
+  let miaAway = false;
+  let listed = false;
+  /** The goods, by month, whose status screen and walk the market has played. */
+  const declared = new Set<string>();
+  const walked = new Set<string>();
+  const stopped = new Set<string>();
   let elapsed = 0;
+  const market = () => {
+    const [heiko, mia] = phones as [Screen, Screen];
+    const v = view();
+    if (v.phase === 'planning' && v.month === 2 && !listed) {
+      const plot = v.tiles.find((t) => t.owner === 's1');
+      if (plot) {
+        listed = true;
+        send(heiko, { t: 'intent', intent: { type: 'list', item: { kind: 'plot', x: plot.x, y: plot.y }, minimum: 1, unsold: 'store' } });
+      }
+    }
+    const lot = v.landAuction;
+    if (v.phase === 'landAuction' && lot?.stage === 'walk' && lot.lot.seller === 's1') {
+      const bidder = lot.walkers.find((w) => w.id === 's2' && w.side === 'buyer');
+      if (bidder && bidder.price < lot.lot.minimum && bidder.dir === 0) send(mia, { t: 'intent', intent: { type: 'walk', dir: 'up' } });
+      if (bidder && bidder.price >= lot.lot.minimum && bidder.dir !== 0) send(mia, { t: 'intent', intent: { type: 'walk', dir: 'stop' } });
+    }
+    const auction = v.auction;
+    if (v.phase !== 'auction' || !auction) return;
+    const key = `${v.month}:${auction.good}`;
+    const food = auction.good === 'food';
+    const miaSells = (food || auction.shipPays !== null) && (auction.walkers.find((w) => w.id === 's2')?.units ?? 0) > 0;
+    if (auction.stage === 'status' && !declared.has(key)) {
+      declared.add(key);
+      // Everyone starts as a buyer (RULE-2): Heiko says so again for Food, which changes nothing; Mia switches to sell.
+      if (food) send(heiko, { t: 'intent', intent: { type: 'declare', side: 'buyer' } });
+      if (miaSells) send(mia, { t: 'intent', intent: { type: 'declare', side: 'seller' } });
+    }
+    if (auction.stage === 'walk' && !walked.has(key)) {
+      walked.add(key);
+      if (food) send(heiko, { t: 'intent', intent: { type: 'walk', dir: 'up' } });
+      if (miaSells) send(mia, { t: 'intent', intent: { type: 'walk', dir: 'down' } });
+    }
+    // At a house's line units trade by themselves (RULE-1): once Mia is selling there, she stops with one tap up, once a
+    // good, so the record holds a mid-run stop at a house line (the auto-trade amendment's T-AC-1).
+    const miaThere = auction.walkers.find((w) => w.id === 's2');
+    const selling = auction.deals.some((d) => d.seller === 's2' && (d.buyer === 'store' || d.buyer === 'ship') && d.units > 0);
+    if (auction.stage === 'walk' && miaThere?.side === 'seller' && miaThere.line && selling && !stopped.has(key)) {
+      stopped.add(key);
+      send(mia, { t: 'intent', intent: { type: 'walkStep', dir: 'up' } });
+    }
+  };
   const script = () => {
     const [heiko, mia] = phones as [Screen, Screen];
     const phase = view().phase;
@@ -210,8 +309,8 @@ function table(options: TableOptions = {}) {
       if (!refusedSent) {
         refusedSent = true;
         send(mia, { t: 'intent', intent: { type: 'continue' } });
-        send(heiko, { t: 'chat', text: 'Leave the river to me.' });
-        send(mia, { t: 'chat', text: 'psst, sell me food', to: 's3' });
+        send(heiko, { t: 'chat', text: CHAT.public.text });
+        send(mia, { t: 'chat', text: CHAT.whisper.text, to: CHAT.whisper.to });
       }
       if (planningFor >= PLANNING_READY_MS && !hostContinued) {
         hostContinued = true;
@@ -219,11 +318,35 @@ function table(options: TableOptions = {}) {
       }
       if (planningFor >= PLANNING_READY_MS) for (const phone of phones) if (view().phase === 'planning') send(phone, { t: 'intent', intent: { type: 'ready' } });
     } else planningFor = 0;
+    if (phase === 'upkeep') for (const phone of phones) send(phone, { t: 'intent', intent: { type: 'ready' } });
+    // A good's side pick has no clock either (A-7): once read, every phone not yet Done presses Ready there.
+    const pick = view().auction;
+    // A-7, review F7: at the first side pick Mia's phone drops, Heiko moves on for her while she is away, and she
+    // rejoins later; the replay must hold through it.
+    if (phase === 'auction' && pick?.stage === 'status' && sidePickDropAt === null) {
+      sidePickDropAt = elapsed;
+      miaAway = true;
+      room.disconnect(mia.conn);
+      send(heiko, { t: 'intent', intent: { type: 'ready' } });
+      send(heiko, { t: 'intent', intent: { type: 'continue' } });
+    }
+    if (sidePickDropAt !== null && miaAway && elapsed === sidePickDropAt + 20 * STEP_MS) {
+      miaAway = false;
+      mia.from.seatId = null;
+      send(mia, { t: 'join', code: CODE, name: 'Mia', seatToken: mia.token! });
+    }
+    if (phase === 'auction' && pick?.stage === 'status') {
+      // Each good's side pick is read afresh: the next can open the moment the last closes.
+      if (pick.good !== sidePickOf) [sidePickOf, sidePickFor] = [pick.good, 0];
+      sidePickFor += STEP_MS;
+      if (sidePickFor >= SIDE_PICK_READ_MS) for (const phone of phones) if (!(phone === mia && miaAway) && !pick.walkers.find((w) => w.id === phone.from.seatId)?.done) send(phone, { t: 'intent', intent: { type: 'ready' } });
+    } else sidePickFor = 0;
     const lit = view().lit;
     if (phase === 'landGrant' && lit && !claimed) {
       claimed = true;
       send(heiko, { t: 'intent', intent: { type: 'claim', x: lit.x, y: lit.y } });
     }
+    // Heiko never installs on his plot: as host he starts month 1's waiting development clock once Mia is back (A-1).
     if (phase === 'development' && dropAt === null) {
       dropAt = elapsed;
       room.disconnect(mia.conn);
@@ -236,6 +359,7 @@ function table(options: TableOptions = {}) {
       room.viewFor('s1');
       send(tv, { t: 'ping', clientTime: elapsed });
     }
+    if (options.market) market();
   };
   const runUntil = async (done: () => boolean, limitMs = GAME_LIMIT_MS) => {
     for (; elapsed < limitMs && !done(); elapsed += STEP_MS) {
@@ -254,6 +378,8 @@ function table(options: TableOptions = {}) {
     game: () => game!,
     unrecordedHash: () => unrecordedHash,
     finished,
+    /** Plays the script until `done`, or until the game's time limit. */
+    runUntil,
     /** Plays to game over, then lets the record be written. */
     toGameOver: async () => {
       const over = await runUntil(finished);
@@ -278,6 +404,10 @@ async function recordedGame(options?: TableOptions): Promise<{ record: MuleRecor
 
 const isStep = (e: MuleRecord['events'][number]) => e.type !== 'notice' && e.type !== 'playbook';
 
+/** The record's heard steps, as who spoke to whom. */
+const heardIn = (record: MuleRecord) =>
+  record.events.flatMap((e) => (e.type === 'heard' ? [e.to === undefined ? { from: e.from } : { from: e.from, to: e.to }] : []));
+
 describe('the game record', { timeout: 60_000 }, () => {
   it('T-AC-1: a recorded game with a late Claude answer and a dropped phone replays identical', async () => {
     const { record, t } = await recordedGame();
@@ -286,11 +416,20 @@ describe('the game record', { timeout: 60_000 }, () => {
     expect(steps.some((e) => e.type === 'answer' && e.choice), 'an answer arrived as its own step').toBe(true);
     expect(steps.some((e) => e.type === 'answer' && e.error === 'busy'), 'a call was rejected busy').toBe(true);
     expect(steps.some((e) => e.type === 'intent' && e.seat === 's1' && e.intent.type === 'continue' && !e.refused && e.hosts?.length)).toBe(true);
+    // A-7, review F7: Heiko's Continue at a side pick, while Mia's phone is away, was taken; she came back after.
+    const accepted = steps.filter((e) => e.type === 'intent' && e.seat === 's1' && e.intent.type === 'continue' && !e.refused);
+    expect(accepted.length, "the host's Continue in planning and at a side pick").toBeGreaterThanOrEqual(2);
+    const sidePick = accepted.at(-1)!;
+    const drops = steps.filter((e) => e.type === 'connection' && !e.connected && e.seq < sidePick.seq);
+    const backs = steps.filter((e) => e.type === 'connection' && e.connected && e.seq > sidePick.seq);
+    expect(drops.length, "Mia's phone dropped before the side pick's Continue").toBeGreaterThanOrEqual(2);
+    expect(backs.length, 'and came back after it').toBeGreaterThanOrEqual(1);
     expect(steps.some((e) => e.type === 'connection' && !e.connected)).toBe(true);
     expect(steps.some((e) => e.type === 'connection' && e.connected)).toBe(true);
     expect(steps.some((e) => e.type === 'intent' && e.intent.type === 'claim' && !e.refused)).toBe(true);
     expect(steps.some((e) => e.type === 'intent' && e.seat === 's2' && e.refused === 'Only the host can continue' && e.hosts?.length)).toBe(true);
     expect(record.seats.filter((s) => s.smart).map((s) => s.id)).toEqual(['s3']);
+    expect(heardIn(record), 'the chat lines are heard steps').toEqual([{ from: CHAT.public.from }, { from: CHAT.whisper.from, to: CHAT.whisper.to }]);
 
     const result = await replay(record);
     expect(result.scores.map((s) => s.replayed)).toEqual(result.scores.map((s) => s.recorded));
@@ -318,6 +457,21 @@ describe('the game record', { timeout: 60_000 }, () => {
       },
     );
     expect(outcome).toBe(false);
+  });
+
+  it('T-AC-39 (C32, G-5 RULE-25): the record keeps the colony score at game over, the replay scores the same, and a changed one is not identical', async () => {
+    const { record } = await recordedGame();
+    // GAME_OPTIONS plays with the council, so the game ends with a colony score.
+    expect(record.outcome!.colonyScore).toEqual(expect.any(Number));
+    const same = await replay(record);
+    expect(same.identical).toBe(true);
+    expect(same.colonyScore).toEqual({ recorded: record.outcome!.colonyScore, replayed: record.outcome!.colonyScore });
+
+    const changed = fileCopy(record);
+    changed.outcome!.colonyScore! += 1;
+    const byScore = await replay(changed);
+    expect(byScore.identical).toBe(false);
+    expect(byScore.colonyScore).toEqual({ recorded: record.outcome!.colonyScore! + 1, replayed: record.outcome!.colonyScore });
   });
 });
 
@@ -402,6 +556,32 @@ describe.runIf(FULL)('the recorder', { timeout: 60_000 }, () => {
   });
 });
 
+describe.runIf(FULL)('chat in the record', { timeout: 60_000 }, () => {
+  it('T-AC-12: a public line and a whisper to an AI are one heard step each, who to whom, the file holds none of their words, and the replay is identical', async () => {
+    const { record } = await recordedGame();
+    const heard = record.events.filter((e) => e.type === 'heard');
+    const fields = new Set(['type', 'at', 'seq', 'reads', 'hosts', 'decides', 'from', 'to']);
+    for (const step of heard) expect(Object.keys(step).filter((k) => !fields.has(k)), 'a heard step has no field for the words').toEqual([]);
+    expect(heardIn(record)).toEqual([{ from: CHAT.public.from }, { from: CHAT.whisper.from, to: CHAT.whisper.to }]);
+
+    const text = JSON.stringify(record);
+    for (const line of [CHAT.public.text, CHAT.whisper.text]) expect(text).not.toContain(line);
+    for (const word of CHAT_WORDS) expect(text, `the record holds the chat word "${word}"`).not.toContain(word);
+
+    // A heard line changes nothing in play yet, so an identical replay alone can't show the replay heard it (RULE-6).
+    const heardInReplay = vi.spyOn(MuleGame.prototype, 'heard');
+    try {
+      expect((await replay(record)).identical).toBe(true);
+      expect(heardInReplay.mock.calls, 'the replay hears each line, from whom to whom, with no words').toEqual([
+        [CHAT.public.from, '', undefined],
+        [CHAT.whisper.from, '', CHAT.whisper.to],
+      ]);
+    } finally {
+      heardInReplay.mockRestore();
+    }
+  });
+});
+
 describe.runIf(FULL)('the replay', { timeout: 60_000 }, () => {
   let dir: string;
   beforeEach(() => {
@@ -463,10 +643,10 @@ describe.runIf(FULL)('the replay', { timeout: 60_000 }, () => {
     expect(byHash.stateHash.replayed).toBe(record.outcome!.stateHash);
 
     const scored = fileCopy(record);
-    scored.outcome!.scores.s1! += 1;
+    scored.outcome!.scores!.s1! += 1;
     const byScore = await replay(scored);
     expect(byScore.identical).toBe(false);
-    expect(byScore.scores.find((s) => s.seat === 's1')).toMatchObject({ recorded: record.outcome!.scores.s1! + 1, replayed: record.outcome!.scores.s1 });
+    expect(byScore.scores.find((s) => s.seat === 's1')).toMatchObject({ recorded: record.outcome!.scores!.s1! + 1, replayed: record.outcome!.scores!.s1 });
   });
 
   it('T-AC-3: a record made under one changed config value is refused before any game is built', async () => {
@@ -568,16 +748,19 @@ describe.runIf(FULL)('playbooks in the record', { timeout: 60_000 }, () => {
   it('T-AC-11: recordPlaybook entries come out in call order with their step\'s at and seq, and the replay ignores them', async () => {
     const written = writeOnReady();
     const { record, t } = await recordedGame();
-    const entries = record.events.filter((e) => e.type === 'playbook');
+    // The Classic AI seat writes its own planning playbooks too (C15); this test is about the ones the spy wrote.
+    const spySeats = new Set(written.map((w) => w.seat));
+    const entries = record.events.flatMap((e) => (e.type === 'playbook' && spySeats.has(e.seat) ? [e] : []));
     expect(entries.length, 'the game wrote playbooks').toBeGreaterThan(1);
     expect(entries.map(({ seat, month, phase, playbook }) => ({ seat, month, phase, playbook }))).toEqual(written);
     record.events.forEach((e, i) => {
-      if (e.type !== 'playbook') return;
+      if (e.type !== 'playbook' || !spySeats.has(e.seat)) return;
       const step = record.events.slice(0, i).filter(isStep).at(-1)!;
       expect(step).toMatchObject({ type: 'intent', seat: e.seat, intent: { type: 'ready' }, at: e.at, seq: e.seq });
     });
 
-    const last = record.events.filter(isStep).at(-1)!;
+    // The live recorder's last step: after game over it may still log AI chat output, which the file need not hold.
+    const last = t.recorder().record.events.filter(isStep).at(-1)!;
     t.recorder().playbook({ seat: 's3', month: 1, phase: 'month', playbook: playbookOf('s3', 0) });
     expect(t.recorder().record.events.at(-1), 'between steps, the last step stamps it').toMatchObject({ type: 'playbook', seat: 's3', at: last.at, seq: last.seq });
 
@@ -600,6 +783,12 @@ describe.runIf(FULL)('playbooks in the record', { timeout: 60_000 }, () => {
 
 
 describe.runIf(FULL)('notices in the record', { timeout: 120_000 }, () => {
+  beforeEach(() => {
+    spies.arrange = arrangeMarket;
+  });
+  afterEach(() => {
+    spies.arrange = null;
+  });
   const factOf = (e: MuleRecord['events'][number]): Notice | null => {
     if (e.type !== 'notice') return null;
     const { type: _type, at: _at, seq: _seq, ...notice } = e;
@@ -607,17 +796,19 @@ describe.runIf(FULL)('notices in the record', { timeout: 120_000 }, () => {
   };
 
   it('T-AC-10: claims, declarations, trades (the ship included) and lot sales appear as notices, phaseNotices() holds them with recording off, and a replay without them is identical', async () => {
-    const { record } = await recordedGame(NOTICE_GAME);
+    const { record } = await recordedGame({ ...NOTICE_GAME, market: true });
     const notices = record.events.map(factOf).filter((n) => n !== null);
     const phaseOf = { claim: 'landGrant', declare: 'auction', trade: 'auction', sale: 'landAuction' } as const;
     for (const n of notices) expect(n.phase, `a ${n.kind} settles in its phase`).toBe(phaseOf[n.kind]);
     expect(notices.some((n) => n.kind === 'claim' && n.seat === 's1'), "the human's claim").toBe(true);
     expect(notices.some((n) => n.kind === 'claim' && n.seat !== 's1'), "an AI seat's claim").toBe(true);
-    expect(notices.some((n) => n.kind === 'declare' && n.side === 'pass')).toBe(true);
-    expect(notices.some((n) => n.kind === 'declare' && n.side !== 'pass')).toBe(true);
-    expect(notices.some((n) => n.kind === 'trade' && n.buyer === 'ship' && n.month === 3), 'a sale to the export ship').toBe(true);
+    expect(notices.some((n) => n.kind === 'declare' && n.side === 'seller'), 'a seat switching to sell a good').toBe(true);
+    expect(notices.some((n) => n.kind === 'declare' && n.side === 'pass'), 'nobody passes: everyone takes part').toBe(false);
+    expect(notices.some((n) => n.kind === 'trade' && n.buyer === 'ship' && n.month === GAME.exportShipEvery), 'a sale to the export ship').toBe(true);
     expect(notices.some((n) => n.kind === 'trade' && n.buyer !== 'ship' && n.buyer !== 'store' && n.seller !== 'store'), 'a trade between players').toBe(true);
     expect(notices.some((n) => n.kind === 'sale' && n.buyer !== 'store'), 'a lot sold to a player').toBe(true);
+    expect(record.events.some((e) => e.type === 'intent' && e.seat === 's2' && e.intent.type === 'walkStep' && e.refused === undefined), "a phone's stop at a house line (T-AC-1), replayed below").toBe(true);
+    expect(notices.some((n) => n.kind === 'trade' && n.seller === 's2' && (n.buyer === 'store' || n.buyer === 'ship')), 'a sale at a house line with nothing chosen').toBe(true);
     record.events.forEach((e, i) => {
       if (e.type !== 'notice') return;
       const step = record.events.slice(0, i).filter(isStep).at(-1)!;
@@ -637,8 +828,140 @@ describe.runIf(FULL)('notices in the record', { timeout: 120_000 }, () => {
       enterPhase.call(this);
       expect(this.phaseNotices(), 'a new phase opens with none').toEqual([]);
     });
-    const off = table({ ...NOTICE_GAME, record: false });
+    const off = table({ ...NOTICE_GAME, market: true, record: false });
     expect(await off.toGameOver()).toBe(true);
     expect(kept).toEqual(notices);
+  });
+});
+
+describe.runIf(FULL)('a crashed game in the record', { timeout: 60_000 }, () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mule-crash-'));
+  });
+  afterEach(() => {
+    spies.arrange = null;
+    spies.playbookFor = null;
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  const FAULT = 'forced fault entering development';
+  /** A message the record must cut at 120 characters: the words past the cap never reach the file. */
+  const PAST_CAP = 'WORDSPASTTHECAP';
+  const LONG_FAULT = `${FAULT}: ${'x'.repeat(120)} ${PAST_CAP}`;
+  /**
+   * A bug in the game's own code as month 1's development opens: the engine has already entered the phase, so the
+   * state at the error is not the state before the step. Nothing marks it as a test's: the recorder sees a throw from
+   * game code, as it would from any bug. The replay's game runs the same code, so it throws there too.
+   */
+  const faultIn = (phase: GameState['phase'], thrown: Error[] = [], message = FAULT) => (state: GameState) => {
+    if (state.phase !== phase || state.month !== 1) return;
+    const err = new Error(message);
+    thrown.push(err);
+    throw err;
+  };
+  /** A bug in the game's `handle`, after it accepted Heiko's claim: a plain Error, not a RuleError, so no refusal. */
+  const CLAIM_FAULT = 'forced fault after a claim';
+  const faultAfterClaim = (thrown: Error[] = []) => (_seat: string, intent: MuleIntent): null => {
+    if (intent.type !== 'claim') return null;
+    const err = new Error(CLAIM_FAULT);
+    thrown.push(err);
+    throw err;
+  };
+
+  /**
+   * Plays the scripted game, with the fault `arm` sets up, until the fault ends the room, and returns the file it
+   * wrote, as text and parsed.
+   */
+  async function crashedGame(arm: (thrown: Error[]) => void = (thrown) => (spies.arrange = faultIn('development', thrown))) {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const thrown: Error[] = [];
+    arm(thrown);
+    const t = table({ dir });
+    const removed = () => t.phones[0]!.seen.includes('removed');
+    expect(await t.runUntil(removed), 'the fault ended the room').toBe(true);
+    await vi.waitFor(() => expect(fs.readdirSync(dir)).toHaveLength(1));
+    expect(thrown).toHaveLength(1);
+    errors.mockRestore();
+    vi.useRealTimers();
+    const text = fs.readFileSync(path.join(dir, fs.readdirSync(dir)[0]!), 'utf8');
+    return { text, record: JSON.parse(text) as MuleRecord, err: thrown[0]! };
+  }
+
+  it('T-AC-13: a game error mid-game writes the record with ended "error" and the message, capped, no stack, and its replay throws at the same step, identical', async () => {
+    const { text, record, err } = await crashedGame((thrown) => (spies.arrange = faultIn('development', thrown, LONG_FAULT)));
+    expect(record.ended).toBe('error');
+    expect(record.error, 'the message, cut at 120 characters').toBe(LONG_FAULT.slice(0, 120));
+    expect(record.error).toHaveLength(120);
+    expect(text, 'the words past the cap').not.toContain(PAST_CAP);
+    expect(record.outcome?.stateHash, 'the state when the error ended the room').toMatch(/^[0-9a-f]{64}$/);
+    expect(Object.keys(record.outcome?.scores ?? {}).sort()).toEqual(record.seats.map((s) => s.id).sort());
+    const frames = err.stack!.split('\n').slice(1).map((line) => line.trim()).filter((line) => line.length > 0);
+    expect(frames.length, 'the error had a stack to leave out').toBeGreaterThan(0);
+    for (const frame of frames) expect(text).not.toContain(frame);
+    expect(text).not.toContain(process.cwd());
+    expect(text).not.toContain('record.test.ts');
+    const last = record.events.filter(isStep).at(-1)!;
+    expect(last.type === 'intent' && last.refused !== undefined, 'the crash is not recorded as a refusal').toBe(false);
+    expect(last, 'a timer threw as development opened, mid-game').toMatchObject({ type: 'fire' });
+    expect(last.seq).toBeGreaterThan(1);
+
+    spies.arrange = faultIn('development', [], LONG_FAULT);
+    const result = await replay(record);
+    expect(result.stateHash.replayed).toBe(record.outcome!.stateHash);
+    expect(result.scores.map((s) => s.replayed)).toEqual(result.scores.map((s) => s.recorded));
+    expect(result.identical).toBe(true);
+  });
+
+  it('T-AC-13: a game error thrown from handle, not a RuleError, writes the record with ended "error", and its replay throws at that intent, identical', async () => {
+    const { record } = await crashedGame((thrown) => (spies.playbookFor = faultAfterClaim(thrown)));
+    expect(record.ended).toBe('error');
+    expect(record.error).toBe(CLAIM_FAULT);
+    const last = record.events.filter(isStep).at(-1)!;
+    expect(last, "Heiko's claim threw, and is no refusal").toMatchObject({ type: 'intent', seat: 's1', intent: { type: 'claim' } });
+    expect(last.type === 'intent' && last.refused).toBeFalsy();
+
+    spies.playbookFor = faultAfterClaim();
+    const result = await replay(record);
+    expect(result.stateHash.replayed).toBe(record.outcome!.stateHash);
+    expect(result.identical).toBe(true);
+  });
+
+  it('T-AC-13: a game error whose message holds absolute paths writes <path>, never the path', async () => {
+    const cwd = process.cwd();
+    const windows = 'C:\\Users\\heiko\\mule\\data\\records\\game.json';
+    const message = `ENOENT: no such file or directory, open '${cwd}/data/records/game.json' (was ${windows})`;
+    const { text, record } = await crashedGame((thrown) => (spies.arrange = faultIn('development', thrown, message)));
+    expect(record.error).toBe("ENOENT: no such file or directory, open '<path>' (was <path>)");
+    expect(text).not.toContain(cwd);
+    expect(text).not.toContain('C:\\\\Users');
+    expect(text).not.toContain('records/game.json');
+
+    spies.arrange = faultIn('development', [], message);
+    expect((await replay(record)).identical).toBe(true);
+  });
+
+  it('T-AC-13 (negative): a replay whose game does not throw at the crashed step, or throws at another, is not identical and says why', async () => {
+    const { record } = await crashedGame();
+    const last = record.events.filter(isStep).at(-1)!;
+
+    spies.arrange = null;
+    const healed = await replay(record);
+    expect(healed.identical).toBe(false);
+    expect(healed.reason).toContain(`step ${last.seq}`);
+    expect(healed.reason).toContain('did not throw');
+
+    spies.arrange = faultIn('landGrant');
+    const early = await replay(record);
+    expect(early.identical).toBe(false);
+    expect(early.reason).toMatch(/threw at step \d+/);
+    expect(early.reason).not.toContain(`threw at step ${last.seq}`);
+
+    const reworded = fileCopy(record);
+    reworded.error = `${FAULT} (reworded)`;
+    spies.arrange = faultIn('development');
+    const other = await replay(reworded);
+    expect(other.identical).toBe(false);
+    expect(other.reason).toContain(FAULT);
   });
 });

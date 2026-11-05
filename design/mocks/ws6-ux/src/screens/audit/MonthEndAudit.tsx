@@ -8,7 +8,9 @@ import { TvHeader } from '../../../../../../apps/web/src/table/TableApp';
 import { VIEW } from '../../fixture';
 import { Board, Game, PhoneFrame, TvFrame } from '../../harness';
 import { GameShell, type Now } from '../../proposed/GameShell';
+import { ChatProvider, useChatSim } from '../../proposed/Chat';
 import { IntentMarker, IntentNotes, IntentNotesProvider } from '../../proposed/IntentNote';
+import { TickerRuleSwitch } from '../../proposed/TickerRule';
 import { DONATION_WORTH, inCollapse, league, MOOD_SCALE, type MonthFacts } from '../../proposed/worth';
 import { OnlyYouLook } from '../PlanningHub';
 import { MONTHEND_NOTES } from './monthend/notes';
@@ -110,10 +112,11 @@ function PhoneGameEnd({ facts, tv }: { facts: MonthFacts; tv: boolean }) {
         }
       >
         <div className={cx('relative flex min-h-0 flex-1 flex-col', tv ? 'gap-2.5' : 'gap-1.5')} data-testid={tv ? 'phone-gameover' : 'phone-only-gameover'}>
-          <div className={cx('grid min-h-0 grid-cols-[minmax(0,5fr)_minmax(0,6fr)]', tv ? 'flex-1 gap-2.5' : 'gap-1.5')}>
-            <div className={cx('flex min-h-0 flex-col', tv ? 'gap-2.5' : 'gap-1.5')}>
-              <WinnerCard view={view} facts={facts} density={density} selfId={self.id} />
-              {tv && <PhoneVerdict view={view} />}
+          {/* A small phone has no height for the card and the verdict in one column: the verdict moves under your lines. */}
+          <div className={cx('grid min-h-0 grid-cols-[minmax(0,5fr)_minmax(0,6fr)]', tv ? 'flex-1 gap-2.5 @max-3xl/shell:grid-cols-[minmax(0,4fr)_minmax(0,7fr)] @max-3xl/shell:grid-rows-[auto_minmax(0,1fr)]' : 'gap-1.5')}>
+            <div className={cx('flex min-h-0 flex-col', tv ? 'gap-2.5 @max-3xl/shell:contents' : 'gap-1.5')}>
+              <WinnerCard view={view} facts={facts} density={density} selfId={self.id} {...(tv ? { className: '@max-3xl/shell:row-span-2' } : {})} />
+              {tv && <PhoneVerdict view={view} className="@max-3xl/shell:col-start-2 @max-3xl/shell:row-start-2" />}
             </div>
             <YourWorth view={view} density={density} />
           </div>
@@ -222,6 +225,8 @@ function Numbers() {
 export function MonthEndAuditPage({ state }: { state: MonthEndState }) {
   const board: MuleView = { ...state.view, me: null };
   // Each state lists the changes its screens show: M3 (the change column) has no place at game over, M11 only there.
+  // The table talks on every screen (C20): the seat row and the ticker in the phone rail's header.
+  const chat = useChatSim(0, 'lena');
   const notes = Object.values(MONTHEND_NOTES).filter((n) => (n.id !== 'M10' || inCollapse(state.view)) && (n.id !== 'M11' || state.view.finished) && (n.id !== 'M3' || !state.view.finished));
   return (
     <div className="min-h-full bg-table p-8 text-ink" data-testid={`page-${state.id}`}>
@@ -230,43 +235,48 @@ export function MonthEndAuditPage({ state }: { state: MonthEndState }) {
       </a>
       <h1 className="mb-2 mt-2 font-display text-2xl font-semibold">For approval · The month’s end · {state.title}</h1>
       <Links current={state.id} />
-      <p className="mt-2 max-w-[900px] text-sm text-ink-2">{state.intro}</p>
-      <IntentNotesProvider>
-        <div className="mt-4 flex flex-wrap items-start gap-6">
-          <div className="flex min-w-0 flex-col gap-2">
-            {state.tv && (
-              <>
-                <Caption>The TV · 1280 × 720 · everyone sees it</Caption>
-                <TvFrame>
-                  <Board view={board}>
-                    <TvMonthEnd key={`${state.id}-tv`} view={board} facts={state.facts} />
-                  </Board>
-                </TvFrame>
-                <Caption>Lena’s phone, beside the TV · 844 × 390</Caption>
-                <PhoneFrame>
-                  <Game view={state.view}>
-                    <PhoneMonthEnd key={`${state.id}-p`} facts={state.facts} tv />
-                  </Game>
-                </PhoneFrame>
-              </>
-            )}
-            <Caption>Lena’s phone, no TV at the table · 844 × 390</Caption>
-            <PhoneFrame>
-              <Game view={state.view}>
-                <PhoneMonthEnd key={`${state.id}-po`} facts={state.facts} tv={false} />
-              </Game>
-            </PhoneFrame>
+      <p className="mt-2 max-w-[900px] text-sm text-ink-2">{state.intro} The table chat runs in the phone rail’s header, as in the product.</p>
+      <div className="mt-2">
+        <TickerRuleSwitch />
+      </div>
+      <ChatProvider value={chat}>
+        <IntentNotesProvider>
+          <div className="mt-4 flex flex-wrap items-start gap-6">
+            <div className="flex min-w-0 flex-col gap-2">
+              {state.tv && (
+                <>
+                  <Caption>The TV · 1280 × 720 · everyone sees it</Caption>
+                  <TvFrame>
+                    <Board view={board}>
+                      <TvMonthEnd key={`${state.id}-tv`} view={board} facts={state.facts} />
+                    </Board>
+                  </TvFrame>
+                  <Caption>Lena’s phone, beside the TV · 844 × 390</Caption>
+                  <PhoneFrame>
+                    <Game view={state.view}>
+                      <PhoneMonthEnd key={`${state.id}-p`} facts={state.facts} tv />
+                    </Game>
+                  </PhoneFrame>
+                </>
+              )}
+              <Caption>Lena’s phone, no TV at the table · 844 × 390</Caption>
+              <PhoneFrame>
+                <Game view={state.view}>
+                  <PhoneMonthEnd key={`${state.id}-po`} facts={state.facts} tv={false} />
+                </Game>
+              </PhoneFrame>
+            </div>
+            <div className="flex w-[420px] max-w-full flex-col gap-4">
+              <IntentNotes
+                title={`${notes.length} changes, and why`}
+                intro="One card per change. Hover one and its numbers light up on every screen. Intent 1 and 2 are Heiko’s own words of 2026-10-28; “Why” quotes his ask or the model he agreed."
+                notes={notes}
+              />
+              <Numbers />
+            </div>
           </div>
-          <div className="flex w-[420px] max-w-full flex-col gap-4">
-            <IntentNotes
-              title={`${notes.length} changes, and why`}
-              intro="One card per change. Hover one and its numbers light up on every screen. Intent 1 and 2 are Heiko’s own words of 2026-10-28; “Why” quotes his ask or the model he agreed."
-              notes={notes}
-            />
-            <Numbers />
-          </div>
-        </div>
-      </IntentNotesProvider>
+        </IntentNotesProvider>
+      </ChatProvider>
     </div>
   );
 }

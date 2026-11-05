@@ -263,6 +263,8 @@ ux           WS6's hub mock at ws6-ux b28ee91 (awaiting Heiko's approval):
              election-stage, run-governor, run-sheriff, withdraw, candidates, voted, vote-weight,
              ballot-countdown, ballot-reveal, result-<office>-<id>, how-<office>, gov-tax, tax-down,
              tax-value, tax-up, tax-confirm, tax-readonly, vote-weights, land-baron.
+             (offices and tax-readonly superseded by A-3: fund-card, fund-in, fund-out,
+             roadmap-offices.)
              GRAFT TARGET: the hub's politics slots (WS6's PR-9 frame).
 depends_on   C9 (contract), WS6 mock approval (not stubbable: an implementer never designs a screen)
 ```
@@ -888,6 +890,16 @@ did       Heiko: "Yes, cut it too". In Collapse, total = round((raw + office) ×
 because   P-1 / G-5: a Governor of a collapsed colony should not keep a full reward for running it
 goal      P-1 — still met
 folded    C7 tomorrow, RULE-7 score
+```
+
+```
+AM-21 · 2026-10-29 · Heiko approved WS6's election mock · Cast, the field closes, one show clock
+
+target    the untimed election's RULE-60..64 (docs/specs/2026-10-28-ws7-untimed-election.md §8 AM-21)
+did       Recorded there in full: Cast my vote is the ballot's Done; the field closes as an election
+          month opens, except month 1; the ceremony's length follows the tally on one show clock;
+          the Governor's promise holds for the term; the Continue's news names its stage.
+goal      P-1 — still met
 ```
 
 ## §9 · Ownership Boundaries `[handoff]`

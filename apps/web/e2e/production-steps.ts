@@ -5,7 +5,7 @@
  */
 import { GOODS, type Good } from '@mule/engine';
 import type { MuleView, ProductionView, ServerEnvelope, TableView } from '@mule/protocol';
-import { SHOW } from '@mule/ui';
+import { showTimes } from '@mule/ui';
 import type { Page } from 'playwright';
 import { check } from './harness';
 
@@ -57,9 +57,11 @@ const RECORDER = `{
       const id = plot.dataset.testid.slice(5);
       const seen = (rec.plots[id] ??= plotSeen());
       const bars = [...plot.querySelectorAll('[data-bar=unit]')];
-      const hit = plot.querySelector('[data-testid^=hit-]');
+      // One chip per hit that landed, in fired order, each staying up to the end of the show.
+      const chips = [...map.querySelectorAll('[data-testid="mark-' + id + '"] [data-delta]')];
       const reasons = [...plot.querySelectorAll('[data-badge=reason]')];
-      if (hit) { seen.struckOnce = true; seen.struck.push(bars.length); add(seen.hits, hit.textContent); }
+      // Once a plot's goods have flown home (RULE-3: the flight follows the events) its bars are gone; only what it stood at before counts.
+      if (chips.length) { seen.struckOnce = true; if (plot.dataset.state !== 'flown') seen.struck.push(bars.length); for (const c of chips) add(seen.hits, c.dataset.delta); }
       else if (!seen.struckOnce) seen.pre = Math.max(seen.pre, bars.length);
       if (bars[0]) add(seen.colours, getComputedStyle(bars[0]).backgroundColor);
       for (const r of reasons) add(seen.reasons, r.textContent);
@@ -70,7 +72,7 @@ const RECORDER = `{
       add(rec.layers, 'event:' + layer.dataset.event);
       for (const el of layer.querySelectorAll('[data-testid]')) add(rec.layers, el.dataset.testid);
     }
-    for (const slot of document.querySelectorAll('[data-phase=production] [data-testid^=slot-]')) {
+    for (const slot of document.querySelectorAll('[data-phase=production] [data-testid^=silo-]:not([data-testid=silo-bar]):not([data-testid^=silo-name-])')) {
       const id = slot.dataset.testid.slice(5);
       rec.slots[id] = Object.fromEntries([...slot.querySelectorAll('[data-good]')].map((el) => [el.dataset.good, el.textContent]));
       rec.slotColours[id] = getComputedStyle(slot).borderTopColor;
@@ -82,7 +84,7 @@ const RECORDER = `{
   requestAnimationFrame(frame);
 }`;
 
-/** What the phone's "On to the auction" sends, as the client puts it on the wire. */
+/** What the phone's "Ready for the auction" sends, as the client puts it on the wire. */
 const READY = JSON.stringify({ t: 'intent', intent: { type: 'ready' } });
 /** Only stops a hang; nothing is asserted about how long a wait takes. */
 const HANG_MS = 15_000;
@@ -126,12 +128,31 @@ export function harvests(production: ProductionView): Record<string, Partial<Rec
   return out;
 }
 
-const hitOn = (production: ProductionView, l: { x: number; y: number }) => production.events[0]?.hits.find((h) => h.x === l.x && h.y === l.y);
-const after = (production: ProductionView, l: ProductionView['lines'][number]) => Math.max(0, l.made + (hitOn(production, l)?.delta ?? 0));
+/** A hit the board marks on its plot: one that changes its units, or the plot itself (taken, caved in, its MULE lost). */
+const marked = (h: ProductionView['events'][number]['hits'][number]) => h.delta !== 0 || h.becomes === 'idle' || h.becomes === 'plain' || (h.muleLost === true && h.becomes === 'crater');
+
+/** Every event's hits on a plot, in fired order: a month can fire more than one event, and each can reach the plot. */
+const hitsOn = (production: ProductionView, l: { x: number; y: number }) => production.events.flatMap((e) => e.hits.filter((h) => h.x === l.x && h.y === l.y));
+/** What a plot holds after each hit lands, never below 0, as the show plays them (RULE-2, plotStrikes). */
+function unitsAfterEach(production: ProductionView, l: ProductionView['lines'][number]): number[] {
+  let units = l.made;
+  return hitsOn(production, l).map((h) => (units = Math.max(0, units + h.delta)));
+}
+const after = (production: ProductionView, l: ProductionView['lines'][number]) => unitsAfterEach(production, l).at(-1) ?? l.made;
+/** Whether every sampled count is one of `steps`, never going back to an earlier one. */
+function inOrder(sampled: readonly number[], steps: readonly number[]): boolean {
+  let i = 0;
+  for (const n of sampled) {
+    while (i < steps.length && steps[i] !== n) i++;
+    if (i === steps.length) return false;
+  }
+  return true;
+}
 const signed = (n: number) => (n > 0 ? `+${n}` : `−${-n}`);
 
 /** The text of a reason badge, as the map draws it. */
 function badgeText(part: ProductionView['lines'][number]['parts'][number]): string {
+  if (part.why === 'energyOff') return '20%';
   return part.why === 'noWater' || part.why === 'noEnergy' ? '½' : signed(part.delta);
 }
 
@@ -148,9 +169,8 @@ export async function checkTheShow({ tv, phone, event = false }: { tv: ShowWatch
   check(seenTv && seenTv.frames > 0 && seenPhone && seenPhone.frames > 0, 'both screens drew the production show');
   const production = board.production;
   const lines = production.lines;
-  const ev = production.events[0];
   check(!event || lines.length > 0, 'B-AC-6: somebody has a working plot in the event month');
-  check(!event || ev, 'B-AC-7: the month fired an event');
+  check(!event || production.events.length > 0, 'B-AC-7: the month fired an event');
 
   // B-AC-8 negative: the TV holds nobody's stock.
   check(board.me === null, 'B-AC-8: the TV view has no player in it');
@@ -165,28 +185,35 @@ export async function checkTheShow({ tv, phone, event = false }: { tv: ShowWatch
     const id = `${l.x}-${l.y}`;
     const seen = seenTv.plots[id];
     check(seen, `B-AC-6: the TV drew plot ${id}`);
-    const hit = hitOn(production, l);
-    const struck = hit !== undefined && hit.delta !== 0;
+    // The badges the plot should show, once each (the recorder keeps each text once): each hit that changes its units, and
+    // each that changes the plot itself even when its units stay ("TAKEN", "CAVED IN", a lost MULE: the board's marks).
+    const deltas = [...new Set(hitsOn(production, l).filter(marked).map((h) => h.delta))];
+    const struck = deltas.length > 0;
     // A plot the event reached before it filled shows its bars only after the event.
-    if (!struck || seen.pre > 0) check(seen.pre === Math.min(l.made, 8), `B-AC-6: plot ${id} filled ${seen.pre} bars for ${l.made} units`);
+    // RULE-3 (AM-19): before any event a plot peaks at its base and bonuses, before its losses land.
+    // The floor that lifts a plot back to 0 lands with the losses, so it is no part of the peak.
+    const peak = l.made - l.parts.reduce((n, p) => n + (p.delta < 0 || p.why === 'floor' ? p.delta : 0), 0);
+    if (!struck || seen.pre > 0) check(seen.pre === Math.min(peak, 8), `B-AC-6: plot ${id} peaked at ${seen.pre} bars for ${peak} units before its losses`);
     const colour = seenTv.slotColours[l.owner];
     // A plot that made nothing has no bars, so nothing to colour.
     const drawn = seen.pre > 0 || seen.struck.some((n) => n > 0);
     check((seen.colours.length > 0) === drawn && seen.colours.every((c) => c === colour), `B-AC-6: plot ${id} bars ${seen.colours.join()} are not ${l.owner}'s ${colour}`);
-    check(seen.mostReasons <= 2, `B-AC-6: plot ${id} shows ${seen.mostReasons} reasons on the TV`);
+    check(seen.mostReasons <= 3, `B-AC-6: plot ${id} shows ${seen.mostReasons} reasons on the TV`);
     if (l.parts[0]) check(seen.reasons.includes(badgeText(l.parts[0])), `B-AC-6: plot ${id} never showed "${badgeText(l.parts[0])}", saw ${seen.reasons.join()}`);
     // B-AC-7: the event's badge is its delta, on the plots it hit and nowhere else, and the bars change by it.
     if (struck) {
-      check(seen.hits.join() === signed(hit.delta), `B-AC-7: plot ${id} was badged "${seen.hits.join()}" for ${hit.delta}`);
-      const want = Math.min(after(production, l), 8);
-      check(seen.struck.length > 0 && seen.struck.every((n) => n === want), `B-AC-7: plot ${id} showed ${seen.struck.join()} bars after the hit, not ${want}`);
+      check(seen.hits.join() === deltas.join(), `B-AC-7: plot ${id} was badged "${seen.hits.join()}" for ${deltas.join()}`);
+      // Between two hits the bars stand at the first one's result; after the last, at the plot's final count.
+      const steps = unitsAfterEach(production, l).map((n) => Math.min(n, 8));
+      const want = steps.at(-1)!;
+      check(seen.struck.length > 0 && inOrder(seen.struck, steps) && seen.struck.at(-1) === want, `B-AC-7: plot ${id} showed ${seen.struck.join()} bars after the hits, not ${steps.join()}`);
     } else check(seen.hits.length === 0, `B-AC-7: plot ${id} was not hit but was badged "${seen.hits.join()}"`);
   }
-  if (ev) {
-    check(seenTv.layers.includes(`event:${ev.kind}`), `B-AC-7: the TV played the ${ev.kind} layer, saw ${seenTv.layers.join()}`);
-    const own: Partial<Record<string, string>> = { storm: 'storm-front', quake: 'quake-hit', comet: 'comet', blight: 'blight-', flood: 'flood-', fire: 'fire-' };
-    const mark = own[ev.kind];
-    if (mark) check(seenTv.layers.some((id) => id.startsWith(mark)), `B-AC-7: the ${ev.kind} layer drew ${mark}, saw ${seenTv.layers.join()}`);
+  const own: Partial<Record<string, string>> = { dustStorm: 'front-dustStorm', drought: 'front-drought', acidRain: 'front-acidRain', solarFlare: 'front-solarFlare', cometPass: 'comet', flood: 'flood-', volcanicAsh: 'ash-', pestSwarm: 'swarm-', wildfire: 'fire-', bumperHarvest: 'bumper-stamp' };
+  for (const ev of production.events) {
+    check(seenTv.layers.includes(`event:${ev.key}`), `B-AC-7: the TV played the ${ev.key} story, saw ${seenTv.layers.join()}`);
+    const mark = own[ev.key];
+    if (mark) check(seenTv.layers.some((id) => id.startsWith(mark)), `B-AC-7: the ${ev.key} story drew ${mark}, saw ${seenTv.layers.join()}`);
   }
 
   // The phone: only its own plots, one badge each, the event's when it was hit.
@@ -199,11 +226,11 @@ export async function checkTheShow({ tv, phone, event = false }: { tv: ShowWatch
     check(seen && seen.mostReasons <= 1, `B-AC-6: the phone drew plot ${id} with at most one reason badge`);
   }
 
-  // B-AC-8: every TV slot ends with "+n" per good its plots made, and the phone's strip counts up to its stock.
+  // B-AC-8: every TV silo ends with the count per good its plots made, and the phone's silo counts up to its stock.
   const harvest = harvests(production);
   for (const p of board.players) {
-    const want = Object.fromEntries(Object.entries(harvest[p.id] ?? {}).map(([g, n]) => [g, `+${n}`]));
-    check(JSON.stringify(sorted(seenTv.slots[p.id] ?? {})) === JSON.stringify(sorted(want)), `B-AC-8: ${p.id}'s slot ended on ${JSON.stringify(seenTv.slots[p.id])}, want ${JSON.stringify(want)}`);
+    const want = Object.fromEntries(Object.entries(harvest[p.id] ?? {}).map(([g, n]) => [g, `${n}`]));
+    check(JSON.stringify(sorted(seenTv.slots[p.id] ?? {})) === JSON.stringify(sorted(want)), `B-AC-8: ${p.id}'s silo ended on ${JSON.stringify(seenTv.slots[p.id])}, want ${JSON.stringify(want)}`);
   }
   check(seenPhone.strip, 'B-AC-8: the phone showed its stock strip');
   for (const g of GOODS) {
@@ -212,35 +239,35 @@ export async function checkTheShow({ tv, phone, event = false }: { tv: ShowWatch
     const start = Math.max(0, me.stock[g] - made);
     check(seenPhone.strip.first[g] === start, `B-AC-8: the strip started ${g} at ${seenPhone.strip.first[g]}, not ${start}`);
   }
-  return `${lines.length} working plots, ${ev ? `a ${ev.kind} event hitting ${ev.hits.length}` : 'no event'}, ${seenTv.frames} TV frames, ${me.id} harvested ${JSON.stringify(harvest[me.id] ?? {})}`;
+  return `${lines.length} working plots, ${production.events.length ? production.events.map((e) => `${e.key} hitting ${e.hits.length}`).join(', ') : 'no event'}, ${seenTv.frames} TV frames, ${me.id} harvested ${JSON.stringify(harvest[me.id] ?? {})}`;
 }
 
 /**
  * During a full-speed show: calls `midShow` once the event card is up, then,
- * once every plot's goods are home, presses the phone's "On to the auction"
- * and checks that the button is there, that the press sends the ready message
- * and that the game moves on to the auction (HC-6). Returns checkTheShow's
- * summary of what both screens drew.
+ * once every plot's goods are home, checks that the phone's Ready still waits
+ * for the show ("Watching the show") and that the show itself moves the game on
+ * to the auction (HC-6, AM-20). Returns checkTheShow's summary of what both
+ * screens drew.
  */
 export async function pressOnward(phone: Page, watch: { tv: ShowWatch; phone: ShowWatch }, midShow: () => Promise<unknown>): Promise<string> {
   const shown = watch.phone.view();
   check(shown?.production && shown.phaseEndsAt, 'the phone received the production view');
-  const { lengthMs, lines } = shown.production;
+  const { lengthMs } = shown.production;
   const endsAt = shown.phaseEndsAt;
   // The server runs on this machine, so its clock is this one.
-  const at = (s: number) => endsAt - lengthMs + (s / SHOW.end) * lengthMs;
-  await phone.waitForTimeout(Math.max(0, at(SHOW.cardAt + 1) - Date.now()));
+  // RULE-3 (AM-19): the show's own times, mapped onto the phase's scheduled length.
+  const times = showTimes(shown.production);
+  const at = (s: number) => endsAt - lengthMs + (s / times.end) * lengthMs;
+  await phone.waitForTimeout(Math.max(0, at((times.eventsAt ?? times.lossAt) + 1) - Date.now()));
   await midShow();
-  await phone.waitForTimeout(Math.max(0, at(SHOW.flyStart + lines.length * SHOW.flyStep + SHOW.flight + 0.3) - Date.now()));
-  const onward = phone.locator('[data-phase=production]').getByRole('button', { name: 'On to the auction' });
-  check(await onward.isEnabled(), 'HC-6: "On to the auction" is there while the phone shows production');
+  await phone.waitForTimeout(Math.max(0, at(times.holdAt + 0.3) - Date.now()));
+  // HC-6 (AM-20, the PM's ruling B): Ready waits for the end of the show, so even with every good home the phone's
+  // Ready is still "Watching the show", and nothing it sends ends production; the show ends it, on time.
+  const ready = phone.locator('[data-phase=production] [data-testid=ready]');
+  check((await ready.textContent())?.trim() === 'Watching the show' && (await ready.isDisabled()), 'HC-6: Ready waits for the end of the show ("Watching the show")');
   const before = watch.phone.sent().length;
-  await onward.click();
-  // That it ends production early is proven by the server's T-AC-6, with a fake clock; here the page only has to send the message.
-  const sentReady = () => watch.phone.sent().slice(before).some((m) => JSON.stringify(m) === READY);
-  for (let i = 0; i < HANG_MS / 50 && !sentReady(); i++) await phone.waitForTimeout(50);
-  check(sentReady(), 'HC-6: pressing "On to the auction" sends the ready message');
-  await phone.locator('[data-phase=auction]').waitFor({ timeout: HANG_MS });
+  await phone.locator('[data-phase=auction]').waitFor({ timeout: Math.max(0, endsAt - Date.now()) + HANG_MS });
+  check(!watch.phone.sent().slice(before).some((m) => JSON.stringify(m) === READY), 'HC-6: the phone sent no Ready while the show played');
   return checkTheShow(watch);
 }
 

@@ -1,4 +1,4 @@
-import { MAP, type PlacedSpecialKind, type SpecialKind as EngineSpecialKind } from '@mule/engine';
+import { EVENTS, MAP, type PlacedSpecialKind, type SpecialKind as EngineSpecialKind } from '@mule/engine';
 import type { MapTile, Terrain } from '@mule/ui';
 
 /**
@@ -61,10 +61,10 @@ const FX = MAP.specialEffect;
 const pct = (n: number) => `${Math.round(n * 100)}%`;
 const SALVAGE_NAME = { alloy: 'Alloy', electronics: 'Electronics' } as const;
 
-/** What a kind does, in general: the legend's line. Numbers from MAP.specialEffect. */
+/** What a kind does, in general: the legend's line. The numbers are the engine's, MAP.specialEffect and the cavern's EVENTS row. */
 export const SPECIAL_EFFECT: Record<SpecialKind, string> = {
   ruins: `pays its first owner ${FX.salvage.alloy} Alloy or ${FX.salvage.electronics} Electronics, once, then is gone.`,
-  crystalCavern: `+${FX.crystalCavern} Crystite when mined. Each month it's mined, a ${pct(FX.collapseChance)} chance it caves in.`,
+  crystalCavern: `+${FX.crystalCavern} Crystite when mined. Each month it's mined, a ${pct(EVENTS.colony.cavernCollapse.phases.production)} chance it caves in.`,
   geyser: `+${FX.geyser} Water or Energy.`,
   oasis: `+${FX.oasis} Food.`,
   relic: `+${FX.relic} to every working plot touching it, anyone's.`,

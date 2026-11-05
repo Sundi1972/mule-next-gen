@@ -32,6 +32,8 @@ const STEP_MS = 500;
  * model well under its usual latency.
  */
 const PLANNING_READY_MS = 3_000;
+/** How long the players read the month end before they all tap "On to month N": as long as its clock ran before C20. */
+const MONTH_END_READ_MS = 8_000;
 /** Longer than any game these tests play (≤ 2 months, phaseScale ≤ 1). */
 const GAME_LIMIT_MS = 30 * 60_000;
 /** Twice the longest a model call may wait (land's timeout), so a call still open at finish has settled. */
@@ -148,6 +150,25 @@ function table(options: TableOptions) {
     for (const phone of phones) if (game?.viewFor(null).phase === 'planning') send(phone, { t: 'intent', intent: { type: 'ready' } });
   };
   readies.push(readyInPlanning);
+  /** The month end has no clock either (C20): once the table has read it for MONTH_END_READ_MS, every phone moves on. */
+  let monthEndFor = 0;
+  const readyAtMonthEnd = () => {
+    if (game?.viewFor(null).phase !== 'upkeep') {
+      monthEndFor = 0;
+      return;
+    }
+    monthEndFor += STEP_MS;
+    if (monthEndFor < MONTH_END_READ_MS) return;
+    for (const phone of phones) if (game?.viewFor(null).phase === 'upkeep') send(phone, { t: 'intent', intent: { type: 'ready' } });
+  };
+  readies.push(readyAtMonthEnd);
+  /** A good's side pick has no clock either (A-7): every phone presses Ready there at once, keeping its side. */
+  const readyAtSidePick = () => {
+    const view = game?.viewFor(null);
+    if (view?.phase !== 'auction' || view.auction?.stage !== 'status') return;
+    for (const phone of phones) send(phone, { t: 'intent', intent: { type: 'ready' } });
+  };
+  readies.push(readyAtSidePick);
   /** Runs the fake clock until `done`, or the game's end; false if `done` never held. */
   const runUntil = async (done: () => boolean, limitMs = GAME_LIMIT_MS) => {
     for (let t = 0; t < limitMs && !done(); t += STEP_MS) {
@@ -211,11 +232,6 @@ function tally(keys: string[]): Map<string, number> {
 /** The model's reply, as the structured output the client asks for. */
 const reply = (option: string, line: string) => sdkMessage(JSON.stringify({ option, line }));
 
-/**
- * The option a prompt offers that installs a MULE (an `install:` key: its label reads "<outfit> on plot x·y"), else
- * "B". The fake model sees only the prompt, so it finds the install by its label.
- */
-const installOrB = (lines: string[]): string => lines.map((l) => /^([A-Z])\. .+ on plot \d+·\d+ \(/.exec(l)?.[1]).find(Boolean) ?? 'B';
 
 describe('the server test setup', () => {
   it('INV-test-key: the shell\'s key and auth token are cleared and the ledger logs to a temp file; only a key a test stubs builds a client', () => {
@@ -313,16 +329,19 @@ describe('the brain at the table', { timeout: 30_000 }, () => {
     for (const s of t.screens) expect(s.chat.filter((m) => m.from === baron.id).map((m) => m.text)).toEqual([top.line]);
   });
 
-  it('B-AC-2: a player\'s line is quoted in the AI\'s next prompt, and the option it names there is the move applied on the board', async () => {
-    const sdk = fakeSdk((_, params) => reply(installOrB(promptOf(params).user.split('\n')), ''));
-    const { brain, records } = watched(smart(sdk));
-    const t = table({ humans: ['Heiko', 'Mia'], ais: 2, brain });
+  // The develop half of B-AC-2 (the option the model named in its next prompt is the move applied on the board) is gone:
+  // on the arcade floor development plays the seeded default pick, with no ask, so chat cannot steer that move. A known
+  // gap the PM has put to Heiko. The line still reaches the AI's next ask, whatever phase it falls in.
+  it('B-AC-2: a player\'s line is quoted in each AI\'s next prompt, and a private line only in its addressee\'s', async () => {
+    const sdk = fakeSdk(() => reply('A', ''));
+    const { brain } = watched(smart(sdk));
+    // Long enough that each AI meets a close call after the lines are said: since the 5 Nov start values (one claim a
+    // grant, 2 Food and 2 Energy) a seat can play two months without one.
+    const t = table({ humans: ['Heiko', 'Mia'], ais: 2, brain, maxMonths: 4 });
     const [heiko, mia] = t.phones;
     const [accountant, baron] = t.ais;
 
     const before = sdk.requests.length;
-    // The board before the talk and the prompts it reaches, so a move shows as a change, not a state.
-    const boardBefore = t.game().viewFor(null).tiles;
     t.say(heiko!, 'give me your Crystite');
     t.say(heiko!, 'Mia, sell them nothing', t.humans[1]!.id);
     t.say(mia!, 'psst, Accountant only', accountant!.id);
@@ -336,30 +355,6 @@ describe('the brain at the table', { timeout: 30_000 }, () => {
     }
     expect(requestOf(nextFor(accountant!.name)!.params).talk).toContain('Mia: "psst, Accountant only"');
     expect(requestOf(nextFor(baron!.name)!.params).user).not.toContain('psst');
-
-    // The move each AI made on that prompt: the option the model named, as the prompt listed it, and that MULE on that
-    // plot for that seat before development ends.
-    const developed = (id: string) => records.some((r) => r.seat === id && r.kind === 'develop');
-    expect(await t.runUntil(() => developed(accountant!.id) && developed(baron!.id))).toBe(true);
-
-    for (const ai of [accountant!, baron!]) {
-      const prompt = requestOf(nextFor(ai.name)!.params);
-      expect(prompt.kind, ai.name).toBe('develop');
-      const move = records.find((r) => r.seat === ai.id && r.kind === prompt.kind)!;
-      const picked = installOrB(prompt.lines);
-      expect(move, ai.name).toMatchObject({ by: 'llm', pick: { id: picked } });
-      expect(prompt.lines.some((l) => l.startsWith(`${picked}. ${move.pick.label} — `)), ai.name).toBe(true);
-      // The option the model named installs a MULE.
-      const [, outfit, index] = /^install:(\w+):(\d+)$/.exec(move.pick.key) ?? [];
-      expect(outfit, `${ai.name} picked ${move.pick.key}`).toBeDefined();
-      const installed = () => {
-        const tile = t.game().viewFor(null).tiles[Number(index)];
-        return tile?.owner === ai.id && tile.outfit === outfit;
-      };
-      expect(boardBefore[Number(index)]?.owner === ai.id && boardBefore[Number(index)]?.outfit === outfit, `${ai.name}: ${move.pick.key} was not already on the board`).toBe(false);
-      await t.runUntil(() => installed() || t.game().viewFor(null).phase !== 'development');
-      expect(installed(), `${ai.name} picked ${move.pick.key}: that plot carries that MULE for that seat before development ends`).toBe(true);
-    }
 
     expect(await t.toGameOver()).toBe(true);
     expect(sdk.requests.filter((r) => promptOf(r.params).user.includes('sell them nothing'))).toEqual([]);
@@ -455,11 +450,12 @@ describe('the brain at the table', { timeout: 30_000 }, () => {
   });
 
   it('INV-heard: heard from an unknown speaker, or to an unknown seat, does not throw, before or after start; an AI\'s own line goes to the other AIs only', async () => {
-    const lobby = new MuleGame({ now: () => 0, schedule: () => () => {}, changed: () => {}, hostId: () => null }, SEED, { brain: createBrain({ gameId: 'g-lobby', env: {} }) });
+    const lobby = new MuleGame({ now: () => 0, schedule: () => () => {}, changed: () => {}, frame: () => {}, hostId: () => null }, SEED, { brain: createBrain({ gameId: 'g-lobby', env: {} }) });
     expect(() => lobby.heard?.('s9', 'hello')).not.toThrow();
 
     const sdk = fakeSdk(() => reply('A', ''));
-    const t = table({ humans: ['Heiko'], ais: 2, brain: smart(sdk) });
+    // Long enough that both AIs ask after the line: see B-AC-2.
+    const t = table({ humans: ['Heiko'], ais: 2, brain: smart(sdk), maxMonths: 4 });
     const game = t.game();
     expect(typeof game.heard).toBe('function');
     expect(() => game.heard?.('s9', 'hello')).not.toThrow();

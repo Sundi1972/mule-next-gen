@@ -1,6 +1,7 @@
 import { Creature, cx, SLOT_COLOR, type Slot } from '@mule/ui';
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { VIEW } from '../fixture';
+import { useTickerRule } from './TickerRule';
 
 /**
  * Live table chat on every screen (Heiko 2026-10-22: "Live on every screen"):
@@ -154,7 +155,7 @@ export function Bubble({ line, size = 'phone', left = false, className }: { line
       data-testid={`chat-bubble-${line.from}`}
       role="status"
     >
-      {whisper && <span className="mr-1 font-mono text-[9px] font-bold text-holo">🔒 TO YOU</span>}
+      {whisper && <span className="mr-1 font-mono text-[10px] font-bold text-holo">🔒 TO YOU</span>}
       {line.text}
       {/* The tail still points at the speaker when the bubble has slid. */}
       <span
@@ -189,25 +190,28 @@ export function Speaker({ id, children, size }: { id: string; children: ReactNod
  * positioned and span the guide's width: the fallback bubble opens to the LEFT of the guide, level with the row, over
  * the stage, so it never covers the ticker below the row or the clock above it. The speaking seat lights up.
  */
-export function SeatRow({ anchored = [] }: { anchored?: string[] }) {
+export function SeatRow({ anchored = [], bubble = true }: { anchored?: string[]; /** False: the screen places the fallback bubble itself (FallbackBubble). */ bubble?: boolean }) {
   const chat = useChat();
   // A speaker the screen draws gets the bubble there instead.
-  const fallback = Object.values(chat?.bubbles ?? {}).find((l) => !anchored.includes(l.from));
+  const fallback = bubble ? Object.values(chat?.bubbles ?? {}).find((l) => !anchored.includes(l.from)) : undefined;
   return (
     <>
-      <div className="flex items-center gap-2 @min-[1100px]/shell:gap-3" data-testid="seat-row">
+      {/* Five others fit the narrowest rail on one line: a long name gives way (its whole name is its title), the creatures never do. */}
+      <div className="flex min-w-0 items-center gap-1 @min-[1100px]/shell:gap-3" data-testid="seat-row">
         {VIEW.players
           .filter((p) => p.id !== chat?.me)
           .map((p) => (
             <span
               key={p.id}
-              className={cx('inline-flex flex-col items-center rounded-control px-0.5 transition-shadow', fallback?.from === p.id && 'ring-2')}
+              className={cx('inline-flex min-w-6 flex-col items-center rounded-control px-0.5 transition-shadow', fallback?.from === p.id && 'ring-2')}
               style={fallback?.from === p.id ? { ['--tw-ring-color' as string]: SLOT_COLOR[P[p.id]!.slot] } : undefined}
               data-testid={`seat-${p.id}`}
               data-speaking={fallback?.from === p.id || undefined}
             >
               <Creature species={p.species} color={SLOT_COLOR[P[p.id]!.slot]} size={20} />
-              <span className="font-mono text-[9px] text-ink-3 @min-[1100px]/shell:text-[10px]">{p.name}</span>
+              <span className="max-w-full truncate font-mono text-[10px] text-ink-3" title={p.name}>
+                {p.name}
+              </span>
             </span>
           ))}
       </div>
@@ -220,22 +224,39 @@ export function SeatRow({ anchored = [] }: { anchored?: string[] }) {
   );
 }
 
+/**
+ * The fallback bubble on its own, for a rail whose seat row is not in its header (the rail-chat proposal, TickerRule.tsx):
+ * it opens to the left of the guide, level with the parent's top, so it shows even while the seat row is scrolled away.
+ */
+export function FallbackBubble({ anchored = [] }: { anchored?: string[] }) {
+  const chat = useChat();
+  const fallback = Object.values(chat?.bubbles ?? {}).find((l) => !anchored.includes(l.from));
+  if (!fallback) return null;
+  return (
+    <span className="pointer-events-none absolute right-full top-0 mr-3 h-[34px]" data-fallback>
+      <Bubble line={fallback} left />
+    </span>
+  );
+}
+
 /** The last few lines, newest first fading in. */
-export function Ticker({ size = 'phone' }: { size?: 'phone' | 'tv' }) {
+export function Ticker({ size = 'phone', lines: keep }: { size?: 'phone' | 'tv'; /** Off unless given: the phone keeps 2, the TV 3. */ lines?: number }) {
   const chat = useChat();
   const lines = chat?.ticker ?? [];
   const tv = size === 'tv';
+  // The rail-chat proposal (TickerRule.tsx): below 1100 px of the shell, only the newest line shows.
+  const oneLine = useTickerRule() === 'one' && !tv && keep === undefined;
   return (
     <ul className={cx('flex flex-col overflow-hidden', tv ? 'gap-1' : 'gap-0.5')} data-testid="chat-ticker" aria-label="Table chat" aria-live="polite">
       {lines
-        .slice(tv ? -3 : -2)
+        .slice(-(keep ?? (tv ? 3 : 2)))
         .reverse()
         .map((l, i) => {
           const p = P[l.from]!;
           return (
             <li
               key={l.id}
-              className={cx('flex min-w-0 items-center gap-1.5 truncate', tv ? 'text-xl' : 'text-[11px] @min-[1100px]/shell:text-sm', i === 0 ? 'animate-[show-card-in_0.25s_ease-out] text-ink' : 'text-ink-3')}
+              className={cx('flex min-w-0 items-center gap-1.5 truncate', tv ? 'text-xl' : 'text-[11px] @min-[1100px]/shell:text-sm', i === 0 ? 'animate-[show-card-in_0.25s_ease-out] text-ink' : 'text-ink-3', i > 0 && oneLine && '@max-[1100px]/shell:hidden')}
               data-testid={`chat-line-${l.id}`}
             >
               <Creature species={p.species} color={SLOT_COLOR[p.slot]} size={tv ? 22 : 14} />

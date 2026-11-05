@@ -13,6 +13,7 @@ import {
   rawOutputParts,
   RuleError,
   runProduction,
+  type EventRow,
   type GameState,
   type SpecialField,
   type Species,
@@ -187,7 +188,8 @@ describe('RULE-6: cavern collapse', () => {
     Object.assign(state, { seed, month }, whatIf ? { whatIf: true } : {});
     const run = runProduction(state);
     return {
-      event: run.events.length > 0,
+      // A month has an event when an output event fired; a collapse is the cavern's own, not another event.
+      event: run.events.some((e) => e.key !== 'cavernCollapse'),
       caverns: caverns.map((at) => {
         const made = madeOn(run, state, state.tiles[at]!);
         return { made, produced: (made ?? 0) > 0, collapsed: state.tiles[at]!.special === undefined };
@@ -203,61 +205,74 @@ describe('RULE-6: cavern collapse', () => {
 
   // Thousands of production runs, to measure the rate; past vitest's 5 s default on a CI runner.
   it('T-AC-6: a cavern’s collapse is the same on replay, and comes about 6 times in 100', () => {
-    const { base, caverns } = cavernGame();
-    let produced = 0;
-    let collapsed = 0;
-    // From the first month that can have an event: mined caverns and their collapses, in months with an event and without.
-    const byEvent = { with: { produced: 0, collapsed: 0 }, without: { produced: 0, collapsed: 0 } };
-    // Months where both caverns produced and only one collapsed.
-    let apart = 0;
-    for (let seed = 1; seed <= RATE_SEEDS; seed++) {
-      for (let month = 1; month <= 10; month++) {
-        const first = produceAt(base, caverns, seed, month);
-        expect(produceAt(base, caverns, seed, month), `seed ${seed}, month ${month}`).toEqual(first);
-        const bucket = month >= EVENTS.firstMonth ? byEvent[first.event ? 'with' : 'without'] : undefined;
-        for (const cavern of first.caverns) {
-          if (!cavern.produced) {
-            // A cavern that made no Crystite this month never collapses.
-            expect(cavern.collapsed, `seed ${seed}, month ${month}`).toBe(false);
-            continue;
+    // About half the months have an event, one draw a month: volcanic ash at 0.5, every other row that production's
+    // start rolls at 0. A per-plot row, the cavern's own, keeps its odds.
+    const rows = [...Object.values(EVENTS.colony), ...Object.values(EVENTS.player)].filter((row: EventRow) => 'production' in row.phases && !row.perPlot);
+    const saved = rows.map((row) => ({ ...row }));
+    const reset = (row: object, fields: object) => {
+      for (const key of Object.keys(row)) delete (row as Record<string, unknown>)[key];
+      Object.assign(row, fields);
+    };
+    for (const row of rows) reset(row, { phases: { production: row === EVENTS.colony.volcanicAsh ? 0.5 : 0 }, cap: 1 });
+    try {
+      const { base, caverns } = cavernGame();
+      let produced = 0;
+      let collapsed = 0;
+      // From the first month that can have an event: mined caverns and their collapses, in months with an event and without.
+      const byEvent = { with: { produced: 0, collapsed: 0 }, without: { produced: 0, collapsed: 0 } };
+      // Months where both caverns produced and only one collapsed.
+      let apart = 0;
+      for (let seed = 1; seed <= RATE_SEEDS; seed++) {
+        for (let month = 1; month <= 10; month++) {
+          const first = produceAt(base, caverns, seed, month);
+          expect(produceAt(base, caverns, seed, month), `seed ${seed}, month ${month}`).toEqual(first);
+          const bucket = month >= EVENTS.firstMonth ? byEvent[first.event ? 'with' : 'without'] : undefined;
+          for (const cavern of first.caverns) {
+            if (!cavern.produced) {
+              // A cavern that made no Crystite this month never collapses.
+              expect(cavern.collapsed, `seed ${seed}, month ${month}`).toBe(false);
+              continue;
+            }
+            produced++;
+            if (bucket) bucket.produced++;
+            if (!cavern.collapsed) continue;
+            collapsed++;
+            if (bucket) bucket.collapsed++;
           }
-          produced++;
-          if (bucket) bucket.produced++;
-          if (!cavern.collapsed) continue;
-          collapsed++;
-          if (bucket) bucket.collapsed++;
-        }
-        const [one, two] = first.caverns as [(typeof first.caverns)[number], (typeof first.caverns)[number]];
-        if (one.produced && two.produced && one.collapsed !== two.collapsed) apart++;
-        if (one.collapsed || two.collapsed) {
-          // An AI's what-if copy can't know the real draw, so it imagines no collapse (as with events and colony lots).
-          const whatIf = produceAt(base, caverns, seed, month, true);
-          expect(whatIf.caverns.map((c) => c.collapsed), `what-if, seed ${seed}, month ${month}`).toEqual([false, false]);
+          const [one, two] = first.caverns as [(typeof first.caverns)[number], (typeof first.caverns)[number]];
+          if (one.produced && two.produced && one.collapsed !== two.collapsed) apart++;
+          if (one.collapsed || two.collapsed) {
+            // An AI's what-if copy can't know the real draw, so it imagines no collapse (as with events and colony lots).
+            const whatIf = produceAt(base, caverns, seed, month, true);
+            expect(whatIf.caverns.map((c) => c.collapsed), `what-if, seed ${seed}, month ${month}`).toEqual([false, false]);
+          }
         }
       }
-    }
-    // The sample is big enough: over 15 mined caverns a seed (6,000 at 400 seeds), over 5 a seed in each bucket below.
-    expect(produced).toBeGreaterThan(15 * RATE_SEEDS);
-    const rate = collapsed / produced;
-    expect(rate).toBeGreaterThan(0.06 * 0.7);
-    expect(rate).toBeLessThan(0.06 * 1.3);
-    // The collapse draw is apart from the event draw, so it comes as often in a month with an event as in one without.
-    for (const [when, { produced: n, collapsed: c }] of Object.entries(byEvent)) {
-      expect(n, `months ${when} an event`).toBeGreaterThan(5 * RATE_SEEDS);
-      expect(c / n, `months ${when} an event`).toBeGreaterThan(0.06 * 0.7);
-      expect(c / n, `months ${when} an event`).toBeLessThan(0.06 * 1.3);
-    }
-    // Each plot draws its own collapse: two caverns mined the same month don't always share their fate.
-    expect(apart).toBeGreaterThan(0);
+      // The sample is big enough: over 15 mined caverns a seed (6,000 at 400 seeds), over 5 a seed in each bucket below.
+      expect(produced).toBeGreaterThan(15 * RATE_SEEDS);
+      const rate = collapsed / produced;
+      expect(rate).toBeGreaterThan(0.06 * 0.7);
+      expect(rate).toBeLessThan(0.06 * 1.3);
+      // The collapse draw is apart from the event draw, so it comes as often in a month with an event as in one without.
+      for (const [when, { produced: n, collapsed: c }] of Object.entries(byEvent)) {
+        expect(n, `months ${when} an event`).toBeGreaterThan(5 * RATE_SEEDS);
+        expect(c / n, `months ${when} an event`).toBeGreaterThan(0.06 * 0.7);
+        expect(c / n, `months ${when} an event`).toBeLessThan(0.06 * 1.3);
+      }
+      // Each plot draws its own collapse: two caverns mined the same month don't always share their fate.
+      expect(apart).toBeGreaterThan(0);
 
-    // A cavern farmed for Food is not mined, and one mined on Crystite 0 makes nothing: neither ever collapses.
-    const [farmed, empty] = caverns as [number, number];
-    base.tiles[farmed]!.outfit = 'food';
-    base.tiles[empty]!.ground.crystite = 0;
-    for (let seed = 1; seed <= 200; seed++) {
-      const month = produceAt(base, caverns, seed, 1);
-      expect(month.caverns[1]!.made, `mined on 0, seed ${seed}`).toBe(0);
-      expect(month.caverns.map((c) => c.collapsed), `farmed and mined on 0, seed ${seed}`).toEqual([false, false]);
+      // A cavern farmed for Food is not mined, and one mined on Crystite 0 makes nothing: neither ever collapses.
+      const [farmed, empty] = caverns as [number, number];
+      base.tiles[farmed]!.outfit = 'food';
+      base.tiles[empty]!.ground.crystite = 0;
+      for (let seed = 1; seed <= 200; seed++) {
+        const month = produceAt(base, caverns, seed, 1);
+        expect(month.caverns[1]!.made, `mined on 0, seed ${seed}`).toBe(0);
+        expect(month.caverns.map((c) => c.collapsed), `farmed and mined on 0, seed ${seed}`).toEqual([false, false]);
+      }
+    } finally {
+      rows.forEach((row, i) => reset(row, saved[i]!));
     }
   }, 30_000);
 });

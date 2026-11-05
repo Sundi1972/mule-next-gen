@@ -232,7 +232,7 @@ describe('T-AC-6: score parts add up and score() is unchanged', () => {
     runFor(state, 'a', 'governor', { kind: 'hold' });
     for (const id of ['a', 'b']) electionDone(state, id);
     stepElection(state, 1);
-    while (state.politics!.election!.stage === 'ceremony') stepElection(state, state.politics!.election!.ceremony!.clockMs);
+    while (state.politics!.election!.stage === 'ceremony') stepElection(state, state.politics!.election!.ceremony!.totalMs);
     expect(state.politics?.governor).toBe('a');
 
     const office = POLITICS.termScore;

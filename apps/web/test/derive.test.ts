@@ -4,7 +4,7 @@ import { GOOD_NAME, type Good } from '@mule/ui';
 import { describe, expect, it } from 'vitest';
 import { colonyVerdict, groundPips, mapTiles, seatSpecies, secondsUntil, slotOf, standings, TERRAIN_ODDS } from '../src/game/derive';
 
-const p = (id: string, money: number, slot: number, worth = money): PlayerView => ({ id, name: id, isAi: false, color: '', slot, species: 'zipwing', money, worth, plots: 0, ready: false, doneDeveloping: false, condition: null, colonist: null });
+const p = (id: string, money: number, slot: number, worth = money): PlayerView => ({ id, name: id, isAi: false, color: '', slot, species: 'zipwing', money, worth, lastWorth: null, worthBeforeCut: null, plots: 0, ready: false, doneDeveloping: false, condition: null, colonist: null });
 const tile = (x: number, y: number, extra: Partial<TileView> = {}): TileView => ({ x, y, terrain: 'plains', peaks: 0, owner: null, outfit: null, pollution: 0, filter: false, ...extra });
 
 function view(extra: Partial<MuleView> = {}): MuleView {
@@ -25,6 +25,8 @@ function view(extra: Partial<MuleView> = {}): MuleView {
     mulePrice: 0,
     colonists: 0,
     air: { level: 0, band: 'clean' },
+    lastAir: null,
+    colonistsFed: null,
     ship: { arrives: 3, inPort: false, wants: null },
     treasury: { money: 0, salesTax: 0 },
     news: [],

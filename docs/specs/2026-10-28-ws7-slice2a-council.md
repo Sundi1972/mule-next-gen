@@ -1,9 +1,9 @@
 # WS7 politics · slice 2a: the council and four laws
 
 Programme amendment to `docs/specs/2026-10-22-ws7-politics.md` (AM-16) · WS7 · 2026-10-28 ·
-**Status:** §0 passed the PM's goal gate (2026-10-28), on one condition: D2 is Heiko's and goes on the
-G-5 card. This design is against D2 option A; if he picks B or C, the non-goals are amended before any
-build. Spec and plan only; the build waits for Heiko's G-5 card and G-5's C20 ledger.
+**Status:** §0 passed the PM's goal gate (2026-10-28). **Heiko ruled D2 option A on the G-5 card
+(2026-11-04), and put slice 2a in the MVP** (AM-2). The build starts in G-5's wave 1, after G-5's C20
+ledger; AM-3 folds the drift against trunk 9a409a56.
 
 Ids continue after slice 1 (C1-C12, RULE-1..10) and G-5 (C20-C37, RULE-20+, UBER-AC-5..7):
 changes C40+, rules RULE-40+, proofs UBER-AC-8..10, ACs B-AC-40+ / T-AC-40+.
@@ -47,8 +47,8 @@ with (G-5).**
 **Non-goals:**
 - Sabotage ban and Sheriff fines: slice 4, with the Sheriff's powers (alone, the ban does nothing;
   D2 option A).
-- Windfall tax (D2 option B) and keeping the inert ban in slice 2 (option C): not chosen. Heiko rules
-  D2 on the G-5 card; B or C amends these non-goals before the build.
+- Windfall tax (D2 option B) and keeping the inert ban in slice 2 (option C): not chosen. Heiko ruled
+  D2 option A on 2026-11-04 ("thous four now").
 - The Sheriff's part in law taxes and the cap (inspections, "taxed only once inspected", breach fines,
   shutting a plot): slice 4. Until then each tax is charged to every payer and the cap blocks the
   action outright.
@@ -59,7 +59,7 @@ with (G-5).**
   and no-confidence: slice 5.
 - Balance numbers: the settings are design 05's (export 10/20/30 %, land 5/10/20 cr a plot, pollution
   10/20/40 cr an air point, cap at air 40/50/60), into config with units. Clocks and AI weights are
-  placeholders; sim tuning and income targets are WS1's affordability study.
+  placeholders; rates are tuned at the end (Heiko, 2026-11-04; G-5 HC-25), by WS1's G-5 C29.
 - Screens before WS6 mocks them: the hub mock's Law vote and This month's law sections are "soon"
   placeholders; WS6 mocks slice 2a's desks and Heiko approves them before any desk is built.
 
@@ -88,9 +88,8 @@ handling keys on one window at the start of planning (`apps/server/src/mule-game
 **Larger: a general council engine for every vote type** (laws, overrule, no-confidence, snap
 elections). Rejected again (as in slice 1): slice 5's votes are not designed.
 
-**D2 (Heiko's, on the G-5 card):** A, the three taxes and the emission cap, recommended; B, A plus the
-windfall tax (only moves money; one more RULE-43 row and a ship-free seam in the auction); C, keep the
-inert ban in slice 2.
+**D2 — RULED A (Heiko, 2026-11-04):** the three taxes and the emission cap. Not chosen: B, A plus the
+windfall tax; C, keep the inert ban in slice 2.
 
 ## §0.2 · Constraints `[handoff]`
 
@@ -108,7 +107,8 @@ HC-43  No decision has a clock (AM-18): while the election or the law ballot is 
        for the stage and only the host's Continue moves past absent players; a reveal is refused
        Continue and runs on its presentation clock.          source: AM-15, AM-18    breach: fatal
 HC-44  Every law tax enters the fund through G-5's colony.ts fundIn; nothing else writes
-       treasury.money.                           source: G-5 spec §9                 breach: fatal
+       treasury.money (G-5's C20 also moves the Federation tax event's write there, AM-3).
+                                                 source: G-5 spec §9                 breach: fatal
 HC-45  Edits outside WS7's paths are the named edits in §1 only, recorded in SEAMS before the PR.
                                                  source: programme rule              breach: decision
 HC-46  No screen before WS6's slice-2a mock is approved by Heiko; the mock is the scaffold.
@@ -190,16 +190,23 @@ atomicity    none
 ```
 C42 · ADDED · the emission cap refuses new Rare earth mines and smelters while the air is above it
 
-today        any player may outfit any MULE they can pay for; POLLUTION.sources makes rareEarth (4)
-             and alloy (3, the smelter) the two outfits that also foul the plots around them.
-             anchors: packages/engine/src/game.ts::outfitMule, packages/engine/src/config.ts::POLLUTION
-             verified_by: read
-tomorrow     MUST refuse outfitting a MULE for an outfit in POLITICS.laws.emissionCap.blocks while
-             the cap is in force and the air is above its level, before any money moves (RULE-44).
-             MUST export outfitBlocked(state, outfit) so the AI never queues a refused outfit.
+today        any player may outfit any MULE they can pay for, and since the arcade re-outfit one
+             they carry (AM-3); POLLUTION.sources makes rareEarth (4) and alloy (3, the smelter) the
+             two outfits that also foul the plots around them.
+             anchors: packages/engine/src/game.ts::outfitMule, ::reoutfitMule,
+             packages/engine/src/floor/reach.ts (the store's reach calls both),
+             packages/engine/src/config.ts::POLLUTION
+             verified_by: read (trunk 9a409a56)
+tomorrow     MUST refuse outfitting or re-outfitting a MULE for an outfit in
+             POLITICS.laws.emissionCap.blocks while the cap is in force and the air is above its
+             level, before any money moves (RULE-44). MUST export outfitBlocked(state, outfit) so the
+             AI never queues a refused outfit and the floor's reach can show the store's outfit as
+             refused, with the cap's reason, instead of offering it.
 logic        → §2 RULE-44 · evaluated at outfitMule · reads state.air, state.politics.laws
-seam         new in politics.ts: outfitBlocked; game.ts::outfitMule throws its reason as a RuleError
-             (WS3 named edit, two lines); the strategist's outfit loop skips blocked outfits as it
+seam         new in politics.ts: outfitBlocked; game.ts::outfitMule and ::reoutfitMule throw its reason
+             as a RuleError (WS3 named edit, two lines each); floor/reach.ts reads it for the store's
+             outfit reach (named edit to the floor's owner, one condition); the strategist's outfit
+             loop skips blocked outfits as it
              already skips factories it can't feed (packages/ai/src/strategist.ts, the `canFeed`
              check; WS1 named edit)
 senior       junior would: check at installMule, after the player has paid for the outfit, or let
@@ -209,7 +216,8 @@ senior       junior would: check at installMule, after the player has paid for t
              plans a refused MULE
 mechanism    sprout + in_place guard
 call sites   outfitMule: packages/ai/src/play.ts (applyAction 'outfit'), apps/server/src/mule-game.ts
-             (the phone's outfit intent)
+             (the phone's outfit intent), packages/engine/src/floor/reach.ts (the arcade's store
+             press). reoutfitMule: floor/reach.ts. Grep-built on trunk 9a409a56.
 pin          with no cap in force every outfit behaves as today (existing development tests)
 depends_on   C40 (data)
 atomicity    none
@@ -524,6 +532,7 @@ Code-only; no existing state to reach: games live in server memory and the sim i
 | T-AC-43 (serves B-AC-41) | the pollution tax uses this month's pollutionBy; a short payer pays what they have and never goes below 0 | C41 | engine |
 | T-AC-44 (serves all) | politics off: no council, no law tax, WS1's politics-off rows byte-identical | C40-C42 | sim report diff |
 | T-AC-45 (serves B-AC-40) | the AI's council draws leave slice 1's election fixtures unchanged | C44 | ai tests |
+| INV-41 (HC-41) | no AI hand reads `state.seed`: the council's stream hashes the seat's own seed (the AiSeat mind's salt) and the month, so games that differ only in the game seed get the same council coin and proposal | C44 | ai test |
 | T-AC-46 (serves B-AC-40) | the game leaves planning with the council open: a ballot is tallied, a proposal-less council ends with no law | C40 | engine |
 | T-AC-47 (serves UBER-AC-8, -10) | the sim's politics row prints laws passed and law income by source and checks both proofs | C47 | `pnpm sim` |
 | T-AC-48 (serves B-AC-42) | the strategist never plans a blocked outfit | C42 | ai test |
@@ -561,6 +570,44 @@ because   S2-1: the table votes laws only if everyone can take part; the same re
 goal      S2-1 — still met; a month for diplomacy on each proposal
 folded    §0.1, HC-43, C40, RULE-40, RULE-41, §3, B-AC-43; RULE-46's propose rows now run in
           planning proper (once a month, after the seeded pause), not in a propose stage
+```
+
+```
+AM-2 · 2026-11-04 · Heiko (the G-5 card, through the PM) · before build
+
+target    status line, non-goals, §0.1 D2
+said      D2 is Heiko's, on the G-5 card; the build waits for it
+did       D2 ruled option A; slice 2a is in the MVP; rates are tuned at the end (G-5 HC-25)
+because   Heiko 2026-11-04: "2. thous four now", "7. yes i want them in"
+goal      S2-1, S2-2 — unchanged
+```
+
+```
+AM-3 · 2026-11-04 · WS7 · drift against trunk 9a409a56 · before build
+
+target    C42, HC-44; checked and unchanged: C41, C45
+said      outfitMule is the one outfit path; called from play.ts and the phone's intent
+did       the arcade added reoutfitMule and the floor's store reach (floor/reach.ts), which calls
+          both: the cap guards both, and the reach reads outfitBlocked so the press is never offered
+          when refused. Checked, no change: C41's seam (goodsMarket's trade, ship branch) is untouched
+          by A-6's store line, which changes store purchases only; C45's continuePlanning now also
+          ends A-7's clockless side pick, and the council's ballot sits in its electionOpen branch,
+          which comes first; HC-43 already matches A-7's no-clock rule
+because   trunk moved through 16 batches since 2026-10-28
+goal      S2-1 — unchanged
+```
+
+```
+AM-4 · 2026-11-05 · PM ruling (WS1's finding on #338) · during build
+
+target    §0.2 HC-41, §1 C44, §6 (INV-41 added)
+said      the council's draws come from their own seeded stream
+did       that stream had been seeded from state.seed, read off the real state because observe() hides
+          it. The game's seed drives its dice (events, wolves, glints), so an AI hand holding it could know
+          what the game will roll. The stream now hashes the seat's own seed and the month; no AI hand
+          reads state.seed (INV-41)
+because   the PM ruled it a fix before trunk, not a deferral
+goal      S2-1 — unchanged; replay holds (the seat seed comes from the game seed and the seat)
 ```
 
 ## §9 · Ownership Boundaries `[handoff]`

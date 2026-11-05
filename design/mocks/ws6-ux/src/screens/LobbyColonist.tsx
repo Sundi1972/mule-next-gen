@@ -91,7 +91,9 @@ export function LobbyColonist({ state }: { state: LobbyState }) {
             <ColonistHero seat={me} />
             <div className="flex min-w-0 flex-1 flex-col gap-2 @min-[1100px]/shell:gap-6">
               <Picker label="Species">
-                <div className="grid grid-cols-6 gap-1 @min-[1100px]/shell:grid-cols-3 @min-[1100px]/shell:gap-3" data-testid="species-pick">
+                {/* Six across when the picker has room for every name whole, three across otherwise (the product's, WS4's #174). */}
+                <div className="@container/species">
+                <div className="grid grid-cols-3 gap-1 @min-[340px]/species:grid-cols-6 @min-[1100px]/shell:grid-cols-3 @min-[1100px]/shell:gap-3" data-testid="species-pick">
                   {SPECIES.map((sp) => (
                     <button
                       key={sp}
@@ -113,6 +115,7 @@ export function LobbyColonist({ state }: { state: LobbyState }) {
                     </button>
                   ))}
                 </div>
+                </div>
               </Picker>
               <Picker label="Colour">
                 <div className="flex flex-wrap gap-1.5 @min-[1100px]/shell:gap-3" data-testid="colour-pick">
@@ -130,7 +133,7 @@ export function LobbyColonist({ state }: { state: LobbyState }) {
                         disabled={locked}
                         onClick={() => (owner ? take(c) : set({ colour: c }))}
                         className={cx(
-                          'flex items-center gap-1.5 rounded-full border py-0.5 pl-0.5 pr-2 @min-[1100px]/shell:gap-2 @min-[1100px]/shell:py-1 @min-[1100px]/shell:pl-1 @min-[1100px]/shell:pr-3',
+                          'flex min-h-8 items-center gap-1.5 rounded-full border py-0.5 pl-0.5 pr-2 @min-[1100px]/shell:gap-2 @min-[1100px]/shell:py-1 @min-[1100px]/shell:pl-1 @min-[1100px]/shell:pr-3',
                           mine ? 'border-2 border-holo bg-holo-soft' : locked ? 'border-holo-faint opacity-60' : 'border-holo-line hover:border-holo',
                         )}
                         data-testid={`colour-${c}`}
@@ -159,7 +162,7 @@ export function LobbyColonist({ state }: { state: LobbyState }) {
                 {seats.map((s) => (
                   <li key={s.id} className="flex items-center gap-2 border-t border-holo-faint bg-panel px-2 py-1 first:border-t-0 @min-[1100px]/shell:gap-3 @min-[1100px]/shell:px-3 @min-[1100px]/shell:py-2">
                     <Creature species={s.species} color={SLOT_COLOR[s.colour]} size={22} />
-                    <span className="min-w-0 flex-1 truncate text-sm font-semibold @min-[1100px]/shell:text-base">
+                    <span className="min-w-0 flex-1 text-sm font-semibold break-words @min-[1100px]/shell:text-base">
                       {s.name}
                       {s.id === meId && ' (you)'}
                     </span>
@@ -169,7 +172,7 @@ export function LobbyColonist({ state }: { state: LobbyState }) {
                     {host && s.id !== meId && (
                       <button
                         type="button"
-                        className="grid size-7 place-items-center rounded-control text-ink-3 hover:bg-alert/10 hover:text-alert"
+                        className="grid size-8 place-items-center rounded-control text-ink-3 hover:bg-alert/10 hover:text-alert"
                         aria-label={`Remove ${s.name}`}
                         onClick={() => setDialog({ kick: s.id })}
                         data-testid={`kick-${s.id}`}
@@ -183,17 +186,17 @@ export function LobbyColonist({ state }: { state: LobbyState }) {
             </section>
             <JoinCard className="order-2! @min-[1100px]/shell:order-3!" />
             {!host && (
-              <button type="button" className="text-left text-sm text-holo underline-offset-2 hover:underline" onClick={() => setDialog('handoff')} data-testid="move-to-phone">
+              <button type="button" className="min-h-8 shrink-0 text-left text-sm text-holo underline-offset-2 hover:underline" onClick={() => setDialog('handoff')} data-testid="move-to-phone">
                 Playing on a laptop? Move to my phone…
               </button>
             )}
             {host && (
               <section className="flex flex-col gap-1 border-t border-holo-faint pt-2 @min-[1100px]/shell:pt-3" data-testid="host-tools">
                 <span className="label-caps @min-[1100px]/shell:text-xs!">You host this table</span>
-                <button type="button" className="text-left text-sm text-holo underline-offset-2 hover:underline" onClick={() => setDialog('handoff')} data-testid="host-to-phone">
+                <button type="button" className="min-h-8 text-left text-sm text-holo underline-offset-2 hover:underline" onClick={() => setDialog('handoff')} data-testid="host-to-phone">
                   Move the host to my phone…
                 </button>
-                <button type="button" className="text-left text-sm text-alert underline-offset-2 hover:underline" onClick={() => setDialog('close')} data-testid="close-room">
+                <button type="button" className="min-h-8 text-left text-sm text-alert underline-offset-2 hover:underline" onClick={() => setDialog('close')} data-testid="close-room">
                   Close the room…
                 </button>
               </section>

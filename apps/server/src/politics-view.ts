@@ -1,19 +1,25 @@
 import {
   canRun,
-  ceremonyStepMs,
+  ceremonyBeats,
   isElectionDone,
+  LAW_NAME,
+  lawImpact,
   nextElectionMonth,
   PERCENT,
   POLITICS,
   taxBounds,
+  votesOpen,
   voteWeight,
-  type Election,
+  type CeremonyBeat,
+  type CeremonyBeats,
   type ElectionHow,
-  type ElectionResult,
   type GameState,
+  type LawId,
+  type LawImpact,
+  type LawProposal,
   type Office,
 } from '@mule/engine';
-import type { ElectionView, MyPoliticsView, OfficeReveal, PoliticsView } from '@mule/protocol';
+import type { CeremonyView, CouncilView, ElectionView, MyPoliticsView, OfficeReveal, PoliticsView } from '@mule/protocol';
 
 /* Colony politics as the screens and the news see it: pure functions of the game state. A ballot reaches only its owner's view. */
 
@@ -24,22 +30,50 @@ function perOffice<T>(value: (office: Office) => T): Partial<Record<Office, T>> 
   return Object.fromEntries(POLITICS.offices.map((office) => [office, value(office)]));
 }
 
+const BEATS: readonly CeremonyBeat[] = ['title', 'candidates', 'bars', 'tie', 'winner', 'end'];
+
+/** The beats of this month's closed result, or null before the ballot closes. */
+function beatsOf(state: GameState): CeremonyBeats | null {
+  const result = state.politics?.election?.result;
+  return result ? ceremonyBeats(state.players.map((p) => p.id), result) : null;
+}
+
+/** How far the show clock has got: the ms it stands at, or past every beat once the election is over. */
+function showMs(state: GameState): number {
+  const e = state.politics!.election!;
+  return e.ceremony ? e.ceremony.elapsedMs : e.stage === 'over' ? Infinity : -Infinity;
+}
+
 /**
- * Each office's result as far as the ceremony has shown it, the same on every screen: its totals from its bars
- * step, its winner and how from its winner step; every office once the election is over. See WS7 spec RULE-64.
+ * Each office's result as far as the ceremony has shown it, the same on every screen: its totals from its bars beat,
+ * its winner and how from its winner beat, or from its tie beat when a tie was broken, whose stamp names the rule and
+ * the winner; every office once the election is over. See WS7 spec RULE-64, AM-21.
  */
-function revealed(e: Election): Partial<Record<Office, OfficeReveal>> {
+function revealed(state: GameState): Partial<Record<Office, OfficeReveal>> {
   const shown: Partial<Record<Office, OfficeReveal>> = {};
-  if (!e.result || (e.stage !== 'ceremony' && e.stage !== 'over')) return shown;
-  const at = e.ceremony ? POLITICS.offices.indexOf(e.ceremony.office) : POLITICS.offices.length;
-  POLITICS.offices.forEach((office, i) => {
-    const result = e.result![office];
-    if (!result || i > at) return;
-    const step = i < at ? 'winner' : e.ceremony!.step;
-    if (step === 'winner') shown[office] = structuredClone(result);
-    else if (step === 'bars') shown[office] = { tallies: structuredClone(result.tallies) };
-  });
+  const beats = beatsOf(state);
+  const result = state.politics!.election!.result;
+  if (!beats || !result) return shown;
+  const ms = showMs(state);
+  for (const { office, at } of beats.offices) {
+    const race = result[office]!;
+    if (ms >= (at.tie ?? at.winner)) shown[office] = structuredClone(race);
+    else if (ms >= at.bars) shown[office] = { tallies: structuredClone(race.tallies) };
+  }
   return shown;
+}
+
+/** The show clock in game seconds and, per office it has reached, its latest beat; nothing ahead of the clock. */
+function ceremonyView(state: GameState): CeremonyView | null {
+  const c = state.politics!.election!.ceremony;
+  const beats = beatsOf(state);
+  if (!c || !beats) return null;
+  const reached: CeremonyView['reached'] = {};
+  for (const { office, at } of beats.offices) {
+    const beat = BEATS.filter((b) => at[b] !== null && at[b]! <= c.elapsedMs).at(-1);
+    if (beat) reached[office] = { beat, at: at[beat]! / 1_000 };
+  }
+  return { seconds: c.elapsedMs / 1_000, total: c.totalMs / 1_000, reached };
 }
 
 /** The last month of the term that began in `start`: the month before the next election, or the game's last month. */
@@ -67,29 +101,65 @@ export function politicsView(state: GameState): PoliticsView | null {
     }),
     candidates: perOffice((office) => [...p.candidates[office]]),
     promises: structuredClone(p.promises),
+    promise: p.promise && { ...p.promise },
+    promiseFrom: p.promiseFrom,
     election: electionView(state),
+    proposal: p.proposal && { ...structuredClone(p.proposal), impact: lawImpact(state, p.proposal.proposal) },
+    council: councilView(state),
+    laws: structuredClone(p.laws),
+    retry: Object.fromEntries(Object.entries(p.failed).map(([key, month]) => [key, month + POLITICS.council.retryMonths + 1])),
   };
+}
+
+/** Built field by field: `ballots` is read only for who has voted, never how; the totals only from the reveal. See slice 2a RULE-47. */
+function councilView(state: GameState): CouncilView | null {
+  const c = state.politics?.council;
+  if (!c) return null;
+  return {
+    stage: c.stage,
+    proposal: structuredClone(c.proposal),
+    proposer: c.proposer,
+    impact: lawImpact(state, c.proposal),
+    voted: Object.keys(c.ballots),
+    done: [...c.done],
+    waitingFor: c.stage === 'ballot' ? state.players.filter((p) => !c.done.includes(p.id)).map((p) => p.id) : [],
+    clockMs: c.clockMs,
+    revealMs: POLITICS.council.revealMs,
+    result: c.stage === 'ballot' ? null : c.result && { ...c.result },
+  };
+}
+
+/** The news line as a law ballot's result is revealed: whether it passed, by the weighted totals. */
+export function councilNews(state: GameState): string | null {
+  const c = state.politics?.council;
+  if (!c?.result) return null;
+  const { proposal, result } = c;
+  const what = proposal.kind === 'repeal' ? `Repeal of the ${LAW_NAME[proposal.law].toLowerCase()}` : `${LAW_NAME[proposal.law]} at ${proposal.setting}`;
+  const tie = result.tie ? ', the Governor breaking the tie' : '';
+  return `${what} ${result.passed ? 'passes' : 'fails'}, ${result.yes} votes to ${result.no}${tie}.`;
 }
 
 /** Built field by field: `ballots` is read only for who has voted, never for whom. */
 function electionView(state: GameState): ElectionView | null {
   const e = state.politics?.election;
   if (!e) return null;
-  const c = e.ceremony;
   const waiting = e.stage === 'announce' || e.stage === 'ballot';
   return {
     stage: e.stage,
-    ceremony: c ? { office: c.office, step: c.step, seconds: Math.max(0, c.clockMs / 1_000), total: ceremonyStepMs(c.step) / 1_000 } : null,
+    ceremony: ceremonyView(state),
     candidates: perOffice((office) => [...e.candidates[office]]),
     promises: structuredClone(e.promises),
     voted: Object.keys(e.ballots),
     done: state.players.filter((p) => isElectionDone(state, p.id)).map((p) => p.id),
     waitingFor: waiting ? state.players.filter((p) => !isElectionDone(state, p.id)).map((p) => p.id) : [],
-    result: revealed(e),
+    result: revealed(state),
   };
 }
 
-/** One player's own side of the election, for their phone only. Their candidacy is the election's from the ballot until the result, else Politics'. */
+/**
+ * One player's own side of politics, for their phone only: their candidacy (the election's from the ballot until the
+ * result, else Politics'), their ballot, and the tax paid and reputation that weigh their vote.
+ */
 export function myPoliticsView(state: GameState, playerId: string): MyPoliticsView | null {
   const p = state.politics;
   if (!p) return null;
@@ -100,7 +170,22 @@ export function myPoliticsView(state: GameState, playerId: string): MyPoliticsVi
     running: POLITICS.offices.find((o) => running[o].includes(playerId)) ?? null,
     ballot: { ...e?.ballots[playerId] },
     canRun: perOffice((office) => may[office]),
+    paid: state.treasury.paid[playerId] ?? 0,
+    reputation: state.players.find((pl) => pl.id === playerId)!.reputation,
+    lawBallot: p.council?.stage === 'ballot' ? (p.council.ballots[playerId] ?? null) : null,
+    ...(p.governor === playerId && state.phase === 'planning' && !votesOpen(state) ? { candidates: candidates(state) } : {}),
   };
+}
+
+/** Every proposal the Governor may weigh, each with lawImpact's cost per player: every law at each setting, and a repeal of each in force. See C46. */
+function candidates(state: GameState): Record<string, Record<string, LawImpact>> {
+  const out: Record<string, Record<string, LawImpact>> = {};
+  const add = (key: string, proposal: LawProposal) => (out[key] = lawImpact(state, proposal));
+  for (const law of Object.keys(POLITICS.laws) as LawId[]) {
+    for (const setting of POLITICS.laws[law].settings) add(`${law}:${setting}`, { kind: 'enact', law, setting });
+  }
+  for (const law of Object.keys(state.politics!.laws) as LawId[]) add(`repeal:${law}`, { kind: 'repeal', law });
+  return out;
 }
 
 const HOW: Record<ElectionHow, string> = {
@@ -114,8 +199,19 @@ const HOW: Record<ElectionHow, string> = {
 
 const TITLE: Record<Office, string> = { governor: 'Governor', sheriff: 'Sheriff' };
 
-/** The news line when the ceremony reaches an office's winner. */
-export function officeNews(office: Office, result: ElectionResult, nameOf: (seatId: string) => string): string {
-  const { winner, how } = result[office]!;
-  return `${nameOf(winner)} is ${TITLE[office]} (${HOW[how]}).`;
+/**
+ * The news as the show clock runs on from `beforeMs` to where it stands now: one line per office whose winner beat it
+ * passed, in POLITICS.offices order. See WS7 spec C64.
+ */
+export function ceremonyNews(state: GameState, beforeMs: number, nameOf: (seatId: string) => string): string[] {
+  const beats = beatsOf(state);
+  const result = state.politics?.election?.result;
+  if (!beats || !result) return [];
+  const ms = showMs(state);
+  return beats.offices
+    .filter(({ at }) => beforeMs < at.winner && at.winner <= ms)
+    .map(({ office }) => {
+      const { winner, how } = result[office]!;
+      return `${nameOf(winner)} is ${TITLE[office]} (${HOW[how]}).`;
+    });
 }

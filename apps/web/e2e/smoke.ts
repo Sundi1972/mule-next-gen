@@ -4,16 +4,18 @@
  * Run with `pnpm --filter @mule/web e2e`; replay a red run's map with `MULE_E2E_SEED=<seed>`.
  */
 import { existsSync } from 'node:fs';
-import { WALK } from '@mule/engine';
+import { EVENTS, WALK, type GameState } from '@mule/engine';
 import { errors as playwrightErrors, type BrowserContext, type Page } from 'playwright';
 import { PHASE_MS } from '../../server/src/mule-game.js';
-import { check, CLAIM_MS, claimAPlot, doneWithLand, headerSlot, held, launch, PHONE, startServer, TV, type AuctionSteps, type GameStepContext } from './harness';
+import type { MuleServer } from '../../server/src/server.js';
+import { check, CLAIM_MS, claimAPlot, doneWithLand, held, launch, PHONE, startServer, TV, type AuctionSteps, type GameStepContext } from './harness';
 import { planningIsTheHub } from './hub-steps';
+import { gameOverIsInCredits, theLeagueTableAtTheMonthEnd, theMonthEndHoldsForThePhone } from './month-end-steps';
 import { ELECTION_WAIT_MS, readyThroughTheElection } from './politics-steps';
 import { checkTheShow, watchShow, type ShowWatch } from './production-steps';
-import { fedPlayerSeesNoHunger, hungryPlayerSeesHerPace, makeHungry, outfittersOpenWithAnEmptyMule, storeIsOneHallWithTwoRows, theCorralGlowsWithNoMule, theLedMuleLightsUp } from './store-steps';
+import { makeHungry } from './store-steps';
 import { specialFieldsShowTheirGlyphs } from './special-steps';
-import { doneThroughTheElection, doubleTapZoomsToYourLand, moveDialogOpensInProduction, moveDialogOutlivedThePhase, noZoomBeforeYourFirstPlot, thePhonePicksRose, thePhoneShowsItsSelectedPlot, theSeatMovesToAnotherDevice, theTvDrawsRose, theTvShowsWhoOwnsEachPlot, watchIntents, zoomButtonOnceYouOwnAPlot } from './table-steps';
+import { doneThroughTheElection, moveDialogOpensInProduction, moveDialogOutlivedThePhase, noZoomBeforeYourFirstPlot, thePhonePicksRose, theSeatMovesToAnotherDevice, theTvDrawsRose, theTvShowsWhoOwnsEachPlot, watchIntents, zoomButtonOnceYouOwnAPlot } from './table-steps';
 
 /** Loaded by a path held in a variable, so tsc never resolves a file that may not exist yet. */
 async function loadAuctionSteps(): Promise<AuctionSteps> {
@@ -51,9 +53,14 @@ const HOST_WALKER = 'walker-s1';
 /** The phone's score lines at game over that add up; a Collapse line, when there is one, is taken off them. */
 const PART_LINES = ['money', 'goods', 'land', 'mules'] as const;
 
-/** Month 2 of this seed rolls a production event: a run with MULE_E2E_SEED=1 checks the event's show (B-AC-7). */
+/** A run with MULE_E2E_SEED=1 checks month 2's event show (B-AC-7). */
 const SHOW_SEED = 1;
 const SEED = seedFrom(process.env.MULE_E2E_SEED);
+// Every event rolls on its own row's dice, so no seed promises one: this run makes an event in month 2 certain. The
+// dust storm's row rolls at 100%, its cap included (it needs only an Energy plot, which month 1 builds; should a solar
+// flare fire too, the pair's dice keep one of the two), and the row is put back when the game ends.
+const dustStorm = { ...EVENTS.colony.dustStorm };
+if (SEED === SHOW_SEED) Object.assign(EVENTS.colony.dustStorm, { phases: { production: 1 }, cap: 1 });
 const steps = await loadAuctionSteps();
 const { server, base } = await startServer({ maxMonths: 2, phaseScale: PHASE_SCALE, seed: () => SEED });
 const browser = await launch();
@@ -110,13 +117,14 @@ try {
   await phone.locator('[data-phase]').getByRole('img', { name: 'You, Mollox', exact: true }).waitFor({ timeout: 5_000 });
   const tvGame = tv.locator('[data-phase]');
   await tvGame.waitFor({ timeout: 5_000 });
-  await tvGame.locator('li').filter({ hasText: 'Heiko' }).getByRole('img', { name: 'Mollox' }).first().waitFor({ timeout: 3_000 });
-  check((await tvGame.getByRole('img', { name: 'Zipwing' }).count()) === 0, 'B-AC-1: nobody in the TV game plays the seat-1 default, Zipwing');
-  check((await tvGame.getByRole('img', { name: 'Bramblet' }).count()) >= 1, 'B-AC-1: the TV game still shows the first AI as a Bramblet');
 
   // Month 1: the election, then planning's steps, then Ready.
   console.log(`election: ${await doneThroughTheElection(ctx, within(ELECTION_WAIT_MS))}`);
-  await theTvDrawsRose(ctx, 'planning');
+  // The TV shows election day first; its planning roster comes after.
+  await tvGame.locator('li').filter({ hasText: 'Heiko' }).getByRole('img', { name: 'Mollox' }).first().waitFor({ timeout: 3_000 });
+  check((await tvGame.getByRole('img', { name: 'Zipwing' }).count()) === 0, 'B-AC-1: nobody in the TV game plays the seat-1 default, Zipwing');
+  check((await tvGame.getByRole('img', { name: 'Bramblet' }).count()) >= 1, 'B-AC-1: the TV game still shows the first AI as a Bramblet');
+  const rose = await theTvDrawsRose(ctx, 'planning');
   await specialFieldsShowTheirGlyphs(ctx);
   await readyThroughTheElection(phone, READY_MS);
   const claim = phone.getByRole('button', { name: /CLAIM/ });
@@ -135,22 +143,17 @@ try {
 
   await pastTheLandGrant(phone);
   await steps.landAuction?.({ phone, tv, check }, 1);
-  // B-AC-10 and B-AC-9's fed case as development starts; the phone buys a MULE through the start-of-turn card.
-  await storeIsOneHallWithTwoRows(phone, PAST_THE_GRANT_MS);
-  // B-AC-15 and B-AC-16: the store says what to do next, and the MULE is a character.
-  await theCorralGlowsWithNoMule(phone, server, code);
-  await fedPlayerSeesNoHunger(phone, server, code);
-  await outfittersOpenWithAnEmptyMule(phone);
-  console.log(`store hall fills the stage: ${await theLedMuleLightsUp(phone, server, code)}`);
-  await checkOwnsAPlot(phone);
-  // B-AC-9 (WS4, plot look A): with a plot of its own selected and its MULE installed, then the TV's map.
-  console.log(`plots, phone: ${await thePhoneShowsItsSelectedPlot(ctx)}`);
-  console.log(`zoom: ${await doubleTapZoomsToYourLand(ctx, phoneIntents)}`);
-  await theTvDrawsRose(ctx, 'development');
+  // Walking is on (arcade PR-11): development is the arcade screen, played with the stick and the button. Its errand is
+  // proven in shell.ts's arcade rooms and walking-steer.ts; at this table's speed a held key overshoots every reach.
+  // So the phone's first MULE goes on its plot through the server: month 1's clock, waiting for every first MULE,
+  // starts, the clock ends the turn, and the show has the MULE to show.
+  await phone.locator('[data-phase=development]').waitFor({ timeout: PAST_THE_GRANT_MS });
+  installAFirstMule(server, code);
+  await theTvDrawsRose(ctx, 'development', rose);
   console.log(`plots, TV: ${await theTvShowsWhoOwnsEachPlot(ctx)}`);
-  await goToThePub(phone);
-  // B-AC-6 and B-AC-8, from what both screens drew of month 1's show.
-  await phone.locator('[data-phase=auction]').waitFor({ timeout: within(PHASE_MS.development + PHASE_MS.production) });
+  // B-AC-6 and B-AC-8, from what both screens drew of month 1's show. The turn runs its whole clock, which starts only
+  // once the AI seats have their first MULEs too: a development's length again for that wait.
+  await phone.locator('[data-phase=auction]').waitFor({ timeout: within(2 * PHASE_MS.development + PHASE_MS.production) });
   console.log(`production show, month 1: ${await checkTheShow({ tv: tvShow, phone: phoneShow })}`);
   let measured = false;
   await pressDoneThroughTheAuction(phone, async (button) => {
@@ -158,8 +161,11 @@ try {
   });
   check(measured, 'FM-2: the month-1 auction reached a walk to measure');
 
+  // B-AC-12 at month 1's end, the one a two-month game has; then it holds until the phone moves on (B-AC-13).
+  console.log(`league table: ${await theLeagueTableAtTheMonthEnd(ctx)}`);
+  console.log(`month end: ${(await theMonthEndHoldsForThePhone(ctx, 1)).line}`);
+
   // Month 2.
-  await phone.locator('[data-phase=planning]').waitFor({ timeout: within(PHASE_MS.upkeep) });
   await steps.listedSale?.({ phone, tv, check });
   makeHungry(server, code);
   // B-AC-14: planning is the hub, its needs read from that seed; with B-AC-12's planning part.
@@ -172,10 +178,10 @@ try {
   await readyIfStillPlanning(phone);
   await pastTheLandGrant(phone);
   await steps.landAuction?.({ phone, tv, check }, 2);
-  await hungryPlayerSeesHerPace(phone, server, code, PAST_THE_GRANT_MS);
-  await goToThePub(phone);
+  // Month 2's clock runs from the start: the phone lets it end the turn.
+  await phone.locator('[data-phase=development]').waitFor({ timeout: PAST_THE_GRANT_MS });
   const moveLink = await moveDialogOpensInProduction(ctx, within(PHASE_MS.development));
-  // B-AC-6, B-AC-7 and B-AC-8: month 2's show, with the seed's event.
+  // B-AC-6, B-AC-7 and B-AC-8: month 2's show, with the run's certain event.
   await phone.locator('[data-phase=auction]').waitFor({ timeout: within(PHASE_MS.development + PHASE_MS.production) });
   await moveDialogOutlivedThePhase(ctx, moveLink);
   console.log(`production show, month 2: ${await checkTheShow({ tv: tvShow, phone: phoneShow, event: SEED === SHOW_SEED })}`);
@@ -184,11 +190,12 @@ try {
   // Game over.
   const scores = phone.locator('[data-phase=gameOver] [data-testid=scores]');
   await scores.waitFor({ timeout: 5_000 });
-  const rows = await scores.locator('li').allTextContents();
+  const rows = await scores.locator('tbody tr').allTextContents();
   check(rows.length === 3, `final scores for all three seats, got ${rows.length}`);
-  check(rows.some((r) => r.includes('Heiko (you)')), `the human is on the final scores: ${rows.join(' | ')}`);
+  check(rows.some((r) => r.includes('You (Heiko)')), `the human is on the final scores: ${rows.join(' | ')}`);
   await tv.getByTestId('tv-phase').filter({ hasText: 'Game over' }).waitFor({ timeout: 5_000 });
   await checkTheScoresAddUp(phone, tv);
+  console.log(`game over: ${await gameOverIsInCredits(phone, tv)}`);
   console.log(`turned upright and back: ${await turnUprightAndBack(phone)}`);
 
   const phases = seen.map((s) => s.phase);
@@ -202,6 +209,7 @@ try {
   if (errors.length > 0) console.error(`page errors: ${errors.join('; ')}`);
   throw err;
 } finally {
+  Object.assign(EVENTS.colony.dustStorm, dustStorm);
   await browser.close();
   await server.close();
 }
@@ -226,22 +234,22 @@ async function readyIfStillPlanning(phone: Page): Promise<void> {
   }
 }
 
-/** Development: walk out to the map and tap a plot in your colour; the phone calls it yours. */
-async function checkOwnsAPlot(phone: Page): Promise<void> {
-  const dev = phone.locator('[data-phase=development]');
-  await dev.getByRole('button', { name: 'Walk out to the map' }).click({ timeout: within(PHASE_MS.development) });
-  await dev.getByRole('button', { name: /, free\b/ }).first().waitFor({ timeout: 3_000 });
-  // The map names each plot's owner by colour slot, counted from 1.
-  const mine = dev.getByRole('button', { name: new RegExp(`owned by player ${(await headerSlot(phone, 'T-AC-1')) + 1}\\b`) });
-  const plots = await mine.count();
-  check(plots >= 1, `T-AC-1: the phone owns a plot before month 2; its map shows ${plots} plots in its colour`);
-  await mine.first().click({ timeout: PRESS_MS });
-  try {
-    await dev.getByText('YOURS', { exact: true }).waitFor({ timeout: PRESS_MS });
-  } catch (err) {
-    if (err instanceof playwrightErrors.TimeoutError) check(false, 'T-AC-1: the phone calls the plot in its colour YOURS');
-    throw err;
-  }
+/**
+ * Month 1, development: an Energy MULE on the phone's first plot, as installing leaves it, so the first-MULE wait
+ * counts the seat in and the AI seats' next tick starts the clock (T-AC-1: the phone owns a plot by now). Energy, as
+ * the tap store's errand installed: SHOW_SEED's dust storm (B-AC-7) only fires on a working Energy plot.
+ */
+function installAFirstMule(server: MuleServer, code: string, seat = 's1'): void {
+  const room = server.registry.get(code);
+  check(room, `a room ${code} on the server`);
+  const state = (room as unknown as { game: { state: GameState } }).game.state;
+  check(state.phase === 'development', `the MULE goes in during development, not in ${state.phase}`);
+  const plot = state.tiles.find((t) => t.owner === seat && t.terrain !== 'store');
+  check(plot, `T-AC-1: the phone owns a plot in month 1's development`);
+  plot.outfit = 'energy';
+  state.players.find((p) => p.id === seat)!.installedThisTurn = true;
+  // Changed behind the game's back: the room's broadcast is the one way every screen sees it now (as makeHungry does).
+  (room as unknown as { broadcast(): void }).broadcast();
 }
 
 /** B-AC-11: held upright the phone shows the turn prompt and not the game; turned back, the same screen again. */
@@ -263,13 +271,6 @@ async function pastTheLandGrant(phone: Page): Promise<void> {
   await doneWithLand(phone);
 }
 
-/** Development: walk into the pub, which ends the human's turn. */
-async function goToThePub(phone: Page): Promise<void> {
-  await phone
-    .locator('[data-phase=development]')
-    .getByRole('button', { name: 'Go to the pub and end your turn' })
-    .click({ timeout: within(PHASE_MS.development) });
-}
 
 /**
  * The goods auction: press its Done button at every stage it shows ('Ready',
@@ -296,8 +297,12 @@ async function pressDoneThroughTheAuction(phone: Page, beforePress?: (button: st
       if (err instanceof playwrightErrors.TimeoutError) continue;
       throw err;
     }
-    // Pressed, it turns to 'Done · waiting'; 'Ready' on the status screen stays until the next stage.
-    await phone.locator('[data-phase=auction]').getByRole('button', { name: label, exact: true }).waitFor({ state: 'hidden', timeout: AUCTION_STAGE_MS });
+    // Pressed, it gives way at once; but the last Ready ends the side pick and the next good can open on Ready again (A-7), so a moment's wait, then press again.
+    try {
+      await phone.locator('[data-phase=auction]').getByRole('button', { name: label, exact: true }).waitFor({ state: 'hidden', timeout: PRESS_MS });
+    } catch (err) {
+      if (!(err instanceof playwrightErrors.TimeoutError)) throw err;
+    }
   }
 }
 
@@ -361,7 +366,7 @@ async function checkTheScoresAddUp(phone: Page, tv: Page): Promise<void> {
     if ((part === 'collapse' || part === 'office') && rows === 0) return 0;
     check(rows === 1, `B-AC-3: the phone shows one part-${part} line, got ${rows}`);
     // The office line is shown with a plus sign.
-    const shown = (await row.locator('td').last().textContent())?.replace(/^\s*\+/, '') ?? null;
+    const shown = (await row.locator('[data-num]').last().textContent())?.replace(/^\s*\+/, '') ?? null;
     return readNumber(shown, `the phone's part-${part}`);
   };
   const parts = Object.fromEntries(await Promise.all(PART_LINES.map(async (p) => [p, await line(p)] as const)));
@@ -374,21 +379,37 @@ async function checkTheScoresAddUp(phone: Page, tv: Page): Promise<void> {
   check(sum === total, `B-AC-3: the phone's lines ${PART_LINES.map((p) => `${p} ${parts[p]}`).join(' + ')} + office ${office} − collapse ${cut} = ${sum}, but its final score reads ${total}`);
 
   await tvEnd.getByTestId('tv-scores').waitFor({ timeout: 5_000 });
-  const hostRow = tvEnd.getByTestId('tv-scores').locator('li').filter({ has: tv.getByText('Heiko', { exact: true }) });
-  check((await hostRow.count()) === 1, 'B-AC-3: the TV lists the host once in its final scores');
-  const onTv = readNumber(await hostRow.locator('[data-num]').last().textContent(), "the host's TV score");
+  const hostRow = tvEnd.getByTestId('tv-scores').getByTestId('league-row-s1');
+  check((await hostRow.count()) === 1 && (await hostRow.getByText('Heiko', { exact: true }).count()) === 1, 'B-AC-3: the TV lists the host once in its final scores');
+  const onTv = readNumber(await hostRow.getByTestId('worth-s1').textContent(), "the host's TV score");
   check(onTv === total, `B-AC-3: the phone's final score ${total} is the host's score on the TV, ${onTv}`);
 
   // The band as the TV's air gauge names it, which everyone in the room reads.
   const gauge = (await tvEnd.getByText(/^\d+ · (CLEAN|SMOGGY|TOXIC|COLLAPSE)$/).textContent()) ?? '';
   const expected = gauge.endsWith('COLLAPSE') ? 'failed' : 'passed';
-  for (const [screen, verdict] of [
-    ['phone', end.getByTestId('verdict')],
-    ['TV', tvEnd.getByTestId('tv-verdict')],
-  ] as const) {
+  // With politics on, the colony's score card (phone) and band (TV) take the verdict's place (C34) and carry a failed
+  // colony as data-failed, with the verdict's words in alert; with politics off the verdict cards are today's.
+  const colony = (await tvEnd.getByTestId('colony-band').count()) > 0;
+  for (const [screen, verdict] of colony
+    ? ([
+        ['phone', end.getByTestId('phone-colony-score')],
+        ['TV', tvEnd.getByTestId('colony-band')],
+      ] as const)
+    : ([
+        ['phone', end.getByTestId('verdict')],
+        ['TV', tvEnd.getByTestId('tv-verdict')],
+      ] as const)) {
     // As read on screen: textContent runs the title into the gauge ("passedColony air"), innerText keeps them apart.
     const text = await verdict.innerText();
-    const says = /\bfailed\b/.test(text) ? 'failed' : /\bpassed\b/.test(text) ? 'passed' : 'neither';
+    const says = colony
+      ? (await verdict.getAttribute('data-failed')) === 'true'
+        ? 'failed'
+        : 'passed'
+      : /\bfailed\b/.test(text)
+        ? 'failed'
+        : /\bpassed\b/.test(text)
+          ? 'passed'
+          : 'neither';
     check(says === expected, `B-AC-3: the ${screen} verdict reads "${says}", but the TV's air gauge shows ${gauge}: "${text}"`);
   }
   check(expected === 'failed' || cut === 0, `B-AC-3: the colony passed, yet the phone shows a Collapse line of ${cut}`);

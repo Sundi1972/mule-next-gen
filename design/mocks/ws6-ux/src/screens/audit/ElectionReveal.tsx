@@ -57,7 +57,7 @@ export function timeline(offices: readonly Office[]) {
     const cands0 = title + 1.8;
     const bars = cands0 + cands.length * 0.5 + 0.5;
     const blocksEnd = bars + order.length * BLOCK;
-    const tie = race.how === 'tieRule' || race.how === 'baron' ? blocksEnd + 0.4 : null;
+    const tie = race.how === 'land' || race.how === 'lot' || race.how === 'baron' ? blocksEnd + 0.4 : null;
     const winner = tie !== null ? tie + 2.6 : blocksEnd + 0.7;
     const end = winner + 3.8;
     t = end;
@@ -506,7 +506,7 @@ export function PhoneRevealWithTv({ offices, t }: { offices: readonly Office[]; 
                       <span data-num className="font-mono font-bold">
                         {x.votes}
                       </span>
-                      {x.id === b.race.winner && <span className="rounded-chip bg-holo px-1 font-mono text-[9px] font-bold leading-4 text-on-holo">ELECTED</span>}
+                      {x.id === b.race.winner && <span className="rounded-chip bg-holo px-1 font-mono text-[10px] font-bold leading-4 text-on-holo">ELECTED</span>}
                     </span>
                   ))}
                 {known && <span className={cx('text-[11px] leading-snug', b.race.how === 'votes' ? 'text-ink-2' : 'text-warn')}>{howWords(b.race, ME)}</span>}

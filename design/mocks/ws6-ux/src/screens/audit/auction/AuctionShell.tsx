@@ -6,6 +6,8 @@ import { ThemeToggle } from '../../../../../../../apps/web/src/components/ThemeT
 import { fmt } from '../../../../../../../apps/web/src/game/derive';
 import { usePhoneGame } from '../../../../../../../apps/web/src/phone/game';
 import { MoveToPhoneOpener, ShellLayer, WIDE_PX } from '../../../../../../../apps/web/src/phone/Shell';
+import { FallbackBubble, SeatRow, Ticker, useChat } from '../../../proposed/Chat';
+import { useTickerRule } from '../../../proposed/TickerRule';
 
 /**
  * A fork of the product's PhoneShell (apps/web/src/phone/Shell.tsx, WS4's file) for the goods auction audit, so the
@@ -58,6 +60,10 @@ export function AuctionShell({
   const [root, wide] = useWideRef<HTMLDivElement>();
   const layer = useContext(ShellLayer);
   const move = useContext(MoveToPhoneOpener);
+  const chat = useChat();
+  // The rail-chat proposal (TickerRule.tsx): on a phone the table chat follows the rail's content, not above it.
+  const rule = useTickerRule();
+  const chatUnder = !!chat && rule === 'under' && !wide;
   return (
     <Wide.Provider value={wide}>
       <div ref={root} className="h-full @container/shell">
@@ -112,10 +118,29 @@ export function AuctionShell({
                   {tally}
                 </span>
               </div>
-              <TableChat />
+              {/* Mock only: with the review page's live table (a ChatProvider), the proposed seat row and ticker, as the hub's
+                  rail draws them; without one, the product's TableChat, which the stand-in client keeps empty. */}
+              {chatUnder ? (
+                <div className="relative h-0">
+                  <FallbackBubble />
+                </div>
+              ) : chat ? (
+                <div className="relative flex flex-col gap-1 border-t border-holo-faint pt-1.5 @min-[1100px]/shell:gap-2 @min-[1100px]/shell:pt-2.5" data-testid="table-chat">
+                  <SeatRow />
+                  <Ticker />
+                </div>
+              ) : (
+                <TableChat />
+              )}
             </header>
             <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-3 py-2.5 *:shrink-0 @min-[1100px]/shell:gap-4 @min-[1100px]/shell:px-5 @min-[1100px]/shell:py-4" data-testid="rail">
               {rail}
+              {chatUnder && (
+                <div className="flex flex-col gap-1 border-t border-holo-faint pt-1.5" data-testid="table-chat">
+                  <SeatRow bubble={false} />
+                  <Ticker />
+                </div>
+              )}
             </div>
             {footer && (
               <div

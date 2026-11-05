@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type PointerEvent } from 'react';
 import { Creature } from './Creature';
+import { boardGait, GAIT, type BoardTrack, type Motion } from './motion/gait';
 import { useSeatSpecies, type CreatureWrap } from './species';
 import { cx, SLOT_COLOR, type Slot } from './tokens';
 
@@ -25,7 +26,13 @@ export interface BoardDeal {
   seller: string;
   price: number;
   units: number;
+  /** How fast its units move now: 0 at its first unit, 1 at the top speed. Without it, no speed is shown. */
+  speed?: number;
 }
+
+/** A deal's speed on the board: one chevron per step, so the table sees units go faster and faster. */
+export const SPEED_STEPS = 4;
+export const speedStep = (speed: number) => Math.min(SPEED_STEPS, 1 + Math.floor(Math.max(0, speed) * SPEED_STEPS));
 
 /** Which of the two moving lines to draw: the lowest ask and the highest bid. */
 export interface BoardMarks {
@@ -75,6 +82,7 @@ export function WalkBoard({
   storeBuys,
   storeSells,
   shipPays,
+  shipCaption,
   lines: extra = [],
   marks,
   storeStock,
@@ -91,6 +99,8 @@ export function WalkBoard({
   storeBuys: number | null;
   storeSells: number | null;
   shipPays: number | null;
+  /** Words on the ship's line, just under it: "The ship buys Crystite at 120". */
+  shipCaption?: string;
   /** More price lines, drawn like the store's: a seller's minimum at the land auction. */
   lines?: { id: string; label: string; price: number }[];
   /** The lowest-ask and highest-bid lines, drawn during the walk while no units change hands. */
@@ -194,7 +204,7 @@ export function WalkBoard({
             <span
               data-num
               data-testid="store-sold-out"
-              className={cx('absolute right-0 top-0 z-20 rounded-sm bg-void px-1 text-right font-mono font-bold leading-tight text-rise', tv ? 'text-base' : 'text-[9px]')}
+              className={cx('absolute right-0 top-0 z-20 rounded-sm bg-void px-1 text-right font-mono font-bold leading-tight text-rise', tv ? 'text-base' : 'text-[10px]')}
               style={{ width: gutter }}
             >
               <span className="block font-normal opacity-80">STORE</span>SOLD OUT
@@ -204,7 +214,7 @@ export function WalkBoard({
             <div key={l.key} className={cx('absolute inset-x-0 border-t border-dashed opacity-80', l.tone)} style={{ top: `${pct(l.price)}%` }} data-testid={`limit-${l.key}`}>
               <span
                 data-num
-                className={cx('absolute right-0 z-20 flex -translate-y-1/2 flex-col items-end rounded-sm bg-void px-1 text-right font-mono font-bold leading-tight', tv ? 'text-base' : 'text-[9px]')}
+                className={cx('absolute right-0 z-20 flex -translate-y-1/2 flex-col items-end rounded-sm bg-void px-1 text-right font-mono font-bold leading-tight', tv ? 'text-base' : 'text-[10px]')}
                 style={{ width: gutter }}
               >
                 <span className="font-normal opacity-80">{l.who}</span>
@@ -212,6 +222,19 @@ export function WalkBoard({
               </span>
             </div>
           ))}
+          {shipCaption && shipPays !== null && (
+            <span
+              className={cx(
+                // Under the line, against the gutter: sellers walk down from above, so the room under it is clear.
+                'pointer-events-none absolute z-20 whitespace-nowrap rounded-chip border border-warn/70 bg-void/90 font-display font-semibold text-warn',
+                tv ? 'mt-1.5 px-2.5 py-0.5 text-xl' : 'mt-1 px-1.5 text-[11px] @min-[1100px]/shell:text-base',
+              )}
+              style={{ top: `${pct(shipPays)}%`, right: `calc(${gutter}px + ${tv ? 0.5 : 0.25}rem)` }}
+              data-testid="ship-caption"
+            >
+              {shipCaption}
+            </span>
+          )}
 
           {askLine && <MovingLine testid="line-ask" top={pct(askLine.at)} width={x(1)} tone="seller" />}
           {bidLine && <MovingLine testid="line-bid" top={pct(bidLine.at)} width={x(1)} tone="buyer" />}
@@ -237,19 +260,39 @@ export function WalkBoard({
             const right = house ? 1 : Math.max(...xs);
             // The counter sits under the trading creature, or between the two players trading.
             const at = house ? left : (left + right) / 2;
+            // Below the trading walker's stock caption ("3 (+1)"), which sits right under the creature, never over it; near
+            // the board's foot there is no room under it before the names row, so it sits above the creatures instead.
+            const CAPTION_CLEAR = tv ? 28 : 18;
+            const above = pct(d.price) > 75;
             return (
               <div key={`${d.buyer}-${d.seller}`} data-testid="deal">
+                {/* The bar pulses faster as the deal speeds up: 1.2 s a beat at its first unit, 0.25 s at the top speed. */}
                 <div
                   className="absolute h-1.5 -translate-y-1/2 animate-pulse rounded-full bg-holo shadow-glow"
-                  style={{ top: `${pct(d.price)}%`, left: x(left), width: house ? `calc(100% - ${x(left)})` : x(Math.max(0.02, right - left)) }}
+                  style={{
+                    top: `${pct(d.price)}%`,
+                    left: x(left),
+                    width: house ? `calc(100% - ${x(left)})` : x(Math.max(0.02, right - left)),
+                    ...(d.speed !== undefined ? { animationDuration: `${1.2 - Math.min(1, Math.max(0, d.speed)) * 0.95}s` } : {}),
+                  }}
                 />
                 <span
                   data-num
-                  className={cx('absolute z-10 -translate-x-1/2 whitespace-nowrap rounded-chip border border-holo bg-void px-1.5 font-mono font-bold text-holo', tv ? 'text-lg' : 'text-[10px]')}
-                  style={{ top: `calc(${pct(d.price)}% + ${creature / 2 + 2}px)`, left: x(at) }}
+                  className={cx('absolute z-10 -translate-x-1/2 whitespace-nowrap rounded-chip border border-holo bg-void px-1.5 font-mono font-bold text-holo', tv ? 'text-lg' : 'text-[10px]', above && '-translate-y-full')}
+                  style={{ top: `calc(${pct(d.price)}% ${above ? '-' : '+'} ${above ? creature / 2 + 4 : creature / 2 + CAPTION_CLEAR}px)`, left: x(at) }}
+                  data-place={above ? 'above' : 'below'}
                 >
                   ×{d.units} @ {d.price}
                   {house ? ` · ${house}` : ''}
+                  {d.speed !== undefined && (
+                    <span className="ml-1 tracking-[-0.15em]" aria-label={`speed ${speedStep(d.speed)} of ${SPEED_STEPS}`} data-testid="deal-speed">
+                      {Array.from({ length: SPEED_STEPS }, (_, k) => (
+                        <span key={k} className={k < speedStep(d.speed!) ? 'text-holo' : 'text-ink-3/40'}>
+                          ›
+                        </span>
+                      ))}
+                    </span>
+                  )}
                 </span>
               </div>
             );
@@ -324,47 +367,68 @@ function AxisTag({ top, price, tone, tv, testid }: { top: number; price: number;
   );
 }
 
+/** Walks while the walker's price moves, stands while it holds (boardGait); wakes once to stand when the price stops. */
+function useBoardMotion(at: number): Motion {
+  const track = useRef<BoardTrack | null>(null);
+  const [, wake] = useState(0);
+  const now = performance.now();
+  const { track: next, motion } = boardGait(track.current, at, now);
+  useEffect(() => {
+    track.current = next;
+    if (motion !== 'walk' || next.movedAt === null) return;
+    const t = setTimeout(() => wake((n) => n + 1), GAIT.boardHoldMs - (now - next.movedAt) + 1);
+    return () => clearTimeout(t);
+  });
+  return motion;
+}
+
+/**
+ * One walker: a full-height column at its x, moved to its price by a transform (the compositor glides it, no layout),
+ * carrying the creature, its units and its price. Up and down have no facing, so the creature faces right.
+ */
 function Walker({ w, left, top, size, tv, me, trading, wrap = (_, c) => c }: { w: BoardWalker; left: string; top: number; size: number; tv: boolean; me: boolean; trading: boolean; wrap?: CreatureWrap | undefined }) {
   const species = useSeatSpecies(w.slot);
   const seller = w.side === 'seller';
+  const motion = useBoardMotion(w.at);
   return (
-    <div
-      className="absolute flex -translate-x-1/2 -translate-y-1/2 items-center gap-1 transition-[top] duration-100 ease-linear"
-      style={{ left, top: `${top}%` }}
-      data-testid={`walker-${w.id}`}
-      data-side={w.side}
-    >
-      <span className="relative flex flex-col items-center">
-        {wrap(
-          w.id,
-          <span className={cx('relative rounded-full', trading && 'animate-pulse-glow', me && 'ring-2 ring-holo ring-offset-2 ring-offset-void')}>
-            <Creature species={species} color={SLOT_COLOR[w.slot]} size={size} />
-          </span>,
-        )}
-        {w.units !== undefined && (
-          <span
-            data-num
-            data-testid={`units-${w.id}`}
-            className={cx('absolute top-full mt-0.5 whitespace-nowrap rounded-sm bg-void/90 px-1 font-mono font-bold leading-none text-ink', tv ? 'text-base' : 'text-[9px]')}
-          >
-            {w.units}
-            {w.surplus !== undefined && (
-              <span className={cx('font-normal', w.surplus < 0 ? 'text-alert' : w.surplus > 0 ? 'text-ok' : 'text-ink-3')}> ({w.surplus > 0 ? '+' : ''}{w.surplus})</span>
-            )}
-          </span>
-        )}
-      </span>
-      <span
-        data-num
-        className={cx(
-          'flex flex-col items-start rounded-control border bg-void/90 px-1 font-mono font-bold leading-none',
-          tv ? 'py-1 text-xl' : 'py-0.5 text-[11px]',
-          seller ? 'border-rise/60 text-rise' : 'border-fall/60 text-fall',
-        )}
+    <div className="absolute inset-y-0 w-0 transition-transform duration-100 ease-linear" style={{ left, transform: `translateY(${top}%)` }}>
+      <div
+        className="absolute left-0 top-0 flex w-max -translate-x-1/2 -translate-y-1/2 items-center gap-1"
+        data-testid={`walker-${w.id}`}
+        data-side={w.side}
       >
-        <span className={cx('font-normal text-ink-3', tv ? 'text-xs' : 'text-[8px]')}>{seller ? 'ASK' : 'BID'}</span>
-        {w.price}
-      </span>
+        <span className="relative flex flex-col items-center">
+          {wrap(
+            w.id,
+            <span className={cx('relative rounded-full', trading && 'animate-pulse-glow', me && 'ring-2 ring-holo ring-offset-2 ring-offset-void')}>
+              <Creature species={species} color={SLOT_COLOR[w.slot]} size={size} motion={motion} cycle={motion === 'walk' ? GAIT.fullCycle : GAIT.idleCycle} shadow={false} />
+            </span>,
+          )}
+          {w.units !== undefined && (
+            <span
+              data-num
+              data-testid={`units-${w.id}`}
+              className={cx('absolute top-full mt-0.5 whitespace-nowrap rounded-sm bg-void/90 px-1 font-mono font-bold leading-none text-ink', tv ? 'text-base' : 'text-[10px]')}
+            >
+              {w.units}
+              {w.surplus !== undefined && (
+                <span className={cx('font-normal', w.surplus < 0 ? 'text-alert' : w.surplus > 0 ? 'text-ok' : 'text-ink-3')}> ({w.surplus > 0 ? '+' : ''}{w.surplus})</span>
+              )}
+            </span>
+          )}
+        </span>
+        <span
+          data-num
+          className={cx(
+            'flex flex-col items-start rounded-control border bg-void/90 px-1 font-mono font-bold leading-none',
+            tv ? 'py-1 text-xl' : 'py-0.5 text-[11px]',
+            seller ? 'border-rise/60 text-rise' : 'border-fall/60 text-fall',
+          )}
+        >
+          <span className={cx('font-normal text-ink-3', tv ? 'text-xs' : 'text-[10px]')}>{seller ? 'ASK' : 'BID'}</span>
+          {w.price}
+        </span>
+      </div>
     </div>
   );
 }

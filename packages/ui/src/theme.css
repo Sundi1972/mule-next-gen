@@ -8,6 +8,8 @@
  * Import once, after `@import "tailwindcss";`. Load the fonts (Space Grotesk, Inter, JetBrains Mono) with a <link> in the page head.
  */
 
+@import "./events/events.css";
+
 @theme static {
   /* Surfaces, darkest first. */
   --color-void: #03060b;
@@ -265,7 +267,27 @@
 @keyframes store-beckon { 0%, 100% { box-shadow: 0 0 0 0 var(--color-holo-line); } 50% { box-shadow: 0 0 0 6px var(--color-holo-faint), var(--shadow-glow); } }
 
 /* The MULE character: it breathes and blinks standing, bobs and swings its legs walking, its pod pulses at work. */
-@keyframes mule-breathe { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-0.6px) scaleY(1.01); } }
+/*
+ * The breath is held in twelve steps (played step-end): the old ease-in-out curve sampled every 0.22 s. A transform
+ * animation on an SVG part lays the drawing out again and repaints it on every frame its value changes; held, it does
+ * so only on a step (measured with six idle MULEs at 844 x 390, CPU x4: 60 layouts/s before, 7.3 after). The largest
+ * step is 0.16 of a drawing unit, under 0.3 px at the store's widest MULE.
+ */
+@keyframes mule-breathe {
+  0% { transform: translateY(0) scaleY(1); }
+  8.333% { transform: translateY(-0.034px) scaleY(1.0006); }
+  16.667% { transform: translateY(-0.139px) scaleY(1.0023); }
+  25% { transform: translateY(-0.3px) scaleY(1.005); }
+  33.333% { transform: translateY(-0.461px) scaleY(1.0077); }
+  41.667% { transform: translateY(-0.566px) scaleY(1.0094); }
+  50% { transform: translateY(-0.6px) scaleY(1.01); }
+  58.333% { transform: translateY(-0.566px) scaleY(1.0094); }
+  66.667% { transform: translateY(-0.461px) scaleY(1.0077); }
+  75% { transform: translateY(-0.3px) scaleY(1.005); }
+  83.333% { transform: translateY(-0.139px) scaleY(1.0023); }
+  91.667% { transform: translateY(-0.034px) scaleY(1.0006); }
+  100% { transform: translateY(0) scaleY(1); }
+}
 @keyframes mule-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-1.2px); } }
 @keyframes mule-step { 0%, 100% { transform: rotate(-16deg); } 50% { transform: rotate(16deg); } }
 @keyframes mule-blink { 0%, 94%, 100% { transform: scaleY(1); } 97% { transform: scaleY(0.1); } }
@@ -277,4 +299,64 @@
   [class*='animate-[mule-'] {
     animation: none !important;
   }
+}
+
+/*
+ * The colonists in motion, variant A "bob and waddle" (Creature's motion props). Every duration is the stride's
+ * --cycle (gait.ts::cycleSeconds), set per creature, so pace shows: half the speed, twice the stride. Everything here
+ * animates `transform` or `opacity` of an HTML wrapper, so the compositor plays it without repainting the creature.
+ * The wrappers, outside in: cm-face > cm-glance > cm-lean > cm-hit > cm-hit > cm-body > cm-sway > the drawing.
+ */
+.cm { --rm: 0; vertical-align: bottom; }
+.cm-face, .cm-glance, .cm-lean, .cm-hit, .cm-body, .cm-sway { display: block; width: 100%; height: 100%; transform-origin: 50% 92%; }
+.cm-face { transform-origin: 50% 50%; transition: transform 160ms ease-in-out; }
+.cm[data-facing='left'] .cm-face { transform: scaleX(-1); }
+.cm-shadow {
+  position: absolute; left: 18%; right: 18%; bottom: -5%; height: 12%; border-radius: 50%;
+  background: var(--color-mark-edge); opacity: 0.35; transform-origin: 50% 50%;
+}
+.cm-swipe {
+  position: absolute; top: 8%; right: -34%; width: 44%; height: 72%; border-radius: 50%;
+  border-right: 2.5px solid var(--color-ink); opacity: 0; pointer-events: none;
+}
+.cm-bite {
+  position: absolute; inset: -14%; border-radius: 50%; border: 2px solid var(--color-alert); opacity: 0; pointer-events: none;
+}
+
+/* The lean: static, and the whole of the reduced-motion pose (--rm is 1 there). */
+.cm-lean { transform: translateY(calc(var(--rm) * var(--rise, 0%))) rotate(calc(var(--lean, 0deg) + var(--rm) * var(--lean-rm, 0deg))); }
+.cm[data-motion='walk'] { --lean: 3deg; --lean-rm: 7deg; }
+.cm[data-motion='run'] { --lean: 9deg; --lean-rm: 9deg; --rise: -7%; }
+.cm[data-motion='fight'] { --lean: 4deg; --lean-rm: 6deg; --rise: -3%; }
+.cm[data-motion='hurt'] { --lean: -2deg; --lean-rm: -6deg; --rise: 4%; }
+
+@keyframes cm-breathe { 0%, 100% { transform: translateY(0) scale(1, 1); } 50% { transform: translateY(-1.5%) scale(1.012, 1.035); } }
+@keyframes cm-hop { 0%, 100% { transform: translateY(0) scale(1.07, 0.93); } 20% { transform: translateY(-5%) scale(0.98, 1.03); } 50% { transform: translateY(-11%) scale(0.97, 1.04); } 80% { transform: translateY(-4%) scale(1, 1); } }
+@keyframes cm-hop-run { 0%, 100% { transform: translateY(0) scale(1.1, 0.9); } 45% { transform: translateY(-19%) scale(0.95, 1.07); } }
+@keyframes cm-sway { 0%, 100% { transform: rotate(-6deg); } 50% { transform: rotate(6deg); } }
+@keyframes cm-sway-small { 0%, 100% { transform: rotate(-2.5deg); } 50% { transform: rotate(2.5deg); } }
+@keyframes cm-glance { 0%, 64%, 100% { transform: scaleX(1); } 72%, 86% { transform: scaleX(-1); } }
+@keyframes cm-bounce { 0%, 100% { transform: translateY(0) scale(1.04, 0.96); } 50% { transform: translateY(-5%) scale(0.98, 1.02); } }
+@keyframes cm-jab { 0%, 52%, 100% { transform: translateX(0) rotate(0); } 66% { transform: translateX(-7%) rotate(-7deg) scale(0.95, 1.04); } 76% { transform: translateX(24%) rotate(12deg) scale(1.1, 0.92); } 86% { transform: translateX(6%) rotate(3deg); } }
+@keyframes cm-swipe { 0%, 70%, 100% { opacity: 0; transform: scale(0.6) rotate(-30deg); } 77% { opacity: 1; transform: scale(1) rotate(0deg); } 88% { opacity: 0; transform: scale(1.15) rotate(15deg); } }
+@keyframes cm-limp { 0%, 100% { transform: translateY(0) rotate(0); } 22% { transform: translateY(-9%) rotate(-3deg); } 45% { transform: translateY(0) rotate(0) scale(1.04, 0.96); } 62% { transform: translateY(-2%) rotate(6deg); } 80% { transform: translateY(4%) rotate(10deg) scale(1.03, 0.93); } }
+@keyframes cm-shadow-hop { 0%, 100% { transform: scaleX(1.08); opacity: 0.4; } 50% { transform: scaleX(0.78); opacity: 0.22; } }
+
+.cm[data-motion='idle'] .cm-body { animation: cm-breathe var(--cycle) ease-in-out infinite; }
+.cm[data-motion='walk'] .cm-body { animation: cm-hop calc(var(--cycle) / 2) ease-in-out infinite; }
+.cm[data-motion='walk'] .cm-sway { animation: cm-sway var(--cycle) ease-in-out infinite; }
+.cm[data-motion='walk'] .cm-shadow { animation: cm-shadow-hop calc(var(--cycle) / 2) ease-in-out infinite; }
+.cm[data-motion='run'] .cm-body { animation: cm-hop-run calc(var(--cycle) / 2) ease-in-out infinite; }
+.cm[data-motion='run'] .cm-sway { animation: cm-sway-small var(--cycle) ease-in-out infinite; }
+.cm[data-motion='run'] .cm-shadow { animation: cm-shadow-hop calc(var(--cycle) / 2) ease-in-out infinite; }
+.cm[data-motion='run'] .cm-glance { animation: cm-glance 1.8s ease-in-out infinite; }
+.cm[data-motion='fight'] .cm-body { animation: cm-bounce calc(var(--cycle) / 4) ease-in-out infinite; }
+.cm[data-motion='fight'] .cm-sway { animation: cm-jab var(--cycle) ease-in-out infinite; }
+.cm[data-motion='fight'] .cm-swipe:not(.cm-swipe-once) { animation: cm-swipe var(--cycle) ease-out infinite; opacity: calc(var(--rm) * 0.9); }
+.cm[data-motion='hurt'] .cm-body { animation: cm-limp var(--cycle) ease-in-out infinite; }
+
+/* Without motion: no looping cycle; moving is the static lean (the fight's swipe held); facing still flips, at once. */
+@media (prefers-reduced-motion: reduce) {
+  .cm { --rm: 1; }
+  .cm * { animation: none !important; transition: none !important; }
 }

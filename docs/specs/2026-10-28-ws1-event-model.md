@@ -38,7 +38,15 @@ the same turn."** (Heiko, 28 Oct)
   Wave 2 includes the **meteor strike** (Heiko, 28 Oct): a colony event in production, 2% a month. It hits any tile on
   the map at random, owned or not. An installation there is destroyed and makes nothing this month, and the tile
   becomes a crater with Crystite at the top of today's scale. The crater is a WS5 special field, and the event row
-  calls it.
+  calls it. Two wave-2 effects ruled by Heiko (28 Oct; chances and phases as catalogued, colony rows at 1% in the goods
+  auction, before trading opens; AM-4):
+  - **Pirate raid** ("pirates take all crystite"): every player's Crystite AND the store's Crystite stock go to 0.
+  - **Store fire** ("store fire burns all store storage, not only food, all the storage that the store had"): the
+    store's whole stock of every good goes to 0, and the corral's built MULEs too (PM ruling B, 28 Oct: "all the
+    storage the store had"); upkeep rebuilds the corral only from what the store holds after that auction; prices
+    follow the empty store as usual.
+  Wave 2's sim report shows how often each fires, the loss per game, and the MULE price and plots developed in the
+  month after a fire; a balance check they break goes to Heiko as options, never a silent tune.
 - Changing any event's effect (wave 1 moves events onto their own dice only).
 - Showing several events on the screens: the phone and TV read `events[0]` today (`table/TvProduction.tsx`,
   `phone/Production.tsx`). WS6 owns that surface; wave 1 needs it before it reaches a table (§9).
@@ -130,8 +138,11 @@ today        specials.ts (WS5's) collapses a cavern that produced Crystite with 
 tomorrow     a row in EVENTS.colony (cavernCollapse), rolled once per cavern plot that produced Crystite this
              month, after production's output, through events.ts's row dice; specials.ts::collapses asks it instead
              of its own hash, and EFFECT.collapseChance moves into the row. Named edits in WS5's file and config
-             block; WS5 reviews.
-pin          specials.test.ts T-AC-6 (WS5's) keeps passing unchanged: the same (seed, month, plot) collapses the
+             block; WS5 reviews. Each collapse is also a MonthEvent in MonthReport.events, after the output
+             events (AM-3): key cavernCollapse, kind quake, scope personal, player = the cavern's owner,
+             plots [{index, order 0, good 'crystite', delta 0}], phase 'production'. EventKey gains
+             'cavernCollapse' (a named edit in WS3's types.ts, WS3 reviews); eventOutput gets a no-op entry.
+pin          specials.test.ts T-AC-6 (WS5's) keeps passing, its assertions unchanged (AM-8): the same (seed, month, plot) collapses the
              same; never on a what-if copy; only in a month the cavern is mined; independent of the month's other
              events (a month with a production event collapses at the same rate); about 6% a mined cavern-month,
              within ±30%. The roller's seed for a cavern is its own (seed, month, plot), never shared with another row.
@@ -142,8 +153,8 @@ depends_on   C1
 C5 · MODIFIED · the month report and the sim count every event
 
 today        MonthReport.events holds 0 or 1 event; the sim prints events in N% of months.
-tomorrow     MonthReport.events holds every production MonthEvent that fired, each with phase 'production'
-             (sickness stays on Player.sick, a collapse on the tile); the sim counts all three by phase and prints
+tomorrow     MonthReport.events holds every production MonthEvent that fired, each with phase 'production',
+             cavern collapses last (AM-3); sickness stays on Player.sick. The sim counts all three by phase and prints
              events per month by phase and for the month, and the share of months with 0, 1, 2, 3, 4+ (UBER-AC-1).
              `pnpm sim -- --air smoggy|toxic` counts each month as if the air were that band and every player had
              caused 5 air points (measure only; the games play on unforced).
@@ -196,7 +207,9 @@ RULE-2 · What fires in a phase                                                s
 3  a row whose "only if" finds nothing to hit fires nothing (a flood needs a river farm; pests need a Food plot)
 4  excludes: if both of a pair fired, the seeded dice keep one (drought/flood, dust storm/solar flare)
 5  onceAMonth (default true): a row that fired earlier this month doesn't fire again
-6  effects apply in the order fired; two on one plot both apply; output never below 0
+6  effects apply in the order fired; two on one plot both apply; output never below 0. Each event's
+   plots[].delta is its own change, worked on the output the earlier events left; a plot the event
+   reaches is listed even when its delta is 0, so the screens rebuild a plot by adding deltas in order
 seeds           each roll from (seed, month, phase, row key, and the player or plot), so a replay is exact
 ```
 
@@ -205,7 +218,11 @@ seeds           each roll from (seed, month, phase, row key, and the player or p
 MonthEvent · MODIFIED · not breaking: gains `phase: Phase` (a named edit in WS3's `types.ts`, WS3 reviews; produced
 by C2). MonthReport.events may now hold several events, in the order they fired; readers
 that take `events[0]` keep working but show only the first (WS6, §9). Example: a production month with a drought
-and a pest swarm on p2's farms gives two MonthEvents, both phase 'production', in that order.
+and a pest swarm on p2's farms gives two MonthEvents, both phase 'production', in that order. Stacking (RULE-2
+step 6): a plot's `delta` in each event is that event's own change on what the earlier events left, and a plot an
+event reaches is listed even at delta 0. A Food plot making 1 hit by a drought and then acid rain lists −1, then 0.
+EventKey · MODIFIED · not breaking (PR-2, AM-3): gains 'cavernCollapse', a named edit in WS3's `types.ts`. A
+collapse is listed last in MonthReport.events, after the output events; the screens read `kind` ('quake').
 
 ## §4 · Failure & Ops `[handoff]`
 
@@ -251,6 +268,12 @@ Code-only; no existing state to reach.
   implied ~2.0; almost all of the excess is sickness (1.79 of the 2.50). Not a blocker: Toxic never happens in
   today's AI games. Mitigation: retune in wave-1 tuning once colonies can reach Toxic air, by lowering
   `EVENTS.player.sickness.air.toxic`, Heiko's call.
+- **R-4 · "Last month" in a phase after production (wave 2).** `events.ts`'s influences read last month as the
+  newest report, `state.history.at(-1)`, as sickness always has. That is right for development and production, but
+  production files this month's report, so a wave-2 row rolled in auction or upkeep would read this month's as "last
+  month". Wave 1 has no such row. Mitigation: the first wave-2 row after production reads the newest report with
+  `month < state.month`, and moves T-AC-24's fixture (which files a month-1 report while the state is in month 1)
+  with it. Found at Task 3's review, 28 Oct.
 
 ## §8 · Amendments `[review-only]`
 
@@ -285,6 +308,137 @@ did       grounded every anchor against the merged tree before planning.
           §0.1's reason was checked and holds: the catalogue's pest swarm, wildfire, bumper harvest and sickness roll
           for each player, and sickness rolls in development.
 goal      G-1 (the same goal; the slices are accurate to the code)
+```
+
+```
+AM-2 · 2026-10-28 · Task 2's freeze point, WS8's review (primary reviewer, PM ruling)
+
+target    §2 RULE-2 step 6 · §3
+did       wrote down the stacking rule the screens rebuild a plot from: each event's plots[].delta is
+          its own change, worked on the output the earlier events left, and a plot the event reaches
+          is listed even when its delta is 0. Both already hold in the code: buildEvent lists every
+          plot an event reaches with delta 0, and production.ts::runProduction fills
+          delta = eventOutput(key, before) − before, with before summing the parts so far, so
+          chaining events (Task 6) keeps the rule. EM-T-AC-3 asserts the delta-0 entry.
+because   WS8 asked for it at the freeze point: the screens add a plot's deltas in order, and must
+          know whether a plot at 0 is listed
+goal      G-1 (unchanged; the contract is clearer, not different)
+```
+
+```
+AM-3 · 2026-10-28 · PM ruling A, on WS8's review of the freeze point
+
+target    §1 C4, C5 · §3 · supersedes AM-1's "a collapse is not a MonthEvent"
+did       a cavern collapse is a MonthEvent in production, after the output events: key cavernCollapse,
+          kind quake, scope personal, player = the cavern's owner, plots [{index, order 0, good
+          'crystite', delta 0}] (this month's Crystite is already made), phase 'production'.
+          EventKey gains 'cavernCollapse': a named edit in WS3's types.ts, which WS3 reviews in PR-2
+          with eventOutput's no-op entry. The collapse itself (C4, WS5's T-AC-6 pins) is unchanged.
+          Lands in PR-2 (Task 9); PR-1 is unchanged.
+because   Heiko's catalogue lists cavern collapse as one of its 35 events, and he wants events
+          announced on the TV and on a phone alone; a badge that vanishes silently fails both
+          (PM, 28 Oct). The screens would otherwise have to diff tiles to find it.
+goal      G-1 (unchanged)
+```
+
+```
+AM-4 · 2026-10-28 · Heiko's ruling on two wave-2 effects (through the PM)
+
+target    §0 Non-goals (the wave-2 note) · the catalogue's pirate raid and store fire rows
+did       recorded the new effects for wave 2's amendment and PR:
+          pirate raid: every player's Crystite and the store's Crystite stock go to 0 (the catalogue said
+          "the Crystite the players hold"); store fire: the store's whole stock of every good goes to 0
+          (the catalogue said "one good"). Chances, raises and the phase stay as catalogued (colony, 1%,
+          the goods auction before trading opens). A store fire empties the corral too (PM ruling B,
+          28 Oct): Store.mules goes to 0 with the stock, and upkeep rebuilds the corral only from what
+          the store holds after that auction (upkeep.ts builds a MULE from each Smithore).
+          Wave 1 is unchanged: neither row is in it.
+because   Heiko, 28 Oct: "pirates take all crystite"; "store fire burns all store storage, not only food,
+          all the storage that the store had". WS8 updates the animations to match.
+goal      G-1 (unchanged); wave 2's rows carry the new effects, its sim report shows each one's rate, its
+          loss per game, and the MULE price and plots developed in the month after a fire; a balance check
+          it breaks goes to Heiko as options
+```
+
+```
+AM-5 · 2026-10-29 · the event payload agreed with WS8 (primary reviewer), for the approved gallery
+        (Heiko, 29 Oct: "Living weather" is the design to build)
+
+target    §3 MonthEvent (Task 2's contract)
+did       wave 1 needs nothing new: the contract at ws1-events-roller 605749d is what the gallery builds against.
+          One field goes: MonthEvent.when ('afterProduction'). Screens read `phase`; when to show an event inside its
+          phase is display timing, the show's (EVENT_SHOW in config.ts, WS8's block by PM ruling). Its readers are its
+          definition (types.ts, WS3's file: a named edit) and buildEvent's value (events.ts); nothing else.
+          Cavern collapse (AM-3) needs no new field: the key and plots[0] (Crystite, delta 0).
+          Wave 2 adds, each with the row that needs it, as a named contract change WS8 reviews:
+          effects?: { on: player id | 'store' | 'colony'; what; delta; pct?; good?; turns? }[] for changes off the map
+          (pirate raid, store fire, tax and grant, the festival, the strikes), in fired order with AM-2's stacking;
+          plots[].becomes? ('crater' | 'plain' | 'idle'); plots[].muleLost?; plots[].pending? (the general strike).
+          WS8's working types: design/mocks/ws8-events/src/events.ts on origin/ws8-events.
+          The production show's files are WS6's; WS8 builds the event segment into them as named edits WS6 reviews,
+          and owns packages/ui/src/events/**. Contract hunks go to WS8, with WS6 copied.
+because   WS8, 29 Oct: "for wave 1 the contract at 605749d is enough"; `when` duplicates `phase`.
+goal      G-1 unchanged
+```
+
+```
+AM-6 · 2026-10-29 · Heiko's ruling on R-2 (via the PM): "b"
+
+target    §2 wave 1's rows (the production bases) · UBER-AC-1 · R-2, R-3
+said      the catalogue's production bases (dust storm, drought, solar flare, comet pass, flood 5%; volcanic ash 4%;
+          acid rain 1%; pest swarm, wildfire, bumper harvest 1.5% a player); UBER-AC-1 ~1.0 a month clean, ~2.0 Smoggy.
+did       every production base ×1.6, the catalogue's relative odds kept: dust storm, drought, solar flare, comet pass,
+          flood 8%; volcanic ash 6.4%; acid rain 1.6%; pest swarm, wildfire, bumper harvest 2.4% a player. Raises,
+          lowers, follows, caps and excludes are unchanged; sickness stays at 3% (Heiko's catalogue ruling (2)).
+          Measured (Task 8; roller against its base b3774fa, 40 games a cell, seeds 1, 101, 201, politics on and off;
+          the only check that ever misses is "Colonists short of Food or Water", under 15%):
+
+          option                                  events a month clean / Smoggy / Toxic    shortage, six cells (mean)
+          base today                              -                                        9 16 15 23 14 13 (15.0)
+          A  the catalogue                        0.66-0.73 / 1.79-1.86 / 2.47-2.54        14 16 21 19 13 13 (16.0)
+          B  every production base x1.6  CHOSEN   0.93-1.01 / 2.02-2.15 / 2.71-2.83        10 15 23 21 15 19 (17.2)
+          C  x1.6 on the four that can't lower    0.79-0.82 / 1.88-1.99 / 2.56-2.68        12 15 21 18 13 14 (15.5)
+             Food or Water (dust, flare, comet, bumper)
+          C' the same four x2.4                   0.95-0.99 / 2.04-2.15 / 2.72-2.85        14 13 19 17 11 10 (14.0)
+
+          UBER-AC-1 passes with B. R-2: under B the shortage check moves from ok to MISS in two cells (seed 201,
+          politics on 14→15%, off 13→19%); Heiko accepts it: food supply is its own follow-up, and the check already
+          misses in half the cells before the event model. R-3: Toxic air at 2.7-2.8 a month, reported, not tuned.
+because   Heiko, via the PM: "b". The liveliness he asked for, with his catalogue's relative odds; the shortage pressure
+          is a food-supply question, not an event one.
+goal      G-1 (unchanged); UBER-AC-1 met
+```
+
+```
+AM-7 · 2026-10-29 · PR-1's boundary review: HC-2 and sickness
+
+target    §0.2 HC-2 · §2 RULE-2 step 1
+said      HC-2 "A what-if copy never rolls, and no event rolls in month 1"; RULE-2 step 1 "month 1 or a what-if copy →
+          nothing".
+did       both bind the phase roller: rollPhase rolls nothing in month 1 or on a what-if copy, for every row it rolls.
+          Sickness is outside rollPhase (AM-1 keeps it on Player.sick) and keeps the roll it has had every month since
+          the balance spec's Task 13, month 1 included: the balance spec's T-AC-24 fixture relies on it and the sim
+          counts it. No behaviour changes; the text now says what the code has done since before this spec.
+because   the boundary review found the spec and the code disagreeing on month-1 sickness; it predates the event model
+          and shipped with Heiko's sickness ruling, so the spec follows the code. Gating sickness to month 2 would be a
+          balance change of its own, measured first.
+goal      G-1 unchanged
+```
+
+```
+AM-8 · 2026-10-29 · Task 9's implementer, measured (a spec claim found false)
+
+target    §1 C4 pin · §6 T-AC-5's cavern clause
+said      "specials.test.ts T-AC-6 (WS5's) keeps passing unchanged".
+did       T-AC-6 keeps every assertion and number; two reads in its fixture change, a named edit WS5 reviews:
+          its setup sets "every production row" to 0 except volcanic ash, which now takes the cavern row with them
+          (measured: collapse rate 0, "expected 0 to be greater than 0.0419"); and it sorts months by "any event
+          fired", which a collapse now is (AM-3; measured: event months 0.1097 against "less than 0.078"). The setup
+          skips rows rolled per plot after output, and a month has an event when an output event fired.
+          The cavern's own dice, rate and guards are C4's as written.
+because   the pin predates AM-3, which made a collapse a MonthEvent; keeping the test unedited would take the row out
+          of EVENTS.colony (C4) and the event out of runProduction's events (AM-3) instead.
+goal      G-1 unchanged
 ```
 
 ## §9 · Ownership Boundaries `[handoff]`

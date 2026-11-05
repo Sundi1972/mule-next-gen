@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { GOODS, newPolitics, player, POLITICS, POLLUTION, scoreParts, type GameState, type Phase } from '@mule/engine';
 import type { MuleView } from '@mule/protocol';
 import { MuleGame } from '../src/mule-game.js';
-import { fakeContext, readyAll, seats, toDevelopment } from './fake-context.js';
+import { fakeContext, pressThroughSidePick, readyAll, seats, toDevelopment } from './fake-context.js';
 
 /** Two phones and the board: every kind of viewer. */
 const VIEWERS = ['s1', 's2', null] as const;
@@ -28,12 +28,15 @@ function playTwoMonths(look: (game: MuleGame, state: GameState) => void): Set<Ph
   for (let n = 0; n < 100_000 && !game.viewFor(null).finished; n++) {
     phases.add(state.phase);
     look(game, state);
-    if (state.phase === 'planning') readyAll(game);
+    if (state.phase === 'planning' || state.phase === 'upkeep') readyAll(game);
+    // s1 never installs on its plot: as host it starts month 1's waiting development clock (A-1).
     const lit = state.phase === 'landGrant' && claimedIn !== state.month ? game.viewFor('s1').lit : null;
     if (lit) {
       game.handle('s1', { type: 'claim', ...lit });
       claimedIn = state.month;
     }
+    // A good's side pick has no clock (A-7): the humans press Ready there.
+    pressThroughSidePick(game);
     advance(100);
   }
   expect(game.viewFor(null).finished).toBe(true);

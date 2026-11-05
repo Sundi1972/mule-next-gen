@@ -1,13 +1,88 @@
-import { AI_HANDS, AI_LEVELS, AI_PERSONAS, createRng, GAME, observe, type AiLevelId, type AiPersonaId, type GameState } from '@mule/engine';
-import type { Act } from './actions.js';
+import {
+  AI_HANDS,
+  AI_LEVELS,
+  AI_PERSONAS,
+  AI_PLANS,
+  createRng,
+  floorConfig,
+  GAME,
+  observe,
+  stableJson,
+  type AiLevelId,
+  type AiPersonaId,
+  type DevFloor,
+  type FloorConfig,
+  type FloorInput,
+  type GameState,
+  type Good,
+  type GoodPlay,
+  type Listing,
+  type PhaseOutcome,
+  type PlanningPlay,
+  type Playbook,
+} from '@mule/engine';
+import type { Act, AiAction } from './actions.js';
 import { Brain, type DecisionRecord, type Pending } from './brain.js';
-import type { Decider, TableTalk } from './decider.js';
+import { templateLine, type Decider, type TableTalk } from './decider.js';
 import { AuctionHand, type AuctionDebug } from './hands/auction.js';
-import { DevelopHand, type DevWalking } from './hands/develop.js';
+import { DevelopHand, type DevLogEntry, type DevWalking } from './hands/develop.js';
 import { PERSONAS } from './personas.js';
-import { landDecision, wantsAnyAhead, wantsPlot, type LandPlan } from './strategist.js';
+import {
+  adoptInto,
+  auctionOutcome,
+  developmentOutcome,
+  DRAFT_PHASE_OF,
+  draftGoodPlaybook,
+  draftPlanningPart,
+  draftPlaybook,
+  draftRoll,
+  pathFor,
+  validatePlaybook,
+  validatorFor,
+  type DraftInput,
+  type DraftPhase,
+  type LeftOutPick,
+  type OwnDeclare,
+  type PartKey,
+  type PhaseFact,
+  type PlayedPart,
+  type PlayPath,
+  type ValidatePlan,
+  type ValidatorProfile,
+} from './playbook/index.js';
+import { GOOD_NAME, landDecision, outfitName, plotName, wantsAnyAhead, wantsPlot, type LandPlan } from './strategist.js';
 import { situation } from './summary.js';
 import type { Mind } from './value.js';
+
+/** One act of the seat's planning part, and whether the rules took it. */
+export interface PlanningStep {
+  action: AiAction;
+  ok: boolean;
+}
+
+type ListEntry = NonNullable<PlanningPlay['list']>[number];
+
+/** This month's auction as the seat plays it, good by good. See AM-20. */
+interface AuctionRun {
+  month: number;
+  /** The playbook it plays under: its month's own draft, or the adopted one; null until the first good is played. */
+  head: Playbook | null;
+  /** Each good's play as it was played, in order. */
+  played: Partial<Record<Good, GoodPlay>>;
+  /** A draft or validator error: the rest of this month's auction plays today's path. See HC-9. */
+  failed: boolean;
+  /** Its own declares, in order: the outcome's side for each good. See AM-23. */
+  declared: OwnDeclare[];
+}
+
+/** The `id` of a DecisionRecord the seat builds itself, for a drafted part: no Brain decision, so no Brain id. See AM-22. */
+export const DRAFTED_RECORD_ID = 0;
+
+/** The parts AI_PLANS.ownPhases holds back on the own path. See AM-26. */
+const OWN_PHASE_KEYS: ReadonlySet<PartKey> = new Set(['development', 'auction']);
+
+const xyOf = (state: GameState, plot: number) => ({ x: state.tiles[plot]!.x, y: state.tiles[plot]!.y });
+const sameSquare = (state: GameState, l: Listing, plot: number) => l.item.x === state.tiles[plot]?.x && l.item.y === state.tiles[plot]?.y;
 
 export interface AiSeatOptions {
   id: string;
@@ -20,6 +95,12 @@ export interface AiSeatOptions {
   decider?: Decider | null;
   /** Every settled decision, with its candidates and scores. */
   onDecision?: (record: DecisionRecord) => void;
+  /** RULE-6 row 1: false plays every phase by today's asks. Unset, AI_PLANS.on decides. */
+  playbook?: boolean;
+  /** Whether the own path plays its own development and auction parts; unset, AI_PLANS.ownPhases decides. See AM-26. */
+  ownPhases?: boolean;
+  /** Each playbook the seat plays itself, validated: what the game records for it. Unset, the seat writes none. */
+  onPlaybook?: (playbook: Playbook) => void;
 }
 
 /** What the dev view shows of an AI: its limits and its plan. */
@@ -38,6 +119,9 @@ export interface AiSeatDebug {
  * only through `Act`, so the server and the simulator drive it the same way:
  * call `planMonth` when planning starts, `onLit` when a plot lights up,
  * `developTick` and `auctionTick` on every tick of those phases.
+ *
+ * It drafts lazily at its own ticks, so the server and the sim draft at the same step with no hook of their own.
+ * See RULE-7, AM-20, AM-26.
  */
 export class AiSeat {
   readonly mind: Mind;
@@ -47,6 +131,15 @@ export class AiSeat {
   private readonly auction: AuctionHand;
   private land: Pending<LandPlan> | null = null;
   private landMonth = -1;
+  /** Playbooks adopted for the newest month adopted, oldest first. */
+  private adopted: readonly Playbook[] = [];
+  /** The month whose planning this seat may act in, and how; an adopt in it plays the listings again. */
+  private planning: { month: number; state: GameState; act: Act; refused: Set<string> } | null = null;
+  private planned: PlanningStep[] = [];
+  /** The month whose development draft point has passed, and the playbook whose route it plays; null on today's path. */
+  private devMonth = -1;
+  private devPlayed: Playbook | null = null;
+  private auctionRun: AuctionRun | null = null;
 
   constructor(readonly options: AiSeatOptions) {
     this.mind = {
@@ -60,7 +153,7 @@ export class AiSeat {
     this.rng = createRng(options.seed >>> 0);
     this.brain = new Brain(this.mind, PERSONAS[options.persona], options.name, options.seed, options.decider ?? null, options.onDecision);
     this.develop = new DevelopHand(this.brain, createRng((options.seed ^ 0x9e3779b9) >>> 0)); // literal-ok: a hash salt for the develop hand's rng stream
-    this.auction = new AuctionHand(this.brain, createRng((options.seed ^ 0x85ebca6b) >>> 0)); // literal-ok: a hash salt for the auction hand's rng stream
+    this.auction = new AuctionHand(this.brain, createRng((options.seed ^ 0x85ebca6b) >>> 0), (state, good) => this.goodPlay(state, good)); // literal-ok: a hash salt for the auction hand's rng stream
   }
 
   get id(): string {
@@ -71,12 +164,134 @@ export class AiSeat {
     this.brain.hear(line);
   }
 
-  /** Planning: the land plan for this month's grant, with its full ranking of free plots. */
-  planMonth(state: GameState): void {
+  /**
+   * Planning: the land plan for this month's grant, with its full ranking of free plots. With `act`, the seat also plays
+   * its planning part: the drone, then its listings; an adopt later in this planning plays the listings again.
+   */
+  planMonth(state: GameState, act?: Act): void {
     if (this.landMonth === state.month) return;
     const obs = observe(state, this.id);
     this.landMonth = state.month;
     this.land = this.brain.ask('land', landDecision(obs, this.mind), obs, Infinity, null, situation(obs, this.mind));
+    // Written only for a listener; the part plays whenever the seat may act, recorded or not.
+    if (this.options.onPlaybook && this.playPath(state.month, 'planning').by === 'own') this.writeDraft(state, 'planning');
+    if (!act) return;
+    this.planning = { month: state.month, state, act, refused: new Set() };
+    this.planned = [];
+    // On its own path the part is its draft's: with nothing to list and nothing of its own listed yet it would play
+    // nothing, so the seat skips the whole draft and its validation.
+    const mine = state.listings.some((l) => l.seller === this.id);
+    if (!mine && this.playPath(state.month, 'planning').by === 'own' && !draftPlanningPart(this.draftInput(state, 'planning')).list) return;
+    const played = this.part(state, 'planning');
+    if (!played) return;
+    const drone = played.part.drone ?? [];
+    const me = state.players.find((p) => p.id === this.id)!;
+    if (drone.length > 0 && me.droneOrder.length === 0) this.planAct({ type: 'drone', plots: drone.map((plot) => xyOf(state, plot)) });
+    this.playListings(state, played.part);
+  }
+
+  /** The planning acts this month, in order, each with whether the rules took it. */
+  planningLog(): readonly PlanningStep[] {
+    return this.planned;
+  }
+
+  /** Makes the seat's listings the part's list: unlists every other one, then lists each entry not yet up. */
+  private playListings(state: GameState, part: PlanningPlay): void {
+    const wanted = part.list ?? [];
+    const mine = state.listings.filter((l) => l.seller === this.id);
+    const same = (l: Listing, e: ListEntry) => l.item.kind === e.item && sameSquare(state, l, e.plot) && l.minimum === e.minimum && l.unsold === e.unsold;
+    for (const l of mine) if (!wanted.some((e) => same(l, e))) this.planAct({ type: 'unlist', id: l.id });
+    for (const e of wanted) {
+      if (!mine.some((l) => same(l, e))) this.planAct({ type: 'list', item: { kind: e.item, ...xyOf(state, e.plot) }, minimum: e.minimum, unsold: e.unsold });
+    }
+  }
+
+  /** One planning act, logged. One the rules refused this month is never tried again. */
+  private planAct(action: AiAction): void {
+    const p = this.planning!;
+    const key = stableJson(action);
+    if (p.refused.has(key)) return;
+    const ok = p.act(action);
+    this.planned.push({ action, ok });
+    if (!ok) p.refused.add(key);
+  }
+
+  /** RULE-6's path for `key`; the own path's development and auction parts play only with ownPhases on. See AM-26. */
+  private playPath(month: number, key: PartKey): PlayPath {
+    const path = pathFor({ on: AI_PLANS.on, playbook: this.options.playbook, hasDecider: !!this.options.decider, adopted: this.adopted, month, key });
+    return path.by === 'own' && OWN_PHASE_KEYS.has(key) && !this.ownPhasesOn() ? { by: 'today' } : path;
+  }
+
+  /** Read per call: `--set` and a test switch AI_PLANS.ownPhases while seats exist. */
+  private ownPhasesOn(): boolean {
+    return this.options.ownPhases ?? AI_PLANS.ownPhases;
+  }
+
+  /** A draft point: drafts, validates and writes. A draft or validator error is logged and the phase plays today's path (HC-9). */
+  private writeDraft(state: GameState, phase: DraftPhase): void {
+    this.ownDraft(state, phase, () => this.draft(state, phase));
+  }
+
+  /**
+   * The seat's validated draft for a phase. `month` is the month whose land grant it plans. Writes nothing, and logs
+   * the MULE picks the draft left out; throws on a draft or validator error.
+   */
+  draft(state: GameState, phase: DraftPhase, month = state.month): Playbook {
+    const leftOut: LeftOutPick[] = [];
+    const drafted = draftPlaybook(this.draftInput(state, phase, month), leftOut);
+    for (const p of leftOut) console.error(`AI seat ${this.id}: the development draft left out MULE ${p.mule} (${p.outfit} on plot ${p.plot}), refused: ${p.refused}`);
+    return validatePlaybook(this.profileFor(month))(state, this.id, drafted, []).playbook;
+  }
+
+  /** What the seat's drafts are drafted from. */
+  private draftInput(state: GameState, phase: DraftPhase, month = state.month): DraftInput {
+    // Read, never settled: settling would log the land decision before the grant.
+    const land = this.landMonth === month ? this.land : null;
+    return { state, seat: this.id, mind: this.mind, seed: this.options.seed, phase, land, month };
+  }
+
+  /**
+   * RULE-6: what this month's hand plays for `key`; null plays today's path, as does a draft or validator error (HC-9,
+   * logged). The seat's own part is drafted from `state`, as `draft` does: it writes nothing and changes no kept state.
+   * That draft costs milliseconds, so a hand reads its part once per phase and keeps it for the phase, never per tick.
+   */
+  part<K extends PartKey>(state: GameState, key: K): PlayedPart<K> | null {
+    const path = this.playPath(state.month, key);
+    if (path.by === 'today') return null;
+    let playbook = path.by === 'adopted' ? path.playbook : null;
+    try {
+      playbook ??= this.draft(state, DRAFT_PHASE_OF[key]);
+    } catch (err) {
+      console.error(`AI seat ${this.id}: no ${key} part for month ${state.month}, playing without one: ${err instanceof Error ? err.message : String(err)}`);
+      return null;
+    }
+    const part = playbook[key];
+    // A copy: a hand that changes what it plays changes nothing the seat keeps. The cast is safe: `== null` rules out
+    // null and undefined, but TS can't narrow Playbook[K] for a generic K.
+    return part == null ? null : structuredClone({ part: part as NonNullable<Playbook[K]>, strategy: playbook.strategy, by: path.by });
+  }
+
+  /**
+   * Puts a playbook's parts in effect for its month (RULE-7). Adopting a later month drops every playbook adopted for
+   * the current one, so a playbook for month m+1 is adopted only after month m's auction. Adopted during the planning
+   * the seat acts in, it plays the listings again, from the planning part now in effect.
+   */
+  adopt(playbook: Playbook): void {
+    this.adopted = adoptInto(this.adopted, playbook);
+    const p = this.planning;
+    // Listings are made in planning only: once it has ended, the ones made stand.
+    if (!p || p.state.phase !== 'planning' || p.state.month !== p.month || playbook.month !== p.month) return;
+    const played = this.part(p.state, 'planning');
+    if (played) this.playListings(p.state, played.part);
+  }
+
+  /** The gate this seat's playbooks pass: its mind, its seed and, for the month it holds one, its pending land pick. */
+  validator(): ValidatePlan {
+    return (state, seat, draft, edits) => validatorFor(this.profileFor(draft.month))(state, seat, draft, edits);
+  }
+
+  private profileFor(month: number): ValidatorProfile {
+    return { mind: this.mind, seed: this.options.seed, land: this.landMonth === month ? this.land : null };
   }
 
   /**
@@ -122,15 +337,153 @@ export class AiSeat {
    * assaying; the referee refuses taps meanwhile, so the hands wait. Without it the seat develops as where nobody walks.
    */
   developTick(state: GameState, dt: number, secondsLeft: number, act: Act, walk?: DevWalking): void {
+    this.developPoint(state);
     this.develop.tick(state, dt, secondsLeft, act, walk);
   }
 
-  auctionTick(state: GameState, dt: number, act: Act): void {
-    this.auction.tick(state, dt, act);
+  /**
+   * One tick of development on the arcade floor (DEV_STEER.on): this seat's input for the floor's next stepFloor, the
+   * stick and the button, as a phone's would be; `secondsLeft` the game seconds left on the one clock. The
+   * server's tick and the sim call it the same way, every DEV_STEER.tickMs, with the same floor (HC-4).
+   */
+  developSteer(state: GameState, floor: DevFloor, secondsLeft: number, cfg: FloorConfig = floorConfig()): FloorInput {
+    this.developPoint(state);
+    return this.develop.steer(state, floor, secondsLeft, cfg);
   }
 
-  /** The development steps taken this month, in order. */
-  developLog(): readonly { label: string; ok: boolean; at: number }[] {
+  /** One goods-auction tick. Its declares are logged for the auction's outcome; the acts are the hand's, unchanged. */
+  auctionTick(state: GameState, dt: number, act: Act): void {
+    this.auction.tick(state, dt, (action) => {
+      const ok = act(action);
+      const good = state.auction?.good;
+      if (action.type === 'declare' && good) this.auctionFor(state.month).declared.push({ good, side: action.side, ...(!ok && { refused: 'declare refused' }) });
+      return ok;
+    });
+  }
+
+  /**
+   * The development draft point, at the month's first development tick: the part the seat's path picks goes to the
+   * hand. A draft or validator error is logged and the month plays today's path. See RULE-6, RULE-7, HC-9.
+   */
+  private developPoint(state: GameState): void {
+    if (state.phase !== 'development' || this.devMonth === state.month) return;
+    this.devMonth = state.month;
+    this.devPlayed = null;
+    const path = this.playPath(state.month, 'development');
+    if (path.by === 'today') return;
+    const playbook = path.by === 'adopted' ? path.playbook : this.ownDraft(state, 'development', () => this.draft(state, 'development'));
+    const part = playbook?.development;
+    if (!playbook || !part) return;
+    if (path.by === 'own') this.say(state, 'develop', null, routeLabel(state, part.route), 'development');
+    this.devPlayed = playbook;
+    this.develop.follow(state.month, { part: structuredClone(part), seed: this.options.seed, moneyMaker: playbook.strategy.moneyMaker, own: path.by === 'own' });
+  }
+
+  /**
+   * The auction hand's source for `good`, asked at its status screen: the adopted part's play, else the seat's own
+   * draft, written; null plays today's ask. A good the adopted part lacks is drafted only with ownPhases on. A draft or
+   * validator error is logged, and the month's later goods play today's ask. See AM-20, AM-26, HC-9.
+   */
+  private goodPlay(state: GameState, good: Good): GoodPlay | null {
+    const run = this.auctionFor(state.month);
+    const path = this.playPath(state.month, 'auction');
+    if (run.failed || path.by === 'today') return null;
+    let play = path.by === 'adopted' ? path.playbook.auction?.[good] : undefined;
+    if (path.by === 'adopted') run.head ??= path.playbook;
+    if (!play && path.by === 'adopted' && !this.ownPhasesOn()) return null;
+    if (!play) {
+      const whole = !run.head;
+      const playbook = this.ownDraft(state, 'auction', () => (whole ? this.draft(state, 'auction') : this.draftGood(state, good)));
+      if (!playbook) {
+        run.failed = true;
+        return null;
+      }
+      run.head ??= playbook;
+      play = playbook.auction?.[good];
+      if (play) this.say(state, 'trade', good, playLabel(state, this.id, good, play), `auction|${good}`);
+    }
+    if (!play) return null;
+    run.played[good] = structuredClone(play);
+    return structuredClone(play);
+  }
+
+  private auctionFor(month: number): AuctionRun {
+    if (this.auctionRun?.month !== month) this.auctionRun = { month, head: null, played: {}, failed: false, declared: [] };
+    return this.auctionRun;
+  }
+
+  /** The seat's validated auction playbook for one good, drafted at that good's status screen. Throws on an error. See AM-20. */
+  private draftGood(state: GameState, good: Good): Playbook {
+    const { phase: _, ...input } = this.draftInput(state, 'auction');
+    return validatePlaybook(this.profileFor(state.month))(state, this.id, draftGoodPlaybook(input, good), []).playbook;
+  }
+
+  /** An own draft point's playbook, written; a draft or validator error is logged and gives null. See HC-9. */
+  private ownDraft(state: GameState, phase: DraftPhase, make: () => Playbook): Playbook | null {
+    let playbook: Playbook;
+    try {
+      playbook = make();
+    } catch (err) {
+      console.error(`AI seat ${this.id}: no ${phase} playbook for month ${state.month}, playing today's path: ${err instanceof Error ? err.message : String(err)}`);
+      return null;
+    }
+    this.options.onPlaybook?.(playbook);
+    return playbook;
+  }
+
+  /**
+   * The table line for a drafted part, as a DecisionRecord the seat builds itself. The Brain's counter is not advanced,
+   * so every Brain decision keeps the seed it has on today's path. See AM-22.
+   */
+  private say(state: GameState, kind: 'develop' | 'trade', topic: string | null, label: string, key: string): void {
+    const persona = PERSONAS[this.options.persona];
+    const line = templateLine(persona, kind, label, draftRoll(this.options.seed, state.month, key));
+    this.options.onDecision?.({
+      id: DRAFTED_RECORD_ID,
+      seat: this.id,
+      kind,
+      month: state.month,
+      phase: state.phase,
+      topic,
+      candidates: [],
+      shortlist: [],
+      pick: { id: key, key, label },
+      by: 'top',
+      line,
+      waitedMs: 0,
+    });
+  }
+
+  /**
+   * How this month's development or auction went against the part it played, read from `state` as the phase ends;
+   * `facts` are the phase's public facts (the server's phaseNotices). Null for a phase played by today's path. See RULE-11.
+   */
+  outcome(phase: 'development' | 'auction', state: GameState, facts: readonly PhaseFact[] = []): PhaseOutcome | null {
+    if (phase === 'development') return this.devMonth === state.month && this.devPlayed ? developmentOutcome(this.devPlayed, this.develop.routeLog(state)) : null;
+    const run = this.auctionRun;
+    if (!run || run.month !== state.month || !run.head) return null;
+    // After an error the goods it went on to play by today's path are not the part's. See HC-9.
+    const auction = run.failed ? run.played : { ...run.head.auction, ...run.played };
+    return auctionOutcome({ ...run.head, auction }, state, facts, this.id, run.declared);
+  }
+
+  /** On the floor: the glint this seat races now, by the tick it lit, or null (the sim's report). */
+  developRacing(): number | null {
+    return this.develop.racing();
+  }
+
+  /** On the floor: whether this seat is off its errand's walk for a moment (a glint race, a leg by wolf land). */
+  developDetouring(): boolean {
+    return this.develop.detouring();
+  }
+
+  /** On the floor: the scrambles this seat raced this month (the sim's report). */
+  developScramblesRaced(): number {
+    return this.develop.scramblesRaced();
+  }
+
+  /** The development steps taken this month, in order; on a route, each with its route index and outcome. */
+  developLog(): readonly DevLogEntry[] {
     return this.develop.done;
   }
 
@@ -146,4 +499,19 @@ export class AiSeat {
       recent: this.brain.log.slice(-5), // literal-ok: the dev view's last five decisions, display only
     };
   }
+}
+
+/** A drafted route's label for its table line: its MULEs, as today's develop picks name them, else keeping the cash. */
+function routeLabel(state: GameState, route: NonNullable<Playbook['development']>['route']): string {
+  const mules = route.flatMap((s, i) => (s.act === 'install' && route[i - 1]?.outfit ? [`${outfitName(route[i - 1]!.outfit!)} on ${plotName(state.tiles[s.plot!]!)}`] : []));
+  return mules.length > 0 ? mules.join(' and ') : 'Keep the cash';
+}
+
+/** A good's play, labelled as today's trade picks are. */
+function playLabel(state: GameState, seat: string, good: Good, play: GoodPlay): string {
+  const held = state.players.find((p) => p.id === seat)!.stock[good];
+  const name = GOOD_NAME[good];
+  if (play.role === 'seller' && held > play.hold) return `Sell ${held - play.hold} ${name}, keep ${play.hold}`;
+  if (play.role === 'buyer' && play.hold > held) return `Buy ${play.hold - held} ${name}`;
+  return `Pass on ${name}`;
 }

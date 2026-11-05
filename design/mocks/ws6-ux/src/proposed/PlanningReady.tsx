@@ -5,6 +5,7 @@ import { mapTiles } from '../../../../../apps/web/src/game/derive';
 import { usePhoneGame } from '../../../../../apps/web/src/phone/game';
 import { TvHeader } from '../../../../../apps/web/src/table/TableApp';
 import { H, W } from '../fixture';
+import { IntentMarker, type IntentNoteData } from './IntentNote';
 
 /**
  * Planning without a clock (Heiko, 2026-10-28: "the planning phase should not be time bound"; AM-16). Planning ends
@@ -63,7 +64,7 @@ export function ReadyCount({ players, tv = false, label = 'READY' }: { players: 
   const ready = players.filter((p) => p.isAi || p.ready).length;
   return (
     <span
-      className={cx('flex shrink-0 items-center gap-1.5 rounded-chip border border-holo-line bg-holo-soft font-mono font-bold text-holo', tv ? 'h-14 px-5 text-3xl' : 'h-8 px-2.5 text-sm @min-[1100px]/shell:h-11 @min-[1100px]/shell:px-4 @min-[1100px]/shell:text-2xl')}
+      className={cx('flex shrink-0 items-center gap-1.5 rounded-chip border border-holo-line bg-holo-soft font-mono font-bold text-holo', tv ? 'h-14 px-5 text-3xl' : 'h-8 px-1.5 text-sm @min-[1100px]/shell:h-11 @min-[1100px]/shell:px-4 @min-[1100px]/shell:text-2xl')}
       data-testid="ready-count"
     >
       {ready} / {players.length} {label}
@@ -127,6 +128,7 @@ export function ReadyBar({
   canReady = true,
   onContinue,
   fit = false,
+  names = true,
 }: {
   ready: boolean;
   onReady: () => void;
@@ -140,6 +142,11 @@ export function ReadyBar({
   onContinue?: () => void;
   /** Off unless given: the confirm's two buttons keep their words on one line in a phone's rail (UX audit E-10). */
   fit?: boolean;
+  /**
+   * On unless given: before you're ready, who is still planning, above the button. False folds the line while a desk
+   * asks first (UX audit E-11, the Governor's tax): the header's ready count says it in brief.
+   */
+  names?: boolean;
 }) {
   const { self } = usePhoneGame();
   const { waiting, others, isHost: host } = useWaiting(ready);
@@ -150,7 +157,7 @@ export function ReadyBar({
   if (!ready)
     return (
       <>
-        {waiting.length > 0 && <WaitingFor seats={waiting} me={self.id} />}
+        {names && waiting.length > 0 && <WaitingFor seats={waiting} me={self.id} />}
         <Button size="lg" className="w-full @min-[1100px]/shell:h-14 @min-[1100px]/shell:text-lg" onClick={onReady} disabled={!canReady} data-testid="ready">
           {words.ready}
         </Button>
@@ -188,16 +195,57 @@ export function ReadyBar({
   );
 }
 
+/** The TV's planning screen carries the sitting Governor's promise (PM 2026-10-29, for Heiko's approval). */
+export const TV_PROMISE_NOTE = {
+  id: 'T1',
+  n: 1,
+  title: 'The Governor’s promise on the TV',
+  what: 'One line under the TV’s planning header, in the phone’s words (the hub’s offices line, E-7 and H-8): “Governor Ossa · promised up to 4% · tax 4%, kept”, kept in green; a tax over the promise reads “tax 6%, promise broken”, in the alert colour the phone uses for it. No line when nobody is Governor. Routes: #plan-wait (kept), #plan-wait-broken, #plan-wait-no-governor.',
+  serves: '9',
+  intent: 'Check whether the Governor kept their promise',
+  why: 'The whole table plans in front of the TV, and the promise is what the Governor was elected on: on the big screen everyone sees, together, whether it holds, without each opening a phone.',
+  differs: 'the brief said “broken” in the warn colour; it is the alert colour here, because the phone’s line (WS7’s Offices.tsx) uses amber for “tax still 5%” (not set yet) and red for “promise broken”, and the TV should not give one state the other’s colour.',
+} satisfies IntentNoteData;
+
+/** The sitting Governor and the promise they hold the tax to, for the TV's line; null with no Governor. */
+export interface TvGovernor {
+  id: string;
+  /** "up to N%": the promise's cap. */
+  cap: number;
+  /** This month's sales tax, in percent. */
+  tax: number;
+}
+
+/** "Governor Ossa · promised up to 4% · tax 4%, kept": the phone's words, big. */
+function TvGovernorPromise({ view, governor }: { view: MuleView; governor: TvGovernor }) {
+  const p = view.players.find((x) => x.id === governor.id);
+  if (!p) return null;
+  const kept = governor.tax <= governor.cap;
+  return (
+    <p className="relative flex items-center gap-2 self-start text-2xl text-ink-2" data-testid="tv-governor-promise">
+      Governor{' '}
+      <PlayerMark slot={p.slot as Slot} size={22} />
+      <strong className="font-display font-semibold text-ink">{p.name}</strong>{' '}
+      <span>· promised up to {governor.cap}% ·</span>{' '}
+      <strong className={cx('font-semibold', kept ? 'text-ok' : 'text-alert')} data-testid="tv-promise-status">
+        {kept ? `tax ${governor.tax}%, kept` : `tax ${governor.tax}%, promise broken`}
+      </strong>
+      <IntentMarker note={TV_PROMISE_NOTE} at="tr" />
+    </p>
+  );
+}
+
 /** The TV in planning: no clock, the ready count instead, and who the table is waiting for, big. */
-export function TvPlanning({ view, hostId, away }: { view: MuleView; hostId: string; away: string[] }) {
+export function TvPlanning({ view, hostId, away, governor = null }: { view: MuleView; hostId: string; away: string[]; /** Off unless given: the sitting Governor's promise line. */ governor?: TvGovernor | null }) {
   const waiting = stillPlanning(view.players, (id) => !away.includes(id));
   const host = view.players.find((p) => p.id === hostId);
   const hostReady = !!host && (host.ready || host.isAi);
   return (
     <div className="flex h-[720px] w-[1280px] flex-col gap-4 bg-table px-10 py-6 text-ink" data-testid="tv-planning">
       <div className="flex items-start gap-4">
-        <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 flex-1 flex-col gap-2">
           <TvHeader game={{ ...view, phase: 'planning' }} title="Planning" />
+          {governor && <TvGovernorPromise view={view} governor={governor} />}
         </div>
         <ReadyCount players={view.players} tv />
       </div>

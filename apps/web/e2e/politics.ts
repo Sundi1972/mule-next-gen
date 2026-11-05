@@ -1,16 +1,19 @@
 /**
- * B-AC-1, B-AC-6, B-AC-61 and UBER-AC-2: two phones and an AI seat play month 1's election on the default server, with
- * the TV, the AI seat running and voting through its own hand, each human Governor candidate on a tax promise; Ossa's
- * phone drops before she votes and the host goes on without her; through to the first sale at the auction.
+ * B-AC-63, restating UBER-AC-2: two phones and an AI seat play month 1's election on the default server, with the TV,
+ * the AI seat running and voting through its own hand. Both humans run in month 1's announce, each on a tax promise;
+ * each phone casts, and nothing closes until the last Cast, though Ossa's phone drops first; every screen shows the
+ * Governor's ceremony; the promise stays beside the tax; the next sale is taxed at the new Governor's rate. The
+ * Governor proposes a land tax, and month 2's planning opens with its ballot: the phones vote, the server's result is
+ * the votes cast, weighted, and the TV and both phones show it with totals only (C46).
  * Run with `pnpm --filter @mule/web e2e`; replay with `MULE_E2E_SEED=<seed>`.
  */
-import { GAME, POLITICS, storeQuotes, WALK, type GameState, type Good, type TaxPromise } from '@mule/engine';
+import { AI_HANDS, GAME, lawImpact, POLITICS, storeQuotes, voteWeight, WALK, type GameState, type Good, type LawProposal, type TaxPromise } from '@mule/engine';
 import type { MuleIntent, MuleView } from '@mule/protocol';
-import { errors as playwrightErrors, type Page } from 'playwright';
+import { errors as playwrightErrors, type Locator, type Page } from 'playwright';
 import { GRANT_TICK_MS, PHASE_MS } from '../../server/src/mule-game.js';
 import type { MuleServer } from '../../server/src/server.js';
 import { check, CLAIM_MS, doneWithLand, held, launch, PHONE, startServer, TV } from './harness';
-import { ELECTION_WAIT_MS, PRESS_MS } from './politics-steps';
+import { ELECTION_WAIT_MS, firstMulesThroughTheServer, PRESS_MS } from './politics-steps';
 
 const SCALE = 0.25;
 /** How long the last phone's Ready takes to land and the land grant to show; planning has no clock. */
@@ -19,6 +22,10 @@ const READY_LANDS_MS = 3_000;
 const NEW_TAX = 8;
 /** How often the ceremony is read on all three screens at once. */
 const TICK_MS = 50;
+/** How long a ballot with every pick in, but one Cast missing, is watched for staying open: several election ticks. */
+const STILL_OPEN_MS = 1_000;
+/** How long month 1's end may take to come up and take the phones' Ready. */
+const MONTH_END_MS = 10_000;
 /** B-AC-6: Lena's promise, stepped up from today's tax. */
 const LENA_CAP = 8;
 
@@ -28,7 +35,7 @@ const within = (ms: number) => ms * SCALE + 3_000;
 
 async function main(): Promise<void> {
   const SEED = seedFrom(process.env.MULE_E2E_SEED);
-  const { server, base } = await startServer({ maxMonths: 1, phaseScale: SCALE, seed: () => SEED });
+  const { server, base } = await startServer({ maxMonths: 2, phaseScale: SCALE, seed: () => SEED });
   const browser = await launch();
   const errors: string[] = [];
   try {
@@ -71,7 +78,8 @@ async function main(): Promise<void> {
     const truth = serverTruth(server, code);
     const phones = [lena, ossa];
 
-    // B-AC-1, B-AC-6: in month 1 both humans run for Governor through the Election day door, each on a promise.
+    // B-AC-63, T-AC-66: month 1's announce is the time to run. Both humans run for Governor from the run block under
+    // Now, each on a promise, while the TV shows the announcement.
     const [lenaId, ossaId] = [truth.idOf(lena), truth.idOf(ossa)];
     const aiIds = truth.board().players.filter((p) => p.isAi).map((p) => p.id);
     const taxNow = truth.board().politics!.tax.percent;
@@ -81,160 +89,202 @@ async function main(): Promise<void> {
       const politics = truth.state().politics!;
       return politics.election!.stage === 'announce' ? politics.promises : politics.election!.promises;
     };
+    await tv.getByTestId('tv-announce').waitFor({ timeout: 5_000 });
     // Every tap below lands in announce; the game clock is held until the look-around is over, so the AI seat, which
     // acts on that clock, runs (if it does) only after the release.
     await held(server, code, async () => {
-      await everyone(phones, (p) => p.page.locator('[data-phase=planning]').getByTestId('agenda-election').click({ timeout: 5_000 }));
       await Promise.all([
         (async () => {
-          // The cap starts at today's tax; plus steps it to her cap, and Run's label waits for it.
-          await lena.page.getByTestId('run-governor').click({ timeout: PRESS_MS });
+          // The cap starts at today's tax; plus steps it to her cap, and Run's label follows it.
+          await lena.page.locator('[data-phase=planning] [data-testid=guide]').getByTestId('run-governor').click({ timeout: 5_000 });
           check((await lena.page.getByTestId('promise-cap-value').innerText({ timeout: PRESS_MS })).trim() === `${taxNow}%`, `B-AC-6: the cap starts at today's ${taxNow}%`);
           for (let n = taxNow; n < LENA_CAP; n++) await lena.page.getByTestId('promise-cap-plus').click({ timeout: PRESS_MS });
-          await lena.page.getByTestId('promise-run').filter({ hasText: `Run, promising “Tax no higher than ${LENA_CAP}%”` }).click({ timeout: PRESS_MS });
+          await lena.page.getByTestId('promise-run').filter({ hasText: `Run · up to ${LENA_CAP}%` }).click({ timeout: PRESS_MS });
         })(),
         (async () => {
           // Only the Governor is elected (T-AC-62): no Sheriff run to offer.
+          await ossa.page.getByTestId('run-governor').waitFor({ timeout: 5_000 });
           check((await ossa.page.getByTestId('run-sheriff').count()) === 0, 'T-AC-62: the phone offers no Sheriff run');
-          // A first look at the picker, then Cancel: nothing is sent.
+          // A first look at the sheet, then Cancel: nothing is sent.
           await ossa.page.getByTestId('run-governor').click({ timeout: PRESS_MS });
-          const pick = ossa.page.getByTestId('promise-pick');
-          await pick.waitFor({ timeout: PRESS_MS });
-          check(await ossa.page.getByTestId('promise-run').isDisabled(), 'B-AC-6: "Run" waits until a promise is chosen');
+          const sheet = ossa.page.getByTestId('promise-sheet');
+          await sheet.waitFor({ timeout: PRESS_MS });
+          const run = (await ossa.page.getByTestId('promise-run').innerText()).trim();
+          check(run === `Run · up to ${taxNow}%`, `E-4: the sheet opens on a cap at today's tax, "Run · up to ${taxNow}%", got "${run}"`);
           await ossa.page.getByTestId('promise-cancel').click({ timeout: PRESS_MS });
-          await pick.waitFor({ state: 'hidden', timeout: PRESS_MS });
+          await sheet.waitFor({ state: 'hidden', timeout: PRESS_MS });
           check(ossa.runs.length === 0, `B-AC-6: Cancel sends nothing, got ${JSON.stringify(ossa.runs)}`);
           // Then she runs for Governor, holding the tax.
           await ossa.page.getByTestId('run-governor').click({ timeout: PRESS_MS });
           await ossa.page.getByTestId('promise-hold').click({ timeout: PRESS_MS });
-          await ossa.page.getByTestId('promise-run').filter({ hasText: 'Run, promising “Hold the tax”' }).click({ timeout: PRESS_MS });
+          await ossa.page.getByTestId('promise-run').filter({ hasText: `Run · keep it at ${taxNow}%` }).click({ timeout: PRESS_MS });
         })(),
       ]);
       const LENA_PROMISE: TaxPromise = { kind: 'cap', percent: LENA_CAP };
       const OSSA_PROMISE: TaxPromise = { kind: 'hold' };
       check(JSON.stringify(lena.runs) === JSON.stringify([{ type: 'run', office: 'governor', promise: LENA_PROMISE }]), `B-AC-6: Lena's phone sends exactly one Governor run with her promise, got ${JSON.stringify(lena.runs)}`);
       check(JSON.stringify(ossa.runs) === JSON.stringify([{ type: 'run', office: 'governor', promise: OSSA_PROMISE }]), `B-AC-6: Ossa's phone then sends one Governor run with her promise, got ${JSON.stringify(ossa.runs)}`);
-      await lena.page.getByTestId('running').filter({ hasText: `You run for Governor, promising “Tax no higher than ${LENA_CAP}%”` }).waitFor({ timeout: PRESS_MS });
-      await ossa.page.getByTestId('running').filter({ hasText: 'You run for Governor, promising “Hold the tax”' }).waitFor({ timeout: PRESS_MS });
-      await everyone(phones, (p) => p.page.getByTestId('candidates').filter({ hasText: lena.name }).filter({ hasText: ossa.name }).waitFor({ timeout: PRESS_MS }));
+      await lena.page.getByTestId('running').filter({ hasText: `You run for Governor, promising up to ${LENA_CAP}% (it's ${taxNow}% now).` }).waitFor({ timeout: PRESS_MS });
+      await ossa.page.getByTestId('running').filter({ hasText: `You run for Governor, promising keep it at ${taxNow}%.` }).waitFor({ timeout: PRESS_MS });
+      // E-4: every phone's announcement and the TV list both, each on a promise as a change from today.
+      await everyone(phones, (p) => p.page.getByTestId(`announce-field-governor-${lenaId}`).filter({ hasText: `up to ${LENA_CAP}% (it's ${taxNow}% now)` }).waitFor({ timeout: PRESS_MS }));
+      await everyone(phones, (p) => p.page.getByTestId(`announce-field-governor-${ossaId}`).filter({ hasText: `keep it at ${taxNow}%` }).waitFor({ timeout: PRESS_MS }));
+      await tv.getByTestId(`tv-field-governor-${lenaId}`).filter({ hasText: `up to ${LENA_CAP}%` }).waitFor({ timeout: PRESS_MS });
       const running = truth.board().politics!.candidates.governor!;
-      check(running.includes(lenaId) && running.includes(ossaId) && running.every((id) => id === lenaId || id === ossaId || aiIds.includes(id)), `B-AC-1: the server has both humans running for Governor, and nobody else but the AI seat, got ${running.join(', ')}`);
+      check(running.includes(lenaId) && running.includes(ossaId) && running.every((id) => id === lenaId || id === ossaId || aiIds.includes(id)), `B-AC-63: the server has both humans running for Governor, and nobody else but the AI seat, got ${running.join(', ')}`);
       check(JSON.stringify(promises()[lenaId]) === JSON.stringify(LENA_PROMISE) && JSON.stringify(promises()[ossaId]) === JSON.stringify(OSSA_PROMISE), `B-AC-6: the server holds Lena's and Ossa's promises, got ${JSON.stringify(promises())}`);
     });
+    console.log(`✓ B-AC-63, T-AC-66: both humans ran in month 1's announce, Lena up to ${LENA_CAP}% and Ossa keeping ${taxNow}%`);
 
-    // Done with announce on both phones; the AI seat runs and votes through its own hand. Both phones get the ballot.
-    await everyone(phones, (p) => p.page.getByTestId('ready').click({ timeout: PRESS_MS }));
-    // Her row is named for her, then her promise.
-    const lenaRadio = (p: Phone) => p.page.locator('[data-phase=planning]').getByTestId('election').getByRole('radio', { name: new RegExp(`^${lena.name}\\b`) });
-    await everyone(phones, (p) => lenaRadio(p).waitFor({ timeout: within(POLITICS.ai.actMs[1]) }));
-    // B-AC-6: every phone's ballot quotes each Governor candidate's promise, the AI seat's too if it runs.
+    // Ready to vote on both phones; the AI seat runs and votes through its own hand. Both phones and the TV get the ballot.
+    await everyone(phones, (p) => p.page.getByTestId('ready').filter({ hasText: 'Ready to vote' }).click({ timeout: PRESS_MS }));
+    const radio = (p: Phone, id: string) => p.page.getByTestId(`ballot-governor-${id}`).locator('input');
+    await everyone(phones, (p) => radio(p, lenaId).waitFor({ timeout: within(POLITICS.ai.actMs[1]) }));
+    await tv.getByTestId('tv-ballot').waitFor({ timeout: PRESS_MS });
+    // B-AC-6: every phone's ballot gives each Governor candidate's promise, the AI seat's too if it runs.
     const govs = truth.state().politics!.election!.candidates.governor;
     await everyone(phones, async (p) => {
       for (const id of govs) {
-        const line = (await p.page.getByTestId(`promise-${id}`).innerText({ timeout: PRESS_MS })).trim();
-        check(line === `“${said(promises()[id]!)}”`, `B-AC-6: ${p.name}'s ballot quotes ${id}'s promise "${said(promises()[id]!)}", got "${line}"`);
+        const row = (await p.page.getByTestId(`ballot-governor-${id}`).innerText({ timeout: PRESS_MS })).trim();
+        check(row.endsWith(said(promises()[id]!, taxNow)), `B-AC-6: ${p.name}'s ballot gives ${id}'s promise "${said(promises()[id]!, taxNow)}", got "${row}"`);
       }
     });
-    console.log(`✓ B-AC-6: both phones' ballots quote ${govs.map((id) => `"${said(promises()[id]!)}"`).join(', ')} under the Governor candidates`);
+    console.log(`✓ B-AC-6: both phones' ballots give ${govs.map((id) => `"${said(promises()[id]!, taxNow)}"`).join(', ')} beside the Governor candidates`);
+
     // Lena's tax paid adds two votes, so she wins whoever the AI seat votes for, with Ossa abstaining.
     truth.state().treasury.paid[lenaId] = POLITICS.weight.taxPerVote * POLITICS.weight.taxCap;
-    await lenaRadio(lena).check({ timeout: PRESS_MS });
+    const election = () => truth.board().politics!.election!;
     const ballots = () => truth.state().politics!.election!.ballots;
-    await untilServer(lena.page, () => ballots()[lenaId]?.governor === lenaId || null, "B-AC-1: the server holds Lena's ballot for herself");
+    const cast = lena.page.getByTestId('ready').filter({ hasText: 'Cast my vote' });
+    check(await cast.isDisabled(), 'AM-21: Cast my vote waits for a pick');
+    await radio(lena, lenaId).check({ timeout: PRESS_MS });
+    await untilServer(lena.page, () => ballots()[lenaId]?.governor === lenaId || null, "B-AC-63: the server holds Lena's ballot for herself");
+    check(!election().done.includes(lenaId), 'AM-21: picking alone is not Done');
+    await cast.click({ timeout: PRESS_MS });
+    await untilServer(lena.page, () => election().done.includes(lenaId) || null, 'B-AC-63: Lena has cast her vote');
 
-    // B-AC-61: Ossa's phone drops before she votes. The ballot waits for her once the AI seat has voted; Lena, who hosts
-    // and is Done by her ballot, goes on without her, and the news names her.
+    // B-AC-63, HC-64: Ossa's phone drops before she casts. Once the AI seat has voted the ballot still waits for her.
     const ossaUrl = ossa.page.url();
     await ossa.page.goto('about:blank');
     const seatOf = (id: string) => truth.room().viewFor(null).seats.find((seat) => seat.id === id);
-    await untilServer(lena.page, () => seatOf(ossaId)?.connected === false || null, "B-AC-61: the server sees Ossa's phone drop");
-    await untilServer(lena.page, () => aiIds.every((id) => ballots()[id] !== undefined) || null, 'B-AC-61: the AI seat votes', within(POLITICS.ai.actMs[1]));
+    await untilServer(lena.page, () => seatOf(ossaId)?.connected === false || null, "the server sees Ossa's phone drop");
+    await untilServer(lena.page, () => aiIds.every((id) => election().done.includes(id)) || null, 'B-AC-63: the AI seat casts', within(POLITICS.ai.actMs[1]));
     await lena.page.getByTestId(`waiting-${ossaId}`).filter({ hasText: 'AWAY' }).waitFor({ timeout: PRESS_MS });
-    check(truth.board().politics!.election!.stage === 'ballot', `B-AC-61: with everyone else Done the ballot still waits for Ossa, got ${truth.board().politics!.election!.stage}`);
-    check(JSON.stringify(truth.board().politics!.election!.waitingFor) === JSON.stringify([ossaId]), `B-AC-61: every screen is told it waits for Ossa, got ${JSON.stringify(truth.board().politics!.election!.waitingFor)}`);
-    // Held, so the ballot closes only once Ossa is back and can watch the result.
-    await held(server, code, async () => {
-      await lena.page.getByTestId('continue').filter({ hasText: `Continue without ${ossa.name}` }).click({ timeout: PRESS_MS });
-      await lena.page.getByTestId('continue-confirm').filter({ hasText: `Go on without ${ossa.name}? ${ossa.name} doesn't vote this time.` }).waitFor({ timeout: PRESS_MS });
-      await lena.page.getByTestId('continue-now').click({ timeout: PRESS_MS });
-      const line = `${lena.name} continued without ${ossa.name}.`;
-      await untilServer(lena.page, () => truth.board().news[0] === line || null, `B-AC-61: the news says "${line}"`);
-      await tv.getByText(line).first().waitFor({ timeout: PRESS_MS });
-      await ossa.page.goto(ossaUrl);
-      await untilServer(lena.page, () => seatOf(ossaId)?.connected === true || null, "B-AC-61: Ossa's phone is back", within(PRESS_MS));
-      await ossa.page.locator('[data-phase=planning]').waitFor({ timeout: PRESS_MS });
-    });
-    console.log(`✓ B-AC-61: Ossa's phone dropped mid-ballot; the ballot waited, Lena continued without her and the news said so`);
+    check(election().stage === 'ballot', `B-AC-63: with everyone else cast the ballot still waits for Ossa, got ${election().stage}`);
+    check(JSON.stringify(election().waitingFor) === JSON.stringify([ossaId]), `B-AC-63: every screen is told it waits for Ossa, got ${JSON.stringify(election().waitingFor)}`);
+    // She comes back and abstains: picking is still not Done, so nothing closes until her Cast.
+    await ossa.page.goto(ossaUrl);
+    await untilServer(lena.page, () => seatOf(ossaId)?.connected === true || null, "Ossa's phone is back", within(PRESS_MS));
+    await ossa.page.getByTestId('ballot-governor-abstain').locator('input').check({ timeout: PRESS_MS * 2 });
+    await ossa.page.waitForTimeout(STILL_OPEN_MS);
+    check(election().stage === 'ballot', `B-AC-63: Ossa's pick alone closes nothing, got ${election().stage}`);
+    await ossa.page.getByTestId('ready').filter({ hasText: 'Cast my vote' }).click({ timeout: PRESS_MS });
+    await untilServer(lena.page, () => election().stage === 'ceremony' || null, "B-AC-63: the ballot closes at Ossa's Cast, the last one");
+    console.log(`✓ B-AC-63: each phone cast; the ballot waited for Ossa's dropped phone, her pick alone closed nothing, and her Cast closed it`);
 
-    // The TV counts through the Governor's intro, then every screen names the Governor at the same moment.
-    await tv.getByTestId('ballot-countdown').waitFor({ timeout: within(POLITICS.ai.actMs[1]) });
-    const reveal = await readTheReveal(tv, lena.page, ossa.page, within(ELECTION_WAIT_MS));
-    // No wall-clock assertion in CI (lean CI rule 6): "the same moment" is one broadcast to every view, proven by B-AC-1 (server). The ticks are logged.
-    // Every ballot cast for Lena, weighted: hers and, if it chose her, the AI seat's; Ossa abstained.
+    // B-AC-63, B-AC-62: every screen shows the Governor's ceremony: the TV carries it, both phones say look up and give
+    // the result only once the server's clock has reached the winner beat.
+    const reveal = await readTheReveal(tv, lena.page, ossa.page, () => election().ceremony?.reached.governor?.beat ?? null, within(ELECTION_WAIT_MS));
     const weights = truth.board().politics!.weights;
     const forLena = Object.entries(ballots()).filter(([, b]) => b.governor === lenaId).map(([id]) => id);
-    check(forLena.includes(lenaId) && ballots()[ossaId] === undefined, `B-AC-1, B-AC-61: Lena's ballot counts for her and Ossa cast none, got ${JSON.stringify(ballots())}`);
+    check(forLena.includes(lenaId) && ballots()[ossaId] === undefined, `B-AC-63: Lena's ballot counts for her and Ossa abstained, got ${JSON.stringify(ballots())}`);
     const expectedVotes = forLena.reduce((sum, id) => sum + weights.find((w) => w.id === id)!.votes, 0);
-    const elected = reveal.tv.filter((r) => r.elected);
-    check(elected.length === 1 && elected[0]!.id === lenaId, `B-AC-1: the TV names Lena Governor, got ${JSON.stringify(reveal.tv)}`);
-    check(elected[0]!.votes === expectedVotes, `B-AC-1: the TV shows Lena's ${expectedVotes} votes (the ${forLena.length} ballots for her, weighted), got ${elected[0]!.votes}`);
+    check(reveal.congrats.startsWith(`Congratulations, Governor ${lena.name}!`), `B-AC-63: the TV congratulates Governor Lena, got "${reveal.congrats}"`);
+    check(reveal.tvVotes[lenaId] === expectedVotes, `B-AC-63: the TV's bar for Lena grows to her ${expectedVotes} votes (the ${forLena.length} ballots for her, weighted), got ${JSON.stringify(reveal.tvVotes)}`);
     for (const [p, text] of [
       [lena, reveal.lena],
       [ossa, reveal.ossa],
     ] as const) {
-      const row = /Governor\s*(.+?)\s*(\d+) votes/.exec(text);
       const name = p === lena ? 'You' : lena.name;
-      check(row && row[1] === name && Number(row[2]) === elected[0]!.votes, `B-AC-1: ${p.name}'s phone names ${name} Governor with ${elected[0]!.votes} votes, as the TV does, in the same tick: "${text}"`);
+      check(text.startsWith(`${name}${expectedVotes}ELECTED`), `B-AC-63: ${p.name}'s phone names ${name} Governor with ${expectedVotes} votes, as the TV does: "${text}"`);
     }
-    // B-AC-6: the TV's result quotes Lena's promise under her name.
-    const lenaRow = reveal.tv.find((r) => r.id === lenaId)!;
-    check(lenaRow.text.includes(`${lena.name}“Tax no higher than ${LENA_CAP}%”`), `B-AC-6: the TV's result row for Lena quotes her promise, got "${lenaRow.text}"`);
-    // T-AC-62: only the Governor is elected, so no screen names a Sheriff.
-    check((await tv.locator('[data-testid^="result-sheriff-"]').count()) === 0, 'T-AC-62: the TV shows no Sheriff');
-    check(![reveal.lena, reveal.ossa].some((text) => text.includes('Sheriff')), `T-AC-62: no phone's result names a Sheriff: ${JSON.stringify([reveal.lena, reveal.ossa])}`);
-    console.log(`✓ B-AC-6: the TV's result shows "${lenaRow.text}"; T-AC-62: no Sheriff on any screen`);
-    console.log(`✓ B-AC-1: both humans run and see the same result at the same moment: the intro, then Lena Governor with ${expectedVotes} votes on the TV and both phones, first seen at ticks ${reveal.firstTicks.join(', ')}`);
+    check(reveal.mine, "B-AC-63: Lena's own phone congratulates her");
+    check((await tv.locator('[data-testid^="reveal-row-sheriff-"]').count()) === 0 && ![reveal.lena, reveal.ossa].some((t) => t.includes('Sheriff')), 'T-AC-62: no screen names a Sheriff');
+    console.log(`✓ B-AC-63: every screen showed the Governor's ceremony: the TV's title, candidates, bars and winner at ticks ${reveal.tvTicks.join(', ')}; both phones the result at ticks ${reveal.phoneTicks.join(', ')}, never before the server's winner beat`);
 
-    // The winner's phone opens the tax desk; the other phone has no Governor's desk.
+    // The winner's phone opens the tax desk with her promise above it; the other phone has no Governor's desk and keeps
+    // the whole result in its Council desk (E-6).
     const taxValue = lena.page.getByTestId('tax-value');
     await taxValue.waitFor({ timeout: within(ELECTION_WAIT_MS) });
     const start = truth.board().politics!.tax.percent;
-    check((await taxValue.innerText()).trim() === `${start}%`, `B-AC-1: the tax desk opens at the colony's ${start}%, got "${await taxValue.innerText()}"`);
-    check((await ossa.page.getByTestId('desk-governor').count()) === 0, 'B-AC-1 (negative): Ossa, not Governor, has no Governor desk');
-    console.log(`✓ B-AC-1: Lena's phone opened the tax desk at ${start}%`);
+    check((await taxValue.innerText()).trim() === `${start}%`, `B-AC-63: the tax desk opens at the colony's ${start}%, got "${await taxValue.innerText()}"`);
+    await lena.page.getByTestId('gov-promise').filter({ hasText: `You promised: no higher than ${LENA_CAP}%` }).waitFor({ timeout: PRESS_MS });
+    check((await ossa.page.getByTestId('desk-governor').count()) === 0, 'B-AC-63 (negative): Ossa, not Governor, has no Governor desk');
+    // E-9: a human holding an office gets its desk first, on one row; everyone else's tabs are today's. CI's pinned
+    // whole-game seed never makes a human Governor, so this is where the office-first order is guarded on every run.
+    const tabs = async (page: Page) => page.locator('[data-testid=desks] [role=tab]').evaluateAll((els) => els.map((e) => e.getAttribute('data-testid')));
+    const lenaTabs = await tabs(lena.page);
+    check(lenaTabs[0] === 'desk-governor' && lenaTabs.filter((t) => t === 'desk-governor').length === 1, `E-9: the Governor's desk is Lena's first tab, got ${lenaTabs.join(', ')}`);
+    check(JSON.stringify(lenaTabs.slice(1)) === JSON.stringify(await tabs(ossa.page)), `E-9: after it, Lena's tabs are Ossa's, got ${lenaTabs.join(', ')}`);
+    await ossa.page.getByTestId('result-how-governor').waitFor({ timeout: PRESS_MS });
+    // T-AC-70: the promise stands beside the tax on every phone.
+    await everyone(phones, (p) => p.page.getByTestId('office-governor').filter({ hasText: `promised up to ${LENA_CAP}%` }).getByTestId('promise-status').filter({ hasText: `tax ${start}%, kept` }).waitFor({ timeout: PRESS_MS }));
+    console.log(`✓ B-AC-63: Lena's phone opened the tax desk at ${start}% under her promise; both phones' offices line reads "promised up to ${LENA_CAP}% · tax ${start}%, kept"`);
 
     // UBER-AC-2: the Governor sets 8%, and everyone's Colony desk says so.
     for (let n = start; n < NEW_TAX; n++) {
       await lena.page.getByTestId('tax-up').click({ timeout: PRESS_MS });
       await taxValue.filter({ hasText: `${n + 1}%` }).waitFor({ timeout: PRESS_MS });
     }
-    await lena.page.getByTestId('tax-confirm').click({ timeout: PRESS_MS });
+    await lena.page.getByTestId('tax-confirm').filter({ hasText: `Set ${NEW_TAX}%` }).click({ timeout: PRESS_MS });
     await untilServer(lena.page, () => truth.board().politics!.tax.percent === NEW_TAX, `UBER-AC-2: the server's sales tax is ${NEW_TAX}%`);
+    await lena.page.getByTestId('gov-done').filter({ hasText: `Done: ${NEW_TAX}% from now on.` }).waitFor({ timeout: PRESS_MS });
+    // T-AC-70: the promise stays beside the new tax on every phone.
+    await everyone(phones, (p) => p.page.getByTestId('promise-status').filter({ hasText: `tax ${NEW_TAX}%, kept` }).waitFor({ timeout: PRESS_MS }));
     await ossa.page.getByTestId('desk-colony').click({ timeout: PRESS_MS });
-    await ossa.page.getByTestId('tax-readonly').filter({ hasText: `Sales tax ${NEW_TAX}%` }).waitFor({ timeout: PRESS_MS });
+    await ossa.page.getByTestId('fund-in').filter({ hasText: `the ${NEW_TAX}% sales tax` }).waitFor({ timeout: PRESS_MS });
 
-    // On to the auction: ready, claim, the pub.
+    // B-AC-46-1, B-AC-46-4 (C46): the Governor proposes a law through the picker; its preview is the server's cost for
+    // each player, the server holds the proposal as picked, and Ossa's This month carries it with her own cost.
+    const setting = POLITICS.laws.landTax.settings[1]!;
+    const law: LawProposal = { kind: 'enact', law: 'landTax', setting };
+    await lena.page.getByTestId(`law-landTax-${setting}`).click({ timeout: PRESS_MS });
+    const costs = lawImpact(truth.state(), law);
+    for (const id of [lenaId, ossaId, ...aiIds]) {
+      const c = costs[id]!.cost;
+      await lena.page.getByTestId(`for-each-${id}`).filter({ hasText: c === 0 ? 'nothing' : `${c} cr a month` }).waitFor({ timeout: PRESS_MS });
+    }
+    await lena.page.getByTestId('propose').filter({ hasText: `Propose Land tax ${setting} cr a plot for next month’s vote` }).click({ timeout: PRESS_MS });
+    await untilServer(lena.page, () => JSON.stringify(truth.state().politics!.proposal?.proposal) === JSON.stringify(law) || null, `B-AC-46-1: the server's proposal is Land tax ${setting}`);
+    await lena.page.getByTestId('pending-words').filter({ hasText: `You propose Land tax ${setting} cr a plot` }).waitFor({ timeout: PRESS_MS });
+    const ossaCost = costs[ossaId]!.cost;
+    await ossa.page.getByTestId('agenda-law').filter({ hasText: `Lena proposes Land tax ${setting} cr a plot. For you: ${ossaCost === 0 ? 'nothing' : `about ${ossaCost} cr a month`}.` }).waitFor({ timeout: PRESS_MS });
+    check((await lena.page.getByTestId('agenda-law').count()) === 0, "B-AC-46-4: the Governor's own phone has no agenda line for it");
+    console.log(`✓ B-AC-46-1, B-AC-46-4: Lena proposed Land tax ${setting} through the picker; the server holds it; Ossa's This month reads her cost, ${ossaCost} cr`);
+
+    // On to the auction: ready, claim, then development. Walking is on, so development is the arcade screen; this
+    // test's promise is not the errand, so both phones' first MULEs go in through the server, month 1's clock (which
+    // waits for every first MULE, the AI seat's too) starts, and it runs out the turn.
     await everyone(phones, (p) => p.page.getByTestId('ready').click({ timeout: PRESS_MS }));
     await everyone(phones, (p) => claimPlots(p.page));
     await everyone(phones, (p) => doneWithLand(p.page));
-    await everyone(phones, (p) => goToThePub(p.page));
-    await lena.page.locator('[data-phase=auction]').waitFor({ timeout: within(PHASE_MS.development + PHASE_MS.production) });
+    await lena.page.locator('[data-phase=development]').waitFor({ timeout: within(PHASE_MS.development) });
+    firstMulesThroughTheServer(server, code, [lenaId, ossaId].map((seat) => ({ seat, outfit: 'food' as const })));
+    await lena.page.locator('[data-phase=auction]').waitFor({ timeout: within(2 * PHASE_MS.development + PHASE_MS.production) });
 
     // Lena holds one unit of a good the store buys for 100 cr or more, seeded as the auction opens and before that good
     // comes up, so 7%, 8% and 9% (and the old rate) each take a different tax from the sale.
-    const toAuction = within(WALK.statusMs);
+    // The side pick has no clock (A-7): it waits for every Ready, then the AI's Done within its decision wait.
+    const toAuction = within(AI_HANDS.auction.decideWaitMs);
     await untilServer(lena.page, () => truth.board().auction?.stage === 'status' || null, 'the goods auction opens on a status screen', toAuction);
     const good = aPinningGood(truth, [start, NEW_TAX - 1, NEW_TAX + 1]);
     holdOneUnit(server, code, lenaId, good);
-    const upNext = within(WALK.order.length * (WALK.statusMs + WALK.goodMs / WALK.tradeClockRate));
-    await untilServer(lena.page, () => { const a = truth.board().auction; return (a?.good === good && a.stage === 'status') || null; }, `UBER-AC-2: ${good} comes up at the auction`, upNext);
-    // With one to spare she opens on Sell; a second tap on Sell would pass.
+    const upNext = within(WALK.order.length * (AI_HANDS.auction.decideWaitMs + WALK.goodMs / WALK.tradeClockRate));
+    // Both phones press Ready at each good's side pick before it; never at its own, where Lena picks Sell first.
+    const isUp = () => { const a = truth.board().auction; return (a?.good === good && a.stage === 'status') || null; };
+    const passing = everyone(phones, (p) => readyAtSidePicksUntil(p.page, () => truth.board().auction?.good === good || truth.board().phase !== 'auction'));
+    await untilServer(lena.page, isUp, `UBER-AC-2: ${good} comes up at the auction`, upNext);
+    await passing;
+    // Everyone opens as a buyer (RULE-2): she switches to Sell.
     const sideOf = () => truth.board().auction?.walkers.find((w) => w.id === lenaId)?.side;
     if (sideOf() !== 'seller') await lena.page.getByTestId('side-seller').click({ timeout: PRESS_MS });
     await untilServer(lena.page, () => sideOf() === 'seller' || null, `UBER-AC-2: Lena sells ${good}`);
     const before = money(await lena.page.getByTestId('money').innerText());
     const paidBefore = truth.taxPaid(lenaId);
-    await hold(lena.page, 'down', within(WALK.statusMs));
+    await everyone(phones, (p) => p.page.locator('[data-phase=auction]').getByRole('button', { name: 'Ready', exact: true }).click({ timeout: PRESS_MS }));
+    await hold(lena.page, 'down', toAuction);
+    // At a house's line units sell by themselves (the auto-trade amendment, RULE-1): holding Down, she reaches the
+    // store's line and her one sells, nothing asked, even if it is one she needs ("show, don't stop").
     await untilServer(lena.page, () => truth.stockOf(lenaId, good) === 0 || null, `UBER-AC-2: Lena sells her one ${good}`, within(WALK.goodMs / WALK.tradeClockRate));
     await lena.page.mouse.up();
     await lena.page.waitForFunction((b) => Number((document.querySelector('[data-testid=money]')?.textContent ?? '').replace(/[^\d-]/g, '')) !== b, before, { timeout: PRESS_MS });
@@ -248,6 +298,55 @@ async function main(): Promise<void> {
       check(Math.round(total * (other / 100)) !== tax, `UBER-AC-2: at ${total} cr, ${other}% would take a tax other than ${tax}`);
     }
     console.log(`✓ UBER-AC-2: the winner sets 8% and the next auction sale is taxed at 8%: one ${good} sold for ${total}; Lena's phone ${before} → ${after}, ${tax} tax (${start}%, ${NEW_TAX - 1}% and ${NEW_TAX + 1}% would take ${[start, NEW_TAX - 1, NEW_TAX + 1].map((r) => Math.round((total * r) / 100)).join(', ')})`);
+
+    // B-AC-46-7..10 (C46): on through the rest of the auction and month 1's end to month 2's planning, which opens
+    // with Lena's land tax on its ballot, on both phones' stage and on the TV.
+    const onward = everyone(phones, (p) => readyAtSidePicksUntil(p.page, () => truth.board().phase !== 'auction'));
+    await untilServer(lena.page, () => truth.board().phase === 'upkeep' || null, "month 1's end", upNext);
+    await onward;
+    await everyone(phones, (p) => p.page.locator('[data-phase=upkeep]').getByTestId('ready').click({ timeout: MONTH_END_MS }));
+    const council = () => truth.board().politics!.council;
+    await untilServer(lena.page, () => (truth.board().month === 2 && council()?.stage === 'ballot') || null, "B-AC-46-7: month 2's planning opens with the law ballot", MONTH_END_MS);
+    await everyone(phones, (p) => p.page.getByTestId('ballot-proposal').filter({ hasText: `Land tax ${setting} cr a plot` }).waitFor({ timeout: PRESS_MS }));
+    await tv.getByTestId('tv-council-ballot').getByTestId('tv-proposal-words').filter({ hasText: `Land tax ${setting} cr a plot` }).waitFor({ timeout: PRESS_MS });
+    const ossaWeight = truth.board().politics!.weights.find((w) => w.id === ossaId)!.votes;
+    await ossa.page.getByTestId('ballot-weight').filter({ hasText: `Your vote weighs ${ossaWeight}` }).waitFor({ timeout: PRESS_MS });
+    check((await lena.page.getByTestId('ballot-yes').getAttribute('aria-pressed')) === 'true', "B-AC-46-7: the Governor's ballot starts at Yes");
+    // Ossa votes No; Lena keeps her Yes and presses Done. A month's opening event may hold the table: press until it lands.
+    const lawBallots = (): Record<string, boolean> => truth.state().politics!.council?.ballots ?? {};
+    await pressUntilServer(ossa.page.getByTestId('ballot-no'), () => lawBallots()[ossaId] === false, "B-AC-46-7: the server holds Ossa's No");
+    await pressUntilServer(lena.page.getByTestId('ready').filter({ hasText: 'Done' }), () => truth.state().politics!.council!.done.includes(lenaId) || council()?.stage !== 'ballot', 'B-AC-46-8: Lena is Done');
+    // The reveal runs on the game clock; the clock is held while every screen is read.
+    await untilServer(lena.page, () => council()?.stage === 'reveal' || null, 'B-AC-46-9: the ballot closes once everyone is Done', within(POLITICS.ai.actMs[1]));
+    await held(server, code, async () => {
+      const cast = lawBallots();
+      check(cast[lenaId] === true && cast[ossaId] === false, `B-AC-46-7: the server's ballots are the phones' votes, Lena yes and Ossa no, got ${JSON.stringify(cast)}`);
+      const sum = (yes: boolean) => Object.entries(cast).filter(([, b]) => b === yes).reduce((n, [id]) => n + voteWeight(truth.state(), id).total, 0);
+      const [yes, no] = [sum(true), sum(false)];
+      const r = council()!.result!;
+      check(r.yes === yes && r.no === no, `B-AC-46-9: the server's result is the votes cast, weighted: ${yes} to ${no}, got ${r.yes} to ${r.no}`);
+      const score = r.tie ? `${yes} to ${no} · the Governor’s vote decides` : `${r.passed ? yes : no} to ${r.passed ? no : yes}`;
+      const then = r.passed ? `Land tax ${setting} cr a plot is in force from now` : `it can come back in month ${2 + POLITICS.council.retryMonths + 1}`;
+      await tv.getByTestId('tv-council-reveal').waitFor({ timeout: PRESS_MS });
+      await tv.getByTestId('tv-yes').filter({ hasText: new RegExp(`^${yes}$`) }).waitFor({ timeout: PRESS_MS });
+      await tv.getByTestId('tv-no').filter({ hasText: new RegExp(`^${no}$`) }).waitFor({ timeout: PRESS_MS });
+      await tv.getByTestId('tv-stamp').filter({ hasText: r.passed ? 'Passed' : 'Failed' }).waitFor({ timeout: PRESS_MS });
+      const tvLine = (await tv.getByTestId('tv-result-line').innerText()).trim();
+      check(tvLine === `${r.passed ? 'Passed' : 'Failed'} ${score} · ${then}`, `B-AC-46-10: the TV's result line, got "${tvLine}"`);
+      const reveal = await tv.getByTestId('tv-reveal-a').innerText();
+      check(![lena.name, ossa.name].some((n) => reveal.includes(n)), `B-AC-46-10: the TV's reveal names nobody beside a vote (RULE-47): "${reveal}"`);
+      const phoneLine = r.tie ? `${score} · ${then}` : `${r.passed ? 'Passed' : 'Failed'} ${score} · ${then}`;
+      await everyone(phones, (p) => p.page.getByTestId('phone-reveal-line').filter({ hasText: phoneLine }).waitFor({ timeout: PRESS_MS }));
+      console.log(`✓ B-AC-46-7..10: month 2's ballot on both phones and the TV; Lena yes, Ossa no; the server's ${r.passed ? 'pass' : 'fail'} ${yes} to ${no} is the votes cast, weighted; the TV and both phones read "${tvLine}"`);
+    });
+    // B-AC-46-11: once the reveal is over a passed law is in force, and every Council desk carries its chip.
+    await untilServer(lena.page, () => council()?.stage === 'over' || null, 'B-AC-46-11: the reveal ends', within(POLITICS.council.revealMs));
+    if (council()!.result!.passed) {
+      check(JSON.stringify(truth.board().politics!.laws?.landTax) === JSON.stringify({ setting, since: 2 }), `B-AC-46-11: the server has Land tax ${setting} in force since month 2`);
+      await ossa.page.getByTestId('desk-council').click({ timeout: PRESS_MS });
+      await ossa.page.getByTestId('law-chip-landTax').filter({ hasText: `Land tax ${setting} cr · since month 2` }).waitFor({ timeout: PRESS_MS });
+      console.log(`✓ B-AC-46-11: Land tax ${setting} is in force on the server and on Ossa's Council desk, since month 2`);
+    }
 
     check(errors.length === 0, `no page errors: ${errors.join('; ')}`);
     console.log(`e2e politics: ok (room ${code}, seed ${SEED})`);
@@ -270,43 +369,65 @@ main().then(
   },
 );
 
-type TvRow = { id: string; votes: number; elected: boolean; text: string };
-
-/** RULE-10's words for a promise, as every screen quotes it. */
-function said(p: TaxPromise): string {
-  return p.kind === 'cap' ? `Tax no higher than ${p.percent}%` : p.kind === 'lower' ? 'Lower the tax' : 'Hold the tax';
+/** E-4's words for a promise beside a candidate, as every screen gives them. */
+function said(p: TaxPromise, tax: number): string {
+  return p.kind === 'cap' ? `up to ${p.percent}% (it's ${tax}% now)` : p.kind === 'lower' ? 'lower it' : `keep it at ${tax}%`;
 }
 
+type Reveal = { tvTicks: number[]; phoneTicks: number[]; tvVotes: Record<string, number>; congrats: string; lena: string; ossa: string; mine: boolean };
+
 /**
- * Reads the TV's ceremony and both phones' result card in one tick, every TICK_MS, until all three name the Governor.
- * Returns the tick each was first seen at, how far apart those are, and what each showed in the last tick.
+ * Reads the TV's ceremony and both phones' companion every TICK_MS until the TV has congratulated the Governor and
+ * both phones give the result. Each beat the TV draws (title, candidates, bars, winner) must be seen; a phone giving the
+ * result before the server's clock has reached the winner beat fails. Returns the tick each was first seen at.
  */
-async function readTheReveal(tv: Page, a: Page, b: Page, timeout: number): Promise<{ firstTicks: number[]; tv: TvRow[]; lena: string; ossa: string }> {
-  const readTv = () => ({
-    shown: !!document.querySelector('[data-testid=how-governor]'),
-    rows: [...document.querySelectorAll<HTMLElement>('[data-testid^="result-governor-"]')].map((el) => ({
-      id: el.dataset.testid!.slice('result-governor-'.length),
-      votes: Number(el.querySelector('[data-num]')?.textContent),
-      elected: (el.textContent ?? '').includes('ELECTED'),
-      text: el.textContent ?? '',
-    })),
-  });
-  const readPhone = () => {
-    const card = document.querySelector<HTMLElement>('[data-testid=phone-election-result]');
-    return { shown: !!card?.textContent?.includes('Governor'), text: card?.textContent ?? '' };
+async function readTheReveal(tv: Page, a: Page, b: Page, beat: () => string | null, timeout: number): Promise<Reveal> {
+  const readTv = () => {
+    const rows = [...document.querySelectorAll<HTMLElement>('[data-testid^="reveal-count-governor-"]')];
+    return {
+      title: !!document.querySelector('[data-testid=reveal-title]'),
+      rows: rows.length,
+      votes: Object.fromEntries(rows.map((el) => [el.dataset.testid!.slice('reveal-count-governor-'.length), Number(el.textContent || 0)])),
+      congrats: document.querySelector('[data-testid=reveal-congrats]')?.textContent ?? '',
+    };
   };
-  const first: (number | null)[] = [null, null, null];
+  const readPhone = () => {
+    const rows = [...document.querySelectorAll<HTMLElement>('[data-testid^="companion-governor-"]')];
+    return {
+      lookUp: !!document.querySelector('[data-testid=look-up]'),
+      result: rows.map((el) => el.textContent ?? '').join(' | '),
+      mine: !!document.querySelector('[data-testid=companion-mine]'),
+    };
+  };
+  const first = { title: -1, candidates: -1, bars: -1, winner: -1, lena: -1, ossa: -1, lenaLooks: -1, ossaLooks: -1 };
+  const seen = (key: keyof typeof first, tick: number, now: boolean) => {
+    if (now && first[key] < 0) first[key] = tick;
+  };
   const deadline = Date.now() + timeout;
   for (let tick = 0; ; tick++) {
     const [t, x, y] = await Promise.all([tv.evaluate(readTv), a.evaluate(readPhone), b.evaluate(readPhone)]);
-    [t.shown, x.shown, y.shown].forEach((shown, i) => {
-      if (shown && first[i] === null) first[i] = tick;
-    });
-    if (t.shown && x.shown && y.shown) {
-      const ticks = first as number[];
-      return { firstTicks: ticks, tv: t.rows, lena: x.text, ossa: y.text };
+    // Read after the screens: the clock only runs on, so a screen ahead of it would show here.
+    const reached = beat();
+    for (const [p, name] of [
+      [x, 'Lena'],
+      [y, 'Ossa'],
+    ] as const) {
+      check(!p.result || reached === 'winner' || reached === 'end' || reached === null, `B-AC-62: ${name}'s phone gave the result at the server's ${reached} beat, before the winner`);
     }
-    check(Date.now() < deadline, `B-AC-1: the result shows on every screen; seen on TV ${t.shown}, Lena ${x.shown}, Ossa ${y.shown}`);
+    seen('title', tick, t.title);
+    seen('candidates', tick, t.rows > 0);
+    seen('bars', tick, Object.values(t.votes).some((v) => v > 0));
+    seen('winner', tick, t.congrats !== '');
+    seen('lena', tick, x.result !== '');
+    seen('ossa', tick, y.result !== '');
+    seen('lenaLooks', tick, x.lookUp);
+    seen('ossaLooks', tick, y.lookUp);
+    if (t.congrats && x.result && y.result) {
+      check(first.title >= 0 && first.candidates >= 0 && first.bars >= 0, `B-AC-63: the TV drew the title, the candidates and the bars before the winner, first seen at ${JSON.stringify(first)}`);
+      check(first.lenaLooks >= 0 && first.ossaLooks >= 0, `B-AC-63: both phones said look up at the TV during the ceremony, first seen at ${JSON.stringify(first)}`);
+      return { tvTicks: [first.title, first.candidates, first.bars, first.winner], phoneTicks: [first.lena, first.ossa], tvVotes: t.votes, congrats: t.congrats, lena: x.result, ossa: y.result, mine: x.mine };
+    }
+    check(Date.now() < deadline, `B-AC-63: the result shows on every screen; seen on TV "${t.congrats}", Lena "${x.result}", Ossa "${y.result}"`);
     await new Promise((r) => setTimeout(r, TICK_MS));
   }
 }
@@ -376,6 +497,15 @@ async function untilServer<T>(page: Page, read: () => T | false | null, what: st
   }
 }
 
+/** Presses until the server shows the press landed: a month's opening event can refuse the first. */
+async function pressUntilServer(button: Locator, landed: () => boolean, what: string): Promise<void> {
+  for (let tries = 0; !landed(); tries++) {
+    check(tries < 10, what);
+    await button.click({ timeout: PRESS_MS });
+    await button.page().waitForTimeout(PRESS_MS / 4);
+  }
+}
+
 async function everyone(phones: Phone[], step: (p: Phone) => Promise<unknown>): Promise<void> {
   await Promise.all(phones.map(step));
 }
@@ -399,8 +529,24 @@ async function claimPlots(page: Page): Promise<void> {
   }
 }
 
-async function goToThePub(page: Page): Promise<void> {
-  await page.locator('[data-phase=development]').getByRole('button', { name: 'Go to the pub and end your turn' }).click({ timeout: within(PHASE_MS.development) });
+/**
+ * At each good's side pick, which has no clock (A-7), presses Ready, as the player would, until `stop`; it reads
+ * `stop` right before each press, so it never presses on the side pick it stops at. Presses nothing in the walk.
+ */
+async function readyAtSidePicksUntil(page: Page, stop: () => boolean): Promise<void> {
+  const ready = page.locator('[data-phase=auction]').getByRole('button', { name: 'Ready', exact: true });
+  while (!stop()) {
+    if (await ready.count()) {
+      if (stop()) return;
+      try {
+        await ready.click({ timeout: PRESS_MS });
+      } catch (err) {
+        // The side pick moved on under the press.
+        if (!(err instanceof playwrightErrors.TimeoutError)) throw err;
+      }
+    }
+    await page.evaluate(() => new Promise((r) => requestAnimationFrame(r)));
+  }
 }
 
 /** Presses and holds Up or Down once the button is enabled. */
