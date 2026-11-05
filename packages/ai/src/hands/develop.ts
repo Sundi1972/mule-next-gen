@@ -893,6 +893,12 @@ export class DevelopHand {
       this.log(head, false, 'skipped', `stale: plot ${plotOf(a)}`);
       return false;
     }
+    // No filter while it still leads a MULE: on the floor the plot's button offers install. See FM-led-no-gain, AM-27.
+    if (a.type === 'filter' && led !== null) {
+      this.queue.shift();
+      this.log(head, false, 'skipped', 'leading');
+      return false;
+    }
     if (a.type === 'analyse' && state.players.find((p) => p.id === me)!.analysed.includes(plotOf(a))) {
       this.queue.shift();
       this.log(head, false, 'skipped', 'already analysed');

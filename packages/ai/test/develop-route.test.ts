@@ -768,14 +768,15 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
       },
     );
 
-    it("T-AC-7 (FM-led-no-gain): while it still leads a MULE, a route's filter is skipped, 'leading', and nothing is refused on the floor", () => {
-      // A Food MULE led in, and an adopted route that fits a filter on the other plot before the led MULE's group.
+    it("T-AC-7 (FM-led-no-gain): while it still leads a MULE, a route's filter is skipped, 'leading', and nothing is refused on the floor; one after the install plays", () => {
+      // A Food MULE led in, and an adopted route that fits a filter on the other plot before the led MULE's group, and one
+      // on its own plot after its install.
       const { state, plots } = wonMuleLot(2, 'food');
       const [home, other] = plots.map((t) => indexOf(state, t)) as [number, number];
       me(state).analysed.push(home, other);
       me(state).stock.alloy = DEVELOPMENT.filterAlloy;
       const { hand } = seatAndHand();
-      const route: DevelopmentPlay['route'] = [{ act: 'filter', plot: other }, { act: 'buyMule' }, { act: 'outfit', outfit: 'food' }, { act: 'install', plot: home }, { act: 'pub' }];
+      const route: DevelopmentPlay['route'] = [{ act: 'filter', plot: other }, { act: 'buyMule' }, { act: 'outfit', outfit: 'food' }, { act: 'install', plot: home }, { act: 'filter', plot: home }, { act: 'pub' }];
       hand.follow(state.month, routeOf(route, {}, false));
       floorTurn(state, hand);
       const log = JSON.stringify(hand.done);
@@ -785,13 +786,16 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
         { route: 2, outcome: 'done', note: 'led' },
         { route: 3, outcome: 'done' },
         { route: 4, outcome: 'done' },
+        { route: 5, outcome: 'done' },
       ]);
       expect(hand.done.filter((e) => e.outcome === 'refused'), log).toEqual([]);
-      // The promise: the lot MULE stands on its plot as it came, and no filter or Alloy went while it was led.
+      // The promise: the lot MULE stands on its plot as it came; no filter went on while it was led, and the one after the
+      // install did.
       expect(state.tiles[home]!.outfit, log).toBe('food');
       expect(state.tiles[other]!.outfit, log).toBeNull();
       expect(state.tiles[other]!.filter).toBe(false);
-      expect(me(state).stock.alloy).toBe(DEVELOPMENT.filterAlloy);
+      expect(state.tiles[home]!.filter, log).toBe(true);
+      expect(me(state).stock.alloy).toBe(0);
       expect(me(state).carriedMule).toBeNull();
       expect(me(state).doneDeveloping).toBe(true);
     });
