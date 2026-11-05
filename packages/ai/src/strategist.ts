@@ -386,6 +386,22 @@ export function developDecision(obs: GameState, mind: Mind, mulesSoFar: number, 
   return shortlist(cands, mind.level.shortlist, mind.level.shortlistTolerance);
 }
 
+/**
+ * The seat's own idle plot where a MULE outfitted for `outfit` gains most, by installGain: its index and the gain and
+ * cost installGain gives there. Null without an idle plot, or for a factory it can't feed (as developDecision vetoes).
+ */
+export function bestInstall(obs: GameState, mind: Mind, outfit: Outfit): { index: number; gain: number; cost: number } | null {
+  if (isFactoryGood(outfit) && !canFeed(obs, mind.me, outfit)) return null;
+  const o = outlook(obs, mind.me, { lookAhead: mind.level.lookAhead });
+  let best: { index: number; gain: number; cost: number } | null = null;
+  for (const tile of obs.tiles) {
+    if (tile.owner !== mind.me || tile.outfit) continue;
+    const { gain, cost } = installGain(obs, o, tile, outfit, mind);
+    if (!best || gain > best.gain) best = { index: tileIndex(obs.width, tile.x, tile.y), gain, cost };
+  }
+  return best;
+}
+
 /** Own idle plots worth a geo analysis: their best and second-best uses are close on the terrain's average ground. */
 export function analysesWanted(obs: GameState, mind: Mind, secondsLeft: number): number[] {
   if (secondsLeft < STRATEGIST.analyseMinSeconds) return [];
