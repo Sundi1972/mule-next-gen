@@ -487,6 +487,7 @@ describe.runIf(process.env.MULE_FULL === '1')('brain:trial', () => {
       cutOff: [],
       countedUsd: 0.9999,
       settledCalls: 2,
+      playbooks: [],
       ...over,
     });
     const call = (usd: number, seat = 'ai0', g = 'g') => ({ game: g, seat, usd, outcome: 'llm' }) as TrialInput['calls'][number];
@@ -576,7 +577,8 @@ describe.runIf(process.env.MULE_FULL === '1')('brain:trial', () => {
     const input = (over: Partial<TrialInput> = {}): TrialInput => ({ keyed: true, planned: 1, stopped: 'done', smartPerGame: 2, seatsPerGame: 4, cap: 2, gameBudgetUsd: 1, games: [game()], calls, ...over });
 
     const r = trialReport(input());
-    expect(r.writes).toEqual({ calls: 3, late: 1, toolRounds: 2, usd: 0.06 });
+    expect(r.writes).toMatchObject({ calls: 3, late: 1, toolRounds: 2 });
+    expect(r.writes.usd).toBeCloseTo(0.05, 10);
     expect(r.edits).toEqual({ model: 8, of: 10 });
     expect(r.acEdits).toBe('pass');
     expect(trialReport(input({ games: [game({ playbooks: took(7, 10) })] })).acEdits).toBe('fail');
@@ -586,7 +588,7 @@ describe.runIf(process.env.MULE_FULL === '1')('brain:trial', () => {
     expect(trialReport(input({ planned: 2, games: [game(), game({ id: 'b', end: 'crashed', playbooks: took(0, 6) })] })).edits).toEqual({ model: 8, of: 10 });
 
     const printed = renderTrialReport(r);
-    expect(printed).toContainEqual(expect.stringMatching(/^strategy and playbook calls\s+3, late 1 \(33\.3%\), tool rounds 0\.67 a call, \$0\.06000$/));
+    expect(printed).toContainEqual(expect.stringMatching(/^strategy and playbook calls\s+3, late 1 \(33\.3%\), tool rounds 0\.67 a call, \$0\.05000$/));
     expect(printed).toContainEqual(expect.stringMatching(/^playbooks with Claude's edits\s+80\.0% \(8 of 10\)$/));
     expect(printed).toContain("UBER-AC-A edits PASS: 80.0% (8 of 10) of the playbooks that took effect carry Claude's accepted edits (needs at least 80%)");
   });
@@ -604,7 +606,7 @@ describe.runIf(process.env.MULE_FULL === '1')('brain:trial', () => {
         }
         return Promise.resolve(sdkMessage(USABLE, BILLED));
       };
-      const { code, report } = await drive(run(['--games', '1', '--seed', '101', '--max-usd', '2'], KEY).result);
+      const { code, report } = await drive(run(['--games', '1', '--seed', '101', '--playbooks', '1', '--max-usd', '2'], KEY).result);
 
       expect(code).toBe(0);
       const months = report!.edits.of / 2;

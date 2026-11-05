@@ -34,6 +34,8 @@ export interface TrialGame {
   countedUsd: number;
   /** Model calls that settled, as the trial saw them: each should have its ledger line. */
   settledCalls: number;
+  /** Each Smart seat's playbook that took effect at a land grant, and whether Claude's edits were in it ('llm'). */
+  playbooks: { seat: string; month: number; by: 'engine' | 'llm' }[];
 }
 
 /** Why a run stopped: the commands' reasons, or a ledger write that was lost. */
@@ -51,7 +53,7 @@ export interface TrialInput {
   gameBudgetUsd: number;
   games: TrialGame[];
   /** The run's call lines from its ledger file. */
-  calls: Pick<CallLine, 'game' | 'seat' | 'usd' | 'outcome'>[];
+  calls: Pick<CallLine, 'game' | 'seat' | 'usd' | 'outcome' | 'kind'>[];
 }
 
 export type FallbackReason = 'too slow' | 'busy' | 'budget' | 'off-list' | 'unreadable' | 'error';
@@ -106,7 +108,19 @@ export interface TrialReport {
   topPicks: number;
   ac1: Verdict;
   ac2: Verdict;
+  /**
+   * The strategy and playbook calls (C6): one call per write, however many tool rounds it took; late ones answered after
+   * their land grant had started; tool rounds are the intermediate round trips, a ledger line each.
+   */
+  writes: { calls: number; late: number; toolRounds: number; usd: number };
+  /** Of the Smart seats' playbooks that took effect in finished games, those carrying Claude's accepted edits. */
+  edits: Share;
+  /** UBER-AC-A's edit clause: at least 80% of them. */
+  acEdits: Verdict;
 }
+
+/** A ledger line that is a write: a strategy or playbook call, or one of its tool rounds. */
+const isWrite = (c: Pick<CallLine, 'kind'>) => c.kind === 'strategy' || c.kind === 'playbook';
 
 /** The phase this state is ending, named, if its tick limit cut it off while it was still open. */
 export function cutOffPhase(state: GameState): string | null {
@@ -188,6 +202,15 @@ export function trialReport(input: TrialInput): TrialReport {
     atOrOverBudget: tableUsd.filter((u) => u >= input.gameBudgetUsd).length,
   };
   const all = shareOf(asked);
+  const writeLines = calls.filter(isWrite);
+  const writes = {
+    calls: writeLines.filter((c) => c.outcome !== 'tool').length,
+    late: writeLines.filter((c) => c.outcome === 'late').length,
+    toolRounds: writeLines.filter((c) => c.outcome === 'tool').length,
+    usd: sum(writeLines.map((c) => c.usd)),
+  };
+  const took = finished.flatMap((g) => g.playbooks.filter((p) => g.smart.includes(p.seat)));
+  const edits = { model: took.filter((p) => p.by === 'llm').length, of: took.length };
 
   // A silent seat-month, a stall or a game at its budget fails outright; the rest is judged on a complete run only.
   const ac1 = input.keyed
@@ -222,6 +245,9 @@ export function trialReport(input: TrialInput): TrialReport {
     topPicks,
     ac1,
     ac2,
+    writes,
+    edits,
+    acEdits: input.keyed ? verdict({ fails: false, proven: complete && edits.of > 0, holds: 5 * edits.model >= 4 * edits.of }) : 'n/a',
   };
 }
 
@@ -233,6 +259,8 @@ export const capText = (x: number) => `$${Number(x.toFixed(2)) === x ? x.toFixed
 const verdictText = (v: Verdict) => v.toUpperCase();
 const reasonsText = (f: Record<FallbackReason, number>) =>
   `too slow ${f['too slow']}, busy ${f.busy}, budget ${f.budget}, off-list ${f['off-list']}, unreadable ${f.unreadable}, error ${f.error}`;
+const writesText = (w: TrialReport['writes']) =>
+  `${w.calls}, late ${w.late}${w.calls === 0 ? '' : ` (${((100 * w.late) / w.calls).toFixed(1)}%)`}, tool rounds ${w.calls === 0 ? 'n/a' : (w.toolRounds / w.calls).toFixed(2)} a call, ${usdText(w.usd)}`;
 const monthText = (c: MonthCounts, of: number) => `min ${c.min}, median ${c.median}, months with none ${c.silent} of ${of}`;
 
 /** The report as printed: the run, the figures for each acceptance criterion, then one verdict line for each. */
@@ -269,6 +297,9 @@ export function renderTrialReport(r: TrialReport): string[] {
       ['refused calls (ledger)', String(r.refusedCalls)],
       ['lines per Smart seat-month', monthText(r.lines, r.lines.seatMonths)],
       ['model-written lines per Smart seat-month', monthText(r.modelLines, r.lines.seatMonths)],
+      ['UBER-AC-A, Claude playbooks', ''],
+      ['strategy and playbook calls', writesText(r.writes)],
+      ["playbooks with Claude's edits", pct(r.edits)],
       ['UBER-AC-2', ''],
       ['ledger $ per Smart seat-game', `max ${usdText(r.seatGameUsd.max)}, mean ${usdText(r.seatGameUsd.mean)}`],
       [
@@ -284,5 +315,6 @@ export function renderTrialReport(r: TrialReport): string[] {
     `UBER-AC-1 ${verdictText(r.ac1)}: ${pct(r.asked.all)} of asked Smart decisions by the model (needs 80%), ${r.lines.silent} Smart seat-months without a line (needs 0)`,
     `UBER-AC-2 ${verdictText(r.ac2)}: at most ${usdText(r.gameUsd.max)} per game for all Smart seats together ` +
       `(needs under the game budget ${capText(r.gameBudgetUsd)}), ${r.stalls.unfinished.length + r.stalls.cutOff.length} stalls (needs 0)`,
+    `UBER-AC-A edits ${verdictText(r.acEdits)}: ${pct(r.edits)} of the playbooks that took effect carry Claude's accepted edits (needs at least 80%)`,
   ];
 }
