@@ -221,6 +221,11 @@ function fund(state: GameState, colony: Colony, project: Project): void {
 }
 
 /** A good's key as words for a message: rareEarth reads "rare earth". */
+/** A good's name in a sentence: "rare earth", "food". */
+export function goodWords(good: Good): string {
+  return words(good);
+}
+
 function words(good: Good): string {
   return good.replace(/[A-Z]/g, (c) => ` ${c.toLowerCase()}`);
 }

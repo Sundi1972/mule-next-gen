@@ -1,5 +1,5 @@
 /** The colony as every screen sees it: gauges, fund, prestige objects and plaques. Public, so one view serves all. */
-import { colonyGauges, commissionRefusal, lastGauges, PRESTIGE, type GameState, type PrestigeId } from '@mule/engine';
+import { colonyGauges, commissionRefusal, lastGauges, moodBand, PRESTIGE, type GameState, type PrestigeId } from '@mule/engine';
 import type { ColonyCatalogueView, ColonyProjectView, ColonyView } from '@mule/protocol';
 
 const IDS = Object.keys(PRESTIGE) as PrestigeId[];
@@ -12,7 +12,7 @@ export function colonyView(state: GameState): ColonyView | null {
   const last = lastGauges(state);
   const ledger = [...state.history].reverse().find((r) => r.ledger)?.ledger ?? null;
   return {
-    gauges: { wealth: now.wealth, environment: state.air, prestige: now.prestige, happiness: now.happiness, band: null },
+    gauges: { wealth: now.wealth, environment: state.air, prestige: now.prestige, happiness: now.happiness, band: now.happiness === null ? null : moodBand(now.happiness) },
     lastGauges: last && { wealth: last.wealth, prestige: last.prestige, happiness: last.happiness },
     fund: state.treasury.money,
     ledger: ledger && structuredClone(ledger),
@@ -40,6 +40,7 @@ export function colonyView(state: GameState): ColonyView | null {
       const why = commissionRefusal(state, id);
       return { id, name: row.name, credits: row.credits, goods: { ...row.goods }, buildMonths: row.buildMonths, needsPlot: row.needsPlot, prestige: row.prestige, upkeep: row.upkeep, commissionable: why === null, why };
     }),
+    strike: colony.strike && colony.strike.month === state.month ? { good: colony.strike.good, cost: colony.strike.cost, paid: colony.strike.paid } : null,
     score: null,
   };
 }
