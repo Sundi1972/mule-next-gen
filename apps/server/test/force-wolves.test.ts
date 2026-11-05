@@ -11,7 +11,7 @@ import { fakeContext, readyAll, seats } from './fake-context.js';
  */
 const TICK = DEV_STEER.tickMs;
 
-function inDevelopment(options: { forceWolves?: boolean }) {
+function inDevelopment(options: { forceWolves?: boolean; devSteer?: boolean; politics?: boolean }) {
   const fake = fakeContext();
   const game = new MuleGame(fake.ctx, 7, { devSteer: true, ...options });
   game.start(seats);
@@ -35,7 +35,8 @@ describe('forceWolves: a pack at once, for tests', () => {
 
     const plain = inDevelopment({});
     plain.advance(TICK);
-    expect(plain.floor().colonists.filter((c) => c.space === 'map' && c.encounter).length, "WOLVES' own chance: 1% a tick").toBeLessThan(out.length);
+    // WOLVES' own chance (1% a tick): on this seed and tick nobody meets one.
+    expect(plain.floor().colonists.filter((c) => c.space === 'map' && c.encounter)).toEqual([]);
   });
 
   it('the cooldown is kept: a colonist who got away meets no second pack before WOLVES.cooldownSeconds', () => {
@@ -56,10 +57,16 @@ describe('forceWolves: a pack at once, for tests', () => {
     for (const tick of met) expect((tick - first) * TICK, 'a second pack only past the cooldown').toBeGreaterThanOrEqual(WOLVES.cooldownSeconds * 1_000);
   });
 
-  it('a recorded game keeps the option, so its replay is forced the same way', () => {
+  it('a recorded game keeps the option, and a game built from its options, as the replay builds one, is forced', () => {
     const fake = fakeContext();
     const { game, recorder } = createRecordedGame({ ctx: fake.ctx, seed: 7, options: { devSteer: true, forceWolves: true, politics: false }, dir: null });
     game.start(seats);
     expect(recorder.record.options).toMatchObject({ forceWolves: true });
+    // replay.ts builds its MuleGame from `{ ...record.options }`: the same options force the same packs.
+    const replayed = inDevelopment({ ...recorder.record.options });
+    replayed.advance(TICK);
+    const out = replayed.floor().colonists.filter((c) => c.space === 'map');
+    expect(out.length).toBeGreaterThan(0);
+    expect(out.every((c) => c.encounter)).toBe(true);
   });
 });
