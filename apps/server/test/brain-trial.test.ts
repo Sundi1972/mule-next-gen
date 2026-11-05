@@ -698,6 +698,42 @@ describe.runIf(process.env.MULE_FULL === '1')('brain:trial', () => {
     expect(printed).toContain('UBER-AC-2 PASS: at most $0.99990 per game for all Smart seats together (needs under the game budget $1.00), 0 stalls (needs 0)');
   });
 
+  it('UBER-AC-A (result): the report gives Smart seats against strategist seats over finished games: mean final score, games a Smart seat won, mean rank; no verdict (the bar is WS1\'s)', () => {
+    const base = (over: Partial<TrialGame>): TrialGame => ({
+      id: 'g',
+      end: 'over',
+      months: 12,
+      smart: ['ai0', 'ai1'],
+      decisions: [],
+      lines: { ai0: [1], ai1: [1] },
+      modelLines: { ai0: [1], ai1: [1] },
+      cutOff: [],
+      countedUsd: 0.1,
+      settledCalls: 0,
+      playbooks: [],
+      scores: {},
+      ...over,
+    });
+    const games = [
+      // A Smart seat wins, the other Smart seat is last.
+      base({ id: 'a', scores: { ai0: 900, ai1: 300, ai2: 600, ai3: 500 } }),
+      // A strategist seat wins; the Smart seats are 2nd and 3rd.
+      base({ id: 'b', scores: { ai0: 700, ai1: 600, ai2: 800, ai3: 100 } }),
+      // A tie for first between a Smart and a strategist seat counts as a Smart win and shares rank 1.
+      base({ id: 'c', scores: { ai0: 500, ai1: 200, ai2: 500, ai3: 400 } }),
+      // A crashed game is left out.
+      base({ id: 'd', end: 'crashed', scores: { ai0: 0, ai1: 0, ai2: 9_999, ai3: 9_999 } }),
+    ];
+    const r = trialReport({ keyed: true, planned: 4, stopped: 'done', smartPerGame: 2, seatsPerGame: 4, cap: 2, gameBudgetUsd: 1, games, calls: [], playbooks: true });
+    expect(r.results).toEqual({
+      games: 3,
+      smartWins: 2,
+      smart: { meanScore: (900 + 300 + 700 + 600 + 500 + 200) / 6, meanRank: (1 + 4 + 2 + 3 + 1 + 4) / 6 },
+      strategist: { meanScore: (600 + 500 + 800 + 100 + 500 + 400) / 6, meanRank: (2 + 3 + 1 + 4 + 1 + 3) / 6 },
+    });
+    expect(renderTrialReport(r)).toContainEqual(expect.stringMatching(/^Smart seats against strategist seats\s+won 2 of 3 games; mean score 533 against 483; mean rank 2\.50 against 2\.33$/));
+  });
+
   it("T-AC-A4 (report): rows for the strategy and playbook calls, the edit share of the playbooks that took effect, late writes, tool rounds per call, and the edit verdict at 80%", () => {
     const took = (llm: number, of: number) => Array.from({ length: of }, (_, i) => ({ seat: i % 2 ? 'ai1' : 'ai0', month: 1 + Math.floor(i / 2), by: i < llm ? ('llm' as const) : ('engine' as const) }));
     const game = (over: Partial<TrialGame> = {}): TrialGame => ({
