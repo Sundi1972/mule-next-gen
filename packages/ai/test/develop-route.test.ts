@@ -606,7 +606,7 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
     });
 
     // trace-allow: HC-9, the spec's own failure-mode id for a draft or validator error (spec §4, "Retry, poison, page?"); trace-check reads no HC- ids
-    it("HC-9: a stale MULE whose replacement draft throws is logged with the seat and dropped, and the route goes on to the pub", () => {
+    it("HC-9: a stale MULE whose replacement draft throws is logged with the seat and dropped, its steps 'skipped', and the route goes on to the pub", () => {
       const { state, plots } = development(2);
       const [stale, spare] = plots as [Tile, Tile];
       stale.owner = ME;
@@ -618,7 +618,8 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
       hand.follow(state.month, play0);
       const { logged } = throwingDraft(() => play(runner, state, hand));
       const log = JSON.stringify(hand.done);
-      expect(hand.routeLog(state).steps.filter((s) => s.note === `stale: plot ${indexOf(state, stale)}`).map((s) => s.outcome), log).toEqual(['replaced', 'replaced', 'replaced']);
+      // The re-pick plays as 'stop': nothing replaces the MULE, so its steps are skipped, not replaced.
+      expect(hand.routeLog(state).steps.filter((s) => s.note === `stale: plot ${indexOf(state, stale)}`).map((s) => s.outcome), log).toEqual(['skipped', 'skipped', 'skipped']);
       expect(logged, log).toEqual([expect.stringMatching(/^AI seat ai0: .*draft broke$/)]);
       expect(hand.done.some((e) => e.action.type === 'buyMule' && e.ok), 'no MULE bought in its place').toBe(false);
       expect(spare.outfit).toBeNull();
