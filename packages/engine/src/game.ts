@@ -666,7 +666,7 @@ export function colonyScore(state: GameState): ColonyScore | null {
   return colonyScoreOf({ wealth: colonyWealth(state), air: state.air, prestige: colonyPrestige(state), happiness: state.colony.happiness });
 }
 
-/** A player's standing at the end (RULE-25): their Worth, and beside it, never in it, what their plaques hold. */
+/** A player's standing at the end (RULE-25): their Worth, which counts their plaques 1:1 (G-5, Heiko 5 Nov), and what the plaques hold. */
 export function playerStanding(state: GameState, playerId: string): { worth: number; plaques: number } {
   const plaques = (state.colony?.projects ?? []).reduce((sum, p) => sum + (p.plaque[playerId] ?? 0), 0);
   return { worth: score(state, playerId), plaques };

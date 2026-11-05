@@ -12,6 +12,7 @@ import {
   donate,
   electionDone,
   GAME,
+  GOOD_CONFIG,
   GOODS,
   newPolitics,
   grantDone,
@@ -280,5 +281,19 @@ describe('T-AC-6: score parts add up and score() is unchanged', () => {
     const parts = scoreParts(state, 'a');
     expect(parts.money + parts.goods + parts.land + parts.muleValue + parts.office + parts.donated).toBe(parts.total + parts.cut);
     expect(scoreParts(state, 'b').donated, "only b's own plaque lines").toBe(50);
+  });
+
+  it('G-5: a gift of goods counts at its reference price, not today\'s store price: 1 Electronics posted 20 below reference raises Worth by 20', () => {
+    const state = workedExample({ money: 2140, air: 0, plots: 6, mules: 5 });
+    state.politics = { ...state.politics!, governor: 'a', election: null };
+    commission(state, 'a', 'hospital');
+    const ref = GOOD_CONFIG.electronics.refPrice;
+    state.store.posted.electronics = ref - 20;
+    player(state, 'a').stock.electronics = 1;
+    const before = scoreParts(state, 'a');
+    expect(allPrices(state).electronics, 'Worth reads the posted price').toBe(ref - 20);
+
+    donate(state, 'a', 'hospital', 0, { electronics: 1 });
+    expect(scoreParts(state, 'a')).toMatchObject({ goods: before.goods - (ref - 20), donated: ref, total: before.total + 20 });
   });
 });
