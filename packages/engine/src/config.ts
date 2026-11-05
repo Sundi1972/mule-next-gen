@@ -223,7 +223,8 @@ export const UPKEEP = {
   energyUse: { food: 1, water: 1, energy: 1, smithore: 2, crystite: 2, rareEarth: 2 } satisfies Record<RawGood, number>,
   /**
    * Share of its output a plot turned off for want of Energy makes, rounded half up (Heiko, 5 Nov: 20%). A turned-off
-   * factory makes it from the same share of its non-Energy inputs, rounded up (PM, 5 Nov: nothing from nothing).
+   * factory makes it from the same share of its non-Energy inputs, rounded up (PM, 5 Nov: nothing from nothing), and
+   * takes none when its share of output rounds to 0 (PM, 5 Nov: nothing spent for nothing).
    */
   offOutputShare: 0.2,
   /**

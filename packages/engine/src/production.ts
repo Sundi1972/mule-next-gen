@@ -258,8 +258,8 @@ function feedOf(good: ProcessedGood): Partial<Stock> {
  *    whose non-Energy inputs are not in stock is not in the list: it waits for the second pass (5);
  * 3. every other working raw plot pays its Energy, and a farm whose owner is short of Water produces half;
  * 4. factories convert inputs from the owner's stock, Alloy first because Electronics needs it; one turned off
- *    makes its share from the same share of its non-Energy inputs (rounded up), or 0 without them, and gains no
- *    experience that month;
+ *    makes its share from the same share of its non-Energy inputs (rounded up), or 0 without them (and takes none
+ *    when its share of output rounds to 0), and gains no experience that month;
  * 5. the second pass, in the same factory order: a factory left out of the list runs on the inputs this month made
  *    and the Energy left over; with its inputs but too little Energy it is turned off; without its inputs it does not
  *    run, as before;
@@ -327,9 +327,11 @@ export function runProduction(state: GameState): {
     const feed = feedOf(good);
     const parts: Part[] = [{ why: 'factory', delta: fit.output }];
     if (isOff) {
-      // Turned off it still files its line: the share it made, or 0 when the factories before it took its inputs.
+      // Turned off it still files its line: the share it made, or 0 when the factories before it took its inputs. A
+      // share that rounds to 0 takes no inputs: nothing is spent for nothing.
       const share = Object.fromEntries(Object.entries(feed).map(([g, q]) => [g, offInput(q)]));
-      if (hasStock(owner.stock, share)) {
+      if (offShare(fit.output) === 0) parts.push({ why: 'energyOff', delta: 0 - fit.output });
+      else if (hasStock(owner.stock, share)) {
         addStock(owner.stock, share, -1);
         switchOff(parts);
       } else parts.push({ why: 'energyOff', delta: 0 - fit.output });
