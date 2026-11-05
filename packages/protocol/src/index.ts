@@ -28,8 +28,6 @@ export type MuleIntent =
   | { type: 'walk'; dir: 'up' | 'down' | 'stop' }
   /** Goods auction, during the walk: one tap on Up or Down, one price step (A-6, UX audit G-2). */
   | { type: 'walkStep'; dir: 'up' | 'down' }
-  /** Goods auction, at the store's or the ship's line: trade this many units with it, then stop (A-6, UX audit G-1). */
-  | { type: 'lineTrade'; units: number }
   /** Planning: put a plot, or the MULE on one, up for the land auction, with a minimum and what happens if nobody bids it. */
   | { type: 'list'; item: { kind: 'plot' | 'mule'; x: number; y: number }; minimum: number; unsold: 'store' | 'keep' }
   /** Planning: take one of your listings back. */
@@ -358,14 +356,8 @@ export interface WalkerView {
   done: boolean;
   /** Their stock of the good up now, live as units trade; public like the status table. */
   units: number;
-  /** The house line they stand at ('store' or 'ship'), or null: there nothing trades until they choose how many (A-6). */
+  /** The house line they stand at ('store' or 'ship'), or null. Standing there, they trade with it by themselves (RULE-1). */
   line?: string | null;
-  /**
-   * What they chose at that line: units to trade, units moved so far, and what those cost or brought in after the
-   * sales tax. A finished choice
-   * (traded = units) stays until they walk off the line, so the phone can say what was traded. Null before choosing.
-   */
-  order?: { house: string; units: number; traded: number; cr: number } | null;
 }
 
 /** Units changing hands right now: between two players, or with the store or the ship ('store', 'ship'). */
@@ -396,7 +388,7 @@ export interface AuctionView {
   storeForSale: number;
   /** What the export ship pays for the next unit, while it is in port and wants this good. */
   shipPays: number | null;
-  /** What it pays for each of the units it still wants, next first (it pays a little less for each): the phone's "Sell 2 for 230 cr" at its line (A-6). */
+  /** What it pays for each of the units it still wants, next first (it pays a little less for each). */
   shipQuote?: number[];
   /** The board's price range: it grows when a walker goes past it. */
   lo: number;
@@ -624,11 +616,6 @@ export interface MuleView {
   eventShow?: EventShowView | null;
   /** Offices, tax, vote weights and the election; null when the game plays without politics. */
   politics: PoliticsView | null;
-  /**
-   * While month 1's development clock stands full: the seats it still waits for, whose first MULE is still to come, in
-   * seat order. Absent once it runs, and in every other phase and month.
-   */
-  clockWaitsFor?: string[];
 }
 
 export const PLAYER_COLORS = ['#e4572e', '#3a86ff', '#2bb673', '#f2a541', '#9b5de5', '#00b4d8'];

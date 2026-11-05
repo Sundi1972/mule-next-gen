@@ -113,6 +113,9 @@ export async function claimAPlot(phone: Page, timeoutMs: number, promise: string
       // Waits until a free plot is lit, which enables the button.
       await claim.click({ timeout: Math.max(1, deadline - Date.now()) });
       await unclaimed.waitFor({ state: 'hidden', timeout: 2 * GRANT_TICK_MS });
+      // Claimed. With one claim a grant (5 Nov) the last phone's claim ends the grant, so the screen may already have
+      // moved on: that is the claim landing, not the grant ending without it.
+      return;
     } catch (err) {
       if (!(err instanceof playwrightErrors.TimeoutError)) throw err;
     }

@@ -1,116 +1,129 @@
 import { describe, expect, it } from 'vitest';
-import { advancePhase, createGame, RuleError, shipPrice, stepAuction, WALK, type GameState, type Good, type Trade } from '@mule/engine';
+import { advancePhase, createGame, lineOf, RuleError, shipLine, shipPrice, storeBuyLine, storeSellLine, stepAuction, WALK, type GameState, type Good, type Trade } from '@mule/engine';
 import type { AiAction } from '../src/actions.js';
 import { applyAction } from '../src/play.js';
 import { AiSeat } from '../src/seat.js';
 
 /**
- * A-6 (UX audit G-1): at the store's or the ship's line nothing trades until a seat says how many. The AI hands say
- * how many at the line, or step off; and a refused choice is not sent again and again.
+ * The auto-trade amendment's C4 (docs/specs/2026-11-05-ws3-auction-auto-trade.md): at the store's or the ship's line
+ * units trade by themselves, so the AI hands stand there while they move and step off once they have about what they
+ * wanted; and every seat takes part as a buyer, switching only to sell, never passing.
  */
 interface Sent {
   seat: string;
   good: Good;
   action: AiAction;
   refused: boolean;
-  /** Whether the seat's own choice at a line still had units to move when it sent this. */
-  running: boolean;
 }
 
-/** One month's auction with four AI seats, every action logged with whether the rules refused it. `refuse` stands in for rules that refuse an action. */
-function auction(seed: number, arrange: (state: GameState) => void, refuse: (action: AiAction) => boolean = () => false) {
+/** One month's auction with four AI seats, every action logged with whether the rules refused it. */
+function auction(seed: number, arrange: (state: GameState) => void) {
   const state = createGame({ seed, players: [0, 1, 2, 3].map((i) => ({ id: `ai${i}`, name: `AI${i}`, isAi: true })) });
   const seats = state.players.map((p, i) => new AiSeat({ id: p.id, name: p.name, persona: 'trader', level: 'trader', seed: seed * 10 + i }));
   while (state.phase !== 'auction') advancePhase(state);
   arrange(state);
   const sent: Sent[] = [];
   const trades: Trade[] = [];
+  /** Per seat and good: the most units it said it wanted to end with during the walk, and what it ended with. */
+  const goals = new Map<string, { goal: number; end: number }>();
+  /** Steps off a house line while the units it would still trade there had not moved: each one a unit given up. */
+  const abandoned: { seat: string; good: Good; wanted: number }[] = [];
+  const wantAtLine = new Map<string, { want: number; house: string; price: number }>();
+  const unitsAt = (s: AiSeat, line: { house: string; price: number }, side: string) => {
+    const hand = (s as unknown as { auction: { unitsAt: (st: GameState, side: string, l: typeof line) => number } }).auction;
+    return hand.unitsAt(state, side, line);
+  };
   for (let i = 0; i < 40_000 && state.auction!.stage !== 'over'; i++) {
     for (const s of seats)
       s.auctionTick(state, WALK.tickMs, (action) => {
         const good = state.auction!.good!;
-        const order = state.auction!.walkers.find((w) => w.id === s.id)?.order;
-        const running = order !== undefined && order.traded < order.units;
         try {
-          if (refuse(action)) throw new RuleError('refused by the test');
           applyAction(state, s.id, action);
-          sent.push({ seat: s.id, good, action, refused: false, running });
+          sent.push({ seat: s.id, good, action, refused: false });
           return true;
         } catch (err) {
           if (!(err instanceof RuleError)) throw err;
-          sent.push({ seat: s.id, good, action, refused: true, running });
+          sent.push({ seat: s.id, good, action, refused: true });
           return false;
         }
       });
+    const a = state.auction!;
+    if (a.stage === 'walk' && a.good)
+      for (const s of seats) {
+        const goal = s.debug().auction?.goal;
+        const key = `${s.id}:${a.good}`;
+        const end = state.players.find((p) => p.id === s.id)!.stock[a.good];
+        if (goal !== null && goal !== undefined) goals.set(key, { goal: Math.max(goal, goals.get(key)?.goal ?? 0), end });
+        else if (goals.has(key)) goals.get(key)!.end = end;
+      }
     trades.push(...stepAuction(state, WALK.tickMs));
+    const b = state.auction!;
+    if (b.stage !== 'walk' || !b.good) continue;
+    for (const s of seats) {
+      const w = b.walkers.find((x) => x.id === s.id)!;
+      const line = lineOf(state, s.id);
+      const before = wantAtLine.get(s.id);
+      // Only a walk off a line that is still there counts: a house selling out or a good closing is not the hand's stop.
+      const stillThere = before && (before.house === 'store' ? (w.side === 'buyer' ? storeSellLine(state) : storeBuyLine(state)) : shipLine(state)) === before.price;
+      if (!line && before && before.want > 0 && stillThere) abandoned.push({ seat: s.id, good: b.good, wanted: before.want });
+      wantAtLine.set(s.id, line ? { want: unitsAt(s, line, w.side), ...line } : { want: 0, house: '', price: 0 });
+    }
   }
-  return { sent, trades };
+  return { sent, trades, goals, abandoned };
 }
 
-describe('A-6: the AI says how many at a house line', () => {
-  it('B-AC: an AI short of Food buys it from the store by choosing how many at its line', () => {
-    const { sent, trades } = auction(5, (state) => {
+describe('C4: the AI hands play the self-trading auction', () => {
+  it('B-AC-2 (AI): an AI short of Food buys it from the store by standing at its line, with nothing to choose', () => {
+    const { sent, trades, goals } = auction(5, (state) => {
       state.store.stock.food = 200;
       for (const p of state.players) p.stock.food = 0;
       for (const p of state.players) p.money = 2_000;
     });
     const fromStore = trades.filter((t) => t.good === 'food' && t.seller === 'store');
     expect(fromStore.length).toBeGreaterThan(0);
-    const chose = sent.filter((s) => s.good === 'food' && s.action.type === 'lineTrade' && !s.refused);
-    expect(chose.length).toBeGreaterThan(0);
-    // Every seat that bought from the store chose at its line first, and got exactly the units it chose: it never walks
-    // away from its own running choice, and the store has plenty.
-    for (const seat of new Set(chose.map((s) => s.seat))) {
-      const units = chose.filter((s) => s.seat === seat).reduce((n, s) => n + (s.action.type === 'lineTrade' ? s.action.units : 0), 0);
-      expect(fromStore.filter((t) => t.buyer === seat).length, seat).toBe(units);
+    // It steps off about where it meant to: never more than a few units past the most it wanted to end with.
+    for (const seat of new Set(fromStore.map((t) => t.buyer))) {
+      const g = goals.get(`${seat}:food`)!;
+      expect(g.end, `${seat} wanted to end with ${g.goal}`).toBeLessThanOrEqual(g.goal + 3);
     }
-    // While its own choice runs, a seat sends no walk: walking would stop the units it chose.
-    expect(sent.filter((s) => s.action.type === 'walk' && s.running)).toEqual([]);
+    expect(sent.some((s) => s.action.type === 'declare' && s.refused)).toBe(false);
   });
 
-  it('B-AC: an AI with spare Smithore sells to the store by choosing how many at its line', () => {
-    const { trades } = auction(6, (state) => {
+  for (const seed of [5, 7, 11]) {
+    it(`C4: an AI stays at a house's line until the units it still wants there have traded, never stepping off first (seed ${seed})`, () => {
+      const { abandoned } = auction(seed, (state) => {
+        state.store.stock.food = 200;
+        for (const p of state.players) p.stock.food = 0;
+        for (const p of state.players) p.money = 2_000;
+      });
+      expect(abandoned).toEqual([]);
+    });
+  }
+
+  it('B-AC-1 (AI): an AI with spare Smithore switches to sell and sells to the store at its line', () => {
+    const { sent, trades } = auction(6, (state) => {
       state.players[0]!.stock.smithore = 40;
     });
+    expect(sent.some((s) => s.seat === 'ai0' && s.good === 'smithore' && s.action.type === 'declare' && s.action.side === 'seller')).toBe(true);
     expect(trades.some((t) => t.seller === 'ai0' && t.buyer === 'store')).toBe(true);
   });
 
   for (const seed of [1, 2, 3, 4]) {
-    it(`no AI loops on a refusal: a refused choice at the line is not sent again until something changed (seed ${seed})`, () => {
+    it(`RULE-2 (AI): no seat ever declares Pass, and none sends a refused side (seed ${seed})`, () => {
       const { sent } = auction(seed, (state) => {
         state.store.stock.food = 200;
-        state.players[1]!.money = 1; // can't pay for one: walks to the line? then it must not ask over and over
+        state.players[1]!.money = 1;
         state.players[0]!.stock.smithore = 25;
       });
-      const lineTrades = sent.filter((s) => s.action.type === 'lineTrade');
-      const refused = lineTrades.filter((s) => s.refused);
-      expect(refused.length, JSON.stringify(refused.slice(0, 5))).toBeLessThanOrEqual(2);
-      // A seat chooses a handful of times per good at most, never once a tick.
-      const per = new Map<string, number>();
-      for (const s of lineTrades) per.set(`${s.seat}:${s.good}`, (per.get(`${s.seat}:${s.good}`) ?? 0) + 1);
-      for (const [k, n] of per) expect(n, k).toBeLessThanOrEqual(20);
+      const declares = sent.filter((s) => s.action.type === 'declare');
+      expect(declares.filter((s) => s.action.type === 'declare' && s.action.side === 'pass')).toEqual([]);
+      expect(declares.filter((s) => s.refused)).toEqual([]);
     });
   }
 
-  it('no AI loops on a refusal: when the rules refuse every choice at the line, a seat asks once for each state it stands in, never once a tick', () => {
-    const { sent } = auction(
-      5,
-      (state) => {
-        state.store.stock.food = 200;
-        for (const p of state.players) p.stock.food = 0;
-      },
-      (action) => action.type === 'lineTrade',
-    );
-    const asked = sent.filter((s) => s.action.type === 'lineTrade');
-    expect(asked.length).toBeGreaterThan(0);
-    const per = new Map<string, number>();
-    for (const s of asked) per.set(`${s.seat}:${s.good}`, (per.get(`${s.seat}:${s.good}`) ?? 0) + 1);
-    for (const [k, n] of per) expect(n, k).toBeLessThanOrEqual(2);
-  });
-
-  it("an AI never walks while its own choice runs, even at the ship's line where the price falls under it", () => {
+  it("sells to the export ship at its line as the ship's price falls, on every seed tried", () => {
     for (const seed of [1, 2, 3, 4, 5, 6]) {
-      const { sent, trades } = auction(seed, (state) => {
+      const { trades } = auction(seed, (state) => {
         state.ship = { arrives: state.month, goods: ['crystite', 'smithore'], hold: { crystite: 20, smithore: 20 }, bought: {} };
         for (const p of state.players) {
           p.stock.crystite = 15;
@@ -118,11 +131,10 @@ describe('A-6: the AI says how many at a house line', () => {
         }
       });
       expect(trades.some((t) => t.buyer === 'ship'), `seed ${seed}: the ship buys`).toBe(true);
-      expect(sent.filter((s) => s.action.type === 'walk' && s.running), `seed ${seed}`).toEqual([]);
     }
   });
 
-  it("F3: at the ship's line a seller counts the ship's falling price per unit, never selling a unit below what it is worth", () => {
+  it("F3: at the ship's line a seller counts the ship's falling price per unit, never meaning to sell a unit below what it is worth", () => {
     const state = createGame({ seed: 3, players: [0, 1, 2, 3].map((i) => ({ id: `ai${i}`, name: `AI${i}`, isAi: true })) });
     while (state.phase !== 'auction') advancePhase(state);
     state.treasury.salesTax = 0;
@@ -133,7 +145,7 @@ describe('A-6: the AI says how many at a house line', () => {
     const seat = new AiSeat({ id: 'ai0', name: 'AI0', persona: 'trader', level: 'trader', seed: 1 });
     const hand = (seat as unknown as { auction: Record<string, unknown> }).auction;
     const prices = [0, 1, 2, 3, 4].map((k) => shipPrice({ ...state, ship: { ...state.ship, bought: { crystite: k } } }, 'crystite')!);
-    // Each unit is worth just under the ship's 3rd price: it sells 3 at the falling prices, not all 5 at the first.
+    // Each unit is worth just under the ship's 3rd price: it means to sell 3 at the falling prices, not all 5 at the first.
     const worth = prices[2]! - 0.5;
     hand.plan = { values: { keep: [worth, worth, worth, worth, worth] } };
     hand.trade = { side: 'seller', keep: 0 };

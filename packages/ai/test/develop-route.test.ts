@@ -185,9 +185,15 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
     it("T-AC-7 example 1 (rows 7, 8): the draft's route on an unchanged state plays every step done, with no notes", () => {
       const { state, plots } = development(2);
       for (const t of plots) t.owner = ME;
+      // Its plots' ground already known, so the draft scouts none: an own route with analyses re-picks its MULEs after
+      // them (AM-27, its own rows below), and under the 5 Nov start stock (2 Food, 2 Energy) these plots' best two uses
+      // are close enough that the draft would analyse them.
+      me(state).analysed.push(...plots.map((t) => indexOf(state, t)));
       const { seat, hand } = seatAndHand();
       const money = me(state).money;
-      hand.follow(state.month, drafted(seat, state));
+      const route = drafted(seat, state);
+      expect(route.part.route.some((s) => s.act === 'analyse'), 'a draft that scouts nothing').toBe(false);
+      hand.follow(state.month, route);
       play(runner, state, hand);
       const { steps, usedMs } = hand.routeLog(state);
       const log = JSON.stringify(hand.done);

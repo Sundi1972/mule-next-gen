@@ -4,17 +4,18 @@
  * Run with `pnpm --filter @mule/web e2e`; replay a red run's map with `MULE_E2E_SEED=<seed>`.
  */
 import { existsSync } from 'node:fs';
-import { EVENTS, WALK } from '@mule/engine';
+import { EVENTS, WALK, type GameState } from '@mule/engine';
 import { errors as playwrightErrors, type BrowserContext, type Page } from 'playwright';
 import { PHASE_MS } from '../../server/src/mule-game.js';
-import { check, CLAIM_MS, claimAPlot, doneWithLand, headerSlot, held, launch, PHONE, startServer, TV, type AuctionSteps, type GameStepContext } from './harness';
+import type { MuleServer } from '../../server/src/server.js';
+import { check, CLAIM_MS, claimAPlot, doneWithLand, held, launch, PHONE, startServer, TV, type AuctionSteps, type GameStepContext } from './harness';
 import { planningIsTheHub } from './hub-steps';
 import { gameOverIsInCredits, theLeagueTableAtTheMonthEnd, theMonthEndHoldsForThePhone } from './month-end-steps';
 import { ELECTION_WAIT_MS, readyThroughTheElection } from './politics-steps';
 import { checkTheShow, watchShow, type ShowWatch } from './production-steps';
-import { fedPlayerSeesNoHunger, hungryPlayerSeesHerPace, makeHungry, outfittersOpenWithAnEmptyMule, storeIsOneHallWithTwoRows, theCorralGlowsWithNoMule, theLedMuleLightsUp } from './store-steps';
+import { makeHungry } from './store-steps';
 import { specialFieldsShowTheirGlyphs } from './special-steps';
-import { doneThroughTheElection, doubleTapZoomsToYourLand, moveDialogOpensInProduction, moveDialogOutlivedThePhase, noZoomBeforeYourFirstPlot, thePhonePicksRose, thePhoneShowsItsSelectedPlot, theSeatMovesToAnotherDevice, theTvDrawsRose, theTvShowsWhoOwnsEachPlot, watchIntents, zoomButtonOnceYouOwnAPlot } from './table-steps';
+import { doneThroughTheElection, moveDialogOpensInProduction, moveDialogOutlivedThePhase, noZoomBeforeYourFirstPlot, thePhonePicksRose, theSeatMovesToAnotherDevice, theTvDrawsRose, theTvShowsWhoOwnsEachPlot, watchIntents, zoomButtonOnceYouOwnAPlot } from './table-steps';
 
 /** Loaded by a path held in a variable, so tsc never resolves a file that may not exist yet. */
 async function loadAuctionSteps(): Promise<AuctionSteps> {
@@ -123,7 +124,7 @@ try {
   await tvGame.locator('li').filter({ hasText: 'Heiko' }).getByRole('img', { name: 'Mollox' }).first().waitFor({ timeout: 3_000 });
   check((await tvGame.getByRole('img', { name: 'Zipwing' }).count()) === 0, 'B-AC-1: nobody in the TV game plays the seat-1 default, Zipwing');
   check((await tvGame.getByRole('img', { name: 'Bramblet' }).count()) >= 1, 'B-AC-1: the TV game still shows the first AI as a Bramblet');
-  await theTvDrawsRose(ctx, 'planning');
+  const rose = await theTvDrawsRose(ctx, 'planning');
   await specialFieldsShowTheirGlyphs(ctx);
   await readyThroughTheElection(phone, READY_MS);
   const claim = phone.getByRole('button', { name: /CLAIM/ });
@@ -142,22 +143,17 @@ try {
 
   await pastTheLandGrant(phone);
   await steps.landAuction?.({ phone, tv, check }, 1);
-  // B-AC-10 and B-AC-9's fed case as development starts; the phone buys a MULE through the start-of-turn card.
-  await storeIsOneHallWithTwoRows(phone, PAST_THE_GRANT_MS);
-  // B-AC-15 and B-AC-16: the store says what to do next, and the MULE is a character.
-  await theCorralGlowsWithNoMule(phone, server, code);
-  await fedPlayerSeesNoHunger(phone, server, code);
-  await outfittersOpenWithAnEmptyMule(phone);
-  console.log(`store hall fills the stage: ${await theLedMuleLightsUp(phone, server, code)}`);
-  await checkOwnsAPlot(phone);
-  // B-AC-9 (WS4, plot look A): with a plot of its own selected and its MULE installed, then the TV's map.
-  console.log(`plots, phone: ${await thePhoneShowsItsSelectedPlot(ctx)}`);
-  console.log(`zoom: ${await doubleTapZoomsToYourLand(ctx, phoneIntents)}`);
-  await theTvDrawsRose(ctx, 'development');
+  // Walking is on (arcade PR-11): development is the arcade screen, played with the stick and the button. Its errand is
+  // proven in shell.ts's arcade rooms and walking-steer.ts; at this table's speed a held key overshoots every reach.
+  // So the phone's first MULE goes on its plot through the server: month 1's clock, waiting for every first MULE,
+  // starts, the clock ends the turn, and the show has the MULE to show.
+  await phone.locator('[data-phase=development]').waitFor({ timeout: PAST_THE_GRANT_MS });
+  installAFirstMule(server, code);
+  await theTvDrawsRose(ctx, 'development', rose);
   console.log(`plots, TV: ${await theTvShowsWhoOwnsEachPlot(ctx)}`);
-  await goToThePub(phone);
-  // B-AC-6 and B-AC-8, from what both screens drew of month 1's show.
-  await phone.locator('[data-phase=auction]').waitFor({ timeout: within(PHASE_MS.development + PHASE_MS.production) });
+  // B-AC-6 and B-AC-8, from what both screens drew of month 1's show. The turn runs its whole clock, which starts only
+  // once the AI seats have their first MULEs too: a development's length again for that wait.
+  await phone.locator('[data-phase=auction]').waitFor({ timeout: within(2 * PHASE_MS.development + PHASE_MS.production) });
   console.log(`production show, month 1: ${await checkTheShow({ tv: tvShow, phone: phoneShow })}`);
   let measured = false;
   await pressDoneThroughTheAuction(phone, async (button) => {
@@ -182,8 +178,8 @@ try {
   await readyIfStillPlanning(phone);
   await pastTheLandGrant(phone);
   await steps.landAuction?.({ phone, tv, check }, 2);
-  await hungryPlayerSeesHerPace(phone, server, code, PAST_THE_GRANT_MS);
-  await goToThePub(phone);
+  // Month 2's clock runs from the start: the phone lets it end the turn.
+  await phone.locator('[data-phase=development]').waitFor({ timeout: PAST_THE_GRANT_MS });
   const moveLink = await moveDialogOpensInProduction(ctx, within(PHASE_MS.development));
   // B-AC-6, B-AC-7 and B-AC-8: month 2's show, with the run's certain event.
   await phone.locator('[data-phase=auction]').waitFor({ timeout: within(PHASE_MS.development + PHASE_MS.production) });
@@ -238,22 +234,22 @@ async function readyIfStillPlanning(phone: Page): Promise<void> {
   }
 }
 
-/** Development: walk out to the map and tap a plot in your colour; the phone calls it yours. */
-async function checkOwnsAPlot(phone: Page): Promise<void> {
-  const dev = phone.locator('[data-phase=development]');
-  await dev.getByRole('button', { name: 'Walk out to the map' }).click({ timeout: within(PHASE_MS.development) });
-  await dev.getByRole('button', { name: /, free\b/ }).first().waitFor({ timeout: 3_000 });
-  // The map names each plot's owner by colour slot, counted from 1.
-  const mine = dev.getByRole('button', { name: new RegExp(`owned by player ${(await headerSlot(phone, 'T-AC-1')) + 1}\\b`) });
-  const plots = await mine.count();
-  check(plots >= 1, `T-AC-1: the phone owns a plot before month 2; its map shows ${plots} plots in its colour`);
-  await mine.first().click({ timeout: PRESS_MS });
-  try {
-    await dev.getByText('YOURS', { exact: true }).waitFor({ timeout: PRESS_MS });
-  } catch (err) {
-    if (err instanceof playwrightErrors.TimeoutError) check(false, 'T-AC-1: the phone calls the plot in its colour YOURS');
-    throw err;
-  }
+/**
+ * Month 1, development: an Energy MULE on the phone's first plot, as installing leaves it, so the first-MULE wait
+ * counts the seat in and the AI seats' next tick starts the clock (T-AC-1: the phone owns a plot by now). Energy, as
+ * the tap store's errand installed: SHOW_SEED's dust storm (B-AC-7) only fires on a working Energy plot.
+ */
+function installAFirstMule(server: MuleServer, code: string, seat = 's1'): void {
+  const room = server.registry.get(code);
+  check(room, `a room ${code} on the server`);
+  const state = (room as unknown as { game: { state: GameState } }).game.state;
+  check(state.phase === 'development', `the MULE goes in during development, not in ${state.phase}`);
+  const plot = state.tiles.find((t) => t.owner === seat && t.terrain !== 'store');
+  check(plot, `T-AC-1: the phone owns a plot in month 1's development`);
+  plot.outfit = 'energy';
+  state.players.find((p) => p.id === seat)!.installedThisTurn = true;
+  // Changed behind the game's back: the room's broadcast is the one way every screen sees it now (as makeHungry does).
+  (room as unknown as { broadcast(): void }).broadcast();
 }
 
 /** B-AC-11: held upright the phone shows the turn prompt and not the game; turned back, the same screen again. */
@@ -275,13 +271,6 @@ async function pastTheLandGrant(phone: Page): Promise<void> {
   await doneWithLand(phone);
 }
 
-/** Development: walk into the pub, which ends the human's turn. */
-async function goToThePub(phone: Page): Promise<void> {
-  await phone
-    .locator('[data-phase=development]')
-    .getByRole('button', { name: 'Go to the pub and end your turn' })
-    .click({ timeout: within(PHASE_MS.development) });
-}
 
 /**
  * The goods auction: press its Done button at every stage it shows ('Ready',

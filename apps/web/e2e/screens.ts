@@ -14,7 +14,7 @@ import type { Page } from 'playwright';
 import { check, hallPlace, launch, PHONE, PHONE_SMALL, PHONE_WIDE, pressAct, startServer, steerTo, throughDoor, TV } from './harness';
 import { pressOnward, watchShow } from './production-steps';
 import { voteThroughTheElection } from './politics-steps';
-import { arcadeTable, fedPlayerSeesNoHunger, outfittersOpenWithAnEmptyMule, storeIsOneHallWithTwoRows } from './store-steps';
+import { arcadeTable, installSpot } from './store-steps';
 
 const out = resolve(process.argv[2] ?? 'screens');
 mkdirSync(out, { recursive: true });
@@ -97,33 +97,43 @@ try {
   }
   await phoneShot(phone, '3-claimed');
 
-  // Development: buy a MULE, outfit it for Food, install it, analyse, then the pub.
+  // Development, walked: in by the door, a MULE from the corral outfitted for Food, out by the door the guide rings to
+  // the plot it rings and installed, then back in to the pub.
   await phase(phone, 'development');
-  await storeIsOneHallWithTwoRows(phone);
-  // Buys the MULE through the corral while the start-of-turn card still shows.
-  await fedPlayerSeesNoHunger(phone, server, code);
+  await phone.getByTestId('phone-game').waitFor();
+  const seat = 's1';
+  const verb = (v: string) => phone.getByTestId('action-verb').filter({ hasText: new RegExp(`^\\s*${v}\\s*$`) });
+  const press = async (v: string) => {
+    await verb(v).waitFor({ timeout: 5_000 });
+    await pressAct(phone);
+  };
+  await throughDoor(phone, server, code, seat);
+  await steerTo(phone, server, code, seat, hallPlace('corral'));
+  await press('BUY MULE');
+  await phone.getByTestId('lead-chip').waitFor({ timeout: 5_000 });
   await phoneShot(phone, '4-store');
   await shot(tv, 'tv-4-develop');
-  await outfittersOpenWithAnEmptyMule(phone);
-  await phone.locator('[data-shop=food]:not([disabled])').click();
-  await phone.getByRole('button', { name: 'Walk out to the map' }).click();
-  await phone.getByRole('button', { name: /Install here|Replace MULE/ }).waitFor();
+  await steerTo(phone, server, code, seat, hallPlace('food'));
+  await press('OUTFIT · FOOD');
+  const door = phone.locator('[data-testid=guide-hall]:is([data-rooms=doorL], [data-rooms=doorR])');
+  await door.waitFor({ timeout: 5_000 });
+  await throughDoor(phone, server, code, seat, (await door.getAttribute('data-rooms')) as 'doorL' | 'doorR');
+  const ring = phone.locator('[data-testid=guide-map][data-what=plot]');
+  await ring.waitFor({ timeout: 5_000 });
+  const spot = installSpot(server, code, seat, Number(await ring.getAttribute('data-x')), Number(await ring.getAttribute('data-y')));
+  await steerTo(phone, server, code, seat, spot.at, spot.within === undefined ? {} : { within: spot.within });
+  await verb('INSTALL · FOOD').waitFor({ timeout: 5_000 });
   await phoneShot(phone, '4-map');
-  await phone.getByRole('button', { name: /Install here|Replace MULE/ }).click();
-  await phone.getByText('No MULE').first().waitFor();
-  // Month 1's clock waits for every first MULE; the plot row and its analysis come back once it runs.
-  await phone.getByTestId('now-title').filter({ hasText: 'MULE installed. What next?' }).waitFor({ timeout: 30_000 });
-  // The plot may already be analysed: the drone's picks can be the plots the grant gave us.
-  const analyse = phone.getByRole('button', { name: /Geo analysis/ });
-  if ((await analyse.count()) > 0) await analyse.click();
-  await phone.getByTestId('ground').waitFor();
-  await phoneShot(phone, '4-analysed');
-  await phone.getByRole('button', { name: 'Go to the pub and end your turn' }).click();
-  await phone.getByText('The pub').or(phone.locator('[data-phase=production]')).first().waitFor();
+  await pressAct(phone);
+  await phone.getByTestId('guide-label').filter({ hasText: 'STORE · PUB' }).waitFor({ timeout: 5_000 });
+  await throughDoor(phone, server, code, seat);
+  await steerTo(phone, server, code, seat, hallPlace('pub'));
+  await press('PUB · END TURN');
+  await phone.getByTestId('over-card').or(phone.locator('[data-phase=production]')).first().waitFor();
   await phoneShot(phone, '4-pub');
 
-  // Production results.
-  await phase(phone, 'production');
+  // Production results: month 1's clock waits for every first MULE, then runs its full length.
+  await phase(phone, 'production', 150_000);
   await phoneShot(phone, '5-production');
   await shot(tv, 'tv-5-production');
   const midShow = () => Promise.all([phone.screenshot({ path: join(out, 'phone-land-5-production-show.png') }), tv.screenshot({ path: join(out, 'tv-5-production-show.png') })]);
@@ -148,20 +158,16 @@ try {
   // Keep walking until units change hands, then picture the trade.
   // A trade is quick, so both screens are taken the moment units start changing hands.
   const deal = phone.getByTestId('my-deal').filter({ hasText: /[2-9] units/ });
-  const go = phone.getByTestId('line-go');
-  await deal.or(go).first().waitFor({ timeout: 20_000 });
-  // With the store the only buyer, at its line the phone first asks how many (A-6): sell what it offers.
-  if ((await go.count()) > 0) {
-    await go.click();
-    await phone.getByText(/Selling to the store: [1-9] of/).or(phone.getByText(/^You sold/)).first().waitFor({ timeout: 10_000 });
-  }
+  // With the store the only buyer, at its line units sell by themselves (the auto-trade amendment): the rail says so.
+  const selling = phone.getByTestId('line-hint').filter({ hasText: /^Selling / });
+  await deal.or(selling).first().waitFor({ timeout: 20_000 });
   await Promise.all([phone.screenshot({ path: join(out, 'phone-land-6-auction-trade.png') }), tv.screenshot({ path: join(out, 'tv-6-auction-trade.png') })]);
   await phone.keyboard.up('ArrowDown');
   await phone.getByRole('button', { name: 'Night' }).click();
   await phoneShot(phone, '6-auction-night');
   await phone.getByRole('button', { name: 'Day' }).click();
-  // Done with every good that comes up, until the auction closes.
-  for (let i = 0; i < 60 && (await phone.locator('[data-phase=auction]').count()) > 0; i++) {
+  // Done with every good that comes up, until the auction closes: up to nine goods, each walked on its own clock.
+  for (let i = 0; i < 360 && (await phone.locator('[data-phase=auction]').count()) > 0; i++) {
     const done = phone.getByRole('button', { name: /^(Ready|Done with )/ });
     if ((await done.count()) > 0 && (await done.isEnabled())) await done.click().catch(() => {});
     await phone.waitForTimeout(500);
