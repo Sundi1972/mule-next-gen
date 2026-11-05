@@ -78,9 +78,9 @@ vi.mock('../src/playbook/draft.js', async (importOriginal) => {
   const real = await importOriginal<typeof import('../src/playbook/draft.js')>();
   return {
     ...real,
-    draftPlaybook: (input: Parameters<typeof real.draftPlaybook>[0]) => {
+    draftPlaybook: (...args: Parameters<typeof real.draftPlaybook>) => {
       if (seam.throwing === 'draft') throw new Error('draft broke');
-      return real.draftPlaybook(input);
+      return real.draftPlaybook(...args);
     },
     draftGoodPlaybook: (...args: Parameters<typeof real.draftGoodPlaybook>) => {
       if (seam.throwing === 'draft' || seam.throwing === 'goodDraft') throw new Error('draft broke');

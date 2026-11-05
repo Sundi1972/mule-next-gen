@@ -303,12 +303,21 @@ function leadOut(copy: GameState, me: PlayerId, mule: Extract<DevAction, { kind:
   return trial;
 }
 
+/** A MULE pick the development draft left out because the what-if copy's rules refused it. */
+export interface LeftOutPick {
+  /** Its place among the month's MULEs, from 1. */
+  mule: number;
+  outfit: Outfit;
+  plot: number;
+  refused: string;
+}
+
 /**
  * RULE-5 · development: the analyses, then each MULE as a pick of developDecision, leaning to the money-maker, on a
  * what-if copy that already holds the MULEs before it, then the filters and the pub. The walk is priced as where the
- * game walks (DEV_WALK). A pick the copy's rules refuse is logged and left out, and the picks go on.
+ * game walks (DEV_WALK). A pick the copy's rules refuse is left out, into `leftOut`, and the picks go on.
  */
-function developmentPart(input: DraftInput, obs: GameState, moneyMaker: Good | null): DevelopmentPlay {
+function developmentPart(input: DraftInput, obs: GameState, moneyMaker: Good | null, leftOut: LeftOutPick[]): DevelopmentPlay {
   const { mind } = input;
   const me = mind.me;
   let copy = cloneForSim(obs);
@@ -338,7 +347,7 @@ function developmentPart(input: DraftInput, obs: GameState, moneyMaker: Good | n
     if (mule.kind === 'stop') break;
     const led = leadOut(copy, me, mule);
     if (led instanceof RuleError) {
-      console.error(`AI seat ${me}: the development draft left out MULE ${k + 1} (${mule.outfit} on plot ${mule.index}), refused: ${led.message}`);
+      leftOut.push({ mule: k + 1, outfit: mule.outfit, plot: mule.index, refused: led.message });
       continue;
     }
     copy = led;
@@ -392,13 +401,14 @@ export function draftPlanningPart(input: DraftInput): PlanningPlay {
 
 /**
  * The seat's playbook for a phase, complete, by 'engine' with no edits: the strategy, and the phase's parts drafted
- * under it. Given a strategy, it plays that one; the same input always drafts the same playbook.
+ * under it. Given a strategy, it plays that one; the same input always drafts the same playbook. The MULE picks the
+ * development draft left out go into `leftOut`, for the caller to log.
  */
-export function draftPlaybook(input: DraftInput): Playbook {
+export function draftPlaybook(input: DraftInput, leftOut: LeftOutPick[] = []): Playbook {
   const obs = observe(input.state, input.seat);
   const head = headOf(input, obs);
   if (input.phase === 'planning') return { ...head, planning: planningPart(input, obs), landGrant: landGrantPart(input, obs) };
-  if (input.phase === 'development') return { ...head, development: developmentPart(input, obs, head.strategy.moneyMaker) };
+  if (input.phase === 'development') return { ...head, development: developmentPart(input, obs, head.strategy.moneyMaker, leftOut) };
   return { ...head, auction: auctionPart(input, obs) };
 }
 

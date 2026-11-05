@@ -41,6 +41,7 @@ import {
   validatorFor,
   type DraftInput,
   type DraftPhase,
+  type LeftOutPick,
   type OwnDeclare,
   type PartKey,
   type PhaseFact,
@@ -233,9 +234,14 @@ export class AiSeat {
     this.ownDraft(state, phase, () => this.draft(state, phase));
   }
 
-  /** The seat's validated draft for a phase. `month` is the month whose land grant it plans. Writes nothing; throws on a draft or validator error. */
+  /**
+   * The seat's validated draft for a phase. `month` is the month whose land grant it plans. Writes nothing, and logs
+   * the MULE picks the draft left out; throws on a draft or validator error.
+   */
   draft(state: GameState, phase: DraftPhase, month = state.month): Playbook {
-    const drafted = draftPlaybook(this.draftInput(state, phase, month));
+    const leftOut: LeftOutPick[] = [];
+    const drafted = draftPlaybook(this.draftInput(state, phase, month), leftOut);
+    for (const p of leftOut) console.error(`AI seat ${this.id}: the development draft left out MULE ${p.mule} (${p.outfit} on plot ${p.plot}), refused: ${p.refused}`);
     return validatePlaybook(this.profileFor(month))(state, this.id, drafted, []).playbook;
   }
 
