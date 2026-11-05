@@ -22,7 +22,7 @@ import {
   type PlayerId,
   type RecordedWrite,
 } from '@mule/engine';
-import { goodPlan, outfitName } from '../strategist.js';
+import { goodPlan, outfitName, shortfallHold } from '../strategist.js';
 import { capCodePoints } from '../text.js';
 import type { Mind } from '../value.js';
 import { draftPlaybook, KINDS, ledOutfit, type DraftPhase, type LandPick, type LeftOutPick } from './draft.js';
@@ -325,7 +325,7 @@ const GOOD_ROWS: Record<string, Row> = {
       const most = ctx.freshHold(good);
       if (hold > most) [hold, why] = [most, 'level never corners'];
     }
-    const least = role === 'seller' && STAPLES.includes(good) ? stapleFloor(ctx, good) : 0;
+    const least = role === 'seller' ? sellerFloor(ctx, good) : 0;
     if (hold < least) [hold, why] = [least, least > 0 ? 'what its hands keep for next month' : 'a hold of 0 or more'];
     return hold === v ? ok(v) : clamped(hold, why);
   },
@@ -348,18 +348,16 @@ const GOOD_ROWS: Record<string, Row> = {
   bluff: (v) => (typeof v === 'boolean' ? ok(v) : refuse('not a boolean')),
 };
 
-/** The goods a seller keeps a floor of for next month (P12). */
-const STAPLES: readonly Good[] = ['food', 'water', 'energy'];
-
 /**
- * P12's floor: the units of a staple the seat's auction hand keeps whatever hold it is handed (goodPlan's floorUnits,
- * which tradeOf keeps). While it holds less than keeps it whole next month and the store sells the good that is up,
- * that is wholeNextMonth; otherwise next month's need, less what its own plants make. A profile with no level reads
- * the gross monthNeeds.
+ * P12's floor: the units of a good the seat's auction hand keeps whatever hold it is handed (tradeOf keeps goodPlan's
+ * floorUnits), at the good's own status screen. An auction part is validated once and played good by good, so a good
+ * still in the queue is raised as goodPlan raises it when it is up (shortfallHold): what keeps it whole next month,
+ * while it holds less and the store sells the good. A profile with no level reads next month's gross need.
  */
-function stapleFloor(ctx: Ctx, good: Good): number {
+function sellerFloor(ctx: Ctx, good: Good): number {
   if (!ctx.mind.level) return monthNeeds(ctx.state, ctx.seat)[good];
-  return goodPlan(observe(ctx.state, ctx.seat), ctx.mind, good).values.floorUnits;
+  const obs = observe(ctx.state, ctx.seat);
+  return Math.max(goodPlan(obs, ctx.mind, good).values.floorUnits, shortfallHold(obs, ctx.seat, good).mustHold);
 }
 
 const perRow: Row = (v, ctx, unit) => (!ctx.others.has(unit[3]!) ? refuse('no such player') : oneOf(TACTICS, 'no such tactic')(v, ctx, unit));
