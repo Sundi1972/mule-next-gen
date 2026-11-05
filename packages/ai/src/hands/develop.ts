@@ -792,9 +792,8 @@ export class DevelopHand {
         const from = { route: r.at };
         if (s.act === 'pub') this.push({ type: 'pub' }, d.pubMs, 'Go to the pub', ++this.group, from);
         else {
-          const t = state.tiles[s.plot!]!;
-          if (s.act === 'analyse') this.push({ type: 'analyse', x: t.x, y: t.y }, d.analyseTapMs, `Analyse ${plotName(t)}`, ++this.group, from);
-          else this.push({ type: 'filter', x: t.x, y: t.y }, d.filterMs, `Fit a filter on ${plotName(t)}`, ++this.group, from);
+          const { action, range, label } = this.scoutStep(state, s.act, s.plot!);
+          this.push(action, range, label, ++this.group, from);
         }
       }
       r.at++;
@@ -861,7 +860,7 @@ export class DevelopHand {
     const a = head.action;
     const me = this.brain.mind.me;
     if (a.type !== 'pub' && r.usedMs >= r.play.part.timeBudgetMs) {
-      this.skipToPub();
+      this.skipToPub(state);
       return false;
     }
     if (a.type === 'buyMule' && head.route !== undefined) {
@@ -930,15 +929,40 @@ export class DevelopHand {
     this.queue.push(...rest);
   }
 
-  /** Row 2: the time budget is spent, so every step still queued is skipped for the route's pub (or an added one). */
-  private skipToPub(): void {
+  /** Row 2: the time budget is spent, so every step left, queued or not, is skipped for the route's pub (or an added one). */
+  private skipToPub(state: GameState): void {
     const r = this.route!;
     for (const s of this.queue) if (s.action.type !== 'pub') this.log(s, false, 'skipped', 'time budget');
+    this.skipUnreleased(state, 'time budget');
     const pub = this.queue.find((s) => s.action.type === 'pub');
     this.queue = pub ? [pub] : [];
     r.at = r.play.part.route.length;
     if (!pub) this.push({ type: 'pub' }, AI_HANDS.develop.pubMs, 'Go to the pub', ++this.group, this.routePub());
     this.then = 'done';
+  }
+
+  /** Logs the route's steps not yet released, but its pub, as skipped. */
+  private skipUnreleased(state: GameState, why: string): void {
+    const steps = this.route!.play.part.route;
+    for (let i = this.route!.at; i < steps.length; i++) {
+      const s = steps[i]!;
+      if (s.act === 'buyMule') {
+        const [, outfit, install] = steps.slice(i, i + MULE_PRESSES);
+        this.muleSteps(state, install!.plot!, outfit!.outfit!).forEach(({ action, label }, k) => this.log({ action, label, ms: 0, group: 0, route: i + k }, false, 'skipped', why));
+        i += MULE_PRESSES - 1;
+      } else if (s.act === 'analyse' || s.act === 'filter') {
+        const { action, label } = this.scoutStep(state, s.act, s.plot!);
+        this.log({ action, label, ms: 0, group: 0, route: i }, false, 'skipped', why);
+      }
+    }
+  }
+
+  /** An analysis or a filter of `plot`, with its tap time's range and label. */
+  private scoutStep(state: GameState, act: 'analyse' | 'filter', plot: number): { action: AiAction; range: [number, number]; label: string } {
+    const t = state.tiles[plot]!;
+    const d = AI_HANDS.develop;
+    if (act === 'analyse') return { action: { type: 'analyse', x: t.x, y: t.y }, range: d.analyseTapMs, label: `Analyse ${plotName(t)}` };
+    return { action: { type: 'filter', x: t.x, y: t.y }, range: d.filterMs, label: `Fit a filter on ${plotName(t)}` };
   }
 
   /** The route's own pub, for a pub the hand pushes in its place: its index, or 'pub added' when the route has none. */
