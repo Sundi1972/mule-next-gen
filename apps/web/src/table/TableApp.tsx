@@ -4,7 +4,7 @@ import { AirGauge, Button, cx, GOOD_NAME, GoodTag, HoloMap, PaceList, PlayerMark
 import { Speaker, TvTicker, tvSpeakerAt } from '../chat/Chat';
 import { boardWalkers, dealLine, dealSpeed, newestFirst, shipWants, ShipWants, SIDE_WORD, skippedLine, StatusTable, StoreBox, TvReadout, WaitingToPick, type DealRow } from '../components/AuctionParts';
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { BuildSite, ColonyGauges, ColonyScoreBand, TvWinner } from '../components/Colony';
+import { BuildSite, ColonyGauges, ColonyScoreBand, TvWinner, useMonthEndDrift, type GaugeLanding } from '../components/Colony';
 import { CollapseBanner, ColonyPanel, LeagueTable, WinnerCard } from '../components/MonthEnd';
 import { joinUrl, Qr } from '../components/Qr';
 import { Scaled } from '../components/Scaled';
@@ -131,8 +131,8 @@ function TvLobby({ table }: { table: TableView<MuleView> }) {
   );
 }
 
-/** `gauges` false keeps the air gauge alone even with a colony, as game over does. */
-export function TvHeader({ game, title, seconds, extra, gauges = true }: { game: MuleView; title: string; seconds?: number | undefined; extra?: ReactNode; gauges?: boolean }) {
+/** `gauges` false keeps the air gauge alone even with a colony, as game over does; `landing` counts changes onto them. */
+export function TvHeader({ game, title, seconds, extra, gauges = true, landing }: { game: MuleView; title: string; seconds?: number | undefined; extra?: ReactNode; gauges?: boolean; landing?: GaugeLanding | undefined }) {
   return (
     <>
       <header className="flex items-end justify-between gap-6">
@@ -147,7 +147,7 @@ export function TvHeader({ game, title, seconds, extra, gauges = true }: { game:
         <div className="flex items-center gap-4">
           {extra}
           <ThemeToggle />
-          {game.colony && gauges ? <ColonyGauges colony={game.colony} size="tv" className="w-[760px]" /> : <AirGauge level={game.air.level} band={game.air.band} tv />}
+          {game.colony && gauges ? <ColonyGauges colony={game.colony} size="tv" className="w-[760px]" landing={landing} /> : <AirGauge level={game.air.level} band={game.air.band} tv />}
           {seconds !== undefined && <Timer seconds={seconds} className="h-14! px-5! text-3xl!" />}
         </div>
       </header>
@@ -158,6 +158,8 @@ export function TvHeader({ game, title, seconds, extra, gauges = true }: { game:
 
 function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView }) {
   const now = useServerNow(200);
+  // Here, where the TV stays mounted across phases, so the drift plays when it sees the month end come (WS8 PR-E2).
+  const drift = useMonthEndDrift(game);
   const tiles = mapTiles(game);
   const lit = game.lit ? tileAt(game, game.lit.x, game.lit.y) : undefined;
   const phase = game.phase;
@@ -174,7 +176,7 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
   if (phase === 'upkeep')
     return (
       <SeatSpeciesProvider value={seatSpecies(game)}>
-        <TvMonthEnd game={game} />
+        <TvMonthEnd game={game} drift={drift} />
       </SeatSpeciesProvider>
     );
   if (phase === 'planning' && game.politics?.election && game.politics.election.stage !== 'over') return <TvElection table={table} game={game} />;
@@ -656,12 +658,12 @@ function FitHeight({ className, children }: { className?: string; children: Reac
  * change since last month, and how the colony is doing. Public: totals only, each player's own lines are on their
  * phone (HC-4). It stays up until everyone moves on, and counts who has, as planning does.
  */
-export function TvMonthEnd({ game }: { game: MuleView }) {
+export function TvMonthEnd({ game, drift }: { game: MuleView; drift?: GaugeLanding | undefined }) {
   return (
     <div className="flex h-[720px] w-[1280px] flex-col gap-4 bg-table p-10 text-ink" data-phase={game.phase} data-testid="tv-monthend">
       <div className="flex items-start gap-4">
         <div className="min-w-0 flex-1">
-          <TvHeader game={game} title="End of the month" />
+          <TvHeader game={game} title="End of the month" landing={drift} />
         </div>
         <ReadyCount players={game.players} tv />
       </div>
