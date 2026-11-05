@@ -407,6 +407,8 @@ export interface Project {
   since: number;
   /** Each donor's credits plus goods at reference price. */
   plaque: Record<string, number>;
+  /** The most the colony bids for this object's plot at the land auction; null, it does not bid. See G-5 RULE-28. */
+  maxBid: number | null;
 }
 
 export interface Colony {
