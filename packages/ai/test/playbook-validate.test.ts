@@ -370,6 +370,18 @@ describe('the validator holds every playbook to RULE-1', () => {
       expect(read(r.playbook, `/auction/${staple}/hold`), staple).toBe(kept);
       expect(r.rejected, staple).toEqual([{ path: `/auction/${staple}/hold`, to: 0, why: `clamped to ${kept}: what its hands keep for next month` }]);
     }
+    // With no Water for sale at the store its hands buy none to be whole, so they keep only next month's need: the floor
+    // is that, below what keeps it whole.
+    const dry = (s: GameState) => {
+      s.store.stock.water = 0;
+      return s;
+    };
+    const atWater = dry(upAt('water'));
+    const need = goodPlan(observe(atWater, 'ai2'), mind, 'water').values.floorUnits;
+    expect(need, 'below what keeps it whole').toBeLessThan(shortfallHold(observe(atWater, 'ai2'), 'ai2', 'water').whole);
+    const r = run('auction', [edit('/auction/water/role', 'seller'), edit('/auction/water/hold', 0)], { state: dry(state), mind });
+    expect(read(r.playbook, '/auction/water/hold'), 'no Water for sale').toBe(need);
+    expect(r.rejected).toEqual([{ path: '/auction/water/hold', to: 0, why: `clamped to ${need}: what its hands keep for next month` }]);
   });
 
   it('T-AC-1: RULE-1 step 6, an edit counts as accepted only if its own value plays', () => {
@@ -573,6 +585,23 @@ describe('the validator never lets an error reach the game', () => {
 const SLOW_MS = 20_000;
 
 describe("the engine's own draft passes the gate", { timeout: SLOW_MS }, () => {
+  it("INV-1 (built): at Food's status screen, a seat holding Water between its need and what keeps it whole drafts a Water seller that passes the gate unchanged", () => {
+    // ai2 holds 3 Water, and Water sells dear (50 cr posted), so its draft sells some; the store sells Water too.
+    const state = fedSeller();
+    state.players.find((p) => p.id === 'ai2')!.stock.water = 3;
+    state.store.posted.water = 50;
+    const obs = observe(state, 'ai2');
+    const { whole, mustHold } = shortfallHold(obs, 'ai2', 'water');
+    expect(monthNeeds(state, 'ai2').water).toBeLessThan(3);
+    expect(mustHold, 'short of what keeps it whole, the store selling').toBe(whole);
+    expect(whole).toBeGreaterThan(3);
+    const draft = draftOf(state, 'auction', mindOf(2), 102);
+    expect(draft.auction!.water!.role, 'it drafts Water for sale').toBe('seller');
+    const r = validatorFor({ mind: mindOf(2), seed: 102 })(state, 'ai2', draft, []);
+    expect(r.rejected).toEqual([]);
+    expect(stableJson(r.playbook)).toBe(stableJson(draft));
+  });
+
   it("INV-1 (spot): the engine's draft with no edits passes unchanged, nothing rejected, and so does the gate's output for any draft", () => {
     const passes = (label: string) => {
       for (const phase of ['planning', 'development', 'auction'] as const) {
