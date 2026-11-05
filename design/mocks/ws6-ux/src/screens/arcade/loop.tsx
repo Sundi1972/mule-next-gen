@@ -3,7 +3,7 @@ import { ADDENDUM, GLINT_RACE, ME, newWorld, SCRAMBLE_RACE, TRACK, WOLF_START } 
 import { callGlint, callScramble, callWolves, DEFAULT_TUNABLES, mulePrice, setBot, step, teleport, type Colonist, type Input, type P, type Space, type Tunables, type WalkTerrain, type World } from './sim';
 
 /** How a page's turn starts: as the table has it, or (#arcade-wolves) Lena on forest with a pack due in about 2 s. */
-export type Scenario = 'table' | 'wolves' | 'glint' | 'scramble' | 'plots' | 'analyse' | 'reoutfit' | 'pace' | 'broke';
+export type Scenario = 'table' | 'wolves' | 'glint' | 'scramble' | 'plots' | 'analyse' | 'reoutfit' | 'pace' | 'broke' | 'sick';
 const WOLVES_DUE_MS = 2000;
 
 /**
@@ -65,7 +65,13 @@ export class Arcade {
 
   constructor(tunables0: Tunables = DEFAULT_TUNABLES, scenario: Scenario = 'table') {
     // V-6's start: Lena ate 1 of the 3 Food she needs, so she walks slower and the side room says why.
-    const tunables = scenario === 'pace' ? { ...tunables0, seats: { ...tunables0.seats, [ME]: { ...tunables0.seats[ME]!, food: ADDENDUM.pace.food } } } : tunables0;
+    const tunables =
+      scenario === 'pace'
+        ? { ...tunables0, seats: { ...tunables0.seats, [ME]: { ...tunables0.seats[ME]!, food: ADDENDUM.pace.food } } }
+        : // The sick line's start (PM, 5 Nov): Lena fed, and sick this turn.
+          scenario === 'sick'
+          ? { ...tunables0, seats: { ...tunables0.seats, [ME]: { ...tunables0.seats[ME]!, sick: true } } }
+          : tunables0;
     this.tunables = tunables;
     this.scenario = scenario;
     this.world = this.fresh();

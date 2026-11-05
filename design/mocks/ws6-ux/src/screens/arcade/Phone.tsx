@@ -9,6 +9,7 @@ import { useGameKeys, useTunables, useWorld } from './loop';
 import { NOTE } from './notes';
 import { ScrambleBanner } from './ScrambleLayer';
 import { reachOf } from './sim';
+import { SICK_BANNER_MS, SickBanner, useSickPreview } from './SickPreview';
 import { ActionButton, conditionOf, GroundChip, Joystick, LeadChip, meOf, Money, OverCard, ruleOf, secondsLeft, YourStage } from './views';
 
 /** The portrait phone: 390 × 844, the size the e2e harness holds a phone upright at. */
@@ -143,6 +144,9 @@ export function PhoneLandscape({ size = 844 }: { size?: PhoneSize }) {
   const card: Box | null = here ? { x: L.stage.x + 4.15 * L.cell, y: 0.95 * L.cell, w: 9.7 * L.cell, h: 3.0 * L.cell } : null;
   const bannerFaded = near(L.banner, mePx, L.cell * 0.4);
   const showScramble = !!world.scramble;
+  // B: the turn opens with the sickness in the banner box, then the guide's note takes it back.
+  const sick = useSickPreview();
+  const sickOpens = sick.variant === 'B' && !!tun.seats[me.id]?.sick && world.t < SICK_BANNER_MS;
   const choosing = me.space === 'hall' && !!me.mule && (!me.mule.good || !!me.mule.taken);
   const markers = (
     <span className="flex flex-wrap gap-x-3 gap-y-2 pl-1 pt-1">
@@ -225,7 +229,13 @@ export function PhoneLandscape({ size = 844 }: { size?: PhoneSize }) {
           stick and the button (no store and none of your plots there); in the hall across the walkway, between the
           shops and the corral and between the two doors. It fades while you walk under it. */}
       <div className="pointer-events-none absolute z-20 flex items-center justify-center" style={css(L.banner)} data-testid="scramble-banner-box">
-        {showScramble ? <ScrambleBanner world={world} me={me} tun={tun} at={{ position: 'static', maxWidth: '100%' }} faded={bannerFaded} /> : <GuideNote world={world} me={me} tun={tun} faded={bannerFaded} />}
+        {showScramble ? (
+          <ScrambleBanner world={world} me={me} tun={tun} at={{ position: 'static', maxWidth: '100%' }} faded={bannerFaded} />
+        ) : sickOpens ? (
+          <SickBanner because={sick.because} pct={Math.round(conditionOf(me, tun).conditionPace * 100)} faded={bannerFaded} />
+        ) : (
+          <GuideNote world={world} me={me} tun={tun} faded={bannerFaded} />
+        )}
       </div>
       {/* The controls, over the bottom corners; the second choice as a line above the button. */}
       <span className={cx('absolute z-30 transition-opacity duration-200', stickFaded ? 'opacity-25' : 'opacity-100')} style={{ left: L.stick.x, top: L.stick.y }} data-testid="overlay-stick" data-overlay="stick" data-faded={stickFaded || undefined}>

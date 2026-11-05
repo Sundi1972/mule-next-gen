@@ -1,9 +1,10 @@
 import { useState, type ReactNode } from 'react';
+import { SickPreview, SICK_BANNER_MS, type SickCause, type SickVariant } from './SickPreview';
 import { ThemeToggle } from '../../../../../../apps/web/src/components/ThemeToggle';
 import { LaptopFrame } from '../../harness';
 import { IntentNotes, IntentNotesProvider } from '../../proposed/IntentNote';
 import { LaptopArcade } from './Laptop';
-import { ArcadeProvider, type Scenario } from './loop';
+import { ArcadeProvider, useArcade, type Scenario } from './loop';
 import { ARCADE_NOTES } from './notes';
 import { PhoneFrame } from '../../harness';
 import { PhoneArcade, PhoneLandscape, PortraitFrame, SmallPhoneFrame } from './Phone';
@@ -91,6 +92,12 @@ export const ARCADE_ROUTES: { id: string; title: string; shows: string; controls
     title: 'Addendum · never sent where you cannot go (V-7)',
     shows: 'In the corral with 66 cr: BUY MULE · costs 139 cr · you have 66, dimmed. The ring goes to the pub and the door out; outside, to a plot you can analyse. The banner box says why.',
     controls: 'Walk out and analyse a plot, or end at the pub.',
+  },
+  {
+    id: 'arcade-sick',
+    title: 'Sick this turn: the sideways phone says so, and why (two ways, beside today’s)',
+    shows: 'Lena is fed but sick this turn. Today’s line, then A (the line names the sickness and its cause) and B (A, and the turn opens with it in the banner box), each at 844 × 390 and 667 × 375, on one live sim.',
+    controls: 'Pick the cause above the phones; Replay the turn’s start to see B’s banner again; tap a pace line for the why.',
   },
   {
     id: 'arcade-tv',
@@ -458,18 +465,67 @@ function TvRoute() {
 
 export function ArcadePage({ route }: { route: string }) {
   const body =
-    route === 'arcade' ? <Table /> : route === 'arcade-computer' ? <Computer /> : route === 'arcade-phone' ? <PhoneRoute /> : route === 'arcade-phone-portrait' ? <PortraitRoute /> : route === 'arcade-tv' ? <TvRoute /> : route === 'arcade-wolves' ? <Wolves /> : route === 'arcade-glint' ? <GlintRace /> : route === 'arcade-scramble' ? <ScrambleRace /> : ADDENDUM_ROUTES.includes(route) ? <AddendumRoute route={route} /> : <Contents />;
+    route === 'arcade' ? <Table /> : route === 'arcade-computer' ? <Computer /> : route === 'arcade-phone' ? <PhoneRoute /> : route === 'arcade-phone-portrait' ? <PortraitRoute /> : route === 'arcade-tv' ? <TvRoute /> : route === 'arcade-wolves' ? <Wolves /> : route === 'arcade-glint' ? <GlintRace /> : route === 'arcade-scramble' ? <ScrambleRace /> : route === 'arcade-sick' ? <SickRoute /> : ADDENDUM_ROUTES.includes(route) ? <AddendumRoute route={route} /> : <Contents />;
   const isGame = ARCADE_ROUTES.some((r) => r.id === route);
   return (
     <IntentNotesProvider>
       {isGame ? (
         // A fresh sim per route: the key restarts it when the hash changes.
-        <ArcadeProvider key={route} autopilot={route === 'arcade-tv'} scenario={route === 'arcade-wolves' ? 'wolves' : route === 'arcade-glint' ? 'glint' : route === 'arcade-scramble' ? 'scramble' : ADDENDUM_ROUTES.includes(route) ? (route.replace('arcade-', '') as Scenario) : 'table'}>
+        <ArcadeProvider key={route} autopilot={route === 'arcade-tv'} scenario={route === 'arcade-wolves' ? 'wolves' : route === 'arcade-glint' ? 'glint' : route === 'arcade-scramble' ? 'scramble' : route === 'arcade-sick' ? 'sick' : ADDENDUM_ROUTES.includes(route) ? (route.replace('arcade-', '') as Scenario) : 'table'}>
           {body}
         </ArcadeProvider>
       ) : (
         body
       )}
     </IntentNotesProvider>
+  );
+}
+
+const SICK_ROWS: { variant: SickVariant; title: string; says: string }[] = [
+  { variant: 'today', title: 'Today', says: 'The line as it ships: small, orange as hunger is, and no cause. The phone says nothing of it as the turn opens; the roll call’s event plays over the map once.' },
+  { variant: 'A', title: 'A · the line says it, and why', says: 'The side room’s line names the sickness and its cause, with the roll call’s cross in the medicine colour; under it the pace this turn. A tap says it struck as the turn began and that one Medicine prevents it. At 667 the bar says “Sick · 50% pace”.' },
+  { variant: 'B', title: 'B · A, and the turn opens with it', says: `As A, and for the turn’s first ${SICK_BANNER_MS / 1000} s the banner box between the stick and the button says “Sick: … It strikes now: you walk at 50% this turn.”, then gives way to the guide’s note. Replay the turn’s start to see it again.` },
+];
+
+const CAUSES: { id: SickCause; label: string }[] = [
+  { id: 'chance', label: 'by chance' },
+  { id: 'air', label: 'toxic air' },
+  { id: 'pollution', label: 'your own pollution' },
+];
+
+/** The sick line (PM, 5 Nov): today’s, A and B, each at both phone sizes, on one live sim. */
+function SickRoute() {
+  const arcade = useArcade();
+  const [because, setBecause] = useState<SickCause>('air');
+  return (
+    <Page title="Sick this turn: the sideways phone says so, and why" intro="Lena is fed but sick this turn. The tap screen’s start card said why and that it strikes now; the arcade’s pace line only says “Pace 50%: sick”. Two ways to say it, beside today’s.">
+      <div className="flex flex-wrap items-center gap-3 font-mono text-xs" data-testid="sick-controls">
+        <span className="text-ink-2">Cause:</span>
+        {CAUSES.map((c) => (
+          <button key={c.id} type="button" onClick={() => setBecause(c.id)} className={because === c.id ? 'rounded-chip bg-holo px-2 py-0.5 text-on-holo' : 'rounded-chip border border-holo-line px-2 py-0.5 text-ink-2'} data-testid={`sick-cause-${c.id}`}>
+            {c.label}
+          </button>
+        ))}
+        <button type="button" onClick={() => arcade.restart()} className="rounded-chip border border-holo-line px-2 py-0.5 text-ink-2" data-testid="sick-replay">
+          Replay the turn’s start
+        </button>
+      </div>
+      {SICK_ROWS.map((r) => (
+        <section key={r.variant} className="flex flex-col gap-2" data-testid={`sick-variant-${r.variant}`}>
+          <h2 className="font-display text-lg font-semibold">{r.title}</h2>
+          <p className="max-w-4xl text-sm text-ink-2">{r.says}</p>
+          <SickPreview.Provider value={{ variant: r.variant, because }}>
+            <div className="flex flex-wrap items-start gap-4">
+              <PhoneFrame>
+                <PhoneLandscape size={844} />
+              </PhoneFrame>
+              <SmallPhoneFrame>
+                <PhoneLandscape size={667} />
+              </SmallPhoneFrame>
+            </div>
+          </SickPreview.Provider>
+        </section>
+      ))}
+    </Page>
   );
 }

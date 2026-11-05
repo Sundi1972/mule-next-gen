@@ -7,6 +7,7 @@ import { useArcade } from './loop';
 import { NOTE } from './notes';
 import { paceOf, reachOf, tileAt, type Colonist, type Tunables, type World } from './sim';
 import { secondsLeft } from './views';
+import { SickTag, sickWords, useSickPreview } from './SickPreview';
 
 /**
  * The addendum (PM ruling 29 Oct): five of the development audit's approved changes, drawn in the arcade's own
@@ -36,6 +37,45 @@ export function paceWords(world: World, me: Colonist, tun: Tunables): { pct: num
 export function PaceLine({ world, me, tun, short = false }: { world: World; me: Colonist; tun: Tunables; short?: boolean }) {
   const [open, setOpen] = useState(false);
   const p = paceWords(world, me, tun);
+  const { variant, because } = useSickPreview();
+  const seat = tun.seats[me.id];
+  if (variant !== 'today' && seat?.sick) {
+    // A and B: the sickness by name and cause, in the roll call's medicine colour; a tap says it struck as the turn began.
+    const w = sickWords(because, p.pct, seat.food < seat.need ? { food: seat.food, need: seat.need } : null);
+    return (
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={() => setOpen((o) => !o)}
+        className={cx('relative flex w-full flex-col pr-4 text-left font-display font-semibold leading-tight', short ? 'text-[11px]' : 'text-xs')}
+        data-testid="pace-line"
+        data-pct={p.pct}
+        data-sick
+        aria-expanded={open}
+      >
+        {short ? (
+          <span className="flex items-center gap-1 text-g-medicine">
+            <SickTag size={11} />
+            {w.short}
+          </span>
+        ) : (
+          <>
+            <span className="flex items-start gap-1 text-g-medicine" data-testid="sick-cause">
+              <SickTag size={12} />
+              {w.title}
+            </span>
+            <span className="text-alert">{w.pace}</span>
+          </>
+        )}
+        <span className="absolute right-0 top-0 font-mono text-[10px] text-ink-3">{open ? '▴' : '▾'}</span>
+        {open && (
+          <span className="mt-0.5 block font-sans text-[11px] font-normal text-ink-2" data-testid="sick-why">
+            {w.why}
+          </span>
+        )}
+      </button>
+    );
+  }
   return (
     <button
       type="button"
