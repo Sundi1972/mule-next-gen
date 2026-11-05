@@ -1,5 +1,5 @@
 import { playGame, type SeatSpec } from '@mule/ai';
-import { boxOf, DEV_STEER, EVENT_SHOW, GOODS, HALL, stableJson, type GameState } from '@mule/engine';
+import { AI_PLANS, boxOf, DEV_STEER, EVENT_SHOW, GOODS, HALL, stableJson, type GameState } from '@mule/engine';
 import type { SeatInfo } from '@tabletop/core';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createBrain } from '../src/brain/index.js';
@@ -109,25 +109,44 @@ function serverGame(seed: number, politics: boolean) {
   return { outcomes, state: inside.state, taps };
 }
 
+/** T-AC-1's check: the sim's and the server's game, development by development, whole state and all. */
+function parity(seed: number, politics: boolean): void {
+  const sim = simGame(seed, politics);
+  const server = serverGame(seed, politics);
+  expect(sim, 'the sim played every month').toHaveLength(MONTHS);
+  // Not two tables standing still alike: the sim's AI installs MULEs and goes to the pub.
+  expect(sim.some((o) => o.players.some((p) => p.mules > 0))).toBe(true);
+  expect(sim.every((o) => o.players.some((p) => p.done))).toBe(true);
+  expect(server.outcomes, 'the server played every month').toHaveLength(MONTHS);
+  for (let m = 0; m < MONTHS; m++) {
+    const { state: simState, ...simFloor } = sim[m]!;
+    const { state: serverState, ...serverFloor } = server.outcomes[m]!;
+    expect(serverFloor, `month ${m + 1}: money, stock, turns, MULEs and plots`).toEqual(simFloor);
+    expect(serverState === simState, `month ${m + 1}: the whole engine state`).toBe(true);
+  }
+  expect(server.state.phase).toBe('gameOver');
+}
+
 describe('the AI walks the floor on the server as in the sim (arcade C9, HC-4)', () => {
+  // Since PR-3 the seats play their development and auction parts here (the default path), the draft point inside the
+  // floor tick's recorded step on the server and at the same step in the sim (C4, RULE-7).
   for (const { seed, politics } of GAMES) {
     it(`T-AC-1 (HC-4): seed ${seed}${politics ? ', politics on' : ''}: an AI-only game ends every development on the server as in the sim`, { timeout: 60_000 }, () => {
-      const sim = simGame(seed, politics);
-      const server = serverGame(seed, politics);
-      expect(sim, 'the sim played every month').toHaveLength(MONTHS);
-      // Not two tables standing still alike: the sim's AI installs MULEs and goes to the pub.
-      expect(sim.some((o) => o.players.some((p) => p.mules > 0))).toBe(true);
-      expect(sim.every((o) => o.players.some((p) => p.done))).toBe(true);
-      expect(server.outcomes, 'the server played every month').toHaveLength(MONTHS);
-      for (let m = 0; m < MONTHS; m++) {
-        const { state: simState, ...simFloor } = sim[m]!;
-        const { state: serverState, ...serverFloor } = server.outcomes[m]!;
-        expect(serverFloor, `month ${m + 1}: money, stock, turns, MULEs and plots`).toEqual(simFloor);
-        expect(serverState === simState, `month ${m + 1}: the whole engine state`).toBe(true);
-      }
-      expect(server.state.phase).toBe('gameOver');
+      parity(seed, politics);
     });
   }
+
+  // AM-24: the parity runs both ways. Today's path (AI_PLANS.on false) on the first game, a whole game like its
+  // neighbours (a few seconds).
+  it(`T-AC-1 (HC-4, AM-24): seed ${GAMES[0]!.seed} on today's path: an AI-only game ends every development on the server as in the sim`, { timeout: 60_000 }, () => {
+    const saved = AI_PLANS.on;
+    AI_PLANS.on = false;
+    try {
+      parity(GAMES[0]!.seed, GAMES[0]!.politics);
+    } finally {
+      AI_PLANS.on = saved;
+    }
+  });
 
   it('C9 (WS3 condition 3): in a steered development the tap path never runs: no scheduleAiDevelop, no aiAct', { timeout: 60_000 }, () => {
     const server = serverGame(1, false);

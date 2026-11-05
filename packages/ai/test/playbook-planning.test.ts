@@ -221,9 +221,10 @@ describe('the seat plays its planning part (C4, RULE-13)', () => {
 
   it("T-AC-10: the sim's planning loop hands each seat its act, so a seat short of cash lists, unsold to the store", () => {
     const listed: Listing[] = [];
-    // Seed 3's third month is the first in which a seat runs short.
+    // Seed 3's fourth month is the first in which a seat runs short (its third, before the seats played their
+    // development and auction parts in PR-3).
     playGame(3, simSeats(4, 'trader', 3), {
-      maxMonths: 3,
+      maxMonths: 4,
       onPhase: (state) => {
         if (state.phase === 'planning') listed.push(...state.listings.filter((l) => l.seller.startsWith('ai')));
       },

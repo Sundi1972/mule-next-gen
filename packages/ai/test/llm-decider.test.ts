@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { AI_HANDS, AI_LEVELS, AI_PERSONAS, BRAIN, createGame, observe } from '@mule/engine';
+import { AI_HANDS, AI_LEVELS, AI_PLANS, AI_PERSONAS, BRAIN, createGame, observe } from '@mule/engine';
 import { Brain, type DecisionRecord } from '../src/brain.js';
 import { PERSONAS, type DecisionKind } from '../src/personas.js';
 import { candidate, consider, shortlist } from '../src/utility.js';
@@ -125,6 +125,10 @@ describe('LlmDecider behind Brain', () => {
       waits.push({ kind, waitMs });
       return ask.apply(this, args);
     } as typeof ask);
+    // Its subject is today's hands, which ask for every development and trade decision; the playbook path asks for
+    // none (INV-3), so the game plays today's path (AM-24).
+    const saved = AI_PLANS.on;
+    AI_PLANS.on = false;
     try {
       expect(() => playGame(7, simSeats(4, 'trader', 7))).toThrow(monthOnePlayed);
       for (const kind of ['develop', 'trade'] as const) {
@@ -133,6 +137,7 @@ describe('LlmDecider behind Brain', () => {
         for (const w of ofKind) expect(w.waitMs).toBe(WAIT_MS[kind]);
       }
     } finally {
+      AI_PLANS.on = saved;
       spy.mockRestore();
     }
   });

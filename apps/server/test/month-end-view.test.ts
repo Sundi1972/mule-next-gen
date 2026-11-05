@@ -41,7 +41,9 @@ interface MonthEnd {
  */
 function playThreeMonths(options: { dearFoodIn?: number } = {}): { ends: MonthEnd[]; over: MuleView; state: GameState } {
   const { ctx, advance } = fakeContext();
-  const game = new MuleGame(ctx, 7, { maxMonths: 3, phaseScale: 0.1 });
+  // Seed 8: its last month feeds the colonists, the 'fed' precondition below. Seed 7's no longer did once the AI seat
+  // played its development and auction parts (PR-3). The file's other preconditions are arranged, and hold on seed 8.
+  const game = new MuleGame(ctx, 8, { maxMonths: 3, phaseScale: 0.1 });
   game.start(seats);
   const state = stateOf(game);
   const ends: MonthEnd[] = [];
