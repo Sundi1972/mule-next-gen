@@ -41,12 +41,20 @@ interface PlotSpec {
   owner?: string;
   terrain?: Tile['terrain'];
   runMonths?: number;
+  /** Right beside the plot laid before it (a factory beside its input's plot is fed: it saves Energy). */
+  beside?: true;
 }
 
-/** The k-th plot sits at (2·(k mod 7), 2·⌊k/7⌋): no two plots touch, so no cluster and no feeder. */
+/**
+ * The k-th plot sits at (2·(k mod 7), 2·⌊k/7⌋): no two plots touch, so no cluster and no feeder; one `beside` sits
+ * one tile right of the plot before it.
+ */
 function lay(state: GameState, specs: PlotSpec[]): Tile[] {
+  const laid: Tile[] = [];
   return specs.map((spec, k) => {
-    const tile = state.tiles[2 * Math.floor(k / 7) * state.width + 2 * (k % 7)]!;
+    const at = spec.beside ? state.tiles.indexOf(laid.at(-1)!) + 1 : 2 * Math.floor(k / 7) * state.width + 2 * (k % 7);
+    const tile = state.tiles[at]!;
+    laid.push(tile);
     expect(tile.terrain).not.toBe('store');
     const ground = { ...flatGround };
     if (spec.good === 'food' || spec.good === 'water' || spec.good === 'energy') ground[spec.good] = (spec.out ?? 0) - GROWN_BASE;
@@ -76,7 +84,9 @@ describe('AM-17: an owner short of Energy turns plots off, biggest use first', (
     plots: PlotSpec[];
     energy: number;
     posted?: Partial<Record<Good, number>>;
-    made: number[];
+    stock?: Partial<Record<Good, number>>;
+    /** Each plot's line's made; undefined where the plot files no line. */
+    made: (number | undefined)[];
     off: boolean[];
     energyAfter: number;
   }[] = [
@@ -146,12 +156,23 @@ describe('AM-17: an owner short of Energy turns plots off, biggest use first', (
       off: [false, false, true],
       energyAfter: 1,
     },
+    {
+      name: 'a factory without its inputs is no working plot: beside the mine it neither runs nor pushes the mine off',
+      // The fed furnace would use 1, the mine 2; 2 covers the mine alone. Without Smithore the furnace is not in the list.
+      plots: [{ good: 'smithore', out: 4 }, { good: 'alloy', beside: true }],
+      energy: 2,
+      stock: { smithore: 0 },
+      made: [4, undefined],
+      off: [false, false],
+      energyAfter: 0,
+    },
   ];
 
-  it.each(rows)('B-AC-energy-off: $name', ({ plots, energy, posted, made, off, energyAfter }) => {
+  it.each(rows)('B-AC-energy-off: $name', ({ plots, energy, posted, stock, made, off, energyAfter }) => {
     const state = colony();
     const tiles = lay(state, plots);
     Object.assign(state.store.posted, posted ?? {});
+    Object.assign(p(state).stock, stock ?? {});
     p(state).stock.energy = energy;
     const before = { ...p(state).stock };
 
@@ -161,15 +182,17 @@ describe('AM-17: an owner short of Energy turns plots off, biggest use first', (
     expect(tiles.map((t) => isOff(run, state, t))).toEqual(off);
     // A turned-off line says by how much: the energyOff part takes it from full to 20%.
     for (const [i, t] of tiles.entries()) {
-      const cut = lineOf(run, state, t)!.parts.find((x) => x.why === 'energyOff');
+      const cut = lineOf(run, state, t)?.parts.find((x) => x.why === 'energyOff');
       if (off[i] && made[i]! < (plots[i]!.out ?? 0)) expect(cut?.delta).toBe(made[i]! - plots[i]!.out!);
     }
     expect(p(state).stock.energy).toBe(energyAfter);
     // Every other good lands in the owner's stock as its lines made it.
     for (const good of new Set(tiles.map((t) => t.outfit as Good).filter((g) => g !== 'energy'))) {
-      const lines = tiles.flatMap((t, i) => (t.outfit === good ? [made[i]!] : []));
+      const lines = tiles.flatMap((t, i) => (t.outfit === good ? [made[i] ?? 0] : []));
       expect(p(state).stock[good] - before[good], good).toBe(lines.reduce((n, m) => n + m, 0));
     }
+    // A raw plot keeps its run count, on or off (a thin vein still wears); a factory that did not run starts again.
+    expect(tiles.map((t) => t.runMonths)).toEqual(tiles.map((t, i) => (isFactory(t.outfit!) ? (made[i] === undefined ? 0 : 1) : 1)));
   });
 
   it('B-AC-energy-off: owners are judged apart: one owner short of Energy turns nothing of another off', () => {
@@ -234,9 +257,11 @@ describe('AM-17: a turned-off factory', () => {
     expect(p(state).stock.smithore).toBe(4);
     expect(p(state).stock.alloy).toBe(1);
     expect(p(state).stock.energy).toBe(0);
+    // Off, it gains no experience that month: the run count holds at 3.
+    expect(tile.runMonths).toBe(3);
   });
 
-  it('FM-factory-off: with today\'s recipe (Smithore 2 → 20% rounds to 0) it makes 1 and takes no Smithore', () => {
+  it('FM-factory-off: with today\'s recipe (Smithore 2) it takes ⌈0.2 × 2⌉ = 1 Smithore and makes 1: nothing is made from nothing', () => {
     const state = colony();
     const tile = furnace(state);
     p(state).stock.smithore = 2;
@@ -244,20 +269,24 @@ describe('AM-17: a turned-off factory', () => {
     const run = runProduction(state);
 
     expect(lineOf(run, state, tile)?.made).toBe(1);
-    expect(p(state).stock.smithore).toBe(2);
+    expect(p(state).stock.smithore).toBe(1);
   });
 
-  it('FM-factory-off: with its 20% of inputs missing it makes 0 and takes nothing', () => {
+  it('FM-factory-off: turned off without its share of inputs (the one left on took them) it makes 0 and takes nothing', () => {
     const state = colony();
-    RECIPES.alloy.inputs = { smithore: 5, energy: 2 };
-    const tile = furnace(state);
-    p(state).stock.smithore = 0;
+    // A (hills, 3 months: makes 4) and B (plains: makes 2) each use 2; 2 Energy runs one. B is worth less: B goes off.
+    const [a, b] = lay(state, [{ good: 'alloy', terrain: 'hills', runMonths: 3 }, { good: 'alloy' }]);
+    Object.assign(p(state).stock, { energy: 2, smithore: 2 });
 
     const run = runProduction(state);
 
-    expect(lineOf(run, state, tile)?.made ?? 0).toBe(0);
-    expect(p(state).stock.alloy).toBe(0);
+    // A runs first in tile order and takes both Smithore; B's ⌈0.2 × 2⌉ = 1 is gone.
+    expect(lineOf(run, state, a!)?.made).toBe(4);
+    expect(isOff(run, state, b!)).toBe(true);
+    expect(lineOf(run, state, b!)?.made).toBe(0);
+    expect(p(state).stock.alloy).toBe(4);
     expect(p(state).stock.smithore).toBe(0);
+    expect(p(state).stock.energy).toBe(0);
   });
 
   it('B-AC-energy-off: a factory and a mine in one list: the factory (use 2) and the mine (use 2) tie, the one worth less goes off', () => {
@@ -274,6 +303,8 @@ describe('AM-17: a turned-off factory', () => {
     expect(lineOf(run, state, mine!)!.made).toBe(0);
     expect(lineOf(run, state, tile!)!.made).toBe(4);
     expect(p(state).stock.energy).toBe(0);
+    // The furnace ran: experience grows. The mine was off: its run count still grows (a thin vein still wears).
+    expect([tile!.runMonths, mine!.runMonths]).toEqual([4, 1]);
   });
 });
 
@@ -356,6 +387,8 @@ describe('AM-17: invariants over generated owners', () => {
       const state = generated(seed);
       const replay = structuredClone(state);
       const before = new Map(state.players.map((pl) => [pl.id, pl.stock.energy]));
+      // A factory whose non-Energy inputs are not in stock before production is no working plot this month.
+      const fed = new Map(state.tiles.map((t) => [t, !isFactory(t.outfit ?? 'food') || Object.entries(RECIPES[t.outfit as 'alloy'].inputs).every(([g, q]) => g === 'energy' || p(state, t.owner!).stock[g as Good] >= q!)]));
       const uses = new Map(state.tiles.map((t) => [t, energyUseOf(state, t)]));
 
       const run = runProduction(state);
@@ -371,11 +404,12 @@ describe('AM-17: invariants over generated owners', () => {
         // The list: every other working plot, biggest use first, then least worth (posted × full output), then tile order.
         const full = (t: Tile) => (isFactory(t.outfit!) ? factoryFit(state, t, t.outfit, pl.id).output : lineOf(run, state, t)!.parts.filter((x) => x.why !== 'energyOff' && x.why !== 'noWater' && x.why !== 'event').reduce((n, x) => n + x.delta, 0));
         const list = own
-          .filter((t) => t.outfit !== 'energy')
+          .filter((t) => t.outfit !== 'energy' && fed.get(t))
           .map((t) => ({ t, use: uses.get(t)!, worth: state.store.posted[t.outfit as Good] * full(t), at: state.tiles.indexOf(t) }))
           .sort((a, b) => b.use - a.use || a.worth - b.worth || a.at - b.at);
-        // A factory left on without its inputs files no line, as before AM-17; with today's recipes a turned-off one always
-        // has its 20% of inputs (they round to 0), so it always files a line.
+        // A factory left out of the list files no line. A turned-off one always files one with energyOff, even when the
+        // factories before it took its share of the inputs and it makes 0.
+        expect(own.filter((t) => !fed.get(t)).every((t) => !lineOf(run, state, t)), `seed ${seed} ${pl.id}: unfed factories run not`).toBe(true);
         const offAt = list.map((e) => isOff(run, state, e.t));
         const k = offAt.filter(Boolean).length;
         expect(offAt.slice(0, k).every(Boolean), `seed ${seed} ${pl.id}: off is a prefix (${offAt})`).toBe(true);
