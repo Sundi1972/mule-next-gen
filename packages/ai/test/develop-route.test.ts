@@ -101,17 +101,18 @@ function seatAndHand(): { seat: AiSeat; hand: DevelopHand } {
   return { seat, hand: new DevelopHand(seat.brain, createRng(SEED)) };
 }
 
-/** A route of the test's own, played with the draft's seed and no money-maker. */
-const routeOf = (route: DevelopmentPlay['route'], extra: Partial<DevelopmentPlay> = {}): RoutePlay => ({
+/** A route of the test's own, played with the draft's seed and no money-maker: as the seat's own draft, or, `own` false, as adopted. */
+const routeOf = (route: DevelopmentPlay['route'], extra: Partial<DevelopmentPlay> = {}, own = true): RoutePlay => ({
   part: { route, timeBudgetMs: DEVELOPMENT.fullSeconds * MS_PER_SECOND, ifSoldOut: 'pub', ...extra },
   seed: SEED,
   moneyMaker: null,
+  own,
 });
 
-/** The seat's own validated development draft, as a hand is given it. */
+/** The seat's own validated development draft, as a hand is given it on the own path. */
 function drafted(seat: AiSeat, state: GameState): RoutePlay {
   const pb = seat.draft(state, 'development');
-  return { part: pb.development!, seed: SEED, moneyMaker: pb.strategy.moneyMaker };
+  return { part: pb.development!, seed: SEED, moneyMaker: pb.strategy.moneyMaker, own: true };
 }
 
 type Runner = 'tick' | 'steer';
@@ -378,10 +379,34 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
       expect(me(state).doneDeveloping).toBe(true);
     });
 
-    /** Two idle plains plots of ai0's, and a route that analyses the first and installs a Smithore MULE on it: not the own pick there. */
-    function smithoreRoute(analyse: boolean) {
+    it("T-AC-7 (AM-27): a lot MULE kept fitted for a good no idle plot of the seat makes is still installed, its outfit noted 'kept outfit, no gain'", () => {
+      // A Smithore MULE led in, and only plains to put it on: it makes nothing there, but it is the seat's.
+      const { state, plots } = wonMuleLot(2, 'smithore');
+      me(state).analysed.push(...plots.map((t) => indexOf(state, t)));
+      const { seat, hand } = seatAndHand();
+      const play0 = drafted(seat, state);
+      const route = play0.part.route;
+      const first = route.findIndex((s) => s.act === 'buyMule');
+      expect(route.slice(first, first + 2), JSON.stringify(route)).toEqual([{ act: 'buyMule' }, { act: 'outfit', outfit: 'smithore' }]);
+      hand.follow(state.month, play0);
+      play(runner, state, hand);
+      const steps = byIndex(hand, state);
+      const log = JSON.stringify(hand.done);
+      expect(steps.get(first), log).toEqual({ route: first, outcome: 'done', note: 'led' });
+      expect(steps.get(first + 1), log).toEqual({ route: first + 1, outcome: 'done', note: 'kept outfit, no gain' });
+      expect(steps.get(first + 2), log).toEqual({ route: first + 2, outcome: 'done' });
+      expect(state.tiles[route[first + 2]!.plot!]!.outfit, log).toBe('smithore');
+      expect(me(state).carriedMule).toBeNull();
+    });
+
+    /**
+     * Two idle plains plots of ai0's, and a route that analyses the first and installs a Smithore MULE on it: not the own
+     * pick there. Played as the seat's own draft, or, `own` false, as an adopted route; `money` is ai0's as it starts.
+     */
+    function smithoreRoute(analyse: boolean, { own = true, money }: { own?: boolean; money?: number } = {}) {
       const { state, plots } = development(2);
       for (const t of plots) t.owner = ME;
+      if (money !== undefined) me(state).money = money;
       const [a] = plots.map((t) => indexOf(state, t)) as [number, number];
       const route: DevelopmentPlay['route'] = [
         ...(analyse ? [{ act: 'analyse' as const, plot: a }] : []),
@@ -389,7 +414,7 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
         { act: 'pub' },
       ];
       const { hand } = seatAndHand();
-      hand.follow(state.month, routeOf(route));
+      hand.follow(state.month, routeOf(route, {}, own));
       play(runner, state, hand);
       return { state, plots, hand, log: JSON.stringify(hand.done) };
     }
@@ -407,6 +432,27 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
       expect(plots[0]!.outfit, log).not.toBe('smithore');
       expect(plots.every((t) => t.outfit !== null), log).toBe(true);
       expect(hand.done.filter((e) => e.action.type === 'install' && e.ok)).toHaveLength(seatAndHand().seat.mind.level.mulesPerMonth);
+      expect(me(state).carriedMule).toBeNull();
+    });
+
+    it("T-AC-7 (AM-27): an own re-pick that says 'stop' drops the MULE's group, logged 'skipped' with 'ground analysed', and adds none", () => {
+      // Nothing on hand: after the analysis no MULE can be paid for, so the own pick keeps the cash.
+      const { state, plots, hand, log } = smithoreRoute(true, { money: 0 });
+      expect(hand.routeLog(state).steps, log).toEqual([
+        { route: 0, outcome: 'done' },
+        ...[1, 2, 3].map((route) => ({ route, outcome: 'skipped', note: 'ground analysed' })),
+        { route: 4, outcome: 'done' },
+      ]);
+      expect(plots.map((t) => t.outfit)).toEqual([null, null]);
+      expect(me(state).doneDeveloping).toBe(true);
+    });
+
+    it("T-AC-7 (AM-27): an adopted route with analyses plays its MULE as adopted: no re-pick, no 'replaced', no 'MULE added'", () => {
+      // The same state and route the own path re-picks above ('ground analysed'), handed in as an adopted part.
+      const { state, plots, hand, log } = smithoreRoute(true, { own: false });
+      expect(hand.routeLog(state).steps, log).toEqual([0, 1, 2, 3, 4].map((route) => ({ route, outcome: 'done' })));
+      // The promise: the adopted MULE stands where the adopted route put it, with its outfit, and no other.
+      expect(plots.map((t) => t.outfit), log).toEqual(['smithore', null]);
       expect(me(state).carriedMule).toBeNull();
     });
 
@@ -429,16 +475,16 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
   });
 
   it("T-AC-7 (AM-27): a MULE pick the draft's copy refuses is logged and left out, and the picks go on", () => {
-    // On the floor a MULE already outfitted is never fitted again, so a Food MULE led in, picked as a Water MULE, is refused.
-    DEV_STEER.on = true;
+    // A led MULE that has bolted can be neither outfitted nor installed until it is caught, so each pick for it is refused.
     const { state } = wonMuleLot(2, 'food');
+    me(state).muleBolted = true;
     const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
     const { seat } = seatAndHand();
     const route = drafted(seat, state).part.route;
     const notes = errors.mock.calls.map((c) => String(c[0]));
     errors.mockRestore();
     // Both picks, each logged: the first refusal did not end the picks.
-    expect(notes, JSON.stringify(route)).toEqual([1, 2].map((k) => expect.stringMatching(new RegExp(`^AI seat ai0: the development draft left out MULE ${k} \\(water on plot \\d+\\), refused: This MULE is outfitted`))));
+    expect(notes, JSON.stringify(route)).toEqual([1, 2].map((k) => expect.stringMatching(new RegExp(`^AI seat ai0: the development draft left out MULE ${k} \\(food on plot \\d+\\), refused: Your MULE bolted`))));
   });
 
   describe("on the floor, the runner's own rows (AM-19)", () => {
@@ -531,6 +577,40 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
       expect(money - beforePub).toBe(price + outfitCostFor(state, ME, spare.outfit!));
       expect(me(state).doneDeveloping).toBe(true);
     });
+
+    it.each(['known', 'unknown'] as const)(
+      "T-AC-7 (AM-27): led on the floor (%s ground), a lot MULE already fitted keeps its outfit, installed on a plot the pick chose, and no MULE is lost",
+      (ground) => {
+        // A Food MULE led in, on plains the seat's own pick would give Water: the floor cannot fit it again.
+        const { state, plots } = wonMuleLot(2, 'food');
+        // Known ground: the draft's pick plays; unknown: the route analyses first, and the hand picks the MULE again.
+        if (ground === 'known') me(state).analysed.push(...plots.map((t) => indexOf(state, t)));
+        const { seat, hand } = seatAndHand();
+        const play0 = drafted(seat, state);
+        const route = play0.part.route;
+        const first = route.findIndex((s) => s.act === 'buyMule');
+        expect(first, JSON.stringify(route)).toBeGreaterThanOrEqual(0);
+        expect(route.slice(0, first).some((s) => s.act === 'analyse'), JSON.stringify(route)).toBe(ground === 'unknown');
+        // The draft fits the led MULE no other outfit: only its plot is picked.
+        expect(route[first + 1], JSON.stringify(route)).toEqual({ act: 'outfit', outfit: 'food' });
+        hand.follow(state.month, play0);
+        floorTurn(state, hand);
+        const log = JSON.stringify(hand.done);
+        // The led MULE's buy and outfit: done 'led', whether the route's group or the own pick in its place.
+        const led = hand.done.filter((e) => e.why === 'led');
+        expect(led.map((e) => e.action), log).toEqual([{ type: 'buyMule' }, { type: 'outfit', outfit: 'food' }]);
+        // The promise: the first MULE installed is the lot's, as it came, on one of the seat's plots; none is lost.
+        const install = hand.done.find((e) => e.action.type === 'install' && e.ok);
+        expect(install, log).toBeDefined();
+        const at = install!.action.type === 'install' ? tileAt(state.tiles, state.width, install!.action.x, install!.action.y)! : null;
+        expect(plots, log).toContain(at);
+        expect(at!.outfit, log).toBe('food');
+        // (Leading a MULE, the floor's plot button offers install, not an analysis: those are refused; no MULE step is.)
+        expect(hand.done.filter((e) => e.outcome === 'refused' && e.action.type !== 'analyse'), log).toEqual([]);
+        expect(me(state).carriedMule, log).toBeNull();
+        expect(me(state).doneDeveloping).toBe(true);
+      },
+    );
 
     it("T-AC-7 (AM-27): a 'MULE added' whose errand no longer fits the clock is not bought, so no MULE is lost", () => {
       const { state, plots } = development(2);
