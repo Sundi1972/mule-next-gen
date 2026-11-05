@@ -1,4 +1,5 @@
 import { EVENTS, GAME } from './config.js';
+import { fundIn } from './colony.js';
 import { neighbours } from './grid.js';
 import { airBand, type AirBand } from './pollution.js';
 import { createRng } from './rng.js';
@@ -448,7 +449,7 @@ export function applyEvents(state: GameState, fired: readonly MonthEvent[]): voi
         for (const p of state.players) {
           const t = taken(p.money, EVENTS.colony.federationTax.share);
           p.money -= t;
-          state.treasury.money += t;
+          fundIn(state, 'federationTax', t);
           change(p.id, 'money', -t);
         }
         break;

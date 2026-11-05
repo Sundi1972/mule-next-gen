@@ -1,6 +1,7 @@
 import { GOOD_CONFIG, PRICE, UPKEEP, WALK } from './config.js';
 import { colonyPrice, driftReference, monthlyDemand, shelfShort, shipInPort, shipPrice, storeForSale, storeWants, taxSale } from './economy.js';
 import { RuleError } from './errors.js';
+import { chargeExportTax } from './politics.js';
 import { monthNeeds } from './production.js';
 import type { AuctionSide, GameState, Good, GoodReceipt, LiveAuction, ReceiptSide, SkipReason, StatusRow } from './types.js';
 import { houseLineAt, stepBoard, stepWalker, takeSide, tradePossible, type WalkMarket } from './walk.js';
@@ -57,17 +58,18 @@ export function shipLine(state: GameState): number | null {
   return a?.good && shipInPort(state) ? shipPrice(state, a.good) : null;
 }
 
-const emptySide = (): ReceiptSide => ({ units: 0, gross: 0, tax: 0, prices: [], with: [] });
+const emptySide = (): ReceiptSide => ({ units: 0, gross: 0, tax: 0, exportTax: 0, prices: [], with: [] });
 
 /** Writes one unit onto a seat's receipt for the good that is up, and its money onto the month's running total. */
-function noteUnit(a: LiveAuction, id: string, side: keyof GoodReceipt, price: number, tax: number, other: string): void {
+function noteUnit(a: LiveAuction, id: string, side: keyof GoodReceipt, price: number, tax: number, other: string, exportTax = 0): void {
   const r = (a.receipts[id] ??= { bought: emptySide(), sold: emptySide() })[side];
   r.units++;
   r.gross += price;
   r.tax += tax;
+  r.exportTax = (r.exportTax ?? 0) + exportTax;
   r.prices.push(price);
   if (!r.with.includes(other)) r.with.push(other);
-  a.tally[id] = (a.tally[id] ?? 0) + (side === 'bought' ? -price : price - tax);
+  a.tally[id] = (a.tally[id] ?? 0) + (side === 'bought' ? -price : price - tax - exportTax);
 }
 
 /** The good that is up, as a market for the walk board: players' stock and money, the store and the ship, and the sales tax. */
@@ -104,9 +106,11 @@ export function goodsMarket(state: GameState): WalkMarket {
       }
       if (s) {
         s.stock[good]--;
-        const net = taxSale(state, s.id, price);
-        s.money += net;
-        noteUnit(a, seller, 'sold', price, price - net, buyer);
+        const afterSalesTax = taxSale(state, s.id, price);
+        // The export tax comes out of the sale after the sales tax (RULE-43); the receipt names each (W2).
+        const exportTax = buyer === SHIP_ID ? chargeExportTax(state, s.id, price) : 0;
+        s.money += afterSalesTax - exportTax;
+        noteUnit(a, seller, 'sold', price, price - afterSalesTax, buyer, exportTax);
       } else {
         state.store.capital += price;
         state.store.stock[good]--;

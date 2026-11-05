@@ -6,6 +6,7 @@ import {
   ceremonyBeats,
   closeElection,
   cloneForSim,
+  COLONY,
   createGame,
   createRng,
   electionDone,
@@ -101,6 +102,18 @@ function seatGovernor(state: GameState, id: string): void {
 const HOUR_MS = 3_600_000;
 
 /** The Sheriff path: each test of the calling block runs with both offices elected, and the config's list comes back after it. */
+/** The Federation's grant at 0, for tests of a fund that runs short at upkeep. */
+function noGrant(): void {
+  let saved: number;
+  beforeEach(() => {
+    saved = COLONY.grant.perMonth;
+    COLONY.grant.perMonth = 0;
+  });
+  afterEach(() => {
+    COLONY.grant.perMonth = saved;
+  });
+}
+
 function bothOffices(): void {
   let saved: Office[];
   beforeEach(() => {
@@ -201,11 +214,11 @@ describe('C1, C2: the host option and the month opening', () => {
     expect(state.treasury.salesTax).toBe(TAX.salesTax);
     expect(state.treasury.money).toBe(500 + taxesPaid);
 
-    // The same month with politics on differs only by the offices' pay.
+    // The same month with politics on differs only by the offices' pay and the Federation's grant.
     const on = newGame();
     on.treasury.money = 500;
     toNextPlanning(on);
-    expect(on.treasury.money).toBe(state.treasury.money - POLITICS.pay.governor - POLITICS.pay.sheriff);
+    expect(on.treasury.money).toBe(state.treasury.money - POLITICS.pay.governor - POLITICS.pay.sheriff + COLONY.grant.perMonth);
   });
 
   it('RULE-5 row 1: the one player with strictly the most plots becomes the Land Baron when planning opens', () => {
@@ -1135,6 +1148,7 @@ describe('C5: the Governor sets the sales tax', () => {
 
 describe('C6, C7: office pay and the term score', () => {
   bothOffices();
+  noGrant();
 
   it.each([
     { fund: 20, governor: 20, sheriff: 0, left: 0 },
@@ -1191,7 +1205,7 @@ describe('T-AC-62: Governor only, the default POLITICS.offices', () => {
 
     advancePhase(state);
     expect(state.phase).toBe('upkeep');
-    expect(state.treasury.money, 'the fund pays 50 a month, not 80').toBe(1_000 - POLITICS.pay.governor);
+    expect(state.treasury.money, 'the fund pays 50 a month, not 80').toBe(1_000 + COLONY.grant.perMonth - POLITICS.pay.governor);
     for (const id of SEATS) expect(player(state, id).money - money[id]!, id).toBe(id === 'lena' ? POLITICS.pay.governor : 0);
     for (const id of SEATS) expect(scoreParts(state, id).office, id).toBe(id === 'lena' ? POLITICS.termScore : 0);
   });
