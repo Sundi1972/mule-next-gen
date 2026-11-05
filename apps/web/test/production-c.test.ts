@@ -1,6 +1,6 @@
 import { productionEventAtMs, productionShowMs } from '@mule/engine';
 import type { MuleView, PlayerView, ProductionView, TileView } from '@mule/protocol';
-import { ProductionMap, showEnd, showTime, showTimes, type MapTile, type ShowData } from '@mule/ui';
+import { ProductionMap, showEnd, showTime, showTimes, type MapTile } from '@mule/ui';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -23,10 +23,9 @@ const PLAYERS = [player('s1', 'Lena', 0), player('s2', 'Ossa', 1)];
 /**
  * Lena's Food (1, 0) makes 3 and gains 1 beside her own Food; Ossa's Food (2, 0) makes 2; Ossa's Energy (4, 1) makes 3
  * and loses 1 to pollution; Lena's Water (2, 2) makes 2. Goods made, in RULE-3's order: Food, Water, Energy.
- * Until WS3's view carries `base` and `hurry` (its half of AM-19), the fixture is the screen's ShowData, cast once here.
  */
-function month(over: Partial<ShowData> = {}): ProductionView {
-  const show: ShowData = {
+function month(over: Partial<ProductionView> = {}): ProductionView {
+  return {
     lines: [
       { x: 1, y: 0, owner: 's1', good: 'food', base: 3, made: 4, parts: [{ why: 'cluster', delta: 1 }] },
       { x: 2, y: 0, owner: 's2', good: 'food', base: 2, made: 2, parts: [] },
@@ -38,7 +37,6 @@ function month(over: Partial<ShowData> = {}): ProductionView {
     introMs: 0,
     ...over,
   };
-  return show as unknown as ProductionView;
 }
 
 const mapAt = (production: ProductionView, t: number) => renderToStaticMarkup(createElement(ProductionMap, { width: W, height: H, tiles, production, t, slots: { s1: 0, s2: 1 }, tv: true }));
@@ -77,7 +75,7 @@ function tvAt(production: ProductionView, t: number, now?: number, phaseEndsAt =
 
 describe('B-AC-6 (AM-19): good by good for every player at once, then every bonus, then every loss', () => {
   const m = month();
-  const s = showTimes(m as unknown as ShowData);
+  const s = showTimes(m);
 
   it("every player's Food fills at once while Water and Energy wait dark; then Water; then Energy", () => {
     const food = mapAt(m, s.goodAt.food! + 0.5);
@@ -121,7 +119,7 @@ describe('B-AC-6 (AM-19): good by good for every player at once, then every bonu
 
 describe('B-AC-8 (AM-19): the goods fly into each player’s silo', () => {
   const m = month();
-  const s = showTimes(m as unknown as ShowData);
+  const s = showTimes(m);
 
   it("each plot's goods fly as one chip, and each silo shows what its player made, good by good", () => {
     expect(tvAt(m, s.flightAt + 0.3)).toContain('data-testid="flying-goods"');
@@ -145,18 +143,18 @@ describe('B-AC-20 (AM-19): everyone taps Speed up, and the rest plays 3× faster
 
   it('once both have asked, the TV says so and its clock runs 3× from the moment they did', () => {
     const fast = month({ hurry: { asked: ['s1', 's2'], from: 4 } });
-    const end = showEnd(fast as unknown as ShowData);
+    const end = showEnd(fast);
     // The server moved the phase's end: from show second 4, the rest plays in a third of the time.
     const phaseEndsAt = 5_000_000;
     const at = (t: number) => phaseEndsAt - ((end - t) * 1000) / 3;
-    expect(showTime(phaseEndsAt, at(7), fast.lengthMs, fast as unknown as ShowData)).toBeCloseTo(7, 6);
-    expect(showTime(phaseEndsAt, at(end), fast.lengthMs, fast as unknown as ShowData)).toBeCloseTo(end, 6);
+    expect(showTime(phaseEndsAt, at(7), fast.lengthMs, fast)).toBeCloseTo(7, 6);
+    expect(showTime(phaseEndsAt, at(end), fast.lengthMs, fast)).toBeCloseTo(end, 6);
     expect(tvAt(fast, 0, at(7), phaseEndsAt)).toMatch(/data-testid="speed-up"[^]*?3× faster/);
   });
 
   it('without a speed-up the clock maps as before', () => {
     const m = month();
-    expect(showTime(5_000_000, 5_000_000 - m.lengthMs + 3000, m.lengthMs, m as unknown as ShowData)).toBeCloseTo(3, 6);
+    expect(showTime(5_000_000, 5_000_000 - m.lengthMs + 3000, m.lengthMs, m)).toBeCloseTo(3, 6);
   });
 });
 
@@ -166,8 +164,8 @@ describe('T-AC-14 (AM-19): the screens play the server’s timeline', () => {
     it(`${name}: the screens end at productionShowMs and start the events at productionEventAtMs`, () => {
       const m = month({ events: [...events], introMs });
       const eventsMs = events.length ? introMs + 7000 : 0;
-      const s = showTimes(m as unknown as ShowData);
-      expect(showEnd(m as unknown as ShowData) * 1000).toBeCloseTo(productionShowMs(3, eventsMs), 6);
+      const s = showTimes(m);
+      expect(showEnd(m) * 1000).toBeCloseTo(productionShowMs(3, eventsMs), 6);
       if (events.length) expect(s.eventsAt! * 1000).toBeCloseTo(productionEventAtMs(3), 6);
       else expect(s.eventsAt).toBeNull();
     });

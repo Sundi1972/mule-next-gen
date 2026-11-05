@@ -47,8 +47,7 @@ const GOODS: Good[] = ['food', 'water', 'energy', 'smithore', 'crystite', 'rareE
 export function Production({ production }: { production: ProductionView }) {
   const client = useClient();
   const { table, view, me, self } = usePhoneGame();
-  // Until WS3's view carries `base` and `hurry` (ws6-ux AM-19), the screen reads them where present.
-  const show = production as typeof production & ShowData;
+  const show: ShowData = production;
   const serverT = showTime(view.phaseEndsAt, useServerNow(frameMs(production.lengthMs)), production.lengthMs, show);
   const solo = table.boards === 0;
   // A skip is this phone's alone: it moves the phone's show ahead of the server's clock, never the clock itself. With

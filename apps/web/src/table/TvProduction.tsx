@@ -44,8 +44,7 @@ import { TvHeader } from './TableApp';
  * every player's silo along the foot, filling as their goods land.
  */
 export function TvProduction({ game, production }: { game: MuleView; production: ProductionView }) {
-  // Until WS3's view carries `base` and `hurry` (AM-19), the screen reads them where present.
-  const show = production as ProductionView & ShowData;
+  const show: ShowData = production;
   const t = showTime(game.phaseEndsAt, useServerNow(frameMs(production.lengthMs)), production.lengthMs, show);
   const tiles = useMemo(() => mapTiles(game), [game]);
   const slots = Object.fromEntries(game.players.map((p) => [p.id, (slotOf(game, p.id) ?? 0) as Slot]));
