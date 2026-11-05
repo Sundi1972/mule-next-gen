@@ -19,6 +19,16 @@ describe('the leader is the rival with the highest Worth the seat can see (FM-le
     expect(leaderOf(obs, 'ai0')).toBe('ai2');
   });
 
+  it("FM-leader-worth: goods the market panel splits evenly don't rank rivals by seat order", () => {
+    const state = table();
+    // One more Food in the colony: the seat's observation shows it on the first rival in seat order, whoever holds it.
+    state.players.find((p) => p.id === 'ai2')!.stock.food += 1;
+    state.players.find((p) => p.id === 'ai3')!.money += 1;
+    const obs = observe(state, 'ai0');
+    expect(obs.players.find((p) => p.id === 'ai1')!.stock.food).toBeGreaterThan(obs.players.find((p) => p.id === 'ai3')!.stock.food);
+    expect(leaderOf(obs, 'ai0')).toBe('ai3');
+  });
+
   it('FM-leader-worth: with no terms served, the richest rival leads, and the seat never names itself', () => {
     const state = table();
     state.players.find((p) => p.id === 'ai3')!.money += 1;
