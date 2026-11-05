@@ -451,6 +451,8 @@ export interface ColonyGauges {
   wealth: number;
   prestige: number;
   happiness: number | null;
+  /** The air as the month ended, 0..POLLUTION.airMax: with the other three, it scores the month end (G-5 AM-12). */
+  air: number;
 }
 
 export type Office = 'governor' | 'sheriff';
