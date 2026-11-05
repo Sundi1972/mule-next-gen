@@ -1060,10 +1060,11 @@ export const WALK = {
   /**
    * Walking speed in price units per second, set when a good comes up: its
    * board's starting height divided by this, so crossing the board takes
-   * this many seconds whatever the good costs. Never under minSpeed.
+   * this many seconds whatever the good costs. Never under minSpeed. The land auction walks at the same speed.
+   * 7.5 and 1.6, 25% slower than 6 and 2 (Heiko at the table, 5 Nov: walking up and down must be a bit slower).
    */
-  crossSeconds: 6,
-  minSpeed: 2,
+  crossSeconds: 7.5,
+  minSpeed: 1.6,
   /** The board reaches this share beyond the outermost price line; sellers start at its top, buyers at its bottom. */
   boardMargin: 0.3,
   /** And this share of the posted price more, so a board whose price lines sit close together still has room to walk. */
@@ -1084,8 +1085,11 @@ export const LOTS = {
   maxLotsPerMonth: 4,
   /** The intro: the lot lit on the map with its seller and minimum. */
   introMs: 3_000,
-  /** The walk's clock for one lot. */
-  walkMs: 12_000,
+  /**
+   * The walk's clock for one lot. 15 s, 25% longer than 12, with WALK's 25% slower walk (Heiko at the table, 5 Nov:
+   * walking up and down must be a bit slower), so a second bidder still reaches its limit before the bell.
+   */
+  walkMs: 15_000,
   /** The result on screen before the next lot comes up. */
   resultMs: 2_500,
   /** The board runs from this share of the minimum (where buyers start) to boardHigh's. */
