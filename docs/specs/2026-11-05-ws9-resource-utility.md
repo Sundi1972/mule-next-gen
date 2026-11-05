@@ -361,11 +361,11 @@ RULE-3 · The chance the seat needs the k-th unit          shape: decision table
 inputs     target  the stock after the auction that keeps the seat whole next month, in
                    the engine's upkeep order (upkeep.ts::runUpkeep: eat and drink, then every
                    good spoils, then the depot cap; then production spends Energy; then
-                   game.ts:224 marks a seat hungry when Food < the month's need):
+                   packages/engine/src/game.ts:224 marks a seat hungry when Food < the month's need):
                      food    eat + ⌈eat / keep⌉
                      water   drink + ⌈drink / keep⌉ for a seat with an irrigated plot
                              (UPKEEP.irrigated); 0 otherwise: a player's Water shortfall
-                             costs only noWater on irrigated plots (production.ts:257)
+                             costs only noWater on irrigated plots (packages/engine/src/production.ts:257)
                      energy  ⌈(plots' use − ownNet) / keep⌉
                      input   ⌈the factory's inputs / keep⌉
                    READ, not copied (HC-5): the target WS1's stopgap builds from the
@@ -464,7 +464,7 @@ Every test runs with `AI_VALUE.model = 'unit'`, except T-AC-9.
 
 | AC | Given · When · Then | Changes | observed_at | negative case |
 |---|---|---|---|---|
-| **B-AC-1** (G-1) | Given a seat with 0 Food, eating 5 a month, holding 1,200 cr, and the store selling enough Food at 72 · When the month plays on through the auction, upkeep and spoilage to the next development · Then the seat is not hungry at that development (`game.ts:224`) | C1, C2 | the seat's `hungry` at the next development (built state, played on). Not "holds ≥ 5 after the auction", which is the trap: upkeep eats, then spoils half | the store holds no Food: no trade, and it is hungry |
+| **B-AC-1** (G-1) | Given a seat with 0 Food, eating 5 a month, holding 1,200 cr, and the store selling enough Food at 72 · When the month plays on through the auction, upkeep and spoilage to the next development · Then the seat is not hungry at that development (`packages/engine/src/game.ts:224`) | C1, C2 | the seat's `hungry` at the next development (built state, played on). Not "holds ≥ 5 after the auction", which is the trap: upkeep eats, then spoils half | the store holds no Food: no trade, and it is hungry |
 | **B-AC-2** (G-1, Energy) | Given a seat whose plots need 6 Energy, holding 1 Energy and enough cash, the store selling 6 · When the Energy auction and production play · Then no plot is turned off for want of Energy | C1, C2 | production's lines for the seat (no `energyOff` part) | cash below one unit: plots turn off in AM-17's order |
 | **B-AC-3** (G-2) | Given Food's ask at or below its reference, a belief above the ask after spoilage and tax, and depot room · When the Food auction plays · Then the seat holds more than next month's need; with the ask ≥ 2× reference, no more than its need | C1, C3 | the seat's stock after the auction | a good that spoils fully: no surplus |
 | **B-AC-4** (G-3) | Given a playbook setting `expect` on Food above the ask · When the auction plays · Then the seat buys beyond its need; with no `expect`, it doesn't | C3, C5 | the stock after the auction | `expect` beyond the bound: clamped and listed in `rejected` |
