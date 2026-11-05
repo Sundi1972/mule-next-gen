@@ -92,18 +92,30 @@ export const afterTax = (obs: GameState, price: number) => price * (1 - obs.trea
 /** The sale price that leaves a seller `kept` after the sales tax. */
 export const beforeTax = (obs: GameState, kept: number) => kept / Math.max(0.01, 1 - obs.treasury.salesTax); // literal-ok: keeps the division finite at a 100% tax
 
+/**
+ * What the seat's own plots supply of a good next month, by the outlook: what they make, but for Energy what the plants
+ * have left after paying their own use (AM-17 R2, PM ruling A: monthNeeds leaves that use out, so supply must too).
+ */
+export function ownSupply(obs: GameState, me: string, made: Stock, good: Good): number {
+  if (good !== 'energy') return made[good];
+  const plantsUse = obs.tiles.filter((t) => t.owner === me && t.outfit === 'energy').reduce((n, t) => n + energyUseOf(obs, t), 0);
+  return Math.max(0, made.energy - plantsUse);
+}
+
 /** Net credits a month from running this outfit here, at the given prices (the outlook's by default, its own extra supply included). */
 export function monthlyNet(obs: GameState, o: Outlook, y: Yield, outfit: Outfit, mind: Mind, price?: PriceOf): number {
   const full = mind.level.fullScoring;
   if (outfit === 'greenBelt') return full ? POLLUTION.greenBeltAir * airUnitCost(obs) - STRATEGIST.greenBeltCost : -STRATEGIST.greenBeltCost;
   const P: PriceOf = price ?? ((g, extra = 0) => o.price(g, extra));
-  let revenue = afterTax(obs, y.made * P(outfit, y.made));
+  // A plant pays its own use from what it makes (AM-17 R2): only the rest is its to sell or to use.
+  const made = outfit === 'energy' ? Math.max(0, y.made - y.energy) : y.made;
+  let revenue = afterTax(obs, made * P(outfit, made));
   if (full && (outfit === 'food' || outfit === 'water' || outfit === 'energy')) {
     // The units that cover its own shortfall are worth what going short would cost it, and pay no tax.
-    const short = Math.max(0, monthNeeds(obs, mind.me)[outfit] - o.made[outfit]);
-    const own = Math.min(y.made, short);
+    const short = Math.max(0, monthNeeds(obs, mind.me)[outfit] - ownSupply(obs, mind.me, o.made, outfit));
+    const own = Math.min(made, short);
     const floor = obs.store.refPrice[outfit] * STRATEGIST.selfSupply;
-    revenue += own * Math.max(0, floor - afterTax(obs, P(outfit, y.made)));
+    revenue += own * Math.max(0, floor - afterTax(obs, P(outfit, made)));
   }
   const energy = outfit === 'energy' ? 0 : y.energy * P('energy', -y.energy);
   const inputs = (Object.entries(y.inputs) as [Good, number][]).reduce((n, [g, q]) => n + q * P(g, -q), 0);
@@ -217,7 +229,7 @@ export function cashReserve(obs: GameState, mind: Mind, o?: Outlook, except?: Go
   let cost = 0;
   for (const g of ['food', 'water', 'energy'] as const) {
     if (g === except) continue;
-    const short = Math.max(0, need[g] - p.stock[g] - (o?.made[g] ?? 0));
+    const short = Math.max(0, need[g] - p.stock[g] - (o ? ownSupply(obs, mind.me, o.made, g) : 0));
     cost += short * Math.min(obs.store.posted[g] * (1 + PRICE.storeSpread), obs.store.refPrice[g] * STRATEGIST.reservePriceCap);
   }
   return Math.round((STRATEGIST.cashFloor + cost) * mind.persona.reserve);
