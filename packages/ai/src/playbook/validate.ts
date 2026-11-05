@@ -26,7 +26,7 @@ import { outlook } from '../outlook.js';
 import { outfitName } from '../strategist.js';
 import { capCodePoints } from '../text.js';
 import { unitValues, type Mind } from '../value.js';
-import { draftPlaybook, KINDS, ledOutfit, type DraftPhase, type LandPick } from './draft.js';
+import { draftPlaybook, KINDS, ledOutfit, type DraftPhase, type LandPick, type LeftOutPick } from './draft.js';
 
 /**
  * The gate every playbook passes before it plays (spec C1, RULE-1, RULE-2): each edit is accepted, clamped to the
@@ -42,7 +42,12 @@ export type ValidatePlan = (
   seat: PlayerId,
   draft: Playbook,
   edits: readonly PlanEdit[],
-) => { playbook: Playbook; rejected: NonNullable<Playbook['rejected']> };
+) => {
+  playbook: Playbook;
+  rejected: NonNullable<Playbook['rejected']>;
+  /** The MULE picks a re-draft under an edited strategy left out, for the caller to log; absent when there are none. */
+  leftOut?: LeftOutPick[];
+};
 
 /** What the gate closes over: the seat's mind (its level, as GameState has none), its draft seed and its land pick. */
 export interface ValidatorProfile {
@@ -605,8 +610,9 @@ function validate(profile: ValidatorProfile, state: GameState, seat: PlayerId, d
   const replanned = (['kind', 'moneyMaker', 'monopolyTarget'] as const).some((k) => pb.strategy[k] !== planned[k]);
   check(true);
   const phase = DRAFTS[draft.phase];
+  const leftOut: LeftOutPick[] = [];
   if (replanned && phase) {
-    const redrafted = draftPlaybook({ state, seat, mind: profile.mind, seed: profile.seed, phase, land: profile.land ?? null, strategy: pb.strategy, month: draft.month });
+    const redrafted = draftPlaybook({ state, seat, mind: profile.mind, seed: profile.seed, phase, land: profile.land ?? null, strategy: pb.strategy, month: draft.month }, leftOut);
     for (const k of PART_KEYS) if (pb[k] !== undefined && redrafted[k] !== undefined) Object.assign(pb, { [k]: redrafted[k] });
   }
   edits.forEach((e, i) => !STRATEGY_ROOTS.has(parse(e.path)?.[0] ?? '') && apply(e, i));
@@ -630,7 +636,7 @@ function validate(profile: ValidatorProfile, state: GameState, seat: PlayerId, d
   pb.by = outEdits.length > 0 ? 'llm' : 'engine';
   if (outEdits.length > 0) pb.edits = outEdits;
   if (outRejected.length > 0) pb.rejected = outRejected;
-  return { playbook: pb, rejected: outRejected };
+  return { playbook: pb, rejected: outRejected, ...(leftOut.length > 0 && { leftOut }) };
 }
 
 /** The gate for one seat, throwing on its own error: for a caller that handles it (HC-9). */
