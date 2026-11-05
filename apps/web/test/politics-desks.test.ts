@@ -1,5 +1,5 @@
 import { ceremonyBeats, POLITICS, type CanRun, type CeremonyBeat, type ElectionHow, type ElectionResult, type Office, type TaxPromise } from '@mule/engine';
-import type { ElectionView, MuleView, MyView, OfficeReveal, PlayerView, PoliticsView, TableView } from '@mule/protocol';
+import type { ColonyView, ElectionView, MuleView, MyView, OfficeReveal, PlayerView, PoliticsView, TableView } from '@mule/protocol';
 import type { Slot } from '@mule/ui';
 import { createElement, type ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -837,6 +837,24 @@ describe('the Colony desk (C11, H-5, A-3)', () => {
     expect(textOf(html, 'fund-in')).toBe('the 8% sales tax on every sale; Ossa, the Governor, sets it');
     expect(textOf(html, 'fund-out')).toBe('Governor 50 cr a month, Sheriff 30 cr a month');
     expect(textOf(html, 'land-baron')).toContain('Land Baron Ossa');
+  });
+
+  it("C34/C35: with the colony on, WS8's colony card (its gauges, then the build site) sits right after the colony fund and before WS6's desk", () => {
+    const colony: ColonyView = {
+      gauges: { wealth: 26_400, environment: 34, prestige: 2, happiness: 64, band: 'content' },
+      lastGauges: null,
+      fund: 840,
+      ledger: null,
+      projects: [],
+      catalogue: [],
+      score: null,
+    };
+    const html = onPhone(view(politics({ governor: 's2', fund: 840 }), me(), { colony }), ColonyWithFacts);
+    const desk = onPhone(view(politics({ governor: 's2', fund: 840 }), me(), { colony }), ColonyDesk);
+    expect(html).toContain('data-testid="colony-desk-card"');
+    expect(html.indexOf('data-testid="fund-card"')).toBeLessThan(html.indexOf('data-testid="colony-desk-card"'));
+    expect(html.indexOf('data-testid="colony-desk-card"')).toBeLessThan(html.indexOf(desk));
+    expect(onPhone(view(politics({ governor: 's2', fund: 840 })), ColonyWithFacts), 'no colony, no card').not.toContain('colony-desk-card');
   });
 });
 

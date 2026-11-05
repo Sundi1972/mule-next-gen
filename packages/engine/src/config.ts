@@ -1,4 +1,4 @@
-import type { Outfit, EventKey, GrownGood, Good, MinedGood, Office, ProcessedGood, RawGood, SpecialKind, Species, Stock, Terrain, TileTrait } from './types.js';
+import type { Outfit, EventKey, GrownGood, Good, LawId, MinedGood, MoodBand, Office, PrestigeId, ProcessedGood, RawGood, SpecialKind, Species, Stock, Terrain, TileTrait } from './types.js';
 import type { Strategy } from './playbook.js';
 
 /**
@@ -896,6 +896,26 @@ export const POLITICS = {
    */
   termScore: 1200,
   /** How Classic AI seats run, vote and set the tax (VoteHand). Placeholders until the sim balances them. */
+  /** The law ballot. Its only clock is the reveal's, a presentation; the ballot itself waits for every player. */
+  council: {
+    /** Ms the result is shown before a passed law takes effect. */
+    revealMs: 4_000,
+    /** Laws in force at once; a fourth must name the one it replaces. */
+    maxInForce: 3,
+    /** Months a failed proposal waits before it may be put again. */
+    retryMonths: 2,
+  },
+  /** The colony's book of laws, each with its settings. */
+  laws: {
+    /** Per cent of each unit a player sells to the export ship. */
+    exportTax: { settings: [10, 20, 30] },
+    /** Credits a plot owned, at each month end. */
+    landTax: { settings: [5, 10, 20] },
+    /** Credits per point of colony pollution a player caused that month, at its end. */
+    pollutionTax: { settings: [10, 20, 40] },
+    /** The air level above which no new mine or smelter of the listed outfits may be outfitted. */
+    emissionCap: { settings: [40, 50, 60], blocks: ['rareEarth', 'alloy'] as Outfit[] },
+  } satisfies Record<LawId, { settings: number[]; blocks?: Outfit[] }>,
   ai: {
     /** Ms a seat waits before acting in announce or the ballot, drawn per stage: a human's pause. */
     actMs: [800, 2_500] as [number, number],
@@ -911,7 +931,101 @@ export const POLITICS = {
     taxFundBump: 2,
     /** The fund is low under this many months of the elected offices' pay. */
     fundMonths: 3,
+    /** The AI in the council. Placeholders until the sim tunes them. */
+    council: {
+      /** Credits a month a law must cost the leader more than the AI Governor before it proposes it. */
+      minGap: 20,
+      /** Chance an AI Governor proposes its best law in a month it has one, per persona. */
+      proposeChance: { trader: 0.5, cautious: 0.3, aggressive: 0.7, saboteur: 0.6 } satisfies Record<AiPersonaId, number>,
+      /** Credits a month an AI counts for each of its plots an emission cap would stop it re-outfitting. */
+      capPlotCost: 40,
+      /** A Rookie's chance of a yes on a law ballot: a coin from the council's own stream. */
+      rookieYes: 0.5,
+    },
+    /** The AI Governor's colony acts and the mood-weighed vote (G-5 C25). Placeholders until the sim tunes them. */
+    colony: {
+      /** Whether an AI Governor of each persona commissions a prestige object the fund can pay for. */
+      commissions: { trader: true, cautious: true, aggressive: true, saboteur: false } satisfies Record<AiPersonaId, boolean>,
+      /** Whether an AI Governor of each persona pays general strikers the fund can pay. */
+      paysStrike: { trader: true, cautious: true, aggressive: false, saboteur: false } satisfies Record<AiPersonaId, boolean>,
+      /** In these mood bands an AI voter will not vote for the sitting Governor if anyone else runs. */
+      leanIn: ['unhappy', 'unrest'] as MoodBand[],
+    },
   },
+};
+
+/**
+ * The colony as a shared project: its prestige objects, one table row each. Every number is a placeholder
+ * until the colony's sim tuning sets it and Heiko OKs it. An object's full cost is its credits plus its goods at
+ * their reference prices; upkeep and repair are in credits.
+ */
+export const PRESTIGE = {
+  park: { name: 'Park', credits: 420, goods: { alloy: 2 }, buildMonths: 1, needsPlot: true, prestige: 2, upkeep: 30, repairCost: 150 },
+  hospital: { name: 'Hospital', credits: 680, goods: { electronics: 1 }, buildMonths: 2, needsPlot: false, prestige: 3, upkeep: 45, repairCost: 225 },
+  observatory: { name: 'Observatory', credits: 700, goods: { crystite: 3 }, buildMonths: 2, needsPlot: false, prestige: 3, upkeep: 50, repairCost: 250 },
+  stadium: { name: 'Stadium', credits: 1_000, goods: { alloy: 2, electronics: 1 }, buildMonths: 3, needsPlot: true, prestige: 4, upkeep: 70, repairCost: 350 },
+  spaceport: { name: 'Spaceport upgrade', credits: 1_380, goods: { alloy: 2, electronics: 2 }, buildMonths: 3, needsPlot: true, prestige: 5, upkeep: 100, repairCost: 500 },
+} satisfies Record<PrestigeId, { name: string; credits: number; goods: Partial<Record<Good, number>>; buildMonths: number; needsPlot: boolean; prestige: number; upkeep: number; repairCost: number }>;
+
+/**
+ * The colony's mood (G-5 RULE-20). Every number is a placeholder, tuned at the end (HC-25). Each month the mood moves
+ * toward a target by at most `maxStep`; an event's moodShift moves it at once.
+ */
+export const HAPPINESS = {
+  /** Where a new colony's mood starts, 0..100. */
+  start: 60,
+  /** The target of a month with nothing wrong and nothing standing. */
+  base: 60,
+  /** The most the mood moves toward its target in one month. */
+  maxStep: 5,
+  /** The least happiness of each band; below `unhappy` is Unrest. */
+  bands: { thriving: 80, content: 60, restless: 40, unhappy: 20 },
+  weights: {
+    /** Off the target for each good the store ran short of this upkeep. */
+    shortage: 8,
+    /** Off the target for each point of air above `airFree`. */
+    air: 0.4,
+    airFree: 30,
+    /** Off the target for each whole percent of sales tax above `taxFree`. */
+    tax: 2,
+    taxFree: 5,
+    /** Off the target in a month the Governor broke their tax promise. */
+    broken: 10,
+    /** Onto the target for each point of prestige standing, up to `prestigeCap` points. */
+    prestige: 2,
+    prestigeCap: 15,
+    /** Off the target for each `gapUnit` credits between the richest and poorest player, up to `gapCap` units. */
+    gap: 2,
+    gapUnit: 1_000,
+    gapCap: 10,
+  },
+};
+
+/** The colony fund's own rules. Placeholders until the colony's sim tuning. */
+export const COLONY = {
+  /** Projects commissioned or building at the same time. */
+  maxOpen: 1,
+  /** Credits the fund keeps back from a project's funding, so next month's office pay is there. */
+  reserve: 100,
+  /** The fund buys an object's missing goods from the store at the store's price; off, only donors' goods fund it. */
+  fundBuysGoods: true,
+  /** The Federation's grant into the fund at each upkeep, in credits; flat until a scaling rule is tuned. */
+  grant: { perMonth: 150 },
+  /** What the strikers of a general strike want from the fund to go back to work, in credits (G-5 RULE-26). */
+  strike: { cost: 250 },
+};
+
+/**
+ * The colony score at game over (G-5 RULE-25): each term turned into credits, so they add. Placeholders, tuned at the
+ * end (HC-25).
+ */
+export const COLONY_SCORE = {
+  /** Credits for each point the air is cleaner than POLLUTION.airMax. */
+  perCleanPoint: 100,
+  /** Credits for each point of the colony's prestige. */
+  perPrestige: 1_000,
+  /** The happiness factor: `low` at happiness 0, `high` at 100, straight between. */
+  factor: { low: 0.8, high: 1.2 },
 };
 
 /**

@@ -45,7 +45,7 @@ export function ReadyBar({ words: given, canReady = true }: { words?: ReadyWords
   const client = useClient();
   const { table, view, self } = usePhoneGame();
   const [confirm, setConfirm] = useState(false);
-  const words = given ?? stageWords(view.politics?.election?.stage);
+  const words = given ?? stageWords(view.politics?.election?.stage, view.politics?.council?.stage);
   const footer = readyFooter({ me: self.id, players: view.players, hostId: table.hostId, connected: connectedIn(table.seats), mayContinue: hostMayContinue(view), confirm });
   const on = (pressed: Press) => () => {
     const next = press(confirm, pressed);
