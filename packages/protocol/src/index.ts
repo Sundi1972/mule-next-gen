@@ -1,4 +1,4 @@
-import type { AuctionSide, CanRun, CeremonyBeat, DevPlace, Election, EventEffect, EventKey, EventKind, EventWeight, Good, GoodReceipt, Ground, MonthEvent, Office, OfficeResult, Outfit, Phase, ScoreParts, SkipReason, SpecialField, Species, StatusRow, Stock, TaxPromise, Terrain, TileTrait, VoteWeight } from '@mule/engine';
+import type { AuctionSide, CanRun, CeremonyBeat, DevPlace, Election, EventEffect, EventKey, EventKind, EventWeight, FundLine, FundSource, Good, LawId, LawImpact, LawProposal, GoodReceipt, Ground, MonthEvent, Office, OfficeResult, Outfit, Phase, PrestigeId, ScoreParts, SkipReason, SpecialField, Species, StatusRow, Stock, TaxPromise, Terrain, TileTrait, VoteWeight } from '@mule/engine';
 export type { ChatMessage, ClientEnvelope, ServerEnvelope, TableView } from '@tabletop/core/protocol';
 
 /**
@@ -38,6 +38,20 @@ export type MuleIntent =
   | { type: 'vote'; office: Office; candidate: string | null }
   /** Planning, after the election: the Governor sets the sales tax in whole percent. */
   | { type: 'setTax'; percent: number }
+  /** Planning, after the votes: the Governor commissions a prestige object for the colony. */
+  | { type: 'commission'; id: PrestigeId }
+  /** Planning: give credits and goods toward the object being funded; the plaque names the donor. */
+  | { type: 'donate'; id: PrestigeId; credits: number; goods?: Partial<Record<Good, number>> }
+  /** Planning, after the votes: the Governor repairs a damaged object from the fund. */
+  | { type: 'repair'; id: PrestigeId }
+  /** Planning, after the votes: the Governor pays this month's general strikers from the fund. */
+  | { type: 'payStrike' }
+  /** Planning, after the votes: the Governor's top bid for a waiting object's plot; null, the colony does not bid. */
+  | { type: 'setSiteBid'; id: PrestigeId; maxBid: number | null }
+  /** Planning, once the votes are over: the Governor puts a law, a new setting or a repeal to the next planning's ballot; null withdraws it. */
+  | { type: 'propose'; proposal: LawProposal | null }
+  /** The law ballot: yes or no; a later vote replaces it until the ballot closes. */
+  | { type: 'voteLaw'; yes: boolean }
   /** Planning: the host ends planning with players not yet Ready; in the election's announce or ballot, it goes on without players not Done. */
   | { type: 'continue' }
   /**
@@ -279,6 +293,28 @@ export interface MyPoliticsView {
   /** Sales tax this player has paid over the game, in credits. */
   paid: number;
   reputation: number;
+  /** Their own vote on the open law ballot, yes or no; null when they have cast none. Never anyone else's. */
+  lawBallot?: boolean | null;
+  /**
+   * The Governor's own view only, in planning while no vote is open: what each proposal they may make would cost each
+   * player a month (RULE-45), keyed `<law>:<setting>` for each enact and `repeal:<law>` for each law in force.
+   */
+  candidates?: Record<string, Record<string, LawImpact>>;
+}
+
+/** The law ballot as every screen sees it: who has voted, never how; the totals only from the reveal. */
+export interface CouncilView {
+  stage: 'ballot' | 'reveal' | 'over';
+  proposal: LawProposal;
+  proposer: string;
+  impact: Record<string, LawImpact>;
+  voted: string[];
+  done: string[];
+  waitingFor: string[];
+  /** Ms of the reveal shown, out of revealMs. */
+  clockMs: number;
+  revealMs: number;
+  result: { passed: boolean; yes: number; no: number; tie: boolean } | null;
 }
 
 /** One office's result as far as the ceremony has shown it: the totals from its bars beat, the winner and how from its winner beat. */
@@ -343,6 +379,14 @@ export interface PoliticsView {
   promiseFrom: number | null;
   /** This month's election, or null in a month without one. */
   election: ElectionView | null;
+  /** The Governor's pending law proposal, public with what it would cost each player, until the next planning's ballot. */
+  proposal?: { by: string; month: number; proposal: LawProposal; impact: Record<string, LawImpact> } | null;
+  /** This month's law ballot; null in a month without one. */
+  council?: CouncilView | null;
+  /** The laws in force, each at its setting since the month it passed. */
+  laws?: Partial<Record<LawId, { setting: number; since: number }>>;
+  /** For each failed proposal (`kind:law`), the first month it may come back. */
+  retry?: Record<string, number>;
 }
 
 /** A player on the auction board. */
@@ -633,6 +677,72 @@ export interface MuleView {
   eventShow?: EventShowView | null;
   /** Offices, tax, vote weights and the election; null when the game plays without politics. */
   politics: PoliticsView | null;
+  /** The colony as a shared project: gauges, fund, prestige objects and plaques; null when the game plays without politics. Every screen gets the same. */
+  colony?: ColonyView | null;
 }
 
 export const PLAYER_COLORS = ['#e4572e', '#3a86ff', '#2bb673', '#f2a541', '#9b5de5', '#00b4d8'];
+
+/** The colony's four gauges; happiness and its band are null until the colony has a mood. */
+export interface ColonyGaugesView {
+  wealth: number;
+  /** The air gauge: the colony's pollution, 0 clean. */
+  environment: number;
+  prestige: number;
+  happiness: number | null;
+  band: 'thriving' | 'content' | 'restless' | 'unhappy' | 'unrest' | null;
+}
+
+export interface ColonyProjectView {
+  id: PrestigeId;
+  name: string;
+  stage: 'commissioned' | 'building' | 'standing' | 'closed' | 'damaged';
+  cost: { credits: number; goods: Partial<Record<Good, number>> };
+  funded: { credits: number; goods: Partial<Record<Good, number>> };
+  buildMonths: number;
+  /** Upkeeps left until it stands; null unless building. */
+  monthsLeft: number | null;
+  /** Its tile index, for an object that needs one; null until sited. */
+  plot: number | null;
+  prestige: number;
+  /** Credits a month while it stands. */
+  upkeep: number;
+  /** Credits to repair it; null unless damaged. */
+  repairCost: number | null;
+  /** Donors, largest first: credits plus goods at reference price. */
+  plaque: { playerId: string; value: number }[];
+  /** The colony's top bid for this object's plot at the land auction; null, it does not bid. Optional, so views built before it still type. */
+  maxBid?: number | null;
+}
+
+/** One object the Governor could commission, and why not when they can't now. */
+export interface ColonyCatalogueView {
+  id: PrestigeId;
+  name: string;
+  credits: number;
+  goods: Partial<Record<Good, number>>;
+  buildMonths: number;
+  needsPlot: boolean;
+  prestige: number;
+  upkeep: number;
+  commissionable: boolean;
+  why: string | null;
+}
+
+/** The colony as every screen sees it. Public: no ballot and no private hand reaches it. */
+export interface ColonyView {
+  gauges: ColonyGaugesView;
+  /** Last month's gauges, for "this month"'s change; null in month 1. */
+  lastGauges: { wealth: number; prestige: number; happiness: number | null } | null;
+  fund: number;
+  /** The ledger of the month just ended, or this month's once its upkeep has run; null before the first upkeep. */
+  ledger: { month: number; in: Partial<Record<FundSource, number>>; out: Partial<Record<FundLine, number>> } | null;
+  projects: ColonyProjectView[];
+  catalogue: ColonyCatalogueView[];
+  /** What a unit of each good the catalogue needs adds to a donor's plaque: the price the engine values a gift at. Optional, so views built before it still type. */
+  refPrice?: Partial<Record<Good, number>>;
+  /** This month's general strike: the good it holds back, what the strikers want, and whether the fund paid; null when none. Optional, so views built before W3 still type. */
+  strike?: { good: Good; cost: number; paid: boolean } | null;
+  /** The colony score at game over (G-5 RULE-25: wealth, environment and prestige in credits, the happiness factor, the rounded total); null before. */
+  score: { wealth: number; environment: number; prestige: number; factor: number; total: number } | null;
+}
