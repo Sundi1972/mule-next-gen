@@ -7,6 +7,7 @@ import { applyAction, playGame } from '../src/play.js';
 import { draftPlaybook } from '../src/playbook/index.js';
 import { AiSeat, type AiSeatOptions } from '../src/seat.js';
 import { sellWanted } from '../src/strategist.js';
+import { cashReserve } from '../src/value.js';
 
 // Seed 11's map: plot 10 is desert, 1 to 5 and 13 plains, 56 mountains.
 const DESERT = 10;
@@ -210,6 +211,13 @@ describe('the seat plays its planning part (C4, RULE-13)', () => {
     const { act, calls } = counted(rich);
     seatOf().planMonth(rich, act);
     expect(calls).toEqual([]);
+    // The line is the seat's cash reserve: at it, nothing is listed; 1 cr under it, the seat lists.
+    const reserve = cashReserve(observe(short(), 'ai0'), seatOf().mind);
+    for (const [money, lists] of [[reserve, false], [reserve - 1, true]] as const) {
+      const state = holding(money, [[DESERT, null], [MOUNTAIN, 'smithore']]);
+      seatOf().planMonth(state, counted(state).act);
+      expect(listingsOf(state).length > 0, `${money} cr against a reserve of ${reserve}`).toBe(lists);
+    }
 
     // RULE-6 row 2: a playbook adopted for the month plays for a Smart seat too, and an adopt in planning lists it.
     const state = short();
