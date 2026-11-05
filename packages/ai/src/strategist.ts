@@ -383,13 +383,14 @@ export function developDecision(obs: GameState, mind: Mind, mulesSoFar: number, 
 
 /**
  * The seat's own idle plot where a MULE outfitted for `outfit` gains most, by installGain: its index and the gain and
- * cost installGain gives there, whatever the gain (a factory it can't feed included). Null without an idle plot.
+ * cost installGain gives there, whatever the gain (a factory it can't feed included). Only plots `can` allows count (on
+ * the floor, those with somewhere to stand for the install). Null without such an idle plot.
  */
-export function bestInstall(obs: GameState, mind: Mind, outfit: Outfit): { index: number; gain: number; cost: number } | null {
+export function bestInstall(obs: GameState, mind: Mind, outfit: Outfit, can: (index: number) => boolean = () => true): { index: number; gain: number; cost: number } | null {
   const o = outlook(obs, mind.me, { lookAhead: mind.level.lookAhead });
   let best: { index: number; gain: number; cost: number } | null = null;
   for (const tile of obs.tiles) {
-    if (tile.owner !== mind.me || tile.outfit) continue;
+    if (tile.owner !== mind.me || tile.outfit || !can(tileIndex(obs.width, tile.x, tile.y))) continue;
     const { gain, cost } = installGain(obs, o, tile, outfit, mind);
     if (!best || gain > best.gain) best = { index: tileIndex(obs.width, tile.x, tile.y), gain, cost };
   }
