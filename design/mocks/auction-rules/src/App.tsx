@@ -58,9 +58,9 @@ const RECOMMENDATION = (
 );
 
 const QUESTIONS = [
-  'For WS3: is a band’s edge a stop? Today a hold walks straight through the store’s line. A detent (a hold stops at the edge, and a second hold crosses) would make the edge truly hard. The mock draws the edge, not the detent.',
-  'For WS3: after the stop at the need, she steps up three price steps (27 → 30) and stays a seller. The TV and the phone both need to know she is holding, not just standing (the KEEPS mark).',
-  'For WS3: sold out, the line sits at the old price until a bid passes it, then follows the top bid. Do sellers above the line still count as resting?',
+  'Settled by WS3 (a33879c4): no detent. The board’s own top and bottom are the hard edges; a store line is crossed by a deliberate hold, and selling below your need is caught by the stop at the need.',
+  'Settled: the seller steps one price step off the line, and the KEEPS mark comes from the view’s held, not from the distance.',
+  'Settled: sold out, the line stays at the old price until a bid passes it, then follows the top bid; every seller above it still rests.',
 ];
 
 const LINKS: { id: string; title: string }[] = [
@@ -109,7 +109,7 @@ function Index() {
           </li>
         ))}
       </ul>
-      <h2 className="mt-2 font-display text-xl font-semibold">Open for WS3</h2>
+      <h2 className="mt-2 font-display text-xl font-semibold">WS3’s rules, settled</h2>
       <ul className="flex max-w-4xl list-disc flex-col gap-1.5 pl-5 text-sm leading-snug text-ink-2" data-testid="questions">
         {QUESTIONS.map((q) => (
           <li key={q}>{q}</li>

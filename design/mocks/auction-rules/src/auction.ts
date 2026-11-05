@@ -91,20 +91,20 @@ export function saleAt(t: number, unlock: number | null, stop: number | null): S
   const first = dealAt(t - APPROACH - BEAT, SPARE);
   const stoppedAt = APPROACH + BEAT + first.doneAt;
   if (first.units < SPARE) return { at: FOOD.storeBuys, sold: first.units, short: 0, held: false, trading: true, speed: first.speed, phase: 'selling' };
-  // At the need: the sale stops by itself and Lena steps up off the line.
+  // At the need: the sale stops by itself and Lena steps one price step up off the line (WS3's RULE-4, a33879c4).
   if (unlock === null || t < unlock) {
-    return { at: lerp(FOOD.storeBuys, 30, (t - stoppedAt) / LIFT), sold: SPARE, short: 0, held: true, trading: false, speed: 0, phase: 'held' };
+    return { at: lerp(FOOD.storeBuys, FOOD.storeBuys + 1, (t - stoppedAt) / LIFT), sold: SPARE, short: 0, held: true, trading: false, speed: 0, phase: 'held' };
   }
   // She chose to sell on: back down to the line, a beat, then a new deal, slow again.
   const back = t - unlock;
-  if (back < LIFT) return { at: lerp(30, FOOD.storeBuys, back / LIFT), sold: SPARE, short: 0, held: false, trading: false, speed: 0, phase: 'returning' };
+  if (back < LIFT) return { at: lerp(FOOD.storeBuys + 1, FOOD.storeBuys, back / LIFT), sold: SPARE, short: 0, held: false, trading: false, speed: 0, phase: 'returning' };
   if (back < LIFT + BEAT) return { at: FOOD.storeBuys, sold: SPARE, short: 0, held: false, trading: false, speed: 0, phase: 'beat' };
   const ms = (stop !== null && stop > unlock ? stop : t) - unlock - LIFT - BEAT;
   const more = dealAt(Math.max(0, ms), LENA.need);
   const out = more.units >= LENA.need;
   const stopped = stop !== null && stop > unlock + LIFT + BEAT;
   return {
-    at: stopped ? lerp(FOOD.storeBuys, 29, (t - stop) / LIFT) : FOOD.storeBuys,
+    at: stopped ? lerp(FOOD.storeBuys, FOOD.storeBuys + 1, (t - stop) / LIFT) : FOOD.storeBuys,
     sold: SPARE + more.units,
     short: more.units,
     held: false,
