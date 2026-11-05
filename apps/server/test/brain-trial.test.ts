@@ -830,6 +830,9 @@ describe.runIf(process.env.MULE_FULL === '1')('brain:trial', () => {
       expect(report!.edits.model).toBe(report!.edits.of);
       expect(report!.edits.of).toBe(land.length * 2 + auction.length);
       expect(report!.writes.calls).toBe(land.length + auction.length);
+      // The game's final scores reach the report: Smart seats against the strategist seats.
+      expect(report!.results.games).toBe(1);
+      expect(Number.isFinite(report!.results.smart.meanScore) && Number.isFinite(report!.results.strategist.meanScore)).toBe(true);
       expect(report!.writes.late).toBe(0);
     },
     GAMES_MS,

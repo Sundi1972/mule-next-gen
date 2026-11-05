@@ -11,7 +11,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { BRAIN, type GameState, type Playbook } from '@mule/engine';
+import { BRAIN, score, type GameState, type Playbook } from '@mule/engine';
 import { playbookSource, playGameAsync, type AiSeat, ReplyRejected, simSeats, type Choice, type Decider, type DecisionRecord, type SeatSpec } from '@mule/ai';
 import { alreadyRanToday, AUTH_STOPPED, claimLedger, day, dayLedgerPath, KINDS, numberFlags, resolveDeps, runAsScript, type MainDeps } from './cli.js';
 import { CallFailed } from './client.js';
@@ -188,6 +188,7 @@ async function playTrialGame(setup: GameSetup): Promise<TrialGame> {
     });
     game.months = played.state.month;
     game.end = played.state.phase === 'gameOver' ? 'over' : 'unfinished';
+    game.scores = Object.fromEntries(played.state.players.map((p) => [p.id, score(played.state, p.id)]));
   } catch (err) {
     game.end = err instanceof AuthRefused ? 'auth' : 'crashed';
     if (game.end === 'crashed') setup.out(`game ${id} threw: ${err instanceof Error ? err.message.slice(0, 120) : 'unknown error'}`);

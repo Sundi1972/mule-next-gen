@@ -36,6 +36,8 @@ export interface TrialGame {
   settledCalls: number;
   /** Each Smart seat's playbook that took effect at a land grant, and whether Claude's edits were in it ('llm'). */
   playbooks: { seat: string; month: number; by: 'engine' | 'llm' }[];
+  /** Every seat's final score, by seat id; absent where the game left none. */
+  scores?: Record<string, number>;
 }
 
 /** Why a run stopped: the commands' reasons, or a ledger write that was lost. */
@@ -122,6 +124,35 @@ export interface TrialReport {
   edits: Share;
   /** UBER-AC-A's edit clause: at least 80% of them. */
   acEdits: Verdict;
+  /**
+   * UBER-AC-A's result clause, as figures: Smart seats against strategist seats over finished games with scores. A
+   * seat's rank is 1 plus the seats that scored more, so a tie shares the rank; a Smart seat tied for first wins. No
+   * verdict: the bar is set from WS1's tournament numbers.
+   */
+  results: { games: number; smartWins: number; smart: SeatResults; strategist: SeatResults };
+}
+
+/** Mean final score and mean rank of a group of seats; NaN where the group played no finished game. */
+export interface SeatResults {
+  meanScore: number;
+  meanRank: number;
+}
+
+/** Smart seats against strategist seats over the finished games that have final scores. */
+function resultsOf(finished: readonly TrialGame[]): TrialReport['results'] {
+  const scored = finished.filter((g) => g.scores !== undefined && Object.keys(g.scores).length > 0);
+  const smart: { score: number; rank: number }[] = [];
+  const strategist: { score: number; rank: number }[] = [];
+  let smartWins = 0;
+  for (const g of scored) {
+    const scores = Object.entries(g.scores!);
+    const rankOf = (score: number) => 1 + scores.filter(([, s]) => s > score).length;
+    for (const [seat, score] of scores) (g.smart.includes(seat) ? smart : strategist).push({ score, rank: rankOf(score) });
+    if (scores.some(([seat, score]) => g.smart.includes(seat) && rankOf(score) === 1)) smartWins++;
+  }
+  const mean = (xs: number[]) => (xs.length === 0 ? Number.NaN : sum(xs) / xs.length);
+  const group = (xs: { score: number; rank: number }[]): SeatResults => ({ meanScore: mean(xs.map((x) => x.score)), meanRank: mean(xs.map((x) => x.rank)) });
+  return { games: scored.length, smartWins, smart: group(smart), strategist: group(strategist) };
 }
 
 /** A ledger line that is a write: a strategy or playbook call, or one of its tool rounds. */
@@ -267,6 +298,7 @@ export function trialReport(input: TrialInput): TrialReport {
     writes,
     playbooks: input.playbooks,
     edits,
+    results: resultsOf(finished),
     acEdits: input.keyed && input.playbooks ? verdict({ fails: false, proven: complete && edits.of > 0, holds: 5 * edits.model >= 4 * edits.of }) : 'n/a',
   };
 }
@@ -281,6 +313,10 @@ const reasonsText = (f: Record<FallbackReason, number>) =>
   `too slow ${f['too slow']}, busy ${f.busy}, budget ${f.budget}, off-list ${f['off-list']}, unreadable ${f.unreadable}, error ${f.error}`;
 const writesText = (w: TrialReport['writes']) =>
   `${w.calls}, late ${w.late}${w.calls === 0 ? '' : ` (${((100 * w.late) / w.calls).toFixed(1)}%)`}, failed ${w.failed}, tool rounds ${w.calls === 0 ? 'n/a' : (w.toolRounds / w.calls).toFixed(2)} a call, ${usdText(w.usd)}`;
+const resultsText = (r: TrialReport['results']) =>
+  r.games === 0
+    ? 'n/a'
+    : `won ${r.smartWins} of ${r.games} games; mean score ${Math.round(r.smart.meanScore)} against ${Math.round(r.strategist.meanScore)}; mean rank ${r.smart.meanRank.toFixed(2)} against ${r.strategist.meanRank.toFixed(2)}`;
 const monthText = (c: MonthCounts, of: number) => `min ${c.min}, median ${c.median}, months with none ${c.silent} of ${of}`;
 
 /** The report as printed: the run, the figures for each acceptance criterion, then one verdict line for each. */
@@ -322,6 +358,7 @@ export function renderTrialReport(r: TrialReport): string[] {
             ['UBER-AC-A, Claude playbooks', ''],
             ['strategy and playbook calls, each waited for', writesText(r.writes)],
             ["playbooks with Claude's edits", pct(r.edits)],
+            ['Smart seats against strategist seats', resultsText(r.results)],
           ]
         : []),
       ['UBER-AC-2', ''],
