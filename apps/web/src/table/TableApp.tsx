@@ -156,18 +156,21 @@ export function TvHeader({
 }) {
   const colony = game.colony && gauges ? <ColonyGauges colony={game.colony} size="tv" className={ready ? 'w-full' : 'w-[760px]'} /> : null;
   const ownRow = colony !== null && ready !== undefined;
+  // With a ready chip the title keeps one line and the chip its size; without one the header is as it always was: the
+  // gauges give way to a long title ("Election day · the result").
+  const fixed = ready !== undefined;
   return (
     <>
       <header className="flex items-end justify-between gap-6" data-testid="tv-header">
-        <div className="flex min-w-0 flex-col gap-1">
+        <div className={cx('flex flex-col gap-1', fixed && 'min-w-0')}>
           <span className="label-caps text-base!">
             Month {game.month} / {game.maxMonths}
           </span>
-          <h1 className="whitespace-nowrap font-display text-5xl font-semibold leading-none" data-testid="tv-phase">
+          <h1 className={cx('font-display text-5xl font-semibold leading-none', fixed && 'whitespace-nowrap')} data-testid="tv-phase">
             {title}
           </h1>
         </div>
-        <div className="flex shrink-0 items-center gap-4">
+        <div className={cx('flex items-center gap-4', fixed && 'shrink-0')}>
           {extra}
           <ThemeToggle />
           {ownRow ? null : (colony ?? <AirGauge level={game.air.level} band={game.air.band} tv />)}
@@ -266,7 +269,7 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
           <MarketTiles game={game} />
         </div>
         {/* News gives way when the column is full, so the prices and who we wait for always show; chat is the ticker's. */}
-        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
+        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden" data-fit-gives>
           <News news={game.news} />
         </div>
         {phase !== 'planning' ? (
@@ -359,9 +362,10 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
           </div>
           {phase === 'planning' ? (
             // Under the colony's gauges' own row and a full chat ticker, planning's side can run past the screen's
-            // foot: it scales down as a whole instead, as the month end's does.
-            <FitHeight className="min-w-0 flex-1">
-              <div className="flex flex-col gap-4">{side}</div>
+            // foot. The news gives way first, as it always has; only what is left over scales the rest, as the month
+            // end's does. Stretched, so the ready list keeps to the foot.
+            <FitHeight className="min-w-0 flex-1" gives>
+              <div className="flex min-h-0 flex-1 flex-col gap-4">{side}</div>
             </FitHeight>
           ) : (
             <div className="flex min-w-0 flex-1 flex-col gap-4">{side}</div>
@@ -391,8 +395,9 @@ function Players({ game, right, className }: { game: MuleView; right: (p: MuleVi
 function News({ news }: { news: string[] }) {
   return (
     <ul className="flex flex-col gap-2" data-testid="tv-news">
-      {news.map((n) => (
-        <li key={n} className="rounded-control border-l-4 border-holo-line bg-panel px-4 py-2.5 text-lg">
+      {news.map((n, i) => (
+        // The newest stays whole when the column runs short: older ones give way (FitHeight's data-fit-keep).
+        <li key={n} className="rounded-control border-l-4 border-holo-line bg-panel px-4 py-2.5 text-lg" {...(i === 0 ? { 'data-fit-keep': true } : {})}>
           {n}
         </li>
       ))}
@@ -655,35 +660,68 @@ const useBeforePaint = typeof document === 'undefined' ? useEffect : useLayoutEf
  * Its content at full size when it fits, scaled down as a whole when it doesn't, and back up when room returns: the
  * month end's table and colony keep the mock's proportions on the TV when the chat ticker is up or more players sit
  * at the table. While it fits, the content stretches to fill the box.
+ *
+ * With `gives`, a box inside marked data-fit-gives (planning's news) takes what room is left and clips, before anything
+ * scales, down to what it keeps (data-fit-keep, the newest item); the content is held to the box's height instead of
+ * growing past it, so it is measured again on every render, its content being free to change without a resize.
  */
-function FitHeight({ className, children }: { className?: string; children: ReactNode }) {
+function FitHeight({ className, gives = false, children }: { className?: string; gives?: boolean; children: ReactNode }) {
   const box = useRef<HTMLDivElement>(null);
   const inner = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
+  // A new scale changes the content's width, so its wrapping, so its height: the renders after one measure again, so the
+  // scale settles where the content wraps; at most three changes in a row, so it can never chase itself round.
+  const current = useRef(1);
+  const changes = useRef(0);
+  const fit = useRef(() => {});
+  fit.current = () => {
+    const b = box.current;
+    const i = inner.current;
+    if (!b || !i) return;
+    // The content's own height, without the stretch: the stretch follows the scale, so measuring through it would keep
+    // a shrunk scale from ever growing back.
+    const size = gives ? 'height' : 'minHeight';
+    const stretch = i.style[size];
+    // A giving box is measured at the height of what it keeps (data-fit-keep: the newest news item), its gap kept: what
+    // it can give is all the rest of itself.
+    const giving = gives ? [...i.querySelectorAll<HTMLElement>('[data-fit-gives]')].map((g) => [g, g.style.cssText] as const) : [];
+    i.style[size] = gives ? 'auto' : '0px';
+    for (const [g] of giving) {
+      const keep = [...g.querySelectorAll<HTMLElement>('[data-fit-keep]')].reduce((h, k) => h + k.offsetHeight, 0);
+      g.style.cssText += `;flex:none;height:${keep}px`;
+    }
+    const natural = i.offsetHeight;
+    for (const [g, css] of giving) g.style.cssText = css;
+    i.style[size] = stretch;
+    if (natural === 0) return;
+    const next = Math.min(1, b.clientHeight / natural);
+    const s = current.current;
+    // Kept within half a percent, but only a scale a touch small: one a touch big clips what is kept.
+    if (s <= next && next - s < 0.005) {
+      changes.current = 0;
+      return;
+    }
+    changes.current += 1;
+    current.current = next;
+    setScale(next);
+  };
   useBeforePaint(() => {
-    const fit = () => {
-      const b = box.current;
-      const i = inner.current;
-      if (!b || !i) return;
-      // The content's own height, without the stretch: the stretch follows the scale, so measuring through it would
-      // keep a shrunk scale from ever growing back.
-      const stretch = i.style.minHeight;
-      i.style.minHeight = '0px';
-      const natural = i.offsetHeight;
-      i.style.minHeight = stretch;
-      if (natural === 0) return;
-      const next = Math.min(1, b.clientHeight / natural);
-      setScale((s) => (Math.abs(s - next) < 0.005 ? s : next));
-    };
-    fit();
-    const ro = new ResizeObserver(fit);
+    if (!gives) return;
+    if (changes.current >= 3) changes.current = 0;
+    else fit.current();
+  });
+  useBeforePaint(() => {
+    const run = () => fit.current();
+    run();
+    const ro = new ResizeObserver(run);
     if (box.current) ro.observe(box.current);
-    if (inner.current) ro.observe(inner.current);
+    // Held to the box's height with `gives`, the content resizes only with the scale itself: renders measure it instead.
+    if (inner.current && !gives) ro.observe(inner.current);
     return () => ro.disconnect();
   }, []);
   return (
     <div ref={box} className={cx('min-h-0 overflow-hidden', className)} data-fit={scale.toFixed(3)}>
-      <div ref={inner} className="flex flex-col" style={{ transform: `scale(${scale})`, transformOrigin: '0 0', width: `${100 / scale}%`, minHeight: `${100 / scale}%` }}>
+      <div ref={inner} className="flex flex-col" style={{ transform: `scale(${scale})`, transformOrigin: '0 0', width: `${100 / scale}%`, [gives ? 'height' : 'minHeight']: `${100 / scale}%` }}>
         {children}
       </div>
     </div>
