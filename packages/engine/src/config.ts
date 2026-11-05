@@ -911,6 +911,17 @@ export const POLITICS = {
       proposeChance: { trader: 0.5, cautious: 0.3, aggressive: 0.7, saboteur: 0.6 } satisfies Record<AiPersonaId, number>,
       /** Credits a month an AI counts for each of its plots an emission cap would stop it re-outfitting. */
       capPlotCost: 40,
+      /** A Rookie's chance of a yes on a law ballot: a coin from the council's own stream. */
+      rookieYes: 0.5,
+    },
+    /** The AI Governor's colony acts and the mood-weighed vote (G-5 C25). Placeholders until the sim tunes them. */
+    colony: {
+      /** Whether an AI Governor of each persona commissions a prestige object the fund can pay for. */
+      commissions: { trader: true, cautious: true, aggressive: true, saboteur: false } satisfies Record<AiPersonaId, boolean>,
+      /** Whether an AI Governor of each persona pays general strikers the fund can pay. */
+      paysStrike: { trader: true, cautious: true, aggressive: false, saboteur: false } satisfies Record<AiPersonaId, boolean>,
+      /** Below this happiness an AI voter will not vote for the sitting Governor if anyone else runs. */
+      leanBelow: 40,
     },
   },
 };
