@@ -48,17 +48,43 @@ const WHOLE = String.raw`((selectors) => selectors.flatMap((sel) => [...document
 })))`;
 
 /** Every box the selectors name shows whole on the TV; returns their tops and bottoms. */
-async function shownWhole(tv: Page, screen: string, selectors: string[]): Promise<{ id: string; top: number; bottom: number }[]> {
+export async function shownWhole(tv: Page, screen: string, selectors: string[]): Promise<{ id: string; top: number; bottom: number }[]> {
   const boxes = (await tv.evaluate(`(${WHOLE})(${JSON.stringify(selectors)})`)) as { id: string; top: number; bottom: number; cut: string | null }[];
   for (const b of boxes) check(b.cut === null, `TV-FIT: on the ${screen} TV ${b.id} shows whole, y ${b.top.toFixed(1)}–${b.bottom.toFixed(1)}, cut by ${b.cut}`);
   return boxes;
 }
 
-async function nothingPastTheFoot(tv: Page, screen: string): Promise<number> {
+/** Nothing the TV stage draws runs past the screen's foot, unless a box that clips it ends above the foot; returns the lowest bottom. */
+export async function nothingPastTheFoot(tv: Page, screen: string): Promise<number> {
   const { past, foot } = (await tv.evaluate(PAST_THE_FOOT)) as { past: string[]; foot: number };
   const vh = await tv.evaluate(() => window.innerHeight);
   check(past.length === 0, `TV-FIT: on the ${screen} TV nothing runs past y ${vh}, got ${past.join('; ')}`);
   return foot;
+}
+
+/** Kept a string, as PAST_THE_FOOT: in the shown TV header, what of the header's right side the title runs over. */
+const TITLE_CLEAR = String.raw`(() => {
+  const header = [...document.querySelectorAll('[data-testid=tv-header]')].find((h) => h.checkVisibility());
+  if (!header) return null;
+  const title = header.querySelector('[data-testid=tv-phase]');
+  // Where its words end, not its box: a title squeezed narrower than its words draws them on past the box's edge.
+  const box = title.getBoundingClientRect();
+  const scale = title.offsetWidth ? box.width / title.offsetWidth : 1;
+  const t = { left: box.left, top: box.top, bottom: box.bottom, right: box.left + Math.max(box.width, title.scrollWidth * scale) };
+  const right = header.lastElementChild;
+  const under = [...right.children].filter((c) => c.checkVisibility()).filter((c) => {
+    const b = c.getBoundingClientRect();
+    return b.left < t.right - 1 && t.left < b.right - 1 && b.top < t.bottom - 1 && t.top < b.bottom - 1;
+  });
+  return { title: title.textContent, right: t.right, under: under.map((c) => (c.getAttribute('data-testid') || c.tagName.toLowerCase() + ' "' + (c.textContent || '').trim().slice(0, 20) + '"')) };
+})()`;
+
+/** TV-FIT title: the shown TV header's title runs over nothing on the header's right (the toggle, the gauges, the clock). */
+export async function theTvTitleIsClear(tv: Page, screen: string): Promise<string> {
+  const read = (await tv.evaluate(TITLE_CLEAR)) as { title: string; right: number; under: string[] } | null;
+  check(read !== null, `TV-FIT: the ${screen} TV shows its header`);
+  check(read.under.length === 0, `TV-FIT: on the ${screen} TV the title "${read.title}" runs over ${read.under.join(', ')}`);
+  return `"${read.title}" clear of the header's right, ending at x ${read.right.toFixed(0)}`;
 }
 
 /** Kept a string, as PAST_THE_FOOT: the ready chip, the gauges it may sit on, and how many lines the title takes. */
@@ -88,8 +114,11 @@ export async function theTvHeaderFits(tv: Page, screen: string): Promise<string>
   check(read.gauges > 0, `TV-FIT: the ${screen} TV shows the colony's gauges`);
   check(read.overlaps.length === 0, `TV-FIT: on the ${screen} TV the ready chip sits on no gauge, got it over ${read.overlaps.join(', ')}`);
   check(read.titleLines === 1, `TV-FIT: on the ${screen} TV "${read.title}" is one line, got ${read.titleLines}`);
+  await theTvTitleIsClear(tv, screen);
+  // Planning's news gives way under a clip; who is ready, at the column's foot, never does.
+  await shownWhole(tv, screen, ['[data-testid=tv-ready-list] > li']);
   const foot = await nothingPastTheFoot(tv, screen);
-  return `"${read.title}" on one line, the chip clear of ${read.gauges} gauges, the foot at y ${foot.toFixed(0)}`;
+  return `"${read.title}" on one line and clear of the header's right, the chip clear of ${read.gauges} gauges, the foot at y ${foot.toFixed(0)}`;
 }
 
 /**
@@ -99,36 +128,36 @@ export async function theTvHeaderFits(tv: Page, screen: string): Promise<string>
  * runs past the foot.
  */
 export async function theAuctionTvFits(tv: Page, server: MuleServer, code: string): Promise<string> {
-  const walk = tv.locator('[data-testid=tv-walk]');
-  await walk.waitFor({ timeout: 5_000 });
   const room = server.registry.get(code);
   check(room, `a room ${code} on the server`);
   const lines = () => tv.locator('[data-testid=chat-ticker] [data-testid^=chat-line-]').count();
   return held(server, code, async () => {
+    // Held first, so the walk cannot move on to the next good's status screen while it is read.
+    await tv.locator('[data-testid=tv-walk]').waitFor({ timeout: 5_000 });
     const state = (room as unknown as { game: { state: { auction: { deals: unknown[] }; players: { id: string; name: string }[] } } }).game.state;
     const a = state.auction;
     // The two longest names at the table trade with each other, and the host sells to the store.
     const [p, q] = [...state.players].sort((x, y) => y.name.length - x.name.length);
     check(p && q, 'TV-FIT: two players at the table to trade');
     const kept = a.deals;
-    // The help shows while nothing trades.
-    a.deals = [];
-    (room as unknown as { broadcast(): void }).broadcast();
-    await tv.locator('[data-testid=tv-deal]').first().waitFor({ state: 'detached', timeout: 2_000 });
-    // Two chat lines, so the ticker is up and has more than it shows, whatever the AIs have said.
-    for (const text of ['Anyone selling?', 'Food is cheap today.']) (room as unknown as { deliver(from: string, text: string): void }).deliver(state.players[0]!.id, text);
-    await tv.locator('[data-testid=chat-ticker]').waitFor({ timeout: 2_000 });
-    const helpLines = await lines();
-    check(helpLines === 1, `TV-FIT: with nothing trading the auction TV's chat ticker shows one line, got ${helpLines}`);
-    const help = await shownWhole(tv, 'auction (the help)', ['[data-testid=tv-help]', '[data-testid=tv-room-line]']);
-    check(help.length === 2, `TV-FIT: the auction TV shows its help and its room line, got ${help.map((b) => b.id).join(', ')}`);
-    const helpFoot = await nothingPastTheFoot(tv, 'auction (the help)');
-    a.deals = [
-      { buyer: p.id, seller: q.id, price: 31, units: 6 },
-      { buyer: 'store', seller: state.players[0]!.id, price: 25, units: 2 },
-    ];
-    (room as unknown as { broadcast(): void }).broadcast();
     try {
+      // The help shows while nothing trades.
+      a.deals = [];
+      (room as unknown as { broadcast(): void }).broadcast();
+      await tv.locator('[data-testid=tv-deal]').first().waitFor({ state: 'detached', timeout: 2_000 });
+      // Two chat lines, so the ticker is up and has more than it shows, whatever the AIs have said.
+      for (const text of ['Anyone selling?', 'Food is cheap today.']) (room as unknown as { deliver(from: string, text: string): void }).deliver(state.players[0]!.id, text);
+      await tv.locator('[data-testid=chat-ticker]').waitFor({ timeout: 2_000 });
+      const helpLines = await lines();
+      check(helpLines === 1, `TV-FIT: with nothing trading the auction TV's chat ticker shows one line, got ${helpLines}`);
+      const help = await shownWhole(tv, 'auction (the help)', ['[data-testid=tv-help]', '[data-testid=tv-room-line]']);
+      check(help.length === 2, `TV-FIT: the auction TV shows its help and its room line, got ${help.map((b) => b.id).join(', ')}`);
+      const helpFoot = await nothingPastTheFoot(tv, 'auction (the help)');
+      a.deals = [
+        { buyer: p.id, seller: q.id, price: 31, units: 6 },
+        { buyer: 'store', seller: state.players[0]!.id, price: 25, units: 2 },
+      ];
+      (room as unknown as { broadcast(): void }).broadcast();
       await tv.locator('[data-testid=tv-deal]').nth(1).waitFor({ timeout: 2_000 });
       const dealLines = await lines();
       check(dealLines === 0, `TV-FIT: while deals run the auction TV hides its chat ticker, got ${dealLines} lines`);
