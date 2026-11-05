@@ -1,4 +1,4 @@
-import { allPrices, observe, scoreParts, type GameState, type Phase, type Playbook, type PlayerId } from '@mule/engine';
+import { allPrices, BRAIN, observe, scoreParts, type GameState, type Phase, type Playbook, type PlayerId } from '@mule/engine';
 import { playMonthFrom, type MonthSeat } from '../play.js';
 import type { PlanEdit } from '../playbook/index.js';
 import { MOVES } from './moves-stub.js';
@@ -51,7 +51,8 @@ export const TOOL_DEFS: readonly ToolDef[] = [
   },
   {
     name: 'whatIf',
-    description: 'Plays your playbook with these edits over one month on a copy of what you can see, and returns your Worth after it.',
+    description:
+      'Plays your playbook with these edits over one month on a copy of what you can see, and returns your Worth after it, with any edit the rules refused (the draft value played instead). A few plays per answer.',
     input_schema: {
       type: 'object',
       properties: {
@@ -80,14 +81,15 @@ const WITHOUT_SIM: readonly ToolDef[] = TOOL_DEFS.filter((d) => d.name !== 'what
 /** What whatIf plays the month with: every player's seat, and the seat's playbook for the month with edits applied. */
 export interface WhatIfSim {
   seats: readonly MonthSeat[];
-  /** The playbook the edits make of the seat's draft, stamped for the month played; may throw on edits it refuses. */
-  playbook(edits: readonly PlanEdit[]): Playbook;
+  /** The playbook the edits make of the seat's draft, stamped for the month played, and the edits the rules refused. */
+  playbook(edits: readonly PlanEdit[]): { playbook: Playbook; rejected: NonNullable<Playbook['rejected']> };
 }
 
 const isEdit = (e: unknown): e is PlanEdit => isObject(e) && typeof e.path === 'string' && 'to' in e;
 
 export function toolsFor(state: GameState, seat: PlayerId, sim?: WhatIfSim): { definitions: readonly ToolDef[]; run(name: string, input: unknown): ToolResult } {
   const obs = observe(state, seat);
+  let played = 0;
   // Public on every row of the board, so read from the game itself: the totals only.
   const standings = state.players
     .map((p) => ({ seat: p.id, name: p.name, worth: scoreParts(state, p.id).total }))
@@ -108,11 +110,14 @@ export function toolsFor(state: GameState, seat: PlayerId, sim?: WhatIfSim): { d
     whatIf: (input) => {
       if (!Array.isArray(input.edits) || !input.edits.every(isEdit)) return error('bad_input');
       if (!sim) return error('unavailable');
+      if (played >= BRAIN.whatIfsPerWrite) return error('limit');
+      played++;
       const edits = input.edits.map((e) => ({ path: e.path, to: e.to, reason: typeof e.reason === 'string' ? e.reason : '' }));
-      const mine = sim.playbook(edits);
-      const seats = sim.seats.map((s) => (s.id === seat ? { ...s, playbook: mine } : s));
-      const played = playMonthFrom(obs, seats, obs.seed);
-      return ok({ month: played.month, worth: scoreParts(played.state, seat) });
+      const { playbook, rejected } = sim.playbook(edits);
+      const seats = sim.seats.map((s) => (s.id === seat ? { ...s, playbook } : s));
+      // observe() zeroes the seed: the month's dice are none of the live game's.
+      const month = playMonthFrom(obs, seats, 0);
+      return ok({ month: month.month, worth: scoreParts(month.state, seat), rejected });
     },
   };
 

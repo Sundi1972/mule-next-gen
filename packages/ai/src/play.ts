@@ -44,6 +44,7 @@ import {
   type AiLevelId,
   type AiPersonaId,
   type Playbook,
+  type PlayerId,
   type DevPlace,
   type GameState,
 } from '@mule/engine';
@@ -432,7 +433,7 @@ function* playPhases(state: GameState, seats: readonly AiSeat[], options: PlayOp
 
 /** A seat for playMonthFrom: who plays it, with the live seat's own seed, and the playbook it plays the month by. */
 export interface MonthSeat {
-  id: string;
+  id: PlayerId;
   persona: AiPersonaId;
   level: AiLevelId;
   /** The live seat's seed (AiSeat options.seed), so its drafts break ties as the live seat's do. */

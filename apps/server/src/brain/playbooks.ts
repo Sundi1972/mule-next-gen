@@ -95,7 +95,7 @@ export class Playbooks {
       // literal-ok: a person's seat in a what-if month is a Trader, seeded by seat order: not balance
       return { id: p.id, persona: 'trader' as const, level: 'trader' as const, seed: (i * 7_919 + 1) >>> 0 };
     });
-    return { seats, playbook: (edits) => validate(asked, seat, draft, edits).playbook };
+    return { seats, playbook: (edits) => validate(asked, seat, draft, edits) };
   }
 
   /**
