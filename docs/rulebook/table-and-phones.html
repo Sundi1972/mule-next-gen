@@ -144,23 +144,23 @@
 <p class="code-ref">In the code: <code>apps/web/src/phone/arcade/Develop.tsx, stages.tsx, guide.ts, parts.tsx::paceWords, layout.ts, controls.ts</code> · <code>packages/engine/src/floor/reach.ts::reachWords</code> · <code>packages/engine/src/config.ts::DEV_STEER</code></p>
 <p class="owner">Kept current by: the UX team (WS6). Rules in <a href="development.html">Development</a>.</p>
 
-<h2 id="sick-line">The sick line on the sideways phone <span class="pill progress">Being built</span></h2>
-<p>Today a sick player's pace line only says "Pace 50%: sick". The new line says that you are sick, why, and your pace this turn:</p>
+<h2 id="sick-line">The sick line on the sideways phone <span class="pill built">In the game</span></h2>
+<p>When you are sick, the pace line in the walking screen's side room says that you are sick, why, and your pace this turn:</p>
 <ul>
 <li>the sickness and its cause, with a cross in the Medicine colour: "✚ Sick: the air is toxic.", "… your own pollution fouled the air.", or "Sick this month.";</li>
 <li>then "50% pace this turn", adding "· you ate 2 of 5 Food" when you are hungry too;</li>
 <li>a tap adds that it struck as your turn began with no Medicine to cure it, and that a Medicine in hand when a turn begins stops it (it is used up);</li>
 <li>on a small phone the bar reads "✚ Sick · 50% pace".</li>
 </ul>
-<div class="box next"><h4>What is changing</h4><p>PR #375 (the UX team, WS6), reviewed. It carries the tap walk's removal (PR #369, the Auctions team) until that merges, because the sick line belongs to the arcade screen only.</p></div>
-<p class="code-ref">In the code: <code>apps/web/src/phone/arcade/parts.tsx::paceWords, PaceLine</code></p>
+<div class="box why"><h4>Why it is like this</h4><p>The PM's ruling A, 5 Nov: the line says it and why, in the place you already look for your pace, rather than a banner competing with the guide's first note. Before it, the line only said "Pace 50%: sick". The tap screen's start card, which explained sickness, went with the tap screen.</p></div>
+<p class="code-ref">In the code: <code>apps/web/src/phone/arcade/parts.tsx::PaceLine, SickLine</code> · <code>packages/ui</code> <code>sickReason</code> · spec ws6-ux AM-21</p>
 <p class="owner">Kept current by: the UX team (WS6).</p>
 
 <h2 id="chat">Chat, whispers, emotes and bubbles <span class="pill built">In the game</span></h2>
 <p>You type in the <strong>Talk</strong> desk in planning: to the whole table, or whispered to one player ("WHISPER · ONLY YOU AND KAI SEE THIS"). Five quick emotes sit above the box: Deal?, Nice!, Traitor!, Ha! and Help!. A line holds up to <span class="num">280</span> characters. A whisper reaches only its two ends, never the TV; a whisper between two people stays hidden from the computer players too.</p>
 <p>Every screen, the TV included, shows what was said:</p>
 <ul>
-<li><strong>A speech bubble</strong> pops at the speaker's creature wherever the screen draws it (on the map, on the auction board, in the store's hall). Where the screen does not draw the speaker, the bubble opens at their place in the seat row. One bubble shows at a time on each screen, so they never cover each other: each shows for at least <span class="num">2</span> s and at most <span class="num">4.5</span> s, and a line that would wait more than <span class="num">4</span> s for its turn gets no bubble. A new phase ends every bubble.</li>
+<li><strong>A speech bubble</strong> pops at the speaker's creature wherever the screen draws it (on the map, on the auction board, in the store's hall). Where the screen does not draw the speaker, the bubble opens at their place in the seat row. One bubble shows at a time on each screen, so they never cover each other: each shows for at least <span class="num">2</span> s and at most <span class="num">4.5</span> s, and a line that would wait more than <span class="num">4</span> s for its turn gets no bubble. A new phase ends every bubble. A bubble opens above its speaker, or below or beside where above would cover a name, a caption or a price, sliding along its side to stay clear and inside its screen; on a crowded screen it takes the place that covers least.</li>
 <li><strong>The ticker</strong> keeps the last lines, newest first: two on a phone (in the rail, under its content), three on the TV (under the header). A whisper is marked 🔒.</li>
 <li><strong>Emotes</strong> float at the top of every phone's stage for <span class="num">3.5</span> s.</li>
 </ul>
