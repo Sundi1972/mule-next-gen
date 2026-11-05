@@ -594,14 +594,19 @@ export interface ScoreParts {
   muleValue: number;
   /** Points for terms served (POLITICS.termScore each), before any Collapse cut. 0 with politics off. */
   office: number;
-  /** What Collapse took off every line, office included: 0 unless the colony failed. */
+  /**
+   * What this player gave the colony's projects, as their plaques record it (credits plus goods at reference price),
+   * counted 1:1 (Heiko, G-5): a donation moves Worth from money and goods to this line. 0 with politics off.
+   */
+  donated: number;
+  /** What Collapse took off every line, office and donations included: 0 unless the colony failed. */
   cut: number;
   total: number;
 }
 
 /**
  * A final score line by line: money, goods at today's colony prices, land,
- * installed MULEs at the store price, terms in office, and the Collapse cut on all of them.
+ * installed MULEs at the store price, terms in office, donations to the colony, and the Collapse cut on all of them.
  * The lines add up to total + cut exactly; goods absorbs the rounding. See spec RULE-3.
  */
 export function scoreParts(state: GameState, playerId: string): ScoreParts {
@@ -618,9 +623,12 @@ export function scoreParts(state: GameState, playerId: string): ScoreParts {
   const before = Math.round(raw);
   // Outside Collapse the office line joins after the rounding, so it moves no existing total.
   const office = officeScore(state, playerId);
-  const total = colonyFailed(state) ? Math.round((raw + office) * POLLUTION.collapseScore) : before + office;
+  // Donations join the same way, whole credits, so a donation of credits leaves Worth as it was.
+  const donated = Math.round((state.colony?.projects ?? []).reduce((sum, project) => sum + (project.plaque[playerId] ?? 0), 0));
+  const added = office + donated;
+  const total = colonyFailed(state) ? Math.round((raw + added) * POLLUTION.collapseScore) : before + added;
   const money = Math.round(p.money);
-  return { money, goods: before - money - land - muleValue, plots, land, mules, muleValue, office, cut: before + office - total, total };
+  return { money, goods: before - money - land - muleValue, plots, land, mules, muleValue, office, donated, cut: before + added - total, total };
 }
 
 /** Final score: scoreParts().total. */
