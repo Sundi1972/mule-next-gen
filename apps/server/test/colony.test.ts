@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { advancePhase, callStrike, COLONY, colonyScore, GOOD_CONFIG, HAPPINESS, monthLedger, PRESTIGE, RuleError, type GameState } from '@mule/engine';
+import { advancePhase, callStrike, COLONY, colonyScore, colonyScoreOf, GOOD_CONFIG, HAPPINESS, monthLedger, PRESTIGE, RuleError, type GameState } from '@mule/engine';
 import { MuleGame } from '../src/mule-game.js';
 import { fakeContext, seats } from './fake-context.js';
 
@@ -26,6 +26,19 @@ function refusal(run: () => void): string {
 }
 
 describe('the colony at the table', () => {
+  it('AM-12: lastScore is the colony score as the last month ended, from its own snapshot (air included); none in month 1', () => {
+    const { game, state } = governed();
+    expect(game.viewFor(null).colony!.lastScore ?? null, 'month 1 has no last month end').toBeNull();
+    state.month = 2;
+    const end = { month: 1, wealth: 9_000, prestige: 3, happiness: 70, air: 12 };
+    state.colony!.monthEnds = [end];
+    state.air = 80; // the air now is not the air that month ended at
+    const expected = colonyScoreOf({ wealth: end.wealth, air: end.air, prestige: end.prestige, happiness: end.happiness }).total;
+    for (const seat of [null, 's1']) expect(game.viewFor(seat).colony!.lastScore, `seen by ${seat ?? 'the TV'}`).toBe(expected);
+    state.colony!.monthEnds = [{ ...end, happiness: null }];
+    expect(game.viewFor(null).colony!.lastScore, 'no mood yet, no score').toBeNull();
+  });
+
   it('AM-12 (RULE-25): every screen carries the colony score every month, as the state scores now, not only at game over', () => {
     const { game, state } = governed();
     expect(state.phase).not.toBe('gameOver');
