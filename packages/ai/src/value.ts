@@ -17,6 +17,7 @@ import {
   playerEventChance,
   POLLUTION,
   PRICE,
+  PROCESSED_GOODS,
   rawOutput,
   RECIPES,
   SPECIES_PERK,
@@ -31,6 +32,7 @@ import {
   type GameState,
   type Good,
   type Outfit,
+  type ProcessedGood,
   type Stock,
   type Tile,
 } from '@mule/engine';
@@ -275,10 +277,17 @@ export function unitValues(obs: GameState, o: Outlook, good: Good, mind: Mind): 
     // off at that point, worth what that plot loses turned off, over each unit of its use. Next month, so no cold snap.
     const order = energyOffOrder(obs, me, 1);
     const net = mine.filter((t) => t.outfit === 'energy').reduce((n, t) => n + Math.max(0, rawOutput(obs, t) - energyUseOf(obs, t)), 0);
-    // Each unit of use, from the plot that goes off last (the back of the order) to the one that goes off first.
-    const units = order
-      .flatMap((p) => Array<number>(p.use).fill(afterTax(obs, (1 - UPKEEP.offOutputShare) * p.full * P(p.tile.outfit as Good)) / p.use))
-      .reverse();
+    // What a plot loses turned off, a unit of its use at a time. An approximation until #385: it leaves out the inputs
+    // a turned-off factory saves, and that one whose 20% rounds to 0 makes nothing (and takes nothing).
+    const lost = (good: Good, full: number, use: number) => Array<number>(use).fill(afterTax(obs, (1 - UPKEEP.offOutputShare) * full * P(good)) / use);
+    // Each unit of use, from the plot that goes off last (the back of the order) to the one that goes off first; then
+    // the factories the stock can't feed now, which run in production's second pass on what is left, so are covered last.
+    const listed = new Set(order.map((p) => p.tile));
+    const unfed = PROCESSED_GOODS.flatMap((g) => mine.filter((t) => t.outfit === g && !listed.has(t)));
+    const units = [
+      ...order.flatMap((p) => lost(p.tile.outfit as Good, p.full, p.use)).reverse(),
+      ...unfed.flatMap((t) => lost(t.outfit as Good, factoryFit(obs, t, t.outfit as ProcessedGood, me).output, energyUseOf(obs, t))),
+    ];
     const short = Math.max(0, units.length - net);
     if (short > 0) {
       block = Math.ceil(short / keepRate);
