@@ -445,12 +445,12 @@ function everyLineShows(who: string, wire: Wire, samples: Sample[]): string {
   for (const line of wire.lines) {
     const phase = name(line);
     const seen = samples.find((s) => s.t >= line.at && s.ticker.some((l) => l.id === line.id));
-    // The TV's goods auction hides its ticker while a deal runs, and the speaker's bubble on the board carries the line
-    // (PM ruling, 5 Nov): said then, the line shows as its bubble, at least.
+    // The TV's goods auction shows no ticker on the walk, and the speaker's bubble on the board carries the line (PM
+    // rulings, 5 Nov): said then, the line shows as its bubble, at least.
     if (!seen && tv && phase === 'auction') {
       const hidden = samples.find((s) => s.t >= line.at);
       const bubble = samples.find((s) => s.t >= line.at && s.bubbles.some((x) => x.line === line.id));
-      check(hidden && !hidden.tickerRect && bubble, `B-AC-17: on the TV line ${line.id} ("${line.text}"), said while the auction's ticker was ${hidden?.tickerRect ? 'up' : 'hidden'}, shows in the ticker or as its bubble`);
+      check(hidden && !hidden.tickerRect && bubble, `B-AC-17: on the TV line ${line.id} ("${line.text}"), said on the auction's walk (its ticker ${hidden?.tickerRect ? 'up' : 'hidden'}), shows in the ticker or as its bubble`);
       continue;
     }
     check(seen, `B-AC-17: on ${who} line ${line.id} ("${line.text}") shows in the ticker`);

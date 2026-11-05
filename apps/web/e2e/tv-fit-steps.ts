@@ -123,14 +123,15 @@ export async function theTvHeaderFits(tv: Page, screen: string): Promise<string>
 
 /**
  * TV-FIT auction (the walk), with deals put on the board through the server while the room is held, then taken off
- * again: with nothing trading, the help shows under a one-line chat ticker and nothing runs past the foot; with two
- * deals up, the ticker is gone (the bubbles carry the chat), each deal row is whole inside the deal list and nothing
- * runs past the foot.
+ * again: the walk has no chat ticker (the bubbles on the board carry the chat), said lines or not, so the board keeps
+ * one size as deals come and go; with nothing trading the help and the room line show whole, with two deals up each
+ * deal row is whole inside the deal list, and either way nothing runs past the foot.
  */
 export async function theAuctionTvFits(tv: Page, server: MuleServer, code: string): Promise<string> {
   const room = server.registry.get(code);
   check(room, `a room ${code} on the server`);
   const lines = () => tv.locator('[data-testid=chat-ticker] [data-testid^=chat-line-]').count();
+  const boardHeight = () => tv.locator('[data-testid=tv-walk] [data-testid=walk-board]').evaluate((b) => b.getBoundingClientRect().height);
   return held(server, code, async () => {
     // Held first, so the walk cannot move on to the next good's status screen while it is read.
     await tv.locator('[data-testid=tv-walk]').waitFor({ timeout: 5_000 });
@@ -145,11 +146,12 @@ export async function theAuctionTvFits(tv: Page, server: MuleServer, code: strin
       a.deals = [];
       (room as unknown as { broadcast(): void }).broadcast();
       await tv.locator('[data-testid=tv-deal]').first().waitFor({ state: 'detached', timeout: 2_000 });
-      // Two chat lines, so the ticker is up and has more than it shows, whatever the AIs have said.
+      // Chat lines said now still put up no ticker on the walk, whatever the AIs have said.
       for (const text of ['Anyone selling?', 'Food is cheap today.']) (room as unknown as { deliver(from: string, text: string): void }).deliver(state.players[0]!.id, text);
-      await tv.locator('[data-testid=chat-ticker]').waitFor({ timeout: 2_000 });
+      await tv.waitForTimeout(300);
       const helpLines = await lines();
-      check(helpLines === 1, `TV-FIT: with nothing trading the auction TV's chat ticker shows one line, got ${helpLines}`);
+      check(helpLines === 0, `TV-FIT: the auction TV's walk shows no chat ticker, got ${helpLines} lines`);
+      const helpBoard = await boardHeight();
       const help = await shownWhole(tv, 'auction (the help)', ['[data-testid=tv-help]', '[data-testid=tv-room-line]']);
       check(help.length === 2, `TV-FIT: the auction TV shows its help and its room line, got ${help.map((b) => b.id).join(', ')}`);
       const helpFoot = await nothingPastTheFoot(tv, 'auction (the help)');
@@ -160,7 +162,9 @@ export async function theAuctionTvFits(tv: Page, server: MuleServer, code: strin
       (room as unknown as { broadcast(): void }).broadcast();
       await tv.locator('[data-testid=tv-deal]').nth(1).waitFor({ timeout: 2_000 });
       const dealLines = await lines();
-      check(dealLines === 0, `TV-FIT: while deals run the auction TV hides its chat ticker, got ${dealLines} lines`);
+      check(dealLines === 0, `TV-FIT: while deals run the auction TV shows no chat ticker, got ${dealLines} lines`);
+      const dealsBoard = await boardHeight();
+      check(Math.abs(dealsBoard - helpBoard) <= 1, `TV-FIT: the walk board keeps its size as deals start, ${helpBoard.toFixed(1)} px then ${dealsBoard.toFixed(1)} px`);
       const rows = await tv.evaluate(() => {
         const list = document.querySelector('[data-testid=tv-deal]')?.parentElement?.getBoundingClientRect();
         return [...document.querySelectorAll('[data-testid=tv-deal]')].map((d) => {
@@ -172,7 +176,7 @@ export async function theAuctionTvFits(tv: Page, server: MuleServer, code: strin
       for (const [i, r] of rows.entries()) check(r.whole, `TV-FIT: the auction TV's deal row ${i + 1} is whole in its list, at x ${r.left.toFixed(1)}, y ${r.top.toFixed(1)}–${r.bottom.toFixed(1)}, in the list at ${r.list}`);
       await shownWhole(tv, 'auction (two deals)', ['[data-testid=tv-deal]', '[data-testid=tv-room-line]']);
       const dealsFoot = await nothingPastTheFoot(tv, 'auction (two deals)');
-      return `the help under one chat line, its foot at y ${helpFoot.toFixed(0)}; two deal rows whole with no ticker, y ${rows[0]!.top.toFixed(0)}–${rows[1]!.bottom.toFixed(0)}, the foot at y ${dealsFoot.toFixed(0)}`;
+      return `no ticker on the walk, the board ${helpBoard.toFixed(0)} px with or without deals; the help whole, its foot at y ${helpFoot.toFixed(0)}; two deal rows whole, y ${rows[0]!.top.toFixed(0)}–${rows[1]!.bottom.toFixed(0)}, the foot at y ${dealsFoot.toFixed(0)}`;
     } finally {
       a.deals = kept;
       (room as unknown as { broadcast(): void }).broadcast();
