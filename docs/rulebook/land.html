@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Land and geology · M.U.L.E. Rulebook</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="rulebook.css">
+</head>
+<body>
+<div class="rb-shell">
+<aside class="rb-rail"></aside>
+<main class="rb-main">
+<article>
+<h1>Land and geology</h1>
+<p class="rb-lede">The map, what lies hidden in its ground, and every way land changes hands: the free land grant, the land auction, selling to the store, the geo drone and analysing a plot on foot.</p>
+
+<h2 id="the-map">The map <span class="pill built">In the game</span></h2>
+<p>Every game is played on one grid of square plots, made fresh from the game's seed. The same seed always makes the same map, so a game can be replayed. The size depends on how many players sit at the table.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Players</th><th>Size band</th><th class="n">Columns</th><th class="n">Rows</th><th class="n">Plots (with the store)</th><th class="n">Special fields</th></tr></thead>
+<tbody>
+<tr><td>2 or 3</td><td>small</td><td class="n">13</td><td class="n">7</td><td class="n">91</td><td class="n">3</td></tr>
+<tr><td>4</td><td>mid</td><td class="n">15</td><td class="n">9</td><td class="n">135</td><td class="n">4</td></tr>
+<tr><td>5 or 6</td><td>large</td><td class="n">19</td><td class="n">11</td><td class="n">209</td><td class="n">5</td></tr>
+</tbody>
+</table></div>
+<p>The <strong>store</strong> sits on the plot at the very centre of the map. It is not land: nobody owns it, claims it or walks across it, and colonists go in and out through the doors on its left and right sides (see <a href="development.html#store-floor">the store floor</a>).</p>
+<p>A <strong>river</strong> runs from the top row to the bottom row, always passing right beside the store. It bends from row to row: at least <span class="num">2</span> bends on a small map, <span class="num">3</span> on a mid map and <span class="num">4</span> on a large one, plus <span class="num">0</span> or <span class="num">1</span> more by chance. It never comes closer than <span class="num">2</span> columns to the left or right edge. Where it bends, an extra river plot joins the two rows, so the river is always one connected stream.</p>
+<p>The rest of the land is laid out in regions of one terrain, each at least <span class="num">3</span> plots big and none larger than <span class="num">12</span>% of the land beside the river. Each terrain aims at a share of that land, allowed to stray by a third of its target plus one plot, and no terrain may cover more than a third.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Terrain</th><th class="n">Target share of land</th></tr></thead>
+<tbody>
+<tr><td>Plains</td><td class="n">24%</td></tr>
+<tr><td>Forest</td><td class="n">11%</td></tr>
+<tr><td>Hills</td><td class="n">10%</td></tr>
+<tr><td>Desert</td><td class="n">9%</td></tr>
+<tr><td>Tundra</td><td class="n">8%</td></tr>
+<tr><td>Mountains</td><td class="n">7%</td></tr>
+<tr><td>Swamp</td><td class="n">7%</td></tr>
+<tr><td>Lake</td><td class="n">6%</td></tr>
+<tr><td>Volcanic</td><td class="n">6%</td></tr>
+<tr><td>Crater</td><td class="n">6%</td></tr>
+<tr><td>Ice</td><td class="n">6%</td></tr>
+</tbody>
+</table></div>
+<h3 id="map-promises">What every map promises</h3>
+<p>The map maker checks each map against a set of rules before play, and repairs the ground until it meets them. So no table is dealt a map without Food, Water, Energy or Smithore.</p>
+<ul>
+<li><strong>Enough good land.</strong> A plot counts as good for Food, Water or Energy at a rating of <span class="num">1</span> or more, and for Smithore, Crystite or Rare earth at <span class="num">3</span> or more. Every map has at least <span class="num">10</span> good Food, <span class="num">10</span> good Water, <span class="num">10</span> good Energy and <span class="num">3</span> good Smithore plots per player.</li>
+<li><strong>Usually more.</strong> Normally the map has at least <span class="num">12</span> Food, <span class="num">13</span> Water, <span class="num">13</span> Energy and <span class="num">4</span> Smithore plots per player. With a chance of <span class="num">25</span>%, one of these four goods is the map's <em>scarce good</em> and only gets the floor above.</li>
+<li><strong>Nothing out of reach.</strong> From any plot, a good Food, Water and Energy plot lies within <span class="num">3</span> steps (<span class="num">4</span> on a large map), and a good Smithore plot within <span class="num">5</span> steps (<span class="num">6</span> on a large map).</li>
+<li><strong>Smithore comes in seams.</strong> At least <span class="num">70</span>% of the good Smithore plots touch another good Smithore plot.</li>
+</ul>
+<p class="code-ref">In the code: <code>packages/engine/src/config.ts::mapSize</code> · <code>config.ts::MAP</code> · <code>packages/engine/src/map-layout.ts::placeRiver</code> · <code>packages/engine/src/map-rules.ts</code></p>
+<p class="owner">Kept current by: the Maps team (WS5).</p>
+
+<h2 id="terrain">Terrain and what it hints <span class="pill built">In the game</span></h2>
+<p>Everyone sees every plot's terrain. Terrain does not decide what a plot makes; it only sets the <em>odds</em> for its hidden ground (next section). For each grown good (Food, Water, Energy) a terrain is either <em>often good</em>, <em>neutral</em> or <em>poor</em>; for Smithore it has an odds level from <em>none</em> to <em>very high</em>.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Terrain</th><th>Often good for</th><th>Poor for</th><th>Smithore odds</th><th>Hint the phone shows</th></tr></thead>
+<tbody>
+<tr><td>River</td><td>Food, Water</td><td>nothing</td><td>low</td><td>Often good for Food and Water. Little Smithore.</td></tr>
+<tr><td>Lake</td><td>Water, Food</td><td>nothing</td><td>none</td><td>Often good for Water and Food. No Smithore.</td></tr>
+<tr><td>Plains</td><td>Food, Energy</td><td>nothing</td><td>low</td><td>Often good for Food and Energy. Little Smithore.</td></tr>
+<tr><td>Forest</td><td>Food</td><td>Energy</td><td>low</td><td>Often good for Food. Poor for Energy. Little Smithore.</td></tr>
+<tr><td>Swamp</td><td>Water</td><td>Food</td><td>low</td><td>Often good for Water. Poor for Food. Little Smithore.</td></tr>
+<tr><td>Hills</td><td>nothing</td><td>Food</td><td>high</td><td>Good odds of Smithore. Poor for Food.</td></tr>
+<tr><td>Mountains</td><td>nothing</td><td>Food, Energy</td><td>very high</td><td>Very good odds of Smithore. Poor for Food and Energy.</td></tr>
+<tr><td>Desert</td><td>Energy</td><td>Water, Food</td><td>low</td><td>Often good for Energy. Poor for Water and Food. Little Smithore.</td></tr>
+<tr><td>Tundra</td><td>Energy, Water</td><td>Food</td><td>medium</td><td>Often good for Energy and Water. Poor for Food. Some Smithore.</td></tr>
+<tr><td>Ice</td><td>Water</td><td>Food, Energy</td><td>none</td><td>Often good for Water. Poor for Food and Energy. No Smithore.</td></tr>
+<tr><td>Volcanic</td><td>Energy</td><td>Food</td><td>medium</td><td>Often good for Energy. Poor for Food. Some Smithore.</td></tr>
+<tr><td>Crater</td><td>nothing</td><td>Food</td><td>low</td><td>Poor for Food. Little Smithore.</td></tr>
+</tbody>
+</table></div>
+<p>No hint ever names Crystite or Rare earth: they turn up anywhere (see <a href="#rings">the rings</a>). Terrain also decides how fast a colonist walks across a plot and whether wolves live there; that is in <a href="development.html#walking">Development</a>.</p>
+<div class="box why"><h4>Why it is like this</h4><p>The design rule is "what you see is not what you get": terrain tells you the odds, only an analysis tells you the truth. Two hills side by side can be a rich Smithore seam and an empty rock. The hints are kept honest: over many maps, each terrain's average rating must sit within <span class="num">0.3</span> of the hint, and no part of the map (an edge row or column, or the middle) may run more than <span class="num">0.1</span> poorer or richer than the hints say.</p></div>
+<p class="code-ref">In the code: <code>config.ts::TERRAIN_ODDS</code> · <code>config.ts::MAP.honesty</code> · <code>config.ts::MAP.placeHonesty</code> · <code>apps/web/src/game/derive.ts::terrainHint</code></p>
+<p class="owner">Kept current by: the Maps team (WS5), with the phone team (WS6) for the hint words.</p>
+
+<h2 id="hidden-ground">Hidden ground ratings <span class="pill built">In the game</span></h2>
+<p>When the map is made, every plot gets a hidden <strong>rating</strong> for each of the six raw goods. The rating, not the terrain, is what a MULE on that plot works with. Nobody sees it until they analyse the plot or fly a drone over it.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Goods</th><th>Rating scale</th><th>What a MULE makes from it</th></tr></thead>
+<tbody>
+<tr><td>Food, Water, Energy (grown)</td><td><span class="num">-2</span> to <span class="num">+3</span></td><td><span class="num">2</span> plus the rating, but never less than <span class="num">1</span>: a poor plot still works, badly.</td></tr>
+<tr><td>Smithore, Crystite, Rare earth (mined)</td><td><span class="num">0</span> to <span class="num">4</span></td><td>Exactly the rating. A <span class="num">0</span> means nothing to mine: a MULE there makes nothing.</td></tr>
+</tbody>
+</table></div>
+<p>That is the plot's base. Traits, species, special fields, neighbours and pollution then add or take away; see <a href="production.html">Production</a>.</p>
+
+<h3 id="grown-odds">How grown ratings are dealt</h3>
+<p>For Food, Water and Energy, each plot's rating is drawn from its terrain's odds row:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Terrain suits the good</th><th class="n">-2</th><th class="n">-1</th><th class="n">0</th><th class="n">+1</th><th class="n">+2</th><th class="n">+3</th><th class="n">Average</th></tr></thead>
+<tbody>
+<tr><td>Often good</td><td class="n">0%</td><td class="n">5%</td><td class="n">15%</td><td class="n">30%</td><td class="n">30%</td><td class="n">20%</td><td class="n">+1.45</td></tr>
+<tr><td>Neutral</td><td class="n">5%</td><td class="n">20%</td><td class="n">40%</td><td class="n">25%</td><td class="n">10%</td><td class="n">0%</td><td class="n">+0.15</td></tr>
+<tr><td>Poor</td><td class="n">30%</td><td class="n">35%</td><td class="n">25%</td><td class="n">10%</td><td class="n">0%</td><td class="n">0%</td><td class="n">-0.85</td></tr>
+</tbody>
+</table></div>
+<p>The draw is not plot by plot at random. A smooth random "field" is laid over the map for each good, and within each terrain the best ratings go where the field is highest. So good farmland comes in patches rather than speckles. Smithore uses a narrower field, which gathers its rich plots into seams.</p>
+
+<h3 id="smithore-odds">How Smithore is dealt</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Smithore odds</th><th>Terrains</th><th class="n">0</th><th class="n">1</th><th class="n">2</th><th class="n">3</th><th class="n">4</th><th class="n">Average</th></tr></thead>
+<tbody>
+<tr><td>none</td><td>Lake, Ice</td><td class="n">100%</td><td class="n">0%</td><td class="n">0%</td><td class="n">0%</td><td class="n">0%</td><td class="n">0</td></tr>
+<tr><td>low</td><td>River, Plains, Forest, Swamp, Desert, Crater</td><td class="n">70%</td><td class="n">20%</td><td class="n">10%</td><td class="n">0%</td><td class="n">0%</td><td class="n">0.4</td></tr>
+<tr><td>medium</td><td>Tundra, Volcanic</td><td class="n">40%</td><td class="n">30%</td><td class="n">20%</td><td class="n">10%</td><td class="n">0%</td><td class="n">1.0</td></tr>
+<tr><td>high</td><td>Hills</td><td class="n">5%</td><td class="n">15%</td><td class="n">30%</td><td class="n">30%</td><td class="n">20%</td><td class="n">2.45</td></tr>
+<tr><td>very high</td><td>Mountains</td><td class="n">2%</td><td class="n">8%</td><td class="n">15%</td><td class="n">40%</td><td class="n">35%</td><td class="n">2.98</td></tr>
+</tbody>
+</table></div>
+
+<h3 id="floors">Floors and repairs</h3>
+<p>After the first deal the map maker repairs the ground until the promises in <a href="#map-promises">The map</a> hold: it lifts single plots to exactly the "good" threshold, swaps ratings within a terrain to join Smithore seams, and lowers the scarce good on a few plots. It never rerolls the map. Crystite and Rare earth have no floors and no scarcity: their rings replace them.</p>
+
+<h3 id="rings">Crystite and Rare earth: the rings</h3>
+<p>Crystite and Rare earth ignore terrain completely. For each of the two, the map maker picks <span class="num">3</span> or <span class="num">4</span> <strong>peak</strong> plots at random anywhere on the land, then rates every plot by how many steps (across the grid, never diagonally) it lies from the nearest peak:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Steps from the nearest peak</th><th class="n">Rating</th><th class="n">Plots in one ring</th></tr></thead>
+<tbody>
+<tr><td>0 (the peak)</td><td class="n">4</td><td class="n">1</td></tr>
+<tr><td>1</td><td class="n">3</td><td class="n">up to 4</td></tr>
+<tr><td>2</td><td class="n">1 or 2, by chance</td><td class="n">up to 8</td></tr>
+<tr><td>3 or more</td><td class="n">0</td><td class="n">the rest</td></tr>
+</tbody>
+</table></div>
+<p>Rings may overlap each other and the other mineral's rings, and a plot takes its rating from the nearest peak. One full ring holds <span class="num">5</span> good plots (rating <span class="num">3</span> or more), so a map has roughly <span class="num">15</span> to <span class="num">20</span> good plots of each, whatever its size. On a small map that is plenty per player; on a six-player map it is about <span class="num">3</span> each.</p>
+<p>Because no terrain says where the rings are, every plot shows the same hint for both: the map-wide average rating, <span class="num">0.6</span> (measured over maps of 2 to 6 players: about <span class="num">0.82</span> on small maps, <span class="num">0.60</span> on mid and <span class="num">0.41</span> on large). The phone's terrain line simply leaves them out.</p>
+<div class="box example"><h4>Example</h4><p>A Crystite peak lands on a plains plot at column 5, row 3. That plot is Crystite <span class="num">4</span>. The four plots touching it are Crystite <span class="num">3</span>, whether they are hills, swamp or river. The eight plots two steps away are each <span class="num">1</span> or <span class="num">2</span>. Everything further out is <span class="num">0</span>, unless another peak is nearer. A player who analyses one of the <span class="num">3</span>s and finds Crystite knows a richer plot is next door, and the race is on.</p></div>
+<div class="box why"><h4>Why it is like this</h4><p>Heiko, 21 Oct: Crystite and Rare earth come in rings, as in the original, at <span class="num">3</span> to <span class="num">4</span> random places per map with no tie to terrain or river side: "the whole idea is that you need to analyse the ground and you can be lucky". On hints he chose "Nothing, test to find", and "Rings replace them" for floors and scarcity.</p></div>
+<p class="code-ref">In the code: <code>config.ts::GROWN_ODDS</code> · <code>config.ts::MINERAL_ODDS</code> · <code>config.ts::MAP.peak</code> · <code>config.ts::MAP.unknownMineral</code> · <code>packages/engine/src/map-ground.ts::placePeaks</code> · <code>map-ground.ts::ringRating</code> · <code>packages/engine/src/production.ts::rawOutputParts</code></p>
+<p class="owner">Kept current by: the Maps team (WS5).</p>
+
+<h2 id="traits">Hidden hazard traits <span class="pill built">In the game</span></h2>
+<p>Each land plot also carries <span class="num">0</span>, <span class="num">1</span> or <span class="num">2</span> hidden traits. The count is drawn evenly from the list <span class="num">0, 0, 0, 1, 1, 2</span>, so half of all plots have none, a third have one and a sixth have two (a repeated draw adds nothing, so some "two" plots end with one).</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Trait</th><th>What it does today</th></tr></thead>
+<tbody>
+<tr><td>Hot spring</td><td>Energy <span class="num">+2</span>, Water <span class="num">-1</span> on that plot</td></tr>
+<tr><td>Toxic</td><td>Food <span class="num">-2</span> on that plot</td></tr>
+<tr><td>Thin vein</td><td>A mine there makes <span class="num">1</span> less for every <span class="num">3</span> months it has run</td></tr>
+<tr><td>Bedrock, Sheltered, Unstable, Infested, Flood plain</td><td>Nothing yet (see below)</td></tr>
+</tbody>
+</table></div>
+<p>You see a plot's traits once you have analysed it, and you always see the traits of plots you own.</p>
+<div class="box next"><h4>What is changing</h4><p>The design says the other five traits change event risks (floods, quakes and so on). Today no rule reads them: a search of the engine finds them only in the list of trait names. Whether they should do something, and what, is open with the Events team (WS1) and the Maps team (WS5).</p></div>
+<p class="code-ref">In the code: <code>config.ts::MAP.traits</code> · <code>config.ts::TRAIT_EFFECT</code> · <code>config.ts::THIN_VEIN_MONTHS</code> · <code>packages/engine/src/map.ts::generateMap</code></p>
+<p class="owner">Kept current by: the Maps team (WS5).</p>
+
+<h2 id="special-fields">Special fields <span class="pill built">In the game</span></h2>
+<p>A few plots carry a special field, drawn on the map for everyone to see, the TV included. Unlike the ground, a special field is public. A map has <span class="num">3</span> (small), <span class="num">4</span> (mid) or <span class="num">5</span> (large) of them, at most <span class="num">2</span> of any kind and at least <span class="num">3</span> different kinds. They sit at least <span class="num">4</span> steps apart, both sides of the river get at least one, and none sits on the river, a lake, the store or a plot touching the store.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Field</th><th>Where it can be</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td>Crystal cavern</td><td>Crater, mountains, hills, and only where the ground has Crystite <span class="num">1</span> or more</td><td><span class="num">+4</span> Crystite when mined for Crystite. Each month it is mined, a <span class="num">6</span>% chance it caves in and becomes a plain plot.</td></tr>
+<tr><td>Ruins</td><td>Any dry land</td><td>Pays its first owner <span class="num">2</span> Alloy or <span class="num">1</span> Electronics (fixed when the map is made), once, at that month's production. Then it is a plain plot.</td></tr>
+<tr><td>Alien relic</td><td>Any dry land</td><td><span class="num">+1</span> to every working plot touching it (raw or factory, whoever owns it), per relic.</td></tr>
+<tr><td>Geyser</td><td>Volcanic, tundra, ice</td><td><span class="num">+2</span> when outfitted for Water or Energy.</td></tr>
+<tr><td>Oasis</td><td>Desert with at least <span class="num">2</span> desert neighbours</td><td><span class="num">+3</span> Food from a farm there.</td></tr>
+<tr><td>Meteor crater</td><td>Never placed; formed in play</td><td>No bonus, but its Crystite rating becomes <span class="num">4</span>.</td></tr>
+</tbody>
+</table></div>
+<h3 id="meteor-craters">Meteor craters</h3>
+<p>A meteor strike is a production event with a <span class="num">3.2</span>% chance each month. After the month's goods are made it hits one plot (never the store). The owner keeps the plot, but its MULE, its run of months and its filter are destroyed, any special field there is replaced, and the plot becomes a meteor crater with Crystite <span class="num">4</span>.</p>
+<h3 id="colony-sites">Colony sites</h3>
+<p>When politics is on, the colony can win a plot at the land auction for a building that needs one (a Park, a Stadium or the Spaceport upgrade). That plot becomes the colony's: it is no player's, cannot be claimed or flown over by the drone, and stands bare. See <a href="#colony-bids">the colony's bid</a> below and <a href="colony-and-politics.html">Colony and politics</a>.</p>
+<p class="code-ref">In the code: <code>config.ts::MAP.special</code> · <code>config.ts::MAP.specialEffect</code> · <code>config.ts::EVENTS.colony.cavernCollapse</code> · <code>config.ts::EVENTS.colony.meteorStrike</code> · <code>packages/engine/src/specials.ts</code> · <code>packages/engine/src/colony.ts::siteProject</code></p>
+<p class="owner">Kept current by: the Maps team (WS5), with the Events team (WS1) for meteor strikes and cavern collapses.</p>
+
+<h2 id="land-grant">The land grant <span class="pill built">In the game</span></h2>
+<p>Every month starts with planning, then the <strong>land grant</strong>: the colony gives away free land, one plot to each player who wants one.</p>
+<ul>
+<li>The free plots light up <strong>one at a time in reading order</strong>: the top row first, left to right, then the next row. Each stays lit for <span class="num">650</span> ms.</li>
+<li>While a plot is lit, the first player to press <strong>CLAIM</strong> gets it. A press counts only for the plot the player saw lit, so a late thumb never grabs the next one by mistake ("That plot is not lit").</li>
+<li>Each player has <strong>one claim</strong> per grant. The button shows "1 OF 1 CLAIMS LEFT" and turns to "Done" once used.</li>
+<li>A player who wants nothing more presses <strong>I'm ready</strong> ("You're done with land") and claims nothing more this month.</li>
+<li>The light passes over the free plots <strong>once</strong>. There is no clock: the grant ends when every player has claimed or is done, when no free land is left, or when the light has passed the last free plot.</li>
+<li>Once every person at the table is done, the computer players' presses resolve at once and the light races to the end at an eighth of the step (about <span class="num">81</span> ms a plot), so nobody waits.</li>
+</ul>
+<p>The "Lit now" panel names the lit plot's terrain, any special field, and its terrain hint; for a plot you have analysed or flown your drone over, it shows the real ratings instead (see <a href="#geo-drone">the geo drone</a>). Each plot you own adds <span class="num">300</span> to your worth, before any MULE on it.</p>
+<p>When the last free plot is taken, the game ends <span class="num">3</span> months later, or at month <span class="num">12</span>, whichever comes first (see <a href="game-flow.html">The game at a glance</a>).</p>
+<div class="box example"><h4>Example</h4><p>A four-player game, month 1: the map has <span class="num">134</span> free plots, so a full pass can take up to <span class="num">134 × 0.65</span> = about <span class="num">87</span> seconds. Lena wants the river plot in row 2; it lights, she presses, it is hers. Once every human has claimed or pressed I'm ready, the computer players' choices settle in a flash.</p></div>
+<h3 id="grant-ai">Computer players in the grant</h3>
+<p>A computer player presses for a lit plot only if it is worth at least <span class="num">75</span>% of the best free plot still ahead of the light, and only with a human-like reaction time, so a quick human can beat it. At the default level (Trader) it reacts in <span class="num">250</span> to <span class="num">400</span> ms plus <span class="num">150</span> to <span class="num">300</span> ms to decide, and misses a plot it wanted <span class="num">5</span>% of the time (Rookie <span class="num">25</span>%, Tycoon never).</p>
+<div class="box why"><h4>Why it is like this</h4><p>One pass with no clock (WS3, 28 Oct) means a player who wants no land does not hold the table up, and nobody is rushed. One claim per grant is Heiko's ruling of 5 Nov (it was two); the store still builds two MULEs per player a month, so the corral did not shrink.</p></div>
+<div class="box next"><h4>What is changing</h4><p><strong>Being built:</strong> with one claim each, computer players all chased the same few best plots and a slow one could end the grant with no plot at all (measured: 25 plotless seats in 200 four-player games, 50 at six players). The fix makes them spread their presses; in 400 test games no seat ended plotless. It is in the Strategy team's PR #366 (WS1), which also fixes the glint grab described in <a href="development.html#glint">Development</a>.</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/game.ts::claimPlot</code> · <code>game.ts::grantDone</code> · <code>game.ts::advanceGrant</code> · <code>config.ts::GAME.claimsPerGrant</code> · <code>config.ts::GAME.grantTickMs</code> · <code>config.ts::PHASES.grantFastForwardMs</code> · <code>config.ts::STRATEGIST.grantShare</code> · <code>apps/server/src/mule-game.ts::maybeFastForward</code></p>
+<p class="owner">Kept current by: the Auctions team (WS3) for the grant, the Strategy team (WS1) for the computer players.</p>
+
+<h2 id="land-auction">The land auction <span class="pill built">In the game</span></h2>
+<p>After the grant comes the <strong>land auction</strong>, where plots and MULEs change hands between players. It happens only in a month where something is up for sale; otherwise the game goes straight to development.</p>
+<h3 id="listing">Putting a lot up</h3>
+<p>In planning, a player can list a plot they own, or the MULE standing on it, from the Sell tool. The listing says:</p>
+<ul>
+<li>the <strong>minimum</strong> bid, any whole number of <span class="num">1</span> or more (the form starts at <span class="num">250</span>);</li>
+<li>what happens if nobody bids that much: <strong>Store buys</strong> (the store pays a fixed price, shown on the form) or <strong>Keep it</strong>.</li>
+</ul>
+<div class="table-wrap"><table>
+<thead><tr><th>Limit</th><th class="n">Value</th></tr></thead>
+<tbody>
+<tr><td>Lots one player may list in a month</td><td class="n">2</td></tr>
+<tr><td>Lots the auction takes in a month, from everyone</td><td class="n">4</td></tr>
+<tr><td>Times one plot may be listed in a month (as plot or as MULE)</td><td class="n">1</td></tr>
+</tbody>
+</table></div>
+<p>A seller can take a listing back at any time in planning. Listings are made only in planning ("Listings are made in planning").</p>
+<h3 id="lot-clock">One lot at a time</h3>
+<p>Lots come up one after another. Each has three stages:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Stage</th><th class="n">Length</th><th>What happens</th></tr></thead>
+<tbody>
+<tr><td>Intro</td><td class="n">3 s</td><td>The plot lights on the map with its seller and minimum. Ends early once every buyer presses Ready to bid.</td></tr>
+<tr><td>Walk</td><td class="n">12 s</td><td>Buyers walk their bids up. Ends early once every buyer presses Done bidding.</td></tr>
+<tr><td>Result</td><td class="n">2.5 s</td><td>"Yours!", "Sold to …", "The store bought it" or "Unsold".</td></tr>
+</tbody>
+</table></div>
+<h3 id="who-bids">Who may bid</h3>
+<p>Everyone but the seller is a buyer, except a player whose money is below the minimum (shown as passing), and, on a MULE lot, a player already leading a MULE. Each buyer starts at the bottom of the board, below the minimum.</p>
+<h3 id="bidding">Bidding</h3>
+<p>Hold up to raise your bid, hold down to lower it, let go to stand. Your bid can never go above the money you hold. The board runs from <span class="num">0.7</span> times the minimum to <span class="num">2</span> times the minimum, and crossing it takes <span class="num">6</span> seconds. Once the leading bid passes the top of the board, bids climb twice as fast for the rest of the lot, so a hard-fought lot can still reach its price before the bell.</p>
+<p><strong>Soft close:</strong> when the lead changes hands with less than <span class="num">2</span> seconds left, the clock goes back to <span class="num">2</span> seconds, so the bell never decides who wins. These top-ups add at most <span class="num">6</span> seconds to one lot. A lot's first leader does not count as a change.</p>
+<p><strong>At the bell</strong> the highest bid at or over the minimum wins; on a tie, whoever got there first, then seat order.</p>
+<ul>
+<li><strong>Sold plot:</strong> the winner pays their bid and owns the plot at once. Any MULE, filter and run of months on it go with it.</li>
+<li><strong>Sold MULE:</strong> the winner pays and leads the MULE, already outfitted, into development, where they must install it on one of their plots before their turn ends or it runs off (see <a href="development.html#mule-runs-off">Development</a>). The seller's plot is left without a MULE.</li>
+<li>The seller receives the bid less sales tax (<span class="num">5</span>% at the start of a game; the Governor may change it), which goes to the colony fund.</li>
+<li><strong>Unsold, Keep it:</strong> nothing moves.</li>
+<li><strong>Unsold, Store buys:</strong> see <a href="#selling">Selling to the store</a>.</li>
+</ul>
+<div class="box example"><h4>Example</h4><p>Brix lists a hills plot at a minimum of <span class="num">250</span>. The board runs from <span class="num">175</span> to <span class="num">500</span>, so bids climb at about <span class="num">54</span> cr a second. Ossa reaches <span class="num">310</span>, Lena stops at <span class="num">290</span>. At the bell Ossa pays <span class="num">310</span>; the tax is <span class="num">16</span> (5% of 310, rounded), so Brix gets <span class="num">294</span>.</p></div>
+<h3 id="capped-mule-lot">A MULE under the emission cap</h3>
+<p>When the colony's emission cap stops new Rare earth or Alloy outfits, a MULE already outfitted for them may still be sold at a lot and installed by its buyer. The cap refuses new outfitting, not moving or installing a MULE that already exists, and the air is no worse for the sale.</p>
+<div class="box why"><h4>Why it is like this</h4><p>The sale rule is the original's land auction: buyers walk up, the highest bid at the bell wins (WS3 spec, 21 Oct). The soft close and the faster climb were added (AM-6) so that a lot is not decided by who happens to be leading when time runs out. The capped MULE is a PM ruling of 5 Nov.</p></div>
+<h3 id="lot-ai">Computer players at the auction</h3>
+<p>A computer player never bids past the lowest of its money less its cash reserve, what the lot is worth to it, and (for a plot) its room to develop more land. Overtaking, it jumps a random <span class="num">10</span> to <span class="num">35</span>% of the gap to that limit, so its stops are hard to read. Short of cash, it lists one plot or MULE a month itself, at <span class="num">80</span>% of what the lot is worth to it, with "Store buys" as its fallback.</p>
+<p class="code-ref">In the code: <code>packages/engine/src/lots.ts</code> (<code>list</code>, <code>standing</code>, <code>lotLeader</code>, <code>stepLandAuction</code>, <code>resolve</code>) · <code>config.ts::LOTS</code> · <code>config.ts::WALK.crossSeconds</code> · <code>config.ts::TAX.salesTax</code> · <code>config.ts::STRATEGIST.sell</code> · <code>packages/engine/src/politics.ts::outfitBlocked</code></p>
+<p class="owner">Kept current by: the Auctions team (WS3), with the Strategy team (WS1) for computer players' bids.</p>
+
+<h2 id="selling">Selling to the store <span class="pill built">In the game</span></h2>
+<p>There is no "sell" button for land outside the land auction. The way to get rid of a plot or a MULE for sure is to list it with <strong>Store buys</strong>: if no bid reaches your minimum, the store pays a fixed price, fixed when you list.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Lot</th><th>The store pays</th><th>Then</th></tr></thead>
+<tbody>
+<tr><td>Plot</td><td><span class="num">2/3</span> of a plot's worth, <span class="num">300</span>: <span class="num">200</span> cr</td><td>The plot goes back to free land. A MULE on it goes back to the store's corral.</td></tr>
+<tr><td>MULE</td><td>half this month's MULE price, rounded</td><td>The MULE goes back to the corral; the plot stays yours, bare.</td></tr>
+</tbody>
+</table></div>
+<p>The store always pays, even when its own cash runs below zero, so "Store buys" is a sure exit. The store price is set below a plot's worth on purpose, so selling to the store can never beat simply holding the land at the end.</p>
+<div class="box example"><h4>Example</h4><p>The MULE price this month is <span class="num">170</span>. Lena lists the Smithore MULE on her plains plot at a minimum of <span class="num">120</span>, Store buys. Nobody bids <span class="num">120</span>. The store pays her <span class="num">85</span> (half of 170), the MULE returns to the corral, and her plains plot is bare, ready for a better outfit.</p></div>
+<p class="code-ref">In the code: <code>lots.ts::storePaysAt</code> · <code>lots.ts::resolve</code> · <code>config.ts::LOTS.storePlotShare</code> · <code>config.ts::LOTS.storeMuleShare</code> · <code>config.ts::GAME.plotScore</code></p>
+<p class="owner">Kept current by: the Auctions team (WS3).</p>
+
+<h2 id="colony-lot">The colony's plot sale <span class="pill built">In the game</span></h2>
+<p>Each month, as the land grant ends, there is a <span class="num">10</span>% chance that the colony itself puts one free plot up for auction (Heiko asked for a chance between 1 in 10 and 1 in 8). The plot is picked at random among the free plots, and its lot comes up first.</p>
+<ul>
+<li>Its minimum is <span class="num">2/3</span> of a plot's worth: <span class="num">200</span>.</li>
+<li>Sold, the money goes to the store's cash, with no sales tax (the colony is not a player).</li>
+<li>Unsold, it simply stays free land.</li>
+<li>It never pushes out a player's listing: if <span class="num">4</span> lots are already listed, or no land is free, there is no colony lot.</li>
+</ul>
+<p>The roll comes from the game's seed and the month alone, so it is the same in a replay.</p>
+<h3 id="colony-bids">The colony bids for a site</h3>
+<p>With politics on, the colony can also <em>buy</em>. When a commissioned building needs a plot and the Governor has set a top bid, the colony bids on every player's plot that comes up: one credit over the best player's bid, up to the lower of the Governor's top bid and what the fund holds above its reserve. A player who reaches that cap takes the lot. If the colony wins, the fund pays the seller (less tax), any MULE on the plot goes back to the corral, and the plot becomes the colony's bare building site.</p>
+<p class="code-ref">In the code: <code>lots.ts::colonyLot</code> · <code>lots.ts::colonyBid</code> · <code>config.ts::LOTS.colonyPlotChance</code> · <code>config.ts::LOTS.colonyPlotShare</code> · <code>colony.ts::siteProject</code></p>
+<p class="owner">Kept current by: the Auctions team (WS3), with the Politics team (WS7) for the colony's bid.</p>
+
+<h2 id="geo-drone">The geo drone <span class="pill built">In the game</span></h2>
+<p>In planning you can send a <strong>geo drone</strong> to read the ground of plots before the land grant, from orbit.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Rule</th><th class="n">Value</th></tr></thead>
+<tbody>
+<tr><td>Fee, paid to the store at once</td><td class="n">60 cr</td></tr>
+<tr><td>Plots per drone</td><td class="n">1 or 2 (same fee)</td></tr>
+<tr><td>Drones per player per month</td><td class="n">1</td></tr>
+</tbody>
+</table></div>
+<ul>
+<li><strong>Which plots:</strong> on the phone, only free plots (not the store, nobody's land, not a colony site). The game's rules also allow a plot listed for this month's land auction, but the phone does not offer it; today only a computer player's plan can choose one.</li>
+<li><strong>How:</strong> open Geo drone in planning, tap up to two free plots ("Tap up to 2 free plots"; tapping a third drops the oldest), then press "Send the drone · 2 of 2 plots · 60 cr". If you picked one, the screen reminds you a second costs nothing extra. Once sent, it cannot be changed: "Your drone is on its way".</li>
+<li><strong>When the results arrive:</strong> silently, as the land grant starts. From then on those plots count as analysed for you, for the rest of the game, exactly as if you had stood on them.</li>
+<li><strong>What you see:</strong> nothing announces the results. While one of your drone's plots is lit in the grant, the "Lit now" panel shows its ground card (pips for every good) instead of the terrain hint, with a line such as "Your drone: 12·5 Desert, good for Energy", naming the best goods if they reach <span class="num">2</span> pips or more. Afterwards the same card shows whenever you look at that plot.</li>
+<li><strong>Who sees it:</strong> only you. The TV and the other players never see what your drone found, nor that you sent one; computer players cannot see it either.</li>
+</ul>
+<div class="box example"><h4>Example</h4><p>Ossa has her eye on two crater plots near the river. In planning she sends the drone over both for <span class="num">60</span> cr. At the grant, the first lights and her phone says "Your drone: 7·2 Crater, good for Crystite": she has found a ring. She claims it. The other crater was empty; she lets it pass.</p></div>
+<h3 id="drone-ai">Computer players and the drone</h3>
+<p>A computer player's own plan never sends a drone. Only a plan written by Claude (when Claude plays a seat) can name drone plots, and the rules check them the same way.</p>
+<p class="code-ref">In the code: <code>game.ts::orderGeoDrone</code> · <code>game.ts::advancePhase</code> (the results at the land grant) · <code>config.ts::DEVELOPMENT.droneFee</code> · <code>config.ts::DEVELOPMENT.dronePlots</code> · <code>apps/web/src/phone/hub/tools.tsx::DroneMap</code> · <code>apps/web/src/phone/LandGrant.tsx::droneFoundLine</code> · <code>packages/ai/src/seat.ts</code></p>
+<p class="owner">Kept current by: the Auctions team (WS3) for the rule, the UX team (WS6) for the drone screens.</p>
+
+<h2 id="analysing">Analysing a plot on foot <span class="pill built">In the game</span></h2>
+<p>During development your colonist can stand on any plot (owned or free, with or without a MULE) and press <strong>ANALYSE</strong>. The colonist stays put, the button reads ASSAYING, and when it is done you know that plot's rating for all six raw goods and its traits.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Who</th><th class="n">Time standing still</th><th class="n">Cost in money</th></tr></thead>
+<tbody>
+<tr><td>Any colonist</td><td class="n">8 s</td><td class="n">0</td></tr>
+<tr><td>Mollox (dig faster)</td><td class="n">4 s</td><td class="n">0</td></tr>
+</tbody>
+</table></div>
+<p>The time comes out of the one <span class="num">60</span>-second development clock, so it also lowers what the pub pays you. A plot analysed once stays known all game; a lake plot is analysed from its shore. See <a href="development.html#analysing">Development</a> for when the button offers it.</p>
+<p class="code-ref">In the code: <code>game.ts::analysePlot</code> · <code>game.ts::analysisSeconds</code> · <code>config.ts::DEVELOPMENT.analysisSeconds</code> · <code>config.ts::SPECIES_PERK.molloxAnalysis</code> · <code>packages/engine/src/floor/reach.ts</code></p>
+<p class="owner">Kept current by: the Auctions team (WS3) for the rule, the Strategy team (WS1) for the floor, the UX team (WS6) for the screens.</p>
+
+<h2 id="who-knows-what">Who knows what <span class="pill built">In the game</span></h2>
+<div class="table-wrap"><table>
+<thead><tr><th>Information</th><th>Who sees it</th></tr></thead>
+<tbody>
+<tr><td>Terrain, owners, MULEs and their outfits, filters, pollution, special fields</td><td>Everyone, the TV too</td></tr>
+<tr><td>A plot's real ratings</td><td>Only a player who analysed it or flew a drone over it</td></tr>
+<tr><td>A plot's traits</td><td>A player who analysed it, and its owner</td></tr>
+<tr><td>Your drone order and what it found</td><td>Only you</td></tr>
+<tr><td>Who analysed which plot</td><td>Nobody else (the colonist standing still is visible, the result is not)</td></tr>
+</tbody>
+</table></div>
+<p>Owning a plot does <em>not</em> show you its ratings. A plot you claimed without analysing shows only its terrain hint until you analyse it.</p>
+<h3 id="ai-knowledge">What the computer players know</h3>
+<p>Computer players read the game only through the same filter as a phone. For any plot they have not analysed, they see the terrain's average rating (and <span class="num">0.6</span> for Crystite and Rare earth on every plot), never the real one, and no traits except on their own plots. They never see another player's analyses, drone orders or drone finds. To learn the truth they must analyse on foot, like a human:</p>
+<ul>
+<li>they analyse an unknown plot of their own when its best and second-best uses are within <span class="num">25</span>% of each other on the averages;</li>
+<li>at most <span class="num">2</span> analyses a month (Rookie <span class="num">1</span>), and never with less than <span class="num">20</span> seconds left;</li>
+<li>when choosing land, an unknown plot counts for less than a known one (they score "known ground" lower when it is a guess from the terrain).</li>
+</ul>
+<p class="code-ref">In the code: <code>packages/engine/src/observe.ts::observe</code> · <code>packages/engine/src/map.ts::expectedGround</code> · <code>apps/server/src/mule-game.ts::viewFor</code> · <code>config.ts::STRATEGIST.analyseWhenClose</code> · <code>config.ts::STRATEGIST.analysesPerMonth</code></p>
+<p class="owner">Kept current by: the Auctions team (WS3) for the views, the Strategy team (WS1) for the computer players.</p>
+
+<h2 id="drone-geology-redesign">Drone and geology redesign <span class="pill designed">Designed</span></h2>
+<p>On 5 Nov Heiko played a game, could not get the drone to work as he expected, and asked for a redesign of how players learn about the ground. In his words, condensed:</p>
+<ol>
+<li><strong>Pick, then scan.</strong> Mark the plots first, press Scan, and get a detailed report.</li>
+<li><strong>Always see your own land.</strong> An easy way to look at your plots and their resources at any time, in planning and in development.</li>
+<li><strong>Pay to know.</strong> Resources show only after you paid for them, by drone or by the assay in development.</li>
+<li><strong>A clear marker</strong> on plots that hold something special, like Crystite or Rare earth.</li>
+<li><strong>One scale.</strong> Every resource rated <span class="num">0</span> to <span class="num">3</span> per plot.</li>
+</ol>
+<h3 id="redesign-today">How today differs</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Ask</th><th>Today</th></tr></thead>
+<tbody>
+<tr><td>Pick, then scan, then a report</td><td>You pick and pay in planning, but the results arrive silently when the land grant starts. You meet them only when a drone plot is lit (its ground card and one line) or when you look the plot up later. There is no Scan button and no report screen.</td></tr>
+<tr><td>Always see your own land</td><td>The Look tool shows a ground card only for plots you analysed; a plot you own but never analysed shows its terrain hint and its traits, not its ratings.</td></tr>
+<tr><td>Pay to know</td><td>Already so: ratings show only after a drone or an analysis. The analysis costs time (<span class="num">8</span> s), not money.</td></tr>
+<tr><td>A marker for Crystite or Rare earth</td><td>None. An analysed plot shows pips for each good on its card, nothing on the map itself marks a rich deposit.</td></tr>
+<tr><td>Every good <span class="num">0</span> to <span class="num">3</span></td><td>Grown goods are rated <span class="num">-2</span> to <span class="num">+3</span> and mined goods <span class="num">0</span> to <span class="num">4</span>; the phone draws both on <span class="num">0</span> to <span class="num">4</span> pips (a grown rating plus one, so <span class="num">-2</span> and <span class="num">-1</span> both show as no pips).</td></tr>
+</tbody>
+</table></div>
+<h3 id="redesign-designed">What you will see at the table</h3>
+<p>Heiko agreed the goals and four rules on 5 Nov: the land's hints stay; the marker for Crystite and Rare earth is yours alone, after geology; "the geologist" is Analyse on the plot; the 0 to 3 scale comes to the screen first, and the hidden numbers change only if the Strategy team's simulator says they hold. He chose approach B ("A plus My plots"), with the drone's report in the side rail.</p>
+<ul>
+<li><strong>Scan, and see at once.</strong> In planning, the Geo drone: tap up to <span class="num">2</span> free plots, then <em>Scan · 60 cr</em>. The plots pulse for a second and the report opens in the rail: each plot's land, what it is best for, any Crystite or Rare earth, and every good's dots. One drone each planning.</li>
+<li><strong>My plots.</strong> A tool beside Look in planning, and a <em>Plots</em> chip on the walking screen in development: every plot you own, one row each, with its MULE and every good's dots. A plot nobody analysed says how to find out. In the store, the "Your plots" box shows dots instead of words.</li>
+<li><strong>Analyse says what it found.</strong> After Analyse on any plot, not only your own, a card opens beside it for a few seconds with its dots and what it is best for.</li>
+<li><strong>The gem.</strong> On your own map only: a plot you analysed shows its best good as dots, and a gem at its top (beside your mark on your own plot) if it holds Crystite or Rare earth. The TV never shows either.</li>
+<li><strong>One scale, 0 to 3.</strong> On every screen, as the table below. The production numbers do not change.</li>
+</ul>
+<div class="table-wrap"><table>
+<thead><tr><th>Good</th><th><span class="num">0</span></th><th><span class="num">1</span></th><th><span class="num">2</span></th><th><span class="num">3</span></th></tr></thead>
+<tbody>
+<tr><td>Food, Water, Energy</td><td>rating <span class="num">-2</span> or <span class="num">-1</span> (makes <span class="num">1</span>)</td><td><span class="num">0</span> (makes <span class="num">2</span>)</td><td><span class="num">+1</span> (makes <span class="num">3</span>)</td><td><span class="num">+2</span> or <span class="num">+3</span> (makes <span class="num">4</span> to <span class="num">5</span>)</td></tr>
+<tr><td>Smithore, Crystite, Rare earth</td><td><span class="num">0</span> (nothing to mine)</td><td><span class="num">1</span></td><td><span class="num">2</span></td><td><span class="num">3</span> or <span class="num">4</span></td></tr>
+</tbody>
+</table></div>
+<div class="box why"><h4>Why it is like this</h4><p>Heiko at the table, 5 Nov: "I failed to use the drone … mark two plots first then click on scan and then I would get a detailed report", and "an easy way for me to always look at my lots and see the plots' resources". He chose B over the thinner A because A had no list of your plots. The report sits in the rail, not on the map, because two reports on the map cover a sixth of it on a sideways phone.</p></div>
+<div class="box next"><h4>What is changing</h4><p>Designed, not yet built. Three pieces, each usable on its own: Scan and the report; My plots; the card after Analyse, the gem and the 0 to 3 dots. The drone's results landing at Scan instead of at the land grant is a rule change for the Auctions team (WS3); the gem on the map is the Table team's map (WS4); the computer players simply learn their drone's results earlier, which the Strategy team (WS1) checks with the simulator.</p></div>
+<p class="code-ref">In the code: <code>game.ts::orderGeoDrone</code> · <code>game.ts::analysePlot</code> · <code>packages/engine/src/types.ts::Ground</code> · <code>apps/web/src/game/derive.ts::groundPips</code> · <code>apps/web/src/phone/ground.tsx::GroundCard</code> · spec <code>docs/specs/2026-11-05-ws6-plot-info.md</code> (PR #397) · mock <code>design/mocks/plot-info</code> at d3f64a51</p>
+<p class="owner">Not in the game yet. Building it: the UX team (WS6), with the Auctions team (WS3) for the drone rule and the Table team (WS4) for the map. Kept current by: the UX team (WS6), with WS3 and WS5.</p>
+</article>
+</main>
+</div>
+<script src="search-index.js"></script>
+<script src="rulebook.js"></script>
+</body>
+</html>

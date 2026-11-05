@@ -334,9 +334,13 @@ export interface ProductionLine {
   tile: number;
   good: Good;
   made: number;
-  /** What made up the output, in order; the deltas sum to `made`. */
+  /**
+   * What made up the output, in order; the deltas sum to `made`. `energyOff`: the plot was turned off for want of
+   * Energy and made UPKEEP.offOutputShare of its output (AM-17). `noEnergy` is the halving it replaced, kept for
+   * screens and fixtures that still name it; the engine no longer files it.
+   */
   parts: {
-    why: 'ground' | 'trait' | 'species' | 'cluster' | 'pollution' | 'floor' | 'noEnergy' | 'noWater' | 'event' | 'factory' | 'special';
+    why: 'ground' | 'trait' | 'species' | 'cluster' | 'pollution' | 'floor' | 'noEnergy' | 'energyOff' | 'noWater' | 'event' | 'factory' | 'special';
     delta: number;
     event?: EventKey;
   }[];

@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Open designs and backlog · M.U.L.E. Rulebook</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="rulebook.css">
+</head>
+<body>
+<div class="rb-shell">
+<aside class="rb-rail"></aside>
+<main class="rb-main">
+<article>
+<h1>Open designs and backlog</h1>
+<p class="rb-lede">Every decision that is not in the game yet, and every open question, with the team responsible. Each item links to the chapter that explains the rule in full.</p>
+<p class="owner">As of 5 Nov 2026. Kept current the day each decision is made (Heiko's rule, 5 Nov): the owning team or the programme manager adds it here and in its chapter.</p>
+<h2 id="being-designed">Being designed <span class="pill open">Being designed</span></h2>
+<p>A design is under way or a question is open. Nothing is built yet.</p>
+<h3 id="food-supply">Is there enough Food in the economy? <span class="pill open">Being designed</span></h3>
+<p>Once computer players buy the Food they need, they empty the same store shelf the colonists buy from. With the buying fix (selling surplus, Heiko&#x27;s V3), colonists go short in about 62-68% of months, against about 50% before. The levers are Heiko&#x27;s: start Food, the store&#x27;s Food per player, Food spoilage (50%), farm yield.</p>
+<p class="owner">Responsible: Heiko, at the balance pass at the end; measured by the Balance team (WS1) · Status: Recorded 5 Nov; measure now, tune at the end · The rule in full: <a href="production.html">production</a></p>
+<h3 id="inert-traits">Five plot traits do nothing yet <span class="pill open">Being designed</span></h3>
+<p>Bedrock, sheltered, unstable, infested and flood plain are drawn on the map but change nothing. Wanted or not is Heiko&#x27;s call; if wanted, a small design.</p>
+<p class="owner">Responsible: Balance team (WS1) with the Maps team (WS5) · Status: Waiting for Heiko · The rule in full: <a href="land.html">land</a></p>
+<h3 id="glimmer-perk">The Glimmer&#x27;s perk: seeing next month&#x27;s event early <span class="pill open">Being designed</span></h3>
+<p>Promised in the lobby, not built.</p>
+<p class="owner">Responsible: Balance team (WS1) · Status: Waiting for Heiko; a small design after the next colony piece · The rule in full: <a href="game-flow.html">game flow</a></p>
+<h2 id="designed">Designed, not built yet <span class="pill designed">Designed</span></h2>
+<p>Decided by Heiko, or ruled by the programme manager under his authority. Not in the game yet; the named team builds it.</p>
+<h3 id="smarter-computer-players">Smarter buying and selling for computer players <span class="pill designed">Designed</span></h3>
+<p>One value for every unit a computer player could hold: the chance it is needed times the cost of going short, plus the chance it is not times what it fetches later. Computer players buy their shortfall first, stock up when goods are cheap, sell surplus when dear, value power plants and wells at what they save, and later speculate. Claude&#x27;s plan can set its price view.</p>
+<p class="owner">Responsible: AI Strategy team (WS9), with the Balance team (WS1) for its files · Status: Heiko chose option B and said &#x27;Yes, build it&#x27; (5 Nov); spec #385; the first piece ships switched off until measured · The rule in full: <a href="computer-players.html">computer players</a></p>
+<h3 id="complete-store-pricing">The store as a market maker <span class="pill designed">Designed</span></h3>
+<p>Steadier prices (at most +30% / -25% a month), a ceiling of 12 times the usual price, sold-out bidding and gluts feed next month&#x27;s price, the shelf moves the price before it empties, a 15% spread each side widening to 25% when short, Energy stocked for working MULEs, and moving off-world prices: Crystite typically 90 within 40-300, other exports half that swing. The MULE price gets the ceiling too.</p>
+<p class="owner">Responsible: Maps team (WS5), with WS1 and WS3 for their files · Status: Heiko chose option B, the 12x ceiling and Crystite as proposed (5 Nov); spec #390, waiting for Heiko to read it · The rule in full: <a href="store-and-prices.html">store and prices</a></p>
+<h3 id="auction-rules-b-to-e">Auction rules: stop at your need, switch sides, rest zones, bidding above a sold-out store <span class="pill designed">Designed</span></h3>
+<p>Selling stops by itself at next month&#x27;s need, whoever you sell to; holding the arrow for one second sells below it on purpose. Buyers get no automatic stop. You can switch between buying and selling during the walk. Rest bands above and below the store&#x27;s lines stop accidental trades. When the store is sold out, buyers can walk above it and push the price up.</p>
+<p class="owner">Responsible: Auctions team (WS3), screens by the UX team (WS6) · Status: Heiko: hold the arrow 1 s; the stop covers all sales; no buyer stop (5 Nov). Rules amendment a33879c4 · The rule in full: <a href="goods-auction.html">goods auction</a></p>
+<h3 id="drone-and-geology">Plot info: scan, My plots, soil-test card, gems <span class="pill designed">Designed</span></h3>
+<p>Mark plots and tap Scan for an instant report in the side rail; every good at 0-3 dots, a gem for Crystite or Rare earth. A My plots list in planning and on the walking screen. A card after each soil test. Gems are private and never on the TV. Terrain hints stay.</p>
+<p class="owner">Responsible: UX &amp; Gameplay team (WS6), with WS3 (drone results at Scan) and WS4 (the map gem) · Status: Heiko chose option B with the report in the side rail (5 Nov); spec #397, teams reading it, then Heiko · The rule in full: <a href="land.html#drone-geology-redesign">land</a></p>
+<h3 id="water-base-resource">Water is a base resource: every plot uses it <span class="pill designed">Designed</span></h3>
+<p>Food farms use 2 Water, every other working plot 1. Energy is settled first, then Water: the biggest Water user is turned off first and makes 20%. Wells and plants take the other good last and are never turned off.</p>
+<p class="owner">Responsible: Balance team (WS1), rule AM-18 · Status: Designed by Heiko 5 Nov; built after the buying fix, about 1.5 to 2 days · The rule in full: <a href="production.html">production</a></p>
+<h3 id="donations-in-worth">Colony donations count 1:1 in your Worth <span class="pill designed">Designed</span></h3>
+<p>Giving to the colony no longer lowers your Worth; the cash is locked in the colony instead of in MULEs or land. Plaques still show what you gave.</p>
+<p class="owner">Responsible: Politics team (WS7), with the Auctions team (WS3) for the score line · Status: Heiko: &#x27;Yes, count 1:1&#x27; (5 Nov) · The rule in full: <a href="colony-and-politics.html">colony and politics</a></p>
+<h3 id="colony-score-monthly">The colony score shows every month <span class="pill designed">Designed</span></h3>
+<p>Shown next to the league at every month end, on the TV and the phones, not only at game over.</p>
+<p class="owner">Responsible: Politics team (WS7), screens by the Events team (WS8) · Status: Heiko: &#x27;Yes, every month&#x27; (5 Nov) · The rule in full: <a href="colony-and-politics.html">colony and politics</a></p>
+<h3 id="claude-voice">Claude&#x27;s own lines at the table <span class="pill designed">Designed</span></h3>
+<p>A Claude seat&#x27;s routine picks say no template line; instead Claude&#x27;s line from each land and auction plan is said at the start of that phase, within the chat limits.</p>
+<p class="owner">Responsible: Brain team (WS2), with the Auctions team (WS3) for one seam · Status: Programme manager ruling, 5 Nov · The rule in full: <a href="computer-players.html">computer players</a></p>
+<h3 id="swap-warning">A warning before a swapped MULE goes back <span class="pill designed">Designed</span></h3>
+<p>While you lead a MULE you swapped out, the walking screen says: &quot;Turn ends: this MULE goes back to the corral&quot;.</p>
+<p class="owner">Responsible: UX team (WS6) · Status: Programme manager ruling, 5 Nov · The rule in full: <a href="development.html#swap-warning">development</a></p>
+<h3 id="tv-gauges-row">Every crowded TV header puts the gauges on their own row <span class="pill designed">Designed</span></h3>
+<p>Any TV header with a clock, a status badge or a ready count puts the colony's gauges on a full-width row of their own, so the development screen's clock no longer runs off the right edge.</p>
+<p class="owner">Responsible: Table team (WS4) · Status: Programme manager ruling, 5 Nov; next after the TV fit (#381) · The rule in full: <a href="table-and-phones.html#gauges-row">the table and the phones</a></p>
+<h3 id="lobby-species-perks">The lobby's species perks say the game's numbers <span class="pill designed">Designed</span></h3>
+<p>The Zipwing card will say a quarter faster (1.25 times), not twice as fast; the Gearling card 5% less (95% of the price), not a quarter less. Each reads its number from the balance settings.</p>
+<p class="owner">Responsible: Table team (WS4), with the Balance team (WS1) · Status: Programme manager ruling, 5 Nov · The rule in full: <a href="table-and-phones.html#species-perks">the table and the phones</a></p>
+<h2 id="being-built">Being built <span class="pill progress">Being built</span></h2>
+<p>A team is building it or it is in a pull request.</p>
+<h3 id="mule-swap">Installing over a MULE gives you the old one <span class="pill progress">Being built</span></h3>
+<p>Installing a new outfit on a plot that has a MULE hands you the old MULE to lead (today it vanishes). Still leading it at turn end: it goes back to the corral, no refund. Installing the same outfit is refused with a dimmed button: &quot;Same outfit: nothing to swap&quot;.</p>
+<p class="owner">Responsible: Auctions team (WS3), rule AM-23 · Status: Pull request #383 · The rule in full: <a href="development.html">development</a></p>
+<h3 id="slower-auction-walk">A slower auction walk and a slower trade start <span class="pill progress">Being built</span></h3>
+<p>Walking up and down the board is about 25% slower; trades start at about one unit a second and speed up; the land auction&#x27;s lot clock stretches from 12 to 15 seconds.</p>
+<p class="owner">Responsible: Auctions team (WS3) · Status: Pull request #376; one check still red · The rule in full: <a href="goods-auction.html">goods auction</a></p>
+<h3 id="tv-fit">The TV fits every screen <span class="pill progress">Being built</span></h3>
+<p>On the auction walk no chat ticker, so two deals fit; the gauges get their own row; the month-end title on one line.</p>
+<p class="owner">Responsible: Table team (WS4) · Status: Pull request #381; being updated to the main build · The rule in full: <a href="table-and-phones.html">table and phones</a></p>
+<h3 id="sick-line">The sideways phone says why you are slow <span class="pill progress">Being built</span></h3>
+<p>The arcade phone says you are sick, why, and your pace this turn.</p>
+<p class="owner">Responsible: UX team (WS6) · Status: Pull request #375; being updated to the main build · The rule in full: <a href="table-and-phones.html">table and phones</a></p>
+<h3 id="last-walking-piece">The old tap development screen is removed <span class="pill progress">Being built</span></h3>
+<p>Every game steers on the development floor; the old tap screen and its tests are gone.</p>
+<p class="owner">Responsible: Auctions team (WS3) · Status: Pull request #369, carried inside #375; all sign-offs in · The rule in full: <a href="development.html">development</a></p>
+<h3 id="ai-shortfall-stopgap">Computer players buy what they are short of <span class="pill progress">Being built</span></h3>
+<p>A computer player short of Food, Energy or Water buys up to what keeps it supplied next month at the store&#x27;s price; once there it keeps this month&#x27;s use and sells the rest (Heiko&#x27;s V3).</p>
+<p class="owner">Responsible: Balance team (WS1) · Status: Pull request #386 · The rule in full: <a href="computer-players.html">computer players</a></p>
+<h3 id="plotless-grant">Computer players no longer end the land grant with no plot <span class="pill progress">Being built</span></h3>
+<p>Computer players count rivals still claiming; a grab on a fading Crystite glint no longer starts a soil test.</p>
+<p class="owner">Responsible: Balance team (WS1) · Status: Pull request #366, after the buying fix · The rule in full: <a href="land.html">land</a></p>
+<h3 id="colony-branch">The colony&#x27;s social events, mood events, gauges, strike and verdict <span class="pill progress">Being built</span></h3>
+<p>Planning social events, mood events in the show, the Happiness gauge counting at month end, the strike on TV and phones, real colony verdict levels, the law ballot words. Riots and the next colony piece follow.</p>
+<p class="owner">Responsible: Politics team (WS7) with the Balance (WS1) and Events (WS8) teams · Status: In the colony branch; riots and the next piece on 6 Nov; then to the main build · The rule in full: <a href="colony-and-politics.html">colony and politics</a></p>
+<h3 id="claude-proof">Proving Claude can play: 20 games <span class="pill progress">Being built</span></h3>
+<p>Claude&#x27;s seats play on Sonnet (Heiko&#x27;s choice). The proof: 20 games on the cheaper Haiku now, then 17 on Sonnet, inside Heiko&#x27;s 10 USD.</p>
+<p class="owner">Responsible: Brain team (WS2) · Status: Running, 5 Nov · The rule in full: <a href="computer-players.html">computer players</a></p>
+<h2 id="backlog">Backlog <span class="pill backlog">Backlog</span></h2>
+<p>Wanted, nobody on it yet.</p>
+<h3 id="return-mule-refund">Hand a MULE back to the store mid-turn for money <span class="pill backlog">Backlog</span></h3>
+<p>From the MULE swap rule: a swapped-out MULE goes back to the corral only at turn end, with no refund.</p>
+<p class="owner">Responsible: Not assigned · Status: Waiting for Heiko to want it · The rule in full: <a href="development.html">development</a></p>
+<h3 id="strategy-engine-4">Computer players keep a plan and re-plan on triggers <span class="pill backlog">Backlog</span></h3>
+<p>The next step of the AI&#x27;s strategy engine.</p>
+<p class="owner">Responsible: AI Strategy team (WS9) · Status: Not started · The rule in full: <a href="computer-players.html">computer players</a></p>
+<h3 id="social-ai">Social computer players <span class="pill backlog">Backlog</span></h3>
+<p>Monthly social reasoning, replies to whispers, replies that can change a vote, a mute button, deal cards, politics from the reasoning, and a proof that social AIs win more.</p>
+<p class="owner">Responsible: Brain team (WS2) · Status: Not started · The rule in full: <a href="computer-players.html">computer players</a></p>
+<h3 id="politics-next">Deal cards and reputation, sabotage and the Sheriff, budget and projects <span class="pill backlog">Backlog</span></h3>
+<p>The colony politics still to come after the council and four laws.</p>
+<p class="owner">Responsible: Politics team (WS7) · Status: Not started · The rule in full: <a href="colony-and-politics.html">colony and politics</a></p>
+<h3 id="air-gauge-bands">The air gauge reads its bands from the game <span class="pill backlog">Backlog</span></h3>
+<p>The TV&#x27;s air gauge keeps its own copy of the pollution bands; it should read them from the game so they cannot drift.</p>
+<p class="owner">Responsible: Events team (WS8) · Status: Backlog · The rule in full: <a href="colony-and-politics.html">colony and politics</a></p>
+<h3 id="retire-old-walk-settings">Retire the old walk-time setting and the steering switch <span class="pill backlog">Backlog</span></h3>
+<p>Once the last walking piece is in, the old development walk time and its switch go.</p>
+<p class="owner">Responsible: Balance team (WS1) with the Brain team (WS2) · Status: After the last walking piece · The rule in full: <a href="development.html">development</a></p>
+</article>
+</main>
+</div>
+<script src="search-index.js"></script>
+<script src="rulebook.js"></script>
+</body>
+</html>

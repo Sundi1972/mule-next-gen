@@ -216,16 +216,26 @@ export const UPKEEP = {
   crewPerWater: 6,
   crew: { raw: 1, factory: 2, greenBelt: 0 },
   /**
-   * Energy a raw plot burns a month, by what it makes. Factories burn what
-   * their recipe says. Without it a raw plot makes half, a factory nothing.
+   * Energy a raw plot burns a month, by what it makes. Factories burn what their recipe says. An Energy plot pays its
+   * use from its own output and is never turned off; an owner short of Energy turns its other plots off, biggest use
+   * first, until the rest fit (AM-17). Energy plots 1: Heiko, 5 Nov.
    */
-  energyUse: { food: 1, water: 1, energy: 0, smithore: 2, crystite: 2, rareEarth: 2 } satisfies Record<RawGood, number>,
+  energyUse: { food: 1, water: 1, energy: 1, smithore: 2, crystite: 2, rareEarth: 2 } satisfies Record<RawGood, number>,
+  /**
+   * Share of its output a plot turned off for want of Energy makes, rounded half up (Heiko, 5 Nov: 20%). A turned-off
+   * factory makes it from the same share of its non-Energy inputs, rounded up (PM, 5 Nov: nothing from nothing), and
+   * takes none when its share of output rounds to 0 (PM, 5 Nov: nothing spent for nothing).
+   */
+  offOutputShare: 0.2,
   /**
    * Plots that need irrigation: when their owner holds less Water than the
    * household and crew need, they make half (on top of any Energy shortfall).
    */
   irrigated: ['food'] as RawGood[],
-  /** Share of its output a plot makes without the Energy (or, for an irrigated plot, the Water) it needs. */
+  /**
+   * Share of its output an irrigated plot makes when its owner is short of Water, rounded down. (Energy no longer
+   * halves: offOutputShare, AM-17.)
+   */
   shortOutputShare: 0.5,
   /** Colonists need 1 Food and 1 Water a month per this many colonists. */
   colonistsPerUnit: 20,
@@ -1675,7 +1685,7 @@ type PlanKind = Strategy['kind'];
 export const AI_PLANS = {
   /** Seats play their playbook; false: every seat plays the phase-by-phase asks, as before playbooks. */
   on: true,
-  /** A feature switch, not a balance value: a seat's own path plays its drafted development and auction parts; false, today's (AM-26). */
+  /** A feature switch, not a balance value: a seat's own path plays its drafted development and auction parts; false, today's. See AM-26. */
   ownPhases: false,
   /** How much each persona leans to each plan kind, 0 to 1: the draft picks the eligible kind it leans to most. */
   leaning: {

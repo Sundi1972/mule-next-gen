@@ -84,7 +84,8 @@ export function playersUse(state: GameState): { food: number; water: number; ene
     use.food += needs.food;
     use.water += needs.water;
   }
-  for (const t of state.tiles) use.energy += energyUseOf(state, t);
+  // A plant pays its own use from its own output (AM-17 R2, PM ruling A): it asks the store for nothing.
+  for (const t of state.tiles) if (t.outfit !== 'energy') use.energy += energyUseOf(state, t);
   return use;
 }
 

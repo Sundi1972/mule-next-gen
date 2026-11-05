@@ -1,5 +1,4 @@
 import { advancePhase, boxOf, COLONY_SELLER, createGame, DEV_STEER, HALL, type GameState } from '@mule/engine';
-import type { MuleIntent } from '@mule/protocol';
 import type { GameContext, SeatInfo } from '@tabletop/core';
 import { afterEach, beforeEach } from 'vitest';
 import { MuleGame } from '../src/mule-game.js';
@@ -143,19 +142,6 @@ export function fakeContext(options: { onChanged?: (at: number) => void; table?:
   return { ctx, advance, hold, waits, frames, setHost };
 }
 
-/**
- * A development tap that lets the fake clock run until the colonist has got there and finished any assay, so the
- * move has applied when it returns, as it had when moves were instant.
- */
-export function tapThere(game: MuleGame, fake: { ctx: GameContext; advance: (ms: number) => void }, seatId: string, intent: MuleIntent): void {
-  game.handle(seatId, intent);
-  const colonist = () => game.viewFor(null).players.find((p) => p.id === seatId)?.colonist;
-  const walk = colonist()?.walk;
-  if (walk) fake.advance(walk.arrivesAt - fake.ctx.now());
-  const assay = colonist()?.assayUntil;
-  if (assay) fake.advance(assay - fake.ctx.now());
-}
-
 /** A point a colonist steers to: map tiles when `space` is 'map', hall units when 'hall'. */
 export interface SteerPoint {
   space: 'map' | 'hall';
@@ -173,7 +159,7 @@ const stick = (x: number, y: number) => {
 };
 
 /**
- * The steering twin of tapThere (arcade spec C15): steers the seat's colonist through `route`, point by point, one
+ * Steers (arcade spec C15) the seat's colonist through `route`, point by point, one
  * steer intent each time its direction changes, letting the fake clock run one development tick (`tickMs` real ms)
  * between looks, until it stands within `within` of the last point; then it lets go of the stick. Where it stands is
  * read from the shared view, as the TV reads it. Time moves only through the fake clock, so only the game's own
