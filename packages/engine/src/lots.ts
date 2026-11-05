@@ -246,6 +246,9 @@ function resolve(state: GameState, lot: Listing, leader: { id: string; bid: numb
     const { id } = colonyBid(state, lot)!;
     fundOut(state, 'siteBid', leader.bid);
     if (seller) seller.money += taxSale(state, seller.id, leader.bid);
+    // A MULE on the plot goes back to the corral, as an unsold lot's does: the colony's site is bare land.
+    if (tile.outfit) state.store.mules++;
+    clearMule();
     siteProject(state, id, lot.item.y * state.width + lot.item.x);
     return { kind: 'sold', buyer: COLONY_SELLER, price: leader.bid };
   }
@@ -343,7 +346,9 @@ export function stepLandAuction(state: GameState, dt: number): LotResult | null 
 /**
  * After the walk has moved, and before the bell: the faster climb once the
  * lead passes the board's top, and the soft close. Running before the bell
- * lets an overtake in the step that empties the clock still win time.
+ * lets an overtake in the step that empties the clock still win time. While
+ * the colony leads (C30), it is the leader: a player passing another player
+ * below the colony's cap overtakes no one; passing the colony does.
  */
 function lateRules(state: GameState, a: LandAuction): void {
   const leader = lotLeader(state);
