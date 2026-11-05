@@ -1,6 +1,6 @@
 import type { MuleView } from '@mule/protocol';
 import { describe, expect, it } from 'vitest';
-import { hostMayContinue, planningProper, readyNowIn } from '../src/phone/hub/ready';
+import { hostMayContinue, planningProper, readyNowIn, stageWords } from '../src/phone/hub/ready';
 
 /**
  * The law ballot (slice 2a C40, RULE-40) is a vote like the election: the server counts a Ready as Done with it and
@@ -32,5 +32,13 @@ describe('the law ballot on the phone: a vote, not planning proper (C40, RULE-40
   it('B-AC-40-3: a Ready in the open ballot is Done with the vote, so Now does not say planning is waiting for Ready', () => {
     expect(readyNowIn(withCouncil('ballot'), true, [], false)).toBeNull();
     expect(readyNowIn(withCouncil('over'), true, [], false)).not.toBeNull();
+  });
+
+  it("B-AC-40-4: the host's confirm in the law ballot says what Continue does there: the absent don't vote, not that the land grant starts", () => {
+    const q = stageWords('over', 'ballot').confirm('Kai', 1);
+    expect(q).toContain("Kai doesn't vote");
+    expect(q).not.toContain('land grant');
+    expect(stageWords('over', 'over').confirm('Kai', 1), 'once the ballot is over, planning words').toContain('land grant');
+    expect(stageWords('over', null).confirm('Kai', 1)).toContain('land grant');
   });
 });
