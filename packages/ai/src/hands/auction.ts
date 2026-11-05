@@ -123,6 +123,10 @@ export class AuctionHand {
     // The walk.
     const w = a.walkers.find((x) => x.id === mind.me);
     if (!w || w.side === 'pass') return;
+    if (w.side === 'seller' && this.oversells(state, me, dt)) {
+      act({ type: 'declare', side: 'buyer' });
+      return;
+    }
     if (this.startDelay > 0) {
       this.startDelay -= dt;
       return;
@@ -301,6 +305,32 @@ export class AuctionHand {
       if (this.bounded('buyer', Math.floor(Math.min(plan.values.buy[h] ?? 0, cap))) < price) break;
     }
     return units;
+  }
+
+  /**
+   * True when the deals it sells in would move more units in the next step than it may still sell: past its hold, or a
+   * unit its floor keeps at any price. Walking off can't outrun a buyer who bids up after it (a buyer walks first and
+   * meets it), nor a line whose units come faster as a deal runs, so it then switches to the buyers' edge, which takes
+   * it off the sellers before the step moves the unit.
+   */
+  private oversells(state: GameState, me: { id: string; stock: Record<Good, number> }, dt: number): boolean {
+    const plan = this.plan;
+    const trade = this.trade;
+    if (!plan || !trade) return false;
+    const good = state.auction!.good!;
+    let may = 0;
+    if (trade.side === 'seller') {
+      for (let h = me.stock[good]; h > trade.keep && h > 0; h--, may++) {
+        if (!Number.isFinite(this.bounded('seller', Math.ceil(beforeTax(state, plan.values.keep[h - 1] ?? 0))))) break;
+      }
+    }
+    const line = lineOf(state, me.id);
+    let due = 0;
+    for (const d of state.auction!.deals) {
+      if (d.seller !== me.id && (line === null || d.buyer !== line.house)) continue;
+      for (let progress = d.progress + dt, units = d.units; progress >= tradeInterval(units); progress -= tradeInterval(units), units++) due++;
+    }
+    return due > may;
   }
 
   /** Holds up or down until the rounded price is on the target, a step at most past it, so it never wobbles. */
