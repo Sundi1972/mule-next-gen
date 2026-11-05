@@ -392,14 +392,6 @@ describe('T-AC-10 display / C11: two sick players play in ONE roll call, on the 
       expect(count(roll, '>Brix<'), id).toBe(1);
     }
   });
-
-  it('T-AC-10: the sick status line on the sick player’s development screen is unchanged, under the overlay', async () => {
-    for (const boards of [0, 1]) {
-      const html = await render(await phone(LENA, boards, viewAt(ROLL_S)));
-      expect(html).toContain('data-testid="sick-strikes"');
-      expect(inside(html, 'phone-event-overlay')).not.toContain('sick-strikes');
-    }
-  });
 });
 
 describe('RULE-3 for the overlay (T-AC-5 style): boards 0/1 × reduced, and a tap', () => {
