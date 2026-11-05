@@ -185,9 +185,11 @@ export function FallbackBubble() {
 
 /**
  * The last few lines, newest first: `lines` of them, or the phone 2 and the TV 3. Each line is cut to one row, or with
- * `wrap` (a narrow column) runs on as one sentence, speaker and words together, over at most three rows.
+ * `wrap` (a narrow column) runs on as one sentence, speaker and words together, over at most three rows. `wide` sets the
+ * phone's lines in text-sm for a holder outside the shell's /shell container, where its own 1100 px step never fires.
+ * A line never gives up its rows: a holder short of room cuts the oldest first, at its foot.
  */
-export function Ticker({ size = 'phone', lines: keep, wrap = false }: { size?: 'phone' | 'tv'; lines?: number; wrap?: boolean }) {
+export function Ticker({ size = 'phone', lines: keep, wrap = false, wide = false }: { size?: 'phone' | 'tv'; lines?: number; wrap?: boolean; wide?: boolean }) {
   const { lines } = useTableChat();
   const { seats } = useSeats();
   const tv = size === 'tv';
@@ -204,9 +206,9 @@ export function Ticker({ size = 'phone', lines: keep, wrap = false }: { size?: '
             <li
               key={l.id}
               className={cx(
-                'min-w-0',
+                'min-w-0 shrink-0',
                 wrap ? 'line-clamp-3 leading-tight' : 'flex items-center gap-1.5 truncate',
-                tv ? 'text-xl' : 'text-[11px] @min-[1100px]/shell:text-sm',
+                tv ? 'text-xl' : wide ? 'text-sm' : 'text-[11px] @min-[1100px]/shell:text-sm',
                 i === 0 ? 'animate-[show-card-in_0.25s_ease-out] text-ink' : 'text-ink-3',
               )}
               data-testid={`chat-line-${l.id}`}
