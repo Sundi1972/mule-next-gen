@@ -127,6 +127,31 @@ export async function theTvHeaderFits(tv: Page, screen: string): Promise<string>
  * one size as deals come and go; with nothing trading the help and the room line show whole, with two deals up each
  * deal row is whole inside the deal list, and either way nothing runs past the foot.
  */
+/**
+ * TV-FIT month end (PM ruling C, 5 Nov): the header fits as theTvHeaderFits reads it; with two chat lines said, the
+ * ticker shows only the newest; and the colony's gauges sit in the screen's body, beside the league, not in a row of
+ * their own under the header, so the league and the colony's score keep the height. Logs the body's scale.
+ */
+export async function theMonthEndTvFits(tv: Page, server: MuleServer, code: string): Promise<string> {
+  const header = await theTvHeaderFits(tv, 'month end');
+  const room = server.registry.get(code);
+  check(room, `a room ${code} on the server`);
+  const end = tv.getByTestId('tv-monthend');
+  const host = (room as unknown as { game: { state: { players: { id: string }[] } } }).game.state.players[0]!.id;
+  const said = ['Who sold the Food?', 'Not me, I ate it.'];
+  for (const text of said) (room as unknown as { deliver(from: string, text: string): void }).deliver(host, text);
+  await end.getByTestId('chat-ticker').getByText(said[1]!).waitFor({ timeout: 2_000 });
+  const lines = await end.locator('[data-testid=chat-ticker] [data-testid^=chat-line-]').count();
+  check(lines === 1, `TV-FIT: the month end's ticker shows only the newest chat line, got ${lines}`);
+  const gauges = await end.getByTestId('colony-gauges').count();
+  if (gauges > 0) {
+    const inBody = await end.locator('[data-fit] [data-testid=colony-gauges]').count();
+    check(inBody === 1, "TV-FIT: the month end's colony gauges sit in its body beside the league, not in a row under the header");
+  }
+  const scale = Number(await end.locator('[data-fit]').getAttribute('data-fit'));
+  return `${header}; one chat line of ${said.length}, the gauges ${gauges > 0 ? 'beside the league' : 'not drawn (no colony)'}, the body at scale ${scale.toFixed(3)} with ${await end.locator('[data-testid^=league-row-]').count()} league rows`;
+}
+
 export async function theAuctionTvFits(tv: Page, server: MuleServer, code: string): Promise<string> {
   const room = server.registry.get(code);
   check(room, `a room ${code} on the server`);

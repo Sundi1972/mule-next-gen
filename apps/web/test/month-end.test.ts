@@ -1,5 +1,5 @@
 import { POLLUTION } from '@mule/engine';
-import type { MuleView, MyView, PlayerView, TableView } from '@mule/protocol';
+import type { ColonyView, MuleView, MyView, PlayerView, TableView } from '@mule/protocol';
 import { createElement, type ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -355,5 +355,34 @@ describe('B-AC-12 (WS4, month end): game over in credits', () => {
     expect(order(element(phone, 'scores'))).toEqual(['s2', 's1', 's3']);
     expect(text(phone)).not.toMatch(/points/i);
     expect(num(said(phone, 'part-total'))).toBe(HEIKO.worth);
+  });
+});
+
+describe('TV-FIT (WS4, month end, PM ruling C): the league and the colony keep the height at a full table', () => {
+  const colony: ColonyView = {
+    gauges: { wealth: 10_700, environment: 0, prestige: 0, happiness: 59, band: 'restless' },
+    lastGauges: { wealth: 9_600, prestige: 0, happiness: 64 },
+    fund: 272,
+    ledger: null,
+    projects: [],
+    catalogue: [],
+    score: null,
+  };
+  const six = [HEIKO, MIA, KAI, row('s4', 'Ruth', 3, 800, 1_900, 1_700), row('s5', 'Ossa', 4, 700, 1_650, 1_330), row('s6', 'Lena', 5, 600, 1_050, 1_060)];
+  const tv = onTv(view({ players: six, colony }), TvMonthEnd);
+
+  it('the colony gauges sit in the body beside the league, not in a row of their own under the header', () => {
+    const header = tv.indexOf('</header>');
+    const gauges = tv.indexOf('data-testid="colony-gauges"');
+    const league = tv.indexOf('data-testid="league"');
+    expect(gauges).toBeGreaterThan(league);
+    expect(tv.slice(header, league)).not.toContain('data-testid="colony-gauges"');
+    expect(said(tv, 'gauge-happiness')).toContain('Happiness 59');
+  });
+
+  it('without the colony (politics off) the header keeps its air gauge, as before', () => {
+    const plain = onTv(view({ players: six }), TvMonthEnd);
+    expect(has(plain, 'colony-gauges')).toBe(false);
+    expect(text(element(plain, 'tv-header'))).toMatch(/air/i);
   });
 });

@@ -10,7 +10,7 @@ import { PHASE_MS } from '../../server/src/mule-game.js';
 import type { MuleServer } from '../../server/src/server.js';
 import { check, CLAIM_MS, claimAPlot, doneWithLand, held, launch, PHONE, startServer, TV, type AuctionSteps, type GameStepContext } from './harness';
 import { planningIsTheHub } from './hub-steps';
-import { theAuctionTvFits, theTvHeaderFits, theTvTitleIsClear } from './tv-fit-steps';
+import { theAuctionTvFits, theMonthEndTvFits, theTvHeaderFits, theTvTitleIsClear } from './tv-fit-steps';
 import { gameOverIsInCredits, theLeagueTableAtTheMonthEnd, theMonthEndHoldsForThePhone } from './month-end-steps';
 import { ELECTION_WAIT_MS, readyThroughTheElection } from './politics-steps';
 import { checkTheShow, watchShow, type ShowWatch } from './production-steps';
@@ -172,7 +172,7 @@ try {
   // B-AC-12 at month 1's end, the one a two-month game has; then it holds until the phone moves on (B-AC-13).
   console.log(`league table: ${await theLeagueTableAtTheMonthEnd(ctx)}`);
   await tv.getByTestId('tv-monthend').waitFor({ timeout: PRESS_MS });
-  console.log(`TV-FIT, the month end: ${await theTvHeaderFits(tv, 'month end')}`);
+  console.log(`TV-FIT, the month end: ${await theMonthEndTvFits(tv, server, code)}`);
   console.log(`month end: ${(await theMonthEndHoldsForThePhone(ctx, 1)).line}`);
 
   // Month 2.
