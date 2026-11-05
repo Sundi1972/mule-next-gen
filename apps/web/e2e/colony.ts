@@ -355,10 +355,10 @@ async function theColonyScoreEveryMonthEnd(): Promise<void> {
     await phone.setViewportSize(PHONE_SMALL.viewport);
     await line.waitFor({ timeout: PRESS_MS });
     const fit = await phone.evaluate(() => {
-      const box = (el: Element | null) => el?.getBoundingClientRect() ?? null;
+      // No named helpers in here: tsx wraps them in a __name the page doesn't have.
       const end = document.querySelector('[data-phase=upkeep]');
-      const rows = [...(end?.querySelectorAll('[data-testid=league-table] tbody tr') ?? [])].map((r) => box(r)!);
-      const foot = box(end?.querySelector('[data-testid=colony-on-tv]') ?? null);
+      const rows = [...(end?.querySelectorAll('[data-testid=league-table] tbody tr') ?? [])].map((r) => r.getBoundingClientRect());
+      const foot = end?.querySelector('[data-testid=colony-on-tv]')?.getBoundingClientRect() ?? null;
       const table = end?.querySelector('[data-testid=league-table]');
       let clip: DOMRect | null = null;
       for (let el = table?.parentElement; el && el !== end; el = el.parentElement) {
