@@ -4,18 +4,25 @@ import { useEffect } from 'react';
 import { usePhoneGame } from '../../game';
 import { useWide } from '../../Shell';
 import { useHub } from '../Hub';
+import { LawsInForce } from './LawBallot';
 import { colorOf, OfficesCard, Person, Section } from './parts';
 import { Blocks } from './Reveal';
 import { RunBlock } from './Run';
 import { howWords, OFFICE_NAME } from './words';
 
-/** Council: this month's result once the election is over, then running for office and what the Governor does. */
+/** Council: the laws in force, this month's result once the election is over, then running for office and what the Governor does. */
 export function CouncilDesk() {
   const { focus, takeFocus } = useHub();
+  const { view } = usePhoneGame();
   useEffect(() => {
     if (focus !== null) takeFocus();
   }, [focus]);
-  return <CouncilBody focus={focus} />;
+  return (
+    <>
+      {view.politics && <LawsInForce laws={view.politics.laws ?? {}} />}
+      <CouncilBody focus={focus} />
+    </>
+  );
 }
 
 /** The desk's body. `focus` is the door it was opened by: 'run' asks for a promise, or shows your candidacy once you run. */

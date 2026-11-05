@@ -4,6 +4,7 @@ import type { AgendaSlot, BannerSlot, DeskSlot, HubSeat, ReadyBarWords, StageSlo
 import { CouncilDesk } from './Council';
 import { ballotComplete, contested, ElectionDay, ElectionDayRail } from './ElectionDay';
 import { GovernorDesk } from './Governor';
+import { CouncilBallot, CouncilRail } from './LawBallot';
 import { forYouWords, proposalWords } from './LawPicker';
 import { Offices } from './Offices';
 import { listNames, namer, officeNames, promiseBase, promiseWords, termEnd, youPromised } from './words';
@@ -135,4 +136,42 @@ export function electionNow({ view, self }: HubSeat): Now | null {
       return { title: 'Set the sales tax', detail: `Then plan your month. You are the new Governor, until month ${termEnd(politics.next, view.maxMonths)}.${promise}` };
     }
   }
+}
+
+/** C46: next month's law ballot takes the stage, as election day does, through its reveal. */
+const councilOpen = ({ view }: HubSeat) => {
+  const stage = view.politics?.council?.stage;
+  return stage === 'ballot' || stage === 'reveal';
+};
+
+export const COUNCIL_STAGE: StageSlot = { id: 'council-ballot', show: councilOpen, phase: () => 'Law vote', Body: CouncilBallot, Rail: CouncilRail };
+
+const LAW_BALLOT_WORDS: ReadyWords = {
+  ready: 'Done',
+  done: 'You voted',
+  waiting: STILL,
+  all: 'Everyone has voted. The result is shown.',
+  confirm: (names, n) => `Close the vote now? ${n === 1 ? `${names}’s vote` : `The votes of ${names}`} won’t count, and the result is shown.`,
+};
+
+/** The ready bar in the law ballot: Done, live once this seat has a vote in (the Governor's starts at Yes). */
+export function councilReadyWords({ view, me }: HubSeat): ReadyBarWords | null {
+  if (view.politics?.council?.stage !== 'ballot') return null;
+  return { ...LAW_BALLOT_WORDS, label: 'VOTED', canReady: (me.politics?.lawBallot ?? null) !== null };
+}
+
+/** Now through the law ballot and its reveal; a Done seat is told whom the vote waits for, not planning's words. */
+export function councilNow({ view, self }: HubSeat): Now | null {
+  const c = view.politics?.council;
+  if (!c || c.stage === 'over') return null;
+  if (c.stage === 'reveal') return { step: 2, of: 2, title: 'The result', detail: 'On the TV and every phone at once.' };
+  const left = c.waitingFor.filter((id) => id !== self.id);
+  if (c.done.includes(self.id))
+    return {
+      step: 1,
+      of: 2,
+      title: left.length ? `You voted. Waiting for ${left.length}: ${listNames(left, null, namer(view))}` : 'Everyone has voted',
+      detail: 'Change your vote until the last one is in, or until the host closes the vote for someone who is away.',
+    };
+  return { step: 1, of: 2, title: 'Vote on the law', detail: 'Yes or No, then Done. Nobody sees how you voted. No clock: it closes once everyone is Done.' };
 }
