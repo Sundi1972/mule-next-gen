@@ -1,5 +1,5 @@
 /** The colony as every screen sees it: gauges, fund, prestige objects and plaques. Public, so one view serves all. */
-import { colonyGauges, colonyScore, commissionRefusal, GOOD_CONFIG, lastGauges, moodBand, PRESTIGE, type GameState, type Good, type PrestigeId } from '@mule/engine';
+import { colonyGauges, colonyScore, colonyScoreOf, commissionRefusal, GOOD_CONFIG, lastGauges, moodBand, PRESTIGE, type GameState, type Good, type PrestigeId } from '@mule/engine';
 import type { ColonyCatalogueView, ColonyProjectView, ColonyView } from '@mule/protocol';
 
 const IDS = Object.keys(PRESTIGE) as PrestigeId[];
@@ -16,6 +16,8 @@ export function colonyView(state: GameState): ColonyView | null {
   return {
     gauges: { wealth: now.wealth, environment: state.air, prestige: now.prestige, happiness: now.happiness, band: now.happiness === null ? null : moodBand(now.happiness) },
     lastGauges: last && { wealth: last.wealth, prestige: last.prestige, happiness: last.happiness },
+    // AM-12: last month end's score, from that month's own snapshot, so "+N since last month" is exact.
+    lastScore: last && last.happiness !== null ? colonyScoreOf({ wealth: last.wealth, air: last.air, prestige: last.prestige, happiness: last.happiness }).total : null,
     fund: state.treasury.money,
     ledger: ledger && structuredClone(ledger),
     projects: colony.projects.map((p): ColonyProjectView => {
