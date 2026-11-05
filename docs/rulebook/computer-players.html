@@ -129,7 +129,7 @@
 <tbody>
 <tr><td>Food</td><td>Walking slower in development. A colonist without Food walks at <span class="num">0.6</span> of its pace, so the month's walking takes longer; each second lost is priced at what a second of development is worth to the seat.</td><td>This month's eating, plus next month's eating grossed up for spoilage</td></tr>
 <tr><td>Water</td><td>Only with a Food farm: an unwatered farm makes half. The half lost, at the Food price, spread over the units.</td><td>As Food, only while it owns a farm</td></tr>
-<tr><td>Energy</td><td>Every plot short of Energy makes half: the half of all its other plots' output, at their prices, spread over the need.</td><td>Its plots' need minus what its own Energy plots make, grossed up for spoilage</td></tr>
+<tr><td>Energy</td><td>A unit short keeps on the plot the game would turn off at that point (biggest Energy user first): it is worth what that plot loses turned off, 80% of its output at the store's price after tax, spread over the plot's use. A factory waiting for this month's inputs is covered last, as it runs last. An approximation: it leaves out the inputs a turned-off factory saves.</td><td>Its plots' use minus what its own Energy plots make after their own 1, grossed up for spoilage</td></tr>
 <tr><td>Medicine</td><td>Only when the air makes people sick: the chance of falling sick, times the walking lost at half pace.</td><td>The month's need</td></tr>
 <tr><td>Factory inputs</td><td>A factory's run is worth its output; that worth is shared over its inputs.</td><td>One run's inputs, grossed up for spoilage</td></tr>
 </tbody>
@@ -195,18 +195,34 @@
 </table></div>
 <p>For Food the value itself is the problem: median 19 cr against asks of 49 to 56 (see the <a href="#value-of-goods">worked example</a>).</p>
 <h3 id="shortfall-rule">The stopgap</h3>
-<p>For Food, Energy and Water, while the seat holds less than next month's need as the status screen shows it and the store is selling the good:</p>
+<p>For Food, Energy and Water a computer player works out how much it must hold when the auction ends to be <strong>all right next month</strong>: fed when next month's development starts, and no plot of its making half for want of Energy or Water at next month's production. It counts what it holds, not what its plots may make. The game eats, drinks and spoils in that order (upkeep straight after the auction), so this is more than the need on the status screen:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Good</th><th>Enough for next month</th><th>Example</th></tr></thead>
+<tbody>
+<tr><td>Food</td><td>What upkeep eats now, plus next month's eating again once half of what is left has spoiled (Food spoils <span class="num">50%</span>)</td><td>Eats 3: 3 + 3 / 0.5 = <strong>9</strong></td></tr>
+<tr><td>Energy</td><td>Next month's need for its plots, once a quarter of what it holds has spoiled (Energy spoils <span class="num">25%</span>)</td><td>Needs 4: 4 / 0.75, rounded up = <strong>6</strong></td></tr>
+<tr><td>Water</td><td>As Food, with Water spoiling <span class="num">5%</span>, and only for a player with a Food farm, since an unwatered farm makes half. Without a farm, going short of Water costs it nothing, and it values Water as before</td><td>Drinks 2: 2 + 2 / 0.95, rounded up = <strong>5</strong></td></tr>
+</tbody>
+</table></div>
+<p>The home depot keeps at most <span class="num">10</span> units of a good, so it never counts on keeping more than that.</p>
 <ul>
-<li>it counts what it <em>holds</em>, not what its plots may make;</li>
-<li>each unit of the shortfall is worth at least the store's asking price, so it buys there, or cheaper from a player, never dearer;</li>
-<li>it buys those units as far as its money goes: the cash reserve and the per-good budget do not stop it;</li>
-<li>it never sells below the need;</li>
-<li>Pass is ruled out while it is short and can pay.</li>
+<li><strong>When it buys.</strong> While it holds less than enough for next month, the store is selling the good and it can pay for a unit, it buys up to enough: at the store's price, or cheaper from a player, never dearer. Its cash reserve and its spending limit per good do not stop it; only its money does. It cannot pass. If its money covers only part, it buys what it can.</li>
+<li><strong>What it won't sell.</strong> While it is short and the store is selling, it sells none of what it needs. Otherwise (it holds enough, or the store has none to sell) it keeps what upkeep is about to eat (Food and Water) or its plots are about to burn (Energy), the need on the status screen, and sells the rest if the price suits it.</li>
+<li><strong>Stopping on time.</strong> A seller that reaches the last unit it may sell steps over to the buyers' edge before the next unit can trade, so a buyer bidding up after it cannot take a unit it means to keep.</li>
 </ul>
-<p>Measured on 5 games: the payable no-buys fell from 47 to 0 for Food, 54 to 0 for Energy and 6 to 0 for Water. A hand bug that pressed Done before a trade at its limit was fixed on the way. The cost: with the seats now buying from the store, the colonists go short more often (52% to 60% of months on one measured cell) and Food stands above 3 times its usual price in more games (78% to 92%). The PM ruled to ship it anyway and balance at the end; Food supply is recorded for Heiko as a balancing finding.</p>
-<div class="box next"><h4>What is changing</h4><p>Built and measured on the WS1 branch, not yet on trunk (WS1, about 17:00Z, 5 November). An approved correction follows: the target becomes next month's whole need (Food: eating plus what spoils; Energy: need grossed up for spoilage; Water only with a farm). The Energy turn-off rule (AM-17, plots switched off biggest user first, an off plot makes 20%) changes what an Energy shortage costs; the AI's valuation of it comes in the same WS1 PR. The stopgap is replaced by the <a href="#resource-utility">resource-utility model</a> once that is designed and built.</p></div>
-<p class="code-ref">In the code: branch <code>ws1-food-short</code> · <code>packages/ai/src/strategist.ts::goodPlan (mustHold), tradeDecision</code> · <code>packages/engine/src/config.ts::STRATEGIST.buyShortfall</code> (on the branch)</p>
-<p class="owner">Kept current by: WS1.</p>
+<div class="box example"><h4>Example: The Gambler's Food</h4>
+<p>The Gambler eats 3 Food a month, so enough for next month is 9. The store sells Food at 50.</p>
+<ul>
+<li>It holds 2 Food and 1,000 cr. It is short by 7, so it buys 7 at the store's line for 350 cr and ends with 9. With only 120 cr it would buy 2 and end with 4.</li>
+<li>It holds 9 Food and a hungry rival bids 60. It holds enough, so it sells its surplus above the status screen's 3 if 60 is worth more to it than a unit: it may sell down to 3, but never lower.</li>
+<li>It holds 5 Food and the store is selling. It is short of the 9, so it sells none and buys 4.</li>
+<li>It holds 5 Food, the store has none to sell and a rival bids 60. It cannot buy, so it keeps the status screen's 3 and may sell the other 2.</li>
+</ul></div>
+<p>Measured on 20 games: a seat short for next month that could pay now always buys (before: it passed in 443 of 485 such months for Food), hungry seat-months fell from 842 to 745, and no seller lets a deal take a unit past where it meant to stop. The cost, on 100 games on each of four settings: colonists go short in 62 to 66% of months (46 to 54% before) and Food stands above 3 times its usual price in 89 to 96% of games (78 to 82% before). Players hungry 3 or more months running stay at 99 to 100%: what keeps a seat fed often is not in the store to buy.</p>
+<div class="box why"><h4>Why it is like this</h4><p>The PM ruled on 5 November, on Heiko's report from the table: a computer player short for next month must buy at the store's price when it can afford it, and treat the shortage as the loss it is. A first version filled only the status screen's need; upkeep then ate it, so the seats went hungry anyway, and the target became enough for next month. Never selling below enough for next month, even with a surplus, kept the seats fed but starved the colony (colonists short in 83 to 86% of months, Food above 3 times its price in 99 to 100% of games). On 5 November Heiko chose “sell surplus”: keep everything while short and the store is selling, otherwise keep what upkeep eats and sell the surplus.</p></div>
+<div class="box next"><h4>What is changing</h4><p>Built on the WS1 branch, in PR #386, not yet on trunk. It is a stopgap: the <a href="#resource-utility">resource-utility model</a> replaces it once that is designed and built, and the balance round (Heiko, 4 November: functions first, balance at the end) takes up the colony's Food supply. A seat's own playbook drafts (off by default) and the playbook check still read the status screen's need as the floor; WS9 aligns them.</p></div>
+<p class="code-ref">In the code: branch <code>ws1-food-short</code> · <code>packages/ai/src/strategist.ts::goodPlan (mustHold), wholeNextMonth, tradeDecision</code> · <code>packages/ai/src/hands/auction.ts::AuctionHand.oversells</code> · <code>packages/engine/src/config.ts::STRATEGIST.buyShortfall</code> (on the branch)</p>
+<p class="owner">Status: Being built &mdash; WS1, PR #386 · Kept current by: WS1.</p>
 
 <h2 id="land">Claiming land <span class="pill built">In the game</span></h2>
 <h3 id="land-plans">Land plans</h3>
@@ -335,20 +351,37 @@
 <p class="code-ref">In the code: branch <code>ws2-brain</code> · <code>packages/ai/src/llm/manual.ts, brief.ts, tools.ts, writer.ts, system.ts</code> · <code>apps/server/src/brain/playbooks.ts</code> · <code>BRAIN.writeCalls, toolRounds, whatIfsPerWrite, gameBudgetUsd</code> (on the branch)</p>
 <p class="owner">Kept current by: WS2.</p>
 
-<h2 id="resource-utility">Next: a resource-utility model <span class="pill open">Being designed</span></h2>
-<p>Heiko, 5 November: the seats need “a more clear algorithm”. A seat should look at its whole shortage, understand the overall price level, know every resource it needs, the store's prices and how much is available, and get utility from having enough or even a surplus, which can make sense when prices are cheap and it can store. Later they might speculate: “they might believe prices go up and buy cheap to sell more expensive later. This is what would make them clever.” This is the base, which Claude can later overrule by defining strategies.</p>
-<h3 id="resource-utility-goals">Proposed goals (awaiting Heiko's confirmation)</h3>
+<h2 id="resource-utility">Next: what every good is worth to a computer player <span class="pill designed">Designed</span></h2>
+<p>Heiko, 5 November: the seats need &#8220;a more clear algorithm&#8221;. A seat should look at its whole shortage, understand the overall price level, know every resource it needs, the store's prices and how much is on the shelf, and get utility from having enough or even a surplus. Later it might speculate: &#8220;buy cheap to sell more expensive later. This is what would make them clever.&#8221; This is the base layer, which Claude can overrule by setting its own price view. He chose this design (option B) and said &#8220;Yes, build it&#8221; on 5 November.</p>
+
+<h3 id="resource-utility-goals">What you will see at the table</h3>
 <div class="table-wrap"><table>
-<thead><tr><th>Goal</th><th>What it means at the table</th><th>How it is measured</th></tr></thead>
+<thead><tr><th>Goal</th><th>At the table</th><th>How it is checked</th></tr></thead>
 <tbody>
-<tr><td>G-1 Keep yourself supplied</td><td>A computer player is not caught short of Food or Energy when the store had stock and it could pay</td><td>Short (or plots halved for want of Energy) while the store had stock and it could pay, in under 5% of months</td></tr>
-<tr><td>G-2 Value having enough and a surplus</td><td>It holds a buffer, larger when the good is cheap</td><td>By price band</td></tr>
-<tr><td>G-3 Speculate (phase 2)</td><td>It buys cheap under a belief that the price will rise, and sells dear; persona-shaped and settable by Claude</td><td>The margin it makes</td></tr>
+<tr><td>Keep yourself supplied</td><td>A computer player short of Food, Water, Energy, a factory's inputs or Medicine buys what it is short of when it can pay. It no longer stands still, short, with cash in hand. An Energy or Water shortage counts at its real cost: next month's output.</td><td>Still short after the auction, although the store had stock and it could pay: under 5% of the times it went in short. Plots cut for want of Energy while it could have bought: under 5% of months.</td></tr>
+<tr><td>Value enough, and a surplus when cheap</td><td>It holds what keeps it whole through next month, eating and spoilage included. It stocks up when a good is cheap and keeps well, and sells its surplus when the price is dear.</td><td>The Food it holds after the auction, against next month's need: over 1 in cheap months, no more than 1 in dear ones.</td></tr>
+<tr><td>Speculate (later)</td><td>A trader buys ahead of a drought, a rival leaving Food or a rising ship price, and sells later. Its view of prices follows the store's stock, the trend, the coming events, the other players' farms and the off-world prices, and its persona's appetite for risk.</td><td>The profit it makes on what it bought beyond its needs, after spoilage, storage and tax.</td></tr>
 </tbody>
 </table></div>
-<p>WS9 measured today's play for the design (40 games on each of 3 seeds): Energy shortages cost 40–43% of seat-months some production, a median of 2 of 5 plots halved, about 265 cr of output; 44–47% of seats that wanted to buy still ended short. The store's own supply and pricing are not part of this design (WS5 is designing store pricing separately).</p>
-<div class="box next"><h4>What is changing</h4><p>Three approaches are drafted, due 20:00Z on 5 November: A, thin needs-first; B, the value of each extra unit set by what running short costs against what holding costs, with a price on cash and a price belief (WS9 recommends B); C, a monthly planner. The goals await Heiko. Owner: WS9 designs; WS1 owns <code>value.ts</code> and builds with it.</p></div>
-<p class="owner">Kept current by: WS9.</p>
+
+<h3 id="resource-utility-how">How a computer player will value a good</h3>
+<p>Every unit it could hold after the auction gets one value:</p>
+<p><strong>value = chance it is needed &#215; what going without it costs + chance it is not needed &#215; what it fetches later</strong></p>
+<ul>
+<li><strong>Needed</strong> means the stock that keeps it whole until next month: what it eats and drinks at the month's end, what spoils after that (half its Food, a quarter of its Energy), and what its plots will burn. What its own farms and plants will make counts too, but as less than certain, since an event or a shortage can cut it.</li>
+<li><strong>Going without</strong> is never cheaper than buying the unit back next month. For Energy and Water it is exact: one unit short switches off the next plot in the order the game uses (the biggest user first), and that plot makes only a fifth of its output.</li>
+<li><strong>What it fetches later</strong> is next month's price after the store's cut, the tax and spoilage, and nothing past what its depot keeps.</li>
+<li><strong>Its cash</strong> goes to the most valuable units across the whole month first, so a player with little money buys Energy before a second sack of Food, even though Food is auctioned first.</li>
+<li><strong>Building</strong> uses the same values: a power plant or a well is worth what its output saves. A player short of Energy builds a plant when that beats buying.</li>
+</ul>
+<p>Example: a player eats 3 Food a month and has none. Upkeep eats 3, then half the rest spoils, so it needs 9 to stay fed. With Food at 72 and 1,200 cr in hand, each of those 9 units is worth at least 72 to it, so it buys them. Today it values each at about 20 and buys none.</p>
+
+<h3 id="resource-utility-why">Why it is like this</h3>
+<p>Measured on today's game (40 games on each of 3 seeds, 5 November): a computer player went into the Food auction short in 86&#8211;87% of months, and refused to buy in most of them because it valued a needed unit at about 19 cr against an asking price near 50. It was hungry at 88&#8211;89% of developments with about 1,200 cr in hand. Energy shortages cut some production in 40&#8211;43% of months. Today a needed Food unit is worth only the walking time hunger costs, which takes no account of the price level. A short buying fix from the Balance team (WS1) covers Food, Water and Energy until this design ships.</p>
+
+<div class="box next"><h4>What is changing</h4><p>Not in the game yet. The first piece (keep supplied, plants and wells valued at what they save) ships switched off behind the switch <code>AI_VALUE.unit</code>, and is switched on only when Heiko rules on its measured numbers. The surplus comes second and speculation third. It replaces the Balance team's short buying fix and its Energy valuation when it ships.</p></div>
+<p class="code-ref">In the code: spec <code>docs/specs/2026-11-05-ws9-resource-utility.md</code> (PR #385) · <code>packages/ai/src/value.ts::unitValues, monthlyNet</code> · <code>packages/ai/src/strategist.ts::goodPlan, tradeDecision</code> · <code>packages/ai/src/outlook.ts</code> · the playbook's <code>GoodPlay.expect</code></p>
+<p class="owner">Responsible: AI Strategy team (WS9), which builds it, with the Balance team (WS1) for <code>value.ts</code> and <code>strategist.ts</code>. Status: Designed, 5 November.</p>
 
 <h2 id="simulator">The simulator <span class="pill built">In the game</span></h2>
 <p>The simulator plays whole games with only computer seats (Classic, no model) and checks them against the balance targets. Every balance change is checked with it.</p>

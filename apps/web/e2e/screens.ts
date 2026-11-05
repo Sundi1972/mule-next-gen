@@ -196,7 +196,7 @@ process.exit(0);
  * while the shots are taken. The server is closed here, whatever happens.
  */
 async function arcadeScreens(): Promise<void> {
-  const steered = await startServer({ maxMonths: 1, politics: false, devSteer: true, phaseScale: 1, seed: () => 1 });
+  const steered = await startServer({ maxMonths: 1, politics: false, phaseScale: 1, seed: () => 1 });
   const errors: string[] = [];
   try {
     const t = await arcadeTable(browser, steered.base, steered.server, errors, { names: ['Heiko', 'Mia'], tv: true });
