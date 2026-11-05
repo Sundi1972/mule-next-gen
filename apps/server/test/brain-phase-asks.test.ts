@@ -208,5 +208,25 @@ describe('RULE-A2 rows 3-4: the next phase is edited in the slack before it', { 
     expect(notes.map((n) => [n.phase, n.playbook.by])).toEqual([['auction', 'llm']]);
     expect(Object.keys(notes[0]!.playbook.auction ?? {}).sort()).toEqual(drafted);
   });
-});
 
+  it("C4 (option C): the development edits the land write carried apply to the development's draft at its start, not to the draft shown at upkeep, so a plot won since is outfitted", async () => {
+    const reply = JSON.stringify({ edits: [{ path: '/development/timeBudgetMs', to: 1_000, reason: 'Quick.' }], line: '' });
+    const state: GameState = createGame({ seed: 10, players: PLAYERS });
+    const seat = new AiSeat({ id: 'p0', name: 'Ada', persona: 'trader', level: 'trader', seed: 1 });
+    const notes: PlaybookNote[] = [];
+    const playbooks = new Playbooks({ brain: smartOn(answersAt(500, reply)), source: playbookSource([seat]), seats: [seat], record: (n) => notes.push(n) });
+    const shown = seat.draft(state, 'development', 1).development;
+    playbooks.ask(state, 1);
+    await vi.advanceTimersByTimeAsync(1_000);
+    advanceTo(state, 'landGrant');
+    playbooks.takeEffect(state);
+    advanceTo(state, 'development');
+    // Won since upkeep: a plot the draft shown at upkeep could not know of.
+    for (const t of state.tiles.filter((x) => x.owner === null && x.terrain !== 'store').slice(0, 2)) t.owner = 'p0';
+    const fresh = seat.draft(state, 'development').development;
+    expect(fresh?.route).not.toEqual(shown?.route);
+    playbooks.takePhase(state, 'development');
+    expect(notes.map((n) => n.phase)).toEqual(['landGrant', 'development']);
+    expect(notes[1]!.playbook.development).toEqual({ ...fresh, timeBudgetMs: 1_000 });
+  });
+});
