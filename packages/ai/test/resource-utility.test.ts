@@ -17,7 +17,7 @@ import {
   type Tile,
   type Trade,
 } from '@mule/engine';
-import { applyAction } from '../src/play.js';
+import { applyAction, playMonthFrom } from '../src/play.js';
 import { AiSeat } from '../src/seat.js';
 import { cashReserve } from '../src/value.js';
 import { goodPlan, wholeNextMonth } from '../src/strategist.js';
@@ -171,5 +171,62 @@ describe('RULE-5: one cash shadow price across the month’s auctions', () => {
 
     expect(bought(trades, 'energy'), 'it bought Energy').toBeGreaterThan(0);
     expect(me(state).money).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe('C8: a power plant is worth what its output saves', () => {
+  /** Three rich mines (use 2 each, make 6 Smithore at 100): a unit of Energy short keeps 0.8 × 6 × 100 ÷ 2 = 240 on. */
+  const RICH: Plot[] = MINES.map((m) => ({ ...m, ground: { smithore: 6 } }));
+
+  /**
+   * Month 1's development: three rich mines (use 6 Energy), no plant, no Energy, 3,000 cr, and an idle plot rated for
+   * Energy and for Food as the row says. The other seats have no money, so they buy no MULE.
+   */
+  function develop(idle: Partial<Tile['ground']>, store: { energy: number; posted: number }): Outfit | null {
+    const state = createGame({ seed: 1, players: ['ai0', 'ai1', 'ai2', 'ai3'].map((id) => ({ id, name: id, isAi: true })) });
+    while (state.phase !== 'development') advancePhase(state);
+    for (const t of state.tiles) if (t.owner) Object.assign(t, { owner: null, outfit: null });
+    const seat: Seat = { plots: [...RICH, { outfit: null, x: 6, ground: idle }], posted: { smithore: 100, energy: store.posted, food: 40 }, stock: { food: 20, water: 20 }, money: 3000, store: { energy: store.energy } };
+    const me = state.players.find((p) => p.id === ME)!;
+    for (const plot of seat.plots) {
+      const tile = state.tiles[plot.x]!;
+      Object.assign(tile, { terrain: 'plains', traits: [], ground: { ...flatGround, ...plot.ground }, owner: ME, outfit: plot.outfit, pollution: 0, runMonths: 0 } satisfies Partial<Tile>);
+      delete tile.special;
+      me.analysed.push(plot.x);
+    }
+    state.treasury.salesTax = 0;
+    Object.assign(state.store.posted, seat.posted);
+    Object.assign(state.store.stock, seat.store);
+    for (const p of state.players) {
+      for (const good of Object.keys(p.stock) as Good[]) p.stock[good] = p.id === ME ? (seat.stock?.[good] ?? 0) : 0;
+      p.money = p.id === ME ? seat.money : 0;
+    }
+    const seats = state.players.map((p, i) => ({ id: p.id, persona: 'trader' as const, level: 'trader' as const, seed: 10 + i }));
+
+    const { state: after } = playMonthFrom(state, seats, 1);
+
+    return after.tiles[6]!.outfit;
+  }
+
+  it('B-AC-5: an Energy-short seat with no plant and no Energy at the store installs a plant on its idle plot, though Food sells as well', () => {
+    expect(develop({ energy: 2, food: 1 }, { energy: 0, posted: 30 })).toBe('energy');
+  });
+
+  it('B-AC-5: with Energy cheap and stocked at the store and a markedly better Food plot, it outfits Food instead', () => {
+    expect(develop({ energy: 2, food: 3 }, { energy: 200, posted: 10 })).toBe('food');
+  });
+
+  it('B-AC-5 negative: with no idle plot there is nothing to install', () => {
+    // The seat owns only its mines: no idle plot.
+    const state = createGame({ seed: 1, players: ['ai0', 'ai1', 'ai2', 'ai3'].map((id) => ({ id, name: id, isAi: true })) });
+    while (state.phase !== 'development') advancePhase(state);
+    for (const t of state.tiles) if (t.owner) Object.assign(t, { owner: null, outfit: null });
+    for (const plot of MINES) Object.assign(state.tiles[plot.x]!, { terrain: 'plains', traits: [], ground: { ...flatGround, ...plot.ground }, owner: ME, outfit: plot.outfit, pollution: 0, runMonths: 0 } satisfies Partial<Tile>);
+    state.players.find((p) => p.id === ME)!.money = 3000;
+    const seats = state.players.map((p, i) => ({ id: p.id, persona: 'trader' as const, level: 'trader' as const, seed: 10 + i }));
+
+    const { state: after } = playMonthFrom(state, seats, 1);
+
+    expect(after.tiles.filter((t) => t.owner === ME).map((t) => t.outfit)).toEqual(MINES.map(() => 'smithore'));
   });
 });
