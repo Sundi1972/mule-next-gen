@@ -445,7 +445,7 @@ function RestBand({ from, to, edge, tone, words, tv, gutter }: { from: number; t
         className={cx(
           'absolute flex flex-col items-end px-1 text-right font-mono font-bold leading-tight opacity-80',
           edge === 'bottom' ? 'top-0.5' : 'bottom-0.5',
-          tv ? 'text-sm' : 'text-[9px]',
+          tv ? 'text-sm' : 'text-[10px]',
           tone === 'seller' ? 'text-rise' : 'text-fall',
         )}
         style={{ left: '100%', width: gutter }}
