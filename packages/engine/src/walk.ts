@@ -1,6 +1,6 @@
 import { WALK } from './config.js';
 import { RuleError } from './errors.js';
-import type { AuctionSide, Deal, Walker, WalkBoard } from './types.js';
+import type { AuctionSide, BoardZones, Deal, Walker, WalkBoard } from './types.js';
 import { MS_PER_SECOND } from './units.js';
 
 /**
@@ -43,6 +43,8 @@ export interface WalkMarket {
   houseBuys: HouseLine[];
   /** Sellers can't walk below this. */
   floor(): number | null;
+  /** The board's rest zones and hard edges, where it has them (the goods auction); they replace floor() for sellers. */
+  zones?: BoardZones;
   /** First in line at a house's turns (a Quibbit at the goods auction). */
   first(playerId: string): boolean;
   /** Seat order, the last tie-break. */
@@ -92,11 +94,12 @@ export function houseLineAt(market: WalkMarket, w: Walker): { house: string; pri
 }
 
 /**
- * The lowest a seller walks or taps to: the house's buying line, or with no house buying, just above the buyers' edge,
- * so a buyer standing there never trades (everyone starts there as a buyer, so standing still is how you buy nothing).
+ * The lowest a seller walks or taps to. On a board with zones, the buying line fixed at the start, whether or not any
+ * house still buys there, so a buyer resting below it never trades. Otherwise the house's buying line, or with no house
+ * buying, just above the buyers' edge (everyone starts there as a buyer, so standing still is how you buy nothing).
  */
 function sellerFloor(board: WalkBoard, market: WalkMarket): number {
-  return market.floor() ?? board.lo + 1;
+  return market.zones?.buyersTop ?? market.floor() ?? board.lo + 1;
 }
 
 /** The price a seller would trade at now, at a buying house's line or with a buyer whose bid reaches their ask; else null. */

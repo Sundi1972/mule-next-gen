@@ -95,6 +95,7 @@ export function goodsMarket(state: GameState): WalkMarket {
       { id: STORE_ID, price: () => storeBuyLine(state) },
     ],
     floor: () => storeBuyLine(state),
+    zones: a.zones,
     first: (id) => players.get(id)?.species === 'quibbit',
     seat: (id) => seats.get(id) ?? 0,
     trade(buyer, seller, price) {
@@ -139,6 +140,7 @@ export function startAuction(state: GameState, goods: readonly Good[] = WALK.ord
     storeBuy: 0,
     storeSell: 0,
     storeBudget: 0,
+    zones: { buyersTop: 0, sellersBottom: 0, lo: 0, hi: 0 },
     lo: 0,
     hi: 0,
     speed: WALK.minSpeed,
@@ -271,6 +273,8 @@ function nextGood(state: GameState, skipped: LiveAuction['skipped']): void {
       storeBuy,
       storeSell,
       storeBudget: budget,
+      // The ship's line stays out of the buyers' zone: its price falls with each unit, and sellers follow it down to here.
+      zones: { buyersTop: storeBuy, sellersBottom: storeSell, lo, hi },
       lo,
       hi,
       speed: Math.max(WALK.minSpeed, (hi - lo) / WALK.crossSeconds),
