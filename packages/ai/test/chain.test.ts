@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { advancePhase, AI_PLANS, createGame, type GameState, type Outfit, type Stock, type Tile } from '@mule/engine';
+import { advancePhase, AI_PLANS, createGame, type GameState, type Good, type Outfit, type Stock, type Strategy, type Tile } from '@mule/engine';
 import { applyAction } from '../src/play.js';
-import { draftStrategyOf } from '../src/playbook/draft.js';
+import { draftPlanningPart, draftStrategyOf } from '../src/playbook/draft.js';
 import { AiSeat, type AiSeatOptions } from '../src/seat.js';
 
 /** A seat whose Electronics fetch a high price builds the chain to them, upstream first. See AM-32. */
@@ -90,6 +90,17 @@ describe('a factory chain (AM-32)', () => {
     const seat = seatOf();
     const redraft = draftStrategyOf({ state, seat: ME, mind: seat.mind, seed: 11, phase: 'development', kept: null, replanned: 'election' });
     expect(redraft.moneyMaker).toBe('electronics');
+  });
+
+  it('B-AC-AM32-1: a seat short of cash keeps its chain\'s standing links off the land auction while the chain is its plan', () => {
+    // Planning, broke: a Smithore mine on thin ground (worth little at the market) is what a short seat lists first.
+    const state = development([{ x: 0, ground: { smithore: 1 }, outfit: 'smithore' }, { x: 2, ground: { food: 2 }, outfit: 'food' }, { x: 4, outfit: 'energy' }], 2_000);
+    state.phase = 'planning';
+    state.players.find((p) => p.id === ME)!.money = 0;
+    const strategy = (moneyMaker: Good): Strategy => ({ kind: 'specialist', moneyMaker, monopolyTarget: null, cashFloor: 0, landTarget: { plots: 3, byMonth: 2 }, stances: {}, reason: '' });
+    const listed = (moneyMaker: Good) => (draftPlanningPart({ state, seat: ME, mind: seatOf().mind, seed: 11, phase: 'planning', strategy: strategy(moneyMaker) }).list ?? []).map((l) => l.plot);
+    expect(listed('food'), 'without a chain the mine is listed').toContain(0);
+    expect(listed('electronics')).not.toContain(0);
   });
 
   it('FM-chain-idle: no works is installed while its inputs neither stand nor are held, whatever the cash', () => {
