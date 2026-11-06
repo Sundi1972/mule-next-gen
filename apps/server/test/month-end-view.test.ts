@@ -150,7 +150,7 @@ describe('Month end: last month against this one (C20)', () => {
  * Month 1 played to its month end: Heiko (s1) hosts, Mia (s2) is the other phone, The Baron (s3) is an AI. With
  * `emptyStore`, the store's Food and Water are kept at nothing through the auction, so the colonists run short at upkeep.
  */
-function toMonthEnd(options: { emptyStore?: boolean; dearFood?: boolean } = {}) {
+function toMonthEnd(options: { emptyStore?: boolean; dearFood?: boolean; shelf?: { colonists: number; food: number; water: number } } = {}) {
   const fake = fakeContext();
   const game = new MuleGame(fake.ctx, 7, { maxMonths: 3, phaseScale: 0.1 });
   game.start(seats);
@@ -160,6 +160,11 @@ function toMonthEnd(options: { emptyStore?: boolean; dearFood?: boolean } = {}) 
     if (options.emptyStore && state.phase === 'auction') {
       state.store.stock.food = 0;
       state.store.stock.water = 0;
+    }
+    // A colony of a set size and a set shelf through the auction, so upkeep's meal is the test's.
+    if (options.shelf && state.phase === 'auction') {
+      state.colonists = options.shelf.colonists;
+      Object.assign(state.store.stock, { food: options.shelf.food, water: options.shelf.water });
     }
     // Food on the shelf at a price far beyond anything colonists ever paid.
     if (options.dearFood && state.phase === 'auction') state.store.posted.food = DEAR_FOOD;
@@ -276,5 +281,20 @@ describe('Colonists fed or short (C20)', () => {
     expect(shortLast.month).toBe(short.over.month);
     expect(shortLast.colonistsHungry, 'precondition: the last month the shelf ran out').toBe(true);
     expect(short.over.colonistsFed).toBe(false);
+  });
+});
+
+describe('needs C6: the month-end line says how much the colonists got', () => {
+  it('needs B-AC-1 (line, server): colonists given 19 of 20 Food read "19 of 20 Food" on the month-end line', () => {
+    // 400 colonists need 20 Food and 20 Water; the shelf holds 19 Food and plenty of Water.
+    const short = toMonthEnd({ shelf: { colonists: 400, food: 19, water: 30 } });
+    expect(stateOf(short.game).history.at(-1)!.shortages, 'precondition: the shelf ran short of Food only').toEqual(['food']);
+    for (const viewer of VIEWERS) {
+      expect(short.game.viewFor(viewer).colonistMeal, viewer ?? 'the board').toEqual({ colonists: 400, food: { took: 19, need: 20 }, water: { took: 20, need: 20 } });
+    }
+    // Negative case: outside the month end the view carries no meal.
+    readyAll(short.game);
+    expect(short.game.viewFor(null).phase).toBe('planning');
+    for (const viewer of VIEWERS) expect(short.game.viewFor(viewer).colonistMeal, `${viewer ?? 'the board'} in planning`).toBeNull();
   });
 });

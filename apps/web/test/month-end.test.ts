@@ -463,3 +463,23 @@ describe('TV-FIT (WS4, month end, PM ruling C): the league and the colony keep t
     expect(text(element(plain, 'tv-header'))).toMatch(/air/i);
   });
 });
+
+describe('needs C6: the month-end line says how much the colonists got', () => {
+  /** A month end whose colonists, 400 before the meal, got `food` and `water` of their 20 each. */
+  const meal = (food: number, water: number) =>
+    view({ colonists: 380, colonistsFed: food === 20 && water === 20, colonistMeal: { colonists: 400, food: { took: food, need: 20 }, water: { took: water, need: 20 } } });
+
+  it('needs B-AC-1 (line, screen): colonists given 19 of 20 Food read "19 of 20 Food" on the month-end line', () => {
+    const short = meal(19, 20);
+    for (const html of [onTv(short, TvMonthEnd), onPhone(short, Results, 0)]) {
+      expect(said(html, 'colonists')).toBe('The store fed the colony’s 400 colonists 19 of 20 Food and all their Water');
+      expect(element(html, 'colonists'), 'short, the line is red').toContain('text-alert');
+    }
+    expect(said(onTv(meal(20, 12), TvMonthEnd), 'colonists')).toBe('The store fed the colony’s 400 colonists all their Food and 12 of 20 Water');
+    expect(said(onTv(meal(7, 0), TvMonthEnd), 'colonists')).toBe('The store fed the colony’s 400 colonists 7 of 20 Food and 0 of 20 Water');
+    // Negative case: nothing missing, the plain line, not red.
+    const fed = onTv(meal(20, 20), TvMonthEnd);
+    expect(said(fed, 'colonists')).toBe('The store fed the colony’s 400 colonists');
+    expect(element(fed, 'colonists')).not.toContain('text-alert');
+  });
+});
