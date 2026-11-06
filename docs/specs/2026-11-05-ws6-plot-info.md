@@ -360,6 +360,12 @@ lands at the land grant (droneOrder is kept until then).
 - 5 Nov, WS4's read of C7: the gem moves right of the owner's tab on an owned plot (the mock's top-left sat on the
   tab) and scales with the plot; C6 names one shared module for the dots, best and gems; the scanning second keeps
   today's SCAN chip (C2), so no new map mark; with a MULE the gem stays and the pip hides. Mock a3f8e3e3.
+- 6 Nov, at plan time (WS6, the plan's drift check on trunk e4e78193): (1) C7 splits. Its pip half (Pips draws 3,
+  "of 3", the pip's good from bestOf) ships with C6 in PR-1, because C6 makes MapTile.ground hold 0–3 dots and a map
+  still drawing "n of 4" would mislabel them until PR-3; the gem stays in PR-3. (2) C6's callers include
+  components/AuctionParts.tsx through phone/ground.tsx::GroundCard (the land auction's lot card): it follows GroundCard
+  with no edit to WS3's file, and its tests' dot counts change with R-2's. (3) packages/ai/src/llm/moves-stub.ts is on
+  trunk now (C1's anchor said WS2's branch). (4) The mock lands on trunk in its own PR (#505) before PR-1.
 
 ## §9 · Ownership Boundaries
 
