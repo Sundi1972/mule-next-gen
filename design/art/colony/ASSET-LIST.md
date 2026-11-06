@@ -22,7 +22,7 @@ picture (build1) for 1–2-month buildings and two (build1 ⅓, build2 ⅔) for 
 | Kind | Stages | Pictures (day + dusk + glow) | Building-specific work (beyond the shared kits) |
 |---|---|---|---|
 | Town hall | tier1, tier2, tier3 (grander as prestige rises: tier2 at 5, tier3 at 12 — PM/WS7 to confirm) | 3 × 3 = **9** | shipped as `tier1` (cb717373), re-keyed `standing` (the grounds ask for standing; T-AC-2); portico, flag, clock; tier2 adds a wing, tier3 a tower. Glow too strong (washes the slab orange) |
-| Park | site, build1, standing, closed, damaged | 5 × 2 + 4 = **14** **shipped** (cb717373); closed = gates locked, lawn brown; damaged = fallen tree, scorched lawn. Look fixes queued: the damaged root ball reads as a boulder, the closed gates as glass |
+| Park | site, build1, standing, closed, damaged | 5 × 2 + 4 = **14** | **shipped** (cb717373); closed = gates locked, lawn brown; damaged = fallen tree, scorched lawn. Look fixes queued: the damaged root ball reads as a boulder, the closed gates as glass |
 | Hospital | site, build1, standing, closed, damaged | **14** | **our own build, polished, with Mission to Minerva props** (Heiko, AM-5; props in local renders only until the licence question is answered); not shipped yet |
 | Observatory | site, build1, standing, closed, damaged | **14** | dome with slot + telescope; damaged = cracked dome |
 | Stadium | site, build1, build2, standing, closed, damaged | 6 × 2 + 5 = **17** | **2×2 places** (Heiko; WS7 #538): a real bowl with stands, pitch, floodlight masts; closed = masts dark, gates shut |
