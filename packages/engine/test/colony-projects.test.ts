@@ -48,7 +48,7 @@ function standing(state: GameState, id: PrestigeId): void {
   const row = PRESTIGE[id];
   state.colony = {
     ...state.colony!,
-    projects: [{ id, stage: 'standing', funded: { credits: row.credits, goods: { ...row.goods } }, monthsLeft: null, plot: null, since: 1, plaque: {}, maxBid: null }],
+    projects: [{ id, stage: 'standing', funded: { credits: row.credits, goods: { ...row.goods } }, monthsLeft: null, since: 1, plaque: {} }],
   };
 }
 
@@ -129,11 +129,14 @@ describe('prestige objects: commissioned, funded, built, kept up', () => {
     expect(project(state, 'hospital')).toMatchObject({ stage: 'commissioned', funded: { credits: 0, goods: {} }, since: state.month, plaque: {} });
   });
 
-  it('T-AC-25: an object that needs a plot waits commissioned with no site, however well funded, and never builds', () => {
-    const state = governedGame(10_000);
-    state.store.stock.alloy = 10;
-    commission(state, 'lena', 'park');
-    for (let i = 0; i < 3; i++) runColony(state, []);
-    expect(project(state, 'park')).toMatchObject({ stage: 'commissioned', plot: null, funded: { credits: PRESTIGE.park.credits, goods: PRESTIGE.park.goods } });
+  it('T-AC-25 (C48): every object, the Park and the Spaceport upgrade included, builds at the first upkeep that funds it in full, with no wait for land', () => {
+    for (const id of ['park', 'stadium', 'spaceport'] as const) {
+      const state = governedGame(10_000);
+      state.store.stock.alloy = 10;
+      state.store.stock.electronics = 10;
+      commission(state, 'lena', id);
+      runColony(state, []);
+      expect(project(state, id), id).toMatchObject({ stage: 'building', monthsLeft: PRESTIGE[id].buildMonths, funded: { credits: PRESTIGE[id].credits, goods: PRESTIGE[id].goods } });
+    }
   });
 });

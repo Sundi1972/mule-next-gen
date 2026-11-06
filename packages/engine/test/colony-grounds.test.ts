@@ -24,7 +24,7 @@ function governedGame(politics = true): GameState {
 /** An object already in the colony at a stage that is not open, holding a place (or none). */
 function holding(state: GameState, id: PrestigeId, stage: Project['stage'], slot: number | null): void {
   const row = PRESTIGE[id];
-  state.colony!.projects.push({ id, stage, funded: { credits: row.credits, goods: { ...row.goods } }, monthsLeft: null, plot: null, since: 1, plaque: {}, maxBid: null, slot });
+  state.colony!.projects.push({ id, stage, funded: { credits: row.credits, goods: { ...row.goods } }, monthsLeft: null, since: 1, plaque: {}, slot });
 }
 
 function slotOf(state: GameState, id: PrestigeId): number | null | undefined {
@@ -79,7 +79,7 @@ describe("T-AC-51 · RULE-32: growth-order places on the colony's grounds", () =
     expect(slotOf(state, 'park')).toBe(1);
   });
 
-  it('T-AC-51 · RULE-32: a project sited on a map plot before the change (slot null) holds no place', () => {
+  it('T-AC-51 · RULE-32: a project holding no place (slot null) leaves place 0 free', () => {
     const state = governedGame();
     holding(state, 'stadium', 'standing', null);
     commission(state, 'lena', 'park');

@@ -168,8 +168,8 @@
 <h3 id="meteor-craters">Meteor craters</h3>
 <p>A meteor strike is a production event with a <span class="num">3.2</span>% chance each month. After the month's goods are made it hits one plot (never the store). The owner keeps the plot, but its MULE, its run of months and its filter are destroyed, any special field there is replaced, and the plot becomes a meteor crater with Crystite <span class="num">4</span>.</p>
 <h3 id="colony-sites">Colony sites</h3>
-<p>When politics is on, the colony can win a plot at the land auction for a building that needs one (a Park, a Stadium or the Spaceport upgrade). That plot becomes the colony's: it is no player's, cannot be claimed or flown over by the drone, and stands bare. See <a href="#colony-bids">the colony's bid</a> below and <a href="colony-and-politics.html">Colony and politics</a>.</p>
-<p class="code-ref">In the code: <code>config.ts::MAP.special</code> · <code>config.ts::MAP.specialEffect</code> · <code>config.ts::EVENTS.colony.cavernCollapse</code> · <code>config.ts::EVENTS.colony.meteorStrike</code> · <code>packages/engine/src/specials.ts</code> · <code>packages/engine/src/colony.ts::siteProject</code></p>
+<p>The colony's buildings never stand on the map. They stand on the colony's own grounds, so no plot is ever the colony's (see <a href="colony-and-politics.html#site-bid">The colony's grounds</a>).</p>
+<p class="code-ref">In the code: <code>config.ts::MAP.special</code> · <code>config.ts::MAP.specialEffect</code> · <code>config.ts::EVENTS.colony.cavernCollapse</code> · <code>config.ts::EVENTS.colony.meteorStrike</code> · <code>packages/engine/src/specials.ts</code></p>
 <p class="owner">Kept current by: the Maps team (WS5), with the Events team (WS1) for meteor strikes and cavern collapses.</p>
 
 <h2 id="land-grant">The land grant <span class="pill built">In the game</span></h2>
@@ -263,10 +263,10 @@
 <li>It never pushes out a player's listing: if <span class="num">4</span> lots are already listed, or no land is free, there is no colony lot.</li>
 </ul>
 <p>The roll comes from the game's seed and the month alone, so it is the same in a replay.</p>
-<h3 id="colony-bids">The colony bids for a site</h3>
-<p>With politics on, the colony can also <em>buy</em>. When a commissioned building needs a plot and the Governor has set a top bid, the colony bids on every player's plot that comes up: one credit over the best player's bid, up to the lower of the Governor's top bid and what the fund holds above its reserve. A player who reaches that cap takes the lot. If the colony wins, the fund pays the seller (less tax), any MULE on the plot goes back to the corral, and the plot becomes the colony's bare building site.</p>
-<p class="code-ref">In the code: <code>lots.ts::colonyLot</code> · <code>lots.ts::colonyBid</code> · <code>config.ts::LOTS.colonyPlotChance</code> · <code>config.ts::LOTS.colonyPlotShare</code> · <code>colony.ts::siteProject</code></p>
-<p class="owner">Kept current by: the Auctions team (WS3), with the Politics team (WS7) for the colony's bid.</p>
+<h3 id="colony-bids">The colony never buys</h3>
+<p>The colony only sells. It never bids at the land auction: its buildings stand on its own grounds (see <a href="colony-and-politics.html#site-bid">The colony's grounds</a>).</p>
+<p class="code-ref">In the code: <code>lots.ts::colonyLot</code> · <code>config.ts::LOTS.colonyPlotChance</code> · <code>config.ts::LOTS.colonyPlotShare</code></p>
+<p class="owner">Kept current by: the Auctions team (WS3).</p>
 
 <h2 id="geo-drone">The geo drone <span class="pill built">In the game</span></h2>
 <p>In planning you can send a <strong>geo drone</strong> to read the ground of plots before the land grant, from orbit.</p>

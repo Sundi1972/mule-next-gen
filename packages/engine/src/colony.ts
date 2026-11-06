@@ -6,7 +6,6 @@
 import { COLONY, GAME, HAPPINESS, PRESTIGE } from './config.js';
 import { allPrices, storeForSale, storeQuotes } from './economy.js';
 import { RuleError } from './errors.js';
-import { COLONY_SELLER } from './lots.js';
 import { votesOpen } from './politics.js';
 import { PERCENT } from './units.js';
 import { scoreParts } from './game.js';
@@ -120,7 +119,7 @@ export function commission(state: GameState, playerId: string, id: PrestigeId): 
   if (refused) throw new RuleError(refused);
   const slot = lowestFreeSlot(state);
   if (slot === null) throw new RuleError(GROUNDS_FULL);
-  edit(state).projects.push({ id, stage: 'commissioned', funded: { credits: 0, goods: {} }, monthsLeft: null, plot: null, since: state.month, plaque: {}, maxBid: null, slot });
+  edit(state).projects.push({ id, stage: 'commissioned', funded: { credits: 0, goods: {} }, monthsLeft: null, since: state.month, plaque: {}, slot });
 }
 
 const GROUNDS_FULL = "The colony's grounds are full";
@@ -236,8 +235,8 @@ function fund(state: GameState, colony: Colony, project: Project): void {
   }
   const needs = stillNeeds(project);
   const funded = needs.credits === 0 && Object.keys(needs.goods).length === 0;
-  const sited = !PRESTIGE[project.id].needsPlot || project.plot !== null;
-  if (funded && sited) Object.assign(project, { stage: 'building', monthsLeft: PRESTIGE[project.id].buildMonths });
+  // RULE-21 row 4: fully funded, it builds. Its place on the colony's grounds is its own from the commission (C48).
+  if (funded) Object.assign(project, { stage: 'building', monthsLeft: PRESTIGE[project.id].buildMonths });
 }
 
 /** A good's key as words for a message: rareEarth reads "rare earth". */
@@ -417,32 +416,4 @@ export function payStrike(state: GameState, playerId: string): void {
   const colony = edit(state);
   payOut(state, colony, 'strikePay', strike.cost);
   colony.strike = { ...strike, paid: true };
-}
-
-/** A commissioned project that waits for its plot, or why there is none. See G-5 RULE-28. */
-function waitingForSite(state: GameState, id: PrestigeId): Project {
-  const project = state.colony?.projects.find((p) => p.id === id && p.stage === 'commissioned');
-  if (!project) throw new RuleError('Nothing is waiting for a site');
-  const { name, needsPlot } = PRESTIGE[id];
-  if (!needsPlot) throw new RuleError(`The ${name} needs no plot`);
-  if (project.plot !== null) throw new RuleError(`The ${name} already has its site`);
-  return project;
-}
-
-/** The Governor's top bid for an object's plot at the land auction; null, the colony does not bid. See G-5 RULE-28. */
-export function setSiteBid(state: GameState, playerId: string, id: PrestigeId, maxBid: number | null): void {
-  if (!state.colony) throw new RuleError("This game plays without the colony's council");
-  if (state.phase !== 'planning' || votesOpen(state)) throw new RuleError('Set the bid once the votes are over');
-  if (state.politics?.governor !== playerId) throw new RuleError("Only the Governor sets the colony's bid");
-  waitingForSite(state, id);
-  if (maxBid !== null && !whole(maxBid)) throw new RuleError('Bid a whole number of credits');
-  edit(state).projects.find((p) => p.id === id)!.maxBid = maxBid;
-}
-
-/** The colony won a plot for an object: lots.ts calls this at the lot's settle. The tile becomes the colony's, bare. */
-export function siteProject(state: GameState, id: PrestigeId, tile: number): void {
-  waitingForSite(state, id);
-  // The tile first: a bad index throws before the project holds a plot it doesn't have.
-  Object.assign(state.tiles[tile]!, { owner: COLONY_SELLER, outfit: null });
-  edit(state).projects.find((p) => p.id === id)!.plot = tile;
 }
