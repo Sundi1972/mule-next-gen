@@ -416,6 +416,10 @@ Code-only; no existing state to reach. The record starts with WS3's build.
   2001–2060): the gate passes with the fix (51.7%, lead +0.05) and without it (48.3%, +0.07); the Claude chairs' gap
   over the engine seats moves −30 a game (95% −1,486 to +1,425). The diagnosis's 6–10 points do not replicate; the
   amendment stands on its mechanism (fields left alone play current), not on a measured gain.
+  Review of #551 (6 Nov): the auction's brief now drafts from the game advanced into the auction (atAuctionStart: its
+  events, posted prices and queue), since a price-only view showed roles the auction's draft did not keep; an edit to a
+  good whose role still differs at the start is rejected with why. The land write's whatIf still previews against the
+  draft shown at upkeep, while the edits play on the grant's draft: a known small gap, left as is.
 - **AM-A16 · 5 Nov · PM ruling (option C), on WS2's PR-4b finding:** RULE-A2 row 3 asked for the development's edits
   as the land grant ended, but development starts in the same tick unless a land auction or an event show comes
   between, so the reply was always late in most months (measured: a 1-month recorded game's reply settled at step 97,
