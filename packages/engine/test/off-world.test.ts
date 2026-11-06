@@ -1,11 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   advancePhase,
+  cloneForSim,
   createGame,
   EXPORT_DEMAND,
   GOOD_CONFIG,
   GOODS,
   OFF_WORLD,
+  observe,
   seedOf,
   stepOffWorld,
   type GameState,
@@ -65,6 +67,20 @@ function idleGame(seed: number): { state: GameState; path: Stock[]; startTiles: 
     if (state.month !== month) path.push({ ...state.store.offWorld });
   }
   return { state, path, startTiles };
+}
+
+/** Month 1's upkeep of a game nobody plays, with Crystite's off-world price set to `crystite`: the next phase opens month 2. */
+function upkeepAt(seed: number, crystite: number): GameState {
+  const state = newGame(seed);
+  while (state.phase !== 'upkeep') advancePhase(state);
+  state.store.offWorld.crystite = crystite;
+  return state;
+}
+
+/** Plays a state on to the next month's opening, where the walk steps. */
+function openNextMonth(state: GameState): void {
+  const month = state.month;
+  while (state.month === month) advancePhase(state);
 }
 
 function withSigmaZero<T>(run: () => T): T {
@@ -139,5 +155,19 @@ describe('pricing G-3: the export goods walk off-world', () => {
     }
     expect(crystite.size, 'the premise: Crystite walked').toBeGreaterThan(50);
     expect([...moved].sort(), 'the premise: every export good walked').toEqual([...EXPORTS].sort());
+  });
+
+  it("price T-AC-2: a what-if month opens on the ship's expected path, 160 to 134, and draws nothing; the real game still walks", () => {
+    const seed = 7;
+    const real = upkeepAt(seed, 160);
+    const ownSeeds = walkSeeds(seed, real.maxMonths);
+    for (const view of [cloneForSim(real), observe(real, 'p0')]) {
+      draws.length = 0;
+      openNextMonth(view);
+      expect(view.store.offWorld.crystite, `a ${view.seed === 0 ? 'seat\'s observed' : 'cloned'} what-if`).toBe(134);
+      expect(draws.filter((d) => ownSeeds.has(d.seed) || d.seed === seedOf(0, 2, 'offWorld', 'crystite')), 'a what-if draws no walk').toEqual([]);
+    }
+    openNextMonth(real);
+    expect(real.store.offWorld.crystite, 'the real game draws its swing').not.toBe(134);
   });
 });
