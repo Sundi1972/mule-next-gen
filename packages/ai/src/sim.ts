@@ -16,6 +16,7 @@ import * as engine from '@mule/engine';
 import {
   AI_LEVELS,
   AI_PERSONAS,
+  AI_VALUE,
   COLONY_SELLER,
   colonyFailed,
   colonyScore,
@@ -25,12 +26,16 @@ import {
   HAPPINESS,
   moodBand,
   MS_PER_SECOND,
+  observe,
+  PRICE,
   POLLUTION,
   rollPhase,
   rollPlayerEvent,
   score,
   SIM_TARGETS,
   STORE_ID,
+  storeForSale,
+  WALK,
   WOLVES,
   type AiLevelId,
   type AiPersonaId,
@@ -44,6 +49,7 @@ import {
 import { simSeats, type TablePlays } from './lineup.js';
 import type { FloorMomentCounts } from './floor-turn.js';
 import { playGame, type DevTurn, type PlayedGame, type SeatSpec } from './play.js';
+import { unitNeed, type Mind } from './value.js';
 
 function arg(name: string, fallback: number): number {
   const i = process.argv.indexOf(`--${name}`);
@@ -334,6 +340,80 @@ function eventLines(months: readonly PhaseEvents[], label: string, note: string)
   ];
 }
 
+/**
+ * What the resource-utility model's proof counts (UBER-AC-1, T-AC-12), read at each auction's start and end and at
+ * production: the auctions a seat entered short of a good it needs, with the store selling it and cash for the whole
+ * shortfall at the store's ask, and how many it left still short; the seat-months that lost output for want of
+ * Energy, and those while the store had Energy for it and it could pay; plants and wells at each game's end.
+ */
+interface SupplyTally {
+  entered: number;
+  leftShort: number;
+  seatMonths: number;
+  cut: number;
+  cutCouldBuy: number;
+  plants: number;
+  wells: number;
+}
+
+const newSupplyTally = (): SupplyTally => ({ entered: 0, leftShort: 0, seatMonths: 0, cut: 0, cutCouldBuy: 0, plants: 0, wells: 0 });
+
+/** The tally's phase hook for one game: `minds` are its seats', by id. */
+function supplyHook(tally: SupplyTally, minds: Map<string, Mind>): (s: GameState) => void {
+  /** At the auction's start: per seat, the goods it is short of and could buy whole, and whether it could buy its Energy. */
+  let open: Map<string, { goods: { good: engine.Good; target: number }[]; energy: boolean }> | null = null;
+  let energyAt: Map<string, boolean> | null = null;
+  return (s) => {
+    if (s.phase === 'production') {
+      if (energyAt) {
+        const lines = s.history.at(-1)?.lines ?? [];
+        for (const p of s.players) {
+          tally.seatMonths++;
+          const cut = lines.some((l) => s.tiles[l.tile]!.owner === p.id && l.parts.some((x) => x.why === 'energyOff'));
+          if (cut) tally.cut++;
+          if (cut && energyAt.get(p.id)) tally.cutCouldBuy++;
+        }
+      }
+      open = new Map();
+      for (const p of s.players) {
+        const obs = observe(s, p.id);
+        const mind = minds.get(p.id)!;
+        const goods: { good: engine.Good; target: number }[] = [];
+        let energy = false;
+        for (const good of WALK.order) {
+          const target = unitNeed(obs, mind, good).target;
+          const short = target - p.stock[good];
+          const ask = Math.ceil(s.store.posted[good] * (1 + PRICE.storeSpread));
+          const can = short > 0 && storeForSale(s, good) > 0 && p.money >= short * ask;
+          if (can) goods.push({ good, target });
+          if (good === 'energy') energy = can;
+        }
+        open.set(p.id, { goods, energy });
+      }
+    }
+    if (s.phase === 'auction' && open) {
+      energyAt = new Map();
+      for (const p of s.players) {
+        const at = open.get(p.id)!;
+        energyAt.set(p.id, at.energy);
+        tally.entered += at.goods.length;
+        tally.leftShort += at.goods.filter((g) => p.stock[g.good] < g.target).length;
+      }
+      open = null;
+    }
+  };
+}
+
+/** The model's proof rows, beside the colony's own Food and Water shortage (HC-6). */
+function supplyLines(t: SupplyTally, playerGames: number, colonyShort: string): string[] {
+  const perSeat = (n: number) => (n / Math.max(1, playerGames)).toFixed(2); // literal-ok: two decimals, display only
+  return [
+    `     Resource utility (UBER-AC-1 a): ${pct(t.leftShort, t.entered)} of ${t.entered} auctions a seat entered short, with the store selling and cash for the whole shortfall, it left still short (target under 5%); colonists short of Food or Water in ${colonyShort} of months`,
+    `     Resource utility (UBER-AC-1 b): Energy cut while the store had Energy and the seat could pay in ${pct(t.cutCouldBuy, t.seatMonths)} of ${t.seatMonths} seat-months (target under 5%); colonists short of Food or Water in ${colonyShort} of months`,
+    `     Resource utility (T-AC-12): ${perSeat(t.plants)} plants and ${perSeat(t.wells)} wells a seat-game at the end; a cut for want of Energy in ${pct(t.cut, t.seatMonths)} of seat-months; colonists short of Food or Water in ${colonyShort} of months`,
+  ];
+}
+
 function main() {
   const overrides = applySets(process.argv.flatMap((a, i) => (a === '--set' ? [process.argv[i + 1] ?? ''] : [])));
   const games = arg('games', 100); // literal-ok: the sim's default run length, a command-line default
@@ -388,6 +468,7 @@ function main() {
   const mood = { months: zero(), events: Object.fromEntries(SOCIAL.map((k) => [k, zero()])) as Record<string, Record<MoodBand, number>>, strikesFelt: 0 };
   /** Each game's colony score at each month's end; empty games without the council. */
   const colonyPaths: number[][] = [];
+  const supply = AI_VALUE.unit ? newSupplyTally() : null;
   // Read once the land grant opens: by then the month's election is closed and the Governor has set the tax.
   const onPhase = (s: Parameters<NonNullable<Parameters<typeof playGame>[2]>['onPhase'] & {}>[0]) => {
     if (s.phase === 'planning') {
@@ -417,9 +498,12 @@ function main() {
     /** Plots developed as each month's production runs, by month. */
     const developedAt = new Map<number, number>();
     const colony = colonyScoreRecorder();
+    const minds = new Map(specs.map((spec, i): [string, Mind] => [`ai${i}`, { me: `ai${i}`, personaId: spec.persona, persona: AI_PERSONAS[spec.persona], levelId: spec.level, level: AI_LEVELS[spec.level] }]));
+    const supplyAt = supply ? supplyHook(supply, minds) : null;
     const onEachPhase = (s: GameState) => {
       onPhase(s);
       colony.onPhase(s);
+      supplyAt?.(s);
       if (s.phase === 'production') developedAt.set(s.month, s.tiles.filter((t) => t.owner && t.outfit).length);
       if (s.phase === 'production' && pending) {
         const events = s.history.at(-1)!.events ?? [];
@@ -462,6 +546,10 @@ function main() {
     }
     const mine = state.tiles.filter((t) => t.owner);
     owned += mine.length;
+    if (supply) {
+      supply.plants += mine.filter((t) => t.outfit === 'energy').length;
+      supply.wells += mine.filter((t) => t.outfit === 'water').length;
+    }
     developed += mine.filter((t) => t.outfit).length;
     if (state.players.some((p) => broke.some((_, m) => brokeRun.every((k) => broke[m + k]?.includes(p.id))))) longBroke++;
     if (colonyFailed(state)) collapsed++;
@@ -513,6 +601,7 @@ function main() {
   console.log(`     MULEs lost to the clock: ${(mulesLost / games).toFixed(1)} a game (walking ${walking ? 'on' : 'off'}; no check)`);
   for (const line of floorLines(floorTurns, floorMoments, playerGames)) console.log(line);
   console.log(`     Players hungry ${SPIRAL_MONTHS} or more months running: ${pct(spirals, playerGames)} (no check)`);
+  if (supply) for (const line of supplyLines(supply, playerGames, pct(hungry, months))) console.log(line);
   console.log(`     Wins by species:${Object.entries(wins).map(([s, n]) => `${s} ${pct(n, games)}`).join(', ')}`);
   console.log(`     Wins by persona: ${Object.entries(byPersona).map(([s, n]) => `${s} ${pct(n, games)}`).join(', ')}`);
   if (plan) for (const line of planLines(plan, level)) console.log(line);
