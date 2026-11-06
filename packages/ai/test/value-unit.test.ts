@@ -42,9 +42,13 @@ interface Table {
   stock?: Partial<Record<Good, number>>;
 }
 
+/** The species the tables were built with, by seat. */
+const BUILT_SPECIES = ['zipwing', 'bramblet', 'gearling', 'mollox'] as const;
+
 /** Month 1's auction, nobody owning land but ai0, which owns the row's plots and holds `stock`; no sales tax. */
 function table({ plots, posted = {}, stock = {} }: Table): GameState {
-  const state = createGame({ seed: 7, players: ['ai0', 'ai1', 'ai2', 'ai3'].map((id) => ({ id, name: id, isAi: true })) });
+  // Species picked as the table was built: the default turns with the seed (FM-species-by-chair), and ai0 is no Bramblet.
+  const state = createGame({ seed: 7, players: (['ai0', 'ai1', 'ai2', 'ai3'] as const).map((id, i) => ({ id, name: id, isAi: true, species: BUILT_SPECIES[i] })) });
   while (state.phase !== 'auction') advancePhase(state);
   for (const t of state.tiles) if (t.owner) Object.assign(t, { owner: null, outfit: null });
   const me = state.players.find((p) => p.id === 'ai0')!;

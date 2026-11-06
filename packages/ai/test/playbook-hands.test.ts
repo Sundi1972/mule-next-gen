@@ -154,6 +154,15 @@ interface TableOptions {
   edit?: (state: GameState) => void;
 }
 
+/**
+ * The species the built cases were measured with, by seat, picked as month 1's planning ends: the default turns with the
+ * seed (FM-species-by-chair), and a seat's species moves its route (a Mollox analyses in half the time).
+ */
+const BUILT_SPECIES = ['zipwing', 'bramblet', 'gearling', 'mollox'] as const;
+function pinSpecies(state: GameState): void {
+  state.players.forEach((p, i) => (p.species = BUILT_SPECIES[i]!));
+}
+
 /** One play.ts game of SPECS on SEED, each seat's view of it collected as each phase ends. */
 function playTable(o: TableOptions = {}): Table {
   const written: Playbook[] = [];
@@ -188,6 +197,7 @@ function playTable(o: TableOptions = {}): Table {
     politics: false,
     maxMonths: o.months ?? MONTHS,
     onPhase: (state) => {
+      pinSpecies(state);
       o.edit?.(state);
       if (state.phase !== 'development' && state.phase !== 'auction') return;
       if (state.phase === 'auction') auctionEnds.set(state.month, stableJson(state));

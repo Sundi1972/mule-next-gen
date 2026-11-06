@@ -25,7 +25,12 @@ import { playGame } from '../src/play.js';
 import { developDecision, goodPlan, landDecision, muleValue, plotRoom, plotValue, rivalsStillClaiming, tradeDecision, wantsAnyAhead, wantsPlot } from '../src/strategist.js';
 import { cashReserve, installGain, secondValue, type Mind } from '../src/value.js';
 
-const fourSeats = (seed: number) => createGame({ seed, players: [0, 1, 2, 3].map((i) => ({ id: `ai${i}`, name: `AI${i}`, isAi: true })) });
+/**
+ * The species these cases were built with, picked per seat: the default turns with the seed (FM-species-by-chair), and
+ * the cases' worths (a Mollox's mines, a Bramblet's farms) were measured for these seats.
+ */
+const BUILT_SPECIES = ['zipwing', 'bramblet', 'gearling', 'mollox'] as const;
+const fourSeats = (seed: number) => createGame({ seed, players: [0, 1, 2, 3].map((i) => ({ id: `ai${i}`, name: `AI${i}`, isAi: true, species: BUILT_SPECIES[i] })) });
 
 /** A store whose Water lasts the colonists past the outlook, so Water is priced at the market, not at what colonists pay. */
 const WATER_TO_SPARE = 36;

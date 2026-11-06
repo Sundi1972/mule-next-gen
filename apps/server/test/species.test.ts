@@ -29,7 +29,8 @@ async function phone(url: string) {
 }
 
 it('T-AC-3: a species picked over the socket reaches the game; a seat that never picked and an AI seat keep the default', async () => {
-  const running = createMuleServer({ seed: () => 42 });
+  // Seed 43 turns the defaults by one seat (FM-species-by-chair): seat i gets DEFAULT_SPECIES[(i + 43) % 6].
+  const running = createMuleServer({ seed: () => 43 });
   const sockets: WebSocket[] = [];
   let code = '';
   try {
@@ -59,9 +60,9 @@ it('T-AC-3: a species picked over the socket reaches the game; a seat that never
     heiko.send({ t: 'start' });
     const started = (await heiko.next((m) => m.t === 'view' && m.view.status === 'playing')) as Extract<Envelope, { t: 'view' }>;
     expect(started.view.game?.players.map((p) => [p.name, p.isAi, p.species])).toEqual([
-      ['Heiko', false, 'zipwing'], // never picked (its refused pick stored nothing): DEFAULT_SPECIES[0]
-      ['Mia', false, 'quibbit'], // picked: not DEFAULT_SPECIES[1], which is bramblet
-      [AI_NAMES[0], true, 'gearling'], // AI seats never pick: DEFAULT_SPECIES[2]
+      ['Heiko', false, 'bramblet'], // never picked (its refused pick stored nothing): DEFAULT_SPECIES[1], not the chair's [0]
+      ['Mia', false, 'quibbit'], // picked: not her default DEFAULT_SPECIES[2], which is gearling
+      [AI_NAMES[0], true, 'mollox'], // AI seats never pick: DEFAULT_SPECIES[3]
     ]);
     const miaView = (await mia.next((m) => m.t === 'view' && m.view.status === 'playing')) as Extract<Envelope, { t: 'view' }>;
     expect(miaView.view.game?.me?.species).toBe('quibbit');
