@@ -693,7 +693,8 @@ export function tradeDecision(obs: GameState, mind: Mind, plan: GoodPlan): Short
   }
 
   const short = upTo > h && h < plan.mustHold ? `it is ${plan.mustHold - h} ${GOOD_NAME[good]} short of next month's need and can pay the store's ${buy}` : null;
-  // A pass gives up the whole value of each funded needed unit: the cash plan has already set its money aside for it.
+  // A pass gives up each funded needed unit's value, its chance-weighted worth: the cash plan has already set its money
+  // aside for it.
   let given = 0;
   for (let k = h; k < h + (plan.cash?.funded ?? 0); k++) given += v.buy[k] ?? 0;
   const passGain = plan.cash ? 0 - given : 0;
