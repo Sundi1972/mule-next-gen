@@ -80,9 +80,10 @@ export function Look() {
         <h1 className="font-display text-4xl font-bold">The colony grounds: how good can it look?</h1>
         <div className="flex items-center justify-between gap-4" id="colony">
           <p className="text-base text-ink-2">
-            <strong className="text-ink">A whole colony, month 12:</strong> the town hall, the Park, Hospital, Observatory, Stadium and Spaceport,
-            three places free to grow into. Pre-rendered in Blender (C). Buildings other than the Park are quick script-built models
-            made today: they show the look, not final designs. This whole picture is about 0.5 MB; in the game each building is its own picture of 50–65 kB.
+            <strong className="text-ink">A whole colony, month 12:</strong> the town hall, the Park, Hospital and Observatory on one place each; the
+            Stadium and the Spaceport on 2×2 places, as WS7 ruled. The rocket stands 37 m, four times the Hospital, the tallest thing on the grounds.
+            Four places are free to grow into. Pre-rendered in Blender (C). Buildings other than the Park are quick script-built models: they show
+            the look, not final designs (the Hospital will be redone with your KitBash3D kits). In the game each building is its own picture of 50–65 kB.
           </p>
           <LightToggle light={light} set={setLight} />
         </div>

@@ -119,29 +119,30 @@ def cabin(x, y):
     light("POINT", (x + 0.55, y - 0.9, ZT + 1.5), 25, (1.0, 0.7, 0.35), 0.2)
 
 
-def site(cx=0.0, cy=0.0, w=7.9, d=7.9):
-    """Stage `site`: the slab's inside graded to earth, stakes every 2 m on a string outline of the footprint,
-    two survey flags, two spoil heaps, a cabin with its work lamp."""
-    slab(cx, cy, top="earth")
+def site(cx=0.0, cy=0.0, w=7.9, d=7.9, n=1, cabin_at=None):
+    """Stage `site`: the slab's inside graded to earth, stakes on a string outline of the footprint, two survey
+    flags, two spoil heaps, a cabin with its work lamp. n: places per side (a 2 x 2 kind's site is one slab)."""
+    slab(cx, cy, top="earth", n=n)
     earth = mat("earth")
     wood = flat("stake_wood", (0.55, 0.4, 0.24), 0.8)
     string = flat("string", (0.95, 0.85, 0.2), 0.6)
     x0, x1, y0, y1 = cx - w / 2, cx + w / 2, cy - d / 2, cy + d / 2
     pts = []
-    for t in [i / 4 for i in range(4)]:
+    k_ = 4 * n
+    for t in [i / k_ for i in range(k_)]:
         pts += [(x0 + (x1 - x0) * t, y0), (x1, y0 + (y1 - y0) * t), (x1 - (x1 - x0) * t, y1), (x0, y1 - (y1 - y0) * t)]
     for (px, py) in pts:
         bx(px - 0.05, px + 0.05, py - 0.05, py + 0.05, ZT, ZT + 0.9, wood, 0.005, "stake")
     for (a, b_, c, d_) in ((x0, x1, y0, y0), (x1, x1, y0, y1), (x0, x1, y1, y1), (x0, x0, y0, y1)):
         bx(a - 0.02, b_ + 0.02, c - 0.02, d_ + 0.02, ZT + 0.75, ZT + 0.79, string, 0, "string")
-    for (hx, hy, r) in ((cx - 3.6, cy + 1.2, 1.1), (cx - 2.4, cy + 3.3, 0.8)):  # heaps at the back, clear of the outline's front
+    for (hx, hy, r) in ((cx - 3.6 * n, cy + 1.2 * n, 1.1 * n), (cx - 2.4 * n, cy + 3.3 * n, 0.8 * n)):  # heaps at the back
         bpy.ops.mesh.primitive_uv_sphere_add(segments=24, ring_count=12, radius=r, location=(hx, hy, ZT))
         hp = bpy.context.active_object
         hp.name = "spoil_heap"
         hp.scale = (1, 1, 0.45)
         hp.data.materials.append(earth)
         hp.data.shade_smooth()
-    cabin(cx + 2.6, cy + 4.6)
+    cabin(*(cabin_at or (cx + 2.6, cy + 4.6)))
     red = flat("survey_flag", (0.85, 0.08, 0.05), 0.6)
     for (px, py) in ((x0, y0), (x1, y1)):
         cyl("survey_pole", px, py, 0.025, ZT, ZT + 1.6, mat("whitemetal"), 8)

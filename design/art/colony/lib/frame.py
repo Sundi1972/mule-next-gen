@@ -19,6 +19,9 @@ CENTRE = (800, 1000)
 PLACE_PX = round(core.SL * math.sqrt(2) * PX_PER_M)  # 1293
 DEFAULT = {"width": W, "height": H, "centre": list(CENTRE)}
 LIGHTS_ALL = ("day", "dusk", "glow")
+# the camera stands well back along its line of sight: an orthographic view does not change with distance, but
+# anything between the camera and its target's plane would be clipped (34 m back cut a 48 m colony in half)
+BACK_OFF = Vector((20, -20, 20 * math.tan(math.radians(30)) * math.sqrt(2))) * 5
 
 
 def camera(fr=None, target=(0.0, 0.0, 0.0)):
@@ -26,7 +29,7 @@ def camera(fr=None, target=(0.0, 0.0, 0.0)):
     the footprint's centre (target) at its centre pixel, so a 2 x 2 kind is 3200 wide and composites like the rest."""
     fr = fr or DEFAULT
     w, h = fr["width"], fr["height"]
-    bpy.ops.object.camera_add(location=Vector(target) + Vector((20, -20, 20 * math.tan(math.radians(30)) * math.sqrt(2))))
+    bpy.ops.object.camera_add(location=Vector(target) + BACK_OFF)
     cam = bpy.context.active_object
     cam.data.type = "ORTHO"
     cam.data.sensor_fit = "AUTO"
@@ -35,7 +38,7 @@ def camera(fr=None, target=(0.0, 0.0, 0.0)):
     # shift is in units of the frame's larger side: the view moves so the target lands on the centre pixel
     cam.data.shift_x = (w / 2 - fr["centre"][0]) / max(w, h)
     cam.data.shift_y = (fr["centre"][1] - h / 2) / max(w, h)
-    cam.data.clip_end = 400
+    cam.data.clip_end = 1000
     bpy.context.scene.camera = cam
     return cam
 

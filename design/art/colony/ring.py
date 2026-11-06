@@ -151,7 +151,9 @@ v0, v1 = min(p[1] for p in pts), max(p[1] for p in pts)
 span_v = (v1 - v0) * 1.08
 width = max((u1 - u0) * 1.25, span_v * 1920 / 1080)
 uc, vc = (u0 + u1) / 2, (v0 + v1) / 2 + 0.01 * span_v
-FADE = {"centre": (to_screen(*C)[0], to_screen(*C)[1] + 3.0), "ru": width * 0.47, "rv": (vc - v0 + 0.04 * span_v) * 1.0}
+fc = (to_screen(*C)[0], to_screen(*C)[1] + 3.0)
+# the land has faded out by the frame's bottom edge and its sides, rather than being cut by them
+FADE = {"centre": fc, "ru": width * 0.47, "rv": fc[1] - (vc - width * 1080 / 1920 / 2)}
 
 MEADOW = ground_mat(False)
 rocks = load("moon_rock_03")[0]
@@ -222,7 +224,7 @@ cam.data.ortho_scale = width
 # aim: the ground point whose screen position is (uc, vc)
 x_plus_y, y_minus_x = uc / 0.7071, vc / 0.3536
 tx, ty = (x_plus_y - y_minus_x) / 2, (x_plus_y + y_minus_x) / 2
-cam.location = Vector((tx, ty, 0)) + Vector((20, -20, 20 * math.tan(math.radians(30)) * math.sqrt(2)))
+cam.location = Vector((tx, ty, 0)) + frame.BACK_OFF
 cam.data.shift_x = cam.data.shift_y = 0
 frame.setup(SAMPLES, PCT, {"width": 1920, "height": 1080, "centre": [960, 540]})
 print(f"COLONY ring t+{time.time() - T0:.0f}s built; rocket top {rocket_top:.1f} m; frame {width:.0f} m wide; "
