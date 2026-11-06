@@ -530,7 +530,7 @@ C19 · ADDED · the view carries colony health, whether Medicine ran short, and 
 
 today        MuleView carries colonistsFed only (packages/protocol/src/index.ts::MuleView, from
              apps/server/src/mule-game.ts::colonistsFedAt) · verified_by: read
-tomorrow     MUST carry colonyHealth: { health, medicineShort, shortMonths } | null (§3), null while health is off;
+tomorrow     MUST carry colonyHealth: { health, medicineShort, shortMonths } | null (§3), null while health is off or politics is off;
              the engine MUST keep the run of months Medicine ran short beside WS7's sick share, written at upkeep
              after the colonists' meal
 seam         packages/protocol/src/index.ts::MuleView (the contract) · apps/server/src/mule-game.ts (the view)
@@ -822,7 +822,8 @@ What it says:
 - `health` = round(100 × (1 − h)), 60..100 (h is WS7's sick share, capped at 0.4).
 - `medicineShort` = the colonists took less Medicine than their need at the last upkeep.
 - `shortMonths` = consecutive upkeeps with `medicineShort`, 0 when it is false.
-- null exactly while HEALTH.enabled is false (HC-13); never null for another reason.
+- null exactly while HEALTH.enabled is false (HC-13) or the game has no colony (politics off: no h, WS7 T-AC-11);
+  never null for another reason.
 Example: h 0.12, short at the last three upkeeps → `{ health: 88, medicineShort: true, shortMonths: 3 }`.
 The phone's cause line ("Medicine ran short", WS8's mock) reads the last two; the gauge reads `health` in WS5's bands.
 
@@ -862,7 +863,7 @@ The phone's cause line ("Medicine ran short", WS8's mock) reads the last two; th
 | B-AC-15 | Given 200 colonists and no Electronics works · When prices are next posted · Then monthlyDemand's Electronics, Rare earth and Alloy are each 4 more than today's terms, and Electronics' band is not off-world. observed_at: monthlyDemand as postPrices reads it. negative: 0 colonists adds nothing | C17 | engine test |
 | B-AC-16 | Given health on and h 0.4 · When a player's development sickness is rolled · Then its chance is today's + 0.10, within the row's cap. observed_at: eventChance for EVENTS.player.sickness. negative: h 0 leaves it unchanged | C18 | engine test |
 | B-AC-17 | Given health on, h 0.3 and a player with a farm making 4 and no Medicine · When production runs · Then the farm makes 3; with 1 Medicine in the depot it makes 4 and the depot holds 1 less. observed_at: the month report's production lines and the depot. negative: h 0.19 cuts nothing | C18 | engine test |
-| B-AC-18 | Given health on and the colonists short of Medicine at the last 3 upkeeps · When the phone's view is built · Then colonyHealth is { health, medicineShort true, shortMonths 3 }; after a month they get their Medicine it is { medicineShort false, shortMonths 0 }; with health off it is null. observed_at: the view the server sends | C19 | server view test |
+| B-AC-18 | Given health on and the colonists short of Medicine at the last 3 upkeeps · When the phone's view is built · Then colonyHealth is { health, medicineShort true, shortMonths 3 }; after a month they get their Medicine it is { medicineShort false, shortMonths 0 }; with health off, or politics off, it is null. observed_at: the view the server sends | C19 | server view test |
 | T-AC-25 (B-AC-15) | RULE-13's examples; the recipe is read, not copied (Rare earth and Alloy follow RECIPES.electronics.inputs under a test override) | C17 | engine unit |
 | T-AC-26 (B-AC-16, 17) | RULE-14 and RULE-15's every row and example; needsOf's Medicine is +1 exactly when RULE-15 row 3 would apply; no copy of the cure in packages/ai (source scan, like T-AC-21) | C18 | engine unit + scan |
 | T-AC-27 (HC-13) | with HEALTH.enabled false, 10 seed-1 sim games give the same final state as the same games on the base commit (every number), so health off is inert | C17-C19 | sim, against the base at run time |
