@@ -52,8 +52,8 @@ const KEEP_SOCKETS = `{
   }
 }`;
 
-/** The development control the sickness step clicks at and presses: in the store, where development opens. */
-const PUB = 'Go to the pub and end your turn';
+/** How long the sickness step holds the arcade's stick after endsAt: long enough for a half-pace colonist to move. */
+const HOLD_MS = 800;
 
 /** Lines the AI seats post when they have not said three yet: the ticker's most, as in a real game. */
 const CHATTER = ['Money is for spending on MULEs.', 'Quietly building.', 'Better safe than sorry: keep the cash.'];
@@ -77,8 +77,8 @@ const sickness: string[] = [];
 const games = new WeakMap<Page, MuleView>();
 /** Every message each phone sent, from its show watch. */
 const watchedSent = new WeakMap<Page, () => unknown[]>();
-/** Where each phone last saw the pub's control on its development screen. */
-const pubAt = new WeakMap<Page, { x: number; y: number }>();
+/** Where each phone last saw the arcade's stick on its development screen. */
+const stickAt = new WeakMap<Page, { x: number; y: number }>();
 try {
   if (SHOTS) mkdirSync(SHOTS, { recursive: true });
   const [withTv, alone, raid, fire] = await Promise.all([theTvPlaysEachStory(browser), thePhoneAlonePlaysAndSkips(browser), theTvPlaysThePirateRaid(browser), thePhoneAlonePlaysTheStoreFire(browser)]);
@@ -331,17 +331,17 @@ async function startAndReachProduction(phone: Page, code: string, tag: string, t
   await phone.locator('[data-phase=production]').waitFor({ timeout: SHOWN_MS });
 }
 
-/** The phone's part in `phase`, one step: Ready, a claim, the pub, Done, on to the next month. A control not there yet is no failure. */
+/** The phone's part in `phase`, one step: Ready, a claim, Done, on to the next month. A control not there yet is no failure. */
 async function act(phone: Page, phase: string): Promise<void> {
   const press = (name: string | RegExp) => phone.locator(`[data-phase=${phase}]`).getByRole('button', { name }).first().click({ timeout: PRESS_MS });
   try {
     if (phase === 'planning') await press("I'm ready");
     else if (phase === 'landGrant') await press(/CLAIM/);
     else if (phase === 'development') {
-      // Where the pub's control sits on the development screen, for the sickness step's click under the overlay.
-      const box = await phone.locator('[data-phase=development]').getByRole('button', { name: PUB }).first().boundingBox({ timeout: PRESS_MS });
-      if (box) pubAt.set(phone, { x: box.x + box.width / 2, y: box.y + box.height / 2 });
-      await press(PUB);
+      // Development is the arcade and runs on its clock. Where its stick sits, for the sickness step's click under the overlay.
+      const box = await phone.locator('[data-phase=development]').getByTestId('overlay-stick').boundingBox({ timeout: PRESS_MS });
+      if (box) stickAt.set(phone, { x: box.x + box.width / 2, y: box.y + box.height / 2 });
+      await phone.waitForTimeout(PRESS_MS);
     }
     else if (phase === 'auction') await press(/^(Ready|Done with .+)$/);
     // The month end has no clock: it waits for the phone's "On to month N", as month-end-steps.ts presses it.
@@ -397,8 +397,8 @@ function sickOnNextDevelopment(code: string, seat: string, entered: () => void):
 
 /**
  * B-AC-4 and T-AC-10's display: development opens on the sick seat's roll call, which holds the phase until the
- * view's endsAt. With a TV, the TV plays it and the phone's light card covers the screen: a real click where the pub's
- * control sits sends nothing; after endsAt one press of it applies. Alone, the phone plays the roll call itself and a
+ * view's endsAt. With a TV, the TV plays it and the phone's light card covers the screen: a real click where the arcade's
+ * stick sits sends nothing; after endsAt one hold of it moves the colonist on the server. Alone, the phone plays the roll call itself and a
  * click on its map skips it; after endsAt the development screen is there.
  */
 async function theRollCallHolds(phone: Page, tv: Page | undefined, code: string, me: string, tag: string): Promise<string> {
@@ -443,15 +443,15 @@ async function theRollCallHolds(phone: Page, tv: Page | undefined, code: string,
   const sentBefore = sent().length;
   let during: string;
   if (tv) {
-    // A real click where the pub's control sits on the development screen: the light card takes it.
-    const at = pubAt.get(phone);
-    check(at, `${tag}: the phone's pub control was seen in an earlier development`);
+    // A real click where the arcade's stick sits on the development screen: the light card takes it.
+    const at = stickAt.get(phone);
+    check(at, `${tag}: the phone's stick was seen in an earlier development`);
     const covered = await phone.evaluate(({ x, y }) => Boolean(document.elementFromPoint(x, y)?.closest('[data-testid=phone-event-overlay]')), at);
-    check(covered, `B-AC-4 (${tag}): the light card is what lies where the pub's control sits`);
+    check(covered, `B-AC-4 (${tag}): the light card is what lies where the stick sits`);
     await phone.mouse.click(at.x, at.y);
     const before = endsAt - Date.now();
     check(before > 0, `B-AC-4 (${tag}): the click landed during the hold, ${before} ms before endsAt`);
-    during = `a click where the pub's control sits landed on the light card ${before} ms before endsAt`;
+    during = `a click where the stick sits landed on the light card ${before} ms before endsAt`;
   } else {
     // Alone, a real click on the map skips: to the roll call's result, then out, ahead of the server's clock.
     // The map moves while it plays, so the click goes to where the tap target is, by the mouse.
@@ -474,23 +474,47 @@ async function theRollCallHolds(phone: Page, tv: Page | undefined, code: string,
     during = `${clicks} click(s) on the map skipped the roll call ${ahead} ms before endsAt`;
   }
 
+  // What the phone sent from the roll call to here, while the server still holds the phase: the arcade under the card
+  // starts steering (standing still) once its floor runs, after endsAt, so only the sends before this count.
+  const heldSent = sent().slice(sentBefore).filter((m) => (m as { t?: string }).t === 'intent');
+  check(endsAt - Date.now() > 0, `B-AC-4 (${tag}): the hold still ran when the step counted what was sent`);
+
   // After endsAt the overlay is gone and the development screen is there.
-  const pub = phone.locator('[data-phase=development]').getByRole('button', { name: PUB }).first();
-  await overlay.waitFor({ state: 'detached', timeout: Math.max(0, endsAt - Date.now()) + SHOWN_MS });
-  await pub.waitFor({ timeout: Math.max(0, endsAt - Date.now()) + SHOWN_MS });
+  const stick = phone.locator('[data-phase=development]').getByTestId('overlay-stick');
+  // Every card is gone, the light one too: alone, after a skip the light card covers the arcade until the hold ends.
+  const anyCard = phone.locator('[data-testid=phone-event-overlay][data-event-phase=development]');
+  await anyCard.waitFor({ state: 'detached', timeout: Math.max(0, endsAt - Date.now()) + SHOWN_MS });
+  await stick.waitFor({ timeout: Math.max(0, endsAt - Date.now()) + SHOWN_MS });
   const late = Date.now() - endsAt;
   check(late >= -AHEAD_MS, `B-AC-4 (${tag}): the development screen came back ${-late} ms before endsAt`);
-  check(intentsFrom(sentBefore).length === 0, `B-AC-4 (${tag}): the phone sent nothing during the hold, sent ${JSON.stringify(intentsFrom(sentBefore))}`);
+  check(heldSent.length === 0, `B-AC-4 (${tag}): the phone sent nothing during the hold, sent ${JSON.stringify(heldSent)}`);
   check(!state().players.find((p) => p.id === me)!.doneDeveloping, `B-AC-4 (${tag}): nothing applied during the hold`);
   let after = 'the development screen is there';
   if (tv) {
+    // One real hold of the stick, by the mouse: the phone steers and the server moves the colonist (sick, at half pace).
+    const where = () => {
+      const floor = (server.registry.get(code) as unknown as { game: { steering: { floor: { colonists: readonly { id: string; space: string; x: number; y: number }[] } } | null } }).game.steering?.floor;
+      return floor?.colonists.find((c) => c.id === me) ?? null;
+    };
+    const from = where();
+    check(from, `B-AC-4 (${tag}): the server walks ${me} in development`);
     const seen = sent().length;
-    await pub.click({ timeout: SHOWN_MS });
-    for (let i = 0; i < SHOWN_MS / 50 && !state().players.find((p) => p.id === me)!.doneDeveloping; i++) await new Promise((r) => setTimeout(r, 50));
-    const pressed = intentsFrom(seen).map((m) => m.intent.type);
-    check(JSON.stringify(pressed) === '["pub"]', `B-AC-4 (${tag}): one press sent one pub intent, sent ${pressed.join()}`);
-    check(state().players.find((p) => p.id === me)!.doneDeveloping, `B-AC-4 (${tag}): one press of the pub applied on the server`);
-    after = 'one press of the pub applied';
+    const box = (await stick.boundingBox())!;
+    const [cx, cy] = [box.x + box.width / 2, box.y + box.height / 2];
+    await phone.mouse.move(cx, cy);
+    await phone.mouse.down();
+    // Away from the store's door, whichever way the colonist faces first: right, then down.
+    await phone.mouse.move(cx + box.width * 0.4, cy, { steps: 4 });
+    await phone.waitForTimeout(HOLD_MS);
+    await phone.mouse.move(cx, cy + box.height * 0.4, { steps: 4 });
+    await phone.waitForTimeout(HOLD_MS);
+    await phone.mouse.up();
+    const to = where()!;
+    const moved = Math.hypot(to.x - from.x, to.y - from.y);
+    const steered = intentsFrom(seen).filter((m) => m.intent.type === 'steer').length;
+    check(steered > 0, `B-AC-4 (${tag}): a hold of the stick sent steers, sent ${intentsFrom(seen).map((m) => m.intent.type).join() || 'nothing'}`);
+    check(to.space !== from.space || moved > 0, `B-AC-4 (${tag}): the hold moved ${me} on the server, from ${JSON.stringify(from)} to ${JSON.stringify(to)}`);
+    after = `a hold of the stick sent ${steered} steers and moved ${me} ${moved.toFixed(2)}`;
   }
   const sickLine = await phone.evaluate(() => (window as unknown as { __sickSeen?: string }).__sickSeen ?? null);
   const line = sickLine ? `the sick line showed ("${sickLine.trim()}")` : 'the sick line (sick-st*) never showed';

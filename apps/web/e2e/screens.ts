@@ -6,7 +6,9 @@
  * Then steered development (arcade PR-6), in a room of its own on a flag-on server: two phones and a TV; Heiko's
  * phone on the map, in the store hall at the corral (also at 667x375) and leading a MULE out of the door, as a laptop at 1440x900 and
  * as the small phone at 667x375, and the TV during development, each saved as *-arcade-*.
- * Run with `pnpm --filter @mule/web screens [output-dir]`.
+ * Run with `pnpm --filter @mule/web screens [output-dir]`. The shots go to argv[2], by default ./screens (from apps/web,
+ * apps/web/screens), which is not committed: pass a scratch folder. MULE_E2E_SEED picks the first game's seed (a fresh
+ * random one otherwise); the run prints it, ok or failed.
  */
 import { mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -19,7 +21,8 @@ import { arcadeTable, installSpot } from './store-steps';
 const out = resolve(process.argv[2] ?? 'screens');
 mkdirSync(out, { recursive: true });
 
-const { server, base } = await startServer();
+const SEED = seedFrom(process.env.MULE_E2E_SEED);
+const { server, base } = await startServer({ seed: () => SEED });
 const browser = await launch();
 /** Waits out the map's fade-in before each picture. */
 const shot = async (page: Page, name: string) => {
@@ -145,24 +148,27 @@ try {
   await phoneShot(phone, '6-auction-status');
   await tv.getByTestId('status-table').waitFor();
   await shot(tv, 'tv-6-auction-status');
-  // Sell what this good leaves spare, picked on the status screen (a second tap would pass): walk down from the top toward the store's buying line.
-  const seller = phone.getByTestId('side-seller');
-  if ((await seller.isEnabled()) && (await seller.getAttribute('aria-checked')) !== 'true') await seller.click();
+  // Buy: month 1's first good is Food, and since the 6 Nov need-to-hold rules every seat is short of it then (auctionNeed
+  // carries next month's ration, efd4bb63: 9 to hold against 2-7 held), and a seller stops at what they must hold
+  // (WALK.needStop, 33dbd379), so a walk down sold nothing and the wait below ran out on every seed. Buy is the default
+  // side (picked on the status screen; a second tap would pass): walk up from the bottom toward the store's selling line.
+  const buyer = phone.getByTestId('side-buyer');
+  if ((await buyer.getAttribute('aria-checked')) !== 'true') await buyer.click();
   await phone.getByRole('button', { name: 'Ready' }).click();
   // The Hold buttons show while the walk is still to start; a key held before it does is dropped, so wait for them to light.
-  await phone.locator('[data-testid=hold-down]:enabled').waitFor();
-  await phone.keyboard.down('ArrowDown');
+  await phone.locator('[data-testid=hold-up]:enabled').waitFor();
+  await phone.keyboard.down('ArrowUp');
   await phone.waitForTimeout(1_200);
   await phoneShot(phone, '6-auction-walking');
   await shot(tv, 'tv-6-auction-walking');
   // Keep walking until units change hands, then picture the trade.
   // A trade is quick, so both screens are taken the moment units start changing hands.
   const deal = phone.getByTestId('my-deal').filter({ hasText: /[2-9] units/ });
-  // With the store the only buyer, at its line units sell by themselves (the auto-trade amendment): the rail says so.
-  const selling = phone.getByTestId('line-hint').filter({ hasText: /^Selling / });
-  await deal.or(selling).first().waitFor({ timeout: 20_000 });
+  // At the store's line units move by themselves (the auto-trade amendment): the rail says so.
+  const trading = phone.getByTestId('line-hint').filter({ hasText: /^(Buying|Selling) / });
+  await deal.or(trading).first().waitFor({ timeout: 20_000 });
   await Promise.all([phone.screenshot({ path: join(out, 'phone-land-6-auction-trade.png') }), tv.screenshot({ path: join(out, 'tv-6-auction-trade.png') })]);
-  await phone.keyboard.up('ArrowDown');
+  await phone.keyboard.up('ArrowUp');
   await phone.getByRole('button', { name: 'Night' }).click();
   await phoneShot(phone, '6-auction-night');
   await phone.getByRole('button', { name: 'Day' }).click();
@@ -182,13 +188,25 @@ try {
   await phoneShot(phone, '8-month2');
 
   await arcadeScreens();
+} catch (err) {
+  console.error(`e2e screens: FAILED (seed ${SEED})`);
+  throw err;
 } finally {
   await browser.close();
   await server.close();
 }
 // Last, after the servers' own lines (the steered game logs its development as it winds down).
 console.log(`screens saved to ${out}`);
+console.log(`e2e screens: ok (seed ${SEED})`);
 process.exit(0);
+
+/** The game's seed: MULE_E2E_SEED when set, a fresh random one otherwise. */
+function seedFrom(value: string | undefined): number {
+  if (value === undefined) return Math.floor(Math.random() * 2 ** 31);
+  const n = /^\d+$/.test(value) ? Number(value) : NaN;
+  if (!(Number.isSafeInteger(n) && n >= 0)) throw new Error(`bad MULE_E2E_SEED "${value}"`);
+  return n;
+}
 
 /**
  * Steered development on a flag-on server of its own, as shell.ts runs it: two phones (Heiko s1, Mia s2) and a TV, at
