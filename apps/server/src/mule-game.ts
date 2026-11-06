@@ -101,6 +101,7 @@ import {
 import { AiSeat, GOOD_NAME, LotHand, personaFor, playbookSource, VoteHand, type AiAction } from '@mule/ai';
 import { PLAYER_COLORS, type EventView, type MuleIntent, type MuleView, type PlayerView, type ProductionHurryView, type ProductionReason, type ProductionView, type ScorePartsView } from '@mule/protocol';
 import type { Game, GameContext, SeatInfo } from '@tabletop/core';
+import type { Spoken } from './brain/chat.js';
 import { createBrain, type BrainService } from './brain/index.js';
 import { Playbooks, type PlaybookSource } from './brain/playbooks.js';
 import { devFrame, noStats, steerConfig, steeredColonistView, SteerInputs, stepTick, type Steering } from './dev-steer.js';
@@ -445,6 +446,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   private monthCondition: { month: number; byId: Map<string, PlayerView['condition']> } | null = null;
   /** The AI players: strategist, decider and hands, keyed by seat id. */
   private readonly ai = new Map<string, AiSeat>();
+  /** Each AI seat's chat, keyed by seat id: its decisions' lines and, for a Smart seat, its plans' lines. */
+  private readonly chats = new Map<string, (record: Spoken) => void>();
   /**
    * The land grant's timers for the lit plot: the light's next move and the AI seats' pending presses, each press with
    * its reaction time. Entering fast-forward cancels them and resolves the pending presses at once.
@@ -500,6 +503,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     this.seats = seats.map((s) => ({ ...s }));
     this.state = createGame({ seed: this.seed, players: seats.map(({ id, name, isAi, pick }) => ({ id, name, isAi, ...(isSpecies(pick) ? { species: pick } : {}) })), maxMonths: this.options.maxMonths, politics: this.options.politics ?? false });
     this.ai.clear();
+    this.chats.clear();
     this.monthEnds.clear();
     this.monthCondition = null;
     this.lotHands.clear();
@@ -508,6 +512,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       if (!s.isAi) return;
       const brainSeat = { id: s.id, persona: personaFor(s.name, i), level: DEFAULT_AI_LEVEL };
       const chat = this.brain.chatter(brainSeat, (line) => this.ctx.say?.(s.id, line));
+      this.chats.set(s.id, chat);
       const seat = new AiSeat({
         ...brainSeat,
         name: s.name,
@@ -525,7 +530,17 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       this.voteHands.set(s.id, new VoteHand(seat.mind, createRng((seat.options.seed ^ 0x165667b1) >>> 0)));
     });
     const source = this.options.playbookSource === undefined ? playbookSource([...this.ai.values()]) : this.options.playbookSource;
-    this.playbooks = new Playbooks({ brain: this.brain, source, seats: [...this.ai.values()], record: this.recordPlaybook });
+    this.playbooks = new Playbooks({
+      brain: this.brain,
+      source,
+      seats: [...this.ai.values()],
+      record: this.recordPlaybook,
+      // Ruling (a'): a plan's line is said as its phase starts, through the seat's chat, after that phase's view goes out.
+      speak: (seat, said) => {
+        const chat = this.chats.get(seat);
+        if (chat) this.ctx.schedule(0, () => chat({ ...said, by: 'llm' }));
+      },
+    });
     this.playbooks.ask(this.state, this.state.month);
     this.news = ['Welcome to the colony. Talk tactics, then grab land.'];
     this.enterPhase();

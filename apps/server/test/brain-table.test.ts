@@ -6,9 +6,10 @@ import { BRAIN, RuleError, type Playbook } from '@mule/engine';
 import { personaFor, type DecisionRecord } from '@mule/ai';
 import type { MuleIntent, MuleView } from '@mule/protocol';
 import { Room, TableError, type ChatMessage, type ClientEnvelope, type Connection, type GameContext, type ServerEnvelope } from '@tabletop/core';
+import type { Spoken } from '../src/brain/chat.js';
 import { createBrain, type BrainService } from '../src/brain/index.js';
 import type { PlaybookSource } from '../src/brain/playbooks.js';
-import { AI_NAMES, MuleGame } from '../src/mule-game.js';
+import { AI_NAMES, MuleGame, type PlaybookNote } from '../src/mule-game.js';
 import { Recorder } from '../src/record.js';
 import { fakeSdk, KEY, promptOf, readLedger, requestOf, sdkMessage, type FakeSdk, type SdkModuleFake, type SdkParams } from './brain-fakes.js';
 import { fakeContext, seats as THREE } from './fake-context.js';
@@ -59,6 +60,8 @@ interface TableOptions {
   /** Default 1: the AI hands have the phase's full time, as in a real game. */
   phaseScale?: number;
   sayThrows?: boolean;
+  /** Hears each playbook that takes effect. */
+  recordPlaybook?: (note: PlaybookNote) => void;
   /** Default true. False leaves the room in the lobby. */
   start?: boolean;
 }
@@ -98,7 +101,12 @@ function table(options: TableOptions) {
             },
           }
         : ctx;
-      game = new MuleGame(context, SEED, { maxMonths: options.maxMonths ?? 1, phaseScale: options.phaseScale ?? 1, ...(options.brain ? { brain: options.brain } : {}) });
+      game = new MuleGame(context, SEED, {
+        maxMonths: options.maxMonths ?? 1,
+        phaseScale: options.phaseScale ?? 1,
+        ...(options.brain ? { brain: options.brain } : {}),
+        ...(options.recordPlaybook ? { recordPlaybook: options.recordPlaybook } : {}),
+      });
       return game;
     },
     aiNames: AI_NAMES,
@@ -206,7 +214,8 @@ function watched(inner: BrainService) {
     chatter: (seat, say) => {
       const onDecision = inner.chatter(seat, say);
       return (record) => {
-        records.push(record);
+        // A plan's line is spoken too (ruling a'); only a decision has a seat and a shortlist.
+        if ('seat' in record) records.push(record as DecisionRecord);
         onDecision(record);
       };
     },
@@ -277,10 +286,17 @@ describe('the brain at the table', { timeout: 30_000 }, () => {
     expect(move).toMatchObject({ by: 'llm', line: MODEL_LINE, pick: { id: 'B', key: optionB.key, label: optionB.label } });
   });
 
-  // B-AC-1's chat half. Since the 5 Nov start values every phase's first line is a top pick's template (a Smart seat's
-  // asks are close calls, which come later), so RULE-2's one line a phase holds the model's line back: over 4 months
-  // neither AI's reaches the chat. A known gap, raised to the PM on 5 Nov with options.
-  it.todo("B-AC-1: a Smart seat's model line reaches every screen's chat");
+  // A Smart seat's asks are close calls, which come after its routine top picks in a phase; those speak no template
+  // line (PM ruling, 5 Nov, option a), so the phase's one line waits for the model's.
+  it("B-AC-1: a Smart seat's model line reaches every screen's chat", async () => {
+    const spenderName = AI_NAMES[1]!;
+    const sdk = decisions((_n, params) => (requestOf(params).seat === spenderName ? reply('B', MODEL_LINE) : reply('A', '')));
+    const { brain } = watched(smart(sdk));
+    const t = table({ humans: ['Heiko', 'Mia'], ais: 2, brain, maxMonths: 4 });
+    const spender = t.ais[1]!;
+    const shownEverywhere = () => t.screens.every((s) => s.chat.some((m) => m.from === spender.id && m.text === MODEL_LINE));
+    expect(await t.runUntil(shownEverywhere)).toBe(true);
+  });
 
   it('B-AC-1 (AM-14): every screen receives AI lines in the land grant, development and the auction, each after the view of the phase it was said in', async () => {
     // Each line said, with the phase of the decision that said it: not the game's phase when the line is delivered.
@@ -289,7 +305,7 @@ describe('the brain at the table', { timeout: 30_000 }, () => {
     const brain: BrainService = {
       ...classic,
       chatter: (seat, say) => {
-        let deciding: DecisionRecord | null = null;
+        let deciding: Spoken | null = null;
         const onDecision = classic.chatter(seat, (line) => {
           said.push({ seat: seat.id, phase: deciding!.phase });
           say(line);
@@ -313,6 +329,32 @@ describe('the brain at the table', { timeout: 30_000 }, () => {
         const shown = s.chat.filter((m) => m.from === ai.id).map((m) => m.showing);
         expect(shown).toEqual(said.filter((l) => l.seat === ai.id).map((l) => l.phase).slice(0, shown.length));
       }
+    }
+  });
+
+  it("B-AC-1 (a'): with real adopted edits, every screen hears the Smart seat's plan lines, the land plan's in the land grant and the auction plan's in the auction, and no template line from it", async () => {
+    const LAND_LINE = 'The north field is mine.';
+    const AUCTION_LINE = 'Selling my Food dear today.';
+    const notes: PlaybookNote[] = [];
+    const sdk = fakeSdk((_n, params) => {
+      const schema = params.output_config?.format?.schema as { properties?: { edits?: { items: { anyOf: { properties: { path: { enum: string[] } } }[] } } } } | undefined;
+      const paths = schema?.properties?.edits?.items.anyOf.flatMap((v) => v.properties.path.enum);
+      // A decision: the top option, no line of its own.
+      if (!paths) return reply('A', '');
+      const hold = paths.find((p) => p.endsWith('/hold'));
+      if (hold) return sdkMessage(JSON.stringify({ edits: [{ path: hold, to: 0, reason: 'None.' }], line: AUCTION_LINE }));
+      return sdkMessage(JSON.stringify({ edits: [{ path: '/landGrant/claims', to: 1, reason: 'One will do.' }], line: LAND_LINE }));
+    });
+    const t = table({ humans: ['Heiko'], ais: 1, brain: smart(sdk), maxMonths: 1, recordPlaybook: (n) => notes.push(n) });
+    expect(await t.toGameOver()).toBe(true);
+    const ai = t.ais[0]!;
+    // The lines rode on plans whose edits were adopted.
+    expect(notes.filter((n) => n.seat === ai.id && n.playbook.by === 'llm').map((n) => n.phase)).toEqual(expect.arrayContaining(['landGrant', 'auction']));
+    for (const s of t.screens) {
+      const fromAi = s.chat.filter((m) => m.from === ai.id);
+      expect(fromAi.filter((m) => m.text === LAND_LINE).map((m) => [m.month, m.phase])).toEqual([[1, 'landGrant']]);
+      expect(fromAi.filter((m) => m.text === AUCTION_LINE).map((m) => [m.month, m.phase])).toEqual([[1, 'auction']]);
+      expect(fromAi.map((m) => m.text).filter((text) => text !== LAND_LINE && text !== AUCTION_LINE)).toEqual([]);
     }
   });
 
@@ -460,7 +502,10 @@ describe('the brain at the table', { timeout: 30_000 }, () => {
     expect(finishes()).toBe(1);
     expect(gameLines()).toHaveLength(1);
     const reports = errors.mock.calls.map((c) => String(c[0])).filter((m) => m.startsWith('brain chat:'));
-    expect(reports.sort()).toEqual(t.ais.map((ai) => `brain chat: seat ${ai.id} cannot say a line: say failed`).sort());
+    // A seat tries to say only a fallback's template: its top picks speak no line (ruling a). Each that tried reports once.
+    const tried = t.ais.filter((ai) => records.some((r) => r.seat === ai.id && r.by === 'fallback' && r.line));
+    expect(tried.length).toBeGreaterThan(0);
+    expect(reports.sort()).toEqual(tried.map((ai) => `brain chat: seat ${ai.id} cannot say a line: say failed`).sort());
   });
 
   it('INV-heard: heard from an unknown speaker, or to an unknown seat, does not throw, before or after start; an AI\'s own line goes to the other AIs only', async () => {
