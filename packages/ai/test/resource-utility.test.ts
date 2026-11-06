@@ -26,7 +26,7 @@ import { outlook } from '../src/outlook.js';
 import { applyAction, playMonthFrom } from '../src/play.js';
 import { AiSeat } from '../src/seat.js';
 import { cashReserve } from '../src/value.js';
-import { goodPlan, sellWanted, wholeNextMonth } from '../src/strategist.js';
+import { goodPlan, sellWanted, tradeDecision, wholeNextMonth, type GoodPlan } from '../src/strategist.js';
 
 /**
  * The resource-utility model at the table: built states played on through the engine with every seat's own hands,
@@ -354,6 +354,29 @@ describe('G-2: a surplus when cheap', () => {
     const dear = auctionOf('food', 55);
     expect(dear.ask, 'the premise: the ask is 2× the reference or more').toBeGreaterThanOrEqual(2 * dear.reference);
     expect(dear.held, 'it holds what keeps it whole, no more').toBe(dear.need);
+  });
+
+  // trace-allow: below the boundary: a corner or spite premium needs rivals short of a scarce good, which a built state
+  // reaches only by chance; the seat's own plan, with the premium set as goodPlan sets it, is the rule's row.
+  it("B-AC-3 (AM-7): a surplus buy valued by unitValues is as sure as a needed one; one carrying a corner or spite premium keeps resale's", () => {
+    const seat: Seat = { plots: PLANTS, posted: { food: 6 }, stock: { water: 20, energy: 20, food: 15 }, money: 1200 };
+    const state = table(seat);
+    state.treasury.salesTax = 0.05;
+    state.store.stock.food = shelf(state, 30);
+    const view = atAuction(state, ['food']);
+    const obs = observe(view, ME);
+    const mind = seatsOf(view, seat)[0]!.mind;
+    const sureOf = (plan: GoodPlan) => tradeDecision(obs, mind, plan).all.find((c) => c.key === 'buy')!.considerations.find((c) => c.name === 'Sure thing')!.score;
+    /** The plan with `premium` added to the next three units' buy values, as goodPlan adds a corner's or a spite bid. */
+    const premiumOn = (premium: Partial<Pick<GoodPlan, 'corner' | 'spiteBid'>>) => {
+      const plan = { ...goodPlan(obs, mind, 'food'), ...premium };
+      for (let k = 15; k < 18; k++) plan.values.buy[k]! += 10;
+      return plan;
+    };
+
+    expect(sureOf(goodPlan(obs, mind, 'food')), 'held past its need, valued by unitValues alone').toBe(STRATEGIST.trade.sure.need);
+    expect(sureOf(premiumOn({ corner: { units: 3, premium: 10 } })), 'a corner premium').toBe(STRATEGIST.trade.sure.resale);
+    expect(sureOf(premiumOn({ spiteBid: 10 })), 'a spite bid').toBe(STRATEGIST.trade.sure.resale);
   });
 
   it('B-AC-3 negative: a good that spoils fully gets no surplus, though its belief beats the ask before spoilage', () => {
