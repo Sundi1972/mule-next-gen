@@ -234,7 +234,6 @@ export function storeQuotes(state: GameState, good: Good): { buy: number | null;
   const buy = Math.max(1, Math.floor(price * (1 - PRICE.storeSpread)));
   return {
     buy: storeWants(state, good) > 0 ? buy : null,
-    // In floating point 50 × 1.1 is a hair over 55, so this sells at 56: the rulebook's spread table states it as played.
     sell: storeForSale(state, good) > 0 ? Math.ceil(price * (1 + PRICE.storeSpread)) : null,
   };
 }
