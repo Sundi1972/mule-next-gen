@@ -27,7 +27,7 @@ const TODAYS_DESKS = ['colony', 'talk', 'council', 'market'];
 const OFFICE_DESKS = ['governor', 'sheriff'] as const;
 /** C17: the office desks built today; the Sheriff's is not, so a Sheriff sees no desk for it. */
 const BUILT_OFFICE_DESKS: readonly string[] = ['governor'];
-const TODAYS_TOOLS = ['look', 'drone', 'list'];
+const TODAYS_TOOLS = ['look', 'plots', 'drone', 'list'];
 /** B-AC-12: the stage's content fills at least this share of the stage's height. */
 const FILL = 0.8;
 
