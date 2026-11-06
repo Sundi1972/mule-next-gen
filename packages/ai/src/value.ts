@@ -1,4 +1,5 @@
 import {
+  AI_PLANS,
   AI_VALUE,
   airPoints,
   crewOf,
@@ -57,7 +58,20 @@ export interface Mind {
   level: AiLevelConfig;
   /** Seeded per seat: breaks ties between plots it values the same, so seats don't all follow the map's order. */
   salt?: number;
+  /** What a playbook adopted for a month sets by an edit, which the hands play (RULE-6); never set for a seat's own draft. */
+  adopted?: AdoptedFields;
 }
+
+/** The fields the seat's adopted playbooks set by an edit, for the one month they were adopted for; null where none did. */
+export interface AdoptedFields {
+  month: number;
+  cashFloor: number | null;
+  pressShare: { start: number; end: number } | null;
+  monopolyTarget: Good | null;
+}
+
+/** The fields adopted for the month `obs` is in, or null: an adoption plays only in its own month. */
+export const adoptedNow = (obs: GameState, mind: Mind): AdoptedFields | null => (mind.adopted?.month === obs.month ? mind.adopted : null);
 
 export interface Yield {
   made: number;
@@ -291,8 +305,11 @@ export function wholeNextMonth(obs: GameState, me: string, good: Good): number {
  * Energy shortfall would cost, times its reserve weight. A short unit counts
  * at most a few times its reference price, so a price spike doesn't freeze
  * all its cash. `except` leaves out a good: the one a new farm would make.
+ * While an adopted playbook's edit sets the month's cash floor, the reserve is that floor, within AI_PLANS.bounds.cashFloorMax.
  */
 export function cashReserve(obs: GameState, mind: Mind, o?: Outlook, except?: Good): number {
+  const floor = adoptedNow(obs, mind)?.cashFloor ?? null;
+  if (floor !== null) return Math.min(AI_PLANS.bounds.cashFloorMax, floor);
   if (AI_VALUE.unit) return monthReserve(obs, mind, o, except);
   const p = obs.players.find((q) => q.id === mind.me)!;
   const need = monthNeeds(obs, mind.me);
