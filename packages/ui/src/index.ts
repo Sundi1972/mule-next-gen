@@ -32,4 +32,5 @@ export * from './components/Wolf';
 export * from './components/tokens';
 export * from './components/ZoomMap';
 export * from './events';
+export * from './grounds/ColonyGrounds';
 export { renderLandscape, type LandscapeInput, type LandscapeTheme } from './terrain/landscape';
