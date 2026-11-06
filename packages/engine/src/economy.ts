@@ -249,7 +249,7 @@ export function storeLines(state: GameState, good: Good): { buy: number; sell: n
 /**
  * What the store charges and what it pays, or null where it doesn't trade:
  * no sell price with an empty shelf, no buy price when it wants no more.
- * The one quote every screen, the auction and the AI read (pricing HC-3).
+ * storeLines' numbers with nulls where the store won't trade; every screen and the AI read this (pricing HC-3).
  */
 export function storeQuotes(state: GameState, good: Good): { buy: number | null; sell: number | null } {
   const lines = storeLines(state, good);
