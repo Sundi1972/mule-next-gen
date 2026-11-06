@@ -213,10 +213,23 @@ function frames(screen: ReturnType<typeof tv>): { t: number; s: Screen }[] {
   for (let t = 0; t < SHOW_END; t += STEP) out.push({ t, s: screen.at(t) });
   return out;
 }
-/** The first show second its chip is on the card: the test's ground truth for when the chip's trip starts. */
+/** The first show second its chip is on the card. */
 function onCardAt(screen: ReturnType<typeof tv>, what: string): number {
   for (let t = 0; t < SHOW_END; t += STEP) if (screen.at(t).cardChip(what)) return t;
   return expect.unreachable(`the event's card never shows its ${what} chip`);
+}
+/** The first show second its chip has left the card (its place there fades): the test's ground truth for the departure. */
+function leftAt(screen: ReturnType<typeof tv>, what: string): number {
+  for (let t = 0; t < SHOW_END; t += STEP) if (screen.at(t).cardChip(what)?.opacity === 0.15) return t;
+  return expect.unreachable(`the ${what} chip never leaves the card`);
+}
+/** The last frame the show's overlay is on the TV, before the phase screen comes back. */
+function lastShowFrame(screen: ReturnType<typeof tv>): Screen {
+  let t = Math.floor(SHOW_END / STEP) * STEP;
+  while (t >= SHOW_END) t -= STEP;
+  const s = screen.at(t);
+  expect(s.overlay).toBe(true);
+  return s;
 }
 
 // The mock's timings (landing.tsx, TvFestival): the chip sits on the card 0.7 s, flies 0.9 s, the gauge counts 0.8 s.
@@ -228,19 +241,21 @@ describe('B-AC-23-7: a colony event’s gauge change flies from its card into th
   it('B-AC-23-7: the festival’s Mood +10 holds the Happiness gauge at 64 until its chip leaves the card, flies on an arc to the gauge, and lands 74 with a pulse', () => {
     const screen = tv(FESTIVAL, colony({ happiness: 74, prestige: 7 }));
     const card = onCardAt(screen, 'mood');
-    const leaves = card + WAIT;
-    const lands = leaves + FLY;
+    const leaves = leftAt(screen, 'mood');
+    // It sits on the card first, never longer than the mock's wait.
+    expect(leaves).toBeGreaterThan(card);
+    expect(leaves).toBeLessThanOrEqual(card + WAIT + STEP);
 
     // From the show's start until the chip leaves, the header reads the mood before the festival.
-    for (const t of [0, card, leaves - 0.05]) {
+    for (const t of [0, card, leaves - STEP]) {
       const s = screen.at(t);
       expect(s.gauge('gauge-happiness').said).toContain('64 Content');
       expect(s.flight('mood')).toBeNull();
     }
-    expect(screen.at(leaves - 0.05).cardChip('mood')!.opacity).toBe(1);
+    expect(screen.at(leaves - STEP).cardChip('mood')!.opacity).toBe(1);
 
     // Mid-flight: the chip is between the card and the gauge, above the straight line (it arcs), and the card's chip has faded.
-    const mid = screen.at(leaves + FLY / 2);
+    const mid = screen.at(leaves + 0.3);
     const chip = mid.flight('mood')!;
     expect(chip).not.toBeNull();
     expect(chip.x).toBeGreaterThan(CHIP.mood!.x);
@@ -250,38 +265,38 @@ describe('B-AC-23-7: a colony event’s gauge change flies from its card into th
     expect(mid.gauge('gauge-happiness').value).toBe(64);
     expect(mid.cardChip('mood')!.opacity).toBe(0.15);
 
-    // It lands: the gauge pulses and counts up from 64, never down.
-    const landed = screen.at(lands + 0.1);
-    expect(landed.gauge('gauge-happiness').pulses).toBe(true);
-    const counting = [lands + 0.1, lands + 0.3, lands + 0.5].map((t) => screen.at(t).gauge('gauge-happiness').value);
+    // It lands within the mock's flight: the gauge pulses and counts up from 64, never down.
+    let lands = leaves;
+    while (!screen.at(lands).gauge('gauge-happiness').pulses) lands += STEP;
+    expect(lands - leaves).toBeLessThanOrEqual(FLY + STEP);
+    const counting = [lands, lands + 0.2, lands + 0.4].map((t) => screen.at(t).gauge('gauge-happiness').value);
     counting.slice(1).forEach((v, i) => expect(v).toBeGreaterThanOrEqual(counting[i]!));
     expect(counting[0]).toBeGreaterThanOrEqual(64);
     expect(counting.at(-1)).toBeGreaterThan(64);
-
-    // Once counted, the TV reads the server's 74.
-    expect(screen.at(lands + COUNT + 0.05).gauge('gauge-happiness').said).toContain('74 Content');
+    expect(screen.at(lands + COUNT + STEP).gauge('gauge-happiness').said).toContain('74 Content');
   });
 
-  it('B-AC-23-7: its Prestige +2 flies to the Prestige gauge after the mood’s, which reads 5 until it lands and 7 once counted', () => {
+  it('B-AC-23-7: its Prestige +2 flies to the Prestige gauge no sooner than the mood’s, which reads 5 until it lands and 7 once counted', () => {
     const screen = tv(FESTIVAL, colony({ happiness: 74, prestige: 7 }));
-    const leaves = onCardAt(screen, 'prestige') + WAIT;
-    const lands = leaves + FLY;
-    expect(leaves).toBeGreaterThan(onCardAt(screen, 'mood') + WAIT);
-    expect(screen.at(leaves - 0.05).gauge('gauge-prestige').value).toBe(5);
-    const mid = screen.at(leaves + FLY / 2);
+    const leaves = leftAt(screen, 'prestige');
+    expect(leaves).toBeGreaterThanOrEqual(leftAt(screen, 'mood'));
+    expect(screen.at(leaves - STEP).gauge('gauge-prestige').value).toBe(5);
+    const mid = screen.at(leaves + 0.3);
     expect(mid.flight('prestige')!.x).toBeGreaterThan(CHIP.prestige!.x);
     expect(mid.flight('prestige')!.x).toBeLessThan(GAUGE['gauge-prestige']!.x);
     expect(mid.gauge('gauge-prestige').value).toBe(5);
-    expect(screen.at(lands + 0.1).gauge('gauge-prestige').pulses).toBe(true);
-    expect(screen.at(lands + COUNT + 0.05).gauge('gauge-prestige').value).toBe(7);
+    let lands = leaves;
+    while (!screen.at(lands).gauge('gauge-prestige').pulses) lands += STEP;
+    expect(lands - leaves).toBeLessThanOrEqual(FLY + STEP);
+    expect(screen.at(lands + COUNT + STEP).gauge('gauge-prestige').value).toBe(7);
   });
 
   it('B-AC-23-7: a festival that lifts the mood 72 → 82 flips Content → Thriving as the count crosses, with a pulse', () => {
     const screen = tv(FESTIVAL, colony({ happiness: 82, prestige: 7 }));
-    const lands = onCardAt(screen, 'mood') + WAIT + FLY;
-    expect(screen.at(lands - 0.05).gauge('gauge-happiness').said).toContain('72 Content');
+    const leaves = leftAt(screen, 'mood');
+    expect(screen.at(leaves).gauge('gauge-happiness').said).toContain('72 Content');
     const seen: Screen['gauge'] extends (...a: never[]) => infer R ? R[] : never = [];
-    for (let t = lands; t < lands + COUNT + 0.05; t += STEP) seen.push(screen.at(t).gauge('gauge-happiness'));
+    for (let t = leaves; t < SHOW_END; t += STEP) seen.push(screen.at(t).gauge('gauge-happiness'));
     for (const g of seen) expect(g.said).toContain(`${g.value} ${g.value >= HAPPINESS.bands.thriving ? 'Thriving' : 'Content'}`);
     const flipAt = seen.findIndex((g) => g.value >= HAPPINESS.bands.thriving);
     expect(flipAt).toBeGreaterThan(0);
@@ -289,15 +304,26 @@ describe('B-AC-23-7: a colony event’s gauge change flies from its card into th
     expect(seen.at(-1)!.said).toContain('82 Thriving');
   });
 
-  it('B-AC-23-7: the volunteer clean-up’s Air −5 flies to the Environment gauge, which reads 22 until it lands and 17 once counted', () => {
+  it('B-AC-23-7: a single festival’s counts and pulses finish inside its show: on the last frame before it goes, Happiness and Prestige read the server’s numbers and no longer pulse', () => {
+    for (const [happiness, band] of [
+      [74, 'Content'],
+      [82, 'Thriving'],
+    ] as const) {
+      const last = lastShowFrame(tv(FESTIVAL, colony({ happiness, prestige: 7 })));
+      expect(last.gauge('gauge-happiness')).toMatchObject({ said: expect.stringContaining(`${happiness} ${band}`), pulses: false });
+      expect(last.gauge('gauge-prestige')).toMatchObject({ value: 7, pulses: false });
+    }
+  });
+
+  it('B-AC-23-7: the volunteer clean-up’s Air −5 keeps the mock’s timing (it fits its show): it leaves 0.7 s after the card shows it, 22 until it lands, 17 once counted', () => {
     const screen = tv(CLEANUP, colony({ environment: 17 }));
-    const leaves = onCardAt(screen, 'air') + WAIT;
-    const lands = leaves + FLY;
-    expect(screen.at(leaves - 0.05).gauge('gauge-environment').value).toBe(22);
+    const leaves = leftAt(screen, 'air');
+    expect(leaves).toBeCloseTo(onCardAt(screen, 'air') + WAIT, 1);
+    expect(screen.at(leaves - STEP).gauge('gauge-environment').value).toBe(22);
     const chip = screen.at(leaves + FLY / 2).flight('air')!;
     expect(chip.x).toBeGreaterThan(CHIP.air!.x);
     expect(chip.x).toBeLessThan(GAUGE['gauge-environment']!.x);
-    expect(screen.at(lands + COUNT + 0.05).gauge('gauge-environment').value).toBe(17);
+    expect(screen.at(leaves + FLY + COUNT + STEP).gauge('gauge-environment').value).toBe(17);
   });
 
   it('B-AC-23-7: with reduced motion nothing travels: the chip shows on its gauge as the gauge jumps to the new value, no count, no pulse', () => {
