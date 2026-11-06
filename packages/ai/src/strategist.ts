@@ -1,13 +1,13 @@
 import {
   AI_PLANS,
+  AI_VALUE,
   airPoints,
+  allPrices,
   DEVELOPMENT,
   GAME,
   GOOD_CONFIG,
-  monthNeeds,
   mulePrice,
   mulePriceFor,
-  needsOf,
   neighbours,
   outfitBlocked,
   POLLUTION,
@@ -16,12 +16,15 @@ import {
   RAW_GOODS,
   STRATEGIST,
   UPKEEP,
+  scoreParts,
   shipInPort,
   shipPrice,
+  storeForSale,
   storePaysFor,
   storeSellLine,
   tileIndex,
   walkSeconds,
+  WALK,
   type DevPlace,
   type GameState,
   type Good,
@@ -29,9 +32,9 @@ import {
   type PlanningPlay,
   type Tile,
 } from '@mule/engine';
-import { outlook, type Outlook } from './outlook.js';
+import { belief, outlook, type Outlook } from './outlook.js';
 import { candidate, consider, curve, shortlist, type Candidate, type Shortlist } from './utility.js';
-import { afterTax, canFeed, cashReserve, installGain, secondValue, unitValues, yieldOf, type Mind, type UnitValues } from './value.js';
+import { afterTax, canFeed, cashPlan, cashReserve, installGain, monthNeedsCost, secondValue, unitValues, wholeNextMonth, yieldOf, type Mind, type UnitValues } from './value.js';
 
 /**
  * The strategist: for each of the month's decisions it lists the options,
@@ -62,15 +65,21 @@ function me(obs: GameState, mind: Mind) {
   return obs.players.find((p) => p.id === mind.me)!;
 }
 
-/** The rival with the most public wealth: money, land and MULEs. */
+/**
+ * The rival with the highest Worth as the seat sees it: the engine's score lines on the seat's observation, less the
+ * goods line, plus the good on the auction's status screen, the one good whose holdings are public. Elsewhere a
+ * rival's goods are the market panel's even split, which says nothing about that rival.
+ */
 export function leaderOf(obs: GameState, self: string): string | null {
-  const price = mulePrice(obs);
+  const status = obs.auction && obs.auction.stage !== 'over' ? obs.auction.good : null;
+  const prices = allPrices(obs);
   const worth = (id: string) => {
-    const p = obs.players.find((q) => q.id === id)!;
-    const plots = obs.tiles.filter((t) => t.owner === id);
-    return p.money + plots.length * GAME.plotScore + plots.filter((t) => t.outfit).length * price;
+    const parts = scoreParts(obs, id);
+    const shown = status ? obs.players.find((p) => p.id === id)!.stock[status] * prices[status] : 0;
+    return parts.total - parts.goods + shown;
   };
-  const rivals = obs.players.filter((p) => p.id !== self).sort((a, b) => worth(b.id) - worth(a.id));
+  const rivals = obs.players.filter((p) => p.id !== self).map((p) => ({ id: p.id, worth: worth(p.id) }));
+  rivals.sort((a, b) => b.worth - a.worth);
   return rivals[0]?.id ?? null;
 }
 
@@ -90,6 +99,18 @@ export interface LandPlan {
   focus: Focus;
   /** Every free plot, best first for this plan. The hands claim from it. */
   ranking: PlotScore[];
+}
+
+/**
+ * The plan reordered by a playbook's land-grant ranking: its plots in the playbook's order, then any free plot the
+ * playbook leaves out, in the plan's own order. A ranked plot that is not free is skipped. No ranking: the plan as is.
+ */
+export function rankedBy(plan: LandPlan, ranked: readonly { plot: number }[] | undefined): LandPlan {
+  if (!ranked) return plan;
+  const byPlot = new Map(plan.ranking.map((s) => [s.index, s]));
+  const first = ranked.flatMap((r) => byPlot.get(r.plot) ?? []);
+  const taken = new Set(first.map((s) => s.index));
+  return { focus: plan.focus, ranking: [...new Set(first)].concat(plan.ranking.filter((s) => !taken.has(s.index))) };
 }
 
 const FOCUS_OUTFITS: Record<Focus, Outfit[] | null> = {
@@ -189,12 +210,19 @@ export function landDecision(obs: GameState, mind: Mind): Shortlist<LandPlan> {
   return shortlist(plans, mind.level.shortlist, mind.level.shortlistTolerance);
 }
 
+/** The other seats still claiming in this grant: claims left and not Done with land, both public on the grant. */
+export function rivalsStillClaiming(obs: GameState, mind: Mind): number {
+  return obs.players.filter((p) => p.id !== mind.me && !p.doneWithLand && p.claimsThisGrant < GAME.claimsPerGrant).length;
+}
+
 /**
  * Whether the hands should press for the lit plot. The grant is one pass, so the seat weighs the lit plot only against
  * the free plots still ahead of the light (`ahead`: the pass's order from the lit plot on): plots it has gone by never
- * come back. It wants the lit plot when that ranks within its claims left plus STRATEGIST.grantSpare among them by the
- * plan's utility, and its utility is at least STRATEGIST.grantShare of the best of theirs; a plot it values at nothing
- * it never wants. Early in the pass better plots lie ahead and it waits;
+ * come back. It wants the lit plot when that ranks within its claims left plus STRATEGIST.grantSpare plus the rivals
+ * still claiming (rivalsStillClaiming) among them by the plan's utility, and its utility is at least
+ * STRATEGIST.grantShare of the best of theirs; a plot it values at nothing it never wants. Seats rank the board nearly
+ * alike, so each rival still claiming may take one of the plots it ranks higher before the light reaches it
+ * (FM-grant-plotless). Early in the pass better plots lie ahead and it waits;
  * late, few do and it takes the best that is left. Never while the seat already holds a month's worth of idle plots
  * it can't pay to develop: hoarded land earns nothing and every idle plot counts as Smithore demand.
  */
@@ -207,7 +235,7 @@ export function wantsPlot(plan: LandPlan, obs: GameState, index: number, ahead: 
   const lit = rivals[rank];
   if (!lit || lit.value <= 0) return false;
   const claimsLeft = GAME.claimsPerGrant - me(obs, mind).claimsThisGrant;
-  if (rank >= claimsLeft + STRATEGIST.grantSpare) return false;
+  if (rank >= claimsLeft + STRATEGIST.grantSpare + rivalsStillClaiming(obs, mind)) return false;
   return lit.utility >= (rivals[0]?.utility ?? 0) * STRATEGIST.grantShare;
 }
 
@@ -219,7 +247,7 @@ export function wantsPlot(plan: LandPlan, obs: GameState, index: number, ahead: 
 export function wantsAnyAhead(plan: LandPlan, obs: GameState, ahead: readonly number[], mind: Mind): boolean {
   const idle = obs.tiles.filter((t) => t.owner === mind.me && !t.outfit).length;
   if (idle >= mind.level.mulesPerMonth && me(obs, mind).money < (idle + 1) * mulePriceFor(obs, mind.me)) return false;
-  const room = GAME.claimsPerGrant - me(obs, mind).claimsThisGrant + STRATEGIST.grantSpare;
+  const room = GAME.claimsPerGrant - me(obs, mind).claimsThisGrant + STRATEGIST.grantSpare + rivalsStillClaiming(obs, mind);
   if (room <= 0) return false;
   const rankOf = new Map(plan.ranking.map((s, rank) => [s.index, rank]));
   // The ranks, best first, of the `room` best plots later in the pass than the one being weighed.
@@ -280,12 +308,12 @@ export function muleValue(obs: GameState, mind: Mind, outfit: Outfit): number {
 export type SellListing = NonNullable<PlanningPlay['list']>[number];
 
 /**
- * What the seat lists for the land auction while its money is under its cash reserve: up to AI_PLANS.sell.perMonth
+ * What the seat lists for the land auction while its money is under what its month of needs costs (monthNeedsCost): up to AI_PLANS.sell.perMonth
  * lots, those worth least to it over what the store pays first, each sold to the store if no one bids. Its idle plots
  * and its MULEs are candidates, never its last Food or Energy MULE. Empty when it is not short.
  */
 export function sellWanted(obs: GameState, mind: Mind): SellListing[] {
-  if (me(obs, mind).money >= cashReserve(obs, mind)) return [];
+  if (me(obs, mind).money >= monthNeedsCost(obs, mind)) return [];
   const o = outlook(obs, mind.me, { lookAhead: mind.level.lookAhead });
   const mine = obs.tiles.flatMap((tile, plot) => (tile.owner === mind.me && tile.terrain !== 'store' ? [{ tile, plot }] : []));
   const isLast = (outfit: Outfit) => (outfit === 'food' || outfit === 'energy') && mine.filter((m) => m.tile.outfit === outfit).length === 1;
@@ -344,6 +372,9 @@ export function developDecision(obs: GameState, mind: Mind, mulesSoFar: number, 
   const p = me(obs, mind);
   const reserve = cashReserve(obs, mind, o);
   const idle = obs.tiles.filter((t) => t.owner === mind.me && !t.outfit);
+  // The reserve less the good a new farm would make, once per good: it is the same for every plot.
+  const keepBacks = new Map<Good, number>();
+  const keepBackFor = (good: Good) => keepBacks.get(good) ?? keepBacks.set(good, cashReserve(obs, mind, o, good)).get(good)!;
   const needFood = !obs.tiles.some((t) => t.owner === mind.me && t.outfit === 'food');
   const needEnergy = !obs.tiles.some((t) => t.owner === mind.me && t.outfit === 'energy');
   const analysed = new Set(p.analysed);
@@ -385,7 +416,7 @@ export function developDecision(obs: GameState, mind: Mind, mulesSoFar: number, 
       const feeds = (outfit === 'food' && needFood) || (outfit === 'energy' && needEnergy);
       // A farm for a good it is short of is the cure, not a risk: it needn't keep cash back to buy that good.
       const cures = outfit === 'food' || outfit === 'water' || outfit === 'energy' ? outfit : undefined;
-      const keepBack = cures ? cashReserve(obs, mind, o, cures) : reserve;
+      const keepBack = cures ? keepBackFor(cures) : reserve;
       const tooFar = walk ? walkVeto(walk, walking, back) : null;
       let veto: string | null = null;
       if (obs.store.mules <= 0) veto = 'the corral is empty';
@@ -462,7 +493,7 @@ export function filtersWanted(obs: GameState, mind: Mind): number[] {
     .map((t) => tileIndex(obs.width, t.x, t.y));
 }
 
-export { yieldOf };
+export { wholeNextMonth, yieldOf };
 
 // --- Auction -----------------------------------------------------------------
 
@@ -484,6 +515,8 @@ export interface GoodPlan {
    * and the store sells the good (STRATEGIST.buyShortfall); 0 otherwise. While it is above 0 it sells none of them.
    */
   mustHold: number;
+  /** With AI_VALUE.unit on: the needed units of this good the month's cash plan funds, and the shadow price of cash. */
+  cash?: { funded: number; lambda: number };
 }
 
 /** What the seat makes of the good that is up: the value of every unit, the cash it spends, and whether it corners or spites. */
@@ -502,21 +535,30 @@ export function goodPlan(obs: GameState, mind: Mind, good: Good): GoodPlan {
   // store sells the good, each unit up to that is worth at least the store's ask, so it buys it there or cheaper from a
   // player, never dearer, and it sells none of them. Otherwise its floor is the screen's need and the rest is for sale
   // (Heiko's choice of 5 Nov, "sell surplus").
-  const whole = STRATEGIST.buyShortfall.includes(good) ? wholeNextMonth(obs, mind.me, good) : 0;
-  // The store's line is the good's that is up: a draft of a good still in the queue has no ask yet, and keeps its values.
-  const ask = whole > 0 && obs.auction?.good === good ? storeSellLine(obs) : null;
-  const mustHold = ask !== null && p.stock[good] < whole ? whole : 0;
-  for (let k = 0; k < mustHold; k++) {
-    values.buy[k] = Math.max(values.buy[k] ?? 0, ask!);
-    values.keep[k] = Infinity;
+  let mustHold = 0;
+  let reserve: number;
+  let budget: number;
+  let cash: GoodPlan['cash'];
+  if (AI_VALUE.unit) {
+    ({ budget, reserve, cash } = monthPlan(obs, mind, o, good, values));
+  } else {
+    const short = shortfallHold(obs, mind.me, good);
+    const whole = short.whole;
+    // The store's line is the good's that is up: a draft of a good still in the queue has no ask yet, and keeps its values.
+    const ask = whole > 0 && obs.auction?.good === good ? storeSellLine(obs) : null;
+    mustHold = ask !== null ? short.mustHold : 0;
+    for (let k = 0; k < mustHold; k++) {
+      values.buy[k] = Math.max(values.buy[k] ?? 0, ask!);
+      values.keep[k] = Infinity;
+    }
+    // Otherwise it keeps the screen's need, what upkeep eats or its plots burn, whatever its own plots may make: Water
+    // only for a seat with a farm to water, as wholeNextMonth counts it.
+    const floor = mustHold > 0 ? mustHold : whole > 0 ? values.need : 0;
+    for (let k = 0; k < floor; k++) values.keep[k] = Infinity;
+    values.floorUnits = Math.max(values.floorUnits, floor);
+    reserve = cashReserve(obs, mind);
+    budget = Math.max(0, Math.min(p.money * STRATEGIST.budgetShare, p.money - reserve));
   }
-  // Otherwise it keeps the screen's need, what upkeep eats or its plots burn, whatever its own plots may make: Water
-  // only for a seat with a farm to water, as wholeNextMonth counts it.
-  const floor = mustHold > 0 ? mustHold : whole > 0 ? values.need : 0;
-  for (let k = 0; k < floor; k++) values.keep[k] = Infinity;
-  values.floorUnits = Math.max(values.floorUnits, floor);
-  const reserve = cashReserve(obs, mind);
-  const budget = Math.max(0, Math.min(p.money * STRATEGIST.budgetShare, p.money - reserve));
   const a = obs.auction;
   const rows = a?.good === good ? a.status : [];
   const others = rows.filter((r) => r.id !== mind.me);
@@ -536,23 +578,41 @@ export function goodPlan(obs: GameState, mind: Mind, good: Good): GoodPlan {
     }
     values.buy.sort((x, y) => y - x);
   }
-  return { good, values, budget, reserve, spiteBid, corner, mustHold };
+  return { good, values, budget, reserve, spiteBid, corner, mustHold, ...(cash ? { cash } : {}) };
 }
 
 /**
- * The units of a good the seat must hold at the auction to be whole next month; #385's resource-value model replaces it
- * and its twin, value.ts unitValues' `block`. In the engine's order: upkeep eats its Food and drinks its Water, then
- * every good spoils and the depot keeps what it can; next development is hungry under the household's Food, and next
- * production halves a plot short of its Energy, or a farm whose owner is short of Water. Water counts only for a seat
- * with a farm to water: without one, going short costs it nothing. 0 for other goods.
+ * The month's cash plan at this good (RULE-5), over the goods still to be auctioned from it: the budget is what the
+ * plan funds of this good plus what is left after every funded unit, at most today's share of the money; with no needed
+ * unit anywhere, today's share alone. The reserve is the cash funded for the later goods.
  */
-export function wholeNextMonth(obs: GameState, me: string, good: Good): number {
-  const kept = (n: number) => Math.ceil(Math.min(n, UPKEEP.depotCapacity) / (1 - GOOD_CONFIG[good].spoilage));
-  if (good === 'food') return needsOf(obs, me).food + kept(needsOf(obs, me).food);
-  if (good === 'energy') return kept(monthNeeds(obs, me).energy);
-  const farms = obs.tiles.some((t) => t.owner === me && (UPKEEP.irrigated as readonly string[]).includes(t.outfit ?? ''));
-  if (good === 'water' && farms) return needsOf(obs, me).water + kept(needsOf(obs, me).water);
-  return 0;
+function monthPlan(obs: GameState, mind: Mind, o: Outlook, good: Good, values: UnitValues): Pick<GoodPlan, 'budget' | 'reserve' | 'cash'> {
+  const money = me(obs, mind).money;
+  const a = obs.auction;
+  const goods = a?.good === good ? [good, ...a.queue] : WALK.order.slice(WALK.order.indexOf(good));
+  const plan = cashPlan(
+    obs,
+    mind,
+    goods,
+    (g) => (g === good ? values : unitValues(obs, o, g, mind)),
+    (g) => (g === good ? expectedPrices(obs, g).buy : belief(obs, o, g) * (1 + PRICE.storeSpread)),
+  );
+  const share = money * STRATEGIST.budgetShare;
+  const later = goods.reduce((n, g) => n + (g === good ? 0 : (plan.cost[g] ?? 0)), 0);
+  const budget = plan.needed === 0 ? share : (plan.cost[good] ?? 0) + Math.min(plan.left, share);
+  return { budget, reserve: later, cash: { funded: plan.funded[good] ?? 0, lambda: plan.lambda } };
+}
+
+/**
+ * goodPlan's raise for `good` at its status screen: what keeps the seat whole next month (wholeNextMonth, for
+ * STRATEGIST.buyShortfall's goods; 0 for the rest), and the units it must hold there, which are that while it holds less
+ * and the store sells the good, else 0.
+ */
+export function shortfallHold(obs: GameState, me: string, good: Good): { whole: number; mustHold: number } {
+  const whole = STRATEGIST.buyShortfall.includes(good) ? wholeNextMonth(obs, me, good) : 0;
+  const held = obs.players.find((p) => p.id === me)!.stock[good];
+  // With the model on, the values alone decide what it buys and keeps: no hold beside them.
+  return { whole, mustHold: !AI_VALUE.unit && held < whole && storeForSale(obs, good) > 0 ? whole : 0 };
 }
 
 /** The price the seat expects to get for a unit, and to pay: the houses' lines while they trade, otherwise around the posted price. */
@@ -608,7 +668,11 @@ export function tradeDecision(obs: GameState, mind: Mind, plan: GoodPlan): Short
   // (plan.mustHold), as far as its money goes.
   let upTo = h;
   let spent = 0;
-  const wanted = (k: number) => (k < plan.mustHold ? spent + buy <= p.money : (v.buy[k] ?? 0) > buy && spent + buy <= plan.budget);
+  // With the cash plan, a needed unit it funds is bought at its value or under (a tie buys); a unit past its needs only
+  // when it gains more per credit than the shadow price.
+  const worth = (k: number) => (plan.cash && k < h + plan.cash.funded ? (v.buy[k] ?? 0) >= buy : (v.buy[k] ?? 0) > buy);
+  const surplus = (k: number) => !plan.cash || k < v.block || (v.buy[k] ?? 0) - buy > plan.cash.lambda * buy;
+  const wanted = (k: number) => (k < plan.mustHold ? spent + buy <= p.money : worth(k) && spent + buy <= plan.budget && surplus(k));
   while (upTo < v.buy.length && wanted(upTo)) {
     spent += buy;
     upTo++;
@@ -629,6 +693,12 @@ export function tradeDecision(obs: GameState, mind: Mind, plan: GoodPlan): Short
   }
 
   const short = upTo > h && h < plan.mustHold ? `it is ${plan.mustHold - h} ${GOOD_NAME[good]} short of next month's need and can pay the store's ${buy}` : null;
-  cands.push(candidate<TradeAction>('pass', `Pass on ${GOOD_NAME[good]}`, { side: 'pass' }, 0, gainCons(0, p.money, 1, 'no trade', 'nothing at stake'), short));
+  // A pass gives up each funded needed unit's value, its chance-weighted worth: the cash plan has already set its money
+  // aside for it.
+  let given = 0;
+  for (let k = h; k < h + (plan.cash?.funded ?? 0); k++) given += v.buy[k] ?? 0;
+  const passGain = plan.cash ? 0 - given : 0;
+  const passWhy = passGain < 0 ? `no trade, leaving needed ${GOOD_NAME[good]} worth ${cr(-passGain)} to it unbought` : 'no trade';
+  cands.push(candidate<TradeAction>('pass', `Pass on ${GOOD_NAME[good]}`, { side: 'pass' }, passGain, gainCons(passGain, p.money, 1, passWhy, 'nothing at stake'), short));
   return shortlist(cands, mind.level.shortlist, mind.level.shortlistTolerance);
 }

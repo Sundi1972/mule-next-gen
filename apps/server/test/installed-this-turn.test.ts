@@ -1,16 +1,18 @@
 import { boxOf, doorOutside, floorConfig, HALL, pathTo, type GameState, type HallDoor, type HallPlace, type Outfit } from '@mule/engine';
 import { describe, expect, it } from 'vitest';
+import type { SeatInfo } from '@tabletop/core';
 import type { MuleGame } from '../src/mule-game.js';
-import { pressAct, pressThroughSidePick, readyAll, steerTo, toDevelopment as reachDevelopment, type SteerPoint } from './fake-context.js';
+import { pressAct, pressThroughSidePick, readyAll, seats, steerTo, toDevelopment as reachDevelopment, type SteerPoint } from './fake-context.js';
 
 /**
  * Month 1 into development with Heiko (s1) owning a land plot two tiles left of the store, on his door's side and out
  * of its reach: a steered colonist installs where it stands, and the grant's first lit plot on seed 7 is a lake that no
  * shore reaches.
  */
-function toDevelopment() {
+function toDevelopment(players?: SeatInfo[]) {
   let plot: { x: number; y: number } | null = null;
   const g = reachDevelopment({
+    ...(players && { players }),
     prepare: (state) => {
       const store = state.tiles.find((t) => t.terrain === 'store')!;
       const t = state.tiles.find((k) => k.y === store.y && k.x === store.x - 2 && k.owner === null && k.terrain !== 'lake')!;
@@ -141,5 +143,84 @@ describe("MyView.installedThisTurn: the store's Now line after a reload", () => 
     }
     expect([...seen.keys()]).toEqual(expect.arrayContaining(['1 production', '1 auction', '1 upkeep', '2 planning', '2 landGrant', '2 development']));
     for (const [at, installed] of seen) expect(installed, at).toBe(at !== '2 development');
+  });
+});
+
+describe('Installing over a MULE swaps it (Heiko at the table, 5 Nov)', () => {
+  /** The plot's MULE as every screen sees it. */
+  const outfitOn = (g: Floor, plot: Spot) => g.game.viewFor(null).tiles.find((t) => t.x === plot.x && t.y === plot.y)!.outfit;
+
+  it('B-AC-SWAP-1: after installing a Water MULE over her Food MULE, Heiko leads the Food MULE, and the plot makes Water', () => {
+    const g = toDevelopment();
+    const { game, plot } = g;
+    buyAndOutfit(g, 's1', 'food');
+    installOn(g, 's1', plot);
+    expect(outfitOn(g, plot)).toBe('food');
+    buyAndOutfit(g, 's1', 'water');
+    hallTo(g, 's1', doorFor(g, plot));
+    press(g, 's1', 'LEAVE');
+    mapTo(g, 's1', { x: plot.x + 0.5, y: plot.y + 0.5 });
+    press(g, 's1', 'SWAP');
+    expect(outfitOn(g, plot)).toBe('water');
+    expect(game.viewFor('s1').me!.carriedMule, 'the Food MULE is on his lead, not gone').toBe('food');
+  });
+
+  it('B-AC-SWAP-4: a double tap on SWAP never swaps back: right after the swap the plot\'s SWAP is dimmed ("just swapped"), and a second press changes nothing', () => {
+    const g = toDevelopment();
+    const { game, plot } = g;
+    buyAndOutfit(g, 's1', 'food');
+    installOn(g, 's1', plot);
+    buyAndOutfit(g, 's1', 'water');
+    hallTo(g, 's1', doorFor(g, plot));
+    press(g, 's1', 'LEAVE');
+    mapTo(g, 's1', { x: plot.x + 0.5, y: plot.y + 0.5 });
+    press(g, 's1', 'SWAP');
+    expect(game.viewFor('s1').me?.reach, 'SWAP stays on the plot the Food MULE just came off, dimmed').toMatchObject({ verb: 'SWAP', enabled: false, detail: expect.stringMatching(/just swapped/i) });
+    const seat = () => (game as unknown as { state: GameState }).state.players.find((p) => p.id === 's1')!;
+    const before = { money: seat().money, alloy: seat().stock.alloy, analysed: seat().analysed.slice() };
+    pressAct(game, g, 's1');
+    expect(outfitOn(g, plot), 'the Water MULE stays').toBe('water');
+    expect(game.viewFor('s1').me!.carriedMule, 'he still leads the Food MULE').toBe('food');
+    expect({ money: seat().money, alloy: seat().stock.alloy, analysed: seat().analysed }, 'the press fell through to nothing else on the tile').toEqual(before);
+  });
+
+  it.each(['the pub', 'the clock'] as const)('B-AC-SWAP-2: Heiko\'s turn ends at %s with the swapped-out Food MULE still on his lead: it goes to the corral, and his plot keeps the Water MULE', (end) => {
+    // The human seats only: the corral then changes, between the swap and the check, by the Food MULE alone. Re-picked
+    // for #366, the plotless-seat fix: with the AI seat at the table, its month-1 plot moved and it now buys a MULE
+    // in that window, so the corral read one short of before + 1.
+    const g = toDevelopment(seats.filter((s) => !s.isAi));
+    const { game, plot } = g;
+    buyAndOutfit(g, 's1', 'food');
+    installOn(g, 's1', plot);
+    buyAndOutfit(g, 's1', 'water');
+    hallTo(g, 's1', doorFor(g, plot));
+    press(g, 's1', 'LEAVE');
+    mapTo(g, 's1', { x: plot.x + 0.5, y: plot.y + 0.5 });
+    press(g, 's1', 'SWAP');
+    const corral = game.viewFor(null).storeMules;
+    if (end === 'the pub') {
+      goIn(g, 's1');
+      hallTo(g, 's1', 'pub');
+      press(g, 's1', 'PUB');
+    }
+    for (let i = 0; i < 10_000 && game.viewFor(null).phase === 'development'; i++) g.advance(100);
+    expect(outfitOn(g, plot), 'never sent home over the new MULE').toBe('water');
+    expect(game.viewFor(null).storeMules, 'the Food MULE is in the corral, on every screen').toBe(corral + 1);
+    expect(game.viewFor('s1').me!.carriedMule).toBeNull();
+  });
+
+  it('B-AC-SWAP-3: over a MULE with the same outfit the button is dimmed and says so, and a press changes nothing: Heiko keeps his MULE, the plot keeps its own', () => {
+    const g = toDevelopment();
+    const { game, plot } = g;
+    buyAndOutfit(g, 's1', 'food');
+    installOn(g, 's1', plot);
+    buyAndOutfit(g, 's1', 'food');
+    hallTo(g, 's1', doorFor(g, plot));
+    press(g, 's1', 'LEAVE');
+    mapTo(g, 's1', { x: plot.x + 0.5, y: plot.y + 0.5 });
+    expect(game.viewFor('s1').me?.reach).toMatchObject({ verb: 'SWAP', detail: 'same outfit, nothing to swap', enabled: false });
+    expect(() => press(g, 's1', 'SWAP')).not.toThrow();
+    expect(outfitOn(g, plot)).toBe('food');
+    expect(game.viewFor('s1').me!.carriedMule, 'still on his lead').toBe('food');
   });
 });

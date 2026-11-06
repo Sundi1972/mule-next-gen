@@ -254,13 +254,13 @@ export function PhoneVerdict({ view, className }: { view: MuleView; className?: 
 
 // --- Collapse -----------------------------------------------------------------------------------------
 
-/** While the air is in Collapse: why every Worth is lower, in one line. */
-export function CollapseBanner({ density }: { density: Density }) {
+/** While the air is in Collapse: why every Worth is lower, in one line. With a colony, donations are cut too. */
+export function CollapseBanner({ density, donations = false }: { density: Density; donations?: boolean }) {
   const tv = density === 'tv';
   return (
     <div role="status" className={cx('relative flex shrink-0 flex-wrap items-baseline rounded-panel border-2 border-alert bg-alert-bg', tv ? 'gap-x-3 px-5 py-2' : 'gap-x-1.5 px-2.5 py-0.5')} data-testid="collapse-banner">
       <span className={cx('font-display font-semibold text-alert-ink', tv ? 'text-xl' : 'text-xs')}>The air is in Collapse.</span>
-      <span className={cx('text-ink', tv ? 'text-lg' : 'text-[11px]')}>Every Worth is cut by {collapseCutWords()}, offices too: the scores if the game ended now.</span>
+      <span className={cx('text-ink', tv ? 'text-lg' : 'text-[11px]')}>Every Worth is cut by {collapseCutWords()}, {donations ? 'offices and donations' : 'offices'} too: the scores if the game ended now.</span>
     </div>
   );
 }
@@ -433,6 +433,8 @@ export function YourWorth({ view, density }: { view: MuleView; density: Exclude<
     { key: 'mules', old: 'part-mules', label: `MULEs · ${p.mules} × ${view.mulePrice}`, cr: p.muleValue },
     ...(collapse ? [{ key: 'cut', old: 'part-collapse', label: `Collapse cut · ${collapseCutWords()}`, cr: -p.cut, tone: 'text-alert' }] : []),
     { key: 'offices', old: 'part-office', label: `Offices · ${p.terms} ${p.terms === 1 ? 'term' : 'terms'} × ${POLITICS.termScore}${collapse ? ', cut too' : ''}`, cr: p.office },
+    // Only where there is a colony to give to; counted 1:1 by the engine, and cut too in Collapse.
+    ...(view.colony ? [{ key: 'donations', old: 'part-donated', label: `Donations${collapse ? ', cut too' : ''}`, cr: p.donated }] : []),
   ];
   const tight = density === 'compact' || collapse;
   return (
