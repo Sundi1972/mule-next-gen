@@ -6,9 +6,9 @@
 import { DEVELOPMENT, type GameState } from '@mule/engine';
 import type { MuleView } from '@mule/protocol';
 import { bestOf, dotsOf, GOOD_NAME, type RawGood } from '@mule/ui';
-import { errors as playwrightErrors, type Locator } from 'playwright';
+import { errors as playwrightErrors, type Locator, type Page } from 'playwright';
 import { fmt, mapTiles } from '../src/game/derive';
-import { check, type GameStepContext } from './harness';
+import { check, PHONE, PHONE_SMALL, type GameStepContext } from './harness';
 import { plotName, tapPlot, type Plot } from './special-steps';
 
 /** The promise: the report shows within this long of the tap on Scan. */
@@ -20,6 +20,52 @@ const RAW: RawGood[] = ['food', 'water', 'energy', 'smithore', 'crystite', 'rare
 type Room = { game: { state: GameState; handle(seat: string, intent: unknown): void }; viewFor(seat: string | null): { game?: MuleView | null } };
 
 const B_AC_1 = 'B-AC-1 (plot info): two free plots picked, Scan, the rail\'s Drone report shows both with each good\'s 0–3 dots and "best for", 60 cr gone, before Ready';
+
+/** The phone sizes the whole report must fit at, both plots in the rail with no scroll (UBER-AC-1, spec §8). */
+const FIT_SIZES = [PHONE.viewport, PHONE_SMALL.viewport];
+
+/** Where a row of the report lies against the rail's scroll box, scrolled to its top, in px from the box's top. */
+type Fit = { id: string; top: number; bottom: number; box: number };
+
+/**
+ * Scrolls the rail holding `report` to its top, then measures each `report-x-y` row's box against the rail's visible
+ * box: what the player sees without scrolling.
+ */
+async function reportFit(report: Locator): Promise<Fit[]> {
+  return report.evaluate(async (el) => {
+    let box = el.parentElement;
+    while (box && !/auto|scroll/.test(getComputedStyle(box).overflowY)) box = box.parentElement;
+    if (!box) throw new Error('the Drone report sits in no scroll box');
+    box.scrollTop = 0;
+    await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
+    const top = box.getBoundingClientRect().top;
+    return [...el.querySelectorAll<HTMLElement>('[data-testid^=report-]')].map((row) => {
+      const r = row.getBoundingClientRect();
+      return { id: row.dataset.testid!, top: Math.round(r.top - top), bottom: Math.round(r.bottom - top), box: box.clientHeight };
+    });
+  });
+}
+
+/** Both scanned plots' rows, fully inside the rail without a scroll, at every FIT_SIZES size; the phone is left at its own. */
+async function bothPlotsFit(phone: Page, report: Locator, picks: Plot[]): Promise<string> {
+  const said: string[] = [];
+  try {
+    for (const size of FIT_SIZES) {
+      await phone.setViewportSize(size);
+      const rows = await reportFit(report);
+      for (const p of picks) {
+        const row = rows.find((r) => r.id === `report-${p.x}-${p.y}`);
+        check(row, `${B_AC_1}: at ${size.width}×${size.height} the report has a row for plot ${plotName(p)}`);
+        check(row.top >= 0 && row.bottom <= row.box, `${B_AC_1}: at ${size.width}×${size.height} plot ${plotName(p)}'s row lies inside the rail without a scroll: rows ${row.top}–${row.bottom} px in a ${row.box} px box`);
+      }
+      const last = rows.at(-1)!;
+      said.push(`${size.width}×${size.height}: the second plot ends at ${last.bottom} of ${last.box} px`);
+    }
+  } finally {
+    await phone.setViewportSize(PHONE.viewport);
+  }
+  return said.join(', ');
+}
 
 /** Waits for `locator`; a timeout fails as the check it stands for. */
 async function appears(locator: Locator, timeout: number, promise: string): Promise<void> {
@@ -70,6 +116,7 @@ export async function theDroneReportsInTheRail({ phone, server, code, held }: Ga
     const tookMs = Date.now() - tapped;
     check(tookMs <= REPORT_MS, `${B_AC_1}: the report shows within ${REPORT_MS} ms of Scan, took ${tookMs} ms`);
     check((await report.getByText('ONLY YOU').count()) === 1, `${B_AC_1}: the report is marked ONLY YOU`);
+    const fit = await bothPlotsFit(phone, report, picks);
 
     // Each plot's row against the ground the server holds for it.
     for (const p of picks) {
@@ -114,7 +161,7 @@ export async function theDroneReportsInTheRail({ phone, server, code, held }: Ga
 
     // Leave the hub as smoke found it.
     await planning.getByTestId('tool-look').click({ timeout: STEP_MS });
-    return `plots ${picks.map(plotName).join(', ')} reported in ${tookMs} ms, ${fee} cr gone; the TV and ${others.length} other seats hold no ground for them; a second Scan refused ("${refused}")`;
+    return `plots ${picks.map(plotName).join(', ')} reported in ${tookMs} ms, both in the rail unscrolled (${fit}), ${fee} cr gone; the TV and ${others.length} other seats hold no ground for them; a second Scan refused ("${refused}")`;
   });
   console.log(`✓ ${B_AC_1}: ${said}`);
   return said;
