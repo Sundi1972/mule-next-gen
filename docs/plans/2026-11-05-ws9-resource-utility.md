@@ -4,6 +4,18 @@
 
 **Spec class:** Standard (Heiko, 5 Nov).
 
+## Status (6 Nov, at the WS9 halt)
+
+| PR | State |
+|---|---|
+| PR-0 (#424) | **merged**, batch 38 |
+| Task 0.4 (#425, leaderOf) | **merged**, batch 38 |
+| PR-1 (#433, G-1) | **merged**, batch 40. `AI_VALUE.unit` stays **OFF** (PM ruling) until WS3's skipBefore fix and WS5's store supply land; then re-measure on 1/101/201, and the PM puts the switch to Heiko |
+| PR-2 (G-2) | **not started.** Next, beginning with Task 2.0 |
+| PR-3 (G-3) | not started |
+
+Spec amendments AM-1..AM-5 are in the spec's §8.
+
 ## Goals (lifted from spec §0; reference, do not restate)
 
 | Goal | Who benefits | Value delivered | Proof | First delivered in |
