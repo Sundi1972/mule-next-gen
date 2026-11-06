@@ -1,7 +1,6 @@
 import {
   advancePhase,
   cloneForSim,
-  colonistAffordable,
   corralTarget,
   endAuction,
   endLead,
@@ -118,7 +117,7 @@ interface Future {
  * MULEs and posts prices. Returns the prices posted `months` on, raised
  * where the rollout (run on to the horizon) shows a shortage the price
  * hasn't caught up with yet: Food or Water colonists went short of count at
- * what colonists would pay, and Smithore, when the corral can't build its
+ * what the store posts after such a month, and Smithore, when the corral can't build its
  * monthly target, at its price at the horizon.
  */
 function rollForward(stage: GameState, months: number): Future {
@@ -143,7 +142,8 @@ function rollForward(stage: GameState, months: number): Future {
   }
   prices = { ...prices };
   for (const good of new Set(sim.history.slice(Math.max(0, from - 1)).flatMap((h) => h.shortages))) {
-    prices[good] = Math.max(prices[good], colonistAffordable(sim, good));
+    // The store's own price for the month after its colonists went short of the good (pricing RULE-6 row 2).
+    prices[good] = Math.max(prices[good], nextPostedPrice(sim, good, undefined, [good]));
   }
   if (corralShort) prices.smithore = Math.max(prices.smithore, last.smithore);
   return { prices };

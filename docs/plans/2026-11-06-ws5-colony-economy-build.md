@@ -205,7 +205,7 @@ Each PR is its own wave; the waves run in PR order. Nothing here is parallel exc
 inside PR-5. The one parallel opportunity, PR-11 beside PR-10, is given up because PR-11 consumes the field PR-10
 freezes; WS8 starts at Task 10.1's commit and merges after PR-10.
 
-**Batch rule for WS9's chain build (needs C17 atomicity).** If WS9's chain build (AM-32) reaches a trunk batch before
+**Batch rule for WS9's chain build (needs C17 atomicity).** If WS9's chain build (AM-33) reaches a trunk batch before
 milestone A does, PR-3 rides in that batch (it needs only PR-1 under it, so PR-1 rides too). The PM decides; WS5
 flags it the day WS9 reports the chain build ready.
 

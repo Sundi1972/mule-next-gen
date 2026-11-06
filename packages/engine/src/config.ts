@@ -254,13 +254,10 @@ export const UPKEEP = {
   colonistEnergyShare: 0.5,
   /** Colonists need 1 Medicine a month per this many colonists (more when the air makes them sick). */
   colonistsPerMedicine: 50,
+  /** Colonists want 1 Electronics a month per this many, and with it the Rare earth and Alloy its recipe takes. */
+  colonistsPerElectronics: 50,
   /** The colony grows by this factor in a month its colonists were fed, and shrinks by this one when they went hungry. */
   colonistGrowth: { fed: 1.04, hungry: 0.95 },
-  /**
-   * The most colonists pay per unit, from their off-world wages. Above it they
-   * buy less, so their demand falls as the price rises: this is the demand curve.
-   */
-  colonistBudget: { food: 150, water: 120, energy: 100, medicine: 400 } as Partial<Record<Good, number>>,
   /** Units of each good a player's home depot holds. */
   depotCapacity: 10,
 };

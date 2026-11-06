@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   advancePhase,
   cloneForSim,
-  colonistDemand,
   createGame,
   eventChance,
   EVENTS,
@@ -118,11 +117,11 @@ describe('C26: the colony\'s planning social events, fired through the planning 
 
     // The extra Food is demand this month: the store's outlook and the colonists' meal at upkeep both carry it.
     const plain = colonyAt(AT.content);
-    expect(monthlyDemand(state).food - monthlyDemand(plain).food).toBeCloseTo(colonistDemand(state, 'food', units));
+    expect(monthlyDemand(state).food - monthlyDemand(plain).food).toBeCloseTo(units);
     // The store keeps the extra back from the players for the colonists, on a stocked shelf.
     for (const s of [state, plain]) s.store.stock.food = 50;
     expect(storeForSale(state, 'food')).toBe(storeForSale(plain, 'food') - units);
-    // A shelf one unit short of the festival month's need, at a price the colonists' wages cover, and no ship in port:
+    // A shelf one unit short of the festival month's need, and no ship in port:
     // the festival month runs short of Food, a plain month does not.
     const need = state.colonists / UPKEEP.colonistsPerUnit;
     for (const s of [state, plain]) {

@@ -7,7 +7,9 @@ import {
   GOODS,
   nextPostedPrice,
   observe,
+  PRICE,
   stepAuction,
+  storeBuyAt,
   storeForSale,
   storeQuotes,
   storeWants,
@@ -78,7 +80,7 @@ describe("pricing §3: the AI's prices are the store's own rule", () => {
   }, 60_000);
 });
 
-describe("pricing HC-4: off the auction, the AI expects the store's capped buy line", () => {
+describe("pricing T-AC-2: off the auction, the AI expects the store's buy line (no wage cap since needs C2)", () => {
   /** Month 1's auction: the colony holds `food` and `water` (all in p0's depot, none on the store's shelf), so the store posts from that. */
   function auctionHolding(food: number, water: number): GameState {
     const state = createGame({ seed: 11, players: [0, 1, 2, 3].map((i) => ({ id: `p${i}`, name: `P${i}`, isAi: false })) });
@@ -100,12 +102,16 @@ describe("pricing HC-4: off the auction, the AI expects the store's capped buy l
     }
   }
 
+  /** The severe band's buy line around the posted price: the posted price less the band's margin, rounded down. */
+  const severeLine = (state: GameState, good: Good) => Math.floor(state.store.posted[good] * (1 - PRICE.bandSpread.severe.under));
+
   it.each([
-    { good: 'food' as const, other: 'water' as const, line: 96 },
-    { good: 'water' as const, other: 'food' as const, line: 76 },
-  ])("price T-AC-2: in a severe $good month the AI expects, while $other is up, what it gets when $good comes up (store buys at $line)", ({ good, other, line }) => {
+    { good: 'food' as const, other: 'water' as const },
+    { good: 'water' as const, other: 'food' as const },
+  ])("price T-AC-2: in a severe $good month the AI expects, while $other is up, what it gets when $good comes up (the band's buy line)", ({ good, other }) => {
     const state = auctionHolding(4, 4);
     expect(state.store.band?.[good], 'the premise: severe').toBe('severe');
+    const line = severeLine(state, good);
     // The off-auction view first when Water is the good, since Food comes up before it.
     const offFirst = good === 'water';
     let off = 0;
@@ -114,12 +120,21 @@ describe("pricing HC-4: off the auction, the AI expects the store's capped buy l
       off = expectedPrices(observe(state, 'p0'), good).sell;
     }
     untilUp(state, good);
-    expect(state.auction!.storeBuy, "the premise: the colonists' cap sets the store's line").toBe(line);
+    expect(state.auction!.storeBuy, "the premise: the band sets the store's line").toBe(line);
     const on = expectedPrices(observe(state, 'p0'), good).sell;
     if (!offFirst) {
       untilUp(state, other);
       off = expectedPrices(observe(state, 'p0'), good).sell;
     }
     expect(off).toBe(on);
+  });
+
+  it("needs T-AC-7 (AI): in a severe Food month the AI's forecast of the store's Food buy is the band's line (108), not 0", () => {
+    const state = auctionHolding(4, 4);
+    expect(state.store.posted.food, 'the premise: Food posted severe, 4 × 30').toBe(120);
+    const obs = observe(state, 'p0');
+    // The exact line value.ts's carry reads, and the rounded one the strategist expects: both the band's 120 less 10%.
+    expect(storeBuyAt(obs, 'food', obs.store.posted.food, { exact: true }), "the exact forecast: the band's line, not a cap of 0").toBeCloseTo(108, 9);
+    expect(expectedPrices(obs, 'food').sell, "the strategist's forecast: the band's line, not 1").toBe(108);
   });
 });
