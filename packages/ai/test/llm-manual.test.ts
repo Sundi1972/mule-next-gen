@@ -23,6 +23,7 @@ const EVERY_MOVE: { readonly [T in AiAction['type']]: true } = {
   list: true,
   unlist: true,
   commission: true,
+  donate: true,
   payStrike: true,
   repair: true,
   setSiteBid: true,

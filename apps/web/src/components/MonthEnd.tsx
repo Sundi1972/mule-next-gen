@@ -378,7 +378,7 @@ export function ColonyPanel({ view, density, layout = 'stack', verdict = false }
               </span>
             )}
             <span className={cx(line, r.colonistsFed === false ? 'text-alert' : 'text-ink-2')} data-testid="colonists">
-              {r.colonistsFed === null ? 'Colonists' : r.colonistsFed ? 'Colonists fed' : 'Colonists went short'} · {fmt(r.colonists)}
+              {r.colonistsFed ? `The store fed the colony’s ${fmt(r.colonists)} colonists` : `The colony’s ${fmt(r.colonists)} colonists${r.colonistsFed === false ? ' went short' : ''}`}
             </span>
           </span>
         </Block>

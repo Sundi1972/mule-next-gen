@@ -29,8 +29,9 @@ function MonthEnd() {
   const mine = lg.rows.find((r) => r.player.id === self.id)!;
   const words = leaderWords(view, lg, self.id);
   const now: Now = {
-    title: mine.rank === 1 && lg.leader?.level.length === 1 ? `Month ${view.month} is over: you lead` : `Month ${view.month} is over: you’re ${ordinal(mine.rank)} of ${view.players.length}`,
-    detail: `${words.lead}. Next: planning month ${view.month + 1}.`,
+    // Your place alone: the folded card is one line, and at 667 px a longer title cuts the place off.
+    title: mine.rank === 1 && lg.leader?.level.length === 1 ? 'You lead' : `You’re ${ordinal(mine.rank)} of ${view.players.length}`,
+    detail: `Month ${view.month} is over. ${words.lead}. Next: planning month ${view.month + 1}.`,
   };
   const density = tv ? 'phone' : 'compact';
   return (
