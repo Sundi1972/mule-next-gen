@@ -65,12 +65,14 @@ const FESTIVAL = event('festival', 'planning', {
     { on: 'store', what: 'food', delta: 6 },
   ],
 });
+/** The share of its output a struck plot makes, as the engine words it: "20%" at 0.2. */
+const STRIKE_SHARE = `${Math.round(COLONY.strike.output * 100)}%`;
 // As #370 builds it: kind 'colony', from the first struck plot, every working plot of the good at delta 0.
 const STRIKE = event('generalStrike', 'planning', {
   kind: 'colony',
   origin: { ...FOOD_PLOTS[0]! },
   title: 'General strike',
-  line: 'This month every Food plot makes 20%, unless the Governor pays the strikers 240 cr from the colony fund.',
+  line: `This month every Food plot makes ${STRIKE_SHARE}, unless the Governor pays the strikers 240 cr from the colony fund.`,
   hits: FOOD_PLOTS.map((p, order) => ({ ...p, order, delta: 0 })),
 });
 const riot = (object: 'park' | 'hospital') =>
@@ -89,7 +91,7 @@ const riot = (object: 'park' | 'hospital') =>
 /** Each of the nine in the phase that rolls it, and the words the TV's log keeps for it. */
 const NINE: { ev: ShowEventView; words: string; story?: string[] }[] = [
   { ev: FESTIVAL, words: 'Mood +10 · Prestige +2 · Store +6 Food', story: ['festival-bunting', 'festival-crowd'] },
-  { ev: STRIKE, words: 'Food at 20% on 4 farms unless the Governor pays' },
+  { ev: STRIKE, words: `Food at ${STRIKE_SHARE} on 4 farms unless the Governor pays` },
   { ev: event('emigrationWave', 'planning', { kind: 'colony', title: 'Emigration wave', line: '10% fewer colonists, for good.', effects: [{ on: 'colony', what: 'colonists', delta: -12 }] }), words: 'Colonists −12' },
   { ev: event('blamedForUnrest', 'planning', { kind: 'ledger', title: 'Blamed for the unrest', line: 'Reputation −1, so fewer votes.', scope: 'personal', player: OSSA, effects: [{ on: OSSA, what: 'reputation', delta: -1 }] }), words: 'Ossa reputation −1' },
   { ev: event('storeStrike', 'development', { title: 'Store strike', line: 'The store sells no MULEs this turn.', effects: [{ on: 'store', what: 'mules', delta: 0 }] }), words: 'No MULEs this turn' },
@@ -236,8 +238,12 @@ describe('B-AC-26-3: the riot takes a third of each shelf and damages one object
   });
 });
 
+/** The strike chip's words, from the engine's share: what each struck plot makes in planning, what it loses in production. */
+const STRIKE_MADE = ` STRIKE · ${STRIKE_SHARE} `;
+const STRIKE_LOST = ` STRIKE −${Math.round((1 - COLONY.strike.output) * 100)}% `;
+
 describe('B-AC-26-4: the planning strike announcement on the TV', () => {
-  it('B-AC-26-4: strikers walk out to every Food plot, each gets STRIKE · 20%, and the log says what it costs', () => {
+  it('B-AC-26-4: strikers walk out to every Food plot, each gets STRIKE · its share made, and the log says what it costs', () => {
     const ev = [STRIKE];
     const seg = segOf(ev, 'tv');
     expect(text(inside(screen(ev, seg.announceAt + 0.3, 'tv'), 'title-card'))).toContain('unless the Governor pays the strikers 240 cr');
@@ -245,17 +251,25 @@ describe('B-AC-26-4: the planning strike announcement on the TV', () => {
       const standing = reduced ? result(ev, 'tv', { reduced }) : storyAt(ev, 2.6 + 3 * 0.35 + 0.2);
       for (const p of FOOD_PLOTS) {
         expect(has(standing, `striker-${p.x}-${p.y}`)).toBe(true);
-        expect(text(inside(standing, `strike-chip-${p.x}-${p.y}`))).toBe(' STRIKE · 20% ');
+        expect(text(inside(standing, `strike-chip-${p.x}-${p.y}`))).toBe(STRIKE_MADE);
       }
       // Nothing stands on land that isn't Food.
       expect(has(standing, 'striker-6-3')).toBe(false);
     }
-    expect(text(inside(result(ev, 'tv'), 'log'))).toContain('Food at 20% on 4 farms unless the Governor pays');
+    expect(text(inside(result(ev, 'tv'), 'log'))).toContain(`Food at ${STRIKE_SHARE} on 4 farms unless the Governor pays`);
+  });
+
+  it('B-AC-26-4: Lena’s phone, no TV: the strike is everyone’s news, each struck plot making its share unless the Governor pays', () => {
+    for (const reduced of [false, true]) {
+      const card = text(inside(result([STRIKE], 'alone', { reduced }), 'phone-card'));
+      expect(card).toContain(`For everyone: every plot of the struck good makes ${STRIKE_SHARE} this month, unless the Governor pays the strikers.`);
+      expect(card).not.toContain('Not you');
+    }
   });
 });
 
 describe('B-AC-26-4: the unpaid strike plays in production on the TV', () => {
-  // What each Food plot made before the strike; (2,3) makes too little to keep anything at 20%.
+  // What each Food plot made before the strike; (2,3) makes too little to keep anything of it.
   const MADE: Record<string, number> = { '1,1': 5, '2,1': 10, '6,1': 5, '2,3': 4 };
   const kept = (p: { x: number; y: number }) => Math.floor(MADE[`${p.x},${p.y}`]! * COLONY.strike.output);
   const owner = (x: number, y: number) => players.find((p) => p.slot === OWNED[`${x},${y}`]![0])!.id;
@@ -265,7 +279,7 @@ describe('B-AC-26-4: the unpaid strike plays in production on the TV', () => {
     kind: 'colony',
     origin: { ...FOOD_PLOTS[0]! },
     title: 'General strike',
-    line: 'The strikers held: every Food plot makes 20% this month.',
+    line: `The strikers held: every Food plot makes ${STRIKE_SHARE} this month.`,
     hits: FOOD_PLOTS.map((p, order) => ({ ...p, order, delta: kept(p) - MADE[`${p.x},${p.y}`]! })),
   });
   const month = (events: ShowEventView[]): ShowData => ({ lines, events, introMs: events.length ? INTRO_MS : 0, lengthMs: 0 });
@@ -289,7 +303,7 @@ describe('B-AC-26-4: the unpaid strike plays in production on the TV', () => {
     return { count: text(inside(plot, 'units')).trim(), bars: (plot.match(/data-bar="unit"/g) ?? []).length };
   };
 
-  it('B-AC-26-4: the strikers stand on every Food plot from the start, no walk; each plot gets STRIKE −80% as the strike lands on it, none before', () => {
+  it('B-AC-26-4: the strikers stand on every Food plot from the start, no walk; each plot gets STRIKE −its share lost as the strike lands on it, none before', () => {
     const start = at(0.05);
     const before = at(lands - 0.1);
     const after = at(lands + 3 * step + 0.2);
@@ -299,7 +313,7 @@ describe('B-AC-26-4: the unpaid strike plays in production on the TV', () => {
       // Already on the plot: where it stands at the start is where it stands once the strike has landed.
       expect(where(start, id)).toEqual(where(after, id));
       expect(has(before, `strike-chip-${p.x}-${p.y}`)).toBe(false);
-      expect(text(inside(after, `strike-chip-${p.x}-${p.y}`))).toBe(' STRIKE −80% ');
+      expect(text(inside(after, `strike-chip-${p.x}-${p.y}`))).toBe(STRIKE_LOST);
     }
     // One plot after the next: as it reaches the second plot, the third has no chip yet.
     const second = at(lands + step + 0.05);
@@ -309,7 +323,7 @@ describe('B-AC-26-4: the unpaid strike plays in production on the TV', () => {
     expect(has(after, 'strike-chip-6-3')).toBe(false);
   });
 
-  it('B-AC-26-4: each struck plot ends on 20% of what it made, the mine keeps its 3, and the log says what the strike cost', () => {
+  it('B-AC-26-4: each struck plot ends on its share of what it made, the mine keeps its 3, and the log says what the strike cost', () => {
     const end = tv(unpaid, seg.endAt - 0.15);
     for (const p of FOOD_PLOTS) {
       const n = kept(p);
@@ -326,7 +340,7 @@ describe('B-AC-26-4: the unpaid strike plays in production on the TV', () => {
     const start = at(0.01, true);
     for (const p of FOOD_PLOTS) {
       expect(has(start, `striker-${p.x}-${p.y}`)).toBe(true);
-      expect(text(inside(start, `strike-chip-${p.x}-${p.y}`))).toBe(' STRIKE −80% ');
+      expect(text(inside(start, `strike-chip-${p.x}-${p.y}`))).toBe(STRIKE_LOST);
     }
   });
 

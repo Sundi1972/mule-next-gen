@@ -1,3 +1,4 @@
+import { COLONY } from '@mule/engine';
 import type { ColonyView, MuleView, PlayerView, PoliticsView, TableView, TileView } from '@mule/protocol';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -48,6 +49,8 @@ const colony = (strike: ColonyView['strike']): ColonyView => ({
 
 const UNPAID = { good: 'food' as const, cost: 240, paid: false };
 const PAID = { ...UNPAID, paid: true };
+/** The share of its output a struck plot makes, as the engine words it: "20%" at 0.2. */
+const SHARE = `${Math.round(COLONY.strike.output * 100)}%`;
 
 const game = (c: ColonyView | null, over: Partial<MuleView> = {}): MuleView =>
   aMuleView({ players: PLAYERS, me: null, politics: c ? politics : null, month: 5, width: 4, height: 2, tiles: TILES, ...(c ? { colony: c } : {}), ...over });
@@ -86,8 +89,8 @@ function textOf(html: string, testid: string): string {
 const strikers = (html: string) => [...html.matchAll(/data-testid="striker-(\d+)-(\d+)"/g)].map((m) => `${m[1]},${m[2]}`).sort();
 
 describe('the general strike on the TV (C37)', () => {
-  it('B-AC-37-1: the header badge reads "STRIKE · Food 20%" while unpaid, "PAID · −240 cr" once paid, and is absent with no strike', () => {
-    expect(textOf(onTv(game(colony(UNPAID))), 'strike-badge')).toBe('STRIKE · Food 20%');
+  it('B-AC-37-1: the header badge reads "STRIKE · Food <share>" while unpaid, "PAID · −240 cr" once paid, and is absent with no strike', () => {
+    expect(textOf(onTv(game(colony(UNPAID))), 'strike-badge')).toBe(`STRIKE · Food ${SHARE}`);
     expect(textOf(onTv(game(colony(PAID))), 'strike-badge')).toBe('PAID · −240 cr');
     expect(onTv(game(colony(null)))).not.toContain('data-testid="strike-badge"');
   });
@@ -100,13 +103,13 @@ describe('the general strike on the TV (C37)', () => {
   });
 
   it('B-AC-37-1: the badge rides the header in every phase that draws the colony gauges, such as the month end', () => {
-    expect(textOf(onTv(game(colony(UNPAID), { phase: 'upkeep' })), 'strike-badge')).toBe('STRIKE · Food 20%');
+    expect(textOf(onTv(game(colony(UNPAID), { phase: 'upkeep' })), 'strike-badge')).toBe(`STRIKE · Food ${SHARE}`);
   });
 
   it("B-AC-37-3: in planning a striker stands on exactly the struck good's plots, and they are gone once paid", () => {
     const html = onTv(game(colony(UNPAID)));
     expect(strikers(html)).toEqual(['0,0', '2,0']);
-    expect(textOf(html, 'strike-chip-0-0')).toBe('STRIKE · 20%');
+    expect(textOf(html, 'strike-chip-0-0')).toBe(`STRIKE · ${SHARE}`);
     expect(strikers(onTv(game(colony(PAID))))).toEqual([]);
   });
 
