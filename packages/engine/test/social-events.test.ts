@@ -162,11 +162,21 @@ describe('C26: the colony\'s planning social events, fired through the planning 
     expect(state.colony!.happiness).toBe(AT.unrest);
   });
 
-  it("INV-C26-3 (immigration's mood part): the mood tilts its odds, its effect stays today's colonists, and politics off rolls it as today", () => {
+  it("INV-C26-3 (immigration's mood and air parts): the mood and a colony's air tilt its odds, its effect stays today's colonists, and politics off rolls it as today", () => {
     const base = EVENTS.colony.immigrationWave.phases.planning;
-    expect(BANDS.map((b) => chanceIn('immigrationWave', b))).toEqual([base + 0.06, base + 0.01, base, 0, 0].map((c) => expect.closeTo(c)));
-    const off = colonyAt(AT.content, { politics: false });
-    expect(eventChance(off, row('immigrationWave'), 'planning')).toBe(base);
+    const inAir = (air: number) => BANDS.map((b) => chanceIn('immigrationWave', b, (s) => (s.air = air)));
+    // Clean air +1 (the colony's air is clean below 30); Smoggy adds nothing; Toxic (60) and Collapse (80) are a hard zero.
+    expect(inAir(0)).toEqual([base + 0.07, base + 0.02, base + 0.01, 0, 0].map((c) => expect.closeTo(c)));
+    expect(inAir(29)).toEqual([base + 0.07, base + 0.02, base + 0.01, 0, 0].map((c) => expect.closeTo(c)));
+    expect(inAir(30)).toEqual([base + 0.06, base + 0.01, base, 0, 0].map((c) => expect.closeTo(c)));
+    expect(inAir(60)).toEqual([0, 0, 0, 0, 0]);
+    expect(inAir(80)).toEqual([0, 0, 0, 0, 0]);
+    // Politics off reads neither the mood nor the air (PM, 6 Nov): today's chance, in clean air and in Toxic.
+    for (const air of [0, 60, 80]) {
+      const off = colonyAt(AT.content, { politics: false });
+      off.air = air;
+      expect(eventChance(off, row('immigrationWave'), 'planning')).toBe(base);
+    }
     only(['immigrationWave']);
     const state = colonyAt(AT.thriving);
     const [wave] = firePhase(state, 'planning');
