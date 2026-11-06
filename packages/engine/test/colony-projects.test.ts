@@ -162,6 +162,17 @@ describe('prestige objects: commissioned, funded, built, kept up', () => {
     expect(state.treasury.money).toBe(2_000 + 4 * COLONY.grant.perMonth - PRESTIGE.spaceport.credits - PRESTIGE.hospital.credits);
   });
 
+  it('RULE-21 row 4 (pace set C): every open project paid in credits and goods starts building at that upkeep, not only the oldest', () => {
+    const state = noGoods(0);
+    commission(state, 'lena', 'spaceport');
+    commission(state, 'lena', 'hospital');
+    // The Hospital has every credit and good in before the month end; the Spaceport in front of it has no plot.
+    project(state, 'hospital').funded = { credits: PRESTIGE.hospital.credits, goods: { ...PRESTIGE.hospital.goods } };
+    runColony(state, []);
+    expect(project(state, 'spaceport'), 'the Spaceport still waits for its plot').toMatchObject({ stage: 'commissioned', plot: null });
+    expect(project(state, 'hospital'), 'the Hospital starts behind it').toMatchObject({ stage: 'building', monthsLeft: PRESTIGE.hospital.buildMonths });
+  });
+
   it('T-AC-24b (pace set C): with too little for both, the fund pays the earlier project first and keeps its reserve', () => {
     const spare = PRESTIGE.spaceport.credits - 40;
     const state = noGoods(COLONY.reserve + spare);

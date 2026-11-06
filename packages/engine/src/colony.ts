@@ -187,7 +187,8 @@ export function runColony(state: GameState, shortages: readonly Good[]): void {
     if (p.monthsLeft === 0) Object.assign(p, { stage: 'standing', monthsLeft: null });
   }
   // Every project still being paid for, in the order it was commissioned: one paid in credits but waiting for its plot
-  // or goods takes no credits, so it never starves the ones behind it. fund() keeps the reserve across all of them.
+  // or goods takes no credits, so it never starves the ones behind it. fund() keeps the reserve across all of them, and
+  // starts every one that has all its credits, goods and (while needsPlot exists) its plot (RULE-21 row 4).
   for (const p of colony.projects.filter((p) => p.stage === 'commissioned')) fund(state, colony, p);
   colony.happiness = moodStep(colony.happiness, moodTarget(moodInputs(state, shortages)));
   // literal-ok: the last two month ends, the window lastGauges reads (this month's and the one before)
