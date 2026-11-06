@@ -30,6 +30,58 @@ export function boardWalkers(view: MuleView, auction: AuctionView): BoardWalker[
   });
 }
 
+/**
+ * The store's selling line and the rest zones, as the board takes them. Once the store is sold out, the line the server
+ * sends is the highest bid (flagged) or the store's old price: never a price it sells at, so the board draws it as the
+ * sold-out line.
+ */
+export function storeLines(auction: AuctionView): {
+  storeSells: number | null;
+  soldOutAt: { price: number; bid: boolean } | null;
+  zones: { buyersTop: number; sellersBottom: number } | null;
+} {
+  const soldOut = auction.storeForSale === 0 && auction.storeSells !== null;
+  return {
+    storeSells: soldOut ? null : auction.storeSells,
+    soldOutAt: soldOut ? { price: auction.storeSells!, bid: auction.storeSellsBid === true } : null,
+    zones: auction.zones ?? null,
+  };
+}
+
+/** What the store charges, as a price box shows it: "out" once it has none to sell, whatever line the board draws. */
+export const storeSellsWord = (auction: AuctionView): number | 'out' => (auction.storeForSale > 0 ? (auction.storeSells ?? 'out') : 'out');
+
+/** In the phone's rail while the store is sold out: nobody buys from it, and what it still pays. */
+export function SoldOutNote({ auction }: { auction: AuctionView }) {
+  return (
+    <p className="rounded-control border border-rise/50 bg-void px-2.5 py-1.5 text-[11px] leading-snug text-ink-2" data-testid="sold-out-note">
+      <strong className="text-rise">Store sold out.</strong> Nobody can buy from it{auction.storeBuys !== null ? `; it still buys at ${auction.storeBuys}` : ''}.
+    </p>
+  );
+}
+
+/** On the TV during the walk while the store is sold out: bids may pass its old price, and the highest bid once one has. */
+export function TvSoldOutBox({ auction }: { auction: AuctionView }) {
+  const lines = storeLines(auction);
+  return (
+    <div className="flex flex-col gap-1 rounded-panel border-2 border-rise bg-panel p-4" data-testid="tv-sold-out">
+      <span className="font-display text-2xl font-semibold text-rise">Store sold out</span>
+      <span className="text-lg leading-snug text-ink-2">
+        Bids can go past its old {auction.zones?.sellersBottom ?? lines.soldOutAt?.price}.
+        {lines.soldOutAt?.bid && (
+          <>
+            {' '}
+            Highest bid{' '}
+            <strong data-num className="font-mono text-ink">
+              {lines.soldOutAt.price}
+            </strong>
+          </>
+        )}
+      </span>
+    </div>
+  );
+}
+
 /** A seller the engine stopped at what they must hold (RULE-4). The engine keeps the flag through a switch to Buy; the screens don't. */
 export function heldSeller(w: Pick<WalkerView, 'side' | 'held'> | undefined): boolean {
   return w?.side === 'seller' && w.held === true;
@@ -166,7 +218,7 @@ export function StoreBox({ auction }: { auction: AuctionView; tv?: true }) {
     <dl className="grid grid-cols-3 gap-px overflow-hidden rounded-panel border border-holo-line bg-holo-line font-mono text-2xl" data-testid="status-store">
       {(
         [
-          ['STORE SELLS', auction.storeSells ?? 'out', 'text-rise'],
+          ['STORE SELLS', storeSellsWord(auction), 'text-rise'],
           ['STORE BUYS', auction.storeBuys ?? '—', 'text-fall'],
           ['IN STOCK', stock, stock === 0 ? 'text-alert' : 'text-ink'],
         ] as const

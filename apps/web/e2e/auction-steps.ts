@@ -292,6 +292,13 @@ async function playTheLandAuction(browser: Browser, base: string, server: MuleSe
   foodForTheNeedStop(server, code, { empty: truth.idOf(brix), seller: truth.idOf(lena), sellerHas: lenaNeeds + NEED_STOP_SPARE });
   await readTheEmptyHandedStatus(phones, truth);
   await readTheNeedStop({ seller: lena, empty: brix, others: [ossa] }, tv, truth, server, code);
+  // The good after Food comes up with the store's shelf empty and Brix holding plenty: the rest zones, and bidding past
+  // a sold-out store.
+  const after = food.next[0];
+  check(after !== undefined, "month 2's goods go on after Food");
+  soldOutWithASeller(server, code, { good: after, seller: truth.idOf(brix), sellerHas: SOLD_OUT_STOCK });
+  await everyone(phones, (p) => p.page.locator('[data-phase=auction]').getByRole('button', { name: 'Done with Food' }).click({ timeout: within(SCALE, WALK.goodMs) }));
+  await readTheRestZones({ seller: brix, bidder: lena, rester: ossa }, after, tv, truth, server, code);
   await everyone(phones, (p) => pressDoneThroughTheAuction(p.page));
   check(errors.length === 0, `no page errors: ${errors.join('; ')}`);
 }
@@ -435,7 +442,10 @@ const readUnits = () =>
   );
 /** The store's selling line's words on the board, "SELLS 66 · 2 LEFT", or "SOLD OUT" in its place. */
 const readStoreLine = () => {
-  const el = document.querySelector<HTMLElement>('[data-testid=limit-sells]') ?? document.querySelector<HTMLElement>('[data-testid=store-sold-out]');
+  const el =
+    document.querySelector<HTMLElement>('[data-testid=limit-sells]') ??
+    document.querySelector<HTMLElement>('[data-testid=limit-follows]') ??
+    document.querySelector<HTMLElement>('[data-testid=store-sold-out]');
   return el?.innerText.trim().split('\n').pop() ?? null;
 };
 const readTvStock = () => document.querySelector('[data-testid=tv-store] > div:nth-child(3) dd')?.textContent ?? null;
@@ -664,9 +674,10 @@ async function readTheGoodsWalk(cast: { seller: Phone; buyer: Phone; stayer: Pho
   await everyone(phones, (p) => pressReadyAtTheSidePick(p.page));
   const walking = { ask: 1, bid: 1, gap: 1 };
   await Promise.all(screens.map((s) => untilShows(s, readLines, walking, 'B-AC-1: the lowest-ask and highest-bid lines and the gap during the walk', SIDE_PICK_MS)));
-  // Both sellers start level at the top. The stayer steps above it, so the lowest ask is the seller's alone and the buyer never meets the stayer.
+  // Both sellers start level at the top edge, which no seller walks above (RULE-6). The seller steps down under the
+  // stayer, so the lowest ask is the seller's alone and the buyer never meets the stayer.
   const at = (a: AuctionView, id: string) => a.walkers.find((w) => w.id === id)?.at ?? NaN;
-  await walkUntil(truth, stayer, 'up', (a) => Math.round(at(a, stayerId)) >= Math.round(at(a, sellerId)) + 2, `B-AC-1: ${stayer.name} walks up over ${seller.name}`);
+  await walkUntil(truth, seller, 'down', (a) => Math.round(at(a, sellerId)) <= Math.round(at(a, stayerId)) - 2, `B-AC-1: ${seller.name} walks down under ${stayer.name}`);
   const view = truth.board();
   const a = view.auction;
   check(a?.stage === 'walk', `the server is walking, got ${a?.stage}`);
@@ -692,8 +703,9 @@ async function readTheGoodsWalk(cast: { seller: Phone; buyer: Phone; stayer: Pho
     `✓ B-AC-1 (WS6): ${a.good} walk, the red line tagged ${ask.price} and the green ${bid.price}, "${tags.gap}", on three phones and the TV; the TV's readout names ${tvAsk.who} and ${tvBid.who}`,
   );
 
-  const storeShows = async (forSale: number, sells: number | null) => {
-    const line = forSale > 0 ? `SELLS ${sells} · ${forSale} LEFT` : 'SOLD OUT';
+  const storeShows = async ({ storeForSale: forSale, storeSells: sells, storeSellsBid: bid }: AuctionView) => {
+    // Sold out, the line stays on the board: at the old price, or at the highest bid once one passes it (RULE-7).
+    const line = forSale > 0 ? `SELLS ${sells} · ${forSale} LEFT` : sells === null ? 'SOLD OUT' : bid ? `HIGHEST BID ${sells} ↑` : `SOLD OUT ${sells}`;
     await Promise.all([
       ...screens.map((s) => untilShows(s, readStoreLine, line, "B-AC-3: the store's line counts what it will sell")),
       untilShows(theTv, readTvStock, String(forSale), "B-AC-3: the TV's Stock is what the store will sell"),
@@ -702,7 +714,7 @@ async function readTheGoodsWalk(cast: { seller: Phone; buyer: Phone; stayer: Pho
     check(raw !== forSale, `B-AC-3 needs the store's raw ${a.good} stock to differ from what it will sell, both ${raw}`);
     console.log(`✓ B-AC-3 (WS6): "${line}" on three phones and the TV, whose Stock reads ${forSale}; the store holds ${raw}, the rest is the colonists' reserve`);
   };
-  await storeShows(a.storeForSale, a.storeSells);
+  await storeShows(a);
 
   const before = unitsFromTheServer(truth, phones);
   await Promise.all(screens.map((s) => untilShows(s, readUnits, before, 'B-AC-2: units and surplus under the creatures before the trade')));
@@ -715,7 +727,9 @@ async function readTheGoodsWalk(cast: { seller: Phone; buyer: Phone; stayer: Pho
   const tradeBudget = within(SCALE, WALK.goodMs);
   await walkUntil(truth, buyer, 'up', (x) => x.walkers.find((w) => w.id === buyerId)?.line === 'store', `B-AC-3: ${buyer.name} walks up to the store's line`);
   await buyAtTheStoreLine(truth, buyer, tradeBudget);
-  await storeShows(0, null);
+  const out = truth.board().auction!;
+  check(out.storeForSale === 0, `B-AC-3: ${buyer.name} bought the store out, it has ${out.storeForSale} left`);
+  await storeShows(out);
 
   const giveWay = Promise.all(screens.map((s) => linesGiveWayToTheTrade(s, tradeBudget)));
   giveWay.catch(() => undefined);
@@ -834,6 +848,122 @@ async function readTheNeedStop(cast: { seller: Phone; empty: Phone; others: Phon
   // Tap ▼ to stop, as her rail says, so the rest of the auction is pressed through.
   await seller.page.locator('[data-testid=hold-down]:not([disabled])').click({ timeout: PRESS_MS });
   console.log(`✓ B-AC-C1: trading at the store's line ${seller.name} tapped Buy: the sale stopped at ${kept}, the server put her at the bottom edge, and walking up she bought from the store (${kept} → ${mine(bought)?.units})`);
+}
+
+/** What Brix holds of the sold-out good: far over his need, so RULE-4 never stops his sale to Lena. */
+const SOLD_OUT_STOCK = 20;
+/** How far past the store's old selling line the bidder walks before the line is read. */
+const PAST_THE_LINE = 1;
+
+/** The board's top of the rest zone named `band` and its bottom, and the centre of walker `id`, in page pixels on `s`. */
+async function bandAndWalker(s: Screen, band: 'rest-buyer' | 'rest-seller', id: string): Promise<{ top: number; bottom: number; walker: number } | null> {
+  return s.page.evaluate(
+    ([b, who]) => {
+      const zone = document.querySelector(`[data-testid=${b}]`)?.getBoundingClientRect();
+      const w = document.querySelector(`[data-testid=walker-${who}]`)?.getBoundingClientRect();
+      return zone && w ? { top: zone.top, bottom: zone.bottom, walker: w.top + w.height / 2 } : null;
+    },
+    [band, id] as const,
+  );
+}
+
+/** Waits a frame at a time until the store's line on `s` reads `want` (its label's last line); fails naming what it read. */
+async function untilStoreLine(s: Screen, want: string, what: string): Promise<void> {
+  await untilShows(s, readStoreLine, want, what);
+}
+
+/**
+ * RULE-6 and RULE-7 front to back, on month 2's good after Food (the fixture empties the store's shelf of it and gives
+ * `seller` plenty). Starts during Food's walk, every phone having pressed Done, and leaves the good's walk running:
+ *  B-AC-D1: `rester`, a buyer, steps up into the buyers' zone and holds ▼: the server stops the walker at the board's
+ *    bottom edge with no deal, and the rester's phone and the TV draw it inside the buyers' zone.
+ *  B-AC-E1: `bidder` walks up past the store's old selling line, and every screen's line reads her bid as the highest
+ *    bid; walking on up she stops short of `seller`, resting above, and nothing trades (the negative); the seller walks
+ *    down to her bid and they trade at it, the server's stock agreeing.
+ */
+async function readTheRestZones(cast: { seller: Phone; bidder: Phone; rester: Phone }, good: Good, tv: Page, truth: Truth, server: MuleServer, code: string): Promise<void> {
+  const { seller, bidder, rester } = cast;
+  const phones = [seller, bidder, rester];
+  const [sellerId, bidderId, resterId] = [truth.idOf(seller), truth.idOf(bidder), truth.idOf(rester)];
+  const at = (a: AuctionView, who: string) => a.walkers.find((w) => w.id === who);
+  const screens: Screen[] = [...phones.map((p) => ({ name: `${p.name}'s phone`, page: p.page })), { name: 'the TV', page: tv }];
+  const name = GOOD_NAME[good];
+
+  await untilServer(truth, seller.page, (a) => a.good === good && a.stage === 'status', `${name}'s status screen opens after Food`, within(SCALE, WALK.closeMs + WALK.goodMs));
+  await tapSide(truth, seller, 'seller', 'seller', `RULE-7: ${seller.name} sells ${name}`);
+  await everyone(phones, (p) => pressReadyAtTheSidePick(p.page));
+  const opened = await untilServer(truth, seller.page, (a) => a.good === good && a.stage === 'walk', `${name}'s walk opens`, SIDE_PICK_MS);
+  longWalk(server, code);
+  const zones = opened.zones;
+  check(zones !== undefined, `RULE-6: the server sends ${name}'s zones`);
+  const S = zones.sellersBottom;
+  check(opened.storeForSale === 0 && opened.storeSells === S && opened.storeSellsBid === undefined, `RULE-7: sold out, the line starts at the old price ${S}, unflagged; got ${opened.storeSells} (bid ${opened.storeSellsBid}), ${opened.storeForSale} for sale`);
+  check(opened.shipPays === null, `RULE-7 needs no ship buying ${name}, it pays ${opened.shipPays}`);
+  check(at(opened, sellerId)!.price > S + PAST_THE_LINE, `RULE-7: ${seller.name} rests above the old line at ${at(opened, sellerId)!.price}`);
+  const money = truth.board().players.find((p) => p.id === bidderId)!.money;
+  check(money >= zones.hi, `RULE-7: ${bidder.name} can pay any bid on the board, she has ${money}`);
+
+  // B-AC-D1: up into the buyers' zone, then ▼ held well past the time it takes to reach the edge.
+  await walkUntil(truth, rester, 'up', (a) => (at(a, resterId)?.price ?? 0) >= zones.lo + 2, `B-AC-D1: ${rester.name} steps up into the buyers' zone`);
+  check(at(truth.board().auction!, resterId)!.price < zones.buyersTop, `B-AC-D1: ${rester.name} stands below the buying line ${zones.buyersTop}`);
+  await hold(rester.page, 'down', PRESS_MS);
+  await untilServer(truth, rester.page, (a) => at(a, resterId)?.price === zones.lo, `B-AC-D1: holding ▼ ${rester.name} reaches the bottom edge ${zones.lo}`, within(SCALE, WALK.crossSeconds * 1_000));
+  await rester.page.waitForTimeout(TAP_SETTLE_MS * 2);
+  const edge = truth.board().auction!;
+  await rester.page.mouse.up();
+  check(at(edge, resterId)!.at === zones.lo, `B-AC-D1: still holding ▼, ${rester.name} stands at the bottom edge ${zones.lo}, got ${at(edge, resterId)!.at}`);
+  check(!edge.deals.some((d) => d.buyer === resterId || d.seller === resterId), `B-AC-D1: ${rester.name} trades with nobody at the edge`);
+  for (const s of [screens[2]!, screens[3]!]) {
+    // The walker glides to its price over a tenth of a second; read once it has settled.
+    await s.page.waitForTimeout(TAP_SETTLE_MS);
+    const box = await bandAndWalker(s, 'rest-buyer', resterId);
+    check(box !== null && box.walker >= box.top && box.walker <= box.bottom + 1, `B-AC-D1: ${s.name} draws ${rester.name} inside the buyers' zone, got ${JSON.stringify(box)}`);
+  }
+  console.log(`✓ B-AC-D1: ${rester.name} held ▼ and stopped at the bottom edge ${zones.lo} on the server, no deal; ${rester.name}'s phone and the TV draw the walker in the buyers' zone (under ${zones.buyersTop})`);
+
+  // B-AC-E1: past the old line, the line is her bid on every screen.
+  const before = { bidder: truth.stockOf(bidder, good), seller: truth.stockOf(seller, good) };
+  await walkUntil(truth, bidder, 'up', (a) => (at(a, bidderId)?.price ?? 0) >= S + PAST_THE_LINE, `B-AC-E1: ${bidder.name} walks up past the old line ${S}`);
+  const passed = truth.board().auction!;
+  const bid = at(passed, bidderId)!.price;
+  check(passed.storeSells === bid && passed.storeSellsBid === true, `B-AC-E1: the server's line is ${bidder.name}'s bid ${bid}, flagged; got ${passed.storeSells} (bid ${passed.storeSellsBid})`);
+  await Promise.all(screens.map((s) => untilStoreLine(s, `HIGHEST BID ${bid} ↑`, `B-AC-E1: ${s.name}'s store line shows ${bidder.name}'s bid`)));
+  console.log(`✓ B-AC-E1: sold out of ${name}, ${bidder.name} bid ${bid} past the old line ${S}; three phones and the TV read "HIGHEST BID ${bid} ↑"`);
+
+  // The negative: walking on up she stops a step short of the resting seller, and nothing trades.
+  const ask = at(passed, sellerId)!.price;
+  await hold(bidder.page, 'up', PRESS_MS);
+  await untilServer(truth, bidder.page, (a) => at(a, bidderId)?.price === Math.min(ask, zones.hi) - 1, `B-AC-E1: ${bidder.name} walks up to one step under ${seller.name}'s ask ${ask}`, within(SCALE, WALK.crossSeconds * 1_000));
+  await bidder.page.waitForTimeout(TAP_SETTLE_MS * 2);
+  const stood = truth.board().auction!;
+  await bidder.page.mouse.up();
+  const top = at(stood, bidderId)!.price;
+  check(top === ask - 1 || top === zones.hi - 1, `B-AC-E1: still holding ▲, ${bidder.name} stands one step under ${seller.name}'s ask ${ask}, got ${top}`);
+  check(stood.deals.length === 0, `B-AC-E1: ${bidder.name} walking up never trades with ${seller.name} standing still, got ${JSON.stringify(stood.deals)}`);
+  check(truth.stockOf(bidder, good) === before.bidder && truth.stockOf(seller, good) === before.seller, `B-AC-E1: no ${name} moved: ${bidder.name} ${before.bidder} → ${truth.stockOf(bidder, good)}, ${seller.name} ${before.seller} → ${truth.stockOf(seller, good)}`);
+  await Promise.all(screens.map((s) => untilStoreLine(s, `HIGHEST BID ${top} ↑`, `B-AC-E1: ${s.name}'s store line follows ${bidder.name}'s bid`)));
+  console.log(`✓ B-AC-E1 (negative): holding ▲, ${bidder.name} stopped at ${top}, a step under ${seller.name}'s ask ${ask}; nothing traded, and every screen's line followed her to ${top}`);
+
+  // The seller walks down onto her bid: they trade at it, and the server's stock agrees.
+  await walkUntil(truth, seller, 'down', (a) => a.deals.some((d) => d.seller === sellerId && d.buyer === bidderId), `B-AC-E1: ${seller.name} walks down to ${bidder.name}'s bid and they meet`);
+  const met = truth.board().auction!.deals.find((d) => d.seller === sellerId && d.buyer === bidderId);
+  check(met?.price === top, `B-AC-E1: they trade at her bid ${top}, got ${met?.price}`);
+  await untilServer(truth, seller.page, () => truth.stockOf(bidder, good) > before.bidder, `B-AC-E1: a unit of ${name} moves from ${seller.name} to ${bidder.name}`, within(SCALE, WALK.tradeStartMs) + PRESS_MS);
+  const bought = truth.stockOf(bidder, good) - before.bidder;
+  const room = server.registry.get(code) as unknown as { game: { state: GameState } };
+  check(before.seller - truth.stockOf(seller, good) === bought, `B-AC-E1: ${seller.name} sold what ${bidder.name} bought, ${bought}: ${before.seller} → ${truth.stockOf(seller, good)}`);
+  check(room.game.state.store.stock[good] === 0, `B-AC-E1: the store sold none, it holds ${room.game.state.store.stock[good]}`);
+  console.log(`✓ B-AC-E1: ${seller.name} walked down to ${bidder.name}'s bid and they traded at ${top}: ${bidder.name} ${before.bidder} → ${truth.stockOf(bidder, good)}, ${seller.name} ${before.seller} → ${truth.stockOf(seller, good)} on the server, the store still out`);
+}
+
+/** Test fixture, during Food's walk: the store's shelf of `good` is empty, and `seller` holds `sellerHas` of it. */
+function soldOutWithASeller(server: MuleServer, code: string, cast: { good: Good; seller: string; sellerHas: number }): void {
+  const room = server.registry.get(code) as unknown as { game: { state: GameState; ctx: { changed(): void } } } | undefined;
+  check(room, `room ${code} is on the server`);
+  const { state } = room.game;
+  state.store.stock[cast.good] = 0;
+  state.players.find((p) => p.id === cast.seller)!.stock[cast.good] = cast.sellerHas;
+  room.game.ctx.changed();
 }
 
 /** Test fixture: the walk now running gets a long clock, so RULE-4's steps are timed by the board, never by the bell. */
