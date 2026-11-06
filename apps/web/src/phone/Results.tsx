@@ -1,5 +1,6 @@
 import { AirGauge, Button, cx, GoodTag, Panel, PlayerMark, type Good } from '@mule/ui';
 import { useState } from 'react';
+import { PhoneMonthScoreHead, PhoneMonthScoreNote } from '../components/Colony';
 import { CollapseBanner, ColonyPanel, LeagueTable, YourWorth } from '../components/MonthEnd';
 import { fmt, secondsUntil, standings } from '../game/derive';
 import { inCollapse, league, leaderWords, ordinal } from '../game/month-end';
@@ -38,11 +39,14 @@ function MonthEnd() {
         {inCollapse(view) && <CollapseBanner density={density} donations={!!view.colony} />}
         <LeagueTable view={view} density={density} selfId={self.id} />
         {tv ? (
-          <p className="mt-auto text-[11px] leading-snug text-ink-3" data-testid="colony-on-tv">
-            How the colony is doing is on the TV. Worth is cash + goods + land + MULEs + offices{view.colony ? ' + donations' : ''}; your own lines are beside, for you only.
-          </p>
+          <PhoneMonthScoreNote view={view}>
+            <p className="mt-auto text-[11px] leading-snug text-ink-3" data-testid="colony-on-tv">
+              How the colony is doing is on the TV. Worth is cash + goods + land + MULEs + offices{view.colony ? ' + donations' : ''}; your own lines are beside, for you only.
+            </p>
+          </PhoneMonthScoreNote>
         ) : (
           <div className="relative" data-testid="phone-only-colony">
+            <PhoneMonthScoreHead view={view} />
             <ColonyPanel view={view} density="compact" />
           </div>
         )}

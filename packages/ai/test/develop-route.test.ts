@@ -204,8 +204,8 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
       const { state, plots } = development(2);
       for (const t of plots) t.owner = ME;
       // Its plots' ground already known, so the draft scouts none: an own route with analyses re-picks its MULEs after
-      // them (AM-27, its own rows below), and under the 5 Nov start stock (2 Food, 2 Energy) these plots' best two uses
-      // are close enough that the draft would analyse them.
+      // them (AM-27, its own rows below), and with the start stock (2 Food, 2 Energy) these plots' best two uses are
+      // close enough that the draft would analyse them.
       me(state).analysed.push(...plots.map((t) => indexOf(state, t)));
       const { seat, hand } = seatAndHand();
       const money = me(state).money;
@@ -253,13 +253,13 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
     });
 
     it("T-AC-7 row 2: a budget spent as the first step ends skips the MULE after it and every later step to the pub, 'time budget'", () => {
-      /** An adopted route (no re-pick): analyse a, a MULE for b, analyse c, the pub; ai0 holds b. */
+      /** An adopted route (no re-pick): analyse a, a MULE for b, a filter on b, analyse c, the pub; ai0 holds b. */
       const turn = (timeBudgetMs: number, onTick?: (hand: DevelopHand, left: number) => void) => {
         const { state, plots } = development(3);
         const [a, b, c] = plots.map((t) => indexOf(state, t)) as [number, number, number];
         plots[1]!.owner = ME;
         const { hand } = seatAndHand();
-        const route: DevelopmentPlay['route'] = [{ act: 'analyse', plot: a }, { act: 'buyMule' }, { act: 'outfit', outfit: 'food' }, { act: 'install', plot: b }, { act: 'analyse', plot: c }, { act: 'pub' }];
+        const route: DevelopmentPlay['route'] = [{ act: 'analyse', plot: a }, { act: 'buyMule' }, { act: 'outfit', outfit: 'food' }, { act: 'install', plot: b }, { act: 'filter', plot: b }, { act: 'analyse', plot: c }, { act: 'pub' }];
         hand.follow(state.month, routeOf(route, { timeBudgetMs }, false));
         play(runner, state, hand, { onTick: (left) => onTick?.(hand, left) });
         return { state, plots, hand, a };
@@ -276,8 +276,8 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
       const log = JSON.stringify(hand.done);
       expect(hand.routeLog(state).steps, log).toEqual([
         { route: 0, outcome: 'done' },
-        ...[1, 2, 3, 4].map((route) => ({ route, outcome: 'skipped', note: 'time budget' })),
-        { route: 5, outcome: 'done' },
+        ...[1, 2, 3, 4, 5].map((route) => ({ route, outcome: 'skipped', note: 'time budget' })),
+        { route: 6, outcome: 'done' },
       ]);
       expect(me(state).analysed).toEqual([a]);
       expect(plots[1]!.outfit).toBeNull();
@@ -294,8 +294,8 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
       const play0 = drafted(seat, state);
       expect(play0.part.route.some((s) => s.act === 'analyse')).toBe(false);
       // After the draft: the plot goes to a rival at the land auction, or gets a MULE; the seat holds three other idle
-      // plots, so the replacement is a pick between them (with two, under the 5 Nov start values, the picks for the
-      // first MULE and the second fall alike).
+      // plots, so the replacement is a pick between them (with two, the picks for the first MULE and the second fall
+      // alike).
       if (how === 'sold') drafted0.owner = RIVAL;
       else drafted0.outfit = 'food';
       for (const t of spares) t.owner = ME;
@@ -547,6 +547,38 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
       expect(plots.map((t) => t.outfit)).toEqual(['smithore', null]);
     });
 
+    it("T-AC-7 (FM-led-no-gain): while it still leads a MULE, a route's filter is skipped, 'leading', and nothing is refused; one after the install plays", () => {
+      // A Food MULE led in, and an adopted route that fits a filter on the other plot before the led MULE's group, and one
+      // on its own plot after its install.
+      const { state, plots } = wonMuleLot(2, 'food');
+      const [home, other] = plots.map((t) => indexOf(state, t)) as [number, number];
+      me(state).analysed.push(home, other);
+      me(state).stock.alloy = DEVELOPMENT.filterAlloy;
+      const { hand } = seatAndHand();
+      const route: DevelopmentPlay['route'] = [{ act: 'filter', plot: other }, { act: 'buyMule' }, { act: 'outfit', outfit: 'food' }, { act: 'install', plot: home }, { act: 'filter', plot: home }, { act: 'pub' }];
+      hand.follow(state.month, routeOf(route, {}, false));
+      play(runner, state, hand);
+      const log = JSON.stringify(hand.done);
+      expect(hand.routeLog(state).steps, log).toEqual([
+        { route: 0, outcome: 'skipped', note: 'leading' },
+        { route: 1, outcome: 'done', note: 'led' },
+        { route: 2, outcome: 'done', note: 'led' },
+        { route: 3, outcome: 'done' },
+        { route: 4, outcome: 'done' },
+        { route: 5, outcome: 'done' },
+      ]);
+      expect(hand.done.filter((e) => e.outcome === 'refused'), log).toEqual([]);
+      // The promise: the lot MULE stands on its plot as it came; no filter went on while it was led, and the one after the
+      // install did.
+      expect(state.tiles[home]!.outfit, log).toBe('food');
+      expect(state.tiles[other]!.outfit, log).toBeNull();
+      expect(state.tiles[other]!.filter).toBe(false);
+      expect(state.tiles[home]!.filter, log).toBe(true);
+      expect(me(state).stock.alloy).toBe(0);
+      expect(me(state).carriedMule).toBeNull();
+      expect(me(state).doneDeveloping).toBe(true);
+    });
+
     /** The errors the seat logs while `run` plays with the hand's draft calls throwing. */
     function throwingDraft<T>(run: () => T): { result: T; logged: string[] } {
       const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -573,8 +605,7 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
       expect(me(state).doneDeveloping).toBe(true);
     });
 
-    // trace-allow: HC-9, the spec's own failure-mode id for a draft or validator error (spec §4, "Retry, poison, page?"); trace-check reads no HC- ids
-    it("HC-9: a stale MULE whose replacement draft throws is logged with the seat and dropped, and the route goes on to the pub", () => {
+    it("T-AC-7 row 3 (HC-9): a stale MULE whose replacement draft throws is logged with the seat and dropped, its steps 'skipped', and the route goes on to the pub", () => {
       const { state, plots } = development(2);
       const [stale, spare] = plots as [Tile, Tile];
       stale.owner = ME;
@@ -586,7 +617,8 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
       hand.follow(state.month, play0);
       const { logged } = throwingDraft(() => play(runner, state, hand));
       const log = JSON.stringify(hand.done);
-      expect(hand.routeLog(state).steps.filter((s) => s.note === `stale: plot ${indexOf(state, stale)}`).map((s) => s.outcome), log).toEqual(['replaced', 'replaced', 'replaced']);
+      // The re-pick plays as 'stop': nothing replaces the MULE, so its steps are skipped, not replaced.
+      expect(hand.routeLog(state).steps.filter((s) => s.note === `stale: plot ${indexOf(state, stale)}`).map((s) => s.outcome), log).toEqual(['skipped', 'skipped', 'skipped']);
       expect(logged, log).toEqual([expect.stringMatching(/^AI seat ai0: .*draft broke$/)]);
       expect(hand.done.some((e) => e.action.type === 'buyMule' && e.ok), 'no MULE bought in its place').toBe(false);
       expect(spare.outfit).toBeNull();
@@ -641,6 +673,23 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
     draftPlaybook({ state, seat: ME, mind: seat.mind, seed: SEED, phase: 'development' }, leftOut);
     expect(quiet).not.toHaveBeenCalled();
     expect(leftOut.map((p) => [p.mule, p.outfit])).toEqual([[1, 'food'], [2, 'food']]);
+  });
+
+  it("T-AC-7 (AM-27): a replanned edit's re-draft logs the MULE picks it left out at the seat's gate, as the seat's own draft does", () => {
+    // The bolted led MULE above: every pick for it is refused, in the draft and in a re-draft under an edited strategy.
+    const { state } = wonMuleLot(2, 'food');
+    me(state).muleBolted = true;
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { seat } = seatAndHand();
+    const draft = seat.draft(state, 'development');
+    errors.mockClear();
+    const moneyMaker = draft.strategy.moneyMaker === 'smithore' ? 'crystite' : 'smithore';
+    const { playbook } = seat.validator()(state, ME, draft, [{ path: '/strategy/moneyMaker', to: moneyMaker, reason: 'This pays.' }]);
+    const notes = errors.mock.calls.map((c) => String(c[0]));
+    errors.mockRestore();
+    expect(playbook.strategy.moneyMaker, 'the edit plays, so the route is re-drafted').toBe(moneyMaker);
+    // No silent end: each pick the re-draft left out is logged once, with the seat.
+    expect(notes, JSON.stringify(playbook.development!.route)).toEqual([1, 2].map((k) => expect.stringMatching(new RegExp(`^AI seat ai0: the development draft left out MULE ${k} \\(\\w+ on plot \\d+\\), refused: Your MULE bolted`))));
   });
 
   describe("on the floor, the runner's own rows (AM-19)", () => {
@@ -767,38 +816,6 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
         expect(me(state).doneDeveloping).toBe(true);
       },
     );
-
-    it("T-AC-7 (FM-led-no-gain): while it still leads a MULE, a route's filter is skipped, 'leading', and nothing is refused on the floor; one after the install plays", () => {
-      // A Food MULE led in, and an adopted route that fits a filter on the other plot before the led MULE's group, and one
-      // on its own plot after its install.
-      const { state, plots } = wonMuleLot(2, 'food');
-      const [home, other] = plots.map((t) => indexOf(state, t)) as [number, number];
-      me(state).analysed.push(home, other);
-      me(state).stock.alloy = DEVELOPMENT.filterAlloy;
-      const { hand } = seatAndHand();
-      const route: DevelopmentPlay['route'] = [{ act: 'filter', plot: other }, { act: 'buyMule' }, { act: 'outfit', outfit: 'food' }, { act: 'install', plot: home }, { act: 'filter', plot: home }, { act: 'pub' }];
-      hand.follow(state.month, routeOf(route, {}, false));
-      floorTurn(state, hand);
-      const log = JSON.stringify(hand.done);
-      expect(hand.routeLog(state).steps, log).toEqual([
-        { route: 0, outcome: 'skipped', note: 'leading' },
-        { route: 1, outcome: 'done', note: 'led' },
-        { route: 2, outcome: 'done', note: 'led' },
-        { route: 3, outcome: 'done' },
-        { route: 4, outcome: 'done' },
-        { route: 5, outcome: 'done' },
-      ]);
-      expect(hand.done.filter((e) => e.outcome === 'refused'), log).toEqual([]);
-      // The promise: the lot MULE stands on its plot as it came; no filter went on while it was led, and the one after the
-      // install did.
-      expect(state.tiles[home]!.outfit, log).toBe('food');
-      expect(state.tiles[other]!.outfit, log).toBeNull();
-      expect(state.tiles[other]!.filter).toBe(false);
-      expect(state.tiles[home]!.filter, log).toBe(true);
-      expect(me(state).stock.alloy).toBe(0);
-      expect(me(state).carriedMule).toBeNull();
-      expect(me(state).doneDeveloping).toBe(true);
-    });
 
     it("T-AC-7 (AM-27): a 'MULE added' whose errand no longer fits the clock is not bought, so no MULE is lost", () => {
       const { state, plots } = development(2);
