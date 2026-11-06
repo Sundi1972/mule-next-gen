@@ -594,6 +594,33 @@ because   each item gives its reason on its own lines
 goal      G-1, G-2 unchanged; G-3 is PR-4's
 folded    §1 C1, C2, C5, C6, C7 marked (AM-6); docs/rulebook/store-and-prices.html describes the build (cd7e8005)
 ```
+```
+AM-7 · 2026-11-07 · lead (WS5) · as built in PR-4 (#604)
+target    §0.2 HC-1; §1 C3; §2 RULE-3; §3 expectedOffWorld; §6 T-AC-1
+said      T-AC-1: a game with the walk and one without draw every other random number identically (events, map, AI);
+          C3: seedOf is exported from events.ts or moved to rng.ts; §3: expectedOffWorld is what the AI reads
+did       PR-4 (ws5-pr4-t41) built C3 and RULE-3 with these differences (paths under packages/engine/src):
+ 1  T-AC-1 pins the walk's own keyed streams (stepOffWorld draws only from seedOf(seed, month, 'offWorld', good)) and,
+    in a game nobody plays, walk on against OFF_WORLD sigma 0: the same map, the same events every month, and the
+    same calls on every other rng. It does not include the AI's draws. Why: the AI reacts to prices by design, so with
+    the walk on its decisions, and the draws they make, change; that is G-3's point, not a shifted stream.
+ 2  The AI's what-if forecasts follow expectedOffWorld's path: economy.ts::stepOffWorld on a what-if state
+    (state.whatIf, set by cloneForSim and so by observe) moves each export good one month along the expected path
+    and draws nothing. Why: outlook's rollForward and the LLM's whatIf open months on observe's seed-0 copy, so the
+    walk drew the same seed-0 swings in every game. The what-if price is kept unrounded, so months in a row compose
+    to the k-month path (160 → 109 in three; a rounded-down step each month gives 108); expectedOffWorld reads it
+    rounded down, as §3's example (160 → 134 → 109). The real walk rounds to the nearest credit (unbiased), so with
+    no swing the real step can be 1 credit above the read (135 against 134).
+ 3  seedOf moved from events.ts to rng.ts beside createRng and is exported; events.ts imports it, unchanged.
+ 4  Crystite opens the game at the walk's centre, 90 (was 100): economy.ts::openingOffWorld, called from
+    game.ts::createGame (a named edit in WS3's file). Why: RULE-3, "the first month starts at the centre". The other
+    export goods' centre is their GOOD_CONFIG refPrice, so they open where they did.
+ 5  floor/chance.ts::momentRng keeps its own copy of seedOf's FNV-1a hash (it adds the tick). Left for its owner.
+because   each item gives its reason on its own lines
+goal      G-3 met: UBER-AC-3 on 200 games, seed 1, politics off: Crystite off-world median 90, 40 to 300, above 200 in
+          1.0% of months, 280 or more 0.1%, 50 or less 2.9%
+folded    §1 C3 and §6 T-AC-1 read with AM-7; docs/rulebook/store-and-prices.html#off-world-walk describes the build
+```
 
 ## §9 · Ownership Boundaries `[handoff]`
 No ownership change. WS1 remains sole owner of `economy.ts`, `upkeep.ts` and its `config.ts` blocks (PRICE, MULE,
