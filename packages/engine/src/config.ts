@@ -985,15 +985,16 @@ export const POLITICS = {
 /**
  * The colony as a shared project: its prestige objects, one table row each. Every number is a placeholder
  * until the colony's sim tuning sets it and Heiko OKs it. An object's full cost is its credits plus its goods at
- * their reference prices; upkeep and repair are in credits.
+ * their reference prices; upkeep and repair are in credits. Its footprint is the block of cells it takes on the
+ * colony's grounds, w × h (G-5 AM-18, RULE-32b: Heiko, 6 Nov, "a Stadium is much bigger than the Hospital").
  */
 export const PRESTIGE = {
-  park: { name: 'Park', credits: 420, goods: { alloy: 2 }, buildMonths: 1, prestige: 2, upkeep: 30, repairCost: 150 },
-  hospital: { name: 'Hospital', credits: 680, goods: { electronics: 1 }, buildMonths: 2, prestige: 3, upkeep: 45, repairCost: 225 },
-  observatory: { name: 'Observatory', credits: 700, goods: { crystite: 3 }, buildMonths: 2, prestige: 3, upkeep: 50, repairCost: 250 },
-  stadium: { name: 'Stadium', credits: 1_000, goods: { alloy: 2, electronics: 1 }, buildMonths: 3, prestige: 4, upkeep: 70, repairCost: 350 },
-  spaceport: { name: 'Spaceport upgrade', credits: 1_380, goods: { alloy: 2, electronics: 2 }, buildMonths: 3, prestige: 5, upkeep: 100, repairCost: 500 },
-} satisfies Record<PrestigeId, { name: string; credits: number; goods: Partial<Record<Good, number>>; buildMonths: number; prestige: number; upkeep: number; repairCost: number }>;
+  park: { name: 'Park', credits: 420, goods: { alloy: 2 }, buildMonths: 1, prestige: 2, upkeep: 30, repairCost: 150, footprint: { w: 1, h: 1 } },
+  hospital: { name: 'Hospital', credits: 680, goods: { electronics: 1 }, buildMonths: 2, prestige: 3, upkeep: 45, repairCost: 225, footprint: { w: 1, h: 1 } },
+  observatory: { name: 'Observatory', credits: 700, goods: { crystite: 3 }, buildMonths: 2, prestige: 3, upkeep: 50, repairCost: 250, footprint: { w: 1, h: 1 } },
+  stadium: { name: 'Stadium', credits: 1_000, goods: { alloy: 2, electronics: 1 }, buildMonths: 3, prestige: 4, upkeep: 70, repairCost: 350, footprint: { w: 2, h: 2 } },
+  spaceport: { name: 'Spaceport upgrade', credits: 1_380, goods: { alloy: 2, electronics: 2 }, buildMonths: 3, prestige: 5, upkeep: 100, repairCost: 500, footprint: { w: 2, h: 2 } },
+} satisfies Record<PrestigeId, { name: string; credits: number; goods: Partial<Record<Good, number>>; buildMonths: number; prestige: number; upkeep: number; repairCost: number; footprint: { w: number; h: number } }>;
 
 /**
  * The colony's mood (G-5 RULE-20). Every number is a placeholder, tuned at the end (HC-25). Each month the mood moves
@@ -1045,10 +1046,10 @@ export const COLONY = {
    */
   strike: { cost: 250, output: 0.2 },
   /**
-   * Places on the colony's own grounds, filled in growth order (index 0 next to the town hall, then outward ring by
-   * ring); an upper bound, the view draws only what is used. A 5×5 square less the town hall (G-5 AM-16 A, RULE-32).
+   * The colony's own grounds (G-5 AM-16 A, RULE-32b): a size × size square of cells with the town hall on the centre
+   * cell. Each building takes a block of its PRESTIGE footprint, the first free block nearest the hall.
    */
-  groundsSlots: 24,
+  grounds: { size: 5 },
 };
 
 /**
