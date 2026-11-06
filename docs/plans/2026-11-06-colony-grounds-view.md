@@ -211,6 +211,14 @@ Plan-drift corrections (as built):
 **Spec:** §1 C4. **Scaffold:** `design/mocks/colony-grounds/src/look/Living.tsx`. **Files:** `packages/ui/src/grounds/LiveLayer.tsx`, wired into `ColonyGrounds`.
 - [ ] Write `B-AC-2: lights dim to full by wealth; closed stays dark; none by day` and `B-AC-3: a strike empties the paths`, at the rendered SVG (glow `<image>` opacity; walker count). Run: FAIL. Implement. Respect `useEventReducedMotion` from `@mule/ui`. Run: PASS. Commit.
 
+### Task 2.2b: C4 — smoke over a damaged building, haze by air
+
+**Plan gap found at PR-2 build:** spec C4 lists smoke and haze; Tasks 2.1–2.2 built glow and walkers only.
+**Scaffold:** `Living.tsx` (smoke). **Files:** `packages/ui/src/grounds/LiveLayer.tsx`.
+- [ ] Test first at the rendered SVG: smoke drawn over a `damaged` place only; haze opacity rises as `gauges.environment` worsens, none at a clean colony; reduced motion → still. Then implement. Commit.
+
+Built in 2.1–2.2 (ws10-grounds-pr2 @ b12f388c): RULE-2 glow on every stage by its factor (the hall counts as standing), RULE-3 walkers along the gaps between places, a paid strike counts as over (G-5 RULE-26), null mood → 0 walkers.
+
 ### Task 2.3: C8 — the phone colony desk mounts the grounds (named edit, WS7)
 
 **Files:** `apps/web/src/phone/hub/politics/Colony.tsx::ColonyWithFacts` (one line above `ColonyDeskCard`); test: extend `apps/web/test/politics-desks.test.ts`.
