@@ -1,5 +1,5 @@
 /** The colony as every screen sees it: gauges, fund, prestige objects and plaques. Public, so one view serves all. */
-import { colonyGauges, colonyScore, colonyScoreOf, commissionRefusal, GOOD_CONFIG, lastGauges, moodBand, PRESTIGE, type GameState, type Good, type PrestigeId } from '@mule/engine';
+import { allPrices, colonyGauges, colonyScore, colonyScoreOf, commissionRefusal, lastGauges, moodBand, PRESTIGE, type GameState, type Good, type PrestigeId } from '@mule/engine';
 import type { ColonyCatalogueView, ColonyProjectView, ColonyView } from '@mule/protocol';
 
 const IDS = Object.keys(PRESTIGE) as PrestigeId[];
@@ -13,6 +13,7 @@ export function colonyView(state: GameState): ColonyView | null {
   const now = colonyGauges(state);
   const last = lastGauges(state);
   const ledger = [...state.history].reverse().find((r) => r.ledger)?.ledger ?? null;
+  const prices = allPrices(state);
   return {
     gauges: { wealth: now.wealth, environment: state.air, prestige: now.prestige, happiness: now.happiness, band: now.happiness === null ? null : moodBand(now.happiness) },
     lastGauges: last && { wealth: last.wealth, prestige: last.prestige, happiness: last.happiness },
@@ -45,8 +46,8 @@ export function colonyView(state: GameState): ColonyView | null {
       const why = commissionRefusal(state, id);
       return { id, name: row.name, credits: row.credits, goods: { ...row.goods }, buildMonths: row.buildMonths, needsPlot: row.needsPlot, prestige: row.prestige, upkeep: row.upkeep, commissionable: why === null, why };
     }),
-    // The config's price, not the store's drifting refPrice: it is what donate() values a gift at on the plaque.
-    refPrice: Object.fromEntries(NEEDED.map((g) => [g, GOOD_CONFIG[g].refPrice])),
+    // The store's price today: what donate() values a gift of goods at on the plaque (AM-13).
+    refPrice: Object.fromEntries(NEEDED.map((g) => [g, prices[g]])),
     strike: colony.strike && colony.strike.month === state.month ? { good: colony.strike.good, cost: colony.strike.cost, paid: colony.strike.paid } : null,
     // RULE-25, every month (AM-12): scored from the state as it stands, so every screen shows the same terms.
     score: colonyScore(state),
