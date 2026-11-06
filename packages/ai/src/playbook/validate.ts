@@ -22,11 +22,10 @@ import {
   type PlayerId,
   type RecordedWrite,
 } from '@mule/engine';
-import { outlook } from '../outlook.js';
-import { outfitName } from '../strategist.js';
+import { goodPlan, outfitName, shortfallHold } from '../strategist.js';
 import { capCodePoints } from '../text.js';
-import { unitValues, type Mind } from '../value.js';
-import { draftPlaybook, KINDS, ledOutfit, type DraftPhase, type LandPick } from './draft.js';
+import type { Mind } from '../value.js';
+import { draftPlaybook, KINDS, ledOutfit, type DraftPhase, type LandPick, type LeftOutPick } from './draft.js';
 
 /**
  * The gate every playbook passes before it plays (spec C1, RULE-1, RULE-2): each edit is accepted, clamped to the
@@ -42,7 +41,12 @@ export type ValidatePlan = (
   seat: PlayerId,
   draft: Playbook,
   edits: readonly PlanEdit[],
-) => { playbook: Playbook; rejected: NonNullable<Playbook['rejected']> };
+) => {
+  playbook: Playbook;
+  rejected: NonNullable<Playbook['rejected']>;
+  /** The MULE picks a re-draft under an edited strategy left out, for the caller to log; absent when there are none. */
+  leftOut?: LeftOutPick[];
+};
 
 /** What the gate closes over: the seat's mind (its level, as GameState has none), its draft seed and its land pick. */
 export interface ValidatorProfile {
@@ -189,6 +193,7 @@ function refitFault(route: DevelopmentPlay['route'], ctx: Ctx): string | null {
   // Asked with the money for it, so the refusal named is the re-fit's and not the purse's.
   self.money = Math.max(self.money, outfitCostFor(trial, ctx.seat, outfit));
   const engine = dryRun(() => outfitMule(trial, ctx.seat, outfit));
+  // The engine refuses the re-fit first today; this fallback keeps the bound for an engine that stops refusing it.
   return engine && 'refused' in engine ? engine.refused : `the MULE it leads already carries ${outfitName(led)}`;
 }
 
@@ -320,9 +325,8 @@ const GOOD_ROWS: Record<string, Row> = {
       const most = ctx.freshHold(good);
       if (hold > most) [hold, why] = [most, 'level never corners'];
     }
-    const staple = role === 'seller' && (good === 'food' || good === 'energy');
-    const least = staple ? stapleFloor(ctx, good) : 0;
-    if (hold < least) [hold, why] = [least, staple ? "next month's need" : 'a hold of 0 or more'];
+    const least = role === 'seller' ? sellerFloor(ctx, good) : 0;
+    if (hold < least) [hold, why] = [least, least > 0 ? 'what its hands keep for next month' : 'a hold of 0 or more'];
     return hold === v ? ok(v) : clamped(hold, why);
   },
   walkAway: (v) => whole(v, 1, Infinity, 'a price of 1 or more', ''),
@@ -345,13 +349,16 @@ const GOOD_ROWS: Record<string, Row> = {
 };
 
 /**
- * P12's floor: the Food or Energy the seat needs next month, as its hands measure it (unitValues' floorUnits): Energy
- * its own power plants will make is not needed from stock. A profile with no level reads the gross monthNeeds.
+ * P12's floor: the units of a good the seat's auction hand keeps whatever hold it is handed (tradeOf keeps goodPlan's
+ * floorUnits), at the good's own status screen. An auction part is validated once and played good by good, so a good
+ * still in the queue is raised as goodPlan raises it when it is up (shortfallHold): what keeps it whole next month,
+ * while it holds less and the store sells the good. A profile with no level reads next month's gross need, for
+ * STRATEGIST.buyShortfall's goods only, as the level's path raises them.
  */
-function stapleFloor(ctx: Ctx, good: Good): number {
-  if (!ctx.mind.level) return monthNeeds(ctx.state, ctx.seat)[good];
+function sellerFloor(ctx: Ctx, good: Good): number {
+  if (!ctx.mind.level) return STRATEGIST.buyShortfall.includes(good) ? monthNeeds(ctx.state, ctx.seat)[good] : 0;
   const obs = observe(ctx.state, ctx.seat);
-  return unitValues(obs, outlook(obs, ctx.seat, { lookAhead: ctx.mind.level.lookAhead }), good, ctx.mind).floorUnits;
+  return Math.max(goodPlan(obs, ctx.mind, good).values.floorUnits, shortfallHold(obs, ctx.seat, good).mustHold);
 }
 
 const perRow: Row = (v, ctx, unit) => (!ctx.others.has(unit[3]!) ? refuse('no such player') : oneOf(TACTICS, 'no such tactic')(v, ctx, unit));
@@ -605,8 +612,9 @@ function validate(profile: ValidatorProfile, state: GameState, seat: PlayerId, d
   const replanned = (['kind', 'moneyMaker', 'monopolyTarget'] as const).some((k) => pb.strategy[k] !== planned[k]);
   check(true);
   const phase = DRAFTS[draft.phase];
+  const leftOut: LeftOutPick[] = [];
   if (replanned && phase) {
-    const redrafted = draftPlaybook({ state, seat, mind: profile.mind, seed: profile.seed, phase, land: profile.land ?? null, strategy: pb.strategy, month: draft.month });
+    const redrafted = draftPlaybook({ state, seat, mind: profile.mind, seed: profile.seed, phase, land: profile.land ?? null, strategy: pb.strategy, month: draft.month }, leftOut);
     for (const k of PART_KEYS) if (pb[k] !== undefined && redrafted[k] !== undefined) Object.assign(pb, { [k]: redrafted[k] });
   }
   edits.forEach((e, i) => !STRATEGY_ROOTS.has(parse(e.path)?.[0] ?? '') && apply(e, i));
@@ -630,7 +638,7 @@ function validate(profile: ValidatorProfile, state: GameState, seat: PlayerId, d
   pb.by = outEdits.length > 0 ? 'llm' : 'engine';
   if (outEdits.length > 0) pb.edits = outEdits;
   if (outRejected.length > 0) pb.rejected = outRejected;
-  return { playbook: pb, rejected: outRejected };
+  return { playbook: pb, rejected: outRejected, ...(leftOut.length > 0 && { leftOut }) };
 }
 
 /** The gate for one seat, throwing on its own error: for a caller that handles it (HC-9). */

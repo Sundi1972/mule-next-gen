@@ -209,7 +209,7 @@ describe('RULE-11, the PhaseOutcome builders (pure)', () => {
     expect(outcome.items.find((i) => i.path === '/auction/crystite/role')).toEqual({ path: '/auction/crystite/role', expected: 'buyer', actual: 'out' });
   });
 
-  it('T-AC-9 (no Pass, #335): declaredButIdle names the goods a rival declared Sell for and traded none of; a rival that stayed a buyer and traded nothing is not idle', () => {
+  it('T-AC-9 (no Pass, #335): declaredButIdle names the goods a rival declared Sell for and traded none of; a rival that stayed a buyer and traded nothing, or declared Sell and then bought, is not idle', () => {
     const facts: PhaseFact[] = [
       declare('ai1', 'food', 'seller'),
       declare('ai2', 'food', 'buyer'),
@@ -217,12 +217,19 @@ describe('RULE-11, the PhaseOutcome builders (pure)', () => {
       trade('food', 'store', 'ai3', 20),
       declare('ai1', 'energy', 'buyer'),
       declare('ai2', 'energy', 'seller'),
+      declare('ai3', 'energy', 'seller'),
+      trade('energy', 'ai3', 'store', 25),
     ];
     const { rivals } = auctionOutcome(AUCTION, endOfAuction(0), facts, 'ai0');
 
     expect(rivals.ai1, 'a declared seller that sold none of food; a buyer of energy that bought none').toEqual({ declaredButIdle: ['food'] });
     expect(rivals.ai2, 'a buyer of food that bought none; a declared seller that sold none of energy').toEqual({ declaredButIdle: ['energy'] });
-    expect(rivals.ai3, 'a declared seller that sold').toEqual({ traded: [{ good: 'food', side: 'seller', price: 20, qty: 1 }] });
+    expect(rivals.ai3, 'a declared seller that sold food; a declared seller of energy that bought it').toEqual({
+      traded: [
+        { good: 'food', side: 'seller', price: 20, qty: 1 },
+        { good: 'energy', side: 'buyer', price: 25, qty: 1 },
+      ],
+    });
   });
 
   it("T-AC-9 (no Pass, #335): an 'out' play stood as the buyer everyone starts as is met as 'out' while it trades none of the good", () => {
