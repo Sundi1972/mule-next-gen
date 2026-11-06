@@ -377,6 +377,24 @@ describe('C26 PR-B: the riot, at the month end', () => {
     expect(fired[0]!.effects).toContainEqual({ on: 'store', what: 'food', delta: -3 });
     expect(state.colony!.projects[0]!.stage).toBe('building');
   });
+
+  it("FM-C26-15 (riot's shelf count read too late): each store effect carries the shelf's count right after the riot, not after the month-end upkeep", () => {
+    only(['riot']);
+    const state = colonyAt(MID('unrest'));
+    Object.assign(state.store.stock, { food: 30, smithore: 30 });
+    state.store.mules = 0;
+    state.phase = 'auction';
+    state.auction = null;
+    advancePhase(state);
+    expect(state.phase).toBe('upkeep');
+    const riot = state.monthEvents.find((e) => e.key === 'riot');
+    // 30 less floor(30 / 3).
+    expect(riot?.effects).toContainEqual({ on: 'store', what: 'food', delta: -10, to: 20 });
+    expect(riot?.effects).toContainEqual({ on: 'store', what: 'smithore', delta: -10, to: 20 });
+    // The colonists bought Food and the store built MULEs from Smithore after the riot.
+    expect(state.store.stock.food).toBeLessThan(20);
+    expect(state.store.stock.smithore).toBeLessThan(20);
+  });
 });
 
 describe('C26 PR-B: the volunteer clean-up, at the month end', () => {
