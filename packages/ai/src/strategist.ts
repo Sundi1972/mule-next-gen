@@ -92,6 +92,18 @@ export interface LandPlan {
   ranking: PlotScore[];
 }
 
+/**
+ * The plan reordered by a playbook's land-grant ranking: its plots in the playbook's order, then any free plot the
+ * playbook leaves out, in the plan's own order. A ranked plot that is not free is skipped. No ranking: the plan as is.
+ */
+export function rankedBy(plan: LandPlan, ranked: readonly { plot: number }[] | undefined): LandPlan {
+  if (!ranked) return plan;
+  const byPlot = new Map(plan.ranking.map((s) => [s.index, s]));
+  const first = ranked.flatMap((r) => byPlot.get(r.plot) ?? []);
+  const taken = new Set(first.map((s) => s.index));
+  return { focus: plan.focus, ranking: [...new Set(first)].concat(plan.ranking.filter((s) => !taken.has(s.index))) };
+}
+
 const FOCUS_OUTFITS: Record<Focus, Outfit[] | null> = {
   best: null,
   grown: ['food', 'water', 'energy'],

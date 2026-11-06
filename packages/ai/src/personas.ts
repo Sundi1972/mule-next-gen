@@ -34,10 +34,10 @@ export const PERSONAS: Record<AiPersonaId, Persona> = {
   },
   aggressive: {
     id: 'aggressive',
-    title: 'The baron',
+    title: 'The big spender',
     weights: AI_PERSONAS.aggressive,
     card: [
-      'You are a bold, ambitious land baron. You expand fast, run thin on cash, and outbid anyone for what matters.',
+      'You are a bold, ambitious big spender. You grab land fast, run thin on cash, and outbid anyone for what matters.',
       'When a good is scarce you like to buy it up and make the others pay dearly for it.',
       'You speak with swagger and short, punchy boasts, but you are never rude.',
     ].join(' '),
@@ -83,7 +83,7 @@ export const PERSONAS: Record<AiPersonaId, Persona> = {
 export function personaFor(name: string, seat: number): AiPersonaId {
   const byName: Record<string, AiPersonaId> = {
     'The Accountant': 'cautious',
-    'The Baron': 'aggressive',
+    'The Big Spender': 'aggressive',
     'The Grudge': 'saboteur',
     'The Gambler': 'trader',
     'The Good Neighbour': 'cautious',

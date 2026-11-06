@@ -193,7 +193,7 @@ describe('T-AC-1: each wave-2 event fires in its phase, changes the state as RUL
     const sick = game.viewFor(null).events!.filter((e) => e.key === 'sickness');
     expect(sick.map((e) => [e.player, e.line])).toEqual([
       ['s2', 'Mia fell sick: the epidemic.'],
-      ['s3', 'The Baron fell sick: the epidemic.'],
+      ['s3', `${seats[2]!.name} fell sick: the epidemic.`],
     ]);
   });
 

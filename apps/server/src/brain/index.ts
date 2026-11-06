@@ -1,9 +1,9 @@
 import { BRAIN, type AiLevelId, type AiPersonaId } from '@mule/engine';
-import { LlmDecider, ReplyRejected, type Complete, type Decider, type DecisionRecord } from '@mule/ai';
-import { createBudget, worstCaseUsd } from './budget.js';
+import { LlmDecider, ReplyRejected, unusableReply, writeReply, type Complete, type Decider, type DecisionRecord, type WriteAsk, type WriteComplete, type WriterReply } from '@mule/ai';
+import { createBudget, MOVE_CALL, worstCaseUsd, type PromptText } from './budget.js';
 import { chatter } from './chat.js';
-import { billUnknown, CallFailed, createAnthropicSdk, createHaikuComplete, type HaikuReply, type HaikuSdk } from './client.js';
-import { createLedger, NO_USAGE, type Outcome, type Usage } from './ledger.js';
+import { billUnknown, CallFailed, createAnthropicSdk, createHaikuComplete, createToolLoop, Stopped, WRITE_CALLS, WRITE_FALLBACK_MODEL, type HaikuReply, type HaikuSdk, type RoundGate, type ToolBox, type WriteKind } from './client.js';
+import { createLedger, NO_USAGE, type LedgerKind, type ModelId, type Outcome, type Usage } from './ledger.js';
 
 /** The seat a decider is built for: its id, persona and level. */
 export interface BrainSeat {
@@ -16,16 +16,44 @@ export interface BrainSeat {
 export interface BrainService {
   /** A decider for a Smart seat, or null: the seat plays Classic. */
   deciderFor(seat: BrainSeat): Decider | null;
+  /** A playbook writer for a Smart seat, or null: the seat plays the engine's playbooks. */
+  writerFor(seat: BrainSeat): PlaybookWriter | null;
   /** The seat's onDecision callback: passes its lines to `say`: at most BRAIN.linesPerMonth a month and one a phase. Never throws. See RULE-2. */
   chatter(seat: BrainSeat, say: (line: string) => void): (record: DecisionRecord) => void;
   /** Closes the game; a Smart brain that built a decider also writes its total line. A second call does nothing. */
   finish(): void;
 }
 
+export type { WriteAsk };
+
+/** A write call as the game asks it: the writer's ask, whether its reply has come too late to take effect, and its cancel. */
+export interface PlaybookAsk extends WriteAsk {
+  /** True once the phase the reply serves has started: a reply that comes then gets a second ledger line, 'late'. */
+  late?: () => boolean;
+  /**
+   * Aborted when the reply can no longer take effect. The abort frees the seat for its deciders at once, in the same
+   * tick, and cancels the request; the call is ledgered as a timeout, its bill unknown, and the write resolves no_reply.
+   */
+  signal?: AbortSignal;
+  /** The game's tools for this call, taken when it is asked (C9); absent, the call is one round trip with none. */
+  tools?: ToolBox;
+}
+
+/**
+ * A seat's strategy and playbook writer. `write` never throws: every failure is the reply's cause. A busy seat, a game
+ * that is over, a wait that is not above 0, an ask already aborted, or a budget no model fits returns cause 'no_reply'
+ * without a model call.
+ */
+export interface PlaybookWriter {
+  write(kind: WriteKind, ask: PlaybookAsk): Promise<WriterReply>;
+}
+
 /** The brain as its owner holds it: the game's contract, plus the spend a run caps on. */
 export interface MeteredBrain extends BrainService {
-  /** The game's counted spend, as its seat budgets check it; after finish, the figure at finish. Classic: 0. */
+  /** The game's counted spend, as its budget checks it; after finish, the figure at finish. Classic: 0. */
   countedUsd(): number;
+  /** Whether a write was refused for its credentials (401/403): then no write calls again. */
+  authRefused(): boolean;
 }
 
 export interface BrainOptions {
@@ -36,6 +64,10 @@ export interface BrainOptions {
   /** Builds the SDK from the key; called once, and never without a key. */
   sdkFactory?: (apiKey: string) => HaikuSdk;
   now?: () => number;
+  /** The most the game's Smart seats together may spend, above 0 and at most BRAIN.gameBudgetUsd (the default). */
+  gameBudgetUsd?: number;
+  /** Every write call goes to this model instead of its kind's: brain:trial --write-model, for a paired run (PR-5 5.4). */
+  writeModel?: ModelId;
 }
 
 /** The port refused before calling. `lockedNow` is true for the refusal that locked the seat, the only one with a line. */
@@ -53,6 +85,18 @@ interface CallSlot {
   reply: HaikuReply | null;
 }
 
+/** A settled write call's ledger outcome: a reply none of which could be read is 'unreadable', as for a move. */
+function writeOutcomeOf(reply: Pick<HaikuReply, 'stopReason'> | null, failure: unknown, written: WriterReply): Exclude<Outcome, 'budget'> {
+  const outcome = outcomeOf(reply, failure);
+  return outcome === 'llm' && written.reply.cause !== undefined ? 'unreadable' : outcome;
+}
+
+/** A failed call's answer for its ledger line: the status and the API's error type, never the message. */
+function answerOf(failure: unknown): { status?: number; error_type?: string } {
+  if (!(failure instanceof CallFailed)) return {};
+  return { ...(failure.status === null ? {} : { status: failure.status }), ...(failure.errorType === null ? {} : { error_type: failure.errorType }) };
+}
+
 /** A settled call's ledger outcome: from the reply's stop reason or the failure's type, never from message text. See RULE-4. */
 export function outcomeOf(reply: Pick<HaikuReply, 'stopReason'> | null, failure: unknown): Exclude<Outcome, 'budget'> {
   if (reply?.stopReason === 'refusal') return 'refused';
@@ -64,9 +108,11 @@ export function outcomeOf(reply: Pick<HaikuReply, 'stopReason'> | null, failure:
 /** Without the key there is no client and no decider, so nothing can make a paid call. See RULE-3. */
 const CLASSIC: MeteredBrain = {
   deciderFor: () => null,
+  writerFor: () => null,
   chatter: (seat, say) => chatter(seat.id, say),
   finish: () => {},
   countedUsd: () => 0,
+  authRefused: () => false,
 };
 
 /** The key's environment variable: the only place in production source its name is written. */
@@ -77,38 +123,64 @@ export function apiKeyFrom(env: Readonly<Record<string, string | undefined>>): s
   return env[API_KEY_ENV]?.trim() || null;
 }
 
-/** The brain for one game. A missing or blank key plays Classic. */
+/**
+ * The brain for one game. A missing or blank key plays Classic.
+ * Throws a RangeError for a game budget that is not above 0 and at most BRAIN.gameBudgetUsd, with or without the key.
+ */
 export function createBrain(options: BrainOptions): MeteredBrain {
+  const gameBudgetUsd = options.gameBudgetUsd ?? BRAIN.gameBudgetUsd;
+  if (!(gameBudgetUsd > 0 && gameBudgetUsd <= BRAIN.gameBudgetUsd)) {
+    throw new RangeError(`gameBudgetUsd must be above 0 and at most ${BRAIN.gameBudgetUsd}`);
+  }
   const apiKey = apiKeyFrom(options.env ?? process.env);
   if (!apiKey) return CLASSIC;
 
   const { gameId } = options;
-  const haiku = createHaikuComplete((options.sdkFactory ?? createAnthropicSdk)(apiKey), options.now);
+  const sdk = (options.sdkFactory ?? createAnthropicSdk)(apiKey);
+  const haiku = createHaikuComplete(sdk, options.now);
+  const toolLoop = createToolLoop(sdk, options.now);
   const ledger = createLedger(options.logPath === undefined ? {} : { path: options.logPath });
-  const budget = createBudget(ledger);
-  // Seat ids with a model call open, across every decider for that seat.
-  const busy = new Set<string>();
-  let finished = false;
-  // A game that never asked for a decider (a lobby abandoned before Start) leaves no game line.
-  let asked = false;
+  // The game's Smart seats: each one registered here takes an equal share of the game budget.
   const seats = new Set<string>();
+  const budget = createBudget(ledger, { budgetUsd: gameBudgetUsd, seats: () => seats });
+  // Seat ids with a model call open, across every decider and writer for that seat, each with its holder's token.
+  const busy = new Map<string, symbol>();
+  /** Takes the seat's lock; the release frees it only while this holder still has it, and may run more than once. */
+  const take = (seat: string) => {
+    const token = Symbol(seat);
+    busy.set(seat, token);
+    return () => {
+      if (busy.get(seat) === token) busy.delete(seat);
+    };
+  };
+  let finished = false;
+  /** A write came back 401/403: the key is refused, so no write calls again. */
+  let refused = false;
+  // A game that never asked for a decider or a writer (a lobby abandoned before Start) leaves no game line.
+  let asked = false;
   // finish releases the budget's figures, so the counted spend is kept from that moment.
   let countedAtFinish: number | null = null;
   const counted = () => [...seats].reduce((sum, seat) => sum + budget.spent(gameId, seat), 0);
 
-  function deciderFor(seat: BrainSeat): Decider | null {
+  /** Registers a Smart seat, and returns how its calls are ledgered; null once the game is over. */
+  function enter(seat: BrainSeat) {
     if (finished) return null;
     asked = true;
     seats.add(seat.id);
+    return (kind: LedgerKind, model: ModelId, outcome: Outcome, usage: Usage, ms: number, round?: number, failure?: unknown) =>
+      ledger.record({ game: gameId, seat: seat.id, persona: seat.persona, level: seat.level, model, kind, ms, outcome, ...usage, ...(round === undefined ? {} : { round }), ...answerOf(failure) });
+  }
 
-    const write = (kind: DecisionRecord['kind'], outcome: Outcome, usage: Usage, ms: number) =>
-      ledger.record({ game: gameId, seat: seat.id, persona: seat.persona, level: seat.level, model: BRAIN.model, kind, ms, outcome, ...usage });
+  function deciderFor(seat: BrainSeat): Decider | null {
+    const line = enter(seat);
+    if (!line) return null;
+    const write = (kind: DecisionRecord['kind'], outcome: Outcome, usage: Usage, ms: number, failure?: unknown) => line(kind, BRAIN.model, outcome, usage, ms, undefined, failure);
 
     const portFor =
       (slot: CallSlot): Complete =>
       async (prompt, waitMs) => {
         if (finished) throw new Error('game over');
-        slot.worstUsd = worstCaseUsd(prompt);
+        slot.worstUsd = worstCaseUsd(prompt, MOVE_CALL);
         const { allowed, lockedNow } = budget.allow(gameId, seat.id, slot.worstUsd);
         if (!allowed) throw new BudgetSpent(lockedNow);
         slot.called = true;
@@ -121,7 +193,7 @@ export function createBrain(options: BrainOptions): MeteredBrain {
       async decide(shortlist, persona, context) {
         if (finished) throw new Error('game over');
         if (busy.has(seat.id)) throw new Error('busy');
-        busy.add(seat.id);
+        const release = take(seat.id);
         const slot: CallSlot = { called: false, worstUsd: 0, reply: null };
         let failure: unknown;
         try {
@@ -130,12 +202,12 @@ export function createBrain(options: BrainOptions): MeteredBrain {
           failure = err ?? new Error('unknown error');
           throw err;
         } finally {
-          busy.delete(seat.id);
+          release();
           if (failure instanceof BudgetSpent) {
             if (failure.lockedNow) write(context.kind, 'budget', NO_USAGE, 0);
           } else if (slot.called) {
             const ms = slot.reply?.ms ?? (failure instanceof CallFailed ? failure.ms : 0);
-            write(context.kind, outcomeOf(slot.reply, failure), slot.reply?.usage ?? NO_USAGE, ms);
+            write(context.kind, outcomeOf(slot.reply, failure), slot.reply?.usage ?? NO_USAGE, ms, failure);
             if (billUnknown(slot.reply, failure) && !finished) budget.countUnknownBill(gameId, seat.id, slot.worstUsd);
           }
         }
@@ -143,8 +215,101 @@ export function createBrain(options: BrainOptions): MeteredBrain {
     };
   }
 
+  function writerFor(seat: BrainSeat): PlaybookWriter | null {
+    const line = enter(seat);
+    if (!line) return null;
+
+    /** The kind's model if its worst case fits, else the fallback's if that fits, else none. Never locks the seat. */
+    const modelFor = (prompt: PromptText, call: { model: ModelId; maxTokens: number }) => {
+      for (const model of [call.model, WRITE_FALLBACK_MODEL]) {
+        // A model with no price table could never be counted, so it is never allowed.
+        if (!Object.hasOwn(BRAIN.priceTable, model)) continue;
+        const worstUsd = worstCaseUsd(prompt, { model, maxTokens: call.maxTokens });
+        if (budget.fits(gameId, seat.id, worstUsd)) return { model, worstUsd };
+      }
+      return null;
+    };
+    return {
+      async write(kind, ask) {
+        const { signal } = ask;
+        if (finished || refused || busy.has(seat.id) || !(ask.waitMs > 0) || signal?.aborted) return unusableReply('no_reply');
+        // The abort frees the seat in its own tick: the decider the game calls next must find it free.
+        const release = take(seat.id);
+        signal?.addEventListener('abort', release, { once: true });
+        const call = options.writeModel === undefined ? WRITE_CALLS[kind] : { ...WRITE_CALLS[kind], model: options.writeModel };
+        // The last round trip: its reply, or the failure it threw. The rounds before it that asked for tools are
+        // ledgered as they end.
+        const slot: CallSlot & { round: number } = { called: false, worstUsd: 0, reply: null, round: 1 };
+        let model: ModelId = call.model;
+        let failure: unknown;
+        const gate: RoundGate = {
+          before(round, text, current) {
+            if (finished) return null;
+            if (current === null) {
+              const pick = modelFor(text, call);
+              if (!pick) return null;
+              slot.worstUsd = pick.worstUsd;
+              return pick.model;
+            }
+            // Later rounds keep the first round's model: its thinking blocks go back to it.
+            const worstUsd = worstCaseUsd(text, { model: current, maxTokens: call.maxTokens });
+            if (!budget.fits(gameId, seat.id, worstUsd)) return null;
+            slot.worstUsd = worstUsd;
+            return current;
+          },
+          after(round, used, reply, failed, more) {
+            model = used;
+            if (more && reply) {
+              line(kind, used, 'tool', reply.usage, reply.ms, round);
+              return;
+            }
+            slot.called = true;
+            slot.reply = reply;
+            slot.round = round;
+            if (failed) failure = failed;
+          },
+        };
+        // The writer turns any throw from here into its 'no_reply' cause, so the port keeps what was thrown.
+        const port: WriteComplete = async (prompt, waitMs) => {
+          try {
+            if (finished) throw new Error('game over');
+            const { reply } = await toolLoop({ ...call, timeoutMs: Math.min(waitMs, call.timeoutMs) }, prompt, ask.tools, gate, signal);
+            return { text: reply.text, stopReason: reply.stopReason };
+          } catch (err) {
+            failure ??= err ?? new Error('unknown error');
+            throw err;
+          }
+        };
+        let written = unusableReply('no_reply');
+        try {
+          written = await writeReply(port, ask);
+        } catch (err) {
+          failure ??= err ?? new Error('unknown error');
+        } finally {
+          signal?.removeEventListener('abort', release);
+          release();
+          if (failure instanceof CallFailed && failure.auth) refused = true;
+          if (failure instanceof Stopped) {
+            // Stopped before a round: out of share, a budget line (round 1's at the kind's model); out of time after a
+            // round, a late line. Neither was sent, so neither is billed.
+            if (failure.why === 'budget') line(kind, failure.model ?? call.model, 'budget', NO_USAGE, 0, failure.round);
+            else if (failure.model) line(kind, failure.model, 'late', NO_USAGE, 0, failure.round);
+          } else if (slot.called) {
+            const ms = slot.reply?.ms ?? (failure instanceof CallFailed ? failure.ms : 0);
+            const outcome = writeOutcomeOf(slot.reply, failure, written);
+            line(kind, model, outcome === 'llm' && model !== call.model ? 'fallback' : outcome, slot.reply?.usage ?? NO_USAGE, ms, slot.round, failure);
+            if (billUnknown(slot.reply, failure) && !finished) budget.countUnknownBill(gameId, seat.id, slot.worstUsd);
+            if (slot.reply && ask.late?.()) line(kind, model, 'late', NO_USAGE, 0, slot.round);
+          }
+        }
+        return written;
+      },
+    };
+  }
+
   return {
     deciderFor,
+    writerFor,
     chatter: (seat, say) => chatter(seat.id, say),
     finish() {
       countedAtFinish ??= counted();
@@ -153,5 +318,6 @@ export function createBrain(options: BrainOptions): MeteredBrain {
       budget.release(gameId);
     },
     countedUsd: () => countedAtFinish ?? counted(),
+    authRefused: () => refused,
   };
 }

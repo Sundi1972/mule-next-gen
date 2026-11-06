@@ -142,4 +142,14 @@ describe.runIf(full)('deciderFor', GAMES, () => {
     expect(mine.length).toBeGreaterThan(10);
     for (const r of mine) expect(r.by).toBe('fallback');
   });
+
+  it("INV-between: onSeats hands over the game's seats once, before the first phase, and a hook that only looks plays the same game", async () => {
+    const plain = recording();
+    const played = playGame(7, SPECS(7), plain.options);
+    const seen: { ids: string[]; phase: GameState['phase']; month: number }[] = [];
+    const hooked = recording({ onSeats: (seats, state) => seen.push({ ids: seats.map((s) => s.id), phase: state.phase, month: state.month }) });
+    const awaited = await playGameAsync(7, SPECS(7), hooked.options);
+    expect(seen).toEqual([{ ids: ['ai0', 'ai1', 'ai2', 'ai3'], phase: 'planning', month: 1 }]);
+    expect(fingerprint(awaited, hooked.records)).toBe(fingerprint(played, plain.records));
+  }, 120_000);
 });
