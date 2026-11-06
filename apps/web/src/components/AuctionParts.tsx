@@ -71,20 +71,18 @@ export function TvSoldOutBox({ auction }: { auction: AuctionView }) {
   return (
     <div className="flex flex-col gap-1 rounded-panel border-2 border-rise bg-panel p-4" data-testid="tv-sold-out">
       <span className="font-display text-2xl font-semibold text-rise">Store sold out</span>
-      {(old !== null || bid !== null) && (
-        <span className="text-lg leading-snug text-ink-2">
-          {old !== null && `Bids can go past its old ${old}.`}
-          {old !== null && bid !== null && ' '}
-          {bid !== null && (
-            <>
-              Highest bid{' '}
-              <strong data-num className="font-mono text-ink">
-                {bid}
-              </strong>
-            </>
-          )}
-        </span>
-      )}
+      <span className="text-lg leading-snug text-ink-2">
+        {old !== null ? `Bids can go past its old ${old}.` : 'No store price yet: bids set it.'}
+        {bid !== null && ' '}
+        {bid !== null && (
+          <>
+            Highest bid{' '}
+            <strong data-num className="font-mono text-ink">
+              {bid}
+            </strong>
+          </>
+        )}
+      </span>
     </div>
   );
 }
