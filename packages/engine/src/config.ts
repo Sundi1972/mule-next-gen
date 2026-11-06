@@ -969,6 +969,15 @@ export const POLITICS = {
       siteBid: ({ trader: 400, cautious: 300, aggressive: 500, saboteur: null } satisfies Record<AiPersonaId, number | null>) as Record<AiPersonaId, number | null>,
       /** In these mood bands an AI voter will not vote for the sitting Governor if anyone else runs. */
       leanIn: ['unhappy', 'unrest'] as MoodBand[],
+      /** What an AI seat gives in planning toward a commissioned object (G-5 C28). Placeholders until the sim tunes them (HC-25). */
+      donate: {
+        /** The share of its cash above its reserve each persona gives. */
+        share: { trader: 0.1, cautious: 0.15, aggressive: 0.05, saboteur: 0 } satisfies Record<AiPersonaId, number>,
+        /** The share's multiplier when the seat leads the table on Worth, or trails it. */
+        standing: { leading: 1, trailing: 1 },
+        /** The least it gives, in credits; a smaller gift is not made. */
+        minCredits: 10,
+      },
     },
   },
 };
@@ -1744,6 +1753,11 @@ export const AI_VALUE = {
    * price itself.
    */
   shortFloorMarkup: 1,
+  /**
+   * Months a unit held past the seat's needs is expected to wait before it is sold: it keeps (1 − spoilage) of itself
+   * per month. A count of upkeeps, 0 or more; 1 is a sale at the next auction.
+   */
+  holdMonths: 1,
 };
 
 /** The AI's hands in the real-time phases. Times are in ms. */

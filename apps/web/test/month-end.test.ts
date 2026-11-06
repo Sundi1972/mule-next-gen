@@ -209,11 +209,13 @@ describe('B-AC-12 (WS4, month end): the league table and the colony, on the phon
     expect(said(fed, 'nobody-hungry')).toBe('✓ Nobody went hungry');
   });
 
-  it('B-AC-12 (WS4, month end): the colony panel says whether the colonists were fed or went short', () => {
-    expect(said(tv, 'colonists')).toBe('Colonists fed · 1,240');
+  it("SWEEP-D4 / B-AC-12 (WS4, month end): the colonists line is the colony's people fed by the store, not the players beside it who went hungry", () => {
+    expect(said(tv, 'hungry-s3')).toBe(`Kai went hungry: ate 1 of ${KAI_NEED} Food`);
+    expect(said(tv, 'colonists')).toBe('The store fed the colony’s 1,240 colonists');
     const short = onTv(view({ colonistsFed: false }), TvMonthEnd);
-    expect(said(short, 'colonists')).toBe('Colonists went short · 1,240');
+    expect(said(short, 'colonists')).toBe('The colony’s 1,240 colonists went short');
     expect(element(short, 'colonists')).toContain('text-alert');
+    expect(said(onPhone(view(), Results, 0), 'colonists')).toBe('The store fed the colony’s 1,240 colonists');
   });
 
   it('B-AC-12 (WS4, month end): your phone alone shows your own lines, and they add up to your Worth', () => {
@@ -405,6 +407,24 @@ describe('B-AC-12 (WS4, month end): game over in credits', () => {
     expect(order(element(phone, 'scores'))).toEqual(['s2', 's1', 's3']);
     expect(text(phone)).not.toMatch(/points/i);
     expect(num(said(phone, 'part-total'))).toBe(HEIKO.worth);
+  });
+});
+
+describe('SWEEP-D5 / SWEEP-A16 (WS4): the folded Now title on the phone puts your place first, short enough for the smallest phone', () => {
+  /** The view with Heiko, the phone, out in front at 9,000. */
+  const leads = (v: MuleView): MuleView => {
+    const players = v.players.map((p) => (p.id === 's1' ? { ...p, worth: 9_000 } : p));
+    return { ...v, players, scores: v.scores && players.map((p) => ({ id: p.id, score: p.worth })) };
+  };
+
+  it('SWEEP-D5: at the month end the title is your place, the month left to the phase above it', () => {
+    expect(said(onPhone(view(), Results), 'now-title')).toBe('You’re 2nd of 3');
+    expect(said(onPhone(leads(view()), Results), 'now-title')).toBe('You lead');
+  });
+
+  it('SWEEP-A16: at game over the title is your place, "Game over" left to the phase above it', () => {
+    expect(said(onPhone(OVER, GameOver), 'now-title')).toBe('You’re 2nd of 3');
+    expect(said(onPhone(leads(OVER), GameOver), 'now-title')).toBe('You win');
   });
 });
 

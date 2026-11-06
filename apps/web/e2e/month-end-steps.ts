@@ -138,7 +138,7 @@ export async function theLeagueTableAtTheMonthEnd(ctx: GameStepContext, last?: M
   }
   check((await tvEnd.getByTestId('nobody-hungry').count()) === (hungry.length === 0 ? 1 : 0), `B-AC-12: the TV says nobody went hungry exactly when nobody did (${hungry.length} hungry)`);
   const colonists = await text(tvEnd.getByTestId('colonists'));
-  check(colonists.startsWith(truth.colonistsFed ? 'Colonists fed' : 'Colonists went short'), `B-AC-12: the TV's colonists line reads "${colonists}", the server's colonistsFed is ${truth.colonistsFed}`);
+  check(truth.colonistsFed ? colonists.startsWith('The store fed the colony’s') : colonists.endsWith('colonists went short'),`B-AC-12: the TV's colonists line reads "${colonists}", the server's colonistsFed is ${truth.colonistsFed}`);
   const air = truth.air.level;
   check(readNumber(await tvEnd.getByTestId('air-level').textContent(), "the TV's air") === air, `B-AC-12: the TV's air is the server's ${air}`);
   const trend = await text(tvEnd.getByTestId('air-trend'));

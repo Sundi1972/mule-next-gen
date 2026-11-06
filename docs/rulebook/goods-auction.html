@@ -46,7 +46,7 @@
 </table></div>
 
 <h3 id="skipped-goods">Goods that are skipped</h3>
-<p>A good with nothing to trade gets no status screen of its own. It is skipped, and the next screen shows one line such as <em>Skipped: Crystite, Medicine: nobody trading</em> (the TV names the goods only). There are three reasons:</p>
+<p>A good with nothing to trade gets no status screen of its own. It is skipped, and the next screen shows one line such as <em>Skipped: Crystite, Medicine: nobody trading</em>, on the phone and the TV alike. There are three reasons:</p>
 <div class="table-wrap"><table>
 <thead><tr><th>Reason on screen</th><th>When</th></tr></thead>
 <tbody>
@@ -102,6 +102,7 @@
 <tr><td>Ship buys</td><td>Amber</td><td>What the export ship pays for its next unit, only in a month it is in port and wants this good.</td><td>Sellers who reach it sell to the ship.</td></tr>
 </tbody>
 </table></div>
+<p>Each line's label sits at the right edge, at its price. When two lines are close (the store selling at 100 and the ship paying 99), their labels move apart, keeping their order, so both stay readable. Between the red and green lines a chip says how far apart the two sides are, counting the store and the ship as the TV's readout does: with the store selling at 100 and the ship paying 99 it says "1 APART", whatever the players ask and bid. When the two prices are too close for the chip to sit between them, it sits just above. The price tags of the red and green lines on the price axis hide the axis number they would cover.</p>
 <p>Above the board your phone says the store's prices from your side ("You can buy from the store at 33 · sell to it at 27 · the ship buys at 104") and what the colours mean: "Walk your bid up to a red line and you buy", or for a seller "Walk your ask down to a green line and you sell".</p>
 
 <h3 id="board-size">How tall the board is</h3>
@@ -286,7 +287,8 @@
 <li>The status table, large, for every player.</li>
 <li>The store box: <strong>STORE SELLS</strong>, <strong>STORE BUYS</strong> and <strong>IN STOCK</strong> (red when 0); "out" when the store has none to sell.</li>
 <li>The ship panel when the export ship is in port and wants this good or one still to come.</li>
-<li>Every player with their side: <em>BUY ✓</em>, <em>SELL ✓</em>, or <em>PICKING</em> (<em>AWAY · PICKING</em> for a dropped phone), with "No clock: the walk starts when everyone has picked." and, while someone is still picking, which player is the host and can move on for them.</li>
+<li>Every player with their side: <em>BUY ✓</em>, <em>SELL ✓</em>, or <em>PICKING</em> (<em>AWAY · PICKING</em> for a dropped phone) and, while someone is still picking, which player is the host and can move on for them.</li>
+<li>Beside the picked count, "No clock: the walk starts when everyone has picked." in full and, under it, the goods skipped on the way here with their reasons, as on the phone ("Skipped: Energy, Smithore: nobody has any"). Both wrap to a second line rather than being cut.</li>
 </ul>
 <h3 id="tv-walk">During the walk</h3>
 <ul>
@@ -294,9 +296,9 @@
 <li>A panel with the good, the stage (<em>Walk</em>, <em>Trading · clock slowed</em>, <em>Closed</em>) and the units traded so far.</li>
 <li>The readout: <strong>LOWEST ASK</strong> and who holds it, <strong>HIGHEST BID</strong> and who holds it (the store and the ship count), and the <strong>GAP</strong> ("4 apart", "they meet", or "MET: TRADING").</li>
 <li>The store's <strong>Sells</strong>, <strong>Buys</strong> and <strong>Stock</strong>, and "The ship buys Smithore at 50" when it is in port.</li>
-<li>Each running deal on a row ("Mia → Kai · 4 units @ 41") with its speed shown as chevrons, "faster and faster" until "full speed".</li>
+<li>Each running deal on a row ("Mia → Kai · 4 units @ 41") with its speed shown as chevrons, "faster and faster" until "full speed". The units and the price always show; long names are shortened first.</li>
 <li>When nothing trades, a reminder: "Sellers push the red line down, buyers push the green line up. When the two lines meet, the goods change hands."</li>
-<li>The room code and the goods still to come ("NEXT WATER, ENERGY, …").</li>
+<li>The room code and, at the close, the good that really comes up next, the same one the phones name ("NEXT SMITHORE", or "LAST GOOD" after the last good that trades). During the status screen and the walk it names none, since a good still to come may yet be skipped.</li>
 </ul>
 <p>During the close stage the board dims for 2.5 seconds while the phones show their receipts. The TV never shows what a player holds, except in this status table.</p>
 <p class="code-ref">In the code: <code>apps/web/src/table/TableApp.tsx::TvAuction</code> · <code>apps/web/src/components/AuctionParts.tsx::TvReadout</code>, <code>StoreBox</code>, <code>ShipWants</code>, <code>StatusTable</code> · <code>packages/ui</code> <code>WalkBoard</code></p>
