@@ -66,8 +66,10 @@ export function bestPrices(walkers: BoardWalker[]): { ask: BoardWalker | null; b
 }
 
 /**
- * The best price on each side with the houses counted, as the TV's readout names them: the lowest ask among sellers
- * with units and a store with stock to sell, the highest bid among buyers, the ship and the store; null when none.
+ * The closest pair that could trade, as the TV's readout measures its gap: a player's lowest ask against the best bid
+ * (a buyer's, the ship's or the store's), or the best ask (a seller's, or the store's while it has stock) against a
+ * player's highest bid, whichever stands closer. The ship and the store crossing each other is no pair: every deal has
+ * a player on one side. Null on both when no player's price faces one.
  */
 export function bestOffers({
   walkers,
@@ -82,10 +84,18 @@ export function bestOffers({
   storeBuys: number | null;
   shipPays: number | null;
 }): { ask: number | null; bid: number | null } {
-  const { ask, bid } = bestPrices(walkers);
-  const asks = [ask?.price ?? null, storeStock === undefined || storeStock > 0 ? storeSells : null].filter((p): p is number => p !== null);
-  const bids = [bid?.price ?? null, shipPays, storeBuys].filter((p): p is number => p !== null);
-  return { ask: asks.length > 0 ? Math.min(...asks) : null, bid: bids.length > 0 ? Math.max(...bids) : null };
+  const player = bestPrices(walkers);
+  const playerAsk = player.ask?.price ?? null;
+  const playerBid = player.bid?.price ?? null;
+  const asks = [playerAsk, storeStock === undefined || storeStock > 0 ? storeSells : null].filter((p): p is number => p !== null);
+  const bids = [playerBid, shipPays, storeBuys].filter((p): p is number => p !== null);
+  const bestAsk = asks.length > 0 ? Math.min(...asks) : null;
+  const bestBid = bids.length > 0 ? Math.max(...bids) : null;
+  const pairs = [
+    ...(playerAsk !== null && bestBid !== null ? [{ ask: playerAsk, bid: bestBid }] : []),
+    ...(bestAsk !== null && playerBid !== null ? [{ ask: bestAsk, bid: playerBid }] : []),
+  ];
+  return pairs.sort((a, b) => a.ask - a.bid - (b.ask - b.bid))[0] ?? { ask: null, bid: null };
 }
 
 /**
@@ -194,7 +204,7 @@ export function WalkBoard({
   const moving = deals.length === 0;
   const askLine = moving && marks?.ask ? best.ask : null;
   const bidLine = moving && marks?.bid ? best.bid : null;
-  // The gap counts the store and the ship, as the TV's readout does, so the table sees one number.
+  // The gap counts only a pair with a player on one side, as the TV's readout does, so the table sees one number.
   const offers = bestOffers({ walkers, storeSells, storeStock, storeBuys, shipPays });
   const gap = moving && marks?.ask && marks.bid && offers.ask !== null && offers.bid !== null ? offers.ask - offers.bid : 0;
   // Midway between the two prices; when they are too close for the chip to sit between them, just above the ask.

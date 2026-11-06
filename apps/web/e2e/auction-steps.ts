@@ -683,8 +683,10 @@ async function readTheGoodsWalk(cast: { seller: Phone; buyer: Phone; stayer: Pho
     await smallPhoneReads(buyer, 'walk');
     console.log(`✓ C20, the walk's hint above the footer: ${await railFits(buyer.page, { key: 'hint' })}`);
   });
-  // The chip counts the store and the ship, as the readout does (SWEEP-C1).
-  const tags = { ask: String(ask.price), bid: String(bid.price), gap: tvAsk.price > tvBid.price ? `${tvAsk.price - tvBid.price} APART` : null };
+  // The chip counts only a pair with a player on one side, as the readout does (SWEEP-C1, FM-house-meet): the player's
+  // ask against the best bid, or the best ask against the player's bid, whichever is closer. Two houses never trade.
+  const apart = Math.min(ask.price - tvBid.price, tvAsk.price - bid.price);
+  const tags = { ask: String(ask.price), bid: String(bid.price), gap: apart > 0 ? `${apart} APART` : null };
   await Promise.all(screens.map((s) => untilShows(s, readTags, tags, "B-AC-1: the lines sit at the server's lowest ask and highest bid, with the gap between them")));
   console.log(
     `✓ B-AC-1 (WS6): ${a.good} walk, the red line tagged ${ask.price} and the green ${bid.price}, "${tags.gap}", on three phones and the TV; the TV's readout names ${tvAsk.who} and ${tvBid.who}`,
