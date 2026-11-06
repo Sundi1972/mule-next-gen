@@ -194,7 +194,7 @@ export const SPECIES_PERK = {
   molloxAnalysis: 0.5,
 } satisfies Record<string, number>;
 
-/** Default species by seat, when a player hasn't picked one. */
+/** Default species, when a player hasn't picked one: of n seats, seat i gets entry (i + seed read unsigned) mod n, so an n-seat game plays the first n and each turns with the game's seed, not the chair (FM-species-by-chair). */
 export const DEFAULT_SPECIES: readonly Species[] = ['zipwing', 'bramblet', 'gearling', 'mollox', 'glimmer', 'quibbit'];
 
 export const ADJACENCY = {
@@ -407,9 +407,10 @@ export const DEV_STEER = {
   /** An AI colonist drops its errand for the pub once the clock shows no more than its walk there and this many seconds. */
   botPubMarginSeconds: 2,
   /**
-   * An AI colonist buys a MULE only while its errand, this share longer than estimated, still leaves the pub margin
-   * (botPubMarginSeconds, as the hurry for the pub counts it): a walk that runs a little long then costs the margin
-   * nothing, and the MULE is installed, not walked into the pub (FM-hurry-margin).
+   * An AI colonist buys a MULE, or starts a glint race, only while its errand, this share longer than estimated,
+   * still leaves the pub margin (botPubMarginSeconds, as the hurry for the pub counts it): a walk that runs a little
+   * long then costs the margin nothing, and the MULE is installed, not walked into the pub (FM-hurry-margin,
+   * FM-pub-lead).
    */
   botPlanSlackShare: 0.1,
   /** Ticks an AI colonist may push its stick without moving before it gives that step of its errand up. */

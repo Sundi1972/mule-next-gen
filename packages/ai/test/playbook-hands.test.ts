@@ -113,7 +113,12 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const SPECS: SeatSpec[] = (['trader', 'aggressive', 'cautious', 'saboteur'] as const).map((persona) => ({ persona, level: 'trader' }));
+/**
+ * Each seat picks the species the built cases were measured with: the default turns with the seed (FM-species-by-chair),
+ * and a seat's species moves its plans from month 1's planning on (a Mollox's mines, a Gearling's prices) and its route.
+ */
+const BUILT_SPECIES = ['zipwing', 'bramblet', 'gearling', 'mollox'] as const;
+const SPECS: SeatSpec[] = (['trader', 'aggressive', 'cautious', 'saboteur'] as const).map((persona, i) => ({ persona, level: 'trader', species: BUILT_SPECIES[i] }));
 const SEED = 3;
 const MONTHS = 2;
 

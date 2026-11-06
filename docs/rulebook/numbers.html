@@ -14,12 +14,12 @@
 <main class="rb-main">
 <article>
 <h1>Every number</h1>
-<p class="rb-lede">Every balancing value in the game, as the game's settings file holds it today: 1136 settings in 52 groups, each with what it does.</p>
+<p class="rb-lede">Every balancing value in the game, as the game's settings file holds it today: 1240 settings in 52 groups, each with what it does.</p>
 <p>This page is generated from the game's settings file, <code>packages/engine/src/config.ts</code>, on trunk. Each group below is one block of that file, named the way the code names it; the setting is its full path, and the note is the comment written beside it in the file. A setting without a note of its own points to the nearest note that explains it. The rules these numbers drive are explained in <a href="index.html">the other chapters</a>.</p>
 <p>Do not edit this page by hand. To regenerate it after <code>config.ts</code> changes, run from the repo root:</p>
 <p><code>pnpm --filter @mule/engine exec tsx ../../docs/rulebook/build-numbers.ts</code> then <code>node docs/rulebook/build-index.mjs</code></p>
 <div class="box next"><h4>Not on this page</h4><p><code>MAP_SIZE</code> is kept inside <code>config.ts</code> without being exported, so this page cannot read it.</p></div>
-<p class="code-ref">Built from <code>config.ts</code> with fingerprint <code>f9a485ad9041</code> (the first 12 characters of its SHA-256).</p>
+<p class="code-ref">Built from <code>config.ts</code> with fingerprint <code>4d93e8085efa</code> (the first 12 characters of its SHA-256).</p>
 
 <h2 id="good-config"><code>GOOD_CONFIG</code> <span class="pill built">In the game</span></h2>
 <div class="table-wrap"><table>
@@ -281,7 +281,7 @@
 </table></div>
 
 <h2 id="default-species"><code>DEFAULT_SPECIES</code> <span class="pill built">In the game</span></h2>
-<p>Default species by seat, when a player hasn&#39;t picked one.</p>
+<p>Default species, when a player hasn&#39;t picked one: of n seats, seat i gets entry (i + seed read unsigned) mod n, so an n-seat game plays the first n and each turns with the game&#39;s seed, not the chair (FM-species-by-chair).</p>
 <div class="table-wrap"><table>
 <thead><tr><th>Setting</th><th class="n">Value</th><th>What it does</th></tr></thead>
 <tbody>
@@ -461,7 +461,7 @@
 <tr><td><code>DEV_STEER.botCounterPauseSeconds</code></td><td class="n">0.5</td><td>Seconds an AI colonist stands at a counter before it presses.</td></tr>
 <tr><td><code>DEV_STEER.botsSpareTime</code></td><td class="n">true</td><td>An AI colonist joins a glint race or the scramble only if its errand still fits the time left after the detour.</td></tr>
 <tr><td><code>DEV_STEER.botPubMarginSeconds</code></td><td class="n">2</td><td>An AI colonist drops its errand for the pub once the clock shows no more than its walk there and this many seconds.</td></tr>
-<tr><td><code>DEV_STEER.botPlanSlackShare</code></td><td class="n">0.1</td><td>An AI colonist buys a MULE only while its errand, this share longer than estimated, still leaves the pub margin (botPubMarginSeconds, as the hurry for the pub counts it): a walk that runs a little long then costs the margin nothing, and the MULE is installed, not walked into the pub (FM-hurry-margin).</td></tr>
+<tr><td><code>DEV_STEER.botPlanSlackShare</code></td><td class="n">0.1</td><td>An AI colonist buys a MULE, or starts a glint race, only while its errand, this share longer than estimated, still leaves the pub margin (botPubMarginSeconds, as the hurry for the pub counts it): a walk that runs a little long then costs the margin nothing, and the MULE is installed, not walked into the pub (FM-hurry-margin, FM-pub-lead).</td></tr>
 <tr><td><code>DEV_STEER.botStuckTicks</code></td><td class="n">20</td><td>Ticks an AI colonist may push its stick without moving before it gives that step of its errand up.</td></tr>
 <tr><td><code>DEV_STEER.botShoreTiles</code></td><td class="n">0.3</td><td>An AI colonist installing on a lake plot from the shore stands this far from the shore tile&#39;s middle towards the lake, in tiles.</td></tr>
 <tr><td><code>DEV_STEER.pubLeadRefund</code></td><td class="n">0</td><td>Share of what a MULE cost that the pub pays back when its owner walks in leading it.</td></tr>
@@ -1025,6 +1025,16 @@
 <tr><td><code>POLITICS.ai.colony.siteBid.aggressive</code></td><td class="n">500</td><td>See the note on <code>POLITICS.ai.colony.siteBid</code>.</td></tr>
 <tr><td><code>POLITICS.ai.colony.siteBid.saboteur</code></td><td class="n">null</td><td>See the note on <code>POLITICS.ai.colony.siteBid</code>.</td></tr>
 <tr><td><code>POLITICS.ai.colony.leanIn</code></td><td class="n">[&quot;unhappy&quot;, &quot;unrest&quot;]</td><td>In these mood bands an AI voter will not vote for the sitting Governor if anyone else runs.</td></tr>
+<tr><td><code>POLITICS.ai.colony.donate</code></td><td class="n"></td><td>What an AI seat gives in planning toward a commissioned object (G-5 C28). Placeholders until the sim tunes them (HC-25).</td></tr>
+<tr><td><code>POLITICS.ai.colony.donate.share</code></td><td class="n"></td><td>The share of its cash above its reserve each persona gives.</td></tr>
+<tr><td><code>POLITICS.ai.colony.donate.share.trader</code></td><td class="n">0.1</td><td>See the note on <code>POLITICS.ai.colony.donate.share</code>.</td></tr>
+<tr><td><code>POLITICS.ai.colony.donate.share.cautious</code></td><td class="n">0.15</td><td>See the note on <code>POLITICS.ai.colony.donate.share</code>.</td></tr>
+<tr><td><code>POLITICS.ai.colony.donate.share.aggressive</code></td><td class="n">0.05</td><td>See the note on <code>POLITICS.ai.colony.donate.share</code>.</td></tr>
+<tr><td><code>POLITICS.ai.colony.donate.share.saboteur</code></td><td class="n">0</td><td>See the note on <code>POLITICS.ai.colony.donate.share</code>.</td></tr>
+<tr><td><code>POLITICS.ai.colony.donate.standing</code></td><td class="n"></td><td>The share&#39;s multiplier when the seat leads the table on Worth, or trails it.</td></tr>
+<tr><td><code>POLITICS.ai.colony.donate.standing.leading</code></td><td class="n">1</td><td>See the note on <code>POLITICS.ai.colony.donate.standing</code>.</td></tr>
+<tr><td><code>POLITICS.ai.colony.donate.standing.trailing</code></td><td class="n">1</td><td>See the note on <code>POLITICS.ai.colony.donate.standing</code>.</td></tr>
+<tr><td><code>POLITICS.ai.colony.donate.minCredits</code></td><td class="n">10</td><td>The least it gives, in credits; a smaller gift is not made.</td></tr>
 </tbody>
 </table></div>
 
@@ -1191,6 +1201,8 @@
 <tr><td><code>WALK.minSpeed</code></td><td class="n">1.6</td><td>Explained in the note on <code>WALK.crossSeconds</code>.</td></tr>
 <tr><td><code>WALK.boardMargin</code></td><td class="n">0.3</td><td>The board reaches this share beyond the outermost price line; sellers start at its top, buyers at its bottom.</td></tr>
 <tr><td><code>WALK.boardPostedMargin</code></td><td class="n">0.1</td><td>And this share of the posted price more, so a board whose price lines sit close together still has room to walk.</td></tr>
+<tr><td><code>WALK.needStop</code></td><td class="n">true</td><td>RULE-4 (AM-1): a seller stops at the amount they must hold (auctionNeed, fixed as the good comes up), one price step above the line, and sells below it only after holding ▼ for shortHoldMs. false turns the stop off, for sweeps.</td></tr>
+<tr><td><code>WALK.shortHoldMs</code></td><td class="n">1000</td><td>Board ms a stopped seller holds ▼ to sell on into shortage (Heiko&#39;s choice A, 5 Nov). A tap or a shorter hold moves nothing.</td></tr>
 <tr><td><code>WALK.tickMs</code></td><td class="n">100</td><td>How often the server steps the auction.</td></tr>
 </tbody>
 </table></div>
@@ -1412,15 +1424,31 @@
 </table></div>
 
 <h2 id="social-events"><code>SOCIAL_EVENTS</code> <span class="pill built">In the game</span></h2>
-<p>G-5 C26: the colony&#39;s social events, rows of the event table (EVENTS.colony and EVENTS.player hold them, so they roll as every row does) and their effects&#39; sizes. Source: the M.U.L.E. Event Catalogue (rev 22, approved by Heiko 2026-10-28), its planning rows Festival, General strike, Emigration wave, Immigration wave (the mood part) and Blamed for the unrest, its points read as shares. Every number is a G-5 placeholder, tuned at the end (HC-25). The mood bands are HAPPINESS.bands (moodBand). Happiness tilts an event&#39;s odds, not the event rate: a row&#39;s <code>mood</code> adds to its chance in that band, and <code>neverIn</code> is a hard zero there, whatever else raises it. <code>needsColony</code> rows never roll with politics off: no colony, no mood (HC-22). The catalogue&#39;s Security and Welfare budget lowers wait for slice 5 (D-G5-5: nothing is paid yet), so no row reads them.</p>
+<p>G-5 C26: the colony&#39;s social events, rows of the event table (EVENTS.colony and EVENTS.player hold them, so they roll as every row does) and their effects&#39; sizes. Source: the M.U.L.E. Event Catalogue (rev 22, approved by Heiko 2026-10-28): its planning rows Festival, General strike, Emigration wave, Immigration wave (the mood and air parts) and Blamed for the unrest; its later rows Store strike, Walkout, Loyal crew, Riot and Volunteer clean-up; and MULE theft&#39;s mood part. Its points are read as shares. Every number is a G-5 placeholder, tuned at the end (HC-25). The mood bands are HAPPINESS.bands (moodBand). Happiness tilts an event&#39;s odds, not the event rate: a row&#39;s <code>mood</code> adds to its chance in that band, and <code>neverIn</code> is a hard zero there, whatever else raises it. <code>needsColony</code> rows never roll with politics off: no colony, no mood (HC-22). The catalogue&#39;s Security and Welfare budget lowers wait for slice 5 (D-G5-5: nothing is paid yet), so no row reads them.</p>
 <div class="table-wrap"><table>
 <thead><tr><th>Setting</th><th class="n">Value</th><th>What it does</th></tr></thead>
 <tbody>
-<tr><td><code>SOCIAL_EVENTS.immigrationWave</code></td><td class="n"></td><td>The mood part of the existing immigration wave (EVENTS.colony.immigrationWave).</td></tr>
+<tr><td><code>SOCIAL_EVENTS.muleTheft</code></td><td class="n"></td><td>The mood part of the existing MULE theft (EVENTS.player.muleTheft), in each phase it rolls in.</td></tr>
+<tr><td><code>SOCIAL_EVENTS.muleTheft.mood</code></td><td class="n"></td><td>By the colony&#39;s mood band (G-5 C26); 0 with no colony.</td></tr>
+<tr><td><code>SOCIAL_EVENTS.muleTheft.mood.restless</code></td><td class="n">0.005</td><td>See the note on <code>SOCIAL_EVENTS.muleTheft.mood</code>.</td></tr>
+<tr><td><code>SOCIAL_EVENTS.muleTheft.mood.unhappy</code></td><td class="n">0.02</td><td>See the note on <code>SOCIAL_EVENTS.muleTheft.mood</code>.</td></tr>
+<tr><td><code>SOCIAL_EVENTS.muleTheft.mood.unrest</code></td><td class="n">0.04</td><td>See the note on <code>SOCIAL_EVENTS.muleTheft.mood</code>.</td></tr>
+<tr><td><code>SOCIAL_EVENTS.muleTheft.neverIn</code></td><td class="n">[&quot;thriving&quot;]</td><td>A hard zero in these mood bands, whatever raises it (the catalogue&#39;s &quot;never when&quot;).</td></tr>
+</tbody>
+</table></div>
+
+<h3 id="social-events-immigration-wave"><code>SOCIAL_EVENTS.immigrationWave</code></h3>
+<p>The mood and air parts of the existing immigration wave (EVENTS.colony.immigrationWave). Its air parts read only with a colony (PM, 6 Nov), so with politics off it rolls as before; the catalogue&#39;s &quot;Toxic&quot; is Toxic or Collapse.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Setting</th><th class="n">Value</th><th>What it does</th></tr></thead>
+<tbody>
 <tr><td><code>SOCIAL_EVENTS.immigrationWave.mood</code></td><td class="n"></td><td>By the colony&#39;s mood band (G-5 C26); 0 with no colony.</td></tr>
 <tr><td><code>SOCIAL_EVENTS.immigrationWave.mood.thriving</code></td><td class="n">0.06</td><td>See the note on <code>SOCIAL_EVENTS.immigrationWave.mood</code>.</td></tr>
 <tr><td><code>SOCIAL_EVENTS.immigrationWave.mood.content</code></td><td class="n">0.01</td><td>See the note on <code>SOCIAL_EVENTS.immigrationWave.mood</code>.</td></tr>
 <tr><td><code>SOCIAL_EVENTS.immigrationWave.neverIn</code></td><td class="n">[&quot;unhappy&quot;, &quot;unrest&quot;]</td><td>A hard zero in these mood bands, whatever raises it (the catalogue&#39;s &quot;never when&quot;).</td></tr>
+<tr><td><code>SOCIAL_EVENTS.immigrationWave.colonyAir</code></td><td class="n"></td><td>By the colony air&#39;s band, like <code>air</code>, and a hard zero in the <code>neverInAir</code> bands; both read only with a colony, so a wave-2 row that gains them rolls with politics off exactly as before (HC-22).</td></tr>
+<tr><td><code>SOCIAL_EVENTS.immigrationWave.colonyAir.clean</code></td><td class="n">0.01</td><td>See the note on <code>SOCIAL_EVENTS.immigrationWave.colonyAir</code>.</td></tr>
+<tr><td><code>SOCIAL_EVENTS.immigrationWave.neverInAir</code></td><td class="n">[&quot;toxic&quot;, &quot;collapse&quot;]</td><td>See the note on <code>SOCIAL_EVENTS.immigrationWave</code>.</td></tr>
 </tbody>
 </table></div>
 
@@ -1472,6 +1500,35 @@
 <tr><td><code>SOCIAL_EVENTS.colony.emigrationWave.air.collapse</code></td><td class="n">0.03</td><td>See the note on <code>SOCIAL_EVENTS.colony.emigrationWave.air</code>.</td></tr>
 <tr><td><code>SOCIAL_EVENTS.colony.emigrationWave.shrink</code></td><td class="n">0.1</td><td>G-5 C26: the share of the colonists an emigration wave takes.</td></tr>
 <tr><td><code>SOCIAL_EVENTS.colony.emigrationWave.cap</code></td><td class="n">0.9</td><td>See the note on <code>SOCIAL_EVENTS.colony.emigrationWave</code>.</td></tr>
+<tr><td><code>SOCIAL_EVENTS.colony.storeStrike</code></td><td class="n"></td><td>In development: the store sells no MULEs this turn (buyMule refuses, storeOnStrike).</td></tr>
+<tr><td><code>SOCIAL_EVENTS.colony.storeStrike.phases.development</code></td><td class="n">0</td><td>See the note on <code>SOCIAL_EVENTS.colony.storeStrike</code>.</td></tr>
+<tr><td><code>SOCIAL_EVENTS.colony.storeStrike.needsColony</code></td><td class="n">true</td><td>Never rolls without a colony: politics off (HC-22).</td></tr>
+<tr><td><code>SOCIAL_EVENTS.colony.storeStrike.mood</code></td><td class="n"></td><td>By the colony&#39;s mood band (G-5 C26); 0 with no colony.</td></tr>
+<tr><td><code>SOCIAL_EVENTS.colony.storeStrike.mood.unhappy</code></td><td class="n">0.02</td><td>See the note on <code>SOCIAL_EVENTS.colony.storeStrike.mood</code>.</td></tr>
+<tr><td><code>SOCIAL_EVENTS.colony.storeStrike.mood.unrest</code></td><td class="n">0.04</td><td>See the note on <code>SOCIAL_EVENTS.colony.storeStrike.mood</code>.</td></tr>
+<tr><td><code>SOCIAL_EVENTS.colony.storeStrike.cap</code></td><td class="n">0.9</td><td>See the note on <code>SOCIAL_EVENTS.colony.storeStrike</code>.</td></tr>
+<tr><td><code>SOCIAL_EVENTS.colony.riot</code></td><td class="n"></td><td>At the month end: each store shelf loses <code>storeLoss</code> of its stock, floored, and one standing object, on the row&#39;s dice, is damaged (damageObject: no prestige until repaired).</td></tr>
+<tr><td><code>SOCIAL_EVENTS.colony.riot.phases.upkeep</code></td><td class="n">0</td><td>See the note on <code>SOCIAL_EVENTS.colony.riot</code>.</td></tr>
+<tr><td><code>SOCIAL_EVENTS.colony.riot.needsColony</code></td><td class="n">true</td><td>Never rolls without a colony: politics off (HC-22).</td></tr>
+<tr><td><code>SOCIAL_EVENTS.colony.riot.mood</code></td><td class="n"></td><td>By the colony&#39;s mood band (G-5 C26); 0 with no colony.</td></tr>
+<tr><td><code>SOCIAL_EVENTS.colony.riot.mood.unhappy</code></td><td class="n">0.01</td><td>See the note on <code>SOCIAL_EVENTS.colony.riot.mood</code>.</td></tr>
+<tr><td><code>SOCIAL_EVENTS.colony.riot.mood.unrest</code></td><td class="n">0.05</td><td>See the note on <code>SOCIAL_EVENTS.colony.riot.mood</code>.</td></tr>
+<tr><td><code>SOCIAL_EVENTS.colony.riot.foodPrice</code></td><td class="n"></td><td>Points when the store&#39;s Food is dearer than <code>factor</code> times its usual price (GOOD_CONFIG).</td></tr>
+<tr><td><code>SOCIAL_EVENTS.colony.riot.foodPrice.factor</code></td><td class="n">1.5</td><td>See the note on <code>SOCIAL_EVENTS.colony.riot.foodPrice</code>.</td></tr>
+<tr><td><code>SOCIAL_EVENTS.colony.riot.foodPrice.points</code></td><td class="n">0.02</td><td>See the note on <code>SOCIAL_EVENTS.colony.riot.foodPrice</code>.</td></tr>
+<tr><td><code>SOCIAL_EVENTS.colony.riot.storeLoss</code></td><td class="n">1 / 3 ≈ 0.3333</td><td>G-5 C26: the share of each store shelf a riot takes (floored).</td></tr>
+<tr><td><code>SOCIAL_EVENTS.colony.riot.cap</code></td><td class="n">0.9</td><td>See the note on <code>SOCIAL_EVENTS.colony.riot</code>.</td></tr>
+<tr><td><code>SOCIAL_EVENTS.colony.volunteerCleanup</code></td><td class="n"></td><td>At the month end: the air gauge drops by <code>airDrop</code>, never below 0.</td></tr>
+<tr><td><code>SOCIAL_EVENTS.colony.volunteerCleanup.phases.upkeep</code></td><td class="n">0.01</td><td>See the note on <code>SOCIAL_EVENTS.colony.volunteerCleanup</code>.</td></tr>
+<tr><td><code>SOCIAL_EVENTS.colony.volunteerCleanup.needsColony</code></td><td class="n">true</td><td>Never rolls without a colony: politics off (HC-22).</td></tr>
+<tr><td><code>SOCIAL_EVENTS.colony.volunteerCleanup.mood</code></td><td class="n"></td><td>By the colony&#39;s mood band (G-5 C26); 0 with no colony.</td></tr>
+<tr><td><code>SOCIAL_EVENTS.colony.volunteerCleanup.mood.thriving</code></td><td class="n">0.03</td><td>See the note on <code>SOCIAL_EVENTS.colony.volunteerCleanup.mood</code>.</td></tr>
+<tr><td><code>SOCIAL_EVENTS.colony.volunteerCleanup.mood.content</code></td><td class="n">0.01</td><td>See the note on <code>SOCIAL_EVENTS.colony.volunteerCleanup.mood</code>.</td></tr>
+<tr><td><code>SOCIAL_EVENTS.colony.volunteerCleanup.objects</code></td><td class="n"></td><td>For each standing object of these kinds.</td></tr>
+<tr><td><code>SOCIAL_EVENTS.colony.volunteerCleanup.objects.park</code></td><td class="n">0.02</td><td>See the note on <code>SOCIAL_EVENTS.colony.volunteerCleanup.objects</code>.</td></tr>
+<tr><td><code>SOCIAL_EVENTS.colony.volunteerCleanup.neverIn</code></td><td class="n">[&quot;unrest&quot;]</td><td>A hard zero in these mood bands, whatever raises it (the catalogue&#39;s &quot;never when&quot;).</td></tr>
+<tr><td><code>SOCIAL_EVENTS.colony.volunteerCleanup.airDrop</code></td><td class="n">5</td><td>G-5 C26: the air points a clean-up takes off the gauge.</td></tr>
+<tr><td><code>SOCIAL_EVENTS.colony.volunteerCleanup.cap</code></td><td class="n">0.9</td><td>See the note on <code>SOCIAL_EVENTS.colony.volunteerCleanup</code>.</td></tr>
 </tbody>
 </table></div>
 
@@ -1487,8 +1544,42 @@
 <tr><td><code>SOCIAL_EVENTS.player.blamedForUnrest.mood.unrest</code></td><td class="n">0.05</td><td>See the note on <code>SOCIAL_EVENTS.player.blamedForUnrest.mood</code>.</td></tr>
 <tr><td><code>SOCIAL_EVENTS.player.blamedForUnrest.wealth</code></td><td class="n"></td><td>Signed, for the richest and the poorest player by cash plus land at GAME.plotScore a plot; a tie goes to the first seat.</td></tr>
 <tr><td><code>SOCIAL_EVENTS.player.blamedForUnrest.wealth.richest</code></td><td class="n">0.02</td><td>See the note on <code>SOCIAL_EVENTS.player.blamedForUnrest.wealth</code>.</td></tr>
+<tr><td><code>SOCIAL_EVENTS.player.blamedForUnrest.neverIn</code></td><td class="n">[&quot;thriving&quot;, &quot;content&quot;]</td><td>A hard zero in these mood bands, whatever raises it (the catalogue&#39;s &quot;never when&quot;).</td></tr>
 <tr><td><code>SOCIAL_EVENTS.player.blamedForUnrest.reputation</code></td><td class="n">-1</td><td>G-5 C26: the reputation a blamed player loses (signed).</td></tr>
 <tr><td><code>SOCIAL_EVENTS.player.blamedForUnrest.cap</code></td><td class="n">0.9</td><td>See the note on <code>SOCIAL_EVENTS.player.blamedForUnrest</code>.</td></tr>
+<tr><td><code>SOCIAL_EVENTS.player.walkout</code></td><td class="n"></td><td>In production: every working plot of the good the player works most plots of (a tie on the row&#39;s dice) makes <code>output</code> of its output, floored. A polluter is likelier, but only when Restless or worse.</td></tr>
+<tr><td><code>SOCIAL_EVENTS.player.walkout.phases.production</code></td><td class="n">0</td><td>See the note on <code>SOCIAL_EVENTS.player.walkout</code>.</td></tr>
+<tr><td><code>SOCIAL_EVENTS.player.walkout.needsColony</code></td><td class="n">true</td><td>Never rolls without a colony: politics off (HC-22).</td></tr>
+<tr><td><code>SOCIAL_EVENTS.player.walkout.mood</code></td><td class="n"></td><td>By the colony&#39;s mood band (G-5 C26); 0 with no colony.</td></tr>
+<tr><td><code>SOCIAL_EVENTS.player.walkout.mood.restless</code></td><td class="n">0.005</td><td>See the note on <code>SOCIAL_EVENTS.player.walkout.mood</code>.</td></tr>
+<tr><td><code>SOCIAL_EVENTS.player.walkout.mood.unhappy</code></td><td class="n">0.02</td><td>See the note on <code>SOCIAL_EVENTS.player.walkout.mood</code>.</td></tr>
+<tr><td><code>SOCIAL_EVENTS.player.walkout.mood.unrest</code></td><td class="n">0.04</td><td>See the note on <code>SOCIAL_EVENTS.player.walkout.mood</code>.</td></tr>
+<tr><td><code>SOCIAL_EVENTS.player.walkout.wealth</code></td><td class="n"></td><td>Signed, for the richest and the poorest player by cash plus land at GAME.plotScore a plot; a tie goes to the first seat.</td></tr>
+<tr><td><code>SOCIAL_EVENTS.player.walkout.wealth.richest</code></td><td class="n">0.01</td><td>See the note on <code>SOCIAL_EVENTS.player.walkout.wealth</code>.</td></tr>
+<tr><td><code>SOCIAL_EVENTS.player.walkout.pollution</code></td><td class="n"></td><td>The catalogue gives the polluter part no most, so its most is the row&#39;s cap.</td></tr>
+<tr><td><code>SOCIAL_EVENTS.player.walkout.pollution.perPoint</code></td><td class="n">0.005</td><td>See the note on <code>SOCIAL_EVENTS.player.walkout.pollution</code>.</td></tr>
+<tr><td><code>SOCIAL_EVENTS.player.walkout.pollution.max</code></td><td class="n">0.9</td><td>See the note on <code>SOCIAL_EVENTS.player.walkout.pollution</code>.</td></tr>
+<tr><td><code>SOCIAL_EVENTS.player.walkout.pollutionIn</code></td><td class="n">[&quot;restless&quot;, &quot;unhappy&quot;, &quot;unrest&quot;]</td><td>Counts <code>pollution</code> only in these mood bands, so never with no colony; absent, in any.</td></tr>
+<tr><td><code>SOCIAL_EVENTS.player.walkout.neverIn</code></td><td class="n">[&quot;thriving&quot;]</td><td>A hard zero in these mood bands, whatever raises it (the catalogue&#39;s &quot;never when&quot;).</td></tr>
+<tr><td><code>SOCIAL_EVENTS.player.walkout.output</code></td><td class="n">0.2</td><td>G-5 C26: the share of its output a walked-out plot makes.</td></tr>
+<tr><td><code>SOCIAL_EVENTS.player.walkout.cap</code></td><td class="n">0.9</td><td>Explained in the note on <code>SOCIAL_EVENTS.player.walkout.pollution</code>.</td></tr>
+<tr><td><code>SOCIAL_EVENTS.player.loyalCrew</code></td><td class="n"></td><td>In production: one of the player&#39;s raw plots, on the row&#39;s dice, makes <code>gain</code> more; none without one.</td></tr>
+<tr><td><code>SOCIAL_EVENTS.player.loyalCrew.phases.production</code></td><td class="n">0</td><td>See the note on <code>SOCIAL_EVENTS.player.loyalCrew</code>.</td></tr>
+<tr><td><code>SOCIAL_EVENTS.player.loyalCrew.needsColony</code></td><td class="n">true</td><td>Never rolls without a colony: politics off (HC-22).</td></tr>
+</tbody>
+</table></div>
+
+<h3 id="social-events-player-part-2"><code>SOCIAL_EVENTS.player</code>, continued</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Setting</th><th class="n">Value</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td><code>SOCIAL_EVENTS.player.loyalCrew.mood</code></td><td class="n"></td><td>By the colony&#39;s mood band (G-5 C26); 0 with no colony.</td></tr>
+<tr><td><code>SOCIAL_EVENTS.player.loyalCrew.mood.thriving</code></td><td class="n">0.03</td><td>See the note on <code>SOCIAL_EVENTS.player.loyalCrew.mood</code>.</td></tr>
+<tr><td><code>SOCIAL_EVENTS.player.loyalCrew.mood.content</code></td><td class="n">0.01</td><td>See the note on <code>SOCIAL_EVENTS.player.loyalCrew.mood</code>.</td></tr>
+<tr><td><code>SOCIAL_EVENTS.player.loyalCrew.wealth</code></td><td class="n"></td><td>Signed, for the richest and the poorest player by cash plus land at GAME.plotScore a plot; a tie goes to the first seat.</td></tr>
+<tr><td><code>SOCIAL_EVENTS.player.loyalCrew.wealth.poorest</code></td><td class="n">0.01</td><td>See the note on <code>SOCIAL_EVENTS.player.loyalCrew.wealth</code>.</td></tr>
+<tr><td><code>SOCIAL_EVENTS.player.loyalCrew.gain</code></td><td class="n">1</td><td>G-5 C26: what a loyal crew&#39;s plot makes more.</td></tr>
+<tr><td><code>SOCIAL_EVENTS.player.loyalCrew.cap</code></td><td class="n">0.9</td><td>See the note on <code>SOCIAL_EVENTS.player.loyalCrew</code>.</td></tr>
 </tbody>
 </table></div>
 
@@ -1581,6 +1672,8 @@
 <tr><td><code>EVENTS.colony.immigrationWave.mood.thriving</code></td><td class="n">0.06</td><td>See the note on <code>EVENTS.colony.immigrationWave</code>.</td></tr>
 <tr><td><code>EVENTS.colony.immigrationWave.mood.content</code></td><td class="n">0.01</td><td>See the note on <code>EVENTS.colony.immigrationWave</code>.</td></tr>
 <tr><td><code>EVENTS.colony.immigrationWave.neverIn</code></td><td class="n">[&quot;unhappy&quot;, &quot;unrest&quot;]</td><td>See the note on <code>EVENTS.colony.immigrationWave</code>.</td></tr>
+<tr><td><code>EVENTS.colony.immigrationWave.colonyAir.clean</code></td><td class="n">0.01</td><td>See the note on <code>EVENTS.colony.immigrationWave</code>.</td></tr>
+<tr><td><code>EVENTS.colony.immigrationWave.neverInAir</code></td><td class="n">[&quot;toxic&quot;, &quot;collapse&quot;]</td><td>See the note on <code>EVENTS.colony.immigrationWave</code>.</td></tr>
 <tr><td><code>EVENTS.colony.epidemic</code></td><td class="n"></td><td>Every player without a Medicine is sick this development and the next; one with a Medicine uses it.</td></tr>
 <tr><td><code>EVENTS.colony.epidemic.phases.development</code></td><td class="n">0.005</td><td>See the note on <code>EVENTS.colony.epidemic</code>.</td></tr>
 <tr><td><code>EVENTS.colony.epidemic.cap</code></td><td class="n">0.9</td><td>See the note on <code>EVENTS.colony.epidemic</code>.</td></tr>
@@ -1633,6 +1726,34 @@
 <tr><td><code>EVENTS.colony.emigrationWave.air.collapse</code></td><td class="n">0.03</td><td>See the note on <code>EVENTS.colony</code>.</td></tr>
 <tr><td><code>EVENTS.colony.emigrationWave.shrink</code></td><td class="n">0.1</td><td>See the note on <code>EVENTS.colony</code>.</td></tr>
 <tr><td><code>EVENTS.colony.emigrationWave.cap</code></td><td class="n">0.9</td><td>See the note on <code>EVENTS.colony</code>.</td></tr>
+<tr><td><code>EVENTS.colony.storeStrike.phases.development</code></td><td class="n">0</td><td>See the note on <code>EVENTS.colony</code>.</td></tr>
+<tr><td><code>EVENTS.colony.storeStrike.needsColony</code></td><td class="n">true</td><td>See the note on <code>EVENTS.colony</code>.</td></tr>
+<tr><td><code>EVENTS.colony.storeStrike.mood.unhappy</code></td><td class="n">0.02</td><td>See the note on <code>EVENTS.colony</code>.</td></tr>
+<tr><td><code>EVENTS.colony.storeStrike.mood.unrest</code></td><td class="n">0.04</td><td>See the note on <code>EVENTS.colony</code>.</td></tr>
+<tr><td><code>EVENTS.colony.storeStrike.cap</code></td><td class="n">0.9</td><td>See the note on <code>EVENTS.colony</code>.</td></tr>
+<tr><td><code>EVENTS.colony.riot.phases.upkeep</code></td><td class="n">0</td><td>See the note on <code>EVENTS.colony</code>.</td></tr>
+<tr><td><code>EVENTS.colony.riot.needsColony</code></td><td class="n">true</td><td>See the note on <code>EVENTS.colony</code>.</td></tr>
+<tr><td><code>EVENTS.colony.riot.mood.unhappy</code></td><td class="n">0.01</td><td>See the note on <code>EVENTS.colony</code>.</td></tr>
+<tr><td><code>EVENTS.colony.riot.mood.unrest</code></td><td class="n">0.05</td><td>See the note on <code>EVENTS.colony</code>.</td></tr>
+<tr><td><code>EVENTS.colony.riot.foodPrice.factor</code></td><td class="n">1.5</td><td>See the note on <code>EVENTS.colony</code>.</td></tr>
+<tr><td><code>EVENTS.colony.riot.foodPrice.points</code></td><td class="n">0.02</td><td>See the note on <code>EVENTS.colony</code>.</td></tr>
+<tr><td><code>EVENTS.colony.riot.storeLoss</code></td><td class="n">≈ 0.3333</td><td>See the note on <code>EVENTS.colony</code>.</td></tr>
+<tr><td><code>EVENTS.colony.riot.cap</code></td><td class="n">0.9</td><td>See the note on <code>EVENTS.colony</code>.</td></tr>
+<tr><td><code>EVENTS.colony.volunteerCleanup.phases.upkeep</code></td><td class="n">0.01</td><td>See the note on <code>EVENTS.colony</code>.</td></tr>
+<tr><td><code>EVENTS.colony.volunteerCleanup.needsColony</code></td><td class="n">true</td><td>See the note on <code>EVENTS.colony</code>.</td></tr>
+<tr><td><code>EVENTS.colony.volunteerCleanup.mood.thriving</code></td><td class="n">0.03</td><td>See the note on <code>EVENTS.colony</code>.</td></tr>
+<tr><td><code>EVENTS.colony.volunteerCleanup.mood.content</code></td><td class="n">0.01</td><td>See the note on <code>EVENTS.colony</code>.</td></tr>
+<tr><td><code>EVENTS.colony.volunteerCleanup.objects.park</code></td><td class="n">0.02</td><td>See the note on <code>EVENTS.colony</code>.</td></tr>
+<tr><td><code>EVENTS.colony.volunteerCleanup.neverIn</code></td><td class="n">[&quot;unrest&quot;]</td><td>See the note on <code>EVENTS.colony</code>.</td></tr>
+<tr><td><code>EVENTS.colony.volunteerCleanup.airDrop</code></td><td class="n">5</td><td>See the note on <code>EVENTS.colony</code>.</td></tr>
+</tbody>
+</table></div>
+
+<h3 id="events-colony-part-4"><code>EVENTS.colony</code>, continued</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Setting</th><th class="n">Value</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td><code>EVENTS.colony.volunteerCleanup.cap</code></td><td class="n">0.9</td><td>See the note on <code>EVENTS.colony</code>.</td></tr>
 </tbody>
 </table></div>
 
@@ -1685,6 +1806,10 @@
 <tr><td><code>EVENTS.player.muleTheft.phases.development</code></td><td class="n">0.01</td><td>See the note on <code>EVENTS.player.muleTheft</code>.</td></tr>
 <tr><td><code>EVENTS.player.muleTheft.phases.upkeep</code></td><td class="n">0.01</td><td>See the note on <code>EVENTS.player.muleTheft</code>.</td></tr>
 <tr><td><code>EVENTS.player.muleTheft.cap</code></td><td class="n">0.9</td><td>See the note on <code>EVENTS.player.muleTheft</code>.</td></tr>
+<tr><td><code>EVENTS.player.muleTheft.mood.restless</code></td><td class="n">0.005</td><td>See the note on <code>EVENTS.player.muleTheft</code>.</td></tr>
+<tr><td><code>EVENTS.player.muleTheft.mood.unhappy</code></td><td class="n">0.02</td><td>See the note on <code>EVENTS.player.muleTheft</code>.</td></tr>
+<tr><td><code>EVENTS.player.muleTheft.mood.unrest</code></td><td class="n">0.04</td><td>See the note on <code>EVENTS.player.muleTheft</code>.</td></tr>
+<tr><td><code>EVENTS.player.muleTheft.neverIn</code></td><td class="n">[&quot;thriving&quot;]</td><td>See the note on <code>EVENTS.player.muleTheft</code>.</td></tr>
 <tr><td><code>EVENTS.player.ratsInSilo</code></td><td class="n"></td><td>Share of the player&#39;s Food the rats eat (floored); fires only when that is at least 1.</td></tr>
 <tr><td><code>EVENTS.player.ratsInSilo.phases.upkeep</code></td><td class="n">0.015</td><td>See the note on <code>EVENTS.player.ratsInSilo</code>.</td></tr>
 <tr><td><code>EVENTS.player.ratsInSilo.share</code></td><td class="n">0.5</td><td>See the note on <code>EVENTS.player.ratsInSilo</code>.</td></tr>
@@ -1702,8 +1827,28 @@
 <tr><td><code>EVENTS.player.blamedForUnrest.mood.unhappy</code></td><td class="n">0.02</td><td>See the note on <code>EVENTS</code>.</td></tr>
 <tr><td><code>EVENTS.player.blamedForUnrest.mood.unrest</code></td><td class="n">0.05</td><td>See the note on <code>EVENTS</code>.</td></tr>
 <tr><td><code>EVENTS.player.blamedForUnrest.wealth.richest</code></td><td class="n">0.02</td><td>See the note on <code>EVENTS</code>.</td></tr>
+<tr><td><code>EVENTS.player.blamedForUnrest.neverIn</code></td><td class="n">[&quot;thriving&quot;, &quot;content&quot;]</td><td>See the note on <code>EVENTS</code>.</td></tr>
 <tr><td><code>EVENTS.player.blamedForUnrest.reputation</code></td><td class="n">-1</td><td>See the note on <code>EVENTS</code>.</td></tr>
 <tr><td><code>EVENTS.player.blamedForUnrest.cap</code></td><td class="n">0.9</td><td>See the note on <code>EVENTS</code>.</td></tr>
+<tr><td><code>EVENTS.player.walkout.phases.production</code></td><td class="n">0</td><td>See the note on <code>EVENTS</code>.</td></tr>
+<tr><td><code>EVENTS.player.walkout.needsColony</code></td><td class="n">true</td><td>See the note on <code>EVENTS</code>.</td></tr>
+<tr><td><code>EVENTS.player.walkout.mood.restless</code></td><td class="n">0.005</td><td>See the note on <code>EVENTS</code>.</td></tr>
+<tr><td><code>EVENTS.player.walkout.mood.unhappy</code></td><td class="n">0.02</td><td>See the note on <code>EVENTS</code>.</td></tr>
+<tr><td><code>EVENTS.player.walkout.mood.unrest</code></td><td class="n">0.04</td><td>See the note on <code>EVENTS</code>.</td></tr>
+<tr><td><code>EVENTS.player.walkout.wealth.richest</code></td><td class="n">0.01</td><td>See the note on <code>EVENTS</code>.</td></tr>
+<tr><td><code>EVENTS.player.walkout.pollution.perPoint</code></td><td class="n">0.005</td><td>See the note on <code>EVENTS</code>.</td></tr>
+<tr><td><code>EVENTS.player.walkout.pollution.max</code></td><td class="n">0.9</td><td>See the note on <code>EVENTS</code>.</td></tr>
+<tr><td><code>EVENTS.player.walkout.pollutionIn</code></td><td class="n">[&quot;restless&quot;, &quot;unhappy&quot;, &quot;unrest&quot;]</td><td>See the note on <code>EVENTS</code>.</td></tr>
+<tr><td><code>EVENTS.player.walkout.neverIn</code></td><td class="n">[&quot;thriving&quot;]</td><td>See the note on <code>EVENTS</code>.</td></tr>
+<tr><td><code>EVENTS.player.walkout.output</code></td><td class="n">0.2</td><td>See the note on <code>EVENTS</code>.</td></tr>
+<tr><td><code>EVENTS.player.walkout.cap</code></td><td class="n">0.9</td><td>See the note on <code>EVENTS</code>.</td></tr>
+<tr><td><code>EVENTS.player.loyalCrew.phases.production</code></td><td class="n">0</td><td>See the note on <code>EVENTS</code>.</td></tr>
+<tr><td><code>EVENTS.player.loyalCrew.needsColony</code></td><td class="n">true</td><td>See the note on <code>EVENTS</code>.</td></tr>
+<tr><td><code>EVENTS.player.loyalCrew.mood.thriving</code></td><td class="n">0.03</td><td>See the note on <code>EVENTS</code>.</td></tr>
+<tr><td><code>EVENTS.player.loyalCrew.mood.content</code></td><td class="n">0.01</td><td>See the note on <code>EVENTS</code>.</td></tr>
+<tr><td><code>EVENTS.player.loyalCrew.wealth.poorest</code></td><td class="n">0.01</td><td>See the note on <code>EVENTS</code>.</td></tr>
+<tr><td><code>EVENTS.player.loyalCrew.gain</code></td><td class="n">1</td><td>See the note on <code>EVENTS</code>.</td></tr>
+<tr><td><code>EVENTS.player.loyalCrew.cap</code></td><td class="n">0.9</td><td>See the note on <code>EVENTS</code>.</td></tr>
 </tbody>
 </table></div>
 
@@ -1811,6 +1956,7 @@
 <tr><td><code>AI_VALUE.unit</code></td><td class="n">false</td><td>The switch: true values every unit with this model, false keeps the strategist&#39;s own values.</td></tr>
 <tr><td><code>AI_VALUE.forecastRisk</code></td><td class="n">0.5</td><td>Chance, per point of the persona&#39;s risk weight, that a unit the seat&#39;s own plots are forecast to make is needed anyway (the forecast falls short). 0 to 1; the product is capped at 1.</td></tr>
 <tr><td><code>AI_VALUE.shortFloorMarkup</code></td><td class="n">1</td><td>While the store sells the good, a needed unit is never valued below the store&#39;s ask today, nor below this multiple of buying it back next month (the belief plus the store&#39;s spread), whichever is more. 1 is the buy-back price itself.</td></tr>
+<tr><td><code>AI_VALUE.holdMonths</code></td><td class="n">1</td><td>Months a unit held past the seat&#39;s needs is expected to wait before it is sold: it keeps (1 − spoilage) of itself per month. A count of upkeeps, 0 or more; 1 is a sale at the next auction.</td></tr>
 </tbody>
 </table></div>
 
