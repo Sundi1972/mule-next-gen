@@ -394,7 +394,8 @@ export class DevelopHand {
     // that fades in the coming step: the press applies after it, to the row below, such as ANALYSE of the land
     // underfoot, an assay no plan priced (FM-glint-fade).
     // Nor where a rival may take the glint first while a row below GRAB is on offer: the press would fall to that row
-    // just the same. It walks onto the glint's tile instead, which wins it in the step with no press (FM-hurry-margin).
+    // just the same. Racing, it walks onto the glint's tile instead, which wins it in the step with no press
+    // (FM-hurry-margin); not racing, it lets the glint go.
     const first = reachOf(floor, state, me, cfg, { secondsLeft }).kind;
     const fading = fadesThisStep(floor);
     const sure = !fading && !(first === 'grab' && rivalMayGrab(state, floor, me, cfg) && pressBelowGrab(state, floor, me, cfg, secondsLeft));
