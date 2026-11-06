@@ -35,18 +35,29 @@ export function EventTvLog() {
   const { seg } = eventStageAt(s, t);
   const done = s.segments.filter((g) => t >= g.settleAt);
   return (
-    <div className="flex flex-col gap-3" data-testid="log">
+    <div className="flex min-h-0 flex-1 flex-col gap-3" data-testid="log">
       <span className="label-caps text-base!">This {phaseNoun(s.phase)}</span>
       {seg && t >= seg.playAt && t < seg.settleAt && <NowCard seg={seg} />}
-      {done.map((g) => (
-        <div key={g.n} className="flex items-center gap-3 rounded-panel border border-holo-line bg-panel p-3 animate-[ev-drop_0.35s_ease-out]" data-log={g.events[0]!.key}>
-          <EventSignBadge ev={g.events[0]!} size={40} />
-          <span className="flex min-w-0 flex-col">
-            <span className="font-display text-xl font-semibold leading-tight">{segTitle(g)}</span>
-            <span className="text-base leading-snug text-ink-2">{eventSegmentSummary(g, cast)}</span>
-          </span>
+      {/* In fired order, held to its foot: where the TV's rail runs short the oldest give way at the top, the newest
+          stays whole (data-fit-gives and data-fit-keep, the TV body's fit; PM ruling 6 Nov). */}
+      {done.length > 0 && (
+        <div className="flex min-h-0 flex-col justify-end gap-3 overflow-hidden" data-fit-gives>
+          {done.map((g, i) => (
+            <div
+              key={g.n}
+              className="flex shrink-0 items-center gap-3 rounded-panel border border-holo-line bg-panel p-3 animate-[ev-drop_0.35s_ease-out]"
+              data-log={g.events[0]!.key}
+              {...(i === done.length - 1 ? { 'data-fit-keep': true } : {})}
+            >
+              <EventSignBadge ev={g.events[0]!} size={40} />
+              <span className="flex min-w-0 flex-col">
+                <span className="font-display text-xl font-semibold leading-tight">{segTitle(g)}</span>
+                <span className="text-base leading-snug text-ink-2">{eventSegmentSummary(g, cast)}</span>
+              </span>
+            </div>
+          ))}
         </div>
-      ))}
+      )}
       {s.segments.length === 0 && <span className="font-display text-xl text-ink-2">A quiet month: nothing happens.</span>}
     </div>
   );
