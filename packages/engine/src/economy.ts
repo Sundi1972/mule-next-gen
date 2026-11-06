@@ -355,9 +355,17 @@ export function stepOffWorld(state: GameState): void {
   }
 }
 
-/** The off-world price expected `monthsAhead` from now; pure, never draws. Nothing moves that price yet, so it is today's. */
+/**
+ * The off-world price expected `monthsAhead` from now (pricing §3): the walk's mean reversion towards its centre
+ * without its swings, in whole credits rounded down. Pure, never draws. A good that isn't exported keeps today's price.
+ */
 export function expectedOffWorld(state: GameState, good: Good, monthsAhead: number): number {
-  return state.store.offWorld[good];
+  const now = state.store.offWorld[good];
+  const walk = offWorldWalk(good);
+  if (!walk) return now;
+  // centre × (now ÷ centre)^f, written so that monthsAhead 0 gives today's price exactly.
+  const f = walk.phi ** monthsAhead;
+  return Math.floor(now ** f * walk.centre ** (1 - f));
 }
 
 /**
