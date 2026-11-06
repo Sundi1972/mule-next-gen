@@ -7,9 +7,12 @@ import {
   speedOf,
   glintMiddle,
   IDLE_INPUT,
+  isAssaying,
+  isStunned,
   MS_PER_SECOND,
   observe,
   pathTo,
+  pressOrder,
   terrainShare,
   tileAt,
   tileIndex,
@@ -87,15 +90,27 @@ const fadesThisStep = (floor: DevFloor): boolean => floor.moments.glint !== null
 
 /**
  * Whether a rival may take the lit glint before this seat's GRAB applies: the press applies after the coming step, which
- * gives the glint to a colonist that steps onto its tile, and after the presses ahead of it in the tick's press order.
- * So a rival on the map within GRAB's reach of the glint, or a step short of it, may take it first (FM-hurry-margin).
+ * gives the glint to a colonist that steps onto its tile, and after the presses ahead of it in the tick's press order
+ * (public: seat order and the tick). So a rival on the map may take it first from within a step of the glint's tile,
+ * or, pressing ahead of this seat, from within GRAB's reach after its step. A stunned or assaying rival neither steps
+ * nor presses (FM-hurry-margin).
  */
 function rivalMayGrab(state: GameState, floor: DevFloor, me: string, cfg: FloorConfig): boolean {
   const g = floor.moments.glint;
   if (!g) return false;
   const m = glintMiddle(g);
-  const step = (r: FloorColonist) => (speedOf(r, state, cfg) * cfg.steer.tickMs) / MS_PER_SECOND;
-  return floor.colonists.some((r) => r.id !== me && r.space === 'map' && Math.hypot(r.x - m.x, r.y - m.y) <= cfg.glint.grabReach + step(r));
+  const next = floor.tick + 1;
+  const order = pressOrder({ ...floor, tick: next }, floor.colonists.map((c) => c.id));
+  const first = new Set(order.slice(0, order.indexOf(me)));
+  return floor.colonists.some((r) => {
+    if (r.id === me || r.space !== 'map') return false;
+    const steps = !isStunned(r, floor.tick) && !isAssaying(r, floor.tick);
+    const step = steps ? (speedOf(r, state, cfg) * cfg.steer.tickMs) / MS_PER_SECOND : 0;
+    const presses = first.has(r.id) && !isStunned(r, next) && !isAssaying(r, next);
+    const gap = Math.hypot(r.x - m.x, r.y - m.y);
+    // The tile's corners lie half a diagonal from its middle.
+    return gap <= step + Math.SQRT1_2 || (presses && gap <= cfg.glint.grabReach + step);
+  });
 }
 
 /** Whether Reach offers this seat a press below GRAB where it stands: what a GRAB pressed now becomes if the glint is gone. */
