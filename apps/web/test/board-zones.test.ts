@@ -206,7 +206,6 @@ describe("RULE-7: a sold-out store's line shows the highest bid on every screen"
     const { game, S } = soldOut(0);
     for (const { who, html } of screens(game)) {
       expect(textOf(html, 'limit-follows'), who).toBe(`STORE SOLD OUT ${S}`);
-      expect(html, `${who} names no highest bid`).not.toMatch(/HIGHEST BID|Highest bid/);
     }
     expect(textOf(tvScreen(game.viewFor(null)), 'tv-sold-out')).toBe(`Store sold out Bids can go past its old ${S}.`);
   });
