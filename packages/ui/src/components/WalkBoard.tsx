@@ -198,12 +198,35 @@ export function WalkBoard({
   ].filter((l): l is typeof l & { price: number } => l.price !== null);
   const LABEL_GAP = 2;
   const labelText = (l: (typeof lines)[number]) => (l.what ? `${l.what} ${l.price}${l.note}` : String(l.price));
+  const labelSize = lines.map((l) => (labelLines(l.who, type.perLine) + labelLines(labelText(l), type.perLine)) * type.lineBox);
   const labelAt = spreadLabels(
-    lines.map((l) => ({ at: px(l.price), size: (labelLines(l.who, type.perLine) + labelLines(labelText(l), type.perLine)) * type.lineBox })),
+    lines.map((l, i) => ({ at: px(l.price), size: labelSize[i]! })),
     LABEL_GAP,
   );
+  /** Each line label's box in px down the board: centred on labelAt, as tall as its two rows. */
+  const labelBox = labelAt.map((at, i) => ({ top: at - labelSize[i]! / 2, bottom: at + labelSize[i]! / 2 }));
   // The lines' labels sit in a gutter on the right, clear of the creatures.
   const gutter = tv ? 104 : 56;
+  /** Where the sellers' zone ends: the store's selling line, or while it is sold out its line, else S. */
+  const sellersEdge = (z: { sellersBottom: number }) => storeSells ?? soldOutAt?.price ?? z.sellersBottom;
+  /**
+   * The sellers' band's words, longest first: a ship paying inside the zone still buys there, the short form fitting a
+   * phone's gutter (WS6). A band too thin for the first form takes the next that fits (RestBand).
+   */
+  const sellersWords = (z: { sellersBottom: number }) =>
+    shipPays !== null && shipPays > sellersEdge(z)
+      ? [...(tv ? ['SELLERS WAIT · ONLY THE SHIP BUYS'] : []), 'SELLERS WAIT · SHIP ONLY', 'SELLERS WAIT']
+      : ['SELLERS WAIT · NO TRADE', 'SELLERS WAIT'];
+  /**
+   * The room for a band's words, in px: from the side they sit on (the band's top for sellers, its bottom for buyers) to
+   * the nearest line label reaching into the band, which is drawn over them, or else the band's far edge; less the inset.
+   */
+  const wordsRoom = (from: number, to: number, side: 'top' | 'bottom') => {
+    const [top, bottom] = [(from / 100) * room, (to / 100) * room];
+    const inside = labelBox.filter((b) => b.top < bottom && b.bottom > top);
+    const clear = side === 'top' ? Math.min(bottom, ...inside.map((b) => b.top)) - top : bottom - Math.max(top, ...inside.map((b) => b.bottom));
+    return clear - BAND_INSET;
+  };
 
   const cols = walkers.length;
   const colOf = new Map(walkers.map((w, i) => [w.id, i]));
@@ -273,9 +296,11 @@ export function WalkBoard({
         <div ref={area} className={cx('absolute inset-x-0', tv ? 'bottom-23 top-12' : 'bottom-14 top-6')}>
           {/* The rest zones. Nobody trades in them; their edge is where trading begins, drawn solid. */}
           {zones && (
-            <RestBand from={0} to={pct(storeSells ?? soldOutAt?.price ?? zones.sellersBottom)} edge="bottom" tone="seller" words="SELLERS WAIT · NO TRADE" tv={tv} gutter={gutter} />
+            <RestBand from={0} to={pct(sellersEdge(zones))} edge="bottom" tone="seller" words={fitWords(sellersWords(zones), wordsRoom(0, pct(sellersEdge(zones)), 'top'), type)} tv={tv} gutter={gutter} />
           )}
-          {zones && <RestBand from={pct(zones.buyersTop)} to={100} edge="top" tone="buyer" words="BUYERS WAIT · NO TRADE" tv={tv} gutter={gutter} />}
+          {zones && (
+            <RestBand from={pct(zones.buyersTop)} to={100} edge="top" tone="buyer" words={fitWords(['BUYERS WAIT · NO TRADE', 'BUYERS WAIT'], wordsRoom(pct(zones.buyersTop), 100, 'bottom'), type)} tv={tv} gutter={gutter} />
+          )}
           {storeStock === 0 && storeSells === null && soldOutAt === null && (
             <span
               data-num
@@ -425,8 +450,20 @@ function useHeight(ref: RefObject<HTMLElement | null>, fallback: number): number
   return height;
 }
 
+/** How far a rest band's words sit in from its edge (top-0.5 / bottom-0.5), in px. */
+const BAND_INSET = 2;
+
+/**
+ * The first of `forms` whose gutter lines fit in `height` px, by the board's own label lines (BOARD_TYPE, labelLines),
+ * so a band's words stay clear of the line labels and its edge; null when none fits.
+ */
+function fitWords(forms: string[], height: number, type: { lineBox: number; perLine: number }): string | null {
+  const lines = (form: string) => form.split(' · ').reduce((n, part) => n + labelLines(part, type.perLine), 0);
+  return forms.find((form) => lines(form) * type.lineBox <= height) ?? null;
+}
+
 /** A rest zone, hatched in its side's colour, with a solid edge where trading begins; its words sit in the gutter. */
-function RestBand({ from, to, edge, tone, words, tv, gutter }: { from: number; to: number; edge: 'top' | 'bottom'; tone: 'seller' | 'buyer'; words: string; tv: boolean; gutter: number }) {
+function RestBand({ from, to, edge, tone, words, tv, gutter }: { from: number; to: number; edge: 'top' | 'bottom'; tone: 'seller' | 'buyer'; words: string | null; tv: boolean; gutter: number }) {
   const colour = tone === 'seller' ? 'var(--color-rise)' : 'var(--color-fall)';
   return (
     <div
@@ -450,7 +487,7 @@ function RestBand({ from, to, edge, tone, words, tv, gutter }: { from: number; t
         )}
         style={{ left: '100%', width: gutter }}
       >
-        {words.split(' · ').map((w) => (
+        {words?.split(' · ').map((w) => (
           <span key={w}>{w}</span>
         ))}
       </span>
