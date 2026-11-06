@@ -196,7 +196,7 @@ describe("RULE-7: a sold-out store's line shows the highest bid on every screen"
     const { game, S } = soldOut(3);
     const bid = lena(game).price;
     const buys = game.viewFor(null).auction!.storeBuys;
-    expect(textOf(phoneScreen(game.viewFor('s1'), 's1'), 'sold-out-note')).toBe(`Store sold out. Nobody can buy from it; it still buys at ${buys}.`);
+    expect(textOf(phoneScreen(game.viewFor('s1'), 's1'), 'sold-out-note')).toBe(`Store sold out. Nobody can buy from it; it still buys at ${buys}. Highest bid ${bid}.`);
     const tv = tvScreen(game.viewFor(null));
     expect(textOf(tv, 'tv-sold-out')).toBe(`Store sold out Bids can go past its old ${S}. Highest bid ${bid}`);
     expect(textOf(tv, 'tv-store'), "the TV's store box: it sells none").toMatch(/^Sells out /);
@@ -208,6 +208,8 @@ describe("RULE-7: a sold-out store's line shows the highest bid on every screen"
       expect(textOf(html, 'limit-follows'), who).toBe(`STORE SOLD OUT ${S}`);
     }
     expect(textOf(tvScreen(game.viewFor(null)), 'tv-sold-out')).toBe(`Store sold out Bids can go past its old ${S}.`);
+    const buys = game.viewFor(null).auction!.storeBuys;
+    expect(textOf(phoneScreen(game.viewFor('s1'), 's1'), 'sold-out-note')).toBe(`Store sold out. Nobody can buy from it; it still buys at ${buys}.`);
   });
 
   it('B-AC-E1 (phone, TV): while the store sells, its line is its selling price, and no screen says sold out', () => {
