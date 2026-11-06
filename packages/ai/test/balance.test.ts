@@ -112,6 +112,26 @@ describe('land claims', () => {
         const some = ahead.some((index, k) => wantsPlot(plan, obs, index, ahead.slice(k), mind));
         expect(wantsAnyAhead(plan, obs, ahead, mind), `seed ${seed}, step ${step}`).toBe(some);
       }
+      // The same plan with every plot that ranks first among the plots after it worth nothing, so only a plot ranked 1
+      // to 3 in the rest of the pass can be wanted: the rivals still claiming decide.
+      const rankOf = new Map(plan.ranking.map((s, rank) => [s.index, rank]));
+      const firsts = new Set<number>();
+      let best = Infinity;
+      for (let k = order.length - 1; k >= 0; k--) {
+        const rank = rankOf.get(order[k]!) ?? Infinity;
+        if (rank >= best) continue;
+        best = rank;
+        firsts.add(order[k]!);
+      }
+      const runnersUp = { ...plan, ranking: plan.ranking.map((s) => (firsts.has(s.index) ? { ...s, value: 0 } : s)) };
+      let wanted = 0;
+      for (let step = 0; step < order.length; step++) {
+        const ahead = order.slice(step);
+        const some = ahead.some((index, k) => wantsPlot(runnersUp, obs, index, ahead.slice(k), mind));
+        if (some) wanted++;
+        expect(wantsAnyAhead(runnersUp, obs, ahead, mind), `seed ${seed}, step ${step}, first plots worth nothing`).toBe(some);
+      }
+      expect(wanted, `seed ${seed}: steps where a runner-up is wanted`).toBeGreaterThan(0);
     }
   });
 });
@@ -143,6 +163,15 @@ describe('land claims off reading order', () => {
     const plan = landDecision(obs, mind(1)).all[0]!.action;
     expect(wantsPlot(plan, obs, outside!.index, state.grant!.order, mind(1))).toBe(false);
     expect(wantsPlot(plan, obs, ranking[0]!.index, state.grant!.order, mind(1))).toBe(true);
+    // A rival that pressed Done and one whose claims are used claim no more: one rival still claiming widens the window.
+    const fewer = structuredClone(obs);
+    fewer.players.find((p) => p.id === 'ai1')!.doneWithLand = true;
+    fewer.players.find((p) => p.id === 'ai2')!.claimsThisGrant = GAME.claimsPerGrant;
+    const window = GAME.claimsPerGrant + STRATEGIST.grantSpare + 1;
+    const clears = (s: (typeof ranking)[number]) => s.value > 0 && s.utility >= ranking[0]!.utility * STRATEGIST.grantShare;
+    expect([ranking[window - 1], ranking[window]].every((s) => s && clears(s)), 'the case: both plots at the window\'s edge clear grantShare').toBe(true);
+    expect(wantsPlot(plan, fewer, ranking[window - 1]!.index, state.grant!.order, mind(1)), 'the last plot inside the window').toBe(true);
+    expect(wantsPlot(plan, fewer, ranking[window]!.index, state.grant!.order, mind(1)), 'the first plot outside it').toBe(false);
     // Tied plots: two salts order them differently, so seats don't all reach for the same first rows.
     const order = (salt: number) => landDecision(obs, mind(salt)).all[0]!.action.ranking.map((s) => s.index);
     expect(order(1)).not.toEqual(order(2));
