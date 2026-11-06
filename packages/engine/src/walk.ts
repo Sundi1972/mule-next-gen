@@ -107,6 +107,20 @@ const buyerBottom = (market: WalkMarket) => market.zones?.lo ?? 0;
 /** The highest a seller walks or taps to: the sellers' hard edge on a board with zones, else no limit. */
 const sellerTop = (market: WalkMarket) => market.zones?.hi ?? Infinity;
 
+/**
+ * The highest a buyer walks or taps to. While the store sells, its line or the lowest ask, whichever is lower. Once a
+ * board with zones has its store sold out, buyers may bid above the store's old selling line, up to one step under the
+ * top edge, but stop one step short of a seller resting above that line: walking up never trades with them, they walk
+ * down onto a bid. Otherwise up to the lowest ask, where the two meet.
+ */
+function buyerTop(board: WalkBoard, market: WalkMarket): number {
+  const sellLine = market.houseSells?.price() ?? null;
+  const zones = market.zones;
+  if (sellLine !== null || !zones || !WALK.soldOutBidding) return Math.min(sellLine ?? Infinity, minAsk(board, market));
+  const asks = board.walkers.filter((w) => selling(market, w)).map((w) => (rounded(w) > zones.sellersBottom ? rounded(w) - 1 : w.price));
+  return Math.min(zones.hi - 1, ...asks);
+}
+
 /** The price a seller would trade at now, at a buying house's line or with a buyer whose bid reaches their ask; else null. */
 function tradingAt(board: WalkBoard, market: WalkMarket, w: Walker): number | null {
   const ask = rounded(w);
@@ -160,8 +174,7 @@ export function stepWalker(board: WalkBoard, market: WalkMarket, playerId: strin
   const before = rounded(w);
   const to = before + dir;
   if (w.side === 'buyer') {
-    const sellLine = market.houseSells?.price() ?? null;
-    w.price = dir > 0 ? Math.max(w.price, Math.min(to, sellLine ?? Infinity, minAsk(board, market))) : Math.min(w.price, Math.max(buyerBottom(market), to));
+    w.price = dir > 0 ? Math.max(w.price, Math.min(to, buyerTop(board, market))) : Math.min(w.price, Math.max(buyerBottom(market), to));
   } else {
     w.price = dir < 0 ? Math.min(w.price, Math.max(to, sellerFloor(board, market), maxBid(board, market), 1)) : Math.max(w.price, Math.min(sellerTop(market), to));
   }
@@ -212,7 +225,7 @@ export function stepBoard(board: WalkBoard, market: WalkMarket, dt: number): Sal
   for (const w of board.walkers) {
     if (w.side !== 'buyer' || w.dir === 0) continue;
     const before = rounded(w);
-    if (w.dir > 0) w.price = Math.max(w.price, Math.min(w.price + step, sellLine ?? Infinity, minAsk(board, market)));
+    if (w.dir > 0) w.price = Math.max(w.price, Math.min(w.price + step, buyerTop(board, market)));
     else w.price = Math.min(w.price, Math.max(buyerBottom(market), w.price - step));
     if (rounded(w) !== before) w.since = board.elapsed;
   }
