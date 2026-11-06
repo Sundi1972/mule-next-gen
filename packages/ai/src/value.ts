@@ -329,6 +329,8 @@ export interface UnitValues {
 }
 
 export function unitValues(obs: GameState, o: Outlook, good: Good, mind: Mind): UnitValues {
+  // Known gap (PR #510's review): the model's values skip buyForFactories, so with AI_VALUE.unit on a factory's Food or
+  // Water is bought without FM-factory-input's buy-side fix. Inert while the switch is off; build it with the switch.
   if (AI_VALUE.unit) return modelValues(obs, o, good, mind);
   const me = mind.me;
   const need = monthNeeds(obs, me)[good];
