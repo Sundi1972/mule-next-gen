@@ -628,7 +628,7 @@ th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line
 </head>
 <body>
 <main>
-<p class="sub">Colony economy · version 3, 6 Nov · you approved the recommendations on 6 Nov; this version adds your later rulings · nothing is built yet</p>
+<p class="sub">Colony economy · version 3, 6 Nov · <b>approved v3, 6 Nov</b>: Heiko approved this explainer and all its proposed design options and solutions · nothing is built yet</p>
 <h1>How the colony eats, and what the store charges</h1>
 <p>Five parts that work as one: what each kind of plot uses, what the whole colony needs, how the store prices a good from that, how colonists feel when they go short, and how sickness moves through the colony. The ${decisions.length} decisions are at the end, each with its recommendation; two of them (${D.hungrySick} and ${D.medMood}) are now superseded by the health rule.</p>
 
