@@ -1,0 +1,13 @@
+{
+  "source": "10 seed-1 games, 4 computer players, politics on, trunk 34dfa3c7 with the recommended package; WS5 prototype of 6 Nov",
+  "head": ["Ten games, 120 months", "Without health", "With health", "+ Electronics wanted", "Dirty air", "Medicine supplied in full"],
+  "rows": [
+    ["Months colonists lacked Medicine", "—", "110", "115", "119", "—"],
+    ["Average share of colonists sick", "—", "36%", "36%", "37%", "22%"],
+    ["Months at the 40% ceiling", "—", "92", "97", "103", "0"],
+    ["Player-months sick (of 480)", "22", "70", "76", "387", "47"],
+    ["Food the colony made a month", "13.2", "7.9", "6.6", "3.7", "11.4"],
+    ["Colonists left of 100", "72", "55", "52", "48", "71"],
+    ["Electronics store price, highest", "373", "373", "880", "373", "373"]
+  ]
+}
