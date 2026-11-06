@@ -16,6 +16,7 @@ import { check, hallPlace, headerSlot, held, launch, PHONE, PHONE_SMALL, pressAc
 import { hostContinuesWithout } from './hub-steps';
 import { ELECTION_WAIT_MS, readyThroughTheElection, voteThroughTheElection } from './politics-steps';
 import { railFits } from './shell-steps';
+import { fitSettled, nothingPastTheFoot, shownWhole, theTvScaleHolds } from './tv-fit-steps';
 import { AUDIT_JS, MIN_TEXT, type AuditRead } from './small-phone-audit';
 
 const PRESS_MS = 2_000;
@@ -954,6 +955,40 @@ async function readTheRestZones(cast: { seller: Phone; bidder: Phone; rester: Ph
   check(before.seller - truth.stockOf(seller, good) === bought, `B-AC-E1: ${seller.name} sold what ${bidder.name} bought, ${bought}: ${before.seller} → ${truth.stockOf(seller, good)}`);
   check(room.game.state.store.stock[good] === 0, `B-AC-E1: the store sold none, it holds ${room.game.state.store.stock[good]}`);
   console.log(`✓ B-AC-E1: ${seller.name} walked down to ${bidder.name}'s bid and they traded at ${top}: ${bidder.name} ${before.bidder} → ${truth.stockOf(bidder, good)}, ${seller.name} ${before.seller} → ${truth.stockOf(seller, good)} on the server, the store still out`);
+  console.log(`✓ TV-FIT, sold out: ${await theSoldOutTvFits(tv, server, code)}`);
+}
+
+/**
+ * WS4's TV-FIT on a sold-out walk: the sold-out box sits in the TV's side with the running deals, and with two deals
+ * between the longest names the side still shows the box and both rows whole, at the scale floor or more (PM ruling 6 Nov).
+ */
+async function theSoldOutTvFits(tv: Page, server: MuleServer, code: string): Promise<string> {
+  const room = server.registry.get(code) as unknown as { game: { state: GameState }; broadcast(): void };
+  return held(server, code, async () => {
+    await tv.getByTestId('tv-sold-out').waitFor({ timeout: 2_000 });
+    const { state } = room.game;
+    const a = state.auction!;
+    const [p, q] = [...state.players].sort((x, y) => y.name.length - x.name.length);
+    check(p && q, 'TV-FIT: two players at the table to trade');
+    const kept = a.deals;
+    try {
+      a.deals = [
+        { buyer: p.id, seller: q.id, price: 31, units: 6, progress: 0 },
+        { buyer: q.id, seller: p.id, price: 30, units: 2, progress: 0 },
+      ];
+      room.broadcast();
+      await tv.locator('[data-testid=tv-deal]').nth(1).waitFor({ timeout: 2_000 });
+      await fitSettled(tv);
+      const shown = await shownWhole(tv, 'auction (sold out, two deals)', ['[data-testid=tv-sold-out]', '[data-testid=tv-deal]']);
+      check(shown.length === 3, `TV-FIT: the sold-out TV shows its box and both running deals, got ${shown.map((b) => b.id).join(', ')}`);
+      const foot = await nothingPastTheFoot(tv, 'auction (sold out, two deals)');
+      const scale = await theTvScaleHolds(tv, 'auction (sold out, two deals)');
+      return `the sold-out box and both deal rows whole, y ${shown[0]!.top.toFixed(0)}–${shown.at(-1)!.bottom.toFixed(0)}; fit scales ${scale}; the foot at y ${foot.toFixed(0)}`;
+    } finally {
+      a.deals = kept;
+      room.broadcast();
+    }
+  });
 }
 
 /** Test fixture, during Food's walk: the store's shelf of `good` is empty, and `seller` holds `sellerHas` of it. */
