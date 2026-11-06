@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { createContext, Fragment, useContext, type ReactNode } from 'react';
 import { PlayerMark } from '../components/PlayerMark';
 import { cx } from '../components/tokens';
 import { motionOf, offMap, STORY } from './catalogue';
@@ -8,7 +8,7 @@ import { ramp } from './fx';
 import { EventDeltaChip, EventEffectChip, EventSignBadge } from './glyphs';
 import { cardAt, cq, useEventLivingView } from './living';
 import { RollCall } from './rollcall';
-import { eventEffectsAt, eventHitAt, isRollCall, type EventSegment } from './timing';
+import { eventEffectsAt, eventHitAt, isRollCall, type EventScript, type EventSegment, type ShowGrid } from './timing';
 import type { ShowEffect, ShowEventView, ShowSize } from './types';
 
 /** The cards over the map, outside its camera: the phase's intro card and each event's title card. */
@@ -100,6 +100,7 @@ export function TitleCard({ seg, size }: { seg: EventSegment; size: ShowSize }) 
  */
 export function EffectsCard({ seg, size }: { seg: EventSegment; size: ShowSize }) {
   const { s, t, reduced, grid, cast } = useShow();
+  const departures = useContext(GaugeDepartures);
   const ev = seg.events[0]!;
   const fx = ev.effects ?? [];
   const objects = objectWords(ev);
@@ -132,9 +133,17 @@ export function EffectsCard({ seg, size }: { seg: EventSegment; size: ShowSize }
                 objects.map((w) => <EventDeltaChip key={w} delta={-1} text={w} size={tv ? 'tv' : 'phone'} className={cx(!reduced && 'animate-[ev-pop_0.3s_ease-out]', tv && 'text-xl!')} />)}
               {r.items
                 .filter((f) => seen.includes(f))
-                .map((f, i) => (
-                  <EventEffectChip key={i} f={f} size={tv ? 'tv' : 'phone'} className={cx(!reduced && 'animate-[ev-pop_0.3s_ease-out]', tv && 'text-xl!')} />
-                ))}
+                .map((f, i) => {
+                  const chip = <EventEffectChip f={f} size={tv ? 'tv' : 'phone'} className={cx(!reduced && 'animate-[ev-pop_0.3s_ease-out]', tv && 'text-xl!')} />;
+                  const leaving = departures?.get(f);
+                  if (leaving === undefined) return <Fragment key={i}>{chip}</Fragment>;
+                  // The flight to the header's gauge finds this chip by data-fly-from; once it has left, its place stays, faded.
+                  return (
+                    <span key={i} data-fly-from={f.what} style={{ opacity: t >= leaving ? 0.15 : 1 }}>
+                      {chip}
+                    </span>
+                  );
+                })}
             </span>
           </span>
         ))}
@@ -154,8 +163,31 @@ function SeatHead({ id, size }: { id: string; size: ShowSize }) {
   );
 }
 
+/** A change to one of the colony's gauges: its chip flies from the card to the gauge in the TV's header. */
+const movesAGauge = (f: ShowEffect) => f.on === 'colony' && (f.what === 'mood' || f.what === 'prestige' || f.what === 'air');
+
+/**
+ * When each gauge chip leaves this screen's card for its gauge in the header (the TV's event overlay sets it); without
+ * it, nothing leaves and the chips stay put.
+ */
+export const GaugeDepartures = createContext<ReadonlyMap<ShowEffect, number> | null>(null);
+
+/** A gauge chip on the card: from when both the card and its change are up, until its event's segment ends. */
+export interface GaugeChip {
+  effect: ShowEffect;
+  onCard: number;
+  end: number;
+}
+
+/** Every gauge chip in the show, in fired order. */
+export function gaugeChipsAt(s: EventScript, reduced: boolean, grid: ShowGrid): GaugeChip[] {
+  return eventEffectsAt(s, Infinity, reduced, grid)
+    .filter((l) => movesAGauge(l.effect))
+    .map((l) => ({ effect: l.effect, onCard: Math.max(l.at, cardAt(l.seg)), end: l.seg.endAt }));
+}
+
 /** Whether an event on the map also moved a colony gauge (a MULE theft's mood): its card says so. */
-const movesGauge = (ev: ShowEventView) => (ev.effects ?? []).some((f) => f.on === 'colony' && (f.what === 'mood' || f.what === 'prestige' || f.what === 'air'));
+const movesGauge = (ev: ShowEventView) => (ev.effects ?? []).some(movesAGauge);
 
 /** Everything that goes over the map: the intro, the title card, a card of changes off the map, the roll call. */
 export function Overlays({ size }: { size: ShowSize }) {

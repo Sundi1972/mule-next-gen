@@ -69,6 +69,8 @@ export interface GaugeChange {
   from: number;
   to: number;
   landsAt: number;
+  /** An event's chip lands on the gauge: it pulses as it lands, unless its band flips, which pulses as the count crosses. */
+  chip?: boolean;
 }
 /** What ColonyGauges lands, on whose clock: an event's show clock, or the month end's own (useMonthEndDrift). */
 export interface GaugeLanding {
@@ -93,14 +95,24 @@ function countAt(c: GaugeChange, t: number, reduced: boolean): number {
   return Math.round(c.from + (c.to - c.from) * k);
 }
 
-/** A gauge's number at `t` under a landing, and whether its band flipped within the pulse's length. */
+/** A gauge's number at `t` under a landing, and whether it pulses: its band just flipped, or a chip just landed on it. */
 function landed(id: GaugeId, value: number, landing: GaugeLanding | undefined): { value: number; pulse: boolean; change?: GaugeChange } {
   const c = landing?.changes.find((x) => x.gauge === id);
   if (!landing || !c) return { value, pulse: false };
   const now = countAt(c, landing.t, landing.reduced);
   const band = BAND_AT[id];
   const flipped = band !== undefined && !landing.reduced && band(now) !== band(countAt(c, landing.t - LANDING.pulse, false));
-  return { value: now, pulse: flipped, change: c };
+  const flips = band !== undefined && band(c.from) !== band(c.to);
+  const struck = c.chip === true && !flips && !landing.reduced && landing.t >= c.landsAt && landing.t < c.landsAt + LANDING.pulse;
+  return { value: now, pulse: flipped || struck, change: c };
+}
+
+/** Seconds from a change landing until its count and pulse are over; a flip's pulse can start as late as the count's end. */
+export function settlesAfter(c: GaugeChange, reduced: boolean): number {
+  if (reduced) return 0;
+  const band = BAND_AT[c.gauge];
+  if (band !== undefined && band(c.from) !== band(c.to)) return LANDING.count + LANDING.pulse;
+  return c.chip ? Math.max(LANDING.count, LANDING.pulse) : LANDING.count;
 }
 
 /** The month end's drift, when there is one: Happiness from last month's to now's (RULE-20). Nothing without a colony. */
@@ -172,7 +184,7 @@ export function ColonyGauges({ colony, size, className, landing }: { colony: Col
     <div className={cx('grid grid-cols-4', tv ? 'gap-2' : 'gap-1.5', className)} data-testid="colony-gauges">
       <Gauge size={size} testid="gauge-wealth" label="Wealth" value={`${fmt(wealth.value)} cr`} note={`fund ${fmt(colony.fund)} cr`} change={wealth.change} />
       <Gauge size={size} testid="gauge-environment" label="Environment" value={`${environment.value}`} band={air.label} tone={air.tone} bar={air.bar} fill={environment.value} pulse={environment.pulse} change={environment.change} />
-      <Gauge size={size} testid="gauge-prestige" label="Prestige" change={prestige.change} value={`${prestige.value}`} note={`${standingCount(colony)} standing${last && g.prestige !== last.prestige ? ` · ${signed(g.prestige - last.prestige)}` : ''}`} />
+      <Gauge size={size} testid="gauge-prestige" label="Prestige" pulse={prestige.pulse} change={prestige.change} value={`${prestige.value}`} note={`${standingCount(colony)} standing${last && g.prestige !== last.prestige ? ` · ${signed(g.prestige - last.prestige)}` : ''}`} />
       {g.happiness === null || g.band === null ? (
         <Gauge size={size} testid="gauge-happiness" label="Happiness" value="—" note="not yet" />
       ) : (
