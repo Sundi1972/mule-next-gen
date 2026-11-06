@@ -1559,8 +1559,6 @@ export const STRATEGIST = {
   grantSpare: 0,
   /** A factory needs this many months of its inputs on hand or from its own plots. */
   factoryInputMonths: 2,
-  /** Spare Food, Water, Energy and Medicine it keeps over next month's need, before the reserve multiplier. */
-  keepSpare: { food: 1, water: 1, energy: 1, medicine: 0 } as Partial<Record<Good, number>>,
   /** It analyses an unknown plot of its own when the plot's best and second-best uses are this close, as a share. */
   analyseWhenClose: 0.25,
   /** Analyses per month, at most, and never with less than this many seconds left. */
