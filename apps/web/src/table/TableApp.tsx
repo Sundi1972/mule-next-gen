@@ -2,7 +2,24 @@ import { GAME, POLITICS } from '@mule/engine';
 import type { DealView, MuleView, TableView } from '@mule/protocol';
 import { AirGauge, Button, cx, GOOD_NAME, GoodIcon, GoodTag, HoloMap, PlayerMark, SPEED_STEPS, speedStep, SeatSpeciesProvider, TERRAIN_NAME, TimeBar, Timer, WalkBoard, type CreatureWrap } from '@mule/ui';
 import { Speaker, TvTicker, tvSpeakerAt } from '../chat/Chat';
-import { boardWalkers, dealLine, dealSpeed, newestFirst, shipWants, ShipWants, SIDE_WORD, skippedLine, StatusTable, StoreBox, TvReadout, WaitingToPick, type DealRow } from '../components/AuctionParts';
+import {
+  boardWalkers,
+  dealLine,
+  dealSpeed,
+  newestFirst,
+  shipWants,
+  ShipWants,
+  SIDE_WORD,
+  skippedLine,
+  StatusTable,
+  storeLines,
+  storeSellsWord,
+  StoreBox,
+  TvReadout,
+  TvSoldOutBox,
+  WaitingToPick,
+  type DealRow,
+} from '../components/AuctionParts';
 import { Fragment, useEffect, useState, type ReactNode } from 'react';
 import { BuildSite, ColonyGauges, ColonyScoreBand, MonthScoreColumn, TvWinner, useMonthEndDrift, type GaugeLanding } from '../components/Colony';
 import { StrikeBadge, StrikeMap, StrikeWaiting } from '../components/Strike';
@@ -516,7 +533,7 @@ export function TvAuction({ table, game, auction }: { table: TableView<MuleView>
                 walkers={walkers}
                 deals={auction.deals.map((d) => ({ ...d, speed: dealSpeed(d.units) }))}
                 storeBuys={auction.storeBuys}
-                storeSells={auction.storeSells}
+                {...storeLines(auction)}
                 shipPays={auction.shipPays}
                 {...(auction.shipPays !== null ? { shipCaption: `The ship buys ${GOOD_NAME[auction.good]} at ${auction.shipPays}` } : {})}
                 storeStock={stock}
@@ -541,6 +558,7 @@ export function TvAuction({ table, game, auction }: { table: TableView<MuleView>
                 </span>
               )}
             </div>
+            {!status && stock === 0 && <TvSoldOutBox auction={auction} />}
             {status ? (
               <ul className="flex flex-col gap-2" data-testid="tv-picked">
                 {game.players.map((p) => {
@@ -573,7 +591,7 @@ export function TvAuction({ table, game, auction }: { table: TableView<MuleView>
               <dl className="grid shrink-0 grid-cols-3 gap-px overflow-hidden rounded-panel border border-holo-line bg-holo-line font-mono" data-testid="tv-store">
                 <div className="flex flex-col bg-panel p-3">
                   <dt className="label-caps">Sells</dt>
-                  <dd data-num className="text-2xl font-bold text-rise">{auction.storeSells ?? 'out'}</dd>
+                  <dd data-num className="text-2xl font-bold text-rise">{storeSellsWord(auction)}</dd>
                 </div>
                 <div className="flex flex-col bg-panel p-3">
                   <dt className="label-caps">Buys</dt>

@@ -103,8 +103,8 @@
 <tbody>
 <tr><td>Sellers' asks</td><td>Red</td><td>The lowest ask any seller is making.</td><td>Buyers walking up meet it.</td></tr>
 <tr><td>Buyers' bids</td><td>Green</td><td>The highest bid any buyer is making.</td><td>Sellers walking down meet it.</td></tr>
-<tr><td>Store sells</td><td>Dashed, near the top</td><td>What the store charges. Shown only while it has some of the good for sale.</td><td>Buyers can't walk above it while the store sells.</td></tr>
-<tr><td>Store buys</td><td>Dashed, near the bottom</td><td>What the store pays. Shown only while it still wants the good.</td><td>Sellers can't walk below it.</td></tr>
+<tr><td>Store sells</td><td>Dashed, near the top</td><td>What the store charges. Once the store has none left to sell, the line reads "SOLD OUT 28" at its old price, and "HIGHEST BID 30 ↑" once a buyer bids past it; the TV's panel says "Highest bid 30".</td><td>Buyers can't walk above it while the store sells; sold out, they may (<a href="#rule-e-sold-out">rule E</a>).</td></tr>
+<tr><td>Store buys</td><td>Dashed, near the bottom</td><td>What the store pays when the good's walk begins.</td><td>Sellers can't walk below it, even once the store stops buying (<a href="#rule-d-rest-zones">rule D</a>).</td></tr>
 <tr><td>Ship buys</td><td>Amber</td><td>What the export ship pays for its next unit, only in a month it is in port and wants this good.</td><td>Sellers who reach it sell to the ship.</td></tr>
 </tbody>
 </table></div>
@@ -130,10 +130,9 @@
 
 <h3 id="what-stops-you">What stops you</h3>
 <ul>
-<li>A buyer walking up stops at the store's selling line (while the store sells) and at the lowest ask of any seller who still has units. Meeting that seller is a trade.</li>
-<li>A seller walking down stops at the store's buying line (while the store buys) and at the highest bid of any buyer who can pay it. Meeting that buyer is a trade.</li>
-<li>When no house is buying at all, a seller can walk down to one credit above the board's bottom edge, so a buyer still standing at the start is never traded with.</li>
-<li>A buyer can walk down to 0; a seller can walk up without limit. Neither trades up there. (Heiko's rest zones, <a href="#heiko-auction-rules">being designed</a>, would put hard edges here.)</li>
+<li>A buyer walking up stops at the store's selling line (while the store sells) and at the lowest ask of any seller who still has units. Meeting that seller is a trade. With the store sold out, a seller resting above the store's old selling line is not met: the buyer stops one step below them (<a href="#rule-e-sold-out">rule E</a>).</li>
+<li>A seller walking down stops at the store's buying line, whether or not the store still buys, and at the highest bid of any buyer who can pay it. Meeting that buyer is a trade.</li>
+<li>A buyer can't walk below the board's bottom edge, and a seller can't walk above its top edge (<a href="#rule-d-rest-zones">rule D</a>). Neither trades out there.</li>
 <li>A buyer who can no longer pay their own bid, or a seller with nothing left, no longer blocks anyone: the other side walks through them.</li>
 </ul>
 <p class="code-ref">In the code: <code>packages/engine/src/walk.ts::stepBoard</code>, <code>stepWalker</code>, <code>takeSide</code>, <code>sellerFloor</code> · <code>auction.ts::nextGood</code> (board range and speed) · <code>config.ts::WALK.crossSeconds</code>, <code>minSpeed</code>, <code>boardMargin</code>, <code>boardPostedMargin</code> · <code>apps/web/src/phone/Auction.tsx::WalkHold</code> (TAP_MS) · <code>AuctionParts.tsx::BoardKey</code></p>
@@ -210,7 +209,7 @@
 <ul>
 <li>The store sells at its posted price plus 10%, rounded up. Walk up to that line and you buy, one unit at a time.</li>
 <li>It sells only what it has <strong>for sale</strong>. For Food and Water it holds back what its colonists will buy at month end, one unit per <span class="num">20</span> colonists: the colony's own people come first, so in a shortage the shelf runs empty for the players first.</li>
-<li>When the store has nothing more for sale, its selling line disappears ("STORE SELLS out" on the TV) and buyers can walk higher, to tempt a player to sell.</li>
+<li>When the store has nothing more for sale, buyers can walk higher, to tempt a player to sell, and the store's selling line shows the highest bid (<a href="#rule-e-sold-out">rule E</a>).</li>
 </ul>
 <h3 id="selling-to-the-store">Selling to the store</h3>
 <ul>
@@ -336,14 +335,14 @@
 <p class="code-ref">In the code: <code>apps/web/src/phone/Auction.tsx</code> · <code>apps/web/src/table/TableApp.tsx::TvAuction</code></p>
 <p class="owner">Kept current by: WS6, with WS3 and WS4.</p>
 
-<h2 id="heiko-auction-rules">Heiko's auction rules of 5 November <span class="pill designed">Designed</span></h2>
+<h2 id="heiko-auction-rules">Heiko's auction rules of 5 November <span class="pill built">In the game</span></h2>
 <p>Selling a Water surplus at the table on 5 Nov, Heiko sold too much and ended up short. He asked for four changes, in his words (shortened): "When I am selling it should auto-stop when I reached my equilibrium, it should get me up the store lane. If I still want to sell (in shortage) it must be a conscious decision … It should be possible to flip sides (buy / sell) within the auction. Below the store buying lane and above the store selling lane there should be safe or rest areas … so that I am not participating in the auction accidentally. When the store has no more goods to sell, buyers can walk up and drive the prices up further, trying to convince a seller to sell. The sell lane of the store is representing the latest bid price of the buyers."</p>
-<p>Heiko approved the rules on 5 Nov after seeing WS6's screens, choosing <strong>hold ▼ for one second</strong> as the way to sell into a shortage. B and C are in the game (WS3, 6 Nov); D and E are designed, not built yet, and the Auctions team (WS3) builds them next. Until then the game plays as the sections above describe for those two.</p>
+<p>Heiko approved the rules on 5 Nov after seeing WS6's screens, choosing <strong>hold ▼ for one second</strong> as the way to sell into a shortage. All four are in the game (WS3, 6 Nov): B and C with #483, D and E with #503.</p>
 
 <h3 id="rule-b-stop-at-need">B · You stop at your need <span class="pill built">In the game</span></h3>
 <ul>
 <li>A seller who holds more than their need sells down to their need and then stops: the unit that would take them below need does not sell, and they are moved <strong>one step</strong> up off the line. Your need here is the status screen's: what you must hold now, spoilage included (see <a href="#status-screen">the status screen</a>). Every phone and the TV mark the seller <em>KEEPS 6</em>, and their own phone says "Stopped at 6 Food: what you must hold."</li>
-<li>To sell on into a shortage, <strong>hold ▼ for one second</strong>. A tap, or a shorter hold, does nothing, so a thumb resting on the arrow never sells you short by accident. After the one-second hold you sell for the rest of that good, starting slow again. The phone says "To sell more, hold ▼: you'd be short next month".</li>
+<li>To sell on into a shortage, <strong>hold ▼ for one second</strong>. A tap, or a shorter hold, does nothing, so a thumb resting on the arrow never sells you short by accident. The hold starts at the stop: a ▼ you were already holding when selling stopped stops with you, so let go and hold ▼ again. After the one-second hold you sell for the rest of that good, starting slow again. The phone says "To sell more, hold ▼: you'd be short next month".</li>
 <li>It applies to <strong>every</strong> sale: to the store, to the ship and to other players (Heiko, 5 Nov). A good you don't need (Smithore, Crystite and the like, when no factory of yours uses them) has no stop.</li>
 <li>There is no matching stop for buyers (Heiko, 5 Nov).</li>
 <li>Computer players hold ▼ again only when the least they mean to keep is below this need, so selling short is a choice they made, never an accident of the walk. Today a computer player's least is what next month uses before spoilage, so for Food, Energy and Water it does sell on below this need, a second later.</li>
@@ -352,25 +351,30 @@
 <h3 id="rule-c-flip-sides">C · Flip sides during the auction <span class="pill built">In the game</span></h3>
 <p>Tap <em>Buy</em> or <em>Sell</em> during the walk (see <a href="#switching-sides">switching sides</a>): a switch stops any trade at once, takes back your Done, and keeps your stop-at-need for this good. A computer player that has sold more than it meant to switches to buying.</p>
 
-<h3 id="rule-d-rest-zones">D · Rest zones with hard edges</h3>
+<h3 id="rule-d-rest-zones">D · Rest zones with hard edges <span class="pill built">In the game</span></h3>
 <ul>
-<li>Below the best buying line (the store's, or the ship's if higher) is the <strong>buyers' rest zone</strong>; above the store's selling line is the <strong>sellers' rest zone</strong>. Standing in your own rest zone you can't trade, because the other side can't reach you.</li>
+<li>Below the store's buying line is the <strong>buyers' rest zone</strong>; above the store's selling line is the <strong>sellers' rest zone</strong>. Both lines are taken when the good's walk begins and stay put for that good, even when the store's money runs out or it sells out. Standing in your own rest zone you can't trade, because the other side can't reach you.</li>
 <li>Buyers can't walk below the board's bottom edge; sellers can't walk above the top edge. The edges are hard: there is no extra "click" at a line you are allowed to cross, because crossing one is always a deliberate hold, and the one crossing that can cost you, selling below your need, is caught by rule B.</li>
-<li>Sellers always stop at the old buying line, even after the store has bought all it wants and no ship is in. (Today they can then walk down into the buyers' area.)</li>
+<li>Sellers always stop at the store's buying line, even after the store has bought all it wants and no ship is in. A seller there trades only with a buyer who walks up to them.</li>
+<li>The export ship's line sits above the store's buying line, on the trading floor. A seller sells to the ship as its price falls, unit by unit, then walks on down to the store, and stops at the store's line.</li>
+<li>Computer players walk inside the same edges as a phone. Sitting a good out (standing at the edge and pressing Done) is unchanged.</li>
 </ul>
 
-<h3 id="rule-e-sold-out">E · Bidding past a sold-out store</h3>
+<h3 id="rule-e-sold-out">E · Bidding past a sold-out store <span class="pill built">In the game</span></h3>
 <ul>
 <li>When the store has none of the good left to sell, buyers may walk above its old selling line, up to one step below the top.</li>
 <li>Walking up never trades with a seller resting in the sellers' zone: the buyer stops one step below them. A seller who wants the bid walks down onto it, and then they trade.</li>
-<li>The store's selling line stays at its old price until a bid passes it, then shows the <strong>highest bid</strong> on the board ("Highest bid N"), so every seller sees what walking down would fetch. The store itself sells nothing.</li>
+<li>The store's selling line stays at its old price ("SOLD OUT 28") until a bid passes it, then shows the <strong>highest bid</strong> on the board ("HIGHEST BID 30 ↑"), so every seller sees what walking down would fetch. The store itself sells nothing.</li>
+<li>Both rest zones are drawn on the board as bands, "SELLERS WAIT · NO TRADE" and "BUYERS WAIT · NO TRADE", and they keep their place for the whole good.</li>
 <li>Every seller above that line is still resting: since a buyer can never walk past a resting seller, the highest bid is always below every resting seller.</li>
+<li>On the trading floor below the store's old selling line, walking up into a seller still trades, as before.</li>
+<li>A computer player short of the good walks up as far as it values it. A computer seller walks down onto the highest bid when that bid is at least what it would sell for.</li>
 </ul>
 
-<div class="box next"><h4>What is changing</h4>
-<p><strong>Designed, not built yet.</strong> Approved by Heiko on 5 Nov. He chose hold ▼ for one second, the stop covers every sale, and buyers get no matching stop. To be built by the Auctions team (WS3) for the rules, with the UX team (WS6) for the phone and TV screens (mock <code>design/mocks/auction-rules</code>) and the Strategy team (WS1) for the computer players.</p>
+<div class="box why"><h4>Why it is like this</h4>
+<p>Heiko approved the rules on 5 Nov: hold ▼ for one second, the stop covers every sale, and buyers get no matching stop. The buyers' rest zone ends at the <em>store's</em> buying line, his words "below the store buying lane". A first draft also counted the export ship's price, the higher of the two. But the ship pays a little less for every unit it buys, so a line fixed at its opening price let it buy one unit and then never again, and once the ship left, no seller could reach the store. WS3 ruled the store's line alone on 6 Nov.</p>
 <p>How the store sets its prices after it sells out, and a wider gap between its buying and selling prices, are part of WS5's <a href="store-and-prices.html#store-pricing-design">store-pricing design</a>, not this one.</p></div>
-<p class="code-ref">In the code (where it would land): <code>packages/engine/src/walk.ts::stepBoard</code>, <code>sellerFloor</code> · <code>auction.ts::declareRole</code> · <code>packages/ai/src/hands/auction.ts</code> · rules: <code>docs/specs/2026-11-05-ws3-auction-auto-trade.md</code> §10 AM-1 (WS3's branch <code>ws3-auction-rules-b-e</code>, a33879c4)</p>
+<p class="code-ref">In the code: <code>packages/engine/src/walk.ts::stepBoard</code>, <code>stepWalker</code>, <code>topBid</code> · <code>auction.ts::nextGood</code> (the zones), <code>shownSellLine</code> · <code>WALK.soldOutBidding</code> in <code>config.ts</code> · <code>packages/ai/src/hands/auction.ts</code> · rules: <code>docs/specs/2026-11-05-ws3-auction-auto-trade.md</code> §10, §12 AM-3</p>
 <p class="owner">Kept current by: WS3 (rules), WS6 (screens), WS1 (AI).</p>
 </article>
 </main>
