@@ -42,6 +42,48 @@
         "dusk": "park/damaged-dusk@800.webp",
         "glow": "park/damaged-glow@800.webp"
       }
+    },
+    "stadium": {
+      "frame": {
+        "width": 3200,
+        "height": 2600,
+        "place": 1293,
+        "centre": [
+          1600,
+          1900
+        ],
+        "places": 2
+      },
+      "site": {
+        "day": "stadium/site-day@800.webp",
+        "dusk": "stadium/site-dusk@800.webp",
+        "glow": "stadium/site-glow@800.webp"
+      },
+      "build1": {
+        "day": "stadium/build1-day@800.webp",
+        "dusk": "stadium/build1-dusk@800.webp",
+        "glow": "stadium/build1-glow@800.webp"
+      },
+      "build2": {
+        "day": "stadium/build2-day@800.webp",
+        "dusk": "stadium/build2-dusk@800.webp",
+        "glow": "stadium/build2-glow@800.webp"
+      },
+      "standing": {
+        "day": "stadium/standing-day@800.webp",
+        "dusk": "stadium/standing-dusk@800.webp",
+        "glow": "stadium/standing-glow@800.webp"
+      },
+      "closed": {
+        "day": "stadium/closed-day@800.webp",
+        "dusk": "stadium/closed-dusk@800.webp",
+        "glow": null
+      },
+      "damaged": {
+        "day": "stadium/damaged-day@800.webp",
+        "dusk": "stadium/damaged-dusk@800.webp",
+        "glow": "stadium/damaged-glow@800.webp"
+      }
     }
   },
   "sizes": [
