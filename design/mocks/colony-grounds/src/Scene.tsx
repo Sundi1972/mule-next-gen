@@ -237,6 +237,20 @@ function Smoke({ c, r, id }: { c: number; r: number; id: PrestigeId }) {
   );
 }
 
+/**
+ * A rendered picture of a building standing in place of its SVG shape (WS10's look spike). Every render shares one
+ * camera: orthographic, 2:1 isometric, its centre ray on the place's centre, one 12 m place 1293 px wide of 1600 × 1200.
+ */
+export const ART_FRAME = { width: 1600, height: 1200, place: 1293 };
+
+function Art({ c, r, href }: { c: number; r: number; href: string }) {
+  const [x, y] = iso(c, r);
+  const k = W / ART_FRAME.place;
+  const w = ART_FRAME.width * k;
+  const h = ART_FRAME.height * k;
+  return <image href={href} x={x - w / 2} y={y - h / 2} width={w} height={h} data-testid="art" />;
+}
+
 /** Where the next building will go: a faint dashed outline on the paving, so the order of growth is legible. */
 function NextPlace({ c, r }: { c: number; r: number }) {
   const [x, y] = iso(c, r);
@@ -298,6 +312,7 @@ export function Scene({
   look,
   words,
   fresh = null,
+  art,
   className,
 }: {
   objects: GroundsObject[];
@@ -307,6 +322,8 @@ export function Scene({
   words: boolean;
   /** A building that changed this month (its place index), ringed. */
   fresh?: number | null;
+  /** Pictures that replace a kind's SVG shape when it stands, by kind. */
+  art?: Partial<Record<PrestigeId, string>>;
   className?: string;
 }) {
   const at = new Map(objects.map((o) => [o.slot, o]));
@@ -360,7 +377,7 @@ export function Scene({
                 <Scaffold c={c} r={r} id={o.id} />
               </>
             )}
-            {o.stage === 'standing' && <Building id={o.id} c={c} r={r} look={look} lit={rich.mood >= 40} />}
+            {o.stage === 'standing' && (art?.[o.id] ? <Art c={c} r={r} href={art[o.id]!} /> : <Building id={o.id} c={c} r={r} look={look} lit={rich.mood >= 40} />)}
             {o.stage === 'closed' && <Building id={o.id} c={c} r={r} look={look} lit={false} dim />}
             {o.stage === 'damaged' && (
               <>

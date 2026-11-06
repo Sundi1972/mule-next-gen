@@ -99,8 +99,13 @@
 <p class="code-ref">In the code: <code>apps/web/src/table/TableApp.tsx::TvHeader</code> · <code>apps/web/src/table/TvDevelop.tsx</code> · checked by <code>apps/web/e2e/tv-fit-steps.ts::theTvHeaderStaysOnScreen</code></p>
 <p class="owner">Responsible: the Table team (WS4); the strike badge's screen is the Events team's (WS8) · Status: Programme manager rulings, 5 and 6 Nov; in the game</p>
 
-<h2 id="map-gem">The map's dots and gem <span class="pill designed">Designed</span></h2>
-<p>On the map of the player who did the geology, a known plot shows its best good with <span class="num">0</span> to <span class="num">3</span> dots (today <span class="num">4</span>), and a gem when its ground holds Crystite or Rare earth, in that good's colour with its icon; both gems when both. On a free plot the gem sits in the plot's top-left corner; on a plot you own, it sits just right of your owner's tab, which keeps that corner. The gem is sized with the plot, like the owner's tab, so it fits the smallest phone's plots; two gems overlap by half. The TV never shows dots or gems. The rule itself is in <a href="land.html">Land</a>.</p>
+<h2 id="map-dots">The map's dots <span class="pill built">In the game</span></h2>
+<p>On the map of the player who did the geology, a known plot with nothing on it shows its best good's icon over <span class="num">0</span> to <span class="num">3</span> dots, the same good the walking screen calls "Best here" (on a tie, the first of Food, Water, Energy, Smithore, Crystite, Rare earth). The plot's label reads, for example, "Food 2 of 3". A plot with a MULE making a good, or a colony building, shows that instead; a Green belt plot makes no good and keeps its dots. The TV never shows dots. The scale is in <a href="land.html#ground-dots">Land</a>.</p>
+<p class="code-ref">In the code: <code>packages/ui/src/components/HoloMap.tsx::Pips</code> · <code>packages/ui/src/ground-dots.ts::bestOf</code> · <code>apps/web/src/game/derive.ts::mapTiles</code></p>
+<p class="owner">Responsible: the Table team (WS4) for the map, the UX team (WS6) for the rule · Status: in the game</p>
+
+<h2 id="map-gem">The map's gem <span class="pill designed">Designed</span></h2>
+<p>On the map of the player who did the geology, a known plot shows a gem when its ground holds Crystite or Rare earth, in that good's colour with its icon; both gems when both. On a free plot the gem sits in the plot's top-left corner; on a plot you own, it sits just right of your owner's tab, which keeps that corner. The gem is sized with the plot, like the owner's tab, so it fits the smallest phone's plots; two gems overlap by half. The TV never shows dots or gems. The rule itself is in <a href="land.html">Land</a>.</p>
 <p class="owner">Responsible: the Table team (WS4) for the map, the UX team (WS6) for the rule · Status: Heiko chose option B (5 Nov); the corner and size ruled by the programme manager, 5 Nov; spec #397; not built yet</p>
 
 <h2 id="phone-shell">The phone: always sideways <span class="pill built">In the game</span></h2>
