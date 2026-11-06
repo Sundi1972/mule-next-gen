@@ -302,8 +302,11 @@ export class AiSeat {
     return { state, seat: this.id, mind: this.mindFor(month), seed: this.options.seed, phase, land, month, kept: trigger ? null : this.kept, replanned: trigger ?? this.kept?.trigger ?? null };
   }
 
-  /** The mind a draft for `month` reads: the adopted fields only while they are that month's, so the upkeep's draft of the next month reads none. */
-  private mindFor(month: number): Mind {
+  /**
+   * The mind a draft or brief for `month` reads: the adopted fields only while they are that month's, so what the
+   * upkeep drafts or briefs for the next month reads none of them.
+   */
+  mindFor(month: number): Mind {
     if (this.mind.adopted === undefined || this.mind.adopted.month === month) return this.mind;
     const { adopted: _, ...mind } = this.mind;
     return mind;
