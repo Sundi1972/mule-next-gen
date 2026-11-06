@@ -273,7 +273,7 @@ function pickKind(input: DraftInput, obs: GameState, eligible: Record<Kind, bool
 /** What the seat lists in planning when short of cash; nothing outside this month's planning, as lots.ts lists only there (RULE-5). */
 function planningPart(input: DraftInput, obs: GameState, moneyMaker: Good | null): PlanningPlay {
   if (obs.phase !== 'planning' || monthOf(input, obs) !== obs.month) return {};
-  // The money-maker's chain links stay off the list: selling one breaks the plan (AM-32).
+  // The money-maker's chain links stay off the list: selling one breaks the plan (AM-33).
   const list = sellWanted(obs, input.mind, moneyMaker ? chainInputs(obs, input.mind.me, moneyMaker) : []);
   return list.length > 0 ? { list } : {};
 }

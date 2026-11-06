@@ -298,6 +298,16 @@ describe('the engine\'s own seats read none of the fields', () => {
     });
     expect(held).toEqual([]);
   });
+
+  it('INV-fields-engine: the gate refuses an edit that replaces the whole strategy, so no adopted field can come from one', () => {
+    const state = game();
+    const seat = seatOf();
+    const draft = seat.draft(state, 'planning');
+    const { playbook, rejected } = seat.validator()(state, seat.id, draft, [edit('/strategy', { ...draft.strategy, cashFloor: 1_777 })]);
+    expect(rejected.map((r) => [r.path, r.why])).toEqual([['/strategy', 'no such field']]);
+    seat.adopt(playbook);
+    expect(seat.mind.adopted).toBeUndefined();
+  });
 });
 
 describe('an adopted field holds for its own month only', () => {
