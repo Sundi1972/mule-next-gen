@@ -106,6 +106,17 @@ describe('RULE-7 rows 1 and 2: a buyer bidding past a sold-out store', () => {
     }
   });
 
+  it('T-AC-E2: on the trading floor a seller with nothing to spare stops no buyer: she walks past him to a seller with spare at S, and they trade at S', () => {
+    const S = a(soldOutWalk([PROBE_ASK])).storeSell;
+    const state = soldOutWalk([S - 3, S]); // p0 has none to spare, p2 sells at S
+    a(state).status.find((r) => r.id === 'p0')!.need = state.players[0]!.stock.water;
+    setWalk(state, 'p1', 1);
+    const trades: Trade[] = [];
+    for (let t = 0; t < 20_000; t += TICK) trades.push(...stepAuction(state, TICK));
+    expect(trades.length).toBeGreaterThan(0);
+    expect(trades.every((t) => t.buyer === 'p1' && t.seller === 'p2' && t.price === S)).toBe(true);
+  });
+
   it('T-AC-E2: with soldOutBidding off, a buyer walks as before: into the resting seller, and they trade', () => {
     WALK.soldOutBidding = false;
     const ask = a(soldOutWalk([PROBE_ASK])).storeSell + 6;
