@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { AI_LEVELS, createGame, GAME, scoreParts } from '@mule/engine';
+import { AI_LEVELS, createGame, GAME, scoreParts, UPKEEP } from '@mule/engine';
 import type { AiAction } from '../src/actions.js';
 import { ADVICE, defaultManual, seatBounds, type AdviceLine } from '../src/llm/manual.js';
 import { WRITER_SYSTEM } from '../src/llm/system.js';
@@ -73,6 +73,21 @@ describe('the manual of moves', () => {
       GAME.plotScore = saved;
     }
     expect(defaultManual()).toBe(before);
+  });
+
+  it('T-AC-A7: production states the Energy cut-off share and the Water shortfall share, each from its own config number', () => {
+    const saved = { off: UPKEEP.offOutputShare, short: UPKEEP.shortOutputShare };
+    try {
+      UPKEEP.offOutputShare = 0.13;
+      UPKEEP.shortOutputShare = 0.71;
+      const production = section(defaultManual(), 'How a month goes').split('\n').find((l) => l.startsWith('- production: '))!;
+      expect(production).toMatch(/Energy[^.;]*13%/);
+      expect(production).toMatch(/Water[^.;]*71%/);
+      expect(production).not.toMatch(/Energy[^.;]*71%/);
+    } finally {
+      UPKEEP.offOutputShare = saved.off;
+      UPKEEP.shortOutputShare = saved.short;
+    }
   });
 
   it("T-AC-A7: the default config's manual is byte-identical run to run, and from a fresh module", async () => {
