@@ -1,8 +1,11 @@
 import type { ColonyProjectView, ColonyView, MuleView, MyView, TableView } from '@mule/protocol';
 import { COLONY_SCORE } from '@mule/engine';
+import type { GroundsColony } from '@mule/ui';
+import { readFileSync } from 'node:fs';
 import { createElement, type ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { loadGroundsManifest } from '../src/components/Grounds';
 import type { TableClient } from '../src/net/client';
 import { ClientProvider } from '../src/net/react';
 import { PhoneGameProvider } from '../src/phone/game';
@@ -511,5 +514,68 @@ describe('G-5 AM-12: the colony score at every month end (variant A)', () => {
     // Production's harvest on the phone, with a score in the view, carries no month-end score.
     const harvest = onPhone(end(MONTH_7, { phase: 'production' }), 1, Results);
     for (const id of ['phone-month-score', 'colony-score-change', 'colony-band']) expect(has(harvest, id), `production has no ${id}`).toBe(false);
+  });
+});
+
+describe('C7: the colony grounds on the TV', () => {
+  type Place = { x: number; y: number; w: number; h: number };
+  /** A project as WS7's view will carry it, with its block on the 5×5 grounds (AM-18). */
+  const at = (p: ColonyProjectView, place: Place | null): ColonyProjectView => Object.assign({}, p, { place });
+  /** Month 12: the Park stands, the Stadium has 1 of its 3 months left, the Hospital is closed, the Spaceport only commissioned. */
+  const MONTH_12: ColonyView = {
+    ...MIDGAME,
+    projects: [
+      at(PARK, { x: 1, y: 2, w: 1, h: 1 }),
+      at({ ...STADIUM, stage: 'building', monthsLeft: 1 }, { x: 0, y: 0, w: 2, h: 2 }),
+      at({ ...HOSPITAL, stage: 'closed', monthsLeft: null }, { x: 3, y: 2, w: 1, h: 1 }),
+      at({ ...DAMAGED, stage: 'commissioned', repairCost: null }, { x: 3, y: 3, w: 2, h: 2 }),
+    ],
+  };
+  const MANIFEST_URL = '/art/colony/manifest.json';
+  const manifestFile = readFileSync(new URL('../public/art/colony/manifest.json', import.meta.url), 'utf8');
+  /** The web server as the browser meets it: the manifest at its URL, nothing else. */
+  const serveManifest = (body: () => Response | Promise<Response>) => vi.stubGlobal('fetch', vi.fn(async (url: string) => (url === MANIFEST_URL ? body() : new Response('', { status: 404 }))));
+  const hrefs = (html: string) => [...element(html, 'colony-grounds').matchAll(/<image[^>]*href="([^"]+)"/g)].map((m) => m[1]!);
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("B-AC-1 (TV): the month end shows colony-grounds, each place in its stage's dusk picture at TV size", async () => {
+    serveManifest(() => new Response(manifestFile));
+    await loadGroundsManifest();
+    const tv = onTv(game(MONTH_12), TvMonthEnd);
+    expect(has(tv, 'colony-grounds')).toBe(true);
+    const shown = hrefs(tv);
+    expect(shown).toEqual(expect.arrayContaining(['/art/colony/park/standing-dusk@800.webp', '/art/colony/stadium/build2-dusk@800.webp', '/art/colony/hospital/closed-dusk@800.webp']));
+    // Negative: a commissioned project shows its site, never its standing building.
+    expect(shown).toContain('/art/colony/spaceport/site-dusk@800.webp');
+    expect(shown.some((h) => h.startsWith('/art/colony/spaceport/standing'))).toBe(false);
+    expect(has(tv, 'build-site'), 'the build site list stays beside the grounds').toBe(true);
+  });
+
+  it('T-AC-5: politics off, no colony-grounds', async () => {
+    serveManifest(() => new Response(manifestFile));
+    await loadGroundsManifest();
+    for (const colony of [null, undefined]) {
+      expect(has(onTv(game(colony), TvMonthEnd), 'colony-grounds'), `month end, colony ${colony}`).toBe(false);
+      expect(has(onTvRouter(game(colony, { phase: 'planning' })), 'colony-grounds'), `planning, colony ${colony}`).toBe(false);
+    }
+  });
+
+  it.each<[string, () => Response | Promise<Response>]>([
+    ['the network fails', () => Promise.reject(new TypeError('Failed to fetch'))],
+    ['the server answers 404', () => new Response('Not found', { status: 404 })],
+    ['the file is not JSON', () => new Response('<!doctype html>')],
+    ['the JSON is not a manifest', () => new Response('{"pictures":null}')],
+  ])('HC-3: when %s, the grounds draw every place as its SVG shape and nothing breaks', async (_, body) => {
+    vi.resetModules();
+    const fresh = await import('../src/components/Grounds');
+    serveManifest(body);
+    await expect(fresh.loadGroundsManifest()).resolves.toBeNull();
+    const html = renderToStaticMarkup(createElement(fresh.Grounds, { colony: MONTH_12 as GroundsColony, size: 'tv', light: 'dusk' }));
+    expect(has(html, 'colony-grounds')).toBe(true);
+    expect(html).not.toContain('<image');
+    for (const n of [1, 2, 3, 4]) expect(has(html, `shape-${n}`), `place ${n} is drawn`).toBe(true);
   });
 });
