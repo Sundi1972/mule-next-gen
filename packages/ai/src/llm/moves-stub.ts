@@ -43,6 +43,7 @@ export type IntentType =
   | 'vote'
   | 'setTax'
   | 'commission'
+  | 'donate'
   | 'payStrike'
   | 'repair'
   | 'setSiteBid'
@@ -364,6 +365,26 @@ export const MOVES: MoveTable = {
     ],
     cost: null,
     args: [{ name: 'id', kind: 'enum', values: PRESTIGE_IDS }],
+  },
+  donate: {
+    type: 'donate',
+    command: 'donate',
+    phases: ['planning'],
+    does: () =>
+      "Gives credits from your money toward the colony's commissioned prestige object; its plaque names you with the sum, and the gift counts toward your vote weight. It leaves your Worth as it was: what you give counts as donated.",
+    legalWhen: () => [
+      refused("the game plays with the colony's council", "This game plays without the colony's council"),
+      refused('it is planning', 'Donate in planning'),
+      refused('the object is commissioned and still being funded', 'Nothing is being funded'),
+      refused('it is a whole number of credits, at least 1', 'Give at least 1 cr or 1 unit'),
+      refused('you have the credits', 'You have <money> cr'),
+      refused('the object still needs that many credits', 'The <name> needs only <credits> cr more'),
+    ],
+    cost: () => ({ line: 'the credits you give' }),
+    args: [
+      { name: 'id', kind: 'enum', values: PRESTIGE_IDS },
+      { name: 'credits', kind: 'number' },
+    ],
   },
   payStrike: {
     type: 'payStrike',

@@ -8,6 +8,7 @@ import type { Strategy } from './playbook.js';
  */
 
 export interface GoodConfig {
+  /** Credits a unit at normal supply when the game starts: the store's opening price and off-world price; it drifts after. */
   refPrice: number;
   /** How strongly price reacts to low cover (k in the price formula). */
   sensitivity: number;
@@ -214,6 +215,7 @@ export const UPKEEP = {
   baseWater: 1,
   crewPerFood: 4,
   crewPerWater: 6,
+  /** Crew a plot adds to its owner's, by kind: a raw plot, a factory, a green belt. */
   crew: { raw: 1, factory: 2, greenBelt: 0 },
   /**
    * Energy a raw plot burns a month, by what it makes. Factories burn what their recipe says. An Energy plot pays its
@@ -255,6 +257,7 @@ export const UPKEEP = {
 };
 
 export const START = {
+  /** Each player's credits at the start. */
   money: 1000,
   /** Each player's depot at the start. Food 2 and Energy 2 (Heiko, 5 Nov). */
   playerStock: { food: 2, water: 6, energy: 2 } as Partial<Stock>,
@@ -303,6 +306,7 @@ export const MULE = {
   surplusShare: 0.5,
   /** The scarcity factor never falls below this. */
   minFactor: 0.6,
+  /** Credits to outfit a MULE for each good, paid at the store's outfit counter. */
   outfitCost: {
     food: 25, water: 25, energy: 50, smithore: 75, crystite: 100, rareEarth: 100,
     alloy: 150, electronics: 200, medicine: 150, greenBelt: 20,
@@ -969,6 +973,15 @@ export const POLITICS = {
       siteBid: ({ trader: 400, cautious: 300, aggressive: 500, saboteur: null } satisfies Record<AiPersonaId, number | null>) as Record<AiPersonaId, number | null>,
       /** In these mood bands an AI voter will not vote for the sitting Governor if anyone else runs. */
       leanIn: ['unhappy', 'unrest'] as MoodBand[],
+      /** What an AI seat gives in planning toward a commissioned object (G-5 C28). Placeholders until the sim tunes them (HC-25). */
+      donate: {
+        /** The share of its cash above its reserve each persona gives. */
+        share: { trader: 0.1, cautious: 0.15, aggressive: 0.05, saboteur: 0 } satisfies Record<AiPersonaId, number>,
+        /** The share's multiplier when the seat leads the table on Worth, or trails it. */
+        standing: { leading: 1, trailing: 1 },
+        /** The least it gives, in credits; a smaller gift is not made. */
+        minCredits: 10,
+      },
     },
   },
 };
@@ -1100,6 +1113,13 @@ export const WALK = {
   boardMargin: 0.3,
   /** And this share of the posted price more, so a board whose price lines sit close together still has room to walk. */
   boardPostedMargin: 0.1,
+  /**
+   * RULE-4 (AM-1): a seller stops at the amount they must hold (auctionNeed, fixed as the good comes up), one price
+   * step above the line, and sells below it only after holding ▼ for shortHoldMs. false turns the stop off, for sweeps.
+   */
+  needStop: true,
+  /** Board ms a stopped seller holds ▼ to sell on into shortage (Heiko's choice A, 5 Nov). A tap or a shorter hold moves nothing. */
+  shortHoldMs: 1_000,
   /** How often the server steps the auction. */
   tickMs: 100,
 };
@@ -1621,8 +1641,6 @@ export const STRATEGIST = {
   grantSpare: 0,
   /** A factory needs this many months of its inputs on hand or from its own plots. */
   factoryInputMonths: 2,
-  /** Spare Food, Water, Energy and Medicine it keeps over next month's need, before the reserve multiplier. */
-  keepSpare: { food: 1, water: 1, energy: 1, medicine: 0 } as Partial<Record<Good, number>>,
   /** It analyses an unknown plot of its own when the plot's best and second-best uses are this close, as a share. */
   analyseWhenClose: 0.25,
   /** Analyses per month, at most, and never with less than this many seconds left. */
@@ -1737,6 +1755,11 @@ export const AI_VALUE = {
    * price itself.
    */
   shortFloorMarkup: 1,
+  /**
+   * Months a unit held past the seat's needs is expected to wait before it is sold: it keeps (1 − spoilage) of itself
+   * per month. A count of upkeeps, 0 or more; 1 is a sale at the next auction.
+   */
+  holdMonths: 1,
 };
 
 /** The AI's hands in the real-time phases. Times are in ms. */
@@ -1806,8 +1829,8 @@ export const AI_PLANS = {
     otherScore: 0.8,
   },
   monopoly: {
-    /** The goods a seat may try to corner. */
-    goods: ['food', 'energy', 'smithore'] as Good[],
+    /** The goods a seat may try to corner. Not Food: it spoils too fast (STRATEGIST.cornerMaxSpoilage). */
+    goods: ['energy', 'smithore'] as Good[],
     /** A good is cornered only while at most this many rival plots make it. */
     maxRivalPlots: 1,
     /** And only with at least this many of its own idle or free plots whose best outfit is the good. */

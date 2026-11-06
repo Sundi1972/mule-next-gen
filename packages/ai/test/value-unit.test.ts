@@ -10,7 +10,6 @@ import {
   needsOf,
   observe,
   PRICE,
-  STRATEGIST,
   UPKEEP,
   type GameState,
   type Good,
@@ -85,12 +84,13 @@ function nonIncreasing(v: UnitValues): void {
  */
 const lost = (units: number, price: number, use: number) => ((1 - UPKEEP.offOutputShare) * units * price) / use;
 
-const saved = { unit: AI_VALUE.unit, spoilage: GOOD_CONFIG.energy.spoilage };
+const saved = { unit: AI_VALUE.unit, holdMonths: AI_VALUE.holdMonths, spoilage: GOOD_CONFIG.energy.spoilage };
 beforeEach(() => {
   AI_VALUE.unit = true;
 });
 afterEach(() => {
   AI_VALUE.unit = saved.unit;
+  AI_VALUE.holdMonths = saved.holdMonths;
   GOOD_CONFIG.energy.spoilage = saved.spoilage;
 });
 
@@ -223,8 +223,8 @@ describe('RULE-3: the chance the seat needs the k-th unit', () => {
     const S = shortCosts(obs, o, 'energy', mind, target).sort((a, b) => b - a);
     const q = Math.min(1, AI_VALUE.forecastRisk * mind.persona.risk);
 
-    // What a unit fetches next month: today's price after spoilage and the forecast's risk (no sales tax here).
-    const carry = 20 * (1 - GOOD_CONFIG.energy.spoilage) * (1 - STRATEGIST.forecastHaircut * mind.persona.risk);
+    // RULE-4: what the store pays for a unit after the months it is held (no sales tax here).
+    const carry = 20 * (1 - PRICE.storeSpread) * (1 - GOOD_CONFIG.energy.spoilage) ** AI_VALUE.holdMonths;
 
     nonIncreasing(v);
     const expected = S.map((s) => q * s + (1 - q) * carry).sort((a, b) => b - a);
@@ -243,6 +243,51 @@ describe('RULE-3: the chance the seat needs the k-th unit', () => {
 
     expect(v.buy[0], "under the store's ask: it buys none").toBeLessThan(20 * (1 + PRICE.storeSpread));
     expect(v.block).toBe(0);
+  });
+});
+
+describe('RULE-4: what an unneeded unit is worth', () => {
+  /** A seat with no plots, so no unit is needed and each is worth its carry alone; Energy posted at 40, tax 8%. */
+  function carryAt(spoilage: number, persona: 'trader' | 'cautious' = 'trader'): UnitValues {
+    GOOD_CONFIG.energy.spoilage = spoilage;
+    AI_VALUE.holdMonths = 1;
+    const state = table({ plots: [], posted: { energy: 40 } });
+    state.treasury.salesTax = 0.08;
+    const { obs, o } = view(state);
+    return unitValues(obs, o, 'energy', mindOf(persona));
+  }
+
+  it("T-AC-7: Ck at RULE-4's example is about 29.8, and a seat speculating less pays that share of it", () => {
+    expect(PRICE.storeSpread, 'the premise: the example’s spread').toBe(0.1);
+    // 40 × (1 − 0.1 spread) × (1 − 0.08 tax) × 0.9 kept a month = 29.808.
+    const trader = carryAt(0.1);
+    const cautious = carryAt(0.1, 'cautious');
+
+    expect(trader.keep[0]).toBeCloseTo(29.808, 6);
+    expect(trader.buy[0], 'speculate 1.4 counts as 1').toBeCloseTo(29.808, 6);
+    expect(cautious.buy[0], 'speculate 0.3').toBeCloseTo(29.808 * 0.3, 6);
+  });
+
+  it("T-AC-7: held 0 months, a Food unit is worth 40 × 0.9 × 0.92 = 33.12 in unitValues' carry and as a farm's surplus in monthlyNet", () => {
+    AI_VALUE.holdMonths = 0;
+    // One plant, so the seat's walking time, and with it what going without Food costs, is finite.
+    const state = table({ plots: [{ outfit: 'energy', x: 0 }], posted: { food: 40 } });
+    state.treasury.salesTax = 0.08;
+    const { obs, o } = view(state);
+    const mind = mindOf();
+    const target = wholeNextMonth(obs, 'ai0', 'food');
+    // Past the target every unit the farm makes is surplus: the next one adds what it sells for.
+    const farmMaking = (made: number) => monthlyNet(obs, o, { made, energy: 0, inputs: {}, air: 0, crew: 0 }, 'food', mind);
+
+    expect(unitValues(obs, o, 'food', mind).keep[target], 'the first unit past the target').toBeCloseTo(33.12, 6);
+    expect(farmMaking(target + 1) - farmMaking(target)).toBeCloseTo(33.12, 6);
+  });
+
+  it('T-AC-7 negative: a good that spoils fully carries nothing', () => {
+    const v = carryAt(1);
+
+    expect(v.keep[0]).toBe(0);
+    expect(v.buy[0]).toBe(0);
   });
 });
 
@@ -361,6 +406,8 @@ describe("C8: a new plot's own-use units are worth what going short costs", () =
     Object.assign(state.store.stock, store);
     return { ...view(state), mind: mindOf() };
   };
+  /** What the store pays for a unit posted at 20: what a unit the seat doesn't use earns (AM-6). */
+  const storePays = 20 * (1 - PRICE.storeSpread);
   const netOf = (plots: Plot[], outfit: Outfit, store: Partial<Record<Good, number>> = {}) => {
     const { obs, o, mind } = seatOf(plots, store);
     return monthlyNet(obs, o, yieldOf(obs, obs.tiles[6]!, outfit, 'ai0'), outfit, mind);
@@ -368,10 +415,10 @@ describe("C8: a new plot's own-use units are worth what going short costs", () =
 
   it('T-AC-12 (C8): a plant beside plots short of Energy earns, over its sale, S − price for each unit they would go without', () => {
     const rich = [0, 2, 4].map((x): Plot => ({ outfit: 'smithore', x, ground: { smithore: 6 } }));
-    // The mines use 6; the plant nets 3, each keeping a mine's unit on: 0.8 × 6 × 100 ÷ 2 = 240, sold at 20.
+    // The mines use 6; the plant nets 3, each keeping a mine's unit on: 0.8 × 6 × 100 ÷ 2 = 240, sold to the store at 20 less its spread.
     const gain = netOf(rich, 'energy') - netOf([], 'energy');
 
-    expect(gain).toBeCloseTo(3 * (lost(6, 100, 2) - 20), 6);
+    expect(gain).toBeCloseTo(3 * (lost(6, 100, 2) - storePays), 6);
   });
 
   it("T-AC-12 (C8) negative: a seat with no farm gains nothing from a well's drink units, whether the store sells Water or not", () => {
@@ -394,6 +441,6 @@ describe("C8: a new plot's own-use units are worth what going short costs", () =
     // With the store selling none, S has no floor; the damage alone is what its farm loses.
     const [bare = 0] = shortCosts(seatOf([farm], { water: 0 }).obs, seatOf([farm], { water: 0 }).o, 'water', mind, 1);
 
-    expect(gain).toBeCloseTo(own * (Math.max(0, S - 20) - Math.max(0, bare - 20)), 6);
+    expect(gain).toBeCloseTo(own * (Math.max(0, S - storePays) - Math.max(0, bare - storePays)), 6);
   });
 });

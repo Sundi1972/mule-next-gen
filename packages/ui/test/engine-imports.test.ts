@@ -22,6 +22,11 @@ const ALLOWED = new Set([
   // Types: exactly those Store.tsx draws the plan with.
   'HallPlace',
   'HallRect',
+  // The event show's vocabulary is the engine's: types, not rules (AM-17).
+  'EventKey',
+  'EventEffect',
+  // The strike chip's share (WS6 ruling, 6 Nov): the engine's COLONY.strike.output, read, never computed here.
+  'COLONY',
 ]);
 
 const SRC = fileURLToPath(new URL('../src', import.meta.url));

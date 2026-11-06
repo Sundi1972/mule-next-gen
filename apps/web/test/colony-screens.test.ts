@@ -369,6 +369,33 @@ describe('G-5 AM-12: the colony score at every month end (variant A)', () => {
     expect(text(band)).not.toContain('since month');
   });
 
+  it('B-AC-27-6: at six seats the TV band shows the total and "+N" but no sum and no words; at four seats both lines are there', () => {
+    const SIX = [...PLAYERS, aPlayer({ id: 's5', name: 'Ola', slot: 4, worth: 5_200, lastWorth: 5_000 }), aPlayer({ id: 's6', name: 'Ben', slot: 5, worth: 4_400, lastWorth: 4_300 })];
+    const six = element(onTv(end(MONTH_7, { players: SIX }), TvMonthEnd), 'colony-band');
+    expect(said(six, 'colony-total')).toBe('36,676');
+    expect(said(six, 'colony-score-change')).toBe('↑ +2,069 since month 6');
+    expect(has(six, 'score-sum')).toBe(false);
+    expect(has(six, 'colony-score-words')).toBe(false);
+    const four = element(onTv(end(MONTH_7), TvMonthEnd), 'colony-band');
+    expect(said(four, 'colony-total')).toBe('36,676');
+    expect(has(four, 'score-sum')).toBe(true);
+    expect(has(four, 'colony-score-words')).toBe(true);
+  });
+
+  it('B-AC-27-6: five seats is where the band drops its sum and words', () => {
+    const FIVE = [...PLAYERS, aPlayer({ id: 's5', name: 'Ola', slot: 4, worth: 5_200, lastWorth: 5_000 })];
+    const five = element(onTv(end(MONTH_7, { players: FIVE }), TvMonthEnd), 'colony-band');
+    expect(said(five, 'colony-total')).toBe('36,676');
+    expect(has(five, 'score-sum')).toBe(false);
+    expect(has(five, 'colony-score-words')).toBe(false);
+  });
+
+  it('B-AC-27-6: at six seats the phone beside the TV does not send players to a sum the TV no longer shows', () => {
+    const SIX = [...PLAYERS, aPlayer({ id: 's5', name: 'Ola', slot: 4, worth: 5_200, lastWorth: 5_000 }), aPlayer({ id: 's6', name: 'Ben', slot: 5, worth: 4_400, lastWorth: 4_300 })];
+    const foot = element(onPhone(end(MONTH_7, { players: SIX }), 1, Results), 'colony-on-tv');
+    expect(said(foot, 'phone-month-score')).toBe('Colony score 36,676 ↑ +2,069 since month 6 Your own lines are beside, yours only.');
+  });
+
   it('B-AC-27-2: in Collapse the TV keeps the CollapseBanner and still shows the score, saying the cut is not the score’s', () => {
     const tv = onTv(end(MONTH_7, COLLAPSE), TvMonthEnd);
     expect(has(tv, 'collapse-banner')).toBe(true);

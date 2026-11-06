@@ -20,8 +20,8 @@ export function GameOver() {
   const mine = lg.rows.find((r) => r.player.id === self.id)!;
   const shared = (lg.leader?.level.length ?? 0) > 1;
   const now: Now = {
-    // One line in the rail: the card beside says the rest ("You finished 2nd of 4").
-    title: mine.rank === 1 ? (shared ? 'Game over: you share the win' : 'Game over: you win') : `Game over: ${ordinal(mine.rank)} of ${view.players.length}`,
+    // Your place alone, as at the month end: one line at 667 px; the phase above says "Game over".
+    title: mine.rank === 1 ? (shared ? 'You share the win' : 'You win') : `You’re ${ordinal(mine.rank)} of ${view.players.length}`,
     detail: `${winnerWords(view, lg)}.`,
   };
   const density = tv ? 'phone' : 'compact';

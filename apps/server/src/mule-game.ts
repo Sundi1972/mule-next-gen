@@ -1761,6 +1761,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
         done: a.done.includes(w.id),
         units: market.units(w.id),
         line: a.stage === 'walk' ? (houseLineAt(market, w)?.house ?? null) : null,
+        // RULE-4: stopped at the amount they must hold; absent otherwise.
+        ...(w.held ? { held: true as const } : {}),
       })),
       deals: a.deals.map(({ buyer, seller, price, units }) => ({ buyer, seller, price, units })),
       units: a.units,

@@ -520,7 +520,8 @@ describe('the walk', () => {
     expect(state.players[1]!.money).toBe(1);
 
     const other = waterPair();
-    other.players[0]!.stock.water = 2;
+    // Two units over what the seller must hold: RULE-4 keeps the rest, so two are all it has to sell.
+    other.players[0]!.stock.water = 2 + a(other).status.find((r) => r.id === 'p0')!.need;
     walker(other, 'p0').price = a(other).storeBuy + 2;
     walker(other, 'p1').price = a(other).storeBuy + 2;
     expect(run(other, 5_000)).toHaveLength(2);
