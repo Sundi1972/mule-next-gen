@@ -2,6 +2,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   advancePhase,
   AI_VALUE,
+  energyOffOrder,
+  needsOf,
+  UPKEEP,
   createGame,
   GROWN_BASE,
   observe,
@@ -228,5 +231,77 @@ describe('C8: a power plant is worth what its output saves', () => {
     const { state: after } = playMonthFrom(state, seats, 1);
 
     expect(after.tiles.filter((t) => t.owner === ME).map((t) => t.outfit)).toEqual(MINES.map(() => 'smithore'));
+  });
+});
+
+/** Plays on from the auction's end through upkeep into next month, up to `until`'s start; with `through`, past it too. */
+function playOn(state: GameState, until: 'development' | 'production', through = false): void {
+  const month = state.month;
+  for (let i = 0; i < 50 && !(state.month > month && state.phase === until); i++) advancePhase(state);
+  expect(state.phase).toBe(until);
+  if (through) advancePhase(state);
+}
+
+describe('G-1: a seat keeps itself supplied', () => {
+  /** Nine Energy plants (crew 9, so it eats 5): they pay their own use, so no plot needs Energy and only Food is short. */
+  const PLANTS: Plot[] = Array.from({ length: 9 }, (_, i): Plot => ({ outfit: 'energy', x: 2 * i }));
+  /** Food posted at 65: the store sells at 72. */
+  const FED: Seat = { plots: PLANTS, posted: { food: 65 }, stock: { water: 20, energy: 20 }, money: 1200 };
+  /** The colonists' month the store keeps back from players, and 30 Food more for sale. */
+  const shelf = (state: GameState, extra: number) => Math.ceil(state.colonists / UPKEEP.colonistsPerUnit) + extra;
+
+  function hungryNext(seat: Seat, forSale: number): { hungry: boolean; bought: number; money: number } {
+    const state = table(seat);
+    state.store.stock.food = shelf(state, forSale);
+    expect(needsOf(state, ME).food, 'the premise: it eats 5').toBe(5);
+    const trades = playAuction(state, seat, ['food']);
+    const money = me(state).money;
+    playOn(state, 'development');
+    return { hungry: me(state).hungry, bought: bought(trades, 'food'), money };
+  }
+
+  it('B-AC-1: a seat with 0 Food, eating 5, 1,200 cr and the store selling Food at 72 is not hungry at the next development', () => {
+    const state = atAuction(table(FED), ['food']);
+    state.store.stock.food = shelf(state, 30);
+    expect(state.auction!.storeSell, 'the premise: the store asks 72').toBe(72);
+
+    const { hungry, bought: units, money } = hungryNext(FED, 30);
+
+    expect(units, 'it bought Food').toBeGreaterThan(0);
+    expect(money, 'its money never went negative').toBeGreaterThanOrEqual(0);
+    expect(hungry, 'fed at the next development').toBe(false);
+  });
+
+  it('B-AC-1 negative: with no Food for sale at the store, there is no trade and it is hungry', () => {
+    const { hungry, bought: units } = hungryNext(FED, 0);
+
+    expect(units).toBe(0);
+    expect(hungry).toBe(true);
+  });
+
+  /** Three mines (use 2 each): 6 Energy a month. Food and Water in plenty. */
+  const POWERED = (money: number): Seat => ({ plots: MINES, posted: POSTED, stock: { food: 20, water: 20, energy: 1 }, money });
+
+  /** Plays the Energy auction, then next month's production; returns the seat's plots turned off for want of Energy. */
+  function offAtProduction(seat: Seat): { off: number[]; order: number[] } {
+    const state = table(seat);
+    playAuction(state, seat, ['energy']);
+    playOn(state, 'production');
+    const order = energyOffOrder(state, ME, 1).map((p) => state.tiles.indexOf(p.tile));
+    advancePhase(state);
+    const lines = state.history.at(-1)!.lines ?? [];
+    const off = lines.filter((l) => state.tiles[l.tile]!.owner === ME && l.parts.some((p) => p.why === 'energyOff')).map((l) => l.tile);
+    return { off, order };
+  }
+
+  it('B-AC-2: a seat whose plots need 6 Energy, holding 1, with cash enough and the store selling, has no plot turned off at production', () => {
+    expect(offAtProduction(POWERED(1000)).off).toEqual([]);
+  });
+
+  it("B-AC-2 negative: with cash below one unit, its plots turn off in energyOffOrder's order", () => {
+    const { off, order } = offAtProduction(POWERED(10));
+
+    expect(off.length, 'some plot turned off').toBeGreaterThan(0);
+    expect(order.slice(0, off.length).sort(), 'the first in the turn-off order').toEqual([...off].sort());
   });
 });
