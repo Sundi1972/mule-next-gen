@@ -23,6 +23,15 @@ export interface NewPlayer {
 
 export { RuleError };
 
+/**
+ * A seat that picked no species gets one from DEFAULT_SPECIES, turned by the seed: the chairs of one game never share
+ * one, and across seeds every chair plays every species, so a per-chair result is not a species result.
+ */
+function defaultSpecies(seat: number, seed: number): Species {
+  // The seed read as the rng reads it (createRng), so a negative or fractional seed still lands on the list.
+  return DEFAULT_SPECIES[(seat + (seed >>> 0)) % DEFAULT_SPECIES.length]!;
+}
+
 /** Starts a game in month 1's planning phase. `politics: false` is the host option that plays without offices, elections or a moving tax. */
 export function createGame(options: { seed: number; players: NewPlayer[]; maxMonths?: number; politics?: boolean }): GameState {
   if (options.players.length < GAME.minPlayers || options.players.length > GAME.maxPlayers) {
@@ -44,7 +53,7 @@ export function createGame(options: { seed: number; players: NewPlayer[]; maxMon
         id: p.id,
         name: p.name,
         isAi: p.isAi,
-        species: p.species ?? DEFAULT_SPECIES[i % DEFAULT_SPECIES.length]!,
+        species: p.species ?? defaultSpecies(i, options.seed),
         money: START.money,
         stock: { ...emptyStock(), ...START.playerStock },
         carriedMule: null,
