@@ -1,5 +1,5 @@
 import { COLONY, EVENTS, GAME, GOOD_CONFIG, SOCIAL_EVENTS, UPKEEP } from './config.js';
-import { addPrestige, callStrike, fundIn, goodWords, moodBand, moodShift, strikeHolds } from './colony.js';
+import { addPrestige, callStrike, damageObject, fundIn, goodWords, moodBand, moodShift, strikeHolds } from './colony.js';
 import { neighbours } from './grid.js';
 import { reputationShift } from './politics.js';
 import { airBand, type AirBand } from './pollution.js';
@@ -57,6 +57,13 @@ const SHAPE: Record<EventKey, { kind: EventKind; title: string; scope: MonthEven
   },
   storeStrike: { kind: 'store', title: 'Store strike', scope: 'colony', sign: 'bad', line: () => 'The store is on strike: it sells no MULEs this turn.' },
   walkout: { kind: 'plot', title: 'Walkout', scope: 'personal', sign: 'bad', line: () => walkoutLine(null) },
+  riot: {
+    kind: 'store',
+    title: 'Riot',
+    scope: 'colony',
+    sign: 'bad',
+    line: () => `A riot: the store loses ${pct(SOCIAL_EVENTS.colony.riot.storeLoss)} of every shelf, and one colony object is damaged until it is repaired.`,
+  },
   loyalCrew: { kind: 'plot', title: 'Loyal crew', scope: 'personal', sign: 'good', line: () => `A loyal crew: one of your plots makes ${SOCIAL_EVENTS.player.loyalCrew.gain} more this month.` },
 };
 
@@ -181,6 +188,7 @@ const OFF_MAP = {
   emigrationWave: () => true,
   blamedForUnrest: () => true,
   storeStrike: () => true,
+  riot: () => true,
   walkout: (state: GameState, p?: Player) => p !== undefined && workedBy(state, p.id).length > 0,
   loyalCrew: (state: GameState, p?: Player) => p !== undefined && workedBy(state, p.id).length > 0,
 } satisfies Partial<Record<EventKey, (state: GameState, player?: Player) => boolean>>;
@@ -213,11 +221,20 @@ function offMapEvent(state: GameState, key: OffMapKey, rng: Rng, phase: Phase, p
     const hit = state.tiles.filter((t) => t.owner === player && t.outfit === good);
     return { ...toEvent(state, key, { x: hit[0]!.x, y: hit[0]!.y }, hit, undefined, player, phase), line: walkoutLine(good) };
   }
+  if (key === 'riot') {
+    const standing = (state.colony?.projects ?? []).filter((p) => p.stage === 'standing');
+    const event = offMapAtStore(state, key, phase, player);
+    return standing.length > 0 ? { ...event, objects: [{ id: rng.pick(standing).id, becomes: 'damaged' }] } : event;
+  }
   if (key === 'loyalCrew') {
     const plot = rng.pick(workedBy(state, player!));
     return toEvent(state, key, { x: plot.x, y: plot.y }, [plot], undefined, player, phase);
   }
-  // Off the map: it starts at the store, where every colonist starts development.
+  return offMapAtStore(state, key, phase, player);
+}
+
+/** An event off the map: it starts at the store, where every colonist starts development. */
+function offMapAtStore(state: GameState, key: EventKey, phase: Phase, player?: string): MonthEvent {
   const store = state.tiles.find((t) => t.terrain === 'store');
   return toEvent(state, key, store ? { x: store.x, y: store.y } : { x: 0, y: 0 }, [], undefined, player, phase);
 }
@@ -365,6 +382,8 @@ export interface EventParams {
   output?: number;
   /** G-5 C26: what a loyal crew's plot makes more. */
   gain?: number;
+  /** G-5 C26: the share of each store shelf a riot takes (floored). */
+  storeLoss?: number;
 }
 
 /** What a chance reads beside the state: whose roll it is (none for a colony row), and the keys already fired this phase. */
@@ -684,6 +703,17 @@ export function applyEvents(state: GameState, fired: readonly MonthEvent[]): voi
         const was = me!.reputation;
         reputationShift(state, me!.id, SOCIAL_EVENTS.player.blamedForUnrest.reputation);
         change(me!.id, 'reputation', me!.reputation - was);
+        break;
+      }
+      case 'riot': {
+        for (const g of GOODS) {
+          const n = Math.floor(state.store.stock[g] * SOCIAL_EVENTS.colony.riot.storeLoss);
+          state.store.stock[g] -= n;
+          change('store', g, -n);
+        }
+        const damaged = (event.objects ?? []).filter((o) => damageObject(state, o.id));
+        if (damaged.length > 0) event.objects = damaged;
+        else delete event.objects;
         break;
       }
       default:

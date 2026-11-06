@@ -1423,6 +1423,18 @@ export const SOCIAL_EVENTS = {
       mood: { unhappy: 0.02, unrest: 0.04 },
       cap: 0.9,
     },
+    /**
+     * At the month end: each store shelf loses `storeLoss` of its stock, floored, and one standing object, on the row's
+     * dice, is damaged (damageObject: no prestige until repaired).
+     */
+    riot: {
+      phases: { upkeep: 0 },
+      needsColony: true,
+      mood: { unhappy: 0.01, unrest: 0.05 },
+      foodPrice: { factor: 1.5, points: 0.02 },
+      storeLoss: 1 / 3,
+      cap: 0.9,
+    },
   } satisfies Record<string, import('./events.js').EventRow & import('./events.js').EventParams>,
   player: {
     /** Each player's own roll: `reputation` points (reputationShift), so fewer votes. The richest is likelier. */
