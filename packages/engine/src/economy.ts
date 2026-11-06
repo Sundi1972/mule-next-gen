@@ -105,7 +105,7 @@ export function festivalFood(state: GameState): number {
 export function colonistDemand(state: GameState, good: Good, need: number): number {
   const budget = UPKEEP.colonistBudget[good];
   if (budget === undefined) return need;
-  const price = state.store.posted[good] * (1 + PRICE.storeSpread);
+  const price = storeSellAt(state, good, state.store.posted[good], { exact: true });
   return need * Math.min(1, budget / Math.max(1, price));
 }
 
@@ -225,12 +225,24 @@ export function mulePrice(state: GameState): number {
   return Math.round((MULE.labour + MULE.smithorePerMule * state.store.posted.smithore) * state.store.muleFactor);
 }
 
-/** What the store sells at for a posted price: the price plus PRICE.storeSpread, rounded up. */
-export function storeSellPrice(posted: number): number {
-  const exact = posted * (1 + PRICE.storeSpread);
-  const whole = Math.round(exact);
+/** What the store sells a good at around a mid price: the mid plus PRICE.storeSpread, rounded up, or unrounded with `exact` for a forecast. */
+export function storeSellAt(state: GameState, good: Good, mid: number, { exact = false } = {}): number {
+  const line = mid * (1 + PRICE.storeSpread);
+  if (exact) return line;
+  const whole = Math.round(line);
   // 1 + 0.1 is a hair over 1.1 in floating point, so 50 × 1.1 lands a hair over 55: that close to a whole number, it is one.
-  return Math.abs(exact - whole) <= Number.EPSILON * exact ? whole : Math.ceil(exact);
+  return Math.abs(line - whole) <= Number.EPSILON * line ? whole : Math.ceil(line);
+}
+
+/** What the store pays for a good around a mid price: the mid less PRICE.storeSpread, rounded down to at least 1, or unrounded with `exact`. */
+export function storeBuyAt(state: GameState, good: Good, mid: number, { exact = false } = {}): number {
+  const line = mid * (1 - PRICE.storeSpread);
+  return exact ? line : Math.max(1, Math.floor(line));
+}
+
+/** The highest mid price whose exact selling line the colonists' budget for a good still covers. */
+export function colonistAffordable(state: GameState, good: Good): number {
+  return (UPKEEP.colonistBudget[good] ?? 0) / (1 + PRICE.storeSpread);
 }
 
 /**
@@ -240,10 +252,10 @@ export function storeSellPrice(posted: number): number {
  */
 export function storeLines(state: GameState, good: Good): { buy: number; sell: number } {
   const posted = colonyPrice(state, good);
-  const usualBuy = Math.max(1, Math.floor(posted * (1 - PRICE.storeSpread)));
+  const usualBuy = storeBuyAt(state, good, posted);
   const ceiling = Math.floor((UPKEEP.colonistBudget[good] ?? 0) / (1 + PRICE.storeSpread) ** 2); // literal-ok: the spread applies twice, store buys then sells
   const buy = shelfShort(state, good, 1) ? Math.max(usualBuy, Math.min(ceiling, Math.ceil(posted * PRICE.restockPremium))) : usualBuy;
-  return { buy, sell: Math.max(storeSellPrice(posted), buy + 1) };
+  return { buy, sell: Math.max(storeSellAt(state, good, posted), buy + 1) };
 }
 
 /**
