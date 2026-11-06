@@ -330,9 +330,9 @@ const madeCache = new WeakMap<GameState, Map<string, Stock>>();
 /**
  * What the seat's own plots make at the next production: the outlook's rollout of a copy of what it sees, Energy, Water
  * and the turn-off rule included, with the factory `adding` (when given) installed on a stand-in plot: the seat's first
- * idle plot, else the first free one, with a run of inputs in stock for it and for each factory the seat has, as they run
- * once fed: the engine puts a factory in the turn-off order only when its inputs are in stock. Their Energy use may turn
- * a farm off (AM-17).
+ * idle plot, else the first free one, with a run of inputs in stock for it and for each factory of the seat's that takes
+ * one of its inputs (canFeed counts those running), as they run once fed: the engine puts a factory in the turn-off order
+ * only when its inputs are in stock. Their Energy use may turn a farm off (AM-17).
  * Remembered per observation, seat, month, phase, plots and factory, as canFeed asks it for every plot it scores. In the production phase this month's
  * production has run and the outlook rolls none before the auction (its `made` is empty), so the month's report says
  * what the plots make: the plots are the ones that made it, without the factory being weighed.
@@ -352,13 +352,18 @@ function madeNext(obs: GameState, me: string, adding?: Outfit): Stock {
         ? (sim: GameState) => {
             Object.assign(sim.tiles[at]!, { owner: me, outfit: adding, runMonths: 0 });
             // As they will run once fed: the engine lists a factory in the turn-off order only with its inputs in stock,
-            // reserving them in factory, then tile order. canFeed counts every factory of the seat's as taking its run
-            // (inputLasts' `taken`), so the stock holds a run for each, the stand-in's included, and each is listed: a
-            // run for the stand-in alone would go to a factory ahead of it, and leave its Energy out of the turn-off.
+            // reserving them in factory, then tile order. canFeed counts each of the seat's factories taking one of the
+            // new factory's inputs as running (inputLasts' `taken`), so the stock holds a run for each of those and for
+            // the stand-in, and each is listed: a run for the stand-in alone would go to such a factory ahead of it, and
+            // leave its Energy out of the turn-off. A factory sharing no input is not counted, so it is not stocked:
+            // run on inputs the seat lacks, it would make what it can't (an unfed Alloy works the Alloy of a new
+            // Electronics works).
             if (isFactory(adding)) {
               const stock = sim.players.find((p) => p.id === me)!.stock;
-              const runs = emptyStock();
-              for (const t of sim.tiles) if (t.owner === me && t.outfit && isFactory(t.outfit)) addStock(runs, inputsOf(t.outfit));
+              const needs = inputsOf(adding);
+              const counted = (o: ProcessedGood) => Object.keys(inputsOf(o)).some((g) => g in needs);
+              const runs = { ...emptyStock(), ...needs };
+              for (const t of obs.tiles) if (t.owner === me && t.outfit && isFactory(t.outfit) && counted(t.outfit)) addStock(runs, inputsOf(t.outfit));
               for (const g of GOODS) stock[g] = Math.max(stock[g], runs[g]);
             }
           }
