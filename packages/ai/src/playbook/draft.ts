@@ -161,13 +161,14 @@ const topGains = (gains: number[]) => [...gains].sort((a, b) => b - a).slice(0, 
 
 /**
  * RULE-4's chain row: the works' own score, its input charge refunded, plus each link's best plot at its running cost
- * (chainOutlook). The best works plot and each link take a plot of their own; null when the plots run short, or the
- * chain's MULEs don't fit in AI_PLANS.chain.months at the level's MULEs a month, or cost more than the cash on hand.
+ * (chainOutlook). The best works plot and each link take a plot of their own; null when `good` is no chain
+ * (chainLinks), the plots run short, or the chain's MULEs don't fit in AI_PLANS.chain.months at the level's MULEs a
+ * month, or cost more than the cash on hand.
  */
 function chainScore(obs: GameState, o: Outlook, plots: Tile[], good: Good, mind: Mind): number | null {
   const links = chainLinks(obs, mind.me, good);
   const mules = 1 + links.length;
-  if (plots.length < mules || Math.ceil(mules / mind.level.mulesPerMonth) > AI_PLANS.chain.months) return null;
+  if (links.length === 0 || plots.length < mules || Math.ceil(mules / mind.level.mulesPerMonth) > AI_PLANS.chain.months) return null;
   const valued = chainOutlook(o, links);
   const works = plots.map((t) => ({ t, ...installGain(obs, valued, t, good, mind) })).sort((a, b) => b.gain - a.gain);
   const taken = new Set([works[0]!.t]);
