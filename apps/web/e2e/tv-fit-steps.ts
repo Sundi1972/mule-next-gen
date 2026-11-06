@@ -89,7 +89,20 @@ export async function theTableHasSaid(tv: Page, server: MuleServer, code: string
   const said = ['Who sold the Food?', 'Not me, I ate it.', 'Then who is buying the Energy?'];
   for (const text of said) room.deliver(room.game.state.players[0]!.id, text);
   await tv.locator('[data-phase] [data-testid=chat-ticker]').getByText(said.at(-1)!).first().waitFor({ timeout: 2_000 });
+  await fitSettled(tv);
   return said;
+}
+
+/** Waits until the shown screen's fit boxes keep their scale across two reads: a line shown resizes the body a frame later. */
+export async function fitSettled(tv: Page): Promise<void> {
+  const read = () => tv.evaluate(() => [...document.querySelectorAll('[data-phase] [data-fit]')].map((b) => b.getAttribute('data-fit')).join(','));
+  let last = await read();
+  for (let i = 0; i < 20; i++) {
+    await tv.waitForTimeout(150);
+    const now = await read();
+    if (now === last) return;
+    last = now;
+  }
 }
 
 /** How many chat lines the shown TV screen's strip has. */
