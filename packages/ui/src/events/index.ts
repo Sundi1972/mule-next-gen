@@ -28,3 +28,4 @@ export { useEventLivingView } from './living';
 export { EventSoloRail, EventTvPhoneRail, EventSkipHint } from './phone';
 export { useEventReducedMotion } from './motion';
 export { EventPips, EventTvLog, EventColonyChips, type EventPlotOutput } from './tv';
+export { Colonist as EventColonist, TOWN as EVENT_TOWN } from './scene';

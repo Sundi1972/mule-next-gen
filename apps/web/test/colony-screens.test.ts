@@ -2,12 +2,14 @@ import type { ColonyProjectView, ColonyView, MuleView, MyView, TableView } from 
 import { COLONY_SCORE } from '@mule/engine';
 import { createElement, type ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { TableClient } from '../src/net/client';
 import { ClientProvider } from '../src/net/react';
 import { PhoneGameProvider } from '../src/phone/game';
 import { GameOver } from '../src/phone/GameOver';
-import { TvGameOver, TvHeader, TvMonthEnd } from '../src/table/TableApp';
+import { Results } from '../src/phone/Results';
+import { ColonyPanel, LeagueTable } from '../src/components/MonthEnd';
+import { TableApp, TvGameOver, TvHeader, TvMonthEnd } from '../src/table/TableApp';
 import { aMuleView, aPlayer } from './fixtures/views';
 
 /**
@@ -41,7 +43,7 @@ const ME: MyView = {
   droneOrder: [],
   politics: null,
   installedThisTurn: false,
-  worthParts: { money: 2_900, goods: 220, plots: 7, land: 2_100, mules: 6, muleValue: 900, office: 300, cut: 0 },
+  worthParts: { money: 2_900, goods: 220, plots: 7, land: 2_100, mules: 6, muleValue: 900, office: 300, donated: 0, cut: 0 },
 };
 
 function project(over: Partial<ColonyProjectView> & Pick<ColonyProjectView, 'id' | 'name' | 'stage'>): ColonyProjectView {
@@ -120,14 +122,26 @@ function game(colony: ColonyView | null | undefined, over: Partial<MuleView> = {
 const over = (colony: ColonyView | null | undefined, extra: Partial<MuleView> = {}) =>
   game(colony, { finished: true, phase: 'gameOver', month: 12, scores: PLAYERS.map((p) => ({ id: p.id, score: p.worth })), ...extra });
 
-function onPhone(view: MuleView, boards = 1): string {
+function onPhone(view: MuleView, boards = 1, screen: () => ReactElement = GameOver): string {
   const table = { code: 'MULE', status: 'playing', hostId: 's1', seats: [], boards, game: view } as TableView<MuleView>;
   const value = { table, view, me: view.me!, self: view.players[0]!, slot: 0 as const };
-  return renderToStaticMarkup(createElement(ClientProvider, { client, children: createElement(PhoneGameProvider, { value, children: createElement(GameOver) }) }));
+  return renderToStaticMarkup(createElement(ClientProvider, { client, children: createElement(PhoneGameProvider, { value, children: createElement(screen) }) }));
 }
 
 function onTv(view: MuleView, screen: (props: { game: MuleView }) => ReactElement): string {
   return renderToStaticMarkup(createElement(ClientProvider, { client, children: createElement(screen, { game: { ...view, me: null } }) }));
+}
+
+// The server renderer has no getServerSnapshot for the client's store, so the router reads its state from here (as hub-tv-rank does).
+let boardState: unknown = null;
+vi.mock('../src/net/react', async (actual) => ({ ...(await actual<typeof import('../src/net/react')>()), useClientState: () => boardState }));
+
+/** The TV as the table drives it: TableApp's router over a board's view of the room. */
+function onTvRouter(view: MuleView): string {
+  const game = { ...view, me: null };
+  const table = { code: 'MULE', status: 'playing', hostId: 's1', seats: [], boards: 1, game } as unknown as TableView<MuleView>;
+  boardState = { status: 'open', role: 'board', code: 'MULE', seatId: null, view: table, notice: null, chat: [], emotes: [], toasts: [], clockOffset: 0 };
+  return renderToStaticMarkup(createElement(ClientProvider, { client: { ...client, watch: () => {} } as unknown as TableClient, children: createElement(TableApp, { room: 'MULE' }) }));
 }
 
 const header = (view: MuleView) => onTv(view, ({ game: g }) => createElement(TvHeader, { game: g, title: 'Planning' }));
@@ -317,5 +331,126 @@ describe('C34: the build site at the month end', () => {
 
   it('B-AC-34-4 (negative): without politics the month end has no build site', () => {
     expect(has(onTv(game(null), TvMonthEnd), 'build-site')).toBe(false);
+  });
+});
+
+describe('G-5 AM-12: the colony score at every month end (variant A)', () => {
+  /** Month 7's end: (26,400 + 6,200 + 2,000) × 1.06 = 36,676; last month ended on 34,607, so ↑ +2,069 since month 6. */
+  const MONTH_7: ColonyView = { ...MIDGAME, score: { wealth: 26_400, environment: 6_200, prestige: 2_000, factor: 1.06, total: 36_676 }, lastScore: 34_607 };
+  const MONTH_1: ColonyView = { ...MONTH_7, lastGauges: null, lastScore: null };
+  const end = (colony: ColonyView | null | undefined, extra: Partial<MuleView> = {}) => game(colony, extra);
+  const firstEnd = (colony: ColonyView | null | undefined) => game(colony, { month: 1, players: PLAYERS.map((p) => ({ ...p, lastWorth: null })) });
+  const COLLAPSE = { air: { level: 86, band: 'collapse' as const }, players: PLAYERS.map((p) => ({ ...p, worthBeforeCut: p.worth, worth: Math.round(p.worth * 0.8) })) };
+  const MONTH_SCORE_IDS = ['colony-band', 'colony-score', 'colony-total', 'colony-score-change', 'score-sum', 'phone-month-score', 'colony-score-uncut'];
+
+  it('B-AC-27-2: at a month end the TV shows the colony total, "+N since month M" from lastScore and the sum, under the league; no verdict, no plaques', () => {
+    const tv = onTv(end(MONTH_7), TvMonthEnd);
+    const band = element(tv, 'colony-band');
+    expect(said(band, 'colony-total')).toBe('36,676');
+    expect(said(band, 'colony-score-change')).toBe('↑ +2,069 since month 6');
+    const sum = said(band, 'score-sum');
+    for (const term of ['26,400', '6,200', '2,000', '1.06', 'Content']) expect(sum).toContain(term);
+    expect(said(band, 'colony-score-words')).toBe('Wealth: everything the colony owns, 26,400 cr · Environment: air 34 · Prestige: 1 standing object · Content: × 1.06');
+    expect(text(band)).toContain('counted again at game over');
+    expect(has(band, 'colony-verdict')).toBe(false);
+    expect(text(band)).not.toMatch(/A colony (to be proud of|that held together|in ruins)/);
+    expect(has(band, 'plaque-board')).toBe(false);
+    // Under the league, in its column; the build site beside it keeps the plaques.
+    expect(tv.indexOf('data-testid="league-table"')).toBeLessThan(tv.indexOf('data-testid="colony-band"'));
+    expect(tv.indexOf('data-testid="colony-band"')).toBeLessThan(tv.indexOf('data-testid="build-site"'));
+    expect(has(tv, 'colony-score-uncut')).toBe(false);
+  });
+
+  it('B-AC-27-2: month 1’s end has no last month, so the TV shows the total and the sum with no change line', () => {
+    const band = element(onTv(firstEnd(MONTH_1), TvMonthEnd), 'colony-band');
+    expect(said(band, 'colony-total')).toBe('36,676');
+    expect(has(band, 'score-sum')).toBe(true);
+    expect(has(band, 'colony-score-change')).toBe(false);
+    expect(text(band)).not.toContain('since month');
+  });
+
+  it('B-AC-27-2: in Collapse the TV keeps the CollapseBanner and still shows the score, saying the cut is not the score’s', () => {
+    const tv = onTv(end(MONTH_7, COLLAPSE), TvMonthEnd);
+    expect(has(tv, 'collapse-banner')).toBe(true);
+    const band = element(tv, 'colony-band');
+    expect(said(band, 'colony-total')).toBe('36,676');
+    expect(said(band, 'colony-score-uncut')).toBe('The Collapse cuts each Worth, not the colony’s score.');
+  });
+
+  it('B-AC-27-3: beside a TV the phone’s month end shows one colony line with its change in the footnote’s place, under the whole league', () => {
+    const phone = onPhone(end(MONTH_7), 1, Results);
+    const foot = element(phone, 'colony-on-tv');
+    expect(said(foot, 'phone-month-score')).toBe('Colony score 36,676 ↑ +2,069 since month 6 Its sum is on the TV; your own lines are beside, yours only.');
+    expect(has(foot, 'score-sum')).toBe(false);
+    expect(has(foot, 'colony-verdict')).toBe(false);
+    for (const p of PLAYERS) expect(has(element(phone, 'league-table'), `league-row-${p.id}`), `the league keeps ${p.name}'s row`).toBe(true);
+    expect(phone.indexOf('data-testid="league-table"')).toBeLessThan(phone.indexOf('data-testid="colony-on-tv"'));
+    // The 10 px floor: no smaller type in the line.
+    expect(foot).not.toMatch(/text-\[(\d|10\.\d)px\]|text-\[9/);
+    const first = said(onPhone(firstEnd(MONTH_1), 1, Results), 'phone-month-score');
+    expect(first).toMatch(/^Colony score 36,676 Its sum is on the TV/);
+  });
+
+  it('B-AC-27-3: with no TV the line heads the colony panel, the sum on it where the shell is wide; in Collapse it says the score is not cut', () => {
+    const alone = element(onPhone(end(MONTH_7), 0, Results), 'phone-only-colony');
+    expect(said(alone, 'colony-total')).toBe('36,676');
+    expect(said(alone, 'colony-score-change')).toBe('↑ +2,069 since month 6');
+    expect(said(alone, 'score-sum')).toBe('= 26,400 + 6,200 + 2,000 × 1.06');
+    expect(element(alone, 'score-sum')).toContain('@min-[800px]/shell:inline');
+    expect(alone.indexOf('data-testid="phone-month-score"')).toBeLessThan(alone.indexOf('data-testid="colony-panel"'));
+    const collapse = onPhone(end(MONTH_7, COLLAPSE), 1, Results);
+    expect(has(collapse, 'collapse-banner')).toBe(true);
+    expect(said(collapse, 'colony-score-uncut')).toBe('The Collapse cuts each Worth, not the colony’s score.');
+  });
+
+  it('B-AC-27-4: game over is unchanged and prints its credits with thousands separators, on the TV and the phone', () => {
+    const score = { wealth: 31_200, environment: 9_500, prestige: 11_000, factor: 1.08, total: 55_718 };
+    const tv = onTv(over({ ...FINAL, score, lastScore: 52_000 }), TvGameOver);
+    expect(said(tv, 'colony-total')).toBe('55,718');
+    for (const [id, v] of [['term-wealth', '31,200'], ['term-environment', '9,500'], ['term-prestige', '11,000']]) expect(said(tv, id!)).toContain(v!);
+    expect(has(tv, 'colony-verdict')).toBe(true);
+    expect(has(tv, 'plaque-board')).toBe(true);
+    const phone = onPhone(over({ ...FINAL, score, lastScore: 52_000 }));
+    expect(said(phone, 'colony-total')).toBe('55,718');
+    expect(said(phone, 'score-sum')).toContain('31,200');
+    // Through the TV's own router, as the table reaches game over: C34's band once, no month-end band beside it.
+    const routed = onTvRouter(over({ ...FINAL, score, lastScore: 52_000 }));
+    expect(has(routed, 'tv-gameover')).toBe(true);
+    expect(routed.match(/data-testid="colony-band"/g)).toHaveLength(1);
+    expect(text(routed)).not.toContain('counted again at game over');
+    expect(has(routed, 'colony-score-change')).toBe(false);
+    // No month-end part leaks into game over.
+    for (const html of [tv, phone]) for (const id of ['colony-score-change', 'phone-month-score', 'colony-score-uncut']) expect(has(html, id), `game over has no ${id}`).toBe(false);
+  });
+
+  it('B-AC-27-5 (negative): politics off, the month end is today’s on the TV and the phones; outside the month end there is no colony score line', () => {
+    for (const colony of [null, undefined]) {
+      const screens = [onTv(end(colony), TvMonthEnd), onPhone(end(colony), 1, Results), onPhone(end(colony), 0, Results)];
+      for (const html of screens) for (const id of MONTH_SCORE_IDS) expect(has(html, id), `politics off has no ${id}`).toBe(false);
+      expect(said(screens[1]!, 'colony-on-tv')).toBe('How the colony is doing is on the TV. Worth is cash + goods + land + MULEs + offices; your own lines are beside, for you only.');
+    }
+    expect(onTv(end(null), TvMonthEnd)).toBe(onTv(end(undefined), TvMonthEnd));
+    // HC-22 to the tag: with no score, the footnote is today's bare <p>, and no wrapper sits around the league or the panel.
+    for (const colony of [null, { ...MONTH_7, score: null }]) {
+      const view = end(colony);
+      // A game with a colony names donations in the rule (G-5 AM-12, #421); with none, today's words.
+      const footnote = `<p class="mt-auto text-[11px] leading-snug text-ink-3" data-testid="colony-on-tv">How the colony is doing is on the TV. Worth is cash + goods + land + MULEs + offices${colony ? ' + donations' : ''}; your own lines are beside, for you only.</p>`;
+      const phoneLeague = renderToStaticMarkup(createElement(LeagueTable, { view, density: 'phone', selfId: 's1' }));
+      // The footnote is the month end's last child, straight after the league: no wrapper around it.
+      expect(element(onPhone(view, 1, Results), 'phone-monthend').endsWith(`${phoneLeague}${footnote}</div>`)).toBe(true);
+      const panel = renderToStaticMarkup(createElement(ColonyPanel, { view, density: 'compact' }));
+      expect(element(onPhone(view, 0, Results), 'phone-only-colony')).toBe(`<div class="relative" data-testid="phone-only-colony">${panel}</div>`);
+    }
+    const unscoredView = end({ ...MONTH_7, score: null });
+    const league = renderToStaticMarkup(createElement(LeagueTable, { view: { ...unscoredView, me: null }, density: 'tv' }));
+    expect(onTv(unscoredView, TvMonthEnd)).toContain(`<div class="grid flex-1 grid-cols-[minmax(0,6fr)_minmax(0,6fr)] gap-6">${league}<div class="flex flex-col gap-4">`);
+    // With the colony on but its score not counted, the month end is the screen before this change: no band, today's footnote.
+    const unscored = onPhone(end({ ...MONTH_7, score: null }), 1, Results);
+    expect(has(unscored, 'phone-month-score')).toBe(false);
+    expect(said(unscored, 'colony-on-tv')).toContain('How the colony is doing is on the TV');
+    expect(has(onTv(end({ ...MONTH_7, score: null }), TvMonthEnd), 'colony-band')).toBe(false);
+    // Production's harvest on the phone, with a score in the view, carries no month-end score.
+    const harvest = onPhone(end(MONTH_7, { phase: 'production' }), 1, Results);
+    for (const id of ['phone-month-score', 'colony-score-change', 'colony-band']) expect(has(harvest, id), `production has no ${id}`).toBe(false);
   });
 });

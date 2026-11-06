@@ -173,3 +173,11 @@ export function outlookPrices(o: Outlook): Stock {
   for (const g of GOODS) s[g] = o.price(g);
   return s;
 }
+
+/**
+ * What the seat believes a good's posted price will be at the next auction: the outlook's price, or today's posted
+ * price when the game ends first.
+ */
+export function belief(obs: GameState, o: Outlook, good: Good): number {
+  return o.final ? obs.store.posted[good] : o.price(good);
+}

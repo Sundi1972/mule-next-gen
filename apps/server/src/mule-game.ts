@@ -98,10 +98,12 @@ import {
   type PlaybookEntry,
   type Trade,
 } from '@mule/engine';
-import { AiSeat, GOOD_NAME, LotHand, personaFor, VoteHand, type AiAction } from '@mule/ai';
+import { AiSeat, GOOD_NAME, LotHand, personaFor, playbookSource, VoteHand, type AiAction } from '@mule/ai';
 import { PLAYER_COLORS, type EventView, type MuleIntent, type MuleView, type PlayerView, type ProductionHurryView, type ProductionReason, type ProductionView, type ScorePartsView } from '@mule/protocol';
 import type { Game, GameContext, SeatInfo } from '@tabletop/core';
+import type { Spoken } from './brain/chat.js';
 import { createBrain, type BrainService } from './brain/index.js';
+import { Playbooks, type PlaybookSource } from './brain/playbooks.js';
 import { devFrame, noStats, steerConfig, steeredColonistView, SteerInputs, stepTick, type Steering } from './dev-steer.js';
 import { boardRange, landAuctionView, listingView, lotNews } from './land-auction.js';
 import { colonyView } from './colony-view.js';
@@ -144,7 +146,7 @@ export const GRANT_TICK_MS = GAME.grantTickMs;
 /** The longest a land grant can run, from the engine's grant rules: one pass over the largest map. */
 export { GRANT_PASS_MAX_MS } from '@mule/engine';
 
-export const AI_NAMES = ['The Accountant', 'The Baron', 'The Grudge', 'The Gambler', 'The Good Neighbour'];
+export const AI_NAMES = ['The Accountant', 'The Big Spender', 'The Grudge', 'The Gambler', 'The Good Neighbour'];
 
 
 /** The level AI seats play at until the lobby lets the host choose. */
@@ -166,6 +168,13 @@ const OUTFITS: readonly Outfit[] = [...GOODS, 'greenBelt'];
 /** Names in reading order: "A", "A and B", "A, B and C". */
 function andList(names: string[]): string {
   return names.length < 2 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
+}
+
+/** The game-over line, from the seats in seat order: every player tied for the best score is named, as the screens show. */
+export function gameOverNews(seats: readonly { name: string; score: number }[]): string {
+  const best = Math.max(...seats.map((s) => s.score));
+  const winners = seats.filter((s) => s.score === best).map((s) => s.name);
+  return winners.length === 1 ? `Game over. ${winners[0]} wins the colony!` : `Game over. ${andList(winners)} share the win!`;
 }
 
 /** A player's Worth line by line, without the total their public row carries as `worth`. Only for their own `me`. */
@@ -437,6 +446,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   private monthCondition: { month: number; byId: Map<string, PlayerView['condition']> } | null = null;
   /** The AI players: strategist, decider and hands, keyed by seat id. */
   private readonly ai = new Map<string, AiSeat>();
+  /** Each AI seat's chat, keyed by seat id: its decisions' lines and, for a Smart seat, its plans' lines. */
+  private readonly chats = new Map<string, (record: Spoken) => void>();
   /**
    * The land grant's timers for the lit plot: the light's next move and the AI seats' pending presses, each press with
    * its reaction time. Entering fast-forward cancels them and resolves the pending presses at once.
@@ -457,6 +468,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
   private notices: Notice[] = [];
   /** Where whoever builds a seat's playbook hands the final one; a no-op unless the game is recorded or replayed. */
   protected readonly recordPlaybook: (entry: PlaybookNote) => void;
+  /** The AI seats' land-grant playbooks: asked for at game start and as each upkeep opens, in effect at the land grant. */
+  private playbooks: Playbooks | null = null;
 
   constructor(
     private readonly ctx: GameContext,
@@ -474,6 +487,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       /** Hears each notice as it settles. */
       notice?: (notice: Notice) => void;
       recordPlaybook?: (entry: PlaybookNote) => void;
+      /** The engine's playbook drafts and validator: the AI seats' own (playbookSource) unless a test sets one; null asks for none. */
+      playbookSource?: PlaybookSource | null;
       /** Where a steered development's per-phase log line goes (spec §4); console.info by default. */
       log?: (line: string) => void;
     } = {},
@@ -488,6 +503,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     this.seats = seats.map((s) => ({ ...s }));
     this.state = createGame({ seed: this.seed, players: seats.map(({ id, name, isAi, pick }) => ({ id, name, isAi, ...(isSpecies(pick) ? { species: pick } : {}) })), maxMonths: this.options.maxMonths, politics: this.options.politics ?? false });
     this.ai.clear();
+    this.chats.clear();
     this.monthEnds.clear();
     this.monthCondition = null;
     this.lotHands.clear();
@@ -496,6 +512,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       if (!s.isAi) return;
       const brainSeat = { id: s.id, persona: personaFor(s.name, i), level: DEFAULT_AI_LEVEL };
       const chat = this.brain.chatter(brainSeat, (line) => this.ctx.say?.(s.id, line));
+      this.chats.set(s.id, chat);
       const seat = new AiSeat({
         ...brainSeat,
         name: s.name,
@@ -512,6 +529,19 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       this.lotHands.set(s.id, new LotHand(seat.mind, createRng((seat.options.seed ^ 0xc2b2ae35) >>> 0)));
       this.voteHands.set(s.id, new VoteHand(seat.mind, createRng((seat.options.seed ^ 0x165667b1) >>> 0)));
     });
+    const source = this.options.playbookSource === undefined ? playbookSource([...this.ai.values()]) : this.options.playbookSource;
+    this.playbooks = new Playbooks({
+      brain: this.brain,
+      source,
+      seats: [...this.ai.values()],
+      record: this.recordPlaybook,
+      // Ruling (a'): a plan's line is said as its phase starts, through the seat's chat, after that phase's view goes out.
+      speak: (seat, said) => {
+        const chat = this.chats.get(seat);
+        if (chat) this.ctx.schedule(0, () => chat({ ...said, by: 'llm' }));
+      },
+    });
+    this.playbooks.ask(this.state, this.state.month);
     this.news = ['Welcome to the colony. Talk tactics, then grab land.'];
     this.enterPhase();
   }
@@ -866,7 +896,12 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     const state = this.requireState();
     if (state.phase === 'gameOver') return;
     if (state.phase === 'development') this.finishDevelopment();
+    // The development's facts, read before the next phase resets them: its outcome goes into the auction's brief.
+    const developmentFacts = state.phase === 'development' ? this.notices : null;
     advancePhase(state);
+    // The auction's edits are asked in the production show's slack, once production has run, so the draft holds this
+    // month's stock (spec A RULE-A2, AM-A16). The development's edits come with the month's land write.
+    if (developmentFacts) this.playbooks?.askPhase(state, 'auction', developmentFacts);
     this.enterPhase();
   }
 
@@ -883,8 +918,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
 
     if (state.phase === 'gameOver') {
       this.phaseEndsAt = null;
-      const ranking = [...this.seats].sort((a, b) => score(state, b.id) - score(state, a.id));
-      this.news = [`Game over. ${ranking[0]?.name} wins the colony!`];
+      this.news = [gameOverNews(this.seats.map((s) => ({ name: s.name, score: score(state, s.id) })))];
       this.brain.finish();
       this.options.onGameOver?.(state);
       return;
@@ -918,6 +952,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     // Game over has no clocks; enterPhase finished it before any hold.
     if (state.phase === 'gameOver') return;
     if (state.phase === 'auction') {
+      // Before the first good's status screen: a playbook adopted now plays from the first good (AM-20).
+      this.playbooks?.takePhase(state, 'auction');
       this.phaseEndsAt = null;
       this.dealsInGood = [];
       this.news = ['The auction opens. Walk up to buy, down to sell.'];
@@ -938,6 +974,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       return;
     }
     if (state.phase === 'development') {
+      // Before the first development tick or steer: the development part the month's land write carried (RULE-7).
+      this.playbooks?.takePhase(state, 'development');
       this.startDevelopment();
       return;
     }
@@ -945,6 +983,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
 
     if (state.phase === 'planning') this.startPlanning();
     if (state.phase === 'landGrant') {
+      this.playbooks?.takeEffect(state);
       this.fastForward = false;
       this.grantTimers = { cancelTick: null, presses: [] };
       this.aiGrantBids();
@@ -952,6 +991,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     }
     if (state.phase === 'production') this.reportProduction();
     if (state.phase === 'upkeep') {
+      this.playbooks?.ask(state, state.month + 1);
       this.recordMonthEnd();
       // AI seats are on at once: the month end waits only for people.
       for (const s of this.seats) if (s.isAi) this.ready.add(s.id);

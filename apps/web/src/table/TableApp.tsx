@@ -4,7 +4,8 @@ import { AirGauge, Button, cx, GOOD_NAME, GoodIcon, GoodTag, HoloMap, PlayerMark
 import { Speaker, TvTicker, tvSpeakerAt } from '../chat/Chat';
 import { boardWalkers, dealLine, dealSpeed, newestFirst, shipWants, ShipWants, SIDE_WORD, skippedLine, StatusTable, StoreBox, TvReadout, WaitingToPick, type DealRow } from '../components/AuctionParts';
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { BuildSite, ColonyGauges, ColonyScoreBand, TvWinner, useMonthEndDrift, type GaugeLanding } from '../components/Colony';
+import { BuildSite, ColonyGauges, ColonyScoreBand, MonthScoreColumn, TvWinner, useMonthEndDrift, type GaugeLanding } from '../components/Colony';
+import { StrikeBadge, StrikeMap, StrikeWaiting } from '../components/Strike';
 import { CollapseBanner, ColonyPanel, LeagueTable, WinnerCard } from '../components/MonthEnd';
 import { joinUrl, Qr } from '../components/Qr';
 import { Scaled } from '../components/Scaled';
@@ -130,28 +131,65 @@ function TvLobby({ table }: { table: TableView<MuleView> }) {
   );
 }
 
-/** `gauges` false keeps the air gauge alone even with a colony, as game over does; `landing` counts changes onto them. */
-export function TvHeader({ game, title, icon, seconds, extra, gauges = true, landing }: { game: MuleView; title: string; icon?: ReactNode; seconds?: number | undefined; extra?: ReactNode; gauges?: boolean; landing?: GaugeLanding | undefined }) {
+/**
+ * The TV's header: the month and the phase's title (after its `icon`, where it has one), the theme toggle, the colony's
+ * gauges (or the air gauge alone when `gauges` is false, as game over and the goods auction keep it) and the clock, then
+ * the table chat. `ready`, a screen's ready count, sits beside the title; with the colony's gauges too, they move to a
+ * row of their own under it, full width, since title, chip and gauges don't share 1280 px (PM ruling, 5 Nov).
+ * `landing` counts changes onto the gauges, wherever they sit. `chatLines` is how many chat lines show: three, or fewer
+ * where a screen needs the height; none hides the ticker.
+ */
+export function TvHeader({
+  game,
+  title,
+  icon,
+  seconds,
+  extra,
+  ready,
+  gauges = true,
+  landing,
+  chatLines,
+}: {
+  game: MuleView;
+  title: string;
+  icon?: ReactNode;
+  seconds?: number | undefined;
+  extra?: ReactNode;
+  ready?: ReactNode;
+  gauges?: boolean;
+  landing?: GaugeLanding | undefined;
+  chatLines?: number;
+}) {
+  const colony = game.colony && gauges ? <ColonyGauges colony={game.colony} size="tv" className={ready ? 'w-full' : 'w-[760px]'} landing={landing} /> : null;
+  const ownRow = colony !== null && (ready !== undefined || !!game.colony?.strike);
+  // With a ready chip the title keeps one line and the chip its size; without one the header is as it always was: the
+  // gauges give way to a long title ("Election day · the result").
+  const fixed = ready !== undefined;
   return (
     <>
-      <header className="flex items-end justify-between gap-6">
-        <div className="flex flex-col gap-1">
-          <span className="label-caps text-base!">
-            Month {game.month} / {game.maxMonths}
+      <header className="flex items-end justify-between gap-6" data-testid="tv-header">
+        <div className={cx('flex flex-col gap-1', fixed && 'min-w-0')}>
+          <span className="flex items-center gap-3">
+            <span className="label-caps whitespace-nowrap text-base!">
+              Month {game.month} / {game.maxMonths}
+            </span>
+            {gauges && <StrikeBadge strike={game.colony?.strike} />}
           </span>
-          <h1 className="flex items-center gap-4 font-display text-5xl font-semibold leading-none" data-testid="tv-phase">
+          <h1 className={cx('flex items-center gap-4 font-display text-5xl font-semibold leading-none', fixed && 'whitespace-nowrap')} data-testid="tv-phase">
             {icon}
             {title}
           </h1>
         </div>
-        <div className="flex items-center gap-4">
+        <div className={cx('flex items-center gap-4', fixed && 'shrink-0')}>
           {extra}
           <ThemeToggle />
-          {game.colony && gauges ? <ColonyGauges colony={game.colony} size="tv" className="w-[760px]" landing={landing} /> : <AirGauge level={game.air.level} band={game.air.band} tv />}
+          {ownRow ? null : (colony ?? <AirGauge level={game.air.level} band={game.air.band} tv />)}
           {seconds !== undefined && <Timer seconds={seconds} className="h-14! px-5! text-3xl!" />}
+          {ready}
         </div>
       </header>
-      <TvTicker />
+      {ownRow && colony}
+      {chatLines === 0 ? null : <TvTicker {...(chatLines === undefined ? {} : { most: chatLines })} />}
     </>
   );
 }
@@ -223,11 +261,12 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
         ) : (
           <div className="shrink-0 rounded-panel border-2 border-holo bg-holo-soft p-5 font-display text-3xl font-semibold shadow-glow">Everyone is ready</div>
         )}
+        <StrikeWaiting game={game} />
         <div className="shrink-0">
           <MarketTiles game={game} />
         </div>
         {/* News gives way when the column is full, so the prices and who we wait for always show; chat is the ticker's. */}
-        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
+        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden" data-fit-gives>
           <News news={game.news} />
         </div>
         {phase !== 'planning' ? (
@@ -300,19 +339,18 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
     <SeatSpeciesProvider value={seatSpecies(game)}>
       <div className={cx('flex h-[720px] w-[1280px] flex-col bg-table text-ink', phase === 'planning' ? 'gap-4 px-10 py-6' : 'gap-5 p-10')} data-phase={phase} data-testid={phase === 'planning' ? 'tv-planning' : undefined}>
         {phase === 'planning' ? (
-          <div className="flex items-start gap-4">
-            <div className="min-w-0 flex-1">
-              <TvHeader game={game} title={PHASE_NAME[phase]} seconds={secondsUntil(game.phaseEndsAt, now)} />
-              <TvGovernorPromise game={game} />
-            </div>
-            <ReadyCount players={game.players} tv />
+          <div className="flex flex-col gap-3">
+            <TvHeader game={game} title={PHASE_NAME[phase]} seconds={secondsUntil(game.phaseEndsAt, now)} ready={<ReadyCount players={game.players} tv />} />
+            <TvGovernorPromise game={game} />
           </div>
         ) : (
           <TvHeader game={game} title={PHASE_NAME[phase]} seconds={secondsUntil(game.phaseEndsAt, now)} />
         )}
         <div className="flex min-h-0 flex-1 gap-6">
           <div className="flex w-[700px] shrink-0 flex-col gap-3">
-            <HoloMap width={game.width} height={game.height} tiles={tiles} cursor={game.lit} density="tv" hideGround className="w-full" />
+            <StrikeMap view={game} size="tv">
+              <HoloMap width={game.width} height={game.height} tiles={tiles} cursor={game.lit} density="tv" hideGround className="w-full" />
+            </StrikeMap>
             <div className="flex items-center justify-between font-mono text-sm text-ink-3">
               <span>ROOM {table.code}</span>
               <span>
@@ -320,7 +358,16 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
               </span>
             </div>
           </div>
-          <div className="flex min-w-0 flex-1 flex-col gap-4">{side}</div>
+          {phase === 'planning' ? (
+            // Under the colony's gauges' own row and a full chat ticker, planning's side can run past the screen's
+            // foot. The news gives way first, as it always has; only what is left over scales the rest, as the month
+            // end's does. Stretched, so the ready list keeps to the foot.
+            <FitHeight className="min-w-0 flex-1" gives>
+              <div className="flex min-h-0 flex-1 flex-col gap-4">{side}</div>
+            </FitHeight>
+          ) : (
+            <div className="flex min-w-0 flex-1 flex-col gap-4">{side}</div>
+          )}
         </div>
       </div>
     </SeatSpeciesProvider>
@@ -346,8 +393,9 @@ function Players({ game, right, className }: { game: MuleView; right: (p: MuleVi
 function News({ news }: { news: string[] }) {
   return (
     <ul className="flex flex-col gap-2" data-testid="tv-news">
-      {news.map((n) => (
-        <li key={n} className="rounded-control border-l-4 border-holo-line bg-panel px-4 py-2.5 text-lg">
+      {news.map((n, i) => (
+        // The newest stays whole when the column runs short: older ones give way (FitHeight's data-fit-keep).
+        <li key={n} className="rounded-control border-l-4 border-holo-line bg-panel px-4 py-2.5 text-lg" {...(i === 0 ? { 'data-fit-keep': true } : {})}>
           {n}
         </li>
       ))}
@@ -410,9 +458,11 @@ export function TvAuction({ table, game, auction }: { table: TableView<MuleView>
   const host = game.players.find((p) => p.id === table.hostId);
   const picked = game.players.map((p) => ({ ...p, ready: pickedIn(game, p.id) }));
   return (
-    <div className="flex h-[720px] w-[1280px] flex-col gap-4 bg-table px-10 py-8 text-ink" data-phase="auction" data-stage={auction.stage} data-testid={status ? 'tv-status' : 'tv-walk'}>
-      {/* The good leads the headline, its glyph first (Heiko, 5 Nov). */}
-      <TvHeader game={game} title={`${GOOD_NAME[auction.good]} auction`} icon={<GoodIcon good={auction.good} size={52} />} gauges={false} />
+    <div className="flex h-[720px] w-[1280px] flex-col gap-3 bg-table px-10 py-6 text-ink" data-phase="auction" data-stage={auction.stage} data-testid={status ? 'tv-status' : 'tv-walk'}>
+      {/* The good leads the headline, its glyph first (Heiko, 5 Nov). On the board the deal rows and the help need the
+          height, and a board that stays one size as deals come and go: no chat ticker for the whole walk, the speakers'
+          bubbles on the board carry it (PM rulings, 5 Nov). The status stage keeps three lines, which it has room for (G-6). */}
+      <TvHeader game={game} title={`${GOOD_NAME[auction.good]} auction`} icon={<GoodIcon good={auction.good} size={52} />} gauges={false} {...(status ? {} : { chatLines: 0 })} />
       <div className="flex min-h-0 flex-1 gap-6">
         <div className={cx('flex min-w-0 flex-1 flex-col', status ? 'gap-3' : 'gap-2')}>
           {status ? (
@@ -533,16 +583,23 @@ export function TvAuction({ table, game, auction }: { table: TableView<MuleView>
               </strong>
             </p>
           )}
-          {/* Each row is one line. A row that doesn't fit below the others wraps into a second column, which the clip hides. */}
-          <ul className="flex min-h-0 flex-1 flex-col flex-wrap gap-2 overflow-hidden">
-            {deals.map(({ key, deal }) => {
-              // Variant A (Heiko's pick): each running deal shows its speed-up, as the board's counter does.
+          {/* Newest first. A row that doesn't fit below the others wraps into a second column, which the clip hides. */}
+          <ul className="flex min-h-0 flex-1 flex-col flex-wrap gap-1.5 overflow-hidden">
+            {deals.map(({ key, deal }, i) => {
+              // Variant A (Heiko's pick): the newest deal shows its speed-up, as the board's counter does; the older
+              // ones are one line each, so two deals fit under the store box (PM ruling, 5 Nov).
               const steps = speedStep(dealSpeed(deal.units));
+              if (i > 0)
+                return (
+                  <li key={key} className="w-full truncate rounded-control border border-holo bg-holo-soft px-3 py-1.5 font-mono text-base font-bold leading-tight text-holo" data-testid="tv-deal">
+                    {dealLine(game, deal)}
+                  </li>
+                );
               return (
-                <li key={key} className="flex w-full flex-col rounded-control border border-holo bg-holo-soft px-3 py-2 font-mono text-lg font-bold text-holo" data-testid="tv-deal">
+                <li key={key} className="flex w-full flex-col rounded-control border border-holo bg-holo-soft px-3 py-1.5 font-mono text-lg font-bold leading-tight text-holo" data-testid="tv-deal">
                   <span className="truncate">{dealLine(game, deal)}</span>
                   <span className="flex items-center gap-2 text-base font-normal text-ink-2">
-                    <span className="text-2xl font-bold tracking-[-0.1em]" aria-label={`speed ${steps} of ${SPEED_STEPS}`} data-testid="tv-deal-speed">
+                    <span className="text-2xl font-bold leading-none tracking-[-0.1em]" aria-label={`speed ${steps} of ${SPEED_STEPS}`} data-testid="tv-deal-speed">
                       {Array.from({ length: SPEED_STEPS }, (_, k) => (
                         <span key={k} className={k < steps ? 'text-holo' : 'text-ink-3/30'}>
                           ›
@@ -555,12 +612,12 @@ export function TvAuction({ table, game, auction }: { table: TableView<MuleView>
               );
             })}
           </ul>
-          <p className={cx('mt-auto text-base leading-snug text-ink-2', auction.deals.length > 0 && 'hidden')}>
+          <p className={cx('mt-auto text-base leading-tight text-ink-2', auction.deals.length > 0 && 'hidden')} data-testid="tv-help">
             {status
               ? `Pick your side on your phone. No clock: ${SIDE_PICK_WORDS.noClock}`
               : 'Sellers push the red line down, buyers push the green line up. When the two lines meet, the goods change hands.'}
           </p>
-          <span className="truncate font-mono text-sm text-ink-3">
+          <span className="shrink-0 truncate font-mono text-sm text-ink-3" data-testid="tv-room-line">
             ROOM {table.code}
             {auction.next.length > 0 ? ` · NEXT ${auction.next.map((g) => GOOD_NAME[g].toUpperCase()).join(', ')}` : ''}
           </span>
@@ -601,35 +658,68 @@ const useBeforePaint = typeof document === 'undefined' ? useEffect : useLayoutEf
  * Its content at full size when it fits, scaled down as a whole when it doesn't, and back up when room returns: the
  * month end's table and colony keep the mock's proportions on the TV when the chat ticker is up or more players sit
  * at the table. While it fits, the content stretches to fill the box.
+ *
+ * With `gives`, a box inside marked data-fit-gives (planning's news) takes what room is left and clips, before anything
+ * scales, down to what it keeps (data-fit-keep, the newest item); the content is held to the box's height instead of
+ * growing past it, so it is measured again on every render, its content being free to change without a resize.
  */
-function FitHeight({ className, children }: { className?: string; children: ReactNode }) {
+function FitHeight({ className, gives = false, children }: { className?: string; gives?: boolean; children: ReactNode }) {
   const box = useRef<HTMLDivElement>(null);
   const inner = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
+  // A new scale changes the content's width, so its wrapping, so its height: the renders after one measure again, so the
+  // scale settles where the content wraps; at most three changes in a row, so it can never chase itself round.
+  const current = useRef(1);
+  const changes = useRef(0);
+  const fit = useRef(() => {});
+  fit.current = () => {
+    const b = box.current;
+    const i = inner.current;
+    if (!b || !i) return;
+    // The content's own height, without the stretch: the stretch follows the scale, so measuring through it would keep
+    // a shrunk scale from ever growing back.
+    const size = gives ? 'height' : 'minHeight';
+    const stretch = i.style[size];
+    // A giving box is measured at the height of what it keeps (data-fit-keep: the newest news item), its gap kept: what
+    // it can give is all the rest of itself.
+    const giving = gives ? [...i.querySelectorAll<HTMLElement>('[data-fit-gives]')].map((g) => [g, g.style.cssText] as const) : [];
+    i.style[size] = gives ? 'auto' : '0px';
+    for (const [g] of giving) {
+      const keep = [...g.querySelectorAll<HTMLElement>('[data-fit-keep]')].reduce((h, k) => h + k.offsetHeight, 0);
+      g.style.cssText += `;flex:none;height:${keep}px`;
+    }
+    const natural = i.offsetHeight;
+    for (const [g, css] of giving) g.style.cssText = css;
+    i.style[size] = stretch;
+    if (natural === 0) return;
+    const next = Math.min(1, b.clientHeight / natural);
+    const s = current.current;
+    // Kept within half a percent, but only a scale a touch small: one a touch big clips what is kept.
+    if (s <= next && next - s < 0.005) {
+      changes.current = 0;
+      return;
+    }
+    changes.current += 1;
+    current.current = next;
+    setScale(next);
+  };
   useBeforePaint(() => {
-    const fit = () => {
-      const b = box.current;
-      const i = inner.current;
-      if (!b || !i) return;
-      // The content's own height, without the stretch: the stretch follows the scale, so measuring through it would
-      // keep a shrunk scale from ever growing back.
-      const stretch = i.style.minHeight;
-      i.style.minHeight = '0px';
-      const natural = i.offsetHeight;
-      i.style.minHeight = stretch;
-      if (natural === 0) return;
-      const next = Math.min(1, b.clientHeight / natural);
-      setScale((s) => (Math.abs(s - next) < 0.005 ? s : next));
-    };
-    fit();
-    const ro = new ResizeObserver(fit);
+    if (!gives) return;
+    if (changes.current >= 3) changes.current = 0;
+    else fit.current();
+  });
+  useBeforePaint(() => {
+    const run = () => fit.current();
+    run();
+    const ro = new ResizeObserver(run);
     if (box.current) ro.observe(box.current);
-    if (inner.current) ro.observe(inner.current);
+    // Held to the box's height with `gives`, the content resizes only with the scale itself: renders measure it instead.
+    if (inner.current && !gives) ro.observe(inner.current);
     return () => ro.disconnect();
   }, []);
   return (
     <div ref={box} className={cx('min-h-0 overflow-hidden', className)} data-fit={scale.toFixed(3)}>
-      <div ref={inner} className="flex flex-col" style={{ transform: `scale(${scale})`, transformOrigin: '0 0', width: `${100 / scale}%`, minHeight: `${100 / scale}%` }}>
+      <div ref={inner} className="flex flex-col" style={{ transform: `scale(${scale})`, transformOrigin: '0 0', width: `${100 / scale}%`, [gives ? 'height' : 'minHeight']: `${100 / scale}%` }}>
         {children}
       </div>
     </div>
@@ -644,17 +734,16 @@ function FitHeight({ className, children }: { className?: string; children: Reac
 export function TvMonthEnd({ game, drift }: { game: MuleView; drift?: GaugeLanding | undefined }) {
   return (
     <div className="flex h-[720px] w-[1280px] flex-col gap-4 bg-table p-10 text-ink" data-phase={game.phase} data-testid="tv-monthend">
-      <div className="flex items-start gap-4">
-        <div className="min-w-0 flex-1">
-          <TvHeader game={game} title="End of the month" landing={drift} />
-        </div>
-        <ReadyCount players={game.players} tv />
+      <div className="flex flex-col gap-3">
+        <TvHeader game={game} title="End of the month" ready={<ReadyCount players={game.players} tv />} landing={drift} />
       </div>
-      {inCollapse(game) && <CollapseBanner density="tv" />}
+      {inCollapse(game) && <CollapseBanner density="tv" donations={!!game.colony} />}
       <FitHeight className="flex-1">
         {game.colony ? (
           <div className="grid flex-1 grid-cols-[minmax(0,6fr)_minmax(0,6fr)] gap-6">
-            <LeagueTable view={game} density="tv" />
+            <MonthScoreColumn view={game}>
+              <LeagueTable view={game} density="tv" />
+            </MonthScoreColumn>
             <div className="flex flex-col gap-4">
               <ColonyPanel view={game} density="tv" />
               <BuildSite colony={game.colony} players={game.players} size="tv" />
@@ -668,7 +757,7 @@ export function TvMonthEnd({ game, drift }: { game: MuleView; drift?: GaugeLandi
         )}
       </FitHeight>
       <p className="text-lg leading-snug text-ink-2" data-testid="worth-rule">
-        Worth: cash + goods at the store’s price + land at {GAME.plotScore} cr a plot + MULEs at {game.mulePrice} cr + {POLITICS.termScore} cr a term in office. Each player’s own lines are on their phone.
+        Worth: cash + goods at the store’s price + land at {GAME.plotScore} cr a plot + MULEs at {game.mulePrice} cr + {POLITICS.termScore} cr a term in office{game.colony ? ' + donations' : ''}. Each player’s own lines are on their phone.
       </p>
     </div>
   );

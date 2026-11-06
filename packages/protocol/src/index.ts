@@ -108,7 +108,7 @@ export interface PlayerView {
   lastWorth: number | null;
   /**
    * While the air is in Collapse, this player's Worth before the cut (scoreParts' total plus its cut: money + goods +
-   * land + muleValue + office, rounded as scoreParts rounds); null outside Collapse. Public like `worth`, a total only.
+   * land + muleValue + office + donated, rounded as scoreParts rounds); null outside Collapse. Public like `worth`, a total only.
    */
   worthBeforeCut: number | null;
   plots: number;

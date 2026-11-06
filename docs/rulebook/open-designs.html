@@ -19,7 +19,7 @@
 <h2 id="being-designed">Being designed <span class="pill open">Being designed</span></h2>
 <p>A design is under way or a question is open. Nothing is built yet.</p>
 <h3 id="food-supply">Is there enough Food in the economy? <span class="pill open">Being designed</span></h3>
-<p>Once computer players buy the Food they need, they empty the same store shelf the colonists buy from. With the buying fix (selling surplus, Heiko&#x27;s V3), colonists go short in about 62-68% of months, against about 50% before. The levers are Heiko&#x27;s: start Food, the store&#x27;s Food per player, Food spoilage (50%), farm yield.</p>
+<p>Once computer players buy the Food they need, they empty the same store shelf the colonists buy from. With the buying fix (Heiko&#x27;s &#x27;sell surplus&#x27;, the computer players also keeping back the Energy and, with a farm, the Water they need), colonists are short of Food or Water in about 66-70% of months, against 62-66% if they kept back only their Food and about 50% before. The levers are Heiko&#x27;s: start Food, the store&#x27;s Food per player, Food spoilage (50%), farm yield.</p>
 <p class="owner">Responsible: Heiko, at the balance pass at the end; measured by the Balance team (WS1) · Status: Recorded 5 Nov; measure now, tune at the end · The rule in full: <a href="production.html">production</a></p>
 <h3 id="inert-traits">Five plot traits do nothing yet <span class="pill open">Being designed</span></h3>
 <p>Bedrock, sheltered, unstable, infested and flood plain are drawn on the map but change nothing. Wanted or not is Heiko&#x27;s call; if wanted, a small design.</p>
@@ -44,9 +44,6 @@
 <h3 id="water-base-resource">Water is a base resource: every plot uses it <span class="pill designed">Designed</span></h3>
 <p>Food farms use 2 Water, every other working plot 1. Energy is settled first, then Water: the biggest Water user is turned off first and makes 20%. Wells and plants take the other good last and are never turned off.</p>
 <p class="owner">Responsible: Balance team (WS1), rule AM-18 · Status: Designed by Heiko 5 Nov; built after the buying fix, about 1.5 to 2 days · The rule in full: <a href="production.html">production</a></p>
-<h3 id="donations-in-worth">Colony donations count 1:1 in your Worth <span class="pill designed">Designed</span></h3>
-<p>Giving to the colony no longer lowers your Worth; the cash is locked in the colony instead of in MULEs or land. Plaques still show what you gave.</p>
-<p class="owner">Responsible: Politics team (WS7), with the Auctions team (WS3) for the score line · Status: Heiko: &#x27;Yes, count 1:1&#x27; (5 Nov) · The rule in full: <a href="colony-and-politics.html">colony and politics</a></p>
 <h3 id="colony-score-monthly">The colony score shows every month <span class="pill designed">Designed</span></h3>
 <p>Shown next to the league at every month end, on the TV and the phones, not only at game over.</p>
 <p class="owner">Responsible: Politics team (WS7), screens by the Events team (WS8) · Status: Heiko: &#x27;Yes, every month&#x27; (5 Nov) · The rule in full: <a href="colony-and-politics.html">colony and politics</a></p>
@@ -64,12 +61,9 @@
 <p class="owner">Responsible: Table team (WS4), with the Balance team (WS1) · Status: Programme manager ruling, 5 Nov · The rule in full: <a href="table-and-phones.html#species-perks">the table and the phones</a></p>
 <h2 id="being-built">Being built <span class="pill progress">Being built</span></h2>
 <p>A team is building it or it is in a pull request.</p>
-<h3 id="mule-swap">Installing over a MULE gives you the old one <span class="pill progress">Being built</span></h3>
-<p>Installing a new outfit on a plot that has a MULE hands you the old MULE to lead (today it vanishes). Still leading it at turn end: it goes back to the corral, no refund. Installing the same outfit is refused with a dimmed button: &quot;Same outfit: nothing to swap&quot;.</p>
-<p class="owner">Responsible: Auctions team (WS3), rule AM-23 · Status: Pull request #383 · The rule in full: <a href="development.html">development</a></p>
-<h3 id="slower-auction-walk">A slower auction walk and a slower trade start <span class="pill progress">Being built</span></h3>
-<p>Walking up and down the board is about 25% slower; trades start at about one unit a second and speed up; the land auction&#x27;s lot clock stretches from 12 to 15 seconds.</p>
-<p class="owner">Responsible: Auctions team (WS3) · Status: Pull request #376; one check still red · The rule in full: <a href="goods-auction.html">goods auction</a></p>
+<h3 id="donations-in-worth">Colony donations count 1:1 in your Worth: goods at the store&#x27;s price <span class="pill progress">Being built</span></h3>
+<p>Counting donations 1:1 in Worth is in the game: giving credits to the colony no longer lowers your Worth. Still to come: goods count at the store&#x27;s price on the day (ruled, WS7 building), so a gift of goods is exactly Worth-neutral too; today they count at their reference price. The cash is locked in the colony instead of in MULEs or land. Plaques still show what you gave.</p>
+<p class="owner">Responsible: Politics team (WS7), with the Auctions team (WS3) for the score line · Status: Heiko: &#x27;Yes, count 1:1&#x27; (5 Nov); in the game since #408. Goods at the store&#x27;s price: ruled by the PM, WS7 building. Your phone&#x27;s line-by-line Worth gets its Donations line from the Table team (WS4) and the UX team (WS6) · The rule in full: <a href="colony-and-politics.html">colony and politics</a></p>
 <h3 id="tv-fit">The TV fits every screen <span class="pill progress">Being built</span></h3>
 <p>On the auction walk no chat ticker, so two deals fit; the gauges get their own row; the month-end title on one line.</p>
 <p class="owner">Responsible: Table team (WS4) · Status: Pull request #381; being updated to the main build · The rule in full: <a href="table-and-phones.html">table and phones</a></p>
@@ -82,9 +76,6 @@
 <h3 id="ai-shortfall-stopgap">Computer players buy what they are short of <span class="pill progress">Being built</span></h3>
 <p>A computer player short of Food, Energy or Water buys up to what keeps it supplied next month at the store&#x27;s price; once there it keeps this month&#x27;s use and sells the rest (Heiko&#x27;s V3).</p>
 <p class="owner">Responsible: Balance team (WS1) · Status: Pull request #386 · The rule in full: <a href="computer-players.html">computer players</a></p>
-<h3 id="plotless-grant">Computer players no longer end the land grant with no plot <span class="pill progress">Being built</span></h3>
-<p>Computer players count rivals still claiming; a grab on a fading Crystite glint no longer starts a soil test.</p>
-<p class="owner">Responsible: Balance team (WS1) · Status: Pull request #366, after the buying fix · The rule in full: <a href="land.html">land</a></p>
 <h3 id="colony-branch">The colony&#x27;s social events, mood events, gauges, strike and verdict <span class="pill progress">Being built</span></h3>
 <p>Planning social events, mood events in the show, the Happiness gauge counting at month end, the strike on TV and phones, real colony verdict levels, the law ballot words. Riots and the next colony piece follow.</p>
 <p class="owner">Responsible: Politics team (WS7) with the Balance (WS1) and Events (WS8) teams · Status: In the colony branch; riots and the next piece on 6 Nov; then to the main build · The rule in full: <a href="colony-and-politics.html">colony and politics</a></p>
