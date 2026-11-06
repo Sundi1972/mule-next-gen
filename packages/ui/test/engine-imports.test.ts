@@ -29,6 +29,8 @@ const ALLOWED = new Set([
   'COLONY',
   // The air gauge's bands and ticks (WS6 ruling, 6 Nov): POLLUTION.bands read, never restated; names and tones stay here.
   'POLLUTION',
+  // The social events' shares, such as the walkout's output (WS6 ruling, 6 Nov): SOCIAL_EVENTS read, never restated.
+  'SOCIAL_EVENTS',
 ]);
 
 const SRC = fileURLToPath(new URL('../src', import.meta.url));
