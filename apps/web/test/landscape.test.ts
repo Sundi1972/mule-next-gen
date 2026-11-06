@@ -183,6 +183,9 @@ describe('the landscape on a phase change', () => {
     );
     expect(night).toHaveLength(5);
     expect(paintedCanvases).toHaveLength(11);
+    // A day picture is let go only after its night one is on screen, by an effect that can run a task after the
+    // screen changed (a loaded machine's React yields between the two), so the last may still be going: wait for it.
+    await vi.waitFor(() => expect(revoked).toHaveLength(5), { timeout: 2_000, interval: 5 });
     expect(revokedWhileShown).toEqual([]);
     // With more than 3 pictures cached, every day picture went, once it was off screen.
     expect([...revoked].sort()).toEqual([...before].sort());
