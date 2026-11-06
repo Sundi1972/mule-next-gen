@@ -1,16 +1,16 @@
 /**
  * LOCAL ONLY (lean CI tier 3, 2026-10-28): CI checks B-AC-9 as a step of the whole game, special-steps.ts in smoke.ts.
  * This script plays its own game to check what the step doesn't: the badge never over the owner's mark of the plot it
- * hangs into (W-I1, the geometry), a plain plot's card, and the special line in the drone's rail, the land grant's lit
- * card and Develop's plot card.
+ * hangs into (W-I1, the geometry), a plain plot's card, the special line in the drone's rail and the land grant's lit
+ * card, and the glyph on the TV's development map.
  * Run it after a build: `pnpm --filter @mule/web build && pnpm --filter @mule/web exec tsx e2e/specials.ts`; another
  * map with `MULE_E2E_SEED=<seed>`.
  *
  * B-AC-9 (MG-2): given a special field on the map, when a player looks at the phone or the TV, the approved glyph
  * (the badge, variant A) shows on that plot; a plain plot shows none. On the phone, tapping a special plot selects
  * it and its plot card says what it does, first under the plot's name; when the land grant lights it, so does the
- * lit card; so do the geo drone's rail and Develop's plot card. The badge never takes a plot's taps: a tap on the part
- * that hangs over a neighbour selects the neighbour. Each badge is drawn at its density's size, and never over the
+ * lit card; so does the geo drone's rail; and the TV's arcade map in development draws the glyph. The badge never
+ * takes a plot's taps: a tap on the part that hangs over a neighbour selects the neighbour. Each badge is drawn at its density's size, and never over the
  * owner's mark of the plot it hangs into.
  */
 import { createGame, type GameState, type Tile } from '@mule/engine';
@@ -123,16 +123,12 @@ try {
   await checkGlyphs(grant, 'phone, land grant', 'phone');
   await checkGlyphs(tv.locator('[data-phase=landGrant]'), 'TV, land grant', 'tv');
 
-  // Development: the plot card of a tapped special plot says what it is.
+  // Development is the arcade (C14, 02bb0500): the TV's map draws each special's glyph; it has no plot card to tap.
   await claimAPlot(phone, CLAIM_MS, 'the phone claims a plot');
   await doneWithLand(phone);
-  const dev = phone.locator('[data-phase=development]');
-  await dev.getByRole('button', { name: 'Walk out to the map' }).click({ timeout: REACH_DEVELOPMENT_MS });
-  const devMap = dev.getByTestId('dev-map');
-  await checkGlyphs(devMap, 'phone, development', 'phone');
-  await tapPlot(phone, devMap, looked);
-  await dev.getByTestId('plot-title').filter({ hasText: plotName(looked) }).waitFor({ timeout: SHOWN_MS });
-  await checkSpecialLine(dev.getByTestId('plot-title').locator('xpath=ancestor::section[1]'), looked.special.kind, `B-AC-9: Develop's plot card of ${plotName(looked)}`);
+  const devMap = tv.locator('[data-phase=development]').getByTestId('tv-map');
+  await devMap.waitFor({ timeout: REACH_DEVELOPMENT_MS });
+  await checkGlyphs(devMap, 'TV, development', 'tv');
 
   check(errors.length === 0, `no page errors: ${errors.join('; ')}`);
   console.log(`e2e specials: ok (seed ${SEED}, ${specials.map((t) => `${t.special.kind} ${plotName(t)}`).join(', ')}; ${marks.join('; ')})`);
