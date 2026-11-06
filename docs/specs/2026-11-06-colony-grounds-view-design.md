@@ -133,7 +133,7 @@ depends_on   —
 C4 · ADDED · the live layer
 today        none_exists in the app; the scaffold is design/mocks/colony-grounds/src/look/Living.tsx
 tomorrow     MUST fade each building's glow picture by wealth and stage, put colonists on the paths by mood (none in a
-             strike), smoke over a damaged building, a haze by air; MUST respect reduced motion (still frame, no walkers)
+             strike), smoke over a damaged building, a haze by air; MUST respect reduced motion (still frame: walkers shown still, per RULE-3)
 logic        → §2 RULE-2 (glow), RULE-3 (colonists)
 seam         packages/ui/src/grounds/LiveLayer.tsx (new), inside C2's SVG
 mechanism    fill_scaffold (Living.tsx)
