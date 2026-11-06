@@ -18,7 +18,7 @@ const flatGround = { food: 0, water: 0, energy: 0, smithore: 0, crystite: 0, rar
  * Month 1's land grant. ai0 owns, analysed, a plant making `plant` Energy and a farm making `farm` Food, on plots apart
  * (no cluster bonus). It holds no Energy, so the farm runs only on what the plant nets after its own use; Water in plenty.
  */
-function grant(plant: number, farm: number, level: 'trader' | 'rookie' = 'trader'): { state: GameState; seat: AiSeat } {
+function grant(plant: number, farm: number, level: 'trader' | 'rookie' = 'trader', energy = 0): { state: GameState; seat: AiSeat } {
   const state = createGame({ seed: 11, players: ['ai0', 'ai1', 'ai2', 'ai3'].map((id) => ({ id, name: id, isAi: true, species: 'zipwing' as const })) });
   while (state.phase !== 'landGrant') advancePhase(state);
   const plots: [Outfit, Partial<Tile['ground']>][] = [
@@ -33,7 +33,7 @@ function grant(plant: number, farm: number, level: 'trader' | 'rookie' = 'trader
     delete tile.special;
     me.analysed.push(2 * k);
   });
-  Object.assign(me.stock, { food: 0, water: 40, energy: 0 });
+  Object.assign(me.stock, { food: 0, water: 40, energy });
   me.money = 3000;
   return { state, seat: new AiSeat({ id: 'ai0', name: 'ai0', persona: 'cautious', level, seed: 11 }) };
 }
@@ -69,6 +69,28 @@ describe('FM-feeds-me: the land plan counts Food and Energy as units against nee
       expect(k.reason, `${k.plan} plan`).toBe('my Food and Energy are covered');
       expect(k.score, `${k.plan} plan`).toBe(STRATEGIST.land.feedsMe.covered);
     }
+  });
+
+  it('FM-feeds-me: Food alone short: a powered farm making less than the household eats reads as short', () => {
+    // The plant nets 2 over the farm's 1, so Energy is covered; the farm makes 1, under the household's Food.
+    const { state, seat } = grant(3, 1);
+    expect(monthNeeds(state, 'ai0').food).toBeGreaterThan(1);
+
+    const plans = feedsMe(state, seat);
+
+    expect(plans.length).toBeGreaterThan(0);
+    for (const k of plans) expect(k.reason, `${k.plan} plan`).toBe('I still buy my Food and Energy');
+  });
+
+  it('FM-feeds-me: Energy alone short: a farm run on stock while the plant nets nothing reads as short', () => {
+    // Energy in stock runs the farm this month, so it makes its 4 Food; the plant makes 1 and uses 1, so the seat's own
+    // plots supply no Energy against the farm's 1.
+    const { state, seat } = grant(1, FARM, 'trader', 5);
+
+    const plans = feedsMe(state, seat);
+
+    expect(plans.length).toBeGreaterThan(0);
+    for (const k of plans) expect(k.reason, `${k.plan} plan`).toBe('I still buy my Food and Energy');
   });
 
   it('FM-feeds-me: a Rookie, which does not look ahead, still counts plots: owning a farm and a plant reads as covered', () => {
