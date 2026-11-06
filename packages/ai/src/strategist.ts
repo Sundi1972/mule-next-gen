@@ -688,7 +688,11 @@ export function tradeDecision(obs: GameState, mind: Mind, plan: GoodPlan): Short
   if (upTo > h) {
     const needOnly = Math.min(upTo, Math.max(h, v.block, plan.mustHold));
     const speculative = upTo > Math.max(h, v.block, plan.mustHold);
-    buyTo(upTo, `Buy ${upTo - h} ${GOOD_NAME[good]}${speculative ? ' (some to resell)' : ''}`, 'buy', speculative ? sure.resale : sure.need, speculative ? 'resale next month is a forecast' : 'it needs them');
+    // With the model on, a value from unitValues already prices its resale risk (RULE-4), so a surplus buy is no less
+    // sure; a corner or spite premium is intent the model doesn't price, and keeps the discount. See AM-7.
+    const modelOnly = AI_VALUE.unit && plan.corner.units === 0 && plan.spiteBid === 0;
+    const resale = speculative ? (modelOnly ? [sure.need, 'its value counts the resale risk'] as const : [sure.resale, 'resale next month is a forecast'] as const) : null;
+    buyTo(upTo, `Buy ${upTo - h} ${GOOD_NAME[good]}${speculative ? ' (some to resell)' : ''}`, 'buy', resale?.[0] ?? sure.need, resale?.[1] ?? 'it needs them');
     if (speculative && needOnly > h) buyTo(needOnly, `Buy ${needOnly - h} ${GOOD_NAME[good]}, just what I need`, 'buy:need', sure.need, 'it needs them');
   }
 

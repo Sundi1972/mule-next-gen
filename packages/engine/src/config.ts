@@ -1671,6 +1671,11 @@ export const AI_VALUE = {
    * price itself.
    */
   shortFloorMarkup: 1,
+  /**
+   * Months a unit held past the seat's needs is expected to wait before it is sold: it keeps (1 − spoilage) of itself
+   * per month. A count of upkeeps, 0 or more; 1 is a sale at the next auction.
+   */
+  holdMonths: 1,
 };
 
 /** The AI's hands in the real-time phases. Times are in ms. */

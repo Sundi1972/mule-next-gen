@@ -6,8 +6,10 @@ import {
   needsOf,
   UPKEEP,
   createGame,
+  GOOD_CONFIG,
   GROWN_BASE,
   observe,
+  PRICE,
   startAuction,
   stepAuction,
   STRATEGIST,
@@ -20,10 +22,11 @@ import {
   type Tile,
   type Trade,
 } from '@mule/engine';
+import { outlook } from '../src/outlook.js';
 import { applyAction, playMonthFrom } from '../src/play.js';
 import { AiSeat } from '../src/seat.js';
-import { cashReserve } from '../src/value.js';
-import { goodPlan, sellWanted, wholeNextMonth } from '../src/strategist.js';
+import { cashReserve, installGain } from '../src/value.js';
+import { goodPlan, plotValue, sellWanted, tradeDecision, wholeNextMonth, type GoodPlan } from '../src/strategist.js';
 
 /**
  * The resource-utility model at the table: built states played on through the engine with every seat's own hands,
@@ -108,7 +111,7 @@ const me = (state: GameState) => state.players.find((p) => p.id === ME)!;
  * The stopgap's rule beside the values (STRATEGIST.buyShortfall) is off in every row: the model alone must buy what the
  * seat needs, and a row that passes only by that rule proves nothing about it.
  */
-const saved = { unit: AI_VALUE.unit, buyShortfall: STRATEGIST.buyShortfall };
+const saved = { unit: AI_VALUE.unit, buyShortfall: STRATEGIST.buyShortfall, waterSpoilage: GOOD_CONFIG.water.spoilage };
 beforeEach(() => {
   AI_VALUE.unit = true;
   STRATEGIST.buyShortfall = [];
@@ -116,6 +119,7 @@ beforeEach(() => {
 afterEach(() => {
   AI_VALUE.unit = saved.unit;
   STRATEGIST.buyShortfall = saved.buyShortfall;
+  GOOD_CONFIG.water.spoilage = saved.waterSpoilage;
 });
 
 /** Three Smithore mines (use 2 each, make 3 at 100): a unit of Energy short keeps 0.8 × 3 × 100 ÷ 2 = 120 on. */
@@ -228,6 +232,20 @@ describe('C8: a power plant is worth what its output saves', () => {
     expect(develop({ energy: 2, food: 2 }, { energy: 0, posted: 20 }, { plots: [farm], energy: 10 })).toBe('energy');
   });
 
+  it('FM-no-plots: a seat with no plots at the first land grant values a free Food plot at a finite number', () => {
+    const state = createGame({ seed: 1, players: ['ai0', 'ai1', 'ai2', 'ai3'].map((id) => ({ id, name: id, isAi: true })) });
+    while (state.phase !== 'landGrant') advancePhase(state);
+    const obs = observe(state, ME);
+    const mind = seatsOf(state, { plots: [], money: 0 })[0]!.mind;
+    expect(obs.tiles.some((t) => t.owner === ME), 'the premise: it owns no plot').toBe(false);
+    const free = obs.tiles.findIndex((t) => !t.owner && t.terrain !== 'store');
+
+    const o = outlook(obs, ME, { lookAhead: mind.level.lookAhead });
+
+    expect(installGain(obs, o, obs.tiles[free]!, 'food', mind).net).toSatisfy(Number.isFinite);
+    expect(plotValue(obs, mind, free)).toSatisfy(Number.isFinite);
+  });
+
   it('B-AC-5 negative: with no idle plot there is nothing to install', () => {
     // The seat owns only its mines: no idle plot.
     const state = createGame({ seed: 1, players: ['ai0', 'ai1', 'ai2', 'ai3'].map((id) => ({ id, name: id, isAi: true })) });
@@ -251,13 +269,14 @@ function playOn(state: GameState, until: 'development' | 'production', through =
   if (through) advancePhase(state);
 }
 
+/** Nine Energy plants (crew 9, so it eats 5): they pay their own use, so no plot needs Energy and only Food is short. */
+const PLANTS: Plot[] = Array.from({ length: 9 }, (_, i): Plot => ({ outfit: 'energy', x: 2 * i }));
+/** The colonists' month the store keeps back from players, and `extra` more for sale. */
+const shelf = (state: GameState, extra: number) => Math.ceil(state.colonists / UPKEEP.colonistsPerUnit) + extra;
+
 describe('G-1: a seat keeps itself supplied', () => {
-  /** Nine Energy plants (crew 9, so it eats 5): they pay their own use, so no plot needs Energy and only Food is short. */
-  const PLANTS: Plot[] = Array.from({ length: 9 }, (_, i): Plot => ({ outfit: 'energy', x: 2 * i }));
   /** Food posted at 65: the store sells at 72. */
   const FED: Seat = { plots: PLANTS, posted: { food: 65 }, stock: { water: 20, energy: 20 }, money: 1200 };
-  /** The colonists' month the store keeps back from players, and 30 Food more for sale. */
-  const shelf = (state: GameState, extra: number) => Math.ceil(state.colonists / UPKEEP.colonistsPerUnit) + extra;
 
   function hungryNext(seat: Seat, forSale: number): { hungry: boolean; bought: number; money: number } {
     const state = table(seat);
@@ -312,6 +331,76 @@ describe('G-1: a seat keeps itself supplied', () => {
 
     expect(off.length, 'some plot turned off').toBeGreaterThan(0);
     expect(order.slice(0, off.length).sort(), 'the first in the turn-off order').toEqual([...off].sort());
+  });
+});
+
+describe('G-2: a surplus when cheap', () => {
+  /**
+   * The PLANTS seat with 1,200 cr and none of `good`, at a 5% sales tax, `good` posted at `posted`; the store holds the
+   * colonists' month and 30 more, so next month's posted price climbs. Plays the auction of `good` alone.
+   */
+  function auctionOf(good: Good, posted: number) {
+    const seat: Seat = { plots: PLANTS, posted: { [good]: posted }, stock: { water: 20, energy: 20, [good]: 0 }, money: 1200 };
+    const state = table(seat);
+    state.treasury.salesTax = 0.05;
+    state.store.stock[good] = shelf(state, 30);
+    const view = atAuction(state, [good]);
+    const obs = observe(view, ME);
+    const mind = seatsOf(view, seat)[0]!.mind;
+    const before = {
+      ask: view.auction!.storeSell,
+      reference: state.store.refPrice[good],
+      belief: outlook(obs, ME, { lookAhead: mind.level.lookAhead }).price(good),
+      need: wholeNextMonth(obs, ME, good),
+    };
+    playAuction(state, seat, [good]);
+    return { ...before, held: me(state).stock[good] };
+  }
+  /** What a unit held a month fetches from the store at the belief: after the spread, the 5% tax and its spoilage. */
+  const carried = (good: Good, belief: number) => belief * (1 - PRICE.storeSpread) * 0.95 * (1 - GOOD_CONFIG[good].spoilage);
+
+  it("B-AC-3: with Food's ask at or below its reference and a belief above it after spoilage and tax, the seat holds more than next month's need; at 2× reference, no more", () => {
+    const cheap = auctionOf('food', 6);
+    expect(cheap.ask, 'the premise: the ask is at or below the reference').toBeLessThanOrEqual(cheap.reference);
+    expect(carried('food', cheap.belief), 'the premise: the belief beats the ask after spoilage and tax').toBeGreaterThan(cheap.ask);
+    expect(cheap.held, 'it holds a surplus past what keeps it whole next month').toBeGreaterThan(cheap.need);
+
+    const dear = auctionOf('food', 55);
+    expect(dear.ask, 'the premise: the ask is 2× the reference or more').toBeGreaterThanOrEqual(2 * dear.reference);
+    expect(dear.held, 'it holds what keeps it whole, no more').toBe(dear.need);
+  });
+
+  // trace-allow: below the boundary: a corner or spite premium needs rivals short of a scarce good, which a built state
+  // reaches only by chance; the seat's own plan, with the premium set as goodPlan sets it, is the rule's row.
+  it("B-AC-3 (AM-7): a surplus buy valued by unitValues is as sure as a needed one; one carrying a corner or spite premium keeps resale's", () => {
+    const seat: Seat = { plots: PLANTS, posted: { food: 6 }, stock: { water: 20, energy: 20, food: 15 }, money: 1200 };
+    const state = table(seat);
+    state.treasury.salesTax = 0.05;
+    state.store.stock.food = shelf(state, 30);
+    const view = atAuction(state, ['food']);
+    const obs = observe(view, ME);
+    const mind = seatsOf(view, seat)[0]!.mind;
+    const sureOf = (plan: GoodPlan) => tradeDecision(obs, mind, plan).all.find((c) => c.key === 'buy')!.considerations.find((c) => c.name === 'Sure thing')!.score;
+    /** The plan with `premium` added to the next three units' buy values, as goodPlan adds a corner's or a spite bid. */
+    const premiumOn = (premium: Partial<Pick<GoodPlan, 'corner' | 'spiteBid'>>) => {
+      const plan = { ...goodPlan(obs, mind, 'food'), ...premium };
+      for (let k = 15; k < 18; k++) plan.values.buy[k]! += 10;
+      return plan;
+    };
+
+    expect(sureOf(goodPlan(obs, mind, 'food')), 'held past its need, valued by unitValues alone').toBe(STRATEGIST.trade.sure.need);
+    expect(sureOf(premiumOn({ corner: { units: 3, premium: 10 } })), 'a corner premium').toBe(STRATEGIST.trade.sure.resale);
+    expect(sureOf(premiumOn({ spiteBid: 10 })), 'a spite bid').toBe(STRATEGIST.trade.sure.resale);
+  });
+
+  it('B-AC-3 negative: a good that spoils fully gets no surplus, though its belief beats the ask before spoilage', () => {
+    // Water: a seat with no farm needs none, so every unit it would hold is surplus.
+    GOOD_CONFIG.water.spoilage = 1;
+    const water = auctionOf('water', 6);
+    expect(water.need, 'the premise: it needs no Water').toBe(0);
+    expect(water.belief * (1 - PRICE.storeSpread) * 0.95, 'the premise: unspoilt, a unit would beat the ask').toBeGreaterThan(water.ask);
+
+    expect(water.held).toBe(0);
   });
 });
 
