@@ -30,15 +30,68 @@ export function boardWalkers(view: MuleView, auction: AuctionView): BoardWalker[
   });
 }
 
+/**
+ * The store's selling line and the rest zones, as the board takes them. Once the store is sold out, the line the server
+ * sends is the highest bid (flagged) or the store's old price: never a price it sells at, so the board draws it as the
+ * sold-out line.
+ */
+export function storeLines(auction: AuctionView): {
+  storeSells: number | null;
+  soldOutAt: { price: number; bid: boolean } | null;
+  zones: { buyersTop: number; sellersBottom: number } | null;
+} {
+  const soldOut = auction.storeForSale === 0 && auction.storeSells !== null;
+  return {
+    storeSells: soldOut ? null : auction.storeSells,
+    soldOutAt: soldOut ? { price: auction.storeSells!, bid: auction.storeSellsBid === true } : null,
+    zones: auction.zones ?? null,
+  };
+}
+
+/** What the store charges, as a price box shows it: "out" once it has none to sell, whatever line the board draws. */
+export const storeSellsWord = (auction: AuctionView): number | 'out' => (auction.storeForSale > 0 ? (auction.storeSells ?? 'out') : 'out');
+
+/** In the phone's rail while the store is sold out: nobody buys from it, what it still pays, and the highest bid once one passes its old price. */
+export function SoldOutNote({ auction }: { auction: AuctionView }) {
+  const { soldOutAt } = storeLines(auction);
+  return (
+    <p className="rounded-control border border-rise/50 bg-void px-2.5 py-1.5 text-[11px] leading-snug text-ink-2" data-testid="sold-out-note">
+      <strong className="text-rise">Store sold out.</strong> Nobody can buy from it{auction.storeBuys !== null ? `; it still buys at ${auction.storeBuys}` : ''}.
+      {soldOutAt?.bid && ` Highest bid ${soldOutAt.price}.`}
+    </p>
+  );
+}
+
+/** On the TV during the walk while the store is sold out: bids may pass its old price, and the highest bid once one has. */
+export function TvSoldOutBox({ auction }: { auction: AuctionView }) {
+  const { soldOutAt } = storeLines(auction);
+  // The old price is the sellers' zone's floor; without zones, the sold-out line until a bid passes it. Never the bid.
+  const old = auction.zones?.sellersBottom ?? (soldOutAt && !soldOutAt.bid ? soldOutAt.price : null);
+  const bid = soldOutAt?.bid ? soldOutAt.price : null;
+  return (
+    <div className="flex flex-col gap-1 rounded-panel border-2 border-rise bg-panel p-4" data-testid="tv-sold-out">
+      <span className="font-display text-2xl font-semibold text-rise">Store sold out</span>
+      <span className="text-lg leading-snug text-ink-2">
+        {old !== null ? `Bids can go past its old ${old}.` : 'No store price yet: bids set it.'}
+        {bid !== null && ' '}
+        {bid !== null && (
+          <>
+            Highest bid{' '}
+            <strong data-num className="font-mono text-ink">
+              {bid}
+            </strong>
+          </>
+        )}
+      </span>
+    </div>
+  );
+}
+
 /** A seller the engine stopped at what they must hold (RULE-4). The engine keeps the flag through a switch to Buy; the screens don't. */
 export function heldSeller(w: Pick<WalkerView, 'side' | 'held'> | undefined): boolean {
   return w?.side === 'seller' && w.held === true;
 }
 
-/**
- * The held seller's rail (WS6's mock PhoneSale, variant A, at cde3ff61): she stopped at what she must hold, and
- * how to sell on.
- */
 /**
  * Why the auction asks you to hold more of `good`, true for that good (auctionNeed): upkeep eats Food and Water, the
  * month end spoils what has spoilage in config, and what neither touches is held for next month's use alone.
@@ -48,6 +101,10 @@ export function holdReason(good: Good): string {
   return GOOD_CONFIG[good].spoilage > 0 ? 'next month uses it, and some spoils first' : 'next month uses it';
 }
 
+/**
+ * The held seller's rail (WS6's mock PhoneSale, variant A, at cde3ff61): she stopped at what she must hold, and
+ * how to sell on.
+ */
 export function heldWords(good: Good, need: number): { line: string; how: string } {
   return { line: `Stopped at ${need} ${GOOD_NAME[good]}: what you must hold.`, how: 'To sell more, hold ▼: you’d be short next month.' };
 }
@@ -179,7 +236,7 @@ export function StoreBox({ auction }: { auction: AuctionView; tv?: true }) {
     <dl className="grid grid-cols-3 gap-px overflow-hidden rounded-panel border border-holo-line bg-holo-line font-mono text-2xl" data-testid="status-store">
       {(
         [
-          ['STORE SELLS', auction.storeSells ?? 'out', 'text-rise'],
+          ['STORE SELLS', storeSellsWord(auction), 'text-rise'],
           ['STORE BUYS', auction.storeBuys ?? '—', 'text-fall'],
           ['IN STOCK', stock, stock === 0 ? 'text-alert' : 'text-ink'],
         ] as const

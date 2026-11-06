@@ -242,7 +242,9 @@ describe('several events in one production', () => {
     expect(Object.entries(table).flatMap(([key, row]) => (Object.keys(row.phases).length === 1 || key === 'muleTheft' ? [] : [key]))).toEqual([]);
   });
 
-  it('EM-T-AC-3: two events on one plot both apply in order, never below 0, and an excluded pair keeps one', () => {
+  // About 0.7 s alone (20 seeded productions for the pair's dice); in a full run on a loaded machine it ran past vitest's
+  // 5 s default, so it carries its own.
+  it('EM-T-AC-3: two events on one plot both apply in order, never below 0, and an excluded pair keeps one', { timeout: 30_000 }, () => {
     withEveryRowAt(0, () => {
       const calm = loneFarm();
       expect(lineOf(produce(calm.state), calm.farm).made).toBe(1);

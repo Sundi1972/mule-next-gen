@@ -1,4 +1,4 @@
-import type { GameState } from '@mule/engine';
+import { DEVELOPMENT, type GameState } from '@mule/engine';
 import type { MuleView, TableView } from '@mule/protocol';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -9,6 +9,10 @@ import type { TableClient } from '../src/net/client';
 import { ClientProvider } from '../src/net/react';
 import { PhoneGameProvider } from '../src/phone/game';
 import { LandGrant } from '../src/phone/LandGrant';
+import type { HubSeat } from '../src/phone/hub/slots';
+import { HUB_SLOTS } from '../src/phone/hub/today';
+import { droneButtonWords } from '../src/phone/hub/tools';
+import { nextDroneWords } from '../src/phone/plotInfo';
 
 /**
  * H-3 (WS6 UX audit, A-2's named edit in WS3's LandGrant.tsx): while the land grant's lit plot is one your drone
@@ -85,8 +89,8 @@ describe('H-3: the land grant names what your drone found, on your phone only', 
     expect(droneLine(phone(game, fake.ctx.now(), LENA))).toBe(EXPECTED_SECOND);
   });
 
-  it('H-3: on a poor plot (best 1 of 4) the line names no goods: it stops at the plot and its terrain', () => {
-    // Every raw rating 0: Food, Water and Energy draw 1 pip each, the minerals none.
+  it('H-3: on a poor plot (best 1 of 3) the line names no goods: it stops at the plot and its terrain', () => {
+    // Every raw rating 0: Food, Water and Energy draw 1 dot each, the minerals none.
     const { game, fake, surveyed, runTo } = droneMonth((state, [weak]) => {
       state.tiles[weak!.y * state.width + weak!.x]!.ground = { food: 0, water: 0, energy: 0, smithore: 0, crystite: 0, rareEarth: 0 };
     });
@@ -96,12 +100,22 @@ describe('H-3: the land grant names what your drone found, on your phone only', 
     expect(droneLine(html)).toBe('Your drone: 12·7 Plains');
   });
 
-  it('H-3: at 2 of 4 a good is named', () => {
+  it('H-3: at 2 of 3 a good is named', () => {
     const { game, fake, surveyed, runTo } = droneMonth((state, [plot]) => {
       state.tiles[plot!.y * state.width + plot!.x]!.ground = { food: 0, water: 0, energy: 0, smithore: 2, crystite: 0, rareEarth: 0 };
     });
     runTo((l) => same(l, surveyed[0]!));
-    expect(droneLine(phone(game, fake.ctx.now(), LENA))).toBe('Your drone: 12·7 Plains, good for Smithore');
+    const html = phone(game, fake.ctx.now(), LENA);
+    expect(droneLine(html)).toBe('Your drone: 12·7 Plains, good for Smithore');
+    expect(html, 'the ground card draws it on 3 dots').toContain('aria-label="Smithore 2 of 3"');
+  });
+
+  it('H-3: every good at the top dot count is named: Food +3 and Smithore 3 both draw 3', () => {
+    const { game, fake, surveyed, runTo } = droneMonth((state, [plot]) => {
+      state.tiles[plot!.y * state.width + plot!.x]!.ground = { food: 3, water: 0, energy: 0, smithore: 3, crystite: 0, rareEarth: 0 };
+    });
+    runTo((l) => same(l, surveyed[0]!));
+    expect(droneLine(phone(game, fake.ctx.now(), LENA))).toBe('Your drone: 12·7 Plains, good for Food and Smithore');
   });
 
   it('H-3: with a plot the drone did not survey lit, there is no drone line, even one Lena analysed herself', () => {
@@ -142,9 +156,39 @@ describe('H-3: the land grant names what your drone found, on your phone only', 
   });
 });
 
+describe('C2: the drone tells the truth: its report comes at Scan, not at the land grant', () => {
+  it('the button reads "Scan · n of 2 plots · 60 cr", its count and fee from config', () => {
+    expect(droneButtonWords(0)).toBe('Pick a free plot for the drone');
+    for (let n = 1; n <= DEVELOPMENT.dronePlots; n++) expect(droneButtonWords(n)).toBe(`Scan · ${n} of ${DEVELOPMENT.dronePlots} plots · ${DEVELOPMENT.droneFee} cr`);
+  });
+
+  it("the hub's tile says the drone was used this month once it is; before, its plots and fee", () => {
+    const fake = fakeContext({ table: walkers });
+    const game = new MuleGame(fake.ctx, 7);
+    game.start(walkers);
+    const tile = HUB_SLOTS.agenda.find((a) => a.key === 'drone')!;
+    const seat = (): HubSeat => {
+      const view = game.viewFor(LENA);
+      return { view, me: view.me!, self: view.players.find((p) => p.id === LENA)! };
+    };
+    expect(tile.sub(seat())).toBe(`${DEVELOPMENT.dronePlots} plots · ${DEVELOPMENT.droneFee} cr`);
+    const free = (game as unknown as { state: GameState }).state.tiles.filter((t) => t.owner === null && t.terrain !== 'store');
+    game.handle(LENA, { type: 'drone', plots: free.slice(-2).map((t) => ({ x: t.x, y: t.y })) });
+    expect(tile.sub(seat())).toBe('Used this month');
+  });
+});
+
 /**
- * Seed 7's two surveyed plots. 12·7 Plains reads Rare earth 3 of 4 above everything else (Water, Energy, Crystite 2);
- * 13·7 Tundra reads Water and Energy both 4 of 4, so the line names both, as the ground card's pips show them.
+ * Seed 7's two surveyed plots. 12·7 Plains reads Rare earth 3 of 3 above everything else (Water, Energy, Crystite 2);
+ * 13·7 Tundra reads Water and Energy both 3 of 3, so the line names both, as the ground card's dots show them.
  */
 const EXPECTED_FIRST = 'Your drone: 12·7 Plains, good for Rare earth';
 const EXPECTED_SECOND = 'Your drone: 13·7 Tundra, good for Water and Energy';
+
+describe('C2: the Drone report closes with when the next drone flies', () => {
+  it('before the last month it names the next month; in the last month it says there is none', () => {
+    expect(nextDroneWords({ month: 2, maxMonths: 12 })).toBe('Next drone: month 3.');
+    expect(nextDroneWords({ month: 11, maxMonths: 12 })).toBe('Next drone: month 12.');
+    expect(nextDroneWords({ month: 12, maxMonths: 12 })).toBe('No more drones this game.');
+  });
+});

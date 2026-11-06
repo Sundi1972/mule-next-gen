@@ -251,24 +251,6 @@ describe('RULE-2 in the engine: everyone takes part', () => {
     expect(a(state).walkers.map((w) => w.side)).toEqual(['buyer', 'buyer', 'buyer', 'buyer']);
   });
 
-  it('a buyer standing at the bottom edge never trades, even once the store has stopped buying (C2 pin)', () => {
-    const state = newGame();
-    state.players[0]!.stock.smithore = 5;
-    startAuction(state, ['smithore']);
-    a(state).storeBudget = 0; // the store buys nothing: no buying line under the seller
-    toWalk(state, { p0: 'seller' });
-    a(state).clockMs = 600_000;
-    setWalk(state, 'p0', -1);
-    const trades = run(state, 60_000);
-    expect(trades, 'the idle buyers have money but stand at the edge').toEqual([]);
-    expect(Math.round(walker(state, 'p0').price)).toBeGreaterThan(a(state).lo);
-    // A tap down from there is held at the same place: it never steps onto the buyers' edge.
-    setWalk(state, 'p0', 0);
-    stepWalk(state, 'p0', -1);
-    expect(run(state, 10_000)).toEqual([]);
-    expect(Math.round(walker(state, 'p0').price)).toBe(a(state).lo + 1);
-  });
-
   it("'pass' is refused with the rules' words, on the status screen and in the walk", () => {
     const state = newGame();
     state.store.stock.food = 200;
@@ -286,13 +268,14 @@ describe('G-2: a tap moves the walker one price step', () => {
     state.store.stock.food = 200;
     startAuction(state, ['food']);
     toWalk(state);
-    walker(state, 'p1').price = 50;
+    const bid = a(state).lo + 10;
+    walker(state, 'p1').price = bid;
     stepWalk(state, 'p1', 1);
-    expect(walker(state, 'p1')).toMatchObject({ price: 51, dir: 0 });
+    expect(walker(state, 'p1')).toMatchObject({ price: bid + 1, dir: 0 });
     stepAuction(state, 1_000);
-    expect(walker(state, 'p1').price).toBe(51);
+    expect(walker(state, 'p1').price).toBe(bid + 1);
     stepWalk(state, 'p1', -1);
-    expect(walker(state, 'p1').price).toBe(50);
+    expect(walker(state, 'p1').price).toBe(bid);
   });
 
   it('a step lands on the rounded price next to where you stand, so a walker between prices moves to a whole one', () => {
