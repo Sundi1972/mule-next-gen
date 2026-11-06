@@ -107,3 +107,55 @@ describe('T-AC-3 (pip): an analysed plot draws its best good on 3 dots', () => {
     expect(tv({ food: 0, water: 0 })).toContain('aria-label="Plains, free, Food 0 of 3"');
   });
 });
+
+describe('T-AC-3 (gem): Crystite and Rare earth found on a plot', () => {
+  /** A 5×1 map: free with Crystite; player 1's with both; player 2's with a MULE and Rare earth; free with neither; free with both. */
+  const GEM_TILES: MapTile[] = [
+    { x: 0, y: 0, terrain: 'plains', owner: null, ground: { crystite: 2, food: 3 } },
+    { x: 1, y: 0, terrain: 'plains', owner: 0, ground: { crystite: 1, rareEarth: 2 } },
+    { x: 2, y: 0, terrain: 'plains', owner: 1, good: 'energy', ground: { rareEarth: 1, food: 3 } },
+    { x: 3, y: 0, terrain: 'plains', owner: null, ground: { crystite: 0, rareEarth: 0, food: 2 } },
+    { x: 4, y: 0, terrain: 'plains', owner: null, ground: { crystite: 3, rareEarth: 3 } },
+  ];
+  const render = (tiles: MapTile[], hideGround = false) => renderToStaticMarkup(createElement(HoloMap, { width: 5, height: 1, tiles, hideGround }));
+  const plotOf = (markup: string, x: number) => markup.slice(markup.indexOf(`data-testid="map-plot-${x}-0"`), x < 4 ? markup.indexOf(`data-testid="map-plot-${x + 1}-0"`) : undefined);
+  const gem = (markup: string, good: string) => tag(markup, new RegExp(`data-testid="gem-${good}"`));
+  const row = (markup: string, x: number) => tag(markup, new RegExp(`data-testid="map-gem-${x}-0"`));
+  const width = (opening: string) => opening.match(/width:(\d+)%/)?.[1];
+
+  it('T-AC-3 (gem): a tile with ground and Crystite or Rare earth at 1 or more draws its gem(s), right of the owner’s tab on an owned plot, at left 4% on a free one; with a MULE the gem stays and the pip hides; a tile without ground (the TV) draws none', () => {
+    const map = render(GEM_TILES);
+
+    const free = plotOf(map, 0);
+    expect(row(free, 0)).toMatch(/\bleft-\[4%\]/);
+    expect(row(free, 0)).toMatch(/\btop-\[4%\]/);
+    expect(gem(free, 'crystite')).toMatch(/background:var\(--color-g-crystite\)/);
+    expect(width(gem(free, 'crystite'))).toBe('40');
+    expect(gem(free, 'rareEarth')).toBe('');
+
+    const ownedPair = plotOf(map, 1);
+    expect(row(ownedPair, 1)).toMatch(/\bleft-\[54%\]/);
+    expect(width(gem(ownedPair, 'crystite'))).toBe('30');
+    expect(width(gem(ownedPair, 'rareEarth'))).toBe('30');
+    expect(gem(ownedPair, 'rareEarth')).toMatch(/margin-left:-15%/);
+
+    const withMule = plotOf(map, 2);
+    expect(tag(withMule, /data-testid="installed-2-0"/)).not.toBe('');
+    expect(width(gem(withMule, 'rareEarth'))).toBe('40');
+    expect(row(withMule, 2)).toMatch(/\bleft-\[54%\]/);
+    expect(withMule).not.toMatch(/size-\[3px\]/);
+
+    const barren = plotOf(map, 3);
+    expect(barren).not.toMatch(/data-testid="(map-)?gem-/);
+
+    const freePair = plotOf(map, 4);
+    expect(row(freePair, 4)).toMatch(/\bleft-\[4%\]/);
+    expect(width(gem(freePair, 'crystite'))).toBe('40');
+    expect(width(gem(freePair, 'rareEarth'))).toBe('40');
+    expect(gem(freePair, 'rareEarth')).toMatch(/margin-left:-20%/);
+
+    const tv = render(GEM_TILES.map(({ ground: _, ...t }) => t));
+    expect(tv).not.toMatch(/data-testid="(map-)?gem-/);
+    expect(render(GEM_TILES, true)).not.toMatch(/data-testid="(map-)?gem-/);
+  });
+});
