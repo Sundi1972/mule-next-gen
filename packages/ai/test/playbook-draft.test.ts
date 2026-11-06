@@ -76,7 +76,9 @@ function withPlans<T>(sets: string[], fn: () => T): T {
  * A factory good the seat can't feed scores as AM-33's chain, or not at all; `chains` false is the rule before AM-33.
  * The chain: one works, its inputs free, times the least share of its run a link supplies, plus each missing link at
  * its running cost. The links take their plots first, the one whose share varies most across the plots first, each
- * where it adds most; the works takes the best plot left. It models no standing link: a chain with one throws.
+ * where it adds most; the works takes the best plot left. A link that stands (a plot of the seat's already making an
+ * input it can't feed) counts its running cost with no install price, supplies what its plots make of a run, and its
+ * good is refunded with the rest.
  */
 function moneyMakerByRule(state: GameState, mind: Mind, chains = true): Good | null {
   const obs = observe(state, mind.me);
@@ -91,11 +93,13 @@ function moneyMakerByRule(state: GameState, mind: Mind, chains = true): Good | n
       const links = chainLinks(obs, mind.me, good);
       const mules = links.length + 1;
       if (!chains || links.length === 0 || Math.ceil(mules / mind.level.mulesPerMonth) > AI_PLANS.chain.months) continue;
-      if (standingLinks(obs, mind.me, good).length > 0) throw new Error(`the reference models no standing link (${good})`);
-      const free = chainOutlook(o, links);
+      const standing = standingLinks(obs, mind.me, good);
+      const stands = [...new Set(standing.map((t) => t.outfit as Good))];
+      const members = [good, ...links, ...stands];
+      const free = chainOutlook(o, [...links, ...stands]);
       const works = plots.map((t) => ({ t, ...installGain(obs, free, t, good, mind) }));
       const best = Math.max(...works.map((w) => w.gain));
-      const at = (link: Good) => plots.map((t) => ({ t, share: linkShare(obs, t, link, [good, ...links], mind.me), ...installGain(obs, free, t, link, mind) }));
+      const at = (link: Good) => plots.map((t) => ({ t, share: linkShare(obs, t, link, members, mind.me), ...installGain(obs, free, t, link, mind) }));
       const spread = (link: Good) => Math.max(...at(link).map((w) => w.share)) - Math.min(...at(link).map((w) => w.share));
       const used: Tile[] = [];
       let share = 1;
@@ -108,6 +112,15 @@ function moneyMakerByRule(state: GameState, mind: Mind, chains = true): Good | n
         running += pick.gain;
         share = Math.min(share, pick.share);
         cost += pick.cost;
+      }
+      for (const g of stands) {
+        const mines = standing.filter((t) => t.outfit === g);
+        // Its running cost: its gain without the MULE's price, already paid.
+        for (const t of mines) {
+          const { gain, cost: paid } = installGain(obs, free, t, g, mind);
+          running += gain + paid;
+        }
+        share = Math.min(share, mines.reduce((n, t) => n + linkShare(obs, t, g, members, mind.me), 0));
       }
       const home = works.filter((w) => !used.includes(w.t)).sort((a, b) => b.gain - a.gain)[0]!;
       cost += home.cost;
@@ -128,7 +141,7 @@ function moneyMakerByRule(state: GameState, mind: Mind, chains = true): Good | n
  * posting it, with or without its bands (C17): their normal, off-world and posted price, with two months of the
  * colony's demand on the shelf, so the bands post normal and the price holds.
  */
-function chainTable(electronics: number): GameState {
+function chainTable(electronics: number, smithoreStands = false): GameState {
   const state = createGame({ seed: 7, players: ['ai0', 'ai1', 'ai2', 'ai3'].map((id) => ({ id, name: id, isAi: true, species: 'zipwing' as const })) });
   while (state.phase !== 'development') advancePhase(state);
   for (const t of state.tiles) if (t.owner) Object.assign(t, { owner: null, outfit: null });
@@ -139,7 +152,8 @@ function chainTable(electronics: number): GameState {
   for (const t of state.tiles) if (t.terrain !== 'store') t.owner = 'ai1';
   for (const [x, ground] of [[0, { rareEarth: 4 }], [2, { smithore: 1 }], [4, {}], [6, {}]] as const) {
     const tile = state.tiles[x]!;
-    Object.assign(tile, { terrain: 'plains', traits: [], ground: { ...flat, ...ground }, owner: 'ai0', outfit: null, pollution: 0, runMonths: 0 } satisfies Partial<Tile>);
+    const outfit = smithoreStands && x === 2 ? 'smithore' : null;
+    Object.assign(tile, { terrain: 'plains', traits: [], ground: { ...flat, ...ground }, owner: 'ai0', outfit, pollution: 0, runMonths: 0 } satisfies Partial<Tile>);
     delete tile.special;
     me.analysed.push(x);
   }
@@ -211,6 +225,13 @@ describe('the draft picks a plan kind and writes its strategy', () => {
       const drafted = electronicsFrom((price) => strategyOf(chainTable(price), chained.mind, 100).moneyMaker);
       expect(drafted, 'the chain wins under the bands\' ceiling').not.toBeNull();
       expect(drafted).toBe(electronicsFrom((price) => moneyMakerByRule(chainTable(price), chained.mind)));
+      // The same with the thin Smithore mine already standing, an unfed link: no MULE to buy for it, and Smithore
+      // refunded with the links (so the Alloy link isn't charged for it, nor the mine paid for it).
+      const standing = chainTable(2_000, true);
+      expect(standingLinks(observe(standing, 'ai0'), 'ai0', 'electronics').map((t) => t.outfit)).toEqual(['smithore']);
+      const stands = electronicsFrom((price) => strategyOf(chainTable(price, true), chained.mind, 100).moneyMaker);
+      expect(stands, 'the chain with a standing link wins under the bands\' ceiling').not.toBeNull();
+      expect(stands).toBe(electronicsFrom((price) => moneyMakerByRule(chainTable(price, true), chained.mind)));
     });
 
     // monopolist: the level corners and a target qualifies; its money-maker is the target, a good that keeps.
