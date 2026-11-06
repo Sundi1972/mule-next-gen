@@ -536,6 +536,12 @@ describe('C7: the colony grounds on the TV', () => {
   /** The web server as the browser meets it: the manifest at its URL, nothing else. */
   const serveManifest = (body: () => Response | Promise<Response>) => vi.stubGlobal('fetch', vi.fn(async (url: string) => (url === MANIFEST_URL ? body() : new Response('', { status: 404 }))));
   const hrefs = (html: string) => [...element(html, 'colony-grounds').matchAll(/<image[^>]*href="([^"]+)"/g)].map((m) => m[1]!);
+  /** The shipped manifest with one part broken, as the server would send it. */
+  const broken = (spoil: (m: { frame: Record<string, unknown>; pictures: Record<string, Record<string, Record<string, unknown>>> }) => void) => () => {
+    const m = JSON.parse(manifestFile);
+    spoil(m);
+    return new Response(JSON.stringify(m));
+  };
 
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -568,6 +574,11 @@ describe('C7: the colony grounds on the TV', () => {
     ['the server answers 404', () => new Response('Not found', { status: 404 })],
     ['the file is not JSON', () => new Response('<!doctype html>')],
     ['the JSON is not a manifest', () => new Response('{"pictures":null}')],
+    ['the frame is empty', broken((m) => void (m.frame = {}))],
+    ['the frame has no number for its width', broken((m) => void (m.frame.width = 'wide'))],
+    ['the frame centre is one number', broken((m) => void (m.frame.centre = [800]))],
+    ['an entry has no day picture', broken((m) => void delete m.pictures.park!.standing!.day)],
+    ["a kind's own frame is bad", broken((m) => void (m.pictures.stadium!.frame = {}))],
   ])('HC-3: when %s, the grounds draw every place as its SVG shape and nothing breaks', async (_, body) => {
     vi.resetModules();
     const fresh = await import('../src/components/Grounds');
