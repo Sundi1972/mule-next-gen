@@ -1,5 +1,5 @@
 import { EXPORT_DEMAND, EXPORT_SHIP, GAME, GOOD_CONFIG, MULE, POLLUTION, PRICE, RECIPES, UPKEEP } from './config.js';
-import { fundIn } from './colony.js';
+import { fundIn, stillNeeds } from './colony.js';
 import { airBand } from './pollution.js';
 import { energyUseOf, needsOf } from './production.js';
 import { createRng } from './rng.js';
@@ -55,6 +55,12 @@ export function monthlyDemand(state: GameState, festival = festivalFood(state)):
   demand.electronics = 0;
   const off = exportDemand(state);
   for (const good of GOODS) demand[good] += off[good];
+  // A commissioned building still missing goods asks the store for them, so their price rises while it waits; the
+  // fund buys them at that price at upkeep (G-5 C49, RULE-21 row 3). Politics off, there is no colony and nothing here.
+  for (const p of state.colony?.projects ?? []) {
+    if (p.stage !== 'commissioned') continue;
+    for (const [good, units] of Object.entries(stillNeeds(p).goods) as [Good, number][]) demand[good] += units;
+  }
   return demand;
 }
 
