@@ -4,7 +4,7 @@ import { AirGauge, Button, cx, GOOD_NAME, GoodIcon, GoodTag, HoloMap, PlayerMark
 import { Speaker, TvTicker, tvSpeakerAt } from '../chat/Chat';
 import { boardWalkers, dealLine, dealSpeed, newestFirst, shipWants, ShipWants, SIDE_WORD, skippedLine, StatusTable, StoreBox, TvReadout, WaitingToPick, type DealRow } from '../components/AuctionParts';
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { BuildSite, ColonyGauges, ColonyScoreBand, TvWinner, useMonthEndDrift, type GaugeLanding } from '../components/Colony';
+import { BuildSite, ColonyGauges, ColonyScoreBand, MonthScoreColumn, TvWinner, useMonthEndDrift, type GaugeLanding } from '../components/Colony';
 import { StrikeBadge, StrikeMap, StrikeWaiting } from '../components/Strike';
 import { CollapseBanner, ColonyPanel, LeagueTable, WinnerCard } from '../components/MonthEnd';
 import { joinUrl, Qr } from '../components/Qr';
@@ -737,11 +737,13 @@ export function TvMonthEnd({ game, drift }: { game: MuleView; drift?: GaugeLandi
       <div className="flex flex-col gap-3">
         <TvHeader game={game} title="End of the month" ready={<ReadyCount players={game.players} tv />} landing={drift} />
       </div>
-      {inCollapse(game) && <CollapseBanner density="tv" />}
+      {inCollapse(game) && <CollapseBanner density="tv" donations={!!game.colony} />}
       <FitHeight className="flex-1">
         {game.colony ? (
           <div className="grid flex-1 grid-cols-[minmax(0,6fr)_minmax(0,6fr)] gap-6">
-            <LeagueTable view={game} density="tv" />
+            <MonthScoreColumn view={game}>
+              <LeagueTable view={game} density="tv" />
+            </MonthScoreColumn>
             <div className="flex flex-col gap-4">
               <ColonyPanel view={game} density="tv" />
               <BuildSite colony={game.colony} players={game.players} size="tv" />
@@ -755,7 +757,7 @@ export function TvMonthEnd({ game, drift }: { game: MuleView; drift?: GaugeLandi
         )}
       </FitHeight>
       <p className="text-lg leading-snug text-ink-2" data-testid="worth-rule">
-        Worth: cash + goods at the store’s price + land at {GAME.plotScore} cr a plot + MULEs at {game.mulePrice} cr + {POLITICS.termScore} cr a term in office. Each player’s own lines are on their phone.
+        Worth: cash + goods at the store’s price + land at {GAME.plotScore} cr a plot + MULEs at {game.mulePrice} cr + {POLITICS.termScore} cr a term in office{game.colony ? ' + donations' : ''}. Each player’s own lines are on their phone.
       </p>
     </div>
   );

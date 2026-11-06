@@ -1,16 +1,18 @@
 import { boxOf, doorOutside, floorConfig, HALL, pathTo, type GameState, type HallDoor, type HallPlace, type Outfit } from '@mule/engine';
 import { describe, expect, it } from 'vitest';
+import type { SeatInfo } from '@tabletop/core';
 import type { MuleGame } from '../src/mule-game.js';
-import { pressAct, pressThroughSidePick, readyAll, steerTo, toDevelopment as reachDevelopment, type SteerPoint } from './fake-context.js';
+import { pressAct, pressThroughSidePick, readyAll, seats, steerTo, toDevelopment as reachDevelopment, type SteerPoint } from './fake-context.js';
 
 /**
  * Month 1 into development with Heiko (s1) owning a land plot two tiles left of the store, on his door's side and out
  * of its reach: a steered colonist installs where it stands, and the grant's first lit plot on seed 7 is a lake that no
  * shore reaches.
  */
-function toDevelopment() {
+function toDevelopment(players?: SeatInfo[]) {
   let plot: { x: number; y: number } | null = null;
   const g = reachDevelopment({
+    ...(players && { players }),
     prepare: (state) => {
       const store = state.tiles.find((t) => t.terrain === 'store')!;
       const t = state.tiles.find((k) => k.y === store.y && k.x === store.x - 2 && k.owner === null && k.terrain !== 'lake')!;
@@ -183,7 +185,10 @@ describe('Installing over a MULE swaps it (Heiko at the table, 5 Nov)', () => {
   });
 
   it.each(['the pub', 'the clock'] as const)('B-AC-SWAP-2: Heiko\'s turn ends at %s with the swapped-out Food MULE still on his lead: it goes to the corral, and his plot keeps the Water MULE', (end) => {
-    const g = toDevelopment();
+    // The human seats only: the corral then changes, between the swap and the check, by the Food MULE alone. Re-picked
+    // for #366, the plotless-seat fix: with the AI seat at the table, its month-1 plot moved and it now buys a MULE
+    // in that window, so the corral read one short of before + 1.
+    const g = toDevelopment(seats.filter((s) => !s.isAi));
     const { game, plot } = g;
     buyAndOutfit(g, 's1', 'food');
     installOn(g, 's1', plot);
@@ -202,6 +207,24 @@ describe('Installing over a MULE swaps it (Heiko at the table, 5 Nov)', () => {
     expect(outfitOn(g, plot), 'never sent home over the new MULE').toBe('water');
     expect(game.viewFor(null).storeMules, 'the Food MULE is in the corral, on every screen').toBe(corral + 1);
     expect(game.viewFor('s1').me!.carriedMule).toBeNull();
+  });
+
+  it('B-AC-SWAP-5: Heiko\'s own view says he leads a swapped-out MULE (the phone\'s warning) only from the swap until his turn ends; a MULE he bought never, nor any other seat\'s view', () => {
+    const g = toDevelopment(seats.filter((s) => !s.isAi));
+    const { game, plot } = g;
+    buyAndOutfit(g, 's1', 'food');
+    installOn(g, 's1', plot);
+    buyAndOutfit(g, 's1', 'water');
+    hallTo(g, 's1', doorFor(g, plot));
+    press(g, 's1', 'LEAVE');
+    mapTo(g, 's1', { x: plot.x + 0.5, y: plot.y + 0.5 });
+    expect(game.viewFor('s1').me!.leadsSwapped, 'the Water MULE he bought').toBeUndefined();
+    press(g, 's1', 'SWAP');
+    expect(game.viewFor('s1').me!.leadsSwapped, 'the Food MULE he swapped off').toBe(true);
+    expect(game.viewFor('s2').me!.leadsSwapped, "another seat's own view").toBeUndefined();
+    for (const view of [game.viewFor(null), game.viewFor('s2')]) for (const p of view.players) expect(Object.keys(p)).not.toContain('leadsSwapped');
+    for (let i = 0; i < 10_000 && game.viewFor(null).phase === 'development'; i++) g.advance(100);
+    expect(game.viewFor('s1').me!.leadsSwapped, 'the turn ended: the MULE is in the corral').toBeUndefined();
   });
 
   it('B-AC-SWAP-3: over a MULE with the same outfit the button is dimmed and says so, and a press changes nothing: Heiko keeps his MULE, the plot keeps its own', () => {
