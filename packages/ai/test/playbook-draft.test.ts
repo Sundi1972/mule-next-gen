@@ -22,6 +22,7 @@ import { Brain } from '../src/brain.js';
 import { PERSONAS } from '../src/personas.js';
 import { applyAction, playGame } from '../src/play.js';
 import { draftPlaybook, type DraftPhase } from '../src/playbook/draft.js';
+import { planMind } from '../src/playbook/plan.js';
 import { AiSeat } from '../src/seat.js';
 import { applySets } from '../src/sim.js';
 import { goodPlan, landDecision, leaderOf, shortfallHold, tradeDecision } from '../src/strategist.js';
@@ -87,10 +88,13 @@ describe('the draft picks a plan kind and writes its strategy', () => {
     const others = (me: string) => state.players.map((p) => p.id).filter((id) => id !== me);
 
     // RULE-3 · builder: always eligible, the cautious favourite. RULE-4 · no money-maker; a month-1 target of 1 plot a
-    // month for 3 months; the reserve as today's strategist keeps it; every other seat neutral.
+    // month for 3 months; the reserve as today's strategist keeps it, with the builder's plan mind (RULE-14: its
+    // reserve multiplier); every other seat neutral.
     const builder = strategyOf(state, cautious.mind, cautious.seed);
     expect(builder).toMatchObject({ kind: 'builder', moneyMaker: null, monopolyTarget: null, landTarget: { plots: 3, byMonth: 4 } });
-    expect(builder.cashFloor).toBe(cashReserve(observe(state, cautious.mind.me), cautious.mind));
+    const reserveAt = (reserve: number) => cashReserve(observe(state, cautious.mind.me), { ...cautious.mind, persona: { ...cautious.mind.persona, reserve } });
+    expect(builder.cashFloor).toBe(reserveAt(cautious.mind.persona.reserve * AI_PLANS.kinds.builder.reserve));
+    expect(builder.cashFloor).not.toBe(reserveAt(cautious.mind.persona.reserve));
     expect(builder.stances).toEqual(Object.fromEntries(others(cautious.mind.me).map((id) => [id, 'neutral'])));
 
     // landBaron: while free plots are at least minFreeShare of all; its plots a month, at most what a grant gives
@@ -315,13 +319,15 @@ describe('the draft writes the parts of its phase', () => {
       expect(Object.keys(auction.auction!)).toEqual(goods);
       const sobs = observe(at.auction, `ai${i}`);
       const me = sobs.players[i]!;
+      // The parts are drafted with the plan mind (RULE-14).
+      const mind = planMind(seats[i]!.mind, auction.strategy);
       for (const good of goods) {
         const part = auction.auction![good]!;
-        const plan = goodPlan(sobs, seats[i]!.mind, good);
+        const plan = goodPlan(sobs, mind, good);
         const h = me.stock[good];
         // A seller keeps at least what its hands will keep at the good's status screen (shortfallHold).
         const raised = shortfallHold(sobs, `ai${i}`, good).mustHold;
-        const options = tradeDecision(sobs, seats[i]!.mind, plan).options.map(({ action: t }) =>
+        const options = tradeDecision(sobs, mind, plan).options.map(({ action: t }) =>
           t.side === 'seller' ? { role: 'seller', hold: Math.max(t.keep, raised) } : t.side === 'buyer' ? { role: 'buyer', hold: t.upTo } : { role: 'out', hold: h },
         );
         expect(options, `ai${i} ${good}`).toContainEqual({ role: part.role, hold: part.hold });

@@ -90,6 +90,11 @@ describe('selling when short of cash (C10, RULE-12)', () => {
     expect(wanted(holding(40, [[PLAINS, 'food']]))).toEqual([]);
     expect(wanted(holding(40, [[PLAINS, 'energy']]))).toEqual([]);
     expect(wanted(holding(40, []))).toEqual([]);
+    // FM-RULE12-water: a seat with a farm never lists its last Water MULE (an unwatered farm makes half); without a
+    // farm it may, and with two one may go.
+    expect(wanted(holding(40, [[PLAINS, 'food'], [PLAINS_2, 'water']]))).toEqual([]);
+    expect(wanted(holding(40, [[PLAINS_2, 'water']]))).toMatchObject([{ item: 'mule', plot: PLAINS_2 }]);
+    expect(wanted(holding(40, [[PLAINS, 'food'], [PLAINS_2, 'water'], [MOUNTAIN, 'water']]))).toMatchObject([{ item: 'mule', plot: expect.toBeOneOf([PLAINS_2, MOUNTAIN]) }]);
     // With two Food MULEs, one of them may go; a plot with a MULE on it is never a plot lot.
     const twoFarms = holding(40, [[PLAINS, 'food'], [PLAINS_2, 'food']]);
     const farms = wanted(twoFarms);

@@ -1,4 +1,4 @@
-import { GOODS, moodBand, type PrestigeId } from '@mule/engine';
+import { GOODS, moodBand, POLLUTION, type PrestigeId } from '@mule/engine';
 import type { ColonyProjectView, ColonyView, MuleView, PlayerView } from '@mule/protocol';
 import { airBandStyle, cx, GoodIcon, PlayerMark, useEventReducedMotion } from '@mule/ui';
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
@@ -183,7 +183,7 @@ export function ColonyGauges({ colony, size, className, landing }: { colony: Col
   return (
     <div className={cx('grid grid-cols-4', tv ? 'gap-2' : 'gap-1.5', className)} data-testid="colony-gauges">
       <Gauge size={size} testid="gauge-wealth" label="Wealth" value={`${fmt(wealth.value)} cr`} note={`fund ${fmt(colony.fund)} cr`} change={wealth.change} />
-      <Gauge size={size} testid="gauge-environment" label="Environment" value={`${environment.value}`} band={air.label} tone={air.tone} bar={air.bar} fill={environment.value} pulse={environment.pulse} change={environment.change} />
+      <Gauge size={size} testid="gauge-environment" label="Environment" value={`${environment.value}`} band={air.label} tone={air.tone} bar={air.bar} fill={(environment.value / POLLUTION.airMax) * 100} pulse={environment.pulse} change={environment.change} />
       <Gauge size={size} testid="gauge-prestige" label="Prestige" pulse={prestige.pulse} change={prestige.change} value={`${prestige.value}`} note={`${standingCount(colony)} standing${last && g.prestige !== last.prestige ? ` · ${signed(g.prestige - last.prestige)}` : ''}`} />
       {g.happiness === null || g.band === null ? (
         <Gauge size={size} testid="gauge-happiness" label="Happiness" value="—" note="not yet" />
