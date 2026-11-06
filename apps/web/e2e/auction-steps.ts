@@ -1104,10 +1104,10 @@ async function readTheStatusWords(phones: Phone[], tv: Page, truth: Truth): Prom
   console.log(`✓ G-8, G-4, G-6: ${a.good}'s status screen says "Goes bad" and "Spare" and "${store}" on three phones; one ship panel, "${shipText}${also}", on the phones and the TV`);
 }
 
-/** Lines said at the table in month 1's planning, so the TV's header ticker shows its full three through the auction. */
+/** Lines said at the table in month 1's planning, so the TV's header ticker is up through the auction. */
 const TABLE_TALK = ['Anyone need Water? Cheap today.', 'Smithore is going to spike, I hear.', 'The ship is in: hold your Crystite.'];
 
-/** Says TABLE_TALK from `phone`'s Talk desk, then waits until the TV's ticker shows three lines. */
+/** Says TABLE_TALK from `phone`'s Talk desk; in play the TV's ticker shows the newest line only (PM ruling 6 Nov). */
 async function fillTheTvTicker(phone: Page, tv: Page): Promise<void> {
   const planning = phone.locator('[data-phase=planning]');
   await planning.waitFor({ timeout: PRESS_MS * 5 });
@@ -1118,11 +1118,11 @@ async function fillTheTvTicker(phone: Page, tv: Page): Promise<void> {
     await tv.getByTestId('chat-ticker').getByText(line).waitFor({ timeout: PRESS_MS });
   }
   const lines = await tv.locator('[data-testid=chat-ticker] [data-testid^=chat-line-]').count();
-  check(lines === 3, `the TV's chat ticker shows three lines, got ${lines}`);
+  check(lines === 1, `the TV's chat ticker shows the newest line only, got ${lines}`);
 }
 
 /**
- * The TV's status stage at 1920×1080 with its chat ticker full: the store box keeps its prices, the ship panel ends
+ * The TV's status stage at 1920×1080 with its chat ticker up: the store box keeps its prices, the ship panel ends
  * inside the screen and the TV's frame with its words whole, and a skipped line sits in the picked count's row, whole.
  */
 async function checkTvStatusRoom(tv: Page, good: Good, skipped: boolean): Promise<void> {
@@ -1159,8 +1159,8 @@ async function checkTvStatusRoom(tv: Page, good: Good, skipped: boolean): Promis
   console.log(
     `  TV on ${GOOD_NAME[good]} at ${room.w}×${room.h}, ${room.ticker} chat lines in the ticker: store box ${room.store.height.toFixed(1)} px tall${room.store.full && room.store.pricesShown ? ', prices whole' : ', prices cut'}; ship panel y ${room.ship.top.toFixed(0)}–${room.ship.bottom.toFixed(0)} (the TV's frame ends at ${room.frame.bottom.toFixed(0)}), x ${room.ship.left.toFixed(0)}–${room.ship.right.toFixed(0)}${where}`,
   );
-  check(room.ticker === 3, `G-6 is read with the TV's chat ticker full: 3 lines, got ${room.ticker}`);
-  check(room.store.full && room.store.pricesShown && room.store.height >= TV_STORE_MIN, `G-6: the TV's store box keeps its prices beside the ship panel and a full ticker: ${room.store.height} px, prices ${room.store.pricesShown && room.store.full ? 'whole' : 'cut'}`);
+  check(room.ticker === 1, `G-6 is read with the TV's chat ticker up: its newest line (PM ruling 6 Nov), got ${room.ticker}`);
+  check(room.store.full && room.store.pricesShown && room.store.height >= TV_STORE_MIN, `G-6: the TV's store box keeps its prices beside the ship panel and the ticker: ${room.store.height} px, prices ${room.store.pricesShown && room.store.full ? 'whole' : 'cut'}`);
   check(
     room.ship.top >= 0 && room.ship.left >= 0 && room.ship.bottom <= Math.min(room.h, room.frame.bottom + 0.5) && room.ship.right <= room.w && room.ship.full,
     `G-6: on ${GOOD_NAME[good]} the TV's ship panel ends inside the ${room.w}×${room.h} screen and the TV's frame: y ${room.ship.top}–${room.ship.bottom}, frame to ${room.frame.bottom}, its words ${room.ship.full ? 'whole' : 'cut'}`,

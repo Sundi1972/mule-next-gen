@@ -1049,6 +1049,11 @@ export const COLONY = {
    * of its output each plot of the struck good makes while they are unpaid (UBER-AC-6).
    */
   strike: { cost: 250, output: 0.2 },
+  /**
+   * Places on the colony's own grounds, filled in growth order (index 0 next to the town hall, then outward ring by
+   * ring); an upper bound, the view draws only what is used. A 5×5 square less the town hall (G-5 AM-16 A, RULE-32).
+   */
+  groundsSlots: 24,
 };
 
 /**
@@ -1825,6 +1830,26 @@ export const AI_PLANS = {
     trader: { builder: 0.3, specialist: 1, monopolist: 1, landBaron: 0.3, politician: 0.2, spoiler: 0 },
     saboteur: { builder: 0.2, specialist: 0.4, monopolist: 0.5, landBaron: 0.4, politician: 0.3, spoiler: 1 },
   } satisfies Record<AiPersonaId, Record<PlanKind, number>>,
+  /** What a plan kind multiplies the persona's weights by while the seat plays it; a weight not named is × 1. */
+  kinds: {
+    builder: { reserve: 1.2, speculate: 0.5, corner: 0 },
+    specialist: { greed: 1.2, risk: 0.9 },
+    monopolist: { corner: 2.5, speculate: 1.2, patience: 1.2 },
+    landBaron: { greed: 1.1, reserve: 0.8 },
+    politician: {},
+    spoiler: { spite: 1.5 },
+  } satisfies Record<PlanKind, Partial<AiPersonaWeights>>,
+  /** When a kept plan is drafted again: each threshold is against the plan's anchor, set when it was drafted. */
+  replan: {
+    /** The plan's key plots: the first this many of its month's land ranking. One taken by a rival re-plans. */
+    keyPlots: 2,
+    /** Rival plots making the monopoly target, this many more than at the anchor, re-plan. */
+    rivalPlots: 1,
+    /** The money-maker's or the target's posted price moving by this share of its anchor price re-plans. */
+    priceShock: 0.4,
+    /** A production event cutting the output of this many of the seat's money-maker plots re-plans. */
+    eventPlots: 1,
+  },
   moneyMaker: {
     /** A good's score sums its install gain over this many of the seat's best plots for it (own idle and free). */
     plots: 3,
@@ -1834,6 +1859,15 @@ export const AI_PLANS = {
     weight: 1,
     /** That consideration's score, 0 to 1, for an outfit that makes another good (the money-maker scores 1). */
     otherScore: 0.8,
+  },
+  /** A factory good the seat can't feed yet, scored with the plots that would make its inputs. See AM-32. */
+  chain: {
+    /**
+     * A feature switch. 0 is off: no chain is ever committed and the seats play as before AM-32. Above 0, the chain's
+     * MULEs, at the level's MULEs a month, must all be bought within this many months, from cash on hand. Switching
+     * on (at 3, as tested) is Heiko's decision, once the economy lets a chain pay.
+     */
+    months: 0,
   },
   monopoly: {
     /** The goods a seat may try to corner. Not Food: it spoils too fast (STRATEGIST.cornerMaxSpoilage). */

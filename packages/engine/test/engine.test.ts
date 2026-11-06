@@ -5,6 +5,7 @@ import {
   GAME,
   grantDone,
   postPrices,
+  PRICE,
   storeQuotes,
   buyMule,
   claimPlot,
@@ -171,6 +172,32 @@ describe('prices', () => {
       return [posted, quote, state.auction!.good === 'smithore' ? state.auction!.storeSell : 'skipped'];
     });
     expect(seen).toEqual(rows.map(([posted, sells]) => [posted, sells, sells]));
+  });
+
+  it('FM-store-spread-float: the store buys at its posted price less storeSpread, rounded down, in its quotes and at the auction', () => {
+    // [posted, buys at]: 30% less, rounded down, worked by hand, under a swept spread (`pnpm sim -- --set
+    // PRICE.storeSpread=0.3`). 1 - 0.3 is a hair under 0.7 in floating point, so 90 × 0.7 lands a hair under 63 and
+    // used to round down one credit too low, as the sell side's 1 + 0.1 did one too high.
+    const rows = [
+      [90, 63], [170, 119], [180, 126], [100, 70], [10, 7], [7, 4], [33, 23], [1, 1],
+    ];
+    const live = PRICE.storeSpread;
+    PRICE.storeSpread = 0.3; // literal-ok: a swept spread where the float bites
+    try {
+      const seen = rows.map(([posted]) => {
+        const state = newGame();
+        state.store.posted.smithore = posted!;
+        state.store.stock.smithore = 0;
+        state.players[0]!.stock.smithore = 5;
+        const quote = storeQuotes(state, 'smithore').buy;
+        state.phase = 'auction';
+        startAuction(state, ['smithore']);
+        return [posted, quote, state.auction!.good === 'smithore' ? state.auction!.storeBuy : 'skipped'];
+      });
+      expect(seen).toEqual(rows.map(([posted, buys]) => [posted, buys, buys]));
+    } finally {
+      PRICE.storeSpread = live;
+    }
   });
 
   it('react more strongly to a Food shortage than an Alloy shortage', () => {

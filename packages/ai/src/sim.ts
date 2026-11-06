@@ -50,6 +50,7 @@ import { simSeats, type TablePlays } from './lineup.js';
 import type { FloorMomentCounts } from './floor-turn.js';
 import { playGame, type DevTurn, type PlayedGame, type SeatSpec } from './play.js';
 import type { AiSeat } from './seat.js';
+import { GOOD_NAME } from './strategist.js';
 import { unitNeed, wholeNextMonth, type Mind } from './value.js';
 
 function arg(name: string, fallback: number): number {
@@ -189,6 +190,33 @@ export function colonyScoreRecorder(): { onPhase: (s: GameState) => void; end: (
       return score ? [...totals, score.total] : [];
     },
   };
+}
+
+/**
+ * A month's factories and the idle ones among them, from its production report: the engine files no line for a factory
+ * whose non-Energy inputs are not in stock (production.ts runProduction), so a factory with none made nothing. Each idle
+ * one lists the inputs its owner held too few of for all its factories that take them, before production plus what
+ * production made.
+ */
+export function idleFactories(state: GameState, report: Pick<MonthReport, 'lines' | 'before' | 'produced'>): { factories: number; idle: engine.Good[][] } {
+  const ran = new Set((report.lines ?? []).map((l) => l.tile));
+  const factories = state.tiles.flatMap((t, i) => (t.owner && t.outfit && engine.isFactory(t.outfit) ? [{ owner: t.owner, outfit: t.outfit, i }] : []));
+  const idle = factories
+    .filter((f) => !ran.has(f.i))
+    .map((f) =>
+      (Object.keys(engine.RECIPES[f.outfit].inputs) as engine.Good[]).filter((g) => {
+        if (g === 'energy') return false;
+        const takes = factories.filter((x) => x.owner === f.owner).reduce((n, x) => n + (engine.RECIPES[x.outfit].inputs[g] ?? 0), 0);
+        return report.before[f.owner]![g] + report.produced[f.owner]![g] < takes;
+      }),
+    );
+  return { factories: factories.length, idle };
+}
+
+/** The factory line (no check): the share of factory-months a factory made nothing for want of an input, and which. */
+export function factoryIdleLine(t: { factories: number; idle: number; wanted: Partial<Record<engine.Good, number>> }): string {
+  const wanted = (Object.entries(t.wanted) as [engine.Good, number][]).map(([g, n]) => `${GOOD_NAME[g]} ${n}`).join(', ');
+  return `     Factories idle for want of an input: ${pct(t.idle, t.factories)} of ${t.factories} factory-months${wanted ? ` (wanting ${wanted})` : ''} (no check)`;
 }
 
 /**
@@ -598,6 +626,8 @@ function main() {
   const mood = { months: zero(), events: Object.fromEntries(SOCIAL.map((k) => [k, zero()])) as Record<string, Record<MoodBand, number>>, strikesFelt: 0 };
   /** Each game's colony score at each month's end; empty games without the council. */
   const colonyPaths: number[][] = [];
+  /** Factory-months, the idle ones among them, and the inputs they wanted. */
+  const factoryIdle = { factories: 0, idle: 0, wanted: {} as Partial<Record<engine.Good, number>> };
   const supply = AI_VALUE.unit ? newSupplyTally() : null;
   // Read once the land grant opens: by then the month's election is closed and the Governor has set the tax.
   const onPhase = (s: Parameters<NonNullable<Parameters<typeof playGame>[2]>['onPhase'] & {}>[0]) => {
@@ -634,6 +664,12 @@ function main() {
       colony.onPhase(s);
       supplyAt?.phase(s);
       if (s.phase === 'production') developedAt.set(s.month, s.tiles.filter((t) => t.owner && t.outfit).length);
+      if (s.phase === 'production') {
+        const { factories, idle } = idleFactories(s, s.history.at(-1)!);
+        factoryIdle.factories += factories;
+        factoryIdle.idle += idle.length;
+        for (const g of idle.flat()) factoryIdle.wanted[g] = (factoryIdle.wanted[g] ?? 0) + 1;
+      }
       if (s.phase === 'production' && pending) {
         const events = s.history.at(-1)!.events ?? [];
         monthEvents.push({ development: pending.sickness, production: events.length });
@@ -782,6 +818,7 @@ function main() {
     console.log(`       general strikes called ${called}, felt unpaid in production ${mood.strikesFelt}`);
   }
   for (const line of colonyScoreLines(colonyPaths)) console.log(line);
+  console.log(factoryIdleLine(factoryIdle));
   console.log('\nPosted prices (min / median / 90th percentile / max):');
   for (const good of GOODS) {
     const all = prices[good]!;

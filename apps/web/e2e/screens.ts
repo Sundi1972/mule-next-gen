@@ -75,7 +75,7 @@ try {
   await free.nth(3).click();
   await free.nth(9).click();
   await phoneShot(phone, '2-drone');
-  await phone.getByRole('button', { name: /Send the drone/ }).click();
+  await phone.getByRole('button', { name: /^Scan · / }).click();
   await phone.getByTestId('desk-talk').click();
   await phone.getByPlaceholder('Say something to everyone').fill('Anyone need Water? Cheap today.');
   await phone.getByRole('button', { name: 'Send' }).click();

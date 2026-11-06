@@ -6,6 +6,7 @@ import { LawsInForce, thenWords } from '../phone/hub/politics/LawBallot';
 import { costChip, LAW_MEANING, proposalWords } from '../phone/hub/politics/LawPicker';
 import { colorOf } from '../phone/hub/politics/parts';
 import { TvHeader } from './TableApp';
+import { TvBody } from './TvFit';
 
 /*
  * C46: next month's law ballot on the big screen, in TvElection's frame, grafted from the approved ws8-desks mock
@@ -18,10 +19,12 @@ export function TvCouncil({ game }: { game: MuleView }) {
   return (
     <div className="flex h-[720px] w-[1280px] flex-col gap-4 bg-table px-10 py-7 text-ink" data-phase="planning" data-testid={c.stage === 'ballot' ? 'tv-council-ballot' : 'tv-council-reveal'}>
       <TvHeader game={game} title={c.stage === 'ballot' ? 'The law vote' : 'The law vote · the result'} />
+      <TvBody>
       {c.stage === 'ballot' || !c.result ? <TvLawBallot game={game} c={c} /> : <RevealBar game={game} c={c} result={c.result} />}
       <div className="mt-auto rounded-panel border border-holo-line bg-panel px-6 py-3" data-testid="tv-laws">
         <LawsInForce laws={game.politics?.laws ?? {}} tv />
       </div>
+      </TvBody>
     </div>
   );
 }

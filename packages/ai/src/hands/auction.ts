@@ -3,7 +3,7 @@ import type { Act } from '../actions.js';
 import type { Brain, Pending } from '../brain.js';
 import { goodPlan, tradeDecision, type GoodPlan, type TradeAction } from '../strategist.js';
 import { situation } from '../summary.js';
-import { beforeTax } from '../value.js';
+import { beforeTax, type Mind } from '../value.js';
 
 /**
  * Auction hands, after the design doc's auction example. At the status
@@ -49,8 +49,14 @@ export interface AuctionDebug {
   goal: number | null;
 }
 
+/** A good's play on the playbook path, and the plan mind its unit values are read with (RULE-10, RULE-14). */
+export interface PlannedPlay {
+  play: GoodPlay;
+  mind: Mind;
+}
+
 /** The good's play on the playbook path, asked once a good at its status screen; null plays today's ask. */
-export type GoodPlaySource = (state: GameState, good: Good) => GoodPlay | null;
+export type GoodPlaySource = (state: GameState, good: Good) => PlannedPlay | null;
 
 type Side = 'buyer' | 'seller';
 
@@ -107,8 +113,9 @@ export class AuctionHand {
 
     if (!this.plan) {
       const obs = observe(state, mind.me);
-      this.plan = goodPlan(obs, mind, a.good);
-      this.play = this.playOf?.(state, a.good) ?? null;
+      const planned = this.playOf?.(state, a.good) ?? null;
+      this.play = planned?.play ?? null;
+      this.plan = goodPlan(obs, planned?.mind ?? mind, a.good);
       if (this.play) this.trade = tradeOf(this.play, this.plan);
       else this.pending = this.brain.ask('trade', tradeDecision(obs, mind, this.plan), obs, AI_HANDS.auction.decideWaitMs, a.good, situation(obs, mind));
     }

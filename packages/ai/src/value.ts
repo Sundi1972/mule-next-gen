@@ -1,14 +1,17 @@
 import {
+  AI_PLANS,
   AI_VALUE,
   airPoints,
   crewOf,
   DEV_STEER,
   DEV_WALK,
   DEVELOPMENT,
+  emptyStock,
   FACTORY,
   factoryFit,
   floorConfig,
   GOOD_CONFIG,
+  GOODS,
   isFactory,
   monthNeeds,
   mulePrice,
@@ -169,29 +172,141 @@ export function installGain(obs: GameState, o: Outlook, tile: Tile, outfit: Outf
 }
 
 /**
- * True when the factory could run: every input other than Energy comes from
- * the seat's own plots, or its stock lasts STRATEGIST.factoryInputMonths
- * months of runs while the household, the new factory's crew included, eats
- * and drinks from the same stock and what is left spoils between months.
+ * True when the factory could run: for every input other than Energy, its stock plus what its own plots make lasts
+ * STRATEGIST.factoryInputMonths months of runs while the household, the new factory's crew included, eats and drinks
+ * from the same stock and what is left spoils between months. A plot of its own feeds the factory only with what is
+ * left after the household eats (FM-factory-input): a farm turned off, or one making only the household's Food, feeds
+ * nothing, and nor does what the seat's factories already running take of the same input. Its plots make what the next
+ * production on a copy of what it sees, with the new factory in it, makes (madeNext), each month alike: a farm the
+ * factory's own Energy use turns off feeds it only that 20%.
  */
 export function canFeed(obs: GameState, me: string, outfit: Outfit): boolean {
-  if (!isFactory(outfit)) return true;
+  return unfedInputs(obs, me, outfit).length === 0;
+}
+
+/** The inputs other than Energy that canFeed finds the seat can't feed a new `outfit` factory with; none for a raw outfit. */
+export function unfedInputs(obs: GameState, me: string, outfit: Outfit): Good[] {
+  if (!isFactory(outfit)) return [];
   const p = obs.players.find((q) => q.id === me)!;
-  const crew = crewOf(obs, me) + UPKEEP.crew.factory;
-  const household: Partial<Stock> = {
-    food: UPKEEP.baseFood + Math.ceil(crew / UPKEEP.crewPerFood),
-    water: UPKEEP.baseWater + Math.ceil(crew / UPKEEP.crewPerWater),
-  };
-  return (Object.entries(RECIPES[outfit].inputs) as [Good, number][]).every(([g, q]) => {
-    if (g === 'energy' || obs.tiles.some((t) => t.owner === me && t.outfit === g)) return true;
+  const household = householdNeeds(obs, me);
+  const factories = obs.tiles.filter((t) => t.owner === me && t.outfit && isFactory(t.outfit));
+  const lasts = (g: Good, q: number) => {
+    const own = obs.tiles.some((t) => t.owner === me && t.outfit === g) ? madeNext(obs, me, outfit)[g] : 0;
+    // What the seat's factories already take of it each month, before the new one gets any.
+    const taken = factories.reduce((n, t) => n + (RECIPES[t.outfit as ProcessedGood].inputs[g] ?? 0), 0);
     let carry = p.stock[g];
     for (let m = 0; m < STRATEGIST.factoryInputMonths; m++) {
-      carry -= (household[g] ?? 0) + q;
+      carry += own - (household[g] ?? 0) - taken - q;
       if (carry < 0) return false;
       carry = Math.floor(carry * (1 - GOOD_CONFIG[g].spoilage));
     }
     return true;
-  });
+  };
+  return (Object.entries(RECIPES[outfit].inputs) as [Good, number][]).filter(([g, q]) => g !== 'energy' && !lasts(g, q)).map(([g]) => g);
+}
+
+/** What the household, a new factory's crew included, eats and drinks a month: canFeed's first call on Food and Water. */
+function householdNeeds(obs: GameState, me: string): Partial<Stock> {
+  const crew = crewOf(obs, me) + UPKEEP.crew.factory;
+  return {
+    food: UPKEEP.baseFood + Math.ceil(crew / UPKEEP.crewPerFood),
+    water: UPKEEP.baseWater + Math.ceil(crew / UPKEEP.crewPerWater),
+  };
+}
+
+/**
+ * The links a chain to factory good `good` still needs a plot for: each input the seat can't feed and has no plot
+ * making, and that input's own links when it is a factory good too. Empty when `good` is no chain: a raw good, a
+ * factory the seat can feed, one missing an input the household eats or drinks, which it takes first, so no farm or
+ * well is the works' alone, or with chains switched off. See AM-32.
+ */
+export function chainLinks(obs: GameState, me: string, good: Good): Good[] {
+  return chainParts(obs, me, good).links;
+}
+
+/** AI_PLANS.chain.months, the switch: at 0 there is no chain, and every chain helper answers none. */
+const chainsOn = () => AI_PLANS.chain.months > 0;
+
+/**
+ * Every good a chain to `good` is built from, Energy aside, all the way up its recipes: Rare earth, Alloy and Smithore
+ * for Electronics. None for a raw good, a factory with an input the household eats or drinks, or chains switched off.
+ * See AM-32.
+ */
+export function chainInputs(obs: GameState, me: string, good: Good): Good[] {
+  if (!chainsOn() || !isFactory(good)) return [];
+  const inputs = (Object.keys(RECIPES[good].inputs) as Good[]).filter((g) => g !== 'energy');
+  const household = householdNeeds(obs, me);
+  if (inputs.some((g) => g in household)) return [];
+  return [...new Set(inputs.flatMap((g) => [g, ...chainInputs(obs, me, g)]))];
+}
+
+/** The seat's plots already making an input of the chain to `good` that it still can't feed: links that stand. See AM-32. */
+export function standingLinks(obs: GameState, me: string, good: Good): Tile[] {
+  return chainParts(obs, me, good).standing;
+}
+
+function chainParts(obs: GameState, me: string, good: Good): { links: Good[]; standing: Tile[] } {
+  if (!chainsOn()) return { links: [], standing: [] };
+  const unfed = unfedInputs(obs, me, good);
+  const household = householdNeeds(obs, me);
+  if (unfed.some((g) => g in household)) return { links: [], standing: [] };
+  const links = new Set<Good>();
+  const standing = new Set<Tile>();
+  for (const g of unfed) {
+    const making = obs.tiles.filter((t) => t.owner === me && t.outfit === g);
+    if (making.length === 0) links.add(g);
+    for (const t of making) standing.add(t);
+    const up = chainParts(obs, me, g);
+    for (const l of up.links) links.add(l);
+    for (const t of up.standing) standing.add(t);
+  }
+  return { links: [...links], standing: [...standing] };
+}
+
+/**
+ * The share of its works' monthly run a link plot on `tile` supplies, at most 1: what it would make over what the chain
+ * member that uses it needs a run. A link counts for the chain only as far as it feeds it. See AM-32.
+ */
+export function linkShare(obs: GameState, tile: Tile, link: Good, members: readonly Good[], me: string): number {
+  const user = members.find((m) => isFactory(m) && (RECIPES[m].inputs[link] ?? 0) > 0);
+  const need = user ? RECIPES[user as ProcessedGood].inputs[link]! : 1;
+  return Math.min(1, yieldOf(obs, tile, link, me).made / need);
+}
+
+/**
+ * The outlook a chain is valued at: its links' goods cost and fetch nothing. A link's output and the works' charge for
+ * it cancel within the seat, so the works is valued with its input charge refunded and each link plot at its running
+ * cost alone (MULE, outfit, Energy, crew, air). See AM-32.
+ */
+export function chainOutlook(o: Outlook, links: readonly Good[]): Outlook {
+  const free = (price: (good: Good, extra?: number) => number) => (good: Good, extra?: number) => (links.includes(good) ? 0 : price(good, extra));
+  return { ...o, price: free(o.price.bind(o)), later: free(o.later.bind(o)) };
+}
+
+const madeCache = new WeakMap<GameState, Map<string, Stock>>();
+
+/**
+ * What the seat's own plots make at the next production: the outlook's rollout of a copy of what it sees, Energy, Water
+ * and the turn-off rule included, with the factory `adding` (when given) installed on a stand-in plot: the seat's first
+ * idle plot, else the first free one. Its Energy use may turn a farm off (AM-17). Remembered per observation, seat,
+ * month, phase, plots and factory, as canFeed asks it for every plot it scores. In the production phase this month's
+ * production has run and the outlook rolls none before the auction (its `made` is empty), so the month's report says
+ * what the plots make: the plots are the ones that made it, without the factory being weighed.
+ */
+function madeNext(obs: GameState, me: string, adding?: Outfit): Stock {
+  if (obs.phase === 'production') return obs.history.at(-1)?.produced[me] ?? emptyStock();
+  const plots = obs.tiles.flatMap((t, i) => (t.owner === me ? [`${i}:${t.outfit ?? ''}`] : [])).join(',');
+  const key = `${me}|${obs.month}|${obs.phase}|${plots}|${GOODS.map((g) => obs.players.find((p) => p.id === me)!.stock[g]).join(',')}|${adding ?? ''}`;
+  let seen = madeCache.get(obs);
+  if (!seen) madeCache.set(obs, (seen = new Map()));
+  let made = seen.get(key);
+  if (!made) {
+    const idle = obs.tiles.findIndex((t) => t.owner === me && !t.outfit);
+    const at = idle >= 0 ? idle : obs.tiles.findIndex((t) => !t.owner && t.terrain !== 'store');
+    const apply = adding && at >= 0 ? (sim: GameState) => Object.assign(sim.tiles[at]!, { owner: me, outfit: adding, runMonths: 0 }) : undefined;
+    seen.set(key, (made = outlook(obs, me, { lookAhead: true, ...(apply && { apply }) }).made));
+  }
+  return made;
 }
 
 /**
@@ -294,6 +409,8 @@ export interface UnitValues {
 }
 
 export function unitValues(obs: GameState, o: Outlook, good: Good, mind: Mind): UnitValues {
+  // Known gap (PR #510's review): the model's values skip buyForFactories, so with AI_VALUE.unit on a factory's Food or
+  // Water is bought without FM-factory-input's buy-side fix. Inert while the switch is off; build it with the switch.
   if (AI_VALUE.unit) return modelValues(obs, o, good, mind);
   const me = mind.me;
   const need = monthNeeds(obs, me)[good];
@@ -348,6 +465,10 @@ export function unitValues(obs: GameState, o: Outlook, good: Good, mind: Mind): 
     const sick = playerEventChance(obs, 'sickness', 'development', me);
     use = sick * monthWalkSeconds(obs, mind) * (1 / DEV_WALK.sickPace - 1) * sec;
   }
+  // The household's own block, before any factory's units join it: the buy side values it apart (FM-factory-input).
+  const household = { block, use };
+  let factoryUnits = 0;
+  let factoryWorth = 0;
   // Factory inputs: a factory's run is worth its output, shared over its inputs.
   for (const t of mine) {
     if (!isFactory(t.outfit!)) continue;
@@ -358,6 +479,8 @@ export function unitValues(obs: GameState, o: Outlook, good: Good, mind: Mind): 
     const add = Math.ceil(q / keepRate);
     use = (use * block + each * add) / Math.max(1, block + add);
     block += add;
+    factoryUnits += add;
+    factoryWorth += each * add;
   }
 
   // Beyond the block: resale next month, after spoilage, the sales tax and the depot limit.
@@ -380,9 +503,35 @@ export function unitValues(obs: GameState, o: Outlook, good: Good, mind: Mind): 
       buy.push(0);
     }
   }
+  if (factoryUnits > 0) buyForFactories(obs, me, good, buy, { household, factoryUnits, factoryWorth, resaleBuy, room });
   keep.sort((a, b) => b - a);
   buy.sort((a, b) => b - a);
   return { good, keep, buy, block, need, floorUnits };
+}
+
+/**
+ * The buy side of a factory input (FM-factory-input, PM ruling of 6 Nov; the keep side and the sell floor stay, Heiko's
+ * 5 Nov "sell surplus"). The factories' share of their runs (`factoryWorth`) is what the seat gets by holding the units
+ * that carry their inputs past upkeep: what upkeep eats or drinks first, then `factoryUnits`. It is spread over the
+ * units of those it still has to buy, not averaged down by the household's walking value; the household's own block
+ * keeps that value besides, and past it a unit is worth its resale.
+ */
+function buyForFactories(
+  obs: GameState,
+  me: string,
+  good: Good,
+  buy: number[],
+  f: { household: { block: number; use: number }; factoryUnits: number; factoryWorth: number; resaleBuy: number; room: number },
+): void {
+  const eaten = good === 'food' || good === 'water' ? needsOf(obs, me)[good] : 0;
+  const reach = eaten + f.factoryUnits;
+  const held = Math.min(obs.players.find((p) => p.id === me)!.stock[good], reach);
+  const run = f.factoryWorth / Math.max(1, reach - held);
+  for (let k = 0; k < buy.length; k++) {
+    const own = k < f.household.block ? f.household.use : 0;
+    const worth = (k < reach ? run : 0) + own;
+    buy[k] = k < reach || k < f.room ? Math.max(worth, f.resaleBuy) : 0;
+  }
 }
 
 /**

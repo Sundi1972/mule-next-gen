@@ -1,12 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
+  advanceGrant,
   advancePhase,
   AI_LEVELS,
+  claimPlot,
   AI_PERSONAS,
   createGame,
   EVENTS,
   GAME,
   GOODS,
+  grantDone,
+  litPlot,
   mulePriceFor,
   observe,
   STRATEGIST,
@@ -22,7 +26,7 @@ import { FOOD_TO_SPARE } from './store-food.js';
 import { AiSeat } from '../src/seat.js';
 import { simSeats } from '../src/lineup.js';
 import { playGame } from '../src/play.js';
-import { developDecision, goodPlan, landDecision, muleValue, plotRoom, plotValue, rivalsStillClaiming, tradeDecision, wantsAnyAhead, wantsPlot } from '../src/strategist.js';
+import { developDecision, goodPlan, landDecision, muleValue, plotRoom, plotsAhead, plotValue, rivalsStillClaiming, tradeDecision, wantsAnyAhead, wantsPlot } from '../src/strategist.js';
 import { cashReserve, installGain, secondValue, type Mind } from '../src/value.js';
 
 /**
@@ -102,6 +106,30 @@ describe('land claims', () => {
       if (new Set(plays).size > 1) differing.push(step);
     }
     expect(differing, 'steps where the hidden tail changed a press or a Done').toEqual([]);
+  });
+
+  it("INV-grant-view: over a grant with plots claimed, plotsAhead from a seat's view equals the hidden order's free plots from the light on", () => {
+    // observe() hides the order, so plotsAhead rebuilds it from the board; the two must agree at every step, claims and all.
+    const state = fourSeats(3);
+    while (state.phase !== 'landGrant') advancePhase(state);
+    let claims = 0;
+    let checked = 0;
+    for (let lit = litPlot(state); lit; lit = advanceGrant(state)) {
+      const { order, step } = state.grant!;
+      const hidden = order.slice(step).filter((index) => !state.tiles[index]!.owner);
+      for (const p of state.players) expect(plotsAhead(observe(state, p.id)), `${p.id}, step ${step}`).toEqual(hidden);
+      checked++;
+      // Every third lit plot is claimed by the next seat with claims left, so the pass holds claimed plots behind and on the light.
+      const claimer = state.players.find((p) => p.claimsThisGrant < GAME.claimsPerGrant && !p.doneWithLand);
+      if (checked % 3 === 0 && claimer) {
+        claimPlot(state, claimer.id, lit.x, lit.y);
+        claims++;
+        expect(plotsAhead(observe(state, 'ai0')), `just claimed, step ${step}`).toEqual(order.slice(step).filter((index) => !state.tiles[index]!.owner));
+      }
+      if (grantDone(state)) break;
+    }
+    expect(claims, 'the case: plots were claimed during the pass').toBeGreaterThan(1);
+    expect(checked, 'the case: the light walked the pass').toBeGreaterThan(claims);
   });
 
   it('INV-grant-ahead: wantsAnyAhead is true exactly when wantsPlot would take some plot still ahead of the light', () => {
@@ -367,8 +395,14 @@ describe('factories', () => {
       const free = state.tiles.filter((t) => !t.owner && t.terrain !== 'store');
       free[0]!.owner = 'ai0';
       if (farms) {
-        Object.assign(free[1]!, { owner: 'ai0', outfit: 'food' });
-        Object.assign(free[2]!, { owner: 'ai0', outfit: 'water' });
+        // A farm feeds the works only with what is left after the household eats and drinks (FM-factory-input): on good
+        // ground, with 6 Food in hand, they make enough for the household and the works for two months.
+        const ground = { food: 3, water: 3, energy: 0, smithore: 0, crystite: 0, rareEarth: 0 };
+        for (const [tile, outfit] of [[free[1]!, 'food'], [free[2]!, 'water']] as const) {
+          Object.assign(tile, { owner: 'ai0', outfit, terrain: 'plains', traits: [], ground });
+          delete tile.special;
+        }
+        state.players[0]!.stock.food = 6;
       }
       state.players[0]!.money = 5_000;
       return developDecision(observe(state, 'ai0'), traderMind, 0).all.filter((c) => c.key.startsWith('install:medicine'));
@@ -377,7 +411,7 @@ describe('factories', () => {
     const bare = arrange(false);
     expect(bare.length).toBeGreaterThan(0);
     for (const c of bare) expect(c.veto ?? '').toMatch(/nothing to feed/);
-    // Negative case: its own Food and Water farms feed the works.
+    // Negative case: its own Food and Water farms, making more than the household takes, feed the works.
     for (const c of arrange(true)) expect(c.veto ?? '').not.toMatch(/nothing to feed/);
   });
 });

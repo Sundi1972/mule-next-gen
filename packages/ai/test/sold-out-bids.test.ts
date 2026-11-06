@@ -65,7 +65,7 @@ function soldOutFood(): GameState {
 function handOf(seat: AiSeat, state: GameState, edit: Partial<GoodPlay>): AuctionHand {
   const own = draftGoodPlaybook({ state, seat: seat.id, mind: seat.mind, seed: seat.options.seed }, 'food').auction!.food!;
   const part: GoodPlay = { ...own, bluff: false, ...edit };
-  return new AuctionHand(seat.brain, createRng((seat.options.seed ^ 0x85ebca6b) >>> 0), () => structuredClone(part)); // literal-ok: AiSeat's salt for the auction hand's rng
+  return new AuctionHand(seat.brain, createRng((seat.options.seed ^ 0x85ebca6b) >>> 0), () => ({ play: structuredClone(part), mind: seat.mind })); // literal-ok: AiSeat's salt for the auction hand's rng
 }
 
 interface Walk {

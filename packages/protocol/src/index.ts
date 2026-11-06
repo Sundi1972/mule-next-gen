@@ -276,10 +276,10 @@ export interface MyView {
   /** What this player pays for a MULE and for each outfit. */
   mulePrice: number;
   outfitCosts: Record<Outfit, number>;
-  /** Free plots chosen for the geo drone this month. */
+  /** Free or listed plots the geo drone flew over this month; set until the land grant frees the drone. */
   droneOrder: { x: number; y: number }[];
   /**
-   * The plots this month's drone surveyed, from the land grant until the month ends: the land grant's rail says
+   * The plots this month's drone surveyed, from the moment it is sent until the month ends: the land grant's rail says
    * "Your drone: …" while one is lit (H-3). Only on this player's own view; absent reads as none.
    */
   droneFound?: { x: number; y: number }[];

@@ -1,6 +1,6 @@
 import { DEFAULT_SPECIES, EVENTS, MAP, TERRAIN_ODDS as ENGINE_TERRAIN_ODDS, type MINERAL_ODDS, type SpecialKind as EngineSpecialKind } from '@mule/engine';
 import type { MuleView, PlayerView, TableView, TileView } from '@mule/protocol';
-import { GOOD_NAME, SPECIES, type Good, type MapObject, type MapSpecial, type MapTile, type Slot, type SpecialKind, type Species } from '@mule/ui';
+import { dotsOf, GOOD_NAME, SPECIES, type Good, type MapObject, type MapSpecial, type MapTile, type Slot, type SpecialKind, type Species } from '@mule/ui';
 
 /**
  * Small, pure readings of the view for the screens. No rules live here: the
@@ -45,12 +45,6 @@ export function lobbySeatSpecies(seat: SeatView, index: number): Species {
   return SPECIES.find((sp) => sp === seat.pick) ?? DEFAULT_SPECIES[index % DEFAULT_SPECIES.length]!;
 }
 
-/** The design system rates ground 0 to 4; grown goods come as -2 to +3, shown on the same pips. */
-export function groundPips(good: Good, rating: number): number {
-  const grown = good === 'food' || good === 'water' || good === 'energy';
-  return Math.max(0, Math.min(4, grown ? rating + 1 : rating));
-}
-
 /**
  * The colony's objects by the plot they stand on (a tile index): a project holds its plot from its site on, at every
  * stage, and an object that needs no plot has none. A building site counts its months built.
@@ -72,7 +66,7 @@ export function mapTiles(view: MuleView): MapTile[] {
     const object = objects.get(i);
     const owner = slotOf(view, t.owner);
     const good = t.outfit && t.outfit !== 'greenBelt' ? t.outfit : undefined;
-    const ground = t.ground ? (Object.fromEntries(Object.entries(t.ground).map(([g, n]) => [g, groundPips(g as Good, n)])) as Partial<Record<Good, number>>) : undefined;
+    const ground = dotsOf(t.ground);
     return {
       x: t.x,
       y: t.y,
