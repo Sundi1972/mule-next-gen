@@ -169,6 +169,22 @@ describe('RULE-6: every board draws the rest zones', () => {
     }
   });
 
+  it("B-AC-D1 (phone, TV): when the ship pays inside the sellers' zone, its band says only the ship buys there: the short form on a phone, the long one on the TV (WS6)", () => {
+    const { game } = toWalk();
+    const S = game.viewFor(null).auction!.zones!.sellersBottom;
+    const withShip = (view: MuleView): MuleView => ({ ...view, auction: { ...view.auction!, shipPays: Math.round((S + view.auction!.hi) / 2) } });
+    expect(withShip(game.viewFor(null)).auction!.shipPays!, 'the premise: the ship pays above S').toBeGreaterThan(S);
+    for (const id of ['s1', 's2']) {
+      expect(textOf(phoneScreen(withShip(game.viewFor(id)), id), 'rest-seller'), id).toBe('SELLERS WAIT SHIP ONLY');
+    }
+    expect(textOf(tvScreen(withShip(game.viewFor(null))), 'rest-seller'), 'the TV').toBe('SELLERS WAIT ONLY THE SHIP BUYS');
+    // The buyers' band never changes, and a ship at or under S leaves the sellers' band as it was.
+    const atS = (view: MuleView): MuleView => ({ ...view, auction: { ...view.auction!, shipPays: S } });
+    expect(textOf(tvScreen(withShip(game.viewFor(null))), 'rest-buyer')).toBe('BUYERS WAIT NO TRADE');
+    expect(textOf(tvScreen(atS(game.viewFor(null))), 'rest-seller')).toBe('SELLERS WAIT NO TRADE');
+    expect(textOf(phoneScreen(atS(game.viewFor('s1')), 's1'), 'rest-seller')).toBe('SELLERS WAIT NO TRADE');
+  });
+
   it("B-AC-D1 (phone, TV): once the store stops buying, the buyers' zone keeps its top at the old buying line", () => {
     const { game, state } = toWalk();
     state.auction!.storeBudget = 0;
@@ -212,12 +228,12 @@ describe("RULE-7: a sold-out store's line shows the highest bid on every screen"
     expect(textOf(phoneScreen(game.viewFor('s1'), 's1'), 'sold-out-note')).toBe(`Store sold out. Nobody can buy from it; it still buys at ${buys}.`);
   });
 
-  it("B-AC-E1 (TV): a store with none of the good and no old price to name says it is sold out and nothing more, never a sentence without its number", () => {
+  it("B-AC-E1 (TV): a store that never posted a selling price for the good says bids set it, never a sentence without its number (WS6)", () => {
     const { game } = soldOut(0);
     const view = game.viewFor(null);
     // A store that never had the good: no selling line, and a view without zones (a record from before them).
     const { zones: _, ...auction } = { ...view.auction!, storeSells: null };
-    expect(textOf(tvScreen({ ...view, auction }), 'tv-sold-out')).toBe('Store sold out');
+    expect(textOf(tvScreen({ ...view, auction }), 'tv-sold-out')).toBe('Store sold out No store price yet: bids set it.');
   });
 
   it('B-AC-E1 (phone, TV): while the store sells, its line is its selling price, and no screen says sold out', () => {
