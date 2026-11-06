@@ -146,6 +146,21 @@ describe('C26 PR-B: the store strike, in development', () => {
     buyMule(plain, 'p0');
     expect(plain.players[0]!.carriedMule).toBe('empty');
   });
+
+  it("FM-C26-11 (store strike ends with its month): in the next month's development the store sells MULEs again", () => {
+    only(['storeStrike']);
+    const state = developing(MID('unrest'));
+    const month = state.month;
+    expect(state.monthEvents.map((e) => e.key)).toEqual(['storeStrike']);
+    only([]);
+    // Thriving, so the mood alone cannot call next month's strike.
+    state.colony!.happiness = 100;
+    do advancePhase(state);
+    while (state.phase !== 'development');
+    expect(state.month).toBe(month + 1);
+    buyMule(state, 'p0');
+    expect(state.players[0]!.carriedMule).toBe('empty');
+  });
 });
 
 /** Production from development, as the month's phases run it; the report it files. */
@@ -224,6 +239,16 @@ describe('C26 PR-B: the walkout, in production', () => {
     const food = plotsOf(state, 'p0', 'food');
     expect(report.events!.map((e) => [e.key, e.player])).toContainEqual(['walkout', 'p0']);
     expect(madeAt(report, food)).toEqual(madeAt(full, food).map((n) => Math.floor(Math.floor(n * 0.2) * COLONY.strike.output)));
+  });
+});
+
+describe('C26 PR-B: the walkout and the loyal crew need a colony', () => {
+  it('FM-C26-12 (politics off): a walkout and a loyal crew never fire, even made certain', () => {
+    only(['walkout', 'loyalCrew']);
+    const events = (band: MoodBand, politics: boolean) => produce(colonyAt(MID(band), { politics })).events!.map((e) => e.key);
+    expect(events('unrest', true)).toContain('walkout');
+    expect(events('thriving', true)).toContain('loyalCrew');
+    expect(events('unrest', false)).toEqual([]);
   });
 });
 
