@@ -148,6 +148,23 @@ function bandOf(html: string, testid: string): { top: number; bottom: number } |
   return { top, bottom: top + height };
 }
 
+/** The rest band's words sit this far in from the band's edge (top-0.5 / bottom-0.5). */
+const BAND_INSET = 2;
+
+/**
+ * Every line label the board draws, as px boxes down the board: centred where the markup places it, as tall as the
+ * board's own label lines make its two rows. Reads only the rendered markup and BOARD_TYPE.
+ */
+function labelBoxes(html: string, size: 'tv' | 'phone'): { top: number; bottom: number }[] {
+  const { room, lineBox, perLine } = BOARD_TYPE[size];
+  const label = /<div [^>]*style="top:([\d.]+)%"[^>]*data-testid="limit-[^"]+"><span [^>]*style="width:\d+px;top:(-?[\d.e-]+)px"><span[^>]*>([^<]*)<\/span><span>([^<]*)<\/span>/g;
+  return [...html.matchAll(label)].map(([, pct, offset, who, text]) => {
+    const centre = (Number(pct) / 100) * room + Number(offset);
+    const half = ((labelLines(who!, perLine) + labelLines(text!, perLine)) * lineBox) / 2;
+    return { top: centre - half, bottom: centre + half };
+  });
+}
+
 /** A price's height on the board, in percent from its top edge, from the board's own range as the view sends it. */
 const pctOf = (view: MuleView, price: number) => ((view.auction!.hi - price) / (view.auction!.hi - view.auction!.lo)) * 100;
 
@@ -186,15 +203,9 @@ describe('RULE-6: every board draws the rest zones', () => {
     expect(textOf(phoneScreen(atS(game.viewFor('s1')), 's1'), 'rest-seller')).toBe('SELLERS WAIT NO TRADE');
   });
 
-  it("B-AC-D1 (phone, TV): a rest band's words never run past its edge: a thin band drops to a shorter form, by the board's own label lines (WS4)", () => {
+  it("B-AC-D1 (phone, TV): a rest band shows the longest of its words that fits above the line labels reaching into it, never under them or past its edge (WS4)", () => {
     const { game } = soldOut(0);
-    const parts: Record<string, string[]> = {
-      'SELLERS WAIT ONLY THE SHIP BUYS': ['SELLERS WAIT', 'ONLY THE SHIP BUYS'],
-      'SELLERS WAIT SHIP ONLY': ['SELLERS WAIT', 'SHIP ONLY'],
-      'SELLERS WAIT NO TRADE': ['SELLERS WAIT', 'NO TRADE'],
-      'SELLERS WAIT': ['SELLERS WAIT'],
-      '': [],
-    };
+    const forms = { tv: ['SELLERS WAIT · ONLY THE SHIP BUYS', 'SELLERS WAIT · SHIP ONLY', 'SELLERS WAIT'], phone: ['SELLERS WAIT · SHIP ONLY', 'SELLERS WAIT'] };
     const seen = { tv: new Set<string>(), phone: new Set<string>() };
     const { hi: top, zones } = game.viewFor(null).auction!;
     // Sold out, a bid ever closer to the top edge thins the sellers' band; the ship pays inside it, a step above the bid.
@@ -206,12 +217,20 @@ describe('RULE-6: every board draws the rest zones', () => {
         ['tv', tvScreen(staged(game.viewFor(null)))],
         ['phone', phoneScreen(staged(game.viewFor('s1')), 's1')],
       ] as const) {
+        const { room, lineBox, perLine } = BOARD_TYPE[size];
         const band = bandOf(html, 'rest-seller')!;
+        const bottom = (band.bottom / 100) * room;
+        // The words start at the band's top, inset; they must end above every line label reaching into the band.
+        const clear = Math.min(bottom, ...labelBoxes(html, size).filter((b) => b.top < bottom && b.bottom > 0).map((b) => b.top)) - BAND_INSET;
+        const height = (form: string) => form.split(' · ').reduce((n, part) => n + labelLines(part, perLine), 0) * lineBox;
         const words = textOf(html, 'rest-seller') ?? '';
-        expect(Object.keys(parts), `${size}, bid ${bid}: a known form, got "${words}"`).toContain(words);
-        const lines = parts[words]!.reduce((n, part) => n + labelLines(part, BOARD_TYPE[size].perLine), 0);
-        const height = ((band.bottom - band.top) / 100) * BOARD_TYPE[size].room;
-        expect(lines * BOARD_TYPE[size].lineBox, `${size}, bid ${bid}: "${words}" fits the band's ${height.toFixed(0)} px`).toBeLessThanOrEqual(height);
+        const shown = forms[size].findIndex((f) => f.replaceAll(' · ', ' ') === words);
+        const what = `${size}, hi ${hi}, bid ${bid}: "${words}" in ${clear.toFixed(0)} px`;
+        expect(shown >= 0 || words === '', `${what}: a known form`).toBe(true);
+        if (shown >= 0) expect(height(forms[size][shown]!), what).toBeLessThanOrEqual(clear);
+        // The longest that fits: the next longer form would not.
+        const longer = shown >= 0 ? forms[size][shown - 1] : forms[size].at(-1);
+        if (longer) expect(height(longer), `${what}: "${longer}" would not fit`).toBeGreaterThan(clear);
         seen[size].add(words);
       }
     }
