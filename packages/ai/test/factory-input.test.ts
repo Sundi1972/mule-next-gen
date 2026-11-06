@@ -121,6 +121,37 @@ describe('a farm feeds a new factory only with what its factories already runnin
   });
 });
 
+describe("a farm the new factory's own Energy use would turn off does not feed it (N9)", () => {
+  /**
+   * Development: ai0 owns a farm on column 0 (rating 3: 5 Food a month on its own) and an idle plot on column 2, with
+   * `energy` Energy, 2 Food (so the new factory is fed from stock and takes its Energy in production's first pass) and
+   * Water to spare. Whether a Medicine factory on column 2 is vetoed for want of Food, and what the farm makes alone.
+   */
+  function withEnergy(energy: number): { veto: string | null | undefined; alone: number } {
+    const state = game();
+    while (state.phase !== 'development') advancePhase(state);
+    place(state, [
+      { x: 0, outfit: 'food', food: 3 },
+      { x: 2, outfit: null },
+    ]);
+    for (const p of state.players) setStock(state, p.id, p.id === ME ? { food: 2, water: 10, energy } : {}, p.id === ME ? 5000 : 0);
+    const alone = outlook(observe(state, ME), ME, { lookAhead: true }).made.food;
+    const medicine = developDecision(observe(state, ME), mindOf(), 0).all.find((c) => c.key === 'install:medicine:2');
+    expect(medicine, 'a Medicine install on the idle plot is listed').toBeDefined();
+    return { veto: medicine!.veto, alone };
+  }
+
+  it("FM-factory-input-N9: with Energy for one plot, the factory's use turns the farm off, so the farm does not feed it", () => {
+    // The farm and the factory use 1 Energy each; the farm's 5 Food are worth less than the factory's 2 Medicine, so
+    // AM-17 turns the farm off first, and it makes 20% of 5: 1 Food, under the household's 3.
+    const one = withEnergy(1);
+    expect(one.alone, 'the case: on its own the farm makes 5').toBe(5);
+    expect(one.veto ?? '').toMatch(/nothing to feed/);
+    // The control: Energy for both, and the farm feeds it.
+    expect(withEnergy(10).veto ?? '').not.toMatch(/nothing to feed/);
+  });
+});
+
 describe("in the production phase a farm counts with what it makes, not with nothing (N8)", () => {
   /** ai0's farm (rating `food`) and an idle plot, played into the production phase; then its Food set to 0. */
   function inProduction(food: number): { state: GameState; made: number } {
