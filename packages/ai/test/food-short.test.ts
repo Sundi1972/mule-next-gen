@@ -201,11 +201,7 @@ function cannotPay(good: Good): void {
   expect(state.players.find((p) => p.id === id)!.money).toBe(money);
 }
 
-/**
- * A seat holding what keeps it whole and `surplus` more, beside a short rival with money. It is not short, so its
- * surplus is for sale (Heiko's choice of 5 Nov, "sell surplus"): it may sell down to the screen's need, what upkeep or
- * production is about to take, and never lower, though the rival keeps bidding up after it. Returns the units sold.
- */
+/** How sellsSurplus sets the auction up. */
 interface Surplus {
   /** Its plots; the good's usual arrangement unless given. */
   plots?: Outfit[];
@@ -221,6 +217,11 @@ interface Surplus {
   storeBuys?: number;
 }
 
+/**
+ * A seat holding what keeps it whole and `surplus` more, beside a short rival with money, plays the good's auction. It
+ * is not short, so its surplus is for sale: it may sell down to the screen's need, what upkeep or production is about
+ * to take, and never lower, though the rival keeps bidding up after it. Returns the units sold.
+ */
 function sellsSurplus(good: Good, id: string, surplus: number, o: Surplus = {}): { state: GameState; units: number; need: number } {
   const whole = (t: GameState) => wholeOf(t, id, good);
   const co = id === 'ai3' ? 'ai2' : 'ai3';
@@ -242,12 +243,11 @@ function sellsSurplus(good: Good, id: string, surplus: number, o: Surplus = {}):
 
   const trades = play(state);
 
-  const units = sold(trades, id).length;
+  const soldUnits = sold(trades, id).length;
   const left = state.players.find((p) => p.id === id)!.stock[good];
-  expect(left, 'it sold only what it held').toBe(held - units + units_(trades, id));
-  return { state, units, need };
+  expect(left, 'it sold only what it held').toBe(held - soldUnits + units(trades, id));
+  return { state, units: soldUnits, need };
 }
-const units_ = (trades: Trade[], id: string) => trades.filter((t) => t.buyer === id).reduce((n, t) => n + t.quantity, 0);
 
 /** The promise when it is not short: it keeps the screen's need, what upkeep or production is about to take. */
 function keepsNeed(good: Good, id: string, surplus: number, o: Surplus = {}): void {

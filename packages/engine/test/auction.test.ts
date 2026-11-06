@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  needsOf,
+  monthNeeds,
+  GOODS,
+  GOOD_CONFIG,
+  UPKEEP,
+  statusRows,
+  auctionNeed,
   advancePhase,
   auctionDone,
   createGame,
@@ -159,8 +166,9 @@ describe('the live auction: goods one at a time', () => {
     });
     startAuction(state, ['food']);
     const row = a(state).status.find((r) => r.id === 'p0')!;
-    expect(row).toMatchObject({ had: 4, made: 3, now: 7, used: 0, need: 2 });
-    // Half the Food over the need spoils at month end.
+    // The need to hold: 2 eaten at upkeep, plus 4 so that 2 are left after half spoils (auctionNeed).
+    expect(row).toMatchObject({ had: 4, made: 3, now: 7, used: 0, need: 6 });
+    // Upkeep eats 2 first; half of the other 5 spoils, rounded in the player's favour.
     expect(row.spoils).toBe(3);
     expect(a(state).status.find((r) => r.id === 'p1')).toMatchObject({ had: 4, made: 0, now: 0, used: 4 });
   });
@@ -334,6 +342,95 @@ describe('the live auction: goods one at a time', () => {
   });
 });
 
+describe('the need to hold at the auction: what upkeep eats now, plus what must survive spoilage until it is used (PM ruling B, 6 Nov)', () => {
+  /** Each player works `farms` Food farms (1 Energy each at production) and holds `energy` Energy; the store's Energy shelf is full, so it buys none. */
+  function energyTable(farms: number, energy: number): GameState {
+    const state = newGame();
+    const free = state.tiles.filter((t) => t.terrain !== 'store' && !t.owner);
+    state.players.forEach((p, i) => {
+      for (const t of free.slice(i * farms, (i + 1) * farms)) Object.assign(t, { owner: p.id, outfit: 'food' });
+      p.stock.energy = energy;
+      p.stock.food = 3;
+    });
+    state.store.stock.energy = 999;
+    return state;
+  }
+
+  it("FM-skip-spoilage (WS9's finding): every seat holds the 2 Energy its farms burn, which spoils to 1 by production, so Energy comes up and the status row asks for 3", () => {
+    const state = energyTable(2, 2);
+    expect(monthNeeds(state, 'p0').energy, 'production burns 2').toBe(2);
+    startAuction(state, ['energy', 'food']);
+    expect(a(state).skipped, 'not skipped as nobody buys').toEqual([]);
+    expect(a(state).good).toBe('energy');
+    // 3 x 0.75 = 2.25: 2 survive the month end's spoilage; 2 x 0.75 = 1.5 would leave 1.
+    expect(a(state).status.map((r) => r.need)).toEqual([3, 3, 3, 3]);
+    expect(a(state).status[0]!.spoils, 'what would spoil of what is held: 2 leaves 1').toBe(1);
+  });
+
+  it('FM-skip-spoilage: every seat holding what survives spoilage, and the store wanting none: Energy is skipped as nobody buys, as before', () => {
+    const state = energyTable(2, 3);
+    startAuction(state, ['energy', 'food']);
+    expect(a(state).skipped).toEqual([{ good: 'energy', reason: 'nobody buys' }]);
+  });
+
+  it("FM-skip-spoilage: Food is what upkeep eats now plus what survives to next month's development: a seat with no crew eats 2 and must hold 6", () => {
+    const state = energyTable(0, 0);
+    expect(needsOf(state, 'p0').food, 'the household alone').toBe(2);
+    // 2 eaten at the month end; 4 halve to the 2 next month's development checks for.
+    expect(auctionNeed(state, 'p0').food).toBe(6);
+  });
+
+  /** p0 works the given outfits; every seat holds `water` Water (or its own drink, if less), and the store wants no Water. */
+  function outfitTable(outfits: string[], water: (eat: number) => number): GameState {
+    const state = newGame();
+    const free = state.tiles.filter((t) => t.terrain !== 'store' && !t.owner);
+    outfits.forEach((outfit, i) => Object.assign(free[i]!, { owner: 'p0', outfit }));
+    for (const p of state.players) p.stock.water = water(needsOf(state, p.id).water);
+    state.store.stock.water = 999;
+    return state;
+  }
+
+  it("FM-skip-spoilage: a Medicine factory's Water is carried too: its seat, with no farm, holding only what it drinks, keeps Water from being skipped and its row asks for 2 more", () => {
+    const state = outfitTable(['medicine'], (eat) => eat);
+    const eat = needsOf(state, 'p0').water;
+    startAuction(state, ['water', 'food']);
+    expect(a(state).skipped, 'Water comes up: the factory would run dry').toEqual([]);
+    // The factory uses 1 at production; 1 x 0.95 floors to 0, so 2 must be held past the month end.
+    expect(a(state).status.find((r) => r.id === 'p0')!.need).toBe(eat + 2);
+  });
+
+  it('FM-skip-spoilage: Water is carried for a Food farm, and not for a seat with neither a farm nor a factory', () => {
+    const farm = outfitTable(['food'], (eat) => eat);
+    expect(auctionNeed(farm, 'p0').water, 'the farm is watered next month').toBeGreaterThan(needsOf(farm, 'p0').water);
+    expect(auctionNeed(farm, 'p1').water, 'p1 has no plot: only what upkeep drinks now').toBe(needsOf(farm, 'p1').water);
+  });
+
+  it('FM-skip-spoilage: never below the old need (monthNeeds), with or without a farm, for seats running Medicine and Alloy factories', () => {
+    for (const outfits of [['medicine', 'alloy'], ['medicine', 'alloy', 'food']]) {
+      const state = outfitTable(outfits, (eat) => eat);
+      const held = auctionNeed(state, 'p0');
+      for (const g of GOODS) expect(held[g], `${g} with ${outfits.join(', ')}`).toBeGreaterThanOrEqual(Math.min(monthNeeds(state, 'p0')[g], UPKEEP.depotCapacity));
+    }
+  });
+
+  it("FM-skip-spoilage: the row's spoils count the depot cap: 30 Water, after upkeep drinks, keeps at most the depot's 10", () => {
+    const state = outfitTable([], () => 30);
+    const rest = 30 - needsOf(state, 'p0').water;
+    expect(statusRows(state, 'water').find((r) => r.id === 'p0')!.spoils).toBe(rest - UPKEEP.depotCapacity);
+  });
+
+  it('FM-skip-spoilage: a good that spoils entirely (a --set sweep to spoilage 1) carries nothing and still returns', () => {
+    const was = GOOD_CONFIG.water.spoilage;
+    GOOD_CONFIG.water.spoilage = 1;
+    try {
+      const state = outfitTable(['food'], (eat) => eat);
+      expect(auctionNeed(state, 'p0').water).toBe(needsOf(state, 'p0').water);
+    } finally {
+      GOOD_CONFIG.water.spoilage = was;
+    }
+  });
+});
+
 describe('the walk', () => {
   /** p0 sells Water, p1 buys; p2 and p3 stand aside. */
   function waterPair() {
@@ -423,7 +520,8 @@ describe('the walk', () => {
     expect(state.players[1]!.money).toBe(1);
 
     const other = waterPair();
-    other.players[0]!.stock.water = 2;
+    // Two units over what the seller must hold: RULE-4 keeps the rest, so two are all it has to sell.
+    other.players[0]!.stock.water = 2 + a(other).status.find((r) => r.id === 'p0')!.need;
     walker(other, 'p0').price = a(other).storeBuy + 2;
     walker(other, 'p1').price = a(other).storeBuy + 2;
     expect(run(other, 5_000)).toHaveLength(2);

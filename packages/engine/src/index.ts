@@ -16,6 +16,8 @@ export {
   doorOutside,
   floorConfig,
   IDLE_INPUT,
+  isAssaying,
+  isStunned,
   type DevFloor,
   type FloorColonist,
   type FloorBeat,

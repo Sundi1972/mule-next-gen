@@ -4,8 +4,10 @@ import {
   airPoints,
   allPrices,
   DEVELOPMENT,
+  freePlots,
   GAME,
   GOOD_CONFIG,
+  litPlot,
   mulePrice,
   mulePriceFor,
   neighbours,
@@ -23,6 +25,7 @@ import {
   storePaysFor,
   storeOnStrike,
   storeSellLine,
+  storeSellPrice,
   tileIndex,
   walkSeconds,
   WALK,
@@ -209,6 +212,17 @@ export function landDecision(obs: GameState, mind: Mind): Shortlist<LandPlan> {
     return candidate<LandPlan>(`land:${focus}`, `${FOCUS_LABEL[focus]}: ${labels || 'nothing left'}`, { focus, ranking }, worth, cons);
   });
   return shortlist(plans, mind.level.shortlist, mind.level.shortlistTolerance);
+}
+
+/**
+ * The free plots from the lit one on, in reading order: the rest of the light's pass, rebuilt from the board every seat
+ * sees, since observe() hides the grant's order. The light walks the pass's free plots in reading order, so the two agree.
+ */
+export function plotsAhead(obs: GameState): number[] {
+  const lit = litPlot(obs);
+  if (!lit) return [];
+  const from = tileIndex(obs.width, lit.x, lit.y);
+  return freePlots(obs).map((t) => tileIndex(obs.width, t.x, t.y)).filter((index) => index >= from);
 }
 
 /** The other seats still claiming in this grant: claims left and not Done with land, both public on the grant. */
@@ -553,7 +567,7 @@ export function goodPlan(obs: GameState, mind: Mind, good: Good): GoodPlan {
       values.buy[k] = Math.max(values.buy[k] ?? 0, ask!);
       values.keep[k] = Infinity;
     }
-    // Otherwise it keeps the screen's need, what upkeep eats or its plots burn, whatever its own plots may make: Water
+    // Otherwise it keeps its need before spoilage, what upkeep eats or its plots burn, whatever its own plots may make: Water
     // only for a seat with a farm to water, as wholeNextMonth counts it.
     const floor = mustHold > 0 ? mustHold : whole > 0 ? values.need : 0;
     for (let k = 0; k < floor; k++) values.keep[k] = Infinity;
@@ -624,7 +638,7 @@ export function expectedPrices(obs: GameState, good: Good): { sell: number; buy:
   const storeBuy = a?.good === good ? (a.storeBudget > 0 ? a.storeBuy : 0) : Math.floor(posted * (1 - PRICE.storeSpread));
   const ship = shipInPort(obs) ? (shipPrice(obs, good) ?? 0) : 0;
   const sell = Math.max(storeBuy, ship, Math.floor(posted * STRATEGIST.trade.sellFloor));
-  const storeSell = a?.good === good ? a.storeSell : Math.ceil(posted * (1 + PRICE.storeSpread));
+  const storeSell = a?.good === good ? a.storeSell : storeSellPrice(posted);
   return { sell, buy: storeSell };
 }
 
@@ -690,7 +704,11 @@ export function tradeDecision(obs: GameState, mind: Mind, plan: GoodPlan): Short
   if (upTo > h) {
     const needOnly = Math.min(upTo, Math.max(h, v.block, plan.mustHold));
     const speculative = upTo > Math.max(h, v.block, plan.mustHold);
-    buyTo(upTo, `Buy ${upTo - h} ${GOOD_NAME[good]}${speculative ? ' (some to resell)' : ''}`, 'buy', speculative ? sure.resale : sure.need, speculative ? 'resale next month is a forecast' : 'it needs them');
+    // With the model on, a value from unitValues already prices its resale risk (RULE-4), so a surplus buy is no less
+    // sure; a corner or spite premium is intent the model doesn't price, and keeps the discount. See AM-7.
+    const modelOnly = AI_VALUE.unit && plan.corner.units === 0 && plan.spiteBid === 0;
+    const resale = speculative ? (modelOnly ? [sure.need, 'its value counts the resale risk'] as const : [sure.resale, 'resale next month is a forecast'] as const) : null;
+    buyTo(upTo, `Buy ${upTo - h} ${GOOD_NAME[good]}${speculative ? ' (some to resell)' : ''}`, 'buy', resale?.[0] ?? sure.need, resale?.[1] ?? 'it needs them');
     if (speculative && needOnly > h) buyTo(needOnly, `Buy ${needOnly - h} ${GOOD_NAME[good]}, just what I need`, 'buy:need', sure.need, 'it needs them');
   }
 
