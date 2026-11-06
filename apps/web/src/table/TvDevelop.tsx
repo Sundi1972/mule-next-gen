@@ -11,6 +11,7 @@ import type { DrawnMoments } from '../phone/arcade/frames';
 import { colonistsOf, type ArcadeColonist } from '../phone/arcade/seat';
 import { HallStage, MapStage } from '../phone/arcade/stages';
 import { TvHeader } from './TableApp';
+import { TvBody } from './TvFit';
 
 /**
  * The big screen in development, steered (arcade spec C12): the approved mock's TV (Tv.tsx::TvArcade at d30ae057) on
@@ -79,6 +80,7 @@ export function TvArcade({ game }: { game: MuleView }) {
       {/* No clock in the header: "Everyone's time" right under it is development's clock. The colony's gauges stay beside
           the title, a strike or not, so the map keeps its size (PM ruling, 6 Nov; rulebook #gauges-row). */}
       <TvHeader game={game} title="Development" gauges="beside" />
+      <TvBody>
       <SharedClock seconds={seconds} total={DEVELOPMENT.fullSeconds} size="tv" />
       <div className="flex min-h-0 flex-1 gap-6">
         <div className="relative shrink-0 self-start" data-testid="tv-map">
@@ -95,6 +97,7 @@ export function TvArcade({ game }: { game: MuleView }) {
           </div>
         </div>
       </div>
+      </TvBody>
     </div>
   );
 }

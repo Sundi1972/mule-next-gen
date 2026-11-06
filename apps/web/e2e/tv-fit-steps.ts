@@ -21,9 +21,16 @@ const PAST_THE_FOOT = String.raw`(() => {
   const limit = Math.min(window.innerHeight, box.bottom - parseFloat(getComputedStyle(stage).paddingBottom) * scale);
   const past = [];
   let foot = 0;
+  // A layer placed absolutely (walkers, bubbles, the map's beats) is its container's to place, and the container is read:
+  // its boxes are positioning wrappers as big as the layer, moved to where each creature stands.
+  const floating = (el) => {
+    for (let a = el; a && a !== stage; a = a.parentElement) if (['absolute', 'fixed'].includes(getComputedStyle(a).position)) return true;
+    return false;
+  };
   for (const el of stage.querySelectorAll('*')) {
     const b = el.getBoundingClientRect();
     if (b.width === 0 || b.height === 0 || !el.checkVisibility({ opacityProperty: true, visibilityProperty: true })) continue;
+    if (floating(el)) continue;
     // Below an inner box that clips it on purpose (a list that gives way) it is that box's to judge, and that box is read
     // too; nor is it drawn, so it is no foot. The frame's own clips never excuse it: the stage, everything above it (the
     // scaler) and a body's fit box (data-fit) clip what the screen failed to fit, so content cut there runs past the foot.
@@ -83,6 +90,21 @@ export async function theTableHasSaid(tv: Page, server: MuleServer, code: string
   for (const text of said) room.deliver(room.game.state.players[0]!.id, text);
   await tv.locator('[data-phase] [data-testid=chat-ticker]').getByText(said.at(-1)!).first().waitFor({ timeout: 2_000 });
   return said;
+}
+
+/** How many chat lines the shown TV screen's strip has. */
+const stripLines = (tv: Page) => tv.locator('[data-phase] [data-testid=chat-ticker] [data-testid^=chat-line-]').count();
+
+/**
+ * TV-FIT body (PM ruling 6 Nov): under three chat lines said, a screen in play shows the newest only, and its body fits
+ * the height the header leaves: nothing runs past the foot.
+ */
+export async function theTvBodyFits(tv: Page, server: MuleServer, code: string, screen: string): Promise<string> {
+  await theTableHasSaid(tv, server, code);
+  const lines = await stripLines(tv);
+  check(lines === 1, `TV-FIT: in play the ${screen} TV's chat strip shows the newest line only, got ${lines}`);
+  const scale = await tv.locator('[data-phase] [data-fit]').first().getAttribute('data-fit');
+  return `one chat line of 3, the body at scale ${scale}, the foot at y ${(await nothingPastTheFoot(tv, screen)).toFixed(0)}`;
 }
 
 /** Kept a string, as PAST_THE_FOOT: in the shown TV header, what of the header's right side the title runs over. */
@@ -176,21 +198,17 @@ export async function theTvHeaderFits(tv: Page, screen: string): Promise<string>
 }
 
 /**
- * TV-FIT month end (PM ruling C, 5 Nov): the header fits as theTvHeaderFits reads it; with two chat lines said, the
- * ticker shows only the newest; and the colony's gauges sit in the screen's body, beside the league, not in a row of
- * their own under the header, so the league and the colony's score keep the height. Logs the body's scale.
+ * TV-FIT month end (PM ruling C, 5 Nov; chat lines, 6 Nov): with three chat lines said, the ticker shows all three, and
+ * under them the header fits as theTvHeaderFits reads it; the colony's gauges sit in the screen's body, beside the
+ * league, not in a row of their own under the header, so the league and the colony's score keep the height. Logs the
+ * body's scale.
  */
 export async function theMonthEndTvFits(tv: Page, server: MuleServer, code: string): Promise<string> {
-  const header = await theTvHeaderFits(tv, 'month end');
-  const room = server.registry.get(code);
-  check(room, `a room ${code} on the server`);
   const end = tv.getByTestId('tv-monthend');
-  const host = (room as unknown as { game: { state: { players: { id: string }[] } } }).game.state.players[0]!.id;
-  const said = ['Who sold the Food?', 'Not me, I ate it.'];
-  for (const text of said) (room as unknown as { deliver(from: string, text: string): void }).deliver(host, text);
-  await end.getByTestId('chat-ticker').getByText(said[1]!).waitFor({ timeout: 2_000 });
-  const lines = await end.locator('[data-testid=chat-ticker] [data-testid^=chat-line-]').count();
-  check(lines === 1, `TV-FIT: the month end's ticker shows only the newest chat line, got ${lines}`);
+  const said = await theTableHasSaid(tv, server, code);
+  const lines = await stripLines(tv);
+  check(lines === said.length, `TV-FIT: the month end's ticker shows ${said.length} chat lines, got ${lines}`);
+  const header = await theTvHeaderFits(tv, 'month end');
   const gauges = await end.getByTestId('colony-gauges').count();
   if (gauges > 0) {
     const inBody = await end.locator('[data-fit] [data-testid=colony-gauges]').count();
@@ -200,14 +218,14 @@ export async function theMonthEndTvFits(tv: Page, server: MuleServer, code: stri
   const rule = await end.getByTestId('worth-rule').evaluate((p) => ({ text: (p as HTMLElement).innerText, cut: p.scrollWidth > p.clientWidth }));
   check(!rule.cut, `TV-FIT: the month end's worth rule fits its one line, got it cut: "${rule.text}"`);
   const scale = Number(await end.locator('[data-fit]').getAttribute('data-fit'));
-  return `${header}; the worth rule whole on one line; one chat line of ${said.length}, the gauges ${gauges > 0 ? 'beside the league' : 'not drawn (no colony)'}, the body at scale ${scale.toFixed(3)} with ${await end.locator('[data-testid^=league-row-]').count()} league rows`;
+  return `${header}; the worth rule whole on one line; ${lines} chat lines, the gauges ${gauges > 0 ? 'beside the league' : 'not drawn (no colony)'}, the body at scale ${scale.toFixed(3)} with ${await end.locator('[data-testid^=league-row-]').count()} league rows`;
 }
 
 /**
  * TV-FIT auction (the walk), with deals put on the board through the server while the room is held, then taken off
- * again: the walk has no chat ticker (the bubbles on the board carry the chat), said lines or not, so the board keeps
- * one size as deals come and go; with nothing trading the help and the room line show whole, with two deals up each
- * deal row is whole inside the deal list, and either way nothing runs past the foot.
+ * again: the walk's chat strip shows the newest line only (PM ruling 6 Nov), and the board keeps one size as deals come
+ * and go; with nothing trading the help and the room line show whole, with two deals up the newest is whole inside the
+ * deal list and an older one is whole or wrapped out of it, and either way nothing runs past the foot.
  */
 export async function theAuctionTvFits(tv: Page, server: MuleServer, code: string): Promise<string> {
   const room = server.registry.get(code);
@@ -228,11 +246,9 @@ export async function theAuctionTvFits(tv: Page, server: MuleServer, code: strin
       a.deals = [];
       (room as unknown as { broadcast(): void }).broadcast();
       await tv.locator('[data-testid=tv-deal]').first().waitFor({ state: 'detached', timeout: 2_000 });
-      // Chat lines said now still put up no ticker on the walk, whatever the AIs have said.
-      for (const text of ['Anyone selling?', 'Food is cheap today.']) (room as unknown as { deliver(from: string, text: string): void }).deliver(state.players[0]!.id, text);
-      await tv.waitForTimeout(300);
+      await theTableHasSaid(tv, server, code);
       const helpLines = await lines();
-      check(helpLines === 0, `TV-FIT: the auction TV's walk shows no chat ticker, got ${helpLines} lines`);
+      check(helpLines === 1, `TV-FIT: the auction TV's walk shows the newest chat line only, got ${helpLines}`);
       const helpBoard = await boardHeight();
       const help = await shownWhole(tv, 'auction (the help)', ['[data-testid=tv-help]', '[data-testid=tv-room-line]']);
       check(help.length === 2, `TV-FIT: the auction TV shows its help and its room line, got ${help.map((b) => b.id).join(', ')}`);
@@ -244,21 +260,26 @@ export async function theAuctionTvFits(tv: Page, server: MuleServer, code: strin
       (room as unknown as { broadcast(): void }).broadcast();
       await tv.locator('[data-testid=tv-deal]').nth(1).waitFor({ timeout: 2_000 });
       const dealLines = await lines();
-      check(dealLines === 0, `TV-FIT: while deals run the auction TV shows no chat ticker, got ${dealLines} lines`);
+      check(dealLines === 1, `TV-FIT: while deals run the auction TV shows the newest chat line only, got ${dealLines}`);
       const dealsBoard = await boardHeight();
       check(Math.abs(dealsBoard - helpBoard) <= 1, `TV-FIT: the walk board keeps its size as deals start, ${helpBoard.toFixed(1)} px then ${dealsBoard.toFixed(1)} px`);
       const rows = await tv.evaluate(() => {
         const list = document.querySelector('[data-testid=tv-deal]')?.parentElement?.getBoundingClientRect();
         return [...document.querySelectorAll('[data-testid=tv-deal]')].map((d) => {
           const b = d.getBoundingClientRect();
-          return { whole: !!list && b.top >= list.top - 1 && b.bottom <= list.bottom + 1 && b.left >= list.left - 1 && b.right <= list.right + 1, top: b.top, bottom: b.bottom, left: b.left, list: list ? `${list.left.toFixed(0)},${list.top.toFixed(0)}–${list.right.toFixed(0)},${list.bottom.toFixed(0)}` : 'none' };
+          const whole = !!list && b.top >= list.top - 1 && b.bottom <= list.bottom + 1 && b.left >= list.left - 1 && b.right <= list.right + 1;
+          // A row with no room under the others wraps into the list's second column, which the list's clip hides whole.
+          const away = !!list && (b.left >= list.right - 1 || b.top >= list.bottom - 1);
+          return { whole, away, top: b.top, bottom: b.bottom, left: b.left, list: list ? `${list.left.toFixed(0)},${list.top.toFixed(0)}–${list.right.toFixed(0)},${list.bottom.toFixed(0)}` : 'none' };
         });
       });
       check(rows.length === 2, `TV-FIT: the auction TV lists both deals, got ${rows.length}`);
-      for (const [i, r] of rows.entries()) check(r.whole, `TV-FIT: the auction TV's deal row ${i + 1} is whole in its list, at x ${r.left.toFixed(1)}, y ${r.top.toFixed(1)}–${r.bottom.toFixed(1)}, in the list at ${r.list}`);
-      await shownWhole(tv, 'auction (two deals)', ['[data-testid=tv-deal]', '[data-testid=tv-room-line]']);
+      check(rows[0]!.whole, `TV-FIT: the auction TV's newest deal row is whole in its list, at x ${rows[0]!.left.toFixed(1)}, y ${rows[0]!.top.toFixed(1)}–${rows[0]!.bottom.toFixed(1)}, in the list at ${rows[0]!.list}`);
+      for (const [i, r] of rows.entries()) check(r.whole || r.away, `TV-FIT: the auction TV's deal row ${i + 1} is whole in its list or wrapped out of it, at x ${r.left.toFixed(1)}, y ${r.top.toFixed(1)}–${r.bottom.toFixed(1)}, in the list at ${r.list}`);
+      await shownWhole(tv, 'auction (two deals)', ['[data-testid=tv-deal]:first-child', '[data-testid=tv-room-line]']);
       const dealsFoot = await nothingPastTheFoot(tv, 'auction (two deals)');
-      return `no ticker on the walk, the board ${helpBoard.toFixed(0)} px with or without deals; the help whole, its foot at y ${helpFoot.toFixed(0)}; two deal rows whole, y ${rows[0]!.top.toFixed(0)}–${rows[1]!.bottom.toFixed(0)}, the foot at y ${dealsFoot.toFixed(0)}`;
+      const shown = rows.filter((r) => r.whole);
+      return `one chat line on the walk, the board ${helpBoard.toFixed(0)} px with or without deals; the help whole, its foot at y ${helpFoot.toFixed(0)}; ${shown.length} of 2 deal rows shown whole, y ${shown[0]!.top.toFixed(0)}–${shown.at(-1)!.bottom.toFixed(0)}, the foot at y ${dealsFoot.toFixed(0)}`;
     } finally {
       a.deals = kept;
       (room as unknown as { broadcast(): void }).broadcast();
