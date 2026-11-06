@@ -115,7 +115,7 @@ describe('RULE-4 AI: a held AI seller presses ▼ again only when it chose to se
     const own = (seat: AiSeat) => draftGoodPlaybook({ state, seat: ME, mind: seat.mind, seed: seat.options.seed }, 'food').auction!.food!;
     const hand = (seat: AiSeat) => {
       const part: GoodPlay = { ...own(seat), role: 'seller', hold: need, bluff: false };
-      return new AuctionHand(seat.brain, createRng((seat.options.seed ^ 0x85ebca6b) >>> 0), () => structuredClone(part)); // literal-ok: AiSeat's salt for the auction hand's rng
+      return new AuctionHand(seat.brain, createRng((seat.options.seed ^ 0x85ebca6b) >>> 0), () => ({ play: structuredClone(part), mind: seat.mind })); // literal-ok: AiSeat's salt for the auction hand's rng
     };
 
     const run = play(state, hand);
