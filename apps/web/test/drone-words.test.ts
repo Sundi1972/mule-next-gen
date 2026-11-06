@@ -156,7 +156,7 @@ describe('H-3: the land grant names what your drone found, on your phone only', 
   });
 });
 
-describe('the drone tells the truth: its report comes at Scan, not at the land grant', () => {
+describe('C2: the drone tells the truth: its report comes at Scan, not at the land grant', () => {
   it('the button reads "Scan · n of 2 plots · 60 cr", its count and fee from config', () => {
     expect(droneButtonWords(0)).toBe('Pick a free plot for the drone');
     for (let n = 1; n <= DEVELOPMENT.dronePlots; n++) expect(droneButtonWords(n)).toBe(`Scan · ${n} of ${DEVELOPMENT.dronePlots} plots · ${DEVELOPMENT.droneFee} cr`);

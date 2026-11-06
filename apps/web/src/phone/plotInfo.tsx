@@ -4,6 +4,7 @@ import { bestOf, cx, dotsOf, gemsIn, GOOD_NAME, GoodIcon, TERRAIN_NAME, type Raw
 import { useEffect, useState } from 'react';
 import { plotName, tileAt } from '../game/derive';
 import { OUTFIT_WORD } from './arcade/plots';
+import { OnlyYou } from './hub/OnlyYou';
 
 /* What a plot's ground shows on the phone: each raw good as 0–3 dots, the gem, and the drone's report. */
 
@@ -64,12 +65,18 @@ export function GoodDots({ ground, cols = 2 }: { ground: Ground; cols?: 2 | 3 | 
   );
 }
 
+/** "best for Energy", or "nothing worth working" when even its best good draws no dot. */
+export function bestWords(dots: Record<RawGood, number>): string {
+  const best = bestOf(dots);
+  return dots[best] > 0 ? `best for ${GOOD_NAME[best]}` : 'nothing worth working';
+}
+
 /** "best for Energy · Rare earth 3": the plot in one line. */
 export function bestLine(ground: Ground): string {
   const dots = dotsOf(ground);
   const best = bestOf(dots);
   const gems = gemsIn(dots).filter((g) => g !== best);
-  return [`best for ${GOOD_NAME[best]}`, ...gems.map((g) => `${GOOD_NAME[g]} ${dots[g]}`)].join(' · ');
+  return [bestWords(dots), ...gems.map((g) => `${GOOD_NAME[g]} ${dots[g]}`)].join(' · ');
 }
 
 /** What closes the Drone report: the month of the next drone, or that the game has none left. */
@@ -94,7 +101,7 @@ export function ScanReport({ tiles, next }: { tiles: TileView[]; next: string })
             <b className="font-semibold">
               {plotName(t.x, t.y)} · {TERRAIN_NAME[t.terrain]}
             </b>{' '}
-            <span className="font-semibold text-holo">· best for {GOOD_NAME[bestOf(dotsOf(t.ground!))]}</span>
+            <span className="font-semibold text-holo">· {bestWords(dotsOf(t.ground!))}</span>
           </span>
           <GoodDots ground={t.ground!} cols={6} />
         </div>
@@ -104,10 +111,6 @@ export function ScanReport({ tiles, next }: { tiles: TileView[]; next: string })
       </span>
     </section>
   );
-}
-
-export function OnlyYou() {
-  return <span className="rounded-chip bg-holo-soft px-1.5 font-mono text-[10px] font-bold text-holo">ONLY YOU</span>;
 }
 
 /** The plots `meId` owns in the view, in the map's order: what My plots lists. */

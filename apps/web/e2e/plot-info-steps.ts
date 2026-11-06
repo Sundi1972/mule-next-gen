@@ -128,7 +128,7 @@ export async function theDroneReportsInTheRail({ phone, server, code, held }: Ga
     for (const p of picks) await appears(report.getByTestId(`report-${p.x}-${p.y}`), Math.max(1, tapped + REPORT_MS - Date.now()), `${B_AC_1}: the rail's Drone report shows plot ${plotName(p)} within ${REPORT_MS} ms of Scan`);
     const tookMs = Date.now() - tapped;
     check(tookMs <= REPORT_MS, `${B_AC_1}: the report shows within ${REPORT_MS} ms of Scan, took ${tookMs} ms`);
-    check((await report.getByText('ONLY YOU').count()) === 1, `${B_AC_1}: the report is marked ONLY YOU`);
+    check((await report.getByText('Only you').count()) === 1, `${B_AC_1}: the report is marked Only you`);
     const fit = await bothPlotsFit(phone, report, picks);
 
     // Each plot's row against the ground the server holds for it.
@@ -137,7 +137,7 @@ export async function theDroneReportsInTheRail({ phone, server, code, held }: Ga
       const row = report.getByTestId(`report-${p.x}-${p.y}`);
       const text = (await row.innerText()).replace(/\s+/g, ' ');
       check(text.startsWith(`${plotName(p)} · `), `${B_AC_1}: the row names plot ${plotName(p)} first, got "${text}"`);
-      const best = `best for ${GOOD_NAME[bestOf(dots)]}`;
+      const best = dots[bestOf(dots)] > 0 ? `best for ${GOOD_NAME[bestOf(dots)]}` : 'nothing worth working';
       check(text.toLowerCase().includes(best.toLowerCase()), `${B_AC_1}: plot ${plotName(p)} says "${best}", got "${text}"`);
       for (const g of RAW) {
         const shown = await row.getByTestId(`dots-${g}`).getAttribute('data-n', { timeout: STEP_MS });

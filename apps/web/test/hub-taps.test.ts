@@ -213,7 +213,7 @@ describe('the planning hub, tapped (UX audit)', () => {
     expect(findTestid('scan-report')).toBeDefined();
     expect(text('report-1-0')).toContain('2·1 · Plains');
     expect(text('report-1-0')).toContain('best for Food');
-    expect(text('scan-report')).toContain('ONLY YOU');
+    expect(text('scan-report')).toContain('Only you');
     expect(findTestid('scan')).toBeUndefined();
     expect(findTestid('drone-hint')).toBeUndefined();
     expect(text('drone-used')).toBe('Next drone: month 3.');
