@@ -10,7 +10,9 @@ import {
   isAssaying,
   isStunned,
   MS_PER_SECOND,
+  mulePriceFor,
   observe,
+  outfitCostFor,
   pathTo,
   pressOrder,
   terrainShare,
@@ -40,7 +42,7 @@ import type { DevelopmentLog, DevelopmentStepLog } from '../playbook/outcome.js'
 import { floorDevWalk, installable, leading, mapFactor, planSeconds, plotErrandSeconds, pubDoor, pubMargin, pubSeconds, tileMiddle, tripSeconds, type PlanStop } from '../floor-time.js';
 import { analysesWanted, bestInstall, developDecision, filtersWanted, outfitName, plotName, walkVeto, type DevAction, type DevWalk } from '../strategist.js';
 import { situation } from '../summary.js';
-import type { Mind } from '../value.js';
+import { adoptedNow, cashReserve, type Mind } from '../value.js';
 import { FloorWalker, type FloorView } from './floor-walker.js';
 
 /**
@@ -236,6 +238,8 @@ export class DevelopHand {
   private floorCfg: FloorConfig | null = null;
   /** This month's route, if the seat handed one in; null plays today's list. */
   private route: RouteRun | null = null;
+  /** The good today's picks lean to, and the month it is for. */
+  private lean: { month: number; good: Good | null } = { month: -1, good: null };
   /** The route step last let through, so it is judged once, before its tap or walk starts. */
   private vetted: DevStep | null = null;
   /** The MULE group whose buy was the MULE the seat already led ('led'). */
@@ -272,6 +276,11 @@ export class DevelopHand {
     if (month !== this.month) this.reset(month);
     if (this.stage !== 'start') return;
     this.route = { play, at: 0, mules: 0, soldOut: false, noMore: false, startLeft: null, left: 0, usedMs: 0 };
+  }
+
+  /** Leans today's picks in `month` to `good`; null, or another month, leaves them unleaned. */
+  leanOn(month: number, good: Good | null): void {
+    this.lean = { month, good };
   }
 
   /**
@@ -690,7 +699,7 @@ export class DevelopHand {
       if (!this.pending) {
         const obs = observe(state, mind.me);
         const d = AI_HANDS.develop;
-        const list = developDecision(obs, mind, this.mules, walk?.());
+        const list = developDecision(obs, mind, this.mules, walk?.(), this.lean.month === state.month ? this.lean.good : null);
         // On the floor the server computes this inside the tick's recorded step, and a replay computes it again: no
         // decider call and no reply to wait for (WS3's condition 1). A Smart seat plays the default pick here.
         this.pending = this.onFloor
@@ -988,7 +997,10 @@ export class DevelopHand {
     return true;
   }
 
-  /** Why a route MULE about to be bought is stale, or null: its plot is not its idle plot, or the floor's walk vetoes it. See AM-25. */
+  /**
+   * Why a route MULE about to be bought is stale, or null: its plot is not its idle plot, the floor's walk vetoes it
+   * (AM-25), or it would take the cash under the cash floor an adopted playbook set.
+   */
   private staleMule(state: GameState, group: number, walk?: () => DevWalk): string | null {
     let plot = -1;
     let outfit: Outfit | null = null;
@@ -999,6 +1011,13 @@ export class DevelopHand {
     if (plot < 0) return null;
     const tile = state.tiles[plot]!;
     if (tile.owner !== this.brain.mind.me || tile.outfit !== null) return `stale: plot ${plot}`;
+    // The floor as cashReserve holds it (within AI_PLANS.bounds.cashFloorMax), not the raw field: one reading of it.
+    const floor = adoptedNow(state, this.brain.mind)?.cashFloor != null ? cashReserve(state, this.brain.mind) : null;
+    if (floor !== null && outfit !== null) {
+      const me = state.players.find((p) => p.id === this.brain.mind.me)!;
+      const cost = (me.carriedMule === null ? mulePriceFor(state, me.id) : 0) + (me.carriedMule === outfit ? 0 : outfitCostFor(state, me.id, outfit));
+      if (me.money - cost < floor) return `stale: under the cash floor of ${floor} cr`;
+    }
     // Only the floor's walk: where the game walks (DEV_WALK) the draft priced the route by that same walk.
     const w = walk?.();
     const legs = outfit === null ? undefined : w?.floor?.(plot, outfit);

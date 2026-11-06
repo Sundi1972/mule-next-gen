@@ -11,7 +11,7 @@ import { PHASE_MS } from '../../server/src/mule-game.js';
 import type { MuleServer } from '../../server/src/server.js';
 import { check, doneWithLand, held, launch, PHONE, PHONE_SMALL, startServer, TV } from './harness';
 import { ELECTION_WAIT_MS, PRESS_MS, readyThroughTheElection, voteThroughTheElection } from './politics-steps';
-import { shownWhole, theTvHeaderFits } from './tv-fit-steps';
+import { shownWhole, theTvHeaderFits, theTvScaleHolds, theTvScalesHeld, TV_SCALE_FLOOR, watchTvScales } from './tv-fit-steps';
 
 const SCALE = 0.25;
 const within = (ms: number) => ms * SCALE + 5_000;
@@ -436,6 +436,8 @@ async function theMonthEndScoreAtSixSeats(): Promise<void> {
     }
     const tv = await (await browser.newContext(TV)).newPage();
     tv.on('pageerror', (e) => errors.push(`tv: ${e.message}`));
+    // TV-FIT's floor (PM ruling 6 Nov) is read on every screen this six-seat TV shows, over both months.
+    await watchTvScales(tv);
     await tv.goto(`${base}/table?room=${code}`);
     await tv.getByTestId('room-code').waitFor();
     await phone.getByRole('button', { name: 'Start game' }).click();
@@ -469,6 +471,7 @@ async function theMonthEndScoreAtSixSeats(): Promise<void> {
       const read = await readTheSixSeatMonthEnd(page, name);
       console.log(`✓ B-AC-27-2: six seats, month 2's end, ${read}`);
     }
+    console.log(`✓ TV-FIT floor ${TV_SCALE_FLOOR}, every screen at six seats over two months: ${await theTvScalesHeld(tv, 'six seats')}`);
 
     check(errors.length === 0, `no page errors: ${errors.join('; ')}`);
     console.log(`e2e colony six seats: ok (room ${code}, seed ${SEED})`);
@@ -496,13 +499,8 @@ async function readTheSixSeatMonthEnd(tv: Page, name: string): Promise<string> {
     await end.getByTestId('league-table').waitFor({ state: 'visible', timeout: PRESS_MS });
     check((await end.locator('[data-testid^=league-row-]').count()) === 6, 'six league rows on the TV');
     const header = await theTvHeaderFits(tv, `six-seat month end (${name})`);
-    let scale = Number(await end.locator('[data-fit]').getAttribute('data-fit'));
-    for (let i = 0; i < 10; i++) {
-      await tv.waitForTimeout(300);
-      const again = Number(await end.locator('[data-fit]').getAttribute('data-fit'));
-      if (again === scale) break;
-      scale = again;
-    }
+    // Settled, and at TV-FIT's floor or more (PM ruling 6 Nov).
+    const scale = Number(await theTvScaleHolds(tv, `six-seat month end (${name})`));
     const parts = await end.evaluate((root) => {
       const box = root.querySelector('[data-fit]')!;
       const band = root.querySelector('[data-testid=colony-band]') as HTMLElement;

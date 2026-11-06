@@ -1164,6 +1164,12 @@ export const WALK = {
   needStop: true,
   /** Board ms a stopped seller holds ▼ to sell on into shortage (Heiko's choice A, 5 Nov). A tap or a shorter hold moves nothing. */
   shortHoldMs: 1_000,
+  /**
+   * While the store has none of the good left to sell, buyers may bid above its old selling line, up to one step under
+   * the board's top, stopping one step short of any seller resting above that line; the line then shows the highest bid
+   * and a seller walks down onto it to trade. false: buyers walk as before, into a resting seller. For sweeps.
+   */
+  soldOutBidding: true,
   /** How often the server steps the auction. */
   tickMs: 100,
 };
@@ -1891,6 +1897,15 @@ export const AI_PLANS = {
     weight: 1,
     /** That consideration's score, 0 to 1, for an outfit that makes another good (the money-maker scores 1). */
     otherScore: 0.8,
+  },
+  /** A factory good the seat can't feed yet, scored with the plots that would make its inputs. See AM-33. */
+  chain: {
+    /**
+     * A feature switch. 0 is off: no chain is ever committed and the seats play as before AM-33. Above 0, the chain's
+     * MULEs, at the level's MULEs a month, must all be bought within this many months, from cash on hand. Switching
+     * on (at 3, as tested) is Heiko's decision, once the economy lets a chain pay.
+     */
+    months: 0,
   },
   monopoly: {
     /** The goods a seat may try to corner. Not Food: it spoils too fast (STRATEGIST.cornerMaxSpoilage). */
