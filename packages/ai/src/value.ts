@@ -5,6 +5,7 @@ import {
   DEV_STEER,
   DEV_WALK,
   DEVELOPMENT,
+  emptyStock,
   FACTORY,
   factoryFit,
   floorConfig,
@@ -206,9 +207,11 @@ const madeCache = new WeakMap<GameState, Map<string, Stock>>();
 /**
  * What the seat's own plots make at the next production: the outlook's rollout of a copy of what it sees, Energy, Water
  * and the turn-off rule included. Remembered per observation, seat, month, phase and plots, as canFeed asks it for every
- * plot it scores.
+ * plot it scores. In the production phase this month's production has run and the outlook rolls none before the auction
+ * (its `made` is empty), so the month's report says what the plots make: the plots are the ones that made it.
  */
 function madeNext(obs: GameState, me: string): Stock {
+  if (obs.phase === 'production') return obs.history.at(-1)?.produced[me] ?? emptyStock();
   const plots = obs.tiles.flatMap((t, i) => (t.owner === me ? [`${i}:${t.outfit ?? ''}`] : [])).join(',');
   const key = `${me}|${obs.month}|${obs.phase}|${plots}|${GOODS.map((g) => obs.players.find((p) => p.id === me)!.stock[g]).join(',')}`;
   let seen = madeCache.get(obs);
