@@ -1,3 +1,4 @@
+import type { Good } from '@mule/engine';
 import type { MuleView } from '@mule/protocol';
 import { useEventReducedMotion, type ShowPlayer, type Slot } from '@mule/ui';
 import { useMemo } from 'react';
@@ -20,5 +21,6 @@ export function useOverlayShow(view: MuleView) {
   const reduced = useEventReducedMotion();
   const tiles = useMemo(() => mapTiles(view), [view]);
   const players = useMemo<ShowPlayer[]>(() => view.players.map((p) => ({ id: p.id, slot: (slotOf(view, p.id) ?? 0) as Slot, name: p.name })), [view]);
-  return { show, stage: { reduced, width: view.width, height: view.height, tiles, players } };
+  const storeStock = useMemo(() => Object.fromEntries(view.market.map((r) => [r.good, r.storeStock])) as Partial<Record<Good, number>>, [view.market]);
+  return { show, stage: { reduced, width: view.width, height: view.height, tiles, players, storeStock } };
 }
