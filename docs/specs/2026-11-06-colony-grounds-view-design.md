@@ -101,7 +101,7 @@ today        none_exists (grep ColonyGrounds|grounds/ in packages, apps: nothing
              design/mocks/colony-grounds/src/Scene.tsx (layout, painter's order, callouts) + src/layout.ts::PLACES
 tomorrow     MUST draw, from MuleView.colony: the painted ground (C3), then each project's picture at its slot in
              painter's order (col+row), the town hall at the centre, slot chips over each place, the next free
-             place's outline; MUST size the scene to the rings in use (layout.ts::extentOf); MUST draw at size
+             place's outline; MUST size the scene to the rings in use (design/mocks/colony-grounds/src/layout.ts::extentOf); MUST draw at size
              'tv' and 'phone'
 logic        → §2 RULE-1 (which picture), RULE-4 (extent)
 seam         packages/ui/src/grounds/ColonyGrounds.tsx (new, WS10) — packages/ui is where the TV and phone share parts
@@ -120,8 +120,8 @@ today        packages/ui/src/terrain/landscape.ts paints the map; its palette an
              (Palette, LIGHT, DARK module-private; landscape-painter.ts hard-wires its worker) (verified_by: read)
 tomorrow     MUST paint the grounds' ground (plaza, paths between places, lawn, room-to-grow places, a terrain skirt
              fading out) with noise.ts's fbm/cells and the map's light model, off the main thread, cached
-seam         packages/ui/src/grounds/ground.ts + ground.worker.ts (new) — reusing ../terrain/noise.ts and
-             ../terrain/picture-cache.ts::PictureCache by import (HC-4)
+seam         packages/ui/src/grounds/ground.ts + ground.worker.ts (new) — reusing packages/ui/src/terrain/noise.ts and
+             packages/ui/src/terrain/picture-cache.ts::PictureCache by import (HC-4)
 senior       junior would: copy landscape.ts or add a palette switch to it · senior does: a small painter for a few
              flat materials on the same noise and cache, so the map stays untouched and the grounds' palette is its own
 mechanism    sprout
@@ -224,7 +224,7 @@ examples happiness 72, 5 standing → 9 · strike → 0 · nothing standing, hap
 ```
 
 ```
-RULE-4 · How big the scene is: rings = 0 with no project, 1 while the highest slot ≤ 7, else 2 (layout.ts::extentOf by slot)
+RULE-4 · How big the scene is: rings = 0 with no project, 1 while the highest slot ≤ 7, else 2 (design/mocks/colony-grounds/src/layout.ts::extentOf, by the highest slot)
 RULE-5 · What leans in at the month end: the projects whose stage differs from the stage seen at the last month end
          on this screen; none seen before (a reload, a new screen) → no lean-in, the scene just shows
 ```
@@ -288,3 +288,18 @@ Invariant: the grounds never write state (HC-1).
 - Read contract: `<ColonyGrounds colony size />` from `@mule/ui`; `manifest.json` (§3).
 - Write contract: only WS10 writes pictures and the manifest; screens mount the component and never draw buildings.
 - Enforcement: the SEAMS row (PM, 6 Nov) plus WS4's review of packages/ui; T-AC-2 fails on any picture that isn't in the manifest.
+
+## Self-review record  [review-only]
+
+- anchor-check.sh: PASS (8 seams), after fixing two it caught (a relative path; `layout.ts` resolving to another file).
+  Positive control: `ColonyWithFacts` broken to `…Factz` → the pass count fell 6 → 5 and the run FAILed; restored.
+- Reuse checks (check 6), each ADDED change against its nearest neighbour:
+  C1 — `ls apps/web/public` (no such dir), `grep -rn "manifest" apps/web/src` for art: none; nearest is the spike's
+  `publish-look.sh`, which C1 grows into. C2 — `grep -rn "ColonyGrounds\|grounds/" packages apps` and
+  `find -iname "*grounds*"`: only `packages/engine/test/colony-grounds.test.ts` (rules, not drawing); nearest is the
+  mock's `Scene.tsx`, grafted (fill_scaffold), not rebuilt. C3 — nearest `terrain/landscape.ts`: reuse rejected,
+  palette and worker closed (HC-4); its `noise.ts` and `PictureCache` are reused. C4 — nearest `look/Living.tsx`
+  (scaffold). C5 — nearest `components/Colony.tsx::useMonthEndDrift`: happiness only, per gauge, not per project.
+- Goal alignment: C1–C5, C7, C8 serve G-1/G-2 as stated; C6 is the data G-1 needs in a real game (no orphan).
+- Landmines from memory: cross-lane edits go via the PM (C6, C7, C8 are routed, not taken); a build PR flips the
+  rulebook's `#colony-grounds-look` to "In the game" in the same PR (plan task).
