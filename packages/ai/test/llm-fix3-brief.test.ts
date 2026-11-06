@@ -131,7 +131,7 @@ describe('B fix 3: what the brief tells the seat of its plots, its MULEs and its
     expect(text).toContain(
       `MULEs: 6 in the corral, at ${mulePriceFor(state, 'p0')} cr each to you this month. ` +
         `The store holds 4 Smithore; at the next upkeep it builds MULEs to fill the corral back to ${target}, ${MULE.smithorePerMule} Smithore each: ` +
-        `${Math.min(target, buildable)} if the corral sells out, ${Math.max(0, Math.min(target - 6, buildable))} if it sells none.`,
+        `on its Smithore today, ${Math.min(target, buildable)} if the corral sells out, ${Math.max(0, Math.min(target - 6, buildable))} if it sells none (the auction and a ship that takes Smithore can change that).`,
     );
   });
 

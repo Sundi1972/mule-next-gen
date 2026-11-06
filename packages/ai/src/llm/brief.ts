@@ -295,7 +295,7 @@ function muleLine(obs: GameState, me: PlayerId): string {
   return (
     `MULEs: ${mules} in the corral, at ${mulePriceFor(obs, me)} cr each to you this month. ` +
     `The store holds ${smithore} Smithore; at the next upkeep it builds MULEs to fill the corral back to ${target}, ${MULE.smithorePerMule} Smithore each: ` +
-    `${Math.min(target, buildable)} if the corral sells out, ${Math.max(0, Math.min(target - mules, buildable))} if it sells none.`
+    `on its Smithore today, ${Math.min(target, buildable)} if the corral sells out, ${Math.max(0, Math.min(target - mules, buildable))} if it sells none (the auction and a ship that takes Smithore can change that).`
   );
 }
 

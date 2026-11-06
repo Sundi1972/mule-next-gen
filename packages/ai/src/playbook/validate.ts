@@ -147,8 +147,11 @@ function routeFault(route: unknown, ctx: Ctx): RouteFault | null {
   const mulesPerMonth = ctx.mind.level?.mulesPerMonth ?? 0;
   const step = (i: number) => (isObject(route[i]) ? route[i] : {});
   let mules = 0;
+  // The last MULE group's first and last steps: a cut at the cap never splits a group (review of #556).
+  let group: [number, number] = [-1, -1];
+  const capCut = () => (group[0] < cap && group[1] >= cap ? group[0] : cap);
   for (let i = 0; i < route.length; i++) {
-    if (i >= cap) return [`more than ${cap} steps`, cap, cap];
+    if (i >= cap) return [`more than ${cap} steps`, cap, capCut()];
     const s = step(i);
     switch (s.act) {
       case 'analyse':
@@ -159,15 +162,16 @@ function routeFault(route: unknown, ctx: Ctx): RouteFault | null {
         break;
       case 'buyMule': {
         // A MULE's buy, outfit and install stand or fall together.
-        const group = i;
-        if (++mules > mulesPerMonth) return [`more than ${mulesPerMonth} MULEs`, i, group];
+        const start = i;
+        if (++mules > mulesPerMonth) return [`more than ${mulesPerMonth} MULEs`, i, start];
         const outfitAt = i + 1;
         const installAt = outfitAt + 1;
         const [outfit, install] = [step(outfitAt), step(installAt)];
-        if (outfit.act !== 'outfit') return ['buyMule not followed by outfit and install', outfitAt, group];
-        if (!OUTFITS.includes(outfit.outfit as Outfit)) return ['no such outfit', outfitAt, group];
-        if (install.act !== 'install') return ['buyMule not followed by outfit and install', installAt, group];
-        if (!isMine(ctx, install.plot)) return [isPlot(ctx, install.plot) ? 'not your plot' : 'no such plot', installAt, group];
+        if (outfit.act !== 'outfit') return ['buyMule not followed by outfit and install', outfitAt, start];
+        if (!OUTFITS.includes(outfit.outfit as Outfit)) return ['no such outfit', outfitAt, start];
+        if (install.act !== 'install') return ['buyMule not followed by outfit and install', installAt, start];
+        if (!isMine(ctx, install.plot)) return [isPlot(ctx, install.plot) ? 'not your plot' : 'no such plot', installAt, start];
+        group = [start, installAt];
         i = installAt;
         break;
       }
@@ -182,7 +186,7 @@ function routeFault(route: unknown, ctx: Ctx): RouteFault | null {
         return ['no such act', i, i];
     }
   }
-  return route.length > cap ? [`more than ${cap} steps`, cap, cap] : null;
+  return route.length > cap ? [`more than ${cap} steps`, cap, capCut()] : null;
 }
 
 /** Why a route cannot give its first MULE group, the fitted MULE the seat leads, another outfit, or null. See AM-29. */
