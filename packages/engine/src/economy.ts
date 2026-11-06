@@ -41,17 +41,17 @@ export function monthlyDemand(state: GameState, festival = festivalFood(state)):
   const players = state.players.length;
   const colonistUnits = state.colonists / UPKEEP.colonistsPerUnit;
 
-  // Players must eat and power their plots whatever the price. Colonists buy
-  // less when the store's price is above what their wages pay.
+  // Players must eat and power their plots whatever the price, and so must the colonists: they have no wages, and
+  // their full need counts at any price (needs C2).
   const sick = airBand(state.air).sickens;
   const own = playersUse(state);
-  demand.food = own.food + colonistDemand(state, 'food', colonistUnits + festival);
-  demand.water = own.water + colonistDemand(state, 'water', colonistUnits);
-  demand.energy = own.energy + colonistDemand(state, 'energy', colonistUnits * UPKEEP.colonistEnergyShare);
+  demand.food = own.food + colonistUnits + festival;
+  demand.water = own.water + colonistUnits;
+  demand.energy = own.energy + colonistUnits * UPKEEP.colonistEnergyShare;
   // The MULEs players are about to install will each need Energy before any plot draws it (C6).
   demand.energy += mulesWanted(state) * energyPerNewMule();
   // Sick colonists in dirty air need more Medicine.
-  demand.medicine = colonistDemand(state, 'medicine', (state.colonists / UPKEEP.colonistsPerMedicine) * (sick ? POLLUTION.sickMedicineDemand : 1));
+  demand.medicine = (state.colonists / UPKEEP.colonistsPerMedicine) * (sick ? POLLUTION.sickMedicineDemand : 1);
   const factories = (good: Good) => state.tiles.filter((t) => t.outfit === good).length;
   // The store builds a MULE from Smithore for every plot that will want one; smelters need Smithore too.
   demand.smithore = factories('alloy') * (RECIPES.alloy.inputs.smithore ?? 0) + mulesWanted(state) * MULE.smithorePerMule;
@@ -109,14 +109,6 @@ export function festivalFood(state: GameState): number {
     .flatMap((e) => e.effects ?? [])
     .filter((f) => f.on === 'store' && f.what === 'food')
     .reduce((sum, f) => sum + f.delta, 0);
-}
-
-/** What colonists buy of a good they need this much of, at the store's current selling price. */
-export function colonistDemand(state: GameState, good: Good, need: number): number {
-  const budget = UPKEEP.colonistBudget[good];
-  if (budget === undefined) return need;
-  const price = storeSellAt(state, good, state.store.posted[good], { exact: true });
-  return need * Math.min(1, budget / Math.max(1, price));
 }
 
 /** MULEs a month's new land takes from the corral, by grant and by auction: MULE.corralPerPlayer for every seat. */
@@ -285,27 +277,15 @@ export function storeSellAt(state: GameState, good: Good, mid: number, { exact =
 
 /**
  * What the store pays for a good around a mid price, with its band's spread: rounded down to at least 1, or unrounded
- * with `exact`. Never more for Food or Water than colonists can pay once the store sells it on (pricing HC-4).
+ * with `exact`. No colonists' cap: they have no wages (needs C2), so pricing HC-4's cap went with their budget.
  */
 export function storeBuyAt(state: GameState, good: Good, mid: number, { exact = false } = {}): number {
   const line = mid * (1 - spreadOf(state, good).under);
-  const cap = colonistCap(state, good);
-  if (exact) return Math.min(line, cap);
+  if (exact) return line;
   const whole = Math.round(line);
   // The sell side's float, mirrored: 1 - 0.3 is a hair under 0.7, so 90 × 0.7 lands a hair under 63: that close, it is 63.
   const rounded = Math.abs(line - whole) <= Number.EPSILON * line ? whole : Math.floor(line);
-  return Math.max(1, Math.min(rounded, Math.floor(cap)));
-}
-
-/** HC-4's cap on the store's Food and Water buy line, unrounded: the colonists' budget less the spread twice; none for other goods. */
-function colonistCap(state: GameState, good: Good): number {
-  if (good !== 'food' && good !== 'water') return Infinity;
-  return (UPKEEP.colonistBudget[good] ?? 0) / (1 + spreadOf(state, good).over) ** 2; // literal-ok: the spread applies twice, store buys then sells
-}
-
-/** The highest mid price whose exact selling line the colonists' budget for a good still covers. */
-export function colonistAffordable(state: GameState, good: Good): number {
-  return (UPKEEP.colonistBudget[good] ?? 0) / (1 + spreadOf(state, good).over);
+  return Math.max(1, rounded);
 }
 
 /**

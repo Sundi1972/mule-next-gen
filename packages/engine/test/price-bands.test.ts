@@ -8,7 +8,6 @@ import {
   declareRole,
   GOOD_CONFIG,
   GOODS,
-  colonistDemand,
   monthlyDemand,
   mulesWanted,
   postPrices,
@@ -159,21 +158,8 @@ describe('price B-AC-4: the store’s Food lines when Food comes up, by band', (
     { band: 'shortage', holds: 10, farms: [5, 3], buy: 54, sell: 75 },
     { band: 'severe', holds: 4, farms: [5, 1], buy: 108, sell: 150 },
   ])('price B-AC-4: $band Food comes up at $buy / $sell', ({ holds, farms: outputs, buy, sell }) => {
-    // The colonists' cap would cut severe Food's buy line until colony-needs deletes colonistBudget: lifted here.
-    const saved = UPKEEP.colonistBudget.food;
-    UPKEEP.colonistBudget.food = 10_000;
-    try {
-      expect(lines(holds, outputs)).toEqual({ buy, sell });
-    } finally {
-      UPKEEP.colonistBudget.food = saved;
-    }
-  });
-
-  it('price B-AC-4: while colonistBudget exists, the severe Food buy line stays under the colonists’ cap', () => {
-    const { buy, sell } = lines(4, [5, 1]);
-    // 150 ÷ 1.25², what colonists can pay after the store buys and then sells at the severe band's 25%.
-    expect(buy).toBe(96);
-    expect(sell).toBe(150);
+    // No colonists' cap since needs C2: the severe band buys at its own 108 (pricing AM-5, HC-4's cap gone with the budget).
+    expect(lines(holds, outputs)).toEqual({ buy, sell });
   });
 });
 
@@ -368,7 +354,8 @@ describe("price C6: the colony's Energy demand counts the MULEs it will add", ()
     expect(state.tiles.some((t) => t.owner), 'the premise: no plot owned, so no idle plot and no plant').toBe(false);
     expect(mulesWanted(state), 'the premise: a month of new land, 4 seats × 2').toBe(8);
 
-    const colonists = colonistDemand(state, 'energy', (state.colonists / UPKEEP.colonistsPerUnit) * UPKEEP.colonistEnergyShare);
+    // The colonists' full Energy need, at any price (needs C2).
+    const colonists = (state.colonists / UPKEEP.colonistsPerUnit) * UPKEEP.colonistEnergyShare;
 
     expect(monthlyDemand(state).energy - colonists).toBeCloseTo(8 * PER_NEW_MULE, 9);
   });
@@ -390,7 +377,8 @@ describe("price C6: the colony's Energy demand counts the MULEs it will add", ()
     for (const t of state.tiles) if (t.terrain !== 'store') { t.owner = 'p0'; t.outfit = 'energy'; }
     expect(mulesWanted(state), 'the premise: no MULE wanted').toBe(0);
 
-    const colonists = colonistDemand(state, 'energy', (state.colonists / UPKEEP.colonistsPerUnit) * UPKEEP.colonistEnergyShare);
+    // The colonists' full Energy need, at any price (needs C2).
+    const colonists = (state.colonists / UPKEEP.colonistsPerUnit) * UPKEEP.colonistEnergyShare;
 
     expect(monthlyDemand(state).energy).toBeCloseTo(colonists, 9);
   });

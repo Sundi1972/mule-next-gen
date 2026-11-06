@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { advancePhase, cloneForSim, colonistDemand, exportDemand, monthlyDemand, RECIPES, UPKEEP, type GameState } from '../src/index.js';
+import { advancePhase, cloneForSim, exportDemand, monthlyDemand, RECIPES, UPKEEP, type GameState } from '../src/index.js';
 import { game, to, worked } from './fixtures/food-month.js';
 
 /** Month 1's production with `colonists` in the colony and no Electronics works. */
@@ -16,8 +16,9 @@ function colonistsAdd(state: GameState): { electronics: number; rareEarth: numbe
   const none = cloneForSim(state);
   none.colonists = 0;
   const [d, d0] = [monthlyDemand(state), monthlyDemand(none)];
-  // Energy also carries the colonists' own Energy want, so it is compared with that part taken out.
-  const ownEnergy = (s: GameState) => colonistDemand(s, 'energy', (s.colonists / UPKEEP.colonistsPerUnit) * UPKEEP.colonistEnergyShare);
+  // Energy also carries the colonists' own Energy want, in full since they have no wages (needs C2), so it is compared
+  // with that part taken out.
+  const ownEnergy = (s: GameState) => (s.colonists / UPKEEP.colonistsPerUnit) * UPKEEP.colonistEnergyShare;
   const energy = d.energy - ownEnergy(state) - (d0.energy - ownEnergy(none));
   return { electronics: d.electronics - d0.electronics, rareEarth: d.rareEarth - d0.rareEarth, alloy: d.alloy - d0.alloy, energy };
 }

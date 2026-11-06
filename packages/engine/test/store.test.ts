@@ -5,7 +5,6 @@ import {
   createGame,
   MULE,
   mulesWanted,
-  PRICE,
   runUpkeep,
   startAuction,
   stepAuction,
@@ -112,12 +111,9 @@ describe('pricing C2: one selling price', () => {
 
   it('price T-AC-6: one selling price: storeQuotes equals comeUp\'s lines, for every good over 21 seeded games', () => {
     let banded = 0;
-    let capped = 0;
     const look = (seed: number) => (state: GameState, good: Good) => {
       const band = state.store.band?.[good] ?? 'normal';
       if (band !== 'normal') banded++;
-      const spreadLine = Math.floor(state.store.posted[good] * (1 - PRICE.bandSpread[band].under));
-      if ((good === 'food' || good === 'water') && state.auction!.storeBuy < spreadLine) capped++;
       expect(storeQuotes(state, good), `seed ${seed}, month ${state.month}, ${good}`).toEqual({ buy: storeBuyLine(state), sell: storeSellLine(state) });
     };
     for (let seed = 401; seed <= 420; seed++) eachComeUp(seed, look(seed));
@@ -129,7 +125,5 @@ describe('pricing C2: one selling price', () => {
     eachComeUp(421, look(421), starve);
     // Without a good posted outside the normal band its own spread never runs, and the two could differ unseen.
     expect(banded, 'a good came up in a band other than normal').toBeGreaterThan(0);
-    // Likewise HC-4's cap: unless it binds somewhere, the two could apply it differently unseen.
-    expect(capped, "Food or Water came up with the colonists' cap under the band's line").toBeGreaterThan(0);
   });
 });
