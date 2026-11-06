@@ -19,16 +19,16 @@ const MANIFEST = manifestOf({ hall: ['standing'], park: ALL, hospital: ALL, stad
 const MONTH_12: GroundsColony = {
   gauges: { happiness: 72 },
   projects: [
-    { id: 'park', name: 'Park', stage: 'standing', buildMonths: 1, monthsLeft: null, slot: 0 },
-    { id: 'hospital', name: 'Hospital', stage: 'closed', buildMonths: 2, monthsLeft: null, slot: 1 },
-    { id: 'stadium', name: 'Stadium', stage: 'building', buildMonths: 3, monthsLeft: 1, slot: 2 },
-    { id: 'spaceport', name: 'Spaceport upgrade', stage: 'commissioned', buildMonths: 3, monthsLeft: null, slot: 3 },
+    { id: 'park', name: 'Park', stage: 'standing', buildMonths: 1, monthsLeft: null, place: { x: 3, y: 2, w: 1, h: 1 } },
+    { id: 'hospital', name: 'Hospital', stage: 'closed', buildMonths: 2, monthsLeft: null, place: { x: 2, y: 3, w: 1, h: 1 } },
+    { id: 'stadium', name: 'Stadium', stage: 'building', buildMonths: 3, monthsLeft: 1, place: { x: 3, y: 3, w: 1, h: 1 } },
+    { id: 'spaceport', name: 'Spaceport upgrade', stage: 'commissioned', buildMonths: 3, monthsLeft: null, place: { x: 1, y: 2, w: 1, h: 1 } },
   ],
 };
 
 /**
- * Each place's centre in the scene: a place is 120 units wide in a 2:1 projection, the hall at the origin, and the
- * growth order puts slots 0–3 at (col, row) (1,0), (0,1), (1,1), (-1,0).
+ * Each project's centre in the scene: a grounds cell is 120 units wide in a 2:1 projection, the hall's cell (2,2) at the
+ * origin, x running down-right and y down-left on screen (the camera looks from the south-east).
  */
 const PLACE_CENTRE: Record<string, [number, number]> = { hall: [0, 0], 1: [60, 30], 2: [-60, 30], 3: [0, 60], 4: [-60, -30] };
 const PLACE_WIDTH = 120;
@@ -107,7 +107,7 @@ describe('ColonyGrounds · the colony drawn from its view', () => {
     expect(html).not.toContain('spaceport/standing');
   });
 
-  it("B-AC-1 (AM-1): a kind with its own tall frame sits at its slot by its own centre", () => {
+  it("B-AC-1 (AM-1): a kind with its own tall frame sits at its place by its own centre", () => {
     const tall: GroundsManifest['frame'] = { width: 1600, height: 3200, place: 1293, centre: [800, 2600] };
     const manifest = manifestOf({ hall: ['standing'], park: ALL, hospital: ALL, stadium: ALL, spaceport: ALL });
     manifest.pictures.spaceport = { ...manifest.pictures.spaceport, frame: tall };
@@ -125,8 +125,24 @@ describe('ColonyGrounds · the colony drawn from its view', () => {
     const html = grounds();
     expect(attrOf(tagWith(html, 'data-testid="colony-grounds"'), 'data-extent')).toBe('1');
     expect(tagsWith(html, 'data-testid="next-place"')).toHaveLength(1);
-    const far = { ...MONTH_12, projects: [{ id: 'park' as const, name: 'Park', stage: 'standing' as const, buildMonths: 1, monthsLeft: null, slot: 8 }] };
+    const far = { ...MONTH_12, projects: [{ id: 'park' as const, name: 'Park', stage: 'standing' as const, buildMonths: 1, monthsLeft: null, place: { x: 4, y: 2, w: 1, h: 1 } }] };
     expect(attrOf(tagWith(grounds({ colony: far }), 'data-testid="colony-grounds"'), 'data-extent')).toBe('2');
+    expect(attrOf(tagWith(grounds({ colony: { ...MONTH_12, projects: [] } }), 'data-testid="colony-grounds"'), 'data-extent')).toBe('0');
+  });
+
+  it('B-AC-1 (AM-18): a 2×2 footprint sits at its block\'s centre and widens the scene to the ring it reaches', () => {
+    const stadium = { id: 'stadium' as const, name: 'Stadium', stage: 'standing' as const, buildMonths: 3, monthsLeft: null, place: { x: 3, y: 2, w: 2, h: 2 } };
+    const html = grounds({ colony: { gauges: { happiness: 72 }, projects: [stadium] } });
+    // The block covers cells (3..4, 2..3): its centre is 1.5 cells east and 0.5 south of the hall.
+    PLACE_CENTRE.block = [(1.5 - 0.5) * 60, (1.5 + 0.5) * 30];
+    expectAt(tagWith(html, 'data-testid="picture-1"'), 'block');
+    expect(attrOf(tagWith(html, 'data-testid="colony-grounds"'), 'data-extent')).toBe('2');
+  });
+
+  it('B-AC-1: a project with no place yet is not drawn on the grounds', () => {
+    const html = grounds({ colony: { gauges: { happiness: 72 }, projects: [{ ...MONTH_12.projects[0]!, place: null }] } });
+    expect(tagsWith(html, 'data-testid="picture-1"')).toHaveLength(0);
+    expect(tagsWith(html, 'data-testid="callout-1"')).toHaveLength(0);
   });
 
   it('B-AC-4: a missing picture falls back to the SVG shape', () => {
