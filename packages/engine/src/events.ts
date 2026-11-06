@@ -56,12 +56,19 @@ const SHAPE: Record<EventKey, { kind: EventKind; title: string; scope: MonthEven
     line: () => `Blamed for the unrest: ${Math.abs(SOCIAL_EVENTS.player.blamedForUnrest.reputation)} reputation lost, so fewer votes.`,
   },
   storeStrike: { kind: 'store', title: 'Store strike', scope: 'colony', sign: 'bad', line: () => 'The store is on strike: it sells no MULEs this turn.' },
+  walkout: { kind: 'plot', title: 'Walkout', scope: 'personal', sign: 'bad', line: () => walkoutLine(null) },
 };
 
 /** A general strike's line, naming its good when it has one. */
 function strikeLine(good: Good | null): string {
   const plots = good ? `every ${goodWords(good)} plot` : 'every plot of one good';
   return `A general strike: this month ${plots} makes ${pct(COLONY.strike.output)}, unless the Governor pays the strikers.`;
+}
+
+/** A walkout's line, naming its good when it has one. */
+function walkoutLine(good: Good | null): string {
+  const plots = good ? `your ${goodWords(good)} plots make` : 'your plots of one good make';
+  return `A walkout: this month ${plots} ${pct(SOCIAL_EVENTS.player.walkout.output)}.`;
 }
 
 /** The goods a colony-wide event touches. */
@@ -91,6 +98,7 @@ export function eventOutput(key: EventKey, before: number, first: boolean): numb
     bumperHarvest: () => before * EVENTS.bumperHarvest.factor,
     cavernCollapse: () => before,
     generalStrike: () => Math.floor(before * COLONY.strike.output),
+    walkout: () => Math.floor(before * SOCIAL_EVENTS.player.walkout.output),
   };
   // An event with no rule here changes no plot's output.
   return Math.max(0, rules[key]?.() ?? before);
@@ -167,10 +175,11 @@ const OFF_MAP = {
   packageFromHome: () => true,
   // G-5 C26: a strike needs a good the colony works; the rest always find what they change.
   festival: () => true,
-  generalStrike: (state: GameState) => strikeGoods(state).length > 0,
+  generalStrike: (state: GameState) => mostWorked(state).length > 0,
   emigrationWave: () => true,
   blamedForUnrest: () => true,
   storeStrike: () => true,
+  walkout: (state: GameState, p?: Player) => p !== undefined && mostWorked(state, p.id).length > 0,
 } satisfies Partial<Record<EventKey, (state: GameState, player?: Player) => boolean>>;
 type OffMapKey = keyof typeof OFF_MAP;
 
@@ -195,15 +204,23 @@ function offMapEvent(state: GameState, key: OffMapKey, rng: Rng, phase: Phase, p
     const event = toEvent(state, key, { x: tile.x, y: tile.y }, [tile], undefined, tile.owner ?? undefined, phase);
     return withPlots(event, { becomes: 'crater', ...(tile.special ? { was: tile.special.kind } : {}), ...(tile.outfit ? { muleLost: true as const } : {}) });
   }
-  if (key === 'generalStrike') return struck(state, rng.pick(strikeGoods(state)), phase);
+  if (key === 'generalStrike') return struck(state, rng.pick(mostWorked(state)), phase);
+  if (key === 'walkout') {
+    const good = rng.pick(mostWorked(state, player));
+    const hit = state.tiles.filter((t) => t.owner === player && t.outfit === good);
+    return { ...toEvent(state, key, { x: hit[0]!.x, y: hit[0]!.y }, hit, undefined, player, phase), line: walkoutLine(good) };
+  }
   // Off the map: it starts at the store, where every colonist starts development.
   const store = state.tiles.find((t) => t.terrain === 'store');
   return toEvent(state, key, store ? { x: store.x, y: store.y } : { x: 0, y: 0 }, [], undefined, player, phase);
 }
 
-/** The goods the most working colony plots make, in GOODS order: a general strike's pick (none when nothing works). */
-function strikeGoods(state: GameState): Good[] {
-  const plots = (good: Good) => state.tiles.filter((t) => t.owner && t.outfit === good).length;
+/**
+ * The goods the most working plots make, in GOODS order: the colony's (a general strike's pick) or one owner's (a
+ * walkout's); none when nothing works.
+ */
+function mostWorked(state: GameState, owner?: string): Good[] {
+  const plots = (good: Good) => state.tiles.filter((t) => (owner === undefined ? t.owner : t.owner === owner) && t.outfit === good).length;
   const most = Math.max(0, ...GOODS.map(plots));
   return most === 0 ? [] : GOODS.filter((g) => plots(g) === most);
 }
@@ -286,6 +303,8 @@ export interface EventRow {
   air?: Partial<Record<AirBand['name'], number>>;
   /** perPoint for each air point the player's plots caused last month, at most max. */
   pollution?: { perPoint: number; max: number };
+  /** Counts `pollution` only in these mood bands, so never with no colony; absent, in any. */
+  pollutionIn?: readonly MoodBand[];
   /** Signed, for the richest and the poorest player by cash plus land at GAME.plotScore a plot; a tie goes to the first seat. */
   wealth?: { richest?: number; poorest?: number };
   /** By event key: points when that event fired in a window the row names; once, if it fired in both. */
@@ -330,6 +349,8 @@ export interface EventParams {
   shrink?: number;
   /** G-5 C26: the reputation a blamed player loses (signed). */
   reputation?: number;
+  /** G-5 C26: the share of its output a walked-out plot makes. */
+  output?: number;
 }
 
 /** What a chance reads beside the state: whose roll it is (none for a colony row), and the keys already fired this phase. */
@@ -364,13 +385,17 @@ function influences(state: GameState, row: EventRow, { player, firedThisPhase = 
     .reduce((sum, [, f]) => sum + f.points, 0);
   return {
     air: (row.air?.[airBand(state.air).name] ?? 0) + (state.colony ? (row.colonyAir?.[airBand(state.air).name] ?? 0) : 0),
-    pollution: row.pollution ? Math.min(row.pollution.max, row.pollution.perPoint * caused) : 0,
+    pollution: row.pollution && pollutionCounts(state, row) ? Math.min(row.pollution.max, row.pollution.perPoint * caused) : 0,
     wealth: row.wealth && player !== undefined ? wealthShare(state, row.wealth, player) : 0,
     follows,
     mood: state.colony ? (row.mood?.[moodBand(state.colony.happiness)] ?? 0) : 0,
     objects: (state.colony?.projects ?? []).filter((p) => p.stage === 'standing').reduce((sum, p) => sum + (row.objects?.[p.id] ?? 0), 0),
     foodPrice: row.foodPrice && state.store.posted.food > row.foodPrice.factor * GOOD_CONFIG.food.refPrice ? row.foodPrice.points : 0,
   };
+}
+
+function pollutionCounts(state: GameState, row: EventRow): boolean {
+  return !row.pollutionIn || (!!state.colony && row.pollutionIn.includes(moodBand(state.colony.happiness)));
 }
 
 /** A wealth influence for this player: the richest's and the poorest's points, by cash plus land, a tie to the first seat. */

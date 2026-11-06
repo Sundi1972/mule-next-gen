@@ -1435,6 +1435,22 @@ export const SOCIAL_EVENTS = {
       reputation: -1,
       cap: 0.9,
     },
+    /**
+     * In production: every working plot of the good the player works most plots of (a tie on the row's dice) makes
+     * `output` of its output, floored. A polluter is likelier, but only when Restless or worse.
+     */
+    walkout: {
+      phases: { production: 0 },
+      needsColony: true,
+      mood: { restless: 0.005, unhappy: 0.02, unrest: 0.04 },
+      wealth: { richest: 0.01 },
+      // The catalogue gives the polluter part no most, so its most is the row's cap.
+      pollution: { perPoint: 0.005, max: 0.9 },
+      pollutionIn: ['restless', 'unhappy', 'unrest'],
+      neverIn: ['thriving'],
+      output: 0.2,
+      cap: 0.9,
+    },
   } satisfies Record<string, import('./events.js').EventRow & import('./events.js').EventParams>,
 };
 
