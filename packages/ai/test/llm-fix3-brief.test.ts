@@ -156,6 +156,20 @@ describe('B fix 3: what the brief tells the seat of its plots, its MULEs and its
     expect(auction(state)).toContain('Food and Energy in units: ');
   });
 
+  it("B fix 3: the auction brief, asked after production, does not count this month's Food twice: it is in what the seat holds, and upkeep eats next", () => {
+    const { state } = table();
+    const p0 = state.players.find((p) => p.id === 'p0')!;
+    const need = monthNeeds(state, 'p0');
+    // Holds one short of upkeep's Food, the 1 made at the last production included: short, though holds + made covers it.
+    p0.stock.food = need.food - 1;
+    p0.stock.energy = need.energy;
+    expect(auction(state)).toContain(
+      `Food — you hold ${need.food - 1}, the 1 your plots made at the last production included, against ${need.food} your household eats a month: short by 1;`,
+    );
+    // Asked at upkeep, before the next production: what the plots make comes before upkeep eats, so it counts.
+    expect(land(state)).toContain(`Food — you hold ${need.food - 1} and your plots made 1 at the last production, against ${need.food} your household eats a month: covered;`);
+  });
+
   it("B fix 3: a land plan's reason no longer says the seat's Food and Energy are covered for owning a farm and a plant; it says what it counted", () => {
     const { state, plots } = table();
     state.tiles[plots[1]!]!.outfit = 'energy';
