@@ -62,15 +62,33 @@ export const PRICE = {
 };
 
 /**
- * Each month the export goods' off-world prices walk (pricing RULE-3): the log of the price moves `phi` of the way it
- * stands from its centre's, plus a seeded swing, then is clamped. `sigma` is the spread of the log price the walk
- * settles into. Food, Water and Energy are not exported; their off-world price stays put.
+ * As each month opens, the export goods' off-world prices walk (pricing RULE-3): the log of the price keeps `phi` of
+ * its distance from the centre's, plus a seeded swing, then is clamped. Food, Water and Energy are not exported; their
+ * off-world price stays put.
  */
 export const OFF_WORLD = {
   /** Crystite: normally about 90, rarely 40, very rarely 300. */
-  crystite: { centre: 90, phi: 0.7, sigma: 0.35, min: 40, max: 300 },
-  /** Every other export good: centred on its GOOD_CONFIG refPrice, at most `band` above or below it. */
-  others: { phi: 0.7, sigma: 0.18, band: 0.5 },
+  crystite: {
+    /** The price Crystite's walk returns to, and opens the game at. */
+    centre: 90,
+    /** The share of last month's distance from the centre (in log terms) a month keeps. */
+    phi: 0.7,
+    /** The spread of the log price the walk settles into: the bigger, the wilder the swings. */
+    sigma: 0.35,
+    /** The lowest off-world price. */
+    min: 40,
+    /** The highest off-world price. */
+    max: 300,
+  },
+  /** Every other export good, centred on its GOOD_CONFIG refPrice. */
+  others: {
+    /** The share of last month's distance from the centre (in log terms) a month keeps. */
+    phi: 0.7,
+    /** The spread of the log price the walk settles into. */
+    sigma: 0.18,
+    /** The price stays within this share of its centre, above or below. */
+    band: 0.5,
+  },
 };
 
 /**
