@@ -176,7 +176,8 @@ async function read(phone: Page): Promise<Shown> {
       },
       desks: [...(tabs?.querySelectorAll('[data-testid^="desk-"]') ?? [])].map((d) => d.getAttribute('data-testid')!.slice('desk-'.length)),
       tools: [...(screen?.querySelectorAll('[data-testid=map-tools] [data-testid^="tool-"]') ?? [])].map((t) => t.getAttribute('data-testid')!.slice('tool-'.length)),
-      needs: [...(guide?.querySelectorAll('[data-testid^="need-"]') ?? [])].map((n) => ({ good: n.getAttribute('data-testid')!.slice('need-'.length), text: (n as HTMLElement).innerText })),
+      // Only the This-month rows: the colony's build sites carry need-<project>-<good> ids of their own.
+      needs: [...(guide?.querySelectorAll('[data-testid=this-month] [data-testid^="need-"]') ?? [])].map((n) => ({ good: n.getAttribute('data-testid')!.slice('need-'.length), text: (n as HTMLElement).innerText })),
       thisMonthInColony: !!guide?.querySelector('[data-testid=desk-body-colony] [data-testid=this-month]'),
       // Now first: the card itself, or the card a folding Now wraps with its fold button (E-9).
       nowFirst: !!body?.firstElementChild && !!guide?.querySelector('[data-testid=now]') && body.firstElementChild.contains(guide.querySelector('[data-testid=now]')),
