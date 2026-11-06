@@ -10,7 +10,9 @@ import {
   isAssaying,
   isStunned,
   MS_PER_SECOND,
+  mulePriceFor,
   observe,
+  outfitCostFor,
   pathTo,
   pressOrder,
   terrainShare,
@@ -40,7 +42,7 @@ import type { DevelopmentLog, DevelopmentStepLog } from '../playbook/outcome.js'
 import { floorDevWalk, installable, leading, mapFactor, planSeconds, plotErrandSeconds, pubDoor, pubMargin, pubSeconds, tileMiddle, tripSeconds, type PlanStop } from '../floor-time.js';
 import { analysesWanted, bestInstall, developDecision, filtersWanted, outfitName, plotName, walkVeto, type DevAction, type DevWalk } from '../strategist.js';
 import { situation } from '../summary.js';
-import type { Mind } from '../value.js';
+import { adoptedNow, type Mind } from '../value.js';
 import { FloorWalker, type FloorView } from './floor-walker.js';
 
 /**
@@ -988,7 +990,10 @@ export class DevelopHand {
     return true;
   }
 
-  /** Why a route MULE about to be bought is stale, or null: its plot is not its idle plot, or the floor's walk vetoes it. See AM-25. */
+  /**
+   * Why a route MULE about to be bought is stale, or null: its plot is not its idle plot, the floor's walk vetoes it
+   * (AM-25), or it would take the cash under the cash floor an adopted playbook set.
+   */
   private staleMule(state: GameState, group: number, walk?: () => DevWalk): string | null {
     let plot = -1;
     let outfit: Outfit | null = null;
@@ -999,6 +1004,12 @@ export class DevelopHand {
     if (plot < 0) return null;
     const tile = state.tiles[plot]!;
     if (tile.owner !== this.brain.mind.me || tile.outfit !== null) return `stale: plot ${plot}`;
+    const floor = adoptedNow(state, this.brain.mind)?.cashFloor ?? null;
+    if (floor !== null && outfit !== null) {
+      const me = state.players.find((p) => p.id === this.brain.mind.me)!;
+      const cost = (me.carriedMule === null ? mulePriceFor(state, me.id) : 0) + (me.carriedMule === outfit ? 0 : outfitCostFor(state, me.id, outfit));
+      if (me.money - cost < floor) return `stale: under the cash floor of ${floor} cr`;
+    }
     // Only the floor's walk: where the game walks (DEV_WALK) the draft priced the route by that same walk.
     const w = walk?.();
     const legs = outfit === null ? undefined : w?.floor?.(plot, outfit);
