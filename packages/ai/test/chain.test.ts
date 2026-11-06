@@ -200,22 +200,33 @@ describe('a factory chain (AM-33)', () => {
     expect(draftStrategyOf({ state, seat: ME, mind: seatOf().mind, seed: 11, phase: 'development' }).moneyMaker).not.toBe('electronics');
   }));
 
-  it('B-AC-11: a short seat lists a spare Smithore MULE when its Alloy money-maker is fed, and keeps a standing link of an unfed chain', () => withChains(() => {
-    // Planning, broke, its Food and Energy MULEs its last (never listed): a Smithore mine is the one lot it can list.
-    const listed = (smithore: number, moneyMaker: Good) => {
-      const state = development([{ x: 0, ground: { smithore }, outfit: 'smithore' }, { x: 2, ground: { food: 2 }, outfit: 'food' }, { x: 4, outfit: 'energy' }], DEAR);
+  it('B-AC-11: a short seat never lists a MULE its chain depends on, fed or unfed, and lists the same MULE without a chain', () => withChains(() => {
+    // Planning, broke, its Food and Energy MULEs its last (never listed): the plots before them are what it can list.
+    const broke = (plots: Parameters<typeof development>[0]) => {
+      const state = development([...plots, { x: 12, ground: { food: 2 }, outfit: 'food' }, { x: 14, outfit: 'energy' }], DEAR);
       state.phase = 'planning';
       state.players.find((p) => p.id === ME)!.money = 0;
-      expect(canFeed(state, ME, 'alloy'), `Alloy fed on Smithore ground ${smithore}`).toBe(smithore >= 4);
+      return state;
+    };
+    const listed = (state: GameState, moneyMaker: Good) => {
       const strategy: Strategy = { kind: 'specialist', moneyMaker, monopolyTarget: null, cashFloor: 0, landTarget: { plots: 3, byMonth: 2 }, stances: {}, reason: '' };
       return (draftPlanningPart({ state, seat: ME, mind: seatOf().mind, seed: 11, phase: 'planning', strategy }).list ?? []).map((l) => l.plot);
     };
-    // Fed: the mine is no link, and it is listed as without a chain.
-    expect(listed(4, 'food'), 'without a chain the mine is listed').toContain(0);
-    expect(listed(4, 'alloy')).toEqual(listed(4, 'food'));
-    // Unfed: the mine is the chain's standing link, kept.
-    expect(listed(1, 'food')).toContain(0);
-    expect(listed(1, 'alloy')).not.toContain(0);
+    // A Smithore mine, the only source of Smithore, and Alloy the money-maker.
+    for (const smithore of [4, 1]) {
+      const state = broke([{ x: 0, ground: { smithore }, outfit: 'smithore' }]);
+      expect(canFeed(state, ME, 'alloy'), `Alloy fed on Smithore ground ${smithore}`).toBe(smithore >= 4);
+      expect(listed(state, 'food'), `Smithore ${smithore}: without a chain the mine is listed`).toContain(0);
+      // Fed, it is no standing link, but without it Alloy can't be fed: kept. Unfed, it is the standing link: kept.
+      expect(listed(state, 'alloy'), `Smithore ${smithore}: the chain keeps its mine`).not.toContain(0);
+    }
+    // The whole chain to Electronics but its works: Rare earth, Smithore and an Alloy works, fed, so no standing links.
+    const chain = broke([{ x: 0, ground: { rareEarth: 4 }, outfit: 'rareEarth' }, { x: 2, ground: { smithore: 4 }, outfit: 'smithore' }, { x: 4, outfit: 'alloy' }, { x: 6, ground: { crystite: 1 }, outfit: 'crystite' }]);
+    expect(standingLinks(observe(chain, ME), ME, 'electronics')).toEqual([]);
+    expect(listed(chain, 'food'), 'without a chain the Alloy works is listed').toContain(4);
+    const kept = listed(chain, 'electronics');
+    expect(kept.filter((x) => [0, 2, 4].includes(x)), 'the chain keeps its mines and its own Alloy works').toEqual([]);
+    expect(kept, 'and still lists a MULE it doesn\'t need').toContain(6);
   }));
 
   it("B-AC-11: with an Alloy works standing, the strategist values a Smithore link by the draft's chain: its share of Alloy's 2 a run", () => withChains(() => {
