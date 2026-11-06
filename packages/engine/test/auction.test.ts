@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  needsOf,
+  monthNeeds,
+  GOODS,
+  GOOD_CONFIG,
+  auctionNeed,
   advancePhase,
   auctionDone,
   createGame,
@@ -331,6 +336,48 @@ describe('the live auction: goods one at a time', () => {
     stepAuction(state, TICK);
     throughClose(state);
     expect(a(state).stage).toBe('over');
+  });
+});
+
+describe('the need to hold at the auction: what upkeep eats now, plus what must survive spoilage until it is used (PM ruling B, 6 Nov)', () => {
+  /** Each player works `farms` Food farms (1 Energy each at production) and holds `energy` Energy; the store's Energy shelf is full, so it buys none. */
+  function energyTable(farms: number, energy: number): GameState {
+    const state = newGame();
+    const free = state.tiles.filter((t) => t.terrain !== 'store' && !t.owner);
+    state.players.forEach((p, i) => {
+      for (const t of free.slice(i * farms, (i + 1) * farms)) Object.assign(t, { owner: p.id, outfit: 'food' });
+      p.stock.energy = energy;
+      p.stock.food = 3;
+    });
+    state.store.stock.energy = 999;
+    return state;
+  }
+
+  it("WS9's finding: every seat holds the 2 Energy its farms burn, which spoils to 1 by production, so Energy comes up and the status row asks for 3", () => {
+    const state = energyTable(2, 2);
+    expect(monthNeeds(state, 'p0').energy, 'production burns 2').toBe(2);
+    startAuction(state, ['energy', 'food']);
+    expect(a(state).skipped, 'not skipped as nobody buys').toEqual([]);
+    expect(a(state).good).toBe('energy');
+    // 3 x 0.75 = 2.25: 2 survive the month end's spoilage; 2 x 0.75 = 1.5 would leave 1.
+    expect(a(state).status.map((r) => r.need)).toEqual([3, 3, 3, 3]);
+    expect(a(state).status[0]!.spoils, 'what would spoil of what is held: 2 leaves 1').toBe(1);
+  });
+
+  it('every seat holding what survives spoilage, and the store wanting none: Energy is skipped as nobody buys, as before', () => {
+    const state = energyTable(2, 3);
+    startAuction(state, ['energy', 'food']);
+    expect(a(state).skipped).toEqual([{ good: 'energy', reason: 'nobody buys' }]);
+  });
+
+  it("Food: what upkeep eats now plus what must be left after spoilage for next month's development; never below the old need", () => {
+    const state = energyTable(0, 0);
+    const eat = needsOf(state, 'p0').food;
+    const held = auctionNeed(state, 'p0');
+    // Upkeep eats first, then the rest spoils: the carry is the least n with floor(n x (1 - spoilage)) >= eat.
+    const carry = Array.from({ length: 100 }, (_, n) => n).find((n) => Math.floor(n * (1 - GOOD_CONFIG.food.spoilage)) >= eat)!;
+    expect(held.food).toBe(eat + carry);
+    for (const g of GOODS) expect(held[g], g).toBeGreaterThanOrEqual(monthNeeds(state, 'p0')[g]);
   });
 });
 
