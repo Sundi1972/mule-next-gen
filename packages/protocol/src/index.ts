@@ -1,4 +1,4 @@
-import type { AuctionSide, CanRun, CeremonyBeat, DevPlace, Election, EventEffect, EventKey, EventKind, EventWeight, FundLine, FundSource, Good, LawId, LawImpact, LawProposal, GoodReceipt, Ground, MonthEvent, Office, OfficeResult, Outfit, Phase, PrestigeId, ScoreParts, SkipReason, SpecialField, Species, StatusRow, Stock, TaxPromise, Terrain, TileTrait, VoteWeight } from '@mule/engine';
+import type { AuctionSide, BoardZones, CanRun, CeremonyBeat, DevPlace, Election, EventEffect, EventKey, EventKind, EventWeight, FundLine, FundSource, Good, LawId, LawImpact, LawProposal, GoodReceipt, Ground, MonthEvent, Office, OfficeResult, Outfit, Phase, PrestigeId, ScoreParts, SkipReason, SpecialField, Species, StatusRow, Stock, TaxPromise, Terrain, TileTrait, VoteWeight } from '@mule/engine';
 export type { ChatMessage, ClientEnvelope, ServerEnvelope, TableView } from '@tabletop/core/protocol';
 
 /**
@@ -435,9 +435,18 @@ export interface AuctionView {
   slowed: boolean;
   /** Goods still to come after this one. */
   next: Good[];
-  /** What the store pays and charges, or null while it doesn't trade at that line. */
+  /** What the store pays, or null while it doesn't buy. */
   storeBuys: number | null;
+  /**
+   * The store's selling line: what it charges while it has units to sell. Once it is sold out (`storeForSale` 0), the
+   * highest bid a buyer can pay, flagged by `storeSellsBid`, or its old price while no bid is above it; the store sells
+   * nothing there. Null when it is sold out and the line is off.
+   */
   storeSells: number | null;
+  /** Present, as true, while `storeSells` is the highest bid on a sold-out store's line, not a price it sells at. */
+  storeSellsBid?: true;
+  /** The board's rest zones and hard edges, fixed as the good comes up: buyers rest below `buyersTop`, sellers above `sellersBottom`. */
+  zones?: BoardZones;
   /** Units the store will sell of this good: its stock less the colonists' Food and Water reserve. */
   storeForSale: number;
   /** What the export ship pays for the next unit, while it is in port and wants this good. */

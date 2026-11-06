@@ -658,6 +658,18 @@ export interface WalkBoard {
   between: { units: number; value: number };
 }
 
+/** The goods board's rest zones and hard edges, fixed as the good comes up: a house that stops buying moves none of them. */
+export interface BoardZones {
+  /** The store's buying line at the good's start: sellers never walk below it, so a buyer resting under it never trades. */
+  buyersTop: number;
+  /** The store's selling line at the good's start: buyers walk no higher while the store sells. */
+  sellersBottom: number;
+  /** The buyers' hard edge: no buyer walks or taps below it. */
+  lo: number;
+  /** The sellers' hard edge: no seller walks or taps above it. */
+  hi: number;
+}
+
 /** One player's line on the status screen before a good comes up. */
 export interface StatusRow {
   id: string;
@@ -718,6 +730,7 @@ export interface LiveAuction extends WalkBoard {
   storeSell: number;
   /** Units the store will still buy of this good, from its demand and its budget. */
   storeBudget: number;
+  zones: BoardZones;
   /** Players who pressed Done in this stage. */
   done: string[];
   status: StatusRow[];

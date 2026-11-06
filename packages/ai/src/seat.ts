@@ -66,7 +66,7 @@ import {
 } from './playbook/index.js';
 import { GOOD_NAME, landDecision, outfitName, plotName, plotsAhead, rankedBy, wantsAnyAhead, wantsPlot, type LandPlan } from './strategist.js';
 import { situation } from './summary.js';
-import type { Mind } from './value.js';
+import { chainLinks, type AdoptedFields, type Mind } from './value.js';
 
 /** One act of the seat's planning part, and whether the rules took it. */
 export interface PlanningStep {
@@ -299,12 +299,28 @@ export class AiSeat {
     const land = this.landMonth === month ? this.land : null;
     // A trigger due now drafts the plan again, as the draft point will (RULE-8).
     const trigger = this.replanDue(state);
-    return { state, seat: this.id, mind: this.mind, seed: this.options.seed, phase, land, month, kept: trigger ? null : this.kept, replanned: trigger ?? this.kept?.trigger ?? null };
+    return { state, seat: this.id, mind: this.mindFor(month), seed: this.options.seed, phase, land, month, kept: trigger ? null : this.kept, replanned: trigger ?? this.kept?.trigger ?? null };
+  }
+
+  /**
+   * The mind a draft or brief for `month` reads: the adopted fields only while they are that month's, so what the
+   * upkeep drafts or briefs for the next month reads none of them.
+   */
+  mindFor(month: number): Mind {
+    if (this.mind.adopted === undefined || this.mind.adopted.month === month) return this.mind;
+    const { adopted: _, ...mind } = this.mind;
+    return mind;
   }
 
   /** Whether the seat plays playbooks at all (RULE-6 row 1 does not match): only then does it keep a plan. */
   private playsPlaybooks(): boolean {
     return AI_PLANS.on && this.options.playbook !== false;
+  }
+
+  /** The kept money-maker while it is a factory good with an input the seat can't feed yet, else null. See AM-33. */
+  private chainFocus(state: GameState): Good | null {
+    const good = this.kept?.moneyMaker ?? null;
+    return good && chainLinks(observe(state, this.id), this.id, good).length > 0 ? good : null;
   }
 
   /** RULE-8's re-plan trigger the kept plan meets on `state`, or null: also null with no plan kept, or none anchored yet. */
@@ -371,11 +387,29 @@ export class AiSeat {
     const newest = this.adopted.at(-1);
     this.adopted = adoptInto(this.adopted, playbook);
     if (this.adopted.at(-1) !== newest) this.kept = { ...planFields(playbook.strategy), anchor: null, trigger: null };
+    this.mind.adopted = this.adoptedFields();
     const p = this.planning;
     // Listings are made in planning only: once it has ended, the ones made stand.
     if (!p || p.state.phase !== 'planning' || p.state.month !== p.month || playbook.month !== p.month) return;
     const played = this.part(p.state, 'planning');
     if (played) this.playListings(p.state, played.part);
+  }
+
+  /**
+   * The fields the playbooks adopted for the newest month set by an edit, each from the newest that edited it: Claude's
+   * edits play, a value the engine drafted does not. None while the seat plays no playbooks, or nothing was edited.
+   */
+  private adoptedFields(): AdoptedFields | undefined {
+    const month = this.adopted.at(-1)?.month;
+    if (month === undefined || !this.playsPlaybooks()) return undefined;
+    const edited = (path: string) => this.adopted.filter((pb) => pb.month === month && pb.edits?.some((e) => e.path === path || e.path.startsWith(`${path}/`))).at(-1);
+    const fields: AdoptedFields = {
+      month,
+      cashFloor: edited('/strategy/cashFloor')?.strategy.cashFloor ?? null,
+      pressShare: edited('/landGrant/pressShare')?.landGrant?.pressShare ?? null,
+      monopolyTarget: edited('/strategy/monopolyTarget')?.strategy.monopolyTarget ?? null,
+    };
+    return fields.cashFloor === null && fields.pressShare === null && fields.monopolyTarget === null ? undefined : fields;
   }
 
   /**
@@ -392,7 +426,7 @@ export class AiSeat {
   }
 
   private profileFor(month: number): ValidatorProfile {
-    return { mind: this.mind, seed: this.options.seed, land: this.landMonth === month ? this.land : null };
+    return { mind: this.mindFor(month), seed: this.options.seed, land: this.landMonth === month ? this.land : null };
   }
 
   /**
@@ -485,6 +519,7 @@ export class AiSeat {
     this.devMonth = state.month;
     this.devPlayed = null;
     this.planPoint(state, 'development');
+    this.develop.leanOn(state.month, this.chainFocus(state));
     const path = this.playPath(state.month, 'development');
     if (path.by === 'today') return;
     const playbook = path.by === 'adopted' ? path.playbook : this.ownDraft(state, 'development', () => this.draft(state, 'development'));

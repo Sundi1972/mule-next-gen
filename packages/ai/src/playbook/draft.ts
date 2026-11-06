@@ -29,13 +29,14 @@ import {
   type Playbook,
   type PlayerId,
   type Strategy,
+  type Tile,
 } from '@mule/engine';
 import { OPTION_IDS, TopPickDecider, toOptions, type Choice, type DecisionContext, type ShortOption } from '../decider.js';
-import { outlook, productionsLeft } from '../outlook.js';
+import { outlook, productionsLeft, type Outlook } from '../outlook.js';
 import { PERSONAS, type DecisionKind } from '../personas.js';
 import { analysesWanted, developDecision, filtersWanted, goodPlan, landDecision, leaderOf, sellWanted, shortfallHold, tradeDecision, walkVeto, type DevAction, type DevWalk, type LandPlan } from '../strategist.js';
 import { candidate, shortlist, type Shortlist } from '../utility.js';
-import { beforeTax, canFeed, cashReserve, installGain, type Mind } from '../value.js';
+import { beforeTax, canFeed, cashReserve, chainInputs, chainLinks, chainOutlook, installGain, linkShare, standingLinks, type Mind } from '../value.js';
 import { landTargetWithin, planMind, type PlanFields } from './plan.js';
 import type { ReplanTrigger } from './replan.js';
 
@@ -136,19 +137,67 @@ function topPick<A>(input: DraftInput, obs: GameState, kind: DecisionKind, place
   return list.options[Math.max(0, options.findIndex((o) => o.id === id))]!.action;
 }
 
-/** RULE-4's goods: each good's money-maker score, its rival plots, and how many candidate plots it is the best use of. */
+/**
+ * RULE-4's goods: each good's money-maker score, its rival plots, and how many candidate plots it is the best use of. A
+ * factory good the seat can't feed is scored as a chain (chainScore), and left out when it can't be one.
+ */
 function goodScores(obs: GameState, mind: Mind) {
   const o = outlook(obs, mind.me, { lookAhead: mind.level.lookAhead });
   const plots = obs.tiles.filter((t) => t.terrain !== 'store' && (t.owner === null || (t.owner === mind.me && !t.outfit)));
-  const goods = GOODS.filter((g) => canFeed(obs, mind.me, g));
-  const gains = plots.map((t) => new Map(goods.map((g) => [g, installGain(obs, o, t, g, mind).gain])));
-  const bestUse = gains.map((byGood) => goods.reduce((b, g) => (byGood.get(g)! > byGood.get(b)! ? g : b), goods[0]!));
-  return goods.map((good) => {
-    const top = gains.map((byGood) => byGood.get(good)!).sort((a, b) => b - a).slice(0, AI_PLANS.moneyMaker.plots);
+  const fed = GOODS.filter((g) => canFeed(obs, mind.me, g));
+  const gains = plots.map((t) => new Map(fed.map((g) => [g, installGain(obs, o, t, g, mind).gain])));
+  const bestUse = gains.map((byGood) => fed.reduce((b, g) => (byGood.get(g)! > byGood.get(b)! ? g : b), fed[0]!));
+  return GOODS.flatMap((good) => {
+    const own = fed.includes(good) ? topGains(gains.map((byGood) => byGood.get(good)!)) : chainScore(obs, o, plots, good, mind);
+    if (own === null) return [];
     const rivalPlots = obs.tiles.filter((t) => t.owner !== null && t.owner !== mind.me && t.outfit === good).length;
-    const score = top.reduce((n, g) => n + g, 0) * (1 - AI_PLANS.moneyMaker.rivalDiscount * rivalPlots);
-    return { good, score, rivalPlots, bestOn: bestUse.filter((g) => g === good).length };
+    const score = own * (1 - AI_PLANS.moneyMaker.rivalDiscount * rivalPlots);
+    return [{ good, score, rivalPlots, bestOn: bestUse.filter((g) => g === good).length }];
   });
+}
+
+/** A good's own score: its install gain summed over its best AI_PLANS.moneyMaker.plots plots. */
+const topGains = (gains: number[]) => [...gains].sort((a, b) => b - a).slice(0, AI_PLANS.moneyMaker.plots).reduce((n, g) => n + g, 0);
+
+/**
+ * RULE-4's chain row, on what is still to build: the works' own score, its input charge refunded (chainOutlook) and
+ * scaled by the least share of its run a link supplies (linkShare), plus each link at its running cost. A missing link
+ * takes the plot of its own where it adds most to the chain; a link that stands counts its running cost with no
+ * install price. Null when `good` is no chain (chainLinks), the plots run short, or the MULEs for the works and the
+ * missing links don't fit in AI_PLANS.chain.months at the level's MULEs a month, or cost more than the cash on hand.
+ */
+function chainScore(obs: GameState, o: Outlook, plots: Tile[], good: Good, mind: Mind): number | null {
+  const links = chainLinks(obs, mind.me, good);
+  const mules = 1 + links.length;
+  if (links.length === 0 || plots.length < mules || Math.ceil(mules / mind.level.mulesPerMonth) > AI_PLANS.chain.months) return null;
+  const standing = standingLinks(obs, mind.me, good);
+  const standingGoods = [...new Set(standing.map((t) => t.outfit as Good))];
+  const members = [good, ...links, ...standingGoods];
+  const valued = chainOutlook(o, [...links, ...standingGoods]);
+  const works = plots.map((t) => ({ t, ...installGain(obs, valued, t, good, mind) })).sort((a, b) => b.gain - a.gain);
+  const taken = new Set([works[0]!.t]);
+  let running = 0;
+  let share = 1;
+  let cost = works[0]!.cost;
+  for (const link of links) {
+    const at = plots
+      .filter((t) => !taken.has(t))
+      .map((t) => ({ t, share: linkShare(obs, t, link, members, mind.me), ...installGain(obs, valued, t, link, mind) }))
+      .reduce((b, w) => (w.gain + w.share * works[0]!.gain > b.gain + b.share * works[0]!.gain ? w : b));
+    taken.add(at.t);
+    running += at.gain;
+    share = Math.min(share, at.share);
+    cost += at.cost;
+  }
+  for (const g of standingGoods) {
+    const plotsOf = standing.filter((t) => t.outfit === g);
+    for (const t of plotsOf) {
+      const { gain, cost: outfit } = installGain(obs, valued, t, g, mind);
+      running += gain + outfit;
+    }
+    share = Math.min(share, plotsOf.reduce((n, t) => n + linkShare(obs, t, g, members, mind.me), 0));
+  }
+  return cost <= obs.players.find((p) => p.id === mind.me)!.money ? topGains(works.map((w) => w.gain)) * share + running : null;
 }
 
 function best<T extends { score: number }>(rows: T[]): T | null {
@@ -222,9 +271,10 @@ function pickKind(input: DraftInput, obs: GameState, eligible: Record<Kind, bool
 }
 
 /** What the seat lists in planning when short of cash; nothing outside this month's planning, as lots.ts lists only there (RULE-5). */
-function planningPart(input: DraftInput, obs: GameState): PlanningPlay {
+function planningPart(input: DraftInput, obs: GameState, moneyMaker: Good | null): PlanningPlay {
   if (obs.phase !== 'planning' || monthOf(input, obs) !== obs.month) return {};
-  const list = sellWanted(obs, input.mind);
+  // The money-maker's chain links stay off the list: selling one breaks the plan (AM-33).
+  const list = sellWanted(obs, input.mind, moneyMaker ? chainInputs(obs, input.mind.me, moneyMaker) : []);
   return list.length > 0 ? { list } : {};
 }
 
@@ -417,7 +467,8 @@ function goodPart(input: DraftInput, obs: GameState, good: Good): GoodPlay {
 /** The planning part a planning draft from `input` carries, alone: the same decision, without the strategy or the land grant. */
 export function draftPlanningPart(input: DraftInput): PlanningPlay {
   const obs = observe(input.state, input.seat);
-  return planningPart(planned(input, headOf(input, obs).strategy), obs);
+  const { strategy } = headOf(input, obs);
+  return planningPart(planned(input, strategy), obs, strategy.moneyMaker);
 }
 
 /** The draft's strategy alone, as the seat's playbook for the phase would carry it. */
@@ -442,7 +493,7 @@ export function draftPlaybook(input: DraftInput, leftOut: LeftOutPick[] = []): P
   const obs = observe(input.state, input.seat);
   const head = headOf(input, obs);
   const plan = planned(input, head.strategy);
-  if (input.phase === 'planning') return { ...head, planning: planningPart(plan, obs), landGrant: landGrantPart(input, obs) };
+  if (input.phase === 'planning') return { ...head, planning: planningPart(plan, obs, head.strategy.moneyMaker), landGrant: landGrantPart(input, obs) };
   if (input.phase === 'development') return { ...head, development: developmentPart(plan, obs, head.strategy.moneyMaker, leftOut) };
   return { ...head, auction: auctionPart(plan, obs) };
 }

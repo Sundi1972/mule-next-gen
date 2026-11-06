@@ -226,12 +226,12 @@ price ▲
   S ──────────── the store's selling line (storeSell at the good's start); when the store is sold out it shows the
                  highest bid instead (E)
       the trading floor
-  B ──────────── the best house's buying line (the store's storeBuy, or the ship's price, if higher)
+  B ──────────── the store's buying line (storeBuy at the good's start; AM-3: the ship's price is not part of B)
       buyers' rest zone    (nobody trades here unless a buyer walks up)
   lo ─────────── the board's bottom edge: buyers' hard edge (D)
 ```
 
-`S` and `B` are fixed for the good when its walk starts (`storeSell`, the higher of `storeBuy` and the ship's price);
+`S` and `B` are fixed for the good when its walk starts (`storeSell`, and `storeBuy`, per AM-3);
 the zones keep their bounds even after the store's budget is spent, the ship leaves, or the store sells out (E moves
 only the line `S` shows).
 
@@ -427,3 +427,22 @@ item corrects a claim in §10 that the code no longer bears out; none changes a 
 8. **Owners, per SEAMS:** the board drawing is `packages/ui` `WalkBoard` (WS4; the zones and the line label are a
    named edit there). `phone/Auction.tsx`, `AuctionParts.tsx`, protocol, `mule-game.ts`, `walk.ts`, `auction.ts`,
    `types.ts` and WALK are WS3's. `hands/auction.ts` is WS1's (named edit). `apps/web/e2e/auction-steps.ts` is WS3's.
+
+## §12 · Amendment AM-3: B is the store's buying line alone `[handoff]`
+
+Found while building PR-2 (RULE-6), 6 Nov. It corrects AM-2 item 3 and the diagram in §10 "The lines and zones";
+no ruling of Heiko's changes.
+
+1. **B = `storeBuy`, fixed at the good's walk start** (`nextGood`, `LiveAuction.zones.buyersTop`). The ship's price is
+   not part of B.
+   - **Why:** the ship pays a little less for every unit (`economy.ts::shipPrice`, `EXPORT_SHIP.stepDown`), so a B fixed
+     at its opening price let the ship buy one unit per good and then sit unreachable below B. Any B above `storeBuy`
+     also makes the store unreachable once the ship fills or leaves.
+   - **What holds instead:** the ship's live line sits on the trading floor. A seller sells to it as its price falls,
+     then walks on to the store, and stops at B.
+   - Heiko's own words are "below the store buying lane". The ship in B was WS3's elaboration, not his ruling.
+2. **Rejected:** B = the higher of `storeBuy` and the ship's price for the last unit in its hold. It keeps every ship
+   unit reachable, but still strands the store once the ship is gone.
+3. **Tests:** the B-AC-D2 table covers three rows: (a) no ship, (b) a ship above the store, which buys all it wants
+   before the seller goes on to the store, and (c) the ship sailing mid-walk without moving B. The existing ship
+   tests stay unchanged.

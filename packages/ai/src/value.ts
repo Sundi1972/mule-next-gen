@@ -1,4 +1,5 @@
 import {
+  AI_PLANS,
   AI_VALUE,
   airPoints,
   crewOf,
@@ -58,7 +59,20 @@ export interface Mind {
   level: AiLevelConfig;
   /** Seeded per seat: breaks ties between plots it values the same, so seats don't all follow the map's order. */
   salt?: number;
+  /** What a playbook adopted for a month sets by an edit, which the hands play (RULE-6); never set for a seat's own draft. */
+  adopted?: AdoptedFields;
 }
+
+/** The fields the seat's adopted playbooks set by an edit, for the one month they were adopted for; null where none did. */
+export interface AdoptedFields {
+  month: number;
+  cashFloor: number | null;
+  pressShare: { start: number; end: number } | null;
+  monopolyTarget: Good | null;
+}
+
+/** The fields adopted for the month `obs` is in, or null: an adoption plays only in its own month. */
+export const adoptedNow = (obs: GameState, mind: Mind): AdoptedFields | null => (mind.adopted?.month === obs.month ? mind.adopted : null);
 
 export interface Yield {
   made: number;
@@ -181,16 +195,16 @@ export function installGain(obs: GameState, o: Outlook, tile: Tile, outfit: Outf
  * factory's own Energy use turns off feeds it only that 20%.
  */
 export function canFeed(obs: GameState, me: string, outfit: Outfit): boolean {
-  if (!isFactory(outfit)) return true;
+  return unfedInputs(obs, me, outfit).length === 0;
+}
+
+/** The inputs other than Energy that canFeed finds the seat can't feed a new `outfit` factory with; none for a raw outfit. */
+export function unfedInputs(obs: GameState, me: string, outfit: Outfit): Good[] {
+  if (!isFactory(outfit)) return [];
   const p = obs.players.find((q) => q.id === me)!;
-  const crew = crewOf(obs, me) + UPKEEP.crew.factory;
-  const household: Partial<Stock> = {
-    food: UPKEEP.baseFood + Math.ceil(crew / UPKEEP.crewPerFood),
-    water: UPKEEP.baseWater + Math.ceil(crew / UPKEEP.crewPerWater),
-  };
+  const household = householdNeeds(obs, me);
   const factories = obs.tiles.filter((t) => t.owner === me && t.outfit && isFactory(t.outfit));
-  return (Object.entries(RECIPES[outfit].inputs) as [Good, number][]).every(([g, q]) => {
-    if (g === 'energy') return true;
+  const lasts = (g: Good, q: number) => {
     const own = obs.tiles.some((t) => t.owner === me && t.outfit === g) ? madeNext(obs, me, outfit)[g] : 0;
     // What the seat's factories already take of it each month, before the new one gets any.
     const taken = factories.reduce((n, t) => n + (RECIPES[t.outfit as ProcessedGood].inputs[g] ?? 0), 0);
@@ -201,7 +215,86 @@ export function canFeed(obs: GameState, me: string, outfit: Outfit): boolean {
       carry = Math.floor(carry * (1 - GOOD_CONFIG[g].spoilage));
     }
     return true;
-  });
+  };
+  return (Object.entries(RECIPES[outfit].inputs) as [Good, number][]).filter(([g, q]) => g !== 'energy' && !lasts(g, q)).map(([g]) => g);
+}
+
+/** What the household, a new factory's crew included, eats and drinks a month: canFeed's first call on Food and Water. */
+function householdNeeds(obs: GameState, me: string): Partial<Stock> {
+  const crew = crewOf(obs, me) + UPKEEP.crew.factory;
+  return {
+    food: UPKEEP.baseFood + Math.ceil(crew / UPKEEP.crewPerFood),
+    water: UPKEEP.baseWater + Math.ceil(crew / UPKEEP.crewPerWater),
+  };
+}
+
+/**
+ * The links a chain to factory good `good` still needs a plot for: each input the seat can't feed and has no plot
+ * making, and that input's own links when it is a factory good too. Empty when `good` is no chain: a raw good, a
+ * factory the seat can feed, one missing an input the household eats or drinks, which it takes first, so no farm or
+ * well is the works' alone, or with chains switched off. See AM-33.
+ */
+export function chainLinks(obs: GameState, me: string, good: Good): Good[] {
+  return chainParts(obs, me, good).links;
+}
+
+/** AI_PLANS.chain.months, the switch: at 0 there is no chain, and every chain helper answers none. */
+const chainsOn = () => AI_PLANS.chain.months > 0;
+
+/**
+ * Every good a chain to `good` is built from, Energy aside, all the way up its recipes: Rare earth, Alloy and Smithore
+ * for Electronics. None for a raw good, a factory with an input the household eats or drinks, or chains switched off.
+ * See AM-33.
+ */
+export function chainInputs(obs: GameState, me: string, good: Good): Good[] {
+  if (!chainsOn() || !isFactory(good)) return [];
+  const inputs = (Object.keys(RECIPES[good].inputs) as Good[]).filter((g) => g !== 'energy');
+  const household = householdNeeds(obs, me);
+  if (inputs.some((g) => g in household)) return [];
+  return [...new Set(inputs.flatMap((g) => [g, ...chainInputs(obs, me, g)]))];
+}
+
+/** The seat's plots already making an input of the chain to `good` that it still can't feed: links that stand. See AM-33. */
+export function standingLinks(obs: GameState, me: string, good: Good): Tile[] {
+  return chainParts(obs, me, good).standing;
+}
+
+function chainParts(obs: GameState, me: string, good: Good): { links: Good[]; standing: Tile[] } {
+  if (!chainsOn()) return { links: [], standing: [] };
+  const unfed = unfedInputs(obs, me, good);
+  const household = householdNeeds(obs, me);
+  if (unfed.some((g) => g in household)) return { links: [], standing: [] };
+  const links = new Set<Good>();
+  const standing = new Set<Tile>();
+  for (const g of unfed) {
+    const making = obs.tiles.filter((t) => t.owner === me && t.outfit === g);
+    if (making.length === 0) links.add(g);
+    for (const t of making) standing.add(t);
+    const up = chainParts(obs, me, g);
+    for (const l of up.links) links.add(l);
+    for (const t of up.standing) standing.add(t);
+  }
+  return { links: [...links], standing: [...standing] };
+}
+
+/**
+ * The share of its works' monthly run a link plot on `tile` supplies, at most 1: what it would make over what the chain
+ * member that uses it needs a run. A link counts for the chain only as far as it feeds it. See AM-33.
+ */
+export function linkShare(obs: GameState, tile: Tile, link: Good, members: readonly Good[], me: string): number {
+  const user = members.find((m) => isFactory(m) && (RECIPES[m].inputs[link] ?? 0) > 0);
+  const need = user ? RECIPES[user as ProcessedGood].inputs[link]! : 1;
+  return Math.min(1, yieldOf(obs, tile, link, me).made / need);
+}
+
+/**
+ * The outlook a chain is valued at: its links' goods cost and fetch nothing. A link's output and the works' charge for
+ * it cancel within the seat, so the works is valued with its input charge refunded and each link plot at its running
+ * cost alone (MULE, outfit, Energy, crew, air). See AM-33.
+ */
+export function chainOutlook(o: Outlook, links: readonly Good[]): Outlook {
+  const free = (price: (good: Good, extra?: number) => number) => (good: Good, extra?: number) => (links.includes(good) ? 0 : price(good, extra));
+  return { ...o, price: free(o.price.bind(o)), later: free(o.later.bind(o)) };
 }
 
 const madeCache = new WeakMap<GameState, Map<string, Stock>>();
@@ -288,12 +381,20 @@ export function wholeNextMonth(obs: GameState, me: string, good: Good): number {
 }
 
 /**
- * Cash the seat keeps back: a floor plus what next month's Food, Water and
- * Energy shortfall would cost, times its reserve weight. A short unit counts
- * at most a few times its reference price, so a price spike doesn't freeze
- * all its cash. `except` leaves out a good: the one a new farm would make.
+ * Cash the seat keeps back, the least it spends down to: neededReserve's, or, while an adopted playbook's edit sets the
+ * month's cash floor, that floor, within AI_PLANS.bounds.cashFloorMax.
  */
 export function cashReserve(obs: GameState, mind: Mind, o?: Outlook, except?: Good): number {
+  const floor = adoptedNow(obs, mind)?.cashFloor ?? null;
+  return floor !== null ? Math.min(AI_PLANS.bounds.cashFloorMax, floor) : neededReserve(obs, mind, o, except);
+}
+
+/**
+ * The cash the seat's needs call for: a floor plus what next month's Food, Water and Energy shortfall would cost,
+ * times its reserve weight. A short unit counts at most a few times its reference price, so a price spike doesn't
+ * freeze all its cash. `except` leaves out a good: the one a new farm would make.
+ */
+function neededReserve(obs: GameState, mind: Mind, o?: Outlook, except?: Good): number {
   if (AI_VALUE.unit) return monthReserve(obs, mind, o, except);
   const p = obs.players.find((q) => q.id === mind.me)!;
   const need = monthNeeds(obs, mind.me);
@@ -771,8 +872,9 @@ function monthReserve(obs: GameState, mind: Mind, o?: Outlook, except?: Good): n
 
 /**
  * The cash every needed unit of the month would take at the belief's prices, funded or not: with the model on, what a
- * seat's money must reach before it stops listing land to sell; today's cash reserve with it off.
+ * seat's money must reach before it stops listing land to sell; the reserve its needs call for with it off. An adopted
+ * cash floor never raises it: the floor is cash not spent, never cash to raise by selling.
  */
 export function monthNeedsCost(obs: GameState, mind: Mind): number {
-  return AI_VALUE.unit ? Math.round(monthPlan(obs, mind).wanted) : cashReserve(obs, mind);
+  return AI_VALUE.unit ? Math.round(monthPlan(obs, mind).wanted) : neededReserve(obs, mind);
 }
