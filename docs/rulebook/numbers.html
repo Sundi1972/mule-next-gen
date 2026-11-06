@@ -14,12 +14,12 @@
 <main class="rb-main">
 <article>
 <h1>Every number</h1>
-<p class="rb-lede">Every balancing value in the game, as the game's settings file holds it today: 1250 settings in 52 groups, each with what it does.</p>
+<p class="rb-lede">Every balancing value in the game, as the game's settings file holds it today: 1260 settings in 52 groups, each with what it does.</p>
 <p>This page is generated from the game's settings file, <code>packages/engine/src/config.ts</code>, on trunk. Each group below is one block of that file, named the way the code names it; the setting is its full path, and the note is the comment written beside it in the file. A setting without a note of its own points to the nearest note that explains it. The rules these numbers drive are explained in <a href="index.html">the other chapters</a>.</p>
 <p>Do not edit this page by hand. To regenerate it after <code>config.ts</code> changes, run from the repo root:</p>
 <p><code>pnpm --filter @mule/engine exec tsx ../../docs/rulebook/build-numbers.ts</code> then <code>node docs/rulebook/build-index.mjs</code></p>
 <div class="box next"><h4>Not on this page</h4><p><code>MAP_SIZE</code> is kept inside <code>config.ts</code> without being exported, so this page cannot read it.</p></div>
-<p class="code-ref">Built from <code>config.ts</code> with fingerprint <code>3b5a83036a7f</code> (the first 12 characters of its SHA-256).</p>
+<p class="code-ref">Built from <code>config.ts</code> with fingerprint <code>fd273297e432</code> (the first 12 characters of its SHA-256).</p>
 
 <h2 id="good-config"><code>GOOD_CONFIG</code> <span class="pill built">In the game</span></h2>
 <div class="table-wrap"><table>
@@ -1034,7 +1034,7 @@
 </table></div>
 
 <h2 id="prestige"><code>PRESTIGE</code> <span class="pill built">In the game</span></h2>
-<p>The colony as a shared project: its prestige objects, one table row each. Every number is a placeholder until the colony&#39;s sim tuning sets it and Heiko OKs it. An object&#39;s full cost is its credits plus its goods at their reference prices; upkeep and repair are in credits.</p>
+<p>The colony as a shared project: its prestige objects, one table row each. Every number is a placeholder until the colony&#39;s sim tuning sets it and Heiko OKs it. An object&#39;s full cost is its credits plus its goods at their reference prices; upkeep and repair are in credits. Its footprint is the block of cells it takes on the colony&#39;s grounds, w × h (G-5 AM-18, RULE-32b: Heiko, 6 Nov, &quot;a Stadium is much bigger than the Hospital&quot;).</p>
 
 <h3 id="prestige-park"><code>PRESTIGE.park</code></h3>
 <div class="table-wrap"><table>
@@ -1047,6 +1047,8 @@
 <tr><td><code>PRESTIGE.park.prestige</code></td><td class="n">2</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 <tr><td><code>PRESTIGE.park.upkeep</code></td><td class="n">30</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 <tr><td><code>PRESTIGE.park.repairCost</code></td><td class="n">150</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
+<tr><td><code>PRESTIGE.park.footprint.w</code></td><td class="n">1</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
+<tr><td><code>PRESTIGE.park.footprint.h</code></td><td class="n">1</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 </tbody>
 </table></div>
 
@@ -1061,6 +1063,8 @@
 <tr><td><code>PRESTIGE.hospital.prestige</code></td><td class="n">3</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 <tr><td><code>PRESTIGE.hospital.upkeep</code></td><td class="n">45</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 <tr><td><code>PRESTIGE.hospital.repairCost</code></td><td class="n">225</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
+<tr><td><code>PRESTIGE.hospital.footprint.w</code></td><td class="n">1</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
+<tr><td><code>PRESTIGE.hospital.footprint.h</code></td><td class="n">1</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 </tbody>
 </table></div>
 
@@ -1075,6 +1079,8 @@
 <tr><td><code>PRESTIGE.observatory.prestige</code></td><td class="n">3</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 <tr><td><code>PRESTIGE.observatory.upkeep</code></td><td class="n">50</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 <tr><td><code>PRESTIGE.observatory.repairCost</code></td><td class="n">250</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
+<tr><td><code>PRESTIGE.observatory.footprint.w</code></td><td class="n">1</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
+<tr><td><code>PRESTIGE.observatory.footprint.h</code></td><td class="n">1</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 </tbody>
 </table></div>
 
@@ -1090,6 +1096,8 @@
 <tr><td><code>PRESTIGE.stadium.prestige</code></td><td class="n">4</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 <tr><td><code>PRESTIGE.stadium.upkeep</code></td><td class="n">70</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 <tr><td><code>PRESTIGE.stadium.repairCost</code></td><td class="n">350</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
+<tr><td><code>PRESTIGE.stadium.footprint.w</code></td><td class="n">2</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
+<tr><td><code>PRESTIGE.stadium.footprint.h</code></td><td class="n">2</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 </tbody>
 </table></div>
 
@@ -1105,6 +1113,8 @@
 <tr><td><code>PRESTIGE.spaceport.prestige</code></td><td class="n">5</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 <tr><td><code>PRESTIGE.spaceport.upkeep</code></td><td class="n">100</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 <tr><td><code>PRESTIGE.spaceport.repairCost</code></td><td class="n">500</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
+<tr><td><code>PRESTIGE.spaceport.footprint.w</code></td><td class="n">2</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
+<tr><td><code>PRESTIGE.spaceport.footprint.h</code></td><td class="n">2</td><td>See the note on <code>PRESTIGE</code>.</td></tr>
 </tbody>
 </table></div>
 
@@ -1155,7 +1165,8 @@
 <tr><td><code>COLONY.strike</code></td><td class="n"></td><td>A general strike (G-5 RULE-26): what the strikers want from the fund to go back to work, in credits, and the share of its output each plot of the struck good makes while they are unpaid (UBER-AC-6).</td></tr>
 <tr><td><code>COLONY.strike.cost</code></td><td class="n">250</td><td>See the note on <code>COLONY.strike</code>.</td></tr>
 <tr><td><code>COLONY.strike.output</code></td><td class="n">0.2</td><td>See the note on <code>COLONY.strike</code>.</td></tr>
-<tr><td><code>COLONY.groundsSlots</code></td><td class="n">24</td><td>Places on the colony&#39;s own grounds, filled in growth order (index 0 next to the town hall, then outward ring by ring); an upper bound, the view draws only what is used. A 5×5 square less the town hall (G-5 AM-16 A, RULE-32).</td></tr>
+<tr><td><code>COLONY.grounds</code></td><td class="n"></td><td>The colony&#39;s own grounds (G-5 AM-16 A, RULE-32b): a size × size square of cells with the town hall on the centre cell. Each building takes a block of its PRESTIGE footprint, the first free block nearest the hall.</td></tr>
+<tr><td><code>COLONY.grounds.size</code></td><td class="n">5</td><td>See the note on <code>COLONY.grounds</code>.</td></tr>
 </tbody>
 </table></div>
 
