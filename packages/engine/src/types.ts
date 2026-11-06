@@ -177,7 +177,12 @@ export interface Store {
    * before it existed still load.
    */
   lastWalk?: Partial<Record<Good, WalkLesson>>;
+  /** The band each good was posted in this month, which sets its spread; a good without one is normal, so older records load. */
+  band?: Partial<Record<Good, PriceBand>>;
 }
+
+/** How short the colony is of a good when its price is posted (pricing RULE-6); off-world is a good only export buyers want. */
+export type PriceBand = 'offWorld' | 'normal' | 'tight' | 'short' | 'severe';
 
 /** One good's walk, as the store's next prices read it (pricing spec §3). */
 export interface WalkLesson {

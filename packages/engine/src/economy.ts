@@ -4,7 +4,7 @@ import { airBand } from './pollution.js';
 import { energyUseOf, needsOf } from './production.js';
 import { createRng } from './rng.js';
 import { emptyStock } from './stock.js';
-import { GOODS, type ExportShip, type GameState, type Good, type Stock } from './types.js';
+import { GOODS, type ExportShip, type GameState, type Good, type PriceBand, type Stock } from './types.js';
 
 /** True from the month before the export ship calls: its wishlist is public and counts as demand. */
 export function shipAnnounced(state: GameState): boolean {
@@ -159,6 +159,16 @@ export function scarcity(state: GameState, good: Good, demand = monthlyDemand(st
  */
 export function targetPrice(state: GameState, good: Good, demand = monthlyDemand(state)): number {
   return Math.max(1, state.store.refPrice[good] * scarcity(state, good, demand));
+}
+
+export function priceBand(
+  state: GameState,
+  good: Good,
+  demand = monthlyDemand(state),
+  lastShortages: readonly Good[] = state.history.at(-2)?.shortages ?? [], // literal-ok: last month's report, a position in the history
+  off = exportDemand(state),
+): PriceBand {
+  throw new Error('NotImplemented: price-band');
 }
 
 /**
