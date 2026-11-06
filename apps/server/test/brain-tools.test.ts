@@ -163,7 +163,7 @@ describe('the tool loop (C9, RULE-A4)', () => {
     vi.useFakeTimers();
     try {
       const isWrite = (params: SdkParams) => promptOf(params).user.includes('What you may change:');
-      const quick = { path: '/development/timeBudgetMs', to: 0, reason: 'No time.' };
+      const quick = { path: '/development/route', to: [{ act: 'pub' }], reason: 'Cash now.' };
       const sdk = fakeSdk((_n, params) => {
         if (!isWrite(params)) return sdkMessage(JSON.stringify({ option: 'A', line: '' }));
         if (params.messages.length === 1)
@@ -187,7 +187,7 @@ describe('the tool loop (C9, RULE-A4)', () => {
         return JSON.parse(r.content) as { worth: { total: number }; rejected: { path: string; why: string }[] };
       });
       expect(noTime!.rejected).toEqual([]);
-      // No development time buys no MULE: the month played differs from the draft's.
+      // Straight to the pub buys no MULE and takes the pub's cash: the month played differs from the draft's.
       expect(noTime!.worth.total).not.toBe(asDrafted!.worth.total);
     } finally {
       vi.useRealTimers();
