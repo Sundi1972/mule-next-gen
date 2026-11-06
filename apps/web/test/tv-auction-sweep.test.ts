@@ -112,7 +112,7 @@ describe('SWEEP-C1: one gap number on the TV screen', () => {
     const html = tvScreen(tvView(alloyWalk));
     const panel = textOf(inside(html, 'tv-readout'));
     const chip = textOf(inside(html, 'gap-label'));
-    expect(panel).toContain('GAP 16 apart');
+    expect(panel).toContain('NEAREST TRADE 16 apart');
     expect(chip).toBe('16 APART');
   });
 });

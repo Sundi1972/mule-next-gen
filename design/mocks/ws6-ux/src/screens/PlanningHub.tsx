@@ -757,7 +757,7 @@ export function PlanningHub({
         ? { step: 2, of: 3, title: 'Cast your secret vote', detail: 'One vote per office, or abstain; your vote weighs 2. Then everything below is yours until you press Ready.' }
         : office === 'governor'
           ? { title: 'Set the sales tax, then plan your month', detail: 'You are the new Governor (months 4–6). The tax is yours to set until planning ends.' }
-          : { title: 'Plan your month, then press Ready', detail: 'Next is the land grant. Kai, the new Governor, is setting the tax.' };
+          : { title: 'Plan your month', detail: 'Then press Ready. Next is the land grant. Kai, the new Governor, is setting the tax.' };
   const tools: { id: Tool; label: string; status: Status; locked?: boolean; show: boolean }[] = [
     { id: 'look', label: 'Look', status: 'today', show: true },
     { id: 'drone', label: 'Geo drone', status: 'today', locked: true, show: true },

@@ -8,6 +8,7 @@ import {
   GAME,
   grantDone,
   litPlot,
+  observe,
   stableJson,
   stepElection,
   WALK,
@@ -24,9 +25,9 @@ import type { DecisionRecord } from '../src/brain.js';
 import type { Decider } from '../src/decider.js';
 import { VoteHand } from '../src/hands/vote.js';
 import { applyAction } from '../src/play.js';
-import { draftPlaybook, playbookSource } from '../src/playbook/index.js';
+import { draftPlaybook, planFields, playbookSource, type ReplanTrigger } from '../src/playbook/index.js';
 import { AiSeat, type AiSeatOptions } from '../src/seat.js';
-import { plotName } from '../src/strategist.js';
+import { landDecision, plotName } from '../src/strategist.js';
 import { FOOD_TO_SPARE } from './store-food.js';
 
 // The HC-9 seams: a draft or a validator that throws, switched on per test; otherwise the real ones.
@@ -218,8 +219,12 @@ describe('the seat drafts, validates and writes its planning playbook (C4, RULE-
       opening: (state, seats) => {
         if (state.phase !== 'planning' || state.month !== 1) return;
         const pb = draftPlaybook({ state, seat: 'ai1', mind: seats[1]!.mind, seed: 1, phase: 'planning' });
-        seats[1]!.adopt({ ...pb, month: 2, by: 'llm' });
+        // C12: the adopted strategy becomes the plan the seat keeps; the ignored older one does not.
+        const kind = pb.strategy.kind === 'landBaron' ? 'specialist' : 'landBaron';
+        const moneyMaker = pb.strategy.moneyMaker === 'smithore' ? 'food' : 'smithore';
+        seats[1]!.adopt({ ...pb, month: 2, by: 'llm', strategy: { ...pb.strategy, kind, moneyMaker } });
         seats[1]!.adopt({ ...pb, by: 'llm' });
+        expect(seats[1]!.draft(state, 'development').strategy).toMatchObject({ kind, moneyMaker });
       },
     });
     expect(adopted.written.map((pb) => `${pb.seat}/${pb.month}`)).toEqual(['ai0/1', 'ai1/1', 'ai2/1', 'ai3/1', 'ai0/2', 'ai2/2', 'ai3/2', 'ai0/3', 'ai1/3', 'ai2/3', 'ai3/3']);
@@ -398,7 +403,7 @@ interface PlaybookSource {
 describe("playbookSource, WS2's PlaybookSource (AM-1)", () => {
   // trace-allow: AM-1, the plan's amendment agreed with WS2 on 4 Nov; the spec gives the contract no AC id yet
   it("AM-1: playbookSource returns WS2's PlaybookSource shape", () => {
-    type Seen = { phase: string; state: GameState; playbook: Playbook; land: LandDraft; free: Set<number> };
+    type Seen = { phase: string; state: GameState; playbook: Playbook; land: LandDraft; free: Set<number>; due: ReplanTrigger | null };
     const seen: Seen[] = [];
     let source: PlaybookSource | null = null;
     // A Smart seat whose decider takes the last land plan offered, where the draft's own pick would take the top one.
@@ -410,7 +415,8 @@ describe("playbookSource, WS2's PlaybookSource (AM-1)", () => {
         source ??= playbookSource(seats);
         const { playbook, land } = source.draft(state, 'ai2');
         const free = new Set(state.tiles.flatMap((tile, i) => (tile.owner === null && tile.terrain !== 'store' ? [i] : [])));
-        seen.push({ phase: state.phase, state: structuredClone(state), playbook, land, free });
+        const due = seats.find((x) => x.id === 'ai2')!.replanDue(state);
+        seen.push({ phase: state.phase, state: structuredClone(state), playbook, land, free, due });
       },
     });
     const at = (phase: string) => seen.find((s) => s.phase === phase)!;
@@ -431,11 +437,20 @@ describe("playbookSource, WS2's PlaybookSource (AM-1)", () => {
     // At the grant it plans the pending pick the land hand then plays, the decider's, not a pick of its own.
     expect(headOf(at('landGrant').playbook.landGrant!, t.state)).toEqual(playedHead(t, 'ai2', 1));
     expect(headOf(at('planning').playbook.landGrant!, t.state)).not.toEqual(playedHead(t, 'ai2', 1));
-    // After the grant it plans next month's, and the seat holds no pick for that month: a fresh month-2 draft with none.
+    // After the grant it plans next month's, and the seat holds no pick for that month: a month-2 draft with none, under
+    // the plan it keeps (C12), or drafted again when a re-plan is due (RULE-8).
     const next = at('development');
-    const fresh = draftPlaybook({ state: next.state, seat: 'ai2', mind: t.seats[2]!.mind, seed: t.seats[2]!.options.seed, phase: 'planning', land: null, month: 2 });
+    const kept = next.due ? null : planFields(at('landGrant').playbook.strategy);
+    const fresh = draftPlaybook({ state: next.state, seat: 'ai2', mind: t.seats[2]!.mind, seed: t.seats[2]!.options.seed, phase: 'planning', land: null, month: 2, kept, replanned: next.due });
     const { planning: _, ...freshGrant } = fresh;
     expect(next.playbook).toEqual({ ...freshGrant, phase: 'landGrant' });
+    // RULE-14: not the land hand. With no pick held, the draft ranks the grant as one of the persona's own land plans,
+    const persona = landDecision(observe(next.state, 'ai2'), t.seats[2]!.mind).options.map((o) => o.action.ranking.map((r) => ({ plot: r.index, value: Math.max(0, Math.round(r.value)) })));
+    expect(persona).toContainEqual(next.playbook.landGrant!.ranked);
+    // whatever the plan's kind: ai1 as a builder (whose plan mind ranks this table otherwise) ranks it as with none.
+    const grantAs = (kind: Strategy['kind']) =>
+      draftPlaybook({ state: next.state, seat: 'ai1', mind: t.seats[1]!.mind, seed: t.seats[1]!.options.seed, phase: 'planning', land: null, month: 2, kept: { ...planFields(next.playbook.strategy), kind } }).landGrant;
+    expect(grantAs('builder')).toEqual(grantAs('politician'));
     // Its gate re-drafts that land part for month 2 the same way, with no pick of this month's.
     const kind = next.playbook.strategy.kind === 'builder' ? 'landBaron' : 'builder';
     const replanned = source!.validate(next.state, 'ai2', next.playbook, [{ path: '/strategy/kind', to: kind, reason: 'Land, now.' }]);

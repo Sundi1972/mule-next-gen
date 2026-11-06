@@ -26,8 +26,8 @@ const DECISIONS: ReactNode[] = [
   <>
     <strong>Stop at the need (B).</strong> A seller’s sale stops by itself when she is down to next month’s need, whether
     she sells to the store or to another player (drawn here with the store). Buyers have no matching stop. Her
-    creature steps up off the line and gets a green <em>KEEPS 5</em> mark; the rail says “Stopped at 5 Food: what you need
-    next month”. The TV says “Lena keeps 5 Food”.
+    creature steps up off the line and gets a green <em>KEEPS 5</em> mark; the rail says “Stopped at 5 Food: what you must
+    hold” (WS6, 6 Nov: the auction says Hold, never need). The TV says “Lena keeps 5 Food”.
   </>,
   <>
     <strong>Selling into a shortage is an act (B).</strong> Two ways to show it, for Heiko to pick:{' '}
