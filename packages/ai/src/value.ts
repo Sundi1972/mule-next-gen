@@ -208,17 +208,35 @@ function householdNeeds(obs: GameState, me: string): Partial<Stock> {
 }
 
 /**
- * The links a chain to factory good `good` still needs a plot for: each input the seat can't feed, and that input's
- * own links when it is a factory good too. Empty when `good` is no chain: a raw good, a factory the seat can feed, or
- * one missing an input the household eats or drinks, which it takes first, so no farm or well is the works' alone.
- * See AM-32.
+ * The links a chain to factory good `good` still needs a plot for: each input the seat can't feed and has no plot
+ * making, and that input's own links when it is a factory good too. Empty when `good` is no chain: a raw good, a
+ * factory the seat can feed, or one missing an input the household eats or drinks, which it takes first, so no farm or
+ * well is the works' alone. See AM-32.
  */
 export function chainLinks(obs: GameState, me: string, good: Good): Good[] {
+  return chainParts(obs, me, good).links;
+}
+
+/** The seat's plots already making an input of the chain to `good` that it still can't feed: links that stand. See AM-32. */
+export function standingLinks(obs: GameState, me: string, good: Good): Tile[] {
+  return chainParts(obs, me, good).standing;
+}
+
+function chainParts(obs: GameState, me: string, good: Good): { links: Good[]; standing: Tile[] } {
   const unfed = unfedInputs(obs, me, good);
   const household = householdNeeds(obs, me);
-  if (unfed.some((g) => g in household)) return [];
-  const links = unfed.flatMap((g) => [g, ...chainLinks(obs, me, g)]);
-  return [...new Set(links)];
+  if (unfed.some((g) => g in household)) return { links: [], standing: [] };
+  const links = new Set<Good>();
+  const standing = new Set<Tile>();
+  for (const g of unfed) {
+    const making = obs.tiles.filter((t) => t.owner === me && t.outfit === g);
+    if (making.length === 0) links.add(g);
+    for (const t of making) standing.add(t);
+    const up = chainParts(obs, me, g);
+    for (const l of up.links) links.add(l);
+    for (const t of up.standing) standing.add(t);
+  }
+  return { links: [...links], standing: [...standing] };
 }
 
 /**
