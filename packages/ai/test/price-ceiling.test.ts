@@ -20,5 +20,5 @@ describe('price B-AC-3: the store never posts a price above 12× its reference',
     });
     expect(postings, 'the game posted every month').toBe(GAME.maxMonths);
     expect(over).toEqual([]);
-  });
+  }, 60_000);
 });

@@ -9,8 +9,9 @@ import {
   GOOD_CONFIG,
   GROWN_BASE,
   observe,
-  PRICE,
   startAuction,
+  storeBuyAt,
+  storeSellAt,
   stepAuction,
   STRATEGIST,
   WALK,
@@ -48,6 +49,8 @@ interface Seat {
   level?: AiLevelId;
   plots: Plot[];
   posted?: Partial<Record<Good, number>>;
+  /** The store's ask for a good, set through the mid its band's spread turns into that ask; instead of `posted`. */
+  asks?: Partial<Record<Good, number>>;
   stock?: Partial<Record<Good, number>>;
   money: number;
   /** What the store holds of each good; plenty of the household's goods unless the row says. */
@@ -72,6 +75,7 @@ function table(seat: Seat): GameState {
   }
   state.treasury.salesTax = 0;
   Object.assign(state.store.posted, seat.posted ?? {});
+  for (const [good, ask] of Object.entries(seat.asks ?? {}) as [Good, number][]) state.store.posted[good] = Math.round(ask / storeSellAt(state, good, 1, { exact: true }));
   for (const good of ['food', 'water', 'energy'] as const) state.store.stock[good] = 200;
   Object.assign(state.store.stock, seat.store ?? {});
   for (const p of state.players) {
@@ -163,7 +167,8 @@ describe('RULE-5: one cash shadow price across the month’s auctions', () => {
       persona: 'cautious',
       level: 'rookie',
       plots: [{ outfit: 'smithore', x: 0, ground: { smithore: 6 } }, ...[2, 4, 6, 8, 10].map((x): Plot => ({ outfit: 'food', x, ground: { food: 1 - GROWN_BASE } }))],
-      posted: { smithore: 171, energy: 194, food: 82, water: 70 },
+      posted: { smithore: 171, food: 82, water: 70 },
+      asks: { energy: 214 },
       money: 1355,
     };
     const state = table(seat);
@@ -276,7 +281,7 @@ const shelf = (state: GameState, extra: number) => Math.ceil(state.colonists / U
 
 describe('G-1: a seat keeps itself supplied', () => {
   /** Food posted at 65: the store sells at 72. */
-  const FED: Seat = { plots: PLANTS, posted: { food: 65 }, stock: { water: 20, energy: 20 }, money: 1200 };
+  const FED: Seat = { plots: PLANTS, asks: { food: 72 }, stock: { water: 20, energy: 20 }, money: 1200 };
 
   function hungryNext(seat: Seat, forSale: number): { hungry: boolean; bought: number; money: number } {
     const state = table(seat);
@@ -348,6 +353,7 @@ describe('G-2: a surplus when cheap', () => {
     const obs = observe(view, ME);
     const mind = seatsOf(view, seat)[0]!.mind;
     const before = {
+      view,
       ask: view.auction!.storeSell,
       reference: state.store.refPrice[good],
       belief: outlook(obs, ME, { lookAhead: mind.level.lookAhead }).price(good),
@@ -357,12 +363,12 @@ describe('G-2: a surplus when cheap', () => {
     return { ...before, held: me(state).stock[good] };
   }
   /** What a unit held a month fetches from the store at the belief: after the spread, the 5% tax and its spoilage. */
-  const carried = (good: Good, belief: number) => belief * (1 - PRICE.storeSpread) * 0.95 * (1 - GOOD_CONFIG[good].spoilage);
+  const carried = (view: GameState, good: Good, belief: number) => storeBuyAt(view, good, belief, { exact: true }) * 0.95 * (1 - GOOD_CONFIG[good].spoilage);
 
   it("B-AC-3: with Food's ask at or below its reference and a belief above it after spoilage and tax, the seat holds more than next month's need; at 2× reference, no more", () => {
     const cheap = auctionOf('food', 6);
     expect(cheap.ask, 'the premise: the ask is at or below the reference').toBeLessThanOrEqual(cheap.reference);
-    expect(carried('food', cheap.belief), 'the premise: the belief beats the ask after spoilage and tax').toBeGreaterThan(cheap.ask);
+    expect(carried(cheap.view, 'food', cheap.belief), 'the premise: the belief beats the ask after spoilage and tax').toBeGreaterThan(cheap.ask);
     expect(cheap.held, 'it holds a surplus past what keeps it whole next month').toBeGreaterThan(cheap.need);
 
     const dear = auctionOf('food', 55);
@@ -398,7 +404,7 @@ describe('G-2: a surplus when cheap', () => {
     GOOD_CONFIG.water.spoilage = 1;
     const water = auctionOf('water', 6);
     expect(water.need, 'the premise: it needs no Water').toBe(0);
-    expect(water.belief * (1 - PRICE.storeSpread) * 0.95, 'the premise: unspoilt, a unit would beat the ask').toBeGreaterThan(water.ask);
+    expect(storeBuyAt(water.view, 'water', water.belief, { exact: true }) * 0.95, 'the premise: unspoilt, a unit would beat the ask').toBeGreaterThan(water.ask);
 
     expect(water.held).toBe(0);
   });

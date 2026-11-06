@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   advancePhase,
+  cloneForSim,
+  colonistAffordable,
   AI_LEVELS,
   AI_PERSONAS,
   createGame,
@@ -9,6 +11,7 @@ import {
   GOODS,
   mulePriceFor,
   observe,
+  postPrices,
   STRATEGIST,
   takeMule,
   walkSeconds,
@@ -390,9 +393,14 @@ describe('factories', () => {
 
 describe('shortage foresight', () => {
   it('T-AC-5: a seat prices Water at what colonists would pay once its outlook shows Water running short', () => {
-    // Colonists pay at most 120 a unit, the store adds 10%: 120 / 1.1 is about 109.
-    const ceiling = 120 / 1.1;
-    const short = outlook(observe(developmentWithWater(0), 'ai0'), 'ai0', { lookAhead: true });
+    // Colonists pay at most 120 a unit and the store adds its spread: the highest mid they can pay, in the band the
+    // store posts Water in with none left.
+    const dry = developmentWithWater(0);
+    const posting = cloneForSim(dry);
+    postPrices(posting);
+    expect(posting.store.band?.water, 'the premise: Water is posted severe').toBe('severe');
+    const ceiling = colonistAffordable(posting, 'water');
+    const short = outlook(observe(dry, 'ai0'), 'ai0', { lookAhead: true });
     expect(short.later('water')).toBeGreaterThanOrEqual(ceiling);
     // Negative case: with Water to spare the forecast stays a market price, far under the ceiling.
     const plenty = outlook(observe(developmentWithWater(300), 'ai0'), 'ai0', { lookAhead: true });

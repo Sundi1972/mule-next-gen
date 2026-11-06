@@ -25,13 +25,13 @@ export function to(state: GameState, phase: Phase): void {
   while (state.phase !== phase) advancePhase(state);
 }
 
-/** Puts p0's MULEs on free plots of `good`, apart from each other and from any special field, so no bonus adds to them. */
+/** Puts p0's MULEs on free plots of `good`, apart from every other plot and from any special field, so no bonus adds to them. */
 export function worked(state: GameState, good: Good, count: number): Tile[] {
   const chosen: Tile[] = [];
   for (const t of state.tiles) {
     if (chosen.length === count) break;
     if (t.terrain === 'store' || t.owner || t.special) continue;
-    if (neighbours(state.tiles, state.width, t).some((n) => chosen.includes(n) || n.special)) continue;
+    if (neighbours(state.tiles, state.width, t).some((n) => chosen.includes(n) || n.owner || n.special)) continue;
     chosen.push(t);
   }
   for (const t of chosen) Object.assign(t, { owner: 'p0', outfit: good, traits: [], pollution: 0 });

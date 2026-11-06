@@ -172,40 +172,50 @@ describe('price B-AC-8: once supply returns the price falls a quarter a month, n
 });
 
 describe('price B-AC-9: a high trade between players pulls the store halfway towards it', () => {
-  /** Month 1 in shortage (mid 60), p1 selling p2 one unit at `price` while the store still sells Food; month 2 posts. */
-  function tradeInShortage(price: number): GameState {
+  /**
+   * Month 1 in shortage (mid 60, the store selling at 75) with `shelf` Food on the store's shelf, p1 selling p2 one unit
+   * at `price`; month 2 posts in shortage again. Returns that mid and the normal price N it was posted against.
+   */
+  function tradeInShortage(price: number, shelf: number): { mid: number; normal: number } {
     const state = game();
     to(state, 'production');
     farms(state, [5, 3]);
-    hold(state, 7, 0, 3);
+    // p1 keeps 6 for its own need and sells the seventh.
+    hold(state, shelf, 0, 7);
     expect(post(state), 'the premise: shortage').toBe(60);
     walkFood(state, 'p1');
     trade(state, 'p2', 'p1', price);
-    expect(state.store.lastWalk?.food?.soldOutHigh, 'the premise: the store still had Food').toBeNull();
     nextMonth(state);
-    hold(state, 7, 0, 3);
-    return state;
+    hold(state, shelf, 0, 7);
+    const mid = post(state);
+    expect(state.store.band?.food, 'the premise: shortage again').toBe('short');
+    return { mid, normal: state.store.refPrice.food };
   }
 
   it('price B-AC-9: shortage at 60 and a trade at 95 last walk posts 78', () => {
-    expect(post(tradeInShortage(95))).toBe(78);
+    // A buyer walking up stops at the store's selling line, so a trade above it finds the shelf at its colonists'
+    // reserve (5): its sell-out floor, 95 / 1.25 = 76, is under the pull's 78.
+    const { mid, normal } = tradeInShortage(95, 5);
+    expect(2 * normal, 'the premise: the band alone posts under 78').toBeLessThan(78);
+    expect(mid).toBe(78);
   });
 
-  it('price B-AC-9: a trade at the store’s selling line (75) pulls nothing: the shortage band alone', () => {
-    const state = tradeInShortage(75);
-    const mid = post(state);
-    expect(mid).toBe(2 * state.store.refPrice.food);
-    expect(mid).toBeLessThanOrEqual(60);
+  it('price B-AC-9: a trade at the store’s selling line (75) pulls nothing: the shortage band alone, 2N', () => {
+    const { mid, normal } = tradeInShortage(75, 6);
+    expect(mid).toBe(2 * normal);
   });
 });
 
 describe('price B-AC-1: a sell-out the players bid past lifts the next selling line', () => {
-  /** Month 1 normal (mid 30), with the store holding `forSale` Food over the colonists' reserve; p1 sells p2 one at `price`. */
+  /**
+   * Month 1 normal (mid 30), the store holding one Food over the colonists' reserve, which p2 buys first when `soldOut`;
+   * then p1 sells p2 one at `price`, and month 2's Food comes up.
+   */
   function bidPast(price: number, { soldOut }: { soldOut: boolean }): GameState {
     const state = game();
     to(state, 'production');
     farms(state, [5, 5]);
-    hold(state, 6, 21, 3);
+    hold(state, 6, 16, 8);
     state.players[2]!.money = 10_000;
     expect(post(state), 'the premise: normal').toBe(30);
     walkFood(state, 'p1');
