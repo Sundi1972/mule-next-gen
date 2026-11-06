@@ -456,7 +456,8 @@ inputs     money · every needed unit (q(k) > 0) of each good still to be auctio
            month, in AUCTION.order from the current good · its v(k) and expected ask
            (expectedPrices.buy, or belief × (1 + spread) for a later good)
 steps      1 rank all those units by v(k) ÷ ask, highest first (ties: AUCTION.order)
-           2 fund them in that order while money covers the ask
+           2 fund them in that order: each unit the money still covers is funded; one that
+             doesn't fit is skipped and the ranking goes on (AM-4)
            3 λ = (v ÷ ask − 1) of the last funded unit, 0 if all are funded
            4 the current good's budget = its funded units' asks + what is left after
              every funded unit (for surplus units, each bought only if v − ask > λ × ask)
@@ -620,4 +621,23 @@ also      at v = ask a buy and a pass both gain 0 and the pass won on 'Sure thin
 open      hunger's true damage (what a month of hungry development costs the seat) stays
           today's walking-time estimate; pricing it fully is a balance-phase question
           (Heiko, 4 Nov: functions first, balance at the end)
+```
+
+```
+AM-4 · 2026-11-06 · WS9 · building PR-1
+
+target    §2 RULE-5 step 2; §1 C6 (UBER-AC-1 (a)'s row)
+said      "fund them in that order while money covers the ask"
+did       a greedy fill: a unit the money can't cover is skipped and the ranking goes on.
+          The sim row reads the ask and the money at the good's own status screen, leaves
+          out goods the engine skipped, and prints beside UBER-AC-1 (a) its breakdown per
+          good: store sold out mid-auction, good skipped, decided fewer, could not pay
+because   read literally, step 2 stopped at the first dear unit, so cheaper needed units of
+          a later good went unfunded (17 of 385 short seat-months on seed 1). The diagnosis
+          (seed 1, 40 games, switch on) put 69% of the still-short months on the store
+          selling out with every seat deciding to buy, and 21% on Energy never auctioned
+          (WS3's skip rule), so (a) cannot read as a valuation result without the breakdown.
+          G-1 is unchanged; its proof's wording is Heiko's and stays.
+findings  WS3: skipBefore drops a good when every seat holds the screen need but less than
+          the target that covers spoilage. WS5 / C29: store supply in the first months.
 ```
