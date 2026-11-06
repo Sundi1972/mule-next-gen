@@ -68,7 +68,7 @@ describe('pricing C2: one selling price on every screen', () => {
     return renderToStaticMarkup(createElement(PhoneGameProvider, { value, children: createElement(MarketStrip) })).replaceAll('<!-- -->', '');
   }
 
-  const priceOf = (screen: string, name: string) => screen.match(new RegExp(`${name} (\\S+) cr`))?.[1];
+  const priceOf = (screen: string, name: string) => screen.match(new RegExp(`${name} (\\S+)( cr)?`))?.[1];
 
   it('price T-AC-6: the TV and the phone show the same Food selling price, the store\'s, not the posted price; "—" when it sells none', () => {
     // A short Food shelf: 3 units, under the colonists' reserve, so the store sells none however high it bids.
@@ -80,6 +80,9 @@ describe('pricing C2: one selling price on every screen', () => {
 
     expect(priceOf(tv, 'Food')).toBe('—');
     expect(priceOf(phone, 'Food')).toBe('—');
+    // No price, no unit: the dash stands alone.
+    expect(tv).not.toContain('— cr');
+    expect(phone).not.toContain('— cr');
     expect(priceOf(tv, 'Water')).toBe('22');
     expect(priceOf(phone, 'Water')).toBe('22');
   });
