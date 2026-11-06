@@ -42,6 +42,7 @@ import {
   pathFor,
   planFields,
   planMind,
+  replanReason,
   validatePlaybook,
   validatorFor,
   type DraftInput,
@@ -55,6 +56,7 @@ import {
   type PlanPoint,
   type PlayedPart,
   type PlayPath,
+  type ReplanTrigger,
   type ValidatePlan,
   type ValidatorProfile,
 } from './playbook/index.js';
@@ -85,11 +87,11 @@ interface AuctionRun {
   planned: boolean;
 }
 
-/** A change of the seat's kept plan after its first: when, and the re-plan trigger that made it. See RULE-8. */
+/** A re-plan of the seat's kept plan: when, and the trigger that called it. See RULE-8. */
 export interface ReplanEntry {
   month: number;
   point: PlanPoint;
-  trigger: string;
+  trigger: ReplanTrigger;
 }
 
 /** The `id` of a DecisionRecord the seat builds itself, for a drafted part: no Brain decision, so no Brain id. See AM-22. */
@@ -281,7 +283,9 @@ export class AiSeat {
   private draftInput(state: GameState, phase: DraftPhase, month = state.month): DraftInput {
     // Read, never settled: settling would log the land decision before the grant.
     const land = this.landMonth === month ? this.land : null;
-    return { state, seat: this.id, mind: this.mind, seed: this.options.seed, phase, land, month, kept: this.kept };
+    // A trigger due now drafts the plan again, as the draft point will (RULE-8).
+    const trigger = this.replanDue(state);
+    return { state, seat: this.id, mind: this.mind, seed: this.options.seed, phase, land, month, kept: trigger ? null : this.kept, replanned: trigger ?? this.kept?.trigger ?? null };
   }
 
   /** Whether the seat plays playbooks at all (RULE-6 row 1 does not match): only then does it keep a plan. */
@@ -289,19 +293,27 @@ export class AiSeat {
     return AI_PLANS.on && this.options.playbook !== false;
   }
 
+  /** RULE-8's re-plan trigger the kept plan meets on `state`, or null: also null with no plan kept, or none anchored yet. */
+  replanDue(state: GameState): ReplanTrigger | null {
+    return this.kept ? replanReason(state, this.kept, this.id) : null;
+  }
+
   /**
-   * A draft point's plan (RULE-7): the kept plan stands; with none, the seat drafts one and keeps it. An adopted plan
-   * takes its anchor here, from the first state the seat sees after the adopt.
+   * A draft point's plan (RULE-7, RULE-8): the kept plan stands until a trigger names a re-plan, which drafts it again
+   * with a new anchor and is logged. With none kept, the seat drafts one. An adopted plan takes its anchor here, from
+   * the first state the seat sees after the adopt.
    */
   private planPoint(state: GameState, point: DraftPhase): void {
     if (!this.playsPlaybooks()) return;
     if (this.kept && !this.kept.anchor) this.kept.anchor = anchorOf(state, this.id, this.kept, 'adopt', this.landRanking(state));
-    if (this.kept) return;
-    this.keep(state, point, draftStrategyOf(this.draftInput(state, point)));
+    const trigger = this.replanDue(state);
+    if (this.kept && !trigger) return;
+    this.keep(state, point, draftStrategyOf(this.draftInput(state, point)), trigger);
+    if (trigger) this.replans.push({ month: state.month, point, trigger });
   }
 
-  private keep(state: GameState, point: PlanPoint, plan: PlanFields): void {
-    this.kept = { ...planFields(plan), anchor: anchorOf(state, this.id, plan, point, this.landRanking(state)) };
+  private keep(state: GameState, point: PlanPoint, plan: PlanFields, trigger: ReplanTrigger | null): void {
+    this.kept = { ...planFields(plan), anchor: anchorOf(state, this.id, plan, point, this.landRanking(state)), trigger };
   }
 
   /** This month's land ranking, as the planning draft ranks it: the plan's key plots come from it. */
@@ -309,7 +321,7 @@ export class AiSeat {
     return landRanking(this.draftInput(state, 'planning'));
   }
 
-  /** Each change of the kept plan after the first, in order. */
+  /** Each re-plan of the kept plan, in order: when, and its trigger. */
   replanLog(): readonly ReplanEntry[] {
     return this.replans;
   }
@@ -343,7 +355,7 @@ export class AiSeat {
   adopt(playbook: Playbook): void {
     const newest = this.adopted.at(-1);
     this.adopted = adoptInto(this.adopted, playbook);
-    if (this.adopted.at(-1) !== newest) this.kept = { ...planFields(playbook.strategy), anchor: null };
+    if (this.adopted.at(-1) !== newest) this.kept = { ...planFields(playbook.strategy), anchor: null, trigger: null };
     const p = this.planning;
     // Listings are made in planning only: once it has ended, the ones made stand.
     if (!p || p.state.phase !== 'planning' || p.state.month !== p.month || playbook.month !== p.month) return;
