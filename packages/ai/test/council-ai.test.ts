@@ -276,7 +276,8 @@ describe('C25: AI Governors build and pay, AI voters weigh the mood (G-5)', () =
       state.treasury.money = 1_500;
       const sent = tick(new VoteHand(mindOf('ai0', persona), createRng(1)), state);
       expect(state.colony!.projects.map((p) => p.id), `${persona}: the Spaceport upgrade (5) builds on the colony's grounds, no plot to wait for`).toEqual(['spaceport']);
-      expect(sent.map((a) => a.type), persona).toEqual(['commission']);
+      // Its other planning moves (the tax, a law) are its own business; of the colony's acts it sends the commission only.
+      expect(sent.map((a) => a.type).filter((t) => !['setTax', 'propose'].includes(t)), persona).toEqual(['commission']);
     }
   });
 
