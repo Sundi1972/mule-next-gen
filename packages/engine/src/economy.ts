@@ -201,7 +201,7 @@ function bandTarget(state: GameState, good: Good, band: PriceBand): number {
 
 /**
  * This month's mid and band for a good (pricing RULE-7): straight up to a higher band target, down at most fallStep a
- * month, never under the normal price; pulled towards a high trade between players and lifted past a sell-out they bid
+ * month, never under the normal price unless off-world; pulled towards a high trade between players and lifted past a sell-out they bid
  * over; never above the ceiling, which always wins.
  */
 function nextPosting(state: GameState, good: Good, demand: Stock, lastShortages: readonly Good[], off: Stock): { mid: number; band: PriceBand } {
@@ -209,7 +209,8 @@ function nextPosting(state: GameState, good: Good, demand: Stock, lastShortages:
   const band = priceBand(state, good, demand, lastShortages, off);
   const target = bandTarget(state, good, band);
   let mid = target >= prev ? target : Math.max(target, prev * (1 - PRICE.fallStep));
-  mid = Math.max(mid, state.store.refPrice[good]);
+  // An export-only good follows the off-world price wherever it goes; the colony's normal price is no floor for it.
+  if (band !== 'offWorld') mid = Math.max(mid, state.store.refPrice[good]);
   const lesson = state.store.lastWalk?.[good];
   // Last month's selling line: the store's band and mid are still last month's until postPrices writes them.
   const highTrade = lesson?.highTrade ?? null;
