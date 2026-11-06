@@ -1,0 +1,51 @@
+{
+  "frame": {
+    "width": 1600,
+    "height": 1600,
+    "place": 1293,
+    "centre": [
+      800,
+      1000
+    ]
+  },
+  "pictures": {
+    "hall": {
+      "tier1": {
+        "day": "hall/tier1-day@800.webp",
+        "dusk": "hall/tier1-dusk@800.webp",
+        "glow": "hall/tier1-glow@800.webp"
+      }
+    },
+    "park": {
+      "site": {
+        "day": "park/site-day@800.webp",
+        "dusk": "park/site-dusk@800.webp",
+        "glow": "park/site-glow@800.webp"
+      },
+      "build1": {
+        "day": "park/build1-day@800.webp",
+        "dusk": "park/build1-dusk@800.webp",
+        "glow": "park/build1-glow@800.webp"
+      },
+      "standing": {
+        "day": "park/standing-day@800.webp",
+        "dusk": "park/standing-dusk@800.webp",
+        "glow": "park/standing-glow@800.webp"
+      },
+      "closed": {
+        "day": "park/closed-day@800.webp",
+        "dusk": "park/closed-dusk@800.webp",
+        "glow": null
+      },
+      "damaged": {
+        "day": "park/damaged-day@800.webp",
+        "dusk": "park/damaged-dusk@800.webp",
+        "glow": "park/damaged-glow@800.webp"
+      }
+    }
+  },
+  "sizes": [
+    800,
+    400
+  ]
+}
