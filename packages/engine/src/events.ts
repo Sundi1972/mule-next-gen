@@ -2,7 +2,7 @@ import { COLONY, EVENTS, GAME, GOOD_CONFIG, SOCIAL_EVENTS, UPKEEP } from './conf
 import { addPrestige, callStrike, damageObject, fundIn, goodWords, moodBand, moodShift, strikeHolds } from './colony.js';
 import { neighbours } from './grid.js';
 import { reputationShift } from './politics.js';
-import { airBand, type AirBand } from './pollution.js';
+import { airBand, cleanAir, type AirBand } from './pollution.js';
 import { createRng } from './rng.js';
 import { GOODS, RAW_GOODS, type EventEffect, type EventKey, type EventKind, type GameState, type Good, type MonthEvent, type MoodBand, type Phase, type Player, type PrestigeId, type SpecialKind, type Tile } from './types.js';
 
@@ -63,6 +63,13 @@ const SHAPE: Record<EventKey, { kind: EventKind; title: string; scope: MonthEven
     scope: 'colony',
     sign: 'bad',
     line: () => `A riot: the store loses ${pct(SOCIAL_EVENTS.colony.riot.storeLoss)} of every shelf, and one colony object is damaged until it is repaired.`,
+  },
+  volunteerCleanup: {
+    kind: 'colony',
+    title: 'Volunteer clean-up',
+    scope: 'colony',
+    sign: 'good',
+    line: () => `Volunteers clean up: the air gauge drops by ${SOCIAL_EVENTS.colony.volunteerCleanup.airDrop}.`,
   },
   loyalCrew: { kind: 'plot', title: 'Loyal crew', scope: 'personal', sign: 'good', line: () => `A loyal crew: one of your plots makes ${SOCIAL_EVENTS.player.loyalCrew.gain} more this month.` },
 };
@@ -189,6 +196,7 @@ const OFF_MAP = {
   blamedForUnrest: () => true,
   storeStrike: () => true,
   riot: () => true,
+  volunteerCleanup: () => true,
   walkout: (state: GameState, p?: Player) => p !== undefined && workedBy(state, p.id).length > 0,
   loyalCrew: (state: GameState, p?: Player) => p !== undefined && workedBy(state, p.id).length > 0,
 } satisfies Partial<Record<EventKey, (state: GameState, player?: Player) => boolean>>;
@@ -384,6 +392,8 @@ export interface EventParams {
   gain?: number;
   /** G-5 C26: the share of each store shelf a riot takes (floored). */
   storeLoss?: number;
+  /** G-5 C26: the air points a clean-up takes off the gauge. */
+  airDrop?: number;
 }
 
 /** What a chance reads beside the state: whose roll it is (none for a colony row), and the keys already fired this phase. */
@@ -716,6 +726,9 @@ export function applyEvents(state: GameState, fired: readonly MonthEvent[]): voi
         else delete event.objects;
         break;
       }
+      case 'volunteerCleanup':
+        change('colony', 'air', cleanAir(state, SOCIAL_EVENTS.colony.volunteerCleanup.airDrop));
+        break;
       default:
         break;
     }

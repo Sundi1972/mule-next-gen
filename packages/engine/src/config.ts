@@ -1435,6 +1435,16 @@ export const SOCIAL_EVENTS = {
       storeLoss: 1 / 3,
       cap: 0.9,
     },
+    /** At the month end: the air gauge drops by `airDrop`, never below 0. */
+    volunteerCleanup: {
+      phases: { upkeep: 0.01 },
+      needsColony: true,
+      mood: { thriving: 0.03, content: 0.01 },
+      objects: { park: 0.02 },
+      neverIn: ['unrest'],
+      airDrop: 5,
+      cap: 0.9,
+    },
   } satisfies Record<string, import('./events.js').EventRow & import('./events.js').EventParams>,
   player: {
     /** Each player's own roll: `reputation` points (reputationShift), so fewer votes. The richest is likelier. */
