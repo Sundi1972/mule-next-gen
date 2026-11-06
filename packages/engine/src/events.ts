@@ -58,8 +58,10 @@ const SHAPE: Record<EventKey, { kind: EventKind; title: string; scope: MonthEven
 };
 
 /** A general strike's line, naming its good when it has one. */
-function strikeLine(good: Good | null): string {
+function strikeLine(good: Good | null, phase: Phase = 'planning'): string {
   const plots = good ? `every ${goodWords(good)} plot` : 'every plot of one good';
+  // By production the Governor's chance to pay has passed, so the line no longer offers it (PM ruling A, 6 Nov).
+  if (phase === 'production') return `The strikers held: ${plots} makes ${pct(COLONY.strike.output)} this month.`;
   return `A general strike: this month ${plots} makes ${pct(COLONY.strike.output)}, unless the Governor pays the strikers.`;
 }
 
@@ -205,7 +207,7 @@ function strikeGoods(state: GameState): Good[] {
 function struck(state: GameState, good: Good, phase: Phase): MonthEvent {
   const hit = state.tiles.filter((t) => t.owner && t.outfit === good);
   const at = hit[0] ?? state.tiles.find((t) => t.terrain === 'store') ?? { x: 0, y: 0 };
-  return { ...toEvent(state, 'generalStrike', { x: at.x, y: at.y }, hit, undefined, undefined, phase), line: strikeLine(good) };
+  return { ...toEvent(state, 'generalStrike', { x: at.x, y: at.y }, hit, undefined, undefined, phase), line: strikeLine(good, phase) };
 }
 
 /**
