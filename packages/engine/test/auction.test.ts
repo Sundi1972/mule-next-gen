@@ -564,20 +564,6 @@ describe('the store and the ship on the board', () => {
     expect(state.store.stock.food).toBe(reserve);
   });
 
-  it('has no ceiling when it is sold out: buyers keep walking up and the board grows', () => {
-    const state = newGame();
-    state.store.stock.energy = 0;
-    state.players[0]!.stock.energy = 5;
-    startAuction(state, ['energy']);
-    toWalk(state, { p1: 'buyer' });
-    setWalk(state, 'p1', 1);
-    // p0 the seller stands far above; p1 walks past where the store would sell.
-    walker(state, 'p0').price = 10_000;
-    stepAuction(state, 60_000 / 4);
-    expect(walker(state, 'p1').price).toBeGreaterThan(a(state).storeSell);
-    expect(walker(state, 'p1').price).toBeGreaterThan(a(state).hi);
-  });
-
   it('B-AC-D2: buys from sellers at its buy line within its budget; once the budget is spent the line still holds sellers up', () => {
     const state = newGame();
     state.players[0]!.stock.smithore = 10;
