@@ -32,6 +32,9 @@ const MONTH_12: GroundsColony = {
  */
 const PLACE_CENTRE: Record<string, [number, number]> = { hall: [0, 0], 1: [60, 30], 2: [-60, 30], 3: [0, 60], 4: [-60, -30] };
 const PLACE_WIDTH = 120;
+/** A 2×2 block anchored at (3,2) covers cells (3..4, 2..3): its centre is 1.5 cells east and 0.5 south of the hall. */
+const BLOCK = { x: 3, y: 2, w: 2, h: 2 };
+const BLOCK_CENTRE: [number, number] = [(1.5 - 0.5) * 60, (1.5 + 0.5) * 30];
 
 const grounds = (props: Partial<Parameters<typeof ColonyGrounds>[0]> = {}) => renderToStaticMarkup(<ColonyGrounds colony={MONTH_12} size="tv" manifest={MANIFEST} {...props} />);
 
@@ -56,13 +59,29 @@ function placed(tag: string, frame: GroundsManifest['frame']) {
   return { width: width!, height: height!, anchor: [x! + frame.centre[0] * k, y! + frame.centre[1] * k] as [number, number] };
 }
 
-function expectAt(tag: string, place: string, frame = FRAME) {
+function expectAt(tag: string, place: string | [number, number], frame = FRAME) {
   const { width, height, anchor } = placed(tag, frame);
+  const centre = typeof place === 'string' ? PLACE_CENTRE[place]! : place;
   const k = PLACE_WIDTH / frame.place;
   expect(width).toBeCloseTo(frame.width * k, 3);
   expect(height).toBeCloseTo(frame.height * k, 3);
-  expect(anchor[0]).toBeCloseTo(PLACE_CENTRE[place]![0], 3);
-  expect(anchor[1]).toBeCloseTo(PLACE_CENTRE[place]![1], 3);
+  expect(anchor[0]).toBeCloseTo(centre[0], 3);
+  expect(anchor[1]).toBeCloseTo(centre[1], 3);
+}
+
+/** The scale and offset of a `matrix(s 0 0 s tx ty)` transform on a tag; none is the identity. */
+function scaleOf(tag: string): { s: number; tx: number; ty: number } {
+  const m = attrOf(tag, 'transform')?.match(/^matrix\(([-\d.e]+) 0 0 \1 ([-\d.e]+) ([-\d.e]+)\)$/);
+  return m ? { s: Number(m[1]), tx: Number(m[2]), ty: Number(m[3]) } : { s: 1, tx: 0, ty: 0 };
+}
+
+/** The staked site's corners as drawn on screen, after the shape's own transform. */
+function siteCorners(html: string, shapeId: string): [number, number][] {
+  const shape = tagWith(html, `data-testid="${shapeId}"`);
+  const { s, tx, ty } = scaleOf(shape);
+  const after = html.slice(html.indexOf(shape));
+  const points = attrOf(after.match(/<polygon[^>]*>/)![0], 'points')!;
+  return points.split(' ').map((p) => p.split(',').map(Number) as [number, number]).map(([x, y]) => [s * x + tx, s * y + ty]);
 }
 
 /** The words over a place: its number, then its stage chip if it has one. */
@@ -121,21 +140,18 @@ describe('ColonyGrounds · the colony drawn from its view', () => {
     expect(attrOf(tagWith(html, 'data-testid="picture-1"'), 'href')).toBe('/art/colony/park/standing-dusk@800.webp');
   });
 
-  it('B-AC-1: the grounds are as big as the highest slot needs, with the next free place outlined', () => {
+  it('B-AC-1: the grounds are as big as the places in use need (RULE-4)', () => {
     const html = grounds();
     expect(attrOf(tagWith(html, 'data-testid="colony-grounds"'), 'data-extent')).toBe('1');
-    expect(tagsWith(html, 'data-testid="next-place"')).toHaveLength(1);
     const far = { ...MONTH_12, projects: [{ id: 'park' as const, name: 'Park', stage: 'standing' as const, buildMonths: 1, monthsLeft: null, place: { x: 4, y: 2, w: 1, h: 1 } }] };
     expect(attrOf(tagWith(grounds({ colony: far }), 'data-testid="colony-grounds"'), 'data-extent')).toBe('2');
     expect(attrOf(tagWith(grounds({ colony: { ...MONTH_12, projects: [] } }), 'data-testid="colony-grounds"'), 'data-extent')).toBe('0');
   });
 
   it('B-AC-1 (AM-18): a 2×2 footprint sits at its block\'s centre and widens the scene to the ring it reaches', () => {
-    const stadium = { id: 'stadium' as const, name: 'Stadium', stage: 'standing' as const, buildMonths: 3, monthsLeft: null, place: { x: 3, y: 2, w: 2, h: 2 } };
+    const stadium = { id: 'stadium' as const, name: 'Stadium', stage: 'standing' as const, buildMonths: 3, monthsLeft: null, place: BLOCK };
     const html = grounds({ colony: { gauges: { happiness: 72 }, projects: [stadium] } });
-    // The block covers cells (3..4, 2..3): its centre is 1.5 cells east and 0.5 south of the hall.
-    PLACE_CENTRE.block = [(1.5 - 0.5) * 60, (1.5 + 0.5) * 30];
-    expectAt(tagWith(html, 'data-testid="picture-1"'), 'block');
+    expectAt(tagWith(html, 'data-testid="picture-1"'), BLOCK_CENTRE);
     expect(attrOf(tagWith(html, 'data-testid="colony-grounds"'), 'data-extent')).toBe('2');
   });
 
@@ -153,6 +169,17 @@ describe('ColonyGrounds · the colony drawn from its view', () => {
     expect(html.match(/data-testid="shape-2"[^>]*>(.*?)<\/g>/)?.[1], 'the shape draws something').toMatch(/<polygon /);
     expect(calloutText(html, 2)).toBe('2 SHUT');
     expect(tagsWith(html, 'data-testid="picture-1"'), 'the others keep their pictures').toHaveLength(1);
+  });
+
+  it('B-AC-4: a 2×2 kind with no picture falls back to a shape the size of its footprint', () => {
+    const site = (place: typeof BLOCK) => ({ id: 'stadium' as const, name: 'Stadium', stage: 'commissioned' as const, buildMonths: 3, monthsLeft: null, place });
+    const one = siteCorners(grounds({ manifest: null, colony: { gauges: { happiness: 72 }, projects: [site({ x: 3, y: 2, w: 1, h: 1 })] } }), 'shape-1');
+    const four = siteCorners(grounds({ manifest: null, colony: { gauges: { happiness: 72 }, projects: [site(BLOCK)] } }), 'shape-1');
+    const span = (pts: [number, number][]) => Math.max(...pts.map((p) => p[0])) - Math.min(...pts.map((p) => p[0]));
+    const mid = (pts: [number, number][]) => [pts.reduce((a, p) => a + p[0], 0) / pts.length, pts.reduce((a, p) => a + p[1], 0) / pts.length];
+    expect(span(four)).toBeCloseTo(2 * span(one), 3);
+    expect(mid(four)[0]).toBeCloseTo(BLOCK_CENTRE[0], 3);
+    expect(mid(four)[1]).toBeCloseTo(BLOCK_CENTRE[1], 3);
   });
 
   it('B-AC-4: no manifest at all draws every place, the hall too, as its shape', () => {
