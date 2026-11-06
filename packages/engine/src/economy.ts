@@ -1,8 +1,8 @@
-import { EXPORT_DEMAND, EXPORT_SHIP, GAME, GOOD_CONFIG, MULE, POLLUTION, PRICE, RECIPES, UPKEEP } from './config.js';
+import { EXPORT_DEMAND, EXPORT_SHIP, GAME, GOOD_CONFIG, MULE, OFF_WORLD, POLLUTION, PRICE, RECIPES, UPKEEP } from './config.js';
 import { fundIn } from './colony.js';
 import { airBand } from './pollution.js';
 import { energyUseOf, factoryFit, isFactory, needsOf, rawOutput } from './production.js';
-import { createRng } from './rng.js';
+import { createRng, seedOf, type Rng } from './rng.js';
 import { emptyStock } from './stock.js';
 import { GOODS, type ExportShip, type GameState, type Good, type PriceBand, type Stock } from './types.js';
 
@@ -309,6 +309,50 @@ export function storeQuotes(state: GameState, good: Good): { buy: number | null;
     buy: storeWants(state, good) > 0 ? lines.buy : null,
     sell: storeForSale(state, good) > 0 ? lines.sell : null,
   };
+}
+
+interface OffWorldWalk {
+  centre: number;
+  phi: number;
+  sigma: number;
+  min: number;
+  max: number;
+}
+
+/** How a good's off-world price walks (pricing RULE-3); null for a good the export ship never buys. */
+function offWorldWalk(good: Good): OffWorldWalk | null {
+  if (EXPORT_DEMAND[good] === undefined) return null;
+  if (good === 'crystite') return OFF_WORLD.crystite;
+  const centre = GOOD_CONFIG[good].refPrice;
+  const { phi, sigma, band } = OFF_WORLD.others;
+  return { centre, phi, sigma, min: centre * (1 - band), max: centre * (1 + band) };
+}
+
+/** The off-world prices a game opens with: each export good at its walk's centre, the rest at their reference price. */
+export function openingOffWorld(): Stock {
+  const prices = emptyStock();
+  for (const good of GOODS) prices[good] = offWorldWalk(good)?.centre ?? GOOD_CONFIG[good].refPrice;
+  return prices;
+}
+
+/** A standard normal draw (Box–Muller); 1 − u keeps the logarithm's argument above 0. */
+function normal(rng: Rng): number {
+  return Math.sqrt(-2 * Math.log(1 - rng.next())) * Math.cos(2 * Math.PI * rng.next()); // literal-ok: Box–Muller's constants
+}
+
+/**
+ * Moves each export good's off-world price one month along its walk (pricing RULE-3), as the month opens. Each good
+ * draws from its own rng keyed on the seed, the month and the good, so no other draw in the game moves (HC-1).
+ */
+export function stepOffWorld(state: GameState): void {
+  for (const good of GOODS) {
+    const walk = offWorldWalk(good);
+    if (!walk) continue;
+    const rng = createRng(seedOf(state.seed, state.month, 'offWorld', good));
+    const swing = walk.sigma * Math.sqrt(1 - walk.phi ** 2) * normal(rng); // literal-ok: phi squared, the walk's own formula
+    const log = Math.log(walk.centre) + walk.phi * Math.log(state.store.offWorld[good] / walk.centre) + swing;
+    state.store.offWorld[good] = Math.round(Math.min(walk.max, Math.max(walk.min, Math.exp(log))));
+  }
 }
 
 /** The off-world price expected `monthsAhead` from now; pure, never draws. Nothing moves that price yet, so it is today's. */

@@ -1,7 +1,7 @@
 import { endAuction, startAuction } from './auction.js';
 import { RuleError } from './errors.js';
 import { COLONY_SCORE, DEFAULT_SPECIES, DEV_STEER, DEVELOPMENT, GAME, GLINT, GOOD_CONFIG, mapSize, MULE, POLLUTION, SPECIES_PERK, START, storeStockFor, TAX, UPKEEP, WOLVES } from './config.js';
-import { allPrices, mulePrice, planShip, postPrices } from './economy.js';
+import { allPrices, mulePrice, openingOffWorld, planShip, postPrices, stepOffWorld } from './economy.js';
 import { firePhase, rollPlayerEvent, storeOnStrike } from './events.js';
 import { colonyLot, endLandAuction, isListed, plotAt, startLandAuction } from './lots.js';
 import { generateMap, tileIndex } from './map.js';
@@ -80,7 +80,7 @@ export function createGame(options: { seed: number; players: NewPlayer[]; maxMon
       capital: START.storeCapital,
       posted: { ...refPrice },
       refPrice,
-      offWorld: { ...refPrice },
+      offWorld: openingOffWorld(),
     },
     treasury: { money: 0, salesTax: TAX.salesTax, paid: {} },
     ship: planShip(options.seed, GAME.exportShipEvery, options.players.length),
@@ -605,6 +605,7 @@ export function advancePhase(state: GameState): void {
   }
   if (next === 'planning') {
     state.month++;
+    stepOffWorld(state);
     state.monthEvents = [];
     for (const p of state.players) p.droneFound = [];
     // Planning's events roll as the month opens, with or without politics; they move cash and colonists, never land.

@@ -62,6 +62,18 @@ export const PRICE = {
 };
 
 /**
+ * Each month the export goods' off-world prices walk (pricing RULE-3): the log of the price moves `phi` of the way it
+ * stands from its centre's, plus a seeded swing, then is clamped. `sigma` is the spread of the log price the walk
+ * settles into. Food, Water and Energy are not exported; their off-world price stays put.
+ */
+export const OFF_WORLD = {
+  /** Crystite: normally about 90, rarely 40, very rarely 300. */
+  crystite: { centre: 90, phi: 0.7, sigma: 0.35, min: 40, max: 300 },
+  /** Every other export good: centred on its GOOD_CONFIG refPrice, at most `band` above or below it. */
+  others: { phi: 0.7, sigma: 0.18, band: 0.5 },
+};
+
+/**
  * Off-world demand per player per month: what the export ship's buyers take.
  * Food, Water and Energy don't travel well, so only the colony wants them.
  * The colony is self-contained: nothing is imported.
