@@ -47,8 +47,8 @@ const RIOT = {
 const SHOW_MS = EVENT_SHOW.introMs + RIOT.playMs;
 
 const row = (good: MarketRow['good'], storeStock: number) => ({ good, price: 30, storeBuys: 25, storeSells: 35, storeStock, cover: 1, demand: 4, shipPays: null }) as MarketRow;
-/** The store after the riot: 11 Food, 9 Energy and 10 Smithore left, so 17, 13 and 15 before it. */
-const AFTER_RIOT = [row('food', 11), row('energy', 9), row('smithore', 10), row('crystite', 3)];
+/** The store after the riot: 12 Food, 8 Energy and 10 Smithore left, so 18, 12 and 15 before it (a third of each gone). */
+const AFTER_RIOT = [row('food', 12), row('energy', 8), row('smithore', 10), row('crystite', 3)];
 
 const person = (id: string, name: string, slot: number): PlayerView =>
   ({ id, name, isAi: false, color: '', slot, species: 'mollox', money: 640, worth: 0, plots: 1, ready: false, doneDeveloping: false, colonist: null, condition: { foodShare: 1, sick: false, sickBecause: null, conditionPace: 1 } }) as unknown as PlayerView;
@@ -216,8 +216,8 @@ async function shelves(screen: (typeof screens)[number], u: number, market: Mark
 
 describe('B-AC-26-3: the riot’s shelves on the TV and a phone alone', () => {
   it.each(screens)('B-AC-26-3: $name: each shelf counts down from the store’s real stock to what the market shows after the riot', async (screen) => {
-    expect(await shelves(screen, FULL_U, AFTER_RIOT)).toEqual(['17', '13', '15']);
-    expect(await shelves(screen, EMPTIED_U, AFTER_RIOT)).toEqual(['11', '9', '10']);
+    expect(await shelves(screen, FULL_U, AFTER_RIOT)).toEqual(['18', '12', '15']);
+    expect(await shelves(screen, EMPTIED_U, AFTER_RIOT)).toEqual(['12', '8', '10']);
   });
 
   it.each(screens)('B-AC-26-3: $name: with no market rows for the riot’s goods, each shelf shows only what it lost, never a guessed count', async (screen) => {
