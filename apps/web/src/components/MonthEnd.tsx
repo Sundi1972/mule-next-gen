@@ -378,13 +378,27 @@ export function ColonyPanel({ view, density, layout = 'stack', verdict = false }
               </span>
             )}
             <span className={cx(line, r.colonistsFed === false ? 'text-alert' : 'text-ink-2')} data-testid="colonists">
-              {r.colonistsFed ? `The store fed the colony’s ${fmt(r.colonists)} colonists` : `The colony’s ${fmt(r.colonists)} colonists${r.colonistsFed === false ? ' went short' : ''}`}
+              {colonistsLine(view, r)}
             </span>
           </span>
         </Block>
       </div>
     </section>
   );
+}
+
+/**
+ * The month end's colonists line (needs C6): what the store fed them, and of Food and Water how much when something was
+ * missing ("19 of 20 Food and all their Water"). Without the meal in the view, the line says only fed or short.
+ */
+function colonistsLine(view: MuleView, r: ReturnType<typeof colonyReport>): string {
+  const meal = view.colonistMeal;
+  if (meal) {
+    const got = (g: { took: number; need: number }, name: string) => (g.took >= g.need ? `all their ${name}` : `${fmt(g.took)} of ${fmt(g.need)} ${name}`);
+    const fed = `The store fed the colony’s ${fmt(r.colonists)} colonists`;
+    return meal.food.took >= meal.food.need && meal.water.took >= meal.water.need ? fed : `${fed} ${got(meal.food, 'Food')} and ${got(meal.water, 'Water')}`;
+  }
+  return r.colonistsFed ? `The store fed the colony’s ${fmt(r.colonists)} colonists` : `The colony’s ${fmt(r.colonists)} colonists${r.colonistsFed === false ? ' went short' : ''}`;
 }
 
 // --- Your worth (your phone only) --------------------------------------------------------------------
