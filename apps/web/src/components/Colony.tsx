@@ -107,6 +107,14 @@ function landed(id: GaugeId, value: number, landing: GaugeLanding | undefined): 
   return { value: now, pulse: flipped || struck, change: c };
 }
 
+/** Seconds from a change landing until its count and pulse are over; a flip's pulse can start as late as the count's end. */
+export function settlesAfter(c: GaugeChange, reduced: boolean): number {
+  if (reduced) return 0;
+  const band = BAND_AT[c.gauge];
+  if (band !== undefined && band(c.from) !== band(c.to)) return LANDING.count + LANDING.pulse;
+  return c.chip ? Math.max(LANDING.count, LANDING.pulse) : LANDING.count;
+}
+
 /** The month end's drift, when there is one: Happiness from last month's to now's (RULE-20). Nothing without a colony. */
 function driftOf(colony: ColonyView | null | undefined): GaugeChange | null {
   const from = colony?.lastGauges?.happiness;

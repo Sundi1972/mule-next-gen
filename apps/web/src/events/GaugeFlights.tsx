@@ -1,39 +1,57 @@
 import type { ColonyView } from '@mule/protocol';
-import { cx, EventEffectChip, eventGaugeFlightsAt, useEventShow, type EventGaugeFlightTimes, type ShowEffect } from '@mule/ui';
-import { useLayoutEffect, useState, type RefObject } from 'react';
-import { LANDING, type GaugeChange, type GaugeId, type GaugeLanding } from '../components/Colony';
+import { cx, EventEffectChip, eventGaugeChipsAt, EventGaugeDepartures, useEventShow, type ShowEffect } from '@mule/ui';
+import { useLayoutEffect, useState, type ReactNode, type RefObject } from 'react';
+import { LANDING, settlesAfter, type GaugeChange, type GaugeId, type GaugeLanding } from '../components/Colony';
 
 /**
  * The gauge landing over the TV's show (the colony events mock's landing.tsx): a change to a colony gauge leaves the
  * event's card as a chip, flies on an arc to its gauge in the header and lands, and the gauge counts to its new value.
  */
 
+/** Seconds: the mock's wait on the card and flight; and how long the landed gauges rest, still, before the show ends. */
+const FLIGHT = { wait: 0.7, fly: 0.9, rest: 0.1 } as const;
+
 const GAUGE_OF: Partial<Record<ShowEffect['what'], GaugeId>> = { mood: 'happiness', prestige: 'prestige', air: 'environment' };
 const valueOf = (colony: ColonyView, gauge: GaugeId): number | null => colony.gauges[gauge];
 
-/** One chip's trip from the card to its gauge, on the show clock. */
-type Flight = EventGaugeFlightTimes & { gauge: GaugeId };
-
-/** The show's trips to the gauges this colony shows a number on. */
-function useFlights(colony: ColonyView | null | undefined): Flight[] {
-  const { s, reduced, grid } = useEventShow();
-  if (!colony) return [];
-  return eventGaugeFlightsAt(s, reduced, grid).flatMap((l) => {
-    const gauge = GAUGE_OF[l.effect.what];
-    return gauge && valueOf(colony, gauge) !== null ? [{ ...l, gauge }] : [];
-  });
+/** One chip's trip from the card to its gauge, on the show clock, and the gauge's numbers either side of it. */
+interface Flight {
+  effect: ShowEffect;
+  change: GaugeChange;
+  leaves: number;
 }
 
 /**
- * Each gauge held at its value before the show's changes, stepping through them as their chips land. The view already
- * carries every change, so a gauge starts at its value less all of them.
+ * The show's trips to the gauges this colony shows a number on. Each keeps the mock's timing when it fits its segment;
+ * otherwise it leaves earlier, though never before the card shows it, and only then flies faster, so that its count and
+ * pulse are over before the segment ends. The view already carries every change, so a gauge starts at its value less
+ * all of the show's changes to it.
  */
-function landingOf(flights: Flight[], colony: ColonyView, t: number, reduced: boolean): GaugeLanding | undefined {
+function useFlights(colony: ColonyView | null | undefined): Flight[] {
+  const { s, reduced, grid } = useEventShow();
+  if (!colony) return [];
+  const chips = eventGaugeChipsAt(s, reduced, grid).flatMap((c) => {
+    const gauge = GAUGE_OF[c.effect.what];
+    return gauge && valueOf(colony, gauge) !== null ? [{ ...c, gauge }] : [];
+  });
+  const left = new Map<GaugeId, number>();
+  for (const c of chips) left.set(c.gauge, (left.get(c.gauge) ?? valueOf(colony, c.gauge)!) - c.effect.delta);
+  return chips.map((c) => {
+    const from = left.get(c.gauge)!;
+    left.set(c.gauge, from + c.effect.delta);
+    const tail = settlesAfter({ gauge: c.gauge, from, to: from + c.effect.delta, landsAt: 0, chip: true }, reduced);
+    const end = c.end - FLIGHT.rest;
+    const leaves = Math.max(c.onCard, Math.min(c.onCard + FLIGHT.wait, end - FLIGHT.fly - tail));
+    const landsAt = Math.min(leaves + FLIGHT.fly, Math.max(leaves, end - tail));
+    return { effect: c.effect, leaves, change: { gauge: c.gauge, from, to: from + c.effect.delta, landsAt, chip: true } };
+  });
+}
+
+/** Each gauge held at its value before the show's changes, stepping through them as their chips land. */
+function landingOf(flights: Flight[], t: number, reduced: boolean): GaugeLanding | undefined {
   if (!flights.length) return undefined;
-  const changes = [...new Set(flights.map((l) => l.gauge))].map((gauge) => {
-    const mine = flights.filter((l) => l.gauge === gauge).sort((a, b) => a.landsAt - b.landsAt);
-    let at = valueOf(colony, gauge)! - mine.reduce((n, l) => n + l.effect.delta, 0);
-    const steps: GaugeChange[] = mine.map((l) => ({ gauge, from: at, to: (at += l.effect.delta), landsAt: l.landsAt, chip: true }));
+  const changes = [...new Set(flights.map((l) => l.change.gauge))].map((gauge) => {
+    const steps = flights.filter((l) => l.change.gauge === gauge).map((l) => l.change);
     return [...steps].reverse().find((c) => t >= c.landsAt) ?? steps[0]!;
   });
   return { changes, t, reduced };
@@ -42,8 +60,13 @@ function landingOf(flights: Flight[], colony: ColonyView, t: number, reduced: bo
 /** The landing for the header's gauges under the enclosing show; nothing when no change in it moves a gauge. */
 export function useShowLanding(colony: ColonyView | null | undefined): GaugeLanding | undefined {
   const { t, reduced } = useEventShow();
-  const flights = useFlights(colony);
-  return colony ? landingOf(flights, colony, t, reduced) : undefined;
+  return landingOf(useFlights(colony), t, reduced);
+}
+
+/** Tells the event's card when each gauge chip leaves it, so its place there fades as the chip flies. */
+export function GaugeDepartures({ colony, children }: { colony: ColonyView | null | undefined; children: ReactNode }) {
+  const departures = new Map(useFlights(colony).map((l) => [l.effect, l.leaves]));
+  return <EventGaugeDepartures.Provider value={departures}>{children}</EventGaugeDepartures.Provider>;
 }
 
 type Point = { x: number; y: number };
@@ -77,8 +100,8 @@ export function GaugeFlights({ root, colony }: { root: RefObject<HTMLElement>; c
   const { t, reduced } = useEventShow();
   const shown = useFlights(colony);
   const from = (l: Flight) => `[data-fly-from="${l.effect.what}"]`;
-  const to = (l: Flight) => `[data-testid="gauge-${l.gauge}"]`;
-  const live = shown.some((l) => t >= l.leaves - 0.3 && t < l.landsAt + LANDING.count + 0.6);
+  const to = (l: Flight) => `[data-testid="gauge-${l.change.gauge}"]`;
+  const live = shown.some((l) => t >= l.leaves - 0.3 && t < l.change.landsAt + LANDING.count + 0.6);
   const at = useCentres(root, shown.flatMap((l) => [from(l), to(l)]), live);
   return (
     <div className="pointer-events-none absolute inset-0 z-50" data-testid="gauge-flights">
@@ -86,9 +109,10 @@ export function GaugeFlights({ root, colony }: { root: RefObject<HTMLElement>; c
         const a = at[from(l)];
         const b = at[to(l)];
         if (!a || !b) return null;
-        const on = reduced ? t >= l.landsAt && t < l.landsAt + LANDING.count + 0.6 : t >= l.leaves && t < l.landsAt + 0.25;
+        const lands = l.change.landsAt;
+        const on = reduced ? t >= lands && t < lands + LANDING.count + 0.6 : t >= l.leaves && t < lands + 0.25;
         if (!on) return null;
-        const k = ramp(t, l.leaves, l.landsAt - l.leaves);
+        const k = lands > l.leaves ? ramp(t, l.leaves, lands - l.leaves) : 1;
         const e = k * k * (3 - 2 * k);
         // An arc: up and over, so the chip reads as travelling, not sliding.
         const x = reduced ? b.x : a.x + (b.x - a.x) * e;
@@ -97,7 +121,7 @@ export function GaugeFlights({ root, colony }: { root: RefObject<HTMLElement>; c
           <span
             key={i}
             className={cx('absolute', reduced && 'animate-[ev-fade_0.3s_ease-out]')}
-            style={{ left: x, top: y, transform: `translate(-50%, -50%) scale(${reduced ? 1 : 1.3 - 0.4 * e})`, opacity: reduced ? 1 : 1 - ramp(t, l.landsAt, 0.25) }}
+            style={{ left: x, top: y, transform: `translate(-50%, -50%) scale(${reduced ? 1 : 1.3 - 0.4 * e})`, opacity: reduced ? 1 : 1 - ramp(t, lands, 0.25) }}
             data-testid={`gauge-flight-${l.effect.what}`}
           >
             <EventEffectChip f={l.effect} size="tv" className="text-xl!" />

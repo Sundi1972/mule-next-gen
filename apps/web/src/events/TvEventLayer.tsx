@@ -4,7 +4,6 @@ import {
   Creature,
   cx,
   EventBoundary,
-  EventGaugeFlightsHere,
   EventLivingMap,
   EventPips,
   EventShow,
@@ -20,7 +19,7 @@ import {
 } from '@mule/ui';
 import { fmt, PHASE_NAME, seatSpecies, slotOf } from '../game/derive';
 import { TvHeader } from '../table/TableApp';
-import { GaugeFlights, useShowLanding } from './GaugeFlights';
+import { GaugeDepartures, GaugeFlights, useShowLanding } from './GaugeFlights';
 import { useOverlayOn, useOverlayShow } from './overlay';
 
 /**
@@ -51,7 +50,7 @@ function TvEventOverlay({ game }: { game: MuleView }) {
     <SeatSpeciesProvider value={seatSpecies(game)}>
     <div ref={root} className="absolute inset-0 z-40 flex flex-col gap-4 bg-table px-10 py-6 text-ink" data-testid="tv-event-overlay" data-event-phase={game.phase}>
       <EventShow events={show.events} introMs={show.introMs} t={show.t} mode="tv" {...stage}>
-        <EventGaugeFlightsHere.Provider value={true}>
+        <GaugeDepartures colony={game.colony}>
           <ShowHeader game={game} />
           <div className="flex min-h-0 flex-1 gap-6 [container-type:size]">
             <div className="shrink-0 self-start" style={{ width: `min(820px, calc(100cqh * ${game.width} / ${game.height}))` }}>
@@ -63,7 +62,7 @@ function TvEventOverlay({ game }: { game: MuleView }) {
           </div>
           <ColonyBar game={game} />
           <GaugeFlights root={root} colony={game.colony} />
-        </EventGaugeFlightsHere.Provider>
+        </GaugeDepartures>
       </EventShow>
     </div>
     </SeatSpeciesProvider>

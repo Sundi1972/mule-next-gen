@@ -107,8 +107,7 @@ export function EffectsCard({ seg, size }: { seg: EventSegment; size: ShowSize }
   const seen = eventEffectsAt(s, t, reduced, grid)
     .filter((l) => l.seg === seg)
     .map((l) => l.effect);
-  const flights = useContext(GaugeFlightsHere);
-  const leaves = new Map(flights ? gaugeFlightsAt(s, reduced, grid).map((l) => [l.effect, l.leaves]) : []);
+  const departures = useContext(GaugeDepartures);
   const tv = size === 'tv';
   const rows: { key: string; head: ReactNode; items: ShowEffect[] }[] = [
     ...cast.players.filter((p) => fx.some((f) => f.on === p.id)).map((p) => ({ key: p.id, head: <SeatHead id={p.id} size={size} />, items: fx.filter((f) => f.on === p.id) })),
@@ -136,7 +135,7 @@ export function EffectsCard({ seg, size }: { seg: EventSegment; size: ShowSize }
                 .filter((f) => seen.includes(f))
                 .map((f, i) => {
                   const chip = <EventEffectChip f={f} size={tv ? 'tv' : 'phone'} className={cx(!reduced && 'animate-[ev-pop_0.3s_ease-out]', tv && 'text-xl!')} />;
-                  const leaving = leaves.get(f);
+                  const leaving = departures?.get(f);
                   if (leaving === undefined) return <Fragment key={i}>{chip}</Fragment>;
                   // The flight to the header's gauge finds this chip by data-fly-from; once it has left, its place stays, faded.
                   return (
@@ -167,27 +166,24 @@ function SeatHead({ id, size }: { id: string; size: ShowSize }) {
 /** A change to one of the colony's gauges: its chip flies from the card to the gauge in the TV's header. */
 const movesAGauge = (f: ShowEffect) => f.on === 'colony' && (f.what === 'mood' || f.what === 'prestige' || f.what === 'air');
 
-/** Whether this screen flies the card's gauge chips to header gauges (the TV's event overlay): elsewhere they stay put. */
-export const GaugeFlightsHere = createContext(false);
+/**
+ * When each gauge chip leaves this screen's card for its gauge in the header (the TV's event overlay sets it); without
+ * it, nothing leaves and the chips stay put.
+ */
+export const GaugeDepartures = createContext<ReadonlyMap<ShowEffect, number> | null>(null);
 
-/** Seconds: how long a gauge's chip sits on the card before it leaves, and how long it flies to its gauge. */
-export const GAUGE_FLIGHT = { wait: 0.7, fly: 0.9 } as const;
-
-/** One gauge chip's trip, on the show clock: it leaves the card, then lands on its gauge. */
-export interface GaugeFlightTimes {
+/** A gauge chip on the card: from when both the card and its change are up, until its event's segment ends. */
+export interface GaugeChip {
   effect: ShowEffect;
-  leaves: number;
-  landsAt: number;
+  onCard: number;
+  end: number;
 }
 
-/** Every gauge chip's trip in the show: it waits on the card from when both the card and its change are up. */
-export function gaugeFlightsAt(s: EventScript, reduced: boolean, grid: ShowGrid): GaugeFlightTimes[] {
+/** Every gauge chip in the show, in fired order. */
+export function gaugeChipsAt(s: EventScript, reduced: boolean, grid: ShowGrid): GaugeChip[] {
   return eventEffectsAt(s, Infinity, reduced, grid)
     .filter((l) => movesAGauge(l.effect))
-    .map((l) => {
-      const leaves = Math.max(l.at, cardAt(l.seg)) + GAUGE_FLIGHT.wait;
-      return { effect: l.effect, leaves, landsAt: leaves + GAUGE_FLIGHT.fly };
-    });
+    .map((l) => ({ effect: l.effect, onCard: Math.max(l.at, cardAt(l.seg)), end: l.seg.endAt }));
 }
 
 /** Whether an event on the map also moved a colony gauge (a MULE theft's mood): its card says so. */
