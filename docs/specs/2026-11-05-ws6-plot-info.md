@@ -2,10 +2,10 @@
 
 2026-11-05 · WS6-1 · class **Standard** (Heiko, 5 Nov, on WS6's recommendation: three PRs, one engine rule change by
 WS3 and named edits in WS4's and WS2's files, no new contract, no new sole owner) · approach **B** (Heiko, 5 Nov:
-"A plus My plots") · report **A, in the side rail** (Heiko, 5 Nov)
+"A plus My plots") · report **A, in the side rail** (Heiko, 5 Nov) · **approved by Heiko, 6 Nov** ("Approved: build it", Mission Control)
 
 **The approved mock is this spec's screens.** The binding scaffold is `design/mocks/plot-info/` at **a3f8e3e3**
-(branch `ws6-mock-auction-rules`; d3f64a51 plus WS4's gem placement and size and the scanning chip, §8; Heiko chose the report in the rail, `#scan-a`; `#scan-b` was set aside). Routes:
+(branch `ws6-mock-auction-rules`, landing on trunk with the plan's first PR; d3f64a51 plus WS4's gem placement and size and the scanning chip, §8; Heiko chose the report in the rail, `#scan-a`; `#scan-b` was set aside). Routes:
 `#scan-a` (C2), `#plots` (C3), `#dev-plots` and `#store` (C4), `#analyse` (C5), `#gem` (C7). Where this text and the
 mock disagree on layout, components or states, the mock wins. "How it works today", with pictures from the real build:
 https://claude.ai/artifact/Ht3DuRAuhuJYLBRFEmubmU (WS6, 5 Nov; Heiko read it and agreed §0 from it).
