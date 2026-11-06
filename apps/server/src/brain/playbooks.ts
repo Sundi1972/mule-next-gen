@@ -20,6 +20,7 @@ import {
   type WriterReply,
 } from '@mule/ai';
 import type { PlaybookNote } from '../mule-game.js';
+import type { Spoken } from './chat.js';
 import { WRITE_CALLS } from './client.js';
 import { timeSlicer } from './slice.js';
 import type { BrainService, PlaybookWriter } from './index.js';
@@ -32,7 +33,21 @@ export interface PlaybooksOptions {
   seats: readonly AiSeat[];
   /** Hears each playbook that takes effect for a Smart seat. */
   record?: (note: PlaybookNote) => void;
+  /**
+   * Hears Claude's line from a plan that came in time, as the plan's phase starts: the land write's at the land grant,
+   * the auction's at the auction (PM ruling a', 5 Nov). The game says it through the seat's chat, inside its caps.
+   */
+  speak?: (seat: PlayerId, said: PlanLine) => void;
 }
+
+/** A plan's line as the game hears it: a decision's spoken fields, said by Claude at the plan's phase. */
+export type PlanLine = Pick<Spoken, 'month'> & { line: string; phase: 'landGrant' | EditPhase };
+
+/**
+ * Whether a plan's line goes to the table: its edits are played, or it proposed none and had none refused, so it keeps
+ * the draft the seat plays. A plan whose edits were refused says nothing: the table never hears a plan not played.
+ */
+const saysPlan = (written: WriterReply, by: Playbook['by']) => by === 'llm' || (written.reply.edits.length === 0 && written.refused.length === 0);
 
 export type { Feedback };
 
@@ -197,6 +212,8 @@ export class Playbooks {
       // month's, since adopt keeps the newest month's playbooks only (WS9).
       seat.adopt(playbook);
       this.options.record?.({ seat: seat.id, month: state.month, phase: 'landGrant', playbook });
+      // The land part's line: the development part carries none, and is said nothing at its start.
+      if (asked?.written && saysPlan(asked.written, playbook.by)) this.speak(seat.id, asked.written.reply.line, state.month, 'landGrant');
     }
   }
 
@@ -261,9 +278,21 @@ export class Playbooks {
         continue;
       }
       if (made.feedback) this.phaseFeedback.set(key, made.feedback);
+      // The development part carries no line: the land write's was said at the land grant.
+      if (saysPlan(ask.written, made.playbook.by)) this.speak(seat.id, ask.written.reply.line, state.month, phase);
       if (made.playbook.by !== 'llm') continue;
       seat.adopt(made.playbook);
       this.options.record?.({ seat: seat.id, month: state.month, phase, playbook: made.playbook });
+    }
+  }
+
+  /** Hands a plan's line to the game's speak; a blank or absent line says nothing, and a speak that throws stops no play. */
+  private speak(seat: PlayerId, line: string | null, month: number, phase: 'landGrant' | EditPhase): void {
+    if (!line?.trim() || !this.options.speak) return;
+    try {
+      this.options.speak(seat, { line, month, phase });
+    } catch (err) {
+      console.error(`playbooks: seat ${seat}'s plan line could not be said: ${messageOf(err)}`);
     }
   }
 
