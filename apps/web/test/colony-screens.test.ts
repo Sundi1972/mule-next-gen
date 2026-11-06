@@ -5,7 +5,6 @@ import { readFileSync } from 'node:fs';
 import { createElement, type ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { loadGroundsManifest } from '../src/components/Grounds';
 import type { TableClient } from '../src/net/client';
 import { ClientProvider } from '../src/net/react';
 import { PhoneGameProvider } from '../src/phone/game';
@@ -517,7 +516,7 @@ describe('G-5 AM-12: the colony score at every month end (variant A)', () => {
   });
 });
 
-describe('C7: the colony grounds on the TV', () => {
+describe('HC-3: the grounds when the art manifest fails', () => {
   type Place = { x: number; y: number; w: number; h: number };
   /** A project as WS7's view will carry it, with its block on the 5×5 grounds (AM-18). */
   const at = (p: ColonyProjectView, place: Place | null): ColonyProjectView => Object.assign({}, p, { place });
@@ -535,7 +534,6 @@ describe('C7: the colony grounds on the TV', () => {
   const manifestFile = readFileSync(new URL('../public/art/colony/manifest.json', import.meta.url), 'utf8');
   /** The web server as the browser meets it: the manifest at its URL, nothing else. */
   const serveManifest = (body: () => Response | Promise<Response>) => vi.stubGlobal('fetch', vi.fn(async (url: string) => (url === MANIFEST_URL ? body() : new Response('', { status: 404 }))));
-  const hrefs = (html: string) => [...element(html, 'colony-grounds').matchAll(/<image[^>]*href="([^"]+)"/g)].map((m) => m[1]!);
   /** The shipped manifest with one part broken, as the server would send it. */
   const broken = (spoil: (m: { frame: Record<string, unknown>; pictures: Record<string, Record<string, Record<string, unknown>>> }) => void) => () => {
     const m = JSON.parse(manifestFile);
@@ -545,28 +543,6 @@ describe('C7: the colony grounds on the TV', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
-  });
-
-  it("B-AC-1 (TV): the month end shows colony-grounds, each place in its stage's dusk picture at TV size", async () => {
-    serveManifest(() => new Response(manifestFile));
-    await loadGroundsManifest();
-    const tv = onTv(game(MONTH_12), TvMonthEnd);
-    expect(has(tv, 'colony-grounds')).toBe(true);
-    const shown = hrefs(tv);
-    expect(shown).toEqual(expect.arrayContaining(['/art/colony/park/standing-dusk@800.webp', '/art/colony/stadium/build2-dusk@800.webp', '/art/colony/hospital/closed-dusk@800.webp']));
-    // Negative: a commissioned project shows its site, never its standing building.
-    expect(shown).toContain('/art/colony/spaceport/site-dusk@800.webp');
-    expect(shown.some((h) => h.startsWith('/art/colony/spaceport/standing'))).toBe(false);
-    expect(has(tv, 'build-site'), 'the build site list stays beside the grounds').toBe(true);
-  });
-
-  it('T-AC-5: politics off, no colony-grounds', async () => {
-    serveManifest(() => new Response(manifestFile));
-    await loadGroundsManifest();
-    for (const colony of [null, undefined]) {
-      expect(has(onTv(game(colony), TvMonthEnd), 'colony-grounds'), `month end, colony ${colony}`).toBe(false);
-      expect(has(onTvRouter(game(colony, { phase: 'planning' })), 'colony-grounds'), `planning, colony ${colony}`).toBe(false);
-    }
   });
 
   it.each<[string, () => Response | Promise<Response>]>([
@@ -584,32 +560,10 @@ describe('C7: the colony grounds on the TV', () => {
     const fresh = await import('../src/components/Grounds');
     serveManifest(body);
     await expect(fresh.loadGroundsManifest()).resolves.toBeNull();
-    const html = renderToStaticMarkup(createElement(fresh.Grounds, { colony: MONTH_12 as GroundsColony, size: 'tv', light: 'dusk' }));
+    const html = renderToStaticMarkup(createElement(fresh.Grounds, { colony: MONTH_12 as GroundsColony, size: 'phone' }));
     expect(has(html, 'colony-grounds')).toBe(true);
     expect(html).not.toContain('<image');
     for (const n of [1, 2, 3, 4]) expect(has(html, `shape-${n}`), `place ${n} is drawn`).toBe(true);
   });
 });
 
-describe('C7: the colony panel beside the map in planning', () => {
-  const at = (p: ColonyProjectView, place: { x: number; y: number; w: number; h: number }): ColonyProjectView => Object.assign({}, p, { place });
-  const PLACED: ColonyView = { ...MIDGAME, projects: [at(PARK, { x: 1, y: 2, w: 1, h: 1 }), at({ ...HOSPITAL, stage: 'closed', monthsLeft: null }, { x: 3, y: 2, w: 1, h: 1 })] };
-  const manifestFile = readFileSync(new URL('../public/art/colony/manifest.json', import.meta.url), 'utf8');
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  it('B-AC-1 (TV planning): planning shows colony-grounds, politics on', async () => {
-    vi.stubGlobal('fetch', vi.fn(async (url: string) => (url === '/art/colony/manifest.json' ? new Response(manifestFile) : new Response('', { status: 404 }))));
-    await loadGroundsManifest();
-    const tv = onTvRouter(game(PLACED, { phase: 'planning' }));
-    const panel = element(tv, 'tv-colony-panel');
-    expect(text(panel)).toContain('The colony grounds');
-    const shown = [...element(panel, 'colony-grounds').matchAll(/<image[^>]*href="([^"]+)"/g)].map((m) => m[1]);
-    expect(shown).toEqual(expect.arrayContaining(['/art/colony/park/standing-day@800.webp', '/art/colony/hospital/closed-day@800.webp']));
-    // Beside the map, at the head of planning's side: the room line under the map before it, everything the side had after it.
-    expect(tv.indexOf('ROOM MULE')).toBeLessThan(tv.indexOf('data-testid="tv-colony-panel"'));
-    for (const id of ['tv-waiting', 'tv-ready-list']) expect(tv.indexOf('data-testid="tv-colony-panel"'), `the panel comes before ${id}`).toBeLessThan(tv.indexOf(`data-testid="${id}"`));
-  });
-});

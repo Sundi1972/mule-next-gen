@@ -22,7 +22,6 @@ import {
 } from '../components/AuctionParts';
 import { Fragment, useEffect, useState, type ReactNode } from 'react';
 import { BuildSite, ColonyGauges, ColonyScoreBand, MonthScoreColumn, TvWinner, useMonthEndDrift, type GaugeLanding } from '../components/Colony';
-import { Grounds } from '../components/Grounds';
 import { StrikeBadge, StrikeMap, StrikeWaiting } from '../components/Strike';
 import { CollapseBanner, ColonyPanel, LeagueTable, WinnerCard } from '../components/MonthEnd';
 import { joinUrl, Qr } from '../components/Qr';
@@ -281,13 +280,6 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
     const places = placesOf(game);
     side = (
       <>
-        {/* A fixed height, so the grounds never push the waiting card or the ready list out; news gives way first. */}
-        {phase === 'planning' && game.colony && (
-          <aside className="flex h-[200px] min-w-0 shrink-0 flex-col gap-2 rounded-panel border border-holo-line bg-panel p-4" data-testid="tv-colony-panel">
-            <span className="label-caps">The colony grounds</span>
-            <Grounds colony={game.colony} size="tv" className="min-h-0 flex-1" />
-          </aside>
-        )}
         {/* This branch also draws an auction or land auction for the moment before its data arrives; Ready means Done there. */}
         {phase !== 'planning' ? null : waiting.length > 0 ? (
           <div className="flex shrink-0 flex-col gap-3 rounded-panel border-2 border-holo bg-holo-soft p-5 shadow-glow" data-testid="tv-waiting">
@@ -725,7 +717,6 @@ export function TvMonthEnd({ game, drift }: { game: MuleView; drift?: GaugeLandi
             <div className="flex flex-col gap-4">
               <ColonyGauges colony={game.colony} size="tv" className="grid-cols-2!" landing={drift} />
               <ColonyPanel view={game} density="tv" />
-              <Grounds colony={game.colony} size="tv" light="dusk" className="h-48 shrink-0" />
               <BuildSite colony={game.colony} players={game.players} size="tv" />
             </div>
           </div>
