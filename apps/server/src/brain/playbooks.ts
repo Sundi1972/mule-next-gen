@@ -57,12 +57,11 @@ const saysPlan = (written: WriterReply, by: Playbook['by']) => by === 'llm' || (
 export type { Feedback };
 
 /**
- * A seat's ask for one month's land grant: the draft its brief showed, the reply once it came in time, whether that
- * grant has started, and the cancel for its call.
+ * A seat's ask for one month's land grant: the reply once it came in time, whether that grant has started, and the
+ * cancel for its call. The edits go onto the phase's draft at its start (AM-A17), so the draft shown is not kept.
  */
 interface Ask {
   month: number;
-  draft: Playbook;
   written: WriterReply | null;
   started: boolean;
   controller: AbortController;
@@ -149,7 +148,7 @@ export class Playbooks {
           console.error(`playbooks: seat ${seat.id} has no development draft for month ${month}: ${messageOf(err)}`);
         }
         const brief = landBrief(state, seat.mind, seat.brain.persona, drafted.land, seat.brain.heard(), last, development?.development ?? null);
-        const ask: Ask = { month, draft: drafted.playbook, written: null, started: false, controller: new AbortController(), development };
+        const ask: Ask = { month, written: null, started: false, controller: new AbortController(), development };
         this.asks.set(seat.id, ask);
         seat.playbookAsked(month);
         const waitMs = this.options.waitMs?.strategy ?? WRITE_CALLS.strategy.timeoutMs;
@@ -204,7 +203,7 @@ export class Playbooks {
           const { land, development } = splitDevelopment(asked.written);
           asked.written = land;
           if (development && asked.development) {
-            this.phaseAsks.set(`${seat.id}/development`, { month: state.month, draft: asked.development, written: development, started: false, controller: new AbortController() });
+            this.phaseAsks.set(`${seat.id}/development`, { month: state.month, written: development, started: false, controller: new AbortController() });
           }
         }
       }
@@ -251,7 +250,7 @@ export class Playbooks {
           feedback: this.phaseFeedback.get(key) ?? null,
           worthBefore: this.worthAtAsk.get(seat.id) ?? null,
         });
-        const ask: Ask = { month: state.month, draft, written: null, started: false, controller: new AbortController() };
+        const ask: Ask = { month: state.month, written: null, started: false, controller: new AbortController() };
         this.phaseAsks.set(key, ask);
         const waitMs = this.options.waitMs?.playbook ?? WRITE_CALLS.playbook.timeoutMs;
         const write = writer
@@ -272,7 +271,7 @@ export class Playbooks {
 
   /**
    * `phase` has started: a call still open for it is cancelled and its reply would be late. A reply that came in time
-   * is applied to the draft its brief showed (the development's, to its draft as it starts); only a playbook carrying Claude's accepted edits is adopted and
+   * is applied to the phase's draft as it starts (AM-A17); only a playbook carrying Claude's accepted edits is adopted and
    * recorded. Otherwise nothing is adopted, so the seat plays the phase its own way (today's hands while
    * AI_PLANS.ownPhases is off). The reply's feedback is kept for that phase's next brief.
    */
@@ -287,9 +286,10 @@ export class Playbooks {
       if (!ask.written) continue;
       let made: ReturnType<typeof playbookFrom>;
       try {
-        // The development's edits go onto its draft as it starts: the land write's was drafted at upkeep, before the land
-        // grant and auction changed what the seat owns. The auction's draft was made after production, and holds.
-        const draft = phase === 'development' ? seat.draft(state, 'development') : ask.draft;
+        // The edits go onto the phase's draft as it starts, the one the engine's own seat would play (AM-A17): the
+        // development's was shown at upkeep, before the land grant changed what the seat owns; the auction's in
+        // production, before the store posted its prices and the month's events ran.
+        const draft = seat.draft(state, phase);
         made = playbookFrom(seat.validator(), state, draft, ask.written);
       } catch (err) {
         console.error(`playbooks: seat ${seat.id}'s ${phase} could not be drafted or validated, it plays its own way: ${messageOf(err)}`);
@@ -334,8 +334,9 @@ export class Playbooks {
 
   /**
    * The playbook that takes effect, by playbookFrom. A reply that came in time has its edits validated against the
-   * draft its brief showed, never a later one whose plan letters may name other plots; only a playbook by 'llm' comes
-   * from that draft. Otherwise (no reply, nothing accepted, a validator that throws) the engine's draft `now` plays.
+   * land grant's own draft `now` (AM-A17): a plan letter was already turned into its plots by the writer, so no letter
+   * can name other plots, and every field Claude left alone plays as the engine's seat would. Otherwise (no reply,
+   * nothing accepted, a validator that throws) `now` plays by engine.
    * The reply's feedback is kept either way.
    */
   private decide(state: GameState, seat: PlayerId, now: Playbook, asked: Ask | null, validate: ValidatePlan): Playbook {
@@ -344,7 +345,7 @@ export class Playbooks {
     if (!asked || !written) return engine;
     let made: ReturnType<typeof playbookFrom>;
     try {
-      made = playbookFrom(validate, state, asked.draft, written);
+      made = playbookFrom(validate, state, now, written);
     } catch (err) {
       console.error(`playbooks: validatePlan failed for seat ${seat}, the engine's playbook plays: ${messageOf(err)}`);
       made = { playbook: engine, feedback: { refused: written.refused, rejected: [] } };
