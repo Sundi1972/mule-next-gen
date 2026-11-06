@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { JOIN_CODE, SETUP_DECISION, type LobbyLink, type PlayLink } from './fixture';
-import { Page, PhoneFrame, States, TvFrame, useHash, type Choice } from './harness';
+import { Page, PhoneFrame, States, TvFrame, useCountdown, useHash, type Choice } from './harness';
 import { MoveDialog, type ClaudeCode, type MoveTo } from './screens/MoveDialog';
-import { PhonePlanning, TvPlanning, type Person, type Table } from './screens/Planning';
+import { CLAUDE_SIDE_PICK_SECONDS, PhonePlanning, TvPlanning, type Person, type Stage, type Table } from './screens/Planning';
 import { PhoneLobby, type JunoState, type Variant, type Viewer } from './screens/PhoneLobby';
 import { SetupPage } from './screens/SetupPage';
 import { TvLobby } from './screens/TvLobby';
@@ -12,7 +12,10 @@ const DECISIONS = [
   'A Claude Code seat has its own join code (MULE-XXXX-XXXX-XXXX) for the whole game. Only the host’s phone shows it, with Copy, the one setup line with its own Copy, and a link to the setup page.',
   'Its chip says where it stands: WAITING FOR CLAUDE, then CLAUDE · CONNECTED. Other phones and the TV see the seat and its chip, never the code.',
   'The host can switch the seat back to Built-in; its code stops working.',
-  'In play the TV ready list and the phone’s ready bar say CLAUDE · THINKING, CLAUDE · READY or CLAUDE · OFFLINE. Thinking holds the table as a person planning does; offline plays its built-in plan and never holds it, unlike an AWAY phone.',
+  'In play the TV ready list and the phone’s ready bar say CLAUDE · THINKING, CLAUDE · READY or CLAUDE · OFFLINE, on the seat’s own row (never folded in with the AIs); offline plays its built-in plan, unlike an AWAY phone.',
+  'HC-3: a Claude Code seat never holds the table. THINKING is a label only and the seat counts as ready, except at the first good’s side pick: there it is waited for, CLAUDE · THINKING · 0:32, at most 45 s, then plays its built-in plan.',
+  'The host can start while a seat is WAITING FOR CLAUDE: the seat says it plays its built-in plan until Claude joins.',
+  'At the side pick, the host’s Move on for… covers a thinking Claude seat too; it then plays its built-in plan.',
   'Mid-game, Move my seat gains a second choice: Hand my seat to Claude Code. Its code works 10 minutes (counting down); the phone is let go once Claude joins.',
   SETUP_DECISION,
   'Open: two variants of the host’s lobby row. A opens the seat in place in the rail; B keeps the row one line, with a Code button that opens a sheet.',
@@ -46,6 +49,19 @@ const PLAY_LINK: Choice<PlayLink>[] = [
   { id: 'ready', title: 'Ready' },
   { id: 'offline', title: 'Offline' },
 ];
+type StageChoice = Stage | 'sidepick-late';
+const STAGE: Choice<StageChoice>[] = [
+  { id: 'planning', title: 'Planning' },
+  { id: 'sidepick', title: 'Side pick, first good' },
+  { id: 'sidepick-late', title: 'Side pick, Claude’s 45 s running out' },
+];
+
+/** The stage and Claude's side-pick clock: 45 s, or the last 3 to watch it run out. */
+function useStage(choice: StageChoice): Pick<Table, 'stage' | 'left'> {
+  const left = useCountdown(choice === 'sidepick' ? CLAUDE_SIDE_PICK_SECONDS : choice === 'sidepick-late' ? 3 : 0);
+  return { stage: choice === 'planning' ? 'planning' : 'sidepick', left };
+}
+
 const KAI: Choice<Person>[] = [
   { id: 'planning', title: 'Planning' },
   { id: 'ready', title: 'Ready' },
@@ -160,12 +176,15 @@ function TvLobbyPage() {
 function TvReadyPage() {
   const [juno, setJuno] = useState<PlayLink>('thinking');
   const [kai, setKai] = useState<Person>('planning');
+  const [stage, setStage] = useState<StageChoice>('planning');
+  const s = useStage(stage);
   return (
-    <Page title="TV: planning ready list" lead="Lena is ready, Brix is Built-in. Juno has its own row, never folded in with the AIs: it can hold the table while it thinks.">
+    <Page title="TV: planning ready list" lead="Lena is ready, Brix is Built-in. Juno has its own row, never folded in with the AIs. Thinking counts as ready, except at the first good’s side pick (45 s at most).">
+      <States label="Stage" choices={STAGE} value={stage} onChange={setStage} testid="stage" />
       <States label="Juno" choices={PLAY_LINK} value={juno} onChange={setJuno} testid="juno" />
       <States label="Kai" choices={KAI} value={kai} onChange={setKai} testid="kai" />
       <TvFrame>
-        <TvPlanning t={{ juno, kai, me: 'ready' }} />
+        <TvPlanning t={{ juno, kai, me: 'ready', ...s }} />
       </TvFrame>
     </Page>
   );
@@ -175,13 +194,16 @@ function PhoneReadyPage() {
   const [juno, setJuno] = useState<PlayLink>('thinking');
   const [kai, setKai] = useState<Person>('ready');
   const [me, setMe] = useState<Table['me']>('planning');
+  const [stage, setStage] = useState<StageChoice>('planning');
+  const s = useStage(stage);
   return (
-    <Page title="Phone: planning ready bar" lead="Lena’s phone, the host’s. A thinking Claude is in the waiting line with its chip; ready or offline it gets its own line.">
+    <Page title="Phone: planning ready bar" lead="Lena’s phone, the host’s. Juno has its own line; only at the first good’s side pick is a thinking Claude in the waiting line, with its 45 s.">
+      <States label="Stage" choices={STAGE} value={stage} onChange={setStage} testid="stage" />
       <States label="Juno" choices={PLAY_LINK} value={juno} onChange={setJuno} testid="juno" />
       <States label="Kai" choices={KAI} value={kai} onChange={setKai} testid="kai" />
       <States label="Lena (you)" choices={ME_STATES} value={me} onChange={setMe} testid="me" />
       <PhoneFrame>
-        <PhonePlanning t={{ juno, kai, me }} onReady={() => setMe('ready')} />
+        <PhonePlanning t={{ juno, kai, me, ...s }} onReady={() => setMe('ready')} />
       </PhoneFrame>
     </Page>
   );
@@ -202,7 +224,7 @@ function MovePage() {
       <States label="Claude code" choices={CODE} value={code} onChange={(c) => (setCode(c), setOpen(true))} testid="code" />
       <PhoneFrame>
         <div className="relative h-full">
-          <PhonePlanning t={{ juno: 'ready', kai: 'planning', me: 'planning' }} onReady={() => {}} onMove={() => setOpen(true)} />
+          <PhonePlanning t={{ juno: 'ready', kai: 'planning', me: 'planning', stage: 'planning', left: 0 }} onReady={() => {}} onMove={() => setOpen(true)} />
           {open && <MoveDialog key={`${code}-${renews}`} to={to} onTo={setTo} code={code} onRenew={renew} onClose={() => setOpen(false)} />}
         </div>
       </PhoneFrame>

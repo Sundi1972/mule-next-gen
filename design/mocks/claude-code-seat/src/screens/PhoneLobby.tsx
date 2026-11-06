@@ -167,8 +167,19 @@ function KickButton({ seat }: { seat: MockSeat }) {
 }
 
 /** "Claude Code" under a Claude seat's name, for everyone at the table; a built-in seat keeps today's row. */
-function Plays({ juno }: { juno: JunoState }) {
-  return juno === 'builtin' ? null : <span className="block text-[10px] font-normal leading-tight text-ink-3">Claude Code</span>;
+function Plays({ juno, host }: { juno: JunoState; host: boolean }) {
+  if (juno === 'builtin') return null;
+  return (
+    <>
+      <span className="block text-[10px] font-normal leading-tight text-ink-3">Claude Code</span>
+      {/* Start stays enabled while the seat waits; the host is told what happens if they start now. */}
+      {host && juno === 'waiting' && (
+        <span className="block text-[10px] font-normal leading-tight text-ink-2" data-testid="waiting-note">
+          Plays its built-in plan until Claude joins
+        </span>
+      )}
+    </>
+  );
 }
 
 /**
@@ -183,7 +194,7 @@ function ComputerRowA({ seat, juno, host, open, onToggle, onPick }: { seat: Mock
         <SeatCreature seat={seat} />
         <span className="min-w-0 flex-1 text-sm font-semibold break-words">
           {seat.name}
-          <Plays juno={juno} />
+          <Plays juno={juno} host={host} />
         </span>
         {chip}
         {host && <KickButton seat={seat} />}
@@ -196,7 +207,7 @@ function ComputerRowA({ seat, juno, host, open, onToggle, onPick }: { seat: Mock
           <SeatCreature seat={seat} />
           <span className="min-w-0 flex-1 text-sm font-semibold break-words">
             {seat.name}
-            <Plays juno={juno} />
+            <Plays juno={juno} host={host} />
           </span>
           {chip}
           <svg aria-hidden viewBox="0 0 24 24" width={14} height={14} fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className={cx('shrink-0 text-ink-3 transition-transform', open && 'rotate-180')}>
@@ -236,7 +247,7 @@ function ComputerRowB({ seat, juno, host, onOpen }: { seat: MockSeat; juno: Juno
       <SeatCreature seat={seat} />
       <span className="min-w-0 flex-1 text-sm font-semibold break-words">
         {seat.name}
-        <Plays juno={juno} />
+        <Plays juno={juno} host={host} />
       </span>
       <Chip word={chipFor(seat, juno)} testid={`chip-${seat.id}`} />
       {host && (

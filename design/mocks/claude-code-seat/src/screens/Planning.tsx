@@ -2,46 +2,59 @@ import { Button, cx, Panel, PlayerMark } from '@mule/ui';
 import { ThemeToggle } from '../../../../../apps/web/src/components/ThemeToggle';
 import { NowCard, type Now } from '../../../../../apps/web/src/phone/Shell';
 import { HOST, ME, SEATS, type MockSeat, type PlayLink } from '../fixture';
-import { Chip, PLAY_CHIP } from '../parts';
+import { Chip, PLAY_CHIP, type ChipWord } from '../parts';
 
 /*
- * GRAFT TARGETS: TvGame's planning ready list (apps/web/src/table/TableApp.tsx) and ReadyBar with WaitingFor
- * (apps/web/src/phone/hub/ReadyBar.tsx), with ready.ts behind both. A Claude Code seat is a computer seat that is not
- * always ready: while it is thinking the table waits for it, as for a person; offline, it plays its built-in plan
- * and the table never waits for it.
+ * GRAFT TARGETS: TvGame's planning ready list and the side-pick status list (apps/web/src/table/TableApp.tsx), and
+ * ReadyBar with WaitingFor (apps/web/src/phone/hub/ReadyBar.tsx), with ready.ts behind them.
+ * HC-3: a Claude Code seat never holds the table, as ready.ts has it for every AI: THINKING is a label, and the seat
+ * counts as ready. The one exception is the first good's side pick, where it is waited for at most 45 seconds and
+ * then plays its built-in plan.
  */
 
 export type Person = 'planning' | 'ready' | 'away';
+
+/** Planning proper, or the first good's side pick: the only place a thinking Claude seat is waited for. */
+export type Stage = 'planning' | 'sidepick';
+
+/** The longest the table waits for a thinking Claude seat at the first good's side pick (HC-3). */
+export const CLAUDE_SIDE_PICK_SECONDS = 45;
 
 export interface Table {
   juno: PlayLink;
   me: 'planning' | 'ready';
   kai: Person;
+  stage: Stage;
+  /** Seconds left on Claude's side-pick wait; at 0 it plays its built-in plan. */
+  left: number;
 }
 
-type Row = { seat: MockSeat; word: string; blocks: boolean; dim: boolean; tone: 'holo' | 'warn' | 'quiet' };
+const clock = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+
+type Row = { seat: MockSeat; word: string; blocks: boolean; dim: boolean; tone: 'holo' | 'warn' | 'quiet'; chip?: ChipWord; suffix?: string; builtin?: boolean };
 
 const PLACE: Record<string, string> = { lena: '2nd', kai: '1st', juno: '3rd', brix: '4th' };
 
 function rowOf(seat: MockSeat, t: Table): Row {
   if (seat.kind === 'builtin') return { seat, word: 'AI · READY', blocks: false, dim: true, tone: 'quiet' };
-  if (seat.kind === 'claude')
-    return {
-      seat,
-      word: PLAY_CHIP[t.juno],
-      blocks: t.juno === 'thinking',
-      dim: t.juno === 'ready',
-      tone: t.juno === 'thinking' ? 'holo' : t.juno === 'offline' ? 'warn' : 'quiet',
-    };
+  if (seat.kind === 'claude') {
+    if (t.stage === 'sidepick' && t.juno === 'thinking')
+      return t.left > 0
+        ? { seat, word: `${PLAY_CHIP.thinking} · ${clock(t.left)}`, blocks: true, dim: false, tone: 'holo', chip: PLAY_CHIP.thinking, suffix: clock(t.left) }
+        : { seat, word: PLAY_CHIP.ready, blocks: false, dim: true, tone: 'quiet', chip: PLAY_CHIP.ready, builtin: true };
+    const tone = t.juno === 'thinking' ? 'holo' : t.juno === 'offline' ? 'warn' : 'quiet';
+    return { seat, word: PLAY_CHIP[t.juno], blocks: false, dim: t.juno === 'ready', tone, chip: PLAY_CHIP[t.juno], builtin: t.juno === 'offline' };
+  }
   const state: Person = seat.id === ME ? t.me : t.kai;
-  if (state === 'ready') return { seat, word: 'READY', blocks: false, dim: true, tone: 'quiet' };
-  if (state === 'away') return { seat, word: 'AWAY · PLANNING', blocks: true, dim: false, tone: 'warn' };
-  return { seat, word: 'PLANNING', blocks: true, dim: false, tone: 'holo' };
+  const doing = t.stage === 'sidepick' ? 'PICKING' : 'PLANNING';
+  if (state === 'ready') return { seat, word: t.stage === 'sidepick' ? 'SELL ✓' : 'READY', blocks: false, dim: true, tone: 'quiet' };
+  if (state === 'away') return { seat, word: `AWAY · ${doing}`, blocks: true, dim: false, tone: 'warn' };
+  return { seat, word: doing, blocks: true, dim: false, tone: 'holo' };
 }
 
 const rowsOf = (t: Table) => SEATS.map((s) => rowOf(s, t));
 
-/** A copy of ReadyCount: here a computer seat counts as ready only when it is not thinking. */
+/** A copy of ReadyCount: ready.ts's own, except at the side pick, where a thinking Claude seat is not ready yet. */
 function ReadyCount({ t, tv = false }: { t: Table; tv?: boolean }) {
   const rows = rowsOf(t);
   return (
@@ -63,7 +76,7 @@ export function TvPlanning({ t }: { t: Table }) {
         <div className="flex flex-col gap-1">
           <span className="label-caps whitespace-nowrap text-base!">Month 3 / 12</span>
           <h1 className="font-display text-5xl font-semibold leading-none" data-testid="tv-phase">
-            Planning
+            {t.stage === 'sidepick' ? 'Smithore · pick your side' : 'Planning'}
           </h1>
         </div>
         <div className="flex shrink-0 items-center gap-4">
@@ -73,11 +86,11 @@ export function TvPlanning({ t }: { t: Table }) {
       </header>
       <div className="flex min-h-0 flex-1" data-testid="tv-unchanged">
         <Panel className="flex-1 items-center justify-center">
-          <span className="label-caps">Map, news and chat: unchanged</span>
+          <span className="label-caps">{t.stage === 'sidepick' ? 'Status table, news and chat: unchanged' : 'Map, news and chat: unchanged'}</span>
         </Panel>
       </div>
       <ul className="flex shrink-0 flex-col gap-2" data-testid="tv-ready-list">
-        {rowsOf(t).map(({ seat, word, dim, tone }) => (
+        {rowsOf(t).map(({ seat, word, dim, tone, builtin }) => (
           <li key={seat.id} className={cx('flex items-center gap-3', dim && 'opacity-60')} data-testid={`tv-ready-${seat.id}`}>
             <span data-num className="w-9 shrink-0 font-mono text-sm text-ink-3">
               {PLACE[seat.id]}
@@ -87,8 +100,8 @@ export function TvPlanning({ t }: { t: Table }) {
               {seat.name}
               {seat.kind === 'claude' && <span className="ml-2 font-mono text-sm font-normal text-ink-3">Claude Code</span>}
             </span>
-            {seat.kind === 'claude' && t.juno === 'offline' && <span className="font-mono text-sm text-ink-3">plays its built-in plan</span>}
-            <span className={cx('font-mono text-sm', TONE[tone], word === 'CLAUDE · THINKING' && 'animate-pulse')} data-testid={`tv-state-${seat.id}`}>
+            {builtin && <span className="font-mono text-sm text-ink-3">plays its built-in plan</span>}
+            <span className={cx('font-mono text-sm', TONE[tone], word.startsWith(PLAY_CHIP.thinking) && 'animate-pulse')} data-testid={`tv-state-${seat.id}`}>
               {word}
             </span>
           </li>
@@ -101,44 +114,52 @@ export function TvPlanning({ t }: { t: Table }) {
 /** One seat in the phone's waiting line: its creature, its name, and a chip when it is away or a thinking Claude. */
 function Waiting({ row }: { row: Row }) {
   const { seat } = row;
-  const away = row.word === 'AWAY · PLANNING';
+  const away = row.word.startsWith('AWAY');
   return (
     <span className="flex items-center gap-1 font-semibold" data-testid={`waiting-${seat.id}`}>
       <PlayerMark slot={seat.slot} species={seat.species} size={14} glow={!away} />
       {seat.id === ME ? 'you' : seat.name}
       {away && <span className="rounded-chip border border-warn/60 px-1 font-mono text-[10px] font-bold text-warn">AWAY</span>}
-      {seat.kind === 'claude' && <Chip word="CLAUDE · THINKING" testid="waiting-chip" />}
+      {row.chip && <Chip word={row.chip} suffix={row.suffix} testid="waiting-chip" />}
     </span>
   );
 }
 
 /**
- * The Claude seat's line under the waiting line, once the table no longer waits for it: ready, or offline and
- * playing its built-in plan. While it thinks it is in the waiting line instead, so it shows once.
+ * The Claude seat's own line, whenever the table is not waiting for it: thinking, ready, or offline and playing its
+ * built-in plan. At the side pick, while it is waited for, it is in the waiting line instead, so it shows once.
  */
-function ClaudeLine({ t }: { t: Table }) {
-  if (t.juno === 'thinking') return null;
-  const seat = SEATS.find((s) => s.kind === 'claude')!;
+function ClaudeLine({ row }: { row: Row }) {
+  if (row.blocks || !row.chip) return null;
+  const { seat } = row;
   return (
     <span className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-sm" data-testid="claude-line">
-      <PlayerMark slot={seat.slot} species={seat.species} size={14} glow={t.juno === 'ready'} />
+      <PlayerMark slot={seat.slot} species={seat.species} size={14} glow={!row.dim} />
       <span className="font-semibold">{seat.name}</span>
-      <Chip word={PLAY_CHIP[t.juno]} testid="claude-line-chip" />
-      {t.juno === 'offline' && <span className="text-xs text-ink-2">plays its built-in plan</span>}
+      <Chip word={row.chip} testid="claude-line-chip" />
+      {row.builtin && <span className="text-xs text-ink-2">plays its built-in plan</span>}
     </span>
   );
 }
 
 function phoneNow(t: Table, waiting: Row[]): Now {
-  if (t.me === 'planning') return { title: 'Plan your month', detail: 'Planning has no clock: it ends when everyone is ready.' };
-  if (waiting.length === 0) return { title: 'Everyone is ready', detail: 'The land grant starts.' };
+  const side = t.stage === 'sidepick';
+  if (t.me === 'planning')
+    return side ? { title: 'Pick your side for Smithore', detail: 'Buy or Sell. The walk starts when everyone has picked.' } : { title: 'Plan your month', detail: 'Planning has no clock: it ends when everyone is ready.' };
+  if (waiting.length === 0) return side ? { title: 'Everyone has picked', detail: 'The Smithore walk starts.' } : { title: 'Everyone is ready', detail: 'The land grant starts.' };
   const names = waiting.map((r) => r.seat.name).join(' and ');
-  return { title: `You're ready. Waiting for ${names}`, detail: 'Planning has no clock: it ends when everyone is ready. As the host, you can continue without them.' };
+  const claude = waiting.some((r) => r.seat.kind === 'claude') ? ' A Claude seat is waited for at most 45 seconds, then plays its built-in plan.' : '';
+  return side
+    ? { title: `You've picked. Waiting for ${names}`, detail: `As the host, you can move on without them.${claude}` }
+    : { title: `You're ready. Waiting for ${names}`, detail: 'Planning has no clock: it ends when everyone is ready. As the host, you can continue without them.' };
 }
 
 /** The planning rail as GameShell draws it on a phone; the stage beside it is unchanged. */
 export function PhonePlanning({ t, onReady, onMove }: { t: Table; onReady: () => void; onMove?: () => void }) {
-  const waiting = rowsOf(t).filter((r) => r.blocks && r.seat.id !== ME);
+  const rows = rowsOf(t);
+  const waiting = rows.filter((r) => r.blocks && r.seat.id !== ME);
+  const claudeRow = rows.find((r) => r.seat.kind === 'claude')!;
+  const side = t.stage === 'sidepick';
   const ready = t.me === 'ready';
   const host = ME === HOST;
   return (
@@ -146,7 +167,7 @@ export function PhonePlanning({ t, onReady, onMove }: { t: Table; onReady: () =>
       <div className="relative flex h-full bg-table text-ink" data-testid="game-shell">
         <main className="flex min-w-0 flex-1 p-2.5" data-testid="stage">
           <Panel className="flex-1 items-center justify-center">
-            <span className="label-caps">Planning hub: unchanged</span>
+            <span className="label-caps">{side ? 'Side pick: unchanged' : 'Planning hub: unchanged'}</span>
           </Panel>
         </main>
         <aside className="flex w-(--rail) shrink-0 flex-col border-l border-holo-faint bg-void/40" data-testid="guide">
@@ -154,7 +175,7 @@ export function PhonePlanning({ t, onReady, onMove }: { t: Table; onReady: () =>
             <div className="flex items-center justify-between gap-1.5">
               <div className="flex min-w-0 flex-col">
                 <span className="label-caps text-[10px]!">Month 3 / 12</span>
-                <span className="truncate font-display text-lg font-semibold leading-tight">Planning</span>
+                <span className="truncate font-display text-lg font-semibold leading-tight">{side ? 'Smithore' : 'Planning'}</span>
               </div>
               <ReadyCount t={t} />
             </div>
@@ -188,7 +209,7 @@ export function PhonePlanning({ t, onReady, onMove }: { t: Table; onReady: () =>
                 <svg aria-hidden viewBox="0 0 24 24" width={18} height={18} fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
                   <path d="M5 12.5l4.5 4.5L19 7" />
                 </svg>
-                You're ready
+                {side ? "You've picked" : "You're ready"}
               </span>
             )}
             {waiting.length > 0 ? (
@@ -199,18 +220,18 @@ export function PhonePlanning({ t, onReady, onMove }: { t: Table; onReady: () =>
                 ))}
               </span>
             ) : (
-              ready && <span className="text-sm text-ink-2">Everyone is ready.</span>
+              ready && <span className="text-sm text-ink-2">{side ? 'Everyone has picked.' : 'Everyone is ready.'}</span>
             )}
-            <ClaudeLine t={t} />
+            <ClaudeLine row={claudeRow} />
             {!ready ? (
               <Button size="lg" className="w-full" onClick={onReady} data-testid="ready">
-                I'm ready
+                {side ? 'Done' : "I'm ready"}
               </Button>
             ) : (
               host &&
               waiting.length > 0 && (
                 <Button size="md" variant="outline" className="w-full" data-testid="continue">
-                  Continue without {waiting.length === 1 ? waiting[0]!.seat.name : 'them'}
+                  {side ? 'Move on for' : 'Continue without'} {waiting.length === 1 ? waiting[0]!.seat.name : 'them'}
                 </Button>
               )
             )}
