@@ -63,6 +63,7 @@ describe('the colony at the table', () => {
 
     game.handle('s1', { type: 'commission', id: 'hospital' });
     state.players.find((p) => p.id === 's2')!.stock.electronics = 1;
+    const price = state.store.posted.electronics;
     game.handle('s2', { type: 'donate', id: 'hospital', credits: 100, goods: { electronics: 1 } });
 
     for (const viewer of [null, 's1', 's2']) {
@@ -72,7 +73,7 @@ describe('the colony at the table', () => {
         stage: 'commissioned',
         buildMonths: PRESTIGE.hospital.buildMonths,
         funded: { credits: 100, goods: { electronics: 1 } },
-        plaque: [{ playerId: 's2', value: 100 + GOOD_CONFIG.electronics.refPrice }],
+        plaque: [{ playerId: 's2', value: 100 + price }],
       });
     }
     const hospital = game.viewFor(null).colony!.catalogue.find((c) => c.id === 'hospital')!;
@@ -145,13 +146,14 @@ describe('the colony at the table', () => {
     expect(game.viewFor(null).colony!.projects[0]!.maxBid, 'the Governor can take the bid back').toBeNull();
   });
 
-  it("C35: the colony view carries refPrice for every good the catalogue needs, and a gift's plaque grows by exactly units × that price, after the store's prices have moved", () => {
+  it("C35, AM-13: the colony view's refPrice is the store's price today for every good the catalogue needs, and a gift's plaque grows by exactly units × that price", () => {
     const { game, state } = governed();
     const needed = [...new Set(Object.values(PRESTIGE).flatMap((row) => Object.keys(row.goods)))].sort();
-    // The store's reference drifts with trade; the plaque values goods as the engine does, so the view must too.
-    for (const good of needed) state.store.refPrice[good as keyof typeof state.store.refPrice] += 37;
+    // The store's posted price moves with the market; a gift is valued at it on the day (PM ruling, option B).
+    for (const good of needed) state.store.posted[good as keyof typeof state.store.posted] += 37;
     const view = game.viewFor('s2').colony!;
     expect(Object.keys(view.refPrice ?? {}).sort()).toEqual(needed);
+    for (const good of needed) expect(view.refPrice![good as keyof typeof view.refPrice], good).toBe(state.store.posted[good as keyof typeof state.store.posted]);
     for (const viewer of [null, 's1']) expect(game.viewFor(viewer).colony!.refPrice, `${viewer ?? 'the TV'}'s view`).toEqual(view.refPrice);
 
     game.handle('s1', { type: 'commission', id: 'hospital' });

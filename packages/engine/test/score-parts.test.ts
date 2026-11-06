@@ -283,7 +283,7 @@ describe('T-AC-6: score parts add up and score() is unchanged', () => {
     expect(scoreParts(state, 'b').donated, "only b's own plaque lines").toBe(50);
   });
 
-  it('G-5: a gift of goods counts at its reference price, not today\'s store price: 1 Electronics posted 20 below reference raises Worth by 20', () => {
+  it('G-5 AM-13: a gift of goods counts at the store\'s price on the day: 1 Electronics posted 20 below reference leaves Worth unchanged', () => {
     const state = workedExample({ money: 2140, air: 0, plots: 6, mules: 5 });
     state.politics = { ...state.politics!, governor: 'a', election: null };
     commission(state, 'a', 'hospital');
@@ -294,6 +294,6 @@ describe('T-AC-6: score parts add up and score() is unchanged', () => {
     expect(allPrices(state).electronics, 'Worth reads the posted price').toBe(ref - 20);
 
     donate(state, 'a', 'hospital', 0, { electronics: 1 });
-    expect(scoreParts(state, 'a')).toMatchObject({ goods: before.goods - (ref - 20), donated: ref, total: before.total + 20 });
+    expect(scoreParts(state, 'a')).toMatchObject({ goods: before.goods - (ref - 20), donated: ref - 20, total: before.total });
   });
 });
