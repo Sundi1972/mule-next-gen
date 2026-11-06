@@ -26,7 +26,7 @@ describe('HC-3: the resource-utility model keeps a game replayable', () => {
     expect(result.identical).toBe(true);
   });
 
-  it('Task 2.0: the record carries AI_VALUE.unit, so a switch-on game replays the same on a server whose switch is off', { timeout: 60_000 }, async () => {
+  it('T-AC-11 (HC-3): the record carries AI_VALUE.unit, so a switch-on game replays the same on a server whose switch is off', { timeout: 60_000 }, async () => {
     AI_VALUE.unit = true;
     const record = await playRecorded();
     expect(record.options.aiValueUnit, 'the record names the switch it was played under').toBe(true);
@@ -39,7 +39,7 @@ describe('HC-3: the resource-utility model keeps a game replayable', () => {
     expect(AI_VALUE.unit, 'the replay gives the server its own switch back').toBe(false);
   });
 
-  it("Task 2.0, negative: a record that names no switch replays under the server's own, as before", { timeout: 60_000 }, async () => {
+  it("T-AC-11 (HC-3), negative: a record that names no switch replays under the server's own, as before", { timeout: 60_000 }, async () => {
     AI_VALUE.unit = true;
     const record = await playRecorded();
     delete record.options.aiValueUnit;
