@@ -174,7 +174,8 @@ export function installGain(obs: GameState, o: Outlook, tile: Tile, outfit: Outf
  * STRATEGIST.factoryInputMonths months of runs while the household, the new factory's crew included, eats and drinks
  * from the same stock and what is left spoils between months. A plot of its own feeds the factory only with what is
  * left after the household eats (FM-factory-input): a farm turned off, or one making only the household's Food, feeds
- * nothing. Its plots make what the next production on a copy of what it sees makes (madeNext), each month alike.
+ * nothing, and nor does what the seat's factories already running take of the same input. Its plots make what the next
+ * production on a copy of what it sees makes (madeNext), each month alike.
  */
 export function canFeed(obs: GameState, me: string, outfit: Outfit): boolean {
   if (!isFactory(outfit)) return true;
@@ -184,12 +185,15 @@ export function canFeed(obs: GameState, me: string, outfit: Outfit): boolean {
     food: UPKEEP.baseFood + Math.ceil(crew / UPKEEP.crewPerFood),
     water: UPKEEP.baseWater + Math.ceil(crew / UPKEEP.crewPerWater),
   };
+  const factories = obs.tiles.filter((t) => t.owner === me && t.outfit && isFactory(t.outfit));
   return (Object.entries(RECIPES[outfit].inputs) as [Good, number][]).every(([g, q]) => {
     if (g === 'energy') return true;
     const own = obs.tiles.some((t) => t.owner === me && t.outfit === g) ? madeNext(obs, me)[g] : 0;
+    // What the seat's factories already take of it each month, before the new one gets any.
+    const taken = factories.reduce((n, t) => n + (RECIPES[t.outfit as ProcessedGood].inputs[g] ?? 0), 0);
     let carry = p.stock[g];
     for (let m = 0; m < STRATEGIST.factoryInputMonths; m++) {
-      carry += own - (household[g] ?? 0) - q;
+      carry += own - (household[g] ?? 0) - taken - q;
       if (carry < 0) return false;
       carry = Math.floor(carry * (1 - GOOD_CONFIG[g].spoilage));
     }
