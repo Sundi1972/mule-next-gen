@@ -283,9 +283,15 @@ async function playTheLandAuction(browser: Browser, base: string, server: MuleSe
   }
   console.log(`✓ ${first} and ${second} are Ossa's on the TV's map in development`);
 
-  // Month 2's goods: Brix sold all his Food in month 1, so he opens Food's status screen with none to sell.
+  // Month 2's goods: Brix opens Food's status screen with none to sell, and Lena with some over what she must hold.
+  // Month 1's sale no longer empties Brix (RULE-4 stops him at his need), so the fixture does.
   await everyone(phones, (p) => goToThePub(p, server, code, truth));
+  const food = await untilServer(truth, brix.page, (a) => a.stage === 'status', "month 2's goods auction opens on its status screen", within(SCALE, PHASE_MS.development + PHASE_MS.production));
+  check(food.good === 'food', `month 2's goods open on Food, got ${food.good}`);
+  const lenaNeeds = food.status.find((r) => r.id === truth.idOf(lena))?.need ?? 0;
+  foodForTheNeedStop(server, code, { empty: truth.idOf(brix), seller: truth.idOf(lena), sellerHas: lenaNeeds + NEED_STOP_SPARE });
   await readTheEmptyHandedStatus(phones, truth);
+  await readTheNeedStop({ seller: lena, empty: brix, others: [ossa] }, tv, truth, server, code);
   await everyone(phones, (p) => pressDoneThroughTheAuction(p.page));
   check(errors.length === 0, `no page errors: ${errors.join('; ')}`);
 }
@@ -722,6 +728,130 @@ async function readTheGoodsWalk(cast: { seller: Phone; buyer: Phone; stayer: Pho
   const zero = Object.values(after).some((l) => l.endsWith(' (0)'));
   const moved = (id: string) => `${name(id)} ${before[id]} → ${after[id]}`;
   console.log(`✓ B-AC-2 (WS6): after ${traded.units} units traded, ${moved(sellerId)} and ${moved(buyerId)} on three phones and the TV${zero ? ', a surplus of 0 drawn "(0)"' : ''}`);
+}
+
+/** What month 2's Food seller holds over her need for RULE-4's walk: three to sell before she stops. */
+const NEED_STOP_SPARE = 3;
+
+/** Waits a frame at a time until the KEEPS mark over walker `id` on `s` reads `want`; fails naming what it read. */
+async function untilKeeps(s: Screen, id: string, want: string, what: string): Promise<void> {
+  try {
+    await s.page.waitForFunction(([who, text]) => document.querySelector(`[data-testid=keeps-${who}]`)?.textContent === text, [id, want] as const, { timeout: PRESS_MS, polling: 'raf' });
+  } catch (err) {
+    if (!(err instanceof playwrightErrors.TimeoutError)) throw err;
+    const got = await s.page.evaluate((who) => document.querySelector(`[data-testid=keeps-${who}]`)?.textContent ?? null, id);
+    check(false, `${what} on ${s.name}: want "${want}", got ${JSON.stringify(got)}`);
+  }
+}
+
+/**
+ * RULE-4 front to back, on month 2's Food (the fixture gives `seller` NEED_STOP_SPARE over her need and `empty` none,
+ * and the walk a long clock). Starts on the status screen and leaves the walk running:
+ *  B-AC-C1 (negative): `empty`, holding none, taps Sell in the walk; the phone takes no tap and the server keeps him a buyer.
+ *  B-AC-B1: `seller` walks down to the store's buying line, sells her spare and stops at her need: the server holds her
+ *    there, held; her phone shows KEEPS n and the stop line, every other screen the KEEPS mark.
+ *  B-AC-B2: a tap of ▼ sells nothing; holding ▼ a second sells on below her need.
+ *  B-AC-C1: trading at the store's line she taps Buy: no unit moves after, the server has her a buyer at the bottom edge,
+ *    and walking up to the store's selling line she buys from it.
+ */
+async function readTheNeedStop(cast: { seller: Phone; empty: Phone; others: Phone[] }, tv: Page, truth: Truth, server: MuleServer, code: string): Promise<void> {
+  const { seller, empty, others } = cast;
+  const phones = [seller, empty, ...others];
+  const [id, emptyId] = [truth.idOf(seller), truth.idOf(empty)];
+  const mine = (a: AuctionView, who = id) => a.walkers.find((w) => w.id === who);
+  const opened = truth.board().auction;
+  check(opened?.stage === 'status' && opened.good === 'food', `RULE-4 starts on Food's status screen, got ${opened?.good} ${opened?.stage}`);
+  const need = opened.status.find((r) => r.id === id)?.need ?? 0;
+  check(need > 0 && truth.stockOf(seller, 'food') === need + NEED_STOP_SPARE, `RULE-4 needs ${seller.name} ${NEED_STOP_SPARE} over a need above 0, got ${truth.stockOf(seller, 'food')} for ${need}`);
+  await tapSide(truth, seller, 'seller', 'seller', `RULE-4: ${seller.name} switches to Sell`);
+  await everyone(phones, (p) => pressReadyAtTheSidePick(p.page));
+  await untilServer(truth, seller.page, (a) => a.good === 'food' && a.stage === 'walk', "Food's walk opens", SIDE_PICK_MS);
+  longWalk(server, code);
+  const screens: Screen[] = [...phones.map((p) => ({ name: `${p.name}'s phone`, page: p.page })), { name: 'the TV', page: tv }];
+
+  // B-AC-C1, negative: with none to hold, Sell takes no tap and the server keeps him a buyer.
+  const sell = empty.page.locator('[data-phase=auction]').getByRole('radio', { name: 'Seller' });
+  check(await sell.isDisabled({ timeout: PRESS_MS }), `B-AC-C1: ${empty.name}, holding no Food, finds Sell off in the walk`);
+  await sell.click({ force: true, timeout: PRESS_MS });
+  await empty.page.waitForTimeout(TAP_SETTLE_MS);
+  check(mine(truth.board().auction!, emptyId)?.side === 'buyer', `B-AC-C1: ${empty.name}'s tap on Sell, holding none, is refused: the server holds ${mine(truth.board().auction!, emptyId)?.side}`);
+  console.log(`✓ B-AC-C1 (negative): ${empty.name}, holding no Food, taps Sell in the walk; it is off, and the server keeps him a buyer`);
+
+  // B-AC-B1: down to the store's buying line; she sells her spare and stops at her need, held.
+  await walkUntil(truth, seller, 'down', (a) => mine(a)?.held === true, `B-AC-B1: ${seller.name} walks down to the store's line and stops at her need`);
+  await truth.held(async () => {
+    const a = truth.board().auction!;
+    const stock = truth.stockOf(seller, 'food');
+    check(stock === need && mine(a)?.units === need, `B-AC-B1: the server holds ${seller.name} at her need of ${need}, got ${stock} (board ${mine(a)?.units})`);
+    check(!a.deals.some((d) => d.seller === id), `B-AC-B1: once held ${seller.name} sells nothing`);
+    await Promise.all(screens.map((s) => untilKeeps(s, id, `KEEPS ${need}`, `B-AC-B1: ${seller.name}'s walker is marked KEEPS ${need}`)));
+    const words = await readText(seller.page, 'held');
+    check(words === `Stopped at ${need} Food: what you need next month. To sell more, hold ▼: you’d be short next month.`, `B-AC-B1: ${seller.name}'s rail says she stopped and how to sell on, got "${words}"`);
+    const down = await readText(seller.page, 'hold-down');
+    check(down === '▼ Hold: sell short', `B-AC-B1: ${seller.name}'s ▼ is the hold that sells short, got "${down}"`);
+    for (const p of [empty, ...others]) check((await p.page.getByTestId('held').count()) === 0, `B-AC-B1: ${p.name}'s rail says nothing of ${seller.name}'s stop`);    console.log(`✓ B-AC-B1: ${seller.name} sold her ${NEED_STOP_SPARE} spare and stopped at ${need}, held on the server; KEEPS ${need} on three phones and the TV, and her rail: "${words}"`);
+  });
+
+  // B-AC-B2, negative: one tap of ▼ sells nothing.
+  await seller.page.locator('[data-testid=hold-down]:not([disabled])').click({ timeout: PRESS_MS });
+  await seller.page.waitForTimeout(TAP_SETTLE_MS);
+  const tapped = truth.board().auction!;
+  check(truth.stockOf(seller, 'food') === need && mine(tapped)?.held === true && !tapped.deals.some((d) => d.seller === id), `B-AC-B2: a tap of ▼ sells nothing: ${seller.name} holds ${truth.stockOf(seller, 'food')} of ${need}, held ${mine(tapped)?.held}`);
+  console.log(`✓ B-AC-B2 (negative): a tap of ▼ leaves ${seller.name} held at ${need}`);
+
+  // B-AC-B2: holding ▼ a second, she sells on below her need.
+  await hold(seller.page, 'down', PRESS_MS);
+  const short = await untilServer(truth, seller.page, (a) => (mine(a)?.units ?? need) < need, `B-AC-B2: holding ▼ a second, ${seller.name} sells below her need of ${need}`, within(SCALE, WALK.shortHoldMs + WALK.tradeStartMs) + PRESS_MS);
+  await seller.page.mouse.up();
+  check(mine(short)?.held === undefined && truth.stockOf(seller, 'food') < need, `B-AC-B2: the server lets ${seller.name} sell on: held ${mine(short)?.held}, ${truth.stockOf(seller, 'food')} of ${need}`);
+  console.log(`✓ B-AC-B2: holding ▼ a second, ${seller.name} sells on below her need: ${need} → ${mine(short)?.units} on the server`);
+
+  // B-AC-C1: still trading at the store's line, she taps Buy.
+  const trading = await untilServer(truth, seller.page, (a) => a.deals.some((d) => d.seller === id && d.buyer === 'store'), `B-AC-C1: ${seller.name} trades at the store's line`);
+  check(mine(trading)?.line === 'store', `B-AC-C1: ${seller.name} stands at the store's line, got ${mine(trading)?.line}`);
+  await seller.page.locator('[data-phase=auction]').getByRole('radio', { name: 'Buyer' }).click({ timeout: PRESS_MS });
+  const switched = await untilServer(truth, seller.page, (a) => mine(a)?.side === 'buyer', `B-AC-C1: the server has ${seller.name} a buyer after her tap on Buy`);
+  const kept = mine(switched)!.units;
+  check(mine(switched)!.at <= switched.lo, `B-AC-C1: ${seller.name} starts buying at the board's bottom edge ${switched.lo}, got ${mine(switched)!.at}`);
+  // The board redraws its deals on its next tick; by then her sale is gone, with no unit sold after the switch.
+  const ended = await untilServer(truth, seller.page, (a) => !a.deals.some((d) => d.seller === id), `B-AC-C1: ${seller.name}'s sale ends on the board's next tick`, within(SCALE, WALK.tickMs * 2));
+  check(mine(ended)!.units === kept, `B-AC-C1: no unit sold after the switch: ${kept} → ${mine(ended)!.units}`);
+  await seller.page.waitForTimeout(TAP_SETTLE_MS);
+  check(truth.stockOf(seller, 'food') === kept, `B-AC-C1: no unit moves after the switch: ${seller.name} kept ${kept}, holds ${truth.stockOf(seller, 'food')}`);
+  await walkUntil(truth, seller, 'up', (a) => mine(a)?.line === 'store', `B-AC-C1: ${seller.name} walks up to the store's selling line`);
+  const bought = await untilServer(
+    truth,
+    seller.page,
+    (a) => (mine(a)?.units ?? 0) > kept,
+    `B-AC-C1: at the store's selling line ${seller.name} buys from the store`,
+    within(SCALE, WALK.tradeStartMs) + PRESS_MS,
+  );
+  check(truth.stockOf(seller, 'food') > kept, `B-AC-C1: the server's Food for ${seller.name} rose from ${kept} to ${truth.stockOf(seller, 'food')}`);
+  // Tap ▼ to stop, as her rail says, so the rest of the auction is pressed through.
+  await seller.page.locator('[data-testid=hold-down]:not([disabled])').click({ timeout: PRESS_MS });
+  console.log(`✓ B-AC-C1: trading at the store's line ${seller.name} tapped Buy: the sale stopped at ${kept}, the server put her at the bottom edge, and walking up she bought from the store (${kept} → ${mine(bought)?.units})`);
+}
+
+/** Test fixture: the walk now running gets a long clock, so RULE-4's steps are timed by the board, never by the bell. */
+function longWalk(server: MuleServer, code: string): void {
+  const room = server.registry.get(code) as unknown as { game: { state: GameState; ctx: { changed(): void } } } | undefined;
+  check(room?.game.state.auction?.stage === 'walk', `room ${code} is walking a good`);
+  room.game.state.auction.clockMs = 60_000;
+  room.game.ctx.changed();
+}
+
+/**
+ * Test fixture, on month 2's Food status screen: `empty` holds no Food (B-AC-4), `seller` holds `sellerHas` (RULE-4),
+ * and the store has plenty to sell, so a seller who switches to Buy can buy from it (B-AC-C1).
+ */
+function foodForTheNeedStop(server: MuleServer, code: string, cast: { empty: string; seller: string; sellerHas: number }): void {
+  const room = server.registry.get(code) as unknown as { game: { state: GameState; ctx: { changed(): void } } } | undefined;
+  check(room, `room ${code} is on the server`);
+  const { state } = room.game;
+  state.players.find((p) => p.id === cast.empty)!.stock.food = 0;
+  state.players.find((p) => p.id === cast.seller)!.stock.food = cast.sellerHas;
+  state.store.stock.food = 40;
+  room.game.ctx.changed();
 }
 
 const fmtCr = (n: number) => Math.round(n).toLocaleString('en');
