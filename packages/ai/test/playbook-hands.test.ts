@@ -311,7 +311,7 @@ function ownPhasesOn(): void {
 
 describe('the own path plays today’s development and auction while AI_PLANS.ownPhases is off (AM-26, RULE-6)', { timeout: SLOW_MS }, () => {
   it("B-AC-6, T-AC-13 (RULE-6, AI_PLANS.ownPhases off): a Classic seat's own path plays today's development and auction and writes neither; its planning still writes and plays; an adopted part still plays", () => {
-    // A chain is AM-32's one exception to "ownPhases off plays today's path", so none can be committed here.
+    // A chain is AM-33's one exception to "ownPhases off plays today's path", so none can be committed here.
     const chainMonths = AI_PLANS.chain.months;
     AI_PLANS.chain.months = 0;
     try {
@@ -662,7 +662,7 @@ describe('the seat plays its development and auction parts (C4, RULE-6, RULE-7)'
   });
 
   it('B-AC-6 (AM-27): an adopted route with analyses plays as adopted, its installs the route’s, while the own route in the same state is picked again', () => {
-    // The built case is drafted for a plan with no chain: month 1's Electronics price would draft one (AM-32).
+    // The built case is drafted for a plan with no chain: month 1's Electronics price would draft one (AM-33).
     const chainMonths = AI_PLANS.chain.months;
     AI_PLANS.chain.months = 0;
     try {
@@ -824,7 +824,7 @@ describe('the seat plays its development and auction parts (C4, RULE-6, RULE-7)'
 
   // trace-allow: HC-9, the spec's own failure-mode id for a draft or validator error (spec §4, "Retry, poison, page?"); trace-check reads no HC- ids
   it('HC-9: a development or auction draft or validator that throws is logged, writes nothing, and the seat plays today’s path', () => {
-    // A chain is AM-32's one exception to "ownPhases off plays today's path", so none can be committed here.
+    // A chain is AM-33's one exception to "ownPhases off plays today's path", so none can be committed here.
     const chainMonths = AI_PLANS.chain.months;
     AI_PLANS.chain.months = 0;
     try {

@@ -53,7 +53,7 @@ function strategyOf(state: GameState, mind: Mind, seed: number): Strategy {
   return draftPlaybook({ state, seat: mind.me, mind, seed, phase: 'development' }).strategy;
 }
 
-/** The switch-on value under test: AI_PLANS.chain.months ships at 0, which switches chains off (AM-32). */
+/** The switch-on value under test: AI_PLANS.chain.months ships at 0, which switches chains off (AM-33). */
 const CHAIN_ON = 'AI_PLANS.chain.months=3';
 
 /** Runs `fn` with AI_PLANS paths set by --set, then puts each back. */
@@ -70,7 +70,7 @@ function withPlans<T>(sets: string[], fn: () => T): T {
 
 /**
  * RULE-4's money-maker score, written out from the rule's words: the best plots' install gains, less the rivals' share.
- * A factory good the seat can't feed scores as AM-32's chain, or not at all; `chains` false is the rule before AM-32.
+ * A factory good the seat can't feed scores as AM-33's chain, or not at all; `chains` false is the rule before AM-33.
  */
 function moneyMakerByRule(state: GameState, mind: Mind, chains = true): Good | null {
   const obs = observe(state, mind.me);
@@ -169,7 +169,7 @@ describe('the draft picks a plan kind and writes its strategy', () => {
   });
 
 
-  it('FM-chain-household: a seat with no spare Food or Water never drafts Medicine as a chain; its money-maker is the rule before AM-32', () => {
+  it('FM-chain-household: a seat with no spare Food or Water never drafts Medicine as a chain; its money-maker is the rule before AM-33', () => {
     const { state, seats } = table('trader');
     const trader = seats[2]!;
     withPlans(['AI_PLANS.leaning.trader.monopolist=0.9', CHAIN_ON], () => {

@@ -317,7 +317,7 @@ export class AiSeat {
     return AI_PLANS.on && this.options.playbook !== false;
   }
 
-  /** The kept money-maker while it is a factory good with an input the seat can't feed yet, else null. See AM-32. */
+  /** The kept money-maker while it is a factory good with an input the seat can't feed yet, else null. See AM-33. */
   private chainFocus(state: GameState): Good | null {
     const good = this.kept?.moneyMaker ?? null;
     return good && chainLinks(observe(state, this.id), this.id, good).length > 0 ? good : null;
