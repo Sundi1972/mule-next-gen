@@ -553,7 +553,7 @@ export function goodPlan(obs: GameState, mind: Mind, good: Good): GoodPlan {
       values.buy[k] = Math.max(values.buy[k] ?? 0, ask!);
       values.keep[k] = Infinity;
     }
-    // Otherwise it keeps the screen's need, what upkeep eats or its plots burn, whatever its own plots may make: Water
+    // Otherwise it keeps its need before spoilage, what upkeep eats or its plots burn, whatever its own plots may make: Water
     // only for a seat with a farm to water, as wholeNextMonth counts it.
     const floor = mustHold > 0 ? mustHold : whole > 0 ? values.need : 0;
     for (let k = 0; k < floor; k++) values.keep[k] = Infinity;
