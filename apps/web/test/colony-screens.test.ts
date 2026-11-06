@@ -268,15 +268,18 @@ describe('C34 / N-6: a shared win at game over, with the colony band', () => {
     const tv = onTv(level(PLAYERS.map((p) => (p.id === 's1' ? { ...p, worth: 7_050 } : p))), TvGameOver);
     expect(said(element(tv, 'tv-winner'), 'winner-line')).toBe('Heiko and Mia share the win, each with a Worth of 7,050 cr');
     expect(marks(tv)).toEqual(['Heiko', 'Mia']);
-    const [a, b] = sizes(tv);
-    expect(a, 'the two marks are one size, smaller than a sole winner\'s').toBe(b);
-    expect(a).toBeLessThan(sizes(onTv(over(FINAL), TvGameOver))[0]!);
+    expect(sizes(tv), 'two marks, one size, smaller than a sole winner\'s').toEqual([64, 64]);
     expect(has(tv, 'colony-band'), 'the band stays under it').toBe(true);
   });
 
-  it('N-6: three level winners get three marks', () => {
+  it('N-6: three or more level winners get a mark each, smaller again, two abreast so they wrap inside the card', () => {
     const tv = onTv(level(PLAYERS.map((p) => (p.id === 's1' || p.id === 's3' ? { ...p, worth: 7_050 } : p))), TvGameOver);
     expect(marks(tv)).toEqual(['Heiko', 'Mia', 'Kai']);
+    expect(sizes(tv)).toEqual([48, 48, 48]);
+    const all = onTv(level(PLAYERS.map((p) => ({ ...p, worth: 7_050 }))), TvGameOver);
+    expect(marks(all)).toEqual(['Heiko', 'Mia', 'Kai', 'Ruth']);
+    // Two 48 px marks and their gap fit its 9rem; a third wraps, so four winners take two rows, never the line's width.
+    expect(element(element(all, 'tv-winner'), 'winner-marks')).toMatch(/class="[^"]*\bmax-w-36\b[^"]*\bflex-wrap\b/);
   });
 
   it('N-6 (negative): a sole winner keeps one mark, at its full size', () => {
