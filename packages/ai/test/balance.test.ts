@@ -3,7 +3,6 @@ import {
   advanceGrant,
   advancePhase,
   cloneForSim,
-  colonistAffordable,
   AI_LEVELS,
   claimPlot,
   AI_PERSONAS,
@@ -15,6 +14,7 @@ import {
   litPlot,
   mulePriceFor,
   observe,
+  nextPostedPrice,
   postPrices,
   STRATEGIST,
   takeMule,
@@ -424,14 +424,14 @@ describe('factories', () => {
 });
 
 describe('shortage foresight', () => {
-  it('T-AC-5: a seat prices Water at what colonists would pay once its outlook shows Water running short', () => {
-    // Colonists pay at most 120 a unit and the store adds its spread: the highest mid they can pay, in the band the
-    // store posts Water in with none left.
+  it('T-AC-5: a seat prices Water at what the store posts after its colonists went short, once its outlook shows Water running short', () => {
+    // Colonists pay no wages since needs C2: the shortage's price is the store's own, the severe band it posts the
+    // month after its colonists went short of Water (pricing RULE-6 row 2).
     const dry = developmentWithWater(0);
     const posting = cloneForSim(dry);
     postPrices(posting);
     expect(posting.store.band?.water, 'the premise: Water is posted severe').toBe('severe');
-    const ceiling = colonistAffordable(posting, 'water');
+    const ceiling = nextPostedPrice(posting, 'water', undefined, ['water']);
     const short = outlook(observe(dry, 'ai0'), 'ai0', { lookAhead: true });
     expect(short.later('water')).toBeGreaterThanOrEqual(ceiling);
     // Negative case: with Water to spare the forecast stays a market price, far under the ceiling.

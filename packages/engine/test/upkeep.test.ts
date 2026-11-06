@@ -1,5 +1,9 @@
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { colonistMeal, createGame, runUpkeep, shipInPort, UPKEEP, type GameState } from '../src/index.js';
+import { colonistMeal, createGame, PRICE, runUpkeep, shipInPort, UPKEEP, type GameState } from '../src/index.js';
+import { foodMonth, post } from './fixtures/food-month.js';
 
 /** A fresh 4-seat game whose colony needs exactly `need` Food and `need` Water this month, at upkeep. */
 function colonyNeeding(need: number): GameState {
@@ -50,5 +54,29 @@ describe('needs C1: the colonists eat free from the store (RULE-1)', () => {
     expect(state.store.stock.water).toBe(0);
     expect(state.colonists, 'a fed colony grows').toBe(Math.round(400 * UPKEEP.colonistGrowth.fed));
     expect(state.store.capital, 'their meal paid the store nothing').toBe(capital);
+  });
+});
+
+describe('needs C2: colonists have no wages, and the store bids with no wage ceiling', () => {
+  it("needs T-AC-7: colonistBudget exists nowhere in packages/engine/src, and the store's lines read no colonist wage", () => {
+    const src = fileURLToPath(new URL('../src', import.meta.url));
+    const files = readdirSync(src, { recursive: true, encoding: 'utf8' }).filter((f) => f.endsWith('.ts'));
+    const read = (f: string) => readFileSync(join(src, f), 'utf8');
+    // The scan reads the engine: it finds the colonists' other numbers where they live.
+    expect(files.filter((f) => /\bcolonistsPerUnit\b/.test(read(f))), 'the scan sees config.ts').toContain('config.ts');
+    expect(files.filter((f) => /\bcolonistBudget\b/.test(read(f))), 'no wage budget left in the engine').toEqual([]);
+  });
+
+  it("needs T-AC-7 (store): a short Food shelf's buy line is the band's (108), not a wage cap (96) and not 1", () => {
+    // A short Food shelf: the colony holds 4 against a need of 14, so Food is posted severe at 4 × 30 = 120.
+    const state = foodMonth(4, [5, 1]);
+    expect(post(state), 'the premise: severe').toBe(120);
+    const a = state.auction!;
+    expect(a.good, 'the premise: Food is up').toBe('food');
+    const band = PRICE.bandSpread.severe;
+    // The band's own lines, 120 less 10% and 120 plus 25%: no wage ceiling under the buy line.
+    expect(a.storeBuy, 'the band\'s buy line, not a wage cap (96) and not a cap reading a deleted budget (1)').toBe(Math.floor(120 * (1 - band.under)));
+    expect(a.storeBuy).toBe(108);
+    expect(a.storeSell).toBe(150);
   });
 });
