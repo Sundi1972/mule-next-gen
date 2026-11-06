@@ -404,5 +404,9 @@ describe('price B-AC-6: a corral sold out month after month stops raising the MU
       expect(mulePrice(state), `month ${month}`).toBeLessThanOrEqual(cap);
     }
     expect(state.store.muleFactor, 'the premise: ten sold-out months reached the cap').toBe(MULE.maxFactor);
+    expect(state.store.muleFactor, "the spec's cap").toBeLessThanOrEqual(2.0);
+    expect(mulePrice(state), 'labour and Smithore at the posted price, times the capped factor').toBe(
+      Math.round((MULE.labour + MULE.smithorePerMule * state.store.posted.smithore) * MULE.maxFactor),
+    );
   });
 });

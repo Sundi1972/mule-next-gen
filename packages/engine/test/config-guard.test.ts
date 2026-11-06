@@ -3,6 +3,7 @@ import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
+import { MULE } from '../src/index.js';
 
 const ROOT = fileURLToPath(new URL('../../..', import.meta.url));
 /** Where balance numbers must not hide: everything here but config.ts. */
@@ -73,5 +74,13 @@ describe('configurable balance', () => {
     expect(findings('planted.ts', 'type Two = 2;\nconst a = [5][0]!;\nconst b = xs[3];\nconst c = -1 + 0 * 1;\n')).toEqual([
       { file: 'planted.ts', line: 2, value: '5' },
     ]);
+  });
+});
+
+describe('configuration invariants', () => {
+  // A minFactor above 1 would let the surplus step lift the factor past maxFactor (pricing C4).
+  it('INV-2: the MULE scarcity factor starts inside its bounds: MULE.minFactor <= 1 <= MULE.maxFactor', () => {
+    expect(MULE.minFactor).toBeLessThanOrEqual(1);
+    expect(MULE.maxFactor).toBeGreaterThanOrEqual(1);
   });
 });
