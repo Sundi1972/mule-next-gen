@@ -88,24 +88,24 @@ describe('createGame', () => {
   });
 
   describe("FM-species-by-chair: a seat's default species follows the seed, not the chair", () => {
-    const ALL_SIX = ['bramblet', 'gearling', 'glimmer', 'mollox', 'quibbit', 'zipwing'];
-    const SEEDS = [0, 1, 2, 3, 4, 5];
+    /** DEFAULT_SPECIES's order, written out: an n-seat game deals from its first n. */
+    const ORDER = ['zipwing', 'bramblet', 'gearling', 'mollox', 'glimmer', 'quibbit'];
+    const firstN = (n: number) => ORDER.slice(0, n).sort();
 
-    it('FM-species-by-chair: over six seeds, chair 0 plays every species exactly once', () => {
-      const chairZero = SEEDS.map((seed) => createGame({ seed, players: players(4) }).players[0]!.species);
-      expect([...chairZero].sort()).toEqual(ALL_SIX);
+    it.each([2, 4, 6])('FM-species-by-chair: in a %i-seat game, over seeds 0..n-1, chair 0 plays each of the first n species once', (n) => {
+      const chairZero = Array.from({ length: n }, (_, seed) => createGame({ seed, players: players(n) }).players[0]!.species);
+      expect([...chairZero].sort()).toEqual(firstN(n));
     });
 
-    it.each([2, 4, 6])('FM-species-by-chair: in a %i-seat game nobody who did not pick shares a species, whatever the seed', (n) => {
-      for (const seed of [...SEEDS, 2_147_483_646, -1]) {
+    it.each([2, 4, 6])('FM-species-by-chair: a %i-seat game where nobody picked plays the first n species, one each, whatever the seed', (n) => {
+      for (const seed of [0, 1, 2, 3, 4, 5, 2_147_483_646, -1]) {
         const species = createGame({ seed, players: players(n) }).players.map((p) => p.species);
-        expect(species.every((sp) => ALL_SIX.includes(sp)), `seed ${seed}: ${species.join(',')}`).toBe(true);
-        expect(new Set(species).size, `seed ${seed}: ${species.join(',')}`).toBe(n);
+        expect([...species].sort(), `seed ${seed}: ${species.join(',')}`).toEqual(firstN(n));
       }
     });
 
     it('FM-species-by-chair: a seat that picked a species keeps it under every seed', () => {
-      for (const seed of SEEDS) {
+      for (const seed of [0, 1, 2, 3]) {
         const seats = players(4).map((p, i) => (i === 1 ? { ...p, species: 'glimmer' as const } : p));
         expect(createGame({ seed, players: seats }).players[1]!.species).toBe('glimmer');
       }
