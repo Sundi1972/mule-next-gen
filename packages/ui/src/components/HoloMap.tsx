@@ -96,6 +96,7 @@ export function selectionRing(plot: number, density: 'phone' | 'tv'): { inset: n
 }
 
 /** The selection's pulsing glow: its box reaches 8% of the plot out; its box-shadow's blur and spread, in px. */
+/** out: the uncapped glow's reach, as the glow span's -inset-[8%] class draws it: change both together. */
 const GLOW = { out: 0.08, phone: { blur: 12, spread: 4 }, tv: { blur: 26, spread: 8 } };
 
 /**
@@ -233,7 +234,7 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
               )}
               {/* An object's plot shows the object, not the ground under it (no pip, no gem): the plot's label still names the ground. */}
               {showsDots(t) && (
-                // A chip can stand taller than a small phone's plot: a tap on what overhangs goes to the plot beneath.
+                // The full chip (17 px) can stand taller than a 16 px plot: a tap on what overhangs goes to the plot beneath.
                 <span
                   className={cx('pointer-events-none relative flex flex-col items-center rounded-control bg-map-chip/90 shadow-chip', tv ? 'gap-0.5 px-1.5 py-1' : small ? 'px-px py-[2px]' : 'px-[3px] py-[2px]', fade)}
                   // In the right column the badge sits inside the plot instead of hanging out: the chip steps left by as much,
