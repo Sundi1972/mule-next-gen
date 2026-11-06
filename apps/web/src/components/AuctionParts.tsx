@@ -84,7 +84,11 @@ function playerGap(asks: Offer[], bids: Offer[]): number | null {
   return gaps.length > 0 ? Math.min(...gaps) : null;
 }
 
-/** The TV's readout: who holds the lowest ask and the highest bid, the store and the ship counted, and the gap a player faces. */
+/**
+ * The TV's readout: who holds the lowest ask and the highest bid, the store and the ship counted, and the nearest trade a
+ * player faces. TRADING is one word: NEAREST TRADE widens the label column, and a two-line value pushed the second deal row
+ * out of the TV's list (TV-FIT).
+ */
 export function TvReadout({ view, auction }: { view: MuleView; auction: AuctionView }) {
   const asks = pricesOn(auction, 'seller');
   const bids = pricesOn(auction, 'buyer');
@@ -99,7 +103,7 @@ export function TvReadout({ view, auction }: { view: MuleView; auction: AuctionV
       <dt className="text-fall">HIGHEST BID</dt>
       <dd data-num className={cx('font-bold', bid?.id === SHIP_ID ? 'text-warn' : 'text-fall')}>{bid ? `${bid.price} · ${who(view, bid.id)}` : '—'}</dd>
       <dt className="text-ink-3">NEAREST TRADE</dt>
-      <dd data-num className="font-bold text-ink">{trading ? 'MET: TRADING' : gap === null ? '—' : gap > 0 ? `${gap} apart` : 'they meet'}</dd>
+      <dd data-num className="font-bold text-ink">{trading ? 'TRADING' : gap === null ? '—' : gap > 0 ? `${gap} apart` : 'they meet'}</dd>
     </dl>
   );
 }
