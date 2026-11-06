@@ -91,12 +91,12 @@ describe('createGame', () => {
     const ALL_SIX = ['bramblet', 'gearling', 'glimmer', 'mollox', 'quibbit', 'zipwing'];
     const SEEDS = [0, 1, 2, 3, 4, 5];
 
-    it('over six seeds, chair 0 plays every species exactly once', () => {
+    it('FM-species-by-chair: over six seeds, chair 0 plays every species exactly once', () => {
       const chairZero = SEEDS.map((seed) => createGame({ seed, players: players(4) }).players[0]!.species);
       expect([...chairZero].sort()).toEqual(ALL_SIX);
     });
 
-    it.each([2, 4, 6])('in a %i-seat game nobody who did not pick shares a species, whatever the seed', (n) => {
+    it.each([2, 4, 6])('FM-species-by-chair: in a %i-seat game nobody who did not pick shares a species, whatever the seed', (n) => {
       for (const seed of [...SEEDS, 2_147_483_646, -1]) {
         const species = createGame({ seed, players: players(n) }).players.map((p) => p.species);
         expect(species.every((sp) => ALL_SIX.includes(sp)), `seed ${seed}: ${species.join(',')}`).toBe(true);
@@ -104,7 +104,7 @@ describe('createGame', () => {
       }
     });
 
-    it('a seat that picked a species keeps it under every seed', () => {
+    it('FM-species-by-chair: a seat that picked a species keeps it under every seed', () => {
       for (const seed of SEEDS) {
         const seats = players(4).map((p, i) => (i === 1 ? { ...p, species: 'glimmer' as const } : p));
         expect(createGame({ seed, players: seats }).players[1]!.species).toBe('glimmer');
