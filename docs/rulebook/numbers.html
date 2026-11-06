@@ -14,12 +14,12 @@
 <main class="rb-main">
 <article>
 <h1>Every number</h1>
-<p class="rb-lede">Every balancing value in the game, as the game's settings file holds it today: 1261 settings in 52 groups, each with what it does.</p>
+<p class="rb-lede">Every balancing value in the game, as the game's settings file holds it today: 1262 settings in 52 groups, each with what it does.</p>
 <p>This page is generated from the game's settings file, <code>packages/engine/src/config.ts</code>, on trunk. Each group below is one block of that file, named the way the code names it; the setting is its full path, and the note is the comment written beside it in the file. A setting without a note of its own points to the nearest note that explains it. The rules these numbers drive are explained in <a href="index.html">the other chapters</a>.</p>
 <p>Do not edit this page by hand. To regenerate it after <code>config.ts</code> changes, run from the repo root:</p>
 <p><code>pnpm --filter @mule/engine exec tsx ../../docs/rulebook/build-numbers.ts</code> then <code>node docs/rulebook/build-index.mjs</code></p>
 <div class="box next"><h4>Not on this page</h4><p><code>MAP_SIZE</code> is kept inside <code>config.ts</code> without being exported, so this page cannot read it.</p></div>
-<p class="code-ref">Built from <code>config.ts</code> with fingerprint <code>ac00d54ab184</code> (the first 12 characters of its SHA-256).</p>
+<p class="code-ref">Built from <code>config.ts</code> with fingerprint <code>161812007b57</code> (the first 12 characters of its SHA-256).</p>
 
 <h2 id="good-config"><code>GOOD_CONFIG</code> <span class="pill built">In the game</span></h2>
 <div class="table-wrap"><table>
@@ -330,6 +330,7 @@
 <tr><td><code>UPKEEP.colonistsPerUnit</code></td><td class="n">20</td><td>Colonists need 1 Food and 1 Water a month per this many colonists.</td></tr>
 <tr><td><code>UPKEEP.colonistEnergyShare</code></td><td class="n">0.5</td><td>Colonists&#39; Energy demand, as a share of their Food and Water units.</td></tr>
 <tr><td><code>UPKEEP.colonistsPerMedicine</code></td><td class="n">50</td><td>Colonists need 1 Medicine a month per this many colonists (more when the air makes them sick).</td></tr>
+<tr><td><code>UPKEEP.colonistsPerElectronics</code></td><td class="n">50</td><td>Colonists want 1 Electronics a month per this many, and with it the Rare earth and Alloy its recipe takes.</td></tr>
 <tr><td><code>UPKEEP.colonistGrowth</code></td><td class="n"></td><td>The colony grows by this factor in a month its colonists were fed, and shrinks by this one when they went hungry.</td></tr>
 <tr><td><code>UPKEEP.colonistGrowth.fed</code></td><td class="n">1.04</td><td>See the note on <code>UPKEEP.colonistGrowth</code>.</td></tr>
 <tr><td><code>UPKEEP.colonistGrowth.hungry</code></td><td class="n">0.95</td><td>See the note on <code>UPKEEP.colonistGrowth</code>.</td></tr>

@@ -32,7 +32,7 @@ function energyPerNewMule(): number {
 }
 
 /**
- * Expected demand for next month, per good, from colonists, players,
+ * Expected demand for next month, per good, from colonists (their Electronics down to its inputs), players,
  * industry and the export ship's off-world buyers. `festival` is the extra Food the colonists ask this month (G-5 C26);
  * once upkeep's meal has run it is eaten, and the caller passes 0.
  */
@@ -60,7 +60,11 @@ export function monthlyDemand(state: GameState, festival = festivalFood(state)):
   demand.rareEarth = factories('electronics');
   // Crystite is a pure off-world luxury: only the export ship wants it.
   demand.crystite = 0;
-  demand.electronics = 0;
+  // Counted before any works stands, so the price tells players to build one.
+  const electronics = state.colonists / UPKEEP.colonistsPerElectronics;
+  demand.electronics = electronics;
+  demand.rareEarth += electronics * (RECIPES.electronics.inputs.rareEarth ?? 0);
+  demand.alloy += electronics * (RECIPES.electronics.inputs.alloy ?? 0);
   const off = exportDemand(state);
   for (const good of GOODS) demand[good] += off[good];
   return demand;
