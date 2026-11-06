@@ -316,7 +316,7 @@ describe("brain:trial tournament (WS1's bar for UBER-AC-A: --table pair, --seeds
     expect(exitCode(false, 'done', { ac2: 'pass', bar: { kind: 'control', verdict: 'not proven' } })).toBe(1);
     expect(exitCode(false, 'done', { ac2: 'pass', bar: { kind: 'control', verdict: 'pass' } })).toBe(0);
     expect(exitCode(true, 'done', { ac2: 'pass', bar: { kind: 'claim', verdict: 'fail' } })).toBe(0);
-    const { out, result } = run(['--table', 'pair', '--playbooks', '1', '--games', '1'], {});
+    const { out, result } = run(['--table', 'pair', '--playbooks', '1', '--games', '2'], {});
     expect((await result).code).toBe(1);
     expect(out).toEqual([expect.stringContaining('no Claude would sit at the pair table')]);
   });

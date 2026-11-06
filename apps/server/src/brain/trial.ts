@@ -2,9 +2,10 @@
  * Plays Smart seats against strategist seats and reports whether the Smart AI decides and talks in character, never
  * stalls a game, and stays within its budget. See C6.
  * Usage: pnpm --filter @mule/server brain:trial -- --games 20 --seed 101 [--smart 2] [--playbooks 1] [--max-usd X] [--game-budget-usd Y] [--run label]
- * The tournament (WS1's bar for UBER-AC-A): --table pair --playbooks 1 --seeds 1,101,201 --games 40, Claude on the even
- * chairs, every seat on its playbook, its ledgers under BRAIN.tournament.capUsd; --control 1 plays the same table with
- * engine seats in the Claude chairs and calls nothing.
+ * The tournament (WS1's bar for UBER-AC-A): --table pair --playbooks 1 --seeds 1,101,201 --games 40, every seat on its
+ * playbook, its ledgers under BRAIN.tournament.capUsd. --games is even there: each seed is played twice, the Claude chairs
+ * on 0 and 2 and then on 1 and 3, so a chair's edge cancels in the pooled result the bar is judged on (120 games: seeds
+ * 1-20, 101-120, 201-220). --control 1 plays the same table with engine seats in the Claude chairs and calls nothing.
  * With --playbooks 1 each Smart seat also writes its strategy and land-grant playbook each month (spec A C4), and the
  * report adds UBER-AC-A's edit share; without it the seats only decide move by move, as before.
  * Without the key every seat plays Classic and nothing is called. With it, real money: --max-usd is required; one
@@ -77,7 +78,7 @@ function trackCalls() {
 interface GameSetup {
   /** The model every write goes to, or null for each kind's own. */
   writeModel: ModelId | null;
-  seed: number;
+  game: PlannedGame;
   id: string;
   env: Readonly<Record<string, string | undefined>>;
   logPath: string | null;
@@ -85,8 +86,6 @@ interface GameSetup {
   gameBudgetUsd: number;
   /** Whether the Smart seats write their playbooks. */
   playbooks: boolean;
-  /** 'pair' for the tournament table, or null. */
-  table: 'pair' | null;
   /** The positive control: the Claude chairs play as engine seats, and nothing is called. */
   control: boolean;
   out: (line: string) => void;
@@ -125,8 +124,9 @@ async function playTrialGame(setup: GameSetup): Promise<TrialGame> {
     routing = null;
   };
 
-  const table = tableSeats(setup.table, setup.seed, setup.smart);
+  const table = tableSeats(setup.game, setup.smart);
   game.chairs = [];
+  if (setup.game.seating !== null) game.seating = setup.game.seating;
   const deciderFor = (seatId: string, spec: SeatSpec, index: number): Decider | null => {
     if (!table.claude.includes(index)) return null;
     game.chairs!.push(seatId);
@@ -151,7 +151,7 @@ async function playTrialGame(setup: GameSetup): Promise<TrialGame> {
   };
 
   try {
-    const played = await playGameAsync(setup.seed, table.specs, {
+    const played = await playGameAsync(setup.game.seed, table.specs, {
       deciderFor,
       onSeats: (seats, state) => {
         const smart = seats.filter((s) => game.smart.includes(s.id));
@@ -266,7 +266,8 @@ export interface TrialFlags {
 
 const USAGE =
   `Usage: brain:trial [--games N] [--seed S | --seeds S1,S2,...] [--smart K] [--playbooks 0|1] [--max-usd X] [--game-budget-usd Y] [--run label] [--write-model sonnet|haiku] ` +
-  `[--table pair [--control 1]], --table pair with --playbooks 1 unless --control 1, and --smart 2 if given; ` +
+  `[--table pair [--control 1]], --table pair with --playbooks 1 unless --control 1, --smart 2 if given, and --games even under --table pair ` +
+  `(each seed in both seatings); ` +
   `Y above 0 and at most ${BRAIN.gameBudgetUsd.toFixed(2)}; nothing played.`;
 
 /** A run label: lowercase letters, digits and dashes, so it can only name a file in the data folder. */
@@ -311,16 +312,17 @@ export function trialLedgerPath(dataDir: string, at: Date, label: string | null,
 }
 
 /**
- * A game's seats: under 'pair' Claude sits on the even chairs and every seat plays its playbook, its own development and
- * auction parts included, as the sim's pair table seats them (RULE-15); otherwise the first `smart` chairs, every seat as
- * the config says. Personas rotate by seat and seed either way.
+ * A game's seats: at the pair table Claude sits on the chairs of its seating, even or odd, and every seat plays its
+ * playbook, its own development and auction parts included, as the sim's pair table seats them (RULE-15); otherwise the
+ * first `smart` chairs, every seat as the config says. Personas rotate by chair and seed either way.
  */
-export function tableSeats(table: 'pair' | null, seed: number, smart: number): { specs: SeatSpec[]; claude: number[] } {
-  if (table === 'pair') {
+export function tableSeats(game: PlannedGame, smart: number): { specs: SeatSpec[]; claude: number[] } {
+  if (game.seating !== null) {
     // literal-ok: RULE-15's pairing, even chairs and odd, not balance
-    return { specs: simSeats(SEATS, 'trader', seed, null, 'playbook'), claude: Array.from({ length: SEATS }, (_, i) => i).filter((i) => i % 2 === 0) };
+    const parity = game.seating === 'even' ? 0 : 1;
+    return { specs: simSeats(SEATS, 'trader', game.seed, null, 'playbook'), claude: Array.from({ length: SEATS }, (_, i) => i).filter((i) => i % 2 === parity) };
   }
-  return { specs: simSeats(SEATS, 'trader', seed), claude: Array.from({ length: smart }, (_, i) => i) };
+  return { specs: simSeats(SEATS, 'trader', game.seed), claude: Array.from({ length: smart }, (_, i) => i) };
 }
 
 /** `--seeds 1,101,201`: distinct whole seeds, at least one, or undefined. */
@@ -335,15 +337,21 @@ export function trialSeeds(flags: { seeds: number[] | null; seed: number; games:
   return (flags.seeds ?? [flags.seed]).flatMap((first) => Array.from({ length: flags.games }, (_, i) => first + i));
 }
 
+const SEATINGS: readonly Seating[] = ['even', 'odd'];
+
 /** One game a run plays: its seed, and its seating at the pair table (null off it). */
 export interface PlannedGame {
   seed: number;
   seating: Seating | null;
 }
 
-/** The games a run plays, in order. */
-export function trialGames(_flags: { table: 'pair' | null; seeds: number[] | null; seed: number; games: number }): PlannedGame[] {
-  throw new Error('NotImplemented: trial-games');
+/**
+ * The games a run plays, in order. At the pair table `games` counts both seatings: half as many seeds, each played even
+ * then odd at once, so a run stopped early is still balanced.
+ */
+export function trialGames(flags: { table: 'pair' | null; seeds: number[] | null; seed: number; games: number }): PlannedGame[] {
+  if (flags.table !== 'pair') return trialSeeds(flags).map((seed) => ({ seed, seating: null }));
+  return trialSeeds({ ...flags, games: flags.games / 2 }).flatMap((seed) => SEATINGS.map((seating) => ({ seed, seating })));
 }
 
 /** A trial ledger that could not be read, so the spend behind the cap is unknown. */
@@ -440,7 +448,8 @@ function parseFlags(argv: readonly string[], words: { table: 'pair' | null; seed
     gameBudgetUsd: given.get('--game-budget-usd') ?? BRAIN.gameBudgetUsd,
     playbooks: given.get('--playbooks') ?? 0,
   };
-  const ok = Number.isInteger(flags.games) && flags.games >= 1 && Number.isInteger(flags.seed) && Number.isInteger(flags.smart);
+  const ok =
+    Number.isInteger(flags.games) && flags.games >= 1 && (!pair || flags.games % 2 === 0) && Number.isInteger(flags.seed) && Number.isInteger(flags.smart);
   const budgetOk = flags.gameBudgetUsd > 0 && flags.gameBudgetUsd <= BRAIN.gameBudgetUsd;
   const playbooksOk = flags.playbooks === 0 || flags.playbooks === 1;
   return ok && budgetOk && playbooksOk && flags.smart >= 1 && flags.smart <= SEATS && (flags.maxUsd === null || flags.maxUsd > 0)
@@ -471,30 +480,30 @@ async function playRun(
   writeModel: ModelId | null = null,
 ): Promise<PlayedRun> {
   const games: TrialGame[] = [];
-  const seeds = trialSeeds(flags);
-  for (let i = 0; i < seeds.length; i++) {
+  const planned = trialGames(flags);
+  for (let i = 0; i < planned.length; i++) {
     if (paid) {
       // The brain's table check holds a game to the game budget, unknown bills included. !(<=) refuses a NaN.
       if (!(sum(games.map((g) => g.countedUsd)) + flags.gameBudgetUsd <= paid.cap)) return { games, stopped: 'cap', lostLines: null };
       // The day's clearance is used once, by the run that starts the first game.
       if (i === 0) claimLedger(paid.logPath);
     }
-    const seed = seeds[i]!;
+    const next = planned[i]!;
     const game = await playTrialGame({
       writeModel,
-      seed,
-      id: `trial-${today}-${seeds[0]}-${i}`,
+      game: next,
+      id: `trial-${today}-${planned[0]!.seed}-${i}`,
       env,
       logPath: paid?.logPath ?? null,
       smart: flags.smart,
       gameBudgetUsd: flags.gameBudgetUsd,
       playbooks: flags.playbooks,
-      table: flags.table,
       control: flags.control,
       out,
     });
     games.push(game);
-    out(`game ${i + 1}/${seeds.length} seed ${seed}: ${game.end}, ${game.cutOff.length} phases cut off, ${game.settledCalls} model calls`);
+    const chairs = next.seating === null ? '' : `, Claude chairs ${next.seating === 'even' ? '0 and 2' : '1 and 3'}`;
+    out(`game ${i + 1}/${planned.length} seed ${next.seed}${chairs}: ${game.end}, ${game.cutOff.length} phases cut off, ${game.settledCalls} model calls`);
     if (game.end === 'auth') return { games, stopped: 'auth', lostLines: null };
     if (!paid) continue;
     const calls = readCalls(paid.logPath);
@@ -538,10 +547,10 @@ export async function trial(
   const gameEnv = flags.control ? {} : env;
   const keyed = apiKeyFrom(gameEnv) !== null;
   const at = now();
-  const planned = trialSeeds(flags).length;
+  const planned = trialGames(flags).length;
   let paid: Paid | null = null;
   if (flags.control) {
-    out(`brain:trial control: the Claude chairs play as engine seats on the pair table; ${planned} games, nothing is called.`);
+    out(`brain:trial control: the Claude chairs play as engine seats on the pair table; ${planned} games, each seed with the Claude chairs on 0 and 2, then on 1 and 3; nothing is called.`);
   } else if (!keyed && flags.table === 'pair') {
     out(`${API_KEY_ENV} is not set, so no Claude would sit at the pair table; run --control 1 for the engine-only table; nothing played.`);
     return { code: 1, report: null };
@@ -571,7 +580,7 @@ export async function trial(
     }
     paid = { logPath, cap: flags.maxUsd };
     out(
-      `brain:trial model ${BRAIN.model}, cap ${capText(paid.cap)}, planned ${planned} games with ${flags.table === 'pair' ? 'Claude on chairs 0 and 2 of the pair table' : `${flags.smart} Smart seats`} ` +
+      `brain:trial model ${BRAIN.model}, cap ${capText(paid.cap)}, planned ${planned} games with ${flags.table === 'pair' ? 'Claude on chairs 0 and 2, then 1 and 3, of the pair table, each seed in both seatings' : `${flags.smart} Smart seats`} ` +
         `(together held to ${capText(flags.gameBudgetUsd)} a game, an equal share each)${run.writeModel === null ? '' : `, every write on ${run.writeModel}`}, ledger ${logPath}`,
     );
   }
