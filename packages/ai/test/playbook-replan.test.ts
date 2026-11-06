@@ -4,6 +4,7 @@ import { simSeats } from '../src/lineup.js';
 import { playGame, type SeatSpec } from '../src/play.js';
 import { anchorOf, type KeptPlan, type PlanAnchor } from '../src/playbook/plan.js';
 import { replanReason, type ReplanTrigger } from '../src/playbook/replan.js';
+import { AiSeat } from '../src/seat.js';
 
 const ME = 'ai0';
 /** The anchor's posted price for the plan's good: a round number, so a share of it is exact. */
@@ -157,6 +158,32 @@ describe('the five re-plan triggers (C13, RULE-8)', () => {
     const { state, free } = table();
     own(state, free[0]!, 'ai1');
     expect(replanReason(state, { ...kept(state, [free[0]!]), anchor: null }, ME)).toBeNull();
+  });
+});
+
+describe('the seat’s anchor and the offices (C13, RULE-8 row 5, AM-31)', () => {
+  it('T-AC-6: an anchor from before the first election takes the offices at the next draft point, so a later change of holder fires row 5', () => {
+    const { state } = table();
+    Object.assign(state.politics!, { governor: null, sheriff: null, termStart: 0 });
+    const seat = new AiSeat({ id: ME, name: 'AI 1', persona: 'trader', level: 'trader', seed: 11, playbook: true });
+    seat.planMonth(state);
+
+    const term = (month: number, offices: { governor: string; sheriff: string }) => {
+      Object.assign(state, { month, phase: 'planning' });
+      Object.assign(state.politics!, { termStart: month, ...offices });
+    };
+    term(4, OFFICES);
+    expect(seat.replanDue(state), 'the first term: no holder to compare').toBeNull();
+    seat.planMonth(state);
+    term(7, OFFICES);
+    expect(seat.replanDue(state), 'the same holders again').toBeNull();
+    seat.planMonth(state);
+    expect(seat.replanLog()).toEqual([]);
+
+    term(10, { ...OFFICES, governor: 'ai2' });
+    expect(seat.replanDue(state)).toBe('election');
+    seat.planMonth(state);
+    expect(seat.replanLog()).toEqual([{ month: 10, point: 'planning', trigger: 'election' }]);
   });
 });
 
