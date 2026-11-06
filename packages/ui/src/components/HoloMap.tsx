@@ -6,7 +6,7 @@ import { objectLabel, PlotObjectMark, type MapObject } from './ObjectGlyph';
 import { SPECIAL_BADGE, SPECIAL_HANG, SpecialBadge } from './SpecialIcon';
 import { useTheme } from './theme';
 import { cx, GOOD_NAME, SLOT_COLOR, specialLabel, TERRAIN_NAME, type Good, type MapSpecial, type Slot, type Terrain } from './tokens';
-import { bestOf, type Dots } from '../ground-dots';
+import { bestOf, gemsIn, type Dots, type RawGood } from '../ground-dots';
 
 export interface MapTile {
   x: number;
@@ -88,7 +88,7 @@ function usePlotSize(width: number) {
 /**
  * The colony map: a painted landscape with a fine plot grid over it. An owned plot is bordered and tinted in its owner's
  * colour, with a corner tab holding the owner's creature; an installed good sits on a disc ringed in the good's colour.
- * Geo analysis results float above the land as chips.
+ * Geo analysis results float above the land as chips, and a found Crystite or Rare earth as a gem at the plot's top.
  */
 export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], showOutput = false, focusSlot, onTile, density = 'phone', hideGround = false, className }: HoloMapProps) {
   const tv = density === 'tv';
@@ -130,6 +130,7 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
           // The map clips at its edge, so an edge plot's selection is drawn inside it, and on the top row the pin hangs below.
           const onEdge = t.x === 0 || t.y === 0 || t.x === width - 1 || t.y === height - 1;
           const ground = !hideGround && t.ground ? bestGoods(t.ground, tv ? 2 : 1) : [];
+          const gems = !hideGround && t.ground ? gemsIn(t.ground) : [];
           const label = [
             TERRAIN_NAME[t.terrain],
             t.special ? specialLabel(t.special) : '',
@@ -179,6 +180,17 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
                   data-testid={`owner-${t.x}-${t.y}`}
                 >
                   <PlayerMark slot={t.owner} size={size.mark} glow={false} />
+                </span>
+              )}
+              {gems.length > 0 && (
+                // Right of the tab, which is 46% wide at 4%; z-[4], the tab's, so a neighbour's special badge never covers it.
+                <span
+                  className={cx('pointer-events-none absolute top-[4%] z-[4] flex w-full', t.owner !== null ? 'left-[54%]' : 'left-[4%]', fade)}
+                  data-testid={`map-gem-${t.x}-${t.y}`}
+                >
+                  {gems.map((g, i) => (
+                    <MapGem key={g} good={g} nth={i} share={t.owner !== null && gems.length > 1 ? 30 : 40} />
+                  ))}
                 </span>
               )}
               {t.object && <PlotObjectMark object={t.object} density={density} at={`${t.x}-${t.y}`} className={fade} />}
@@ -303,6 +315,20 @@ function bestGoods(dots: Dots, count: number): [Good, number][] {
     delete left[best];
   }
   return out;
+}
+
+/** A found Crystite or Rare earth, `share`% of the plot wide; a second gem overlaps the first by half. */
+function MapGem({ good, nth, share }: { good: RawGood; nth: number; share: number }) {
+  return (
+    <span
+      className="relative grid aspect-square shrink-0 place-items-center rounded-full shadow-chip ring-1 ring-white/80"
+      style={{ width: `${share}%`, background: `var(--color-g-${good})`, marginLeft: nth > 0 ? `-${share / 2}%` : 0, zIndex: 2 - nth }}
+      title={`${GOOD_NAME[good]} here`}
+      data-testid={`gem-${good}`}
+    >
+      <GoodIcon good={good} color="white" className="h-[62%] w-[62%]" />
+    </span>
+  );
 }
 
 function Pips({ n, tv, good }: { n: number; tv: boolean; good: Good }) {
