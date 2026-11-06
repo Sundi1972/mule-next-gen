@@ -14,4 +14,8 @@ pub r3f/shots/park_day.png b-day
 pub r3f/shots/park_dusk.png b-dusk
 pub out/park_day.png c-day
 pub out/park_dusk.png c-dusk
-ls -la "$OUT"
+
+# The whole colony (1920×1080, published as is) and the Hospital's stages, once rendered.
+for v in day dusk; do [ -f out/colony_$v.png ] && cwebp -quiet -q 86 -alpha_q 90 out/colony_$v.png -o "$OUT/colony-$v.webp"; done
+[ -f out/hospital_stages.png ] && cwebp -quiet -q 86 -alpha_q 90 out/hospital_stages.png -o "$OUT/hospital-stages.webp"
+ls -la "$OUT" | grep -E "colony|hospital" || true
