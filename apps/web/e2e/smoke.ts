@@ -103,20 +103,22 @@ try {
   check(compactQr > 0 && compactQr < 60, `B-AC-4: with a big screen the lobby shows the compact room card, QR ${compactQr} px`);
 
   // B-AC-1: the host picks Mollox; the lobby rail and the TV lobby show it, and each AI seat the default the server will
-  // deal it, which turns with the seed (#497), never its chair's.
+  // deal it, which turns with the seed (#497), never its chair's. Three seats turn by the seed mod 3: one seed in three
+  // deals the chairs' own species and cannot tell the two apart; derive.test.ts pins the rule on every run.
   const lobbySeats = phone.getByTestId('seats').locator('li');
   const hostMark = lobbySeats.nth(0).getByRole('img', { name: 'Mollox' });
   await phone.getByTestId('species-mollox').click({ timeout: 3_000 });
   await hostMark.waitFor({ timeout: 3_000 });
   check((await phone.getByTestId('species-mollox').getAttribute('aria-pressed')) === 'true', 'B-AC-1: the Mollox chip shows as chosen');
   const titled = (species: string) => species[0]!.toUpperCase() + species.slice(1);
-  const dealt = (server.registry.get(code)?.viewFor(null).seats ?? []).filter((s) => s.isAi).map((s) => ({ name: s.name, species: s.defaultPick ?? '' }));
+  // Each AI seat at its own index in the server's seats, which both lobbies draw in order.
+  const dealt = (server.registry.get(code)?.viewFor(null).seats ?? []).flatMap((s, seat) => (s.isAi ? [{ name: s.name, seat, species: s.defaultPick ?? '' }] : []));
   check(dealt.length === 2 && dealt.every((s) => (SPECIES as readonly string[]).includes(s.species)), `B-AC-1: the server deals each AI seat a default in the lobby, got ${JSON.stringify(dealt)}`);
   const tvLobbySeats = tv.locator('li');
   await tvLobbySeats.nth(0).getByRole('img', { name: 'Mollox' }).waitFor({ timeout: 3_000 });
-  for (const [i, ai] of dealt.entries()) {
-    check((await lobbySeats.nth(i + 1).getByRole('img', { name: titled(ai.species) }).count()) === 1, `B-AC-1: the lobby shows ${ai.name} (seat ${i + 2}) as the ${titled(ai.species)} the server will deal it`);
-    check((await tvLobbySeats.nth(i + 1).getByRole('img', { name: titled(ai.species) }).count()) === 1, `B-AC-1: the TV lobby shows ${ai.name} as the ${titled(ai.species)} the server will deal it`);
+  for (const ai of dealt) {
+    check((await lobbySeats.nth(ai.seat).getByRole('img', { name: titled(ai.species) }).count()) === 1, `B-AC-1: the lobby shows ${ai.name} (seat ${ai.seat + 1}) as the ${titled(ai.species)} the server will deal it`);
+    check((await tvLobbySeats.nth(ai.seat).getByRole('img', { name: titled(ai.species) }).count()) === 1, `B-AC-1: the TV lobby shows ${ai.name} as the ${titled(ai.species)} the server will deal it`);
   }
   await thePhonePicksRose(ctx);
 

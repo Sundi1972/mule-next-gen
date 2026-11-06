@@ -140,6 +140,8 @@ describe('B-AC-1 (WS4): the lobby draws the species a seat will play', () => {
 
   it('B-AC-1: a pick beats the default', () => {
     expect(lobbySeatSpecies(seat({ pick: 'mollox', defaultPick: 'quibbit' }), 1)).toBe('mollox');
+    // A pick the game does not know is no pick, as the server reads it: the dealt default stands.
+    expect(lobbySeatSpecies(seat({ pick: 'dragon', defaultPick: 'quibbit' }), 1)).toBe('quibbit');
   });
 
   it('B-AC-1 (negative): with no default from the server, or one the game does not know, the seat shows its chair\'s', () => {
