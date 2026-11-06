@@ -113,9 +113,10 @@ describe("C2: the writer takes a phase brief's paths", () => {
     later.month = 4;
     expect(JSON.stringify(of(later))).toBe(JSON.stringify(a));
     expect(sha(a)).not.toBe(sha(replySchema(true)));
-    // The land request's schema since B fix 5 (6 Nov): pinned, so a change to it is a deliberate cache reset.
-    expect(sha(a)).toBe('416d133c52bd5bd17113bd63823d2e09f1b4c0ffff275deae68a2d69e24acf9c');
-    expect(sha(replySchema(false, [...LAND_OFFERS, ...DEVELOPMENT_OFFERS], true))).toBe('905ac03114daf7250232add6faf4492d04c0891c558d1db8e9d58cbb4ac13cf4');
+    // The land request's schema since B fix 4 (a) (7 Nov: a route step's plot may be "granted"): pinned, so a change to
+    // it is a deliberate cache reset.
+    expect(sha(a)).toBe('5db4978f1e7a15671f1e7480578866407904de87d5f865efef7b5c8a352360e3');
+    expect(sha(replySchema(false, [...LAND_OFFERS, ...DEVELOPMENT_OFFERS], true))).toBe('86103ba7b46952a704c8a202231d35ee31f81eb5714737de7a2a28f5771d7ca4');
   });
 
   it("C2: a full auction brief's schema compiles: offers with the same value type share one branch with a path enum, so 6 goods take 3 branches, not 30 (the API refused 30 in the PR-5 pilot), and every offered path is in exactly one", () => {

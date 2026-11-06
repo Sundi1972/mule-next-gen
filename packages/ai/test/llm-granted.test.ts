@@ -3,7 +3,8 @@
  * the development's edits is asked at upkeep, before the land grant, so it cannot name that plot by its index.
  */
 import { describe, expect, it } from 'vitest';
-import { AI_LEVELS, AI_PERSONAS, createGame, type GameState } from '@mule/engine';
+import { AI_LEVELS, AI_PERSONAS, createGame, type GameState, type Strategy } from '@mule/engine';
+import type { LandDraft } from '../src/playbook/index.js';
 import { PERSONAS } from '../src/personas.js';
 import type { Mind } from '../src/value.js';
 import { DEVELOPMENT_OFFERS, landBrief } from '../src/llm/brief.js';
@@ -91,8 +92,8 @@ describe('B fix 4 (a): the brief and the writer take "granted"', () => {
     const plot = (routeOffer.to as { items: { properties: { plot: unknown } } }).items.properties.plot;
     expect(plot).toEqual({ anyOf: [{ type: 'integer' }, { type: 'string', enum: ['granted'] }, { type: 'null' }] });
     const { state } = table();
-    const strategy = { kind: 'builder', moneyMaker: 'food', monopolyTarget: null, cashFloor: 200, landTarget: { plots: 6, byMonth: 6 }, stances: {}, reason: 'Grow.' } as const;
-    const draft = { strategy, landGrant: { ranked: [], pressShare: { start: 0.8, end: 0.4 }, deny: [], planB: [], claims: 1 } };
+    const strategy: Strategy = { kind: 'builder', moneyMaker: 'food', monopolyTarget: null, cashFloor: 200, landTarget: { plots: 6, byMonth: 6 }, stances: {}, reason: 'Grow.' };
+    const draft: LandDraft = { strategy, landGrant: { ranked: [], pressShare: { start: 0.8, end: 0.4 }, deny: [], planB: [], claims: 1 } };
     const text = landBrief(state, mind, PERSONAS.trader, draft, [], {}, { route: [], timeBudgetMs: 1_000, ifSoldOut: 'pub' }).text;
     expect(text).toContain('plot may be "granted": this month\'s grant plot, else a plot won at this month\'s land auction');
   });

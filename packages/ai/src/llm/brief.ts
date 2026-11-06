@@ -7,6 +7,7 @@ import { seatBounds } from './manual.js';
 import { optionLine, tableTalkBlock } from './prompt.js';
 import type { LandDraft } from '../playbook/index.js';
 import type { Feedback } from './writer.js';
+import { GRANTED } from './granted.js';
 
 
 /** A land plan the brief offers: its letter, its label, and its full ranking as a LandGrantPlay ranking. */
@@ -128,11 +129,12 @@ const IF_SOLD_OUT: readonly DevelopmentPlay['ifSoldOut'][] = ['pub', 'analyse', 
 
 /**
  * A route step's schema: every field required, plot and outfit null where the act takes none (structured outputs
- * take no optional field); the writer drops the nulls.
+ * take no optional field); the writer drops the nulls. A plot may be "granted", the plot the seat gains this month,
+ * resolved at development's start (B fix 4 a, granted.ts): the land write is asked before the grant.
  */
 const ROUTE_STEP = {
   type: 'object',
-  properties: { act: { type: 'string', enum: [...ROUTE_ACTS] }, plot: { anyOf: [{ type: 'integer' }, { type: 'null' }] }, outfit: { anyOf: [{ type: 'string', enum: [...OUTFITS] }, { type: 'null' }] } },
+  properties: { act: { type: 'string', enum: [...ROUTE_ACTS] }, plot: { anyOf: [{ type: 'integer' }, { type: 'string', enum: [GRANTED] }, { type: 'null' }] }, outfit: { anyOf: [{ type: 'string', enum: [...OUTFITS] }, { type: 'null' }] } },
   required: ['act', 'plot', 'outfit'],
   additionalProperties: false,
 };
@@ -313,7 +315,7 @@ export function landBrief(
 
 /** What a brief that offers the development paths says of them. */
 const DEV_CHANGES = [
-  '- /development/route: the whole route, in order; each step {act, plot, outfit}, null where the act takes none.',
+  `- /development/route: the whole route, in order; each step {act, plot, outfit}, null where the act takes none; plot may be "${GRANTED}": this month's grant plot, else a plot won at this month's land auction.`,
   '- /development/timeBudgetMs: the time to spend, in ms.',
   '- /development/ifSoldOut: pub, analyse or stop.',
 ];

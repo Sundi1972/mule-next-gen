@@ -3,6 +3,7 @@ import { monthSteps, type MonthSeat } from '../play.js';
 import type { AiSeat } from '../seat.js';
 import type { PlanEdit } from '../playbook/index.js';
 import { MOVES } from './moves-stub.js';
+import { newPlots, ownedPlots, resolveGranted } from './granted.js';
 
 /**
  * The game's tools for Claude while it writes a seat's strategy and playbook (C9). Each definition is MCP-shaped, so a
@@ -92,6 +93,8 @@ const isEdit = (e: unknown): e is PlanEdit => isObject(e) && typeof e.path === '
 
 export function toolsFor(state: GameState, seat: PlayerId, sim?: WhatIfSim): { definitions: readonly ToolDef[]; run(name: string, input: unknown): Promise<ToolResult> } {
   const obs = observe(state, seat);
+  // The seat's plots as the tools were made, when the write was asked: a route's "granted" plot is one gained since.
+  const ownedAtAsk = ownedPlots(obs, seat);
   let played = 0;
   // Public on every row of the board, so read from the game itself: the totals only.
   const standings = state.players
@@ -124,8 +127,12 @@ export function toolsFor(state: GameState, seat: PlayerId, sim?: WhatIfSim): { d
       const atDevelopment: NonNullable<Playbook['rejected']> = [];
       const editDevelopment = (s: AiSeat, draft: Playbook, at: GameState): readonly PlanEdit[] | null => {
         if (s.id !== seat || draft.phase !== 'development' || development.length === 0) return null;
-        atDevelopment.push(...s.validator()(at, seat, draft, development).rejected);
-        return development;
+        // A route's "granted" plot is the one the seat gained in the month played, as in play (B fix 4 a).
+        const { edits: resolved, dropped } = resolveGranted(development, newPlots(at, seat, ownedAtAsk, playbook.landGrant?.ranked ?? []));
+        atDevelopment.push(...dropped);
+        if (resolved.length === 0) return null;
+        atDevelopment.push(...s.validator()(at, seat, draft, resolved).rejected);
+        return resolved;
       };
       // observe() zeroes the seed: the month's dice are none of the live game's.
       const steps = monthSteps(obs, seats, 0, { edits: editDevelopment });
