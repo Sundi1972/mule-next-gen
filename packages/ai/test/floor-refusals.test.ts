@@ -241,7 +241,8 @@ describe("the arcade floor's AI bugs of 5 Nov (FM-glint-install, FM-led-analyse,
   it('FM-led-analyse: a seat that starts development leading a lot MULE installs it first, and no analysis it sets off for is refused', () => {
     // A MULE won at the land auction is led into development (lots.ts: carriedMule = the lot's outfit). While it leads one,
     // a plot's button offers INSTALL, not ANALYSE, so analyses queued ahead of the install are refused on the plot.
-    const state = development(4);
+    // Seed 14: since the colonists' full need counts in the demand (needs C2), seed 4's seat no longer wants an analysis.
+    const state = development(14);
     ownNearest(state, 4);
     const me = state.players.find((p) => p.id === ME)!;
     me.carriedMule = 'food';
