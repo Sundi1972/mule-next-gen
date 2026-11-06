@@ -337,7 +337,7 @@ def scorch(x, y, r, z=ZT + 0.004, strong=False):
     a = math_(nt, "MULTIPLY", math_(nt, "SUBTRACT", math_(nt, "MULTIPLY", gr.outputs["Fac"], k_[0]), math_(nt, "MULTIPLY", nz.outputs["Fac"], k_[1])), k_[2], True)
     if strong:  # grey ash toward the edge, black at the heart
         ash = math_(nt, "MULTIPLY", gr.outputs["Fac"], 1.4, True)
-        link(nt, mix(nt, ash, (0.16, 0.15, 0.14, 1), (0.012, 0.011, 0.01, 1)), b.inputs["Base Color"])
+        link(nt, mix(nt, ash, (0.055, 0.045, 0.035, 1), (0.01, 0.009, 0.008, 1)), b.inputs["Base Color"])
     tr = node(nt, "ShaderNodeBsdfTransparent")
     mx = node(nt, "ShaderNodeMixShader")
     link(nt, a, mx.inputs[0])

@@ -38,7 +38,8 @@ RIM_TOP = 0.05  # the paved rim stands a kerb's height above the lawn, so the la
 LH = SPEC["lamps"]["height"]
 GR = 0.16
 FALLEN = 1  # the 4.2 m tree, front left: in `damaged` it lies across the south path
-SCORCH = (-2.6, -3.6, 1.7)  # x, y, r of the burn beside its root, on open lawn where the camera sees it
+SCORCH = (-1.3, -4.3, 1.9)  # x, y, r of the burn on open lawn in front of the fallen tree, where the camera sees it
+HOLE = (-3.8, -3.75, 0.7)  # x, y, r of the hole the root mass tore out of the lawn
 
 
 # ---------- layout geometry (shared by mesh, hair and shader) ----------
@@ -77,8 +78,29 @@ def bed_r(x, y):
 
 # ---------- materials ----------
 
-def grass_color(nt, P, state):
-    """Two photo lawns blended by a slow noise, patchy brightness, faint mowing stripes. Dry: toward straw."""
+def burn_mask(nt, P, burn):
+    """1 at the heart of a burn, 0 outside it, with a noise-ragged edge; from the shading point's distance in x, y."""
+    sep = node(nt, "ShaderNodeSeparateXYZ")
+    link(nt, P, sep.inputs[0])
+    dx, dy = math_(nt, "SUBTRACT", sep.outputs["X"], burn[0]), math_(nt, "SUBTRACT", sep.outputs["Y"], burn[1])
+    d = math_(nt, "DIVIDE", math_(nt, "SQRT", math_(nt, "ADD", math_(nt, "MULTIPLY", dx, dx), math_(nt, "MULTIPLY", dy, dy))), burn[2])
+    nz = node(nt, "ShaderNodeTexNoise")
+    nz.inputs["Scale"].default_value = 1.6
+    nz.inputs["Detail"].default_value = 6
+    link(nt, P, nz.inputs["Vector"])
+    d = math_(nt, "ADD", d, math_(nt, "MULTIPLY", math_(nt, "SUBTRACT", nz.outputs["Fac"], 0.5), 0.7))
+    mr = node(nt, "ShaderNodeMapRange")
+    mr.inputs["From Min"].default_value = 0.45
+    mr.inputs["From Max"].default_value = 1.0
+    mr.inputs["To Min"].default_value = 1.0
+    mr.inputs["To Max"].default_value = 0.0
+    link(nt, d, mr.inputs["Value"])
+    return mr.outputs[0]
+
+
+def grass_color(nt, P, state, burn=None):
+    """Two photo lawns blended by a slow noise, patchy brightness, faint mowing stripes. Dry: toward straw.
+    burn (x, y, r): the grass scorched brown toward the edge and black at the heart."""
     m1 = node(nt, "ShaderNodeMapping")
     m1.inputs["Scale"].default_value = (1 / 1.5, 1 / 1.5, 1)
     link(nt, P, m1.inputs["Vector"])
@@ -114,6 +136,10 @@ def grass_color(nt, P, state):
     c = mix(nt, 1.0, c, kk.outputs[0], "MULTIPLY")
     if state == "dry":  # unwatered for months: straw with green only in the damp patches
         c = mix(nt, math_(nt, "ADD", math_(nt, "MULTIPLY", ramp.outputs[0], 0.25), 0.62), c, (0.36, 0.29, 0.15, 1))
+    if burn:
+        k = burn_mask(nt, P, burn)
+        c = mix(nt, math_(nt, "MINIMUM", math_(nt, "MULTIPLY", k, 2.5), 1.0), c, (0.13, 0.085, 0.04, 1))  # scorched brown
+        c = mix(nt, math_(nt, "POWER", k, 0.6), c, (0.012, 0.011, 0.01, 1))  # charred black at the heart
     return c
 
 
@@ -126,10 +152,10 @@ def earth_color(nt, P):
     return mix(nt, 1.0, peb, (0.5, 0.38, 0.27, 1), "MULTIPLY")
 
 
-def ground_mat(state):
+def ground_mat(state, burn=None):
     m, nt, b = new_mat("ground")
     P = node(nt, "ShaderNodeTexCoord").outputs["Object"]
-    soil_or_grass = earth_color(nt, P) if state == "earth" else grass_color(nt, P, state)
+    soil_or_grass = earth_color(nt, P) if state == "earth" else grass_color(nt, P, state, burn)
     gm = node(nt, "ShaderNodeMapping")
     gm.inputs["Scale"].default_value = (0.5, 0.5, 1)
     link(nt, P, gm.inputs["Vector"])
@@ -177,7 +203,7 @@ def ground_mat(state):
     return m
 
 
-def hair_mat(state):
+def hair_mat(state, burn=None):
     m, nt, b = new_mat("grass_blades")
     P = node(nt, "ShaderNodeTexCoord").outputs["Object"]
     hi = node(nt, "ShaderNodeHairInfo")
@@ -185,7 +211,7 @@ def hair_mat(state):
     tip.inputs["To Min"].default_value = 0.7
     tip.inputs["To Max"].default_value = 1.3
     link(nt, hi.outputs["Intercept"], tip.inputs["Value"])
-    g = mix(nt, 1.0, grass_color(nt, P, state), (1.0, 1.04, 0.92, 1), "MULTIPLY")
+    g = mix(nt, 1.0, grass_color(nt, P, state, burn), (1.0, 1.04, 0.92, 1), "MULTIPLY")
     t3 = node(nt, "ShaderNodeCombineColor")
     for i in range(3):
         link(nt, tip.outputs[0], t3.inputs[i])
@@ -283,8 +309,9 @@ def rim():
         block("rim_gap", x0, x1, -PW, PW, zb, -0.004, stone, bevel=0)
 
 
-def ground(state, grass, bald=None):
-    """One fine grid, lawn (or earth) and gravel told apart by the shader; hair grass where the lawn is."""
+def ground(state, grass, bald=None, hole=None):
+    """One fine grid, lawn (or earth) and gravel told apart by the shader; hair grass where the lawn is.
+    bald (x, y, r): a burn, scorching the lawn and blades and thinning them at its heart. hole (x, y, r): cut out."""
     n = 240
     step = TILE / n
     vid, verts, faces = {}, [], []
@@ -292,6 +319,8 @@ def ground(state, grass, bald=None):
     def keep(cx, cy):
         if (abs(cx) > INNER or abs(cy) > INNER) and min(abs(cx), abs(cy)) > PW:
             return False  # under the raised rim
+        if hole and math.hypot(cx - hole[0], cy - hole[1]) < hole[2]:
+            return False
         return pond_r(cx, cy) >= 1.03 and bed_r(cx, cy) >= BED["radius"] + 0.06
 
     def vi(i, j):
@@ -304,14 +333,14 @@ def ground(state, grass, bald=None):
         for i in range(n):
             if keep(-HALF + (i + 0.5) * step, -HALF + (j + 0.5) * step):
                 faces.append((vi(i, j), vi(i + 1, j), vi(i + 1, j + 1), vi(i, j + 1)))
-    lawn = mesh_obj("ground", verts, faces, ground_mat(state))
+    lawn = mesh_obj("ground", verts, faces, ground_mat(state, bald))
     uvl = lawn.data.uv_layers.new(name="UVMap")
     for l in lawn.data.loops:
         x, y, _ = lawn.data.vertices[l.vertex_index].co
         uvl.data[l.index].uv = ((x + HALF) / TILE, (y + HALF) / TILE)
     if not grass:
         return lawn
-    lawn.data.materials.append(hair_mat(state))
+    lawn.data.materials.append(hair_mat(state, bald))
     vg = lawn.vertex_groups.new(name="grass")
     for v in lawn.data.vertices:
         x, y, _ = v.co
@@ -320,7 +349,9 @@ def ground(state, grass, bald=None):
             w = 0.0
         if bald:  # burnt off, with a ragged edge
             d = math.hypot(x - bald[0], y - bald[1]) / bald[2] + 0.25 * noise.noise(Vector((x * 1.7, y * 1.7, 0.5)))
-            w *= max(0.0, min(1.0, (d - 0.5) / 0.25))
+            w *= max(0.0, min(1.0, (d - 0.3) / 0.3))  # the heart burnt to the soil; the rest stands, charred
+        if hole and math.hypot(x - hole[0], y - hole[1]) < hole[2] + 0.15:
+            w = 0.0
         vg.add([v.index], w, "REPLACE")
     lawn.modifiers.new("grass", "PARTICLE_SYSTEM")
     ps = lawn.particle_systems[0]
@@ -504,38 +535,68 @@ def flower_bed(planted=True, wilted=False):
     translucent(m, 0.2, 1.15)
 
 
+def lump(name, at, size, m, seed, rough=0.35, sub=3):
+    """An irregular clod: an icosphere scaled to size and pushed about by noise."""
+    bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=sub, radius=1.0, location=at)
+    o = bpy.context.active_object
+    o.name = name
+    off = Vector((seed * 3.1, seed * 1.7, seed * 0.9))
+    for v in o.data.vertices:
+        p = v.co.copy()
+        v.co = Vector((p.x * size[0], p.y * size[1], p.z * size[2])) * (1 + rough * noise.noise(p * 1.8 + off) + 0.5 * rough * noise.noise(p * 4.5 + off))
+    o.data.materials.append(m)
+    o.data.shade_smooth()
+    return o
+
+
 def root_plate(x, y, fall):
-    """The torn-up root plate: a disc of earth stood on edge at the trunk's foot, facing back the way the tree fell,
-    root strands sticking out of its rim, and the dark hole it tore in the lawn."""
+    """The torn-up root mass: a ragged slab of dark soil stood up behind the trunk, a few bent, tapering roots
+    trailing out of it, clods fallen round its foot, and the hole it tore in the lawn (HOLE, cut from the grid)."""
     back = Vector((-fall.x, -fall.y, 0)).normalized()
-    earth = mat("earth")
-    bpy.ops.mesh.primitive_cylinder_add(vertices=28, radius=1.05, depth=0.28, location=(x + back.x * 0.15, y + back.y * 0.15, 0.95))
-    rp = bpy.context.active_object
-    rp.name = "root_plate"
-    for v in rp.data.vertices:
-        v.co.x *= 1 + 0.18 * noise.noise(v.co * 2.3)
-        v.co.y *= 1 + 0.18 * noise.noise(v.co * 2.3 + Vector((3, 1, 0)))
-    rp.rotation_mode = "QUATERNION"
-    rp.rotation_quaternion = Vector((0, 0, 1)).rotation_difference(back)
-    rp.data.materials.append(earth)
-    roots = flat("roots", (0.16, 0.11, 0.07), 0.9)
-    rng = random.Random(3)
-    for k in range(14):
-        a = 2 * math.pi * k / 14 + rng.uniform(-0.2, 0.2)
-        side = Vector((-back.y, back.x, 0))
-        d = (side * math.cos(a) + Vector((0, 0, 1)) * math.sin(a)).normalized()
-        L = rng.uniform(0.5, 0.95)
-        base = Vector((x + back.x * 0.15, y + back.y * 0.15, 0.95)) + d * 0.95
-        tip = base + (d + back * rng.uniform(-0.3, 0.4)).normalized() * L
-        if tip.z < 0.02:
-            continue
-        bpy.ops.mesh.primitive_cone_add(vertices=6, radius1=0.05, radius2=0.008, depth=L, location=(base + tip) / 2)
-        r = bpy.context.active_object
-        r.name = "root"
-        r.rotation_euler = (tip - base).to_track_quat("Z", "Y").to_euler()
-        r.data.materials.append(roots)
-    hole = cyl("root_hole", x + back.x * 0.9, y + back.y * 0.9, 0.85, -0.05, 0.015, mat("earth"), 28)
-    hole.scale = (1.0, 0.8, 1.0)
+    side = Vector((-back.y, back.x, 0))
+    soil = soil_mat()
+    c = Vector((x, y, 0.0)) + back * 0.35
+    mass = lump("root_mass", (c.x, c.y, 0.8), (0.32, 1.05, 0.85), soil, 1.0, 0.3, 4)
+    mass.rotation_euler = (0, 0, math.atan2(back.y, back.x))  # its thin axis along the line of the fall
+    roots = flat("roots", (0.12, 0.085, 0.055), 0.9)
+    rng = random.Random(5)
+    for k in range(9):
+        a = math.pi * (0.1 + 0.8 * k / 8) + rng.uniform(-0.15, 0.15)  # round the upper rim, not the buried edge
+        rim = (side * math.cos(a) + Vector((0, 0, 1)) * math.sin(a)).normalized()
+        p0 = Vector((c.x, c.y, 0.8)) + rim * rng.uniform(0.65, 0.8) + back * 0.12
+        L = rng.uniform(0.7, 1.3)
+        # trailing out sideways and back from the rim, then drooping under their own weight: never sticking up
+        out = (side * math.cos(a) * 1.0 + back * 0.7 + Vector((0, 0, 0.15))).normalized()
+        p1 = p0 + out * L * 0.5
+        p2 = p1 + (out + Vector((0, 0, -1.2))).normalized() * L * 0.5
+        cu = bpy.data.curves.new("root", "CURVE")
+        cu.dimensions = "3D"
+        cu.bevel_depth = 0.045
+        cu.bevel_resolution = 2
+        sp = cu.splines.new("NURBS")
+        sp.points.add(2)
+        for pt, q, r in zip(sp.points, (p0, p1, p2), (1.0, 0.6, 0.12)):
+            pt.co = (q.x, q.y, max(q.z, 0.03), 1)
+            pt.radius = r  # tapering to a point
+        sp.use_endpoint_u = True
+        sp.order_u = 3
+        o = bpy.data.objects.new("root", cu)
+        coll().objects.link(o)
+        cu.materials.append(roots)
+    for k in range(7):  # clods at its foot
+        q = c + side * rng.uniform(-1.0, 1.0) + back * rng.uniform(-0.3, 0.8)
+        s_ = rng.uniform(0.12, 0.28)
+        lump("clod", (q.x, q.y, s_ * 0.5), (s_, s_ * 0.9, s_ * 0.7), soil, k + 7, 0.4, 2)
+    hx, hy, hr = HOLE  # the hole: a dark bowl under the cut in the lawn, a lip of thrown-up soil round it
+    seg = 32
+    ring = lambda r, z: [(hx + r * math.cos(2 * math.pi * i / seg), hy + r * math.sin(2 * math.pi * i / seg), z) for i in range(seg)]  # noqa: E731
+    v = [(hx, hy, -0.4)] + ring(hr * 0.6, -0.3) + ring(hr + 0.02, 0.0)
+    f = [(0, 1 + i, 1 + (i + 1) % seg) for i in range(seg)] + [(1 + i, 1 + seg + i, 1 + seg + (i + 1) % seg, 1 + (i + 1) % seg) for i in range(seg)]
+    mesh_obj("root_hole", v, f, soil, smooth=True)
+    for k in range(10):
+        a = 2 * math.pi * k / 10 + rng.uniform(-0.2, 0.2)
+        s_ = rng.uniform(0.12, 0.22)
+        lump("hole_lip", (hx + (hr + 0.1) * math.cos(a), hy + (hr + 0.1) * math.sin(a), 0.02), (s_ * 1.4, s_, s_ * 0.5), soil, k + 20, 0.3, 2)
 
 
 def trees(state):
@@ -696,7 +757,7 @@ def build(stage):
         kits.work_light(4.6, -1.0, (0, 0))
         return
     closed, damaged = stage == "closed", stage == "damaged"
-    ground("dry" if closed else "green", grass=True, bald=SCORCH if damaged else None)
+    ground("dry" if closed else "green", grass=True, bald=SCORCH if damaged else None, hole=HOLE if damaged else None)
     rock_mat = monument()
     pond(rock_mat, murky=closed)
     flower_bed(wilted=closed)
