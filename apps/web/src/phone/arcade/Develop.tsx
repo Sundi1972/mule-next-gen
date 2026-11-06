@@ -9,7 +9,7 @@ import { ShellLayer, WIDE_PX } from '../Shell';
 import { keyDown, keyUp } from './controls';
 import { BANNER_CHAR_PX, bannerBox, colonistBox, css, FRAMES, freeRun, overlap, phoneLayout, tileBox, type Box } from './layout';
 import { PhoneLive, useArcade, useLive } from './live';
-import { ChatTicker, CompactClock, GroundChip, GuideNote, LeadChip, Money, OverCard, PaceLine, PlotCard, PlotsLegend, Reconnecting } from './parts';
+import { ChatTicker, CompactClock, GroundChip, GuideNote, LeadChip, Money, OverCard, PaceLine, PlotCard, PlotsLegend, Reconnecting, SwapWarning } from './parts';
 import { ScrambleBanner, scrambleWords } from './moments';
 import { arcadeSeat, type ArcadeSeat } from './seat';
 import { SeatProvider, YourStage } from './stages';
@@ -390,8 +390,9 @@ export function LaptopArcade({ frame }: { frame: { w: number; h: number } }) {
             <span className="relative flex flex-col items-start gap-2">
               <GroundChip seat={seat} />
             </span>
-            <span className="relative flex flex-col items-start">
+            <span className="relative flex flex-col items-start gap-2">
               <LeadChip seat={seat} />
+              <SwapWarning seat={seat} />
             </span>
             {/* On a short window the chat panel is what folds, its older line first: Controls stays in sight. */}
             <Panel title="Table chat" className="min-h-0 overflow-hidden">

@@ -3,6 +3,7 @@ import { Creature, cx, GoodIcon, MuleIcon, sickReason, SLOT_COLOR, TERRAIN_NAME 
 import { useState, type CSSProperties } from 'react';
 import { useTableChat } from '../../chat/store';
 import { groundPips, plotName, toSlot } from '../../game/derive';
+import { SWAP_NOTE } from './guide';
 import { bestHere, OUTFIT_WORD, RAW, plotTitle, suits, suitsLine } from './plots';
 import { assaySeconds, type ArcadeSeat } from './seat';
 
@@ -39,6 +40,16 @@ export function LeadChip({ seat, className }: { seat: ArcadeSeat; className?: st
       <MuleIcon size={16} className={m ? 'text-holo' : 'text-ink-3'} />
       <span className="truncate">{!m ? 'No MULE' : m !== 'empty' ? 'MULE on lead' : 'Empty MULE'}</span>
       {m && m !== 'empty' && m !== 'greenBelt' && <GoodIcon good={m} size={14} />}
+    </span>
+  );
+}
+
+/** The laptop has no guide, so its rail gives the swapped MULE's warning (AM-35) in the phone's guide-note words. */
+export function SwapWarning({ seat }: { seat: ArcadeSeat }) {
+  if (!seat.me.leadsSwapped) return null;
+  return (
+    <span className="rounded-chip border-2 border-warn bg-panel/95 px-2 py-1 font-display text-sm font-bold leading-tight text-warn shadow-chip" data-testid="swap-warning">
+      {SWAP_NOTE}
     </span>
   );
 }

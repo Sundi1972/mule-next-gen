@@ -12,8 +12,8 @@ import { bestFreePlot } from './plots';
  *   3a a fitted MULE → the door on your plot's side, then the BEST of your free plots for its good (V-2: by its
  *      analysis, else its land's odds; the nearer only on a tie)
  *   4 otherwise → the store, then the pub
- * Row 3 (a MULE taken off a plot, AM-2) is PR-7's and the bolted MULE PR-9's: the view carries neither yet. A MULE
- * swapped off a plot (AM-35) takes the way its outfit gives, with SWAP_NOTE as the note.
+ * Row 3 (a MULE taken off a plot, AM-2) is PR-7's and the bolted MULE PR-9's: of either, the view carries only
+ * whether the led MULE was swapped off a plot (AM-35), which takes the way its outfit gives, with SWAP_NOTE as the note.
  */
 
 export interface P {
@@ -67,7 +67,7 @@ export const SWAP_NOTE = 'Turn ends: this MULE goes back to the corral';
 export function guideOf(input: GuideInput): Guide {
   const guide = wayOf(input);
   const { me } = input;
-  return guide && me.leadsSwapped && me.carriedMule ? { ...guide, note: SWAP_NOTE } : guide;
+  return guide && me.leadsSwapped ? { ...guide, note: SWAP_NOTE } : guide;
 }
 
 function wayOf({ view, me, self, at, analysing, over, pay, cfg }: GuideInput): Guide {
