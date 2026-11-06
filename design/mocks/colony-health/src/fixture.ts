@@ -23,12 +23,6 @@ export interface HealthView {
   lastWell: number | null;
   /** Sick colonists in 100. */
   sick: number;
-  /**
-   * SEAM: not in ColonyGaugesView yet (WS5/WS7). The months in a row the colonists' Medicine ran short, 0 when it did
-   * not. The phone's cause line ("Medicine ran short", "Medicine short 3 months") needs it; the brief's shape has no
-   * cause, so WS5 to say whether the view carries it or the client derives it.
-   */
-  shortMonths: number;
 }
 
 /** SEAM: not in ColonyGaugesView yet (WS5/WS7). The colony view with health beside the gauges, local to this mock. */
@@ -36,6 +30,9 @@ export type ColonyViewHealth = ColonyView & { health: HealthView };
 
 /** SEAM: WS5's floor: at most 4 in 10 are ever sick, so health never reads below 60. From config when WS5's rule lands. */
 export const HEALTH_FLOOR = 60;
+
+/** SEAM: decision 25: below 80 the crews start falling sick. From config when WS5's rule lands. */
+export const HEALTH_CREWS = 80;
 
 // --- The three states ---------------------------------------------------------------------------------
 
@@ -52,11 +49,11 @@ export interface HealthState {
 
 export const STATES: Record<StateId, HealthState> = {
   // MIDGAME as the test has it: Content 64, up 6.
-  well: { id: 'well', name: 'Well', health: { well: 97, lastWell: 96, sick: 3, shortMonths: 0 }, happiness: 64, band: 'content', lastHappiness: 58 },
+  well: { id: 'well', name: 'Well', health: { well: 97, lastWell: 96, sick: 3 }, happiness: 64, band: 'content', lastHappiness: 58 },
   // Medicine short this month: 22 in 100 sick, the mood down to Restless 52.
-  sick: { id: 'sick', name: 'Sick spell', health: { well: 78, lastWell: 92, sick: 22, shortMonths: 1 }, happiness: 52, band: 'restless', lastHappiness: 57 },
+  sick: { id: 'sick', name: 'Sick spell', health: { well: 78, lastWell: 92, sick: 22 }, happiness: 52, band: 'restless', lastHappiness: 57 },
   // Medicine short three months running: 4 in 10 sick, the most there can be; the mood Unhappy 38.
-  limit: { id: 'limit', name: 'At the limit', health: { well: 60, lastWell: 63, sick: 40, shortMonths: 3 }, happiness: 38, band: 'unhappy', lastHappiness: 43 },
+  limit: { id: 'limit', name: 'At the limit', health: { well: 60, lastWell: 63, sick: 40 }, happiness: 38, band: 'unhappy', lastHappiness: 43 },
 };
 
 export const STATE_IDS: StateId[] = ['well', 'sick', 'limit'];

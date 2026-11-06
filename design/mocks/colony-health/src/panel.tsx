@@ -5,11 +5,11 @@ import type { Density } from '../../../../apps/web/src/components/MonthEnd';
 import { colonyVerdict, fmt, toSlot } from '../../../../apps/web/src/game/derive';
 import { colonyReport } from '../../../../apps/web/src/game/month-end';
 import { healthOf, type HealthView } from './fixture';
-import { atLimit, healthBand, sickInTen } from './gauges';
+import { healthBand, isWell } from './gauges';
 
 /**
  * COPY: apps/web/src/components/MonthEnd.tsx:270-388 (`Block`, `HUNGRY_LINES_COMPACT`, `ColonyPanel`) at trunk 0ece94ba,
- * verbatim but for the lines marked EXTEND: on the phone with no TV the panel gains a Health block after Hunger.
+ * verbatim but for the lines marked EXTEND: on the phone with no TV the colonists line under Hunger carries health.
  * src/borrowed/month-end.ts puts this copy in the real one's place for the real phone `Results` (see vite.config.ts).
  * Graft target: MonthEnd.tsx `ColonyPanel` (WS4's file, per SEAMS apps/web/** ).
  */
@@ -59,7 +59,9 @@ export function ColonyPanel({ view, density, layout = 'stack', verdict = false }
           </>
         )}
       </header>
-      <div className={cx('grid', row ? 'grid-cols-3 gap-x-6' : tv ? 'grid-cols-2 gap-x-6 gap-y-3' : 'grid-cols-3 gap-2')}>
+      {/* EXTEND: with health on the colonists line, the phone's columns lean to Hunger, taken from Air and Colony fund (their lines are
+          short), so the line wraps no more often than today's. DS-GAP: unequal panel columns. */}
+      <div className={cx('grid', row ? 'grid-cols-3 gap-x-6' : tv ? 'grid-cols-2 gap-x-6 gap-y-3' : health ? 'grid-cols-[minmax(0,0.9fr)_minmax(0,0.85fr)_minmax(0,1.25fr)] gap-2' : 'grid-cols-3 gap-2')}>
         <Block label="Air" testid="colony-air" tv={tv}>
           <span className="flex flex-wrap items-baseline gap-x-2">
             <span data-num className={cx('font-mono font-bold', big)} data-testid="air-level">
@@ -128,55 +130,41 @@ export function ColonyPanel({ view, density, layout = 'stack', verdict = false }
             )}
             <span className={cx(line, r.colonistsFed === false ? 'text-alert' : 'text-ink-2')} data-testid="colonists">
               {r.colonistsFed ? `The store fed the colony’s ${fmt(r.colonists)} colonists` : `The colony’s ${fmt(r.colonists)} colonists${r.colonistsFed === false ? ' went short' : ''}`}
+              {/* EXTEND: health on the colonists line, on the phone with no TV only ('compact'). */}
+              {!tv && health && <HealthWords health={health} />}
             </span>
           </span>
         </Block>
-        {/* EXTEND: Health, after Hunger, on the phone with no TV only ('compact'). The TV month end and a phone beside a
-            TV keep the panel as it is: the TV header's gauges carry health there. */}
-        {!tv && health && <HealthBlock health={health} />}
       </div>
     </section>
   );
 }
 
-// --- The Health block (NEW) ---------------------------------------------------------------------------
+// --- Health on the colonists line (NEW) --------------------------------------------------------------
 
 /**
- * The second line: the cause, then what it does. WS5's effects: sickness raises the colonists' Medicine need (up to
- * 40 % more), takes up to 4 points off the mood's aim and slows growth by up to 2 % a month. The line names the first
- * two, which the table can act on; growth is left to the rulebook.
+ * " · health 78% · Sick spell": the figure toned by its band, the band word only when it is not Well. The TV month end
+ * and a phone beside a TV keep the line as it is: the TV header's gauges carry health there.
  */
-export function healthWhy(h: HealthView): string {
-  const short = h.shortMonths === 0 ? null : h.shortMonths === 1 ? 'Medicine ran short' : `Medicine short ${h.shortMonths} months`;
-  if (atLimit(h)) return [`${sickInTen(h)}, the most there can be`, short].filter(Boolean).join(' · ');
-  if (h.well >= 90) return `${h.sick} in 100 sick: about as low as it goes`;
-  return [`${h.sick} in 100 sick`, short, 'they need more Medicine and the mood’s aim drops'].filter(Boolean).join(' · ');
-}
-
-/**
- * Health on the phone with no TV, in the panel's compact sizes: "HEALTH 78% well · Sick spell", then why. The label sits
- * on the first line (the other blocks put it above) to keep the block two lines tall on a 375 px phone.
- */
-function HealthBlock({ health }: { health: HealthView }) {
+function HealthWords({ health }: { health: HealthView }) {
   const b = healthBand(health.well);
   return (
-    <div className="relative col-span-3 flex min-w-0 flex-col border-t border-holo-faint pt-1" data-testid="colony-health">
-      <span className="flex flex-wrap items-baseline gap-x-1.5" data-testid="health-line">
-        <span className="label-caps mr-0.5 text-[10px]!">Health</span>
-        <span data-num className="font-mono text-base font-bold leading-tight" data-testid="health-value">
+    <span data-testid="colony-health">
+      {' · '}
+      <span data-testid="health-line">
+        health{' '}
+        <span data-num className={cx('font-mono font-bold leading-none', b.tone)} data-testid="health-value">
           {health.well}%
         </span>
-        <span className="text-xs text-ink-2">well</span>
-        <span className="text-xs text-ink-3" aria-hidden>
-          ·
-        </span>
-        <span className={cx('font-display text-xs font-semibold', b.tone)} data-testid="health-band">
-          {b.label}
-        </span>
+        {!isWell(health) && (
+          <>
+            {' · '}
+            <span className={cx('font-semibold', b.tone)} data-testid="health-band">
+              {b.label}
+            </span>
+          </>
+        )}
       </span>
-      <span className="text-[11px] leading-tight text-ink-2" data-testid="health-why">
-        {healthWhy(health)}
-      </span>
-    </div>
+    </span>
   );
 }
