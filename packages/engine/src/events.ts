@@ -613,8 +613,8 @@ export function applyEvents(state: GameState, fired: readonly MonthEvent[]): voi
   const inherits = new Map(state.players.map((p) => [p.id, inheritanceAmount(state, p.id)]));
   for (const event of fired) {
     const effects: EventEffect[] = [];
-    const change = (on: string, what: EventEffect['what'], delta: number) => {
-      if (delta !== 0) effects.push({ on, what, delta });
+    const change = (on: string, what: EventEffect['what'], delta: number, to?: number) => {
+      if (delta !== 0) effects.push({ on, what, delta, ...(to === undefined ? {} : { to }) });
     };
     const me = state.players.find((p) => p.id === event.player);
     switch (event.key) {
@@ -726,7 +726,7 @@ export function applyEvents(state: GameState, fired: readonly MonthEvent[]): voi
         for (const g of GOODS) {
           const n = Math.floor(state.store.stock[g] * SOCIAL_EVENTS.colony.riot.storeLoss);
           state.store.stock[g] -= n;
-          change('store', g, -n);
+          change('store', g, -n, state.store.stock[g]);
         }
         const damaged = (event.objects ?? []).filter((o) => damageObject(state, o.id));
         if (damaged.length > 0) event.objects = damaged;

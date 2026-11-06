@@ -339,8 +339,8 @@ describe('C26 PR-B: the riot, at the month end', () => {
     expect(fired).toMatchObject([{ key: 'riot', scope: 'colony', sign: 'bad', phase: 'upkeep' }]);
     expect(Object.fromEntries(Object.keys(shelves).map((g) => [g, state.store.stock[g as keyof typeof shelves]]))).toEqual({ food: 1, energy: 2, smithore: 2, crystite: 5 });
     expect(fired[0]!.effects).toEqual([
-      { on: 'store', what: 'smithore', delta: -1 },
-      { on: 'store', what: 'crystite', delta: -2 },
+      { on: 'store', what: 'smithore', delta: -1, to: 2 },
+      { on: 'store', what: 'crystite', delta: -2, to: 5 },
     ]);
   });
 
@@ -374,7 +374,7 @@ describe('C26 PR-B: the riot, at the month end', () => {
     expect(fired).toHaveLength(1);
     expect(fired[0]!.objects).toBeUndefined();
     expect(fired[0]!.line).toBe('A riot: the store loses 33% of every shelf.');
-    expect(fired[0]!.effects).toContainEqual({ on: 'store', what: 'food', delta: -3 });
+    expect(fired[0]!.effects).toContainEqual({ on: 'store', what: 'food', delta: -3, to: 6 });
     expect(state.colony!.projects[0]!.stage).toBe('building');
   });
 
