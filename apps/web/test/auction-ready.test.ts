@@ -199,6 +199,21 @@ describe("the goods auction's status screen, in plain words", () => {
     expect(textOf(html, 'ship-wants')).toBe('The ship wants 3 Water this month. Water comes up after Food: the ship pays 12 cr for the first. You have 2. It also wants Smithore, Crystite and Rare earth.');
   });
 
+  it.each<[string, number, string]>([
+    ['short', -4, 'Hold 4 more Water: upkeep and spoilage take some before next month.'],
+    ['over', 2, 'You have 2 more than you must hold.'],
+    ['even', 0, 'You hold just enough.'],
+  ])('HOLD (WS6, 6 Nov): the status screen calls the auction’s number what you must hold, never what you need — %s', (_, spare, words) => {
+    const view = toFirstStatus().viewFor('s1');
+    const must = 6;
+    view.auction = { ...view.auction!, good: 'water', status: view.auction!.status.map((r) => (r.id === 's1' ? { ...r, need: must } : r)) };
+    view.me = { ...view.me!, stock: { ...view.me!.stock, water: must + spare } };
+    const html = phoneScreen(view, 's1');
+    expect(textOf(html, 'status-words')).toBe(`${words} Pick your side; you can change it until everyone has.`);
+    expect(html).toMatch(/<th[^>]*>Hold<\/th>/);
+    expect(html).not.toMatch(/<th[^>]*>Needs<\/th>/);
+  });
+
   it("the status screen's words and your numbers carry the mock's test ids", () => {
     const html = phoneScreen(toFirstStatus().viewFor('s1'), 's1');
     expect(textOf(html, 'status-words')).toMatch(/Pick your side; you can change it until everyone has\.$/);

@@ -196,7 +196,7 @@ describe('the line, in pure parts', () => {
     expect(lineHint({ kind: 'trading', house: 'store' }, 'seller', 'water', 27)).toEqual({ line: 'Selling Water to the store at 27 cr, faster and faster.', how: 'Tap ▲ to stop.' });
     expect(lineHint({ kind: 'trading', house: 'ship' }, 'seller', 'crystite', 120)).toEqual({ line: 'Selling Crystite to the ship at 120 cr, faster and faster.', how: 'Tap ▲ to stop.' });
     expect(lineHint({ kind: 'trading', house: 'store' }, 'buyer', 'food', 36).how).toBe('Tap ▼ to stop.');
-    expect(keepWords('water', 1, 3)).toBe('You keep 1 of the 3 Water you need next month.');
+    expect(keepWords('water', 1, 3)).toBe('You keep 1 of the 3 Water you must hold.');
   });
 
   it('RULE-2: a tap on your own side keeps it; there is no Pass to toggle into', () => {
@@ -263,7 +263,10 @@ describe('WS6 variant A: the auction trades by itself, faster and faster, on the
     const have = view.me!.stock[view.auction!.good];
     const html = phoneScreen(view, 's1');
     const name = { food: 'Food', water: 'Water', energy: 'Energy', smithore: 'Smithore' }[view.auction!.good as 'food'];
-    expect(textOf(html, 'keep')).toBe(`You keep ${have} of the ${need} ${name} you need next month.`);
+    expect(textOf(html, 'keep')).toBe(`You keep ${have} of the ${need} ${name} you must hold.`);
+    // HOLD (WS6, 6 Nov): the bidding readout calls the auction's number Hold, never need.
+    expect(textOf(html, 'good-row')).toMatch(new RegExp(`HAVE${have}HOLD${need}SHORT`));
+    expect(textOf(html, 'good-row')).not.toContain('NEED');
     expect(tagOf(html, 'have')).toContain('text-warn');
     expect(textOf(html, 'line-hint')).not.toContain('you keep');
   });
@@ -342,7 +345,7 @@ describe('RULE-4: a seller stops at what she must hold, and every screen shows i
     expect(view.me!.stock[good]).toBe(need);
     const html = phoneScreen(view, 's1');
     expect(textOf(html, 'keeps-s1')).toBe(`KEEPS ${need}`);
-    expect(textOf(html, 'held')).toBe(`Stopped at ${need} ${GOOD_NAME[good]}: what you need next month. To sell more, hold ▼: you’d be short next month.`);
+    expect(textOf(html, 'held')).toBe(`Stopped at ${need} ${GOOD_NAME[good]}: what you must hold. To sell more, hold ▼: you’d be short next month.`);
     expect(textOf(html, 'hold-down')).toBe('▼ Hold: sell short');
     // Another phone sees the mark on her walker, and no rail line of its own about it.
     const other = phoneScreen(game.viewFor('s2'), 's2');
