@@ -362,6 +362,9 @@ export function setWalk(state: GameState, playerId: string, dir: -1 | 0 | 1): vo
   if (a.stage !== 'walk') throw new RuleError('Not walking yet');
   const w = a.walkers.find((x) => x.id === playerId);
   if (!w || w.side === 'pass') throw new RuleError('You passed on this good');
+  // RULE-4: the board's time a hold of ▼ began, so a held seller's one-second hold counts the same on a replay.
+  if (dir !== -1) delete w.downSince;
+  else if (w.dir !== -1 || w.downSince === undefined) w.downSince = a.elapsed;
   w.dir = dir;
 }
 

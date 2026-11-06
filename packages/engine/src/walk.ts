@@ -108,6 +108,18 @@ function tradingAt(board: WalkBoard, market: WalkMarket, w: Walker): number | nu
 }
 
 /**
+ * RULE-4 row 2: a held seller who has held ▼ for WALK.shortHoldMs of board time sells into shortage for the rest of
+ * this good. Until then a held seller does not walk down.
+ */
+function shortHold(board: WalkBoard): void {
+  for (const w of board.walkers) {
+    if (!w.held || w.dir >= 0 || w.downSince === undefined || board.elapsed - w.downSince < WALK.shortHoldMs) continue;
+    delete w.held;
+    w.sellsShort = true;
+  }
+}
+
+/**
  * RULE-4 row 3: a seller whose next unit would take them below what they keep sells nothing more. They stop, one price
  * step above the line they would trade at (off every line), stay a seller, and are held.
  */
@@ -132,6 +144,9 @@ export function stepWalker(board: WalkBoard, market: WalkMarket, playerId: strin
   const w = board.walkers.find((x) => x.id === playerId);
   if (!w || w.side === 'pass') throw new RuleError('You passed on this good');
   w.dir = 0;
+  delete w.downSince;
+  // RULE-4: a tap never takes a held seller down; only a hold of ▼ does.
+  if (w.held && dir < 0) return;
   const before = rounded(w);
   const to = before + dir;
   if (w.side === 'buyer') {
@@ -154,6 +169,7 @@ export function takeSide(board: WalkBoard, market: WalkMarket, playerId: string,
   const others = board.walkers.filter((x) => x.id !== playerId);
   w.side = side;
   w.dir = 0;
+  delete w.downSince;
   w.since = board.elapsed;
   if (side === 'seller') w.price = Math.max(board.hi, ...others.filter((x) => activeBuyer(market, x)).map((x) => rounded(x) + 1));
   if (side === 'buyer') w.price = Math.max(0, Math.min(board.lo, ...others.filter((x) => activeSeller(market, x)).map((x) => rounded(x) - 1)));
@@ -180,6 +196,7 @@ export function stepBoard(board: WalkBoard, market: WalkMarket, dt: number): Sal
   board.elapsed += dt;
   const sellLine = market.houseSells?.price() ?? null;
   const step = (board.speed * dt) / MS_PER_SECOND;
+  shortHold(board);
 
   // Walk. Buyers first, then sellers; nobody walks through an active walker of the other side: they meet.
   for (const w of board.walkers) {
@@ -190,7 +207,7 @@ export function stepBoard(board: WalkBoard, market: WalkMarket, dt: number): Sal
     if (rounded(w) !== before) w.since = board.elapsed;
   }
   for (const w of board.walkers) {
-    if (w.side !== 'seller' || w.dir === 0) continue;
+    if (w.side !== 'seller' || w.dir === 0 || (w.held && w.dir < 0)) continue;
     const before = rounded(w);
     if (w.dir < 0) w.price = Math.min(w.price, Math.max(w.price - step, sellerFloor(board, market), maxBid(board, market), 1));
     else w.price += step;
