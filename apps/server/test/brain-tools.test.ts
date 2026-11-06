@@ -158,4 +158,39 @@ describe('the tool loop (C9, RULE-A4)', () => {
       vi.useRealTimers();
     }
   });
+
+  it("B fix 4 (c): whatIf in the land write plays the month's development part: a development edit is played, never refused 'not in this playbook'", async () => {
+    vi.useFakeTimers();
+    try {
+      const isWrite = (params: SdkParams) => promptOf(params).user.includes('What you may change:');
+      const quick = { path: '/development/timeBudgetMs', to: 0, reason: 'No time.' };
+      const sdk = fakeSdk((_n, params) => {
+        if (!isWrite(params)) return sdkMessage(JSON.stringify({ option: 'A', line: '' }));
+        if (params.messages.length === 1)
+          return {
+            ...sdkMessage('', {}, 'tool_use'),
+            content: [
+              { type: 'tool_use', id: 'w0', name: 'whatIf', input: { edits: [] } },
+              { type: 'tool_use', id: 'w1', name: 'whatIf', input: { edits: [quick] } },
+            ],
+          } as unknown as SdkMessage;
+        return sdkMessage(JSON.stringify({ edits: [], line: '' }));
+      });
+      const fake = fakeContext({ table: THREE });
+      const game = new MuleGame(fake.ctx, 10, { maxMonths: 1, politics: false, brain: brainOn(sdk) });
+      game.start(THREE);
+      await runTable(game, fake, (v) => v.phase === 'landGrant');
+
+      const write = sdk.requests.find((r) => isWrite(r.params) && r.params.messages.length > 1)!;
+      const [asDrafted, noTime] = (resultsIn(write.params) as { content: string; is_error?: boolean }[]).map((r) => {
+        expect(r.is_error).toBeUndefined();
+        return JSON.parse(r.content) as { worth: { total: number }; rejected: { path: string; why: string }[] };
+      });
+      expect(noTime!.rejected).toEqual([]);
+      // No development time buys no MULE: the month played differs from the draft's.
+      expect(noTime!.worth.total).not.toBe(asDrafted!.worth.total);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
