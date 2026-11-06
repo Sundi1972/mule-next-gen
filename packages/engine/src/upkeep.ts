@@ -33,7 +33,7 @@ export function runUpkeep(state: GameState): { shortages: Good[]; hungry: boolea
   // Colonists take their Food and Water from the store, free, as far as its shelf holds them (needs C1, RULE-1):
   // they hold no money and the meal moves none (HC-2). The store kept their month back from the players (HC-3).
   const colonistBase = state.colonists / UPKEEP.colonistsPerUnit;
-  const meal: NonNullable<MonthReport['colonistMeal']> = { food: { need: 0, took: 0 }, water: { need: 0, took: 0 } };
+  const meal: NonNullable<MonthReport['colonistMeal']> = { colonists: state.colonists, food: { need: 0, took: 0 }, water: { need: 0, took: 0 } };
   let fed = true;
   for (const good of ['food', 'water'] as const) {
     // A festival month the colonists eat more Food (G-5 C26).
