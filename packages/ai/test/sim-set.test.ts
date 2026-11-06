@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { colonyScore, DEV_STEER, score, SPECIES_PERK, type GameState } from '@mule/engine';
 import { ROTATION, simSeats } from '../src/lineup.js';
 import { playGame } from '../src/play.js';
-import { applySets, colonyScoreLines, colonyScoreRecorder, newPlanTally, planLines, playsArg, tallyGame, winnerOf } from '../src/sim.js';
+import { applySets, colonyScoreLines, foodBandLine, colonyScoreRecorder, newPlanTally, planLines, playsArg, tallyGame, winnerOf } from '../src/sim.js';
 
 describe('a sweep sets config without editing it', () => {
   it('T-AC-26: sim --set sets a config number or switch, names it in the header, and refuses an unknown path', () => {
@@ -101,5 +101,32 @@ describe("the sim reports the colony score (C29's baseline, RULE-25)", () => {
     const off = playGame(1, simSeats(4, 'trader', 1), { politics: false, maxMonths: 1, onPhase: recorder.onPhase });
     expect(recorder.end(off.state)).toEqual([]);
     expect(colonyScoreLines([recorder.end(off.state)])).toEqual([]);
+  });
+});
+
+describe('the sim reports the surplus when cheap (C6, UBER-AC-2)', () => {
+  const ROW = "     Resource utility (UBER-AC-2): Food held after its auction ÷ next month's need, the median seat by the ask against Food's reference:";
+  const TAIL = ' (target over 1.0 at ask ≤ ref, at most 1.0 at ask ≥ 2× ref); colonists short of Food or Water in 40% of months';
+  /** A seat at a Food auction with Food's reference at 30. */
+  const at = (ask: number, held: number, need = 10) => ({ ask, reference: 30, held, need });
+
+  it("UBER-AC-2 row: median Food held ÷ need by ask band", () => {
+    const samples = [
+      // ask ≤ ref, the reference itself included: 0.5, 1.5, 2.0.
+      at(10, 5), at(30, 15), at(20, 20),
+      // ref < ask < 2× ref, from just above the reference to just below twice it: 1.0, 0.8, 1.2.
+      at(31, 10), at(59, 8), at(45, 12),
+      // ask ≥ 2× ref, twice the reference itself included: 0.4.
+      at(60, 4),
+    ];
+
+    expect(foodBandLine(samples, '40%')).toBe(`${ROW} ask ≤ ref 1.50 (n 3), ref < ask < 2× ref 1.00 (n 3), ask ≥ 2× ref 0.40 (n 1)${TAIL}`);
+  });
+
+  it('UBER-AC-2 row negative: a band with no auctions prints n 0 and no median, never NaN; a seat needing no Food has no ratio', () => {
+    const row = foodBandLine([at(20, 15), at(70, 3, 0)], '40%');
+
+    expect(row).toBe(`${ROW} ask ≤ ref 1.50 (n 1), ref < ask < 2× ref no median (n 0), ask ≥ 2× ref no median (n 0)${TAIL}`);
+    expect(row).not.toMatch(/NaN|Infinity/);
   });
 });
