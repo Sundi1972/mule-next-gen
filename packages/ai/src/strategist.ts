@@ -1,5 +1,6 @@
 import {
   AI_PLANS,
+  AI_VALUE,
   airPoints,
   allPrices,
   DEVELOPMENT,
@@ -23,6 +24,7 @@ import {
   storeSellLine,
   tileIndex,
   walkSeconds,
+  WALK,
   type DevPlace,
   type GameState,
   type Good,
@@ -30,9 +32,9 @@ import {
   type PlanningPlay,
   type Tile,
 } from '@mule/engine';
-import { outlook, type Outlook } from './outlook.js';
+import { belief, outlook, type Outlook } from './outlook.js';
 import { candidate, consider, curve, shortlist, type Candidate, type Shortlist } from './utility.js';
-import { afterTax, canFeed, cashReserve, installGain, secondValue, unitValues, wholeNextMonth, yieldOf, type Mind, type UnitValues } from './value.js';
+import { afterTax, canFeed, cashPlan, cashReserve, installGain, secondValue, unitValues, wholeNextMonth, yieldOf, type Mind, type UnitValues } from './value.js';
 
 /**
  * The strategist: for each of the month's decisions it lists the options,
@@ -503,6 +505,8 @@ export interface GoodPlan {
    * and the store sells the good (STRATEGIST.buyShortfall); 0 otherwise. While it is above 0 it sells none of them.
    */
   mustHold: number;
+  /** With AI_VALUE.unit on: the needed units of this good the month's cash plan funds, and the shadow price of cash. */
+  cash?: { funded: number; lambda: number };
 }
 
 /** What the seat makes of the good that is up: the value of every unit, the cash it spends, and whether it corners or spites. */
@@ -521,22 +525,30 @@ export function goodPlan(obs: GameState, mind: Mind, good: Good): GoodPlan {
   // store sells the good, each unit up to that is worth at least the store's ask, so it buys it there or cheaper from a
   // player, never dearer, and it sells none of them. Otherwise its floor is the screen's need and the rest is for sale
   // (Heiko's choice of 5 Nov, "sell surplus").
-  const short = shortfallHold(obs, mind.me, good);
-  const whole = short.whole;
-  // The store's line is the good's that is up: a draft of a good still in the queue has no ask yet, and keeps its values.
-  const ask = whole > 0 && obs.auction?.good === good ? storeSellLine(obs) : null;
-  const mustHold = ask !== null ? short.mustHold : 0;
-  for (let k = 0; k < mustHold; k++) {
-    values.buy[k] = Math.max(values.buy[k] ?? 0, ask!);
-    values.keep[k] = Infinity;
+  let mustHold = 0;
+  let reserve: number;
+  let budget: number;
+  let cash: GoodPlan['cash'];
+  if (AI_VALUE.unit) {
+    ({ budget, reserve, cash } = monthPlan(obs, mind, o, good, values));
+  } else {
+    const short = shortfallHold(obs, mind.me, good);
+    const whole = short.whole;
+    // The store's line is the good's that is up: a draft of a good still in the queue has no ask yet, and keeps its values.
+    const ask = whole > 0 && obs.auction?.good === good ? storeSellLine(obs) : null;
+    mustHold = ask !== null ? short.mustHold : 0;
+    for (let k = 0; k < mustHold; k++) {
+      values.buy[k] = Math.max(values.buy[k] ?? 0, ask!);
+      values.keep[k] = Infinity;
+    }
+    // Otherwise it keeps the screen's need, what upkeep eats or its plots burn, whatever its own plots may make: Water
+    // only for a seat with a farm to water, as wholeNextMonth counts it.
+    const floor = mustHold > 0 ? mustHold : whole > 0 ? values.need : 0;
+    for (let k = 0; k < floor; k++) values.keep[k] = Infinity;
+    values.floorUnits = Math.max(values.floorUnits, floor);
+    reserve = cashReserve(obs, mind);
+    budget = Math.max(0, Math.min(p.money * STRATEGIST.budgetShare, p.money - reserve));
   }
-  // Otherwise it keeps the screen's need, what upkeep eats or its plots burn, whatever its own plots may make: Water
-  // only for a seat with a farm to water, as wholeNextMonth counts it.
-  const floor = mustHold > 0 ? mustHold : whole > 0 ? values.need : 0;
-  for (let k = 0; k < floor; k++) values.keep[k] = Infinity;
-  values.floorUnits = Math.max(values.floorUnits, floor);
-  const reserve = cashReserve(obs, mind);
-  const budget = Math.max(0, Math.min(p.money * STRATEGIST.budgetShare, p.money - reserve));
   const a = obs.auction;
   const rows = a?.good === good ? a.status : [];
   const others = rows.filter((r) => r.id !== mind.me);
@@ -556,7 +568,29 @@ export function goodPlan(obs: GameState, mind: Mind, good: Good): GoodPlan {
     }
     values.buy.sort((x, y) => y - x);
   }
-  return { good, values, budget, reserve, spiteBid, corner, mustHold };
+  return { good, values, budget, reserve, spiteBid, corner, mustHold, ...(cash ? { cash } : {}) };
+}
+
+/**
+ * The month's cash plan at this good (RULE-5), over the goods still to be auctioned from it: the budget is what the
+ * plan funds of this good plus what is left after every funded unit, at most today's share of the money; with no needed
+ * unit anywhere, today's share alone. The reserve is the cash funded for the later goods.
+ */
+function monthPlan(obs: GameState, mind: Mind, o: Outlook, good: Good, values: UnitValues): Pick<GoodPlan, 'budget' | 'reserve' | 'cash'> {
+  const money = me(obs, mind).money;
+  const a = obs.auction;
+  const goods = a?.good === good ? [good, ...a.queue] : WALK.order.slice(WALK.order.indexOf(good));
+  const plan = cashPlan(
+    obs,
+    mind,
+    goods,
+    (g) => (g === good ? values : unitValues(obs, o, g, mind)),
+    (g) => (g === good ? expectedPrices(obs, g).buy : belief(obs, o, g) * (1 + PRICE.storeSpread)),
+  );
+  const share = money * STRATEGIST.budgetShare;
+  const later = goods.reduce((n, g) => n + (g === good ? 0 : (plan.cost[g] ?? 0)), 0);
+  const budget = plan.needed === 0 ? share : (plan.cost[good] ?? 0) + Math.min(plan.left, share);
+  return { budget, reserve: later, cash: { funded: plan.funded[good] ?? 0, lambda: plan.lambda } };
 }
 
 /**
@@ -567,7 +601,8 @@ export function goodPlan(obs: GameState, mind: Mind, good: Good): GoodPlan {
 export function shortfallHold(obs: GameState, me: string, good: Good): { whole: number; mustHold: number } {
   const whole = STRATEGIST.buyShortfall.includes(good) ? wholeNextMonth(obs, me, good) : 0;
   const held = obs.players.find((p) => p.id === me)!.stock[good];
-  return { whole, mustHold: held < whole && storeForSale(obs, good) > 0 ? whole : 0 };
+  // With the model on, the values alone decide what it buys and keeps: no hold beside them.
+  return { whole, mustHold: !AI_VALUE.unit && held < whole && storeForSale(obs, good) > 0 ? whole : 0 };
 }
 
 /** The price the seat expects to get for a unit, and to pay: the houses' lines while they trade, otherwise around the posted price. */
@@ -623,7 +658,9 @@ export function tradeDecision(obs: GameState, mind: Mind, plan: GoodPlan): Short
   // (plan.mustHold), as far as its money goes.
   let upTo = h;
   let spent = 0;
-  const wanted = (k: number) => (k < plan.mustHold ? spent + buy <= p.money : (v.buy[k] ?? 0) > buy && spent + buy <= plan.budget);
+  // With the cash plan, a unit past its needs is bought only when it gains more per credit than the shadow price.
+  const surplus = (k: number) => !plan.cash || k < v.block || (v.buy[k] ?? 0) - buy > plan.cash.lambda * buy;
+  const wanted = (k: number) => (k < plan.mustHold ? spent + buy <= p.money : (v.buy[k] ?? 0) > buy && spent + buy <= plan.budget && surplus(k));
   while (upTo < v.buy.length && wanted(upTo)) {
     spent += buy;
     upTo++;
