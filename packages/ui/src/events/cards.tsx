@@ -1,4 +1,4 @@
-import { Fragment, type ReactNode } from 'react';
+import { createContext, Fragment, useContext, type ReactNode } from 'react';
 import { PlayerMark } from '../components/PlayerMark';
 import { cx } from '../components/tokens';
 import { motionOf, offMap, STORY } from './catalogue';
@@ -107,7 +107,8 @@ export function EffectsCard({ seg, size }: { seg: EventSegment; size: ShowSize }
   const seen = eventEffectsAt(s, t, reduced, grid)
     .filter((l) => l.seg === seg)
     .map((l) => l.effect);
-  const leaves = new Map(gaugeFlightsAt(s, reduced, grid).map((l) => [l.effect, l.leaves]));
+  const flights = useContext(GaugeFlightsHere);
+  const leaves = new Map(flights ? gaugeFlightsAt(s, reduced, grid).map((l) => [l.effect, l.leaves]) : []);
   const tv = size === 'tv';
   const rows: { key: string; head: ReactNode; items: ShowEffect[] }[] = [
     ...cast.players.filter((p) => fx.some((f) => f.on === p.id)).map((p) => ({ key: p.id, head: <SeatHead id={p.id} size={size} />, items: fx.filter((f) => f.on === p.id) })),
@@ -165,6 +166,9 @@ function SeatHead({ id, size }: { id: string; size: ShowSize }) {
 
 /** A change to one of the colony's gauges: its chip flies from the card to the gauge in the TV's header. */
 const movesAGauge = (f: ShowEffect) => f.on === 'colony' && (f.what === 'mood' || f.what === 'prestige' || f.what === 'air');
+
+/** Whether this screen flies the card's gauge chips to header gauges (the TV's event overlay): elsewhere they stay put. */
+export const GaugeFlightsHere = createContext(false);
 
 /** Seconds: how long a gauge's chip sits on the card before it leaves, and how long it flies to its gauge. */
 export const GAUGE_FLIGHT = { wait: 0.7, fly: 0.9 } as const;

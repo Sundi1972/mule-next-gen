@@ -4,6 +4,7 @@ import {
   Creature,
   cx,
   EventBoundary,
+  EventGaugeFlightsHere,
   EventLivingMap,
   EventPips,
   EventShow,
@@ -50,17 +51,19 @@ function TvEventOverlay({ game }: { game: MuleView }) {
     <SeatSpeciesProvider value={seatSpecies(game)}>
     <div ref={root} className="absolute inset-0 z-40 flex flex-col gap-4 bg-table px-10 py-6 text-ink" data-testid="tv-event-overlay" data-event-phase={game.phase}>
       <EventShow events={show.events} introMs={show.introMs} t={show.t} mode="tv" {...stage}>
-        <ShowHeader game={game} />
-        <div className="flex min-h-0 flex-1 gap-6 [container-type:size]">
-          <div className="shrink-0 self-start" style={{ width: `min(820px, calc(100cqh * ${game.width} / ${game.height}))` }}>
-            <EventLivingMap size="tv" className="w-full" />
+        <EventGaugeFlightsHere.Provider value={true}>
+          <ShowHeader game={game} />
+          <div className="flex min-h-0 flex-1 gap-6 [container-type:size]">
+            <div className="shrink-0 self-start" style={{ width: `min(820px, calc(100cqh * ${game.width} / ${game.height}))` }}>
+              <EventLivingMap size="tv" className="w-full" />
+            </div>
+            <div className="flex min-w-0 flex-1 flex-col gap-3" data-testid="rail">
+              <EventTvLog />
+            </div>
           </div>
-          <div className="flex min-w-0 flex-1 flex-col gap-3" data-testid="rail">
-            <EventTvLog />
-          </div>
-        </div>
-        <ColonyBar game={game} />
-        <GaugeFlights root={root} colony={game.colony} />
+          <ColonyBar game={game} />
+          <GaugeFlights root={root} colony={game.colony} />
+        </EventGaugeFlightsHere.Provider>
       </EventShow>
     </div>
     </SeatSpeciesProvider>
