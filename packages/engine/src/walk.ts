@@ -123,7 +123,9 @@ function buyerTop(board: WalkBoard, market: WalkMarket): number {
   const sellLine = market.houseSells?.price() ?? null;
   const zones = market.zones;
   if (sellLine !== null || !zones || !WALK.soldOutBidding) return Math.min(sellLine ?? Infinity, minAsk(board, market));
-  const asks = board.walkers.filter((w) => selling(market, w)).map((w) => (rounded(w) > zones.sellersBottom ? rounded(w) - 1 : w.price));
+  // Above S, any seller with units rests, the need-stop's held ones too (RULE-4): no seller is left between S and the line.
+  const stops = (w: Walker) => selling(market, w) || (activeSeller(market, w) && rounded(w) > zones.sellersBottom);
+  const asks = board.walkers.filter(stops).map((w) => (rounded(w) > zones.sellersBottom ? rounded(w) - 1 : w.price));
   return Math.min(zones.hi - 1, ...asks);
 }
 
