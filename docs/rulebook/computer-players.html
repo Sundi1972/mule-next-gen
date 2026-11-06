@@ -405,6 +405,20 @@
 <p class="code-ref">In the code: spec <code>docs/specs/2026-11-05-ws9-resource-utility.md</code> (PR #385) · <code>packages/ai/src/value.ts::unitValues, monthlyNet</code> · <code>packages/ai/src/strategist.ts::goodPlan, tradeDecision</code> · <code>packages/ai/src/outlook.ts::belief</code> · <code>packages/ai/src/sim.ts</code> (the Resource utility rows) · the playbook's <code>GoodPlay.expect</code></p>
 <p class="owner">Responsible: AI Strategy team (WS9), which builds it, with the Balance team (WS1) for <code>value.ts</code> and <code>strategist.ts</code>. Status: Being built, branch <code>ws9-util-pr1</code>, 6 November.</p>
 
+<h3 id="resource-utility-surplus-check">How the surplus is checked <span class="pill progress">Being built</span></h3>
+<p>The second goal, a surplus when Food is cheap and none when it is dear, gets its own line in the simulator's report. After every Food auction it takes each computer player's Food and divides it by what keeps that player whole through next month (eating and spoilage included), so 1 means exactly enough and 1.5 means half as much again. It sorts those auctions by Food's asking price against its reference price, the price level the store tracks:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Food's asking price</th><th>What the median player should hold</th></tr></thead>
+<tbody>
+<tr><td>At or below the reference price (cheap)</td><td>More than 1: a surplus</td></tr>
+<tr><td>Above the reference, below twice it</td><td>Reported, no target</td></tr>
+<tr><td>Twice the reference or more (dear)</td><td>No more than 1</td></tr>
+</tbody>
+</table></div>
+<p>Each band shows the median player's Food against its need and how many player-auctions fell in it; a band no auction fell in shows none, not a made-up number. The colony's own shortage (colonists short of Food or Water) is printed beside it, so a surplus the players hoard is seen against the colonists going without. The line appears only with the new model switched on; with it off the report is exactly today's. Not measured yet: the numbers come once the surplus valuation it checks is built.</p>
+<p class="code-ref">In the code: <code>packages/ai/src/sim.ts::foodBandLine</code> (the Resource utility (UBER-AC-2) line) · next month's need from <code>packages/ai/src/value.ts::wholeNextMonth</code> · the reference price from the store's <code>refPrice</code> · spec C6</p>
+<p class="owner">Responsible: AI Strategy team (WS9). Status: Being built, branch <code>ws9-util-pr2</code>, 6 November.</p>
+
 <h2 id="simulator">The simulator <span class="pill built">In the game</span></h2>
 <p>The simulator plays whole games with only computer seats (Classic, no model) and checks them against the balance targets. Every balance change is checked with it.</p>
 <div class="table-wrap"><table>
