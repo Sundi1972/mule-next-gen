@@ -291,11 +291,14 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
   );
 }
 
-/** The plot's best goods with their dots, best first, each by bestOf so the map and the rail name the same one. */
+/**
+ * The plot's best goods with their dots, best first, each by bestOf so the map and the rail name the same one. The best
+ * is shown even at 0 dots (analysed, nothing there); a runner-up only with a dot.
+ */
 function bestGoods(dots: Dots, count: number): [Good, number][] {
   const left = { ...dots };
   const out: [Good, number][] = [];
-  for (let best = bestOf(left); best !== undefined && out.length < count; best = bestOf(left)) {
+  for (let best = bestOf(left); best !== undefined && out.length < count && (out.length === 0 || left[best]! > 0); best = bestOf(left)) {
     out.push([best, left[best]!]);
     delete left[best];
   }
