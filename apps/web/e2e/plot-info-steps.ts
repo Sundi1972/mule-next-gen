@@ -12,6 +12,7 @@ import { errors as playwrightErrors, type Locator, type Page } from 'playwright'
 import { fmt, mapTiles } from '../src/game/derive';
 import { check, doneWithLand, held as heldIn, PHONE, PHONE_SMALL, TV, type GameStepContext } from './harness';
 import { readyThroughTheElection } from './politics-steps';
+import { LAPTOP } from './shell-steps';
 import { plotName, tapPlot, type Plot } from './special-steps';
 
 /** The promise: the report shows within this long of the tap on Scan. */
@@ -28,7 +29,7 @@ type Room = {
 };
 
 const B_AC_1 = 'B-AC-1 (plot info): two free plots picked, Scan, the rail\'s Drone report shows both with each good\'s 0–3 dots and "best for", 60 cr gone, before Ready';
-const B_AC_2 = 'B-AC-2 (plot info): My plots in planning and the Plots chip on the walking screen list every owned plot once, analysed ones with 0–3 dots and the gem, others "Not analysed …"';
+const B_AC_2 = 'B-AC-2 (plot info): My plots in planning and the Plots chip on the walking screen (phone and laptop) list every owned plot once, analysed ones with 0–3 dots and the gem, others "Not analysed …"';
 const B_AC_3 = 'B-AC-3 (plot info): analysing a free plot holding Crystite shows the card with its dots and "best for … · Crystite n" within 1 s of the assay\'s end';
 /** How long the second room has to get through month 1's election, planning and land grant to its development. */
 const TO_DEVELOPMENT_MS = 90_000;
@@ -204,8 +205,8 @@ function roomOf(server: GameStepContext['server'], code: string): Room {
 
 /**
  * B-AC-2's Given, seeded on the server as makeHungry seeds hunger: `seat` owns at least two plots, one of them holding
- * Crystite or Rare earth (a free one is given when none of its own does), and every plot of its but one is analysed.
- * Sends every screen the view that makes.
+ * Crystite or Rare earth (a free one is given when none of its own does), every plot of its but one is analysed, and
+ * another seat owns a plot. Sends every screen the view that makes.
  */
 function someOfMyPlotsAnalysed(room: Room, seat: string): void {
   const state = room.game.state;
@@ -227,6 +228,14 @@ function someOfMyPlotsAnalysed(room: Room, seat: string): void {
     if (owned().length >= 2) break;
     give(t);
   }
+  // Another seat owns a plot, so "never lists another player's plot" is read against one.
+  const other = state.players.find((p) => p.id !== seat);
+  check(other, `${B_AC_2}: another seat in the game`);
+  if (!state.tiles.some((t) => t.owner !== null && t.owner !== seat)) {
+    const theirs = free.find((t) => state.tiles[index(t)]!.owner === null);
+    check(theirs, `${B_AC_2}: a free plot to give ${other.name}`);
+    Object.assign(state.tiles[index(theirs)]!, { owner: other.id, outfit: null });
+  }
   const mine = owned();
   const kept = mine.find((t) => !hasGem(t) && !me.analysed.includes(index(t)));
   check(kept, `${B_AC_2}: a plot of ${seat}'s to leave unanalysed`);
@@ -245,7 +254,9 @@ async function listsEveryPlot(list: Locator, view: MuleView, seat: string, where
     const n = ids.filter((id) => id === `plot-row-${t.x}-${t.y}`).length;
     check(n === 1, `${B_AC_2}: ${where} lists plot ${plotName(t)} once, got ${n}`);
   }
-  for (const t of view.tiles.filter((t) => t.owner !== null && t.owner !== seat)) {
+  const theirs = view.tiles.filter((t) => t.owner !== null && t.owner !== seat);
+  check(theirs.length > 0, `${B_AC_2} (negative): ${where} is read with another seat owning a plot`);
+  for (const t of theirs) {
     check(!ids.includes(`plot-row-${t.x}-${t.y}`), `${B_AC_2} (negative): ${where} never lists ${t.owner}'s plot ${plotName(t)}`);
   }
   check(ids.length === owned.length, `${B_AC_2}: ${where} lists ${owned.length} plots, the ones ${seat} owns, got ${ids.length}`);
@@ -379,10 +390,50 @@ async function analyseSaysWhatItFound(room: Room, screens: { lena: Page; kai: Pa
   return `plot ${plotName(plot)} (${line}) analysed; the card showed ${shownAt - assayEnd} ms after the assay's end; the TV and the other seats' views hold no ground for it, and the TV and Kai's phone show no card`;
 }
 
+/** The development clock's seconds left as `walking` shows them. */
+async function clockSeconds(walking: Locator): Promise<number> {
+  const label = (await walking.getByTestId('shared-clock').getByRole('timer').getAttribute('aria-label', { timeout: STEP_MS })) ?? '';
+  const s = /^(\d+) seconds left/.exec(label);
+  check(s, `the clock says its seconds left, got "${label}"`);
+  return Number(s[1]);
+}
+
+/** How long the laptop's list stays open while the step watches the clock run under it. */
+const CLOCK_WATCH_MS = 1_500;
+
+/**
+ * B-AC-2's walking half on the laptop, unheld so the game runs: the Plots chip in the laptop's status opens the list,
+ * the clock keeps running under it, and the chip closes it. The page is left at the phone's size.
+ */
+async function thePlotsChipOnTheLaptop(page: Page, room: Room, seat: string): Promise<string> {
+  try {
+    await page.setViewportSize(LAPTOP);
+    const walking = page.locator('[data-phase=development] [data-testid=laptop-game]');
+    const where = `the laptop's Plots list at ${LAPTOP.width}×${LAPTOP.height}`;
+    const chip = walking.getByTestId('plots-chip');
+    const panel = walking.getByTestId('plots-panel');
+    await appears(chip, STEP_MS, `${B_AC_2}: at ${LAPTOP.width}×${LAPTOP.height} the laptop's walking screen offers the Plots chip`);
+    await chip.click({ timeout: STEP_MS });
+    await appears(panel, STEP_MS, `${B_AC_2}: the laptop's Plots chip opens the list`);
+    const before = await clockSeconds(walking);
+    const seen = await listsEveryPlot(panel, room.viewFor(seat).game!, seat, where);
+    await page.waitForTimeout(CLOCK_WATCH_MS);
+    check(await panel.isVisible(), `${B_AC_2}: ${where} stays open while the clock runs`);
+    const after = await clockSeconds(walking);
+    check(after < before, `${B_AC_2}: with ${where} open the clock runs, ${before} s then ${after} s`);
+    await chip.click({ timeout: STEP_MS });
+    await panel.waitFor({ state: 'detached', timeout: STEP_MS });
+    return `the laptop's Plots chip lists ${seen.analysed + seen.not} plots while the clock runs (${before} s → ${after} s), and closes`;
+  } finally {
+    await page.setViewportSize(PHONE.viewport);
+  }
+}
+
 /**
  * A second room on the same server, Lena's phone, Kai's phone, an AI and a TV, taken through month 1 to its
  * development: there Analyse opens its card (B-AC-3), and the Plots chip opens the list over the map and closes it, at
- * the smoke's phone and the small one (B-AC-2). The room is disposed afterwards, so nothing of it runs on.
+ * the smoke's phone and the small one, then on the laptop (B-AC-2). A page error on any of its screens fails the step.
+ * The room is disposed afterwards, so nothing of it runs on.
  */
 async function theSecondRoomsDevelopment({ phone, server }: Pick<GameStepContext, 'phone' | 'server'>): Promise<{ analysed: string; walking: string }> {
   const browser = phone.context().browser();
@@ -390,6 +441,8 @@ async function theSecondRoomsDevelopment({ phone, server }: Pick<GameStepContext
   const origin = new URL(phone.url()).origin;
   const contexts = await Promise.all([browser.newContext(PHONE), browser.newContext(PHONE), browser.newContext(TV)]);
   const [page, kai, tv] = (await Promise.all(contexts.map((c) => c.newPage()))) as [Page, Page, Page];
+  const errors: string[] = [];
+  for (const [who, p] of [['Lena', page], ['Kai', kai], ['the TV', tv]] as const) p.on('pageerror', (e) => errors.push(`${who}: ${e.message}`));
   let code = '';
   try {
     await page.goto(origin);
@@ -439,7 +492,9 @@ async function theSecondRoomsDevelopment({ phone, server }: Pick<GameStepContext
       }
       return `the walking screen's Plots chip lists them, and closes (${said.join(', ')})`;
     });
-    return { analysed, walking: listed };
+    const laptop = await thePlotsChipOnTheLaptop(page, room, seat);
+    check(errors.length === 0, `${B_AC_2}: no page errors in the second room: ${errors.join('; ')}`);
+    return { analysed, walking: `${listed}; ${laptop}` };
   } finally {
     await Promise.all(contexts.map((c) => c.close()));
     if (code) server.registry.get(code)?.dispose();
