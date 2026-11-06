@@ -365,6 +365,9 @@ export function developDecision(obs: GameState, mind: Mind, mulesSoFar: number, 
   const p = me(obs, mind);
   const reserve = cashReserve(obs, mind, o);
   const idle = obs.tiles.filter((t) => t.owner === mind.me && !t.outfit);
+  // The reserve less the good a new farm would make, once per good: it is the same for every plot.
+  const keepBacks = new Map<Good, number>();
+  const keepBackFor = (good: Good) => keepBacks.get(good) ?? keepBacks.set(good, cashReserve(obs, mind, o, good)).get(good)!;
   const needFood = !obs.tiles.some((t) => t.owner === mind.me && t.outfit === 'food');
   const needEnergy = !obs.tiles.some((t) => t.owner === mind.me && t.outfit === 'energy');
   const analysed = new Set(p.analysed);
@@ -406,7 +409,7 @@ export function developDecision(obs: GameState, mind: Mind, mulesSoFar: number, 
       const feeds = (outfit === 'food' && needFood) || (outfit === 'energy' && needEnergy);
       // A farm for a good it is short of is the cure, not a risk: it needn't keep cash back to buy that good.
       const cures = outfit === 'food' || outfit === 'water' || outfit === 'energy' ? outfit : undefined;
-      const keepBack = cures ? cashReserve(obs, mind, o, cures) : reserve;
+      const keepBack = cures ? keepBackFor(cures) : reserve;
       const tooFar = walk ? walkVeto(walk, walking, back) : null;
       let veto: string | null = null;
       if (obs.store.mules <= 0) veto = 'the corral is empty';
