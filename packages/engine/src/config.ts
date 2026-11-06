@@ -1666,8 +1666,9 @@ export const AI_VALUE = {
    */
   forecastRisk: 0.5,
   /**
-   * What a needed unit is never valued below, as a multiple of buying it back from the store next month (the belief
-   * plus the store's spread). 1 is the buy-back price itself.
+   * While the store sells the good, a needed unit is never valued below the store's ask today, nor below this
+   * multiple of buying it back next month (the belief plus the store's spread), whichever is more. 1 is the buy-back
+   * price itself.
    */
   shortFloorMarkup: 1,
 };
