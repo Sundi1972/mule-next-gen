@@ -265,7 +265,7 @@ export function PlotsLegend({ seat, short = false }: { seat: ArcadeSeat; short?:
       ))}
       {all.length > mine.length && (
         <span className="text-ink-3" data-testid="legend-more">
-          +{all.length - mine.length} more
+          +{all.length - mine.length} more · Plots ▸{short ? '' : ' shows all'}
         </span>
       )}
     </div>
