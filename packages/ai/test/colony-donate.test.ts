@@ -1,18 +1,18 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { commission, createGame, observe, player, POLITICS, PRESTIGE, type AiPersonaId, type GameState } from '@mule/engine';
+import { commission, createGame, observe, player, POLITICS, PRESTIGE, type AiPersonaId, type GameState, type Good, type PrestigeId } from '@mule/engine';
 import { donationFor, standingOf } from '../src/colony-donate.js';
 import { applyAction } from '../src/play.js';
 import { AiSeat } from '../src/seat.js';
-import { cashReserve } from '../src/value.js';
+import { cashReserve, unitNeed } from '../src/value.js';
 
 const SEATS = ['ai0', 'ai1', 'ai2', 'ai3'];
 const ME = 'ai0';
 
 /** A politics game in planning, the votes over, ai1 governing and the hospital commissioned unless told otherwise. */
-function table({ politics = true, commissioned = true } = {}): GameState {
+function table({ politics = true, commissioned = true, object = 'hospital' as PrestigeId } = {}): GameState {
   const state = createGame({ seed: 7, players: SEATS.map((id) => ({ id, name: id, isAi: true })), politics });
   if (state.politics) state.politics = { ...state.politics, governor: 'ai1', election: null };
-  if (commissioned && state.colony) commission(state, 'ai1', 'hospital');
+  if (commissioned && state.colony) commission(state, 'ai1', object);
   return state;
 }
 
@@ -74,6 +74,66 @@ describe('AI seats donate toward commissioned objects (G-5 C28)', () => {
   });
 });
 
+/** The store's price for a good on the day: what a gift of it is worth on the plaque (AM-13). */
+const POSTED = 100;
+
+interface GoodsRow {
+  name: string;
+  persona: AiPersonaId;
+  object: PrestigeId;
+  /** The seat's stock of the object's goods before planning. */
+  stock: Partial<Record<Good, number>>;
+  /** Electronics factories the seat owns: each turns Alloy, so Alloy becomes something it needs. */
+  factories?: number;
+  /** Cash above its reserve. */
+  spare: number;
+  /** Units it gives, by the object's funded goods. */
+  gives: Partial<Record<Good, number>>;
+  /** Credits it gives in the same act. */
+  credits: number;
+}
+
+const GOODS_ROWS: GoodsRow[] = [
+  { name: 'a trader with 4 spare Crystite gives the Observatory half: 2', persona: 'trader', object: 'observatory', stock: { crystite: 4 }, spare: 0, gives: { crystite: 2 }, credits: 0 },
+  { name: 'credits and goods go in one act', persona: 'trader', object: 'observatory', stock: { crystite: 4 }, spare: 1_000, gives: { crystite: 2 }, credits: 100 },
+  { name: 'never more than the object still needs: 3 of 20', persona: 'trader', object: 'observatory', stock: { crystite: 20 }, spare: 0, gives: { crystite: 3 }, credits: 0 },
+  { name: 'Alloy held exactly at what its factories need next month: none given', persona: 'trader', object: 'park', stock: {}, factories: 2, spare: 0, gives: {}, credits: 0 },
+  { name: 'a saboteur never gives goods', persona: 'saboteur', object: 'observatory', stock: { crystite: 20 }, spare: 1_000, gives: {}, credits: 0 },
+];
+
+/** Puts the seat on `n` free plots, each an Electronics factory. */
+function ownFactories(state: GameState, n: number): void {
+  const plots = state.tiles.filter((t) => t.terrain !== 'store' && t.owner === null).slice(0, n);
+  for (const t of plots) Object.assign(t, { owner: ME, outfit: 'electronics' });
+}
+
+describe('AI seats donate goods toward commissioned objects (G-5 C28)', () => {
+  it.each(GOODS_ROWS)('T-AC-C28-goods: a seat with a surplus of a good the object still needs gives it after planning; the funded goods and the plaque show it ($name)', (row) => {
+    const state = table({ object: row.object });
+    const seat = seatAs(row.persona);
+    ownFactories(state, row.factories ?? 0);
+    for (const [good, units] of Object.entries(row.stock)) player(state, ME).stock[good as Good] = units;
+    if (row.factories) {
+      const need = unitNeed(observe(state, ME), seat.mind, 'alloy').target;
+      expect(need * POLITICS.ai.colony.donate.goodsShare.trader, 'a trader ignoring its need would give at least 1 Alloy').toBeGreaterThanOrEqual(1);
+      player(state, ME).stock.alloy = need;
+    }
+    for (const good of Object.keys(PRESTIGE[row.object].goods) as Good[]) state.store.posted[good] = POSTED;
+    giveSpare(state, seat, row.spare);
+    const before = { ...player(state, ME).stock };
+    const object = () => state.colony!.projects.find((p) => p.id === row.object)!;
+
+    seat.planMonth(state, (a) => applyAction(state, ME, a));
+
+    const units = Object.values(row.gives).reduce((n, u) => n + u, 0);
+    expect(object().funded.goods).toEqual(row.gives);
+    expect(object().plaque[ME] ?? 0).toBe(row.credits + units * POSTED);
+    for (const [good, given] of Object.entries(row.gives)) expect(player(state, ME).stock[good as Good]).toBe(before[good as Good] - given);
+    const donations = seat.planningLog().filter((s) => s.action.type === 'donate');
+    expect(donations).toHaveLength(units + row.credits > 0 ? 1 : 0);
+  });
+});
+
 describe('donationFor and the standing it reads', () => {
   const standing = { ...POLITICS.ai.colony.donate.standing };
   afterEach(() => {
@@ -96,7 +156,7 @@ describe('donationFor and the standing it reads', () => {
       const seat = seatAs(persona);
       giveSpare(state, seat, spare);
       const got = donationFor(observe(state, ME), seat.mind, at);
-      expect(got, `${persona}, ${spare} cr spare, ${at}`).toEqual(want === null ? null : { id: 'hospital', credits: want });
+      expect(got, `${persona}, ${spare} cr spare, ${at}`).toEqual(want === null ? null : { id: 'hospital', credits: want, goods: {} });
     }
   });
 
