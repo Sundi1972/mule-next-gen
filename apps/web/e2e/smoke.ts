@@ -132,6 +132,7 @@ try {
   await claim.waitFor({ timeout: 5_000 });
   check(await claim.isVisible(), 'CLAIM button visible');
   await tv.getByTestId('tv-phase').filter({ hasText: 'Land grant' }).waitFor({ timeout: 3_000 });
+  console.log(`TV-FIT, the land grant: ${await theTvHeaderStaysOnScreen(tv, 'land grant', true)}`);
   await noZoomBeforeYourFirstPlot(ctx);
   await claimAPlot(phone, CLAIM_MS, 'AM-7: the phone claims a plot in the month-1 land grant');
   await zoomButtonOnceYouOwnAPlot(ctx, phoneIntents);

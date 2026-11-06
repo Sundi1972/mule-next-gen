@@ -96,19 +96,23 @@ const HEADER_ON_SCREEN = String.raw`(() => {
   // The outermost only: a clock past the edge names the clock, not each of its digits.
   const named = off.filter((c) => !off.includes(c.parentElement)).map((c) => (c.getAttribute('data-testid') || c.tagName.toLowerCase() + ' "' + (c.textContent || '').trim().slice(0, 20) + '"') + ' to x ' + Math.round(c.getBoundingClientRect().right));
   const gauges = header.parentElement.querySelector(':scope > [data-testid=colony-gauges]');
-  return { off: named, vw, ownRow: !!gauges && gauges.checkVisibility() };
+  const crowd = [...header.querySelectorAll('[role=timer], [data-testid=ready-count], [data-testid=strike-badge]')].filter((c) => c.checkVisibility()).map((c) => c.getAttribute('data-testid') || 'clock');
+  return { off: named, vw, crowd, ownRow: !!gauges && gauges.checkVisibility() };
 })()`;
 
 /**
  * GAUGES-ROW (PM ruling 5 Nov): a TV header with a clock, the strike badge or a ready count has nothing past the screen's
- * right edge; with the colony on, its gauges sit on their own row under the title.
+ * right edge; with the colony on, its gauges sit on their own row under the title; and nothing runs past the foot.
  */
 export async function theTvHeaderStaysOnScreen(tv: Page, screen: string, colony: boolean): Promise<string> {
-  const read = (await tv.evaluate(HEADER_ON_SCREEN)) as { off: string[]; vw: number; ownRow: boolean } | null;
+  const read = (await tv.evaluate(HEADER_ON_SCREEN)) as { off: string[]; vw: number; crowd: string[]; ownRow: boolean } | null;
   check(read !== null, `TV-FIT: the ${screen} TV shows its header`);
   check(read.off.length === 0, `GAUGES-ROW: on the ${screen} TV the header runs past the right edge (x ${read.vw}): ${read.off.join(', ')}`);
-  if (colony) check(read.ownRow, `GAUGES-ROW: on the ${screen} TV the colony's gauges sit on their own row under the title`);
-  return `nothing past x ${read.vw}${colony ? ', the gauges on their own row' : ''}`;
+  const crowded = read.crowd.length > 0;
+  if (colony) check(read.ownRow === crowded, `GAUGES-ROW: on the ${screen} TV, with ${crowded ? read.crowd.join(' and ') : 'no clock, badge or ready count'} in the header, the colony's gauges sit ${crowded ? 'on their own row' : 'beside the title'}`);
+  // The row costs height: the screen's foot is read too.
+  const foot = await nothingPastTheFoot(tv, screen);
+  return `${crowded ? read.crowd.join(' and ') : 'no clock'}, nothing past x ${read.vw}${colony ? `, the gauges ${read.ownRow ? 'on their own row' : 'beside the title'}` : ''}, the foot at y ${foot.toFixed(0)}`;
 }
 
 /** Kept a string, as PAST_THE_FOOT: the ready chip, the gauges it may sit on, and how many lines the title takes. */
