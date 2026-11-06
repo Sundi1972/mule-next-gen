@@ -65,11 +65,15 @@ describe('a GRAB pressed is a GRAB taken (FM-glint-fade, for FM-hurry-margin)', 
    * on its tile), then the presses in the tick's press order, each where Reach then offers one. With `rival`, ai1 stands
    * by the glint; with `analysed`, ai0 has analysed the land underfoot already, so no row below GRAB is on offer to it.
    * With `racing`, ai0 races every glint, and with `stepsOff` it stands that many of its steps short of the glint tile's
-   * near edge instead of a tile from it. `belowGrab`: whether a row below GRAB was on offer to ai0 as it chose (what its press
-   * becomes with the glint gone). `input`: ai0's input for the tick; `errand`: the input the same seat gives on the same
-   * floor with no glint lit, where its errand leads it.
+   * near edge instead of a tile from it (with `farSide`, past its far edge: the glint lies behind it, against its errand).
+   * With `warm`, ai0 has played that many ticks of its errand first, no glint lit, so its errand is under way. `belowGrab`: whether a row below GRAB was on offer to ai0 as it chose (what its press
+   * becomes with the glint gone). `input`: ai0's input for the tick; `errand`: the input the same seat, warmed alike,
+   * gives on the same floor with no glint lit, where its errand leads it.
    */
-  function glintTick(fadesIn: number, { rival, analysed = false, racing = false, stepsOff }: { rival?: Rival; analysed?: boolean; racing?: boolean; stepsOff?: number } = {}): GlintTick {
+  function glintTick(
+    fadesIn: number,
+    { rival, analysed = false, racing = false, stepsOff, farSide = false, warm = 0 }: { rival?: Rival; analysed?: boolean; racing?: boolean; stepsOff?: number; farSide?: boolean; warm?: number } = {},
+  ): GlintTick {
     const state = createGame({ seed: 4, players: [0, 1].map((i) => ({ id: `ai${i}`, name: `AI ${i + 1}`, isAi: true })) });
     while (state.phase !== 'development') advancePhase(state);
     const live = simFloorConfig();
@@ -84,6 +88,8 @@ describe('a GRAB pressed is a GRAB taken (FM-glint-fade, for FM-hurry-margin)', 
     const under = state.tiles.find((t) => open(t.x, t.y) && Math.abs(t.x - store.x) + Math.abs(t.y - store.y) >= 2 && open(t.x + 1, t.y))!;
     if (analysed) player(state, ME).analysed.push(tileIndex(state.width, under.x, under.y));
     const seat = new AiSeat({ id: ME, name: 'AI 1', persona: 'trader', level: 'trader', seed: 11 });
+    // Its twin, played alike, gives the errand's input on the tick.
+    const twin = new AiSeat({ id: ME, name: 'AI 1', persona: 'trader', level: 'trader', seed: 11 });
     const built = buildFloor(state, cfg);
     // With a rival by, the first tick from 200 on whose presses (read after its step) put the rival where it asks.
     const ahead = (t: number) => pressOrder({ ...built, tick: t + 1 }, [ME, RIVAL])[0] === RIVAL;
@@ -101,12 +107,23 @@ describe('a GRAB pressed is a GRAB taken (FM-glint-fade, for FM-hurry-margin)', 
       tick,
       colonists: built.colonists.map((c) => {
         const step = (speedOf(c, state, cfg) * cfg.steer.tickMs) / MS_PER_SECOND;
-        if (c.id === ME) return { ...c, x: stepsOff === undefined ? under.x + 0.5 : glint.x - stepsOff * step, y: under.y + 0.5 };
+        if (c.id === ME) return { ...c, x: stepsOff === undefined ? under.x + 0.5 : farSide ? glint.x + 1 + stepsOff * step : glint.x - stepsOff * step, y: under.y + 0.5 };
         return c.id === RIVAL && spot ? { ...c, space: 'map' as const, ...spot, ...(rival.held && { [rival.held]: tick + 10 }) } : c; // literal-ok: held well past the tick
       }),
       moments: { ...built.moments, glint },
     };
     const left = 40; // literal-ok: seconds on the clock, plenty for a grab
+    const calm = (f: DevFloor): DevFloor => ({ ...f, moments: { ...f.moments, glint: null } });
+    if (warm > 0) {
+      // The errand's first ticks, no glint lit, refereed as below; both seats play them, and the tick is the next one.
+      let w: DevFloor = { ...calm(floor), tick: tick - warm };
+      for (let k = 0; k < warm; k++) {
+        const a = seat.developSteer(state, w, left, cfg);
+        twin.developSteer(state, w, left, cfg);
+        w = settleMoments(state, stepFloor(w, state, { [ME]: a }, cfg.steer.tickMs, cfg));
+      }
+      floor = { ...w, moments: { ...w.moments, glint } };
+    }
     const gapOf = (f: DevFloor, id: string) => {
       const c = f.colonists.find((x) => x.id === id)!;
       return Math.hypot(c.x - mid.x, c.y - mid.y);
@@ -114,7 +131,7 @@ describe('a GRAB pressed is a GRAB taken (FM-glint-fade, for FM-hurry-margin)', 
     const belowGrab = reachOf({ ...floor, moments: { ...floor.moments, glint: null } }, state, ME, cfg, { secondsLeft: left }).enabled;
     const gapBefore = gapOf(floor, ME);
     const inputs: Record<string, FloorInput> = { [ME]: seat.developSteer(state, floor, left, cfg) };
-    const errand = new AiSeat({ id: ME, name: 'AI 1', persona: 'trader', level: 'trader', seed: 11 }).developSteer(state, { ...floor, moments: { ...floor.moments, glint: null } }, left, cfg);
+    const errand = twin.developSteer(state, calm(floor), left, cfg);
     if (rival) {
       const toward = { x: (mid.x - spot!.x) / rival.gap, y: (mid.y - spot!.y) / rival.gap };
       inputs[RIVAL] = { ...(rival.walks ? toward : { x: 0, y: 0 }), act: rival.presses };
@@ -152,8 +169,10 @@ describe('a GRAB pressed is a GRAB taken (FM-glint-fade, for FM-hurry-margin)', 
     expect({ holder: walkOn.holder, analysedUnderfoot: walkOn.analysedUnderfoot, assaying: walkOn.assaying }, 'racing, fading this step, half a step off its tile: won by walking on').toEqual({ holder: ME, analysedUnderfoot: false, assaying: false });
     // Fading this step, and more than a step short of its tile: no step reaches it before it fades, so the seat gives the
     // race up and keeps to its errand instead of walking a tick towards a glint about to vanish: its input is the one the
-    // same seat gives with no glint lit (on this tick, standing as it picks its first step), not a step east to the glint.
-    const tooFar = glintTick(1, { racing: true, stepsOff: 3 }); // literal-ok: three steps short
+    // same seat gives with no glint lit. Staged a few ticks into the errand, with the glint behind it, so that input is a
+    // real step away from the glint, not standing still as on its first tick: a seat frozen for any reason would fail.
+    const tooFar = glintTick(1, { racing: true, stepsOff: 3, farSide: true, warm: 2 }); // literal-ok: three steps past its tile, two ticks into the errand
+    expect(Math.hypot(tooFar.errand.x, tooFar.errand.y), 'the case: with no glint lit, its errand moves it').toBeGreaterThan(0);
     expect({ holder: tooFar.holder, assaying: tooFar.assaying }, 'racing, fading this step, three steps off its tile: not won').toEqual({ holder: null, assaying: false });
     expect(tooFar.input, 'racing, fading this step, three steps off its tile: its input leads where its errand does, not to the glint').toEqual(tooFar.errand);
     expect(walkOn.input, 'the control: half a step off, its input leads to the glint, off its errand').not.toEqual(walkOn.errand);
