@@ -214,6 +214,18 @@ describe("the goods auction's status screen, in plain words", () => {
     expect(html).not.toMatch(/<th[^>]*>Needs<\/th>/);
   });
 
+  it.each<[string, 'smithore' | 'energy' | 'food', string]>([
+    // #498 review: Hold is upkeep plus spoilage only where they apply (auctionNeed); a factory's Smithore neither spoils nor is eaten.
+    ['a good that never spoils', 'smithore', 'Hold 2 more Smithore: next month uses it.'],
+    ['a good that spoils but is not eaten', 'energy', 'Hold 2 more Energy: next month uses it, and some spoils first.'],
+    ['a good upkeep eats', 'food', 'Hold 2 more Food: upkeep and spoilage take some before next month.'],
+  ])('HOLD (WS6, 6 Nov): the short line gives the reason that is true for the good — %s', (_, good, words) => {
+    const view = toFirstStatus().viewFor('s1');
+    view.auction = { ...view.auction!, good, status: view.auction!.status.map((r) => (r.id === 's1' ? { ...r, need: 2 } : r)) };
+    view.me = { ...view.me!, stock: { ...view.me!.stock, [good]: 0 } };
+    expect(textOf(phoneScreen(view, 's1'), 'status-words')).toBe(`${words} Pick your side; you can change it until everyone has.`);
+  });
+
   it("the status screen's words and your numbers carry the mock's test ids", () => {
     const html = phoneScreen(toFirstStatus().viewFor('s1'), 's1');
     expect(textOf(html, 'status-words')).toMatch(/Pick your side; you can change it until everyone has\.$/);
