@@ -382,6 +382,20 @@ lands at the land grant (droneOrder is kept until then).
   foot a 17 px chip clipped a bottom-row pin, went under the owner's tab and gem on the right column, and lost its third
   dot under a special's badge; centred, the tab and gem stay clear and a badge clips about 1 px of dot 3. The mock's
   MapMarks pip position is superseded by this line.
+- 7 Nov, WS6 ruling on #562 (C7, built): on a phone plot under 16 px the dots chip drops its icon and keeps three
+  3 px dots in the good's colour (13×7 px); its label still names the good.
+- 7 Nov, WS6 ruling on Jira SA-1372 (C7, the small phone's hub map, plots 12.8–15 px at 667×375), under the PM's
+  principle that no mark hides a rating. Under 16 px, on a plot showing its dots: (1) the chip sits at the plot's foot
+  (ruling X's centring was measured at 25–30 px and stays there); (2) the owner's tab, the gem and a special's badge
+  shrink into the strip above the chip, each at least a dot's 3 px, none touching the chip; if they cannot all fit, the
+  badge goes first, then the gem; the owner's border always stays; (3) a SALE, SCAN or OFF flag replaces the chip
+  while it shows; (4) the selection ring sits inside the selected plot and may cover only that plot's own dots, which
+  the rail shows in full beside the map (Look, My plots); never a neighbour's, at any size where the ring outside would
+  reach them (WS4 measures the threshold, 16–18 px today). A plot without dots keeps every mark as today. Rejected: a
+  bigger hub map at 667 (the roadmap, needs and agenda above it are planning's content, and a full-height 19-column
+  map stays width-bound, about 18 px by estimate, so the clash moves rather than goes); hiding the tab or the gem
+  outright (they carry the plot look A and Heiko's gem choice B). Checked by extending table-steps.ts
+  theMarksStayClearOfTheDots at 667×375. WS4 builds HoloMap.
 
 ## §9 · Ownership Boundaries
 
