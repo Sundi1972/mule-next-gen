@@ -122,7 +122,8 @@ const POSTED = { smithore: 100, energy: 30, food: 30 };
 
 describe('RULE-5: one cash shadow price across the month’s auctions', () => {
   it('T-AC-2: with money for its Energy and not its Food too, Food’s budget is under one unit and the Energy auction buys every needed unit', () => {
-    const base: Seat = { plots: MINES, posted: POSTED, money: 0 };
+    // Rookie: no look-ahead, so every belief is the posted price the row sets.
+    const base: Seat = { level: 'rookie', plots: MINES, posted: POSTED, money: 0 };
     const probe = table(base);
     const energy = wholeNextMonth(observe(probe, ME), ME, 'energy');
     // The Energy it needs at the store's ask, and less than one Food unit more.
