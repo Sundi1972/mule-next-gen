@@ -1,8 +1,11 @@
 import type { RawGood } from '@mule/engine';
+import type { TileView } from '@mule/protocol';
 import { Creature, cx, GoodIcon, groundDots, MuleIcon, sickReason, SLOT_COLOR, TERRAIN_NAME } from '@mule/ui';
 import { useState, type CSSProperties } from 'react';
 import { useTableChat } from '../../chat/store';
 import { plotName, toSlot } from '../../game/derive';
+import { OnlyYou } from '../hub/OnlyYou';
+import { bestLine, GoodDots } from '../plotInfo';
 import { SWAP_NOTE } from './guide';
 import { bestHere, OUTFIT_WORD, RAW, plotTitle, suits, suitsLine } from './plots';
 import { assaySeconds, type ArcadeSeat } from './seat';
@@ -238,6 +241,33 @@ export function PlotCard({ seat, now, at }: { seat: ArcadeSeat; now: number; at:
         </span>
       )}
     </div>
+  );
+}
+
+// --- C5 · Analyse says what it found ---------------------------------------------------------------
+
+/** The Analyse card's width, as the mock draws it: Develop.tsx places it beside the plot by this. */
+export const ANALYSE_CARD_W = 236;
+
+/** What Analyse found, over the map beside the plot, any plot: its words and every good's dots. A tap closes it. */
+export function AnalyseCard({ t, at, onClose }: { t: TileView; at: CSSProperties; onClose: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClose}
+      className="pointer-events-auto absolute z-30 flex flex-col gap-1 rounded-panel border-2 border-holo bg-panel/95 px-2.5 py-2 text-left shadow-map animate-[show-card-in_0.25s_ease-out]"
+      style={{ width: ANALYSE_CARD_W, ...at }}
+      data-testid="analyse-card"
+    >
+      <span className="flex w-full items-center justify-between gap-2">
+        <span className="font-display text-sm font-semibold">
+          {plotName(t.x, t.y)} · {TERRAIN_NAME[t.terrain]} <span className="text-ok">analysed</span>
+        </span>
+        <OnlyYou />
+      </span>
+      <span className="text-[11px] font-semibold text-holo">{bestLine(t.ground!)}</span>
+      <GoodDots ground={t.ground!} />
+    </button>
   );
 }
 

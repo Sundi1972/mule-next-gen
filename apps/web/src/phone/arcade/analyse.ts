@@ -19,3 +19,6 @@ export function analyseCard(shown: Plot | null, prev: MuleView | null, next: Mul
   const newest = fresh.at(-1);
   return newest ? { x: newest.x, y: newest.y } : shown;
 }
+
+/** How long the Analyse card stays open once its assay is done. A screen's pause, not a rule. */
+export const ANALYSE_CARD_MS = 6_000;

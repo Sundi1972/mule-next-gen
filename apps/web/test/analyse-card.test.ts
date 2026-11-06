@@ -1,7 +1,11 @@
 import type { Ground } from '@mule/engine';
 import type { MuleView } from '@mule/protocol';
+import { dotsOf } from '@mule/ui';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { analyseCard } from '../src/phone/arcade/analyse';
+import { AnalyseCard } from '../src/phone/arcade/parts';
 import { devView, lenasMe, TILES } from './fixtures/arcade';
 
 /**
@@ -47,5 +51,24 @@ describe('T-AC-4: RULE-3, the Analyse card, over two views', () => {
 
   it('first row wins: a drone plot outside development, on the first view, gives no card', () => {
     expect(analyseCard(null, null, knowing([FREE], { phase: 'planning' }, [FREE]))).toBeNull();
+  });
+});
+
+describe('C5: the Analyse card says what Analyse found', () => {
+  const card = (ground: Ground) =>
+    renderToStaticMarkup(createElement(AnalyseCard, { t: { ...TILES[5 * 15 + 8]!, ground }, at: { left: 0, top: 0 }, onClose: () => {} })).replaceAll('<!-- -->', '');
+
+  it('names the plot as analysed, says what it is best for and any Crystite, draws every good’s dots, marked Only you', () => {
+    const html = card(GROUND);
+    const words = html.replace(/<[^>]+>/g, '');
+    expect(words).toContain('9·6 · Plains analysed');
+    expect(words).toContain('best for Food · Crystite 1');
+    for (const [good, n] of Object.entries(dotsOf(GROUND))) expect(html, good).toContain(`data-testid="dots-${good}" data-n="${n}"`);
+    expect(html).toContain('Only you');
+    expect(html).toMatch(/<button[^>]*data-testid="analyse-card"/);
+  });
+
+  it('a plot where nothing makes more than the floor says so', () => {
+    expect(card({ food: -2, water: -1, energy: -2, smithore: 0, crystite: 0, rareEarth: 0 })).toContain('nothing worth working');
   });
 });

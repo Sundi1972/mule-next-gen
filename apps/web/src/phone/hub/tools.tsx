@@ -44,7 +44,10 @@ export function LookMap() {
   );
 }
 
-/** The plot looked at: where, what ground, whose, and what its MULE makes. */
+/**
+ * The plot looked at: where, what land and whose, then its ground's dots when you know them, above its special and what
+ * its MULE makes; a plot you have not analysed ends with its land's hint.
+ */
 export function LookPanel() {
   const { view, me } = usePhoneGame();
   const { looked, setLooked } = useToday();
@@ -61,11 +64,10 @@ export function LookPanel() {
       <span className="font-display text-lg font-semibold leading-tight">
         {TERRAIN_NAME[tile.terrain]} <span className="font-mono text-xs text-holo">{ownerWord(view, tile, me.id)}</span>
       </span>
+      {tile.ground && <GroundCard ground={tile.ground} />}
       <SpecialLine special={tile.special} />
       {tile.outfit && <span className="text-xs text-ink-2">A MULE here makes {tile.outfit === 'greenBelt' ? 'a green belt' : GOOD_NAME[tile.outfit]}.</span>}
-      {tile.ground ? (
-        <GroundCard ground={tile.ground} />
-      ) : (
+      {!tile.ground && (
         <span className="text-xs text-ink-2" data-testid="terrain-hint">
           {TERRAIN_ODDS[tile.terrain]}
         </span>

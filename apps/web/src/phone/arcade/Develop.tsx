@@ -1,16 +1,18 @@
 import { DEV_WALK } from '@mule/engine';
+import type { MuleView, TileView } from '@mule/protocol';
 import { ActionButton, cx, Joystick, Panel, SharedClock, YourPace, type Condition } from '@mule/ui';
-import { useContext, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type RefObject } from 'react';
+import { useContext, useEffect, useLayoutEffect, useReducer, useRef, useState, useSyncExternalStore, type CSSProperties, type RefObject } from 'react';
 import { useTableChat } from '../../chat/store';
 import { ThemeToggle } from '../../components/ThemeToggle';
 import { useClient } from '../../net/react';
 import { usePhoneGame } from '../game';
 import { myPlots, PlotRow } from '../plotInfo';
 import { ShellLayer, WIDE_PX } from '../Shell';
+import { ANALYSE_CARD_MS, analyseCard, type Plot } from './analyse';
 import { keyDown, keyUp } from './controls';
-import { BANNER_CHAR_PX, bannerBox, colonistBox, css, FRAMES, freeRun, overlap, phoneLayout, tileBox, type Box } from './layout';
+import { BANNER_CHAR_PX, bannerBox, colonistBox, css, FRAMES, freeRun, overlap, phoneLayout, tileBox, type Box, type PhoneLayout } from './layout';
 import { PhoneLive, useArcade, useLive } from './live';
-import { ChatTicker, CompactClock, GroundChip, GuideNote, LeadChip, Money, OverCard, PaceLine, PlotCard, PlotsLegend, Reconnecting, SwapWarning } from './parts';
+import { ANALYSE_CARD_W, AnalyseCard, ChatTicker, CompactClock, GroundChip, GuideNote, LeadChip, Money, OverCard, PaceLine, PlotCard, PlotsLegend, Reconnecting, SwapWarning } from './parts';
 import { ScrambleBanner, scrambleWords } from './moments';
 import { arcadeSeat, type ArcadeSeat } from './seat';
 import { SeatProvider, YourStage } from './stages';
@@ -196,6 +198,54 @@ function PlotsPanel({ seat, at }: { seat: ArcadeSeat; at: { top: number; bottom:
   );
 }
 
+/**
+ * RULE-3's Analyse card: opened by a view that brings a plot's ground, shown once the assay that found it is done, for
+ * ANALYSE_CARD_MS, one at a time. Null while there is none to show.
+ */
+function useAnalyseCard(seat: ArcadeSeat, now: number): { tile: TileView; close: () => void } | null {
+  const client = useClient();
+  const { view } = seat;
+  const prev = useRef<MuleView | null>(null);
+  const [card, setCard] = useState<{ plot: Plot; from: number } | null>(null);
+  const [, wake] = useReducer((n: number) => n + 1, 0);
+  const assayUntil = seat.assayUntil;
+  useEffect(() => {
+    const before = prev.current;
+    prev.current = view;
+    setCard((shown) => {
+      const plot = analyseCard(shown?.plot ?? null, before, view);
+      if (plot === (shown?.plot ?? null)) return shown;
+      return plot && { plot, from: assayUntil ?? client.serverNow() };
+    });
+    // Only a new view can bring a plot's ground; the assay's end is the one that view carries.
+  }, [view]);
+  useEffect(() => {
+    if (!card) return;
+    const show = setTimeout(wake, Math.max(0, card.from - client.serverNow()));
+    const hide = setTimeout(() => setCard((c) => (c === card ? null : c)), Math.max(0, card.from + ANALYSE_CARD_MS - client.serverNow()));
+    return () => {
+      clearTimeout(show);
+      clearTimeout(hide);
+    };
+  }, [card, client]);
+  const tile = card && now >= card.from ? view.tiles[card.plot.y * view.width + card.plot.x] : undefined;
+  return tile?.ground ? { tile, close: () => setCard(null) } : null;
+}
+
+/** The gap between a plot and the Analyse card beside it, and the card's least margin from the stage's edges. */
+const CARD_GAP = 6;
+
+/**
+ * Where the Analyse card goes on the phone: beside its plot, to the right unless that runs off the stage; level with the
+ * plot's top in the map's upper half, with its bottom in the lower, so it never runs off the screen.
+ */
+function cardBeside(L: PhoneLayout, plot: Plot): CSSProperties {
+  const b = tileBox(L, plot);
+  const right = b.x + b.w + CARD_GAP;
+  const left = right + ANALYSE_CARD_W <= L.stage.x + L.stage.w - CARD_GAP ? right : Math.max(L.stage.x + CARD_GAP, b.x - CARD_GAP - ANALYSE_CARD_W);
+  return b.y + b.h / 2 < L.stage.y + L.stage.h / 2 ? { left, top: Math.max(CARD_GAP, b.y) } : { left, bottom: Math.max(CARD_GAP, L.h - (b.y + b.h)) };
+}
+
 /** The plots panel's top: under the status's first row, so the chip that closes it stays in reach. */
 const PLOTS_PANEL_TOP = 48;
 
@@ -208,6 +258,7 @@ const PLOTS_PANEL_TOP = 48;
 export function PhoneLandscape({ frame }: { frame: { w: number; h: number } }) {
   const { seat, installs, now } = useArcadeSeat();
   const keys = useGameKeys();
+  const found = useAnalyseCard(seat, now);
   const [plotsOpen, setPlotsOpen] = useState(false);
   // The game keeps the keyboard: a tapped chip would otherwise hold the focus, and the arrows with it.
   const togglePlots = () => {
@@ -227,8 +278,8 @@ export function PhoneLandscape({ frame }: { frame: { w: number; h: number } }) {
   const buttonFaded = fade(L.button);
   // Over a plot of yours a control is translucent, so the plot's marks read through it (AM-20); near you or the target
   // it fades further, near-clear, as the scaffold has it.
-  const myPlots = space === 'map' ? view.tiles.filter((t) => t.owner === me.id) : [];
-  const overMine = (r: Box) => myPlots.some((t) => overlap(r, tileBox(L, t)) > 0);
+  const yours = space === 'map' ? myPlots(view, me.id) : [];
+  const overMine = (r: Box) => yours.some((t) => overlap(r, tileBox(L, t)) > 0);
   const look = (faded: boolean, r: Box) => (faded ? 'opacity-25' : overMine(r) ? OVER_YOUR_PLOTS : 'opacity-100');
   // At 667 the status bar: row 0's widest run with no plot of yours and no target on it.
   let bar: Box | null = null;
@@ -260,7 +311,7 @@ export function PhoneLandscape({ frame }: { frame: { w: number; h: number } }) {
   const { moments = null } = useLive();
   const scramble = moments?.scramble ?? null;
   const words = (scramble ? scrambleWords(seat, scramble)?.text : seat.guide?.note) ?? '';
-  const banner = bannerBox(L, space, view.height, [...myPlots, seat.store], words.length * BANNER_CHAR_PX);
+  const banner = bannerBox(L, space, view.height, [...yours, seat.store], words.length * BANNER_CHAR_PX);
   const bannerFaded = near(banner, mePx, L.cell * 0.4);
   const choosing = space === 'hall' && me.carriedMule === 'empty';
   const compactLeft = !!L.left && L.left.w < SIDE_ROOM_FULL;
@@ -356,6 +407,7 @@ export function PhoneLandscape({ frame }: { frame: { w: number; h: number } }) {
         )}
         {plotsOpen && <PlotsPanel seat={seat} at={{ top: PLOTS_PANEL_TOP, bottom: L.h - L.button.y + 6 }} />}
         {card && <PlotCard seat={seat} now={now} at={{ left: card.x, top: card.y, width: card.w, maxHeight: card.h }} />}
+        {found && space === 'map' && <AnalyseCard t={found.tile} at={cardBeside(L, found.tile)} onClose={found.close} />}
         {/* The banner box: the scramble's banner, or the guide's note (V-7); on the map along the bottom rows between the
             stick and the button, clear of your plots, in the hall across the walkway. It fades while you walk under it. */}
         <div className="pointer-events-none absolute z-20 flex items-center justify-center" style={css(banner)} data-testid="scramble-banner-box">
