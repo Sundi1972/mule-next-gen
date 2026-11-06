@@ -73,9 +73,9 @@ function withPlans<T>(sets: string[], fn: () => T): T {
 /**
  * RULE-4's money-maker score, written out from the rule's words: the best plots' install gains, less the rivals' share.
  * A factory good the seat can't feed scores as AM-33's chain, or not at all; `chains` false is the rule before AM-33.
- * The chain: one works on its best plot, its inputs free, times the least share of its run a link supplies, plus each
- * missing link on the plot of its own where it adds most, at its running cost. It models no standing link: a chain
- * with one throws.
+ * The chain: one works, its inputs free, times the least share of its run a link supplies, plus each missing link at
+ * its running cost. The links take their plots first, the one whose share varies most across the plots first, each
+ * where it adds most; the works takes the best plot left. It models no standing link: a chain with one throws.
  */
 function moneyMakerByRule(state: GameState, mind: Mind, chains = true): Good | null {
   const obs = observe(state, mind.me);
@@ -92,24 +92,25 @@ function moneyMakerByRule(state: GameState, mind: Mind, chains = true): Good | n
       if (!chains || links.length === 0 || Math.ceil(mules / mind.level.mulesPerMonth) > AI_PLANS.chain.months) continue;
       if (standingLinks(obs, mind.me, good).length > 0) throw new Error(`the reference models no standing link (${good})`);
       const free = chainOutlook(o, links);
-      const works = plots.map((t) => ({ t, ...installGain(obs, free, t, good, mind) })).sort((a, b) => b.gain - a.gain);
-      const best = works[0]!.gain;
-      const used = [works[0]!.t];
+      const works = plots.map((t) => ({ t, ...installGain(obs, free, t, good, mind) }));
+      const best = Math.max(...works.map((w) => w.gain));
+      const at = (link: Good) => plots.map((t) => ({ t, share: linkShare(obs, t, link, [good, ...links], mind.me), ...installGain(obs, free, t, link, mind) }));
+      const spread = (link: Good) => Math.max(...at(link).map((w) => w.share)) - Math.min(...at(link).map((w) => w.share));
+      const used: Tile[] = [];
       let share = 1;
       let running = 0;
-      let cost = works[0]!.cost;
-      for (const link of links) {
+      let cost = 0;
+      for (const link of [...links].sort((a, b) => spread(b) - spread(a))) {
         const adds = (w: { gain: number; share: number }) => w.gain + w.share * best;
-        const at = plots
-          .filter((t) => !used.includes(t))
-          .map((t) => ({ t, share: linkShare(obs, t, link, [good, ...links], mind.me), ...installGain(obs, free, t, link, mind) }))
-          .sort((a, b) => adds(b) - adds(a))[0]!;
-        used.push(at.t);
-        running += at.gain;
-        share = Math.min(share, at.share);
-        cost += at.cost;
+        const pick = at(link).filter((w) => !used.includes(w.t)).sort((a, b) => adds(b) - adds(a))[0]!;
+        used.push(pick.t);
+        running += pick.gain;
+        share = Math.min(share, pick.share);
+        cost += pick.cost;
       }
-      sum = best * share + running;
+      const home = works.filter((w) => !used.includes(w.t)).sort((a, b) => b.gain - a.gain)[0]!;
+      cost += home.cost;
+      sum = home.gain * share + running;
       if (cost > obs.players.find((p) => p.id === mind.me)!.money) continue;
     }
     const rivals = obs.tiles.filter((t) => t.owner !== null && t.owner !== mind.me && t.outfit === good).length;
@@ -120,8 +121,8 @@ function moneyMakerByRule(state: GameState, mind: Mind, chains = true): Good | n
 }
 
 /**
- * Development in month 1 with AM-33's chain to Electronics in reach: ai0 holds two plains plots, Rare earth ground and
- * thin Smithore ground (one a month: half the Alloy works' run, a link share of 0.5), all analysed; Electronics at
+ * Development in month 1 with AM-33's chain to Electronics in reach: ai0 holds Rare earth ground, thin Smithore ground
+ * (one a month: half the Alloy works' run, a link share of 0.5) and two plains plots, all analysed; Electronics at
  * `electronics`. ai1 holds every other plot, the others none; no one holds goods or cash but ai0.
  */
 function chainTable(electronics: number): GameState {
@@ -130,10 +131,10 @@ function chainTable(electronics: number): GameState {
   for (const t of state.tiles) if (t.owner) Object.assign(t, { owner: null, outfit: null });
   const flat = { food: 0, water: 0, energy: 0, smithore: 0, crystite: 0, rareEarth: 0 };
   const me = state.players.find((p) => p.id === 'ai0')!;
-  // Every other plot ai1's, idle: no free plot elsewhere offers a richer link. The plains come first in the board's
-  // order, so the works and the Alloy link take them, leaving the ground to its own link (the draft places links in turn).
+  // Every other plot ai1's, idle: no free plot elsewhere offers a richer link. The ground comes first in the board's
+  // order, so a link placed in recipe order (Alloy, which makes the same anywhere) would take the Smithore ground.
   for (const t of state.tiles) if (t.terrain !== 'store') t.owner = 'ai1';
-  for (const [x, ground] of [[0, {}], [2, {}], [4, { rareEarth: 4 }], [6, { smithore: 1 }]] as const) {
+  for (const [x, ground] of [[0, { rareEarth: 4 }], [2, { smithore: 1 }], [4, {}], [6, {}]] as const) {
     const tile = state.tiles[x]!;
     Object.assign(tile, { terrain: 'plains', traits: [], ground: { ...flat, ...ground }, owner: 'ai0', outfit: null, pollution: 0, runMonths: 0 } satisfies Partial<Tile>);
     delete tile.special;
