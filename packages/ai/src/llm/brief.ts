@@ -1,8 +1,35 @@
-import { advancePhase, allPrices, BRAIN, GOODS, MS_PER_SECOND, observe, scoreParts, SPECIES_PERK, type DevelopmentPlay, type GameState, type Good, type GoodPlay, type LandGrantPlay, type Outfit, type PhaseOutcome, type Playbook, type PlayerId, type Species, type Strategy } from '@mule/engine';
+import {
+  advancePhase,
+  allPrices,
+  BRAIN,
+  corralTarget,
+  emptyStock,
+  GOODS,
+  isFactory,
+  monthNeeds,
+  MS_PER_SECOND,
+  MULE,
+  mulePriceFor,
+  observe,
+  scoreParts,
+  SPECIES_PERK,
+  type DevelopmentPlay,
+  type GameState,
+  type Good,
+  type GoodPlay,
+  type LandGrantPlay,
+  type Outfit,
+  type PhaseOutcome,
+  type Playbook,
+  type PlayerId,
+  type ProductionLine,
+  type Species,
+  type Strategy,
+} from '@mule/engine';
 import { OPTION_IDS, toOptions, type TableTalk } from '../decider.js';
 import type { Persona } from '../personas.js';
 import { GOOD_NAME, landDecision, outfitName } from '../strategist.js';
-import type { Mind } from '../value.js';
+import { ownSupply, type Mind } from '../value.js';
 import { seatBounds } from './manual.js';
 import { optionLine, tableTalkBlock } from './prompt.js';
 import type { LandDraft } from '../playbook/index.js';
@@ -196,6 +223,90 @@ function shipLine(obs: GameState): string {
   return `The export ship calls in month ${ship.arrives} and wants: ${ship.goods.map((g) => `${GOOD_NAME[g]} ${ship.hold[g] ?? 0}`).join(', ')}.`;
 }
 
+type PartWhy = ProductionLine['parts'][number]['why'];
+/** What cut a plot's output, in the brief's words, by the reason production files (runProduction's parts). */
+const LESS_WHY: Partial<Record<PartWhy, string>> = {
+  energyOff: 'turned off for want of Energy',
+  noEnergy: 'short of Energy',
+  noWater: 'short of Water',
+  pollution: 'pollution',
+};
+const partText = (p: ProductionLine['parts'][number]) => `${p.why === 'event' ? `the ${p.event ?? 'event'}` : (LESS_WHY[p.why] ?? p.why)} ${signed(p.delta)}`;
+
+/**
+ * One line per plot of the seat's own: what it made at the last production, from the line production filed for it
+ * (the report's lines, which observe keeps), and each part that cut its output. A plot with no line made
+ * nothing: no MULE, a green belt (it makes no goods), or works that did not run, short of their inputs. At most
+ * BRAIN.brief.plotsPerPlayer plots, the rest counted.
+ */
+function plotOutputLines(obs: GameState, me: PlayerId): string[] {
+  const report = obs.history.at(-1);
+  if (!report) return ['No production has run yet.'];
+  const filed = new Map((report.lines ?? []).map((l) => [l.tile, l]));
+  const mine = obs.tiles.flatMap((t, i) => (t.owner === me && t.terrain !== 'store' ? [{ i, outfit: t.outfit }] : []));
+  if (mine.length === 0) return [];
+  const text = ({ i, outfit }: (typeof mine)[number]) => {
+    if (!outfit) return `- plot ${i}: no MULE, made nothing`;
+    const line = filed.get(i);
+    const name = `- plot ${i} ${outfitName(outfit)}`;
+    if (outfit === 'greenBelt') return `${name}: makes no goods`;
+    if (!line) return isFactory(outfit) ? `${name}: made nothing: it did not run, short of its inputs` : `${name}: made nothing at the last production`;
+    const less = line.parts.filter((p) => p.delta < 0);
+    return `${name}: made ${line.made} ${GOOD_NAME[line.good]}${less.length > 0 ? ` (${less.map(partText).join(', ')})` : ''}`;
+  };
+  const shown = mine.slice(0, BRAIN.brief.plotsPerPlayer).map(text);
+  if (mine.length > shown.length) shown.push(`- and ${mine.length - shown.length} more plots`);
+  return [`What your plots made at the last production (month ${report.month}):`, ...shown];
+}
+
+/**
+ * Food and Energy in units: what the seat holds and its own plots made at the last production (a plant's output net of
+ * its own use, as value.ts ownSupply counts it), against what the engine says it burns (monthNeeds): its household's
+ * Food at upkeep, its plots' and works' Energy at production.
+ */
+function feedLine(obs: GameState, me: PlayerId): string {
+  const p = obs.players.find((q) => q.id === me)!;
+  const made = obs.history.at(-1)?.produced[me] ?? emptyStock();
+  const need = monthNeeds(obs, me);
+  const verdict = (held: number, makes: number, needs: number) => (held + makes >= needs ? 'covered' : `short by ${needs - held - makes}`);
+  const food = ownSupply(obs, me, made, 'food');
+  const energy = ownSupply(obs, me, made, 'energy');
+  return (
+    `Food and Energy in units: Food — you hold ${p.stock.food} and your plots made ${food} at the last production, against ${need.food} your household eats a month: ${verdict(p.stock.food, food, need.food)}; ` +
+    `Energy — you hold ${p.stock.energy} and your plants made ${energy} beyond their own use, against ${need.energy} your plots and works use a production: ${verdict(p.stock.energy, energy, need.energy)}.`
+  );
+}
+
+/**
+ * Where MULEs come from, as upkeep builds them (upkeep.ts): the corral now and this month's price to the seat; the
+ * store's Smithore, and what the next upkeep builds from it, filling the corral back to corralTarget at
+ * MULE.smithorePerMule each, whether the corral sells out or sells none.
+ */
+function muleLine(obs: GameState, me: PlayerId): string {
+  const { mules } = obs.store;
+  const smithore = obs.store.stock.smithore;
+  const target = corralTarget(obs.players.length);
+  const buildable = Math.floor(smithore / MULE.smithorePerMule);
+  return (
+    `MULEs: ${mules} in the corral, at ${mulePriceFor(obs, me)} cr each to you this month. ` +
+    `The store holds ${smithore} Smithore; at the next upkeep it builds MULEs to fill the corral back to ${target}, ${MULE.smithorePerMule} Smithore each: ` +
+    `${Math.min(target, buildable)} if the corral sells out, ${Math.max(0, Math.min(target - mules, buildable))} if it sells none.`
+  );
+}
+
+/** What the seat's plots made, and its Food and Energy in units: the land and auction briefs' (B fix 3). */
+const madeLines = (obs: GameState, me: PlayerId) => [...plotOutputLines(obs, me), feedLine(obs, me), ''];
+
+/**
+ * The land plans' "Feeds me" reason counts plots, not units (strategist.ts landDecision: a Food plot and an Energy plot
+ * owned). The brief says what it counted, so it never claims a coverage the units line contradicts (B fix 3).
+ */
+const FEEDS_ME: readonly [string, string][] = [
+  ['my Food and Energy are covered', 'I own a Food plot and an Energy plot'],
+  ['I still buy my Food and Energy', 'I lack a Food plot or an Energy plot'],
+];
+const plotsCounted = (line: string) => FEEDS_ME.reduce((l, [said, counted]) => l.replace(said, counted), line);
+
 const valueText = (v: unknown) => (typeof v === 'string' ? v : JSON.stringify(v));
 
 /**
@@ -284,8 +395,10 @@ export function landBrief(
     'Who owns the land:',
     ...ownership(obs, mind.me),
     '',
+    ...madeLines(obs, mind.me),
     priceLine(obs, state.history),
     `Store stock: ${GOODS.map((g) => `${GOOD_NAME[g]} ${obs.store.stock[g]}`).join(', ')}.`,
+    muleLine(obs, mind.me),
     shipLine(obs),
     '',
     strategyLine(draft.strategy),
@@ -293,7 +406,7 @@ export function landBrief(
     ...outcomeLines(last.outcome, mind.me, names),
     ...refusalLines(last.feedback),
     'Land plans for this month, best first:',
-    ...options.map((o, i) => `${optionLine(o)}: ${capped(plans[i]!.ranked, BRAIN.brief.plotsPerPlan, plotText)}`),
+    ...options.map((o, i) => `${plotsCounted(optionLine(o))}: ${capped(plans[i]!.ranked, BRAIN.brief.plotsPerPlan, plotText)}`),
     '',
     'Your draft land grant:',
     ...draftLines(draft.landGrant),
@@ -388,6 +501,7 @@ export function phaseBrief(state: GameState, mind: Mind, persona: Persona, draft
     'Who owns the land:',
     ...ownership(obs, mind.me),
     '',
+    ...(phase === 'auction' ? madeLines(obs, mind.me) : []),
     priceLine(obs, state.history),
     `Store stock: ${GOODS.map((g) => `${GOOD_NAME[g]} ${obs.store.stock[g]}`).join(', ')}.`,
     shipLine(obs),
