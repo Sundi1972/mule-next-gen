@@ -658,9 +658,11 @@ export function tradeDecision(obs: GameState, mind: Mind, plan: GoodPlan): Short
   // (plan.mustHold), as far as its money goes.
   let upTo = h;
   let spent = 0;
-  // With the cash plan, a unit past its needs is bought only when it gains more per credit than the shadow price.
+  // With the cash plan, a needed unit it funds is bought at its value or under (a tie buys); a unit past its needs only
+  // when it gains more per credit than the shadow price.
+  const worth = (k: number) => (plan.cash && k < h + plan.cash.funded ? (v.buy[k] ?? 0) >= buy : (v.buy[k] ?? 0) > buy);
   const surplus = (k: number) => !plan.cash || k < v.block || (v.buy[k] ?? 0) - buy > plan.cash.lambda * buy;
-  const wanted = (k: number) => (k < plan.mustHold ? spent + buy <= p.money : (v.buy[k] ?? 0) > buy && spent + buy <= plan.budget && surplus(k));
+  const wanted = (k: number) => (k < plan.mustHold ? spent + buy <= p.money : worth(k) && spent + buy <= plan.budget && surplus(k));
   while (upTo < v.buy.length && wanted(upTo)) {
     spent += buy;
     upTo++;
