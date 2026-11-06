@@ -112,9 +112,11 @@ export async function theDroneReportsInTheRail({ phone, server, code, held }: Ga
 
     const planning = phone.locator('[data-phase=planning]');
     const hubMap = planning.getByTestId('hub-map');
-    // Now open, as a player who read it leaves it: the rail then holds more above the report than its box can show, on
-    // every seed, so the report fits only by keeping itself in view (a strike alert above does the same).
-    if (!(await planning.getByTestId('now-fold').count())) await planning.getByTestId('now').click({ timeout: STEP_MS });
+    // Now open, as a player who read it leaves it: the rail then holds more above the report than its box can show, so
+    // the report fits only by keeping itself in view (a strike alert above does the same). A Governor's strike card is
+    // drawn whole, with no fold, and is taller still.
+    const folded = planning.getByTestId('now');
+    if (!(await planning.getByTestId('now-fold').count()) && (await folded.count())) await folded.click({ timeout: STEP_MS });
     await planning.getByTestId('tool-drone').click({ timeout: STEP_MS });
     for (const p of picks) await tapPlot(phone, hubMap, p, state.width, STEP_MS);
     const scan = planning.getByTestId('scan');
@@ -209,8 +211,10 @@ function someOfMyPlotsAnalysed(room: Room, seat: string): void {
     check(gem, `${B_AC_2}: a free plot holding Crystite or Rare earth to give ${seat}`);
     give(gem);
   }
-  for (const t of free.filter((t) => !hasGem(t) && !me.analysed.includes(index(t)))) {
-    if (owned().length >= 2) break;
+  // One plot left unanalysed whatever the seat already owns, then at least two plots in all.
+  const unanalysed = (t: Plot) => !hasGem(t) && !me.analysed.includes(index(t));
+  for (const t of free.filter(unanalysed)) {
+    if (owned().some(unanalysed) && owned().length >= 2) break;
     give(t);
   }
   const mine = owned();
