@@ -1,6 +1,6 @@
-import { createGame, EVENT_SHOW, rollPhase, type Phase } from '@mule/engine';
+import { COLONY, createGame, EVENT_SHOW, rollPhase, type Phase } from '@mule/engine';
 import type { ColonyProjectView, EventView } from '@mule/protocol';
-import { EventEffectChip, EventLivingMap, EventShow, EventSoloRail, EventTvLog, eventSegments, type MapTile, type ShowEffect, type ShowEventView, type ShowMode, type ShowPlayer, type Slot } from '@mule/ui';
+import { EventEffectChip, EventLivingMap, EventShow, EventSoloRail, EventTvLog, eventSegments, ProductionMap, productionShowProps, showEnd, showTimes, type MapTile, type ShowData, type ShowEffect, type ShowEventView, type ShowMode, type ShowPlayer, type Slot } from '@mule/ui';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -251,6 +251,95 @@ describe('B-AC-26-4: the planning strike announcement on the TV', () => {
       expect(has(standing, 'striker-6-3')).toBe(false);
     }
     expect(text(inside(result(ev, 'tv'), 'log'))).toContain('Food at 20% on 4 farms unless the Governor pays');
+  });
+});
+
+describe('B-AC-26-4: the unpaid strike plays in production on the TV', () => {
+  // What each Food plot made before the strike; (2,3) makes too little to keep anything at 20%.
+  const MADE: Record<string, number> = { '1,1': 5, '2,1': 10, '6,1': 5, '2,3': 4 };
+  const kept = (p: { x: number; y: number }) => Math.floor(MADE[`${p.x},${p.y}`]! * COLONY.strike.output);
+  const owner = (x: number, y: number) => players.find((p) => p.slot === OWNED[`${x},${y}`]![0])!.id;
+  const lines: ShowData['lines'] = [...FOOD_PLOTS.map((p) => ({ ...p, owner: owner(p.x, p.y), good: 'food' as const, made: MADE[`${p.x},${p.y}`]!, parts: [] })), { x: 6, y: 3, owner: OSSA, good: 'smithore' as const, made: 3, parts: [] }].sort((a, b) => a.y - b.y || a.x - b.x);
+  // As production files it unpaid: the same key, every Food plot, each delta down to what the strike leaves it.
+  const STRIKE_PRODUCTION = event('generalStrike', 'production', {
+    kind: 'colony',
+    origin: { ...FOOD_PLOTS[0]! },
+    title: 'General strike',
+    line: 'The strikers held: every Food plot makes 20% this month.',
+    hits: FOOD_PLOTS.map((p, order) => ({ ...p, order, delta: kept(p) - MADE[`${p.x},${p.y}`]! })),
+  });
+  const month = (events: ShowEventView[]): ShowData => ({ lines, events, introMs: events.length ? INTRO_MS : 0, lengthMs: 0 });
+  const unpaid = month([STRIKE_PRODUCTION]);
+  const slots = Object.fromEntries(players.map((p) => [p.id, p.slot]));
+  /** The production TV: the show around the map and the log, as TvProduction composes them. */
+  const tv = (production: ShowData, t: number, reduced = false) =>
+    renderToStaticMarkup(
+      createElement(EventShow, {
+        ...productionShowProps(production, t, { reduced, mode: 'tv', players, tiles, width: W, height: H }),
+        children: [createElement(ProductionMap, { key: 'm', width: W, height: H, tiles, production, t, slots, players, reduced, mode: 'tv', tv: true }), createElement(EventTvLog, { key: 'l' })],
+      }),
+    );
+  const seg = eventSegments(unpaid, showTimes(unpaid).eventsAt!, 'tv')[0]!;
+  const at = (u: number, reduced = false) => tv(unpaid, seg.playAt + u * seg.pace, reduced);
+  // The strike story's beat (STORY.generalStrike): it lands on the first plot at 2.6 s, then on each next 0.35 s later.
+  const { lands, step } = { lands: 2.6, step: 0.35 };
+  const where = (html: string, testid: string) => html.match(new RegExp(`data-testid="${testid}" style="left:([^;]+);top:([^;]+);`))?.slice(1);
+  const units = (html: string, x: number, y: number) => {
+    const plot = inside(html, `plot-${x}-${y}`);
+    return { count: text(inside(plot, 'units')).trim(), bars: (plot.match(/data-bar="unit"/g) ?? []).length };
+  };
+
+  it('B-AC-26-4: the strikers stand on every Food plot from the start, no walk; each plot gets STRIKE −80% as the strike lands on it, none before', () => {
+    const start = at(0.05);
+    const before = at(lands - 0.1);
+    const after = at(lands + 3 * step + 0.2);
+    for (const p of FOOD_PLOTS) {
+      const id = `striker-${p.x}-${p.y}`;
+      expect(has(start, id), id).toBe(true);
+      // Already on the plot: where it stands at the start is where it stands once the strike has landed.
+      expect(where(start, id)).toEqual(where(after, id));
+      expect(has(before, `strike-chip-${p.x}-${p.y}`)).toBe(false);
+      expect(text(inside(after, `strike-chip-${p.x}-${p.y}`))).toBe(' STRIKE −80% ');
+    }
+    // One plot after the next: as it reaches the second plot, the third has no chip yet.
+    const second = at(lands + step + 0.05);
+    expect(FOOD_PLOTS.map((p) => has(second, `strike-chip-${p.x}-${p.y}`))).toEqual([true, true, false, false]);
+    // Nobody stands on the Smithore mine.
+    expect(has(after, 'striker-6-3')).toBe(false);
+    expect(has(after, 'strike-chip-6-3')).toBe(false);
+  });
+
+  it('B-AC-26-4: each struck plot ends on 20% of what it made, the mine keeps its 3, and the log says what the strike cost', () => {
+    const end = tv(unpaid, seg.endAt - 0.15);
+    for (const p of FOOD_PLOTS) {
+      const n = kept(p);
+      expect(units(end, p.x, p.y), `${p.x},${p.y}`).toEqual({ count: n > 0 ? String(n) : '', bars: n });
+    }
+    expect(units(end, 2, 1)).toEqual({ count: '2', bars: 2 });
+    expect(units(end, 6, 3)).toEqual({ count: '3', bars: 3 });
+    const lost = FOOD_PLOTS.reduce((n, p) => n + MADE[`${p.x},${p.y}`]! - kept(p), 0);
+    expect(text(inside(end, 'log'))).toContain(`−${lost} Food on 4 farms`);
+    expect(text(inside(end, 'log'))).not.toContain('unless the Governor pays');
+  });
+
+  it('B-AC-26-4: with reduced motion the strikers and their chips are there at once', () => {
+    const start = at(0.01, true);
+    for (const p of FOOD_PLOTS) {
+      expect(has(start, `striker-${p.x}-${p.y}`)).toBe(true);
+      expect(text(inside(start, `strike-chip-${p.x}-${p.y}`))).toBe(' STRIKE −80% ');
+    }
+  });
+
+  it('B-AC-26-4: paid, the server sends no strike, so no striker and no strike chip ever shows and every plot keeps what it made', () => {
+    const paid = month([]);
+    const end = showEnd(paid);
+    for (let t = 0.05; t < end; t += 0.1) {
+      const html = tv(paid, t);
+      expect(has(html, 'striker-')).toBe(false);
+      expect(has(html, 'strike-chip-')).toBe(false);
+    }
+    const harvested = tv(paid, showTimes(paid).flightAt - 0.3);
+    expect(units(harvested, 2, 1)).toEqual({ count: '10', bars: 8 });
   });
 });
 
