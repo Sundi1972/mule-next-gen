@@ -4,6 +4,7 @@ import {
   auctionDone,
   cloneForSim,
   colonySupply,
+  createGame,
   declareRole,
   GOOD_CONFIG,
   GOODS,
@@ -193,6 +194,47 @@ describe('price B-AC-8: once supply returns the price falls a quarter a month, n
   });
 });
 
+describe('price B-AC-8: never below normal, from the opening posting on, and a crisis price does not lower normal', () => {
+  it.each([2, 4, 6])('price B-AC-8: a new %i-seat game opens every good in a band, at or above its normal price unless off-world', (seats) => {
+    for (const seed of [1, 7, 11, 42]) {
+      const state = createGame({ seed, players: Array.from({ length: seats }, (_, i) => ({ id: `p${i}`, name: `P${i}`, isAi: false })) });
+      for (const good of GOODS) {
+        const band = state.store.band?.[good];
+        expect(band, `seed ${seed}: ${good} has a band`).toBeDefined();
+        if (band !== 'offWorld') expect(state.store.posted[good], `seed ${seed}: ${good}`).toBeGreaterThanOrEqual(state.store.refPrice[good]);
+      }
+    }
+  });
+
+  /** Food's walk in a month posted in `band`, p1 selling p2 one unit at `price`; N once the walk has finished. */
+  function normalAfter(state: GameState, band: PriceBand, price: number): number {
+    expect(state.store.band?.food, 'the premise: the band').toBe(band);
+    expect(state.store.refPrice.food, 'the premise: N').toBe(30);
+    walkFood(state, 'p1');
+    trade(state, 'p2', 'p1', price);
+    for (const p of state.players) auctionDone(state, p.id, true);
+    stepAuction(state, WALK.tickMs);
+    expect(state.auction!.stage, "the premise: Food's walk finished").toBe('close');
+    return state.store.refPrice.food;
+  }
+
+  it('price B-AC-8: a trade at 120 in a severe month (120 ÷ 4 = 30) leaves N at 30', () => {
+    const state = colonistsShortOfFood();
+    hold(state, 10, 0, 7);
+    expect(post(state), 'the premise: severe').toBe(120);
+    expect(normalAfter(state, 'severe', 120)).toBe(30);
+  });
+
+  it('price B-AC-8: a trade at 36 in a normal month moves N a quarter of the way up: 30 + 6 × 0.25 = 31.5, posted 32', () => {
+    const state = game();
+    to(state, 'production');
+    farms(state, [5, 5]);
+    hold(state, 6, 17, 7);
+    expect(post(state), 'the premise: normal').toBe(30);
+    expect(normalAfter(state, 'normal', 36)).toBe(32);
+  });
+});
+
 describe('price B-AC-9: a high trade between players pulls the store halfway towards it', () => {
   /**
    * Month 1 in shortage (mid 60, the store selling at 75) with `shelf` Food on the store's shelf, p1 selling p2 one unit
@@ -225,6 +267,23 @@ describe('price B-AC-9: a high trade between players pulls the store halfway tow
   it('price B-AC-9: a trade at the store’s selling line (75) pulls nothing: the shortage band alone, 2N', () => {
     const { mid, normal } = tradeInShortage(75, 6);
     expect(mid).toBe(2 * normal);
+  });
+
+  it("price B-AC-9: a trade over this month's normal line but not over last month's selling line (46) pulls nothing", () => {
+    const state = game();
+    to(state, 'production');
+    farms(state, [5, 5]);
+    hold(state, 6, 0, 7, 7);
+    expect(post(state), 'the premise: tight').toBe(38);
+    expect(state.auction!.storeSell, "the premise: last month's selling line").toBe(46);
+    walkFood(state, 'p1');
+    // 45: over what a normal mid of 38 sells at (44), not over the 46 the store sold at.
+    trade(state, 'p2', 'p1', 45);
+    nextMonth(state);
+    hold(state, 10, 20);
+    const mid = post(state);
+    expect(state.store.band?.food, 'the premise: normal').toBe('normal');
+    expect(mid).toBe(state.store.refPrice.food);
   });
 });
 

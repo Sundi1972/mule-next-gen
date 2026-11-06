@@ -263,30 +263,31 @@ describe('RULE-4: what an unneeded unit is worth', () => {
     return unitValues(obs, o, 'energy', mindOf(persona));
   }
 
-  it("T-AC-7: Ck at RULE-4's example is what the store pays at 40, less the 8% tax and a month's 10% spoilage, and a seat speculating less pays that share of it", () => {
-    const example = storeBuyAt(table({ plots: [], posted: { energy: 40 } }), 'energy', 40, { exact: true }) * (1 - 0.08) * 0.9;
+  it("T-AC-7: Ck at RULE-4's example is about 28.2, and a seat speculating less pays that share of it", () => {
+    expect(table({ plots: [], posted: { energy: 40 } }).store.band?.energy, 'the premise: Energy posts normal, 15% under').toBe('normal');
+    // 40 × (1 − 0.15 normal band) × (1 − 0.08 tax) × 0.9 kept a month = 28.152.
     const trader = carryAt(0.1);
     const cautious = carryAt(0.1, 'cautious');
 
-    expect(trader.keep[0]).toBeCloseTo(example, 6);
-    expect(trader.buy[0], 'speculate 1.4 counts as 1').toBeCloseTo(example, 6);
-    expect(cautious.buy[0], 'speculate 0.3').toBeCloseTo(example * 0.3, 6);
+    expect(trader.keep[0]).toBeCloseTo(28.152, 6);
+    expect(trader.buy[0], 'speculate 1.4 counts as 1').toBeCloseTo(28.152, 6);
+    expect(cautious.buy[0], 'speculate 0.3').toBeCloseTo(28.152 * 0.3, 6);
   });
 
-  it("T-AC-7: held 0 months, a Food unit is worth what the store pays at 40 less the 8% tax, in unitValues' carry and as a farm's surplus in monthlyNet", () => {
+  it("T-AC-7: held 0 months, a Food unit is worth 40 × 0.85 × 0.92 = 31.28 in unitValues' carry and as a farm's surplus in monthlyNet", () => {
     AI_VALUE.holdMonths = 0;
     // One plant, so the seat's walking time, and with it what going without Food costs, is finite.
     const state = table({ plots: [{ outfit: 'energy', x: 0 }], posted: { food: 40 } });
+    expect(state.store.band?.food, 'the premise: Food posts tight, 15% under').toBe('tight');
     state.treasury.salesTax = 0.08;
     const { obs, o } = view(state);
     const mind = mindOf();
     const target = wholeNextMonth(obs, 'ai0', 'food');
     // Past the target every unit the farm makes is surplus: the next one adds what it sells for.
     const farmMaking = (made: number) => monthlyNet(obs, o, { made, energy: 0, inputs: {}, air: 0, crew: 0 }, 'food', mind);
-    const carry = storeBuyAt(obs, 'food', 40, { exact: true }) * (1 - 0.08);
 
-    expect(unitValues(obs, o, 'food', mind).keep[target], 'the first unit past the target').toBeCloseTo(carry, 6);
-    expect(farmMaking(target + 1) - farmMaking(target)).toBeCloseTo(carry, 6);
+    expect(unitValues(obs, o, 'food', mind).keep[target], 'the first unit past the target').toBeCloseTo(31.28, 6);
+    expect(farmMaking(target + 1) - farmMaking(target)).toBeCloseTo(31.28, 6);
   });
 
   it('T-AC-7 negative: a good that spoils fully carries nothing', () => {
