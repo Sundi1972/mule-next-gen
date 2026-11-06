@@ -26,7 +26,7 @@ import { planMind } from '../src/playbook/plan.js';
 import { AiSeat } from '../src/seat.js';
 import { applySets } from '../src/sim.js';
 import { goodPlan, landDecision, leaderOf, shortfallHold, tradeDecision } from '../src/strategist.js';
-import { beforeTax, canFeed, cashReserve, chainLinks, chainOutlook, installGain, type Mind } from '../src/value.js';
+import { beforeTax, canFeed, cashReserve, chainLinks, chainOutlook, installGain, linkShare, standingLinks, type Mind } from '../src/value.js';
 import { outlook } from '../src/outlook.js';
 import { FOOD_TO_SPARE } from './store-food.js';
 
@@ -71,6 +71,9 @@ function withPlans<T>(sets: string[], fn: () => T): T {
 /**
  * RULE-4's money-maker score, written out from the rule's words: the best plots' install gains, less the rivals' share.
  * A factory good the seat can't feed scores as AM-33's chain, or not at all; `chains` false is the rule before AM-33.
+ * The chain: one works on its best plot, its inputs free, times the least share of its run a link supplies, plus each
+ * missing link on the plot of its own where it adds most, at its running cost. It models no standing link: a chain
+ * with one throws.
  */
 function moneyMakerByRule(state: GameState, mind: Mind, chains = true): Good | null {
   const obs = observe(state, mind.me);
@@ -85,17 +88,26 @@ function moneyMakerByRule(state: GameState, mind: Mind, chains = true): Good | n
       const links = chainLinks(obs, mind.me, good);
       const mules = links.length + 1;
       if (!chains || links.length === 0 || Math.ceil(mules / mind.level.mulesPerMonth) > AI_PLANS.chain.months) continue;
+      if (standingLinks(obs, mind.me, good).length > 0) throw new Error(`the reference models no standing link (${good})`);
       const free = chainOutlook(o, links);
       const works = plots.map((t) => ({ t, ...installGain(obs, free, t, good, mind) })).sort((a, b) => b.gain - a.gain);
+      const best = works[0]!.gain;
       const used = [works[0]!.t];
-      sum = top(works.map((w) => w.gain));
+      let share = 1;
+      let running = 0;
       let cost = works[0]!.cost;
       for (const link of links) {
-        const at = plots.filter((t) => !used.includes(t)).map((t) => ({ t, ...installGain(obs, free, t, link, mind) })).sort((a, b) => b.gain - a.gain)[0]!;
+        const adds = (w: { gain: number; share: number }) => w.gain + w.share * best;
+        const at = plots
+          .filter((t) => !used.includes(t))
+          .map((t) => ({ t, share: linkShare(obs, t, link, [good, ...links], mind.me), ...installGain(obs, free, t, link, mind) }))
+          .sort((a, b) => adds(b) - adds(a))[0]!;
         used.push(at.t);
-        sum += at.gain;
+        running += at.gain;
+        share = Math.min(share, at.share);
         cost += at.cost;
       }
+      sum = best * share + running;
       if (cost > obs.players.find((p) => p.id === mind.me)!.money) continue;
     }
     const rivals = obs.tiles.filter((t) => t.owner !== null && t.owner !== mind.me && t.outfit === good).length;
@@ -131,6 +143,10 @@ describe('the draft picks a plan kind and writes its strategy', () => {
     const [specialist, ruled] = withPlans(['AI_PLANS.leaning.trader.monopolist=0.9', CHAIN_ON], () => [strategyOf(state, trader.mind, trader.seed), moneyMakerByRule(state, trader.mind)] as const);
     expect(specialist).toMatchObject({ kind: 'specialist', moneyMaker: ruled, monopolyTarget: null });
     expect(specialist.moneyMaker).not.toBeNull();
+    // And as shipped, chains off: the rule before AM-33.
+    const [offSpecialist, offRuled] = withPlans(['AI_PLANS.leaning.trader.monopolist=0.9'], () => [strategyOf(state, trader.mind, trader.seed), moneyMakerByRule(state, trader.mind, false)] as const);
+    expect(offSpecialist).toMatchObject({ kind: 'specialist', moneyMaker: offRuled, monopolyTarget: null });
+    expect(offSpecialist.moneyMaker).not.toBeNull();
 
     // monopolist: the level corners and a target qualifies; its money-maker is the target, a good that keeps.
     const monopolist = withPlans(['AI_PLANS.leaning.trader.specialist=0.9'], () => strategyOf(state, trader.mind, trader.seed));
