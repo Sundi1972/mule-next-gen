@@ -4,6 +4,8 @@ import {
   colonyPrestige,
   commission,
   createGame,
+  exportDemand,
+  monthlyDemand,
   PRESTIGE,
   repair,
   RuleError,
@@ -135,5 +137,40 @@ describe('prestige objects: commissioned, funded, built, kept up', () => {
     commission(state, 'lena', 'park');
     for (let i = 0; i < 3; i++) runColony(state, []);
     expect(project(state, 'park')).toMatchObject({ stage: 'commissioned', plot: null, funded: { credits: PRESTIGE.park.credits, goods: PRESTIGE.park.goods } });
+  });
+});
+
+describe('C49: a waiting building pulls on the store (G-5 AM-17)', () => {
+  /** The Hospital, open, with its credits paid and its goods short by `missing` Electronics. */
+  function hospitalAt(state: GameState, stage: Project['stage'], missing: number): void {
+    const row = PRESTIGE.hospital;
+    const goods = { electronics: (row.goods.electronics ?? 0) - missing };
+    state.colony = {
+      ...state.colony!,
+      projects: [{ id: 'hospital', stage, funded: { credits: row.credits, goods }, monthsLeft: null, plot: null, since: 1, plaque: {}, maxBid: null }],
+    };
+  }
+
+  it("C49: an open commissioned Hospital missing 1 Electronics adds 1 to the store's monthly Electronics demand", () => {
+    const state = governedGame();
+    const base = monthlyDemand(state).electronics;
+    hospitalAt(state, 'commissioned', 1);
+    expect(monthlyDemand(state).electronics).toBe(base + 1);
+  });
+
+  it('C49: a fully funded or building Hospital adds nothing', () => {
+    const state = governedGame();
+    const base = monthlyDemand(state);
+    hospitalAt(state, 'commissioned', 0);
+    expect(monthlyDemand(state)).toEqual(base);
+    hospitalAt(state, 'building', 1);
+    expect(monthlyDemand(state)).toEqual(base);
+  });
+
+  it('C49: politics off, no colony, the demand is unchanged', () => {
+    const off = governedGame(0, false);
+    expect(off.colony).toBeFalsy();
+    // Electronics' only buyer without a colony is the export ship.
+    expect(monthlyDemand(off).electronics).toBe(exportDemand(off).electronics);
   });
 });
