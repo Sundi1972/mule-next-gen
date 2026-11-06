@@ -27,6 +27,8 @@ const ALLOWED = new Set([
   'EventEffect',
   // The strike chip's share (WS6 ruling, 6 Nov): the engine's COLONY.strike.output, read, never computed here.
   'COLONY',
+  // The social events' shares, such as the walkout's output (WS6 ruling, 6 Nov): SOCIAL_EVENTS read, never restated.
+  'SOCIAL_EVENTS',
 ]);
 
 const SRC = fileURLToPath(new URL('../src', import.meta.url));
