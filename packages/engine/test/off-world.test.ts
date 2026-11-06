@@ -135,26 +135,41 @@ describe('pricing G-3: the export goods walk off-world', () => {
     const state = newGame(1);
     expect(state.store.offWorld.crystite, 'the first month starts at the centre (RULE-3)').toBe(90);
     const crystite = new Set<number>();
+    const logs: number[] = [];
     const moved = new Set<Good>();
+    const { band } = OFF_WORLD.others;
     for (let i = 0; i < MONTHS; i++) {
       const before = { ...state.store.offWorld };
       state.month++;
       stepOffWorld(state);
       const price = state.store.offWorld;
       crystite.add(price.crystite);
+      logs.push(Math.log(price.crystite));
       expect(price.crystite, `Crystite, month ${state.month}`).toBeGreaterThanOrEqual(40);
       expect(price.crystite, `Crystite, month ${state.month}`).toBeLessThanOrEqual(300);
       for (const good of EXPORTS) {
         if (price[good] !== before[good]) moved.add(good);
         if (good === 'crystite') continue;
         const ref = GOOD_CONFIG[good].refPrice;
-        expect(price[good], `${good}, month ${state.month}`).toBeGreaterThanOrEqual(ref * 0.5);
-        expect(price[good], `${good}, month ${state.month}`).toBeLessThanOrEqual(ref * 1.5);
+        expect(price[good], `${good}, month ${state.month}`).toBeGreaterThanOrEqual(ref * (1 - band));
+        expect(price[good], `${good}, month ${state.month}`).toBeLessThanOrEqual(ref * (1 + band));
       }
       for (const good of GOODS.filter((g) => !EXPORTS.includes(g))) expect(price[good], `${good} is not exported and stays`).toBe(before[good]);
     }
     expect(crystite.size, 'the premise: Crystite walked').toBeGreaterThan(50);
     expect([...moved].sort(), 'the premise: every export good walked').toEqual([...EXPORTS].sort());
+    // The walk settles into a log-price spread of sigma: each month keeps phi of the last, and a swing of
+    // sigma × √(1 − phi²) adds the rest of the variance back. The clamp (40 is −2.3 sigma, 300 is +3.4) trims it a
+    // little; 1,000 months that keep 70% of the last are worth about 180 independent ones, an error near 0.02.
+    const mean = logs.reduce((a, b) => a + b, 0) / logs.length;
+    const spread = Math.sqrt(logs.reduce((a, b) => a + (b - mean) ** 2, 0) / logs.length);
+    expect(spread, 'the log price settles into a spread of sigma').toBeGreaterThan(OFF_WORLD.crystite.sigma - 0.05);
+    expect(spread, 'the log price settles into a spread of sigma').toBeLessThan(OFF_WORLD.crystite.sigma + 0.05);
+
+    // With no swing, one month opening takes Crystite one step back towards its centre: 90 × (160 ÷ 90)^0.7 = 134.6.
+    const still = upkeepAt(7, 160);
+    withSigmaZero(() => openNextMonth(still));
+    expect(still.store.offWorld.crystite, 'one step of the reversion a month').toBe(135);
   });
 
   it("price T-AC-2: a what-if month opens on the ship's expected path, 160 to 134, and draws nothing; the real game still walks", () => {
