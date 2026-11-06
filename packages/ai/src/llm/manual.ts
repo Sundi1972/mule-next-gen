@@ -44,32 +44,41 @@ export type PlaybookField =
   | FieldsOf<'DevelopmentPlay', DevelopmentPlay>
   | FieldsOf<'GoodPlay', GoodPlay>;
 
-/** Every key of T, at run time; the mapped type makes the compiler reject a missing or unknown key. */
-const keysOf = <T>(name: string, keys: { readonly [K in keyof Required<T>]: true }) => Object.keys(keys).map((k) => `${name}.${k}`);
+/**
+ * The keys of T the writer is offered, at run time: every key is listed, true when a brief offers it; the mapped type
+ * makes the compiler reject a missing or unknown key, so a new playbook field must be ruled on here.
+ */
+const offeredOf = <T>(name: string, keys: { readonly [K in keyof Required<T>]: boolean }) =>
+  Object.entries(keys).flatMap(([k, offered]) => (offered ? [`${name}.${k}`] : []));
 
-const PLAYBOOK_FIELDS: ReadonlySet<string> = new Set([
-  ...keysOf<Strategy>('Strategy', {
+/**
+ * The playbook fields an advice line may name: the ones a brief offers the writer. The rest are not offered: play does
+ * not read monopolyTarget, cashFloor, landTarget, stances, the land grant's claims, press share, deny, plan B and pair,
+ * or the market (WS9 ruling, 6 Nov); planning and a good's bluff, vsRival and per are not offered either.
+ */
+const OFFERED_FIELDS: ReadonlySet<string> = new Set([
+  ...offeredOf<Strategy>('Strategy', {
     kind: true,
     moneyMaker: true,
-    monopolyTarget: true,
-    cashFloor: true,
-    landTarget: true,
-    stances: true,
+    monopolyTarget: false,
+    cashFloor: false,
+    landTarget: false,
+    stances: false,
     reason: true,
   }),
-  ...keysOf<PlanningPlay>('PlanningPlay', { drone: true, list: true }),
-  ...keysOf<LandGrantPlay>('LandGrantPlay', { ranked: true, pressShare: true, deny: true, planB: true, claims: true, pair: true }),
-  ...keysOf<DevelopmentPlay>('DevelopmentPlay', { route: true, timeBudgetMs: true, ifSoldOut: true }),
-  ...keysOf<GoodPlay>('GoodPlay', {
+  ...offeredOf<PlanningPlay>('PlanningPlay', { drone: false, list: false }),
+  ...offeredOf<LandGrantPlay>('LandGrantPlay', { ranked: true, pressShare: false, deny: false, planB: false, claims: false, pair: false }),
+  ...offeredOf<DevelopmentPlay>('DevelopmentPlay', { route: true, timeBudgetMs: true, ifSoldOut: true }),
+  ...offeredOf<GoodPlay>('GoodPlay', {
     role: true,
     hold: true,
     walkAway: true,
     start: true,
     concedeCrPerS: true,
-    bluff: true,
-    vsRival: true,
-    per: true,
-    market: true,
+    bluff: false,
+    vsRival: false,
+    per: false,
+    market: false,
   }),
 ]);
 
@@ -156,17 +165,6 @@ export const ADVICE: readonly AdviceLine[] = [
       `a plot adds ${GAME.plotScore} to your Worth and makes goods every month after; rank by what it makes over the months left, and a plot beside your others making the same good makes ${ADJACENCY.neighbour} more.`,
   },
   {
-    move: 'claim',
-    field: 'LandGrantPlay.deny',
-    when: () => 'take a plot before a rival does when it is worth more to them than it costs you to hold.',
-  },
-  {
-    move: 'done',
-    field: 'LandGrantPlay.claims',
-    when: () =>
-      `claim fewer when you cannot pay for a MULE on the plot (${MULE.labour} plus Smithore, then the outfit): a plot without one makes nothing.`,
-  },
-  {
     move: 'buyMule',
     field: 'DevelopmentPlay.route',
     when: () =>
@@ -210,14 +208,14 @@ export const ADVICE: readonly AdviceLine[] = [
   },
   {
     move: 'declare',
-    field: 'GoodPlay.market',
+    field: 'GoodPlay.hold',
     when: () => `hold units for the export ship's month when its wishlist names the good; it calls every ${GAME.exportShipEvery} months.`,
   },
   {
     move: 'declare',
-    field: 'Strategy.monopolyTarget',
+    field: 'Strategy.kind',
     when: () =>
-      `only if your level may corner: buy up a scarce good that spoils less than ${pct(STRATEGIST.cornerMaxSpoilage)} a month, so the others must buy it from you.`,
+      `as a monopolist, only if your level may corner: buy up a scarce good that spoils less than ${pct(STRATEGIST.cornerMaxSpoilage)} a month, so the others must buy it from you.`,
   },
   {
     move: 'run',
@@ -264,7 +262,7 @@ function moveBlock(move: MoveDescriptor, shared: Shared): string {
 function checkAdvice(moves: MoveTable, advice: readonly AdviceLine[]): void {
   for (const line of advice) {
     if (!Object.hasOwn(moves, line.move)) throw new Error(`Advice names a move that does not exist: ${line.move}`);
-    if (!PLAYBOOK_FIELDS.has(line.field)) throw new Error(`Advice names a playbook field that does not exist: ${line.field}`);
+    if (!OFFERED_FIELDS.has(line.field)) throw new Error(`Advice names a playbook field that does not exist or is not offered: ${line.field}`);
   }
 }
 
@@ -310,11 +308,11 @@ export function defaultManual(advice: readonly AdviceLine[] = ADVICE): string {
 
 /**
  * The seat's own bounds, for its brief: kept out of the shared manual so the manual stays the same for every level. A
- * seat that never corners is not offered monopolyTarget, by its brief or its reply schema; the shared system block
- * still names the field, as one only a cornering level may set, and the writer refuses it from such a seat.
+ * seat that never corners is not offered the kind 'monopolist', by its reply schema; the shared system block still
+ * names it, as one only a cornering level may play to, and the writer refuses it from such a seat (RULE-A3).
  */
 export function seatBounds(level: Pick<AiLevelConfig, 'corners'>): string {
   return level.corners
-    ? "Your level may corner a good: Strategy.kind 'monopolist' with a monopolyTarget is open to you when a good is scarce."
+    ? "Your level may corner a good: Strategy.kind 'monopolist' is open to you when a good is scarce."
     : "Your level never aims for a monopoly: never set Strategy.kind to 'monopolist'.";
 }

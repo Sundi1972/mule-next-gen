@@ -13,7 +13,7 @@ import { AI_NAMES, MuleGame, type PlaybookNote } from '../src/mule-game.js';
 import { Recorder } from '../src/record.js';
 import { fakeSdk, KEY, promptOf, readLedger, requestOf, sdkMessage, type FakeSdk, type SdkModuleFake, type SdkParams } from './brain-fakes.js';
 import { fakeContext, seats as THREE } from './fake-context.js';
-import { ENGINE_PRESS, runTable, stubSource } from './playbook-fakes.js';
+import { REFUSED_MONEY_MAKER, runTable, stubSource } from './playbook-fakes.js';
 
 /** The SDK module's constructor: records its options and builds nothing, so no network and no credential chain. */
 const sdkModule = vi.hoisted((): SdkModuleFake => ({ built: [], create: null }));
@@ -343,7 +343,7 @@ describe('the brain at the table', { timeout: 30_000 }, () => {
       if (!paths) return reply('A', '');
       const hold = paths.find((p) => p.endsWith('/hold'));
       if (hold) return sdkMessage(JSON.stringify({ edits: [{ path: hold, to: 0, reason: 'None.' }], line: AUCTION_LINE }));
-      return sdkMessage(JSON.stringify({ edits: [{ path: '/landGrant/claims', to: 1, reason: 'One will do.' }], line: LAND_LINE }));
+      return sdkMessage(JSON.stringify({ edits: [{ path: '/landGrant/ranked', to: 'A', reason: 'Plan A.' }], line: LAND_LINE }));
     });
     const t = table({ humans: ['Heiko'], ais: 1, brain: smart(sdk), maxMonths: 1, recordPlaybook: (n) => notes.push(n) });
     expect(await t.toGameOver()).toBe(true);
@@ -566,18 +566,18 @@ function planInBrief(params: SdkParams, id: string): { plot: number; value: numb
   return [...line.slice(line.lastIndexOf('): ') + 3).matchAll(/plot (\d+) \((-?\d+) cr\)/g)].map((m) => ({ plot: Number(m[1]), value: Number(m[2]) }));
 }
 
-/** An edit no validator accepts: the press share must fall, 0 ≤ end ≤ start ≤ 1. */
-const RISING_PRESS = { start: 0.2, end: 0.7 };
+/** A strategy whose moneyMaker the stub's validator refuses; its kind and reason it accepts. */
+const OUT_OF_BOUNDS = { kind: 'specialist', moneyMaker: REFUSED_MONEY_MAKER, reason: 'Pills pay.' };
 
 /**
  * A recorded table of two people and The Big Spender at SEED, on the game's clock, played to month 2's land grant. The
- * fake model takes plan B in every land brief and sends a press share out of bounds; every move gets option A. Returns
+ * fake model takes plan B in every land brief and sends a moneyMaker out of bounds; every move gets option A. Returns
  * the record, the writer requests, and the engine's draft for each land grant.
  */
 async function recordedToMonth2(recordPlaybook = true, until: (view: MuleView) => boolean = (v) => v.month === 2 && v.phase !== 'planning') {
   const sdk = fakeSdk((_n, params) =>
     isWrite(params)
-      ? sdkMessage(JSON.stringify({ edits: [{ path: '/landGrant/ranked', to: 'B', reason: 'B is mine.' }, { path: '/landGrant/pressShare', to: RISING_PRESS, reason: 'Late rush.' }], line: '' }))
+      ? sdkMessage(JSON.stringify({ strategy: OUT_OF_BOUNDS, edits: [{ path: '/landGrant/ranked', to: 'B', reason: 'B is mine.' }], line: '' }))
       : reply('A', ''),
   );
   const stub = stubSource();
@@ -628,8 +628,8 @@ describe('Claude plans the land grant', { timeout: 30_000 }, () => {
     expect(entry).toMatchObject({ seat: ai, month: 2, phase: 'landGrant' });
     expect(entry.playbook.by).toBe('llm');
     expect(entry.playbook.landGrant!.ranked.slice(0, planB.length)).toEqual(planB);
-    expect(entry.playbook.landGrant!.pressShare).toEqual(ENGINE_PRESS);
-    expect(entry.playbook.rejected).toEqual([{ path: '/landGrant/pressShare', to: RISING_PRESS, why: 'out of bounds' }]);
+    expect(entry.playbook.strategy).toMatchObject({ kind: 'specialist', moneyMaker: engine.strategy.moneyMaker });
+    expect(entry.playbook.rejected).toEqual([{ path: '/strategy/moneyMaker', to: REFUSED_MONEY_MAKER, why: 'out of bounds' }]);
     // Stamped in the step that opened month 2's land grant: the last Ready of planning.
     const step = record.events.find((e) => e.type !== 'notice' && e.type !== 'playbook' && e.seq === entry.seq);
     expect(step?.type).toBe('intent');

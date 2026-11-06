@@ -145,15 +145,15 @@ describe("T-AC-A2: the brief holds only public facts in a deterministic order; t
     expect(draftLine.match(/\bplot \d+/g)?.length).toBe(BRAIN.brief.draftEntries);
   });
 
-  it('T-AC-A2: a Rookie seat is told it never aims for a monopoly and is offered no monopoly target; a Trader seat is offered one', () => {
+  it("T-AC-A2: a Rookie seat is told it never aims for a monopoly; a Trader seat is told 'monopolist' is open to it, and neither is offered a monopoly target (B fix 5)", () => {
     const state = table();
     const rookie = landBrief(state, mindOf('p0', 'rookie'), PERSONAS.trader, draftOf(12), []);
     const trader = landBrief(state, mindOf('p0', 'trader'), PERSONAS.trader, draftOf(12), []);
     expect(rookie.corners).toBe(false);
     expect(trader.corners).toBe(true);
     expect(rookie.text).toMatch(/never aims for a monopoly/);
-    expect(rookie.text).not.toContain('monopolyTarget');
-    expect(trader.text).toContain('monopolyTarget');
+    expect(trader.text).toMatch(/may corner a good: Strategy\.kind 'monopolist'/);
+    for (const b of [rookie, trader]) expect(b.text).not.toContain('monopolyTarget');
   });
 });
 
@@ -241,7 +241,7 @@ describe("C1 (PM ruling, 5 Nov, option C): the month's land brief also carries t
     expect(brief.text).toContain('- /development/route:');
     expect(brief.text.indexOf('Your draft land grant:')).toBeLessThan(brief.text.indexOf('Your draft development:'));
     expect(brief.text.indexOf('Your draft development:')).toBeLessThan(brief.text.indexOf('What you may change:'));
-    expect(brief.offers.map((o) => o.path)).toEqual(['/landGrant/ranked', '/landGrant/claims', '/landGrant/pressShare', '/development/route', '/development/timeBudgetMs', '/development/ifSoldOut']);
+    expect(brief.offers.map((o) => o.path)).toEqual(['/landGrant/ranked', '/development/route', '/development/timeBudgetMs', '/development/ifSoldOut']);
     expect(brief.strategyOffered).toBe(true);
   });
 
@@ -249,7 +249,7 @@ describe("C1 (PM ruling, 5 Nov, option C): the month's land brief also carries t
     const brief = landBrief(table(), mindOf('p0'), PERSONAS.trader, draftOf(12), TALK);
     expect(brief.text).not.toContain('Your draft development:');
     expect(brief.text).not.toContain('/development/');
-    expect(brief.offers.map((o) => o.path)).toEqual(['/landGrant/ranked', '/landGrant/claims', '/landGrant/pressShare']);
+    expect(brief.offers.map((o) => o.path)).toEqual(['/landGrant/ranked']);
   });
 });
 

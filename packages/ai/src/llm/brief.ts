@@ -1,4 +1,4 @@
-import { advancePhase, allPrices, BRAIN, GAME, GOODS, MS_PER_SECOND, observe, scoreParts, SPECIES_PERK, type DevelopmentPlay, type GameState, type Good, type GoodPlay, type LandGrantPlay, type Outfit, type PhaseOutcome, type Playbook, type PlayerId, type Species, type Strategy } from '@mule/engine';
+import { advancePhase, allPrices, BRAIN, GOODS, MS_PER_SECOND, observe, scoreParts, SPECIES_PERK, type DevelopmentPlay, type GameState, type Good, type GoodPlay, type LandGrantPlay, type Outfit, type PhaseOutcome, type Playbook, type PlayerId, type Species, type Strategy } from '@mule/engine';
 import { OPTION_IDS, toOptions, type TableTalk } from '../decider.js';
 import type { Persona } from '../personas.js';
 import { GOOD_NAME, landDecision, outfitName } from '../strategist.js';
@@ -108,20 +108,17 @@ function resultLines(state: GameState, me: PlayerId, before: WorthAt | null | un
 const AIM = 'Your aim: finish with the highest Worth. Make every edit raise your Worth against your rivals\'.';
 const characterLine = (persona: Persona) => `Your character, for your table line only: ${persona.card}`;
 
-/** The playbook paths a land brief lets the writer edit, besides the strategy's fields. */
-export const LAND_PATHS = ['/landGrant/ranked', '/landGrant/claims', '/landGrant/pressShare'] as const;
+/**
+ * The playbook paths a land brief lets the writer edit, besides the strategy's fields: the ranking only. The land
+ * grant's claims and press share, and its deny, plan B and pair, are not offered: play does not read them (WS9 ruling,
+ * 6 Nov); claims and press share may return once WS9 wires them.
+ */
+export const LAND_PATHS = ['/landGrant/ranked'] as const;
 export type LandPath = (typeof LAND_PATHS)[number];
 
-/** What each land path's `to` is: a plan's letter, a claim count, a press share. */
+/** What each land path's `to` is: a plan's letter. */
 const LAND_TO: Record<LandPath, object> = {
   '/landGrant/ranked': { type: 'string', enum: [...OPTION_IDS] },
-  '/landGrant/claims': { type: 'integer', enum: Array.from({ length: GAME.claimsPerGrant + 1 }, (_, i) => i) },
-  '/landGrant/pressShare': {
-    type: 'object',
-    properties: { start: { type: 'number' }, end: { type: 'number' } },
-    required: ['start', 'end'],
-    additionalProperties: false,
-  },
 };
 export const LAND_OFFERS: readonly EditOffer[] = LAND_PATHS.map((path) => ({ path, to: LAND_TO[path] }));
 
@@ -229,30 +226,20 @@ function refusalLines(feedback: Feedback | null | undefined): string[] {
   return parts.length > 0 ? [`Last time: ${parts.join('; ')}.`, ''] : [];
 }
 
-function strategyLine(s: Strategy, corners: boolean): string {
-  const target = corners ? `, monopolyTarget ${goodText(s.monopolyTarget)}` : '';
-  return `Your strategy: ${s.kind}, moneyMaker ${goodText(s.moneyMaker)}${target}, cashFloor ${s.cashFloor}. "${s.reason}"`;
+/** The strategy's fields that play reads: no monopolyTarget or cashFloor (WS9 ruling, 6 Nov). */
+function strategyLine(s: Strategy): string {
+  return `Your strategy: ${s.kind}, moneyMaker ${goodText(s.moneyMaker)}. "${s.reason}"`;
 }
 
+/** The draft land grant as play reads it: its ranking only (WS9 ruling, 6 Nov). */
 function draftLines(g: LandGrantPlay): string[] {
-  const cap = BRAIN.brief.draftEntries;
-  return [
-    `Ranked: ${capped(g.ranked, cap, plotText)}`,
-    `Press share: from ${g.pressShare.start} down to ${g.pressShare.end} of the best free plot's value as the grant goes on.`,
-    `Claims: ${g.claims}.`,
-    `Deny: ${capped(g.deny, cap, (d) => `plot ${d.plot} from ${d.rival} up to ${d.maxCost} cr`)}.`,
-    `Plan B: ${capped(g.planB, cap, (p) => `plot ${p}`)}.`,
-    ...(g.pair ? [`Pair: plot ${g.pair[0]} with plot ${g.pair[1]}.`] : []),
-  ];
+  return [`Ranked: ${capped(g.ranked, BRAIN.brief.draftEntries, plotText)}`];
 }
 
-function changeLines(corners: boolean): string[] {
-  const fields = ['kind', 'moneyMaker', ...(corners ? ['monopolyTarget'] : []), 'cashFloor', 'reason'];
+function changeLines(): string[] {
   return [
-    `- strategy: ${fields.join(', ')}; leave it out to keep your strategy.`,
+    '- strategy: kind, moneyMaker, reason; leave it out to keep your strategy.',
     '- /landGrant/ranked: the letter of a land plan; its ranking replaces the draft\'s.',
-    `- /landGrant/claims: how many plots to claim, 0 to ${GAME.claimsPerGrant}.`,
-    '- /landGrant/pressShare: {start, end}, with 0 ≤ end ≤ start ≤ 1.',
     `Every edit says why, as does the strategy, in at most ${BRAIN.writeReasonChars} characters.`,
   ];
 }
@@ -299,7 +286,7 @@ export function landBrief(
     `Store stock: ${GOODS.map((g) => `${GOOD_NAME[g]} ${obs.store.stock[g]}`).join(', ')}.`,
     shipLine(obs),
     '',
-    strategyLine(draft.strategy, corners),
+    strategyLine(draft.strategy),
     '',
     ...outcomeLines(last.outcome, mind.me, names),
     ...refusalLines(last.feedback),
@@ -311,7 +298,7 @@ export function landBrief(
     '',
     ...(development ? ['Your draft development:', ...developmentLines(development), ''] : []),
     'What you may change:',
-    ...changeLines(corners),
+    ...changeLines(),
     ...(development ? DEV_CHANGES : []),
     '',
     AIM,
@@ -403,7 +390,7 @@ export function phaseBrief(state: GameState, mind: Mind, persona: Persona, draft
     `Store stock: ${GOODS.map((g) => `${GOOD_NAME[g]} ${obs.store.stock[g]}`).join(', ')}.`,
     shipLine(obs),
     '',
-    strategyLine(draft.strategy, corners),
+    strategyLine(draft.strategy),
     '',
     ...outcomeLines(last.outcome, mind.me, names),
     ...refusalLines(last.feedback),

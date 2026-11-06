@@ -22,16 +22,22 @@ const draftStrategy = (state: GameState): Strategy => ({
   reason: 'The engine draft.',
 });
 
-/** Bounds chosen for the tests: claims 0..claimsPerGrant, press share 0 ≤ end ≤ start ≤ 1, a ranking as plot values. */
+/** Bounds chosen for the tests: a ranking as plot values. */
 const BOUNDS: Record<string, (to: unknown) => boolean> = {
   '/landGrant/ranked': (to) => Array.isArray(to) && to.every((r) => Number.isInteger(r?.plot) && typeof r?.value === 'number'),
-  '/landGrant/claims': (to) => Number.isInteger(to) && (to as number) >= 0 && (to as number) <= GAME.claimsPerGrant,
-  '/landGrant/pressShare': (to) => {
-    const p = to as { start?: unknown; end?: unknown } | null;
-    return typeof p?.start === 'number' && typeof p.end === 'number' && p.end >= 0 && p.end <= p.start && p.start <= 1;
-  },
 };
-const STRATEGY_FIELDS = ['kind', 'moneyMaker', 'monopolyTarget', 'cashFloor', 'reason'];
+/**
+ * A moneyMaker this validator refuses, chosen for the tests. The land brief offers only the ranking and the strategy's
+ * kind, moneyMaker and reason (B fix 5, WS9 ruling, 6 Nov), so a test that needs an offered edit the rules turn down
+ * sends this one.
+ */
+export const REFUSED_MONEY_MAKER = 'medicine';
+/** The strategy fields the writer can send, each with its bound. */
+const STRATEGY_BOUNDS: Record<string, (to: unknown) => boolean> = {
+  kind: () => true,
+  moneyMaker: (to) => to !== REFUSED_MONEY_MAKER,
+  reason: () => true,
+};
 
 /** Each edit in bounds is set on a copy of the draft; any other is refused with its reason and the draft's value stays. */
 export const boundsValidate: ValidatePlan = (_state, _seat, draft, edits: readonly PlanEdit[]) => {
@@ -40,7 +46,7 @@ export const boundsValidate: ValidatePlan = (_state, _seat, draft, edits: readon
   const applied: NonNullable<Playbook['edits']> = [];
   for (const e of edits) {
     const field = e.path.startsWith('/strategy/') ? e.path.slice('/strategy/'.length) : null;
-    if (field !== null && STRATEGY_FIELDS.includes(field)) {
+    if (field !== null && STRATEGY_BOUNDS[field]?.(e.to)) {
       const strategy = playbook.strategy as unknown as Record<string, unknown>;
       applied.push({ path: e.path, from: strategy[field], to: e.to, reason: e.reason });
       strategy[field] = e.to;
@@ -51,7 +57,7 @@ export const boundsValidate: ValidatePlan = (_state, _seat, draft, edits: readon
       rejected.push({ path: e.path, to: e.to, why: 'out of bounds' });
       continue;
     }
-    const key = e.path.slice('/landGrant/'.length) as 'ranked' | 'claims' | 'pressShare';
+    const key = e.path.slice('/landGrant/'.length) as 'ranked';
     applied.push({ path: e.path, from: playbook.landGrant[key], to: e.to, reason: e.reason });
     (playbook.landGrant as unknown as Record<string, unknown>)[key] = structuredClone(e.to);
   }

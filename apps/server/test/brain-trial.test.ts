@@ -1092,7 +1092,7 @@ describe.runIf(process.env.MULE_FULL === '1')('brain:trial', () => {
         const who = () => /^You are (.+)\. Month (\d+)/m.exec(user)!.slice(1, 3).join(' m');
         if (user.includes('Your draft land grant:')) {
           land.push(who());
-          const edits = [{ path: '/landGrant/claims', to: 1, reason: 'One will do.' }, { path: '/development/timeBudgetMs', to: 1_000, reason: 'Quick.' }];
+          const edits = [{ path: '/landGrant/ranked', to: 'A', reason: 'Plan A.' }, { path: '/development/timeBudgetMs', to: 1_000, reason: 'Quick.' }];
           return Promise.resolve(sdkMessage(JSON.stringify({ edits, line: 'The north field is mine.' }), BILLED));
         }
         if (user.includes('Your draft auction:')) {
