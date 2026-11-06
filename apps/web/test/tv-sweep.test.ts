@@ -4,6 +4,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { TableClient } from '../src/net/client';
 import { ClientProvider } from '../src/net/react';
+import { PhoneGameProvider, type PhoneGame } from '../src/phone/game';
+import { MarketStrip } from '../src/phone/hub/desks';
 import { TableApp } from '../src/table/TableApp';
 import { aMuleView, aPlayer } from './fixtures/views';
 
@@ -55,5 +57,30 @@ describe('the TV, after the 6 November screen sweep', () => {
     expect(text(tiles)).toBe('Food 156 cr 0 months cover Water 14 cr 1.8 months cover Rare earth 60 cr no demand');
     expect(tiles).toMatch(/class="[^"]*text-alert[^"]*">0 months cover</);
     expect(tiles).toMatch(/class="[^"]*text-ink-3[^"]*">no demand</);
+  });
+});
+
+describe('pricing C2: one selling price on every screen', () => {
+  /** The phone's market strip for the same view, as the hub draws it beneath its desks. */
+  function onPhone(game: MuleView): string {
+    // The strip reads only the view; the seat's own fields are left out.
+    const value = { table: { code: 'MULE', status: 'playing', hostId: 's1', seats: [], boards: 1, game }, view: game, me: {}, self: PLAYERS[0]!, slot: 0 } as unknown as PhoneGame;
+    return renderToStaticMarkup(createElement(PhoneGameProvider, { value, children: createElement(MarketStrip) })).replaceAll('<!-- -->', '');
+  }
+
+  const priceOf = (screen: string, name: string) => screen.match(new RegExp(`${name} (\\S+) cr`))?.[1];
+
+  it('price T-AC-6: the TV and the phone show the same Food selling price, the store\'s, not the posted price; "—" when it sells none', () => {
+    // A short Food shelf: 3 units, under the colonists' reserve, so the store sells none however high it bids.
+    const food: MarketRow = { good: 'food', price: 30, storeBuys: 45, storeSells: null, storeStock: 3, cover: 0.4, demand: 14, shipPays: null };
+    const water: MarketRow = { good: 'water', price: 20, storeBuys: 18, storeSells: 22, storeStock: 40, cover: 1.5, demand: 14, shipPays: null };
+    const game = aMuleView({ month: 3, players: PLAYERS, me: null, politics: null, market: [food, water] });
+    const tv = text(element(onTv(game), 'tv-market'));
+    const phone = text(element(onPhone(game), 'market-strip'));
+
+    expect(priceOf(tv, 'Food')).toBe('—');
+    expect(priceOf(phone, 'Food')).toBe('—');
+    expect(priceOf(tv, 'Water')).toBe('22');
+    expect(priceOf(phone, 'Water')).toBe('22');
   });
 });

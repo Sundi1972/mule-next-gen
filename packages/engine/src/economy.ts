@@ -234,16 +234,34 @@ export function storeSellPrice(posted: number): number {
 }
 
 /**
+ * The store's two lines for a good, whether or not it trades today: the auction's board is drawn around both.
+ * A shelf that can't feed the colonists for a month bids up to restock, still under what they can pay, and a
+ * store bidding up sells dearer too, so it never buys above its own selling price.
+ */
+export function storeLines(state: GameState, good: Good): { buy: number; sell: number } {
+  const posted = colonyPrice(state, good);
+  const usualBuy = Math.max(1, Math.floor(posted * (1 - PRICE.storeSpread)));
+  const ceiling = Math.floor((UPKEEP.colonistBudget[good] ?? 0) / (1 + PRICE.storeSpread) ** 2); // literal-ok: the spread applies twice, store buys then sells
+  const buy = shelfShort(state, good, 1) ? Math.max(usualBuy, Math.min(ceiling, Math.ceil(posted * PRICE.restockPremium))) : usualBuy;
+  return { buy, sell: Math.max(storeSellPrice(posted), buy + 1) };
+}
+
+/**
  * What the store charges and what it pays, or null where it doesn't trade:
  * no sell price with an empty shelf, no buy price when it wants no more.
+ * The one quote every screen, the auction and the AI read (pricing HC-3).
  */
 export function storeQuotes(state: GameState, good: Good): { buy: number | null; sell: number | null } {
-  const price = colonyPrice(state, good);
-  const buy = Math.max(1, Math.floor(price * (1 - PRICE.storeSpread)));
+  const lines = storeLines(state, good);
   return {
-    buy: storeWants(state, good) > 0 ? buy : null,
-    sell: storeForSale(state, good) > 0 ? storeSellPrice(price) : null,
+    buy: storeWants(state, good) > 0 ? lines.buy : null,
+    sell: storeForSale(state, good) > 0 ? lines.sell : null,
   };
+}
+
+/** The off-world price expected `monthsAhead` from now; pure, never draws. Nothing moves that price yet, so it is today's. */
+export function expectedOffWorld(state: GameState, good: Good, monthsAhead: number): number {
+  return state.store.offWorld[good];
 }
 
 /**

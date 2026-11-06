@@ -1,5 +1,25 @@
 import { describe, expect, it } from 'vitest';
-import { advancePhase, createGame, MULE, mulesWanted, nextPostedPrice, PRICE, runUpkeep, startAuction, storeBuyLine, storeWants, UPKEEP, type GameState } from '../src/index.js';
+import {
+  advancePhase,
+  auctionDone,
+  createGame,
+  MULE,
+  mulesWanted,
+  nextPostedPrice,
+  PRICE,
+  runUpkeep,
+  shelfShort,
+  startAuction,
+  stepAuction,
+  storeBuyLine,
+  storeQuotes,
+  storeSellLine,
+  storeWants,
+  UPKEEP,
+  WALK,
+  type GameState,
+  type Good,
+} from '../src/index.js';
 
 const SEATS = ['brix', 'ossa', 'lena', 'tam'];
 
@@ -89,5 +109,40 @@ describe('the corral keeps its size when a grant gives one claim (Heiko, 5 Nov)'
     const state = game(seats);
     expect(state.tiles.some((t) => t.terrain !== 'store' && !t.owner), 'free land is left').toBe(true);
     expect(mulesWanted(state)).toBe(seats * 2);
+  });
+});
+
+describe('pricing C2: one selling price', () => {
+  /**
+   * Plays a game where nobody acts, calling `look` at the state each good comes up in. Every player is done at once,
+   * so each good's status screen and walk end on the next step.
+   */
+  function eachComeUp(seed: number, look: (state: GameState, good: Good) => void): void {
+    // literal-ok: long enough for the colonists to eat the store's Food and Water shelves short
+    const state = createGame({ seed, players: SEATS.map((id) => ({ id, name: id, isAi: false })), maxMonths: 8 });
+    while (state.phase !== 'gameOver') {
+      advancePhase(state);
+      if (state.phase !== 'auction') continue;
+      let up: Good | null = null;
+      for (let step = 0; state.auction!.stage !== 'over'; step++) {
+        expect(step, 'the auction ends').toBeLessThan(10_000);
+        const a = state.auction!;
+        if (a.stage === 'status' && a.good !== up) look(state, a.good!);
+        up = a.good;
+        for (const p of state.players) auctionDone(state, p.id);
+        stepAuction(state, WALK.tickMs);
+      }
+    }
+  }
+
+  it('price T-AC-6: one selling price: storeQuotes equals comeUp\'s lines, for every good over 20 seeded games', () => {
+    let shortShelves = 0;
+    for (let seed = 401; seed <= 420; seed++)
+      eachComeUp(seed, (state, good) => {
+        if (shelfShort(state, good, 1)) shortShelves++;
+        expect(storeQuotes(state, good), `seed ${seed}, month ${state.month}, ${good}`).toEqual({ buy: storeBuyLine(state), sell: storeSellLine(state) });
+      });
+    // Without a short Food or Water shelf the restock rule never runs, and the two could differ unseen.
+    expect(shortShelves, 'a short Food or Water shelf came up').toBeGreaterThan(0);
   });
 });
