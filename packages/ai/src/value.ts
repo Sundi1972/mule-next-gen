@@ -28,6 +28,7 @@ import {
   tileIndex,
   UPKEEP,
   walkSeconds,
+  WALK,
   energyOffOrder,
   energyUseOf,
   type AiLevelConfig,
@@ -40,7 +41,7 @@ import {
   type Tile,
 } from '@mule/engine';
 import { standPoint, tripSeconds } from './floor-time.js';
-import { belief, productionsLeft, type Outlook } from './outlook.js';
+import { belief, outlook, productionsLeft, type Outlook } from './outlook.js';
 
 /** Who is thinking: the seat, its persona and its level. */
 export interface Mind {
@@ -247,6 +248,7 @@ export function wholeNextMonth(obs: GameState, me: string, good: Good): number {
  * all its cash. `except` leaves out a good: the one a new farm would make.
  */
 export function cashReserve(obs: GameState, mind: Mind, o?: Outlook, except?: Good): number {
+  if (AI_VALUE.unit) return monthReserve(obs, mind, o, except);
   const p = obs.players.find((q) => q.id === mind.me)!;
   const need = monthNeeds(obs, mind.me);
   let cost = 0;
@@ -549,4 +551,51 @@ function modelValues(obs: GameState, o: Outlook, good: Good, mind: Mind): UnitVa
   buy.sort((a, b) => b - a);
   const floorUnits = good === 'food' || good === 'energy' ? need.sure : 0;
   return { good, keep, buy, block: need.target, need: monthNeeds(obs, mind.me)[good], floorUnits };
+}
+
+/** The month's cash plan (RULE-5): which needed units of the goods still to be auctioned the seat's money buys first. */
+export interface CashPlan {
+  /** Units funded, and what they cost, per good. */
+  funded: Partial<Record<Good, number>>;
+  cost: Partial<Record<Good, number>>;
+  /** Money left after every funded unit. */
+  left: number;
+  /** The shadow price of cash: what the last funded unit gains per credit, 0 when every needed unit is funded. */
+  lambda: number;
+  /** Needed units worth more than their ask, funded or not. */
+  needed: number;
+}
+
+/**
+ * Ranks every needed unit (below the good's target) worth more than its expected ask, across `goods`, by value per
+ * credit, ties in `goods`' order, and funds them in that order while the money covers the ask.
+ */
+export function cashPlan(obs: GameState, mind: Mind, goods: readonly Good[], valuesOf: (good: Good) => UnitValues, askOf: (good: Good) => number): CashPlan {
+  const p = obs.players.find((q) => q.id === mind.me)!;
+  const units: { good: Good; at: number; ratio: number; ask: number }[] = [];
+  goods.forEach((good, at) => {
+    const v = valuesOf(good);
+    const ask = askOf(good);
+    for (let k = p.stock[good]; k < v.block; k++) if ((v.buy[k] ?? 0) > ask) units.push({ good, at, ratio: v.buy[k]! / ask, ask });
+  });
+  units.sort((a, b) => b.ratio - a.ratio || a.at - b.at);
+  const plan: CashPlan = { funded: {}, cost: {}, left: p.money, lambda: 0, needed: units.length };
+  let n = 0;
+  for (const u of units) {
+    if (u.ask > plan.left) break;
+    plan.left -= u.ask;
+    plan.funded[u.good] = (plan.funded[u.good] ?? 0) + 1;
+    plan.cost[u.good] = (plan.cost[u.good] ?? 0) + u.ask;
+    n++;
+  }
+  if (n < units.length) plan.lambda = units[Math.max(0, n - 1)]!.ratio - 1;
+  return plan;
+}
+
+/** The cash the month's needed units take at the belief's prices: the model's reserve for decisions off the auction. */
+function monthReserve(obs: GameState, mind: Mind, o?: Outlook, except?: Good): number {
+  const look = o ?? outlook(obs, mind.me, { lookAhead: mind.level.lookAhead });
+  const goods = WALK.order.filter((g) => g !== except);
+  const plan = cashPlan(obs, mind, goods, (g) => unitValues(obs, look, g, mind), (g) => belief(obs, look, g) * (1 + PRICE.storeSpread));
+  return Math.round(Object.values(plan.cost).reduce((n, c) => n + (c ?? 0), 0));
 }
