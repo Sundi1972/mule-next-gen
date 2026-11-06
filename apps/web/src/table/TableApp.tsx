@@ -459,7 +459,10 @@ function useNewestFirst(deals: DealView[]): DealRow[] {
   return rows;
 }
 
-/** The sellers held at what they must hold, newest first: those already held keep their order, one just held goes on top. */
+/**
+ * The sellers held at what they must hold, newest first: those already held keep their order, one just held goes on top.
+ * The order is adjusted during render, as useNewestFirst's, so the card never shows a seller who is no longer held.
+ */
 function useHeldNewestFirst(ids: string[]): string[] {
   const key = ids.join(',');
   const [held, setHeld] = useState(() => ({ key, ids }));
@@ -633,9 +636,13 @@ export function TvAuction({ table, game, auction }: { table: TableView<MuleView>
                   const name = game.players.find((x) => x.id === w.id)?.name ?? w.id;
                   return (
                     <li className="flex flex-col gap-2 rounded-panel border border-ok/70 bg-panel p-4" data-testid={`tv-held-${w.id}`}>
-                      <span className="flex items-center gap-2 font-display text-2xl font-semibold">
-                        <PlayerMark slot={slotOf(game, w.id) ?? 0} size={32} label={name} />
-                        <span className="min-w-0 truncate">{`${name} keeps ${w.units} ${GOOD_NAME[auction.good]}`}</span>
+                      {/* The line wraps, as the mock's does: a long name never cuts off the count and the good. The mark is
+                          the name's picture, so a reader hears the name once. */}
+                      <span className="flex items-start gap-2 font-display text-2xl font-semibold leading-tight">
+                        <span aria-hidden="true" className="shrink-0">
+                          <PlayerMark slot={slotOf(game, w.id) ?? 0} size={32} label={name} />
+                        </span>
+                        <span className="min-w-0 break-words" data-testid="held-words">{`${name} keeps ${w.units} ${GOOD_NAME[auction.good]}`}</span>
                       </span>
                       <span className="font-mono text-xl text-ink-2">what they must hold</span>
                     </li>

@@ -379,7 +379,8 @@ export async function theMonthEndTvFits(tv: Page, server: MuleServer, code: stri
  * again: the walk's chat strip shows the newest line only (PM ruling 6 Nov), and the board keeps one size as deals come
  * and go; with nothing trading the help and the room line show whole; with two deals up, both show whole on the screen,
  * the newest with its speed line and the older on one row (PM ruling 5 Nov, kept 6 Nov: every running deal stays in
- * sight); and either way nothing runs past the foot.
+ * sight); with every seat then held at what they must hold, the longest name newest, its card's words stand uncut and
+ * the others' marks share one box (PM ruling (A), 6 Nov); and either way nothing runs past the foot.
  */
 export async function theAuctionTvFits(tv: Page, server: MuleServer, code: string): Promise<string> {
   const room = server.registry.get(code);
@@ -434,10 +435,19 @@ export async function theAuctionTvFits(tv: Page, server: MuleServer, code: strin
       // RULE-4 said on the TV: every seat a seller held at what they must hold, both deals still running. The newest has
       // the card, the others their marks in one box (PM ruling (A)); all of it and both deals stay in sight, and the side
       // keeps the floor.
-      for (const w of a.walkers) Object.assign(w, { side: 'seller', held: true });
+      check(a.walkers.length >= 2, `TV-FIT: a held box needs two walkers at least, got ${a.walkers.length}`);
+      // The longest name is held last, so it is the newest and has the card: the words most likely to be cut.
+      const longest = a.walkers.find((w) => w.id === p.id)!;
+      for (const w of a.walkers) if (w !== longest) Object.assign(w, { side: 'seller', held: true });
       (room as unknown as { broadcast(): void }).broadcast();
+      await tv.locator('[data-testid^=tv-held-]').first().waitFor({ timeout: 2_000 });
+      Object.assign(longest, { side: 'seller', held: true });
+      (room as unknown as { broadcast(): void }).broadcast();
+      await tv.locator(`[data-testid=tv-held-${p.id}]`).waitFor({ timeout: 2_000 });
       const others = tv.locator('[data-testid=tv-held-others] [role=img]');
       await others.nth(a.walkers.length - 2).waitFor({ timeout: 2_000 });
+      const words = await tv.locator(`[data-testid=tv-held-${p.id}] [data-testid=held-words]`).evaluate((e) => ({ text: (e as HTMLElement).innerText, cut: e.scrollWidth > e.clientWidth + 1 || e.scrollHeight > e.clientHeight + 1 }));
+      check(!words.cut, `TV-FIT: the auction TV's held card says "${words.text}" uncut`);
       check((await others.count()) === a.walkers.length - 1, `TV-FIT: the auction TV's held box has a mark for each held seller but the newest, got ${await others.count()} of ${a.walkers.length - 1}`);
       await fitSettled(tv);
       const keeps = await shownWhole(tv, 'auction (everyone held, two deals)', ['[data-testid^=tv-held-]', '[data-testid=tv-deal]']);
