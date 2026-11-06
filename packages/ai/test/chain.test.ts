@@ -198,6 +198,16 @@ describe('a factory chain (AM-33)', () => {
     }
   }));
 
+  it('B-AC-11: the links are placed jointly, so a works link never takes the ground a mine link needs', () => withChains(() => {
+    // In board order: Rare earth ground, Smithore ground, two plains. Every other plot a rival's, so no free plot offers
+    // a richer link. In recipe order the Alloy link, which makes the same anywhere, would take the Smithore ground first
+    // and leave Smithore a plot making nothing, a share of 0: the chain would lose at any price. (With thin Smithore
+    // ground, one a month, half the Alloy works' run, the chain wins only from about 3500: the share halves the works.)
+    const state = development([{ x: 0, ground: { rareEarth: 4 } }, { x: 2, ground: { smithore: 4 } }, { x: 4 }, { x: 6 }], DEAR);
+    for (const t of state.tiles) if (!t.owner && t.terrain !== 'store') t.owner = 'ai1';
+    expect(draftStrategyOf({ state, seat: ME, mind: seatOf().mind, seed: 11, phase: 'development' }).moneyMaker).toBe('electronics');
+  }));
+
   it('FM-chain-idle: no works is installed while its inputs neither stand nor are held, whatever the cash', () => withChains(() => {
     // Plains only: no ground for a mine, so the chain's inputs can't stand this month.
     const state = development([{ x: 0 }, { x: 2 }, { x: 4 }, { x: 6 }], DEAR);
