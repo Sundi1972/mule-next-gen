@@ -25,8 +25,8 @@ import {
 import { outlook } from '../src/outlook.js';
 import { applyAction, playMonthFrom } from '../src/play.js';
 import { AiSeat } from '../src/seat.js';
-import { cashReserve } from '../src/value.js';
-import { goodPlan, sellWanted, tradeDecision, wholeNextMonth, type GoodPlan } from '../src/strategist.js';
+import { cashReserve, installGain } from '../src/value.js';
+import { goodPlan, plotValue, sellWanted, tradeDecision, wholeNextMonth, type GoodPlan } from '../src/strategist.js';
 
 /**
  * The resource-utility model at the table: built states played on through the engine with every seat's own hands,
@@ -230,6 +230,20 @@ describe('C8: a power plant is worth what its output saves', () => {
     const farm: Plot = { outfit: 'food', x: 8, ground: { food: 4 } };
 
     expect(develop({ energy: 2, food: 2 }, { energy: 0, posted: 20 }, { plots: [farm], energy: 10 })).toBe('energy');
+  });
+
+  it('FM-no-plots: a seat with no plots at the first land grant values a free Food plot at a finite number', () => {
+    const state = createGame({ seed: 1, players: ['ai0', 'ai1', 'ai2', 'ai3'].map((id) => ({ id, name: id, isAi: true })) });
+    while (state.phase !== 'landGrant') advancePhase(state);
+    const obs = observe(state, ME);
+    const mind = seatsOf(state, { plots: [], money: 0 })[0]!.mind;
+    expect(obs.tiles.some((t) => t.owner === ME), 'the premise: it owns no plot').toBe(false);
+    const free = obs.tiles.findIndex((t) => !t.owner && t.terrain !== 'store');
+
+    const o = outlook(obs, ME, { lookAhead: mind.level.lookAhead });
+
+    expect(installGain(obs, o, obs.tiles[free]!, 'food', mind).net).toSatisfy(Number.isFinite);
+    expect(plotValue(obs, mind, free)).toSatisfy(Number.isFinite);
   });
 
   it('B-AC-5 negative: with no idle plot there is nothing to install', () => {
