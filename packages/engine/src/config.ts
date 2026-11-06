@@ -1856,8 +1856,12 @@ export const AI_PLANS = {
   },
   /** A factory good the seat can't feed yet, scored with the plots that would make its inputs. See AM-32. */
   chain: {
-    /** The chain's MULEs, at the level's MULEs a month, must all be bought within this many months, from cash on hand. */
-    months: 3,
+    /**
+     * A feature switch. 0 is off: no chain is ever committed and the seats play as before AM-32. Above 0, the chain's
+     * MULEs, at the level's MULEs a month, must all be bought within this many months, from cash on hand. Switching
+     * on (at 3, as tested) is Heiko's decision, once the economy lets a chain pay.
+     */
+    months: 0,
   },
   monopoly: {
     /** The goods a seat may try to corner. Not Food: it spoils too fast (STRATEGIST.cornerMaxSpoilage). */
