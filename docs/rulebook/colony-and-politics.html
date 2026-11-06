@@ -441,9 +441,28 @@
 
 <!-- ============================================================ -->
 <h2 id="migration">Mood and migration <span class="pill designed">Designed</span></h2>
-<p>Today the colony grows by <span class="num">4</span>% in a month its colonists were fed and shrinks by <span class="num">5</span>% when they went hungry, whatever the mood. The design says the mood will scale that growth and shrinkage: a happy colony attracts settlers, an unhappy one loses them. How much is not set yet; the numbers will live with the mood's.</p>
-<div class="box next"><h4>What is changing</h4><p>C27, after C26's PR-B, on WS1's queue (it was planned for the evening of 5 Nov). Owner: WS1.</p></div>
-<p class="code-ref">In the code: <code>packages/engine/src/upkeep.ts::runUpkeep</code> · <code>config.ts::UPKEEP.colonistGrowth</code> · G-5 C27</p>
+<p>Today the colony grows by <span class="num">4</span>% in a month its colonists were fed and shrinks by <span class="num">5</span>% when they went hungry, whatever the mood.</p>
+<p>Designed, not in the game yet, WS1: the colony's mood band adds to that monthly rate. A happy colony draws settlers; an unhappy one loses them, even in a month its colonists were fed.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Mood band</th><th>Added to the month's rate</th><th>Fed</th><th>Hungry</th></tr></thead>
+<tbody>
+<tr><td>Thriving</td><td><span class="num">+2</span> points</td><td>grows <span class="num">6</span>%</td><td>shrinks <span class="num">3</span>%</td></tr>
+<tr><td>Content</td><td><span class="num">0</span></td><td>grows <span class="num">4</span>%</td><td>shrinks <span class="num">5</span>%</td></tr>
+<tr><td>Restless</td><td><span class="num">−1</span> point</td><td>grows <span class="num">3</span>%</td><td>shrinks <span class="num">6</span>%</td></tr>
+<tr><td>Unhappy</td><td><span class="num">−3</span> points</td><td>grows <span class="num">1</span>%</td><td>shrinks <span class="num">8</span>%</td></tr>
+<tr><td>Unrest</td><td><span class="num">−5</span> points</td><td>shrinks <span class="num">1</span>%</td><td>shrinks <span class="num">10</span>%</td></tr>
+</tbody>
+</table></div>
+<ul>
+<li><strong>The band that counts</strong> is the one you saw during the month: growth reads the mood before it takes its month-end step.</li>
+<li><strong>Collapse air</strong> still overrides: <span class="num">5</span>% of the colonists leave, whatever the mood.</li>
+<li><strong>Politics off:</strong> there is no mood, so the colony grows exactly as today.</li>
+<li>The colony never shrinks below nothing, whatever the numbers are tuned to.</li>
+</ul>
+<div class="box example"><h4>Example</h4><p>A colony of <span class="num">100</span> was fed this month. In Unrest it ends the month with <span class="num">99</span> colonists (4% − 5% = −1%); in Content it would have <span class="num">104</span>; in Thriving <span class="num">106</span>.</p></div>
+<div class="box why"><h4>Why it is like this</h4><p>The PM ruled on 6 Nov (option A): players read the band on their screens, so the band is the lever, rather than a rate that moves with every point of happiness; showing arrivals and departures as a flow was more than G-5 needs. The offsets are placeholders until the colony's balance pass (C29). In the sim the colony spends most months Restless or Unhappy, so games end with fewer colonists than today; that is by design.</p></div>
+<div class="box next"><h4>What is changing</h4><p>C27 is designed and next on WS1's queue, after C26's PR-B, on branch <code>ws1-c27</code>. Until it is built the mood does not touch growth: trunk grows the colony by 4% fed and shrinks it by 5% hungry. Owner: WS1.</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/upkeep.ts::runUpkeep</code> · <code>config.ts::UPKEEP.colonistGrowth</code> · <code>colony.ts::moodBand</code> · G-5 C27, RULE-29, AM-15</p>
 <p class="owner">Kept current by: WS1.</p>
 
 <!-- ============================================================ -->
