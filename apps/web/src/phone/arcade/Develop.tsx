@@ -412,7 +412,10 @@ export function PhoneLandscape({ frame }: { frame: { w: number; h: number } }) {
         )}
         {plotsOpen && <PlotsPanel seat={seat} at={{ top: PLOTS_PANEL_TOP, bottom: L.h - L.button.y + 6 }} />}
         {card && <PlotCard seat={seat} now={now} at={{ left: card.x, top: card.y, width: card.w, maxHeight: card.h }} />}
-        {found && space === 'map' && <AnalyseCard t={found.tile} at={cardBeside(L, found.tile, barFoot)} onClose={found.close} />}
+        {found && space === 'map' && <AnalyseCard t={found.tile} at={cardBeside(L, found.tile, barFoot)} onClose={() => {
+          found.close();
+          keys.focus();
+        }} />}
         {/* The banner box: the scramble's banner, or the guide's note (V-7); on the map along the bottom rows between the
             stick and the button, clear of your plots, in the hall across the walkway. It fades while you walk under it. */}
         <div className="pointer-events-none absolute z-20 flex items-center justify-center" style={css(banner)} data-testid="scramble-banner-box">
