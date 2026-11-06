@@ -8,15 +8,15 @@ import { SetupPage } from './screens/SetupPage';
 import { TvLobby } from './screens/TvLobby';
 
 const DECISIONS = [
-  'A computer seat is played Built-in (the game) or by Claude Code (a session someone runs). The host picks, by tapping the seat in the lobby.',
-  'A Claude Code seat has its own join code (MULE-XXXX-XXXX-XXXX) for the whole game. Only the host’s phone shows it, with Copy, the one setup line with its own Copy, and a link to the setup page.',
+  'A computer seat is played Built-in (the game) or by Claude (a chat in any Claude app with the MULE connector). The host picks, by tapping the seat in the lobby.',
+  'C11 (spec amendment 1): a Claude seat has its own seat code (K7QM-42: 4 letters, a dash, 2 digits) for the whole game. Only the host’s phone shows it, with Copy, the invite as it will be sent with Copy invite, and a link to how to connect Claude. The setup line is gone: the connector is added once per person, not per seat.',
   'Its chip says where it stands: WAITING FOR CLAUDE, then CLAUDE · CONNECTED. Other phones and the TV see the seat and its chip, never the code.',
   'The host can switch the seat back to Built-in; its code stops working.',
   'In play the TV ready list and the phone’s ready bar say CLAUDE · THINKING, CLAUDE · READY or CLAUDE · OFFLINE, on the seat’s own row (never folded in with the AIs); offline plays its built-in plan, unlike an AWAY phone.',
-  'HC-3: a Claude Code seat never holds the table. THINKING is a label only and the seat counts as ready, except at the first good’s side pick: there it is waited for, CLAUDE · THINKING · 0:32, at most 45 s, then plays its built-in plan.',
+  'HC-3: a Claude seat never holds the table. THINKING is a label only and the seat counts as ready, except at the first good’s side pick: there it is waited for, CLAUDE · THINKING · 0:32, at most 45 s, then plays its built-in plan.',
   'The host can start while a seat is WAITING FOR CLAUDE: the seat says it plays its built-in plan until Claude joins.',
   'At the side pick, the host’s Move on for… covers a thinking Claude seat too; it then plays its built-in plan.',
-  'Mid-game, Move my seat gains a second choice: Hand my seat to Claude Code. Its code works 10 minutes (counting down); the phone is let go once Claude joins.',
+  'Mid-game, Move my seat gains a second choice: Hand my seat to Claude. Its code works 10 minutes (counting down), with the same Copy invite; the phone is let go once Claude calls with it.',
   SETUP_DECISION,
   'Open: two variants of the host’s lobby row. A opens the seat in place in the rail; B keeps the row one line, with a Code button that opens a sheet.',
 ];
@@ -37,8 +37,8 @@ const VIEWERS: Choice<Viewer>[] = [
 ];
 const JUNO: Choice<JunoState>[] = [
   { id: 'builtin', title: 'Built-in' },
-  { id: 'waiting', title: 'Claude Code · waiting' },
-  { id: 'connected', title: 'Claude Code · connected' },
+  { id: 'waiting', title: 'Claude · waiting' },
+  { id: 'connected', title: 'Claude · connected' },
 ];
 const LOBBY_LINK: Choice<LobbyLink>[] = [
   { id: 'waiting', title: 'Waiting for Claude' },
@@ -73,7 +73,7 @@ const ME_STATES: Choice<Table['me']>[] = [
 ];
 const MOVE_TO: Choice<MoveTo>[] = [
   { id: 'phone', title: 'To another phone' },
-  { id: 'claude', title: 'To Claude Code' },
+  { id: 'claude', title: 'To Claude' },
 ];
 const CODE: Choice<ClaudeCode>[] = [
   { id: 'fresh', title: '10:00 left' },
@@ -94,7 +94,7 @@ function Index() {
   const [a, setA] = useState<JunoState>('waiting');
   const [b, setB] = useState<JunoState>('waiting');
   return (
-    <Page title="Claude Code plays a computer seat" lead="WS2 mock, 6 Nov. Every screen has a state switcher above it; a plain click uses the prototype.">
+    <Page title="Claude plays a computer seat" lead="WS2 mock, 6 Nov; the lobby and Move moved to Copy invite, WS4, 7 Nov (C11). Every screen has a state switcher above it; a plain click uses the prototype.">
       <section className="flex flex-col gap-2" data-testid="decisions">
         <h2 className="label-caps">Design decisions</h2>
         <ul className="flex max-w-4xl list-disc flex-col gap-1 pl-5 text-sm text-ink-2">
@@ -150,7 +150,7 @@ function LobbyPage({ variant }: { variant: Variant }) {
   const [sheet, setSheet] = useState<'closed' | 'open'>(variant === 'B' ? 'open' : 'closed');
   const title = variant === 'A' ? 'Phone lobby, variant A: the seat opens in place' : 'Phone lobby, variant B: compact row, Code opens a sheet';
   return (
-    <Page title={title} lead="Juno is the Claude Code seat; Brix is a Built-in one the host can switch too. Kai’s phone sees chips only.">
+    <Page title={title} lead="Juno is the Claude seat; Brix is a Built-in one the host can switch too. Kai’s phone sees chips only.">
       <States label="Viewer" choices={VIEWERS} value={viewer} onChange={setViewer} testid="viewer" />
       <States label="Juno" choices={JUNO} value={juno} onChange={setJuno} testid="juno" />
       {variant === 'B' && <States label="Sheet" choices={SHEET} value={sheet} onChange={setSheet} testid="sheet" />}
@@ -164,7 +164,7 @@ function LobbyPage({ variant }: { variant: Variant }) {
 function TvLobbyPage() {
   const [juno, setJuno] = useState<LobbyLink>('waiting');
   return (
-    <Page title="TV lobby" lead="The Claude Code seat says so and wears its chip. The TV never shows a seat’s code.">
+    <Page title="TV lobby" lead="The Claude seat says so and wears its chip. The TV never shows a seat’s code.">
       <States label="Juno" choices={LOBBY_LINK} value={juno} onChange={setJuno} testid="juno" />
       <TvFrame>
         <TvLobby juno={juno} />

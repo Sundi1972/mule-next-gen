@@ -1,17 +1,17 @@
 import { Button, cx, Timer } from '@mule/ui';
 import { useId } from 'react';
 import { joinUrl, Qr } from '../../../../../apps/web/src/components/Qr';
-import { HANDOFF_CODE, ROOM, setupLine } from '../fixture';
+import { HANDOFF_CODE, ROOM } from '../fixture';
 import { useCountdown } from '../harness';
-import { Chip, CopyLine, SetupLink } from '../parts';
+import { Chip, CopyInvite, CopyLine, SetupLink } from '../parts';
 
 /*
  * GRAFT TARGET: MoveDialog in apps/web/src/phone/Shell.tsx, whose body today is MoveToPhone. The phone half below is
- * MoveToPhone's, unchanged; the Claude Code half is new.
+ * MoveToPhone's, unchanged; the Claude half is new.
  */
 
 export type MoveTo = 'phone' | 'claude';
-/** The Claude Code code: counting down from 10 minutes, in its last seconds, run out, or used (Claude joined). */
+/** The hand-over code: counting down from 10 minutes, in its last seconds, run out, or used (Claude joined). */
 export type ClaudeCode = 'fresh' | 'last' | 'expired' | 'joined';
 
 const START: Record<ClaudeCode, number> = { fresh: 600, last: 14, expired: 0, joined: 0 };
@@ -43,7 +43,7 @@ export function MoveDialog({ to, onTo, code, onRenew, onClose }: { to: MoveTo; o
 function MoveChoice({ to, onTo }: { to: MoveTo; onTo: (t: MoveTo) => void }) {
   const options: { id: MoveTo; title: string }[] = [
     { id: 'phone', title: 'To another phone' },
-    { id: 'claude', title: 'Hand my seat to Claude Code' },
+    { id: 'claude', title: 'Hand my seat to Claude' },
   ];
   return (
     <div className="ml-auto flex gap-1.5" role="group" aria-label="Where the seat goes" data-testid="move-choice">
@@ -93,7 +93,7 @@ function ToClaude({ code, onRenew }: { code: ClaudeCode; onRenew: () => void }) 
           </div>
         ) : (
           <>
-            <CopyLine label="Join code" text={HANDOFF_CODE} testid="claude-code" big />
+            <CopyLine label="Seat code" text={HANDOFF_CODE} testid="claude-code" big />
             <span className="flex items-center gap-2 text-sm text-ink-2" data-testid="claude-code-timer">
               Works for <Timer seconds={left} />
             </span>
@@ -104,10 +104,8 @@ function ToClaude({ code, onRenew }: { code: ClaudeCode; onRenew: () => void }) 
         </p>
       </div>
       <div className="flex flex-col gap-2">
-        <p className="text-sm text-ink-2">
-          In Claude Code: <code className="font-mono text-xs text-ink">/mcp__mule__play</code> and this code. You keep your money, goods and plots; the game doesn't pause.
-        </p>
-        <CopyLine label="Setup, once per computer" text={setupLine()} testid="claude-line" />
+        <p className="text-sm text-ink-2">Paste the invite into a new chat with MULE on. You keep your money, goods and plots; the game doesn't pause.</p>
+        {!expired && <CopyInvite code={HANDOFF_CODE} testid="claude-invite" />}
         <SetupLink testid="claude-setup-link" />
       </div>
     </div>
@@ -119,7 +117,7 @@ function LetGo() {
   return (
     <div className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-3 bg-table px-8 text-center text-ink" data-testid="let-go">
       <Chip word="CLAUDE · CONNECTED" className="px-2! py-0.5 text-sm!" />
-      <h2 className="font-display text-2xl font-semibold">Claude Code plays your seat now</h2>
+      <h2 className="font-display text-2xl font-semibold">Claude plays your seat now</h2>
       <p className="max-w-[520px] text-ink-2">Lena's money, goods and plots went with it. This phone has stepped aside.</p>
     </div>
   );

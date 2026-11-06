@@ -5,13 +5,13 @@ import { HOST, ROOM, SEATS, type LobbyLink, type MockSeat } from '../fixture';
 import { Chip, LOBBY_CHIP } from '../parts';
 
 /*
- * GRAFT TARGET: TvLobby in apps/web/src/table/TableApp.tsx. Only the seat's second line changes: a Claude Code seat
+ * GRAFT TARGET: TvLobby in apps/web/src/table/TableApp.tsx. Only the seat's second line changes: a Claude seat
  * says so and wears its chip. The TV never shows a seat's join code: the room is watching.
  */
 
 function kindLine(seat: MockSeat): string {
   if (seat.kind === 'builtin') return 'AI player';
-  if (seat.kind === 'claude') return 'Claude Code';
+  if (seat.kind === 'claude') return 'Claude';
   return seat.id === HOST ? 'Host' : 'Ready';
 }
 

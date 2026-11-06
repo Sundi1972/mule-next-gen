@@ -7,7 +7,7 @@ import { Chip, PLAY_CHIP, type ChipWord } from '../parts';
 /*
  * GRAFT TARGETS: TvGame's planning ready list and the side-pick status list (apps/web/src/table/TableApp.tsx), and
  * ReadyBar with WaitingFor (apps/web/src/phone/hub/ReadyBar.tsx), with ready.ts behind them.
- * HC-3: a Claude Code seat never holds the table, as ready.ts has it for every AI: THINKING is a label, and the seat
+ * HC-3: a Claude seat never holds the table, as ready.ts has it for every AI: THINKING is a label, and the seat
  * counts as ready. The one exception is the first good's side pick, where it is waited for at most 45 seconds and
  * then plays its built-in plan.
  */
@@ -98,7 +98,7 @@ export function TvPlanning({ t }: { t: Table }) {
             <PlayerMark slot={seat.slot} species={seat.species} size={22} glow={!dim} />
             <span className="flex-1 truncate font-display text-xl font-semibold">
               {seat.name}
-              {seat.kind === 'claude' && <span className="ml-2 font-mono text-sm font-normal text-ink-3">Claude Code</span>}
+              {seat.kind === 'claude' && <span className="ml-2 font-mono text-sm font-normal text-ink-3">Claude</span>}
             </span>
             {builtin && <span className="font-mono text-sm text-ink-3">plays its built-in plan</span>}
             <span className={cx('font-mono text-sm', TONE[tone], word.startsWith(PLAY_CHIP.thinking) && 'animate-pulse')} data-testid={`tv-state-${seat.id}`}>
