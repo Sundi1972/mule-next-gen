@@ -147,7 +147,7 @@ describe('C26 PR-B: the store strike, in development', () => {
     expect(plain.players[0]!.carriedMule).toBe('empty');
   });
 
-  it("FM-C26-11 (store strike ends with its month): in the next month's development the store sells MULEs again", () => {
+  it("FM-C26-14 (store strike ends with its month): in the next month's development the store sells MULEs again", () => {
     only(['storeStrike']);
     const state = developing(MID('unrest'));
     const month = state.month;
@@ -279,7 +279,7 @@ describe('C26 PR-B: the loyal crew, in production', () => {
     expect(picked.size).toBeGreaterThan(1);
   });
 
-  it("FM-C26-10 (loyal crew on an idle factory): the crew works only raw plots, so its +1 always reaches the line and the stock; with no raw plot, no crew", () => {
+  it("FM-C26-13 (loyal crew on an idle factory): the crew works only raw plots, so its +1 always reaches the line and the stock; with no raw plot, no crew", () => {
     /** A Thriving colony where p3 works an Alloy factory with no Smithore to run on and, unless `farm` is false, one Food plot. */
     const withFactory = (seed: number, farm = true) => {
       const state = colonyAt(MID('thriving'), { seed });
