@@ -1049,6 +1049,11 @@ export const COLONY = {
    * of its output each plot of the struck good makes while they are unpaid (UBER-AC-6).
    */
   strike: { cost: 250, output: 0.2 },
+  /**
+   * Places on the colony's own grounds, filled in growth order (index 0 next to the town hall, then outward ring by
+   * ring); an upper bound, the view draws only what is used. A 5×5 square less the town hall (G-5 AM-16 A, RULE-32).
+   */
+  groundsSlots: 24,
 };
 
 /**
