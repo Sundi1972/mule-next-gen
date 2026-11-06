@@ -60,11 +60,17 @@ describe('GAUGES-ROW (WS4): a crowded TV header puts the colony gauges on their 
 
   it('with a ready count the gauges sit on their own row, full width, as planning already does', () => {
     const ready = createElement(ReadyCount, { players: PLAYERS, tv: true });
-    expect(gauges(header({ game: game(colony()), title: 'Planning', seconds: 42, ready }))).toEqual({ where: 'own row', width: 'w-full' });
+    expect(gauges(header({ game: game(colony()), title: 'Planning', ready }))).toEqual({ where: 'own row', width: 'w-full' });
   });
 
   it('with no clock, badge or ready count the gauges stay beside the title, at their header width', () => {
     expect(gauges(header({ game: game(colony()), title: 'Election day' }))).toEqual({ where: 'header', width: 'w-[760px]' });
+  });
+
+  it("development asks for its gauges beside the title (gauges='beside', PM ruling 6 Nov): in a strike month too, the map keeps its size", () => {
+    const html = header({ game: game(colony({ good: 'food', cost: 240, paid: false })), title: 'Development', gauges: 'beside' });
+    expect(gauges(html)).toEqual({ where: 'header', width: 'w-[760px]' });
+    expect(html).toContain('data-testid="strike-badge"');
   });
 
   it('without the colony (politics off) a clocked header keeps its air gauge and draws no colony gauges', () => {
