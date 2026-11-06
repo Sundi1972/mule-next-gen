@@ -9,6 +9,7 @@ import {
   castVote,
   commission,
   claimPlot,
+  donate,
   COLONY_SELLER,
   createGame,
   createRng,
@@ -233,6 +234,9 @@ function applyRule(state: GameState, id: string, action: AiAction, clock?: DevCl
         break;
       case 'commission':
         commission(state, id, action.id);
+        break;
+      case 'donate':
+        donate(state, id, action.id, action.credits);
         break;
       case 'payStrike':
         payStrike(state, id);
