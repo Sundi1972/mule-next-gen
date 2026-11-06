@@ -304,6 +304,18 @@ goal      G-2
 folded    ART-DIRECTION §2 "Tall kinds" row widened to "Large kinds"; ASSET-LIST Stadium + Spaceport rows; plan PR-3
 ```
 
+```
+AM-3 · 2026-11-06 · lead · WS7's ruling, docs PR #538 @ 950e3bf0 (AM-18 / RULE-32b)
+target    §1 C6, §2 RULE-4, §3 ColonyProjectView.slot
+said      ColonyProjectView.slot (growth-order index)
+did       ColonyProjectView.place: { x, y, w, h } | null — anchor + footprint on the 5×5 grounds, the hall at (2,2),
+          derived by the server (WS7); COLONY.grounds {size 5} replaces groundsSlots. Pictures sit at the footprint's
+          centre; RULE-4's extent is the bounding box of the places in use. Sizes: Stadium, Spaceport 2×2; rest 1×1.
+because   G-2 (footprints in proportion, Heiko) — WS7 owns placement
+goal      G-2
+folded    C2 positions by place; C6 produced by WS7's engine PR (after its grounds PR-2); plan Task 1.5 waits for it
+```
+
 ## §9 · Ownership Boundaries  [handoff]
 
 - Sole owner: WS10, for `packages/ui/src/grounds/**`, `apps/web/public/art/colony/**` and `design/art/**`.
