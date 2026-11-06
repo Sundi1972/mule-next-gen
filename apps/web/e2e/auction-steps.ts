@@ -677,7 +677,8 @@ async function readTheGoodsWalk(cast: { seller: Phone; buyer: Phone; stayer: Pho
     await smallPhoneReads(buyer, 'walk');
     console.log(`✓ C20, the walk's hint above the footer: ${await railFits(buyer.page, { key: 'hint' })}`);
   });
-  const tags = { ask: String(ask.price), bid: String(bid.price), gap: `${ask.price - bid.price} APART` };
+  // The chip counts the store and the ship, as the readout does (SWEEP-C1).
+  const tags = { ask: String(ask.price), bid: String(bid.price), gap: tvAsk.price > tvBid.price ? `${tvAsk.price - tvBid.price} APART` : null };
   await Promise.all(screens.map((s) => untilShows(s, readTags, tags, "B-AC-1: the lines sit at the server's lowest ask and highest bid, with the gap between them")));
   console.log(
     `✓ B-AC-1 (WS6): ${a.good} walk, the red line tagged ${ask.price} and the green ${bid.price}, "${tags.gap}", on three phones and the TV; the TV's readout names ${tvAsk.who} and ${tvBid.who}`,
@@ -859,7 +860,7 @@ async function fillTheTvTicker(phone: Page, tv: Page): Promise<void> {
 
 /**
  * The TV's status stage at 1920×1080 with its chat ticker full: the store box keeps its prices, the ship panel ends
- * inside the screen and the TV's frame with its words whole, and a skipped line sits in the picked count's row, on one line.
+ * inside the screen and the TV's frame with its words whole, and a skipped line sits in the picked count's row, whole.
  */
 async function checkTvStatusRoom(tv: Page, good: Good, skipped: boolean): Promise<void> {
   const room = (await tv.evaluate(`(() => {
@@ -874,7 +875,8 @@ async function checkTvStatusRoom(tv: Page, good: Good, skipped: boolean): Promis
       frame: box('tv-status'),
       // The side pick has no clock (A-7): the picked count stands where the time bar was.
       bar: box('ready-count'),
-      skipped: skip ? { ...box('skipped'), oneLine: cs.whiteSpace === 'nowrap' && cs.textOverflow === 'ellipsis', lineHeight: parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.5 } : null,
+      skipped: skip ? { ...box('skipped'), whole: cs.textOverflow !== 'ellipsis' && skip.scrollWidth <= skip.clientWidth + 1, lineHeight: parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.5 } : null,
+      row: box('tv-pick-bar'),
       ticker: document.querySelectorAll('[data-testid=chat-ticker] [data-testid^=chat-line-]').length,
       w: window.innerWidth,
       h: window.innerHeight,
@@ -884,7 +886,8 @@ async function checkTvStatusRoom(tv: Page, good: Good, skipped: boolean): Promis
     ship: { top: number; bottom: number; left: number; right: number; full: boolean };
     frame: { bottom: number };
     bar: { top: number; bottom: number; right: number };
-    skipped: { top: number; bottom: number; left: number; height: number; oneLine: boolean; lineHeight: number } | null;
+    skipped: { top: number; bottom: number; left: number; height: number; whole: boolean; lineHeight: number } | null;
+    row: { top: number; bottom: number };
     ticker: number;
     w: number;
     h: number;
@@ -902,12 +905,11 @@ async function checkTvStatusRoom(tv: Page, good: Good, skipped: boolean): Promis
   if (!skipped) return;
   const s = room.skipped;
   check(s, `on ${GOOD_NAME[good]} the TV's status stage says which goods were skipped`);
-  const mid = (s.top + s.bottom) / 2;
   check(
-    mid >= room.bar.top && mid <= room.bar.bottom && s.left >= room.bar.right - 0.5,
-    `on ${GOOD_NAME[good]} the TV's skipped words sit in the picked count's row, to its right: y ${s.top}–${s.bottom} beside the count's ${room.bar.top}–${room.bar.bottom}, x from ${s.left} after the count's ${room.bar.right}`,
+    s.top >= room.row.top - 0.5 && s.bottom <= room.row.bottom + 0.5 && s.left >= room.bar.right - 0.5,
+    `on ${GOOD_NAME[good]} the TV's skipped words sit in the picked count's row, to its right: y ${s.top}–${s.bottom} in the row's ${room.row.top}–${room.row.bottom}, x from ${s.left} after the count's ${room.bar.right}`,
   );
-  check(s.oneLine && s.height <= s.lineHeight * 1.5, `on ${GOOD_NAME[good]} the TV's skipped words take one line, cut with an ellipsis: ${s.height} px for a ${s.lineHeight} px line, ${s.oneLine ? 'nowrap with an ellipsis' : 'wrapping'}`);
+  check(s.whole && s.height <= s.lineHeight * 2.5, `SWEEP-C10: on ${GOOD_NAME[good]} the TV's skipped words show whole, on at most two lines: ${s.height} px for a ${s.lineHeight} px line, ${s.whole ? 'whole' : 'cut'}`);
 }
 
 /** The TV's store box on the status stage: a label, a number and its padding, about 78 px; a squeezed box is a few px. */

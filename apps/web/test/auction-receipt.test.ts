@@ -169,8 +169,8 @@ describe('A-5 the receipt words, from hand-built views (the review fix round)', 
   });
 });
 
-describe("the TV's status line (WS6 ruling on #204)", () => {
-  it('B-AC-A5-12: the status line lists only the skipped goods, on one truncated line, with no reasons', () => {
+describe("the TV's status line (WS6 ruling on #204, amended by SWEEP-C10)", () => {
+  it('B-AC-A5-12: the status line lists the skipped goods with their reasons, as the phone does, wrapping rather than cut', () => {
     const view = toClose().game.viewFor(null);
     const skipped: NonNullable<MuleView['auction']>['skipped'] = [
       { good: 'rareEarth', reason: 'nobody has any' },
@@ -179,8 +179,9 @@ describe("the TV's status line (WS6 ruling on #204)", () => {
     ];
     const html = tvScreen({ ...view, auction: { ...view.auction!, stage: 'status', skipped } });
     expect(html).toContain('data-testid="tv-status"');
-    expect(textOf(html, 'skipped')).toBe('Skipped: Rare earth, Alloy, Electronics');
-    expect(html).toMatch(/<p class="[^"]*\btruncate\b[^"]*" data-testid="skipped"/);
+    expect(textOf(html, 'skipped')).toBe('Skipped: Rare earth, Alloy, Electronics: nobody has any, nobody buys, nobody trading');
+    expect(html).toMatch(/<p class="[^"]*" data-testid="skipped"/);
+    expect(html).not.toMatch(/<p class="[^"]*\btruncate\b[^"]*" data-testid="skipped"/);
   });
 });
 

@@ -132,6 +132,12 @@ Does: The Governor commissions a prestige object for the colony; the fund and do
 Legal when: the game plays with the colony's council (else: "This game plays without the colony's council"); the votes are over (else: "Commission once the votes are over"); you are the Governor (else: "Only the Governor commissions for the colony"); the object is one the colony can build (else: "The colony can't build that"); the colony has none of it (else: "The colony already has a <name>"); the colony is not already building it (else: "The colony is already building the <name>").
 Cost: free.
 
+### donate
+In: planning. Args: id (park | hospital | observatory | stadium | spaceport), credits (number).
+Does: Gives credits from your money toward the colony's commissioned prestige object; its plaque names you with the sum, and the gift counts toward your vote weight. It leaves your Worth as it was: what you give counts as donated.
+Legal when: the game plays with the colony's council (else: "This game plays without the colony's council"); it is planning (else: "Donate in planning"); the object is commissioned and still being funded (else: "Nothing is being funded"); it is a whole number of credits, at least 1 (else: "Give at least 1 cr or 1 unit"); you have the credits (else: "You have <money> cr"); the object still needs that many credits (else: "The <name> needs only <credits> cr more").
+Cost: yes, as it says under Does.
+
 ### payStrike
 In: planning.
 Does: The Governor pays this month's general strikers from the colony fund, so the struck good produces in full.
