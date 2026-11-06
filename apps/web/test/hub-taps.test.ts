@@ -178,7 +178,7 @@ describe('the planning hub, tapped (UX audit)', () => {
     expect(sent).toEqual([{ type: 'drone', plots: [{ x: 1, y: 0 }, { x: 2, y: 0 }] }]);
   });
 
-  it('C2: after Scan the picked plots keep their SCAN chip and the rail says "Scanning…" for a second, then the Drone report, then one drone each planning', () => {
+  it('C2: after Scan the picked plots keep their SCAN chip and the rail says "Scanning…" for a second, then the Drone report, closed by the month of the next drone; the footer gives its room to the report', () => {
     vi.useFakeTimers();
     try {
       mount(VIEW);
@@ -199,7 +199,9 @@ describe('the planning hub, tapped (UX audit)', () => {
       for (const id of ['report-1-0', 'report-2-0']) expect(findTestid(id), id).toBeDefined();
       for (const id of ['map-plot-1-0', 'map-plot-2-0']) expect(text(id), `${id}: the chip gives way to what was found`).not.toContain('SCAN');
       expect(findTestid('scan')).toBeUndefined();
-      expect(text('drone-used')).toBe('One drone each planning: the next in month 3.');
+      expect(text('drone-used')).toBe('Next drone: month 3.');
+      expect(findTestid('drone-used', byTestid('scan-report')), 'the next drone closes the report').toBeDefined();
+      expect(text('actions'), "the footer holds only Ready's bar: its room goes to the report").not.toMatch(/drone|Scan/i);
     } finally {
       vi.useRealTimers();
     }
@@ -209,12 +211,12 @@ describe('the planning hub, tapped (UX audit)', () => {
     mount(SCANNED);
     tap('tool-drone');
     expect(findTestid('scan-report')).toBeDefined();
-    expect(text('report-1-0')).toContain('Plot 2·1 · Plains');
+    expect(text('report-1-0')).toContain('2·1 · Plains');
     expect(text('report-1-0')).toContain('best for Food');
-    expect(text('scan-report')).toContain('ONLY YOU');
+    expect(text('scan-report')).toContain('Only you');
     expect(findTestid('scan')).toBeUndefined();
     expect(findTestid('drone-hint')).toBeUndefined();
-    expect(text('drone-used')).toBe('One drone each planning: the next in month 3.');
+    expect(text('drone-used')).toBe('Next drone: month 3.');
     expect(host.textContent).not.toMatch(/on its way|read at the land grant/i);
   });
 
@@ -224,6 +226,48 @@ describe('the planning hub, tapped (UX audit)', () => {
     tap('map-plot-1-0');
     expect(byTestid('drone-pick').textContent).toContain('Plot 2·1');
     expect(findTestid('special-line', byTestid('drone-pick'))?.getAttribute('data-kind')).toBe('oasis');
+  });
+
+  /** Lena owns 1·1, analysed with Crystite 2, and 2·1, not analysed, with a Food MULE; Ossa owns 4·1, its ground known too. */
+  const OWNED: MuleView = {
+    ...VIEW,
+    tiles: TILES.map((t) =>
+      t.x === 0 ? { ...t, owner: 's1', ground: { ...GROUND, crystite: 2 } } : t.x === 1 ? { ...t, owner: 's1', outfit: 'food' } : t.x === 3 ? { ...t, ground: GROUND } : t,
+    ),
+  };
+
+  it('C3: My plots lists every plot of yours once, an analysed one with its dots and gem, the other "Not analysed"; never Ossa\'s', () => {
+    mount(OWNED);
+    tap('tool-plots');
+    expect(text('my-plots')).toContain('My plots · 2');
+    const rows = host.findAll('button').filter((b) => b.getAttribute('data-testid')?.startsWith('plot-row-')).map((b) => b.getAttribute('data-testid'));
+    expect(rows).toEqual(['plot-row-0-0', 'plot-row-1-0']);
+    const analysed = byTestid('plot-row-0-0');
+    expect(findTestid('dots-food', analysed)?.getAttribute('data-n')).toBe('3');
+    expect(findTestid('dots-crystite', analysed)?.getAttribute('data-n')).toBe('2');
+    expect(findTestid('gem-crystite', analysed)).toBeDefined();
+    expect(findTestid('gem-rareEarth', analysed)).toBeUndefined();
+    expect(analysed.textContent).toContain('no MULE yet');
+    const unknown = byTestid('plot-row-1-0');
+    expect(unknown.textContent).toContain('Not analysed: walk to it in development and press Analyse.');
+    expect(unknown.textContent).toContain('Food MULE');
+    expect(findTestid('good-dots', unknown), 'unknown is not 0: no dots').toBeUndefined();
+  });
+
+  it('C3: a tap on a row selects its plot on the map; a tap on a plot of yours on the map selects its row; a tap elsewhere lets go', () => {
+    mount(OWNED);
+    tap('tool-plots');
+    expect(host.findAll('*').some((e) => e.getAttribute('data-selected') !== null)).toBe(false);
+    tap('plot-row-1-0');
+    expect(byTestid('map-plot-1-0').getAttribute('data-selected')).not.toBeNull();
+    expect(byTestid('plot-row-1-0').getAttribute('aria-pressed')).toBe('true');
+    tap('map-plot-0-0');
+    expect(byTestid('plot-row-0-0').getAttribute('aria-pressed')).toBe('true');
+    expect(byTestid('plot-row-1-0').getAttribute('aria-pressed')).toBe('false');
+    expect(byTestid('map-plot-0-0').getAttribute('data-selected')).not.toBeNull();
+    tap('map-plot-3-0');
+    expect(byTestid('plot-row-0-0').getAttribute('aria-pressed'), "Ossa's plot is not in the list: nothing selected").toBe('false');
+    expect(byTestid('map-plot-3-0').getAttribute('data-selected')).toBeNull();
   });
 
   it('H-4: a tap on "2nd of 2" opens the standings, and Close shuts them', () => {

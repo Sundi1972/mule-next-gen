@@ -24,6 +24,7 @@ import {
   storeForSale,
   storePaysFor,
   storeOnStrike,
+  storeBuyPrice,
   storeSellLine,
   storeSellPrice,
   tileIndex,
@@ -650,7 +651,7 @@ export function shortfallHold(obs: GameState, me: string, good: Good): { whole: 
 export function expectedPrices(obs: GameState, good: Good): { sell: number; buy: number } {
   const a = obs.auction;
   const posted = obs.store.posted[good];
-  const storeBuy = a?.good === good ? (a.storeBudget > 0 ? a.storeBuy : 0) : Math.floor(posted * (1 - PRICE.storeSpread));
+  const storeBuy = a?.good === good ? (a.storeBudget > 0 ? a.storeBuy : 0) : storeBuyPrice(posted);
   const ship = shipInPort(obs) ? (shipPrice(obs, good) ?? 0) : 0;
   const sell = Math.max(storeBuy, ship, Math.floor(posted * STRATEGIST.trade.sellFloor));
   const storeSell = a?.good === good ? a.storeSell : storeSellPrice(posted);
