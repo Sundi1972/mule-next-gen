@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  advancePhase,
   buyMule,
+  COLONY,
   createGame,
   eventChance,
   EVENTS,
@@ -10,6 +12,7 @@ import {
   RuleError,
   type EventRow,
   type GameState,
+  type MonthReport,
   type MoodBand,
 } from '../src/index.js';
 
@@ -48,7 +51,7 @@ const MID = (band: MoodBand) => Math.round((EDGES[band][0] + EDGES[band][1]) / 2
 
 /**
  * A politics game in the first month events may roll, with the mood at `h`: p0 works three Food plots, p1 two Food
- * plots and an Energy plot, p2 one Energy plot, p3 nothing; plain ground, every player with Energy and Water to spare;
+ * plots and an Energy plot, p2 one Energy plot, p3 nothing; rich ground and no specials, every player with Energy and Water to spare;
  * Food at its usual price; clean air.
  */
 function colonyAt(h: number, { seed = 4, politics = true } = {}): GameState {
@@ -59,7 +62,10 @@ function colonyAt(h: number, { seed = 4, politics = true } = {}): GameState {
   for (const t of state.tiles) delete t.special;
   const land = state.tiles.filter((t) => t.terrain !== 'store');
   const plots: [string, 'food' | 'energy'][] = [['p0', 'food'], ['p0', 'food'], ['p0', 'food'], ['p1', 'food'], ['p1', 'food'], ['p1', 'energy'], ['p2', 'energy']];
-  plots.forEach(([owner, outfit], i) => Object.assign(land[i * 3]!, { owner, outfit, traits: [], pollution: 0 }));
+  plots.forEach(([owner, outfit], i) => {
+    const t = land[i * 3]!;
+    Object.assign(t, { owner, outfit, traits: [], pollution: 0, ground: { ...t.ground, food: 6, energy: 6 } });
+  });
   for (const p of state.players) Object.assign(p.stock, { energy: 20, water: 20, food: 10 });
   state.store.posted.food = GOOD_CONFIG.food.refPrice;
   state.air = 0;
@@ -135,5 +141,84 @@ describe('C26 PR-B: the store strike, in development', () => {
     const plain = developing(MID('unrest'));
     buyMule(plain, 'p0');
     expect(plain.players[0]!.carriedMule).toBe('empty');
+  });
+});
+
+/** Production from development, as the month's phases run it; the report it files. */
+function produce(state: GameState) {
+  state.phase = 'development';
+  advancePhase(state);
+  return state.history.at(-1)!;
+}
+
+/** Each of `tiles`' output in `report`. */
+const madeAt = (report: MonthReport, tiles: number[]) => tiles.map((i) => report.lines!.find((l) => l.tile === i)!.made);
+const plotsOf = (state: GameState, owner: string, good?: string) =>
+  state.tiles.flatMap((t, i) => (t.owner === owner && t.outfit && (good === undefined || t.outfit === good) ? [i] : []));
+/** Last month's report, with the air points each player caused. */
+const caused = (state: GameState, by: Record<string, number>) => state.history.push({ month: state.month - 1, pollutionBy: by } as MonthReport);
+
+describe('C26 PR-B: the walkout, in production', () => {
+  it('INV-C26-11 (walkout odds): Restless +0.5, Unhappy +2, Unrest +4, the richest +1; never when Thriving', () => {
+    // p2 is neither the richest nor the poorest; p0 is the richest (cash plus land, a tie to the first seat).
+    expect(chances('walkout', 'production', { player: 'p2' })).toEqual(close([0, 0, 0.005, 0.02, 0.04]));
+    expect(chances('walkout', 'production', { player: 'p0' })).toEqual(close([0, 0.01, 0.015, 0.03, 0.05]));
+  });
+
+  it("INV-C26-12 (walkout's polluter part): +0.5 for every air point the player caused, only when Restless or worse, up to the row's cap", () => {
+    const tweak = (points: number) => (s: GameState) => caused(s, { p2: points });
+    expect(chances('walkout', 'production', { player: 'p2', tweak: tweak(10) })).toEqual(close([0, 0, 0.055, 0.07, 0.09]));
+    expect(chances('walkout', 'production', { player: 'p2', tweak: tweak(1000) })).toEqual(close([0, 0, 0.9, 0.9, 0.9]));
+  });
+
+  it("INV-C26-13 (walkout's effect): every working plot of the player's most-worked good makes 20%, floored; its plots carry their deltas; no plot, no walkout", () => {
+    only([]);
+    const full = produce(colonyAt(MID('unrest')));
+    only(['walkout']);
+    const state = colonyAt(MID('unrest'));
+    const report = produce(state);
+    const walkouts = report.events!.filter((e) => e.key === 'walkout');
+    // p3 works no plot, so it has no walkout; p1 works two Food plots and one Energy plot, so Food walks out.
+    expect(walkouts.map((e) => [e.player, e.scope, e.sign, e.phase])).toEqual(['p0', 'p1', 'p2'].map((p) => [p, 'personal', 'bad', 'production']));
+    for (const [player, good] of [['p0', 'food'], ['p1', 'food'], ['p2', 'energy']] as const) {
+      const hit = plotsOf(state, player, good);
+      const before = madeAt(full, hit);
+      expect(before.every((n) => n >= 5)).toBe(true);
+      const after = before.map((n) => Math.floor(n * 0.2));
+      expect(madeAt(report, hit)).toEqual(after);
+      const event = walkouts.find((e) => e.player === player)!;
+      expect(event.plots.map((p) => [p.index, p.good, p.delta])).toEqual(hit.map((i, k) => [i, good, after[k]! - before[k]!]));
+    }
+    // p1's Energy plot works in full.
+    const energy = plotsOf(state, 'p1', 'energy');
+    expect(madeAt(report, energy)).toEqual(madeAt(full, energy));
+  });
+
+  it("FM-C26-7 (walkout's pick): a tie between the player's most-worked goods goes to the event's dice, each good on some seed, and replays", () => {
+    only(['walkout']);
+    const tied = (seed: number) => {
+      const state = colonyAt(MID('unrest'), { seed });
+      const free = state.tiles.find((t) => t.terrain !== 'store' && !t.owner)!;
+      Object.assign(free, { owner: 'p1', outfit: 'energy', traits: [], pollution: 0 });
+      return state;
+    };
+    const pick = (seed: number) => produce(tied(seed)).events!.find((e) => e.key === 'walkout' && e.player === 'p1')?.plots.map((p) => p.good);
+    const picks = [1, 2, 3, 4, 5, 6, 7, 8].map(pick);
+    for (const goods of picks) expect([['food', 'food'], ['energy', 'energy']]).toContainEqual(goods);
+    expect(new Set(picks.map((g) => g[0]))).toEqual(new Set(['food', 'energy']));
+    expect(pick(3)).toEqual(pick(3));
+  });
+
+  it('FM-C26-8 (walkout and general strike): on the same plot they stack in fired order, the unpaid strike last, each floored', () => {
+    only(['generalStrike']);
+    const state = colonyAt(MID('unrest'));
+    firePhase(state, 'planning');
+    only([]);
+    const full = produce(colonyAt(MID('unrest')));
+    only(['walkout']);
+    const report = produce(state);
+    const food = plotsOf(state, 'p0', 'food');
+    expect(report.events!.map((e) => [e.key, e.player])).toContainEqual(['walkout', 'p0']);
+    expect(madeAt(report, food)).toEqual(madeAt(full, food).map((n) => Math.floor(Math.floor(n * 0.2) * COLONY.strike.output)));
   });
 });
