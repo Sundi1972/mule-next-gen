@@ -7,8 +7,11 @@ import { BRAIN, type GameState, type Playbook, type PlayerId } from '@mule/engin
 import {
   atAuctionStart,
   landBrief,
+  newPlots,
+  ownedPlots,
   phaseBrief,
   playbookFrom,
+  resolveGranted,
   toolsFor,
   WRITER_SYSTEM,
   type AiSeat,
@@ -69,6 +72,11 @@ interface Ask {
   controller: AbortController;
   /** A land ask's draft development for the month, whose edits ride on the land write (PM ruling, 5 Nov, option C). */
   development?: Playbook | null;
+  /**
+   * The seat's plots when its land write was asked, at upkeep before the grant (no plot changes hands between them):
+   * a land ask's, and the development part's it carried, against which a route's "granted" plot is found (B fix 4 a).
+   */
+  owned?: ReadonlySet<number>;
 }
 
 const isDevelopmentPath = (path: string | null) => path !== null && path.startsWith('/development/');
@@ -150,7 +158,7 @@ export class Playbooks {
           console.error(`playbooks: seat ${seat.id} has no development draft for month ${month}: ${messageOf(err)}`);
         }
         const brief = landBrief(state, seat.mind, seat.brain.persona, drafted.land, seat.brain.heard(), last, development?.development ?? null);
-        const ask: Ask = { month, written: null, started: false, controller: new AbortController(), development };
+        const ask: Ask = { month, written: null, started: false, controller: new AbortController(), development, owned: ownedPlots(state, seat.id) };
         this.asks.set(seat.id, ask);
         seat.playbookAsked(month);
         const waitMs = this.options.waitMs?.strategy ?? WRITE_CALLS.strategy.timeoutMs;
@@ -205,7 +213,7 @@ export class Playbooks {
           const { land, development } = splitDevelopment(asked.written);
           asked.written = land;
           if (development && asked.development) {
-            this.phaseAsks.set(`${seat.id}/development`, { month: state.month, written: development, started: false, controller: new AbortController() });
+            this.phaseAsks.set(`${seat.id}/development`, { month: state.month, written: development, started: false, controller: new AbortController(), owned: asked.owned });
           }
         }
       }
@@ -293,7 +301,12 @@ export class Playbooks {
         // development's was shown at upkeep, before the land grant changed what the seat owns; the auction's in
         // production, before the store posted its prices and the month's events ran.
         const draft = seat.draft(state, phase);
-        const { written, dropped } = withoutFlippedGoods(ask.written, ask.roles, draft);
+        const flips = withoutFlippedGoods(ask.written, ask.roles, draft);
+        // A route's "granted" plot is the one the seat gained since its land write was asked: found in the ranking of
+        // the land playbook that took effect, else a land-auction win (B fix 4 a).
+        const granted = this.withGranted(flips.written, state, seat.id, ask.owned);
+        const written = granted.written;
+        const dropped = [...flips.dropped, ...granted.dropped];
         made = playbookFrom(seat.validator(), state, draft, written);
         if (dropped.length > 0 && made.feedback) {
           // One new list for both: by 'llm', the feedback and the playbook share playbookFrom's rejected array.
@@ -311,6 +324,17 @@ export class Playbooks {
       seat.adopt(made.playbook);
       this.options.record?.({ seat: seat.id, month: state.month, phase, playbook: made.playbook });
     }
+  }
+
+  /**
+   * The reply with its route's "granted" steps on the plot the seat gained since `owned` was taken, or cut where no plot
+   * was gained; what was cut comes back as dropped. A reply asked without `owned` (none rides on a land write) is kept.
+   */
+  private withGranted(written: WriterReply, state: GameState, seat: PlayerId, owned: ReadonlySet<number> | undefined): { written: WriterReply; dropped: NonNullable<Playbook['rejected']> } {
+    if (!owned) return { written, dropped: [] };
+    const ranking = this.playing.get(`${seat}/${state.month}`)?.landGrant?.ranked ?? [];
+    const { edits, dropped } = resolveGranted(written.reply.edits, newPlots(state, seat, owned, ranking));
+    return { written: { ...written, reply: { ...written.reply, edits } }, dropped };
   }
 
   /** Hands a plan's line to the game's speak; a blank or absent line says nothing, and a speak that throws stops no play. */

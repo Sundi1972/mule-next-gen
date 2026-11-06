@@ -125,6 +125,17 @@ describe("Claude's tools (C9)", () => {
     expect(answer.rejected).toEqual([{ path: '/strategy/cashFloor', to: -5, why: 'out of bounds' }]);
   });
 
+  it('B fix 4 (a): whatIf plays a route on "granted" as play does: on the plot the seat gained in the month, else cut with why, never refused as no such plot', async () => {
+    const state = fixture();
+    const route = [{ act: 'buyMule' }, { act: 'outfit', outfit: 'food' }, { act: 'install', plot: 'granted' }];
+    const answer = (await parsed(toolsFor(state, 'a', simFor(state)).run('whatIf', { edits: [{ path: '/development/route', to: route }] }))) as {
+      rejected: { path: string; why: string }[];
+    };
+    const onRoute = answer.rejected.filter((r) => r.path === '/development/route');
+    expect(onRoute.map((r) => r.why).filter((why) => /no such plot/.test(why))).toEqual([]);
+    for (const r of onRoute) expect(r.why).toBe('no plot was granted this month, so steps 0 on are dropped');
+  });
+
   it('whatIf plays at most BRAIN.whatIfsPerWrite months for one set of tools, then answers limit', async () => {
     const state = fixture();
     const tools = toolsFor(state, 'a', simFor(state));

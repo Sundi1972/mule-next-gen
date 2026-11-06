@@ -97,9 +97,9 @@ describe("C2: the writer takes a phase brief's paths", () => {
   const sha = (v: unknown) => createHash('sha256').update(JSON.stringify(v)).digest('hex');
 
   it("C2: the land reply schema is byte for byte what it was, for both corners flags, so the land request's cache holds", () => {
-    // Re-pinned for GAME.claimsPerGrant 2 → 1 (trunk, 5 Nov): the claims enum is [0, 1], so the land cache reset once.
-    expect(sha(replySchema(true))).toBe('6975f613536e698b00b8751de3e7adae8a6dc6b121cc7bf63370192e75841e2f');
-    expect(sha(replySchema(false))).toBe('8425081cf9c0bb23b4d70a79080cb7fe1daf3f49ee676bbb74b71c566fe3abe0');
+    // Re-pinned for B fix 5 (WS9 ruling, 6 Nov): no claims, press share, monopolyTarget or cashFloor, so the land cache reset once.
+    expect(sha(replySchema(true))).toBe('3ade7b1dd903a650dee4045377354296f5a5543cc6a3ad09b39dfd35e97e77dd');
+    expect(sha(replySchema(false))).toBe('40d1107acb2c8987878fd8b1861091169b3588ca32ae451b9f21098de73954bf');
   });
 
   it("C2 (option C): the month's land schema, land and development paths together, is the same bytes for every brief of a level", () => {
@@ -113,9 +113,10 @@ describe("C2: the writer takes a phase brief's paths", () => {
     later.month = 4;
     expect(JSON.stringify(of(later))).toBe(JSON.stringify(a));
     expect(sha(a)).not.toBe(sha(replySchema(true)));
-    // The land request's schema from 5 Nov (option C): pinned, so a change to it is a deliberate cache reset.
-    expect(sha(a)).toBe('87e780aae59a57a6aa8f6d24f9ec32e7af301fb93426757dbb48acb235fcdb02');
-    expect(sha(replySchema(false, [...LAND_OFFERS, ...DEVELOPMENT_OFFERS], true))).toBe('9d2ecadba756d64bd6c8420fc7bae591fa8bddfd3116ee6a96d3abea6c459b7c');
+    // The land request's schema since B fix 4 (a) (7 Nov: a route step's plot may be "granted"): pinned, so a change to
+    // it is a deliberate cache reset.
+    expect(sha(a)).toBe('5db4978f1e7a15671f1e7480578866407904de87d5f865efef7b5c8a352360e3');
+    expect(sha(replySchema(false, [...LAND_OFFERS, ...DEVELOPMENT_OFFERS], true))).toBe('86103ba7b46952a704c8a202231d35ee31f81eb5714737de7a2a28f5771d7ca4');
   });
 
   it("C2: a full auction brief's schema compiles: offers with the same value type share one branch with a path enum, so 6 goods take 3 branches, not 30 (the API refused 30 in the PR-5 pilot), and every offered path is in exactly one", () => {
@@ -151,11 +152,11 @@ describe("C2: the writer takes a phase brief's paths", () => {
     const plot = PLOTS(state)[1]!;
     const brief = phaseBrief(state, mind, PERSONAS.trader, devDraft(state), 'development', [], {});
     const reply = {
-      strategy: { kind: 'specialist', moneyMaker: 'smithore', cashFloor: 1, reason: 'x' },
+      strategy: { kind: 'specialist', moneyMaker: 'smithore', reason: 'x' },
       edits: [
         { path: '/development/route', to: [{ act: 'buyMule', plot: null, outfit: null }, { act: 'outfit', plot: null, outfit: 'energy' }, { act: 'install', plot, outfit: null }], reason: 'Energy first.' },
         { path: '/development/timeBudgetMs', to: 20_000, reason: 'Quick.' },
-        { path: '/landGrant/claims', to: 1, reason: 'Wrong phase.' },
+        { path: '/landGrant/ranked', to: 'A', reason: 'Wrong phase.' },
       ],
       line: '',
     };
@@ -165,7 +166,7 @@ describe("C2: the writer takes a phase brief's paths", () => {
       { path: '/development/route', to: [{ act: 'buyMule' }, { act: 'outfit', outfit: 'energy' }, { act: 'install', plot }], reason: 'Energy first.' },
       { path: '/development/timeBudgetMs', to: 20_000, reason: 'Quick.' },
     ]);
-    expect(refused).toEqual(expect.arrayContaining([{ path: '/landGrant/claims', cause: 'path_not_offered' }]));
+    expect(refused).toEqual(expect.arrayContaining([{ path: '/landGrant/ranked', cause: 'path_not_offered' }]));
     expect(refused.filter((r) => r.path?.startsWith('/strategy/')).every((r) => r.cause === 'path_not_offered')).toBe(true);
     expect(refused.length).toBeGreaterThan(1);
   });

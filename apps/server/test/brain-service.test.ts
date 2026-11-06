@@ -56,7 +56,7 @@ const BRIEF: LandBrief = { text: 'You are P0. The land brief.', plans: [{ id: 'A
 const ASK: WriteAsk = { brief: BRIEF, system: 'The manual.', waitMs: 5_000 };
 /** A writer reply the model could send: a strategy and one plan pick. */
 const WRITER_TEXT = JSON.stringify({
-  strategy: { kind: 'specialist', moneyMaker: 'smithore', monopolyTarget: null, cashFloor: 150, reason: 'Ore pays.' },
+  strategy: { kind: 'specialist', moneyMaker: 'smithore', reason: 'Ore pays.' },
   edits: [{ path: '/landGrant/ranked', to: 'A', reason: 'River.' }],
   line: 'Ore.',
 });

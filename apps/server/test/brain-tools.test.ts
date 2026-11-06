@@ -14,7 +14,7 @@ import { runTable } from './playbook-fakes.js';
 const SEAT: BrainSeat = { id: 'p0', persona: 'trader', level: 'trader' };
 const STRATEGY: Strategy = { kind: 'builder', moneyMaker: 'food', monopolyTarget: null, cashFloor: 200, landTarget: { plots: 6, byMonth: 6 }, stances: {}, reason: 'Grow steady.' };
 const BRIEF: LandBrief = { text: 'You are P0. The land brief.', plans: [{ id: 'A', label: 'Take the river', ranked: [{ plot: 12, value: 410 }] }], corners: true, strategy: STRATEGY, offers: LAND_OFFERS, strategyOffered: true };
-const ANSWER = JSON.stringify({ strategy: { kind: 'builder', moneyMaker: 'food', monopolyTarget: null, cashFloor: 200, reason: 'Grow.' }, edits: [{ path: '/landGrant/ranked', to: 'A', reason: 'River.' }], line: '' });
+const ANSWER = JSON.stringify({ strategy: { kind: 'builder', moneyMaker: 'food', reason: 'Grow.' }, edits: [{ path: '/landGrant/ranked', to: 'A', reason: 'River.' }], line: '' });
 
 /** One tool the model may call; `answer` is what it returns, or what it throws. */
 const DEF: ToolDef = { name: 'worth', description: 'Your Worth.', input_schema: { type: 'object', properties: {} } };
@@ -154,6 +154,41 @@ describe('the tool loop (C9, RULE-A4)', () => {
       const played = JSON.parse(whatIf!.content) as { month: number; worth: { total: number } };
       expect(played.month).toBe(1);
       expect(played.worth.total).toBeGreaterThan(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("B fix 4 (c): whatIf in the land write plays the month's development part: a development edit is played, never refused 'not in this playbook'", async () => {
+    vi.useFakeTimers();
+    try {
+      const isWrite = (params: SdkParams) => promptOf(params).user.includes('What you may change:');
+      const quick = { path: '/development/route', to: [{ act: 'pub' }], reason: 'Cash now.' };
+      const sdk = fakeSdk((_n, params) => {
+        if (!isWrite(params)) return sdkMessage(JSON.stringify({ option: 'A', line: '' }));
+        if (params.messages.length === 1)
+          return {
+            ...sdkMessage('', {}, 'tool_use'),
+            content: [
+              { type: 'tool_use', id: 'w0', name: 'whatIf', input: { edits: [] } },
+              { type: 'tool_use', id: 'w1', name: 'whatIf', input: { edits: [quick] } },
+            ],
+          } as unknown as SdkMessage;
+        return sdkMessage(JSON.stringify({ edits: [], line: '' }));
+      });
+      const fake = fakeContext({ table: THREE });
+      const game = new MuleGame(fake.ctx, 10, { maxMonths: 1, politics: false, brain: brainOn(sdk) });
+      game.start(THREE);
+      await runTable(game, fake, (v) => v.phase === 'landGrant');
+
+      const write = sdk.requests.find((r) => isWrite(r.params) && r.params.messages.length > 1)!;
+      const [asDrafted, noTime] = (resultsIn(write.params) as { content: string; is_error?: boolean }[]).map((r) => {
+        expect(r.is_error).toBeUndefined();
+        return JSON.parse(r.content) as { worth: { total: number }; rejected: { path: string; why: string }[] };
+      });
+      expect(noTime!.rejected).toEqual([]);
+      // Straight to the pub buys no MULE and takes the pub's cash: the month played differs from the draft's.
+      expect(noTime!.worth.total).not.toBe(asDrafted!.worth.total);
     } finally {
       vi.useRealTimers();
     }

@@ -15,6 +15,8 @@ export const CAUSES = [
   'bad_shape',
   'bad_kind',
   'bad_good',
+  // No writer refuses for it since cashFloor is not offered (WS9 ruling, 6 Nov); kept for the strategy spike's replies
+  // and for records written before.
   'bad_cash_floor',
   'reason_too_long',
   'plan_not_offered',
@@ -31,11 +33,13 @@ export type { RecordedWrite };
 const KIND_SET: Record<Strategy['kind'], true> = { builder: true, specialist: true, monopolist: true, landBaron: true, politician: true, spoiler: true };
 const STRATEGY_KINDS = Object.keys(KIND_SET) as Strategy['kind'][];
 
-/** The strategy fields the writer may set, in the order its edits list them. */
-const STRATEGY_FIELDS = ['kind', 'moneyMaker', 'monopolyTarget', 'cashFloor', 'reason'] as const;
+/**
+ * The strategy fields the writer may set, in the order its edits list them, for every level: the ones play reads.
+ * monopolyTarget and cashFloor are not offered: play does not read them (WS9 ruling, 6 Nov); they may return once WS9
+ * wires them.
+ */
+const STRATEGY_FIELDS = ['kind', 'moneyMaker', 'reason'] as const;
 type StrategyField = (typeof STRATEGY_FIELDS)[number];
-/** The fields a seat that never corners may set: no monopolyTarget. */
-const fieldsFor = (corners: boolean): readonly StrategyField[] => (corners ? STRATEGY_FIELDS : STRATEGY_FIELDS.filter((f) => f !== 'monopolyTarget'));
 const strategyPath = (f: StrategyField) => `/strategy/${f}`;
 const FIELD_OF = new Map(STRATEGY_FIELDS.map((f) => [strategyPath(f), f]));
 /** A path is recorded in a refusal only when some brief offers it; any other comes back as null. */
@@ -60,12 +64,6 @@ export interface WriterSchema {
 }
 
 /**
- * The reply's JSON schema for a brief: one per level's corners flag and offered paths, so the request stays
- * byte-stable (the land brief's, by default). A seat that never corners is offered neither 'monopolist' nor
- * monopolyTarget; a brief that offers no strategy has none in its schema. Plan letters are any option letter; the writer
- * checks them against the brief, and checks each reason's length (structured outputs take no string-length constraint).
- */
-/**
  * The offers as schema branches: offers whose value has the same type share one branch, its paths an enum, in first-offer
  * order. The API refuses a schema of one branch per path past a few dozen (an auction of 6 goods offers 30 paths), and
  * offers of distinct types keep a branch each, so the land schema's bytes are unchanged.
@@ -81,19 +79,22 @@ function byValueType(offers: readonly EditOffer[]): { paths: string[]; to: objec
   return [...branches.values()];
 }
 
+/**
+ * The reply's JSON schema for a brief: one per level's corners flag and offered paths, so the request stays
+ * byte-stable (the land brief's, by default). A seat that never corners is not offered 'monopolist'; a brief that
+ * offers no strategy has none in its schema. Plan letters are any option letter; the writer checks them against the
+ * brief, and checks each reason's length (structured outputs take no string-length constraint).
+ */
 export function replySchema(corners: boolean, offers: readonly EditOffer[] = LAND_OFFERS, strategyOffered = true): WriterSchema {
   const field: Record<StrategyField, object> = {
     kind: { type: 'string', enum: corners ? [...STRATEGY_KINDS] : STRATEGY_KINDS.filter((k) => k !== 'monopolist') },
     moneyMaker: goodOrNull,
-    monopolyTarget: goodOrNull,
-    cashFloor: { type: 'integer' },
     reason: { type: 'string' },
   };
-  const fields = fieldsFor(corners);
   const strategy: NonNullable<WriterSchema['properties']['strategy']> = {
     type: 'object',
-    properties: Object.fromEntries(fields.map((f) => [f, field[f]])) as NonNullable<WriterSchema['properties']['strategy']>['properties'],
-    required: [...fields],
+    properties: Object.fromEntries(STRATEGY_FIELDS.map((f) => [f, field[f]])) as NonNullable<WriterSchema['properties']['strategy']>['properties'],
+    required: [...STRATEGY_FIELDS],
     additionalProperties: false,
   };
   return {
@@ -174,8 +175,8 @@ function readReply(text: string, stopReason: string | null): { edits: Proposed[]
   if (!Array.isArray(edits) || !edits.every(wellFormed)) return { cause: 'bad_shape' };
   const proposed: Proposed[] = [];
   if ('strategy' in reply) {
-    // Both levels' schemas require every field but monopolyTarget; a Rookie's monopolyTarget is refused per edit.
-    if (!isObject(strategy) || !onlyKeys(strategy, STRATEGY_FIELDS, fieldsFor(false)) || typeof strategy.reason !== 'string') return { cause: 'bad_shape' };
+    // Every level's schema requires the same fields: a strategy with another (monopolyTarget, cashFloor) is not its shape.
+    if (!isObject(strategy) || !onlyKeys(strategy, STRATEGY_FIELDS, STRATEGY_FIELDS) || typeof strategy.reason !== 'string') return { cause: 'bad_shape' };
     for (const f of STRATEGY_FIELDS) if (f in strategy) proposed.push({ path: strategyPath(f), to: strategy[f], reason: strategy.reason, fromStrategy: true });
   }
   if (typeof line !== 'string') return { cause: 'bad_line' };
@@ -185,9 +186,9 @@ function readReply(text: string, stopReason: string | null): { edits: Proposed[]
 
 /** One proposed edit: accepted, with its `to` resolved, or refused with its cause. */
 function judgeEdit(e: Proposed, brief: WriterBrief, seen: Set<string>): { edit: PlanEdit } | { cause: Cause } {
-  const cornering = e.path === strategyPath('monopolyTarget') || (e.path === strategyPath('kind') && e.to === 'monopolist');
-  if (!brief.corners && cornering) return { cause: 'never_corners' };
-  const offered: readonly string[] = e.fromStrategy ? (brief.strategyOffered ? fieldsFor(brief.corners).map(strategyPath) : []) : brief.offers.map((o) => o.path);
+  // RULE-A3: 'monopolist' is never a kind for a level that does not corner, however it is sent.
+  if (!brief.corners && e.path === strategyPath('kind') && e.to === 'monopolist') return { cause: 'never_corners' };
+  const offered: readonly string[] = e.fromStrategy ? (brief.strategyOffered ? STRATEGY_FIELDS.map(strategyPath) : []) : brief.offers.map((o) => o.path);
   if (!offered.includes(e.path)) return { cause: 'path_not_offered' };
   if (seen.has(e.path)) return { cause: 'path_repeated' };
   seen.add(e.path);
@@ -197,10 +198,7 @@ function judgeEdit(e: Proposed, brief: WriterBrief, seen: Set<string>): { edit: 
     case strategyPath('kind'):
       return (STRATEGY_KINDS as readonly unknown[]).includes(e.to) ? { edit } : { cause: 'bad_kind' };
     case strategyPath('moneyMaker'):
-    case strategyPath('monopolyTarget'):
       return isGoodOrNull(e.to) ? { edit } : { cause: 'bad_good' };
-    case strategyPath('cashFloor'):
-      return Number.isInteger(e.to) ? { edit } : { cause: 'bad_cash_floor' };
     case '/landGrant/ranked': {
       const plan = brief.plans.find((p) => p.id === e.to);
       return plan ? { edit: { ...edit, to: plan.ranked } } : { cause: 'plan_not_offered' };
