@@ -6,7 +6,7 @@ import { useTableChat } from '../../chat/store';
 import { ThemeToggle } from '../../components/ThemeToggle';
 import { useClient } from '../../net/react';
 import { usePhoneGame } from '../game';
-import { myPlots, PlotRow } from '../plotInfo';
+import { myPlots, MyPlotsList } from '../plotInfo';
 import { ShellLayer, WIDE_PX } from '../Shell';
 import { ANALYSE_CARD_MS, analyseCard, type Plot } from './analyse';
 import { keyDown, keyUp } from './controls';
@@ -181,21 +181,26 @@ function PlotsChip({ open, onToggle, className }: { open: boolean; onToggle: () 
   );
 }
 
-/** Every plot you own with its goods' dots, over the stage's right side, from under the status to above the button. */
+/** Every plot you own with its goods' dots, over the stage's right side, between `at`'s top and bottom. */
 function PlotsPanel({ seat, at }: { seat: ArcadeSeat; at: { top: number; bottom: number } }) {
-  const mine = myPlots(seat.view, seat.me.id);
   return (
     <aside className="absolute right-3 z-30 flex w-[300px] flex-col gap-1 overflow-y-auto rounded-panel border-2 border-holo bg-panel/95 p-2 shadow-map" style={at} data-testid="plots-panel">
-      <span className="flex items-center justify-between">
-        <span className="font-display text-sm font-semibold">My plots · {mine.length}</span>
-        <span className="text-[10px] text-ink-3">the clock keeps running</span>
-      </span>
-      {mine.length === 0 && <span className="text-[11px] leading-snug text-ink-2">No plots yet: claim one in the land grant.</span>}
-      {mine.map((t) => (
-        <PlotRow key={`${t.x},${t.y}`} t={t} dense />
-      ))}
+      <MyPlotsList tiles={myPlots(seat.view, seat.me.id)} note={<span className="text-[10px] text-ink-3">the clock keeps running</span>} />
     </aside>
   );
+}
+
+/** The plots chip and its list, open or not; a tap on the chip hands the keyboard back to the game. */
+function usePlotsChip(keys: { focus: () => void }): { open: boolean; toggle: () => void } {
+  const [open, setOpen] = useState(false);
+  return {
+    open,
+    // The game keeps the keyboard: a tapped chip would otherwise hold the focus, and the arrows with it.
+    toggle: () => {
+      setOpen((o) => !o);
+      keys.focus();
+    },
+  };
 }
 
 /**
@@ -237,13 +242,14 @@ const CARD_GAP = 6;
 
 /**
  * Where the Analyse card goes on the phone: beside its plot, to the right unless that runs off the stage; level with the
- * plot's top in the map's upper half, with its bottom in the lower, so it never runs off the screen.
+ * plot's top in the map's upper half, never above `below` (the status bar's foot, when there is one), with its bottom
+ * in the lower, so it never runs off the screen.
  */
-function cardBeside(L: PhoneLayout, plot: Plot): CSSProperties {
+function cardBeside(L: PhoneLayout, plot: Plot, below: number): CSSProperties {
   const b = tileBox(L, plot);
   const right = b.x + b.w + CARD_GAP;
   const left = right + ANALYSE_CARD_W <= L.stage.x + L.stage.w - CARD_GAP ? right : Math.max(L.stage.x + CARD_GAP, b.x - CARD_GAP - ANALYSE_CARD_W);
-  return b.y + b.h / 2 < L.stage.y + L.stage.h / 2 ? { left, top: Math.max(CARD_GAP, b.y) } : { left, bottom: Math.max(CARD_GAP, L.h - (b.y + b.h)) };
+  return b.y + b.h / 2 < L.stage.y + L.stage.h / 2 ? { left, top: Math.max(below + CARD_GAP, b.y) } : { left, bottom: Math.max(CARD_GAP, L.h - (b.y + b.h)) };
 }
 
 /** The plots panel's top: under the status's first row, so the chip that closes it stays in reach. */
@@ -259,12 +265,7 @@ export function PhoneLandscape({ frame }: { frame: { w: number; h: number } }) {
   const { seat, installs, now } = useArcadeSeat();
   const keys = useGameKeys();
   const found = useAnalyseCard(seat, now);
-  const [plotsOpen, setPlotsOpen] = useState(false);
-  // The game keeps the keyboard: a tapped chip would otherwise hold the focus, and the arrows with it.
-  const togglePlots = () => {
-    setPlotsOpen((o) => !o);
-    keys.focus();
-  };
+  const { open: plotsOpen, toggle: togglePlots } = usePlotsChip(keys);
   const { view, me } = seat;
   const space = seat.mine?.space ?? 'map';
   const L = phoneLayout(frame, space, view.width, view.height);
@@ -294,6 +295,8 @@ export function PhoneLandscape({ frame }: { frame: { w: number; h: number } }) {
   const { showing } = useTableChat();
   const bubbleOverBar = useBubbleMeets(stageRef, barRef, !!bar && !!showing);
   const barFaded = !!bar && (near(bar, mePx, L.cell * 0.5) || bubbleOverBar);
+  // The bar grows with its words past its least height: the screen redraws every frame, so its last drawn foot is current.
+  const barFoot = !bar ? 0 : barRef.current ? barRef.current.offsetTop + barRef.current.offsetHeight : bar.y + bar.h;
   // The card covers neither your colonist nor the target (AM-20): the first of its places clear of both. Under both
   // places at once (your plot in columns 5 to 9 of rows 1 to 3) it is not drawn: the button's words still say what a
   // press does there, and your colonist stays in sight (ruled with AM-20).
@@ -349,7 +352,9 @@ export function PhoneLandscape({ frame }: { frame: { w: number; h: number } }) {
           <div className={cx('absolute flex flex-col overflow-hidden', compactLeft ? 'gap-1.5 p-1' : 'gap-1.5 p-1.5')} style={{ left: L.left.x, top: L.left.y, width: L.left.w, height: L.left.h }} data-testid="phone-status-left" data-overlay="status-left">
             {/* Here, not in the right room: there, in the hall, your plots' box runs to the button and has no row to spare. */}
             <PlotsChip open={plotsOpen} onToggle={togglePlots} className={cx('self-start', compactLeft && 'px-1.5')} />
-            {roomy && <span className="label-caps text-[10px]! leading-tight">M{view.month} · Development</span>}
+            {/* Measured at 844 on the map: the chip, a three-row chat line and the keys hint fill the room, so the
+                month's label gives way while the hint shows. */}
+            {roomy && keys.focused && <span className="label-caps text-[10px]! leading-tight">M{view.month} · Development</span>}
             <Money seat={seat} className={compactLeft ? 'text-[11px] [&_*]:whitespace-nowrap' : 'text-base'} />
             {compactLeft ? <CompactClock seat={seat} /> : <SharedClock seconds={seat.seconds} total={seat.total} />}
             {/* With room, the newest line wraps under the clock and keeps its rows. */}
@@ -407,7 +412,7 @@ export function PhoneLandscape({ frame }: { frame: { w: number; h: number } }) {
         )}
         {plotsOpen && <PlotsPanel seat={seat} at={{ top: PLOTS_PANEL_TOP, bottom: L.h - L.button.y + 6 }} />}
         {card && <PlotCard seat={seat} now={now} at={{ left: card.x, top: card.y, width: card.w, maxHeight: card.h }} />}
-        {found && space === 'map' && <AnalyseCard t={found.tile} at={cardBeside(L, found.tile)} onClose={found.close} />}
+        {found && space === 'map' && <AnalyseCard t={found.tile} at={cardBeside(L, found.tile, barFoot)} onClose={found.close} />}
         {/* The banner box: the scramble's banner, or the guide's note (V-7); on the map along the bottom rows between the
             stick and the button, clear of your plots, in the hall across the walkway. It fades while you walk under it. */}
         <div className="pointer-events-none absolute z-20 flex items-center justify-center" style={css(banner)} data-testid="scramble-banner-box">
@@ -446,16 +451,21 @@ const KEYS: [string, string][] = [
   ['Mouse', 'hold a spot to walk to it; click the glowing thing to act'],
 ];
 
+/** The laptop's plots list sits this far inside its stage, top and bottom. */
+const LAPTOP_PANEL_INSET = 12;
+
 /** The laptop's rail beside its stage, and the page's padding and header, as the mock lays out 1440 × 900. */
 const RAIL = { w: 252, gap: 24, padX: 32, chrome: 160 };
 
 /**
  * Development on a laptop: where you are fills the stage, the map or the store's hall, and the rail holds the one
- * action button, your pace, the land underfoot and your MULE. Arrow keys, SPACE, or the mouse.
+ * action button, your pace, the land underfoot and your MULE. The header's Plots chip lists your plots over the stage's
+ * right side. Arrow keys, SPACE, or the mouse.
  */
 export function LaptopArcade({ frame }: { frame: { w: number; h: number } }) {
   const { seat, installs } = useArcadeSeat();
   const keys = useGameKeys();
+  const plots = usePlotsChip(keys);
   const { view, me, self } = seat;
   const arcade = useArcade();
   const stageW = Math.min(frame.w - 2 * RAIL.padX - RAIL.gap - RAIL.w, ((frame.h - RAIL.chrome) * view.width) / view.height);
@@ -473,6 +483,7 @@ export function LaptopArcade({ frame }: { frame: { w: number; h: number } }) {
             <SharedClock seconds={seat.seconds} total={seat.total} />
           </div>
           <Money seat={seat} className="text-2xl" />
+          <PlotsChip open={plots.open} onToggle={plots.toggle} className="px-3 py-1 text-sm" />
           <ThemeToggle />
         </header>
         <div className="flex min-h-0 flex-1 gap-6">
@@ -484,6 +495,7 @@ export function LaptopArcade({ frame }: { frame: { w: number; h: number } }) {
               </span>
             )}
             <OverCard seat={seat} installs={installs} className="inset-x-auto left-1/2 w-[420px] -translate-x-1/2" />
+            {plots.open && <PlotsPanel seat={seat} at={{ top: LAPTOP_PANEL_INSET, bottom: LAPTOP_PANEL_INSET }} />}
           </div>
           <aside className="flex min-w-0 flex-1 flex-col gap-4" data-testid="laptop-rail">
             <ActionButton verb={r.verb} detail={r.detail} enabled={r.enabled} onPress={arcade.press} hint="SPACE" />

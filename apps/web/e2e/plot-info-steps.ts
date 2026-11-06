@@ -35,6 +35,8 @@ const B_AC_3 = 'B-AC-3 (plot info): analysing a free plot holding Crystite shows
 const TO_DEVELOPMENT_MS = 90_000;
 /** The promise: the Analyse card shows within this long of the assay's end. */
 const CARD_MS = 1_000;
+/** How often the step reads the server's assay while it waits for one. */
+const ASSAY_POLL_MS = 5;
 /** How early the card may show against the server's assay end: the phone's estimate of the server clock, not a rule. */
 const CLOCK_SLACK_MS = 300;
 /**
@@ -347,15 +349,24 @@ async function analyseSaysWhatItFound(room: Room, screens: { lena: Page; kai: Pa
   steering.floor = { ...steering.floor, colonists: steering.floor.colonists.map((c) => (c.id === seat ? { ...c, space: 'map', x: plot.x + 0.5, y: plot.y + 0.5, moving: false } : c)) };
   const walking = screens.lena.locator('[data-phase=development] [data-testid=phone-game]');
   await appears(walking.getByTestId('action-verb').filter({ hasText: 'ANALYSE' }), STEP_MS, `${B_AC_3}: on plot ${plotName(plot)} Lena's button offers ANALYSE`);
-  await walking.getByTestId('action-button').click({ timeout: STEP_MS });
-
+  // Watched from the server's side from before the press: at the smoke's phaseScale an assay lasts under a second, and a
+  // poll through the browser can come back after it is over.
+  const me = state.players.find((p) => p.id === seat)!;
+  const seen: { assayEnd: number | null; analysed: boolean } = { assayEnd: null, analysed: false };
+  const watch = setInterval(() => {
+    seen.analysed ||= me.analysed.includes(index(plot));
+    seen.assayEnd ??= assayEndOf(room, seat);
+  }, ASSAY_POLL_MS);
   const pressed = Date.now();
-  let assayEnd = assayEndOf(room, seat);
-  while (assayEnd === null && Date.now() < pressed + STEP_MS) {
-    await screens.lena.waitForTimeout(25);
-    assayEnd = assayEndOf(room, seat);
+  try {
+    await walking.getByTestId('action-button').click({ timeout: STEP_MS });
+    while (seen.assayEnd === null && Date.now() < pressed + STEP_MS) await new Promise((r) => setTimeout(r, ASSAY_POLL_MS));
+  } finally {
+    clearInterval(watch);
   }
-  check(assayEnd !== null, `${B_AC_3}: the server has Lena assaying plot ${plotName(plot)} within ${STEP_MS} ms of the press`);
+  check(seen.analysed, `${B_AC_3}: the press analysed plot ${plotName(plot)} on the server`);
+  const assayEnd = seen.assayEnd;
+  check(assayEnd !== null, `${B_AC_3}: the server had Lena assaying plot ${plotName(plot)} within ${STEP_MS} ms of the press`);
   const card = walking.getByTestId('analyse-card');
   await appears(card, Math.max(1, assayEnd + CARD_MS - Date.now()), `${B_AC_3}: the card shows within ${CARD_MS} ms of the assay's end`);
   const shownAt = Date.now();

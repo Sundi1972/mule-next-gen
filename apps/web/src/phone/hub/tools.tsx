@@ -8,7 +8,7 @@ import { StrikeMap } from '../../components/Strike';
 import { useClient } from '../../net/react';
 import { usePhoneGame } from '../game';
 import { GroundCard } from '../ground';
-import { droneReport, myPlots, nextDroneWords, PlotRow, ScanReport, useScanning } from '../plotInfo';
+import { droneReport, myPlots, MyPlotsList, nextDroneWords, ScanReport, useScanning } from '../plotInfo';
 import { SellMap } from '../Sell';
 import { MapFit, useWide } from '../Shell';
 import { OnlyYou } from './OnlyYou';
@@ -97,7 +97,6 @@ export function MyPlotsPanel() {
   const { view, me } = usePhoneGame();
   const { looked, setLooked } = useToday();
   const list = useRef<HTMLElement>(null);
-  const mine = myPlots(view, me.id);
   const isLooked = (t: TileView) => looked?.x === t.x && looked.y === t.y;
   // A plot tapped on the map may have its row below the rail's fold.
   useEffect(() => {
@@ -105,14 +104,7 @@ export function MyPlotsPanel() {
   }, [looked]);
   return (
     <section ref={list} className="flex flex-col gap-1.5" data-testid="my-plots">
-      <span className="flex items-center justify-between">
-        <span className="font-display text-sm font-semibold">My plots · {mine.length}</span>
-        <OnlyYou />
-      </span>
-      {mine.length === 0 && <span className="text-[11px] leading-snug text-ink-2">No plots yet: claim one in the land grant.</span>}
-      {mine.map((t) => (
-        <PlotRow key={`${t.x},${t.y}`} t={t} selected={isLooked(t)} onPick={() => setLooked({ x: t.x, y: t.y })} dense />
-      ))}
+      <MyPlotsList tiles={myPlots(view, me.id)} note={<OnlyYou />} picked={isLooked} onPick={(t) => setLooked({ x: t.x, y: t.y })} />
     </section>
   );
 }

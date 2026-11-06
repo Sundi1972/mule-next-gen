@@ -190,6 +190,8 @@ export function PlotCard({ seat, now, at }: { seat: ArcadeSeat; now: number; at:
   if (seat.mine?.space !== 'map' || !t || t.owner !== seat.me.id) return null;
   const lead = seat.me.carriedMule && seat.me.carriedMule !== 'empty' ? seat.me.carriedMule : null;
   const best = t.ground ? bestHere(t.ground) : null;
+  const worked = !!best && groundDots(best, t.ground![best]) > 0;
+  const bestFor = worked ? `this plot is best for ${OUTFIT_WORD[best!]}` : 'this plot has nothing worth working';
   // A MULE whose good ties the best on dots is on a plot as good for it as any; only a worse fit is a mismatch.
   const misfits = (good: string | null | undefined): boolean =>
     !!good && !!best && good !== best && !((RAW as string[]).includes(good) && groundDots(good as RawGood, t.ground![good as RawGood]) === groundDots(best, t.ground![best]));
@@ -221,17 +223,17 @@ export function PlotCard({ seat, now, at }: { seat: ArcadeSeat; now: number; at:
           {/* A mismatch names the best good itself; otherwise the best gets its own line. */}
           {!misfit && (
             <span className="font-semibold" data-testid="plot-best">
-              Best here: {OUTFIT_WORD[best!]}
+              {worked ? `Best here: ${OUTFIT_WORD[best!]}` : 'Nothing worth working here'}
             </span>
           )}
           {lead && misfit && (
             <span className="font-semibold text-alert" data-testid="plot-mismatch">
-              Your MULE makes {OUTFIT_WORD[lead]}; this plot is best for {OUTFIT_WORD[best!]}
+              Your MULE makes {OUTFIT_WORD[lead]}; {bestFor}
             </span>
           )}
           {!lead && t.outfit && misfit && (
             <span className="font-semibold text-warn" data-testid="plot-mismatch">
-              Its {OUTFIT_WORD[t.outfit]} MULE: this plot is best for {OUTFIT_WORD[best!]}
+              Its {OUTFIT_WORD[t.outfit]} MULE: {bestFor}
             </span>
           )}
         </>

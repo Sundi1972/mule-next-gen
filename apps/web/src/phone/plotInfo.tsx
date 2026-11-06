@@ -1,9 +1,9 @@
 import type { Ground } from '@mule/engine';
 import type { MuleView, TileView } from '@mule/protocol';
 import { bestOf, cx, dotsOf, gemsIn, GOOD_NAME, GoodIcon, TERRAIN_NAME, type RawGood } from '@mule/ui';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { plotName, tileAt } from '../game/derive';
-import { OUTFIT_WORD } from './arcade/plots';
+import { bestWords, OUTFIT_WORD } from './arcade/plots';
 import { OnlyYou } from './hub/OnlyYou';
 
 /* What a plot's ground shows on the phone: each raw good as 0–3 dots, the gem, and the drone's report. */
@@ -65,12 +65,6 @@ export function GoodDots({ ground, cols = 2 }: { ground: Ground; cols?: 2 | 3 | 
   );
 }
 
-/** "best for Energy", or "nothing worth working" when even its best good draws no dot. */
-export function bestWords(dots: Record<RawGood, number>): string {
-  const best = bestOf(dots);
-  return dots[best] > 0 ? `best for ${GOOD_NAME[best]}` : 'nothing worth working';
-}
-
 /** "best for Energy · Rare earth 3": the plot in one line. */
 export function bestLine(ground: Ground): string {
   const dots = dotsOf(ground);
@@ -120,17 +114,12 @@ export function myPlots(view: Pick<MuleView, 'tiles'>, meId: string): TileView[]
 
 /**
  * One row of My plots: where, what land, what stands on it, then its goods; a plot nobody analysed says how to find
- * out (its ground is unknown, never 0).
+ * out (its ground is unknown, never 0). With `onPick` a tap picks it, and the row says whether it is the one picked.
  */
 export function PlotRow({ t, selected = false, onPick, dense = false }: { t: TileView; selected?: boolean; onPick?: () => void; dense?: boolean }) {
-  return (
-    <button
-      type="button"
-      onClick={onPick}
-      aria-pressed={selected}
-      className={cx('flex w-full flex-col gap-1 rounded-control border px-2 py-1.5 text-left', selected ? 'border-holo bg-holo-soft' : 'border-holo-faint bg-panel')}
-      data-testid={`plot-row-${t.x}-${t.y}`}
-    >
+  const look = cx('flex w-full flex-col gap-1 rounded-control border px-2 py-1.5 text-left', selected ? 'border-holo bg-holo-soft' : 'border-holo-faint bg-panel');
+  const body = (
+    <>
       <span className="flex w-full items-baseline justify-between gap-2 text-xs">
         <b className="shrink-0 font-semibold">
           {plotName(t.x, t.y)} · {TERRAIN_NAME[t.terrain]}
@@ -144,7 +133,39 @@ export function PlotRow({ t, selected = false, onPick, dense = false }: { t: Til
           Not analysed: walk to it in development and press Analyse.
         </span>
       )}
+    </>
+  );
+  return onPick ? (
+    <button type="button" onClick={onPick} aria-pressed={selected} className={look} data-testid={`plot-row-${t.x}-${t.y}`}>
+      {body}
     </button>
+  ) : (
+    <div className={look} data-testid={`plot-row-${t.x}-${t.y}`}>
+      {body}
+    </div>
+  );
+}
+
+/**
+ * My plots, in planning's rail and over the walking screen alike: "My plots · n" with `note` beside it, then one dense
+ * row per plot, or how to get a first. With `onPick` a tap on a row picks its plot, and `picked` marks the one picked.
+ */
+export function MyPlotsList({ tiles, note, picked, onPick }: { tiles: TileView[]; note: ReactNode; picked?: (t: TileView) => boolean; onPick?: (t: TileView) => void }) {
+  return (
+    <>
+      <span className="flex items-center justify-between">
+        <span className="font-display text-sm font-semibold">My plots · {tiles.length}</span>
+        {note}
+      </span>
+      {tiles.length === 0 && (
+        <span className="text-[11px] leading-snug text-ink-2" data-testid="no-plots">
+          No plots yet: claim one in the land grant.
+        </span>
+      )}
+      {tiles.map((t) => (
+        <PlotRow key={`${t.x},${t.y}`} t={t} selected={picked?.(t) ?? false} {...(onPick ? { onPick: () => onPick(t) } : {})} dense />
+      ))}
+    </>
   );
 }
 
