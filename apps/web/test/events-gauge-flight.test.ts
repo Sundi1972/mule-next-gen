@@ -2,9 +2,11 @@
 import { document, FakeElement } from './fake-dom';
 import { EVENT_SHOW, HAPPINESS } from '@mule/engine';
 import type { ColonyView, EventView, MuleView, TableView, TileView } from '@mule/protocol';
+import { EventLivingMap, EventShow, eventSegments, type MapTile, type ShowEventView } from '@mule/ui';
 import { createElement } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TableClient } from '../src/net/client';
 import { ClientProvider } from '../src/net/react';
@@ -314,7 +316,7 @@ describe('B-AC-23-7: a colony event’s gauge change flies from its card into th
   });
 });
 
-describe('B-AC-23-8 (negative): an event that moves no gauge flies nothing', () => {
+describe('B-AC-23-8 (negative): nothing flies for an event that moves no gauge, or on a screen with no header gauges', () => {
   it('B-AC-23-8: an emigration wave (colonists only) flies no chip, and every gauge reads the server’s value from the first frame to the last', () => {
     const seen = frames(tv(EMIGRATION, colony({ happiness: 64, prestige: 5, environment: 34 })));
     expect(seen.some((f) => f.s.overlay)).toBe(true);
@@ -324,5 +326,20 @@ describe('B-AC-23-8 (negative): an event that moves no gauge flies nothing', () 
       expect(s.gauge('gauge-prestige')).toMatchObject({ value: 5, from: null });
       expect(s.gauge('gauge-environment')).toMatchObject({ value: 34, from: null });
     }
+  });
+
+  it('B-AC-23-8: a phone alone plays the festival’s card with its Mood and Prestige chips in place: nothing leaves it, nothing fades', () => {
+    const events = [FESTIVAL as unknown as ShowEventView];
+    const tiles = TILES.map((t) => ({ x: t.x, y: t.y, terrain: t.terrain, owner: null })) as MapTile[];
+    const players = PLAYERS.map((p) => ({ id: p.id, name: p.name, slot: p.slot as 0 }));
+    const seg = eventSegments({ events, introMs: EVENT_SHOW.introMs }, 0, 'solo')[0]!;
+    const cards: string[] = [];
+    for (let t = seg.playAt; t < seg.endAt; t += STEP) {
+      const html = renderToStaticMarkup(createElement(EventShow, { events, introMs: EVENT_SHOW.introMs, t, mode: 'solo', width: W, height: H, tiles, players, children: createElement(EventLivingMap, { size: 'phone', focusSlot: 0, onSkip: () => undefined }) }));
+      const card = html.match(/data-testid="effects-card"[\s\S]*/)?.[0];
+      if (card) cards.push(card);
+    }
+    expect(cards.some((c) => c.includes('Mood +10') && c.includes('Prestige +2'))).toBe(true);
+    for (const c of cards) expect(c).not.toContain('opacity:0.15');
   });
 });
