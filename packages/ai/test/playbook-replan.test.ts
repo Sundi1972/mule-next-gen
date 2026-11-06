@@ -28,11 +28,11 @@ function kept(state: GameState, keyPlots: number[], plan: Partial<Strategy> = {}
     posted: { smithore: ANCHOR_PRICE },
     rivalPlots: 1,
     keyPlots,
-    reports: state.history.length,
+    reportedMonth: 0,
     governor: null,
     sheriff: null,
   };
-  return { ...fields, anchor };
+  return { ...fields, anchor, trigger: null };
 }
 
 const own = (state: GameState, plot: number, seat: string, outfit: Strategy['moneyMaker'] = null) => Object.assign(state.tiles[plot]!, { owner: seat, outfit });
@@ -40,7 +40,7 @@ const own = (state: GameState, plot: number, seat: string, outfit: Strategy['mon
 /** A production report since the anchor whose one event hits each of `hits` by its delta. */
 function produced(state: GameState, hits: { plot: number; delta: number }[]): void {
   const plots = hits.map((h, order) => ({ index: h.plot, order, good: 'smithore' as const, delta: h.delta }));
-  state.history.push({ month: state.month, events: [{ key: 'cavernCollapse', kind: 'quake', title: 'Cave-in', line: '', scope: 'local', origin: { x: 0, y: 0 }, plots, result: null }] } as unknown as MonthReport);
+  state.history.push({ month: state.month, before: {}, produced: {}, events: [{ key: 'cavernCollapse', kind: 'quake', title: 'Cave-in', line: '', scope: 'local', origin: { x: 0, y: 0 }, plots, result: null }] } as unknown as MonthReport);
 }
 
 describe('the five re-plan triggers (C13, RULE-8)', () => {
@@ -53,14 +53,14 @@ describe('the five re-plan triggers (C13, RULE-8)', () => {
       'row 2: rival plots making the target at the anchor’s + replan.rivalPlots',
       'rivalProducer',
       (s, f) => {
-        for (let i = 0; i < 1 + replan.rivalPlots; i++) own(s, f[3 + i]!, 'ai1', 'smithore');
+        for (let i = 0; i < replan.rivalPlots; i++) own(s, f[3 + i]!, 'ai1', 'smithore');
       },
     ],
     [
       'row 2 under: one rival plot fewer, and its own Smithore plots',
       null,
       (s, f) => {
-        for (let i = 0; i < replan.rivalPlots; i++) own(s, f[3 + i]!, 'ai1', 'smithore');
+        for (let i = 0; i < replan.rivalPlots - 1; i++) own(s, f[3 + i]!, 'ai1', 'smithore');
         own(s, f[10]!, ME, 'smithore');
         own(s, f[11]!, ME, 'smithore');
       },
@@ -85,7 +85,7 @@ describe('the five re-plan triggers (C13, RULE-8)', () => {
       (s, f) => {
         const mine = Array.from({ length: replan.eventPlots }, (_, i) => f[10 + i]!);
         mine.forEach((p) => own(s, p, ME, 'smithore'));
-        own(s, f[20]!, 'ai1', 'smithore');
+        own(s, f[20]!, 'ai1');
         produced(s, [...mine.slice(1).map((plot) => ({ plot, delta: -2 })), { plot: mine[0]!, delta: 2 }, { plot: f[20]!, delta: -2 }]);
       },
     ],

@@ -37,6 +37,7 @@ import { analysesWanted, developDecision, filtersWanted, goodPlan, landDecision,
 import { candidate, shortlist, type Shortlist } from '../utility.js';
 import { beforeTax, canFeed, cashReserve, installGain, type Mind } from '../value.js';
 import { landTargetWithin, planMind, type PlanFields } from './plan.js';
+import type { ReplanTrigger } from './replan.js';
 
 /**
  * The engine's own playbook for a phase (spec C2): the strategist's shortlists, reshaped, each pick a seeded TopPick.
@@ -66,6 +67,8 @@ export interface DraftInput {
   strategy?: Strategy;
   /** The plan the seat keeps: drafted under, with its cash floor, stances and reason drafted afresh. See C12. */
   kept?: PlanFields | null;
+  /** The re-plan trigger that drafted the plan, which its reason names. See RULE-8. */
+  replanned?: ReplanTrigger | null;
   /** The month the playbook is for; unset, the state's month. */
   month?: number;
 }
@@ -80,6 +83,15 @@ const REASONS: Record<Kind, string> = {
   landBaron: 'Land is the one thing nobody can make more of. I take it while it is still free.',
   politician: 'Offices pay, and a vote costs less than a MULE. I run for the council.',
   spoiler: 'Whoever leads will find every road blocked. I play to bring them down.',
+};
+
+/** What a reason says first when a re-plan trigger drafted the plan. */
+const REPLAN_LINES: Record<ReplanTrigger, string> = {
+  lostKeyPlot: 'Lost a key plot.',
+  rivalProducer: 'A rival makes my good now.',
+  priceShock: 'The price moved.',
+  event: 'An event cut my output.',
+  election: 'New faces in office.',
 };
 
 /** The month the playbook is for: a draft for next month is seeded as next month's. */
@@ -191,7 +203,7 @@ function keptStrategy(input: DraftInput, obs: GameState, plan: PlanFields): Stra
     cashFloor: Math.min(AI_PLANS.bounds.cashFloorMax, cashReserve(obs, planMind(input.mind, plan))),
     landTarget: landTargetWithin(obs, seat, plan.landTarget),
     stances: Object.fromEntries(obs.players.filter((p) => p.id !== seat).map((p) => [p.id, p.id === leader ? 'target' : 'neutral'])),
-    reason: REASONS[plan.kind],
+    reason: input.replanned ? `${REPLAN_LINES[input.replanned]} ${REASONS[plan.kind]}` : REASONS[plan.kind],
   };
 }
 

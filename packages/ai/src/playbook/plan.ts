@@ -1,5 +1,6 @@
 import { AI_PLANS, GAME, type AiPersonaWeights, type GameState, type Good, type PlayerId, type Strategy } from '@mule/engine';
 import type { Mind } from '../value.js';
+import type { ReplanTrigger } from './replan.js';
 
 /** The plan a seat keeps across months, and the mind it plays that plan with. See spec C12. */
 
@@ -20,8 +21,8 @@ export interface PlanAnchor {
   /** Rival plots making the monopoly target; 0 with none. */
   rivalPlots: number;
   keyPlots: number[];
-  /** Production reports already in the history: an event in a later one is "since the anchor". */
-  reports: number;
+  /** The month of the newest production report (0 with none): an event in a later month's is "since the anchor". */
+  reportedMonth: number;
   governor: PlayerId | null;
   sheriff: PlayerId | null;
 }
@@ -29,6 +30,8 @@ export interface PlanAnchor {
 /** The plan a seat keeps. An adopted plan's anchor is read at the seat's next draft point, as adopt sees no state. */
 export interface KeptPlan extends PlanFields {
   anchor: PlanAnchor | null;
+  /** The trigger that re-drafted it; null for a seat's first plan and an adopted one. */
+  trigger: ReplanTrigger | null;
 }
 
 /**
@@ -61,7 +64,7 @@ export function anchorOf(state: GameState, seat: PlayerId, plan: PlanFields, poi
     posted: Object.fromEntries(goods.map((g) => [g, state.store.posted[g]])),
     rivalPlots: plan.monopolyTarget ? rivalPlotsMaking(state, seat, plan.monopolyTarget) : 0,
     keyPlots: open.slice(0, AI_PLANS.replan.keyPlots),
-    reports: state.history.length,
+    reportedMonth: state.history.at(-1)?.month ?? 0,
     governor: state.politics?.governor ?? null,
     sheriff: state.politics?.sheriff ?? null,
   };

@@ -24,7 +24,7 @@ import type { DecisionRecord } from '../src/brain.js';
 import type { Decider } from '../src/decider.js';
 import { VoteHand } from '../src/hands/vote.js';
 import { applyAction } from '../src/play.js';
-import { draftPlaybook, planFields, playbookSource } from '../src/playbook/index.js';
+import { draftPlaybook, planFields, playbookSource, type ReplanTrigger } from '../src/playbook/index.js';
 import { AiSeat, type AiSeatOptions } from '../src/seat.js';
 import { plotName } from '../src/strategist.js';
 import { FOOD_TO_SPARE } from './store-food.js';
@@ -398,7 +398,7 @@ interface PlaybookSource {
 describe("playbookSource, WS2's PlaybookSource (AM-1)", () => {
   // trace-allow: AM-1, the plan's amendment agreed with WS2 on 4 Nov; the spec gives the contract no AC id yet
   it("AM-1: playbookSource returns WS2's PlaybookSource shape", () => {
-    type Seen = { phase: string; state: GameState; playbook: Playbook; land: LandDraft; free: Set<number> };
+    type Seen = { phase: string; state: GameState; playbook: Playbook; land: LandDraft; free: Set<number>; due: ReplanTrigger | null };
     const seen: Seen[] = [];
     let source: PlaybookSource | null = null;
     // A Smart seat whose decider takes the last land plan offered, where the draft's own pick would take the top one.
@@ -410,7 +410,8 @@ describe("playbookSource, WS2's PlaybookSource (AM-1)", () => {
         source ??= playbookSource(seats);
         const { playbook, land } = source.draft(state, 'ai2');
         const free = new Set(state.tiles.flatMap((tile, i) => (tile.owner === null && tile.terrain !== 'store' ? [i] : [])));
-        seen.push({ phase: state.phase, state: structuredClone(state), playbook, land, free });
+        const due = seats.find((x) => x.id === 'ai2')!.replanDue(state);
+        seen.push({ phase: state.phase, state: structuredClone(state), playbook, land, free, due });
       },
     });
     const at = (phase: string) => seen.find((s) => s.phase === phase)!;
@@ -432,10 +433,10 @@ describe("playbookSource, WS2's PlaybookSource (AM-1)", () => {
     expect(headOf(at('landGrant').playbook.landGrant!, t.state)).toEqual(playedHead(t, 'ai2', 1));
     expect(headOf(at('planning').playbook.landGrant!, t.state)).not.toEqual(playedHead(t, 'ai2', 1));
     // After the grant it plans next month's, and the seat holds no pick for that month: a month-2 draft with none, under
-    // the plan it keeps (C12).
+    // the plan it keeps (C12), or drafted again when a re-plan is due (RULE-8).
     const next = at('development');
-    const kept = planFields(at('landGrant').playbook.strategy);
-    const fresh = draftPlaybook({ state: next.state, seat: 'ai2', mind: t.seats[2]!.mind, seed: t.seats[2]!.options.seed, phase: 'planning', land: null, month: 2, kept });
+    const kept = next.due ? null : planFields(at('landGrant').playbook.strategy);
+    const fresh = draftPlaybook({ state: next.state, seat: 'ai2', mind: t.seats[2]!.mind, seed: t.seats[2]!.options.seed, phase: 'planning', land: null, month: 2, kept, replanned: next.due });
     const { planning: _, ...freshGrant } = fresh;
     expect(next.playbook).toEqual({ ...freshGrant, phase: 'landGrant' });
     // Its gate re-drafts that land part for month 2 the same way, with no pick of this month's.
