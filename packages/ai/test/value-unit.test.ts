@@ -18,7 +18,7 @@ import {
 import { outlook, type Outlook } from '../src/outlook.js';
 import { AiSeat } from '../src/seat.js';
 import { goodPlan, tradeDecision, wholeNextMonth } from '../src/strategist.js';
-import { shortCosts, unitNeed, unitValues, type Mind, type UnitValues } from '../src/value.js';
+import { cashPlan, shortCosts, unitNeed, unitValues, type Mind, type UnitValues } from '../src/value.js';
 
 /**
  * The resource-utility model's rule rows, on the pure functions: a unit's value is the chance it is needed times what
@@ -286,5 +286,24 @@ describe('C4: a pass that leaves a funded shortfall carries its cost', () => {
 
     expect(pass.value).toBe(0);
     expect(pass.veto).toBeNull();
+  });
+});
+
+describe('RULE-5: the cash plan fills in rank order', () => {
+  it("T-AC-2: a dear unit the money can't cover is skipped, and the cheaper needed units ranked after it are funded", () => {
+    // Seed 1, month 5, ai3's Water: 311 cr, 2 Water needed at 188 each against an ask of 29, and a Medicine worth 5,000
+    // at 400, ranked first and out of reach.
+    const state = table({ plots: [] });
+    state.players.find((p) => p.id === 'ai0')!.money = 311;
+    const values = (good: Good, worth: number, units: number): UnitValues => ({ good, keep: Array(units).fill(worth), buy: Array(units).fill(worth), block: units, need: units, floorUnits: 0 });
+    const valuesOf = (good: Good) => (good === 'water' ? values('water', 188, 2) : values('medicine', 5000, 1));
+    const askOf = (good: Good) => (good === 'water' ? 29 : 400);
+
+    const plan = cashPlan(observe(state, 'ai0'), mindOf(), ['water', 'medicine'], valuesOf, askOf);
+
+    expect(plan.funded).toEqual({ water: 2 });
+    expect(plan.cost).toEqual({ water: 58 });
+    expect(plan.left).toBe(311 - 58);
+    expect(plan.left, 'money never goes negative').toBeGreaterThanOrEqual(0);
   });
 });
