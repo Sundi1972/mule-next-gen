@@ -16,7 +16,7 @@ import bpy
 from mathutils import Vector
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from lib import frame, kits  # noqa: E402
+from lib import frame, kits, props  # noqa: E402
 from lib.core import ZT, accent, box_uv, bx, cyl, flat, glass_mat, light, mat, mesh_obj  # noqa: E402
 
 STAGES = ["site", "build1", "build2", "standing", "closed", "damaged"]  # buildMonths 3: two build pictures
@@ -97,6 +97,19 @@ def rocket(z0, white, black, orange, dark, full=True):
             bx(-0.15, 0.15, -0.15, 0.15, zz, zz + 0.3, dark, 0.01, "strut").location = (bxx * 0.55, byy * 0.55, 0)
     print(f"COLONY spaceport rocket {z0 - 1.2:.1f} .. {zf + fair:.1f} m ({zf + fair - (z0 - 1.2):.1f} m tall)", flush=True)
     return zf
+
+
+def dress_build1():
+    """Kit props on the build1 site (KITS_DIR set: local looks only): a 34 m portal crane, steel, rebar, a dumpster.
+    The crane is placed by its bounding box: turned 45°, its portal stands in the slab's right corner off the pad and
+    its jib reaches over the mount toward the camera's left, in profile."""
+    z = "kb3d_constructionzone"
+    props.place("kb3d_cityinthesky", "KB3D_CSK_PropCraneE_A", (0.2, 0.2), 0.785)
+    for (name, at, rot) in (("PropDumpster_B", (-8.6, -8.6), 0.785), ("PropMetalBeams_B", (8.6, -5.6), 0.0),
+                            ("PropRebar_E", (-10.4, 6.0), 0.0), ("PropConcreteMixer_A", (5.8, -9.9), 0.0),
+                            ("PropPowerGenerator_B", (9.2, -7.4), 1.57), ("PropBrickPallet_B", (-6.4, -10.0), 0.0),
+                            ("PropCementBagPallet_A", (-4.8, -10.2), 0.3), ("PropSandMound_B", (-9.0, -2.0), 0.0)):
+        props.place(z, "KB3D_CSZ_" + name, at, rot)
 
 
 def build(stage):
@@ -214,7 +227,9 @@ def build(stage):
             x, y = 7.0 + dx * 0.8, -8.5 + dy
             bx(x - sz / 2, x + sz / 2, y - sz / 2, y + sz / 2, ZT + dz, ZT + dz + sz * 0.9, crates[k % 3], 0.03, "crate")
     if b1 or b2:
-        if b1:
+        if b1 and props.on():
+            dress_build1()
+        elif b1:
             kits.crane(9.5, 9.5, 14.0, jib=11.0, counter=3.0)
         kits.work_light(-9.0, -9.0, (0, 0))
         kits.work_light(9.5, -6.0, (0, 0))

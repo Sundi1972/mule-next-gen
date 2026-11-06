@@ -10,7 +10,7 @@ import bpy
 from bpy_extras.object_utils import world_to_camera_view
 from mathutils import Vector
 
-from . import core, light
+from . import core, light, props
 
 W = H = 1600
 ORTHO = 21.0
@@ -96,10 +96,14 @@ def run(kind, stages, build, glowless=("closed",), fr=None):
     want = argv[2].split(",") if len(argv) > 2 and argv[2] not in ("", "all") else list(stages)
     lights = argv[3].split(",") if len(argv) > 3 and argv[3] else list(LIGHTS_ALL)
     pct = int(argv[4]) if len(argv) > 4 else 100
+    if props.on():  # kit-dressed pictures are local looks only: never where publish.sh reads (spec AM-5)
+        out = os.path.join(out, "kit-look")
+        print(f"COLONY KITS_DIR is set: kit props ON, writing to {out} (never published)", flush=True)
     os.makedirs(os.path.join(out, kind), exist_ok=True)
     for stage in want:
         t0 = time.time()
         core.reset()
+        props.reset()
         build(stage)
         light.rig()
         camera(fr)

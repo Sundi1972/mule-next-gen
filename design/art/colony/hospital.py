@@ -8,7 +8,7 @@ import sys
 import bpy
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from lib import frame, kits  # noqa: E402
+from lib import frame, kits, props  # noqa: E402
 from lib.core import ZT, accent, bx, cyl, flat, glass_mat, mat  # noqa: E402
 
 STAGES = ["site", "build1", "standing", "closed", "damaged"]
@@ -60,12 +60,24 @@ def sunshades(z0, z1, wall_y, wall_x, white):
         bx(wall_x, wall_x + 0.4, MAIN_Y0, W / 2, z, z + 0.06, white, 0.005, "sunshade")
 
 
+def dress_site():
+    """Kit props on the site (KITS_DIR set: local looks only): a sand mound, mixer, pallets, a barrow, a generator."""
+    z = "kb3d_constructionzone"
+    for (name, at, rot) in (("PropSandMound_A", (-2.0, 1.8), 0.4), ("PropConcreteMixer_A", (1.4, -2.4), 0.0),
+                            ("PropBrickPallet_B", (2.5, 0.0), 0.0), ("PropCementBagPallet_A", (2.5, 1.6), 0.2),
+                            ("PropWheelbarrow_A", (0.0, -0.8), 0.7), ("PropPortaPotty_A", (4.7, 4.7), 0.0),
+                            ("PropPowerGenerator_B", (-3.0, -4.6), 0.0), ("PropCableSpool_A", (-4.6, 2.6), 1.57)):
+        props.place(z, "KB3D_CSZ_" + name, at, rot)
+
+
 def build(stage):
     """site: the shared site kit. build1: the main block's ground floor up, the floor above and the wing a bare frame,
     scaffold, crane. standing: main block, emergency wing, ambulance bay. closed: faded, dead glass, boarded, the bay
     fenced off. damaged: a bite out of the main block's near corner, rubble on the wing roof and the bay, an ember."""
     if stage == "site":
-        kits.site(0, 0, W, W)
+        kits.site(0, 0, W, W, heaps=not props.on())
+        if props.on():
+            dress_site()
         return
     kits.slab()
     b1, closed, damaged = stage == "build1", stage == "closed", stage == "damaged"
