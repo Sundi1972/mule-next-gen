@@ -616,7 +616,7 @@ because   hunger is decided at the next development and Energy is spent at the n
           (G-1: buys what it is short of when it can pay). No number added.
 also      at v = ask a buy and a pass both gain 0 and the pass won on 'Sure thing' and 'Cash
           left'; so C4's pass counts each funded needed unit it leaves unbought at its full S
-          (RULE-5 has already funded it; 'Cash left' scores the money separately). No veto,
+          (RULE-5 has already funded it; 'Cash left' scores the money separately; read "its value v", AM-5). No veto,
           no number; a playbook may still pass knowingly
 open      hunger's true damage (what a month of hungry development costs the seat) stays
           today's walking-time estimate; pricing it fully is a balance-phase question
@@ -640,4 +640,24 @@ because   read literally, step 2 stopped at the first dear unit, so cheaper need
           G-1 is unchanged; its proof's wording is Heiko's and stays.
 findings  WS3: skipBefore drops a good when every seat holds the screen need but less than
           the target that covers spoilage. WS5 / C29: store supply in the first months.
+```
+
+```
+AM-5 · 2026-11-06 · WS9 · PR-1's review (#433)
+
+target    §2 RULE-5 outcome and step 4; RULE-2's held mapping for spoilage cover; AM-3's
+          wording
+said      cashReserve = Σ asks of the funded units, for every non-auction caller; budget =
+          funded asks + what is left; a pass gives up "its full S"; each held unit maps to a
+          whole use-unit of damage
+did       the sale trigger (sellWanted) compares money with the cost of every needed unit,
+          funded or not (CashPlan.wanted); the budget is funded asks + min(what is left,
+          money × STRATEGIST.budgetShare); a pass gives up each funded unit's value v (= S
+          when q = 1); a held spoilage-cover unit carries the per-use loss × keep
+because   the funded total never exceeds the money, so a cash-short seat stopped listing
+          plots or MULEs (the reviewer's I-2); the cap keeps surplus spending to today's
+          share until PR-2; v is the unit's whole value for q < 1; a held unit keeps only
+          keep of itself through upkeep, so a whole use-unit each over-charged Energy by
+          about 1/keep, against AM-2's own reasoning
+folded    PR-1's fix round; T-AC-6's spoilage row
 ```
