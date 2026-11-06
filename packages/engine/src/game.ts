@@ -549,7 +549,7 @@ export function advancePhase(state: GameState): void {
     const price = mulePrice(state);
     const soldOut = state.store.mules === 0;
     // MULEs get dearer each month the corral sells out, and cheaper when they are left over.
-    if (soldOut) state.store.muleFactor *= 1 + MULE.scarcityUp;
+    if (soldOut) state.store.muleFactor = Math.min(MULE.maxFactor, state.store.muleFactor * (1 + MULE.scarcityUp));
     else if (state.store.mules >= state.store.mulesAtStart * MULE.surplusShare) state.store.muleFactor = Math.max(MULE.minFactor, state.store.muleFactor * (1 - MULE.surplusDown));
     const before = Object.fromEntries(state.players.map((p) => [p.id, { ...p.stock }]));
     const { produced, pollutionBy, lines, events } = runProduction(state);

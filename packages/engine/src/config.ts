@@ -315,6 +315,8 @@ export const MULE = {
   surplusShare: 0.5,
   /** The scarcity factor never falls below this. */
   minFactor: 0.6,
+  /** Nor rises above this, so a MULE costs at most twice its labour and Smithore at the store's price (pricing C4). */
+  maxFactor: 2.0,
   /** Credits to outfit a MULE for each good, paid at the store's outfit counter. */
   outfitCost: {
     food: 25, water: 25, energy: 50, smithore: 75, crystite: 100, rareEarth: 100,
