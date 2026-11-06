@@ -71,8 +71,8 @@ lives in WS7's `colony.ts`; its effects on players, crews and the store go throu
 
 **Inputs:**
 - Specs: `docs/specs/2026-11-05-ws5-store-pricing.md` (on trunk; amended here as AM-5) and
-  `docs/specs/2026-11-06-colony-needs.md` (branch `ws7-colony-needs` at 55b036c1, WS7 leads; WS5's health side added
-  there as AM-1 today).
+  `docs/specs/2026-11-06-colony-needs.md` (branch `ws7-colony-needs` at dee0b961, WS7 leads; WS5's health side added
+  there as AM-1 today, WS7's at 8c9c3957).
 - Approved source: explainer v3 a28b861b; WS8's colony-health mock (de672e61) for C19's screen.
 - Sections present and consumed: pricing §0, §0.1, §0.2, §1 C1–C7, §2 RULE-3..7, §3, §5, §6, §8, §9; needs §0,
   §0.1, §0.2, §1 C1–C6 (WS7), C10–C19 (WS5), §2 RULE-1..6, RULE-10..15, §3 (WS5's part), §6, §8, §9.
@@ -86,17 +86,20 @@ lives in WS7's `colony.ts`; its effects on players, crews and the store go throu
    the glut step → **AM-5** folds the approved rework in (C1, C2, C5, C7, HC-4, B-AC-2 dropped, B-AC-4 rewritten,
    B-AC-7..9, T-AC-5, T-AC-6 added).
 2. The colony-needs spec had no health or Electronics changes although Heiko approved them → **AM-1** (WS5's side:
-   C17–C19, RULE-13..15, HC-13, HC-14, §3, B-AC-15..18, T-AC-25..28). WS7's colonist side (decisions 28–30) is not in
-   the spec yet: WS7 adds it in its own ids before PR-9 starts (pre-implementation checklist).
-3. The colony-needs non-goal "Colonists' … Medicine … stay demand for prices only" contradicts decisions 23–30. It is
-   WS7's §0: raised to WS7 through the PM to amend (one line), not edited by WS5.
+   C17–C19, RULE-13..15, HC-13, HC-14, §3, B-AC-15..18, T-AC-25..28); WS7 added its colonist side at 8c9c3957 (C7–C9,
+   RULE-7..9, B-AC-6..8, T-AC-8..11).
+3. The colony-needs non-goal "Colonists' … Medicine … stay demand for prices only" contradicted decisions 23–30:
+   WS7 amended it at 8c9c3957 (the non-goal above is lifted from before that commit).
+4. C19's view was null only with health off, but WS7's T-AC-11 has no sick share with politics off → C19 and §3 now
+   read null with politics off too (dee0b961).
 
-**Plan decision P-1 (needs WS7's OK through the PM before PR-2 starts).** The colonists' free meal (needs C1, C2,
+**Plan decision P-1 — OK'd by WS7 through the PM, 6 Nov.** The colonists' free meal (needs C1, C2,
 C6) ships in milestone A, not with the hardship. Reason: it counts no shortfall (decision 1's concern is "any rule
 that counts how short they went"); the pricing rework was measured with colonists eating free from the store; and
 under the bands the severe Food selling line (150) equals the colonists' Food wage (150), so a wage-paying colony
 would go hungry beside a stocked shelf as soon as a trade pulls the price up. If WS7 declines, PR-2 moves unchanged
-into milestone B after PR-6, and PR-1's colonist cap (pricing HC-4) simply stays until then.
+into milestone B after PR-6, and PR-1's colonist cap (pricing HC-4) simply stays until then. (WS7 agreed; its note:
+C2 also removes the wage ceiling on the store's restock bid, which PR-1's bands replace.)
 
 ---
 
@@ -117,7 +120,7 @@ Trunk is reached only by the PM's batch merges: **milestone A** (PR-1..PR-4) as 
 | PR-6 | `ws5-econ-pr6-consumption` | WS5 · WS1, WS2 | Tasks 6.0–6.5 (needs C10, C11, C12, C13) | needs B-AC-10, 11, 12; T-AC-20..23 | `CONSUMPTION`, `needsWith` | none | No |
 | PR-7 | `ws7-econ-pr7-hardship` | WS7 · WS1 | Tasks 7.1–7.3 (needs C3, C4, C5, C6's red) | needs B-AC-1..3, B-AC-5, T-AC-1..5 | the curve `g` (exported from colony.ts) | PR-2's meal record | No (C6's red is a style on an existing line) |
 | PR-8 | `ws5-econ-pr8-crews` | WS5 · WS1, WS3 | Tasks 8.1–8.3 (needs C14, C15, C16) | needs B-AC-13, B-AC-14, T-AC-24 | `Player.crewShort` | the curve `g` (PR-7) | No |
-| PR-9 | `ws7-econ-pr9-health` | WS7 · WS1 | Tasks 9.1–9.2 (WS7's colonist health, decisions 28–30) | WS7's health ACs (its ids) | the sick share `h`, `HEALTH` (enabled false) | PR-2's meal, PR-7's curve | No |
+| PR-9 | `ws7-econ-pr9-health` | WS7 · WS1 | Task 9.1 (needs C7, C8, C9) | needs B-AC-6..8 (engine), T-AC-8..11 | the sick share `h`, `HEALTH` (enabled false) | PR-2's meal, PR-7's curve | No |
 | PR-10 | `ws5-econ-pr10-health-reach` | WS5 · WS1, WS3 | Tasks 10.1–10.4 (needs C18, C19, C13's Medicine line) | needs B-AC-16..18, T-AC-26, T-AC-27 | `MuleView.colonyHealth` (needs §3) | `h` (PR-9) | No (the field only) |
 | PR-11 | `ws8-econ-pr11-health-gauge` | WS8 · WS5 | Task 11.1 (needs C19's ux, from the mock) | needs B-AC-18 on the phone | none | `MuleView.colonyHealth` | Yes: from WS8's approved mock |
 | PR-12 | `ws1-econ-pr12-tune` | WS1 · WS5, WS7 | Task 12.1 (one tuning pass, G-5 C29) | needs UBER-AC-1's sim part; Gate B | tuned config | all of the above | No |
@@ -595,22 +598,24 @@ removed). Tests: `production.test.ts`.
 
 ## PR-9 · colony health: the colonists' side (WS7 builds; decisions 28, 29, 30)
 
-### Task 9.1 — WS7's sick share, its mood, growth and Medicine need; the Electronics bonus
-**Depends on:** WS7's ids for decisions 28–30 in the colony-needs spec (checklist) · PR-7 (the curve)
-- [ ] **Step 1:** WS7 writes its ACs' failing tests first (its ids), including: `HEALTH.enabled` false leaves every
-  number of a game as on PR-8's head (needs HC-13), and the Electronics bonus reads `UPKEEP.colonistsPerElectronics`
-  (PR-3), never a second number.
-- [ ] **Step 2:** WS7 implements in `colony.ts` / `upkeep.ts`; `HEALTH` lands in `config.ts` with `enabled: false`.
+### Task 9.1 — needs C7, C8, C9: the sick share, its mood, growth and Medicine need; the Electronics comfort
+**Depends on:** PR-7 (the curve) · **ACs verified:** needs T-AC-8..11, B-AC-6, B-AC-8, B-AC-7 (engine half) ·
+**Spec:** needs §1 C7–C9, RULE-7..9 (WS7, 8c9c3957)
+- [ ] **Step 1: Write the failing tests needs T-AC-8, T-AC-9, T-AC-10, T-AC-11 (RULE-7..9's rows; health off and politics off inert)**
+  (unit) **and needs B-AC-6, B-AC-7 (h never above 0.4; its view half is PR-10's), B-AC-8** (promise at GameState
+  after upkeep). The Electronics comfort reads `UPKEEP.colonistsPerElectronics` (PR-3), never a second number. → FAIL.
+- [ ] **Step 2: Implement needs C7, C8 and C9** in `colony.ts` / `upkeep.ts`; `HEALTH` lands in `config.ts` with
+  `enabled: false` and the names WS5's C18 reads (crewSickFrom 0.2). → PASS.
 - [ ] **Step 3:** Rulebook `colony-and-politics.html#colony-health-gauge` stays "Designed" (health is off) with a
   line "built, switched off until Medicine can be had (HC-13)"; build-index. Commit.
 
 ### PR-9 merge gate
-- [ ] WS7's health ACs green and named; typecheck + test exit 0; OK WS1 (upkeep, config); one independent review.
+- [ ] needs T-AC-8..11, B-AC-6..8 (engine) green and named; typecheck + test exit 0; OK WS1 (upkeep, config); one independent review.
 
 ## PR-10 · colony health reaches the store, players and crews; the view carries it (needs C18, C19)
 
 ### Task 10.1 — freeze `MuleView.colonyHealth` (needs §3)
-- [ ] **Step 1: Write the failing test `needs B-AC-18: three Medicine-short upkeeps → { health, medicineShort true, shortMonths 3 }; a month with Medicine → false, 0; health off → null`**
+- [ ] **Step 1: Write the failing tests needs B-AC-18 and B-AC-7 (view half): three Medicine-short upkeeps → { health, medicineShort true, shortMonths 3 }; a month with Medicine → false, 0; health off or politics off → null; at the cap, health 60**
   (altitude: server view test, `apps/server/test/`) → FAIL.
 - [ ] **Step 2: Implement needs C19**: the protocol field, the run of short months at upkeep beside WS7's sick share,
   the view in `mule-game.ts` → PASS. **Step 3: Commit** `feat: the view carries colony health and the Medicine-short run (verifies needs B-AC-18)` — WS8 starts PR-11 from this SHA.
@@ -684,15 +689,15 @@ limit 60, WS5's ruling 6 Nov)
 ---
 
 <!-- plan-check: no-task B-AC-2 — pricing spec: dropped by AM-5 (Heiko's decision 12, never below normal) -->
-<!-- plan-check: no-task C7 C8 C9 — colony-needs spec: WS7's reserved ids for its colonist health (decisions 28-30); built in PR-9 under WS7's own ids -->
 <!-- plan-check: no-task C26 C27 C29 C33 C49 A2 A3 — named in the specs' prose as other specs' changes (G-5 C26/C27/C29, C49) or WS7's measured variants A2/A3; not changes of these specs -->
 
 ## Pre-implementation checklist
 - [ ] Spec approved by the user: explainer v3 approved by Heiko 6 Nov (a28b861b); the pricing spec's AM-5 and the
   colony-needs spec's AM-1 record it. Heiko reads this plan through the PM before PR-1 starts.
-- [ ] P-1 (the free meal in milestone A) OK'd or declined by WS7 through the PM.
-- [ ] WS7 adds its colony-health ids (decisions 28–30) to the colony-needs spec and amends its Medicine non-goal
-  before PR-9; the colony-needs spec reaches trunk (it lives on `ws7-colony-needs`) before PR-2 merges.
+- [x] P-1 (the free meal in milestone A) OK'd by WS7 through the PM, 6 Nov.
+- [x] WS7 added its colony-health ids (C7–C9) and amended its Medicine non-goal (8c9c3957).
+- [ ] The colony-needs spec reaches trunk (it lives on `ws7-colony-needs`) before PR-2 merges.
+- [ ] Heiko read the plan summary (PM, 6 Nov; no gate): PR-1 starts unless he objects.
 - [ ] Open PRs that touch the same seams known: #503 (rule E, WS3; PR-1's soldOutHigh, stubbable), #525 (C49, WS7;
   `monthlyDemand`), #532 (the grant 450, now 250 by pace option C: not this plan's), WS9's chain build (PR-3's
   atomicity), #457 (WS9, in batch 58).
