@@ -6,9 +6,23 @@ let manifest: GroundsManifest | null = null;
 let loading: Promise<GroundsManifest | null> | null = null;
 const listeners = new Set<() => void>();
 
+const isObject = (x: unknown): x is Record<string, unknown> => typeof x === 'object' && x !== null && !Array.isArray(x);
+const isNumber = (x: unknown): x is number => typeof x === 'number' && Number.isFinite(x);
+
+function isFrame(f: unknown): boolean {
+  return isObject(f) && isNumber(f.width) && isNumber(f.height) && isNumber(f.place) && Array.isArray(f.centre) && f.centre.length === 2 && f.centre.every(isNumber);
+}
+
+function isEntry(e: unknown): boolean {
+  return isObject(e) && typeof e.day === 'string' && typeof e.dusk === 'string' && (e.glow === null || typeof e.glow === 'string');
+}
+
+/** Every part the grounds compute with: a bad frame draws blank places, a missing picture name throws (HC-3). */
 function isManifest(m: unknown): m is GroundsManifest {
-  const { frame, pictures, sizes } = (m ?? {}) as Partial<Record<keyof GroundsManifest, unknown>>;
-  return typeof frame === 'object' && frame !== null && typeof pictures === 'object' && pictures !== null && Array.isArray(sizes);
+  if (!isObject(m) || !isFrame(m.frame) || !Array.isArray(m.sizes) || !m.sizes.every(isNumber) || !isObject(m.pictures)) return false;
+  return Object.values(m.pictures).every(
+    (kind) => isObject(kind) && Object.entries(kind).every(([key, value]) => (key === 'frame' ? isFrame(value) : isEntry(value))),
+  );
 }
 
 /** Fetches the manifest once; resolves null, never rejects, when it is missing or malformed (HC-3). */
