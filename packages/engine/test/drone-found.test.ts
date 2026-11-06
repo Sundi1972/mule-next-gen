@@ -81,11 +81,13 @@ describe('T-AC-1: the drone\'s ground lands at Scan', () => {
 
     orderGeoDrone(state, 'ossa', plots);
 
-    expect(ossa(state).analysed, 'known at once, in planning').toEqual(expect.arrayContaining(indices));
+    expect(ossa(state).analysed, 'known at once, in planning, each plot once').toEqual(indices);
     expect(ossa(state).droneFound).toEqual(indices);
     expect(ossa(state).money).toBe(money - DEVELOPMENT.droneFee);
     expect(state.store.capital).toBe(capital + DEVELOPMENT.droneFee);
     for (const p of state.players.filter((q) => q.id !== 'ossa')) expect(p.analysed, `${p.id} learns nothing`).toEqual([]);
+    const seenByBrix = observe(state, 'brix').players.find((p) => p.id === 'ossa')!;
+    expect([seenByBrix.analysed, seenByBrix.droneFound], 'another seat sees none of it in planning').toEqual([[], []]);
 
     expect(() => orderGeoDrone(state, 'ossa', plots)).toThrow('A drone is already on its way');
     expect(ossa(state).money, 'charged once').toBe(money - DEVELOPMENT.droneFee);
