@@ -3,17 +3,21 @@ import {
   advancePhase,
   buyMule,
   COLONY,
+  colonyPrestige,
   createGame,
   eventChance,
   EVENTS,
   firePhase,
   GOOD_CONFIG,
   HAPPINESS,
+  PRESTIGE,
   RuleError,
   type EventRow,
   type GameState,
   type MonthReport,
   type MoodBand,
+  type PrestigeId,
+  type Project,
 } from '../src/index.js';
 
 // G-5 C26 PR-B: the colony's development, production and month-end social events, and the mood part of MULE theft.
@@ -248,5 +252,74 @@ describe('C26 PR-B: the loyal crew, in production', () => {
     // The dice pick among p0's three Food plots: more than one of them on some seed.
     const picked = new Set([1, 2, 3, 4, 5, 6].map((seed) => produce(colonyAt(MID('thriving'), { seed })).events!.find((e) => e.key === 'loyalCrew' && e.player === 'p0')?.plots[0]?.index));
     expect(picked.size).toBeGreaterThan(1);
+  });
+});
+
+/** A colony object at `stage`, as colony.ts keeps it. */
+const object = (id: PrestigeId, stage: Project['stage'] = 'standing'): Project => ({ id, stage, funded: { credits: 0, goods: {} }, monthsLeft: null, plot: null, since: 1, plaque: {}, maxBid: null });
+
+describe('C26 PR-B: the riot, at the month end', () => {
+  const rioting = (h: number, setUp: (s: GameState) => void = () => {}, seed = 4) => {
+    only(['riot']);
+    const state = colonyAt(h, { seed });
+    setUp(state);
+    const fired = firePhase(state, 'upkeep').filter((e) => e.key === 'riot');
+    return { state, fired };
+  };
+
+  it('INV-C26-16 (riot odds): Unhappy +1, Unrest +5, Food above 1.5 times its usual price +2; no colony, no riot', () => {
+    expect(chances('riot', 'upkeep')).toEqual(close([0, 0, 0, 0.01, 0.05]));
+    const dear = (s: GameState) => (s.store.posted.food = GOOD_CONFIG.food.refPrice * 1.5 + 1);
+    expect(chances('riot', 'upkeep', { tweak: dear })).toEqual(close([0.02, 0.02, 0.02, 0.03, 0.07]));
+    const atEdge = (s: GameState) => (s.store.posted.food = GOOD_CONFIG.food.refPrice * 1.5);
+    expect(chances('riot', 'upkeep', { tweak: atEdge })).toEqual(close([0, 0, 0, 0.01, 0.05]));
+    only(['riot']);
+    const off = colonyAt(MID('unrest'), { politics: false });
+    expect(firePhase(off, 'upkeep')).toEqual([]);
+  });
+
+  it("INV-C26-17 (riot's store loss): each shelf loses a third, floored, so a shelf of 1 or 2 loses nothing; each effect is the actual loss", () => {
+    const shelves = { food: 1, energy: 2, smithore: 3, crystite: 7 };
+    const { state, fired } = rioting(MID('unrest'), (s) => {
+      s.store.stock = { ...s.store.stock, ...Object.fromEntries(Object.keys(s.store.stock).map((g) => [g, 0])), ...shelves };
+    });
+    expect(fired).toMatchObject([{ key: 'riot', scope: 'colony', sign: 'bad', phase: 'upkeep' }]);
+    expect(Object.fromEntries(Object.keys(shelves).map((g) => [g, state.store.stock[g as keyof typeof shelves]]))).toEqual({ food: 1, energy: 2, smithore: 2, crystite: 5 });
+    expect(fired[0]!.effects).toEqual([
+      { on: 'store', what: 'smithore', delta: -1 },
+      { on: 'store', what: 'crystite', delta: -2 },
+    ]);
+  });
+
+  it('INV-C26-18 (riot damages an object): one standing object, on the event\'s dice, becomes damaged and counts 0 prestige; others are never picked', () => {
+    const { state, fired } = rioting(MID('unrest'), (s) => {
+      s.colony!.projects.push(object('park'), object('hospital', 'commissioned'), object('stadium', 'closed'));
+    });
+    expect(fired[0]?.objects).toEqual([{ id: 'park', becomes: 'damaged' }]);
+    expect(state.colony!.projects.map((p) => [p.id, p.stage])).toEqual([['park', 'damaged'], ['hospital', 'commissioned'], ['stadium', 'closed']]);
+    expect(colonyPrestige(state)).toBe(0);
+    // With two standing, the dice pick either over seeds; the other stays standing and keeps its prestige.
+    const both = (seed: number) => rioting(MID('unrest'), (s) => s.colony!.projects.push(object('park'), object('stadium')), seed);
+    const picks = new Set<string>();
+    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
+      const { state: s, fired: f } = both(seed);
+      const [hit] = f[0]!.objects!;
+      picks.add(hit!.id);
+      const other = s.colony!.projects.find((p) => p.id !== hit!.id)!;
+      expect(other.stage).toBe('standing');
+      expect(colonyPrestige(s)).toBe(PRESTIGE[other.id].prestige);
+    }
+    expect(picks).toEqual(new Set(['park', 'stadium']));
+  });
+
+  it('FM-C26-9 (riot with nothing standing): the riot still fires and takes its store loss, with no objects', () => {
+    const { state, fired } = rioting(MID('unrest'), (s) => {
+      s.colony!.projects.push(object('park', 'building'));
+      s.store.stock.food = 9;
+    });
+    expect(fired).toHaveLength(1);
+    expect(fired[0]!.objects).toBeUndefined();
+    expect(fired[0]!.effects).toContainEqual({ on: 'store', what: 'food', delta: -3 });
+    expect(state.colony!.projects[0]!.stage).toBe('building');
   });
 });
