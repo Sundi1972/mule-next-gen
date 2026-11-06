@@ -371,19 +371,23 @@ export const MOVES: MoveTable = {
     command: 'donate',
     phases: ['planning'],
     does: () =>
-      "Gives credits from your money toward the colony's commissioned prestige object; its plaque names you with the sum, and the gift counts toward your vote weight. It leaves your Worth as it was: what you give counts as donated.",
+      "Gives credits from your money, and units of goods the object still needs from your stock, toward the colony's commissioned prestige object; its plaque names you with the credits plus each good at the store's price that day, and the gift counts toward your vote weight. It leaves your Worth as it was: what you give counts as donated.",
     legalWhen: () => [
       refused("the game plays with the colony's council", "This game plays without the colony's council"),
       refused('it is planning', 'Donate in planning'),
       refused('the object is commissioned and still being funded', 'Nothing is being funded'),
-      refused('it is a whole number of credits, at least 1', 'Give at least 1 cr or 1 unit'),
+      refused('credits and units are whole numbers, at least 1 cr or 1 unit in all', 'Give at least 1 cr or 1 unit'),
       refused('you have the credits', 'You have <money> cr'),
       refused('the object still needs that many credits', 'The <name> needs only <credits> cr more'),
+      refused('the object needs each good you give', 'The <name> needs no <good>'),
+      refused('the object still needs that many units of it', 'The <name> still needs <units> <good>'),
+      refused('you have the units', 'You have <units> <good>'),
     ],
     cost: () => ({ line: 'the credits you give' }),
     args: [
       { name: 'id', kind: 'enum', values: PRESTIGE_IDS },
       { name: 'credits', kind: 'number' },
+      { name: 'goods', kind: 'good' },
     ],
   },
   payStrike: {
