@@ -236,7 +236,7 @@ function applyRule(state: GameState, id: string, action: AiAction, clock?: DevCl
         commission(state, id, action.id);
         break;
       case 'donate':
-        donate(state, id, action.id, action.credits);
+        donate(state, id, action.id, action.credits, action.goods);
         break;
       case 'payStrike':
         payStrike(state, id);
