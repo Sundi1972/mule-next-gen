@@ -352,6 +352,10 @@ async function analyseSaysWhatItFound(room: Room, screens: { lena: Page; kai: Pa
   while (!game.steering && Date.now() < end) await screens.lena.waitForTimeout(ASSAY_POLL_MS);
   const steering = game.steering;
   check(steering, `${B_AC_3}: the second room steers its development within ${FLOOR_STARTS_MS / 1_000} s (phase ${state.phase})`);
+  // The turn the rest of the second room's steps need, set once its floor runs: development's own start (after an event
+  // show holds it) would otherwise reset the clock to the smoke's scaled minute.
+  game.devEndsAt = Date.now() + SECOND_ROOM_TURN_MS;
+  room.broadcast();
   steering.floor = { ...steering.floor, colonists: steering.floor.colonists.map((c) => (c.id === seat ? { ...c, space: 'map', x: plot.x + 0.5, y: plot.y + 0.5, moving: false } : c)) };
   const walking = screens.lena.locator('[data-phase=development] [data-testid=phone-game]');
   await appears(walking.getByTestId('action-verb').filter({ hasText: 'ANALYSE' }), STEP_MS, `${B_AC_3}: on plot ${plotName(plot)} Lena's button offers ANALYSE`);
@@ -482,9 +486,6 @@ async function theSecondRoomsDevelopment({ phone, server }: Pick<GameStepContext
     const walking = page.locator('[data-phase=development] [data-testid=phone-game]');
     await appears(walking, Math.max(1, started + TO_DEVELOPMENT_MS - Date.now()), `${B_AC_2}: the second room reaches its walking screen`);
     const room = roomOf(server, code);
-    const game = room.game as SteeredGame;
-    game.devEndsAt = Date.now() + SECOND_ROOM_TURN_MS;
-    room.broadcast();
     const seat = room.game.state.players.find((p) => p.name === 'Lena')?.id;
     check(seat, `${B_AC_2}: Lena plays in the second room`);
     const analysed = await analyseSaysWhatItFound(room, { lena: page, kai, tv }, seat);
@@ -513,6 +514,10 @@ async function theSecondRoomsDevelopment({ phone, server }: Pick<GameStepContext
     const laptop = await thePlotsChipOnTheLaptop(page, room, seat);
     check(errors.length === 0, `${B_AC_2}: no page errors in the second room: ${errors.join('; ')}`);
     return { analysed, walking: `${listed}; ${laptop}` };
+  } catch (e) {
+    // A step that fails after a page error says so, whichever check tripped.
+    if (errors.length) throw new Error(`${(e as Error).message}; page errors in the second room: ${errors.join('; ')}`);
+    throw e;
   } finally {
     await Promise.all(contexts.map((c) => c.close()));
     if (code) server.registry.get(code)?.dispose();
