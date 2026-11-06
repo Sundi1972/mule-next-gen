@@ -152,6 +152,26 @@ describe('the colony at the table', () => {
     expect(game.viewFor(null).tiles.map((t) => t.owner)).toEqual(owners);
   });
 
+  it("RULE-32 (C48): every screen's colony view carries each building's place on the grounds: the Hospital commissioned first at 0, the Park next at 1", () => {
+    const { game, state } = governed();
+    game.handle('s1', { type: 'commission', id: 'hospital' });
+    state.colony!.projects.find((p) => p.id === 'hospital')!.stage = 'standing';
+    game.handle('s1', { type: 'commission', id: 'park' });
+    for (const viewer of [null, 's1', 's2']) {
+      expect(game.viewFor(viewer).colony!.projects.map((p) => [p.id, p.slot]), `${viewer ?? 'the TV'}'s view`).toEqual([
+        ['hospital', 0],
+        ['park', 1],
+      ]);
+    }
+  });
+
+  it('RULE-32: a project holding no place shows slot null, never undefined', () => {
+    const { game, state } = governed();
+    game.handle('s1', { type: 'commission', id: 'hospital' });
+    delete state.colony!.projects[0]!.slot;
+    expect(game.viewFor(null).colony!.projects[0]!.slot).toBeNull();
+  });
+
   it("C35, AM-13: the colony view's refPrice is the store's price today for every good the catalogue needs, and a gift's plaque grows by exactly units × that price", () => {
     const { game, state } = governed();
     const needed = [...new Set(Object.values(PRESTIGE).flatMap((row) => Object.keys(row.goods)))].sort();

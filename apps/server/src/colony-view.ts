@@ -31,6 +31,7 @@ export function colonyView(state: GameState): ColonyView | null {
         funded: { credits: p.funded.credits, goods: { ...p.funded.goods } },
         buildMonths: row.buildMonths,
         monthsLeft: p.monthsLeft,
+        slot: p.slot ?? null,
         prestige: row.prestige,
         upkeep: row.upkeep,
         repairCost: p.stage === 'damaged' ? row.repairCost : null,

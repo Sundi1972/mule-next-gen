@@ -713,6 +713,8 @@ export interface ColonyProjectView {
   buildMonths: number;
   /** Upkeeps left until it stands; null unless building. */
   monthsLeft: number | null;
+  /** Its place on the colony's own grounds, in growth order (0 beside the town hall, outward ring by ring, up to COLONY.groundsSlots); null holds none (G-5 RULE-32). */
+  slot: number | null;
   prestige: number;
   /** Credits a month while it stands. */
   upkeep: number;
