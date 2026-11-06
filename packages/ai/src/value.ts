@@ -3,6 +3,7 @@ import {
   AI_PLANS,
   AI_VALUE,
   airPoints,
+  cloneForSim,
   crewOf,
   DEV_STEER,
   DEV_WALK,
@@ -27,6 +28,7 @@ import {
   PROCESSED_GOODS,
   rawOutput,
   RECIPES,
+  runProduction,
   SPECIES_PERK,
   STRATEGIST,
   storeForSale,
@@ -110,12 +112,35 @@ export const beforeTax = (obs: GameState, kept: number) => kept / Math.max(0.01,
 
 /**
  * What the seat's own plots supply of a good next month, by the outlook: what they make, but for Energy what the plants
- * have left after paying their own use (AM-17 R2, PM ruling A: monthNeeds leaves that use out, so supply must too).
+ * have left after paying their own use (AM-17 R2, PM ruling A: monthNeeds leaves that use out, so supply must too). A
+ * plant pays its use from what it makes and never more (runProduction charges min(made, use)), so one an event leaves
+ * making nothing pays nothing.
  */
-export function ownSupply(obs: GameState, me: string, made: Stock, good: Good): number {
-  if (good !== 'energy') return made[good];
-  const plantsUse = obs.tiles.filter((t) => t.owner === me && t.outfit === 'energy').reduce((n, t) => n + energyUseOf(obs, t), 0);
-  return Math.max(0, made.energy - plantsUse);
+export function ownSupply(o: Outlook, me: string, good: Good): number {
+  if (good !== 'energy') return o.made[good];
+  if (o.made.energy <= 0) return 0;
+  return Math.max(0, o.made.energy - plantsCharge(o.stage, me));
+}
+
+const chargeCache = new WeakMap<GameState, Map<string, number>>();
+
+/**
+ * What the seat's Energy plants paid of their own use at the production an outlook rolled: each min(made, use), as
+ * runProduction charges it. The outlook keeps only the seat's totals, so production runs once more, on a copy of its
+ * stage (the copy just after that production), for each plant's line: what a plant makes doesn't move with what the
+ * month made, and a what-if copy rolls no event but the strike it already holds.
+ */
+function plantsCharge(stage: GameState, me: string): number {
+  let seen = chargeCache.get(stage);
+  if (!seen) chargeCache.set(stage, (seen = new Map()));
+  let charge = seen.get(me);
+  if (charge === undefined) {
+    const sim = cloneForSim(stage);
+    const plants = runProduction(sim).lines.filter((l) => l.good === 'energy' && sim.tiles[l.tile]!.owner === me);
+    charge = plants.reduce((n, l) => n + Math.min(Math.max(0, l.made), energyUseOf(sim, sim.tiles[l.tile]!)), 0);
+    seen.set(me, charge);
+  }
+  return charge;
 }
 
 /** Net credits a month from running this outfit here, at the given prices (the outlook's by default, its own extra supply included). */
@@ -133,7 +158,7 @@ export function monthlyNet(obs: GameState, o: Outlook, y: Yield, outfit: Outfit,
     revenue += ownUseGain(obs, o, outfit, made, each, mind);
   } else if (full && (outfit === 'food' || outfit === 'water' || outfit === 'energy')) {
     // The units that cover its own shortfall are worth what going short would cost it, and pay no tax.
-    const short = Math.max(0, monthNeeds(obs, mind.me)[outfit] - ownSupply(obs, mind.me, o.made, outfit));
+    const short = Math.max(0, monthNeeds(obs, mind.me)[outfit] - ownSupply(o, mind.me, outfit));
     const own = Math.min(made, short);
     const floor = obs.store.refPrice[outfit] * STRATEGIST.selfSupply;
     revenue += own * Math.max(0, floor - afterTax(obs, P(outfit, made)));
@@ -393,7 +418,7 @@ export function cashReserve(obs: GameState, mind: Mind, o?: Outlook, except?: Go
   let cost = 0;
   for (const g of ['food', 'water', 'energy'] as const) {
     if (g === except) continue;
-    const short = Math.max(0, need[g] - p.stock[g] - (o ? ownSupply(obs, mind.me, o.made, g) : 0));
+    const short = Math.max(0, need[g] - p.stock[g] - (o ? ownSupply(o, mind.me, g) : 0));
     cost += short * Math.min(obs.store.posted[g] * (1 + PRICE.storeSpread), obs.store.refPrice[g] * STRATEGIST.reservePriceCap);
   }
   return Math.round((STRATEGIST.cashFloor + cost) * mind.persona.reserve);
@@ -802,7 +827,7 @@ function ownUseGain(obs: GameState, o: Outlook, good: 'food' | 'water' | 'energy
   // Only units the seat needs count: a well's drink units are worth nothing to a seat with no farm to water.
   const target = unitNeed(obs, mind, good).target;
   if (target === 0) return 0;
-  const own = Math.min(made, Math.max(0, target - ownSupply(obs, mind.me, o.made, good)));
+  const own = Math.min(made, Math.max(0, target - ownSupply(o, mind.me, good)));
   const [cost = replace] = shortCosts(obs, o, good, mind, 1);
   return own * Math.max(0, cost - price);
 }
