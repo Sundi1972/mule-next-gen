@@ -6,6 +6,7 @@ import {
   boardWalkers,
   dealLine,
   dealSpeed,
+  heldSeller,
   newestFirst,
   shipWants,
   ShipWants,
@@ -458,6 +459,17 @@ function useNewestFirst(deals: DealView[]): DealRow[] {
   return rows;
 }
 
+/** The sellers held at what they must hold, newest first: those already held keep their order, one just held goes on top. */
+function useHeldNewestFirst(ids: string[]): string[] {
+  const key = ids.join(',');
+  const [held, setHeld] = useState(() => ({ key, ids }));
+  if (held.key === key) return held.ids;
+  const kept = held.ids.filter((id) => ids.includes(id));
+  const next = [...ids.filter((id) => !kept.includes(id)), ...kept];
+  setHeld({ key, ids: next });
+  return next;
+}
+
 /**
  * The auction on the big screen: before each good, the status table and everyone's side, which is public;
  * then the whole board, large, with every creature walking live.
@@ -468,6 +480,7 @@ export function TvAuction({ table, game, auction }: { table: TableView<MuleView>
   const walkers = boardWalkers(game, auction);
   const stock = auction.storeForSale;
   const deals = useNewestFirst(auction.deals);
+  const held = useHeldNewestFirst(auction.walkers.filter(heldSeller).map((w) => w.id));
   const status = auction.stage === 'status';
   // The close stage (A-5, G-5): the board holds still while each phone shows its receipt; "closed" is the receipt's word.
   const closed = auction.stage === 'close';
@@ -609,6 +622,33 @@ export function TvAuction({ table, game, auction }: { table: TableView<MuleView>
                   The ship buys {GOOD_NAME[auction.good]} at {auction.shipPays}
                 </strong>
               </p>
+            )}
+            {/* RULE-4 said, not only marked KEEPS on the board (WS6's mock, TvSale): the newest held seller in the mock's
+                card, older ones a row each, as the deals below, so a full table's several stay in sight. */}
+            {!status && held.length > 0 && (
+              <ul className="flex shrink-0 flex-col gap-1.5" data-testid="tv-held">
+                {held.map((id, i) => {
+                  const w = auction.walkers.find((x) => x.id === id)!;
+                  const p = game.players.find((x) => x.id === id);
+                  const keeps = `${p?.name ?? id} keeps ${w.units} ${GOOD_NAME[auction.good]}`;
+                  if (i > 0)
+                    return (
+                      <li key={id} className="flex items-center gap-2 rounded-control border border-ok/70 bg-panel px-3 py-1.5 font-display text-base font-semibold leading-tight" data-testid={`tv-held-${id}`}>
+                        <PlayerMark slot={slotOf(game, id) ?? 0} size={20} label={p?.name ?? id} />
+                        <span className="min-w-0 truncate">{keeps}</span>
+                      </li>
+                    );
+                  return (
+                    <li key={id} className="flex flex-col gap-2 rounded-panel border border-ok/70 bg-panel p-4" data-testid={`tv-held-${id}`}>
+                      <span className="flex items-center gap-2 font-display text-2xl font-semibold">
+                        <PlayerMark slot={slotOf(game, id) ?? 0} size={32} label={p?.name ?? id} />
+                        <span className="min-w-0 truncate">{keeps}</span>
+                      </span>
+                      <span className="font-mono text-xl text-ink-2">what they must hold</span>
+                    </li>
+                  );
+                })}
+              </ul>
             )}
             {/* Newest first, every one of them: none is clipped or wrapped out of sight; the side scales instead. */}
             <ul className="flex flex-1 flex-col gap-1.5">

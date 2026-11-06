@@ -217,3 +217,33 @@ describe('TV-DEALS (PM rulings 5 and 6 Nov): every running deal stays in sight o
     expect(list).not.toMatch(/flex-wrap|overflow-hidden/);
   });
 });
+
+/**
+ * RULE-4 on the TV (WS3's ask; WS6's mock design/mocks/auction-rules, TvSale): a seller the engine stopped at what they
+ * must hold is said on the TV's side, "Lena keeps 5 Food", not only marked KEEPS on the board. The mock draws one; at a
+ * full table several can be held at once, so the newest keeps the mock's card and older ones get a row each, as the
+ * running deals do (Variant A), and the side stays over the fit floor.
+ */
+describe('B-AC-B1 (TV, WS4): the TV says who keeps what they must hold', () => {
+  const held = (w: ReturnType<typeof walker>) => ({ ...w, held: true as const });
+  const alloy = alloyWalk.walkers!;
+
+  it('B-AC-B1: a held seller is said on the TV in a card: who keeps how much of the good, and why', () => {
+    const html = tvScreen(tvView({ ...alloyWalk, walkers: [alloy[0]!, alloy[1]!, held(walker('s3', 'seller', 81, 4)), alloy[3]!] }));
+    const card = inside(html, 'tv-held-s3');
+    expect(textOf(card)).toBe('The Big Spender keeps 4 Alloy what they must hold');
+    expect(card).toMatch(/role="img"[^>]*aria-label="The Big Spender"/);
+  });
+
+  it('B-AC-B1: two held sellers are both said, the newest in the card and the other in a row of its own', () => {
+    const html = tvScreen(tvView({ ...alloyWalk, walkers: [alloy[0]!, held(walker('s2', 'seller', 81, 2)), held(walker('s3', 'seller', 81, 4)), alloy[3]!] }));
+    expect(textOf(inside(html, 'tv-held-s2'))).toBe('The Accountant keeps 2 Alloy what they must hold');
+    expect(textOf(inside(html, 'tv-held-s3'))).toBe('The Big Spender keeps 4 Alloy');
+  });
+
+  it('B-AC-B1 (negative): nobody held, a held flag kept through a switch to Buy, or the status stage: nothing said', () => {
+    expect(tvScreen(tvView(alloyWalk))).not.toMatch(/data-testid="tv-held-/);
+    expect(tvScreen(tvView({ ...alloyWalk, walkers: [alloy[0]!, alloy[1]!, held(walker('s3', 'buyer', 66, 4)), alloy[3]!] }))).not.toMatch(/data-testid="tv-held-/);
+    expect(tvScreen(tvView({ ...alloyWalk, stage: 'status', walkers: [alloy[0]!, alloy[1]!, held(walker('s3', 'seller', 81, 4)), alloy[3]!] }))).not.toMatch(/data-testid="tv-held-/);
+  });
+});
