@@ -1,7 +1,7 @@
 /**
  * Option (a) of the visual spike: the Park painted the world map's way (packages/ui/src/terrain/landscape.ts).
  * No image assets. Every point of the 12 m place is a height plus a material from the map's own noise, coloured
- * from the map's palette and lit from the north-west with its ambient + diffuse. The map is seen from straight
+ * from the map's palette and lit with its ambient + diffuse, the sun from the grounds' west-south-west. The map is seen from straight
  * above, so it never needed depth; here the same height field is splatted as columns into the grounds' iso
  * camera with a z-buffer, and a second splat from the sun gives cast shadows. Tree crowns and lamp globes float,
  * which one height field cannot hold, so they are lumpy spheres (Worley crowns, as the map's forest) beside it;
@@ -82,13 +82,13 @@ const PATH_HALF = 0.5;
 const PLAZA_R = 1.6;
 const POND = { x: 3.1, y: 3.1, rx: 1.9, ry: 1.4 };
 const BED = { x: 3.1, y: -3.1, r: 1.3 };
-const LAMPS: [number, number][] = [[1.3, 1.3], [-1.3, 1.3], [1.3, -1.3], [-1.3, -1.3]];
+const LAMPS: [number, number][] = [[2.2, 2.2], [-2.2, 2.2], [2.2, -2.2], [-2.2, -2.2]];
 const LAMP_Z = 2.4;
 const BENCHES: [number, number][] = [[-1.9, -1.2], [1.2, -1.9]];
 const BENCH_HALF = 0.75;
 const TREES = [
-  { x: -3.1, y: 3.0, h: 7.0, seed: 11 },
-  { x: -3.6, y: -2.8, h: 5.2, seed: 23 },
+  { x: -3.1, y: 3.0, h: 5.5, seed: 11 },
+  { x: -3.6, y: -2.8, h: 4.2, seed: 23 },
 ];
 /** Hedge boxes [x0, x1, y0, y1]: inside the rim on the north and west, open where the paths run out. */
 const HEDGE_W = 0.7;
@@ -234,9 +234,11 @@ function benchLocal(x: number, y: number, b: [number, number]): [number, number]
 }
 
 function pondQ(x: number, y: number): number {
-  const t = (x - POND.x) / POND.rx;
-  // Bent ends make the kidney: its hollow faces the plaza.
-  const dy = y - POND.y + POND.ry * 0.42 * (t * t - 0.35);
+  // Laid along the diagonal with its ends bent towards the plaza: the kidney's hollow holds the lamp at (2.2, 2.2),
+  // which the spec's plain ellipse would put in the water.
+  const u = (x - POND.x - (y - POND.y)) * Math.SQRT1_2, v = (x - POND.x + (y - POND.y)) * Math.SQRT1_2;
+  const t = u / POND.rx;
+  const dy = v + POND.ry * 0.42 * (t * t - 0.35);
   return Math.hypot(t, dy / (POND.ry * 0.86));
 }
 
@@ -618,8 +620,10 @@ function splatClumps(c: Cam, B: Buffers, nGround: number): void {
 // ---------------------------------------------------------------- shading
 
 const SUN: [number, number, number] = (() => {
-  // The map's light, [-0.62, -0.7, 0.55] with its y running south; ours runs north.
-  const v = [-0.62, 0.7, 0.55];
+  // The grounds' sun (park-spec.json): azimuth 250° from north, 35° up — the camera's left, so the faces we see are
+  // lit. The map's north-west sun would leave every face this camera sees in shade.
+  const az = (250 * Math.PI) / 180, el = (35 * Math.PI) / 180;
+  const v = [Math.sin(az) * Math.cos(el), Math.cos(az) * Math.cos(el), Math.sin(el)];
   const l = Math.hypot(v[0]!, v[1]!, v[2]!);
   return [v[0]! / l, v[1]! / l, v[2]! / l];
 })();
@@ -881,9 +885,18 @@ export function paintPark(theme: Theme, ss = 2): Painted {
           const vx = lx - px, vy = ly - py, vz = lampsZ - pz;
           const dl = Math.hypot(vx, vy, vz);
           if (dl < 0.2) continue;
+          // Hedges, benches and the plinth stand in a lamp's way: a few steps along the ray over the height field.
+          let seen = 1;
+          for (let q = 1; q < 10 && seen; q++) {
+            const f = q / 10, qx = px + vx * f, qy = py + vy * f;
+            const gi = Math.floor((qx + HALF) / G.g), gj = Math.floor((qy + HALF) / G.g);
+            if (gi >= 0 && gj >= 0 && gi < N && gj < N && G.h[gj * N + gi]! > pz + vz * f + 0.02 && G.m[gj * N + gi] !== POST) seen = 0;
+          }
+          if (!seen) continue;
           const nd = clamp01((vx * nx + vy * ny + vz * nz) / dl);
           const fall = 1 / (1 + (dl / 2.2) ** 2) ** 2;
-          const k = 1.5 * fall * (0.15 + 0.85 * nd);
+          // Leaves right beside a globe would flare: they scatter the light, so they take less of it.
+          const k = 1.5 * fall * (0.15 + 0.85 * nd) * (mat === -1 ? 0.45 : 1);
           // Lamplight shows the day colour back, so undo the night palette for it.
           r += (ar / 0.34) * 1.0 * k;
           g += (ag2 / 0.4) * 0.74 * k;

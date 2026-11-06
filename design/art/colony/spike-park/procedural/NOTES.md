@@ -14,8 +14,10 @@ What is taken from the map (`packages/ui/src/terrain/landscape.ts`, `noise.ts`),
 - **The palette.** LIGHT is copied value for value (it is not exported); DARK is the map's own transform
   (`r×0.34, g×0.4, b×0.48+0.03`, the same water/foam overrides, ambient 0.42 / diffuse 0.62, cyan contour).
   The park adds a few colours the map never needed (bark, painted wood, lamp metal, gazania petals), kept muted.
-- **The light.** The map's vector `[-0.62, -0.7, 0.55]` (sun from the north-west, ~30° up) and its
-  `ambient + diffuse × lambert` model; the map's clouds by day, its contour lines (every 25 cm here) at night.
+- **The light model.** The map's `ambient + diffuse × lambert`, its clouds by day, its contour lines (every 25 cm
+  here) at night. **Not its direction:** the map's sun is north-west, which from this south-east camera lights
+  only faces we cannot see. Since the second pass (spec v3, 6 Nov) the sun is the grounds' own: azimuth 250°
+  (west-south-west, the camera's left), 35° up, so the near-left faces are lit and shadows fall back-right.
 - **The materials' recipes.** Lawn = the map's plains patchwork + mown stripes; tree crowns and hedges = the map's
   forest formula `crown = 1 − smooth(0.05, 0.62, cells(…))`, forest→canopy colour by crown; the meteorite =
   `ridged` crests + Worley pits + the crater's purple glints; the pond = the map's shallow/deep mix, ripple,
@@ -38,8 +40,8 @@ What had to be added, because the map is only ever seen from straight above:
 5. **Cast shadows.** A second splat of everything from the sun (1.4 cm texels), 3×3 soft taps. The map has no cast
    shadows; without them nothing here stands up.
 6. **Ambient occlusion** from a blurred top-down "what stands over me" map (land + crown undersides).
-7. **Dusk extras.** Warm light pools from the four globes (re-lighting the day colours), a halo round each
-   globe, the slab's top edge drawn as a hologram line (as the map rings the store's pad), contours on the
+7. **Dusk extras.** Warm light pools from the four globes (re-lighting the day colours, stopped by hedges, benches
+   and the plinth with a short march over the height field), a halo round each globe, the slab's top edge drawn as a hologram line (as the map rings the store's pad), contours on the
    slab's sides, plinth and meteorite.
 
 ## Paint time (Apple M5 Max, one thread, Node 24)
@@ -50,8 +52,9 @@ What had to be added, because the map is only ever seen from straight above:
 | 1600×1200, ss 1 (no supersampling; nearly as good) | **≈ 1.7 s** | 2.7 s |
 
 Split at ss 2 (warm): grid 1.0–1.1 s · splat 1.1 s · shadow map 0.35 s · AO 0.1 s · shading 1.2 s.
-Some runs were slower (up to 8.9 s) while other spikes were rendering on the same machine; the figures above are the
-quiet runs. With the map's own estimate of a phone 4–6× slower: **7–10 s per image at ss 1, 15–25 s at ss 2**.
+Some runs were slower (up to 11 s) while other spikes were rendering on the same machine; the figures above are the
+quiet runs. The second pass (spec v3: WSW sun, 5.5 m and 4.2 m trees, lamps at ±2.2, lamp light occluded) costs
+about the same; the occlusion march adds a few hundred ms at dusk. With the map's own estimate of a phone 4–6× slower: **7–10 s per image at ss 1, 15–25 s at ss 2**.
 Cost scales with pixels, so a grounds tile drawn ~400 px wide at 2× density would be ≈ 0.4–0.6 s here, 2–3 s on a
 phone — fine for a picture painted once in a worker and cached (as `landscape-painter.ts` does), not for anything
 that animates.
@@ -73,16 +76,14 @@ that animates.
   noisy spheres, no visible branches, no light through the canopy (a little faked transmission keeps them from
   going black). Benches are solid boxes with the gap under the seat *painted* on; they read as benches at this size
   but not up close. Lamp posts are fine because they are just thin columns.
-- **The sun from the north-west lights the side the camera does not see.** The camera looks from the south-east, so
-  every wall, hedge face and crown facing us is in the shade side; the picture leans on ambient. (Note for the
-  comparison: `park.py` sets its sun to rotation (50°, 0, 35°), which shines *from the south-east*, so the Blender
-  render is front-lit despite the spec's "sun from the north-west" — the two images are not lit alike.)
-- No reflections worth the name: from this camera the pond cannot see any of the lamps (they are all south-west of
-  it, the reflected view looks north-west), so "the pond reflects them" does not happen; it only darkens and
+- **Light direction had to leave the map's.** The first pass used the map's north-west sun and every face the camera
+  sees was in shade; the second pass uses the grounds' west-south-west sun, which reads far better. So "like the
+  map" means the map's palette and light *model*, with a sun chosen for this camera.
+- No reflections worth the name: from this camera the pond cannot see any of the lamps, so it only darkens and
   ripples. Water is coloured, as on the map, not reflective.
 - Silhouettes are aliased unless supersampled (ss 2 doubles to quadruples the time).
-- The 7 m tree's crown pokes ~25 px above the top of the 1600×1200 frame. That is the spec's camera (ortho 21 m);
-  the Blender render would clip it too.
+- Spec v3 puts the lamp at (2.2, 2.2) inside the pond's ellipse. Here the kidney is laid along the diagonal with its
+  hollow towards the plaza, and the lamp stands in the hollow; the pond's size is the spec's.
 - Every new kind of object is new code and new artefacts to chase (the column splat left holes in walls on
   staircase edges until the eight-neighbour fix; one-cell normals striped every curved wall). It is a renderer you
   own, not a tool.

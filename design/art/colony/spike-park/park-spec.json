@@ -6,7 +6,7 @@
   "plaza": { "center": [0, 0], "radius": 1.6, "material": "pale gravel or stone setts" },
   "paths": { "width": 1.0, "material": "gravel, same as plaza", "spokes": [[0, -6], [6, 0], [0, 6], [-6, 0]] },
   "monument": { "asset": "moon_rock_03", "center": [0, 0], "plinth": { "radius": 0.7, "height": 0.35 }, "height": 1.4, "note": "the colony is not on Earth: a meteorite on a plinth" },
-  "pond": { "center": [3.1, 3.1], "rx": 1.9, "ry": 1.4, "edge": "ring of rounded stones", "material": "clear dark water, reflective, with a shallow lighter edge" },
+  "pond": { "center": [3.1, 3.1], "rx": 1.9, "ry": 1.4, "shape": "kidney, long axis along the NW-SE diagonal, hollow facing the plaza so the NE lamp stands in it", "edge": "ring of rounded stones", "material": "clear dark water, reflective, with a shallow lighter edge" },
   "trees": [
     { "asset": "island_tree_01", "at": [-3.1, 3.0], "height": 5.5 },
     { "asset": "island_tree_01", "at": [-3.6, -2.8], "height": 4.2, "rotate": 2.1 }
