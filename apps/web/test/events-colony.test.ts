@@ -236,8 +236,12 @@ describe('B-AC-26-3: the riot takes a third of each shelf and damages one object
   });
 });
 
+/** The strike chip's words, from the engine's share: what each struck plot makes in planning, what it loses in production. */
+const STRIKE_MADE = ` STRIKE · ${Math.round(COLONY.strike.output * 100)}% `;
+const STRIKE_LOST = ` STRIKE −${Math.round((1 - COLONY.strike.output) * 100)}% `;
+
 describe('B-AC-26-4: the planning strike announcement on the TV', () => {
-  it('B-AC-26-4: strikers walk out to every Food plot, each gets STRIKE · 20%, and the log says what it costs', () => {
+  it('B-AC-26-4: strikers walk out to every Food plot, each gets STRIKE · its share made, and the log says what it costs', () => {
     const ev = [STRIKE];
     const seg = segOf(ev, 'tv');
     expect(text(inside(screen(ev, seg.announceAt + 0.3, 'tv'), 'title-card'))).toContain('unless the Governor pays the strikers 240 cr');
@@ -245,7 +249,7 @@ describe('B-AC-26-4: the planning strike announcement on the TV', () => {
       const standing = reduced ? result(ev, 'tv', { reduced }) : storyAt(ev, 2.6 + 3 * 0.35 + 0.2);
       for (const p of FOOD_PLOTS) {
         expect(has(standing, `striker-${p.x}-${p.y}`)).toBe(true);
-        expect(text(inside(standing, `strike-chip-${p.x}-${p.y}`))).toBe(' STRIKE · 20% ');
+        expect(text(inside(standing, `strike-chip-${p.x}-${p.y}`))).toBe(STRIKE_MADE);
       }
       // Nothing stands on land that isn't Food.
       expect(has(standing, 'striker-6-3')).toBe(false);
@@ -289,7 +293,7 @@ describe('B-AC-26-4: the unpaid strike plays in production on the TV', () => {
     return { count: text(inside(plot, 'units')).trim(), bars: (plot.match(/data-bar="unit"/g) ?? []).length };
   };
 
-  it('B-AC-26-4: the strikers stand on every Food plot from the start, no walk; each plot gets STRIKE −80% as the strike lands on it, none before', () => {
+  it('B-AC-26-4: the strikers stand on every Food plot from the start, no walk; each plot gets STRIKE −its share lost as the strike lands on it, none before', () => {
     const start = at(0.05);
     const before = at(lands - 0.1);
     const after = at(lands + 3 * step + 0.2);
@@ -299,7 +303,7 @@ describe('B-AC-26-4: the unpaid strike plays in production on the TV', () => {
       // Already on the plot: where it stands at the start is where it stands once the strike has landed.
       expect(where(start, id)).toEqual(where(after, id));
       expect(has(before, `strike-chip-${p.x}-${p.y}`)).toBe(false);
-      expect(text(inside(after, `strike-chip-${p.x}-${p.y}`))).toBe(' STRIKE −80% ');
+      expect(text(inside(after, `strike-chip-${p.x}-${p.y}`))).toBe(STRIKE_LOST);
     }
     // One plot after the next: as it reaches the second plot, the third has no chip yet.
     const second = at(lands + step + 0.05);
@@ -326,7 +330,7 @@ describe('B-AC-26-4: the unpaid strike plays in production on the TV', () => {
     const start = at(0.01, true);
     for (const p of FOOD_PLOTS) {
       expect(has(start, `striker-${p.x}-${p.y}`)).toBe(true);
-      expect(text(inside(start, `strike-chip-${p.x}-${p.y}`))).toBe(' STRIKE −80% ');
+      expect(text(inside(start, `strike-chip-${p.x}-${p.y}`))).toBe(STRIKE_LOST);
     }
   });
 
