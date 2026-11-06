@@ -1,7 +1,7 @@
 import { BRAIN, type AiLevelId, type AiPersonaId } from '@mule/engine';
 import { LlmDecider, ReplyRejected, unusableReply, writeReply, type Complete, type Decider, type DecisionRecord, type WriteAsk, type WriteComplete, type WriterReply } from '@mule/ai';
 import { createBudget, MOVE_CALL, worstCaseUsd, type PromptText } from './budget.js';
-import { chatter } from './chat.js';
+import { chatter, type Spoken } from './chat.js';
 import { billUnknown, CallFailed, createAnthropicSdk, createHaikuComplete, createToolLoop, Stopped, WRITE_CALLS, WRITE_FALLBACK_MODEL, type HaikuReply, type HaikuSdk, type RoundGate, type ToolBox, type WriteKind } from './client.js';
 import { createLedger, NO_USAGE, type LedgerKind, type ModelId, type Outcome, type Usage } from './ledger.js';
 
@@ -19,7 +19,8 @@ export interface BrainService {
   /** A playbook writer for a Smart seat, or null: the seat plays the engine's playbooks. */
   writerFor(seat: BrainSeat): PlaybookWriter | null;
   /** The seat's onDecision callback: passes its lines to `say`: at most BRAIN.linesPerMonth a month and one a phase. Never throws. See RULE-2. */
-  chatter(seat: BrainSeat, say: (line: string) => void): (record: DecisionRecord) => void;
+  /** A seat's chat: its decisions' lines and its plans' lines (ruling a'), within the caps. */
+  chatter(seat: BrainSeat, say: (line: string) => void): (record: Spoken) => void;
   /** Closes the game; a Smart brain that built a decider also writes its total line. A second call does nothing. */
   finish(): void;
 }
@@ -310,7 +311,8 @@ export function createBrain(options: BrainOptions): MeteredBrain {
   return {
     deciderFor,
     writerFor,
-    chatter: (seat, say) => chatter(seat.id, say),
+    // Every AI seat of a Smart brain gets a decider, so its routine top picks stay quiet.
+    chatter: (seat, say) => chatter(seat.id, say, 'smart'),
     finish() {
       countedAtFinish ??= counted();
       finished = true;
