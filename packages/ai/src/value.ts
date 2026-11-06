@@ -194,16 +194,28 @@ export function installGain(obs: GameState, o: Outlook, tile: Tile, outfit: Outf
  * factory's own Energy use turns off feeds it only that 20%.
  */
 export function canFeed(obs: GameState, me: string, outfit: Outfit): boolean {
-  return unfedInputs(obs, me, outfit).length === 0;
+  if (!isFactory(outfit)) return true;
+  const lasts = inputLasts(obs, me, outfit);
+  // Stops at the first input it can't feed: each input's check may roll a production out.
+  return inputsOf(outfit).find(([g, q]) => !lasts(g, q)) === undefined;
 }
 
 /** The inputs other than Energy that canFeed finds the seat can't feed a new `outfit` factory with; none for a raw outfit. */
 export function unfedInputs(obs: GameState, me: string, outfit: Outfit): Good[] {
   if (!isFactory(outfit)) return [];
+  const lasts = inputLasts(obs, me, outfit);
+  return inputsOf(outfit).filter(([g, q]) => !lasts(g, q)).map(([g]) => g);
+}
+
+/** A factory's inputs other than Energy, with what a run takes of each. */
+const inputsOf = (outfit: ProcessedGood): [Good, number][] => (Object.entries(RECIPES[outfit].inputs) as [Good, number][]).filter(([g]) => g !== 'energy');
+
+/** canFeed's test for one input `g`, of which a run of a new `outfit` factory takes `q`: whether it lasts. */
+function inputLasts(obs: GameState, me: string, outfit: ProcessedGood): (g: Good, q: number) => boolean {
   const p = obs.players.find((q) => q.id === me)!;
   const household = householdNeeds(obs, me);
   const factories = obs.tiles.filter((t) => t.owner === me && t.outfit && isFactory(t.outfit));
-  const lasts = (g: Good, q: number) => {
+  return (g: Good, q: number) => {
     const own = obs.tiles.some((t) => t.owner === me && t.outfit === g) ? madeNext(obs, me, outfit)[g] : 0;
     // What the seat's factories already take of it each month, before the new one gets any.
     const taken = factories.reduce((n, t) => n + (RECIPES[t.outfit as ProcessedGood].inputs[g] ?? 0), 0);
@@ -215,7 +227,6 @@ export function unfedInputs(obs: GameState, me: string, outfit: Outfit): Good[] 
     }
     return true;
   };
-  return (Object.entries(RECIPES[outfit].inputs) as [Good, number][]).filter(([g, q]) => g !== 'energy' && !lasts(g, q)).map(([g]) => g);
 }
 
 /** What the household, a new factory's crew included, eats and drinks a month: canFeed's first call on Food and Water. */
