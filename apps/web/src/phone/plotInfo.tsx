@@ -1,7 +1,7 @@
 import type { Ground } from '@mule/engine';
 import type { MuleView, TileView } from '@mule/protocol';
 import { bestOf, cx, dotsOf, gemsIn, GOOD_NAME, GoodIcon, TERRAIN_NAME, type RawGood } from '@mule/ui';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { plotName, tileAt } from '../game/derive';
 import { OUTFIT_WORD } from './arcade/plots';
 import { OnlyYou } from './hub/OnlyYou';
@@ -89,8 +89,9 @@ export function nextDroneWords({ month, maxMonths }: Pick<MuleView, 'month' | 'm
  * line (where, what land, best for), then its six goods as icons with 0–3 dots in one row. `next` closes it.
  */
 export function ScanReport({ tiles, next }: { tiles: TileView[]; next: string }) {
+  const ref = useInView<HTMLElement>();
   return (
-    <section className="flex flex-col gap-1 rounded-control border border-holo bg-panel px-2 py-1.5" data-testid="scan-report">
+    <section ref={ref} className="flex flex-col gap-1 rounded-control border border-holo bg-panel px-2 py-1.5" data-testid="scan-report">
       <span className="flex items-center justify-between">
         <span className="font-display text-sm font-semibold">Drone report</span>
         <OnlyYou />
@@ -111,6 +112,27 @@ export function ScanReport({ tiles, next }: { tiles: TileView[]; next: string })
       </span>
     </section>
   );
+}
+
+/**
+ * Keeps an element wholly in its scroll box's view when it appears and whenever that box changes size: the rail can
+ * hold notices above it (a strike alert, the Now card) that would push it below the fold.
+ */
+function useInView<T extends HTMLElement>() {
+  const ref = useRef<T>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el?.scrollIntoView) return;
+    const show = () => el.scrollIntoView({ block: 'nearest' });
+    show();
+    let box = el.parentElement;
+    while (box && !/auto|scroll/.test(getComputedStyle(box).overflowY)) box = box.parentElement;
+    if (!box || typeof ResizeObserver === 'undefined') return;
+    const watch = new ResizeObserver(show);
+    watch.observe(box);
+    return () => watch.disconnect();
+  }, []);
+  return ref;
 }
 
 /** The plots `meId` owns in the view, in the map's order: what My plots lists. */
