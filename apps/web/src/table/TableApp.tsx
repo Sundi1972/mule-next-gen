@@ -133,9 +133,12 @@ function TvLobby({ table }: { table: TableView<MuleView> }) {
 
 /**
  * The TV's header: the month and the phase's title (after its `icon`, where it has one), the theme toggle, the colony's
- * gauges (or the air gauge alone when `gauges` is false, as game over and the goods auction keep it) and the clock, then
- * the table chat. `ready`, a screen's ready count, sits beside the title; with the colony's gauges too, they move to a
- * row of their own under it, full width, since title, chip and gauges don't share 1280 px (PM ruling, 5 Nov).
+ * gauges (or the air gauge alone when `gauges` is false, as game over and the goods auction keep it; none at all with
+ * 'none', where the screen draws them itself, as the month end does; beside the title whatever the header shows with
+ * 'beside', as development keeps them, PM ruling 6 Nov) and the clock, then
+ * the table chat. `ready`, a screen's ready count, sits beside the title. A header with a clock, the strike badge or a
+ * ready count puts the colony's gauges on a row of their own under it, full width: they don't share 1280 px with the
+ * title, or the clock runs off the screen's right edge (PM ruling, 5 Nov; rulebook #gauges-row).
  * `landing` counts changes onto the gauges, wherever they sit. `chatLines` is how many chat lines show: three, or fewer
  * where a screen needs the height; none hides the ticker.
  */
@@ -156,12 +159,13 @@ export function TvHeader({
   seconds?: number | undefined;
   extra?: ReactNode;
   ready?: ReactNode;
-  gauges?: boolean;
+  gauges?: boolean | 'none' | 'beside';
   landing?: GaugeLanding | undefined;
   chatLines?: number;
 }) {
-  const colony = game.colony && gauges ? <ColonyGauges colony={game.colony} size="tv" className={ready ? 'w-full' : 'w-[760px]'} landing={landing} /> : null;
-  const ownRow = colony !== null && (ready !== undefined || !!game.colony?.strike);
+  const crowded = seconds !== undefined || ready !== undefined || !!game.colony?.strike;
+  const ownRow = !!game.colony && gauges === true && crowded;
+  const colony = game.colony && (gauges === true || gauges === 'beside') ? <ColonyGauges colony={game.colony} size="tv" className={ownRow ? 'w-full' : 'w-[760px]'} landing={landing} /> : null;
   // With a ready chip the title keeps one line and the chip its size; without one the header is as it always was: the
   // gauges give way to a long title ("Election day · the result").
   const fixed = ready !== undefined;
@@ -183,7 +187,7 @@ export function TvHeader({
         <div className={cx('flex items-center gap-4', fixed && 'shrink-0')}>
           {extra}
           <ThemeToggle />
-          {ownRow ? null : (colony ?? <AirGauge level={game.air.level} band={game.air.band} tv />)}
+          {ownRow || gauges === 'none' ? null : (colony ?? <AirGauge level={game.air.level} band={game.air.band} tv />)}
           {seconds !== undefined && <Timer seconds={seconds} className="h-14! px-5! text-3xl!" />}
           {ready}
         </div>
@@ -667,8 +671,9 @@ function FitHeight({ className, gives = false, children }: { className?: string;
   const box = useRef<HTMLDivElement>(null);
   const inner = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
-  // A new scale changes the content's width, so its wrapping, so its height: the renders after one measure again, so the
-  // scale settles where the content wraps; at most three changes in a row, so it can never chase itself round.
+  // A scale sets the content's width (100% / scale), so its wrapping, so its height. So each candidate scale is measured
+  // at its own width, until the scale settles, all before paint; then the largest that fits at its own width is taken.
+  // Measured at the old scale's width instead, the new scale clipped what wraps differently (B-AC-19, six seats).
   const current = useRef(1);
   const changes = useRef(0);
   const fit = useRef(() => {});
@@ -676,37 +681,57 @@ function FitHeight({ className, gives = false, children }: { className?: string;
     const b = box.current;
     const i = inner.current;
     if (!b || !i) return;
+    const room = b.clientHeight;
+    // A box not laid out yet has no height to fit to; a scale of 0 would set the width to Infinity%.
+    if (room <= 0) return;
     // The content's own height, without the stretch: the stretch follows the scale, so measuring through it would keep
     // a shrunk scale from ever growing back.
     const size = gives ? 'height' : 'minHeight';
-    const stretch = i.style[size];
+    const saved = [i.style[size], i.style.width] as const;
     // A giving box is measured at the height of what it keeps (data-fit-keep: the newest news item), its gap kept: what
     // it can give is all the rest of itself.
     const giving = gives ? [...i.querySelectorAll<HTMLElement>('[data-fit-gives]')].map((g) => [g, g.style.cssText] as const) : [];
-    i.style[size] = gives ? 'auto' : '0px';
-    for (const [g] of giving) {
-      const keep = [...g.querySelectorAll<HTMLElement>('[data-fit-keep]')].reduce((h, k) => h + k.offsetHeight, 0);
-      g.style.cssText += `;flex:none;height:${keep}px`;
+    const heightAt = (s: number) => {
+      i.style.width = `${100 / s}%`;
+      i.style[size] = gives ? 'auto' : '0px';
+      for (const [g, css] of giving) g.style.cssText = css;
+      for (const [g] of giving) {
+        const keep = [...g.querySelectorAll<HTMLElement>('[data-fit-keep]')].reduce((h, k) => h + k.offsetHeight, 0);
+        g.style.cssText += `;flex:none;height:${keep}px`;
+      }
+      return i.offsetHeight;
+    };
+    const tried: [number, number][] = [];
+    let s = current.current;
+    for (let k = 0; k < 6; k++) {
+      const natural = heightAt(s);
+      if (natural === 0) break;
+      tried.push([s, natural]);
+      const next = Math.min(1, room / natural);
+      if (Math.abs(next - s) < 0.001) break;
+      s = next;
     }
-    const natural = i.offsetHeight;
     for (const [g, css] of giving) g.style.cssText = css;
-    i.style[size] = stretch;
-    if (natural === 0) return;
-    const next = Math.min(1, b.clientHeight / natural);
-    const s = current.current;
-    // Kept within half a percent, but only a scale a touch small: one a touch big clips what is kept.
-    if (s <= next && next - s < 0.005) {
+    [i.style[size], i.style.width] = saved;
+    if (tried.length === 0) return;
+    // The largest scale whose content fits at its own width; if none did, the smallest any measure asked for.
+    const fits = tried.filter(([t, n]) => t * n <= room + 0.5).map(([t]) => t);
+    const next = fits.length > 0 ? Math.max(...fits) : Math.min(...tried.map(([, n]) => Math.min(1, room / n)));
+    if (Math.abs(next - current.current) < 0.001) {
       changes.current = 0;
       return;
     }
+    // Settled before paint, a change re-measures to the same scale. Three changes before the next frame would be a chase
+    // (renders feeding renders blank the TV), so it stops there; the count starts again each frame.
+    if (changes.current >= 3) return;
+    if (changes.current === 0) requestAnimationFrame(() => (changes.current = 0));
     changes.current += 1;
     current.current = next;
     setScale(next);
   };
+  // With `gives` the content can change without a resize, so every render measures.
   useBeforePaint(() => {
-    if (!gives) return;
-    if (changes.current >= 3) changes.current = 0;
-    else fit.current();
+    if (gives) fit.current();
   });
   useBeforePaint(() => {
     const run = () => fit.current();
@@ -733,9 +758,11 @@ function FitHeight({ className, gives = false, children }: { className?: string;
  */
 export function TvMonthEnd({ game, drift }: { game: MuleView; drift?: GaugeLanding | undefined }) {
   return (
-    <div className="flex h-[720px] w-[1280px] flex-col gap-4 bg-table p-10 text-ink" data-phase={game.phase} data-testid="tv-monthend">
+    <div className="flex h-[720px] w-[1280px] flex-col gap-3 bg-table px-10 py-8 text-ink" data-phase={game.phase} data-testid="tv-monthend">
+      {/* The league and the colony's score need the height (six seats, PM ruling C, 5 Nov): the colony's gauges sit at the
+          top of the right column, not in a row of their own, and the chat ticker shows its newest line only. */}
       <div className="flex flex-col gap-3">
-        <TvHeader game={game} title="End of the month" ready={<ReadyCount players={game.players} tv />} landing={drift} />
+        <TvHeader game={game} title="End of the month" ready={<ReadyCount players={game.players} tv />} gauges={game.colony ? 'none' : true} chatLines={1} />
       </div>
       {inCollapse(game) && <CollapseBanner density="tv" donations={!!game.colony} />}
       <FitHeight className="flex-1">
@@ -745,6 +772,7 @@ export function TvMonthEnd({ game, drift }: { game: MuleView; drift?: GaugeLandi
               <LeagueTable view={game} density="tv" />
             </MonthScoreColumn>
             <div className="flex flex-col gap-4">
+              <ColonyGauges colony={game.colony} size="tv" className="grid-cols-2!" landing={drift} />
               <ColonyPanel view={game} density="tv" />
               <BuildSite colony={game.colony} players={game.players} size="tv" />
             </div>
@@ -756,8 +784,8 @@ export function TvMonthEnd({ game, drift }: { game: MuleView; drift?: GaugeLandi
           </div>
         )}
       </FitHeight>
-      <p className="text-lg leading-snug text-ink-2" data-testid="worth-rule">
-        Worth: cash + goods at the store’s price + land at {GAME.plotScore} cr a plot + MULEs at {game.mulePrice} cr + {POLITICS.termScore} cr a term in office{game.colony ? ' + donations' : ''}. Each player’s own lines are on their phone.
+      <p className="truncate text-base leading-snug text-ink-2" data-testid="worth-rule">
+        Worth: cash + goods at the store’s price + land at {GAME.plotScore} cr a plot + MULEs at {game.mulePrice} cr + {POLITICS.termScore} cr a term in office{game.colony ? ' + donations' : ''}. Your own lines are on your phone.
       </p>
     </div>
   );
