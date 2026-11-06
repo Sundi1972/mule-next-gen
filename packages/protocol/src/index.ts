@@ -255,6 +255,11 @@ export interface MyView {
   species: Species;
   stock: Stock;
   carriedMule: Outfit | 'empty' | null;
+  /**
+   * The MULE this player leads came off one of their plots by a swap (AM-35): if the turn ends with it still on the
+   * lead it goes to the corral, so the walking screen warns. Only on this player's own view; absent reads as no.
+   */
+  leadsSwapped?: true;
   claimsLeft: number;
   hungry: boolean;
   sick: boolean;
