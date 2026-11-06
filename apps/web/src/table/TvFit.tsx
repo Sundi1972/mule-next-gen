@@ -14,7 +14,8 @@ const REFIT_MS = 120;
  * scales, down to what it keeps (data-fit-keep, the newest item); the content is held to the box's height instead of
  * growing past it, so it is measured again as it renders, its content being free to change without a resize (the
  * auction's side, whose deals come and go, is measured so for that, and gives nothing: every deal stays in sight). A box marked data-fit-spills does not grow with its content (size containment, as production's
- * map row): what spills past it at the height it would have is height the content still needs.
+ * map row): what spills past it at the height it would have is height the content still needs, but for what flies
+ * (data-fit-flies), which leaves its box by design.
  */
 export function FitHeight({ className, innerClassName, gives = false, children }: { className?: string; innerClassName?: string; gives?: boolean; children: ReactNode }) {
   const box = useRef<HTMLDivElement>(null);
@@ -45,16 +46,19 @@ export function FitHeight({ className, innerClassName, gives = false, children }
       i.style.width = `${100 / s}%`;
       i.style[size] = gives ? 'auto' : '0px';
       for (const [g, css] of giving) g.style.cssText = css;
-      for (const [g] of giving) {
-        const keep = [...g.querySelectorAll<HTMLElement>('[data-fit-keep]')].reduce((h, k) => h + k.offsetHeight, 0);
-        g.style.cssText += `;flex:none;height:${keep}px`;
-      }
+      const keeps = giving.map(([g]) => [...g.querySelectorAll<HTMLElement>('[data-fit-keep]')].reduce((h, k) => h + k.offsetHeight, 0));
+      for (const [n, [g]] of giving.entries()) g.style.cssText += `;flex:none;height:${keeps[n]}px`;
       const natural = i.offsetHeight;
       if (spilling.length === 0) return natural;
-      // A spilling box is read at the height the stretch gives it at this scale.
+      // A spilling box is read at the height the stretch gives it at this scale, a giving box in it still holding what
+      // it keeps. What flies over the screen (data-fit-flies: production's goods on their way to the silos) leaves its
+      // box by design: it is not content the box spills, so it is out of the reading (read before paint: never seen).
       i.style[size] = `${room / s}px`;
-      for (const [g, css] of giving) g.style.cssText = css;
+      for (const [n, [g, css]] of giving.entries()) g.style.cssText = `${css};min-height:${keeps[n]}px`;
+      const flying = [...i.querySelectorAll<HTMLElement>('[data-fit-flies]')].map((f) => [f, f.style.display] as const);
+      for (const [f] of flying) f.style.display = 'none';
       const spill = Math.max(...spilling.map((el) => el.scrollHeight - el.clientHeight));
+      for (const [f, display] of flying) f.style.display = display;
       return spill > 0.5 ? Math.max(natural, room / s + spill) : natural;
     };
     const tried: [number, number][] = [];
