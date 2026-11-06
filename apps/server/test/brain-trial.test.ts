@@ -188,7 +188,8 @@ describe('brain:trial paid-run guard (PR-5: --run label, the proof cap)', () => 
 describe("brain:trial tournament (WS1's bar for UBER-AC-A: --table pair, --seeds, --control, its own cap)", () => {
   const T = BRAIN.tournament;
   /** The control's line saying its pooled result cannot miss. */
-  const CONTROL_POOLED = /^Control, pooled\s+50% by construction: engine seats in every chair play a seed's two seatings as the same game, so the control checks the harness; the chair edge shows by seating$/;
+  const CONTROL_POOLED =
+    /^Control, pooled\s+50% by construction \(each seed's two seatings are the same game\)\. The control's gate: the harness runs clean \(0 stalls, every game scored, 0 model calls\) and reports the per-seating edge as a number; the paid run is judged pooled\. That edge is mostly species, not seat order \(each chair keeps its default species\), and balanced seating cancels it\.$/;
   /** Results with the Claude chairs at `wins` of 100 games and the given mean ranks. */
   const results = (wins: number, claude: number, engine: number) => ({ games: 100, smartWins: wins, smart: { meanScore: 0, meanRank: claude }, strategist: { meanScore: 0, meanRank: engine } });
 
