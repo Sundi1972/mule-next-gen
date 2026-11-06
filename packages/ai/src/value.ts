@@ -217,6 +217,26 @@ export function secondValue(obs: GameState, me: string): number {
   return Math.max(pubRate, idle && p.money > mulePriceFor(obs, me) ? STRATEGIST.secondValue.busy : STRATEGIST.secondValue.idle);
 }
 
+/** Units of `good` to hold so that `n` are left after the month's spoilage, within what the depot keeps. */
+export function keptUnits(good: Good, n: number): number {
+  return Math.ceil(Math.min(n, UPKEEP.depotCapacity) / (1 - GOOD_CONFIG[good].spoilage));
+}
+
+/**
+ * The units of a good the seat must hold at the auction to be whole next month. In the engine's order: upkeep eats its
+ * Food and drinks its Water, then every good spoils and the depot keeps what it can; next development is hungry under
+ * the household's Food, and next production turns off a plot short of its Energy, or halves a farm whose owner is
+ * short of Water. Water counts only for a seat with a farm to water: without one, going short costs it nothing. 0 for
+ * other goods.
+ */
+export function wholeNextMonth(obs: GameState, me: string, good: Good): number {
+  if (good === 'food') return needsOf(obs, me).food + keptUnits(good, needsOf(obs, me).food);
+  if (good === 'energy') return keptUnits(good, monthNeeds(obs, me).energy);
+  const farms = obs.tiles.some((t) => t.owner === me && (UPKEEP.irrigated as readonly string[]).includes(t.outfit ?? ''));
+  if (good === 'water' && farms) return needsOf(obs, me).water + keptUnits(good, needsOf(obs, me).water);
+  return 0;
+}
+
 /**
  * Cash the seat keeps back: a floor plus what next month's Food, Water and
  * Energy shortfall would cost, times its reserve weight. A short unit counts
