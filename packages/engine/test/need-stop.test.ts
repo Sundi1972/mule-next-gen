@@ -8,6 +8,7 @@ import {
   setWalk,
   startAuction,
   stepAuction,
+  stepWalk,
   WALK,
   type AuctionRole,
   type GameState,
@@ -145,5 +146,82 @@ describe('RULE-4: a seller stops at the amount they must hold', () => {
     expect(soldBy(trades, 'p0').filter((t) => t.buyer === 'store')).toHaveLength(6);
     expect(state.players[0]!.stock.smithore).toBe(0);
     expect(walker(state, 'p0').held).toBeUndefined();
+  });
+});
+
+/** p0 sold its 8 spare Water to the store and was stopped at its need: held, one step above the store's line. */
+function heldAtNeed(): { state: GameState; need: number; line: number } {
+  const { state, need } = waterSellerToStore(12);
+  run(state, 15_000);
+  expect(walker(state, 'p0').held, 'the stop happened').toBe(true);
+  expect(state.players[0]!.stock.water).toBe(need);
+  return { state, need, line: a(state).storeBuy };
+}
+
+describe('RULE-4 row 2: selling into shortage takes a conscious hold of ▼', () => {
+  for (const dt of [TICK, 250]) {
+    it(`B-AC-B2: held, a hold of ▼ for WALK.shortHoldMs sells on below the need, one unit at a time, the speed-up restarted (${dt} ms ticks)`, () => {
+      const { state, need, line } = heldAtNeed();
+      const at = walker(state, 'p0').price;
+      setWalk(state, 'p0', -1);
+
+      // One tick short of the hold, nothing has moved.
+      expect(run(state, WALK.shortHoldMs - dt, dt)).toEqual([]);
+      expect(walker(state, 'p0').price).toBe(at);
+      // The tick that completes it: the seller walks down onto the line.
+      run(state, dt, dt);
+      expect(walker(state, 'p0').price).toBeLessThan(at);
+
+      const first: Trade[] = [];
+      for (let t = 0; t < 5_000 && first.length === 0; t += dt) first.push(...stepAuction(state, dt));
+      expect(first).toEqual([{ good: 'water', buyer: 'store', seller: 'p0', price: line, quantity: 1 }]);
+      expect(state.players[0]!.stock.water).toBe(need - 1);
+      // A new deal: this is its first unit, not the ninth.
+      expect(a(state).deals.find((d) => d.buyer === 'store')!.units).toBe(1);
+
+      // It sells on, for the rest of this good, down to nothing.
+      const rest = run(state, 15_000, dt);
+      expect(soldBy(rest, 'p0').every((t) => t.quantity === 1 && t.buyer === 'store')).toBe(true);
+      expect(state.players[0]!.stock.water).toBe(0);
+    });
+
+    it(`B-AC-B2: held, a tap of ▼ or a hold one tick shorter than WALK.shortHoldMs sells nothing and moves nothing (${dt} ms ticks)`, () => {
+      const { state, need } = heldAtNeed();
+      const at = walker(state, 'p0').price;
+
+      stepWalk(state, 'p0', -1);
+      expect(walker(state, 'p0').price).toBe(at);
+      expect(run(state, 5_000, dt)).toEqual([]);
+
+      // Two short holds in a row: they don't add up.
+      for (let i = 0; i < 2; i++) {
+        setWalk(state, 'p0', -1);
+        expect(run(state, WALK.shortHoldMs - dt, dt)).toEqual([]);
+        setWalk(state, 'p0', 0);
+      }
+      expect(run(state, 5_000, dt)).toEqual([]);
+      expect(walker(state, 'p0').price).toBe(at);
+      expect(walker(state, 'p0').held).toBe(true);
+      expect(state.players[0]!.stock.water).toBe(need);
+    });
+  }
+
+  it('B-AC-B2: held survives a switch to buyer and back; back as a seller, a short hold still sells nothing and a full one sells on', () => {
+    const { state, need } = heldAtNeed();
+    declareRole(state, 'p0', 'buyer');
+    declareRole(state, 'p0', 'seller');
+    expect(walker(state, 'p0')).toMatchObject({ side: 'seller', held: true });
+    const at = walker(state, 'p0').price;
+
+    setWalk(state, 'p0', -1);
+    expect(run(state, WALK.shortHoldMs - TICK)).toEqual([]);
+    expect(walker(state, 'p0').price).toBe(at);
+    setWalk(state, 'p0', 0);
+    expect(run(state, 5_000)).toEqual([]);
+
+    setWalk(state, 'p0', -1);
+    const trades = run(state, 20_000);
+    expect(soldBy(trades, 'p0').length).toBeGreaterThan(0);
+    expect(state.players[0]!.stock.water).toBeLessThan(need);
   });
 });
