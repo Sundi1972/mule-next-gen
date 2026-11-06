@@ -613,6 +613,10 @@ because   hunger is decided at the next development and Energy is spent at the n
           the damage. At a flat price the buy-back (posted × 1.1) never beats the ask (the
           same number rounded up), so B-AC-1 stayed red and UBER-AC-1 (a) at about 50%
           (G-1: buys what it is short of when it can pay). No number added.
+also      at v = ask a buy and a pass both gain 0 and the pass won on 'Sure thing' and 'Cash
+          left'; so C4's pass counts each funded needed unit it leaves unbought at its full S
+          (RULE-5 has already funded it; 'Cash left' scores the money separately). No veto,
+          no number; a playbook may still pass knowingly
 open      hunger's true damage (what a month of hungry development costs the seat) stays
           today's walking-time estimate; pricing it fully is a balance-phase question
           (Heiko, 4 Nov: functions first, balance at the end)
