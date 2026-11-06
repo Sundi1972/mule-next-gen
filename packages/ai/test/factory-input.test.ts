@@ -152,6 +152,29 @@ describe("a farm the new factory's own Energy use would turn off does not feed i
   });
 });
 
+describe('a factory the seat holds none of the inputs for yet still turns the farm off once fed (FM-factory-input, Q1)', () => {
+  it('FM-factory-input-unstocked: with no Food in stock and Energy for one plot, the farm that will be turned off does not feed it', () => {
+    // As N9, with 0 Food: the engine leaves an unfed factory out of the turn-off order, so on this month's roll the farm
+    // keeps its Energy and makes 5. From month 2, Food in stock, the factory is listed, the farm goes off and makes 1,
+    // under the household's 3: the factory would starve.
+    const state = game();
+    while (state.phase !== 'development') advancePhase(state);
+    place(state, [
+      { x: 0, outfit: 'food', food: 3 },
+      { x: 2, outfit: null },
+    ]);
+    for (const p of state.players) setStock(state, p.id, p.id === ME ? { water: 10, energy: 1 } : {}, p.id === ME ? 5000 : 0);
+    const obs = observe(state, ME);
+    expect(outlook(obs, ME, { lookAhead: true }).made.food, 'the case: on its own the farm makes 5').toBe(5);
+    const before = JSON.stringify(obs);
+    expect(canFeed(obs, ME, 'medicine'), 'the farm goes off once the factory is fed').toBe(false);
+    expect(JSON.stringify(obs), 'the observation is untouched').toBe(before);
+    // The control: Energy for both, and the farm feeds it.
+    setStock(state, ME, { water: 10, energy: 10 }, 5000);
+    expect(canFeed(observe(state, ME), ME, 'medicine'), 'Energy for both').toBe(true);
+  });
+});
+
 describe("in the production phase a farm counts with what it makes, not with nothing (N8)", () => {
   /** ai0's farm (rating `food`) and an idle plot, played into the production phase; then its Food set to 0. */
   function inProduction(food: number): { state: GameState; made: number } {

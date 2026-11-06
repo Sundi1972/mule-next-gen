@@ -76,6 +76,21 @@ export async function theMonthEndHoldsForThePhone(ctx: GameStepContext, month: n
 }
 
 /**
+ * The TV's one hunger line, in words (PM ruling 6 Nov): one player is the sentence; several who ate the same of the same
+ * need share the numbers; otherwise each group of names, by first appearance in seat order, carries its own.
+ */
+function hungerWords(hungry: { name: string; ate: number; need: number }[]): string {
+  if (hungry.length === 1) return `${hungry[0]!.name} went hungry: ate ${hungry[0]!.ate} of ${hungry[0]!.need} Food`;
+  const groups = new Map<string, string[]>();
+  for (const h of hungry) groups.set(`ate ${h.ate} of ${h.need}`, [...(groups.get(`ate ${h.ate} of ${h.need}`) ?? []), h.name]);
+  if (groups.size === 1) {
+    const [ate, names] = [...groups][0]!;
+    return `Went hungry: ${names.join(', ')} · ${ate} Food`;
+  }
+  return `Went hungry: ${[...groups].map(([ate, names]) => `${names.join(', ')} ${ate}`).join(' · ')} Food`;
+}
+
+/**
  * B-AC-12 at a month end, read off the phone and the TV against the server's view: both rank by Worth with the lead
  * line; each change cell is this Worth less the one the TV showed at `last` month's end, and with no `last` (month 1)
  * there is no change column; the TV names who went hungry, says whether the colonists were fed, and gives the air
@@ -124,17 +139,19 @@ export async function theLeagueTableAtTheMonthEnd(ctx: GameStepContext, last?: M
     }
   }
 
-  // The colony, on the TV: who went hungry by the month's condition, the colonists, and the air against last month's.
+  // The colony, on the TV: who went hungry by the month's condition, on one line (PM ruling 6 Nov), the colonists, and
+  // the air against last month's.
   const hungry = truth.players.filter((p) => p.condition && p.condition.foodShare < 1);
   for (const p of truth.players) {
-    const line = tvEnd.getByTestId(`hungry-${p.id}`);
-    const c = p.condition;
-    if (!c || c.foodShare >= 1) {
-      check((await line.count()) === 0, `B-AC-12: the TV does not name ${p.name} as hungry`);
-      continue;
-    }
-    const want = `${p.name} went hungry: ate ${Math.round(c.foodShare * c.foodNeed)} of ${c.foodNeed} Food`;
-    check((await text(line)) === want, `B-AC-12: the TV's hunger line for ${p.name} reads "${await text(line)}", want "${want}"`);
+    const named = await tvEnd.getByTestId(`hungry-${p.id}`).count();
+    check(named === (hungry.includes(p) ? 1 : 0), `B-AC-12: the TV's hunger line names ${p.name} ${named} times; ${hungry.includes(p) ? 'hungry' : 'fed'} by the server`);
+  }
+  const hungerLines = await tvEnd.getByTestId('hungry-line').count();
+  check(hungerLines === (hungry.length === 0 ? 0 : 1), `B-AC-12: the TV puts the ${hungry.length} hungry on one line, got ${hungerLines}`);
+  if (hungry.length > 0) {
+    const want = hungerWords(hungry.map((p) => ({ name: p.name, ate: Math.round(p.condition!.foodShare * p.condition!.foodNeed), need: p.condition!.foodNeed })));
+    const shown = await text(tvEnd.getByTestId('hungry-line'));
+    check(shown === want, `B-AC-12: the TV's hunger line reads "${shown}", want "${want}"`);
   }
   check((await tvEnd.getByTestId('nobody-hungry').count()) === (hungry.length === 0 ? 1 : 0), `B-AC-12: the TV says nobody went hungry exactly when nobody did (${hungry.length} hungry)`);
   const colonists = await text(tvEnd.getByTestId('colonists'));
