@@ -1,0 +1,5 @@
+node_modules
+dist
+.vite
+current-selection.json
+review-notes.jsonl
