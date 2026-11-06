@@ -193,7 +193,7 @@ export const SPECIES_PERK = {
   molloxAnalysis: 0.5,
 } satisfies Record<string, number>;
 
-/** Default species, when a player hasn't picked one: of n seats, seat i gets entry (i + seed) mod n, so an n-seat game plays the first n and each turns with the game's seed, not the chair (FM-species-by-chair). */
+/** Default species, when a player hasn't picked one: of n seats, seat i gets entry (i + seed read unsigned) mod n, so an n-seat game plays the first n and each turns with the game's seed, not the chair (FM-species-by-chair). */
 export const DEFAULT_SPECIES: readonly Species[] = ['zipwing', 'bramblet', 'gearling', 'mollox', 'glimmer', 'quibbit'];
 
 export const ADJACENCY = {

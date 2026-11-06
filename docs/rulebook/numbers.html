@@ -19,7 +19,7 @@
 <p>Do not edit this page by hand. To regenerate it after <code>config.ts</code> changes, run from the repo root:</p>
 <p><code>pnpm --filter @mule/engine exec tsx ../../docs/rulebook/build-numbers.ts</code> then <code>node docs/rulebook/build-index.mjs</code></p>
 <div class="box next"><h4>Not on this page</h4><p><code>MAP_SIZE</code> is kept inside <code>config.ts</code> without being exported, so this page cannot read it.</p></div>
-<p class="code-ref">Built from <code>config.ts</code> with fingerprint <code>a0c417b23a0a</code> (the first 12 characters of its SHA-256).</p>
+<p class="code-ref">Built from <code>config.ts</code> with fingerprint <code>a2c587144d82</code> (the first 12 characters of its SHA-256).</p>
 
 <h2 id="good-config"><code>GOOD_CONFIG</code> <span class="pill built">In the game</span></h2>
 <div class="table-wrap"><table>
@@ -281,7 +281,7 @@
 </table></div>
 
 <h2 id="default-species"><code>DEFAULT_SPECIES</code> <span class="pill built">In the game</span></h2>
-<p>Default species, when a player hasn&#39;t picked one: of n seats, seat i gets entry (i + seed) mod n, so an n-seat game plays the first n and each turns with the game&#39;s seed, not the chair (FM-species-by-chair).</p>
+<p>Default species, when a player hasn&#39;t picked one: of n seats, seat i gets entry (i + seed read unsigned) mod n, so an n-seat game plays the first n and each turns with the game&#39;s seed, not the chair (FM-species-by-chair).</p>
 <div class="table-wrap"><table>
 <thead><tr><th>Setting</th><th class="n">Value</th><th>What it does</th></tr></thead>
 <tbody>
