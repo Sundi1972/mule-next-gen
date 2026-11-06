@@ -316,7 +316,7 @@ describe('B-AC-46-12 (negative): with politics off, or no council, the hub is to
     mount(viewFor('s2', null));
     expect(findTestid('phone-ballot')).toBeUndefined();
     expect(findTestid('laws-in-force')).toBeUndefined();
-    expect(text('now-title')).toBe('Plan your month, then press Ready');
+    expect(text('now-title')).toBe('Plan your month');
   });
 
   it.each<[string, CouncilView | null]>([
@@ -327,7 +327,7 @@ describe('B-AC-46-12 (negative): with politics off, or no council, the hub is to
     expect(findTestid('phone-ballot')).toBeUndefined();
     expect(findTestid('phone-reveal')).toBeUndefined();
     byTestid('agenda');
-    expect(text('now-title')).toBe('Plan your month, then press Ready');
+    expect(text('now-title')).toBe('Plan your month');
     expect(text('ready')).toBe("I'm ready");
   });
 });
