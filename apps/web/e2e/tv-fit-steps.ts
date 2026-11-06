@@ -389,12 +389,13 @@ export async function theAuctionTvFits(tv: Page, server: MuleServer, code: strin
   return held(server, code, async () => {
     // Held first, so the walk cannot move on to the next good's status screen while it is read.
     await tv.locator('[data-testid=tv-walk]').waitFor({ timeout: 5_000 });
-    const state = (room as unknown as { game: { state: { auction: { deals: unknown[] }; players: { id: string; name: string }[] } } }).game.state;
+    const state = (room as unknown as { game: { state: { auction: { deals: unknown[]; walkers: { id: string; side: string; held?: true }[] }; players: { id: string; name: string }[] } } }).game.state;
     const a = state.auction;
     // The two longest names at the table trade with each other, and the host sells to the store.
     const [p, q] = [...state.players].sort((x, y) => y.name.length - x.name.length);
     check(p && q, 'TV-FIT: two players at the table to trade');
     const kept = a.deals;
+    const keptWalkers = a.walkers.map((w) => ({ ...w }));
     try {
       // The help shows while nothing trades.
       a.deals = [];
@@ -430,9 +431,20 @@ export async function theAuctionTvFits(tv: Page, server: MuleServer, code: strin
       await shownWhole(tv, 'auction (two deals)', ['[data-testid=tv-room-line]']);
       const dealsFoot = await nothingPastTheFoot(tv, 'auction (two deals)');
       const side = await theTvScaleHolds(tv, 'auction (two deals)');
-      return `one chat line on the walk, the board ${helpBoard.toFixed(0)} px with or without deals; the help whole, its foot at y ${helpFoot.toFixed(0)}; both deal rows shown whole, y ${rows[0]!.top.toFixed(0)}–${rows[1]!.bottom.toFixed(0)}, the older on one row; fit scales ${side}; the foot at y ${dealsFoot.toFixed(0)}`;
+      // RULE-4 said on the TV: every seat a seller held at what they must hold, both deals still running. The newest has
+      // the card, the others a row each; all of them and both deals stay in sight, and the side keeps the floor.
+      for (const w of a.walkers) Object.assign(w, { side: 'seller', held: true });
+      (room as unknown as { broadcast(): void }).broadcast();
+      await tv.locator('[data-testid^=tv-held-]').nth(a.walkers.length - 1).waitFor({ timeout: 2_000 });
+      await fitSettled(tv);
+      const keeps = await shownWhole(tv, 'auction (everyone held, two deals)', [...a.walkers.map((w) => `[data-testid=tv-held-${w.id}]`), '[data-testid=tv-deal]']);
+      check(keeps.length === a.walkers.length + 2, `TV-FIT: the auction TV shows every held seller and both deals, got ${keeps.map((b) => b.id).join(', ')}`);
+      const heldFoot = await nothingPastTheFoot(tv, 'auction (everyone held, two deals)');
+      const heldSide = await theTvScaleHolds(tv, 'auction (everyone held, two deals)');
+      return `one chat line on the walk, the board ${helpBoard.toFixed(0)} px with or without deals; the help whole, its foot at y ${helpFoot.toFixed(0)}; both deal rows shown whole, y ${rows[0]!.top.toFixed(0)}–${rows[1]!.bottom.toFixed(0)}, the older on one row; fit scales ${side}; the foot at y ${dealsFoot.toFixed(0)}; ${a.walkers.length} held sellers and both deals whole, fit scales ${heldSide}, the foot at y ${heldFoot.toFixed(0)}`;
     } finally {
       a.deals = kept;
+      a.walkers.splice(0, a.walkers.length, ...keptWalkers);
       (room as unknown as { broadcast(): void }).broadcast();
     }
   });
