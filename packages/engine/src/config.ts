@@ -1355,8 +1355,9 @@ export type AiLevelId = keyof typeof AI_LEVELS;
 /**
  * G-5 C26: the colony's social events, rows of the event table (EVENTS.colony and EVENTS.player hold them, so they roll
  * as every row does) and their effects' sizes. Source: the M.U.L.E. Event Catalogue (rev 22, approved by Heiko
- * 2026-10-28), its planning rows Festival, General strike, Emigration wave, Immigration wave (the mood part) and
- * Blamed for the unrest, its points read as shares. Every number is a G-5 placeholder, tuned at the end (HC-25).
+ * 2026-10-28): its planning rows Festival, General strike, Emigration wave, Immigration wave (the mood and air parts)
+ * and Blamed for the unrest; its later rows Store strike, Walkout, Loyal crew, Riot and Volunteer clean-up; and MULE
+ * theft's mood part. Its points are read as shares. Every number is a G-5 placeholder, tuned at the end (HC-25).
  *
  * The mood bands are HAPPINESS.bands (moodBand). Happiness tilts an event's odds, not the event rate: a row's `mood`
  * adds to its chance in that band, and `neverIn` is a hard zero there, whatever else raises it. `needsColony` rows never

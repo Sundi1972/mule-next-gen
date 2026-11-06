@@ -172,7 +172,8 @@ export function buildEvent(state: GameState, key: EventKey, rng: Rng, player?: s
 
 /**
  * The wave-2 events' only-ifs (spec RULE-3): whether each fires for this state and player. Most change things off the
- * map and hit no plot; a MULE theft and a meteor strike hit one plot each, picked on the row's dice (offMapEvent).
+ * map and hit no plot; a MULE theft, a meteor strike and a loyal crew hit one plot each, a general strike and a walkout
+ * every plot of one good, picked on the row's dice (offMapEvent).
  */
 const OFF_MAP = {
   federationTax: () => true,
@@ -189,7 +190,8 @@ const OFF_MAP = {
   ratsInSilo: (_: GameState, p?: Player) => p !== undefined && taken(p.stock.food, EVENTS.player.ratsInSilo.share) >= 1,
   crookedAccountant: (_: GameState, p?: Player) => p !== undefined && taken(p.money, EVENTS.player.crookedAccountant.share) >= 1,
   packageFromHome: () => true,
-  // G-5 C26: a strike needs a good the colony works; the rest always find what they change.
+  // G-5 C26: a strike needs a good the colony works, a walkout and a loyal crew a plot the player works; the rest always
+  // find what they change.
   festival: () => true,
   generalStrike: (state: GameState) => mostWorked(state).length > 0,
   emigrationWave: () => true,
