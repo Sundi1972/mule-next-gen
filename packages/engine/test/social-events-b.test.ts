@@ -324,6 +324,7 @@ describe('C26 PR-B: the riot, at the month end', () => {
       s.colony!.projects.push(object('park'), object('hospital', 'commissioned'), object('stadium', 'closed'));
     });
     expect(fired[0]?.objects).toEqual([{ id: 'park', becomes: 'damaged' }]);
+    expect(fired[0]?.line).toBe('A riot: the store loses 33% of every shelf, and the Park is damaged until it is repaired.');
     expect(state.colony!.projects.map((p) => [p.id, p.stage])).toEqual([['park', 'damaged'], ['hospital', 'commissioned'], ['stadium', 'closed']]);
     expect(colonyPrestige(state)).toBe(0);
     // With two standing, the dice pick either over seeds; the other stays standing and keeps its prestige.
@@ -340,13 +341,14 @@ describe('C26 PR-B: the riot, at the month end', () => {
     expect(picks).toEqual(new Set(['park', 'stadium']));
   });
 
-  it('FM-C26-9 (riot with nothing standing): the riot still fires and takes its store loss, with no objects', () => {
+  it('FM-C26-9 (riot with nothing standing): the riot still fires and takes its store loss, with no objects and no damage in its line', () => {
     const { state, fired } = rioting(MID('unrest'), (s) => {
       s.colony!.projects.push(object('park', 'building'));
       s.store.stock.food = 9;
     });
     expect(fired).toHaveLength(1);
     expect(fired[0]!.objects).toBeUndefined();
+    expect(fired[0]!.line).toBe('A riot: the store loses 33% of every shelf.');
     expect(fired[0]!.effects).toContainEqual({ on: 'store', what: 'food', delta: -3 });
     expect(state.colony!.projects[0]!.stage).toBe('building');
   });
