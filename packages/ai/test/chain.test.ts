@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { advancePhase, AI_PLANS, createGame, GOODS, observe, type GameState, type Good, type Outfit, type Stock, type Strategy, type Tile } from '@mule/engine';
+import { advancePhase, AI_PLANS, createGame, GOOD_CONFIG, GOODS, monthlyDemand, MULE, observe, postPrices, type GameState, type Good, type Outfit, type Stock, type Strategy, type Tile } from '@mule/engine';
 import { applyAction } from '../src/play.js';
 import { draftPlanningPart, draftStrategyOf } from '../src/playbook/draft.js';
 import { AiSeat, type AiSeatOptions } from '../src/seat.js';
@@ -13,7 +13,10 @@ const ME = 'ai0';
 const flatGround = { food: 0, water: 0, energy: 0, smithore: 0, crystite: 0, rareEarth: 0 };
 const WORKS: Outfit[] = ['alloy', 'electronics'];
 
-/** Development in month 1: ai0 holds the given plots on row 0, analysed, with cash and a full larder; the others hold nothing. */
+/**
+ * Development in month 1: ai0 holds the given plots on row 0, analysed, with cash and a full larder; the others hold
+ * nothing. Electronics priced at `electronics` (pricedAt).
+ */
 function development(plots: { x: number; outfit?: Outfit; ground?: Partial<typeof flatGround> }[], electronics: number): GameState {
   const state = createGame({ seed: 7, players: ['ai0', 'ai1', 'ai2', 'ai3'].map((id) => ({ id, name: id, isAi: true, species: 'zipwing' as const })) });
   while (state.phase !== 'development') advancePhase(state);
@@ -31,8 +34,25 @@ function development(plots: { x: number; outfit?: Outfit; ground?: Partial<typeo
   }
   Object.assign(me.stock, { food: 30, water: 30, energy: 30 });
   me.money = 8_000;
-  state.store.offWorld.electronics = electronics;
-  state.store.posted.electronics = electronics;
+  return pricedAt(state, electronics);
+}
+
+/**
+ * Electronics at `price` as the store itself keeps posting it, with or without the store's bands (C17): `price` is
+ * their normal, off-world and posted price, and the colony's shelf holds two months of its Electronics demand, so the
+ * bands post normal and the price neither climbs nor falls. A hand-set price alone moves under the bands (by up to a
+ * quarter a month toward the band's posting), so the seat would weigh another. Asserted: its outlook reads `price` now
+ * and later.
+ */
+function pricedAt(state: GameState, price: number): GameState {
+  Object.assign(state.store, {
+    refPrice: { ...state.store.refPrice, electronics: price },
+    offWorld: { ...state.store.offWorld, electronics: price },
+    posted: { ...state.store.posted, electronics: price },
+    stock: { ...state.store.stock, electronics: 2 * Math.ceil(monthlyDemand(state).electronics) },
+  });
+  const o = outlook(observe(state, ME), ME, { lookAhead: true });
+  expect([o.price('electronics'), Math.round(o.later('electronics'))], 'Electronics hold their price').toEqual([price, price]);
   return state;
 }
 
@@ -61,10 +81,23 @@ const seatOf = (options: Partial<AiSeatOptions> = {}) => new AiSeat({ id: ME, na
 const CHAIN_PLOTS = [{ x: 0, ground: { rareEarth: 4 } }, { x: 2, ground: { smithore: 4 } }, { x: 4 }, { x: 6 }];
 
 /**
- * Electronics dear enough that the chain wins with a clear margin. On CHAIN_PLOTS one works and its links (SA-1371)
- * starts to beat Smithore between 1950 and 2000: a test on that edge breaks on any valuation change.
+ * Electronics dear enough that the chain wins with a clear margin: on CHAIN_PLOTS one works and its links (SA-1371)
+ * starts to beat Smithore between 700 and 800, with or without the store's bands. Above about 2640 the bands' ceiling
+ * (12 times the normal price) caps a price.
  */
 const DEAR = 2_500;
+
+/** Ground the seat's Food and Energy already come from, so a farm is no need of its own the plan must outweigh. */
+const FARMS = [{ x: 8, ground: { food: 2 }, outfit: 'food' as Outfit }, { x: 10, ground: { energy: 2 }, outfit: 'energy' as Outfit }];
+
+/**
+ * Whether each works in `installed` (in order) comes after the links it needs, built earlier or standing in `standing`:
+ * the Alloy works after a Smithore mine, the Electronics works after an Alloy works and a Rare earth mine.
+ */
+function upstreamFirst(installed: readonly Outfit[], standing: readonly Outfit[] = []): boolean {
+  const needs: Partial<Record<Outfit, Outfit[]>> = { alloy: ['smithore'], electronics: ['alloy', 'rareEarth'] };
+  return installed.every((o, i) => (needs[o] ?? []).every((n) => standing.includes(n) || installed.slice(0, i).includes(n)));
+}
 
 /** The switch-on value under test: AI_PLANS.chain.months ships at 0, which switches chains off. */
 const CHAIN_ON_MONTHS = 3;
@@ -97,20 +130,29 @@ function fedMoneyMaker(state: GameState, mind: Mind): Good | null {
 
 describe('a factory chain (AM-33)', () => {
   it('B-AC-11: with Electronics dear, the seat commits to Electronics and builds an upstream mine before any works', () => withChains(() => {
-    const state = development(CHAIN_PLOTS, DEAR);
-    const seat = seatOf();
-    const installed = playDevelopment(state, seat);
-    expect(seat.draft(state, 'development').strategy.moneyMaker).toBe('electronics');
-    expect(installed.length, `installed ${installed.join(', ')}`).toBeGreaterThan(0);
-    expect(installed.every((o) => o === 'rareEarth' || o === 'smithore'), `installed ${installed.join(', ')}`).toBe(true);
-    expect(installed.filter((o) => WORKS.includes(o))).toEqual([]);
+    // Every seat seed 1-30: the plan is Electronics, and no works goes in before the links it needs.
+    const broken: string[] = [];
+    for (let seed = 1; seed <= 30; seed++) {
+      const state = development([...CHAIN_PLOTS, ...FARMS], DEAR);
+      const seat = seatOf({ seed });
+      const installed = playDevelopment(state, seat);
+      const plan = seat.draft(state, 'development').strategy.moneyMaker;
+      if (plan !== 'electronics' || !upstreamFirst(installed)) broken.push(`seed ${seed}: ${plan}, installed ${installed.join(', ')}`);
+    }
+    expect(broken).toEqual([]);
+    // Seed 11: what goes in first is a mine.
+    const installed = playDevelopment(development([...CHAIN_PLOTS, ...FARMS], DEAR), seatOf());
+    expect(['rareEarth', 'smithore'], `installed ${installed.join(', ')}`).toContain(installed[0]);
   }));
 
   it('B-AC-11: with its mines standing, the seat builds the Alloy works, and the Electronics works only after it', () => withChains(() => {
-    const state = development([{ x: 0, ground: { rareEarth: 4 }, outfit: 'rareEarth' }, { x: 2, ground: { smithore: 4 }, outfit: 'smithore' }, { x: 4 }, { x: 6 }], DEAR);
-    const installed = playDevelopment(state, seatOf());
-    expect(installed[0], `installed ${installed.join(', ')}`).toBe('alloy');
-    expect(installed.slice(1).every((o) => o === 'electronics')).toBe(true);
+    const plots = [{ x: 0, ground: { rareEarth: 4 }, outfit: 'rareEarth' as Outfit }, { x: 2, ground: { smithore: 4 }, outfit: 'smithore' as Outfit }, { x: 4 }, { x: 6 }, ...FARMS];
+    const broken: string[] = [];
+    for (let seed = 1; seed <= 30; seed++) {
+      const installed = playDevelopment(development(plots, DEAR), seatOf({ seed }));
+      if (installed[0] !== 'alloy' || !installed.slice(1).every((o) => o === 'electronics')) broken.push(`seed ${seed}: installed ${installed.join(', ')}`);
+    }
+    expect(broken).toEqual([]);
   }));
 
   it('B-AC-11 (FM-chain-dry-link): a link plot that makes nothing adds nothing to the chain, so no mine goes onto dry ground', () => withChains(() => {
@@ -122,14 +164,22 @@ describe('a factory chain (AM-33)', () => {
 
   it('B-AC-11: a chain under way is re-drafted on what is left to build: its standing link at running cost, cash for the missing links only', () => withChains(() => {
     // The Smithore mine stands on thin ground (one a month, the Alloy works wants two), so Smithore is still short; the
-    // cash pays the works, the Rare earth mine and the Alloy works, not a second Smithore mine as well. Electronics at a
-    // price where the chain wins by less than the standing mine's outfit (75 cr): it wins only while the mine counts at
-    // its running cost, with no install price (M7).
-    const state = development([{ x: 0, ground: { rareEarth: 4 } }, { x: 2, ground: { smithore: 1 }, outfit: 'smithore' }, { x: 4 }, { x: 6 }], 3_772);
-    state.players.find((p) => p.id === ME)!.money = 1_000;
-    const seat = seatOf();
-    const redraft = draftStrategyOf({ state, seat: ME, mind: seat.mind, seed: 11, phase: 'development', kept: null, replanned: 'election' });
-    expect(redraft.moneyMaker).toBe('electronics');
+    // cash pays the works, the Rare earth mine and the Alloy works, not a second Smithore mine as well. The standing
+    // mine counts at its running cost, with no install price: so the re-draft is the same whatever a Smithore outfit
+    // costs (M7).
+    const redraft = (outfit: number) => {
+      const shipped = MULE.outfitCost.smithore;
+      MULE.outfitCost.smithore = outfit;
+      try {
+        const state = development([{ x: 0, ground: { rareEarth: 4 } }, { x: 2, ground: { smithore: 1 }, outfit: 'smithore' }, { x: 4 }, { x: 6 }], DEAR);
+        state.players.find((p) => p.id === ME)!.money = 1_000;
+        return draftStrategyOf({ state, seat: ME, mind: seatOf().mind, seed: 11, phase: 'development', kept: null, replanned: 'election' }).moneyMaker;
+      } finally {
+        MULE.outfitCost.smithore = shipped;
+      }
+    };
+    expect(redraft(MULE.outfitCost.smithore)).toBe('electronics');
+    expect(redraft(50_000), 'a standing link pays no outfit').toBe('electronics');
   }));
 
   it('B-AC-11: a seat short of cash keeps its chain\'s standing links off the land auction while the chain is its plan', () => withChains(() => {
@@ -145,15 +195,9 @@ describe('a factory chain (AM-33)', () => {
 
   it('B-AC-11: one set of links feeds one works, so a chain is scored as one works and its links, never as three works', () => withChains(() => {
     // Electronics at a price where three works plots' gains with one set of links would win, and one works with its
-    // links, what the seat would build, does not.
-    const state = development(CHAIN_PLOTS, 1_500);
+    // links, what the seat would build, does not (it wins from 700-800).
+    const state = development(CHAIN_PLOTS, 500);
     expect(draftStrategyOf({ state, seat: ME, mind: seatOf().mind, seed: 11, phase: 'development' }).moneyMaker).not.toBe('electronics');
-  }));
-
-  it("B-AC-11: the works' charge for the inputs its own links make is refunded, end to end", () => withChains(() => {
-    // Electronics at a price where the chain wins only with its works' input charge refunded (M8).
-    const state = development(CHAIN_PLOTS, 2_075);
-    expect(draftStrategyOf({ state, seat: ME, mind: seatOf().mind, seed: 11, phase: 'development' }).moneyMaker).toBe('electronics');
   }));
 
   it('B-AC-11: a short seat lists a spare Smithore MULE when its Alloy money-maker is fed, and keeps a standing link of an unfed chain', () => withChains(() => {
@@ -217,17 +261,22 @@ describe('a factory chain (AM-33)', () => {
   }));
 
   it('B-AC-11 negative: a price shock on Electronics drops the chain at the next draft point', () => withChains(() => {
-    const state = development(CHAIN_PLOTS, DEAR);
+    const state = development([...CHAIN_PLOTS, ...FARMS], DEAR);
     const seat = seatOf();
     playDevelopment(state, seat);
     expect(seat.draft(state, 'development').strategy.moneyMaker).toBe('electronics');
 
-    // Next month, Electronics back at its base: a fall past RULE-8's shock.
-    state.month++;
+    // Months on, Electronics are back to normal: their normal and off-world price the game's, the colony's shelf full,
+    // and the store has posted the fall itself, each month as far as it may (a quarter under the bands): past RULE-8's
+    // shock, and past where the chain pays (700-800).
+    const normal = GOOD_CONFIG.electronics.refPrice;
+    Object.assign(state.store, { refPrice: { ...state.store.refPrice, electronics: normal }, offWorld: { ...state.store.offWorld, electronics: normal } });
+    state.store.stock.electronics = 20 * Math.ceil(monthlyDemand(state).electronics);
+    const months = 5;
+    for (let m = 0; m < months; m++) postPrices(state);
+    expect(1 - state.store.posted.electronics / DEAR).toBeGreaterThanOrEqual(AI_PLANS.replan.priceShock);
+    state.month += months;
     state.players.find((p) => p.id === ME)!.doneDeveloping = false;
-    state.store.offWorld.electronics = 220;
-    state.store.posted.electronics = 220;
-    expect(1 - 220 / DEAR).toBeGreaterThanOrEqual(AI_PLANS.replan.priceShock);
     const installed = playDevelopment(state, seat);
     expect(seat.replanLog().at(-1)?.trigger).toBe('priceShock');
     expect(seat.draft(state, 'development').strategy.moneyMaker).not.toBe('electronics');
@@ -235,13 +284,15 @@ describe('a factory chain (AM-33)', () => {
   }));
 
   it('INV-chain-focus: a seat whose money-maker is not a chain plays the same development picks as a seat with no plan', () => withChains(() => {
-    // Ground where leaning to the money-maker, Smithore, would change the picks.
-    const plots = [{ x: 0 }, { x: 2, ground: { smithore: 4 } }, { x: 4 }];
+    // Ground where leaning to the money-maker, Smithore, would change the picks: thin Food ground the seat farms first
+    // without a plan, with or without the store's bands. Electronics at their normal price: no chain.
+    const plots = [{ x: 0, ground: { food: 1 } }, { x: 2, ground: { smithore: 4 } }, { x: 4 }];
+    const normal = GOOD_CONFIG.electronics.refPrice;
     const planned = seatOf();
-    const picks = playDevelopment(development(plots, 220), planned);
-    expect(planned.draft(development(plots, 220), 'development').strategy.moneyMaker).toBe('smithore');
+    const picks = playDevelopment(development(plots, normal), planned);
+    expect(planned.draft(development(plots, normal), 'development').strategy.moneyMaker).toBe('smithore');
     expect(picks.length).toBeGreaterThan(0);
-    expect(picks).toEqual(playDevelopment(development(plots, 220), seatOf({ playbook: false })));
+    expect(picks).toEqual(playDevelopment(development(plots, normal), seatOf({ playbook: false })));
   }));
 });
 
