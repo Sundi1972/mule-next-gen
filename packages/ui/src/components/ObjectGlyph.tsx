@@ -1,5 +1,3 @@
-import { cx } from './tokens';
-
 /** The colony's five objects, as the design system draws them; the same ids as the engine's catalogue. */
 export type ObjectKind = 'park' | 'hospital' | 'observatory' | 'stadium' | 'spaceport';
 
