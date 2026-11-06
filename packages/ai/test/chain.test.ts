@@ -4,7 +4,7 @@ import { applyAction } from '../src/play.js';
 import { draftPlanningPart, draftStrategyOf } from '../src/playbook/draft.js';
 import { AiSeat, type AiSeatOptions } from '../src/seat.js';
 import { outlook } from '../src/outlook.js';
-import { canFeed, installGain, type Mind } from '../src/value.js';
+import { canFeed, chainInputs, chainLinks, installGain, standingLinks, type Mind } from '../src/value.js';
 
 /** A seat whose Electronics fetch a high price builds the chain to them, upstream first. See AM-32. */
 
@@ -178,5 +178,20 @@ describe('the chain switch (AM-32, PM ruling B)', () => {
     const drafted = draftStrategyOf({ state, seat: ME, mind: seat.mind, seed: 11, phase: 'development' }).moneyMaker;
     expect(drafted).toBe(fedMoneyMaker(state, seat.mind));
     expect(withChains(() => draftStrategyOf({ state, seat: ME, mind: seat.mind, seed: 11, phase: 'development' }).moneyMaker), 'switched on, a chain').toBe('electronics');
+    // Every chain helper answers none while switched off, not only the draft's row (a guard on the helpers themselves).
+    expect(chainLinks(state, ME, 'electronics'), 'no links').toEqual([]);
+    expect(chainInputs(state, ME, 'electronics'), 'no inputs').toEqual([]);
+    expect(standingLinks(state, ME, 'electronics'), 'no standing links').toEqual([]);
+    expect(withChains(() => chainInputs(state, ME, 'electronics')), 'switched on, the recipe closure').not.toEqual([]);
+  });
+
+  it('INV-chain-off: at the shipped AI_PLANS.chain.months, a seat short of cash lists the same lot whatever its money-maker', () => {
+    const state = development([{ x: 0, ground: { smithore: 1 }, outfit: 'smithore' }, { x: 2, ground: { food: 2 }, outfit: 'food' }, { x: 4, outfit: 'energy' }], 2_000);
+    state.phase = 'planning';
+    state.players.find((p) => p.id === ME)!.money = 0;
+    const strategy = (moneyMaker: Good): Strategy => ({ kind: 'specialist', moneyMaker, monopolyTarget: null, cashFloor: 0, landTarget: { plots: 3, byMonth: 2 }, stances: {}, reason: '' });
+    const listed = (moneyMaker: Good) => (draftPlanningPart({ state, seat: ME, mind: seatOf().mind, seed: 11, phase: 'planning', strategy: strategy(moneyMaker) }).list ?? []).map((l) => l.plot);
+    expect(listed('electronics'), 'an Electronics plan keeps no link back while chains are off').toContain(0);
+    expect(listed('electronics')).toEqual(listed('food'));
   });
 });
