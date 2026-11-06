@@ -22,7 +22,7 @@ export function moodOf(band: MoodBand | null): { label: string; tone: string } {
 }
 
 export const PERK: Record<PrestigeId, string> = {
-  park: 'Calms the colony in a riot',
+  park: 'Volunteer clean-ups come more often',
   hospital: 'Softens an epidemic',
   observatory: 'Prestige only',
   stadium: 'Festivals come more often',
