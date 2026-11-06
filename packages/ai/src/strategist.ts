@@ -39,7 +39,7 @@ import {
 } from '@mule/engine';
 import { belief, outlook, type Outlook } from './outlook.js';
 import { candidate, consider, curve, shortlist, type Candidate, type Shortlist } from './utility.js';
-import { adoptedNow, afterTax, canFeed, cashPlan, cashReserve, chainLinks, chainOutlook, installGain, linkShare, monthNeedsCost, secondValue, unitValues, wholeNextMonth, yieldOf, type Mind, type UnitValues } from './value.js';
+import { adoptedNow, afterTax, canFeed, cashPlan, cashReserve, chainOf, chainOutlook, installGain, linkShare, monthNeedsCost, secondValue, unitValues, wholeNextMonth, yieldOf, type Mind, type UnitValues } from './value.js';
 
 /**
  * The strategist: for each of the month's decisions it lists the options,
@@ -482,13 +482,13 @@ export function developDecision(obs: GameState, mind: Mind, mulesSoFar: number, 
  * it completes. Null when `focus` is no chain. See AM-33.
  */
 function chainValue(obs: GameState, o: Outlook, mind: Mind, focus: Good): { links: Good[]; linkGain: (tile: Tile, link: Outfit) => number } | null {
-  const links = chainLinks(obs, mind.me, focus);
+  // The chain as the draft scores it (chainOf): standing links' goods are members, and free, too.
+  const { links, members } = chainOf(obs, mind.me, focus);
   if (links.length === 0) return null;
-  const valued = chainOutlook(o, links);
-  const members = [focus, ...links];
+  const valued = chainOutlook(o, members.slice(1));
   const ground = obs.tiles.filter((t) => t.terrain !== 'store' && (t.owner === null || (t.owner === mind.me && !t.outfit)));
   const running = (tile: Tile, outfit: Outfit) => installGain(obs, valued, tile, outfit, mind).gain;
-  const best = new Map(members.map((g) => [g, Math.max(...ground.map((t) => running(t, g)))]));
+  const best = new Map([focus, ...links].map((g) => [g, Math.max(...ground.map((t) => running(t, g)))]));
   const others = (link: Good) => links.reduce((n, g) => (g === link ? n : n + best.get(g)!), 0);
   return { links, linkGain: (tile, link) => running(tile, link) + linkShare(obs, tile, link as Good, members, mind.me) * best.get(focus)! + others(link as Good) };
 }
