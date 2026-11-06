@@ -432,13 +432,16 @@ export async function theAuctionTvFits(tv: Page, server: MuleServer, code: strin
       const dealsFoot = await nothingPastTheFoot(tv, 'auction (two deals)');
       const side = await theTvScaleHolds(tv, 'auction (two deals)');
       // RULE-4 said on the TV: every seat a seller held at what they must hold, both deals still running. The newest has
-      // the card, the others a row each; all of them and both deals stay in sight, and the side keeps the floor.
+      // the card, the others their marks in one box (PM ruling (A)); all of it and both deals stay in sight, and the side
+      // keeps the floor.
       for (const w of a.walkers) Object.assign(w, { side: 'seller', held: true });
       (room as unknown as { broadcast(): void }).broadcast();
-      await tv.locator('[data-testid^=tv-held-]').nth(a.walkers.length - 1).waitFor({ timeout: 2_000 });
+      const others = tv.locator('[data-testid=tv-held-others] [role=img]');
+      await others.nth(a.walkers.length - 2).waitFor({ timeout: 2_000 });
+      check((await others.count()) === a.walkers.length - 1, `TV-FIT: the auction TV's held box has a mark for each held seller but the newest, got ${await others.count()} of ${a.walkers.length - 1}`);
       await fitSettled(tv);
-      const keeps = await shownWhole(tv, 'auction (everyone held, two deals)', [...a.walkers.map((w) => `[data-testid=tv-held-${w.id}]`), '[data-testid=tv-deal]']);
-      check(keeps.length === a.walkers.length + 2, `TV-FIT: the auction TV shows every held seller and both deals, got ${keeps.map((b) => b.id).join(', ')}`);
+      const keeps = await shownWhole(tv, 'auction (everyone held, two deals)', ['[data-testid^=tv-held-]', '[data-testid=tv-deal]']);
+      check(keeps.length === 4, `TV-FIT: the auction TV shows the held card, the held box and both deals, got ${keeps.map((b) => b.id).join(', ')}`);
       const heldFoot = await nothingPastTheFoot(tv, 'auction (everyone held, two deals)');
       const heldSide = await theTvScaleHolds(tv, 'auction (everyone held, two deals)');
       return `one chat line on the walk, the board ${helpBoard.toFixed(0)} px with or without deals; the help whole, its foot at y ${helpFoot.toFixed(0)}; both deal rows shown whole, y ${rows[0]!.top.toFixed(0)}–${rows[1]!.bottom.toFixed(0)}, the older on one row; fit scales ${side}; the foot at y ${dealsFoot.toFixed(0)}; ${a.walkers.length} held sellers and both deals whole, fit scales ${heldSide}, the foot at y ${heldFoot.toFixed(0)}`;
