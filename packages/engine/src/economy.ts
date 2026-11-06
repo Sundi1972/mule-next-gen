@@ -350,7 +350,8 @@ export function stepOffWorld(state: GameState): void {
     const walk = offWorldWalk(good);
     if (!walk) continue;
     if (state.whatIf) {
-      state.store.offWorld[good] = expectedOffWorld(state, good, 1);
+      // Unrounded, so months in a row compose to expectedOffWorld's k-month path.
+      state.store.offWorld[good] = expectedPath(walk, state.store.offWorld[good], 1);
       continue;
     }
     const rng = createRng(seedOf(state.seed, state.month, 'offWorld', good));
@@ -367,10 +368,13 @@ export function stepOffWorld(state: GameState): void {
 export function expectedOffWorld(state: GameState, good: Good, monthsAhead: number): number {
   const now = state.store.offWorld[good];
   const walk = offWorldWalk(good);
-  if (!walk) return now;
-  // centre × (now ÷ centre)^f, written so that monthsAhead 0 gives today's price exactly.
-  const f = walk.phi ** monthsAhead;
-  return Math.floor(now ** f * walk.centre ** (1 - f));
+  return walk ? Math.floor(expectedPath(walk, now, monthsAhead)) : now;
+}
+
+/** centre × (now ÷ centre)^(phi^months), unrounded; written so that 0 months gives `now` exactly. */
+function expectedPath(walk: OffWorldWalk, now: number, months: number): number {
+  const f = walk.phi ** months;
+  return now ** f * walk.centre ** (1 - f);
 }
 
 /**
