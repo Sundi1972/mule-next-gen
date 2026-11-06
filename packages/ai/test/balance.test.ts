@@ -367,8 +367,14 @@ describe('factories', () => {
       const free = state.tiles.filter((t) => !t.owner && t.terrain !== 'store');
       free[0]!.owner = 'ai0';
       if (farms) {
-        Object.assign(free[1]!, { owner: 'ai0', outfit: 'food' });
-        Object.assign(free[2]!, { owner: 'ai0', outfit: 'water' });
+        // A farm feeds the works only with what is left after the household eats and drinks (FM-factory-input): on good
+        // ground, with 6 Food in hand, they make enough for the household and the works for two months.
+        const ground = { food: 3, water: 3, energy: 0, smithore: 0, crystite: 0, rareEarth: 0 };
+        for (const [tile, outfit] of [[free[1]!, 'food'], [free[2]!, 'water']] as const) {
+          Object.assign(tile, { owner: 'ai0', outfit, terrain: 'plains', traits: [], ground });
+          delete tile.special;
+        }
+        state.players[0]!.stock.food = 6;
       }
       state.players[0]!.money = 5_000;
       return developDecision(observe(state, 'ai0'), traderMind, 0).all.filter((c) => c.key.startsWith('install:medicine'));
@@ -377,7 +383,7 @@ describe('factories', () => {
     const bare = arrange(false);
     expect(bare.length).toBeGreaterThan(0);
     for (const c of bare) expect(c.veto ?? '').toMatch(/nothing to feed/);
-    // Negative case: its own Food and Water farms feed the works.
+    // Negative case: its own Food and Water farms, making more than the household takes, feed the works.
     for (const c of arrange(true)) expect(c.veto ?? '').not.toMatch(/nothing to feed/);
   });
 });
