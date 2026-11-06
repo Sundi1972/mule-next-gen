@@ -183,3 +183,37 @@ describe('SWEEP-C10: the TV status row shows its whole line', () => {
     expect(classOf(html, 'skipped')).not.toContain('truncate');
   });
 });
+
+describe('TV-DEALS (PM rulings 5 and 6 Nov): every running deal stays in sight on the TV', () => {
+  // Two deals at once in the Alloy walk, the ship in port. A TV that sees both at once lists them as the view does,
+  // the first as the newest.
+  const twoDeals = tvScreen(
+    tvView({
+      ...alloyWalk,
+      deals: [
+        { buyer: 's4', seller: 's3', price: 90, units: 7 },
+        { buyer: 's2', seller: 's1', price: 82, units: 2 },
+      ],
+    }),
+  );
+  const cards = twoDeals.split('data-testid="tv-deal"').slice(1);
+
+  it('both deals show their names and terms: the newest with its speed line, the older on one row', () => {
+    expect(cards).toHaveLength(2);
+    const words = cards.map((c) => textOf(`<li ${c}`));
+    expect(words[0]).toContain('The Big Spender → The Grudge');
+    expect(words[0]).toContain('· 7 units @ 90');
+    expect(words[0]).toMatch(/faster and faster|full speed/);
+    expect(words[1]).toContain('Heiko → The Accountant');
+    expect(words[1]).toContain('· 2 units @ 82');
+    expect(cards[1], 'the older deal has no speed line').not.toContain('tv-deal-speed');
+    expect(classOf(`<li class="x" ${cards[1]}`, 'tv-deal-names')).toContain('truncate');
+  });
+
+  it('no deal row sits in a list that gives way: a list that clips or wraps could hide the older deal', () => {
+    const list = twoDeals.match(/<ul[^>]*>(?=<li[^>]*data-testid="tv-deal")/)?.[0] ?? '';
+    expect(list, 'the deals list').not.toBe('');
+    expect(list).not.toContain('data-fit-gives');
+    expect(list).not.toMatch(/flex-wrap|overflow-hidden/);
+  });
+});

@@ -17,7 +17,7 @@ import { developDecision, goodPlan } from '../src/strategist.js';
 import { applyAction } from '../src/play.js';
 import { AiSeat } from '../src/seat.js';
 import { outlook } from '../src/outlook.js';
-import { unitValues, type Mind } from '../src/value.js';
+import { canFeed, unitValues, type Mind } from '../src/value.js';
 
 /**
  * A factory seat keeps its factory fed (PM ruling of 6 Nov, options 3 and 1, buy side only):
@@ -87,6 +87,120 @@ describe('a farm feeds a new factory only with what is left after the household 
   it('FM-factory-input-3c: a farm that makes more than the household eats, with Food in stock, still feeds it', () => {
     // 5 a month against the household's 3 and the factory's 1: a unit to spare, and 4 in stock besides.
     expect(develop(3, { water: 10, energy: 10, food: 4 }, 5) ?? "").not.toMatch(/nothing to feed/);
+  });
+});
+
+describe('a farm feeds a new factory only with what its factories already running leave (FM-factory-input, N7)', () => {
+  /**
+   * Development: ai0 owns a farm on column 0 (rating `food`), a Medicine factory on column 1 and an idle plot on column
+   * 2, with Water and Energy to spare and no Food. Whether a second Medicine factory on column 2 is vetoed for want of Food.
+   */
+  function secondFactory(food: number, farmMakes: number): string | null | undefined {
+    const state = game();
+    while (state.phase !== 'development') advancePhase(state);
+    place(state, [
+      { x: 0, outfit: 'food', food },
+      { x: 1, outfit: 'medicine' },
+      { x: 2, outfit: null },
+    ]);
+    for (const p of state.players) setStock(state, p.id, p.id === ME ? { water: 30, energy: 20 } : {}, p.id === ME ? 5000 : 0);
+    expect(outlook(observe(state, ME), ME, { lookAhead: true }).made.food, 'the farm makes').toBe(farmMakes);
+    const medicine = developDecision(observe(state, ME), mindOf(), 0).all.find((c) => c.key === 'install:medicine:2');
+    expect(medicine, 'a Medicine install on the idle plot is listed').toBeDefined();
+    return medicine!.veto;
+  }
+
+  it('FM-factory-input-N7a: a farm whose one spare Food the first Medicine factory takes does not feed a second', () => {
+    // Crew: 1 for the farm and 2 for each factory, so the household eats 2 + ceil(5 / 4) = 4 of the farm's 5; the first
+    // factory takes the fifth. Nothing is left for a second, which would idle.
+    expect(secondFactory(3, 5) ?? '').toMatch(/nothing to feed/);
+  });
+
+  it('FM-factory-input-N7b: a farm with a Food to spare beyond the household and the first factory feeds a second', () => {
+    expect(secondFactory(4, 6) ?? '').not.toMatch(/nothing to feed/);
+  });
+});
+
+describe("a farm the new factory's own Energy use would turn off does not feed it (N9)", () => {
+  /**
+   * Development: ai0 owns a farm on column 0 (rating 3: 5 Food a month on its own) and an idle plot on column 2, with
+   * `energy` Energy, 2 Food (so the new factory is fed from stock and takes its Energy in production's first pass) and
+   * Water to spare. Whether a Medicine factory on column 2 is vetoed for want of Food, and what the farm makes alone.
+   */
+  function withEnergy(energy: number): { veto: string | null | undefined; alone: number } {
+    const state = game();
+    while (state.phase !== 'development') advancePhase(state);
+    place(state, [
+      { x: 0, outfit: 'food', food: 3 },
+      { x: 2, outfit: null },
+    ]);
+    for (const p of state.players) setStock(state, p.id, p.id === ME ? { food: 2, water: 10, energy } : {}, p.id === ME ? 5000 : 0);
+    const alone = outlook(observe(state, ME), ME, { lookAhead: true }).made.food;
+    const medicine = developDecision(observe(state, ME), mindOf(), 0).all.find((c) => c.key === 'install:medicine:2');
+    expect(medicine, 'a Medicine install on the idle plot is listed').toBeDefined();
+    return { veto: medicine!.veto, alone };
+  }
+
+  it("FM-factory-input-N9: with Energy for one plot, the factory's use turns the farm off, so the farm does not feed it", () => {
+    // The farm and the factory use 1 Energy each; the farm's 5 Food are worth less than the factory's 2 Medicine, so
+    // AM-17 turns the farm off first, and it makes 20% of 5: 1 Food, under the household's 3.
+    const one = withEnergy(1);
+    expect(one.alone, 'the case: on its own the farm makes 5').toBe(5);
+    expect(one.veto ?? '').toMatch(/nothing to feed/);
+    // The control: Energy for both, and the farm feeds it.
+    expect(withEnergy(10).veto ?? '').not.toMatch(/nothing to feed/);
+  });
+});
+
+describe('a factory the seat holds none of the inputs for yet still turns the farm off once fed (FM-factory-input, Q1)', () => {
+  it('FM-factory-input-unstocked: with no Food in stock and Energy for one plot, the farm that will be turned off does not feed it', () => {
+    // As N9, with 0 Food: the engine leaves an unfed factory out of the turn-off order, so on this month's roll the farm
+    // keeps its Energy and makes 5. From month 2, Food in stock, the factory is listed, the farm goes off and makes 1,
+    // under the household's 3: the factory would starve.
+    const state = game();
+    while (state.phase !== 'development') advancePhase(state);
+    place(state, [
+      { x: 0, outfit: 'food', food: 3 },
+      { x: 2, outfit: null },
+    ]);
+    for (const p of state.players) setStock(state, p.id, p.id === ME ? { water: 10, energy: 1 } : {}, p.id === ME ? 5000 : 0);
+    const obs = observe(state, ME);
+    expect(outlook(obs, ME, { lookAhead: true }).made.food, 'the case: on its own the farm makes 5').toBe(5);
+    const before = JSON.stringify(obs);
+    expect(canFeed(obs, ME, 'medicine'), 'the farm goes off once the factory is fed').toBe(false);
+    expect(JSON.stringify(obs), 'the observation is untouched').toBe(before);
+    // The control: Energy for both, and the farm feeds it.
+    setStock(state, ME, { water: 10, energy: 10 }, 5000);
+    expect(canFeed(observe(state, ME), ME, 'medicine'), 'Energy for both').toBe(true);
+  });
+});
+
+describe("in the production phase a farm counts with what it makes, not with nothing (N8)", () => {
+  /** ai0's farm (rating `food`) and an idle plot, played into the production phase; then its Food set to 0. */
+  function inProduction(food: number): { state: GameState; made: number } {
+    const state = game();
+    while (state.phase !== 'development') advancePhase(state);
+    place(state, [
+      { x: 0, outfit: 'food', food },
+      { x: 2, outfit: null },
+    ]);
+    for (const p of state.players) setStock(state, p.id, p.id === ME ? { water: 30, energy: 20 } : {}, p.id === ME ? 5000 : 0);
+    advancePhase(state);
+    expect(state.phase).toBe('production');
+    const made = state.history.at(-1)!.produced[ME]!.food;
+    state.players.find((p) => p.id === ME)!.stock.food = 0;
+    return { state, made };
+  }
+
+  it('FM-factory-input-N8: a farm with Food to spare feeds a new Medicine factory in the production phase as in development', () => {
+    // 5 a month against the household's 3 and the factory's 1, as in FM-factory-input-3c: fed, though no Food is in stock.
+    const spare = inProduction(3);
+    expect(spare.made, 'the case: the farm made 5 this month').toBe(5);
+    expect(canFeed(observe(spare.state, ME), ME, 'medicine'), 'a Food to spare each month').toBe(true);
+    // The control: a farm making only the household's 3 feeds nothing, in this phase too.
+    const just = inProduction(1);
+    expect(just.made, 'the case: the farm made 3 this month').toBe(3);
+    expect(canFeed(observe(just.state, ME), ME, 'medicine'), 'only the household\'s Food').toBe(false);
   });
 });
 

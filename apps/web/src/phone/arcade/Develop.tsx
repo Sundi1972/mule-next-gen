@@ -5,6 +5,7 @@ import { useTableChat } from '../../chat/store';
 import { ThemeToggle } from '../../components/ThemeToggle';
 import { useClient } from '../../net/react';
 import { usePhoneGame } from '../game';
+import { myPlots, PlotRow } from '../plotInfo';
 import { ShellLayer, WIDE_PX } from '../Shell';
 import { keyDown, keyUp } from './controls';
 import { BANNER_CHAR_PX, bannerBox, colonistBox, css, FRAMES, freeRun, overlap, phoneLayout, tileBox, type Box } from './layout';
@@ -163,6 +164,41 @@ function Stick({ size, className }: { size: number; className: string }) {
   return <Joystick size={size} className={className} onStick={(at) => (arcade.controls.stick = at)} />;
 }
 
+/** Opens and closes your plots' list over the stage; the colonist keeps its place and the clock runs. */
+function PlotsChip({ open, onToggle, className }: { open: boolean; onToggle: () => void; className?: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={open}
+      className={cx('shrink-0 rounded-chip border-2 border-holo px-2.5 py-0.5 font-display text-xs font-bold', open ? 'bg-holo text-on-holo' : 'bg-holo-soft text-holo', className)}
+      data-testid="plots-chip"
+    >
+      Plots {open ? '✕' : '▸'}
+    </button>
+  );
+}
+
+/** Every plot you own with its goods' dots, over the stage's right side, from under the status to above the button. */
+function PlotsPanel({ seat, at }: { seat: ArcadeSeat; at: { top: number; bottom: number } }) {
+  const mine = myPlots(seat.view, seat.me.id);
+  return (
+    <aside className="absolute right-3 z-30 flex w-[300px] flex-col gap-1 overflow-y-auto rounded-panel border-2 border-holo bg-panel/95 p-2 shadow-map" style={at} data-testid="plots-panel">
+      <span className="flex items-center justify-between">
+        <span className="font-display text-sm font-semibold">My plots · {mine.length}</span>
+        <span className="text-[10px] text-ink-3">the clock keeps running</span>
+      </span>
+      {mine.length === 0 && <span className="text-[11px] leading-snug text-ink-2">No plots yet: claim one in the land grant.</span>}
+      {mine.map((t) => (
+        <PlotRow key={`${t.x},${t.y}`} t={t} dense />
+      ))}
+    </aside>
+  );
+}
+
+/** The plots panel's top: under the status's first row, so the chip that closes it stays in reach. */
+const PLOTS_PANEL_TOP = 48;
+
 /**
  * Your phone, held sideways: the whole map fills the screen, the joystick under your left thumb and the one button
  * under your right lie over it, translucent. Your next step is ringed on the map or in the hall, so the phone alone
@@ -172,6 +208,12 @@ function Stick({ size, className }: { size: number; className: string }) {
 export function PhoneLandscape({ frame }: { frame: { w: number; h: number } }) {
   const { seat, installs, now } = useArcadeSeat();
   const keys = useGameKeys();
+  const [plotsOpen, setPlotsOpen] = useState(false);
+  // The game keeps the keyboard: a tapped chip would otherwise hold the focus, and the arrows with it.
+  const togglePlots = () => {
+    setPlotsOpen((o) => !o);
+    keys.focus();
+  };
   const { view, me } = seat;
   const space = seat.mine?.space ?? 'map';
   const L = phoneLayout(frame, space, view.width, view.height);
@@ -254,6 +296,8 @@ export function PhoneLandscape({ frame }: { frame: { w: number; h: number } }) {
             shows the newest line: a speaker in the other space is drawn nowhere here. */}
         {L.left && (
           <div className={cx('absolute flex flex-col overflow-hidden', compactLeft ? 'gap-1.5 p-1' : 'gap-1.5 p-1.5')} style={{ left: L.left.x, top: L.left.y, width: L.left.w, height: L.left.h }} data-testid="phone-status-left" data-overlay="status-left">
+            {/* Here, not in the right room: there, in the hall, your plots' box runs to the button and has no row to spare. */}
+            <PlotsChip open={plotsOpen} onToggle={togglePlots} className={cx('self-start', compactLeft && 'px-1.5')} />
             {roomy && <span className="label-caps text-[10px]! leading-tight">M{view.month} · Development</span>}
             <Money seat={seat} className={compactLeft ? 'text-[11px] [&_*]:whitespace-nowrap' : 'text-base'} />
             {compactLeft ? <CompactClock seat={seat} /> : <SharedClock seconds={seat.seconds} total={seat.total} />}
@@ -300,12 +344,17 @@ export function PhoneLandscape({ frame }: { frame: { w: number; h: number } }) {
             <span className="min-w-0 shrink">
               <PaceLine seat={seat} short />
             </span>
-            {/* The newest line keeps a share of the bar however much the status says: the rest of it gives way first. */}
-            <span className="min-w-0 flex-[1_1_40%]">
-              <ChatTicker seat={seat} keep={1} />
+            {/* The newest line keeps a share of the bar however much the status says: the rest of it gives way first.
+                The Plots chip comes out of that share, so the status before it keeps the room it had. */}
+            <span className="flex min-w-0 flex-[1_1_40%] items-center gap-2">
+              <span className="min-w-0 flex-1">
+                <ChatTicker seat={seat} keep={1} />
+              </span>
+              <PlotsChip open={plotsOpen} onToggle={togglePlots} />
             </span>
           </div>
         )}
+        {plotsOpen && <PlotsPanel seat={seat} at={{ top: PLOTS_PANEL_TOP, bottom: L.h - L.button.y + 6 }} />}
         {card && <PlotCard seat={seat} now={now} at={{ left: card.x, top: card.y, width: card.w, maxHeight: card.h }} />}
         {/* The banner box: the scramble's banner, or the guide's note (V-7); on the map along the bottom rows between the
             stick and the button, clear of your plots, in the hall across the walkway. It fades while you walk under it. */}

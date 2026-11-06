@@ -6,43 +6,35 @@ import { GOODS, type GameState, type Stock } from '@mule/engine';
 import type { MuleView, ServerEnvelope, TableView } from '@mule/protocol';
 import type { Locator, Page } from 'playwright';
 import { COLOUR_NAME, SLOT_COLOR, type Slot } from '@mule/ui';
-import { check, checkLink, EXPIRED, gone, MOVED, onStartScreen, PHONE, qrLink, seatToken, shows, SHOWN_MS, type GameStepContext } from './harness';
+import { check, checkLink, EXPIRED, gone, MOVED, onStartScreen, PHONE, PHONE_SMALL, qrLink, seatToken, shows, SHOWN_MS, type GameStepContext } from './harness';
 
 /** B-AC-9 (WS4, plot look A): a mark's width as a share of its plot's, with slack for rounding and the 2 px minimums. */
 const LOOK_A = { tab: 0.46, disc: 0.62 };
 const SHARE_SLACK = 0.06;
-/** B-AC-9 (WS4, plot look A): the least share of the selected ring and pin inside the map's visible box. */
-const SEEN = 0.9;
-/** B-AC-9 (WS4, plot look A): a faded plot's marks, as a phone draws another player's land. */
-const FADED = 0.45;
 /** B-AC-9 (WS4, plot look A): an owned plot's inset border, a share of its width, and its tint's share of the owner's colour. */
 const BORDER = { share: 1 / 12, slack: 0.025, minPx: 2 };
-/** B-AC-9 (WS4, plot look A): the selected ring's band, as the mock paints it. */
-const RING_COLOUR = 'var(--color-holo-strong)';
 const TINT = { alpha: 0.3, slack: 0.05 };
+/** PM ruling X on #562: how far a mark may touch a dot, for rounding. */
+const SLACK_PX = 0.5;
 /** T-AC-9 watches the wire from the first tap to at least this long after the second. */
 const QUIET_MS = 400;
 const PRESS_MS = 2_000;
 const READY = '[data-testid=handoff-qr][data-state=ready]';
 
-export type Plot = { x: number; y: number };
 type Box = { x: number; y: number; width: number; height: number };
 /**
  * A plot as drawn: its x-y, its label, its box on screen, what each of its layers paints (computed box-shadow and
- * background), and every mark inside it with a test id, with its box-shadow and effective opacity.
+ * background), and every mark inside it with a test id.
  */
 type DrawnPlot = {
   at: string;
   label: string;
   box: Box;
   paint: { boxShadow: string; background: string }[];
-  marks: { id: string; box: Box; visible: boolean; opacity: number; boxShadow: string }[];
+  marks: { id: string; box: Box }[];
 };
-/**
- * A map as drawn: its plots; the box it is seen through, the map clipped by a zoom's viewport; how much a zoom or a
- * scaled screen magnifies it; and each colour slot's colour as computed.
- */
-type DrawnMap = { clip: Box; scale: number; colours: string[]; ringColour: string; plots: DrawnPlot[] };
+/** A map as drawn: its plots, how much a zoom or a scaled screen magnifies it, and each colour slot's colour as computed. */
+type DrawnMap = { scale: number; colours: string[]; plots: DrawnPlot[] };
 type Rgba = { r: number; g: number; b: number; a: number };
 type Shadow = { colour: Rgba | null; spread: number; inset: boolean };
 type Game = { state: GameState; devEndsAt: number | null; phaseEndsAt: number | null; ctx: { now(): number } };
@@ -285,6 +277,251 @@ export async function theTvShowsWhoOwnsEachPlot(ctx: GameStepContext): Promise<s
   return ctx.held(() => checkPlotLook(ctx.tv.locator('[data-phase=development]'), 'TV, development', { installed: true }));
 }
 
+type Rect = { left: number; top: number; right: number; bottom: number };
+/** Each selector's matches inside `map`, as boxes on screen, in document order. */
+async function rectsOf(map: Locator, selectors: string[]): Promise<Rect[][]> {
+  // Kept free of named functions: tsx's keepNames wraps them with `__name`, which the page lacks.
+  return map.evaluate(
+    (el, sels) =>
+      sels.map((sel) =>
+        [...el.querySelectorAll(sel)].map((q) => {
+          const r = q.getBoundingClientRect();
+          return { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+        }),
+      ),
+    selectors,
+  );
+}
+/** The special badge's hexagon, in its 24-unit viewBox (SpecialIcon.tsx's path), clockwise on screen. */
+const HEXAGON = [[12, 1.2], [21.4, 6.6], [21.4, 17.4], [12, 22.8], [2.6, 17.4], [2.6, 6.6]] as const;
+/** Whether the point lies inside the hexagon drawn in `badge`'s box. */
+function inHexagon(x: number, y: number, badge: Rect): boolean {
+  const corners = HEXAGON.map(([vx, vy]) => [badge.left + (vx / 24) * (badge.right - badge.left), badge.top + (vy / 24) * (badge.bottom - badge.top)] as const);
+  return corners.every(([x1, y1], i) => {
+    const [x2, y2] = corners[(i + 1) % corners.length]!;
+    return (x2 - x1) * (y - y1) - (y2 - y1) * (x - x1) >= 0;
+  });
+}
+/** Whether two boxes overlap by more than SLACK_PX. */
+const covers = (a: Rect, b: Rect) => a.left < b.right - SLACK_PX && b.left < a.right - SLACK_PX && a.top < b.bottom - SLACK_PX && b.top < a.bottom - SLACK_PX;
+
+/**
+ * T-AC-3 and B-AC-9 (WS4; PM ruling X on #562), on the hub's Look map at the phone's 844×390, where a 3-seat plot is
+ * about 25 px: (a) on every analysed special plot with nothing installed, the right column's and its corner's included,
+ * the third dot's centre lies outside the plot's own badge and its box clears the badge's; (b) on an owned plot with a
+ * gem, the owner's tab and the gem are clear of the dots; (c) a plot Look-selected under a plot showing its dots draws no
+ * pin, and its ring's painted band keeps off those dots, and its glow at half strength stays clear of them, at 844×390
+ * and at the small phone's 667×375 (hub plots 12.8 to 15 px). At 667×375 (WS6 ruling, 7 Nov): (d) every analysed plot's dots chip
+ * lies inside its plot and (e) no two chips overlap, on the plots above and staged around the selection. Each "clear" is
+ * within SLACK_PX, the glow's within 0. The ground is seeded on the server for the seat, as makeHungry seeds hunger, and
+ * undone inside the hold, before anything due runs.
+ */
+export async function theMarksStayClearOfTheDots(ctx: GameStepContext, seat = 's1'): Promise<string> {
+  const id = 'T-AC-3 / B-AC-9 (WS4, plot marks at 25 and 12.8 px, PM rulings X, a and c on #562, WS6 small dots and PM glow rulings)';
+  type Room = { game: { state: GameState }; viewFor(seat: string): { game?: MuleView }; broadcast(): void };
+  const room = ctx.server.registry.get(ctx.code) as unknown as Room | undefined;
+  check(room, `${id}: a room ${ctx.code} on the server`);
+  const state = room.game.state;
+  const me = state.players.find((p) => p.id === seat);
+  check(me, `${id}: seat ${seat} in the game`);
+  try {
+    return await ctx.held(async () => {
+      const undo: (() => void)[] = [];
+      try {
+        check(state.phase === 'planning', `${id}: the step runs in planning, not in ${state.phase}`);
+        const sited = new Set((room.viewFor(seat).game?.colony?.projects ?? []).map((p) => p.plot));
+        const index = (t: { x: number; y: number }) => t.y * state.width + t.x;
+        const at = (x: number, y: number) => state.tiles.find((t) => t.x === x && t.y === y);
+        const open = (t: GameState['tiles'][number]) => t.terrain !== 'store' && !sited.has(index(t));
+        const known = [...me.analysed];
+        undo.push(() => me.analysed.splice(0, me.analysed.length, ...known));
+        const analyse = (t: { x: number; y: number }) => {
+          if (!me.analysed.includes(index(t))) me.analysed.push(index(t));
+        };
+
+        // (a): every special plot the map holds with nothing installed on it, so its dots show under its badge. A map with
+        // none is given an oasis on a free plot inside it for the step.
+        let specials = state.tiles.filter((t) => t.special && open(t) && !t.outfit);
+        if (specials.length === 0) {
+          const plain = state.tiles.find((t) => t.owner === null && open(t) && !t.outfit && !t.special && t.x < state.width - 1 && t.y < state.height - 1);
+          check(plain, `${id}: a free plot inside the map to give a special`);
+          undo.push(() => delete plain.special);
+          plain.special = { kind: 'oasis' };
+          specials = [plain];
+        }
+        // The right column, where the badge sits inside the plot, and its bottom corner: given a special when the map has
+        // none there. A corner the store or a colony building holds gives way to the next free right-column plot.
+        const rightColumn = state.tiles.filter((t) => t.x === state.width - 1 && open(t) && !t.special).sort((p, q) => q.y - p.y);
+        const corner = at(state.width - 1, state.height - 1);
+        const staged: GameState['tiles'][number][] = [];
+        if (!specials.some((t) => t.x === state.width - 1 && t.y < state.height - 1)) {
+          const edge = rightColumn.find((t) => t.y > 0 && t.y < state.height - 1);
+          check(edge, `${id}: a free plot in the map's right column to give a special`);
+          staged.push(edge);
+        }
+        if (!specials.some((t) => t.x === state.width - 1 && t.y === state.height - 1)) {
+          const edge = corner && open(corner) ? corner : rightColumn.find((t) => !staged.includes(t));
+          check(edge, `${id}: the map's bottom-right corner, or another free right-column plot, to give a special`);
+          staged.push(edge);
+        }
+        for (const edge of staged) {
+          const was = { special: edge.special, outfit: edge.outfit };
+          undo.push(() => {
+            if (was.special) edge.special = was.special;
+            else delete edge.special;
+            edge.outfit = was.outfit;
+          });
+          edge.special = edge.special ?? { kind: 'oasis' };
+          edge.outfit = null;
+          specials.push(edge);
+        }
+        specials.forEach(analyse);
+        // (b): an owned plot without a special, given a gem. One with nothing installed is taken first; else a MULE is lifted off one for the step.
+        const owned = state.tiles.find((t) => t.owner !== null && open(t) && !t.special && !t.outfit) ?? state.tiles.find((t) => t.owner !== null && open(t) && !t.special);
+        check(owned, `${id}: the map has an owned plot without a special`);
+        const { outfit, ground } = owned;
+        const crystite = ground.crystite;
+        undo.push(() => Object.assign(owned, { outfit }), () => Object.assign(owned.ground, { crystite }));
+        owned.outfit = null;
+        owned.ground.crystite = Math.max(crystite, 2);
+        analyse(owned);
+        // (c): a plot inside the map, so its ring reaches out on every side, under a plot that can show its dots. For (d)
+        // and (e) that plot's left, right and upper neighbours show their dots too; a MULE on any of them is lifted for the step.
+        const around = (t: { x: number; y: number }) => [at(t.x, t.y - 1), at(t.x - 1, t.y - 1), at(t.x + 1, t.y - 1), at(t.x, t.y - 2)];
+        const selected = state.tiles.find((t) => t.x > 0 && t.x < state.width - 1 && t.y > 1 && t.y < state.height - 1 && open(t) && around(t).every((n) => !!n && open(n)));
+        check(selected, `${id}: a plot inside the map whose upper neighbour, and that one's left, right and upper neighbours, can show their dots`);
+        const { x, y } = selected;
+        const neighbours = around(selected) as GameState['tiles'][number][];
+        for (const n of neighbours) {
+          const was = n.outfit;
+          undo.push(() => Object.assign(n, { outfit: was }));
+          n.outfit = null;
+          analyse(n);
+        }
+        room.broadcast();
+
+        const planning = ctx.phone.locator('[data-phase=planning]');
+        await planning.getByTestId('tool-look').click({ timeout: PRESS_MS });
+        const map = planning.getByTestId('hub-map');
+        for (const t of [...specials, owned, ...neighbours]) await map.getByTestId(`map-dots-${t.x}-${t.y}`).waitFor({ timeout: PRESS_MS });
+        await map.getByTestId(`gem-crystite`).first().waitFor({ timeout: PRESS_MS });
+        const specialAt = specials.map((t) => `${t.x}-${t.y}`);
+        const ownedAt = `${owned.x}-${owned.y}`;
+        const [[ownedPlot] = [], ownedPips, [tab] = [], gems, ...perSpecial] = await rectsOf(map, [
+          `[data-testid=map-plot-${ownedAt}]`,
+          `[data-testid=map-dots-${ownedAt}] span.rounded-full`,
+          `[data-testid=owner-${ownedAt}]`,
+          `[data-testid=map-gem-${ownedAt}] [data-testid^=gem-]`,
+          ...specialAt.flatMap((at) => [`[data-testid=map-dots-${at}] span.rounded-full`, `[data-testid=special-glyph-${at}] > span`]),
+        ]);
+        const marks = {
+          plot: ownedPlot,
+          specials: specialAt.map((at, i) => ({ at, third: perSpecial[2 * i]?.[2], badge: perSpecial[2 * i + 1]?.[0] })),
+          owned: { pips: (ownedPips ?? []).slice(0, 3), tab, gems: gems ?? [] },
+        };
+        check(marks.plot, `${id}: plot ${owned.x}-${owned.y} is drawn`);
+        for (const sp of marks.specials) {
+          check(sp.third && sp.badge, `${id}: special plot ${sp.at} draws its third dot and its badge`);
+          const [d, b] = [sp.third, sp.badge];
+          check(!inHexagon((d.left + d.right) / 2, (d.top + d.bottom) / 2, b), `${id}: on special plot ${sp.at} the third dot's centre lies outside the plot's badge`);
+          check(!covers(d, b), `${id}: on special plot ${sp.at} the third dot (${px(d.left)}–${px(d.right)}, ${px(d.top)}–${px(d.bottom)}) is clear of the ${px(b.right - b.left)} badge (${px(b.left)}–${px(b.right)}, ${px(b.top)}–${px(b.bottom)})`);
+        }
+        const o = marks.owned;
+        check(o.pips.length === 3 && o.tab && o.gems.length > 0, `${id}: owned plot ${owned.x}-${owned.y} draws 3 dots, its tab and a gem`);
+        check(!o.pips.some((d) => covers(d, o.tab!)), `${id}: on owned plot ${owned.x}-${owned.y} the owner's tab (foot at ${px(o.tab.bottom)}) is clear of the dots (top at ${px(o.pips[0]!.top)})`);
+        check(!o.pips.some((d) => o.gems.some((g) => covers(d, g))), `${id}: on owned plot ${owned.x}-${owned.y} the gem is clear of the dots`);
+
+        const phone = await selectionUnderDots(map, x, y, id);
+        await ctx.phone.setViewportSize(PHONE_SMALL.viewport);
+        let small: Awaited<ReturnType<typeof selectionUnderDots>>;
+        let fit: Awaited<ReturnType<typeof dotsFitTheirPlots>>;
+        try {
+          const where = `${id}, ${PHONE_SMALL.viewport.width}×${PHONE_SMALL.viewport.height}`;
+          small = await selectionUnderDots(map, x, y, where);
+          fit = await dotsFitTheirPlots(map, [...specials, owned, ...neighbours].map((t) => `${t.x}-${t.y}`), where);
+        } finally {
+          await ctx.phone.setViewportSize(PHONE.viewport);
+        }
+        const third = (sp: (typeof marks.specials)[number]) => `${sp.at} ${px(Math.max(sp.badge!.left - sp.third!.right, sp.badge!.top - sp.third!.bottom))}`;
+        const gap = (over: number) => (over > 0 ? `${px(over)} into` : `${px(-over)} under`);
+        const c = (r: typeof phone) => `on a ${px(r.plot)} plot no pin, the ring's band ${gap(r.bandOver)} the dots, the glow's half-strength edge ${gap(r.glowOver)}`;
+        return `on a ${px(marks.plot.right - marks.plot.left)} plot: (a) the third dot clear of its ${px(marks.specials[0]!.badge!.right - marks.specials[0]!.badge!.left)} badge on ${marks.specials.map(third).join(', ')}; (b) on ${owned.x}-${owned.y} the tab's foot ${px(o.pips[0]!.top - o.tab.bottom)} above the dots, the gem's ${px(o.pips[0]!.top - Math.max(...o.gems.map((g) => g.bottom)))}; (c) ${x}-${y} selected under ${x}-${y - 1}: at ${PHONE.viewport.width}×${PHONE.viewport.height} ${c(phone)}, at ${PHONE_SMALL.viewport.width}×${PHONE_SMALL.viewport.height} ${c(small)}; at ${PHONE_SMALL.viewport.width}×${PHONE_SMALL.viewport.height} (d) ${fit.chips} chips of at most ${px(fit.width)}×${px(fit.height)}, at most ${px(fit.out)} out of their plots, (e) none overlapping${fit.pairs ? `: ${fit.pairs} pairs touching, at most ${px(fit.overlap)} into each other` : ', none touching'}`;
+      } finally {
+        for (const step of undo.reverse()) step();
+      }
+    });
+  } finally {
+    room.broadcast();
+  }
+}
+
+/**
+ * (c) of theMarksStayClearOfTheDots: Look-selects plot x-y, under a plot showing its dots, at the phone's size now; it
+ * draws no pin, its ring's painted band stops within SLACK_PX of those dots, and its glow at half strength stops clear of
+ * them. Deselects it after.
+ */
+async function selectionUnderDots(map: Locator, x: number, y: number, id: string): Promise<{ plot: number; bandOver: number; glowOver: number }> {
+  // Once the resize has reached the map's marks: two frames, the ResizeObserver's and the one it paints in.
+  await map.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+  const plot = map.getByTestId(`map-plot-${x}-${y}`);
+  await plot.click({ timeout: PRESS_MS });
+  await map.locator(`[data-testid=map-plot-${x}-${y}][data-selected]`).waitFor({ timeout: PRESS_MS });
+  const [[box] = [], [pin] = [], [ringBox] = [], [glowBox] = [], dots = []] = await rectsOf(map, [
+    `[data-testid=map-plot-${x}-${y}]`,
+    `[data-testid=map-plot-${x}-${y}] [data-testid=selected-pin]`,
+    `[data-testid=map-plot-${x}-${y}] [data-testid=selected-ring]`,
+    `[data-testid=map-plot-${x}-${y}] [data-testid=selected-glow]`,
+    `[data-testid=map-dots-${x}-${y - 1}] span.rounded-full`,
+  ]);
+  // The ring's band is painted as outset box-shadows: its outer edge lies the largest spread outside the ring's box.
+  const spread = shadowsOf(await map.getByTestId('selected-ring').evaluate((ring) => getComputedStyle(ring).boxShadow)).filter((s) => !s.inset);
+  // The glow is a Gaussian blur of σ = blur / 2 (12 px blur: σ 6) across its spread edge, 4 px outside its box. A blurred
+  // edge is at half strength on the edge itself, so the glow's half-strength edge lies its spread outside the box: the
+  // blur widens the glow around that edge (to about 2% at 12 px out), but moves no part of it past half strength.
+  const glow = shadowsOf(await map.getByTestId('selected-glow').evaluate((g) => getComputedStyle(g).boxShadow)).filter((s) => !s.inset);
+  check(box && ringBox && glowBox && dots.length >= 3, `${id}: the selected plot ${x}-${y} draws its ring and its glow, and ${x}-${y - 1} its 3 dots`);
+  check(!pin, `${id}: the plot ${x}-${y}, selected under the dots of ${x}-${y - 1}, draws no pin`);
+  const foot = Math.max(...dots.slice(0, 3).map((d) => d.bottom));
+  const bandOver = foot - (ringBox.top - Math.max(0, ...spread.map((s) => s.spread)));
+  check(bandOver <= SLACK_PX, `${id}: the ring on ${x}-${y}, as painted, keeps off the dots of ${x}-${y - 1}: its band reaches ${px(bandOver)} into their row on a ${px(box.right - box.left)} plot`);
+  const glowOver = foot - (glowBox.top - Math.max(0, ...glow.map((s) => s.spread)));
+  check(glowOver <= 0, `${id}: the glow on ${x}-${y}, at half strength, stays clear of the dots of ${x}-${y - 1}: it reaches ${px(glowOver)} into their row on a ${px(box.right - box.left)} plot`);
+  await plot.click({ timeout: PRESS_MS });
+  return { plot: box.right - box.left, bandOver, glowOver };
+}
+
+/**
+ * (d) and (e) of theMarksStayClearOfTheDots, at the phone's size now: the dots chip of each plot in `analysed` lies
+ * inside its plot, and no two chips on the map overlap, each within SLACK_PX. Returns the chips' count and largest size,
+ * the farthest a chip reaches out of its plot, and how many pairs touch (within 1 px) and the deepest of them.
+ */
+async function dotsFitTheirPlots(map: Locator, analysed: string[], id: string): Promise<{ chips: number; width: number; height: number; out: number; pairs: number; overlap: number }> {
+  const ats = [...new Set(analysed)];
+  const rects = await rectsOf(map, ats.flatMap((at) => [`[data-testid=map-plot-${at}]`, `[data-testid=map-dots-${at}]`]));
+  let out = 0;
+  for (const [i, at] of ats.entries()) {
+    const [[p] = [], [c] = []] = [rects[2 * i] ?? [], rects[2 * i + 1] ?? []];
+    check(p && c, `${id}: the analysed plot ${at} draws its dots chip`);
+    const reach = Math.max(p.left - c.left, c.right - p.right, p.top - c.top, c.bottom - p.bottom);
+    check(reach <= SLACK_PX, `${id}: the dots chip of ${at} (${px(c.left)}–${px(c.right)}, ${px(c.top)}–${px(c.bottom)}) lies inside its plot (${px(p.left)}–${px(p.right)}, ${px(p.top)}–${px(p.bottom)}): it reaches ${px(reach)} out`);
+    out = Math.max(out, reach);
+  }
+  const all = await rectsOf(map, ['[data-testid^=map-dots-]']).then(([r = []]) => r);
+  let pairs = 0;
+  let overlap = -Infinity;
+  for (const [i, a] of all.entries())
+    for (const b of all.slice(i + 1)) {
+      const depth = Math.min(a.right - b.left, b.right - a.left, a.bottom - b.top, b.bottom - a.top);
+      const next = a.left - b.right < 1 && b.left - a.right < 1 && a.top - b.bottom < 1 && b.top - a.bottom < 1;
+      check(!covers(a, b), `${id}: two neighbouring dots chips overlap by ${px(depth)} (${px(a.left)}–${px(a.right)}, ${px(a.top)}–${px(a.bottom)} and ${px(b.left)}–${px(b.right)}, ${px(b.top)}–${px(b.bottom)})`);
+      if (next) {
+        pairs++;
+        overlap = Math.max(overlap, depth);
+      }
+    }
+  return { chips: all.length, width: Math.max(...all.map((r) => r.right - r.left)), height: Math.max(...all.map((r) => r.bottom - r.top)), out, pairs, overlap };
+}
+
 /** readPlotLook's read, failing with every check that failed. Returns a line for the log. */
 export async function checkPlotLook(map: Locator, where: string, want: LookWanted): Promise<string> {
   const { read, fails } = await readPlotLook(map, where, want);
@@ -292,15 +529,13 @@ export async function checkPlotLook(map: Locator, where: string, want: LookWante
   return read;
 }
 
-type LookWanted = { installed: boolean; selected?: Plot; faded?: boolean };
+type LookWanted = { installed: boolean };
 
 /**
  * B-AC-9 (WS4, plot look A) on one map, measured on screen as drawn, so a zoomed or scaled map shows the same shares:
  * every owned plot paints an inset border of about a twelfth of its width (at least 2 px) in its owner's colour, a tint
  * of 30% of that colour, and holds its owner's tab at about 0.46 of its width; every installed good sits on a disc of
- * about 0.62. `selected` alone shows the ring, and the ring paints a band: inside the plot on the map's edge, outside it
- * on every side elsewhere; the ring as painted and the pin lie at least SEEN inside the box the map is seen through, and
- * never fade. With `faded`, the selected plot's tab is at FADED. Returns a line for the log and every check that failed.
+ * about 0.62. Returns a line for the log and every check that failed.
  */
 export async function readPlotLook(map: Locator, where: string, want: LookWanted): Promise<{ read: string; fails: string[] }> {
   const id = `B-AC-9 (WS4, plot look A, ${where})`;
@@ -308,7 +543,7 @@ export async function readPlotLook(map: Locator, where: string, want: LookWanted
   const fail = (ok: boolean, message: string) => {
     if (!ok) fails.push(`${id}: ${message}`);
   };
-  const { clip, scale, colours, ringColour, plots: drawn } = await drawnMap(map, id);
+  const { scale, colours, plots: drawn } = await drawnMap(map, id);
   check(drawn.length > 0, `${id}: the map draws its plots as map-plot-<x>-<y>, found none`);
   const owned = drawn.filter((p) => /\bowned by player \d+\b/.test(p.label));
   check(owned.length > 0, `${id}: the map has owned plots to measure`);
@@ -340,57 +575,21 @@ export async function readPlotLook(map: Locator, where: string, want: LookWanted
   fail(discs.every((s) => Math.abs(s - LOOK_A.disc) <= SHARE_SLACK), `each installed good's disc is ${LOOK_A.disc} ± ${SHARE_SLACK} of its plot, got ${shares(discs)}`);
   const borders = shares(bordered.map((p) => p.share!));
   const read = `${where}: borders ${borders}, tabs ${shares(tabs)}, discs ${shares(discs) || 'none'} of a ${px(owned[0]!.box.width)} plot`;
-  if (!want.selected) return { read, fails };
-
-  const { x, y } = want.selected;
-  const at = `${x}-${y}`;
-  const rings = drawn.filter((p) => p.marks.some((m) => m.id === 'selected-ring'));
-  check(rings.length === 1 && rings[0]!.at === at, `${id}: the selected plot ${at} alone shows the selected ring, found it on [${rings.map((p) => p.at).join(', ')}]`);
-  const sel = rings[0]!;
-  const ring = sel.marks.find((m) => m.id === 'selected-ring')!;
-  const pin = sel.marks.find((m) => m.id === 'selected-pin');
-  const cells = drawn.map((p) => p.at.split('-').map(Number) as [number, number]);
-  const edge = x === 0 || y === 0 || x === Math.max(...cells.map(([cx]) => cx)) || y === Math.max(...cells.map(([, cy]) => cy));
-  // How far the ring's box reaches outside the plot's: left, top, right, bottom.
-  const out = [sel.box.x - ring.box.x, sel.box.y - ring.box.y, ring.box.x + ring.box.width - (sel.box.x + sel.box.width), ring.box.y + ring.box.height - (sel.box.y + sel.box.height)];
-  if (edge) fail(out.every((d) => d <= 0.5), `on the map's edge the selected ring lies inside plot ${at}, but reaches ${out.map(px).join(', ')} out (left, top, right, bottom)`);
-  else fail(out.every((d) => d > 0), `inside the map the selected ring reaches outside plot ${at} on every side, by ${out.map(px).join(', ')} (left, top, right, bottom)`);
-  const band = shadowsOf(ring.boxShadow).filter((s) => s.spread >= 1 && (s.colour?.a ?? 0) > 0);
-  fail(
-    band.some((s) => sameColour(s.colour, rgbaOf(ringColour))),
-    `the selected ring on ${at} paints a band in the holo colour (${RING_COLOUR}, ${ringColour}), got box-shadow "${ring.boxShadow}"`,
-  );
-  // An outset band paints beyond the ring's box by its spread.
-  const reach = Math.max(0, ...band.filter((s) => !s.inset).map((s) => s.spread)) * scale;
-  const ringSeen = onScreen({ x: ring.box.x - reach, y: ring.box.y - reach, width: ring.box.width + 2 * reach, height: ring.box.height + 2 * reach }, clip);
-  fail(ringSeen >= SEEN, `at least ${SEEN * 100}% of the selected ring on ${at}, as painted, is inside the map's visible box, got ${percent(ringSeen)}`);
-  const pinSeen = pin ? onScreen(pin.box, clip) : 0;
-  fail(!!pin && pin.visible && pinSeen >= SEEN, `the selected plot ${at} shows its pin, at least ${SEEN * 100}% inside the map's visible box, got ${pin ? percent(pinSeen) : 'no pin'}`);
-  fail(ring.opacity > 0.99 && (pin?.opacity ?? 0) > 0.99, `the selection never fades: the ring on ${at} draws at ${ring.opacity.toFixed(2)}, its pin at ${pin?.opacity.toFixed(2) ?? 'none'}`);
-  const tab = sel.marks.find((m) => m.id === `owner-${at}`);
-  if (want.faded) fail(!!tab && Math.abs(tab.opacity - FADED) <= 0.05, `another player's plot ${at} fades its tab to ${FADED}, got ${tab?.opacity.toFixed(2) ?? 'no tab'}`);
-  const faded = want.faded && tab ? `, its tab at ${tab.opacity.toFixed(2)}` : '';
-  return { read: `${read}; ${at} selected${edge ? ' on the edge' : ''}, ring ${percent(ringSeen)} and pin ${percent(pinSeen)} in view at ${ring.opacity.toFixed(2)}${faded}`, fails };
+  return { read, fails };
 }
 
-/** Every plot on the map with its marks and paint, in one read once its fades have run. Fails when the map has no root. */
+/** Every plot on the map with its marks and paint, in one read. Fails when the map has no root. */
 async function drawnMap(map: Locator, id: string): Promise<DrawnMap> {
   const slots = ([0, 1, 2, 3, 4, 5] as Slot[]).map((s) => SLOT_COLOR[s]);
   // Kept free of named functions: tsx's keepNames wraps them with `__name`, which the page lacks.
-  const drawn = await map.evaluate(async (el, { slotColours, ring }) => {
-    // A fade still running reads mid-way; the selection's glow breathes forever, but it is an animation, not a transition.
-    await Promise.all(el.getAnimations({ subtree: true }).filter((a) => a instanceof CSSTransition).map((a) => a.finished.catch(() => undefined)));
+  const drawn = await map.evaluate((el, slotColours) => {
     const root = el.querySelector<HTMLElement>('[data-testid=holo-map]');
     if (!root) return null;
-    const r = root.getBoundingClientRect();
-    // The map clips at its padding box, inside its border, scaled as the map is.
-    const scale = r.width / root.offsetWidth;
-    const p = { left: r.x + root.clientLeft * scale, top: r.y + root.clientTop * scale, right: r.x + (root.clientLeft + root.clientWidth) * scale, bottom: r.y + (root.clientTop + root.clientHeight) * scale };
-    const v = root.closest('[data-testid=map-viewport]')?.getBoundingClientRect() ?? p;
-    const clip = { x: Math.max(p.left, v.left), y: Math.max(p.top, v.top), width: Math.min(p.right, v.right) - Math.max(p.left, v.left), height: Math.min(p.bottom, v.bottom) - Math.max(p.top, v.top) };
-    // Each slot's colour and the ring's as the page computes them, through the theme's variables.
+    // How much a zoom or a scaled screen magnifies the map: its width on screen over its layout width.
+    const scale = root.getBoundingClientRect().width / root.offsetWidth;
+    // Each slot's colour as the page computes it, through the theme's variables.
     const probe = document.body.appendChild(document.createElement('span'));
-    const [ringColour = '', ...colours] = [ring, ...slotColours].map((c) => {
+    const colours = slotColours.map((c) => {
       probe.style.color = c;
       return getComputedStyle(probe).color;
     });
@@ -404,21 +603,12 @@ async function drawnMap(map: Locator, id: string): Promise<DrawnMap> {
         paint: [...t.children].map((c) => ({ boxShadow: getComputedStyle(c).boxShadow, background: getComputedStyle(c).backgroundColor })),
         marks: [...t.querySelectorAll('[data-testid]')].map((m) => {
           const k = m.getBoundingClientRect();
-          // What the eye gets: the product of the opacities of the mark and everything it sits in.
-          let opacity = 1;
-          for (let e: Element | null = m; e; e = e.parentElement) opacity *= Number(getComputedStyle(e).opacity);
-          return {
-            id: m.getAttribute('data-testid') ?? '',
-            box: { x: k.x, y: k.y, width: k.width, height: k.height },
-            visible: m.checkVisibility({ opacityProperty: true, visibilityProperty: true }),
-            opacity,
-            boxShadow: getComputedStyle(m).boxShadow,
-          };
+          return { id: m.getAttribute('data-testid') ?? '', box: { x: k.x, y: k.y, width: k.width, height: k.height } };
         }),
       };
     });
-    return { clip, scale, colours, ringColour, plots };
-  }, { slotColours: slots, ring: RING_COLOUR });
+    return { scale, colours, plots };
+  }, slots);
   check(drawn, `${id}: map root not found (data-testid=holo-map)`);
   return drawn;
 }
@@ -461,17 +651,6 @@ function sameColour(a: Rgba | null, b: Rgba | null): boolean {
 
 function shares(list: number[]): string {
   return list.map((s) => s.toFixed(2)).join(', ');
-}
-
-function percent(share: number): string {
-  return `${(share * 100).toFixed(1)}%`;
-}
-
-/** The share of `b`'s area inside `clip`. */
-function onScreen(b: Box, clip: Box): number {
-  const w = Math.max(0, Math.min(b.x + b.width, clip.x + clip.width) - Math.max(b.x, clip.x));
-  const h = Math.max(0, Math.min(b.y + b.height, clip.y + clip.height) - Math.max(b.y, clip.y));
-  return (w * h) / (b.width * b.height);
 }
 
 /** A seat's plot count and its goods, written out good by good so two stocks compare as text. */
