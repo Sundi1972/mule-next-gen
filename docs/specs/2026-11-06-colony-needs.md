@@ -270,7 +270,7 @@ owner        WS7 (colony.ts); upkeep.ts and economy.ts named edits (WS1)
 ```
 C9 · ADDED · Electronics are a comfort: a mood bonus when met, never a penalty
 
-tomorrow     MUST give the colonists min(colonists / HEALTH.colonistsPerElectronics (50), store
+tomorrow     MUST give the colonists min(colonists / UPKEEP.colonistsPerElectronics (50), store
              stock) Electronics at upkeep, free; MUST raise the mood's target by
              HEALTH.electronicsBonus (4) × the share met; MUST NOT lower it when unmet. The store's
              demand for them is WS5's C17
@@ -621,7 +621,7 @@ Medicine need ×= (1 + h_old)                 · crews: WS5 RULE-14 reads h (sic
 
 ```
 RULE-9 · The Electronics comfort (C9)                             shape: formula
-want = colonists / HEALTH.colonistsPerElectronics (50) · took = min(want, store stock)
+want = colonists / UPKEEP.colonistsPerElectronics (50) · took = min(want, store stock)
 mood target += HEALTH.electronicsBonus (4) × (took / want); want 0 → 0; never negative
 ```
 
