@@ -3,10 +3,10 @@
  * standings by Worth, the result since its last plan, the aim to win, the tools named, and the auction's own prices.
  */
 import { describe, expect, it } from 'vitest';
-import { AI_LEVELS, AI_PERSONAS, allPrices, createGame, postPrices, scoreParts, type GameState, type LandGrantPlay, type Playbook, type Strategy } from '@mule/engine';
+import { advancePhase, AI_LEVELS, AI_PERSONAS, allPrices, createGame, scoreParts, type GameState, type LandGrantPlay, type Playbook, type Strategy } from '@mule/engine';
 import { PERSONAS } from '../src/personas.js';
 import type { Mind } from '../src/value.js';
-import { atAuctionPrices, landBrief, phaseBrief } from '../src/llm/brief.js';
+import { atAuctionStart, landBrief, phaseBrief } from '../src/llm/brief.js';
 import { WRITER_SYSTEM } from '../src/llm/system.js';
 import type { LandDraft } from '../src/playbook/index.js';
 
@@ -78,17 +78,20 @@ describe('deep2: the brief gives Claude what the engine seats play with', () => 
     expect(WRITER_SYSTEM).not.toContain('in character. The brief shows');
   });
 
-  it("deep2 C1: atAuctionPrices is the game as the auction opens: the store's posted prices moved, the game itself untouched", () => {
+  it("deep2 C1 (B fix 1): atAuctionStart is the game as the auction opens, the phase's events and posted prices included; the game itself untouched", () => {
     const state = table();
+    while (state.phase !== 'production') advancePhase(state);
     // Nothing on the shelf or in any hand: Food is short, so its price must rise when the store posts.
     state.store.stock.food = 0;
     for (const p of state.players) p.stock.food = 0;
     const was = allPrices(state).food;
     const expected = structuredClone(state);
-    postPrices(expected);
-    const view = atAuctionPrices(state);
-    expect(allPrices(view).food).toBe(allPrices(expected).food);
+    advancePhase(expected);
+    const view = atAuctionStart(state);
+    expect(view).toEqual(expected);
+    expect(view.phase).toBe('auction');
     expect(allPrices(view).food).not.toBe(was);
+    expect(state.phase).toBe('production');
     expect(allPrices(state).food).toBe(was);
     expect(auction(view)).toContain(`Food ${allPrices(expected).food}`);
   });

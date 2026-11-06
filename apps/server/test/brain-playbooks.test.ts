@@ -150,10 +150,10 @@ describe('RULE-A1: which playbook takes effect at the land grant', () => {
     expect(none.now).toBeNull();
   });
 
-  it("T-AC-A1: row 4, a reply 1 s before the land grant: the draft the brief showed, with its accepted edits, plays by llm; a reply in time with none accepted plays the land grant's own draft, by engine", async () => {
+  it("T-AC-A1: row 4 (AM-A17), a reply 1 s before the land grant: the land grant's own draft, with its accepted edits, plays by llm; a reply in time with none accepted plays that draft, by engine", async () => {
     // Month 1's reply carries EDITS; month 2's has every edit refused or rejected.
     const sdk = answersAt(1_000, (n) => (n === 1 ? EDITS : ALL_REFUSED));
-    // The draft moves on between the ask and the land grant: the edits apply to the one the brief showed.
+    // The draft moves on between the ask and the land grant: the edits apply to the land grant's own (AM-A17).
     const { now, inEffectAtStart, engine, playbooks, state } = await month1({ brain: smartOn(sdk), source: driftingSource(), grantAtMs: 2_000 });
 
     expect(sdk.calls).toBe(1);
@@ -167,7 +167,7 @@ describe('RULE-A1: which playbook takes effect at the land grant', () => {
     expect(inEffectAtStart?.landGrant?.ranked.slice(0, planA.length)).toEqual(planA);
     expect(inEffectAtStart?.landGrant?.claims).toBe(1);
     expect(engine?.landGrant?.pressShare).toEqual(ENGINE_PRESS);
-    expect(inEffectAtStart?.landGrant?.pressShare, "the ask-time draft's, not the land grant's").toEqual(ENGINE_PRESS);
+    expect(inEffectAtStart?.landGrant?.pressShare, "the land grant's draft's, not the ask-time one's").toEqual(LATER_PRESS);
     expect(inEffectAtStart?.rejected).toEqual([]);
     expect(now).toEqual(inEffectAtStart);
     expect(callLines().map((l) => [l.kind, l.outcome])).toEqual([['strategy', 'llm']]);

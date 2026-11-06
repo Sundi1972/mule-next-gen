@@ -1,4 +1,4 @@
-import { allPrices, BRAIN, GAME, GOODS, MS_PER_SECOND, observe, postPrices, scoreParts, SPECIES_PERK, type DevelopmentPlay, type GameState, type Good, type GoodPlay, type LandGrantPlay, type Outfit, type PhaseOutcome, type Playbook, type PlayerId, type Species, type Strategy } from '@mule/engine';
+import { advancePhase, allPrices, BRAIN, GAME, GOODS, MS_PER_SECOND, observe, scoreParts, SPECIES_PERK, type DevelopmentPlay, type GameState, type Good, type GoodPlay, type LandGrantPlay, type Outfit, type PhaseOutcome, type Playbook, type PlayerId, type Species, type Strategy } from '@mule/engine';
 import { OPTION_IDS, toOptions, type TableTalk } from '../decider.js';
 import type { Persona } from '../personas.js';
 import { GOOD_NAME, landDecision, outfitName } from '../strategist.js';
@@ -58,13 +58,15 @@ export interface WorthAt {
 export const worthNow = (state: GameState): Record<PlayerId, number> => Object.fromEntries(state.players.map((p) => [p.id, scoreParts(state, p.id).total]));
 
 /**
- * The game as the goods auction opens: a copy with the store's prices posted, as the auction's start posts them. The
- * auction's edits are asked in the production show, before that, so its brief and draft read this instead of last
- * month's prices. The phase's own events (a raid, a fire) are not foreseen.
+ * The game as the goods auction opens: a copy of the production phase advanced into the auction, so the phase's events
+ * (a raid, a fire), the store's posted prices and the auction's queue are the ones the auction will open on. The engine
+ * is seeded, so the copy's events are the game's own. The auction's edits are asked in the production show, before
+ * that, and the seat can do nothing between, so it learns no more than it would at the auction's start; drafting from
+ * anything else showed a plan whose roles the auction's own draft did not keep (B fix 1, 6 Nov).
  */
-export function atAuctionPrices(state: GameState): GameState {
+export function atAuctionStart(state: GameState): GameState {
   const view = structuredClone(state);
-  postPrices(view);
+  if (view.phase === 'production') advancePhase(view);
   return view;
 }
 

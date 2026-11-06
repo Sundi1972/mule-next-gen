@@ -7,7 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { advancePhase, allPrices, createGame, type GameState } from '@mule/engine';
-import { AiSeat, atAuctionPrices, playbookSource } from '@mule/ai';
+import { AiSeat, atAuctionStart, playbookSource } from '@mule/ai';
 import { createBrain, type MeteredBrain } from '../src/brain/index.js';
 import { Playbooks } from '../src/brain/playbooks.js';
 import type { PlaybookNote } from '../src/mule-game.js';
@@ -344,6 +344,116 @@ describe('RULE-A2 rows 3-4: the next phase is edited in the slack before it', { 
     expect(notes.map((n) => n.phase)).toEqual(['landGrant', 'development']);
     expect(notes[1]!.playbook.development).toEqual({ ...fresh, timeBudgetMs: 1_000 });
   });
+
+  /** Production's state, the plan shown for it, and the plan the auction would draft once a raid takes all of p0's goods. */
+  const raided = (state: GameState, seat: AiSeat) => {
+    const shown = seat.draft(atAuctionStart(state), 'auction').auction!;
+    const later = structuredClone(state);
+    advanceTo(later, 'auction');
+    raid(later, shown);
+    return { shown, fresh: seat.draft(later, 'auction').auction! };
+  };
+  const raid = (state: GameState, shown: object) => {
+    for (const g of Object.keys(shown)) (state.players[0]!.stock as Record<string, number>)[g] = 0;
+  };
+  type Plans = ReturnType<typeof raided>;
+  const roleOf = (plans: Plans['shown'], g: string) => (plans as Record<string, { role: string }>)[g]?.role;
+
+  it("B fix 1: the auction is briefed on the draft it opens on: with nothing happening between, the plan shown in production is the one the auction drafts", async () => {
+    const asked: SdkParams[] = [];
+    const { state, seat, playbooks } = table(smartOn(fakeSdk((_n, params, options) => (asked.push(params), neverAnswers(options)))));
+    advanceTo(state, 'production');
+    const shown = seat.draft(atAuctionStart(state), 'auction');
+    playbooks.askPhase(state, 'auction', []);
+    await vi.advanceTimersByTimeAsync(0);
+    advanceTo(state, 'auction');
+    expect(seat.draft(state, 'auction').auction).toEqual(shown.auction);
+    expect(asked).toHaveLength(1);
+  });
+
+  it("B fix 1 (AM-A17): the auction edits apply to the auction's draft at its start, not to the one shown in production, so stock lost since is planned for", async () => {
+    let plans: Plans | null = null;
+    let edited: string | null = null;
+    const sdk = fakeSdk((_n, params) => {
+      // A good whose role the raid leaves alone, so its edit still plays.
+      edited = offeredPaths(params).find((p) => p.endsWith('/concedeCrPerS') && roleOf(plans!.shown, p.split('/')[2]!) === roleOf(plans!.fresh, p.split('/')[2]!))!;
+      return sdkMessage(JSON.stringify({ edits: [{ path: edited, to: 3, reason: 'Patient.' }], line: '' }), USED);
+    });
+    const { state, seat, notes, playbooks } = table(smartOn(sdk));
+    advanceTo(state, 'production');
+    plans = raided(state, seat);
+    playbooks.askPhase(state, 'auction', []);
+    await vi.advanceTimersByTimeAsync(1_000);
+    advanceTo(state, 'auction');
+    raid(state, plans.shown);
+    const fresh = seat.draft(state, 'auction').auction!;
+    expect(fresh).toEqual(plans.fresh);
+    playbooks.takePhase(state, 'auction');
+    expect(edited).toBeTruthy();
+    const good = edited!.split('/')[2]!;
+    // The drafts differ outside the edited good, so only the fresh one can pass the next line.
+    expect({ ...fresh, [good]: null }).not.toEqual({ ...plans.shown, [good]: null });
+    expect(notes.map((n) => [n.phase, n.playbook.by])).toEqual([['auction', 'llm']]);
+    const played = notes[0]!.playbook.auction as Record<string, unknown>;
+    expect({ ...played, [good]: null }).toEqual({ ...fresh, [good]: null });
+    expect((played[good] as { concedeCrPerS: number }).concedeCrPerS).toBe(3);
+  });
+
+  it("B fix 1 (review of #551): an edit to a good whose role changed since the plan was shown is not played on the new role; it is rejected with why, and the draft's plan for that good plays", async () => {
+    let plans: Plans | null = null;
+    let edited: string | null = null;
+    let kept: string | null = null;
+    const sdk = fakeSdk((_n, params) => {
+      const offered = offeredPaths(params);
+      const flipped = (p: string) => roleOf(plans!.shown, p.split('/')[2]!) !== roleOf(plans!.fresh, p.split('/')[2]!);
+      edited = offered.find((p) => p.endsWith('/walkAway') && flipped(p))!;
+      kept = offered.find((p) => p.endsWith('/concedeCrPerS') && !flipped(p))!;
+      return sdkMessage(JSON.stringify({ edits: [{ path: edited, to: 90, reason: 'Hold out.' }, { path: kept, to: 3, reason: 'Patient.' }], line: '' }), USED);
+    });
+    const { state, seat, notes, playbooks } = table(smartOn(sdk));
+    advanceTo(state, 'production');
+    plans = raided(state, seat);
+    playbooks.askPhase(state, 'auction', []);
+    await vi.advanceTimersByTimeAsync(1_000);
+    advanceTo(state, 'auction');
+    raid(state, plans.shown);
+    playbooks.takePhase(state, 'auction');
+    expect(edited).toBeTruthy();
+    expect(kept).toBeTruthy();
+    const good = edited!.split('/')[2]!;
+    const played = notes[0]!.playbook.auction as Record<string, unknown>;
+    expect(played[good]).toEqual((plans.fresh as Record<string, unknown>)[good]);
+    expect((played[kept!.split('/')[2]!] as { concedeCrPerS: number }).concedeCrPerS).toBe(3);
+    // Listed once, beside whatever the rules rejected of the kept edit (nothing here).
+    expect(notes[0]!.playbook.rejected).toEqual([{ path: edited, to: 90, why: expect.stringMatching(/role/) }]);
+  });
+
+  it("B fix 1 (review of #551): a reply that sets a flipped good's role keeps its other edits for that good, read under the role it chose", async () => {
+    let plans: Plans | null = null;
+    let good: string | null = null;
+    const sdk = fakeSdk((_n, params) => {
+      const offered = offeredPaths(params);
+      const flipped = (g: string) => roleOf(plans!.shown, g) !== roleOf(plans!.fresh, g);
+      good = offered.filter((p) => p.endsWith('/walkAway')).map((p) => p.split('/')[2]!).find(flipped)!;
+      const shownRole = roleOf(plans!.shown, good);
+      return sdkMessage(
+        JSON.stringify({ edits: [{ path: `/auction/${good}/role`, to: shownRole, reason: 'Still.' }, { path: `/auction/${good}/concedeCrPerS`, to: 3, reason: 'Patient.' }], line: '' }),
+        USED,
+      );
+    });
+    const { state, seat, notes, playbooks } = table(smartOn(sdk));
+    advanceTo(state, 'production');
+    plans = raided(state, seat);
+    playbooks.askPhase(state, 'auction', []);
+    await vi.advanceTimersByTimeAsync(1_000);
+    advanceTo(state, 'auction');
+    raid(state, plans.shown);
+    playbooks.takePhase(state, 'auction');
+    expect(good).toBeTruthy();
+    const played = (notes[0]!.playbook.auction as Record<string, { concedeCrPerS: number }>)[good!]!;
+    expect(played.concedeCrPerS).toBe(3);
+    expect((notes[0]!.playbook.rejected ?? []).filter((r) => /role changed/.test(r.why))).toEqual([]);
+  });
 });
 
 describe('deep2: what the Smart seat is asked with (t120s audit, 6 Nov)', { timeout: 30_000 }, () => {
@@ -356,7 +466,7 @@ describe('deep2: what the Smart seat is asked with (t120s audit, 6 Nov)', { time
     state.store.stock.food = 0;
     for (const p of state.players) p.stock.food = 0;
     const stale = allPrices(state).food;
-    const posted = allPrices(atAuctionPrices(state)).food;
+    const posted = allPrices(atAuctionStart(state)).food;
     expect(posted).not.toBe(stale);
     playbooks.askPhase(state, 'auction', []);
     await vi.advanceTimersByTimeAsync(0);

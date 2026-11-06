@@ -5,7 +5,7 @@
  */
 import { BRAIN, type GameState, type Playbook, type PlayerId } from '@mule/engine';
 import {
-  atAuctionPrices,
+  atAuctionStart,
   landBrief,
   phaseBrief,
   playbookFrom,
@@ -57,12 +57,13 @@ const saysPlan = (written: WriterReply, by: Playbook['by']) => by === 'llm' || (
 export type { Feedback };
 
 /**
- * A seat's ask for one month's land grant: the draft its brief showed, the reply once it came in time, whether that
- * grant has started, and the cancel for its call.
+ * A seat's ask for one month's land grant: the reply once it came in time, whether that grant has started, and the
+ * cancel for its call. The edits go onto the phase's draft at its start (AM-A17), so the draft shown is not kept.
  */
 interface Ask {
   month: number;
-  draft: Playbook;
+  /** An auction ask's role for each good its brief showed: an edit to a good whose role has changed by the auction's start is not played. */
+  roles?: Readonly<Record<string, string>>;
   written: WriterReply | null;
   started: boolean;
   controller: AbortController;
@@ -149,7 +150,7 @@ export class Playbooks {
           console.error(`playbooks: seat ${seat.id} has no development draft for month ${month}: ${messageOf(err)}`);
         }
         const brief = landBrief(state, seat.mind, seat.brain.persona, drafted.land, seat.brain.heard(), last, development?.development ?? null);
-        const ask: Ask = { month, draft: drafted.playbook, written: null, started: false, controller: new AbortController(), development };
+        const ask: Ask = { month, written: null, started: false, controller: new AbortController(), development };
         this.asks.set(seat.id, ask);
         seat.playbookAsked(month);
         const waitMs = this.options.waitMs?.strategy ?? WRITE_CALLS.strategy.timeoutMs;
@@ -204,7 +205,7 @@ export class Playbooks {
           const { land, development } = splitDevelopment(asked.written);
           asked.written = land;
           if (development && asked.development) {
-            this.phaseAsks.set(`${seat.id}/development`, { month: state.month, draft: asked.development, written: development, started: false, controller: new AbortController() });
+            this.phaseAsks.set(`${seat.id}/development`, { month: state.month, written: development, started: false, controller: new AbortController() });
           }
         }
       }
@@ -241,9 +242,9 @@ export class Playbooks {
       if (!writer) continue;
       const key = `${seat.id}/${phase}`;
       try {
-        // The auction is asked in the production show, before the store posts its prices: it is drafted and briefed at
-        // the prices the auction will open at, as the engine's own seats redraft at its start.
-        const view = phase === 'auction' ? atAuctionPrices(state) : state;
+        // The auction is asked in the production show: it is drafted and briefed on the game as the auction will open,
+        // its events and posted prices included, as the engine's own seats draft at its start.
+        const view = phase === 'auction' ? atAuctionStart(state) : state;
         const draft = seat.draft(view, phase);
         const outcome = phase === 'auction' ? seat.outcome('development', state, facts) : null;
         const brief = phaseBrief(view, seat.mind, seat.brain.persona, draft, phase, seat.brain.heard(), {
@@ -251,7 +252,8 @@ export class Playbooks {
           feedback: this.phaseFeedback.get(key) ?? null,
           worthBefore: this.worthAtAsk.get(seat.id) ?? null,
         });
-        const ask: Ask = { month: state.month, draft, written: null, started: false, controller: new AbortController() };
+        const roles = Object.fromEntries(Object.entries(draft.auction ?? {}).map(([g, plan]) => [g, plan.role]));
+        const ask: Ask = { month: state.month, roles, written: null, started: false, controller: new AbortController() };
         this.phaseAsks.set(key, ask);
         const waitMs = this.options.waitMs?.playbook ?? WRITE_CALLS.playbook.timeoutMs;
         const write = writer
@@ -272,7 +274,7 @@ export class Playbooks {
 
   /**
    * `phase` has started: a call still open for it is cancelled and its reply would be late. A reply that came in time
-   * is applied to the draft its brief showed (the development's, to its draft as it starts); only a playbook carrying Claude's accepted edits is adopted and
+   * is applied to the phase's draft as it starts (AM-A17); only a playbook carrying Claude's accepted edits is adopted and
    * recorded. Otherwise nothing is adopted, so the seat plays the phase its own way (today's hands while
    * AI_PLANS.ownPhases is off). The reply's feedback is kept for that phase's next brief.
    */
@@ -287,10 +289,17 @@ export class Playbooks {
       if (!ask.written) continue;
       let made: ReturnType<typeof playbookFrom>;
       try {
-        // The development's edits go onto its draft as it starts: the land write's was drafted at upkeep, before the land
-        // grant and auction changed what the seat owns. The auction's draft was made after production, and holds.
-        const draft = phase === 'development' ? seat.draft(state, 'development') : ask.draft;
-        made = playbookFrom(seat.validator(), state, draft, ask.written);
+        // The edits go onto the phase's draft as it starts, the one the engine's own seat would play (AM-A17): the
+        // development's was shown at upkeep, before the land grant changed what the seat owns; the auction's in
+        // production, before the store posted its prices and the month's events ran.
+        const draft = seat.draft(state, phase);
+        const { written, dropped } = withoutFlippedGoods(ask.written, ask.roles, draft);
+        made = playbookFrom(seat.validator(), state, draft, written);
+        if (dropped.length > 0 && made.feedback) {
+          // One new list for both: by 'llm', the feedback and the playbook share playbookFrom's rejected array.
+          const rejected = [...made.feedback.rejected, ...dropped];
+          made = { feedback: { ...made.feedback, rejected }, playbook: made.playbook.by === 'llm' ? { ...made.playbook, rejected } : made.playbook };
+        }
       } catch (err) {
         console.error(`playbooks: seat ${seat.id}'s ${phase} could not be drafted or validated, it plays its own way: ${messageOf(err)}`);
         continue;
@@ -334,8 +343,9 @@ export class Playbooks {
 
   /**
    * The playbook that takes effect, by playbookFrom. A reply that came in time has its edits validated against the
-   * draft its brief showed, never a later one whose plan letters may name other plots; only a playbook by 'llm' comes
-   * from that draft. Otherwise (no reply, nothing accepted, a validator that throws) the engine's draft `now` plays.
+   * land grant's own draft `now` (AM-A17): a plan letter was already turned into its plots by the writer, so no letter
+   * can name other plots, and every field Claude left alone plays as the engine's seat would. Otherwise (no reply,
+   * nothing accepted, a validator that throws) `now` plays by engine.
    * The reply's feedback is kept either way.
    */
   private decide(state: GameState, seat: PlayerId, now: Playbook, asked: Ask | null, validate: ValidatePlan): Playbook {
@@ -344,7 +354,7 @@ export class Playbooks {
     if (!asked || !written) return engine;
     let made: ReturnType<typeof playbookFrom>;
     try {
-      made = playbookFrom(validate, state, asked.draft, written);
+      made = playbookFrom(validate, state, now, written);
     } catch (err) {
       console.error(`playbooks: validatePlan failed for seat ${seat}, the engine's playbook plays: ${messageOf(err)}`);
       made = { playbook: engine, feedback: { refused: written.refused, rejected: [] } };
@@ -352,4 +362,26 @@ export class Playbooks {
     if (made.feedback) this.feedback.set(seat, made.feedback);
     return made.playbook.by === 'llm' ? made.playbook : engine;
   }
+}
+
+/**
+ * The reply without its edits to a good whose role has changed since the plan was shown (a raid or an event between the
+ * production ask and the auction's start), unless the reply sets that good's role itself: a seller's hold-out walk-away
+ * read as a buyer's limit would pay that much. Each dropped edit comes back rejected, with why, for the next brief.
+ */
+function withoutFlippedGoods(
+  written: WriterReply,
+  shown: Readonly<Record<string, string>> | undefined,
+  draft: Playbook,
+): { written: WriterReply; dropped: NonNullable<Playbook['rejected']> } {
+  if (!shown) return { written, dropped: [] };
+  const goodOf = (path: string) => (path.startsWith('/auction/') ? path.split('/')[2] : undefined);
+  const setsRole = new Set(written.reply.edits.filter((e) => e.path.endsWith('/role')).map((e) => goodOf(e.path)));
+  const now = (g: string) => (draft.auction as Record<string, { role: string } | undefined> | undefined)?.[g]?.role;
+  const flipped = (g: string | undefined) => g !== undefined && shown[g] !== undefined && now(g) !== undefined && shown[g] !== now(g) && !setsRole.has(g);
+  const dropped = written.reply.edits
+    .filter((e) => flipped(goodOf(e.path)))
+    .map((e) => ({ path: e.path, to: e.to, why: `its role changed from ${shown[goodOf(e.path)!]} to ${now(goodOf(e.path)!)} before the auction opened, so the draft's plan for it plays` }));
+  if (dropped.length === 0) return { written, dropped };
+  return { written: { ...written, reply: { ...written.reply, edits: written.reply.edits.filter((e) => !flipped(goodOf(e.path))) } }, dropped };
 }
