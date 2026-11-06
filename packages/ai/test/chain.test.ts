@@ -4,7 +4,8 @@ import { applyAction } from '../src/play.js';
 import { draftPlanningPart, draftStrategyOf } from '../src/playbook/draft.js';
 import { AiSeat, type AiSeatOptions } from '../src/seat.js';
 import { outlook } from '../src/outlook.js';
-import { canFeed, chainInputs, chainLinks, installGain, standingLinks, type Mind } from '../src/value.js';
+import { developDecision } from '../src/strategist.js';
+import { canFeed, chainInputs, chainLinks, chainOf, chainOutlook, installGain, linkShare, standingLinks, type Mind } from '../src/value.js';
 
 /** A seat whose Electronics fetch a high price builds the chain to them, upstream first. See AM-33. */
 
@@ -115,8 +116,10 @@ describe('a factory chain (AM-33)', () => {
 
   it('B-AC-11: a chain under way is re-drafted on what is left to build: its standing link at running cost, cash for the missing links only', () => withChains(() => {
     // The Smithore mine stands on thin ground (one a month, the Alloy works wants two), so Smithore is still short; the
-    // cash pays the works, the Rare earth mine and the Alloy works, not a second Smithore mine as well.
-    const state = development([{ x: 0, ground: { rareEarth: 4 } }, { x: 2, ground: { smithore: 1 }, outfit: 'smithore' }, { x: 4 }, { x: 6 }], 2_000);
+    // cash pays the works, the Rare earth mine and the Alloy works, not a second Smithore mine as well. Electronics at a
+    // price where the chain wins by less than the standing mine's outfit (75 cr): it wins only while the mine counts at
+    // its running cost, with no install price (M7).
+    const state = development([{ x: 0, ground: { rareEarth: 4 } }, { x: 2, ground: { smithore: 1 }, outfit: 'smithore' }, { x: 4 }, { x: 6 }], 3_772);
     state.players.find((p) => p.id === ME)!.money = 1_000;
     const seat = seatOf();
     const redraft = draftStrategyOf({ state, seat: ME, mind: seat.mind, seed: 11, phase: 'development', kept: null, replanned: 'election' });
@@ -132,6 +135,61 @@ describe('a factory chain (AM-33)', () => {
     const listed = (moneyMaker: Good) => (draftPlanningPart({ state, seat: ME, mind: seatOf().mind, seed: 11, phase: 'planning', strategy: strategy(moneyMaker) }).list ?? []).map((l) => l.plot);
     expect(listed('food'), 'without a chain the mine is listed').toContain(0);
     expect(listed('electronics')).not.toContain(0);
+  }));
+
+  it('B-AC-11: one set of links feeds one works, so a chain is scored as one works and its links, never as three works', () => withChains(() => {
+    // Electronics at a price where three works plots' gains with one set of links would win, and one works with its
+    // links, what the seat would build, does not.
+    const state = development(CHAIN_PLOTS, 1_500);
+    expect(draftStrategyOf({ state, seat: ME, mind: seatOf().mind, seed: 11, phase: 'development' }).moneyMaker).not.toBe('electronics');
+  }));
+
+  it("B-AC-11: the works' charge for the inputs its own links make is refunded, end to end", () => withChains(() => {
+    // Electronics at a price where the chain wins only with its works' input charge refunded (M8).
+    const state = development(CHAIN_PLOTS, 2_075);
+    expect(draftStrategyOf({ state, seat: ME, mind: seatOf().mind, seed: 11, phase: 'development' }).moneyMaker).toBe('electronics');
+  }));
+
+  it('B-AC-11: a short seat lists a spare Smithore MULE when its Alloy money-maker is fed, and keeps a standing link of an unfed chain', () => withChains(() => {
+    // Planning, broke, its Food and Energy MULEs its last (never listed): a Smithore mine is the one lot it can list.
+    const listed = (smithore: number, moneyMaker: Good) => {
+      const state = development([{ x: 0, ground: { smithore }, outfit: 'smithore' }, { x: 2, ground: { food: 2 }, outfit: 'food' }, { x: 4, outfit: 'energy' }], 2_000);
+      state.phase = 'planning';
+      state.players.find((p) => p.id === ME)!.money = 0;
+      expect(canFeed(state, ME, 'alloy'), `Alloy fed on Smithore ground ${smithore}`).toBe(smithore >= 4);
+      const strategy: Strategy = { kind: 'specialist', moneyMaker, monopolyTarget: null, cashFloor: 0, landTarget: { plots: 3, byMonth: 2 }, stances: {}, reason: '' };
+      return (draftPlanningPart({ state, seat: ME, mind: seatOf().mind, seed: 11, phase: 'planning', strategy }).list ?? []).map((l) => l.plot);
+    };
+    // Fed: the mine is no link, and it is listed as without a chain.
+    expect(listed(4, 'food'), 'without a chain the mine is listed').toContain(0);
+    expect(listed(4, 'alloy')).toEqual(listed(4, 'food'));
+    // Unfed: the mine is the chain's standing link, kept.
+    expect(listed(1, 'food')).toContain(0);
+    expect(listed(1, 'alloy')).not.toContain(0);
+  }));
+
+  it("B-AC-11: with an Alloy works standing, the strategist values a Smithore link by the draft's chain: its share of Alloy's 2 a run", () => withChains(() => {
+    // The Alloy works stands, unfed; no Smithore mine yet. Smithore ground making 1 a month (plot 4) and 3 (plot 6).
+    const state = development([{ x: 0, ground: { rareEarth: 4 }, outfit: 'rareEarth' }, { x: 2, outfit: 'alloy' }, { x: 4, ground: { smithore: 1 } }, { x: 6, ground: { smithore: 3 } }, { x: 8, outfit: 'energy' }], 2_000);
+    const mind = seatOf().mind;
+    const obs = observe(state, ME);
+    // The draft's chain (chainOf): Smithore its one link, the standing Alloy works a member.
+    const { links, members } = chainOf(obs, ME, 'electronics');
+    expect(links).toEqual(['smithore']);
+    expect(members).toContain('alloy');
+    const thin = obs.tiles[4]!;
+    expect(linkShare(obs, thin, 'smithore', members, ME), 'one a month of the Alloy works\' 2').toBe(0.5);
+    // What a link MULE is worth, read the draft's way: its running cost plus its share of the best works' gain.
+    const valued = chainOutlook(outlook(obs, ME, { lookAhead: mind.level.lookAhead }), members.slice(1));
+    const ground = obs.tiles.filter((t) => t.terrain !== 'store' && (t.owner === null || (t.owner === ME && !t.outfit)));
+    const works = Math.max(...ground.map((t) => installGain(obs, valued, t, 'electronics', mind).gain));
+    const values = new Map(developDecision(obs, mind, 0, undefined, 'electronics').all.map((c) => [c.key, c.value]));
+    for (const x of [4, 6]) {
+      const t = obs.tiles[x]!;
+      const expected = installGain(obs, valued, t, 'smithore', mind).gain + linkShare(obs, t, 'smithore', members, ME) * works;
+      // A candidate's value is in whole credits.
+      expect(values.get(`install:smithore:${x}`), `plot ${x}`).toBe(Math.round(expected));
+    }
   }));
 
   it('FM-chain-idle: no works is installed while its inputs neither stand nor are held, whatever the cash', () => withChains(() => {
