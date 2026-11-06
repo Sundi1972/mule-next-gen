@@ -268,13 +268,14 @@ describe('G-2: a tap moves the walker one price step', () => {
     state.store.stock.food = 200;
     startAuction(state, ['food']);
     toWalk(state);
-    walker(state, 'p1').price = 50;
+    const bid = a(state).lo + 10;
+    walker(state, 'p1').price = bid;
     stepWalk(state, 'p1', 1);
-    expect(walker(state, 'p1')).toMatchObject({ price: 51, dir: 0 });
+    expect(walker(state, 'p1')).toMatchObject({ price: bid + 1, dir: 0 });
     stepAuction(state, 1_000);
-    expect(walker(state, 'p1').price).toBe(51);
+    expect(walker(state, 'p1').price).toBe(bid + 1);
     stepWalk(state, 'p1', -1);
-    expect(walker(state, 'p1').price).toBe(50);
+    expect(walker(state, 'p1').price).toBe(bid);
   });
 
   it('a step lands on the rounded price next to where you stand, so a walker between prices moves to a whole one', () => {

@@ -102,6 +102,11 @@ function sellerFloor(board: WalkBoard, market: WalkMarket): number {
   return market.zones?.buyersTop ?? market.floor() ?? board.lo + 1;
 }
 
+/** The lowest a buyer walks or taps to: the buyers' hard edge on a board with zones, else 0. */
+const buyerBottom = (market: WalkMarket) => market.zones?.lo ?? 0;
+/** The highest a seller walks or taps to: the sellers' hard edge on a board with zones, else no limit. */
+const sellerTop = (market: WalkMarket) => market.zones?.hi ?? Infinity;
+
 /** The price a seller would trade at now, at a buying house's line or with a buyer whose bid reaches their ask; else null. */
 function tradingAt(board: WalkBoard, market: WalkMarket, w: Walker): number | null {
   const ask = rounded(w);
@@ -156,9 +161,9 @@ export function stepWalker(board: WalkBoard, market: WalkMarket, playerId: strin
   const to = before + dir;
   if (w.side === 'buyer') {
     const sellLine = market.houseSells?.price() ?? null;
-    w.price = dir > 0 ? Math.max(w.price, Math.min(to, sellLine ?? Infinity, minAsk(board, market))) : Math.max(0, to);
+    w.price = dir > 0 ? Math.max(w.price, Math.min(to, sellLine ?? Infinity, minAsk(board, market))) : Math.min(w.price, Math.max(buyerBottom(market), to));
   } else {
-    w.price = dir < 0 ? Math.min(w.price, Math.max(to, sellerFloor(board, market), maxBid(board, market), 1)) : to;
+    w.price = dir < 0 ? Math.min(w.price, Math.max(to, sellerFloor(board, market), maxBid(board, market), 1)) : Math.max(w.price, Math.min(sellerTop(market), to));
   }
   if (rounded(w) !== before) w.since = board.elapsed;
 }
@@ -208,14 +213,14 @@ export function stepBoard(board: WalkBoard, market: WalkMarket, dt: number): Sal
     if (w.side !== 'buyer' || w.dir === 0) continue;
     const before = rounded(w);
     if (w.dir > 0) w.price = Math.max(w.price, Math.min(w.price + step, sellLine ?? Infinity, minAsk(board, market)));
-    else w.price = Math.max(0, w.price - step);
+    else w.price = Math.min(w.price, Math.max(buyerBottom(market), w.price - step));
     if (rounded(w) !== before) w.since = board.elapsed;
   }
   for (const w of board.walkers) {
     if (w.side !== 'seller' || w.dir === 0 || (w.held && w.dir < 0)) continue;
     const before = rounded(w);
     if (w.dir < 0) w.price = Math.min(w.price, Math.max(w.price - step, sellerFloor(board, market), maxBid(board, market), 1));
-    else w.price += step;
+    else w.price = Math.max(w.price, Math.min(sellerTop(market), w.price + step));
     if (rounded(w) !== before) w.since = board.elapsed;
   }
   stopAtNeed(board, market);
