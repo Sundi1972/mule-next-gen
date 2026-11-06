@@ -126,6 +126,15 @@ HC-11 No copy of the Food/Water/Energy use formula outside production.ts: the AI
       ask needsOf / needsWith / energyUseOf.  source: #390 HC-3 (same rule)   breach: fatal
 HC-12 Crews eat from their owner's depot, never from the store; players eat before colonists.
                                               source: upkeep.ts today; WS5 recommendation   breach: decision
+HC-13 Colony health ships switched off (HEALTH.enabled false) and is switched on by its own one-line
+      config PR only when a sim of 10 seed-1 games (4 trader seats, politics on, the WS9/WS7 harness)
+      shows the colonists short of Medicine in fewer than 40 of 120 months; the PR body carries the
+      numbers. While it is off, every health term is inert: no sick share, no spill, no sick crews,
+      Medicine demand as RULE-11 without the sick factor.
+                                              source: Heiko 6 Nov, decision 23   breach: fatal
+HC-14 The hardship (C3-C5) and the sickness (WS7's health, C18) reach trunk in the same batch as the
+      supply change (C10-C16 and the power supply), tuned in one pass; neither merges alone.
+                                              source: Heiko 6 Nov, decisions 1 and 23   breach: fatal
 ```
 
 ## §1 · Solution Design `[handoff]`
@@ -424,6 +433,79 @@ owner        WS1 (config.ts)
 and switching farms and wells off last (no gain: the power is short whichever plots wait). Power supply is the
 first lever (WS1's measurement): plants from month 1; the supply pass (WS1, WS9 for the computer players) owns it.
 
+
+### Colony health and Electronics: the store, players and crews (WS5, approved 6 Nov)
+
+Heiko approved the colony economy explainer v3 on 6 Nov (`docs/explainers/2026-11-06-colony-economy.html`, a28b861b):
+decisions 23 (health on with the Medicine supply), 24 (sickness reaches players as an addition), 25 (sick crews from
+a fifth; the computer players learn one Medicine cures them) and 27 (the colonists' Electronics want reaches its
+inputs; the price is the signal, the ceiling a safety rail). WS7 writes the colonists' side (the sick share, its
+mood, growth and Medicine need, the Electronics bonus) in its own ids; this section reads WS7's sick share `h`
+(0..HEALTH.max 0.4) and never computes it.
+
+```
+C17 · MODIFIED · the colonists' Electronics want is store demand, and reaches Rare earth and Alloy
+
+today        demand.electronics = 0 (+ the export ship); demand.rareEarth and demand.alloy = one per standing
+             Electronics works · anchor: packages/engine/src/economy.ts::monthlyDemand · verified_by: read (trunk 38070ffb)
+tomorrow     MUST add E = colonists ÷ UPKEEP.colonistsPerElectronics (new, 50) to demand.electronics, and E ×
+             RECIPES.electronics.inputs[g] to demand.rareEarth and demand.alloy, on top of today's terms (RULE-13)
+logic        → RULE-13 · evaluated wherever monthlyDemand is
+seam         packages/engine/src/economy.ts::monthlyDemand — the one demand every price and the AI read
+senior       junior would: count the want once someone makes Electronics · senior does: counts it from month 1,
+             so the price rises before the first works stands (Heiko: the price is the signal), and passes it
+             to the inputs through the recipe, so mines and smelters see it too
+mechanism    in_place
+call sites   monthlyDemand's readers: postPrices → nextPostedPrice, storeWants, cover, ai outlook.ts
+pin          the export ship's take; Smithore's demand (decision 27 names Rare earth and Alloy only)
+depends_on   store pricing's RULE-6 bands (docs/specs/2026-11-05-ws5-store-pricing.md, data, not stubbable):
+             under today's pricing the same demand ran the price to 80,738
+atomicity    lands before, or in the same batch as, WS9's chain build (AM-32): without it Electronics has no
+             colony demand and sits at its off-world price (pricing RULE-6 row 1)
+owner        WS1 (economy.ts, config.ts UPKEEP, named edit); WS7's +4 bonus reads the same colonistsPerElectronics
+```
+
+```
+C18 · ADDED · the colony's sickness reaches players (an addition) and crews (from a fifth)
+
+today        a player's sickness odds read the air and their pollution only (EVENTS.player.sickness through
+             packages/engine/src/events.ts::eventChance); crews are never sick · verified_by: read (trunk 38070ffb)
+tomorrow     MUST add HEALTH.playerSpill (0.10) × h ÷ HEALTH.max to the player sickness row's chance, within
+             its cap (RULE-14); MUST make a player's crews sick at production when h ≥ HEALTH.crewSickFrom (0.2)
+             unless the player's depot gives 1 Medicine, and cut that player's output by RULE-15; MUST add that
+             1 Medicine to the player's needs (needsOf), so the AI and the auction see it without a copy
+logic        → RULE-14 (eventChance, development) · RULE-15 (runProduction, after RULE-12, before AM-17's turn-off)
+seam         packages/engine/src/events.ts::eventChance (the row's chance) · packages/engine/src/production.ts::runProduction
+             (the crew cut beside C14's) · packages/engine/src/production.ts::needsOf (the cure's Medicine)
+senior       junior would: multiply the odds (×1 to ×4: players sick in 387 of 480 dirty-air months, measured)
+             and teach the AI the cure in value.ts · senior does: an addition bounded by the row's cap, and the
+             cure as a need in needsOf, which every reader already asks (HC-11's pattern)
+mechanism    in_place
+call sites   eventChance: game.ts startDevelopment (rollPlayerEvent 'sickness'); runProduction: game.ts (one);
+             needsOf: as C10's list
+pin          with HEALTH.enabled false every term is 0 (HC-13); Energy plants are never cut (AM-17 R2, as C14)
+depends_on   WS7's sick share h (data, stubbable as h = 0)
+owner        WS1 (events.ts, production.ts, config.ts HEALTH named edits)
+```
+
+```
+C19 · ADDED · the view carries colony health, whether Medicine ran short, and for how many months
+
+today        MuleView carries colonistsFed only (packages/protocol/src/index.ts::MuleView, from
+             apps/server/src/mule-game.ts::colonistsFedAt) · verified_by: read
+tomorrow     MUST carry colonyHealth: { health, medicineShort, shortMonths } | null (§3), null while health is off;
+             the engine MUST keep the run of months Medicine ran short beside WS7's sick share, written at upkeep
+             after the colonists' meal
+seam         packages/protocol/src/index.ts::MuleView (the contract) · apps/server/src/mule-game.ts (the view)
+             · packages/engine/src/upkeep.ts::runUpkeep (the count)
+senior       junior would: let the phone derive the months from past views · senior does: the engine counts it,
+             so a reconnecting phone and the TV read the same number
+mechanism    sprout
+ux           WS8's colony-health mock (design/mocks at de672e61, the phone's gauge and cause line, SEAM shortMonths);
+             display bands ruled by WS5 6 Nov: Well ≥ 90 · Sick spell 61–89 · At the limit 60
+depends_on   WS7's sick share and the colonists' Medicine meal (data, stubbable)
+owner        WS3 (protocol, mule-game.ts named edit); WS1 (upkeep.ts named edit); WS8 builds the phone from the mock
+```
 ## §2 · The Logic `[handoff]`
 
 ```
@@ -515,6 +597,32 @@ then          f = (1 − crewDrop × g(sF)) × (1 − crewDrop × g(sW)),  g = W
 examples      sF 0.1 → f 1 · sF 0.5 → 1 − 0.5 × 0.296 = 0.85 · sF 1 → 0.5 · sF 1 and sW 1 → 0.25
 ```
 
+
+```
+RULE-13 · The colonists' Electronics want (C17)                      shape: formula
+E            = colonists ÷ UPKEEP.colonistsPerElectronics (50)        ≥ 0, not rounded (demand is a rate)
+electronics += E · rareEarth += E × RECIPES.electronics.inputs.rareEarth · alloy += E × RECIPES.electronics.inputs.alloy
+unknown      none: colonists is a count in state
+example      200 colonists → Electronics +4, Rare earth +4, Alloy +4 a month; 0 colonists → nothing
+```
+
+```
+RULE-14 · A player's sickness odds with a sick colony (C18)            shape: formula
+chance' = min(row.cap, chance + HEALTH.playerSpill × h ÷ HEALTH.max)     chance = today's eventChance
+examples h 0 → unchanged · h 0.4, clean air (0.03) → 0.13 · h 0.2 → +0.05
+```
+
+```
+RULE-15 · Sick crews (C18)                                             shape: decision table, then formula
+evaluated at production, per player; first match wins
+  #  when                                     then
+  1  HEALTH.enabled false, or h < crewSickFrom  no sick crews
+  2  the player holds ≥ 1 Medicine              they take 1 Medicine; no sick crews this month
+  3  otherwise                                  sick share k = min(1, HEALTH.crewSpill (1) × h)
+output   every plot of that player but Energy plants: round-half-up(output × (1 − HEALTH.crewSickDrop (0.5) × k)),
+         applied after RULE-12's factor and before AM-17's Energy turn-off
+examples h 0.19 → none · h 0.3, no Medicine, a farm making 4 → 4 × 0.85 = 3.4 → 3 · h 0.3, 1 Medicine → 4, Medicine −1
+```
 ## The curve: shortfall → mood change in one month
 
 From a Content colony at 60 with its target at 60 and no memory, Water fed, Food short by the
@@ -645,6 +753,17 @@ What it says:
   already below 0 in 7 of 10 trunk games, and nothing reads it before buying
   (`packages/engine/src/economy.ts::storeWants`), so D5 needs nothing.
 
+## §3 · Contracts & Data Models `[handoff]` (WS5's part)
+
+**colonyHealth on MuleView** (C19; ADDED, optional, not breaking). In `packages/protocol/src/index.ts::MuleView`:
+`colonyHealth: { health: number; medicineShort: boolean; shortMonths: number } | null`.
+- `health` = round(100 × (1 − h)), 60..100 (h is WS7's sick share, capped at 0.4).
+- `medicineShort` = the colonists took less Medicine than their need at the last upkeep.
+- `shortMonths` = consecutive upkeeps with `medicineShort`, 0 when it is false.
+- null exactly while HEALTH.enabled is false (HC-13); never null for another reason.
+Example: h 0.12, short at the last three upkeeps → `{ health: 88, medicineShort: true, shortMonths: 3 }`.
+The phone's cause line ("Medicine ran short", WS8's mock) reads the last two; the gauge reads `health` in WS5's bands.
+
 ## §6 · Acceptance Criteria `[handoff]`
 
 | AC | Given · When · Then | Changes | Proof |
@@ -671,10 +790,26 @@ What it says:
 | B-AC-13 | Given a player whose crews got half their Food at last month's end · When production runs · Then each of their plots but Energy plants makes 85% of its output, rounded half up (RULE-12). observed_at: the month report's production lines. negative: a crew 10% short loses nothing | C14 | engine test |
 | B-AC-14 | Given a player whose household ate in full and whose stock then spoiled below their need · When development starts · Then they are not hungry. observed_at: the player's walking pace. negative: a household short at upkeep is hungry | C15 | engine test |
 | T-AC-24 (B-AC-13) | RULE-12's examples; no farm halving remains (grep UPKEEP.irrigated, shortOutputShare); the curve is imported from WS7's function | C14 | engine unit + scan |
+| B-AC-15 | Given 200 colonists and no Electronics works · When prices are next posted · Then monthlyDemand's Electronics, Rare earth and Alloy are each 4 more than today's terms, and Electronics' band is not off-world. observed_at: monthlyDemand as postPrices reads it. negative: 0 colonists adds nothing | C17 | engine test |
+| B-AC-16 | Given health on and h 0.4 · When a player's development sickness is rolled · Then its chance is today's + 0.10, within the row's cap. observed_at: eventChance for EVENTS.player.sickness. negative: h 0 leaves it unchanged | C18 | engine test |
+| B-AC-17 | Given health on, h 0.3 and a player with a farm making 4 and no Medicine · When production runs · Then the farm makes 3; with 1 Medicine in the depot it makes 4 and the depot holds 1 less. observed_at: the month report's production lines and the depot. negative: h 0.19 cuts nothing | C18 | engine test |
+| B-AC-18 | Given health on and the colonists short of Medicine at the last 3 upkeeps · When the phone's view is built · Then colonyHealth is { health, medicineShort true, shortMonths 3 }; after a month they get their Medicine it is { medicineShort false, shortMonths 0 }; with health off it is null. observed_at: the view the server sends | C19 | server view test |
+| T-AC-25 (B-AC-15) | RULE-13's examples; the recipe is read, not copied (Rare earth and Alloy follow RECIPES.electronics.inputs under a test override) | C17 | engine unit |
+| T-AC-26 (B-AC-16, 17) | RULE-14 and RULE-15's every row and example; needsOf's Medicine is +1 exactly when RULE-15 row 3 would apply; no copy of the cure in packages/ai (source scan, like T-AC-21) | C18 | engine unit + scan |
+| T-AC-27 (HC-13) | with HEALTH.enabled false, 10 seed-1 sim games give the same final state as the same games on the base commit (every number), so health off is inert | C17-C19 | sim, against the base at run time |
+| T-AC-28 (HC-13) | the switch-on PR's body reports, for 10 seed-1 games, months the colonists were short of Medicine (must be < 40 of 120), the mean sick share, months at the cap, colonists at the end, and player-sick months | C18 | sim report |
 
 ## §8 · Amendments
 
-*(none)*
+```
+AM-1 · 2026-11-06 · WS5 · Heiko approved explainer v3 (a28b861b), all its options
+target    §0.2 HC-13, HC-14; §1 C17-C19; §2 RULE-13-15; §3 (new, WS5's part); §6 B-AC-15-18, T-AC-25-28
+said      health and Electronics lived in the explainer only
+did       wrote WS5's side of decisions 23, 24, 25, 27 and the WS8 view contract into the spec; RULE-11's Medicine
+          "× sickness" is WS7's health factor (up to +40% at the cap), replacing POLLUTION.sickMedicineDemand
+because   the build plan (docs/plans/2026-11-06-ws5-colony-economy-build.md) needs every change it builds in a spec
+goal      G-1, G-2 unchanged; WS7's colonist health ids are WS7's to add
+```
 
 ## §9 · Ownership Boundaries
 
