@@ -80,15 +80,26 @@ export async function nothingPastTheFoot(tv: Page, screen: string): Promise<numb
   return foot;
 }
 
-type Chatty = { deliver(from: string, text: string): void; game: { state: { players: { id: string }[] } } };
+type Chatty = { deliver(from: string, text: string): { id: number } | null; game: { state: { players: { id: string }[] } } };
 
-/** The host says three lines, the most a TV strip shows, and the TV shows the newest: a screen is read under the chat a real table has. */
+/**
+ * The host says three lines, the most a TV strip shows, and the TV shows the newest: a screen is read under the chat a
+ * real table has. The strip shows only the newest line, and the AI seats may speak the same instant (the auction's
+ * first tick, the land grant's and development's starts), so the TV showing the host's last line or any later one
+ * counts: either way the strip is full when the screen is read.
+ */
 export async function theTableHasSaid(tv: Page, server: MuleServer, code: string): Promise<string[]> {
   const room = server.registry.get(code) as unknown as Chatty | undefined;
   check(room, `a room ${code} on the server`);
   const said = ['Who sold the Food?', 'Not me, I ate it.', 'Then who is buying the Energy?'];
-  for (const text of said) room.deliver(room.game.state.players[0]!.id, text);
-  await tv.locator('[data-phase] [data-testid=chat-ticker]').getByText(said.at(-1)!).first().waitFor({ timeout: 2_000 });
+  let last = 0;
+  for (const text of said) last = room.deliver(room.game.state.players[0]!.id, text)?.id ?? last;
+  check(last > 0, 'the host\'s lines reach the table chat');
+  await tv.waitForFunction(
+    (since) => [...document.querySelectorAll('[data-phase] [data-testid=chat-ticker] [data-testid^=chat-line-]')].some((l) => Number(l.getAttribute('data-testid')!.slice('chat-line-'.length)) >= since),
+    last,
+    { timeout: 2_000 },
+  );
   await fitSettled(tv);
   return said;
 }
