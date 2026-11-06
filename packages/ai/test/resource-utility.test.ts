@@ -23,7 +23,7 @@ import {
 import { applyAction, playMonthFrom } from '../src/play.js';
 import { AiSeat } from '../src/seat.js';
 import { cashReserve } from '../src/value.js';
-import { goodPlan, wholeNextMonth } from '../src/strategist.js';
+import { goodPlan, sellWanted, wholeNextMonth } from '../src/strategist.js';
 
 /**
  * The resource-utility model at the table: built states played on through the engine with every seat's own hands,
@@ -185,11 +185,12 @@ describe('C8: a power plant is worth what its output saves', () => {
    * Month 1's development: three rich mines (use 6 Energy), no plant, no Energy, 3,000 cr, and an idle plot rated for
    * Energy and for Food as the row says. The other seats have no money, so they buy no MULE.
    */
-  function develop(idle: Partial<Tile['ground']>, store: { energy: number; posted: number }): Outfit | null {
+  function develop(idle: Partial<Tile['ground']>, store: { energy: number; posted: number }, more: { plots?: Plot[]; energy?: number } = {}): Outfit | null {
     const state = createGame({ seed: 1, players: ['ai0', 'ai1', 'ai2', 'ai3'].map((id) => ({ id, name: id, isAi: true })) });
     while (state.phase !== 'development') advancePhase(state);
     for (const t of state.tiles) if (t.owner) Object.assign(t, { owner: null, outfit: null });
-    const seat: Seat = { plots: [...RICH, { outfit: null, x: 6, ground: idle }], posted: { smithore: 100, energy: store.posted, food: 40 }, stock: { food: 20, water: 20 }, money: 3000, store: { energy: store.energy } };
+    const plots = [...RICH, { outfit: null, x: 6, ground: idle }, ...(more.plots ?? [])];
+    const seat: Seat = { plots, posted: { smithore: 100, energy: store.posted, food: 40 }, stock: { food: 20, water: 20, energy: more.energy ?? 0 }, money: 3000, store: { energy: store.energy } };
     const me = state.players.find((p) => p.id === ME)!;
     for (const plot of seat.plots) {
       const tile = state.tiles[plot.x]!;
@@ -217,6 +218,14 @@ describe('C8: a power plant is worth what its output saves', () => {
 
   it('B-AC-5: with Energy cheap and stocked at the store and a markedly better Food plot, it outfits Food instead', () => {
     expect(develop({ energy: 2, food: 3 }, { energy: 200, posted: 10 })).toBe('food');
+  });
+
+  it('B-AC-5: a seat whose own farm feeds it builds a plant though a farm sells better, for the plots the plant keeps on', () => {
+    // Its farm (makes 6) covers its Food, so a second farm saves nothing; sold, the farm earns more than the plant. The
+    // plant wins only by the Energy its own plots would otherwise go without, each unit at what that saves.
+    const farm: Plot = { outfit: 'food', x: 8, ground: { food: 4 } };
+
+    expect(develop({ energy: 2, food: 2 }, { energy: 0, posted: 20 }, { plots: [farm], energy: 10 })).toBe('energy');
   });
 
   it('B-AC-5 negative: with no idle plot there is nothing to install', () => {
@@ -303,5 +312,31 @@ describe('G-1: a seat keeps itself supplied', () => {
 
     expect(off.length, 'some plot turned off').toBeGreaterThan(0);
     expect(order.slice(0, off.length).sort(), 'the first in the turn-off order').toEqual([...off].sort());
+  });
+});
+
+describe('AM-5: a seat whose month of needs outruns its cash lists land to sell', () => {
+  /** Month 1's planning: the three mines (6 Energy a month), no Energy, an idle plot, and `money`. */
+  function listed(money: number): number {
+    const state = createGame({ seed: 1, players: ['ai0', 'ai1', 'ai2', 'ai3'].map((id) => ({ id, name: id, isAi: true })) });
+    while (state.phase !== 'planning') advancePhase(state);
+    for (const t of state.tiles) if (t.owner) Object.assign(t, { owner: null, outfit: null });
+    for (const plot of [...MINES, { outfit: null, x: 6 } satisfies Plot]) {
+      Object.assign(state.tiles[plot.x]!, { terrain: 'plains', traits: [], ground: { ...flatGround, ...plot.ground }, owner: ME, outfit: plot.outfit, pollution: 0, runMonths: 0 } satisfies Partial<Tile>);
+      delete state.tiles[plot.x]!.special;
+    }
+    Object.assign(state.store.posted, POSTED);
+    const p = me(state);
+    for (const good of Object.keys(p.stock) as Good[]) p.stock[good] = 0;
+    p.money = money;
+    return sellWanted(observe(state, ME), seatsOf(state, { plots: [], money })[0]!.mind).length;
+  }
+
+  it('FM-sell-trigger: a seat short of cash for its month of needs lists a lot with the model on', () => {
+    expect(listed(20)).toBeGreaterThan(0);
+  });
+
+  it('FM-sell-trigger negative: a seat with cash for every needed unit lists nothing', () => {
+    expect(listed(5000)).toBe(0);
   });
 });
