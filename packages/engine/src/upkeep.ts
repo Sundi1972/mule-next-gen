@@ -1,3 +1,4 @@
+import { M22, m22log, m22Missing } from './m22.js';
 import { GAME, GOOD_CONFIG, MULE, POLLUTION, PRICE, UPKEEP } from './config.js';
 import { corralTarget, festivalFood, monthlyDemand, planShip, shipInPort, shipPrice, storeSellPrice } from './economy.js';
 import { airBand } from './pollution.js';
@@ -61,7 +62,11 @@ export function runUpkeep(state: GameState): { shortages: Good[]; hungry: boolea
     // The colonists have eaten: a festival's extra Food is no longer demand.
     const demand = monthlyDemand(state, 0);
     for (const good of state.ship.goods) {
+      const projectNeed = m22Missing(state)[good] ?? 0;
       let surplus = state.store.stock[good] - Math.ceil(demand[good] * PRICE.targetCover);
+      // M22 GR: the ship's surplus is computed after the project's reserve.
+      if (M22.reserve) surplus = Math.min(surplus, state.store.stock[good] - projectNeed);
+      const before = state.store.stock[good];
       for (let price = shipPrice(state, good); surplus > 0 && price !== null; price = shipPrice(state, good)) {
         state.store.stock[good]--;
         state.store.capital += price;
@@ -69,6 +74,7 @@ export function runUpkeep(state: GameState): { shortages: Good[]; hungry: boolea
         state.ship.bought[good] = (state.ship.bought[good] ?? 0) + 1;
         surplus--;
       }
+      if (!state.whatIf && before - state.store.stock[good] > 0) m22log.push({ kind: 'ship', month: state.month, good, took: before - state.store.stock[good], before, projectNeed, after: state.store.stock[good], intoNeed: projectNeed > 0 && state.store.stock[good] < projectNeed });
     }
     state.ship = planShip(state.seed, state.month + GAME.exportShipEvery, state.players.length);
   }

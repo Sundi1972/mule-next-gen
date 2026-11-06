@@ -1,3 +1,4 @@
+import { M22, m22Missing } from './m22.js';
 import { EXPORT_DEMAND, EXPORT_SHIP, GAME, GOOD_CONFIG, MULE, POLLUTION, PRICE, RECIPES, UPKEEP } from './config.js';
 import { fundIn } from './colony.js';
 import { airBand } from './pollution.js';
@@ -55,6 +56,8 @@ export function monthlyDemand(state: GameState, festival = festivalFood(state)):
   demand.electronics = 0;
   const off = exportDemand(state);
   for (const good of GOODS) demand[good] += off[good];
+  // M22 GD/GR: the open project's still-missing goods are demand while it waits.
+  if (M22.demand) for (const [g, u] of Object.entries(m22Missing(state))) demand[g as Good] += u;
   return demand;
 }
 
@@ -254,7 +257,9 @@ export function storeQuotes(state: GameState, good: Good): { buy: number | null;
 export function storeForSale(state: GameState, good: Good): number {
   const need = state.colonists / UPKEEP.colonistsPerUnit + (good === 'food' ? festivalFood(state) : 0);
   const reserve = good === 'food' || good === 'water' ? Math.ceil(need) : 0;
-  return Math.max(0, state.store.stock[good] - reserve);
+  // M22 GR: the open project's missing goods are held back too.
+  const project = M22.reserve ? (m22Missing(state)[good] ?? 0) : 0;
+  return Math.max(0, state.store.stock[good] - reserve - project);
 }
 
 /** Whether the store's shelf of Food or Water holds under `months` of the colonists' need. Other goods never are. */

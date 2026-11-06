@@ -1,10 +1,11 @@
+import { M22, m22log } from './m22.js';
 /**
  * The colony as a shared project: the colony fund's ledger, every write to the fund, and the prestige objects the
  * Governor commissions. The only writer of GameState.colony and, through fundIn and fundOut, of treasury.money.
  * With politics off there is no colony, and the fund moves exactly as it always has, with no ledger.
  */
 import { COLONY, GAME, HAPPINESS, PRESTIGE } from './config.js';
-import { allPrices, storeForSale, storeQuotes } from './economy.js';
+import { allPrices, storeForSale, storeQuotes, storeSellPrice } from './economy.js';
 import { RuleError } from './errors.js';
 import { COLONY_SELLER } from './lots.js';
 import { votesOpen } from './politics.js';
@@ -224,14 +225,17 @@ function fund(state: GameState, colony: Colony, project: Project): void {
   project.funded.credits += payOut(state, colony, 'project', Math.min(stillNeeds(project).credits, spare(state)));
   if (COLONY.fundBuysGoods) {
     for (const [good, missing] of Object.entries(stillNeeds(project).goods) as [Good, number][]) {
-      const price = storeQuotes(state, good).sell;
+      // M22 GR: the reserve is held for the fund, so the fund buys from it at the store's sell price.
+      const forFund = M22.reserve ? storeForSale(state, good) + missing : storeForSale(state, good);
+      const price = M22.reserve ? (forFund > 0 ? storeSellPrice(state.store.posted[good]) : null) : storeQuotes(state, good).sell;
       if (price === null) continue;
-      const units = Math.min(missing, storeForSale(state, good), Math.floor(spare(state) / price));
+      const units = Math.min(missing, Math.min(forFund, state.store.stock[good]), Math.floor(spare(state) / price));
       if (units <= 0) continue;
       payOut(state, colony, 'project', units * price);
       state.store.stock[good] -= units;
       state.store.capital += units * price;
       project.funded.goods[good] = (project.funded.goods[good] ?? 0) + units;
+      if (!state.whatIf) m22log.push({ kind: 'fundBuy', month: state.month, id: project.id, good, units, price });
     }
   }
   const needs = stillNeeds(project);
