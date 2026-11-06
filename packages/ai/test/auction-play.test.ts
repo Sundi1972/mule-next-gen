@@ -287,8 +287,16 @@ describe('AM-20: the one-good draft', () => {
   });
 });
 
+/**
+ * Hands the event loop to vitest's worker. A test that runs synchronously past 60 s fails the run, every test green:
+ * the worker's report of the test's start waits 60 s for its answer, and a blocked worker cannot read it ("Timeout
+ * calling onTaskUpdate"). The parity half below plays every good of five seeds and took 62–75 s on CI (runs 42233998329,
+ * 42242341278, 42246371807, 42246435393), so it yields between screens.
+ */
+const yieldToWorker = () => new Promise<void>((r) => setImmediate(r));
+
 describe('C7 · RULE-10: the auction hand plays the good part', () => {
-  it('T-AC-8: with the draft\'s defaults the acts are today\'s, tick for tick; each binding field moves the walk', { timeout: 120_000 }, () => {
+  it('T-AC-8: with the draft\'s defaults the acts are today\'s, tick for tick; each binding field moves the walk', { timeout: 120_000 }, async () => {
     // ── Parity: each good's own fresh one-good draft, played, sends today's acts tick for tick, from the same seed and screen.
     let compared = 0;
     let picksDiffer = 0;
@@ -315,6 +323,7 @@ describe('C7 · RULE-10: the auction hand plays the good part', () => {
           expect(playbook.acts, at).toEqual(today.acts);
           expect(playbook.trades, at).toEqual(today.trades);
         }
+        await yieldToWorker();
       }
     }
     expect(compared, 'goods compared tick for tick').toBeGreaterThanOrEqual(60);
