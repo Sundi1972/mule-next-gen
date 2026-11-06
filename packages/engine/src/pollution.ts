@@ -67,3 +67,10 @@ export function runPollution(state: GameState): Record<string, number> {
   state.air = Math.min(POLLUTION.airMax, Math.max(0, air - POLLUTION.natureCleansPerPlayer * state.players.length));
   return by;
 }
+
+/** Lowers the colony air by `points`, never below 0; returns the change (0 or less). */
+export function cleanAir(state: GameState, points: number): number {
+  const was = state.air;
+  state.air = Math.max(0, was - points);
+  return state.air - was;
+}
