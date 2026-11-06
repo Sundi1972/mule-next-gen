@@ -1,5 +1,7 @@
 # WS5 · How the store sets its prices: a market-maker store
 
+**Approved:** Heiko, 6 Nov 2026, from the colony-economy explainer (`docs/explainers/2026-11-06-colony-economy.html` at 903f3b80): all 30 recommendations, including the pricing rework's five (colony stock; four steps; a quarter a month down; never below normal; halfway towards a high trade), and decision 1 (hardship and sickness ship together with the Food and Medicine supply, tuned in one pass). The rework below replaces RULE-1's step and target and RULE-2's lean (AM-4, now folded as approved).
+
 Class: **Standard** (Heiko, 5 Nov). Several files in two lanes' code (WS1's economy and config, WS3's auction,
 game and types), two PRs, no new sole owner.
 Approach: **B, the market-maker store** (Heiko, 5 Nov), with the ceiling at **12×** and Crystite **as proposed**
@@ -22,7 +24,7 @@ Heiko's words, the provenance of every goal:
 4. His scope answers (5 Nov): Energy supply at the store in; the other export goods' off-world prices move too,
    with smaller swings than Crystite; the MULE price and the corral refill in; taxes out.
 
-## Rework, 6 Nov: Heiko's five rules (PROPOSED, waiting for Heiko) `[handoff]`
+## Rework, 6 Nov: Heiko's five rules (APPROVED by Heiko, 6 Nov) `[handoff]`
 
 Heiko, 6 Nov, close to his words: (1) the store knows OVERALL demand; when overall supply covers it, it sells at
 the lowest, normal price. (2) If stock covers less than 2 months AND demand is bigger than production, prices
@@ -501,7 +503,7 @@ goal      G-1 unchanged (the AI and the store apply one rule, HC-3)
 folded    §6 T-AC-2, §1 C6, header; plan Tasks 1.1, 1.3, 1.6, 2.4
 ```
 
-AM-4 · 2026-11-06 · lead (WS5) · Heiko's five rules, relayed by the PM (PROPOSED until he approves)
+AM-4 · 2026-11-06 · lead (WS5) · Heiko's five rules, relayed by the PM — APPROVED by Heiko 6 Nov (903f3b80)
 
 target    §2 RULE-1 (step, target), RULE-2 (lean); §0 G-1's glut clause; §0.2 HC-4; §1 C5
 said      a power-law target with momentum, a shelf lean on both lines, a glut step down, HC-4's colonist cap
