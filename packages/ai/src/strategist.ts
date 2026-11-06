@@ -5,10 +5,8 @@ import {
   DEVELOPMENT,
   GAME,
   GOOD_CONFIG,
-  monthNeeds,
   mulePrice,
   mulePriceFor,
-  needsOf,
   neighbours,
   outfitBlocked,
   POLLUTION,
@@ -34,7 +32,7 @@ import {
 } from '@mule/engine';
 import { outlook, type Outlook } from './outlook.js';
 import { candidate, consider, curve, shortlist, type Candidate, type Shortlist } from './utility.js';
-import { afterTax, canFeed, cashReserve, installGain, secondValue, unitValues, yieldOf, type Mind, type UnitValues } from './value.js';
+import { afterTax, canFeed, cashReserve, installGain, secondValue, unitValues, wholeNextMonth, yieldOf, type Mind, type UnitValues } from './value.js';
 
 /**
  * The strategist: for each of the month's decisions it lists the options,
@@ -483,7 +481,7 @@ export function filtersWanted(obs: GameState, mind: Mind): number[] {
     .map((t) => tileIndex(obs.width, t.x, t.y));
 }
 
-export { yieldOf };
+export { wholeNextMonth, yieldOf };
 
 // --- Auction -----------------------------------------------------------------
 
@@ -570,22 +568,6 @@ export function shortfallHold(obs: GameState, me: string, good: Good): { whole: 
   const whole = STRATEGIST.buyShortfall.includes(good) ? wholeNextMonth(obs, me, good) : 0;
   const held = obs.players.find((p) => p.id === me)!.stock[good];
   return { whole, mustHold: held < whole && storeForSale(obs, good) > 0 ? whole : 0 };
-}
-
-/**
- * The units of a good the seat must hold at the auction to be whole next month; #385's resource-value model replaces it
- * and its twin, value.ts unitValues' `block`. In the engine's order: upkeep eats its Food and drinks its Water, then
- * every good spoils and the depot keeps what it can; next development is hungry under the household's Food, and next
- * production halves a plot short of its Energy, or a farm whose owner is short of Water. Water counts only for a seat
- * with a farm to water: without one, going short costs it nothing. 0 for other goods.
- */
-export function wholeNextMonth(obs: GameState, me: string, good: Good): number {
-  const kept = (n: number) => Math.ceil(Math.min(n, UPKEEP.depotCapacity) / (1 - GOOD_CONFIG[good].spoilage));
-  if (good === 'food') return needsOf(obs, me).food + kept(needsOf(obs, me).food);
-  if (good === 'energy') return kept(monthNeeds(obs, me).energy);
-  const farms = obs.tiles.some((t) => t.owner === me && (UPKEEP.irrigated as readonly string[]).includes(t.outfit ?? ''));
-  if (good === 'water' && farms) return needsOf(obs, me).water + kept(needsOf(obs, me).water);
-  return 0;
 }
 
 /** The price the seat expects to get for a unit, and to pay: the houses' lines while they trade, otherwise around the posted price. */
