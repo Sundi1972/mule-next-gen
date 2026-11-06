@@ -33,7 +33,7 @@ const WAYS: Record<Way, { title: string; how: string; look: string; phone: strin
     how: 'The same model, rendered offline the way films and Unreal’s path tracer render, and placed as a picture.',
     look: 'The most real of the three: grass, gravel, water with a stone edge, soft sun shadows. Reads as a believable miniature diorama.',
     phone: 'Just pictures: 50–65 kB each at the size a place has on the TV (measured, WebP). Any phone and any TV stick shows them perfectly. The live layer below adds the motion.',
-    effort: '30–45 h for the first building with all 5 stages, 25–35 h for each after; about 35 s of rendering per picture. No paid assets: CC0 parts and materials, modelled by script.',
+    effort: 'Measured: about 1–1.5 agent minutes a building once the shared kit exists, 7 minutes for the Hospital’s four extra stages; about 30 s of rendering a picture. The real cost is look review. (A human artist: 25–35 h a building.) No paid assets.',
   },
 };
 
@@ -82,7 +82,7 @@ export function Look() {
           <p className="text-base text-ink-2">
             <strong className="text-ink">A whole colony, month 12:</strong> the town hall, the Park, Hospital, Observatory, Stadium and Spaceport,
             three places free to grow into. Pre-rendered in Blender (C). Buildings other than the Park are quick script-built models
-            made today: they show the look, not final designs. The whole picture is 120–140 kB.
+            made today: they show the look, not final designs. This whole picture is about 0.5 MB; in the game each building is its own picture of 50–65 kB.
           </p>
           <LightToggle light={light} set={setLight} />
         </div>
@@ -98,9 +98,10 @@ export function Look() {
             so nothing is thrown away. Keep the world map’s painter (A) for the ground between the buildings.
           </p>
           <p className="mt-2 text-base text-ink-2">
-            Effort: about <strong>30–45 hours for the first building</strong> with all five stages, <strong>25–35 for each after</strong>;
-            the first ring (hall plus five) is roughly 5–7 agent-days. No paid assets needed. Buying a professional asset pack
-            would raise the quality further; that would be your spend.
+            Effort, measured today: the whole first ring above (five buildings, day and dusk), the Hospital in all five stages and a
+            phone 3D version took <strong>23 minutes of agent work</strong>, plus a 10-minute polish pass. A human 3D artist would need
+            25–35 hours a building. What really takes time is <strong>look review</strong>: each building needs a few short rounds of
+            “is this right at TV size?”. No paid assets needed; a professional pack would raise the detail further (your call).
           </p>
         </div>
         <nav className="flex flex-wrap gap-4 text-sm text-holo">
@@ -174,7 +175,7 @@ export function Look() {
             <tr><th>Looks</th><td>Like the map; stylised</td><td>Best at dusk; camera can move</td><td>Most real; fixed angle</td></tr>
             <tr><th>Phone</th><td>A picture; 7–25 s to paint once</td><td>20–30 fps est.; 0.5 MB code + 5–8 MB a building</td><td>A picture, 50–65 kB at TV size</td></tr>
             <tr><th>Weak TV stick</th><td>Fine</td><td>At risk: needs a measured device</td><td>Fine</td></tr>
-            <tr><th>Per building, 5 stages</th><td>25–40 h (+16–24 h once)</td><td>3–4 days (+1½ days once for kits)</td><td>30–45 h first, 25–35 h after</td></tr>
+            <tr><th>Per building, 5 stages</th><td>25–40 h (+16–24 h once)</td><td>3–4 days (+1½ days once for kits)</td><td>Minutes of agent work + look review (human artist: 25–35 h)</td></tr>
             <tr><th>Day, dusk, lights, smoke</th><td>Repaint</td><td>Free, live</td><td>Re-render, or the live layer</td></tr>
             <tr><th>Paid spend</th><td>None</td><td>None (CC0)</td><td>None (CC0)</td></tr>
           </tbody>
@@ -213,14 +214,11 @@ export function Look() {
         </ul>
       </Section>
 
-      <Section id="decide" title="What you decide">
+      <Section id="decide" title="Decided, and what is still yours">
         <ol className="max-w-5xl list-decimal space-y-2 pl-6 text-base leading-snug">
-          <li>
-            <strong>The direction:</strong> C with the live layer now and B for the TV later <em>(recommended)</em>; or B everywhere now (best look,
-            phone and TV-stick risk); or A everywhere (one style with the map, cheapest to keep consistent, less real).
-          </li>
-          <li><strong>Art spend:</strong> stay free (CC0 parts, script-modelled buildings) <em>(recommended for now)</em>, or budget a professional asset pack later.</li>
-          <li>After you pick: WS10 writes the art direction and the full asset list (every building × stage, the parks, the hall), then the build plan with the screen lanes.</li>
+          <li><strong>Decided (Heiko, 6 Nov):</strong> direction C: rendered pictures with the live layer, the map’s painter for the ground, live 3D on the TV later from the same models. Free (CC0) assets for now.</li>
+          <li><strong>Still yours:</strong> whether to buy a professional asset pack. WS10’s answer, with prices and licences checked today, goes to you through the PM.</li>
+          <li><strong>Next from WS10:</strong> the art direction and the full picture list are written (85 pictures). The build spec and plan with the screens teams follow, through the PM.</li>
         </ol>
       </Section>
     </main>
