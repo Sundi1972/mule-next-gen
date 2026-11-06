@@ -240,7 +240,7 @@ only the line `S` shows).
 ```
 inputs
   units(w)   the seller's units of this good now
-  need(w)    next month's need of this good (the status row's `need`, auction.ts::monthNeeds), fixed at the walk's start
+  need(w)    the need to hold of this good (the status row's `need`, auction.ts::auctionNeed, AM-2), fixed at the walk's start
   held(w)    false | true: this seller was stopped at their need this good
   conscious  after held became true, the seller holds ▼ (a `walk` down intent, not released) for WALK.shortHoldMs
              (1000 ms) of the board's time (Heiko's choice A). A tap (`walkStep` down) or a shorter hold does not
@@ -259,7 +259,7 @@ several rows match → first match wins
   4   otherwise                                                    RULE-1 as above
 
 unknown
-  need is never unknown in an auction: monthNeeds gives 0 for a good nobody consumes (Smithore, Crystite, …), so row 1
+  need is never unknown in an auction: auctionNeed gives 0 for a good nobody consumes (Smithore, Crystite, …), so row 1
   applies to those. A seller who starts the walk already at or below need is stopped at the first unit (row 3): even
   their first sale into shortage takes the second, conscious press.
 ```
@@ -395,3 +395,31 @@ Front to back: `apps/web/e2e/auction-steps.ts` drives B-AC-B1 and B2, and B-AC-E
 2. **No mirror stop for buyers.** A buyer walks and buys as today until they stop or the walk ends; nothing stops them
    at their need.
 3. **Building AM-1 is a go.**
+
+## §11 · Amendment AM-2: plan-time corrections to AM-1 `[handoff]`
+
+Written with the B–E plan (`docs/plans/2026-11-06-ws3-auction-rules-b-e.md`), against trunk 46c0ce2c (6 Nov). Each
+item corrects a claim in §10 that the code no longer bears out; none changes a ruling.
+
+1. **RULE-4's need is `auctionNeed`**, not `monthNeeds` (#439, PM ruling B, 6 Nov): the status row's `need`, which
+   now covers spoilage, fixed at the walk's start. `monthNeeds` stays the production need the AI grosses up. Row 1
+   ("need = 0, no stop") still covers Smithore, Crystite and every good nobody consumes.
+2. **The conscious hold needs a hold start.** The engine does not see how long ▼ has been held today: `setWalk` only
+   sets `dir`, and `Walker.since` is the last change of the rounded price. RULE-4 adds `Walker.downSince` (the board's
+   `elapsed` when a `walk down` began, cleared by any other walk intent or a step), so the 1 s is board time and a
+   replay counts it the same way.
+3. **D's "today", corrected.** A seller walking down stops at the store's buying line or the best player bid
+   (`sellerFloor`, `maxBid`), not at "the best house's line": the ship's price is read live each unit (`shipLine`),
+   and a seller below it still sells to the ship. RULE-6's **B** is therefore fixed by this amendment at the walk's
+   start as the higher of `storeBuy` and the ship's price at that moment (`nextGood`), and stored on the board
+   (`LiveAuction.zones`); a ship that leaves later does not move B.
+4. **RULE-5's AI line is false.** The AI hand does switch sides mid-walk: a seller that `oversells()` declares
+   buyer (`hands/auction.ts`). That stays (it is WS1's, and RULE-5 allows it); `held` carries over the switch as
+   RULE-5 says.
+5. **RULE-5 is already built end to end** (engine `declareRole` in the walk; the phone's Buy/Sell switch during the
+   walk, `phone/Auction.tsx`). Only B-AC-C1's front-to-back step is new.
+6. **The mock is not on trunk.** WS6's `design/mocks/auction-rules` is at cde3ff61 on `ws6-mock-auction-rules`;
+   screens are built on a base that contains it.
+7. **Owners, per SEAMS:** the board drawing is `packages/ui` `WalkBoard` (WS4; the zones and the line label are a
+   named edit there). `phone/Auction.tsx`, `AuctionParts.tsx`, protocol, `mule-game.ts`, `walk.ts`, `auction.ts`,
+   `types.ts` and WALK are WS3's. `hands/auction.ts` is WS1's (named edit). `apps/web/e2e/auction-steps.ts` is WS3's.
