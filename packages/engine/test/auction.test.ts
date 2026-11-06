@@ -786,3 +786,84 @@ describe('A-5 the close stage: a receipt after each good (G-5)', () => {
     expect(state.store.refPrice.water).toBe(ref);
   });
 });
+
+describe("price T-AC-3: when a good's walk finishes, the store keeps its sold-out high, its highest trade and whether its budget ran dry", () => {
+  // A seller standing here meets no buyer and no house line.
+  const APART = 10_000;
+
+  /** Smithore comes up with p0 selling 10 and the store holding `shelf` to sell and wanting `budget`; then the walk, everyone apart. */
+  function smithoreWalk(shelf: number, budget: number) {
+    const state = newGame();
+    state.players[0]!.stock.smithore = 10;
+    state.store.stock.smithore = shelf;
+    startAuction(state, ['smithore']);
+    a(state).storeBudget = budget;
+    toWalk(state);
+    walker(state, 'p0').price = APART;
+    return state;
+  }
+
+  /** Brings p0 and p1 together for one unit at `price`, then apart again. */
+  function tradeBetween(state: GameState, price: number) {
+    walker(state, 'p0').price = price;
+    walker(state, 'p1').price = price;
+    expect(run(state, WALK.tradeStartMs)).toEqual([{ good: 'smithore', buyer: 'p1', seller: 'p0', quantity: 1, price }]);
+    walker(state, 'p0').price = APART;
+    walker(state, 'p1').price = a(state).lo;
+    run(state, TICK);
+  }
+
+  /** p2 buys the store's last unit at its sell line, which then goes. */
+  function emptyShelf(state: GameState) {
+    walker(state, 'p2').price = a(state).storeSell;
+    expect(run(state, WALK.tradeStartMs)).toMatchObject([{ buyer: 'p2', seller: 'store' }]);
+    walker(state, 'p2').price = a(state).lo;
+    run(state, TICK);
+  }
+
+  /** p0 sells `units` to the store at its buy line, then stands apart. */
+  function sellToStore(state: GameState, units: number) {
+    walker(state, 'p0').price = a(state).storeBuy;
+    for (let sold = 0; sold < units; ) sold += run(state, TICK).filter((t) => t.buyer === 'store').length;
+    walker(state, 'p0').price = APART;
+    run(state, TICK);
+  }
+
+  function finish(state: GameState) {
+    for (const p of state.players) auctionDone(state, p.id);
+    stepAuction(state, TICK);
+    expect(a(state).stage).toBe('close');
+    return state.store.lastWalk?.smithore;
+  }
+
+  it('price T-AC-3: a unit traded before the shelf emptied never sets soldOutHigh', () => {
+    const state = smithoreWalk(1, 0);
+    tradeBetween(state, 100);
+    emptyShelf(state);
+    tradeBetween(state, 90);
+    expect(finish(state)).toEqual({ soldOutHigh: 90, highTrade: 100, dryBudget: false });
+  });
+
+  it.each([
+    { name: 'no unit traded between players', before: [], empties: true, after: [], soldOutHigh: null, highTrade: null },
+    { name: 'the shelf never empties', before: [100, 95], empties: false, after: [], soldOutHigh: null, highTrade: 100 },
+    { name: 'the highest unit came after the shelf emptied', before: [100], empties: true, after: [90, 130], soldOutHigh: 130, highTrade: 130 },
+  ])('price T-AC-3: highTrade is the highest unit between players, shelf empty or not: $name', ({ before, empties, after, soldOutHigh, highTrade }) => {
+    const state = smithoreWalk(1, 0);
+    for (const price of before) tradeBetween(state, price);
+    if (empties) emptyShelf(state);
+    for (const price of after) tradeBetween(state, price);
+    expect(finish(state)).toEqual({ soldOutHigh, highTrade, dryBudget: false });
+  });
+
+  it.each([
+    { name: 'the store wanted 2 and bought 2', budget: 2, sold: 2, dryBudget: true },
+    { name: 'the store wanted 2 and bought 1', budget: 2, sold: 1, dryBudget: false },
+    { name: "the store wanted none as the good came up, whatever last month's walk kept", budget: 0, sold: 0, dryBudget: false },
+  ])('price T-AC-3: dryBudget is true exactly when the store wanted some as the good came up and wants none at its finish: $name', ({ budget, sold, dryBudget }) => {
+    const state = smithoreWalk(0, budget);
+    state.store.lastWalk = { smithore: { soldOutHigh: 500, highTrade: 500, dryBudget: true } };
+    sellToStore(state, sold);
+    expect(finish(state)).toEqual({ soldOutHigh: null, highTrade: null, dryBudget });
+  });
+});
