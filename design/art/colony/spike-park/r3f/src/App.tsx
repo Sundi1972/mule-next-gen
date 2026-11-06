@@ -12,10 +12,18 @@ import { settings, type Mood } from './settings'
 const ISO_DIST = 20
 const ISO_HEIGHT = ISO_DIST * Math.SQRT2 * Math.tan(Math.PI / 6)
 
-// Per-mood lighting. Sun comes from the north-west: three (-x, +y, -z).
+// Sun from the west-south-west (azimuth 250°, the camera's left) so the faces the camera sees are lit
+// and shadows fall back and to the right. Three axes: x east, y up, z south.
+function sunAt(azimuthDeg: number, elevationDeg: number, dist = 18) {
+  const az = THREE.MathUtils.degToRad(azimuthDeg)
+  const el = THREE.MathUtils.degToRad(elevationDeg)
+  const h = dist * Math.cos(el)
+  return new THREE.Vector3(h * Math.sin(az), dist * Math.sin(el), -h * Math.cos(az))
+}
+
 const MOODS = {
   day: {
-    sun: new THREE.Vector3(-9, 13, -11),
+    sun: sunAt(250, 35),
     sunColor: '#fff0d8',
     sunIntensity: 2.3,
     env: 0.5,
@@ -26,7 +34,7 @@ const MOODS = {
     exposure: 1.0,
   },
   dusk: {
-    sun: new THREE.Vector3(-14, 2.6, -8),
+    sun: sunAt(250, 9),
     sunColor: '#ff8a3d',
     sunIntensity: 2.4,
     env: 0.18,
@@ -205,13 +213,12 @@ function Park({ url, mood }: { url: string; mood: Mood }) {
         const e = s.emissive
         if (e && e.r + e.g + e.b > 0.05) {
           mats.add(s)
-          const c = new THREE.Vector3()
-          new THREE.Box3().setFromObject(mesh).getCenter(c)
-          pos.push(c)
+          pos.push(...globeCentres(mesh))
         }
       }
     })
     window.__perf.modelTris = tris
+    window.__perf.lamps = dedupe(pos).length
     return { mats: [...mats], pos: dedupe(pos), added: false, root: settings.merge ? mergeStatic(scene) : scene }
   }, [scene])
 
@@ -313,6 +320,22 @@ function mergeStatic(scene: THREE.Object3D) {
   }
   window.__perf.mergedMeshes = root.children.length
   return root
+}
+
+// Exports may join all globes into one mesh, so find each globe as a cluster of vertices.
+function globeCentres(mesh: THREE.Mesh) {
+  const p = mesh.geometry.attributes.position
+  const v = new THREE.Vector3()
+  const clusters: { sum: THREE.Vector3; n: number }[] = []
+  for (let i = 0; i < p.count; i++) {
+    v.fromBufferAttribute(p, i).applyMatrix4(mesh.matrixWorld)
+    const c = clusters.find((k) => k.sum.clone().divideScalar(k.n).distanceTo(v) < 0.6)
+    if (c) {
+      c.sum.add(v)
+      c.n++
+    } else clusters.push({ sum: v.clone(), n: 1 })
+  }
+  return clusters.map((k) => k.sum.divideScalar(k.n))
 }
 
 function dedupe(ps: THREE.Vector3[]) {

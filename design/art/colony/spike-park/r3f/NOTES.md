@@ -28,11 +28,11 @@ URL switches (each one defaults to on unless noted): `mood=day|dusk`, `ssao`, `b
 | Part | Choice | Why |
 |---|---|---|
 | Camera | Orthographic at (20, 16.33, 20) looking at the origin. 21 m fit across the wider side at 4:3. | This is Blender's (60°, 0, 45°) Z-up camera converted to glTF Y-up. Blender +y (north) becomes three −z. The frame matches `../out/park_render.png` and `park_day.png` pixel for pixel in position. |
-| Light | Poly Haven `sky_2k.hdr` as environment (IBL), plus one directional sun from the north-west | Day: high, warm white sun, env 0.5. Dusk: sun 10° high and orange, env 0.18, a blue/brown hemisphere fill. |
+| Light | Poly Haven `sky_2k.hdr` as environment (IBL), plus one directional sun from the **west-south-west** (azimuth 250°, the camera's left) | This is the art-direction ruling: a north-west sun leaves every face the camera sees in shade. Shadows fall back and to the right. Day: 35° elevation, warm white, env 0.5. Dusk: same azimuth at 9°, orange, env 0.18, with a blue/brown hemisphere fill. |
 | Shadows | One 2048² PCF-soft map fitted to ±10 m (the tile plus a tree's throw) | PCSS (`SoftShadows`) looked no better at this zoom and costs a shader rebuild. |
-| Lamps | The glb's `lamp_globe` material (emissive) at 0.4 by day and 14 at dusk, plus 4 point lights under the globes at dusk | The emissive value drives bloom. The point lights light the plaza. |
+| Lamps | The glb's `lamp_globe` material (emissive) at 0.4 by day and 14 at dusk, plus 4 point lights under the globes at dusk | The emissive value drives bloom. The point lights light the plaza. The globes are found as vertex clusters, because the export joins all four into one mesh. |
 | Post | N8AO (half-res, medium) → Bloom (mipmap, threshold 2.5) → ToneMapping ACES → SMAA, on a HalfFloat buffer, no MSAA | ACES over AgX: AgX washed the lawn out at this exposure. Raising the bloom threshold stops the sunlit white kerb from glowing. |
-| Static merge | At load, every mesh is baked into one mesh per material | The measured glb draws 401 calls unmerged and 63 merged; the 21:27 export went from 743 to 65. On a phone CPU, every hundred calls costs whole milliseconds. |
+| Static merge | At load, every mesh is baked into one mesh per material | The final export arrives already joined (13 objects), so the merge changes nothing there (63 calls either way). The earlier exports needed it: 743 → 65 and 401 → 63 calls. It stays as a guard against node-heavy exports. |
 | Lawn | World-space value noise on flat-colour `lawn`/`grass` materials only | Only matters for `park.glb`, whose lawn is flat. `park_rt.glb` has a textured ground, so the noise does not touch it. |
 | Foliage | `BLEND` leaves turned into `alphaTest` cutouts | This fixes sorting, and the shadows come out leaf-shaped instead of square. |
 
@@ -42,51 +42,49 @@ URL switches (each one defaults to on unless noted): `mood=day|dusk`, `ssao`, `b
 
 ## Which model was measured
 
-**`../out/park_rt.glb` was 5,482,532 bytes, sha1 `7632877a…`, exported 21:48 local.** The final shots and every number below come from this file. The sha was checked before and after the runs, and every run reports 132,059 model triangles. The Blender agent was still iterating: a 9.7 MB export landed at 22:09, after the runs had finished, and it is **not** measured here. It is pre-merged (13 nodes) and over the 8 MB budget. Re-run `scripts/measure.mjs` to measure it.
+**`../out/park_rt.glb` was 7,550,696 bytes, sha1 `415bbfb3…`, exported at 14:19Z.** That is after the 14:08Z cutoff, so it carries the spec at fccd19c7: trees 5.5 m and 4.2 m, lamps at (±2.2, ±2.2). The sha was the same before and after the runs. The final shots and every number below come from this file (`shots/measured-glb.sha1`).
 
-- It draws **132k triangles per pass and 264k per frame** with the shadow pass. Watch out: an earlier export (21:27) had 75k triangles in unique meshes but drew **423k**, because its nodes reused meshes. A budget counted on unique meshes undercounts.
-- Textures: 14 images, mostly 1k JPEG. The PNG cut-outs (leaves and shrub) are the largest. KTX2/Basis would cut both download and GPU memory, since JPEG expands to full RGBA8 in VRAM.
-- The 21:27 export had decimated tree twigs that rendered as flat bark "planks". The 21:48 export has fixed this (visible in the shots).
+- **116,853 triangles per pass, 233,739 per frame** with the shadow pass. That is within the 150k-per-pass budget, and 7.55 MB is within the 8 MB budget. It has 13 nodes, so the drawn and unique triangle counts are equal. Earlier exports reused meshes across nodes and drew up to 5.6× their unique count; watch for that.
+- **Weakest asset in this export:** the hedge shrubs (`shrub_01`) are decimated far enough that their leaves read as flat paper cards up close. The flower bed and the trees are clean in this export; earlier exports had white gaps in the bed and bark "planks" in the trees.
+- Textures: 14 images, mostly 1k JPEG, plus PNG cut-outs for the leaves and shrub. KTX2/Basis would cut both download and GPU memory, since JPEG expands to full RGBA8 in VRAM.
 
 ## Numbers
 
-Machine: Apple M5 Max. GL renderer: `ANGLE (Apple, ANGLE Metal Renderer: Apple M5 Max, Unspecified Version)`. Headless Chromium (Playwright 1.56.1) with `--use-angle=metal`, so this is real GPU, not software. Scene: Dusk, the heavier mood (4 point lights and strong bloom). Every effect is on, merge is on, and the full DPR is used. Raw data: `shots/measure.json` and `shots/measure-swiftshader.json`.
+Machine: Apple M5 Max. GL renderer: `ANGLE (Apple, ANGLE Metal Renderer: Apple M5 Max, Unspecified Version)`. Headless Chromium (Playwright 1.56.1) with `--use-angle=metal`, so this is real GPU, not software. Scene: Dusk, the heavier mood (4 point lights and strong bloom). Every effect is on and the full DPR is used. Raw data: `shots/measure.json`.
 
 ### FPS (5 s, rAF-counted)
 
 | Viewport | CPU | vsync-capped fps (p95 frame) | uncapped fps (p95) | draw calls | triangles drawn / frame | time to first frame |
 |---|---|---|---|---|---|---|
-| 1920×1080 @ DPR 1 | 1× | **60** (16.8 ms) | 441 (4.0 ms) | 63 | 264,151 | 1.3 s |
-| 1920×1080 @ DPR 1 | 4× throttled | **60** (16.8 ms) | 460 (5.2 ms) | 63 | 264,151 | 2.2 s |
-| 390×844 @ DPR 3 (1170×2532 px) | 1× | **60** (16.7 ms) | 442 (4.1 ms) | 63 | 264,151 | 1.1 s |
-| 390×844 @ DPR 3 | 4× throttled | **60** (16.8 ms) | 283 (5.6 ms) | 63 | 264,151 | 2.4 s |
+| 1920×1080 @ DPR 1 | 1× | **60** (16.7 ms) | 294–443 (two runs) | 63 | 233,739 | 0.9 s |
+| 1920×1080 @ DPR 1 | 4× throttled | **60** (16.7 ms) | 471 (4.7 ms) | 63 | 233,739 | 2.3 s |
+| 390×844 @ DPR 3 (1170×2532 px) | 1× | **60** (16.7 ms) | 444 (3.9 ms) | 63 | 233,739 | 1.2 s |
+| 390×844 @ DPR 3 | 4× throttled | **60** (16.8 ms) | 387 (5.8 ms) | 63 | 233,739 | 2.5 s |
 
-"Time to first frame" is measured from navigation start to the first frame drawn with the model, over localhost: JS parse, glb parse, mesh merge, PMREM of the HDR, and shader compile. CPU throttling at 4× doubles it, because it is all main-thread work. On a phone over 4G, add the download: the 5.5 MB glb, the 5.4 MB HDR (a 1k HDR or a prefiltered KTX2 env would be about 1 MB), and the 0.5 MB JS. That is roughly 3–6 s more.
+"Time to first frame" is measured from navigation start to the first frame drawn with the model, over localhost: JS parse, glb parse, PMREM of the HDR, and shader compile. CPU throttling at 4× doubles it, because it is all main-thread work. On a phone over 4G, add the download: the 7.6 MB glb, the 5.4 MB HDR (a 1k HDR or a prefiltered KTX2 env would be about 1 MB), and the 0.5 MB JS. That is roughly 3–7 s more.
 
-`renderer.info`, summed over all composer passes: **63 draw calls** (unmerged: 401), **264,151 triangles** (132k colour pass plus 132k shadow pass), 25 shader programs.
+`renderer.info`, summed over all composer passes: **63 draw calls** and **233,739 triangles** (117k colour pass plus 117k shadow pass).
 
 ### What each effect costs
 
-I could **not isolate per-effect GPU cost reliably on this machine.** On Metal, the whole frame is about 2 ms, of which about 1.3 ms is a fixed browser/compositor floor. On top of that, a Cycles render from the Blender agent was running on the same Mac during the runs. Repeat runs of the same configuration varied by ±0.6 ms. The figures below are single runs and show the ordering only.
+Measured on the M5 Max, uncapped, at the phone viewport (DPR 3 ≈ 3.0 Mpx), as frame time with one thing changed. The whole frame is only about 2.3 ms, of which about 1.3 ms is a fixed browser/compositor floor. The Blender agent was rendering on the same Mac during the runs, and repeat runs of the same configuration varied by up to ±0.6 ms. **Read this table for ordering, not for exact costs.**
 
-| Config (phone viewport, uncapped) | Metal ms/frame | SwiftShader ms/frame |
-|---|---|---|
-| everything on, DPR 3 | 2.3–2.9 (two runs) | 588 |
-| SSAO off | 1.86 | 769 (noise) |
-| shadows off | 2.10 | 1111 (noise) |
-| bloom off | 1.94 | 526 |
-| SMAA off | 2.07 | — |
-| lamp point lights off | 2.29 | — |
-| whole composer off (MSAA instead) | 1.63 | **182** |
-| merge off (401 calls instead of 63) | 2.14–2.63 | — |
-| DPR 2 | 1.60 | **244** |
-| DPR 2 + 1024² shadows + no SSAO | 1.62 | 370 (noise) |
-| DPR 1.5 + 1024² shadows + no SSAO | 1.7 (DPR 1.5 alone) | **119** |
+| Config | ms/frame | | Config | ms/frame |
+|---|---|---|---|---|
+| everything on | 2.30 | | whole composer off (MSAA instead) | **1.42** |
+| SSAO off | **1.87** | | composer + shadows off | 1.37 |
+| bloom off | 2.11 | | DPR 3 → 2 | **1.78** |
+| SMAA off | 2.07 | | DPR 1.5 + 1024² shadow map | **1.51** |
+| shadows off | 2.28 | | DPR 2 + 1024² + SSAO off | 1.71 |
+| lamp point lights off | 2.34 | | | |
 
-Two things hold across every run, on both backends:
+The robust findings, which also matched the earlier runs on two other exports:
 
-1. **Pixel count dominates.** DPR 3 → 1.5 is a 4× pixel cut, and it gives about a 5× speed-up on software GL.
-2. **The post stack as a whole (AO, bloom, SMAA and the HalfFloat buffer) is the second-biggest cost**, at about 3× on software GL. Shadows and the four lamp lights are small at this scene size.
+1. **Pixel count dominates.** DPR is the biggest lever.
+2. **The post stack as a whole (AO, bloom, SMAA and the HalfFloat buffer) costs about 40% of the frame.** SSAO is the largest single effect in it.
+3. Shadows and the four lamp lights are noise-level at this scene size.
+
+I also tried a software-GL run (SwiftShader) as a weak-GPU stand-in. On a shared, busy machine it was non-monotonic: switching shadows off made it *slower*. I discarded it.
 
 ### Bundle
 
@@ -96,8 +94,7 @@ Two things hold across every run, on both backends:
 
 | File | Bytes |
 |---|---|
-| `park_rt.glb` (measured, 21:48) | 5,482,532 (5.2 MiB) |
-| `park_rt.glb` (22:09, not measured) | 9,749,592 |
+| `park_rt.glb` (measured, 14:19Z export) | 7,550,696 (7.2 MiB) |
 | `park.glb` (older, unused for the numbers) | 39,015,740 |
 | `sky_2k.hdr` | 5,451,493 (3.6 MB gzip) |
 
@@ -106,7 +103,7 @@ Two things hold across every run, on both backends:
 **A desktop GPU is not a phone GPU.** The M5 Max saturates vsync with about 7× headroom, and that says almost nothing about a phone. My estimate for a **2022 mid-range Android** (Mali-G68 MP4 or Adreno 642L class, e.g. Galaxy A53 or Pixel 6a):
 
 - That GPU has roughly 1/30–1/50 of the M5 Max's fill rate and ALU, and a frame here is dominated by fill: N8AO, bloom mips and SMAA are each full-screen passes over 3 Mpx at DPR 3. Scaling the ~1 ms of GPU work measured above by 30–50× gives **about 30–50 ms per frame: roughly 20–30 fps with everything on at DPR 3**, and it will drop further as the phone heats up and throttles.
-- 63 draw calls and 132k triangles per pass are fine for that class. The merge is what makes the call count fine. Unmerged, the 401 calls would cost several ms of driver time on a phone CPU, far more than on the M5.
+- 63 draw calls and 117k triangles per pass are fine for that class. Keep it that way: an export with hundreds of nodes (an earlier one drew 743 calls) costs several ms of driver time on a phone CPU unless it is merged.
 - **Phone preset that should hold 30 fps, and maybe 60 on a good day:** DPR capped at 1.5, SSAO off, a 1024² shadow map, bloom kept (it carries the dusk look and is cheap at half-res mips), SMAA kept. That cuts the pixel count to a quarter and drops the most expensive pass.
 - **What to drop, in order:** (1) **DPR cap** to 1.5, the biggest single win, since pixel work scales linearly; (2) **SSAO**, which you hardly miss here because the shadow map already grounds objects; (3) **shadow-map resolution** 2048 → 1024; (4) the lamp **point lights**, replaced by baked light-pool decals; (5) **SMAA**, using the DPR as antialiasing. Bloom goes last.
 - **Also important:** this game shows the grounds on a **TV**. If the TV is driven by a smart-TV browser or a cheap stick (Chromecast or Fire TV class), that GPU is *weaker* than the phone's and draws 1080p. Measure the actual TV device before committing to the real-time route.
