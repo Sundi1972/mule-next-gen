@@ -1,4 +1,4 @@
-import { HoloMap, type MapTile } from '@mule/ui';
+import { HoloMap, specialBadgeBox, type MapTile } from '@mule/ui';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -198,28 +198,43 @@ describe('T-AC-3 (gem): Crystite and Rare earth found on a plot', () => {
   });
 });
 
-describe('B-AC-9 (WS4, plot look A): the selection stays look A over a plot’s dots', () => {
+describe('B-AC-9 (WS4, plot look A): no mark hides the dots of the plot above a selection', () => {
   /** A 3×3 map with plot 1-1 selected; `above` is what plot 1-0 holds. */
-  const render = (above: Partial<MapTile>, selected = { x: 1, y: 1 }) => {
+  const render = (above: Partial<MapTile>, selected = { x: 1, y: 1 }, hideGround = false) => {
     const tiles: MapTile[] = [];
     for (let y = 0; y < 3; y++) for (let x = 0; x < 3; x++) tiles.push({ x, y, terrain: 'plains', owner: null, ...(x === 1 && y === 0 ? above : {}) });
-    return renderToStaticMarkup(createElement(HoloMap, { width: 3, height: 3, tiles, selected }));
+    return renderToStaticMarkup(createElement(HoloMap, { width: 3, height: 3, tiles, selected, hideGround }));
   };
   const pin = (markup: string) => tag(markup, /data-testid="selected-pin"/);
   const ring = (markup: string) => tag(markup, /data-testid="selected-ring"/);
 
-  it('keeps the pin above and the ring outside the plot under a plot showing its dots, as under any other', () => {
-    for (const above of [{ ground: { food: 2 } }, {}]) {
-      const map = render(above);
-      expect(pin(map)).toMatch(/\bbottom-full mb-1\b/);
-      expect(ring(map)).toMatch(/-inset-\[6%\]/);
-      expect(ring(map)).not.toMatch(/\binset-0\b/);
-    }
+  it('draws no pin under a plot showing its dots: the ring, outside the plot as ever, marks it alone', () => {
+    const map = render({ ground: { food: 2 } });
+    expect(pin(map)).toBe('');
+    expect(ring(map)).toMatch(/-inset-\[6%\]/);
   });
 
-  it('keeps the top row’s pin below and its ring inside', () => {
-    const map = render({ ground: { food: 2 } }, { x: 1, y: 0 });
-    expect(pin(map)).toMatch(/\btop-full mt-1\b/);
-    expect(ring(map)).toMatch(/\binset-0\b/);
+  it('draws the pin as ever otherwise: no ground above, a MULE above, the ground hidden, the top row', () => {
+    for (const [why, map, side] of [
+      ['no ground above', render({}), /\bbottom-full mb-1\b/],
+      ['a MULE above', render({ ground: { food: 2 }, good: 'food' }), /\bbottom-full mb-1\b/],
+      ['the ground hidden', render({ ground: { food: 2 } }, undefined, true), /\bbottom-full mb-1\b/],
+      ['the top row', render({ ground: { food: 2 } }, { x: 1, y: 0 }), /\btop-full mt-1\b/],
+    ] as const) expect(pin(map), why).toMatch(side);
+  });
+});
+
+describe('B-AC-9 (MG-2): the special badge is sized with the plot, so it hides none of the plot’s dots', () => {
+  it('on a phone takes 36% of the plot, at most 15 px; the TV’s stays 21 px', () => {
+    expect(specialBadgeBox(25, 'phone')).toBe(9);
+    expect(specialBadgeBox(30, 'phone')).toBe(11);
+    expect(specialBadgeBox(60, 'phone')).toBe(15);
+    expect(specialBadgeBox(37, 'tv')).toBe(21);
+  });
+
+  it('draws the map’s badge at that size, hung by a quarter of it (the server render’s plot is 30 px)', () => {
+    const map = renderToStaticMarkup(createElement(HoloMap, { width: 3, height: 3, tiles: [{ x: 1, y: 1, terrain: 'plains', owner: null, special: { kind: 'oasis' } }] }));
+    const badge = map.match(/data-testid="special-glyph-1-1"[^>]*><span[^>]*style="([^"]*)"/)?.[1] ?? '';
+    expect(badge).toMatch(/right:-2.75px;bottom:-2.75px;width:11px;height:11px/);
   });
 });

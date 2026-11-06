@@ -302,18 +302,29 @@ async function rectsOf(map: Locator, selectors: string[]): Promise<Rect[][]> {
     selectors,
   );
 }
+/** The special badge's hexagon, in its 24-unit viewBox (SpecialIcon.tsx's path), clockwise on screen. */
+const HEXAGON = [[12, 1.2], [21.4, 6.6], [21.4, 17.4], [12, 22.8], [2.6, 17.4], [2.6, 6.6]] as const;
+/** Whether the point lies inside the hexagon drawn in `badge`'s box. */
+function inHexagon(x: number, y: number, badge: Rect): boolean {
+  const corners = HEXAGON.map(([vx, vy]) => [badge.left + (vx / 24) * (badge.right - badge.left), badge.top + (vy / 24) * (badge.bottom - badge.top)] as const);
+  return corners.every(([x1, y1], i) => {
+    const [x2, y2] = corners[(i + 1) % corners.length]!;
+    return (x2 - x1) * (y - y1) - (y2 - y1) * (x - x1) >= 0;
+  });
+}
 /** Whether two boxes overlap by more than SLACK_PX. */
 const covers = (a: Rect, b: Rect) => a.left < b.right - SLACK_PX && b.left < a.right - SLACK_PX && a.top < b.bottom - SLACK_PX && b.top < a.bottom - SLACK_PX;
 
 /**
  * T-AC-3 and B-AC-9 (WS4; PM ruling X on #562), on the hub's Look map at the phone's 844×390, where a 3-seat plot is
- * about 25 px. Checked: (b) on an owned plot with a gem, the owner's tab and the gem are clear of the dots. Measured for
- * the log: (a) on every analysed special plot with nothing installed, how much of the third dot the plot's own badge
- * covers; (c) for a plot Look-selected under a plot showing its dots, whether its pin or its ring's painted band covers
- * those dots. The ground is seeded on the server for the seat, as makeHungry seeds hunger, and undone afterwards.
+ * about 25 px: (a) on every analysed special plot with nothing installed, off the map's right column, the third dot's
+ * centre lies outside the plot's own badge and its box clears the badge's (in the right column it is measured for the log); (b) on an owned plot with a gem, the owner's tab and the gem are clear of the
+ * dots; (c) a plot Look-selected under a plot showing its dots draws no pin, and its ring's painted band keeps off those
+ * dots. Each "clear" is within SLACK_PX. The ground is seeded on the server for the seat, as makeHungry seeds hunger, and
+ * undone afterwards.
  */
 export async function theMarksStayClearOfTheDots(ctx: GameStepContext, seat = 's1'): Promise<string> {
-  const id = 'T-AC-3 / B-AC-9 (WS4, plot marks at 25 px, PM ruling X on #562)';
+  const id = 'T-AC-3 / B-AC-9 (WS4, plot marks at 25 px, PM rulings X, a and c on #562)';
   type Room = { game: { state: GameState }; viewFor(seat: string): { game?: MuleView }; broadcast(): void };
   const room = ctx.server.registry.get(ctx.code) as unknown as Room | undefined;
   check(room, `${id}: a room ${ctx.code} on the server`);
@@ -384,7 +395,15 @@ export async function theMarksStayClearOfTheDots(ctx: GameStepContext, seat = 's
         owned: { pips: (ownedPips ?? []).slice(0, 3), tab, gems: gems ?? [] },
       };
       check(marks.plot, `${id}: plot ${owned.x}-${owned.y} is drawn`);
-      for (const sp of marks.specials) check(sp.third && sp.badge, `${id}: special plot ${sp.at} draws its third dot and its badge`);
+      const rightColumn = (at: string) => at.startsWith(`${state.width - 1}-`);
+      for (const sp of marks.specials) {
+        check(sp.third && sp.badge, `${id}: special plot ${sp.at} draws its third dot and its badge`);
+        const [d, b] = [sp.third, sp.badge];
+        // In the right column the badge sits 2 px inside the map's edge, over the third dot: measured for the log only.
+        if (rightColumn(sp.at)) continue;
+        check(!inHexagon((d.left + d.right) / 2, (d.top + d.bottom) / 2, b), `${id}: on special plot ${sp.at} the third dot's centre lies outside the plot's badge`);
+        check(!covers(d, b), `${id}: on special plot ${sp.at} the third dot (${px(d.left)}–${px(d.right)}, ${px(d.top)}–${px(d.bottom)}) is clear of the ${px(b.right - b.left)} badge (${px(b.left)}–${px(b.right)}, ${px(b.top)}–${px(b.bottom)})`);
+      }
       const o = marks.owned;
       check(o.pips.length === 3 && o.tab && o.gems.length > 0, `${id}: owned plot ${owned.x}-${owned.y} draws 3 dots, its tab and a gem`);
       check(!o.pips.some((d) => covers(d, o.tab!)), `${id}: on owned plot ${owned.x}-${owned.y} the owner's tab (foot at ${px(o.tab.bottom)}) is clear of the dots (top at ${px(o.pips[0]!.top)})`);
@@ -405,16 +424,18 @@ export async function theMarksStayClearOfTheDots(ctx: GameStepContext, seat = 's
         ),
       );
       const sel = { pin, dots: dots.slice(0, 3), band: ringBox ? { left: ringBox.left - spread, top: ringBox.top - spread, right: ringBox.right + spread, bottom: ringBox.bottom + spread } : undefined };
-      check(sel.pin && sel.band && sel.dots.length === 3, `${id}: the selected plot ${x}-${y} draws its pin and ring, and ${x}-${y - 1} its 3 dots`);
+      check(sel.band && sel.dots.length === 3, `${id}: the selected plot ${x}-${y} draws its ring, and ${x}-${y - 1} its 3 dots`);
+      check(!sel.pin, `${id}: the plot ${x}-${y}, selected under the dots of ${x}-${y - 1}, draws no pin`);
       const dotsFoot = Math.max(...sel.dots.map((d) => d.bottom));
-      const pinOver = sel.dots.some((d) => covers(d, sel.pin!));
       const bandOver = dotsFoot - sel.band.top;
+      check(bandOver <= SLACK_PX, `${id}: the ring on ${x}-${y}, as painted, keeps off the dots of ${x}-${y - 1}: its band reaches ${px(bandOver)} into their row`);
       await plot.click({ timeout: PRESS_MS });
       const third = (sp: (typeof marks.specials)[number]) => {
         const [d, b] = [sp.third!, sp.badge!];
-        return covers(d, b) ? `${sp.at} covered ${px(Math.min(d.right, b.right) - Math.max(d.left, b.left))} × ${px(Math.min(d.bottom, b.bottom) - Math.max(d.top, b.top))}` : `${sp.at} clear`;
+        const clear = `${sp.at} ${px(Math.max(b.left - d.right, b.top - d.bottom))}`;
+        return rightColumn(sp.at) ? `${clear} (right column, not checked: ${inHexagon((d.left + d.right) / 2, (d.top + d.bottom) / 2, b) ? 'centre covered' : covers(d, b) ? 'box overlaps' : 'clear'})` : clear;
       };
-      return `on a ${px(marks.plot.right - marks.plot.left)} plot: (a) the third dot against its plot's badge: ${marks.specials.map(third).join(', ')}; (b) on ${owned.x}-${owned.y} the tab's foot ${px(o.pips[0]!.top - o.tab.bottom)} above the dots, the gem's ${px(o.pips[0]!.top - Math.max(...o.gems.map((g) => g.bottom)))}; (c) ${x}-${y} selected: the pin ${pinOver ? 'covers' : 'is clear of'} the dots of ${x}-${y - 1}, the ring's band ${bandOver > 0 ? `reaches ${px(bandOver)} into their row${bandOver <= SLACK_PX ? ', within the slack' : ''}` : `is ${px(-bandOver)} clear`}`;
+      return `on a ${px(marks.plot.right - marks.plot.left)} plot: (a) the third dot clear of its ${px(marks.specials[0]!.badge!.right - marks.specials[0]!.badge!.left)} badge on ${marks.specials.map(third).join(', ')}; (b) on ${owned.x}-${owned.y} the tab's foot ${px(o.pips[0]!.top - o.tab.bottom)} above the dots, the gem's ${px(o.pips[0]!.top - Math.max(...o.gems.map((g) => g.bottom)))}; (c) ${x}-${y} selected: no pin, the ring's band ${bandOver > 0 ? `${px(bandOver)} into` : `${px(-bandOver)} under`} the dots of ${x}-${y - 1}`;
     });
   } finally {
     for (const step of undo.reverse()) step();
@@ -502,12 +523,15 @@ export async function readPlotLook(map: Locator, where: string, want: LookWanted
   const ringSeen = onScreen({ x: ring.box.x - reach, y: ring.box.y - reach, width: ring.box.width + 2 * reach, height: ring.box.height + 2 * reach }, clip);
   fail(ringSeen >= SEEN, `at least ${SEEN * 100}% of the selected ring on ${at}, as painted, is inside the map's visible box, got ${percent(ringSeen)}`);
   const pinSeen = pin ? onScreen(pin.box, clip) : 0;
-  fail(!!pin && pin.visible && pinSeen >= SEEN, `the selected plot ${at} shows its pin, at least ${SEEN * 100}% inside the map's visible box, got ${pin ? percent(pinSeen) : 'no pin'}`);
-  fail(ring.opacity > 0.99 && (pin?.opacity ?? 0) > 0.99, `the selection never fades: the ring on ${at} draws at ${ring.opacity.toFixed(2)}, its pin at ${pin?.opacity.toFixed(2) ?? 'none'}`);
+  // Under a plot showing its dots the ring alone marks the selection (PM ruling c on #562).
+  const dotsAbove = drawn.some((p) => p.at === `${x}-${y - 1}` && p.marks.some((m) => m.id === `map-dots-${x}-${y - 1}`));
+  if (dotsAbove) fail(!pin, `under the dots of ${x}-${y - 1} the selected plot ${at} draws no pin, got one`);
+  else fail(!!pin && pin.visible && pinSeen >= SEEN, `the selected plot ${at} shows its pin, at least ${SEEN * 100}% inside the map's visible box, got ${pin ? percent(pinSeen) : 'no pin'}`);
+  fail(ring.opacity > 0.99 && (dotsAbove || (pin?.opacity ?? 0) > 0.99), `the selection never fades: the ring on ${at} draws at ${ring.opacity.toFixed(2)}, its pin at ${pin?.opacity.toFixed(2) ?? 'none'}`);
   const tab = sel.marks.find((m) => m.id === `owner-${at}`);
   if (want.faded) fail(!!tab && Math.abs(tab.opacity - FADED) <= 0.05, `another player's plot ${at} fades its tab to ${FADED}, got ${tab?.opacity.toFixed(2) ?? 'no tab'}`);
   const faded = want.faded && tab ? `, its tab at ${tab.opacity.toFixed(2)}` : '';
-  return { read: `${read}; ${at} selected${edge ? ' on the edge' : ''}, ring ${percent(ringSeen)} and pin ${percent(pinSeen)} in view at ${ring.opacity.toFixed(2)}${faded}`, fails };
+  return { read: `${read}; ${at} selected${edge ? ' on the edge' : ''}, ring ${percent(ringSeen)} and ${dotsAbove ? 'no pin (dots above)' : `pin ${percent(pinSeen)}`} in view at ${ring.opacity.toFixed(2)}${faded}`, fails };
 }
 
 /** Every plot on the map with its marks and paint, in one read once its fades have run. Fails when the map has no root. */

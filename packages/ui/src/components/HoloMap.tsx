@@ -3,7 +3,7 @@ import { GoodIcon } from './GoodIcon';
 import { Landscape } from './Landscape';
 import { PlayerMark } from './PlayerMark';
 import { objectLabel, PlotObjectMark, type MapObject } from './ObjectGlyph';
-import { SPECIAL_BADGE, SPECIAL_HANG, SpecialBadge } from './SpecialIcon';
+import { SPECIAL_HANG, SpecialBadge, specialBadgeBox } from './SpecialIcon';
 import { useTheme } from './theme';
 import { cx, GOOD_NAME, SLOT_COLOR, specialLabel, TERRAIN_NAME, type Good, type MapSpecial, type Slot, type Terrain } from './tokens';
 import { bestOf, gemsIn, type Dots, type RawGood } from '../ground-dots';
@@ -101,6 +101,15 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
     for (const t of tiles) grid[t.y * width + t.x] = t.terrain;
     return grid;
   }, [tiles, width, height]);
+  const cells = useMemo(() => {
+    const grid: (MapTile | undefined)[] = new Array(width * height);
+    for (const t of tiles) grid[t.y * width + t.x] = t;
+    return grid;
+  }, [tiles, width, height]);
+  const badge = specialBadgeBox(plot, density);
+  const groundOf = (t: MapTile) => (!hideGround && t.ground ? bestGoods(t.ground, tv ? 2 : 1) : []);
+  /** Whether the plot draws its dots chip: an installed good or a colony building shows instead. */
+  const showsDots = (t: MapTile) => !t.good && !t.object && groundOf(t).length > 0;
 
   return (
     <div
@@ -129,7 +138,10 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
           const fade = cx('transition-opacity', faded && 'opacity-45');
           // The map clips at its edge, so an edge plot's selection is drawn inside it, and on the top row the pin hangs below.
           const onEdge = t.x === 0 || t.y === 0 || t.x === width - 1 || t.y === height - 1;
-          const ground = !hideGround && t.ground ? bestGoods(t.ground, tv ? 2 : 1) : [];
+          const ground = groundOf(t);
+          const above = t.y > 0 ? cells[(t.y - 1) * width + t.x] : undefined;
+          // The pin would hang over the dots of the plot above: there the ring alone marks the selection.
+          const pin = !above || !showsDots(above);
           const gems = !hideGround && t.ground ? gemsIn(t.ground) : [];
           const label = [
             TERRAIN_NAME[t.terrain],
@@ -160,7 +172,7 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
                 />
               )}
               {/* An object's plot shows the object, not the ground under it (no pip, no gem): the plot's label still names the ground. */}
-              {!t.good && !t.object && ground.length > 0 && (
+              {showsDots(t) && (
                 // A TV chip can stand taller than its plot: a tap on what overhangs goes to the plot beneath.
                 <span
                   className={cx('pointer-events-none relative flex flex-col items-center rounded-control bg-map-chip/90 shadow-chip', tv ? 'gap-0.5 px-1.5 py-1' : 'px-[3px] py-[2px]', fade)}
@@ -241,10 +253,11 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
                   <SpecialBadge
                     special={t.special}
                     density={density}
+                    box={badge}
                     className="absolute"
                     style={{
-                      right: t.x === width - 1 ? 2 : -SPECIAL_BADGE[density].box * SPECIAL_HANG,
-                      bottom: t.y === height - 1 ? 2 : -SPECIAL_BADGE[density].box * SPECIAL_HANG,
+                      right: t.x === width - 1 ? 2 : -badge * SPECIAL_HANG,
+                      bottom: t.y === height - 1 ? 2 : -badge * SPECIAL_HANG,
                     }}
                   />
                 </span>
@@ -267,16 +280,18 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
                     }}
                     data-testid="selected-ring"
                   />
-                  <span
-                    className={cx(
-                      'pointer-events-none absolute left-1/2 z-[6] -translate-x-1/2 whitespace-nowrap rounded-chip bg-holo font-mono font-bold text-on-holo shadow-glow',
-                      t.y === 0 ? 'top-full mt-1' : 'bottom-full mb-1',
-                      tv ? 'px-2 py-0.5 text-sm' : 'px-1 text-[8px]',
-                    )}
-                    data-testid="selected-pin"
-                  >
-                    {t.y === 0 ? '▴' : '▾'}
-                  </span>
+                  {pin && (
+                    <span
+                      className={cx(
+                        'pointer-events-none absolute left-1/2 z-[6] -translate-x-1/2 whitespace-nowrap rounded-chip bg-holo font-mono font-bold text-on-holo shadow-glow',
+                        t.y === 0 ? 'top-full mt-1' : 'bottom-full mb-1',
+                        tv ? 'px-2 py-0.5 text-sm' : 'px-1 text-[8px]',
+                      )}
+                      data-testid="selected-pin"
+                    >
+                      {t.y === 0 ? '▴' : '▾'}
+                    </span>
+                  )}
                 </>
               )}
               {isCursor && (

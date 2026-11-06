@@ -8,7 +8,7 @@
  * The helpers below are specials.ts's too (local only), which also checks the badge in later phases and its geometry.
  */
 import type { GameState, Tile } from '@mule/engine';
-import { SPECIAL_BADGE } from '@mule/ui';
+import { SPECIAL_BADGE, specialBadgeBox } from '@mule/ui';
 import type { Locator, Page } from 'playwright';
 import { check, type GameStepContext } from './harness';
 
@@ -82,8 +82,8 @@ export function glyph(map: Locator, p: Plot): Locator {
 }
 
 /**
- * B-AC-9: every special plot carries its glyph with its kind, and inside it a visible badge of its density's size
- * (scaled with the map, as the TV's stage is); nothing else on the map does, the plain plot included. One read of the
+ * B-AC-9: every special plot carries its glyph with its kind, and inside it a visible badge of its size for its density
+ * and plot (specialBadgeBox; scaled with the map, as the TV's stage is); nothing else on the map does, the plain plot included. One read of the
  * whole map once its first glyph shows.
  */
 export async function checkGlyphs(map: Locator, where: string, density: Density, specials: Special[], plain: Plot, timeout: number): Promise<void> {
@@ -101,12 +101,11 @@ export async function checkGlyphs(map: Locator, where: string, density: Density,
         kind: g.getAttribute('data-kind'),
         badge:
           b && root && r
-            ? { w: b.offsetWidth, h: b.offsetHeight, rw: r.width, rh: r.height, scale: root.getBoundingClientRect().width / root.offsetWidth, visible: b.checkVisibility({ opacityProperty: true, visibilityProperty: true }), hexagon: !!b.querySelector('svg path') }
+            ? { w: b.offsetWidth, h: b.offsetHeight, rw: r.width, rh: r.height, scale: root.getBoundingClientRect().width / root.offsetWidth, plot: g.parentElement!.getBoundingClientRect().width / (root.getBoundingClientRect().width / root.offsetWidth), visible: b.checkVisibility({ opacityProperty: true, visibilityProperty: true }), hexagon: !!b.querySelector('svg path') }
             : null,
       };
     }),
   );
-  const box = SPECIAL_BADGE[density].box;
   for (const t of specials) {
     const g = drawn.find((d) => d.id === `special-glyph-${t.x}-${t.y}`);
     check(g, `B-AC-9 (${where}): the ${t.special.kind} on ${plotName(t)} shows its glyph`);
@@ -114,6 +113,7 @@ export async function checkGlyphs(map: Locator, where: string, density: Density,
     const badge = g.badge;
     check(badge, `B-AC-9 (${where}): the glyph on ${plotName(t)} holds a badge`);
     check(badge.visible && badge.hexagon, `B-AC-9 (${where}): the badge on ${plotName(t)} is visible and drawn`);
+    const box = specialBadgeBox(badge.plot, density);
     const want = box * badge.scale;
     check(
       badge.w === box && badge.h === box && Math.abs(badge.rw - want) < 0.5 && Math.abs(badge.rh - want) < 0.5,
