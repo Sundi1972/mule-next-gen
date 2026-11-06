@@ -9,8 +9,9 @@ import {
   GOOD_CONFIG,
   GROWN_BASE,
   observe,
-  PRICE,
   startAuction,
+  storeBuyAt,
+  storeSellAt,
   stepAuction,
   STRATEGIST,
   WALK,
@@ -48,6 +49,8 @@ interface Seat {
   level?: AiLevelId;
   plots: Plot[];
   posted?: Partial<Record<Good, number>>;
+  /** The store's ask for a good, set through the mid its band's spread turns into that ask; instead of `posted`. */
+  asks?: Partial<Record<Good, number>>;
   stock?: Partial<Record<Good, number>>;
   money: number;
   /** What the store holds of each good; plenty of the household's goods unless the row says. */
@@ -72,6 +75,7 @@ function table(seat: Seat): GameState {
   }
   state.treasury.salesTax = 0;
   Object.assign(state.store.posted, seat.posted ?? {});
+  for (const [good, ask] of Object.entries(seat.asks ?? {}) as [Good, number][]) state.store.posted[good] = Math.round(ask / storeSellAt(state, good, 1, { exact: true }));
   for (const good of ['food', 'water', 'energy'] as const) state.store.stock[good] = 200;
   Object.assign(state.store.stock, seat.store ?? {});
   for (const p of state.players) {
@@ -163,7 +167,8 @@ describe('RULE-5: one cash shadow price across the month’s auctions', () => {
       persona: 'cautious',
       level: 'rookie',
       plots: [{ outfit: 'smithore', x: 0, ground: { smithore: 6 } }, ...[2, 4, 6, 8, 10].map((x): Plot => ({ outfit: 'food', x, ground: { food: 1 - GROWN_BASE } }))],
-      posted: { smithore: 171, energy: 194, food: 82, water: 70 },
+      posted: { smithore: 171, food: 82, water: 70 },
+      asks: { energy: 214 },
       money: 1355,
     };
     const state = table(seat);
@@ -189,7 +194,8 @@ describe('C8: a power plant is worth what its output saves', () => {
    * Month 1's development: three rich mines (use 6 Energy), no plant, no Energy, 3,000 cr, and an idle plot rated for
    * Energy and for Food as the row says. The other seats have no money, so they buy no MULE.
    */
-  function develop(idle: Partial<Tile['ground']>, store: { energy: number; posted: number }, more: { plots?: Plot[]; energy?: number } = {}): Outfit | null {
+  /** `store.normal`: Energy's normal (and off-world) price, for a row where Energy is cheap; the store never posts under it. */
+  function develop(idle: Partial<Tile['ground']>, store: { energy: number; posted: number; normal?: number }, more: { plots?: Plot[]; energy?: number } = {}): Outfit | null {
     const state = createGame({ seed: 1, players: ['ai0', 'ai1', 'ai2', 'ai3'].map((id) => ({ id, name: id, isAi: true })) });
     while (state.phase !== 'development') advancePhase(state);
     for (const t of state.tiles) if (t.owner) Object.assign(t, { owner: null, outfit: null });
@@ -204,6 +210,7 @@ describe('C8: a power plant is worth what its output saves', () => {
     }
     state.treasury.salesTax = 0;
     Object.assign(state.store.posted, seat.posted);
+    if (store.normal !== undefined) Object.assign(state.store, { refPrice: { ...state.store.refPrice, energy: store.normal }, offWorld: { ...state.store.offWorld, energy: store.normal } });
     Object.assign(state.store.stock, seat.store);
     for (const p of state.players) {
       for (const good of Object.keys(p.stock) as Good[]) p.stock[good] = p.id === ME ? (seat.stock?.[good] ?? 0) : 0;
@@ -221,7 +228,9 @@ describe('C8: a power plant is worth what its output saves', () => {
   });
 
   it('B-AC-5: with Energy cheap and stocked at the store and a markedly better Food plot, it outfits Food instead', () => {
-    expect(develop({ energy: 2, food: 3 }, { energy: 200, posted: 10 })).toBe('food');
+    // Food rated 4 (makes 6) against Energy rated 2 (makes 4): a rating of 3 no longer outweighs the mines' Energy at the
+    // store's band prices.
+    expect(develop({ energy: 2, food: 4 }, { energy: 200, posted: 10, normal: 10 })).toBe('food');
   });
 
   it('B-AC-5: a seat whose own farm feeds it builds a plant though a farm sells better, for the plots the plant keeps on', () => {
@@ -276,7 +285,7 @@ const shelf = (state: GameState, extra: number) => Math.ceil(state.colonists / U
 
 describe('G-1: a seat keeps itself supplied', () => {
   /** Food posted at 65: the store sells at 72. */
-  const FED: Seat = { plots: PLANTS, posted: { food: 65 }, stock: { water: 20, energy: 20 }, money: 1200 };
+  const FED: Seat = { plots: PLANTS, asks: { food: 72 }, stock: { water: 20, energy: 20 }, money: 1200 };
 
   function hungryNext(seat: Seat, forSale: number): { hungry: boolean; bought: number; money: number } {
     const state = table(seat);
@@ -348,6 +357,7 @@ describe('G-2: a surplus when cheap', () => {
     const obs = observe(view, ME);
     const mind = seatsOf(view, seat)[0]!.mind;
     const before = {
+      view,
       ask: view.auction!.storeSell,
       reference: state.store.refPrice[good],
       belief: outlook(obs, ME, { lookAhead: mind.level.lookAhead }).price(good),
@@ -357,12 +367,12 @@ describe('G-2: a surplus when cheap', () => {
     return { ...before, held: me(state).stock[good] };
   }
   /** What a unit held a month fetches from the store at the belief: after the spread, the 5% tax and its spoilage. */
-  const carried = (good: Good, belief: number) => belief * (1 - PRICE.storeSpread) * 0.95 * (1 - GOOD_CONFIG[good].spoilage);
+  const carried = (view: GameState, good: Good, belief: number) => storeBuyAt(view, good, belief, { exact: true }) * 0.95 * (1 - GOOD_CONFIG[good].spoilage);
 
   it("B-AC-3: with Food's ask at or below its reference and a belief above it after spoilage and tax, the seat holds more than next month's need; at 2× reference, no more", () => {
     const cheap = auctionOf('food', 6);
     expect(cheap.ask, 'the premise: the ask is at or below the reference').toBeLessThanOrEqual(cheap.reference);
-    expect(carried('food', cheap.belief), 'the premise: the belief beats the ask after spoilage and tax').toBeGreaterThan(cheap.ask);
+    expect(carried(cheap.view, 'food', cheap.belief), 'the premise: the belief beats the ask after spoilage and tax').toBeGreaterThan(cheap.ask);
     expect(cheap.held, 'it holds a surplus past what keeps it whole next month').toBeGreaterThan(cheap.need);
 
     const dear = auctionOf('food', 55);
@@ -398,7 +408,7 @@ describe('G-2: a surplus when cheap', () => {
     GOOD_CONFIG.water.spoilage = 1;
     const water = auctionOf('water', 6);
     expect(water.need, 'the premise: it needs no Water').toBe(0);
-    expect(water.belief * (1 - PRICE.storeSpread) * 0.95, 'the premise: unspoilt, a unit would beat the ask').toBeGreaterThan(water.ask);
+    expect(storeBuyAt(water.view, 'water', water.belief, { exact: true }) * 0.95, 'the premise: unspoilt, a unit would beat the ask').toBeGreaterThan(water.ask);
 
     expect(water.held).toBe(0);
   });

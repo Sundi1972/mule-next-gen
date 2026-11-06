@@ -93,7 +93,8 @@ describe('a farm feeds a new factory only with what is left after the household 
 describe("a factory seat bids for its Food at a worthwhile ask (FM-factory-input, option 1)", () => {
   /**
    * Month 1's auction, Food up: ai0 owns one Medicine factory and holds Water and Energy for it, no Food. The store
-   * has no Food to sell (its shelf is the colonists'); ai1 holds 30 Food and nothing else. Medicine posts at `medicine`.
+   * has no Food to sell (its shelf is the colonists'); ai1 holds 30 Food and nothing else. Food posts at 120, a severe
+   * shortage's price, and Medicine at `medicine`.
    */
   function auction(medicine: number): GameState {
     const state = game();
@@ -105,7 +106,7 @@ describe("a factory seat bids for its Food at a worthwhile ask (FM-factory-input
     setStock(state, 'ai3', {}, 0);
     state.store.stock.food = 0;
     state.store.stock.medicine = 0;
-    state.store.posted.food = 300;
+    state.store.posted.food = 120;
     state.store.posted.medicine = medicine;
     startAuction(state);
     expect(state.auction!.good).toBe('food');
@@ -127,7 +128,8 @@ describe("a factory seat bids for its Food at a worthwhile ask (FM-factory-input
   }
 
   it('FM-factory-input-1: its run worth far more than its inputs, it buys enough Food from a player for the factory to run', () => {
-    const state = auction(1500);
+    // Medicine at its ceiling, 12 × 120.
+    const state = auction(1440);
     const obs = observe(state, ME);
     const o = outlook(obs, ME, { lookAhead: true });
     // The arrangement: the run's two Medicine are worth twice and more the 5 Food the factory needs past upkeep (3 eaten,

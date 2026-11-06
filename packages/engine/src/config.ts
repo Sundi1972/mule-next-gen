@@ -10,40 +10,49 @@ import type { Strategy } from './playbook.js';
 export interface GoodConfig {
   /** Credits a unit at normal supply when the game starts: the store's opening price and off-world price; it drifts after. */
   refPrice: number;
-  /** How strongly price reacts to low cover (k in the price formula). */
-  sensitivity: number;
   /** Share lost each month without suitable storage. */
   spoilage: number;
 }
 
 export const GOOD_CONFIG: Record<Good, GoodConfig> = {
-  food: { refPrice: 30, sensitivity: 1.5, spoilage: 0.5 },
-  water: { refPrice: 25, sensitivity: 1.5, spoilage: 0.05 },
-  energy: { refPrice: 25, sensitivity: 1.2, spoilage: 0.25 },
-  smithore: { refPrice: 50, sensitivity: 1.2, spoilage: 0 },
-  crystite: { refPrice: 100, sensitivity: 0.5, spoilage: 0 },
-  rareEarth: { refPrice: 60, sensitivity: 0.8, spoilage: 0 },
-  alloy: { refPrice: 90, sensitivity: 0.8, spoilage: 0 },
-  electronics: { refPrice: 220, sensitivity: 0.5, spoilage: 0 },
-  medicine: { refPrice: 120, sensitivity: 1.0, spoilage: 0.2 },
+  food: { refPrice: 30, spoilage: 0.5 },
+  water: { refPrice: 25, spoilage: 0.05 },
+  energy: { refPrice: 25, spoilage: 0.25 },
+  smithore: { refPrice: 50, spoilage: 0 },
+  crystite: { refPrice: 100, spoilage: 0 },
+  rareEarth: { refPrice: 60, spoilage: 0 },
+  alloy: { refPrice: 90, spoilage: 0 },
+  electronics: { refPrice: 220, spoilage: 0 },
+  medicine: { refPrice: 120, spoilage: 0.2 },
 };
 
 export const PRICE = {
   /** Months of demand the store aims to hold. */
   targetCover: 2,
-  /** Cover below this counts as this, so an empty shelf still gives a finite target. */
-  minCover: 0.25,
-  /** Momentum: the posted price moves toward its target by at most this share up or down a month. */
-  maxRise: 0.5,
-  maxFall: 0.4,
-  /** The store sells this much above and buys this much below its posted price. */
-  storeSpread: 0.1,
+  /** Months of cover from which a good is posted at its normal price, whatever the colony makes. */
+  normalCover: 2,
+  /** Months of cover from which a good is only tight; under it, a shortage. */
+  tightCover: 1,
+  /** Months of cover from which a good is in a shortage; under it, a severe one. */
+  shortCover: 0.5,
+  /** Each band's target as a multiple of the normal price. */
+  band: { tight: 1.25, short: 2, severe: 4 },
+  /** Each band's spread: the store buys `under` below its mid and sells `over` above it. */
+  bandSpread: {
+    offWorld: { under: 0.15, over: 0.15 },
+    normal: { under: 0.15, over: 0.15 },
+    tight: { under: 0.15, over: 0.2 },
+    short: { under: 0.1, over: 0.25 },
+    severe: { under: 0.1, over: 0.25 },
+  },
+  /** The most the mid falls in a month towards a lower target, as a share of last month's mid. */
+  fallStep: 0.25,
+  /** After players paid each other more than the store sold at, the mid moves this share of the way to that price. */
+  tradePull: 0.5,
+  /** No mid is posted above this many times the good's configured reference price. */
+  ceiling: 12,
   /** The store fills its shelves up to this many months of demand. */
   storeMaxCover: 3,
-  /** Food and Water count as short when the store's shelf holds under this many months of the colonists' need, so the price climbs before they go hungry. */
-  shelfCover: 1,
-  /** With that shelf short, the store bids up to this times the posted price for Food and Water, capped so it can still sell to colonists within their budget. */
-  restockPremium: 1.5,
   /** Share of normal spoilage the store suffers, thanks to its cold store and silos. */
   storeSpoilage: 0.25,
   /** How fast the reference price follows what players pay each other (0..1). */

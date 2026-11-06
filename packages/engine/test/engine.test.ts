@@ -12,7 +12,6 @@ import {
   createGame,
   shipPrice,
   startAuction,
-  targetPrice,
   installMule,
   isGameOver,
   monthlyDemand,
@@ -115,29 +114,6 @@ describe('createGame', () => {
 });
 
 describe('prices', () => {
-  it('target high when the shelf is empty and low in a glut', () => {
-    const state = newGame();
-    emptyColony(state, 'food');
-    expect(targetPrice(state, 'food')).toBeGreaterThan(state.store.refPrice.food * 10);
-    state.store.stock.food = 10_000;
-    expect(targetPrice(state, 'food')).toBeLessThan(state.store.refPrice.food / 10);
-  });
-
-  it('move toward the target with momentum, and keep climbing while a shortage lasts', () => {
-    const state = newGame();
-    emptyColony(state, 'food');
-    const ref = state.store.refPrice.food;
-    const start = colonyPrice(state, 'food');
-    // A cheap good climbs by half its reference price, a dear one by half its price.
-    const step = (p: number) => Math.round(p + 0.5 * Math.max(p, ref));
-    postPrices(state);
-    expect(colonyPrice(state, 'food')).toBe(step(start));
-    postPrices(state);
-    expect(colonyPrice(state, 'food')).toBe(step(step(start)));
-    for (let i = 0; i < 6; i++) postPrices(state);
-    expect(colonyPrice(state, 'food')).toBeGreaterThan(ref * 10);
-  });
-
   it('let a good only off-world buyers want cost no more than they pay', () => {
     const state = newGame();
     emptyColony(state, 'crystite');
@@ -152,13 +128,12 @@ describe('prices', () => {
     expect(shipPrice(state, 'food')).toBeNull();
   });
 
-  it('FM-store-spread-float: the store sells at its posted price plus storeSpread, rounded up, in its quotes and at the auction', () => {
-    // [posted, sells at]: 10% more, rounded up, worked by hand. The multiples of 10 are where 1 + 0.1 in floating point
-    // (a hair over 1.1) used to round one credit too high.
+  it("FM-store-spread-float: the store sells at its posted price plus its band's spread, rounded up, in its quotes and at the auction", () => {
+    // [posted, sells at]: 15% more (the normal band), rounded up, worked by hand. 1 + 0.15 in floating point is a hair
+    // under 1.15, so 100 × 1.15 lands a hair under 115, which must still sell at 115.
     const rows = [
-      [50, 55], [90, 99], [100, 110], [110, 121], [170, 187], [180, 198], [190, 209], [200, 220], [210, 231], [220, 242], [230, 253],
-      [330, 363], [340, 374], [350, 385], [360, 396], [370, 407], [380, 418], [390, 429], [400, 440],
-      [7, 8], [25, 28], [33, 37], [51, 57], [99, 109],
+      [100, 115], [180, 207], [200, 230], [220, 253], [340, 391], [360, 414], [380, 437], [400, 460],
+      [7, 9], [25, 29], [33, 38], [50, 58], [51, 59], [90, 104], [99, 114],
     ];
     const seen = rows.map(([posted]) => {
       const state = newGame();
@@ -171,17 +146,6 @@ describe('prices', () => {
       return [posted, quote, state.auction!.good === 'smithore' ? state.auction!.storeSell : 'skipped'];
     });
     expect(seen).toEqual(rows.map(([posted, sells]) => [posted, sells, sells]));
-  });
-
-  it('react more strongly to a Food shortage than an Alloy shortage', () => {
-    const state = newGame();
-    // One month of cover each.
-    const demand = monthlyDemand(state);
-    emptyColony(state, 'food');
-    emptyColony(state, 'alloy');
-    state.store.stock.food = demand.food;
-    state.store.stock.alloy = demand.alloy;
-    expect(targetPrice(state, 'food') / 30).toBeGreaterThan(targetPrice(state, 'alloy') / 90);
   });
 
   it('make MULEs dearer when Alloy is scarce', () => {

@@ -107,6 +107,8 @@ export function cloneForSim(state: GameState): GameState {
       posted: { ...state.store.posted },
       refPrice: { ...state.store.refPrice },
       offWorld: { ...state.store.offWorld },
+      ...(state.store.lastWalk ? { lastWalk: structuredClone(state.store.lastWalk) } : {}),
+      ...(state.store.band ? { band: { ...state.store.band } } : {}),
     },
     treasury: { ...state.treasury, paid: { ...state.treasury.paid } },
     ship: { ...state.ship, goods: state.ship.goods.slice(), hold: { ...state.ship.hold }, bought: { ...state.ship.bought } },
