@@ -57,7 +57,7 @@ th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line
 <main>
 <p class="sub">Colony economy · a proposal for you to approve · nothing is built yet</p>
 <h1>How the colony eats, and what the store charges</h1>
-<p>Four parts that work as one: what each kind of plot uses, what the whole colony needs, how the store prices a good from that, and how colonists feel when they go short. 22 decisions for you are at the end, each with a recommendation.</p>
+<p>Four parts that work as one: what each kind of plot uses, what the whole colony needs, how the store prices a good from that, and how colonists feel when they go short. 30 decisions for you are at the end, each with a recommendation.</p>
 
 <h2>What you'll see at the table</h2>
 <div class="lead">
@@ -303,6 +303,49 @@ th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line
 
 
 
+<h2>Addendum: colony health</h2>
+<p>You asked for colonists who need Medicine, fall sick without it, pass sickness on to each other and to players and crews, a colony health gauge, and Electronics that make colonists happier but are never required. The colonists' side comes first; then what it asks of the store, the players and the crews; then what ten simulated games say.</p>
+<h3>What you'll see at the table</h3>
+<ul>
+<li><b>A health gauge beside the mood:</b> the share of colonists who are well, from 100 down to 60. It never goes lower: at most 4 in 10 colonists are ever sick.</li>
+<li><b>Hunger, thirst and missing Medicine make colonists sick, and sickness spreads.</b> A few fall sick every month anyway; more when they went short; more again the more are already sick.</li>
+<li><b>Fed and treated, they recover.</b> About half the sick get well each month, fewer when Medicine is short. A colony that is fed and has its Medicine settles at about 3 sick in 100.</li>
+<li><b>Sick colonists need more Medicine</b> (up to 40% more), cost the mood up to 4 points of its aim, and slow the colony's growth by up to 2% a month.</li>
+<li><b>Electronics are a comfort, never a need.</b> When the store can give the colonists their Electronics (1 per 50 colonists a month), their mood aims up to 4 points higher. Missing them costs nothing.</li>
+</ul>
+
+<h3>How it works</h3>
+<p>Each month, after the colonists have eaten: new sick = the well share × (1 in 100 + up to 2 in 10 for hunger or thirst + up to 2 in 10 for missing Medicine + 15% of the share already sick). Recovered = half the sick share, cut by up to a third when Medicine is short. The sick share is capped at 4 in 10. Hunger and missing Medicine go through the same tolerance curve as the mood: a tenth short costs nothing.</p>
+<p><b>Why it cannot spiral:</b> contagion (15%) is far below recovery (50%), so whenever the colony is fed and treated, the sick share falls back toward 3 in 100 whatever it was. The ceiling only bounds the worst famine. The first version measured, with contagion equal to recovery, settled at 18 sick in 100 even when fully fed and sat at the ceiling to the end in 4 of 10 games; this one does not.</p>
+
+<h3>Measured: ten simulated games</h3>
+<div class="scroll"><table>
+<thead><tr><th></th><th>Without health</th><th>With health</th></tr></thead>
+<tbody>
+<tr><td>Average sick share</td><td>–</td><td>22 in 100 (peak month 5: 35)</td></tr>
+<tr><td>Months at the ceiling</td><td>–</td><td>34 of 120; 1 game ends there (a famine game)</td></tr>
+<tr><td>Months in Unrest</td><td>17</td><td>15</td></tr>
+<tr><td>Games ending in Unrest</td><td>4</td><td>3</td></tr>
+<tr><td>Colonists at the end (average of 100)</td><td>49</td><td>51</td></tr>
+<tr><td>Months Medicine was short</td><td>65</td><td>64</td></tr>
+</tbody></table></div>
+<p>Sickness stays high only where the shortages last: Medicine was short in 64 of 120 months. In the three games whose shortages eased, the sick share fell from the ceiling to under 10 in 100 within 4 months. Health costs the mood and the colony almost nothing beyond the hunger itself.</p>
+<p><b>Electronics today:</b> the store stocked Electronics for the colonists in 1 month of 120, because nobody makes them; the bonus averaged +0.02. Adding the colonists' Electronics to the store's demand made it stock them, but the price ran to 80,738 credits with no maker.</p>
+
+
+<h3>What it asks of the store, the players and the crews</h3>
+<ul>
+<li><b>Medicine.</b> Colonists take their Medicine from the store at the month's end, free, after Food and Water: one a month for every 50 colonists, half as much again in dirty air, and up to 40% more while many are sick. It counts in what the colony needs, so a Medicine shortage raises its price through the same steps as Food.</li>
+<li><b>Players.</b> A player's chance of falling sick rises with the colony's sick share. Recommended as an addition (up to 10 points more at the worst), not a multiple: as a multiple, dirty air made players sick in 387 of 480 months.</li>
+<li><b>Crews.</b> Once a tenth of the colonists are sick, the same share of each player's crews is sick, and their plots make up to half as much on top of the hunger curve. One Medicine in the player's stock cures that player's crews for the month.</li>
+<li><b>The gauge.</b> Colony health shows beside the colony's mood as the share of colonists who are well. It is a new piece of screen, so its look needs a mock before it is built.</li>
+<li><b>Electronics.</b> Colonists want one a month for every 50 of them; when they get it the mood's aim rises, and when they don't, nothing is lost. It counts in what the colony needs, so its price climbs to four times normal (880) while nobody makes it. The ceiling stays at twelve times (2,640) as a safety rail only. At 880 the store pays 792 for a unit whose inputs (Rare earth, Alloy, Energy) cost about 175 at normal prices, or about 700 even if all three are short: a works pays well.</li>
+</ul>
+<h3>Ten simulated games</h3>
+<div class="scroll"><table><thead><tr><th>Ten games, 120 months</th><th>Without health</th><th>With health</th><th>+ Electronics wanted</th><th>Dirty air</th><th>Medicine supplied in full</th></tr></thead><tbody><tr><td>Months colonists lacked Medicine</td><td>—</td><td>110</td><td>115</td><td>119</td><td>—</td></tr><tr><td>Average share of colonists sick</td><td>—</td><td>36%</td><td>36%</td><td>37%</td><td>22%</td></tr><tr><td>Months at the 40% ceiling</td><td>—</td><td>92</td><td>97</td><td>103</td><td>0</td></tr><tr><td>Player-months sick (of 480)</td><td>22</td><td>70</td><td>76</td><td>387</td><td>47</td></tr><tr><td>Food the colony made a month</td><td>13.2</td><td>7.9</td><td>6.6</td><td>3.7</td><td>11.4</td></tr><tr><td>Colonists left of 100</td><td>72</td><td>55</td><td>52</td><td>48</td><td>71</td></tr><tr><td>Electronics store price, highest</td><td>373</td><td>373</td><td>880</td><td>373</td><td>373</td></tr></tbody></table></div>
+<p><b>What it says.</b> The rules cannot run away: with Medicine supplied in full the sick share never reaches the ceiling and every bad spell clears within two to seven months. But today's colony cannot supply Medicine: colonists got about 0.4 of the 2.1 they needed each month, so the sick share sat at its ceiling in most months, sick crews cut Food from 13.2 to 7.9 a month, and 55 colonists were left instead of 72. <b>Medicine supply has to come first.</b></p>
+<p><b>Did the high Electronics price make anyone build Electronics?</b> Two computer players put up an Electronics works as the price rose, but neither became a working chain: in all ten games nobody mined Rare earth or made Alloy, so the works ran for one month in total. The computer players only build a works when they already hold its inputs, and nothing asks for Rare earth or Alloy except a works that already stands. So the price at the end of the chain cannot pull the chain on its own; the inputs need the same signal (decision below). That is also a finding for the computer players' team.</p>
+
 <h2>Before and after: ten simulated games</h2>
 <p>Ten simulated games, four computer players, twelve months each, today's rules against the whole proposal (the use table, the colonists' full need, colonists eating free, and the new store prices).</p>
 <h3>Highest Food price in any month</h3>
@@ -450,6 +493,45 @@ th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line
 <li><b>An off-world grant pays the store for what the colonists take.</b> <i>For:</i> keeps the store's books as they were. <i>Against:</i> money that nobody sees, for no effect.</li>
 </ul>
 <p class="rec"><b>Recommended: nothing replaces them.</b></p>
+</div>
+<div class="decision"><h3>23 · Colony health: switch it on now, or with the Medicine supply?</h3>
+<ul><li><b>With the Medicine supply</b>, once a simulation shows colonists short of Medicine in fewer than 40 months of 120 (today 110). <i>For:</i> the rules only make sense when Medicine can be had.</li><li><b>Now.</b> <i>Against:</i> measured: most months at the ceiling, Food down by a third, 55 colonists left of 100.</li></ul>
+<p class="rec"><b>Recommended: with the Medicine supply</b>, like the hunger rules (decision 1).</p></div>
+<div class="decision"><h3>24 · How strongly does colony sickness reach players?</h3>
+<ul><li><b>An addition</b>: up to 10 points more chance at the worst. <i>For:</i> stays under a third even in dirty air.</li><li><b>A multiple</b> (×1 to ×4). <i>Against:</i> players sick in 387 of 480 months in dirty air.</li></ul>
+<p class="rec"><b>Recommended: an addition.</b></p></div>
+<div class="decision"><h3>25 · Sick crews</h3>
+<ul><li><b>From a fifth of the colony sick</b>, and the computer players learn that one Medicine cures their crews. <i>For:</i> sickness reaches production without the loop measured below a fifth.</li><li><b>From a tenth</b>, as measured. <i>Against:</i> sick crews cut Food, hungry colonists fall sick: a loop.</li><li><b>No sick crews.</b> <i>Against:</i> Medicine matters less to players.</li></ul>
+<p class="rec"><b>Recommended: from a fifth</b>.</p></div>
+<div class="decision"><h3>26 · Colony health in the score?</h3>
+<ul><li><b>No separate term</b>: health already reaches the score through the mood and the number of colonists.</li><li><b>A small term.</b> <i>Against:</i> counts the same thing twice.</li></ul>
+<p class="rec"><b>Recommended: no separate term.</b></p></div>
+<div class="decision"><h3>27 · Does the Electronics demand reach its inputs?</h3>
+<ul><li><b>Yes</b>: the colonists' Electronics want also counts as demand for Rare earth and Alloy, so their prices rise too and mines and smelters pay. <i>For:</i> the signal reaches the start of the chain.</li><li><b>No</b>, as measured. <i>Against:</i> the 880 price changed nothing.</li></ul>
+<p class="rec"><b>Recommended: yes.</b> The ceiling stays only as a safety rail, as you ruled.</p></div>
+<div class="decision">
+<h3>28 · Sickness with a ceiling and recovery stronger than contagion</h3>
+<ul>
+<li><b>As above: at most 4 in 10 sick; contagion 15%, recovery 50%.</b> <i>For:</i> measured, it never runs away; sickness follows the shortages and clears when they clear. <i>Against:</i> six numbers to tune.</li>
+<li><b>Stronger contagion</b> (as strong as recovery). <i>Against:</i> measured, it never clears: 18 in 100 sick even when fully fed, and stuck at the ceiling in 4 games.</li>
+</ul>
+<p class="rec"><b>Recommended: as above.</b></p>
+</div>
+<div class="decision">
+<h3>29 · How much health weighs on the mood</h3>
+<ul>
+<li><b>Up to 4 points of the mood's aim at the ceiling</b>, no sudden blow. <i>For:</i> the hunger already lands its blow; sickness is the slow after-effect. Measured: no worse than without health. <i>Against:</i> a sick colony is not much unhappier than a hungry one.</li>
+<li><b>Up to 8 points.</b> <i>Against:</i> measured in the first version, together with strong contagion, it pushed one more game into Unrest and cost 14 colonists a game.</li>
+</ul>
+<p class="rec"><b>Recommended: up to 4.</b></p>
+</div>
+<div class="decision">
+<h3>30 · The Electronics bonus: a comfort, sized below the hunger</h3>
+<ul>
+<li><b>Up to +4 to the mood's aim when met, never a penalty.</b> About what one month at half rations costs, so comfort never outweighs hunger. <i>For:</i> it gives a reason to make Electronics beyond the colony's buildings. <i>Against:</i> today it almost never applies, because nobody makes Electronics.</li>
+<li><b>Whether the store asks for the colonists' Electronics</b> is the store's side (WS5): asking makes it stock them, but with no maker the price runs away (80,738 measured).</li>
+</ul>
+<p class="rec"><b>Recommended: +4, never a penalty.</b> Whether the store asks for it goes with WS5's pricing ceiling.</p>
 </div>
 </main>
 </body>

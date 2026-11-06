@@ -272,6 +272,15 @@ const readIf = (f) => (existsSync(here(f)) ? readFileSync(here(f), 'utf8') : nul
 const BAL = JSON.parse(readIf('2026-11-06-colony-economy.balance.json') ?? 'null');
 const CREW = JSON.parse(readIf('2026-11-06-colony-economy.crew.json') ?? 'null');
 const ws7Chain = readIf('shortage-chain-colony.fragment.html');
+const HEALTH = JSON.parse(readIf('2026-11-06-colony-economy.health.json') ?? 'null');
+const ws7Health = readIf('colony-health-colonists.fragment.html');
+function ws7HealthParts() {
+  if (!ws7Health) return { body: '<p class="pending">The colonists’ part is on its way.</p>', decisions: [] };
+  const parts = ws7Health.replace(/<!--[\s\S]*?-->/g, '').replace(/<\/?section[^>]*>/g, '').replace(/<h2[^>]*>[\s\S]*?<\/h2>/g, '').split(/(?=<h3>)/);
+  const keep = parts.filter((p) => p.startsWith('<h3>') && !/Decisions|^<h3>\d/.test(p.slice(0, p.indexOf('</h3>'))));
+  return { body: keep.join(''), decisions: [...ws7Health.matchAll(/<div class="decision">[\s\S]*?<\/div>/g)].map((m) => m[0]) };
+}
+const tableOf = (t) => `<div class="scroll"><table><thead><tr>${t.head.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody>${t.rows.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
 
 function allGoodsFlow() {
   const C1 = 16, C2 = 262, C3 = 512, BW = 150, BH = 40;
@@ -403,6 +412,24 @@ const chainDecisions = [
 <ul><li><b>Not yet.</b> The simulations never got the air dirty, so sickness is untested; decide it when it can be measured.</li><li><b>Yes</b>: hunger raises the existing sickness odds by up to half. <i>For:</i> one more link in the chain. <i>Against:</i> untested; it stacks on the slower walk.</li></ul>
 <p class="rec"><b>Recommended: not yet.</b></p></div>`,
 ];
+const ws7h = ws7HealthParts();
+const healthDecisions = [
+  `<div class="decision"><h3>Colony health: switch it on now, or with the Medicine supply?</h3>
+<ul><li><b>With the Medicine supply</b>, once a simulation shows colonists short of Medicine in fewer than 40 months of 120 (today 110). <i>For:</i> the rules only make sense when Medicine can be had. <li><b>Now.</b> <i>Against:</i> measured: most months at the ceiling, Food down by a third, 55 colonists left of 100.</li></ul>
+<p class="rec"><b>Recommended: with the Medicine supply</b>, like the hunger rules (decision 1).</p></div>`,
+  `<div class="decision"><h3>How strongly does colony sickness reach players?</h3>
+<ul><li><b>An addition</b>: up to 10 points more chance at the worst. <i>For:</i> stays under a third even in dirty air.</li><li><b>A multiple</b> (×1 to ×4). <i>Against:</i> players sick in 387 of 480 months in dirty air.</li></ul>
+<p class="rec"><b>Recommended: an addition.</b></p></div>`,
+  `<div class="decision"><h3>Sick crews</h3>
+<ul><li><b>From a fifth of the colony sick</b>, and the computer players learn that one Medicine cures their crews. <i>For:</i> sickness reaches production without the loop measured below a fifth. <li><b>From a tenth</b>, as measured. <i>Against:</i> sick crews cut Food, hungry colonists fall sick: a loop. <li><b>No sick crews.</b> <i>Against:</i> Medicine matters less to players.</li></ul>
+<p class="rec"><b>Recommended: from a fifth</b>.</p></div>`,
+  `<div class="decision"><h3>Colony health in the score?</h3>
+<ul><li><b>No separate term</b>: health already reaches the score through the mood and the number of colonists.</li><li><b>A small term.</b> <i>Against:</i> counts the same thing twice.</li></ul>
+<p class="rec"><b>Recommended: no separate term.</b></p></div>`,
+  `<div class="decision"><h3>Does the Electronics demand reach its inputs?</h3>
+<ul><li><b>Yes</b>: the colonists' Electronics want also counts as demand for Rare earth and Alloy, so their prices rise too and mines and smelters pay. <i>For:</i> the signal reaches the start of the chain. <li><b>No</b>, as measured. <i>Against:</i> the 880 price changed nothing.</li></ul>
+<p class="rec"><b>Recommended: yes.</b> The ceiling stays only as a safety rail, as you ruled.</p></div>`,
+].map((d) => d.replace(/ <li>/g, '</li><li>'));
 const decisions = [
   ws7Decisions[d6],
   ...chainDecisions,
@@ -429,6 +456,8 @@ const decisions = [
 <p class="rec"><b>Recommended: halfway.</b> If the store had sold out while they traded, it opens next month selling at what they paid, as agreed yesterday.</p></div>`,
   ...ws7ChainDecisions,
   ...ws7Decisions.filter((_, i) => i !== d6),
+  ...healthDecisions,
+  ...ws7h.decisions,
 ].map((d, i) => d.replace(/<h3>(?:\d+\s*·\s*)?/, `<h3>${i + 1} · `));
 
 const html = `<!doctype html>
@@ -568,6 +597,22 @@ ${ws7Example}
 <h3>How often each mood shows up</h3>
 ${moodBars()}
 ${ws7Measure}
+
+<h2>Addendum: colony health</h2>
+<p>You asked for colonists who need Medicine, fall sick without it, pass sickness on to each other and to players and crews, a colony health gauge, and Electronics that make colonists happier but are never required. The colonists' side comes first; then what it asks of the store, the players and the crews; then what ten simulated games say.</p>
+${ws7h.body}
+<h3>What it asks of the store, the players and the crews</h3>
+<ul>
+<li><b>Medicine.</b> Colonists take their Medicine from the store at the month's end, free, after Food and Water: one a month for every 50 colonists, half as much again in dirty air, and up to 40% more while many are sick. It counts in what the colony needs, so a Medicine shortage raises its price through the same steps as Food.</li>
+<li><b>Players.</b> A player's chance of falling sick rises with the colony's sick share. Recommended as an addition (up to 10 points more at the worst), not a multiple: as a multiple, dirty air made players sick in 387 of 480 months.</li>
+<li><b>Crews.</b> Once a tenth of the colonists are sick, the same share of each player's crews is sick, and their plots make up to half as much on top of the hunger curve. One Medicine in the player's stock cures that player's crews for the month.</li>
+<li><b>The gauge.</b> Colony health shows beside the colony's mood as the share of colonists who are well. It is a new piece of screen, so its look needs a mock before it is built.</li>
+<li><b>Electronics.</b> Colonists want one a month for every 50 of them; when they get it the mood's aim rises, and when they don't, nothing is lost. It counts in what the colony needs, so its price climbs to four times normal (880) while nobody makes it. The ceiling stays at twelve times (2,640) as a safety rail only. At 880 the store pays 792 for a unit whose inputs (Rare earth, Alloy, Energy) cost about 175 at normal prices, or about 700 even if all three are short: a works pays well.</li>
+</ul>
+<h3>Ten simulated games</h3>
+${HEALTH ? tableOf(HEALTH) : '<p class="pending">Running.</p>'}
+<p><b>What it says.</b> The rules cannot run away: with Medicine supplied in full the sick share never reaches the ceiling and every bad spell clears within two to seven months. But today's colony cannot supply Medicine: colonists got about 0.4 of the 2.1 they needed each month, so the sick share sat at its ceiling in most months, sick crews cut Food from 13.2 to 7.9 a month, and 55 colonists were left instead of 72. <b>Medicine supply has to come first.</b></p>
+<p><b>Did the high Electronics price make anyone build Electronics?</b> Two computer players put up an Electronics works as the price rose, but neither became a working chain: in all ten games nobody mined Rare earth or made Alloy, so the works ran for one month in total. The computer players only build a works when they already hold its inputs, and nothing asks for Rare earth or Alloy except a works that already stands. So the price at the end of the chain cannot pull the chain on its own; the inputs need the same signal (decision below). That is also a finding for the computer players' team.</p>
 
 <h2>Before and after: ten simulated games</h2>
 ${simBlock}
