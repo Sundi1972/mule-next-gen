@@ -268,6 +268,15 @@ Every handoff carries, verbatim:
 - [ ] **Step 1: Implement C5 per spec §1 C5** (6 s, one at a time, a tap closes it, ONLY YOU) **and C8 per spec §1 C8**.
 - [ ] **Step 2: Run** `cd apps/web && npx vitest run` → green; the smoke → B-AC-3 printed. **Step 3: Commit** `feat(web): C5 Analyse says what it found; C8 Look shows the dots first (verifies B-AC-3)`.
 
+### Task 3.4b: C4 on the laptop, and PR-2's review follow-ups (PR-3b)
+
+**Spec:** §1 C4 (PM ruling 6 Nov: the laptop's walking screen gets the Plots chip, as the table chat precedent, phone and laptop alike) · **ux:** `#dev-plots`
+
+**Files:** Modify `apps/web/src/phone/arcade/` (`LaptopArcade`'s status), `plotInfo.tsx`, `hub/tools.tsx`, `hub/today.tsx`, `arcade/Develop.tsx`, `arcade/plots.ts` (`suitsLine`), `arcade/parts.tsx` (PlotCard words); `apps/web/e2e/plot-info-steps.ts`
+
+- [ ] **Step 1, red:** B-AC-2's walking half also on the laptop (the chip opens the list; the clock runs). Its negative first asserts another seat owns a plot. The second room's page joins smoke's pageerror collector.
+- [ ] **Step 2:** the laptop chip; PR-2's review minors: My plots tab `locked`; one shared list header and empty state; "nothing worth working" in `suitsLine` and PlotCard; the walking panel's rows not inert toggle buttons; the 844 left side room measured with chat lines (no clipping). **Commit** `feat(web): C4 the Plots chip on the laptop; PR-2's review follow-ups`.
+
 ### Task 3.5: PR-3b merge gate
 
 - [ ] B-AC-3 and T-AC-4 green, test-first; `pnpm typecheck && pnpm test`, smoke green; rulebook (Analyse card, gem, 0–3) Designed → built, index rebuilt; open-designs entries dropped by hand (PM named edit); one independent review once CI is green. Then Heiko's table check of UBER-AC-3 (five testers), through the PM.
