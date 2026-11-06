@@ -113,7 +113,12 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const SPECS: SeatSpec[] = (['trader', 'aggressive', 'cautious', 'saboteur'] as const).map((persona) => ({ persona, level: 'trader' }));
+/**
+ * Each seat picks the species the built cases were measured with: the default turns with the seed (FM-species-by-chair),
+ * and a seat's species moves its plans from month 1's planning on (a Mollox's mines, a Gearling's prices) and its route.
+ */
+const BUILT_SPECIES = ['zipwing', 'bramblet', 'gearling', 'mollox'] as const;
+const SPECS: SeatSpec[] = (['trader', 'aggressive', 'cautious', 'saboteur'] as const).map((persona, i) => ({ persona, level: 'trader', species: BUILT_SPECIES[i] }));
 const SEED = 3;
 const MONTHS = 2;
 
@@ -154,15 +159,6 @@ interface TableOptions {
   edit?: (state: GameState) => void;
 }
 
-/**
- * The species the built cases were measured with, by seat, picked as month 1's planning ends: the default turns with the
- * seed (FM-species-by-chair), and a seat's species moves its route (a Mollox analyses in half the time).
- */
-const BUILT_SPECIES = ['zipwing', 'bramblet', 'gearling', 'mollox'] as const;
-function pinSpecies(state: GameState): void {
-  state.players.forEach((p, i) => (p.species = BUILT_SPECIES[i]!));
-}
-
 /** One play.ts game of SPECS on SEED, each seat's view of it collected as each phase ends. */
 function playTable(o: TableOptions = {}): Table {
   const written: Playbook[] = [];
@@ -197,7 +193,6 @@ function playTable(o: TableOptions = {}): Table {
     politics: false,
     maxMonths: o.months ?? MONTHS,
     onPhase: (state) => {
-      pinSpecies(state);
       o.edit?.(state);
       if (state.phase !== 'development' && state.phase !== 'auction') return;
       if (state.phase === 'auction') auctionEnds.set(state.month, stableJson(state));
