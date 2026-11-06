@@ -1,4 +1,5 @@
 import { document, FakeElement } from './fake-dom';
+import { COLONY } from '@mule/engine';
 import type { ColonyView, CouncilView, ElectionView, MuleView, MyView, PlayerView, PoliticsView, TableView, TileView } from '@mule/protocol';
 import type { Slot } from '@mule/ui';
 import { act, createElement } from 'react';
@@ -32,6 +33,8 @@ beforeAll(async () => {
   (FakeElement.prototype as unknown as { getBoundingClientRect?: () => object }).getBoundingClientRect ??= () => ({ x: 0, y: 0, top: 0, left: 0, width: 844, height: 390, right: 844, bottom: 390 });
 });
 
+/** The share of its output a struck plot makes, as the engine words it: "20%" at 0.2. */
+const SHARE = `${Math.round(COLONY.strike.output * 100)}%`;
 const NO_GOODS = { food: 0, water: 0, energy: 0, smithore: 0, crystite: 0, rareEarth: 0, alloy: 0, electronics: 0, medicine: 0 };
 const PLAYERS: PlayerView[] = [aPlayer({ id: 's1', name: 'Lena', slot: 0 }), aPlayer({ id: 's2', name: 'Kai', slot: 1 }), aPlayer({ id: 's3', name: 'Ossa', slot: 2 })];
 const tile = (x: number, y: number, owner: string | null, outfit: TileView['outfit']): TileView => ({ x, y, terrain: 'plains', peaks: 0, owner, outfit, pollution: 0, filter: false });
@@ -168,7 +171,7 @@ describe("the general strike on the phones (C37)", () => {
   it("B-AC-37-2: the Governor's Now card names the strike, its cost and the fund before and after, and Pay sends payStrike", () => {
     mount(view(UNPAID));
     expect(text('strike-now')).toContain('General strike on Food');
-    expect(text('unpaid-cost')).toBe('Unpaid: Food plots make 20% this month.');
+    expect(text('unpaid-cost')).toBe(`Unpaid: Food plots make ${SHARE} this month.`);
     expect(text('fund-line')).toBe('Fund 2,340 → 2,100 cr');
     expect(text('pay-strike')).toBe('Pay the strikers 240 cr');
     expect(findTestid('after-votes')).toBeUndefined();

@@ -17,9 +17,16 @@ const ALLOWED = new Set([
   'WOLVES',
   // The production show's lengths (ws6-ux AM-19, WS6's ruling): its timeline's numbers, the server's own.
   'PRODUCTION_SHOW',
+  // The lobby cards' numbers (WS6 ruling, 6 Nov): species.ts words its perks from them, never restating them.
+  'SPECIES_PERK',
   // Types: exactly those Store.tsx draws the plan with.
   'HallPlace',
   'HallRect',
+  // The event show's vocabulary is the engine's: types, not rules (AM-17).
+  'EventKey',
+  'EventEffect',
+  // The strike chip's share (WS6 ruling, 6 Nov): the engine's COLONY.strike.output, read, never computed here.
+  'COLONY',
 ]);
 
 const SRC = fileURLToPath(new URL('../src', import.meta.url));

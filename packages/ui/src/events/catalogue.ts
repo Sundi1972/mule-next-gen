@@ -1,9 +1,14 @@
+import { COLONY } from '@mule/engine';
 import type { ShowEventKey } from './types';
 
 /**
  * The events of the M.U.L.E. Event Catalogue as the show draws them: how each one moves, and what it looks like in
  * words. Display data only; the rules are the engine's.
  */
+
+/** A share as the engine words it: 0.2 → "20%". */
+// Here, not in copy.ts: copy.ts reaches this module through frame and timing, so an entry below could not call it at load.
+export const percent = (share: number) => `${Math.round(share * 100)}%`;
 
 /**
  * The motion family a show draws. Several events share one; the event only says which, and where.
@@ -59,7 +64,7 @@ export const EVENT_ENTRY = {
   packageFromHome: { key: 'packageFromHome', motion: 'ledger', look: 'A parcel drops into the player’s slot and opens: +3 Food.' },
   // The colony's mood events (C26), the approved mock's (design/mocks/ws8-colony-events).
   festival: { key: 'festival', motion: 'colony', look: 'Bunting goes up over the colony and a crowd dances at the store; the mood and prestige chips come up.' },
-  generalStrike: { key: 'generalStrike', motion: 'plot', look: 'Strikers with placards walk out of the store to every plot of the struck good; each plot says STRIKE · 20%.' },
+  generalStrike: { key: 'generalStrike', motion: 'plot', look: `Strikers with placards walk out of the store to every plot of the struck good; each plot says STRIKE · ${percent(COLONY.strike.output)}.` },
   riot: { key: 'riot', motion: 'store', look: 'An angry crowd at the store; a third of each shelf goes, and one colony object is damaged.' },
   emigrationWave: { key: 'emigrationWave', motion: 'colony', look: 'Colonists leave for good; the colony’s head count ticks down.' },
   volunteerCleanup: { key: 'volunteerCleanup', motion: 'colony', look: 'Volunteers clean up; the air gauge drops.' },

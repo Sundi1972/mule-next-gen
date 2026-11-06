@@ -18,15 +18,15 @@ const PAST_THE_FOOT = String.raw`(() => {
   for (const el of stage.querySelectorAll('*')) {
     const b = el.getBoundingClientRect();
     if (b.width === 0 || b.height === 0 || !el.checkVisibility({ opacityProperty: true, visibilityProperty: true })) continue;
-    foot = Math.max(foot, b.bottom);
-    if (b.bottom <= vh + 1) continue;
-    // Below the foot but inside a box that clips it is the clipping box's to judge, and that box is read too.
+    // Below a box that clips it is the clipping box's to judge, and that box is read too; nor is it drawn, so it is no foot.
     let clipped = false;
     for (let a = el.parentElement; a && a !== stage.parentElement; a = a.parentElement) {
       const cs = getComputedStyle(a);
-      if (cs.overflowY !== 'visible' && a.getBoundingClientRect().bottom <= vh + 1) { clipped = true; break; }
+      if (cs.overflowY !== 'visible' && b.bottom > a.getBoundingClientRect().bottom + 1) { clipped = true; break; }
     }
     if (clipped) continue;
+    foot = Math.max(foot, b.bottom);
+    if (b.bottom <= vh + 1) continue;
     const id = el.getAttribute('data-testid') || el.tagName.toLowerCase() + ' "' + (el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 30) + '"';
     past.push(id + ' to y ' + b.bottom.toFixed(1));
   }
@@ -87,6 +87,37 @@ export async function theTvTitleIsClear(tv: Page, screen: string): Promise<strin
   return `"${read.title}" clear of the header's right, ending at x ${read.right.toFixed(0)}`;
 }
 
+/** Kept a string, as PAST_THE_FOOT: in the shown TV header, what runs past the screen's right edge, and the colony gauges' row. */
+const HEADER_ON_SCREEN = String.raw`(() => {
+  const header = [...document.querySelectorAll('[data-testid=tv-header]')].find((h) => h.checkVisibility());
+  if (!header) return null;
+  const vw = window.innerWidth;
+  const off = [...header.querySelectorAll('*')].filter((c) => c.checkVisibility() && c.getBoundingClientRect().right > vw + 1);
+  // The outermost only: a clock past the edge names the clock, not each of its digits.
+  const named = off.filter((c) => !off.includes(c.parentElement)).map((c) => (c.getAttribute('data-testid') || c.tagName.toLowerCase() + ' "' + (c.textContent || '').trim().slice(0, 20) + '"') + ' to x ' + Math.round(c.getBoundingClientRect().right));
+  const gauges = header.parentElement.querySelector(':scope > [data-testid=colony-gauges]');
+  const crowd = [...header.querySelectorAll('[role=timer], [data-testid=ready-count], [data-testid=strike-badge]')].filter((c) => c.checkVisibility()).map((c) => c.getAttribute('data-testid') || 'clock');
+  const beside = [...header.querySelectorAll('[data-testid=colony-gauges]')].some((g) => g.checkVisibility());
+  return { off: named, vw, crowd, ownRow: !!gauges && gauges.checkVisibility(), drawn: beside || (!!gauges && gauges.checkVisibility()) };
+})()`;
+
+/**
+ * GAUGES-ROW (PM ruling 5 Nov): a TV header with a clock, the strike badge or a ready count has nothing past the screen's
+ * right edge; with the colony on, its gauges are drawn, on their own row under the title (beside it on a screen that
+ * keeps them there, `beside`, as development does); and nothing runs past the foot.
+ */
+export async function theTvHeaderStaysOnScreen(tv: Page, screen: string, colony: boolean, beside = false): Promise<string> {
+  const read = (await tv.evaluate(HEADER_ON_SCREEN)) as { off: string[]; vw: number; crowd: string[]; ownRow: boolean; drawn: boolean } | null;
+  check(read !== null, `TV-FIT: the ${screen} TV shows its header`);
+  check(read.off.length === 0, `GAUGES-ROW: on the ${screen} TV the header runs past the right edge (x ${read.vw}): ${read.off.join(', ')}`);
+  const crowded = read.crowd.length > 0;
+  if (colony) check(read.drawn, `GAUGES-ROW: the ${screen} TV draws the colony's gauges`);
+  if (colony) check(read.ownRow === (crowded && !beside), `GAUGES-ROW: on the ${screen} TV, with ${crowded ? read.crowd.join(' and ') : 'no clock, badge or ready count'} in the header, the colony's gauges sit ${crowded && !beside ? 'on their own row' : 'beside the title'}`);
+  // The row costs height: the screen's foot is read too.
+  const foot = await nothingPastTheFoot(tv, screen);
+  return `${crowded ? read.crowd.join(' and ') : 'no clock'}, nothing past x ${read.vw}${colony ? `, the gauges ${read.ownRow ? 'on their own row' : 'beside the title'}` : ''}, the foot at y ${foot.toFixed(0)}`;
+}
+
 /** Kept a string, as PAST_THE_FOOT: the ready chip, the gauges it may sit on, and how many lines the title takes. */
 const HEADER = String.raw`(() => {
   // The screen's own chip, gauges and title: the shown ones, in the one TV screen that holds the chip.
@@ -119,6 +150,34 @@ export async function theTvHeaderFits(tv: Page, screen: string): Promise<string>
   await shownWhole(tv, screen, ['[data-testid=tv-ready-list] > li']);
   const foot = await nothingPastTheFoot(tv, screen);
   return `"${read.title}" on one line and clear of the header's right, the chip clear of ${read.gauges} gauges, the foot at y ${foot.toFixed(0)}`;
+}
+
+/**
+ * TV-FIT month end (PM ruling C, 5 Nov): the header fits as theTvHeaderFits reads it; with two chat lines said, the
+ * ticker shows only the newest; and the colony's gauges sit in the screen's body, beside the league, not in a row of
+ * their own under the header, so the league and the colony's score keep the height. Logs the body's scale.
+ */
+export async function theMonthEndTvFits(tv: Page, server: MuleServer, code: string): Promise<string> {
+  const header = await theTvHeaderFits(tv, 'month end');
+  const room = server.registry.get(code);
+  check(room, `a room ${code} on the server`);
+  const end = tv.getByTestId('tv-monthend');
+  const host = (room as unknown as { game: { state: { players: { id: string }[] } } }).game.state.players[0]!.id;
+  const said = ['Who sold the Food?', 'Not me, I ate it.'];
+  for (const text of said) (room as unknown as { deliver(from: string, text: string): void }).deliver(host, text);
+  await end.getByTestId('chat-ticker').getByText(said[1]!).waitFor({ timeout: 2_000 });
+  const lines = await end.locator('[data-testid=chat-ticker] [data-testid^=chat-line-]').count();
+  check(lines === 1, `TV-FIT: the month end's ticker shows only the newest chat line, got ${lines}`);
+  const gauges = await end.getByTestId('colony-gauges').count();
+  if (gauges > 0) {
+    const inBody = await end.locator('[data-fit] [data-testid=colony-gauges]').count();
+    check(inBody === 1, "TV-FIT: the month end's colony gauges sit in its body beside the league, not in a row under the header");
+  }
+  // The worth rule is one truncated line; the table reads it whole, donations and all, or the cut falls on the rule itself.
+  const rule = await end.getByTestId('worth-rule').evaluate((p) => ({ text: (p as HTMLElement).innerText, cut: p.scrollWidth > p.clientWidth }));
+  check(!rule.cut, `TV-FIT: the month end's worth rule fits its one line, got it cut: "${rule.text}"`);
+  const scale = Number(await end.locator('[data-fit]').getAttribute('data-fit'));
+  return `${header}; the worth rule whole on one line; one chat line of ${said.length}, the gauges ${gauges > 0 ? 'beside the league' : 'not drawn (no colony)'}, the body at scale ${scale.toFixed(3)} with ${await end.locator('[data-testid^=league-row-]').count()} league rows`;
 }
 
 /**

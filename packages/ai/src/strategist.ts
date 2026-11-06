@@ -21,6 +21,7 @@ import {
   shipPrice,
   storeForSale,
   storePaysFor,
+  storeOnStrike,
   storeSellLine,
   tileIndex,
   walkSeconds,
@@ -420,6 +421,7 @@ export function developDecision(obs: GameState, mind: Mind, mulesSoFar: number, 
       const tooFar = walk ? walkVeto(walk, walking, back) : null;
       let veto: string | null = null;
       if (obs.store.mules <= 0) veto = 'the corral is empty';
+      else if (storeOnStrike(obs)) veto = 'the store is on strike';
       else if (mulesSoFar >= mind.level.mulesPerMonth) veto = `already led ${mulesSoFar} MULEs out this month`;
       else if (tooFar) veto = tooFar;
       else if (cashAfter < 0) veto = `it costs ${cr(cost)}, more than the ${cr(p.money)} on hand`;
@@ -551,7 +553,7 @@ export function goodPlan(obs: GameState, mind: Mind, good: Good): GoodPlan {
       values.buy[k] = Math.max(values.buy[k] ?? 0, ask!);
       values.keep[k] = Infinity;
     }
-    // Otherwise it keeps the screen's need, what upkeep eats or its plots burn, whatever its own plots may make: Water
+    // Otherwise it keeps its need before spoilage, what upkeep eats or its plots burn, whatever its own plots may make: Water
     // only for a seat with a farm to water, as wholeNextMonth counts it.
     const floor = mustHold > 0 ? mustHold : whole > 0 ? values.need : 0;
     for (let k = 0; k < floor; k++) values.keep[k] = Infinity;
@@ -688,7 +690,11 @@ export function tradeDecision(obs: GameState, mind: Mind, plan: GoodPlan): Short
   if (upTo > h) {
     const needOnly = Math.min(upTo, Math.max(h, v.block, plan.mustHold));
     const speculative = upTo > Math.max(h, v.block, plan.mustHold);
-    buyTo(upTo, `Buy ${upTo - h} ${GOOD_NAME[good]}${speculative ? ' (some to resell)' : ''}`, 'buy', speculative ? sure.resale : sure.need, speculative ? 'resale next month is a forecast' : 'it needs them');
+    // With the model on, a value from unitValues already prices its resale risk (RULE-4), so a surplus buy is no less
+    // sure; a corner or spite premium is intent the model doesn't price, and keeps the discount. See AM-7.
+    const modelOnly = AI_VALUE.unit && plan.corner.units === 0 && plan.spiteBid === 0;
+    const resale = speculative ? (modelOnly ? [sure.need, 'its value counts the resale risk'] as const : [sure.resale, 'resale next month is a forecast'] as const) : null;
+    buyTo(upTo, `Buy ${upTo - h} ${GOOD_NAME[good]}${speculative ? ' (some to resell)' : ''}`, 'buy', resale?.[0] ?? sure.need, resale?.[1] ?? 'it needs them');
     if (speculative && needOnly > h) buyTo(needOnly, `Buy ${needOnly - h} ${GOOD_NAME[good]}, just what I need`, 'buy:need', sure.need, 'it needs them');
   }
 
