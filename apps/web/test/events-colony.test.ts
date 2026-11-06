@@ -72,7 +72,7 @@ const STRIKE = event('generalStrike', 'planning', {
   kind: 'colony',
   origin: { ...FOOD_PLOTS[0]! },
   title: 'General strike',
-  line: 'This month every Food plot makes 20%, unless the Governor pays the strikers 240 cr from the colony fund.',
+  line: `This month every Food plot makes ${STRIKE_SHARE}, unless the Governor pays the strikers 240 cr from the colony fund.`,
   hits: FOOD_PLOTS.map((p, order) => ({ ...p, order, delta: 0 })),
 });
 const riot = (object: 'park' | 'hospital') =>
@@ -269,7 +269,7 @@ describe('B-AC-26-4: the planning strike announcement on the TV', () => {
 });
 
 describe('B-AC-26-4: the unpaid strike plays in production on the TV', () => {
-  // What each Food plot made before the strike; (2,3) makes too little to keep anything at 20%.
+  // What each Food plot made before the strike; (2,3) makes too little to keep anything of it.
   const MADE: Record<string, number> = { '1,1': 5, '2,1': 10, '6,1': 5, '2,3': 4 };
   const kept = (p: { x: number; y: number }) => Math.floor(MADE[`${p.x},${p.y}`]! * COLONY.strike.output);
   const owner = (x: number, y: number) => players.find((p) => p.slot === OWNED[`${x},${y}`]![0])!.id;
@@ -279,7 +279,7 @@ describe('B-AC-26-4: the unpaid strike plays in production on the TV', () => {
     kind: 'colony',
     origin: { ...FOOD_PLOTS[0]! },
     title: 'General strike',
-    line: 'The strikers held: every Food plot makes 20% this month.',
+    line: `The strikers held: every Food plot makes ${STRIKE_SHARE} this month.`,
     hits: FOOD_PLOTS.map((p, order) => ({ ...p, order, delta: kept(p) - MADE[`${p.x},${p.y}`]! })),
   });
   const month = (events: ShowEventView[]): ShowData => ({ lines, events, introMs: events.length ? INTRO_MS : 0, lengthMs: 0 });
@@ -323,7 +323,7 @@ describe('B-AC-26-4: the unpaid strike plays in production on the TV', () => {
     expect(has(after, 'strike-chip-6-3')).toBe(false);
   });
 
-  it('B-AC-26-4: each struck plot ends on 20% of what it made, the mine keeps its 3, and the log says what the strike cost', () => {
+  it('B-AC-26-4: each struck plot ends on its share of what it made, the mine keeps its 3, and the log says what the strike cost', () => {
     const end = tv(unpaid, seg.endAt - 0.15);
     for (const p of FOOD_PLOTS) {
       const n = kept(p);
