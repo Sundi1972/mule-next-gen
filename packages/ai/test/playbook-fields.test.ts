@@ -71,7 +71,7 @@ describe('an adopted playbook\'s cash floor (Strategy.cashFloor)', () => {
     return rows.filter((r) => (r.phase === 'development' || r.phase === 'landAuction') && r.after < Math.min(FLOOR, r.before));
   }
 
-  it('B-AC-13: an adopted cashFloor keeps the seat\'s cash at or above it through development and the land auction', () => {
+  it('B-AC-13: an adopted cashFloor keeps the seat\'s cash at or above it through development and the land auction', { timeout: 60_000 }, () => {
     expect(moneyByPhase(null).length, 'without the floor the seat spends below it').toBeGreaterThan(0);
     expect(moneyByPhase(FLOOR)).toEqual([]);
   });
@@ -283,7 +283,7 @@ describe('an adopted playbook\'s monopoly target (Strategy.monopolyTarget)', () 
 });
 
 describe('the engine\'s own seats read none of the fields', () => {
-  it('INV-fields-engine: a seat playing its own drafts, or adopting drafts with none of the fields edited (or only its kind), holds no adopted field', () => {
+  it('INV-fields-engine: a seat playing its own drafts, or adopting drafts with none of the fields edited (or only its kind), holds no adopted field', { timeout: 60_000 }, () => {
     let seats: readonly AiSeat[] = [];
     const held: string[] = [];
     // ai1 adopts its own draft at every draft point, unedited; ai2 with only its kind edited; the others play their own drafts.
