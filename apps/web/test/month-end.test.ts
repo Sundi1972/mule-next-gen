@@ -199,7 +199,7 @@ describe('B-AC-12 (WS4, month end): the league table and the colony, on the phon
   });
 
   it('B-AC-12 (WS4, month end): the TV names who went hungry, from the month’s condition, and the air against last month', () => {
-    expect(said(tv, 'hungry-s3')).toBe(`Kai went hungry: ate 1 of ${KAI_NEED} Food`);
+    expect(said(tv, 'hungry-line')).toBe(`Kai went hungry: ate 1 of ${KAI_NEED} Food`);
     expect(has(tv, 'hungry-s1')).toBe(false);
     expect(has(tv, 'nobody-hungry')).toBe(false);
     expect(said(tv, 'air-level')).toBe('34');
@@ -210,7 +210,7 @@ describe('B-AC-12 (WS4, month end): the league table and the colony, on the phon
   });
 
   it("SWEEP-D4 / B-AC-12 (WS4, month end): the colonists line is the colony's people fed by the store, not the players beside it who went hungry", () => {
-    expect(said(tv, 'hungry-s3')).toBe(`Kai went hungry: ate 1 of ${KAI_NEED} Food`);
+    expect(said(tv, 'hungry-line')).toBe(`Kai went hungry: ate 1 of ${KAI_NEED} Food`);
     expect(said(tv, 'colonists')).toBe('The store fed the colony’s 1,240 colonists');
     const short = onTv(view({ colonistsFed: false }), TvMonthEnd);
     expect(said(short, 'colonists')).toBe('The colony’s 1,240 colonists went short');
@@ -303,6 +303,27 @@ describe('B-AC-12 (WS4, month end): the league table and the colony, on the phon
     const tv4 = onTv(starving, TvMonthEnd);
     expect([...tv4.matchAll(/data-testid="hungry-s\d"/g)]).toHaveLength(4);
     expect(has(tv4, 'hungry-more')).toBe(false);
+  });
+
+  it('B-AC-12 (WS4, month end, PM ruling 6 Nov): the TV puts everyone who went hungry on one line, each number true', () => {
+    const DEV = row('s4', 'Dev', 3, 700, 1_900, 1_800, KAI_SHORT);
+    const hungryLines = (html: string) => [...html.matchAll(/data-testid="hungry-line"/g)].length;
+    // Everyone short by the same: the names, then the numbers once.
+    const same = onTv(view({ players: [...PLAYERS, DEV].map((p) => ({ ...p, condition: KAI_SHORT })) }), TvMonthEnd);
+    expect(hungryLines(same), `four went hungry: one line on the TV, not ${[...same.matchAll(/data-testid="hungry-s\d"/g)].length}`).toBe(1);
+    expect(said(same, 'hungry-line')).toBe(`Went hungry: Heiko, Mia, Kai, Dev · ate 1 of ${KAI_NEED} Food`);
+    // Short by different amounts: each group of names with its own numbers, still one line.
+    const EMPTY: Condition = { ...KAI_SHORT, foodShare: 0 };
+    const BIG: Condition = { ...KAI_SHORT, foodShare: 1 / 4, foodNeed: 4 };
+    const mixed = onTv(view({ players: [{ ...HEIKO, condition: EMPTY }, MIA, KAI, { ...DEV, condition: BIG }] }), TvMonthEnd);
+    expect(hungryLines(mixed)).toBe(1);
+    expect(said(mixed, 'hungry-line')).toBe(`Went hungry: Heiko ate 0 of ${KAI_NEED} · Kai ate 1 of ${KAI_NEED} · Dev ate 1 of 4 Food`);
+    expect(has(mixed, 'hungry-s2'), 'Mia was fed: the line does not name her').toBe(false);
+    // One player: the sentence it always was. The game over's row draws the same line.
+    expect(said(tv, 'hungry-line')).toBe(`Kai went hungry: ate 1 of ${KAI_NEED} Food`);
+    const over = onTv(view({ finished: true, phase: 'gameOver', month: 12, scores: PLAYERS.map((p) => ({ id: p.id, score: p.worth })), players: PLAYERS.map((p) => ({ ...p, condition: KAI_SHORT })) }), TvGameOver);
+    expect(hungryLines(over)).toBe(1);
+    expect(said(over, 'hungry-line')).toBe(`Went hungry: Heiko, Mia, Kai · ate 1 of ${KAI_NEED} Food`);
   });
 
   it('B-AC-13 (WS4, month end): the phone moves on with "On to month 5", which is Ready', () => {
