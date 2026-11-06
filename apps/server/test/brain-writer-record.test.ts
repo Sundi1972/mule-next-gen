@@ -26,7 +26,7 @@ const ASK: WriteAsk = { brief: BRIEF, system: 'The manual.', waitMs: 5_000 };
 /** An edit path the brief never offers: the writer refuses it, and nothing of it may reach the record. */
 const REFUSED_PATH = '/landGrant/MARK-refused-7w';
 const REPLY_TEXT = JSON.stringify({
-  strategy: { kind: 'specialist', moneyMaker: 'smithore', monopolyTarget: null, cashFloor: 150, reason: 'Ore pays.' },
+  strategy: { kind: 'specialist', moneyMaker: 'smithore', reason: 'Ore pays.' },
   edits: [
     { path: '/landGrant/ranked', to: 'A', reason: 'River.' },
     { path: REFUSED_PATH, to: 1, reason: 'Sneak.' },
@@ -111,12 +111,10 @@ describe('the writer port through the game record', () => {
 
     // The writer's reply, derived by hand from REPLY_TEXT, the brief and the draft's strategy.
     const reply = {
-      strategy: { ...STRATEGY, kind: 'specialist', moneyMaker: 'smithore', monopolyTarget: null, cashFloor: 150, reason: 'Ore pays.' },
+      strategy: { ...STRATEGY, kind: 'specialist', moneyMaker: 'smithore', reason: 'Ore pays.' },
       edits: [
         { path: '/strategy/kind', to: 'specialist', reason: 'Ore pays.' },
         { path: '/strategy/moneyMaker', to: 'smithore', reason: 'Ore pays.' },
-        { path: '/strategy/monopolyTarget', to: null, reason: 'Ore pays.' },
-        { path: '/strategy/cashFloor', to: 150, reason: 'Ore pays.' },
         { path: '/strategy/reason', to: 'Ore pays.', reason: 'Ore pays.' },
         { path: '/landGrant/ranked', to: RANKED, reason: 'River.' },
       ],

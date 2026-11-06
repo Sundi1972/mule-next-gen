@@ -14,7 +14,7 @@ import { runTable } from './playbook-fakes.js';
 const SEAT: BrainSeat = { id: 'p0', persona: 'trader', level: 'trader' };
 const STRATEGY: Strategy = { kind: 'builder', moneyMaker: 'food', monopolyTarget: null, cashFloor: 200, landTarget: { plots: 6, byMonth: 6 }, stances: {}, reason: 'Grow steady.' };
 const BRIEF: LandBrief = { text: 'You are P0. The land brief.', plans: [{ id: 'A', label: 'Take the river', ranked: [{ plot: 12, value: 410 }] }], corners: true, strategy: STRATEGY, offers: LAND_OFFERS, strategyOffered: true };
-const ANSWER = JSON.stringify({ strategy: { kind: 'builder', moneyMaker: 'food', monopolyTarget: null, cashFloor: 200, reason: 'Grow.' }, edits: [{ path: '/landGrant/ranked', to: 'A', reason: 'River.' }], line: '' });
+const ANSWER = JSON.stringify({ strategy: { kind: 'builder', moneyMaker: 'food', reason: 'Grow.' }, edits: [{ path: '/landGrant/ranked', to: 'A', reason: 'River.' }], line: '' });
 
 /** One tool the model may call; `answer` is what it returns, or what it throws. */
 const DEF: ToolDef = { name: 'worth', description: 'Your Worth.', input_schema: { type: 'object', properties: {} } };

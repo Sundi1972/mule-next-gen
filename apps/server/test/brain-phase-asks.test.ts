@@ -143,7 +143,7 @@ describe('RULE-A2 rows 3-4: the next phase is edited in the slack before it', { 
     const asked: SdkParams[] = [];
     const reply = JSON.stringify({
       edits: [
-        { path: '/landGrant/claims', to: 1, reason: 'One will do.' },
+        { path: '/landGrant/ranked', to: 'A', reason: 'Plan A.' },
         { path: '/development/timeBudgetMs', to: 1_000, reason: 'Quick.' },
       ],
       line: '',
@@ -161,8 +161,7 @@ describe('RULE-A2 rows 3-4: the next phase is edited in the slack before it', { 
     playbooks.takeEffect(state);
     // The land grant's playbook carries the land edit only: the development edit waits for its phase.
     expect(notes.map((n) => [n.phase, n.playbook.by])).toEqual([['landGrant', 'llm']]);
-    expect(notes[0]!.playbook.landGrant?.claims).toBe(1);
-    expect(notes[0]!.playbook.edits?.map((e) => e.path)).toEqual(['/landGrant/claims']);
+    expect(notes[0]!.playbook.edits?.map((e) => e.path)).toEqual(['/landGrant/ranked']);
     expect(notes[0]!.playbook.development).toBeUndefined();
 
     advanceTo(state, 'development');
@@ -179,7 +178,7 @@ describe('RULE-A2 rows 3-4: the next phase is edited in the slack before it', { 
   });
 
   it('C4 (option C): a land reply with no development edit adopts no development part; a late land reply plays neither', async () => {
-    const landOnly = JSON.stringify({ edits: [{ path: '/landGrant/claims', to: 1, reason: 'One.' }], line: '' });
+    const landOnly = JSON.stringify({ edits: [{ path: '/landGrant/ranked', to: 'A', reason: 'Plan A.' }], line: '' });
     const { state, seat, notes, playbooks } = (() => {
       const st: GameState = createGame({ seed: 10, players: PLAYERS });
       const se = new AiSeat({ id: 'p0', name: 'Ada', persona: 'trader', level: 'trader', seed: 1 });
@@ -203,7 +202,7 @@ describe('RULE-A2 rows 3-4: the next phase is edited in the slack before it', { 
       const hold = offeredPaths(params).find((p) => p.endsWith('/hold'));
       if (hold) return sdkMessage(JSON.stringify({ edits: [{ path: hold, to: 0, reason: 'None.' }], line: AUCTION_LINE }), USED);
       const edits = [
-        { path: '/landGrant/claims', to: 1, reason: 'One will do.' },
+        { path: '/landGrant/ranked', to: 'A', reason: 'Plan A.' },
         { path: '/development/timeBudgetMs', to: 1_000, reason: 'Quick.' },
       ];
       return sdkMessage(JSON.stringify({ edits, line: LAND_LINE }), USED);
@@ -246,7 +245,7 @@ describe('RULE-A2 rows 3-4: the next phase is edited in the slack before it', { 
     const saidAt = async (atMs: number, line: string) => {
       const said: string[] = [];
       const seat = new AiSeat({ id: 'p0', name: 'Ada', persona: 'trader', level: 'trader', seed: 1 });
-      const reply = JSON.stringify({ edits: [{ path: '/landGrant/claims', to: 1, reason: 'One.' }], line });
+      const reply = JSON.stringify({ edits: [{ path: '/landGrant/ranked', to: 'A', reason: 'Plan A.' }], line });
       const playbooks = new Playbooks({ brain: smartOn(answersAt(atMs, reply)), source: playbookSource([seat]), seats: [seat], speak: (_id, s) => said.push(s.line) });
       const state: GameState = createGame({ seed: 10, players: PLAYERS });
       playbooks.ask(state, 1);
@@ -286,7 +285,7 @@ describe('RULE-A2 rows 3-4: the next phase is edited in the slack before it', { 
     const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
     const seat = new AiSeat({ id: 'p0', name: 'Ada', persona: 'trader', level: 'trader', seed: 1 });
     const notes: PlaybookNote[] = [];
-    const reply = JSON.stringify({ edits: [{ path: '/landGrant/claims', to: 1, reason: 'One.' }], line: LAND_LINE });
+    const reply = JSON.stringify({ edits: [{ path: '/landGrant/ranked', to: 'A', reason: 'Plan A.' }], line: LAND_LINE });
     const playbooks = new Playbooks({
       brain: smartOn(answersAt(100, reply)),
       source: playbookSource([seat]),

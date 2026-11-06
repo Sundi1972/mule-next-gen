@@ -3,14 +3,14 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { advancePhase, AI_LEVELS, BRAIN, createGame, GAME, observe, type GameState, type Playbook } from '@mule/engine';
+import { advancePhase, AI_LEVELS, BRAIN, createGame, observe, type GameState, type Playbook } from '@mule/engine';
 import { AiSeat, candidate, consider, defaultManual, seatBounds, shortlist, WRITER_SYSTEM, type ValidatePlan } from '@mule/ai';
 import { createBrain, type BrainService, type MeteredBrain } from '../src/brain/index.js';
 import { MuleGame } from '../src/mule-game.js';
 import { Playbooks, type PlaybookSource } from '../src/brain/playbooks.js';
 import { fakeSdk, KEY, neverAnswers, promptOf, readLedger, sdkMessage, type FakeSdk, type SdkMessage, type SdkParams } from './brain-fakes.js';
 import { fakeContext, seats as TABLE } from './fake-context.js';
-import { boundsValidate, ENGINE_PRESS, READ_MS, runTable, stubSource } from './playbook-fakes.js';
+import { boundsValidate, ENGINE_PRESS, READ_MS, REFUSED_MONEY_MAKER, runTable, stubSource } from './playbook-fakes.js';
 
 const SEED = 10;
 const PLAYERS = [
@@ -19,20 +19,18 @@ const PLAYERS = [
 ];
 const USED = { input: 900, output: 120 };
 
-/** The fake model's reply: plan A's ranking, one claim where the engine drafts two, and the line it says. */
+/** The fake model's reply: a Smithore specialist where the engine drafts a builder, plan A's ranking, and the line it says. */
 const EDITS = JSON.stringify({
-  edits: [
-    { path: '/landGrant/ranked', to: 'A', reason: 'A is mine.' },
-    { path: '/landGrant/claims', to: 1, reason: 'Save money.' },
-  ],
+  strategy: { kind: 'specialist', moneyMaker: 'smithore', reason: 'Ore pays.' },
+  edits: [{ path: '/landGrant/ranked', to: 'A', reason: 'A is mine.' }],
   line: 'Mine.',
 });
-/** Every edit out of bounds, or refused by the writer before validation. */
+/**
+ * Every edit refused by the writer before validation. Since B fix 5 (6 Nov) the land brief offers only the ranking
+ * and the strategy, whose kind and reason no validator here turns down, so nothing in it is out of bounds.
+ */
 const ALL_REFUSED = JSON.stringify({
-  edits: [
-    { path: '/landGrant/pressShare', to: { start: 0.2, end: 0.7 }, reason: 'Wait for it.' },
-    { path: '/landGrant/ranked', to: 'Z', reason: 'No such plan.' },
-  ],
+  edits: [{ path: '/landGrant/ranked', to: 'Z', reason: 'No such plan.' }],
   line: '',
 });
 
@@ -162,10 +160,10 @@ describe('RULE-A1: which playbook takes effect at the land grant', () => {
     expect(sdk.requests[0]!.options.timeout).toBe(BRAIN.writeCalls.strategy.timeoutMs);
     const planA = planInBrief(sdk.requests[0]!.params, 'A');
     expect(planA.length).toBeGreaterThan(0);
-    expect(engine?.landGrant?.claims).toBe(GAME.claimsPerGrant);
+    expect(engine?.strategy).toMatchObject({ kind: 'builder', moneyMaker: null });
     expect(inEffectAtStart?.by).toBe('llm');
     expect(inEffectAtStart?.landGrant?.ranked.slice(0, planA.length)).toEqual(planA);
-    expect(inEffectAtStart?.landGrant?.claims).toBe(1);
+    expect(inEffectAtStart?.strategy).toMatchObject({ kind: 'specialist', moneyMaker: 'smithore' });
     expect(engine?.landGrant?.pressShare).toEqual(ENGINE_PRESS);
     expect(inEffectAtStart?.landGrant?.pressShare, "the land grant's draft's, not the ask-time one's").toEqual(LATER_PRESS);
     expect(inEffectAtStart?.rejected).toEqual([]);
@@ -184,10 +182,7 @@ describe('RULE-A1: which playbook takes effect at the land grant', () => {
     expect(month2).toEqual({ ...driftingSource().draft(state, 'p0').playbook, by: 'engine' });
     expect(month2).toMatchObject({ by: 'engine', month: 2 });
     expect(month2?.landGrant?.pressShare, "the land grant's draft").toEqual(LATER_PRESS);
-    expect(playbooks.feedbackFor('p0')).toEqual({
-      refused: [{ path: '/landGrant/ranked', cause: 'plan_not_offered' }],
-      rejected: [{ path: '/landGrant/pressShare', to: { start: 0.2, end: 0.7 }, why: 'out of bounds' }],
-    });
+    expect(playbooks.feedbackFor('p0')).toEqual({ refused: [{ path: '/landGrant/ranked', cause: 'plan_not_offered' }], rejected: [] });
   });
 
   it('T-AC-A1: row 2, a model still thinking when the land grant starts is cancelled then: the engine playbook plays, and the call is ledgered as a timeout, its bill unknown and counted at the worst case', async () => {
@@ -238,10 +233,7 @@ describe('RULE-A1: which playbook takes effect at the land grant', () => {
     const { now, engine, playbooks, state } = await month1({ brain: smartOn(sdk), grantAtMs: 2_000 });
 
     expect(now).toEqual({ ...engine, by: 'engine' });
-    expect(playbooks.feedbackFor('p0')).toEqual({
-      refused: [{ path: '/landGrant/ranked', cause: 'plan_not_offered' }],
-      rejected: [{ path: '/landGrant/pressShare', to: { start: 0.2, end: 0.7 }, why: 'out of bounds' }],
-    });
+    expect(playbooks.feedbackFor('p0')).toEqual({ refused: [{ path: '/landGrant/ranked', cause: 'plan_not_offered' }], rejected: [] });
 
     // Month 2's reply never comes: month 1's refusals are not this month's, so the seat has none.
     advanceTo(state, 'upkeep');
@@ -252,7 +244,7 @@ describe('RULE-A1: which playbook takes effect at the land grant', () => {
     expect(sdk.calls).toBe(2);
     // T-AC-A10: month 2's brief tells the model what month 1's reply had refused, by path and why.
     expect(promptOf(asked[0]!).user).not.toContain('Last time:');
-    expect(promptOf(asked[1]!).user).toContain('Last time: the rules clamped or refused /landGrant/pressShare (out of bounds); your reply was refused at /landGrant/ranked (plan_not_offered).');
+    expect(promptOf(asked[1]!).user).toContain('Last time: your reply was refused at /landGrant/ranked (plan_not_offered).');
     expect(playbooks.playbookFor('p0', 2)?.by).toBe('engine');
     expect(playbooks.feedbackFor('p0')).toBeNull();
   });
@@ -262,18 +254,12 @@ describe('RULE-A1: which playbook takes effect at the land grant', () => {
       const result = boundsValidate(state, seat, draft, edits);
       return { ...result, rejected: result.rejected.flatMap((r) => [r, { ...r, why: 'and again' }]) };
     };
-    const reply = JSON.stringify({
-      edits: [
-        { path: '/landGrant/claims', to: 1, reason: 'Save money.' },
-        { path: '/landGrant/pressShare', to: { start: 0.2, end: 0.7 }, reason: 'Wait for it.' },
-      ],
-      line: '',
-    });
+    // The kind is accepted; the moneyMaker is one the stub's validator refuses.
+    const reply = JSON.stringify({ strategy: { kind: 'specialist', moneyMaker: REFUSED_MONEY_MAKER, reason: 'Pills pay.' }, edits: [], line: '' });
     const { now, playbooks } = await month1({ brain: smartOn(answersAt(500, reply)), source: stubSource(twice), grantAtMs: 2_000 });
 
     expect(now?.by).toBe('llm');
-    expect(now?.landGrant?.claims).toBe(1);
-    expect(now?.landGrant?.pressShare).toEqual(ENGINE_PRESS);
+    expect(now?.strategy).toMatchObject({ kind: 'specialist', moneyMaker: null });
     expect(playbooks.feedbackFor('p0')?.rejected.map((r) => r.why)).toEqual(['out of bounds', 'and again']);
   });
 

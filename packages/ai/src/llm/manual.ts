@@ -7,6 +7,7 @@ import {
   ADJACENCY,
   DEV_WALK,
   DEVELOPMENT,
+  EXPORT_DEMAND,
   EXPORT_SHIP,
   GAME,
   GOOD_CONFIG,
@@ -16,6 +17,7 @@ import {
   PERCENT,
   POLITICS,
   POLLUTION,
+  PRICE,
   RECIPES,
   STRATEGIST,
   UPKEEP,
@@ -44,32 +46,41 @@ export type PlaybookField =
   | FieldsOf<'DevelopmentPlay', DevelopmentPlay>
   | FieldsOf<'GoodPlay', GoodPlay>;
 
-/** Every key of T, at run time; the mapped type makes the compiler reject a missing or unknown key. */
-const keysOf = <T>(name: string, keys: { readonly [K in keyof Required<T>]: true }) => Object.keys(keys).map((k) => `${name}.${k}`);
+/**
+ * The keys of T the writer is offered, at run time: every key is listed, true when a brief offers it; the mapped type
+ * makes the compiler reject a missing or unknown key, so a new playbook field must be ruled on here.
+ */
+const offeredOf = <T>(name: string, keys: { readonly [K in keyof Required<T>]: boolean }) =>
+  Object.entries(keys).flatMap(([k, offered]) => (offered ? [`${name}.${k}`] : []));
 
-const PLAYBOOK_FIELDS: ReadonlySet<string> = new Set([
-  ...keysOf<Strategy>('Strategy', {
+/**
+ * The playbook fields an advice line may name: the ones a brief offers the writer. The rest are not offered: play does
+ * not read monopolyTarget, cashFloor, landTarget, stances, the land grant's claims, press share, deny, plan B and pair,
+ * or the market (WS9 ruling, 6 Nov); planning and a good's bluff, vsRival and per are not offered either.
+ */
+const OFFERED_FIELDS: ReadonlySet<string> = new Set([
+  ...offeredOf<Strategy>('Strategy', {
     kind: true,
     moneyMaker: true,
-    monopolyTarget: true,
-    cashFloor: true,
-    landTarget: true,
-    stances: true,
+    monopolyTarget: false,
+    cashFloor: false,
+    landTarget: false,
+    stances: false,
     reason: true,
   }),
-  ...keysOf<PlanningPlay>('PlanningPlay', { drone: true, list: true }),
-  ...keysOf<LandGrantPlay>('LandGrantPlay', { ranked: true, pressShare: true, deny: true, planB: true, claims: true, pair: true }),
-  ...keysOf<DevelopmentPlay>('DevelopmentPlay', { route: true, timeBudgetMs: true, ifSoldOut: true }),
-  ...keysOf<GoodPlay>('GoodPlay', {
+  ...offeredOf<PlanningPlay>('PlanningPlay', { drone: false, list: false }),
+  ...offeredOf<LandGrantPlay>('LandGrantPlay', { ranked: true, pressShare: false, deny: false, planB: false, claims: false, pair: false }),
+  ...offeredOf<DevelopmentPlay>('DevelopmentPlay', { route: true, timeBudgetMs: true, ifSoldOut: true }),
+  ...offeredOf<GoodPlay>('GoodPlay', {
     role: true,
     hold: true,
     walkAway: true,
     start: true,
     concedeCrPerS: true,
-    bluff: true,
-    vsRival: true,
-    per: true,
-    market: true,
+    bluff: false,
+    vsRival: false,
+    per: false,
+    market: false,
   }),
 ]);
 
@@ -111,14 +122,33 @@ const PHASES: Record<Exclude<Phase, 'gameOver'>, () => string> = {
   landAuction: () =>
     `The listed lots come up one at a time: an intro of ${LOTS.introMs} ms, then a walk of ${LOTS.walkMs} ms where every player but the seller stands as a buyer, unless short of the minimum or leading a MULE when a MULE is up, and walks up to bid. The highest bid at the bell wins; a change of leader in the last ${LOTS.lateMs} ms sets the clock back to it. An unsold lot is kept, or sold to the store for ${pct(LOTS.storePlotShare)} of the ${GAME.plotScore} a plot scores and ${pct(LOTS.storeMuleShare)} of the MULE price for a MULE, as the seller chose. Each month the colony puts one free plot up with a chance of ${pct(LOTS.colonyPlotChance)}. With nothing listed it is skipped.`,
   development: () =>
-    `One clock of ${DEVELOPMENT.fullSeconds} s for every player. Each step from one map tile to the next takes ${DEV_WALK.tileSeconds} s; a hungry or sick colonist walks slower. You buy a MULE at the corral, outfit it, and install it on one of your plots; you may analyse ground, fit filters, or end at the pub for cash.`,
+    `One clock of ${DEVELOPMENT.fullSeconds} s for every player. Each step from one map tile to the next takes ${DEV_WALK.tileSeconds} s; a hungry or sick colonist walks slower. You buy a MULE at the corral, outfit it, and install it on one of your plots; you may analyse ground, fit filters, or end at the pub for cash. ${muleSupply()}`,
   production: () =>
-    `Every plot with a MULE makes its good, more on better ground, plus ${ADJACENCY.neighbour} when a neighbour of yours makes the same good, or ${ADJACENCY.cluster} in a cluster of ${ADJACENCY.clusterSize} or more. A raw plot burns Energy from your stock (${rawEnergy()}); an Energy plot pays its own from its output and is never turned off. An owner short of Energy has their other plots turned off, biggest use first, until the rest fit, and a plot turned off makes ${pct(UPKEEP.offOutputShare)} of its output. A Food plot also needs Water: when its owner holds less Water than their household and crew drink, it makes ${pct(UPKEEP.shortOutputShare)} of what it would. A factory turns inputs from your stock into its good (${(Object.keys(RECIPES) as ProcessedGood[]).map(recipe).join('; ')}) and makes nothing without them.`,
+    `Every plot with a MULE makes its good, more on better ground, plus ${ADJACENCY.neighbour} when a neighbour of yours makes the same good, or ${ADJACENCY.cluster} in a cluster of ${ADJACENCY.clusterSize} or more. A raw plot burns Energy from your stock (${rawEnergy()}); an Energy plot pays its own from its output and is never turned off. An owner short of Energy has their other plots turned off, biggest use first, until the rest fit; a plot turned off makes ${pct(UPKEEP.offOutputShare)} of its output, rounded half up. ${waterCut()} A factory turns inputs from your stock into its good (${(Object.keys(RECIPES) as ProcessedGood[]).map(recipe).join('; ')}) and makes nothing without them. A factory turned off for want of Energy makes ${pct(UPKEEP.offOutputShare)} of its output from ${pct(UPKEEP.offOutputShare)} of each non-Energy input, rounded up, and takes no inputs when its share of output rounds to 0.`,
   auction: () =>
-    `Goods come up one at a time (${goodList(WALK.order)}). Each has a status screen where players pick buyer, seller or pass, ${WALK.statusMs === null ? "with no clock: it waits for every player's Done or the host's Continue" : `for ${WALK.statusMs} ms`}, then a walk of ${WALK.goodMs} ms: buyers walk up, sellers down, and units trade while a buyer and a seller meet. The store buys and sells there too, and every sale pays the sales tax into the colony fund.`,
+    `Goods come up one at a time (${goodList(WALK.order)}). Each has a status screen where players pick buyer, seller or pass, ${WALK.statusMs === null ? "with no clock: it waits for every player's Done or the host's Continue" : `for ${WALK.statusMs} ms`}, then a walk of ${WALK.goodMs} ms: buyers walk up, sellers down, and units trade while a buyer and a seller meet. The store buys and sells there too, and every sale pays the sales tax into the colony fund. In a month the export ship calls it buys there too, from any seller, up to its hold of each good on its wishlist: the off-world price for its first unit of a good and ${pct(EXPORT_SHIP.stepDown)} less for each one after, ${pct(POLLUTION.cleanExportBonus)} more when the air is clean; a sale to it pays the sales tax and any export tax.`,
   upkeep: () =>
-    `Each player eats ${UPKEEP.baseFood} Food and drinks ${UPKEEP.baseWater} Water, plus 1 Food per ${UPKEEP.crewPerFood} crew and 1 Water per ${UPKEEP.crewPerWater}, from their own stock. Your goods spoil (${spoiling()}, rounded down), and anything above ${UPKEEP.depotCapacity} units of a good is lost. Every ${GAME.exportShipEvery} months an export ship calls, buying the ${EXPORT_SHIP.wishlist} goods on its wishlist, announced one month before.`,
+    `Each player eats ${UPKEEP.baseFood} Food and drinks ${UPKEEP.baseWater} Water, plus 1 Food per ${UPKEEP.crewPerFood} crew and 1 Water per ${UPKEEP.crewPerWater}, from their own stock. Your goods spoil (${spoiling()}, rounded down), and anything above ${UPKEEP.depotCapacity} units of a good is lost. Every ${GAME.exportShipEvery} months, first in month ${GAME.exportShipEvery}, an export ship calls; its wishlist of ${EXPORT_SHIP.wishlist} goods, drawn from ${goodList(Object.keys(EXPORT_DEMAND))}, is public from the month before. It buys from players at that month's goods auction, then at upkeep takes the store's surplus of those goods until its hold is full: what the store holds above ${PRICE.targetCover} months of the colony's demand.`,
 };
+
+/**
+ * The Water cut, and how it stacks on the Energy cut, as production.ts runProduction applies them: switchOff, then
+ * halve on what the parts add up to after it.
+ */
+function waterCut(): string {
+  const irrigated = UPKEEP.irrigated.map((g) => GOOD_NAME[g]).join(' or ');
+  return `A ${irrigated} plot also needs Water: when its owner holds less Water than their household and crew drink, it makes ${pct(UPKEEP.shortOutputShare)} of what it would, rounded down; one also turned off for want of Energy takes both cuts, the Water cut on what the Energy cut left.`;
+}
+
+/** How the store makes MULEs and prices them: upkeep.ts builds them, game.ts moves the factor, economy.ts mulePrice. */
+function muleSupply(): string {
+  return [
+    `At upkeep the store builds MULEs from its own Smithore, ${MULE.smithorePerMule} Smithore each, until the corral holds ${corral()}; short of Smithore it builds fewer, so the corral can run dry.`,
+    `A MULE costs ${MULE.labour} plus ${MULE.smithorePerMule} Smithore at the store's posted price, times a scarcity factor: up ${pct(MULE.scarcityUp)} after a development that sold the corral out, down ${pct(MULE.surplusDown)} after one that left ${pct(MULE.surplusShare)} or more of its MULEs unsold, never below ${pct(MULE.minFactor)} of that base.`,
+  ].join(' ');
+}
+
+const corral = () => `${MULE.corralPerPlayer} for each player plus ${MULE.spareInCorral}`;
 
 function rawEnergy(): string {
   return Object.entries(UPKEEP.energyUse)
@@ -156,21 +186,10 @@ export const ADVICE: readonly AdviceLine[] = [
       `a plot adds ${GAME.plotScore} to your Worth and makes goods every month after; rank by what it makes over the months left, and a plot beside your others making the same good makes ${ADJACENCY.neighbour} more.`,
   },
   {
-    move: 'claim',
-    field: 'LandGrantPlay.deny',
-    when: () => 'take a plot before a rival does when it is worth more to them than it costs you to hold.',
-  },
-  {
-    move: 'done',
-    field: 'LandGrantPlay.claims',
-    when: () =>
-      `claim fewer when you cannot pay for a MULE on the plot (${MULE.labour} plus Smithore, then the outfit): a plot without one makes nothing.`,
-  },
-  {
     move: 'buyMule',
     field: 'DevelopmentPlay.route',
     when: () =>
-      `buy early: the corral has a MULE for each plot claimed this month plus ${MULE.spareInCorral}, and a sold-out corral raises next month's price by ${pct(MULE.scarcityUp)}.`,
+      `buy early: the store fills the corral to ${corral()} at upkeep, as its Smithore allows, and a sold-out corral raises next month's price by ${pct(MULE.scarcityUp)}.`,
   },
   {
     move: 'analyse',
@@ -210,14 +229,15 @@ export const ADVICE: readonly AdviceLine[] = [
   },
   {
     move: 'declare',
-    field: 'GoodPlay.market',
-    when: () => `hold units for the export ship's month when its wishlist names the good; it calls every ${GAME.exportShipEvery} months.`,
+    field: 'GoodPlay.hold',
+    when: () =>
+      `hold units for the export ship's month when its wishlist names the good: it buys at that month's goods auction, from the off-world price down; it calls every ${GAME.exportShipEvery} months.`,
   },
   {
     move: 'declare',
-    field: 'Strategy.monopolyTarget',
+    field: 'Strategy.kind',
     when: () =>
-      `only if your level may corner: buy up a scarce good that spoils less than ${pct(STRATEGIST.cornerMaxSpoilage)} a month, so the others must buy it from you.`,
+      `as a monopolist, only if your level may corner: buy up a scarce good that spoils less than ${pct(STRATEGIST.cornerMaxSpoilage)} a month, so the others must buy it from you.`,
   },
   {
     move: 'run',
@@ -264,7 +284,7 @@ function moveBlock(move: MoveDescriptor, shared: Shared): string {
 function checkAdvice(moves: MoveTable, advice: readonly AdviceLine[]): void {
   for (const line of advice) {
     if (!Object.hasOwn(moves, line.move)) throw new Error(`Advice names a move that does not exist: ${line.move}`);
-    if (!PLAYBOOK_FIELDS.has(line.field)) throw new Error(`Advice names a playbook field that does not exist: ${line.field}`);
+    if (!OFFERED_FIELDS.has(line.field)) throw new Error(`Advice names a playbook field that does not exist or is not offered: ${line.field}`);
   }
 }
 
@@ -310,11 +330,11 @@ export function defaultManual(advice: readonly AdviceLine[] = ADVICE): string {
 
 /**
  * The seat's own bounds, for its brief: kept out of the shared manual so the manual stays the same for every level. A
- * seat that never corners is not offered monopolyTarget, by its brief or its reply schema; the shared system block
- * still names the field, as one only a cornering level may set, and the writer refuses it from such a seat.
+ * seat that never corners is not offered the kind 'monopolist', by its reply schema; the shared system block still
+ * names it, as one only a cornering level may play to, and the writer refuses it from such a seat (RULE-A3).
  */
 export function seatBounds(level: Pick<AiLevelConfig, 'corners'>): string {
   return level.corners
-    ? "Your level may corner a good: Strategy.kind 'monopolist' with a monopolyTarget is open to you when a good is scarce."
+    ? "Your level may corner a good: Strategy.kind 'monopolist' is open to you when a good is scarce."
     : "Your level never aims for a monopoly: never set Strategy.kind to 'monopolist'.";
 }

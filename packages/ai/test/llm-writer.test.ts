@@ -50,8 +50,8 @@ function fakeModel(text: string, stopReason: string | null = 'end_turn') {
   return { complete, asked };
 }
 
-const strategyReply = (over: Record<string, unknown> = {}) => ({ kind: 'specialist', moneyMaker: 'smithore', cashFloor: 150, reason: 'Ore pays.', ...over });
-const replyText = (over: Record<string, unknown> = {}) => JSON.stringify({ strategy: strategyReply(), edits: [{ path: '/landGrant/claims', to: 1, reason: 'One plot will do.' }], line: 'Ore, ore, ore.', ...over });
+const strategyReply = (over: Record<string, unknown> = {}) => ({ kind: 'specialist', moneyMaker: 'smithore', reason: 'Ore pays.', ...over });
+const replyText = (over: Record<string, unknown> = {}) => JSON.stringify({ strategy: strategyReply(), edits: [{ path: '/landGrant/ranked', to: 'A', reason: 'Grow a patch.' }], line: 'Ore, ore, ore.', ...over });
 
 /** writeReply on a fake model, then playbookFrom on the draft: the reply, and the playbook that plays from it. */
 async function write(level: 'rookie' | 'trader', text: string, stopReason: string | null = 'end_turn') {
@@ -67,13 +67,13 @@ const ENGINE: Playbook = { ...DRAFT, by: 'engine' };
 const paths = (edits: readonly { path: string }[]) => edits.map((e) => e.path);
 
 describe("T-AC-A5: a Rookie seat's edits that would corner are refused; the same edits on a Trader seat pass", () => {
-  it("T-AC-A5: a Rookie seat's reply schema offers neither 'monopolist' nor monopolyTarget; a Trader seat's offers both, and each is what the request carries", async () => {
+  it("T-AC-A5: a Rookie seat's reply schema does not offer 'monopolist'; a Trader seat's does, and each is what the request carries (neither offers monopolyTarget: B fix 5)", async () => {
     const rookie = replySchema(false);
     const trader = replySchema(true);
     expect(rookie.properties.strategy!.properties.kind.enum).not.toContain('monopolist');
     expect(rookie.properties.strategy!.properties).not.toHaveProperty('monopolyTarget');
     expect(trader.properties.strategy!.properties.kind.enum).toContain('monopolist');
-    expect(trader.properties.strategy!.properties).toHaveProperty('monopolyTarget');
+    expect(trader.properties.strategy!.properties).not.toHaveProperty('monopolyTarget');
     expect(JSON.stringify(rookie)).not.toMatch(/monopol/);
 
     const r = await write('rookie', replyText());
@@ -82,31 +82,25 @@ describe("T-AC-A5: a Rookie seat's edits that would corner are refused; the same
     expect(t.model.asked[0]!.prompt.schema).toEqual(trader);
   });
 
-  it("T-AC-A5: a Rookie reply that still names 'monopolist' and a monopolyTarget has both edits refused 'never_corners' before validate; on a Trader seat both reach validate", async () => {
-    const cornering = replyText({ strategy: strategyReply({ kind: 'monopolist', monopolyTarget: 'smithore' }) });
+  it("T-AC-A5: a Rookie reply that still names 'monopolist' has that edit refused 'never_corners' before validate; on a Trader seat it reaches validate", async () => {
+    const cornering = replyText({ strategy: strategyReply({ kind: 'monopolist' }) });
 
     const r = await write('rookie', cornering);
-    expect(r.written.refused).toEqual([
-      { path: '/strategy/kind', cause: 'never_corners' },
-      { path: '/strategy/monopolyTarget', cause: 'never_corners' },
-    ]);
-    expect(paths(r.v.seen[0]!)).toEqual(['/strategy/moneyMaker', '/strategy/cashFloor', '/strategy/reason', '/landGrant/claims']);
-    expect(r.written.reply.strategy).toMatchObject({ kind: 'builder', monopolyTarget: null, moneyMaker: 'smithore' });
+    expect(r.written.refused).toEqual([{ path: '/strategy/kind', cause: 'never_corners' }]);
+    expect(paths(r.v.seen[0]!)).toEqual(['/strategy/moneyMaker', '/strategy/reason', '/landGrant/ranked']);
+    expect(r.written.reply.strategy).toMatchObject({ kind: 'builder', moneyMaker: 'smithore' });
 
     const t = await write('trader', cornering);
     expect(t.written.refused).toEqual([]);
-    expect(t.v.seen[0]).toEqual(expect.arrayContaining([
-      { path: '/strategy/kind', to: 'monopolist', reason: 'Ore pays.' },
-      { path: '/strategy/monopolyTarget', to: 'smithore', reason: 'Ore pays.' },
-    ]));
-    expect(t.written.reply.strategy).toMatchObject({ kind: 'monopolist', monopolyTarget: 'smithore' });
+    expect(t.v.seen[0]).toEqual(expect.arrayContaining([{ path: '/strategy/kind', to: 'monopolist', reason: 'Ore pays.' }]));
+    expect(t.written.reply.strategy).toMatchObject({ kind: 'monopolist' });
   });
 
-  it("T-AC-A5: a Rookie edit that names /strategy/monopolyTarget in its edits, around the schema, is refused 'never_corners' too", async () => {
+  it("T-AC-A5: a Rookie edit that names 'monopolist' in its edits, around the schema, is refused 'never_corners' too; one naming /strategy/monopolyTarget is offered to no level (B fix 5)", async () => {
     const around = replyText({ strategy: undefined, edits: [{ path: '/strategy/monopolyTarget', to: 'smithore', reason: 'Sneak.' }, { path: '/strategy/kind', to: 'monopolist', reason: 'Sneak.' }] });
     const r = await write('rookie', around);
     const refused = [
-      { path: '/strategy/monopolyTarget', cause: 'never_corners' },
+      { path: null, cause: 'path_not_offered' },
       { path: '/strategy/kind', cause: 'never_corners' },
     ];
     expect(r.written.refused).toEqual(refused);
@@ -124,11 +118,12 @@ describe("T-AC-A5: a Rookie seat's edits that would corner are refused; the same
   });
 
   it("T-AC-A1: an edit is accepted when validate's playbook carries it: a clamped edit plays by 'llm' though also listed in rejected; with none carried the engine's draft plays", async () => {
-    const written = (await write('trader', JSON.stringify({ edits: [{ path: '/landGrant/claims', to: 9, reason: 'All of it.' }], line: '' }))).written;
+    const written = (await write('trader', JSON.stringify({ edits: [{ path: '/landGrant/ranked', to: 'A', reason: 'All of it.' }], line: '' }))).written;
     // The validator clamps the edit, plays it, and lists the clamp with its why.
-    const clamped = { path: '/landGrant/claims', to: 9, why: 'clamped to 2' };
+    const ranked = written.reply.edits[0]!.to as LandGrantPlay['ranked'];
+    const clamped = { path: '/landGrant/ranked', to: ranked, why: 'clamped: dropped 1 entry' };
     const clamps: ValidatePlan = (_s, _seat, draft, edits) => ({
-      playbook: { ...draft, edits: [{ path: '/landGrant/claims', from: 2, to: 2, reason: edits[0]!.reason }] },
+      playbook: { ...draft, edits: [{ path: '/landGrant/ranked', from: LAND.ranked, to: ranked.slice(1), reason: edits[0]!.reason }] },
       rejected: [clamped],
     });
     const made = playbookFrom(clamps, state, DRAFT, written);
@@ -180,34 +175,34 @@ describe('C2: the checks the schema cannot carry, each a cause code with no repl
   });
 
   const each: { cause: Cause; edit: Record<string, unknown>; path: string | null }[] = [
-    { cause: 'reason_too_long', edit: { path: '/landGrant/claims', to: 1, reason: MARK + 'x'.repeat(BRAIN.writeReasonChars) }, path: '/landGrant/claims' },
+    { cause: 'reason_too_long', edit: { path: '/landGrant/ranked', to: 'A', reason: MARK + 'x'.repeat(BRAIN.writeReasonChars) }, path: '/landGrant/ranked' },
     { cause: 'plan_not_offered', edit: { path: '/landGrant/ranked', to: MARK, reason: 'Take it.' }, path: '/landGrant/ranked' },
     { cause: 'plan_not_offered', edit: { path: '/landGrant/ranked', to: 'E', reason: 'Take it.' }, path: '/landGrant/ranked' },
     { cause: 'path_not_offered', edit: { path: `/landGrant/${MARK}`, to: 1, reason: 'Take it.' }, path: null },
     { cause: 'path_not_offered', edit: { path: '/development/route', to: [], reason: 'Take it.' }, path: null },
   ];
   it.each(each)('C2: an edit with $cause is refused alone, by its path when the brief offered it; the rest reach validate', async ({ cause, edit, path }) => {
-    const text = JSON.stringify({ edits: [edit, { path: '/landGrant/pressShare', to: { start: 0.7, end: 0.3 }, reason: 'Press less.' }], line: '' });
+    // The rest: the strategy, since the ranking is the one land path offered (B fix 5).
+    const text = JSON.stringify({ strategy: strategyReply(), edits: [edit], line: '' });
     const { written, v, brief } = await write('trader', text);
     expect(brief.plans.map((p) => p.id)).not.toContain('E');
     expect(written.refused).toEqual([{ path, cause }]);
-    expect(v.seen[0]).toEqual([{ path: '/landGrant/pressShare', to: { start: 0.7, end: 0.3 }, reason: 'Press less.' }]);
+    expect(paths(v.seen[0]!)).toEqual(['/strategy/kind', '/strategy/moneyMaker', '/strategy/reason']);
     expect(written.reply.cause).toBeUndefined();
     expect(kept(written)).not.toContain(MARK);
   });
 
   it("C2: a path edited twice keeps the first; the second is refused 'path_repeated'", async () => {
-    const text = JSON.stringify({ edits: [{ path: '/landGrant/claims', to: 1, reason: 'One.' }, { path: '/landGrant/claims', to: 2, reason: MARK }], line: '' });
-    const { written, v } = await write('trader', text);
-    expect(written.refused).toEqual([{ path: '/landGrant/claims', cause: 'path_repeated' }]);
-    expect(v.seen[0]).toEqual([{ path: '/landGrant/claims', to: 1, reason: 'One.' }]);
+    const text = JSON.stringify({ edits: [{ path: '/landGrant/ranked', to: 'A', reason: 'One.' }, { path: '/landGrant/ranked', to: 'B', reason: MARK }], line: '' });
+    const { written, v, brief } = await write('trader', text);
+    expect(written.refused).toEqual([{ path: '/landGrant/ranked', cause: 'path_repeated' }]);
+    expect(v.seen[0]).toEqual([{ path: '/landGrant/ranked', to: brief.plans.find((p) => p.id === 'A')!.ranked, reason: 'One.' }]);
     expect(kept(written)).not.toContain(MARK);
   });
 
   const fields: { cause: Cause; over: Record<string, unknown>; path: string }[] = [
     { cause: 'bad_kind', over: { kind: MARK }, path: '/strategy/kind' },
     { cause: 'bad_good', over: { moneyMaker: MARK }, path: '/strategy/moneyMaker' },
-    { cause: 'bad_cash_floor', over: { cashFloor: 12.5 }, path: '/strategy/cashFloor' },
   ];
   it.each(fields)('C2: a strategy field with $cause is refused alone; the other fields reach validate', async ({ cause, over, path }) => {
     const { written, v, brief } = await write('trader', replyText({ strategy: strategyReply(over) }));
@@ -222,8 +217,8 @@ describe('C2: the checks the schema cannot carry, each a cause code with no repl
 
   it("C2: a strategy reason past the cap refuses every strategy field, which all carry it, and keeps the land edits", async () => {
     const { written, v } = await write('trader', replyText({ strategy: strategyReply({ reason: MARK + 'x'.repeat(BRAIN.writeReasonChars) }) }));
-    expect(written.refused.map((r) => r.cause)).toEqual(['reason_too_long', 'reason_too_long', 'reason_too_long', 'reason_too_long']);
-    expect(paths(v.seen[0]!)).toEqual(['/landGrant/claims']);
+    expect(written.refused.map((r) => r.cause)).toEqual(['reason_too_long', 'reason_too_long', 'reason_too_long']);
+    expect(paths(v.seen[0]!)).toEqual(['/landGrant/ranked']);
     expect(written.reply.strategy).toBeUndefined();
     expect(kept(written)).not.toContain(MARK);
   });
@@ -252,11 +247,39 @@ describe('C2: the request and the reply', () => {
   it('C2: a reply without a strategy keeps the draft strategy: no strategy edits, none recorded', async () => {
     const { written, v } = await write('trader', replyText({ strategy: undefined }));
     expect(written.reply.strategy).toBeUndefined();
-    expect(paths(v.seen[0]!)).toEqual(['/landGrant/claims']);
+    expect(paths(v.seen[0]!)).toEqual(['/landGrant/ranked']);
   });
 
   it('C2: the reply schema is the same object shape for every brief of a level, so the request stays byte-stable', () => {
     expect(JSON.stringify(replySchema(true))).toBe(JSON.stringify(replySchema(true)));
     expect(JSON.stringify(replySchema(false))).toBe(JSON.stringify(replySchema(false)));
+  });
+});
+
+describe('B fix 5: an edit to a setting play does not read is refused as not offered (WS9 ruling, 6 Nov)', () => {
+  it.each(['rookie', 'trader'] as const)("B fix 5: a %s reply that edits /landGrant/claims or /strategy/cashFloor has both refused 'path_not_offered', unnamed, and validate sees only the ranking", async (level) => {
+    const text = JSON.stringify({
+      edits: [
+        { path: '/landGrant/claims', to: 1, reason: 'One plot will do.' },
+        { path: '/strategy/cashFloor', to: 150, reason: 'Keep some back.' },
+        { path: '/landGrant/ranked', to: 'A', reason: 'Grow a patch.' },
+      ],
+      line: '',
+    });
+    const { written, v } = await write(level, text);
+    // A path is named in a refusal only when some brief offers it: no brief offers these any more.
+    expect(written.refused).toEqual([
+      { path: null, cause: 'path_not_offered' },
+      { path: null, cause: 'path_not_offered' },
+    ]);
+    expect(paths(v.seen[0]!)).toEqual(['/landGrant/ranked']);
+  });
+
+  it("B fix 5: a reply whose strategy still carries cashFloor or monopolyTarget, outside the schema, is not the schema's shape: nothing of it plays", async () => {
+    for (const over of [{ cashFloor: 150 }, { monopolyTarget: 'smithore' }]) {
+      const { written, made } = await write('trader', replyText({ strategy: strategyReply(over), edits: [{ path: '/landGrant/ranked', to: 'A', reason: 'Grow.' }] }));
+      expect(written.reply.cause).toBe('bad_shape');
+      expect(made.playbook).toEqual(ENGINE);
+    }
   });
 });
