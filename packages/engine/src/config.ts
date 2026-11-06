@@ -1956,7 +1956,17 @@ export const BRAIN = {
   /** US dollars per million tokens for Sonnet 5.5: cache reads 0.1x input, 5-minute cache writes 1.25x. */
   sonnetPricesPerMTok: { input: 2, cacheRead: 0.2, cacheWrite: 2.5, output: 10 },
   /** The price table each model is billed at. Every model a call may name is listed here, so none is priced as another. */
-  priceTable: { 'claude-haiku-5-5': 'pricesPerMTok', 'claude-sonnet-5-5': 'sonnetPricesPerMTok' },
+  /** US dollars per million tokens for Opus 5.5 (claude-api reference, 6 Nov): cache reads $0.20, 5-minute cache writes 1.25x input. */
+  opusPricesPerMTok: { input: 4, cacheRead: 0.2, cacheWrite: 5, output: 20 },
+  priceTable: { 'claude-haiku-5-5': 'pricesPerMTok', 'claude-sonnet-5-5': 'sonnetPricesPerMTok', 'claude-opus-5-5': 'opusPricesPerMTok' },
+  /** brain:trial --write-model names: the model every write of a run goes to. */
+  trialWriteModels: { haiku: 'claude-haiku-5-5', sonnet: 'claude-sonnet-5-5', opus: 'claude-opus-5-5' },
+  /**
+   * brain:trial --deep, a monitoring run (deep2-opus, Heiko 6 Nov): every write thinks at writeCall's effort, with room
+   * for long thinking and a long wait, and every call is recorded with its summarized thinking. Its ledgers
+   * (deep-*.jsonl) count against capUsd, Heiko's clearance; a game's Smart seats may spend up to gameBudgetUsdMax.
+   */
+  deep: { capUsd: 20, gameBudgetUsdMax: 10, writeCall: { effort: 'high', maxTokens: 16_000, timeoutMs: 180_000 } },
   /**
    * The calls that write a seat's strategy and its playbook edits, by kind: adaptive thinking at this effort, a reply
    * cap that includes the thinking, and how long one call may take in ms (a p90 of 3.9 s was measured).

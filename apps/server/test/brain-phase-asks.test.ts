@@ -6,8 +6,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { advancePhase, createGame, type GameState } from '@mule/engine';
-import { AiSeat, playbookSource } from '@mule/ai';
+import { advancePhase, allPrices, createGame, type GameState } from '@mule/engine';
+import { AiSeat, atAuctionPrices, playbookSource } from '@mule/ai';
 import { createBrain, type MeteredBrain } from '../src/brain/index.js';
 import { Playbooks } from '../src/brain/playbooks.js';
 import type { PlaybookNote } from '../src/mule-game.js';
@@ -343,5 +343,44 @@ describe('RULE-A2 rows 3-4: the next phase is edited in the slack before it', { 
     playbooks.takePhase(state, 'development');
     expect(notes.map((n) => n.phase)).toEqual(['landGrant', 'development']);
     expect(notes[1]!.playbook.development).toEqual({ ...fresh, timeBudgetMs: 1_000 });
+  });
+});
+
+describe('deep2: what the Smart seat is asked with (t120s audit, 6 Nov)', { timeout: 30_000 }, () => {
+  it("deep2 C1: the auction ask in production's slack shows, and drafts at, the prices the store posts as the auction opens", async () => {
+    const asked: SdkParams[] = [];
+    const spy = fakeSdk((_n, params, options) => (asked.push(params), neverAnswers(options)));
+    const { state, playbooks } = table(smartOn(spy));
+    advanceTo(state, 'production');
+    // No Food anywhere: the store must raise its price when it posts at the auction's start.
+    state.store.stock.food = 0;
+    for (const p of state.players) p.stock.food = 0;
+    const stale = allPrices(state).food;
+    const posted = allPrices(atAuctionPrices(state)).food;
+    expect(posted).not.toBe(stale);
+    playbooks.askPhase(state, 'auction', []);
+    await vi.advanceTimersByTimeAsync(0);
+    const user = promptOf(asked[0]!).user;
+    expect(user).toContain(`Food ${posted}`);
+    expect(user).not.toContain(`Food ${stale} `);
+    // The game itself is untouched until the auction posts.
+    expect(allPrices(state).food).toBe(stale);
+  });
+
+  it("deep2: a seat's next land brief shows each seat's Worth change since its last plan; its first shows none", async () => {
+    const asked: SdkParams[] = [];
+    // Answers at once with nothing to change, so the seat is free for its next ask.
+    const spy = fakeSdk((_n, params) => (asked.push(params), Promise.resolve(sdkMessage(JSON.stringify({ edits: [], line: '' }), USED))));
+    const { state, playbooks } = table(smartOn(spy));
+    playbooks.ask(state, 2);
+    await vi.advanceTimersByTimeAsync(10);
+    await playbooks.settle();
+    state.players.find((p) => p.id === 'p0')!.money += 300;
+    playbooks.ask(state, 3);
+    await vi.advanceTimersByTimeAsync(10);
+    const briefs = asked.map((p) => promptOf(p).user).filter((u) => u.includes('Land plans for this month'));
+    expect(briefs).toHaveLength(2);
+    expect(briefs[0]).not.toContain('Since your plan for month');
+    expect(briefs[1]).toMatch(/Since your plan for month 2: your Worth .+ \(\+300\)/);
   });
 });

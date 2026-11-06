@@ -160,12 +160,13 @@ describe('brain:trial paid-run guard (PR-5: --run label, the proof cap)', () => 
     expect(out).toEqual([`brain:trial cannot check the PR-5 cap: ${path.join(dir, 'trial-2026-10-20.jsonl')} is not a readable ledger; nothing called.`]);
   });
 
-  it('PR-5 5.4: --write-model is sonnet or haiku, named in the run line; anything else, or twice, is a bad flag', async () => {
+  it('PR-5 5.4: --write-model is sonnet, haiku or opus (deep2, 6 Nov), named in the run line; anything else, or twice, is a bad flag', async () => {
     expect(writeModelFlag('sonnet')).toBe(BRAIN.strategySpike.models.sonnet);
     expect(writeModelFlag('haiku')).toBe(BRAIN.strategySpike.models.haiku);
-    expect(writeModelFlag('opus')).toBeUndefined();
+    expect(writeModelFlag('opus')).toBe('claude-opus-5-5');
+    expect(writeModelFlag('fable')).toBeUndefined();
     const calls = called();
-    for (const argv of [['--write-model', 'opus'], ['--write-model'], ['--write-model', 'haiku', '--write-model', 'sonnet']]) {
+    for (const argv of [['--write-model', 'fable'], ['--write-model'], ['--write-model', 'haiku', '--write-model', 'sonnet']]) {
       const { result } = run(['--games', '1', '--max-usd', '1', ...argv]);
       expect((await result).code, argv.join(' ')).toBe(1);
     }
@@ -568,6 +569,59 @@ describe.runIf(process.env.MULE_FULL === '1')('brain:trial', () => {
     },
     GAMES_MS,
   );
+
+  it(
+    'deep2: a --deep 1 pair run on opus keeps its own ledger and cap, and records every call with its thinking asked summarized, every playbook taken and every seat\'s Worth at each phase',
+    async () => {
+      const seen: SdkParams[] = [];
+      sdk.create = (params) => (seen.push(params), Promise.resolve(sdkMessage(USABLE, BILLED)));
+      const argv = ['--table', 'pair', '--playbooks', '1', '--games', '2', '--seed', '1', '--deep', '1', '--write-model', 'opus', '--run', 'deep2-test', '--game-budget-usd', '5', '--max-usd', '10'];
+      const { report } = await run(argv).result;
+      expect(report).toMatchObject({ played: 2, stopped: 'done' });
+      expect(fs.existsSync(path.join(dir, 'deep-2026-10-22-deep2-test.jsonl'))).toBe(true);
+      expect(fs.existsSync(path.join(dir, 'tourney-2026-10-22-deep2-test.jsonl'))).toBe(false);
+      const writes = seen.filter((q) => q.thinking?.type === 'adaptive');
+      expect(writes.length).toBeGreaterThan(0);
+      for (const q of writes) {
+        expect(q.model).toBe('claude-opus-5-5');
+        expect(q.thinking).toEqual({ type: 'adaptive', display: 'summarized' });
+        expect(q.max_tokens).toBe(BRAIN.deep.writeCall.maxTokens);
+        expect(q.output_config?.effort).toBe(BRAIN.deep.writeCall.effort);
+      }
+      const record = fs
+        .readFileSync(path.join(dir, 'deep-2026-10-22-deep2-test.record.ndjson'), 'utf8')
+        .trim()
+        .split('\n')
+        .map((l) => JSON.parse(l) as { kind: string; game: string; request?: { system: string }; worth?: Record<string, { total: number }> });
+      const kinds = new Set(record.map((r) => r.kind));
+      for (const k of ['seats', 'call', 'phase']) expect(kinds, k).toContain(k);
+      // The manual is written once beside the record, and each call names it.
+      const call = record.find((r) => r.kind === 'call')!;
+      expect(call.request!.system).toMatch(/^system-[0-9a-f]{12}$/);
+      expect(fs.existsSync(path.join(dir, `deep-2026-10-22-deep2-test.record.${call.request!.system}.txt`))).toBe(true);
+      expect(Object.keys(record.find((r) => r.kind === 'phase')!.worth!).sort()).toEqual(['ai0', 'ai1', 'ai2', 'ai3']);
+      expect(new Set(record.map((r) => r.game)).size).toBe(2);
+      // A second deep run reads only the deep ledgers' call lines: the record is not one, so the cap still adds up.
+      const again = await run(['--table', 'pair', '--playbooks', '1', '--games', '2', '--seed', '1', '--deep', '1', '--write-model', 'opus', '--run', 'deep2-again', '--game-budget-usd', '5', '--max-usd', '1']).result;
+      expect(again.report).toMatchObject({ played: 0, stopped: 'cap' });
+    },
+    GAMES_MS,
+  );
+
+  it('deep2: --deep 1 is refused past BRAIN.deep.capUsd, without a pair table, or with --control 1; its game budget may reach BRAIN.deep.gameBudgetUsdMax', async () => {
+    let calls = 0;
+    sdk.create = () => (calls++, Promise.resolve(sdkMessage(USABLE, BILLED)));
+    const over = await run(['--table', 'pair', '--playbooks', '1', '--games', '2', '--deep', '1', '--run', 'd1', '--game-budget-usd', '5', '--max-usd', String(BRAIN.deep.capUsd + 1)]).result;
+    expect(over.code).toBe(1);
+    for (const argv of [
+      ['--games', '2', '--deep', '1', '--max-usd', '5'],
+      ['--table', 'pair', '--control', '1', '--games', '2', '--deep', '1'],
+      ['--table', 'pair', '--playbooks', '1', '--games', '2', '--deep', '1', '--game-budget-usd', String(BRAIN.deep.gameBudgetUsdMax + 1), '--max-usd', '5'],
+    ]) {
+      expect(await run(argv).result, argv.join(' ')).toEqual({ code: 1, report: null });
+    }
+    expect(calls).toBe(0);
+  });
 
   it('INV-trial-cap: a --game-budget-usd above BRAIN.gameBudgetUsd, or of 0, prints the usage and exits 1 before any claim, client or call', async () => {
     let calls = 0;
