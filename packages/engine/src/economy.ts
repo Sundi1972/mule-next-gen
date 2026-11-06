@@ -343,11 +343,16 @@ function normal(rng: Rng): number {
 /**
  * Moves each export good's off-world price one month along its walk (pricing RULE-3), as the month opens. Each good
  * draws from its own rng keyed on the seed, the month and the good, so no other draw in the game moves (HC-1).
+ * A what-if month draws nothing: it opens on the expected path, as an AI's forecast should (pricing §3).
  */
 export function stepOffWorld(state: GameState): void {
   for (const good of GOODS) {
     const walk = offWorldWalk(good);
     if (!walk) continue;
+    if (state.whatIf) {
+      state.store.offWorld[good] = expectedOffWorld(state, good, 1);
+      continue;
+    }
     const rng = createRng(seedOf(state.seed, state.month, 'offWorld', good));
     const swing = walk.sigma * Math.sqrt(1 - walk.phi ** 2) * normal(rng); // literal-ok: phi squared, the walk's own formula
     const log = Math.log(walk.centre) + walk.phi * Math.log(state.store.offWorld[good] / walk.centre) + swing;
