@@ -189,9 +189,10 @@ export function landDecision(obs: GameState, mind: Mind): Shortlist<LandPlan> {
   const reserve = cashReserve(obs, mind, o);
   // Units against need (FM-feeds-me), not plots: a farm turned off for want of Energy, or halved for want of Water, feeds
   // nobody. Supply is the outlook's next production on the footing monthNeeds uses (ownSupply: a plant's own use left
-  // out). Without a look-ahead the outlook makes nothing, so the seat counts on none of its plots.
+  // out). Without a look-ahead (Rookie) the outlook makes nothing, so that seat still counts plots: a Food and an Energy plot.
   const need = monthNeeds(obs, mind.me);
-  const shortOfFood = (['food', 'energy'] as const).some((g) => ownSupply(obs, mind.me, o.made, g) < need[g]);
+  const owns = (outfit: Outfit) => obs.tiles.some((t) => t.owner === mind.me && t.outfit === outfit);
+  const shortOfFood = mind.level.lookAhead ? (['food', 'energy'] as const).some((g) => ownSupply(obs, mind.me, o.made, g) < need[g]) : !owns('food') || !owns('energy');
 
   const gains = new Map(free.map((t) => [t, plotGains(obs, o, t, mind)]));
   const land = STRATEGIST.land;
