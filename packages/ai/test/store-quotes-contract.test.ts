@@ -32,11 +32,13 @@ function atEachUpkeep(seed: number, look: (state: GameState) => void): number {
 describe("pricing §3: the AI's prices are the store's own rule", () => {
   it.each(SEEDS)("price T-AC-2: at upkeep, outlook's next-month price is the store's own rule on its stage (seed %i)", (seed) => {
     let checkedPurity = false;
+    let walked = 0;
     const seen = atEachUpkeep(seed, (state) => {
       const me = state.players[0]!.id;
       const o = outlook(observe(state, me), me, { lookAhead: true });
       // The report the store's next postPrices reads as last month's: this month's, which upkeep just filled in.
       const lastShortages = state.history.at(-1)!.shortages;
+      if (Object.keys(state.store.lastWalk ?? {}).length > 0) walked++;
       expect(o.stage.store.lastWalk, 'the stage carries the real lastWalk').toEqual(state.store.lastWalk);
       for (const good of GOODS) {
         expect(o.price(good), `${good}, month ${state.month}`).toBe(nextPostedPrice(o.stage, good, undefined, lastShortages));
@@ -55,5 +57,7 @@ describe("pricing §3: the AI's prices are the store's own rule", () => {
       checkedPurity = true;
     });
     expect(seen, 'the game reached upkeeps to sample').toBeGreaterThan(0);
+    // Without a walk's lesson at some upkeep, the stage check above compares nothing with nothing.
+    expect(walked, 'some upkeep held a walk lesson').toBeGreaterThan(0);
   }, 60_000);
 });

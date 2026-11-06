@@ -26,6 +26,7 @@ import {
   type Good,
   type Species,
   type Trade,
+  type WalkLesson,
 } from '../src/index.js';
 
 const TICK = WALK.tickMs;
@@ -792,10 +793,11 @@ describe("price T-AC-3: when a good's walk finishes, the store keeps its sold-ou
   const APART = 10_000;
 
   /** Smithore comes up with p0 selling 10 and the store holding `shelf` to sell and wanting `budget`; then the walk, everyone apart. */
-  function smithoreWalk(shelf: number, budget: number) {
+  function smithoreWalk(shelf: number, budget: number, lastMonth?: WalkLesson) {
     const state = newGame();
     state.players[0]!.stock.smithore = 10;
     state.store.stock.smithore = shelf;
+    if (lastMonth) state.store.lastWalk = { smithore: lastMonth };
     startAuction(state, ['smithore']);
     a(state).storeBudget = budget;
     toWalk(state);
@@ -861,8 +863,7 @@ describe("price T-AC-3: when a good's walk finishes, the store keeps its sold-ou
     { name: 'the store wanted 2 and bought 1', budget: 2, sold: 1, dryBudget: false },
     { name: "the store wanted none as the good came up, whatever last month's walk kept", budget: 0, sold: 0, dryBudget: false },
   ])('price T-AC-3: dryBudget is true exactly when the store wanted some as the good came up and wants none at its finish: $name', ({ budget, sold, dryBudget }) => {
-    const state = smithoreWalk(0, budget);
-    state.store.lastWalk = { smithore: { soldOutHigh: 500, highTrade: 500, dryBudget: true } };
+    const state = smithoreWalk(0, budget, { soldOutHigh: 500, highTrade: 500, dryBudget: true });
     sellToStore(state, sold);
     expect(finish(state)).toEqual({ soldOutHigh: null, highTrade: null, dryBudget });
   });
