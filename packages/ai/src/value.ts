@@ -222,6 +222,16 @@ export function chainLinks(obs: GameState, me: string, good: Good): Good[] {
 }
 
 /**
+ * The share of its works' monthly run a link plot on `tile` supplies, at most 1: what it would make over what the chain
+ * member that uses it needs a run. A link counts for the chain only as far as it feeds it. See AM-32.
+ */
+export function linkShare(obs: GameState, tile: Tile, link: Good, members: readonly Good[], me: string): number {
+  const user = members.find((m) => isFactory(m) && (RECIPES[m].inputs[link] ?? 0) > 0);
+  const need = user ? RECIPES[user as ProcessedGood].inputs[link]! : 1;
+  return Math.min(1, yieldOf(obs, tile, link, me).made / need);
+}
+
+/**
  * The outlook a chain is valued at: its links' goods cost and fetch nothing. A link's output and the works' charge for
  * it cancel within the seat, so the works is valued with its input charge refunded and each link plot at its running
  * cost alone (MULE, outfit, Energy, crew, air). See AM-32.
