@@ -1,4 +1,7 @@
+import { mkdtempSync, rmSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { MuleView, ServerEnvelope } from '@mule/protocol';
 import { expect, it } from 'vitest';
 import WebSocket from 'ws';
@@ -73,10 +76,16 @@ it('T-AC-3: a species picked over the socket reaches the game; a seat that never
   }
 });
 
-it.each([43, 7, -5])(
-  'T-AC-LS1: at seed %i the lobby tells each seat the species it will play if it never picks, and Start gives it exactly that',
-  async (seed) => {
-    const running = createMuleServer({ seed: () => seed });
+it.each([
+  { seed: 43, recorded: false },
+  { seed: 7, recorded: false },
+  { seed: -5, recorded: true },
+])(
+  'T-AC-LS1: at seed $seed (recorded: $recorded) the lobby tells each seat the species it will play if it never picks, and Start gives it exactly that',
+  async ({ seed, recorded }) => {
+    // A recording server hosts the game through the recorder's wrapper, which must pass the defaults on too.
+    const recordDir = recorded ? mkdtempSync(join(tmpdir(), 'mule-ls1-')) : null;
+    const running = createMuleServer({ seed: () => seed, recordDir });
     const sockets: WebSocket[] = [];
     let code = '';
     try {
@@ -108,6 +117,7 @@ it.each([43, 7, -5])(
       for (const s of sockets) s.terminate();
       running.registry.get(code)?.dispose();
       await running.close();
+      if (recordDir) rmSync(recordDir, { recursive: true, force: true });
     }
   },
 );
