@@ -49,6 +49,7 @@ import {
 import { simSeats, type TablePlays } from './lineup.js';
 import type { FloorMomentCounts } from './floor-turn.js';
 import { playGame, type DevTurn, type PlayedGame, type SeatSpec } from './play.js';
+import type { AiSeat } from './seat.js';
 import { unitNeed, type Mind } from './value.js';
 
 function arg(name: string, fallback: number): number {
@@ -340,15 +341,29 @@ function eventLines(months: readonly PhaseEvents[], label: string, note: string)
   ];
 }
 
+/** Why a seat short of a good when the auction opened ended it still short. */
+const SHORT_WHY = ['soldOut', 'skipped', 'fewer', 'couldNotPay', 'other'] as const;
+type ShortWhy = (typeof SHORT_WHY)[number];
+const SHORT_WHY_LABEL: Record<ShortWhy, string> = {
+  soldOut: 'store sold out mid-auction',
+  skipped: 'good skipped by the engine',
+  fewer: 'decided fewer than the shortfall',
+  couldNotPay: 'could not pay at the good',
+  other: 'other',
+};
+
 /**
- * What the resource-utility model's proof counts (UBER-AC-1, T-AC-12), read at each auction's start and end and at
- * production: the auctions a seat entered short of a good it needs, with the store selling it and cash for the whole
- * shortfall at the store's ask, and how many it left still short; the seat-months that lost output for want of
- * Energy, and those while the store had Energy for it and it could pay; plants and wells at each game's end.
+ * What the resource-utility model's proof counts (UBER-AC-1, T-AC-12). UBER-AC-1 (a): at each good's status screen,
+ * the seats short of what they need with the store selling it and the cash for the whole shortfall at the store's ask
+ * then, and how many left that good still short; a good the engine skips holds no auction and counts none. Beside it,
+ * why each seat short of a good when the auction opened (with the store selling and the cash then) ended still short.
+ * (b) and T-AC-12: the seat-months that lost output for want of Energy, those while the store had Energy for it and it
+ * could pay, and plants and wells at each game's end.
  */
 interface SupplyTally {
   entered: number;
   leftShort: number;
+  why: Partial<Record<engine.Good, Record<ShortWhy, number>>>;
   seatMonths: number;
   cut: number;
   cutCouldBuy: number;
@@ -356,59 +371,111 @@ interface SupplyTally {
   wells: number;
 }
 
-const newSupplyTally = (): SupplyTally => ({ entered: 0, leftShort: 0, seatMonths: 0, cut: 0, cutCouldBuy: 0, plants: 0, wells: 0 });
+const newSupplyTally = (): SupplyTally => ({ entered: 0, leftShort: 0, why: {}, seatMonths: 0, cut: 0, cutCouldBuy: 0, plants: 0, wells: 0 });
 
-/** The tally's phase hook for one game: `minds` are its seats', by id. */
-function supplyHook(tally: SupplyTally, minds: Map<string, Mind>): (s: GameState) => void {
-  /** At the auction's start: per seat, the goods it is short of and could buy whole, and whether it could buy its Energy. */
-  let open: Map<string, { goods: { good: engine.Good; target: number }[]; energy: boolean }> | null = null;
-  let energyAt: Map<string, boolean> | null = null;
-  return (s) => {
+interface Short {
+  target: number;
+  /** Short with the store selling it and the cash for the whole shortfall at the store's ask. */
+  canBuy: boolean;
+}
+
+/** Each seat's shortfall of a good, by the model's target, at the store's ask `ask`. */
+function shortOf(s: GameState, mind: Mind, good: engine.Good, ask: number): Short {
+  const p = s.players.find((q) => q.id === mind.me)!;
+  const target = unitNeed(observe(s, p.id), mind, good).target;
+  const short = target - p.stock[good];
+  return { target, canBuy: short > 0 && storeForSale(s, good) > 0 && p.money >= short * ask };
+}
+
+/**
+ * The tally's hooks for one game: `phase` after each phase, `seats` once the seats sit down. It watches the auction
+ * through the first seat's tick, which runs before every step: it reads and changes nothing.
+ */
+function supplyHooks(tally: SupplyTally): { phase: (s: GameState) => void; seats: (seats: readonly AiSeat[]) => void } {
+  let seats: readonly AiSeat[] = [];
+  /** When the auction opens: per seat and good, its shortfall at the posted price. */
+  let opened: Map<string, Map<engine.Good, Short>> | null = null;
+  /** At each good's status screen, per seat; at its close, per seat: the stock, the trade it chose, the shelf. */
+  let atStatus = new Map<engine.Good, Map<string, Short>>();
+  let atClose = new Map<engine.Good, Map<string, { stock: number; buyTo: number | null; soldOut: boolean }>>();
+  const watch = (s: GameState) => {
+    const a = s.auction;
+    if (!opened || !a?.good) return;
+    const good = a.good;
+    if (a.stage === 'status' && !atStatus.has(good)) atStatus.set(good, new Map(seats.map((seat) => [seat.mind.me, shortOf(s, seat.mind, good, a.storeSell)])));
+    if (a.stage === 'close' && atStatus.has(good) && !atClose.has(good)) {
+      const close = new Map<string, { stock: number; buyTo: number | null; soldOut: boolean }>();
+      for (const seat of seats) {
+        const d = seat.debug().auction;
+        const buyTo = d?.good === good && d.side === 'buyer' ? d.goal : null;
+        close.set(seat.mind.me, { stock: s.players.find((p) => p.id === seat.mind.me)!.stock[good], buyTo, soldOut: storeForSale(s, good) === 0 });
+      }
+      atClose.set(good, close);
+    }
+  };
+  const phase = (s: GameState) => {
     if (s.phase === 'production') {
-      if (energyAt) {
+      if (opened) {
         const lines = s.history.at(-1)?.lines ?? [];
         for (const p of s.players) {
           tally.seatMonths++;
           const cut = lines.some((l) => s.tiles[l.tile]!.owner === p.id && l.parts.some((x) => x.why === 'energyOff'));
+          const could = atStatus.get('energy')?.get(p.id)?.canBuy ?? opened.get(p.id)?.get('energy')?.canBuy ?? false;
           if (cut) tally.cut++;
-          if (cut && energyAt.get(p.id)) tally.cutCouldBuy++;
+          if (cut && could) tally.cutCouldBuy++;
         }
       }
-      open = new Map();
-      for (const p of s.players) {
-        const obs = observe(s, p.id);
-        const mind = minds.get(p.id)!;
-        const goods: { good: engine.Good; target: number }[] = [];
-        let energy = false;
-        for (const good of WALK.order) {
-          const target = unitNeed(obs, mind, good).target;
-          const short = target - p.stock[good];
-          const ask = Math.ceil(s.store.posted[good] * (1 + PRICE.storeSpread));
-          const can = short > 0 && storeForSale(s, good) > 0 && p.money >= short * ask;
-          if (can) goods.push({ good, target });
-          if (good === 'energy') energy = can;
+      opened = new Map(seats.map((seat) => [seat.mind.me, new Map(WALK.order.map((g) => [g, shortOf(s, seat.mind, g, Math.ceil(s.store.posted[g] * (1 + PRICE.storeSpread)))]))]));
+      atStatus = new Map();
+      atClose = new Map();
+    }
+    if (s.phase !== 'auction' || !opened) return;
+    for (const p of s.players) {
+      for (const good of WALK.order) {
+        const status = atStatus.get(good)?.get(p.id);
+        const end = atClose.get(good)?.get(p.id)?.stock ?? p.stock[good];
+        if (status?.canBuy) {
+          tally.entered++;
+          if (end < status.target) tally.leftShort++;
         }
-        open.set(p.id, { goods, energy });
+        const start = opened.get(p.id)!.get(good)!;
+        if (!start.canBuy || end >= start.target) continue;
+        const close = atClose.get(good)?.get(p.id);
+        let why: ShortWhy = 'other';
+        if (!status) why = 'skipped';
+        else if (!status.canBuy) why = 'couldNotPay';
+        else if (close && (close.buyTo === null || close.buyTo < status.target)) why = 'fewer';
+        else if (close?.soldOut) why = 'soldOut';
+        const row = (tally.why[good] ??= Object.fromEntries(SHORT_WHY.map((w) => [w, 0])) as Record<ShortWhy, number>);
+        row[why]++;
       }
     }
-    if (s.phase === 'auction' && open) {
-      energyAt = new Map();
-      for (const p of s.players) {
-        const at = open.get(p.id)!;
-        energyAt.set(p.id, at.energy);
-        tally.entered += at.goods.length;
-        tally.leftShort += at.goods.filter((g) => p.stock[g.good] < g.target).length;
-      }
-      open = null;
-    }
+  };
+  return {
+    phase,
+    seats: (all) => {
+      seats = all;
+      const first = all[0];
+      if (!first) return;
+      const tick = first.auctionTick.bind(first);
+      first.auctionTick = (state, dt, act) => {
+        watch(state);
+        tick(state, dt, act);
+      };
+    },
   };
 }
 
 /** The model's proof rows, beside the colony's own Food and Water shortage (HC-6). */
 function supplyLines(t: SupplyTally, playerGames: number, colonyShort: string): string[] {
   const perSeat = (n: number) => (n / Math.max(1, playerGames)).toFixed(2); // literal-ok: two decimals, display only
+  const why = (Object.entries(t.why) as [engine.Good, Record<ShortWhy, number>][]).map(
+    ([good, row]) => `       ${good}: ${SHORT_WHY.filter((w) => row[w] > 0).map((w) => `${SHORT_WHY_LABEL[w]} ${row[w]}`).join(', ')}`,
+  );
   return [
-    `     Resource utility (UBER-AC-1 a): ${pct(t.leftShort, t.entered)} of ${t.entered} auctions a seat entered short, with the store selling and cash for the whole shortfall, it left still short (target under 5%); colonists short of Food or Water in ${colonyShort} of months`,
+    `     Resource utility (UBER-AC-1 a): ${pct(t.leftShort, t.entered)} of ${t.entered} goods a seat came to short, with the store selling and cash at its status screen for the whole shortfall at the store's ask, it left still short (target under 5%); colonists short of Food or Water in ${colonyShort} of months`,
+    `     Resource utility (UBER-AC-1 a, why): short when the auction opened, with the store selling and the cash then, and still short after the good:`,
+    ...why,
     `     Resource utility (UBER-AC-1 b): Energy cut while the store had Energy and the seat could pay in ${pct(t.cutCouldBuy, t.seatMonths)} of ${t.seatMonths} seat-months (target under 5%); colonists short of Food or Water in ${colonyShort} of months`,
     `     Resource utility (T-AC-12): ${perSeat(t.plants)} plants and ${perSeat(t.wells)} wells a seat-game at the end; a cut for want of Energy in ${pct(t.cut, t.seatMonths)} of seat-months; colonists short of Food or Water in ${colonyShort} of months`,
   ];
@@ -498,12 +565,11 @@ function main() {
     /** Plots developed as each month's production runs, by month. */
     const developedAt = new Map<number, number>();
     const colony = colonyScoreRecorder();
-    const minds = new Map(specs.map((spec, i): [string, Mind] => [`ai${i}`, { me: `ai${i}`, personaId: spec.persona, persona: AI_PERSONAS[spec.persona], levelId: spec.level, level: AI_LEVELS[spec.level] }]));
-    const supplyAt = supply ? supplyHook(supply, minds) : null;
+    const supplyAt = supply ? supplyHooks(supply) : null;
     const onEachPhase = (s: GameState) => {
       onPhase(s);
       colony.onPhase(s);
-      supplyAt?.(s);
+      supplyAt?.phase(s);
       if (s.phase === 'production') developedAt.set(s.month, s.tiles.filter((t) => t.owner && t.outfit).length);
       if (s.phase === 'production' && pending) {
         const events = s.history.at(-1)!.events ?? [];
@@ -522,7 +588,7 @@ function main() {
         hungryRun.set(p.id, h);
       }
     };
-    const played = playGame(seed, specs, { politics, walking, onPhase: onEachPhase });
+    const played = playGame(seed, specs, { politics, walking, onPhase: onEachPhase, ...(supplyAt ? { onSeats: supplyAt.seats } : {}) });
     const { state, broke, auction: a, lots: l, mulesLost: lost, turns, moments } = played;
     mulesLost += lost;
     colonyPaths.push(colony.end(state));
