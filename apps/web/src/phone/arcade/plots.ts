@@ -1,7 +1,7 @@
 import { MINERAL_ODDS, TERRAIN_ODDS, type Good, type Ground, type Outfit, type RawGood } from '@mule/engine';
 import type { TileView } from '@mule/protocol';
-import { GOOD_NAME, TERRAIN_NAME } from '@mule/ui';
-import { groundPips, plotName } from '../../game/derive';
+import { bestOf, dotsOf, GOOD_NAME, groundDots, TERRAIN_NAME } from '@mule/ui';
+import { plotName } from '../../game/derive';
 
 /**
  * What a plot suits, from its analysis when the player has one, else its land's odds (the development audit's helpers
@@ -16,14 +16,14 @@ export const OUTFIT_WORD: Record<Outfit, string> = { ...(GOOD_NAME as Record<Goo
 
 /** The good the ground is best for: the most dots, the outfitters' order on a tie. */
 export function bestHere(ground: Ground): RawGood {
-  return RAW.reduce((b, g) => (groundPips(g, ground[g]) > groundPips(b, ground[b]) ? g : b), RAW[0]!);
+  return bestOf(dotsOf(ground));
 }
 
 const oddsOf = (t: Pick<TileView, 'terrain'>) => TERRAIN_ODDS[t.terrain as keyof typeof TERRAIN_ODDS] as (typeof TERRAIN_ODDS)[keyof typeof TERRAIN_ODDS] | undefined;
 
 /** Goods a plot suits: from its analysis (3 dots or more), else from its land's odds. */
 export function suits(t: Pick<TileView, 'terrain' | 'ground'>): Good[] {
-  if (t.ground) return RAW.filter((g) => groundPips(g, t.ground![g]) >= 3);
+  if (t.ground) return RAW.filter((g) => groundDots(g, t.ground![g]) >= 3);
   const odds = oddsOf(t);
   if (!odds) return [];
   const grown = GROWN.filter((g) => odds.grown[g] === 'good');
@@ -48,10 +48,11 @@ function fit(t: TileView, good: Outfit): number {
   // A factory or the Green belt makes its good from inputs, not from the ground: every plot fits it the same.
   if (!(RAW as string[]).includes(good)) return 2;
   const raw = good as RawGood;
-  if (t.ground) return groundPips(raw, t.ground[raw]);
+  if (t.ground) return groundDots(raw, t.ground[raw]);
   const odds = oddsOf(t);
   if (!odds) return 0;
-  if (raw === 'smithore') return Object.keys(MINERAL_ODDS).indexOf(odds.mined.smithore);
+  // The odds run none..veryHigh (0..4); held to the dots' 3, so a guess at most ties an analysed 3-dot plot, never beats it.
+  if (raw === 'smithore') return Math.min(3, Object.keys(MINERAL_ODDS).indexOf(odds.mined.smithore));
   if (raw === 'crystite' || raw === 'rareEarth') return 2;
   const o = odds.grown[raw];
   return o === 'good' ? 3 : o === 'poor' ? 1 : 2;

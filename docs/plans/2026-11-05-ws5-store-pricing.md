@@ -1,5 +1,8 @@
 # WS5 store pricing: a market-maker store, implementation plan
 
+> **SUPERSEDED (6 Nov)** by `docs/plans/2026-11-06-ws5-colony-economy-build.md`, which builds the design Heiko
+> approved in explainer v3 (a28b861b). Kept for the record; do not execute from it.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use swisper-superpowers:subagent-driven-development (recommended) or swisper-superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Spec class:** Standard (Heiko, 5 Nov).
