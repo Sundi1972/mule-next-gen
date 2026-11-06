@@ -1,19 +1,20 @@
 import { COLONY_SELLER, DEVELOPMENT } from '@mule/engine';
 import type { MuleView, TileView } from '@mule/protocol';
 import { Button, GOOD_NAME, HoloMap, TERRAIN_NAME, type MapTile } from '@mule/ui';
+import { useEffect, useRef } from 'react';
 import { mapTiles, player, plotName, TERRAIN_ODDS, tileAt } from '../../game/derive';
 import { SpecialLine } from '../../components/SpecialLine';
 import { StrikeMap } from '../../components/Strike';
 import { useClient } from '../../net/react';
 import { usePhoneGame } from '../game';
 import { GroundCard } from '../ground';
-import { droneReport, nextDroneWords, ScanReport, useScanning } from '../plotInfo';
+import { droneReport, myPlots, nextDroneWords, PlotRow, ScanReport, useScanning } from '../plotInfo';
 import { SellMap } from '../Sell';
 import { MapFit, useWide } from '../Shell';
 import { OnlyYou } from './OnlyYou';
 import { useToday } from './state';
 
-/* Today's map tools: Look, the geo drone (planning's drone flow) and selling a plot (the Sell form's map). */
+/* Today's map tools: Look, My plots, the geo drone (planning's drone flow) and selling a plot (the Sell form's map). */
 
 /** A plot the drone may fly over: nobody's, not the store, and not the colony's (a sited object's plot is no player's). */
 export const freeForDrone = (t: MapTile) => t.owner === null && !t.object && t.terrain !== 'store';
@@ -69,6 +70,47 @@ export function LookPanel() {
           {TERRAIN_ODDS[tile.terrain]}
         </span>
       )}
+    </section>
+  );
+}
+
+/** My plots on the map: a tap on one of yours selects its row; a tap anywhere else lets go. */
+export function MyPlotsMap() {
+  const { view, me, slot } = usePhoneGame();
+  const { looked, setLooked } = useToday();
+  const wide = useWide();
+  const mine = (p: { x: number; y: number } | null) => !!p && tileAt(view, p.x, p.y)?.owner === me.id;
+  const tap = (t: MapTile) => setLooked(mine(t) ? { x: t.x, y: t.y } : null);
+  return (
+    <MapFit width={view.width} height={view.height}>
+      <StrikeMap view={view} size="phone">
+        <HoloMap width={view.width} height={view.height} tiles={mapTiles(view)} onTile={tap} selected={mine(looked) ? looked : null} focusSlot={slot} density={wide ? 'tv' : 'phone'} />
+      </StrikeMap>
+    </MapFit>
+  );
+}
+
+/** Every plot you own, one row each with its goods' dots; a tap on a row selects the plot on the map. */
+export function MyPlotsPanel() {
+  const { view, me } = usePhoneGame();
+  const { looked, setLooked } = useToday();
+  const list = useRef<HTMLElement>(null);
+  const mine = myPlots(view, me.id);
+  const isLooked = (t: TileView) => looked?.x === t.x && looked.y === t.y;
+  // A plot tapped on the map may have its row below the rail's fold.
+  useEffect(() => {
+    if (looked) list.current?.querySelector?.(`[data-testid="plot-row-${looked.x}-${looked.y}"]`)?.scrollIntoView?.({ block: 'nearest' });
+  }, [looked]);
+  return (
+    <section ref={list} className="flex flex-col gap-1.5" data-testid="my-plots">
+      <span className="flex items-center justify-between">
+        <span className="font-display text-sm font-semibold">My plots · {mine.length}</span>
+        <OnlyYou />
+      </span>
+      {mine.length === 0 && <span className="text-[11px] leading-snug text-ink-2">No plots yet: claim one in the land grant.</span>}
+      {mine.map((t) => (
+        <PlotRow key={`${t.x},${t.y}`} t={t} selected={isLooked(t)} onPick={() => setLooked({ x: t.x, y: t.y })} dense />
+      ))}
     </section>
   );
 }

@@ -3,6 +3,7 @@ import type { MuleView, TileView } from '@mule/protocol';
 import { bestOf, cx, dotsOf, gemsIn, GOOD_NAME, GoodIcon, TERRAIN_NAME, type RawGood } from '@mule/ui';
 import { useEffect, useState } from 'react';
 import { plotName, tileAt } from '../game/derive';
+import { OUTFIT_WORD } from './arcade/plots';
 
 /* What a plot's ground shows on the phone: each raw good as 0–3 dots, the gem, and the drone's report. */
 
@@ -107,6 +108,41 @@ export function ScanReport({ tiles, next }: { tiles: TileView[]; next: string })
 
 export function OnlyYou() {
   return <span className="rounded-chip bg-holo-soft px-1.5 font-mono text-[10px] font-bold text-holo">ONLY YOU</span>;
+}
+
+/** The plots `meId` owns in the view, in the map's order: what My plots lists. */
+export function myPlots(view: Pick<MuleView, 'tiles'>, meId: string): TileView[] {
+  return view.tiles.filter((t) => t.owner === meId);
+}
+
+/**
+ * One row of My plots: where, what land, what stands on it, then its goods; a plot nobody analysed says how to find
+ * out (its ground is unknown, never 0).
+ */
+export function PlotRow({ t, selected = false, onPick, dense = false }: { t: TileView; selected?: boolean; onPick?: () => void; dense?: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={onPick}
+      aria-pressed={selected}
+      className={cx('flex w-full flex-col gap-1 rounded-control border px-2 py-1.5 text-left', selected ? 'border-holo bg-holo-soft' : 'border-holo-faint bg-panel')}
+      data-testid={`plot-row-${t.x}-${t.y}`}
+    >
+      <span className="flex w-full items-baseline justify-between gap-2 text-xs">
+        <b className="shrink-0 font-semibold">
+          {plotName(t.x, t.y)} · {TERRAIN_NAME[t.terrain]}
+        </b>
+        <span className="truncate text-[11px] text-ink-3">{t.outfit ? `${OUTFIT_WORD[t.outfit]} MULE` : 'no MULE yet'}</span>
+      </span>
+      {t.ground ? (
+        <GoodDots ground={t.ground} cols={dense ? 6 : 3} />
+      ) : (
+        <span className="text-[11px] leading-snug text-warn" data-testid="not-analysed">
+          Not analysed: walk to it in development and press Analyse.
+        </span>
+      )}
+    </button>
+  );
 }
 
 /**
