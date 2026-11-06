@@ -1,4 +1,5 @@
 import {
+  addStock,
   AI_PLANS,
   AI_VALUE,
   airPoints,
@@ -69,6 +70,12 @@ export interface Yield {
   crew: number;
 }
 
+/** A factory's recipe inputs but its Energy, per run. */
+function inputsOf(good: ProcessedGood): Partial<Stock> {
+  const { energy: _e, ...inputs } = RECIPES[good].inputs;
+  return inputs;
+}
+
 /** What an outfit would make on a tile for this player, on the ground the seat knows (the observation's). */
 export function yieldOf(obs: GameState, tile: Tile, outfit: Outfit, me: string): Yield {
   const index = obs.tiles.indexOf(tile);
@@ -79,8 +86,7 @@ export function yieldOf(obs: GameState, tile: Tile, outfit: Outfit, me: string):
     if (outfit === 'greenBelt') return { made: 0, energy: 0, inputs: {}, air: 0, crew: UPKEEP.crew.greenBelt };
     if (isFactory(outfit)) {
       const fit = factoryFit(obs, probe, outfit, me);
-      const { energy: _e, ...inputs } = RECIPES[outfit].inputs;
-      return { made: fit.output, energy: fit.energy, inputs, air, crew: UPKEEP.crew.factory };
+      return { made: fit.output, energy: fit.energy, inputs: inputsOf(outfit), air, crew: UPKEEP.crew.factory };
     }
     return { made: rawOutput(obs, probe), energy: energyUseOf(obs, probe), inputs: {}, air, crew: UPKEEP.crew.raw };
   } finally {
@@ -177,8 +183,8 @@ export function installGain(obs: GameState, o: Outlook, tile: Tile, outfit: Outf
  * from the same stock and what is left spoils between months. A plot of its own feeds the factory only with what is
  * left after the household eats (FM-factory-input): a farm turned off, or one making only the household's Food, feeds
  * nothing, and nor does what the seat's factories already running take of the same input. Its plots make what the next
- * production on a copy of what it sees, with the new factory in it, makes (madeNext), each month alike: a farm the
- * factory's own Energy use turns off feeds it only that 20%.
+ * production on a copy of what it sees, with the new factory in it and fed, makes (madeNext), each month alike: a farm
+ * the factory's own Energy use turns off feeds it only that 20%, though no input is in stock yet.
  */
 export function canFeed(obs: GameState, me: string, outfit: Outfit): boolean {
   return unfedInputs(obs, me, outfit).length === 0;
@@ -288,8 +294,9 @@ const madeCache = new WeakMap<GameState, Map<string, Stock>>();
 /**
  * What the seat's own plots make at the next production: the outlook's rollout of a copy of what it sees, Energy, Water
  * and the turn-off rule included, with the factory `adding` (when given) installed on a stand-in plot: the seat's first
- * idle plot, else the first free one. Its Energy use may turn a farm off (AM-17). Remembered per observation, seat,
- * month, phase, plots and factory, as canFeed asks it for every plot it scores. In the production phase this month's
+ * idle plot, else the first free one, with one run of its inputs in stock, as it runs once fed: the engine puts a
+ * factory in the turn-off order only when its inputs are in stock. Its Energy use may turn a farm off (AM-17).
+ * Remembered per observation, seat, month, phase, plots and factory, as canFeed asks it for every plot it scores. In the production phase this month's
  * production has run and the outlook rolls none before the auction (its `made` is empty), so the month's report says
  * what the plots make: the plots are the ones that made it, without the factory being weighed.
  */
@@ -303,7 +310,14 @@ function madeNext(obs: GameState, me: string, adding?: Outfit): Stock {
   if (!made) {
     const idle = obs.tiles.findIndex((t) => t.owner === me && !t.outfit);
     const at = idle >= 0 ? idle : obs.tiles.findIndex((t) => !t.owner && t.terrain !== 'store');
-    const apply = adding && at >= 0 ? (sim: GameState) => Object.assign(sim.tiles[at]!, { owner: me, outfit: adding, runMonths: 0 }) : undefined;
+    const apply =
+      adding && at >= 0
+        ? (sim: GameState) => {
+            Object.assign(sim.tiles[at]!, { owner: me, outfit: adding, runMonths: 0 });
+            // As it will run once fed: the engine lists a factory in the turn-off order only with its inputs in stock.
+            if (isFactory(adding)) addStock(sim.players.find((p) => p.id === me)!.stock, inputsOf(adding));
+          }
+        : undefined;
     seen.set(key, (made = outlook(obs, me, { lookAhead: true, ...(apply && { apply }) }).made));
   }
   return made;
