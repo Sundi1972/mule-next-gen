@@ -1,9 +1,11 @@
 import {
+  AI_VALUE,
   airPoints,
   crewOf,
   DEV_STEER,
   DEV_WALK,
   DEVELOPMENT,
+  FACTORY,
   factoryFit,
   floorConfig,
   GOOD_CONFIG,
@@ -22,6 +24,7 @@ import {
   RECIPES,
   SPECIES_PERK,
   STRATEGIST,
+  storeForSale,
   tileIndex,
   UPKEEP,
   walkSeconds,
@@ -37,7 +40,7 @@ import {
   type Tile,
 } from '@mule/engine';
 import { standPoint, tripSeconds } from './floor-time.js';
-import { productionsLeft, type Outlook } from './outlook.js';
+import { belief, productionsLeft, type Outlook } from './outlook.js';
 
 /** Who is thinking: the seat, its persona and its level. */
 export interface Mind {
@@ -279,6 +282,7 @@ export interface UnitValues {
 }
 
 export function unitValues(obs: GameState, o: Outlook, good: Good, mind: Mind): UnitValues {
+  if (AI_VALUE.unit) return modelValues(obs, o, good, mind);
   const me = mind.me;
   const need = monthNeeds(obs, me)[good];
   const full = mind.level.fullScoring;
@@ -345,13 +349,8 @@ export function unitValues(obs: GameState, o: Outlook, good: Good, mind: Mind): 
   }
 
   // Beyond the block: resale next month, after spoilage, the sales tax and the depot limit.
-  const haircut = full ? 1 - STRATEGIST.forecastHaircut * mind.persona.risk : 1;
-  const resale = afterTax(obs, P(good)) * keepRate * haircut;
-  const resaleBuy = resale * Math.min(1, mind.persona.speculate) * (1 - STRATEGIST.resaleRisk * mind.persona.risk);
-  // literal-ok: 0.05 keeps the division finite for a good that all spoils; 99 stands for no depot limit (Rookie ignores it)
-  const depot = full ? Math.ceil(UPKEEP.depotCapacity / Math.max(0.05, keepRate)) : 99;
-  const eaten = good === 'food' || good === 'water' ? needsOf(obs, me)[good] : 0;
-  const length = Math.max(block, eaten + depot) + 1;
+  const { sell: resale, buy: resaleBuy, room } = carryOf(obs, o, good, mind);
+  const length = Math.max(block, room) + 1;
   const floorUnits = good === 'food' || good === 'energy' ? Math.min(block, need) : 0;
 
   const keep: number[] = [];
@@ -361,7 +360,7 @@ export function unitValues(obs: GameState, o: Outlook, good: Good, mind: Mind): 
       const worth = perUnit?.[k] ?? use;
       keep.push(k < floorUnits ? Infinity : Math.max(worth, resale));
       buy.push(Math.max(worth, resaleBuy));
-    } else if (k < eaten + depot) {
+    } else if (k < room) {
       keep.push(resale);
       buy.push(resaleBuy);
     } else {
@@ -372,4 +371,182 @@ export function unitValues(obs: GameState, o: Outlook, good: Good, mind: Mind): 
   keep.sort((a, b) => b - a);
   buy.sort((a, b) => b - a);
   return { good, keep, buy, block, need, floorUnits };
+}
+
+/**
+ * What a unit the seat holds past its needs fetches next month: resale after spoilage, the sales tax and the
+ * forecast's risk (`sell`), and the less a seat pays for one only to resell it (`buy`); `room` is how many units it
+ * can hold before the depot limit takes them, after what upkeep eats.
+ */
+function carryOf(obs: GameState, o: Outlook, good: Good, mind: Mind): { sell: number; buy: number; room: number } {
+  const full = mind.level.fullScoring;
+  const keepRate = 1 - (full ? GOOD_CONFIG[good].spoilage : 0);
+  const P = (g: Good) => (o.final ? obs.store.posted[g] : o.price(g));
+  const haircut = full ? 1 - STRATEGIST.forecastHaircut * mind.persona.risk : 1;
+  const sell = afterTax(obs, P(good)) * keepRate * haircut;
+  const buy = sell * Math.min(1, mind.persona.speculate) * (1 - STRATEGIST.resaleRisk * mind.persona.risk);
+  // literal-ok: 0.05 keeps the division finite for a good that all spoils; 99 stands for no depot limit (Rookie ignores it)
+  const depot = full ? Math.ceil(UPKEEP.depotCapacity / Math.max(0.05, keepRate)) : 99;
+  const eaten = good === 'food' || good === 'water' ? needsOf(obs, mind.me)[good] : 0;
+  return { sell, buy, room: eaten + depot };
+}
+
+// --- The resource-utility model, switched on by AI_VALUE.unit ------------------
+
+/**
+ * The chance the seat needs each unit it could hold after the auction: every unit under `sure` is needed; a unit from
+ * `sure` up to `target` is needed only if its own plants make less than forecast; none past `target`.
+ */
+export interface UnitNeed {
+  sure: number;
+  target: number;
+}
+
+/** What the seat's Energy plants leave over their own use for its other plots. */
+function plantsNet(obs: GameState, me: string): number {
+  return obs.tiles.filter((t) => t.owner === me && t.outfit === 'energy').reduce((n, t) => n + Math.max(0, rawOutput(obs, t) - energyUseOf(obs, t)), 0);
+}
+
+/** Units of a good the seat's factories turn in a month (Energy aside: it is the plots' use). */
+function factoryUse(obs: GameState, me: string, good: Good): number {
+  if (good === 'energy') return 0;
+  return obs.tiles.filter((t) => t.owner === me && t.outfit && isFactory(t.outfit)).reduce((n, t) => n + (RECIPES[t.outfit as ProcessedGood].inputs[good] ?? 0), 0);
+}
+
+/**
+ * The units that keep the seat whole next month (wholeNextMonth), plus what its factories turn after spoilage. Energy
+ * its plants are forecast to supply is needed only at the forecast's risk; without a look-ahead the seat can't count
+ * on them, and every unit is needed.
+ */
+export function unitNeed(obs: GameState, mind: Mind, good: Good): UnitNeed {
+  const me = mind.me;
+  if (good === 'energy') {
+    const target = wholeNextMonth(obs, me, good);
+    if (!mind.level.lookAhead) return { sure: target, target };
+    return { sure: keptUnits(good, Math.max(0, monthNeeds(obs, me).energy - plantsNet(obs, me))), target };
+  }
+  const household = good === 'medicine' ? keptUnits(good, monthNeeds(obs, me).medicine) : wholeNextMonth(obs, me, good);
+  const target = household + keptUnits(good, factoryUse(obs, me, good));
+  return { sure: target, target };
+}
+
+/** A factory short of its experience bonus, with the game long enough to reach it, waits a month more turned off. */
+function experienceMissed(obs: GameState, tile: Tile): number {
+  if (!tile.outfit || !isFactory(tile.outfit) || tile.runMonths >= FACTORY.experienceMonths) return 0;
+  return productionsLeft(obs) > FACTORY.experienceMonths - tile.runMonths ? FACTORY.experienceBonus : 0;
+}
+
+/**
+ * Each unit of the plots' Energy use, from the unit covered first (the back of energyOffOrder) to the one covered
+ * last, at what going without it costs: the plot it keeps on loses (1 − offOutputShare) of its output turned off, and
+ * a factory short of its experience a month of it, spread over the plot's use. Factories the stock can't feed now run
+ * last on what is left, so their units come last.
+ */
+function energyUnits(obs: GameState, o: Outlook, mind: Mind): number[] {
+  const me = mind.me;
+  // Next month's production: no cold snap is known ahead, so every use counts once.
+  const order = energyOffOrder(obs, me, 1);
+  const listed = new Set(order.map((p) => p.tile));
+  const unfed = PROCESSED_GOODS.flatMap((g) => obs.tiles.filter((t) => t.owner === me && t.outfit === g && !listed.has(t)));
+  const plots = [
+    ...order.map((p) => ({ tile: p.tile, use: p.use, full: p.full })).reverse(),
+    ...unfed.map((t) => ({ tile: t, use: energyUseOf(obs, t), full: factoryFit(obs, t, t.outfit as ProcessedGood, me).output })),
+  ];
+  return plots.flatMap(({ tile, use, full }) => {
+    const price = afterTax(obs, belief(obs, o, tile.outfit as Good));
+    const lost = (1 - UPKEEP.offOutputShare) * full * price + experienceMissed(obs, tile) * price;
+    return Array<number>(use).fill(lost / use);
+  });
+}
+
+/**
+ * What each unit a factory turns is worth to the seat: the run's output after tax over the recipe's inputs, averaged
+ * over its factories that take the good by how much each takes. 0 when none takes it.
+ */
+function inputWorth(obs: GameState, o: Outlook, good: Good, me: string): number {
+  let units = 0;
+  let worth = 0;
+  for (const t of obs.tiles) {
+    if (t.owner !== me || !t.outfit || !isFactory(t.outfit)) continue;
+    const q = RECIPES[t.outfit].inputs[good];
+    if (!q || good === 'energy') continue;
+    const all = Object.values(RECIPES[t.outfit].inputs).reduce((n, x) => n + (x ?? 0), 0);
+    worth += (q * afterTax(obs, factoryFit(obs, t, t.outfit, me).output * belief(obs, o, t.outfit))) / all;
+    units += q;
+  }
+  return units > 0 ? worth / units : 0;
+}
+
+/**
+ * What going without each unit the seat holds would cost it, before the buy-back floor, unit 0 first. Energy: the
+ * plot that unit keeps on (energyUnits), the seat's own plants covering the first units. Food: the walking hunger
+ * slows. Water: half of what its irrigated farms make. Medicine: the walking sickness slows. A factory input: its
+ * share of the run. Each household unit is worth the household's damage over the household's units.
+ */
+function heldDamage(obs: GameState, o: Outlook, good: Good, mind: Mind, need: UnitNeed): number[] {
+  const me = mind.me;
+  const keepRate = 1 - GOOD_CONFIG[good].spoilage;
+  if (good === 'energy') {
+    const units = energyUnits(obs, o, mind);
+    const net = mind.level.lookAhead ? plantsNet(obs, me) : 0;
+    // A unit needed for sure covers the plots above what the plants make; one beyond covers the plants' share.
+    return Array.from({ length: need.target }, (_, h) => units[h < need.sure ? net + Math.floor(h * keepRate) : Math.floor((h - need.sure) * keepRate)] ?? 0);
+  }
+  const household = good === 'medicine' ? keptUnits(good, monthNeeds(obs, me).medicine) : wholeNextMonth(obs, me, good);
+  const sec = secondValue(obs, me);
+  let worth = 0;
+  if (household > 0 && good === 'food') worth = (monthWalkSeconds(obs, mind) * (1 / DEV_WALK.hungerPaceMin - 1) * sec) / household;
+  if (household > 0 && good === 'water') worth = waterDamage(obs, o, me) / household;
+  if (household > 0 && good === 'medicine') worth = playerEventChance(obs, 'sickness', 'development', me) * monthWalkSeconds(obs, mind) * (1 / DEV_WALK.sickPace - 1) * sec;
+  const input = inputWorth(obs, o, good, me);
+  return Array.from({ length: need.target }, (_, h) => (h < household ? worth : input));
+}
+
+/**
+ * What a month short of Water costs the seat: its irrigated farms make UPKEEP.shortOutputShare of their output. Water's
+ * own turn-off order (AM-18) replaces this when the engine has it.
+ */
+function waterDamage(obs: GameState, o: Outlook, me: string): number {
+  const farms = obs.tiles.filter((t) => t.owner === me && UPKEEP.irrigated.includes(t.outfit as never));
+  return farms.reduce((n, t) => n + rawOutput(obs, t), 0) * (1 - UPKEEP.shortOutputShare) * afterTax(obs, belief(obs, o, 'food'));
+}
+
+/** Buying a unit back from the store next month, which a needed unit is never valued below; none if the store sells none. */
+function replaceCost(obs: GameState, o: Outlook, good: Good): number {
+  return storeForSale(obs, good) > 0 ? belief(obs, o, good) * (1 + PRICE.storeSpread) * AI_VALUE.shortFloorMarkup : 0;
+}
+
+/**
+ * What going without the k-th unit short of the seat's target costs, k = 0 first, the unit whose plot goes off first;
+ * never below buying it back next month. Past the target, nothing is lost: buying it back alone.
+ */
+export function shortCosts(obs: GameState, o: Outlook, good: Good, mind: Mind, length: number): number[] {
+  const need = unitNeed(obs, mind, good);
+  const damage = heldDamage(obs, o, good, mind, need);
+  const replace = replaceCost(obs, o, good);
+  return Array.from({ length }, (_, k) => Math.max(replace, k < need.target ? damage[need.target - 1 - k]! : 0));
+}
+
+/**
+ * Each unit's value as the model sets it: the chance it is needed times what going without it costs, plus the rest
+ * times what it fetches later, most valuable first.
+ */
+function modelValues(obs: GameState, o: Outlook, good: Good, mind: Mind): UnitValues {
+  const need = unitNeed(obs, mind, good);
+  const S = shortCosts(obs, o, good, mind, need.target);
+  const carry = carryOf(obs, o, good, mind);
+  const risky = Math.min(1, AI_VALUE.forecastRisk * mind.persona.risk);
+  const keep: number[] = [];
+  const buy: number[] = [];
+  for (let h = 0; h < Math.max(need.target, carry.room) + 1; h++) {
+    const q = h < need.sure ? 1 : h < need.target ? risky : 0;
+    const short = h < need.target ? S[need.target - 1 - h]! : 0;
+    const kept = h < carry.room ? 1 : 0;
+    keep.push(q * short + (1 - q) * carry.sell * kept);
+    buy.push(q * short + (1 - q) * carry.buy * kept);
+  }
+  keep.sort((a, b) => b - a);
+  buy.sort((a, b) => b - a);
+  const floorUnits = good === 'food' || good === 'energy' ? need.sure : 0;
+  return { good, keep, buy, block: need.target, need: monthNeeds(obs, mind.me)[good], floorUnits };
 }
