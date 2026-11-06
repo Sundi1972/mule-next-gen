@@ -1,5 +1,5 @@
 """The Spaceport on 2 x 2 places (spec AM-1, AM-2): a launch pad with a 36 m rocket, clearly the tallest thing on
-the grounds and taller than its gantry. Standing only so far (PR-3 adds the other stages). Accent: safety orange.
+the grounds and taller than its gantry, in every RULE-1 stage. Accent: safety orange.
   pad       a raised launch-concrete disc 15 m across with a flame trench, an orange ring of lit marks
   rocket    36 m: a white core (first stage 21 m, interstage, second stage, fairing) with two strap-on boosters,
             on a dark launch mount
@@ -17,9 +17,9 @@ from mathutils import Vector
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lib import frame, kits  # noqa: E402
-from lib.core import ZT, accent, box_uv, bx, cyl, flat, light, mat, mesh_obj  # noqa: E402
+from lib.core import ZT, accent, box_uv, bx, cyl, flat, glass_mat, light, mat, mesh_obj  # noqa: E402
 
-STAGES = ["standing"]
+STAGES = ["site", "build1", "build2", "standing", "closed", "damaged"]  # buildMonths 3: two build pictures
 FRAME = {"width": 3200, "height": 3500, "centre": [1600, 2800], "places": 2}
 PAD_R, PAD_H = 7.5, 0.8
 ROCKET = 36.0
@@ -66,10 +66,52 @@ def lattice_tower(x, y, w, h, legs_m, brace_m):
         lev += 2.5
 
 
+def rocket(z0, white, black, orange, dark, full=True):
+    """36 m from the engine skirt to the fairing tip; strap-on boosters along the screen's horizontal (world x = y).
+    full=False: only the first stage, being stacked (build2)."""
+    R = 1.6
+    s1, inter, s2, fair = 20.5, 1.5, 7.5, 6.5
+    cyl("engine_skirt", 0, 0, R * 0.9, z0 - 1.2, z0, black, 40)
+    cyl("stage1", 0, 0, R, z0, z0 + s1, white, 48)
+    cyl("stage1_band", 0, 0, R + 0.01, z0 + 1.0, z0 + 2.4, orange, 48)
+    cyl("stage1_band_top", 0, 0, R + 0.01, z0 + s1 - 2.2, z0 + s1 - 1.6, orange, 48)
+    if not full:
+        return z0 + s1
+    cyl("interstage", 0, 0, R + 0.01, z0 + s1, z0 + s1 + inter, black, 48)
+    cyl("stage2", 0, 0, R, z0 + s1 + inter, z0 + s1 + inter + s2, white, 48)
+    zf = z0 + s1 + inter + s2
+    cyl("fairing_base", 0, 0, R + 0.15, zf, zf + 2.5, white, 48)
+    ogive("fairing_nose", 0, 0, R + 0.15, zf + 2.5, fair - 2.5, white)
+    for k in range(4):  # grid fins under the interstage
+        f = bx(R, R + 0.7, -0.35, 0.35, -0.05, 0.05, dark, 0.005, "grid_fin")
+        f.location = (0, 0, z0 + s1 - 0.6)
+        f.rotation_euler = (0, 0, math.pi / 4 + k * math.pi / 2)
+    for side in (-1, 1):
+        bxx, byy = side * (R + 1.0) * 0.7071, side * (R + 1.0) * 0.7071
+        rb = 1.0
+        cyl("booster_skirt", bxx, byy, rb * 0.85, z0 - 1.0, z0, black, 32)
+        cyl("booster", bxx, byy, rb, z0, z0 + 15.5, white, 32)
+        cyl("booster_band", bxx, byy, rb + 0.01, z0 + 1.0, z0 + 2.0, orange, 32)
+        ogive("booster_nose", bxx, byy, rb, z0 + 15.5, 3.0, white, 32, 10)
+        for zz in (z0 + 3.0, z0 + 13.0):  # struts to the core
+            bx(-0.15, 0.15, -0.15, 0.15, zz, zz + 0.3, dark, 0.01, "strut").location = (bxx * 0.55, byy * 0.55, 0)
+    print(f"COLONY spaceport rocket {z0 - 1.2:.1f} .. {zf + fair:.1f} m ({zf + fair - (z0 - 1.2):.1f} m tall)", flush=True)
+    return zf
+
+
 def build(stage):
-    kits.slab(top="padmat", n=2)
-    orange = accent("spaceport_orange", (0.95, 0.38, 0.04), rough=0.45)
-    signal = accent("spaceport_signal", (0.95, 0.38, 0.04), glow=3.0)  # only the pad marks and beacon glow
+    """site: the shared site kit on one 2 x 2 slab. build1 (1/3): the pad and mount poured, the gantry's first 9 m,
+    a crane. build2 (2/3): the gantry topped out, the first stage stacked on the mount. standing: the rocket on the
+    pad. closed: no rocket, the gantry faded, fenced, dark. damaged: no rocket, the gantry's top toppled across the
+    pad, the pad scorched, rubble and an ember."""
+    if stage == "site":
+        kits.site(0, 0, 16.0, 16.0, n=2, cabin_at=(6.5, 10.3))
+        return
+    b1, b2, closed, damaged = (stage == s for s in ("build1", "build2", "closed", "damaged"))
+    lit = stage == "standing"
+    kits.slab(top="earth" if b1 else "padmat", n=2)
+    orange = accent("spaceport_orange", (0.95, 0.38, 0.04) if not closed else (0.5, 0.3, 0.18), rough=0.45 if not closed else 0.8)
+    signal = accent("spaceport_signal", (0.95, 0.38, 0.04), glow=3.0 if lit else 0)  # only the pad marks and beacon glow
     white = flat("rocket_white", (0.9, 0.9, 0.88), 0.32, 0.1)
     black = flat("rocket_black", (0.03, 0.03, 0.035), 0.4, 0.3)
     dark, concrete = mat("darkmetal"), mat("concrete")
@@ -81,99 +123,104 @@ def build(stage):
     pv = [(0, 0, ZT + PAD_H + 0.005)] + [(PAD_R * 0.985 * math.cos(2 * math.pi * k / seg), PAD_R * 0.985 * math.sin(2 * math.pi * k / seg), ZT + PAD_H + 0.005) for k in range(seg)]
     top = mesh_obj("pad_top", pv, [(0, 1 + k, 1 + (k + 1) % seg) for k in range(seg)], mat("padmat"))
     box_uv(top)
-    cyl("scorch", 0, 0, 3.4, ZT + PAD_H + 0.006, ZT + PAD_H + 0.012, flat("pad_scorch", (0.07, 0.065, 0.06), 0.9), 48)
+    if not b1:
+        cyl("scorch", 0, 0, 3.4, ZT + PAD_H + 0.006, ZT + PAD_H + 0.012, flat("pad_scorch", (0.07, 0.065, 0.06), 0.9), 48)
     trench = bx(-1.3, 1.3, -PAD_R - 0.3, -2.0, ZT + PAD_H - 0.6, ZT + PAD_H + 0.013, flat("trench", (0.035, 0.033, 0.03), 0.9), 0, "flame_trench")
     trench.rotation_euler = (0, 0, math.radians(-45))
-    for k in range(40):
-        a = 2 * math.pi * k / 40
-        if k % 2 == 0:
+    if not b1:
+        for k in range(0, 40, 2):
+            a = 2 * math.pi * k / 40
             r0 = PAD_R - 0.5
             bx(r0 * math.cos(a) - 0.2, r0 * math.cos(a) + 0.2, r0 * math.sin(a) - 0.2, r0 * math.sin(a) + 0.2, ZT + PAD_H, ZT + PAD_H + 0.03, signal, 0, "pad_mark")
 
-    # the launch mount: a dark table on four legs, hold-down arms round the core
+    # the launch mount: a dark table on four legs
     z_m = ZT + PAD_H
     for (sx, sy) in ((1, 1), (1, -1), (-1, 1), (-1, -1)):
         bx(sx * 2.4 - 0.35, sx * 2.4 + 0.35, sy * 2.4 - 0.35, sy * 2.4 + 0.35, z_m, z_m + 2.0, dark, 0.02, "mount_leg")
     bx(-3.0, 3.0, -3.0, 3.0, z_m + 2.0, z_m + 2.6, dark, 0.03, "mount_table")
     z0 = z_m + 2.6  # the rocket stands on the table
+    zf = None
+    if lit:
+        zf = rocket(z0, white, black, orange, dark)
+    elif b2:
+        rocket(z0, white, black, orange, dark, full=False)
 
-    # the rocket: 36 m from the engine skirt to the fairing tip; strap-on boosters along the screen's horizontal
-    R = 1.6
-    cyl("engine_skirt", 0, 0, R * 0.9, z0 - 1.2, z0, black, 40)
-    s1, inter, s2, fair = 20.5, 1.5, 7.5, 6.5
-    cyl("stage1", 0, 0, R, z0, z0 + s1, white, 48)
-    cyl("stage1_band", 0, 0, R + 0.01, z0 + 1.0, z0 + 2.4, orange, 48)
-    cyl("stage1_band_top", 0, 0, R + 0.01, z0 + s1 - 2.2, z0 + s1 - 1.6, orange, 48)
-    cyl("interstage", 0, 0, R + 0.01, z0 + s1, z0 + s1 + inter, black, 48)
-    cyl("stage2", 0, 0, R, z0 + s1 + inter, z0 + s1 + inter + s2, white, 48)
-    zf = z0 + s1 + inter + s2
-    cyl("fairing_base", 0, 0, R + 0.15, zf, zf + 2.5, white, 48)
-    ogive("fairing_nose", 0, 0, R + 0.15, zf + 2.5, fair - 2.5, white)
-    for k in range(4):  # grid fins under the interstage
-        a = math.pi / 4 + k * math.pi / 2
-        f = bx(R, R + 0.7, -0.35, 0.35, -0.05, 0.05, dark, 0.005, "grid_fin")
-        f.location = (0, 0, z0 + s1 - 0.6)
-        f.rotation_euler = (0, 0, a)
-    for side in (-1, 1):  # boosters, side by side along the screen's horizontal (world x = y)
-        bxx, byy = side * (R + 1.0) * 0.7071, side * (R + 1.0) * 0.7071
-        rb = 1.0
-        cyl("booster_skirt", bxx, byy, rb * 0.85, z0 - 1.0, z0, black, 32)
-        cyl("booster", bxx, byy, rb, z0, z0 + 15.5, white, 32)
-        cyl("booster_band", bxx, byy, rb + 0.01, z0 + 1.0, z0 + 2.0, orange, 32)
-        ogive("booster_nose", bxx, byy, rb, z0 + 15.5, 3.0, white, 32, 10)
-        for zz in (z0 + 3.0, z0 + 13.0):  # struts to the core
-            bx(-0.15, 0.15, -0.15, 0.15, zz, zz + 0.3, dark, 0.01, "strut").location = (bxx * 0.55, byy * 0.55, 0)
-    print(f"COLONY spaceport rocket {z0 - 1.2:.1f} .. {zf + fair:.1f} m ({zf + fair - (z0 - 1.2):.1f} m tall)", flush=True)
-
-    # the gantry: behind the rocket (north-west), shorter than it, three access arms
+    # the gantry: behind the rocket (north-west), shorter than it
     tx, ty = -3.4, 3.4
-    th = 29.0
+    th = 9.0 if b1 else 17.0 if damaged else 29.0
     lattice_tower(tx, ty, 1.5, th, orange, dark)
-    bx(tx - 1.8, tx + 1.8, ty - 1.8, ty + 1.8, ZT + th, ZT + th + 0.3, dark, 0.02, "tower_top")
-    cyl("lightning_mast", tx, ty, 0.08, ZT + th + 0.3, ZT + th + 3.5, dark, 8)
-    cyl("beacon", tx, ty, 0.2, ZT + th + 3.5, ZT + th + 4.0, signal, 12)
-    for (za, length) in ((z0 + 9.0, 3.4), (z0 + 19.0, 3.4), (zf + 0.8, 3.5)):
-        arm = bx(0, length, -0.5, 0.5, 0, 0.7, dark, 0.02, "access_arm")
-        arm.location = (tx + 1.0, ty - 1.0, za)
-        arm.rotation_euler = (0, 0, math.radians(-45))
+    if not (b1 or damaged):
+        bx(tx - 1.8, tx + 1.8, ty - 1.8, ty + 1.8, ZT + th, ZT + th + 0.3, dark, 0.02, "tower_top")
+        cyl("lightning_mast", tx, ty, 0.08, ZT + th + 0.3, ZT + th + 3.5, dark, 8)
+        cyl("beacon", tx, ty, 0.2, ZT + th + 3.5, ZT + th + 4.0, signal, 12)
+    if lit or closed:
+        for za in (z0 + 9.0, z0 + 19.0, z0 + 29.8):
+            arm = bx(0, 3.4, -0.5, 0.5, 0, 0.7, dark, 0.02, "access_arm")
+            arm.location = (tx + 1.0, ty - 1.0, za)
+            arm.rotation_euler = (0, 0, math.radians(-45))
+    if damaged:
+        # the gantry's top 10 m broke off and lies across the pad, toward the south-east
+        before = set(bpy.context.scene.objects)
+        lattice_tower(0, 0, 1.5, 10.0, orange, dark)
+        piece = bpy.data.objects.new("toppled_section", None)
+        bpy.context.scene.collection.objects.link(piece)
+        for o in set(bpy.context.scene.objects) - before - {piece}:
+            o.parent = piece
+        piece.location = (tx + 1.2, ty - 1.2, ZT + PAD_H + 1.6)
+        piece.rotation_euler = (math.radians(84), 0, math.radians(-40))
+        kits.scorch(0.5, -0.5, 5.5, z=ZT + PAD_H + 0.02)
+        kits.rubble(1.5, -2.0, 3.0, [concrete, orange, dark], n=40, seed=9)
+        kits.ember(-0.5, 0.5, ZT + PAD_H + 0.2, r=0.5, energy=120)
 
-    # propellant spheres on legs, east of the pad; a blockhouse with a glass control room to the south
+    # propellant spheres on legs, east of the pad (their legs only while building)
     for (sx, sy) in ((9.0, 1.5), (9.0, -2.6)):
         for (lx, ly) in ((1, 1), (1, -1), (-1, 1), (-1, -1)):
             cyl("tank_leg", sx + lx * 1.2, sy + ly * 1.2, 0.12, ZT, ZT + 2.2, dark, 8)
+        if b1:
+            continue
         bpy.ops.mesh.primitive_uv_sphere_add(segments=48, ring_count=24, radius=1.9, location=(sx, sy, ZT + 3.6))
         t_ = bpy.context.active_object
         t_.name = "tank"
-        t_.data.materials.append(white)
+        t_.data.materials.append(white if not closed else flat("tank_faded", (0.6, 0.6, 0.57), 0.6))
         t_.data.shade_smooth()
-    kits.modern(3.0, -9.0, 5.0, 3.0, 1, 3.0, concrete, "blockhouse", sp=1.0, top_extra=0.5)
-    # floodlights round the pad, aimed up the rocket: at night it stands lit
-    for a in (math.radians(-45), math.radians(-150), math.radians(60)):
-        fx, fy = 10.0 * math.cos(a), 10.0 * math.sin(a)
-        cyl("flood_pole", fx, fy, 0.08, ZT, ZT + 3.0, dark, 8)
-        bx(fx - 0.3, fx + 0.3, fy - 0.3, fy + 0.3, ZT + 3.0, ZT + 3.4, accent("pad_flood", (0.9, 0.92, 0.95), glow=18.0, emit=(0.95, 0.97, 1.0)), 0.01, "flood_head")
-        S = light("SPOT", (fx, fy, ZT + 3.2), 9000, (0.95, 0.96, 1.0), 0.3)
-        d = Vector((0 - fx, 0 - fy, 18.0 - 3.2))
-        S.rotation_euler = (-d).to_track_quat("Z", "Y").to_euler()
-        S.data.spot_size = math.radians(24)
-        S.data.spot_blend = 0.4
-    # a rover and crates by the blockhouse
-    rover = flat("rover_white", (0.82, 0.83, 0.85), 0.4)
-    rx_, ry_ = -3.5, -9.5
-    bx(rx_ - 1.6, rx_ + 1.6, ry_ - 0.95, ry_ + 0.95, ZT + 0.75, ZT + 1.5, rover, 0.08, "rover_body")
-    bx(rx_ + 0.4, rx_ + 1.5, ry_ - 0.8, ry_ + 0.8, ZT + 1.5, ZT + 2.1, mat("glass"), 0.08, "rover_cabin")
-    bx(rx_ - 1.62, rx_ + 1.62, ry_ - 0.97, ry_ + 0.97, ZT + 1.0, ZT + 1.15, orange, 0.0, "rover_stripe")
-    for wx in (rx_ - 1.1, rx_, rx_ + 1.1):
-        for wy in (ry_ - 1.05, ry_ + 1.05):
-            bpy.ops.mesh.primitive_cylinder_add(vertices=20, radius=0.45, depth=0.35, location=(wx, wy, ZT + 0.45))
-            w_ = bpy.context.active_object
-            w_.rotation_euler = (math.pi / 2, 0, 0)
-            w_.data.materials.append(mat("tyre"))
-    crates = [flat("crate_grey", (0.42, 0.44, 0.46), 0.5, 0.3), orange, flat("crate_green", (0.2, 0.32, 0.22), 0.6)]
-    for k, (dx, dy, dz) in enumerate([(0, 0, 0), (1.15, 0.1, 0), (0.55, 1.0, 0), (0.1, 0.05, 1.0), (2.3, -0.2, 0)]):
-        sz = rng.uniform(0.85, 1.05)
-        x, y = 7.0 + dx * 0.8, -8.5 + dy
-        bx(x - sz / 2, x + sz / 2, y - sz / 2, y + sz / 2, ZT + dz, ZT + dz + sz * 0.9, crates[k % 3], 0.03, "crate")
+    # a blockhouse with a glass control room to the south
+    gl = mat("dead_glass") if (closed or b2) else glass_mat("window_glass_empty", lit_share=0.0) if damaged else None
+    kits.modern(3.0, -9.0, 5.0, 3.0, 1, 3.0, concrete if not closed else kits.faded("blockhouse"), "blockhouse", sp=1.0, top_extra=0.5, upto=0 if b1 else None, gl=gl)
+    if lit:  # floodlights round the pad, aimed up the rocket: at night it stands lit
+        for a in (math.radians(-45), math.radians(-150), math.radians(60)):
+            fx, fy = 10.0 * math.cos(a), 10.0 * math.sin(a)
+            cyl("flood_pole", fx, fy, 0.08, ZT, ZT + 3.0, dark, 8)
+            bx(fx - 0.3, fx + 0.3, fy - 0.3, fy + 0.3, ZT + 3.0, ZT + 3.4, accent("pad_flood", (0.9, 0.92, 0.95), glow=18.0, emit=(0.95, 0.97, 1.0)), 0.01, "flood_head")
+            S = light("SPOT", (fx, fy, ZT + 3.2), 9000, (0.95, 0.96, 1.0), 0.3)
+            d = Vector((0 - fx, 0 - fy, 18.0 - 3.2))
+            S.rotation_euler = (-d).to_track_quat("Z", "Y").to_euler()
+            S.data.spot_size = math.radians(24)
+            S.data.spot_blend = 0.4
+        rover = flat("rover_white", (0.82, 0.83, 0.85), 0.4)  # a rover by the blockhouse
+        rx_, ry_ = -3.5, -9.5
+        bx(rx_ - 1.6, rx_ + 1.6, ry_ - 0.95, ry_ + 0.95, ZT + 0.75, ZT + 1.5, rover, 0.08, "rover_body")
+        bx(rx_ + 0.4, rx_ + 1.5, ry_ - 0.8, ry_ + 0.8, ZT + 1.5, ZT + 2.1, mat("glass"), 0.08, "rover_cabin")
+        bx(rx_ - 1.62, rx_ + 1.62, ry_ - 0.97, ry_ + 0.97, ZT + 1.0, ZT + 1.15, orange, 0.0, "rover_stripe")
+        for wx in (rx_ - 1.1, rx_, rx_ + 1.1):
+            for wy in (ry_ - 1.05, ry_ + 1.05):
+                bpy.ops.mesh.primitive_cylinder_add(vertices=20, radius=0.45, depth=0.35, location=(wx, wy, ZT + 0.45))
+                w_ = bpy.context.active_object
+                w_.rotation_euler = (math.pi / 2, 0, 0)
+                w_.data.materials.append(mat("tyre"))
+    if lit or b2:  # crates by the blockhouse
+        crates = [flat("crate_grey", (0.42, 0.44, 0.46), 0.5, 0.3), orange, flat("crate_green", (0.2, 0.32, 0.22), 0.6)]
+        for k, (dx, dy, dz) in enumerate([(0, 0, 0), (1.15, 0.1, 0), (0.55, 1.0, 0), (0.1, 0.05, 1.0), (2.3, -0.2, 0)]):
+            sz = rng.uniform(0.85, 1.05)
+            x, y = 7.0 + dx * 0.8, -8.5 + dy
+            bx(x - sz / 2, x + sz / 2, y - sz / 2, y + sz / 2, ZT + dz, ZT + dz + sz * 0.9, crates[k % 3], 0.03, "crate")
+    if b1 or b2:
+        if b1:
+            kits.crane(9.5, 9.5, 14.0, jib=11.0, counter=3.0)
+        kits.work_light(-9.0, -9.0, (0, 0))
+        kits.work_light(9.5, -6.0, (0, 0))
+    if closed:
+        kits.fence(-8.0, 8.0, -PAD_R - 1.0, 2.0)
+        kits.fence_y(PAD_R + 1.0, -8.0, 4.0, 2.0)
 
 
 if __name__ == "__main__":

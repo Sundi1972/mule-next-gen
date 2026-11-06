@@ -84,6 +84,48 @@
         "dusk": "stadium/damaged-dusk@800.webp",
         "glow": "stadium/damaged-glow@800.webp"
       }
+    },
+    "spaceport": {
+      "frame": {
+        "width": 3200,
+        "height": 3500,
+        "place": 1293,
+        "centre": [
+          1600,
+          2800
+        ],
+        "places": 2
+      },
+      "site": {
+        "day": "spaceport/site-day@800.webp",
+        "dusk": "spaceport/site-dusk@800.webp",
+        "glow": "spaceport/site-glow@800.webp"
+      },
+      "build1": {
+        "day": "spaceport/build1-day@800.webp",
+        "dusk": "spaceport/build1-dusk@800.webp",
+        "glow": "spaceport/build1-glow@800.webp"
+      },
+      "build2": {
+        "day": "spaceport/build2-day@800.webp",
+        "dusk": "spaceport/build2-dusk@800.webp",
+        "glow": "spaceport/build2-glow@800.webp"
+      },
+      "standing": {
+        "day": "spaceport/standing-day@800.webp",
+        "dusk": "spaceport/standing-dusk@800.webp",
+        "glow": "spaceport/standing-glow@800.webp"
+      },
+      "closed": {
+        "day": "spaceport/closed-day@800.webp",
+        "dusk": "spaceport/closed-dusk@800.webp",
+        "glow": null
+      },
+      "damaged": {
+        "day": "spaceport/damaged-day@800.webp",
+        "dusk": "spaceport/damaged-dusk@800.webp",
+        "glow": "spaceport/damaged-glow@800.webp"
+      }
     }
   },
   "sizes": [
