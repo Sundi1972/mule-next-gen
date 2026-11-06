@@ -5,7 +5,7 @@ import { chargeExportTax } from './politics.js';
 import { monthNeeds, needsOf } from './production.js';
 import { emptyStock } from './stock.js';
 import { GOODS, type AuctionSide, type GameState, type Good, type GoodReceipt, type LiveAuction, type ReceiptSide, type SkipReason, type StatusRow, type Stock } from './types.js';
-import { houseLineAt, stepBoard, stepWalker, takeSide, tradePossible, type WalkMarket } from './walk.js';
+import { houseLineAt, stepBoard, stepWalker, takeSide, topBid, tradePossible, type WalkMarket } from './walk.js';
 
 /**
  * The goods auction, played live as in the original M.U.L.E. Goods come up
@@ -47,9 +47,19 @@ export function storeSellLine(state: GameState): number | null {
   return a?.good && storeForSale(state, a.good) > 0 ? a.storeSell : null;
 }
 
-/** The store's selling line as every screen shows it: what the store sells at, or while it is sold out the highest bid. */
+/**
+ * The store's selling line as every screen shows it. While the store sells, its price. Once it is sold out, the highest
+ * bid a buyer can pay, flagged `bid`, or its old selling price while no bid is above it; the store sells nothing there.
+ * null when it is sold out and soldOutBidding is off: no line, as before.
+ */
 export function shownSellLine(state: GameState): { price: number; bid: boolean } | null {
-  throw new Error('NotImplemented: shownSellLine');
+  const a = state.auction;
+  if (!a?.good) return null;
+  const selling = storeSellLine(state);
+  if (selling !== null) return { price: selling, bid: false };
+  if (!WALK.soldOutBidding) return null;
+  const top = topBid(a, goodsMarket(state));
+  return top !== null && top > a.zones.sellersBottom ? { price: top, bid: true } : { price: a.zones.sellersBottom, bid: false };
 }
 
 /** The store's buying line, while it still wants the good. The store never runs out of money. */

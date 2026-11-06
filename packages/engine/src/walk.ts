@@ -79,6 +79,12 @@ const selling = (m: WalkMarket, w: Walker) => w.side === 'seller' && free(m, w) 
 const minAsk = (board: WalkBoard, m: WalkMarket) => Math.min(Infinity, ...board.walkers.filter((w) => selling(m, w)).map((w) => w.price));
 const maxBid = (board: WalkBoard, m: WalkMarket) => Math.max(-Infinity, ...board.walkers.filter((w) => activeBuyer(m, w)).map((w) => w.price));
 
+/** The highest bid on the board that its buyer can pay, as a whole price; null when no buyer can pay theirs. */
+export function topBid(board: WalkBoard, market: WalkMarket): number | null {
+  const bids = board.walkers.filter((w) => activeBuyer(market, w)).map(rounded);
+  return bids.length > 0 ? Math.max(...bids) : null;
+}
+
 /**
  * The house line a walker stands at, if any: a buyer at or over the house's selling line, a seller at or under a
  * buying house's price (the one that pays most, as stepBoard serves them).
