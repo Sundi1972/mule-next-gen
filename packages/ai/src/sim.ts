@@ -360,7 +360,7 @@ const SHORT_WHY_LABEL: Record<ShortWhy, string> = {
  * (b) and T-AC-12: the seat-months that lost output for want of Energy, those while the store had Energy for it and it
  * could pay, and plants and wells at each game's end. UBER-AC-2: each seat at each Food auction (foodBandLine).
  */
-interface SupplyTally {
+export interface SupplyTally {
   entered: number;
   leftShort: number;
   why: Partial<Record<engine.Good, Record<ShortWhy, number>>>;
@@ -372,7 +372,7 @@ interface SupplyTally {
   food: FoodHeld[];
 }
 
-const newSupplyTally = (): SupplyTally => ({ entered: 0, leftShort: 0, why: {}, seatMonths: 0, cut: 0, cutCouldBuy: 0, plants: 0, wells: 0, food: [] });
+export const newSupplyTally = (): SupplyTally => ({ entered: 0, leftShort: 0, why: {}, seatMonths: 0, cut: 0, cutCouldBuy: 0, plants: 0, wells: 0, food: [] });
 
 interface Short {
   target: number;
@@ -392,7 +392,7 @@ function shortOf(s: GameState, mind: Mind, good: engine.Good, ask: number): Shor
  * The tally's hooks for one game: `phase` after each phase, `seats` once the seats sit down. It watches the auction
  * through the first seat's tick, which runs before every step: it reads and changes nothing.
  */
-function supplyHooks(tally: SupplyTally): { phase: (s: GameState) => void; seats: (seats: readonly AiSeat[]) => void } {
+export function supplyHooks(tally: SupplyTally): { phase: (s: GameState) => void; seats: (seats: readonly AiSeat[]) => void } {
   let seats: readonly AiSeat[] = [];
   /** When the auction opens: per seat and good, its shortfall at the posted price. */
   let opened: Map<string, Map<engine.Good, Short>> | null = null;

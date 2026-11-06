@@ -1,8 +1,9 @@
-import { describe, expect, it } from 'vitest';
-import { colonyScore, DEV_STEER, score, SPECIES_PERK, type GameState } from '@mule/engine';
+import { afterEach, describe, expect, it } from 'vitest';
+import { AI_VALUE, colonyScore, DEV_STEER, observe, score, SPECIES_PERK, type GameState } from '@mule/engine';
 import { ROTATION, simSeats } from '../src/lineup.js';
 import { playGame } from '../src/play.js';
-import { applySets, colonyScoreLines, foodBandLine, colonyScoreRecorder, newPlanTally, planLines, playsArg, tallyGame, winnerOf } from '../src/sim.js';
+import { applySets, colonyScoreLines, foodBandLine, colonyScoreRecorder, newPlanTally, newSupplyTally, planLines, playsArg, supplyHooks, tallyGame, winnerOf, type FoodHeld } from '../src/sim.js';
+import { wholeNextMonth } from '../src/value.js';
 
 describe('a sweep sets config without editing it', () => {
   it('T-AC-26: sim --set sets a config number or switch, names it in the header, and refuses an unknown path', () => {
@@ -116,11 +117,11 @@ describe('the sim reports the surplus when cheap (C6, UBER-AC-2)', () => {
       at(10, 5), at(30, 15), at(20, 20),
       // ref < ask < 2× ref, from just above the reference to just below twice it: 1.0, 0.8, 1.2.
       at(31, 10), at(59, 8), at(45, 12),
-      // ask ≥ 2× ref, twice the reference itself included: 0.4.
-      at(60, 4),
+      // ask ≥ 2× ref, twice the reference itself included: 0.4 and 1.2, an even count, so the mean of the two middles.
+      at(60, 4), at(90, 12),
     ];
 
-    expect(foodBandLine(samples, '40%')).toBe(`${ROW} ask ≤ ref 1.50 (n 3), ref < ask < 2× ref 1.00 (n 3), ask ≥ 2× ref 0.40 (n 1)${TAIL}`);
+    expect(foodBandLine(samples, '40%')).toBe(`${ROW} ask ≤ ref 1.50 (n 3), ref < ask < 2× ref 1.00 (n 3), ask ≥ 2× ref 0.80 (n 2)${TAIL}`);
   });
 
   it('UBER-AC-2 row negative: a band with no auctions prints n 0 and no median, never NaN; a seat needing no Food has no ratio', () => {
@@ -128,5 +129,56 @@ describe('the sim reports the surplus when cheap (C6, UBER-AC-2)', () => {
 
     expect(row).toBe(`${ROW} ask ≤ ref 1.50 (n 1), ref < ask < 2× ref no median (n 0), ask ≥ 2× ref no median (n 0)${TAIL}`);
     expect(row).not.toMatch(/NaN|Infinity/);
+  });
+
+  afterEach(() => {
+    AI_VALUE.unit = false;
+  });
+
+  it("UBER-AC-2 row (played): one sample per seat per Food auction held, its Food just after that auction ÷ its own next month's need, at Food's ask and reference", () => {
+    AI_VALUE.unit = true;
+    const tally = newSupplyTally();
+    const hooks = supplyHooks(tally);
+    const truth: FoodHeld[] = [];
+    let ids: string[] = [];
+    let food: { ask: number; reference: number; need: number[]; held?: number[] } | null = null;
+    let auctions = 0;
+    playGame(1, simSeats(4, 'trader', 1), {
+      politics: true,
+      maxMonths: 3,
+      onSeats: (seats) => {
+        hooks.seats(seats);
+        ids = seats.map((seat) => seat.mind.me);
+        const first = seats[0]!;
+        const tick = first.auctionTick.bind(first);
+        first.auctionTick = (s, dt, act) => {
+          const a = s.auction;
+          const stock = () => ids.map((id) => s.players.find((p) => p.id === id)!.stock.food);
+          if (a?.good === 'food' && a.stage === 'status' && !food) {
+            food = { ask: a.storeSell, reference: s.store.refPrice.food, need: ids.map((id) => wholeNextMonth(observe(s, id), id, 'food')) };
+          }
+          const leaving = food !== null && !food.held && a?.good !== 'food';
+          if (leaving) food!.held = stock();
+          tick(s, dt, act);
+          // Food moved later in the phase, after its auction ended: the row must not see it.
+          if (leaving) s.players.find((p) => p.id === ids[2])!.stock.food += 7;
+        };
+      },
+      onPhase: (s: GameState) => {
+        hooks.phase(s);
+        if (s.phase !== 'auction') return;
+        if (food) {
+          auctions++;
+          const held = food.held ?? ids.map((id) => s.players.find((p) => p.id === id)!.stock.food);
+          ids.forEach((_, i) => truth.push({ ask: food!.ask, reference: food!.reference, held: held[i]!, need: food!.need[i]! }));
+        }
+        food = null;
+      },
+    });
+
+    expect(auctions, 'the premise: a Food auction every month').toBe(3);
+    expect(new Set(truth.map((x) => x.need)).size, 'the premise: the seats need different amounts, so a wrong seat shows').toBeGreaterThan(1);
+    expect(tally.food).toHaveLength(ids.length * auctions);
+    expect(tally.food).toEqual(truth);
   });
 });
