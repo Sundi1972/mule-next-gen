@@ -73,8 +73,10 @@ and they go short only when the shelf is empty.
 **Non-goals.**
 - Players' and crews' consumption per production type and the store-demand step (WS5's part of
   this spec, §1 WS5).
-- Colonists' Energy and Medicine: they stay demand for prices only, as today; hardship reads Food
-  and Water. A later spec could add them as softer hardships.
+- Colonists' Energy: it stays demand for prices only. (Amended 6 Nov: Medicine is no longer a
+  non-goal. Heiko's colony health, decisions 23-30, makes colonists take Medicine and fall sick:
+  C7-C9 here, C17-C19 WS5's. Missing Medicine reaches the mood only through sickness; it is not in
+  RULE-2's severity, since decisions 14 and 15 are superseded by health.)
 - A new screen or gauge for the hardship memory: the table sees it through the mood, the events
   and the month-end line. A hardship marker on the colony panel would need a WS6 mock first.
 - Tuning: every number is a placeholder (G-5 HC-25).
@@ -239,6 +241,41 @@ tomorrow     MUST say "The store fed the colony's N colonists 19 of 20 Food and 
              and the plain "fed" line when nothing was missing; red when severity is over tolerance
 ux           wording only on an existing line; no layout change, so no new mock
 owner        WS3 (mule-game.ts, protocol), web line by the PM's build ruling
+```
+
+```
+C7 · ADDED · colonist sickness: a sick share h with a ceiling, where recovery beats contagion (decisions 28-30)
+
+tomorrow     MUST keep h (0..HEALTH.cap 0.4) on the colony; at upkeep, after the colonists' meal (Food,
+             Water and now Medicine taken free, as C1), update it by RULE-7; MUST start h at 0. While
+             health is off (WS5 HC-13: it switches on with the Medicine supply), h stays 0
+logic        → RULE-7 · upkeep, in runColony before the mood steps
+seam         packages/engine/src/colony.ts::runColony — the colony's one monthly writer
+senior       junior would: a sick count per colonist · senior does: one share on the colony, so
+             contagion, crews (WS5 C18) and the view (WS5 C19) read one number
+owner        WS7 (colony.ts); config HEALTH block (WS1 named edit)
+```
+
+```
+C8 · ADDED · health weighs on the mood, the colony's growth and its Medicine need
+
+tomorrow     MUST lower the mood's target by HEALTH.moodPerSick (10) × h; MUST lower the growth rate
+             (RULE-5) by HEALTH.growthPerSick (0.05) × h; MUST raise the colonists' Medicine need by
+             × (1 + h_old) (WS5 reads it in demand, RULE-13's neighbour). No immediate hit
+logic        → RULE-8
+seam         colony.ts::moodTarget's inputs; NEW function growthRate in upkeep.ts (C4)
+owner        WS7 (colony.ts); upkeep.ts and economy.ts named edits (WS1)
+```
+
+```
+C9 · ADDED · Electronics are a comfort: a mood bonus when met, never a penalty
+
+tomorrow     MUST give the colonists min(colonists / HEALTH.colonistsPerElectronics (50), store
+             stock) Electronics at upkeep, free; MUST raise the mood's target by
+             HEALTH.electronicsBonus (4) × the share met; MUST NOT lower it when unmet. The store's
+             demand for them is WS5's C17
+logic        → RULE-9
+owner        WS7 (colony.ts)
 ```
 
 ### Players' and crews' consumption, store demand (WS5)
@@ -563,6 +600,31 @@ a row's mood points in band b = row.mood[b] × (b ∈ {restless, unhappy, unrest
 H at its cap (2) → ×1.5. Rows with no mood points, and politics off, are unchanged.
 ```
 
+```
+RULE-7 · The sick share (C7)                                      shape: formula
+p        = HEALTH.base (0.01) + HEALTH.perHunger (0.2) × g(s) + HEALTH.perMedicine (0.2) × g(s_med)
+           + HEALTH.contagion (0.15) × h_old         g: RULE-2's curve; s: RULE-2's severity (Food, Water)
+newSick  = (1 − h_old) × p
+recover  = h_old × HEALTH.recovery (0.5) × (1 − HEALTH.medicineCut (0.3) × s_med)
+h        = min(HEALTH.cap (0.4), max(0, h_old + newSick − recover))
+reads    recovery (0.5, at least 0.35) is always above contagion (0.15): fed and treated, h settles
+         near 0.03 whatever it was. With no Medicine it settles near 0.44, so it sits at the cap
+         (m26 on WS5's baseline: 95 of 120 months): why health ships with the Medicine supply
+unknown  health off → h = 0; no colony (politics off) → none
+```
+
+```
+RULE-8 · Health's effects (C8)                                    shape: formula
+mood target −= HEALTH.moodPerSick (10) × h   · growth rate −= HEALTH.growthPerSick (0.05) × h
+Medicine need ×= (1 + h_old)                 · crews: WS5 RULE-14 reads h (sick from HEALTH.crewSickFrom 0.2)
+```
+
+```
+RULE-9 · The Electronics comfort (C9)                             shape: formula
+want = colonists / HEALTH.colonistsPerElectronics (50) · took = min(want, store stock)
+mood target += HEALTH.electronicsBonus (4) × (took / want); want 0 → 0; never negative
+```
+
 ### WS5's rules
 
 ```
@@ -780,6 +842,13 @@ The phone's cause line ("Medicine ran short", WS8's mock) reads the last two; th
 | T-AC-5 (serves G-1) | RULE-6: an unrest row's points ×(1 + 0.25 H); a thriving row's unchanged; politics off unchanged | C5 | engine unit |
 | T-AC-6 (B-AC-4) | RULE-1: need 0 → s 0; stock 0 → s 1; no credits move | C1 | engine unit |
 | T-AC-7 (UBER-AC-2) | `colonistBudget` no longer exists in packages/engine/src; the store's restock bid (today's premium, or #390's bands if approved) reads no colonist wage | C2 | grep + auction test |
+| B-AC-6 | Given health on, a colony at h 0.3, fed and with all its Medicine · When upkeep ends · Then h falls (0.3 → about 0.19) and the mood's target is about 1.9 lower than with h 0 | C7, C8 | engine test on GameState |
+| B-AC-7 | Given health on and no Medicine on the shelf for months · When upkeeps pass · Then h never exceeds 0.4 and the phone's colonyHealth (WS5 C19) shows health 60 | C7, C8 | engine test + server view test |
+| B-AC-8 | Given 400 colonists and 8 Electronics in the store · When upkeep ends · Then the colonists take 8, and the mood's target is 4 higher; with none in the store it is unchanged | C9 | engine test |
+| T-AC-8 (B-AC-6, 7) | RULE-7 rows: fed and treated settles near 0.03; no Medicine stays at the cap; recovery > contagion for every s_med | C7 | engine unit |
+| T-AC-9 (B-AC-6) | RULE-8: mood −10h, growth −0.05h, Medicine need ×(1 + h_old) | C8 | engine unit |
+| T-AC-10 (B-AC-8) | RULE-9: bonus 4 × share; want 0 → 0; never negative | C9 | engine unit |
+| T-AC-11 (WS5 HC-13) | health off: h stays 0 and nothing else moves; politics off: no h | C7 | engine unit |
 | B-AC-10 | Given two seats, one with 2 Smithore mines + 1 Crystite mine + 1 plant, one with 3 farms + 1 well · When upkeep ends · Then the miner's household ate 4 Food and drank 3 Water, the farmer's ate 3 and drank 3 (RULE-10's examples). observed_at: each player's depot before and after upkeep. negative: a seat with no plots eats 2 and drinks 1 | C10 | engine test on GameState |
 | B-AC-11 | Given an Electronics works that runs this month · When production ends · Then its owner's Energy fell by the recipe's Energy plus 2. observed_at: the owner's depot. negative: a works turned off for want of Energy draws only its share (AM-17) | C11 | engine test |
 | B-AC-12 | Given 4 seats of "3 farms + well" and 100 colonists, Food posted at 300 · When prices are next posted · Then the store's Food demand is 17, not less (RULE-11's example). observed_at: monthlyDemand as the store's price reads it. negative: a festival month adds its Food on top | C13 | engine test |
