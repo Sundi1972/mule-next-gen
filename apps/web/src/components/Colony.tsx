@@ -515,8 +515,12 @@ function NotCut({ size }: { size: Size }) {
 
 const monthScoreOf = (view: MuleView) => (view.colony?.score ? { colony: view.colony, score: view.colony.score, last: view.colony.lastScore ?? null } : null);
 
+/** From this many seats the TV band drops its sum and words so the month end fits the screen (PM ruling, 6 Nov: six seats). */
+export const COMPACT_FROM_SEATS = 5;
+
 /** The colony score under the league at a month end: the total, the change, the sum and its words. No verdict: that is game over's. */
 function MonthScoreBand({ view, colony, score, last }: { view: MuleView; colony: ColonyView; score: ColonyScore; last: number | null }) {
+  const compact = view.players.length >= COMPACT_FROM_SEATS;
   return (
     <section className="relative flex shrink-0 flex-col gap-2 rounded-panel border border-holo-line bg-panel p-5" aria-label="The colony’s score" data-testid="colony-band" data-month={view.month}>
       <header className="flex items-baseline justify-between gap-4">
@@ -530,11 +534,13 @@ function MonthScoreBand({ view, colony, score, last }: { view: MuleView; colony:
           </span>
           <SinceLast score={score} last={last} month={view.month} size="tv" />
         </span>
-        <ScoreSum score={score} colony={colony} size="band" />
+        {!compact && <ScoreSum score={score} colony={colony} size="band" />}
       </div>
-      <span className="text-base leading-snug text-ink-2" data-testid="colony-score-words">
-        {scoreWords(colony, score)}
-      </span>
+      {!compact && (
+        <span className="text-base leading-snug text-ink-2" data-testid="colony-score-words">
+          {scoreWords(colony, score)}
+        </span>
+      )}
       {inCollapse(view) && <NotCut size="tv" />}
     </section>
   );
