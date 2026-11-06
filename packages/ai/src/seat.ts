@@ -66,7 +66,7 @@ import {
 } from './playbook/index.js';
 import { GOOD_NAME, landDecision, outfitName, plotName, plotsAhead, rankedBy, wantsAnyAhead, wantsPlot, type LandPlan } from './strategist.js';
 import { situation } from './summary.js';
-import { chainLinks, type AdoptedFields, type Mind } from './value.js';
+import { chainLinks, chainsOn, type AdoptedFields, type Mind } from './value.js';
 
 /** One act of the seat's planning part, and whether the rules took it. */
 export interface PlanningStep {
@@ -320,7 +320,9 @@ export class AiSeat {
   /** The kept money-maker while it is a factory good with an input the seat can't feed yet, else null. See AM-33. */
   private chainFocus(state: GameState): Good | null {
     const good = this.kept?.moneyMaker ?? null;
-    return good && chainLinks(observe(state, this.id), this.id, good).length > 0 ? good : null;
+    // Switched off, no good is a chain: no observation is made at every development start for nothing.
+    if (!good || !chainsOn()) return null;
+    return chainLinks(observe(state, this.id), this.id, good).length > 0 ? good : null;
   }
 
   /** RULE-8's re-plan trigger the kept plan meets on `state`, or null: also null with no plan kept, or none anchored yet. */
