@@ -1,13 +1,21 @@
+import { POLLUTION } from '@mule/engine';
 import { cx } from './tokens';
 
-export type AirBandName = 'clean' | 'smoggy' | 'toxic' | 'collapse';
+/** The air bands' names, as config names them. */
+export type AirBandName = (typeof POLLUTION.bands)[number]['name'];
 
-const BANDS: { from: number; name: AirBandName; label: string; tone: string; bar: string }[] = [
-  { from: 0, name: 'clean', label: 'Clean', tone: 'text-ok', bar: 'bg-ok' },
-  { from: 30, name: 'smoggy', label: 'Smoggy', tone: 'text-warn', bar: 'bg-warn' },
-  { from: 60, name: 'toxic', label: 'Toxic', tone: 'text-alert', bar: 'bg-alert' },
-  { from: 80, name: 'collapse', label: 'Collapse', tone: 'text-alert', bar: 'bg-alert' },
-];
+/** Each band's look. Where a band starts is config's (POLLUTION.bands), never restated here. */
+const LOOK: Record<AirBandName, { label: string; tone: string; bar: string }> = {
+  clean: { label: 'Clean', tone: 'text-ok', bar: 'bg-ok' },
+  smoggy: { label: 'Smoggy', tone: 'text-warn', bar: 'bg-warn' },
+  toxic: { label: 'Toxic', tone: 'text-alert', bar: 'bg-alert' },
+  collapse: { label: 'Collapse', tone: 'text-alert', bar: 'bg-alert' },
+};
+
+const BANDS = POLLUTION.bands.map((b) => ({ name: b.name, from: b.from, ...LOOK[b.name] }));
+
+/** A level as a share of the gauge, in percent: the air runs from 0 to POLLUTION.airMax. */
+const share = (level: number) => (Math.min(POLLUTION.airMax, Math.max(0, level)) / POLLUTION.airMax) * 100;
 
 /** The look of an air band, by name or from the gauge level. */
 export function airBandStyle(level: number, band?: AirBandName) {
@@ -26,10 +34,10 @@ export function AirGauge({ level, band, tv = false, className }: { level: number
         </span>
       </span>
       <span className="relative h-2 overflow-hidden rounded-full bg-raised">
-        {[30, 60, 80].map((m) => (
-          <span key={m} className="absolute inset-y-0 w-px bg-ink-3/40" style={{ left: `${m}%` }} />
+        {BANDS.slice(1).map((b) => (
+          <span key={b.name} className="absolute inset-y-0 w-px bg-ink-3/40" style={{ left: `${share(b.from)}%` }} />
         ))}
-        <span className={cx('absolute inset-y-0 left-0 rounded-full', style.bar)} style={{ width: `${Math.min(100, level)}%` }} />
+        <span className={cx('absolute inset-y-0 left-0 rounded-full', style.bar)} style={{ width: `${share(level)}%` }} />
       </span>
     </div>
   );
