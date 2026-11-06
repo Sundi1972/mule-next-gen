@@ -11,11 +11,21 @@ export interface ManifestEntry {
   glow: string | null;
 }
 
+/** A picture's camera frame: a place is `place` px wide, its centre at pixel `centre`. */
+export interface Frame {
+  width: number;
+  height: number;
+  place: number;
+  centre: [number, number];
+}
+
+/** A kind's pictures by stage; a kind taller than the shared frame carries its own (spec AM-1). */
+export type KindPictures = Partial<Record<PictureStage, ManifestEntry>> & { frame?: Frame };
+
 /** `apps/web/public/art/colony/manifest.json`. Picture paths are relative to the art folder. */
 export interface GroundsManifest {
-  /** The camera frame every picture shares: a place is `place` px wide, its centre at pixel `centre`. */
-  frame: { width: number; height: number; place: number; centre: [number, number] };
-  pictures: Partial<Record<string, Partial<Record<PictureStage, ManifestEntry>>>>;
+  frame: Frame;
+  pictures: Partial<Record<string, KindPictures>>;
   sizes: number[];
 }
 
