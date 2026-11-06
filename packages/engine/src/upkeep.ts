@@ -2,7 +2,7 @@ import { GAME, GOOD_CONFIG, MULE, POLLUTION, PRICE, UPKEEP } from './config.js';
 import { corralTarget, festivalFood, monthlyDemand, planShip, shipInPort, shipPrice } from './economy.js';
 import { airBand } from './pollution.js';
 import { needsOf } from './production.js';
-import { GOODS, type GameState, type Good } from './types.js';
+import { GOODS, type GameState, type Good, type MonthReport } from './types.js';
 
 /**
  * End of month: players and colonists eat, goods spoil, anything above the
@@ -33,6 +33,7 @@ export function runUpkeep(state: GameState): { shortages: Good[]; hungry: boolea
   // Colonists take their Food and Water from the store, free, as far as its shelf holds them (needs C1, RULE-1):
   // they hold no money and the meal moves none (HC-2). The store kept their month back from the players (HC-3).
   const colonistBase = state.colonists / UPKEEP.colonistsPerUnit;
+  const meal: NonNullable<MonthReport['colonistMeal']> = { food: { need: 0, took: 0 }, water: { need: 0, took: 0 } };
   let fed = true;
   for (const good of ['food', 'water'] as const) {
     // A festival month the colonists eat more Food (G-5 C26).
@@ -43,7 +44,11 @@ export function runUpkeep(state: GameState): { shortages: Good[]; hungry: boolea
       shortages.add(good);
     }
     state.store.stock[good] -= took;
+    meal[good] = { need, took };
   }
+  // The month's report keeps the meal for the month-end line (C6). A what-if shares the real report: it writes nothing.
+  const report = state.history.at(-1);
+  if (report?.month === state.month && !state.whatIf) report.colonistMeal = meal;
   // In Collapse colonists leave whatever they eat.
   const growth = airBand(state.air).name === 'collapse' ? 1 - POLLUTION.collapseLeave : fed ? UPKEEP.colonistGrowth.fed : UPKEEP.colonistGrowth.hungry;
   state.colonists = Math.round(state.colonists * growth);
