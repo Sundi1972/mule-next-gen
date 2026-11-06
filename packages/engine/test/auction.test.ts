@@ -707,9 +707,11 @@ describe('changing sides and ending early', () => {
     state.players[3]!.money = 0;
     startAuction(state, ['food']);
     toWalk(state);
-    state.players[1]!.money = 100;
-    walker(state, 'p0').price = 50;
-    walker(state, 'p1').price = 50;
+    // Met at the buying line, the lowest a seller stands (rule D): two units' money there, and then none.
+    const line = a(state).storeBuy;
+    state.players[1]!.money = 2 * line;
+    walker(state, 'p0').price = line;
+    walker(state, 'p1').price = line;
     expect(run(state, 5_000)).toHaveLength(2);
     expect(a(state).stage).toBe('close');
   });
