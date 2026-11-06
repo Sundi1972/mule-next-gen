@@ -17,7 +17,7 @@ import { developDecision, goodPlan } from '../src/strategist.js';
 import { applyAction } from '../src/play.js';
 import { AiSeat } from '../src/seat.js';
 import { outlook } from '../src/outlook.js';
-import { unitValues, type Mind } from '../src/value.js';
+import { canFeed, unitValues, type Mind } from '../src/value.js';
 
 /**
  * A factory seat keeps its factory fed (PM ruling of 6 Nov, options 3 and 1, buy side only):
@@ -118,6 +118,35 @@ describe('a farm feeds a new factory only with what its factories already runnin
 
   it('FM-factory-input-N7b: a farm with a Food to spare beyond the household and the first factory feeds a second', () => {
     expect(secondFactory(4, 6) ?? '').not.toMatch(/nothing to feed/);
+  });
+});
+
+describe("in the production phase a farm counts with what it makes, not with nothing (N8)", () => {
+  /** ai0's farm (rating `food`) and an idle plot, played into the production phase; then its Food set to 0. */
+  function inProduction(food: number): { state: GameState; made: number } {
+    const state = game();
+    while (state.phase !== 'development') advancePhase(state);
+    place(state, [
+      { x: 0, outfit: 'food', food },
+      { x: 2, outfit: null },
+    ]);
+    for (const p of state.players) setStock(state, p.id, p.id === ME ? { water: 30, energy: 20 } : {}, p.id === ME ? 5000 : 0);
+    advancePhase(state);
+    expect(state.phase).toBe('production');
+    const made = state.history.at(-1)!.produced[ME]!.food;
+    state.players.find((p) => p.id === ME)!.stock.food = 0;
+    return { state, made };
+  }
+
+  it('FM-factory-input-N8: a farm with Food to spare feeds a new Medicine factory in the production phase as in development', () => {
+    // 5 a month against the household's 3 and the factory's 1, as in FM-factory-input-3c: fed, though no Food is in stock.
+    const spare = inProduction(3);
+    expect(spare.made, 'the case: the farm made 5 this month').toBe(5);
+    expect(canFeed(observe(spare.state, ME), ME, 'medicine'), 'a Food to spare each month').toBe(true);
+    // The control: a farm making only the household's 3 feeds nothing, in this phase too.
+    const just = inProduction(1);
+    expect(just.made, 'the case: the farm made 3 this month').toBe(3);
+    expect(canFeed(observe(just.state, ME), ME, 'medicine'), 'only the household\'s Food').toBe(false);
   });
 });
 
