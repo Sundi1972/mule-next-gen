@@ -584,6 +584,12 @@ export interface Walker {
   dir: -1 | 0 | 1;
   /** Board time (ms into the walk) when their rounded price last changed: who got there first. */
   since: number;
+  /** A seller stopped at the amount they must hold of this good (RULE-4): they sell nothing more until a hold of ▼ frees them. Survives a side switch. */
+  held?: true;
+  /** Board time when the current hold of ▼ began; cleared by any other walk intent, a tap or a stop. */
+  downSince?: number;
+  /** A stopped seller who held ▼ for WALK.shortHoldMs: sells into shortage for the rest of this good (RULE-4 row 2). */
+  sellsShort?: true;
 }
 
 /** A buyer and a seller, either of them perhaps a house (the store, the ship), exchanging units right now. */

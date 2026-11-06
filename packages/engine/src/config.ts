@@ -1100,6 +1100,13 @@ export const WALK = {
   boardMargin: 0.3,
   /** And this share of the posted price more, so a board whose price lines sit close together still has room to walk. */
   boardPostedMargin: 0.1,
+  /**
+   * RULE-4 (AM-1): a seller stops at the amount they must hold (auctionNeed, fixed as the good comes up), one price
+   * step above the line, and sells below it only after holding ▼ for shortHoldMs. false turns the stop off, for sweeps.
+   */
+  needStop: true,
+  /** Board ms a stopped seller holds ▼ to sell on into shortage (Heiko's choice A, 5 Nov). A tap or a shorter hold moves nothing. */
+  shortHoldMs: 1_000,
   /** How often the server steps the auction. */
   tickMs: 100,
 };
