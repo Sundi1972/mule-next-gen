@@ -78,6 +78,17 @@ export function Look() {
       <header className="flex flex-col gap-3">
         <span className="label-caps">WS10 · Visual design · 6 Nov · for Heiko</span>
         <h1 className="font-display text-4xl font-bold">The colony grounds: how good can it look?</h1>
+        <div className="flex items-center justify-between gap-4" id="colony">
+          <p className="text-base text-ink-2">
+            <strong className="text-ink">A whole colony, month 12:</strong> the town hall, the Park, Hospital, Observatory, Stadium and Spaceport,
+            three places free to grow into. Pre-rendered in Blender (C). Buildings other than the Park are quick script-built models
+            made today: they show the look, not final designs. The whole picture is 120–140 kB.
+          </p>
+          <LightToggle light={light} set={setLight} />
+        </div>
+        <div className="overflow-hidden rounded-panel border border-holo-line bg-[#070b12]" data-testid="section-colony">
+          <Picture src={img(`colony-${light}`)} alt={`The colony's first ring at ${light}`} className="mx-auto aspect-video max-h-[78vh]" />
+        </div>
         <div className="max-w-5xl rounded-panel border border-holo bg-panel p-4 text-lg leading-snug" data-testid="answer">
           <p>
             <strong>Yes, it can look like a real place.</strong> Model each building once in Blender from free (CC0) parts and
@@ -93,8 +104,7 @@ export function Look() {
           </p>
         </div>
         <nav className="flex flex-wrap gap-4 text-sm text-holo">
-          <a href="#colony">A whole colony</a>
-          <a href="#stages">One building, every stage</a>
+                    <a href="#stages">One building, every stage</a>
           <a href="#three-ways">The Park three ways</a>
           <a href="#in-grounds">In today’s grounds</a>
           <a href="#numbers">The numbers</a>
@@ -103,16 +113,6 @@ export function Look() {
         </nav>
       </header>
 
-      <Section
-        id="colony"
-        title="A whole colony: the first ring, pre-rendered (C)"
-        lead="The town hall in the middle, the Park, Hospital, Observatory, Stadium and Spaceport around it, three places still free to grow into. This is what the TV would show in month 12. Buildings other than the Park are quick script-built models made today, so they show the look, not final designs."
-      >
-        <LightToggle light={light} set={setLight} />
-        <div className="overflow-hidden rounded-panel border border-holo-line bg-[#070b12]">
-          <Picture src={img(`colony-${light}`)} alt={`The colony's first ring at ${light}`} className="aspect-video w-full" />
-        </div>
-      </Section>
 
       <Section id="stages" title="One building, every stage: the Hospital" lead="Each stage in the game is a different picture of the same model. Closed and damaged are mostly the standing model with lights and materials changed; the scaffold is a kit built once and reused for every building.">
         <div className="overflow-hidden rounded-panel border border-holo-line bg-[#070b12]">
