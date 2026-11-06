@@ -1706,3 +1706,42 @@ describe('Room: a disposed room is done with its game', () => {
     room.dispose();
   });
 });
+
+describe("Room: the lobby shows each seat the game's default for it (T-AC-LS1)", () => {
+  /** A game whose default for a seat names its index and the seat count, so a stale count shows. */
+  function defaultRoom() {
+    return new Room<Intent, View>({
+      code: 'KRTX',
+      createGame: () => ({ ...secretsGame(), defaultPick: (seat: number, seats: number) => `d${seat}of${seats}` }),
+      aiNames: ['Brix'],
+      newToken: () => `t${++tokens}`,
+      picks: CHOICES,
+    });
+  }
+
+  it("T-AC-LS1: each lobby seat carries the game's default for its index at the current seat count, picked or not", () => {
+    const room = defaultRoom();
+    const heiko = join(room, 'Heiko');
+    join(room, 'Mia');
+    expect(room.viewFor(null).seats.map((s) => s.defaultPick)).toEqual(['d0of2', 'd1of2']);
+    room.receive(heiko, heiko.from, { t: 'addAi' });
+    pick(room, heiko, 'owl');
+    expect(room.viewFor(heiko.from.seatId).seats.map((s) => [s.pick, s.defaultPick])).toEqual([
+      ['owl', 'd0of3'],
+      [undefined, 'd1of3'],
+      [undefined, 'd2of3'],
+    ]);
+  });
+
+  it('T-AC-LS1: a started table, and a game with no defaults, carry no defaultPick', () => {
+    const room = defaultRoom();
+    const heiko = join(room, 'Heiko');
+    join(room, 'Mia');
+    room.receive(heiko, heiko.from, { t: 'start' });
+    expect(room.viewFor(null).seats.some((s) => 'defaultPick' in s)).toBe(false);
+
+    const plain = pickRoom().room;
+    join(plain, 'Heiko');
+    expect(plain.viewFor(null).seats.some((s) => 'defaultPick' in s)).toBe(false);
+  });
+});
