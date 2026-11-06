@@ -24,6 +24,7 @@ import {
   storeForSale,
   storePaysFor,
   storeOnStrike,
+  storeBuyPrice,
   storeSellLine,
   storeSellPrice,
   tileIndex,
@@ -325,13 +326,13 @@ export type SellListing = NonNullable<PlanningPlay['list']>[number];
 /**
  * What the seat lists for the land auction while its money is under what its month of needs costs (monthNeedsCost): up to AI_PLANS.sell.perMonth
  * lots, those worth least to it over what the store pays first, each sold to the store if no one bids. Its idle plots
- * and its MULEs are candidates, never its last Food or Energy MULE. Empty when it is not short.
+ * and its MULEs are candidates, never its last Food or Energy MULE, nor its last Water MULE while it has a farm. Empty when it is not short.
  */
 export function sellWanted(obs: GameState, mind: Mind): SellListing[] {
   if (me(obs, mind).money >= monthNeedsCost(obs, mind)) return [];
   const o = outlook(obs, mind.me, { lookAhead: mind.level.lookAhead });
   const mine = obs.tiles.flatMap((tile, plot) => (tile.owner === mind.me && tile.terrain !== 'store' ? [{ tile, plot }] : []));
-  const isLast = (outfit: Outfit) => (outfit === 'food' || outfit === 'energy') && mine.filter((m) => m.tile.outfit === outfit).length === 1;
+  const isLast = (outfit: Outfit) => (outfit === 'food' || outfit === 'energy' || (outfit === 'water' && mine.some((m) => (UPKEEP.irrigated as readonly string[]).includes(m.tile.outfit ?? '')))) && mine.filter((m) => m.tile.outfit === outfit).length === 1;
   const lots = mine.flatMap(({ tile, plot }): { item: SellListing['item']; plot: number; worth: number }[] => {
     if (!tile.outfit) return [{ item: 'plot', plot, worth: plotValue(obs, mind, plot) }];
     if (isLast(tile.outfit)) return [];
@@ -635,7 +636,7 @@ export function shortfallHold(obs: GameState, me: string, good: Good): { whole: 
 export function expectedPrices(obs: GameState, good: Good): { sell: number; buy: number } {
   const a = obs.auction;
   const posted = obs.store.posted[good];
-  const storeBuy = a?.good === good ? (a.storeBudget > 0 ? a.storeBuy : 0) : Math.floor(posted * (1 - PRICE.storeSpread));
+  const storeBuy = a?.good === good ? (a.storeBudget > 0 ? a.storeBuy : 0) : storeBuyPrice(posted);
   const ship = shipInPort(obs) ? (shipPrice(obs, good) ?? 0) : 0;
   const sell = Math.max(storeBuy, ship, Math.floor(posted * STRATEGIST.trade.sellFloor));
   const storeSell = a?.good === good ? a.storeSell : storeSellPrice(posted);

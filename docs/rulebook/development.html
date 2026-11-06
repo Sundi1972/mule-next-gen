@@ -96,6 +96,18 @@
 <p class="code-ref">In the code: <code>packages/engine/src/dev-walk.ts::pace</code> · <code>dev-walk.ts::hungerPace</code> · <code>config.ts::DEV_WALK</code> (<code>hungerPaceMin</code>, <code>sickPace</code>, <code>hungerLevels</code>) · <code>config.ts::SPECIES_PERK.zipwingSpeed</code> · <code>config.ts::EVENTS.player.sickness</code> · <code>packages/engine/src/production.ts::needsOf</code></p>
 <p class="owner">Kept current by: the Strategy team (WS1), with the Events team (WS1/WS8) for sickness.</p>
 
+<h3 id="hunger-last-meal">Hunger read from your household's last meal <span class="pill designed">Designed, not in the game yet, WS5</span></h3>
+<p>Heiko approved on 6 Nov (decision 7): you will be hungry when your household went short at the last month end, not when you start development holding less Food than you need. The walking pace and the words for how hungry stay as above.</p>
+<p>Why: today's check reads your stock after half the Food has spoiled and before the month's market, so a player whose farms make twice their need still counts as hungry; 83 of every 100 player-months read hungry today. A player who bought Food late in the month still walks fed, which is the cost.</p>
+<div class="box next"><h4>Ships as one package</h4><p>Heiko's decision 1 (6 Nov): the colonists' hardship and sickness ship together with the Food and Medicine supply change, tuned in one pass. This hunger rule is part of that pass, with Food spoiling a quarter a month (see <a href="production.html#food-spoilage-quarter">Food will spoil a quarter a month</a>).</p></div>
+<p class="owner">Designed, not in the game yet, WS5 (a named edit in WS1's and WS3's code) · Spec: <code>docs/specs/2026-11-06-colony-needs.md</code>, C15.</p>
+<h3 id="sickness-from-colony">The colony's sickness reaches players <span class="pill designed">Designed, not in the game yet, WS5</span></h3>
+<p>Heiko approved on 6 Nov (decision 24): when colonists are sick (see <a href="colony-and-politics.html#colony-health">Colony health</a>), your chance of falling sick at the start of development rises with the share of them who are sick, by up to <span class="num">10</span> points at the worst. It is added to the chance above, never multiplied. Medicine cures you as today.</p>
+<p>Why an addition: as a multiple, dirty air made players sick in 387 of 480 player-months in ten simulated games. Added, it stays under a third even in dirty air. Hunger does not raise a player's own sickness chance yet (decision 8): no simulation has tested that link, so it is decided when it can be measured.</p>
+<p>Decisions 8 and 24 both stand (Heiko, 6 Nov): decision 8 is a player's <em>own</em> hunger making them sick, decision 24 is the colony's sickness reaching players. Where both apply, their chances add.</p>
+<div class="box next"><h4>Ships as one package</h4><p>Heiko's decision 1 (6 Nov): the colonists' hardship and sickness ship together with the Food and Medicine supply change, tuned in one pass; colony health switches on with the Medicine supply.</p></div>
+<p class="owner">Designed, not in the game yet, WS5 · <a href="../explainers/2026-11-06-colony-economy.html">the colony economy explainer</a> (Colony health).</p>
+
 <h2 id="store-floor">The store floor <span class="pill built">In the game</span></h2>
 <p>The store is one hall, entered by an airlock on its left or right side. Walk up to a door from outside and press <strong>ENTER STORE</strong>; inside, stand in a door and press <strong>LEAVE</strong> ("to the colony", or "with your MULE"). The hall has two rows of rooms off one walkway:</p>
 <div class="table-wrap"><table>

@@ -138,11 +138,11 @@ export interface Player {
   installedThisTurn: boolean;
   /** Indices of tiles whose ground this player has analysed. Private to them. */
   analysed: number[];
-  /** Free plots chosen for a geo drone this planning phase, analysed when the land grant starts. */
+  /** Free or listed plots this planning's geo drone flew over, analysed at once; it marks the drone used until the land grant clears it. */
   droneOrder: number[];
   /**
-   * The plots this month's drone surveyed: what droneOrder held when the land grant started, kept until the next month
-   * opens, so the player's phone can say "Your drone: …" while one is lit. Private to them, like analysed.
+   * The plots this month's drone surveyed, set when it is sent and kept until the next month opens, so the player's
+   * phone can say "Your drone: …" while one is lit. Private to them, like analysed.
    */
   droneFound: number[];
 }
