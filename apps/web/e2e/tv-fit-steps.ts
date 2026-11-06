@@ -159,6 +159,8 @@ const SCALE_WATCH = String.raw`{
   const effective = ${EFFECTIVE_SCALE};
   const lows = {};
   const shown = new Map();
+  const cuts = [];
+  const cutSince = new Map();
   const keep = (s, now) => {
     if (now - s.since < SETTLED_MS) return;
     if (!(s.screen in lows) || s.scale < lows[s.screen]) lows[s.screen] = s.scale;
@@ -178,7 +180,28 @@ const SCALE_WATCH = String.raw`{
       shown.set(b, { scale, screen, since: now });
     }
     for (const [b, s] of shown) if (!live.has(b)) { keep(s, now); shown.delete(b); }
+    // What a giving box keeps (data-fit-keep) is shown whole inside it, once it has stood SETTLED_MS (a card's drop-in
+    // starts above the box): the fit gave the rest away for it.
+    const seen = new Set();
+    for (const g of document.querySelectorAll('[data-phase] [data-fit-gives]')) {
+      if (!g.checkVisibility()) continue;
+      const box = g.getBoundingClientRect();
+      for (const k of g.querySelectorAll('[data-fit-keep]')) {
+        const r = k.getBoundingClientRect();
+        const off = Math.max(box.top - r.top, r.bottom - box.bottom);
+        if (off <= 0.5) { cutSince.delete(k); continue; }
+        seen.add(k);
+        if (!cutSince.has(k)) cutSince.set(k, now);
+        else if (now - cutSince.get(k) >= SETTLED_MS && cuts.length < 5) {
+          const stage = k.closest('[data-phase]');
+          cuts.push(stage.getAttribute('data-phase') + ': ' + (k.getAttribute('data-log') || k.getAttribute('data-testid') || k.tagName) + ' cut by ' + off.toFixed(1) + ' px');
+          cutSince.set(k, Infinity);
+        }
+      }
+    }
+    for (const k of [...cutSince.keys()]) if (!seen.has(k)) cutSince.delete(k);
   }, 100);
+  window.__tvKeepCuts = () => cuts;
   window.__tvScaleLows = () => {
     const now = performance.now();
     for (const s of shown.values()) keep(s, now);
@@ -193,7 +216,8 @@ export async function watchTvScales(tv: Page): Promise<void> {
 
 /**
  * TV-FIT floor over a whole run (PM ruling 6 Nov): every screen the watched TV showed drew its body at TV_SCALE_FLOOR
- * or more, once settled. Returns each screen's lowest scale.
+ * or more, once settled, and what each giving box keeps (data-fit-keep: the newest news, the newest event) stood whole
+ * inside it. Returns each screen's lowest scale.
  */
 export async function theTvScalesHeld(tv: Page, table: string): Promise<string> {
   const lows = (await tv.evaluate('window.__tvScaleLows ? window.__tvScaleLows() : null')) as Record<string, number> | null;
@@ -202,6 +226,8 @@ export async function theTvScalesHeld(tv: Page, table: string): Promise<string> 
   check(Object.keys(lows).length > 0, `TV-FIT: the ${table} TV showed a fit box`);
   const under = Object.entries(lows).filter(([, scale]) => scale < TV_SCALE_FLOOR);
   check(under.length === 0, `TV-FIT: at ${table} the TV drew ${under.map(([screen, scale]) => `${screen} at scale ${scale.toFixed(3)}`).join(', ')}, under the floor ${TV_SCALE_FLOOR} (PM ruling 6 Nov); every screen's lowest: ${read}`);
+  const cuts = (await tv.evaluate('window.__tvKeepCuts ? window.__tvKeepCuts() : []')) as string[];
+  check(cuts.length === 0, `TV-FIT: at ${table} what a giving box keeps was cut: ${cuts.join('; ')}`);
   return read;
 }
 
