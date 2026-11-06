@@ -54,6 +54,28 @@ const TOOLS = [
   },
 ];
 
+/** The kick-off prompt: /mcp__muleseat__play <code> <seat> loads the persona, the rules and the loop, and starts it. */
+const PROMPTS = [
+  {
+    name: 'play',
+    description: 'Play one seat of a running M.U.L.E. game until it ends.',
+    arguments: [
+      { name: 'code', description: 'The game code', required: true },
+      { name: 'seat', description: 'Your seat id, e.g. ai0', required: true },
+    ],
+  },
+];
+
+/** The bridge's text at `path`, or `fallback` when it cannot be reached. */
+async function bridgeText(path, fallback) {
+  try {
+    const res = await fetch(`${BRIDGE}${path}`, { signal: AbortSignal.timeout(5_000) });
+    return await res.text();
+  } catch {
+    return fallback;
+  }
+}
+
 const send = (msg) => process.stdout.write(`${JSON.stringify(msg)}\n`);
 const result = (id, value) => send({ jsonrpc: '2.0', id, result: value });
 const error = (id, code, message) => send({ jsonrpc: '2.0', id, error: { code, message } });
@@ -86,7 +108,24 @@ rl.on('line', (raw) => {
   const { id, method, params } = msg;
   // A notification has no id and gets no answer.
   if (id === undefined) return;
-  if (method === 'initialize') return result(id, { protocolVersion: params?.protocolVersion ?? PROTOCOL, capabilities: { tools: {} }, serverInfo: { name: 'mule-seat', version: '0.0.1-spike' } });
+  if (method === 'initialize') {
+    // The server's instructions, which Claude Code places in its system prompt: the loop and the how-to-play digest.
+    bridgeText('/instructions', 'You play one seat of a M.U.L.E. game: join, then wait_for_my_turn and submit_plan until the game is over.').then((instructions) =>
+      result(id, { protocolVersion: params?.protocolVersion ?? PROTOCOL, capabilities: { tools: {}, prompts: {} }, serverInfo: { name: 'mule-seat', version: '0.0.1-spike' }, instructions }),
+    );
+    return;
+  }
+  if (method === 'prompts/list') return result(id, { prompts: PROMPTS });
+  if (method === 'prompts/get') {
+    const { code, seat } = params?.arguments ?? {};
+    bridgeText('/kickoff', '').then((kickoff) =>
+      result(id, {
+        description: 'Play your seat',
+        messages: [{ role: 'user', content: { type: 'text', text: `${kickoff}\n\nGame code: ${code ?? 'SPIKE'}. Your seat: ${seat ?? 'ai0'}.` } }],
+      }),
+    );
+    return;
+  }
   if (method === 'ping') return result(id, {});
   if (method === 'tools/list') return result(id, { tools: TOOLS });
   if (method === 'tools/call') {

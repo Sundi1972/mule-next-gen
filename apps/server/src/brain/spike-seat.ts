@@ -16,7 +16,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import http from 'node:http';
 import { score, type GameState, type Playbook } from '@mule/engine';
-import { playbookSource, playGameAsync, simSeats, writeReply, type AiSeat, type WriteComplete, type WriterPrompt } from '@mule/ai';
+import { defaultManual, PERSONAS, playbookSource, playGameAsync, simSeats, writeReply, type AiSeat, type WriteComplete, type WriterPrompt } from '@mule/ai';
 import { chatter, type Spoken } from './chat.js';
 import { WRITE_CALLS } from './client.js';
 import type { BrainService, PlaybookAsk, PlaybookWriter } from './index.js';
@@ -35,6 +35,22 @@ interface Flags {
   /** Holds each of the first holdAsks asks this long before /wait sees it: the real game's minutes between asks. */
   holdMs: number;
   holdAsks: number;
+  /** 'every': each wait carries the persona and the full rules (self-contained); 'once': the rules on the first only. */
+  rules: 'every' | 'once';
+}
+
+/** The loop protocol, for the server's instructions and the kick-off prompt. */
+const LOOP = [
+  'You play one seat of a M.U.L.E. colony game through the muleseat tools.',
+  'Protocol: join(gameCode, seat) once; then repeat wait_for_my_turn -> decide -> submit_plan(ask_id, edits, line) until wait_for_my_turn returns over: true.',
+  "Each wait result is self-contained: your persona, the rules for this decision, the game as you see it, your draft plan and the edits you may make. Decide from it alone, in your persona's voice, to end with the highest Worth.",
+  'Use only paths in reply_schema; an empty edits list keeps the draft. Never stop before the game is over and never ask the user anything.',
+].join('\n');
+
+/** The short "how to play" digest for the server instructions: the manual's month and how the game is won. */
+function digest(): string {
+  const manual = defaultManual();
+  return manual.slice(manual.indexOf('## How a month goes'), manual.indexOf('## Moves')).trim();
 }
 
 function flags(argv: readonly string[]): Flags {
@@ -44,7 +60,7 @@ function flags(argv: readonly string[]): Flags {
   };
   const mode = get('--mode', 'mcp');
   if (mode !== 'mcp' && mode !== 'per-call') throw new Error(`--mode mcp|per-call, not ${mode}`);
-  return { mode, seed: Number(get('--seed', '7')), capMs: Number(get('--cap-ms', '180000')), port: Number(get('--port', '4821')), out: get('--out', 'spike-asks.jsonl'), model: get('--model', 'sonnet'), holdMs: Number(get('--hold-ms', '0')), holdAsks: Number(get('--hold-asks', '0')) };
+  return { mode, seed: Number(get('--seed', '7')), capMs: Number(get('--cap-ms', '180000')), port: Number(get('--port', '4821')), out: get('--out', 'spike-asks.jsonl'), model: get('--model', 'sonnet'), holdMs: Number(get('--hold-ms', '0')), holdAsks: Number(get('--hold-asks', '0')), rules: get('--rules', 'every') === 'once' ? 'once' : 'every' };
 }
 
 /** One ask of the seat, as recorded. */
@@ -87,7 +103,11 @@ class Bridge {
   private join!: () => void;
   readonly server: http.Server;
 
-  constructor(port: number) {
+  constructor(
+    port: number,
+    private readonly persona: string,
+    private readonly rules: 'every' | 'once',
+  ) {
     this.joined = new Promise((resolve) => (this.join = resolve));
     this.server = http.createServer((req, res) => void this.route(req, res));
     this.server.requestTimeout = 0;
@@ -117,11 +137,12 @@ class Bridge {
       const p = this.pending;
       this.delivered = true;
       // The system text (the rules and the manual of moves) is sent once; after that only if it changed.
-      const system = p.prompt.system === this.lastSystem ? '(unchanged since your first turn)' : p.prompt.system;
+      const system = this.rules === 'once' && p.prompt.system === this.lastSystem ? '(unchanged since your first turn)' : p.prompt.system;
       this.lastSystem = p.prompt.system;
       const paths = p.prompt.schema;
       this.reply(this.waiter, {
         ask_id: p.id,
+        persona: this.persona,
         kind: p.kind,
         month: p.month,
         phase: p.phase,
@@ -150,6 +171,17 @@ class Bridge {
       req.on('data', (c) => (s += c));
       req.on('end', () => resolve(s));
     });
+    if (req.url?.startsWith('/instructions')) {
+      res.writeHead(200, { 'content-type': 'text/plain' });
+      // The codeword is only here, so a final reply that names it shows the instructions reached the session and outlived any compaction.
+      res.end(`${LOOP}\nWhen the game is over, end your final reply with the codeword HARVEST-MOON-7.\n\n${digest()}`);
+      return;
+    }
+    if (req.url?.startsWith('/kickoff')) {
+      res.writeHead(200, { 'content-type': 'text/plain' });
+      res.end(`${this.persona}\n\n${LOOP}\n\nThe full rules:\n${this.lastSystem ?? '(sent with your first ask)'}\n\nStart now: call join, then wait_for_my_turn.`);
+      return;
+    }
     if (req.url?.startsWith('/join')) {
       this.join();
       return this.reply(res, { joined: SEAT, note: 'You play this seat. Call wait_for_my_turn now.' });
@@ -180,10 +212,8 @@ class Bridge {
 }
 
 /** --mode per-call: one `claude -p` per ask, its answer the JSON on stdout. No API key: the subscription's login. */
-function perCall(prompt: WriterPrompt, model: string, cwd: string): Promise<string> {
+function perCall(prompt: WriterPrompt, model: string, cwd: string, persona: string): Promise<string> {
   const ask = [
-    prompt.system,
-    '',
     prompt.user,
     '',
     'Answer with ONLY one JSON object, no prose, matching this schema:',
@@ -192,7 +222,8 @@ function perCall(prompt: WriterPrompt, model: string, cwd: string): Promise<stri
   const env = { ...process.env };
   delete env.ANTHROPIC_API_KEY;
   return new Promise((resolve, reject) => {
-    const child = spawn('claude', ['-p', '--output-format', 'json', '--model', model, '--setting-sources', 'project', '--no-session-persistence'], { cwd, env, stdio: ['pipe', 'pipe', 'pipe'] });
+    const system = `${persona}\n\n${prompt.system}`;
+    const child = spawn('claude', ['-p', '--output-format', 'json', '--model', model, '--setting-sources', 'project', '--no-session-persistence', '--append-system-prompt', system], { cwd, env, stdio: ['pipe', 'pipe', 'pipe'] });
     let out = '';
     child.stdout.on('data', (c) => (out += c));
     child.on('error', reject);
@@ -215,7 +246,9 @@ async function main(): Promise<void> {
   const records: AskRecord[] = [];
   const lines: Spoken[] = [];
   const log = (r: AskRecord) => fs.appendFileSync(f.out, `${JSON.stringify(r)}\n`);
-  const bridge = f.mode === 'mcp' ? new Bridge(f.port) : null;
+  const specs = simSeats(SEATS, 'trader', f.seed);
+  const persona = `Your persona: ${PERSONAS[specs[0]!.persona].title}. ${PERSONAS[specs[0]!.persona].card}`;
+  const bridge = f.mode === 'mcp' ? new Bridge(f.port, persona, f.rules) : null;
   const cwd = process.env.SPIKE_CWD ?? process.cwd();
   let n = 0;
   let state: GameState | null = null;
@@ -247,7 +280,7 @@ async function main(): Promise<void> {
               askedAt = Date.now();
               bridge.ask({ id, kind, month: s.month, phase: s.phase, prompt, askedAt, answer, judged });
             }, hold);
-          else perCall(prompt, f.model, cwd).then(answer, (err: unknown) => (clearTimeout(timer), reject(err instanceof Error ? err : new Error(String(err)))));
+          else perCall(prompt, f.model, cwd, persona).then(answer, (err: unknown) => (clearTimeout(timer), reject(err instanceof Error ? err : new Error(String(err)))));
         });
       // The spike's own wait: --cap-ms, not the write's 30 s, so each latency is measured whole.
       const written = await writeReply(port, { ...ask, waitMs: f.capMs });
@@ -276,7 +309,6 @@ async function main(): Promise<void> {
 
   const held: { playbooks: Playbooks | null; auctionAsked: number } = { playbooks: null, auctionAsked: -1 };
   const adopted: { phase: string; by: Playbook['by'] }[] = [];
-  const specs = simSeats(SEATS, 'trader', f.seed);
   const played = await playGameAsync(f.seed, specs, {
     deciderFor: () => null,
     onSeats: (seats, s) => {
