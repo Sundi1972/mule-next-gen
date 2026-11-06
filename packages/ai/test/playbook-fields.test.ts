@@ -3,6 +3,7 @@ import {
   advanceGrant,
   advancePhase,
   AI_HANDS,
+  commission,
   createGame,
   DEV_STEER,
   litPlot,
@@ -23,6 +24,7 @@ import {
   type Trade,
 } from '@mule/engine';
 import { simSeats } from '../src/lineup.js';
+import { donationFor, standingOf } from '../src/colony-donate.js';
 import { applyAction, arrive, playGame, type DevClock } from '../src/play.js';
 import type { DraftPhase } from '../src/playbook/draft.js';
 import { playbookSource } from '../src/playbook/source.js';
@@ -318,5 +320,31 @@ describe('an adopted field holds for its own month only', () => {
     // The same drafts with no field adopted at all.
     delete seat.mind.adopted;
     expect(drafted).toEqual(next());
+  });
+
+  it("INV-fields-month: next month's planning, its gift to the colony and its land decision, is a seat's that adopted no field", () => {
+    // A politics table: two seats alike, one adopting its month-1 draft with a cash floor over its money, one unedited.
+    const state = createGame({ seed: 7, players: PLAYERS.map((id) => ({ id, name: id, isAi: true })), politics: true });
+    const floored = seatOf();
+    const plain = seatOf();
+    adoptEdited(floored, state, 'planning', [edit('/strategy/cashFloor', 2_000)]);
+    adoptEdited(plain, state, 'planning', []);
+    while (!(state.phase === 'planning' && state.month === 2)) advancePhase(state);
+    // Month 2's planning, a commissioned hospital still short of credits, and money between the reserve and the floor.
+    if (state.politics) state.politics = { ...state.politics, governor: 'ai1', election: null };
+    commission(state, 'ai1', 'hospital');
+    state.players.find((p) => p.id === ME)!.money = 1_500;
+    const obs = observe(state, ME);
+    const gift = donationFor(obs, floored.mind, standingOf(obs, ME));
+    expect(gift, 'it gives, as a seat with no floor gives').not.toBeNull();
+    expect(gift).toEqual(donationFor(obs, plain.mind, standingOf(obs, ME)));
+    // Its land decision for the month, made in planning and settled at the grant's first look: every plan's scores and the pick.
+    for (const seat of [floored, plain]) seat.planMonth(state);
+    // (Widened: the loop above narrowed the phase to planning.)
+    while ((state.phase as GameState['phase']) !== 'landGrant') advancePhase(state);
+    for (const seat of [floored, plain]) seat.passesGrant(state);
+    const land = (seat: AiSeat) => seat.brain.log.filter((r) => r.kind === 'land');
+    expect(land(floored)).toHaveLength(1);
+    expect(land(floored)).toEqual(land(plain));
   });
 });
