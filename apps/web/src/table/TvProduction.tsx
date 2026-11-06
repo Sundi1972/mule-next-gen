@@ -60,7 +60,7 @@ export function TvProduction({ table, game, production }: { table?: TableView<Mu
         {/* The header's pips, the rail and the silos read the very script the map plays: the same events, clock and pace. */}
         <EventShow {...productionShowProps(show, t, { reduced, mode: 'tv', players, tiles, width: game.width, height: game.height })}>
           <TvHeader game={game} title="Production" extra={<EventPips />} />
-          {/* The map takes the height the header's ticker leaves, never more: three chat lines would push it under the silos. */}
+          {/* The map's width follows the height the header leaves (100cqh), never more, so a taller header shrinks the map rather than push the silos past the foot. */}
           <TvBody>
           <div className="flex min-h-0 flex-1 gap-6 [container-type:size]" data-fit-spills>
             <div className="shrink-0 self-start" style={{ width: `min(800px, calc(100cqh * ${game.width} / ${game.height}))` }}>
