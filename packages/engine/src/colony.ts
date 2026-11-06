@@ -3,8 +3,8 @@
  * Governor commissions. The only writer of GameState.colony and, through fundIn and fundOut, of treasury.money.
  * With politics off there is no colony, and the fund moves exactly as it always has, with no ledger.
  */
-import { COLONY, GAME, GOOD_CONFIG, HAPPINESS, PRESTIGE } from './config.js';
-import { storeForSale, storeQuotes } from './economy.js';
+import { COLONY, GAME, HAPPINESS, PRESTIGE } from './config.js';
+import { allPrices, storeForSale, storeQuotes } from './economy.js';
 import { RuleError } from './errors.js';
 import { COLONY_SELLER } from './lots.js';
 import { votesOpen } from './politics.js';
@@ -259,12 +259,14 @@ export function donate(state: GameState, playerId: string, id: PrestigeId, credi
   donor.money -= credits;
   payIn(state, colony, 'donation', credits);
   target.funded.credits += payOut(state, colony, 'project', credits);
+  // Goods count at the store's price on the day, the price Worth values them at, so a gift is Worth-neutral (AM-13).
+  const prices = allPrices(state);
   let value = credits;
   for (const [good, units] of given) {
     if (units === 0) continue;
     donor.stock[good] -= units;
     target.funded.goods[good] = (target.funded.goods[good] ?? 0) + units;
-    value += units * GOOD_CONFIG[good].refPrice;
+    value += units * prices[good];
   }
   target.plaque[playerId] = (target.plaque[playerId] ?? 0) + value;
   state.treasury.paid[playerId] = (state.treasury.paid[playerId] ?? 0) + value;
