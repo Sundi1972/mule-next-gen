@@ -204,6 +204,11 @@ export function WalkBoard({
   );
   // The lines' labels sit in a gutter on the right, clear of the creatures.
   const gutter = tv ? 104 : 56;
+  /** Where the sellers' zone ends: the store's selling line, or while it is sold out its line, else S. */
+  const sellersEdge = (z: { sellersBottom: number }) => storeSells ?? soldOutAt?.price ?? z.sellersBottom;
+  /** A ship paying inside the sellers' zone still buys there; the short form fits a phone's gutter (WS6). */
+  const sellersWords = (z: { sellersBottom: number }) =>
+    shipPays !== null && shipPays > sellersEdge(z) ? (tv ? 'SELLERS WAIT · ONLY THE SHIP BUYS' : 'SELLERS WAIT · SHIP ONLY') : 'SELLERS WAIT · NO TRADE';
 
   const cols = walkers.length;
   const colOf = new Map(walkers.map((w, i) => [w.id, i]));
@@ -273,7 +278,7 @@ export function WalkBoard({
         <div ref={area} className={cx('absolute inset-x-0', tv ? 'bottom-23 top-12' : 'bottom-14 top-6')}>
           {/* The rest zones. Nobody trades in them; their edge is where trading begins, drawn solid. */}
           {zones && (
-            <RestBand from={0} to={pct(storeSells ?? soldOutAt?.price ?? zones.sellersBottom)} edge="bottom" tone="seller" words="SELLERS WAIT · NO TRADE" tv={tv} gutter={gutter} />
+            <RestBand from={0} to={pct(sellersEdge(zones))} edge="bottom" tone="seller" words={sellersWords(zones)} tv={tv} gutter={gutter} />
           )}
           {zones && <RestBand from={pct(zones.buyersTop)} to={100} edge="top" tone="buyer" words="BUYERS WAIT · NO TRADE" tv={tv} gutter={gutter} />}
           {storeStock === 0 && storeSells === null && soldOutAt === null && (
