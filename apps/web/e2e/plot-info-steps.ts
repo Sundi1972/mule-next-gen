@@ -34,7 +34,7 @@ const TO_DEVELOPMENT_MS = 90_000;
 /** The phone sizes the whole report must fit at, both plots in the rail with no scroll (UBER-AC-1, spec §8). */
 const FIT_SIZES = [PHONE.viewport, PHONE_SMALL.viewport];
 
-/** Where a row of the report lies against the rail's scroll box, scrolled to its top, in px from the box's top. */
+/** Where a row of the report lies against the rail's scroll box as the rail stands, in px from the box's visible top. */
 type Fit = { id: string; top: number; bottom: number; box: number };
 
 /**
@@ -112,9 +112,9 @@ export async function theDroneReportsInTheRail({ phone, server, code, held }: Ga
 
     const planning = phone.locator('[data-phase=planning]');
     const hubMap = planning.getByTestId('hub-map');
-    // Now as planning first draws it, folded to its title: an earlier step may have opened it to read it whole.
-    const fold = planning.getByTestId('now-fold');
-    if (await fold.count()) await fold.click({ timeout: STEP_MS });
+    // Now open, as a player who read it leaves it: the rail then holds more above the report than its box can show, on
+    // every seed, so the report fits only by keeping itself in view (a strike alert above does the same).
+    if (!(await planning.getByTestId('now-fold').count())) await planning.getByTestId('now').click({ timeout: STEP_MS });
     await planning.getByTestId('tool-drone').click({ timeout: STEP_MS });
     for (const p of picks) await tapPlot(phone, hubMap, p, state.width, STEP_MS);
     const scan = planning.getByTestId('scan');
