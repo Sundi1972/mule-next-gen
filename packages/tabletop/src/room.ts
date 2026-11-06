@@ -1,4 +1,4 @@
-import type { ChatMessage, ClientEnvelope, ServerEnvelope, TableView } from './protocol.js';
+import type { ChatMessage, ClientEnvelope, SeatKind, ServerEnvelope, TableView } from './protocol.js';
 
 /** A rule a player broke: shown to them, never a crash. */
 export class TableError extends Error {}
@@ -102,6 +102,8 @@ export interface RoomOptions<Intent, GameView> {
   isUserError?(err: unknown): boolean;
   now?(): number;
   newToken?(): string;
+  /** A fresh seat code (seatCode below); the registry's is unique across its live rooms. The room still skips one it holds. */
+  newSeatCode?(): string;
   /** Called once the room has ended, closed by the host or stopped by a game error, and is disposed. */
   onClose?(): void;
   /** Hears a game error that ended the room, for logging. The players are only told the table stopped. */
@@ -120,7 +122,25 @@ function cleanName(name: string): string {
   return Array.from(oneLine).slice(0, ROOM_LIMITS.nameChars).join('').trim();
 }
 
+/**
+ * A seat code, as players type it (spec §3): 4 characters from an alphabet with no look-alikes (no I, O, 0 or 1), a
+ * dash, 2 digits; about 26.6 bits. `random` returns [0, 1): the registry's, or a cryptographic one, since the code
+ * lets whoever holds it play the seat.
+ */
+export function seatCode(random: () => number): string {
+  const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const pick = (from: string) => from[Math.floor(random() * from.length)]!;
+  return `${Array.from({ length: 4 }, () => pick(letters)).join('')}-${pick('0123456789')}${pick('0123456789')}`;
+}
+
+/** A uniform [0, 1) from the platform's cryptographic generator. */
+export const cryptoRandom = (): number => crypto.getRandomValues(new Uint32Array(1))[0]! / 2 ** 32;
+
 interface Seat<View> extends SeatInfo {
+  /** A computer seat's kind, once the host set one; unset plays builtin (C1). */
+  kind?: SeatKind;
+  /** A claude seat's live code; null otherwise. It lives on the seat, so a kicked seat takes it along. */
+  seatCode: string | null;
   token: string | null;
   conn: Connection<View> | null;
   /** The seat's one live handoff code; a newer one replaces it, and it goes with the seat. */
@@ -164,6 +184,7 @@ export class Room<Intent, View> {
       isUserError: options.isUserError ?? ((err) => err instanceof TableError),
       now: options.now ?? Date.now,
       newToken: options.newToken ?? (() => crypto.randomUUID()),
+      newSeatCode: options.newSeatCode ?? (() => seatCode(cryptoRandom)),
       onClose: options.onClose ?? (() => {}),
       onError: options.onError ?? (() => {}),
     };
@@ -295,8 +316,11 @@ export class Room<Intent, View> {
         if (!this.opts.emotes.includes(msg.emote)) throw new TableError('Unknown emote');
         this.everyone((c) => c.send({ t: 'emote', from: seatId, emote: msg.emote }));
         return;
-      // The contract is frozen ahead of the build (C1, C8), so a client sending these is told so, never ignored.
       case 'setSeatKind':
+        this.setSeatKind(seatId, msg.seatId, msg.kind);
+        this.broadcast();
+        return;
+      // The contract is frozen ahead of C8's build, so a client sending this is told so, never ignored.
       case 'handoverToClaude':
         throw new TableError('Claude seats are not built yet');
     }
@@ -304,11 +328,34 @@ export class Room<Intent, View> {
 
   /**
    * The live claude seat that holds `code` in this room, or null: how the Claude seat's MCP module finds a seat, on
-   * every call (spec §9: never a second store of codes). Case-insensitive, as players type codes. Contract only, until
-   * C1 issues codes: nothing holds one yet.
+   * every call (spec §9: never a second store of codes). Case-insensitive and trimmed, as players type and paste codes.
    */
-  seatForCode(_code: string): { seatId: string; kind: 'claude' } | null {
-    return null;
+  seatForCode(code: string): { seatId: string; kind: 'claude' } | null {
+    const typed = code.trim().toUpperCase();
+    const seat = typed ? this.seats.find((s) => s.kind === 'claude' && s.seatCode === typed) : undefined;
+    return seat ? { seatId: seat.id, kind: 'claude' } : null;
+  }
+
+  /** RULE-1: the host, in the lobby, sets a computer seat's kind; claude issues it a code, builtin kills the code at once. */
+  private setSeatKind(by: string, target: string, kind: SeatKind): void {
+    this.requireHost(by);
+    if (this.started) throw new TableError('The game has already started');
+    const seat = this.seats.find((s) => s.id === target);
+    if (!seat) throw new TableError('No such seat');
+    if (!seat.isAi) throw new TableError('Only a computer seat can be played by Claude');
+    if (kind !== 'claude' && kind !== 'builtin') throw new TableError('No such kind of seat');
+    if ((seat.kind ?? 'builtin') === kind) return;
+    seat.kind = kind;
+    seat.seatCode = kind === 'claude' ? this.freshSeatCode() : null;
+  }
+
+  /** A code no seat in this room holds: the registry's generator already avoids every other live room's. */
+  private freshSeatCode(): string {
+    for (let i = 0; i < 100; i++) {
+      const code = this.opts.newSeatCode().trim().toUpperCase();
+      if (!this.seatForCode(code)) return code;
+    }
+    throw new Error('No free seat code after 100 draws');
   }
 
   private join(conn: Connection<View>, name: string, token?: string, handoff?: string): string {
@@ -378,7 +425,7 @@ export class Room<Intent, View> {
   }
 
   private addSeat(name: string, isAi: boolean): Seat<View> {
-    const seat: Seat<View> = { id: `s${this.nextSeat++}`, name, isAi, color: this.lowestFreeColour(), token: isAi ? null : this.opts.newToken(), conn: null, handoff: null };
+    const seat: Seat<View> = { id: `s${this.nextSeat++}`, name, isAi, color: this.lowestFreeColour(), seatCode: null, token: isAi ? null : this.opts.newToken(), conn: null, handoff: null };
     this.seats.push(seat);
     return seat;
   }
@@ -540,6 +587,11 @@ export class Room<Intent, View> {
         color: s.color,
         ...(s.pick !== undefined ? { pick: s.pick } : {}),
         ...(!this.started && this.game.defaultPick ? { defaultPick: this.game.defaultPick(i, this.seats.length) } : {}),
+        ...(s.kind ? { kind: s.kind } : {}),
+        // C6 fills the live status; until a Claude chat calls, the seat waits.
+        ...(s.kind === 'claude' ? { claude: 'waiting' as const } : {}),
+        // T-AC-5: the code lets whoever holds it play the seat, so it goes to the host's own view and no other.
+        ...(s.seatCode && seatId !== null && seatId === this.hostId ? { seatCode: s.seatCode } : {}),
       })),
       boards: this.boards.size,
       game: this.started ? this.game.viewFor(seatId) : null,

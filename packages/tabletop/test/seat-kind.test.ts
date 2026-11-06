@@ -116,8 +116,10 @@ describe('C1: a computer seat is Built-in or Claude, and only the host holds its
   });
 
   it('C1: the registry issues a code no other live room holds', async () => {
-    const draws = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5];
-    const registry = new RoomRegistry<unknown, View>({ createGame: game, aiNames: ['Brix'] }, () => draws.shift() ?? 0.9);
+    // Room 1's code, its seat's code (AAAA-00), room 2's code, then room 2's seat draws AAAA-00 again before another.
+    const draws = [0, 0, 0, 0, ...Array(6).fill(0), 0.5, 0.5, 0.5, 0.5, ...Array(6).fill(0), ...Array(6).fill(0.9)];
+    const random = () => draws.shift() ?? 0.9;
+    const registry = new RoomRegistry<unknown, View>({ createGame: game, aiNames: ['Brix'] }, random, Date.now, random);
     const codes: string[] = [];
     for (let i = 0; i < 2; i++) {
       const room = registry.create();
@@ -130,9 +132,9 @@ describe('C1: a computer seat is Built-in or Claude, and only the host holds its
       await flush();
       codes.push(host.view().seats.find((s) => s.id === ai)!.seatCode!);
     }
-    expect(codes[0]).toMatch(SEAT_CODE);
+    expect(codes[0]).toBe('AAAA-00');
     expect(codes[1]).toMatch(SEAT_CODE);
-    expect(codes[1]).not.toBe(codes[0]);
+    expect(codes[1], 'the second room redraws rather than issue a live code').not.toBe('AAAA-00');
   });
 
   it('RULE-1 row 1 (negative): only the host, only in the lobby, only on a computer seat', async () => {
