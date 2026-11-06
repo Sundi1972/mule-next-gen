@@ -412,7 +412,10 @@ Code-only; no existing state to reach. The record starts with WS3's build.
   draft cutting the Claude chairs out of store Food and ship Alloy. A plan letter is turned into its plots by the
   writer, so the later draft cannot make a letter name other plots. T-AC-A1 row 4 now asserts the land grant's draft;
   the gate `brain:gate` (zero-content edits through the whole pipeline, WS1's control band over 240 games) is run before
-  any paid tournament. Built on ws2-b1-plumbing.
+  any paid tournament. Built on ws2-b1-plumbing. Measured after (6 Nov, 240 paired games, seeds 1001–1060 and
+  2001–2060): the gate passes with the fix (51.7%, lead +0.05) and without it (48.3%, +0.07); the Claude chairs' gap
+  over the engine seats moves −30 a game (95% −1,486 to +1,425). The diagnosis's 6–10 points do not replicate; the
+  amendment stands on its mechanism (fields left alone play current), not on a measured gain.
 - **AM-A16 · 5 Nov · PM ruling (option C), on WS2's PR-4b finding:** RULE-A2 row 3 asked for the development's edits
   as the land grant ended, but development starts in the same tick unless a land auction or an event show comes
   between, so the reply was always late in most months (measured: a 1-month recorded game's reply settled at step 97,
