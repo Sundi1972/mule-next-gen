@@ -184,11 +184,7 @@ export function canFeed(obs: GameState, me: string, outfit: Outfit): boolean {
 export function unfedInputs(obs: GameState, me: string, outfit: Outfit): Good[] {
   if (!isFactory(outfit)) return [];
   const p = obs.players.find((q) => q.id === me)!;
-  const crew = crewOf(obs, me) + UPKEEP.crew.factory;
-  const household: Partial<Stock> = {
-    food: UPKEEP.baseFood + Math.ceil(crew / UPKEEP.crewPerFood),
-    water: UPKEEP.baseWater + Math.ceil(crew / UPKEEP.crewPerWater),
-  };
+  const household = householdNeeds(obs, me);
   const lasts = (g: Good, q: number) => {
     const own = obs.tiles.some((t) => t.owner === me && t.outfit === g) ? madeNext(obs, me)[g] : 0;
     let carry = p.stock[g];
@@ -202,13 +198,26 @@ export function unfedInputs(obs: GameState, me: string, outfit: Outfit): Good[] 
   return (Object.entries(RECIPES[outfit].inputs) as [Good, number][]).filter(([g, q]) => g !== 'energy' && !lasts(g, q)).map(([g]) => g);
 }
 
+/** What the household, a new factory's crew included, eats and drinks a month: canFeed's first call on Food and Water. */
+function householdNeeds(obs: GameState, me: string): Partial<Stock> {
+  const crew = crewOf(obs, me) + UPKEEP.crew.factory;
+  return {
+    food: UPKEEP.baseFood + Math.ceil(crew / UPKEEP.crewPerFood),
+    water: UPKEEP.baseWater + Math.ceil(crew / UPKEEP.crewPerWater),
+  };
+}
+
 /**
  * The links a chain to factory good `good` still needs a plot for: each input the seat can't feed, and that input's
- * own links when it is a factory good too. Empty when `good` is no chain: a raw good, or a factory the seat can feed.
+ * own links when it is a factory good too. Empty when `good` is no chain: a raw good, a factory the seat can feed, or
+ * one missing an input the household eats or drinks, which it takes first, so no farm or well is the works' alone.
  * See AM-32.
  */
 export function chainLinks(obs: GameState, me: string, good: Good): Good[] {
-  const links = unfedInputs(obs, me, good).flatMap((g) => [g, ...chainLinks(obs, me, g)]);
+  const unfed = unfedInputs(obs, me, good);
+  const household = householdNeeds(obs, me);
+  if (unfed.some((g) => g in household)) return [];
+  const links = unfed.flatMap((g) => [g, ...chainLinks(obs, me, g)]);
   return [...new Set(links)];
 }
 
