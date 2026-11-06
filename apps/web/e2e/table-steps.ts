@@ -20,7 +20,7 @@ const BORDER = { share: 1 / 12, slack: 0.025, minPx: 2 };
 /** B-AC-9 (WS4, plot look A): the selected ring's band, as the mock paints it. */
 const RING_COLOUR = 'var(--color-holo-strong)';
 const TINT = { alpha: 0.3, slack: 0.05 };
-/** PM ruling A+ on #562: how far the pin or the ring's band may touch the dots chip above, for rounding. */
+/** PM ruling X on #562: how far a mark may touch a dot, for rounding. */
 const SLACK_PX = 0.5;
 /** T-AC-9 watches the wire from the first tap to at least this long after the second. */
 const QUIET_MS = 400;
@@ -287,68 +287,139 @@ export async function theTvShowsWhoOwnsEachPlot(ctx: GameStepContext): Promise<s
   return ctx.held(() => checkPlotLook(ctx.tv.locator('[data-phase=development]'), 'TV, development', { installed: true }));
 }
 
-/**
- * B-AC-9 (WS4, plot look A; PM rulings A and A+ on #562), in planning on the hub's Look map: Look-select a plot whose upper
- * neighbour shows its dots, and that chip stays whole in view: the selected pin hangs below and the ring is drawn inside
- * the plot, so neither the pin nor the ring's painted band overlaps the chip (within SLACK_PX). The neighbour's ground is seeded on the server: the
- * seat is given that plot as analysed, as makeHungry seeds hunger. Leaves the Look tool on, nothing selected.
- */
-export async function theDotsAboveASelectionStayInView(ctx: GameStepContext, seat = 's1'): Promise<string> {
-  const id = 'B-AC-9 (WS4, plot look A, PM rulings A and A+ on #562)';
-  return ctx.held(async () => {
-    const room = ctx.server.registry.get(ctx.code) as unknown as { game: { state: GameState }; viewFor(seat: string): { game?: MuleView }; broadcast(): void } | undefined;
-    check(room, `${id}: a room ${ctx.code} on the server`);
-    const state = room.game.state;
-    check(state.phase === 'planning', `${id}: the step runs in planning, not in ${state.phase}`);
-    const me = state.players.find((p) => p.id === seat);
-    check(me, `${id}: seat ${seat} in the game`);
-    const sited = new Set((room.viewFor(seat).game?.colony?.projects ?? []).map((p) => p.plot));
-    const at = (x: number, y: number) => state.tiles.find((t) => t.x === x && t.y === y);
-    // Inside the map, so the ring reaches out of the plot on every side, the case that comes nearest the chip above.
-    const selected = state.tiles.find((t) => {
-      const above = at(t.x, t.y - 1);
-      return t.x > 0 && t.x < state.width - 1 && t.y > 1 && t.y < state.height - 1 && t.terrain !== 'store' && !!above && above.terrain !== 'store' && !above.outfit && !sited.has(above.y * state.width + above.x);
-    });
-    check(selected, `${id}: a plot inside the map whose upper neighbour can show its dots`);
-    const { x, y } = selected;
-    const aboveIndex = (y - 1) * state.width + x;
-    if (!me.analysed.includes(aboveIndex)) me.analysed.push(aboveIndex);
-    room.broadcast();
+type Rect = { left: number; top: number; right: number; bottom: number };
+/** Each selector's matches inside `map`, as boxes on screen, in document order. */
+async function rectsOf(map: Locator, selectors: string[]): Promise<Rect[][]> {
+  // Kept free of named functions: tsx's keepNames wraps them with `__name`, which the page lacks.
+  return map.evaluate(
+    (el, sels) =>
+      sels.map((sel) =>
+        [...el.querySelectorAll(sel)].map((q) => {
+          const r = q.getBoundingClientRect();
+          return { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+        }),
+      ),
+    selectors,
+  );
+}
+/** Whether two boxes overlap by more than SLACK_PX. */
+const covers = (a: Rect, b: Rect) => a.left < b.right - SLACK_PX && b.left < a.right - SLACK_PX && a.top < b.bottom - SLACK_PX && b.top < a.bottom - SLACK_PX;
 
-    const planning = ctx.phone.locator('[data-phase=planning]');
-    await planning.getByTestId('tool-look').click({ timeout: PRESS_MS });
-    const map = planning.getByTestId('hub-map');
-    const chip = map.getByTestId(`map-dots-${x}-${y - 1}`);
-    await chip.waitFor({ timeout: PRESS_MS });
-    const plot = map.getByTestId(`map-plot-${x}-${y}`);
-    await plot.click({ timeout: PRESS_MS });
-    await map.locator(`[data-testid=map-plot-${x}-${y}][data-selected]`).waitFor({ timeout: PRESS_MS });
-    // Kept free of named functions: tsx's keepNames wraps them with `__name`, which the page lacks.
-    const seen = await map.evaluate((el, { above, sel }) => {
-      const plotEl = el.querySelector(`[data-testid=map-plot-${sel}]`);
-      const ring = plotEl?.querySelector('[data-testid=selected-ring]') ?? null;
-      const [chip, pin, ringBox, plot] = [el.querySelector(`[data-testid=map-dots-${above}]`), plotEl?.querySelector('[data-testid=selected-pin]') ?? null, ring, plotEl].map((q) => {
-        const r = q?.getBoundingClientRect();
-        return r ? { left: r.left, top: r.top, right: r.right, bottom: r.bottom } : null;
+/**
+ * T-AC-3 and B-AC-9 (WS4; PM ruling X on #562), on the hub's Look map at the phone's 844×390, where a 3-seat plot is
+ * about 25 px. Checked: (b) on an owned plot with a gem, the owner's tab and the gem are clear of the dots. Measured for
+ * the log: (a) on every analysed special plot with nothing installed, how much of the third dot the plot's own badge
+ * covers; (c) for a plot Look-selected under a plot showing its dots, whether its pin or its ring's painted band covers
+ * those dots. The ground is seeded on the server for the seat, as makeHungry seeds hunger, and undone afterwards.
+ */
+export async function theMarksStayClearOfTheDots(ctx: GameStepContext, seat = 's1'): Promise<string> {
+  const id = 'T-AC-3 / B-AC-9 (WS4, plot marks at 25 px, PM ruling X on #562)';
+  type Room = { game: { state: GameState }; viewFor(seat: string): { game?: MuleView }; broadcast(): void };
+  const room = ctx.server.registry.get(ctx.code) as unknown as Room | undefined;
+  check(room, `${id}: a room ${ctx.code} on the server`);
+  const state = room.game.state;
+  const me = state.players.find((p) => p.id === seat);
+  check(me, `${id}: seat ${seat} in the game`);
+  const undo: (() => void)[] = [];
+  try {
+    return await ctx.held(async () => {
+      check(state.phase === 'planning', `${id}: the step runs in planning, not in ${state.phase}`);
+      const sited = new Set((room.viewFor(seat).game?.colony?.projects ?? []).map((p) => p.plot));
+      const index = (t: { x: number; y: number }) => t.y * state.width + t.x;
+      const at = (x: number, y: number) => state.tiles.find((t) => t.x === x && t.y === y);
+      const open = (t: GameState['tiles'][number]) => t.terrain !== 'store' && !sited.has(index(t));
+      const known = [...me.analysed];
+      undo.push(() => me.analysed.splice(0, me.analysed.length, ...known));
+      const analyse = (t: { x: number; y: number }) => {
+        if (!me.analysed.includes(index(t))) me.analysed.push(index(t));
+      };
+
+      // (a): every special plot the map holds with nothing installed on it, so its dots show under its badge. A map with
+      // none is given an oasis on a free plot inside it for the step.
+      let specials = state.tiles.filter((t) => t.special && open(t) && !t.outfit);
+      if (specials.length === 0) {
+        const plain = state.tiles.find((t) => t.owner === null && open(t) && !t.outfit && !t.special && t.x < state.width - 1 && t.y < state.height - 1);
+        check(plain, `${id}: a free plot inside the map to give a special`);
+        undo.push(() => delete plain.special);
+        plain.special = { kind: 'oasis' };
+        specials = [plain];
+      }
+      specials.forEach(analyse);
+      // (b): an owned plot without a special, given a gem. One with nothing installed is taken first; else a MULE is lifted off one for the step.
+      const owned = state.tiles.find((t) => t.owner !== null && open(t) && !t.special && !t.outfit) ?? state.tiles.find((t) => t.owner !== null && open(t) && !t.special);
+      check(owned, `${id}: the map has an owned plot without a special`);
+      const { outfit, ground } = owned;
+      const crystite = ground.crystite;
+      undo.push(() => Object.assign(owned, { outfit }), () => Object.assign(owned.ground, { crystite }));
+      owned.outfit = null;
+      owned.ground.crystite = Math.max(crystite, 2);
+      analyse(owned);
+      // (c): a plot inside the map, so its ring reaches out on every side, under a plot that can show its dots.
+      const selected = state.tiles.find((t) => {
+        const above = at(t.x, t.y - 1);
+        return t.x > 0 && t.x < state.width - 1 && t.y > 1 && t.y < state.height - 1 && open(t) && !!above && open(above) && !above.outfit;
       });
+      check(selected, `${id}: a plot inside the map whose upper neighbour can show its dots`);
+      const { x, y } = selected;
+      analyse({ x, y: y - 1 });
+      room.broadcast();
+
+      const planning = ctx.phone.locator('[data-phase=planning]');
+      await planning.getByTestId('tool-look').click({ timeout: PRESS_MS });
+      const map = planning.getByTestId('hub-map');
+      for (const t of [...specials, owned, { x, y: y - 1 }]) await map.getByTestId(`map-dots-${t.x}-${t.y}`).waitFor({ timeout: PRESS_MS });
+      await map.getByTestId(`gem-crystite`).first().waitFor({ timeout: PRESS_MS });
+      const specialAt = specials.map((t) => `${t.x}-${t.y}`);
+      const ownedAt = `${owned.x}-${owned.y}`;
+      const [[ownedPlot] = [], ownedPips, [tab] = [], gems, ...perSpecial] = await rectsOf(map, [
+        `[data-testid=map-plot-${ownedAt}]`,
+        `[data-testid=map-dots-${ownedAt}] span.rounded-full`,
+        `[data-testid=owner-${ownedAt}]`,
+        `[data-testid=map-gem-${ownedAt}] [data-testid^=gem-]`,
+        ...specialAt.flatMap((at) => [`[data-testid=map-dots-${at}] span.rounded-full`, `[data-testid=special-glyph-${at}] > span`]),
+      ]);
+      const marks = {
+        plot: ownedPlot,
+        specials: specialAt.map((at, i) => ({ at, third: perSpecial[2 * i]?.[2], badge: perSpecial[2 * i + 1]?.[0] })),
+        owned: { pips: (ownedPips ?? []).slice(0, 3), tab, gems: gems ?? [] },
+      };
+      check(marks.plot, `${id}: plot ${owned.x}-${owned.y} is drawn`);
+      for (const sp of marks.specials) check(sp.third && sp.badge, `${id}: special plot ${sp.at} draws its third dot and its badge`);
+      const o = marks.owned;
+      check(o.pips.length === 3 && o.tab && o.gems.length > 0, `${id}: owned plot ${owned.x}-${owned.y} draws 3 dots, its tab and a gem`);
+      check(!o.pips.some((d) => covers(d, o.tab!)), `${id}: on owned plot ${owned.x}-${owned.y} the owner's tab (foot at ${px(o.tab.bottom)}) is clear of the dots (top at ${px(o.pips[0]!.top)})`);
+      check(!o.pips.some((d) => o.gems.some((g) => covers(d, g))), `${id}: on owned plot ${owned.x}-${owned.y} the gem is clear of the dots`);
+
+      const plot = map.getByTestId(`map-plot-${x}-${y}`);
+      await plot.click({ timeout: PRESS_MS });
+      await map.locator(`[data-testid=map-plot-${x}-${y}][data-selected]`).waitFor({ timeout: PRESS_MS });
+      const [[pin] = [], [ringBox] = [], dots = []] = await rectsOf(map, [`[data-testid=map-plot-${x}-${y}] [data-testid=selected-pin]`, `[data-testid=map-plot-${x}-${y}] [data-testid=selected-ring]`, `[data-testid=map-dots-${x}-${y - 1}] span.rounded-full`]);
       // The ring's band is painted as outset box-shadows: its outer edge lies the largest spread outside the ring's box.
-      const spreads = (ring ? getComputedStyle(ring).boxShadow : '')
-        .split(/,(?![^(]*\))/)
-        .filter((sh) => !/\binset\b/.test(sh))
-        .map((sh) => Number([...sh.matchAll(/(-?[\d.]+)px/g)].map((m) => m[1])[3] ?? 0));
-      return { chip: chip ?? null, pin: pin ?? null, ring: ringBox ?? null, spread: Math.max(0, ...spreads), plot: plot ?? null };
-    }, { above: `${x}-${y - 1}`, sel: `${x}-${y}` });
-    const { chip: c, pin, ring, spread, plot: p } = seen;
-    check(c && pin && ring && p, `${id}: the chip above, the selected pin and ring are drawn: ${JSON.stringify(seen)}`);
-    const overlaps = (a: typeof c, b: typeof c) => a.left < b.right - SLACK_PX && b.left < a.right - SLACK_PX && a.top < b.bottom - SLACK_PX && b.top < a.bottom - SLACK_PX;
-    const ringTop = ring.top - spread;
-    check(!overlaps(c, pin), `${id}: the pin on ${x}-${y} keeps off the dots chip of ${x}-${y - 1}: pin ${px(pin.top)}–${px(pin.bottom)}, chip ${px(c.top)}–${px(c.bottom)} (top–bottom)`);
-    const bandOver = c.bottom - ringTop;
-    check(bandOver <= SLACK_PX, `${id}: the ring on ${x}-${y}, as painted, starts under the dots chip of ${x}-${y - 1}: its band reaches ${px(bandOver)} over the chip's foot`);
-    // Leave the hub as it was found: nothing looked at.
-    await plot.click({ timeout: PRESS_MS });
-    return `${x}-${y} selected under ${x}-${y - 1}'s dots on a ${px(p.right - p.left)} × ${px(p.bottom - p.top)} plot: pin ${pin.top >= p.bottom ? 'below' : 'above'} the plot, clear of the ${px(c.right - c.left)} × ${px(c.bottom - c.top)} chip; the ring's box ${px(Math.abs(ring.top - c.bottom))} ${ring.top >= c.bottom ? 'under' : 'over'} the chip's foot, its band (${px(spread)}) ${bandOver > 0 ? `${px(bandOver)} over it` : `${px(-bandOver)} under it`}`;
-  });
+      const spread = await map.getByTestId('selected-ring').evaluate((ring) =>
+        Math.max(
+          0,
+          ...getComputedStyle(ring)
+            .boxShadow.split(/,(?![^(]*\))/)
+            .filter((sh) => !/\binset\b/.test(sh))
+            .map((sh) => Number([...sh.matchAll(/(-?[\d.]+)px/g)].map((m) => m[1])[3] ?? 0)),
+        ),
+      );
+      const sel = { pin, dots: dots.slice(0, 3), band: ringBox ? { left: ringBox.left - spread, top: ringBox.top - spread, right: ringBox.right + spread, bottom: ringBox.bottom + spread } : undefined };
+      check(sel.pin && sel.band && sel.dots.length === 3, `${id}: the selected plot ${x}-${y} draws its pin and ring, and ${x}-${y - 1} its 3 dots`);
+      const dotsFoot = Math.max(...sel.dots.map((d) => d.bottom));
+      const pinOver = sel.dots.some((d) => covers(d, sel.pin!));
+      const bandOver = dotsFoot - sel.band.top;
+      await plot.click({ timeout: PRESS_MS });
+      const third = (sp: (typeof marks.specials)[number]) => {
+        const [d, b] = [sp.third!, sp.badge!];
+        return covers(d, b) ? `${sp.at} covered ${px(Math.min(d.right, b.right) - Math.max(d.left, b.left))} × ${px(Math.min(d.bottom, b.bottom) - Math.max(d.top, b.top))}` : `${sp.at} clear`;
+      };
+      return `on a ${px(marks.plot.right - marks.plot.left)} plot: (a) the third dot against its plot's badge: ${marks.specials.map(third).join(', ')}; (b) on ${owned.x}-${owned.y} the tab's foot ${px(o.pips[0]!.top - o.tab.bottom)} above the dots, the gem's ${px(o.pips[0]!.top - Math.max(...o.gems.map((g) => g.bottom)))}; (c) ${x}-${y} selected: the pin ${pinOver ? 'covers' : 'is clear of'} the dots of ${x}-${y - 1}, the ring's band ${bandOver > 0 ? `reaches ${px(bandOver)} into their row${bandOver <= SLACK_PX ? ', within the slack' : ''}` : `is ${px(-bandOver)} clear`}`;
+    });
+  } finally {
+    for (const step of undo.reverse()) step();
+    room.broadcast();
+  }
 }
 
 /** readPlotLook's read, failing with every check that failed. Returns a line for the log. */
@@ -419,9 +490,7 @@ export async function readPlotLook(map: Locator, where: string, want: LookWanted
   const edge = x === 0 || y === 0 || x === Math.max(...cells.map(([cx]) => cx)) || y === Math.max(...cells.map(([, cy]) => cy));
   // How far the ring's box reaches outside the plot's: left, top, right, bottom.
   const out = [sel.box.x - ring.box.x, sel.box.y - ring.box.y, ring.box.x + ring.box.width - (sel.box.x + sel.box.width), ring.box.y + ring.box.height - (sel.box.y + sel.box.height)];
-  // Under a plot showing its dots the ring is drawn inside, as on the edge (PM ruling A+ on #562).
-  const dotsAbove = drawn.some((p) => p.at === `${x}-${y - 1}` && p.marks.some((m) => m.id === `map-dots-${x}-${y - 1}`));
-  if (edge || dotsAbove) fail(out.every((d) => d <= 0.5), `${edge ? "on the map's edge" : 'under the dots above'} the selected ring lies inside plot ${at}, but reaches ${out.map(px).join(', ')} out (left, top, right, bottom)`);
+  if (edge) fail(out.every((d) => d <= 0.5), `on the map's edge the selected ring lies inside plot ${at}, but reaches ${out.map(px).join(', ')} out (left, top, right, bottom)`);
   else fail(out.every((d) => d > 0), `inside the map the selected ring reaches outside plot ${at} on every side, by ${out.map(px).join(', ')} (left, top, right, bottom)`);
   const band = shadowsOf(ring.boxShadow).filter((s) => s.spread >= 1 && (s.colour?.a ?? 0) > 0);
   fail(
