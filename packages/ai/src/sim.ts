@@ -229,12 +229,17 @@ function floorLines(turns: readonly DevTurn[], moments: readonly FloorMomentCoun
   const lakeFailed = turns.reduce((n, t) => n + t.lakeAnalyses.failed, 0);
   const packMonths = moments.filter((c) => c.packs > 0).length;
   const lakeNoTime = turns.reduce((n, t) => n + t.lakeAnalyses.noTime, 0);
+  // A MULE bought and not installed: walked into the pub on its lead, or still on it at the clock (FM-hurry-margin,
+  // FM-pub-lead). A pack met while it led that MULE is the one excuse.
+  const wasted = turns.flatMap((t) => t.lostMules);
+  const wastedPack = wasted.filter((m) => m.packLeading).length;
   return [
     // literal-ok: two decimals for the MULEs a turn, display only
     `     Development on the floor: ${(installs / turns.length).toFixed(2)} MULEs installed a seat a turn; the pub reached in ${pct(reached.length, turns.length)} of ${turns.length} AI turns, at ${median.toFixed(1)} / ${ninetieth.toFixed(1)} s on the clock (median / 90th percentile); ${(paid / Math.max(1, seats)).toFixed(0)} cr pub payout a seat a game; ${refused} presses refused (no check)`,
     `     Floor moments: packs met ${m.packs} (fought ${m.fights}: won ${m.won}, lost ${m.lost}; ran ${m.runs}: bitten ${m.bitten}); MULEs bolted ${m.bolted}, caught ${m.caught}; pelts sold ${m.peltsSold}; glints lit ${m.glints}, raced ${m.raced} (${pct(m.raced, m.glints)}), won ${m.glintsWon}; scrambles ${m.scrambles}, AI racers ${m.scrambleRacers}, left out ${m.leftOut} (no check)`,
     `${packMonths / Math.max(1, moments.length) >= WOLVES.simMonthsWithPack ? 'ok  ' : 'MISS'} Months with an AI wolf encounter: ${packMonths} of ${moments.length}, ${pct(packMonths, moments.length)} (AM-27: target ${pct(WOLVES.simMonthsWithPack, 1)} or more, on each of seeds 1, 101 and 201)`,
     `     Lake plots: ${lakeFailed} analyses failed on the way, ${lakeNoTime} dropped as not fitting the clock (no check)`,
+    `     MULEs bought and not installed: ${wasted.length} in ${turns.length} AI turns, ${wastedPack} of them a pack met leading it, ${wasted.length - wastedPack} with no pack (FM-pub-lead: target none with no pack; no check)`,
   ];
 }
 
@@ -579,6 +584,8 @@ function main() {
   const afterFire = { mulePrices: [] as number[], developed: [] as number[] };
   const everyDeveloped: number[] = [];
   const wins: Record<string, number> = {};
+  /** Each game's winner's engine score. */
+  const winnerScores: number[] = [];
   const auction = { between: 0, store: 0, ship: 0, ms: 0 };
   const lots = { sold: 0, unsold: 0, colonyOffered: 0, colonySold: 0, stalled: 0 };
   const band = forcedBand(argText('air'));
@@ -693,6 +700,7 @@ function main() {
       afterFire.developed.push(developedAt.get(next.month) ?? 0);
     });
     const winner = winnerOf(state);
+    winnerScores.push(score(state, state.players[winner]!.id));
     const species = state.players[winner]!.species;
     wins[species] = (wins[species] ?? 0) + 1;
     const wp = specs[winner]!.persona;
@@ -724,6 +732,8 @@ function main() {
   for (const line of floorLines(floorTurns, floorMoments, playerGames)) console.log(line);
   console.log(`     Players hungry ${SPIRAL_MONTHS} or more months running: ${pct(spirals, playerGames)} (no check)`);
   if (supply) for (const line of supplyLines(supply, playerGames, pct(hungry, months))) console.log(line);
+  // literal-ok: the median, the statistic the line names
+  console.log(`     Winner's score: median ${quantile(winnerScores, 0.5)} (no check)`);
   console.log(`     Wins by species:${Object.entries(wins).map(([s, n]) => `${s} ${pct(n, games)}`).join(', ')}`);
   console.log(`     Wins by persona: ${Object.entries(byPersona).map(([s, n]) => `${s} ${pct(n, games)}`).join(', ')}`);
   if (plan) for (const line of planLines(plan, level)) console.log(line);
