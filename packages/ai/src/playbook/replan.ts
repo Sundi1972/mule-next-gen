@@ -1,5 +1,5 @@
 import { AI_PLANS, observe, type GameState, type Good, type MonthReport, type PlayerId } from '@mule/engine';
-import { rivalPlotsMaking, type KeptPlan } from './plan.js';
+import { draftPointOf, rivalPlotsMaking, type KeptPlan } from './plan.js';
 
 /** RULE-8's five re-plan triggers, read from public data against the kept plan's anchor. See spec C13. */
 
@@ -18,12 +18,14 @@ export function replanReason(state: GameState, kept: KeptPlan, seat: PlayerId): 
   if (anchor.keyPlots.some(rival)) return 'lostKeyPlot';
   const target = kept.monopolyTarget;
   if (target && rivalPlotsMaking(obs, seat, target) >= anchor.rivalPlots + replan.rivalPlots) return 'rivalProducer';
-  const shocked = (g: Good) => anchor.posted[g] !== undefined && Math.abs(obs.store.posted[g] - anchor.posted[g]) >= replan.priceShock * anchor.posted[g];
-  if ([kept.moneyMaker, target].some((g) => g !== null && shocked(g))) return 'priceShock';
+  // Like for like, and a fall only: the store reprices between draft points, and dearer is good news for a seller.
+  const fell = (g: Good) => anchor.posted[g] !== undefined && anchor.posted[g] - obs.store.posted[g] >= replan.priceShock * anchor.posted[g];
+  if (draftPointOf(state.phase) === anchor.pricedAt && [kept.moneyMaker, target].some((g) => g !== null && fell(g))) return 'priceShock';
   const maker = kept.moneyMaker;
   if (maker && obs.history.some((r) => r.month > anchor.reportedMonth && plotsCut(obs, r, seat, maker) >= replan.eventPlots)) return 'event';
   const p = state.politics;
-  if (p && p.termStart === state.month && (p.governor !== anchor.governor || p.sheriff !== anchor.sheriff)) return 'election';
+  const known = anchor.governor !== null || anchor.sheriff !== null;
+  if (p && known && p.termStart === state.month && (p.governor !== anchor.governor || p.sheriff !== anchor.sheriff)) return 'election';
   return null;
 }
 

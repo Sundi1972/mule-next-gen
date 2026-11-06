@@ -1,6 +1,6 @@
 /** The playbook module: the draft, its validator, the plan a seat keeps and how a phase went against it. See spec C1, C2, C8. */
 export { draftGoodPlaybook, draftPlanningPart, draftRoll, draftPlaybook, draftStrategyOf, landRanking, type DraftInput, type DraftPhase, type LandPick, type LeftOutPick } from './draft.js';
-export { anchorOf, planFields, planMind, type KeptPlan, type PlanAnchor, type PlanFields, type PlanPoint } from './plan.js';
+export { anchorOf, planFields, planMind, withOffices, type KeptPlan, type PlanAnchor, type PlanFields, type PlanPoint } from './plan.js';
 export { replanReason, type ReplanTrigger } from './replan.js';
 export { validatePlaybook, validatorFor, type PlanEdit, type ValidatePlan, type ValidatorProfile } from './validate.js';
 export { playbookSource, type LandDraft, type PlaybookSource, type SourceSeat } from './source.js';

@@ -1,4 +1,4 @@
-import { AI_PLANS, GAME, type AiPersonaWeights, type GameState, type Good, type PlayerId, type Strategy } from '@mule/engine';
+import { AI_PLANS, GAME, type AiPersonaWeights, type GameState, type Good, type Phase, type PlayerId, type Strategy } from '@mule/engine';
 import type { Mind } from '../value.js';
 import type { ReplanTrigger } from './replan.js';
 
@@ -12,10 +12,20 @@ export type PlanFields = Pick<Strategy, 'kind' | 'moneyMaker' | 'monopolyTarget'
 /** Where in the month a plan was drafted or adopted: a draft point, or an adopt. See RULE-7. */
 export type PlanPoint = 'planning' | 'development' | 'auction' | 'adopt';
 
+/** The draft point whose stretch of the month `phase` falls in: the store reprices at production, before the auction's. */
+export function draftPointOf(phase: Phase): DraftPoint {
+  if (phase === 'development') return 'development';
+  return phase === 'planning' || phase === 'landGrant' || phase === 'landAuction' ? 'planning' : 'auction';
+}
+
+export type DraftPoint = Exclude<PlanPoint, 'adopt'>;
+
 /** RULE-8's reference values, read when the plan was drafted or adopted. */
 export interface PlanAnchor {
   month: number;
   point: PlanPoint;
+  /** The draft point the posted prices were read at: a price is compared only at the same one (AM-29). */
+  pricedAt: DraftPoint;
   /** The posted price of the money-maker and of the monopoly target. */
   posted: Partial<Record<Good, number>>;
   /** Rival plots making the monopoly target; 0 with none. */
@@ -23,6 +33,7 @@ export interface PlanAnchor {
   keyPlots: number[];
   /** The month of the newest production report (0 with none): an event in a later month's is "since the anchor". */
   reportedMonth: number;
+  /** The office holders; both null before the first election, until a draft point after it reads them (AM-29). */
   governor: PlayerId | null;
   sheriff: PlayerId | null;
 }
@@ -61,6 +72,7 @@ export function anchorOf(state: GameState, seat: PlayerId, plan: PlanFields, poi
   return {
     month: state.month,
     point,
+    pricedAt: draftPointOf(state.phase),
     posted: Object.fromEntries(goods.map((g) => [g, state.store.posted[g]])),
     rivalPlots: plan.monopolyTarget ? rivalPlotsMaking(state, seat, plan.monopolyTarget) : 0,
     keyPlots: open.slice(0, AI_PLANS.replan.keyPlots),
@@ -68,6 +80,13 @@ export function anchorOf(state: GameState, seat: PlayerId, plan: PlanFields, poi
     governor: state.politics?.governor ?? null,
     sheriff: state.politics?.sheriff ?? null,
   };
+}
+
+/** The anchor with the offices filled in, once an election has filled one: an anchor from before any keeps none. See AM-29. */
+export function withOffices(anchor: PlanAnchor, state: GameState): PlanAnchor {
+  const p = state.politics;
+  if (anchor.governor !== null || anchor.sheriff !== null || !p || (p.governor === null && p.sheriff === null)) return anchor;
+  return { ...anchor, governor: p.governor, sheriff: p.sheriff };
 }
 
 /**
