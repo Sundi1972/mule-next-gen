@@ -150,15 +150,28 @@ describe('G-6: what the ship in port wants, in one panel', () => {
 });
 
 describe("the TV's gap", () => {
-  it('reads "they meet" when the best ask is not above the best bid, never a negative', () => {
-    const a = auction({ good: 'crystite', storeSells: 100, storeForSale: 3, shipPays: 119, walkers: [walker('lena', 'seller', 150)] });
-    const html = renderToStaticMarkup(createElement(TvReadout, { view, auction: a }));
-    expect(html).toContain('they meet');
-    expect(html).not.toMatch(/-\d+ apart/);
+  /** What the readout's NEAREST TRADE row says, as rendered (WS6, 6 Nov: the row counts only pairs with a player in them). */
+  const gapOf = (a: AuctionView) => /NEAREST TRADE<\/dt><dd[^>]*>([^<]*)<\/dd>/.exec(renderToStaticMarkup(createElement(TvReadout, { view, auction: a })))?.[1];
+  it.each<[string, Partial<AuctionView>, string]>([
+    // Two houses never trade with each other: the ship paying over the store's selling line is no meeting.
+    ['the ship pays over the store’s selling line, the only player asks above both', { good: 'crystite', storeSells: 100, storeForSale: 3, shipPays: 119, walkers: [walker('lena', 'seller', 150)] }, '31 apart'],
+    ['the ship pays the store’s selling line, the only player bids under it', { good: 'crystite', storeSells: 100, storeForSale: 3, shipPays: 100, walkers: [walker('lena', 'buyer', 90)] }, '10 apart'],
+    ['a buyer faces the store’s selling line, not the store’s own buying line', { storeSells: 30, storeForSale: 3, storeBuys: 24, walkers: [walker('lena', 'buyer', 12)] }, '18 apart'],
+    ['no player price at all: nothing to read', { good: 'crystite', storeSells: 100, storeForSale: 3, shipPays: 119, walkers: [walker('lena', 'seller', 150, 0)] }, '—'],
+    // A player on one side: they meet.
+    ['a player’s ask at the ship’s price', { good: 'crystite', storeSells: 100, storeForSale: 3, shipPays: 119, walkers: [walker('lena', 'seller', 119)] }, 'they meet'],
+    ['a player’s ask under the store’s buying line', { storeBuys: 24, walkers: [walker('lena', 'seller', 20)] }, 'they meet'],
+    ['a player’s ask under another player’s bid', { walkers: [walker('lena', 'seller', 40), walker('kai', 'buyer', 45)] }, 'they meet'],
+    ['a player’s bid at the store’s selling line', { storeSells: 30, storeForSale: 3, storeBuys: 24, walkers: [walker('lena', 'buyer', 30)] }, 'they meet'],
+  ])('FM-house-meet: the readout never says the lines meet when only the ship and the store cross; a player crossing a house line still meets — %s', (_, over, gap) => {
+    expect(gapOf(auction(over))).toBe(gap);
   });
-  it('reads "N apart" while the ask is above the bid', () => {
-    const a = auction({ storeSells: 30, storeForSale: 3, storeBuys: 24, walkers: [walker('lena', 'buyer', 12)] });
-    expect(renderToStaticMarkup(createElement(TvReadout, { view, auction: a }))).toContain('6 apart');
+});
+
+describe("the TV's nearest trade while a deal runs", () => {
+  it('NEAREST TRADE (WS6, 6 Nov): while a deal runs the row reads TRADING, one word, so the longer label costs the readout no line (TV-FIT)', () => {
+    const html = renderToStaticMarkup(createElement(TvReadout, { view, auction: auction({ walkers: [walker('lena', 'seller', 40), walker('kai', 'buyer', 45)], deals: [{ buyer: 'kai', seller: 'lena', price: 40, units: 1 }] }) }));
+    expect(/NEAREST TRADE<\/dt><dd[^>]*>([^<]*)<\/dd>/.exec(html)?.[1]).toBe('TRADING');
   });
 });
 

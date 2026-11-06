@@ -36,8 +36,8 @@ const WHOLE: AuditScope = { roots: ['[data-testid=game-shell]'], skip: ['[data-t
 const HUB: AuditScope = {
   roots: [...RAIL.roots, '[data-testid=desks]', '[data-testid=actions]'],
   skip: RAIL.skip,
-  // H-9 in the approved mock: folded, the Now card keeps to one line, its long title truncating (whole one tap away).
-  truncates: ['[data-testid=now][aria-expanded=false] [data-testid=now-title]'],
+  // H-9: folded, the Now card keeps to one line, and that line is its whole title (WS4's sweep A16, 6 Nov: "Plan your
+  // month, …" lost the step it names), so no truncation is allowed here.
 };
 /**
  * Development, steered (walking on): the whole arcade screen, its HUD, the stage (map or hall) and the stick and the
@@ -48,11 +48,10 @@ const HUB: AuditScope = {
  */
 const STEERED: AuditScope = { roots: ['[data-testid=phone-game]'], skip: ['[data-testid=chat-ticker]', '[data-testid=chat-foot]'], clips: ['[data-testid=map-stage]'] };
 /**
- * Month end and game over: the whole screen. WS6's fidelity rulings make two texts truncate, printed, not failed: the
- * folded Now card's title is one line (M-4), and a league table's name gives way so its numbers stay in the panel
- * (D-1/D-2).
+ * Month end and game over: the whole screen. A league table's name gives way so its numbers stay in the panel
+ * (D-1/D-2), printed, not failed. The folded Now card's title is one line (M-4) and must fit whole: it is your place.
  */
-const MONTH_END: AuditScope = { ...WHOLE, truncates: ['[data-testid=now-title]', '[data-testid^=name-]', '[data-testid^=hungry-name-]'] };
+const MONTH_END: AuditScope = { ...WHOLE, truncates: ['[data-testid^=name-]', '[data-testid^=hungry-name-]'] };
 
 type Read = { screen: string; small: AuditRead; base: AuditRead; c20?: { small: string[]; base: string[] } };
 /** The screens whose rail is the game shell's, with your name in its header: every phase, not the lobby. */

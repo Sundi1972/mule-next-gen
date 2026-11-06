@@ -27,7 +27,6 @@ import {
   moodBand,
   MS_PER_SECOND,
   observe,
-  PRICE,
   POLLUTION,
   rollPhase,
   rollPlayerEvent,
@@ -35,6 +34,7 @@ import {
   SIM_TARGETS,
   STORE_ID,
   storeForSale,
+  storeSellPrice,
   WALK,
   WOLVES,
   type AiLevelId,
@@ -50,7 +50,7 @@ import { simSeats, type TablePlays } from './lineup.js';
 import type { FloorMomentCounts } from './floor-turn.js';
 import { playGame, type DevTurn, type PlayedGame, type SeatSpec } from './play.js';
 import type { AiSeat } from './seat.js';
-import { unitNeed, type Mind } from './value.js';
+import { unitNeed, wholeNextMonth, type Mind } from './value.js';
 
 function arg(name: string, fallback: number): number {
   const i = process.argv.indexOf(`--${name}`);
@@ -229,12 +229,17 @@ function floorLines(turns: readonly DevTurn[], moments: readonly FloorMomentCoun
   const lakeFailed = turns.reduce((n, t) => n + t.lakeAnalyses.failed, 0);
   const packMonths = moments.filter((c) => c.packs > 0).length;
   const lakeNoTime = turns.reduce((n, t) => n + t.lakeAnalyses.noTime, 0);
+  // A MULE bought and not installed: walked into the pub on its lead, or still on it at the clock (FM-hurry-margin,
+  // FM-pub-lead). A pack met while it led that MULE is the one excuse.
+  const wasted = turns.flatMap((t) => t.lostMules);
+  const wastedPack = wasted.filter((m) => m.packLeading).length;
   return [
     // literal-ok: two decimals for the MULEs a turn, display only
     `     Development on the floor: ${(installs / turns.length).toFixed(2)} MULEs installed a seat a turn; the pub reached in ${pct(reached.length, turns.length)} of ${turns.length} AI turns, at ${median.toFixed(1)} / ${ninetieth.toFixed(1)} s on the clock (median / 90th percentile); ${(paid / Math.max(1, seats)).toFixed(0)} cr pub payout a seat a game; ${refused} presses refused (no check)`,
     `     Floor moments: packs met ${m.packs} (fought ${m.fights}: won ${m.won}, lost ${m.lost}; ran ${m.runs}: bitten ${m.bitten}); MULEs bolted ${m.bolted}, caught ${m.caught}; pelts sold ${m.peltsSold}; glints lit ${m.glints}, raced ${m.raced} (${pct(m.raced, m.glints)}), won ${m.glintsWon}; scrambles ${m.scrambles}, AI racers ${m.scrambleRacers}, left out ${m.leftOut} (no check)`,
     `${packMonths / Math.max(1, moments.length) >= WOLVES.simMonthsWithPack ? 'ok  ' : 'MISS'} Months with an AI wolf encounter: ${packMonths} of ${moments.length}, ${pct(packMonths, moments.length)} (AM-27: target ${pct(WOLVES.simMonthsWithPack, 1)} or more, on each of seeds 1, 101 and 201)`,
     `     Lake plots: ${lakeFailed} analyses failed on the way, ${lakeNoTime} dropped as not fitting the clock (no check)`,
+    `     MULEs bought and not installed: ${wasted.length} in ${turns.length} AI turns, ${wastedPack} of them a pack met leading it, ${wasted.length - wastedPack} with no pack (FM-pub-lead: target none with no pack; no check)`,
   ];
 }
 
@@ -358,9 +363,9 @@ const SHORT_WHY_LABEL: Record<ShortWhy, string> = {
  * then, and how many left that good still short; a good the engine skips holds no auction and counts none. Beside it,
  * why each seat short of a good when the auction opened (with the store selling and the cash then) ended still short.
  * (b) and T-AC-12: the seat-months that lost output for want of Energy, those while the store had Energy for it and it
- * could pay, and plants and wells at each game's end.
+ * could pay, and plants and wells at each game's end. UBER-AC-2: each seat at each Food auction (foodBandLine).
  */
-interface SupplyTally {
+export interface SupplyTally {
   entered: number;
   leftShort: number;
   why: Partial<Record<engine.Good, Record<ShortWhy, number>>>;
@@ -369,9 +374,10 @@ interface SupplyTally {
   cutCouldBuy: number;
   plants: number;
   wells: number;
+  food: FoodHeld[];
 }
 
-const newSupplyTally = (): SupplyTally => ({ entered: 0, leftShort: 0, why: {}, seatMonths: 0, cut: 0, cutCouldBuy: 0, plants: 0, wells: 0 });
+export const newSupplyTally = (): SupplyTally => ({ entered: 0, leftShort: 0, why: {}, seatMonths: 0, cut: 0, cutCouldBuy: 0, plants: 0, wells: 0, food: [] });
 
 interface Short {
   target: number;
@@ -391,18 +397,27 @@ function shortOf(s: GameState, mind: Mind, good: engine.Good, ask: number): Shor
  * The tally's hooks for one game: `phase` after each phase, `seats` once the seats sit down. It watches the auction
  * through the first seat's tick, which runs before every step: it reads and changes nothing.
  */
-function supplyHooks(tally: SupplyTally): { phase: (s: GameState) => void; seats: (seats: readonly AiSeat[]) => void } {
+export function supplyHooks(tally: SupplyTally): { phase: (s: GameState) => void; seats: (seats: readonly AiSeat[]) => void } {
   let seats: readonly AiSeat[] = [];
   /** When the auction opens: per seat and good, its shortfall at the posted price. */
   let opened: Map<string, Map<engine.Good, Short>> | null = null;
   /** At each good's status screen, per seat; at its close, per seat: the stock, the trade it chose, the shelf. */
   let atStatus = new Map<engine.Good, Map<string, Short>>();
   let atClose = new Map<engine.Good, Map<string, { stock: number; buyTo: number | null; soldOut: boolean }>>();
+  /** At Food's status screen: its ask, Food's reference then, and per seat next month's need; per seat its Food once the next good is up. */
+  let foodAt: { ask: number; reference: number; need: Map<string, number>; held?: Map<string, number> } | null = null;
   const watch = (s: GameState) => {
     const a = s.auction;
     if (!opened || !a?.good) return;
     const good = a.good;
-    if (a.stage === 'status' && !atStatus.has(good)) atStatus.set(good, new Map(seats.map((seat) => [seat.mind.me, shortOf(s, seat.mind, good, a.storeSell)])));
+    if (foodAt && !foodAt.held && good !== 'food') foodAt.held = new Map(seats.map((seat) => [seat.mind.me, s.players.find((p) => p.id === seat.mind.me)!.stock.food]));
+    if (a.stage === 'status' && !atStatus.has(good)) {
+      atStatus.set(good, new Map(seats.map((seat) => [seat.mind.me, shortOf(s, seat.mind, good, a.storeSell)])));
+      if (good === 'food') {
+        const need = new Map(seats.map((seat) => [seat.mind.me, wholeNextMonth(observe(s, seat.mind.me), seat.mind.me, good)]));
+        foodAt = { ask: a.storeSell, reference: s.store.refPrice.food, need };
+      }
+    }
     if (a.stage === 'close' && atStatus.has(good) && !atClose.has(good)) {
       const close = new Map<string, { stock: number; buyTo: number | null; soldOut: boolean }>();
       for (const seat of seats) {
@@ -425,11 +440,20 @@ function supplyHooks(tally: SupplyTally): { phase: (s: GameState) => void; seats
           if (cut && could) tally.cutCouldBuy++;
         }
       }
-      opened = new Map(seats.map((seat) => [seat.mind.me, new Map(WALK.order.map((g) => [g, shortOf(s, seat.mind, g, Math.ceil(s.store.posted[g] * (1 + PRICE.storeSpread)))]))]));
+      opened = new Map(seats.map((seat) => [seat.mind.me, new Map(WALK.order.map((g) => [g, shortOf(s, seat.mind, g, storeSellPrice(s.store.posted[g]))]))]));
       atStatus = new Map();
       atClose = new Map();
+      foodAt = null;
     }
     if (s.phase !== 'auction' || !opened) return;
+    // With no good up after Food, its auction was the phase's last, so the phase's end is just after it.
+    if (foodAt) {
+      const { ask, reference } = foodAt;
+      for (const [me, need] of foodAt.need) {
+        const held = foodAt.held?.get(me) ?? s.players.find((p) => p.id === me)!.stock.food;
+        tally.food.push({ ask, reference, held, need });
+      }
+    }
     for (const p of s.players) {
       for (const good of WALK.order) {
         const status = atStatus.get(good)?.get(p.id);
@@ -466,6 +490,42 @@ function supplyHooks(tally: SupplyTally): { phase: (s: GameState) => void; seats
   };
 }
 
+/** One seat at one Food auction (UBER-AC-2): the auction's ask and Food's reference then, its Food after, its need. */
+export interface FoodHeld {
+  ask: number;
+  reference: number;
+  held: number;
+  need: number;
+}
+
+const DEAR_TIMES = 2; // literal-ok: UBER-AC-2's own band boundary ("ask ≥ 2× reference"), a proof's term, not a balance number
+const FOOD_BANDS = [
+  { label: 'ask ≤ ref', holds: (x: FoodHeld) => x.ask <= x.reference },
+  { label: `ref < ask < ${DEAR_TIMES}× ref`, holds: (x: FoodHeld) => x.ask > x.reference && x.ask < DEAR_TIMES * x.reference },
+  { label: `ask ≥ ${DEAR_TIMES}× ref`, holds: (x: FoodHeld) => x.ask >= DEAR_TIMES * x.reference },
+];
+
+/** The median; for an even count the mean of the two middles, since the row's 1.0 targets are judged on it. */
+function trueMedian(values: readonly number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2); // literal-ok: halving, the median's position
+  return sorted.length % 2 === 1 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2; // literal-ok: odd or even count, the mean of two
+}
+
+/**
+ * UBER-AC-2's row: per band, the median of Food held after the auction ÷ next month's need over every seat at every
+ * Food auction in it. A seat needing no Food has no ratio and counts in no band.
+ */
+export function foodBandLine(samples: readonly FoodHeld[], colonyShort: string): string {
+  const counted = samples.filter((x) => x.need > 0);
+  const bands = FOOD_BANDS.map(({ label, holds }) => {
+    const ratios = counted.filter(holds).map((x) => x.held / x.need);
+    const median = ratios.length > 0 ? trueMedian(ratios).toFixed(2) : 'no median'; // literal-ok: two decimals, display only
+    return `${label} ${median} (n ${ratios.length})`;
+  });
+  return `     Resource utility (UBER-AC-2): Food held after its auction ÷ next month's need, the median seat by the ask against Food's reference: ${bands.join(', ')} (target over 1.0 at ask ≤ ref, at most 1.0 at ask ≥ ${DEAR_TIMES}× ref); colonists short of Food or Water in ${colonyShort} of months`;
+}
+
 /** The model's proof rows, beside the colony's own Food and Water shortage (HC-6). */
 function supplyLines(t: SupplyTally, playerGames: number, colonyShort: string): string[] {
   const perSeat = (n: number) => (n / Math.max(1, playerGames)).toFixed(2); // literal-ok: two decimals, display only
@@ -477,6 +537,7 @@ function supplyLines(t: SupplyTally, playerGames: number, colonyShort: string): 
     `     Resource utility (UBER-AC-1 a, why): short when the auction opened, with the store selling and the cash then, and still short after the good:`,
     ...why,
     `     Resource utility (UBER-AC-1 b): Energy cut while the store had Energy and the seat could pay in ${pct(t.cutCouldBuy, t.seatMonths)} of ${t.seatMonths} seat-months (target under 5%); colonists short of Food or Water in ${colonyShort} of months`,
+    foodBandLine(t.food, colonyShort),
     `     Resource utility (T-AC-12): ${perSeat(t.plants)} plants and ${perSeat(t.wells)} wells a seat-game at the end; a cut for want of Energy in ${pct(t.cut, t.seatMonths)} of seat-months; colonists short of Food or Water in ${colonyShort} of months`,
   ];
 }
@@ -523,6 +584,8 @@ function main() {
   const afterFire = { mulePrices: [] as number[], developed: [] as number[] };
   const everyDeveloped: number[] = [];
   const wins: Record<string, number> = {};
+  /** Each game's winner's engine score. */
+  const winnerScores: number[] = [];
   const auction = { between: 0, store: 0, ship: 0, ms: 0 };
   const lots = { sold: 0, unsold: 0, colonyOffered: 0, colonySold: 0, stalled: 0 };
   const band = forcedBand(argText('air'));
@@ -637,6 +700,7 @@ function main() {
       afterFire.developed.push(developedAt.get(next.month) ?? 0);
     });
     const winner = winnerOf(state);
+    winnerScores.push(score(state, state.players[winner]!.id));
     const species = state.players[winner]!.species;
     wins[species] = (wins[species] ?? 0) + 1;
     const wp = specs[winner]!.persona;
@@ -668,6 +732,8 @@ function main() {
   for (const line of floorLines(floorTurns, floorMoments, playerGames)) console.log(line);
   console.log(`     Players hungry ${SPIRAL_MONTHS} or more months running: ${pct(spirals, playerGames)} (no check)`);
   if (supply) for (const line of supplyLines(supply, playerGames, pct(hungry, months))) console.log(line);
+  // literal-ok: the median, the statistic the line names
+  console.log(`     Winner's score: median ${quantile(winnerScores, 0.5)} (no check)`);
   console.log(`     Wins by species:${Object.entries(wins).map(([s, n]) => `${s} ${pct(n, games)}`).join(', ')}`);
   console.log(`     Wins by persona: ${Object.entries(byPersona).map(([s, n]) => `${s} ${pct(n, games)}`).join(', ')}`);
   if (plan) for (const line of planLines(plan, level)) console.log(line);

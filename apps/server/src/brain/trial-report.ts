@@ -14,6 +14,9 @@ export interface TrialDecision {
   note?: string;
 }
 
+/** Where the Claude chairs sit at the pair table: 'even' on chairs 0 and 2, 'odd' on 1 and 3. */
+export type Seating = 'even' | 'odd';
+
 /** What one game left behind. */
 export interface TrialGame {
   id: string;
@@ -40,6 +43,8 @@ export interface TrialGame {
   scores?: Record<string, number>;
   /** The seats in the Claude chairs, Claude's or, in the control, the engine's; absent, the Smart seats. */
   chairs?: string[];
+  /** At the pair table, where the Claude chairs sat: 'even' on chairs 0 and 2, 'odd' on 1 and 3. */
+  seating?: Seating;
 }
 
 /** Why a run stopped: the commands' reasons, a ledger write that was lost, or a game in which the API refused every call. */
@@ -144,6 +149,8 @@ export interface TrialReport {
    * verdict: the bar is set from WS1's tournament numbers.
    */
   results: { games: number; smartWins: number; smart: SeatResults; strategist: SeatResults };
+  /** A pair run's results per seating, the Claude chairs on 0 and 2 (even) or on 1 and 3 (odd); `results` pools them. */
+  seatings?: Record<Seating, TrialReport['results']>;
   /** WS1's bar for a pair run: the claim, or the positive control; absent without --table pair. */
   bar?: { kind: 'claim' | 'control'; verdict: Verdict };
   totals?: SpendTotals;
@@ -340,6 +347,7 @@ export function trialReport(input: TrialInput): TrialReport {
     playbooks: input.playbooks,
     edits,
     results: resultsOf(finished),
+    ...(input.table === 'pair' ? { seatings: { even: resultsOf(finished.filter((g) => g.seating === 'even')), odd: resultsOf(finished.filter((g) => g.seating === 'odd')) } } : {}),
     ...(input.table === 'pair'
       ? { bar: { kind: input.control ? ('control' as const) : ('claim' as const), verdict: complete ? tournamentBar(resultsOf(finished), input.control === true, input.planned) : ('not proven' as const) } }
       : {}),
@@ -379,8 +387,27 @@ const barText = (r: TrialReport) => {
 };
 const totalsText = (t: SpendTotals) =>
   `PR-5 proofs ${capText(Number(t.proofUsd.toFixed(2)))} of ${capText(BRAIN.proofCapUsd)}; tournament ${capText(Number(t.tourneyUsd.toFixed(2)))} of ${capText(BRAIN.tournament.capUsd)}`;
+/** The win share and mean-rank lead of the Claude chairs in one seating, so a chair's edge shows as a number. */
+const seatingText = (chairs: string, x: TrialReport['results']) =>
+  x.games === 0
+    ? `on ${chairs}: n/a`
+    : `on ${chairs}: won ${(Math.floor((1000 * x.smartWins) / x.games) / 10).toFixed(1)}% (${x.smartWins} of ${x.games} games), mean rank lead ${(x.strategist.meanRank - x.smart.meanRank).toFixed(2)}`;
+const seatingsRows = (r: TrialReport): string[][] =>
+  r.seatings ? [['Claude chairs by seating', `${seatingText('0 and 2', r.seatings.even)}; ${seatingText('1 and 3', r.seatings.odd)}`]] : [];
+const CONTROL_POOLED =
+  "50% by construction (each seed's two seatings are the same game). The control's gate: the harness runs clean (0 stalls, every game scored, " +
+  "0 model calls) and reports the per-seating edge as a number; the paid run is judged pooled. That edge is mostly species, not seat order " +
+  '(each chair keeps its default species), and balanced seating cancels it.';
 const tourneyRows = (r: TrialReport): string[][] =>
-  r.bar ? [['Claude chairs against engine chairs', resultsText(r.results)], barText(r), ...(r.totals ? [['Spend so far, every ledger', totalsText(r.totals)]] : [])] : [];
+  r.bar
+    ? [
+        ['Claude chairs against engine chairs, pooled', resultsText(r.results)],
+        ...seatingsRows(r),
+        barText(r),
+        ...(r.bar.kind === 'control' ? [['Control, pooled', CONTROL_POOLED]] : []),
+        ...(r.totals ? [['Spend so far, every ledger', totalsText(r.totals)]] : []),
+      ]
+    : [];
 const monthText = (c: MonthCounts, of: number) => `min ${c.min}, median ${c.median}, months with none ${c.silent} of ${of}`;
 
 /** The report as printed: the run, the figures for each acceptance criterion, then one verdict line for each. */

@@ -6,6 +6,7 @@ import {
   createRng,
   DEV_STEER,
   GAME,
+  GOOD_CONFIG,
   list,
   lotDone,
   lotLeader,
@@ -166,7 +167,15 @@ describe('the validator holds every playbook to RULE-1', () => {
     expect(one('planning', '/strategy/moneyMaker', 'gold')).toMatchObject({ plays: draft.strategy.moneyMaker, why: 'no such good' });
     expect(one('planning', '/strategy/moneyMaker', 'crystite')).toMatchObject({ plays: 'crystite', why: null });
     expect(one('planning', '/strategy/monopolyTarget', 'crystite')).toMatchObject({ plays: draft.strategy.monopolyTarget, why: 'not a good to corner' });
-    expect(one('planning', '/strategy/monopolyTarget', 'food')).toMatchObject({ plays: draft.strategy.monopolyTarget, why: 'spoils too fast to corner' });
+    expect(one('planning', '/strategy/monopolyTarget', 'food')).toMatchObject({ plays: draft.strategy.monopolyTarget, why: 'not a good to corner' });
+    // A listed good that spoils too fast: Energy, with the bar lowered to its spoilage.
+    const bar = STRATEGIST.cornerMaxSpoilage;
+    STRATEGIST.cornerMaxSpoilage = GOOD_CONFIG.energy.spoilage;
+    try {
+      expect(one('planning', '/strategy/monopolyTarget', 'energy')).toMatchObject({ why: 'spoils too fast to corner' });
+    } finally {
+      STRATEGIST.cornerMaxSpoilage = bar;
+    }
     expect(one('planning', '/strategy/monopolyTarget', 'smithore')).toMatchObject({ plays: 'smithore', why: null });
     // S4, spec §3's example.
     expect(one('planning', '/strategy/cashFloor', 5000)).toMatchObject({ plays: 2000, why: 'clamped to 2000: AI_PLANS.bounds.cashFloorMax' });

@@ -27,7 +27,7 @@ export function HandoffCode({ url, state, onRenew }: { url: string; state: CodeS
   return (
     <span className="relative inline-grid shrink-0" data-testid="handoff-qr" data-state={state}>
       {state === 'waiting' ? (
-        <span className="grid size-[120px] place-items-center rounded-panel border border-holo-line bg-panel-2 @min-[1100px]/shell:size-[220px]" role="status">
+        <span className="grid size-[120px] place-items-center rounded-panel border border-holo-line bg-raised @min-[1100px]/shell:size-[220px]" role="status">
           <span className="animate-pulse font-mono text-xs text-ink-3 @min-[1100px]/shell:text-sm">Making a code…</span>
         </span>
       ) : (

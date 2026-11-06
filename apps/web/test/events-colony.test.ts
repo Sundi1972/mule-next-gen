@@ -1,6 +1,6 @@
-import { createGame, EVENT_SHOW, rollPhase, type Phase } from '@mule/engine';
+import { COLONY, createGame, EVENT_SHOW, rollPhase, type Phase } from '@mule/engine';
 import type { ColonyProjectView, EventView } from '@mule/protocol';
-import { EventEffectChip, EventLivingMap, EventShow, EventSoloRail, EventTvLog, eventSegments, type MapTile, type ShowEffect, type ShowEventView, type ShowMode, type ShowPlayer, type Slot } from '@mule/ui';
+import { EventEffectChip, EventLivingMap, EventShow, EventSoloRail, EventTvLog, eventSegments, ProductionMap, productionShowProps, showEnd, showTimes, type MapTile, type ShowData, type ShowEffect, type ShowEventView, type ShowMode, type ShowPlayer, type Slot } from '@mule/ui';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -65,31 +65,34 @@ const FESTIVAL = event('festival', 'planning', {
     { on: 'store', what: 'food', delta: 6 },
   ],
 });
+/** The share of its output a struck plot makes, as the engine words it: "20%" at 0.2. */
+const STRIKE_SHARE = `${Math.round(COLONY.strike.output * 100)}%`;
 // As #370 builds it: kind 'colony', from the first struck plot, every working plot of the good at delta 0.
 const STRIKE = event('generalStrike', 'planning', {
   kind: 'colony',
   origin: { ...FOOD_PLOTS[0]! },
   title: 'General strike',
-  line: 'This month every Food plot makes 20%, unless the Governor pays the strikers 240 cr from the colony fund.',
+  line: `This month every Food plot makes ${STRIKE_SHARE}, unless the Governor pays the strikers 240 cr from the colony fund.`,
   hits: FOOD_PLOTS.map((p, order) => ({ ...p, order, delta: 0 })),
 });
-const riot = (object: 'park' | 'hospital') =>
+/** The riot takes floor(stock / 3) of each shelf: 18 Food, 12 Energy and 15 Smithore leave 12, 8 and 10. */
+const riot = (object: 'park' | 'hospital', { counted = true } = {}) =>
   event('riot', 'upkeep', {
     title: 'Riot',
     line: 'One prestige object is damaged (no prestige until repaired); the store loses a third of its stock.',
     hits: object === 'park' ? [{ ...PARK, order: 0, delta: 0 }] : [],
     objects: [{ id: object, becomes: 'damaged' }],
     effects: [
-      { on: 'store', what: 'food', delta: -6 },
-      { on: 'store', what: 'energy', delta: -4 },
-      { on: 'store', what: 'smithore', delta: -5 },
+      { on: 'store', what: 'food', delta: -6, ...(counted ? { to: 12 } : {}) },
+      { on: 'store', what: 'energy', delta: -4, ...(counted ? { to: 8 } : {}) },
+      { on: 'store', what: 'smithore', delta: -5, ...(counted ? { to: 10 } : {}) },
     ],
   });
 
 /** Each of the nine in the phase that rolls it, and the words the TV's log keeps for it. */
 const NINE: { ev: ShowEventView; words: string; story?: string[] }[] = [
   { ev: FESTIVAL, words: 'Mood +10 · Prestige +2 · Store +6 Food', story: ['festival-bunting', 'festival-crowd'] },
-  { ev: STRIKE, words: 'Food at 20% on 4 farms unless the Governor pays' },
+  { ev: STRIKE, words: `Food at ${STRIKE_SHARE} on 4 farms unless the Governor pays` },
   { ev: event('emigrationWave', 'planning', { kind: 'colony', title: 'Emigration wave', line: '10% fewer colonists, for good.', effects: [{ on: 'colony', what: 'colonists', delta: -12 }] }), words: 'Colonists −12' },
   { ev: event('blamedForUnrest', 'planning', { kind: 'ledger', title: 'Blamed for the unrest', line: 'Reputation −1, so fewer votes.', scope: 'personal', player: OSSA, effects: [{ on: OSSA, what: 'reputation', delta: -1 }] }), words: 'Ossa reputation −1' },
   { ev: event('storeStrike', 'development', { title: 'Store strike', line: 'The store sells no MULEs this turn.', effects: [{ on: 'store', what: 'mules', delta: 0 }] }), words: 'No MULEs this turn' },
@@ -104,17 +107,15 @@ interface Opts {
   reduced?: boolean;
   me?: string;
   map?: MapTile[];
-  /** The store's stock per good as the view's market sends it, after the phase's events. */
-  storeStock?: Partial<Record<'food' | 'energy' | 'smithore', number>>;
 }
-function screen(events: ShowEventView[], t: number, where: Where, { reduced = false, me = LENA, map = tiles, storeStock }: Opts = {}): string {
+function screen(events: ShowEventView[], t: number, where: Where, { reduced = false, me = LENA, map = tiles }: Opts = {}): string {
   const mode: ShowMode = where === 'alone' ? 'solo' : 'tv';
   const slot = players.find((p) => p.id === me)!.slot;
   const parts =
     where === 'tv'
       ? [createElement(EventLivingMap, { key: 'm', size: 'tv' }), createElement(EventTvLog, { key: 'l' })]
       : [createElement(EventLivingMap, { key: 'm', size: 'phone', focusSlot: slot, onSkip: () => undefined }), createElement(EventSoloRail, { key: 'r', me })];
-  return renderToStaticMarkup(createElement(EventShow, { events, introMs: INTRO_MS, t, mode, reduced, width: W, height: H, tiles: map, players, ...(storeStock ? { storeStock } : {}), children: parts }));
+  return renderToStaticMarkup(createElement(EventShow, { events, introMs: INTRO_MS, t, mode, reduced, width: W, height: H, tiles: map, players, children: parts }));
 }
 const segOf = (events: ShowEventView[], where: Where) => eventSegments({ events, introMs: INTRO_MS }, 0, where === 'alone' ? 'solo' : 'tv')[0]!;
 function showFrames(events: ShowEventView[], where: Where, opts: Opts = {}): string[] {
@@ -192,13 +193,11 @@ describe('B-AC-26-3: the riot takes a third of each shelf and damages one object
   // The view's tiles are after the event: the park is damaged already.
   const after = tilesWith('damaged');
 
-  it('B-AC-26-3: the park: each shelf counts down from the store’s real stock, the park keeps standing until the riot reaches it, then its HIT mark', () => {
+  it('B-AC-26-3: the park: each shelf counts down to the store’s count right after the riot, the park keeps standing until the riot reaches it, then its HIT mark', () => {
     const ev = [riot('park')];
-    // The view's market after the riot: 11 Food, 9 Energy, 10 Smithore left, so 17, 13 and 15 before.
-    const storeStock = { food: 11, energy: 9, smithore: 10 };
-    expect(text(inside(storyAt(ev, 1.5, { map: after, storeStock }), 'riot-storage')).match(/\d+/g)).toEqual(['17', '13', '15']);
-    const shelves = storyAt(ev, 4.3, { map: after, storeStock });
-    expect(text(inside(shelves, 'riot-storage')).match(/\d+/g)).toEqual(['11', '9', '10']);
+    expect(text(inside(storyAt(ev, 1.5, { map: after }), 'riot-storage')).match(/\d+/g)).toEqual(['18', '12', '15']);
+    const shelves = storyAt(ev, 4.3, { map: after });
+    expect(text(inside(shelves, 'riot-storage')).match(/\d+/g)).toEqual(['12', '8', '10']);
     expect(plotStage(shelves, PARK.x, PARK.y)).toBe('standing');
     expect(has(shelves, 'store-flames')).toBe(false);
     // The card is up, but the park's chip waits for the riot to reach it.
@@ -214,8 +213,8 @@ describe('B-AC-26-3: the riot takes a third of each shelf and damages one object
     expect(text(inside(result(ev, 'alone', { map: after }), 'phone-card'))).toContain('Park damaged in the riot');
   });
 
-  it('B-AC-26-3: without the store’s stock, each shelf shows only what it lost, never a guessed count', () => {
-    const shelves = text(inside(storyAt([riot('park')], 4.3, { map: after }), 'riot-storage'));
+  it('B-AC-26-3: without the count after the riot, each shelf shows only what it lost, never a guessed count', () => {
+    const shelves = text(inside(storyAt([riot('park', { counted: false })], 4.3, { map: after }), 'riot-storage'));
     expect(shelves.match(/[−-]?\d+/g)).toEqual(['−6', '−4', '−5']);
   });
 
@@ -236,8 +235,12 @@ describe('B-AC-26-3: the riot takes a third of each shelf and damages one object
   });
 });
 
+/** The strike chip's words, from the engine's share: what each struck plot makes in planning, what it loses in production. */
+const STRIKE_MADE = ` STRIKE · ${STRIKE_SHARE} `;
+const STRIKE_LOST = ` STRIKE −${Math.round((1 - COLONY.strike.output) * 100)}% `;
+
 describe('B-AC-26-4: the planning strike announcement on the TV', () => {
-  it('B-AC-26-4: strikers walk out to every Food plot, each gets STRIKE · 20%, and the log says what it costs', () => {
+  it('B-AC-26-4: strikers walk out to every Food plot, each gets STRIKE · its share made, and the log says what it costs', () => {
     const ev = [STRIKE];
     const seg = segOf(ev, 'tv');
     expect(text(inside(screen(ev, seg.announceAt + 0.3, 'tv'), 'title-card'))).toContain('unless the Governor pays the strikers 240 cr');
@@ -245,12 +248,109 @@ describe('B-AC-26-4: the planning strike announcement on the TV', () => {
       const standing = reduced ? result(ev, 'tv', { reduced }) : storyAt(ev, 2.6 + 3 * 0.35 + 0.2);
       for (const p of FOOD_PLOTS) {
         expect(has(standing, `striker-${p.x}-${p.y}`)).toBe(true);
-        expect(text(inside(standing, `strike-chip-${p.x}-${p.y}`))).toBe(' STRIKE · 20% ');
+        expect(text(inside(standing, `strike-chip-${p.x}-${p.y}`))).toBe(STRIKE_MADE);
       }
       // Nothing stands on land that isn't Food.
       expect(has(standing, 'striker-6-3')).toBe(false);
     }
-    expect(text(inside(result(ev, 'tv'), 'log'))).toContain('Food at 20% on 4 farms unless the Governor pays');
+    expect(text(inside(result(ev, 'tv'), 'log'))).toContain(`Food at ${STRIKE_SHARE} on 4 farms unless the Governor pays`);
+  });
+
+  it('B-AC-26-4: Lena’s phone, no TV: the strike is everyone’s news, each struck plot making its share unless the Governor pays', () => {
+    for (const reduced of [false, true]) {
+      const card = text(inside(result([STRIKE], 'alone', { reduced }), 'phone-card'));
+      expect(card).toContain(`For everyone: every plot of the struck good makes ${STRIKE_SHARE} this month, unless the Governor pays the strikers.`);
+      expect(card).not.toContain('Not you');
+    }
+  });
+});
+
+describe('B-AC-26-4: the unpaid strike plays in production on the TV', () => {
+  // What each Food plot made before the strike; (2,3) makes too little to keep anything of it.
+  const MADE: Record<string, number> = { '1,1': 5, '2,1': 10, '6,1': 5, '2,3': 4 };
+  const kept = (p: { x: number; y: number }) => Math.floor(MADE[`${p.x},${p.y}`]! * COLONY.strike.output);
+  const owner = (x: number, y: number) => players.find((p) => p.slot === OWNED[`${x},${y}`]![0])!.id;
+  const lines: ShowData['lines'] = [...FOOD_PLOTS.map((p) => ({ ...p, owner: owner(p.x, p.y), good: 'food' as const, made: MADE[`${p.x},${p.y}`]!, parts: [] })), { x: 6, y: 3, owner: OSSA, good: 'smithore' as const, made: 3, parts: [] }].sort((a, b) => a.y - b.y || a.x - b.x);
+  // As production files it unpaid: the same key, every Food plot, each delta down to what the strike leaves it.
+  const STRIKE_PRODUCTION = event('generalStrike', 'production', {
+    kind: 'colony',
+    origin: { ...FOOD_PLOTS[0]! },
+    title: 'General strike',
+    line: `The strikers held: every Food plot makes ${STRIKE_SHARE} this month.`,
+    hits: FOOD_PLOTS.map((p, order) => ({ ...p, order, delta: kept(p) - MADE[`${p.x},${p.y}`]! })),
+  });
+  const month = (events: ShowEventView[]): ShowData => ({ lines, events, introMs: events.length ? INTRO_MS : 0, lengthMs: 0 });
+  const unpaid = month([STRIKE_PRODUCTION]);
+  const slots = Object.fromEntries(players.map((p) => [p.id, p.slot]));
+  /** The production TV: the show around the map and the log, as TvProduction composes them. */
+  const tv = (production: ShowData, t: number, reduced = false) =>
+    renderToStaticMarkup(
+      createElement(EventShow, {
+        ...productionShowProps(production, t, { reduced, mode: 'tv', players, tiles, width: W, height: H }),
+        children: [createElement(ProductionMap, { key: 'm', width: W, height: H, tiles, production, t, slots, players, reduced, mode: 'tv', tv: true }), createElement(EventTvLog, { key: 'l' })],
+      }),
+    );
+  const seg = eventSegments(unpaid, showTimes(unpaid).eventsAt!, 'tv')[0]!;
+  const at = (u: number, reduced = false) => tv(unpaid, seg.playAt + u * seg.pace, reduced);
+  // The strike story's beat (STORY.generalStrike): it lands on the first plot at 2.6 s, then on each next 0.35 s later.
+  const { lands, step } = { lands: 2.6, step: 0.35 };
+  const where = (html: string, testid: string) => html.match(new RegExp(`data-testid="${testid}" style="left:([^;]+);top:([^;]+);`))?.slice(1);
+  const units = (html: string, x: number, y: number) => {
+    const plot = inside(html, `plot-${x}-${y}`);
+    return { count: text(inside(plot, 'units')).trim(), bars: (plot.match(/data-bar="unit"/g) ?? []).length };
+  };
+
+  it('B-AC-26-4: the strikers stand on every Food plot from the start, no walk; each plot gets STRIKE −its share lost as the strike lands on it, none before', () => {
+    const start = at(0.05);
+    const before = at(lands - 0.1);
+    const after = at(lands + 3 * step + 0.2);
+    for (const p of FOOD_PLOTS) {
+      const id = `striker-${p.x}-${p.y}`;
+      expect(has(start, id), id).toBe(true);
+      // Already on the plot: where it stands at the start is where it stands once the strike has landed.
+      expect(where(start, id)).toEqual(where(after, id));
+      expect(has(before, `strike-chip-${p.x}-${p.y}`)).toBe(false);
+      expect(text(inside(after, `strike-chip-${p.x}-${p.y}`))).toBe(STRIKE_LOST);
+    }
+    // One plot after the next: as it reaches the second plot, the third has no chip yet.
+    const second = at(lands + step + 0.05);
+    expect(FOOD_PLOTS.map((p) => has(second, `strike-chip-${p.x}-${p.y}`))).toEqual([true, true, false, false]);
+    // Nobody stands on the Smithore mine.
+    expect(has(after, 'striker-6-3')).toBe(false);
+    expect(has(after, 'strike-chip-6-3')).toBe(false);
+  });
+
+  it('B-AC-26-4: each struck plot ends on its share of what it made, the mine keeps its 3, and the log says what the strike cost', () => {
+    const end = tv(unpaid, seg.endAt - 0.15);
+    for (const p of FOOD_PLOTS) {
+      const n = kept(p);
+      expect(units(end, p.x, p.y), `${p.x},${p.y}`).toEqual({ count: n > 0 ? String(n) : '', bars: n });
+    }
+    expect(units(end, 2, 1)).toEqual({ count: '2', bars: 2 });
+    expect(units(end, 6, 3)).toEqual({ count: '3', bars: 3 });
+    const lost = FOOD_PLOTS.reduce((n, p) => n + MADE[`${p.x},${p.y}`]! - kept(p), 0);
+    expect(text(inside(end, 'log'))).toContain(`−${lost} Food on 4 farms`);
+    expect(text(inside(end, 'log'))).not.toContain('unless the Governor pays');
+  });
+
+  it('B-AC-26-4: with reduced motion the strikers and their chips are there at once', () => {
+    const start = at(0.01, true);
+    for (const p of FOOD_PLOTS) {
+      expect(has(start, `striker-${p.x}-${p.y}`)).toBe(true);
+      expect(text(inside(start, `strike-chip-${p.x}-${p.y}`))).toBe(STRIKE_LOST);
+    }
+  });
+
+  it('B-AC-26-4: paid, the server sends no strike, so no striker and no strike chip ever shows and every plot keeps what it made', () => {
+    const paid = month([]);
+    const end = showEnd(paid);
+    for (let t = 0.05; t < end; t += 0.1) {
+      const html = tv(paid, t);
+      expect(has(html, 'striker-')).toBe(false);
+      expect(has(html, 'strike-chip-')).toBe(false);
+    }
+    const harvested = tv(paid, showTimes(paid).flightAt - 0.3);
+    expect(units(harvested, 2, 1)).toEqual({ count: '10', bars: 8 });
   });
 });
 

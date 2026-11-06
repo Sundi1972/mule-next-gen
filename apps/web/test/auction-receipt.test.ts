@@ -1,4 +1,4 @@
-import { WALK } from '@mule/engine';
+import { WALK, type GameState } from '@mule/engine';
 import type { MuleView, TableView } from '@mule/protocol';
 import { GOOD_NAME, type Slot } from '@mule/ui';
 import { createElement } from 'react';
@@ -56,6 +56,10 @@ function toClose() {
   for (const s of seats) if (!s.isAi) game.handle(s.id, { type: 'ready' });
   for (let i = 0; i < 20_000 && game.viewFor(null).auction?.stage !== 'status'; i++) advance(WALK.tickMs);
   const opened = { s1: game.viewFor('s1').players.find((p) => p.id === 's1')!.money, s2: game.viewFor('s2').players.find((p) => p.id === 's2')!.money };
+  // Heiko has 4 over what he must hold, so the need stop (RULE-4) leaves him some to sell.
+  const state = (game as unknown as { state: GameState }).state;
+  const good = state.auction!.good!;
+  state.players.find((p) => p.id === 's1')!.stock[good] = game.viewFor('s1').auction!.status.find((r) => r.id === 's1')!.need + 4;
   game.handle('s1', { type: 'declare', side: 'seller' });
   game.handle('s2', { type: 'declare', side: 'buyer' });
   game.handle('s1', { type: 'ready' });
@@ -169,8 +173,8 @@ describe('A-5 the receipt words, from hand-built views (the review fix round)', 
   });
 });
 
-describe("the TV's status line (WS6 ruling on #204)", () => {
-  it('B-AC-A5-12: the status line lists only the skipped goods, on one truncated line, with no reasons', () => {
+describe("the TV's status line (WS6 ruling on #204, amended by SWEEP-C10)", () => {
+  it('B-AC-A5-12: the status line lists the skipped goods with their reasons, as the phone does, wrapping rather than cut', () => {
     const view = toClose().game.viewFor(null);
     const skipped: NonNullable<MuleView['auction']>['skipped'] = [
       { good: 'rareEarth', reason: 'nobody has any' },
@@ -179,8 +183,9 @@ describe("the TV's status line (WS6 ruling on #204)", () => {
     ];
     const html = tvScreen({ ...view, auction: { ...view.auction!, stage: 'status', skipped } });
     expect(html).toContain('data-testid="tv-status"');
-    expect(textOf(html, 'skipped')).toBe('Skipped: Rare earth, Alloy, Electronics');
-    expect(html).toMatch(/<p class="[^"]*\btruncate\b[^"]*" data-testid="skipped"/);
+    expect(textOf(html, 'skipped')).toBe('Skipped: Rare earth, Alloy, Electronics: nobody has any, nobody buys, nobody trading');
+    expect(html).toMatch(/<p class="[^"]*" data-testid="skipped"/);
+    expect(html).not.toMatch(/<p class="[^"]*\btruncate\b[^"]*" data-testid="skipped"/);
   });
 });
 
@@ -200,6 +205,14 @@ describe('A-5 the receipt on the phone (#audit-auction-receipt)', () => {
     expect(textOf(html, 'receipt-each')).toMatch(/ to (.* and )?Mia( and .*)?$/);
     const have = view.me!.stock[view.auction!.good];
     expect(textOf(html, 'receipt-stand')).toMatch(new RegExp(`^You have ${have} ${good}`));
+  });
+
+  it('HOLD (WS6, 6 Nov): the receipt says what you must hold, never what you need', () => {
+    const view = toClose().game.viewFor('s1');
+    const good = view.auction!.good;
+    const have = view.me!.stock[good];
+    view.auction = { ...view.auction!, status: view.auction!.status.map((r) => (r.id === 's1' ? { ...r, need: have + 2 } : r)) };
+    expect(textOf(phoneScreen(view, 's1'), 'receipt-stand')).toBe(`You have ${have} ${GOOD_NAME[good]}, you must hold ${have + 2}: short 2`);
   });
 
   it('B-AC-A5-2: the buyer reads what it bought and for how much, with no tax line', () => {

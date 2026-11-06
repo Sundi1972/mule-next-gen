@@ -110,12 +110,30 @@ function governorActs(state: GameState, playerId: string, act: string): Colony {
   return state.colony;
 }
 
-/** The Governor commissions a prestige object; the fund and donors pay for it from the next upkeep. See G-5 RULE-22. */
+/**
+ * The Governor commissions a prestige object; the fund and donors pay for it from the next upkeep. It takes the next
+ * place on the colony's grounds. See G-5 RULE-22, RULE-32.
+ */
 export function commission(state: GameState, playerId: string, id: PrestigeId): void {
   governorActs(state, playerId, 'Commission');
   const refused = objectRefusal(state, id);
   if (refused) throw new RuleError(refused);
-  edit(state).projects.push({ id, stage: 'commissioned', funded: { credits: 0, goods: {} }, monthsLeft: null, plot: null, since: state.month, plaque: {}, maxBid: null });
+  const slot = lowestFreeSlot(state);
+  if (slot === null) throw new RuleError(GROUNDS_FULL);
+  edit(state).projects.push({ id, stage: 'commissioned', funded: { credits: 0, goods: {} }, monthsLeft: null, plot: null, since: state.month, plaque: {}, maxBid: null, slot });
+}
+
+const GROUNDS_FULL = "The colony's grounds are full";
+
+/**
+ * The next place on the colony's grounds (G-5 RULE-32): the lowest index no project holds, or null when all are taken.
+ * The index is the growth order, 0 next to the town hall, then outward ring by ring; every project with a place keeps it
+ * whatever its stage, closed and damaged ones too. No rule reads the position.
+ */
+function lowestFreeSlot(state: GameState): number | null {
+  const taken = new Set(state.colony!.projects.map((p) => p.slot));
+  for (let slot = 0; slot < COLONY.groundsSlots; slot++) if (!taken.has(slot)) return slot;
+  return null;
 }
 
 /** Why the colony can't take on this object now, whoever asks (RULE-22 rows 4-6), or null. */
@@ -139,7 +157,7 @@ export function commissionRefusal(state: GameState, id: PrestigeId): string | nu
     if (err instanceof RuleError) return err.message;
     throw err;
   }
-  return objectRefusal(state, id);
+  return objectRefusal(state, id) ?? (lowestFreeSlot(state) === null ? GROUNDS_FULL : null);
 }
 
 /** The Governor pays to repair a damaged object from the fund. See G-5 RULE-21. */

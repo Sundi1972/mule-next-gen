@@ -1,4 +1,4 @@
-import { COLONY_SELLER, SHIP_ID, STORE_ID, tradeInterval, WALK, type AuctionRole, type AuctionSide, type Good } from '@mule/engine';
+import { COLONY_SELLER, GOOD_CONFIG, SHIP_ID, STORE_ID, tradeInterval, WALK, type AuctionRole, type AuctionSide, type Good } from '@mule/engine';
 import type { AuctionView, DealView, LandAuctionView, ListingView, MuleView, WalkerView } from '@mule/protocol';
 import { Button, Creature, cx, GOOD_NAME, GoodIcon, MuleIcon, PlayerMark, SLOT_COLOR, TERRAIN_NAME, useSeatSpecies, type BoardWalker, type Slot } from '@mule/ui';
 import type { ReactNode } from 'react';
@@ -8,7 +8,10 @@ import type { Seat } from '../phone/hub/ready';
 import { WaitingFor } from '../phone/hub/ReadyBar';
 import { SpecialLine } from './SpecialLine';
 
-/** The auction's walkers as the board draws them, in seat order, with their units and the surplus over this month's need. */
+/**
+ * The auction's walkers as the board draws them, in seat order, with their units and the surplus over this month's
+ * need; a seller stopped at what they must hold (RULE-4) carries the KEEPS mark with what they keep.
+ */
 export function boardWalkers(view: MuleView, auction: AuctionView): BoardWalker[] {
   return auction.walkers.map((w) => {
     const need = auction.status.find((r) => r.id === w.id)?.need;
@@ -22,8 +25,31 @@ export function boardWalkers(view: MuleView, auction: AuctionView): BoardWalker[
       done: w.done,
       units: w.units,
       ...(need === undefined ? {} : { surplus: w.units - need }),
+      ...(heldSeller(w) ? { keeps: w.units } : {}),
     };
   });
+}
+
+/** A seller the engine stopped at what they must hold (RULE-4). The engine keeps the flag through a switch to Buy; the screens don't. */
+export function heldSeller(w: Pick<WalkerView, 'side' | 'held'> | undefined): boolean {
+  return w?.side === 'seller' && w.held === true;
+}
+
+/**
+ * The held seller's rail (WS6's mock PhoneSale, variant A, at cde3ff61): she stopped at what she must hold, and
+ * how to sell on.
+ */
+/**
+ * Why the auction asks you to hold more of `good`, true for that good (auctionNeed): upkeep eats Food and Water, the
+ * month end spoils what has spoilage in config, and what neither touches is held for next month's use alone.
+ */
+export function holdReason(good: Good): string {
+  if (good === 'food' || good === 'water') return 'upkeep and spoilage take some before next month';
+  return GOOD_CONFIG[good].spoilage > 0 ? 'next month uses it, and some spoils first' : 'next month uses it';
+}
+
+export function heldWords(good: Good, need: number): { line: string; how: string } {
+  return { line: `Stopped at ${need} ${GOOD_NAME[good]}: what you must hold.`, how: 'To sell more, hold ▼: you’d be short next month.' };
 }
 
 /** Who an id is, in a sentence: "you", "the store", "the ship", or the player's name. */
@@ -37,26 +63,47 @@ export function who(view: MuleView, id: string, meId?: string): string {
 interface Offer {
   id: string;
   price: number;
+  /** The store's or the ship's line: two houses never trade with each other. */
+  house: boolean;
 }
 
 /** Every price a walker on `side` could meet, the store and the ship included, best first: the lowest ask, the highest bid. */
 function pricesOn(auction: AuctionView, side: 'seller' | 'buyer', without?: string): Offer[] {
   if (side === 'seller') {
-    const list: Offer[] = auction.walkers.filter((w) => w.id !== without && w.side === 'seller' && w.units > 0).map((w) => ({ id: w.id, price: w.price }));
-    if (auction.storeSells !== null && auction.storeForSale > 0) list.push({ id: STORE_ID, price: auction.storeSells });
+    const list: Offer[] = auction.walkers.filter((w) => w.id !== without && w.side === 'seller' && w.units > 0).map((w) => ({ id: w.id, price: w.price, house: false }));
+    if (auction.storeSells !== null && auction.storeForSale > 0) list.push({ id: STORE_ID, price: auction.storeSells, house: true });
     return list.sort((a, b) => a.price - b.price);
   }
-  const list: Offer[] = auction.walkers.filter((w) => w.id !== without && w.side === 'buyer').map((w) => ({ id: w.id, price: w.price }));
+  const list: Offer[] = auction.walkers.filter((w) => w.id !== without && w.side === 'buyer').map((w) => ({ id: w.id, price: w.price, house: false }));
   // The ship before the store: on a tie the sort keeps it first, and the engine sells to the ship.
-  if (auction.shipPays !== null) list.push({ id: SHIP_ID, price: auction.shipPays });
-  if (auction.storeBuys !== null) list.push({ id: STORE_ID, price: auction.storeBuys });
+  if (auction.shipPays !== null) list.push({ id: SHIP_ID, price: auction.shipPays, house: true });
+  if (auction.storeBuys !== null) list.push({ id: STORE_ID, price: auction.storeBuys, house: true });
   return list.sort((a, b) => b.price - a.price);
 }
 
-/** The TV's readout: who holds the lowest ask and the highest bid, the store and the ship counted, and the gap. */
+/**
+ * How far the closest pair that could trade stands apart: a player's ask against the best bid, or the best ask against
+ * a player's bid. Zero or less, they meet; null when no player has a price facing one. The ship and the store crossing
+ * each other is no pair: every deal has a player on one side.
+ */
+function playerGap(asks: Offer[], bids: Offer[]): number | null {
+  const ask = asks.find((o) => !o.house);
+  const bid = bids.find((o) => !o.house);
+  const gaps = [ask && bids[0] ? ask.price - bids[0].price : null, bid && asks[0] ? asks[0].price - bid.price : null].filter((g): g is number => g !== null);
+  return gaps.length > 0 ? Math.min(...gaps) : null;
+}
+
+/**
+ * The TV's readout: who holds the lowest ask and the highest bid, the store and the ship counted, and the nearest trade a
+ * player faces. TRADING is one word: NEAREST TRADE widens the label column, and a two-line value pushed the second deal row
+ * out of the TV's list (TV-FIT).
+ */
 export function TvReadout({ view, auction }: { view: MuleView; auction: AuctionView }) {
-  const ask = pricesOn(auction, 'seller')[0];
-  const bid = pricesOn(auction, 'buyer')[0];
+  const asks = pricesOn(auction, 'seller');
+  const bids = pricesOn(auction, 'buyer');
+  const ask = asks[0];
+  const bid = bids[0];
+  const gap = playerGap(asks, bids);
   const trading = auction.deals.length > 0;
   return (
     <dl className="grid grid-cols-[auto_1fr] items-baseline gap-x-2 gap-y-1 font-mono text-lg" data-testid="tv-readout">
@@ -64,8 +111,8 @@ export function TvReadout({ view, auction }: { view: MuleView; auction: AuctionV
       <dd data-num className="font-bold text-rise">{ask ? `${ask.price} · ${who(view, ask.id)}` : '—'}</dd>
       <dt className="text-fall">HIGHEST BID</dt>
       <dd data-num className={cx('font-bold', bid?.id === SHIP_ID ? 'text-warn' : 'text-fall')}>{bid ? `${bid.price} · ${who(view, bid.id)}` : '—'}</dd>
-      <dt className="text-ink-3">GAP</dt>
-      <dd data-num className="font-bold text-ink">{trading ? 'MET: TRADING' : ask && bid ? (ask.price > bid.price ? `${ask.price - bid.price} apart` : 'they meet') : '—'}</dd>
+      <dt className="text-ink-3">NEAREST TRADE</dt>
+      <dd data-num className="font-bold text-ink">{trading ? 'TRADING' : gap === null ? '—' : gap > 0 ? `${gap} apart` : 'they meet'}</dd>
     </dl>
   );
 }
@@ -326,8 +373,8 @@ function Who({ slot, name, size }: { slot: Slot; name: string; size: number }) {
 
 /**
  * The original's status screen before each good: for every player, what
- * they had before production, used, made and hold now, what they need for
- * next month, what goes bad, and the spare or shortage that leaves.
+ * they had before production, used, made and hold now, what they must hold
+ * (Hold: next month's use and what spoils first), what goes bad, and the spare or shortage that leaves.
  */
 export function StatusTable({ view, auction, meId, tv = false }: { view: MuleView; auction: AuctionView; meId?: string; tv?: boolean }) {
   // On a phone the whole table fits the stage of a small landscape phone (667×375), an AI's long name included.
@@ -342,7 +389,7 @@ export function StatusTable({ view, auction, meId, tv = false }: { view: MuleVie
           <th className={head}>Used</th>
           <th className={head}>Made</th>
           <th className={head}>Now</th>
-          <th className={head}>Needs</th>
+          <th className={head}>Hold</th>
           <th className={cx(head, 'whitespace-nowrap')} data-testid="head-goes-bad">
             Goes bad
           </th>
@@ -543,8 +590,8 @@ export function dealSpeed(units: number): number {
   return (WALK.tradeStartMs - tradeInterval(units)) / (WALK.tradeStartMs - WALK.tradeFloorMs);
 }
 
-/** "You keep 3 of the 5 Food you need next month.": selling into next month's need is shown, never asked. */
+/** "You keep 3 of the 6 Food you must hold.": selling into what you must hold is shown, never asked. */
 export function keepWords(good: Good, have: number, need: number): string {
-  return `You keep ${have} of the ${need} ${GOOD_NAME[good]} you need next month.`;
+  return `You keep ${have} of the ${need} ${GOOD_NAME[good]} you must hold.`;
 }
 

@@ -410,6 +410,8 @@ export interface WalkerView {
   units: number;
   /** The house line they stand at ('store' or 'ship'), or null. Standing there, they trade with it by themselves (RULE-1). */
   line?: string | null;
+  /** A seller stopped at the amount they must hold (RULE-4): the phone says how to sell on. */
+  held?: true;
 }
 
 /** Units changing hands right now: between two players, or with the store or the ship ('store', 'ship'). */

@@ -294,6 +294,8 @@ export interface EventEffect {
   /** G-5 C26 adds 'mood' (moodShift's change), 'prestige' (lasting points), 'air' (the gauge) and 'reputation'. */
   what: Good | 'money' | 'mules' | 'colonists' | 'energyNeed' | 'mood' | 'prestige' | 'air' | 'reputation';
   delta: number;
+  /** The holder's count of `what` right after this effect, before anything later in the month moves it; absent means not reported. */
+  to?: number;
 }
 
 export interface MonthEvent {
@@ -432,6 +434,8 @@ export interface Project {
   plaque: Record<string, number>;
   /** The most the colony bids for this object's plot at the land auction; null, it does not bid. See G-5 RULE-28. */
   maxBid: number | null;
+  /** Its slot on the colony's own grounds, 0..COLONY.groundsSlots−1; null or absent holds none, as one sited on a map plot before (G-5 RULE-32). */
+  slot?: number | null;
 }
 
 export interface Colony {
@@ -584,6 +588,12 @@ export interface Walker {
   dir: -1 | 0 | 1;
   /** Board time (ms into the walk) when their rounded price last changed: who got there first. */
   since: number;
+  /** A seller stopped at the amount they must hold of this good (RULE-4): they sell nothing more until a hold of ▼ frees them. Survives a side switch. */
+  held?: true;
+  /** Board time when the current hold of ▼ began; cleared by any other walk intent, a tap or a stop. */
+  downSince?: number;
+  /** A stopped seller who held ▼ for WALK.shortHoldMs: sells into shortage for the rest of this good (RULE-4 row 2). */
+  sellsShort?: true;
 }
 
 /** A buyer and a seller, either of them perhaps a house (the store, the ship), exchanging units right now. */
