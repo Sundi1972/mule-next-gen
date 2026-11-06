@@ -588,9 +588,10 @@ export function playMonthFrom(start: GameState, seats: readonly MonthSeat[], see
 
 /**
  * playMonthFrom's month, one step at a time: it yields after every tick a decider may wait on, so a caller can let
- * other work run between steps, and returns what playMonthFrom returns. Its checks throw on the first step.
+ * other work run between steps, and returns what playMonthFrom returns. Its checks throw on the first step. `edits`
+ * edits a seat's draft at each phase's draft point, as PlayOptions.edits does in a whole game.
  */
-export function* monthSteps(start: GameState, seats: readonly MonthSeat[], seed: number, options: { walking?: boolean } = {}): Generator<void, MonthPlayed, void> {
+export function* monthSteps(start: GameState, seats: readonly MonthSeat[], seed: number, options: Pick<PlayOptions, 'walking' | 'edits'> = {}): Generator<void, MonthPlayed, void> {
   const month = start.phase === 'upkeep' ? start.month + 1 : start.month;
   for (const p of start.players) if (!seats.some((s) => s.id === p.id)) throw new Error(`No seat for player ${p.id}`);
   for (const s of seats) {
