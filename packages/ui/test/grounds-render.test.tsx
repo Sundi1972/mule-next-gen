@@ -52,6 +52,8 @@ function attrOf(tag: string, name: string): string | undefined {
   return tag.match(new RegExp(`\\s${name}="([^"]*)"`))?.[1];
 }
 
+const imagesIn = (html: string) => html.match(/<image[\s>]/g) ?? [];
+
 /** The picture's box in scene units, and the scene point its frame's centre pixel lands on. */
 function placed(tag: string, frame: GroundsManifest['frame']) {
   const [x, y, width, height] = ['x', 'y', 'width', 'height'].map((a) => Number(attrOf(tag, a)));
@@ -184,7 +186,7 @@ describe('ColonyGrounds · the colony drawn from its view', () => {
 
   it('B-AC-4: no manifest at all draws every place, the hall too, as its shape', () => {
     const html = grounds({ manifest: null });
-    expect(tagsWith(html, '<image')).toHaveLength(0);
+    expect(imagesIn(html)).toHaveLength(0);
     for (const n of ['hall', '1', '2', '3', '4']) expect(tagsWith(html, `data-testid="shape-${n}"`), `shape-${n}`).toHaveLength(1);
     expect(tagsWith(html, 'data-testid="scaffold"'), 'the stadium is shown being built').toHaveLength(1);
     expect(tagsWith(html, 'data-testid="site"'), 'the spaceport is shown as a site').toHaveLength(1);
