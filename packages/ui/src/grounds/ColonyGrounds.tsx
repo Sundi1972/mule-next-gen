@@ -3,6 +3,8 @@ import type { ObjectKind } from '../components/ObjectGlyph';
 import { useState, type ReactNode } from 'react';
 import { cx } from '../components/tokens';
 import { builtOf, HallShape, Lamp, PlaceShape, Tree } from './fallback';
+import { Glow, Walkers } from './LiveLayer';
+import { glowOpacity, walkersOut } from './live';
 import { centreOf, edgeDecoration, extentOf, MASSING, type EdgeProp, type GridPlace } from './layout';
 import { pick, type Frame, type GroundsManifest, type Light, type PictureKind, type PlaceState } from './pick';
 import { iso, poly, square, W } from './projection';
@@ -43,13 +45,30 @@ function hrefOf(src: string, { sizes }: GroundsManifest, size: ColonyGroundsProp
   return ART_BASE + src.replace(/@\d+(\.\w+)$/, `@${width}$1`);
 }
 
-/** A picture placed so its frame's centre pixel sits on the place's centre, one place `frame.place` px wide. */
-function Picture({ c, r, href, frame, testid, fallback }: { c: number; r: number; href: string; frame: Frame; testid: string; fallback: ReactNode }) {
+/** A lit picture's glow pass (RULE-2): its file and how strongly it shows. */
+interface Lit {
+  href: string;
+  opacity: number;
+  testid: string;
+}
+
+/**
+ * A picture placed so its frame's centre pixel sits on the place's centre, one place `frame.place` px wide, with its
+ * glow pass straight over it so nearer buildings still cover a farther one's light. A failed picture takes its glow
+ * with it: the fallback shape is never lit.
+ */
+function Picture({ c, r, href, frame, testid, fallback, lit }: { c: number; r: number; href: string; frame: Frame; testid: string; fallback: ReactNode; lit: Lit | null }) {
   const [failed, setFailed] = useState(false);
   if (failed) return <>{fallback}</>;
   const [x, y] = iso(c, r);
   const k = W / frame.place;
-  return <image href={href} x={x - frame.centre[0] * k} y={y - frame.centre[1] * k} width={frame.width * k} height={frame.height * k} data-testid={testid} onError={() => setFailed(true)} />;
+  const box = { x: x - frame.centre[0] * k, y: y - frame.centre[1] * k, width: frame.width * k, height: frame.height * k };
+  return (
+    <>
+      <image href={href} {...box} data-testid={testid} onError={() => setFailed(true)} />
+      {lit && <Glow key={lit.href} href={lit.href} opacity={lit.opacity} box={box} testid={lit.testid} />}
+    </>
+  );
 }
 
 /** The place's number and its stage chip, over the place; `words` sizes it for the TV. */
@@ -82,7 +101,8 @@ const HALL_PLACE: PlaceState = { stage: 'standing', monthsLeft: null, buildMonth
 
 /**
  * The grounds as one SVG, back to front (painter's order): the land and plaza sized to the rings in use, the far edge's
- * trees, the hall and the places by col + row so nearer buildings cover farther ones, the near edge, then the callouts.
+ * trees, the hall and the places by col + row so nearer buildings cover farther ones (each with its glow at dusk), the
+ * colonists on the paths, the near edge, then the callouts.
  */
 export function ColonyGrounds({ colony, size, manifest, light = 'day', className }: ColonyGroundsProps) {
   const placed = colony.projects.flatMap((p, i) => (p.place ? [{ p, n: i + 1, block: p.place, ...centreOf(p.place) }] : []));
@@ -100,13 +120,18 @@ export function ColonyGrounds({ colony, size, manifest, light = 'day', className
   const prop = (d: EdgeProp, k: string) => (d.kind === 'tree' ? <Tree key={k} c={d.col} r={d.row} /> : <Lamp key={k} c={d.col} r={d.row} on={mood >= 50} />);
   const vb = { x: -(land + 0.1) * W, y: -(land * W) / 2 - 1.15 * W, w: 2 * (land + 0.1) * W, h: land * W + 1.3 * W };
 
-  const drawn = (kind: PictureKind, place: PlaceState, c: number, r: number, testid: string, fallback: ReactNode) => {
+  const walkers = walkersOut({ happiness: mood, standing, strike: !!colony.strike && !colony.strike.paid });
+
+  const drawn = (kind: PictureKind, place: PlaceState, c: number, r: number, id: string, fallback: ReactNode) => {
     const picked = pick(kind, place, light, manifest);
     if (picked.shows === 'shape' || !manifest) return fallback;
     const frame = manifest.pictures[kind]?.frame ?? manifest.frame;
     const href = hrefOf(picked.src, manifest, size);
+    const glow = manifest.pictures[kind]?.[picked.stage]?.glow;
+    const opacity = glowOpacity({ light, stage: place.stage, wealth: colony.gauges.wealth });
+    const lit = glow && opacity > 0 ? { href: hrefOf(glow, manifest, size), opacity, testid: `glow-${id}` } : null;
     // Keyed by its picture, so a load that failed for one stage never keeps the next stage's picture on the fallback.
-    return <Picture key={href} c={c} r={r} href={href} frame={frame} testid={testid} fallback={fallback} />;
+    return <Picture key={href} c={c} r={r} href={href} frame={frame} testid={`picture-${id}`} fallback={fallback} lit={lit} />;
   };
 
   return (
@@ -130,13 +155,14 @@ export function ColonyGrounds({ colony, size, manifest, light = 'day', className
         ])}
       {edge.filter((d) => d.col + d.row < 0).map((d, i) => prop(d, `b${i}`))}
       {scene.map(({ n, p, block, col: c, row: r }) => {
-        if (!p || !block) return <g key="hall">{drawn('hall', HALL_PLACE, 0, 0, 'picture-hall', <HallShape mood={mood} />)}</g>;
+        if (!p || !block) return <g key="hall">{drawn('hall', HALL_PLACE, 0, 0, 'hall', <HallShape mood={mood} />)}</g>;
         return (
           <g key={n} data-testid={`place-${n}`} data-stage={p.stage}>
-            {drawn(p.id, p, c, r, `picture-${n}`, <PlaceShape id={p.id} place={p} c={c} r={r} span={Math.min(block.w, block.h)} mood={mood} testid={`shape-${n}`} />)}
+            {drawn(p.id, p, c, r, String(n), <PlaceShape id={p.id} place={p} c={c} r={r} span={Math.min(block.w, block.h)} mood={mood} testid={`shape-${n}`} />)}
           </g>
         );
       })}
+      <Walkers count={walkers} rim={R + 0.85} />
       <g pointerEvents="none">{edge.filter((d) => d.col + d.row >= 0).map((d, i) => prop(d, `f${i}`))}</g>
       {placed.sort(inBack).map(({ n, p, col, row }) => (
         <Callout key={`c${n}`} n={n} p={p} c={col} r={row} words={size === 'tv'} />
