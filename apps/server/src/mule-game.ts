@@ -1640,6 +1640,7 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
             species: me.species,
             stock: me.stock,
             carriedMule: me.carriedMule,
+            ...(me.carriedMule && me.takenMule?.swapped && { leadsSwapped: true as const }),
             claimsLeft: GAME.claimsPerGrant - me.claimsThisGrant,
             hungry: me.hungry,
             sick: me.sick,
