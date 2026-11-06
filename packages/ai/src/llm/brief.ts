@@ -262,17 +262,22 @@ function plotOutputLines(obs: GameState, me: PlayerId): string[] {
 /**
  * Food and Energy in units: what the seat holds and its own plots made at the last production (a plant's output net of
  * its own use, as value.ts ownSupply counts it), against what the engine says it burns (monthNeeds): its household's
- * Food at upkeep, its plots' and works' Energy at production.
+ * Food at upkeep, its plots' and works' Energy at production. What the plots make counts where it comes before the
+ * burn: Energy always (plants run first in production); Food only before production (the land brief, at upkeep), since
+ * after it (the auction brief) this month's Food is in what the seat holds, and upkeep eats next.
  */
-function feedLine(obs: GameState, me: PlayerId): string {
+function feedLine(obs: GameState, me: PlayerId, afterProduction: boolean): string {
   const p = obs.players.find((q) => q.id === me)!;
   const made = obs.history.at(-1)?.produced[me] ?? emptyStock();
   const need = monthNeeds(obs, me);
   const verdict = (held: number, makes: number, needs: number) => (held + makes >= needs ? 'covered' : `short by ${needs - held - makes}`);
   const food = ownSupply(obs, me, made, 'food');
   const energy = ownSupply(obs, me, made, 'energy');
+  const foodText = afterProduction
+    ? `Food — you hold ${p.stock.food}, the ${food} your plots made at the last production included, against ${need.food} your household eats a month: ${verdict(p.stock.food, 0, need.food)}`
+    : `Food — you hold ${p.stock.food} and your plots made ${food} at the last production, against ${need.food} your household eats a month: ${verdict(p.stock.food, food, need.food)}`;
   return (
-    `Food and Energy in units: Food — you hold ${p.stock.food} and your plots made ${food} at the last production, against ${need.food} your household eats a month: ${verdict(p.stock.food, food, need.food)}; ` +
+    `Food and Energy in units: ${foodText}; ` +
     `Energy — you hold ${p.stock.energy} and your plants made ${energy} beyond their own use, against ${need.energy} your plots and works use a production: ${verdict(p.stock.energy, energy, need.energy)}.`
   );
 }
@@ -295,7 +300,7 @@ function muleLine(obs: GameState, me: PlayerId): string {
 }
 
 /** What the seat's plots made, and its Food and Energy in units: the land and auction briefs' (B fix 3). */
-const madeLines = (obs: GameState, me: PlayerId) => [...plotOutputLines(obs, me), feedLine(obs, me), ''];
+const madeLines = (obs: GameState, me: PlayerId, afterProduction: boolean) => [...plotOutputLines(obs, me), feedLine(obs, me, afterProduction), ''];
 
 /**
  * The land plans' "Feeds me" reason counts plots, not units (strategist.ts landDecision: a Food plot and an Energy plot
@@ -395,7 +400,7 @@ export function landBrief(
     'Who owns the land:',
     ...ownership(obs, mind.me),
     '',
-    ...madeLines(obs, mind.me),
+    ...madeLines(obs, mind.me, false),
     priceLine(obs, state.history),
     `Store stock: ${GOODS.map((g) => `${GOOD_NAME[g]} ${obs.store.stock[g]}`).join(', ')}.`,
     muleLine(obs, mind.me),
@@ -501,7 +506,7 @@ export function phaseBrief(state: GameState, mind: Mind, persona: Persona, draft
     'Who owns the land:',
     ...ownership(obs, mind.me),
     '',
-    ...(phase === 'auction' ? madeLines(obs, mind.me) : []),
+    ...(phase === 'auction' ? madeLines(obs, mind.me, true) : []),
     priceLine(obs, state.history),
     `Store stock: ${GOODS.map((g) => `${GOOD_NAME[g]} ${obs.store.stock[g]}`).join(', ')}.`,
     shipLine(obs),
