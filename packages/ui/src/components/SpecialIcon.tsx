@@ -34,8 +34,9 @@ export function SpecialIcon({ kind, size = 16, className }: SpecialIconProps) {
 }
 
 /**
- * The badge's size per density, in screen pixels: the TV's size, and the phone's cap (see specialBadgeBox). DS-GAP: there are no size tokens for map marks; HoloMap writes
- * each mark's size per density inline (PlayerMark 7/12, GoodIcon 10/20), and these follow that precedent.
+ * The badge's size per density, in screen pixels: the TV's size, and the phone's cap (see specialBadgeBox). DS-GAP:
+ * there are no size tokens for map marks; HoloMap writes each mark's size per density inline (PlayerMark 7/12,
+ * GoodIcon 10/20), and these follow that precedent.
  */
 export const SPECIAL_BADGE = { phone: { box: 15, icon: 10, ring: 1.6 }, tv: { box: 21, icon: 14, ring: 2.2 } } as const;
 
