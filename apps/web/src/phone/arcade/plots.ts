@@ -51,7 +51,7 @@ function fit(t: TileView, good: Outfit): number {
   if (t.ground) return groundDots(raw, t.ground[raw]);
   const odds = oddsOf(t);
   if (!odds) return 0;
-  // The odds run none..veryHigh (0..4); held to the dots' 3, so a guess at most ties an analysed plot, never beats it.
+  // The odds run none..veryHigh (0..4); held to the dots' 3, so a guess at most ties an analysed 3-dot plot, never beats it.
   if (raw === 'smithore') return Math.min(3, Object.keys(MINERAL_ODDS).indexOf(odds.mined.smithore));
   if (raw === 'crystite' || raw === 'rareEarth') return 2;
   const o = odds.grown[raw];
