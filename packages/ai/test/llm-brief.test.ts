@@ -3,8 +3,8 @@ import { AI_LEVELS, AI_PERSONAS, allPrices, BRAIN, createGame, GOODS, type GameS
 import { PERSONAS } from '../src/personas.js';
 import { GOOD_NAME } from '../src/strategist.js';
 import type { Mind } from '../src/value.js';
-import { landBrief } from '../src/llm/brief.js';
-import type { Feedback } from '../src/llm/writer.js';
+import { landBrief, phaseBrief } from '../src/llm/brief.js';
+import { replySchema, type Feedback } from '../src/llm/writer.js';
 import type { LandDraft } from '../src/playbook/index.js';
 
 /** Stock counts no game reaches, one per seat, so a leak into another seat's brief is unmistakable. */
@@ -250,6 +250,44 @@ describe("C1 (PM ruling, 5 Nov, option C): the month's land brief also carries t
     expect(brief.text).not.toContain('Your draft development:');
     expect(brief.text).not.toContain('/development/');
     expect(brief.offers.map((o) => o.path)).toEqual(['/landGrant/ranked', '/landGrant/claims', '/landGrant/pressShare']);
+  });
+});
+
+/**
+ * The ten playbook fields play never reads (WS9 ruling, 6 Nov, via the PM), as Claude would meet them: a path's last
+ * key, a field name, or a draft line's label. None may reach a brief, its offers or its reply schema.
+ */
+const UNREAD = /\b(claims|deny|planB|pair|landTarget|stances|buyOutStore|forShip|cashFloor|pressShare|monopolyTarget)\b|Press share|Plan B|Claims:|Deny:|Pair:/;
+
+describe('B fix 5: Claude is offered and shown only the settings play reads (WS9 ruling, 6 Nov)', () => {
+  const DEV: DevelopmentPlay = { route: [{ act: 'buyMule' }, { act: 'install', plot: 12 }], timeBudgetMs: 25_000, ifSoldOut: 'pub' };
+  // A draft whose unread fields all carry something, so a line that still showed one would show it.
+  const full = (): LandDraft => ({
+    strategy: { ...STRATEGY, monopolyTarget: 'smithore', cashFloor: 345, stances: { p1: 'rival' } },
+    landGrant: { ...draftOf(12).landGrant, deny: [{ plot: 3, rival: 'p1', maxCost: 99 }], planB: [4, 5], pair: [12, 13] },
+  });
+
+  it.each(['rookie', 'trader'] as const)('B fix 5: a %s land brief offers only the ranking and the development, and its text and reply schema name none of the ten fields', (level) => {
+    const brief = landBrief(table(), mindOf('p0', level), PERSONAS.trader, full(), TALK, {}, DEV);
+    expect(brief.offers.map((o) => o.path)).toEqual(['/landGrant/ranked', '/development/route', '/development/timeBudgetMs', '/development/ifSoldOut']);
+    expect(brief.text).not.toMatch(UNREAD);
+    expect(brief.text).not.toContain('345');
+    const schema = replySchema(brief.corners, brief.offers, brief.strategyOffered);
+    expect(Object.keys(schema.properties.strategy!.properties)).toEqual(['kind', 'moneyMaker', 'reason']);
+    expect(JSON.stringify(schema)).not.toMatch(UNREAD);
+  });
+
+  it('B fix 5: the development and auction briefs show the strategy without the unread fields', () => {
+    const state = table();
+    const { strategy } = full();
+    const base = { v: 1 as const, seat: 'p0', month: 1, strategy, by: 'engine' as const };
+    const dev = phaseBrief(state, mindOf('p0'), PERSONAS.trader, { ...base, phase: 'development', development: DEV }, 'development', TALK);
+    const food = { role: 'seller' as const, hold: 4, walkAway: 20, start: 40, concedeCrPerS: 2, bluff: false, vsRival: 'hold' as const };
+    const auction = phaseBrief(state, mindOf('p0'), PERSONAS.trader, { ...base, phase: 'auction', auction: { food } }, 'auction', TALK);
+    for (const b of [dev, auction]) {
+      expect(b.text).toContain(`Your strategy: builder, moneyMaker ${GOOD_NAME.food}.`);
+      expect(b.text).not.toMatch(UNREAD);
+    }
   });
 });
 

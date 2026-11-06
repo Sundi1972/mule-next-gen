@@ -148,6 +148,23 @@ describe('the manual of moves', () => {
     expect(defaultManual()).not.toContain('never aims for a monopoly');
   });
 
+  it("B fix 5: the writer's system text and every seat's bounds name no playbook field Claude cannot edit or play does not read (WS9 ruling, 6 Nov)", () => {
+    const unread = /monopolyTarget|cashFloor|pressShare|landTarget|stances|buyOutStore|forShip|LandGrantPlay\.(claims|deny|planB|pair)|GoodPlay\.(bluff|vsRival|per|market)\b|PlanningPlay\./;
+    expect(WRITER_SYSTEM).not.toMatch(unread);
+    for (const level of Object.values(AI_LEVELS)) expect(seatBounds(level)).not.toMatch(unread);
+    // The fields the writer is offered: the ranking, the strategy's kind, moneyMaker and reason, the route and the auction's five.
+    const offered = /^(LandGrantPlay\.ranked|Strategy\.(kind|moneyMaker|reason)|DevelopmentPlay\.(route|timeBudgetMs|ifSoldOut)|GoodPlay\.(role|hold|walkAway|start|concedeCrPerS))$/;
+    for (const line of ADVICE) expect(line.field).toMatch(offered);
+  });
+
+  it('B fix 5: an advice line naming a playbook field the writer is not offered fails, as one naming no field does', () => {
+    const when = () => 'when it is a good idea';
+    for (const field of ['LandGrantPlay.claims', 'LandGrantPlay.deny', 'Strategy.monopolyTarget', 'Strategy.cashFloor', 'GoodPlay.market', 'LandGrantPlay.pressShare']) {
+      const line = { move: 'claim', field, when } as AdviceLine;
+      expect(() => defaultManual([...ADVICE, line]), field).toThrow(field);
+    }
+  });
+
   it("T-AC-A7: the default config's manual is pinned, so the cached system block moves only with the config", () => {
     expect(defaultManual()).toMatchSnapshot();
   });

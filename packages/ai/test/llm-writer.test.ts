@@ -260,3 +260,31 @@ describe('C2: the request and the reply', () => {
     expect(JSON.stringify(replySchema(false))).toBe(JSON.stringify(replySchema(false)));
   });
 });
+
+describe('B fix 5: an edit to a setting play does not read is refused as not offered (WS9 ruling, 6 Nov)', () => {
+  it.each(['rookie', 'trader'] as const)("B fix 5: a %s reply that edits /landGrant/claims or /strategy/cashFloor has both refused 'path_not_offered', unnamed, and validate sees only the ranking", async (level) => {
+    const text = JSON.stringify({
+      edits: [
+        { path: '/landGrant/claims', to: 1, reason: 'One plot will do.' },
+        { path: '/strategy/cashFloor', to: 150, reason: 'Keep some back.' },
+        { path: '/landGrant/ranked', to: 'A', reason: 'Grow a patch.' },
+      ],
+      line: '',
+    });
+    const { written, v } = await write(level, text);
+    // A path is named in a refusal only when some brief offers it: no brief offers these any more.
+    expect(written.refused).toEqual([
+      { path: null, cause: 'path_not_offered' },
+      { path: null, cause: 'path_not_offered' },
+    ]);
+    expect(paths(v.seen[0]!)).toEqual(['/landGrant/ranked']);
+  });
+
+  it("B fix 5: a reply whose strategy still carries cashFloor or monopolyTarget, outside the schema, is not the schema's shape: nothing of it plays", async () => {
+    for (const over of [{ cashFloor: 150 }, { monopolyTarget: 'smithore' }]) {
+      const { written, made } = await write('trader', replyText({ strategy: strategyReply(over), edits: [{ path: '/landGrant/ranked', to: 'A', reason: 'Grow.' }] }));
+      expect(written.reply.cause).toBe('bad_shape');
+      expect(made.playbook).toEqual(ENGINE);
+    }
+  });
+});
