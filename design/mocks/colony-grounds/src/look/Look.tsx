@@ -91,7 +91,7 @@ export function Look() {
         </div>
         <div className="max-w-5xl rounded-panel border border-holo bg-panel p-4 text-lg leading-snug" data-testid="answer">
           <p>
-            <strong>Yes, it can look like a real place.</strong> Model each building once in Blender from free (CC0) parts and
+            <strong>Heiko ruled this direction on 6 Nov (C, free assets for now).</strong> Model each building once in Blender from free (CC0) parts and
             materials, and show it as a <strong>pre-rendered picture (C)</strong> with a <strong>live layer</strong> on top: lamps that
             come on as the colony gets richer, colonists who come out when the mood is good, smoke, rain, and dusk falling at the
             month end. That works on every phone and TV. The same models turn into <strong>live 3D (B)</strong> for the TV later,
