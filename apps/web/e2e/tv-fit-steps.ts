@@ -438,9 +438,19 @@ export async function theAuctionTvFits(tv: Page, server: MuleServer, code: strin
       check(a.walkers.length >= 2, `TV-FIT: a held box needs two walkers at least, got ${a.walkers.length}`);
       // The longest name is held last, so it is the newest and has the card: the words most likely to be cut.
       const longest = a.walkers.find((w) => w.id === p.id)!;
-      for (const w of a.walkers) if (w !== longest) Object.assign(w, { side: 'seller', held: true });
+      // Step 1: everyone else held, the longest a buyer and not held, and the TV seen to draw exactly that, so step 2's
+      // seller is new to the TV and goes on top (a game that had held someone already cannot reorder it).
+      for (const w of a.walkers) Object.assign(w, w === longest ? { side: 'buyer' } : { side: 'seller', held: true });
+      delete (longest as { held?: true }).held;
       (room as unknown as { broadcast(): void }).broadcast();
-      await tv.locator('[data-testid^=tv-held-]').first().waitFor({ timeout: 2_000 });
+      await tv.waitForFunction(
+        ([longestId, marks]) =>
+          !document.querySelector(`[data-testid=tv-held-${longestId}]`) &&
+          document.querySelectorAll('[data-testid^=tv-held-]:not([data-testid=tv-held-others])').length === 1 &&
+          document.querySelectorAll('[data-testid=tv-held-others] [role=img]').length === marks,
+        [p.id, a.walkers.length - 2] as const,
+        { timeout: 2_000 },
+      );
       Object.assign(longest, { side: 'seller', held: true });
       (room as unknown as { broadcast(): void }).broadcast();
       await tv.locator(`[data-testid=tv-held-${p.id}]`).waitFor({ timeout: 2_000 });

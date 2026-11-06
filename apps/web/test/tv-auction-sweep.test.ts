@@ -236,7 +236,7 @@ describe('B-AC-B1 (TV, WS4): the TV says who keeps what they must hold', () => {
     expect(card).toMatch(/<span aria-hidden="true"[^>]*><span role="img"[^>]*aria-label="The Big Spender"/);
   });
 
-  it('B-AC-B1: with several held, the newest is in the card and the others are their marks in one row that says so', () => {
+  it('B-AC-B1: with several held, the newest is in the card and the others are their marks in one box that says so', () => {
     const html = tvScreen(tvView({ ...alloyWalk, walkers: [held(walker('s1', 'seller', 81, 1)), held(walker('s2', 'seller', 81, 2)), held(walker('s3', 'seller', 81, 4)), alloy[3]!] }));
     expect(textOf(inside(html, 'tv-held-s1'))).toBe('Heiko keeps 1 Alloy what they must hold');
     const others = inside(html, 'tv-held-others');
