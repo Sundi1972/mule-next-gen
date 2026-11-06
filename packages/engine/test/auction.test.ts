@@ -9,6 +9,7 @@ import {
   auctionNeed,
   advancePhase,
   auctionDone,
+  cloneForSim,
   createGame,
   declareRole,
   endAuction,
@@ -844,6 +845,19 @@ describe("price T-AC-3: when a good's walk finishes, the store keeps its sold-ou
     emptyShelf(state);
     tradeBetween(state, 90);
     expect(finish(state)).toEqual({ soldOutHigh: 90, highTrade: 100, dryBudget: false });
+  });
+
+  it("price T-AC-3: the game keeps its lesson while an AI's what-if copy (cloneForSim) plays the next walk", () => {
+    const state = smithoreWalk(1, 0);
+    tradeBetween(state, 100);
+    emptyShelf(state);
+    tradeBetween(state, 90);
+    finish(state);
+    endAuction(state);
+    const sim = cloneForSim(state);
+    startAuction(sim, ['smithore']);
+    expect(a(sim).good).toBe('smithore');
+    expect(state.store.lastWalk).toEqual({ smithore: { soldOutHigh: 90, highTrade: 100, dryBudget: false } });
   });
 
   it.each([
