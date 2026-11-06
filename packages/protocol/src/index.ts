@@ -48,8 +48,6 @@ export type MuleIntent =
   | { type: 'repair'; id: PrestigeId }
   /** Planning, after the votes: the Governor pays this month's general strikers from the fund. */
   | { type: 'payStrike' }
-  /** Planning, after the votes: the Governor's top bid for a waiting object's plot; null, the colony does not bid. */
-  | { type: 'setSiteBid'; id: PrestigeId; maxBid: number | null }
   /** Planning, once the votes are over: the Governor puts a law, a new setting or a repeal to the next planning's ballot; null withdraws it. */
   | { type: 'propose'; proposal: LawProposal | null }
   /** The law ballot: yes or no; a later vote replaces it until the ballot closes. */
@@ -600,7 +598,7 @@ export interface EventView {
   }[];
   /** What it changed off the map, in the order it changed it: a player's (by id), the store's or the colony's. */
   effects?: EventEffect[];
-  /** The colony's objects it damaged (a riot): with a plot, the plot is among its hits. */
+  /** The colony's objects it damaged (a riot). */
   objects?: { id: PrestigeId; becomes: 'damaged' }[];
   /** The phase whose show plays it. */
   phase: Phase;
@@ -715,8 +713,6 @@ export interface ColonyProjectView {
   buildMonths: number;
   /** Upkeeps left until it stands; null unless building. */
   monthsLeft: number | null;
-  /** Its tile index, for an object that needs one; null until sited. */
-  plot: number | null;
   prestige: number;
   /** Credits a month while it stands. */
   upkeep: number;
@@ -724,8 +720,6 @@ export interface ColonyProjectView {
   repairCost: number | null;
   /** Donors, largest first: credits plus goods at reference price. */
   plaque: { playerId: string; value: number }[];
-  /** The colony's top bid for this object's plot at the land auction; null, it does not bid. Optional, so views built before it still type. */
-  maxBid?: number | null;
 }
 
 /** One object the Governor could commission, and why not when they can't now. */
@@ -735,7 +729,6 @@ export interface ColonyCatalogueView {
   credits: number;
   goods: Partial<Record<Good, number>>;
   buildMonths: number;
-  needsPlot: boolean;
   prestige: number;
   upkeep: number;
   commissionable: boolean;

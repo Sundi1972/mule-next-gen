@@ -408,7 +408,7 @@ export interface GameState {
 /** Where money comes into the colony fund from. */
 export type FundSource = 'salesTax' | 'federationTax' | 'exportTax' | 'landTax' | 'pollutionTax' | 'donation' | 'grant';
 /** What the colony fund pays out for. */
-export type FundLine = 'officePay' | 'project' | 'upkeep' | 'repair' | 'strikePay' | 'siteBid';
+export type FundLine = 'officePay' | 'project' | 'upkeep' | 'repair' | 'strikePay';
 
 /** One month's money into and out of the colony fund. */
 export interface FundLedger {
@@ -426,15 +426,11 @@ export interface Project {
   funded: { credits: number; goods: Partial<Record<Good, number>> };
   /** Upkeeps left until it stands; null unless building. */
   monthsLeft: number | null;
-  /** The tile it stands on, for an object that needs one; null until sited. */
-  plot: number | null;
   /** The month it was commissioned. */
   since: number;
   /** Each donor's credits plus goods at reference price. */
   plaque: Record<string, number>;
-  /** The most the colony bids for this object's plot at the land auction; null, it does not bid. See G-5 RULE-28. */
-  maxBid: number | null;
-  /** Its slot on the colony's own grounds, 0..COLONY.groundsSlots−1; null or absent holds none, as one sited on a map plot before (G-5 RULE-32). */
+  /** Its place on the colony's own grounds, 0..COLONY.groundsSlots−1, in growth order (G-5 RULE-32); null or absent holds none. */
   slot?: number | null;
 }
 
