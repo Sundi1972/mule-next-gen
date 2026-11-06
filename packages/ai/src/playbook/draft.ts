@@ -36,7 +36,7 @@ import { outlook, productionsLeft, type Outlook } from '../outlook.js';
 import { PERSONAS, type DecisionKind } from '../personas.js';
 import { analysesWanted, developDecision, filtersWanted, goodPlan, landDecision, leaderOf, sellWanted, shortfallHold, tradeDecision, walkVeto, type DevAction, type DevWalk, type LandPlan } from '../strategist.js';
 import { candidate, shortlist, type Shortlist } from '../utility.js';
-import { beforeTax, canFeed, cashReserve, chainLinks, chainOutlook, installGain, type Mind } from '../value.js';
+import { beforeTax, canFeed, cashReserve, chainLinks, chainOutlook, installGain, linkShare, type Mind } from '../value.js';
 import { landTargetWithin, planMind, type PlanFields } from './plan.js';
 import type { ReplanTrigger } from './replan.js';
 
@@ -160,10 +160,11 @@ function goodScores(obs: GameState, mind: Mind) {
 const topGains = (gains: number[]) => [...gains].sort((a, b) => b - a).slice(0, AI_PLANS.moneyMaker.plots).reduce((n, g) => n + g, 0);
 
 /**
- * RULE-4's chain row: the works' own score, its input charge refunded, plus each link's best plot at its running cost
- * (chainOutlook). The best works plot and each link take a plot of their own; null when `good` is no chain
- * (chainLinks), the plots run short, or the chain's MULEs don't fit in AI_PLANS.chain.months at the level's MULEs a
- * month, or cost more than the cash on hand.
+ * RULE-4's chain row: the works' own score, its input charge refunded (chainOutlook) and scaled by the least share of
+ * its run a link supplies (linkShare), plus each link plot at its running cost. The best works plot and each link take
+ * a plot of their own, a link the one where it adds most to the chain; null when `good` is no chain (chainLinks), the
+ * plots run short, or the chain's MULEs don't fit in AI_PLANS.chain.months at the level's MULEs a month, or cost more
+ * than the cash on hand.
  */
 function chainScore(obs: GameState, o: Outlook, plots: Tile[], good: Good, mind: Mind): number | null {
   const links = chainLinks(obs, mind.me, good);
@@ -172,15 +173,21 @@ function chainScore(obs: GameState, o: Outlook, plots: Tile[], good: Good, mind:
   const valued = chainOutlook(o, links);
   const works = plots.map((t) => ({ t, ...installGain(obs, valued, t, good, mind) })).sort((a, b) => b.gain - a.gain);
   const taken = new Set([works[0]!.t]);
-  let gain = topGains(works.map((w) => w.gain));
+  const members = [good, ...links];
+  let running = 0;
+  let share = 1;
   let cost = works[0]!.cost;
   for (const link of links) {
-    const at = plots.filter((t) => !taken.has(t)).map((t) => ({ t, ...installGain(obs, valued, t, link, mind) })).reduce((b, w) => (w.gain > b.gain ? w : b));
+    const at = plots
+      .filter((t) => !taken.has(t))
+      .map((t) => ({ t, share: linkShare(obs, t, link, members, mind.me), ...installGain(obs, valued, t, link, mind) }))
+      .reduce((b, w) => (w.gain + w.share * works[0]!.gain > b.gain + b.share * works[0]!.gain ? w : b));
     taken.add(at.t);
-    gain += at.gain;
+    running += at.gain;
+    share = Math.min(share, at.share);
     cost += at.cost;
   }
-  return cost <= obs.players.find((p) => p.id === mind.me)!.money ? gain : null;
+  return cost <= obs.players.find((p) => p.id === mind.me)!.money ? topGains(works.map((w) => w.gain)) * share + running : null;
 }
 
 function best<T extends { score: number }>(rows: T[]): T | null {
