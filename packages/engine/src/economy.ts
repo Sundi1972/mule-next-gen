@@ -59,7 +59,7 @@ export function monthlyDemand(state: GameState, festival = festivalFood(state)):
   demand.crystite = 0;
   const electronics = state.colonists / UPKEEP.colonistsPerElectronics;
   demand.electronics = electronics;
-  // The larger, not the sum: the works and the colonists' want are the same Electronics. See needs C17 (AM).
+  // The larger, not the sum: the works and the colonists' want are the same Electronics. See needs AM-2.
   for (const input of ['rareEarth', 'alloy'] as const) {
     const perElectronics = RECIPES.electronics.inputs[input] ?? 0;
     demand[input] = Math.max(factories('electronics'), electronics) * perElectronics;

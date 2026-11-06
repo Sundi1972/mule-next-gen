@@ -83,17 +83,13 @@ describe('needs C17: the colonists want Electronics, and so its inputs', () => {
     return { rareEarth: d.rareEarth - off.rareEarth, alloy: d.alloy - off.alloy };
   }
 
-  it('needs C17 (AM): 200 colonists and 4 Electronics works ask 4 Rare earth and 4 Alloy, not 8', () => {
+  it.each([
+    { name: '0 works 4', works: 0, want: 4 },
+    { name: '4 works 4', works: 4, want: 4 },
+    { name: '6 works 6', works: 6, want: 6 },
+  ])('needs C17 AM-2: with 200 colonists the inputs ask max(works, E × recipe): $name', ({ works, want }) => {
     expect(RECIPES.electronics.inputs, 'the premise: a works takes one Rare earth and one Alloy a month').toMatchObject({ rareEarth: 1, alloy: 1 });
 
-    expect(inputsAsked(200, 4)).toEqual({ rareEarth: 4, alloy: 4 });
-  });
-
-  it('needs C17 (AM): 50 colonists want 1 Electronics, and 4 works making for export still ask their 4 Rare earth and 4 Alloy', () => {
-    expect(inputsAsked(50, 4)).toEqual({ rareEarth: 4, alloy: 4 });
-  });
-
-  it('needs C17 (AM): 200 colonists and no works still ask the 4 their Electronics would take', () => {
-    expect(inputsAsked(200, 0)).toEqual({ rareEarth: 4, alloy: 4 });
+    expect(inputsAsked(200, works)).toEqual({ rareEarth: want, alloy: want });
   });
 });
