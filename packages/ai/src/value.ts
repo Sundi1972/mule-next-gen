@@ -449,6 +449,24 @@ function experienceMissed(obs: GameState, tile: Tile): number {
  * last on what is left, so their units come last.
  */
 function energyUnits(obs: GameState, o: Outlook, mind: Mind): number[] {
+  return cached(o, `energy:${mind.me}`, () => energyUnitsOf(obs, o, mind));
+}
+
+/**
+ * Damage rows the model reads many times in one decision, kept for the outlook they were read with: an outlook is
+ * built for one decision on one observation, so the rows can't go stale.
+ */
+const rows = new WeakMap<Outlook, Map<string, number[]>>();
+
+function cached(o: Outlook, key: string, make: () => number[]): number[] {
+  let at = rows.get(o);
+  if (!at) rows.set(o, (at = new Map()));
+  let row = at.get(key);
+  if (!row) at.set(key, (row = make()));
+  return row;
+}
+
+function energyUnitsOf(obs: GameState, o: Outlook, mind: Mind): number[] {
   const me = mind.me;
   // Next month's production: no cold snap is known ahead, so every use counts once.
   const order = energyOffOrder(obs, me, 1);
@@ -490,6 +508,10 @@ function inputWorth(obs: GameState, o: Outlook, good: Good, me: string): number 
  * share of the run. Each household unit is worth the household's damage over the household's units.
  */
 function heldDamage(obs: GameState, o: Outlook, good: Good, mind: Mind, need: UnitNeed): number[] {
+  return cached(o, `held:${mind.me}:${mind.levelId}:${good}:${need.sure}:${need.target}`, () => heldDamageOf(obs, o, good, mind, need));
+}
+
+function heldDamageOf(obs: GameState, o: Outlook, good: Good, mind: Mind, need: UnitNeed): number[] {
   const me = mind.me;
   const keepRate = 1 - GOOD_CONFIG[good].spoilage;
   if (good === 'energy') {
