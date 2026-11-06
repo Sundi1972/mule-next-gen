@@ -9,6 +9,7 @@ import {
   needsOf,
   observe,
   PRICE,
+  STRATEGIST,
   UPKEEP,
   type GameState,
   type Good,
@@ -18,7 +19,7 @@ import {
 import { outlook, type Outlook } from '../src/outlook.js';
 import { AiSeat } from '../src/seat.js';
 import { goodPlan, tradeDecision, wholeNextMonth } from '../src/strategist.js';
-import { cashPlan, shortCosts, unitNeed, unitValues, type Mind, type UnitValues } from '../src/value.js';
+import { cashPlan, monthlyNet, shortCosts, unitNeed, unitValues, yieldOf, type Mind, type UnitValues } from '../src/value.js';
 
 /**
  * The resource-utility model's rule rows, on the pure functions: a unit's value is the chance it is needed times what
@@ -117,16 +118,17 @@ describe('RULE-2: what going without a unit costs', () => {
     expect(S).toEqual([lost(made, 200, 2), lost(made, 200, 2), lost(3, 80, 1), lost(3, 80, 1)]);
   });
 
-  it('T-AC-6: with spoilage, every unit of the target keeps a plot on: the furnace first, a farm last', () => {
+  it('T-AC-6: with spoilage, each held unit covers the share of a unit of use that survives: the furnace first, a farm last', () => {
     const { obs, o } = view(table({ plots: [FURNACE, ...FARMS], posted, stock: { smithore: 2 } }));
     const target = wholeNextMonth(obs, 'ai0', 'energy');
     expect(target, 'the premise: spoilage raises the target over the use of 4').toBeGreaterThan(4);
+    const keep = 1 - GOOD_CONFIG.energy.spoilage;
 
     const S = shortCosts(obs, o, 'energy', mindOf(), target);
 
-    expect(S.slice(0, 2)).toEqual([lost(made, 200, 2), lost(made, 200, 2)]);
-    expect(S.at(-1)).toBe(lost(3, 80, 1));
-    for (const s of S) expect([lost(made, 200, 2), lost(3, 80, 1)]).toContain(s);
+    expect(S.slice(0, 2)).toEqual([lost(made, 200, 2) * keep, lost(made, 200, 2) * keep]);
+    expect(S.at(-1)).toBe(lost(3, 80, 1) * keep);
+    for (const s of S) expect([lost(made, 200, 2) * keep, lost(3, 80, 1) * keep]).toContain(s);
   });
 
   it('T-AC-6: a furnace short of its experience makes 2 and misses the experience month as well', () => {
@@ -220,8 +222,12 @@ describe('RULE-3: the chance the seat needs the k-th unit', () => {
     const S = shortCosts(obs, o, 'energy', mind, target).sort((a, b) => b - a);
     const q = Math.min(1, AI_VALUE.forecastRisk * mind.persona.risk);
 
+    // What a unit fetches next month: today's price after spoilage and the forecast's risk (no sales tax here).
+    const carry = 20 * (1 - GOOD_CONFIG.energy.spoilage) * (1 - STRATEGIST.forecastHaircut * mind.persona.risk);
+
     nonIncreasing(v);
-    for (let k = 0; k < target; k++) expect(v.keep[k], `keep[${k}] holds q × S`).toBeGreaterThanOrEqual(q * S[k]!);
+    const expected = S.map((s) => q * s + (1 - q) * carry).sort((a, b) => b - a);
+    for (let k = 0; k < target; k++) expect(v.keep[k], `keep[${k}] is q × S + (1 − q) × carry`).toBeCloseTo(expected[k]!, 9);
     // Selling to the store would fetch under a unit's share of what its mine loses turned off.
     expect(v.keep[1]).toBeGreaterThan(20);
     expect(v.floorUnits, 'nothing is needed for sure, so nothing is fenced off').toBe(0);
@@ -305,5 +311,55 @@ describe('RULE-5: the cash plan fills in rank order', () => {
     expect(plan.cost).toEqual({ water: 58 });
     expect(plan.left).toBe(311 - 58);
     expect(plan.left, 'money never goes negative').toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe('RULE-5: a unit past the target buys only above the shadow price', () => {
+  // trace-allow: below the boundary: the shadow price comes from the month's other goods, which a built state reaches
+  // only by chance; the seat's own plan, with λ set, is the rule's row.
+  it('T-AC-2: a unit past the target is refused when what it gains per credit is no more than λ, and bought when more', () => {
+    const mines = [0, 2, 4].map((x): Plot => ({ outfit: 'smithore', x, ground: { smithore: 3 } }));
+    const state = table({ plots: mines, posted: { smithore: 100, energy: 20 } });
+    const obs = observe(state, 'ai0');
+    const mind = mindOf();
+    const ask = Math.ceil(20 * (1 + PRICE.storeSpread));
+    const upTo = (lambda: number) => {
+      const plan = goodPlan(obs, mind, 'energy');
+      // One unit past the target, worth 30: it gains (30 − 22) ÷ 22 ≈ 0.36 a credit.
+      plan.values.buy[plan.values.block] = 30;
+      plan.cash = { funded: plan.values.block, lambda };
+      const buy = tradeDecision(obs, mind, plan).all.find((c) => c.key === 'buy')!.action;
+      return buy.side === 'buyer' ? buy.upTo : -1;
+    };
+    const block = goodPlan(obs, mind, 'energy').values.block;
+    expect((30 - ask) / ask, 'the premise').toBeCloseTo(0.364, 2);
+
+    expect(upTo(0.5), 'λ 0.5: refused').toBe(block);
+    expect(upTo(0.3), 'λ 0.3: bought').toBe(block + 1);
+  });
+});
+
+describe("C8: a new plot's own-use units are worth what going short costs", () => {
+  /** An idle plot at x 6 rated for Energy (a plant makes 4, uses 1) and Water; Energy and Water posted at 20. */
+  const IDLE: Plot = { outfit: null as unknown as Outfit, x: 6, ground: { energy: 2, water: 2 } };
+  const netOf = (plots: Plot[], outfit: Outfit, store: Partial<Record<Good, number>> = {}) => {
+    const state = table({ plots: [...plots, IDLE], posted: { smithore: 100, energy: 20, water: 20 } });
+    Object.assign(state.store.stock, store);
+    const { obs, o } = view(state);
+    const mind = mindOf();
+    const tile = obs.tiles[6]!;
+    return monthlyNet(obs, o, yieldOf(obs, tile, outfit, 'ai0'), outfit, mind);
+  };
+
+  it('B-AC-5: a plant beside plots short of Energy earns, over its sale, S − price for each unit they would go without', () => {
+    const rich = [0, 2, 4].map((x): Plot => ({ outfit: 'smithore', x, ground: { smithore: 6 } }));
+    // The mines use 6; the plant nets 3, each keeping a mine's unit on: 0.8 × 6 × 100 ÷ 2 = 240, sold at 20.
+    const gain = netOf(rich, 'energy') - netOf([], 'energy');
+
+    expect(gain).toBeCloseTo(3 * (lost(6, 100, 2) - 20), 6);
+  });
+
+  it("B-AC-5 negative: a seat with no farm gains nothing from a well's drink units, whether the store sells Water or not", () => {
+    expect(netOf([], 'water', { water: 200 })).toBeCloseTo(netOf([], 'water', { water: 0 }), 6);
   });
 });
