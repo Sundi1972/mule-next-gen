@@ -148,7 +148,7 @@ export function factoryFit(state: GameState, tile: Tile, good: ProcessedGood, ow
     output += FACTORY.parkBonus;
     lines.push({ tone: 'good', text: 'Next to the same factory: industrial park, +1' });
   }
-  if (tile.outfit === good && tile.runMonths >= FACTORY.experienceMonths) {
+  if (tile.outfit === good && monthsToExperience(tile) === 0) {
     output += FACTORY.experienceBonus;
     lines.push({ tone: 'good', text: `Running for ${tile.runMonths} months: experience, +1` });
   }
@@ -163,6 +163,11 @@ export function factoryFit(state: GameState, tile: Tile, good: ProcessedGood, ow
     lines.push({ tone: 'bad', text: `Polluted plot: -${loss}` });
   }
   return { output: Math.max(0, output), energy, lines };
+}
+
+/** Months a factory must still run in a row before it makes FACTORY.experienceBonus more; 0 once it does. */
+export function monthsToExperience(tile: Tile): number {
+  return Math.max(0, FACTORY.experienceMonths - tile.runMonths);
 }
 
 /** Crew working a player's land: 1 per raw plot, 2 per factory, none on a green belt. */

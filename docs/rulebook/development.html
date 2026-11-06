@@ -221,9 +221,8 @@
 <tr><td>Prize</td><td class="n">1 Crystite</td></tr>
 </tbody>
 </table></div>
-<p>A glint can light any plot a colonist can stand on, owned or free, but never a lake, the store, or a plot someone is standing on as it lights. A player already at the pub cannot win it. Nobody there in time: "The glint faded". The prize goes straight into your stock.</p>
-<div class="box next"><h4>What is changing</h4><p><strong>Being built:</strong> a computer player that pressed GRAB on the very tick a glint faded had its press fall through to the next thing the button offered, which could be ANALYSE: it then stood still for a <span class="num">4</span>-second assay it never meant to do (measured 2 of 201 grabs before, 0 of 199 after). The fix is in the Strategy team's PR #366 (WS1), together with the land-grant fix in <a href="land.html#land-grant">Land</a>.</p></div>
-<p class="code-ref">In the code: <code>config.ts::GLINT</code> · <code>packages/engine/src/floor/glint.ts</code> · <code>game.ts::awardGlint</code></p>
+<p>A glint can light any plot a colonist can stand on, owned or free, but never a lake, the store, or a plot someone is standing on as it lights. A player already at the pub cannot win it. Nobody there in time: "The glint faded". The prize goes straight into your stock. A computer player never presses GRAB when its press could fall through to another action: not on the tick the glint fades, and not when a rival may take it first; racing, it walks onto the glint instead (measured: no paid MULE lost to a stray assay in <span class="num">960</span> turns).</p>
+<p class="code-ref">In the code: <code>config.ts::GLINT</code> · <code>packages/engine/src/floor/glint.ts</code> · <code>game.ts::awardGlint</code> · <code>packages/ai/src/hands/develop.ts</code></p>
 <p class="owner">Kept current by: the Strategy team (WS1).</p>
 
 <h2 id="scramble">The corral scramble <span class="pill built">In the game</span></h2>
