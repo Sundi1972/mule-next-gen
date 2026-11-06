@@ -579,3 +579,26 @@ describe('C7: the colony grounds on the TV', () => {
     for (const n of [1, 2, 3, 4]) expect(has(html, `shape-${n}`), `place ${n} is drawn`).toBe(true);
   });
 });
+
+describe('C7: the colony panel beside the map in planning', () => {
+  const at = (p: ColonyProjectView, place: { x: number; y: number; w: number; h: number }): ColonyProjectView => Object.assign({}, p, { place });
+  const PLACED: ColonyView = { ...MIDGAME, projects: [at(PARK, { x: 1, y: 2, w: 1, h: 1 }), at({ ...HOSPITAL, stage: 'closed', monthsLeft: null }, { x: 3, y: 2, w: 1, h: 1 })] };
+  const manifestFile = readFileSync(new URL('../public/art/colony/manifest.json', import.meta.url), 'utf8');
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('B-AC-1 (TV planning): planning shows colony-grounds, politics on', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => (url === '/art/colony/manifest.json' ? new Response(manifestFile) : new Response('', { status: 404 }))));
+    await loadGroundsManifest();
+    const tv = onTvRouter(game(PLACED, { phase: 'planning' }));
+    const panel = element(tv, 'tv-colony-panel');
+    expect(text(panel)).toContain('The colony grounds');
+    const shown = [...element(panel, 'colony-grounds').matchAll(/<image[^>]*href="([^"]+)"/g)].map((m) => m[1]);
+    expect(shown).toEqual(expect.arrayContaining(['/art/colony/park/standing-day@800.webp', '/art/colony/hospital/closed-day@800.webp']));
+    // Beside the map, at the head of planning's side: the room line under the map before it, everything the side had after it.
+    expect(tv.indexOf('ROOM MULE')).toBeLessThan(tv.indexOf('data-testid="tv-colony-panel"'));
+    for (const id of ['tv-waiting', 'tv-ready-list']) expect(tv.indexOf('data-testid="tv-colony-panel"'), `the panel comes before ${id}`).toBeLessThan(tv.indexOf(`data-testid="${id}"`));
+  });
+});
