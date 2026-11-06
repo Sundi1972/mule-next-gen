@@ -619,7 +619,8 @@ export interface CashPlan {
 
 /**
  * Ranks every needed unit (below the good's target) worth at least its expected ask, across `goods`, by value per
- * credit, ties in `goods`' order, and funds them in that order while the money covers the ask.
+ * credit, ties in `goods`' order, and funds every one in that order that the money still covers; one that doesn't fit
+ * is skipped and the ranking goes on.
  */
 export function cashPlan(obs: GameState, mind: Mind, goods: readonly Good[], valuesOf: (good: Good) => UnitValues, askOf: (good: Good) => number): CashPlan {
   const p = obs.players.find((q) => q.id === mind.me)!;
@@ -632,14 +633,16 @@ export function cashPlan(obs: GameState, mind: Mind, goods: readonly Good[], val
   units.sort((a, b) => b.ratio - a.ratio || a.at - b.at);
   const plan: CashPlan = { funded: {}, cost: {}, left: p.money, lambda: 0, needed: units.length };
   let n = 0;
+  let last: number | null = null;
   for (const u of units) {
-    if (u.ask > plan.left) break;
+    if (u.ask > plan.left) continue;
     plan.left -= u.ask;
     plan.funded[u.good] = (plan.funded[u.good] ?? 0) + 1;
     plan.cost[u.good] = (plan.cost[u.good] ?? 0) + u.ask;
+    last = u.ratio;
     n++;
   }
-  if (n < units.length) plan.lambda = units[Math.max(0, n - 1)]!.ratio - 1;
+  if (n < units.length) plan.lambda = (last ?? units[0]!.ratio) - 1;
   return plan;
 }
 
