@@ -101,13 +101,20 @@ interface GameSetup {
 /** Appends one record line to a deep run's file; the manual's system text goes in once per text, by its hash. */
 function deepRecorder(file: string, game: string): { call(e: TranscriptEntry): void; note(kind: string, fields: object): void } {
   const written = new Set<string>();
-  const line = (o: object) => fs.appendFileSync(file, `${JSON.stringify({ game, ...o })}\n`);
+  // A lost record line must never stop the game it records.
+  const line = (o: object) => {
+    try {
+      fs.appendFileSync(file, `${JSON.stringify({ game, ...o })}\n`);
+    } catch (err) {
+      console.error(`brain:trial --deep: a record line was lost: ${err instanceof Error ? err.message : 'unknown error'}`);
+    }
+  };
   return {
     call(e) {
       const sha = createHash('sha256').update(e.request.system).digest('hex').slice(0, 12);
       if (!written.has(sha)) {
         written.add(sha);
-        const systemFile = `${file.replace(/\.jsonl$/, '')}.system-${sha}.txt`;
+        const systemFile = `${file.replace(/\.ndjson$/, '')}.system-${sha}.txt`;
         if (!fs.existsSync(systemFile)) fs.writeFileSync(systemFile, e.request.system);
       }
       line({ kind: 'call', ...e, request: { ...e.request, system: `system-${sha}` } });
@@ -547,7 +554,8 @@ async function playRun(
       gameBudgetUsd: flags.gameBudgetUsd,
       playbooks: flags.playbooks,
       control: flags.control,
-      deep: paid && flags.deep ? paid.logPath.replace(/\.jsonl$/, '.record.jsonl') : null,
+      // .ndjson, not .jsonl: the record must never be read as a cost ledger by the deep cap (ledgersSpent).
+      deep: paid && flags.deep ? paid.logPath.replace(/\.jsonl$/, '.record.ndjson') : null,
       out,
     });
     games.push(game);

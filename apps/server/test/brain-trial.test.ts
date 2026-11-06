@@ -589,7 +589,7 @@ describe.runIf(process.env.MULE_FULL === '1')('brain:trial', () => {
         expect(q.output_config?.effort).toBe(BRAIN.deep.writeCall.effort);
       }
       const record = fs
-        .readFileSync(path.join(dir, 'deep-2026-10-22-deep2-test.record.jsonl'), 'utf8')
+        .readFileSync(path.join(dir, 'deep-2026-10-22-deep2-test.record.ndjson'), 'utf8')
         .trim()
         .split('\n')
         .map((l) => JSON.parse(l) as { kind: string; game: string; request?: { system: string }; worth?: Record<string, { total: number }> });
@@ -601,6 +601,9 @@ describe.runIf(process.env.MULE_FULL === '1')('brain:trial', () => {
       expect(fs.existsSync(path.join(dir, `deep-2026-10-22-deep2-test.record.${call.request!.system}.txt`))).toBe(true);
       expect(Object.keys(record.find((r) => r.kind === 'phase')!.worth!).sort()).toEqual(['ai0', 'ai1', 'ai2', 'ai3']);
       expect(new Set(record.map((r) => r.game)).size).toBe(2);
+      // A second deep run reads only the deep ledgers' call lines: the record is not one, so the cap still adds up.
+      const again = await run(['--table', 'pair', '--playbooks', '1', '--games', '2', '--seed', '1', '--deep', '1', '--write-model', 'opus', '--run', 'deep2-again', '--game-budget-usd', '5', '--max-usd', '1']).result;
+      expect(again.report).toMatchObject({ played: 0, stopped: 'cap' });
     },
     GAMES_MS,
   );
