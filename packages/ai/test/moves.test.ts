@@ -265,7 +265,7 @@ const COVERAGE = {
   payStrike: { move: 'payStrike' },
   propose: { move: 'propose' },
   voteLaw: { move: 'voteLaw' },
-  donate: { excluded: "AI donations are WS1's C28 (G-5), still to come" },
+  donate: { move: 'donate' },
   repair: { move: 'repair' },
   setSiteBid: { move: 'setSiteBid' },
   continue: { excluded: 'host only' },
