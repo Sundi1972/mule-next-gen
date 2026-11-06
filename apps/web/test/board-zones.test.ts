@@ -10,6 +10,7 @@ import { ClientProvider } from '../src/net/react';
 import { Auction } from '../src/phone/Auction';
 import { PhoneGameProvider } from '../src/phone/game';
 import { TvAuction } from '../src/table/TableApp';
+import { BOARD_TYPE, labelLines } from '../../../packages/ui/src/components/board-layout';
 
 /**
  * RULE-6 and RULE-7 on the screens (WS6's mock design/mocks/auction-rules, PhoneRest, PhoneSoldOut and TvSoldOut): the
@@ -183,6 +184,42 @@ describe('RULE-6: every board draws the rest zones', () => {
     expect(textOf(tvScreen(withShip(game.viewFor(null))), 'rest-buyer')).toBe('BUYERS WAIT NO TRADE');
     expect(textOf(tvScreen(atS(game.viewFor(null))), 'rest-seller')).toBe('SELLERS WAIT NO TRADE');
     expect(textOf(phoneScreen(atS(game.viewFor('s1')), 's1'), 'rest-seller')).toBe('SELLERS WAIT NO TRADE');
+  });
+
+  it("B-AC-D1 (phone, TV): a rest band's words never run past its edge: a thin band drops to a shorter form, by the board's own label lines (WS4)", () => {
+    const { game } = soldOut(0);
+    const parts: Record<string, string[]> = {
+      'SELLERS WAIT ONLY THE SHIP BUYS': ['SELLERS WAIT', 'ONLY THE SHIP BUYS'],
+      'SELLERS WAIT SHIP ONLY': ['SELLERS WAIT', 'SHIP ONLY'],
+      'SELLERS WAIT NO TRADE': ['SELLERS WAIT', 'NO TRADE'],
+      'SELLERS WAIT': ['SELLERS WAIT'],
+      '': [],
+    };
+    const seen = { tv: new Set<string>(), phone: new Set<string>() };
+    const { hi: top, zones } = game.viewFor(null).auction!;
+    // Sold out, a bid ever closer to the top edge thins the sellers' band; the ship pays inside it, a step above the bid.
+    // The board as it is and a taller one, so the bands run from roomy to a single step.
+    const cases = [top, top + 20].flatMap((hi) => Array.from({ length: hi - zones!.sellersBottom - 1 }, (_, i) => ({ hi, bid: zones!.sellersBottom + 1 + i })));
+    for (const { hi, bid } of cases) {
+      const staged = (view: MuleView): MuleView => ({ ...view, auction: { ...view.auction!, hi, storeSells: bid, storeSellsBid: true, shipPays: bid + 1 } });
+      for (const [size, html] of [
+        ['tv', tvScreen(staged(game.viewFor(null)))],
+        ['phone', phoneScreen(staged(game.viewFor('s1')), 's1')],
+      ] as const) {
+        const band = bandOf(html, 'rest-seller')!;
+        const words = textOf(html, 'rest-seller') ?? '';
+        expect(Object.keys(parts), `${size}, bid ${bid}: a known form, got "${words}"`).toContain(words);
+        const lines = parts[words]!.reduce((n, part) => n + labelLines(part, BOARD_TYPE[size].perLine), 0);
+        const height = ((band.bottom - band.top) / 100) * BOARD_TYPE[size].room;
+        expect(lines * BOARD_TYPE[size].lineBox, `${size}, bid ${bid}: "${words}" fits the band's ${height.toFixed(0)} px`).toBeLessThanOrEqual(height);
+        seen[size].add(words);
+      }
+    }
+    // The staging reaches both the full words and a shorter form on each board.
+    expect([...seen.tv]).toEqual(expect.arrayContaining(['SELLERS WAIT ONLY THE SHIP BUYS']));
+    expect([...seen.phone]).toEqual(expect.arrayContaining(['SELLERS WAIT SHIP ONLY']));
+    expect(seen.tv.size, `the TV's forms: ${[...seen.tv].join(' | ')}`).toBeGreaterThan(1);
+    expect(seen.phone.size, `the phone's forms: ${[...seen.phone].join(' | ')}`).toBeGreaterThan(1);
   });
 
   it("B-AC-D1 (phone, TV): once the store stops buying, the buyers' zone keeps its top at the old buying line", () => {
