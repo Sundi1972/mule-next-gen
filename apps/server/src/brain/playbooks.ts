@@ -295,9 +295,10 @@ export class Playbooks {
         const draft = seat.draft(state, phase);
         const { written, dropped } = withoutFlippedGoods(ask.written, ask.roles, draft);
         made = playbookFrom(seat.validator(), state, draft, written);
-        if (dropped.length > 0) {
-          made.feedback?.rejected.push(...dropped);
-          if (made.playbook.by === 'llm') made.playbook = { ...made.playbook, rejected: [...(made.playbook.rejected ?? []), ...dropped] };
+        if (dropped.length > 0 && made.feedback) {
+          // One new list for both: by 'llm', the feedback and the playbook share playbookFrom's rejected array.
+          const rejected = [...made.feedback.rejected, ...dropped];
+          made = { feedback: { ...made.feedback, rejected }, playbook: made.playbook.by === 'llm' ? { ...made.playbook, rejected } : made.playbook };
         }
       } catch (err) {
         console.error(`playbooks: seat ${seat.id}'s ${phase} could not be drafted or validated, it plays its own way: ${messageOf(err)}`);
