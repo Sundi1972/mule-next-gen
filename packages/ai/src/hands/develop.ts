@@ -238,6 +238,8 @@ export class DevelopHand {
   private floorCfg: FloorConfig | null = null;
   /** This month's route, if the seat handed one in; null plays today's list. */
   private route: RouteRun | null = null;
+  /** The good today's picks lean to, and the month it is for. */
+  private lean: { month: number; good: Good | null } = { month: -1, good: null };
   /** The route step last let through, so it is judged once, before its tap or walk starts. */
   private vetted: DevStep | null = null;
   /** The MULE group whose buy was the MULE the seat already led ('led'). */
@@ -274,6 +276,11 @@ export class DevelopHand {
     if (month !== this.month) this.reset(month);
     if (this.stage !== 'start') return;
     this.route = { play, at: 0, mules: 0, soldOut: false, noMore: false, startLeft: null, left: 0, usedMs: 0 };
+  }
+
+  /** Leans today's picks in `month` to `good`; null, or another month, leaves them unleaned. */
+  leanOn(month: number, good: Good | null): void {
+    this.lean = { month, good };
   }
 
   /**
@@ -692,7 +699,7 @@ export class DevelopHand {
       if (!this.pending) {
         const obs = observe(state, mind.me);
         const d = AI_HANDS.develop;
-        const list = developDecision(obs, mind, this.mules, walk?.());
+        const list = developDecision(obs, mind, this.mules, walk?.(), this.lean.month === state.month ? this.lean.good : null);
         // On the floor the server computes this inside the tick's recorded step, and a replay computes it again: no
         // decider call and no reply to wait for (WS3's condition 1). A Smart seat plays the default pick here.
         this.pending = this.onFloor
