@@ -344,7 +344,7 @@ export type SellListing = NonNullable<PlanningPlay['list']>[number];
  * What the seat lists for the land auction while its money is under what its month of needs costs (monthNeedsCost): up to AI_PLANS.sell.perMonth
  * lots, those worth least to it over what the store pays first, each sold to the store if no one bids. Its idle plots
  * and its MULEs are candidates, never its last Food or Energy MULE, nor its last Water MULE while it has a farm, nor a
- * MULE outfitted for one of `keep` (a chain's links, AM-32). Empty when it is not short.
+ * MULE outfitted for one of `keep` (a chain's links, AM-33). Empty when it is not short.
  */
 export function sellWanted(obs: GameState, mind: Mind, keep: readonly Outfit[] = []): SellListing[] {
   if (me(obs, mind).money >= monthNeedsCost(obs, mind)) return [];
@@ -479,7 +479,7 @@ export function developDecision(obs: GameState, mind: Mind, mulesSoFar: number, 
  * A chain focus's links (chainLinks) and what a link MULE on `tile` is worth, at chainOutlook's prices: its running
  * cost, plus the works' best gain times the share of the works' run it supplies (linkShare), plus the other links'
  * running costs on their best own idle or free plots. A link alone makes nothing the seat can sell, so it is worth what
- * it completes. Null when `focus` is no chain. See AM-32.
+ * it completes. Null when `focus` is no chain. See AM-33.
  */
 function chainValue(obs: GameState, o: Outlook, mind: Mind, focus: Good): { links: Good[]; linkGain: (tile: Tile, link: Outfit) => number } | null {
   const links = chainLinks(obs, mind.me, focus);
