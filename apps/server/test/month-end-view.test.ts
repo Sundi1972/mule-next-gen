@@ -290,11 +290,26 @@ describe('needs C6: the month-end line says how much the colonists got', () => {
     const short = toMonthEnd({ shelf: { colonists: 400, food: 19, water: 30 } });
     expect(stateOf(short.game).history.at(-1)!.shortages, 'precondition: the shelf ran short of Food only').toEqual(['food']);
     for (const viewer of VIEWERS) {
-      expect(short.game.viewFor(viewer).colonistMeal, viewer ?? 'the board').toEqual({ colonists: 400, food: { took: 19, need: 20 }, water: { took: 20, need: 20 } });
+      expect(short.game.viewFor(viewer).colonistMeal, viewer ?? 'the board').toEqual({ food: { took: 19, need: 20 }, water: { took: 20, need: 20 } });
     }
     // Negative case: outside the month end the view carries no meal.
     readyAll(short.game);
     expect(short.game.viewFor(null).phase).toBe('planning');
     for (const viewer of VIEWERS) expect(short.game.viewFor(viewer).colonistMeal, `${viewer ?? 'the board'} in planning`).toBeNull();
+  });
+
+  it('needs C6 (old report): a month-end report from before the meal was recorded still shows: no meal, and fed or short as before', () => {
+    // The only path that reads a stored report's meal is the month-end view; a replay re-runs upkeep, which writes its own.
+    for (const options of [{}, { emptyStore: true }]) {
+      const end = toMonthEnd(options);
+      const report = stateOf(end.game).history.at(-1)!;
+      expect(report.colonistMeal, 'precondition: this upkeep recorded the meal').toBeDefined();
+      delete report.colonistMeal;
+      for (const viewer of VIEWERS) {
+        const v = end.game.viewFor(viewer);
+        expect(v.colonistMeal, viewer ?? 'the board').toBeNull();
+        expect(v.colonistsFed, viewer ?? 'the board').toBe(!report.colonistsHungry);
+      }
+    }
   });
 });

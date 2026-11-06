@@ -465,9 +465,9 @@ describe('TV-FIT (WS4, month end, PM ruling C): the league and the colony keep t
 });
 
 describe('needs C6: the month-end line says how much the colonists got', () => {
-  /** A month end whose colonists, 400 before the meal, got `food` and `water` of their 20 each. */
+  /** A month end whose 400 colonists got `food` and `water` of their 20 each. */
   const meal = (food: number, water: number) =>
-    view({ colonists: 380, colonistsFed: food === 20 && water === 20, colonistMeal: { colonists: 400, food: { took: food, need: 20 }, water: { took: water, need: 20 } } });
+    view({ colonists: 400, colonistsFed: food === 20 && water === 20, colonistMeal: { food: { took: food, need: 20 }, water: { took: water, need: 20 } } });
 
   it('needs B-AC-1 (line, screen): colonists given 19 of 20 Food read "19 of 20 Food" on the month-end line', () => {
     const short = meal(19, 20);
