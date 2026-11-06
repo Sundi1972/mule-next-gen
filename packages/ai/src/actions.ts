@@ -8,6 +8,7 @@ import {
   POLITICS,
   type AuctionSide,
   type GameState,
+  type Good,
   type LawProposal,
   type Office,
   type Outfit,
@@ -47,8 +48,8 @@ export type AiAction =
   | { type: 'unlist'; id: string }
   /** Planning, the Governor once the votes are over: commission a prestige object for the colony (G-5 RULE-22). */
   | { type: 'commission'; id: PrestigeId }
-  /** Planning: give credits toward a commissioned object; the giver's plaque on it records them (G-5 RULE-23). */
-  | { type: 'donate'; id: PrestigeId; credits: number }
+  /** Planning: give credits, and units of goods it still needs, toward a commissioned object; the plaque records them (G-5 RULE-23). */
+  | { type: 'donate'; id: PrestigeId; credits: number; goods?: Partial<Record<Good, number>> }
   /** Planning, the Governor once the votes are over: pay this month's general strikers from the fund (G-5 RULE-26). */
   | { type: 'payStrike' }
   /** Planning, the Governor once the votes are over: mend a damaged prestige object from the fund (G-5 RULE-22). */
@@ -306,7 +307,8 @@ const DESCRIBED = {
     type: 'donate',
     command: 'donate',
     phases: ['planning'],
-    does: () => "Gives credits from the seat's money toward a commissioned prestige object; the plaque on it names the giver, and the gift counts toward their vote weight.",
+    does: () =>
+      "Gives credits from the seat's money, and units of goods the object still needs from its stock, toward a commissioned prestige object; the plaque on it names the giver, and the gift counts toward their vote weight.",
     legalWhen: () => [
       "This game plays without the colony's council",
       'Donate in planning',
@@ -314,10 +316,17 @@ const DESCRIBED = {
       'Give at least 1 cr or 1 unit',
       'You have {money} cr',
       'The {name} needs only {credits} cr more',
+      'The {name} needs no {good}',
+      'The {name} still needs {units} {good}',
+      'You have {units} {good}',
     ],
     // The credits it names, so no fixed cost.
     cost: null,
-    args: { id: 'the commissioned object', credits: 'whole credits, at most what it still needs' },
+    args: {
+      id: 'the commissioned object',
+      credits: 'whole credits, at most what it still needs; 0 for goods only',
+      goods: 'whole units by good, each at most what the object still needs of it; left out, no goods',
+    },
   },
   payStrike: {
     type: 'payStrike',
