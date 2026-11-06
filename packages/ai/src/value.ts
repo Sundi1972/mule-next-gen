@@ -217,6 +217,18 @@ export function chainLinks(obs: GameState, me: string, good: Good): Good[] {
   return chainParts(obs, me, good).links;
 }
 
+/**
+ * Every good a chain to `good` is built from, Energy aside, all the way up its recipes: Rare earth, Alloy and Smithore
+ * for Electronics. None for a raw good, or for a factory with an input the household eats or drinks. See AM-32.
+ */
+export function chainInputs(obs: GameState, me: string, good: Good): Good[] {
+  if (!isFactory(good)) return [];
+  const inputs = (Object.keys(RECIPES[good].inputs) as Good[]).filter((g) => g !== 'energy');
+  const household = householdNeeds(obs, me);
+  if (inputs.some((g) => g in household)) return [];
+  return [...new Set(inputs.flatMap((g) => [g, ...chainInputs(obs, me, g)]))];
+}
+
 /** The seat's plots already making an input of the chain to `good` that it still can't feed: links that stand. See AM-32. */
 export function standingLinks(obs: GameState, me: string, good: Good): Tile[] {
   return chainParts(obs, me, good).standing;
