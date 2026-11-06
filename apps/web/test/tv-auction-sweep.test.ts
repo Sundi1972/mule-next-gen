@@ -108,12 +108,12 @@ const alloyWalk: Partial<AuctionView> = {
 };
 
 describe('SWEEP-C1: one gap number on the TV screen', () => {
-  it('SWEEP-C1: the chart chip and the side panel both say the gap is 1 (store sells 100, ship pays 99)', () => {
+  it('SWEEP-C1: the chart chip and the side panel both say the gap is 16 (the seller asks 115, the ship pays 99), not the houses’ 1 (FM-house-meet)', () => {
     const html = tvScreen(tvView(alloyWalk));
     const panel = textOf(inside(html, 'tv-readout'));
     const chip = textOf(inside(html, 'gap-label'));
-    expect(panel).toContain('GAP 1 apart');
-    expect(chip).toBe('1 APART');
+    expect(panel).toContain('GAP 16 apart');
+    expect(chip).toBe('16 APART');
   });
 });
 
