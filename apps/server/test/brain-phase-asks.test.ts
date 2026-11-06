@@ -344,6 +344,56 @@ describe('RULE-A2 rows 3-4: the next phase is edited in the slack before it', { 
     expect(notes[1]!.playbook.development).toEqual({ ...fresh, timeBudgetMs: 1_000 });
   });
 
+  /** Month 1's land write, answered with `route` as its only edit, taken at the land grant; the game at development's start. */
+  const grantedWrite = async (route: unknown[]) => {
+    const reply = JSON.stringify({ edits: [{ path: '/development/route', to: route, reason: 'Farm the grant.' }], line: '' });
+    const state: GameState = createGame({ seed: 10, players: PLAYERS });
+    const seat = new AiSeat({ id: 'p0', name: 'Ada', persona: 'trader', level: 'trader', seed: 1 });
+    const notes: PlaybookNote[] = [];
+    const playbooks = new Playbooks({ brain: smartOn(answersAt(500, reply)), source: playbookSource([seat]), seats: [seat], record: (n) => notes.push(n) });
+    playbooks.ask(state, 1);
+    await vi.advanceTimersByTimeAsync(1_000);
+    advanceTo(state, 'landGrant');
+    playbooks.takeEffect(state);
+    const ranked = playbooks.playbookFor('p0', 1)!.landGrant!.ranked;
+    advanceTo(state, 'development');
+    return { state, notes, playbooks, ranked };
+  };
+  const GRANTED_GROUP = [
+    { act: 'buyMule', plot: null, outfit: null },
+    { act: 'outfit', plot: null, outfit: 'food' },
+    { act: 'install', plot: 'granted', outfit: null },
+  ];
+
+  it('B fix 4 (a): the land write\'s route installs on "granted"; the plot the seat is granted between the land grant and development is the one the adopted development installs on', async () => {
+    const { state, notes, playbooks, ranked } = await grantedWrite(GRANTED_GROUP);
+    // Granted since upkeep: the plot the land write could not name.
+    const granted = ranked.find((r) => state.tiles[r.plot]!.owner === null)!.plot;
+    state.tiles[granted]!.owner = 'p0';
+    playbooks.takePhase(state, 'development');
+    expect(notes.map((n) => [n.phase, n.playbook.by])).toEqual([
+      ['landGrant', 'engine'],
+      ['development', 'llm'],
+    ]);
+    expect(notes[1]!.playbook.development?.route).toEqual([{ act: 'buyMule' }, { act: 'outfit', outfit: 'food' }, { act: 'install', plot: granted }]);
+    expect(notes[1]!.playbook.rejected ?? []).toEqual([]);
+  });
+
+  it('B fix 4 (a): granted nothing, the steps before the "granted" group play, and the playbook\'s rejected says why', async () => {
+    // Any plot on the map may be analysed.
+    const analysed = createGame({ seed: 10, players: PLAYERS }).tiles.findIndex((t) => t.terrain !== 'store');
+    const { state, notes, playbooks } = await grantedWrite([{ act: 'analyse', plot: analysed, outfit: null }, ...GRANTED_GROUP]);
+    playbooks.takePhase(state, 'development');
+    expect(notes.map((n) => [n.phase, n.playbook.by])).toEqual([
+      ['landGrant', 'engine'],
+      ['development', 'llm'],
+    ]);
+    expect(notes[1]!.playbook.development?.route).toEqual([{ act: 'analyse', plot: analysed }]);
+    expect(notes[1]!.playbook.rejected).toEqual([
+      { path: '/development/route', to: expect.any(Array), why: 'no plot was granted this month, so steps 1 on are dropped' },
+    ]);
+  });
+
   /** Production's state, the plan shown for it, and the plan the auction would draft once a raid takes all of p0's goods. */
   const raided = (state: GameState, seat: AiSeat) => {
     const shown = seat.draft(atAuctionStart(state), 'auction').auction!;
