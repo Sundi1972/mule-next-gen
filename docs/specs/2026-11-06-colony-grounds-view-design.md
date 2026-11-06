@@ -316,6 +316,17 @@ goal      G-2
 folded    C2 positions by place; C6 produced by WS7's engine PR (after its grounds PR-2); plan Task 1.5 waits for it
 ```
 
+```
+AM-4 · 2026-11-06 · lead · PR-1 build
+target    §1 C2 tomorrow ("the next free place's outline")
+said      C2 draws the next free place's outline
+did       dropped: the grounds cannot know the next place without computing RULE-32b (the mock's order differs);
+          it returns only if WS7's view carries the next place
+because   HC-1 (the grounds compute no rule) — G-1 holds without it
+goal      G-1 — unaffected
+folded    C2; PR-1 fix round
+```
+
 ## §9 · Ownership Boundaries  [handoff]
 
 - Sole owner: WS10, for `packages/ui/src/grounds/**`, `apps/web/public/art/colony/**` and `design/art/**`.
