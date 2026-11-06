@@ -6,8 +6,10 @@ import {
   createRng,
   floorConfig,
   GAME,
+  litPlot,
   observe,
   stableJson,
+  tileIndex,
   type AiLevelId,
   type AiPersonaId,
   type DevFloor,
@@ -23,6 +25,7 @@ import {
 } from '@mule/engine';
 import type { Act, AiAction } from './actions.js';
 import { Brain, type DecisionRecord, type Pending } from './brain.js';
+import { donationFor, standingOf } from './colony-donate.js';
 import { templateLine, type Decider, type TableTalk } from './decider.js';
 import { AuctionHand, type AuctionDebug } from './hands/auction.js';
 import { DevelopHand, type DevLogEntry, type DevWalking } from './hands/develop.js';
@@ -50,7 +53,7 @@ import {
   type ValidatePlan,
   type ValidatorProfile,
 } from './playbook/index.js';
-import { GOOD_NAME, landDecision, outfitName, plotName, wantsAnyAhead, wantsPlot, type LandPlan } from './strategist.js';
+import { GOOD_NAME, landDecision, outfitName, plotName, plotsAhead, rankedBy, wantsAnyAhead, wantsPlot, type LandPlan } from './strategist.js';
 import { situation } from './summary.js';
 import type { Mind } from './value.js';
 
@@ -131,6 +134,10 @@ export class AiSeat {
   private readonly auction: AuctionHand;
   private land: Pending<LandPlan> | null = null;
   private landMonth = -1;
+  /** The month whose land-grant playbook a writer was asked for: that month's planning asks no land decision. */
+  private askedFor = -1;
+  /** The land plan this month's grant plays, fixed at the grant's first look (spec §4: the phase's first tick decides). */
+  private grantPlan: { month: number; plan: LandPlan } | null = null;
   /** Playbooks adopted for the newest month adopted, oldest first. */
   private adopted: readonly Playbook[] = [];
   /** The month whose planning this seat may act in, and how; an adopt in it plays the listings again. */
@@ -166,18 +173,32 @@ export class AiSeat {
 
   /**
    * Planning: the land plan for this month's grant, with its full ranking of free plots. With `act`, the seat also plays
-   * its planning part: the drone, then its listings; an adopt later in this planning plays the listings again.
+   * its planning part: the drone, then its listings; an adopt later in this planning plays the listings again. Last,
+   * it may give toward the colony's commissioned object, once (G-5 C28).
    */
   planMonth(state: GameState, act?: Act): void {
     if (this.landMonth === state.month) return;
     const obs = observe(state, this.id);
     this.landMonth = state.month;
-    this.land = this.brain.ask('land', landDecision(obs, this.mind), obs, Infinity, null, situation(obs, this.mind));
+    // A playbook asked for this month ranks the grant, so planning takes the seeded default pick: no land ask, which
+    // the open write would leave busy anyway. Keyed on the ask, made at a fixed step, so a replay does the same.
+    const list = landDecision(obs, this.mind);
+    const summary = situation(obs, this.mind);
+    this.land = this.askedFor === state.month ? this.brain.pick('land', list, obs, null, summary) : this.brain.ask('land', list, obs, Infinity, null, summary);
     // Written only for a listener; the part plays whenever the seat may act, recorded or not.
     if (this.options.onPlaybook && this.playPath(state.month, 'planning').by === 'own') this.writeDraft(state, 'planning');
     if (!act) return;
     this.planning = { month: state.month, state, act, refused: new Set() };
     this.planned = [];
+    this.playPlanningPart(state);
+    // Read again: the drone's fee has come off its money.
+    const after = observe(state, this.id);
+    const gift = donationFor(after, this.mind, standingOf(after, this.id));
+    if (gift) this.planAct({ type: 'donate', ...gift });
+  }
+
+  /** The drone, then the listings, as the planning part in effect says. */
+  private playPlanningPart(state: GameState): void {
     // On its own path the part is its draft's: with nothing to list and nothing of its own listed yet it would play
     // nothing, so the seat skips the whole draft and its validation.
     const mine = state.listings.some((l) => l.seller === this.id);
@@ -239,8 +260,13 @@ export class AiSeat {
   draft(state: GameState, phase: DraftPhase, month = state.month): Playbook {
     const leftOut: LeftOutPick[] = [];
     const drafted = draftPlaybook(this.draftInput(state, phase, month), leftOut);
-    for (const p of leftOut) console.error(`AI seat ${this.id}: the development draft left out MULE ${p.mule} (${p.outfit} on plot ${p.plot}), refused: ${p.refused}`);
+    this.logLeftOut(leftOut);
     return validatePlaybook(this.profileFor(month))(state, this.id, drafted, []).playbook;
+  }
+
+  /** The MULE picks a development draft left out, one line each: a pick never ends unlogged. See AM-27. */
+  private logLeftOut(leftOut: readonly LeftOutPick[]): void {
+    for (const p of leftOut) console.error(`AI seat ${this.id}: the development draft left out MULE ${p.mule} (${p.outfit} on plot ${p.plot}), refused: ${p.refused}`);
   }
 
   /** What the seat's drafts are drafted from. */
@@ -285,9 +311,17 @@ export class AiSeat {
     if (played) this.playListings(p.state, played.part);
   }
 
-  /** The gate this seat's playbooks pass: its mind, its seed and, for the month it holds one, its pending land pick. */
+  /**
+   * The gate this seat's playbooks pass: its mind, its seed and, for the month it holds one, its pending land pick. A
+   * writer's edits and the server's what-if checks both pass it; the MULE picks a re-draft under an edited strategy left
+   * out are logged on each pass, with the seat.
+   */
   validator(): ValidatePlan {
-    return (state, seat, draft, edits) => validatorFor(this.profileFor(draft.month))(state, seat, draft, edits);
+    return (state, seat, draft, edits) => {
+      const result = validatorFor(this.profileFor(draft.month))(state, seat, draft, edits);
+      this.logLeftOut(result.leftOut ?? []);
+      return result;
+    };
   }
 
   private profileFor(month: number): ValidatorProfile {
@@ -300,15 +334,14 @@ export class AiSeat {
    * a reaction and a go/no-go choice, and Rookie sometimes misses on purpose.
    */
   onLit(state: GameState): number | null {
-    const grant = state.grant;
-    if (state.phase !== 'landGrant' || !grant) return null;
+    if (state.phase !== 'landGrant' || !state.grant) return null;
     const me = state.players.find((p) => p.id === this.id)!;
     if (me.claimsThisGrant >= GAME.claimsPerGrant || me.doneWithLand) return null;
     const plan = this.landPlan(state);
-    const index = grant.order[grant.step];
-    if (index === undefined) return null;
     const obs = observe(state, this.id);
-    if (!wantsPlot(plan, obs, index, grant.order.slice(grant.step), this.mind)) return null;
+    const lit = litPlot(obs);
+    if (!lit) return null;
+    if (!wantsPlot(plan, obs, tileIndex(obs.width, lit.x, lit.y), plotsAhead(obs), this.mind)) return null;
     if (this.rng.next() < this.mind.level.missChance) return null;
     return this.rng.int(...this.mind.level.reactMs) + this.rng.int(...AI_HANDS.grant.choiceMs);
   }
@@ -318,17 +351,32 @@ export class AiSeat {
    * as onLit. A seat whose claims are used, or that is done already, has nothing to press.
    */
   passesGrant(state: GameState): boolean {
-    const grant = state.grant;
-    if (state.phase !== 'landGrant' || !grant) return false;
+    if (state.phase !== 'landGrant' || !state.grant) return false;
     const me = state.players.find((p) => p.id === this.id)!;
     if (me.claimsThisGrant >= GAME.claimsPerGrant || me.doneWithLand) return false;
-    return !wantsAnyAhead(this.landPlan(state), observe(state, this.id), grant.order.slice(grant.step), this.mind);
+    const obs = observe(state, this.id);
+    return !wantsAnyAhead(this.landPlan(state), obs, plotsAhead(obs), this.mind);
   }
 
-  /** This month's land plan, as its hands read it: planned once a month, settled now. */
+  /**
+   * This month's land plan, as its hands read it: planned once a month, settled now. In the land grant, a playbook
+   * adopted for the month ranks it; the seat's own path drafts, so only an adopted playbook ranks it. Fixed at the
+   * grant's first look and kept for the grant: an adopt after that look plays from next month.
+   */
   private landPlan(state: GameState): LandPlan {
     if (!this.land || this.landMonth !== state.month) this.planMonth(state);
-    return this.brain.resolveNow(this.land!, state).action;
+    const plan = this.brain.resolveNow(this.land!, state).action;
+    if (state.phase !== 'landGrant') return plan;
+    if (this.grantPlan?.month !== state.month) {
+      const path = this.playPath(state.month, 'landGrant');
+      this.grantPlan = { month: state.month, plan: path.by === 'adopted' ? rankedBy(plan, path.playbook.landGrant?.ranked) : plan };
+    }
+    return this.grantPlan.plan;
+  }
+
+  /** A writer was asked for this seat's land-grant playbook for `month`: that month's planning asks no land decision. */
+  playbookAsked(month: number): void {
+    this.askedFor = month;
   }
 
   /**

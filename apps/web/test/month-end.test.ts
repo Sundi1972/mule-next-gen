@@ -1,5 +1,5 @@
 import { POLLUTION } from '@mule/engine';
-import type { MuleView, MyView, PlayerView, TableView } from '@mule/protocol';
+import type { ColonyView, MuleView, MyView, PlayerView, TableView } from '@mule/protocol';
 import { createElement, type ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -65,7 +65,7 @@ const me: MyView = {
   droneOrder: [],
   politics: null,
   installedThisTurn: false,
-  worthParts: { money: 3_000, goods: 100, plots: 1, land: 300, mules: 0, muleValue: 0, office: 0, cut: 0 },
+  worthParts: { money: 3_000, goods: 100, plots: 1, land: 300, mules: 0, muleValue: 0, office: 0, donated: 0, cut: 0 },
 };
 
 function view(extra: Partial<MuleView> = {}): MuleView {
@@ -209,11 +209,13 @@ describe('B-AC-12 (WS4, month end): the league table and the colony, on the phon
     expect(said(fed, 'nobody-hungry')).toBe('✓ Nobody went hungry');
   });
 
-  it('B-AC-12 (WS4, month end): the colony panel says whether the colonists were fed or went short', () => {
-    expect(said(tv, 'colonists')).toBe('Colonists fed · 1,240');
+  it("SWEEP-D4 / B-AC-12 (WS4, month end): the colonists line is the colony's people fed by the store, not the players beside it who went hungry", () => {
+    expect(said(tv, 'hungry-s3')).toBe(`Kai went hungry: ate 1 of ${KAI_NEED} Food`);
+    expect(said(tv, 'colonists')).toBe('The store fed the colony’s 1,240 colonists');
     const short = onTv(view({ colonistsFed: false }), TvMonthEnd);
-    expect(said(short, 'colonists')).toBe('Colonists went short · 1,240');
+    expect(said(short, 'colonists')).toBe('The colony’s 1,240 colonists went short');
     expect(element(short, 'colonists')).toContain('text-alert');
+    expect(said(onPhone(view(), Results, 0), 'colonists')).toBe('The store fed the colony’s 1,240 colonists');
   });
 
   it('B-AC-12 (WS4, month end): your phone alone shows your own lines, and they add up to your Worth', () => {
@@ -261,13 +263,28 @@ describe('B-AC-12 (WS4, month end): the league table and the colony, on the phon
     }
   });
 
-  it('B-AC-12 (WS4, month end): no screen shows a line that is not built yet: no fund in and out, no G-5 slots, no Donations', () => {
+  it('B-AC-12 (WS4, month end): no screen shows a line that is not built yet: no fund in and out, no G-5 slots; and with no colony, no Donations line', () => {
     const screens = [phone, tv, onPhone(view(), Results, 0), onPhone(OVER, GameOver), onPhone(OVER, GameOver, 0), onTv(OVER, TvGameOver)];
     for (const html of screens) {
       expect(text(html)).not.toMatch(/comes with|Prestige|Mood|Colony score|Donations/);
       for (const testid of ['fund-month', 'g5-', 'worth-line-donations']) expect(html).not.toContain(`data-testid="${testid}`);
     }
     for (const html of [tv, onPhone(view(), Results, 0)]) expect(said(html, 'fund-balance')).toBe('640 cr');
+  });
+
+  it('B-AC-12 (WS4, month end) + G-5 AM-12: in a colony game your lines carry Donations after Offices, and they add up to your Worth', () => {
+    const colony: ColonyView = { gauges: { wealth: 20_000, environment: 34, prestige: 2, happiness: 60, band: 'content' }, lastGauges: null, fund: 640, ledger: null, projects: [], catalogue: [], score: null };
+    // Heiko gave 250 to the colony's projects: 3,400 + 250 = 3,650.
+    const gave = view({ colony, players: PLAYERS.map((p) => (p.id === 's1' ? { ...p, worth: 3_650 } : p)), me: { ...me, worthParts: { ...me.worthParts, donated: 250 } } });
+    const html = onPhone(gave, Results);
+    const order = [...html.matchAll(/data-testid="worth-line-([a-z]+)"/g)].map((m) => m[1]);
+    expect(order).toEqual(['cash', 'goods', 'land', 'mules', 'offices', 'donations']);
+    expect(said(html, 'worth-line-donations')).toBe('Donations 250');
+    const lines = ['cash', 'goods', 'land', 'mules', 'offices', 'donations'].map((k) => num(said(html, `worth-cr-${k}`)));
+    expect(lines.reduce((a, b) => a + b, 0)).toBe(3_650);
+    expect(num(said(html, 'worth-total-cr'))).toBe(3_650);
+    // The rule beside a TV names the line too, with no price basis (goods given count at the store's price on the day).
+    expect(said(html, 'colony-on-tv')).toContain('cash + goods + land + MULEs + offices + donations');
   });
 
   it("B-AC-13 (WS4, month end): the TV's month end carries planning's ready count, the AI seats counted on", () => {
@@ -336,6 +353,41 @@ describe('B-AC-12 (WS4, month end): Collapse', () => {
   });
 });
 
+describe('B-AC-12 (WS4, month end) + G-5 AM-12: donations, only in a game with a colony', () => {
+  const colony: ColonyView = { gauges: { wealth: 20_000, environment: 34, prestige: 2, happiness: 60, band: 'content' }, lastGauges: null, fund: 640, ledger: null, projects: [], catalogue: [], score: null };
+  /** Heiko gave 250: 3,400 + 250 = 3,650 before any cut. */
+  const gave = (cut: number, worth: number, extra: Partial<MuleView> = {}) =>
+    view({ colony, players: PLAYERS.map((p) => (p.id === 's1' ? { ...p, worth, worthBeforeCut: cut ? 3_650 : null } : p)), me: { ...me, worthParts: { ...me.worthParts, donated: 250, cut } }, ...extra });
+  const cutOf = (n: number) => Math.round(n * POLLUTION.collapseScore);
+
+  it('in Collapse the Donations line is cut too, the banner says so, and the lines add up to the cut Worth', () => {
+    const worth = cutOf(3_650);
+    const html = onPhone(gave(3_650 - worth, worth, { air: { level: 84, band: 'collapse' }, lastAir: { level: 77, band: 'toxic' } }), Results);
+    expect(said(html, 'worth-line-donations')).toBe('Donations, cut too 250');
+    const lines = ['cash', 'goods', 'land', 'mules', 'cut', 'offices', 'donations'].map((k) => num(said(html, `worth-cr-${k}`)));
+    expect(lines.reduce((a, b) => a + b, 0)).toBe(worth);
+    expect(said(html, 'collapse-banner')).toContain('offices and donations too');
+  });
+
+  it('at game over your final lines carry Donations, and they add up to your final Worth', () => {
+    const over = gave(0, 3_650, { finished: true, phase: 'gameOver', month: 12, scores: PLAYERS.map((p) => ({ id: p.id, score: p.id === 's1' ? 3_650 : p.worth })) });
+    const phone = onPhone(over, GameOver);
+    expect(num(said(phone, 'worth-cr-donations'))).toBe(250);
+    expect(has(phone, 'part-donated')).toBe(true);
+    const parts = ['cash', 'goods', 'land', 'mules', 'offices', 'donations'].map((k) => num(said(phone, `worth-cr-${k}`)));
+    expect(parts.reduce((a, b) => a + b, 0)).toBe(num(said(phone, 'part-total')));
+  });
+
+  it('the TV and the phone name donations in the Worth rule with a colony, and never without one', () => {
+    expect(said(onTv(gave(0, 3_650), TvMonthEnd), 'worth-rule')).toContain('+ donations');
+    expect(said(onPhone(gave(0, 3_650), Results), 'colony-on-tv')).toContain('offices + donations');
+    expect(said(onTv(view(), TvMonthEnd), 'worth-rule')).not.toMatch(/donation/i);
+    expect(said(onPhone(view(), Results), 'colony-on-tv')).not.toMatch(/donation/i);
+    const cut = collapse();
+    expect(said(onPhone(cut, Results), 'collapse-banner')).not.toMatch(/donation/i);
+  });
+});
+
 describe('B-AC-12 (WS4, month end): game over in credits', () => {
   it('B-AC-12 (WS4, month end): the TV calls the winner out in credits, over the final table by Worth; never points', () => {
     const tv = onTv(OVER, TvGameOver);
@@ -355,5 +407,59 @@ describe('B-AC-12 (WS4, month end): game over in credits', () => {
     expect(order(element(phone, 'scores'))).toEqual(['s2', 's1', 's3']);
     expect(text(phone)).not.toMatch(/points/i);
     expect(num(said(phone, 'part-total'))).toBe(HEIKO.worth);
+  });
+});
+
+describe('SWEEP-D5 / SWEEP-A16 (WS4): the folded Now title on the phone puts your place first, short enough for the smallest phone', () => {
+  /** The view with Heiko, the phone, out in front at 9,000. */
+  const leads = (v: MuleView): MuleView => {
+    const players = v.players.map((p) => (p.id === 's1' ? { ...p, worth: 9_000 } : p));
+    return { ...v, players, scores: v.scores && players.map((p) => ({ id: p.id, score: p.worth })) };
+  };
+
+  it('SWEEP-D5: at the month end the title is your place, the month left to the phase above it', () => {
+    expect(said(onPhone(view(), Results), 'now-title')).toBe('You’re 2nd of 3');
+    expect(said(onPhone(leads(view()), Results), 'now-title')).toBe('You lead');
+  });
+
+  it('SWEEP-A16: at game over the title is your place, "Game over" left to the phase above it', () => {
+    expect(said(onPhone(OVER, GameOver), 'now-title')).toBe('You’re 2nd of 3');
+    expect(said(onPhone(leads(OVER), GameOver), 'now-title')).toBe('You win');
+  });
+});
+
+describe('TV-FIT (WS4, month end, PM ruling C): the league and the colony keep the height at a full table', () => {
+  const colony: ColonyView = {
+    gauges: { wealth: 10_700, environment: 0, prestige: 0, happiness: 59, band: 'restless' },
+    lastGauges: { wealth: 9_600, prestige: 0, happiness: 64 },
+    fund: 272,
+    ledger: null,
+    projects: [],
+    catalogue: [],
+    score: null,
+  };
+  const six = [HEIKO, MIA, KAI, row('s4', 'Ruth', 3, 800, 1_900, 1_700), row('s5', 'Ossa', 4, 700, 1_650, 1_330), row('s6', 'Lena', 5, 600, 1_050, 1_060)];
+  const tv = onTv(view({ players: six, colony }), TvMonthEnd);
+
+  it('the colony gauges sit in the body beside the league, not in a row of their own under the header', () => {
+    const header = tv.indexOf('</header>');
+    const gauges = tv.indexOf('data-testid="colony-gauges"');
+    const league = tv.indexOf('data-testid="league"');
+    expect(gauges).toBeGreaterThan(league);
+    expect(tv.slice(header, league)).not.toContain('data-testid="colony-gauges"');
+    expect(said(tv, 'gauge-happiness')).toContain('Happiness 59');
+  });
+
+  it('from five players the TV league drops its small header row ("League table · month N"), the rows and their column heads stay; under five it keeps it', () => {
+    expect(element(tv, 'league')).not.toContain('League table · month');
+    expect(said(tv, 'worth-head')).toBe('Worth');
+    expect(tv.match(/data-testid="league-row-/g)).toHaveLength(6);
+    expect(element(onTv(view({ colony }), TvMonthEnd), 'league')).toContain('League table · month 4');
+  });
+
+  it('without the colony (politics off) the header keeps its air gauge, as before', () => {
+    const plain = onTv(view({ players: six }), TvMonthEnd);
+    expect(has(plain, 'colony-gauges')).toBe(false);
+    expect(text(element(plain, 'tv-header'))).toMatch(/air/i);
   });
 });

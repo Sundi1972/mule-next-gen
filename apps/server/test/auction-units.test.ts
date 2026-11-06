@@ -67,7 +67,11 @@ function expectBoardKeys(auction: NonNullable<MuleView['auction']>) {
   expect(auction.receipt, NEW_FIELD).toBeNull();
   expect(auction.tally, NEW_FIELD).toBeNull();
   // A-6: `line` names a house ('store', 'ship') and `order` holds units of the good that is up: no other good's stock.
-  for (const w of auction.walkers) expect(keysOf(w), NEW_FIELD).toEqual(['at', 'dir', 'done', 'id', 'line', 'price', 'side', 'units']);
+  // RULE-4: `held` is a flag, no stock: present, as true, only on a seller stopped at their need.
+  for (const w of auction.walkers) {
+    expect(keysOf(w).filter((k) => k !== 'held'), NEW_FIELD).toEqual(['at', 'dir', 'done', 'id', 'line', 'price', 'side', 'units']);
+    if ('held' in w) expect(w.held, NEW_FIELD).toBe(true);
+  }
   for (const r of auction.status) expect(keysOf(r), NEW_FIELD).toEqual(['had', 'id', 'made', 'need', 'now', 'spoils', 'used']);
   for (const d of auction.deals) expect(keysOf(d), NEW_FIELD).toEqual(['buyer', 'price', 'seller', 'units']);
   for (const k of auction.skipped) expect(keysOf(k), NEW_FIELD).toEqual(['good', 'reason']);
@@ -85,6 +89,9 @@ describe('the goods auction walkers carry their units', () => {
     let checks = 0;
     let betweenPlayers = 0;
     for (let i = 0; i < 2_000 && game.viewFor(null).auction?.good === good && game.viewFor(null).auction?.stage === 'walk'; i++) {
+      // RULE-4: stopped at what he must hold, s1 holds ▼ again, so he sells on to s2 into shortage.
+      const s1 = state.auction?.walkers.find((w) => w.id === 's1');
+      if (s1?.held && s1.dir === 0) game.handle('s1', { type: 'walk', dir: 'down' });
       advance(WALK.tickMs);
       if (state.auction?.units === traded) continue;
       if (game.viewFor(null).auction?.good !== good) break;

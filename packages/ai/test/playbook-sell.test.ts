@@ -20,12 +20,17 @@ function seller(): Mind {
   return { ...mind, persona: { ...mind.persona, reserve: 2 } };
 }
 
+/** The species the cases were built with, by seat. */
+const BUILT_SPECIES = ['zipwing', 'bramblet', 'gearling', 'mollox'] as const;
+
 /**
  * Month 1's planning on seed 11, ai0 holding `money` and the given plots: an outfit puts a MULE on it, null leaves it
  * idle. ai0 holds next month's Food, Water and Energy, so nothing is short and its reserve is the cash floor alone.
  */
 function holding(money: number, plots: [number, Outfit | null][]): GameState {
-  const state = createGame({ seed: 11, players: [0, 1, 2, 3].map((i) => ({ id: `ai${i}`, name: `AI ${i + 1}`, isAi: true })) });
+  // Species picked as the cases were built: the default turns with the seed (FM-species-by-chair), and ai0 is no Mollox,
+  // whose +1 on a working mine would give the dud Smithore MULE a worth.
+  const state = createGame({ seed: 11, players: [0, 1, 2, 3].map((i) => ({ id: `ai${i}`, name: `AI ${i + 1}`, isAi: true, species: BUILT_SPECIES[i] })) });
   for (const [index, outfit] of plots) Object.assign(state.tiles[index]!, { owner: 'ai0', outfit });
   const p = state.players[0]!;
   p.money = money;

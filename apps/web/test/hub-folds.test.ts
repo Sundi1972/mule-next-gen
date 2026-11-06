@@ -50,7 +50,7 @@ function month(governor: boolean, percent = 5, start = 5): MuleView {
     stock: { ...stock, food: 9 },
     carriedMule: null,
     installedThisTurn: false,
-    worthParts: { money: 0, goods: 0, plots: 0, land: 0, mules: 0, muleValue: 0, office: 0, cut: 0 },
+    worthParts: { money: 0, goods: 0, plots: 0, land: 0, mules: 0, muleValue: 0, office: 0, donated: 0, cut: 0 },
     claimsLeft: 0,
     hungry: false,
     sick: false,

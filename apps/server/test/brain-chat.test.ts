@@ -14,6 +14,8 @@ interface Step {
   month: number;
   phase: string;
   line: string | null;
+  /** Who decided; the throttle rows are the model's ('llm'). */
+  by?: DecisionRecord['by'];
 }
 
 interface Row {
@@ -30,7 +32,7 @@ const linesOf = (seat: string, month: number, count: number, from = 1): Step[] =
   Array.from({ length: count }, (_, i) => ({ seat, month, phase: `phase ${from + i}`, line: `${seat} m${month} #${from + i}` }));
 const said = (steps: Step[]): Array<[string, string]> => steps.map((s) => [s.seat, s.line!]);
 
-const record = ({ seat, month, phase, line }: Step): DecisionRecord => ({
+const record = ({ seat, month, phase, line, by = 'llm' }: Step): DecisionRecord => ({
   id: 0,
   seat,
   kind: 'develop',
@@ -40,7 +42,7 @@ const record = ({ seat, month, phase, line }: Step): DecisionRecord => ({
   candidates: [],
   shortlist: [],
   pick: { id: 'a', key: 'a', label: 'Option a' },
-  by: 'top',
+  by,
   line,
   waitedMs: 0,
 });
@@ -169,8 +171,27 @@ describe('table chat throttle', () => {
     }
   });
 
+  it("B-AC-1 (ruling a): a Smart seat's top pick speaks no template line and takes no slot, so the model's line after it in the phase is said; a fallback still speaks its template", () => {
+    const service = createBrain({
+      gameId: 'g-chat',
+      env: KEY,
+      logPath: path.join(dir, 'costs.jsonl'),
+      sdkFactory: () => fakeSdk(() => Promise.reject(new Error('no call expected'))),
+    });
+    const steps: Step[] = [
+      { seat: 'p0', month: 1, phase: 'auction', line: 'Corner the market.', by: 'top' },
+      { seat: 'p0', month: 1, phase: 'auction', line: 'The model, in character.', by: 'llm' },
+      { seat: 'p0', month: 1, phase: 'development', line: 'A template, the model having failed.', by: 'fallback' },
+    ];
+    expect(play(service, { name: 'smart', steps, said: [] })).toEqual([
+      ['p0', 'The model, in character.'],
+      ['p0', 'A template, the model having failed.'],
+    ]);
+    service.finish();
+  });
+
   it('T-AC-5: the Classic brain (no key) keeps its template lines to the same cap and one per phase', () => {
-    for (const row of rows) {
+    for (const row of rows.map((r) => ({ ...r, steps: r.steps.map((s) => ({ ...s, by: 'top' as const })) }))) {
       const service = createBrain({ gameId: 'g-chat', env: {}, logPath: path.join(dir, 'costs.jsonl') });
       expect(service.deciderFor({ id: 'p0', persona: 'trader', level: 'rookie' }), 'Classic').toBeNull();
       errors.mockClear();

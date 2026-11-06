@@ -1,9 +1,10 @@
-import { EVENTS, GAME } from './config.js';
-import { fundIn } from './colony.js';
+import { COLONY, EVENTS, GAME, GOOD_CONFIG, PRESTIGE, SOCIAL_EVENTS, UPKEEP } from './config.js';
+import { addPrestige, callStrike, damageObject, fundIn, goodWords, moodBand, moodShift, strikeHolds } from './colony.js';
 import { neighbours } from './grid.js';
-import { airBand, type AirBand } from './pollution.js';
+import { reputationShift } from './politics.js';
+import { airBand, cleanAir, type AirBand } from './pollution.js';
 import { createRng } from './rng.js';
-import { GOODS, RAW_GOODS, type EventEffect, type EventKey, type EventKind, type GameState, type Good, type MonthEvent, type Phase, type Player, type SpecialKind, type Tile } from './types.js';
+import { GOODS, RAW_GOODS, type EventEffect, type EventKey, type EventKind, type GameState, type Good, type MonthEvent, type MoodBand, type Phase, type Player, type PrestigeId, type SpecialKind, type Tile } from './types.js';
 
 type Rng = ReturnType<typeof createRng>;
 type Direction = NonNullable<MonthEvent['direction']>;
@@ -34,7 +35,58 @@ const SHAPE: Record<EventKey, { kind: EventKind; title: string; scope: MonthEven
   ratsInSilo: { kind: 'ledger', title: 'Rats in the silo', scope: 'personal', sign: 'bad', line: () => `Rats eat ${pct(EVENTS.player.ratsInSilo.share)} of the stored Food.` },
   crookedAccountant: { kind: 'ledger', title: 'Crooked accountant', scope: 'personal', sign: 'bad', line: () => `A crooked accountant takes ${pct(EVENTS.player.crookedAccountant.share)} of the cash.` },
   packageFromHome: { kind: 'ledger', title: 'Package from home', scope: 'personal', sign: 'good', line: () => `A package from home: +${EVENTS.player.packageFromHome.amount} Food.` },
+  // G-5 C26 (SOCIAL_EVENTS). A general strike's line names its good once it is picked (strikeLine).
+  festival: {
+    kind: 'colony',
+    title: 'Festival',
+    scope: 'colony',
+    sign: 'good',
+    line: () => {
+      const f = SOCIAL_EVENTS.colony.festival;
+      return `A festival: the mood lifts by ${f.moodShift}, the colony gains ${f.prestige} prestige for good, and the colonists eat ${pct(f.foodDemand)} more Food this month.`;
+    },
+  },
+  generalStrike: { kind: 'colony', title: 'General strike', scope: 'colony', sign: 'bad', line: () => strikeLine(null) },
+  emigrationWave: { kind: 'colony', title: 'Emigration wave', scope: 'colony', sign: 'bad', line: () => `${pct(SOCIAL_EVENTS.colony.emigrationWave.shrink)} of the colonists leave, for good.` },
+  blamedForUnrest: {
+    kind: 'ledger',
+    title: 'Blamed for the unrest',
+    scope: 'personal',
+    sign: 'bad',
+    line: () => `Blamed for the unrest: ${Math.abs(SOCIAL_EVENTS.player.blamedForUnrest.reputation)} reputation lost, so fewer votes.`,
+  },
+  storeStrike: { kind: 'store', title: 'Store strike', scope: 'colony', sign: 'bad', line: () => 'The store is on strike: it sells no MULEs this turn.' },
+  walkout: { kind: 'plot', title: 'Walkout', scope: 'personal', sign: 'bad', line: () => walkoutLine(null) },
+  riot: { kind: 'store', title: 'Riot', scope: 'colony', sign: 'bad', line: () => riotLine(null) },
+  volunteerCleanup: {
+    kind: 'colony',
+    title: 'Volunteer clean-up',
+    scope: 'colony',
+    sign: 'good',
+    line: () => `Volunteers clean up: the air gauge drops by ${SOCIAL_EVENTS.colony.volunteerCleanup.airDrop}.`,
+  },
+  loyalCrew: { kind: 'plot', title: 'Loyal crew', scope: 'personal', sign: 'good', line: () => `A loyal crew: one of your plots makes ${SOCIAL_EVENTS.player.loyalCrew.gain} more this month.` },
 };
+
+/** A general strike's line, naming its good when it has one. */
+function strikeLine(good: Good | null, phase: Phase = 'planning'): string {
+  const plots = good ? `every ${goodWords(good)} plot` : 'every plot of one good';
+  // By production the Governor's chance to pay has passed, so the line no longer offers it (PM ruling A, 6 Nov).
+  if (phase === 'production') return `The strikers held: ${plots} makes ${pct(COLONY.strike.output)} this month.`;
+  return `A general strike: this month ${plots} makes ${pct(COLONY.strike.output)}, unless the Governor pays the strikers.`;
+}
+
+/** A walkout's line, naming its good when it has one. */
+function walkoutLine(good: Good | null): string {
+  const plots = good ? `your ${goodWords(good)} plots make` : 'your plots of one good make';
+  return `A walkout: this month ${plots} ${pct(SOCIAL_EVENTS.player.walkout.output)}.`;
+}
+
+/** A riot's line, naming the object it damaged when it damaged one. */
+function riotLine(damaged: PrestigeId | null): string {
+  const damage = damaged ? `, and the ${PRESTIGE[damaged].name} is damaged until it is repaired` : '';
+  return `A riot: the store loses ${pct(SOCIAL_EVENTS.colony.riot.storeLoss)} of every shelf${damage}.`;
+}
 
 /** The goods a colony-wide event touches. */
 const COLONY_GOODS: Partial<Record<EventKey, readonly Good[]>> = {
@@ -62,6 +114,9 @@ export function eventOutput(key: EventKey, before: number, first: boolean): numb
     wildfire: () => (first ? 0 : before - EVENTS.wildfire.loss),
     bumperHarvest: () => before * EVENTS.bumperHarvest.factor,
     cavernCollapse: () => before,
+    generalStrike: () => Math.floor(before * COLONY.strike.output),
+    walkout: () => Math.floor(before * SOCIAL_EVENTS.player.walkout.output),
+    loyalCrew: () => before + SOCIAL_EVENTS.player.loyalCrew.gain,
   };
   // An event with no rule here changes no plot's output.
   return Math.max(0, rules[key]?.() ?? before);
@@ -119,7 +174,8 @@ export function buildEvent(state: GameState, key: EventKey, rng: Rng, player?: s
 
 /**
  * The wave-2 events' only-ifs (spec RULE-3): whether each fires for this state and player. Most change things off the
- * map and hit no plot; a MULE theft and a meteor strike hit one plot each, picked on the row's dice (offMapEvent).
+ * map and hit no plot; a MULE theft, a meteor strike and a loyal crew hit one plot each, a general strike and a walkout
+ * every plot of one good, picked on the row's dice (offMapEvent).
  */
 const OFF_MAP = {
   federationTax: () => true,
@@ -136,8 +192,24 @@ const OFF_MAP = {
   ratsInSilo: (_: GameState, p?: Player) => p !== undefined && taken(p.stock.food, EVENTS.player.ratsInSilo.share) >= 1,
   crookedAccountant: (_: GameState, p?: Player) => p !== undefined && taken(p.money, EVENTS.player.crookedAccountant.share) >= 1,
   packageFromHome: () => true,
+  // G-5 C26: a strike needs a good the colony works, a walkout a plot the player works and a loyal crew a raw plot of
+  // theirs; the rest always find what they change.
+  festival: () => true,
+  generalStrike: (state: GameState) => mostWorked(state).length > 0,
+  emigrationWave: () => true,
+  blamedForUnrest: () => true,
+  storeStrike: () => true,
+  riot: () => true,
+  volunteerCleanup: () => true,
+  walkout: (state: GameState, p?: Player) => p !== undefined && workedBy(state, p.id).length > 0,
+  loyalCrew: (state: GameState, p?: Player) => p !== undefined && rawPlotsOf(state, p.id).length > 0,
 } satisfies Partial<Record<EventKey, (state: GameState, player?: Player) => boolean>>;
 type OffMapKey = keyof typeof OFF_MAP;
+
+/** Whether the store is on strike this turn: a store strike fired in this month's development. buyMule refuses then. */
+export function storeOnStrike(state: Pick<GameState, 'monthEvents'>): boolean {
+  return state.monthEvents.some((e) => e.key === 'storeStrike' && e.phase === 'development');
+}
 
 /** A share of what someone holds, floored, never more than they hold (HC-5). */
 const taken = (have: number, share: number) => Math.min(have, Math.floor(have * share));
@@ -155,9 +227,67 @@ function offMapEvent(state: GameState, key: OffMapKey, rng: Rng, phase: Phase, p
     const event = toEvent(state, key, { x: tile.x, y: tile.y }, [tile], undefined, tile.owner ?? undefined, phase);
     return withPlots(event, { becomes: 'crater', ...(tile.special ? { was: tile.special.kind } : {}), ...(tile.outfit ? { muleLost: true as const } : {}) });
   }
-  // Off the map: it starts at the store, where every colonist starts development.
+  if (key === 'generalStrike') return struck(state, rng.pick(mostWorked(state)), phase);
+  if (key === 'walkout') {
+    const good = rng.pick(mostWorked(state, player));
+    const hit = state.tiles.filter((t) => t.owner === player && t.outfit === good);
+    return { ...toEvent(state, key, { x: hit[0]!.x, y: hit[0]!.y }, hit, undefined, player, phase), line: walkoutLine(good) };
+  }
+  if (key === 'riot') {
+    const standing = (state.colony?.projects ?? []).filter((p) => p.stage === 'standing');
+    const event = offMapAtStore(state, key, phase, player);
+    return standing.length > 0 ? { ...event, objects: [{ id: rng.pick(standing).id, becomes: 'damaged' }] } : event;
+  }
+  if (key === 'loyalCrew') {
+    const plot = rng.pick(rawPlotsOf(state, player!));
+    return toEvent(state, key, { x: plot.x, y: plot.y }, [plot], undefined, player, phase);
+  }
+  return offMapAtStore(state, key, phase, player);
+}
+
+/** An event off the map: it starts at the store, where every colonist starts development. */
+function offMapAtStore(state: GameState, key: EventKey, phase: Phase, player?: string): MonthEvent {
   const store = state.tiles.find((t) => t.terrain === 'store');
   return toEvent(state, key, store ? { x: store.x, y: store.y } : { x: 0, y: 0 }, [], undefined, player, phase);
+}
+
+/** A player's working plots: those outfitted to make a good (a green belt makes none). */
+function workedBy(state: GameState, owner: string): Tile[] {
+  return state.tiles.filter((t) => t.owner === owner && (GOODS as readonly string[]).includes(t.outfit ?? ''));
+}
+
+/** A player's raw plots: production credits each of them every month, where a factory short of inputs makes nothing. */
+function rawPlotsOf(state: GameState, owner: string): Tile[] {
+  return state.tiles.filter((t) => t.owner === owner && (RAW_GOODS as readonly string[]).includes(t.outfit ?? ''));
+}
+
+/**
+ * The goods the most working plots make, in GOODS order: the colony's (a general strike's pick) or one owner's (a
+ * walkout's); none when nothing works.
+ */
+function mostWorked(state: GameState, owner?: string): Good[] {
+  const plots = (good: Good) => state.tiles.filter((t) => (owner === undefined ? t.owner : t.owner === owner) && t.outfit === good).length;
+  const most = Math.max(0, ...GOODS.map(plots));
+  return most === 0 ? [] : GOODS.filter((g) => plots(g) === most);
+}
+
+/** A general strike on `good`: every working plot of it, each delta 0 until production fills it in. */
+function struck(state: GameState, good: Good, phase: Phase): MonthEvent {
+  const hit = state.tiles.filter((t) => t.owner && t.outfit === good);
+  const at = hit[0] ?? state.tiles.find((t) => t.terrain === 'store') ?? { x: 0, y: 0 };
+  return { ...toEvent(state, 'generalStrike', { x: at.x, y: at.y }, hit, undefined, undefined, phase), line: strikeLine(good, phase) };
+}
+
+/**
+ * This month's general strike as production files it while the strikers are unpaid (strikeHolds, G-5 RULE-26): every
+ * working plot of the struck good, each delta 0 until production fills it in; null when no strike holds or no plot
+ * works that good. Paid, production runs in full and files nothing.
+ */
+export function strikeEvent(state: GameState): MonthEvent | null {
+  const good = state.colony?.strike?.good;
+  if (!good || !strikeHolds(state, good)) return null;
+  const event = struck(state, good, 'production');
+  return event.plots.length > 0 ? event : null;
 }
 
 /** `event` with each of its plots changed as `change` says. */
@@ -219,6 +349,8 @@ export interface EventRow {
   air?: Partial<Record<AirBand['name'], number>>;
   /** perPoint for each air point the player's plots caused last month, at most max. */
   pollution?: { perPoint: number; max: number };
+  /** Counts `pollution` only in these mood bands, so never with no colony; absent, in any. */
+  pollutionIn?: readonly MoodBand[];
   /** Signed, for the richest and the poorest player by cash plus land at GAME.plotScore a plot; a tie goes to the first seat. */
   wealth?: { richest?: number; poorest?: number };
   /** By event key: points when that event fired in a window the row names; once, if it fired in both. */
@@ -227,6 +359,22 @@ export interface EventRow {
   perPlot?: true;
   /** Rolls once for the colony after production's output (rollAfterOutput); rollPhase never rolls it. */
   afterOutput?: true;
+  /** By the colony's mood band (G-5 C26); 0 with no colony. */
+  mood?: Partial<Record<MoodBand, number>>;
+  /** A hard zero in these mood bands, whatever raises it (the catalogue's "never when"). */
+  neverIn?: readonly MoodBand[];
+  /** Never rolls without a colony: politics off (HC-22). */
+  needsColony?: true;
+  /** For each standing object of these kinds. */
+  objects?: Partial<Record<PrestigeId, number>>;
+  /** Points when the store's Food is dearer than `factor` times its usual price (GOOD_CONFIG). */
+  foodPrice?: { factor: number; points: number };
+  /**
+   * By the colony air's band, like `air`, and a hard zero in the `neverInAir` bands; both read only with a colony, so a
+   * wave-2 row that gains them rolls with politics off exactly as before (HC-22).
+   */
+  colonyAir?: Partial<Record<AirBand['name'], number>>;
+  neverInAir?: readonly AirBand['name'][];
   cap: number;
 }
 
@@ -239,6 +387,22 @@ export interface EventParams {
   min?: number;
   max?: number;
   factor?: number;
+  /** G-5 C26: a festival's mood change, lasting prestige and extra Food (a share of the colonists' need). */
+  moodShift?: number;
+  prestige?: number;
+  foodDemand?: number;
+  /** G-5 C26: the share of the colonists an emigration wave takes. */
+  shrink?: number;
+  /** G-5 C26: the reputation a blamed player loses (signed). */
+  reputation?: number;
+  /** G-5 C26: the share of its output a walked-out plot makes. */
+  output?: number;
+  /** G-5 C26: what a loyal crew's plot makes more. */
+  gain?: number;
+  /** G-5 C26: the share of each store shelf a riot takes (floored). */
+  storeLoss?: number;
+  /** G-5 C26: the air points a clean-up takes off the gauge. */
+  airDrop?: number;
 }
 
 /** What a chance reads beside the state: whose roll it is (none for a colony row), and the keys already fired this phase. */
@@ -254,8 +418,12 @@ export interface ChanceInput {
 export function eventChance(state: GameState, row: EventRow, phase: Phase, input: ChanceInput = {}): number {
   const base = row.phases[phase];
   if (base === undefined) return 0;
-  const { air, pollution, wealth, follows } = influences(state, row, input);
-  return Math.min(row.cap, Math.max(0, base + air + pollution + wealth + follows));
+  // The hard zeros (G-5 C26): no colony for a row that needs one, or a mood band the row never fires in.
+  if (row.needsColony && !state.colony) return 0;
+  if (state.colony && row.neverIn?.includes(moodBand(state.colony.happiness))) return 0;
+  if (state.colony && row.neverInAir?.includes(airBand(state.air).name)) return 0;
+  const { air, pollution, wealth, follows, mood, objects, foodPrice } = influences(state, row, input);
+  return Math.min(row.cap, Math.max(0, base + air + pollution + wealth + follows + mood + objects + foodPrice));
 }
 
 /** Each influence's share of a row's chance; 0 for one the row doesn't read, or with nothing to read. */
@@ -268,11 +436,18 @@ function influences(state: GameState, row: EventRow, { player, firedThisPhase = 
     .filter(([key, f]) => (f.thisPhase && firedThisPhase.includes(key)) || (f.lastMonth && firedLastMonth.includes(key)))
     .reduce((sum, [, f]) => sum + f.points, 0);
   return {
-    air: row.air?.[airBand(state.air).name] ?? 0,
-    pollution: row.pollution ? Math.min(row.pollution.max, row.pollution.perPoint * caused) : 0,
+    air: (row.air?.[airBand(state.air).name] ?? 0) + (state.colony ? (row.colonyAir?.[airBand(state.air).name] ?? 0) : 0),
+    pollution: row.pollution && pollutionCounts(state, row) ? Math.min(row.pollution.max, row.pollution.perPoint * caused) : 0,
     wealth: row.wealth && player !== undefined ? wealthShare(state, row.wealth, player) : 0,
     follows,
+    mood: state.colony ? (row.mood?.[moodBand(state.colony.happiness)] ?? 0) : 0,
+    objects: (state.colony?.projects ?? []).filter((p) => p.stage === 'standing').reduce((sum, p) => sum + (row.objects?.[p.id] ?? 0), 0),
+    foodPrice: row.foodPrice && state.store.posted.food > row.foodPrice.factor * GOOD_CONFIG.food.refPrice ? row.foodPrice.points : 0,
   };
+}
+
+function pollutionCounts(state: GameState, row: EventRow): boolean {
+  return !row.pollutionIn || (!!state.colony && row.pollutionIn.includes(moodBand(state.colony.happiness)));
 }
 
 /** A wealth influence for this player: the richest's and the poorest's points, by cash plus land, a tie to the first seat. */
@@ -440,8 +615,8 @@ export function applyEvents(state: GameState, fired: readonly MonthEvent[]): voi
   const inherits = new Map(state.players.map((p) => [p.id, inheritanceAmount(state, p.id)]));
   for (const event of fired) {
     const effects: EventEffect[] = [];
-    const change = (on: string, what: EventEffect['what'], delta: number) => {
-      if (delta !== 0) effects.push({ on, what, delta });
+    const change = (on: string, what: EventEffect['what'], delta: number, to?: number) => {
+      if (delta !== 0) effects.push({ on, what, delta, ...(to === undefined ? {} : { to }) });
     };
     const me = state.players.find((p) => p.id === event.player);
     switch (event.key) {
@@ -519,6 +694,50 @@ export function applyEvents(state: GameState, fired: readonly MonthEvent[]): voi
       case 'packageFromHome':
         me!.stock.food += EVENTS.player.packageFromHome.amount;
         change(me!.id, 'food', EVENTS.player.packageFromHome.amount);
+        break;
+      // G-5 C26: colony.ts and politics.ts write the colony and reputation; each effect is what moved.
+      case 'festival': {
+        const f = SOCIAL_EVENTS.colony.festival;
+        const mood = state.colony?.happiness ?? 0;
+        moodShift(state, f.moodShift);
+        change('colony', 'mood', (state.colony?.happiness ?? 0) - mood);
+        const prestige = state.colony?.permanentPrestige ?? 0;
+        addPrestige(state, f.prestige);
+        change('colony', 'prestige', (state.colony?.permanentPrestige ?? 0) - prestige);
+        // The extra Food is this month's demand: the store's outlook and the colonists' meal read it back (festivalFood).
+        change('store', 'food', Math.round((state.colonists / UPKEEP.colonistsPerUnit) * f.foodDemand));
+        break;
+      }
+      case 'generalStrike':
+        // Announced in planning; production reads strikeHolds and files its own event (strikeEvent).
+        if (event.phase !== 'production') callStrike(state, event.plots[0]!.good);
+        break;
+      case 'emigrationWave': {
+        const n = Math.round(state.colonists * (1 - SOCIAL_EVENTS.colony.emigrationWave.shrink)) - state.colonists;
+        state.colonists += n;
+        change('colony', 'colonists', n);
+        break;
+      }
+      case 'blamedForUnrest': {
+        const was = me!.reputation;
+        reputationShift(state, me!.id, SOCIAL_EVENTS.player.blamedForUnrest.reputation);
+        change(me!.id, 'reputation', me!.reputation - was);
+        break;
+      }
+      case 'riot': {
+        for (const g of GOODS) {
+          const n = Math.floor(state.store.stock[g] * SOCIAL_EVENTS.colony.riot.storeLoss);
+          state.store.stock[g] -= n;
+          change('store', g, -n, state.store.stock[g]);
+        }
+        const damaged = (event.objects ?? []).filter((o) => damageObject(state, o.id));
+        if (damaged.length > 0) event.objects = damaged;
+        else delete event.objects;
+        event.line = riotLine(damaged[0]?.id ?? null);
+        break;
+      }
+      case 'volunteerCleanup':
+        change('colony', 'air', cleanAir(state, SOCIAL_EVENTS.colony.volunteerCleanup.airDrop));
         break;
       default:
         break;

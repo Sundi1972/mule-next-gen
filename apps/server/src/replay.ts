@@ -1,5 +1,5 @@
 /** Replays a game record through a fresh MuleGame and names the first step that doesn't play as recorded. */
-import { stableJson, type CallKind, type PlaybookEntry } from '@mule/engine';
+import { AI_VALUE, stableJson, type CallKind, type PlaybookEntry, type RecordedWrite } from '@mule/engine';
 import type { Choice } from '@mule/ai';
 import type { GameContext, SeatInfo } from '@tabletop/core';
 import type { BrainService } from './brain/index.js';
@@ -72,6 +72,9 @@ class Script {
     this.brain = {
       deciderFor: (seat) =>
         smart.has(seat.id) ? { name: 'recorded', decide: () => this.call(seat.id, 'move') as Choice | Promise<Choice> } : null,
+      // The record holds no refusals, so a replayed reply never has any.
+      writerFor: (seat) =>
+        smart.has(seat.id) ? { write: async (kind) => ({ reply: (await this.call(seat.id, kind)) as RecordedWrite, refused: [] }) } : null,
       chatter: () => () => {},
       finish: () => {},
     };
@@ -188,16 +191,32 @@ const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
  * A record a game error ended (`ended: 'error'`, AM-5) must throw at its last step with the recorded message; the
  * state it leaves is then compared. A replay that doesn't throw there, throws another message, or throws at an
  * earlier step is not identical, and `reason` says which.
+ *
+ * It plays under the record's AI_VALUE.unit when the record names it, and gives the switch back after.
  */
 export async function replay(record: MuleRecord): Promise<ReplayResult> {
+  // The switch the game played under, for this replay only. Setting a global is safe only because replay-cli.ts is the
+  // one caller and its process hosts no live game: a server route that calls replay() must change this first, or a live
+  // game would play under the record's switch while the replay awaits.
+  const own = AI_VALUE.unit;
+  if (record.options.aiValueUnit !== undefined) AI_VALUE.unit = record.options.aiValueUnit;
+  try {
+    return await replayUnder(record);
+  } finally {
+    AI_VALUE.unit = own;
+  }
+}
+
+async function replayUnder(record: MuleRecord): Promise<ReplayResult> {
   if (record.v !== 1) throw new RecordMismatch(`record version ${String(record.v)}; this server replays version 1`);
   if (record.configFingerprint !== configFingerprint()) throw new RecordMismatch('the record was made under another config');
 
   const script = new Script(record);
   let replayed: MuleRecord['outcome'] | null = null;
   let reason: string | undefined;
+  const { aiValueUnit: _played, ...options } = record.options;
   const game = new MuleGame(script.ctx, record.seed, {
-    ...record.options,
+    ...options,
     brain: script.brain,
     onGameOver: (state) => (replayed ??= outcomeOf(state, record.seats)),
     recordPlaybook: (entry) => script.playbook(entry),

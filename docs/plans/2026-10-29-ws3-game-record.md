@@ -65,6 +65,7 @@ feat/strategist with Heiko's OK through the PM.
 |----|------------|-------------------------|--------------|--------------------|--------------------|-------------------|
 | PR-1 | `ws3-record-pr1` | Tasks 1–6 (C1, C2, C3, C4, C5) | B-AC-1 (goal check), T-AC-1..T-AC-9 | `GameRecord`, `RecordEvent`, `RecordStep`, `RecordedChoice`, `NoticeEntry`, `PlaybookEntry` types (spec §3) | `Playbook` (engine `playbook.ts`, frozen v1) | No |
 | PR-2 | `ws3-record-pr2` | Tasks 7–8 (C6, C7) | T-AC-10, T-AC-11 | the `notice` and `recordPlaybook` options on MuleGame | PR-1's types and Recorder | No |
+| PR-3 | `ws3-record-heard` (from trunk) | Task 9 (AM-4) | T-AC-12, T-AC-1 strengthened | the `heard` variant of `RecordEvent` (spec §3, AM-4) | the Recorder on trunk | No |
 
 **Per-PR authority:**
 
@@ -293,13 +294,81 @@ sale to the ship. AI claims share one `claim()` path. A seat's side is noticed a
 
 ---
 
+## Phase P3: PR-3, the heard step (AM-4)
+
+**PR #194: MERGED into feat/strategist at acae3b64.** Branch `ws3-record-heard` was cut from trunk, because the lane PR #178 had already merged.
+**It must land before WS2's B-2b**, which reacts to whispers. AM-4 is agreed by WS1, WS2 and WS3 (spec §8). Merging needs
+Heiko's OK through the PM.
+
+### Task 9: heard steps: AM-4
+
+**ACs verified:** T-AC-12, T-AC-1. **Spec sections consumed:** §8 AM-4, §2 RULE-1 row 9, RULE-5, RULE-6, §3 `heard`.
+
+- [x] **Step 1: Write `T-AC-12`** (red a994552a).
+  - Altitude: contract, a real Room, and the stringified record file.
+  - A public line and a whisper give one heard step each: `{from}` and `{from, to}`. No heard step has a field for words.
+  - None of the chat's words appear in the file. The replay is identical.
+  - Strengthen T-AC-1 (Tier 1) so it records two heard steps and still replays identical.
+- [x] **Step 2: Implement AM-4** (03520d58):
+  - `wrap().heard` opens its step through the guarded `begin()`;
+  - the replay plays `game.heard(from, '', to)`;
+  - the engine's `RecordEvent` gains the variant.
+- [x] **Step 3: Positive control.**
+  - Write the text into the heard step: the field check goes red.
+  - With the field check skipped, the word search goes red on its own.
+  - Restore.
+
+### PR-3 merge gate
+
+- [x] T-AC-12 is green, named, and red first. T-AC-1 is strengthened and green.
+- [x] `pnpm typecheck` is clean. `record.test.ts` under `MULE_FULL=1` is 20/20. config-guard is 2/2.
+- [x] Root `pnpm test` is green: server 235 (42 skipped), engine 281, web 257, ai 125, ui 46, tabletop 148.
+- [x] The independent review: APPROVE WITH FIXES. The replay's heard calls were unpinned. Fixed in a200c6c2:
+  T-AC-12 spies on `MuleGame.prototype.heard` and asserts `[['s1','',undefined],['s2','','s3']]`; two controls
+  went red. The verdict is in the #194 body. CI 4/4.
+- [x] Heiko's OK through the PM; merged at acae3b64. WS2 was told B-2b can build on it.
+
+## Still to come (planned, in order)
+
+- **WS2's named edits in WS3's record files**, made in WS2's PRs and reviewed on their SHAs:
+  - the writerFor wrap (WS2's a9709756, OK'd: writerFor is non-null exactly when deciderFor is, spec A AM-A15);
+  - the talkerFor coupling (B-2): a pass-through in `record.ts` and null in `replay.ts`, not through `call()`;
+  - **pending:** WS2's PR #227 (spec A PR-1, into ws2-brain) asks for a named edit in `mule-game.ts` at 28ab532b,
+    the Playbooks wiring. It is asked for at start and at each upkeep's opening, takes effect at the land grant,
+    and reaches the record only through `recordPlaybook`. WS3's OK or flag is owed on that SHA.
+- [x] **R-2, the crashed-game record** (Heiko approved; spec AM-5 at 5ea6da22): **built as PR #246** on
+  `ws3-record-crash` from trunk f1d7c8b0.
+  - The commits: 3b300e65 (T-AC-13, red first) and 16cebd0c (the build).
+  - The throw is caught in WS3's own wraps in `record.ts` and rethrown, so no tabletop edit was needed.
+  - The replay must throw the same message at the last step.
+  - Positive control: a replay that ignores the throw goes red.
+  - Gates: `MULE_FULL=1` record 22/22.
+  - Merge gate:
+    - [x] T-AC-13 is green, named, and red first.
+    - [x] One independent review after green CI: APPROVE WITH FIXES at 16cebd0c, fixed at f1a9fbd1:
+      - F1, a test for the 120-character cap;
+      - F2, file paths in the message scrubbed to `<path>`;
+      - F5, a test for a crash on the intent path.
+    - [x] The PM's merge batch: batch 13. Trunk 5745e9f6 was merged in at 5128d560. MERGED 2026-11-04
+      (`gh pr view 246`: 3dafea34).
+  - The edges: F3 (a disconnect after the crash) was fixed by WS4's #271. F4 (`viewFor` throws) is a known edge,
+    named in #246's body.
+- [x] **A balance-independent T-AC-10 fixture: DONE in PR #209** (branch `ws3-record-fixture`; 677e26f1, a trunk
+  merge bc3f66bf, fixes df30b355). It has MERGED (`gh pr view 209`: merged 2026-10-29, b1c5906d).
+  - The fixture builds its lot and its ship sale from the state, not from a lucky seed. 32/32 seeds pass.
+  - Positive control: with the lot-sale notice disabled, it goes red.
+  - Review: APPROVE WITH FIXES. The fixes are `maxMonths: Math.max(2, GAME.exportShipEvery)`,
+    `n.month === GAME.exportShipEvery`, and comment fixes.
+  - WS1's interim seed edit, 2c1bdef1 (NOTICE_GAME seed 2 → 8 on ws1-events), merged through #210.
+- **B-AC-1 is still open:** Heiko's real keyed game, then the keyless replay. The PM sets it up. Never report it from a test run.
+
+---
+
 ## Risks from spec §7
 
 - **R-1 (memory per room):** measure it in PR-1. Task 6 Step 2 also prints the file size of T-AC-1's game, and the
   lead records it in the ledger.
-- **R-2 (a crashed game leaves no file):** not built here. Heiko's ruling is pending through the PM. If he says yes, it
-  becomes a PR-3 task: write with `ended: 'error'`, and the replay reproduces the throw. This plan gains that task by
-  amendment.
+- **R-2 (a crashed game leaves no file):** Heiko approved building it. It is built as AM-5, PR #246.
 - **R-3 (Node microtask order):** covered by T-AC-1's positive control (Task 4 Step 4).
 - **R-4 (viewFor purity):** covered by T-AC-6 (Task 3).
 

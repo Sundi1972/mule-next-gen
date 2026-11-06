@@ -108,7 +108,7 @@ export interface PlayerView {
   lastWorth: number | null;
   /**
    * While the air is in Collapse, this player's Worth before the cut (scoreParts' total plus its cut: money + goods +
-   * land + muleValue + office, rounded as scoreParts rounds); null outside Collapse. Public like `worth`, a total only.
+   * land + muleValue + office + donated, rounded as scoreParts rounds); null outside Collapse. Public like `worth`, a total only.
    */
   worthBeforeCut: number | null;
   plots: number;
@@ -255,6 +255,11 @@ export interface MyView {
   species: Species;
   stock: Stock;
   carriedMule: Outfit | 'empty' | null;
+  /**
+   * The MULE this player leads came off one of their plots by a swap (AM-35): if the turn ends with it still on the
+   * lead it goes to the corral, so the walking screen warns. Only on this player's own view; absent reads as no.
+   */
+  leadsSwapped?: true;
   claimsLeft: number;
   hungry: boolean;
   sick: boolean;
@@ -405,6 +410,8 @@ export interface WalkerView {
   units: number;
   /** The house line they stand at ('store' or 'ship'), or null. Standing there, they trade with it by themselves (RULE-1). */
   line?: string | null;
+  /** A seller stopped at the amount they must hold (RULE-4): the phone says how to sell on. */
+  held?: true;
 }
 
 /** Units changing hands right now: between two players, or with the store or the ship ('store', 'ship'). */
@@ -556,8 +563,11 @@ export interface ProductionHurryView {
   from: number | null;
 }
 
-/** What an event on screen is: one of the engine's month events, or a player falling sick at development's start. */
-export type ShowEventKey = EventKey | 'sickness';
+/** The colony's mood events C26's second engine PR adds (WS1's frozen contract): harmless once EventKey takes them. */
+export type ColonyEventKey = 'storeStrike' | 'walkout' | 'loyalCrew' | 'riot' | 'volunteerCleanup';
+
+/** What an event on screen is: one of the engine's month events, a colony mood event, or a player falling sick at development's start. */
+export type ShowEventKey = EventKey | ColonyEventKey | 'sickness';
 
 /** One event as every screen shows it, whichever phase fired it: production's map and every other phase's show. */
 export interface EventView {
@@ -590,6 +600,8 @@ export interface EventView {
   }[];
   /** What it changed off the map, in the order it changed it: a player's (by id), the store's or the colony's. */
   effects?: EventEffect[];
+  /** The colony's objects it damaged (a riot): with a plot, the plot is among its hits. */
+  objects?: { id: PrestigeId; becomes: 'damaged' }[];
   /** The phase whose show plays it. */
   phase: Phase;
   /** How big its story is on the TV. */
@@ -744,6 +756,8 @@ export interface ColonyView {
   refPrice?: Partial<Record<Good, number>>;
   /** This month's general strike: the good it holds back, what the strikers want, and whether the fund paid; null when none. Optional, so views built before W3 still type. */
   strike?: { good: Good; cost: number; paid: boolean } | null;
-  /** The colony score at game over (G-5 RULE-25: wealth, environment and prestige in credits, the happiness factor, the rounded total); null before. */
+  /** The colony score every month, as the state stands (G-5 RULE-25, AM-12: wealth, environment and prestige in credits, the happiness factor, the rounded total). */
   score: { wealth: number; environment: number; prestige: number; factor: number; total: number } | null;
+  /** The colony score's total as the last month ended, for "+N since last month"; null in month 1 or before the colony has a mood (AM-12). */
+  lastScore?: number | null;
 }

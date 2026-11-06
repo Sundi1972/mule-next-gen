@@ -1,5 +1,6 @@
 import { AirGauge, Button, cx, GoodTag, Panel, PlayerMark, type Good } from '@mule/ui';
 import { useState } from 'react';
+import { PhoneMonthScoreHead, PhoneMonthScoreNote } from '../components/Colony';
 import { CollapseBanner, ColonyPanel, LeagueTable, YourWorth } from '../components/MonthEnd';
 import { fmt, secondsUntil, standings } from '../game/derive';
 import { inCollapse, league, leaderWords, ordinal } from '../game/month-end';
@@ -28,21 +29,25 @@ function MonthEnd() {
   const mine = lg.rows.find((r) => r.player.id === self.id)!;
   const words = leaderWords(view, lg, self.id);
   const now: Now = {
-    title: mine.rank === 1 && lg.leader?.level.length === 1 ? `Month ${view.month} is over: you lead` : `Month ${view.month} is over: you’re ${ordinal(mine.rank)} of ${view.players.length}`,
-    detail: `${words.lead}. Next: planning month ${view.month + 1}.`,
+    // Your place alone: the folded card is one line, and at 667 px a longer title cuts the place off.
+    title: mine.rank === 1 && lg.leader?.level.length === 1 ? 'You lead' : `You’re ${ordinal(mine.rank)} of ${view.players.length}`,
+    detail: `Month ${view.month} is over. ${words.lead}. Next: planning month ${view.month + 1}.`,
   };
   const density = tv ? 'phone' : 'compact';
   return (
     <PhoneShell phase="End of the month" now={now} foldNow rail={<YourWorth view={view} density={density} />} footer={<MonthEndFooter />}>
       <div className={cx('relative flex min-h-0 flex-1 flex-col', tv ? 'gap-2' : 'gap-1.5')} data-testid={tv ? 'phone-monthend' : 'phone-only-monthend'}>
-        {inCollapse(view) && <CollapseBanner density={density} />}
+        {inCollapse(view) && <CollapseBanner density={density} donations={!!view.colony} />}
         <LeagueTable view={view} density={density} selfId={self.id} />
         {tv ? (
-          <p className="mt-auto text-[11px] leading-snug text-ink-3" data-testid="colony-on-tv">
-            How the colony is doing is on the TV. Worth is cash + goods + land + MULEs + offices; your own lines are beside, for you only.
-          </p>
+          <PhoneMonthScoreNote view={view}>
+            <p className="mt-auto text-[11px] leading-snug text-ink-3" data-testid="colony-on-tv">
+              How the colony is doing is on the TV. Worth is cash + goods + land + MULEs + offices{view.colony ? ' + donations' : ''}; your own lines are beside, for you only.
+            </p>
+          </PhoneMonthScoreNote>
         ) : (
           <div className="relative" data-testid="phone-only-colony">
+            <PhoneMonthScoreHead view={view} />
             <ColonyPanel view={view} density="compact" />
           </div>
         )}

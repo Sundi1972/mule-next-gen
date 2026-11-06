@@ -11,6 +11,7 @@ import {
   colonyPrice,
   createGame,
   shipPrice,
+  startAuction,
   targetPrice,
   installMule,
   isGameOver,
@@ -86,6 +87,31 @@ describe('createGame', () => {
   ])("a %i-seat game's store starts with %i Energy, 5 a seat (Heiko, 5 Nov)", (n, energy) => {
     expect(newGame(n).store.stock.energy).toBe(energy);
   });
+
+  describe("FM-species-by-chair: a seat's default species follows the seed, not the chair", () => {
+    /** DEFAULT_SPECIES's order, written out: an n-seat game deals from its first n. */
+    const ORDER = ['zipwing', 'bramblet', 'gearling', 'mollox', 'glimmer', 'quibbit'];
+    const firstN = (n: number) => ORDER.slice(0, n).sort();
+
+    it.each([2, 3, 4, 5, 6])('FM-species-by-chair: in a %i-seat game, over seeds 0..n-1, chair 0 plays each of the first n species once', (n) => {
+      const chairZero = Array.from({ length: n }, (_, seed) => createGame({ seed, players: players(n) }).players[0]!.species);
+      expect([...chairZero].sort()).toEqual(firstN(n));
+    });
+
+    it.each([2, 3, 4, 5, 6])('FM-species-by-chair: a %i-seat game where nobody picked plays the first n species, one each, whatever the seed', (n) => {
+      for (const seed of [0, 1, 2, 3, 4, 5, 2_147_483_646, -1]) {
+        const species = createGame({ seed, players: players(n) }).players.map((p) => p.species);
+        expect([...species].sort(), `seed ${seed}: ${species.join(',')}`).toEqual(firstN(n));
+      }
+    });
+
+    it('FM-species-by-chair: a seat that picked a species keeps it under every seed', () => {
+      for (const seed of [0, 1, 2, 3]) {
+        const seats = players(4).map((p, i) => (i === 1 ? { ...p, species: 'glimmer' as const } : p));
+        expect(createGame({ seed, players: seats }).players[1]!.species).toBe('glimmer');
+      }
+    });
+  });
 });
 
 describe('prices', () => {
@@ -124,6 +150,27 @@ describe('prices', () => {
     state.store.stock.electronics = 0;
     expect(storeQuotes(state, 'electronics').sell).toBeNull();
     expect(shipPrice(state, 'food')).toBeNull();
+  });
+
+  it('FM-store-spread-float: the store sells at its posted price plus storeSpread, rounded up, in its quotes and at the auction', () => {
+    // [posted, sells at]: 10% more, rounded up, worked by hand. The multiples of 10 are where 1 + 0.1 in floating point
+    // (a hair over 1.1) used to round one credit too high.
+    const rows = [
+      [50, 55], [90, 99], [100, 110], [110, 121], [170, 187], [180, 198], [190, 209], [200, 220], [210, 231], [220, 242], [230, 253],
+      [330, 363], [340, 374], [350, 385], [360, 396], [370, 407], [380, 418], [390, 429], [400, 440],
+      [7, 8], [25, 28], [33, 37], [51, 57], [99, 109],
+    ];
+    const seen = rows.map(([posted]) => {
+      const state = newGame();
+      state.store.posted.smithore = posted!;
+      state.store.stock.smithore = 20;
+      state.players[0]!.stock.smithore = 5;
+      const quote = storeQuotes(state, 'smithore').sell;
+      state.phase = 'auction';
+      startAuction(state, ['smithore']);
+      return [posted, quote, state.auction!.good === 'smithore' ? state.auction!.storeSell : 'skipped'];
+    });
+    expect(seen).toEqual(rows.map(([posted, sells]) => [posted, sells, sells]));
   });
 
   it('react more strongly to a Food shortage than an Alloy shortage', () => {

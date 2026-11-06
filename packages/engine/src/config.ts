@@ -8,6 +8,7 @@ import type { Strategy } from './playbook.js';
  */
 
 export interface GoodConfig {
+  /** Credits a unit at normal supply when the game starts: the store's opening price and off-world price; it drifts after. */
   refPrice: number;
   /** How strongly price reacts to low cover (k in the price formula). */
   sensitivity: number;
@@ -193,7 +194,7 @@ export const SPECIES_PERK = {
   molloxAnalysis: 0.5,
 } satisfies Record<string, number>;
 
-/** Default species by seat, when a player hasn't picked one. */
+/** Default species, when a player hasn't picked one: of n seats, seat i gets entry (i + seed read unsigned) mod n, so an n-seat game plays the first n and each turns with the game's seed, not the chair (FM-species-by-chair). */
 export const DEFAULT_SPECIES: readonly Species[] = ['zipwing', 'bramblet', 'gearling', 'mollox', 'glimmer', 'quibbit'];
 
 export const ADJACENCY = {
@@ -214,6 +215,7 @@ export const UPKEEP = {
   baseWater: 1,
   crewPerFood: 4,
   crewPerWater: 6,
+  /** Crew a plot adds to its owner's, by kind: a raw plot, a factory, a green belt. */
   crew: { raw: 1, factory: 2, greenBelt: 0 },
   /**
    * Energy a raw plot burns a month, by what it makes. Factories burn what their recipe says. An Energy plot pays its
@@ -255,6 +257,7 @@ export const UPKEEP = {
 };
 
 export const START = {
+  /** Each player's credits at the start. */
   money: 1000,
   /** Each player's depot at the start. Food 2 and Energy 2 (Heiko, 5 Nov). */
   playerStock: { food: 2, water: 6, energy: 2 } as Partial<Stock>,
@@ -303,6 +306,7 @@ export const MULE = {
   surplusShare: 0.5,
   /** The scarcity factor never falls below this. */
   minFactor: 0.6,
+  /** Credits to outfit a MULE for each good, paid at the store's outfit counter. */
   outfitCost: {
     food: 25, water: 25, energy: 50, smithore: 75, crystite: 100, rareEarth: 100,
     alloy: 150, electronics: 200, medicine: 150, greenBelt: 20,
@@ -403,9 +407,10 @@ export const DEV_STEER = {
   /** An AI colonist drops its errand for the pub once the clock shows no more than its walk there and this many seconds. */
   botPubMarginSeconds: 2,
   /**
-   * An AI colonist buys a MULE only while its errand, this share longer than estimated, still leaves the pub margin
-   * (botPubMarginSeconds, as the hurry for the pub counts it): a walk that runs a little long then costs the margin
-   * nothing, and the MULE is installed, not walked into the pub (FM-hurry-margin).
+   * An AI colonist buys a MULE, or starts a glint race, only while its errand, this share longer than estimated,
+   * still leaves the pub margin (botPubMarginSeconds, as the hurry for the pub counts it): a walk that runs a little
+   * long then costs the margin nothing, and the MULE is installed, not walked into the pub (FM-hurry-margin,
+   * FM-pub-lead).
    */
   botPlanSlackShare: 0.1,
   /** Ticks an AI colonist may push its stick without moving before it gives that step of its errand up. */
@@ -895,6 +900,8 @@ export const POLITICS = {
     taxPerVote: 300,
     taxCap: 2,
   },
+  /** A player's reputation stays within these bounds, in whole points (START.reputation is where it starts). */
+  reputation: { min: 0, max: 100 },
   /** The sales tax the Governor may set, in whole percent, and how far it may move from the month's starting rate. */
   tax: { min: 0, max: 15, maxStep: 5 },
   /** Paid from the colony fund to each officeholder at upkeep, as far as the fund reaches. */
@@ -955,18 +962,27 @@ export const POLITICS = {
     /** The AI Governor's colony acts and the mood-weighed vote (G-5 C25). Placeholders until the sim tunes them. */
     colony: {
       /** Whether an AI Governor of each persona commissions a prestige object the fund can pay for. */
-      commissions: { trader: true, cautious: true, aggressive: true, saboteur: false } as Record<AiPersonaId, boolean>,
+      commissions: ({ trader: true, cautious: true, aggressive: true, saboteur: false } satisfies Record<AiPersonaId, boolean>) as Record<AiPersonaId, boolean>,
       /** Whether an AI Governor of each persona pays general strikers the fund can pay. */
-      paysStrike: { trader: true, cautious: true, aggressive: false, saboteur: false } as Record<AiPersonaId, boolean>,
+      paysStrike: ({ trader: true, cautious: true, aggressive: false, saboteur: false } satisfies Record<AiPersonaId, boolean>) as Record<AiPersonaId, boolean>,
       /** Whether an AI Governor of each persona repairs a damaged object the fund can pay for (AM-10). */
-      repairs: { trader: true, cautious: true, aggressive: true, saboteur: false } as Record<AiPersonaId, boolean>,
+      repairs: ({ trader: true, cautious: true, aggressive: true, saboteur: false } satisfies Record<AiPersonaId, boolean>) as Record<AiPersonaId, boolean>,
       /**
        * An AI Governor's top bid, in credits, for an object's site at the land auction (RULE-28, AM-10); null, it never
        * bids, so it commissions only objects that need no plot. The engine caps the bid at the fund over its reserve.
        */
-      siteBid: { trader: 400, cautious: 300, aggressive: 500, saboteur: null } as Record<AiPersonaId, number | null>,
+      siteBid: ({ trader: 400, cautious: 300, aggressive: 500, saboteur: null } satisfies Record<AiPersonaId, number | null>) as Record<AiPersonaId, number | null>,
       /** In these mood bands an AI voter will not vote for the sitting Governor if anyone else runs. */
       leanIn: ['unhappy', 'unrest'] as MoodBand[],
+      /** What an AI seat gives in planning toward a commissioned object (G-5 C28). Placeholders until the sim tunes them (HC-25). */
+      donate: {
+        /** The share of its cash above its reserve each persona gives. */
+        share: { trader: 0.1, cautious: 0.15, aggressive: 0.05, saboteur: 0 } satisfies Record<AiPersonaId, number>,
+        /** The share's multiplier when the seat leads the table on Worth, or trails it. */
+        standing: { leading: 1, trailing: 1 },
+        /** The least it gives, in credits; a smaller gift is not made. */
+        minCredits: 10,
+      },
     },
   },
 };
@@ -1028,8 +1044,11 @@ export const COLONY = {
   fundBuysGoods: true,
   /** The Federation's grant into the fund at each upkeep, in credits; flat until a scaling rule is tuned. */
   grant: { perMonth: 150 },
-  /** What the strikers of a general strike want from the fund to go back to work, in credits (G-5 RULE-26). */
-  strike: { cost: 250 },
+  /**
+   * A general strike (G-5 RULE-26): what the strikers want from the fund to go back to work, in credits, and the share
+   * of its output each plot of the struck good makes while they are unpaid (UBER-AC-6).
+   */
+  strike: { cost: 250, output: 0.2 },
 };
 
 /**
@@ -1043,6 +1062,13 @@ export const COLONY_SCORE = {
   perPrestige: 1_000,
   /** The happiness factor: `low` at happiness 0, `high` at 100, straight between. */
   factor: { low: 0.8, high: 1.2 },
+  /**
+   * The score's verdict at game over, in credits like the total: from `proud` "A colony to be proud of", from `held` "A
+   * colony that held together", below it "A colony in ruins". Set from 100 politics-on 4-seat trader games (seeds
+   * 1–100): a quarter score under 60,650 and a quarter over 99,193, so held sits near the bottom quartile and proud
+   * near the top one.
+   */
+  verdict: { proud: 100_000, held: 60_000 },
 };
 
 /**
@@ -1069,22 +1095,32 @@ export const WALK = {
    * While a buyer and a seller (or a player and the store or the ship) stay
    * matched, the first unit takes tradeStartMs, each further one tradeSpeedUp
    * times as long as the one before, down to tradeFloorMs, so big lots don't
-   * take ages. The speed-up starts again when the pair separates.
+   * take ages. The speed-up starts again when the pair separates. 1000 and 200, from 400 and 60: start slow, about one
+   * unit a second, then faster to at most 5 a second, about 7 units in (Heiko at the table, 5 Nov; guess numbers, to be
+   * tested).
    */
-  tradeStartMs: 400,
+  tradeStartMs: 1_000,
   tradeSpeedUp: 0.8,
-  tradeFloorMs: 60,
+  tradeFloorMs: 200,
   /**
    * Walking speed in price units per second, set when a good comes up: its
    * board's starting height divided by this, so crossing the board takes
-   * this many seconds whatever the good costs. Never under minSpeed.
+   * this many seconds whatever the good costs. Never under minSpeed. The land auction walks at the same speed.
+   * 7.5 and 1.6, 25% slower than 6 and 2 (Heiko at the table, 5 Nov: walking up and down must be a bit slower).
    */
-  crossSeconds: 6,
-  minSpeed: 2,
+  crossSeconds: 7.5,
+  minSpeed: 1.6,
   /** The board reaches this share beyond the outermost price line; sellers start at its top, buyers at its bottom. */
   boardMargin: 0.3,
   /** And this share of the posted price more, so a board whose price lines sit close together still has room to walk. */
   boardPostedMargin: 0.1,
+  /**
+   * RULE-4 (AM-1): a seller stops at the amount they must hold (auctionNeed, fixed as the good comes up), one price
+   * step above the line, and sells below it only after holding ▼ for shortHoldMs. false turns the stop off, for sweeps.
+   */
+  needStop: true,
+  /** Board ms a stopped seller holds ▼ to sell on into shortage (Heiko's choice A, 5 Nov). A tap or a shorter hold moves nothing. */
+  shortHoldMs: 1_000,
   /** How often the server steps the auction. */
   tickMs: 100,
 };
@@ -1101,8 +1137,11 @@ export const LOTS = {
   maxLotsPerMonth: 4,
   /** The intro: the lot lit on the map with its seller and minimum. */
   introMs: 3_000,
-  /** The walk's clock for one lot. */
-  walkMs: 12_000,
+  /**
+   * The walk's clock for one lot. 15 s, 25% longer than 12, with WALK's 25% slower walk (Heiko at the table, 5 Nov:
+   * walking up and down must be a bit slower), so a second bidder still reaches its limit before the bell.
+   */
+  walkMs: 15_000,
   /** The result on screen before the next lot comes up. */
   resultMs: 2_500,
   /** The board runs from this share of the minimum (where buyers start) to boardHigh's. */
@@ -1335,6 +1374,140 @@ export const AI_LEVELS = {
 export type AiLevelId = keyof typeof AI_LEVELS;
 
 /**
+ * G-5 C26: the colony's social events, rows of the event table (EVENTS.colony and EVENTS.player hold them, so they roll
+ * as every row does) and their effects' sizes. Source: the M.U.L.E. Event Catalogue (rev 22, approved by Heiko
+ * 2026-10-28): its planning rows Festival, General strike, Emigration wave, Immigration wave (the mood and air parts)
+ * and Blamed for the unrest; its later rows Store strike, Walkout, Loyal crew, Riot and Volunteer clean-up; and MULE
+ * theft's mood part. Its points are read as shares. Every number is a G-5 placeholder, tuned at the end (HC-25).
+ *
+ * The mood bands are HAPPINESS.bands (moodBand). Happiness tilts an event's odds, not the event rate: a row's `mood`
+ * adds to its chance in that band, and `neverIn` is a hard zero there, whatever else raises it. `needsColony` rows never
+ * roll with politics off: no colony, no mood (HC-22). The catalogue's Security and Welfare budget lowers wait for
+ * slice 5 (D-G5-5: nothing is paid yet), so no row reads them.
+ */
+export const SOCIAL_EVENTS = {
+  /**
+   * The mood and air parts of the existing immigration wave (EVENTS.colony.immigrationWave). Its air parts read only
+   * with a colony (PM, 6 Nov), so with politics off it rolls as before; the catalogue's "Toxic" is Toxic or Collapse.
+   */
+  immigrationWave: {
+    mood: { thriving: 0.06, content: 0.01 },
+    neverIn: ['unhappy', 'unrest'],
+    colonyAir: { clean: 0.01 },
+    neverInAir: ['toxic', 'collapse'],
+  } satisfies Pick<import('./events.js').EventRow, 'mood' | 'neverIn' | 'colonyAir' | 'neverInAir'>,
+  /** The mood part of the existing MULE theft (EVENTS.player.muleTheft), in each phase it rolls in. */
+  muleTheft: {
+    mood: { restless: 0.005, unhappy: 0.02, unrest: 0.04 },
+    neverIn: ['thriving'],
+  } satisfies Pick<import('./events.js').EventRow, 'mood' | 'neverIn'>,
+  colony: {
+    /**
+     * Mood +moodShift at once (moodShift, uncapped), +prestige lasting points (addPrestige), and the colonists ask
+     * foodDemand more Food this month (of their need, rounded to whole units). Never with a general strike (EVENTS.excludes).
+     */
+    festival: {
+      phases: { planning: 0.01 },
+      needsColony: true,
+      mood: { thriving: 0.05, content: 0.01 },
+      objects: { stadium: 0.05 },
+      neverIn: ['unhappy', 'unrest'],
+      moodShift: 10,
+      prestige: 2,
+      foodDemand: 0.25,
+      cap: 0.9,
+    },
+    /**
+     * Announced in planning (callStrike) on the good the most colony plots work, a tie on the row's dice; unpaid, every
+     * plot of it makes COLONY.strike.output in production. Raised when Food is dearer than foodPrice.factor times its usual price.
+     */
+    generalStrike: {
+      phases: { planning: 0 },
+      needsColony: true,
+      mood: { restless: 0.02, unhappy: 0.05, unrest: 0.1 },
+      foodPrice: { factor: 1.5, points: 0.03 },
+      neverIn: ['thriving'],
+      cap: 0.9,
+    },
+    /** The colonists shrink by `shrink`, for good (rounded). */
+    emigrationWave: {
+      phases: { planning: 0 },
+      needsColony: true,
+      mood: { restless: 0.01, unhappy: 0.04, unrest: 0.08 },
+      air: { toxic: 0.03, collapse: 0.03 },
+      shrink: 0.1,
+      cap: 0.9,
+    },
+    /** In development: the store sells no MULEs this turn (buyMule refuses, storeOnStrike). */
+    storeStrike: {
+      phases: { development: 0 },
+      needsColony: true,
+      mood: { unhappy: 0.02, unrest: 0.04 },
+      cap: 0.9,
+    },
+    /**
+     * At the month end: each store shelf loses `storeLoss` of its stock, floored, and one standing object, on the row's
+     * dice, is damaged (damageObject: no prestige until repaired).
+     */
+    riot: {
+      phases: { upkeep: 0 },
+      needsColony: true,
+      mood: { unhappy: 0.01, unrest: 0.05 },
+      foodPrice: { factor: 1.5, points: 0.02 },
+      storeLoss: 1 / 3,
+      cap: 0.9,
+    },
+    /** At the month end: the air gauge drops by `airDrop`, never below 0. */
+    volunteerCleanup: {
+      phases: { upkeep: 0.01 },
+      needsColony: true,
+      mood: { thriving: 0.03, content: 0.01 },
+      objects: { park: 0.02 },
+      neverIn: ['unrest'],
+      airDrop: 5,
+      cap: 0.9,
+    },
+  } satisfies Record<string, import('./events.js').EventRow & import('./events.js').EventParams>,
+  player: {
+    /** Each player's own roll: `reputation` points (reputationShift), so fewer votes. The richest is likelier. */
+    blamedForUnrest: {
+      phases: { planning: 0 },
+      needsColony: true,
+      mood: { unhappy: 0.02, unrest: 0.05 },
+      wealth: { richest: 0.02 },
+      neverIn: ['thriving', 'content'],
+      reputation: -1,
+      cap: 0.9,
+    },
+    /**
+     * In production: every working plot of the good the player works most plots of (a tie on the row's dice) makes
+     * `output` of its output, floored. A polluter is likelier, but only when Restless or worse.
+     */
+    walkout: {
+      phases: { production: 0 },
+      needsColony: true,
+      mood: { restless: 0.005, unhappy: 0.02, unrest: 0.04 },
+      wealth: { richest: 0.01 },
+      // The catalogue gives the polluter part no most, so its most is the row's cap.
+      pollution: { perPoint: 0.005, max: 0.9 },
+      pollutionIn: ['restless', 'unhappy', 'unrest'],
+      neverIn: ['thriving'],
+      output: 0.2,
+      cap: 0.9,
+    },
+    /** In production: one of the player's raw plots, on the row's dice, makes `gain` more; none without one. */
+    loyalCrew: {
+      phases: { production: 0 },
+      needsColony: true,
+      mood: { thriving: 0.03, content: 0.01 },
+      wealth: { poorest: 0.01 },
+      gain: 1,
+      cap: 0.9,
+    },
+  } satisfies Record<string, import('./events.js').EventRow & import('./events.js').EventParams>,
+};
+
+/**
  * Events: each row of the table below rolls on its own seeded dice, so several can fire in one phase and their effects
  * stack on the same plots. Each event's effect numbers sit under its key.
  */
@@ -1384,7 +1557,7 @@ export const EVENTS = {
     /** Credits the Federation pays each of the `count` poorest players, new money. */
     federationGrant: { phases: { planning: 0.02 }, amount: 150, count: 2, cap: 0.9 },
     /** The colonists grow by this share, for good (rounded). */
-    immigrationWave: { phases: { planning: 0.02 }, growth: 0.1, cap: 0.9 },
+    immigrationWave: { phases: { planning: 0.02 }, growth: 0.1, cap: 0.9, ...SOCIAL_EVENTS.immigrationWave },
     /** Every player without a Medicine is sick this development and the next; one with a Medicine uses it. */
     epidemic: { phases: { development: 0.005 }, cap: 0.9 },
     /** Every plot's Energy need is `factor` times this production. */
@@ -1395,6 +1568,8 @@ export const EVENTS = {
     pirateRaid: { phases: { auction: 0.01 }, cap: 0.9 },
     /** The store's stock of every good and its MULEs go to 0 before the auction opens. */
     storeFire: { phases: { auction: 0.01 }, cap: 0.9 },
+    // G-5 C26, after every older row so none of their dice or table order moves (SOCIAL_EVENTS).
+    ...SOCIAL_EVENTS.colony,
   } satisfies Record<string, import('./events.js').EventRow & import('./events.js').EventParams>,
   player: {
     /**
@@ -1419,18 +1594,22 @@ export const EVENTS = {
     /** Credits from min (the richest) to max (the poorest), linear in wealth rank (wave-2 AM-1 6a). */
     inheritance: { phases: { planning: 0.015 }, min: 100, max: 300, cap: 0.9 },
     /** One installed MULE is taken off one of the player's plots; rolls in development and again at the month end. */
-    muleTheft: { phases: { development: 0.01, upkeep: 0.01 }, cap: 0.9 },
+    muleTheft: { phases: { development: 0.01, upkeep: 0.01 }, cap: 0.9, ...SOCIAL_EVENTS.muleTheft },
     /** Share of the player's Food the rats eat (floored); fires only when that is at least 1. */
     ratsInSilo: { phases: { upkeep: 0.015 }, share: 0.5, cap: 0.9 },
     /** Share of the player's cash the accountant takes (floored); fires only when that is at least 1. */
     crookedAccountant: { phases: { upkeep: 0.01 }, share: 0.1, cap: 0.9 },
     /** Food the package brings. */
     packageFromHome: { phases: { upkeep: 0.015 }, amount: 3, cap: 0.9 },
+    // G-5 C26 (SOCIAL_EVENTS).
+    ...SOCIAL_EVENTS.player,
   } satisfies Record<string, import('./events.js').EventRow & import('./events.js').EventParams>,
   /** Pairs that never fire together in one phase: if both roll, the seeded dice keep one. */
   excludes: [
     ['drought', 'flood'],
     ['dustStorm', 'solarFlare'],
+    // The catalogue: "festival and general strike can't fall in the same month"; both roll in planning only.
+    ['festival', 'generalStrike'],
   ] satisfies [string, string][],
 };
 
@@ -1463,8 +1642,6 @@ export const STRATEGIST = {
   grantSpare: 0,
   /** A factory needs this many months of its inputs on hand or from its own plots. */
   factoryInputMonths: 2,
-  /** Spare Food, Water, Energy and Medicine it keeps over next month's need, before the reserve multiplier. */
-  keepSpare: { food: 1, water: 1, energy: 1, medicine: 0 } as Partial<Record<Good, number>>,
   /** It analyses an unknown plot of its own when the plot's best and second-best uses are this close, as a share. */
   analyseWhenClose: 0.25,
   /** Analyses per month, at most, and never with less than this many seconds left. */
@@ -1508,6 +1685,12 @@ export const STRATEGIST = {
   outlookMonths: 2,
   /** When it sizes its cash reserve, a short unit counts at most this many times the reference price. */
   reservePriceCap: 3,
+  /**
+   * Goods it keeps itself whole in for next month (Heiko, 5 Nov; Water only with a farm): while it holds less and
+   * the store sells the good, it buys up to that, as far as its money goes, at no more than the store's ask, and sells
+   * none of it; otherwise it keeps the status screen's need and may sell the rest.
+   */
+  buyShortfall: ['food', 'energy', 'water'] as Good[],
   /**
    * A new farm's Food, Water or Energy that covers the seat's own shortfall is
    * worth at least this many times the reference price: going short costs
@@ -1555,6 +1738,31 @@ export const STRATEGIST = {
   },
 };
 
+/**
+ * The resource-utility model: one value per unit a seat could hold, the chance it is needed times what going without
+ * it costs, plus the rest times what it fetches later. Placeholders until the balance phase.
+ */
+export const AI_VALUE = {
+  /** The switch: true values every unit with this model, false keeps the strategist's own values. */
+  unit: false,
+  /**
+   * Chance, per point of the persona's risk weight, that a unit the seat's own plots are forecast to make is needed
+   * anyway (the forecast falls short). 0 to 1; the product is capped at 1.
+   */
+  forecastRisk: 0.5,
+  /**
+   * While the store sells the good, a needed unit is never valued below the store's ask today, nor below this
+   * multiple of buying it back next month (the belief plus the store's spread), whichever is more. 1 is the buy-back
+   * price itself.
+   */
+  shortFloorMarkup: 1,
+  /**
+   * Months a unit held past the seat's needs is expected to wait before it is sold: it keeps (1 − spoilage) of itself
+   * per month. A count of upkeeps, 0 or more; 1 is a sale at the next auction.
+   */
+  holdMonths: 1,
+};
+
 /** The AI's hands in the real-time phases. Times are in ms. */
 export const AI_HANDS = {
   /** How often AI hands act during development, in the server and the simulator alike. */
@@ -1581,8 +1789,11 @@ export const AI_HANDS = {
     waitGap: [0.03, 0.08] as [number, number],
     /** It wanders its target up to this share of the board inside its limit, so its stops are hard to read. */
     targetJitter: 0.03,
-    /** How long it waits for the decider at the status screen before it plays its own top option. */
-    decideWaitMs: 2_500,
+    /**
+     * How long it waits for the decider at the status screen before it plays its own top option. It asks as the
+     * screen opens, so this stays well under WALK.statusMs and a late answer is still declared before the walk.
+     */
+    decideWaitMs: 4_000,
   },
   grant: {
     /** A go/no-go choice takes this much longer than a bare reaction. */
@@ -1619,8 +1830,8 @@ export const AI_PLANS = {
     otherScore: 0.8,
   },
   monopoly: {
-    /** The goods a seat may try to corner. */
-    goods: ['food', 'energy', 'smithore'] as Good[],
+    /** The goods a seat may try to corner. Not Food: it spoils too fast (STRATEGIST.cornerMaxSpoilage). */
+    goods: ['energy', 'smithore'] as Good[],
     /** A good is cornered only while at most this many rival plots make it. */
     maxRivalPlots: 1,
     /** And only with at least this many of its own idle or free plots whose best outfit is the good. */
@@ -1692,19 +1903,98 @@ export const SIM_TARGETS = {
 export const BRAIN = {
   /** The model that decides and talks. */
   model: 'claude-haiku-5-5',
-  /** A Smart seat's model budget per game, in US dollars; past it the seat plays Classic. */
-  seatBudgetUsd: 0.06,
+  /**
+   * The most all of a game's Smart AI seats together may spend on the model, in US dollars. Each Smart seat holds an
+   * equal share of it; past its share a seat plays Classic.
+   */
+  gameBudgetUsd: 1.0,
+  /**
+   * The PR-5 proof's total, in US dollars, across every brain:trial ledger (all days, all --run labels): a paid run
+   * whose --max-usd would carry the total past it is refused before any call (Heiko's cap, via the PM, 5 Nov).
+   */
+  proofCapUsd: 10,
+  /**
+   * The tournament behind UBER-AC-A's result clause, WS1's bar (Heiko, 5 Nov): Claude-playbook seats on the even chairs
+   * against engine-playbook seats on the odd. Its ledgers count against capUsd, apart from proofCapUsd. The claim: the
+   * Claude chairs win at least winShare of the games, with a mean rank at least rankLead better. The positive control,
+   * engine seats in the Claude chairs, lands between winShareLow and winShareHigh, within rankBand of mean rank.
+   */
+  tournament: {
+    capUsd: 60,
+    claim: { winShare: 0.6, rankLead: 0.3 },
+    control: { winShareLow: 0.45, winShareHigh: 0.55, rankBand: 0.15 },
+  },
   /** Hard ceiling, in US dollars, for the latency spike command. */
   spikeCapUsd: 0.05,
-  /** US dollars per million tokens. */
+  /** US dollars per million tokens, for `model` (Haiku 5.5). */
   pricesPerMTok: { input: 0.1, cacheRead: 0.01, cacheWrite: 0.125, output: 0.5 },
+  /** US dollars per million tokens for Sonnet 5.5: cache reads 0.1x input, 5-minute cache writes 1.25x. */
+  sonnetPricesPerMTok: { input: 2, cacheRead: 0.2, cacheWrite: 2.5, output: 10 },
+  /** The price table each model is billed at. Every model a call may name is listed here, so none is priced as another. */
+  priceTable: { 'claude-haiku-5-5': 'pricesPerMTok', 'claude-sonnet-5-5': 'sonnetPricesPerMTok' },
+  /**
+   * The calls that write a seat's strategy and its playbook edits, by kind: adaptive thinking at this effort, a reply
+   * cap that includes the thinking, and how long one call may take in ms (a p90 of 3.9 s was measured).
+   */
+  writeCalls: {
+    strategy: { model: 'claude-sonnet-5-5', effort: 'medium', maxTokens: 3_000, timeoutMs: 30_000 },
+    playbook: { model: 'claude-sonnet-5-5', effort: 'medium', maxTokens: 3_000, timeoutMs: 30_000 },
+  },
+  /** The cheaper model a strategy or playbook call may be sent to instead of its kind's model. */
+  writeFallbackModel: 'claude-haiku-5-5',
+  /**
+   * Round trips with the game's tools offered in one strategy or playbook call (RULE-A4); one more round without them
+   * asks for the answer, so a call makes at most toolRounds + 1.
+   */
+  toolRounds: 3,
+  /**
+   * Months whatIf may play for one strategy or playbook call. Each is a whole month played in process on the server
+   * (about 0.3s with the walking floor), so a model asking for many cannot stall every game's ticks; past it whatIf
+   * answers `limit`.
+   */
+  whatIfsPerWrite: 4,
+  /** How long a whatIf month plays on the server before it lets the event loop run, so every other room keeps ticking. */
+  whatIfSliceMs: 10,
+  /**
+   * Spike S-A1 (WS2 spec A §7), brain:strategy-spike: Haiku 5.5 with adaptive thinking against Sonnet 5.5 writing a
+   * seat's strategy. `models.haiku` is priced at pricesPerMTok, `models.sonnet` at sonnetPricesPerMTok.
+   */
+  strategySpike: {
+    /** Hard ceiling for one run, in US dollars; the --max-usd flag may only lower it. */
+    capUsd: 0.1,
+    models: { haiku: 'claude-haiku-5-5', sonnet: 'claude-sonnet-5-5' },
+    /** output_config.effort for both models: Haiku 5.5's default, one below Sonnet 5.5's. */
+    effort: 'medium',
+    /** Reply cap per call, in tokens, thinking included. */
+    maxTokens: 3_000,
+    /** How long one call may take before it counts as a timeout, in ms. */
+    timeoutMs: 30_000,
+    /** Strategy calls one seat makes in a game, as the cost projection assumes. */
+    callsPerSeatGame: 24,
+  },
+  /**
+   * brain:social-spike: what a Smart seat's social reasoning (relationships, aims, messages, campaign) costs on Haiku 5.5
+   * and Sonnet 5.5, folded into the strategy call, as its own call, and as a reply to one whisper. Priced as strategySpike.
+   */
+  socialSpike: {
+    /** Hard ceiling for one run, in US dollars; the --max-usd flag may only lower it. */
+    capUsd: 0.1,
+    models: { haiku: 'claude-haiku-5-5', sonnet: 'claude-sonnet-5-5' },
+    /** output_config.effort for both models, as strategySpike. */
+    effort: 'medium',
+    /** Reply cap per call and mode, in tokens, thinking included. */
+    maxTokens: { folded: 3_000, separate: 2_000, reply: 600 },
+    /** How long one call of each mode may take before it counts as a timeout, in ms. */
+    timeoutMs: { folded: 30_000, separate: 30_000, reply: 15_000 },
+  },
   /** Reply cap, in tokens. */
   maxTokens: 200,
   /**
-   * Prompt characters per token, as the budget assumes. Haiku 5.5 measured 2.56 to 2.65 on real prompts; this sits
-   * below the lowest so the worst case never undercounts.
+   * Prompt characters per token, as the budget assumes. Haiku 5.5 measured 2.56 to 2.65 on decision prompts, and about
+   * 2.24 on strategy prompts with adaptive thinking (spike S-A1); this sits below the lowest so the worst case never
+   * undercounts.
    */
-  charsPerToken: 2.5,
+  charsPerToken: 2.2,
   /** Longest chat line an AI says, in characters. */
   maxLineChars: 140,
   /** Most chat lines per AI seat per game month: one each for land, development and the auction, since a seat says at most one a phase. */
@@ -1715,4 +2005,27 @@ export const BRAIN = {
   talkLines: 6,
   /** How long a land decision may wait for the model, in ms; planning lasts up to 45 s. */
   landTimeoutMs: 5_000,
+  /** The strategy brief's sections, each capped so the prompt stays bounded; its table talk keeps `talkLines`. */
+  brief: {
+    /** Plots named per player under who owns the land; the rest are counted. */
+    plotsPerPlayer: 12,
+    /** Land plans offered, best first; never more than there are option letters. */
+    plans: 5,
+    /** Plots named under each land plan, with their values. */
+    plotsPerPlan: 3,
+    /** Entries named from each list in the draft land grant; the rest are counted. */
+    draftEntries: 6,
+    /** Past months of colony prices shown beside this month's, newest first. */
+    trendMonths: 3,
+    /** Items named from the seat's last PhaseOutcome (planned against got); the rest are counted. */
+    outcomeItems: 6,
+    /** Trades named per rival from the last PhaseOutcome; the rest are counted. */
+    rivalTrades: 4,
+    /** Refused edits named from the seat's last reply; the rest are counted. */
+    refusals: 6,
+    /** Goods named, with their plays, in the auction brief; the rest are counted. */
+    auctionGoods: 6,
+  },
+  /** Longest reason the playbook writer accepts on a strategy or an edit, in characters. */
+  writeReasonChars: 140,
 } as const;

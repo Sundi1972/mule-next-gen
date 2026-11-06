@@ -211,6 +211,66 @@ const GLYPH: Partial<Record<ShowEventKey, () => ReactNode>> = {
       <path {...S} strokeWidth={1.8} d="M12 6.2C10 2 6 3.5 8.5 6.2M12 6.2C14 2 18 3.5 15.5 6.2" />
     </>
   ),
+  // The colony's mood events (C26).
+  festival: () => (
+    <>
+      <path {...S} strokeWidth={1.8} d="M2 4c6 4 14 4 20 0" />
+      <path {...F} d="M4.5 5.6 8 6.8 5.6 11.5ZM10.5 7.2h3L12 12.5ZM16 6.8l3.5-1.2-1.1 5.9Z" />
+      <path {...F} d="M12 14.5l1.4 2.9 3.1.4-2.3 2.2.6 3.1-2.8-1.5-2.8 1.5.6-3.1-2.3-2.2 3.1-.4Z" />
+    </>
+  ),
+  generalStrike: () => (
+    <>
+      <rect x="3" y="2.5" width="18" height="11" rx="1.6" {...F} />
+      <path {...V} strokeWidth={2} d="M6.5 6.5h11M6.5 10h7" />
+      <path {...S} d="M12 13.5V22" />
+    </>
+  ),
+  riot: () => (
+    <>
+      <path {...F} d="M12 2 20.5 5v6.5c0 5-3.6 8.8-8.5 10.5C7.1 20.3 3.5 16.5 3.5 11.5V5Z" />
+      <path {...V} strokeWidth={1.8} d="M12 4.5 10 9.5l3.5 2-2.5 4.5 1 3.5" />
+    </>
+  ),
+  emigrationWave: () => (
+    <>
+      <path {...S} d="M3 21V4h9v17" />
+      <circle cx="15.5" cy="7" r="2.2" {...F} />
+      <path {...F} d="M13.5 10.5h4l1.5 5h-2l-.5 5.5h-3.5Z" />
+      <path {...S} d="M19 12h3.5M20.8 10l1.9 2-1.9 2" />
+    </>
+  ),
+  volunteerCleanup: () => (
+    <>
+      <path {...S} d="M19.5 2.5 11 13" />
+      <path {...F} d="M9.5 11.5 14 15.5 11 22H3.5Z" />
+      <path {...V} strokeWidth={1.4} d="M7 21l2.5-4.5M10 21.5l2-4" />
+    </>
+  ),
+  storeStrike: () => (
+    <>
+      <path {...F} d="M4 11h16v10H4Z" />
+      <path {...F} d="M2.5 11l2-4h15l2 4Z" />
+      <circle cx="12" cy="16" r="3.6" fill="none" stroke="var(--color-void)" strokeWidth={1.6} />
+      <path {...V} d="M9.5 18.5l5-5" />
+    </>
+  ),
+  walkout: () => (
+    <>
+      <path {...F} d="M4 13a8 8 0 0 1 16 0v1.5H4Z" />
+      <path {...F} d="M2 14.5h20V17H2Z" />
+      <path {...V} strokeWidth={1.8} d="M12 6.5v6" />
+      <path {...S} d="M7 21h10M14.5 18.8 17 21l-2.5 2.2" />
+    </>
+  ),
+  loyalCrew: () => <path {...F} d="M12 21.5C5.5 17 2.5 13.3 2.5 9.2A4.7 4.7 0 0 1 12 6.6a4.7 4.7 0 0 1 9.5 2.6c0 4.1-3 7.8-9.5 12.3Z" />,
+  blamedForUnrest: () => (
+    <>
+      <path {...F} d="M4 3h16a1.6 1.6 0 0 1 1.6 1.6v10.8A1.6 1.6 0 0 1 20 17h-9l-5 4.5V17H4a1.6 1.6 0 0 1-1.6-1.6V4.6A1.6 1.6 0 0 1 4 3Z" />
+      <path {...V} strokeWidth={2.4} d="M12 6.5v4.5" />
+      <circle cx="12" cy="14" r="1.3" fill="var(--color-void)" />
+    </>
+  ),
 };
 
 export function EventGlyph({ k, size = 24, className }: { k: ShowEventKey; size?: number; className?: string }) {
@@ -249,6 +309,15 @@ export const EVENT_ACCENT: Partial<Record<ShowEventKey, string>> = {
   ratsInSilo: 'var(--color-ink-2)',
   crookedAccountant: 'var(--color-warn)',
   packageFromHome: 'var(--color-g-food)',
+  festival: 'var(--color-ok)',
+  generalStrike: 'var(--color-alert)',
+  riot: 'var(--color-alert)',
+  emigrationWave: 'var(--color-ink-2)',
+  volunteerCleanup: 'var(--color-ok)',
+  storeStrike: 'var(--color-mule-metal)',
+  walkout: 'var(--color-warn)',
+  loyalCrew: 'var(--color-ok)',
+  blamedForUnrest: 'var(--color-warn)',
 };
 /** A key this client doesn't know yet takes the text colour. */
 export const accent = (k: ShowEventKey) => EVENT_ACCENT[k] ?? 'currentColor';
@@ -312,8 +381,8 @@ export function EventDeltaChip({ delta, good, size = 'tv', className, lost, text
 
 const isGood = (what: ShowEffect['what']): what is Good => what in GOOD_NAME;
 
-/** Whether a change off the map is good for the colony: a higher energy need is not, and losing MULEs never is. */
-export const effectIsGood = (f: ShowEffect) => (f.what === 'energyNeed' ? f.delta < 0 : f.what === 'mules' ? false : f.delta > 0);
+/** Whether a change off the map is good for the colony: a higher energy need or more air pollution is not, and losing MULEs never is. */
+export const effectIsGood = (f: ShowEffect) => (f.what === 'energyNeed' || f.what === 'air' ? f.delta < 0 : f.what === 'mules' ? false : f.delta > 0);
 
 /** A change off the map, as a chip: credits, held goods, a gauge. Same notch-and-stripes language as the plot's chip. */
 export function EventEffectChip({ f, size = 'tv', className }: { f: ShowEffect; size?: 'tv' | 'phone' | 'hero'; className?: string }) {

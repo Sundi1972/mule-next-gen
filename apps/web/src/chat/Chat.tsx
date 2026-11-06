@@ -235,31 +235,47 @@ export function FallbackBubble() {
   return <div className="relative -mt-1 h-0 short:-mt-0.5">{said && <FallbackAt {...said} />}</div>;
 }
 
-/** The last few lines, newest first: the phone keeps 2, the TV 3. */
-function Ticker({ size = 'phone' }: { size?: 'phone' | 'tv' }) {
+/**
+ * The last few lines, newest first: `lines` of them, or the phone 2 and the TV 3. Each line is cut to one row, or with
+ * `wrap` (a narrow column) runs on as one sentence, speaker and words together, over at most three rows. `wide` sets the
+ * phone's lines in text-sm for a holder outside the shell's /shell container, where its own 1100 px step never fires.
+ * A line never gives up its rows: a holder short of room cuts the oldest first, at its foot.
+ */
+export function Ticker({ size = 'phone', lines: keep, wrap = false, wide = false }: { size?: 'phone' | 'tv'; lines?: number; wrap?: boolean; wide?: boolean }) {
   const { lines } = useTableChat();
   const { seats } = useSeats();
   const tv = size === 'tv';
   const said = lines.filter((l) => seats.has(l.from));
   return (
-    <ul className={cx('flex flex-col overflow-hidden', tv ? 'gap-1' : 'gap-0.5')} data-testid="chat-ticker" aria-label="Table chat" aria-live="polite">
+    <ul className={cx('flex min-w-0 flex-col overflow-hidden', tv ? 'gap-1' : 'gap-0.5')} data-testid="chat-ticker" aria-label="Table chat" aria-live="polite">
       {said
-        .slice(tv ? -3 : -2)
+        // From the end, by count: slice(-0) would keep them all, so none is an empty slice.
+        .slice(Math.max(0, said.length - (keep ?? (tv ? 3 : 2))))
         .reverse()
         .map((l, i) => {
           const { player, slot } = seats.get(l.from)!;
           return (
             <li
               key={l.id}
-              className={cx('flex min-w-0 items-center gap-1.5 truncate', tv ? 'text-xl' : 'text-[11px] @min-[1100px]/shell:text-sm', i === 0 ? 'animate-[show-card-in_0.25s_ease-out] text-ink' : 'text-ink-3')}
+              className={cx(
+                'min-w-0 shrink-0',
+                wrap ? 'line-clamp-3 leading-tight' : 'flex items-center gap-1.5 truncate',
+                tv ? 'text-xl' : wide ? 'text-sm' : 'text-[11px] @min-[1100px]/shell:text-sm',
+                i === 0 ? 'animate-[show-card-in_0.25s_ease-out] text-ink' : 'text-ink-3',
+              )}
               data-testid={`chat-line-${l.id}`}
             >
-              <Creature species={player.species} color={SLOT_COLOR[slot]} size={tv ? 22 : 14} />
-              <strong className="shrink-0">
+              <span className={wrap ? 'mr-1 inline-block align-[-3px]' : 'contents'}>
+                <Creature species={player.species} color={SLOT_COLOR[slot]} size={tv ? 22 : 14} />
+              </span>
+              <strong className={wrap ? undefined : 'shrink-0'}>
                 {player.name}
                 {l.to ? ' 🔒' : ''}:
               </strong>
-              <span className="truncate">{l.text}</span>
+              <span className={wrap ? undefined : 'truncate'}>
+                {wrap ? ' ' : ''}
+                {l.text}
+              </span>
             </li>
           );
         })}
@@ -287,13 +303,16 @@ export function TableChat({ under = false }: { under?: boolean }) {
   );
 }
 
-/** The TV's ticker, under its header. Nothing shows until someone speaks. */
-export function TvTicker() {
+/**
+ * The TV's ticker, under its header: its last three lines, newest first, or the `most` newest where a screen has less
+ * room. Nothing shows until someone speaks, or with `most` 0.
+ */
+export function TvTicker({ most }: { most?: number } = {}) {
   const { lines } = useTableChat();
-  if (lines.length === 0) return null;
+  if (lines.length === 0 || most === 0) return null;
   return (
     <div className="rounded-panel border border-holo-line bg-panel/60 px-4 py-2">
-      <Ticker size="tv" />
+      <Ticker size="tv" {...(most === undefined ? {} : { lines: most })} />
     </div>
   );
 }

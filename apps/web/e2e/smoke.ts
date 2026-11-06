@@ -4,12 +4,13 @@
  * Run with `pnpm --filter @mule/web e2e`; replay a red run's map with `MULE_E2E_SEED=<seed>`.
  */
 import { existsSync } from 'node:fs';
-import { EVENTS, WALK, type GameState } from '@mule/engine';
+import { EVENTS, SPECIES, WALK, type GameState } from '@mule/engine';
 import { errors as playwrightErrors, type BrowserContext, type Page } from 'playwright';
 import { PHASE_MS } from '../../server/src/mule-game.js';
 import type { MuleServer } from '../../server/src/server.js';
 import { check, CLAIM_MS, claimAPlot, doneWithLand, held, launch, PHONE, startServer, TV, type AuctionSteps, type GameStepContext } from './harness';
 import { planningIsTheHub } from './hub-steps';
+import { theAuctionTvFits, theMonthEndTvFits, theTvHeaderFits, theTvHeaderStaysOnScreen, theTvTitleIsClear } from './tv-fit-steps';
 import { gameOverIsInCredits, theLeagueTableAtTheMonthEnd, theMonthEndHoldsForThePhone } from './month-end-steps';
 import { ELECTION_WAIT_MS, readyThroughTheElection } from './politics-steps';
 import { checkTheShow, watchShow, type ShowWatch } from './production-steps';
@@ -122,8 +123,18 @@ try {
   console.log(`election: ${await doneThroughTheElection(ctx, within(ELECTION_WAIT_MS))}`);
   // The TV shows election day first; its planning roster comes after.
   await tvGame.locator('li').filter({ hasText: 'Heiko' }).getByRole('img', { name: 'Mollox' }).first().waitFor({ timeout: 3_000 });
-  check((await tvGame.getByRole('img', { name: 'Zipwing' }).count()) === 0, 'B-AC-1: nobody in the TV game plays the seat-1 default, Zipwing');
-  check((await tvGame.getByRole('img', { name: 'Bramblet' }).count()) >= 1, 'B-AC-1: the TV game still shows the first AI as a Bramblet');
+  // The species each seat plays come from the server's game, not from the chair: a seat's default turns with the seed
+  // (FM-species-by-chair). The TV game draws exactly the species the game holds, so the host's own default, which its
+  // pick replaced, is on no one, and each AI plays the species the game dealt it.
+  const gameSeats = server.registry.get(code)?.viewFor(null).game?.players.map((p) => ({ name: p.name, species: p.species })) ?? [];
+  check(gameSeats.length === 3, `B-AC-1: the server's game holds three seats, got ${gameSeats.length}`);
+  check(gameSeats.find((p) => p.name === 'Heiko')?.species === 'mollox', `B-AC-1: the server's game has Heiko as the Mollox he picked: ${JSON.stringify(gameSeats)}`);
+  for (const species of SPECIES) {
+    const name = species[0]!.toUpperCase() + species.slice(1);
+    const drawn = (await tvGame.getByRole('img', { name }).count()) > 0;
+    const inGame = gameSeats.some((p) => p.species === species);
+    check(drawn === inGame, `B-AC-1: the TV game ${inGame ? 'draws' : 'draws no'} ${name}, as the server's game holds ${gameSeats.map((p) => `${p.name} ${p.species}`).join(', ')}`);
+  }
   const rose = await theTvDrawsRose(ctx, 'planning');
   await specialFieldsShowTheirGlyphs(ctx);
   await readyThroughTheElection(phone, READY_MS);
@@ -131,6 +142,7 @@ try {
   await claim.waitFor({ timeout: 5_000 });
   check(await claim.isVisible(), 'CLAIM button visible');
   await tv.getByTestId('tv-phase').filter({ hasText: 'Land grant' }).waitFor({ timeout: 3_000 });
+  console.log(`TV-FIT, the land grant: ${await theTvHeaderStaysOnScreen(tv, 'land grant', true)}`);
   await noZoomBeforeYourFirstPlot(ctx);
   await claimAPlot(phone, CLAIM_MS, 'AM-7: the phone claims a plot in the month-1 land grant');
   await zoomButtonOnceYouOwnAPlot(ctx, phoneIntents);
@@ -151,24 +163,35 @@ try {
   installAFirstMule(server, code);
   await theTvDrawsRose(ctx, 'development', rose);
   console.log(`plots, TV: ${await theTvShowsWhoOwnsEachPlot(ctx)}`);
+  // The header without a ready chip: its gauges give way, so a long title keeps clear of them.
+  await tv.locator('[data-phase=development] [data-testid=tv-header]').waitFor({ timeout: PRESS_MS });
+  console.log(`TV-FIT, development: ${await theTvTitleIsClear(tv, 'development')}; ${await theTvHeaderStaysOnScreen(tv, 'development', true, true)}`);
   // B-AC-6 and B-AC-8, from what both screens drew of month 1's show. The turn runs its whole clock, which starts only
   // once the AI seats have their first MULEs too: a development's length again for that wait.
   await phone.locator('[data-phase=auction]').waitFor({ timeout: within(2 * PHASE_MS.development + PHASE_MS.production) });
   console.log(`production show, month 1: ${await checkTheShow({ tv: tvShow, phone: phoneShow })}`);
   let measured = false;
+  let fits = '';
   await pressDoneThroughTheAuction(phone, async (button) => {
     if (!measured && button.startsWith('Done with')) measured = await checkTheFloorClearsTheNames(phone, tv);
+    if (!fits && button.startsWith('Done with') && (await tv.locator('[data-testid=tv-walk]').count()) > 0) fits = await theAuctionTvFits(tv, server, code);
   });
   check(measured, 'FM-2: the month-1 auction reached a walk to measure');
+  check(fits !== '', 'TV-FIT: the month-1 auction reached a walk to measure the TV in');
+  console.log(`TV-FIT, the auction: ${fits}`);
 
   // B-AC-12 at month 1's end, the one a two-month game has; then it holds until the phone moves on (B-AC-13).
   console.log(`league table: ${await theLeagueTableAtTheMonthEnd(ctx)}`);
+  await tv.getByTestId('tv-monthend').waitFor({ timeout: PRESS_MS });
+  console.log(`TV-FIT, the month end: ${await theMonthEndTvFits(tv, server, code)}`);
   console.log(`month end: ${(await theMonthEndHoldsForThePhone(ctx, 1)).line}`);
 
   // Month 2.
   await steps.listedSale?.({ phone, tv, check });
   makeHungry(server, code);
   // B-AC-14: planning is the hub, its needs read from that seed; with B-AC-12's planning part.
+  await tv.getByTestId('tv-planning').waitFor({ timeout: READY_MS });
+  console.log(`TV-FIT, planning: ${await theTvHeaderFits(tv, 'planning')}`);
   console.log(`hub: ${await planningIsTheHub(phone, server, code)}`);
   // B-AC-7 (in game): the player moves to a second device, which plays the rest of the game.
   const second = await newPhone('second device');

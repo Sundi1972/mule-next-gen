@@ -21,6 +21,7 @@ export {
 export { EVENT_ENTRY, type EventEntry, type EventMotion } from './catalogue';
 export { EventBoundary } from './boundary';
 export { EventEffectChip } from './glyphs';
+export { GaugeDepartures as EventGaugeDepartures, gaugeChipsAt as eventGaugeChipsAt, type GaugeChip as EventGaugeChip } from './cards';
 export { EventSickTag, sickAt as eventSickAt } from './rollcall';
 export { EventShow, useShow as useEventShow, useEnclosingEventShow, type EventShowProps } from './frame';
 export { EventLivingMap } from './map';
@@ -28,3 +29,4 @@ export { useEventLivingView } from './living';
 export { EventSoloRail, EventTvPhoneRail, EventSkipHint } from './phone';
 export { useEventReducedMotion } from './motion';
 export { EventPips, EventTvLog, EventColonyChips, type EventPlotOutput } from './tv';
+export { Colonist as EventColonist, TOWN as EVENT_TOWN } from './scene';

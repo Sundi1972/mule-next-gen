@@ -47,6 +47,8 @@ export type AiAction =
   | { type: 'unlist'; id: string }
   /** Planning, the Governor once the votes are over: commission a prestige object for the colony (G-5 RULE-22). */
   | { type: 'commission'; id: PrestigeId }
+  /** Planning: give credits toward a commissioned object; the giver's plaque on it records them (G-5 RULE-23). */
+  | { type: 'donate'; id: PrestigeId; credits: number }
   /** Planning, the Governor once the votes are over: pay this month's general strikers from the fund (G-5 RULE-26). */
   | { type: 'payStrike' }
   /** Planning, the Governor once the votes are over: mend a damaged prestige object from the fund (G-5 RULE-22). */
@@ -129,8 +131,8 @@ const DESCRIBED = {
     type: 'install',
     command: 'install',
     phases: ['development'],
-    does: () => 'Installs the outfitted MULE it leads on one of its plots; a MULE already there runs away.',
-    legalWhen: () => [...DEVELOPER, 'The MULE is not outfitted', 'Your MULE bolted: catch it first', 'Not a plot', 'Not your plot'],
+    does: () => 'Installs the outfitted MULE it leads on one of its plots; a MULE already there comes onto its lead, and goes to the corral if the turn ends with it still led.',
+    legalWhen: () => [...DEVELOPER, 'The MULE is not outfitted', 'Your MULE bolted: catch it first', 'Not a plot', 'Not your plot', 'Same outfit: nothing to swap', 'Just swapped: lead it to another plot'],
     cost: null,
     args: PLOT,
   },
@@ -299,6 +301,23 @@ const DESCRIBED = {
     ],
     cost: null,
     args: { id: "the object: 'park', 'hospital', 'observatory', 'stadium' or 'spaceport'" },
+  },
+  donate: {
+    type: 'donate',
+    command: 'donate',
+    phases: ['planning'],
+    does: () => "Gives credits from the seat's money toward a commissioned prestige object; the plaque on it names the giver, and the gift counts toward their vote weight.",
+    legalWhen: () => [
+      "This game plays without the colony's council",
+      'Donate in planning',
+      'Nothing is being funded',
+      'Give at least 1 cr or 1 unit',
+      'You have {money} cr',
+      'The {name} needs only {credits} cr more',
+    ],
+    // The credits it names, so no fixed cost.
+    cost: null,
+    args: { id: 'the commissioned object', credits: 'whole credits, at most what it still needs' },
   },
   payStrike: {
     type: 'payStrike',

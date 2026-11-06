@@ -6,7 +6,7 @@ import { fakeContext, pressThroughSidePick, readyAll, seats } from './fake-conte
 
 /**
  * C31 B-AC-27 (G-5 spec RULE-25): at game over every screen's colony view carries the colony score, its three terms,
- * the factor and the total; before it, none. Each player's standing is their Worth with their plaques beside it: the
+ * the factor and the total; every month before it, too, as the state stands (AM-12). Each player's standing is their Worth with their plaques beside it: the
  * view's `worth` and their entries on the projects' plaques.
  */
 function playToTheEnd(politics: boolean) {
@@ -26,14 +26,14 @@ function playToTheEnd(politics: boolean) {
 }
 
 describe('C31 B-AC-27: the colony score on every screen at game over', () => {
-  it('at game over the TV and every phone carry the colony score as RULE-25 scores the final state; before it, none', () => {
+  it('at game over the TV and every phone carry the colony score as RULE-25 scores the final state; every view before it carries one too (AM-12)', () => {
     const { game, state, views } = playToTheEnd(true);
     expect(state.phase).toBe('gameOver');
     const expected = colonyScore(state)!;
     expect(expected.total).toBeGreaterThan(0);
     for (const seat of [null, 's1', 's2']) expect(game.viewFor(seat).colony!.score, `seen by ${seat ?? 'the TV'}`).toEqual(expected);
     expect(views.length).toBeGreaterThan(0);
-    for (const v of views) expect(v.colony?.score ?? null).toBeNull();
+    for (const v of views) expect(v.colony?.score?.total, `month ${v.month}, ${v.phase}`).toBeGreaterThan(0);
   });
 
   it("each player's standing: the view's Worth, with their plaques beside it on the projects' plaques", () => {

@@ -53,7 +53,7 @@ const me: MyView = {
   droneOrder: [],
   politics: null,
   installedThisTurn: false,
-  worthParts: { money: 3_000, goods: 100, plots: 1, land: 300, mules: 0, muleValue: 0, office: 0, cut: 0 },
+  worthParts: { money: 3_000, goods: 100, plots: 1, land: 300, mules: 0, muleValue: 0, office: 0, donated: 0, cut: 0 },
 };
 
 function view(extra: Partial<MuleView> = {}): MuleView {
@@ -178,7 +178,7 @@ describe('N-6 (WS4): a shared win at game over', () => {
   it('N-6: a winner who shares it is told so on the phone, in the card and the rail; three level winners read as a list', () => {
     const phone = onPhone(LEVEL, GameOver);
     expect(text(element(phone, 'my-place'))).toBe('You share the win!');
-    expect(text(phone)).toContain('Game over: you share the win');
+    expect(text(element(phone, 'now-title'))).toBe('You share the win');
 
     // A phone outside the tie: its place, and the shared line with a mark for each winner.
     const kai = element(onPhone(tied([KAI, { ...HEIKO, worth: 5_200 }, MIA]), GameOver), 'winner');

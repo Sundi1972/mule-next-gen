@@ -92,22 +92,44 @@ export const PHONE_SMALL = { ...PHONE, viewport: { width: 667, height: 375 } };
 export const PHONE_WIDE = { width: 932, height: 430 };
 export const TV = { viewport: { width: 1920, height: 1080 } };
 
+/** The last check the file made, passed or not: what the watchdog names when the file runs over its time. */
+let lastCheck = 'none yet';
+
 export function check(cond: unknown, message: string): asserts cond {
+  lastCheck = message;
   if (!cond) throw new Error(`E2E check failed: ${message}`);
+}
+
+/**
+ * The watchdog (CI): with MULE_E2E_FILE_LIMIT_S set, an e2e file still running after that many seconds fails at once and
+ * names its last check. Some waits have no deadline of their own (page.evaluate has none), so a stuck page used to hold
+ * the job until CI cancelled it at its limit, saying nothing (batch 38, 6 Nov: 13 silent minutes in shell.ts).
+ */
+const FILE_LIMIT_S = Number(process.env.MULE_E2E_FILE_LIMIT_S ?? 0);
+if (FILE_LIMIT_S > 0) {
+  setTimeout(() => {
+    console.error(`E2E watchdog: ${process.argv[1]?.split('/').at(-1) ?? 'this file'} ran past ${FILE_LIMIT_S} s; its last check: ${lastCheck}`);
+    process.exit(1);
+  }, FILE_LIMIT_S * 1_000).unref();
 }
 
 /**
  * Presses CLAIM until the claims counter drops, within `timeoutMs`. The lit plot moves on every
  * tick and an AI can take it first, so a press may be refused; press again. `promise` names the
  * check that fails when no claim lands in time.
+ *
+ * It first waits for the phone to draw the grant: called as the last seat presses Ready, a phone can still be on the
+ * screen before for a moment, and reading "no grant" then failed the claim before it began (CI, 5 Nov, three times).
  */
 export async function claimAPlot(phone: Page, timeoutMs: number, promise: string): Promise<void> {
   const grant = phone.locator('[data-phase=landGrant]');
   const claim = grant.getByRole('button', { name: /CLAIM/ });
   const unclaimed = grant.getByText(`${GAME.claimsPerGrant} OF ${GAME.claimsPerGrant} CLAIMS LEFT`, { exact: true });
   const deadline = Date.now() + timeoutMs;
+  await claim.waitFor({ timeout: Math.max(1, deadline - Date.now()) }).catch(() => undefined);
   for (;;) {
-    check((await grant.count()) > 0 && Date.now() < deadline, promise);
+    check((await grant.count()) > 0, `${promise}: no land grant on this phone (never shown, or ended before its claim landed)`);
+    check(Date.now() < deadline, `${promise}: no free plot could be claimed within ${timeoutMs} ms`);
     if ((await unclaimed.count()) === 0) return;
     try {
       // Waits until a free plot is lit, which enables the button.

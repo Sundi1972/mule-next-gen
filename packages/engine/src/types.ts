@@ -88,6 +88,11 @@ export interface TakenMule {
   readonly y: number;
   readonly outfit: Outfit;
   readonly runMonths: number;
+  /**
+   * It came off by a swap (AM-35): another MULE stands on its plot now, so if the turn ends with it still carried it
+   * goes to the corral, not back to the plot.
+   */
+  readonly swapped?: true;
 }
 
 export interface Player {
@@ -251,7 +256,18 @@ export type EventKey =
   | 'storeFire'
   | 'ratsInSilo'
   | 'crookedAccountant'
-  | 'packageFromHome';
+  | 'packageFromHome'
+  // G-5 C26: the colony's social events, rolled in planning (a general strike also files a production event when unpaid).
+  | 'festival'
+  | 'generalStrike'
+  | 'emigrationWave'
+  | 'blamedForUnrest'
+  // G-5 C26 PR-B: development's store strike, production's walkout and loyal crew, the month end's riot and clean-up.
+  | 'storeStrike'
+  | 'walkout'
+  | 'loyalCrew'
+  | 'riot'
+  | 'volunteerCleanup';
 
 /** How the screens animate an event; several events share a kind. */
 export type EventKind =
@@ -275,8 +291,11 @@ export type EventKind =
 /** One change an event made off the map: whose (a player's id, the store or the colony), of what, and by how much. */
 export interface EventEffect {
   on: string | 'store' | 'colony';
-  what: Good | 'money' | 'mules' | 'colonists' | 'energyNeed';
+  /** G-5 C26 adds 'mood' (moodShift's change), 'prestige' (lasting points), 'air' (the gauge) and 'reputation'. */
+  what: Good | 'money' | 'mules' | 'colonists' | 'energyNeed' | 'mood' | 'prestige' | 'air' | 'reputation';
   delta: number;
+  /** The holder's count of `what` right after this effect, before anything later in the month moves it; absent means not reported. */
+  to?: number;
 }
 
 export interface MonthEvent {
@@ -314,6 +333,8 @@ export interface MonthEvent {
   phase: Phase;
   /** What the event changed off the map, in the order it changed it; absent when it changed nothing there. */
   effects?: EventEffect[];
+  /** The colony's objects it damaged (a riot); absent when it damaged none. */
+  objects?: { id: PrestigeId; becomes: 'damaged' }[];
 }
 
 export interface EventWarning {
@@ -449,6 +470,8 @@ export interface ColonyGauges {
   wealth: number;
   prestige: number;
   happiness: number | null;
+  /** The air as the month ended, 0..POLLUTION.airMax: with the other three, it scores the month end (G-5 AM-12). */
+  air: number;
 }
 
 export type Office = 'governor' | 'sheriff';
@@ -563,6 +586,12 @@ export interface Walker {
   dir: -1 | 0 | 1;
   /** Board time (ms into the walk) when their rounded price last changed: who got there first. */
   since: number;
+  /** A seller stopped at the amount they must hold of this good (RULE-4): they sell nothing more until a hold of ▼ frees them. Survives a side switch. */
+  held?: true;
+  /** Board time when the current hold of ▼ began; cleared by any other walk intent, a tap or a stop. */
+  downSince?: number;
+  /** A stopped seller who held ▼ for WALK.shortHoldMs: sells into shortage for the rest of this good (RULE-4 row 2). */
+  sellsShort?: true;
 }
 
 /** A buyer and a seller, either of them perhaps a house (the store, the ship), exchanging units right now. */

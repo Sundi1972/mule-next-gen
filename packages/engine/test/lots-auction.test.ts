@@ -11,6 +11,7 @@ import {
   RuleError,
   setLotWalk,
   stepLandAuction,
+  WALK,
   type GameState,
   type Listing,
   type Tile,
@@ -362,8 +363,8 @@ describe('when a lot’s walk ends (RULE-4)', () => {
 });
 
 describe('T-AC-8: the faster climb past the top and the soft close (RULE-4 row 0, the speed line)', () => {
-  // Every lot here has minimum 200, so the board runs from 140 to 400 and crosses it in 6 s.
-  const BASE = (400 - 140) / 6;
+  // Every lot here has minimum 200, so the board runs from 140 to 400 and crosses it in WALK.crossSeconds.
+  const BASE = (400 - 140) / WALK.crossSeconds;
   // A step this long moves a bid at least 8 past where it stood, so a buyer level with the leader passes them in it.
   const JUMP = 200;
 

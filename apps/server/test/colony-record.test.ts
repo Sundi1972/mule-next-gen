@@ -9,7 +9,7 @@ import { replay } from '../src/replay.js';
 import { fakeContext, seats } from './fake-context.js';
 
 /** Every seat plays Classic: no Claude call to record. */
-const classic: BrainService = { deciderFor: () => null, chatter: (seat, say) => chatter(seat.id, say), finish: () => {} };
+const classic: BrainService = { deciderFor: () => null, writerFor: () => null, chatter: (seat, say) => chatter(seat.id, say), finish: () => {} };
 const KEY_VAR = 'ANTHROPIC_API_KEY';
 
 describe('T-AC-30: the record replays the colony', () => {
@@ -81,7 +81,8 @@ describe('T-AC-30: the record replays the colony', () => {
       expect(accepted('commission'), 'an accepted commission is in the record').toHaveLength(1);
       expect(accepted('donate'), 'an accepted donation is in the record').toHaveLength(1);
       const hospital = (final! as GameState).colony!.projects.find((p) => p.id === 'hospital');
-      expect(hospital?.plaque).toEqual({ s2: 50 });
+      // AI seats may donate too (C28); the human's gift is what this record proves.
+      expect(hospital?.plaque).toMatchObject({ s2: 50 });
 
       const result = await replay(record);
       expect(result.stateHash.replayed).toBe(record.outcome!.stateHash);

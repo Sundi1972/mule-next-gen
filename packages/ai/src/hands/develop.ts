@@ -4,11 +4,15 @@ import {
   doorOutside,
   HALL_DOORS,
   reachOf,
+  speedOf,
   glintMiddle,
   IDLE_INPUT,
+  isAssaying,
+  isStunned,
   MS_PER_SECOND,
   observe,
   pathTo,
+  pressOrder,
   terrainShare,
   tileAt,
   tileIndex,
@@ -77,6 +81,42 @@ const STOP: DevAction = { kind: 'stop' };
 
 /** The presses a MULE takes at the counters and its plot: buy, outfit, install. */
 const MULE_PRESSES = 3; // literal-ok: a count of the rule's steps, not balance
+
+/**
+ * Whether the lit glint fades in the floor's coming step: stepFloor steps the tick and fades a glint whose time is up
+ * (stepGlint) before the tick's presses apply, so a GRAB pressed now reaches nothing of the glint's.
+ */
+const fadesThisStep = (floor: DevFloor): boolean => floor.moments.glint !== null && floor.tick + 1 >= floor.moments.glint.untilTick;
+
+/**
+ * Whether a rival may take the lit glint before this seat's GRAB applies: the press applies after the coming step, which
+ * gives the glint to a colonist that steps onto its tile, and after the presses ahead of it in the tick's press order
+ * (public: seat order and the tick). So a rival on the map may take it first from within a step of the glint's tile,
+ * or, pressing ahead of this seat, from within GRAB's reach after its step. A stunned or assaying rival neither steps
+ * nor presses (FM-hurry-margin).
+ */
+function rivalMayGrab(state: GameState, floor: DevFloor, me: string, cfg: FloorConfig): boolean {
+  const g = floor.moments.glint;
+  if (!g) return false;
+  const m = glintMiddle(g);
+  const next = floor.tick + 1;
+  const order = pressOrder({ ...floor, tick: next }, floor.colonists.map((c) => c.id));
+  const first = new Set(order.slice(0, order.indexOf(me)));
+  return floor.colonists.some((r) => {
+    if (r.id === me || r.space !== 'map') return false;
+    const steps = !isStunned(r, floor.tick) && !isAssaying(r, floor.tick);
+    const step = steps ? (speedOf(r, state, cfg) * cfg.steer.tickMs) / MS_PER_SECOND : 0;
+    const presses = first.has(r.id) && !isStunned(r, next) && !isAssaying(r, next);
+    const gap = Math.hypot(r.x - m.x, r.y - m.y);
+    // The tile's corners lie half a diagonal from its middle.
+    return gap <= step + Math.SQRT1_2 || (presses && gap <= cfg.glint.grabReach + step);
+  });
+}
+
+/** Whether Reach offers this seat a press below GRAB where it stands: what a GRAB pressed now becomes if the glint is gone. */
+function pressBelowGrab(state: GameState, floor: DevFloor, me: string, cfg: FloorConfig, secondsLeft: number): boolean {
+  return reachOf({ ...floor, moments: { ...floor.moments, glint: null } }, state, me, cfg, { secondsLeft }).enabled;
+}
 
 /** How an AI level plays a pack of wolves (RULE-4's levels): a Rookie a rookie, a Trader a regular, a Tycoon a veteran. */
 const WOLF_LEVEL: Record<AiLevelId, WolfFightLevel> = { rookie: 'rookie', trader: 'regular', tycoon: 'veteran' };
@@ -350,9 +390,16 @@ export class DevelopHand {
     this.pack = null;
     if (c.stunnedUntilTick !== undefined && floor.tick < c.stunnedUntilTick) return IDLE_INPUT;
     // A press that comes first wherever it stands: pelts at a store door (the door's LEAVE waits behind SELL), and a
-    // glint within reach, raced or not (ENTER, ANALYSE, INSTALL wait behind GRAB THE GLINT).
+    // glint within reach, raced or not (ENTER, ANALYSE, INSTALL wait behind GRAB THE GLINT). Never GRAB for a glint
+    // that fades in the coming step: the press applies after it, to the row below, such as ANALYSE of the land
+    // underfoot, an assay no plan priced (FM-glint-fade).
+    // Nor where a rival may take the glint first while a row below GRAB is on offer: the press would fall to that row
+    // just the same. Racing, it walks onto the glint's tile instead, which wins it in the step with no press
+    // (FM-hurry-margin); not racing, it lets the glint go.
     const first = reachOf(floor, state, me, cfg, { secondsLeft }).kind;
-    if ((c.pelts > 0 && first === 'sell') || first === 'grab') return { x: 0, y: 0, act: true };
+    const fading = fadesThisStep(floor);
+    const sure = !fading && !(first === 'grab' && rivalMayGrab(state, floor, me, cfg) && pressBelowGrab(state, floor, me, cfg, secondsLeft));
+    if ((c.pelts > 0 && first === 'sell') || (first === 'grab' && sure)) return { x: 0, y: 0, act: true };
     if (c.assayUntilTick !== null && floor.tick < c.assayUntilTick) return null;
     const g = floor.moments.glint;
     // Whether it would race is drawn once a glint (GLINT.botShare); whether it can, every tick the glint is lit and it
@@ -364,7 +411,10 @@ export class DevelopHand {
     if (g && this.glintWanted && this.racingGlint !== g.sinceTick) {
       const to = glintMiddle(g);
       const from = this.raceFrom(view, c);
-      if (Math.hypot(to.x - from.x, to.y - from.y) <= cfg.glint.botCareTiles && this.fitsDetour(view, c, to)) {
+      // It sets off only with the slack a MULE is bought with (botPlanSlackShare): a race started on the knife edge is
+      // given up a few ticks on, when the estimate wobbles, further from its errand than it started, and the walk out and
+      // back can cost the MULE it leads (FM-pub-lead). The check while racing, below, keeps no slack.
+      if (Math.hypot(to.x - from.x, to.y - from.y) <= cfg.glint.botCareTiles && this.fitsDetour(view, c, to, cfg.steer.botPlanSlackShare)) {
         this.racingGlint = g.sinceTick;
         this.chaser.reset();
       }
@@ -373,8 +423,10 @@ export class DevelopHand {
     // the pub's, and every step left on the list after the glint (RULE-8).
     const racing = g !== null && this.racingGlint === g.sinceTick;
     const spare = !cfg.steer.botsSpareTime || (racing && secondsLeft > pubSeconds(state, cfg, c) + this.margin(cfg, c) && this.fitsDetour(view, c, glintMiddle(g)));
+    // A glint fading in the coming step is walked onto, not pressed for (`sure` is false): the step gives it to a
+    // colonist on its tile before it fades it.
     if (g && racing && spare) {
-      const input = this.chaser.seek(view, glintMiddle(g), 'grab');
+      const input = this.chaser.seek(view, glintMiddle(g), sure ? 'grab' : 'none');
       if (input) return input;
     }
     // No way there after all, or no more time: it gives the race up.
@@ -507,9 +559,10 @@ export class DevelopHand {
   /**
    * RULE-8: whether a detour to `to` still leaves the errand time to finish inside the turn: the walk there, then from
    * there every step left on the list and the pub, at the floor's speeds and with the presses' pauses (planSeconds, the
-   * estimates the plan is priced by), with the hurry's margin in hand (restMargin). Always true with DEV_STEER.botsSpareTime off.
+   * estimates the plan is priced by), with the hurry's margin in hand (restMargin); the walks `slack` longer than
+   * estimated, as a share. Always true with DEV_STEER.botsSpareTime off.
    */
-  private fitsDetour(view: FloorView, c: FloorColonist, to: FloorPoint): boolean {
+  private fitsDetour(view: FloorView, c: FloorColonist, to: FloorPoint, slack = 0): boolean {
     const { state, cfg, secondsLeft } = view;
     if (!cfg.steer.botsSpareTime) return true;
     const index = tileIndex(state.width, Math.floor(to.x), Math.floor(to.y));
@@ -519,7 +572,7 @@ export class DevelopHand {
         ? tripSeconds(state, cfg, w, c, index, leading(c))
         : (pathTo(state, c, to, cfg)?.seconds ?? Infinity) / mapFactor(cfg, c.pace, leading(c), c.bot, c.bitten);
     const from: FloorColonist = { ...c, space: 'map', x: to.x, y: to.y };
-    return there + this.restFrom(view, from) + this.restMargin(cfg, from) <= secondsLeft;
+    return (there + this.restFrom(view, from)) * (1 + slack) + this.restMargin(cfg, from) <= secondsLeft;
   }
 
   /** Seconds of errand left from a colonist standing at a point: every step on the list, in order, then the pub. */
@@ -937,15 +990,18 @@ export class DevelopHand {
     return veto ? `stale: ${veto}` : null;
   }
 
-  /** The stale MULE's group, replaced once by the seat's own pick for that MULE, ahead of the rest. See RULE-9 row 3. */
+  /**
+   * The stale MULE's group, replaced once by the seat's own pick for that MULE, ahead of the rest; a pick of 'stop'
+   * drops it, its steps logged 'skipped'. See RULE-9 row 3.
+   */
   private replace(state: GameState, group: number, note: string, walk?: () => DevWalk): void {
     const r = this.route!;
-    for (const s of this.queue.filter((q) => q.group === group)) this.log(s, false, 'replaced', note);
-    const rest = this.queue.filter((q) => q.group !== group);
-    this.queue = [];
     const mind = this.brain.mind;
     const input = { state, seat: mind.me, mind, seed: r.play.seed, phase: 'development' as const, month: state.month };
     const pick = this.drafting('replacement MULE pick', "taken as 'stop'", STOP, () => draftMulePick(input, r.mules - 1, walk?.(), r.play.moneyMaker));
+    for (const s of this.queue.filter((q) => q.group === group)) this.log(s, false, pick.kind === 'stop' ? 'skipped' : 'replaced', note);
+    const rest = this.queue.filter((q) => q.group !== group);
+    this.queue = [];
     if (pick.kind !== 'stop') this.pushMule(state, pick.index, pick.outfit);
     this.queue.push(...rest);
   }

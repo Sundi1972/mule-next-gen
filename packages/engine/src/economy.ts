@@ -27,9 +27,10 @@ export function planShip(seed: number, arrives: number, players: number): Export
 
 /**
  * Expected demand for next month, per good, from colonists, players,
- * industry and the export ship's off-world buyers.
+ * industry and the export ship's off-world buyers. `festival` is the extra Food the colonists ask this month (G-5 C26);
+ * once upkeep's meal has run it is eaten, and the caller passes 0.
  */
-export function monthlyDemand(state: GameState): Stock {
+export function monthlyDemand(state: GameState, festival = festivalFood(state)): Stock {
   const demand = emptyStock();
   const players = state.players.length;
   const colonistUnits = state.colonists / UPKEEP.colonistsPerUnit;
@@ -38,7 +39,7 @@ export function monthlyDemand(state: GameState): Stock {
   // less when the store's price is above what their wages pay.
   const sick = airBand(state.air).sickens;
   const own = playersUse(state);
-  demand.food = own.food + colonistDemand(state, 'food', colonistUnits);
+  demand.food = own.food + colonistDemand(state, 'food', colonistUnits + festival);
   demand.water = own.water + colonistDemand(state, 'water', colonistUnits);
   demand.energy = own.energy + colonistDemand(state, 'energy', colonistUnits * UPKEEP.colonistEnergyShare);
   // Sick colonists in dirty air need more Medicine.
@@ -86,6 +87,18 @@ export function playersUse(state: GameState): { food: number; water: number; ene
   // A plant pays its own use from its own output (AM-17 R2, PM ruling A): it asks the store for nothing.
   for (const t of state.tiles) if (t.outfit !== 'energy') use.energy += energyUseOf(state, t);
   return use;
+}
+
+/**
+ * The Food the colonists ask this month beyond their need: a festival's extra (G-5 C26), the units its store-Food
+ * effect carries; 0 in any other month. The month's list holds it from planning until the next month opens.
+ */
+export function festivalFood(state: GameState): number {
+  return state.monthEvents
+    .filter((e) => e.key === 'festival')
+    .flatMap((e) => e.effects ?? [])
+    .filter((f) => f.on === 'store' && f.what === 'food')
+    .reduce((sum, f) => sum + f.delta, 0);
 }
 
 /** What colonists buy of a good they need this much of, at the store's current selling price. */
@@ -212,6 +225,14 @@ export function mulePrice(state: GameState): number {
   return Math.round((MULE.labour + MULE.smithorePerMule * state.store.posted.smithore) * state.store.muleFactor);
 }
 
+/** What the store sells at for a posted price: the price plus PRICE.storeSpread, rounded up. */
+export function storeSellPrice(posted: number): number {
+  const exact = posted * (1 + PRICE.storeSpread);
+  const whole = Math.round(exact);
+  // 1 + 0.1 is a hair over 1.1 in floating point, so 50 × 1.1 lands a hair over 55: that close to a whole number, it is one.
+  return Math.abs(exact - whole) <= Number.EPSILON * exact ? whole : Math.ceil(exact);
+}
+
 /**
  * What the store charges and what it pays, or null where it doesn't trade:
  * no sell price with an empty shelf, no buy price when it wants no more.
@@ -221,7 +242,7 @@ export function storeQuotes(state: GameState, good: Good): { buy: number | null;
   const buy = Math.max(1, Math.floor(price * (1 - PRICE.storeSpread)));
   return {
     buy: storeWants(state, good) > 0 ? buy : null,
-    sell: storeForSale(state, good) > 0 ? Math.ceil(price * (1 + PRICE.storeSpread)) : null,
+    sell: storeForSale(state, good) > 0 ? storeSellPrice(price) : null,
   };
 }
 
@@ -231,7 +252,8 @@ export function storeQuotes(state: GameState, good: Good): { buy: number | null;
  * first, so a short good runs out for the players, not for the colonists.
  */
 export function storeForSale(state: GameState, good: Good): number {
-  const reserve = good === 'food' || good === 'water' ? Math.ceil(state.colonists / UPKEEP.colonistsPerUnit) : 0;
+  const need = state.colonists / UPKEEP.colonistsPerUnit + (good === 'food' ? festivalFood(state) : 0);
+  const reserve = good === 'food' || good === 'water' ? Math.ceil(need) : 0;
   return Math.max(0, state.store.stock[good] - reserve);
 }
 

@@ -1,10 +1,11 @@
-import { GOODS, type PrestigeId } from '@mule/engine';
+import { GOODS, moodBand, type PrestigeId } from '@mule/engine';
 import type { ColonyProjectView, ColonyView, MuleView, PlayerView } from '@mule/protocol';
-import { airBandStyle, cx, GoodIcon, PlayerMark } from '@mule/ui';
-import type { ReactNode } from 'react';
+import { airBandStyle, cx, GoodIcon, PlayerMark, useEventReducedMotion } from '@mule/ui';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { colonyVerdict, fmt, toSlot } from '../game/derive';
-import { league, winnerWords } from '../game/month-end';
-import { MOOD, moodOf, PERK, plaqueBoard, plaquesOf, scoreVerdict, scoreWords, STAGE, standingCount, type ColonyScore } from '../game/colony';
+import { inCollapse, league, winnerWords } from '../game/month-end';
+import { ChangeTag } from './MonthEnd';
+import { MOOD, moodOf, type MoodBand, PERK, plaqueBoard, plaquesOf, scoreVerdict, scoreWords, STAGE, standingCount, type ColonyScore } from '../game/colony';
 
 /** The colony's parts at the TV's size and the phone's: its four gauges, its build site, and its score at game over. */
 
@@ -37,10 +38,11 @@ function Mark({ player, size }: { player: PlayerView; size: number }) {
 
 // --- The four gauges ----------------------------------------------------------------------------------
 
-function Gauge({ label, value, band, tone, bar, fill, note, size, testid }: { label: string; value: string; band?: string; tone?: string; bar?: string; fill?: number; note?: ReactNode; size: Size; testid: string }) {
+function Gauge({ label, value, band, tone, bar, fill, note, size, testid, pulse = false, change }: { label: string; value: string; band?: string; tone?: string; bar?: string; fill?: number; note?: ReactNode; size: Size; testid: string; pulse?: boolean; change?: GaugeChange | undefined }) {
   const tv = size === 'tv';
   return (
-    <div className={cx('flex min-w-0 flex-col rounded-control border border-holo-line bg-panel', tv ? 'gap-1 px-3 py-1.5' : 'gap-0.5 px-2 py-1')} data-testid={testid}>
+    // DS-GAP (WS8): the band flip's pulse, cev-pulse in packages/ui's events.css, until the design system has one.
+    <div className={cx('flex min-w-0 flex-col rounded-control border border-holo-line bg-panel', tv ? 'gap-1 px-3 py-1.5' : 'gap-0.5 px-2 py-1', pulse && 'animate-[cev-pulse_0.8s_ease-out]')} data-testid={testid} data-from={change?.from} data-to={change?.to}>
       <span className="flex items-baseline justify-between gap-2">
         <span className={cx('label-caps', !tv && 'text-[10px]!')}>{label}</span>
         <span data-num className={cx('whitespace-nowrap font-mono font-bold', tv ? 'text-lg' : 'text-xs')}>
@@ -58,34 +60,159 @@ function Gauge({ label, value, band, tone, bar, fill, note, size, testid }: { la
   );
 }
 
-/** Wealth, Environment, Prestige and Happiness. Environment is the air, so it keeps the air's bands. */
-export function ColonyGauges({ colony, size, className }: { colony: ColonyView; size: Size; className?: string }) {
+// --- The gauge landing (the colony events mock's landing.tsx) -------------------------------------------------------
+
+export type GaugeId = 'wealth' | 'environment' | 'prestige' | 'happiness';
+/** One gauge's change: it reads `from` until `landsAt` (seconds on the caller's clock), then counts to `to`. */
+export interface GaugeChange {
+  gauge: GaugeId;
+  from: number;
+  to: number;
+  landsAt: number;
+  /** An event's chip lands on the gauge: it pulses as it lands, unless its band flips, which pulses as the count crosses. */
+  chip?: boolean;
+}
+/** What ColonyGauges lands, on whose clock: an event's show clock, or the month end's own (useMonthEndDrift). */
+export interface GaugeLanding {
+  changes: GaugeChange[];
+  t: number;
+  reduced: boolean;
+}
+
+/** Seconds: how long a landed number counts, and how long the pulse round a gauge whose band just flipped lasts. */
+export const LANDING = { count: 0.8, pulse: 0.8 } as const;
+/** Seconds from the month end coming up to its mood drift landing on the Happiness gauge. */
+export const DRIFT_AT = 1.2;
+
+/** The banded gauges' band at a value, from the engine's thresholds (mood) and the air's. */
+const BAND_AT: Partial<Record<GaugeId, (v: number) => string>> = { happiness: moodBand, environment: (v) => airBandStyle(v).label };
+
+/** A change's value at `t`: `from` until it lands, then counting to `to`; reduced, it jumps to `to` as it lands. */
+function countAt(c: GaugeChange, t: number, reduced: boolean): number {
+  if (t < c.landsAt) return c.from;
+  if (reduced) return c.to;
+  const k = Math.min(1, (t - c.landsAt) / LANDING.count);
+  return Math.round(c.from + (c.to - c.from) * k);
+}
+
+/** A gauge's number at `t` under a landing, and whether it pulses: its band just flipped, or a chip just landed on it. */
+function landed(id: GaugeId, value: number, landing: GaugeLanding | undefined): { value: number; pulse: boolean; change?: GaugeChange } {
+  const c = landing?.changes.find((x) => x.gauge === id);
+  if (!landing || !c) return { value, pulse: false };
+  const now = countAt(c, landing.t, landing.reduced);
+  const band = BAND_AT[id];
+  const flipped = band !== undefined && !landing.reduced && band(now) !== band(countAt(c, landing.t - LANDING.pulse, false));
+  const flips = band !== undefined && band(c.from) !== band(c.to);
+  const struck = c.chip === true && !flips && !landing.reduced && landing.t >= c.landsAt && landing.t < c.landsAt + LANDING.pulse;
+  return { value: now, pulse: flipped || struck, change: c };
+}
+
+/** Seconds from a change landing until its count and pulse are over; a flip's pulse can start as late as the count's end. */
+export function settlesAfter(c: GaugeChange, reduced: boolean): number {
+  if (reduced) return 0;
+  const band = BAND_AT[c.gauge];
+  if (band !== undefined && band(c.from) !== band(c.to)) return LANDING.count + LANDING.pulse;
+  return c.chip ? Math.max(LANDING.count, LANDING.pulse) : LANDING.count;
+}
+
+/** The month end's drift, when there is one: Happiness from last month's to now's (RULE-20). Nothing without a colony. */
+function driftOf(colony: ColonyView | null | undefined): GaugeChange | null {
+  const from = colony?.lastGauges?.happiness;
+  const to = colony?.gauges.happiness;
+  if (from == null || to == null || from === to) return null;
+  return { gauge: 'happiness', from, to, landsAt: DRIFT_AT };
+}
+
+/** Seconds since `on` turned true, from the page's frames; it stops at `end`, and reads 0 while off. */
+function useFrameClock(on: boolean, end: number): number {
+  const [clock, setClock] = useState({ on, t: 0 });
+  // Turning on (or off) starts at 0 in this very render, so a new run never shows the last run's time, even for a frame.
+  if (clock.on !== on) setClock({ on, t: 0 });
+  useEffect(() => {
+    if (!on) return;
+    let first: number | null = null;
+    let raf = requestAnimationFrame(function tick(now) {
+      first ??= now;
+      const t = Math.min(end, (now - first) / 1000);
+      setClock({ on: true, t });
+      if (t < end) raf = requestAnimationFrame(tick);
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [on, end]);
+  return clock.on === on ? clock.t : 0;
+}
+
+/**
+ * The month end's mood drift, for the TV's gauges: it plays when this screen sees the month end come, once, and never
+ * for a screen that joins (or rejoins) at the month end, which shows the end state. Reduced motion lands it at once.
+ * Call it where the TV stays mounted across phases.
+ */
+export function useMonthEndDrift(game: MuleView): GaugeLanding | undefined {
+  const reduced = useEventReducedMotion();
+  const seen = useRef<string | null>(null);
+  const [drift, setDrift] = useState<GaugeChange | null>(null);
+  const end = DRIFT_AT + LANDING.count + LANDING.pulse;
+  // Reduced motion shows the end state, which needs no frames.
+  const t = useFrameClock(drift !== null && !reduced, end);
+  // Before paint, so the month end never shows the new number before it counts to it.
+  useLayoutEffect(() => {
+    const before = seen.current;
+    seen.current = game.phase;
+    if (game.phase !== 'upkeep') setDrift(null);
+    else if (before !== null && before !== 'upkeep') setDrift(driftOf(game.colony));
+    // Only the phase and month: a new view of the same month end (someone readies) never replays it.
+  }, [game.phase, game.month]);
+  // Held to the month end's last view once it has played, so the gauge keeps saying what it counted (data-from, data-to).
+  if (drift === null || reduced) return undefined;
+  return { changes: [drift], t, reduced };
+}
+
+/**
+ * Wealth, Environment, Prestige and Happiness. Environment is the air, so it keeps the air's bands. A `landing` holds
+ * each changed gauge at its old number until its change lands, then counts it, the band flipping with a pulse.
+ */
+export function ColonyGauges({ colony, size, className, landing }: { colony: ColonyView; size: Size; className?: string; landing?: GaugeLanding | undefined }) {
   const g = colony.gauges;
   const last = colony.lastGauges;
-  const air = airBandStyle(g.environment);
+  const wealth = landed('wealth', g.wealth, landing);
+  const environment = landed('environment', g.environment, landing);
+  const prestige = landed('prestige', g.prestige, landing);
+  const air = airBandStyle(environment.value);
   const tv = size === 'tv';
   const moodMove = last?.happiness == null || g.happiness === null ? null : g.happiness - last.happiness;
   return (
     <div className={cx('grid grid-cols-4', tv ? 'gap-2' : 'gap-1.5', className)} data-testid="colony-gauges">
-      <Gauge size={size} testid="gauge-wealth" label="Wealth" value={`${fmt(g.wealth)} cr`} note={`fund ${fmt(colony.fund)} cr`} />
-      <Gauge size={size} testid="gauge-environment" label="Environment" value={`${g.environment}`} band={air.label} tone={air.tone} bar={air.bar} fill={g.environment} />
-      <Gauge size={size} testid="gauge-prestige" label="Prestige" value={`${g.prestige}`} note={`${standingCount(colony)} standing${last && g.prestige !== last.prestige ? ` · ${signed(g.prestige - last.prestige)}` : ''}`} />
+      <Gauge size={size} testid="gauge-wealth" label="Wealth" value={`${fmt(wealth.value)} cr`} note={`fund ${fmt(colony.fund)} cr`} change={wealth.change} />
+      <Gauge size={size} testid="gauge-environment" label="Environment" value={`${environment.value}`} band={air.label} tone={air.tone} bar={air.bar} fill={environment.value} pulse={environment.pulse} change={environment.change} />
+      <Gauge size={size} testid="gauge-prestige" label="Prestige" pulse={prestige.pulse} change={prestige.change} value={`${prestige.value}`} note={`${standingCount(colony)} standing${last && g.prestige !== last.prestige ? ` · ${signed(g.prestige - last.prestige)}` : ''}`} />
       {g.happiness === null || g.band === null ? (
         <Gauge size={size} testid="gauge-happiness" label="Happiness" value="—" note="not yet" />
       ) : (
-        <Gauge
-          size={size}
-          testid="gauge-happiness"
-          label="Happiness"
-          value={`${g.happiness}`}
-          band={MOOD[g.band].label}
-          tone={MOOD[g.band].tone}
-          bar={MOOD[g.band].bar}
-          fill={g.happiness}
-          {...(moodMove !== null && tv ? { note: moodMove === 0 ? '± 0' : `${moodMove > 0 ? '↑' : '↓'} ${Math.abs(moodMove)} this month` } : {})}
-        />
+        <HappinessGauge size={size} happiness={g.happiness} band={g.band} moodMove={tv ? moodMove : null} landing={landing} />
       )}
     </div>
+  );
+}
+
+/** Happiness at its landed number, in the band that number reads in, so the label flips as the count crosses. */
+function HappinessGauge({ size, happiness, band, moodMove, landing }: { size: Size; happiness: number; band: MoodBand; moodMove: number | null; landing: GaugeLanding | undefined }) {
+  const { value, pulse, change } = landed('happiness', happiness, landing);
+  // The server's band, until a landing counts the number through another.
+  const mood = MOOD[value === happiness ? band : moodBand(value)];
+  return (
+    <Gauge
+      size={size}
+      testid="gauge-happiness"
+      label="Happiness"
+      value={`${value}`}
+      band={mood.label}
+      tone={mood.tone}
+      bar={mood.bar}
+      fill={value}
+      pulse={pulse}
+      change={change}
+      {...(moodMove !== null ? { note: moodMove === 0 ? '± 0' : `${moodMove > 0 ? '↑' : '↓'} ${Math.abs(moodMove)} this month` } : {})}
+    />
   );
 }
 
@@ -254,8 +381,11 @@ export function ColonyDeskCard({ view, action, className }: { view: MuleView; ac
 
 // --- The colony score ---------------------------------------------------------------------------------
 
-function Term({ label, value, size, testid, sign, tone }: { label: string; value: string; size: Size | 'hero'; testid: string; sign?: string; tone?: string }) {
-  const big = size === 'hero' ? 'text-5xl' : size === 'tv' ? 'text-3xl' : 'text-base';
+type SumSize = Size | 'hero' | 'band';
+const TERM_BIG: Record<SumSize, string> = { hero: 'text-5xl', tv: 'text-3xl', band: 'text-2xl', phone: 'text-base' };
+
+function Term({ label, value, size, testid, sign, tone }: { label: string; value: string; size: SumSize; testid: string; sign?: string; tone?: string }) {
+  const big = TERM_BIG[size];
   return (
     <span className="flex items-end gap-2" data-testid={testid}>
       {sign && <span className={cx('pb-1 font-mono text-ink-3', size === 'phone' ? 'text-sm' : 'text-2xl')}>{sign}</span>}
@@ -270,14 +400,14 @@ function Term({ label, value, size, testid, sign, tone }: { label: string; value
 }
 
 /** The sum as one line everyone can read across the room: wealth + environment + prestige, × the happiness factor. */
-export function ScoreSum({ score, colony, size }: { score: ColonyScore; colony: ColonyView; size: Size | 'hero' }) {
+export function ScoreSum({ score, colony, size }: { score: ColonyScore; colony: ColonyView; size: SumSize }) {
   const mood = moodOf(colony.gauges.band);
   if (size === 'phone') {
     // On a phone the sum is one line of numbers with the four names under it, so it never wraps mid-sum.
     const cells: [string, string, string, string | undefined][] = [
-      ['', `${score.wealth}`, 'Wealth', undefined],
-      ['+', `${score.environment}`, 'Env.', undefined],
-      ['+', `${score.prestige}`, 'Prestige', undefined],
+      ['', fmt(score.wealth), 'Wealth', undefined],
+      ['+', fmt(score.environment), 'Env.', undefined],
+      ['+', fmt(score.prestige), 'Prestige', undefined],
       ['×', score.factor.toFixed(2), mood.label, mood.tone],
     ];
     return (
@@ -296,9 +426,9 @@ export function ScoreSum({ score, colony, size }: { score: ColonyScore; colony: 
   }
   return (
     <span className="flex flex-wrap items-end gap-x-4 gap-y-2" data-testid="score-sum">
-      <Term size={size} testid="term-wealth" label="Wealth" value={`${score.wealth}`} />
-      <Term size={size} testid="term-environment" label="Environment" value={`${score.environment}`} sign="+" />
-      <Term size={size} testid="term-prestige" label="Prestige" value={`${score.prestige}`} sign="+" />
+      <Term size={size} testid="term-wealth" label="Wealth" value={fmt(score.wealth)} />
+      <Term size={size} testid="term-environment" label="Environment" value={fmt(score.environment)} sign="+" />
+      <Term size={size} testid="term-prestige" label="Prestige" value={fmt(score.prestige)} sign="+" />
       <Term size={size} testid="term-factor" label={mood.label} value={score.factor.toFixed(2)} sign="×" tone={mood.tone} />
     </span>
   );
@@ -316,7 +446,7 @@ export function ScoreHero({ colony, score, size, failed = false }: { colony: Col
       <span className={cx('flex gap-x-8 gap-y-4', hero ? 'flex-col' : 'flex-row flex-wrap items-end')}>
         <span className="flex items-baseline gap-4">
           <span data-num className={cx('font-mono font-bold leading-none', failed ? 'text-alert-ink' : 'text-holo', hero ? 'text-8xl' : 'text-6xl')} data-testid="colony-total">
-            {score.total}
+            {fmt(score.total)}
           </span>
           <span className="flex flex-col">
             <span className="label-caps text-sm!">Colony score</span>
@@ -369,6 +499,126 @@ export function PlaqueBoard({ colony, players, size, selfId }: { colony: ColonyV
         </li>
       ))}
     </ol>
+  );
+}
+
+// --- The month end ------------------------------------------------------------------------------------
+
+/** "↑ +2,069 since month 6": score.total − lastScore. Month 1 has no last month end, so no line. */
+function SinceLast({ score, last, month, size }: { score: ColonyScore; last: number | null; month: number; size: Size }) {
+  if (last === null) return null;
+  const tv = size === 'tv';
+  return (
+    <span className={cx('flex items-baseline whitespace-nowrap', tv ? 'gap-2' : 'gap-1')} data-testid="colony-score-change">
+      <ChangeTag change={score.total - last} className={tv ? 'text-2xl' : 'text-xs'} testid="colony-score-delta" />
+      <span className={cx('text-ink-3', tv ? 'text-lg' : 'text-[11px]')}>since month {month - 1}</span>
+    </span>
+  );
+}
+
+/** Collapse cuts every Worth, never the colony's score (RULE-25): said once, so a high score beside cut Worths reads right. */
+function NotCut({ size }: { size: Size }) {
+  return (
+    <span className={cx('text-ink-2', size === 'tv' ? 'text-base' : 'text-[11px] leading-tight')} data-testid="colony-score-uncut">
+      The Collapse cuts each Worth, not the colony’s score.
+    </span>
+  );
+}
+
+const monthScoreOf = (view: MuleView) => (view.colony?.score ? { colony: view.colony, score: view.colony.score, last: view.colony.lastScore ?? null } : null);
+
+/** From this many seats the TV band drops its sum and words so the month end fits the screen (PM ruling, 6 Nov: six seats). */
+export const COMPACT_FROM_SEATS = 5;
+
+/** Whether the TV's month-end band is short: no sum, no words. */
+const compactBand = (view: MuleView) => view.players.length >= COMPACT_FROM_SEATS;
+
+/** The colony score under the league at a month end: the total, the change, and below five seats the sum and its words. No verdict: that is game over's. */
+function MonthScoreBand({ view, colony, score, last }: { view: MuleView; colony: ColonyView; score: ColonyScore; last: number | null }) {
+  const compact = compactBand(view);
+  return (
+    <section className="relative flex shrink-0 flex-col gap-2 rounded-panel border border-holo-line bg-panel p-5" aria-label="The colony’s score" data-testid="colony-band" data-month={view.month}>
+      <header className="flex items-baseline justify-between gap-4">
+        <h2 className="label-caps text-sm!">Colony score · month {view.month}</h2>
+        <span className="text-lg text-ink-3">counted again at game over</span>
+      </header>
+      <div className="flex flex-wrap items-end gap-x-6 gap-y-2" data-testid="colony-score">
+        <span className="flex flex-col gap-1">
+          <span data-num className="font-mono text-6xl font-bold leading-none text-holo" data-testid="colony-total">
+            {fmt(score.total)}
+          </span>
+          <SinceLast score={score} last={last} month={view.month} size="tv" />
+        </span>
+        {!compact && <ScoreSum score={score} colony={colony} size="band" />}
+      </div>
+      {!compact && (
+        <span className="text-base leading-snug text-ink-2" data-testid="colony-score-words">
+          {scoreWords(colony, score)}
+        </span>
+      )}
+      {inCollapse(view) && <NotCut size="tv" />}
+    </section>
+  );
+}
+
+/** The TV month end's left column: the league (`children`) with the colony score under it, once the view carries one. */
+export function MonthScoreColumn({ view, children }: { view: MuleView; children: ReactNode }) {
+  const at = monthScoreOf(view);
+  if (!at) return children;
+  return (
+    <div className="flex min-h-0 flex-col gap-4">
+      {children}
+      <MonthScoreBand view={view} {...at} />
+    </div>
+  );
+}
+
+/** The phone's one line: "Colony score", the total and the change; `sum` adds the sum from 800 px of shell. */
+function PhoneMonthScore({ view, colony, score, last, sum = false, children }: { view: MuleView; colony: ColonyView; score: ColonyScore; last: number | null; sum?: boolean; children?: ReactNode }) {
+  const mood = moodOf(colony.gauges.band);
+  return (
+    <div className="flex min-w-0 flex-col gap-0.5" data-testid="phone-month-score">
+      <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">
+        <span className="label-caps text-[10px]!">Colony score</span>
+        <span data-num className="font-mono text-base font-bold leading-none text-holo" data-testid="colony-total">
+          {fmt(score.total)}
+        </span>
+        <SinceLast score={score} last={last} month={view.month} size="phone" />
+        {sum && (
+          <span data-num className="hidden whitespace-nowrap font-mono text-[11px] text-ink-2 @min-[800px]/shell:inline" data-testid="score-sum">
+            = {fmt(score.wealth)} + {fmt(score.environment)} + {fmt(score.prestige)} × <span className={mood.tone}>{score.factor.toFixed(2)}</span>
+          </span>
+        )}
+      </span>
+      {inCollapse(view) && <NotCut size="phone" />}
+      {children}
+    </div>
+  );
+}
+
+/** Beside a TV, the month end's footnote place: the colony line once the view carries a score, else `children` (today's footnote). */
+export function PhoneMonthScoreNote({ view, children }: { view: MuleView; children: ReactNode }) {
+  const at = monthScoreOf(view);
+  if (!at) return children;
+  return (
+    <div className="mt-auto" data-testid="colony-on-tv">
+      <PhoneMonthScore view={view} {...at}>
+        <span className="text-[11px] leading-snug text-ink-3">
+          {compactBand(view) ? 'Your own lines are beside, yours only.' : 'Its sum is on the TV; your own lines are beside, yours only.'}
+        </span>
+      </PhoneMonthScore>
+    </div>
+  );
+}
+
+/** With no TV, the colony line heading the colony panel, the sum on it where the phone is wide enough. */
+export function PhoneMonthScoreHead({ view }: { view: MuleView }) {
+  const at = monthScoreOf(view);
+  if (!at) return null;
+  return (
+    <div className="mb-1 rounded-panel border border-holo-line bg-panel px-2.5 py-1">
+      <PhoneMonthScore view={view} {...at} sum />
+    </div>
   );
 }
 
@@ -445,7 +695,7 @@ export function PhoneColonyScore({ view, colony, selfId, className }: { view: Mu
         <>
           <span className="flex items-baseline gap-2">
             <span data-num className={cx('font-mono text-2xl font-bold leading-none', failed.failed ? 'text-alert-ink' : 'text-holo')} data-testid="colony-total">
-              {score.total}
+              {fmt(score.total)}
             </span>
             <span className="flex flex-col">
               <span className="label-caps text-[10px]!">Colony score</span>
