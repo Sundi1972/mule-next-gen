@@ -290,7 +290,8 @@ describe('C26: the colony\'s planning social events, fired through the planning 
     expect(at('emigrationWave', (s) => (s.air = 70))).toEqual(close([0.03, 0.03, 0.04, 0.07, 0.11]));
     // p3 is not the richest until it is.
     expect(at('blamedForUnrest')).toEqual(close([0, 0, 0, 0.02, 0.05]));
-    expect(at('blamedForUnrest', (s) => (s.players[3]!.money = 100_000))).toEqual(close([0.02, 0.02, 0.02, 0.04, 0.07]));
+    // Never in Thriving or Content (PM, 5 Nov), whatever the richest's raise.
+    expect(at('blamedForUnrest', (s) => (s.players[3]!.money = 100_000))).toEqual(close([0, 0, 0.02, 0.04, 0.07]));
   });
 
   it('INV-C26-7: over seeded months the mood stays 0..100 and moves in planning only by the mood effects, which only a festival carries', () => {
