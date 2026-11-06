@@ -134,16 +134,22 @@ describe('the colony at the table', () => {
     expect(game.viewFor(null).news).toContain(`Heiko pays the rare earth strikers ${COLONY.strike.cost} cr.`);
   });
 
-  it("B-AC-26: the Governor's phone sets the colony's bid for the park's site; every screen's colony view shows it, and another phone is refused with RULE-28's message", () => {
-    const { game } = governed();
+  it("B-AC-31: the Park the Governor commissions after the Hospital builds at the upkeep that funds it: every screen's colony view shows it building with its months to go, and no map plot changes owner", () => {
+    const { game, state } = governed();
+    game.handle('s1', { type: 'commission', id: 'hospital' });
+    state.colony!.projects.find((p) => p.id === 'hospital')!.stage = 'standing';
     game.handle('s1', { type: 'commission', id: 'park' });
-    expect(game.viewFor(null).colony!.projects[0]!.maxBid, 'a new object has no bid').toBeNull();
-    expect(refusal(() => game.handle('s2', { type: 'setSiteBid', id: 'park', maxBid: 300 }))).toBe("Only the Governor sets the colony's bid");
+    state.treasury.money = 10_000;
+    state.store.stock.alloy = 10;
+    const owners = state.tiles.map((t) => t.owner);
 
-    game.handle('s1', { type: 'setSiteBid', id: 'park', maxBid: 300 });
-    for (const viewer of [null, 's1', 's2']) expect(game.viewFor(viewer).colony!.projects[0]!.maxBid, `${viewer ?? 'the TV'}'s view`).toBe(300);
-    game.handle('s1', { type: 'setSiteBid', id: 'park', maxBid: null });
-    expect(game.viewFor(null).colony!.projects[0]!.maxBid, 'the Governor can take the bid back').toBeNull();
+    do advancePhase(state);
+    while (state.phase !== 'upkeep');
+    for (const viewer of [null, 's1', 's2']) {
+      const park = game.viewFor(viewer).colony!.projects.find((p) => p.id === 'park');
+      expect(park, `${viewer ?? 'the TV'}'s view`).toMatchObject({ stage: 'building', monthsLeft: PRESTIGE.park.buildMonths, buildMonths: PRESTIGE.park.buildMonths });
+    }
+    expect(game.viewFor(null).tiles.map((t) => t.owner)).toEqual(owners);
   });
 
   it("C35, AM-13: the colony view's refPrice is the store's price today for every good the catalogue needs, and a gift's plaque grows by exactly units × that price", () => {
