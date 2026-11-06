@@ -13,6 +13,8 @@ const plots = (good: Good | undefined, n: number) => {
   return plural(n, one, many);
 };
 const signed = (n: number) => `${n < 0 ? '−' : '+'}${Math.abs(n)}`;
+/** A share as the engine words it: 0.2 → "20%". */
+export const percent = (share: number) => `${Math.round(share * 100)}%`;
 const lower = (w: string) => (/^[A-Z][a-z]/.test(w) ? w[0]!.toLowerCase() + w.slice(1) : w);
 const isGood = (what: ShowEffect['what']): what is Good => what in GOOD_NAME;
 /** The colony's gauges an event can move, beside whatever else it did. */

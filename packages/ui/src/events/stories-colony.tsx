@@ -1,9 +1,10 @@
+import { COLONY } from '@mule/engine';
 import { GoodIcon } from '../components/GoodIcon';
 import { MuleIcon } from '../components/MuleIcon';
 import type { Species } from '../components/species';
 import { cx, GOOD_NAME, type Good } from '../components/tokens';
 import { STORY } from './catalogue';
-import { effectWords } from './copy';
+import { effectWords, percent } from './copy';
 import { useShow } from './frame';
 import { clamp, ramp } from './fx';
 import { At, px, type P } from './place';
@@ -272,8 +273,9 @@ const CROWD: Species[] = ['bramblet', 'gearling', 'mollox', 'zipwing', 'quibbit'
 
 /**
  * The general strike. Planning: strikers with placards walk out of the store, one to each plot of the struck good, and
- * stand there; each plot gets "STRIKE · 20%". Production (unpaid): the strikers stand on the plots and each chip reads
- * "STRIKE −80%". Paid, the server sends no event, so nobody stands anywhere.
+ * stand there; each plot's chip gives the share of COLONY.strike.output it makes ("STRIKE · 20%" at 0.2). Production
+ * (unpaid): the strikers stand on the plots and each chip gives the share lost ("STRIKE −80%"). Paid, the server sends
+ * no event, so nobody stands anywhere.
  */
 const GeneralStrike: Scene = ({ ev, seg, size }) => {
   const frame = useShow();
@@ -303,7 +305,7 @@ const GeneralStrike: Scene = ({ ev, seg, size }) => {
                     {/* Two lines, so neighbouring plots' chips never overlap. */}
                     <span className="flex flex-col items-center leading-none">
                       <span>STRIKE</span>
-                      <span>{planning ? '· 20%' : '−80%'}</span>
+                      <span>{planning ? `· ${percent(COLONY.strike.output)}` : `−${percent(1 - COLONY.strike.output)}`}</span>
                     </span>
                   </span>
                 </span>
