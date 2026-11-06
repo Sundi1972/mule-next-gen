@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
+  AI_VALUE,
   colonyScore,
   configSnapshot,
   RuleError,
@@ -40,6 +41,11 @@ export interface RecordOptions {
   /** The game forced its wolves (a test option); the replay forces them too. */
   forceWolves?: boolean;
   politics: boolean;
+  /**
+   * AI_VALUE.unit as the game played it: a switch a run can change (`--set`, a test), so the config file can't say it.
+   * The replay plays under it. Absent from records made before it was written.
+   */
+  aiValueUnit?: boolean;
 }
 
 export const configFingerprint = (): string => sha256(stableJson(configSnapshot()));
@@ -131,7 +137,7 @@ export class Recorder {
     private readonly dir: string | null,
     private readonly userError: (err: unknown) => boolean = isUserError,
   ) {
-    this.record = { v: 1, seed, configFingerprint: configFingerprint(), options: { ...options }, seats: [], t0: inner.now(), events: [] };
+    this.record = { v: 1, seed, configFingerprint: configFingerprint(), options: { ...options, aiValueUnit: AI_VALUE.unit }, seats: [], t0: inner.now(), events: [] };
     this.ctx = this.wrapContext(inner);
     this.brain = this.wrapBrain(brain);
   }
