@@ -635,8 +635,10 @@ th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line
 <div class="since"><h2>Since you approved (6 Nov)</h2>
 <ul>
 <li><b>Nothing is imported.</b> The colony makes its own goods. Colony buildings get their Alloy and Electronics only through the store, from goods made in the colony; the export ship only takes goods away.</li>
-<li><b>The Federation grant goes to 450</b>, and taxes are the colony fund's largest income.</li>
-<li><b>Two or three colony buildings can be in progress at once.</b></li>
+<li><b>The Federation grant is 250</b>, and taxes are the colony fund's largest income (in 9 of 10 games of WS7's measurement).</li>
+<li><b>Up to 3 colony buildings can be in progress at once.</b></li>
+<li><b>AI Governors commission at a tenth of the price and tax at about 10%.</b></li>
+<li><b>Every colony building costs half</b>: half the credits, half the goods and half the upkeep.</li>
 <li><b>Build times stay at 1 to 3 months per building.</b></li>
 <li><b>The health rule replaces decisions ${D.hungrySick} and ${D.medMood}.</b> Hunger makes colonists sicker; sickness raises the Medicine need (by up to 40%) and lowers the mood; missing Medicine reaches the mood only through sickness. Each effect counts once. Decisions ${D.playerSick} and ${D.spill} both stand: one is a player's own hunger, the other the colony's sickness reaching players.</li>
 </ul></div>
