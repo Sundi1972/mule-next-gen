@@ -466,6 +466,18 @@ function supplyHooks(tally: SupplyTally): { phase: (s: GameState) => void; seats
   };
 }
 
+/** One seat at one Food auction (UBER-AC-2): the auction's ask and Food's reference then, its Food after, its need. */
+export interface FoodHeld {
+  ask: number;
+  reference: number;
+  held: number;
+  need: number;
+}
+
+export function foodBandLine(samples: readonly FoodHeld[], colonyShort: string): string {
+  throw new Error('NotImplemented: foodBandLine');
+}
+
 /** The model's proof rows, beside the colony's own Food and Water shortage (HC-6). */
 function supplyLines(t: SupplyTally, playerGames: number, colonyShort: string): string[] {
   const perSeat = (n: number) => (n / Math.max(1, playerGames)).toFixed(2); // literal-ok: two decimals, display only
