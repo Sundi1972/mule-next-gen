@@ -1,0 +1,1 @@
+maxOpen 1 f 0.25 | standing mean 0.8 [1 1 1 1 0 1 1 1 0 1] building-at-end 1 | first commission median m2 (10 games) | fund end mean 2369 | waiting {"electronics":8,"alloy":1} | income/game {"salesTax":2995,"grant":1800,"donation":515,"pollutionTax":54,"exportTax":74} | out/game {"officePay":600,"project":2290,"upkeep":164,"repair":15}

@@ -1,0 +1,12 @@
+VARIANT T1 target {"trader":10,"cautious":10,"aggressive":10,"saboteur":10} start 0.05 grant 250 maxOpen 3
+G1: tax 6288 grant 3000 don 1866 other 0 | tax>grant true largest true | standing 5 | cash 36436 | moodCost 10.67 | tax 10..12% | sales 5908
+G2: tax 2416 grant 3000 don 1363 other 0 | tax>grant false largest false | standing 2 | cash 10977 | moodCost 11.67 | tax 10..12% | sales 2336
+G3: tax 4762 grant 3000 don 1951 other 0 | tax>grant true largest true | standing 1 | cash 24187 | moodCost 11.00 | tax 10..12% | sales 4762
+G4: tax 4154 grant 3000 don 1996 other 0 | tax>grant true largest true | standing 1 | cash 20025 | moodCost 10.33 | tax 10..12% | sales 4154
+G5: tax 3137 grant 3000 don 1910 other 0 | tax>grant true largest true | standing 2 | cash 15603 | moodCost 10.67 | tax 10..12% | sales 3137
+G6: tax 3328 grant 3000 don 2408 other 0 | tax>grant true largest true | standing 1 | cash 20381 | moodCost 10.67 | tax 10..12% | sales 3328
+G7: tax 10435 grant 3000 don 1242 other 0 | tax>grant true largest true | standing 4 | cash 64572 | moodCost 10.67 | tax 10..12% | sales 10117
+G8: tax 4522 grant 3000 don 953 other 0 | tax>grant true largest true | standing 1 | cash 26398 | moodCost 10.33 | tax 10..12% | sales 4259
+G9: tax 291 grant 3000 don 1602 other 0 | tax>grant false largest false | standing 1 | cash 11599 | moodCost 10.67 | tax 10..12% | sales 291
+G10: tax 3782 grant 3000 don 1765 other 0 | tax>grant true largest true | standing 5 | cash 19657 | moodCost 11.33 | tax 10..12% | sales 3782
+MEAN tax 4312 grant 3000 don 1706 other 0 | tax>grant 8/10 largest 8/10 | standing 2.3 [5 2 1 1 2 1 4 1 1 5] | cash 24984 | moodCost 10.80 | bands {"restless":70,"unhappy":50}

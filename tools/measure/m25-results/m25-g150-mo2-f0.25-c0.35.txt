@@ -1,0 +1,1 @@
+grant 150 mo 2 f 0.25 c 0.35 | standing 4.1 [5 5 5 2 3 4 5 5 3 4] closed 0 | tax 3680 grant 1800 don 878 | tax largest 9/10 | cash 22372 | fund end 3567 | upkeep paid 336 | moodCost 10.7 | bands {"restless":86,"unhappy":25,"content":9}

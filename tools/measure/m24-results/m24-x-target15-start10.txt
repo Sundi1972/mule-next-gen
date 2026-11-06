@@ -1,0 +1,12 @@
+VARIANT x-target15-start10 target {"trader":15,"cautious":15,"aggressive":15,"saboteur":15} start 0.1
+G1: tax 7593 grant 5400 don 2153 other 0 | tax>grant true largest true | standing 2 | cash 17532 | moodCost 20.00 | tax 15..15% | sales 5503
+G2: tax 1364 grant 5400 don 443 other 0 | tax>grant false largest false | standing 3 | cash 4575 | moodCost 20.00 | tax 15..15% | sales 1364
+G3: tax 5992 grant 5400 don 1000 other 0 | tax>grant true largest true | standing 5 | cash 19362 | moodCost 20.00 | tax 15..15% | sales 5992
+G4: tax 5277 grant 5400 don 1381 other 0 | tax>grant false largest false | standing 1 | cash 16907 | moodCost 20.00 | tax 15..15% | sales 5023
+G5: tax 2031 grant 5400 don 476 other 0 | tax>grant false largest false | standing 2 | cash 11624 | moodCost 20.00 | tax 15..15% | sales 2031
+G6: tax 4984 grant 5400 don 1014 other 0 | tax>grant false largest false | standing 4 | cash 24811 | moodCost 20.00 | tax 15..15% | sales 4984
+G7: tax 3692 grant 5400 don 340 other 0 | tax>grant false largest false | standing 3 | cash 11727 | moodCost 20.00 | tax 15..15% | sales 3144
+G8: tax 6290 grant 5400 don 867 other 0 | tax>grant true largest true | standing 1 | cash 19418 | moodCost 20.00 | tax 15..15% | sales 5864
+G9: tax 409 grant 5400 don 1972 other 0 | tax>grant false largest false | standing 3 | cash 11274 | moodCost 20.00 | tax 15..15% | sales 409
+G10: tax 6350 grant 5400 don 2160 other 0 | tax>grant true largest true | standing 3 | cash 17598 | moodCost 20.00 | tax 15..15% | sales 5850
+MEAN tax 4398 grant 5400 don 1181 other 0 | tax>grant 4/10 largest 4/10 | standing 2.7 [2 3 5 1 2 4 3 1 3 3] | cash 15483 | moodCost 20.00 | bands {"restless":62,"unhappy":57,"content":1}

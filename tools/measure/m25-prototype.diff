@@ -1,0 +1,69 @@
+# trunk 38070ffb82d045c17e99f07575279a275d7514e3 (apply with: git apply <this file>, from the repo root at that SHA)
+diff --git a/packages/ai/src/hands/vote.ts b/packages/ai/src/hands/vote.ts
+index e5b1e70d..1c72e95a 100644
+--- a/packages/ai/src/hands/vote.ts
++++ b/packages/ai/src/hands/vote.ts
+@@ -1,3 +1,4 @@
++import { M24_T2 } from '../../../engine/src/m24.js';
+ import {
+   canRun,
+   commissionRefusal,
+@@ -266,7 +267,7 @@ export class VoteHand {
+     }
+     if (!commissions[this.persona]) return;
+     const choices = (Object.keys(PRESTIGE) as PrestigeId[])
+-      .filter((id) => (bid !== null || !PRESTIGE[id].needsPlot) && PRESTIGE[id].credits <= fund && commissionRefusal(obs, id) === null)
++      .filter((id) => (bid !== null || !PRESTIGE[id].needsPlot) && PRESTIGE[id].credits * Number((globalThis as any).process?.env?.M25_F ?? '0.25') <= fund && commissionRefusal(obs, id) === null)
+       .sort((a, b) => PRESTIGE[b].prestige - PRESTIGE[a].prestige || PRESTIGE[a].credits - PRESTIGE[b].credits);
+     const pick = choices[0];
+     if (pick && act({ type: 'commission', id: pick }) && PRESTIGE[pick].needsPlot) act({ type: 'setSiteBid', id: pick, maxBid: bid });
+@@ -275,7 +276,9 @@ export class VoteHand {
+   private govern(obs: GameState, act: Act): void {
+     if (obs.politics!.governor !== this.mind.me) return;
+     const current = Math.round(obs.treasury.salesTax * PERCENT);
+-    const next = nextTax(current, POLITICS.ai.taxTarget[this.persona], obs.treasury.money, taxBounds(obs), obs.month);
++    // M24 T2: while a commissioned project lacks credits, aim at TAX.max (nextTax steps by at most maxStep, inside the bounds).
++    const lacking = M24_T2 && (obs.colony?.projects ?? []).some((p) => p.stage === 'commissioned' && p.funded.credits < PRESTIGE[p.id].credits);
++    const next = nextTax(current, lacking ? POLITICS.tax.max : POLITICS.ai.taxTarget[this.persona], obs.treasury.money, taxBounds(obs), obs.month);
+     if (next !== current) act({ type: 'setTax', percent: next });
+     this.proposeLaw(obs, act);
+     this.colonyActs(obs, act);
+diff --git a/packages/engine/src/economy.ts b/packages/engine/src/economy.ts
+index 0844f3f6..eb4a0b1b 100644
+--- a/packages/engine/src/economy.ts
++++ b/packages/engine/src/economy.ts
+@@ -1,3 +1,4 @@
++import { m24Missing } from './m24.js';
+ import { EXPORT_DEMAND, EXPORT_SHIP, GAME, GOOD_CONFIG, MULE, POLLUTION, PRICE, RECIPES, UPKEEP } from './config.js';
+ import { fundIn } from './colony.js';
+ import { airBand } from './pollution.js';
+@@ -55,6 +56,8 @@ export function monthlyDemand(state: GameState, festival = festivalFood(state)):
+   demand.electronics = 0;
+   const off = exportDemand(state);
+   for (const good of GOODS) demand[good] += off[good];
++  // M24 (m22 GD): commissioned projects' still-missing goods are demand while they wait.
++  for (const [g, u] of Object.entries(m24Missing(state))) demand[g as Good] += u;
+   return demand;
+ }
+ 
+diff --git a/packages/engine/src/m24.ts b/packages/engine/src/m24.ts
+new file mode 100644
+--- /dev/null
++++ b/packages/engine/src/m24.ts
+@@ -0,0 +1,16 @@
++// M24 throwaway prototype: GD (commissioned projects' missing goods in monthlyDemand), the AI Governor commissions at
++// 25% of credits, and M24_T2=1 (raise the tax by maxStep while a commissioned project lacks credits). E-free, maxOpen 2,
++// grant 450, T1 and T3 are set at runtime by the harness. Never merged.
++import { PRESTIGE } from './config.js';
++export const M24_T2: boolean = (globalThis as any).process?.env?.M24_T2 === '1';
++export function m24Missing(state: any): Record<string, number> {
++  const out: Record<string, number> = {};
++  for (const p of state.colony?.projects ?? []) {
++    if (p.stage !== 'commissioned') continue;
++    for (const [g, u] of Object.entries((PRESTIGE as any)[p.id].goods) as [string, number][]) {
++      const left = u - (p.funded.goods[g] ?? 0);
++      if (left > 0) out[g] = (out[g] ?? 0) + left;
++    }
++  }
++  return out;
++}

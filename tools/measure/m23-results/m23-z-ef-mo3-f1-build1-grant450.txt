@@ -1,0 +1,1 @@
+maxOpen 3 f 1 E-free grant 450 build1 | standing mean 3.6 [5 4 4 1 4 5 4 3 1 5] building-at-end 1 | first commission median m3 (10 games) | fund end mean 3770 | waiting {"alloy":6,"crystite":2} | income/game {"salesTax":2799,"grant":5400,"donation":1652,"pollutionTax":64,"exportTax":35} | out/game {"officePay":600,"project":4727,"upkeep":783,"repair":45,"strikePay":25}

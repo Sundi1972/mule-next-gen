@@ -1,0 +1,1 @@
+maxOpen 3 f 0.25 E-free fund-all | standing mean 1.9 [3 2 3 1 0 4 1 1 2 2] building-at-end 11 | first commission median m2 (10 games) | fund end mean 1894 | waiting {"crystite":3,"alloy":6} | income/game {"salesTax":3063,"grant":1800,"donation":1925,"pollutionTax":102,"exportTax":35} | out/game {"officePay":600,"project":4117,"upkeep":300,"repair":15}
