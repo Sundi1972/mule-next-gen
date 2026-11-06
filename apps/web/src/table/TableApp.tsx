@@ -22,6 +22,7 @@ import {
 } from '../components/AuctionParts';
 import { Fragment, useEffect, useState, type ReactNode } from 'react';
 import { BuildSite, ColonyGauges, ColonyScoreBand, MonthScoreColumn, TvWinner, useMonthEndDrift, type GaugeLanding } from '../components/Colony';
+import { Grounds } from '../components/Grounds';
 import { StrikeBadge, StrikeMap, StrikeWaiting } from '../components/Strike';
 import { CollapseBanner, ColonyPanel, LeagueTable, WinnerCard } from '../components/MonthEnd';
 import { joinUrl, Qr } from '../components/Qr';
@@ -717,6 +718,7 @@ export function TvMonthEnd({ game, drift }: { game: MuleView; drift?: GaugeLandi
             <div className="flex flex-col gap-4">
               <ColonyGauges colony={game.colony} size="tv" className="grid-cols-2!" landing={drift} />
               <ColonyPanel view={game} density="tv" />
+              <Grounds colony={game.colony} size="tv" light="dusk" className="h-48 shrink-0" />
               <BuildSite colony={game.colony} players={game.players} size="tv" />
             </div>
           </div>
