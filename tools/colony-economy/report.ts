@@ -6,7 +6,7 @@
 import { writeFileSync } from 'node:fs';
 // Relative, not @mule/engine: that name resolves only from inside packages/ai.
 import * as engine from '../../packages/engine/src/index.ts';
-import { colonyScore, GOODS, GOOD_CONFIG, moodBand, mulePrice, scoreParts, SHIP_ID, STORE_ID, storeForSale, type Good, type GameState, type MoodBand } from '../../packages/engine/src/index.ts';
+import { colonyScore, GOODS, GOOD_CONFIG, moodBand, mulePrice, scoreParts, SHIP_ID, STORE_ID, storeForSale, type Good, type GameState, type MoodBand, type PriceBand } from '../../packages/engine/src/index.ts';
 import { simSeats } from '../../packages/ai/src/lineup.ts';
 import { playGameAsync } from '../../packages/ai/src/play.ts';
 import type { PhaseFact } from '../../packages/ai/src/playbook/index.ts';
@@ -15,6 +15,7 @@ const CEILING_TIMES = 12;
 const NARROW_SPREAD = 0.2;
 const WATCHED: Good[] = ['food', 'water', 'energy', 'electronics'];
 const MOODS: MoodBand[] = ['thriving', 'content', 'restless', 'unhappy', 'unrest'];
+const BANDS: PriceBand[] = ['offWorld', 'normal', 'tight', 'short', 'severe'];
 // The band store lines exist only from pricing PR-1 on; the trunk this report also runs on has none, so its rows print n/a.
 const bandLines = (engine as Partial<Pick<typeof engine, 'storeLines'>>).storeLines;
 
@@ -74,6 +75,8 @@ interface GameRecord {
   soldOutWalks: SoldOutWalk[];
   /** Each month's selling line per good: the walk's where it came up, else the band lines' as the auction opened. */
   sellLines: Partial<Record<Good, number>>[];
+  /** Each month's band per good as the auction opened. */
+  bands: Partial<Record<Good, PriceBand>>[];
   foodSold: { store: number; players: number; ship: number };
   devMulePrices: number[];
   /** The price Worth counts an installed MULE at (mulePrice): at the game's end. */
@@ -106,6 +109,7 @@ async function playOne(seed: number, politics: boolean): Promise<GameRecord> {
   const walks: Walk[] = [];
   const postings: Record<Good, number>[] = [];
   const sellLines: Partial<Record<Good, number>>[] = [];
+  const bands: Partial<Record<Good, PriceBand>>[] = [];
   let hungrySeatMonths = 0;
   let month1Shares: number[] = [];
   const moods: MoodBand[] = [];
@@ -122,6 +126,7 @@ async function playOne(seed: number, politics: boolean): Promise<GameRecord> {
       if (q.buy !== null && q.sell !== null) postedSpreads[g].push((q.sell - q.buy) / s.store.posted[g]);
     }
     sellLines[s.month - 1] = lines;
+    bands[s.month - 1] = { ...s.store.band };
   };
   const watch = (s: GameState) => {
     const a = s.auction;
@@ -222,6 +227,7 @@ async function playOne(seed: number, politics: boolean): Promise<GameRecord> {
     worksEnd,
     soldOutWalks: soldOutWalks(walks, facts),
     sellLines,
+    bands,
     foodSold,
     devMulePrices: state.history.map((h) => h.mulePrice),
     worthMulePriceEnd: mulePrice(state),
@@ -388,6 +394,19 @@ const METRICS: Metric[] = [
     value: (gs) => (gs.every((x) => x.moodMonths === null) ? 'n/a' : MOODS.map((b) => sum(gs.map((x) => x.moodMonths?.[b] ?? 0))).join(' / ')),
   },
   { name: 'Electronics works standing at the end (all games)', value: (gs) => String(sum(gs.map((x) => x.worksEnd.electronics ?? 0))) },
+  {
+    name: 'Electronics posted price by month, median over games (month 1, 2, ...)',
+    value: (gs) => {
+      const months = Math.max(...gs.map((x) => x.prices.length));
+      return Array.from({ length: months }, (_, m) => fmt(quantile(gs.flatMap((x) => (m < x.prices.length ? [x.prices[m]!.electronics] : [])), 0.5))).join(' ');
+    },
+  },
+  {
+    name: `Electronics months by band (${BANDS.join(' / ')})`,
+    value: (gs) => BANDS.map((b) => sum(gs.map((x) => x.bands.filter((m) => m.electronics === b).length))).join(' / '),
+  },
+  { name: `Electronics months posted at the ${CEILING_TIMES}x ceiling`, value: (gs) => String(sum(gs.map((x) => x.prices.filter((m) => m.electronics >= ceilingOf('electronics')).length))) },
+  { name: 'Electronics made (all games)', value: (gs) => String(sum(gs.map((x) => x.made.electronics))) },
   { name: 'Rare earth made (all games)', value: (gs) => String(sum(gs.map((x) => x.made.rareEarth))) },
   { name: 'Alloy made (all games)', value: (gs) => String(sum(gs.map((x) => x.made.alloy))) },
 ];
