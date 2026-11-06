@@ -225,7 +225,7 @@ describe('B-AC-26-3: the riot takes a third of each shelf and damages one object
   });
 
   it('B-AC-26-3: the damaged object’s build-site row says it counts 0 until repaired', () => {
-    const park: ColonyProjectView = { id: 'park', name: 'Park', stage: 'damaged', cost: { credits: 420, goods: {} }, funded: { credits: 420, goods: {} }, buildMonths: 1, monthsLeft: null, prestige: 2, upkeep: 30, repairCost: 150, plaque: [] };
+    const park: ColonyProjectView = { id: 'park', name: 'Park', stage: 'damaged', cost: { credits: 420, goods: {} }, funded: { credits: 420, goods: {} }, buildMonths: 1, monthsLeft: null, slot: 0, prestige: 2, upkeep: 30, repairCost: 150, plaque: [] };
     const row = renderToStaticMarkup(createElement(ProjectRow, { p: park, players: [], size: 'tv' }));
     expect(row).toContain('data-stage="damaged"');
     expect(text(row)).toContain('Damaged in the riot');

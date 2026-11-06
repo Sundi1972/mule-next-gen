@@ -83,6 +83,7 @@ function project(id: PrestigeId, stage: ColonyProjectView['stage'], extra: Parti
     funded: { credits: 0, goods: {} },
     buildMonths: row.buildMonths,
     monthsLeft: null,
+    slot: null,
     prestige: row.prestige,
     upkeep: row.upkeep,
     repairCost: stage === 'damaged' ? row.repairCost : null,
