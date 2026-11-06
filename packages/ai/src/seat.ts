@@ -6,8 +6,10 @@ import {
   createRng,
   floorConfig,
   GAME,
+  litPlot,
   observe,
   stableJson,
+  tileIndex,
   type AiLevelId,
   type AiPersonaId,
   type DevFloor,
@@ -50,7 +52,7 @@ import {
   type ValidatePlan,
   type ValidatorProfile,
 } from './playbook/index.js';
-import { GOOD_NAME, landDecision, outfitName, plotName, rankedBy, wantsAnyAhead, wantsPlot, type LandPlan } from './strategist.js';
+import { GOOD_NAME, landDecision, outfitName, plotName, plotsAhead, rankedBy, wantsAnyAhead, wantsPlot, type LandPlan } from './strategist.js';
 import { situation } from './summary.js';
 import type { Mind } from './value.js';
 
@@ -321,15 +323,14 @@ export class AiSeat {
    * a reaction and a go/no-go choice, and Rookie sometimes misses on purpose.
    */
   onLit(state: GameState): number | null {
-    const grant = state.grant;
-    if (state.phase !== 'landGrant' || !grant) return null;
+    if (state.phase !== 'landGrant' || !state.grant) return null;
     const me = state.players.find((p) => p.id === this.id)!;
     if (me.claimsThisGrant >= GAME.claimsPerGrant || me.doneWithLand) return null;
     const plan = this.landPlan(state);
-    const index = grant.order[grant.step];
-    if (index === undefined) return null;
     const obs = observe(state, this.id);
-    if (!wantsPlot(plan, obs, index, grant.order.slice(grant.step), this.mind)) return null;
+    const lit = litPlot(obs);
+    if (!lit) return null;
+    if (!wantsPlot(plan, obs, tileIndex(obs.width, lit.x, lit.y), plotsAhead(obs), this.mind)) return null;
     if (this.rng.next() < this.mind.level.missChance) return null;
     return this.rng.int(...this.mind.level.reactMs) + this.rng.int(...AI_HANDS.grant.choiceMs);
   }
@@ -339,11 +340,11 @@ export class AiSeat {
    * as onLit. A seat whose claims are used, or that is done already, has nothing to press.
    */
   passesGrant(state: GameState): boolean {
-    const grant = state.grant;
-    if (state.phase !== 'landGrant' || !grant) return false;
+    if (state.phase !== 'landGrant' || !state.grant) return false;
     const me = state.players.find((p) => p.id === this.id)!;
     if (me.claimsThisGrant >= GAME.claimsPerGrant || me.doneWithLand) return false;
-    return !wantsAnyAhead(this.landPlan(state), observe(state, this.id), grant.order.slice(grant.step), this.mind);
+    const obs = observe(state, this.id);
+    return !wantsAnyAhead(this.landPlan(state), obs, plotsAhead(obs), this.mind);
   }
 
   /**
