@@ -4,8 +4,9 @@ import type { MuleView, MyView, PlayerView, TableView, TileView } from '@mule/pr
 import type { Slot } from '@mule/ui';
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { TableClient } from '../src/net/client';
+import { SCANNING_MS } from '../src/phone/plotInfo';
 import { aMuleView, aPlayer } from './fixtures/views';
 
 /*
@@ -63,6 +64,14 @@ const ME: MyView = {
 };
 
 const VIEW: MuleView = aMuleView({ month: 2, width: 4, height: 1, tiles: TILES, players: PLAYERS, me: ME, politics: null });
+/** The view once Lena's drone has scanned plots 2·1 and 3·1: the drone used, their ground hers. */
+const GROUND = { food: 3, water: 0, energy: 1, smithore: 2, crystite: 1, rareEarth: 0 };
+const SCANNED: MuleView = {
+  ...VIEW,
+  tiles: TILES.map((t) => (t.x === 1 || t.x === 2 ? { ...t, ground: GROUND } : t)),
+  me: { ...ME, droneOrder: [{ x: 1, y: 0 }, { x: 2, y: 0 }], droneFound: [{ x: 1, y: 0 }, { x: 2, y: 0 }] },
+  players: [{ ...PLAYERS[0]!, money: PLAYERS[0]!.money - DEVELOPMENT.droneFee }, PLAYERS[1]!],
+};
 
 const sent: unknown[] = [];
 /** One snapshot, the same object on every read, as a store must give. */
@@ -148,30 +157,73 @@ describe('the planning hub, tapped (UX audit)', () => {
     tap('tool-drone');
     expect(text('drone-hint')).toBe(`Tap up to ${DEVELOPMENT.dronePlots} free plots`);
     expect(text('drone-panel')).toContain('Only you');
+    expect(text('drone-panel')).toContain(`The drone reads their ground from orbit, at once, for ${DEVELOPMENT.droneFee} cr. Only you see what it finds.`);
+    expect(text('drone-panel'), 'its results come at Scan').not.toMatch(/land grant|on its way/i);
     expect(order('drone-panel'), 'the drone takes the rail, the desks after it').toBeLessThan(order('desks'));
-    expect(text('drone-send')).toBe('Pick a free plot for the drone');
+    expect(text('scan')).toBe('Pick a free plot for the drone');
     expect(findTestid('drone-one-more')).toBeUndefined();
 
     tap('map-plot-1-0');
-    expect(text('drone-send')).toBe(`Send the drone · 1 of ${DEVELOPMENT.dronePlots} plots · ${DEVELOPMENT.droneFee} cr`);
+    expect(text('scan')).toBe(`Scan · 1 of ${DEVELOPMENT.dronePlots} plots · ${DEVELOPMENT.droneFee} cr`);
     expect(text('drone-one-more')).toBe('Pick 1 more: it costs nothing extra.');
     expect(text('drone-pick')).toContain('Plot');
 
     tap('map-plot-3-0');
-    expect(text('drone-send'), "Ossa's plot is not free: no pick").toContain('1 of');
+    expect(text('scan'), "Ossa's plot is not free: no pick").toContain('1 of');
     tap('map-plot-2-0');
-    expect(text('drone-send')).toBe(`Send the drone · 2 of ${DEVELOPMENT.dronePlots} plots · ${DEVELOPMENT.droneFee} cr`);
+    expect(text('scan')).toBe(`Scan · 2 of ${DEVELOPMENT.dronePlots} plots · ${DEVELOPMENT.droneFee} cr`);
     expect(findTestid('drone-one-more'), 'both plots picked: nothing more to say').toBeUndefined();
 
-    tap('drone-send');
+    tap('scan');
     expect(sent).toEqual([{ type: 'drone', plots: [{ x: 1, y: 0 }, { x: 2, y: 0 }] }]);
   });
 
-  it('H-3 (negative): once the drone is sent its button leaves the footer and the rail says it is on its way', () => {
-    mount({ ...VIEW, me: { ...ME, droneOrder: [{ x: 1, y: 0 }] } });
+  it('C2: after Scan the picked plots keep their SCAN chip and the rail says "Scanning…" for a second, then the Drone report, then one drone each planning', () => {
+    vi.useFakeTimers();
+    try {
+      mount(VIEW);
+      tap('tool-drone');
+      tap('map-plot-1-0');
+      tap('map-plot-2-0');
+      tap('scan');
+      // The server's answer: the drone is used and both plots' ground is in this seat's view.
+      act(() => root!.render(onPhone(SCANNED)));
+      expect(text('drone-hint')).toBe('Scanning…');
+      expect(text('scan')).toBe('Scanning…');
+      expect(byTestid('scan').getAttribute('disabled'), 'no second Scan while it scans').not.toBeNull();
+      for (const id of ['map-plot-1-0', 'map-plot-2-0']) expect(text(id), id).toContain('SCAN');
+      expect(findTestid('scan-report')).toBeUndefined();
+
+      act(() => void vi.advanceTimersByTime(SCANNING_MS));
+      expect(findTestid('scan-report')).toBeDefined();
+      for (const id of ['report-1-0', 'report-2-0']) expect(findTestid(id), id).toBeDefined();
+      for (const id of ['map-plot-1-0', 'map-plot-2-0']) expect(text(id), `${id}: the chip gives way to what was found`).not.toContain('SCAN');
+      expect(findTestid('scan')).toBeUndefined();
+      expect(text('drone-used')).toBe('One drone each planning: the next in month 3.');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('C2 (rejoin): a phone that opens planning with the drone already used shows the Drone report at once, from the view; no Scan and no "land grant"', () => {
+    mount(SCANNED);
     tap('tool-drone');
-    expect(text('drone-hint')).toBe('Your drone is on its way');
-    expect(findTestid('drone-send')).toBeUndefined();
+    expect(findTestid('scan-report')).toBeDefined();
+    expect(text('report-1-0')).toContain('Plot 2·1 · Plains');
+    expect(text('report-1-0')).toContain('best for Food');
+    expect(text('scan-report')).toContain('ONLY YOU');
+    expect(findTestid('scan')).toBeUndefined();
+    expect(findTestid('drone-hint')).toBeUndefined();
+    expect(text('drone-used')).toBe('One drone each planning: the next in month 3.');
+    expect(host.textContent).not.toMatch(/on its way|read at the land grant/i);
+  });
+
+  it("C2 (pin): a picked special plot's drone rail says what the special is, first under the plot's name", () => {
+    mount({ ...VIEW, tiles: TILES.map((t) => (t.x === 1 ? { ...t, special: { kind: 'oasis' } } : t)) });
+    tap('tool-drone');
+    tap('map-plot-1-0');
+    expect(byTestid('drone-pick').textContent).toContain('Plot 2·1');
+    expect(findTestid('special-line', byTestid('drone-pick'))?.getAttribute('data-kind')).toBe('oasis');
   });
 
   it('H-4: a tap on "2nd of 2" opens the standings, and Close shuts them', () => {

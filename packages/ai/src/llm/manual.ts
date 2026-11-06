@@ -105,7 +105,7 @@ const recipe = (good: ProcessedGood) => {
 /** Each phase in the order a month plays them, with its rules. */
 const PHASES: Record<Exclude<Phase, 'gameOver'>, () => string> = {
   planning: () =>
-    `Everyone reads the colony's stores, prices and plots. Players may send a geo drone over ${DEVELOPMENT.dronePlots} free or listed plots for ${DEVELOPMENT.droneFee} credits (its results arrive when the land grant starts), and list up to ${LOTS.perPlayer} plots or MULEs for the land auction, ${LOTS.maxLotsPerMonth} lots a month from all sellers. In months ${monthsList(POLITICS.electionMonths)} planning opens with an election for ${POLITICS.offices.join(', ')}: announce, then a secret ballot if an office has two or more candidates, then the result. Planning ends when every player is Ready.`,
+    `Everyone reads the colony's stores, prices and plots. Players may send a geo drone over ${DEVELOPMENT.dronePlots} free or listed plots for ${DEVELOPMENT.droneFee} credits (their ground is known at once), and list up to ${LOTS.perPlayer} plots or MULEs for the land auction, ${LOTS.maxLotsPerMonth} lots a month from all sellers. In months ${monthsList(POLITICS.electionMonths)} planning opens with an election for ${POLITICS.offices.join(', ')}: announce, then a secret ballot if an office has two or more candidates, then the result. Planning ends when every player is Ready.`,
   landGrant: () =>
     `The light passes over the free plots one at a time in reading order, ${GAME.grantTickMs} ms each, ${GAME.grantSweeps} pass; the first player to press claims the lit plot, up to ${GAME.claimsPerGrant} claims each. It ends after the pass, when no free land is left, or once every player has used their claims or is Done.`,
   landAuction: () =>
