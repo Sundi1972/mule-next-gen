@@ -60,6 +60,9 @@ export interface HoloMapProps {
 /** Every mark is a share of the plot's size, so it reads the same at any width. */
 const SHARE = { border: 1 / 12, tab: 0.46, mark: 0.36, disc: 0.62, icon: 0.44, ring: 1 / 9 };
 
+/** How far inside the map's right or bottom edge an edge plot's special badge sits, in px, where it can't hang out. */
+const BADGE_EDGE = 2;
+
 /** Before paint in the browser; the server renderer (and the node tests) has nothing to measure and no paint. */
 const useBeforePaint = typeof document === 'undefined' ? useEffect : useLayoutEffect;
 
@@ -176,6 +179,8 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
                 // A TV chip can stand taller than its plot: a tap on what overhangs goes to the plot beneath.
                 <span
                   className={cx('pointer-events-none relative flex flex-col items-center rounded-control bg-map-chip/90 shadow-chip', tv ? 'gap-0.5 px-1.5 py-1' : 'px-[3px] py-[2px]', fade)}
+                  // In the right column the badge sits inside the plot instead of hanging out: the chip steps left by as much.
+                  style={t.special && t.x === width - 1 ? { left: -(badge * SPECIAL_HANG + BADGE_EDGE) } : undefined}
                   data-testid={`map-dots-${t.x}-${t.y}`}
                 >
                   {ground.map(([g, n]) => (
@@ -256,8 +261,8 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
                     box={badge}
                     className="absolute"
                     style={{
-                      right: t.x === width - 1 ? 2 : -badge * SPECIAL_HANG,
-                      bottom: t.y === height - 1 ? 2 : -badge * SPECIAL_HANG,
+                      right: t.x === width - 1 ? BADGE_EDGE : -badge * SPECIAL_HANG,
+                      bottom: t.y === height - 1 ? BADGE_EDGE : -badge * SPECIAL_HANG,
                     }}
                   />
                 </span>

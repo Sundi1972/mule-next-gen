@@ -232,6 +232,19 @@ describe('B-AC-9 (MG-2): the special badge is sized with the plot, so it hides n
     expect(specialBadgeBox(37, 'tv')).toBe(21);
   });
 
+  it('in the map’s right column steps a special plot’s dots left by the badge’s hang and edge inset (2.75 + 2 px on a 30 px plot); a plain right-column plot’s stay put', () => {
+    const tiles: MapTile[] = [
+      { x: 2, y: 0, terrain: 'plains', owner: null, ground: { food: 3 }, special: { kind: 'oasis' } },
+      { x: 2, y: 1, terrain: 'plains', owner: null, ground: { food: 3 } },
+      { x: 1, y: 1, terrain: 'plains', owner: null, ground: { food: 3 }, special: { kind: 'oasis' } },
+    ];
+    const map = renderToStaticMarkup(createElement(HoloMap, { width: 3, height: 3, tiles }));
+    const chip = (at: string) => tag(map, new RegExp(`data-testid="map-dots-${at}"`));
+    expect(chip('2-0')).toMatch(/style="left:-4.75px"/);
+    expect(chip('2-1')).not.toMatch(/style=/);
+    expect(chip('1-1')).not.toMatch(/style=/);
+  });
+
   it('draws the map’s badge at that size, hung by a quarter of it (the server render’s plot is 30 px)', () => {
     const map = renderToStaticMarkup(createElement(HoloMap, { width: 3, height: 3, tiles: [{ x: 1, y: 1, terrain: 'plains', owner: null, special: { kind: 'oasis' } }] }));
     const badge = map.match(/data-testid="special-glyph-1-1"[^>]*><span[^>]*style="([^"]*)"/)?.[1] ?? '';

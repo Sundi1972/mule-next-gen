@@ -317,8 +317,8 @@ const covers = (a: Rect, b: Rect) => a.left < b.right - SLACK_PX && b.left < a.r
 
 /**
  * T-AC-3 and B-AC-9 (WS4; PM ruling X on #562), on the hub's Look map at the phone's 844×390, where a 3-seat plot is
- * about 25 px: (a) on every analysed special plot with nothing installed, off the map's right column, the third dot's
- * centre lies outside the plot's own badge and its box clears the badge's (in the right column it is measured for the log); (b) on an owned plot with a gem, the owner's tab and the gem are clear of the
+ * about 25 px: (a) on every analysed special plot with nothing installed, the right column's and its corner's included,
+ * the third dot's centre lies outside the plot's own badge and its box clears the badge's; (b) on an owned plot with a gem, the owner's tab and the gem are clear of the
  * dots; (c) a plot Look-selected under a plot showing its dots draws no pin, and its ring's painted band keeps off those
  * dots. Each "clear" is within SLACK_PX. The ground is seeded on the server for the seat, as makeHungry seeds hunger, and
  * undone afterwards.
@@ -354,6 +354,25 @@ export async function theMarksStayClearOfTheDots(ctx: GameStepContext, seat = 's
         undo.push(() => delete plain.special);
         plain.special = { kind: 'oasis' };
         specials = [plain];
+      }
+      // The right column, where the badge sits inside the plot, and its bottom corner: given a special when the map has none there.
+      const inRightColumn = specials.some((t) => t.x === state.width - 1 && t.y < state.height - 1);
+      const inCorner = specials.some((t) => t.x === state.width - 1 && t.y === state.height - 1);
+      for (const [want, edge] of [
+        [!inRightColumn, state.tiles.find((t) => t.x === state.width - 1 && t.y > 0 && t.y < state.height - 1 && open(t) && !t.special)],
+        [!inCorner, at(state.width - 1, state.height - 1)],
+      ] as const) {
+        if (!want) continue;
+        check(edge && open(edge), `${id}: a plot in the map's right column to give a special`);
+        const was = { special: edge.special, outfit: edge.outfit };
+        undo.push(() => {
+          if (was.special) edge.special = was.special;
+          else delete edge.special;
+          edge.outfit = was.outfit;
+        });
+        edge.special = edge.special ?? { kind: 'oasis' };
+        edge.outfit = null;
+        specials.push(edge);
       }
       specials.forEach(analyse);
       // (b): an owned plot without a special, given a gem. One with nothing installed is taken first; else a MULE is lifted off one for the step.
@@ -395,12 +414,9 @@ export async function theMarksStayClearOfTheDots(ctx: GameStepContext, seat = 's
         owned: { pips: (ownedPips ?? []).slice(0, 3), tab, gems: gems ?? [] },
       };
       check(marks.plot, `${id}: plot ${owned.x}-${owned.y} is drawn`);
-      const rightColumn = (at: string) => at.startsWith(`${state.width - 1}-`);
       for (const sp of marks.specials) {
         check(sp.third && sp.badge, `${id}: special plot ${sp.at} draws its third dot and its badge`);
         const [d, b] = [sp.third, sp.badge];
-        // In the right column the badge sits 2 px inside the map's edge, over the third dot: measured for the log only.
-        if (rightColumn(sp.at)) continue;
         check(!inHexagon((d.left + d.right) / 2, (d.top + d.bottom) / 2, b), `${id}: on special plot ${sp.at} the third dot's centre lies outside the plot's badge`);
         check(!covers(d, b), `${id}: on special plot ${sp.at} the third dot (${px(d.left)}–${px(d.right)}, ${px(d.top)}–${px(d.bottom)}) is clear of the ${px(b.right - b.left)} badge (${px(b.left)}–${px(b.right)}, ${px(b.top)}–${px(b.bottom)})`);
       }
@@ -430,11 +446,7 @@ export async function theMarksStayClearOfTheDots(ctx: GameStepContext, seat = 's
       const bandOver = dotsFoot - sel.band.top;
       check(bandOver <= SLACK_PX, `${id}: the ring on ${x}-${y}, as painted, keeps off the dots of ${x}-${y - 1}: its band reaches ${px(bandOver)} into their row`);
       await plot.click({ timeout: PRESS_MS });
-      const third = (sp: (typeof marks.specials)[number]) => {
-        const [d, b] = [sp.third!, sp.badge!];
-        const clear = `${sp.at} ${px(Math.max(b.left - d.right, b.top - d.bottom))}`;
-        return rightColumn(sp.at) ? `${clear} (right column, not checked: ${inHexagon((d.left + d.right) / 2, (d.top + d.bottom) / 2, b) ? 'centre covered' : covers(d, b) ? 'box overlaps' : 'clear'})` : clear;
-      };
+      const third = (sp: (typeof marks.specials)[number]) => `${sp.at} ${px(Math.max(sp.badge!.left - sp.third!.right, sp.badge!.top - sp.third!.bottom))}`;
       return `on a ${px(marks.plot.right - marks.plot.left)} plot: (a) the third dot clear of its ${px(marks.specials[0]!.badge!.right - marks.specials[0]!.badge!.left)} badge on ${marks.specials.map(third).join(', ')}; (b) on ${owned.x}-${owned.y} the tab's foot ${px(o.pips[0]!.top - o.tab.bottom)} above the dots, the gem's ${px(o.pips[0]!.top - Math.max(...o.gems.map((g) => g.bottom)))}; (c) ${x}-${y} selected: no pin, the ring's band ${bandOver > 0 ? `${px(bandOver)} into` : `${px(-bandOver)} under`} the dots of ${x}-${y - 1}`;
     });
   } finally {
