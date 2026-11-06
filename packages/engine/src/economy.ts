@@ -60,10 +60,9 @@ export function monthlyDemand(state: GameState, festival = festivalFood(state)):
   const electronics = state.colonists / UPKEEP.colonistsPerElectronics;
   demand.electronics = electronics;
   // The larger, not the sum: the works and the colonists' want are the same Electronics. See needs AM-2.
-  for (const input of ['rareEarth', 'alloy'] as const) {
-    const perElectronics = RECIPES.electronics.inputs[input] ?? 0;
-    demand[input] = Math.max(factories('electronics'), electronics) * perElectronics;
-  }
+  // A works takes one recipe's inputs a month, so the want counts in recipes: E ÷ output.
+  const recipes = Math.max(factories('electronics'), electronics / RECIPES.electronics.output);
+  for (const input of ['rareEarth', 'alloy'] as const) demand[input] = recipes * (RECIPES.electronics.inputs[input] ?? 0);
   const off = exportDemand(state);
   for (const good of GOODS) demand[good] += off[good];
   return demand;
