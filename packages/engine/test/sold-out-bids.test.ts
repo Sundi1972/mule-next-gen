@@ -94,6 +94,18 @@ describe('RULE-7 rows 1 and 2: a buyer bidding past a sold-out store', () => {
     }
   });
 
+  it('T-AC-E2: on the trading floor, at S or under it, a buyer walking up still meets the seller and they trade at the ask (RULE-7 note)', () => {
+    const { storeSell: S, storeBuy: B } = a(soldOutWalk([PROBE_ASK]));
+    for (const ask of [S, S - 3, B + 1]) {
+      const state = soldOutWalk([ask]);
+      setWalk(state, 'p1', 1);
+      const trades: Trade[] = [];
+      for (let t = 0; t < 20_000; t += TICK) trades.push(...stepAuction(state, TICK));
+      expect(trades.length, `ask ${ask}`).toBeGreaterThan(0);
+      expect(trades.every((t) => t.buyer === 'p1' && t.seller === 'p0' && t.price === ask), `ask ${ask}`).toBe(true);
+    }
+  });
+
   it('T-AC-E2: with soldOutBidding off, a buyer walks as before: into the resting seller, and they trade', () => {
     WALK.soldOutBidding = false;
     const ask = a(soldOutWalk([PROBE_ASK])).storeSell + 6;
@@ -139,6 +151,47 @@ describe('RULE-7 rows 3 and 4: the line shows the top bid, and a seller walks do
     expect(met.length).toBeGreaterThan(1);
     expect(met.every((s) => s.buyer === 'p1' && s.seller === 'p0' && s.price === lenaBid)).toBe(true);
     expect(first, 'the first unit waits tradeStartMs from when they meet').toBeGreaterThanOrEqual(tradeInterval(0) - TICK);
+  });
+
+  it('B-AC-E1: a bid exactly at the old line S is no bid past it: the line reads the store sold out at S, unflagged', () => {
+    const state = soldOutWalk([PROBE_ASK]);
+    const S = a(state).storeSell;
+    walker(state, 'p1').price = S;
+    expect(shownSellLine(state)).toEqual({ price: S, bid: false });
+    walker(state, 'p1').price = S + 1;
+    expect(shownSellLine(state)).toEqual({ price: S + 1, bid: true });
+  });
+
+  it('RULE-7 × RULE-4: a seller stopped at his need above S rests; the buyer stops one under him, the line stays her bid, and his one-second hold sells at it', () => {
+    const S = a(soldOutWalk([PROBE_ASK])).storeSell;
+    const brixAsk = S + 10;
+    const state = soldOutWalk([brixAsk]); // p0 is Brix, resting; p1 is Lena
+    const spare = 2;
+    a(state).status.find((r) => r.id === 'p0')!.need = state.players[0]!.stock.water - spare;
+    setWalk(state, 'p1', 1);
+    for (let t = 0; t < 15_000; t += TICK) stepAuction(state, TICK);
+    const lenaBid = brixAsk - 1;
+    expect(Math.round(walker(state, 'p1').price)).toBe(lenaBid);
+
+    // Brix walks down onto her bid and sells his spare; the need-stop holds him a step above it.
+    setWalk(state, 'p0', -1);
+    const sold: Trade[] = [];
+    for (let t = 0; t < 10_000; t += TICK) sold.push(...stepAuction(state, TICK));
+    expect(sold.map((t) => t.price)).toEqual(Array(spare).fill(lenaBid));
+    expect(walker(state, 'p0').held).toBe(true);
+    expect(Math.round(walker(state, 'p0').price)).toBe(lenaBid + 1);
+
+    // Lena, still holding up, stays one under him: no seller is left between S and the line.
+    for (let t = 0; t < 10_000; t += TICK) stepAuction(state, TICK);
+    expect(Math.round(walker(state, 'p1').price), 'Lena does not walk past the held seller').toBe(lenaBid);
+    expect(shownSellLine(state)).toEqual({ price: lenaBid, bid: true });
+
+    // His one-second hold of down sells on at her bid, not at an ask under it.
+    setWalk(state, 'p0', -1);
+    const short: Trade[] = [];
+    for (let t = 0; t < 10_000; t += TICK) short.push(...stepAuction(state, TICK));
+    expect(short.length).toBeGreaterThan(0);
+    expect(short.every((t) => t.buyer === 'p1' && t.seller === 'p0' && t.price === lenaBid)).toBe(true);
   });
 
   it('B-AC-E1: while the store sells, the line is its selling price, not a bid; with soldOutBidding off a sold-out store shows no line', () => {
