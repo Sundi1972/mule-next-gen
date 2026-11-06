@@ -188,6 +188,9 @@ spread p50, sold-out-floor and glut-step violations, posted above ceiling; colon
   floor/cap/ceiling violations (UBER-AC-1), quoted spread > 20% every good-month and between-player Food share
   above 8% (UBER-AC-2). Colonists short of Food/Water: report against Today (13% / 30% of months); a rise goes to
   the PM as a finding for Heiko, never a silent tune.
+  Also report WS9's early-month supply finding (6 Nov): in month 1 the store's Food for sale against the short
+  seats' need (WS9 saw 11 for sale against three seats needing 9 each). The lean raises the buy line but adds no
+  stock; supply is Heiko's C29 pass, so this is reported, not tuned.
 - [ ] **Step 3: Commit** `test(ai): the sim reports the store's spread, floors and between-player share (verifies T-AC-4)`.
 
 ### Task 1.7 — the rulebook chapter (spec §5, §8 AM-1)
