@@ -178,7 +178,7 @@ describe('the planning hub, tapped (UX audit)', () => {
     expect(sent).toEqual([{ type: 'drone', plots: [{ x: 1, y: 0 }, { x: 2, y: 0 }] }]);
   });
 
-  it('C2: after Scan the picked plots keep their SCAN chip and the rail says "Scanning…" for a second, then the Drone report, then one drone each planning', () => {
+  it('C2: after Scan the picked plots keep their SCAN chip and the rail says "Scanning…" for a second, then the Drone report, closed by the month of the next drone; the footer gives its room to the report', () => {
     vi.useFakeTimers();
     try {
       mount(VIEW);
@@ -199,7 +199,9 @@ describe('the planning hub, tapped (UX audit)', () => {
       for (const id of ['report-1-0', 'report-2-0']) expect(findTestid(id), id).toBeDefined();
       for (const id of ['map-plot-1-0', 'map-plot-2-0']) expect(text(id), `${id}: the chip gives way to what was found`).not.toContain('SCAN');
       expect(findTestid('scan')).toBeUndefined();
-      expect(text('drone-used')).toBe('One drone each planning: the next in month 3.');
+      expect(text('drone-used')).toBe('Next drone: month 3.');
+      expect(findTestid('drone-used', byTestid('scan-report')), 'the next drone closes the report').toBeDefined();
+      expect(text('actions'), "the footer holds only Ready's bar: its room goes to the report").not.toMatch(/drone|Scan/i);
     } finally {
       vi.useRealTimers();
     }
@@ -209,12 +211,12 @@ describe('the planning hub, tapped (UX audit)', () => {
     mount(SCANNED);
     tap('tool-drone');
     expect(findTestid('scan-report')).toBeDefined();
-    expect(text('report-1-0')).toContain('Plot 2·1 · Plains');
+    expect(text('report-1-0')).toContain('2·1 · Plains');
     expect(text('report-1-0')).toContain('best for Food');
     expect(text('scan-report')).toContain('ONLY YOU');
     expect(findTestid('scan')).toBeUndefined();
     expect(findTestid('drone-hint')).toBeUndefined();
-    expect(text('drone-used')).toBe('One drone each planning: the next in month 3.');
+    expect(text('drone-used')).toBe('Next drone: month 3.');
     expect(host.textContent).not.toMatch(/on its way|read at the land grant/i);
   });
 

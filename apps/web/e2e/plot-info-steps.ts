@@ -103,6 +103,9 @@ export async function theDroneReportsInTheRail({ phone, server, code, held }: Ga
 
     const planning = phone.locator('[data-phase=planning]');
     const hubMap = planning.getByTestId('hub-map');
+    // Now as planning first draws it, folded to its title: an earlier step may have opened it to read it whole.
+    const fold = planning.getByTestId('now-fold');
+    if (await fold.count()) await fold.click({ timeout: STEP_MS });
     await planning.getByTestId('tool-drone').click({ timeout: STEP_MS });
     for (const p of picks) await tapPlot(phone, hubMap, p, state.width, STEP_MS);
     const scan = planning.getByTestId('scan');
@@ -123,7 +126,7 @@ export async function theDroneReportsInTheRail({ phone, server, code, held }: Ga
       const dots = dotsOf(state.tiles[index(p)]!.ground);
       const row = report.getByTestId(`report-${p.x}-${p.y}`);
       const text = (await row.innerText()).replace(/\s+/g, ' ');
-      check(text.includes(`Plot ${plotName(p)}`), `${B_AC_1}: the row names plot ${plotName(p)}, got "${text}"`);
+      check(text.startsWith(`${plotName(p)} · `), `${B_AC_1}: the row names plot ${plotName(p)} first, got "${text}"`);
       const best = `best for ${GOOD_NAME[bestOf(dots)]}`;
       check(text.toLowerCase().includes(best.toLowerCase()), `${B_AC_1}: plot ${plotName(p)} says "${best}", got "${text}"`);
       for (const g of RAW) {

@@ -37,19 +37,25 @@ export function Gem({ good, size = 12 }: { good: RawGood; size?: number }) {
   );
 }
 
-/** Every raw good of one plot, 0–3 dots each, in two columns; Crystite and Rare earth carry their gem when found. */
+/**
+ * Every raw good of one plot, 0–3 dots each, in two or three labelled columns, or six in one row by icon alone (the
+ * compact report); Crystite and Rare earth carry their gem when found.
+ */
 export function GoodDots({ ground, cols = 2 }: { ground: Ground; cols?: 2 | 3 | 6 }) {
   const dots = dotsOf(ground);
   const gems = gemsIn(dots);
+  const row = cols === 6;
   return (
-    <div className={cx('grid gap-x-3 gap-y-1', cols === 2 ? 'grid-cols-2' : cols === 3 ? 'grid-cols-3' : 'grid-cols-6 gap-x-1.5')} data-testid="good-dots">
+    <div className={cx('grid gap-y-1', cols === 2 ? 'grid-cols-2 gap-x-3' : cols === 3 ? 'grid-cols-3 gap-x-3' : 'grid-cols-6 gap-x-1')} data-testid="good-dots">
       {RAW.map((g) => {
         const n = dots[g];
         return (
-          <span key={g} className={cx('flex items-center gap-1', n === 0 && 'opacity-45')}>
-            {gems.includes(g) ? <Gem good={g} size={8} /> : <GoodIcon good={g} size={12} />}
-            {cols !== 6 && <span className={cx('min-w-0 flex-1 truncate text-[11px]', gems.includes(g) && 'font-semibold')}>{SHORT[g]}</span>}
-            <Dots good={g} n={n} size={cols === 6 ? 4 : 6} />
+          <span key={g} className={cx('flex min-w-0 items-center', row ? 'gap-0.5' : 'gap-1', n === 0 && 'opacity-45')}>
+            <span className="flex shrink-0">{gems.includes(g) ? <Gem good={g} size={row ? 6 : 8} /> : <GoodIcon good={g} size={row ? 11 : 12} />}</span>
+            {!row && <span className={cx('min-w-0 flex-1 truncate text-[11px]', gems.includes(g) && 'font-semibold')}>{SHORT[g]}</span>}
+            <span className="flex shrink-0">
+              <Dots good={g} n={n} size={row ? 4 : 6} />
+            </span>
           </span>
         );
       })}
@@ -65,23 +71,36 @@ export function bestLine(ground: Ground): string {
   return [`best for ${GOOD_NAME[best]}`, ...gems.map((g) => `${GOOD_NAME[g]} ${dots[g]}`)].join(' · ');
 }
 
-/** The drone's report, in the rail: each scanned plot, its land, every good and the best of it. */
-export function ScanReport({ tiles }: { tiles: TileView[] }) {
+/** What closes the Drone report: the month of the next drone, or that the game has none left. */
+export function nextDroneWords({ month, maxMonths }: Pick<MuleView, 'month' | 'maxMonths'>): string {
+  return month < maxMonths ? `Next drone: month ${month + 1}.` : 'No more drones this game.';
+}
+
+/**
+ * The drone's report, in the rail, compact so both plots show without a scroll on a phone on its side: per plot one
+ * line (where, what land, best for), then its six goods as icons with 0–3 dots in one row. `next` closes it.
+ */
+export function ScanReport({ tiles, next }: { tiles: TileView[]; next: string }) {
   return (
-    <section className="flex flex-col gap-1.5 rounded-control border border-holo bg-panel p-2" data-testid="scan-report">
+    <section className="flex flex-col gap-1 rounded-control border border-holo bg-panel px-2 py-1.5" data-testid="scan-report">
       <span className="flex items-center justify-between">
         <span className="font-display text-sm font-semibold">Drone report</span>
         <OnlyYou />
       </span>
       {tiles.map((t) => (
-        <div key={`${t.x},${t.y}`} className="flex flex-col gap-1 border-t border-holo-faint pt-1.5" data-testid={`report-${t.x}-${t.y}`}>
-          <b className="text-xs font-semibold">
-            Plot {plotName(t.x, t.y)} · {TERRAIN_NAME[t.terrain]}
-          </b>
-          <span className="text-[11px] font-semibold leading-tight text-holo">{bestLine(t.ground!)}</span>
-          <GoodDots ground={t.ground!} />
+        <div key={`${t.x},${t.y}`} className="flex flex-col gap-0.5 border-t border-holo-faint pt-1" data-testid={`report-${t.x}-${t.y}`}>
+          <span className="truncate text-xs leading-tight">
+            <b className="font-semibold">
+              {plotName(t.x, t.y)} · {TERRAIN_NAME[t.terrain]}
+            </b>{' '}
+            <span className="font-semibold text-holo">· best for {GOOD_NAME[bestOf(dotsOf(t.ground!))]}</span>
+          </span>
+          <GoodDots ground={t.ground!} cols={6} />
         </div>
       ))}
+      <span className="border-t border-holo-faint pt-1 text-[11px] leading-tight text-ink-3" data-testid="drone-used">
+        {next}
+      </span>
     </section>
   );
 }

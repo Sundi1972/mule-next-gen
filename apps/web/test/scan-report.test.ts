@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { MuleGame } from '../../server/src/mule-game';
 import { fakeContext, walkers } from '../../server/test/fake-context';
-import { droneReport, ScanReport } from '../src/phone/plotInfo';
+import { droneReport, nextDroneWords, ScanReport } from '../src/phone/plotInfo';
 
 /**
  * The Drone report is drawn from the view (the seat's droneOrder and its tiles' ground), never from the tap on Scan, so
@@ -25,7 +25,7 @@ function scanned() {
   return { game, fake, plots, before };
 }
 
-const html = (view: MuleView) => renderToStaticMarkup(createElement(ScanReport, { tiles: droneReport(view)! }));
+const html = (view: MuleView) => renderToStaticMarkup(createElement(ScanReport, { tiles: droneReport(view)!, next: nextDroneWords(view) }));
 
 describe("the Drone report is the view's: droneOrder plus the tiles' ground", () => {
   it("after Scan, the sender's view gives the report both plots, in the order picked, each with its ground", () => {

@@ -7,7 +7,7 @@ import { StrikeMap } from '../../components/Strike';
 import { useClient } from '../../net/react';
 import { usePhoneGame } from '../game';
 import { GroundCard } from '../ground';
-import { droneReport, ScanReport, useScanning } from '../plotInfo';
+import { droneReport, nextDroneWords, ScanReport, useScanning } from '../plotInfo';
 import { SellMap } from '../Sell';
 import { MapFit, useWide } from '../Shell';
 import { OnlyYou } from './OnlyYou';
@@ -113,7 +113,7 @@ export function DroneMap() {
 export function DronePanel() {
   const { view } = usePhoneGame();
   const { stage, report, chosen } = useDrone();
-  if (stage === 'report') return <ScanReport tiles={report!} />;
+  if (stage === 'report') return <ScanReport tiles={report!} next={nextDroneWords(view)} />;
   const scanning = stage === 'scanning';
   const last = chosen.at(-1);
   const lastTile = last ? tileAt(view, last.x, last.y) : undefined;
@@ -145,23 +145,15 @@ export function DronePanel() {
   );
 }
 
-/** "One drone each planning", with the month of the next while the game has one. */
-function oneDroneWords(view: Pick<MuleView, 'month' | 'maxMonths'>): string {
-  return view.month < view.maxMonths ? `One drone each planning: the next in month ${view.month + 1}.` : 'One drone each planning.';
-}
-
-/** Scan: the button counts the plots picked and, while one more is free to add, says so; once used, one drone a planning. */
+/**
+ * Scan: the button counts the plots picked and, while one more is free to add, says so. Once the report shows it is
+ * gone: the report says when the next drone flies, and the footer's room goes to the report.
+ */
 export function DroneSend() {
   const client = useClient();
-  const { view, self } = usePhoneGame();
+  const { self } = usePhoneGame();
   const { stage, picked } = useDrone();
-  if (stage === 'report') {
-    return (
-      <span className="flex items-center justify-between text-[11px] text-ink-3" data-testid="drone-used">
-        {oneDroneWords(view)}
-      </span>
-    );
-  }
+  if (stage === 'report') return null;
   const scanning = stage === 'scanning';
   const left = DEVELOPMENT.dronePlots - picked.length;
   return (
