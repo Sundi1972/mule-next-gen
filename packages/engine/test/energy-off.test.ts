@@ -497,7 +497,9 @@ describe('AM-17, PM ruling A: a plant counts net, so its own use is nobody\'s ne
     expect(statusRows(state, 'energy').find((r) => r.id === 'p0')!.need).toBe(0);
 
     lay(state, [{ good: 'energy', out: 2 }, { good: 'food', out: 3 }]);
-    expect(statusRows(state, 'energy').find((r) => r.id === 'p0')!.need).toBe(1);
+    expect(monthNeeds(state, 'p0').energy, 'the farm burns 1 at production').toBe(1);
+    // The status row asks for what survives the month end's spoilage: 2 × 0.75 leaves 1 (auctionNeed, PM ruling B).
+    expect(statusRows(state, 'energy').find((r) => r.id === 'p0')!.need).toBe(2);
   });
 
   it('B-AC-energy-off: the store\'s Energy demand counts the players\' plots but never a plant\'s own use', () => {
