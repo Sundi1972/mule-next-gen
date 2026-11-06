@@ -1,4 +1,6 @@
+import { COLONY } from '@mule/engine';
 import { GOOD_NAME, type Good } from '../components/tokens';
+import { percent } from './catalogue';
 import { signLook, type ShowCast } from './frame';
 import { epidemicSick, sickBecause } from './sick';
 import type { EventSegment } from './timing';
@@ -131,7 +133,7 @@ function plotSummary(ev: ShowEventView, cast: ShowCast): string | null {
   if (first?.becomes === 'plain') return `${whose(first)}’s crystal cavern is a plain plot`;
   if (ev.key === 'generalStrike' && ev.phase === 'planning' && first) {
     const good = cast.goodAt(first.x, first.y);
-    return `${good ? `${GOOD_NAME[good]} ` : ''}at 20% on ${plots(good, ev.hits.length)} unless the Governor pays`;
+    return `${good ? `${GOOD_NAME[good]} ` : ''}at ${percent(COLONY.strike.output)} on ${plots(good, ev.hits.length)} unless the Governor pays`;
   }
   // A hit that changed nothing is no loss: it is in no figure and no plot count; with none left, the effects speak.
   const hits = ev.hits.filter((h) => h.delta !== 0);
@@ -195,7 +197,7 @@ const ALL: Partial<Record<ShowEventKey, (ev: ShowEventView) => string>> = {
   storeFire: () => 'For everyone: the store lost everything it held, every good and its MULEs, until it’s restocked.',
   coldSnap: () => 'For everyone: every plot needs twice its Energy this month.',
   festival: () => 'For everyone: the colony’s mood lifts, and the store buys more Food this month.',
-  generalStrike: () => 'For everyone: every plot of the struck good makes 20% this month, unless the Governor pays the strikers.',
+  generalStrike: () => `For everyone: every plot of the struck good makes ${percent(COLONY.strike.output)} this month, unless the Governor pays the strikers.`,
   emigrationWave: () => 'For everyone: colonists leave the colony, for good. The store buys less.',
   storeStrike: () => 'For everyone: the store sells no MULEs this turn.',
   riot: (ev) => `For everyone: ${[...objectWords(ev).map((w) => `${w} in the riot`), 'the store lost a third of its stock'].join(', and ')}.`,

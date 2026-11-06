@@ -1,39 +1,12 @@
+import type { EventEffect, EventKey } from '@mule/engine';
 import type { Good, Slot, SpecialKind } from '../components/tokens';
 
 /** The colony's mood events C26's second engine PR adds (the protocol's ColonyEventKey); harmless once EventKey takes them. */
 export type ColonyEventKey = 'storeStrike' | 'walkout' | 'loyalCrew' | 'riot' | 'volunteerCleanup';
 
-/** The events the show draws: the engine's EventKey union (packages/engine/src/types.ts), mirrored (AM-17), and C26's still to come. */
+/** The events the show draws: the engine's, C26's still to come, and development's sick players. */
 export type ShowEventKey =
-  | 'dustStorm'
-  | 'drought'
-  | 'acidRain'
-  | 'solarFlare'
-  | 'cometPass'
-  | 'flood'
-  | 'volcanicAsh'
-  | 'pestSwarm'
-  | 'wildfire'
-  | 'bumperHarvest'
-  | 'cavernCollapse'
-  | 'federationTax'
-  | 'federationGrant'
-  | 'immigrationWave'
-  | 'inheritance'
-  | 'muleTheft'
-  | 'epidemic'
-  | 'coldSnap'
-  | 'meteorStrike'
-  | 'pirateRaid'
-  | 'storeFire'
-  | 'ratsInSilo'
-  | 'crookedAccountant'
-  | 'packageFromHome'
-  // G-5 C26's planning social events (a general strike also files a production event when unpaid).
-  | 'festival'
-  | 'generalStrike'
-  | 'emigrationWave'
-  | 'blamedForUnrest'
+  | EventKey
   | ColonyEventKey
   // Not an EventKey: development's sick players, each sent as a bulletin (C11; the protocol's EventView widens to match).
   | 'sickness';
@@ -85,13 +58,8 @@ export interface ShowEventView {
   objects?: { id: 'park' | 'hospital' | 'observatory' | 'stadium' | 'spaceport'; becomes: 'damaged' }[];
 }
 
-/** One change an event made off the map (the protocol's EventEffect, structurally): whose, of what, by how much. */
-export interface ShowEffect {
-  /** A player's id, 'store' or 'colony'. */
-  on: string;
-  what: Good | 'money' | 'mules' | 'colonists' | 'energyNeed' | 'mood' | 'prestige' | 'air' | 'reputation';
-  delta: number;
-}
+/** One change an event made off the map: whose (a player's id, 'store' or 'colony'), of what, by how much. */
+export type ShowEffect = EventEffect;
 
 export type ShowHit = ShowEventView['hits'][number];
 

@@ -25,6 +25,7 @@ import {
 } from '@mule/engine';
 import type { Act, AiAction } from './actions.js';
 import { Brain, type DecisionRecord, type Pending } from './brain.js';
+import { donationFor, standingOf } from './colony-donate.js';
 import { templateLine, type Decider, type TableTalk } from './decider.js';
 import { AuctionHand, type AuctionDebug } from './hands/auction.js';
 import { DevelopHand, type DevLogEntry, type DevWalking } from './hands/develop.js';
@@ -172,7 +173,8 @@ export class AiSeat {
 
   /**
    * Planning: the land plan for this month's grant, with its full ranking of free plots. With `act`, the seat also plays
-   * its planning part: the drone, then its listings; an adopt later in this planning plays the listings again.
+   * its planning part: the drone, then its listings; an adopt later in this planning plays the listings again. Last,
+   * it may give toward the colony's commissioned object, once (G-5 C28).
    */
   planMonth(state: GameState, act?: Act): void {
     if (this.landMonth === state.month) return;
@@ -188,6 +190,15 @@ export class AiSeat {
     if (!act) return;
     this.planning = { month: state.month, state, act, refused: new Set() };
     this.planned = [];
+    this.playPlanningPart(state);
+    // Read again: the drone's fee has come off its money.
+    const after = observe(state, this.id);
+    const gift = donationFor(after, this.mind, standingOf(after, this.id));
+    if (gift) this.planAct({ type: 'donate', ...gift });
+  }
+
+  /** The drone, then the listings, as the planning part in effect says. */
+  private playPlanningPart(state: GameState): void {
     // On its own path the part is its draft's: with nothing to list and nothing of its own listed yet it would play
     // nothing, so the seat skips the whole draft and its validation.
     const mine = state.listings.some((l) => l.seller === this.id);

@@ -261,7 +261,13 @@ export type EventKey =
   | 'festival'
   | 'generalStrike'
   | 'emigrationWave'
-  | 'blamedForUnrest';
+  | 'blamedForUnrest'
+  // G-5 C26 PR-B: development's store strike, production's walkout and loyal crew, the month end's riot and clean-up.
+  | 'storeStrike'
+  | 'walkout'
+  | 'loyalCrew'
+  | 'riot'
+  | 'volunteerCleanup';
 
 /** How the screens animate an event; several events share a kind. */
 export type EventKind =
@@ -288,6 +294,8 @@ export interface EventEffect {
   /** G-5 C26 adds 'mood' (moodShift's change), 'prestige' (lasting points), 'air' (the gauge) and 'reputation'. */
   what: Good | 'money' | 'mules' | 'colonists' | 'energyNeed' | 'mood' | 'prestige' | 'air' | 'reputation';
   delta: number;
+  /** The holder's count of `what` right after this effect, before anything later in the month moves it; absent means not reported. */
+  to?: number;
 }
 
 export interface MonthEvent {
@@ -325,6 +333,8 @@ export interface MonthEvent {
   phase: Phase;
   /** What the event changed off the map, in the order it changed it; absent when it changed nothing there. */
   effects?: EventEffect[];
+  /** The colony's objects it damaged (a riot); absent when it damaged none. */
+  objects?: { id: PrestigeId; becomes: 'damaged' }[];
 }
 
 export interface EventWarning {

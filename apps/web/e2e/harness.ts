@@ -117,14 +117,19 @@ if (FILE_LIMIT_S > 0) {
  * Presses CLAIM until the claims counter drops, within `timeoutMs`. The lit plot moves on every
  * tick and an AI can take it first, so a press may be refused; press again. `promise` names the
  * check that fails when no claim lands in time.
+ *
+ * It first waits for the phone to draw the grant: called as the last seat presses Ready, a phone can still be on the
+ * screen before for a moment, and reading "no grant" then failed the claim before it began (CI, 5 Nov, three times).
  */
 export async function claimAPlot(phone: Page, timeoutMs: number, promise: string): Promise<void> {
   const grant = phone.locator('[data-phase=landGrant]');
   const claim = grant.getByRole('button', { name: /CLAIM/ });
   const unclaimed = grant.getByText(`${GAME.claimsPerGrant} OF ${GAME.claimsPerGrant} CLAIMS LEFT`, { exact: true });
   const deadline = Date.now() + timeoutMs;
+  await claim.waitFor({ timeout: Math.max(1, deadline - Date.now()) }).catch(() => undefined);
   for (;;) {
-    check((await grant.count()) > 0 && Date.now() < deadline, promise);
+    check((await grant.count()) > 0, `${promise}: no land grant on this phone (never shown, or ended before its claim landed)`);
+    check(Date.now() < deadline, `${promise}: no free plot could be claimed within ${timeoutMs} ms`);
     if ((await unclaimed.count()) === 0) return;
     try {
       // Waits until a free plot is lit, which enables the button.

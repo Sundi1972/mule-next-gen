@@ -209,11 +209,13 @@ describe('B-AC-12 (WS4, month end): the league table and the colony, on the phon
     expect(said(fed, 'nobody-hungry')).toBe('✓ Nobody went hungry');
   });
 
-  it('B-AC-12 (WS4, month end): the colony panel says whether the colonists were fed or went short', () => {
-    expect(said(tv, 'colonists')).toBe('Colonists fed · 1,240');
+  it("SWEEP-D4 / B-AC-12 (WS4, month end): the colonists line is the colony's people fed by the store, not the players beside it who went hungry", () => {
+    expect(said(tv, 'hungry-s3')).toBe(`Kai went hungry: ate 1 of ${KAI_NEED} Food`);
+    expect(said(tv, 'colonists')).toBe('The store fed the colony’s 1,240 colonists');
     const short = onTv(view({ colonistsFed: false }), TvMonthEnd);
-    expect(said(short, 'colonists')).toBe('Colonists went short · 1,240');
+    expect(said(short, 'colonists')).toBe('The colony’s 1,240 colonists went short');
     expect(element(short, 'colonists')).toContain('text-alert');
+    expect(said(onPhone(view(), Results, 0), 'colonists')).toBe('The store fed the colony’s 1,240 colonists');
   });
 
   it('B-AC-12 (WS4, month end): your phone alone shows your own lines, and they add up to your Worth', () => {
@@ -405,5 +407,59 @@ describe('B-AC-12 (WS4, month end): game over in credits', () => {
     expect(order(element(phone, 'scores'))).toEqual(['s2', 's1', 's3']);
     expect(text(phone)).not.toMatch(/points/i);
     expect(num(said(phone, 'part-total'))).toBe(HEIKO.worth);
+  });
+});
+
+describe('SWEEP-D5 / SWEEP-A16 (WS4): the folded Now title on the phone puts your place first, short enough for the smallest phone', () => {
+  /** The view with Heiko, the phone, out in front at 9,000. */
+  const leads = (v: MuleView): MuleView => {
+    const players = v.players.map((p) => (p.id === 's1' ? { ...p, worth: 9_000 } : p));
+    return { ...v, players, scores: v.scores && players.map((p) => ({ id: p.id, score: p.worth })) };
+  };
+
+  it('SWEEP-D5: at the month end the title is your place, the month left to the phase above it', () => {
+    expect(said(onPhone(view(), Results), 'now-title')).toBe('You’re 2nd of 3');
+    expect(said(onPhone(leads(view()), Results), 'now-title')).toBe('You lead');
+  });
+
+  it('SWEEP-A16: at game over the title is your place, "Game over" left to the phase above it', () => {
+    expect(said(onPhone(OVER, GameOver), 'now-title')).toBe('You’re 2nd of 3');
+    expect(said(onPhone(leads(OVER), GameOver), 'now-title')).toBe('You win');
+  });
+});
+
+describe('TV-FIT (WS4, month end, PM ruling C): the league and the colony keep the height at a full table', () => {
+  const colony: ColonyView = {
+    gauges: { wealth: 10_700, environment: 0, prestige: 0, happiness: 59, band: 'restless' },
+    lastGauges: { wealth: 9_600, prestige: 0, happiness: 64 },
+    fund: 272,
+    ledger: null,
+    projects: [],
+    catalogue: [],
+    score: null,
+  };
+  const six = [HEIKO, MIA, KAI, row('s4', 'Ruth', 3, 800, 1_900, 1_700), row('s5', 'Ossa', 4, 700, 1_650, 1_330), row('s6', 'Lena', 5, 600, 1_050, 1_060)];
+  const tv = onTv(view({ players: six, colony }), TvMonthEnd);
+
+  it('the colony gauges sit in the body beside the league, not in a row of their own under the header', () => {
+    const header = tv.indexOf('</header>');
+    const gauges = tv.indexOf('data-testid="colony-gauges"');
+    const league = tv.indexOf('data-testid="league"');
+    expect(gauges).toBeGreaterThan(league);
+    expect(tv.slice(header, league)).not.toContain('data-testid="colony-gauges"');
+    expect(said(tv, 'gauge-happiness')).toContain('Happiness 59');
+  });
+
+  it('from five players the TV league drops its small header row ("League table · month N"), the rows and their column heads stay; under five it keeps it', () => {
+    expect(element(tv, 'league')).not.toContain('League table · month');
+    expect(said(tv, 'worth-head')).toBe('Worth');
+    expect(tv.match(/data-testid="league-row-/g)).toHaveLength(6);
+    expect(element(onTv(view({ colony }), TvMonthEnd), 'league')).toContain('League table · month 4');
+  });
+
+  it('without the colony (politics off) the header keeps its air gauge, as before', () => {
+    const plain = onTv(view({ players: six }), TvMonthEnd);
+    expect(has(plain, 'colony-gauges')).toBe(false);
+    expect(text(element(plain, 'tv-header'))).toMatch(/air/i);
   });
 });
