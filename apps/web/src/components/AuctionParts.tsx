@@ -36,11 +36,11 @@ export function heldSeller(w: Pick<WalkerView, 'side' | 'held'> | undefined): bo
 }
 
 /**
- * The held seller's rail (WS6's mock PhoneSale, variant A, at cde3ff61): she stopped at what she needs next month, and
+ * The held seller's rail (WS6's mock PhoneSale, variant A, at cde3ff61): she stopped at what she must hold, and
  * how to sell on.
  */
 export function heldWords(good: Good, need: number): { line: string; how: string } {
-  return { line: `Stopped at ${need} ${GOOD_NAME[good]}: what you need next month.`, how: 'To sell more, hold ▼: you’d be short next month.' };
+  return { line: `Stopped at ${need} ${GOOD_NAME[good]}: what you must hold.`, how: 'To sell more, hold ▼: you’d be short next month.' };
 }
 
 /** Who an id is, in a sentence: "you", "the store", "the ship", or the player's name. */
@@ -98,7 +98,7 @@ export function TvReadout({ view, auction }: { view: MuleView; auction: AuctionV
       <dd data-num className="font-bold text-rise">{ask ? `${ask.price} · ${who(view, ask.id)}` : '—'}</dd>
       <dt className="text-fall">HIGHEST BID</dt>
       <dd data-num className={cx('font-bold', bid?.id === SHIP_ID ? 'text-warn' : 'text-fall')}>{bid ? `${bid.price} · ${who(view, bid.id)}` : '—'}</dd>
-      <dt className="text-ink-3">GAP</dt>
+      <dt className="text-ink-3">NEAREST TRADE</dt>
       <dd data-num className="font-bold text-ink">{trading ? 'MET: TRADING' : gap === null ? '—' : gap > 0 ? `${gap} apart` : 'they meet'}</dd>
     </dl>
   );
@@ -360,8 +360,8 @@ function Who({ slot, name, size }: { slot: Slot; name: string; size: number }) {
 
 /**
  * The original's status screen before each good: for every player, what
- * they had before production, used, made and hold now, what they need for
- * next month, what goes bad, and the spare or shortage that leaves.
+ * they had before production, used, made and hold now, what they must hold
+ * (Hold: next month's use and what spoils first), what goes bad, and the spare or shortage that leaves.
  */
 export function StatusTable({ view, auction, meId, tv = false }: { view: MuleView; auction: AuctionView; meId?: string; tv?: boolean }) {
   // On a phone the whole table fits the stage of a small landscape phone (667×375), an AI's long name included.
@@ -376,7 +376,7 @@ export function StatusTable({ view, auction, meId, tv = false }: { view: MuleVie
           <th className={head}>Used</th>
           <th className={head}>Made</th>
           <th className={head}>Now</th>
-          <th className={head}>Needs</th>
+          <th className={head}>Hold</th>
           <th className={cx(head, 'whitespace-nowrap')} data-testid="head-goes-bad">
             Goes bad
           </th>
@@ -577,8 +577,8 @@ export function dealSpeed(units: number): number {
   return (WALK.tradeStartMs - tradeInterval(units)) / (WALK.tradeStartMs - WALK.tradeFloorMs);
 }
 
-/** "You keep 3 of the 5 Food you need next month.": selling into next month's need is shown, never asked. */
+/** "You keep 3 of the 6 Food you must hold.": selling into what you must hold is shown, never asked. */
 export function keepWords(good: Good, have: number, need: number): string {
-  return `You keep ${have} of the ${need} ${GOOD_NAME[good]} you need next month.`;
+  return `You keep ${have} of the ${need} ${GOOD_NAME[good]} you must hold.`;
 }
 

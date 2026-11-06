@@ -265,7 +265,7 @@ describe('WS6 variant A: the auction trades by itself, faster and faster, on the
     const name = { food: 'Food', water: 'Water', energy: 'Energy', smithore: 'Smithore' }[view.auction!.good as 'food'];
     expect(textOf(html, 'keep')).toBe(`You keep ${have} of the ${need} ${name} you must hold.`);
     // HOLD (WS6, 6 Nov): the bidding readout calls the auction's number Hold, never need.
-    expect(textOf(html, 'good-row')).toMatch(new RegExp(`HAVE${have}HOLD${need}SHORT`));
+    expect(textOf(html, 'good-row')).toContain(`HAVE ${have} HOLD ${need} SHORT`);
     expect(textOf(html, 'good-row')).not.toContain('NEED');
     expect(tagOf(html, 'have')).toContain('text-warn');
     expect(textOf(html, 'line-hint')).not.toContain('you keep');
