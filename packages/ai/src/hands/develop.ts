@@ -411,7 +411,10 @@ export class DevelopHand {
     if (g && this.glintWanted && this.racingGlint !== g.sinceTick) {
       const to = glintMiddle(g);
       const from = this.raceFrom(view, c);
-      if (Math.hypot(to.x - from.x, to.y - from.y) <= cfg.glint.botCareTiles && this.fitsDetour(view, c, to)) {
+      // It sets off only with the slack a MULE is bought with (botPlanSlackShare): a race started on the knife edge is
+      // given up a few ticks on, when the estimate wobbles, further from its errand than it started, and the walk out and
+      // back can cost the MULE it leads (FM-pub-lead). The check while racing, below, keeps no slack.
+      if (Math.hypot(to.x - from.x, to.y - from.y) <= cfg.glint.botCareTiles && this.fitsDetour(view, c, to, cfg.steer.botPlanSlackShare)) {
         this.racingGlint = g.sinceTick;
         this.chaser.reset();
       }
@@ -556,9 +559,10 @@ export class DevelopHand {
   /**
    * RULE-8: whether a detour to `to` still leaves the errand time to finish inside the turn: the walk there, then from
    * there every step left on the list and the pub, at the floor's speeds and with the presses' pauses (planSeconds, the
-   * estimates the plan is priced by), with the hurry's margin in hand (restMargin). Always true with DEV_STEER.botsSpareTime off.
+   * estimates the plan is priced by), with the hurry's margin in hand (restMargin); the walks `slack` longer than
+   * estimated, as a share. Always true with DEV_STEER.botsSpareTime off.
    */
-  private fitsDetour(view: FloorView, c: FloorColonist, to: FloorPoint): boolean {
+  private fitsDetour(view: FloorView, c: FloorColonist, to: FloorPoint, slack = 0): boolean {
     const { state, cfg, secondsLeft } = view;
     if (!cfg.steer.botsSpareTime) return true;
     const index = tileIndex(state.width, Math.floor(to.x), Math.floor(to.y));
@@ -568,7 +572,7 @@ export class DevelopHand {
         ? tripSeconds(state, cfg, w, c, index, leading(c))
         : (pathTo(state, c, to, cfg)?.seconds ?? Infinity) / mapFactor(cfg, c.pace, leading(c), c.bot, c.bitten);
     const from: FloorColonist = { ...c, space: 'map', x: to.x, y: to.y };
-    return there + this.restFrom(view, from) + this.restMargin(cfg, from) <= secondsLeft;
+    return (there + this.restFrom(view, from)) * (1 + slack) + this.restMargin(cfg, from) <= secondsLeft;
   }
 
   /** Seconds of errand left from a colonist standing at a point: every step on the list, in order, then the pub. */
