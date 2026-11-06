@@ -21,12 +21,12 @@ picture (build1) for 1–2-month buildings and two (build1 ⅓, build2 ⅔) for 
 
 | Kind | Stages | Pictures (day + dusk + glow) | Building-specific work (beyond the shared kits) |
 |---|---|---|---|
-| Town hall | tier1, tier2, tier3 (grander as prestige rises: tier2 at 5, tier3 at 12 — PM/WS7 to confirm) | 3 × 3 = **9** | portico, flag, clock; tier2 adds a wing, tier3 a tower |
-| Park | site, build1, standing, closed, damaged | 5 × 2 + 4 = **14** | done in the spike (`park.py`); closed = gates locked, lawn brown; damaged = fallen tree, scorched lawn |
-| Hospital | site, build1, standing, closed, damaged | **14** | done in the spike (`colony.py::hospital`) — needs the polish pass |
+| Town hall | tier1, tier2, tier3 (grander as prestige rises: tier2 at 5, tier3 at 12 — PM/WS7 to confirm) | 3 × 3 = **9** | tier1 **shipped** (cb717373); portico, flag, clock; tier2 adds a wing, tier3 a tower. Glow too strong (washes the slab orange) |
+| Park | site, build1, standing, closed, damaged | 5 × 2 + 4 = **14** **shipped** (cb717373); closed = gates locked, lawn brown; damaged = fallen tree, scorched lawn. Look fixes queued: the damaged root ball reads as a boulder, the closed gates as glass |
+| Hospital | site, build1, standing, closed, damaged | **14** **redo with KitBash3D kits** (Heiko, AM-5); the script-built renders are not shipped |
 | Observatory | site, build1, standing, closed, damaged | **14** | dome with slot + telescope; damaged = cracked dome |
-| Stadium | site, build1, build2, standing, closed, damaged | 6 × 2 + 5 = **17** | **2×2 places** (Heiko): a real bowl with stands, pitch, floodlight masts; closed = masts dark, gates shut |
-| Spaceport upgrade | site, build1, build2, standing, closed, damaged | **17** | pad, gantry, **a ~36 m rocket, the tallest thing on the grounds** (Heiko 6 Nov), blockhouse, tall frame 1600×3200; build1 = rocket stacking on the pad, build2 = fully stacked in scaffold; closed = rocket shrouded, pad dark; damaged = toppled gantry arm, scorched pad |
+| Stadium | site, build1, build2, standing, closed, damaged | 6 × 2 + 5 = **17** | **2×2 places** (Heiko; WS7 #538): a real bowl with stands, pitch, floodlight masts; closed = masts dark, gates shut |
+| Spaceport upgrade | site, build1, build2, standing, closed, damaged | **17** | pad, gantry, **a ~36 m rocket, the tallest thing on the grounds** (Heiko 6 Nov), blockhouse, **2×2 places** (WS7 #538), frame 3200 wide and tall enough for the rocket (height and anchor confirmed by the first render); build1 = rocket stacking on the pad, build2 = fully stacked in scaffold; closed = rocket shrouded, pad dark; damaged = toppled gantry arm, scorched pad |
 | **Total** | | **85 pictures** | |
 
 ## Shared pieces (made once)
@@ -49,7 +49,7 @@ A place picture at 800 px wide is 50–65 kB (the Spaceport's tall frame ≈ 2×
 85 pictures + 6 props ≈ **4.5 MB at 800 px**, **≈ 1.8 MB at 400 px** — loaded per building as it appears, so a
 month-12 colony on a phone fetches ~0.4 MB.
 
-## Effort (direction C, free assets)
+## Effort (direction C)
 
 | Work | Estimate | Measured in the spike |
 |---|---|---|

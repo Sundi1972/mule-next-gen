@@ -32,7 +32,8 @@ this spec adds nothing to them.
 - Live 3D on the TV (react-three-fiber): later, from the same models — its own spec when Heiko asks.
 - Any rule, number or data change: slots, stages, gauges are C48/RULE-32 and ColonyView as they are.
 - Weather from events, seasons, a camera the player moves: later, each its own small spec.
-- Paid assets: Heiko's call (the asset-pack answer is a separate note).
+- Paid assets beyond what Heiko has chosen: his call. He chose KitBash3D kits for the Hospital (AM-5); renders only,
+  the raw kits stay outside the repo.
 - The town hall growing with prestige: needs a rule (tiers) from WS7; until then the hall has one picture.
 
 **Rough cost**
@@ -231,13 +232,16 @@ RULE-5 · What leans in at the month end: the projects whose stage differs from 
 
 ## §3 · Contracts & Data Models  [handoff]
 
-- **ColonyProjectView.slot** · ADDED · non-breaking (optional on old clients) · `number | null`, the place in growth
-  order (G-5 RULE-32), null for none · produced by C6.
+- **ColonyProjectView.place** · ADDED · non-breaking (optional on old clients) · `{ x, y, w, h } | null`, the anchor
+  and footprint on the 5×5 grounds (RULE-32b: x right, y down; the hall at (2,2)), null for none · produced by WS7's
+  engine PR (C6). Supersedes `slot` (AM-3).
 - **apps/web/public/art/colony/manifest.json** · ADDED · produced by C1, read by C2:
   `{ "frame": { "width": 1600, "height": 1600, "place": 1293, "centre": [800, 1000] },
      "pictures": { "<kind>": { "<stage>": { "day": "…@800.webp", "dusk": "…", "glow": "… | null" } } },
      "sizes": [800, 400] }` — kind ∈ hall + PrestigeId; stage per RULE-1. A kind may override the frame:
   `"pictures": { "spaceport": { "frame": { "width": 1600, "height": 3200, "place": 1293, "centre": [800, 2600] }, … } }` (AM-1).
+  A 2×2 kind's frame is **3200 wide** at the same scale, its centre on the footprint's centre (AM-2); the Spaceport,
+  2×2 and tall, carries both. Paths are relative to `/art/colony/`.
 
 ## §4 · Failure & Ops  [handoff]
 
@@ -325,6 +329,19 @@ did       dropped: the grounds cannot know the next place without computing RULE
 because   HC-1 (the grounds compute no rule) — G-1 holds without it
 goal      G-1 — unaffected
 folded    C2; PR-1 fix round
+```
+
+```
+AM-5 · 2026-11-06 · lead · Heiko (via the PM): KitBash3D Cargo connector installed
+target    §0 non-goal "Paid assets: Heiko's call"
+said      no paid assets until Heiko decides
+did       Heiko decided: the Hospital is redone with KitBash3D kits (possibly other kinds later). Kits download to
+          /Users/heiko/.kitbash3d/kits (4k PNG textures, Blender 5.2); only the rendered WebP enters the repo, never
+          a raw kit. UNPROVEN: whether the licence covers a company with staff and AI agents rendering — the
+          follow-up (4f07afba) advised emailing KitBash first; whether Heiko did is not known to WS10.
+because   G-2: city-builder polish; Heiko's call by the non-goal itself
+goal      G-2
+folded    §0 non-goal; ART-DIRECTION §4; ASSET-LIST Hospital row; plan Task 1.6
 ```
 
 ## §9 · Ownership Boundaries  [handoff]
