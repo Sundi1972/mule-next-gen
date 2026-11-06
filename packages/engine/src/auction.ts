@@ -154,6 +154,8 @@ export function startAuction(state: GameState, goods: readonly Good[] = WALK.ord
 function carried(good: Good, use: number): number {
   const want = Math.min(use, UPKEEP.depotCapacity);
   const left = 1 - GOOD_CONFIG[good].spoilage;
+  // A good that spoils entirely can't be carried (a sweep may set it so).
+  if (left <= 0) return 0;
   // Upkeep's own arithmetic, floor(n x left), so the two never disagree on a rounding edge.
   let n = want;
   while (Math.floor(n * left) < want) n++;
@@ -164,17 +166,20 @@ function carried(good: Good, use: number): number {
  * What a player must hold at the auction to be short of nothing before the next one (PM ruling B, 6 Nov): what upkeep
  * eats and drinks now, plus enough of what is used next month to survive the month end's spoilage. Food carries next
  * month's ration (development reads it); Water carries one only for a seat with a farm to water (production reads it);
- * Energy, a factory's inputs and Medicine carry what next month's production and sickness use. Never below monthNeeds,
- * which stays the need at production that the AI grosses up for itself.
+ * Energy, a factory's inputs and Medicine carry what next month's production and sickness use. Food and Water carry
+ * the larger of the ration and a factory's inputs, not their sum: development's hunger and production's dry check
+ * read stock before a factory takes its inputs. Never below monthNeeds up to the depot cap; monthNeeds stays the need
+ * at production that the AI grosses up for itself.
  */
 export function auctionNeed(state: GameState, playerId: string): Stock {
   const use = monthNeeds(state, playerId);
   const eat = needsOf(state, playerId);
   const farms = state.tiles.some((t) => t.owner === playerId && (UPKEEP.irrigated as readonly string[]).includes(t.outfit ?? ''));
+  const factory = { food: use.food - eat.food, water: use.water - eat.water };
   const need = emptyStock();
   for (const good of GOODS) {
     const eaten = good === 'food' ? eat.food : good === 'water' ? eat.water : 0;
-    const next = good === 'food' ? eat.food : good === 'water' ? (farms ? eat.water : 0) : use[good];
+    const next = good === 'food' ? Math.max(eat.food, factory.food) : good === 'water' ? Math.max(farms ? eat.water : 0, factory.water) : use[good];
     need[good] = eaten + carried(good, next);
   }
   return need;
