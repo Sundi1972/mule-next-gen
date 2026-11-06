@@ -2,8 +2,9 @@ import { GOOD_CONFIG, PRICE, UPKEEP, WALK } from './config.js';
 import { colonyPrice, driftReference, monthlyDemand, shelfShort, shipInPort, shipPrice, storeForSale, storeWants, taxSale } from './economy.js';
 import { RuleError } from './errors.js';
 import { chargeExportTax } from './politics.js';
-import { monthNeeds } from './production.js';
-import type { AuctionSide, GameState, Good, GoodReceipt, LiveAuction, ReceiptSide, SkipReason, StatusRow } from './types.js';
+import { monthNeeds, needsOf } from './production.js';
+import { emptyStock } from './stock.js';
+import { GOODS, type AuctionSide, type GameState, type Good, type GoodReceipt, type LiveAuction, type ReceiptSide, type SkipReason, type StatusRow, type Stock } from './types.js';
 import { houseLineAt, stepBoard, stepWalker, takeSide, tradePossible, type WalkMarket } from './walk.js';
 
 /**
@@ -149,7 +150,37 @@ export function startAuction(state: GameState, goods: readonly Good[] = WALK.ord
   nextGood(state, []);
 }
 
-/** The status screen's rows for a good: had, used, made, now, need and what would spoil. */
+/** The least a player must hold now for `use` of a good to be left after the month end's spoilage and the depot cap. */
+function carried(good: Good, use: number): number {
+  const want = Math.min(use, UPKEEP.depotCapacity);
+  const left = 1 - GOOD_CONFIG[good].spoilage;
+  // Upkeep's own arithmetic, floor(n x left), so the two never disagree on a rounding edge.
+  let n = want;
+  while (Math.floor(n * left) < want) n++;
+  return n;
+}
+
+/**
+ * What a player must hold at the auction to be short of nothing before the next one (PM ruling B, 6 Nov): what upkeep
+ * eats and drinks now, plus enough of what is used next month to survive the month end's spoilage. Food carries next
+ * month's ration (development reads it); Water carries one only for a seat with a farm to water (production reads it);
+ * Energy, a factory's inputs and Medicine carry what next month's production and sickness use. Never below monthNeeds,
+ * which stays the need at production that the AI grosses up for itself.
+ */
+export function auctionNeed(state: GameState, playerId: string): Stock {
+  const use = monthNeeds(state, playerId);
+  const eat = needsOf(state, playerId);
+  const farms = state.tiles.some((t) => t.owner === playerId && (UPKEEP.irrigated as readonly string[]).includes(t.outfit ?? ''));
+  const need = emptyStock();
+  for (const good of GOODS) {
+    const eaten = good === 'food' ? eat.food : good === 'water' ? eat.water : 0;
+    const next = good === 'food' ? eat.food : good === 'water' ? (farms ? eat.water : 0) : use[good];
+    need[good] = eaten + carried(good, next);
+  }
+  return need;
+}
+
+/** The status screen's rows for a good: had, used, made, now, need (auctionNeed) and what would spoil. */
 export function statusRows(state: GameState, good: Good): StatusRow[] {
   const report = state.history.at(-1);
   const current = report?.month === state.month;
@@ -157,8 +188,10 @@ export function statusRows(state: GameState, good: Good): StatusRow[] {
     const now = p.stock[good];
     const made = current ? (report.produced[p.id]?.[good] ?? 0) : 0;
     const had = current ? (report.before[p.id]?.[good] ?? now) : now;
-    const need = monthNeeds(state, p.id)[good];
-    const rest = Math.max(0, now - need);
+    const need = auctionNeed(state, p.id)[good];
+    // Upkeep eats and drinks first; the rest spoils.
+    const eaten = good === 'food' || good === 'water' ? needsOf(state, p.id)[good] : 0;
+    const rest = Math.max(0, now - eaten);
     const kept = Math.min(UPKEEP.depotCapacity, Math.floor(rest * (1 - GOOD_CONFIG[good].spoilage)));
     return { id: p.id, had, used: Math.max(0, had + made - now), made, now, need, spoils: rest - kept };
   });
@@ -176,7 +209,7 @@ function skipBefore(state: GameState, good: Good, storeBuy: number, storeBudget:
   const someoneBuys =
     storeBudget > 0 ||
     (shipInPort(state) && shipPrice(state, good) !== null) ||
-    state.players.some((p) => p.stock[good] < monthNeeds(state, p.id)[good] && p.money >= storeBuy);
+    state.players.some((p) => p.stock[good] < auctionNeed(state, p.id)[good] && p.money >= storeBuy);
   return someoneBuys ? null : 'nobody buys';
 }
 

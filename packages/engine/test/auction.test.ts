@@ -164,8 +164,9 @@ describe('the live auction: goods one at a time', () => {
     });
     startAuction(state, ['food']);
     const row = a(state).status.find((r) => r.id === 'p0')!;
-    expect(row).toMatchObject({ had: 4, made: 3, now: 7, used: 0, need: 2 });
-    // Half the Food over the need spoils at month end.
+    // The need to hold: 2 eaten at upkeep, plus 4 so that 2 are left after half spoils (auctionNeed).
+    expect(row).toMatchObject({ had: 4, made: 3, now: 7, used: 0, need: 6 });
+    // Upkeep eats 2 first; half of the other 5 spoils, rounded in the player's favour.
     expect(row.spoils).toBe(3);
     expect(a(state).status.find((r) => r.id === 'p1')).toMatchObject({ had: 4, made: 0, now: 0, used: 4 });
   });
