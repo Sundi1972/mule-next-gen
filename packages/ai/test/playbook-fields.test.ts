@@ -6,11 +6,14 @@ import {
   commission,
   createGame,
   DEV_STEER,
+  GOOD_CONFIG,
+  GOODS,
   litPlot,
   MS_PER_SECOND,
   MULE,
   mulePriceFor,
   monthNeeds,
+  monthlyDemand,
   observe,
   outfitCostFor,
   startAuction,
@@ -20,6 +23,7 @@ import {
   type Good,
   type Outfit,
   type Playbook,
+  type Stock,
   type Tile,
   type Trade,
 } from '@mule/engine';
@@ -191,13 +195,25 @@ describe('an adopted playbook\'s cash floor (Strategy.cashFloor)', () => {
 });
 
 describe('an adopted playbook\'s land-grant press share (LandGrantPlay.pressShare)', () => {
-  /** How many plots into month 1's grant ME first claims on its own, nobody else claiming; with `press`, its adopted share. */
+  /**
+   * How many plots into month 1's grant ME first claims on its own, nobody else claiming; with `press`, its adopted share.
+   * Every good posted at its normal price (GOOD_CONFIG.refPrice), its normal and off-world price the same, and two months
+   * of the colony's demand on the shelf: with or without the store's bands (C17) the store posts normal, so the plots
+   * are valued at the same prices in both. Left to the bands, month 1 posts from the starting shelf (Water 25 not 7,
+   * Electronics 880 not 622, Crystite 100 not 283), every plot is valued afresh and the claims move. Asserted: the store
+   * still posts normal when the grant opens.
+   */
   function firstClaim(press: { start: number; end: number } | null, seed = 7): number | null {
     const state = game(seed);
+    const demand = monthlyDemand(state);
+    const normal = Object.fromEntries(GOODS.map((g) => [g, GOOD_CONFIG[g].refPrice])) as Stock;
+    const shelf = Object.fromEntries(GOODS.map((g) => [g, 2 * Math.ceil(demand[g])])) as Stock;
+    Object.assign(state.store, { refPrice: { ...normal }, offWorld: { ...normal }, posted: { ...normal }, stock: shelf });
     const seat = seatOf();
     seat.planMonth(state);
     if (press) adoptEdited(seat, state, 'planning', [edit('/landGrant/pressShare', press)]);
     while (state.phase !== 'landGrant') advancePhase(state);
+    expect(state.store.posted, 'the store posts normal').toEqual(normal);
     let step = 0;
     for (let lit = litPlot(state); lit; lit = advanceGrant(state)) {
       step++;
@@ -219,10 +235,10 @@ describe('an adopted playbook\'s land-grant press share (LandGrantPlay.pressShar
   });
 
   it('B-AC-14: a share falling from start to end refuses an early plot it would take at end, and takes a later one it would refuse at start', () => {
-    // Seed 15: at a steady 0.7 the seat claims early, at a steady 1 late; falling from 1 to 0.7, in between.
-    const atEnd = firstClaim({ start: 0.7, end: 0.7 }, 15);
-    const atStart = firstClaim({ start: 1, end: 1 }, 15);
-    const falling = firstClaim({ start: 1, end: 0.7 }, 15);
+    // Seed 10: at a steady 0.7 the seat claims early, at a steady 1 late; falling from 1 to 0.7, in between.
+    const atEnd = firstClaim({ start: 0.7, end: 0.7 }, 10);
+    const atStart = firstClaim({ start: 1, end: 1 }, 10);
+    const falling = firstClaim({ start: 1, end: 0.7 }, 10);
     expect(atEnd).not.toBeNull();
     expect(atStart).not.toBeNull();
     expect(falling).not.toBeNull();
