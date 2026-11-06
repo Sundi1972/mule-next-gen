@@ -289,8 +289,9 @@ describe('needs C6: the month-end line says how much the colonists got', () => {
     // 400 colonists need 20 Food and 20 Water; the shelf holds 19 Food and plenty of Water.
     const short = toMonthEnd({ shelf: { colonists: 400, food: 19, water: 30 } });
     expect(stateOf(short.game).history.at(-1)!.shortages, 'precondition: the shelf ran short of Food only').toEqual(['food']);
+    expect(short.game.viewFor(null).colonists, 'precondition: the colony shrank after the meal, so the count must come from the meal').not.toBe(400);
     for (const viewer of VIEWERS) {
-      expect(short.game.viewFor(viewer).colonistMeal, viewer ?? 'the board').toEqual({ food: { took: 19, need: 20 }, water: { took: 20, need: 20 } });
+      expect(short.game.viewFor(viewer).colonistMeal, viewer ?? 'the board').toEqual({ colonists: 400, food: { took: 19, need: 20 }, water: { took: 20, need: 20 } });
     }
     // Negative case: outside the month end the view carries no meal.
     readyAll(short.game);
