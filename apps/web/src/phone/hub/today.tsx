@@ -17,7 +17,7 @@ export const HUB_SLOTS: HubSlots = {
     {
       key: 'drone',
       title: () => 'Geo drone',
-      sub: ({ me }) => (me.droneOrder.length > 0 ? 'On its way · read at the land grant' : `${DEVELOPMENT.dronePlots} plots · ${DEVELOPMENT.droneFee} cr`),
+      sub: ({ me }) => (me.droneOrder.length > 0 ? 'Used this month' : `${DEVELOPMENT.dronePlots} plots · ${DEVELOPMENT.droneFee} cr`),
       locked: true,
       opens: { tool: 'drone' },
     },
