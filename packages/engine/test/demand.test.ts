@@ -1,0 +1,101 @@
+import { describe, expect, it } from 'vitest';
+import { advancePhase, cloneForSim, colonistDemand, exportDemand, monthlyDemand, RECIPES, UPKEEP, type GameState } from '../src/index.js';
+import { game, to, worked } from './fixtures/food-month.js';
+
+/** Month 1's production with `colonists` in the colony and no Electronics works. */
+function colonyOf(colonists: number): GameState {
+  const state = game();
+  to(state, 'production');
+  state.colonists = colonists;
+  expect(state.tiles.some((t) => t.outfit === 'electronics'), 'the premise: no Electronics works').toBe(false);
+  return state;
+}
+
+/** What the colonists add to the Electronics, Rare earth, Alloy and Energy demand over a colony of none, all else equal. */
+function colonistsAdd(state: GameState): { electronics: number; rareEarth: number; alloy: number; energy: number } {
+  const none = cloneForSim(state);
+  none.colonists = 0;
+  const [d, d0] = [monthlyDemand(state), monthlyDemand(none)];
+  // Energy also carries the colonists' own Energy want, so it is compared with that part taken out.
+  const ownEnergy = (s: GameState) => colonistDemand(s, 'energy', (s.colonists / UPKEEP.colonistsPerUnit) * UPKEEP.colonistEnergyShare);
+  const energy = d.energy - ownEnergy(state) - (d0.energy - ownEnergy(none));
+  return { electronics: d.electronics - d0.electronics, rareEarth: d.rareEarth - d0.rareEarth, alloy: d.alloy - d0.alloy, energy };
+}
+
+describe('needs C17: the colonists want Electronics, and so its inputs', () => {
+  it('needs B-AC-15: 200 colonists add 4 Electronics, 4 Rare earth and 4 Alloy to the demand, and Electronics leaves the off-world band', () => {
+    const { rareEarth, alloy } = RECIPES.electronics.inputs;
+    expect({ rareEarth, alloy }, 'the premise: one Rare earth and one Alloy per Electronics, so 4 each').toEqual({ rareEarth: 1, alloy: 1 });
+    const state = colonyOf(200);
+
+    advancePhase(state);
+    expect(state.phase, 'the premise: the store has posted').toBe('auction');
+
+    expect(colonistsAdd(state)).toEqual({ electronics: 4, rareEarth: 4, alloy: 4, energy: 0 });
+    expect(state.store.band?.electronics).not.toBe('offWorld');
+  });
+
+  it('needs B-AC-15: 0 colonists add nothing, and Electronics stays in the off-world band', () => {
+    const state = colonyOf(0);
+    const off = exportDemand(state);
+
+    advancePhase(state);
+
+    const d = monthlyDemand(state);
+    expect({ electronics: d.electronics, rareEarth: d.rareEarth, alloy: d.alloy }).toEqual({
+      electronics: off.electronics,
+      rareEarth: off.rareEarth,
+      alloy: off.alloy,
+    });
+    expect(state.store.band?.electronics).toBe('offWorld');
+  });
+
+  it.each([
+    { name: '200 colonists want 4', colonists: 200, want: 4 },
+    { name: '75 colonists want 1.5, unrounded', colonists: 75, want: 1.5 },
+    { name: '0 colonists want none', colonists: 0, want: 0 },
+  ])('needs T-AC-25: RULE-13, $name Electronics a month', ({ colonists, want }) => {
+    expect(UPKEEP.colonistsPerElectronics, 'the premise: one Electronics per 50 colonists').toBe(50);
+    expect(colonistsAdd(colonyOf(colonists))).toEqual({ electronics: want, rareEarth: want, alloy: want, energy: 0 });
+  });
+
+  it('needs T-AC-25: the want follows UPKEEP.colonistsPerElectronics and the inputs RECIPES.electronics.inputs under a test override', () => {
+    const state = colonyOf(200);
+    const [savedPer, savedInputs] = [UPKEEP.colonistsPerElectronics, RECIPES.electronics.inputs];
+    UPKEEP.colonistsPerElectronics = 25;
+    RECIPES.electronics.inputs = { ...savedInputs, rareEarth: 2, alloy: 0 };
+    try {
+      expect(colonistsAdd(state)).toEqual({ electronics: 8, rareEarth: 16, alloy: 0, energy: 0 });
+    } finally {
+      UPKEEP.colonistsPerElectronics = savedPer;
+      RECIPES.electronics.inputs = savedInputs;
+    }
+  });
+
+  /** The Electronics, Rare earth and Alloy the colony asks a month with `colonists` and `works` Electronics works, the export ship's part taken out. */
+  function asked(colonists: number, works: number): { electronics: number; rareEarth: number; alloy: number } {
+    const state = game();
+    to(state, 'production');
+    state.colonists = colonists;
+    worked(state, 'electronics', works);
+    expect(state.tiles.filter((t) => t.outfit === 'electronics'), 'the premise: the works stand').toHaveLength(works);
+    const [d, off] = [monthlyDemand(state), exportDemand(state)];
+    return { electronics: d.electronics - off.electronics, rareEarth: d.rareEarth - off.rareEarth, alloy: d.alloy - off.alloy };
+  }
+
+  it.each([
+    { name: '0 works 4', works: 0, rareEarth: 1, output: 1, want: { electronics: 4, rareEarth: 4, alloy: 4 } },
+    { name: '4 works 4', works: 4, rareEarth: 1, output: 1, want: { electronics: 4, rareEarth: 4, alloy: 4 } },
+    { name: '6 works 6', works: 6, rareEarth: 1, output: 1, want: { electronics: 4, rareEarth: 6, alloy: 6 } },
+    { name: '6 works taking 2 Rare earth each ask 12', works: 6, rareEarth: 2, output: 1, want: { electronics: 4, rareEarth: 12, alloy: 6 } },
+    { name: 'a recipe making 2 needs 2 batches for E = 4', works: 0, rareEarth: 1, output: 2, want: { electronics: 4, rareEarth: 2, alloy: 2 } },
+  ])('needs C17 AM-2: with 200 colonists the inputs ask max(works, E ÷ output) × recipe, and Electronics stays E: $name', ({ works, rareEarth, output, want }) => {
+    const saved = RECIPES.electronics;
+    RECIPES.electronics = { inputs: { ...saved.inputs, rareEarth, alloy: 1 }, output };
+    try {
+      expect(asked(200, works)).toEqual(want);
+    } finally {
+      RECIPES.electronics = saved;
+    }
+  });
+});
