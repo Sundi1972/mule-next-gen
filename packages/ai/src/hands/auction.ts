@@ -280,7 +280,6 @@ export class AuctionHand {
    * priced as the ship will pay it.
    */
   private unitsAt(state: GameState, side: Walker['side'], line: { house: string; price: number }): number {
-    if (this.play?.bluff) return 0;
     const price = line.price;
     const good = state.auction!.good!;
     const plan = this.plan!;
