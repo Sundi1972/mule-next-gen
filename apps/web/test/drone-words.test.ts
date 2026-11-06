@@ -85,8 +85,8 @@ describe('H-3: the land grant names what your drone found, on your phone only', 
     expect(droneLine(phone(game, fake.ctx.now(), LENA))).toBe(EXPECTED_SECOND);
   });
 
-  it('H-3: on a poor plot (best 1 of 4) the line names no goods: it stops at the plot and its terrain', () => {
-    // Every raw rating 0: Food, Water and Energy draw 1 pip each, the minerals none.
+  it('H-3: on a poor plot (best 1 of 3) the line names no goods: it stops at the plot and its terrain', () => {
+    // Every raw rating 0: Food, Water and Energy draw 1 dot each, the minerals none.
     const { game, fake, surveyed, runTo } = droneMonth((state, [weak]) => {
       state.tiles[weak!.y * state.width + weak!.x]!.ground = { food: 0, water: 0, energy: 0, smithore: 0, crystite: 0, rareEarth: 0 };
     });
@@ -96,12 +96,22 @@ describe('H-3: the land grant names what your drone found, on your phone only', 
     expect(droneLine(html)).toBe('Your drone: 12·7 Plains');
   });
 
-  it('H-3: at 2 of 4 a good is named', () => {
+  it('H-3: at 2 of 3 a good is named', () => {
     const { game, fake, surveyed, runTo } = droneMonth((state, [plot]) => {
       state.tiles[plot!.y * state.width + plot!.x]!.ground = { food: 0, water: 0, energy: 0, smithore: 2, crystite: 0, rareEarth: 0 };
     });
     runTo((l) => same(l, surveyed[0]!));
-    expect(droneLine(phone(game, fake.ctx.now(), LENA))).toBe('Your drone: 12·7 Plains, good for Smithore');
+    const html = phone(game, fake.ctx.now(), LENA);
+    expect(droneLine(html)).toBe('Your drone: 12·7 Plains, good for Smithore');
+    expect(html, 'the ground card draws it on 3 dots').toContain('aria-label="Smithore 2 of 3"');
+  });
+
+  it('H-3: every good at the top dot count is named: Food +3 and Smithore 3 both draw 3', () => {
+    const { game, fake, surveyed, runTo } = droneMonth((state, [plot]) => {
+      state.tiles[plot!.y * state.width + plot!.x]!.ground = { food: 3, water: 0, energy: 0, smithore: 3, crystite: 0, rareEarth: 0 };
+    });
+    runTo((l) => same(l, surveyed[0]!));
+    expect(droneLine(phone(game, fake.ctx.now(), LENA))).toBe('Your drone: 12·7 Plains, good for Food and Smithore');
   });
 
   it('H-3: with a plot the drone did not survey lit, there is no drone line, even one Lena analysed herself', () => {
@@ -143,8 +153,8 @@ describe('H-3: the land grant names what your drone found, on your phone only', 
 });
 
 /**
- * Seed 7's two surveyed plots. 12·7 Plains reads Rare earth 3 of 4 above everything else (Water, Energy, Crystite 2);
- * 13·7 Tundra reads Water and Energy both 4 of 4, so the line names both, as the ground card's pips show them.
+ * Seed 7's two surveyed plots. 12·7 Plains reads Rare earth 3 of 3 above everything else (Water, Energy, Crystite 2);
+ * 13·7 Tundra reads Water and Energy both 3 of 3, so the line names both, as the ground card's dots show them.
  */
 const EXPECTED_FIRST = 'Your drone: 12·7 Plains, good for Rare earth';
 const EXPECTED_SECOND = 'Your drone: 13·7 Tundra, good for Water and Energy';

@@ -71,3 +71,30 @@ describe('B-AC-9 (WS4, plot look A): the layers WS6 ruled', () => {
     for (const name of ['tile', 'glow', 'ring', 'pin'] as const) expect(marks[name], `the ${name} does not fade`).not.toMatch(/\bopacity-/);
   });
 });
+
+describe('T-AC-3 (pip): an analysed plot draws its best good on 3 dots', () => {
+  /** A 2×1 map: an analysed free plot whose Water and Food tie at 2 dots, and an unanalysed one. */
+  const PIP_TILES: MapTile[] = [
+    { x: 0, y: 0, terrain: 'plains', owner: null, ground: { water: 2, food: 2, crystite: 1 } },
+    { x: 1, y: 0, terrain: 'plains', owner: null },
+  ];
+  const render = (tiles: MapTile[]) => renderToStaticMarkup(createElement(HoloMap, { width: 2, height: 1, tiles }));
+  const pips = (markup: string) => markup.match(/<span class="rounded-full size-\[3px\]" style="background:[^"]*"><\/span>/g) ?? [];
+
+  it('T-AC-3 (pip): the tie goes to Food, drawn as 3 pips with 2 lit and labelled "Food 2 of 3"', () => {
+    const map = render(PIP_TILES);
+    const analysed = map.slice(map.indexOf('data-testid="map-plot-0-0"'), map.indexOf('data-testid="map-plot-1-0"'));
+    expect(map).toContain('aria-label="Plains, free, Food 2 of 3"');
+    expect(pips(analysed)).toHaveLength(3);
+    expect(pips(analysed).filter((p) => p.includes('var(--color-g-food)'))).toHaveLength(2);
+    expect(analysed).not.toContain('--color-g-water');
+  });
+
+  it('T-AC-3 (pip): a plot without ground, as every plot on the TV, draws no pip and names no dots', () => {
+    const tv = render(PIP_TILES.map(({ ground: _, ...t }) => t));
+    expect(pips(tv)).toHaveLength(0);
+    expect(tv).not.toMatch(/ of 3"/);
+    const unanalysed = render(PIP_TILES).split('data-testid="map-plot-1-0"')[1]!;
+    expect(pips(unanalysed)).toHaveLength(0);
+  });
+});

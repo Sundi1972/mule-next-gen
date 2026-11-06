@@ -457,6 +457,14 @@ describe('C11: it fits the phone (B-AC-4\'s layout half, B-AC-11\'s text floor)'
     expect(tag(html, 'plot-card')).toBeNull();
   });
 
+  it('C11 (R-2): the plot card reads every good on 3 dots, and a Food/Smithore tie at 3 is best for Food', () => {
+    const ground = { food: 3, water: -2, energy: 0, smithore: 4, crystite: 2, rareEarth: 0 };
+    const tiles = TILES.map((t) => (t.x === 3 && t.y === 0 ? { ...t, ground } : t));
+    const html = phone(devView(lenasMe(), { tiles }), live(mine(3.5, 0.6)));
+    expect(text(html, 'plot-readout')).toBe('Food●●●Water○○○Energy●○○Smithore●●●Crystite●●○Rare earth○○○');
+    expect(text(html, 'plot-best')).toBe('Best here: Food');
+  });
+
   it('C11: a control fades while you stand under it, so it never hides you', () => {
     const under = phone(devView(), live(mine(0.5, 7.5)));
     expect(tag(under, 'overlay-stick')).toMatch(/data-faded="true"/);
