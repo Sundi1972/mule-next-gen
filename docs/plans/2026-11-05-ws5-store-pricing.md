@@ -70,9 +70,11 @@ the lane is when WS9's PR-3 may stop stubbing `outlook.later`.
   `packages/engine/src/upkeep.ts` (WS1) · `packages/ai/src/outlook.ts`, `strategist.ts`, `value.ts` (WS1, only
   the spread copies named in spec §1 C2) · `packages/engine/src/auction.ts` (WS3, comeUp and finishGood) ·
   `packages/engine/src/types.ts` (WS3, `Store.lastWalk` only) · tests under `packages/engine/test`,
-  `packages/ai/test` · `docs/rulebook/store-and-prices.html` (WS5).
+  `packages/ai/test` · `docs/rulebook/store-and-prices.html` (WS5) · `apps/web/src/table/TableApp.tsx::MarketTiles`
+  (WS4, the number it shows, Task 1.1 Step 1b) · its test under `apps/web/test` · `docs/rulebook/table-and-phones.html`
+  (WS4, the tiles' line).
 - `must_not_edit`: `packages/engine/src/game.ts` (PR-2 owns its month-opening and muleFactor lines) · `walk.ts`
-  and the board (WS3/WS4, approach C is a non-goal) · `apps/web/**` (no screen change).
+  and the board (WS3/WS4, approach C is a non-goal) · the rest of `apps/web/**` (no other screen change).
 
 **PR-2**
 - `may_edit`: `packages/engine/src/economy.ts` (WS1, stepOffWorld and expectedOffWorld's path) ·
@@ -100,7 +102,8 @@ PR-1 and PR-2 run one after the other (one wave each); the tasks inside PR-1 are
 ### Task 1.1 — freeze the §3 contract (C2 extract, `Store.lastWalk`, `expectedOffWorld` stub)
 **Depends on:** none · **ACs verified:** T-AC-2 (as a contract test) · **Spec:** §3, HC-3, HC-5
 **Files:** Modify `packages/engine/src/economy.ts` (`storeQuotes`, new `expectedOffWorld`),
-`packages/engine/src/types.ts` (`Store`), `packages/engine/src/auction.ts::comeUp` (calls `storeQuotes`).
+`packages/engine/src/types.ts` (`Store`), `packages/engine/src/auction.ts::comeUp` (calls `storeQuotes`),
+`apps/web/src/table/TableApp.tsx::MarketTiles` (WS4, named edit: the selling price, Step 1b).
 Test: `packages/ai/test/store-quotes-contract.test.ts` (new).
 
 - [ ] **Step 1: Write the failing test `T-AC-2: at upkeep, outlook's next-month price is the store's own rule on its stage`**
@@ -117,7 +120,14 @@ Test: `packages/ai/test/store-quotes-contract.test.ts` (new).
   engine, in `packages/engine/test/store.test.ts`. Observed at: the state a good comes up in, every good, 20 seeded
   games, which must include at least one short-shelf Food or Water month (assert that the sample has one, so the
   test can't pass vacuously): `storeQuotes(state, g)` equals `comeUp`'s `{storeBuy, storeSell}` (null where §3 says
-  so). Run → FAIL on the short-shelf months. Residual, by design: the hub reads the shelf and demand as they stand
+  so). Run → FAIL on the short-shelf months.
+  The TV half (PM, 6 Nov, sweep m03-060): the planning TV's store tiles (`apps/web/src/table/TableApp.tsx::MarketTiles`,
+  WS4's file, a named edit OK'd on the SHA through the PM) show `r.price`, the POSTED price, while the phone's
+  MarketStrip shows `r.storeSells` from the same `game.market` row. The tiles show `r.storeSells` (`—` when null, as
+  the phone does); the tile's layout is unchanged, so no new mock. Test, altitude: screen, in `apps/web/test/`: one
+  `MuleView` with a short Food shelf rendered as the TV's planning screen and as the phone's MarketStrip shows the
+  same Food selling price on both, and it is not the posted price. Run → FAIL (the TV shows posted). Update
+  `docs/rulebook/table-and-phones.html` for what the tiles show (AM-1). Residual, by design: the hub reads the shelf and demand as they stand
   in development, the auction reads them after production, so the two can still differ across that step; the
   rule is the same. Say so in PR-1's body and the rulebook chapter.
 - [ ] **Step 2: Run both, expect FAIL (`expectedOffWorld` is not exported; the short-shelf lines differ)** —
