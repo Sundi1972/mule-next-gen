@@ -168,6 +168,13 @@ describe("the TV's gap", () => {
   });
 });
 
+describe("the TV's nearest trade while a deal runs", () => {
+  it('NEAREST TRADE (WS6, 6 Nov): while a deal runs the row reads TRADING, one word, so the longer label costs the readout no line (TV-FIT)', () => {
+    const html = renderToStaticMarkup(createElement(TvReadout, { view, auction: auction({ walkers: [walker('lena', 'seller', 40), walker('kai', 'buyer', 45)], deals: [{ buyer: 'kai', seller: 'lena', price: 40, units: 1 }] }) }));
+    expect(/NEAREST TRADE<\/dt><dd[^>]*>([^<]*)<\/dd>/.exec(html)?.[1]).toBe('TRADING');
+  });
+});
+
 describe('a tie between the ship and the store goes to the ship, as the engine sells', () => {
   it('a seller is sent to the ship when it pays what the store pays', () => {
     const a = auction({ good: 'crystite', storeBuys: 100, shipPays: 100, walkers: [walker('lena', 'seller', 150)] });
