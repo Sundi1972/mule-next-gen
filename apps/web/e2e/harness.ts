@@ -128,7 +128,7 @@ export async function claimAPlot(phone: Page, timeoutMs: number, promise: string
   const deadline = Date.now() + timeoutMs;
   await claim.waitFor({ timeout: Math.max(1, deadline - Date.now()) }).catch(() => undefined);
   for (;;) {
-    check((await grant.count()) > 0, `${promise}: the land grant ended before this phone's claim landed`);
+    check((await grant.count()) > 0, `${promise}: no land grant on this phone (never shown, or ended before its claim landed)`);
     check(Date.now() < deadline, `${promise}: no free plot could be claimed within ${timeoutMs} ms`);
     if ((await unclaimed.count()) === 0) return;
     try {

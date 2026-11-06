@@ -60,12 +60,13 @@ const SIZE: Record<Density, Size> = {
   },
 };
 
+/** From this many players the TV's league is set a step tighter. */
+const FULL_TABLE = 5;
+
 /**
  * Everyone by Worth, the leader called out, the change since last month. Totals only. `final` (game over): the final
  * standings, no callout (the winner card has it) and no change column.
  */
-/** From this many players the TV's league is set a step tighter. */
-const FULL_TABLE = 5;
 
 export function LeagueTable({ view, density, selfId, final = false }: { view: MuleView; density: Density; selfId?: string; final?: boolean }) {
   const lg = league(view);
@@ -74,8 +75,8 @@ export function LeagueTable({ view, density, selfId, final = false }: { view: Mu
   const changes = !final && lg.hasLastMonth;
   const tv = density === 'tv';
   const full = tv && !final && view.players.length >= FULL_TABLE;
-  // At a full table the TV's rows and callout are a step tighter, the type the same, so six rows and the colony's score
-  // fit the month end without scaling it down (PM ruling C, 5 Nov).
+  // At a full table the TV's rows and callout are a step tighter: the rows' type the same, the leader's line a step
+  // smaller, so six rows and the colony's score fit the month end without scaling it down (PM ruling C, 5 Nov).
   const s = final && tv ? { ...SIZE.tv, mark: 36, cell: 'px-3 py-1.5' } : full ? { ...SIZE.tv, mark: 32, cell: 'px-3 py-1', callMark: 36, call: 'text-3xl' } : SIZE[density];
   const words = leaderWords(view, lg, selfId);
   const top = lg.rows[0];

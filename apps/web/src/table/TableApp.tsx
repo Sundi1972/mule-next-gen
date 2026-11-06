@@ -681,6 +681,8 @@ function FitHeight({ className, gives = false, children }: { className?: string;
     const i = inner.current;
     if (!b || !i) return;
     const room = b.clientHeight;
+    // A box not laid out yet has no height to fit to; a scale of 0 would set the width to Infinity%.
+    if (room <= 0) return;
     // The content's own height, without the stretch: the stretch follows the scale, so measuring through it would keep
     // a shrunk scale from ever growing back.
     const size = gives ? 'height' : 'minHeight';

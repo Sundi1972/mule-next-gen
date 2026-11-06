@@ -150,12 +150,6 @@ export async function theTvHeaderFits(tv: Page, screen: string): Promise<string>
 }
 
 /**
- * TV-FIT auction (the walk), with deals put on the board through the server while the room is held, then taken off
- * again: the walk has no chat ticker (the bubbles on the board carry the chat), said lines or not, so the board keeps
- * one size as deals come and go; with nothing trading the help and the room line show whole, with two deals up each
- * deal row is whole inside the deal list, and either way nothing runs past the foot.
- */
-/**
  * TV-FIT month end (PM ruling C, 5 Nov): the header fits as theTvHeaderFits reads it; with two chat lines said, the
  * ticker shows only the newest; and the colony's gauges sit in the screen's body, beside the league, not in a row of
  * their own under the header, so the league and the colony's score keep the height. Logs the body's scale.
@@ -183,6 +177,12 @@ export async function theMonthEndTvFits(tv: Page, server: MuleServer, code: stri
   return `${header}; the worth rule whole on one line; one chat line of ${said.length}, the gauges ${gauges > 0 ? 'beside the league' : 'not drawn (no colony)'}, the body at scale ${scale.toFixed(3)} with ${await end.locator('[data-testid^=league-row-]').count()} league rows`;
 }
 
+/**
+ * TV-FIT auction (the walk), with deals put on the board through the server while the room is held, then taken off
+ * again: the walk has no chat ticker (the bubbles on the board carry the chat), said lines or not, so the board keeps
+ * one size as deals come and go; with nothing trading the help and the room line show whole, with two deals up each
+ * deal row is whole inside the deal list, and either way nothing runs past the foot.
+ */
 export async function theAuctionTvFits(tv: Page, server: MuleServer, code: string): Promise<string> {
   const room = server.registry.get(code);
   check(room, `a room ${code} on the server`);
