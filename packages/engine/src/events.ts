@@ -57,6 +57,7 @@ const SHAPE: Record<EventKey, { kind: EventKind; title: string; scope: MonthEven
   },
   storeStrike: { kind: 'store', title: 'Store strike', scope: 'colony', sign: 'bad', line: () => 'The store is on strike: it sells no MULEs this turn.' },
   walkout: { kind: 'plot', title: 'Walkout', scope: 'personal', sign: 'bad', line: () => walkoutLine(null) },
+  loyalCrew: { kind: 'plot', title: 'Loyal crew', scope: 'personal', sign: 'good', line: () => `A loyal crew: one of your plots makes ${SOCIAL_EVENTS.player.loyalCrew.gain} more this month.` },
 };
 
 /** A general strike's line, naming its good when it has one. */
@@ -99,6 +100,7 @@ export function eventOutput(key: EventKey, before: number, first: boolean): numb
     cavernCollapse: () => before,
     generalStrike: () => Math.floor(before * COLONY.strike.output),
     walkout: () => Math.floor(before * SOCIAL_EVENTS.player.walkout.output),
+    loyalCrew: () => before + SOCIAL_EVENTS.player.loyalCrew.gain,
   };
   // An event with no rule here changes no plot's output.
   return Math.max(0, rules[key]?.() ?? before);
@@ -179,7 +181,8 @@ const OFF_MAP = {
   emigrationWave: () => true,
   blamedForUnrest: () => true,
   storeStrike: () => true,
-  walkout: (state: GameState, p?: Player) => p !== undefined && mostWorked(state, p.id).length > 0,
+  walkout: (state: GameState, p?: Player) => p !== undefined && workedBy(state, p.id).length > 0,
+  loyalCrew: (state: GameState, p?: Player) => p !== undefined && workedBy(state, p.id).length > 0,
 } satisfies Partial<Record<EventKey, (state: GameState, player?: Player) => boolean>>;
 type OffMapKey = keyof typeof OFF_MAP;
 
@@ -210,9 +213,18 @@ function offMapEvent(state: GameState, key: OffMapKey, rng: Rng, phase: Phase, p
     const hit = state.tiles.filter((t) => t.owner === player && t.outfit === good);
     return { ...toEvent(state, key, { x: hit[0]!.x, y: hit[0]!.y }, hit, undefined, player, phase), line: walkoutLine(good) };
   }
+  if (key === 'loyalCrew') {
+    const plot = rng.pick(workedBy(state, player!));
+    return toEvent(state, key, { x: plot.x, y: plot.y }, [plot], undefined, player, phase);
+  }
   // Off the map: it starts at the store, where every colonist starts development.
   const store = state.tiles.find((t) => t.terrain === 'store');
   return toEvent(state, key, store ? { x: store.x, y: store.y } : { x: 0, y: 0 }, [], undefined, player, phase);
+}
+
+/** A player's working plots: those outfitted to make a good (a green belt makes none). */
+function workedBy(state: GameState, owner: string): Tile[] {
+  return state.tiles.filter((t) => t.owner === owner && (GOODS as readonly string[]).includes(t.outfit ?? ''));
 }
 
 /**
@@ -351,6 +363,8 @@ export interface EventParams {
   reputation?: number;
   /** G-5 C26: the share of its output a walked-out plot makes. */
   output?: number;
+  /** G-5 C26: what a loyal crew's plot makes more. */
+  gain?: number;
 }
 
 /** What a chance reads beside the state: whose roll it is (none for a colony row), and the keys already fired this phase. */

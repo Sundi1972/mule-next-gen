@@ -1451,6 +1451,15 @@ export const SOCIAL_EVENTS = {
       output: 0.2,
       cap: 0.9,
     },
+    /** In production: one of the player's working plots, on the row's dice, makes `gain` more. */
+    loyalCrew: {
+      phases: { production: 0 },
+      needsColony: true,
+      mood: { thriving: 0.03, content: 0.01 },
+      wealth: { poorest: 0.01 },
+      gain: 1,
+      cap: 0.9,
+    },
   } satisfies Record<string, import('./events.js').EventRow & import('./events.js').EventParams>,
 };
 
