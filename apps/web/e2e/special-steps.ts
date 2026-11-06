@@ -8,7 +8,7 @@
  * The helpers below are specials.ts's too (local only), which also checks the badge in later phases and its geometry.
  */
 import type { GameState, Tile } from '@mule/engine';
-import { SPECIAL_BADGE, specialBadgeBox } from '@mule/ui';
+import { SPECIAL_BADGE, SPECIAL_HANG, specialBadgeBox } from '@mule/ui';
 import type { Locator, Page } from 'playwright';
 import { check, type GameStepContext } from './harness';
 
@@ -145,7 +145,9 @@ export async function checkSpecialLine(card: Locator, kind: string, what: string
 export async function tapOnTheOverhang(phone: Page, map: Locator, look: Locator, inner: Special, timeout: number): Promise<void> {
   const badge = await glyph(map, inner).locator(':scope > span').boundingBox({ timeout });
   check(badge, `B-AC-9: the badge on ${plotName(inner)} has a box`);
-  await phone.touchscreen.tap(badge.x + badge.width - 1.5, badge.y + badge.height - 1.5);
+  // The middle of the part that hangs out, over the neighbour.
+  const hang = badge.width * SPECIAL_HANG;
+  await phone.touchscreen.tap(badge.x + badge.width - hang / 2, badge.y + badge.height - hang / 2);
   const neighbour = { x: inner.x + 1, y: inner.y + 1 };
   const shown = await look
     .filter({ hasText: `Plot ${plotName(neighbour)}` })

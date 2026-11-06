@@ -34,7 +34,7 @@ export function SpecialIcon({ kind, size = 16, className }: SpecialIconProps) {
 }
 
 /**
- * The badge's size per density, in screen pixels. DS-GAP: there are no size tokens for map marks; HoloMap writes
+ * The badge's size per density, in screen pixels: the TV's size, and the phone's cap (see specialBadgeBox). DS-GAP: there are no size tokens for map marks; HoloMap writes
  * each mark's size per density inline (PlayerMark 7/12, GoodIcon 10/20), and these follow that precedent.
  */
 export const SPECIAL_BADGE = { phone: { box: 15, icon: 10, ring: 1.6 }, tv: { box: 21, icon: 14, ring: 2.2 } } as const;
@@ -50,7 +50,7 @@ export const SPECIAL_HANG = 0.25;
 /** The phone badge's share of its plot, so on a 25 px plot it keeps off the third of the plot's dots. */
 export const SPECIAL_BADGE_SHARE = 0.36;
 
-/** The badge's size on a map plot `plot` px wide: on a phone a share of the plot, at most its size today; the TV's as today. */
+/** The badge's size on a map plot `plot` px wide: on a phone a share of the plot, at most the phone's cap; on the TV its fixed size. */
 export function specialBadgeBox(plot: number, density: 'phone' | 'tv'): number {
   if (density === 'tv') return SPECIAL_BADGE.tv.box;
   return Math.min(SPECIAL_BADGE.phone.box, Math.max(1, Math.round(plot * SPECIAL_BADGE_SHARE)));

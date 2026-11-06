@@ -60,6 +60,24 @@ export interface HoloMapProps {
 /** Every mark is a share of the plot's size, so it reads the same at any width. */
 const SHARE = { border: 1 / 12, tab: 0.46, mark: 0.36, disc: 0.62, icon: 0.44, ring: 1 / 9 };
 
+/** The phone's dots chip ends its dot row this far under its plot's middle, in px: its 17 px height halved, less its 2 px padding. */
+const DOTS_FOOT = 6.5;
+
+/**
+ * The selected ring outside its plot, in px: how far its box reaches out (`inset`; null for 6% of the plot, as drawn on
+ * a larger plot), its holo band and its void edge. On a small phone plot the three together stop half a pixel under the
+ * dots of the plot above, whose foot sits P/2 − DOTS_FOOT over the shared edge: the box comes in first, then the band
+ * thins. `inside` when not even a 1 px band fits there: under dots, the ring is then drawn inside its plot.
+ */
+export function selectionRing(plot: number, density: 'phone' | 'tv'): { inset: number | null; band: number; edge: number; inside: boolean } {
+  const band = Math.max(2, Math.round(plot * SHARE.ring));
+  const edge = density === 'tv' ? 3 : 2;
+  const room = plot / 2 - DOTS_FOOT - 0.5;
+  if (density === 'tv' || plot * 0.06 + band + edge <= room) return { inset: null, band, edge, inside: false };
+  const thin = Math.max(1, Math.min(band, room - edge));
+  return { inset: Math.max(0, room - thin - edge), band: thin, edge, inside: room - edge < 1 };
+}
+
 /** How far inside the map's right or bottom edge an edge plot's special badge sits, in px, where it can't hang out. */
 const BADGE_EDGE = 2;
 
@@ -110,6 +128,7 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
     return grid;
   }, [tiles, width, height]);
   const badge = specialBadgeBox(plot, density);
+  const ring = selectionRing(plot, density);
   const groundOf = (t: MapTile) => (!hideGround && t.ground ? bestGoods(t.ground, tv ? 2 : 1) : []);
   /** Whether the plot draws its dots chip: an installed good or a colony building shows instead. */
   const showsDots = (t: MapTile) => !t.good && !t.object && groundOf(t).length > 0;
@@ -143,8 +162,11 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
           const onEdge = t.x === 0 || t.y === 0 || t.x === width - 1 || t.y === height - 1;
           const ground = groundOf(t);
           const above = t.y > 0 ? cells[(t.y - 1) * width + t.x] : undefined;
-          // The pin would hang over the dots of the plot above: there the ring alone marks the selection.
-          const pin = !above || !showsDots(above);
+          // The pin would hang over the dots of the plot it points from, above, or below on the top row: there the ring alone marks the selection.
+          const under = t.y === 0 ? cells[width + t.x] : above;
+          const pin = !under || !showsDots(under);
+          // Inside the plot on the map's edge, which clips, and under dots on a plot too small for a band between.
+          const inner = onEdge || (ring.inside && !!above && showsDots(above));
           const gems = !hideGround && t.ground ? gemsIn(t.ground) : [];
           const label = [
             TERRAIN_NAME[t.terrain],
@@ -176,7 +198,7 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
               )}
               {/* An object's plot shows the object, not the ground under it (no pip, no gem): the plot's label still names the ground. */}
               {showsDots(t) && (
-                // A TV chip can stand taller than its plot: a tap on what overhangs goes to the plot beneath.
+                // A chip can stand taller than a small phone's plot: a tap on what overhangs goes to the plot beneath.
                 <span
                   className={cx('pointer-events-none relative flex flex-col items-center rounded-control bg-map-chip/90 shadow-chip', tv ? 'gap-0.5 px-1.5 py-1' : 'px-[3px] py-[2px]', fade)}
                   // In the right column the badge sits inside the plot instead of hanging out: the chip steps left by as much.
@@ -272,16 +294,17 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
                   {/* The ring stays solid; only its glow breathes, so the selection never dims. */}
                   <span
                     aria-hidden
-                    className={cx('pointer-events-none absolute z-[5] motion-safe:animate-pulse', onEdge ? 'inset-0 rounded-[10%]' : '-inset-[8%] rounded-[16%]')}
-                    style={{ boxShadow: `${onEdge ? 'inset ' : ''}0 0 ${tv ? 26 : 12}px ${tv ? 8 : 4}px var(--color-holo)` }}
+                    className={cx('pointer-events-none absolute z-[5] motion-safe:animate-pulse', inner ? 'inset-0 rounded-[10%]' : '-inset-[8%] rounded-[16%]')}
+                    style={{ boxShadow: `${inner ? 'inset ' : ''}0 0 ${tv ? 26 : 12}px ${tv ? 8 : 4}px var(--color-holo)` }}
                   />
                   <span
                     aria-hidden
-                    className={cx('pointer-events-none absolute z-[5]', onEdge ? 'inset-0 rounded-[10%]' : '-inset-[6%] rounded-[14%]')}
+                    className={cx('pointer-events-none absolute z-[5]', inner ? 'inset-0 rounded-[10%]' : cx('rounded-[14%]', ring.inset === null && '-inset-[6%]'))}
                     style={{
-                      boxShadow: onEdge
+                      ...(!inner && ring.inset !== null ? { inset: -ring.inset } : {}),
+                      boxShadow: inner
                         ? `inset 0 0 0 ${size.ring}px var(--color-holo-strong), inset 0 0 0 ${size.ring + (tv ? 3 : 2)}px var(--color-void)`
-                        : `0 0 0 ${size.ring}px var(--color-holo-strong), 0 0 0 ${size.ring + (tv ? 3 : 2)}px var(--color-void)`,
+                        : `0 0 0 ${ring.band}px var(--color-holo-strong), 0 0 0 ${ring.band + ring.edge}px var(--color-void)`,
                     }}
                     data-testid="selected-ring"
                   />
