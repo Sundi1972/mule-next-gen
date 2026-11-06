@@ -253,7 +253,7 @@
 </table></div>
 <p>The other goods' usual price is their starting reference price (<code>GOOD_CONFIG.refPrice</code>), and they stay within half of it either way. Crystite's usual price, 90, is under its starting reference price of 100, so in month 1 the ship's Crystite price is 90 and Crystite's reference price drifts down towards it.</p>
 <p>Measured over 200 simulated four-seat games (2,400 months): Crystite's off-world price was above 90 in half the months and below it in the other half, above 200 in 1.0% of months, 280 or more in 0.1%, and 50 or less in 2.9%. It reached both limits, 40 and 300, and never passed them.</p>
-<div class="box example"><h4>Example: Crystite at 160</h4><p>Crystite's off-world price stands at 160. With no swing, next month it would be 90 × (160 ÷ 90)<sup>0.7</sup> = 134.6, and in three months 90 × (160 ÷ 90)<sup>0.7 × 0.7 × 0.7</sup> = 109.6. A computer player expects those, rounded down: <strong>134</strong> next month and <strong>109</strong> in three. The swings then take the real price above or below them. Holding Crystite when its price is high is a bet the price will not fall back before the ship calls.</p></div>
+<div class="box example"><h4>Example: Crystite at 160</h4><p>Crystite's off-world price stands at 160. With no swing, next month it would be 90 × (160 ÷ 90)<sup>0.7</sup> = 134.6, and in three months 90 × (160 ÷ 90)<sup>0.7 × 0.7 × 0.7</sup> = 109.6. A computer player's forecast follows exactly that path, without the swings, and reads it rounded down: <strong>134</strong> next month and <strong>109</strong> in three. The real price then swings above or below it. Holding Crystite when its price is high is a bet the price will not fall back before the ship calls.</p></div>
 <div class="table-wrap"><table>
 <thead><tr><th>Setting</th><th class="n">Value</th><th>What it does</th></tr></thead>
 <tbody>
@@ -266,7 +266,7 @@
 </tbody>
 </table></div>
 <div class="box why"><h4>Why it is like this</h4><p>Heiko chose on 5 Nov, with the market-maker design: Crystite's off-world price should vary from 40 to 300, usually about 90, with the higher prices more and more unlikely, and the other export goods should move too, about half as much, within half their normal price either way. A price that wanders back to its usual level, rather than a fresh draw each month, lets prices trend for a few months, so when to sell to the ship becomes a decision. Each swing has its own draw from the seed, so adding the walk moved no other random draw in the game.</p></div>
-<p class="code-ref">In the code: <code>economy.ts::stepOffWorld</code>, <code>expectedOffWorld</code> (what the computer players expect), <code>openingOffWorld</code> · <code>rng.ts::seedOf</code> · <code>game.ts::advancePhase</code> (as the month opens), <code>createGame</code> · <code>config.ts::OFF_WORLD</code></p>
+<p class="code-ref">In the code: <code>economy.ts::stepOffWorld</code>, <code>expectedOffWorld</code> (the path a computer player's forecast follows: a forecast month moves along it and draws no swing), <code>openingOffWorld</code> · <code>rng.ts::seedOf</code> · <code>game.ts::advancePhase</code> (as the month opens), <code>createGame</code> · <code>config.ts::OFF_WORLD</code></p>
 <p class="owner">In the game since the colony-economy package's PR-4, the Maps team (WS5), as named edits in the Strategy team's (WS1) economy code and the Auctions team's (WS3) game code. Kept current by: WS1, with WS5 for the design.</p>
 
 <h3 id="reference-learning">How the reference price learns</h3>
