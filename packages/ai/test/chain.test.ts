@@ -74,6 +74,13 @@ describe('a factory chain (AM-32)', () => {
     expect(installed.slice(1).every((o) => o === 'electronics')).toBe(true);
   });
 
+  it('B-AC-AM32-1 (FM-chain-dry-link): a link plot that makes nothing adds nothing to the chain, so no mine goes onto dry ground', () => {
+    // Rare earth only on ground the seat knows is dry; Smithore ground and plains for the rest.
+    const state = development([{ x: 0 }, { x: 2, ground: { smithore: 4 } }, { x: 4 }, { x: 6 }], 2_000);
+    const installed = playDevelopment(state, seatOf());
+    expect(installed, `installed ${installed.join(', ')}`).not.toContain('rareEarth');
+  });
+
   it('FM-chain-idle: no works is installed while its inputs neither stand nor are held, whatever the cash', () => {
     // Plains only: no ground for a mine, so the chain's inputs can't stand this month.
     const state = development([{ x: 0 }, { x: 2 }, { x: 4 }, { x: 6 }], 2_000);

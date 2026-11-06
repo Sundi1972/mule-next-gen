@@ -662,58 +662,65 @@ describe('the seat plays its development and auction parts (C4, RULE-6, RULE-7)'
   });
 
   it('B-AC-6 (AM-27): an adopted route with analyses plays as adopted, its installs the route’s, while the own route in the same state is picked again', () => {
-    ownPhasesOn();
-    // G-2: an adopted playbook (WS2's writer, Claude's edits) reaches the board as adopted; the hand's own picks after
-    // the analyses are for the seat's own draft only. The built case: ME opens month 1's development with a farm, a
-    // well and a plant, an unanalysed volcanic plot and an unanalysed river plot, and a month's staples in stock. Its
-    // own route analyses the volcanic plot before its MULE, and its own play replaces that MULE on the analysed ground.
-    // The same route, adopted at the same tick, plays as it stands.
-    const edit = (state: GameState) => {
-      landed(1, ['plains:food', 'river:water', 'plains:energy', 'volcanic', 'river'], [], false)(state);
-      stocked(1)(state);
-    };
-    // The seat keeps the plan it drafted at planning (C12): here it plays the plan it would draft on the built case,
-    // adopted bare, with no part, so every part is still its own.
-    const plannedOn = (firstPlan = once()) => (seat: AiSeat, state: GameState, point: Point) => {
-      if (seat.id !== ME || point !== 'development' || !firstPlan(seat, state, point)) return;
-      const { strategy } = draftPlaybook({ state, seat: ME, mind: seat.mind, seed: seat.options.seed, phase: 'development' });
-      seat.adopt({ v: 1, seat: ME, month: state.month, phase: 'development', by: 'engine', strategy });
-    };
-    const scoutsFirst = (pb: Playbook) => {
-      const route = pb.development!.route;
-      const buy = route.findIndex((s) => s.act === 'buyMule');
-      return buy > 0 && route.slice(0, buy).some((s) => s.act === 'analyse');
-    };
-    const routeItems = (t: Table) => t.outcomes.get(key(ME, 1, 'development'))!.items.filter((i) => i.path.startsWith('/development/route/'));
-    const own = playTable({ months: 1, edit, before: plannedOn() });
-    const theCase = own.written.find((pb) => pb.phase === 'development' && pb.seat === ME)!;
-    expect(scoutsFirst(theCase), 'its own route analyses before its MULE').toBe(true);
-    expect(routeItems(own).some((i) => i.actual === 'replaced' && i.note === 'ground analysed'), 'its own route was picked again after its analyses').toBe(true);
-    const route = theCase.development!.route;
+    // The built case is drafted for a plan with no chain: month 1's Electronics price would draft one (AM-32).
+    const chainMonths = AI_PLANS.chain.months;
+    AI_PLANS.chain.months = 0;
+    try {
+      ownPhasesOn();
+      // G-2: an adopted playbook (WS2's writer, Claude's edits) reaches the board as adopted; the hand's own picks after
+      // the analyses are for the seat's own draft only. The built case: ME opens month 1's development with a farm, a
+      // well and a plant, an unanalysed volcanic plot and an unanalysed river plot, and a month's staples in stock. Its
+      // own route analyses the volcanic plot before its MULE, and its own play replaces that MULE on the analysed ground.
+      // The same route, adopted at the same tick, plays as it stands.
+      const edit = (state: GameState) => {
+        landed(1, ['plains:food', 'river:water', 'plains:energy', 'volcanic', 'river'], [], false)(state);
+        stocked(1)(state);
+      };
+      // The seat keeps the plan it drafted at planning (C12): here it plays the plan it would draft on the built case,
+      // adopted bare, with no part, so every part is still its own.
+      const plannedOn = (firstPlan = once()) => (seat: AiSeat, state: GameState, point: Point) => {
+        if (seat.id !== ME || point !== 'development' || !firstPlan(seat, state, point)) return;
+        const { strategy } = draftPlaybook({ state, seat: ME, mind: seat.mind, seed: seat.options.seed, phase: 'development' });
+        seat.adopt({ v: 1, seat: ME, month: state.month, phase: 'development', by: 'engine', strategy });
+      };
+      const scoutsFirst = (pb: Playbook) => {
+        const route = pb.development!.route;
+        const buy = route.findIndex((s) => s.act === 'buyMule');
+        return buy > 0 && route.slice(0, buy).some((s) => s.act === 'analyse');
+      };
+      const routeItems = (t: Table) => t.outcomes.get(key(ME, 1, 'development'))!.items.filter((i) => i.path.startsWith('/development/route/'));
+      const own = playTable({ months: 1, edit, before: plannedOn() });
+      const theCase = own.written.find((pb) => pb.phase === 'development' && pb.seat === ME)!;
+      expect(scoutsFirst(theCase), 'its own route analyses before its MULE').toBe(true);
+      expect(routeItems(own).some((i) => i.actual === 'replaced' && i.note === 'ground analysed'), 'its own route was picked again after its analyses').toBe(true);
+      const route = theCase.development!.route;
 
-    const first = once();
-    const plan = plannedOn();
-    let adopted: Playbook | null = null;
-    const t = playTable({
-      months: 1,
-      edit,
-      before: (seat, state, point) => {
-        plan(seat, state, point);
-        if (seat.id !== ME || point !== 'development' || !first(seat, state, point)) return;
-        adopted = seat.draft(state, 'development');
-        seat.adopt(adopted);
-      },
-    });
-    expect(adopted!.development!.route, 'the same route as the own path drafted').toEqual(route);
-    const items = routeItems(t);
-    const log = JSON.stringify(items);
-    expect(items.filter((i) => i.note === 'ground analysed'), log).toEqual([]);
-    expect(t.ownInstalls.get(key(ME, 1)), 'no MULE the hand picked itself').toEqual([]);
-    // The promise: its installs, in order, are the adopted route's where they were done, each with the route's outfit.
-    const wanted = route.flatMap((s, i) => (s.act === 'install' && items[i]!.actual === 'done' ? [{ plot: s.plot!, outfit: route[i - 1]!.outfit! }] : []));
-    expect(wanted.length, log).toBeGreaterThan(0);
-    expect(t.installs.get(key(ME, 1)), log).toEqual(wanted);
-    expect(own.installs.get(key(ME, 1)), 'the own path installed otherwise').not.toEqual(wanted);
+      const first = once();
+      const plan = plannedOn();
+      let adopted: Playbook | null = null;
+      const t = playTable({
+        months: 1,
+        edit,
+        before: (seat, state, point) => {
+          plan(seat, state, point);
+          if (seat.id !== ME || point !== 'development' || !first(seat, state, point)) return;
+          adopted = seat.draft(state, 'development');
+          seat.adopt(adopted);
+        },
+      });
+      expect(adopted!.development!.route, 'the same route as the own path drafted').toEqual(route);
+      const items = routeItems(t);
+      const log = JSON.stringify(items);
+      expect(items.filter((i) => i.note === 'ground analysed'), log).toEqual([]);
+      expect(t.ownInstalls.get(key(ME, 1)), 'no MULE the hand picked itself').toEqual([]);
+      // The promise: its installs, in order, are the adopted route's where they were done, each with the route's outfit.
+      const wanted = route.flatMap((s, i) => (s.act === 'install' && items[i]!.actual === 'done' ? [{ plot: s.plot!, outfit: route[i - 1]!.outfit! }] : []));
+      expect(wanted.length, log).toBeGreaterThan(0);
+      expect(t.installs.get(key(ME, 1)), log).toEqual(wanted);
+      expect(own.installs.get(key(ME, 1)), 'the own path installed otherwise').not.toEqual(wanted);
+    } finally {
+      AI_PLANS.chain.months = chainMonths;
+    }
   });
 
   it('T-AC-12: one DecisionRecord per drafted development and auction playbook', () => {
