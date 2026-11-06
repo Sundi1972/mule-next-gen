@@ -96,6 +96,7 @@ describe('T-AC-3 (pip): an analysed plot draws its best good on 3 dots', () => {
     expect(chip).toMatch(/\bbottom-\[8%\]/);
     expect(chip).toMatch(/\bleft-1\/2\b/);
     expect(chip).toMatch(/ -translate-x-1\/2\b/);
+    expect(chip).toMatch(/\bpointer-events-none\b/);
   });
 
   it('T-AC-3 (pip): a plot without ground, as every plot on the TV, draws no pip and names no dots', () => {
@@ -173,6 +174,9 @@ describe('T-AC-3 (gem): Crystite and Rare earth found on a plot', () => {
     expect(map).toContain('data-testid="plot-object-0-0"');
     expect(map).not.toMatch(/data-testid="(map-)?gem-/);
     expect(map).not.toMatch(/\brounded-control\b/);
+    const label = tag(map, /data-testid="map-plot-0-0"/).match(/aria-label="([^"]*)"/)?.[1] ?? '';
+    expect(label).toContain('Food 3 of 3');
+    expect(label).toContain('Crystite here');
   });
 
   it('T-AC-3 (gem): the plot’s label names its gems, "Crystite here", and none without ground or under hideGround', () => {

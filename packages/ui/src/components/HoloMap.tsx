@@ -161,7 +161,8 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
               )}
               {/* An object's plot shows the object, not the ground under it (no pip, no gem): the plot's label still names the ground. */}
               {!t.good && !t.object && ground.length > 0 && (
-                <span className={cx('absolute bottom-[8%] left-1/2 flex -translate-x-1/2 flex-col items-center rounded-control bg-map-chip/90 shadow-chip', tv ? 'gap-0.5 px-1.5 py-1' : 'px-[3px] py-[2px]', fade)}>
+                // A tall TV chip can overhang the plot above: a tap there goes to that plot.
+                <span className={cx('pointer-events-none absolute bottom-[8%] left-1/2 flex -translate-x-1/2 flex-col items-center rounded-control bg-map-chip/90 shadow-chip', tv ? 'gap-0.5 px-1.5 py-1' : 'px-[3px] py-[2px]', fade)}>
                   {ground.map(([g, n]) => (
                     <span key={g} className={cx('flex items-center', tv ? 'gap-0.5' : 'flex-col gap-px')}>
                       <GoodIcon good={g} size={tv ? 16 : 9} />
