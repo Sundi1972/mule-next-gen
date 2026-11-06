@@ -89,7 +89,7 @@ export function nextDroneWords({ month, maxMonths }: Pick<MuleView, 'month' | 'm
  * line (where, what land, best for), then its six goods as icons with 0–3 dots in one row. `next` closes it.
  */
 export function ScanReport({ tiles, next }: { tiles: TileView[]; next: string }) {
-  const ref = useInView<HTMLElement>();
+  const ref = useKeptInView<HTMLElement>();
   return (
     <section ref={ref} className="flex flex-col gap-1 rounded-control border border-holo bg-panel px-2 py-1.5" data-testid="scan-report">
       <span className="flex items-center justify-between">
@@ -115,22 +115,21 @@ export function ScanReport({ tiles, next }: { tiles: TileView[]; next: string })
 }
 
 /**
- * Keeps an element wholly in its scroll box's view when it appears and whenever that box changes size: the rail can
- * hold notices above it (a strike alert, the Now card) that would push it below the fold.
+ * Scrolls an element wholly into its rail's view when it appears and when the window changes size: the rail can hold
+ * notices above it (a strike alert, the Now card opened) that would push it below the fold. A footer changing size (a
+ * player getting ready) never moves it, so a player who scrolled up to read a notice stays there.
  */
-function useInView<T extends HTMLElement>() {
+function useKeptInView<T extends HTMLElement>() {
   const ref = useRef<T>(null);
   useEffect(() => {
     const el = ref.current;
     if (!el?.scrollIntoView) return;
-    const show = () => el.scrollIntoView({ block: 'nearest' });
+    const show = () => {
+      el.scrollIntoView({ block: 'nearest' });
+    };
     show();
-    let box = el.parentElement;
-    while (box && !/auto|scroll/.test(getComputedStyle(box).overflowY)) box = box.parentElement;
-    if (!box || typeof ResizeObserver === 'undefined') return;
-    const watch = new ResizeObserver(show);
-    watch.observe(box);
-    return () => watch.disconnect();
+    window.addEventListener('resize', show);
+    return () => window.removeEventListener('resize', show);
   }, []);
   return ref;
 }
