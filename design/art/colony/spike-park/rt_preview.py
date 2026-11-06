@@ -1,7 +1,8 @@
 """
 A rasterised look at out/park_rt.glb from the grounds camera: EEVEE stands in for a phone's WebGL renderer,
 so the real-time trade-offs (card trees, baked ground, decimated plants) can be judged before the page exists.
-Run: blender -b -P rt_preview.py -- <spike-dir> [day|dusk]  -> out/park_rt_preview_<view>.png
+Run: blender -b -P rt_preview.py -- <spike-dir> [day|dusk] [name=park]  -> out/<name>_rt_preview_<view>.png
+(name=colony frames the 3x3 ring at 1920x1080, as colony.py does)
 """
 import json
 import math
@@ -14,9 +15,10 @@ from mathutils import Vector
 argv = sys.argv[sys.argv.index("--") + 1 :]
 DIR = argv[0]
 VIEW = argv[1] if len(argv) > 1 else "day"
+NAME = argv[2] if len(argv) > 2 else "park"
 bpy.ops.wm.read_factory_settings(use_empty=True)
 scene = bpy.context.scene
-bpy.ops.import_scene.gltf(filepath=os.path.join(DIR, "out", "park_rt.glb"))
+bpy.ops.import_scene.gltf(filepath=os.path.join(DIR, "out", f"{NAME}_rt.glb"))
 
 world = bpy.data.worlds.new("sky")
 scene.world = world
@@ -47,7 +49,7 @@ m = bpy.data.materials.get("lamp_globe")
 if m:
     m.node_tree.nodes["Principled BSDF"].inputs["Emission Strength"].default_value = emit
 
-if VIEW == "dusk":  # the glb carries no lights; the page adds one per globe, as here
+if VIEW == "dusk" and NAME == "park":  # the glb carries no lights; the page adds one per globe, as here
     spec = json.load(open(os.path.join(DIR, "park-spec.json")))
     for x, y in spec["lamps"]["at"]:
         bpy.ops.object.light_add(type="POINT", location=(x, y, spec["lamps"]["height"] - 0.16))
@@ -58,16 +60,16 @@ if VIEW == "dusk":  # the glb carries no lights; the page adds one per globe, as
 bpy.ops.object.camera_add(location=(20, -20, 20 * math.tan(math.radians(30)) * math.sqrt(2)))
 cam = bpy.context.active_object
 cam.data.type = "ORTHO"
-cam.data.ortho_scale = 12 * 1.75
+cam.data.ortho_scale = 12 * 1.75 if NAME == "park" else 2 * 21.5 * math.sqrt(2) * 1.04
 cam.rotation_euler = (math.radians(60), 0, math.radians(45))
 scene.camera = cam
 
 scene.render.engine = "BLENDER_EEVEE"
 scene.eevee.taa_render_samples = 32
 scene.render.film_transparent = True
-scene.render.resolution_x, scene.render.resolution_y = 1600, 1200
+scene.render.resolution_x, scene.render.resolution_y = (1600, 1200) if NAME == "park" else (1920, 1080)
 scene.view_settings.view_transform = "AgX"
 scene.view_settings.exposure = 0.3 if VIEW == "day" else 0.6
-scene.render.filepath = os.path.join(DIR, "out", f"park_rt_preview_{VIEW}.png")
+scene.render.filepath = os.path.join(DIR, "out", f"{NAME}_rt_preview_{VIEW}.png")
 bpy.ops.render.render(write_still=True)
 print("SPIKE preview", scene.render.filepath, flush=True)

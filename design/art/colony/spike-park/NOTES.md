@@ -83,6 +83,12 @@ The build follows the current `park-spec.json`: lamps at ±2.2, trees 5.5 m and 
 | sandstone_blocks_08 (rim, slab sides, kerb, plinth) | https://polyhaven.com/a/sandstone_blocks_08 |
 | clean_pebbles (pond bed) | https://polyhaven.com/a/clean_pebbles |
 | Grass001, Grass004 (lawn; Poly Haven has no mown lawn) | https://ambientcg.com/view?id=Grass001 , https://ambientcg.com/view?id=Grass004 |
+| concrete_panels (colony facades; its normal map gives the hospital's panel joints) | https://polyhaven.com/a/concrete_panels |
+| white_plaster_02 (fetched; replaced by a clean flat panel material, because its grime read as neglect) | https://polyhaven.com/a/white_plaster_02 |
+| metal_plate_02 (rooftop plant) | https://polyhaven.com/a/metal_plate_02 |
+| box_profile_metal_sheet (stadium cladding) | https://polyhaven.com/a/box_profile_metal_sheet |
+| square_concrete_pavers (forecourts and plaza) | https://polyhaven.com/a/square_concrete_pavers |
+| hangar_concrete_floor (launch pad) | https://polyhaven.com/a/hangar_concrete_floor |
 
 `assets/baked/` holds the three maps the script bakes (ground diffuse, ground normal, flower bed). They are regenerated on every run.
 
@@ -100,3 +106,80 @@ The park needed no modelling, only placement of library assets. A hospital is di
 | **Total for one building, all 5 stages** | **about 30–45 h** the first time; **about 25–35 h** for each later one once the stake kit and scaffold generator exist | |
 
 For comparison, this park (spec to delivered renders, glb and these notes) took one agent session of about an hour of wall-clock time. All of that time went into assembly and look development, with none spent on modelling.
+
+## The whole colony (`colony.py`)
+
+`colony.py` runs `park.py` up to its render step, which gives it the park plus every helper, then builds the rest of the first ring:
+
+```
+Blender -b -P colony.py -- "$PWD" 256 day,dusk 100 colony   # out/colony_day.png, out/colony_dusk.png (~2.5 min)
+Blender -b -P colony.py -- "$PWD" 256 day 100 stages        # out/hospital_stages.png (~20 s)
+Blender -b -P colony.py -- "$PWD" 16 dusk 50 rt             # out/colony_rt.glb (needs out/park_rt.glb)
+Blender -b -P rt_preview.py -- "$PWD" day|dusk colony       # EEVEE look at the glb
+```
+
+**Layout.** Place (col, row) sits at (12·col, −12·row). The town hall is at (0,0) and the park at (1,0), moved there unchanged. Hospital (0,1), observatory (1,1), stadium (−1,0) and spaceport (0,−1) follow. The other three places are bare paved slabs. Each place sits on a park-style slab (sandstone rim and sides, square concrete pavers inside). The ring stands on a lower plaza apron 3.5 m wide with 28 lamps of 4 m, each with a warm point light. Five of the park's trees stand on forecourts. The camera has the same angle and centre, with ortho widened to 63 m; output is 1920×1080. The sun is WSW, as in the park.
+
+**Shared building kit.** About 200 lines, written once:
+- `modern()`: per floor, a solid spandrel band, then a glass band recessed 28 cm with real mullions every 1.4 m and a transom. On top, parapets and a roof membrane.
+- `rooftop()`: plant boxes with fans. `canopy()`: an entrance canopy with an accent fascia. `lamp()`.
+- A glass shader that lights a random half of the bays warm at dusk, one random draw per bay and floor.
+
+**The buildings** (massing from layout.ts):
+
+| Building | What it is | Accent |
+|---|---|---|
+| Town hall, 7.4 × 7.4 × 5 m | one tall floor; a deep portico of six columns on its east face (the face the camera sees over the low park), stone steps, a gold plaque, a flag on a 9 m pole | blue |
+| Hospital, 7.9 × 7.9 × 7 m | two floors in clean white panels, red crosses on both visible parapets, an entrance canopy with a red fascia, a rooftop helipad | red |
+| Observatory, 6.7 × 6.7 × 5.5 m | a drum and a 2.5 m metal dome, with its slot cut by a boolean to face the camera; a telescope tube in the slot; a blue band | blue |
+| Stadium, oval 10.3 × 8.2 × 2.6 m | outer wall in box-profile cladding with an orange band; six stepped rings of teal and white stands; a striped pitch with lines and centre circle; four 8 m floodlight masts with real spot lights | teal, orange |
+| Spaceport | a 9.6 m launch-concrete pad with lit orange marks and a scorch; a 7.5 m rocket (body, band, interstage, nose, four swept fins, engine bell, four-leg mount); a 10.8 m lattice service tower with X-braces, an access arm and a beacon; a blockhouse | orange |
+
+**Hospital stages** (`hospital_stages.png`, 1920×480): one `hospital(stage=…)` function.
+
+| Stage | What it shows | Derived or its own kit |
+|---|---|---|
+| Site | graded earth, stakes every 2 m, string outline, survey flags, spoil heaps, a site cabin | own small kit, `site_stakes()`, reusable |
+| Building | ground floor glazed, upper floor a bare concrete frame (the `upto` option of `modern()`), a scaffold wrapped round the footprint, a tower crane | own kit, `scaffold()` and `crane()`, reusable for any footprint |
+| Standing | the full building | the base |
+| Closed | dead glass, greyed facade, faded crosses, a boarded ground floor, a site fence | derived: material swaps plus a few boxes |
+| Damaged | a noise-displaced boolean bites the upper south-east corner out of every part it touches; rubble; an ember glow and light inside the break; a volumetric smoke column | derived: one cutter, rubble scatter, a smoke volume |
+
+**Phone version** (`colony_rt.glb`):
+- **Budgets:** 174,717 triangles drawn (budget 300k), 10.05 MB (budget 12 MB), 65 draw calls over 20 meshes.
+- **What it contains:** the park's own phone build plus one merged mesh per building, the plaza, and the lamp globes. Textures are at most 512 px.
+- **Two things that do not carry over:**
+  - **The five forecourt trees are left out**, because each one is a 1.6M-triangle scan.
+  - **Window lighting is uniform.** The random per-bay lighting is procedural, so `window_glass` ships evenly lit (emissive 0.6, warm), like the signs and globes. The page must set those emissives to 0 by day.
+
+### Measured effort: the colony
+
+These are wall-clock times from `date -u`, for one agent session working in parallel with nothing else. **These are agent minutes, not human hours.** They are the evidence for "what an agent costs per building", and they measure building this pipeline, not an artist's.
+
+| Step | From → to (UTC, 6 Nov) | Minutes |
+|---|---|---|
+| Read brief, pick and fetch 6 CC0 textures, hook `park.py` for reuse | 14:20 → 14:22 | 2 |
+| Write `colony.py`: shared kit plus all 5 buildings, first render | 14:22 → 14:26 | 4 |
+| Two look passes (glass too dark, facades brown, portico onto the visible face, grey pavers, forecourt trees, signal-only glow) | 14:26 → 14:31 | 5 |
+| Final day and dusk at 256 samples (2 × 28 s render) | 14:31 → 14:34 | 3 |
+| Hospital closed and damaged stages, three fix passes (boolean solver, bound boxes, smoke and embers), final render | 14:34 → 14:41 | 7 |
+| Real-time export, two fixes (dome slot cutter, lit windows), previews | 14:41 → 14:43 | 2 |
+| **Total: ring of 5 buildings, both renders, 5-stage strip, phone glb** | **14:20 → 14:43** | **23** |
+
+Per building, as a share of the build, by size of its code:
+
+| | Lines | Share of the ~9 min of building and look passes |
+|---|---|---|
+| Shared kit (modern block, glass, rooftop, canopy, lamp, slab) | ~200 | ~3 min, paid once |
+| Town hall | 34 | ~1 min |
+| Hospital, standing | ~45 | ~1 min |
+| Observatory | 42 | ~1 min |
+| Stadium | 81 | ~1.5 min |
+| Spaceport | 82 | ~1.5 min |
+| Hospital, 4 extra stages | ~165 (site, scaffold, crane, closed, damaged) | ~7 min including fixes |
+
+**How to read these numbers.**
+- **What the speed bought:** clean, readable massing, buildings that read as what they are, real window, parapet and canopy geometry, and convincing dusk lighting. At this camera distance (about 32 px/m) that is what shows.
+- **What it did not buy:** hero-art detail up close. There are no interior props behind the glass, no weathering or grime maps, and no signage text. The bench and hedge are still the park's library assets.
+- **A human artist modelling the same buildings to the same bar** would take roughly the hours in the estimate above (about 16–24 h for one standing hospital). The agent is fast because every building is composed from the same parametric kit. That is also its limit: the buildings share one architectural language and differ in silhouette and accent, not in hand-made detail.
+- **The real cost driver is look review:** each pass costs a render and a human or agent judgement. The stage strip needed three passes for one building, because the boolean and smoke failed silently until they were looked at.

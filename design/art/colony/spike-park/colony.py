@@ -40,6 +40,8 @@ for k in ("node", "sock", "link", "mix", "math_", "new_mat", "pbr", "box_uv", "b
           "stone", "scene", "coll", "cam", "shadow_see_through", "load", "place", "recentre", "mdims", "unlink", "A", "T"):
     globals()[k] = P[k]
 print(f"SPIKE t+{time.time() - T0:.0f}s park built", flush=True)
+PARK_OBJS = set(scene.objects)
+GROUP = {}  # object -> export group, so the glb has one mesh per building
 random.seed(21)
 
 SL = 12.0
@@ -69,7 +71,85 @@ plaster = panel_mat("facade_white", (0.8, 0.81, 0.82))
 clad = pbr("metal_cladding", "box_profile_metal_sheet", 2.0, tint=(0.62, 0.64, 0.68))
 roofplant = pbr("roof_plant", "metal_plate_02", 1.5, tint=(0.8, 0.8, 0.82))
 pavers = pbr("forecourt_pavers", "square_concrete_pavers", 1.8, tint=(0.98, 1.0, 1.05))
-apron_pavers = pbr("plaza_pavers", "square_concrete_pavers", 1.8, tint=(0.62, 0.64, 0.68))
+apron_pavers = pbr("plaza_pavers", "square_concrete_pavers", 1.2, tint=(0.78, 0.79, 0.8))
+
+
+def worn(m, scale=0.6, lo=0.72):
+    """Wear on paving: a slow noise darkens and warms patches, so a plaza is not one flat tone."""
+    nt = m.node_tree
+    b = nt.nodes["Principled BSDF"]
+    src = b.inputs["Base Color"].links[0].from_socket
+    nz = node(nt, "ShaderNodeTexNoise")
+    nz.inputs["Scale"].default_value = scale
+    nz.inputs["Detail"].default_value = 4
+    link(nt, node(nt, "ShaderNodeTexCoord").outputs["Object"], nz.inputs["Vector"])
+    r = node(nt, "ShaderNodeValToRGB")
+    r.color_ramp.elements[0].position = 0.35
+    r.color_ramp.elements[0].color = (lo, lo * 0.97, lo * 0.92, 1)
+    r.color_ramp.elements[1].position = 0.65
+    r.color_ramp.elements[1].color = (1.05, 1.05, 1.05, 1)
+    link(nt, nz.outputs["Fac"], r.inputs["Fac"])
+    link(nt, mix(nt, 1.0, src, r.outputs["Color"], "MULTIPLY"), b.inputs["Base Color"])
+
+
+worn(apron_pavers)
+worn(pavers, 0.9, 0.82)
+
+
+def ground_mat(name, fade=False):
+    """The planet's ground: two photo lawns, bare earth and pebbles mixed by noise. With fade, it thins to
+    transparent toward the frame's edge (an ellipse in screen space), so the colony sits in a vignette of land."""
+    m, nt, b = new_mat(name)
+    Pc = node(nt, "ShaderNodeTexCoord").outputs["Object"]
+    def img_at(path, size, data=False):
+        mp = node(nt, "ShaderNodeMapping")
+        mp.inputs["Scale"].default_value = (1 / size, 1 / size, 1)
+        link(nt, Pc, mp.inputs["Vector"])
+        n = node(nt, "ShaderNodeTexImage", image=bpy.data.images.load(path, check_existing=True))
+        link(nt, mp.outputs[0], n.inputs["Vector"])
+        return n.outputs["Color"]
+    g1 = img_at(os.path.join(T, "Grass001", "Grass001_1K-JPG_Color.jpg"), 2.2)
+    g4 = img_at(os.path.join(T, "Grass004", "Grass004_1K-JPG_Color.jpg"), 1.7)
+    peb = img_at(os.path.join(T, "clean_pebbles", "clean_pebbles_diff_1k.jpg"), 1.6)
+    def noise(scale, lo, hi):
+        nz = node(nt, "ShaderNodeTexNoise")
+        nz.inputs["Scale"].default_value = scale
+        nz.inputs["Detail"].default_value = 5
+        link(nt, Pc, nz.inputs["Vector"])
+        mr = node(nt, "ShaderNodeMapRange")
+        mr.inputs["From Min"].default_value = lo
+        mr.inputs["From Max"].default_value = hi
+        link(nt, nz.outputs["Fac"], mr.inputs["Value"])
+        return mr.outputs[0]
+    grass = mix(nt, noise(0.08, 0.4, 0.6), mix(nt, 1.0, g4, (0.72, 0.78, 0.55, 1), "MULTIPLY"), mix(nt, 1.0, g1, (0.95, 0.95, 0.85, 1), "MULTIPLY"))
+    earth = mix(nt, 1.0, peb, (0.62, 0.5, 0.38, 1), "MULTIPLY")
+    c = mix(nt, noise(0.12, 0.47, 0.6), grass, earth)
+    link(nt, c, b.inputs["Base Color"])
+    b.inputs["Roughness"].default_value = 0.92
+    if not fade:
+        return m
+    sep = node(nt, "ShaderNodeSeparateXYZ")
+    link(nt, Pc, sep.inputs[0])
+    u = math_(nt, "MULTIPLY", math_(nt, "ADD", sep.outputs["X"], sep.outputs["Y"]), 0.7071 / 30.0)
+    v = math_(nt, "MULTIPLY", math_(nt, "SUBTRACT", sep.outputs["Y"], sep.outputs["X"]), 0.3536 / 17.0)
+    rr = math_(nt, "SQRT", math_(nt, "ADD", math_(nt, "MULTIPLY", u, u), math_(nt, "MULTIPLY", v, v)))
+    nz = noise(0.25, 0.0, 1.0)
+    rr = math_(nt, "ADD", rr, math_(nt, "MULTIPLY", math_(nt, "SUBTRACT", nz, 0.5), 0.06))
+    fadef = node(nt, "ShaderNodeMapRange")
+    fadef.inputs["From Min"].default_value = 0.62
+    fadef.inputs["From Max"].default_value = 1.0
+    link(nt, rr, fadef.inputs["Value"])
+    out = nt.nodes["Material Output"]
+    mx = node(nt, "ShaderNodeMixShader")
+    link(nt, fadef.outputs[0], mx.inputs[0])
+    link(nt, b.outputs[0], mx.inputs[1])
+    link(nt, node(nt, "ShaderNodeBsdfTransparent").outputs[0], mx.inputs[2])
+    link(nt, mx.outputs[0], out.inputs["Surface"])
+    return m
+
+
+meadow = ground_mat("rough_ground")
+terrain_mat = ground_mat("terrain", fade=True)
 padmat = pbr("launch_pad", "hangar_concrete_floor", 3.0, tint=(1.3, 1.3, 1.3))
 
 
@@ -104,7 +184,7 @@ def glass_mat(name, lit_share=0.55):
     m, nt, b = new_mat(name)
     b.inputs["Base Color"].default_value = (0.09, 0.115, 0.14, 1)
     b.inputs["Roughness"].default_value = 0.07
-    b.inputs["Emission Color"].default_value = (1.0, 0.72, 0.42, 1)
+    b.inputs["Emission Color"].default_value = (1.0, 0.64, 0.3, 1)
     P_ = node(nt, "ShaderNodeTexCoord").outputs["Object"]
     cell = node(nt, "ShaderNodeVectorMath", operation="DIVIDE")
     cell.inputs[1].default_value = (1.4, 1.4, 3.0)
@@ -124,7 +204,7 @@ def glass_mat(name, lit_share=0.55):
 
 
 WINDOWS = []
-glass = glass_mat("window_glass")
+glass = glass_mat("window_glass", lit_share=0.72)
 
 # ---------- building kit ----------
 
@@ -200,24 +280,24 @@ def canopy(cx, y_front, width, depth, z, mat_edge, posts=True):
             cyl("canopy_post", px, y_front - depth + 0.25, 0.05, ZT, z, frame, 12)
 
 
-def lamp(x, y, h=4.0):
-    """A plaza lamp: the park's post and globe, taller, with its own warm light."""
-    cyl("lamp_base", x, y, 0.1, -0.62, -0.35, metal)
-    cyl("lamp_post", x, y, 0.04, -0.4, h - 0.65, metal, 16)
-    bpy.ops.mesh.primitive_uv_sphere_add(segments=24, ring_count=12, radius=0.18, location=(x, y, h - 0.6 + 0.18))
+def lamp(x, y, h=3.0, z0=0.0):
+    """A walkway lamp: the park's post and globe, with its own warm light."""
+    cyl("lamp_base", x, y, 0.08, z0 - 0.02, z0 + 0.22, metal)
+    cyl("lamp_post", x, y, 0.035, z0 + 0.2, z0 + h - 0.32, metal, 16)
+    bpy.ops.mesh.primitive_uv_sphere_add(segments=24, ring_count=12, radius=0.16, location=(x, y, z0 + h - 0.16))
     g = bpy.context.active_object
     g.name = "lamp_globe"
     g.data.materials.append(globe)
     g.data.shade_smooth()
-    bpy.ops.object.light_add(type="POINT", location=(x, y, h - 0.42))
+    bpy.ops.object.light_add(type="POINT", location=(x, y, z0 + h - 0.16))
     L = bpy.context.active_object
-    L.data.shadow_soft_size = 0.15
+    L.data.shadow_soft_size = 0.13
     L.data.color = (1.0, 0.66, 0.36)
-    L.data.energy = 140
+    L.data.energy = 110
     LAMPS.append(L)
 
 
-LAMPS, SPOTS = [], []
+LAMPS, SPOTS, SKIRT = [], [], []
 
 # ---------- the buildings ----------
 
@@ -567,6 +647,24 @@ def spaceport(cx, cy):
     modern(cx + 3.3, cy + 3.5, 3.0, 2.2, 1, 2.8, concrete, "blockhouse", sp=0.9, top_extra=0.5)
 
 
+def room_to_grow(cx, cy):
+    """A bare place: rough ground with grass coming through, a surveyor's stake at each corner of a future footprint."""
+    rng = random.Random(int(cx * 7 + cy * 13))
+    bx(cx - H + RIM, cx + H - RIM, cy - H + RIM, cy + H - RIM, ZT, ZT + 0.03, meadow, 0.004, "rough_ground")
+    stake = flat("survey_stake", (0.95, 0.42, 0.06), 0.5)
+    w = rng.uniform(5.5, 7.5)
+    for (sx, sy) in ((1, 1), (1, -1), (-1, 1), (-1, -1)):
+        px, py = cx + sx * w / 2, cy + sy * w / 2
+        bx(px - 0.05, px + 0.05, py - 0.05, py + 0.05, ZT, ZT + 0.75, stake, 0.005, "stake")
+    for k in range(4):  # a few loose rocks
+        r = P["rock"].copy()
+        coll.objects.link(r)
+        sc = rng.uniform(0.18, 0.35) * P["rock"].scale.x
+        r.scale = (sc, sc, sc * 0.7)
+        r.rotation_euler = (rng.uniform(0, 0.4), rng.uniform(0, 3), rng.uniform(0, 6))
+        r.location = (cx + rng.uniform(-4, 4), cy + rng.uniform(-4, 4), ZT - 0.05)
+
+
 def site_stakes(cx, cy, w, d):
     """Stage 1: graded earth, a stake at every corner and every 2 m, string between them, two survey flags."""
     m, nt, b = new_mat("earth")
@@ -668,8 +766,13 @@ LIGHTFACE = m
 def colony_view(v):
     view(v)  # park.py's sun, sky, globe and park lamps
     dusk = v != "day"
+    if dusk:  # blue hour, not sunset: a cool sky does the fill, the sun only grazes, so warm windows and lamps carry the picture
+        P["bg"].inputs["Strength"].default_value = 0.42
+        P["sock"](P["tint"], "B", False, "RGBA").default_value = (0.32, 0.48, 1.0, 1)
+        P["set_sun"](3, 200, 0.5, (1.0, 0.5, 0.3), 2.0)
+        scene.view_settings.exposure = 0.55
     for s in WINDOWS:
-        s.outputs[0].default_value = 1.1 if dusk else 0.0
+        s.outputs[0].default_value = 2.6 if dusk else 0.0
     for b, g in GLOWS:
         b.inputs["Emission Strength"].default_value = g if dusk else 0.0
     for L in LAMPS + SPOTS:
@@ -751,20 +854,130 @@ for col in (-1, 0, 1):
         if (col, row) == (1, 0):
             continue
         cx, cy = SL * col, -SL * row
+        before = set(scene.objects)
         slab(cx, cy)
+        for o in set(scene.objects) - before:
+            GROUP[o] = "plaza"
+        if (col, row) not in builders:
+            room_to_grow(cx, cy)
         if (col, row) in builders:
+            before = set(scene.objects)
             builders[(col, row)](cx, cy)
+            for o in set(scene.objects) - before:
+                GROUP[o] = builders[(col, row)].__name__
             print(f"SPIKE t+{time.time() - T0:.0f}s built {builders[(col, row)].__name__}", flush=True)
 
-# the plaza round the ring: a lower paved apron, lamps along it every 6 m
-AP = 3.5
+# the plaza round the ring: a lower paved apron with planters; lamps only on the walkways between places
+AP = 2.5
 E = 1.5 * SL
 bx(-E - AP, E + AP, -E - AP, E + AP, -0.95, -0.62, apron_pavers, 0.02, "apron")
-for k in range(7):
-    t = -E + k * SL / 2
-    for (x, y) in ((t, -E - 1.6), (E + 1.6, t), (t, E + 1.6), (-E - 1.6, t)):
-        lamp(x, y)
+for (x, y) in [(sx * 6, sy * 6) for sx in (1, -1) for sy in (1, -1)] + [(6 * sx, 17.0 * sy) for sx in (1, -1) for sy in (1, -1)] + [(17.0 * sx, 6 * sy) for sx in (1, -1) for sy in (1, -1)]:
+    lamp(x, y)
+planter_box = flat("planter_concrete", (0.3, 0.3, 0.31), 0.8)
+hedge_src = [o for o in P["hedge"]]
+for i, (x, y) in enumerate([(t, -E - 1.25) for t in (-12, 0, 12)] + [(E + 1.25, t) for t in (-12, 0, 12)]):
+    along = abs(y) > abs(x)
+    w2, d2 = (1.6, 0.7) if along else (0.7, 1.6)
+    if along:
+        bx(x - w2, x + w2, y - d2 / 2 - 0.05, y + d2 / 2 + 0.05, -0.62, -0.1, planter_box, 0.03, "planter")
+    else:
+        bx(x - w2 / 2 - 0.05, x + w2 / 2 + 0.05, y - d2, y + d2, -0.62, -0.1, planter_box, 0.03, "planter")
+    for k in range(5):
+        h_ = hedge_src[(i * 5 + k) % len(hedge_src)].copy()
+        coll.objects.link(h_)
+        off = (k - 2) * 0.62
+        h_.location = (x + (off if along else 0), y + (0 if along else off), -0.12)
+        h_.scale = (h_.scale.x * 0.95, h_.scale.y * 0.95, h_.scale.z * 0.7)
 
+# the planet round the colony: a terrain skirt, flat at the apron and rolling away, faded out at the frame's edge
+
+
+def terrain_z(x, y):
+    lift = max(0.0, (max(abs(x), abs(y)) - 23.5) / 14.0)
+    return -0.97 + lift ** 1.4 * 1.6 * P["noise"].noise(Vector((x * 0.045, y * 0.045, 0.3))) + lift ** 1.2 * 0.25 * P["noise"].noise(Vector((x * 0.2, y * 0.2, 1.7)))
+
+
+N_ = 140
+size = 150.0
+tv, tf = [], []
+for j in range(N_ + 1):
+    for i in range(N_ + 1):
+        x, y = -size / 2 + size * i / N_, -size / 2 + size * j / N_
+        tv.append((x, y, terrain_z(x, y)))
+for j in range(N_):
+    for i in range(N_):
+        a0 = j * (N_ + 1) + i
+        tf.append((a0, a0 + 1, a0 + N_ + 2, a0 + N_ + 1))
+terrain = mesh_obj("terrain", tv, tf, terrain_mat, smooth=True)
+rng = random.Random(9)
+placed = 0
+while placed < 16:
+    x, y = rng.uniform(-48, 48), rng.uniform(-48, 48)
+    if max(abs(x), abs(y)) < 26:
+        continue
+    u, v = 0.7071 * (x + y) / 30.0, 0.3536 * (y - x) / 17.0
+    if math.hypot(u, v) > 0.85 or (x > 0 and y < 0 and math.hypot(u, v) < 0.6):
+        continue  # inside the fade, and not standing in front of the buildings
+    t = P["trees"][0].copy()
+    coll.objects.link(t)
+    s_ = rng.uniform(3.5, 6.0) / P["trees"][0].dimensions.z * P["trees"][0].scale.z
+    t.scale = (s_, s_, s_)
+    t.rotation_euler = (0, 0, rng.uniform(0, 6.28))
+    t.location = (x, y, terrain_z(x, y) - 0.08)
+    SKIRT.append(t)
+    placed += 1
+for k in range(60):
+    x, y = rng.uniform(-45, 45), rng.uniform(-45, 45)
+    if max(abs(x), abs(y)) < 24.5 or math.hypot(0.7071 * (x + y) / 30.0, 0.3536 * (y - x) / 17.0) > 0.8:
+        continue
+    r = P["rock"].copy()
+    coll.objects.link(r)
+    sc = rng.uniform(0.3, 1.0) * P["rock"].scale.x
+    r.scale = (sc, sc, sc * 0.6)
+    r.rotation_euler = (rng.uniform(0, 0.5), rng.uniform(1.2, 1.9), rng.uniform(0, 6))
+    r.location = (x, y, terrain_z(x, y) - 0.1)
+    SKIRT.append(r)
+
+# ---------- props for life: an ambulance at the hospital canopy, a rover and crates at the spaceport ----------
+
+
+def wheel(x, y, z, r, w, along_x):
+    bpy.ops.mesh.primitive_cylinder_add(vertices=20, radius=r, depth=w, location=(x, y, z))
+    o = bpy.context.active_object
+    o.rotation_euler = (math.pi / 2, 0, 0) if along_x else (0, math.pi / 2, 0)
+    o.data.materials.append(P["tyre"])
+    o.data.shade_smooth()
+
+
+P["tyre"] = flat("tyre", (0.03, 0.03, 0.03), 0.8)
+amb_white = flat("ambulance_white", (0.88, 0.88, 0.86), 0.35)
+amb_red = accent("ambulance_red", (0.8, 0.05, 0.04), rough=0.35)
+ax_, ay_ = 1.6, -12.0 - 3.95 - 1.1  # beside the hospital canopy
+bx(ax_ - 2.1, ax_ + 1.2, ay_ - 0.9, ay_ + 0.9, ZT + 0.3, ZT + 2.3, amb_white, 0.06, "ambulance_box")
+bx(ax_ + 1.2, ax_ + 2.1, ay_ - 0.85, ay_ + 0.85, ZT + 0.3, ZT + 1.55, amb_white, 0.08, "ambulance_cab")
+bx(ax_ + 1.25, ax_ + 2.05, ay_ - 0.86, ay_ + 0.86, ZT + 1.1, ZT + 1.5, glass, 0.02, "ambulance_windscreen")
+bx(ax_ - 2.12, ax_ + 2.12, ay_ - 0.92, ay_ + 0.92, ZT + 0.95, ZT + 1.2, amb_red, 0.0, "ambulance_stripe")
+bx(ax_ + 0.6, ax_ + 1.15, ay_ - 0.5, ay_ + 0.5, ZT + 2.3, ZT + 2.42, accent("ambulance_lightbar", (0.1, 0.3, 1.0), glow=6.0), 0.01, "lightbar")
+for wx in (ax_ - 1.4, ax_ + 1.5):
+    for wy in (ay_ - 0.85, ay_ + 0.85):
+        wheel(wx, wy, ZT + 0.36, 0.36, 0.25, True)
+rover_body = accent("rover_white", (0.82, 0.83, 0.85), rough=0.4)
+rx_, ry_ = 3.6, 12.0 - 4.4  # south-east corner of the spaceport place, clear of the hall from this camera
+bx(rx_ - 1.6, rx_ + 1.6, ry_ - 0.95, ry_ + 0.95, ZT + 0.75, ZT + 1.5, rover_body, 0.08, "rover_body")
+bx(rx_ + 0.4, rx_ + 1.5, ry_ - 0.8, ry_ + 0.8, ZT + 1.5, ZT + 2.1, glass, 0.08, "rover_cabin")
+bx(rx_ - 1.62, rx_ + 1.62, ry_ - 0.97, ry_ + 0.97, ZT + 1.0, ZT + 1.15, accent("rover_orange", (0.95, 0.38, 0.04)), 0.0, "rover_stripe")
+cyl("rover_mast", rx_ - 1.1, ry_ + 0.5, 0.04, ZT + 1.5, ZT + 2.6, darkmetal, 8)
+cyl("rover_dish", rx_ - 1.1, ry_ + 0.5, 0.3, ZT + 2.6, ZT + 2.66, whitemetal, 20)
+for k, wx in enumerate((rx_ - 1.1, rx_, rx_ + 1.1)):
+    for wy in (ry_ - 1.05, ry_ + 1.05):
+        wheel(wx, wy, ZT + 0.45, 0.45, 0.35, True)
+crate_mats = [flat("crate_grey", (0.42, 0.44, 0.46), 0.5, 0.3), accent("crate_orange", (0.9, 0.42, 0.06)), flat("crate_green", (0.2, 0.32, 0.22), 0.6)]
+crng = random.Random(3)
+for k, (dx, dy, dz) in enumerate([(0, 0, 0), (1.15, 0.1, 0), (0.55, 1.0, 0), (0.1, 0.05, 1.0), (2.3, -0.2, 0), (1.2, 1.05, 0)]):
+    x, y = 4.0 + dx * 0.8, 9.8 + dy
+    sz = crng.uniform(0.85, 1.05)
+    c = bx(x - sz / 2, x + sz / 2, y - sz / 2, y + sz / 2, ZT + dz, ZT + dz + sz * 0.9, crate_mats[k % 3], 0.03, "crate")
+FORECOURT_TREES = []
 # a few of the park's trees on the forecourts, so the hard ring has some green (instances: free in Cycles)
 for (x, y, h, r) in ((-4.3, 4.3, 4.6, 0.4), (-4.4, -16.4, 4.2, 1.7), (16.3, -16.2, 4.4, 2.9), (-16.6, -4.6, 4.0, 0.9), (-7.3, 4.6, 3.6, 2.2)):
     t = P["trees"][0].copy()
@@ -773,11 +986,98 @@ for (x, y, h, r) in ((-4.3, 4.3, 4.6, 0.4), (-4.4, -16.4, 4.2, 1.7), (16.3, -16.
     t.scale = (s_, s_, s_)
     t.rotation_euler = (0, 0, r)
     t.location = (x, y, ZT - 0.02)
+    FORECOURT_TREES.append(t)
     cyl("tree_pit", x, y, 0.75, ZT - 0.01, ZT + 0.04, P["soil"], 32)
 
-cam.data.ortho_scale = 2 * (E + AP) * math.sqrt(2) * 1.04
+cam.data.ortho_scale = 2 * (E + 3.5) * math.sqrt(2) * 1.04
 scene.camera = cam
 
 if WHAT == "colony":
     render_setup((1920, 1080), PCT)
     shoot("colony")
+
+if WHAT == "rt":
+    # ======== the real-time colony: the park's own phone build, plus the ring's buildings merged per building ========
+    colony_view("dusk")  # signs exported lit, like the park's globes; the page dims them by day
+    for o in list(PARK_OBJS) + FORECOURT_TREES:  # forecourt trees: 1.6 M triangles each; the phone keeps only the park's two
+        if o.name in scene.objects:
+            bpy.data.objects.remove(o)
+    for o in list(scene.objects):
+        if o.type in ("LIGHT", "CAMERA") or o.name.startswith("tree_pit"):
+            bpy.data.objects.remove(o)
+    # per-bay random lighting is procedural and does not travel: the glass exports evenly lit at dusk strength,
+    # like the signs and globes; the page scales window_glass's emissive down to 0 by day
+    gnt = glass.node_tree
+    gb = gnt.nodes["Principled BSDF"]
+    for l in list(gb.inputs["Emission Strength"].links):
+        gnt.links.remove(l)
+    gb.inputs["Emission Strength"].default_value = 0.6
+    gl_ = globe.node_tree
+    gl_.nodes["Principled BSDF"].inputs["Emission Strength"].default_value = 6.0
+    gl_.links.new(gl_.nodes["Principled BSDF"].outputs[0], gl_.nodes["Material Output"].inputs["Surface"])
+    pm = bpy.data.materials["pitch"]
+    pb = pm.node_tree.nodes["Principled BSDF"]
+    for l in list(pb.inputs["Base Color"].links):
+        pm.node_tree.links.remove(l)
+    pb.inputs["Base Color"].default_value = (0.13, 0.3, 0.08, 1)
+    for o in scene.objects:
+        if o.type == "MESH" and o not in GROUP:
+            GROUP[o] = "lamp_globes" if o.name.startswith("lamp_globe") else "plaza"
+        elif o.type == "MESH" and o.name.startswith("lamp_globe"):
+            GROUP[o] = "lamp_globes"
+    deps = bpy.context.evaluated_depsgraph_get()
+    flat_ = {}
+    cutters = [o for o in scene.objects if o.type == "MESH" and o.hide_render]  # boolean cutters: evaluated with, never exported
+    for o in list(scene.objects):
+        if o.type != "MESH" or o in cutters:
+            continue
+        g = GROUP.get(o, "plaza")
+        me_ = bpy.data.meshes.new_from_object(o.evaluated_get(deps), preserve_all_data_layers=True, depsgraph=deps)
+        me_.transform(o.matrix_world)
+        while len(me_.uv_layers) > 1:
+            me_.uv_layers.remove(me_.uv_layers[-1])
+        if me_.uv_layers:
+            me_.uv_layers[0].name = "UVMap"
+        for c in list(me_.color_attributes):
+            me_.color_attributes.remove(c)
+        n = bpy.data.objects.new(g, me_)
+        coll.objects.link(n)
+        flat_.setdefault(g, []).append(n)
+        bpy.data.objects.remove(o)
+    for o in cutters:
+        bpy.data.objects.remove(o)
+    for g, objs in flat_.items():
+        for o in scene.objects:
+            o.select_set(False)
+        for o in objs:
+            o.select_set(True)
+        bpy.context.view_layer.objects.active = objs[0]
+        if len(objs) > 1:
+            bpy.ops.object.join()
+        bpy.context.view_layer.objects.active.name = g
+    # the park: its phone build, moved to its place
+    before = set(scene.objects)
+    bpy.ops.import_scene.gltf(filepath=os.path.join(OUT, "park_rt.glb"))
+    for o in set(scene.objects) - before:
+        if o.parent is None:
+            o.location.x += SL
+        o.name = "park_" + o.name
+    for im in bpy.data.images:
+        if im.size[0] and max(im.size) > 512 and im.type == "IMAGE":
+            im.scale(512, 512)
+    for mname in ("facade_concrete", "metal_cladding", "roof_plant", "forecourt_pavers", "plaza_pavers", "launch_pad"):
+        m = bpy.data.materials.get(mname)
+        if m:
+            b = m.node_tree.nodes["Principled BSDF"]
+            for k in ("Roughness", "Metallic"):
+                for l in list(b.inputs[k].links):
+                    m.node_tree.links.remove(l)
+            b.inputs["Roughness"].default_value = 0.75
+            b.inputs["Metallic"].default_value = 0.0
+    meshes = [o for o in scene.objects if o.type == "MESH"]
+    dc = sum(len(o.data.materials) or 1 for o in meshes)
+    print(f"SPIKE colony rt tris drawn: {P['tris'](meshes)}; draw calls ~{dc}; " + "; ".join(f"{o.name} {P['tris']([o])}" for o in sorted(meshes, key=lambda o: o.name)), flush=True)
+    glb = os.path.join(OUT, "colony_rt.glb")
+    bpy.ops.export_scene.gltf(filepath=glb, export_format="GLB", export_apply=True, export_image_format="AUTO", export_jpeg_quality=80,
+                              export_cameras=False, export_lights=False)
+    print(f"SPIKE exported {glb}: {os.path.getsize(glb) / 1e6:.2f} MB", flush=True)
