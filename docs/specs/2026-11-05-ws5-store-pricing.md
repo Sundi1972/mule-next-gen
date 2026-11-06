@@ -610,7 +610,9 @@ did       PR-4 (ws5-pr4-t41) built C3 and RULE-3 with these differences (paths u
     walk drew the same seed-0 swings in every game. The what-if price is kept unrounded, so months in a row compose
     to the k-month path (160 → 109 in three; a rounded-down step each month gives 108); expectedOffWorld reads it
     rounded down, as §3's example (160 → 134 → 109). The real walk rounds to the nearest credit (unbiased), so with
-    no swing the real step can be 1 credit above the read (135 against 134).
+    no swing the real step can be 1 credit above the read (135 against 134). packages/ai/src/outlook.ts opens the
+    next month itself at the auction (sim.month++); it calls stepOffWorld there too (ruling 2 on #604, a named edit in
+    WS1's file), so that forecast reads the same path.
  3  seedOf moved from events.ts to rng.ts beside createRng and is exported; events.ts imports it, unchanged.
  4  Crystite opens the game at the walk's centre, 90 (was 100): economy.ts::openingOffWorld, called from
     game.ts::createGame (a named edit in WS3's file). Why: RULE-3, "the first month starts at the centre". The other
