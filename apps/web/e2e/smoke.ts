@@ -10,7 +10,7 @@ import { PHASE_MS } from '../../server/src/mule-game.js';
 import type { MuleServer } from '../../server/src/server.js';
 import { check, CLAIM_MS, claimAPlot, doneWithLand, held, launch, PHONE, startServer, TV, type AuctionSteps, type GameStepContext } from './harness';
 import { planningIsTheHub } from './hub-steps';
-import { theAuctionTvFits, theMonthEndTvFits, theTvBodyFits, theTvHeaderFits, theTvHeaderStaysOnScreen, theTvTitleIsClear } from './tv-fit-steps';
+import { theAuctionTvFits, theMonthEndTvFits, theTvBodyFits, theTvHeaderFits, theTvHeaderStaysOnScreen, theTvScalesHeld, theTvTitleIsClear, watchTvScales } from './tv-fit-steps';
 import { gameOverIsInCredits, theLeagueTableAtTheMonthEnd, theMonthEndHoldsForThePhone } from './month-end-steps';
 import { ELECTION_WAIT_MS, readyThroughTheElection } from './politics-steps';
 import { checkTheShow, watchShow, type ShowWatch } from './production-steps';
@@ -86,6 +86,7 @@ try {
   const tv = await (await browser.newContext(TV)).newPage();
   tv.on('pageerror', (e) => errors.push(`tv: ${e.message}`));
   const tvShow = await watchShow(tv);
+  await watchTvScales(tv);
   await tv.goto(`${base}/table?room=${code}`);
   await tv.getByTestId('room-code').waitFor();
   let ctx: GameStepContext = { phone, tv, check, server, code, held: (step) => held(server, code, step) };
@@ -219,6 +220,7 @@ try {
   await checkTheScoresAddUp(phone, tv);
   console.log(`game over: ${await gameOverIsInCredits(phone, tv)}`);
   console.log(`turned upright and back: ${await turnUprightAndBack(phone)}`);
+  console.log(`TV-FIT floor, every screen at three seats: ${await theTvScalesHeld(tv, 'three seats')}`);
 
   const phases = seen.map((s) => s.phase);
   check(isSubsequence(EXPECTED_PHASES, phases), `phone showed every phase of months 1 and 2 in order: ${phases.join(' > ')}`);

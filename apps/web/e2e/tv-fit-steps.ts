@@ -105,20 +105,100 @@ export async function fitSettled(tv: Page): Promise<void> {
   }
 }
 
+/**
+ * The smallest a TV screen's body may be drawn: under it the couch can't read it (PM ruling 6 Nov, rulebook #tv-fit). It
+ * holds at six seats, the fullest table; the fit box is how a screen keeps it, this is what it promises.
+ */
+export const TV_SCALE_FLOOR = 0.7;
+
+/**
+ * Kept a string, as PAST_THE_FOOT: each fit box the shown TV screen draws, its scale, the height it has and, tallest
+ * first, the named boxes inside it at full size: what makes it scale.
+ */
+const FIT_SCALES = String.raw`[...document.querySelectorAll('[data-phase] [data-fit]')].filter((b) => b.checkVisibility()).map((b) => ({
+  scale: Number(b.getAttribute('data-fit')),
+  room: b.clientHeight,
+  tallest: [...b.querySelectorAll('[data-testid]')].filter((e) => e.checkVisibility()).sort((x, y) => y.offsetHeight - x.offsetHeight).slice(0, 4).map((e) => e.getAttribute('data-testid') + ' ' + e.offsetHeight + ' px'),
+}))`;
+
+/** TV-FIT floor: every fit box on the shown TV screen draws its body at TV_SCALE_FLOOR or more. Returns the scales. */
+export async function theTvScaleHolds(tv: Page, screen: string): Promise<string> {
+  await fitSettled(tv);
+  const boxes = (await tv.evaluate(FIT_SCALES)) as { scale: number; room: number; tallest: string[] }[];
+  check(boxes.length > 0, `TV-FIT: the ${screen} TV's body sits in a fit box`);
+  for (const b of boxes)
+    check(b.scale >= TV_SCALE_FLOOR, `TV-FIT: the ${screen} TV's body is drawn at scale ${b.scale.toFixed(3)}, under the floor ${TV_SCALE_FLOOR} (PM ruling 6 Nov); it has ${b.room} px, its tallest parts at full size ${b.tallest.join(', ')}`);
+  return boxes.map((b) => b.scale.toFixed(3)).join(', ');
+}
+
+/**
+ * Kept a string, run in the TV's page from its first frame: every 100 ms, each fit box shown and its scale. A scale
+ * that has stood SETTLED_MS is one the table saw; per screen (its phase, and its test id when it has one) the lowest
+ * such scale is kept, for theTvScalesHeld. A scale held only while the box settles is not counted.
+ */
+const SCALE_WATCH = String.raw`{
+  const SETTLED_MS = 400;
+  const lows = {};
+  const shown = new Map();
+  const keep = (s, now) => {
+    if (now - s.since < SETTLED_MS) return;
+    if (!(s.screen in lows) || s.scale < lows[s.screen]) lows[s.screen] = s.scale;
+  };
+  setInterval(() => {
+    const now = performance.now();
+    const live = new Set();
+    for (const b of document.querySelectorAll('[data-phase] [data-fit]')) {
+      if (!b.checkVisibility()) continue;
+      live.add(b);
+      const scale = Number(b.getAttribute('data-fit'));
+      const stage = b.closest('[data-phase]');
+      const screen = stage.getAttribute('data-phase') + (stage.getAttribute('data-testid') ? ' (' + stage.getAttribute('data-testid') + ')' : '');
+      const s = shown.get(b);
+      if (s && s.scale === scale) continue;
+      if (s) keep(s, now);
+      shown.set(b, { scale, screen, since: now });
+    }
+    for (const [b, s] of shown) if (!live.has(b)) { keep(s, now); shown.delete(b); }
+  }, 100);
+  window.__tvScaleLows = () => {
+    const now = performance.now();
+    for (const s of shown.values()) keep(s, now);
+    return lows;
+  };
+}`;
+
+/** Starts watching the TV's fit boxes, for theTvScalesHeld; call before the TV's page loads. */
+export async function watchTvScales(tv: Page): Promise<void> {
+  await tv.addInitScript(SCALE_WATCH);
+}
+
+/**
+ * TV-FIT floor over a whole run (PM ruling 6 Nov): every screen the watched TV showed drew its body at TV_SCALE_FLOOR
+ * or more, once settled. Returns each screen's lowest scale.
+ */
+export async function theTvScalesHeld(tv: Page, table: string): Promise<string> {
+  const lows = (await tv.evaluate('window.__tvScaleLows ? window.__tvScaleLows() : null')) as Record<string, number> | null;
+  check(lows !== null, `TV-FIT: the ${table} TV's fit boxes were watched (watchTvScales before it loaded)`);
+  const read = Object.entries(lows).map(([screen, scale]) => `${screen} ${scale.toFixed(3)}`).join(', ');
+  check(Object.keys(lows).length > 0, `TV-FIT: the ${table} TV showed a fit box`);
+  const under = Object.entries(lows).filter(([, scale]) => scale < TV_SCALE_FLOOR);
+  check(under.length === 0, `TV-FIT: at ${table} the TV drew ${under.map(([screen, scale]) => `${screen} at scale ${scale.toFixed(3)}`).join(', ')}, under the floor ${TV_SCALE_FLOOR} (PM ruling 6 Nov); every screen's lowest: ${read}`);
+  return read;
+}
+
 /** How many chat lines the shown TV screen's strip has. */
 const stripLines = (tv: Page) => tv.locator('[data-phase] [data-testid=chat-ticker] [data-testid^=chat-line-]').count();
 
 /**
- * TV-FIT body (PM ruling 6 Nov): under three chat lines said, a screen in play shows the newest only, and its body fits
- * the height the header leaves: nothing runs past the foot.
+ * TV-FIT body (PM rulings 6 Nov): under three chat lines said, a screen in play shows the newest only, and its body fits
+ * the height the header leaves, at TV_SCALE_FLOOR or more: nothing runs past the foot.
  */
 export async function theTvBodyFits(tv: Page, server: MuleServer, code: string, screen: string): Promise<string> {
   await theTableHasSaid(tv, server, code);
   const lines = await stripLines(tv);
   check(lines === 1, `TV-FIT: in play the ${screen} TV's chat strip shows the newest line only, got ${lines}`);
-  const scale = await tv.evaluate(() => document.querySelector('[data-phase] [data-fit]')?.getAttribute('data-fit') ?? null);
-  check(scale !== null, `TV-FIT: the ${screen} TV's body sits in a fit box`);
-  return `one chat line of 3, the body at scale ${scale}, the foot at y ${(await nothingPastTheFoot(tv, screen)).toFixed(0)}`;
+  const scale = await theTvScaleHolds(tv, screen);
+  return `one chat line of 3, the body at scale ${scale} (floor ${TV_SCALE_FLOOR}), the foot at y ${(await nothingPastTheFoot(tv, screen)).toFixed(0)}`;
 }
 
 /** Kept a string, as PAST_THE_FOOT: in the shown TV header, what of the header's right side the title runs over. */
@@ -212,16 +292,16 @@ export async function theTvHeaderFits(tv: Page, screen: string): Promise<string>
 }
 
 /**
- * TV-FIT month end (PM ruling C, 5 Nov; chat lines, 6 Nov): with three chat lines said, the ticker shows all three, and
- * under them the header fits as theTvHeaderFits reads it; the colony's gauges sit in the screen's body, beside the
- * league, not in a row of their own under the header, so the league and the colony's score keep the height. Logs the
- * body's scale.
+ * TV-FIT month end (PM ruling C, 5 Nov; chat line and floor, 6 Nov): with three chat lines said, the ticker shows the
+ * newest only, and under it the header fits as theTvHeaderFits reads it; the colony's gauges sit in the screen's body,
+ * beside the league, not in a row of their own under the header, so the league and the colony's score keep the height;
+ * the body is drawn at TV_SCALE_FLOOR or more.
  */
 export async function theMonthEndTvFits(tv: Page, server: MuleServer, code: string): Promise<string> {
   const end = tv.getByTestId('tv-monthend');
-  const said = await theTableHasSaid(tv, server, code);
+  await theTableHasSaid(tv, server, code);
   const lines = await stripLines(tv);
-  check(lines === said.length, `TV-FIT: the month end's ticker shows ${said.length} chat lines, got ${lines}`);
+  check(lines === 1, `TV-FIT: the month end's ticker shows the newest chat line only, got ${lines}`);
   const header = await theTvHeaderFits(tv, 'month end');
   const gauges = await end.getByTestId('colony-gauges').count();
   if (gauges > 0) {
@@ -231,8 +311,8 @@ export async function theMonthEndTvFits(tv: Page, server: MuleServer, code: stri
   // The worth rule is one truncated line; the table reads it whole, donations and all, or the cut falls on the rule itself.
   const rule = await end.getByTestId('worth-rule').evaluate((p) => ({ text: (p as HTMLElement).innerText, cut: p.scrollWidth > p.clientWidth }));
   check(!rule.cut, `TV-FIT: the month end's worth rule fits its one line, got it cut: "${rule.text}"`);
-  const scale = Number(await end.locator('[data-fit]').getAttribute('data-fit'));
-  return `${header}; the worth rule whole on one line; ${lines} chat lines, the gauges ${gauges > 0 ? 'beside the league' : 'not drawn (no colony)'}, the body at scale ${scale.toFixed(3)} with ${await end.locator('[data-testid^=league-row-]').count()} league rows`;
+  const scale = Number(await theTvScaleHolds(tv, 'month end'));
+  return `${header}; the worth rule whole on one line; ${lines} chat line, the gauges ${gauges > 0 ? 'beside the league' : 'not drawn (no colony)'}, the body at scale ${scale.toFixed(3)} with ${await end.locator('[data-testid^=league-row-]').count()} league rows`;
 }
 
 /**

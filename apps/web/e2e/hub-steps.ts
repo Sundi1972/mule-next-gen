@@ -13,6 +13,7 @@ import type { MuleServer } from '../../server/src/server.js';
 import { check, held as holding, PHONE, TV } from './harness';
 import { ELECTION_WAIT_MS } from './politics-steps';
 import { LAPTOP, railFits } from './shell-steps';
+import { theTvScaleHolds } from './tv-fit-steps';
 
 /** The human sits in seat 1. */
 const SEAT = 's1';
@@ -378,7 +379,9 @@ export async function sixSeatsOnTheTv({ browser, base, server }: { browser: Brow
         return { top, bottom, height: r.height };
       });
       check(shown.height > 0 && shown.top && shown.bottom, `B-AC-19 (six seats${when}): the election result shows whole in the TV's news, got ${JSON.stringify(shown)}`);
-      return `the ready list ends at ${list.toFixed(0)} of ${canvas.toFixed(0)} px`;
+      // TV-FIT's floor holds at the fullest table (PM ruling 6 Nov).
+      const scale = await theTvScaleHolds(tv, `six-seat planning${when}`);
+      return `the ready list ends at ${list.toFixed(0)} of ${canvas.toFixed(0)} px, the body at scale ${scale}`;
     };
     const quiet = await fits('');
     const room = server.registry.get(code) as unknown as { seats: { id: string }[]; chat: (from: string, text: string) => void };

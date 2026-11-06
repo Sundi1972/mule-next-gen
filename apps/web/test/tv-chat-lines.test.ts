@@ -10,8 +10,8 @@ import { TvAuction, TvGameOver, TvHeader, TvMonthEnd } from '../src/table/TableA
 import { aMuleView, aPlayer } from './fixtures/views';
 
 /**
- * TV-CHAT (WS4, PM ruling 6 Nov, rulebook #tv-fit): the TV's chat strip shows the newest line only in every phase of
- * play, where the screens need the height, and three lines at the month end and the game's end.
+ * TV-CHAT (WS4, PM rulings 6 Nov, rulebook #tv-fit): the TV's chat strip shows the newest line only, in every phase of
+ * play, where the screens need the height, at the month end too (its league at six seats needs it) and at the game's end.
  */
 
 const CHAT: ChatMessage[] = [
@@ -82,7 +82,7 @@ function auctionAt(stage: 'status' | 'walk'): MuleView {
 
 const TABLE = { seats: [], hostId: 's1' } as unknown as TableView<MuleView>;
 
-describe('TV-CHAT (WS4, PM ruling 6 Nov): the chat strip is one line in play, three at the month end and the end', () => {
+describe('TV-CHAT (WS4, PM rulings 6 Nov): the chat strip is one line in play, at the month end and at the end', () => {
   it.each(['planning', 'landGrant', 'landAuction', 'development', 'production', 'auction'] as const)('in %s the TV header shows the newest chat line only', (phase) => {
     const html = onTv(createElement(TvHeader, { game: game({ phase }), title: phase }));
     expect(chatLines(html)).toBe(1);
@@ -96,11 +96,15 @@ describe('TV-CHAT (WS4, PM ruling 6 Nov): the chat strip is one line in play, th
     }
   });
 
-  it('the month end shows three lines', () => {
-    expect(chatLines(onTv(createElement(TvMonthEnd, { game: game({ phase: 'upkeep' }) })))).toBe(3);
+  it('the month end shows the newest line only (PM ruling 6 Nov: one line, so a six-seat league stays at 0.7 or more)', () => {
+    const html = onTv(createElement(TvMonthEnd, { game: game({ phase: 'upkeep' }) }));
+    expect(chatLines(html)).toBe(1);
+    expect(html).toContain('data-testid="chat-line-3"');
   });
 
-  it("the game's end shows three lines", () => {
-    expect(chatLines(onTv(createElement(TvGameOver, { game: game({ phase: 'upkeep', finished: true }) })))).toBe(3);
+  it("the game's end shows the newest line only", () => {
+    const html = onTv(createElement(TvGameOver, { game: game({ phase: 'upkeep', finished: true }) }));
+    expect(chatLines(html)).toBe(1);
+    expect(html).toContain('data-testid="chat-line-3"');
   });
 });

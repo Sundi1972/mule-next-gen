@@ -197,11 +197,12 @@ export function TvHeader({
 }
 
 /**
- * How many chat lines the TV's strip shows: the newest only in play, where every screen needs the height; three at the
- * month end and the game's end, where the table talks (PM ruling 6 Nov, rulebook #tv-fit).
+ * How many chat lines the TV's strip shows: the newest only, on every game screen. In play every screen needs the
+ * height; at the month end a six-seat league with three lines fell under 0.7 of its size, and the game over's final table
+ * is the same league (PM rulings 6 Nov, rulebook #tv-fit). Only the lobby would keep three, and it has no strip.
  */
-export function tvChatLines(game: Pick<MuleView, 'phase' | 'finished'>): number {
-  return game.finished || game.phase === 'upkeep' ? 3 : 1;
+export function tvChatLines(_game: Pick<MuleView, 'phase' | 'finished'>): number {
+  return 1;
 }
 
 function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView }) {
