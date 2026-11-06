@@ -299,7 +299,14 @@ export class AiSeat {
     const land = this.landMonth === month ? this.land : null;
     // A trigger due now drafts the plan again, as the draft point will (RULE-8).
     const trigger = this.replanDue(state);
-    return { state, seat: this.id, mind: this.mind, seed: this.options.seed, phase, land, month, kept: trigger ? null : this.kept, replanned: trigger ?? this.kept?.trigger ?? null };
+    return { state, seat: this.id, mind: this.mindFor(month), seed: this.options.seed, phase, land, month, kept: trigger ? null : this.kept, replanned: trigger ?? this.kept?.trigger ?? null };
+  }
+
+  /** The mind a draft for `month` reads: the adopted fields only while they are that month's, so the upkeep's draft of the next month reads none. */
+  private mindFor(month: number): Mind {
+    if (this.mind.adopted === undefined || this.mind.adopted.month === month) return this.mind;
+    const { adopted: _, ...mind } = this.mind;
+    return mind;
   }
 
   /** Whether the seat plays playbooks at all (RULE-6 row 1 does not match): only then does it keep a plan. */
@@ -410,7 +417,7 @@ export class AiSeat {
   }
 
   private profileFor(month: number): ValidatorProfile {
-    return { mind: this.mind, seed: this.options.seed, land: this.landMonth === month ? this.land : null };
+    return { mind: this.mindFor(month), seed: this.options.seed, land: this.landMonth === month ? this.land : null };
   }
 
   /**
