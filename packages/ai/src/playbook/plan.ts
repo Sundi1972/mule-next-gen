@@ -24,7 +24,7 @@ export type DraftPoint = Exclude<PlanPoint, 'adopt'>;
 export interface PlanAnchor {
   month: number;
   point: PlanPoint;
-  /** The draft point the posted prices were read at: a price is compared only at the same one (AM-29). */
+  /** The draft point the posted prices were read at: a price is compared only at the same one (AM-31). */
   pricedAt: DraftPoint;
   /** The posted price of the money-maker and of the monopoly target. */
   posted: Partial<Record<Good, number>>;
@@ -33,7 +33,7 @@ export interface PlanAnchor {
   keyPlots: number[];
   /** The month of the newest production report (0 with none): an event in a later month's is "since the anchor". */
   reportedMonth: number;
-  /** The office holders; both null before the first election, until a draft point after it reads them (AM-29). */
+  /** The office holders; both null before the first election, until a draft point after it reads them (AM-31). */
   governor: PlayerId | null;
   sheriff: PlayerId | null;
 }
@@ -82,7 +82,7 @@ export function anchorOf(state: GameState, seat: PlayerId, plan: PlanFields, poi
   };
 }
 
-/** The anchor with the offices filled in, once an election has filled one: an anchor from before any keeps none. See AM-29. */
+/** The anchor with the offices filled in, once an election has filled one: an anchor from before any keeps none. See AM-31. */
 export function withOffices(anchor: PlanAnchor, state: GameState): PlanAnchor {
   const p = state.politics;
   if (anchor.governor !== null || anchor.sheriff !== null || !p || (p.governor === null && p.sheriff === null)) return anchor;
