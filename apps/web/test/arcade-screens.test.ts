@@ -177,6 +177,20 @@ describe('C11: the phone, held sideways', () => {
     if (poor) for (const dear of ['smithore', 'crystite', 'rareEarth', 'alloy', 'electronics', 'medicine']) expect(tag(html, `guide-room-${dear}`)).toBeNull();
   });
 
+  it('B-AC-SWAP-5 (AM-35): leading a MULE she swapped off a plot, Lena\'s walking screen warns it goes back to the corral at turn end; a MULE she bought never does', () => {
+    const words = 'Turn ends: this MULE goes back to the corral';
+    const swapped = lenasMe({ carriedMule: 'food', leadsSwapped: true });
+    const onMap = guide(swapped, 'map');
+    expect(text(onMap, 'guide-note')).toBe(words);
+    expect(text(onMap, 'guide-label'), 'the ring still shows her best free plot for it').toBe('YOUR PLOT 4·1');
+    expect(text(guide(swapped, 'hall'), 'guide-note'), 'in the store').toBe(words);
+    expect(text(laptop(devView(swapped), live(mine(5.5, 4.5))), 'guide-note'), 'on the laptop').toBe(words);
+    const noFreePlot = devView(swapped, { tiles: TILES.map((t) => (t.owner === 's1' && t.outfit === null ? { ...t, owner: null } : t)) });
+    expect(text(phone(noFreePlot, live(mine(5.5, 4.5))), 'guide-note'), 'no free plot of hers left: the pub, and still the warning').toBe(words);
+    expect(tag(guide(lenasMe({ carriedMule: 'food' }), 'map'), 'guide-note'), 'a MULE she bought').toBeNull();
+    expect(tag(guide(lenasMe({ carriedMule: 'food' }), 'hall'), 'guide-note'), 'a MULE she bought, in the store').toBeNull();
+  });
+
   /** What the engine's pub pays Lena with `seconds` left, in month 2's development as the fixture has it. */
   function enginePay(seconds: number): number {
     const state = createGame({ seed: 1, players: [{ id: 's1', name: 'Lena', isAi: false, species: 'zipwing' }, { id: 's2', name: 'Ossa', isAi: false, species: 'gearling' }] });
