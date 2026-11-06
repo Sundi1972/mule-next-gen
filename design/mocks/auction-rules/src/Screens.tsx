@@ -75,7 +75,7 @@ function GoodRow({ good, have, need }: { good: Good; have: number; need: number 
           </strong>
         </span>
         <span className="flex flex-col">
-          NEED<strong data-num className="text-sm text-ink">{need}</strong>
+          HOLD<strong data-num className="text-sm text-ink">{need}</strong>
         </span>
         <span className="flex flex-col">
           {spare < 0 ? 'SHORT' : 'SPARE'}
@@ -272,17 +272,17 @@ function saleWords(s: Sale, variant: Variant): { line: string; how?: string | nu
         ? { line: 'At the store’s line: 27 cr each.', how: 'Selling starts in a moment.', tone: 'lit' }
         : { line: 'Selling into a shortage.', how: 'Back at the line: it starts slow again.', tone: 'warn' };
     case 'selling':
-      return { line: `Selling to the store: ${s.sold} for ${cr(s.sold)}.`, how: `Tap ▲ to stop. It stops by itself at ${LENA.need}, what you need next month.`, tone: 'lit' };
+      return { line: `Selling to the store: ${s.sold} for ${cr(s.sold)}.`, how: `Tap ▲ to stop. It stops by itself at ${LENA.need}, what you must hold.`, tone: 'lit' };
     case 'held':
       return {
-        line: `Stopped at ${LENA.need} Food: what you need next month.`,
+        line: `Stopped at ${LENA.need} Food: what you must hold.`,
         how: variant === 'A' ? 'Sold 7 for 189 cr. To sell more, hold ▼: you’d be short next month.' : `Sold 7 for ${cr(7)}.`,
         tone: 'ok',
       };
     case 'returning':
       return { line: 'Selling into a shortage.', how: 'Walking back down to the line.', tone: 'warn' };
     case 'short':
-      return { line: `Selling past your need: short ${s.short} next month.`, how: 'Tap ▲ to stop.', tone: 'warn' };
+      return { line: `Selling past what you must hold: short ${s.short} next month.`, how: 'Tap ▲ to stop.', tone: 'warn' };
     case 'stopped':
       return { line: `Stopped. Short ${s.short} next month.`, how: `Sold ${s.sold} for ${cr(s.sold)}.`, tone: 'warn' };
     case 'out':
@@ -414,7 +414,7 @@ export function PhoneSoldOut({ so }: { so: ReturnType<typeof useSoldOut> }) {
         ? { line: 'Brix meets your bid at 43.', how: 'Buying starts in a moment.', tone: 'lit' as const }
         : so.phase === 'trading'
           ? { line: `Buying from Brix at 43: ${so.bought} so far.`, how: 'Tap ▼ to stop.', tone: 'lit' as const }
-          : { line: `Bought ${so.bought} from Brix for ${so.bought * 43} cr.`, how: 'You have what you need.', tone: 'ok' as const };
+          : { line: `Bought ${so.bought} from Brix for ${so.bought * 43} cr.`, how: 'You hold just enough.', tone: 'ok' as const };
   return (
     <PhoneFrame
       main={
@@ -533,7 +533,7 @@ export function TvSale({ live }: { live: LiveSale }) {
                 {held ? 'Lena keeps 5 Food' : short ? 'Lena sells short' : 'Lena sells to the store'}
               </span>
               <span data-num className={cx('font-mono text-xl', short ? 'text-warn' : 'text-ink-2')}>
-                {held ? 'what she needs next month' : short ? `×${sale.short} past her need · short ${sale.short}` : `×${sale.sold} at ${FOOD.storeBuys} cr`}
+                {held ? 'what she must hold' : short ? `×${sale.short} past what she must hold · short ${sale.short}` : `×${sale.sold} at ${FOOD.storeBuys} cr`}
               </span>
               <Chevrons speed={sale.speed} on={sale.trading} />
             </div>
