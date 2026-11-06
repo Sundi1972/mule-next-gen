@@ -4,6 +4,8 @@ import {
   monthNeeds,
   GOODS,
   GOOD_CONFIG,
+  UPKEEP,
+  statusRows,
   auctionNeed,
   advancePhase,
   auctionDone,
@@ -371,14 +373,61 @@ describe('the need to hold at the auction: what upkeep eats now, plus what must 
     expect(a(state).skipped).toEqual([{ good: 'energy', reason: 'nobody buys' }]);
   });
 
-  it("Food: what upkeep eats now plus what must be left after spoilage for next month's development; never below the old need", () => {
+  it("FM-skip-spoilage: Food is what upkeep eats now plus what survives to next month's development: a seat with no crew eats 2 and must hold 6", () => {
     const state = energyTable(0, 0);
-    const eat = needsOf(state, 'p0').food;
-    const held = auctionNeed(state, 'p0');
-    // Upkeep eats first, then the rest spoils: the carry is the least n with floor(n x (1 - spoilage)) >= eat.
-    const carry = Array.from({ length: 100 }, (_, n) => n).find((n) => Math.floor(n * (1 - GOOD_CONFIG.food.spoilage)) >= eat)!;
-    expect(held.food).toBe(eat + carry);
-    for (const g of GOODS) expect(held[g], g).toBeGreaterThanOrEqual(monthNeeds(state, 'p0')[g]);
+    expect(needsOf(state, 'p0').food, 'the household alone').toBe(2);
+    // 2 eaten at the month end; 4 halve to the 2 next month's development checks for.
+    expect(auctionNeed(state, 'p0').food).toBe(6);
+  });
+
+  /** p0 works the given outfits; every seat holds `water` Water (or its own drink, if less), and the store wants no Water. */
+  function outfitTable(outfits: string[], water: (eat: number) => number): GameState {
+    const state = newGame();
+    const free = state.tiles.filter((t) => t.terrain !== 'store' && !t.owner);
+    outfits.forEach((outfit, i) => Object.assign(free[i]!, { owner: 'p0', outfit }));
+    for (const p of state.players) p.stock.water = water(needsOf(state, p.id).water);
+    state.store.stock.water = 999;
+    return state;
+  }
+
+  it("FM-skip-spoilage: a Medicine factory's Water is carried too: its seat, with no farm, holding only what it drinks, keeps Water from being skipped and its row asks for 2 more", () => {
+    const state = outfitTable(['medicine'], (eat) => eat);
+    const eat = needsOf(state, 'p0').water;
+    startAuction(state, ['water', 'food']);
+    expect(a(state).skipped, 'Water comes up: the factory would run dry').toEqual([]);
+    // The factory uses 1 at production; 1 x 0.95 floors to 0, so 2 must be held past the month end.
+    expect(a(state).status.find((r) => r.id === 'p0')!.need).toBe(eat + 2);
+  });
+
+  it('FM-skip-spoilage: Water is carried for a Food farm, and not for a seat with neither a farm nor a factory', () => {
+    const farm = outfitTable(['food'], (eat) => eat);
+    expect(auctionNeed(farm, 'p0').water, 'the farm is watered next month').toBeGreaterThan(needsOf(farm, 'p0').water);
+    expect(auctionNeed(farm, 'p1').water, 'p1 has no plot: only what upkeep drinks now').toBe(needsOf(farm, 'p1').water);
+  });
+
+  it('FM-skip-spoilage: never below the old need (monthNeeds), with or without a farm, for seats running Medicine and Alloy factories', () => {
+    for (const outfits of [['medicine', 'alloy'], ['medicine', 'alloy', 'food']]) {
+      const state = outfitTable(outfits, (eat) => eat);
+      const held = auctionNeed(state, 'p0');
+      for (const g of GOODS) expect(held[g], `${g} with ${outfits.join(', ')}`).toBeGreaterThanOrEqual(Math.min(monthNeeds(state, 'p0')[g], UPKEEP.depotCapacity));
+    }
+  });
+
+  it("FM-skip-spoilage: the row's spoils count the depot cap: 30 Water, after upkeep drinks, keeps at most the depot's 10", () => {
+    const state = outfitTable([], () => 30);
+    const rest = 30 - needsOf(state, 'p0').water;
+    expect(statusRows(state, 'water').find((r) => r.id === 'p0')!.spoils).toBe(rest - UPKEEP.depotCapacity);
+  });
+
+  it('FM-skip-spoilage: a good that spoils entirely (a --set sweep to spoilage 1) carries nothing and still returns', () => {
+    const was = GOOD_CONFIG.water.spoilage;
+    GOOD_CONFIG.water.spoilage = 1;
+    try {
+      const state = outfitTable(['food'], (eat) => eat);
+      expect(auctionNeed(state, 'p0').water).toBe(needsOf(state, 'p0').water);
+    } finally {
+      GOOD_CONFIG.water.spoilage = was;
+    }
   });
 });
 
