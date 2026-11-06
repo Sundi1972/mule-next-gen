@@ -102,7 +102,9 @@ export function ColonyGrounds({ colony, size, manifest, light = 'day', className
     const picked = pick(kind, place, light, manifest);
     if (picked.shows === 'shape' || !manifest) return fallback;
     const frame = manifest.pictures[kind]?.frame ?? manifest.frame;
-    return <Picture c={c} r={r} href={hrefOf(picked.src, manifest, size)} frame={frame} testid={testid} fallback={fallback} />;
+    const href = hrefOf(picked.src, manifest, size);
+    // Keyed by its picture, so a load that failed for one stage never keeps the next stage's picture on the fallback.
+    return <Picture key={href} c={c} r={r} href={href} frame={frame} testid={testid} fallback={fallback} />;
   };
 
   return (
