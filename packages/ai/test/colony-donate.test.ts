@@ -149,6 +149,8 @@ describe('donationFor and the standing it reads', () => {
       ['aggressive', 1_000, 'trailing', 25],
       ['aggressive', 333, 'trailing', null], // 333 × 0.05 × 0.5 = 8.3, under the 10 cr least gift
       ['trader', 101, 'leading', 20], // 101 × 0.1 × 2 = 20.2, floored
+      ['trader', 200, 'trailing', 10], // 200 × 0.1 × 0.5 = 10, exactly the least gift: made
+      ['cautious', 333, 'leading', 99], // 333 × 0.15 × 2 = 99.9, floored, not rounded
       ['saboteur', 1_000, 'leading', null],
     ];
     for (const [persona, spare, at, want] of cases) {
@@ -161,15 +163,18 @@ describe('donationFor and the standing it reads', () => {
   });
 
   it("T-AC-C28 (pure): a seat leads when no rival's Worth is above its own, a tie included; else it trails", () => {
-    const cases: [Record<string, number>, 'leading' | 'trailing'][] = [
-      [{ ai0: 900, ai1: 500, ai2: 500, ai3: 500 }, 'leading'],
-      [{ ai0: 500, ai1: 500, ai2: 500, ai3: 500 }, 'leading'],
-      [{ ai0: 500, ai1: 500, ai2: 501, ai3: 500 }, 'trailing'],
+    // Goods count for no seat, as rivals' are hidden: in the last row ai0's Crystite does not lift it past ai2's 1 cr.
+    const cases: [Record<string, number>, 'leading' | 'trailing', number][] = [
+      [{ ai0: 900, ai1: 500, ai2: 500, ai3: 500 }, 'leading', 0],
+      [{ ai0: 500, ai1: 500, ai2: 500, ai3: 500 }, 'leading', 0],
+      [{ ai0: 500, ai1: 500, ai2: 501, ai3: 500 }, 'trailing', 0],
+      [{ ai0: 500, ai1: 500, ai2: 501, ai3: 500 }, 'trailing', 5],
     ];
-    for (const [money, want] of cases) {
+    for (const [money, want, crystite] of cases) {
       const state = table();
       for (const id of SEATS) player(state, id).money = money[id]!;
-      expect(standingOf(observe(state, ME), ME), JSON.stringify(money)).toBe(want);
+      player(state, ME).stock.crystite = crystite;
+      expect(standingOf(observe(state, ME), ME), `${JSON.stringify(money)}, ai0 holds ${crystite} Crystite`).toBe(want);
     }
   });
 });
