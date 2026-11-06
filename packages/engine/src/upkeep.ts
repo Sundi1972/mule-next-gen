@@ -5,13 +5,6 @@ import { needsOf } from './production.js';
 import { GOODS, type GameState, type Good, type MonthReport } from './types.js';
 
 /**
- * End of month: players and colonists eat, goods spoil, anything above the
- * home depot is lost, the export ship takes the store's surplus and
- * leaves, and the store builds MULEs. Nothing is imported: the colony lives
- * on what its players make. Returns the goods the store ran out of before
- * its colonists had enough, and whether colonists went short at all.
- */
-/**
  * RULE-1, the colonists' meal of one good: they take their need from the shelf, as far as it holds it, and pay
  * nothing. `short` is the share of their need they went without, 0 to 1; 0 when they need none.
  */
@@ -20,6 +13,13 @@ export function colonistMeal(need: number, stock: number): { took: number; short
   return { took, short: need > 0 ? (need - took) / need : 0 };
 }
 
+/**
+ * End of month: players and colonists eat, goods spoil, anything above the
+ * home depot is lost, the export ship takes the store's surplus and
+ * leaves, and the store builds MULEs. Nothing is imported: the colony lives
+ * on what its players make. Returns the goods the store ran out of before
+ * its colonists had enough, and whether colonists went short at all.
+ */
 export function runUpkeep(state: GameState): { shortages: Good[]; hungry: boolean } {
   const shortages = new Set<Good>();
 
