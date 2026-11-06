@@ -37,6 +37,12 @@
 <p class="code-ref">In the code: <code>packages/engine/src/colony.ts::colonyGauges</code> · <code>::colonyWealth</code> · <code>apps/server/src/colony-view.ts::colonyView</code> · <code>apps/web/src/components/Colony.tsx::ColonyGauges</code> · <code>config.ts::POLLUTION.bands</code></p>
 <p class="owner">Kept current by: WS7 (rules), WS8 (screens).</p>
 
+<h3 id="colony-health-gauge">A fifth gauge: colony health <span class="pill designed">Designed, not in the game yet, WS5</span></h3>
+<p>Heiko approved on 6 Nov: a health gauge beside the mood shows the share of colonists who are well, from <span class="num">100</span> down to <span class="num">60</span>; at most 4 in 10 colonists are ever sick. Good is high. How colonists fall sick and recover is in <a href="#colony-health">Colony health</a>. Health has no separate place in the colony score: it already reaches it through the mood and the number of colonists (decision 26).</p>
+<p>Superseded by the health rule (Heiko, 6 Nov), settled: decisions 14 and 15. Hunger makes colonists sicker; sickness raises their Medicine need (by up to 40%) and lowers the mood (by up to 4 points of its aim); missing Medicine reaches the mood <em>only</em> through sickness, never also as hardship of its own. Each effect counts once. Decisions 8 and 24 both stand (see <a href="development.html#sickness-from-colony">The colony's sickness reaches players</a>).</p>
+<div class="box next"><h4>What is next</h4><p>The gauge is a new piece of screen, so its look needs a mock before it is built. Heiko's decision 1 (6 Nov): the colonists' hardship and sickness ship together with the Food and Medicine supply change, tuned in one pass, so the gauge comes with the Medicine supply.</p></div>
+<p class="owner">Designed, not in the game yet, WS5 · explainer <code>docs/explainers/2026-11-06-colony-economy.html</code> (Colony health).</p>
+
 <!-- ============================================================ -->
 <h2 id="mood">Mood: happiness and its bands <span class="pill built">In the game</span></h2>
 <p>The colony starts every game at happiness <span class="num">60</span> (Content). At each month end it moves toward a <em>target</em> set by how the month went, but by at most <span class="num">5</span> points a month. One bad month dents the mood; a run of them sinks it. Events can also move it at once, by any amount, without that limit.</p>
