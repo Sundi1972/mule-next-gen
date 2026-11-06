@@ -109,7 +109,7 @@
 </tbody>
 </table></div>
 <p>Each line's label sits at the right edge, at its price. When two lines are close (the store selling at 100 and the ship paying 99), their labels move apart, keeping their order, so both stay readable. Between the red and green lines a chip says how far apart the two sides are, the same number as the TV's readout (see <a href="#tv-walk">During the walk</a>): the closest pair with a player on one side, the store and the ship counted against a player but never against each other, since two houses never trade. With the store selling at 100, the ship paying 99, the only seller asking 115 and the buyers bidding 66, it says "16 APART" (115 to the ship), not the houses' 1. When no pair with a player is apart, there is no chip. When the two prices are too close for the chip to sit between them, it sits just above. The price tags of the red and green lines on the price axis hide the axis number they would cover.</p>
-<p>Above the board your phone says the store's prices from your side ("You can buy from the store at 33 · sell to it at 27 · the ship buys at 104") and what the colours mean: "Walk your bid up to a red line and you buy", or for a seller "Walk your ask down to a green line and you sell".</p>
+<p>Above the board your phone says the store's prices from your side ("You can buy from the store at 35 · sell to it at 25 · the ship buys at 104") and what the colours mean: "Walk your bid up to a red line and you buy", or for a seller "Walk your ask down to a green line and you sell".</p>
 
 <h3 id="board-size">How tall the board is</h3>
 <p>When a good comes up, the board is sized around its prices. It takes the store's buying and selling prices, the store's posted price and the ship's price, and adds a margin on each side: <span class="num">30%</span> of the distance between the outermost lines (<code>WALK.boardMargin</code>), plus <span class="num">10%</span> of the posted price (<code>WALK.boardPostedMargin</code>). Sellers start at the top edge, buyers at the bottom edge. Because the bottom edge is always below the store's buying line, a buyer who stands still at the start never trades.</p>
@@ -119,12 +119,12 @@
 <p>Hold <em>▲</em> or <em>▼</em> to walk; let go to stand. A quick tap (shorter than <span class="num">0.18</span> seconds) moves exactly one credit. You can also drag on the board.</p>
 <p>Walking speed is set per good so that crossing the whole board always takes the same time, whatever the good costs: the board's height divided by <code>WALK.crossSeconds</code>, <span class="num">7.5</span> seconds, but never slower than <code>WALK.minSpeed</code>, <span class="num">1.6</span> credits a second. A cheap good's board is short and you walk slowly in credits; an expensive good's board is tall and you walk fast in credits, but both take 7.5 seconds end to end.</p>
 <div class="box example"><h4>Example: the Food board</h4>
-<p>Food's posted price is <span class="num">30</span>. The store sells at <span class="num">33</span> (10% above) and buys at <span class="num">27</span> (10% below).</p>
+<p>Food's posted price is <span class="num">30</span>, with supply normal. The store sells at <span class="num">35</span> (15% above) and buys at <span class="num">25</span> (15% below).</p>
 <ul>
-<li>The outermost lines are 27 and 33, so they are 6 apart. Margin: 30% of 6 = 1.8, plus 10% of 30 = 3, so 4.8 on each side.</li>
-<li>The board runs from <span class="num">22</span> (27 − 4.8, rounded down) to <span class="num">38</span> (33 + 4.8, rounded up): 16 credits tall.</li>
-<li>Speed: 16 ÷ 7.5 = <span class="num">2.1</span> credits a second (above the minimum of 1.6).</li>
-<li>A buyer starting at 22 reaches the store's selling line at 33 in 11 ÷ 2.1 = about <span class="num">5</span> seconds of holding ▲.</li>
+<li>The outermost lines are 25 and 35, so they are 10 apart. Margin: 30% of 10 = 3, plus 10% of 30 = 3, so 6 on each side.</li>
+<li>The board runs from <span class="num">19</span> (25 − 6) to <span class="num">41</span> (35 + 6): 22 credits tall.</li>
+<li>Speed: 22 ÷ 7.5 = <span class="num">2.9</span> credits a second (above the minimum of 1.6).</li>
+<li>A buyer starting at 19 reaches the store's selling line at 35 in 16 ÷ 2.9 = about <span class="num">5.5</span> seconds of holding ▲.</li>
 </ul>
 </div>
 
@@ -194,7 +194,7 @@
 <p class="owner">Kept current by: WS3.</p>
 
 <h2 id="deals-between-players">Deals between players <span class="pill built">In the game</span></h2>
-<p>Trading with another player is where the money is: a buyer usually pays less than the store's selling price and a seller usually gets more than the store's buying price, because the store keeps a margin of 10% on each side (see <a href="store-and-prices.html#spread">the spread</a>). The store's lines are the outer limits; deals between players happen in the space between them, and beyond them when the store has sold out.</p>
+<p>Trading with another player is where the money is: a buyer usually pays less than the store's selling price and a seller usually gets more than the store's buying price, because the store keeps a margin on each side, 15% while supply is normal and more as a good runs short (see <a href="store-and-prices.html#spread">the spread</a>). The store's lines are the outer limits; deals between players happen in the space between them, and beyond them when the store has sold out.</p>
 <h3 id="what-the-market-learns">What the colony learns from your deals</h3>
 <p>Only deals between players teach the market. When a good closes, the average price players paid each other for it nudges that good's <strong>reference price</strong>, the price the store aims at when supply is normal. The store's and the ship's trades teach nothing, because they trade at their own prices. How far the nudge goes is explained in <a href="store-and-prices.html#reference-and-off-world">reference and off-world prices</a>.</p>
 <h3 id="sales-tax-at-auction">Sales tax</h3>
@@ -208,21 +208,21 @@
 <p>The store is always on the board as two lines, so there is always someone to trade with while it has stock and wants more. Its prices for the good are fixed when the good comes up and do not move during the walk.</p>
 <h3 id="buying-from-the-store">Buying from the store</h3>
 <ul>
-<li>The store sells at its posted price plus 10%, rounded up. Walk up to that line and you buy, one unit at a time.</li>
+<li>The store sells above its posted price, by its margin for the good's step (15% while supply is normal, up to 25% in a shortage), rounded up. Walk up to that line and you buy, one unit at a time.</li>
 <li>It sells only what it has <strong>for sale</strong>. For Food and Water it holds back what its colonists will buy at month end, one unit per <span class="num">20</span> colonists: the colony's own people come first, so in a shortage the shelf runs empty for the players first.</li>
 <li>When the store has nothing more for sale, its selling line disappears ("STORE SELLS out" on the TV) and buyers can walk higher, to tempt a player to sell.</li>
 </ul>
 <h3 id="selling-to-the-store">Selling to the store</h3>
 <ul>
-<li>The store buys at its posted price less 10%, rounded down. Walk down to that line and you sell.</li>
+<li>The store buys under its posted price, 15% under while supply is normal or tight and 10% under in a shortage, rounded down. Walk down to that line and you sell.</li>
 <li>It buys only as many as it wants this month: enough to fill its shelves to <span class="num">3</span> months of demand, plus a full ship's load of a good the export ship buys. When it has bought that many, its buying line disappears.</li>
 <li>The store never runs out of money; only shelf room limits it.</li>
-<li><strong>Restocking a short shelf.</strong> When the store's Food or Water would not feed its colonists for a month, it bids up to <span class="num">1.5</span> times the posted price to restock, and sells at least one credit above that, so nobody can buy from it and sell straight back. The numbers are in <a href="store-and-prices.html#short-shelf">The store and prices</a>.</li>
+<li><strong>A shortage raises both lines.</strong> As a good runs short the store's price steps up, and with it what the store pays you. For Food and Water it never pays more than its colonists could pay after its two margins, and it always sells at least one credit above what it pays, so nobody can buy from it and sell straight back. The numbers are in <a href="store-and-prices.html#short-shelf">The store and prices</a>.</li>
 </ul>
 <h3 id="selling-to-the-ship">Selling to the export ship</h3>
 <p>Every third month the export ship is in port (months 3, 6, 9 and 12). For each good on its wishlist it stands on the board as an amber line at what it pays for the next unit: the off-world price for the first, 2% less for each further unit as its hold fills, and 10% more from a colony with clean air. Sellers who reach it sell to it. Your phone's status screen tells you how many it still wants. The store sells the ship its own surplus later, at upkeep, so players get first go. The details are in <a href="store-and-prices.html#export-ship">the export ship</a>.</p>
-<div class="box why"><h4>Why it is like this</h4><p>Heiko, 22 Oct: "the store should have unlimited amount of money". The store's buying is limited only by what it wants, never by its capital. The short-shelf bid (pricing B: <code>PRICE.shelfCover</code> 1, <code>restockPremium</code> 1.5) was approved by Heiko the same day, with WS3's fix that the store always sells above what it pays. Heiko, 28 Oct: "the store is the always available market buying what the settlers can offer to a calculated price, so the store will adjust the buying price based on scarcity."</p></div>
-<p class="code-ref">In the code: <code>packages/engine/src/auction.ts::comeUp</code>, <code>storeSellLine</code>, <code>storeBuyLine</code>, <code>shipLine</code> · <code>economy.ts::storeForSale</code>, <code>storeWants</code>, <code>shelfShort</code>, <code>shipPrice</code> · <code>config.ts::PRICE</code>, <code>UPKEEP.colonistsPerUnit</code>, <code>UPKEEP.colonistBudget</code></p>
+<div class="box why"><h4>Why it is like this</h4><p>Heiko, 22 Oct: "the store should have unlimited amount of money". The store's buying is limited only by what it wants, never by its capital. The short-shelf bid Heiko approved the same day (1.5 times the posted price for a short Food or Water shelf) was replaced on 6 Nov by his five rules, which raise both of the store's lines as a good runs short (see <a href="store-and-prices.html#store-pricing-design">the store-pricing design</a>); WS3's fix that the store always sells above what it pays stays. Heiko, 28 Oct: "the store is the always available market buying what the settlers can offer to a calculated price, so the store will adjust the buying price based on scarcity."</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/auction.ts::comeUp</code>, <code>storeSellLine</code>, <code>storeBuyLine</code>, <code>shipLine</code> · <code>economy.ts::storeLines</code>, <code>storeForSale</code>, <code>storeWants</code>, <code>shipPrice</code> · <code>config.ts::PRICE</code>, <code>UPKEEP.colonistsPerUnit</code>, <code>UPKEEP.colonistBudget</code></p>
 <p class="owner">Kept current by: WS3 (the lines), WS1 (the store's prices).</p>
 
 <h2 id="the-clock">The clock and how it slows <span class="pill built">In the game</span></h2>
@@ -369,7 +369,7 @@
 
 <div class="box next"><h4>What is changing</h4>
 <p><strong>Designed, not built yet.</strong> Approved by Heiko on 5 Nov. He chose hold ▼ for one second, the stop covers every sale, and buyers get no matching stop. To be built by the Auctions team (WS3) for the rules, with the UX team (WS6) for the phone and TV screens (mock <code>design/mocks/auction-rules</code>) and the Strategy team (WS1) for the computer players.</p>
-<p>How the store sets its prices after it sells out, and a wider gap between its buying and selling prices, are part of WS5's <a href="store-and-prices.html#store-pricing-design">store-pricing design</a>, not this one.</p></div>
+<p>How the store sets its prices after it sells out, and its wider gap between buying and selling, are WS5's <a href="store-and-prices.html#store-pricing-design">store-pricing design</a>, in the game since its PR-1, not this one.</p></div>
 <p class="code-ref">In the code (where it would land): <code>packages/engine/src/walk.ts::stepBoard</code>, <code>sellerFloor</code> · <code>auction.ts::declareRole</code> · <code>packages/ai/src/hands/auction.ts</code> · rules: <code>docs/specs/2026-11-05-ws3-auction-auto-trade.md</code> §10 AM-1 (WS3's branch <code>ws3-auction-rules-b-e</code>, a33879c4)</p>
 <p class="owner">Kept current by: WS3 (rules), WS6 (screens), WS1 (AI).</p>
 </article>
