@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { advancePhase, AI_PLANS, createGame, type GameState, type Outfit, type Stock, type Tile } from '@mule/engine';
 import { applyAction } from '../src/play.js';
+import { draftStrategyOf } from '../src/playbook/draft.js';
 import { AiSeat, type AiSeatOptions } from '../src/seat.js';
 
 /** A seat whose Electronics fetch a high price builds the chain to them, upstream first. See AM-32. */
@@ -79,6 +80,16 @@ describe('a factory chain (AM-32)', () => {
     const state = development([{ x: 0 }, { x: 2, ground: { smithore: 4 } }, { x: 4 }, { x: 6 }], 2_000);
     const installed = playDevelopment(state, seatOf());
     expect(installed, `installed ${installed.join(', ')}`).not.toContain('rareEarth');
+  });
+
+  it('B-AC-AM32-1: a chain under way is re-drafted on what is left to build: its standing link at running cost, cash for the missing links only', () => {
+    // The Smithore mine stands on thin ground (one a month, the Alloy works wants two), so Smithore is still short; the
+    // cash pays the works, the Rare earth mine and the Alloy works, not a second Smithore mine as well.
+    const state = development([{ x: 0, ground: { rareEarth: 4 } }, { x: 2, ground: { smithore: 1 }, outfit: 'smithore' }, { x: 4 }, { x: 6 }], 2_000);
+    state.players.find((p) => p.id === ME)!.money = 1_000;
+    const seat = seatOf();
+    const redraft = draftStrategyOf({ state, seat: ME, mind: seat.mind, seed: 11, phase: 'development', kept: null, replanned: 'election' });
+    expect(redraft.moneyMaker).toBe('electronics');
   });
 
   it('FM-chain-idle: no works is installed while its inputs neither stand nor are held, whatever the cash', () => {
