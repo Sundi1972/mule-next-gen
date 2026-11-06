@@ -234,7 +234,8 @@ first match wins
   1  seatShareLeft = false                         engine playbook (by 'engine'); no call was made
   2  reply = none or arrivedBeforePhaseStart=false engine playbook; the late reply is ledgered, not played
   3  reply = rejected-all                          engine playbook; rejections logged for the next brief
-  4  otherwise                                     engine draft + accepted edits (by 'llm')
+  4  otherwise                                     engine draft + accepted edits (by 'llm'); the draft is the phase's own,
+                                                   taken at its start, never the one the brief showed (AM-A17)
 unknown  a reply whose phase has already started counts as late, whatever its content.
 examples → §6: no key → engine (B-AC-3) · reply 1 s before the land grant → llm · reply 0.2 s after → engine, late ·
          a playbook call made 5 s before development starts waits at most 5 s, not 30
@@ -403,6 +404,15 @@ Code-only; no existing state to reach. The record starts with WS3's build.
   BRAIN; the capability-first re-run rule → C3, §7. The spike's cause codes → C2.
 - **AM-A6 · 29 Oct · lead:** C4's seam renamed playbooks.ts (no clash with packages/ai's strategist.ts); C3 promotes
   the S-A1 port instead of a second client. Cost note for §0: C8 and C9 add about 2 PRs, so about 5 in all (in §0 since the goal gate).
+- **AM-A17 · 6 Nov · PM go on option B fix 1 (Heiko's decision on the t120s diagnosis):** RULE-A1 row 4's engine draft
+  is the phase's own, taken at its start: the land grant's for the land write, the auction's for the auction's edits,
+  the development's for its part (as AM-A16 already did). The land write was validated against the draft its brief
+  showed at upkeep and the auction's against the one drafted in production, so every field Claude left alone played
+  stale. The free diagnosis measured the stale land draft at about −6 to −10 points of win share and the stale auction
+  draft cutting the Claude chairs out of store Food and ship Alloy. A plan letter is turned into its plots by the
+  writer, so the later draft cannot make a letter name other plots. T-AC-A1 row 4 now asserts the land grant's draft;
+  the gate `brain:gate` (zero-content edits through the whole pipeline, WS1's control band over 240 games) is run before
+  any paid tournament. Built on ws2-b1-plumbing.
 - **AM-A16 · 5 Nov · PM ruling (option C), on WS2's PR-4b finding:** RULE-A2 row 3 asked for the development's edits
   as the land grant ended, but development starts in the same tick unless a land auction or an event show comes
   between, so the reply was always late in most months (measured: a 1-month recorded game's reply settled at step 97,
