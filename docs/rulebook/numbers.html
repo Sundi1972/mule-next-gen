@@ -14,12 +14,12 @@
 <main class="rb-main">
 <article>
 <h1>Every number</h1>
-<p class="rb-lede">Every balancing value in the game, as the game's settings file holds it today: 1258 settings in 52 groups, each with what it does.</p>
+<p class="rb-lede">Every balancing value in the game, as the game's settings file holds it today: 1267 settings in 53 groups, each with what it does.</p>
 <p>This page is generated from the game's settings file, <code>packages/engine/src/config.ts</code>, on trunk. Each group below is one block of that file, named the way the code names it; the setting is its full path, and the note is the comment written beside it in the file. A setting without a note of its own points to the nearest note that explains it. The rules these numbers drive are explained in <a href="index.html">the other chapters</a>.</p>
 <p>Do not edit this page by hand. To regenerate it after <code>config.ts</code> changes, run from the repo root:</p>
 <p><code>pnpm --filter @mule/engine exec tsx ../../docs/rulebook/build-numbers.ts</code> then <code>node docs/rulebook/build-index.mjs</code></p>
 <div class="box next"><h4>Not on this page</h4><p><code>MAP_SIZE</code> is kept inside <code>config.ts</code> without being exported, so this page cannot read it.</p></div>
-<p class="code-ref">Built from <code>config.ts</code> with fingerprint <code>441a83dd0580</code> (the first 12 characters of its SHA-256).</p>
+<p class="code-ref">Built from <code>config.ts</code> with fingerprint <code>a15728cd94e1</code> (the first 12 characters of its SHA-256).</p>
 
 <h2 id="good-config"><code>GOOD_CONFIG</code> <span class="pill built">In the game</span></h2>
 <div class="table-wrap"><table>
@@ -83,6 +83,24 @@
 <tr><td><code>PRICE.bandSpread.short.over</code></td><td class="n">0.25</td><td>See the note on <code>PRICE.bandSpread</code>.</td></tr>
 <tr><td><code>PRICE.bandSpread.severe.under</code></td><td class="n">0.1</td><td>See the note on <code>PRICE.bandSpread</code>.</td></tr>
 <tr><td><code>PRICE.bandSpread.severe.over</code></td><td class="n">0.25</td><td>See the note on <code>PRICE.bandSpread</code>.</td></tr>
+</tbody>
+</table></div>
+
+<h2 id="off-world"><code>OFF_WORLD</code> <span class="pill built">In the game</span></h2>
+<p>As each month opens, the export goods&#39; off-world prices walk (pricing RULE-3): the log of the price keeps <code>phi</code> of its distance from the centre&#39;s, plus a seeded swing, then is clamped. Food, Water and Energy are not exported; their off-world price stays put.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Setting</th><th class="n">Value</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td><code>OFF_WORLD.crystite</code></td><td class="n"></td><td>Crystite: normally about 90, rarely 40, very rarely 300.</td></tr>
+<tr><td><code>OFF_WORLD.crystite.centre</code></td><td class="n">90</td><td>The price Crystite&#39;s walk returns to, and opens the game at.</td></tr>
+<tr><td><code>OFF_WORLD.crystite.phi</code></td><td class="n">0.7</td><td>The share of last month&#39;s distance from the centre (in log terms) a month keeps.</td></tr>
+<tr><td><code>OFF_WORLD.crystite.sigma</code></td><td class="n">0.35</td><td>The spread of the log price the walk settles into: the bigger, the wilder the swings.</td></tr>
+<tr><td><code>OFF_WORLD.crystite.min</code></td><td class="n">40</td><td>The lowest off-world price.</td></tr>
+<tr><td><code>OFF_WORLD.crystite.max</code></td><td class="n">300</td><td>The highest off-world price.</td></tr>
+<tr><td><code>OFF_WORLD.others</code></td><td class="n"></td><td>Every other export good, centred on its GOOD_CONFIG refPrice.</td></tr>
+<tr><td><code>OFF_WORLD.others.phi</code></td><td class="n">0.7</td><td>The share of last month&#39;s distance from the centre (in log terms) a month keeps.</td></tr>
+<tr><td><code>OFF_WORLD.others.sigma</code></td><td class="n">0.18</td><td>The spread of the log price the walk settles into.</td></tr>
+<tr><td><code>OFF_WORLD.others.band</code></td><td class="n">0.5</td><td>The price stays within this share of its centre, above or below.</td></tr>
 </tbody>
 </table></div>
 
@@ -397,6 +415,7 @@
 <tr><td><code>MULE.surplusDown</code></td><td class="n">0.1</td><td>Explained in the note on <code>MULE.scarcityUp</code>.</td></tr>
 <tr><td><code>MULE.surplusShare</code></td><td class="n">0.5</td><td>Explained in the note on <code>MULE.scarcityUp</code>.</td></tr>
 <tr><td><code>MULE.minFactor</code></td><td class="n">0.6</td><td>The scarcity factor never falls below this.</td></tr>
+<tr><td><code>MULE.maxFactor</code></td><td class="n">2</td><td>Nor rises above this, so a MULE costs at most twice its labour and Smithore at the store&#39;s price (pricing C4).</td></tr>
 </tbody>
 </table></div>
 

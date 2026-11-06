@@ -138,7 +138,7 @@
 <p>No price is posted above <code>PRICE.ceiling</code> = <span class="num">12</span> times the good's starting reference price (<code>GOOD_CONFIG</code>), whatever a step, a trade or a sell-out asks: the ceiling always wins. That is Food 360, Water and Energy 300, Smithore 600, Rare earth 720, Alloy 1,080, Crystite 1,200, Medicine 1,440 and Electronics 2,640. The ceiling does not follow the reference price as it learns.</p>
 
 <h3 id="export-only-cap">Goods only the ship wants</h3>
-<p>A good nobody in the colony uses this month, only the export ship, is in the off-world step: the store posts it at the off-world price, however much of it the colony holds. Crystite always is. Electronics, Rare earth and Alloy are not while the colony has colonists: they want Electronics, and with it the Rare earth and Alloy it is made from. The price goes straight up to the off-world price and falls to it by at most a quarter a month; the colony's normal price is no floor for it. High trades, sell-outs (Step 5) and the ceiling still apply. The off-world price never moves today, so Crystite sits at its starting price, 100.</p>
+<p>A good nobody in the colony uses this month, only the export ship, is in the off-world step: the store posts it at the off-world price, however much of it the colony holds. Crystite always is. Electronics, Rare earth and Alloy are not while the colony has colonists: they want Electronics, and with it the Rare earth and Alloy it is made from. The price goes straight up to the off-world price and falls to it by at most a quarter a month; the colony's normal price is no floor for it. High trades, sell-outs (Step 5) and the ceiling still apply. The off-world price moves every month (see <a href="#off-world-walk">how the ship's prices move</a>), and Crystite's posted price follows it.</p>
 
 <h3 id="opening-prices">The opening prices</h3>
 <p>Before month 1 the store posts its prices by the same steps, starting from the normal prices, so no good opens below its normal price. With the starting stock, a four-seat game opens at:</p>
@@ -149,7 +149,7 @@
 <tr><td>Water</td><td>Normal</td><td class="n">25</td><td class="n">21</td><td class="n">29</td></tr>
 <tr><td>Energy</td><td>Tight (28 held, 15.3 needed)</td><td class="n">31</td><td class="n">26</td><td class="n">38</td></tr>
 <tr><td>Smithore</td><td>Normal</td><td class="n">50</td><td class="n">42</td><td class="n">58</td></tr>
-<tr><td>Crystite</td><td>Off-world</td><td class="n">100</td><td class="n">85</td><td class="n">none to sell</td></tr>
+<tr><td>Crystite</td><td>Off-world</td><td class="n">90</td><td class="n">76</td><td class="n">none to sell</td></tr>
 <tr><td>Rare earth</td><td>Tight (4 held, 3 needed)</td><td class="n">75</td><td class="n">63</td><td class="n">90</td></tr>
 <tr><td>Alloy</td><td>Normal (8 held, 4 needed)</td><td class="n">90</td><td class="n">76</td><td class="n">104</td></tr>
 <tr><td>Electronics</td><td>Severe shortage (none held, 4 needed)</td><td class="n">880</td><td class="n">792</td><td class="n">none to sell</td></tr>
@@ -218,20 +218,56 @@
 <li>The <strong>off-world price</strong> is what the export ship pays for its first unit. It is also where the reference price drifts back to.</li>
 </ul>
 <div class="table-wrap"><table>
-<thead><tr><th>Good</th><th class="n">Reference and off-world price at the start</th><th class="n">Spoilage a month (depot)</th></tr></thead>
+<thead><tr><th>Good</th><th class="n">Reference price at the start</th><th class="n">Off-world price at the start</th><th class="n">Spoilage a month (depot)</th></tr></thead>
 <tbody>
-<tr><td>Food</td><td class="n">30</td><td class="n">50%</td></tr>
-<tr><td>Water</td><td class="n">25</td><td class="n">5%</td></tr>
-<tr><td>Energy</td><td class="n">25</td><td class="n">25%</td></tr>
-<tr><td>Smithore</td><td class="n">50</td><td class="n">0%</td></tr>
-<tr><td>Crystite</td><td class="n">100</td><td class="n">0%</td></tr>
-<tr><td>Rare earth</td><td class="n">60</td><td class="n">0%</td></tr>
-<tr><td>Alloy</td><td class="n">90</td><td class="n">0%</td></tr>
-<tr><td>Electronics</td><td class="n">220</td><td class="n">0%</td></tr>
-<tr><td>Medicine</td><td class="n">120</td><td class="n">20%</td></tr>
+<tr><td>Food</td><td class="n">30</td><td class="n">30</td><td class="n">50%</td></tr>
+<tr><td>Water</td><td class="n">25</td><td class="n">25</td><td class="n">5%</td></tr>
+<tr><td>Energy</td><td class="n">25</td><td class="n">25</td><td class="n">25%</td></tr>
+<tr><td>Smithore</td><td class="n">50</td><td class="n">50</td><td class="n">0%</td></tr>
+<tr><td>Crystite</td><td class="n">100</td><td class="n">90</td><td class="n">0%</td></tr>
+<tr><td>Rare earth</td><td class="n">60</td><td class="n">60</td><td class="n">0%</td></tr>
+<tr><td>Alloy</td><td class="n">90</td><td class="n">90</td><td class="n">0%</td></tr>
+<tr><td>Electronics</td><td class="n">220</td><td class="n">220</td><td class="n">0%</td></tr>
+<tr><td>Medicine</td><td class="n">120</td><td class="n">120</td><td class="n">20%</td></tr>
 </tbody>
 </table></div>
-<p><strong>The off-world price never moves today.</strong> It is set from <code>GOOD_CONFIG.refPrice</code> when the game starts and stays there for the whole game, for every good.</p>
+<p>Food, Water and Energy never leave the colony: their off-world price stays at its start for the whole game. The six goods the export ship buys start at the usual price of their walk and move every month, as below.</p>
+
+<h3 id="off-world-walk">How the ship's prices move</h3>
+<p>As each month opens, before anything else happens, the off-world price of every good the ship buys moves: Smithore, Crystite, Rare earth, Alloy, Electronics and Medicine. Two things move it:</p>
+<ul>
+<li><strong>A pull back to its usual price.</strong> The price keeps <span class="num">70%</span> of how far it was from its usual price last month, as a ratio: Crystite at 160, usually 90, is 1.78 times its usual price; a month later, before the swing, it is 1.78<sup>0.7</sup> = 1.496 times, about 135. A high price drifts down and a low one up, over a few months.</li>
+<li><strong>A random swing</strong>, drawn from the game's seed, the month and the good. Most months it is small, now and then large, either way. The same seed always gives the same prices, so a replayed game sees them again.</li>
+</ul>
+<p>Then the price is held between its limits and rounded to whole credits.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Good</th><th class="n">Usual price</th><th class="n">Lowest</th><th class="n">Highest</th><th>Swings</th></tr></thead>
+<tbody>
+<tr><td>Crystite</td><td class="n">90</td><td class="n">40</td><td class="n">300</td><td>Wide</td></tr>
+<tr><td>Smithore</td><td class="n">50</td><td class="n">25</td><td class="n">75</td><td>About half as wide as Crystite's</td></tr>
+<tr><td>Rare earth</td><td class="n">60</td><td class="n">30</td><td class="n">90</td><td>The same</td></tr>
+<tr><td>Alloy</td><td class="n">90</td><td class="n">45</td><td class="n">135</td><td>The same</td></tr>
+<tr><td>Electronics</td><td class="n">220</td><td class="n">110</td><td class="n">330</td><td>The same</td></tr>
+<tr><td>Medicine</td><td class="n">120</td><td class="n">60</td><td class="n">180</td><td>The same</td></tr>
+</tbody>
+</table></div>
+<p>The other goods' usual price is their starting reference price (<code>GOOD_CONFIG.refPrice</code>), and they stay within half of it either way. Crystite's usual price, 90, is under its starting reference price of 100, so in month 1 the ship's Crystite price is 90 and Crystite's reference price drifts down towards it.</p>
+<p>Measured over 200 simulated four-seat games (2,400 months): Crystite's off-world price was above 90 in half the months and below it in the other half, above 200 in 1.0% of months, 280 or more in 0.1%, and 50 or less in 2.9%. It reached both limits, 40 and 300, and never passed them.</p>
+<div class="box example"><h4>Example: Crystite at 160</h4><p>Crystite's off-world price stands at 160. With no swing, next month it would be 90 × (160 ÷ 90)<sup>0.7</sup> = 134.6, and in three months 90 × (160 ÷ 90)<sup>0.7 × 0.7 × 0.7</sup> = 109.6. A computer player expects those, rounded down: <strong>134</strong> next month and <strong>109</strong> in three. The swings then take the real price above or below them. Holding Crystite when its price is high is a bet the price will not fall back before the ship calls.</p></div>
+<div class="table-wrap"><table>
+<thead><tr><th>Setting</th><th class="n">Value</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td><code>OFF_WORLD.crystite.centre</code></td><td class="n">90</td><td>Crystite's usual price, and its off-world price in month 1</td></tr>
+<tr><td><code>OFF_WORLD.crystite.min</code>, <code>max</code></td><td class="n">40, 300</td><td>Crystite's lowest and highest off-world price</td></tr>
+<tr><td><code>OFF_WORLD.crystite.phi</code>, <code>OFF_WORLD.others.phi</code></td><td class="n">0.7</td><td>The share of last month's distance from the usual price (as a ratio) a price keeps</td></tr>
+<tr><td><code>OFF_WORLD.crystite.sigma</code></td><td class="n">0.35</td><td>How wide Crystite's swings are</td></tr>
+<tr><td><code>OFF_WORLD.others.sigma</code></td><td class="n">0.18</td><td>How wide the other export goods' swings are</td></tr>
+<tr><td><code>OFF_WORLD.others.band</code></td><td class="n">0.5</td><td>The other export goods stay within this share of their usual price, either way</td></tr>
+</tbody>
+</table></div>
+<div class="box why"><h4>Why it is like this</h4><p>Heiko chose on 5 Nov, with the market-maker design: Crystite's off-world price should vary from 40 to 300, usually about 90, with the higher prices more and more unlikely, and the other export goods should move too, about half as much, within half their normal price either way. A price that wanders back to its usual level, rather than a fresh draw each month, lets prices trend for a few months, so when to sell to the ship becomes a decision. Each swing has its own draw from the seed, so adding the walk moved no other random draw in the game.</p></div>
+<p class="code-ref">In the code: <code>economy.ts::stepOffWorld</code>, <code>expectedOffWorld</code> (what the computer players expect), <code>openingOffWorld</code> · <code>rng.ts::seedOf</code> · <code>game.ts::advancePhase</code> (as the month opens), <code>createGame</code> · <code>config.ts::OFF_WORLD</code></p>
+<p class="owner">In the game since the colony-economy package's PR-4, the Maps team (WS5), as named edits in the Strategy team's (WS1) economy code and the Auctions team's (WS3) game code. Kept current by: WS1, with WS5 for the design.</p>
 
 <h3 id="reference-learning">How the reference price learns</h3>
 <p>Once a month, when each good closes at the auction (or is skipped), its reference price moves:</p>
@@ -245,7 +281,7 @@
 <p><strong>Paying above normal.</strong> Alloy, reference 90, in the normal step. Players pay each other 130 on average. Implied is 130, so the reference becomes 90 + 40 × 0.25 + 0 = <strong>100</strong>. Next month the pull alone takes it to 99.</p>
 <p><strong>Trading in a shortage.</strong> Food is in the shortage step, twice normal: 60. Two players trade Food at 70. Implied is 70 ÷ 2 = 35, so the reference becomes 30 + (35 − 30) × 0.25 = 31.25, rounded to <strong>31</strong>: they paid a little more than the shortage alone explains. Had they traded at 60, the reference would not move.</p></div>
 <div class="box next"><h4>Worth knowing (from reading the code)</h4><p>Because the reference is rounded every month, the pull toward the off-world price stops a few credits short: a gap of 5 credits or less above it (4 or less below it) moves by less than half a credit and rounds back. A reference that drifted to 34 for Food stays at 34 until players trade Food with each other again. WS1 owns the rule; the store-pricing design may change it.</p></div>
-<p class="code-ref">In the code: <code>config.ts::GOOD_CONFIG</code> · <code>economy.ts::driftReference</code> · <code>auction.ts::learnFromGood</code>, <code>nextGood</code> (skipped goods) · <code>game.ts::createGame</code> (<code>offWorld</code> set once)</p>
+<p class="code-ref">In the code: <code>config.ts::GOOD_CONFIG</code> · <code>economy.ts::driftReference</code> · <code>auction.ts::learnFromGood</code>, <code>nextGood</code> (skipped goods) · <code>game.ts::createGame</code> (the opening off-world prices)</p>
 <p class="owner">Kept current by: WS1.</p>
 
 <h2 id="spread">Buying and selling at the store: the spread <span class="pill built">In the game</span></h2>
@@ -311,11 +347,11 @@
 <p><code>MULE price = (120 + 1 × Smithore's posted price) × scarcity factor</code>, rounded.</p>
 <ul>
 <li>Labour is <code>MULE.labour</code> = <span class="num">120</span> credits; each MULE takes <code>MULE.smithorePerMule</code> = <span class="num">1</span> Smithore. So whoever mines Smithore sets the price of MULEs, as in the original.</li>
-<li>The scarcity factor starts at 1. Each month the corral sold out during development, it goes up by <code>MULE.scarcityUp</code> = <span class="num">15%</span>. Each month at least half the corral's MULEs were left over (<code>MULE.surplusShare</code>), it goes down by <code>MULE.surplusDown</code> = <span class="num">10%</span>, never below <code>MULE.minFactor</code> = <span class="num">0.6</span>. It compounds, so a long MULE shortage gets steadily dearer.</li>
+<li>The scarcity factor starts at 1. Each month the corral sold out during development, it goes up by <code>MULE.scarcityUp</code> = <span class="num">15%</span>. Each month at least half the corral's MULEs were left over (<code>MULE.surplusShare</code>), it goes down by <code>MULE.surplusDown</code> = <span class="num">10%</span>, never below <code>MULE.minFactor</code> = <span class="num">0.6</span>. It compounds, so a long MULE shortage gets steadily dearer, but never above <code>MULE.maxFactor</code> = <span class="num">2</span>: a MULE costs at most twice its labour and Smithore.</li>
 <li>Gearlings pay <span class="num">95%</span> of the price for MULEs and outfits (<code>SPECIES_PERK.gearlingPrice</code>).</li>
 </ul>
 <div class="box example"><h4>Example</h4>
-<p>Smithore is posted at 50: a MULE costs 120 + 50 = <strong>170</strong> (a Gearling pays 162). The corral sells out: next month it costs 170 × 1.15 = <strong>195</strong>. It sells out again: 170 × 1.15 × 1.15 = <strong>225</strong>. In a month with half the MULEs left over, the factor drops by 10% instead.</p>
+<p>Smithore is posted at 50: a MULE costs 120 + 50 = <strong>170</strong> (a Gearling pays 162). The corral sells out: next month it costs 170 × 1.15 = <strong>195</strong>. It sells out again: 170 × 1.15 × 1.15 = <strong>225</strong>. In a month with half the MULEs left over, the factor drops by 10% instead. After five sold-out months in a row the factor would be 2.01, so it stops at 2: with Smithore still at 50, a MULE costs at most <strong>340</strong>. Even with Smithore at its ceiling of 600, a MULE never costs more than (120 + 600) × 2 = <strong>1,440</strong>.</p>
 <p>In month 1 of a four-seat game, reading the code: the colony holds 20 Smithore in the store plus 10 MULEs in the corral (counted as Smithore), against a demand of 10 (8 MULEs for a month's new land and 2 for the export ship's average), so cover is 3, Smithore opens at its normal price of 50, and the first MULEs cost <strong>170</strong>.</p></div>
 <h3 id="corral">The corral</h3>
 <p>At every month end the store builds MULEs from its own Smithore, one Smithore each, up to its corral target: 2 MULEs for every seat (a month's new land, by grant and land auction) plus 2 spare (<code>MULE.corralPerPlayer</code>, <code>MULE.spareInCorral</code>). That is 6 at 2 seats, 10 at 4 seats and 14 at 6 seats. Without enough Smithore it builds fewer, and the corral may sell out.</p>
@@ -334,8 +370,8 @@
 </tbody>
 </table></div>
 <p>An unsold MULE listed at the land auction with "the store buys it" fetches half the month's MULE price (<code>LOTS.storeMuleShare</code>); see <a href="land.html">Land and geology</a>. Buying and leading MULEs is in <a href="development.html">Development</a>.</p>
-<div class="box why"><h4>Why it is like this</h4><p>The design doc, after the original: Smithore sets the MULE price, and starving the store of Smithore is a strategy with a cost for everyone. Heiko, 28 Oct: "when the store runs out of mules and there is no smithore it needs to raise the prices". Heiko, 5 Nov: one claim per land grant, with the corral kept at 2 per seat so it doesn't shrink.</p></div>
-<p class="code-ref">In the code: <code>economy.ts::mulePrice</code>, <code>corralTarget</code>, <code>mulesWanted</code> · <code>game.ts::advancePhase</code> (scarcity factor), <code>mulePriceFor</code>, <code>outfitCostFor</code> · <code>upkeep.ts::runUpkeep</code> (building) · <code>config.ts::MULE</code></p>
+<div class="box why"><h4>Why it is like this</h4><p>The design doc, after the original: Smithore sets the MULE price, and starving the store of Smithore is a strategy with a cost for everyone. Heiko, 28 Oct: "when the store runs out of mules and there is no smithore it needs to raise the prices". Heiko, 5 Nov: one claim per land grant, with the corral kept at 2 per seat so it doesn't shrink. The cap at 2 times is from the market-maker design Heiko chose on 5 Nov: before it, the surcharge compounded without limit, and a simulated MULE reached 7,087 credits.</p></div>
+<p class="code-ref">In the code: <code>economy.ts::mulePrice</code>, <code>corralTarget</code>, <code>mulesWanted</code> · <code>game.ts::advancePhase</code> (scarcity factor and its cap), <code>mulePriceFor</code>, <code>outfitCostFor</code> · <code>upkeep.ts::runUpkeep</code> (building) · <code>config.ts::MULE</code></p>
 <p class="owner">Kept current by: WS1.</p>
 
 <h2 id="export-ship">The export ship <span class="pill built">In the game</span></h2>
@@ -356,7 +392,7 @@
 </table></div>
 <h3 id="what-the-ship-pays">What it pays</h3>
 <ul>
-<li>The off-world price for its first unit of a good.</li>
+<li>The month's off-world price for its first unit of a good (see <a href="#off-world-walk">how the ship's prices move</a>).</li>
 <li><code>EXPORT_SHIP.stepDown</code> = <span class="num">2%</span> less for each further unit of that good, as its hold fills.</li>
 <li><span class="num">10%</span> more from a colony whose air is clean (<code>POLLUTION.cleanExportBonus</code>).</li>
 <li>Rounded down to whole credits.</li>
@@ -373,16 +409,15 @@
 <ul>
 <li><strong>No colony use in the price.</strong> Nobody in the colony consumes Crystite, so its colony demand is 0; only the export ship's demand counts.</li>
 <li><strong>One building needs it.</strong> The Observatory, a colony prestige object, needs <span class="num">3</span> Crystite and 700 credits. The colony fund buys missing goods for a project from the store at the store's selling price. This purchase is not counted in the store's demand.</li>
-<li><strong>Its price is the off-world price.</strong> Because only the ship wants it, it is in the off-world step: the store posts it at the off-world price, 100, however much Crystite the colony holds. Only a high trade between players or a sell-out (see <a href="#short-goods">Step 5</a>) can lift it above that.</li>
+<li><strong>Its price is the off-world price.</strong> Because only the ship wants it, it is in the off-world step: the store posts it at the off-world price, which moves every month between 40 and 300 and is usually about 90 (see <a href="#off-world-walk">how the ship's prices move</a>), however much Crystite the colony holds. The price falls to a lower off-world price by at most a quarter a month. Only a high trade between players or a sell-out (see <a href="#short-goods">Step 5</a>) can lift it above that.</li>
 <li><strong>The store buys it only for a ship.</strong> In a month when the ship has announced a wishlist without Crystite, and in the month it calls without wanting Crystite, the store wants none: nobody buys Crystite and the good is skipped. In the other months the store stocks up to a ship's load.</li>
-<li><strong>Selling to the ship.</strong> In port with Crystite on its list, the ship pays 100 for the first unit (110 from a clean colony), 2% less for each after.</li>
+<li><strong>Selling to the ship.</strong> In port with Crystite on its list, the ship pays that month's off-world price for the first unit (10% more from a clean colony), 2% less for each after. Holding Crystite for a better month is a bet.</li>
 <li><strong>Pirate raid.</strong> With a chance of 1 in 100 each month, as the auction opens, pirates take all the Crystite, the store's and every player's, before prices are posted. Nothing protects it today.</li>
 </ul>
 <h3 id="crystite-month-one">Crystite's first months</h3>
-<p>In month 1 the colony holds no Crystite, and the store opens it at its off-world price of <strong>100</strong>: it buys at 85 and, with none on its shelf, shows no selling price. It stays at 100 for as long as only the ship wants it and no trade lifts it. Electronics, which the colonists want, opens instead at four times its normal price, 880 (see <a href="#electronics-demand">the colonists' Electronics</a>).</p>
-<div class="box why"><h4>Why it is like this</h4><p>Heiko, 5 Nov: "Please confirm crystite is a pure luxury good, it has no purpose, correct? crystite is there for export only". The PM confirmed from the code: colony demand 0, the price capped at the off-world price, the off-world price fixed at 100; the one colony use is the Observatory's 3 Crystite.</p></div>
-<div class="box next"><h4>What is changing</h4><p>Designed, not in the game yet: Heiko wants Crystite's off-world price to vary from 40 to 300, usually about 90, with the higher prices more and more unlikely. Today it never moves from 100, so the store's price does not move either and holding Crystite is not a bet. The Maps team (WS5) builds it in the colony-economy package's PR-4; see <a href="#store-pricing-design">the store-pricing design</a>.</p></div>
-<p class="code-ref">In the code: <code>economy.ts::monthlyDemand</code> (<code>demand.crystite = 0</code>), <code>priceBand</code>, <code>nextPostedPrice</code> (the off-world step), <code>storeWants</code> · <code>game.ts::createGame</code> · <code>config.ts::PRESTIGE.observatory</code>, <code>COLONY.fundBuysGoods</code>, <code>EVENTS.colony.pirateRaid</code>, <code>MULE.outfitCost</code></p>
+<p>In month 1 the colony holds no Crystite, and the store opens it at its off-world price of <strong>90</strong>: it buys at 76 and, with none on its shelf, shows no selling price. From month 2 it follows the off-world price as it moves, for as long as only the ship wants it and no trade lifts it. Electronics, which the colonists want, opens instead at four times its normal price, 880 (see <a href="#electronics-demand">the colonists' Electronics</a>).</p>
+<div class="box why"><h4>Why it is like this</h4><p>Heiko, 5 Nov: "Please confirm crystite is a pure luxury good, it has no purpose, correct? crystite is there for export only". The PM confirmed from the code: colony demand 0, the price capped at the off-world price, the off-world price then fixed at 100; the one colony use is the Observatory's 3 Crystite. Heiko wanted Crystite's off-world price to vary from 40 to 300, usually about 90, with the higher prices more and more unlikely (5 Nov): since PR-4 it does.</p></div>
+<p class="code-ref">In the code: <code>economy.ts::monthlyDemand</code> (<code>demand.crystite = 0</code>), <code>priceBand</code>, <code>nextPostedPrice</code> (the off-world step), <code>storeWants</code>, <code>stepOffWorld</code> · <code>game.ts::createGame</code> · <code>config.ts::OFF_WORLD</code>, <code>PRESTIGE.observatory</code>, <code>COLONY.fundBuysGoods</code>, <code>EVENTS.colony.pirateRaid</code>, <code>MULE.outfitCost</code></p>
 <p class="owner">Kept current by: WS1, with WS5 for the design.</p>
 
 <h2 id="colony-fund-and-taxes">The colony fund and taxes <span class="pill built">In the game</span></h2>
@@ -421,15 +456,14 @@
 <li>When players have just paid each other more than the store asked, the store's price jumps towards that.</li>
 <li>Once the colony holds enough again, the price comes down a quarter a month.</li>
 <li>The phone's market strip, the auction and the TV all show the same store price.</li>
+<li>The export ship's prices move every month: Crystite usually about 90, between 40 and 300; the other export goods about half as much (see <a href="#off-world-walk">how the ship's prices move</a>).</li>
+<li>However often the corral sells out, a MULE never costs more than twice its labour and Smithore (see <a href="#mule-price">the MULE price</a>).</li>
 </ul>
 
 <h3 id="pricing-not-yet">Not in the game yet <span class="pill designed">Designed, not in the game yet, WS5 and WS7</span></h3>
 <div class="table-wrap"><table>
 <thead><tr><th>Part</th><th>Today</th><th>Designed</th><th>Who builds it</th></tr></thead>
 <tbody>
-<tr><td>Crystite's ship price</td><td>Never moves (100)</td><td>Moves every month, typically about 90, never below 40 or above 300 (as chosen on 5 Nov)</td><td>The Maps team (WS5), PR-4</td></tr>
-<tr><td>Other export goods</td><td>Never move</td><td>Move too, about half as much, within half their normal price either way (5 Nov)</td><td>The Maps team (WS5), PR-4</td></tr>
-<tr><td>MULE price</td><td>Smithore's price is under its ceiling, but the sell-out surcharge on MULEs has no limit (up to 7,087 measured before the ceiling)</td><td>The surcharge stops at 2 times (5 Nov)</td><td>The Maps team (WS5), PR-4</td></tr>
 <tr><td>What the colony needs</td><td>See <a href="#demand">Step 1</a></td><td>Each kind of plot eats and drinks its own amount (below)</td><td>WS5 (PR-6)</td></tr>
 <tr><td>The colonists' Medicine</td><td>1 per 50 colonists, half as much again in dirty air</td><td>See <a href="#medicine-electronics-demand">Medicine</a></td><td>WS5 (PR-10), WS7 (PR-9)</td></tr>
 </tbody>
@@ -470,16 +504,16 @@
 <p class="owner">In the game since the colony-economy package's PR-3, the Maps team (WS5), as a named edit in the Strategy team's (WS1) economy code. Kept current by: WS1, with WS5 for the design.</p>
 
 <div class="box why"><h4>Why it is like this</h4><p>Heiko, 6 Nov, his five rules above; he approved every recommendation in <a href="../explainers/2026-11-06-colony-economy.html">the colony economy explainer</a>: the colony's stock (shelf plus players) rather than the shelf alone, four steps rather than a smooth curve, a quarter a month down, never below normal, halfway towards a high trade, and Electronics demand reaching Rare earth and Alloy. Measured on ten simulated games against today: Food's highest price 144 instead of 2,978, no month at the ceiling instead of 42, colonists short of Water in 34 months instead of 63. No price rule makes Food appear: the store's Food shelf runs dry in almost every month under every rule tried, today's included. That is the supply pass (decision 1).</p></div>
-<div class="box next"><h4>What is next</h4><p>The Maps team (WS5) builds the colony-economy package, as named edits in the Strategy team's (WS1) economy code and the Auctions team's (WS3) auction and game code. Built in PR-1: the steps, the moves, the margins, the sell-out rule, the high-trade pull, the ceiling, one selling price, the opening prices and the Energy new MULEs need. Built in PR-2 (WS7): the colonists' free meal and no wages, so their full need counts and no cap holds the store's Food and Water buying line down. Built in PR-3: the colonists' Electronics want. Still to come: the moving ship prices and the MULE surcharge cap (PR-4, WS5), and each plot's own consumption in the demand (PR-6, WS5). When each part lands, it becomes "In the game" here.</p></div>
-<p class="code-ref">Spec: <code>docs/specs/2026-11-05-ws5-store-pricing.md</code> ("Rework, 6 Nov"; §8 AM-6 for what PR-1 built differently) and <code>docs/specs/2026-11-06-colony-needs.md</code> (WS5's C13) · <a href="../explainers/2026-11-06-colony-economy.html">the colony economy explainer</a> · code: <code>economy.ts::priceBand</code>, <code>nextPostedPrice</code>, <code>storeLines</code>, <code>storeQuotes</code>, <code>monthlyDemand</code> · <code>auction.ts::comeUp</code> · <code>game.ts::createGame</code> · <code>config.ts::PRICE</code></p>
-<p class="owner">The five rules: in the game since PR-1. The parts still designed name their lanes above. Kept current by: the Maps team (WS5) for the design; built as named edits in WS1's economy code and WS3's auction and game code.</p>
+<div class="box next"><h4>What is next</h4><p>The Maps team (WS5) builds the colony-economy package, as named edits in the Strategy team's (WS1) economy code and the Auctions team's (WS3) auction and game code. Built in PR-1: the steps, the moves, the margins, the sell-out rule, the high-trade pull, the ceiling, one selling price, the opening prices and the Energy new MULEs need. Built in PR-2 (WS7): the colonists' free meal and no wages, so their full need counts and no cap holds the store's Food and Water buying line down. Built in PR-3: the colonists' Electronics want. Built in PR-4: the moving ship prices and the MULE surcharge cap. Still to come: each plot's own consumption in the demand (PR-6, WS5). When each part lands, it becomes "In the game" here.</p></div>
+<p class="code-ref">Spec: <code>docs/specs/2026-11-05-ws5-store-pricing.md</code> ("Rework, 6 Nov"; §8 AM-6 for what PR-1 built differently) and <code>docs/specs/2026-11-06-colony-needs.md</code> (WS5's C13) · <a href="../explainers/2026-11-06-colony-economy.html">the colony economy explainer</a> · code: <code>economy.ts::priceBand</code>, <code>nextPostedPrice</code>, <code>storeLines</code>, <code>storeQuotes</code>, <code>monthlyDemand</code>, <code>stepOffWorld</code> · <code>auction.ts::comeUp</code> · <code>game.ts::createGame</code> · <code>config.ts::PRICE</code>, <code>OFF_WORLD</code>, <code>MULE.maxFactor</code></p>
+<p class="owner">The five rules: in the game since PR-1; the moving ship prices and the MULE cap since PR-4. The parts still designed name their lanes above. Kept current by: the Maps team (WS5) for the design; built as named edits in WS1's economy code and WS3's auction and game code.</p>
 
 <h2 id="not-in-the-game">In the economy design, not in the game <span class="pill backlog">Backlog</span></h2>
 <p>The economy design (<code>docs/design/01-economy-model.md</code>) describes several things the code does not have. Some were replaced by later rulings.</p>
 <div class="table-wrap"><table>
 <thead><tr><th>The design says</th><th>The game today</th></tr></thead>
 <tbody>
-<tr><td>Off-world prices drift each month, with trends and events</td><td>Fixed at the reference price for the whole game (see <a href="#store-pricing-design">the store-pricing design</a>)</td></tr>
+<tr><td>Off-world prices drift each month, with trends and events</td><td>Partly: the six export goods' off-world prices move every month and drift back to their usual price (see <a href="#off-world-walk">how the ship's prices move</a>); no event moves them</td></tr>
 <tr><td>Emergency purchase: the Governor orders goods at 3 times the off-world price</td><td>Not built; nothing is ever imported</td></tr>
 <tr><td>Storage buildings: warehouse, silo, cold store, tank, battery bank, vault (safe from pirates)</td><td>Not built; every player has only the home depot of 10 a good</td></tr>
 <tr><td>Forward contracts and short sales</td><td>Not built</td></tr>
