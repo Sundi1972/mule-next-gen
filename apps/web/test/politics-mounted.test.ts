@@ -68,7 +68,7 @@ const me = (ballot: MyView['politics'] extends infer P ? (P extends { ballot: in
   stock,
   carriedMule: null,
   installedThisTurn: false,
-  worthParts: { money: 0, goods: 0, plots: 0, land: 0, mules: 0, muleValue: 0, office: 0, cut: 0 },
+  worthParts: { money: 0, goods: 0, plots: 0, land: 0, mules: 0, muleValue: 0, office: 0, donated: 0, cut: 0 },
   claimsLeft: 0,
   hungry: false,
   sick: false,

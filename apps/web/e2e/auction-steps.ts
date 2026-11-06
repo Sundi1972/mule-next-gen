@@ -581,7 +581,8 @@ async function untilServer(truth: Truth, page: Page, ok: (a: AuctionView) => boo
 async function walkUntil(truth: Truth, p: Phone, dir: 'up' | 'down', until: (a: AuctionView) => boolean, what: string): Promise<void> {
   const id = truth.idOf(p);
   await hold(p.page, dir, PRESS_MS);
-  await untilServer(truth, p.page, until, what);
+  // A walk takes up to one crossing of the board (WALK.crossSeconds), not a fixed press time.
+  await untilServer(truth, p.page, until, what, within(SCALE, WALK.crossSeconds * 1_000));
   await p.page.mouse.up();
   await untilServer(truth, p.page, (a) => a.walkers.find((w) => w.id === id)?.dir === 0, `${p.name} stands once ${dir} is let go`);
 }

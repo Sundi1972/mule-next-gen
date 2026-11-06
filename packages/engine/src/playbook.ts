@@ -128,7 +128,7 @@ export interface PhaseOutcome {
     {
       claimed?: PlotIndex[];
       traded?: { good: Good; side: 'buyer' | 'seller'; price: number; qty: number }[];
-      /** Goods it declared a side for and traded none of. */
+      /** Goods it declared Sell for and traded none of. */
       declaredButIdle?: Good[];
     }
   >;

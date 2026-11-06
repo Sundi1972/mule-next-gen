@@ -19,9 +19,10 @@ import {
 } from '@mule/engine';
 import { outlook } from '../src/outlook.js';
 import { FOOD_TO_SPARE } from './store-food.js';
-import { applySets } from '../src/sim.js';
 import { AiSeat } from '../src/seat.js';
-import { developDecision, goodPlan, landDecision, muleValue, plotRoom, plotValue, tradeDecision, wantsAnyAhead, wantsPlot } from '../src/strategist.js';
+import { simSeats } from '../src/lineup.js';
+import { playGame } from '../src/play.js';
+import { developDecision, goodPlan, landDecision, muleValue, plotRoom, plotValue, rivalsStillClaiming, tradeDecision, wantsAnyAhead, wantsPlot } from '../src/strategist.js';
 import { cashReserve, installGain, secondValue, type Mind } from '../src/value.js';
 
 const fourSeats = (seed: number) => createGame({ seed, players: [0, 1, 2, 3].map((i) => ({ id: `ai${i}`, name: `AI${i}`, isAi: true })) });
@@ -107,7 +108,9 @@ describe('land claims off reading order', () => {
     const obs = observe(state, 'ai0');
     const mind = (salt: number): Mind => ({ ...traderMind, salt });
     const ranking = landDecision(obs, mind(1)).all[0]!.action.ranking;
-    const top = GAME.claimsPerGrant + STRATEGIST.grantSpare;
+    // Its top open plots: its claims, the spare, and one for each rival still claiming (FM-grant-plotless).
+    const top = GAME.claimsPerGrant + STRATEGIST.grantSpare + rivalsStillClaiming(obs, mind(1));
+    expect(top, 'three rivals still claiming at the start of the pass').toBe(GAME.claimsPerGrant + STRATEGIST.grantSpare + 3);
     // A plot that clears grantShare of the best, but ranks below the seat's top open plots.
     const outside = ranking.slice(top).find((s) => s.utility >= ranking[0]!.utility * STRATEGIST.grantShare);
     expect(outside).toBeDefined();
@@ -142,7 +145,8 @@ describe('land claims on a single pass', () => {
     const obs = observe(state, 'ai0');
     const plan = landDecision(obs, mind).all[0]!.action;
     const order = state.grant!.order;
-    const top = GAME.claimsPerGrant + STRATEGIST.grantSpare;
+    // Its claims, the spare, and one for each rival still claiming (FM-grant-plotless).
+    const top = GAME.claimsPerGrant + STRATEGIST.grantSpare + rivalsStillClaiming(obs, mind);
     // Early-ish in the pass (40% in): the first lit plot the seat values that still has `top` plots it ranks higher ahead.
     const step = order.findIndex((index, k) => {
       if (k < Math.ceil(order.length * 0.4)) return false;
@@ -156,30 +160,58 @@ describe('land claims on a single pass', () => {
 
   it('T-AC-31: the lit plot is weighed by the utility it is ranked by: within its claims and clearing grantShare of the best utility ahead, it is wanted', () => {
     // The ranking is by utility, so rank 0 clears the utility share by itself: the weighing shows only from rank 1, which
-    // one claim a grant (GAME.claimsPerGrant 1) leaves out of the window. Widen it one rank by STRATEGIST.grantSpare.
-    const spare = STRATEGIST.grantSpare;
-    applySets([`STRATEGIST.grantSpare=${spare + 1}`]);
-    try {
-      const state = fourSeatsWithWater(1, WATER_TO_SPARE);
-      while (state.phase !== 'landGrant') advancePhase(state);
-      const mind: Mind = { ...traderMind, levelId: 'tycoon', level: AI_LEVELS.tycoon, salt: 1 };
-      const obs = observe(state, 'ai0');
-      const plan = landDecision(obs, mind).all[0]!.action;
-      const order = state.grant!.order;
-      // A lit plot within its claims whose utility clears the share while its value falls short of it: the two metrics disagree.
-      const step = order.findIndex((index, k) => {
-        const ahead = new Set(order.slice(k));
-        const rivals = plan.ranking.filter((s) => ahead.has(s.index));
-        const rank = rivals.findIndex((s) => s.index === index);
-        const lit = rivals[rank];
-        if (!lit || lit.value <= 0 || rank >= GAME.claimsPerGrant + STRATEGIST.grantSpare) return false;
-        return lit.utility >= rivals[0]!.utility * STRATEGIST.grantShare && lit.value < Math.max(...rivals.map((s) => s.value)) * STRATEGIST.grantShare;
-      });
-      expect(step).toBeGreaterThanOrEqual(0);
-      expect(wantsPlot(plan, obs, order[step]!, order.slice(step), mind)).toBe(true);
-    } finally {
-      applySets([`STRATEGIST.grantSpare=${spare}`]);
-    }
+    // the window holds with rivals still claiming (FM-grant-plotless): three of them at the start of the pass.
+    const state = fourSeatsWithWater(1, WATER_TO_SPARE);
+    while (state.phase !== 'landGrant') advancePhase(state);
+    const mind: Mind = { ...traderMind, levelId: 'tycoon', level: AI_LEVELS.tycoon, salt: 1 };
+    const obs = observe(state, 'ai0');
+    const plan = landDecision(obs, mind).all[0]!.action;
+    const order = state.grant!.order;
+    // A lit plot within its claims whose utility clears the share while its value falls short of it: the two metrics disagree.
+    const step = order.findIndex((index, k) => {
+      const ahead = new Set(order.slice(k));
+      const rivals = plan.ranking.filter((s) => ahead.has(s.index));
+      const rank = rivals.findIndex((s) => s.index === index);
+      const lit = rivals[rank];
+      if (!lit || lit.value <= 0 || rank === 0 || rank >= GAME.claimsPerGrant + STRATEGIST.grantSpare + rivalsStillClaiming(obs, mind)) return false;
+      return lit.utility >= rivals[0]!.utility * STRATEGIST.grantShare && lit.value < Math.max(...rivals.map((s) => s.value)) * STRATEGIST.grantShare;
+    });
+    expect(step).toBeGreaterThanOrEqual(0);
+    expect(wantsPlot(plan, obs, order[step]!, order.slice(step), mind)).toBe(true);
+  });
+});
+
+/** The board as month 1's land grant ends, in a game of `seats` trader-level AI seats played from `seed` as the sim plays it. */
+function afterFirstGrant(seats: number, seed: number): GameState {
+  class Stop extends Error {}
+  let end: GameState | null = null;
+  try {
+    playGame(seed, simSeats(seats, 'trader', seed), {
+      onPhase: (s) => {
+        if (s.phase !== 'landGrant' || s.month !== 1) return;
+        end = structuredClone(s);
+        throw new Stop();
+      },
+    });
+  } catch (err) {
+    if (!(err instanceof Stop)) throw err;
+  }
+  return end!;
+}
+
+describe('land claims when every seat wants the same plots', () => {
+  // Seats rank the board nearly alike, so with one claim a grant they queue for the same few plots. A seat that lost
+  // each of them, waiting for its own top plot still ahead, ended the pass with no plot while most of the board was free
+  // (traced: 4 seats, seed 46, seat 1; 6 seats, seed 5, seats 0, 3 and 5).
+  it.each([
+    [4, 46],
+    [6, 5],
+  ])('FM-grant-plotless: at %i seats, seed %i, every AI seat holds a plot when month 1 grant ends with plots still free', (seats, seed) => {
+    const end = afterFirstGrant(seats, seed);
+    const free = end.tiles.filter((t) => t.owner === null && t.terrain !== 'store').length;
+    expect(free, 'plots are still free').toBeGreaterThan(0);
+    const plotless = end.players.filter((p) => !end.tiles.some((t) => t.owner === p.id)).map((p) => p.id);
+    expect(plotless, `seats with no plot, ${free} plots still free`).toEqual([]);
   });
 });
 

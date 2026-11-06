@@ -47,7 +47,7 @@ const ME: MyView = {
   stock: { ...NO_GOODS, food: 2 },
   carriedMule: null,
   installedThisTurn: false,
-  worthParts: { money: 1_000, goods: 100, plots: 3, land: 900, mules: 0, muleValue: 0, office: 0, cut: 0 },
+  worthParts: { money: 1_000, goods: 100, plots: 3, land: 900, mules: 0, muleValue: 0, office: 0, donated: 0, cut: 0 },
   claimsLeft: 0,
   hungry: false,
   sick: false,

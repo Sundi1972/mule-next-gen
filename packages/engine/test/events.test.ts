@@ -224,7 +224,8 @@ describe('several events in one production', () => {
     expect(named.length).toBeGreaterThan(0);
     expect(named.filter((key) => !Object.hasOwn(EVENTS.colony, key) && !Object.hasOwn(EVENTS.player, key))).toEqual([]);
     // ...and a row rollPhase rolls at the phase start: sickness makes no MonthEvent, and the cavern rolls per plot after output.
-    const rolled = (table: object) => Object.keys(table).filter((key) => (drawnKeys() as string[]).includes(key));
+    // (Any row but sickness, a per-plot row or an after-output row: the excludes may name a planning row, C26's festival.)
+    const rolled = (table: Record<string, EventRow>) => Object.keys(table).filter((key) => key !== 'sickness' && !table[key]!.perPlot && !table[key]!.afterOutput);
     expect(rolled(EVENTS.colony)).not.toContain('cavernCollapse');
     expect(named.filter((key) => ![...rolled(EVENTS.colony), ...rolled(EVENTS.player)].includes(key))).toEqual([]);
     // rollPhase resolves the excludes after the colony rows and before the player rows: a player-row pair would never

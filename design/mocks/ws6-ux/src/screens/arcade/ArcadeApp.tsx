@@ -4,6 +4,7 @@ import { LaptopFrame } from '../../harness';
 import { IntentNotes, IntentNotesProvider } from '../../proposed/IntentNote';
 import { LaptopArcade } from './Laptop';
 import { ArcadeProvider, type Scenario } from './loop';
+import { ChatProvider, useChatSim } from '../../proposed/Chat';
 import { ARCADE_NOTES } from './notes';
 import { PhoneFrame } from '../../harness';
 import { PhoneArcade, PhoneLandscape, PortraitFrame, SmallPhoneFrame } from './Phone';
@@ -456,6 +457,11 @@ function TvRoute() {
   );
 }
 
+/** The table's chat, running under every arcade screen as the shell runs it under the tap screens. */
+function TableChatSim({ children }: { children: ReactNode }) {
+  return <ChatProvider value={useChatSim()}>{children}</ChatProvider>;
+}
+
 export function ArcadePage({ route }: { route: string }) {
   const body =
     route === 'arcade' ? <Table /> : route === 'arcade-computer' ? <Computer /> : route === 'arcade-phone' ? <PhoneRoute /> : route === 'arcade-phone-portrait' ? <PortraitRoute /> : route === 'arcade-tv' ? <TvRoute /> : route === 'arcade-wolves' ? <Wolves /> : route === 'arcade-glint' ? <GlintRace /> : route === 'arcade-scramble' ? <ScrambleRace /> : ADDENDUM_ROUTES.includes(route) ? <AddendumRoute route={route} /> : <Contents />;
@@ -465,7 +471,7 @@ export function ArcadePage({ route }: { route: string }) {
       {isGame ? (
         // A fresh sim per route: the key restarts it when the hash changes.
         <ArcadeProvider key={route} autopilot={route === 'arcade-tv'} scenario={route === 'arcade-wolves' ? 'wolves' : route === 'arcade-glint' ? 'glint' : route === 'arcade-scramble' ? 'scramble' : ADDENDUM_ROUTES.includes(route) ? (route.replace('arcade-', '') as Scenario) : 'table'}>
-          {body}
+          <TableChatSim>{body}</TableChatSim>
         </ArcadeProvider>
       ) : (
         body

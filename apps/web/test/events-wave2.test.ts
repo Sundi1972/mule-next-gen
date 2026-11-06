@@ -249,10 +249,10 @@ describe('B1 (C5): the ledger stories play the gallery’s own, and say what the
   });
 
   it('a key this client does not know yet still plays, on the plain badge', () => {
-    const unknown = event('festival' as ShowEventView['key'], 'planning', { title: 'Festival', sign: 'good' });
+    const unknown = event('harvestMoon' as ShowEventView['key'], 'planning', { title: 'Harvest moon', sign: 'good' });
     const seg = segOf([unknown], 'tv');
     const html = screen([unknown], seg.announceAt + 0.3, 'tv');
-    expect(html).toMatch(/data-glyph="festival"[^>]*>\s*<circle/);
+    expect(html).toMatch(/data-glyph="harvestMoon"[^>]*>\s*<circle/);
     expect(() => playFrames([unknown], 'alone')).not.toThrow();
   });
 });

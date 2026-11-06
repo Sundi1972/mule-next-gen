@@ -89,6 +89,14 @@ export function voteWeight(state: GameState, playerId: string): VoteWeight {
   return { total: parts.base + parts.land + parts.reputation + parts.baron + parts.taxes, parts };
 }
 
+/** An event's change to a player's reputation (blamed for the unrest, G-5 C26): whole points, POLITICS.reputation.min..max. No-op with politics off. */
+export function reputationShift(state: GameState, playerId: string, delta: number): void {
+  if (!state.politics) return;
+  const p = player(state, playerId);
+  const { min, max } = POLITICS.reputation;
+  p.reputation = Math.max(min, Math.min(max, Math.round(p.reputation + delta)));
+}
+
 /** This month's election while planning runs; a RuleError when there is none. */
 function liveElection(state: GameState): Shared<Election> {
   const election = currentElection(state);

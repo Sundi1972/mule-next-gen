@@ -3,8 +3,8 @@
  * Governor commissions. The only writer of GameState.colony and, through fundIn and fundOut, of treasury.money.
  * With politics off there is no colony, and the fund moves exactly as it always has, with no ledger.
  */
-import { COLONY, GAME, GOOD_CONFIG, HAPPINESS, PRESTIGE } from './config.js';
-import { storeForSale, storeQuotes } from './economy.js';
+import { COLONY, GAME, HAPPINESS, PRESTIGE } from './config.js';
+import { allPrices, storeForSale, storeQuotes } from './economy.js';
 import { RuleError } from './errors.js';
 import { COLONY_SELLER } from './lots.js';
 import { votesOpen } from './politics.js';
@@ -188,7 +188,7 @@ export function colonyWealth(state: GameState): number {
 
 /** The colony's gauges now. */
 export function colonyGauges(state: GameState): ColonyGauges {
-  return { month: state.month, wealth: colonyWealth(state), prestige: colonyPrestige(state), happiness: state.colony?.happiness ?? null };
+  return { month: state.month, wealth: colonyWealth(state), prestige: colonyPrestige(state), happiness: state.colony?.happiness ?? null, air: state.air };
 }
 
 /** Last month's gauges for the "this month" change: the latest month end before this month's, or null in month 1. */
@@ -259,12 +259,14 @@ export function donate(state: GameState, playerId: string, id: PrestigeId, credi
   donor.money -= credits;
   payIn(state, colony, 'donation', credits);
   target.funded.credits += payOut(state, colony, 'project', credits);
+  // Goods count at the store's price on the day, the price Worth values them at, so a gift is Worth-neutral (AM-13).
+  const prices = allPrices(state);
   let value = credits;
   for (const [good, units] of given) {
     if (units === 0) continue;
     donor.stock[good] -= units;
     target.funded.goods[good] = (target.funded.goods[good] ?? 0) + units;
-    value += units * GOOD_CONFIG[good].refPrice;
+    value += units * prices[good];
   }
   target.plaque[playerId] = (target.plaque[playerId] ?? 0) + value;
   state.treasury.paid[playerId] = (state.treasury.paid[playerId] ?? 0) + value;
@@ -342,6 +344,12 @@ export function moodShift(state: GameState, delta: number): void {
   if (!state.colony) return;
   const colony = edit(state);
   colony.happiness = clampMood(Math.round(colony.happiness + delta));
+}
+
+/** An event's lasting prestige (a festival's points, G-5 C26), whole points; colonyPrestige counts them. */
+export function addPrestige(state: GameState, points: number): void {
+  if (!state.colony) return;
+  edit(state).permanentPrestige += Math.round(points);
 }
 
 /** The band a mood falls in. */

@@ -27,9 +27,10 @@ export function planShip(seed: number, arrives: number, players: number): Export
 
 /**
  * Expected demand for next month, per good, from colonists, players,
- * industry and the export ship's off-world buyers.
+ * industry and the export ship's off-world buyers. `festival` is the extra Food the colonists ask this month (G-5 C26);
+ * once upkeep's meal has run it is eaten, and the caller passes 0.
  */
-export function monthlyDemand(state: GameState): Stock {
+export function monthlyDemand(state: GameState, festival = festivalFood(state)): Stock {
   const demand = emptyStock();
   const players = state.players.length;
   const colonistUnits = state.colonists / UPKEEP.colonistsPerUnit;
@@ -38,7 +39,7 @@ export function monthlyDemand(state: GameState): Stock {
   // less when the store's price is above what their wages pay.
   const sick = airBand(state.air).sickens;
   const own = playersUse(state);
-  demand.food = own.food + colonistDemand(state, 'food', colonistUnits);
+  demand.food = own.food + colonistDemand(state, 'food', colonistUnits + festival);
   demand.water = own.water + colonistDemand(state, 'water', colonistUnits);
   demand.energy = own.energy + colonistDemand(state, 'energy', colonistUnits * UPKEEP.colonistEnergyShare);
   // Sick colonists in dirty air need more Medicine.
@@ -86,6 +87,18 @@ export function playersUse(state: GameState): { food: number; water: number; ene
   // A plant pays its own use from its own output (AM-17 R2, PM ruling A): it asks the store for nothing.
   for (const t of state.tiles) if (t.outfit !== 'energy') use.energy += energyUseOf(state, t);
   return use;
+}
+
+/**
+ * The Food the colonists ask this month beyond their need: a festival's extra (G-5 C26), the units its store-Food
+ * effect carries; 0 in any other month. The month's list holds it from planning until the next month opens.
+ */
+export function festivalFood(state: GameState): number {
+  return state.monthEvents
+    .filter((e) => e.key === 'festival')
+    .flatMap((e) => e.effects ?? [])
+    .filter((f) => f.on === 'store' && f.what === 'food')
+    .reduce((sum, f) => sum + f.delta, 0);
 }
 
 /** What colonists buy of a good they need this much of, at the store's current selling price. */
@@ -231,7 +244,8 @@ export function storeQuotes(state: GameState, good: Good): { buy: number | null;
  * first, so a short good runs out for the players, not for the colonists.
  */
 export function storeForSale(state: GameState, good: Good): number {
-  const reserve = good === 'food' || good === 'water' ? Math.ceil(state.colonists / UPKEEP.colonistsPerUnit) : 0;
+  const need = state.colonists / UPKEEP.colonistsPerUnit + (good === 'food' ? festivalFood(state) : 0);
+  const reserve = good === 'food' || good === 'water' ? Math.ceil(need) : 0;
   return Math.max(0, state.store.stock[good] - reserve);
 }
 

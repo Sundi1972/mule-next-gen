@@ -68,12 +68,14 @@ function quoteTalk(talk: TableTalk): string {
   return `${quotableLine(talk.from) || 'Someone'}: "${text}"`;
 }
 
-function optionLine(o: ShortOption): string {
+/** One option as the prompts list it: its letter, label, reason and score. */
+export function optionLine(o: ShortOption): string {
   // literal-ok: shows each score to two decimals in the prompt
   return `${o.id}. ${o.label} — ${o.rationale} (score ${o.utility.toFixed(2)})`;
 }
 
-function tableTalkBlock(talk: TableTalk[]): string {
+/** Table talk as quoted speech in its marked block, or a note that the table is quiet. */
+export function tableTalkBlock(talk: readonly TableTalk[]): string {
   if (talk.length === 0) return 'The table has been quiet.';
   return [TALK_OPEN, ...talk.map(quoteTalk), TALK_CLOSE].join('\n');
 }

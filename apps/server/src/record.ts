@@ -322,6 +322,17 @@ export class Recorder {
             this.call(seat.id, 'move', () => decider.decide(shortlist, persona, context), (choice) => ({ choice: recordedChoice(choice) })),
         };
       },
+      writerFor: (seat) => {
+        const writer = inner.writerFor(seat);
+        if (!writer) return null;
+        this.guard(() => {
+          const header = this.record.seats.find((s) => s.id === seat.id);
+          if (header) header.smart = true;
+        });
+        return {
+          write: async (kind, ask) => this.call(seat.id, kind, () => writer.write(kind, ask), (r) => ({ write: structuredClone(r.reply) })),
+        };
+      },
       chatter: (seat, say) => inner.chatter(seat, say),
       finish: () => inner.finish(),
     };

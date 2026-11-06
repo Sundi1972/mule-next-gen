@@ -71,8 +71,8 @@ const box = (x0: number, x1: number, y0: number, y1: number): CSSProperties => (
  * The phone's type is never under 10 px, and its doors and fitting bays are at least 32 px wide on a 667 px phone.
  */
 const SIZES = {
-  phone: { lock: 'px-0.5 py-px text-[10px]', name: 'text-[11px]', price: 'text-[10px]', small: 'text-[10px]', icon: 20, iconPad: 'p-1', fit: 16, fits: 'gap-0.5 p-0.5', mule: 30, creature: 28, led: 32, sign: 'h-5 w-5', chimney: 'h-3 w-3', caps: 'text-[10px]!', door: 'text-base', doorBox: 'min-w-8', doorNote: 'text-[10px]' },
-  wide: { lock: 'px-1 py-0.5 text-[11px]', name: 'text-lg', price: 'text-base', small: 'text-sm', icon: 40, iconPad: 'p-1.5', fit: 30, fits: 'gap-1 p-1', mule: 84, creature: 52, led: 60, sign: 'h-10 w-10', chimney: 'h-5 w-5', caps: 'text-xs!', door: 'text-3xl', doorBox: '', doorNote: 'text-xs' },
+  phone: { lock: 'px-0.5 py-px text-[10px]', name: 'text-[11px]', price: 'text-[10px]', small: 'text-[10px]', icon: 20, iconPad: 'p-1', fit: 16, fits: 'gap-0.5 p-0.5', mule: 30, creature: 28, led: 32, sign: 'h-5 w-5', chimney: 'h-3 w-3', caps: 'text-[10px]!', door: 'text-base', doorBox: 'min-w-8', doorNote: 'text-[10px]', works: 'The works', worksLine: 'truncate' },
+  wide: { lock: 'px-1 py-0.5 text-[11px]', name: 'text-lg', price: 'text-base', small: 'text-sm', icon: 40, iconPad: 'p-1.5', fit: 30, fits: 'gap-1 p-1', mule: 84, creature: 52, led: 60, sign: 'h-10 w-10', chimney: 'h-5 w-5', caps: 'text-xs!', door: 'text-3xl', doorBox: '', doorNote: 'text-xs', works: 'The works · factory fits', worksLine: '' },
 };
 type Sizes = (typeof SIZES)[keyof typeof SIZES];
 
@@ -207,7 +207,8 @@ export function Hall({
             <svg aria-hidden viewBox="0 0 16 16" className={z.chimney}>
               <path d="M2 14V7l4 2V7l4 2V3h4v11z" fill="var(--color-ink-3)" />
             </svg>
-            <span className={cx('label-caps', z.caps)}>The works · factory fits</span>
+            {/* The phone cuts it to one line, so the arcade guide's label below never meets it (#224). */}
+            <span className={cx('label-caps', z.caps, z.worksLine)}>{z.works}</span>
           </span>
           <span className={cx('grid flex-1 grid-cols-3', z.fits)}>
             {FITS.map((f) => (

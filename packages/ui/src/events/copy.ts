@@ -15,6 +15,12 @@ const plots = (good: Good | undefined, n: number) => {
 const signed = (n: number) => `${n < 0 ? '−' : '+'}${Math.abs(n)}`;
 const lower = (w: string) => (/^[A-Z][a-z]/.test(w) ? w[0]!.toLowerCase() + w.slice(1) : w);
 const isGood = (what: ShowEffect['what']): what is Good => what in GOOD_NAME;
+/** The colony's gauges an event can move, beside whatever else it did. */
+const GAUGES: ReadonlySet<ShowEffect['what']> = new Set(['mood', 'prestige', 'air']);
+const OBJECT_NAME: Record<NonNullable<ShowEventView['objects']>[number]['id'], string> = { park: 'Park', hospital: 'Hospital', observatory: 'Observatory', stadium: 'Stadium', spaceport: 'Spaceport' };
+
+/** The colony's objects an event damaged, in words: "Park damaged". */
+export const objectWords = (ev: Pick<ShowEventView, 'objects'>) => (ev.objects ?? []).map((o) => `${OBJECT_NAME[o.id]} ${o.becomes}`);
 
 /** The word a plot's chip shows instead of a number, when the change isn't one: LOST, TAKEN, CAVED IN. */
 export function hitText(hit: ShowHit): string | undefined {
@@ -24,7 +30,7 @@ export function hitText(hit: ShowHit): string | undefined {
   return undefined;
 }
 
-/** One change off the map in a few words: "−64 cr", "+3 Food", "Colonists +12", "Energy need +100%". */
+/** One change off the map in a few words: "−64 cr", "+3 Food", "Colonists +12", "Energy need +100%", "Mood +10". */
 export function effectWords(f: ShowEffect): string {
   const n = signed(f.delta);
   switch (f.what) {
@@ -35,7 +41,17 @@ export function effectWords(f: ShowEffect): string {
     case 'energyNeed':
       return `Energy need ${n}%`;
     case 'mules':
-      return `${n} MULEs`;
+      // A store strike sends the corral with no change: the store sells none this turn.
+      return f.delta === 0 ? 'No MULEs this turn' : `${n} MULEs`;
+    // G-5 C26's effects.
+    case 'mood':
+      return `Mood ${n}`;
+    case 'prestige':
+      return `Prestige ${n}`;
+    case 'air':
+      return `Air ${n}`;
+    case 'reputation':
+      return `Reputation ${n}`;
     default:
       return `${n} ${GOOD_NAME[f.what]}`;
   }
@@ -94,6 +110,15 @@ export function segTitle(seg: EventSegment): string {
  * "−2 Food, −2 Water on 4 plots".
  */
 export function eventSummary(ev: ShowEventView, cast: ShowCast): string {
+  const onMap = plotSummary(ev, cast);
+  if (onMap === null) return effectsSummary(ev, cast);
+  // A plot event can move a colony gauge too (a MULE theft's mood): it follows what the plots show.
+  const gauges = (ev.effects ?? []).filter((f) => f.on === 'colony' && GAUGES.has(f.what)).map(effectWords);
+  return [onMap, ...gauges].join(' · ');
+}
+
+/** What an event did on the map, or null when no hit changed anything there. */
+function plotSummary(ev: ShowEventView, cast: ShowCast): string | null {
   const first = ev.hits[0];
   const whose = (h: ShowHit) => cast.name(cast.ownerAt(h.x, h.y) ?? '');
   const kindOf = (h: ShowHit) => {
@@ -104,9 +129,13 @@ export function eventSummary(ev: ShowEventView, cast: ShowCast): string {
   if (ev.key === 'meteorStrike' && first) return cast.ownerAt(first.x, first.y) ? `${whose(first)}’s ${first.muleLost ? `${kindOf(first)} lost its MULE` : 'plot was struck'} · a crater` : 'A crater on open land';
   if (first?.becomes === 'idle') return `${whose(first)}’s ${kindOf(first)} stands idle`;
   if (first?.becomes === 'plain') return `${whose(first)}’s crystal cavern is a plain plot`;
+  if (ev.key === 'generalStrike' && ev.phase === 'planning' && first) {
+    const good = cast.goodAt(first.x, first.y);
+    return `${good ? `${GOOD_NAME[good]} ` : ''}at 20% on ${plots(good, ev.hits.length)} unless the Governor pays`;
+  }
   // A hit that changed nothing is no loss: it is in no figure and no plot count; with none left, the effects speak.
   const hits = ev.hits.filter((h) => h.delta !== 0);
-  if (hits.length === 0) return effectsSummary(ev, cast);
+  if (hits.length === 0) return null;
   const change = new Map<Good | undefined, number>();
   for (const h of hits) {
     const good = cast.goodAt(h.x, h.y);
@@ -132,7 +161,7 @@ function effectsSummary(ev: ShowEventView, cast: ShowCast): string {
       : players.map(named);
   // The store's held goods carry its name, so a chip of goods never reads as a player's: "Store −8 Crystite".
   const bare = (f: ShowEffect) => (f.on === 'store' && (players.length > 0 || isGood(f.what)) ? `Store ${lower(effectWords(f))}` : effectWords(f));
-  return [...parts, ...rest.map(bare)].join(' · ');
+  return [...objectWords(ev), ...parts, ...rest.map(bare)].join(' · ');
 }
 
 /** The whole segment's effect, for the TV's log. A roll call says each person's in turn. */
@@ -155,6 +184,9 @@ const YOU: Partial<Record<ShowEventKey, (ev: ShowEventView) => string>> = {
   wildfire: () => 'One farm burned out; the farms joined to it make 1 less. This month only.',
   bumperHarvest: () => 'One plot of yours makes double this month.',
   cavernCollapse: () => 'Your crystal cavern caved in: it’s a plain plot now, with no cavern Crystite.',
+  blamedForUnrest: () => 'The colony blames you for the unrest: fewer votes at the next election.',
+  walkout: () => 'Your workers walked out: your plots of that good make 20% this month.',
+  loyalCrew: () => 'Your crew stayed loyal: one plot makes 1 more this month.',
 };
 
 /** The phone's line for an event that touches everyone the same: the colony's news. */
@@ -162,6 +194,12 @@ const ALL: Partial<Record<ShowEventKey, (ev: ShowEventView) => string>> = {
   immigrationWave: () => 'For everyone: more colonists, for good. The store buys more Food, Water and Energy.',
   storeFire: () => 'For everyone: the store lost everything it held, every good and its MULEs, until it’s restocked.',
   coldSnap: () => 'For everyone: every plot needs twice its Energy this month.',
+  festival: () => 'For everyone: the colony’s mood lifts, and the store buys more Food this month.',
+  generalStrike: () => 'For everyone: every plot of the struck good makes 20% this month, unless the Governor pays the strikers.',
+  emigrationWave: () => 'For everyone: colonists leave the colony, for good. The store buys less.',
+  storeStrike: () => 'For everyone: the store sells no MULEs this turn.',
+  riot: (ev) => `For everyone: ${[...objectWords(ev).map((w) => `${w} in the riot`), 'the store lost a third of its stock'].join(', and ')}.`,
+  volunteerCleanup: () => 'For everyone: volunteers cleaned up, and the air is cleaner.',
 };
 
 /** Whether a segment is the colony's news: it touches everyone the same, so it never "missed" anyone. */
