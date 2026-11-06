@@ -214,7 +214,7 @@ try {
   await tv.getByTestId('tv-planning').waitFor({ timeout: READY_MS });
   console.log(`TV-FIT, planning: ${await theTvBodyFits(tv, server, code, 'planning')}; ${await theTvHeaderFits(tv, 'planning')}`);
   console.log(`hub: ${await planningIsTheHub(phone, server, code)}`);
-  console.log(`plot marks at 25 px: ${await theMarksStayClearOfTheDots(ctx)}`);
+  console.log(`plot marks at 25 and 12.8 px: ${await theMarksStayClearOfTheDots(ctx)}`);
   await theDroneReportsInTheRail(ctx);
   // B-AC-7 (in game): the player moves to a second device, which plays the rest of the game.
   const second = await newPhone('second device');
