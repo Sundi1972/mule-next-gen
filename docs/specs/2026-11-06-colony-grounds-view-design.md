@@ -39,3 +39,29 @@ this spec adds nothing to them.
 - Chosen (C, per-building pictures + live layer + painted ground): art ≈ 85 pictures from shared kits
   (≈ 2–4 agent-days with look rounds), view ≈ 3 PRs (art manifest + compositor, live layer, screens wiring).
 - Thin baseline (WS6's SVG scene, unchanged, with C48's data): ≈ 1 PR — fails G-2 by Heiko's own reaction to it.
+
+§0 CONFIRMED by the PM (design authority) on 6 Nov, as written at c7d38f36.
+
+## §0.1 · Decision Record  [review-only] — approaches, for the PM's pick
+
+**1 · Recommended: pictures + glow + live layer + painted ground (direction C as ruled).** ≈ 3 build PRs + the art.
+- Art: `design/art/colony/` scripts → `apps/web/public/art/colony/<kind>/<stage>-<light>@<w>.webp` + `manifest.json`
+  (WS10 sole owner, already assigned).
+- `ColonyGrounds`: a new `packages/ui/src/grounds/` component, owned by WS10 and reviewed by WS4, like WS6's
+  `ProductionMap` (SEAMS 2026-10-21 PM ruling). It draws the painted ground (the map painter, `terrain/landscape.ts`,
+  with a grounds palette), then the pictures by slot in painter's order, then the live layer (glow by wealth, colonists by
+  mood, smoke, the next place, the slot chips), plus the month-end lean-in. Its scaffold is
+  `design/mocks/colony-grounds/src/Scene.tsx` + `src/look/Living.tsx` (approved mock).
+- Screens: the TV planning colony panel and month end (WS4), the phone colony desk (its owner by the PM's ruling) each
+  mount `<ColonyGrounds colony={…} size=…/>`. Route lines only.
+
+**2 · Middle: pictures + glow + live layer on WS6's flat SVG ground.** ≈ 2–3 PRs. It skips the painter integration
+(about ½–1 day). It loses on the ruling itself: Heiko's 6 Nov ruling names "A painter for ground" (SEAMS 14:42Z), and on
+the look page the flat ground was the weakest part of every picture.
+
+**3 · Thin baseline: WS6's SVG `Scene` as is, with `art` pictures for standing buildings only.** ≈ 1 PR. It fails
+UBER-AC-2's complete manifest (no site, building, closed or damaged pictures) and G-1's "lit or dim" reading, because
+there is no glow layer. Checkable: the `art` prop in `Scene.tsx` replaces only `standing`.
+
+**Spec class: Programme** (recommended). It has a new sole owner (`packages/ui/src/grounds/`), a cross-lane contract
+(the art manifest read by the component; screens owned by WS4 and WS6), and more than 3 PRs counting the art.
