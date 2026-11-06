@@ -47,6 +47,11 @@ export function storeSellLine(state: GameState): number | null {
   return a?.good && storeForSale(state, a.good) > 0 ? a.storeSell : null;
 }
 
+/** The store's selling line as every screen shows it: what the store sells at, or while it is sold out the highest bid. */
+export function shownSellLine(state: GameState): { price: number; bid: boolean } | null {
+  throw new Error('NotImplemented: shownSellLine');
+}
+
 /** The store's buying line, while it still wants the good. The store never runs out of money. */
 export function storeBuyLine(state: GameState): number | null {
   const a = state.auction;

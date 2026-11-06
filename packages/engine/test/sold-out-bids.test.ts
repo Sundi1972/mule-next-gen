@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { auctionDone, createGame, declareRole, setWalk, startAuction, stepAuction, stepWalk, WALK, type GameState, type Good, type Trade } from '../src/index.js';
+import { auctionDone, createGame, declareRole, setWalk, shownSellLine, startAuction, stepAuction, stepWalk, tradeInterval, WALK, type GameState, type Good, type Trade } from '../src/index.js';
 
 /**
  * RULE-7 (docs/specs/2026-11-05-ws3-auction-auto-trade.md §10): with the store sold out, buyers may bid above its old
@@ -103,5 +103,50 @@ describe('RULE-7 rows 1 and 2: a buyer bidding past a sold-out store', () => {
     for (let t = 0; t < 20_000; t += TICK) trades.push(...stepAuction(state, TICK));
     expect(trades.length).toBeGreaterThan(0);
     expect(trades.every((t) => t.buyer === 'p1' && t.seller === 'p0' && t.price === ask)).toBe(true);
+  });
+});
+
+describe('RULE-7 rows 3 and 4: the line shows the top bid, and a seller walks down onto it', () => {
+  it('B-AC-E1: sold out of Water, Lena bids past the old line and every screen\'s line shows her bid; Brix, resting above, does not trade until he walks down to it, then they trade at it one unit at a time', () => {
+    const probe = a(soldOutWalk([PROBE_ASK]));
+    const S = probe.storeSell;
+    const brixAsk = S + 10;
+    const state = soldOutWalk([brixAsk]); // p0 is Brix, resting; p1 is Lena
+    // p2 bids far above S with no money to pay it: not an active bid, so the line never shows it.
+    walker(state, 'p2').price = brixAsk - 2;
+    state.players[2]!.money = 0;
+    expect(shownSellLine(state), 'no bid above S yet: the line stays at S').toEqual({ price: S, bid: false });
+
+    setWalk(state, 'p1', 1);
+    const trades: Trade[] = [];
+    for (let t = 0; t < 15_000; t += TICK) trades.push(...stepAuction(state, TICK));
+    const lenaBid = brixAsk - 1;
+    expect(Math.round(walker(state, 'p1').price)).toBe(lenaBid);
+    expect(shownSellLine(state)).toEqual({ price: lenaBid, bid: true });
+    expect(trades, 'Lena walking up never trades with Brix standing still, and the store sells nothing').toEqual([]);
+    expect(state.store.stock.water).toBe(0);
+
+    // Brix walks down onto her bid: they trade at it, the first unit after tradeStartMs, the next on RULE-3's curve.
+    setWalk(state, 'p0', -1);
+    const met: Trade[] = [];
+    let first = -1;
+    for (let t = 0; t < 10_000; t += TICK) {
+      const step = stepAuction(state, TICK);
+      expect(step.length, 'one unit at a time').toBeLessThanOrEqual(1);
+      if (step.length > 0 && first < 0) first = t;
+      met.push(...step);
+    }
+    expect(met.length).toBeGreaterThan(1);
+    expect(met.every((s) => s.buyer === 'p1' && s.seller === 'p0' && s.price === lenaBid)).toBe(true);
+    expect(first, 'the first unit waits tradeStartMs from when they meet').toBeGreaterThanOrEqual(tradeInterval(0) - TICK);
+  });
+
+  it('B-AC-E1: while the store sells, the line is its selling price, not a bid; with soldOutBidding off a sold-out store shows no line', () => {
+    const selling = soldOutWalk([PROBE_ASK]);
+    selling.store.stock.water = 200;
+    expect(shownSellLine(selling)).toEqual({ price: a(selling).storeSell, bid: false });
+    WALK.soldOutBidding = false;
+    const state = soldOutWalk([PROBE_ASK]);
+    expect(shownSellLine(state)).toBeNull();
   });
 });
