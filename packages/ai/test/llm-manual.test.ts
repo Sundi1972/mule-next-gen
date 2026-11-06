@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { AI_LEVELS, createGame, GAME, scoreParts, UPKEEP } from '@mule/engine';
+import { AI_LEVELS, createGame, EXPORT_SHIP, GAME, MULE, POLLUTION, scoreParts, UPKEEP } from '@mule/engine';
 import type { AiAction } from '../src/actions.js';
 import { ADVICE, defaultManual, seatBounds, type AdviceLine } from '../src/llm/manual.js';
 import { WRITER_SYSTEM } from '../src/llm/system.js';
@@ -87,6 +87,85 @@ describe('the manual of moves', () => {
     } finally {
       UPKEEP.offOutputShare = saved.off;
       UPKEEP.shortOutputShare = saved.short;
+    }
+  });
+
+  /** The line of `How a month goes` for one phase, by its name there. */
+  const phaseLine = (manual: string, name: string) => section(manual, 'How a month goes').split('\n').find((l) => l.startsWith(`- ${name}: `))!;
+
+  it("B fix 2: production says the Energy and Water cuts stack, each with its rounding, and how a factory turned off takes its inputs, from config (production.ts runProduction)", () => {
+    const saved = { off: UPKEEP.offOutputShare, short: UPKEEP.shortOutputShare };
+    const before = phaseLine(defaultManual(), 'production');
+    try {
+      UPKEEP.offOutputShare = 0.13;
+      UPKEEP.shortOutputShare = 0.71;
+      const production = phaseLine(defaultManual(), 'production');
+      expect(production).not.toBe(before);
+      // A plot turned off: offShare, Math.round.
+      expect(production).toContain('a plot turned off makes 13% of its output, rounded half up');
+      // Short of Water: halve, Math.floor, on what the parts add up to after switchOff.
+      expect(production).toContain(`it makes 71% of what it would, rounded down`);
+      expect(production).toContain('takes both cuts, the Water cut on what the Energy cut left');
+      // A factory turned off: offInput, Math.ceil, of each non-Energy input; none taken when offShare(output) is 0.
+      expect(production).toContain('A factory turned off for want of Energy makes 13% of its output from 13% of each non-Energy input, rounded up, and takes no inputs when its share of output rounds to 0');
+    } finally {
+      UPKEEP.offOutputShare = saved.off;
+      UPKEEP.shortOutputShare = saved.short;
+    }
+  });
+
+  it('B fix 2: development says how the store makes MULEs, what the corral holds and when it runs dry, and how their price moves, from config (upkeep.ts, game.ts, economy.ts mulePrice)', () => {
+    const saved = { ...MULE };
+    const before = defaultManual();
+    try {
+      Object.assign(MULE, { labour: 133, smithorePerMule: 3, corralPerPlayer: 7, spareInCorral: 5, scarcityUp: 0.37, surplusDown: 0.23, surplusShare: 0.61, minFactor: 0.47 });
+      const manual = defaultManual();
+      const development = phaseLine(manual, 'development');
+      expect(development).not.toBe(phaseLine(before, 'development'));
+      // upkeep.ts: build = min(corralTarget - mules, floor(store Smithore / smithorePerMule)).
+      expect(development).toContain('At upkeep the store builds MULEs from its own Smithore, 3 Smithore each, until the corral holds 7 for each player plus 5');
+      expect(development).toContain('short of Smithore it builds fewer, so the corral can run dry');
+      // economy.ts mulePrice; game.ts at the end of development.
+      expect(development).toContain("A MULE costs 133 plus 3 Smithore at the store's posted price, times a scarcity factor");
+      expect(development).toContain('up 37% after a development that sold the corral out');
+      expect(development).toContain('down 23% after one that left 61% or more of its MULEs unsold');
+      expect(development).toContain('never below 47%');
+      // Not the old claim: the corral is sized by seats, not by this month's claims.
+      const buyMule = section(manual, 'When a move is smart').split('\n').find((l) => l.startsWith('- buyMule '))!;
+      expect(buyMule).not.toContain('plot claimed');
+      expect(buyMule).toContain('7 for each player plus 5');
+      expect(buyMule).toContain('37%');
+    } finally {
+      Object.assign(MULE, saved);
+    }
+  });
+
+  it('B fix 2: the export ship buys from players at its month\'s goods auction, then the store\'s surplus at upkeep, at the off-world price stepping down, from config (economy.ts shipPrice, auction.ts, upkeep.ts)', () => {
+    const saved = { every: GAME.exportShipEvery, wishlist: EXPORT_SHIP.wishlist, stepDown: EXPORT_SHIP.stepDown, clean: POLLUTION.cleanExportBonus };
+    const before = defaultManual();
+    try {
+      GAME.exportShipEvery = 5;
+      EXPORT_SHIP.wishlist = 4;
+      EXPORT_SHIP.stepDown = 0.07;
+      POLLUTION.cleanExportBonus = 0.13;
+      const manual = defaultManual();
+      expect(manual).not.toBe(before);
+      const auction = phaseLine(manual, 'the goods auction');
+      expect(auction).toContain('In a month the export ship calls it buys there too, from any seller');
+      expect(auction).toContain('the off-world price for its first unit of a good and 7% less for each one after, 13% more when the air is clean');
+      expect(auction).toContain('a sale to it pays the sales tax and any export tax');
+      const upkeep = phaseLine(manual, 'upkeep');
+      expect(upkeep).toContain('Every 5 months, first in month 5, an export ship calls');
+      expect(upkeep).toContain('its wishlist of 4 goods');
+      expect(upkeep).toContain('public from the month before');
+      expect(upkeep).toContain("buys from players at that month's goods auction, then at upkeep takes the store's surplus of those goods until its hold is full");
+      // Not the old line, which had it buy at upkeep only, from nobody named.
+      expect(upkeep).not.toContain('buying the 4 goods on its wishlist');
+    } finally {
+      GAME.exportShipEvery = saved.every;
+      EXPORT_SHIP.wishlist = saved.wishlist;
+      EXPORT_SHIP.stepDown = saved.stepDown;
+      POLLUTION.cleanExportBonus = saved.clean;
     }
   });
 
