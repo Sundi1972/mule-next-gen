@@ -10,7 +10,8 @@ import type { TableClient } from '../src/net/client';
 
 /**
  * The riot's shelves on the screens that play it (G-5 C26), at promise altitude: the TV's overlay and a phone alone,
- * rendered through TableApp and PhoneApp from a month-end view as the server sends it, its market already after the riot.
+ * rendered through TableApp and PhoneApp from a month-end view as the server sends it. The view's market is read after the
+ * whole month end (colonists buy, shelves spoil, the ship exports), so it differs from the count right after the riot.
  */
 
 // The fake document has no dataset (the map's theme reads the page's) and no layout (the shell measures).
@@ -39,16 +40,18 @@ const RIOT = {
   playMs: EVENT_SHOW.playMs.headline,
   objects: [{ id: 'hospital', becomes: 'damaged' }],
   effects: [
-    { on: 'store', what: 'food', delta: -6 },
-    { on: 'store', what: 'energy', delta: -4 },
-    { on: 'store', what: 'smithore', delta: -5 },
+    { on: 'store', what: 'food', delta: -6, to: 12 },
+    { on: 'store', what: 'energy', delta: -4, to: 8 },
+    { on: 'store', what: 'smithore', delta: -5, to: 10 },
   ],
 } as unknown as EventView;
+/** The same riot from an engine that does not report the count after it. */
+const RIOT_NO_COUNT = { ...RIOT, effects: RIOT.effects!.map(({ on, what, delta }) => ({ on, what, delta })) } as EventView;
 const SHOW_MS = EVENT_SHOW.introMs + RIOT.playMs;
 
 const row = (good: MarketRow['good'], storeStock: number) => ({ good, price: 30, storeBuys: 25, storeSells: 35, storeStock, cover: 1, demand: 4, shipPays: null }) as MarketRow;
-/** The store after the riot: 12 Food, 8 Energy and 10 Smithore left, so 18, 12 and 15 before it (a third of each gone). */
-const AFTER_RIOT = [row('food', 12), row('energy', 8), row('smithore', 10), row('crystite', 3)];
+/** The store after the whole month end: what upkeep left once colonists bought, shelves spoiled and the ship exported. */
+const AFTER_MONTH_END = [row('food', 3), row('energy', 7), row('smithore', 6), row('crystite', 3)];
 
 const person = (id: string, name: string, slot: number): PlayerView =>
   ({ id, name, isAi: false, color: '', slot, species: 'mollox', money: 640, worth: 0, plots: 1, ready: false, doneDeveloping: false, colonist: null, condition: { foodShare: 1, sick: false, sickBecause: null, conditionPace: 1 } }) as unknown as PlayerView;
@@ -61,8 +64,8 @@ const tiles: TileView[] = Array.from({ length: W * H }, (_, i) => {
 const STOCK = { food: 3, water: 2, energy: 2, smithore: 0, crystite: 0, rareEarth: 0, alloy: 0, electronics: 0, medicine: 0 };
 
 /** The month end at riot story second `u` on `mode`'s clock: the server's clock is the show's full-pace seconds × SCALE past its start. */
-function viewAt(u: number, mode: ShowMode, market: MarketRow[]): MuleView {
-  const seg = eventSegments({ events: [RIOT as ShowEventView], introMs: EVENT_SHOW.introMs }, 0, mode)[0]!;
+function viewAt(u: number, mode: ShowMode, riot: EventView): MuleView {
+  const seg = eventSegments({ events: [riot as ShowEventView], introMs: EVENT_SHOW.introMs }, 0, mode)[0]!;
   const t = seg.playAt + u * seg.pace;
   const startsAt = NOW - t * 1000 * SCALE;
   return {
@@ -77,7 +80,7 @@ function viewAt(u: number, mode: ShowMode, market: MarketRow[]): MuleView {
     lit: null,
     players,
     me: null,
-    market,
+    market: AFTER_MONTH_END,
     storeMules: 8,
     mulePrice: 120,
     colonists: 1000,
@@ -93,7 +96,7 @@ function viewAt(u: number, mode: ShowMode, market: MarketRow[]): MuleView {
     lotSlots: { used: 0, max: 0 },
     landAuction: null,
     production: { lines: [], events: [], lengthMs: 15_000, introMs: 0 },
-    events: [RIOT],
+    events: [riot],
     eventShow: { startsAt, showMs: SHOW_MS, introMs: EVENT_SHOW.introMs, endsAt: startsAt + Math.round(SHOW_MS * SCALE), held: true },
     politics: null,
   } as unknown as MuleView;
@@ -207,23 +210,21 @@ const screens = [
   { name: 'TV', overlay: 'tv-event-overlay', mode: 'tv' as ShowMode, at: (v: MuleView) => tv(v) },
   { name: 'phone alone', overlay: 'phone-event-overlay', mode: 'solo' as ShowMode, at: (v: MuleView) => phoneAlone(v) },
 ];
-async function shelves(screen: (typeof screens)[number], u: number, market: MarketRow[]): Promise<string[] | null> {
-  const html = await render(await screen.at(viewAt(u, screen.mode, market)));
+async function shelves(screen: (typeof screens)[number], u: number, riot: EventView): Promise<string[] | null> {
+  const html = await render(await screen.at(viewAt(u, screen.mode, riot)));
   const box = inside(inside(html, screen.overlay), 'riot-storage');
   expect(box, `${screen.name} shows the riot's storage box`).not.toBe('');
   return text(box).match(/[−-]?\d+/g);
 }
 
 describe('B-AC-26-3: the riot’s shelves on the TV and a phone alone', () => {
-  it.each(screens)('B-AC-26-3: $name: each shelf counts down from the store’s real stock to what the market shows after the riot', async (screen) => {
-    expect(await shelves(screen, FULL_U, AFTER_RIOT)).toEqual(['18', '12', '15']);
-    expect(await shelves(screen, EMPTIED_U, AFTER_RIOT)).toEqual(['12', '8', '10']);
+  it.each(screens)('B-AC-26-3: $name: each shelf counts down from before the riot to the engine’s count right after it, never the market’s', async (screen) => {
+    expect(await shelves(screen, FULL_U, RIOT)).toEqual(['18', '12', '15']);
+    expect(await shelves(screen, EMPTIED_U, RIOT)).toEqual(['12', '8', '10']);
   });
 
-  it.each(screens)('B-AC-26-3: $name: with no market rows for the riot’s goods, each shelf shows only what it lost, never a guessed count', async (screen) => {
-    for (const market of [[], [row('crystite', 3)]]) {
-      expect(await shelves(screen, FULL_U, market), `market ${market.length}`).toBeNull();
-      expect(await shelves(screen, EMPTIED_U, market), `market ${market.length}`).toEqual(['−6', '−4', '−5']);
-    }
+  it.each(screens)('B-AC-26-3: $name: a riot without the count after it shows only what each shelf lost, never a guessed count', async (screen) => {
+    expect(await shelves(screen, FULL_U, RIOT_NO_COUNT)).toBeNull();
+    expect(await shelves(screen, EMPTIED_U, RIOT_NO_COUNT)).toEqual(['−6', '−4', '−5']);
   });
 });
