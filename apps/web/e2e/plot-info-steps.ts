@@ -385,8 +385,8 @@ async function analyseSaysWhatItFound(room: Room, screens: { lena: Page; kai: Pa
     check(shown === String(dots[g]), `${B_AC_3}: the card shows ${g} as ${dots[g]} of 3, got ${shown}`);
   }
   check((await card.getByText('Only you').count()) === 1, `${B_AC_3}: the card is marked Only you`);
-  // TODO(PR-3a): B-AC-3's map gem. Once WS4's gem is in HoloMap, assert here that Lena's map draws the Crystite gem on
-  // `plot`, and below, in the negative, that neither the TV's map nor Kai's draws one.
+  // The map's gem: Lena's walking map draws the Crystite gem on the plot she analysed.
+  await appears(walking.getByTestId(`map-gem-${plot.x}-${plot.y}`).getByTestId('gem-crystite'), STEP_MS, `${B_AC_3}: Lena's map draws the Crystite gem on plot ${plotName(plot)}`);
 
   // Negative (HC-1): only Lena's view holds the plot's ground; the TV and Kai's phone show no card and no dots for it.
   check(room.viewFor(seat).game?.tiles[index(plot)]?.ground, `${B_AC_3}: the server's view for Lena holds plot ${plotName(plot)}'s ground`);
@@ -400,8 +400,9 @@ async function analyseSaysWhatItFound(room: Room, screens: { lena: Page; kai: Pa
     check((await page.getByTestId('analyse-card').count()) === 0, `${B_AC_3} (negative): ${who} shows no Analyse card`);
     const label = (await shown.getByTestId(`map-plot-${plot.x}-${plot.y}`).first().getAttribute('aria-label')) ?? '';
     check(!label.includes('of 3'), `${B_AC_3} (negative): ${who}'s map gives plot ${plotName(plot)} no dots, labelled "${label}"`);
+    check((await shown.getByTestId(`map-gem-${plot.x}-${plot.y}`).count()) === 0, `${B_AC_3} (negative): ${who}'s map draws no gem on plot ${plotName(plot)}`);
   }
-  return `plot ${plotName(plot)} (${line}) analysed; the card showed ${shownAt - assayEnd} ms after the assay's end; the TV and the other seats' views hold no ground for it, and the TV and Kai's phone show no card`;
+  return `plot ${plotName(plot)} (${line}) analysed; the card showed ${shownAt - assayEnd} ms after the assay's end; the TV and the other seats' views hold no ground for it, and the TV and Kai's phone show no card and no gem; Lena's map shows the Crystite gem`;
 }
 
 /** The development clock's seconds left as `walking` shows them. */
