@@ -1,6 +1,7 @@
 import {
   AI_VALUE,
   airPoints,
+  auctionNeed,
   crewOf,
   DEV_STEER,
   DEV_WALK,
@@ -252,6 +253,19 @@ export function wholeNextMonth(obs: GameState, me: string, good: Good): number {
 }
 
 /**
+ * The units of Food, Energy or Water the seat never sells (PM ruling, 6 Nov): the status screen's need (auctionNeed), what
+ * upkeep takes now and next month's use after spoilage, so it never sells into its own next-month shortage. Water only
+ * for a seat that uses it next month, a farm to water or a factory's input: without one, going short costs it nothing.
+ * 0 for other goods. auctionNeed reads only the seat's own plots and crew and the air, all on the table.
+ */
+export function sellFloor(obs: GameState, me: string, good: Good): number {
+  if (good !== 'food' && good !== 'energy' && good !== 'water') return 0;
+  const farms = obs.tiles.some((t) => t.owner === me && (UPKEEP.irrigated as readonly string[]).includes(t.outfit ?? ''));
+  if (good === 'water' && !farms && monthNeeds(obs, me).water <= needsOf(obs, me).water) return 0;
+  return auctionNeed(obs, me)[good];
+}
+
+/**
  * Cash the seat keeps back: a floor plus what next month's Food, Water and
  * Energy shortfall would cost, times its reserve weight. A short unit counts
  * at most a few times its reference price, so a price spike doesn't freeze
@@ -289,7 +303,7 @@ export interface UnitValues {
   block: number;
   /** Next month's need before spoilage (monthNeeds); the status screen's need (auctionNeed) adds spoilage. */
   need: number;
-  /** Units it never sells: the Food and Energy it needs. strategist.ts goodPlan raises it for STRATEGIST.buyShortfall. */
+  /** Units it never sells: the Food and Energy it needs. strategist.ts goodPlan raises it to sellFloor, and to what it must hold. */
   floorUnits: number;
 }
 
