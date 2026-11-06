@@ -209,7 +209,7 @@ describe('C26 PR-B: the walkout, in production', () => {
     const pick = (seed: number) => produce(tied(seed)).events!.find((e) => e.key === 'walkout' && e.player === 'p1')?.plots.map((p) => p.good);
     const picks = [1, 2, 3, 4, 5, 6, 7, 8].map(pick);
     for (const goods of picks) expect([['food', 'food'], ['energy', 'energy']]).toContainEqual(goods);
-    expect(new Set(picks.map((g) => g[0]))).toEqual(new Set(['food', 'energy']));
+    expect(new Set(picks.map((g) => g?.[0]))).toEqual(new Set(['food', 'energy']));
     expect(pick(3)).toEqual(pick(3));
   });
 
