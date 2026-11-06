@@ -326,8 +326,9 @@ describe('B-AC-food-short: a seat short of Food buys from the store when it can 
   });
 
   it('B-AC-food-short: the trader short of what keeps it whole, with no Food in the store, sells above the screen need to a short rival', () => {
-    // Next month is not forecast severe: the colony makes more Food than it eats, so what the trader holds past next
-    // month's own use is surplus (Heiko's "sell surplus"), not units it will need at a shortage's price.
+    // Next month is not forecast severe: the colony makes more Food than it eats. The units it sells lie inside what
+    // keeps it whole next month (it holds the screen need + 2); it sells them because, with no severe forecast, their
+    // keep value falls under the bid, not because they are surplus beyond next month.
     const { state } = shortBesideRival('ai0', 0, { fedColony: true });
     expect(expectedOutput(state, 'food'), 'the premise: the colony makes more Food than it eats').toBeGreaterThanOrEqual(monthlyDemand(state).food);
 

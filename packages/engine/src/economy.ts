@@ -167,6 +167,7 @@ export function expectedOutput(state: GameState, good: Good): number {
  * How short the colony is of a good (pricing RULE-6, first match wins): off-world when only the export ship wants it;
  * severe after colonists went short of it at the last upkeep; normal while production keeps up with demand or the
  * colony holds normalCover months of it; then tight, short and severe by its months of cover.
+ * It reads the colony's true supply and demand, not a seat's observation: only the store's posting reads it.
  */
 export function priceBand(
   state: GameState,
@@ -229,7 +230,7 @@ export function postPrices(state: GameState): void {
     state.store.posted[good] = next[i]!.mid;
     band[good] = next[i]!.band;
   });
-  // New records, never edits: an AI's what-if copy may share the old ones.
+  // New records, never edits, as auction.ts's teach writes lessons: no reader holds a reference that changes under it.
   state.store.band = band;
   state.store.lastWalk = {};
 }
@@ -274,7 +275,9 @@ export function storeSellAt(state: GameState, good: Good, mid: number, { exact =
   const line = mid * (1 + spreadOf(state, good).over);
   if (exact) return line;
   const whole = Math.round(line);
-  // 1 + 0.1 is a hair over 1.1 in floating point, so 50 × 1.1 lands a hair over 55: that close to a whole number, it is one.
+  // That close to a whole number, the line is that number, so a float error never rounds it up a credit. It matters
+  // only for a margin whose line lands a hair over a whole number: none of today's does for a whole mid; 0.1 would,
+  // as 50 × (1 + 0.1) is 55.00000000000001.
   return Math.abs(line - whole) <= Number.EPSILON * line ? whole : Math.ceil(line);
 }
 
@@ -316,7 +319,7 @@ export function storeLines(state: GameState, good: Good): { buy: number; sell: n
 /**
  * What the store charges and what it pays, or null where it doesn't trade:
  * no sell price with an empty shelf, no buy price when it wants no more.
- * storeLines' numbers with nulls where the store won't trade; every screen and the AI read this (pricing HC-3).
+ * storeLines' numbers with those nulls: the quotes the server's view sends every screen (pricing §3).
  */
 export function storeQuotes(state: GameState, good: Good): { buy: number | null; sell: number | null } {
   const lines = storeLines(state, good);

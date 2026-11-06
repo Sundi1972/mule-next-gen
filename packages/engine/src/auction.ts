@@ -79,7 +79,7 @@ const higher = (high: number | null, price: number) => Math.max(high ?? price, p
 /** Applies `change` to a good's lesson, starting one if there is none. */
 function teach(state: GameState, good: Good, change: (lesson: WalkLesson) => Partial<WalkLesson>): void {
   const lesson = state.store.lastWalk?.[good] ?? freshLesson();
-  // A new record, never an edit: an AI's what-if copy (cloneForSim) shares this one with the real game.
+  // A new record, never an edit: every lesson is a fresh object, so no reader holds a reference that changes under it.
   state.store.lastWalk = { ...state.store.lastWalk, [good]: { ...lesson, ...change(lesson) } };
 }
 
