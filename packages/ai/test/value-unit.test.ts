@@ -268,6 +268,21 @@ describe('RULE-4: what an unneeded unit is worth', () => {
     expect(cautious.buy[0], 'speculate 0.3').toBeCloseTo(29.808 * 0.3, 6);
   });
 
+  it("T-AC-7: held 0 months, a Food unit is worth 40 × 0.9 × 0.92 = 33.12 in unitValues' carry and as a farm's surplus in monthlyNet", () => {
+    AI_VALUE.holdMonths = 0;
+    // One plant, so the seat's walking time, and with it what going without Food costs, is finite.
+    const state = table({ plots: [{ outfit: 'energy', x: 0 }], posted: { food: 40 } });
+    state.treasury.salesTax = 0.08;
+    const { obs, o } = view(state);
+    const mind = mindOf();
+    const target = wholeNextMonth(obs, 'ai0', 'food');
+    // Past the target every unit the farm makes is surplus: the next one adds what it sells for.
+    const farmMaking = (made: number) => monthlyNet(obs, o, { made, energy: 0, inputs: {}, air: 0, crew: 0 }, 'food', mind);
+
+    expect(unitValues(obs, o, 'food', mind).keep[target], 'the first unit past the target').toBeCloseTo(33.12, 6);
+    expect(farmMaking(target + 1) - farmMaking(target)).toBeCloseTo(33.12, 6);
+  });
+
   it('T-AC-7 negative: a good that spoils fully carries nothing', () => {
     const v = carryAt(1);
 
