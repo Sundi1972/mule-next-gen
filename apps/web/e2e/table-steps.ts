@@ -285,6 +285,70 @@ export async function theTvShowsWhoOwnsEachPlot(ctx: GameStepContext): Promise<s
   return ctx.held(() => checkPlotLook(ctx.tv.locator('[data-phase=development]'), 'TV, development', { installed: true }));
 }
 
+/**
+ * B-AC-9 (WS4, plot look A; PM ruling A on #562), in planning on the hub's Look map: Look-select a plot whose upper
+ * neighbour shows its dots: the selected pin hangs below, so it never overlaps the chip. How far the ring's painted band
+ * reaches over the chip's foot is measured for the log. The neighbour's ground is seeded on the server: the
+ * seat is given that plot as analysed, as makeHungry seeds hunger. Leaves the Look tool on, nothing selected.
+ */
+export async function theDotsAboveASelectionStayInView(ctx: GameStepContext, seat = 's1'): Promise<string> {
+  const id = 'B-AC-9 (WS4, plot look A, PM ruling A on #562)';
+  return ctx.held(async () => {
+    const room = ctx.server.registry.get(ctx.code) as unknown as { game: { state: GameState }; viewFor(seat: string): { game?: MuleView }; broadcast(): void } | undefined;
+    check(room, `${id}: a room ${ctx.code} on the server`);
+    const state = room.game.state;
+    check(state.phase === 'planning', `${id}: the step runs in planning, not in ${state.phase}`);
+    const me = state.players.find((p) => p.id === seat);
+    check(me, `${id}: seat ${seat} in the game`);
+    const sited = new Set((room.viewFor(seat).game?.colony?.projects ?? []).map((p) => p.plot));
+    const at = (x: number, y: number) => state.tiles.find((t) => t.x === x && t.y === y);
+    // Inside the map, so the ring reaches out of the plot on every side, the case that comes nearest the chip above.
+    const selected = state.tiles.find((t) => {
+      const above = at(t.x, t.y - 1);
+      return t.x > 0 && t.x < state.width - 1 && t.y > 1 && t.y < state.height - 1 && t.terrain !== 'store' && !!above && above.terrain !== 'store' && !above.outfit && !sited.has(above.y * state.width + above.x);
+    });
+    check(selected, `${id}: a plot inside the map whose upper neighbour can show its dots`);
+    const { x, y } = selected;
+    const aboveIndex = (y - 1) * state.width + x;
+    if (!me.analysed.includes(aboveIndex)) me.analysed.push(aboveIndex);
+    room.broadcast();
+
+    const planning = ctx.phone.locator('[data-phase=planning]');
+    await planning.getByTestId('tool-look').click({ timeout: PRESS_MS });
+    const map = planning.getByTestId('hub-map');
+    const chip = map.getByTestId(`map-dots-${x}-${y - 1}`);
+    await chip.waitFor({ timeout: PRESS_MS });
+    const plot = map.getByTestId(`map-plot-${x}-${y}`);
+    await plot.click({ timeout: PRESS_MS });
+    await map.locator(`[data-testid=map-plot-${x}-${y}][data-selected]`).waitFor({ timeout: PRESS_MS });
+    // Kept free of named functions: tsx's keepNames wraps them with `__name`, which the page lacks.
+    const seen = await map.evaluate((el, { above, sel }) => {
+      const plotEl = el.querySelector(`[data-testid=map-plot-${sel}]`);
+      const ring = plotEl?.querySelector('[data-testid=selected-ring]') ?? null;
+      const [chip, pin, ringBox, plot] = [el.querySelector(`[data-testid=map-dots-${above}]`), plotEl?.querySelector('[data-testid=selected-pin]') ?? null, ring, plotEl].map((q) => {
+        const r = q?.getBoundingClientRect();
+        return r ? { left: r.left, top: r.top, right: r.right, bottom: r.bottom } : null;
+      });
+      // The ring's band is painted as outset box-shadows: its outer edge lies the largest spread outside the ring's box.
+      const spreads = (ring ? getComputedStyle(ring).boxShadow : '')
+        .split(/,(?![^(]*\))/)
+        .filter((sh) => !/\binset\b/.test(sh))
+        .map((sh) => Number([...sh.matchAll(/(-?[\d.]+)px/g)].map((m) => m[1])[3] ?? 0));
+      return { chip: chip ?? null, pin: pin ?? null, ring: ringBox ?? null, spread: Math.max(0, ...spreads), plot: plot ?? null };
+    }, { above: `${x}-${y - 1}`, sel: `${x}-${y}` });
+    const { chip: c, pin, ring, spread, plot: p } = seen;
+    check(c && pin && ring && p, `${id}: the chip above, the selected pin and ring are drawn: ${JSON.stringify(seen)}`);
+    const overlaps = (a: typeof c, b: typeof c) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+    const ringTop = ring.top - spread;
+    check(!overlaps(c, pin), `${id}: the pin on ${x}-${y} keeps off the dots chip of ${x}-${y - 1}: pin ${px(pin.top)}–${px(pin.bottom)}, chip ${px(c.top)}–${px(c.bottom)} (top–bottom)`);
+    // Measured, not checked: the ring's band, unchanged by the ruling, may still reach over the chip's foot.
+    const bandOver = c.bottom - ringTop;
+    // Leave the hub as it was found: nothing looked at.
+    await plot.click({ timeout: PRESS_MS });
+    return `${x}-${y} selected under ${x}-${y - 1}'s dots on a ${px(p.right - p.left)} × ${px(p.bottom - p.top)} plot: pin ${pin.top >= p.bottom ? 'below' : 'above'} the plot, clear of the ${px(c.right - c.left)} × ${px(c.bottom - c.top)} chip; the ring's box ${px(Math.abs(ring.top - c.bottom))} ${ring.top >= c.bottom ? 'under' : 'over'} the chip's foot, its band (${px(spread)}) ${bandOver > 0 ? `${px(bandOver)} over it` : `${px(-bandOver)} under it`}`;
+  });
+}
+
 /** readPlotLook's read, failing with every check that failed. Returns a line for the log. */
 export async function checkPlotLook(map: Locator, where: string, want: LookWanted): Promise<string> {
   const { read, fails } = await readPlotLook(map, where, want);

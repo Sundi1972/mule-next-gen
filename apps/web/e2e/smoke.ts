@@ -17,7 +17,7 @@ import { ELECTION_WAIT_MS, readyThroughTheElection } from './politics-steps';
 import { checkTheShow, watchShow, type ShowWatch } from './production-steps';
 import { makeHungry } from './store-steps';
 import { specialFieldsShowTheirGlyphs } from './special-steps';
-import { doneThroughTheElection, moveDialogOpensInProduction, moveDialogOutlivedThePhase, noZoomBeforeYourFirstPlot, thePhonePicksRose, theSeatMovesToAnotherDevice, theTvDrawsRose, theTvShowsWhoOwnsEachPlot, watchIntents, zoomButtonOnceYouOwnAPlot } from './table-steps';
+import { doneThroughTheElection, moveDialogOpensInProduction, moveDialogOutlivedThePhase, noZoomBeforeYourFirstPlot, theDotsAboveASelectionStayInView, thePhonePicksRose, theSeatMovesToAnotherDevice, theTvDrawsRose, theTvShowsWhoOwnsEachPlot, watchIntents, zoomButtonOnceYouOwnAPlot } from './table-steps';
 
 /** Loaded by a path held in a variable, so tsc never resolves a file that may not exist yet. */
 async function loadAuctionSteps(): Promise<AuctionSteps> {
@@ -204,6 +204,7 @@ try {
   await tv.getByTestId('tv-planning').waitFor({ timeout: READY_MS });
   console.log(`TV-FIT, planning: ${await theTvBodyFits(tv, server, code, 'planning')}; ${await theTvHeaderFits(tv, 'planning')}`);
   console.log(`hub: ${await planningIsTheHub(phone, server, code)}`);
+  console.log(`dots above a selection: ${await theDotsAboveASelectionStayInView(ctx)}`);
   await theDroneReportsInTheRail(ctx);
   // B-AC-7 (in game): the player moves to a second device, which plays the rest of the game.
   const second = await newPhone('second device');

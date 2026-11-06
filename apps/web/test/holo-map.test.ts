@@ -197,3 +197,69 @@ describe('T-AC-3 (gem): Crystite and Rare earth found on a plot', () => {
     }
   });
 });
+
+describe('B-AC-9 (WS4, plot look A): the selected plot’s pin keeps clear of the dots above it', () => {
+  /** A 3×3 map with plot 1-1 selected; `above` is what plot 1-0 holds. */
+  const render = (above: Partial<MapTile>, selected = { x: 1, y: 1 }, hideGround = false) => {
+    const tiles: MapTile[] = [];
+    for (let y = 0; y < 3; y++) for (let x = 0; x < 3; x++) tiles.push({ x, y, terrain: 'plains', owner: null, ...(x === 1 && y === 0 ? above : {}) });
+    return renderToStaticMarkup(createElement(HoloMap, { width: 3, height: 3, tiles, selected, hideGround }));
+  };
+  const pin = (markup: string) => tag(markup, /data-testid="selected-pin"/);
+  const BELOW = /\btop-full mt-1\b/;
+  const ABOVE = /\bbottom-full mb-1\b/;
+
+  it('hangs the pin below the plot when the plot above shows its dots, as on the top row', () => {
+    const map = render({ ground: { food: 2 } });
+    expect(pin(map)).toMatch(BELOW);
+    expect(pin(map)).not.toMatch(ABOVE);
+    expect(map).toContain('>▴</span>');
+  });
+
+  it('keeps the pin above when the plot above shows no dots: no ground, a MULE on it, or the ground hidden', () => {
+    for (const [why, above, hide] of [
+      ['no ground', {}, false],
+      ['a MULE', { ground: { food: 2 }, good: 'food' }, false],
+      ['hidden ground', { ground: { food: 2 } }, true],
+    ] as const) {
+      const map = render(above as Partial<MapTile>, undefined, hide);
+      expect(pin(map), why).toMatch(ABOVE);
+      expect(map, why).toContain('>▾</span>');
+    }
+  });
+
+  it('keeps the top row’s pin below, with or without dots', () => {
+    expect(pin(render({}, { x: 1, y: 0 }))).toMatch(BELOW);
+    expect(pin(render({ ground: { food: 2 } }, { x: 1, y: 0 }))).toMatch(BELOW);
+  });
+});
+
+describe('T-AC-3 (pip): the dots chip keeps clear of its own plot’s special badge', () => {
+  /** A 6-seat map's right column: a special plot and a plain one, both analysed, and a special plot one column in. */
+  const W = 19;
+  const H = 11;
+  const oasis = { kind: 'oasis' } as const;
+  const tiles: MapTile[] = [
+    { x: W - 1, y: 3, terrain: 'plains', owner: null, ground: { food: 3 }, special: oasis },
+    { x: W - 1, y: 4, terrain: 'plains', owner: null, ground: { food: 3 } },
+    { x: W - 2, y: 3, terrain: 'plains', owner: null, ground: { food: 3 }, special: oasis },
+    { x: W - 1, y: H - 1, terrain: 'plains', owner: null, ground: { food: 3 }, special: oasis },
+  ];
+  const map = renderToStaticMarkup(createElement(HoloMap, { width: W, height: H, tiles }));
+  const chip = (x: number, y: number) => tag(map, new RegExp(`data-testid="map-dots-${x}-${y}"`));
+
+  it('in the right column a special plot’s chip stands on the badge’s top (15 px badge, a quarter hanging out: 11.25 px up), centred', () => {
+    expect(chip(W - 1, 3)).not.toMatch(/\bbottom-\[8%\]/);
+    expect(chip(W - 1, 3)).toMatch(/style="bottom:11.25px"/);
+    expect(chip(W - 1, 3)).toMatch(/\bleft-1\/2\b/);
+    // On the bottom row the badge sits 2 px up, inside the map.
+    expect(chip(W - 1, H - 1)).toMatch(/style="bottom:17px"/);
+  });
+
+  it('every other chip keeps its place at the foot: a right-column plot without a special, a special plot one column in', () => {
+    for (const [x, y] of [[W - 1, 4], [W - 2, 3]] as const) {
+      expect(chip(x, y)).toMatch(/\bbottom-\[8%\]/);
+      expect(chip(x, y)).not.toMatch(/style="bottom:/);
+    }
+  });
+});
