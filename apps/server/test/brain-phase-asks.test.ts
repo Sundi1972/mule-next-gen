@@ -344,6 +344,32 @@ describe('RULE-A2 rows 3-4: the next phase is edited in the slack before it', { 
     expect(notes.map((n) => n.phase)).toEqual(['landGrant', 'development']);
     expect(notes[1]!.playbook.development).toEqual({ ...fresh, timeBudgetMs: 1_000 });
   });
+
+  it("B fix 1 (AM-A17): the auction edits apply to the auction's draft at its start, not to the one shown in production, so stock lost since is planned for", async () => {
+    let edited: string | null = null;
+    const sdk = fakeSdk((_n, params) => {
+      edited = offeredPaths(params).find((p) => p.endsWith('/concedeCrPerS'))!;
+      return sdkMessage(JSON.stringify({ edits: [{ path: edited, to: 3, reason: 'Patient.' }], line: '' }), USED);
+    });
+    const { state, seat, notes, playbooks } = table(smartOn(sdk));
+    advanceTo(state, 'production');
+    const shown = seat.draft(atAuctionPrices(state), 'auction').auction!;
+    playbooks.askPhase(state, 'auction', []);
+    await vi.advanceTimersByTimeAsync(1_000);
+    advanceTo(state, 'auction');
+    // Lost since the ask, as a raid would take it: the plan shown in production could not know of it.
+    for (const g of Object.keys(shown)) (state.players[0]!.stock as Record<string, number>)[g] = 0;
+    const fresh = seat.draft(state, 'auction').auction!;
+    expect(fresh).not.toEqual(shown);
+    playbooks.takePhase(state, 'auction');
+    expect(edited).not.toBeNull();
+    const good = edited!.split('/')[2]!;
+    expect(notes.map((n) => [n.phase, n.playbook.by])).toEqual([['auction', 'llm']]);
+    const played = notes[0]!.playbook.auction as Record<string, unknown>;
+    // Every good but the edited one is the fresh draft's; the edited one carries the edit.
+    expect({ ...played, [good]: null }).toEqual({ ...fresh, [good]: null });
+    expect((played[good] as { concedeCrPerS: number }).concedeCrPerS).toBe(3);
+  });
 });
 
 describe('deep2: what the Smart seat is asked with (t120s audit, 6 Nov)', { timeout: 30_000 }, () => {
