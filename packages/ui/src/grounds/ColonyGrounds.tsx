@@ -18,8 +18,10 @@ export interface GroundsProject extends PlaceState {
 
 /** The part of `@mule/protocol`'s ColonyView the grounds read (HC-1: read only). */
 export interface GroundsColony {
-  gauges: { happiness: number | null };
+  gauges: { happiness: number | null; wealth: number };
   projects: GroundsProject[];
+  /** This month's general strike; once the fund has paid it, the strikers are back at work (G-5 RULE-26). */
+  strike?: { paid: boolean } | null;
 }
 
 export interface ColonyGroundsProps {

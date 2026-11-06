@@ -1,0 +1,106 @@
+import { renderToStaticMarkup } from 'react-dom/server';
+import { describe, expect, it } from 'vitest';
+import { ColonyGrounds, type GroundsColony, type GroundsManifest, type PictureStage } from '../src/index';
+
+const FRAME: GroundsManifest['frame'] = { width: 1600, height: 1600, place: 1293, centre: [800, 1000] };
+const ALL: PictureStage[] = ['site', 'build1', 'build2', 'standing', 'closed', 'damaged'];
+
+/** Every stage has a glow picture, closed too, so a dark closed building is the rule's doing and not a missing file. */
+function manifestOf(kinds: Record<string, PictureStage[]>): GroundsManifest {
+  const pictures: GroundsManifest['pictures'] = {};
+  for (const [kind, stages] of Object.entries(kinds)) {
+    pictures[kind] = Object.fromEntries(stages.map((s) => [s, { day: `${kind}/${s}-day@800.webp`, dusk: `${kind}/${s}-dusk@800.webp`, glow: `${kind}/${s}-glow@800.webp` }]));
+  }
+  return { frame: FRAME, pictures, sizes: [800, 400] };
+}
+
+const MANIFEST = manifestOf({ hall: ['standing'], park: ALL, hospital: ALL, stadium: ALL, spaceport: ALL, observatory: ALL });
+
+/** Month 12 (spec B-AC-1): a Park standing, a Hospital closed, a Stadium with 1 of 3 months left, a Spaceport just commissioned. */
+const MONTH_12: GroundsColony = {
+  gauges: { happiness: 72, wealth: 0 },
+  projects: [
+    { id: 'park', name: 'Park', stage: 'standing', buildMonths: 1, monthsLeft: null, place: { x: 3, y: 2, w: 1, h: 1 } },
+    { id: 'hospital', name: 'Hospital', stage: 'closed', buildMonths: 2, monthsLeft: null, place: { x: 2, y: 3, w: 1, h: 1 } },
+    { id: 'stadium', name: 'Stadium', stage: 'building', buildMonths: 3, monthsLeft: 1, place: { x: 3, y: 3, w: 1, h: 1 } },
+    { id: 'spaceport', name: 'Spaceport upgrade', stage: 'commissioned', buildMonths: 3, monthsLeft: null, place: { x: 1, y: 2, w: 1, h: 1 } },
+  ],
+};
+
+const atWealth = (wealth: number): GroundsColony => ({ ...MONTH_12, gauges: { ...MONTH_12.gauges, wealth } });
+
+/** Five buildings standing round the hall (spec B-AC-3's negative: happiness 72 → 9 walkers). */
+const FIVE_STANDING: GroundsColony = {
+  gauges: { happiness: 72, wealth: 2000 },
+  projects: (
+    [
+      ['park', { x: 3, y: 2 }],
+      ['hospital', { x: 2, y: 3 }],
+      ['stadium', { x: 3, y: 3 }],
+      ['spaceport', { x: 1, y: 2 }],
+      ['observatory', { x: 2, y: 1 }],
+    ] as const
+  ).map(([id, at]) => ({ id, name: id, stage: 'standing' as const, buildMonths: 1, monthsLeft: null, place: { ...at, w: 1, h: 1 } })),
+};
+
+const grounds = (props: Partial<Parameters<typeof ColonyGrounds>[0]> = {}) => renderToStaticMarkup(<ColonyGrounds colony={MONTH_12} size="tv" manifest={MANIFEST} light="dusk" {...props} />);
+
+function tagsWith(html: string, attr: string): string[] {
+  return html.match(new RegExp(`<[a-zA-Z]+[^>]*\\s${attr}[^>]*>`, 'g')) ?? [];
+}
+
+function tagWith(html: string, attr: string): string {
+  const tags = tagsWith(html, attr);
+  expect(tags, `one element with ${attr}`).toHaveLength(1);
+  return tags[0]!;
+}
+
+function attrOf(tag: string, name: string): string | undefined {
+  return tag.match(new RegExp(`\\s${name}="([^"]*)"`))?.[1];
+}
+
+/** The glow picture's opacity over a place, as drawn. */
+const glowOf = (html: string, place: string) => Number(attrOf(tagWith(html, `data-testid="glow-${place}"`), 'opacity'));
+
+const walkersIn = (html: string) => tagsWith(html, 'data-testid="walker"');
+
+describe('ColonyGrounds · the live layer', () => {
+  it('B-AC-2: lights dim to full by wealth; closed stays dark; none by day', () => {
+    const poor = grounds({ colony: atWealth(0) });
+    const middling = grounds({ colony: atWealth(2000) });
+    const rich = grounds({ colony: atWealth(4000) });
+
+    // The standing Park and the hall: dim, brighter, full.
+    for (const place of ['1', 'hall']) {
+      expect(glowOf(poor, place), `${place} poor`).toBeCloseTo(0.25, 6);
+      expect(glowOf(middling, place), `${place} middling`).toBeCloseTo(0.625, 6);
+      expect(glowOf(rich, place), `${place} rich`).toBeCloseTo(1, 6);
+    }
+    // The glow is the Park's own glow picture, laid exactly over its picture.
+    const glow = tagWith(rich, 'data-testid="glow-1"');
+    const picture = tagWith(rich, 'data-testid="picture-1"');
+    expect(attrOf(glow, 'href')).toBe('/art/colony/park/standing-glow@800.webp');
+    for (const a of ['x', 'y', 'width', 'height']) expect(attrOf(glow, a), a).toBe(attrOf(picture, a));
+    // Work lights on the Stadium being built, a few lamps on the Spaceport's site.
+    expect(glowOf(rich, '3')).toBeCloseTo(0.5, 6);
+    expect(glowOf(rich, '4')).toBeCloseTo(0.3, 6);
+    // The closed Hospital stays dark, however rich the colony.
+    for (const html of [poor, rich]) expect(tagsWith(html, 'data-testid="glow-2"'), 'no glow over the closed Hospital').toHaveLength(0);
+  });
+
+  it('B-AC-2 negative: by day no glow shows, however rich the colony', () => {
+    const html = grounds({ colony: atWealth(4000), light: 'day' });
+    expect(tagsWith(html, 'data-testid="glow-[^"]*"')).toHaveLength(0);
+    expect(html).not.toContain('-glow@');
+  });
+
+  it('B-AC-3: a strike empties the paths', () => {
+    const html = grounds({ colony: { ...FIVE_STANDING, strike: { paid: false } } });
+    expect(walkersIn(html)).toHaveLength(0);
+  });
+
+  it('B-AC-3 negative: happiness 72, five standing, no strike → 9 colonists walk; a strike the fund paid is over', () => {
+    expect(walkersIn(grounds({ colony: { ...FIVE_STANDING, strike: null } }))).toHaveLength(9);
+    expect(walkersIn(grounds({ colony: { ...FIVE_STANDING, strike: { paid: true } } }))).toHaveLength(9);
+  });
+});
