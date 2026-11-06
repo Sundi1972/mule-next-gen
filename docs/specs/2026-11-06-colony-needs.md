@@ -47,8 +47,8 @@ Each lane commits its own sections on branch `ws7-colony-needs`; one commit per 
 deep or lasting one makes them unhappy, likelier to riot, and fewer.
 - **Who benefits:** the players at the table, who read the colony's mood and size to judge how
   much Food and Water to grow and sell, and whether to cut the colonists' rations for profit.
-- **Today:** any miss is all-or-nothing (`upkeep.ts::runUpkeep`: `fed` is false if one unit is
-  missing; `colony.ts::moodTarget`: 8 points per good short, then the 5-point step cap). Missing 1
+- **Today:** any miss is all-or-nothing (`packages/engine/src/upkeep.ts::runUpkeep`: `fed` is false if one unit is
+  missing; `packages/engine/src/colony.ts::moodTarget`: 8 points per good short, then the 5-point step cap). Missing 1
   Food of 20 and missing all 20 both cost −5 mood and −5% colonists. And colonists go short while
   the store has Food when its price is above their wages (`UPKEEP.colonistBudget`), a price cap
   nobody at the table can see. verified_by: read (measured counts: §Measurement).
@@ -64,8 +64,8 @@ and they go short only when the shelf is empty.
 - **Who benefits:** the players, who no longer meet a hidden wage cap; Heiko's design: "Colonists
   have NO economy: no prices, no wages, no money."
 - **Today:** colonists pay the store's selling price from a wage budget; it caps what they buy
-  (`upkeep.ts::runUpkeep`), the store's demand (`economy.ts::colonistDemand`) and how high the
-  store bids to restock (`auction.ts::comeUp` `ceiling`). verified_by: read.
+  (`packages/engine/src/upkeep.ts::runUpkeep`), the store's demand (`packages/engine/src/economy.ts::colonistDemand`) and how high the
+  store bids to restock (`packages/engine/src/auction.ts::comeUp` `ceiling`). verified_by: read.
 - **Value:** one rule the table can see: the shelf feeds the colonists, and an empty shelf hurts.
 - **Proof, UBER-AC-2:** `grep colonistBudget packages/engine/src` finds nothing; an engine test
   with Food posted at 300 and the shelf full feeds the colonists in full and moves no credits.
@@ -96,7 +96,7 @@ same files less `events.ts` and the memory.
 - **C (raise or drop the step cap):** rejected. The cap also governs tax, air, prestige and the
   wealth gap; lifting it makes those swing too, and a tax change would jolt the mood. A keeps the
   cap for the slow drift and lets only the hardship land at once, as events already do
-  (`colony.ts::moodShift`).
+  (`packages/engine/src/colony.ts::moodShift`).
 
 ## §0.2 · Constraints `[handoff]`
 
@@ -109,7 +109,7 @@ HC-2  Colonists never hold or pay money: their meal moves no credits (store.capi
       by it). The store's money is unlimited already (SEAMS 2026-10-22), so nothing replaces
       the payment.                            source: Heiko 6 Nov   breach: fatal
 HC-3  The store keeps the colonists' month of Food and Water back from sale to players
-      (economy.ts::storeForSale reserve, existing): their need comes out of the store first.
+      (packages/engine/src/economy.ts::storeForSale reserve, existing): their need comes out of the store first.
                                               source: Heiko 6 Nov; existing   breach: fatal
 HC-4  packages/engine stays pure and draws no new random number: hardship is deterministic;
       the unrest odds change only through the existing event roll.
@@ -135,11 +135,11 @@ C1 · MODIFIED · colonists take their Food and Water from the store, free, as f
 
 today        they buy at the store's selling price out of a wage budget; short if the shelf is
              empty OR the price is over the budget; the price is paid into store.capital
-             anchors: upkeep.ts::runUpkeep · verified_by: read
+             anchors: packages/engine/src/upkeep.ts::runUpkeep · verified_by: read
 tomorrow     MUST take min(need, stock) of Food and of Water, pay nothing; MUST record each good's
              need and took in the month report; the store's reserve for them is unchanged
 logic        → RULE-1 · at upkeep, after the players eat · writes store.stock, the report
-seam         upkeep.ts::runUpkeep — the meal already lives here
+seam         packages/engine/src/upkeep.ts::runUpkeep — the meal already lives here
 senior       junior would: set colonistBudget to a huge number · senior does: deletes the budget
              and the payment, so no wage logic survives to confuse a later reader
 mechanism    in_place
@@ -151,15 +151,19 @@ owner        WS1 (upkeep.ts, named edit)
 ```
 C2 · REMOVED · the colonists' wage budget as a price cap
 
-today        UPKEEP.colonistBudget caps the colonists' demand (economy.ts::colonistDemand) and the
-             store's restocking bid (auction.ts::comeUp `ceiling`) · verified_by: read
-tomorrow     MUST count colonists' demand as their full need at any price; the store's restock bid
-             MUST be posted × PRICE.restockPremium with no wage ceiling; colonistBudget deleted
-seam         economy.ts::colonistDemand, auction.ts::comeUp
+today        UPKEEP.colonistBudget caps the colonists' demand (packages/engine/src/economy.ts::colonistDemand) and the
+             store's restocking bid (packages/engine/src/auction.ts::comeUp `ceiling`) · verified_by: read
+tomorrow     MUST count colonists' demand as their full need at any price; MUST remove the
+             colonists' wages from how high the store bids to restock; colonistBudget deleted.
+             How the store prices then is WS5's store-pricing rework (#390, Heiko's decision there):
+             if it is approved, its band spreads replace the restock premium and this change only
+             deletes the wage ceiling from what #390 leaves; if not, the restock bid is
+             posted × PRICE.restockPremium with no wage ceiling
+seam         packages/engine/src/economy.ts::colonistDemand, packages/engine/src/auction.ts::comeUp
 senior       junior would: leave the ceiling reading a deleted config row · senior does: removes
              the ceiling term; the store's own sell-above-buy guard (storeSell) stays
 mechanism    delete
-call sites   economy.ts::monthlyDemand (4 calls), auction.ts::comeUp (1)
+call sites   packages/engine/src/economy.ts::monthlyDemand (4 calls), packages/engine/src/auction.ts::comeUp (1)
 pin          storeForSale's reserve (HC-3); storeSell ≥ storeBuy + 1 (auction tests)
 owner        WS1 (economy.ts, config.ts), WS3 (auction.ts named edit)
 ```
@@ -168,12 +172,12 @@ owner        WS1 (economy.ts, config.ts), WS3 (auction.ts named edit)
 C3 · MODIFIED · the mood reads how short the colonists went, through a curve, a memory and a shock
 
 today        moodTarget subtracts HAPPINESS.weights.shortage (8) per good short; moodStep moves at
-             most 5 · anchors: colony.ts::moodInputs, moodTarget, runColony · verified_by: read
+             most 5 · anchors: packages/engine/src/colony.ts::moodInputs, moodTarget, runColony · verified_by: read
 tomorrow     MUST compute the month's severity and the hardship memory (RULE-2, RULE-3); the target
              loses targetPerHardship × memory instead of 8 per good; after the 5-point step, the
              mood loses the month's shock at once (RULE-4); the memory is stored on the colony
 logic        → RULE-2, RULE-3, RULE-4 · at upkeep in runColony
-seam         colony.ts::runColony — the one place the month's mood is stepped
+seam         packages/engine/src/colony.ts::runColony — the one place the month's mood is stepped
 senior       junior would: raise the shortage weight · senior does: separates "how bad this month"
              (shock, uncapped like moodShift) from "how long it has lasted" (the memory, through the
              capped drift), so a big miss shows at once and a long one keeps the target down
@@ -188,12 +192,13 @@ owner        WS7
 C4 · MODIFIED · the colony grows or shrinks by how short it went, plus C27's mood push
 
 today        ×1.04 if fed, ×0.95 if any unit was missing; Collapse air overrides
-             anchors: upkeep.ts::runUpkeep · verified_by: read. C27's held draft adds a per-band
-             offset (origin/ws1-c27 upkeep.ts::growthRate, RULE-29)
+             anchors: packages/engine/src/upkeep.ts::runUpkeep · verified_by: read. C27's held draft adds a per-band
+             offset (on origin/ws1-c27 only: a new growthRate, RULE-29)
 tomorrow     MUST grow ×colonistGrowth.fed when the month's severity is within tolerance, else
              shrink ×(1 − colonistShrinkPerShortfall × severity); plus HAPPINESS.migration[band]
              with a colony; never below 0; Collapse still overrides (RULE-5)
-seam         upkeep.ts::growthRate (C27's draft function, extended)
+seam         NEW function growthRate in packages/engine/src/upkeep.ts (added by C4; exists only on C27's held
+             branch origin/ws1-c27), extracted from runUpkeep's growth line
 senior       junior would: keep the flat 0.95 and only add C27 · senior does: makes the shrink
              proportional, so the size tells the same story as the mood
 mechanism    in_place (supersedes C27's RULE-29 rows 2–3)
@@ -204,10 +209,10 @@ owner        WS1 (upkeep.ts, config.ts) — folds C27
 ```
 C5 · MODIFIED · the memory of hardship raises the unrest-band events' odds
 
-today        a row's mood points come from its band only (events.ts::influences `mood`)
+today        a row's mood points come from its band only (packages/engine/src/events.ts::influences `mood`)
 tomorrow     MUST multiply the row's restless/unhappy/unrest mood points by
              (1 + unrestPerHardship × memory); thriving/content points unchanged (RULE-6)
-seam         events.ts::influences — the one place mood points are read
+seam         packages/engine/src/events.ts::influences — the one place mood points are read
 mechanism    in_place
 call sites   events.ts chance (all rows)
 pin          rows without mood points and politics-off rolls unchanged: events tests
@@ -543,7 +548,7 @@ payments that disappear.
 | T-AC-4 (B-AC-1,2,5) | RULE-5: every row and example, incl. the floor at 0 under a test override | C4 | engine unit |
 | T-AC-5 (serves G-1) | RULE-6: an unrest row's points ×(1 + 0.5 H); a thriving row's unchanged; politics off unchanged | C5 | engine unit |
 | T-AC-6 (B-AC-4) | RULE-1: need 0 → s 0; stock 0 → s 1; no credits move | C1 | engine unit |
-| T-AC-7 (UBER-AC-2) | `colonistBudget` no longer exists in packages/engine/src; the store's restock bid has no wage ceiling | C2 | grep + auction test |
+| T-AC-7 (UBER-AC-2) | `colonistBudget` no longer exists in packages/engine/src; the store's restock bid (today's premium, or #390's bands if approved) reads no colonist wage | C2 | grep + auction test |
 | B-AC-10 | Given two seats, one with 2 Smithore mines + 1 Crystite mine + 1 plant, one with 3 farms + 1 well · When upkeep ends · Then the miner's household ate 4 Food and drank 3 Water, the farmer's ate 3 and drank 3 (RULE-10's examples). observed_at: each player's depot before and after upkeep. negative: a seat with no plots eats 2 and drinks 1 | C10 | engine test on GameState |
 | B-AC-11 | Given an Electronics works that runs this month · When production ends · Then its owner's Energy fell by the recipe's Energy plus 2. observed_at: the owner's depot. negative: a works turned off for want of Energy draws only its share (AM-17) | C11 | engine test |
 | B-AC-12 | Given 4 seats of "3 farms + well" and 100 colonists, Food posted at 300 · When prices are next posted · Then the store's Food demand is 17, not less (RULE-11's example). observed_at: monthlyDemand as the store's price reads it. negative: a festival month adds its Food on top | C13 | engine test |
