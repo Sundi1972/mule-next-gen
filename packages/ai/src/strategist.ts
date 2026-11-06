@@ -665,9 +665,16 @@ export function tradeDecision(obs: GameState, mind: Mind, plan: GoodPlan): Short
     spent += buy;
     upTo++;
   }
+  // The funded needed units an option ending at `end` leaves unbought: it forgoes what each gains over the ask.
+  const forgone = (end: number) => {
+    let lost = 0;
+    for (let k = Math.max(end, h); k < h + (plan.cash?.funded ?? 0); k++) lost += (v.buy[k] ?? 0) - buy;
+    return lost;
+  };
   const buyTo = (target: number, label: string, key: string, sure: number, sureWhy: string) => {
     let gain = 0;
     for (let k = h; k < target; k++) gain += (v.buy[k] ?? 0) - buy;
+    if (plan.cash) gain -= forgone(target);
     const cost = (target - h) * buy;
     const essential = (target <= v.block && (good === 'food' || good === 'energy')) || target <= plan.mustHold;
     const veto = !essential && p.money - cost < plan.reserve ? `it would dip into the ${cr(plan.reserve)} kept for upkeep` : null;
@@ -681,6 +688,8 @@ export function tradeDecision(obs: GameState, mind: Mind, plan: GoodPlan): Short
   }
 
   const short = upTo > h && h < plan.mustHold ? `it is ${plan.mustHold - h} ${GOOD_NAME[good]} short of next month's need and can pay the store's ${buy}` : null;
-  cands.push(candidate<TradeAction>('pass', `Pass on ${GOOD_NAME[good]}`, { side: 'pass' }, 0, gainCons(0, p.money, 1, 'no trade', 'nothing at stake'), short));
+  const passGain = plan.cash ? 0 - forgone(h) : 0;
+  const passWhy = passGain < 0 ? `no trade, leaving needed ${GOOD_NAME[good]} worth ${cr(-passGain)} over its price unbought` : 'no trade';
+  cands.push(candidate<TradeAction>('pass', `Pass on ${GOOD_NAME[good]}`, { side: 'pass' }, passGain, gainCons(passGain, p.money, 1, passWhy, 'nothing at stake'), short));
   return shortlist(cands, mind.level.shortlist, mind.level.shortlistTolerance);
 }
