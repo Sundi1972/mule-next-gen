@@ -15,7 +15,7 @@ import type { DecisionRecord } from '../src/brain.js';
 import type { Decider } from '../src/decider.js';
 import { PERSONAS } from '../src/personas.js';
 import { playGame, playGameAsync, type SeatSpec } from '../src/play.js';
-import type { PhaseFact } from '../src/playbook/index.js';
+import { draftPlaybook, type PhaseFact } from '../src/playbook/index.js';
 import type { AiSeat, AiSeatOptions } from '../src/seat.js';
 
 /*
@@ -665,24 +665,33 @@ describe('the seat plays its development and auction parts (C4, RULE-6, RULE-7)'
       landed(1, ['plains:food', 'river:water', 'plains:energy', 'volcanic', 'river'], [], false)(state);
       stocked(1)(state);
     };
+    // The seat keeps the plan it drafted at planning (C12): here it plays the plan it would draft on the built case,
+    // adopted bare, with no part, so every part is still its own.
+    const plannedOn = (firstPlan = once()) => (seat: AiSeat, state: GameState, point: Point) => {
+      if (seat.id !== ME || point !== 'development' || !firstPlan(seat, state, point)) return;
+      const { strategy } = draftPlaybook({ state, seat: ME, mind: seat.mind, seed: seat.options.seed, phase: 'development' });
+      seat.adopt({ v: 1, seat: ME, month: state.month, phase: 'development', by: 'engine', strategy });
+    };
     const scoutsFirst = (pb: Playbook) => {
       const route = pb.development!.route;
       const buy = route.findIndex((s) => s.act === 'buyMule');
       return buy > 0 && route.slice(0, buy).some((s) => s.act === 'analyse');
     };
     const routeItems = (t: Table) => t.outcomes.get(key(ME, 1, 'development'))!.items.filter((i) => i.path.startsWith('/development/route/'));
-    const own = playTable({ months: 1, edit });
+    const own = playTable({ months: 1, edit, before: plannedOn() });
     const theCase = own.written.find((pb) => pb.phase === 'development' && pb.seat === ME)!;
     expect(scoutsFirst(theCase), 'its own route analyses before its MULE').toBe(true);
     expect(routeItems(own).some((i) => i.actual === 'replaced' && i.note === 'ground analysed'), 'its own route was picked again after its analyses').toBe(true);
     const route = theCase.development!.route;
 
     const first = once();
+    const plan = plannedOn();
     let adopted: Playbook | null = null;
     const t = playTable({
       months: 1,
       edit,
       before: (seat, state, point) => {
+        plan(seat, state, point);
         if (seat.id !== ME || point !== 'development' || !first(seat, state, point)) return;
         adopted = seat.draft(state, 'development');
         seat.adopt(adopted);
