@@ -1,5 +1,5 @@
 import { GAME, GOOD_CONFIG, MULE, POLLUTION, PRICE, UPKEEP } from './config.js';
-import { corralTarget, festivalFood, monthlyDemand, planShip, shipInPort, shipPrice, storeSellAt } from './economy.js';
+import { corralTarget, festivalFood, monthlyDemand, planShip, shipInPort, shipPrice } from './economy.js';
 import { airBand } from './pollution.js';
 import { needsOf } from './production.js';
 import { GOODS, type GameState, type Good } from './types.js';
@@ -9,9 +9,17 @@ import { GOODS, type GameState, type Good } from './types.js';
  * home depot is lost, the export ship takes the store's surplus and
  * leaves, and the store builds MULEs. Nothing is imported: the colony lives
  * on what its players make. Returns the goods the store ran out of before
- * its colonists had enough, and whether colonists went short at all (also
- * when the price was more than their wages pay).
+ * its colonists had enough, and whether colonists went short at all.
  */
+/**
+ * RULE-1, the colonists' meal of one good: they take their need from the shelf, as far as it holds it, and pay
+ * nothing. `short` is the share of their need they went without, 0 to 1; 0 when they need none.
+ */
+export function colonistMeal(need: number, stock: number): { took: number; short: number } {
+  const took = Math.min(need, Math.max(0, stock));
+  return { took, short: need > 0 ? (need - took) / need : 0 };
+}
+
 export function runUpkeep(state: GameState): { shortages: Good[]; hungry: boolean } {
   const shortages = new Set<Good>();
 
@@ -22,22 +30,19 @@ export function runUpkeep(state: GameState): { shortages: Good[]; hungry: boolea
     player.stock.water = Math.max(0, player.stock.water - needs.water);
   }
 
-  // Colonists buy their Food and Water from the store at its selling price,
-  // out of wages paid from off-world. When the shelf is empty or the price is
-  // more than they can pay, they go short.
+  // Colonists take their Food and Water from the store, free, as far as its shelf holds them (needs C1, RULE-1):
+  // they hold no money and the meal moves none (HC-2). The store kept their month back from the players (HC-3).
   const colonistBase = state.colonists / UPKEEP.colonistsPerUnit;
   let fed = true;
   for (const good of ['food', 'water'] as const) {
     // A festival month the colonists eat more Food (G-5 C26).
-    const colonistNeed = colonistBase + (good === 'food' ? festivalFood(state) : 0);
-    // The store's selling price; the share it kept back is theirs to buy.
-    const price = storeSellAt(state, good, state.store.posted[good]);
-    const budget = colonistNeed * (UPKEEP.colonistBudget[good] ?? 0);
-    const bought = Math.min(colonistNeed, state.store.stock[good], budget / price);
-    if (bought < colonistNeed) fed = false;
-    if (state.store.stock[good] < colonistNeed) shortages.add(good);
-    state.store.stock[good] = Math.max(0, state.store.stock[good] - bought);
-    state.store.capital += Math.round(bought * price);
+    const need = colonistBase + (good === 'food' ? festivalFood(state) : 0);
+    const { took, short } = colonistMeal(need, state.store.stock[good]);
+    if (short > 0) {
+      fed = false;
+      shortages.add(good);
+    }
+    state.store.stock[good] -= took;
   }
   // In Collapse colonists leave whatever they eat.
   const growth = airBand(state.air).name === 'collapse' ? 1 - POLLUTION.collapseLeave : fed ? UPKEEP.colonistGrowth.fed : UPKEEP.colonistGrowth.hungry;
