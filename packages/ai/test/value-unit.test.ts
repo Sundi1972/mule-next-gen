@@ -17,7 +17,7 @@ import {
 } from '@mule/engine';
 import { outlook, type Outlook } from '../src/outlook.js';
 import { AiSeat } from '../src/seat.js';
-import { wholeNextMonth } from '../src/strategist.js';
+import { goodPlan, tradeDecision, wholeNextMonth } from '../src/strategist.js';
 import { shortCosts, unitNeed, unitValues, type Mind, type UnitValues } from '../src/value.js';
 
 /**
@@ -226,5 +226,34 @@ describe('RULE-3: the chance the seat needs the k-th unit', () => {
 
     expect(v.buy[0], "under the store's ask: it buys none").toBeLessThan(20 * (1 + PRICE.storeSpread));
     expect(v.block).toBe(0);
+  });
+});
+
+describe('C4: a pass that leaves a funded shortfall carries its cost', () => {
+  // Three mines (use 2 each, make 3 Smithore at 100): each Energy unit short keeps 120 on; Energy asks 22.
+  const mines = [0, 2, 4].map((x): Plot => ({ outfit: 'smithore', x, ground: { smithore: 3 } }));
+  const shortlistOf = (money: number) => {
+    const state = table({ plots: mines, posted: { smithore: 100, energy: 20 } });
+    state.players.find((p) => p.id === 'ai0')!.money = money;
+    const obs = observe(state, 'ai0');
+    const mind = mindOf();
+    return tradeDecision(obs, mind, goodPlan(obs, mind, 'energy')).all;
+  };
+
+  it("T-AC-5: short and funded, the pass candidate's gain is below the buy's, and nothing vetoes the pass", () => {
+    const all = shortlistOf(5000);
+    const pass = all.find((c) => c.key === 'pass')!;
+    const buy = all.find((c) => c.key === 'buy' || c.key === 'buy:need')!;
+
+    expect(pass.veto).toBeNull();
+    expect(pass.value, 'the pass carries the shortfall it leaves').toBeLessThan(0);
+    expect(pass.value).toBeLessThan(buy.value);
+  });
+
+  it('T-AC-5 negative: with less money than one unit, nothing is funded and the pass gains 0', () => {
+    const pass = shortlistOf(10).find((c) => c.key === 'pass')!;
+
+    expect(pass.value).toBe(0);
+    expect(pass.veto).toBeNull();
   });
 });
