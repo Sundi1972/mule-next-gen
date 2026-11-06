@@ -38,7 +38,7 @@ import {
 } from '@mule/engine';
 import { belief, outlook, type Outlook } from './outlook.js';
 import { candidate, consider, curve, shortlist, type Candidate, type Shortlist } from './utility.js';
-import { afterTax, canFeed, cashPlan, cashReserve, installGain, monthNeedsCost, secondValue, unitValues, wholeNextMonth, yieldOf, type Mind, type UnitValues } from './value.js';
+import { afterTax, canFeed, cashPlan, cashReserve, chainLinks, chainOutlook, installGain, monthNeedsCost, secondValue, unitValues, wholeNextMonth, yieldOf, type Mind, type UnitValues } from './value.js';
 
 /**
  * The strategist: for each of the month's decisions it lists the options,
@@ -394,18 +394,14 @@ export function developDecision(obs: GameState, mind: Mind, mulesSoFar: number, 
   const needEnergy = !obs.tiles.some((t) => t.owner === mind.me && t.outfit === 'energy');
   const analysed = new Set(p.analysed);
   const cands: Candidate<DevAction>[] = [];
+  const chain = focus === null ? null : chainValue(obs, o, mind, focus);
   // Added only with a focus: a consideration scoring 1 for all still changes every utility (utilityOf's make-up counts them).
-  const leaning = (makes: Outfit | null) =>
-    focus === null
-      ? []
-      : [
-          consider(
-            'My money-maker',
-            makes === focus ? 1 : AI_PLANS.moneyMaker.otherScore,
-            AI_PLANS.moneyMaker.weight,
-            makes === focus ? `${GOOD_NAME[focus]} is my money-maker` : `not ${GOOD_NAME[focus]}, my money-maker`,
-          ),
-        ];
+  const leaning = (makes: Outfit | null) => {
+    if (focus === null) return [];
+    const link = makes !== null && makes !== focus && !!chain?.links.includes(makes as Good);
+    const why = makes === focus ? `${GOOD_NAME[focus]} is my money-maker` : link ? `feeds ${GOOD_NAME[focus]}, my money-maker` : `not ${GOOD_NAME[focus]}, my money-maker`;
+    return [consider('My money-maker', makes === focus || link ? 1 : AI_PLANS.moneyMaker.otherScore, AI_PLANS.moneyMaker.weight, why)];
+  };
   const common = (cashAfter: number, known: boolean, feeds: boolean, gain: number, why: string, makes: Outfit | null) => [
     consider('Gain', curve.gain(gain, STRATEGIST.gainScale.develop), mind.persona.greed, why),
     consider('Cash left', curve.floor(curve.ramp(cashAfter, reserve, reserve * STRATEGIST.cashLeftFull), STRATEGIST.cashLeftFloor), mind.persona.reserve, `${cr(cashAfter)} left, ${cr(reserve)} kept back`),
@@ -426,7 +422,7 @@ export function developDecision(obs: GameState, mind: Mind, mulesSoFar: number, 
       const back = legs ? legs.pub : 0;
       const install = installGain(obs, o, tile, outfit, mind);
       const { cost, net } = install;
-      const gain = install.gain - walking * secondValue(obs, mind.me);
+      const gain = (chain?.links.includes(outfit as Good) ? chain.linkGain(tile, outfit) : install.gain) - walking * secondValue(obs, mind.me);
       const cashAfter = p.money - cost;
       const feeds = (outfit === 'food' && needFood) || (outfit === 'energy' && needEnergy);
       // A farm for a good it is short of is the cure, not a risk: it needn't keep cash back to buy that good.
@@ -456,6 +452,22 @@ export function developDecision(obs: GameState, mind: Mind, mulesSoFar: number, 
   }
   cands.push(candidate<DevAction>('stop', 'Keep the cash', { kind: 'stop' }, 0, common(p.money, true, false, 0, 'no new MULE: the money stays in the bank', null)));
   return shortlist(cands, mind.level.shortlist, mind.level.shortlistTolerance);
+}
+
+/**
+ * A chain focus's links (chainLinks) and what a link MULE is worth: the whole chain's value with that link on `tile`,
+ * the works and the other links each on their best own idle or free plot, all at chainOutlook's prices. A link alone
+ * makes nothing the seat can sell, so it is worth what it completes. Null when `focus` is no chain. See AM-32.
+ */
+function chainValue(obs: GameState, o: Outlook, mind: Mind, focus: Good): { links: Good[]; linkGain: (tile: Tile, link: Outfit) => number } | null {
+  const links = chainLinks(obs, mind.me, focus);
+  if (links.length === 0) return null;
+  const valued = chainOutlook(o, links);
+  const ground = obs.tiles.filter((t) => t.terrain !== 'store' && (t.owner === null || (t.owner === mind.me && !t.outfit)));
+  const bestOf = (outfit: Outfit) => Math.max(...ground.map((t) => installGain(obs, valued, t, outfit, mind).gain));
+  const best = new Map<Outfit, number>([focus, ...links].map((g) => [g, bestOf(g)]));
+  const whole = [...best.values()].reduce((n, g) => n + g, 0);
+  return { links, linkGain: (tile, link) => whole - best.get(link)! + installGain(obs, valued, tile, link, mind).gain };
 }
 
 /**
