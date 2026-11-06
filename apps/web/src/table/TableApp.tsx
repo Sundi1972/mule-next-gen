@@ -272,7 +272,6 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
         ) : (
           <div className="shrink-0 rounded-panel border-2 border-holo bg-holo-soft p-5 font-display text-3xl font-semibold shadow-glow">Everyone is ready</div>
         )}
-        <StrikeWaiting game={game} />
         <div className="shrink-0">
           <MarketTiles game={game} />
         </div>
@@ -369,6 +368,8 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
                   {fmt(game.colonists)} COLONISTS · {game.storeMules} MULES IN THE CORRAL · {game.mulePrice} CR EACH
                 </span>
               </div>
+              {/* Under the strikers it is about, in the room the map leaves: in the side it pushed planning under the floor (PM, 6 Nov). */}
+              <StrikeWaiting game={game} />
             </div>
             {/* Planning's news gives way first, as it always has; only what is left over scales the body. */}
             <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">{side}</div>
