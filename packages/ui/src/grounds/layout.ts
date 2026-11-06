@@ -30,18 +30,6 @@ export function extentOf(places: GridPlace[]): 0 | 1 | 2 {
   return Math.min(2, Math.max(0, ...places.map(ringOf))) as 0 | 1 | 2;
 }
 
-export function covers({ x, y, w, h }: GridPlace, col: number, row: number): boolean {
-  return col + HALL >= x && col + HALL < x + w && row + HALL >= y && row + HALL < y + h;
-}
-
-/** Ring 1 (the 3×3 round the hall), then ring 2 (the 5×5), front cells first: where the next building is outlined. */
-const OFFSETS: [number, number][] = [
-  [1, 0], [0, 1], [1, 1], [-1, 0], [0, -1], [1, -1], [-1, 1], [-1, -1],
-  [2, 0], [0, 2], [2, 1], [1, 2], [2, 2], [-2, 0], [0, -2], [2, -1], [-1, 2], [-2, 1], [1, -2], [2, -2], [-2, 2], [-2, -1], [-1, -2], [-2, -2],
-];
-
-export const CELLS: { col: number; row: number }[] = OFFSETS.map(([col, row]) => ({ col, row }));
-
 /** Each building's massing for its SVG shape: footprint (0–1 of a place) and height, in place units. */
 export const MASSING: Record<ObjectKind | 'hall', { footprint: number; height: number }> = {
   hall: { footprint: 0.62, height: 0.42 },

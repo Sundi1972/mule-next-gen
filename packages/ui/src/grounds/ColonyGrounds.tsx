@@ -3,7 +3,7 @@ import type { ObjectKind } from '../components/ObjectGlyph';
 import { useState, type ReactNode } from 'react';
 import { cx } from '../components/tokens';
 import { builtOf, HallShape, Lamp, PlaceShape, Tree } from './fallback';
-import { CELLS, centreOf, covers, edgeDecoration, extentOf, MASSING, type EdgeProp, type GridPlace } from './layout';
+import { centreOf, edgeDecoration, extentOf, MASSING, type EdgeProp, type GridPlace } from './layout';
 import { pick, type Frame, type GroundsManifest, type Light, type PictureKind, type PlaceState } from './pick';
 import { iso, poly, square, W } from './projection';
 
@@ -50,18 +50,6 @@ function Picture({ c, r, href, frame, testid, fallback }: { c: number; r: number
   return <image href={href} x={x - frame.centre[0] * k} y={y - frame.centre[1] * k} width={frame.width * k} height={frame.height * k} data-testid={testid} onError={() => setFailed(true)} />;
 }
 
-function NextPlace({ c, r }: { c: number; r: number }) {
-  const [x, y] = iso(c, r);
-  return (
-    <g data-testid="next-place" aria-label="The next building goes here" pointerEvents="none">
-      <polygon points={poly(square(c, r, 0.4))} fill="none" stroke="var(--color-holo-line)" strokeWidth={1.2} strokeDasharray="5 5" />
-      <text x={x} y={y + 5} textAnchor="middle" className="fill-ink-3 font-mono text-[12px]">
-        next
-      </text>
-    </g>
-  );
-}
-
 /** The place's number and its stage chip, over the place; `words` sizes it for the TV. */
 function Callout({ n, p, c, r, words }: { n: number; p: GroundsProject; c: number; r: number; words: boolean }) {
   const m = MASSING[p.id];
@@ -97,9 +85,8 @@ const HALL_PLACE: PlaceState = { stage: 'standing', monthsLeft: null, buildMonth
 export function ColonyGrounds({ colony, size, manifest, light = 'day', className }: ColonyGroundsProps) {
   const placed = colony.projects.flatMap((p, i) => (p.place ? [{ p, n: i + 1, block: p.place, ...centreOf(p.place) }] : []));
   const R = extentOf(placed.map((q) => q.block));
-  const next = CELLS.find(({ col, row }) => !placed.some((q) => covers(q.block, col, row)));
   const inBack = (a: { col: number; row: number }, b: { col: number; row: number }) => a.col + a.row - (b.col + b.row);
-  const scene = [{ n: 0, col: 0, row: 0, p: undefined as GroundsProject | undefined }, ...placed].sort(inBack);
+  const scene = [{ n: 0, col: 0, row: 0, p: undefined as GroundsProject | undefined, block: undefined as GridPlace | undefined }, ...placed].sort(inBack);
   const mood = colony.gauges.happiness ?? 0;
   const standing = colony.projects.filter((p) => p.stage === 'standing').length;
   const paved = Math.min(1, standing / 3);
@@ -138,12 +125,11 @@ export function ColonyGrounds({ colony, size, manifest, light = 'day', className
           <polyline key={`gr${k}`} points={poly([iso(-R - 0.55, k), iso(R + 0.55, k)])} stroke="var(--color-holo-line)" strokeWidth={1} opacity={paved} />,
         ])}
       {edge.filter((d) => d.col + d.row < 0).map((d, i) => prop(d, `b${i}`))}
-      {next && Math.max(Math.abs(next.col), Math.abs(next.row)) <= Math.max(R, 1) && R > 0 && <NextPlace c={next.col} r={next.row} />}
-      {scene.map(({ n, p, col: c, row: r }) => {
-        if (!p) return <g key="hall">{drawn('hall', HALL_PLACE, 0, 0, 'picture-hall', <HallShape mood={mood} />)}</g>;
+      {scene.map(({ n, p, block, col: c, row: r }) => {
+        if (!p || !block) return <g key="hall">{drawn('hall', HALL_PLACE, 0, 0, 'picture-hall', <HallShape mood={mood} />)}</g>;
         return (
           <g key={n} data-testid={`place-${n}`} data-stage={p.stage}>
-            {drawn(p.id, p, c, r, `picture-${n}`, <PlaceShape id={p.id} place={p} c={c} r={r} mood={mood} testid={`shape-${n}`} />)}
+            {drawn(p.id, p, c, r, `picture-${n}`, <PlaceShape id={p.id} place={p} c={c} r={r} span={Math.min(block.w, block.h)} mood={mood} testid={`shape-${n}`} />)}
           </g>
         );
       })}

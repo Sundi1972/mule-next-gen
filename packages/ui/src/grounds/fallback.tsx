@@ -224,8 +224,11 @@ function Site({ c, r, id }: { c: number; r: number; id: ObjectKind }) {
 /** Months built so far: a building with no months left on the wire counts as just begun. */
 export const builtOf = ({ stage, monthsLeft, buildMonths }: PlaceState) => (stage === 'building' ? buildMonths - (monthsLeft ?? buildMonths) : 0);
 
-/** A place's building drawn in its kind's shape at its stage. Smoke over a damaged one belongs to the live layer. */
-export function PlaceShape({ id, place, c, r, mood, testid }: { id: ObjectKind; place: PlaceState; c: number; r: number; mood: number; testid: string }) {
+/**
+ * A place's building drawn in its kind's shape at its stage, centred on (c, r) and scaled to a footprint `span` places
+ * wide. Smoke over a damaged one belongs to the live layer.
+ */
+export function PlaceShape({ id, place, c, r, span, mood, testid }: { id: ObjectKind; place: PlaceState; c: number; r: number; span: number; mood: number; testid: string }) {
   let shape: ReactNode;
   switch (place.stage) {
     case 'commissioned':
@@ -255,8 +258,10 @@ export function PlaceShape({ id, place, c, r, mood, testid }: { id: ObjectKind; 
       shape = <Building id={id} c={c} r={r} lit={false} frac={0.7} />;
       break;
   }
+  const [x, y] = iso(c, r);
+  const scaled = span === 1 ? {} : { transform: `matrix(${span} 0 0 ${span} ${x * (1 - span)} ${y * (1 - span)})` };
   return (
-    <g data-testid={testid} data-stage={place.stage}>
+    <g data-testid={testid} data-stage={place.stage} {...scaled}>
       {shape}
     </g>
   );
