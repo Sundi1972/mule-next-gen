@@ -295,6 +295,12 @@ describe('the validator holds every playbook to RULE-1', () => {
     expect(fault(middle)).toMatchObject({ plays: kept, why: expect.stringContaining('route: not your plot, step 6, so steps 4 on are dropped') });
     expect(run('development', [{ path: '/development/route', to: middle, reason: 'Two MULEs.' }]).playbook.development!.route).toEqual(kept);
     expect(fault('pub' as unknown as unknown[]).why).toBe('route: not a list of steps, step 0');
+    // Review of #556: a MULE group straddling the step cap is dropped whole, never cut between its buy and its install.
+    const cap = AI_PLANS.bounds.routeSteps;
+    for (const before of [cap - 2, cap - 1]) {
+      const analyses = Array.from({ length: before }, () => ({ act: 'analyse', plot: f1 }));
+      expect(fault([...analyses, ...mule(own[0]!)]), `group from step ${before}`).toMatchObject({ plays: analyses, why: expect.stringContaining(`so steps ${before} on are dropped`) });
+    }
     // P9: RULE-1's example (a 50 s seat asked for 90 s), read against the seat's own development seconds.
     const devMs = at.development.players.find((p) => p.id === 'ai2')!.devSeconds * MS_PER_SECOND;
     expect(one('development', '/development/timeBudgetMs', devMs + 40 * MS_PER_SECOND)).toMatchObject({ plays: devMs, why: `clamped to ${devMs}: the seat's development time` });
