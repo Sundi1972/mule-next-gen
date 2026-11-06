@@ -220,6 +220,16 @@ describe('C26: the colony\'s planning social events, fired through the planning 
       expect(made(report, [energy])).toEqual(made(produce(colonyAt(AT.unhappy)), [energy]));
     });
 
+    it("FM-strike-line (PM ruling A, 6 Nov): planning's line still offers the pay-off; production's says the strikers held", () => {
+      only(['generalStrike']);
+      const state = colonyAt(AT.unhappy);
+      const [announced] = firePhase(state, 'planning');
+      expect(announced!.line).toBe(`A general strike: this month every food plot makes ${COLONY.strike.output * 100}%, unless the Governor pays the strikers.`);
+      only([]);
+      const [held] = produce(state).events!.filter((e: MonthEvent) => e.key === 'generalStrike');
+      expect(held!.line).toBe(`The strikers held: every food plot makes ${COLONY.strike.output * 100}% this month.`);
+    });
+
     it('B-AC-25 (production clause): paid, the Governor pays the strikers, so there is no production event and the Food plots produce in full', () => {
       const { state, twin } = struck();
       state.treasury.money = 400;
