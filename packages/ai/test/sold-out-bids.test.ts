@@ -76,6 +76,8 @@ interface Walk {
   sellerBottom: number;
   /** The highest the store's line showed as a bid. */
   lineTop: number | null;
+  /** Whether ai0 pressed Done during the walk. */
+  sellerDone: boolean;
 }
 
 /**
@@ -85,7 +87,7 @@ interface Walk {
 function play(state: GameState, hands: Record<string, Partial<GoodPlay>>, rest: Record<string, { side: 'buyer' | 'seller'; price: number }> = {}): Walk {
   const seats = seatsFor();
   const mine = new Map(Object.entries(hands).map(([id, edit]) => [id, handOf(seats.find((s) => s.id === id)!, state, edit)]));
-  const walk: Walk = { trades: [], buyerTop: -Infinity, sellerBottom: Infinity, lineTop: null };
+  const walk: Walk = { trades: [], buyerTop: -Infinity, sellerBottom: Infinity, lineTop: null, sellerDone: false };
   let placed = false;
   for (let tick = 0; tick < 2_000; tick++) {
     const a = state.auction!;
@@ -107,6 +109,8 @@ function play(state: GameState, hands: Record<string, Partial<GoodPlay>>, rest: 
       if (hand) hand.tick(state, WALK.tickMs, act);
       else s.auctionTick(state, WALK.tickMs, act);
     }
+    // Read before the step: once every seat is done, the step closes the walk.
+    if (a.stage === 'walk' && a.done.includes(SELLER)) walk.sellerDone = true;
     walk.trades.push(...stepAuction(state, WALK.tickMs));
     const b = state.auction!;
     if (b.stage !== 'walk') continue;
@@ -189,5 +193,16 @@ describe('RULE-7 AI: with the store sold out, an AI buyer bids a seller out and 
       [BUYER]: { role: 'buyer', walkAway: reservation - 1, start: reservation - 1 },
     });
     expect(between(short), 'a limit under the reservation buys nothing').toEqual([]);
+  });
+
+  it('RULE-7 AI: a seller whose reservation is under the buyers\' zone presses Done once nobody buys, and does not wait out the clock', () => {
+    const state = soldOutFood();
+    const { buyersTop } = state.auction!.zones;
+    const fed = soldOutFood();
+    fed.players.find((p) => p.id === BUYER)!.stock.food = wholeFood(fed, BUYER);
+    // The store has Food again, so no bid passes its old line, and its money is spent (play), so it buys none.
+    fed.store.stock.food = 20;
+    const walk = play(fed, { [SELLER]: { role: 'seller', walkAway: buyersTop - 5, start: buyersTop - 5 } });
+    expect(walk.sellerDone, 'stopped at the buyers\' zone with no house buying, it is done').toBe(true);
   });
 });
