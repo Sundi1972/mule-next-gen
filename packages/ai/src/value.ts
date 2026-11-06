@@ -1,4 +1,5 @@
 import {
+  addStock,
   AI_PLANS,
   AI_VALUE,
   airPoints,
@@ -83,6 +84,12 @@ export interface Yield {
   crew: number;
 }
 
+/** A factory's recipe inputs but its Energy, per run. */
+function inputsOf(good: ProcessedGood): Partial<Stock> {
+  const { energy: _e, ...inputs } = RECIPES[good].inputs;
+  return inputs;
+}
+
 /** What an outfit would make on a tile for this player, on the ground the seat knows (the observation's). */
 export function yieldOf(obs: GameState, tile: Tile, outfit: Outfit, me: string): Yield {
   const index = obs.tiles.indexOf(tile);
@@ -93,8 +100,7 @@ export function yieldOf(obs: GameState, tile: Tile, outfit: Outfit, me: string):
     if (outfit === 'greenBelt') return { made: 0, energy: 0, inputs: {}, air: 0, crew: UPKEEP.crew.greenBelt };
     if (isFactory(outfit)) {
       const fit = factoryFit(obs, probe, outfit, me);
-      const { energy: _e, ...inputs } = RECIPES[outfit].inputs;
-      return { made: fit.output, energy: fit.energy, inputs, air, crew: UPKEEP.crew.factory };
+      return { made: fit.output, energy: fit.energy, inputs: inputsOf(outfit), air, crew: UPKEEP.crew.factory };
     }
     return { made: rawOutput(obs, probe), energy: energyUseOf(obs, probe), inputs: {}, air, crew: UPKEEP.crew.raw };
   } finally {
@@ -118,12 +124,13 @@ export const beforeTax = (obs: GameState, kept: number) => kept / Math.max(0.01,
 
 /**
  * What the seat's own plots supply of a good next month, by the outlook: what they make, but for Energy what the plants
- * have left after paying their own use (AM-17 R2, PM ruling A: monthNeeds leaves that use out, so supply must too).
+ * have left after paying their own use (AM-17 R2, PM ruling A: monthNeeds leaves that use out, so supply must too). A
+ * plant pays its use from what it makes and never more (runProduction charges min(made, use)), so one an event leaves
+ * making nothing pays nothing: the outlook records what they paid in its roll (plantsUse).
  */
-export function ownSupply(obs: GameState, me: string, made: Stock, good: Good): number {
-  if (good !== 'energy') return made[good];
-  const plantsUse = obs.tiles.filter((t) => t.owner === me && t.outfit === 'energy').reduce((n, t) => n + energyUseOf(obs, t), 0);
-  return Math.max(0, made.energy - plantsUse);
+export function ownSupply(o: Outlook, good: Good): number {
+  if (good !== 'energy') return o.made[good];
+  return Math.max(0, o.made.energy - o.plantsUse);
 }
 
 /** Net credits a month from running this outfit here, at the given prices (the outlook's by default, its own extra supply included). */
@@ -141,7 +148,7 @@ export function monthlyNet(obs: GameState, o: Outlook, y: Yield, outfit: Outfit,
     revenue += ownUseGain(obs, o, outfit, made, each, mind);
   } else if (full && (outfit === 'food' || outfit === 'water' || outfit === 'energy')) {
     // The units that cover its own shortfall are worth what going short would cost it, and pay no tax.
-    const short = Math.max(0, monthNeeds(obs, mind.me)[outfit] - ownSupply(obs, mind.me, o.made, outfit));
+    const short = Math.max(0, monthNeeds(obs, mind.me)[outfit] - ownSupply(o, outfit));
     const own = Math.min(made, short);
     const floor = obs.store.refPrice[outfit] * STRATEGIST.selfSupply;
     revenue += own * Math.max(0, floor - afterTax(obs, P(outfit, made)));
@@ -191,20 +198,32 @@ export function installGain(obs: GameState, o: Outlook, tile: Tile, outfit: Outf
  * from the same stock and what is left spoils between months. A plot of its own feeds the factory only with what is
  * left after the household eats (FM-factory-input): a farm turned off, or one making only the household's Food, feeds
  * nothing, and nor does what the seat's factories already running take of the same input. Its plots make what the next
- * production on a copy of what it sees, with the new factory in it, makes (madeNext), each month alike: a farm the
- * factory's own Energy use turns off feeds it only that 20%.
+ * production on a copy of what it sees, with the new factory in it and fed, makes (madeNext), each month alike: a farm
+ * the factory's own Energy use turns off feeds it only that 20%, though no input is in stock yet.
  */
 export function canFeed(obs: GameState, me: string, outfit: Outfit): boolean {
-  return unfedInputs(obs, me, outfit).length === 0;
+  if (!isFactory(outfit)) return true;
+  const lasts = inputLasts(obs, me, outfit);
+  // Stops at the first input it can't feed: each input's check may roll a production out.
+  return inputRuns(outfit).find(([g, q]) => !lasts(g, q)) === undefined;
 }
 
 /** The inputs other than Energy that canFeed finds the seat can't feed a new `outfit` factory with; none for a raw outfit. */
 export function unfedInputs(obs: GameState, me: string, outfit: Outfit): Good[] {
   if (!isFactory(outfit)) return [];
+  const lasts = inputLasts(obs, me, outfit);
+  return inputRuns(outfit).filter(([g, q]) => !lasts(g, q)).map(([g]) => g);
+}
+
+/** A factory's inputs other than Energy, with what a run takes of each (inputsOf as entries). */
+const inputRuns = (outfit: ProcessedGood): [Good, number][] => Object.entries(inputsOf(outfit)) as [Good, number][];
+
+/** canFeed's test for one input `g`, of which a run of a new `outfit` factory takes `q`: whether it lasts. */
+function inputLasts(obs: GameState, me: string, outfit: ProcessedGood): (g: Good, q: number) => boolean {
   const p = obs.players.find((q) => q.id === me)!;
   const household = householdNeeds(obs, me);
   const factories = obs.tiles.filter((t) => t.owner === me && t.outfit && isFactory(t.outfit));
-  const lasts = (g: Good, q: number) => {
+  return (g: Good, q: number) => {
     const own = obs.tiles.some((t) => t.owner === me && t.outfit === g) ? madeNext(obs, me, outfit)[g] : 0;
     // What the seat's factories already take of it each month, before the new one gets any.
     const taken = factories.reduce((n, t) => n + (RECIPES[t.outfit as ProcessedGood].inputs[g] ?? 0), 0);
@@ -216,7 +235,6 @@ export function unfedInputs(obs: GameState, me: string, outfit: Outfit): Good[] 
     }
     return true;
   };
-  return (Object.entries(RECIPES[outfit].inputs) as [Good, number][]).filter(([g, q]) => g !== 'energy' && !lasts(g, q)).map(([g]) => g);
 }
 
 /** What the household, a new factory's crew included, eats and drinks a month: canFeed's first call on Food and Water. */
@@ -239,7 +257,7 @@ export function chainLinks(obs: GameState, me: string, good: Good): Good[] {
 }
 
 /** AI_PLANS.chain.months, the switch: at 0 there is no chain, and every chain helper answers none. */
-const chainsOn = () => AI_PLANS.chain.months > 0;
+export const chainsOn = () => AI_PLANS.chain.months > 0;
 
 /**
  * Every good a chain to `good` is built from, Energy aside, all the way up its recipes: Rare earth, Alloy and Smithore
@@ -257,6 +275,17 @@ export function chainInputs(obs: GameState, me: string, good: Good): Good[] {
 /** The seat's plots already making an input of the chain to `good` that it still can't feed: links that stand. See AM-33. */
 export function standingLinks(obs: GameState, me: string, good: Good): Tile[] {
   return chainParts(obs, me, good).standing;
+}
+
+/**
+ * The chain to `good` as both its valuers read it, the draft's RULE-4 row and the strategist's link values: the links
+ * still to build (chainLinks), the plots already making a link (standingLinks), and its members, `good` first, then the
+ * links, then the goods the standing plots make. linkShare finds a link's user among the members, so a standing works
+ * counts (an Alloy works takes Smithore 2 a run), and chainOutlook frees every member but `good`. See AM-33.
+ */
+export function chainOf(obs: GameState, me: string, good: Good): { links: Good[]; standing: Tile[]; members: Good[] } {
+  const { links, standing } = chainParts(obs, me, good);
+  return { links, standing, members: [...new Set([good, ...links, ...standing.map((t) => t.outfit as Good)])] };
 }
 
 function chainParts(obs: GameState, me: string, good: Good): { links: Good[]; standing: Tile[] } {
@@ -302,8 +331,9 @@ const madeCache = new WeakMap<GameState, Map<string, Stock>>();
 /**
  * What the seat's own plots make at the next production: the outlook's rollout of a copy of what it sees, Energy, Water
  * and the turn-off rule included, with the factory `adding` (when given) installed on a stand-in plot: the seat's first
- * idle plot, else the first free one. Its Energy use may turn a farm off (AM-17). Remembered per observation, seat,
- * month, phase, plots and factory, as canFeed asks it for every plot it scores. In the production phase this month's
+ * idle plot, else the first free one, with one run of its inputs in stock, as it runs once fed: the engine puts a
+ * factory in the turn-off order only when its inputs are in stock. Its Energy use may turn a farm off (AM-17).
+ * Remembered per observation, seat, month, phase, plots and factory, as canFeed asks it for every plot it scores. In the production phase this month's
  * production has run and the outlook rolls none before the auction (its `made` is empty), so the month's report says
  * what the plots make: the plots are the ones that made it, without the factory being weighed.
  */
@@ -317,7 +347,14 @@ function madeNext(obs: GameState, me: string, adding?: Outfit): Stock {
   if (!made) {
     const idle = obs.tiles.findIndex((t) => t.owner === me && !t.outfit);
     const at = idle >= 0 ? idle : obs.tiles.findIndex((t) => !t.owner && t.terrain !== 'store');
-    const apply = adding && at >= 0 ? (sim: GameState) => Object.assign(sim.tiles[at]!, { owner: me, outfit: adding, runMonths: 0 }) : undefined;
+    const apply =
+      adding && at >= 0
+        ? (sim: GameState) => {
+            Object.assign(sim.tiles[at]!, { owner: me, outfit: adding, runMonths: 0 });
+            // As it will run once fed: the engine lists a factory in the turn-off order only with its inputs in stock.
+            if (isFactory(adding)) addStock(sim.players.find((p) => p.id === me)!.stock, inputsOf(adding));
+          }
+        : undefined;
     seen.set(key, (made = outlook(obs, me, { lookAhead: true, ...(apply && { apply }) }).made));
   }
   return made;
@@ -401,7 +438,7 @@ function neededReserve(obs: GameState, mind: Mind, o?: Outlook, except?: Good): 
   let cost = 0;
   for (const g of ['food', 'water', 'energy'] as const) {
     if (g === except) continue;
-    const short = Math.max(0, need[g] - p.stock[g] - (o ? ownSupply(obs, mind.me, o.made, g) : 0));
+    const short = Math.max(0, need[g] - p.stock[g] - (o ? ownSupply(o, g) : 0));
     cost += short * Math.min(storeSellAt(obs, g, obs.store.posted[g], { exact: true }), obs.store.refPrice[g] * STRATEGIST.reservePriceCap);
   }
   return Math.round((STRATEGIST.cashFloor + cost) * mind.persona.reserve);
@@ -810,7 +847,7 @@ function ownUseGain(obs: GameState, o: Outlook, good: 'food' | 'water' | 'energy
   // Only units the seat needs count: a well's drink units are worth nothing to a seat with no farm to water.
   const target = unitNeed(obs, mind, good).target;
   if (target === 0) return 0;
-  const own = Math.min(made, Math.max(0, target - ownSupply(obs, mind.me, o.made, good)));
+  const own = Math.min(made, Math.max(0, target - ownSupply(o, good)));
   const [cost = replace] = shortCosts(obs, o, good, mind, 1);
   return own * Math.max(0, cost - price);
 }
