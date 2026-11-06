@@ -57,11 +57,12 @@ Never change the camera per building. One camera is what lets 70 pictures sit to
 - **Textures:** CC0 (Poly Haven, ambientCG), ≤ 1k in renders' source, ≤ 512 px in the real-time glb.
 - **Mission to Minerva props** (Heiko's ruling, 6 Nov): Spaceport apron (landing pads, control tower, cranes, tanks,
   haulers), garden modules, rooftop dishes, construction scaffolding, rubble. Buildings and the rocket stay our own
-  builds. The kit stays outside the repo (path from the PM). **Until Heiko answers the licence question, kit props
-  appear in local renders only, never in committed art.** No real-time glb from kit parts without a licence check.
+  builds. The kit stays outside the repo (`KITS_DIR`, Heiko's `/Users/heiko/.kitbash3d/kits`). **Licence confirmed by
+  Heiko, 7 Nov:** kit-dressed rendered pictures ship; raw kit files (USD, textures) never enter the repo or anything
+  published. Rebuilding the pictures needs that folder. No real-time glb from kit parts without a new licence check.
   No purchases. NASA models only as a reference unless a per-model licence check passes.
   Heiko, later on 6 Nov: **as much kit dressing as fits at our scale**, everywhere (stages, apron, plants, hall). Every
-  picture gets a kit-dressed twin in `out/kit/`; shipping them is one flag (`SRC=out/kit publish.sh`) after the licence answer.
+  picture gets a kit-dressed twin in `out/kit/`; shipping them is one flag (`SRC=out/kit publish.sh`), cleared 7 Nov.
 
 ## 5. Scale and detail
 

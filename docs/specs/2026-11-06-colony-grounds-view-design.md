@@ -349,6 +349,10 @@ addendum  Heiko, later on 6 Nov: kit props as much as they fit at our scale — 
           kit-dressed twin rendered to a gitignored tree; the shipped manifest keeps today's pictures until the
           licence answer; the switch is one flag (publish.sh SRC=out/kit). Measured, not used: the kit hospital is
           141 × 104 × 58 m, ~12× too big for a 12 m place. → plan Task 3.4
+licence   **Licence confirmed by Heiko, 7 Nov** (relayed by the PM, 17:13Z by date -u): the kit-dressed rendered pictures
+          may ship in the game, rendered by our agents. Flip the flag (SRC=out/kit). Raw kit files (USD, textures)
+          still never enter the repo or anything published; only our rendered WebP ships. Rebuilding the pictures
+          needs Heiko's kit folder (KITS_DIR), so it runs on his Mac, not in CI.
 ```
 
 ## §9 · Ownership Boundaries  [handoff]

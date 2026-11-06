@@ -179,8 +179,7 @@ Plan-drift corrections (as built):
   frame and light (ART-DIRECTION §2–§3). Render every RULE-1 stage, look at each one, run `publish.sh`; T-AC-2 covers
   it from the manifest. Commit.
 - [ ] Kit props (rooftop dishes, a helipad, scaffolding for build1, rubble for damaged) from Mission to Minerva, loaded
-  from outside the repo: **local renders only until Heiko answers the licence question**; committed pictures carry
-  none of them until then.
+  from outside the repo. Licence confirmed by Heiko, 7 Nov: kit-dressed pictures ship via Task 3.4's flag.
 
 ### Task 1.7: the colony ring re-render for Heiko's look review
 
@@ -252,9 +251,10 @@ Same lines as PR-1, for B-AC-2, B-AC-3, B-AC-5, T-AC-3, T-AC-4 and T-AC-5 (phone
 - [ ] Each kind script dresses every stage with kit props where they fit at our scale (site/build/damaged gear,
   Spaceport apron, Park and edge plants, hall dressing); renders with `KITS_DIR` set go to `out/kit/` (gitignored).
 - [ ] `publish.sh` takes `SRC` (default `out`) and `PUB` (default `apps/web/public/art/colony`). Preview:
-  `SRC=out/kit PUB=out/kit-pub publish.sh`; the look page's catalogue switches to it. Ship (only after Heiko's licence
-  answer, relayed by the PM): `SRC=out/kit publish.sh`, then T-AC-2, commit.
-- [ ] Until then nothing kit-dressed is committed or published.
+  `SRC=out/kit PUB=out/kit-pub publish.sh`; the look page's catalogue switches to it. Ship: `SRC=out/kit publish.sh`,
+  then T-AC-2, commit. **Cleared: licence confirmed by Heiko, 7 Nov (AM-5)** — ship each kind once its kit set is
+  looked at.
+- [ ] Raw kit files never committed or published; only our WebP.
 
 ### PR-3 merge gate
 
