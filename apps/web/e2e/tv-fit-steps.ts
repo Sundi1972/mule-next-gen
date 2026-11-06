@@ -112,32 +112,51 @@ export async function fitSettled(tv: Page): Promise<void> {
 export const TV_SCALE_FLOOR = 0.7;
 
 /**
- * Kept a string, as PAST_THE_FOOT: each fit box the shown TV screen draws, its scale, the height it has and, tallest
- * first, the named boxes inside it at full size: what makes it scale.
+ * Kept a string, as PAST_THE_FOOT: the scale a fit box's content is drawn at, its own scale times every fit box's around
+ * it. Fit boxes nest (the auction's side sits in the TV body's), and the couch reads the product: a side at 0.80 in a
+ * body at 0.85 is drawn at 0.68, though each box alone reads over the floor. Rounded to a millionth, so a product that is
+ * the floor exactly is not read a hair under it.
  */
-const FIT_SCALES = String.raw`[...document.querySelectorAll('[data-phase] [data-fit]')].filter((b) => b.checkVisibility()).map((b) => ({
-  scale: Number(b.getAttribute('data-fit')),
+const EFFECTIVE_SCALE = String.raw`((b) => {
+  let s = Number(b.getAttribute('data-fit'));
+  for (let a = b.parentElement && b.parentElement.closest('[data-fit]'); a; a = a.parentElement && a.parentElement.closest('[data-fit]')) s *= Number(a.getAttribute('data-fit'));
+  return Math.round(s * 1e6) / 1e6;
+})`;
+
+/**
+ * Kept a string, as PAST_THE_FOOT: each fit box the shown TV screen draws, the scale its content is drawn at (its own
+ * times the fit boxes' around it), its own, the height it has and, tallest first, the named boxes inside it at full
+ * size: what makes it scale.
+ */
+const FIT_SCALES = String.raw`((effective) => [...document.querySelectorAll('[data-phase] [data-fit]')].filter((b) => b.checkVisibility()).map((b) => ({
+  scale: effective(b),
+  own: Number(b.getAttribute('data-fit')),
   room: b.clientHeight,
   tallest: [...b.querySelectorAll('[data-testid]')].filter((e) => e.checkVisibility()).sort((x, y) => y.offsetHeight - x.offsetHeight).slice(0, 4).map((e) => e.getAttribute('data-testid') + ' ' + e.offsetHeight + ' px'),
-}))`;
+})))(${EFFECTIVE_SCALE})`;
 
-/** TV-FIT floor: every fit box on the shown TV screen draws its body at TV_SCALE_FLOOR or more. Returns the scales. */
+/**
+ * TV-FIT floor: every fit box on the shown TV screen draws its body at TV_SCALE_FLOOR or more, nested boxes at the
+ * product of their scales. Returns the scales drawn at.
+ */
 export async function theTvScaleHolds(tv: Page, screen: string): Promise<string> {
   await fitSettled(tv);
-  const boxes = (await tv.evaluate(FIT_SCALES)) as { scale: number; room: number; tallest: string[] }[];
+  const boxes = (await tv.evaluate(FIT_SCALES)) as { scale: number; own: number; room: number; tallest: string[] }[];
   check(boxes.length > 0, `TV-FIT: the ${screen} TV's body sits in a fit box`);
   for (const b of boxes)
-    check(b.scale >= TV_SCALE_FLOOR, `TV-FIT: the ${screen} TV's body is drawn at scale ${b.scale.toFixed(3)}, under the floor ${TV_SCALE_FLOOR} (PM ruling 6 Nov); it has ${b.room} px, its tallest parts at full size ${b.tallest.join(', ')}`);
+    check(b.scale >= TV_SCALE_FLOOR, `TV-FIT: the ${screen} TV's body is drawn at scale ${b.scale.toFixed(3)}${b.own === b.scale ? '' : ` (its own ${b.own.toFixed(3)} inside fit boxes at ${(b.scale / b.own).toFixed(3)})`}, under the floor ${TV_SCALE_FLOOR} (PM ruling 6 Nov); it has ${b.room} px, its tallest parts at full size ${b.tallest.join(', ')}`);
   return boxes.map((b) => b.scale.toFixed(3)).join(', ');
 }
 
 /**
- * Kept a string, run in the TV's page from its first frame: every 100 ms, each fit box shown and its scale. A scale
- * that has stood SETTLED_MS is one the table saw; per screen (its phase, and its test id when it has one) the lowest
- * such scale is kept, for theTvScalesHeld. A scale held only while the box settles is not counted.
+ * Kept a string, run in the TV's page from its first frame: every 100 ms, each fit box shown and the scale its content is
+ * drawn at (EFFECTIVE_SCALE: its own times the fit boxes' around it). A scale that has stood SETTLED_MS is one the table
+ * saw; per screen (its phase, and its test id when it has one) the lowest such scale is kept, for theTvScalesHeld. A
+ * scale held only while the box settles is not counted.
  */
 const SCALE_WATCH = String.raw`{
   const SETTLED_MS = 400;
+  const effective = ${EFFECTIVE_SCALE};
   const lows = {};
   const shown = new Map();
   const keep = (s, now) => {
@@ -150,7 +169,7 @@ const SCALE_WATCH = String.raw`{
     for (const b of document.querySelectorAll('[data-phase] [data-fit]')) {
       if (!b.checkVisibility()) continue;
       live.add(b);
-      const scale = Number(b.getAttribute('data-fit'));
+      const scale = effective(b);
       const stage = b.closest('[data-phase]');
       const screen = stage.getAttribute('data-phase') + (stage.getAttribute('data-testid') ? ' (' + stage.getAttribute('data-testid') + ')' : '');
       const s = shown.get(b);
