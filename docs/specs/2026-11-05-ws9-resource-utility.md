@@ -362,6 +362,7 @@ first match wins
   #  good                  S(k)
   1  energy                max(replace, (1 − UPKEEP.offOutputShare) × the output value
                            of the plot energyOffOrder turns off at the k-th missing unit,
+                           ÷ that plot's use (its loss spread over the units it uses),
                            plus the experience month it misses). Raw plot and factory
                            alike: a turned-off plot makes offOutputShare of its output
                            (rounded half up); a turned-off factory uses ⌈offOutputShare ×
@@ -385,8 +386,9 @@ unknown    the store won't sell the good (storeQuotes(…).sell null, WS5 §3) �
            the belief is unknown (game ends) → the store's posted price today (outlook.final)
 outcome    → C1
 examples   Energy, 3 short, plots ranked [factory 2 Energy, farm 1, farm 1]: S(0..1) =
-           (1 − offOutputShare) × the factory's run, S(2) = (1 − offOutputShare) × the
-           farm's output, each plus the experience month it misses
+           (1 − offOutputShare) × the factory's run ÷ 2 each (its loss spread over the 2
+           units it uses), S(2) = (1 − offOutputShare) × the farm's output, each plus its
+           share of the experience month it misses (AM-2)
 ```
 
 ```
@@ -571,6 +573,24 @@ because   packages/ai/src/sim.ts::applySets takes only numbers and true/false, s
           `pnpm sim --set AI_VALUE.model=unit` would be refused, and every PR's sim rows
           (UBER-AC-1..3) are measured with the switch on. G-1..G-3 unchanged.
 folded    every mention renamed; the rulebook section (#400) follows
+```
+
+```
+AM-2 · 2026-11-06 · WS9 · building PR-1
+
+target    §2 RULE-2 row 1 and its example; §1 C1 depends_on
+said      each missing unit that turns off a plot costs that plot's whole loss;
+          RULE-3's target reuses wholeNextMonth from strategist.ts
+did       a plot's loss is spread over the units it uses: S = (1 − offOutputShare) × output
+          ÷ use, as trunk's AM-17 valuation already does; wholeNextMonth and its rounding
+          move into value.ts (strategist.ts re-exports it), and the net Energy and the
+          input targets use that rounding
+because   neither unit alone saves a 2-use plot, only the pair does, so charging the whole
+          loss per unit buys both once the loss beats one ask instead of two, and breaks
+          keep/buy being non-increasing in k (G-1: buy what keeps it supplied, at its
+          worth). value.ts → strategist.ts would be a runtime import cycle (strategist
+          imports value at runtime).
+folded    RULE-2's example; the PR-1 implementer's T-AC-6 expectations
 ```
 
 ## §9 · Ownership Boundaries
