@@ -169,9 +169,9 @@ Every handoff carries, verbatim:
 
 **Files:** Create `apps/web/e2e/plot-info-steps.ts` (wired into `e2e/smoke.ts` as the other steps are)
 
-- [ ] **Step 1: Write the failing browser step `B-AC-1 (plot info): two free plots picked, Scan, the rail's Drone report shows both with each good's 0–3 dots and "best for", 60 cr gone, before Ready`**
+- [x] **Step 1: Write the failing browser step `B-AC-1 (plot info): two free plots picked, Scan, the rail's Drone report shows both with each good's 0–3 dots and "best for", 60 cr gone, before Ready`**
   Altitude: promise, front to back: the phone's `scan-report` in a real browser, and the server's view for that seat holding both plots' ground. Negative: the TV's view and the other seats' views hold no ground for those plots (HC-1); a second Scan this planning is refused. Within 2 s. The smoke owns its server (listen(0)); never the rig.
-- [ ] **Step 2: Run** `cd apps/web && npx vite build && npx tsx e2e/smoke.ts` → FAIL at B-AC-1 (no `scan-report`). Keep the full log; never pipe the exit code.
+- [x] **Step 2: Run** `cd apps/web && npx vite build && npx tsx e2e/smoke.ts` → FAIL at B-AC-1 (no `scan-report`). Keep the full log; never pipe the exit code.
 
 ### Task 1.7: C2 — Scan and the report (PR-1c)
 
@@ -179,14 +179,14 @@ Every handoff carries, verbatim:
 
 **Files:** Create `apps/web/src/phone/plotInfo.tsx` (ScanReport, GoodDots, Dots, Gem, OnlyYou, grafted from the mock's `proposed/PlotInfo.tsx`); Modify `apps/web/src/phone/hub/tools.tsx` (`DroneSend` "Scan · n of 2 plots · 60 cr", `DronePanel`, `useDrone`), `apps/web/src/phone/hub/today.tsx` (`HUB_SLOTS` drone tile: "used this month"); Tests `apps/web/test/drone-words.test.ts` (the button and tile words), a new `apps/web/test/scan-report.test.ts` only for the report derived from the view (rejoin shows the same report).
 
-- [ ] **Step 1: Implement C2 per spec §1 C2**, grafting `#scan-a` (fill_scaffold: replace `DRONE_PICKS`, `GROUND` fixtures with the view). The report derives from `droneOrder` + the tiles' ground (spec "senior does"), not client state. The scanning second keeps today's SCAN chip (`MapTile.flag 'survey'`). Plan-drift: none.
-- [ ] **Step 2: Run** `cd apps/web && npx vitest run` → green, including the specials pin (`e2e/specials.ts` B-AC-9's drone rail line) and the "Pick n more" hint.
-- [ ] **Step 3: Run the smoke** (Task 1.6's command) → `e2e smoke: ok`, B-AC-1 printed.
-- [ ] **Step 4: Commit** `feat(web): C2 Scan and the Drone report in the rail (verifies B-AC-1)`.
+- [x] **Step 1: Implement C2 per spec §1 C2**, grafting `#scan-a` (fill_scaffold: replace `DRONE_PICKS`, `GROUND` fixtures with the view). The report derives from `droneOrder` + the tiles' ground (spec "senior does"), not client state. The scanning second keeps today's SCAN chip (`MapTile.flag 'survey'`). Plan-drift: none.
+- [x] **Step 2: Run** `cd apps/web && npx vitest run` → green, including the specials pin (`e2e/specials.ts` B-AC-9's drone rail line) and the "Pick n more" hint.
+- [x] **Step 3: Run the smoke** (Task 1.6's command) → `e2e smoke: ok`, B-AC-1 printed.
+- [x] **Step 4: Commit** `feat(web): C2 Scan and the Drone report in the rail (verifies B-AC-1)`.
 
-### Task 1.8: Wave 1 merge gate (PR-1c, and the batch)
+### Task 1.8: Wave 1 merge gate (PR-1c, and the batch) — done: on trunk df4ede8d (batch 59: #515, #511, #524). PR-1c #524: red a5afc67c, 88289d0e → green a046ec1f, docs 4ef99458; `Review: APPROVE at 3eb18236`; CI 4/4 at 6be89ca4. Heiko's UBER-AC-1 table check waits for PR-2's compact report (PM ruling, §8)
 
-- [ ] B-AC-1, T-AC-1, T-AC-2, T-AC-3 (pip) green, each test-first; `pnpm typecheck && pnpm test` green; smoke green at the batch head; rulebook: the drone's Designed entry flips to built, `node docs/rulebook/build-index.mjs`; R-1's sim result in PR-1b; one independent review per PR once CI is green; the PM batches PR-1a, PR-1b, PR-1c together. Then Heiko's table check of UBER-AC-1, through the PM.
+- [x] B-AC-1, T-AC-1, T-AC-2, T-AC-3 (pip) green, each test-first; `pnpm typecheck && pnpm test` green; smoke green at the batch head; rulebook: the drone's Designed entry flips to built, `node docs/rulebook/build-index.mjs`; R-1's sim result in PR-1b; one independent review per PR once CI is green; the PM batches PR-1a, PR-1b, PR-1c together. Then Heiko's table check of UBER-AC-1, through the PM.
 
 ---
 
