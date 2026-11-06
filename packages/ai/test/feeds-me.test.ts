@@ -1,0 +1,73 @@
+import { describe, expect, it } from 'vitest';
+import { advancePhase, createGame, GROWN_BASE, monthNeeds, observe, STRATEGIST, type GameState, type Outfit, type Tile } from '@mule/engine';
+import { AiSeat } from '../src/seat.js';
+import { landDecision } from '../src/strategist.js';
+
+/**
+ * The land plan's "Feeds me" counts units, not plots: a seat is covered only while what its own plots supply of Food and
+ * Energy next month reaches what it needs. Found by WS2: a seat with farms making no Food (turned off for want of
+ * Energy) was told "my Food and Energy are covered", and its land plans turned away from growing Food.
+ */
+
+/** What the farm makes when it runs: over the household's Food (checked below). */
+const FARM = 4;
+
+const flatGround = { food: 0, water: 0, energy: 0, smithore: 0, crystite: 0, rareEarth: 0 };
+
+/**
+ * Month 1's land grant. ai0 owns, analysed, a plant making `plant` Energy and a farm making `farm` Food, on plots apart
+ * (no cluster bonus). It holds no Energy, so the farm runs only on what the plant nets after its own use; Water in plenty.
+ */
+function grant(plant: number, farm: number): { state: GameState; seat: AiSeat } {
+  const state = createGame({ seed: 11, players: ['ai0', 'ai1', 'ai2', 'ai3'].map((id) => ({ id, name: id, isAi: true, species: 'zipwing' as const })) });
+  while (state.phase !== 'landGrant') advancePhase(state);
+  const plots: [Outfit, Partial<Tile['ground']>][] = [
+    ['energy', { energy: plant - GROWN_BASE }],
+    ['food', { food: farm - GROWN_BASE }],
+  ];
+  const me = state.players.find((p) => p.id === 'ai0')!;
+  plots.forEach(([outfit, ground], k) => {
+    const tile = state.tiles[2 * k]!;
+    expect(tile.terrain).not.toBe('store');
+    Object.assign(tile, { terrain: 'plains', traits: [], ground: { ...flatGround, ...ground }, owner: 'ai0', outfit, pollution: 0, runMonths: 0 } satisfies Partial<Tile>);
+    delete tile.special;
+    me.analysed.push(2 * k);
+  });
+  Object.assign(me.stock, { food: 0, water: 40, energy: 0 });
+  me.money = 3000;
+  return { state, seat: new AiSeat({ id: 'ai0', name: 'ai0', persona: 'cautious', level: 'trader', seed: 11 }) };
+}
+
+/** Each land plan's "Feeds me" consideration, as the seat's rationale reads it. */
+function feedsMe(state: GameState, seat: AiSeat) {
+  return landDecision(observe(state, 'ai0'), seat.mind).all.map((c) => ({ plan: c.action.focus, ...c.considerations.find((k) => k.name === 'Feeds me')! }));
+}
+
+describe('FM-feeds-me: the land plan counts Food and Energy as units against need', () => {
+  it('FM-feeds-me: a seat whose farm is turned off for want of Energy reads as short, though it owns a farm and a plant', () => {
+    // The plant makes 1 and uses 1: it nets nothing, so the farm (using 1) is turned off and makes no Food.
+    const { state, seat } = grant(1, FARM);
+
+    const plans = feedsMe(state, seat);
+
+    expect(plans.length).toBeGreaterThan(0);
+    for (const k of plans) {
+      expect(k.reason, `${k.plan} plan`).toBe('I still buy my Food and Energy');
+      expect(k.score, `${k.plan} plan`).toBe(k.plan === 'grown' ? 1 : STRATEGIST.land.feedsMe.short);
+    }
+  });
+
+  it('FM-feeds-me: a seat whose plant powers its farm, and whose farm makes its Food, reads as covered', () => {
+    // The plant makes 3 and uses 1: it nets 2, over the farm's 1. The farm makes 4, over the household's Food.
+    const { state, seat } = grant(3, FARM);
+    expect(FARM).toBeGreaterThanOrEqual(monthNeeds(state, 'ai0').food);
+
+    const plans = feedsMe(state, seat);
+
+    expect(plans.length).toBeGreaterThan(0);
+    for (const k of plans) {
+      expect(k.reason, `${k.plan} plan`).toBe('my Food and Energy are covered');
+      expect(k.score, `${k.plan} plan`).toBe(STRATEGIST.land.feedsMe.covered);
+    }
+  });
+});
