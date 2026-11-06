@@ -238,7 +238,7 @@
 <p>Throughout a good your phone keeps three numbers in view: <strong>HAVE</strong>, <strong>NEED</strong> and <strong>SPARE</strong> (or <strong>SHORT</strong>), green when you have more than you need and red when you have less. Under them a hint tells you where to walk: "Walk up to the store's line at 33: it's the only seller.", "Walk up to Mia's ask at 30: Kai asks 32.", "Walk down to the ship's line at 104: it pays the most. The store pays 81." and how: "Hold ▲ to walk up; a tap moves 1 cr."</p>
 <p>When you stand at a line where nothing moves, the phone says why: "You can't pay for one at 33 cr" or "You have no Water to sell".</p>
 <h3 id="selling-into-shortage">Selling below your need</h3>
-<p>You may sell goods you need next month. The phone does not stop you or ask: it shows an amber note, "You keep 3 of the 5 Food you need next month.", and your HAVE turns amber. A shortage next month has real costs: a hungry colonist walks slower in development, a plot without its Energy makes only part of its output, and a Food farm without Water makes half (see <a href="production.html">Production</a> and <a href="development.html">Development</a>).</p>
+<p>You may sell goods you need next month, but not by accident: selling stops at your need (<a href="#rule-b-stop-at-need">rule B</a>), and to sell on you hold ▼ for one second. Once you do, the phone shows an amber note, "You keep 3 of the 5 Food you need next month.", and your HAVE turns amber. A shortage next month has real costs: a hungry colonist walks slower in development, a plot without its Energy makes only part of its output, and a Food farm without Water makes half (see <a href="production.html">Production</a> and <a href="development.html">Development</a>).</p>
 <h3 id="the-receipt">The receipt</h3>
 <p>When a good closes, each phone shows a receipt over the still board:</p>
 <ul>
@@ -248,7 +248,7 @@
 <li>what comes next ("Next: Energy, buy or sell?") and your running total for the month's auction ("This month: +212 cr").</li>
 </ul>
 <p>If you bought and sold the same good, there is a line for each. If you did not trade, it says "Water: you didn't trade".</p>
-<div class="box why"><h4>Why it is like this</h4><p>The PM ruled WS3's open question "show, don't stop" on 5 Nov: selling below next month's need is allowed and shown, never asked, matching Heiko's words that day ("no question"). Heiko later asked for a stronger guard, an automatic stop at your need; that is <a href="#heiko-auction-rules">being designed</a>. The receipt comes from the UX audit (A-5, G-5).</p></div>
+<div class="box why"><h4>Why it is like this</h4><p>The PM ruled WS3's open question "show, don't stop" on 5 Nov: selling below next month's need is allowed and shown, never asked, matching Heiko's words that day ("no question"). Heiko later asked for a stronger guard, an automatic stop at your need; that is <a href="#rule-b-stop-at-need">rule B</a>, in the game since 6 Nov. The receipt comes from the UX audit (A-5, G-5).</p></div>
 <p class="code-ref">In the code: <code>apps/web/src/phone/Auction.tsx</code> (rail, <code>ReceiptCard</code>, <code>MonthTally</code>) · <code>apps/web/src/components/AuctionParts.tsx::walkHint</code>, <code>keepWords</code>, <code>lineMoment</code> · <code>packages/engine/src/auction.ts::noteUnit</code> (receipts and tally)</p>
 <p class="owner">Kept current by: WS6 (phone), WS3 (receipt data).</p>
 
@@ -332,19 +332,19 @@
 
 <h2 id="heiko-auction-rules">Heiko's auction rules of 5 November <span class="pill designed">Designed</span></h2>
 <p>Selling a Water surplus at the table on 5 Nov, Heiko sold too much and ended up short. He asked for four changes, in his words (shortened): "When I am selling it should auto-stop when I reached my equilibrium, it should get me up the store lane. If I still want to sell (in shortage) it must be a conscious decision … It should be possible to flip sides (buy / sell) within the auction. Below the store buying lane and above the store selling lane there should be safe or rest areas … so that I am not participating in the auction accidentally. When the store has no more goods to sell, buyers can walk up and drive the prices up further, trying to convince a seller to sell. The sell lane of the store is representing the latest bid price of the buyers."</p>
-<p>Heiko approved the rules on 5 Nov after seeing WS6's screens, choosing <strong>hold ▼ for one second</strong> as the way to sell into a shortage. They are designed, not built yet: the Auctions team (WS3) builds them next. Until then the game plays as the sections above describe.</p>
+<p>Heiko approved the rules on 5 Nov after seeing WS6's screens, choosing <strong>hold ▼ for one second</strong> as the way to sell into a shortage. B and C are in the game (WS3, 6 Nov); D and E are designed, not built yet, and the Auctions team (WS3) builds them next. Until then the game plays as the sections above describe for those two.</p>
 
-<h3 id="rule-b-stop-at-need">B · You stop at your need</h3>
+<h3 id="rule-b-stop-at-need">B · You stop at your need <span class="pill built">In the game</span></h3>
 <ul>
-<li>A seller who holds more than their need sells down to their need and then stops: the unit that would take them below need does not sell, and they are moved <strong>one step</strong> up off the line. The phone and the TV mark them as keeping their need.</li>
+<li>A seller who holds more than their need sells down to their need and then stops: the unit that would take them below need does not sell, and they are moved <strong>one step</strong> up off the line. Your need here is the status screen's: what you must hold now, spoilage included (see <a href="#status-screen">the status screen</a>). Every phone and the TV mark the seller <em>KEEPS 6</em>, and their own phone says "Stopped at 6 Food: what you need next month."</li>
 <li>To sell on into a shortage, <strong>hold ▼ for one second</strong>. A tap, or a shorter hold, does nothing, so a thumb resting on the arrow never sells you short by accident. After the one-second hold you sell for the rest of that good, starting slow again. The phone says "To sell more, hold ▼: you'd be short next month".</li>
 <li>It applies to <strong>every</strong> sale: to the store, to the ship and to other players (Heiko, 5 Nov). A good you don't need (Smithore, Crystite and the like, when no factory of yours uses them) has no stop.</li>
 <li>There is no matching stop for buyers (Heiko, 5 Nov).</li>
-<li>Computer players hold ▼ again only if they had already decided to sell past their need.</li>
+<li>Computer players hold ▼ again only when the least they mean to keep is below this need, so selling short is a choice they made, never an accident of the walk. Today a computer player's least is what next month uses before spoilage, so for Food, Energy and Water it does sell on below this need, a second later.</li>
 </ul>
 
-<h3 id="rule-c-flip-sides">C · Flip sides during the auction</h3>
-<p>Already possible on trunk (see <a href="#switching-sides">switching sides</a>). The draft writes it down: a switch stops any trade at once, takes back your Done, and keeps your stop-at-need for this good. Computer players do not switch mid-walk.</p>
+<h3 id="rule-c-flip-sides">C · Flip sides during the auction <span class="pill built">In the game</span></h3>
+<p>Tap <em>Buy</em> or <em>Sell</em> during the walk (see <a href="#switching-sides">switching sides</a>): a switch stops any trade at once, takes back your Done, and keeps your stop-at-need for this good. A computer player that has sold more than it meant to switches to buying.</p>
 
 <h3 id="rule-d-rest-zones">D · Rest zones with hard edges</h3>
 <ul>

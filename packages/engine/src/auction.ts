@@ -81,6 +81,8 @@ export function goodsMarket(state: GameState): WalkMarket {
   const seats = new Map(state.players.map((p, i) => [p.id, i]));
   return {
     units: (id) => players.get(id)?.stock[good] ?? 0,
+    // RULE-4: what a seller must hold is the status row's need (auctionNeed), fixed as the good came up.
+    keep: (id) => (WALK.needStop ? (a.status.find((r) => r.id === id)?.need ?? 0) : 0),
     money: (id) => players.get(id)?.money ?? 0,
     houseSells: { id: STORE_ID, price: () => storeSellLine(state) },
     houseBuys: [
@@ -360,6 +362,9 @@ export function setWalk(state: GameState, playerId: string, dir: -1 | 0 | 1): vo
   if (a.stage !== 'walk') throw new RuleError('Not walking yet');
   const w = a.walkers.find((x) => x.id === playerId);
   if (!w || w.side === 'pass') throw new RuleError('You passed on this good');
+  // RULE-4: the board's time a hold of ▼ began, so a held seller's one-second hold counts the same on a replay.
+  if (dir !== -1) delete w.downSince;
+  else if (w.dir !== -1 || w.downSince === undefined) w.downSince = a.elapsed;
   w.dir = dir;
 }
 

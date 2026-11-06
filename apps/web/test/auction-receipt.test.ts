@@ -1,4 +1,4 @@
-import { WALK } from '@mule/engine';
+import { WALK, type GameState } from '@mule/engine';
 import type { MuleView, TableView } from '@mule/protocol';
 import { GOOD_NAME, type Slot } from '@mule/ui';
 import { createElement } from 'react';
@@ -56,6 +56,10 @@ function toClose() {
   for (const s of seats) if (!s.isAi) game.handle(s.id, { type: 'ready' });
   for (let i = 0; i < 20_000 && game.viewFor(null).auction?.stage !== 'status'; i++) advance(WALK.tickMs);
   const opened = { s1: game.viewFor('s1').players.find((p) => p.id === 's1')!.money, s2: game.viewFor('s2').players.find((p) => p.id === 's2')!.money };
+  // Heiko has 4 over what he must hold, so the need stop (RULE-4) leaves him some to sell.
+  const state = (game as unknown as { state: GameState }).state;
+  const good = state.auction!.good!;
+  state.players.find((p) => p.id === 's1')!.stock[good] = game.viewFor('s1').auction!.status.find((r) => r.id === 's1')!.need + 4;
   game.handle('s1', { type: 'declare', side: 'seller' });
   game.handle('s2', { type: 'declare', side: 'buyer' });
   game.handle('s1', { type: 'ready' });

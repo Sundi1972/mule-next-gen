@@ -1,6 +1,6 @@
 import { WALK, type GameState } from '@mule/engine';
 import type { AuctionView, MuleView, TableView } from '@mule/protocol';
-import type { Slot } from '@mule/ui';
+import { GOOD_NAME, type Slot } from '@mule/ui';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -144,7 +144,8 @@ describe('the auto-trade amendment on the phone: at the store line units trade b
   it('F5 (WS6 ruling): a seller at the store line with none left is told why: "You have no <Good> to sell"', () => {
     const { game, advance, state, good } = toWalk();
     const s1 = state.players.find((p) => p.id === 's1')!;
-    s1.stock[good] = 5;
+    // Above her need, or the need stop (RULE-4) leaves her nothing to sell.
+    s1.stock[good] = game.viewFor('s1').auction!.status.find((r) => r.id === 's1')!.need + 5;
     game.handle('s1', { type: 'declare', side: 'seller' });
     game.handle('s1', { type: 'walk', dir: 'down' });
     for (let i = 0; i < 400 && mine(game).line !== 'store'; i++) advance(WALK.tickMs);
@@ -254,6 +255,9 @@ describe('WS6 variant A: the auction trades by itself, faster and faster, on the
   it('"show, don\'t stop" (variant A): selling into next month’s need turns HAVE amber and says what you keep, apart from the hint', () => {
     const { game, advance, need } = sellingAtTheLine(1);
     expect(need).toBeGreaterThan(0);
+    // RULE-4: she stops at her need; holding ▼ for a second sells on into it.
+    for (let i = 0; i < 400 && !mine(game).held; i++) advance(WALK.tickMs);
+    game.handle('s1', { type: 'walk', dir: 'down' });
     for (let i = 0; i < 400 && (game.viewFor('s1').me!.stock[game.viewFor('s1').auction!.good] ?? 0) >= need; i++) advance(WALK.tickMs);
     const view = game.viewFor('s1');
     const have = view.me!.stock[view.auction!.good];
@@ -301,5 +305,64 @@ describe('WS6 variant A: the auction trades by itself, faster and faster, on the
     expect(tagOf(fast, 'tv-deal-speed')).toMatch(/aria-label="speed 4 of 4"/);
     expect(textOf(fast, 'tv-deal')).toMatch(/full speed/);
     expect(textOf(fast, 'tv-deal')).not.toMatch(/faster and faster/);
+  });
+});
+
+/**
+ * RULE-4 on the screens (WS6's mock design/mocks/auction-rules at cde3ff61, PhoneSale variant A and TvSale): a seller
+ * selling a surplus stops by herself at what she must hold. The board marks her KEEPS n on every screen; her own rail
+ * says she stopped and how to sell on, and her ▼ becomes the hold that sells into a shortage.
+ */
+describe('RULE-4: a seller stops at what she must hold, and every screen shows it', () => {
+  /** s1 a seller with 3 over its need, walking down to the store's buying line; `held` waits until the engine stops her. */
+  function sellerWalkingDown() {
+    const t = toWalk();
+    const s1 = t.state.players.find((p) => p.id === 's1')!;
+    const need = t.game.viewFor('s1').auction!.status.find((r) => r.id === 's1')!.need;
+    expect(need).toBeGreaterThan(0);
+    s1.stock[t.good] = need + 3;
+    t.game.handle('s1', { type: 'declare', side: 'seller' });
+    t.game.handle('s1', { type: 'walk', dir: 'down' });
+    const held = () => {
+      for (let i = 0; i < 2_000 && !mine(t.game).held; i++) t.advance(WALK.tickMs);
+      expect(mine(t.game).held).toBe(true);
+    };
+    return { ...t, need, held };
+  }
+  const tvScreen = (view: MuleView) => {
+    const client = { intent: () => {}, subscribe: () => () => {}, getState: () => ({ chat: [], view: null, seatId: null }), serverNow: () => 0 } as unknown as TableClient;
+    const table = { seats: [], hostId: 's1' } as unknown as TableView<MuleView>;
+    return renderToStaticMarkup(createElement(ClientProvider, { client, children: createElement(TvAuction, { table, game: view, auction: view.auction! }) }));
+  };
+
+  it('B-AC-B1 (phone): the held seller’s board marks her KEEPS n, her rail says she stopped and how to sell on, and ▼ is the hold that sells short', () => {
+    const { game, need, good, held } = sellerWalkingDown();
+    held();
+    const view = game.viewFor('s1');
+    expect(view.me!.stock[good]).toBe(need);
+    const html = phoneScreen(view, 's1');
+    expect(textOf(html, 'keeps-s1')).toBe(`KEEPS ${need}`);
+    expect(textOf(html, 'held')).toBe(`Stopped at ${need} ${GOOD_NAME[good]}: what you need next month. To sell more, hold ▼: you’d be short next month.`);
+    expect(textOf(html, 'hold-down')).toBe('▼ Hold: sell short');
+    // Another phone sees the mark on her walker, and no rail line of its own about it.
+    const other = phoneScreen(game.viewFor('s2'), 's2');
+    expect(textOf(other, 'keeps-s1')).toBe(`KEEPS ${need}`);
+    expect(textOf(other, 'held')).toBeNull();
+  });
+
+  it('B-AC-B1 (phone): a seller not held shows no KEEPS mark and no stop line, and ▼ walks down', () => {
+    const { game } = sellerWalkingDown();
+    const html = phoneScreen(game.viewFor('s1'), 's1');
+    expect(mine(game).held).toBeUndefined();
+    expect(textOf(html, 'keeps-s1')).toBeNull();
+    expect(textOf(html, 'held')).toBeNull();
+    expect(textOf(html, 'hold-down')).toBe('Hold ▼ to walk down');
+  });
+
+  it('B-AC-B1 (TV): the TV marks the held seller’s walker KEEPS n, and no walker before she is held', () => {
+    const { game, need, held } = sellerWalkingDown();
+    expect(textOf(tvScreen(game.viewFor(null)), 'keeps-s1')).toBeNull();
+    held();
+    expect(textOf(tvScreen(game.viewFor(null)), 'keeps-s1')).toBe(`KEEPS ${need}`);
   });
 });

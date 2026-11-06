@@ -19,6 +19,8 @@ export interface BoardWalker {
   units?: number;
   /** Units over (or, negative, under) what they need this month. */
   surplus?: number;
+  /** A seller stopped at what they must hold (RULE-4): the KEEPS mark over the creature, with this many. */
+  keeps?: number;
 }
 
 /** Units changing hands: between two players, or with a house ('store', 'ship'). */
@@ -459,6 +461,15 @@ function Walker({ w, left, top, size, tv, me, trading, wrap = (_, c) => c }: { w
         data-side={w.side}
       >
         <span className="relative flex flex-col items-center">
+          {w.keeps !== undefined && (
+            <span
+              data-num
+              data-testid={`keeps-${w.id}`}
+              className={cx('absolute bottom-full mb-1 whitespace-nowrap rounded-chip border border-ok/70 bg-void/90 px-1 font-mono font-bold leading-tight text-ok', tv ? 'text-base' : 'text-[10px]')}
+            >
+              {`KEEPS ${w.keeps}`}
+            </span>
+          )}
           {wrap(
             w.id,
             <span className={cx('relative rounded-full', trading && 'animate-pulse-glow', me && 'ring-2 ring-holo ring-offset-2 ring-offset-void')}>

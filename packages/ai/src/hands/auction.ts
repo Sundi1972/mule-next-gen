@@ -313,16 +313,8 @@ export class AuctionHand {
    * it off the sellers before the step moves the unit.
    */
   private oversells(state: GameState, me: { id: string; stock: Record<Good, number> }, dt: number): boolean {
-    const plan = this.plan;
-    const trade = this.trade;
-    if (!plan || !trade) return false;
-    const good = state.auction!.good!;
-    let may = 0;
-    if (trade.side === 'seller') {
-      for (let h = me.stock[good]; h > trade.keep && h > 0; h--, may++) {
-        if (!Number.isFinite(this.bounded('seller', Math.ceil(beforeTax(state, plan.values.keep[h - 1] ?? 0))))) break;
-      }
-    }
+    if (!this.plan || !this.trade) return false;
+    const may = me.stock[state.auction!.good!] - this.keepFloor(state, me);
     const line = lineOf(state, me.id);
     let due = 0;
     for (const d of state.auction!.deals) {
@@ -332,14 +324,42 @@ export class AuctionHand {
     return due > may;
   }
 
-  /** Holds up or down until the rounded price is on the target, a step at most past it, so it never wobbles. */
+  /** The units it sells down to: under them a unit is past its trade's keep, or one its floor keeps at any price. */
+  private keepFloor(state: GameState, me: { stock: Record<Good, number> }): number {
+    const plan = this.plan!;
+    const trade = this.trade!;
+    let h = me.stock[state.auction!.good!];
+    if (trade.side !== 'seller') return h;
+    for (; h > trade.keep && h > 0; h--) {
+      if (!Number.isFinite(this.bounded('seller', Math.ceil(beforeTax(state, plan.values.keep[h - 1] ?? 0))))) break;
+    }
+    return h;
+  }
+
+  /**
+   * RULE-4: stopped at the need the status row shows, it sells on into shortage only when its keep floor is below that
+   * need and below what it holds, so the plan already chose to sell those units. Otherwise it never presses ▼ while held.
+   */
+  private sellsShort(state: GameState): boolean {
+    const a = state.auction!;
+    const me = state.players.find((p) => p.id === this.brain.mind.me)!;
+    const need = a.status.find((r) => r.id === me.id)?.need ?? 0;
+    return this.keepFloor(state, me) < Math.min(me.stock[a.good!], need);
+  }
+
+  /**
+   * Holds up or down until the rounded price is on the target, a step at most past it, so it never wobbles. Stopped at
+   * its need (RULE-4), it holds ▼ without letting go until the board frees it, if it chose to sell into shortage, and
+   * otherwise never presses ▼: a target older than the stop would start a hold by accident.
+   */
   private steer(state: GameState, w: Walker, dt: number, act: Act): void {
     const a = state.auction!;
     const target = this.target!;
     const step = (a.speed * dt) / MS_PER_SECOND;
     const p = Math.round(w.price);
-    const dir: -1 | 0 | 1 =
+    let dir: -1 | 0 | 1 =
       w.side === 'seller' ? (p > target ? -1 : w.price < target - step ? 1 : 0) : p < target ? 1 : w.price > target + step ? -1 : 0;
+    if (w.held && w.side === 'seller') dir = this.sellsShort(state) ? -1 : dir === -1 ? 0 : dir;
     if (dir !== this.dir || w.dir !== dir) {
       this.dir = dir;
       act({ type: 'walk', dir });

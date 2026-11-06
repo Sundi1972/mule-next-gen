@@ -8,7 +8,10 @@ import type { Seat } from '../phone/hub/ready';
 import { WaitingFor } from '../phone/hub/ReadyBar';
 import { SpecialLine } from './SpecialLine';
 
-/** The auction's walkers as the board draws them, in seat order, with their units and the surplus over this month's need. */
+/**
+ * The auction's walkers as the board draws them, in seat order, with their units and the surplus over this month's
+ * need; a seller stopped at what they must hold (RULE-4) carries the KEEPS mark with what they keep.
+ */
 export function boardWalkers(view: MuleView, auction: AuctionView): BoardWalker[] {
   return auction.walkers.map((w) => {
     const need = auction.status.find((r) => r.id === w.id)?.need;
@@ -22,8 +25,22 @@ export function boardWalkers(view: MuleView, auction: AuctionView): BoardWalker[
       done: w.done,
       units: w.units,
       ...(need === undefined ? {} : { surplus: w.units - need }),
+      ...(heldSeller(w) ? { keeps: w.units } : {}),
     };
   });
+}
+
+/** A seller the engine stopped at what they must hold (RULE-4). The engine keeps the flag through a switch to Buy; the screens don't. */
+export function heldSeller(w: Pick<WalkerView, 'side' | 'held'> | undefined): boolean {
+  return w?.side === 'seller' && w.held === true;
+}
+
+/**
+ * The held seller's rail (WS6's mock PhoneSale, variant A, at cde3ff61): she stopped at what she needs next month, and
+ * how to sell on.
+ */
+export function heldWords(good: Good, need: number): { line: string; how: string } {
+  return { line: `Stopped at ${need} ${GOOD_NAME[good]}: what you need next month.`, how: 'To sell more, hold ▼: you’d be short next month.' };
 }
 
 /** Who an id is, in a sentence: "you", "the store", "the ship", or the player's name. */
