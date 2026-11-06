@@ -176,7 +176,8 @@ export function installGain(obs: GameState, o: Outlook, tile: Tile, outfit: Outf
  * from the same stock and what is left spoils between months. A plot of its own feeds the factory only with what is
  * left after the household eats (FM-factory-input): a farm turned off, or one making only the household's Food, feeds
  * nothing, and nor does what the seat's factories already running take of the same input. Its plots make what the next
- * production on a copy of what it sees makes (madeNext), each month alike.
+ * production on a copy of what it sees, with the new factory in it, makes (madeNext), each month alike: a farm the
+ * factory's own Energy use turns off feeds it only that 20%.
  */
 export function canFeed(obs: GameState, me: string, outfit: Outfit): boolean {
   if (!isFactory(outfit)) return true;
@@ -189,7 +190,7 @@ export function canFeed(obs: GameState, me: string, outfit: Outfit): boolean {
   const factories = obs.tiles.filter((t) => t.owner === me && t.outfit && isFactory(t.outfit));
   return (Object.entries(RECIPES[outfit].inputs) as [Good, number][]).every(([g, q]) => {
     if (g === 'energy') return true;
-    const own = obs.tiles.some((t) => t.owner === me && t.outfit === g) ? madeNext(obs, me)[g] : 0;
+    const own = obs.tiles.some((t) => t.owner === me && t.outfit === g) ? madeNext(obs, me, outfit)[g] : 0;
     // What the seat's factories already take of it each month, before the new one gets any.
     const taken = factories.reduce((n, t) => n + (RECIPES[t.outfit as ProcessedGood].inputs[g] ?? 0), 0);
     let carry = p.stock[g];
@@ -206,18 +207,25 @@ const madeCache = new WeakMap<GameState, Map<string, Stock>>();
 
 /**
  * What the seat's own plots make at the next production: the outlook's rollout of a copy of what it sees, Energy, Water
- * and the turn-off rule included. Remembered per observation, seat, month, phase and plots, as canFeed asks it for every
- * plot it scores. In the production phase this month's production has run and the outlook rolls none before the auction
- * (its `made` is empty), so the month's report says what the plots make: the plots are the ones that made it.
+ * and the turn-off rule included, with the factory `adding` (when given) installed on a stand-in plot: the seat's first
+ * idle plot, else the first free one. Its Energy use may turn a farm off (AM-17). Remembered per observation, seat,
+ * month, phase, plots and factory, as canFeed asks it for every plot it scores. In the production phase this month's
+ * production has run and the outlook rolls none before the auction (its `made` is empty), so the month's report says
+ * what the plots make: the plots are the ones that made it, without the factory being weighed.
  */
-function madeNext(obs: GameState, me: string): Stock {
+function madeNext(obs: GameState, me: string, adding?: Outfit): Stock {
   if (obs.phase === 'production') return obs.history.at(-1)?.produced[me] ?? emptyStock();
   const plots = obs.tiles.flatMap((t, i) => (t.owner === me ? [`${i}:${t.outfit ?? ''}`] : [])).join(',');
-  const key = `${me}|${obs.month}|${obs.phase}|${plots}|${GOODS.map((g) => obs.players.find((p) => p.id === me)!.stock[g]).join(',')}`;
+  const key = `${me}|${obs.month}|${obs.phase}|${plots}|${GOODS.map((g) => obs.players.find((p) => p.id === me)!.stock[g]).join(',')}|${adding ?? ''}`;
   let seen = madeCache.get(obs);
   if (!seen) madeCache.set(obs, (seen = new Map()));
   let made = seen.get(key);
-  if (!made) seen.set(key, (made = outlook(obs, me, { lookAhead: true }).made));
+  if (!made) {
+    const idle = obs.tiles.findIndex((t) => t.owner === me && !t.outfit);
+    const at = idle >= 0 ? idle : obs.tiles.findIndex((t) => !t.owner && t.terrain !== 'store');
+    const apply = adding && at >= 0 ? (sim: GameState) => Object.assign(sim.tiles[at]!, { owner: me, outfit: adding, runMonths: 0 }) : undefined;
+    seen.set(key, (made = outlook(obs, me, { lookAhead: true, ...(apply && { apply }) }).made));
+  }
   return made;
 }
 
