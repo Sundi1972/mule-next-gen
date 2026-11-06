@@ -1486,8 +1486,11 @@ function givePlot(server: MuleServer, code: string, seat: string): void {
   room.game.ctx.changed();
 }
 
-/** Enough Food that month 1's need (2 a seat) leaves some to sell. */
-const FOOD_TO_SPARE = 6;
+/**
+ * Enough Food that month 1's need leaves some to sell. The need counts spoilage (auctionNeed, #439): 2 eaten at the
+ * month end plus 4 that halve to next month's 2, so 6 a seat; 10 leaves 4 to sell.
+ */
+const FOOD_TO_SPARE = 10;
 
 function shipInPortThisMonth(server: MuleServer, code: string): void {
   type Ship = { arrives: number; goods: Good[]; hold: Partial<Record<Good, number>> };
@@ -1501,7 +1504,7 @@ function shipInPortThisMonth(server: MuleServer, code: string): void {
 }
 
 /**
- * Every seat starts with Food to spare: the 5 Nov start values give each seat just the 2 its month-1 need asks for, and
+ * Every seat starts with Food to spare: the 5 Nov start values give each seat less than its month-1 need asks for, and
  * B-AC-4's cast (a seller, a buyer and a stayer) each needs some to sell.
  */
 function foodToSpare(server: MuleServer, code: string): void {
