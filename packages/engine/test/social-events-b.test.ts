@@ -253,6 +253,34 @@ describe('C26 PR-B: the loyal crew, in production', () => {
     const picked = new Set([1, 2, 3, 4, 5, 6].map((seed) => produce(colonyAt(MID('thriving'), { seed })).events!.find((e) => e.key === 'loyalCrew' && e.player === 'p0')?.plots[0]?.index));
     expect(picked.size).toBeGreaterThan(1);
   });
+
+  it("FM-C26-10 (loyal crew on an idle factory): the crew works only raw plots, so its +1 always reaches the line and the stock; with no raw plot, no crew", () => {
+    /** A Thriving colony where p3 works an Alloy factory with no Smithore to run on and, unless `farm` is false, one Food plot. */
+    const withFactory = (seed: number, farm = true) => {
+      const state = colonyAt(MID('thriving'), { seed });
+      const [food, factory] = state.tiles.filter((t) => t.terrain !== 'store' && !t.owner);
+      if (farm) Object.assign(food!, { owner: 'p3', outfit: 'food', traits: [], pollution: 0, ground: { ...food!.ground, food: 6 } });
+      Object.assign(factory!, { owner: 'p3', outfit: 'alloy', traits: [], pollution: 0 });
+      state.players[3]!.stock.smithore = 0;
+      return state;
+    };
+    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
+      only([]);
+      const plain = withFactory(seed);
+      const full = produce(plain);
+      only(['loyalCrew']);
+      const state = withFactory(seed);
+      const report = produce(state);
+      const farm = plotsOf(state, 'p3', 'food');
+      const crew = report.events!.find((e) => e.key === 'loyalCrew' && e.player === 'p3');
+      expect(crew?.plots.map((p) => [p.index, p.good, p.delta]), `seed ${seed}`).toEqual([[farm[0], 'food', 1]]);
+      expect(madeAt(report, farm)).toEqual(madeAt(full, farm).map((n) => n + 1));
+      expect(state.players[3]!.stock.food).toBe(plain.players[3]!.stock.food + 1);
+    }
+    only(['loyalCrew']);
+    const factoryOnly = produce(withFactory(4, false));
+    expect(factoryOnly.events!.filter((e) => e.key === 'loyalCrew').map((e) => e.player)).toEqual(['p0', 'p1', 'p2']);
+  });
 });
 
 /** A colony object at `stage`, as colony.ts keeps it. */
