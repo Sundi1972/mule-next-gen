@@ -114,7 +114,9 @@ export function monthlyNet(obs: GameState, o: Outlook, y: Yield, outfit: Outfit,
   // A plant pays its own use from what it makes (AM-17 R2): only the rest is its to sell or to use.
   const made = outfit === 'energy' ? Math.max(0, y.made - y.energy) : y.made;
   let revenue = afterTax(obs, made * P(outfit, made));
-  if (full && (outfit === 'food' || outfit === 'water' || outfit === 'energy')) {
+  if (full && (outfit === 'food' || outfit === 'water' || outfit === 'energy') && AI_VALUE.unit) {
+    revenue += ownUseGain(obs, o, outfit, made, afterTax(obs, P(outfit, made)), mind);
+  } else if (full && (outfit === 'food' || outfit === 'water' || outfit === 'energy')) {
     // The units that cover its own shortfall are worth what going short would cost it, and pay no tax.
     const short = Math.max(0, monthNeeds(obs, mind.me)[outfit] - ownSupply(obs, mind.me, o.made, outfit));
     const own = Math.min(made, short);
@@ -551,6 +553,25 @@ function modelValues(obs: GameState, o: Outlook, good: Good, mind: Mind): UnitVa
   buy.sort((a, b) => b - a);
   const floorUnits = good === 'food' || good === 'energy' ? need.sure : 0;
   return { good, keep, buy, block: need.target, need: monthNeeds(obs, mind.me)[good], floorUnits };
+}
+
+/**
+ * What a new plot's units that cover the seat's own shortfall add over selling them: each is worth what going without
+ * it costs. A plant's cover the plots above what its plants already make; a farm's or well's, the household's units.
+ */
+function ownUseGain(obs: GameState, o: Outlook, good: 'food' | 'water' | 'energy', made: number, price: number, mind: Mind): number {
+  const replace = replaceCost(obs, o, good);
+  if (good === 'energy') {
+    const units = energyUnits(obs, o, mind);
+    const net = plantsNet(obs, mind.me);
+    const own = Math.min(made, Math.max(0, units.length - net));
+    let gain = 0;
+    for (let i = 0; i < own; i++) gain += Math.max(0, Math.max(replace, units[net + i]!) - price);
+    return gain;
+  }
+  const own = Math.min(made, Math.max(0, monthNeeds(obs, mind.me)[good] - ownSupply(obs, mind.me, o.made, good)));
+  const [cost = replace] = shortCosts(obs, o, good, mind, 1);
+  return own * Math.max(0, cost - price);
 }
 
 /** The month's cash plan (RULE-5): which needed units of the goods still to be auctioned the seat's money buys first. */
