@@ -9,6 +9,7 @@ import {
   stableJson,
   stepAuction,
   STORE_ID,
+  storeForSale,
   WALK,
   type AiLevelId,
   type AiPersonaId,
@@ -405,8 +406,7 @@ describe('C7 · RULE-10: the auction hand plays the good part', () => {
     expect(sold(turned, 'ai0')).toEqual([]);
 
     // bluff: it declares its side, aims at the far edge, presses Done and trades nothing. The seller's row on a store
-    // with Food to sell all walk: under the 5 Nov start stock (4 Food a seat) the store sells out mid-walk, and ai1, with
-    // no Food and 2,000 cr, then pays the board's top and meets the bluffing seller there.
+    // with Food to sell all walk.
     const stocked = structuredClone(screen);
     stocked.store.stock.food = 30;
     const bluffSeller = runGood(stocked, 5, 0, () => ({ ...seller, bluff: true }));
@@ -414,21 +414,18 @@ describe('C7 · RULE-10: the auction hand plays the good part', () => {
     expect(bluffSeller.acts.some((x) => x.includes('{"done":true,"type":"done"}'))).toBe(true);
     expect(sold(bluffSeller, 'ai0')).toEqual([]);
     expect(bluffSeller.path.at(-1)!.price).toBe(screen.auction!.hi);
-    // With the store sold out mid-walk the bluffing seller may sell at the top edge, to a buyer that walks up to it (WS1's
-    // ruling, accepted): each such unit goes at or over the value the hand puts on it (a unit past the table spoils, so is
-    // worth nothing), and over every unit's worth it could give up; it keeps the Food it needs.
+    // Under the 5 Nov start stock (4 Food a seat) the store sells out mid-walk. ai1, with no Food and 2,000 cr, buys its
+    // share at the store's line, then bids on past that line and stops one step under the bluffing seller resting at the
+    // top: walking up never trades with a resting seller, and a bluff never walks down onto a bid, so it sells nothing.
     const soldOut = runGood(screen, 5, 0, () => ({ ...seller, bluff: true }));
-    const topSales = sold(soldOut, 'ai0');
-    expect(topSales.length, 'the store sells out and a buyer meets the bluff at the top').toBeGreaterThan(0);
-    const sellerValues = goodPlan(observe(screen, 'ai0'), seatsFor(5)[0]!.mind, 'food').values;
-    const unitFloor = (h: number) => Math.ceil(beforeTax(screen, sellerValues.keep[h - 1] ?? 0));
-    const dearest = Math.max(...sellerValues.keep.filter((v) => Number.isFinite(v)).map((v) => Math.ceil(beforeTax(screen, v))));
-    topSales.forEach((t, i) => {
-      expect(t.price, `unit ${i + 1}`).toBe(screen.auction!.hi);
-      expect(t.price, `unit ${i + 1}`).toBeGreaterThanOrEqual(unitFloor(had - i));
-      expect(t.price, `unit ${i + 1}`).toBeGreaterThanOrEqual(dearest);
-    });
-    expect(stockOf(soldOut, 'ai0', 'food')).toBeGreaterThanOrEqual(sellerValues.floorUnits);
+    const { sellersBottom } = screen.auction!.zones;
+    expect(soldOut.trades.some((t) => t.seller === STORE_ID && t.buyer === 'ai1'), 'ai1 buys at the store first').toBe(true);
+    expect(storeForSale(soldOut.state, 'food'), 'the store sells out').toBe(0);
+    expect(soldOut.path.at(-1)!.price, 'the bluff rests at the top').toBe(hi);
+    expect(Math.round(soldOut.state.auction!.walkers.find((w) => w.id === 'ai1')!.price), 'ai1 bids past the old line, a step under the bluff').toBe(hi - 1);
+    expect(hi - 1).toBeGreaterThan(sellersBottom);
+    expect(sold(soldOut, 'ai0'), 'the bluff sells nothing').toEqual([]);
+    expect(stockOf(soldOut, 'ai0', 'food')).toBe(had);
     // A bluffing buyer is the buyer it starts as (no declare under the no-Pass auction): it aims at lo, presses Done and
     // buys nothing.
     const bluffBuyer = runGood(screen, 5, 1, () => ({ ...buyer, bluff: true }));
@@ -437,24 +434,25 @@ describe('C7 · RULE-10: the auction hand plays the good part', () => {
     expect(bluffBuyer.path.at(-1)!.price).toBeLessThanOrEqual(screen.auction!.lo);
     expect(bought(bluffBuyer, 'ai1')).toEqual([]);
 
-    // vsRival, against a rival buyer ahead at 20, the seller asking 40: undercut1 aims one over it; hold never does (it
-    // aims and acts as with no rival there); yield stands one behind it; per names the stance for that rival. The aim is
-    // read off the hand's debug view: past the rival, an overtake and the walk on look alike in the acts.
-    const W = 30;
+    // vsRival, against a rival buyer ahead at lo + 6, the seller asking 40: undercut1 aims one over it; hold never does
+    // (it aims and acts as with no rival there); yield stands one behind it; per names the stance for that rival. The aim
+    // is read off the hand's debug view: past the rival, an overtake and the walk on look alike in the acts. The board
+    // sits inside the edges, where the walk keeps every walker and the hand its targets.
+    const W = lo + 10;
     const base: GoodPlay = { ...buyer, hold: buyer.hold + 5, walkAway: W, start: W };
-    const board = { mine: 8, rival: 20, ask: 40 };
+    const board = { mine: lo, rival: lo + 6, ask: 40 };
     const undercut = probe(screen, { ...base, vsRival: 'undercut1' }, board);
     expect(undercut.limit, 'the probe buyer values Food over its walkAway').toBe(W);
-    expect(undercut.targets).toContain(21);
-    expect(undercut.top).toBeGreaterThan(20);
+    expect(undercut.targets).toContain(board.rival + 1);
+    expect(undercut.top).toBeGreaterThan(board.rival);
     const alone = probe(screen, { ...base, vsRival: 'undercut1' }, { ...board, rival: null });
-    expect(alone.targets).not.toContain(21);
+    expect(alone.targets).not.toContain(board.rival + 1);
     const hold = probe(screen, { ...base, vsRival: 'hold' }, board);
     expect(hold.targets).toEqual(alone.targets);
     expect(hold.acts).toEqual(alone.acts);
     const yieldTop = probe(screen, { ...base, vsRival: 'yield' }, board).top;
-    expect(yieldTop).toBe(19);
-    expect(probe(screen, { ...base, vsRival: 'undercut1', per: { ai2: 'yield' } }, board).top).toBe(19);
+    expect(yieldTop).toBe(board.rival - 1);
+    expect(probe(screen, { ...base, vsRival: 'undercut1', per: { ai2: 'yield' } }, board).top).toBe(board.rival - 1);
     expect(probe(screen, { ...base, vsRival: 'yield', per: { ai2: 'undercut1' } }, board).targets).toEqual(undercut.targets);
     // The seller's mirror, against a rival seller ahead at lo + 8 and a bid at the buyers' edge (a seller walks no lower
     // than just over it, #291): yield stands one behind the rival, over it; undercut1 goes under it.

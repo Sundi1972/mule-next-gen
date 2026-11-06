@@ -1126,6 +1126,12 @@ export const WALK = {
   needStop: true,
   /** Board ms a stopped seller holds ▼ to sell on into shortage (Heiko's choice A, 5 Nov). A tap or a shorter hold moves nothing. */
   shortHoldMs: 1_000,
+  /**
+   * While the store has none of the good left to sell, buyers may bid above its old selling line, up to one step under
+   * the board's top, stopping one step short of any seller resting above that line; the line then shows the highest bid
+   * and a seller walks down onto it to trade. false: buyers walk as before, into a resting seller. For sweeps.
+   */
+  soldOutBidding: true,
   /** How often the server steps the auction. */
   tickMs: 100,
 };
