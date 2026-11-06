@@ -50,8 +50,8 @@ function gauges(html: string): { where: 'header' | 'own row' | 'none'; width: st
 }
 
 describe('GAUGES-ROW (WS4): a crowded TV header puts the colony gauges on their own full-width row', () => {
-  it('with a clock (development, the land grant) the gauges sit on their own row, full width, so the clock stays on the screen', () => {
-    expect(gauges(header({ game: game(colony()), title: 'Development', seconds: 42 }))).toEqual({ where: 'own row', width: 'w-full' });
+  it('with a clock the gauges sit on their own row, full width, so the clock stays on the screen', () => {
+    expect(gauges(header({ game: game(colony()), title: 'Production', seconds: 42 }))).toEqual({ where: 'own row', width: 'w-full' });
   });
 
   it('with the strike badge and no ready count the gauges sit on their own row, full width (#368: not w-[760px])', () => {

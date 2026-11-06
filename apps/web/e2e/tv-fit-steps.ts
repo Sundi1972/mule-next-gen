@@ -18,15 +18,15 @@ const PAST_THE_FOOT = String.raw`(() => {
   for (const el of stage.querySelectorAll('*')) {
     const b = el.getBoundingClientRect();
     if (b.width === 0 || b.height === 0 || !el.checkVisibility({ opacityProperty: true, visibilityProperty: true })) continue;
-    foot = Math.max(foot, b.bottom);
-    if (b.bottom <= vh + 1) continue;
-    // Below the foot but inside a box that clips it is the clipping box's to judge, and that box is read too.
+    // Below a box that clips it is the clipping box's to judge, and that box is read too; nor is it drawn, so it is no foot.
     let clipped = false;
     for (let a = el.parentElement; a && a !== stage.parentElement; a = a.parentElement) {
       const cs = getComputedStyle(a);
-      if (cs.overflowY !== 'visible' && a.getBoundingClientRect().bottom <= vh + 1) { clipped = true; break; }
+      if (cs.overflowY !== 'visible' && b.bottom > a.getBoundingClientRect().bottom + 1) { clipped = true; break; }
     }
     if (clipped) continue;
+    foot = Math.max(foot, b.bottom);
+    if (b.bottom <= vh + 1) continue;
     const id = el.getAttribute('data-testid') || el.tagName.toLowerCase() + ' "' + (el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 30) + '"';
     past.push(id + ' to y ' + b.bottom.toFixed(1));
   }

@@ -76,7 +76,9 @@ export function TvArcade({ game }: { game: MuleView }) {
   const hall = fitHall(room);
   return (
     <div className="flex h-[720px] w-[1280px] flex-col gap-3 bg-table px-10 py-6 text-ink" data-phase="development" data-testid="tv-game">
-      <TvHeader game={game} title="Development" seconds={game.phaseEndsAt === null ? undefined : Math.ceil(seconds)} />
+      {/* No clock in the header: "Everyone's time" right under it is development's clock, so the colony's gauges keep their
+          place beside the title and the map its size (PM ruling, 6 Nov; rulebook #gauges-row). */}
+      <TvHeader game={game} title="Development" />
       <SharedClock seconds={seconds} total={DEVELOPMENT.fullSeconds} size="tv" />
       <div className="flex min-h-0 flex-1 gap-6">
         <div className="relative shrink-0 self-start" data-testid="tv-map">
