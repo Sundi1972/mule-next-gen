@@ -1,6 +1,7 @@
 import {
   advancePhase,
   cloneForSim,
+  colonistAffordable,
   corralTarget,
   endAuction,
   endLead,
@@ -15,9 +16,7 @@ import {
   emptyStock,
   GOODS,
   MULE,
-  PRICE,
   STRATEGIST,
-  UPKEEP,
   type GameState,
   type Good,
   type Stock,
@@ -144,7 +143,7 @@ function rollForward(stage: GameState, months: number): Future {
   }
   prices = { ...prices };
   for (const good of new Set(sim.history.slice(Math.max(0, from - 1)).flatMap((h) => h.shortages))) {
-    prices[good] = Math.max(prices[good], (UPKEEP.colonistBudget[good] ?? 0) / (1 + PRICE.storeSpread));
+    prices[good] = Math.max(prices[good], colonistAffordable(sim, good));
   }
   if (corralShort) prices.smithore = Math.max(prices.smithore, last.smithore);
   return { prices };
