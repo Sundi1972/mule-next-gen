@@ -295,7 +295,20 @@ export class Room<Intent, View> {
         if (!this.opts.emotes.includes(msg.emote)) throw new TableError('Unknown emote');
         this.everyone((c) => c.send({ t: 'emote', from: seatId, emote: msg.emote }));
         return;
+      // The contract is frozen ahead of the build (C1, C8), so a client sending these is told so, never ignored.
+      case 'setSeatKind':
+      case 'handoverToClaude':
+        throw new TableError('Claude seats are not built yet');
     }
+  }
+
+  /**
+   * The live claude seat that holds `code` in this room, or null: how the Claude seat's MCP module finds a seat, on
+   * every call (spec §9: never a second store of codes). Case-insensitive, as players type codes. Contract only, until
+   * C1 issues codes: nothing holds one yet.
+   */
+  seatForCode(_code: string): { seatId: string; kind: 'claude' } | null {
+    return null;
   }
 
   private join(conn: Connection<View>, name: string, token?: string, handoff?: string): string {
