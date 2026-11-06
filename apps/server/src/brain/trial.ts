@@ -4,8 +4,11 @@
  * Usage: pnpm --filter @mule/server brain:trial -- --games 20 --seed 101 [--smart 2] [--playbooks 1] [--max-usd X] [--game-budget-usd Y] [--run label]
  * The tournament (WS1's bar for UBER-AC-A): --table pair --playbooks 1 --seeds 1,101,201 --games 40, every seat on its
  * playbook, its ledgers under BRAIN.tournament.capUsd. --games is even there: each seed is played twice, the Claude chairs
- * on 0 and 2 and then on 1 and 3, so a chair's edge cancels in the pooled result the bar is judged on (120 games: seeds
- * 1-20, 101-120, 201-220). --control 1 plays the same table with engine seats in the Claude chairs and calls nothing.
+ * on 0 and 2 and then on 1 and 3, so a chair's edge cancels in the pooled result the paid run is judged on (120 games:
+ * seeds 1-20, 101-120, 201-220). That edge is mostly species, not seat order: each chair keeps its default species.
+ * --control 1 plays the same table with engine seats in the Claude chairs and calls nothing. Its two seatings of a seed
+ * are then the same game, so its pooled result is 50% by construction; its gate is that the harness runs clean (0
+ * stalls, every game scored, 0 model calls) and reports the per-seating edge as a number.
  * With --playbooks 1 each Smart seat also writes its strategy and land-grant playbook each month (spec A C4), and the
  * report adds UBER-AC-A's edit share; without it the seats only decide move by move, as before.
  * Without the key every seat plays Classic and nothing is called. With it, real money: --max-usd is required; one

@@ -395,7 +395,9 @@ const seatingText = (chairs: string, x: TrialReport['results']) =>
 const seatingsRows = (r: TrialReport): string[][] =>
   r.seatings ? [['Claude chairs by seating', `${seatingText('0 and 2', r.seatings.even)}; ${seatingText('1 and 3', r.seatings.odd)}`]] : [];
 const CONTROL_POOLED =
-  "50% by construction: engine seats in every chair play a seed's two seatings as the same game, so the control checks the harness; the chair edge shows by seating";
+  "50% by construction (each seed's two seatings are the same game). The control's gate: the harness runs clean (0 stalls, every game scored, " +
+  "0 model calls) and reports the per-seating edge as a number; the paid run is judged pooled. That edge is mostly species, not seat order " +
+  '(each chair keeps its default species), and balanced seating cancels it.';
 const tourneyRows = (r: TrialReport): string[][] =>
   r.bar
     ? [
