@@ -1,5 +1,5 @@
 /** The SVG shapes a place shows when it has no picture (HC-3), in the approved mock's lit-diorama look. */
-import type { PrestigeId } from '@mule/engine';
+import type { ObjectKind } from '../components/ObjectGlyph';
 import type { ReactNode } from 'react';
 import { MASSING } from './layout';
 import type { PlaceState } from './pick';
@@ -77,7 +77,7 @@ export function HallShape({ mood }: { mood: number }) {
   );
 }
 
-const ROOF: Record<PrestigeId, string> = {
+const ROOF: Record<ObjectKind, string> = {
   park: 'var(--color-ok)',
   hospital: 'var(--color-g-medicine)',
   observatory: 'var(--color-g-crystite)',
@@ -86,7 +86,7 @@ const ROOF: Record<PrestigeId, string> = {
 };
 
 /** The planned building's outline, dashed. */
-function Ghost({ id, c, r }: { id: PrestigeId; c: number; r: number }) {
+function Ghost({ id, c, r }: { id: ObjectKind; c: number; r: number }) {
   const m = MASSING[id];
   const top = square(c, r, m.footprint / 2, m.height);
   return (
@@ -100,7 +100,7 @@ function Ghost({ id, c, r }: { id: PrestigeId; c: number; r: number }) {
 }
 
 /** One building in its kind's shape; `frac` < 1 draws it part-built. */
-function Building({ id, c, r, frac = 1, lit = true, dim = false }: { id: PrestigeId; c: number; r: number; frac?: number; lit?: boolean; dim?: boolean }) {
+function Building({ id, c, r, frac = 1, lit = true, dim = false }: { id: ObjectKind; c: number; r: number; frac?: number; lit?: boolean; dim?: boolean }) {
   const m = MASSING[id];
   const height = m.height * frac;
   const body = 'var(--color-raised)';
@@ -182,7 +182,7 @@ function Building({ id, c, r, frac = 1, lit = true, dim = false }: { id: Prestig
 }
 
 /** Scaffolding and a crane over a part-built site: the colony at work. */
-function Scaffold({ c, r, id }: { c: number; r: number; id: PrestigeId }) {
+function Scaffold({ c, r, id }: { c: number; r: number; id: ObjectKind }) {
   const m = MASSING[id];
   const h = m.footprint / 2 + 0.04;
   const top = Math.max(m.height, 0.3);
@@ -209,7 +209,7 @@ function Scaffold({ c, r, id }: { c: number; r: number; id: PrestigeId }) {
 }
 
 /** A site waiting for its money and goods: stakes, a rope and a sign. */
-function Site({ c, r, id }: { c: number; r: number; id: PrestigeId }) {
+function Site({ c, r, id }: { c: number; r: number; id: ObjectKind }) {
   const corners = square(c, r, MASSING[id].footprint / 2);
   return (
     <g data-testid="site">
@@ -225,7 +225,7 @@ function Site({ c, r, id }: { c: number; r: number; id: PrestigeId }) {
 export const builtOf = ({ stage, monthsLeft, buildMonths }: PlaceState) => (stage === 'building' ? buildMonths - (monthsLeft ?? buildMonths) : 0);
 
 /** A place's building drawn in its kind's shape at its stage. Smoke over a damaged one belongs to the live layer. */
-export function PlaceShape({ id, place, c, r, mood, testid }: { id: PrestigeId; place: PlaceState; c: number; r: number; mood: number; testid: string }) {
+export function PlaceShape({ id, place, c, r, mood, testid }: { id: ObjectKind; place: PlaceState; c: number; r: number; mood: number; testid: string }) {
   let shape: ReactNode;
   switch (place.stage) {
     case 'commissioned':

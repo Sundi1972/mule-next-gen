@@ -1,5 +1,5 @@
 /** The colony's grounds drawn from its view: the hall and each project's picture at its place (spec C2). */
-import type { PrestigeId } from '@mule/engine';
+import type { ObjectKind } from '../components/ObjectGlyph';
 import { useState, type ReactNode } from 'react';
 import { cx } from '../components/tokens';
 import { builtOf, HallShape, Lamp, PlaceShape, Tree } from './fallback';
@@ -11,7 +11,7 @@ export type { Frame, GroundsManifest, Light, PictureStage } from './pick';
 
 /** One project as `@mule/protocol`'s ColonyProjectView carries it; `place` arrives with spec AM-18 (null: none yet). */
 export interface GroundsProject extends PlaceState {
-  id: PrestigeId;
+  id: ObjectKind;
   name: string;
   place?: GridPlace | null;
 }

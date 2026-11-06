@@ -1,9 +1,9 @@
 /** Which picture a grounds place shows (spec RULE-1), and the art manifest it is picked from (spec §3). */
-import type { PrestigeId } from '@mule/engine';
+import type { ObjectKind } from '../components/ObjectGlyph';
 
 export type PictureStage = 'site' | 'build1' | 'build2' | 'standing' | 'closed' | 'damaged';
 export type Light = 'day' | 'dusk';
-export type PictureKind = PrestigeId | 'hall';
+export type PictureKind = ObjectKind | 'hall';
 
 export interface ManifestEntry {
   day: string;

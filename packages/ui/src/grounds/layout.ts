@@ -1,5 +1,5 @@
 /** The grounds as layout data in place units, the town hall at the origin; nothing here knows about pixels. */
-import type { PrestigeId } from '@mule/engine';
+import type { ObjectKind } from '../components/ObjectGlyph';
 
 /** A project's block on the 5×5 grounds (spec AM-18 / RULE-32b): anchor cell (top-left), x east, y south. */
 export interface GridPlace {
@@ -43,7 +43,7 @@ const OFFSETS: [number, number][] = [
 export const CELLS: { col: number; row: number }[] = OFFSETS.map(([col, row]) => ({ col, row }));
 
 /** Each building's massing for its SVG shape: footprint (0–1 of a place) and height, in place units. */
-export const MASSING: Record<PrestigeId | 'hall', { footprint: number; height: number }> = {
+export const MASSING: Record<ObjectKind | 'hall', { footprint: number; height: number }> = {
   hall: { footprint: 0.62, height: 0.42 },
   park: { footprint: 0.9, height: 0.04 },
   hospital: { footprint: 0.66, height: 0.58 },
