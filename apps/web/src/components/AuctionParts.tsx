@@ -64,22 +64,27 @@ export function SoldOutNote({ auction }: { auction: AuctionView }) {
 
 /** On the TV during the walk while the store is sold out: bids may pass its old price, and the highest bid once one has. */
 export function TvSoldOutBox({ auction }: { auction: AuctionView }) {
-  const lines = storeLines(auction);
+  const { soldOutAt } = storeLines(auction);
+  // The old price is the sellers' zone's floor; without zones, the sold-out line until a bid passes it. Never the bid.
+  const old = auction.zones?.sellersBottom ?? (soldOutAt && !soldOutAt.bid ? soldOutAt.price : null);
+  const bid = soldOutAt?.bid ? soldOutAt.price : null;
   return (
     <div className="flex flex-col gap-1 rounded-panel border-2 border-rise bg-panel p-4" data-testid="tv-sold-out">
       <span className="font-display text-2xl font-semibold text-rise">Store sold out</span>
-      <span className="text-lg leading-snug text-ink-2">
-        Bids can go past its old {auction.zones?.sellersBottom ?? lines.soldOutAt?.price}.
-        {lines.soldOutAt?.bid && (
-          <>
-            {' '}
-            Highest bid{' '}
-            <strong data-num className="font-mono text-ink">
-              {lines.soldOutAt.price}
-            </strong>
-          </>
-        )}
-      </span>
+      {(old !== null || bid !== null) && (
+        <span className="text-lg leading-snug text-ink-2">
+          {old !== null && `Bids can go past its old ${old}.`}
+          {old !== null && bid !== null && ' '}
+          {bid !== null && (
+            <>
+              Highest bid{' '}
+              <strong data-num className="font-mono text-ink">
+                {bid}
+              </strong>
+            </>
+          )}
+        </span>
+      )}
     </div>
   );
 }
