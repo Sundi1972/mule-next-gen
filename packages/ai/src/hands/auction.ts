@@ -222,7 +222,10 @@ export class AuctionHand {
       this.target = Math.min(a.zones.hi, Math.max(buyersTop, this.target));
       // A bid still rising may yet reach its floor: it is not done until the bids it sees have stopped.
       const rising = bidding && others.some((x) => x.side === 'buyer' && x.dir > 0 && money(x.id) >= Math.max(1, Math.round(x.price)));
-      this.doneFlag = finished || (this.target <= restAt && !rising && a.deals.every((d) => d.seller !== me.id));
+      // With no house buying at the buyers' zone's top, a floor under it can go no lower than that top, so standing
+      // there is as low as it goes; while a house still buys there it is selling, not done.
+      const lowest = houses >= buyersTop ? restAt : Math.max(restAt, buyersTop);
+      this.doneFlag = finished || (this.target <= lowest && !rising && a.deals.every((d) => d.seller !== me.id));
       return;
     }
 
@@ -250,10 +253,14 @@ export class AuctionHand {
       const yielded = Math.max(-Infinity, ...pricesOf(rivals, 'yield'));
       if (highest >= mine && highest + 1 <= ceiling) this.target = Math.min(ceiling, highest + 1 + Math.abs(this.jitter));
       else if (yielded >= mine) this.target = Math.min(ceiling, yielded - 1);
-      // No ask is there to wait for: the sellers left all rest, and only a bid they find good enough brings one down.
-      else if (bidding) this.target = Math.min(ceiling, reach);
-      else if (bestAsk - mine <= gap) this.target = mine;
-      else this.target = Math.min(ceiling, (Number.isFinite(bestAsk) ? bestAsk : ceiling) - gap + this.jitter);
+      // A buyer short of the good has no ask to wait for: the sellers left all rest, and only a bid they find good enough
+      // brings one down. Any other buyer edges toward the resting asks as it edges toward any ask.
+      else if (bidding && h < Math.max(plan.values.floorUnits, plan.mustHold)) this.target = Math.min(ceiling, reach);
+      else {
+        const edgeAsk = Math.min(bestAsk, ...resting);
+        if (edgeAsk - mine <= gap) this.target = mine;
+        else this.target = Math.min(ceiling, (Number.isFinite(edgeAsk) ? edgeAsk : ceiling) - gap + this.jitter);
+      }
     }
     if (!finished) this.target = this.scheduled('buyer', this.target, a.elapsed);
     this.target = Math.max(a.zones.lo, Math.min(reach, this.target));
