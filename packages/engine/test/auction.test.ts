@@ -356,7 +356,7 @@ describe('the need to hold at the auction: what upkeep eats now, plus what must 
     return state;
   }
 
-  it("WS9's finding: every seat holds the 2 Energy its farms burn, which spoils to 1 by production, so Energy comes up and the status row asks for 3", () => {
+  it("FM-skip-spoilage (WS9's finding): every seat holds the 2 Energy its farms burn, which spoils to 1 by production, so Energy comes up and the status row asks for 3", () => {
     const state = energyTable(2, 2);
     expect(monthNeeds(state, 'p0').energy, 'production burns 2').toBe(2);
     startAuction(state, ['energy', 'food']);
@@ -367,7 +367,7 @@ describe('the need to hold at the auction: what upkeep eats now, plus what must 
     expect(a(state).status[0]!.spoils, 'what would spoil of what is held: 2 leaves 1').toBe(1);
   });
 
-  it('every seat holding what survives spoilage, and the store wanting none: Energy is skipped as nobody buys, as before', () => {
+  it('FM-skip-spoilage: every seat holding what survives spoilage, and the store wanting none: Energy is skipped as nobody buys, as before', () => {
     const state = energyTable(2, 3);
     startAuction(state, ['energy', 'food']);
     expect(a(state).skipped).toEqual([{ good: 'energy', reason: 'nobody buys' }]);
