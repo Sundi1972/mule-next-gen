@@ -209,6 +209,24 @@ describe('Installing over a MULE swaps it (Heiko at the table, 5 Nov)', () => {
     expect(game.viewFor('s1').me!.carriedMule).toBeNull();
   });
 
+  it('B-AC-SWAP-5: Heiko\'s own view says he leads a swapped-out MULE (the phone\'s warning) only from the swap until his turn ends; a MULE he bought never, nor any other seat\'s view', () => {
+    const g = toDevelopment(seats.filter((s) => !s.isAi));
+    const { game, plot } = g;
+    buyAndOutfit(g, 's1', 'food');
+    installOn(g, 's1', plot);
+    buyAndOutfit(g, 's1', 'water');
+    hallTo(g, 's1', doorFor(g, plot));
+    press(g, 's1', 'LEAVE');
+    mapTo(g, 's1', { x: plot.x + 0.5, y: plot.y + 0.5 });
+    expect(game.viewFor('s1').me!.leadsSwapped, 'the Water MULE he bought').toBeUndefined();
+    press(g, 's1', 'SWAP');
+    expect(game.viewFor('s1').me!.leadsSwapped, 'the Food MULE he swapped off').toBe(true);
+    expect(game.viewFor('s2').me!.leadsSwapped, "another seat's own view").toBeUndefined();
+    for (const view of [game.viewFor(null), game.viewFor('s2')]) for (const p of view.players) expect(Object.keys(p)).not.toContain('leadsSwapped');
+    for (let i = 0; i < 10_000 && game.viewFor(null).phase === 'development'; i++) g.advance(100);
+    expect(game.viewFor('s1').me!.leadsSwapped, 'the turn ended: the MULE is in the corral').toBeUndefined();
+  });
+
   it('B-AC-SWAP-3: over a MULE with the same outfit the button is dimmed and says so, and a press changes nothing: Heiko keeps his MULE, the plot keeps its own', () => {
     const g = toDevelopment();
     const { game, plot } = g;
