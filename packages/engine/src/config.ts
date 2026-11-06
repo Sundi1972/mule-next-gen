@@ -977,6 +977,8 @@ export const POLITICS = {
         standing: { leading: 1, trailing: 1 },
         /** The least it gives, in credits; a smaller gift is not made. */
         minCredits: 10,
+        /** The share of its surplus of each good the object still needs that each persona gives: stock over next month's need. */
+        goodsShare: { trader: 0.5, cautious: 0.5, aggressive: 0.3, saboteur: 0 } satisfies Record<AiPersonaId, number>,
       },
     },
   },
