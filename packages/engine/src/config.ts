@@ -1049,6 +1049,8 @@ export const COLONY = {
    * of its output each plot of the struck good makes while they are unpaid (UBER-AC-6).
    */
   strike: { cost: 250, output: 0.2 },
+  /** Building slots on the colony's own grounds (G-5 AM-16 A, RULE-32), a count of slots. */
+  groundsSlots: 8,
 };
 
 /**
