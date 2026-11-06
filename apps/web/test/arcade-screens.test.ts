@@ -465,6 +465,17 @@ describe('C11: it fits the phone (B-AC-4\'s layout half, B-AC-11\'s text floor)'
     expect(text(html, 'plot-best')).toBe('Best here: Food');
   });
 
+  it('C11 (R-2): a MULE whose good ties the best at 3 dots gets no mismatch; one with fewer dots still does', () => {
+    const ground = { food: 3, water: -2, energy: 0, smithore: 4, crystite: 2, rareEarth: 0 };
+    const at = (extra: object) => TILES.map((t) => (t.x === 3 && t.y === 0 ? { ...t, ground, ...extra } : t));
+    const leading = (good: 'smithore' | 'water') => phone(devView(lenasMe({ carriedMule: good }), { tiles: at({}) }), live(mine(3.5, 0.6)));
+    expect(tag(leading('smithore'), 'plot-mismatch')).toBeNull();
+    expect(text(leading('water'), 'plot-mismatch')).toBe('Your MULE makes Water; this plot is best for Food');
+    const installed = (good: 'smithore' | 'water') => phone(devView(lenasMe(), { tiles: at({ outfit: good }) }), live(mine(3.5, 0.6)));
+    expect(tag(installed('smithore'), 'plot-mismatch')).toBeNull();
+    expect(text(installed('water'), 'plot-mismatch')).toBe('Its Water MULE: this plot is best for Food');
+  });
+
   it('C11: a control fades while you stand under it, so it never hides you', () => {
     const under = phone(devView(), live(mine(0.5, 7.5)));
     expect(tag(under, 'overlay-stick')).toMatch(/data-faded="true"/);
