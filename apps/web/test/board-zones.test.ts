@@ -226,10 +226,10 @@ describe('RULE-6: every board draws the rest zones', () => {
     // The TV names the ship (its full long form is reached in the thin-band sweep below, over a taller board).
     expect(bandWords(tv, 'tv', 'seller', SHIP_INSIDE.tv, 'the TV')).toMatch(/SHIP/);
     // The buyers' band never changes, and a ship at or under S leaves the sellers' band as it was.
-    const atS = (view: MuleView): MuleView => ({ ...view, auction: { ...view.auction!, shipPays: S } });
+    // On a taller board, so the band has room for the full words: a ship exactly at S is not inside it.
+    const atS = (view: MuleView): MuleView => ({ ...view, auction: { ...view.auction!, hi: view.auction!.hi + 20, shipPays: S } });
     expect(bandWords(tv, 'tv', 'buyer', BUYERS, 'the TV')).toBe('BUYERS WAIT NO TRADE');
-    // A known form of SELLERS: never the ship's words.
-    bandWords(tvScreen(atS(game.viewFor(null))), 'tv', 'seller', SELLERS, 'the TV, ship at S');
+    expect(bandWords(tvScreen(atS(game.viewFor(null))), 'tv', 'seller', SELLERS, 'the TV, ship at S')).toBe('SELLERS WAIT NO TRADE');
     bandWords(phoneScreen(atS(game.viewFor('s1')), 's1'), 'phone', 'seller', SELLERS, 's1, ship at S');
   });
 
