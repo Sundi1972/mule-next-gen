@@ -4,6 +4,11 @@ import { airBand } from './pollution.js';
 import { needsOf } from './production.js';
 import { GOODS, type GameState, type Good } from './types.js';
 
+/** The factor the colonists grow by at this upkeep (G-5 RULE-29). */
+export function growthRate(state: GameState, fed: boolean): number {
+  throw new Error('NotImplemented: growthRate');
+}
+
 /**
  * End of month: players and colonists eat, goods spoil, anything above the
  * home depot is lost, the export ship takes the store's surplus and

@@ -1018,6 +1018,8 @@ export const HAPPINESS = {
     gapUnit: 1_000,
     gapCap: 10,
   },
+  /** Added to the colony's monthly growth rate (UPKEEP.colonistGrowth) in that mood band. Placeholders until C29 (HC-25). */
+  migration: { thriving: 0.02, content: 0, restless: -0.01, unhappy: -0.03, unrest: -0.05 } satisfies Record<MoodBand, number>,
 };
 
 /** The colony fund's own rules. Placeholders until the colony's sim tuning. */
