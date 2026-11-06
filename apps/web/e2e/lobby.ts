@@ -3,7 +3,8 @@
  * closes the table. B-AC-7 (lobby): a player and the host each move their seat to another device with a one-time
  * link. Every removed phone lands on the start screen with the reason. B-AC-13: the "make your colonist" lobby at a
  * phone's and a laptop's size. B-AC-8 (lobby): a phone takes an AI's colour and the other phone is refused it; smoke.ts
- * plays a picked colour into the game. Run with `pnpm --filter @mule/web e2e`.
+ * plays a picked colour into the game. B-AC-1 (Claude seat, C1): the host makes a computer seat Claude's and alone
+ * sees its seat code and Copy invite. Run with `pnpm --filter @mule/web e2e`.
  */
 import { COLOUR_NAME, SPECIES, type Slot } from '@mule/ui';
 import type { BrowserContextOptions, Locator, Page } from 'playwright';
@@ -42,6 +43,7 @@ try {
   await colonistLobby(PHONE, '844x390', false);
   await colonistLobby(LAPTOP, '1440x900', true);
   await colourInTheLobby();
+  await aClaudeSeatInTheLobby();
   check(colourRoomReds.length === 0, `the room takes picked colours:\n  ${colourRoomReds.join('\n  ')}`);
   check(errors.length === 0, `no page errors: ${errors.join('; ')}`);
   console.log(`e2e lobby: ok (${((Date.now() - started) / 1000).toFixed(1)} s)`);
@@ -383,6 +385,44 @@ function heikoOn(rows: Locator): Locator {
 
 function colourRoom(cond: boolean, message: string): void {
   if (!cond) colourRoomReds.push(message);
+}
+
+/**
+ * B-AC-1 (Claude seat spec, C1; the mock's #lobby-b and #tv-lobby): the host opens a computer seat and picks Claude. His
+ * phone shows the seat's code and Copy invite, and the seat's chip says it waits for Claude. Mia's phone and the TV show
+ * the seat and its chip, never the code. Negative: Mia has no control to change the kind.
+ */
+async function aClaudeSeatInTheLobby(): Promise<void> {
+  const id = 'B-AC-1 (Claude seat)';
+  const heiko = await phone('heiko');
+  const code = await hostRoom(heiko, base);
+  const mia = await joinRoom(await phone('mia'), base, code, 'Mia');
+  const tv = await phone('tv', TV);
+  await tv.goto(`${base}/table?room=${code}`);
+  await tv.getByTestId('room-code').waitFor();
+  await heiko.getByTestId('add-ai').click();
+  const room = server.registry.get(code);
+  check(room, `${id}: a room ${code} on the server`);
+  await heiko.waitForFunction(() => document.querySelectorAll('[data-testid=seats] li').length === 3);
+  const ai = room.viewFor(null).seats.find((s) => s.isAi)!;
+
+  await heiko.getByTestId(`seat-${ai.id}-open`).click({ timeout: SHOWN_MS });
+  await heiko.getByTestId('sheet-kind-claude').click();
+  const seatCode = (await heiko.getByTestId('sheet-setup-code-text').textContent({ timeout: SHOWN_MS }))?.trim() ?? '';
+  check(/^[A-Z2-9]{4}-\d{2}$/.test(seatCode), `${id}: the host's sheet shows the seat code, got "${seatCode}"`);
+  check(room.seatForCode(seatCode)?.seatId === ai.id, `${id}: the code on the host's phone is the one the room holds for ${ai.name}`);
+  check(await shows(heiko.getByTestId('sheet-setup-invite-copy')), `${id}: the host's sheet has Copy invite`);
+  check((await heiko.getByTestId('sheet-setup-invite-text').textContent())?.includes(`Play MULE seat ${seatCode}.`) ?? false, `${id}: the invite carries the code`);
+  check((await heiko.getByTestId('sheet-chip').textContent())?.trim() === 'WAITING FOR CLAUDE', `${id}: the host's sheet says the seat waits for Claude`);
+  await heiko.getByTestId('sheet-done').click();
+
+  for (const [who, page] of [['Mia', mia], ['the TV', tv]] as const) {
+    await page.getByTestId(`chip-${ai.id}`).filter({ hasText: 'WAITING FOR CLAUDE' }).waitFor({ timeout: SHOWN_MS });
+    check(!(await page.content()).includes(seatCode), `${id}: ${who} never shows the seat code`);
+  }
+  check(await gone(mia.getByTestId(`seat-${ai.id}-open`)), `${id} (negative): Mia has no control to change ${ai.name}'s kind`);
+  console.log(`✓ ${id}: the host made ${ai.name} Claude's; his phone alone shows ${seatCode} and Copy invite; Mia and the TV show WAITING FOR CLAUDE`);
+  for (const page of [heiko, mia, tv]) await page.context().close();
 }
 
 async function phone(who: string, size: BrowserContextOptions = PHONE): Promise<Page> {
