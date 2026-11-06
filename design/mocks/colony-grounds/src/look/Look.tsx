@@ -3,7 +3,7 @@ import { useState, type ReactNode } from 'react';
 import { MONTH_12 } from '../fixture';
 import { Scene } from '../Scene';
 import { richness } from '../screens';
-import { Catalogue, KitCompare } from './Catalogue';
+import { Catalogue } from './Catalogue';
 import { Living } from './Living';
 
 /**
@@ -108,7 +108,6 @@ export function Look() {
         </div>
         <nav className="flex flex-wrap gap-4 text-sm text-holo">
           <a href="#every-stage">Every building, every stage</a>
-          <a href="#kit-props">Kit props, side by side</a>
           <a href="#stages">One building, every stage</a>
           <a href="#three-ways">The Park three ways</a>
           <a href="#in-grounds">In today’s grounds</a>
@@ -122,17 +121,9 @@ export function Look() {
       <Section
         id="every-stage"
         title="Every building, every stage: what the game ships today"
-        lead="These are the game's own pictures, read from its art manifest, so they are exactly what the TV and the phones show. 'Dusk, lights on' adds each building's light layer the way the game will when the colony is rich. The Stadium and the Spaceport stand on 2×2 places; the Observatory is still being made. What we want from you: is each one right at TV size?"
+        lead="These are the game's own pictures, read from its art manifest, so they are exactly what the TV and the phones show. 'Dusk, lights on' adds each building's light layer the way the game will when the colony is rich. The Stadium and the Spaceport stand on 2×2 places; the Observatory is still being made. Switch 'Pictures' to see every one dressed with your KitBash3D props (only on this Mac until the licence answer; shipping them is one switch). What we want from you: is each one right at TV size?"
       >
         <Catalogue />
-      </Section>
-
-      <Section
-        id="kit-props"
-        title="Kit props, side by side (only on your Mac)"
-        lead="The same pictures dressed with props from your KitBash3D kits: building-site gear, and on the Spaceport the Mission to Minerva apron. Our buildings stay; the kit adds the small things around them. These renders are never published until you answer the licence question (can AI agents render with the kits for the company?)."
-      >
-        <KitCompare />
       </Section>
 
       <Section id="stages" title="Earlier: the Hospital's first stages" lead="Each stage in the game is a different picture of the same model. Closed and damaged are mostly the standing model with lights and materials changed; the scaffold is a kit built once and reused for every building.">

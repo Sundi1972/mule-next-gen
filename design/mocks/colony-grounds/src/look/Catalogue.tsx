@@ -8,6 +8,9 @@ import { useEffect, useState } from 'react';
 type Entry = { day: string; dusk: string; glow: string | null };
 type Manifest = { pictures: Record<string, Record<string, Entry | object>> };
 type View = 'day' | 'dusk' | 'lit';
+type Source = 'ours' | 'kit';
+/** The shipped art, or the kit-dressed preview publish (local only, gitignored: design/art/colony/out/kit-pub). */
+const ROOT: Record<Source, string> = { ours: '/art/colony', kit: '/kit-look' };
 
 const KINDS: [string, string][] = [
   ['hall', 'Town hall'],
@@ -27,13 +30,13 @@ const STAGES: [string, string][] = [
 ];
 
 /** One stage's picture; "lit" lays the glow pass over dusk the way the live layer will, by adding light. */
-function Cell({ entry, view, alt }: { entry: Entry; view: View; alt: string }) {
-  const base = `/art/colony/${view === 'day' ? entry.day : entry.dusk}`;
+function Cell({ entry, view, alt, root }: { entry: Entry; view: View; alt: string; root: string }) {
+  const base = `${root}/${view === 'day' ? entry.day : entry.dusk}`;
   return (
     <div className="relative h-full w-full">
       <img src={base} alt={alt} className="absolute inset-0 h-full w-full object-contain object-bottom" />
       {view === 'lit' && entry.glow && (
-        <img src={`/art/colony/${entry.glow}`} alt="" className="absolute inset-0 h-full w-full object-contain object-bottom mix-blend-screen" />
+        <img src={`${root}/${entry.glow}`} alt="" className="absolute inset-0 h-full w-full object-contain object-bottom mix-blend-screen" />
       )}
     </div>
   );
@@ -42,14 +45,24 @@ function Cell({ entry, view, alt }: { entry: Entry; view: View; alt: string }) {
 export function Catalogue() {
   const [manifest, setManifest] = useState<Manifest | null>(null);
   const [view, setView] = useState<View>('day');
+  const [source, setSource] = useState<Source>('ours');
   useEffect(() => {
-    fetch('/art/colony/manifest.json')
+    setManifest(null);
+    fetch(`${ROOT[source]}/manifest.json`)
       .then((r) => r.json())
       .then(setManifest)
       .catch(() => setManifest({ pictures: {} }));
-  }, []);
+  }, [source]);
   return (
     <div className="flex flex-col gap-3" data-testid="catalogue">
+      <div className="flex items-center gap-2">
+        <span className="label-caps">Pictures</span>
+        {(['ours', 'kit'] as const).map((v) => (
+          <Button key={v} size="md" variant={v === source ? 'holo' : 'outline'} onClick={() => setSource(v)} data-testid={`src-${v}`}>
+            {v === 'ours' ? 'Ours (ships today)' : 'With kit props (only on this Mac)'}
+          </Button>
+        ))}
+      </div>
       <div className="flex items-center gap-2">
         <span className="label-caps">Light</span>
         {(['day', 'dusk', 'lit'] as const).map((v) => (
@@ -79,9 +92,9 @@ export function Catalogue() {
                     return (
                       <td key={stage} className={cx('h-72 p-1 align-bottom', kind === 'spaceport' && 'h-[26rem]')}>
                         {entry ? (
-                          <Cell entry={entry} view={view} alt={`${label}, ${stage}, ${view}`} />
+                          <Cell entry={entry} view={view} alt={`${label}, ${stage}, ${view}`} root={ROOT[source]} />
                         ) : (
-                          <span className="text-xs text-ink-3">{!manifest ? '…' : !pics ? 'not rendered yet' : '—'}</span>
+                          <span className="text-xs text-ink-3">{!manifest ? '…' : !pics ? (source === 'kit' ? 'no kit render yet' : 'not rendered yet') : '—'}</span>
                         )}
                       </td>
                     );
@@ -92,43 +105,6 @@ export function Catalogue() {
           </tbody>
         </table>
       </div>
-    </div>
-  );
-}
-
-/** The kit-dressed local renders beside the shipped pictures. Never published: they exist only on this Mac. */
-export function KitCompare() {
-  const pairs: [string, string, string][] = [
-    ['hospital', 'site', 'Hospital · site'],
-    ['spaceport', 'build1', 'Spaceport · building'],
-  ];
-  const [gone, setGone] = useState<Record<string, boolean>>({});
-  return (
-    <div className="grid grid-cols-2 gap-4" data-testid="kit-compare">
-      {pairs.map(([kind, stage, label]) => (
-        <figure key={kind} className="flex flex-col gap-2 rounded-panel border border-holo-line bg-panel p-3">
-          <figcaption className="font-display text-lg">{label}</figcaption>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="flex flex-col gap-1">
-              <span className="label-caps">Our build only (ships today)</span>
-              <img src={`/art/colony/${kind}/${stage}-day@800.webp`} alt={`${label}, our build`} className="aspect-square w-full object-contain" />
-            </div>
-            <div className="flex flex-col gap-1">
-              <span className="label-caps">With KitBash3D props (local only)</span>
-              {gone[kind] ? (
-                <div className="grid aspect-square place-items-center text-xs text-ink-3">only on Heiko’s Mac, not published</div>
-              ) : (
-                <img
-                  src={`/kit-look/${kind}/${stage}-day.png`}
-                  alt={`${label}, with kit props`}
-                  className="aspect-square w-full object-contain"
-                  onError={() => setGone((g) => ({ ...g, [kind]: true }))}
-                />
-              )}
-            </div>
-          </div>
-        </figure>
-      ))}
     </div>
   );
 }
