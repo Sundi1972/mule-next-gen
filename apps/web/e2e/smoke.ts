@@ -10,7 +10,7 @@ import { PHASE_MS } from '../../server/src/mule-game.js';
 import type { MuleServer } from '../../server/src/server.js';
 import { check, CLAIM_MS, claimAPlot, doneWithLand, held, launch, PHONE, startServer, TV, type AuctionSteps, type GameStepContext } from './harness';
 import { planningIsTheHub } from './hub-steps';
-import { theAuctionTvFits, theMonthEndTvFits, theTvHeaderFits, theTvHeaderStaysOnScreen, theTvTitleIsClear } from './tv-fit-steps';
+import { theAuctionTvFits, theMonthEndTvFits, theTableHasSaid, theTvHeaderFits, theTvHeaderStaysOnScreen, theTvTitleIsClear } from './tv-fit-steps';
 import { gameOverIsInCredits, theLeagueTableAtTheMonthEnd, theMonthEndHoldsForThePhone } from './month-end-steps';
 import { ELECTION_WAIT_MS, readyThroughTheElection } from './politics-steps';
 import { checkTheShow, watchShow, type ShowWatch } from './production-steps';
@@ -155,6 +155,8 @@ try {
   console.log(`plots, TV: ${await theTvShowsWhoOwnsEachPlot(ctx)}`);
   // The header without a ready chip: its gauges give way, so a long title keeps clear of them.
   await tv.locator('[data-phase=development] [data-testid=tv-header]').waitFor({ timeout: PRESS_MS });
+  // Under a full chat strip, as a real table has it.
+  await theTableHasSaid(tv, server, code);
   console.log(`TV-FIT, development: ${await theTvTitleIsClear(tv, 'development')}; ${await theTvHeaderStaysOnScreen(tv, 'development', true, true)}`);
   // B-AC-6 and B-AC-8, from what both screens drew of month 1's show. The turn runs its whole clock, which starts only
   // once the AI seats have their first MULEs too: a development's length again for that wait.

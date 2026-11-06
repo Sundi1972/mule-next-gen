@@ -8,29 +8,38 @@ import type { MuleServer } from '../../server/src/server.js';
 import { EVENT_SHOW } from '@mule/engine';
 import { check, held } from './harness';
 
-/** Kept a string: tsx would wrap named functions in a helper the page lacks. What the TV stage draws past the screen. */
+/**
+ * Kept a string: tsx would wrap named functions in a helper the page lacks. What the TV stage draws past its foot: the
+ * inner edge of its bottom padding, or the screen's foot if that is higher. Into the padding is past the foot: the stage
+ * clips nothing there, the scaler only at the screen's edge, so a screen's foot margin hides a body that ran past it.
+ */
 const PAST_THE_FOOT = String.raw`(() => {
   const stage = document.querySelector('[data-phase]');
-  if (!stage) return { past: ['no TV stage'], foot: 0 };
-  const vh = window.innerHeight;
+  if (!stage) return { past: ['no TV stage'], foot: 0, limit: 0 };
+  const box = stage.getBoundingClientRect();
+  const scale = stage.offsetHeight ? box.height / stage.offsetHeight : 1;
+  const limit = Math.min(window.innerHeight, box.bottom - parseFloat(getComputedStyle(stage).paddingBottom) * scale);
   const past = [];
   let foot = 0;
   for (const el of stage.querySelectorAll('*')) {
     const b = el.getBoundingClientRect();
     if (b.width === 0 || b.height === 0 || !el.checkVisibility({ opacityProperty: true, visibilityProperty: true })) continue;
-    // Below a box that clips it is the clipping box's to judge, and that box is read too; nor is it drawn, so it is no foot.
+    // Below an inner box that clips it on purpose (a list that gives way) it is that box's to judge, and that box is read
+    // too; nor is it drawn, so it is no foot. The frame's own clips never excuse it: the stage, everything above it (the
+    // scaler) and a body's fit box (data-fit) clip what the screen failed to fit, so content cut there runs past the foot.
     let clipped = false;
-    for (let a = el.parentElement; a && a !== stage.parentElement; a = a.parentElement) {
+    for (let a = el.parentElement; a && a !== stage; a = a.parentElement) {
+      if (a.hasAttribute('data-fit')) continue;
       const cs = getComputedStyle(a);
       if (cs.overflowY !== 'visible' && b.bottom > a.getBoundingClientRect().bottom + 1) { clipped = true; break; }
     }
     if (clipped) continue;
     foot = Math.max(foot, b.bottom);
-    if (b.bottom <= vh + 1) continue;
+    if (b.bottom <= limit + 1) continue;
     const id = el.getAttribute('data-testid') || el.tagName.toLowerCase() + ' "' + (el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 30) + '"';
     past.push(id + ' to y ' + b.bottom.toFixed(1));
   }
-  return { past: past.slice(0, 6), foot };
+  return { past: past.slice(0, 6), foot, limit };
 })()`;
 
 /** Kept a string: each box the selectors name, and whether it shows whole: inside the screen and every box that clips it. */
@@ -54,12 +63,26 @@ export async function shownWhole(tv: Page, screen: string, selectors: string[]):
   return boxes;
 }
 
-/** Nothing the TV stage draws runs past the screen's foot, unless a box that clips it ends above the foot; returns the lowest bottom. */
+/**
+ * Nothing the TV stage draws runs past its foot, unless an inner box that clips it on purpose ends above the foot; cut
+ * off by the stage, the scaler or a fit box, it counts as past the foot (PM ruling 6 Nov). Returns the lowest bottom.
+ */
 export async function nothingPastTheFoot(tv: Page, screen: string): Promise<number> {
-  const { past, foot } = (await tv.evaluate(PAST_THE_FOOT)) as { past: string[]; foot: number };
-  const vh = await tv.evaluate(() => window.innerHeight);
-  check(past.length === 0, `TV-FIT: on the ${screen} TV nothing runs past y ${vh}, got ${past.join('; ')}`);
+  const { past, foot, limit } = (await tv.evaluate(PAST_THE_FOOT)) as { past: string[]; foot: number; limit: number };
+  check(past.length === 0, `TV-FIT: on the ${screen} TV nothing runs past the foot at y ${limit.toFixed(1)}, got ${past.join('; ')}`);
   return foot;
+}
+
+type Chatty = { deliver(from: string, text: string): void; game: { state: { players: { id: string }[] } } };
+
+/** The host says three lines, the most a TV strip shows, and the TV shows the newest: a screen is read under the chat a real table has. */
+export async function theTableHasSaid(tv: Page, server: MuleServer, code: string): Promise<string[]> {
+  const room = server.registry.get(code) as unknown as Chatty | undefined;
+  check(room, `a room ${code} on the server`);
+  const said = ['Who sold the Food?', 'Not me, I ate it.', 'Then who is buying the Energy?'];
+  for (const text of said) room.deliver(room.game.state.players[0]!.id, text);
+  await tv.locator('[data-phase] [data-testid=chat-ticker]').getByText(said.at(-1)!).first().waitFor({ timeout: 2_000 });
+  return said;
 }
 
 /** Kept a string, as PAST_THE_FOOT: in the shown TV header, what of the header's right side the title runs over. */
