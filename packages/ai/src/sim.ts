@@ -172,6 +172,61 @@ const quantile = (values: number[], q: number) => {
   return sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))] ?? 0;
 };
 
+/** What the sell floor's lines count over a run (PM ruling, 6 Nov: an AI never sells into its own next-month shortage). */
+export interface ShortTally {
+  /** Seat-months read at development, and those that started it hungry. */
+  developments: number;
+  hungry: number;
+  /** Seat-months read at production, and those with a plot turned off for want of Energy, or a farm halved for want of Water. */
+  productions: number;
+  energyShort: number;
+  waterShort: number;
+  /** Units of Food, Energy and Water the players sold at the live auction, to anyone. */
+  sold: { food: number; energy: number; water: number };
+  /** Each game's winner's engine score. */
+  winnerScores: number[];
+}
+
+export function newShortTally(): ShortTally {
+  return { developments: 0, hungry: 0, productions: 0, energyShort: 0, waterShort: 0, sold: { food: 0, energy: 0, water: 0 }, winnerScores: [] };
+}
+
+/** Reads one phase as playGame's onPhase hands it over, played: who started development hungry, whose plots production cut for want of Energy or Water. */
+export function shortAt(t: ShortTally, s: GameState): void {
+  if (s.phase === 'development') {
+    t.developments += s.players.length;
+    t.hungry += s.players.filter((p) => p.hungry).length;
+  }
+  if (s.phase !== 'production') return;
+  const report = s.history.at(-1);
+  if (!report || report.month !== s.month) return;
+  const cut = (whys: readonly string[]) => new Set((report.lines ?? []).filter((l) => l.parts.some((x) => whys.includes(x.why))).map((l) => s.tiles[l.tile]!.owner));
+  const energy = cut(['energyOff', 'noEnergy']);
+  const water = cut(['noWater']);
+  t.productions += s.players.length;
+  t.energyShort += s.players.filter((p) => energy.has(p.id)).length;
+  t.waterShort += s.players.filter((p) => water.has(p.id)).length;
+}
+
+/** Adds one game's live-auction sales of Food, Energy and Water by players, from its facts. */
+export function tallySales(t: ShortTally, played: Pick<PlayedGame, 'facts' | 'state'>): void {
+  const players = new Set(played.state.players.map((p) => p.id));
+  for (const f of played.facts) {
+    if (f.kind !== 'trade' || !players.has(f.seller)) continue;
+    if (f.good === 'food' || f.good === 'energy' || f.good === 'water') t.sold[f.good] += f.qty;
+  }
+}
+
+/** The sell floor's lines: seat-months short, the AI's sales of what it needs, and the winner's score. No check. */
+export function shortLines(t: ShortTally): string[] {
+  // literal-ok: the median the line names
+  const winner = quantile(t.winnerScores, 0.5);
+  return [
+    `     Seat-months short: hungry at development ${pct(t.hungry, t.developments)} of ${t.developments}; a plot off for Energy at production ${pct(t.energyShort, t.productions)}, a farm halved for Water ${pct(t.waterShort, t.productions)} of ${t.productions} (no check)`,
+    `     Players sold at the live auction: Food ${t.sold.food}, Energy ${t.sold.energy}, Water ${t.sold.water} units; winner's score median ${winner} (no check)`,
+  ];
+}
+
 /**
  * One game's colony score total (the engine's colonyScore, RULE-25) at each month's end, month 1 first: read as each
  * upkeep ends, and the last month's from the final state, since its upkeep moves straight to game over. Empty when the
@@ -557,6 +612,8 @@ function main() {
   const floorMoments: FloorMomentCounts[] = [];
   let playerGames = 0;
   let spirals = 0;
+  /** The sell floor's lines (PM ruling, 6 Nov): seat-months short of Food, Energy or Water, and the AI's own sales of them. */
+  const short = newShortTally();
   const byPersona: Record<string, number> = {};
   const prices = Object.fromEntries(GOODS.map((g) => [g, [] as number[]]));
   const mulePrices: number[] = [];
@@ -627,6 +684,7 @@ function main() {
       colony.onPhase(s);
       supplyAt?.phase(s);
       if (s.phase === 'production') developedAt.set(s.month, s.tiles.filter((t) => t.owner && t.outfit).length);
+      shortAt(short, s);
       if (s.phase === 'production' && pending) {
         const events = s.history.at(-1)!.events ?? [];
         monthEvents.push({ development: pending.sickness, production: events.length });
@@ -693,6 +751,8 @@ function main() {
       afterFire.developed.push(developedAt.get(next.month) ?? 0);
     });
     const winner = winnerOf(state);
+    tallySales(short, played);
+    short.winnerScores.push(score(state, state.players[winner]!.id));
     const species = state.players[winner]!.species;
     wins[species] = (wins[species] ?? 0) + 1;
     const wp = specs[winner]!.persona;
@@ -723,6 +783,7 @@ function main() {
   console.log(`     MULEs lost to the clock: ${(mulesLost / games).toFixed(1)} a game (walking ${walking ? 'on' : 'off'}; no check)`);
   for (const line of floorLines(floorTurns, floorMoments, playerGames)) console.log(line);
   console.log(`     Players hungry ${SPIRAL_MONTHS} or more months running: ${pct(spirals, playerGames)} (no check)`);
+  for (const line of shortLines(short)) console.log(line);
   if (supply) for (const line of supplyLines(supply, playerGames, pct(hungry, months))) console.log(line);
   console.log(`     Wins by species:${Object.entries(wins).map(([s, n]) => `${s} ${pct(n, games)}`).join(', ')}`);
   console.log(`     Wins by persona: ${Object.entries(byPersona).map(([s, n]) => `${s} ${pct(n, games)}`).join(', ')}`);

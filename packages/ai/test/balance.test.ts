@@ -23,7 +23,7 @@ import { AiSeat } from '../src/seat.js';
 import { simSeats } from '../src/lineup.js';
 import { playGame } from '../src/play.js';
 import { developDecision, goodPlan, landDecision, muleValue, plotRoom, plotValue, rivalsStillClaiming, tradeDecision, wantsAnyAhead, wantsPlot } from '../src/strategist.js';
-import { cashReserve, installGain, secondValue, type Mind } from '../src/value.js';
+import { cashReserve, installGain, secondValue, unitValues, type Mind } from '../src/value.js';
 
 const fourSeats = (seed: number) => createGame({ seed, players: [0, 1, 2, 3].map((i) => ({ id: `ai${i}`, name: `AI${i}`, isAi: true })) });
 
@@ -447,7 +447,9 @@ describe('the sales tax', () => {
       state.tiles.find((t) => t.terrain === 'plains' && !t.owner)!.owner = 'ai0';
       const obs = observe(state, 'ai0');
       expect(secondValue(obs, 'ai0'), 'a development second, with land to develop').toBe(STRATEGIST.secondValue.busy);
-      return goodPlan(obs, traderMind, 'food').values;
+      // The values themselves: since the PM ruling of 6 Nov goodPlan keeps the whole Food block (sellFloor, auctionNeed),
+      // so the units of own use above unitValues' floor are read before that.
+      return unitValues(obs, outlook(obs, 'ai0', { lookAhead: traderMind.level.lookAhead }), 'food', traderMind);
     };
     const [v0, v15] = [food(0), food(0.15)];
     const resale0 = v0.keep[v0.block]!;

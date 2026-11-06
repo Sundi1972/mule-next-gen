@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   advancePhase,
+  auctionNeed,
   createGame,
   GOOD_CONFIG,
   monthNeeds,
@@ -203,8 +204,9 @@ function cannotPay(good: Good): void {
 
 /**
  * A seat holding what keeps it whole and `surplus` more, beside a short rival with money. It is not short, so its
- * surplus is for sale (Heiko's choice of 5 Nov, "sell surplus"): it may sell down to the screen's need, what upkeep or
- * production is about to take, and never lower, though the rival keeps bidding up after it. Returns the units sold.
+ * surplus is for sale (Heiko's choice of 5 Nov, "sell surplus"): it may sell down to the screen's need (auctionNeed, PM
+ * ruling of 6 Nov: what upkeep takes now and next month's use after spoilage), and never lower, though the rival keeps
+ * bidding up after it. Returns the units sold.
  */
 interface Surplus {
   /** Its plots; the good's usual arrangement unless given. */
@@ -238,7 +240,7 @@ function sellsSurplus(good: Good, id: string, surplus: number, o: Surplus = {}):
     Object.assign(state.auction!, { storeBuy: buy, storeSell: Math.max(state.auction!.storeSell, buy + 1), storeBudget: 20 });
   }
   const held = state.players.find((p) => p.id === id)!.stock[good];
-  const need = monthNeeds(state, id)[good];
+  const need = auctionNeed(state, id)[good];
 
   const trades = play(state);
 
@@ -249,7 +251,7 @@ function sellsSurplus(good: Good, id: string, surplus: number, o: Surplus = {}):
 }
 const units_ = (trades: Trade[], id: string) => trades.filter((t) => t.buyer === id).reduce((n, t) => n + t.quantity, 0);
 
-/** The promise when it is not short: it keeps the screen's need, what upkeep or production is about to take. */
+/** The promise when it is not short: it keeps the screen's need, what upkeep takes and next month's use after spoilage. */
 function keepsNeed(good: Good, id: string, surplus: number, o: Surplus = {}): void {
   const { state, need } = sellsSurplus(good, id, surplus, o);
   expect(need, 'the premise: it needs some').toBeGreaterThan(0);
@@ -276,7 +278,7 @@ describe('B-AC-food-short: a seat short of Food buys from the store when it can 
     keepsNeed('food', id!, 3, { shelf: 0, coSeller: 20, storeBuys: 3, rival: false });
   });
 
-  /** A seat holding the screen's need and 2 more, under what keeps it whole, beside a short rival; the store sells `shelf`. */
+  /** A seat holding its need before spoilage (monthNeeds) and 2 more, under what keeps it whole, beside a short rival; the store sells `shelf`. */
   const shortBesideRival = (id: string, shelf: number) => {
     const state = auctionOf(
       'food',
@@ -299,27 +301,20 @@ describe('B-AC-food-short: a seat short of Food buys from the store when it can 
     expect(state.players.find((p) => p.id === id)!.stock.food, 'it holds what keeps it whole').toBeGreaterThanOrEqual(whole);
   });
 
-  it.each(ROWS)('B-AC-food-short: %s (%s) short of what keeps it whole, with no Food in the store, keeps the screen need and sells no lower to a short rival', (id) => {
-    // The store's shelf is down to the colonists' month, so there is nothing to buy back: the floor is the screen's need.
-    const { state, held, need } = shortBesideRival(id!, 0);
+  it.each(ROWS)('B-AC-food-short: %s (%s) short of what keeps it whole, with no Food in the store, sells none to a short rival', (id) => {
+    // The store's shelf is down to the colonists' month, so there is nothing to buy back; it never sells into its own
+    // next-month shortage (PM ruling, 6 Nov), so it keeps all it holds.
+    const { state, held } = shortBesideRival(id!, 0);
 
     const trades = play(state);
 
-    expect(state.players.find((p) => p.id === id)!.stock.food, `it keeps the screen's need of ${need}`).toBeGreaterThanOrEqual(need);
-    expect(state.players.find((p) => p.id === id)!.stock.food).toBe(held - sold(trades, id!).length + units(trades, id!));
+    expect(sold(trades, id!), 'it sold none of what it needs').toEqual([]);
+    expect(state.players.find((p) => p.id === id)!.stock.food).toBe(held + units(trades, id!));
   });
 
-  it('B-AC-food-short: the trader short of what keeps it whole, with no Food in the store, sells above the screen need to a short rival', () => {
-    const { state } = shortBesideRival('ai0', 0);
-
-    const trades = play(state);
-
-    expect(sold(trades, 'ai0').length, 'it sold some of what it holds above the screen need').toBeGreaterThan(0);
-  });
-
-  it('B-AC-food-short: the trader holding exactly what keeps it whole sells its surplus above the screen need to a short rival', () => {
+  it('B-AC-food-short: the trader holding exactly what keeps it whole, its screen need, sells none to a short rival', () => {
     const { state, units, need } = sellsSurplus('food', 'ai0', 0);
-    expect(units, 'it sold some of its surplus').toBeGreaterThan(0);
+    expect(units, 'it has no surplus over its hold').toBe(0);
     expect(state.players.find((p) => p.id === 'ai0')!.stock.food, `it keeps the screen's need of ${need}`).toBeGreaterThanOrEqual(need);
   });
 

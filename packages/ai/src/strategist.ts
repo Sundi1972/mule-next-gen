@@ -35,7 +35,7 @@ import {
 } from '@mule/engine';
 import { belief, outlook, type Outlook } from './outlook.js';
 import { candidate, consider, curve, shortlist, type Candidate, type Shortlist } from './utility.js';
-import { afterTax, canFeed, cashPlan, cashReserve, installGain, monthNeedsCost, secondValue, unitValues, wholeNextMonth, yieldOf, type Mind, type UnitValues } from './value.js';
+import { afterTax, canFeed, cashPlan, cashReserve, installGain, monthNeedsCost, secondValue, sellFloor, unitValues, wholeNextMonth, yieldOf, type Mind, type UnitValues } from './value.js';
 
 /**
  * The strategist: for each of the month's decisions it lists the options,
@@ -535,8 +535,8 @@ export function goodPlan(obs: GameState, mind: Mind, good: Good): GoodPlan {
   }
   // Short for next month is a loss, not a small cost (Heiko, 5 Nov). While it holds less than what keeps it whole and the
   // store sells the good, each unit up to that is worth at least the store's ask, so it buys it there or cheaper from a
-  // player, never dearer, and it sells none of them. Otherwise its floor is the screen's need and the rest is for sale
-  // (Heiko's choice of 5 Nov, "sell surplus").
+  // player, never dearer, and it sells none of them. Otherwise its floor is the screen's need (sellFloor, PM ruling of
+  // 6 Nov) and the rest is for sale (Heiko's choice of 5 Nov, "sell surplus").
   let mustHold = 0;
   let reserve: number;
   let budget: number;
@@ -553,14 +553,14 @@ export function goodPlan(obs: GameState, mind: Mind, good: Good): GoodPlan {
       values.buy[k] = Math.max(values.buy[k] ?? 0, ask!);
       values.keep[k] = Infinity;
     }
-    // Otherwise it keeps its need before spoilage, what upkeep eats or its plots burn, whatever its own plots may make: Water
-    // only for a seat with a farm to water, as wholeNextMonth counts it.
-    const floor = mustHold > 0 ? mustHold : whole > 0 ? values.need : 0;
-    for (let k = 0; k < floor; k++) values.keep[k] = Infinity;
-    values.floorUnits = Math.max(values.floorUnits, floor);
     reserve = cashReserve(obs, mind);
     budget = Math.max(0, Math.min(p.money * STRATEGIST.budgetShare, p.money - reserve));
   }
+  // On every path, after the cash plan has valued the good: it never sells into its own next-month shortage, whatever
+  // its own plots may make (PM ruling, 6 Nov). Its values above the floor stand.
+  const floor = Math.max(mustHold, sellFloor(obs, mind.me, good));
+  for (let k = 0; k < floor; k++) values.keep[k] = Infinity;
+  values.floorUnits = Math.max(values.floorUnits, floor);
   const a = obs.auction;
   const rows = a?.good === good ? a.status : [];
   const others = rows.filter((r) => r.id !== mind.me);
