@@ -8,6 +8,7 @@ import {
   dealSpeed,
   heldSeller,
   heldWords,
+  holdReason,
   Hint,
   keepWords,
   lineHint,
@@ -118,7 +119,7 @@ export function Auction() {
               </span>
             </div>
             <p className="text-xs leading-snug text-ink-2" data-testid="status-words">
-              {spare < 0 ? `Hold ${-spare} more ${GOOD_NAME[good]}: upkeep and spoilage take some before next month.` : spare > 0 ? `You have ${spare} more than you must hold.` : 'You hold just enough.'} Pick your side; you can change it until everyone has.
+              {spare < 0 ? `Hold ${-spare} more ${GOOD_NAME[good]}: ${holdReason(good)}.` : spare > 0 ? `You have ${spare} more than you must hold.` : 'You hold just enough.'} Pick your side; you can change it until everyone has.
             </p>
           </>
         }

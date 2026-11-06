@@ -1,4 +1,4 @@
-import { COLONY_SELLER, SHIP_ID, STORE_ID, tradeInterval, WALK, type AuctionRole, type AuctionSide, type Good } from '@mule/engine';
+import { COLONY_SELLER, GOOD_CONFIG, SHIP_ID, STORE_ID, tradeInterval, WALK, type AuctionRole, type AuctionSide, type Good } from '@mule/engine';
 import type { AuctionView, DealView, LandAuctionView, ListingView, MuleView, WalkerView } from '@mule/protocol';
 import { Button, Creature, cx, GOOD_NAME, GoodIcon, MuleIcon, PlayerMark, SLOT_COLOR, TERRAIN_NAME, useSeatSpecies, type BoardWalker, type Slot } from '@mule/ui';
 import type { ReactNode } from 'react';
@@ -39,6 +39,15 @@ export function heldSeller(w: Pick<WalkerView, 'side' | 'held'> | undefined): bo
  * The held seller's rail (WS6's mock PhoneSale, variant A, at cde3ff61): she stopped at what she must hold, and
  * how to sell on.
  */
+/**
+ * Why the auction asks you to hold more of `good`, true for that good (auctionNeed): upkeep eats Food and Water, the
+ * month end spoils what has spoilage in config, and what neither touches is held for next month's use alone.
+ */
+export function holdReason(good: Good): string {
+  if (good === 'food' || good === 'water') return 'upkeep and spoilage take some before next month';
+  return GOOD_CONFIG[good].spoilage > 0 ? 'next month uses it, and some spoils first' : 'next month uses it';
+}
+
 export function heldWords(good: Good, need: number): { line: string; how: string } {
   return { line: `Stopped at ${need} ${GOOD_NAME[good]}: what you must hold.`, how: 'To sell more, hold ▼: you’d be short next month.' };
 }
