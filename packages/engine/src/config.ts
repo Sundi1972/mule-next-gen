@@ -1416,6 +1416,13 @@ export const SOCIAL_EVENTS = {
       shrink: 0.1,
       cap: 0.9,
     },
+    /** In development: the store sells no MULEs this turn (buyMule refuses, storeOnStrike). */
+    storeStrike: {
+      phases: { development: 0 },
+      needsColony: true,
+      mood: { unhappy: 0.02, unrest: 0.04 },
+      cap: 0.9,
+    },
   } satisfies Record<string, import('./events.js').EventRow & import('./events.js').EventParams>,
   player: {
     /** Each player's own roll: `reputation` points (reputationShift), so fewer votes. The richest is likelier. */

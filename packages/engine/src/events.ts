@@ -55,6 +55,7 @@ const SHAPE: Record<EventKey, { kind: EventKind; title: string; scope: MonthEven
     sign: 'bad',
     line: () => `Blamed for the unrest: ${Math.abs(SOCIAL_EVENTS.player.blamedForUnrest.reputation)} reputation lost, so fewer votes.`,
   },
+  storeStrike: { kind: 'store', title: 'Store strike', scope: 'colony', sign: 'bad', line: () => 'The store is on strike: it sells no MULEs this turn.' },
 };
 
 /** A general strike's line, naming its good when it has one. */
@@ -169,8 +170,14 @@ const OFF_MAP = {
   generalStrike: (state: GameState) => strikeGoods(state).length > 0,
   emigrationWave: () => true,
   blamedForUnrest: () => true,
+  storeStrike: () => true,
 } satisfies Partial<Record<EventKey, (state: GameState, player?: Player) => boolean>>;
 type OffMapKey = keyof typeof OFF_MAP;
+
+/** Whether the store is on strike this turn: a store strike fired in this month's development. buyMule refuses then. */
+export function storeOnStrike(state: Pick<GameState, 'monthEvents'>): boolean {
+  return state.monthEvents.some((e) => e.key === 'storeStrike' && e.phase === 'development');
+}
 
 /** A share of what someone holds, floored, never more than they hold (HC-5). */
 const taken = (have: number, share: number) => Math.min(have, Math.floor(have * share));
