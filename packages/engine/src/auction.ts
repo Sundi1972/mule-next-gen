@@ -1,5 +1,5 @@
 import { GOOD_CONFIG, PRICE, UPKEEP, WALK } from './config.js';
-import { colonyPrice, driftReference, monthlyDemand, shelfShort, shipInPort, shipPrice, storeForSale, storeWants, taxSale } from './economy.js';
+import { colonyPrice, driftReference, monthlyDemand, shelfShort, shipInPort, shipPrice, storeForSale, storeSellPrice, storeWants, taxSale } from './economy.js';
 import { RuleError } from './errors.js';
 import { chargeExportTax } from './politics.js';
 import { monthNeeds, needsOf } from './production.js';
@@ -228,7 +228,7 @@ function comeUp(state: GameState, good: Good, demand: ReturnType<typeof monthlyD
   const ceiling = Math.floor((UPKEEP.colonistBudget[good] ?? 0) / (1 + PRICE.storeSpread) ** 2); // literal-ok: the spread applies twice, store buys then sells
   const storeBuy = shelfShort(state, good, 1) ? Math.max(usualBuy, Math.min(ceiling, Math.ceil(posted * PRICE.restockPremium))) : usualBuy;
   // A store restocking a short shelf sells dearer too: it never buys above its own selling price, or a player could sell straight back.
-  const storeSell = Math.max(Math.ceil(posted * (1 + PRICE.storeSpread)), storeBuy + 1);
+  const storeSell = Math.max(storeSellPrice(posted), storeBuy + 1);
   const budget = storeWants(state, good, demand);
   const reason = skipBefore(state, good, storeBuy, budget);
   return { posted, storeBuy, storeSell, budget, reason };

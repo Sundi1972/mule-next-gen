@@ -11,6 +11,7 @@ import {
   colonyPrice,
   createGame,
   shipPrice,
+  startAuction,
   targetPrice,
   installMule,
   isGameOver,
@@ -124,6 +125,27 @@ describe('prices', () => {
     state.store.stock.electronics = 0;
     expect(storeQuotes(state, 'electronics').sell).toBeNull();
     expect(shipPrice(state, 'food')).toBeNull();
+  });
+
+  it('FM-store-spread-float: the store sells at its posted price plus storeSpread, rounded up, in its quotes and at the auction', () => {
+    // [posted, sells at]: 10% more, rounded up, worked by hand. The multiples of 10 are where 1 + 0.1 in floating point
+    // (a hair over 1.1) used to round one credit too high.
+    const rows = [
+      [50, 55], [90, 99], [100, 110], [110, 121], [170, 187], [180, 198], [190, 209], [200, 220], [210, 231], [220, 242], [230, 253],
+      [330, 363], [340, 374], [350, 385], [360, 396], [370, 407], [380, 418], [390, 429], [400, 440],
+      [7, 8], [25, 28], [33, 37], [51, 57], [99, 109],
+    ];
+    const seen = rows.map(([posted]) => {
+      const state = newGame();
+      state.store.posted.smithore = posted!;
+      state.store.stock.smithore = 20;
+      state.players[0]!.stock.smithore = 5;
+      const quote = storeQuotes(state, 'smithore').sell;
+      state.phase = 'auction';
+      startAuction(state, ['smithore']);
+      return [posted, quote, state.auction!.good === 'smithore' ? state.auction!.storeSell : 'skipped'];
+    });
+    expect(seen).toEqual(rows.map(([posted, sells]) => [posted, sells, sells]));
   });
 
   it('react more strongly to a Food shortage than an Alloy shortage', () => {
