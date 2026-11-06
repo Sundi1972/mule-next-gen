@@ -94,11 +94,14 @@ const fourSeats = [
 // flare before the comet pass and the pest swarm; seed 56, picked then, was moved by trunk's batches 36-37. Searched
 // again over seeds 1-60, months 1-6: seed 29 fires a solar flare and a bumper harvest in month 2, a colony headline then
 // a personal spotlight as before, and nothing in month 3.
-const REAL_SEED = 29;
+// WS3's #439 (auctionNeed: the auction skips fewer goods) moved seeds 29 and 10 again. Searched over seeds 1-600,
+// months 1-8: the flare-then-harvest pair alone is rare (one seed-month in 4 800), and seed 333 fires it in month 7 with
+// month 3 still quiet; seed 26 fires a lone comet pass in month 2 (searched over seeds 1-60, months 1-10).
+const REAL_SEED = 333;
 /** Production fires a colony solar flare, then a personal bumper harvest. */
-const TWO_EVENT_MONTH = 2;
+const TWO_EVENT_MONTH = 7;
 /** On ONE_EVENT_SEED, production fires a colony comet pass and nothing else. */
-const ONE_EVENT_SEED = 10;
+const ONE_EVENT_SEED = 26;
 const ONE_EVENT_MONTH = 2;
 /** Nothing fires all month. */
 const QUIET_MONTH = 3;
@@ -141,7 +144,7 @@ let realMonths: ReturnType<typeof playRealMonths> | null = null;
 const playedMonths = () => (realMonths ??= playRealMonths(REAL_SEED, Math.max(TWO_EVENT_MONTH, QUIET_MONTH)));
 let loneMonths: ReturnType<typeof playRealMonths> | null = null;
 const playedLone = () => (loneMonths ??= playRealMonths(ONE_EVENT_SEED, ONE_EVENT_MONTH));
-/** Room for five months under a loaded full run, past the 10 s a hook gets by default. */
+/** Room for seven months under a loaded full run, past the 10 s a hook gets by default. */
 const PLAY_MONTHS_MS = 60_000;
 
 describe('the event show on real engine months: the view plays exactly what the month report fired', () => {
