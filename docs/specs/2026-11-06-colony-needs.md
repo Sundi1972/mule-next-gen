@@ -117,6 +117,13 @@ HC-4  packages/engine stays pure and draws no new random number: hardship is det
 HC-5  The mood, the memory and the unrest odds exist only with politics on (state.colony).
       Whether the meal and the population change (C1, C2, C4) also apply with politics off is
       decision D1.                            source: G-5 HC-22   breach: decision
+HC-10 Every consumption number is a named value in one CONSUMPTION table in config.ts, one row
+      per Outfit, in quarters; no rules code holds a crew or plot number.
+                                              source: Heiko 6 Nov, CLAUDE.md   breach: fatal
+HC-11 No copy of the Food/Water/Energy use formula outside production.ts: the AI and the server
+      ask needsOf / needsWith / energyUseOf.  source: #390 HC-3 (same rule)   breach: fatal
+HC-12 Crews eat from their owner's depot, never from the store; players eat before colonists.
+                                              source: upkeep.ts today; WS5 recommendation   breach: decision
 ```
 
 ## §1 · Solution Design `[handoff]`
@@ -220,7 +227,151 @@ owner        WS3 (mule-game.ts, protocol), web line by the PM's build ruling
 
 ### Players' and crews' consumption, store demand (WS5)
 
-*(pending — WS5)*
+Heiko, 6 Nov: "the key demand comes from players supporting production and their crews, so more crews means more
+Food demand", and each production type consumes different amounts of Food, Water and Energy. WS5's part: one
+consumption table, read through the two functions every reader already calls, and the store's demand built from it.
+
+**The consumption table** (per worked plot, per month; a player's household still eats 2 Food and drinks 1 Water):
+
+| Plot makes | Food | Water | Energy | Character |
+|---|---|---|---|---|
+| Food (farm) | ¼ | ½ | 1 | a farm drinks: irrigation |
+| Water (well) | ¼ | 0 | 1 | a well's crew drinks at the well |
+| Energy (plant) | ¼ | ½ | 1 (from its own output, AM-17) | a plant needs cooling water |
+| Smithore (mine) | ½ | ¼ | 2 | miners eat twice a farmhand's Food |
+| Crystite (mine) | ¾ | ½ | 2 | deep, hot shafts: the hungriest crew |
+| Rare earth (mine) | ½ | ¼ | 2 | as Smithore |
+| Alloy (works) | ½ | ½ | recipe + 1 | a smelter's quench water and furnace |
+| Electronics (works) | ½ | ¼ | recipe + 2 | clean rooms burn the most |
+| Medicine (lab) | ½ | ½ | recipe + 1 | |
+| Green belt | 0 | ½ | 0 | a park is watered |
+
+Today, for comparison: a raw plot's crew of 1 adds ¼ Food and ⅙ Water, a factory's crew of 2 adds ½ and ⅓, a green
+belt nothing (`UPKEEP.crew`, `crewPerFood` 4, `crewPerWater` 6), each rounded up per player; Energy is
+`UPKEEP.energyUse` for raw plots and the recipe's Energy for factories. Raw plots' Energy and every recipe stay as
+they are; the table adds a factory's running draw on top of its recipe.
+
+Per player: Food = 2 + ⌈Σ table Food⌉, Water = 1 + ⌈Σ table Water⌉ (RULE-10). Three estates, today → tomorrow:
+| Estate | Food | Water | Energy from the store |
+|---|---|---|---|
+| 3 farms + 1 well | 3 → 3 | 2 → 3 | 4 → 4 |
+| 2 Smithore + 1 Crystite + 1 plant | 3 → 4 | 2 → 3 | 6 → 6 |
+| 1 Alloy + 1 Electronics + 2 Smithore (alloy makes 2, electronics 1) | 4 → 4 | 2 → 3 | 7 → 10 |
+
+**Do crews keep eating from their owner's depot?** Yes, recommended. The store sees crews only as demand: their
+owner must buy the Food (at auction or from the store) or grow it. Crews eating from the store directly would
+take the player's choice away (feed the crew or sell the Food) and turn a player's estate into the colonists'
+problem. `packages/engine/src/upkeep.ts::runUpkeep` keeps its order: players eat from their depots first, then the colonists from the
+store (WS7's C1).
+
+```
+C10 · MODIFIED · each kind of plot's crew eats and drinks its own amount
+
+today        needsOf: Food = baseFood + ⌈crew ÷ crewPerFood⌉, Water = baseWater + ⌈crew ÷ crewPerWater⌉;
+             crew 1 per raw plot, 2 per factory, 0 on a green belt · anchors: packages/engine/src/production.ts::crewOf,
+             packages/engine/src/production.ts::needsOf, packages/engine/src/config.ts::UPKEEP · verified_by: read
+tomorrow     MUST read Food and Water per plot from one CONSUMPTION table in config.ts (RULE-10);
+             MUST keep the household base; crewOf, UPKEEP.crew, crewPerFood and crewPerWater go once
+             nothing reads them
+logic        → RULE-10 · evaluated wherever needsOf is (upkeep, auction status, hunger, irrigation, walking pace)
+seam         packages/engine/src/production.ts::needsOf — every reader of a player's Food and Water need already calls it
+senior       junior would: lower crewPerFood to 3, or multiply the crew by a per-type factor beside crewOf ·
+             senior does: one table read by the existing seam; the ¼ steps sum before one round-up, so a
+             player with three farms doesn't pay three round-ups
+mechanism    in_place
+call sites   (grep-built; the repo isn't prism-indexed) needsOf: engine upkeep.ts, auction.ts (2), economy.ts
+             ::playersUse, game.ts (hungry flag), dev-walk.ts (walking pace), production.ts (irrigation dry
+             check, monthNeeds); server mule-game.ts (2, the view); ai value.ts (4). crewOf: production.ts
+             ::needsOf, ai value.ts. UPKEEP.crew* copies: ai value.ts (C12), ai llm/manual.ts (the text)
+pin          baseFood 2 and baseWater 1 unchanged; the irrigation rule (an owner short of Water makes half)
+             now counts the farm's own Water, by design; engine tests that pin the old crew sums change, named
+             in the PR
+owner        WS1 (production.ts, config.ts UPKEEP)
+```
+
+```
+C11 · MODIFIED · a factory burns a running draw on top of its recipe
+
+today        energyUseOf: raw plot → UPKEEP.energyUse[good]; factory → factoryFit(...).energy (the recipe's
+             Energy) · anchor: packages/engine/src/production.ts::energyUseOf · verified_by: read
+tomorrow     MUST read a raw plot's Energy from CONSUMPTION (same values as energyUse today); a factory's is
+             the recipe's Energy plus CONSUMPTION[good].energy; a green belt 0; UPKEEP.energyUse goes
+logic        → RULE-10
+seam         packages/engine/src/production.ts::energyUseOf — AM-17's turn-off order, monthNeeds and playersUse read it; the
+             factory run in packages/engine/src/production.ts::runProduction draws fit.energy × cold directly today and MUST
+             draw energyUseOf × cold instead, or the draw is counted but never taken (found by the prototype)
+senior       junior would: raise the recipes' Energy inputs · senior does: leaves the recipes (factory output
+             and the turn-off share read them) and adds the draw where use is summed
+mechanism    in_place
+call sites   production.ts (turn-off list, the factory run and its second-pass shortness check, monthNeeds),
+             packages/engine/src/economy.ts::playersUse, ai value.ts (the factory yield's Energy)
+pin          an Energy plant still pays its own use from its own output (AM-17 R2); recipes unchanged
+owner        WS1
+```
+
+```
+C12 · MODIFIED · the AI plans with the same table
+
+today        ai value.ts copies the crew formula: a plot's crew cost (y.crew × (P(food) ÷ crewPerFood +
+             P(water) ÷ crewPerWater)) and the needs with one more factory (baseFood + ⌈crew ÷ crewPerFood⌉)
+             · anchors: packages/ai/src/value.ts (the yield's crew, cashReserve's needs) · verified_by: read
+tomorrow     MUST price a plot's upkeep from CONSUMPTION[outfit] and take "needs with one more plot" from
+             one exported engine helper (needsWith(state, playerId, outfit)), never a copy (HC-11)
+seam         packages/engine/src/production.ts::needsOf, extended by needsWith beside it
+senior       junior would: update the copy's constants · senior does: deletes the copy; the AI asks the engine
+mechanism    extract (needsWith) then in_place
+call sites   value.ts (the yield, cashReserve), llm/manual.ts's sentence about crews (text only)
+pin          the AI's other reads of needsOf unchanged
+owner        WS1 (value.ts), WS2 (manual.ts text)
+```
+
+```
+C13 · MODIFIED · the store's demand estimate is players + crews + colonists, with no wage cap
+
+today        monthlyDemand: players' needsOf + plots' Energy (playersUse) + colonistDemand(...) (wage-capped)
+             + a festival + the export ship · anchor: packages/engine/src/economy.ts::monthlyDemand · verified_by: read
+tomorrow     MUST be RULE-11: playersUse (now through C10, C11) + the colonists' full need (WS7's C2) +
+             festival + export; nothing else changes in the function
+logic        → RULE-11 · evaluated wherever monthlyDemand is (prices, the store's shelf targets, the AI)
+seam         packages/engine/src/economy.ts::monthlyDemand — the one demand; #390's months of cover (its RULE-5 D) reads it
+senior       junior would: add a second "overall demand" beside monthlyDemand for the new pricing · senior
+             does: one demand, which the store's price, its shelf target and the AI all read
+mechanism    in_place (no new code beyond C2, C10, C11: this change is the rule that names the sum)
+pin          the export ship's take and the festival's Food unchanged
+depends_on   C2 (data: no wage cap), C10, C11
+owner        WS1 (economy.ts)
+```
+
+**Measured: the 10 seed-1 games, before and after** (trunk 2eccd439, a throwaway prototype of C10–C13; 4 trader
+seats, rotating personas, walking on, full 12 months; demand sampled when the goods auction opens; "sold out" = the
+store had none to sell players at some point in that good's auction; "hungry" = the game's own flag, a seat holding
+less Food than its need; "+ meal" adds a stand-in for WS7's C1, colonists taking their need from the store free).
+
+| | politics off: today | table + full colonist demand | + meal | politics on: today | table + demand | + meal |
+|---|---|---|---|---|---|---|
+| Store demand Food / Water / Energy, a month | 18.0 / 12.9 / 18.0 | 19.3 / 16.8 / 19.1 | 19.3 / 16.8 / 18.7 | 18.1 / 12.8 / 17.4 | 19.2 / 16.3 / 18.6 | 19.3 / 16.6 / 18.6 |
+| … in month 12 | 19.1 / 12.5 / 25.2 | 21.5 / 20.5 / 27.7 | 21.5 / 21.0 / 26.7 | 19.4 / 12.5 / 25.8 | 21.2 / 19.1 / 25.9 | 21.5 / 19.8 / 26.3 |
+| Players' own need F / W / E | 14.6 / 9.3 / 16.4 | 14.7 / 12.2 / 16.8 | 14.6 / 12.1 / 16.3 | 14.6 / 9.2 / 15.8 | 14.7 / 11.9 / 16.3 | 14.7 / 12.0 / 16.4 |
+| Months the store sold out F / W / E (of 120) | 108 / 94 / 101 | 109 / 95 / 101 | 110 / 96 / 98 | 106 / 89 / 101 | 109 / 87 / 101 | 107 / 91 / 99 |
+| Months colonists went short F / W (of 120) | 50 / 62 | 56 / 69 | 54 / 67 | 55 / 63 | 50 / 56 | 52 / 59 |
+| Hungry seat-months (of 480) | 403 | 406 | 410 | 399 | 401 | 399 |
+
+What it says:
+- **Water is where demand moves**: about +30% a month, rising to about 20 by month 12 as farms and plants spread.
+  Players' own Food need is unchanged on average (the table keeps today's rate of a quarter Food per crew);
+  the +1 Food a month in store demand is the colonists' full need now counted (WS7's C2).
+- **The colony is already short of everything, today**: the store runs out for players in 9 of 10 months and seats
+  are hungry in 83–85% of seat-months, before and after. The table neither causes nor cures that: supply does
+  (Heiko's C29 pass). It matters for the store's pricing (#390's rework reads this demand).
+- Politics on and off move the same way; the meal stand-in changes the colonists' own hunger, which is WS7's.
+
+**Decision for Heiko (WS5): how hungry are crews?**
+- **A (recommended for now): the table above.** Every type has its own character, Water rises about 30%, Food
+  stays at today's rate. Pro: no new hunger on a colony that is already short. Con: "more crews, more Food" holds
+  at today's rate, not a steeper one.
+- **B: hungrier crews** (mines ¾, Crystite 1, factories ¾ Food): about +1½ Food a seat a month by mid-game. Pro: crews
+  are clearly the key demand. Con: without more Food supply (C29) it deepens a shortage that already reaches 9 months
+  in 10; best decided with C29's supply numbers.
 
 ## §2 · The Logic `[handoff]`
 
@@ -276,6 +427,31 @@ examples s 0.05 Content → 1.04 · s 0.5 Content → 0.95 · s 1 Unrest → 0.8
 RULE-6 · Hardship raises the unrest odds (C5)                     shape: formula
 a row's mood points in band b = row.mood[b] × (b ∈ {restless, unhappy, unrest} ? 1 + HARDSHIP.unrestPerHardship (0.5) × H : 1)
 H at its cap (3) → ×2.5. Rows with no mood points, and politics off, are unchanged.
+```
+
+### WS5's rules
+
+```
+RULE-10 · A player's Food, Water and Energy need (C10, C11)            shape: formula
+inputs        plots   the player's tiles with an outfit (Outfit = a good or greenBelt); none → household only
+              CONSUMPTION[outfit] = { food, water, energy }, quarters, ≥ 0
+then          food   = UPKEEP.baseFood  + ⌈Σ CONSUMPTION[o].food − ε⌉      (ε 1e-9: the sums are exact quarters)
+              water  = UPKEEP.baseWater + ⌈Σ CONSUMPTION[o].water − ε⌉
+              energy(tile) = raw: CONSUMPTION[o].energy · factory: recipe Energy (factoryFit) + CONSUMPTION[o].energy
+                             · greenBelt: 0 · an Energy plant's comes from its own output (AM-17 R2, existing)
+examples      no plots → 2 / 1 · 3 farms + well → 2 + ⌈1⌉ = 3 / 1 + ⌈1½⌉ = 3 · 2 Smithore + Crystite + plant →
+              2 + ⌈2⌉ = 4 / 1 + ⌈1½⌉ = 3 · a lone green belt → 2 / 1 + ⌈½⌉ = 2
+```
+
+```
+RULE-11 · The store's monthly demand for a colony good (C13)           shape: formula
+D_g     = Σ players RULE-10 food/water (household + crews)            g ∈ {food, water}
+        + Σ worked plots' energy (RULE-10), but Energy plants          g = energy
+        + colonists' need: colonists ÷ colonistsPerUnit (Food, Water), × colonistEnergyShare (Energy),
+          ÷ colonistsPerMedicine × sickness (Medicine) — full need at any price (WS7 C2)
+        + a festival's Food (existing) + the export ship's take (existing)
+unknown   none: every term is a count in state
+example   4 seats of "3 farms + well", 100 colonists: Food 4 × 3 + 5 = 17 (today 4 × 3 + 5 × wage share)
 ```
 
 ## The curve: shortfall → mood change in one month
@@ -368,6 +544,13 @@ payments that disappear.
 | T-AC-5 (serves G-1) | RULE-6: an unrest row's points ×(1 + 0.5 H); a thriving row's unchanged; politics off unchanged | C5 | engine unit |
 | T-AC-6 (B-AC-4) | RULE-1: need 0 → s 0; stock 0 → s 1; no credits move | C1 | engine unit |
 | T-AC-7 (UBER-AC-2) | `colonistBudget` no longer exists in packages/engine/src; the store's restock bid has no wage ceiling | C2 | grep + auction test |
+| B-AC-10 | Given two seats, one with 2 Smithore mines + 1 Crystite mine + 1 plant, one with 3 farms + 1 well · When upkeep ends · Then the miner's household ate 4 Food and drank 3 Water, the farmer's ate 3 and drank 3 (RULE-10's examples). observed_at: each player's depot before and after upkeep. negative: a seat with no plots eats 2 and drinks 1 | C10 | engine test on GameState |
+| B-AC-11 | Given an Electronics works that runs this month · When production ends · Then its owner's Energy fell by the recipe's Energy plus 2. observed_at: the owner's depot. negative: a works turned off for want of Energy draws only its share (AM-17) | C11 | engine test |
+| B-AC-12 | Given 4 seats of "3 farms + well" and 100 colonists, Food posted at 300 · When prices are next posted · Then the store's Food demand is 17, not less (RULE-11's example). observed_at: monthlyDemand as the store's price reads it. negative: a festival month adds its Food on top | C13 | engine test |
+| T-AC-20 (B-AC-10, 11) | RULE-10's examples, every row of CONSUMPTION summed exactly in quarters (ε), a lone green belt; HC-10's config guard passes | C10, C11 | engine unit |
+| T-AC-21 (B-AC-10) | HC-11: no `crewPerFood`, `crewPerWater`, `UPKEEP.crew` or `energyUse` outside config history; value.ts asks needsWith | C12 | source scan, like engine-imports.test.ts |
+| T-AC-22 (B-AC-11) | the factory run draws energyUseOf × cold: an Alloy works with 3 Energy in stock and use 3 runs; with 2 it is turned off (AM-17) | C11 | engine unit |
+| T-AC-23 (B-AC-12) | `pnpm sim -- --games 10 --seed 1`, politics off and on: Water demand's 12-month mean rises from about 13 to about 16-17; hungry seat-months do not rise by more than 3% | C10-C13 | sim, against trunk at run time |
 
 ## §8 · Amendments
 
