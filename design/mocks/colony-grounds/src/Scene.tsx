@@ -1,8 +1,8 @@
 import { PRESTIGE, type PrestigeId } from '@mule/engine';
 import { cx } from '@mule/ui';
-import type { KeyboardEvent, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { NAME, type GroundsObject } from './fixture';
-import { CELLS, MASSING, RING, type Richness } from './layout';
+import { edgeDecoration, extentOf, MASSING, PLACES, type Richness } from './layout';
 
 /**
  * The colony grounds as an isometric 2.5D scene (SVG). Everything is placed from layout.ts in grid units and projected
@@ -79,8 +79,8 @@ function Lamp({ c, r, on }: { c: number; r: number; on: boolean }) {
 /** The town hall, in the middle: always there, a little grander as the colony prospers (its flag goes up at mood ≥ 50). */
 function Hall({ look, rich }: { look: Look; rich: Richness }) {
   const m = MASSING.hall;
-  const c = 1.5;
-  const r = 1.5;
+  const c = 0;
+  const r = 0;
   const body = look === 'holo' ? 'var(--color-raised)' : 'var(--color-t-store)';
   const edge = look === 'holo' ? 'var(--color-holo)' : undefined;
   const [tx, ty] = iso(c, r, m.height);
@@ -237,26 +237,14 @@ function Smoke({ c, r, id }: { c: number; r: number; id: PrestigeId }) {
   );
 }
 
-/** A free slot: a paving outline and its number; while placing, a lit pad that takes a tap. */
-function FreeSlot({ slot, c, r, placing, onPlace }: { slot: number; c: number; r: number; placing: string | null; onPlace?: ((slot: number) => void) | undefined }) {
+/** Where the next building will go: a faint dashed outline on the paving, so the order of growth is legible. */
+function NextPlace({ c, r }: { c: number; r: number }) {
   const [x, y] = iso(c, r);
-  const pts = poly(square(c, r, 0.4));
-  if (placing && onPlace) {
-    const act = () => onPlace(slot);
-    return (
-      <g role="button" tabIndex={0} aria-label={`Place the ${placing} on slot ${slot}`} onClick={act} onKeyDown={(e: KeyboardEvent) => (e.key === 'Enter' || e.key === ' ') && act()} className="cursor-pointer" data-testid={`place-${slot}`}>
-        <polygon points={pts} fill="var(--color-holo-soft)" stroke="var(--color-holo)" strokeWidth={2} strokeDasharray="6 4" />
-        <text x={x} y={y + 9} textAnchor="middle" className="fill-holo font-display text-[28px] font-bold">
-          +
-        </text>
-      </g>
-    );
-  }
   return (
-    <g data-testid={`free-${slot}`} aria-label={`Slot ${slot}, free`}>
-      <polygon points={pts} fill="none" stroke="var(--color-holo-line)" strokeWidth={1.2} strokeDasharray="5 5" />
-      <text x={x} y={y + 5} textAnchor="middle" className="fill-ink-3 font-mono text-[13px]">
-        {slot}
+    <g data-testid="next-place" aria-label="The next building goes here" pointerEvents="none">
+      <polygon points={poly(square(c, r, 0.4))} fill="none" stroke="var(--color-holo-line)" strokeWidth={1.2} strokeDasharray="5 5" />
+      <text x={x} y={y + 5} textAnchor="middle" className="fill-ink-3 font-mono text-[12px]">
+        next
       </text>
     </g>
   );
@@ -301,59 +289,64 @@ function Callout({ slot, o, c, r, words }: { slot: number; o: GroundsObject; c: 
 }
 
 /**
- * The scene. Back to front (painter's order): ground, ring decoration, then the cells by row+col so nearer buildings
- * cover farther ones, then callouts on top.
+ * The scene. Back to front (painter's order): the land and the plaza sized to the buildings, the far edge's trees, then
+ * the places by row+col so nearer buildings cover farther ones, the near edge, then the labels on top.
  */
 export function Scene({
   objects,
   rich,
   look,
   words,
-  placing = null,
-  onPlace,
   fresh = null,
   className,
 }: {
   objects: GroundsObject[];
   rich: Richness;
   look: Look;
-  /** Over each building its slot number and stage chip (names and words are in the legend beside); true sizes them for the TV. */
+  /** Over each building its number and stage chip (names and words are in the legend beside); true sizes them for the TV. */
   words: boolean;
-  placing?: string | null;
-  onPlace?: (slot: number) => void;
+  /** A building that changed this month (its place index), ringed. */
   fresh?: number | null;
   className?: string;
 }) {
-  const bySlot = new Map(objects.map((o) => [o.slot, o]));
+  const at = new Map(objects.map((o) => [o.slot, o]));
+  const R = extentOf(objects.length);
+  const places = PLACES.filter((p) => Math.max(Math.abs(p.col), Math.abs(p.row)) <= R);
+  const next = objects.length < PLACES.length ? PLACES[objects.length] : undefined;
+  const cells = [{ index: -1, col: 0, row: 0 }, ...places].sort((a, b) => a.row + a.col - (b.row + b.col));
   const paved = Math.min(1, rich.standing / 3);
-  const walkers = Math.round((rich.mood / 100) * Math.min(10, 2 + rich.standing * 2));
-  const order = [...CELLS].sort((a, b) => a.row + a.col - (b.row + b.col));
-  const ground = square(1.5, 1.5, 2.1);
-  const plaza = square(1.5, 1.5, 1.55);
-  // Tight round the ground (x ±2.1 slots, y from the tallest roof's callout to the ground's near corner).
-  const vb = { x: -2.2 * W, y: -1.4 * W, w: 4.4 * W, h: 3.3 * W };
+  const walkers = Math.round((rich.mood / 100) * Math.min(14, 2 + rich.standing * 2));
+  const land = R + 1.1;
+  const ground = square(0, 0, land);
+  const plaza = square(0, 0, R + 0.55);
+  // Bare until something stands: each building standing plants three more along the edge.
+  const edge = edgeDecoration(R + 0.85).slice(0, Math.min(4 * (2 * R + 2), rich.standing * 3));
+  const tree = (d: { col: number; row: number; kind: 'tree' | 'lamp' }, k: string) =>
+    d.kind === 'tree' ? <Tree key={k} c={d.col} r={d.row} look={look} /> : <Lamp key={k} c={d.col} r={d.row} on={rich.mood >= 50} />;
+  // Only as big as the buildings need: a lone hall is drawn close, two rings sprawl.
+  const vb = { x: -(land + 0.1) * W, y: -(land * W) / 2 - 1.15 * W, w: 2 * (land + 0.1) * W, h: land * W + 1.3 * W };
   return (
-    <svg viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`} className={cx('block w-full', className)} role="img" aria-label={`The colony grounds: the town hall and ${objects.length} buildings`} data-testid={`scene-${look}`} data-standing={rich.standing}>
-      {/* The land round the plaza: bare earth in month 1, green as the colony grows. */}
+    <svg viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`} className={cx('block w-full', className)} role="img" aria-label={`The colony grounds: the town hall and ${objects.length} buildings`} data-testid={`scene-${look}`} data-standing={rich.standing} data-extent={R}>
       <polygon points={poly(ground)} fill="var(--color-map-base)" stroke="var(--color-holo-line)" />
       <polygon points={poly(ground)} fill="var(--color-t-desert)" />
       <polygon points={poly(ground)} fill="var(--color-t-plains)" opacity={0.3 + paved * 0.7} />
-      {/* The plaza: a dirt square at first, paved as buildings stand. */}
       <polygon points={poly(plaza)} fill={look === 'holo' ? 'var(--color-raised)' : 'var(--color-t-desert)'} stroke="var(--color-holo-line)" strokeWidth={1.2} />
       <polygon points={poly(plaza)} fill="var(--color-t-store)" opacity={paved} data-testid="paving" />
-      {paved > 0 && [1, 2].map((k) => <polyline key={`gc${k}`} points={poly([iso(k, -0.05), iso(k, 3.05)])} stroke="var(--color-holo-line)" strokeWidth={1} opacity={paved} />)}
-      {paved > 0 && [1, 2].map((k) => <polyline key={`gr${k}`} points={poly([iso(-0.05, k), iso(3.05, k)])} stroke="var(--color-holo-line)" strokeWidth={1} opacity={paved} />)}
-      {RING.filter((d) => d.row + d.col < 2 && rich.standing >= d.from).map((d, i) => (d.kind === 'tree' ? <Tree key={`b${i}`} c={d.col + 0.5} r={d.row + 0.5} look={look} /> : <Lamp key={`b${i}`} c={d.col + 0.5} r={d.row + 0.5} on={rich.mood >= 50} />))}
-      {order.map(({ slot, col, row }) => {
-        const c = col + 0.5;
-        const r = row + 0.5;
-        if (slot === 0) return <Hall key="hall" look={look} rich={rich} />;
-        const o = bySlot.get(slot);
-        if (!o) return <FreeSlot key={slot} slot={slot} c={c} r={r} placing={placing} onPlace={onPlace} />;
+      {paved > 0 &&
+        Array.from({ length: 2 * R }, (_, k) => k - R + 0.5).flatMap((k) => [
+          <polyline key={`gc${k}`} points={poly([iso(k, -R - 0.55), iso(k, R + 0.55)])} stroke="var(--color-holo-line)" strokeWidth={1} opacity={paved} />,
+          <polyline key={`gr${k}`} points={poly([iso(-R - 0.55, k), iso(R + 0.55, k)])} stroke="var(--color-holo-line)" strokeWidth={1} opacity={paved} />,
+        ])}
+      {edge.filter((d) => d.col + d.row < 0).map((d, i) => tree(d, `b${i}`))}
+      {next && Math.max(Math.abs(next.col), Math.abs(next.row)) <= Math.max(R, 1) && R > 0 && <NextPlace c={next.col} r={next.row} />}
+      {cells.map(({ index, col: c, row: r }) => {
+        if (index === -1) return <Hall key="hall" look={look} rich={rich} />;
+        const o = at.get(index);
+        if (!o) return null;
         const months = PRESTIGE[o.id].buildMonths;
         return (
-          <g key={slot} data-testid={`scene-slot-${slot}`} data-stage={o.stage}>
-            {fresh === slot && <polygon points={poly(square(c, r, 0.5))} fill="var(--color-holo-soft)" stroke="var(--color-holo)" strokeWidth={3} className="animate-pulse" />}
+          <g key={index} data-testid={`scene-place-${index + 1}`} data-stage={o.stage}>
+            {fresh === index && <polygon points={poly(square(c, r, 0.5))} fill="var(--color-holo-soft)" stroke="var(--color-holo)" strokeWidth={3} className="animate-pulse" />}
             {o.stage === 'commissioned' && (
               <>
                 <Site c={c} r={r} id={o.id} />
@@ -379,16 +372,15 @@ export function Scene({
         );
       })}
       {Array.from({ length: walkers }, (_, i) => {
-        const [x, y] = iso(0.3 + ((i * 0.37) % 2.4), 0.25 + ((i * 0.61) % 2.5));
+        const span = 2 * R + 0.8;
+        const [x, y] = iso(-R - 0.4 + ((i * 0.37 * span) % span), -R - 0.4 + ((i * 0.61 * span) % span));
         return <circle key={`w${i}`} cx={x} cy={y - 4} r={3} fill={['var(--color-p1)', 'var(--color-p2)', 'var(--color-p3)', 'var(--color-p4)'][i % 4]} pointerEvents="none" data-testid="colonist" />;
       })}
-      <g pointerEvents="none">
-      {RING.filter((d) => d.row + d.col >= 2 && rich.standing >= d.from).map((d, i) => (d.kind === 'tree' ? <Tree key={`f${i}`} c={d.col + 0.5} r={d.row + 0.5} look={look} /> : <Lamp key={`f${i}`} c={d.col + 0.5} r={d.row + 0.5} on={rich.mood >= 50} />))}
-      </g>
+      <g pointerEvents="none">{edge.filter((d) => d.col + d.row >= 0).map((d, i) => tree(d, `f${i}`))}</g>
       {rich.air > 0 && <polygon points={poly(ground)} fill="var(--color-ink-3)" opacity={Math.min(0.45, rich.air / 200)} pointerEvents="none" data-testid="haze" />}
-      {order.map(({ slot, col, row }) => {
-        const o = bySlot.get(slot);
-        return o ? <Callout key={`c${slot}`} slot={slot} o={o} c={col + 0.5} r={row + 0.5} words={words} /> : null;
+      {cells.map(({ index, col, row }) => {
+        const o = index >= 0 ? at.get(index) : undefined;
+        return o ? <Callout key={`c${index}`} slot={index + 1} o={o} c={col} r={row} words={words} /> : null;
       })}
     </svg>
   );

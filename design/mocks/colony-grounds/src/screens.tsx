@@ -48,7 +48,7 @@ function ColonyLine({ n, objects, size }: { n: ColonyNumbers; objects: GroundsOb
         mood <strong className={n.mood >= 50 ? 'text-ok' : 'text-warn'}>{n.mood}</strong>
       </span>
       <span>
-        standing <strong className="text-ink">{standing}</strong> · {SLOTS - objects.length} slots free
+        standing <strong className="text-ink">{standing}</strong> · {objects.length} built or building · room for {SLOTS}
       </span>
     </p>
   );
@@ -86,7 +86,7 @@ function TvLegend({ objects }: { objects: GroundsObject[] }) {
           const w = slotWords(o);
           return (
             <li key={o.id} className="flex min-w-0 items-baseline gap-2" data-testid={`legend-${o.id}`}>
-              <span data-num className="font-mono text-ink-3">{o.slot}</span>
+              <span data-num className="font-mono text-ink-3">{o.slot + 1}</span>
               <span className="whitespace-nowrap font-semibold">{NAME[o.id]}</span>
               <span className={cx('min-w-0 truncate', w.tone)}>{w.line}</span>
             </li>
@@ -136,22 +136,20 @@ export function TvMonthEnd({ month, objects, n, look, fresh }: { month: Month; o
 }
 
 /**
- * Phone (667×375, sideways): the Colony desk. The stage switches Planet · Colony grounds; the rail lists each slot's
- * words (the scene is too small for them) and, for the Governor, Commission → tap a free slot.
+ * Phone (667×375, sideways): the Colony desk. The stage switches Planet · Colony grounds; the rail lists each
+ * building's words (the scene is too small for them). The Governor commissions; the building goes up at the next place.
  */
 export function PhoneColony({ month, initial, n, look, governor }: { month: Month; initial: GroundsObject[]; n: ColonyNumbers; look: Look; governor: boolean }) {
   const [objects, setObjects] = useState(initial);
   const [view, setView] = useState<'planet' | 'grounds'>('grounds');
-  const [placing, setPlacing] = useState<PrestigeId | null>(null);
   const [placed, setPlaced] = useState<GroundsObject | null>(null);
   const map = useMemo(() => tiles(month), [month]);
   const catalogue = (Object.keys(PRESTIGE) as PrestigeId[]).filter((id) => !objects.some((o) => o.id === id));
-  const place = (slot: number) => {
-    if (!placing) return;
-    const o: GroundsObject = { id: placing, stage: 'commissioned', slot, funded: { credits: 0, goods: {} } };
+  const commission = (id: PrestigeId) => {
+    const o: GroundsObject = { id, stage: 'commissioned', slot: objects.length, funded: { credits: 0, goods: {} } };
     setObjects([...objects, o]);
     setPlaced(o);
-    setPlacing(null);
+    setView('grounds');
   };
   return (
     <section className="flex h-[375px] w-[667px] overflow-hidden rounded-panel border border-holo-line bg-void" data-testid="phone-colony">
@@ -169,31 +167,21 @@ export function PhoneColony({ month, initial, n, look, governor }: { month: Mont
           </div>
         ) : (
           <>
-            <Scene objects={objects} rich={richness(objects, n)} look={look} words={false} placing={placing ? NAME[placing] : null} onPlace={place} className="min-h-0 flex-1" />
+            <Scene objects={objects} rich={richness(objects, n)} look={look} words={false} fresh={placed?.slot ?? null} className="min-h-0 flex-1" />
             <ColonyLine n={n} objects={objects} size="phone" />
           </>
         )}
       </div>
       <aside className="flex w-[250px] shrink-0 flex-col gap-2 overflow-y-auto border-l border-holo-line bg-panel p-2" data-testid="colony-desk">
         <span className="label-caps text-[10px]!">Colony desk</span>
-        {placing ? (
-          <div className="flex flex-col gap-1.5 rounded-panel border-2 border-holo bg-holo-soft p-2" data-testid="placing">
-            <span className="font-display text-sm font-semibold">Pick a slot for the {NAME[placing]}</span>
-            <span className="text-xs leading-snug text-ink-2">Tap a free slot on the grounds. Where it stands changes nothing yet.</span>
-            <Button variant="ghost" size="md" onClick={() => setPlacing(null)} data-testid="cancel-placing">
-              Cancel
-            </Button>
-          </div>
-        ) : (
-          placed && (
-            <p className="rounded-panel border border-holo bg-holo-soft p-2 text-xs leading-snug" data-testid="placed">
-              <strong className="font-semibold">{NAME[placed.id]}</strong> commissioned on slot {placed.slot}. It starts building once the fund and the players' gifts pay for it.
-            </p>
-          )
+        {placed && (
+          <p className="rounded-panel border border-holo bg-holo-soft p-2 text-xs leading-snug" data-testid="placed">
+            <strong className="font-semibold">{NAME[placed.id]}</strong> commissioned: its site is marked at the next place on the grounds ({placed.slot + 1}). It starts building once the fund and the players' gifts pay for it.
+          </p>
         )}
         <GroundsList objects={objects} />
         {governor ? (
-          !placing && (
+          (
             <div className="flex flex-col gap-1" data-testid="catalogue">
               <span className="label-caps text-[10px]!">Commission · you are Governor</span>
               {catalogue.length === 0 && <span className="text-xs leading-snug text-ink-2" data-testid="all-commissioned">All five are commissioned.</span>}
@@ -206,11 +194,7 @@ export function PhoneColony({ month, initial, n, look, governor }: { month: Mont
                     variant="outline"
                     size="md"
                     className="h-8! px-2! text-xs!"
-                    onClick={() => {
-                      setPlacing(id);
-                      setPlaced(null);
-                      setView('grounds');
-                    }}
+                    onClick={() => commission(id)}
                     disabled={objects.length >= SLOTS}
                     data-testid={`commission-${id}`}
                   >
@@ -222,7 +206,7 @@ export function PhoneColony({ month, initial, n, look, governor }: { month: Mont
           )
         ) : (
           <p className="text-xs leading-snug text-ink-2" data-testid="not-governor">
-            Kai, the Governor, commissions the colony's buildings and picks each one's slot. You can give credits and goods to any that is waiting.
+            Kai, the Governor, commissions the colony's buildings; each goes up at the next place. You can give credits and goods to any that is waiting.
           </p>
         )}
       </aside>

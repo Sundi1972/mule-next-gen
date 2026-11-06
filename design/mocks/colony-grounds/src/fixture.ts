@@ -2,16 +2,16 @@ import { createGame, PRESTIGE, type Good, type PrestigeId } from '@mule/engine';
 import type { MapObject, MapTile, Slot } from '@mule/ui';
 
 /**
- * The colony grounds (WS7's AM-16 option A, working rules relayed by the PM, 6 Nov): a 3×3 square, the town hall in the
- * middle and 8 slots round it. The Governor picks a slot when commissioning; the AI Governor takes the first free one.
- * In G-5 a slot's place reads nothing (adjacency is a later option), so the slots are numbered, not named.
+ * The colony grounds (AM-16 option A; PM ruling 6 Nov after Heiko's read): buildings take the next place in one growth
+ * order round the town hall, up to 24 (5×5). Nobody picks a place; a building's `slot` is its place in that order.
  */
-export const SLOTS = 8;
+export const SLOTS = 24;
 
 /** A slot's object, as ColonyProjectView carries it plus the slot it was given (the new field option A adds). */
 export interface GroundsObject {
   id: PrestigeId;
   stage: MapObject['stage'];
+  /** Its place in the growth order, 0-based (ColonyView's slot); shown +1. */
   slot: number;
   /** Building: months built so far. */
   built?: number;
@@ -27,11 +27,11 @@ export function mapObject(o: GroundsObject): MapObject {
 
 /** Month 12 of a busy game: one object at every stage, three slots still free. Month 1: nothing yet. */
 export const MONTH_12: GroundsObject[] = [
-  { id: 'park', stage: 'standing', slot: 1 },
-  { id: 'hospital', stage: 'closed', slot: 2 },
-  { id: 'observatory', stage: 'damaged', slot: 4 },
-  { id: 'stadium', stage: 'building', slot: 5, built: 2 },
-  { id: 'spaceport', stage: 'commissioned', slot: 7, funded: { credits: 900, goods: { alloy: 1 } } },
+  { id: 'park', stage: 'standing', slot: 0 },
+  { id: 'hospital', stage: 'closed', slot: 1 },
+  { id: 'observatory', stage: 'damaged', slot: 2 },
+  { id: 'stadium', stage: 'building', slot: 3, built: 2 },
+  { id: 'spaceport', stage: 'commissioned', slot: 4, funded: { credits: 900, goods: { alloy: 1 } } },
 ];
 
 export const FUND = { 1: 0, 12: 640 } as const;
