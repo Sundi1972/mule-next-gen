@@ -6,6 +6,7 @@ import {
   FACTORY,
   GOOD_CONFIG,
   GROWN_BASE,
+  monthNeeds,
   needsOf,
   observe,
   PRICE,
@@ -312,6 +313,19 @@ describe('RULE-5: the cash plan fills in rank order', () => {
     expect(plan.left).toBe(311 - 58);
     expect(plan.left, 'money never goes negative').toBeGreaterThanOrEqual(0);
   });
+
+  it('T-AC-2: with a needed unit left unfunded, λ is what the last funded unit gains per credit', () => {
+    // 50 cr: the first Water unit (188 at 29) fits, the second doesn't, nor the Medicine (5,000 at 400).
+    const state = table({ plots: [] });
+    state.players.find((p) => p.id === 'ai0')!.money = 50;
+    const values = (good: Good, worth: number, units: number): UnitValues => ({ good, keep: Array(units).fill(worth), buy: Array(units).fill(worth), block: units, need: units, floorUnits: 0 });
+    const valuesOf = (good: Good) => (good === 'water' ? values('water', 188, 2) : values('medicine', 5000, 1));
+
+    const plan = cashPlan(observe(state, 'ai0'), mindOf(), ['water', 'medicine'], valuesOf, (good) => (good === 'water' ? 29 : 400));
+
+    expect(plan.funded).toEqual({ water: 1 });
+    expect(plan.lambda).toBeCloseTo(188 / 29 - 1, 9);
+  });
 });
 
 describe('RULE-5: a unit past the target buys only above the shadow price', () => {
@@ -342,16 +356,17 @@ describe('RULE-5: a unit past the target buys only above the shadow price', () =
 describe("C8: a new plot's own-use units are worth what going short costs", () => {
   /** An idle plot at x 6 rated for Energy (a plant makes 4, uses 1) and Water; Energy and Water posted at 20. */
   const IDLE: Plot = { outfit: null as unknown as Outfit, x: 6, ground: { energy: 2, water: 2 } };
-  const netOf = (plots: Plot[], outfit: Outfit, store: Partial<Record<Good, number>> = {}) => {
-    const state = table({ plots: [...plots, IDLE], posted: { smithore: 100, energy: 20, water: 20 } });
+  const seatOf = (plots: Plot[], store: Partial<Record<Good, number>> = {}) => {
+    const state = table({ plots: [...plots, IDLE], posted: { smithore: 100, energy: 20, water: 20, food: 40 } });
     Object.assign(state.store.stock, store);
-    const { obs, o } = view(state);
-    const mind = mindOf();
-    const tile = obs.tiles[6]!;
-    return monthlyNet(obs, o, yieldOf(obs, tile, outfit, 'ai0'), outfit, mind);
+    return { ...view(state), mind: mindOf() };
+  };
+  const netOf = (plots: Plot[], outfit: Outfit, store: Partial<Record<Good, number>> = {}) => {
+    const { obs, o, mind } = seatOf(plots, store);
+    return monthlyNet(obs, o, yieldOf(obs, obs.tiles[6]!, outfit, 'ai0'), outfit, mind);
   };
 
-  it('B-AC-5: a plant beside plots short of Energy earns, over its sale, S − price for each unit they would go without', () => {
+  it('T-AC-12 (C8): a plant beside plots short of Energy earns, over its sale, S − price for each unit they would go without', () => {
     const rich = [0, 2, 4].map((x): Plot => ({ outfit: 'smithore', x, ground: { smithore: 6 } }));
     // The mines use 6; the plant nets 3, each keeping a mine's unit on: 0.8 × 6 × 100 ÷ 2 = 240, sold at 20.
     const gain = netOf(rich, 'energy') - netOf([], 'energy');
@@ -359,7 +374,26 @@ describe("C8: a new plot's own-use units are worth what going short costs", () =
     expect(gain).toBeCloseTo(3 * (lost(6, 100, 2) - 20), 6);
   });
 
-  it("B-AC-5 negative: a seat with no farm gains nothing from a well's drink units, whether the store sells Water or not", () => {
+  it("T-AC-12 (C8) negative: a seat with no farm gains nothing from a well's drink units, whether the store sells Water or not", () => {
     expect(netOf([], 'water', { water: 200 })).toBeCloseTo(netOf([], 'water', { water: 0 }), 6);
+  });
+
+  it("T-AC-12 (C8): a seat with a farm counts a well's own-use units up to its Water target, spoilage cover included, not the screen need", () => {
+    // A farm makes the seat drink 2 a month; holding 5 keeps it whole after spoilage. The well makes 4: all four are
+    // its own use, each at S − price.
+    const farm: Plot = { outfit: 'food', x: 0, ground: { food: 1 } };
+    const { obs, o, mind } = seatOf([farm]);
+    const target = unitNeed(obs, mind, 'water').target;
+    const made = yieldOf(obs, obs.tiles[6]!, 'water', 'ai0').made;
+    expect(target, 'the premise: the target covers spoilage over the screen need').toBeGreaterThan(monthNeeds(obs, 'ai0').water);
+    expect(made, 'the premise: the well makes more than the screen need').toBeGreaterThan(monthNeeds(obs, 'ai0').water);
+    const [S = 0] = shortCosts(obs, o, 'water', mind, 1);
+    const own = Math.min(made, target);
+
+    const gain = netOf([farm], 'water') - netOf([farm], 'water', { water: 0 });
+    // With the store selling none, S has no floor; the damage alone is what its farm loses.
+    const [bare = 0] = shortCosts(seatOf([farm], { water: 0 }).obs, seatOf([farm], { water: 0 }).o, 'water', mind, 1);
+
+    expect(gain).toBeCloseTo(own * (Math.max(0, S - 20) - Math.max(0, bare - 20)), 6);
   });
 });
