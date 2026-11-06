@@ -88,10 +88,6 @@ export function heldSeller(w: Pick<WalkerView, 'side' | 'held'> | undefined): bo
 }
 
 /**
- * The held seller's rail (WS6's mock PhoneSale, variant A, at cde3ff61): she stopped at what she must hold, and
- * how to sell on.
- */
-/**
  * Why the auction asks you to hold more of `good`, true for that good (auctionNeed): upkeep eats Food and Water, the
  * month end spoils what has spoilage in config, and what neither touches is held for next month's use alone.
  */
@@ -100,6 +96,10 @@ export function holdReason(good: Good): string {
   return GOOD_CONFIG[good].spoilage > 0 ? 'next month uses it, and some spoils first' : 'next month uses it';
 }
 
+/**
+ * The held seller's rail (WS6's mock PhoneSale, variant A, at cde3ff61): she stopped at what she must hold, and
+ * how to sell on.
+ */
 export function heldWords(good: Good, need: number): { line: string; how: string } {
   return { line: `Stopped at ${need} ${GOOD_NAME[good]}: what you must hold.`, how: 'To sell more, hold ▼: you’d be short next month.' };
 }
