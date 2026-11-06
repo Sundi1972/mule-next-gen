@@ -57,7 +57,7 @@ describe('a GRAB pressed is a GRAB taken (FM-glint-fade, for FM-hurry-margin)', 
   type Rival = { gap: number; presses: boolean; walks?: boolean; behind?: boolean; held?: 'stunnedUntilTick' | 'assayUntilTick' };
 
   /** What the tick came to: who holds the glint, whether ai0 analysed the land underfoot or started an assay, and how far it then stands from the glint. */
-  type GlintTick = { holder: string | null; analysedUnderfoot: boolean; assaying: boolean; belowGrab: boolean; rivalInReach: boolean; rivalFirst: boolean; gapBefore: number; gapAfter: number };
+  type GlintTick = { holder: string | null; analysedUnderfoot: boolean; assaying: boolean; belowGrab: boolean; rivalInReach: boolean; rivalFirst: boolean; gapBefore: number; gapAfter: number; racing: boolean };
 
   /**
    * One tick of ai0 standing on open land a tile from a glint that fades `fadesIn` ticks on, refereed as the sim's
@@ -66,7 +66,7 @@ describe('a GRAB pressed is a GRAB taken (FM-glint-fade, for FM-hurry-margin)', 
    * by the glint; with `analysed`, ai0 has analysed the land underfoot already, so no row below GRAB is on offer to it.
    * With `racing`, ai0 races every glint, and with `stepsOff` it stands that many of its steps short of the glint tile's
    * near edge instead of a tile from it. `belowGrab`: whether a row below GRAB was on offer to ai0 as it chose (what its press
-   * becomes with the glint gone).
+   * becomes with the glint gone). `racing`: whether ai0 still races the glint once it has chosen the tick's input.
    */
   function glintTick(fadesIn: number, { rival, analysed = false, racing = false, stepsOff }: { rival?: Rival; analysed?: boolean; racing?: boolean; stepsOff?: number } = {}): GlintTick {
     const state = createGame({ seed: 4, players: [0, 1].map((i) => ({ id: `ai${i}`, name: `AI ${i + 1}`, isAi: true })) });
@@ -113,6 +113,7 @@ describe('a GRAB pressed is a GRAB taken (FM-glint-fade, for FM-hurry-margin)', 
     const belowGrab = reachOf({ ...floor, moments: { ...floor.moments, glint: null } }, state, ME, cfg, { secondsLeft: left }).enabled;
     const gapBefore = gapOf(floor, ME);
     const inputs: Record<string, FloorInput> = { [ME]: seat.developSteer(state, floor, left, cfg) };
+    const racingNow = seat.developRacing() !== null;
     if (rival) {
       const toward = { x: (mid.x - spot!.x) / rival.gap, y: (mid.y - spot!.y) / rival.gap };
       inputs[RIVAL] = { ...(rival.walks ? toward : { x: 0, y: 0 }), act: rival.presses };
@@ -129,7 +130,7 @@ describe('a GRAB pressed is a GRAB taken (FM-glint-fade, for FM-hurry-margin)', 
     const me = floor.colonists.find((c) => c.id === ME)!;
     // Analysed this tick: the land underfoot, if it was not before.
     const analysedUnderfoot = !analysed && player(state, ME).analysed.includes(tileIndex(state.width, under.x, under.y));
-    return { holder, analysedUnderfoot, assaying: me.assayUntilTick !== null, belowGrab, rivalInReach, rivalFirst, gapBefore, gapAfter: gapOf(floor, ME) };
+    return { holder, analysedUnderfoot, assaying: me.assayUntilTick !== null, belowGrab, rivalInReach, rivalFirst, gapBefore, gapAfter: gapOf(floor, ME), racing: racingNow };
   }
 
   /** ai0 alone by the glint: the tick as FM-glint-fade's rows read it. */
@@ -148,6 +149,11 @@ describe('a GRAB pressed is a GRAB taken (FM-glint-fade, for FM-hurry-margin)', 
     // before it fades it, so walking on still wins the race.
     const walkOn = glintTick(1, { racing: true, stepsOff: 0.5 }); // literal-ok: half a step short
     expect({ holder: walkOn.holder, analysedUnderfoot: walkOn.analysedUnderfoot, assaying: walkOn.assaying }, 'racing, fading this step, half a step off its tile: won by walking on').toEqual({ holder: ME, analysedUnderfoot: false, assaying: false });
+    // Fading this step, and more than a step short of its tile: no step reaches it before it fades, so the seat gives the
+    // race up and keeps to its errand instead of walking a tick towards a glint about to vanish.
+    const tooFar = glintTick(1, { racing: true, stepsOff: 3 }); // literal-ok: three steps short
+    expect({ holder: tooFar.holder, racing: tooFar.racing, assaying: tooFar.assaying }, 'racing, fading this step, three steps off its tile: race given up').toEqual({ holder: null, racing: false, assaying: false });
+    expect(walkOn.racing, 'the control: half a step off, it races on').toBe(true);
 
     // Seed 1 of T-AC-5's sim sample, month 11, ai0 (c20e1360): leading its MULE out to its plot, it pressed GRAB on a glint
     // lit beside it, and ai3, ahead of it in the tick's press order, grabbed it first. Its press fell to ANALYSE of the
