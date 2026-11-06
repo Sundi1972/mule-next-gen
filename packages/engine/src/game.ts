@@ -28,7 +28,7 @@ export { RuleError };
  * same n species as ever, its chairs never share one, and across seeds every chair plays each of them, so a per-chair
  * result is not a species result (FM-species-by-chair). `seats` is at most GAME.maxPlayers, the list's length.
  */
-function defaultSpecies(seat: number, seats: number, seed: number): Species {
+export function defaultSpecies(seat: number, seats: number, seed: number): Species {
   // The seed read as the rng reads it (createRng), so a negative or fractional seed still lands on the list.
   return DEFAULT_SPECIES[(seat + (seed >>> 0)) % seats]!;
 }

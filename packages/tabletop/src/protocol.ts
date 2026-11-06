@@ -62,6 +62,8 @@ export interface SeatView {
   color: number;
   /** The seat's choice from the game's list; absent until it has chosen. */
   pick?: string;
+  /** In the lobby, what the seat plays as if it never picks, at the table's current seat count; absent once started, or when the game has no defaults. */
+  defaultPick?: string;
 }
 
 export interface TableView<GameView> {
