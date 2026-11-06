@@ -133,9 +133,9 @@ Legal when: the game plays with the colony's council (else: "This game plays wit
 Cost: free.
 
 ### donate
-In: planning. Args: id (park | hospital | observatory | stadium | spaceport), credits (number).
-Does: Gives credits from your money toward the colony's commissioned prestige object; its plaque names you with the sum, and the gift counts toward your vote weight. It leaves your Worth as it was: what you give counts as donated.
-Legal when: the game plays with the colony's council (else: "This game plays without the colony's council"); it is planning (else: "Donate in planning"); the object is commissioned and still being funded (else: "Nothing is being funded"); it is a whole number of credits, at least 1 (else: "Give at least 1 cr or 1 unit"); you have the credits (else: "You have <money> cr"); the object still needs that many credits (else: "The <name> needs only <credits> cr more").
+In: planning. Args: id (park | hospital | observatory | stadium | spaceport), credits (number), goods (good).
+Does: Gives credits from your money, and units of goods the object still needs from your stock, toward the colony's commissioned prestige object; its plaque names you with the credits plus each good at the store's price that day, and the gift counts toward your vote weight. It leaves your Worth as it was: what you give counts as donated.
+Legal when: the game plays with the colony's council (else: "This game plays without the colony's council"); it is planning (else: "Donate in planning"); the object is commissioned and still being funded (else: "Nothing is being funded"); credits and units are whole numbers, at least 1 cr or 1 unit in all (else: "Give at least 1 cr or 1 unit"); you have the credits (else: "You have <money> cr"); the object still needs that many credits (else: "The <name> needs only <credits> cr more"); the object needs each good you give (else: "The <name> needs no <good>"); the object still needs that many units of it (else: "The <name> still needs <units> <good>"); you have the units (else: "You have <units> <good>").
 Cost: yes, as it says under Does.
 
 ### payStrike
