@@ -145,21 +145,6 @@ export function cover(state: GameState, good: Good, demand = monthlyDemand(state
   return supply / need;
 }
 
-/** How far scarcity pushes the target above or below the reference: (T / max(C, minCover))^k. */
-export function scarcity(state: GameState, good: Good, demand = monthlyDemand(state)): number {
-  const c = cover(state, good, demand);
-  if (c === Infinity) return 1;
-  return Math.pow(PRICE.targetCover / Math.max(c, PRICE.minCover), GOOD_CONFIG[good].sensitivity);
-}
-
-/**
- * Where supply and demand would put the price: P = Pref * (T / max(C, 0.25))^k. The game opens at it; after that the
- * store posts by band (nextPostedPrice).
- */
-export function targetPrice(state: GameState, good: Good, demand = monthlyDemand(state)): number {
-  return Math.max(1, state.store.refPrice[good] * scarcity(state, good, demand));
-}
-
 /** What every worked plot of a good is set to make this month, before Energy shortfalls and events. */
 export function expectedOutput(state: GameState, good: Good): number {
   let made = 0;
@@ -192,11 +177,14 @@ export function priceBand(
   return 'severe';
 }
 
+/** How many times the normal price N a band's target is; 1 for normal and off-world. */
+function bandMultiple(band: PriceBand): number {
+  return band === 'normal' || band === 'offWorld' ? 1 : PRICE.band[band];
+}
+
 /** The mid a band aims at: the off-world price, or the normal price N times the band's multiple. */
 function bandTarget(state: GameState, good: Good, band: PriceBand): number {
-  if (band === 'offWorld') return state.store.offWorld[good];
-  const normal = state.store.refPrice[good];
-  return band === 'normal' ? normal : normal * PRICE.band[band];
+  return band === 'offWorld' ? state.store.offWorld[good] : state.store.refPrice[good] * bandMultiple(band);
 }
 
 /**
@@ -362,16 +350,14 @@ export function shipPrice(state: GameState, good: Good): number | null {
 }
 
 /**
- * Learns from what players actually paid each other. The reference is the
- * price at normal supply, so a trade at a shortage price only raises it by as
- * much as players paid above what the shortage alone explains. It also drifts
- * a little toward the off-world price, because ships keep bringing that price
- * back into the colony. There is no bound in either direction.
+ * Learns from what players actually paid each other. The reference is the price at normal supply, so a trade counts
+ * divided by the multiple of the band the good was posted in this month: a trade at a shortage's price says nothing
+ * about the normal one. It also drifts a little toward the off-world price, because ships keep bringing that price
+ * back into the colony.
  */
 export function driftReference(state: GameState, good: Good, clearingPrice: number | null): void {
   const ref = state.store.refPrice[good];
-  const s = scarcity(state, good);
-  const implied = clearingPrice !== null && s > 0 ? clearingPrice / s : ref;
+  const implied = clearingPrice !== null ? clearingPrice / bandMultiple(state.store.band?.[good] ?? 'normal') : ref;
   const next = ref + (implied - ref) * PRICE.refDrift + (state.store.offWorld[good] - ref) * PRICE.worldPull;
   state.store.refPrice[good] = Math.max(1, Math.round(next));
 }

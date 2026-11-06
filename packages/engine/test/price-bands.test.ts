@@ -123,10 +123,10 @@ describe('price B-AC-7: the store posts the band of the colony’s months of cov
 });
 
 describe('price B-AC-7: a good only the export ship wants follows the off-world price, not the normal one', () => {
-  it('price B-AC-7: Crystite with the off-world price at 60, under its normal 100, falls a quarter a month to 60 and stays there', () => {
+  it('price B-AC-7: Crystite with the off-world price at 40, under its normal 100, falls a quarter a month to 40 and stays there', () => {
     const state = game();
     to(state, 'production');
-    state.store.offWorld.crystite = 60;
+    state.store.offWorld.crystite = 40;
     advancePhase(state);
     expect(state.store.band?.crystite, 'the premise: off-world').toBe('offWorld');
     const posted = [state.store.posted.crystite];
@@ -135,9 +135,9 @@ describe('price B-AC-7: a good only the export ship wants follows the off-world 
       advancePhase(state);
       posted.push(state.store.posted.crystite);
     }
-    expect(state.store.refPrice.crystite, 'the premise: N stays above 60').toBeGreaterThan(60);
-    // From month 1's opening 283: 212, 159, 119, 89, 67, then 60, the off-world price, never N.
-    expect(posted).toEqual([212, 159, 119, 89, 67, 60, 60]);
+    expect(state.store.refPrice.crystite, 'the premise: N stays above 40').toBeGreaterThan(40);
+    // From the opening 100: 75, 56, 42, then 40, the off-world price, never N.
+    expect(posted).toEqual([75, 56, 42, 40, 40, 40, 40]);
   });
 });
 

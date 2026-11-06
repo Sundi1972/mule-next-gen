@@ -12,7 +12,6 @@ import {
   createGame,
   shipPrice,
   startAuction,
-  targetPrice,
   installMule,
   isGameOver,
   monthlyDemand,
@@ -115,14 +114,6 @@ describe('createGame', () => {
 });
 
 describe('prices', () => {
-  it('target high when the shelf is empty and low in a glut', () => {
-    const state = newGame();
-    emptyColony(state, 'food');
-    expect(targetPrice(state, 'food')).toBeGreaterThan(state.store.refPrice.food * 10);
-    state.store.stock.food = 10_000;
-    expect(targetPrice(state, 'food')).toBeLessThan(state.store.refPrice.food / 10);
-  });
-
   it('let a good only off-world buyers want cost no more than they pay', () => {
     const state = newGame();
     emptyColony(state, 'crystite');
@@ -155,17 +146,6 @@ describe('prices', () => {
       return [posted, quote, state.auction!.good === 'smithore' ? state.auction!.storeSell : 'skipped'];
     });
     expect(seen).toEqual(rows.map(([posted, sells]) => [posted, sells, sells]));
-  });
-
-  it('react more strongly to a Food shortage than an Alloy shortage', () => {
-    const state = newGame();
-    // One month of cover each.
-    const demand = monthlyDemand(state);
-    emptyColony(state, 'food');
-    emptyColony(state, 'alloy');
-    state.store.stock.food = demand.food;
-    state.store.stock.alloy = demand.alloy;
-    expect(targetPrice(state, 'food') / 30).toBeGreaterThan(targetPrice(state, 'alloy') / 90);
   });
 
   it('make MULEs dearer when Alloy is scarce', () => {

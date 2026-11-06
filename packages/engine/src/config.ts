@@ -10,29 +10,25 @@ import type { Strategy } from './playbook.js';
 export interface GoodConfig {
   /** Credits a unit at normal supply when the game starts: the store's opening price and off-world price; it drifts after. */
   refPrice: number;
-  /** How strongly price reacts to low cover (k in the price formula). */
-  sensitivity: number;
   /** Share lost each month without suitable storage. */
   spoilage: number;
 }
 
 export const GOOD_CONFIG: Record<Good, GoodConfig> = {
-  food: { refPrice: 30, sensitivity: 1.5, spoilage: 0.5 },
-  water: { refPrice: 25, sensitivity: 1.5, spoilage: 0.05 },
-  energy: { refPrice: 25, sensitivity: 1.2, spoilage: 0.25 },
-  smithore: { refPrice: 50, sensitivity: 1.2, spoilage: 0 },
-  crystite: { refPrice: 100, sensitivity: 0.5, spoilage: 0 },
-  rareEarth: { refPrice: 60, sensitivity: 0.8, spoilage: 0 },
-  alloy: { refPrice: 90, sensitivity: 0.8, spoilage: 0 },
-  electronics: { refPrice: 220, sensitivity: 0.5, spoilage: 0 },
-  medicine: { refPrice: 120, sensitivity: 1.0, spoilage: 0.2 },
+  food: { refPrice: 30, spoilage: 0.5 },
+  water: { refPrice: 25, spoilage: 0.05 },
+  energy: { refPrice: 25, spoilage: 0.25 },
+  smithore: { refPrice: 50, spoilage: 0 },
+  crystite: { refPrice: 100, spoilage: 0 },
+  rareEarth: { refPrice: 60, spoilage: 0 },
+  alloy: { refPrice: 90, spoilage: 0 },
+  electronics: { refPrice: 220, spoilage: 0 },
+  medicine: { refPrice: 120, spoilage: 0.2 },
 };
 
 export const PRICE = {
   /** Months of demand the store aims to hold. */
   targetCover: 2,
-  /** Cover below this counts as this, so an empty shelf still gives a finite target. */
-  minCover: 0.25,
   /** Months of cover from which a good is posted at its normal price, whatever the colony makes. */
   normalCover: 2,
   /** Months of cover from which a good is only tight; under it, a shortage. */
