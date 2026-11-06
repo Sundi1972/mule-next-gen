@@ -349,8 +349,9 @@ function crewSection() {
 function ws7ChainParts() {
   if (!ws7Chain) return { body: '<p class="pending">The colonists’ part is on its way.</p>', decisions: [], findings: '' };
   const h3s = ws7Chain.split(/(?=<h3>)/);
-  const head = h3s[0].replace(/<!--[\s\S]*?-->/g, '').replace(/<h2>[\s\S]*?<\/h2>/, '');
-  const pick = (re) => h3s.filter((p) => re.test(p.slice(0, p.indexOf('</h3>'))));
+  const head = h3s[0].replace(/<!--[\s\S]*?-->/g, '').replace(/<h2[^>]*>[\s\S]*?<\/h2>/g, '').replace(/<\/?section[^>]*>/g, '');
+  // Only the chunks that open with a heading; the lead-in (comment, section, h2) has none and is `head`.
+  const pick = (re) => h3s.filter((p) => p.startsWith('<h3>') && re.test(p.slice(0, p.indexOf('</h3>'))));
   const body = head + [...pick(/happens today/i), ...pick(/Measured/i)].join('');
   const blocks = [...ws7Chain.matchAll(/<div class="decision">[\s\S]*?<\/div>/g)].map((m) => m[0]);
   const findings = pick(/findings/i).join('');
