@@ -24,11 +24,12 @@ const WALKOUT: ShowEventView = {
   hits: [{ x: 2, y: 3, order: 0, delta: -3 }],
   phase: 'production',
   weight: 'spotlight',
+  playMs: 3000,
 };
 
 describe('WALKOUT-SHARE: the walkout words its share from SOCIAL_EVENTS.player.walkout.output', () => {
   it('WALKOUT-SHARE-1: the struck player’s phone says what share their plots make', () => {
-    const seg = eventScript({ events: [WALKOUT], introMs: 0 }, 0, 'phone').segments[0]!;
+    const seg = eventScript({ events: [WALKOUT], introMs: 0 }, 0, 'solo').segments[0]!;
     const you = eventYouSummary(seg, 'brix', eventCast(tiles, players));
     expect(you?.detail).toBe('Your workers walked out: your plots of that good make 35% this month.');
   });

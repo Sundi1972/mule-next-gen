@@ -1,4 +1,4 @@
-import { COLONY } from '@mule/engine';
+import { COLONY, SOCIAL_EVENTS } from '@mule/engine';
 import { GOOD_NAME, type Good } from '../components/tokens';
 import { percent } from './catalogue';
 import { signLook, type ShowCast } from './frame';
@@ -187,7 +187,7 @@ const YOU: Partial<Record<ShowEventKey, (ev: ShowEventView) => string>> = {
   bumperHarvest: () => 'One plot of yours makes double this month.',
   cavernCollapse: () => 'Your crystal cavern caved in: it’s a plain plot now, with no cavern Crystite.',
   blamedForUnrest: () => 'The colony blames you for the unrest: fewer votes at the next election.',
-  walkout: () => 'Your workers walked out: your plots of that good make 20% this month.',
+  walkout: () => `Your workers walked out: your plots of that good make ${percent(SOCIAL_EVENTS.player.walkout.output)} this month.`,
   loyalCrew: () => 'Your crew stayed loyal: one plot makes 1 more this month.',
 };
 
