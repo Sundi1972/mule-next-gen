@@ -135,12 +135,13 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
           const faded = focusSlot !== undefined && t.owner !== null && t.owner !== focusSlot;
           // A faded plot fades its marks, never its selection.
           const fade = cx('transition-opacity', faded && 'opacity-45');
-          // The map clips at its edge, so an edge plot's selection is drawn inside it.
           const onEdge = t.x === 0 || t.y === 0 || t.x === width - 1 || t.y === height - 1;
           const ground = groundOf(t);
           const above = t.y > 0 ? cells[(t.y - 1) * width + t.x] : undefined;
           // Below on the top row, where the map clips above, and under a plot showing its dots, which the pin would cover.
           const pinBelow = t.y === 0 || (!!above && showsDots(above));
+          // Inside the plot on the map's edge, which clips, and under a plot showing its dots, which an outer ring would cover.
+          const ringInside = onEdge || pinBelow;
           // In the right column the special's badge sits inside the plot, over the chip's dots: the chip stands on the badge.
           const chipOnBadge = !!t.special && t.x === width - 1;
           const badgeTop = SPECIAL_BADGE[density].box + (t.y === height - 1 ? 2 : -SPECIAL_BADGE[density].box * SPECIAL_HANG);
@@ -269,14 +270,14 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
                   {/* The ring stays solid; only its glow breathes, so the selection never dims. */}
                   <span
                     aria-hidden
-                    className={cx('pointer-events-none absolute z-[5] motion-safe:animate-pulse', onEdge ? 'inset-0 rounded-[10%]' : '-inset-[8%] rounded-[16%]')}
-                    style={{ boxShadow: `${onEdge ? 'inset ' : ''}0 0 ${tv ? 26 : 12}px ${tv ? 8 : 4}px var(--color-holo)` }}
+                    className={cx('pointer-events-none absolute z-[5] motion-safe:animate-pulse', ringInside ? 'inset-0 rounded-[10%]' : '-inset-[8%] rounded-[16%]')}
+                    style={{ boxShadow: `${ringInside ? 'inset ' : ''}0 0 ${tv ? 26 : 12}px ${tv ? 8 : 4}px var(--color-holo)` }}
                   />
                   <span
                     aria-hidden
-                    className={cx('pointer-events-none absolute z-[5]', onEdge ? 'inset-0 rounded-[10%]' : '-inset-[6%] rounded-[14%]')}
+                    className={cx('pointer-events-none absolute z-[5]', ringInside ? 'inset-0 rounded-[10%]' : '-inset-[6%] rounded-[14%]')}
                     style={{
-                      boxShadow: onEdge
+                      boxShadow: ringInside
                         ? `inset 0 0 0 ${size.ring}px var(--color-holo-strong), inset 0 0 0 ${size.ring + (tv ? 3 : 2)}px var(--color-void)`
                         : `0 0 0 ${size.ring}px var(--color-holo-strong), 0 0 0 ${size.ring + (tv ? 3 : 2)}px var(--color-void)`,
                     }}

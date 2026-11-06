@@ -20,6 +20,8 @@ const BORDER = { share: 1 / 12, slack: 0.025, minPx: 2 };
 /** B-AC-9 (WS4, plot look A): the selected ring's band, as the mock paints it. */
 const RING_COLOUR = 'var(--color-holo-strong)';
 const TINT = { alpha: 0.3, slack: 0.05 };
+/** PM ruling A+ on #562: how far the pin or the ring's band may touch the dots chip above, for rounding. */
+const SLACK_PX = 0.5;
 /** T-AC-9 watches the wire from the first tap to at least this long after the second. */
 const QUIET_MS = 400;
 const PRESS_MS = 2_000;
@@ -286,13 +288,13 @@ export async function theTvShowsWhoOwnsEachPlot(ctx: GameStepContext): Promise<s
 }
 
 /**
- * B-AC-9 (WS4, plot look A; PM ruling A on #562), in planning on the hub's Look map: Look-select a plot whose upper
- * neighbour shows its dots: the selected pin hangs below, so it never overlaps the chip. How far the ring's painted band
- * reaches over the chip's foot is measured for the log. The neighbour's ground is seeded on the server: the
+ * B-AC-9 (WS4, plot look A; PM rulings A and A+ on #562), in planning on the hub's Look map: Look-select a plot whose upper
+ * neighbour shows its dots, and that chip stays whole in view: the selected pin hangs below and the ring is drawn inside
+ * the plot, so neither the pin nor the ring's painted band overlaps the chip (within SLACK_PX). The neighbour's ground is seeded on the server: the
  * seat is given that plot as analysed, as makeHungry seeds hunger. Leaves the Look tool on, nothing selected.
  */
 export async function theDotsAboveASelectionStayInView(ctx: GameStepContext, seat = 's1'): Promise<string> {
-  const id = 'B-AC-9 (WS4, plot look A, PM ruling A on #562)';
+  const id = 'B-AC-9 (WS4, plot look A, PM rulings A and A+ on #562)';
   return ctx.held(async () => {
     const room = ctx.server.registry.get(ctx.code) as unknown as { game: { state: GameState }; viewFor(seat: string): { game?: MuleView }; broadcast(): void } | undefined;
     check(room, `${id}: a room ${ctx.code} on the server`);
@@ -338,11 +340,11 @@ export async function theDotsAboveASelectionStayInView(ctx: GameStepContext, sea
     }, { above: `${x}-${y - 1}`, sel: `${x}-${y}` });
     const { chip: c, pin, ring, spread, plot: p } = seen;
     check(c && pin && ring && p, `${id}: the chip above, the selected pin and ring are drawn: ${JSON.stringify(seen)}`);
-    const overlaps = (a: typeof c, b: typeof c) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+    const overlaps = (a: typeof c, b: typeof c) => a.left < b.right - SLACK_PX && b.left < a.right - SLACK_PX && a.top < b.bottom - SLACK_PX && b.top < a.bottom - SLACK_PX;
     const ringTop = ring.top - spread;
     check(!overlaps(c, pin), `${id}: the pin on ${x}-${y} keeps off the dots chip of ${x}-${y - 1}: pin ${px(pin.top)}–${px(pin.bottom)}, chip ${px(c.top)}–${px(c.bottom)} (top–bottom)`);
-    // Measured, not checked: the ring's band, unchanged by the ruling, may still reach over the chip's foot.
     const bandOver = c.bottom - ringTop;
+    check(bandOver <= SLACK_PX, `${id}: the ring on ${x}-${y}, as painted, starts under the dots chip of ${x}-${y - 1}: its band reaches ${px(bandOver)} over the chip's foot`);
     // Leave the hub as it was found: nothing looked at.
     await plot.click({ timeout: PRESS_MS });
     return `${x}-${y} selected under ${x}-${y - 1}'s dots on a ${px(p.right - p.left)} × ${px(p.bottom - p.top)} plot: pin ${pin.top >= p.bottom ? 'below' : 'above'} the plot, clear of the ${px(c.right - c.left)} × ${px(c.bottom - c.top)} chip; the ring's box ${px(Math.abs(ring.top - c.bottom))} ${ring.top >= c.bottom ? 'under' : 'over'} the chip's foot, its band (${px(spread)}) ${bandOver > 0 ? `${px(bandOver)} over it` : `${px(-bandOver)} under it`}`;
@@ -417,7 +419,9 @@ export async function readPlotLook(map: Locator, where: string, want: LookWanted
   const edge = x === 0 || y === 0 || x === Math.max(...cells.map(([cx]) => cx)) || y === Math.max(...cells.map(([, cy]) => cy));
   // How far the ring's box reaches outside the plot's: left, top, right, bottom.
   const out = [sel.box.x - ring.box.x, sel.box.y - ring.box.y, ring.box.x + ring.box.width - (sel.box.x + sel.box.width), ring.box.y + ring.box.height - (sel.box.y + sel.box.height)];
-  if (edge) fail(out.every((d) => d <= 0.5), `on the map's edge the selected ring lies inside plot ${at}, but reaches ${out.map(px).join(', ')} out (left, top, right, bottom)`);
+  // Under a plot showing its dots the ring is drawn inside, as on the edge (PM ruling A+ on #562).
+  const dotsAbove = drawn.some((p) => p.at === `${x}-${y - 1}` && p.marks.some((m) => m.id === `map-dots-${x}-${y - 1}`));
+  if (edge || dotsAbove) fail(out.every((d) => d <= 0.5), `${edge ? "on the map's edge" : 'under the dots above'} the selected ring lies inside plot ${at}, but reaches ${out.map(px).join(', ')} out (left, top, right, bottom)`);
   else fail(out.every((d) => d > 0), `inside the map the selected ring reaches outside plot ${at} on every side, by ${out.map(px).join(', ')} (left, top, right, bottom)`);
   const band = shadowsOf(ring.boxShadow).filter((s) => s.spread >= 1 && (s.colour?.a ?? 0) > 0);
   fail(

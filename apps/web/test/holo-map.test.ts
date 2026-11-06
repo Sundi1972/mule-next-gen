@@ -206,6 +206,9 @@ describe('B-AC-9 (WS4, plot look A): the selected plot’s pin keeps clear of th
     return renderToStaticMarkup(createElement(HoloMap, { width: 3, height: 3, tiles, selected, hideGround }));
   };
   const pin = (markup: string) => tag(markup, /data-testid="selected-pin"/);
+  const ring = (markup: string) => tag(markup, /data-testid="selected-ring"/);
+  const glow = (markup: string) => tag(markup, /\banimate-pulse\b/);
+  const INSIDE = /\binset-0\b/;
   const BELOW = /\btop-full mt-1\b/;
   const ABOVE = /\bbottom-full mb-1\b/;
 
@@ -216,7 +219,15 @@ describe('B-AC-9 (WS4, plot look A): the selected plot’s pin keeps clear of th
     expect(map).toContain('>▴</span>');
   });
 
-  it('keeps the pin above when the plot above shows no dots: no ground, a MULE on it, or the ground hidden', () => {
+  it('draws the ring inside the plot when the plot above shows its dots, as on the map’s edge', () => {
+    const map = render({ ground: { food: 2 } });
+    expect(ring(map)).toMatch(INSIDE);
+    expect(ring(map)).toMatch(/box-shadow:inset /);
+    expect(glow(map)).toMatch(INSIDE);
+    expect(glow(map)).toMatch(/box-shadow:inset /);
+  });
+
+  it('keeps the pin above and the ring outside when the plot above shows no dots: no ground, a MULE on it, or the ground hidden', () => {
     for (const [why, above, hide] of [
       ['no ground', {}, false],
       ['a MULE', { ground: { food: 2 }, good: 'food' }, false],
@@ -225,6 +236,9 @@ describe('B-AC-9 (WS4, plot look A): the selected plot’s pin keeps clear of th
       const map = render(above as Partial<MapTile>, undefined, hide);
       expect(pin(map), why).toMatch(ABOVE);
       expect(map, why).toContain('>▾</span>');
+      expect(ring(map), why).toMatch(/-inset-\[6%\]/);
+      expect(ring(map), why).not.toMatch(INSIDE);
+      expect(glow(map), why).toMatch(/-inset-\[8%\]/);
     }
   });
 
