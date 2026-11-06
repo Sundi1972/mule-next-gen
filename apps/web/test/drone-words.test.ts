@@ -1,4 +1,4 @@
-import type { GameState } from '@mule/engine';
+import { DEVELOPMENT, type GameState } from '@mule/engine';
 import type { MuleView, TableView } from '@mule/protocol';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -9,6 +9,9 @@ import type { TableClient } from '../src/net/client';
 import { ClientProvider } from '../src/net/react';
 import { PhoneGameProvider } from '../src/phone/game';
 import { LandGrant } from '../src/phone/LandGrant';
+import type { HubSeat } from '../src/phone/hub/slots';
+import { HUB_SLOTS } from '../src/phone/hub/today';
+import { droneButtonWords } from '../src/phone/hub/tools';
 
 /**
  * H-3 (WS6 UX audit, A-2's named edit in WS3's LandGrant.tsx): while the land grant's lit plot is one your drone
@@ -149,6 +152,28 @@ describe('H-3: the land grant names what your drone found, on your phone only', 
     const ossa = phone(game, fake.ctx.now(), OSSA);
     expect(droneLine(ossa)).toBeNull();
     expect(text(ossa)).not.toContain('Your drone');
+  });
+});
+
+describe('the drone tells the truth: its report comes at Scan, not at the land grant', () => {
+  it('the button reads "Scan · n of 2 plots · 60 cr", its count and fee from config', () => {
+    expect(droneButtonWords(0)).toBe('Pick a free plot for the drone');
+    for (let n = 1; n <= DEVELOPMENT.dronePlots; n++) expect(droneButtonWords(n)).toBe(`Scan · ${n} of ${DEVELOPMENT.dronePlots} plots · ${DEVELOPMENT.droneFee} cr`);
+  });
+
+  it("the hub's tile says the drone was used this month once it is; before, its plots and fee", () => {
+    const fake = fakeContext({ table: walkers });
+    const game = new MuleGame(fake.ctx, 7);
+    game.start(walkers);
+    const tile = HUB_SLOTS.agenda.find((a) => a.key === 'drone')!;
+    const seat = (): HubSeat => {
+      const view = game.viewFor(LENA);
+      return { view, me: view.me!, self: view.players.find((p) => p.id === LENA)! };
+    };
+    expect(tile.sub(seat())).toBe(`${DEVELOPMENT.dronePlots} plots · ${DEVELOPMENT.droneFee} cr`);
+    const free = (game as unknown as { state: GameState }).state.tiles.filter((t) => t.owner === null && t.terrain !== 'store');
+    game.handle(LENA, { type: 'drone', plots: free.slice(-2).map((t) => ({ x: t.x, y: t.y })) });
+    expect(tile.sub(seat())).toBe('Used this month');
   });
 });
 
