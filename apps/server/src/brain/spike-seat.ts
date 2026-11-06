@@ -32,6 +32,9 @@ interface Flags {
   port: number;
   out: string;
   model: string;
+  /** Holds each of the first holdAsks asks this long before /wait sees it: the real game's minutes between asks. */
+  holdMs: number;
+  holdAsks: number;
 }
 
 function flags(argv: readonly string[]): Flags {
@@ -41,7 +44,7 @@ function flags(argv: readonly string[]): Flags {
   };
   const mode = get('--mode', 'mcp');
   if (mode !== 'mcp' && mode !== 'per-call') throw new Error(`--mode mcp|per-call, not ${mode}`);
-  return { mode, seed: Number(get('--seed', '7')), capMs: Number(get('--cap-ms', '180000')), port: Number(get('--port', '4821')), out: get('--out', 'spike-asks.jsonl'), model: get('--model', 'sonnet') };
+  return { mode, seed: Number(get('--seed', '7')), capMs: Number(get('--cap-ms', '180000')), port: Number(get('--port', '4821')), out: get('--out', 'spike-asks.jsonl'), model: get('--model', 'sonnet'), holdMs: Number(get('--hold-ms', '0')), holdAsks: Number(get('--hold-asks', '0')) };
 }
 
 /** One ask of the seat, as recorded. */
@@ -227,17 +230,23 @@ async function main(): Promise<void> {
       const port: WriteComplete = (prompt) =>
         new Promise((resolve, reject) => {
           record.promptChars = prompt.system.length + prompt.user.length;
-          const askedAt = Date.now();
+          const hold = record.n <= f.holdAsks ? f.holdMs : 0;
+          // Measured from when the seat can see the ask: a held ask starts its clock when the hold ends.
+          let askedAt = Date.now() + hold;
           const timer = setTimeout(() => {
             bridge?.cleared(id);
             reject(new Error('cap'));
-          }, f.capMs);
+          }, hold + f.capMs);
           const answer = (text: string) => {
             clearTimeout(timer);
             record.answeredMs = Date.now() - askedAt;
             resolve({ text, stopReason: 'end_turn' });
           };
-          if (bridge) bridge.ask({ id, kind, month: s.month, phase: s.phase, prompt, askedAt, answer, judged });
+          if (bridge)
+            setTimeout(() => {
+              askedAt = Date.now();
+              bridge.ask({ id, kind, month: s.month, phase: s.phase, prompt, askedAt, answer, judged });
+            }, hold);
           else perCall(prompt, f.model, cwd).then(answer, (err: unknown) => (clearTimeout(timer), reject(err instanceof Error ? err : new Error(String(err)))));
         });
       // The spike's own wait: --cap-ms, not the write's 30 s, so each latency is measured whole.
