@@ -19,7 +19,7 @@
 <p>Do not edit this page by hand. To regenerate it after <code>config.ts</code> changes, run from the repo root:</p>
 <p><code>pnpm --filter @mule/engine exec tsx ../../docs/rulebook/build-numbers.ts</code> then <code>node docs/rulebook/build-index.mjs</code></p>
 <div class="box next"><h4>Not on this page</h4><p><code>MAP_SIZE</code> is kept inside <code>config.ts</code> without being exported, so this page cannot read it.</p></div>
-<p class="code-ref">Built from <code>config.ts</code> with fingerprint <code>e2faf783e23f</code> (the first 12 characters of its SHA-256).</p>
+<p class="code-ref">Built from <code>config.ts</code> with fingerprint <code>d303f3480ebe</code> (the first 12 characters of its SHA-256).</p>
 
 <h2 id="good-config"><code>GOOD_CONFIG</code> <span class="pill built">In the game</span></h2>
 <div class="table-wrap"><table>
@@ -2009,8 +2009,8 @@
 <tr><td><code>AI_PLANS.moneyMaker.rivalDiscount</code></td><td class="n">0.15</td><td>Each rival plot already making the good cuts its score by this share.</td></tr>
 <tr><td><code>AI_PLANS.moneyMaker.weight</code></td><td class="n">1</td><td>Weight of the &quot;My money-maker&quot; consideration in a development pick.</td></tr>
 <tr><td><code>AI_PLANS.moneyMaker.otherScore</code></td><td class="n">0.8</td><td>That consideration&#39;s score, 0 to 1, for an outfit that makes another good (the money-maker scores 1).</td></tr>
-<tr><td><code>AI_PLANS.chain</code></td><td class="n"></td><td>A factory good the seat can&#39;t feed yet, scored with the plots that would make its inputs. See AM-32.</td></tr>
-<tr><td><code>AI_PLANS.chain.months</code></td><td class="n">0</td><td>A feature switch. 0 is off: no chain is ever committed and the seats play as before AM-32. Above 0, the chain&#39;s MULEs, at the level&#39;s MULEs a month, must all be bought within this many months, from cash on hand. Switching on (at 3, as tested) is Heiko&#39;s decision, once the economy lets a chain pay.</td></tr>
+<tr><td><code>AI_PLANS.chain</code></td><td class="n"></td><td>A factory good the seat can&#39;t feed yet, scored with the plots that would make its inputs. See AM-33.</td></tr>
+<tr><td><code>AI_PLANS.chain.months</code></td><td class="n">0</td><td>A feature switch. 0 is off: no chain is ever committed and the seats play as before AM-33. Above 0, the chain&#39;s MULEs, at the level&#39;s MULEs a month, must all be bought within this many months, from cash on hand. Switching on (at 3, as tested) is Heiko&#39;s decision, once the economy lets a chain pay.</td></tr>
 <tr><td><code>AI_PLANS.monopoly.goods</code></td><td class="n">[&quot;energy&quot;, &quot;smithore&quot;]</td><td>The goods a seat may try to corner. Not Food: it spoils too fast (STRATEGIST.cornerMaxSpoilage).</td></tr>
 <tr><td><code>AI_PLANS.monopoly.maxRivalPlots</code></td><td class="n">1</td><td>A good is cornered only while at most this many rival plots make it.</td></tr>
 <tr><td><code>AI_PLANS.monopoly.minPlots</code></td><td class="n">2</td><td>And only with at least this many of its own idle or free plots whose best outfit is the good.</td></tr>

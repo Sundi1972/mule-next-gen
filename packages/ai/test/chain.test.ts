@@ -6,7 +6,7 @@ import { AiSeat, type AiSeatOptions } from '../src/seat.js';
 import { outlook } from '../src/outlook.js';
 import { canFeed, chainInputs, chainLinks, installGain, standingLinks, type Mind } from '../src/value.js';
 
-/** A seat whose Electronics fetch a high price builds the chain to them, upstream first. See AM-32. */
+/** A seat whose Electronics fetch a high price builds the chain to them, upstream first. See AM-33. */
 
 const ME = 'ai0';
 const flatGround = { food: 0, water: 0, energy: 0, smithore: 0, crystite: 0, rareEarth: 0 };
@@ -73,7 +73,7 @@ function withChains<T>(fn: () => T): T {
   }
 }
 
-/** RULE-4 before AM-32: the best of the goods the seat can feed, by its best plots' install gains, less the rivals' share. */
+/** RULE-4 before AM-33: the best of the goods the seat can feed, by its best plots' install gains, less the rivals' share. */
 function fedMoneyMaker(state: GameState, mind: Mind): Good | null {
   const obs = observe(state, mind.me);
   const o = outlook(obs, mind.me, { lookAhead: mind.level.lookAhead });
@@ -88,7 +88,7 @@ function fedMoneyMaker(state: GameState, mind: Mind): Good | null {
   return best?.good ?? null;
 }
 
-describe('a factory chain (AM-32)', () => {
+describe('a factory chain (AM-33)', () => {
   it('B-AC-11: with Electronics dear, the seat commits to Electronics and builds an upstream mine before any works', () => withChains(() => {
     const state = development(CHAIN_PLOTS, 2_000);
     const seat = seatOf();
@@ -171,8 +171,8 @@ describe('a factory chain (AM-32)', () => {
   }));
 });
 
-describe('the chain switch (AM-32, PM ruling B)', () => {
-  it('INV-chain-off: at the shipped AI_PLANS.chain.months, a chain-eligible seat drafts the money-maker RULE-4 drafted before AM-32', () => {
+describe('the chain switch (AM-33, PM ruling B)', () => {
+  it('INV-chain-off: at the shipped AI_PLANS.chain.months, a chain-eligible seat drafts the money-maker RULE-4 drafted before AM-33', () => {
     const state = development(CHAIN_PLOTS, 2_000);
     const seat = seatOf();
     const drafted = draftStrategyOf({ state, seat: ME, mind: seat.mind, seed: 11, phase: 'development' }).moneyMaker;
