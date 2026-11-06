@@ -195,7 +195,9 @@ const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
  * It plays under the record's AI_VALUE.unit when the record names it, and gives the switch back after.
  */
 export async function replay(record: MuleRecord): Promise<ReplayResult> {
-  // The switch the game played under, for this replay only: the replay CLI's process hosts no live game.
+  // The switch the game played under, for this replay only. Setting a global is safe only because replay-cli.ts is the
+  // one caller and its process hosts no live game: a server route that calls replay() must change this first, or a live
+  // game would play under the record's switch while the replay awaits.
   const own = AI_VALUE.unit;
   if (record.options.aiValueUnit !== undefined) AI_VALUE.unit = record.options.aiValueUnit;
   try {

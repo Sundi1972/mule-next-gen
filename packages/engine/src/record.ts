@@ -55,7 +55,8 @@ export interface GameRecord<Intent> {
   v: 1;
   seed: number;
   configFingerprint: string;        // sha256 of stableJson(configSnapshot()), hex
-  options: { maxMonths?: number; phaseScale?: number; politics: boolean };
+  /** `aiValueUnit`: AI_VALUE.unit as the game played it; the replay plays under it. Absent in older records. */
+  options: { maxMonths?: number; phaseScale?: number; politics: boolean; aiValueUnit?: boolean };
   seats: { id: PlayerId; name: string; isAi: boolean; color: number; pick?: string; smart: boolean }[];
   t0: number;                       // the room clock when recording began, epoch ms
   events: RecordEvent<Intent>[];
