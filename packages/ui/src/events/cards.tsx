@@ -100,6 +100,7 @@ export function TitleCard({ seg, size }: { seg: EventSegment; size: ShowSize }) 
  */
 export function EffectsCard({ seg, size }: { seg: EventSegment; size: ShowSize }) {
   const { s, t, reduced, grid, cast } = useShow();
+  const departures = useContext(GaugeDepartures);
   const ev = seg.events[0]!;
   const fx = ev.effects ?? [];
   const objects = objectWords(ev);
@@ -107,7 +108,6 @@ export function EffectsCard({ seg, size }: { seg: EventSegment; size: ShowSize }
   const seen = eventEffectsAt(s, t, reduced, grid)
     .filter((l) => l.seg === seg)
     .map((l) => l.effect);
-  const departures = useContext(GaugeDepartures);
   const tv = size === 'tv';
   const rows: { key: string; head: ReactNode; items: ShowEffect[] }[] = [
     ...cast.players.filter((p) => fx.some((f) => f.on === p.id)).map((p) => ({ key: p.id, head: <SeatHead id={p.id} size={size} />, items: fx.filter((f) => f.on === p.id) })),

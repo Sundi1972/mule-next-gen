@@ -8,8 +8,11 @@ import { LANDING, settlesAfter, type GaugeChange, type GaugeId, type GaugeLandin
  * event's card as a chip, flies on an arc to its gauge in the header and lands, and the gauge counts to its new value.
  */
 
-/** Seconds: the mock's wait on the card and flight; and how long the landed gauges rest, still, before the show ends. */
-const FLIGHT = { wait: 0.7, fly: 0.9, rest: 0.1 } as const;
+/**
+ * Seconds: the mock's wait on the card and flight; the shortest flight that still reads as one (a show cut to its cap
+ * can leave less room than that); and how long the landed gauges rest, still, before the event's part of the show ends.
+ */
+const FLIGHT = { wait: 0.7, fly: 0.9, minFly: 0.4, rest: 0.1 } as const;
 
 const GAUGE_OF: Partial<Record<ShowEffect['what'], GaugeId>> = { mood: 'happiness', prestige: 'prestige', air: 'environment' };
 const valueOf = (colony: ColonyView, gauge: GaugeId): number | null => colony.gauges[gauge];
@@ -24,8 +27,9 @@ interface Flight {
 /**
  * The show's trips to the gauges this colony shows a number on. Each keeps the mock's timing when it fits its segment;
  * otherwise it leaves earlier, though never before the card shows it, and only then flies faster, so that its count and
- * pulse are over before the segment ends. The view already carries every change, so a gauge starts at its value less
- * all of the show's changes to it.
+ * pulse are over before the segment ends. It never flies faster than minFly: in a show cut to its cap the pulse may
+ * then finish under the next event. The view already carries every change, so a gauge starts at its value less all of
+ * the show's changes to it.
  */
 function useFlights(colony: ColonyView | null | undefined): Flight[] {
   const { s, reduced, grid } = useEventShow();
@@ -42,7 +46,7 @@ function useFlights(colony: ColonyView | null | undefined): Flight[] {
     const tail = settlesAfter({ gauge: c.gauge, from, to: from + c.effect.delta, landsAt: 0, chip: true }, reduced);
     const end = c.end - FLIGHT.rest;
     const leaves = Math.max(c.onCard, Math.min(c.onCard + FLIGHT.wait, end - FLIGHT.fly - tail));
-    const landsAt = Math.min(leaves + FLIGHT.fly, Math.max(leaves, end - tail));
+    const landsAt = Math.max(leaves + FLIGHT.minFly, Math.min(leaves + FLIGHT.fly, end - tail));
     return { effect: c.effect, leaves, change: { gauge: c.gauge, from, to: from + c.effect.delta, landsAt, chip: true } };
   });
 }
