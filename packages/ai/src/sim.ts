@@ -399,12 +399,13 @@ export function supplyHooks(tally: SupplyTally): { phase: (s: GameState) => void
   /** At each good's status screen, per seat; at its close, per seat: the stock, the trade it chose, the shelf. */
   let atStatus = new Map<engine.Good, Map<string, Short>>();
   let atClose = new Map<engine.Good, Map<string, { stock: number; buyTo: number | null; soldOut: boolean }>>();
-  /** At Food's status screen: its ask, Food's reference then, and per seat next month's need. */
-  let foodAt: { ask: number; reference: number; need: Map<string, number> } | null = null;
+  /** At Food's status screen: its ask, Food's reference then, and per seat next month's need; per seat its Food once the next good is up. */
+  let foodAt: { ask: number; reference: number; need: Map<string, number>; held?: Map<string, number> } | null = null;
   const watch = (s: GameState) => {
     const a = s.auction;
     if (!opened || !a?.good) return;
     const good = a.good;
+    if (foodAt && !foodAt.held && good !== 'food') foodAt.held = new Map(seats.map((seat) => [seat.mind.me, s.players.find((p) => p.id === seat.mind.me)!.stock.food]));
     if (a.stage === 'status' && !atStatus.has(good)) {
       atStatus.set(good, new Map(seats.map((seat) => [seat.mind.me, shortOf(s, seat.mind, good, a.storeSell)])));
       if (good === 'food') {
@@ -440,11 +441,11 @@ export function supplyHooks(tally: SupplyTally): { phase: (s: GameState) => void
       foodAt = null;
     }
     if (s.phase !== 'auction' || !opened) return;
-    // A Food auction nobody trades in ends at its status screen, with no close: the seat holds what it held.
+    // With no good up after Food, its auction was the phase's last, so the phase's end is just after it.
     if (foodAt) {
       const { ask, reference } = foodAt;
       for (const [me, need] of foodAt.need) {
-        const held = atClose.get('food')?.get(me)?.stock ?? s.players.find((p) => p.id === me)!.stock.food;
+        const held = foodAt.held?.get(me) ?? s.players.find((p) => p.id === me)!.stock.food;
         tally.food.push({ ask, reference, held, need });
       }
     }
@@ -499,6 +500,13 @@ const FOOD_BANDS = [
   { label: `ask ≥ ${DEAR_TIMES}× ref`, holds: (x: FoodHeld) => x.ask >= DEAR_TIMES * x.reference },
 ];
 
+/** The median; for an even count the mean of the two middles, since the row's 1.0 targets are judged on it. */
+function trueMedian(values: readonly number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2); // literal-ok: halving, the median's position
+  return sorted.length % 2 === 1 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2; // literal-ok: odd or even count, the mean of two
+}
+
 /**
  * UBER-AC-2's row: per band, the median of Food held after the auction ÷ next month's need over every seat at every
  * Food auction in it. A seat needing no Food has no ratio and counts in no band.
@@ -507,7 +515,7 @@ export function foodBandLine(samples: readonly FoodHeld[], colonyShort: string):
   const counted = samples.filter((x) => x.need > 0);
   const bands = FOOD_BANDS.map(({ label, holds }) => {
     const ratios = counted.filter(holds).map((x) => x.held / x.need);
-    const median = ratios.length > 0 ? quantile(ratios, 0.5).toFixed(2) : 'no median'; // literal-ok: the median, two decimals for display
+    const median = ratios.length > 0 ? trueMedian(ratios).toFixed(2) : 'no median'; // literal-ok: two decimals, display only
     return `${label} ${median} (n ${ratios.length})`;
   });
   return `     Resource utility (UBER-AC-2): Food held after its auction ÷ next month's need, the median seat by the ask against Food's reference: ${bands.join(', ')} (target over 1.0 at ask ≤ ref, at most 1.0 at ask ≥ ${DEAR_TIMES}× ref); colonists short of Food or Water in ${colonyShort} of months`;
