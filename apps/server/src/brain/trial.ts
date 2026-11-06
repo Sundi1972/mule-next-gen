@@ -482,13 +482,15 @@ async function playRun(
   const games: TrialGame[] = [];
   const planned = trialGames(flags);
   for (let i = 0; i < planned.length; i++) {
+    const next = planned[i]!;
     if (paid) {
-      // The brain's table check holds a game to the game budget, unknown bills included. !(<=) refuses a NaN.
-      if (!(sum(games.map((g) => g.countedUsd)) + flags.gameBudgetUsd <= paid.cap)) return { games, stopped: 'cap', lostLines: null };
+      // The brain's table check holds a game to the game budget, unknown bills included. !(<=) refuses a NaN. A seed's
+      // even game starts only with room for its odd one too, so a run stopped by the cap leaves no seed half played.
+      const room = next.seating === 'even' ? SEATINGS.length * flags.gameBudgetUsd : flags.gameBudgetUsd;
+      if (!(sum(games.map((g) => g.countedUsd)) + room <= paid.cap)) return { games, stopped: 'cap', lostLines: null };
       // The day's clearance is used once, by the run that starts the first game.
       if (i === 0) claimLedger(paid.logPath);
     }
-    const next = planned[i]!;
     const game = await playTrialGame({
       writeModel,
       game: next,
@@ -604,7 +606,11 @@ export async function trial(
   });
   for (const line of renderTrialReport(report)) out(line);
   if (paid && stopped === 'cap' && games.length === 0) {
-    out(`No game started: cap ${capText(paid.cap)} is below one game's budget (${capText(flags.gameBudgetUsd)}).`);
+    out(
+      flags.table === 'pair'
+        ? `No game started: cap ${capText(paid.cap)} is below a seed's two games' budget (${capText(SEATINGS.length * flags.gameBudgetUsd)}).`
+        : `No game started: cap ${capText(paid.cap)} is below one game's budget (${capText(flags.gameBudgetUsd)}).`,
+    );
   }
   if (stopped === 'auth') out(AUTH_STOPPED);
   if (lostLines) out(lostLines);

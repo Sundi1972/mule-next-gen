@@ -394,9 +394,17 @@ const seatingText = (chairs: string, x: TrialReport['results']) =>
     : `on ${chairs}: won ${(Math.floor((1000 * x.smartWins) / x.games) / 10).toFixed(1)}% (${x.smartWins} of ${x.games} games), mean rank lead ${(x.strategist.meanRank - x.smart.meanRank).toFixed(2)}`;
 const seatingsRows = (r: TrialReport): string[][] =>
   r.seatings ? [['Claude chairs by seating', `${seatingText('0 and 2', r.seatings.even)}; ${seatingText('1 and 3', r.seatings.odd)}`]] : [];
+const CONTROL_POOLED =
+  "50% by construction: engine seats in every chair play a seed's two seatings as the same game, so the control checks the harness; the chair edge shows by seating";
 const tourneyRows = (r: TrialReport): string[][] =>
   r.bar
-    ? [['Claude chairs against engine chairs, pooled', resultsText(r.results)], ...seatingsRows(r), barText(r), ...(r.totals ? [['Spend so far, every ledger', totalsText(r.totals)]] : [])]
+    ? [
+        ['Claude chairs against engine chairs, pooled', resultsText(r.results)],
+        ...seatingsRows(r),
+        barText(r),
+        ...(r.bar.kind === 'control' ? [['Control, pooled', CONTROL_POOLED]] : []),
+        ...(r.totals ? [['Spend so far, every ledger', totalsText(r.totals)]] : []),
+      ]
     : [];
 const monthText = (c: MonthCounts, of: number) => `min ${c.min}, median ${c.median}, months with none ${c.silent} of ${of}`;
 
