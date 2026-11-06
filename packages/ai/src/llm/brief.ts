@@ -72,6 +72,7 @@ export function atAuctionPrices(state: GameState): GameState {
 const SPECIES_TEXT: Record<Species, string> = {
   zipwing: `you walk ${SPECIES_PERK.zipwingSpeed} times as fast in development`,
   bramblet: `every farm of yours makes ${SPECIES_PERK.brambletFood} more Food`,
+  // literal-ok: a share shown as a percent, not balance
   gearling: `you pay ${Math.round(SPECIES_PERK.gearlingPrice * 100)}% of the price for MULEs and outfits`,
   mollox: `every working mine of yours makes ${SPECIES_PERK.molloxMine} more, and you analyse ground in ${SPECIES_PERK.molloxAnalysis} of the time`,
   glimmer: 'no special gift',
