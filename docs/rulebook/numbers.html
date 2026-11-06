@@ -19,7 +19,7 @@
 <p>Do not edit this page by hand. To regenerate it after <code>config.ts</code> changes, run from the repo root:</p>
 <p><code>pnpm --filter @mule/engine exec tsx ../../docs/rulebook/build-numbers.ts</code> then <code>node docs/rulebook/build-index.mjs</code></p>
 <div class="box next"><h4>Not on this page</h4><p><code>MAP_SIZE</code> is kept inside <code>config.ts</code> without being exported, so this page cannot read it.</p></div>
-<p class="code-ref">Built from <code>config.ts</code> with fingerprint <code>a3d586e96ce8</code> (the first 12 characters of its SHA-256).</p>
+<p class="code-ref">Built from <code>config.ts</code> with fingerprint <code>9edb28bb7d6b</code> (the first 12 characters of its SHA-256).</p>
 
 <h2 id="good-config"><code>GOOD_CONFIG</code> <span class="pill built">In the game</span></h2>
 <div class="table-wrap"><table>
@@ -1040,7 +1040,7 @@
 </table></div>
 
 <h2 id="prestige"><code>PRESTIGE</code> <span class="pill built">In the game</span></h2>
-<p>The colony as a shared project: its prestige objects, one table row each. Every number is a placeholder until the colony&#39;s sim tuning sets it and Heiko OKs it. An object&#39;s full cost is its credits plus its goods at their reference prices; upkeep and repair are in credits. Pace set C (Heiko, 6 Nov) halved credits, goods (rounded up, at least 1) and upkeep; buildMonths and repairCost are unchanged.</p>
+<p>The colony as a shared project: its prestige objects, one table row each. Every number is a placeholder until the colony&#39;s sim tuning sets it and Heiko OKs it. An object&#39;s full cost is its credits plus its goods at their reference prices; upkeep and repair are in credits. Pace set C (Heiko, 6 Nov) halved credits (exactly: every old value was even, so no rounding), goods (rounded up, at least 1) and upkeep (rounded up); buildMonths and repairCost are unchanged.</p>
 
 <h3 id="prestige-park"><code>PRESTIGE.park</code></h3>
 <div class="table-wrap"><table>
