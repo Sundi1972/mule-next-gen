@@ -6,6 +6,7 @@ import { objectLabel, PlotObjectMark, type MapObject } from './ObjectGlyph';
 import { SPECIAL_BADGE, SPECIAL_HANG, SpecialBadge } from './SpecialIcon';
 import { useTheme } from './theme';
 import { cx, GOOD_NAME, SLOT_COLOR, specialLabel, TERRAIN_NAME, type Good, type MapSpecial, type Slot, type Terrain } from './tokens';
+import { bestOf, type Dots } from '../ground-dots';
 
 export interface MapTile {
   x: number;
@@ -18,7 +19,7 @@ export interface MapTile {
   peaks?: number;
   /** Marks a plot: being surveyed, hit by sabotage, or up for sale. */
   flag?: 'survey' | 'sabotage' | 'sale';
-  /** What a geo analysis found here, only on the map of the player who ran it. Ratings 1 to 4. */
+  /** What a geo analysis found here, only on the map of the player who ran it: each raw good's dots, 0 to 3. */
   ground?: Partial<Record<Good, number>>;
   /** Local pollution, 0 clean to 3 toxic. Drawn as a brown haze over the land. */
   pollution?: number;
@@ -128,13 +129,13 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
           const fade = cx('transition-opacity', faded && 'opacity-45');
           // The map clips at its edge, so an edge plot's selection is drawn inside it, and on the top row the pin hangs below.
           const onEdge = t.x === 0 || t.y === 0 || t.x === width - 1 || t.y === height - 1;
-          const ground = !hideGround && t.ground ? (Object.entries(t.ground) as [Good, number][]).sort((a, b) => b[1] - a[1]).slice(0, tv ? 2 : 1) : [];
+          const ground = !hideGround && t.ground ? bestGoods(t.ground, tv ? 2 : 1) : [];
           const label = [
             TERRAIN_NAME[t.terrain],
             t.special ? specialLabel(t.special) : '',
             t.owner !== null ? `owned by player ${t.owner + 1}` : t.object ? objectLabel(t.object) : t.terrain === 'store' ? '' : 'free',
             t.good ? `${GOOD_NAME[t.good]}${t.output ? ` +${t.output}` : ''}` : '',
-            ...ground.map(([g, n]) => `${GOOD_NAME[g]} ${n} of 4`),
+            ...ground.map(([g, n]) => `${GOOD_NAME[g]} ${n} of 3`),
             t.pollution ? `pollution ${t.pollution} of 3` : '',
           ]
             .filter(Boolean)
@@ -290,10 +291,24 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
   );
 }
 
+/**
+ * The plot's best goods with their dots, best first, each by bestOf so the map and the rail name the same one. The best
+ * is shown even at 0 dots (analysed, nothing there); a runner-up only with a dot.
+ */
+function bestGoods(dots: Dots, count: number): [Good, number][] {
+  const left = { ...dots };
+  const out: [Good, number][] = [];
+  for (let best = bestOf(left); best !== undefined && out.length < count && (out.length === 0 || left[best]! > 0); best = bestOf(left)) {
+    out.push([best, left[best]!]);
+    delete left[best];
+  }
+  return out;
+}
+
 function Pips({ n, tv, good }: { n: number; tv: boolean; good: Good }) {
   return (
     <span className="flex gap-px" aria-hidden>
-      {[1, 2, 3, 4].map((i) => (
+      {[1, 2, 3].map((i) => (
         <span
           key={i}
           className={cx('rounded-full', tv ? 'size-1.5' : 'size-[3px]')}
