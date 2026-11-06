@@ -7,7 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { advancePhase, allPrices, createGame, type GameState } from '@mule/engine';
-import { AiSeat, atAuctionPrices, playbookSource } from '@mule/ai';
+import { AiSeat, atAuctionStart, playbookSource } from '@mule/ai';
 import { createBrain, type MeteredBrain } from '../src/brain/index.js';
 import { Playbooks } from '../src/brain/playbooks.js';
 import type { PlaybookNote } from '../src/mule-game.js';
@@ -347,7 +347,7 @@ describe('RULE-A2 rows 3-4: the next phase is edited in the slack before it', { 
 
   /** Production's state, the plan shown for it, and the plan the auction would draft once a raid takes all of p0's goods. */
   const raided = (state: GameState, seat: AiSeat) => {
-    const shown = seat.draft(atAuctionPrices(state), 'auction').auction!;
+    const shown = seat.draft(atAuctionStart(state), 'auction').auction!;
     const later = structuredClone(state);
     advanceTo(later, 'auction');
     raid(later, shown);
@@ -358,6 +358,18 @@ describe('RULE-A2 rows 3-4: the next phase is edited in the slack before it', { 
   };
   type Plans = ReturnType<typeof raided>;
   const roleOf = (plans: Plans['shown'], g: string) => (plans as Record<string, { role: string }>)[g]?.role;
+
+  it("B fix 1: the auction is briefed on the draft it opens on: with nothing happening between, the plan shown in production is the one the auction drafts", async () => {
+    const asked: SdkParams[] = [];
+    const { state, seat, playbooks } = table(smartOn(fakeSdk((_n, params, options) => (asked.push(params), neverAnswers(options)))));
+    advanceTo(state, 'production');
+    const shown = seat.draft(atAuctionStart(state), 'auction');
+    playbooks.askPhase(state, 'auction', []);
+    await vi.advanceTimersByTimeAsync(0);
+    advanceTo(state, 'auction');
+    expect(seat.draft(state, 'auction').auction).toEqual(shown.auction);
+    expect(asked).toHaveLength(1);
+  });
 
   it("B fix 1 (AM-A17): the auction edits apply to the auction's draft at its start, not to the one shown in production, so stock lost since is planned for", async () => {
     let plans: Plans | null = null;
@@ -426,7 +438,7 @@ describe('deep2: what the Smart seat is asked with (t120s audit, 6 Nov)', { time
     state.store.stock.food = 0;
     for (const p of state.players) p.stock.food = 0;
     const stale = allPrices(state).food;
-    const posted = allPrices(atAuctionPrices(state)).food;
+    const posted = allPrices(atAuctionStart(state)).food;
     expect(posted).not.toBe(stale);
     playbooks.askPhase(state, 'auction', []);
     await vi.advanceTimersByTimeAsync(0);

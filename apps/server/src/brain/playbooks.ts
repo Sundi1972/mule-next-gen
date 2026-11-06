@@ -62,6 +62,8 @@ export type { Feedback };
  */
 interface Ask {
   month: number;
+  /** An auction ask's role for each good its brief showed: an edit to a good whose role has changed by the auction's start is not played. */
+  roles?: Readonly<Record<string, string>>;
   written: WriterReply | null;
   started: boolean;
   controller: AbortController;
@@ -250,7 +252,8 @@ export class Playbooks {
           feedback: this.phaseFeedback.get(key) ?? null,
           worthBefore: this.worthAtAsk.get(seat.id) ?? null,
         });
-        const ask: Ask = { month: state.month, written: null, started: false, controller: new AbortController() };
+        const roles = Object.fromEntries(Object.entries(draft.auction ?? {}).map(([g, plan]) => [g, plan.role]));
+        const ask: Ask = { month: state.month, roles, written: null, started: false, controller: new AbortController() };
         this.phaseAsks.set(key, ask);
         const waitMs = this.options.waitMs?.playbook ?? WRITE_CALLS.playbook.timeoutMs;
         const write = writer
@@ -290,7 +293,12 @@ export class Playbooks {
         // development's was shown at upkeep, before the land grant changed what the seat owns; the auction's in
         // production, before the store posted its prices and the month's events ran.
         const draft = seat.draft(state, phase);
-        made = playbookFrom(seat.validator(), state, draft, ask.written);
+        const { written, dropped } = withoutFlippedGoods(ask.written, ask.roles, draft);
+        made = playbookFrom(seat.validator(), state, draft, written);
+        if (dropped.length > 0) {
+          made.feedback?.rejected.push(...dropped);
+          if (made.playbook.by === 'llm') made.playbook = { ...made.playbook, rejected: [...(made.playbook.rejected ?? []), ...dropped] };
+        }
       } catch (err) {
         console.error(`playbooks: seat ${seat.id}'s ${phase} could not be drafted or validated, it plays its own way: ${messageOf(err)}`);
         continue;
@@ -353,4 +361,26 @@ export class Playbooks {
     if (made.feedback) this.feedback.set(seat, made.feedback);
     return made.playbook.by === 'llm' ? made.playbook : engine;
   }
+}
+
+/**
+ * The reply without its edits to a good whose role has changed since the plan was shown (a raid or an event between the
+ * production ask and the auction's start), unless the reply sets that good's role itself: a seller's hold-out walk-away
+ * read as a buyer's limit would pay that much. Each dropped edit comes back rejected, with why, for the next brief.
+ */
+function withoutFlippedGoods(
+  written: WriterReply,
+  shown: Readonly<Record<string, string>> | undefined,
+  draft: Playbook,
+): { written: WriterReply; dropped: NonNullable<Playbook['rejected']> } {
+  if (!shown) return { written, dropped: [] };
+  const goodOf = (path: string) => (path.startsWith('/auction/') ? path.split('/')[2] : undefined);
+  const setsRole = new Set(written.reply.edits.filter((e) => e.path.endsWith('/role')).map((e) => goodOf(e.path)));
+  const now = (g: string) => (draft.auction as Record<string, { role: string } | undefined> | undefined)?.[g]?.role;
+  const flipped = (g: string | undefined) => g !== undefined && shown[g] !== undefined && now(g) !== undefined && shown[g] !== now(g) && !setsRole.has(g);
+  const dropped = written.reply.edits
+    .filter((e) => flipped(goodOf(e.path)))
+    .map((e) => ({ path: e.path, to: e.to, why: `its role changed from ${shown[goodOf(e.path)!]} to ${now(goodOf(e.path)!)} before the auction opened, so the draft's plan for it plays` }));
+  if (dropped.length === 0) return { written, dropped };
+  return { written: { ...written, reply: { ...written.reply, edits: written.reply.edits.filter((e) => !flipped(goodOf(e.path))) } }, dropped };
 }
