@@ -98,21 +98,39 @@ function colony(g: { happiness?: number; prestige?: number; environment?: number
   } as unknown as ColonyView;
 }
 
-/** The view at show second `t`: the server's clock is `t` past the show's start, which lasts the intro and its event. */
-function viewAt(t: number, ev: EventView, c: ColonyView): MuleView {
-  const showMs = EVENT_SHOW.introMs + ev.playMs;
+/**
+ * The phase's events as the server sends them (RULE-1, mule-game.ts eventShow): the intro keeps its length and, past
+ * EVENT_SHOW.capMs in all, each event's share is cut in proportion, rounded on the running total.
+ */
+function onAir(events: EventView[]): { events: EventView[]; showMs: number } {
+  const total = events.reduce((n, ev) => n + ev.playMs, 0);
+  const showMs = Math.min(EVENT_SHOW.capMs, EVENT_SHOW.introMs + total);
+  const upTo = (ms: number) => Math.round((ms * (showMs - EVENT_SHOW.introMs)) / total);
+  let played = 0;
+  return {
+    showMs,
+    events: events.map((ev) => {
+      const from = upTo(played);
+      played += ev.playMs;
+      return { ...ev, playMs: upTo(played) - from };
+    }),
+  };
+}
+
+/** The view at show second `t`: the server's clock is `t` past the show's start. */
+function viewAt(t: number, { events, showMs }: ReturnType<typeof onAir>, c: ColonyView): MuleView {
   const startsAt = NOW - t * 1000;
   return aMuleView({
     players: PLAYERS,
     me: null,
     politics: null,
     month: 3,
-    phase: ev.phase as MuleView['phase'],
+    phase: events[0]!.phase as MuleView['phase'],
     width: W,
     height: H,
     tiles: TILES,
     colony: c,
-    events: [ev],
+    events,
     eventShow: { startsAt, showMs, introMs: EVENT_SHOW.introMs, endsAt: startsAt + showMs, held: true },
   });
 }
@@ -121,8 +139,10 @@ function viewAt(t: number, ev: EventView, c: ColonyView): MuleView {
 
 const mounted = new Set<() => void>();
 let device = { reduced: false };
+let consoleError: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
   device = { reduced: false };
+  consoleError = vi.spyOn(console, 'error');
   Object.assign(window, {
     matchMedia: (q: string) => ({ media: q, matches: device.reduced && q === '(prefers-reduced-motion: reduce)', addEventListener() {}, removeEventListener() {} }),
     setInterval: () => 0,
@@ -137,6 +157,10 @@ afterEach(() => {
   mounted.clear();
   delete (window as { matchMedia?: unknown }).matchMedia;
   vi.unstubAllGlobals();
+  // React says it once per component and file: a hook after an early return breaks on the screen's next render.
+  const hookOrder = consoleError.mock.calls.map((a) => a.map(String).join(' ')).filter((m) => m.includes('order of Hooks'));
+  consoleError.mockRestore();
+  expect(hookOrder).toEqual([]);
 });
 
 function find(node: FakeElement, ok: (e: FakeElement) => boolean): FakeElement | null {
@@ -146,11 +170,15 @@ const byTestid = (node: FakeElement | null, testid: string) => (node ? find(node
 const words = (node: FakeElement): string => node.childNodes.map((c) => (c instanceof FakeElement ? ` ${words(c)} ` : c.textContent)).join('');
 const px = (v: string | undefined) => (v === undefined || v === '' ? NaN : parseFloat(v));
 
-/** The TV showing `ev` over its phase screen, at show second `t` on each `at`. */
-function tv(ev: EventView, c: ColonyView) {
+/** The TV showing the phase's events over its phase screen, at show second `t` on each `at`. */
+function tv(fired: EventView | EventView[], c: ColonyView) {
+  const aired = onAir([fired].flat());
+  let ms = EVENT_SHOW.introMs;
+  /** Where each event's part of the show ends, in show seconds (each headline plays alone). */
+  const ends = aired.events.map((ev) => (ms += ev.playMs) / 1000);
   const table = (game: MuleView) => ({ code: 'ABCD', status: 'playing', hostId: 's1', boards: 1, seats: [], game }) as unknown as TableView<MuleView>;
   const listeners = new Set<() => void>();
-  let state = { status: 'playing', role: 'board', seatId: null, code: 'ABCD', view: table(viewAt(0, ev, c)), chat: [], emotes: [], toasts: [], notice: null, clockOffset: 0, handoffCode: null };
+  let state = { status: 'playing', role: 'board', seatId: null, code: 'ABCD', view: table(viewAt(0, aired, c)), chat: [], emotes: [], toasts: [], notice: null, clockOffset: 0, handoffCode: null };
   const client = {
     subscribe: (l: () => void) => {
       listeners.add(l);
@@ -173,9 +201,11 @@ function tv(ev: EventView, c: ColonyView) {
     document.body.removeChild(host);
   });
   return {
+    end: aired.showMs / 1000,
+    ends,
     /** What the TV shows at show second `t`. */
     at(t: number) {
-      state = { ...state, view: table(viewAt(t, ev, c)) };
+      state = { ...state, view: table(viewAt(t, aired, c)) };
       flushSync(() => listeners.forEach((l) => l()));
       const overlay = byTestid(host, 'tv-event-overlay');
       // While the show plays its header is the one on screen; after it, the phase screen's.
@@ -206,20 +236,19 @@ function tv(ev: EventView, c: ColonyView) {
 type Screen = ReturnType<ReturnType<typeof tv>['at']>;
 
 const STEP = 0.02;
-const SHOW_END = (EVENT_SHOW.introMs + EVENT_SHOW.playMs.headline) / 1000;
 /** The show sampled every `step` seconds: a tenth of a second still catches the shortest thing it shows (a 0.25 s fade). */
 function frames(screen: ReturnType<typeof tv>, step = 0.1): { t: number; s: Screen }[] {
   const out: { t: number; s: Screen }[] = [];
-  for (let i = 0; i * step < SHOW_END; i++) out.push({ t: i * step, s: screen.at(i * step) });
+  for (let i = 0; i * step < screen.end; i++) out.push({ t: i * step, s: screen.at(i * step) });
   return out;
 }
 /**
- * The first STEP frame from `from` on which `ok` holds, for a condition that, once true, stays true to the show's end;
- * found by halving, since every frame renders the whole TV. NaN when it never holds.
+ * The first STEP frame in [from, to) on which `ok` holds, for a condition that, once true, stays true until `to`; found
+ * by halving, since every frame renders the whole TV. NaN when it never holds.
  */
-function firstWhen(screen: ReturnType<typeof tv>, ok: (s: Screen) => boolean, from = 0): number {
+function firstWhen(screen: ReturnType<typeof tv>, ok: (s: Screen) => boolean, from = 0, to = screen.end): number {
   let lo = Math.ceil(from / STEP - 1e-9);
-  let hi = Math.ceil(SHOW_END / STEP - 1e-9) - 1;
+  let hi = Math.ceil(to / STEP - 1e-9) - 1;
   if (!ok(screen.at(hi * STEP))) return NaN;
   while (lo < hi) {
     const mid = Math.floor((lo + hi) / 2);
@@ -228,22 +257,22 @@ function firstWhen(screen: ReturnType<typeof tv>, ok: (s: Screen) => boolean, fr
   }
   return lo * STEP;
 }
-/** The first show second its chip is on the card (it stays there, faded once it leaves, until the show ends). */
-function onCardAt(screen: ReturnType<typeof tv>, what: string): number {
-  const t = firstWhen(screen, (s) => s.cardChip(what) !== null);
+/** The first show second its chip is on the card (it stays there, faded once it leaves, until its event's part ends). */
+function onCardAt(screen: ReturnType<typeof tv>, what: string, to = screen.ends[0]!): number {
+  const t = firstWhen(screen, (s) => s.cardChip(what) !== null, 0, to);
   return Number.isNaN(t) ? expect.unreachable(`the event's card never shows its ${what} chip`) : t;
 }
 /** The first show second its chip has left the card (its place there fades): the test's ground truth for the departure. */
-function leftAt(screen: ReturnType<typeof tv>, what: string): number {
-  const t = firstWhen(screen, (s) => s.cardChip(what)?.opacity === 0.15);
+function leftAt(screen: ReturnType<typeof tv>, what: string, to = screen.ends[0]!): number {
+  const t = firstWhen(screen, (s) => s.cardChip(what)?.opacity === 0.15, 0, to);
   return Number.isNaN(t) ? expect.unreachable(`the ${what} chip never leaves the card`) : t;
 }
 /** The first show second from `from` its gauge has left `old`: it pulses as the chip lands, then counts away from it. */
 const landedAt = (screen: ReturnType<typeof tv>, gauge: string, old: number, from: number) => firstWhen(screen, (s) => s.gauge(gauge).pulses || s.gauge(gauge).value !== old, from);
 /** The last frame the show's overlay is on the TV, before the phase screen comes back. */
 function lastShowFrame(screen: ReturnType<typeof tv>): Screen {
-  let t = Math.floor(SHOW_END / STEP) * STEP;
-  while (t >= SHOW_END) t -= STEP;
+  let t = Math.floor(screen.end / STEP) * STEP;
+  while (t >= screen.end) t -= STEP;
   const s = screen.at(t);
   expect(s.overlay).toBe(true);
   return s;
@@ -316,7 +345,7 @@ describe('B-AC-23-7: a colony event’s gauge change flies from its card into th
     const lands = landedAt(screen, 'gauge-happiness', 72, leaves);
     expect(screen.at(lands - STEP).gauge('gauge-happiness').said).toContain('72 Content');
     const seen: Screen['gauge'] extends (...a: never[]) => infer R ? R[] : never = [];
-    for (let i = 0; lands + i * STEP < Math.min(SHOW_END, lands + COUNT + 2 * STEP); i++) seen.push(screen.at(lands + i * STEP).gauge('gauge-happiness'));
+    for (let i = 0; lands + i * STEP < Math.min(screen.end, lands + COUNT + 2 * STEP); i++) seen.push(screen.at(lands + i * STEP).gauge('gauge-happiness'));
     for (const g of seen) expect(g.said).toContain(`${g.value} ${g.value >= HAPPINESS.bands.thriving ? 'Thriving' : 'Content'}`);
     const flipAt = seen.findIndex((g) => g.value >= HAPPINESS.bands.thriving);
     expect(flipAt).toBeGreaterThan(0);
@@ -344,6 +373,32 @@ describe('B-AC-23-7: a colony event’s gauge change flies from its card into th
     expect(chip.x).toBeGreaterThan(CHIP.air!.x);
     expect(chip.x).toBeLessThan(GAUGE['gauge-environment']!.x);
     expect(screen.at(leaves + FLY + COUNT + STEP).gauge('gauge-environment').value).toBe(17);
+  });
+
+  it('B-AC-23-7: in a show squeezed to its cap (five headlines), the festival’s Mood chip still flies at least 0.4 s before the 72 → 82 count', () => {
+    const fillers = [1, 2, 3, 4].map(() => event('emigrationWave', 'planning', [{ on: 'colony', what: 'colonists', delta: -12 }] as Effect[], { sign: 'bad' }));
+    const screen = tv([FESTIVAL, ...fillers], colony({ happiness: 82, prestige: 7 }));
+    expect(screen.end).toBe(EVENT_SHOW.capMs / 1000);
+    const leaves = leftAt(screen, 'mood');
+    const lands = landedAt(screen, 'gauge-happiness', 72, leaves);
+    expect(lands - leaves).toBeGreaterThanOrEqual(0.4);
+    const chip = screen.at(leaves + 0.2).flight('mood')!;
+    expect(chip).not.toBeNull();
+    expect(chip.x).toBeGreaterThan(CHIP.mood!.x);
+    expect(chip.x).toBeLessThan(GAUGE['gauge-happiness']!.x);
+    expect(screen.at(leaves + 0.2).gauge('gauge-happiness').said).toContain('72 Content');
+    expect(lastShowFrame(screen).gauge('gauge-happiness').said).toContain('82 Thriving');
+  });
+
+  it('B-AC-23-7: two clean-ups in one month end land on the same gauge in turn: 22 at the start, 17 between them, 12 at the end', () => {
+    const second = event('volunteerCleanup', 'upkeep', [{ on: 'colony', what: 'air', delta: -5 }] as Effect[]);
+    const screen = tv([CLEANUP, second], colony({ environment: 12 }));
+    const [first, last] = screen.ends;
+    expect(screen.at(0).gauge('gauge-environment').value).toBe(22);
+    expect(screen.at(first! - STEP).gauge('gauge-environment').value).toBe(17);
+    expect(screen.at(first! + STEP).gauge('gauge-environment').value).toBe(17);
+    expect(screen.end).toBe(last);
+    expect(lastShowFrame(screen).gauge('gauge-environment').value).toBe(12);
   });
 
   it('B-AC-23-7: with reduced motion nothing travels: the chip shows on its gauge as the gauge jumps to the new value, no count, no pulse', () => {
