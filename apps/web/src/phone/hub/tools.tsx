@@ -1,4 +1,4 @@
-import { COLONY_SELLER, DEVELOPMENT } from '@mule/engine';
+import { DEVELOPMENT } from '@mule/engine';
 import type { MuleView, TileView } from '@mule/protocol';
 import { Button, GOOD_NAME, HoloMap, TERRAIN_NAME, type MapTile } from '@mule/ui';
 import { mapTiles, player, plotName, TERRAIN_ODDS, tileAt } from '../../game/derive';
@@ -14,13 +14,12 @@ import { useToday } from './state';
 
 /* Today's map tools: Look, the geo drone (planning's drone flow) and selling a plot (the Sell form's map). */
 
-/** A plot the drone may fly over: nobody's, not the store, and not the colony's (a sited object's plot is no player's). */
-export const freeForDrone = (t: MapTile) => t.owner === null && !t.object && t.terrain !== 'store';
+/** A plot the drone may fly over: nobody's and not the store. */
+export const freeForDrone = (t: MapTile) => t.owner === null && t.terrain !== 'store';
 
-/** Whose a plot is, in the Look panel's words: yours, a player's name, the colony's, or free. */
+/** Whose a plot is, in the Look panel's words: yours, a player's name, or free. */
 export function ownerWord(view: MuleView, tile: Pick<TileView, 'owner'>, meId: string): string {
   if (tile.owner === meId) return 'YOURS';
-  if (tile.owner === COLONY_SELLER) return 'COLONY';
   return player(view, tile.owner)?.name.toUpperCase() ?? 'FREE';
 }
 

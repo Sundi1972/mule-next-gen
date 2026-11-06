@@ -25,20 +25,18 @@ const players: ShowPlayer[] = [
   { id: BRIX, name: 'Brix', slot: 2 },
   { id: KAI, name: 'Kai', slot: 3 },
 ];
-/** Four farms across three players; the park stands on (5,4). */
+/** Four farms across three players. The colony's objects stand on its own grounds, never on a map plot (G-5 C48). */
 const OWNED: Record<string, [Slot, MapTile['good']]> = { '1,1': [0, 'food'], '2,1': [0, 'food'], '6,3': [1, 'smithore'], '7,3': [1, 'energy'], '2,3': [2, 'food'], '6,1': [3, 'food'] };
-const PARK = { x: 5, y: 4 };
-function tilesWith(park: 'standing' | 'damaged'): MapTile[] {
+function tilesWith(): MapTile[] {
   return Array.from({ length: W * H }, (_, i) => {
     const x = i % W;
     const y = Math.floor(i / W);
     const own = OWNED[`${x},${y}`];
     if (x === STORE.x && y === STORE.y) return { x, y, terrain: 'store', owner: null };
-    if (x === PARK.x && y === PARK.y) return { x, y, terrain: 'plains', owner: null, object: { kind: 'park', name: 'Park', stage: park, buildMonths: 1 } };
     return own ? { x, y, terrain: 'plains', owner: own[0], good: own[1] } : { x, y, terrain: 'plains', owner: null };
   });
 }
-const tiles = tilesWith('standing');
+const tiles = tilesWith();
 const INTRO_MS = EVENT_SHOW.introMs;
 const PLAY_MS = EVENT_SHOW.playMs.headline;
 
@@ -79,7 +77,7 @@ const riot = (object: 'park' | 'hospital') =>
   event('riot', 'upkeep', {
     title: 'Riot',
     line: 'One prestige object is damaged (no prestige until repaired); the store loses a third of its stock.',
-    hits: object === 'park' ? [{ ...PARK, order: 0, delta: 0 }] : [],
+    hits: [],
     objects: [{ id: object, becomes: 'damaged' }],
     effects: [
       { on: 'store', what: 'food', delta: -6 },
@@ -146,7 +144,6 @@ function inside(html: string, testid: string): string {
   return html.slice(from);
 }
 const text = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/&#x27;|&#39;/g, "'").replace(/\s+/g, ' ');
-const plotStage = (html: string, x: number, y: number) => html.match(new RegExp(`data-testid="plot-object-${x}-${y}"[^>]*data-stage="(\\w+)"`))?.[1];
 
 describe('B-AC-26-1: each colony event shows in its phase’s show with its glyph and its words', () => {
   it.each(NINE)('B-AC-26-1: $ev.key in $ev.phase: its badge, its title, its words in the log; nothing prints "undefined"', ({ ev, words, story = [] }) => {
@@ -191,17 +188,16 @@ describe('B-AC-26-2: the festival on a phone alone reads as the colony’s mood'
 });
 
 describe('B-AC-26-3: the riot takes a third of each shelf and damages one object', () => {
-  // The view's tiles are after the event: the park is damaged already.
-  const after = tilesWith('damaged');
+  // The view's tiles are after the event; no map plot holds the park (C48).
+  const after = tilesWith();
 
-  it('B-AC-26-3: the park: each shelf counts down from the store’s real stock, the park keeps standing until the riot reaches it, then its HIT mark', () => {
+  it('B-AC-26-3: the park: each shelf counts down from the store’s real stock, and the card names the park damaged, with no mark on the map', () => {
     const ev = [riot('park')];
     // The view's market after the riot: 11 Food, 9 Energy, 10 Smithore left, so 17, 13 and 15 before.
     const storeStock = { food: 11, energy: 9, smithore: 10 };
     expect(text(inside(storyAt(ev, 1.5, { map: after, storeStock }), 'riot-storage')).match(/\d+/g)).toEqual(['17', '13', '15']);
     const shelves = storyAt(ev, 4.3, { map: after, storeStock });
     expect(text(inside(shelves, 'riot-storage')).match(/\d+/g)).toEqual(['11', '9', '10']);
-    expect(plotStage(shelves, PARK.x, PARK.y)).toBe('standing');
     expect(has(shelves, 'store-flames')).toBe(false);
     // The card is up, but the park's chip waits for the riot to reach it.
     expect(has(shelves, 'effects-card')).toBe(true);
@@ -209,8 +205,7 @@ describe('B-AC-26-3: the riot takes a third of each shelf and damages one object
 
     for (const reduced of [false, true]) {
       const end = result(ev, 'tv', { map: after, reduced });
-      expect(plotStage(end, PARK.x, PARK.y)).toBe('damaged');
-      expect(text(inside(end, `plot-object-${PARK.x}-${PARK.y}`))).toContain('HIT');
+      expect(has(end, 'plot-object-')).toBe(false);
       expect(text(inside(end, 'effects-card'))).toContain('Park damaged');
     }
     expect(text(inside(result(ev, 'alone', { map: after }), 'phone-card'))).toContain('Park damaged in the riot');
@@ -225,13 +220,12 @@ describe('B-AC-26-3: the riot takes a third of each shelf and damages one object
     const ev = [riot('hospital')];
     for (const html of showFrames(ev, 'tv')) expect(text(html)).not.toContain('HIT');
     const end = result(ev, 'tv');
-    expect(plotStage(end, PARK.x, PARK.y)).toBe('standing');
     expect(text(inside(end, 'effects-card'))).toContain('Hospital damaged');
     expect(text(inside(end, 'log'))).toContain('Hospital damaged');
   });
 
   it('B-AC-26-3: the damaged object’s build-site row says it counts 0 until repaired', () => {
-    const park: ColonyProjectView = { id: 'park', name: 'Park', stage: 'damaged', cost: { credits: 420, goods: {} }, funded: { credits: 420, goods: {} }, buildMonths: 1, monthsLeft: null, plot: PARK.y * W + PARK.x, prestige: 2, upkeep: 30, repairCost: 150, plaque: [] };
+    const park: ColonyProjectView = { id: 'park', name: 'Park', stage: 'damaged', cost: { credits: 420, goods: {} }, funded: { credits: 420, goods: {} }, buildMonths: 1, monthsLeft: null, prestige: 2, upkeep: 30, repairCost: 150, plaque: [] };
     const row = renderToStaticMarkup(createElement(ProjectRow, { p: park, players: [], size: 'tv' }));
     expect(row).toContain('data-stage="damaged"');
     expect(text(row)).toContain('Damaged in the riot');
@@ -386,16 +380,6 @@ describe('B-AC-26-5: the four new changes have words, rising and falling, on any
     expect(text(inside(stolen, 'log'))).toContain('Lena’s Food farm stands idle · Mood −2');
     expect(text(inside(stolen, 'effects-card'))).toContain('Mood −2');
     for (const html of showFrames([theft], 'alone')) expect(text(html)).not.toMatch(/undefined|NaN/);
-  });
-});
-
-describe('B-AC-26-6: today’s events are unchanged by the riot’s object marks', () => {
-  it('B-AC-26-6: a meteor on an already-damaged park keeps it damaged, before and after it lands', () => {
-    const meteor = event('meteorStrike', 'production', { title: 'Meteor strike', origin: { ...PARK }, hits: [{ ...PARK, order: 0, delta: 0, becomes: 'crater' }] });
-    const seg = segOf([meteor], 'tv');
-    const map = tilesWith('damaged');
-    expect(plotStage(screen([meteor], seg.playAt + 0.5, 'tv', { map }), PARK.x, PARK.y)).toBe('damaged');
-    expect(plotStage(result([meteor], 'tv', { map }), PARK.x, PARK.y)).toBe('damaged');
   });
 });
 
