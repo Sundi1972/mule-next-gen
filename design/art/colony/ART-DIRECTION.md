@@ -113,7 +113,8 @@ design/art/colony/<kind>/<kind>.py           the building's model + its stages (
 design/art/colony/lib/                       camera, light rig, slab, site kit, scaffold + crane generators
 apps/web/public/art/colony/<kind>/<stage>-<light>@<w>.webp
     kind  hall | park | hospital | observatory | stadium | spaceport
-    stage site | build1 | build2 | standing | closed | damaged      (hall: tier1 | tier2 | tier3)
+    stage site | build1 | build2 | standing | closed | damaged      (hall: standing — one picture until WS7 rules tiers;
+          the manifest keys only RULE-1 stages, T-AC-2 holds it)
     light day | dusk | glow
     w     800 | 400
 apps/web/public/art/colony/manifest.json     every picture, its frame and its anchor — the view reads only this
