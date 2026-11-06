@@ -4,7 +4,7 @@ import { RuleError } from './errors.js';
 import { chargeExportTax } from './politics.js';
 import { monthNeeds, needsOf } from './production.js';
 import { emptyStock } from './stock.js';
-import { GOODS, type AuctionSide, type GameState, type Good, type GoodReceipt, type LiveAuction, type ReceiptSide, type SkipReason, type StatusRow, type Stock } from './types.js';
+import { GOODS, type AuctionSide, type GameState, type Good, type GoodReceipt, type LiveAuction, type ReceiptSide, type SkipReason, type StatusRow, type Stock, type WalkLesson } from './types.js';
 import { houseLineAt, stepBoard, stepWalker, takeSide, tradePossible, type WalkMarket } from './walk.js';
 
 /**
@@ -73,6 +73,25 @@ function noteUnit(a: LiveAuction, id: string, side: keyof GoodReceipt, price: nu
   a.tally[id] = (a.tally[id] ?? 0) + (side === 'bought' ? -price : price - tax - exportTax);
 }
 
+const freshLesson = (): WalkLesson => ({ soldOutHigh: null, highTrade: null, dryBudget: false });
+const higher = (high: number | null, price: number) => Math.max(high ?? price, price);
+
+/** Applies `change` to a good's lesson, starting one if there is none. */
+function teach(state: GameState, good: Good, change: (lesson: WalkLesson) => Partial<WalkLesson>): void {
+  const lesson = state.store.lastWalk?.[good] ?? freshLesson();
+  // A new record, never an edit: an AI's what-if copy (cloneForSim) shares this one with the real game.
+  state.store.lastWalk = { ...state.store.lastWalk, [good]: { ...lesson, ...change(lesson) } };
+}
+
+/**
+ * Notes a unit traded between players on the lesson of the good that is up, while the store's shelf is as that unit
+ * found it: only a unit bought while the store had none to sell counts towards soldOutHigh.
+ */
+function noteBetween(state: GameState, good: Good, price: number): void {
+  const soldOut = storeForSale(state, good) === 0;
+  teach(state, good, (l) => ({ highTrade: higher(l.highTrade, price), soldOutHigh: soldOut ? higher(l.soldOutHigh, price) : l.soldOutHigh }));
+}
+
 /** The good that is up, as a market for the walk board: players' stock and money, the store and the ship, and the sales tax. */
 export function goodsMarket(state: GameState): WalkMarket {
   const a = state.auction!;
@@ -95,6 +114,7 @@ export function goodsMarket(state: GameState): WalkMarket {
     trade(buyer, seller, price) {
       const b = players.get(buyer);
       const s = players.get(seller);
+      if (b && s) noteBetween(state, good, price);
       if (b) {
         b.money -= price;
         b.stock[good]++;
@@ -103,6 +123,8 @@ export function goodsMarket(state: GameState): WalkMarket {
         state.store.capital -= price;
         state.store.stock[good]++;
         a.storeBudget--;
+        // The budget only ever falls, by the store's own buys, so emptying it here is "wanted some, now wants none".
+        if (a.storeBudget === 0) teach(state, good, () => ({ dryBudget: true }));
       } else {
         state.ship.hold[good] = (state.ship.hold[good] ?? 0) - 1;
         state.ship.bought[good] = (state.ship.bought[good] ?? 0) + 1;
@@ -275,6 +297,7 @@ function nextGood(state: GameState, skipped: LiveAuction['skipped']): void {
       upNext: null,
       receipts: {},
       } satisfies Partial<LiveAuction>);
+    teach(state, good, freshLesson);
     seedSides(state);
     return;
   }
