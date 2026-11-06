@@ -2,6 +2,7 @@ import { POLITICS } from '@mule/engine';
 import type { MuleView, PoliticsView } from '@mule/protocol';
 import { ColonyDeskCard } from '../../../components/Colony';
 import { Commission, ProjectActions } from '../../../components/ColonyActions';
+import { Grounds } from '../../../components/Grounds';
 import { fmt } from '../../../game/derive';
 import { usePhoneGame } from '../../game';
 import { ColonyDesk } from '../desks';
@@ -16,6 +17,7 @@ export function ColonyWithFacts() {
     <>
       <FundCard view={view} politics={view.politics} />
       <Commission />
+      {view.colony && <Grounds colony={view.colony} size="phone" light={view.phase === 'upkeep' ? 'dusk' : 'day'} />}
       <ColonyDeskCard view={view} action={(p) => <ProjectActions p={p} />} />
       <ColonyDesk />
       <ColonyFacts view={view} politics={view.politics} />
