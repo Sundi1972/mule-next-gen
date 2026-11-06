@@ -241,7 +241,7 @@
 <li>When it wants no more, it shows no buying price.</li>
 <li>While a Food or Water shelf is short it bids more and sells dearer, always at least one credit apart (see <a href="#restocking">restocking</a>).</li>
 </ul>
-<div class="box next"><h4>Worth knowing (from reading the code)</h4><p>For Smithore, Crystite, Alloy and Electronics at their reference prices the selling price comes out one credit higher than 10% would give (56 rather than 55 for Smithore, 111 rather than 110 for Crystite). The computer's arithmetic makes 50 × 1.1 a hair over 55, and the store always rounds its selling price up. Small, but a player who checks will notice. WS1 owns it.</p></div>
+<p>The selling price is rounded up after the computer multiplies by 1.1, which it holds as a hair more than 1.1. Where the posted price × 1.1 is a whole number, the product can land a hair above it and round up one credit more. At the reference prices that happens for Smithore (56 rather than 55), Crystite (111 rather than 110), Alloy (100 rather than 99) and Electronics (243 rather than 242), as the table shows; it also happens at other posted prices that are multiples of 10, such as 110 or 170 to 230. The buying price is never affected.</p>
 <div class="box why"><h4>Why it is like this</h4><p>The design doc: "The store sells at 10% above the posted price and buys at 10% below it, so selling to another player is usually better than selling to the store." Heiko asked on 5 Nov for a wider spread; see <a href="#store-pricing-design">the store-pricing design</a>.</p></div>
 <p class="code-ref">In the code: <code>economy.ts::storeQuotes</code>, <code>colonyPrice</code> · <code>auction.ts::comeUp</code> (the auction's lines)</p>
 <p class="owner">Kept current by: WS1.</p>
