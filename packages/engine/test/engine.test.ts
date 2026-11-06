@@ -87,6 +87,31 @@ describe('createGame', () => {
   ])("a %i-seat game's store starts with %i Energy, 5 a seat (Heiko, 5 Nov)", (n, energy) => {
     expect(newGame(n).store.stock.energy).toBe(energy);
   });
+
+  describe("FM-species-by-chair: a seat's default species follows the seed, not the chair", () => {
+    /** DEFAULT_SPECIES's order, written out: an n-seat game deals from its first n. */
+    const ORDER = ['zipwing', 'bramblet', 'gearling', 'mollox', 'glimmer', 'quibbit'];
+    const firstN = (n: number) => ORDER.slice(0, n).sort();
+
+    it.each([2, 3, 4, 5, 6])('FM-species-by-chair: in a %i-seat game, over seeds 0..n-1, chair 0 plays each of the first n species once', (n) => {
+      const chairZero = Array.from({ length: n }, (_, seed) => createGame({ seed, players: players(n) }).players[0]!.species);
+      expect([...chairZero].sort()).toEqual(firstN(n));
+    });
+
+    it.each([2, 3, 4, 5, 6])('FM-species-by-chair: a %i-seat game where nobody picked plays the first n species, one each, whatever the seed', (n) => {
+      for (const seed of [0, 1, 2, 3, 4, 5, 2_147_483_646, -1]) {
+        const species = createGame({ seed, players: players(n) }).players.map((p) => p.species);
+        expect([...species].sort(), `seed ${seed}: ${species.join(',')}`).toEqual(firstN(n));
+      }
+    });
+
+    it('FM-species-by-chair: a seat that picked a species keeps it under every seed', () => {
+      for (const seed of [0, 1, 2, 3]) {
+        const seats = players(4).map((p, i) => (i === 1 ? { ...p, species: 'glimmer' as const } : p));
+        expect(createGame({ seed, players: seats }).players[1]!.species).toBe('glimmer');
+      }
+    });
+  });
 });
 
 describe('prices', () => {
