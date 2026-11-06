@@ -242,6 +242,8 @@ export interface MonthReport {
   colonyFund: number;
   /** Colonists short of Food or Water this month. */
   colonistsHungry: boolean;
+  /** The colonists' meal at this upkeep (needs C1, RULE-1): of Food and of Water their need and what they took, unrounded. Absent in older reports. */
+  colonistMeal?: Record<'food' | 'water', { need: number; took: number }>;
   /** The production events that fired this month, in the order they fired. Absent in older reports. */
   events?: MonthEvent[];
   /** Events announced ahead of time. Absent in older reports. */
