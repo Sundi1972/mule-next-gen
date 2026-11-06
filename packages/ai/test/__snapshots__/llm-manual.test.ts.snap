@@ -87,7 +87,7 @@ Cost: free.
 ### drone
 In: planning. Args: plots (plot).
 Does: Sends the geo drone over 1 to 2 free or listed plots for 60 credits: their ground is known at once, in this planning.
-Legal when: it is planning (else: "Not allowed during <phase>"); no drone of yours is on its way (else: "A drone is already on its way"); 1 to 2 plots (else: "Pick 1 to 2 plots"); each plot is free or listed (else: "The drone only flies over free or listed plots"); you have 60 credits (else: "Not enough money").
+Legal when: it is planning (else: "Not allowed during <phase>"); you have not sent a drone this planning (else: "A drone was already used this planning"); 1 to 2 plots (else: "Pick 1 to 2 plots"); each plot is free or listed (else: "The drone only flies over free or listed plots"); you have 60 credits (else: "Not enough money").
 Cost: yes, as it says under Does.
 
 ### list
