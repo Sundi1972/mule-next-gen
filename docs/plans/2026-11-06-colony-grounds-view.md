@@ -142,7 +142,8 @@ packages/ui/test/grounds-*.test.tsx                  vitest, renderToStaticMarku
 - [ ] **Step 1:** Extend `colony-screens.test.ts` with `B-AC-1 (TV): the month end shows colony-grounds` and `T-AC-5: politics off, no colony-grounds`. Run: FAIL.
 - [ ] **Step 2:** Add the mount line. Run: PASS. Commit: `feat(C7): TV month end shows the colony grounds (verifies B-AC-1, T-AC-5)`. Send the SHA to the PM to get WS4's OK on the named edit.
 - [ ] **Step 3:** Implement C7's planning mount: in `TableApp.tsx::TvGame` the planning screen gains the colony panel beside the map, as in the mock's `index.html` "TV · planning" (`design/mocks/colony-grounds/src/screens.tsx::TvPlanning`, `may_edit_content`). Extend `colony-screens.test.ts` with `B-AC-1 (TV planning): planning shows colony-grounds, politics on`. FAIL → implement → PASS. Commit. This is a layout change in WS4's file, so send the SHA to the PM for WS4's OK.
-- [ ] **Step 4:** Browser test (front to back): in `apps/web/e2e/` the test command starts its own stack, plays to the first month end with a Park commissioned and funded, and asserts `[data-testid=colony-grounds] image[href*="park/"]` is visible. It never targets the integration rig.
+- [ ] **Step 4:** Browser test (front to back), also covering review findings: a picture that fails to load shows the SVG shape (B-AC-4's negative case: block one `/art/colony/` URL in the test), and the pictures sit in back-to-front order in the DOM.
+  Original step: browser test (front to back): in `apps/web/e2e/` the test command starts its own stack, plays to the first month end with a Park commissioned and funded, and asserts `[data-testid=colony-grounds] image[href*="park/"]` is visible. It never targets the integration rig.
 
 ### PR-1 merge gate
 
@@ -189,6 +190,10 @@ Same lines as PR-1, for B-AC-2, B-AC-3, B-AC-5, T-AC-3, T-AC-4 and T-AC-5 (phone
 ### Task 3.1: Observatory, Stadium, Spaceport through `lib/`
 
 - [ ] For each kind, write `design/art/colony/<kind>.py` with `build(stage)` covering every RULE-1 stage (build2 for the 3-month kinds). Render, then look at every picture. Run `publish.sh`. Commit per kind.
+
+### Task 3.1b: review nits for the large kinds (PR-1 review at 5241a452)
+
+- [ ] Allow the viewBox headroom for AM-1's tall frame, and place each chip above the picture's footprint height for 2×2 and tall kinds (Spaceport). Test: B-AC-1 with a 2×2 Spaceport at (0,0); the frame top is inside the viewBox and the chip is above the rocket.
 
 ### Task 3.2: T-AC-2 across the whole catalogue
 
