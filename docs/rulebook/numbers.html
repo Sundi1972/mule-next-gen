@@ -14,43 +14,34 @@
 <main class="rb-main">
 <article>
 <h1>Every number</h1>
-<p class="rb-lede">Every balancing value in the game, as the game's settings file holds it today: 1240 settings in 52 groups, each with what it does.</p>
+<p class="rb-lede">Every balancing value in the game, as the game's settings file holds it today: 1261 settings in 52 groups, each with what it does.</p>
 <p>This page is generated from the game's settings file, <code>packages/engine/src/config.ts</code>, on trunk. Each group below is one block of that file, named the way the code names it; the setting is its full path, and the note is the comment written beside it in the file. A setting without a note of its own points to the nearest note that explains it. The rules these numbers drive are explained in <a href="index.html">the other chapters</a>.</p>
 <p>Do not edit this page by hand. To regenerate it after <code>config.ts</code> changes, run from the repo root:</p>
 <p><code>pnpm --filter @mule/engine exec tsx ../../docs/rulebook/build-numbers.ts</code> then <code>node docs/rulebook/build-index.mjs</code></p>
 <div class="box next"><h4>Not on this page</h4><p><code>MAP_SIZE</code> is kept inside <code>config.ts</code> without being exported, so this page cannot read it.</p></div>
-<p class="code-ref">Built from <code>config.ts</code> with fingerprint <code>4d93e8085efa</code> (the first 12 characters of its SHA-256).</p>
+<p class="code-ref">Built from <code>config.ts</code> with fingerprint <code>ac00d54ab184</code> (the first 12 characters of its SHA-256).</p>
 
 <h2 id="good-config"><code>GOOD_CONFIG</code> <span class="pill built">In the game</span></h2>
 <div class="table-wrap"><table>
 <thead><tr><th>Setting</th><th class="n">Value</th><th>What it does</th></tr></thead>
 <tbody>
 <tr><td><code>GOOD_CONFIG.food.refPrice</code></td><td class="n">30</td><td>Credits a unit at normal supply when the game starts: the store&#39;s opening price and off-world price; it drifts after.</td></tr>
-<tr><td><code>GOOD_CONFIG.food.sensitivity</code></td><td class="n">1.5</td><td>How strongly price reacts to low cover (k in the price formula).</td></tr>
 <tr><td><code>GOOD_CONFIG.food.spoilage</code></td><td class="n">0.5</td><td>Share lost each month without suitable storage.</td></tr>
 <tr><td><code>GOOD_CONFIG.water.refPrice</code></td><td class="n">25</td><td>Credits a unit at normal supply when the game starts: the store&#39;s opening price and off-world price; it drifts after.</td></tr>
-<tr><td><code>GOOD_CONFIG.water.sensitivity</code></td><td class="n">1.5</td><td>How strongly price reacts to low cover (k in the price formula).</td></tr>
 <tr><td><code>GOOD_CONFIG.water.spoilage</code></td><td class="n">0.05</td><td>Share lost each month without suitable storage.</td></tr>
 <tr><td><code>GOOD_CONFIG.energy.refPrice</code></td><td class="n">25</td><td>Credits a unit at normal supply when the game starts: the store&#39;s opening price and off-world price; it drifts after.</td></tr>
-<tr><td><code>GOOD_CONFIG.energy.sensitivity</code></td><td class="n">1.2</td><td>How strongly price reacts to low cover (k in the price formula).</td></tr>
 <tr><td><code>GOOD_CONFIG.energy.spoilage</code></td><td class="n">0.25</td><td>Share lost each month without suitable storage.</td></tr>
 <tr><td><code>GOOD_CONFIG.smithore.refPrice</code></td><td class="n">50</td><td>Credits a unit at normal supply when the game starts: the store&#39;s opening price and off-world price; it drifts after.</td></tr>
-<tr><td><code>GOOD_CONFIG.smithore.sensitivity</code></td><td class="n">1.2</td><td>How strongly price reacts to low cover (k in the price formula).</td></tr>
 <tr><td><code>GOOD_CONFIG.smithore.spoilage</code></td><td class="n">0</td><td>Share lost each month without suitable storage.</td></tr>
 <tr><td><code>GOOD_CONFIG.crystite.refPrice</code></td><td class="n">100</td><td>Credits a unit at normal supply when the game starts: the store&#39;s opening price and off-world price; it drifts after.</td></tr>
-<tr><td><code>GOOD_CONFIG.crystite.sensitivity</code></td><td class="n">0.5</td><td>How strongly price reacts to low cover (k in the price formula).</td></tr>
 <tr><td><code>GOOD_CONFIG.crystite.spoilage</code></td><td class="n">0</td><td>Share lost each month without suitable storage.</td></tr>
 <tr><td><code>GOOD_CONFIG.rareEarth.refPrice</code></td><td class="n">60</td><td>Credits a unit at normal supply when the game starts: the store&#39;s opening price and off-world price; it drifts after.</td></tr>
-<tr><td><code>GOOD_CONFIG.rareEarth.sensitivity</code></td><td class="n">0.8</td><td>How strongly price reacts to low cover (k in the price formula).</td></tr>
 <tr><td><code>GOOD_CONFIG.rareEarth.spoilage</code></td><td class="n">0</td><td>Share lost each month without suitable storage.</td></tr>
 <tr><td><code>GOOD_CONFIG.alloy.refPrice</code></td><td class="n">90</td><td>Credits a unit at normal supply when the game starts: the store&#39;s opening price and off-world price; it drifts after.</td></tr>
-<tr><td><code>GOOD_CONFIG.alloy.sensitivity</code></td><td class="n">0.8</td><td>How strongly price reacts to low cover (k in the price formula).</td></tr>
 <tr><td><code>GOOD_CONFIG.alloy.spoilage</code></td><td class="n">0</td><td>Share lost each month without suitable storage.</td></tr>
 <tr><td><code>GOOD_CONFIG.electronics.refPrice</code></td><td class="n">220</td><td>Credits a unit at normal supply when the game starts: the store&#39;s opening price and off-world price; it drifts after.</td></tr>
-<tr><td><code>GOOD_CONFIG.electronics.sensitivity</code></td><td class="n">0.5</td><td>How strongly price reacts to low cover (k in the price formula).</td></tr>
 <tr><td><code>GOOD_CONFIG.electronics.spoilage</code></td><td class="n">0</td><td>Share lost each month without suitable storage.</td></tr>
 <tr><td><code>GOOD_CONFIG.medicine.refPrice</code></td><td class="n">120</td><td>Credits a unit at normal supply when the game starts: the store&#39;s opening price and off-world price; it drifts after.</td></tr>
-<tr><td><code>GOOD_CONFIG.medicine.sensitivity</code></td><td class="n">1</td><td>How strongly price reacts to low cover (k in the price formula).</td></tr>
 <tr><td><code>GOOD_CONFIG.medicine.spoilage</code></td><td class="n">0.2</td><td>Share lost each month without suitable storage.</td></tr>
 </tbody>
 </table></div>
@@ -60,16 +51,38 @@
 <thead><tr><th>Setting</th><th class="n">Value</th><th>What it does</th></tr></thead>
 <tbody>
 <tr><td><code>PRICE.targetCover</code></td><td class="n">2</td><td>Months of demand the store aims to hold.</td></tr>
-<tr><td><code>PRICE.minCover</code></td><td class="n">0.25</td><td>Cover below this counts as this, so an empty shelf still gives a finite target.</td></tr>
-<tr><td><code>PRICE.maxRise</code></td><td class="n">0.5</td><td>Momentum: the posted price moves toward its target by at most this share up or down a month.</td></tr>
-<tr><td><code>PRICE.maxFall</code></td><td class="n">0.4</td><td>No note of its own; the note on <code>PRICE.maxRise</code>, just before it in the file, may cover it.</td></tr>
-<tr><td><code>PRICE.storeSpread</code></td><td class="n">0.1</td><td>The store sells this much above and buys this much below its posted price.</td></tr>
+<tr><td><code>PRICE.normalCover</code></td><td class="n">2</td><td>Months of cover from which a good is posted at its normal price, whatever the colony makes.</td></tr>
+<tr><td><code>PRICE.tightCover</code></td><td class="n">1</td><td>Months of cover from which a good is only tight; under it, a shortage.</td></tr>
+<tr><td><code>PRICE.shortCover</code></td><td class="n">0.5</td><td>Months of cover from which a good is in a shortage; under it, a severe one.</td></tr>
+<tr><td><code>PRICE.band</code></td><td class="n"></td><td>Each band&#39;s target as a multiple of the normal price.</td></tr>
+<tr><td><code>PRICE.band.tight</code></td><td class="n">1.25</td><td>See the note on <code>PRICE.band</code>.</td></tr>
+<tr><td><code>PRICE.band.short</code></td><td class="n">2</td><td>See the note on <code>PRICE.band</code>.</td></tr>
+<tr><td><code>PRICE.band.severe</code></td><td class="n">4</td><td>See the note on <code>PRICE.band</code>.</td></tr>
+<tr><td><code>PRICE.fallStep</code></td><td class="n">0.25</td><td>The most the mid falls in a month towards a lower target, as a share of last month&#39;s mid.</td></tr>
+<tr><td><code>PRICE.tradePull</code></td><td class="n">0.5</td><td>After players paid each other more than the store sold at, the mid moves this share of the way to that price.</td></tr>
+<tr><td><code>PRICE.ceiling</code></td><td class="n">12</td><td>No mid is posted above this many times the good&#39;s configured reference price.</td></tr>
 <tr><td><code>PRICE.storeMaxCover</code></td><td class="n">3</td><td>The store fills its shelves up to this many months of demand.</td></tr>
-<tr><td><code>PRICE.shelfCover</code></td><td class="n">1</td><td>Food and Water count as short when the store&#39;s shelf holds under this many months of the colonists&#39; need, so the price climbs before they go hungry.</td></tr>
-<tr><td><code>PRICE.restockPremium</code></td><td class="n">1.5</td><td>With that shelf short, the store bids up to this times the posted price for Food and Water, capped so it can still sell to colonists within their budget.</td></tr>
 <tr><td><code>PRICE.storeSpoilage</code></td><td class="n">0.25</td><td>Share of normal spoilage the store suffers, thanks to its cold store and silos.</td></tr>
 <tr><td><code>PRICE.refDrift</code></td><td class="n">0.25</td><td>How fast the reference price follows what players pay each other (0..1).</td></tr>
 <tr><td><code>PRICE.worldPull</code></td><td class="n">0.1</td><td>How fast the reference price drifts back toward the off-world price (0..1).</td></tr>
+</tbody>
+</table></div>
+
+<h3 id="price-band-spread"><code>PRICE.bandSpread</code></h3>
+<p>Each band&#39;s spread: the store buys <code>under</code> below its mid and sells <code>over</code> above it.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Setting</th><th class="n">Value</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td><code>PRICE.bandSpread.offWorld.under</code></td><td class="n">0.15</td><td>See the note on <code>PRICE.bandSpread</code>.</td></tr>
+<tr><td><code>PRICE.bandSpread.offWorld.over</code></td><td class="n">0.15</td><td>See the note on <code>PRICE.bandSpread</code>.</td></tr>
+<tr><td><code>PRICE.bandSpread.normal.under</code></td><td class="n">0.15</td><td>See the note on <code>PRICE.bandSpread</code>.</td></tr>
+<tr><td><code>PRICE.bandSpread.normal.over</code></td><td class="n">0.15</td><td>See the note on <code>PRICE.bandSpread</code>.</td></tr>
+<tr><td><code>PRICE.bandSpread.tight.under</code></td><td class="n">0.15</td><td>See the note on <code>PRICE.bandSpread</code>.</td></tr>
+<tr><td><code>PRICE.bandSpread.tight.over</code></td><td class="n">0.2</td><td>See the note on <code>PRICE.bandSpread</code>.</td></tr>
+<tr><td><code>PRICE.bandSpread.short.under</code></td><td class="n">0.1</td><td>See the note on <code>PRICE.bandSpread</code>.</td></tr>
+<tr><td><code>PRICE.bandSpread.short.over</code></td><td class="n">0.25</td><td>See the note on <code>PRICE.bandSpread</code>.</td></tr>
+<tr><td><code>PRICE.bandSpread.severe.under</code></td><td class="n">0.1</td><td>See the note on <code>PRICE.bandSpread</code>.</td></tr>
+<tr><td><code>PRICE.bandSpread.severe.over</code></td><td class="n">0.25</td><td>See the note on <code>PRICE.bandSpread</code>.</td></tr>
 </tbody>
 </table></div>
 
@@ -1165,6 +1178,7 @@
 <tr><td><code>COLONY.strike</code></td><td class="n"></td><td>A general strike (G-5 RULE-26): what the strikers want from the fund to go back to work, in credits, and the share of its output each plot of the struck good makes while they are unpaid (UBER-AC-6).</td></tr>
 <tr><td><code>COLONY.strike.cost</code></td><td class="n">250</td><td>See the note on <code>COLONY.strike</code>.</td></tr>
 <tr><td><code>COLONY.strike.output</code></td><td class="n">0.2</td><td>See the note on <code>COLONY.strike</code>.</td></tr>
+<tr><td><code>COLONY.groundsSlots</code></td><td class="n">24</td><td>Places on the colony&#39;s own grounds, filled in growth order (index 0 next to the town hall, then outward ring by ring); an upper bound, the view draws only what is used. A 5×5 square less the town hall (G-5 AM-16 A, RULE-32).</td></tr>
 </tbody>
 </table></div>
 
@@ -1998,6 +2012,11 @@
 <tbody>
 <tr><td><code>AI_PLANS.on</code></td><td class="n">true</td><td>Seats play their playbook; false: every seat plays the phase-by-phase asks, as before playbooks.</td></tr>
 <tr><td><code>AI_PLANS.ownPhases</code></td><td class="n">false</td><td>A feature switch, not a balance value: a seat&#39;s own path plays its drafted development and auction parts; false, today&#39;s. See AM-26.</td></tr>
+<tr><td><code>AI_PLANS.replan</code></td><td class="n"></td><td>When a kept plan is drafted again: each threshold is against the plan&#39;s anchor, set when it was drafted.</td></tr>
+<tr><td><code>AI_PLANS.replan.keyPlots</code></td><td class="n">2</td><td>The plan&#39;s key plots: the first this many of its month&#39;s land ranking. One taken by a rival re-plans.</td></tr>
+<tr><td><code>AI_PLANS.replan.rivalPlots</code></td><td class="n">1</td><td>Rival plots making the monopoly target, this many more than at the anchor, re-plan.</td></tr>
+<tr><td><code>AI_PLANS.replan.priceShock</code></td><td class="n">0.4</td><td>The money-maker&#39;s or the target&#39;s posted price moving by this share of its anchor price re-plans.</td></tr>
+<tr><td><code>AI_PLANS.replan.eventPlots</code></td><td class="n">1</td><td>A production event cutting the output of this many of the seat&#39;s money-maker plots re-plans.</td></tr>
 <tr><td><code>AI_PLANS.moneyMaker.plots</code></td><td class="n">3</td><td>A good&#39;s score sums its install gain over this many of the seat&#39;s best plots for it (own idle and free).</td></tr>
 <tr><td><code>AI_PLANS.moneyMaker.rivalDiscount</code></td><td class="n">0.15</td><td>Each rival plot already making the good cuts its score by this share.</td></tr>
 <tr><td><code>AI_PLANS.moneyMaker.weight</code></td><td class="n">1</td><td>Weight of the &quot;My money-maker&quot; consideration in a development pick.</td></tr>
@@ -2045,6 +2064,26 @@
 <tr><td><code>AI_PLANS.leaning.saboteur.landBaron</code></td><td class="n">0.4</td><td>See the note on <code>AI_PLANS.leaning</code>.</td></tr>
 <tr><td><code>AI_PLANS.leaning.saboteur.politician</code></td><td class="n">0.3</td><td>See the note on <code>AI_PLANS.leaning</code>.</td></tr>
 <tr><td><code>AI_PLANS.leaning.saboteur.spoiler</code></td><td class="n">1</td><td>See the note on <code>AI_PLANS.leaning</code>.</td></tr>
+</tbody>
+</table></div>
+
+<h3 id="ai-plans-kinds"><code>AI_PLANS.kinds</code></h3>
+<p>What a plan kind multiplies the persona&#39;s weights by while the seat plays it; a weight not named is × 1.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Setting</th><th class="n">Value</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td><code>AI_PLANS.kinds.builder.reserve</code></td><td class="n">1.2</td><td>Multiplies the cash and the Food and Energy it keeps back for next month.</td></tr>
+<tr><td><code>AI_PLANS.kinds.builder.speculate</code></td><td class="n">0.5</td><td>Willingness to buy now to sell next month. 0 never.</td></tr>
+<tr><td><code>AI_PLANS.kinds.builder.corner</code></td><td class="n">0</td><td>Willingness to buy up a scarce good the others are short of, to sell it to them dear. 0 never.</td></tr>
+<tr><td><code>AI_PLANS.kinds.specialist.greed</code></td><td class="n">1.2</td><td>Weight on money made. Higher chases bigger but less certain gains.</td></tr>
+<tr><td><code>AI_PLANS.kinds.specialist.risk</code></td><td class="n">0.9</td><td>Dislike of uncertain bets (unanalysed ground, thin markets). 1 is neutral; higher avoids risk.</td></tr>
+<tr><td><code>AI_PLANS.kinds.monopolist.corner</code></td><td class="n">2.5</td><td>Willingness to buy up a scarce good the others are short of, to sell it to them dear. 0 never.</td></tr>
+<tr><td><code>AI_PLANS.kinds.monopolist.speculate</code></td><td class="n">1.2</td><td>Willingness to buy now to sell next month. 0 never.</td></tr>
+<tr><td><code>AI_PLANS.kinds.monopolist.patience</code></td><td class="n">1.2</td><td>Auction patience: higher waits longer for the other side to come to it.</td></tr>
+<tr><td><code>AI_PLANS.kinds.landBaron.greed</code></td><td class="n">1.1</td><td>Weight on money made. Higher chases bigger but less certain gains.</td></tr>
+<tr><td><code>AI_PLANS.kinds.landBaron.reserve</code></td><td class="n">0.8</td><td>Multiplies the cash and the Food and Energy it keeps back for next month.</td></tr>
+<tr><td><code>AI_PLANS.kinds.politician</code></td><td class="n">{}</td><td>See the note on <code>AI_PLANS.kinds</code>.</td></tr>
+<tr><td><code>AI_PLANS.kinds.spoiler.spite</code></td><td class="n">1.5</td><td>Weight on hurting the leader: blocking their land, outbidding them for what they need. 0 never.</td></tr>
 </tbody>
 </table></div>
 

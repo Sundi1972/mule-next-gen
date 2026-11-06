@@ -415,7 +415,7 @@ function MarketTiles({ game }: { game: MuleView }) {
         <div key={r.good} className="flex flex-col gap-1 bg-panel p-3">
           <GoodTag good={r.good} name />
           <span data-num className="font-mono text-3xl font-bold">
-            {r.price} <span className="text-base font-normal text-ink-3">cr</span>
+            {r.storeSells === null ? '—' : <>{r.storeSells} <span className="text-base font-normal text-ink-3">cr</span></>}
           </span>
           <span data-num className={cx('font-mono text-xs', r.cover < 0.5 ? 'text-alert' : r.cover < 1 ? 'text-warn' : 'text-ink-3')}>
             {r.cover >= 99 ? 'no demand' : `${r.cover} months cover`}

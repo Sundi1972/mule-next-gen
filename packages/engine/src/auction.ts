@@ -1,10 +1,10 @@
-import { GOOD_CONFIG, PRICE, UPKEEP, WALK } from './config.js';
-import { colonyPrice, driftReference, monthlyDemand, shelfShort, shipInPort, shipPrice, storeBuyPrice, storeForSale, storeSellPrice, storeWants, taxSale } from './economy.js';
+import { GOOD_CONFIG, UPKEEP, WALK } from './config.js';
+import { colonyPrice, driftReference, monthlyDemand, shipInPort, shipPrice, storeForSale, storeLines, storeWants, taxSale } from './economy.js';
 import { RuleError } from './errors.js';
 import { chargeExportTax } from './politics.js';
 import { monthNeeds, needsOf } from './production.js';
 import { emptyStock } from './stock.js';
-import { GOODS, type AuctionSide, type GameState, type Good, type GoodReceipt, type LiveAuction, type ReceiptSide, type SkipReason, type StatusRow, type Stock } from './types.js';
+import { GOODS, type AuctionSide, type GameState, type Good, type GoodReceipt, type LiveAuction, type ReceiptSide, type SkipReason, type StatusRow, type Stock, type WalkLesson } from './types.js';
 import { houseLineAt, stepBoard, stepWalker, takeSide, tradePossible, type WalkMarket } from './walk.js';
 
 /**
@@ -73,6 +73,25 @@ function noteUnit(a: LiveAuction, id: string, side: keyof GoodReceipt, price: nu
   a.tally[id] = (a.tally[id] ?? 0) + (side === 'bought' ? -price : price - tax - exportTax);
 }
 
+const freshLesson = (): WalkLesson => ({ soldOutHigh: null, highTrade: null, dryBudget: false });
+const higher = (high: number | null, price: number) => Math.max(high ?? price, price);
+
+/** Applies `change` to a good's lesson, starting one if there is none. */
+function teach(state: GameState, good: Good, change: (lesson: WalkLesson) => Partial<WalkLesson>): void {
+  const lesson = state.store.lastWalk?.[good] ?? freshLesson();
+  // A new record, never an edit: every lesson is a fresh object, so no reader holds a reference that changes under it.
+  state.store.lastWalk = { ...state.store.lastWalk, [good]: { ...lesson, ...change(lesson) } };
+}
+
+/**
+ * Notes a unit traded between players on the lesson of the good that is up, while the store's shelf is as that unit
+ * found it: only a unit bought while the store had none to sell counts towards soldOutHigh.
+ */
+function noteBetween(state: GameState, good: Good, price: number): void {
+  const soldOut = storeForSale(state, good) === 0;
+  teach(state, good, (l) => ({ highTrade: higher(l.highTrade, price), soldOutHigh: soldOut ? higher(l.soldOutHigh, price) : l.soldOutHigh }));
+}
+
 /** The good that is up, as a market for the walk board: players' stock and money, the store and the ship, and the sales tax. */
 export function goodsMarket(state: GameState): WalkMarket {
   const a = state.auction!;
@@ -95,6 +114,7 @@ export function goodsMarket(state: GameState): WalkMarket {
     trade(buyer, seller, price) {
       const b = players.get(buyer);
       const s = players.get(seller);
+      if (b && s) noteBetween(state, good, price);
       if (b) {
         b.money -= price;
         b.stock[good]++;
@@ -103,6 +123,8 @@ export function goodsMarket(state: GameState): WalkMarket {
         state.store.capital -= price;
         state.store.stock[good]++;
         a.storeBudget--;
+        // The budget only ever falls, by the store's own buys, so emptying it here is "wanted some, now wants none".
+        if (a.storeBudget === 0) teach(state, good, () => ({ dryBudget: true }));
       } else {
         state.ship.hold[good] = (state.ship.hold[good] ?? 0) - 1;
         state.ship.bought[good] = (state.ship.bought[good] ?? 0) + 1;
@@ -223,12 +245,7 @@ function skipBefore(state: GameState, good: Good, storeBuy: number, storeBudget:
 /** How a good would come up now: its store lines, budget and board, or why it is skipped. Reads the state only. */
 function comeUp(state: GameState, good: Good, demand: ReturnType<typeof monthlyDemand>) {
   const posted = colonyPrice(state, good);
-  const usualBuy = storeBuyPrice(posted);
-  // A shelf that can't feed the colonists for a month: the store bids up to restock, still under what they can pay.
-  const ceiling = Math.floor((UPKEEP.colonistBudget[good] ?? 0) / (1 + PRICE.storeSpread) ** 2); // literal-ok: the spread applies twice, store buys then sells
-  const storeBuy = shelfShort(state, good, 1) ? Math.max(usualBuy, Math.min(ceiling, Math.ceil(posted * PRICE.restockPremium))) : usualBuy;
-  // A store restocking a short shelf sells dearer too: it never buys above its own selling price, or a player could sell straight back.
-  const storeSell = Math.max(storeSellPrice(posted), storeBuy + 1);
+  const { buy: storeBuy, sell: storeSell } = storeLines(state, good);
   const budget = storeWants(state, good, demand);
   const reason = skipBefore(state, good, storeBuy, budget);
   return { posted, storeBuy, storeSell, budget, reason };
@@ -280,6 +297,7 @@ function nextGood(state: GameState, skipped: LiveAuction['skipped']): void {
       upNext: null,
       receipts: {},
       } satisfies Partial<LiveAuction>);
+    teach(state, good, freshLesson);
     seedSides(state);
     return;
   }

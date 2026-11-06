@@ -263,7 +263,7 @@ today        packages/engine/src/economy.ts::nextPostedPrice: target = ref × (t
              step capped +50% (PRICE.maxRise, of max(prev, ref)) / −40% (PRICE.maxFall); no ceiling; no walk input.
              Called by packages/engine/src/economy.ts::postPrices (game.ts, entering the auction) and ai outlook.ts::outlook.
              verified_by: read + executed (|Δ| p50 41–50% Food/Water/Energy; Food max 1,985)
-tomorrow     (AM-5) the mid follows RULE-5..7: the band's target from the colony's months of cover (RULE-6, the
+tomorrow     (AM-5, AM-6) the mid follows RULE-5..7: the band's target from the colony's months of cover (RULE-6, the
              colonists-short row first); up straight to a higher target; down at most PRICE.fallStep (a quarter) a
              month and never below the normal price N; at least prev + tradePull × (highTrade − prev) after a high
              trade; at least soldOutHigh ÷ (1 + the band's sell spread) after a sell-out; never above
@@ -275,8 +275,9 @@ senior       junior would: clamp posted prices in the auction where they're show
              and ceiling inside nextPostedPrice, so the AI's outlook sees the same price the store will post
 mechanism    in_place
 call sites   packages/engine/src/economy.ts::postPrices; packages/ai/src/outlook.ts (outlook's price/later and outlookPrices)
-pin          the target formula and refDrift/worldPull stay: packages/engine/test economy tests on targetPrice
-             and driftReference keep passing unchanged
+pin          (AM-6) refDrift/worldPull stay; targetPrice is removed (AM-6 item 9), so its tests go with it. PR-1 pins
+             N's drift with B-AC-8's two N-drift tests in packages/engine/test/price-bands.test.ts: a trade at 120 in a
+             severe month leaves N at 30; a trade at 36 in a normal month moves N a quarter of the way up, to 32
 depends_on   C5 (data: store.lastWalk; stubbable as "no walk": null)
 ```
 
@@ -285,13 +286,13 @@ depends_on   C5 (data: store.lastWalk; stubbable as "no walk": null)
 today        packages/engine/src/economy.ts::storeQuotes and packages/engine/src/auction.ts::comeUp: buy = posted × (1 − 0.1), sell = posted × (1 + 0.1);
              comeUp raises the buy line to posted × 1.5 (PRICE.restockPremium) on a short Food/Water shelf, capped at
              the colonists' budget ÷ (1 + spread)²; sell ≥ buy + 1. verified_by: read + executed (spread p50 21%)
-tomorrow     (AM-5) one quote rule for every good: buy = floor(mid × (1 − under)), sell = max(buy + 1, ceil(mid ×
+tomorrow     (AM-5, AM-6) one quote rule for every good: buy = floor(mid × (1 − under)), sell = max(buy + 1, ceil(mid ×
              (1 + over))) with the good's band spread (RULE-7 lines: 15/15, 15/20, 10/25, 10/25); the restock
              premium and the lean are gone; the colonists' cap on the Food/Water buy line stays until the
              colony-needs spec's C2 deletes colonistBudget, and goes with it (HC-4). The hub strip, the auction and
              the TV's market tiles show this one selling price.
 logic        → §2 RULE-7 lines (RULE-2 superseded) · evaluated when a good comes up (comeUp) and whenever storeQuotes is called
-seam         packages/engine/src/economy.ts::storeQuotes (one formula); packages/engine/src/auction.ts::comeUp calls it instead of computing its own
+seam         (AM-6) packages/engine/src/economy.ts::storeQuotes (one formula); packages/engine/src/auction.ts::comeUp calls it instead of computing its own
 senior       junior would: add a scarcity factor in comeUp beside the restock premium · senior does: one quote
              function in economy.ts that comeUp and the AI both call, and delete the second formula in comeUp
 mechanism    extract (comeUp's inline quote → storeQuotes) then in_place
@@ -303,7 +304,7 @@ call sites   (git grep "storeQuotes|storeSpread|restockPremium" on 43af74d2; the
              packages/ai/src/outlook.ts::rollForward (colonist floor), packages/ai/src/strategist.ts::expectedPrices (storeBuy and
              storeSell outside the good that is up), packages/ai/src/value.ts::cashReserve (shortfall cost). WS1 owns economy.ts,
              upkeep.ts, outlook.ts, strategist.ts and value.ts; WS3 owns auction.ts and mule-game.ts.
-pin          HC-4: a short Food shelf never gets a buy line above colonistBudget.food ÷ (1 + max half-spread)²;
+pin          (AM-6) HC-4: a short Food shelf never gets a buy line above colonistBudget.food ÷ (1 + max half-spread)²;
              test kept/renamed from the restock-premium test
 depends_on   C6 (the Energy target feeds the lean)
 ```
@@ -356,7 +357,7 @@ tomorrow     when a good finishes, the store keeps for it: soldOutHigh (the high
              paid between players in the walk, or null) and dryBudget (true exactly when storeBudget was > 0 when
              the good came up and is 0 when it finishes; recorded, read by no rule since decision 12); C1 reads
              them at the next postPrices, which then sets store.lastWalk = {}.
-logic        → §2 RULE-1 inputs · written at packages/engine/src/auction.ts::finishGood (with learnFromGood) · read by nextPostedPrice
+logic        → §2 RULE-1 inputs · (AM-6) written at packages/engine/src/auction.ts::finishGood (with learnFromGood) · read by nextPostedPrice
 seam         packages/engine/src/auction.ts::learnFromGood — where the walk already teaches the market; WS3 records where rule E runs
 senior       junior would: rebuild the high from receipts at month end · senior does: note it unit by unit where
              the store's sold-out state is known, so a unit sold before the shelf emptied never counts
@@ -372,7 +373,7 @@ depends_on   rule E (WS3's amendment E) for the "buyers walk past a sold-out sto
 ```
 today        storeWants(energy) fills to PRICE.storeMaxCover × demand.energy, where demand counts installed plots'
              use (playersUse) and colonists' share. verified_by: read; Energy sold out at come-up 26%, mid-walk 19%
-tomorrow     the Energy target adds newLandMules(players) × PRICE.energyPerNewMule, the mean energyUse of a new MULE
+tomorrow     (AM-6) the Energy target adds newLandMules(players) × PRICE.energyPerNewMule, the mean energyUse of a new MULE
              over the outfits that draw Energy from the stock: plants are excluded, because under AM-17 ruling A a
              plant's own use is not demand on the stock. The lean (C2) then pulls Energy in before the new MULEs need
              it. Water: the same new-MULE term follows AM-18 (WS1 adds it there, not this spec).
@@ -386,7 +387,7 @@ pin          Food/Water demand unchanged
 ```
 
 **C7 · MODIFIED · the configuration: new PRICE, MULE and OFF_WORLD values** — in `packages/engine/src/config.ts`
-(AM-5): `PRICE.normalCover 2, tightCover 1, shortCover 0.5, band { tight 1.25, short 2, severe 4 }, spread
+(AM-5, AM-6): `PRICE.normalCover 2, tightCover 1, shortCover 0.5, band { tight 1.25, short 2, severe 4 }, spread
 { normal 0.15/0.15, tight 0.15/0.20, short 0.10/0.25, severe 0.10/0.25 } (under/over), fallStep 0.25, tradePull
 0.5, ceiling 12, energyPerNewMule (from energyUse)`; maxRise, maxFall, baseSpread, widen, leanShare and glutStep
 are not added (RULE-1/RULE-2 superseded); `PRICE.storeSpread` and `restockPremium` removed once nothing reads them;
@@ -536,6 +537,62 @@ did       folded: C1 → RULE-5..7; C2 → band spreads, one selling price; C5 k
           band lines; B-AC-7..9, T-AC-5, T-AC-6 added; HC-4's cap lasts only while colonistBudget exists
 because   the build plan (docs/plans/2026-11-06-ws5-colony-economy-build.md) builds the approved rule, not the old one
 goal      G-1 (one glut clause fewer, by Heiko's decision), G-2 unchanged
+```
+```
+AM-6 · 2026-11-07 · lead (WS5) · as built in PR-1
+target    §1 C1, C2, C5, C6, C7; §2 RULE-7; §3 the contract and the rule-E seam
+said      the approved rework (AM-5) as §1, §2 and §3 word it
+did       PR-1 (ws5-econ-pr1-bands at eb891c7e) built it with these differences (paths under packages/engine/src):
+ 1  economy.ts::storeLines is the numeric core (storeBuyAt's line, sell ≥ buy + 1); storeQuotes = storeLines
+    + §3's null mask (sell null iff storeForSale = 0, buy null iff storeWants = 0). Why: comeUp draws the board
+    around both lines even where §3 says null, so the mask sits on top of one formula.
+ 2  economy.ts::storeSellAt / storeBuyAt(state, good, mid, { exact }) and colonistAffordable(state, good) are the
+    helpers every former copy of the spread now calls (HC-3): rounded by default, unrounded with exact for forecasts.
+ 3  types.ts::Store.band is recorded per good at economy.ts::postPrices; optional, absent = normal, so older records
+    load. Why: the spread is the posted band's, and every quote until the next posting must read that band.
+ 4  economy.ts::driftReference: implied = trade ÷ the multiple of the band the good was posted in (normal and
+    off-world 1). Before, it divided by the old scarcity(), so a high trade in a shortage could pull N down.
+ 5  game.ts::createGame calls postPrices (a named edit in WS3's file): the opening prices go through the bands from
+    N. Before, it posted round(targetPrice): with the starting stock Water and Energy opened far under N (four
+    seats: Water 7 by the old formula).
+ 6  HC-4's cap in economy.ts::storeBuyAt divides colonistBudget by (1 + the posted band's over)²: Food at most
+    113 / 104 / 96 (normal or off-world / tight / shortage or severe), Water 90 / 83 / 76.
+ 7  economy.ts::monthlyDemand adds mulesWanted(state) × energyPerNewMule() to Energy (C6).
+    a  C7's PRICE.energyPerNewMule became economy.ts::energyPerNewMule(), a private function: the mean of
+       UPKEEP.energyUse over the raw goods except energy (plants excluded, AM-17 A), 1.6 at default, read on
+       every call. Why: the sim's --set reaches it, and no new balance number exists (HC-2).
+    b  the count is economy.ts::mulesWanted (idle owned plots, plus newLandMules while free land is left), not
+       C6's newLandMules(players). Why: that counts 2 a seat even after the last plot is granted and never a
+       granted plot still waiting for its MULE; mulesWanted is the count Smithore's demand already uses.
+ 8  storeBuyAt carries HC-4's cap (exact: unrounded, no floor), and storeLines calls it, so the engine and the AI
+    share one cap: packages/ai/src/strategist.ts::expectedPrices and value.ts::carrySell read storeBuyAt off the
+    auction and expect what the store pays when the good comes up (T-AC-2 in
+    packages/ai/test/store-quotes-contract.test.ts). The buy side's near-whole snap (WS1's N4, from trunk) lives in
+    storeBuyAt's default rounding, so expectedPrices' buy is at least 1.
+ 9  Removed: storeSpread, restockPremium, maxRise, maxFall, shelfCover, minCover, sensitivity, shelfShort, riseCap,
+    scarcity, targetPrice, storeSellPrice, storeBuyPrice. git grep -nw at eb891c7e over packages, apps and tools
+    finds none in code. Left: storeSellPrice once, as a forbidden name in packages/ai/test/price-hc3.test.ts; the
+    word scarcity in MULE's scarcity factor and the map's scarcity stage (other rules). PRICE.targetCover stays:
+    upkeep.ts reads it for the store's ship surplus.
+ 10 C2's pin (a short Food shelf, the max half-spread) and HC-4 (Food and Water, the store's own spread) disagree.
+    The build follows HC-4: Food and Water, every month, the posted band's spread (item 6); the price-bands test
+    pins the severe case, Food's buy line 96 = 150 ÷ 1.25².
+ 11 Measured, no change: C6 cut farm-months without power from 40.4% to 31.8%, and colonists at the end fell from
+    77.5 to 71.7 (40 seed-1 games, politics on, PR-1 without PR-2). The PM ruled C6 stays; Heiko keeps or drops
+    it at milestone A's gate, from runs with and without it.
+ 12 economy.ts::nextPosting (behind nextPostedPrice) skips RULE-7's floor at N for the off-world band: an
+    export-only good follows offWorld below N. Why: RULE-6 row 1 posts the off-world price, and read literally
+    RULE-7's floor would hold Crystite at N once PR-4's walk takes offWorld under it (B-AC-7's off-world test).
+ 13 C5 and §3 name auction.ts::finishGood as where lastWalk is written. Built: auction.ts::teach, called unit by
+    unit from goodsMarket's trade (noteBetween for soldOutHigh and highTrade; dryBudget when storeBudget reaches
+    0) and with a fresh lesson at nextGood. Why: C5's own senior line, "note it unit by unit where the store's
+    sold-out state is known"; each lesson is a new record, so a cloneForSim copy never writes through (T-AC-3).
+ 14 Next month's forecast mid is priced with this month's band spread (packages/ai/src/strategist.ts:614;
+    value.ts:304, 657, 764): storeSellAt reads store.band, which is this month's until the next posting. Accepted as
+    an approximation for now; WS1 fixes it in its own PR after #555.
+because   each item gives its reason on its own lines
+goal      G-1, G-2 unchanged; G-3 is PR-4's
+folded    §1 C1, C2, C5, C6, C7 marked (AM-6); docs/rulebook/store-and-prices.html describes the build (cd7e8005)
 ```
 
 ## §9 · Ownership Boundaries `[handoff]`

@@ -13,7 +13,6 @@ import {
   neighbours,
   outfitBlocked,
   POLLUTION,
-  PRICE,
   PROCESSED_GOODS,
   RAW_GOODS,
   STRATEGIST,
@@ -24,9 +23,9 @@ import {
   storeForSale,
   storePaysFor,
   storeOnStrike,
-  storeBuyPrice,
+  storeBuyAt,
+  storeSellAt,
   storeSellLine,
-  storeSellPrice,
   tileIndex,
   walkSeconds,
   WALK,
@@ -612,7 +611,7 @@ function monthPlan(obs: GameState, mind: Mind, o: Outlook, good: Good, values: U
     mind,
     goods,
     (g) => (g === good ? values : unitValues(obs, o, g, mind)),
-    (g) => (g === good ? expectedPrices(obs, g).buy : belief(obs, o, g) * (1 + PRICE.storeSpread)),
+    (g) => (g === good ? expectedPrices(obs, g).buy : storeSellAt(obs, g, belief(obs, o, g), { exact: true })),
   );
   const share = money * STRATEGIST.budgetShare;
   const later = goods.reduce((n, g) => n + (g === good ? 0 : (plan.cost[g] ?? 0)), 0);
@@ -636,10 +635,10 @@ export function shortfallHold(obs: GameState, me: string, good: Good): { whole: 
 export function expectedPrices(obs: GameState, good: Good): { sell: number; buy: number } {
   const a = obs.auction;
   const posted = obs.store.posted[good];
-  const storeBuy = a?.good === good ? (a.storeBudget > 0 ? a.storeBuy : 0) : storeBuyPrice(posted);
+  const storeBuy = a?.good === good ? (a.storeBudget > 0 ? a.storeBuy : 0) : storeBuyAt(obs, good, posted);
   const ship = shipInPort(obs) ? (shipPrice(obs, good) ?? 0) : 0;
   const sell = Math.max(storeBuy, ship, Math.floor(posted * STRATEGIST.trade.sellFloor));
-  const storeSell = a?.good === good ? a.storeSell : storeSellPrice(posted);
+  const storeSell = a?.good === good ? a.storeSell : storeSellAt(obs, good, posted);
   return { sell, buy: storeSell };
 }
 

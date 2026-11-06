@@ -22,6 +22,7 @@ import {
   type Outfit,
 } from '@mule/engine';
 import { installable, placePoint, plotErrandSeconds, pubMargin } from '../src/floor-time.js';
+import { lookFirstPrices } from './look-first-prices.js';
 import { simFloorConfig } from '../src/floor-turn.js';
 import { FloorWalker, type StepRun } from '../src/hands/floor-walker.js';
 import { outlook } from '../src/outlook.js';
@@ -244,6 +245,7 @@ describe("the arcade floor's AI bugs of 5 Nov (FM-glint-install, FM-led-analyse,
     ownNearest(state, 4);
     const me = state.players.find((p) => p.id === ME)!;
     me.carriedMule = 'food';
+    lookFirstPrices(state);
     const cfg = quietConfig();
     const seat = new AiSeat({ id: ME, name: 'AI 1', persona: 'trader', level: 'trader', seed: 11 });
     const gains = idleGains(state, seat, 'food');

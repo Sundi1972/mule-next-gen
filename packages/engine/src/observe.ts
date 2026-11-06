@@ -9,7 +9,9 @@ import { GOODS, type GameState, type Stock, type Tile } from './types.js';
  *
  * Kept: everything a human in that seat sees on their phone or the board:
  * the map, owners, outfits and pollution; every player's money; the store's
- * prices, stock and MULEs; each good's cover (the market panel), the export
+ * prices, the band each is posted in (store.band), stock and MULEs; what the
+ * last walk taught the store (store.lastWalk, the walk everyone watched);
+ * each good's cover (the market panel), the export
  * ship's wishlist once it is announced; the auction board and its status
  * screen; the colony's price history. The reference and off-world prices
  * count as public colony data (the federation's price list).
@@ -107,6 +109,8 @@ export function cloneForSim(state: GameState): GameState {
       posted: { ...state.store.posted },
       refPrice: { ...state.store.refPrice },
       offWorld: { ...state.store.offWorld },
+      ...(state.store.lastWalk ? { lastWalk: structuredClone(state.store.lastWalk) } : {}),
+      ...(state.store.band ? { band: { ...state.store.band } } : {}),
     },
     treasury: { ...state.treasury, paid: { ...state.treasury.paid } },
     ship: { ...state.ship, goods: state.ship.goods.slice(), hold: { ...state.ship.hold }, bought: { ...state.ship.bought } },

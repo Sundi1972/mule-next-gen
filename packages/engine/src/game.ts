@@ -1,7 +1,7 @@
 import { endAuction, startAuction } from './auction.js';
 import { RuleError } from './errors.js';
 import { COLONY_SCORE, DEFAULT_SPECIES, DEV_STEER, DEVELOPMENT, GAME, GLINT, GOOD_CONFIG, mapSize, MULE, POLLUTION, SPECIES_PERK, START, storeStockFor, TAX, UPKEEP, WOLVES } from './config.js';
-import { allPrices, mulePrice, planShip, postPrices, targetPrice } from './economy.js';
+import { allPrices, mulePrice, planShip, postPrices } from './economy.js';
 import { firePhase, rollPlayerEvent, storeOnStrike } from './events.js';
 import { colonyLot, endLandAuction, isListed, plotAt, startLandAuction } from './lots.js';
 import { generateMap, tileIndex } from './map.js';
@@ -96,8 +96,8 @@ export function createGame(options: { seed: number; players: NewPlayer[]; maxMon
     politics: options.politics === false ? null : newPolitics(),
     colony: options.politics === false ? null : newColony(1),
   };
-  // The first month's prices start where supply and demand put them.
-  for (const good of GOODS) state.store.posted[good] = Math.round(targetPrice(state, good));
+  // The first month's prices are posted by the store's bands, from the normal prices.
+  postPrices(state);
   // Month 1's planning rolls here, as every later month's does in advancePhase (none fires before EVENTS.firstMonth).
   firePhase(state, 'planning');
   openPlanning(state);

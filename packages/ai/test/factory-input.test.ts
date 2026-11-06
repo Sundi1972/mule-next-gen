@@ -184,7 +184,8 @@ describe("in the production phase a farm counts with what it makes, not with not
 describe("a factory seat bids for its Food at a worthwhile ask (FM-factory-input, option 1)", () => {
   /**
    * Month 1's auction, Food up: ai0 owns one Medicine factory and holds Water and Energy for it, no Food. The store
-   * has no Food to sell (its shelf is the colonists'); ai1 holds 30 Food and nothing else. Medicine posts at `medicine`.
+   * has no Food to sell (its shelf is the colonists'); ai1 holds 30 Food and nothing else. Food posts at 120, a severe
+   * shortage's price, and Medicine at `medicine`.
    */
   function auction(medicine: number): GameState {
     const state = game();
@@ -196,7 +197,7 @@ describe("a factory seat bids for its Food at a worthwhile ask (FM-factory-input
     setStock(state, 'ai3', {}, 0);
     state.store.stock.food = 0;
     state.store.stock.medicine = 0;
-    state.store.posted.food = 300;
+    state.store.posted.food = 120;
     state.store.posted.medicine = medicine;
     startAuction(state);
     expect(state.auction!.good).toBe('food');
@@ -218,7 +219,8 @@ describe("a factory seat bids for its Food at a worthwhile ask (FM-factory-input
   }
 
   it('FM-factory-input-1: its run worth far more than its inputs, it buys enough Food from a player for the factory to run', () => {
-    const state = auction(1500);
+    // Medicine at its ceiling, 12 × 120.
+    const state = auction(1440);
     const obs = observe(state, ME);
     const o = outlook(obs, ME, { lookAhead: true });
     // The arrangement: the run's two Medicine are worth twice and more the 5 Food the factory needs past upkeep (3 eaten,
@@ -235,6 +237,8 @@ describe('the keep side does not move (Heiko 5 Nov, "sell surplus")', () => {
   /** Month 1's auction with `good` up; ai0 owns `plots` and holds `stock`. */
   function at(plots: { x: number; outfit: Outfit }[], stock: Partial<Stock>): GameState {
     const state = game();
+    // Energy's shelf is full before the month's prices are posted: C6 counts the MULEs the free land will bring, and it still posts normal.
+    state.store.stock.energy = 200;
     while (state.phase !== 'auction') advancePhase(state);
     place(state, plots);
     setStock(state, ME, stock, 2000);
