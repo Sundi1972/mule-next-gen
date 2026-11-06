@@ -110,12 +110,40 @@ function governorActs(state: GameState, playerId: string, act: string): Colony {
   return state.colony;
 }
 
-/** The Governor commissions a prestige object; the fund and donors pay for it from the next upkeep. See G-5 RULE-22. */
-export function commission(state: GameState, playerId: string, id: PrestigeId): void {
+/**
+ * The Governor commissions a prestige object on a slot of the colony's grounds; the fund and donors pay for it from the
+ * next upkeep. No slot named takes the lowest free one, which is what the AI Governor does. See G-5 RULE-22, RULE-32.
+ */
+export function commission(state: GameState, playerId: string, id: PrestigeId, slot?: number): void {
   governorActs(state, playerId, 'Commission');
   const refused = objectRefusal(state, id);
   if (refused) throw new RuleError(refused);
-  edit(state).projects.push({ id, stage: 'commissioned', funded: { credits: 0, goods: {} }, monthsLeft: null, plot: null, since: state.month, plaque: {}, maxBid: null });
+  edit(state).projects.push({ id, stage: 'commissioned', funded: { credits: 0, goods: {} }, monthsLeft: null, plot: null, since: state.month, plaque: {}, maxBid: null, slot: groundsSlot(state, slot) });
+}
+
+const GROUNDS_FULL = "The colony's grounds are full";
+
+/**
+ * The slot on the colony's grounds a new object takes (G-5 RULE-32): the one named, or the lowest free one. Every
+ * project holding a slot keeps it whatever its stage, closed and damaged ones too; no rule reads where a slot is.
+ */
+function groundsSlot(state: GameState, slot: number | undefined): number {
+  if (slot === undefined) {
+    const free = lowestFreeSlot(state);
+    if (free === null) throw new RuleError(GROUNDS_FULL);
+    return free;
+  }
+  if (!Number.isInteger(slot) || slot < 0 || slot >= COLONY.groundsSlots) throw new RuleError(`There is no slot ${slot} on the colony's grounds`);
+  const holder = state.colony!.projects.find((p) => p.slot === slot);
+  if (holder) throw new RuleError(`The ${PRESTIGE[holder.id].name} stands there`);
+  return slot;
+}
+
+/** The lowest slot on the colony's grounds no project holds, or null when every one is taken. */
+function lowestFreeSlot(state: GameState): number | null {
+  const taken = new Set(state.colony!.projects.map((p) => p.slot));
+  for (let slot = 0; slot < COLONY.groundsSlots; slot++) if (!taken.has(slot)) return slot;
+  return null;
 }
 
 /** Why the colony can't take on this object now, whoever asks (RULE-22 rows 4-6), or null. */
@@ -139,7 +167,7 @@ export function commissionRefusal(state: GameState, id: PrestigeId): string | nu
     if (err instanceof RuleError) return err.message;
     throw err;
   }
-  return objectRefusal(state, id);
+  return objectRefusal(state, id) ?? (lowestFreeSlot(state) === null ? GROUNDS_FULL : null);
 }
 
 /** The Governor pays to repair a damaged object from the fund. See G-5 RULE-21. */
