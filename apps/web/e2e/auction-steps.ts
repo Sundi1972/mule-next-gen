@@ -981,9 +981,16 @@ async function theSoldOutTvFits(tv: Page, server: MuleServer, code: string): Pro
       await fitSettled(tv);
       const shown = await shownWhole(tv, 'auction (sold out, two deals)', ['[data-testid=tv-sold-out]', '[data-testid=tv-deal]']);
       check(shown.length === 3, `TV-FIT: the sold-out TV shows its box and both running deals, got ${shown.map((b) => b.id).join(', ')}`);
+      // The sellers' band, thin under a bid near the top edge, keeps its words inside it, off the line's label (WS4).
+      const band = await tv.locator('[data-testid=tv-walk] [data-testid=rest-seller]').evaluate((b) => {
+        const r = b.getBoundingClientRect();
+        const words = b.lastElementChild!.getBoundingClientRect();
+        return { top: r.top, bottom: r.bottom, wordsBottom: words.bottom, text: (b as HTMLElement).innerText.replace(/\s+/g, ' ').trim() };
+      });
+      check(band.wordsBottom <= band.bottom + 1, `TV-FIT: the sellers' band's words "${band.text}" end at y ${band.wordsBottom.toFixed(1)}, inside the band ending at y ${band.bottom.toFixed(1)}`);
       const foot = await nothingPastTheFoot(tv, 'auction (sold out, two deals)');
       const scale = await theTvScaleHolds(tv, 'auction (sold out, two deals)');
-      return `the sold-out box and both deal rows whole, y ${shown[0]!.top.toFixed(0)}–${shown.at(-1)!.bottom.toFixed(0)}; fit scales ${scale}; the foot at y ${foot.toFixed(0)}`;
+      return `the sold-out box and both deal rows whole, y ${shown[0]!.top.toFixed(0)}–${shown.at(-1)!.bottom.toFixed(0)}; the sellers' band ${(band.bottom - band.top).toFixed(0)} px says "${band.text}" inside it; fit scales ${scale}; the foot at y ${foot.toFixed(0)}`;
     } finally {
       a.deals = kept;
       room.broadcast();
