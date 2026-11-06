@@ -7,9 +7,12 @@ import {
   speedOf,
   glintMiddle,
   IDLE_INPUT,
+  isAssaying,
+  isStunned,
   MS_PER_SECOND,
   observe,
   pathTo,
+  pressOrder,
   terrainShare,
   tileAt,
   tileIndex,
@@ -87,15 +90,27 @@ const fadesThisStep = (floor: DevFloor): boolean => floor.moments.glint !== null
 
 /**
  * Whether a rival may take the lit glint before this seat's GRAB applies: the press applies after the coming step, which
- * gives the glint to a colonist that steps onto its tile, and after the presses ahead of it in the tick's press order.
- * So a rival on the map within GRAB's reach of the glint, or a step short of it, may take it first (FM-hurry-margin).
+ * gives the glint to a colonist that steps onto its tile, and after the presses ahead of it in the tick's press order
+ * (public: seat order and the tick). So a rival on the map may take it first from within a step of the glint's tile,
+ * or, pressing ahead of this seat, from within GRAB's reach after its step. A stunned or assaying rival neither steps
+ * nor presses (FM-hurry-margin).
  */
 function rivalMayGrab(state: GameState, floor: DevFloor, me: string, cfg: FloorConfig): boolean {
   const g = floor.moments.glint;
   if (!g) return false;
   const m = glintMiddle(g);
-  const step = (r: FloorColonist) => (speedOf(r, state, cfg) * cfg.steer.tickMs) / MS_PER_SECOND;
-  return floor.colonists.some((r) => r.id !== me && r.space === 'map' && Math.hypot(r.x - m.x, r.y - m.y) <= cfg.glint.grabReach + step(r));
+  const next = floor.tick + 1;
+  const order = pressOrder({ ...floor, tick: next }, floor.colonists.map((c) => c.id));
+  const first = new Set(order.slice(0, order.indexOf(me)));
+  return floor.colonists.some((r) => {
+    if (r.id === me || r.space !== 'map') return false;
+    const steps = !isStunned(r, floor.tick) && !isAssaying(r, floor.tick);
+    const step = steps ? (speedOf(r, state, cfg) * cfg.steer.tickMs) / MS_PER_SECOND : 0;
+    const presses = first.has(r.id) && !isStunned(r, next) && !isAssaying(r, next);
+    const gap = Math.hypot(r.x - m.x, r.y - m.y);
+    // The tile's corners lie half a diagonal from its middle.
+    return gap <= step + Math.SQRT1_2 || (presses && gap <= cfg.glint.grabReach + step);
+  });
 }
 
 /** Whether Reach offers this seat a press below GRAB where it stands: what a GRAB pressed now becomes if the glint is gone. */
@@ -379,7 +394,8 @@ export class DevelopHand {
     // that fades in the coming step: the press applies after it, to the row below, such as ANALYSE of the land
     // underfoot, an assay no plan priced (FM-glint-fade).
     // Nor where a rival may take the glint first while a row below GRAB is on offer: the press would fall to that row
-    // just the same. It walks onto the glint's tile instead, which wins it in the step with no press (FM-hurry-margin).
+    // just the same. Racing, it walks onto the glint's tile instead, which wins it in the step with no press
+    // (FM-hurry-margin); not racing, it lets the glint go.
     const first = reachOf(floor, state, me, cfg, { secondsLeft }).kind;
     const fading = fadesThisStep(floor);
     const sure = !fading && !(first === 'grab' && rivalMayGrab(state, floor, me, cfg) && pressBelowGrab(state, floor, me, cfg, secondsLeft));
@@ -404,8 +420,9 @@ export class DevelopHand {
     // the pub's, and every step left on the list after the glint (RULE-8).
     const racing = g !== null && this.racingGlint === g.sinceTick;
     const spare = !cfg.steer.botsSpareTime || (racing && secondsLeft > pubSeconds(state, cfg, c) + this.margin(cfg, c) && this.fitsDetour(view, c, glintMiddle(g)));
-    // A glint fading in the coming step can no longer be pressed for: the race is over.
-    if (g && racing && spare && !fading) {
+    // A glint fading in the coming step is walked onto, not pressed for (`sure` is false): the step gives it to a
+    // colonist on its tile before it fades it.
+    if (g && racing && spare) {
       const input = this.chaser.seek(view, glintMiddle(g), sure ? 'grab' : 'none');
       if (input) return input;
     }

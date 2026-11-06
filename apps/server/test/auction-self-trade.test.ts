@@ -111,9 +111,14 @@ describe('RULE-1 and RULE-3: at the store\'s line units trade by themselves, one
     const afterTwo = at - stock(state, 's2', good);
     expect(afterOne, 'the first window sells a few').toBeGreaterThanOrEqual(2);
     expect(afterTwo - afterOne, 'the next window sells more').toBeGreaterThan(afterOne);
-    // Selling below next month's need is allowed and shown, never asked: nothing stops it but the player.
+    // RULE-4: he stops at next month's need with nothing asked; selling on below it takes a hold of ▼ for WALK.shortHoldMs.
+    const held = () => state.auction!.walkers.find((w) => w.id === 's2')!.held === true;
+    for (let i = 0; i < 400 && !held(); i++) advance(WALK.tickMs);
+    expect(stock(state, 's2', good), 'stopped at his need').toBe(need);
+    game.handle('s2', { type: 'walk', dir: 'down' });
+    ticks(advance, WALK.shortHoldMs);
     ticks(advance, unitsMs(12));
-    expect(stock(state, 's2', good), 'sold down past the need, with nothing asked').toBeLessThan(Math.max(1, need));
+    expect(stock(state, 's2', good), 'sold down past the need, once he held ▼').toBeLessThan(Math.max(1, need));
     game.handle('s2', { type: 'ready' });
     const left = stock(state, 's2', good);
     if (left > 0) {

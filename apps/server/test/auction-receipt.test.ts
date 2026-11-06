@@ -22,6 +22,9 @@ function toClose() {
   expect(game.viewFor('s1').phase).toBe('auction');
   const state = engineOf(game);
   const good = game.viewFor(null).auction!.good;
+  // RULE-4: a seller stops at what they must hold. s1 holds four over his need, so what he sells here is spare.
+  const s1 = state.players.find((p) => p.id === 's1')!;
+  s1.stock[good] = state.auction!.status.find((r) => r.id === 's1')!.need + 4;
   const opened = Object.fromEntries(state.players.map((p) => [p.id, { money: p.money, stock: p.stock[good] }]));
   game.handle('s1', { type: 'declare', side: 'seller' });
   game.handle('s2', { type: 'declare', side: 'buyer' });

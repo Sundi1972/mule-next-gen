@@ -1,5 +1,5 @@
 import { GOOD_CONFIG, PRICE, UPKEEP, WALK } from './config.js';
-import { colonyPrice, driftReference, monthlyDemand, shelfShort, shipInPort, shipPrice, storeForSale, storeWants, taxSale } from './economy.js';
+import { colonyPrice, driftReference, monthlyDemand, shelfShort, shipInPort, shipPrice, storeForSale, storeSellPrice, storeWants, taxSale } from './economy.js';
 import { RuleError } from './errors.js';
 import { chargeExportTax } from './politics.js';
 import { monthNeeds, needsOf } from './production.js';
@@ -81,6 +81,8 @@ export function goodsMarket(state: GameState): WalkMarket {
   const seats = new Map(state.players.map((p, i) => [p.id, i]));
   return {
     units: (id) => players.get(id)?.stock[good] ?? 0,
+    // RULE-4: what a seller must hold is the status row's need (auctionNeed), fixed as the good came up.
+    keep: (id) => (WALK.needStop ? (a.status.find((r) => r.id === id)?.need ?? 0) : 0),
     money: (id) => players.get(id)?.money ?? 0,
     houseSells: { id: STORE_ID, price: () => storeSellLine(state) },
     houseBuys: [
@@ -226,7 +228,7 @@ function comeUp(state: GameState, good: Good, demand: ReturnType<typeof monthlyD
   const ceiling = Math.floor((UPKEEP.colonistBudget[good] ?? 0) / (1 + PRICE.storeSpread) ** 2); // literal-ok: the spread applies twice, store buys then sells
   const storeBuy = shelfShort(state, good, 1) ? Math.max(usualBuy, Math.min(ceiling, Math.ceil(posted * PRICE.restockPremium))) : usualBuy;
   // A store restocking a short shelf sells dearer too: it never buys above its own selling price, or a player could sell straight back.
-  const storeSell = Math.max(Math.ceil(posted * (1 + PRICE.storeSpread)), storeBuy + 1);
+  const storeSell = Math.max(storeSellPrice(posted), storeBuy + 1);
   const budget = storeWants(state, good, demand);
   const reason = skipBefore(state, good, storeBuy, budget);
   return { posted, storeBuy, storeSell, budget, reason };
@@ -360,6 +362,9 @@ export function setWalk(state: GameState, playerId: string, dir: -1 | 0 | 1): vo
   if (a.stage !== 'walk') throw new RuleError('Not walking yet');
   const w = a.walkers.find((x) => x.id === playerId);
   if (!w || w.side === 'pass') throw new RuleError('You passed on this good');
+  // RULE-4: the board's time a hold of ▼ began, so a held seller's one-second hold counts the same on a replay.
+  if (dir !== -1) delete w.downSince;
+  else if (w.dir !== -1 || w.downSince === undefined) w.downSince = a.elapsed;
   w.dir = dir;
 }
 

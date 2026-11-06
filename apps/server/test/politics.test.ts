@@ -694,6 +694,9 @@ describe('the politics view', () => {
     while (g.game.viewFor('lena').phase === 'landGrant') g.advance(GRANT_TICK_MS);
     while (g.game.viewFor('lena').phase === 'development' || g.game.viewFor('lena').phase === 'production') g.advance(1_000);
     expect(g.game.viewFor('lena').phase).toBe('auction');
+    // RULE-4: a seller stops at what she must hold. Lena holds four over her need, so the unit she sells is spare.
+    const auction = engineOf(g.game).auction!;
+    engineOf(g.game).players.find((p) => p.id === 'lena')!.stock[auction.good!] = auction.status.find((r) => r.id === 'lena')!.need + 4;
     g.game.handle('lena', { type: 'declare', side: 'seller' });
     g.game.handle('brix', { type: 'declare', side: 'buyer' });
     engineOf(g.game).players.find((p) => p.id === 'ossa')!.money = 0;

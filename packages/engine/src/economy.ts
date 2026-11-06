@@ -225,6 +225,14 @@ export function mulePrice(state: GameState): number {
   return Math.round((MULE.labour + MULE.smithorePerMule * state.store.posted.smithore) * state.store.muleFactor);
 }
 
+/** What the store sells at for a posted price: the price plus PRICE.storeSpread, rounded up. */
+export function storeSellPrice(posted: number): number {
+  const exact = posted * (1 + PRICE.storeSpread);
+  const whole = Math.round(exact);
+  // 1 + 0.1 is a hair over 1.1 in floating point, so 50 × 1.1 lands a hair over 55: that close to a whole number, it is one.
+  return Math.abs(exact - whole) <= Number.EPSILON * exact ? whole : Math.ceil(exact);
+}
+
 /**
  * What the store charges and what it pays, or null where it doesn't trade:
  * no sell price with an empty shelf, no buy price when it wants no more.
@@ -234,7 +242,7 @@ export function storeQuotes(state: GameState, good: Good): { buy: number | null;
   const buy = Math.max(1, Math.floor(price * (1 - PRICE.storeSpread)));
   return {
     buy: storeWants(state, good) > 0 ? buy : null,
-    sell: storeForSale(state, good) > 0 ? Math.ceil(price * (1 + PRICE.storeSpread)) : null,
+    sell: storeForSale(state, good) > 0 ? storeSellPrice(price) : null,
   };
 }
 
