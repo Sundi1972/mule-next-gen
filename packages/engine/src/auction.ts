@@ -81,6 +81,8 @@ export function goodsMarket(state: GameState): WalkMarket {
   const seats = new Map(state.players.map((p, i) => [p.id, i]));
   return {
     units: (id) => players.get(id)?.stock[good] ?? 0,
+    // RULE-4: what a seller must hold is the status row's need (auctionNeed), fixed as the good came up.
+    keep: (id) => (WALK.needStop ? (a.status.find((r) => r.id === id)?.need ?? 0) : 0),
     money: (id) => players.get(id)?.money ?? 0,
     houseSells: { id: STORE_ID, price: () => storeSellLine(state) },
     houseBuys: [
