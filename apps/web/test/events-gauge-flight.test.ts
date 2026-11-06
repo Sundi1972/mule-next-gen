@@ -207,22 +207,39 @@ type Screen = ReturnType<ReturnType<typeof tv>['at']>;
 
 const STEP = 0.02;
 const SHOW_END = (EVENT_SHOW.introMs + EVENT_SHOW.playMs.headline) / 1000;
-/** Every frame of the show, STEP apart. */
-function frames(screen: ReturnType<typeof tv>): { t: number; s: Screen }[] {
+/** The show sampled every `step` seconds: a tenth of a second still catches the shortest thing it shows (a 0.25 s fade). */
+function frames(screen: ReturnType<typeof tv>, step = 0.1): { t: number; s: Screen }[] {
   const out: { t: number; s: Screen }[] = [];
-  for (let t = 0; t < SHOW_END; t += STEP) out.push({ t, s: screen.at(t) });
+  for (let i = 0; i * step < SHOW_END; i++) out.push({ t: i * step, s: screen.at(i * step) });
   return out;
 }
-/** The first show second its chip is on the card. */
+/**
+ * The first STEP frame from `from` on which `ok` holds, for a condition that, once true, stays true to the show's end;
+ * found by halving, since every frame renders the whole TV. NaN when it never holds.
+ */
+function firstWhen(screen: ReturnType<typeof tv>, ok: (s: Screen) => boolean, from = 0): number {
+  let lo = Math.ceil(from / STEP - 1e-9);
+  let hi = Math.ceil(SHOW_END / STEP - 1e-9) - 1;
+  if (!ok(screen.at(hi * STEP))) return NaN;
+  while (lo < hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (ok(screen.at(mid * STEP))) hi = mid;
+    else lo = mid + 1;
+  }
+  return lo * STEP;
+}
+/** The first show second its chip is on the card (it stays there, faded once it leaves, until the show ends). */
 function onCardAt(screen: ReturnType<typeof tv>, what: string): number {
-  for (let t = 0; t < SHOW_END; t += STEP) if (screen.at(t).cardChip(what)) return t;
-  return expect.unreachable(`the event's card never shows its ${what} chip`);
+  const t = firstWhen(screen, (s) => s.cardChip(what) !== null);
+  return Number.isNaN(t) ? expect.unreachable(`the event's card never shows its ${what} chip`) : t;
 }
 /** The first show second its chip has left the card (its place there fades): the test's ground truth for the departure. */
 function leftAt(screen: ReturnType<typeof tv>, what: string): number {
-  for (let t = 0; t < SHOW_END; t += STEP) if (screen.at(t).cardChip(what)?.opacity === 0.15) return t;
-  return expect.unreachable(`the ${what} chip never leaves the card`);
+  const t = firstWhen(screen, (s) => s.cardChip(what)?.opacity === 0.15);
+  return Number.isNaN(t) ? expect.unreachable(`the ${what} chip never leaves the card`) : t;
 }
+/** The first show second from `from` its gauge has left `old`: it pulses as the chip lands, then counts away from it. */
+const landedAt = (screen: ReturnType<typeof tv>, gauge: string, old: number, from: number) => firstWhen(screen, (s) => s.gauge(gauge).pulses || s.gauge(gauge).value !== old, from);
 /** The last frame the show's overlay is on the TV, before the phase screen comes back. */
 function lastShowFrame(screen: ReturnType<typeof tv>): Screen {
   let t = Math.floor(SHOW_END / STEP) * STEP;
@@ -266,8 +283,8 @@ describe('B-AC-23-7: a colony event’s gauge change flies from its card into th
     expect(mid.cardChip('mood')!.opacity).toBe(0.15);
 
     // It lands within the mock's flight: the gauge pulses and counts up from 64, never down.
-    let lands = leaves;
-    while (!screen.at(lands).gauge('gauge-happiness').pulses) lands += STEP;
+    const lands = landedAt(screen, 'gauge-happiness', 64, leaves);
+    expect(screen.at(lands).gauge('gauge-happiness').pulses).toBe(true);
     expect(lands - leaves).toBeLessThanOrEqual(FLY + STEP);
     const counting = [lands, lands + 0.2, lands + 0.4].map((t) => screen.at(t).gauge('gauge-happiness').value);
     counting.slice(1).forEach((v, i) => expect(v).toBeGreaterThanOrEqual(counting[i]!));
@@ -285,8 +302,8 @@ describe('B-AC-23-7: a colony event’s gauge change flies from its card into th
     expect(mid.flight('prestige')!.x).toBeGreaterThan(CHIP.prestige!.x);
     expect(mid.flight('prestige')!.x).toBeLessThan(GAUGE['gauge-prestige']!.x);
     expect(mid.gauge('gauge-prestige').value).toBe(5);
-    let lands = leaves;
-    while (!screen.at(lands).gauge('gauge-prestige').pulses) lands += STEP;
+    const lands = landedAt(screen, 'gauge-prestige', 5, leaves);
+    expect(screen.at(lands).gauge('gauge-prestige').pulses).toBe(true);
     expect(lands - leaves).toBeLessThanOrEqual(FLY + STEP);
     expect(screen.at(lands + COUNT + STEP).gauge('gauge-prestige').value).toBe(7);
   });
@@ -295,8 +312,11 @@ describe('B-AC-23-7: a colony event’s gauge change flies from its card into th
     const screen = tv(FESTIVAL, colony({ happiness: 82, prestige: 7 }));
     const leaves = leftAt(screen, 'mood');
     expect(screen.at(leaves).gauge('gauge-happiness').said).toContain('72 Content');
+    // Every frame from the landing until the count is over; before it the gauge holds 72 Content.
+    const lands = landedAt(screen, 'gauge-happiness', 72, leaves);
+    expect(screen.at(lands - STEP).gauge('gauge-happiness').said).toContain('72 Content');
     const seen: Screen['gauge'] extends (...a: never[]) => infer R ? R[] : never = [];
-    for (let t = leaves; t < SHOW_END; t += STEP) seen.push(screen.at(t).gauge('gauge-happiness'));
+    for (let i = 0; lands + i * STEP < Math.min(SHOW_END, lands + COUNT + 2 * STEP); i++) seen.push(screen.at(lands + i * STEP).gauge('gauge-happiness'));
     for (const g of seen) expect(g.said).toContain(`${g.value} ${g.value >= HAPPINESS.bands.thriving ? 'Thriving' : 'Content'}`);
     const flipAt = seen.findIndex((g) => g.value >= HAPPINESS.bands.thriving);
     expect(flipAt).toBeGreaterThan(0);
@@ -360,7 +380,7 @@ describe('B-AC-23-8 (negative): nothing flies for an event that moves no gauge, 
     const players = PLAYERS.map((p) => ({ id: p.id, name: p.name, slot: p.slot as 0 }));
     const seg = eventSegments({ events, introMs: EVENT_SHOW.introMs }, 0, 'solo')[0]!;
     const cards: string[] = [];
-    for (let t = seg.playAt; t < seg.endAt; t += STEP) {
+    for (let t = seg.playAt; t < seg.endAt; t += 0.05) {
       const html = renderToStaticMarkup(createElement(EventShow, { events, introMs: EVENT_SHOW.introMs, t, mode: 'solo', width: W, height: H, tiles, players, children: createElement(EventLivingMap, { size: 'phone', focusSlot: 0, onSkip: () => undefined }) }));
       const card = html.match(/data-testid="effects-card"[\s\S]*/)?.[0];
       if (card) cards.push(card);
