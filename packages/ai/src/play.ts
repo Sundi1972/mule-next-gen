@@ -55,6 +55,7 @@ import {
   type GameState,
   type PhaseOutcome,
   type Playbook,
+  type Species,
 } from '@mule/engine';
 import type { Act, AiAction } from './actions.js';
 import type { DecisionRecord } from './brain.js';
@@ -84,6 +85,8 @@ export interface SeatSpec {
    * ships. See C14, AM-26.
    */
   plays?: 'playbook' | 'today';
+  /** The species the seat picked; unset, it plays the game's default for its seat, which turns with the seed. */
+  species?: Species;
 }
 
 export interface PlayedGame {
@@ -328,7 +331,7 @@ export async function playGameAsync(seed: number, specs: SeatSpec[], options: Pl
 
 /** The game loop, yielding after every tick where a decider may be waiting, and once at the end of each phase. */
 function* playSteps(seed: number, specs: SeatSpec[], options: PlayOptions): Generator<void, PlayedGame, void> {
-  const state = createGame({ seed, players: specs.map((_, i) => ({ id: `ai${i}`, name: `AI ${i + 1}`, isAi: true })), politics: options.politics, maxMonths: options.maxMonths });
+  const state = createGame({ seed, players: specs.map((spec, i) => ({ id: `ai${i}`, name: `AI ${i + 1}`, isAi: true, ...(spec.species ? { species: spec.species } : {}) })), politics: options.politics, maxMonths: options.maxMonths });
   // Read per game, so a sim run's --set reaches it.
   const DEV_TICK_MS = AI_HANDS.devTickMs;
   let decisions = 0;

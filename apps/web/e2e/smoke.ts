@@ -4,7 +4,7 @@
  * Run with `pnpm --filter @mule/web e2e`; replay a red run's map with `MULE_E2E_SEED=<seed>`.
  */
 import { existsSync } from 'node:fs';
-import { EVENTS, WALK, type GameState } from '@mule/engine';
+import { EVENTS, SPECIES, WALK, type GameState } from '@mule/engine';
 import { errors as playwrightErrors, type BrowserContext, type Page } from 'playwright';
 import { PHASE_MS } from '../../server/src/mule-game.js';
 import type { MuleServer } from '../../server/src/server.js';
@@ -129,8 +129,18 @@ try {
   console.log(`election: ${await doneThroughTheElection(ctx, within(ELECTION_WAIT_MS))}`);
   // The TV shows election day first; its planning roster comes after.
   await tvGame.locator('li').filter({ hasText: 'Heiko' }).getByRole('img', { name: 'Mollox' }).first().waitFor({ timeout: 3_000 });
-  check((await tvGame.getByRole('img', { name: 'Zipwing' }).count()) === 0, 'B-AC-1: nobody in the TV game plays the seat-1 default, Zipwing');
-  check((await tvGame.getByRole('img', { name: 'Bramblet' }).count()) >= 1, 'B-AC-1: the TV game still shows the first AI as a Bramblet');
+  // The species each seat plays come from the server's game, not from the chair: a seat's default turns with the seed
+  // (FM-species-by-chair). The TV game draws exactly the species the game holds, so the host's own default, which its
+  // pick replaced, is on no one, and each AI plays the species the game dealt it.
+  const gameSeats = server.registry.get(code)?.viewFor(null).game?.players.map((p) => ({ name: p.name, species: p.species })) ?? [];
+  check(gameSeats.length === 3, `B-AC-1: the server's game holds three seats, got ${gameSeats.length}`);
+  check(gameSeats.find((p) => p.name === 'Heiko')?.species === 'mollox', `B-AC-1: the server's game has Heiko as the Mollox he picked: ${JSON.stringify(gameSeats)}`);
+  for (const species of SPECIES) {
+    const name = species[0]!.toUpperCase() + species.slice(1);
+    const drawn = (await tvGame.getByRole('img', { name }).count()) > 0;
+    const inGame = gameSeats.some((p) => p.species === species);
+    check(drawn === inGame, `B-AC-1: the TV game ${inGame ? 'draws' : 'draws no'} ${name}, as the server's game holds ${gameSeats.map((p) => `${p.name} ${p.species}`).join(', ')}`);
+  }
   const rose = await theTvDrawsRose(ctx, 'planning');
   await specialFieldsShowTheirGlyphs(ctx);
   await readyThroughTheElection(phone, READY_MS);

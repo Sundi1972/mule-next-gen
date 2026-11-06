@@ -8,6 +8,7 @@ import type { Strategy } from './playbook.js';
  */
 
 export interface GoodConfig {
+  /** Credits a unit at normal supply when the game starts: the store's opening price and off-world price; it drifts after. */
   refPrice: number;
   /** How strongly price reacts to low cover (k in the price formula). */
   sensitivity: number;
@@ -193,7 +194,7 @@ export const SPECIES_PERK = {
   molloxAnalysis: 0.5,
 } satisfies Record<string, number>;
 
-/** Default species by seat, when a player hasn't picked one. */
+/** Default species, when a player hasn't picked one: of n seats, seat i gets entry (i + seed read unsigned) mod n, so an n-seat game plays the first n and each turns with the game's seed, not the chair (FM-species-by-chair). */
 export const DEFAULT_SPECIES: readonly Species[] = ['zipwing', 'bramblet', 'gearling', 'mollox', 'glimmer', 'quibbit'];
 
 export const ADJACENCY = {
@@ -214,6 +215,7 @@ export const UPKEEP = {
   baseWater: 1,
   crewPerFood: 4,
   crewPerWater: 6,
+  /** Crew a plot adds to its owner's, by kind: a raw plot, a factory, a green belt. */
   crew: { raw: 1, factory: 2, greenBelt: 0 },
   /**
    * Energy a raw plot burns a month, by what it makes. Factories burn what their recipe says. An Energy plot pays its
@@ -255,6 +257,7 @@ export const UPKEEP = {
 };
 
 export const START = {
+  /** Each player's credits at the start. */
   money: 1000,
   /** Each player's depot at the start. Food 2 and Energy 2 (Heiko, 5 Nov). */
   playerStock: { food: 2, water: 6, energy: 2 } as Partial<Stock>,
@@ -303,6 +306,7 @@ export const MULE = {
   surplusShare: 0.5,
   /** The scarcity factor never falls below this. */
   minFactor: 0.6,
+  /** Credits to outfit a MULE for each good, paid at the store's outfit counter. */
   outfitCost: {
     food: 25, water: 25, energy: 50, smithore: 75, crystite: 100, rareEarth: 100,
     alloy: 150, electronics: 200, medicine: 150, greenBelt: 20,
@@ -403,9 +407,10 @@ export const DEV_STEER = {
   /** An AI colonist drops its errand for the pub once the clock shows no more than its walk there and this many seconds. */
   botPubMarginSeconds: 2,
   /**
-   * An AI colonist buys a MULE only while its errand, this share longer than estimated, still leaves the pub margin
-   * (botPubMarginSeconds, as the hurry for the pub counts it): a walk that runs a little long then costs the margin
-   * nothing, and the MULE is installed, not walked into the pub (FM-hurry-margin).
+   * An AI colonist buys a MULE, or starts a glint race, only while its errand, this share longer than estimated,
+   * still leaves the pub margin (botPubMarginSeconds, as the hurry for the pub counts it): a walk that runs a little
+   * long then costs the margin nothing, and the MULE is installed, not walked into the pub (FM-hurry-margin,
+   * FM-pub-lead).
    */
   botPlanSlackShare: 0.1,
   /** Ticks an AI colonist may push its stick without moving before it gives that step of its errand up. */
@@ -1109,6 +1114,13 @@ export const WALK = {
   boardMargin: 0.3,
   /** And this share of the posted price more, so a board whose price lines sit close together still has room to walk. */
   boardPostedMargin: 0.1,
+  /**
+   * RULE-4 (AM-1): a seller stops at the amount they must hold (auctionNeed, fixed as the good comes up), one price
+   * step above the line, and sells below it only after holding ▼ for shortHoldMs. false turns the stop off, for sweeps.
+   */
+  needStop: true,
+  /** Board ms a stopped seller holds ▼ to sell on into shortage (Heiko's choice A, 5 Nov). A tap or a shorter hold moves nothing. */
+  shortHoldMs: 1_000,
   /** How often the server steps the auction. */
   tickMs: 100,
 };
@@ -1630,8 +1642,6 @@ export const STRATEGIST = {
   grantSpare: 0,
   /** A factory needs this many months of its inputs on hand or from its own plots. */
   factoryInputMonths: 2,
-  /** Spare Food, Water, Energy and Medicine it keeps over next month's need, before the reserve multiplier. */
-  keepSpare: { food: 1, water: 1, energy: 1, medicine: 0 } as Partial<Record<Good, number>>,
   /** It analyses an unknown plot of its own when the plot's best and second-best uses are this close, as a share. */
   analyseWhenClose: 0.25,
   /** Analyses per month, at most, and never with less than this many seconds left. */
@@ -1820,8 +1830,8 @@ export const AI_PLANS = {
     otherScore: 0.8,
   },
   monopoly: {
-    /** The goods a seat may try to corner. */
-    goods: ['food', 'energy', 'smithore'] as Good[],
+    /** The goods a seat may try to corner. Not Food: it spoils too fast (STRATEGIST.cornerMaxSpoilage). */
+    goods: ['energy', 'smithore'] as Good[],
     /** A good is cornered only while at most this many rival plots make it. */
     maxRivalPlots: 1,
     /** And only with at least this many of its own idle or free plots whose best outfit is the good. */
