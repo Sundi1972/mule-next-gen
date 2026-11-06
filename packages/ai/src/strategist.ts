@@ -258,7 +258,7 @@ export function wantsPlot(plan: LandPlan, obs: GameState, index: number, ahead: 
 /**
  * The least share of the best plot ahead that the plot `k` steps ahead of the light must reach: STRATEGIST.grantShare,
  * or, while an adopted playbook sets the grant's pressShare, start falling to end over the pass. How far the pass has
- * gone is the plot's step over the pass's length, as the seat sees them: the free plots behind the light and the
+ * gone is the plot's step over the pass's last step, as the seat sees them: the free plots behind the light and the
  * plots claimed this grant behind it, then `ahead`.
  */
 function grantShareAt(obs: GameState, mind: Mind, ahead: readonly number[], k: number): number {
@@ -267,7 +267,8 @@ function grantShareAt(obs: GameState, mind: Mind, ahead: readonly number[], k: n
   const lit = ahead[0] ?? 0;
   const behind = freePlots(obs).filter((t) => tileIndex(obs.width, t.x, t.y) < lit).length + obs.players.reduce((n, p) => n + p.claimsThisGrant, 0);
   const length = behind + ahead.length;
-  const gone = length > 0 ? (behind + k) / length : 0;
+  // The pass's last plot is step length − 1 of it: there the share has reached `end`.
+  const gone = Math.min(1, (behind + k) / Math.max(1, length - 1));
   return press.start + (press.end - press.start) * gone;
 }
 
