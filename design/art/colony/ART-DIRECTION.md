@@ -20,6 +20,7 @@ The grounds are the colony's portrait. A glance at the TV answers three question
 | Place | One grounds place is a **12 m square**; place (col, row) sits at Blender (x = 12·col, y = −12·row) |
 | Frame per place | **1600 × 1600**, ortho scale 21 m, the place's centre at pixel **(800, 1000)** (camera `shift_y`) ⇒ a place is **1293 px** wide and there are 1000 px (≈ 15 m at the centre, ≈ 10 m at the back corner) of height room. Every building picture shares this frame, so pictures composite by position alone. (The spike used 1600 × 1200 centred, which leaves only ≈ 9 m: enough for the Park, not the Spaceport tower.) |
 | Shipped size | Rendered at 1600 × 1600; shipped as WebP at 800 wide (the TV, 2× a place's ~400 px) and 400 wide (the phone) |
+| Tall kinds | **The Spaceport's rocket is the colony's dominant vertical (Heiko, 6 Nov: "an impressive, big rocket, not a toy").** About **36 m** (three places tall) on a gantry that reads shorter than it. Its pictures use a tall frame: **1600 × 3200**, the place centre at **(800, 2600)** — same scale, same camera, ≈ 39 m of room. The manifest carries a frame per kind, so the compositor places it like any other. It overlaps the places behind it in painter's order, as a real rocket would. |
 | Compositing | Back to front by col + row (painter's order), as `Scene.tsx` does. Shadows a building throws onto a neighbouring place are lost; each place's own slab carries its shadow. Accepted. |
 
 Never change the camera per building. One camera is what lets 70 pictures sit together as one place.

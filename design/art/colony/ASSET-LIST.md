@@ -26,7 +26,7 @@ picture (build1) for 1–2-month buildings and two (build1 ⅓, build2 ⅔) for 
 | Hospital | site, build1, standing, closed, damaged | **14** | done in the spike (`colony.py::hospital`) — needs the polish pass |
 | Observatory | site, build1, standing, closed, damaged | **14** | dome with slot + telescope; damaged = cracked dome |
 | Stadium | site, build1, build2, standing, closed, damaged | 6 × 2 + 5 = **17** | stands, pitch, floodlight masts; closed = masts dark, gates shut |
-| Spaceport upgrade | site, build1, build2, standing, closed, damaged | **17** | pad, gantry, rocket, blockhouse; damaged = toppled gantry arm |
+| Spaceport upgrade | site, build1, build2, standing, closed, damaged | **17** | pad, gantry, **a ~36 m rocket, the tallest thing on the grounds** (Heiko 6 Nov), blockhouse, tall frame 1600×3200; build1 = rocket stacking on the pad, build2 = fully stacked in scaffold; closed = rocket shrouded, pad dark; damaged = toppled gantry arm, scorched pad |
 | **Total** | | **85 pictures** | |
 
 ## Shared pieces (made once)
@@ -45,7 +45,7 @@ picture (build1) for 1–2-month buildings and two (build1 ⅓, build2 ⅔) for 
 
 ## Sizes (measured on the spike's WebP)
 
-A place picture at 800 px wide is 50–65 kB; 400 px ≈ 20 kB; a glow layer is mostly black, ≈ 10 kB.
+A place picture at 800 px wide is 50–65 kB (the Spaceport's tall frame ≈ 2×, est. 100–130 kB); 400 px ≈ 20 kB; a glow layer is mostly black, ≈ 10 kB.
 85 pictures + 6 props ≈ **4.5 MB at 800 px**, **≈ 1.8 MB at 400 px** — loaded per building as it appears, so a
 month-12 colony on a phone fetches ~0.4 MB.
 

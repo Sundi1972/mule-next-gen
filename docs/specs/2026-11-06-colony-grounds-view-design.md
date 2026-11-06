@@ -236,7 +236,8 @@ RULE-5 · What leans in at the month end: the projects whose stage differs from 
 - **apps/web/public/art/colony/manifest.json** · ADDED · produced by C1, read by C2:
   `{ "frame": { "width": 1600, "height": 1600, "place": 1293, "centre": [800, 1000] },
      "pictures": { "<kind>": { "<stage>": { "day": "…@800.webp", "dusk": "…", "glow": "… | null" } } },
-     "sizes": [800, 400] }` — kind ∈ hall + PrestigeId; stage per RULE-1.
+     "sizes": [800, 400] }` — kind ∈ hall + PrestigeId; stage per RULE-1. A kind may override the frame:
+  `"pictures": { "spaceport": { "frame": { "width": 1600, "height": 3200, "place": 1293, "centre": [800, 2600] }, … } }` (AM-1).
 
 ## §4 · Failure & Ops  [handoff]
 
@@ -280,7 +281,15 @@ Invariant: the grounds never write state (HC-1).
 
 ## §8 · Amendments  [review-only]
 
-(none yet)
+```
+AM-1 · 2026-11-06 · lead · after Heiko's look-page feedback
+target    §3 manifest frame (one shared frame)
+said      every picture shares the 1600×1600 frame
+did       a kind may carry its own frame; the Spaceport's is 1600×3200 (centre 800,2600) for a ~36 m rocket
+because   Heiko: "an impressive, big rocket, not a toy" — G-2 (UBER-AC-2's TV look review)
+goal      G-2 — met more fully; HC-2 holds (one Spaceport ≈ +60 kB at 800 px; ≤ 1 MB per month-12 colony on a phone)
+folded    §3 manifest; ART-DIRECTION §2; ASSET-LIST Spaceport row; plan PR-1 Task 1.1 (lib supports a per-kind frame)
+```
 
 ## §9 · Ownership Boundaries  [handoff]
 
