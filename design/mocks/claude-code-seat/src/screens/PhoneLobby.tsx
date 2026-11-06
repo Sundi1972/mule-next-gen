@@ -13,7 +13,7 @@ import { Chip, ClaudeSetup, KindChoice, LOBBY_CHIP, type ChipWord, type Computer
 
 export type Variant = 'A' | 'B';
 export type Viewer = 'host' | 'guest';
-/** Juno, the computer seat: built-in, or Claude Code waiting for its session, or connected. */
+/** Juno, the computer seat: built-in, or Claude waiting for its chat, or connected. */
 export type JunoState = 'builtin' | LobbyLink;
 
 const kindOf = (s: JunoState): ComputerKind => (s === 'builtin' ? 'builtin' : 'claude');
@@ -166,12 +166,12 @@ function KickButton({ seat }: { seat: MockSeat }) {
   );
 }
 
-/** "Claude Code" under a Claude seat's name, for everyone at the table; a built-in seat keeps today's row. */
+/** "Claude" under a Claude seat's name, for everyone at the table; a built-in seat keeps today's row. */
 function Plays({ juno, host }: { juno: JunoState; host: boolean }) {
   if (juno === 'builtin') return null;
   return (
     <>
-      <span className="block text-[10px] font-normal leading-tight text-ink-3">Claude Code</span>
+      <span className="block text-[10px] font-normal leading-tight text-ink-3">Claude</span>
       {/* Start stays enabled while the seat waits; the host is told what happens if they start now. */}
       {host && juno === 'waiting' && (
         <span className="block text-[10px] font-normal leading-tight text-ink-2" data-testid="waiting-note">
@@ -275,7 +275,7 @@ function SeatSheet({ seat, juno, onPick, onClose }: { seat: MockSeat; juno: Juno
         <header className="flex items-center gap-2">
           <SeatCreature seat={seat} />
           <h2 id={titleId} className="font-display text-xl font-semibold">
-            {juno === 'builtin' ? `Who plays ${seat.name}?` : `${seat.name} plays with Claude Code`}
+            {juno === 'builtin' ? `Who plays ${seat.name}?` : `${seat.name} plays with Claude`}
           </h2>
           {juno !== 'builtin' && <Chip word={LOBBY_CHIP[juno]} className="ml-auto" testid="sheet-chip" />}
         </header>
@@ -283,7 +283,7 @@ function SeatSheet({ seat, juno, onPick, onClose }: { seat: MockSeat; juno: Juno
           <KindChoice value="builtin" onChange={onPick} testid="sheet-kind" />
         ) : (
           <>
-            <p className="text-sm text-ink-2">Give these to whoever runs Claude Code. The code is this seat's for the whole game.</p>
+            <p className="text-sm text-ink-2">Send the invite to whoever's Claude should play: yours, or a friend's. The code is this seat's for the whole game.</p>
             <ClaudeSetup code={JOIN_CODES[seat.id]!} testid="sheet-setup" />
           </>
         )}

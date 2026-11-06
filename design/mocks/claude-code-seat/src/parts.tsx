@@ -1,10 +1,10 @@
 import { Button, cx } from '@mule/ui';
 import { useEffect, useState } from 'react';
-import { setupLine, type LobbyLink, type PlayLink } from './fixture';
+import { inviteText, type LobbyLink, type PlayLink } from './fixture';
 
 /*
  * DS-GAP: @mule/ui has no chip. Lobby.tsx keeps its own CHIP_CLASS (AI, HOST, PHONE, AWAY); these are its entries
- * plus the Claude Code ones, from the same tokens. One chip component in packages/ui would hold both.
+ * plus the Claude ones, from the same tokens. One chip component in packages/ui would hold both.
  */
 export const CHIP_CLASS = {
   AI: 'bg-holo-soft text-holo',
@@ -74,17 +74,38 @@ export function CopyLine({ label, text, testid, big = false }: { label: string; 
 export function SetupLink({ testid = 'setup-link' }: { testid?: string }) {
   return (
     <a href="#setup" className="min-h-8 self-start text-sm text-holo underline-offset-2 hover:underline" data-testid={testid}>
-      How to set up Claude Code →
+      How to connect Claude →
     </a>
   );
 }
 
-/** What the host hands to whoever runs Claude Code: the seat's code, the one setup line, and the page that explains them. */
+/**
+ * Copy invite (spec C11): the invite as it will be sent, and one button that copies all of it. It replaces the
+ * Claude Code setup line: any Claude app with the MULE connector plays from this one message.
+ */
+export function CopyInvite({ code, testid }: { code: string; testid: string }) {
+  const [copied, copy] = useCopied();
+  const invite = inviteText(code);
+  return (
+    // Beside the text, as Copy sits beside the code: a row of its own would push the lobby sheet past a 390 px phone.
+    // In a narrow column (variant A's rail) the button wraps under the text rather than squeeze it.
+    <div className="flex flex-wrap items-center gap-2" data-testid={testid}>
+      <p className="min-w-[14rem] flex-1 rounded-control border border-holo-line bg-void/40 px-2 py-1.5 text-[11px] leading-snug text-ink-2" data-testid={`${testid}-text`}>
+        {invite}
+      </p>
+      <Button size="md" className="shrink-0" onClick={() => copy(invite)} data-testid={`${testid}-copy`}>
+        {copied ? 'Invite copied' : 'Copy invite'}
+      </Button>
+    </div>
+  );
+}
+
+/** What the host hands on for a Claude seat: its seat code, the invite that carries it, and how to connect Claude. */
 export function ClaudeSetup({ code, testid = 'claude-setup' }: { code: string; testid?: string }) {
   return (
     <div className="flex flex-col gap-2" data-testid={testid}>
-      <CopyLine label="Join code" text={code} testid={`${testid}-code`} big />
-      <CopyLine label="Setup, once per computer" text={setupLine()} testid={`${testid}-line`} />
+      <CopyLine label="Seat code" text={code} testid={`${testid}-code`} big />
+      <CopyInvite code={code} testid={`${testid}-invite`} />
       <SetupLink testid={`${testid}-link`} />
     </div>
   );
@@ -93,13 +114,13 @@ export function ClaudeSetup({ code, testid = 'claude-setup' }: { code: string; t
 export type ComputerKind = 'builtin' | 'claude';
 
 /**
- * Built-in or Claude Code, for a computer seat. The pressed look is the lobby's species picker's.
+ * Built-in or Claude, for a computer seat. The pressed look is the lobby's species picker's.
  * DS-GAP: no segmented choice in @mule/ui.
  */
 export function KindChoice({ value, onChange, testid = 'kind' }: { value: ComputerKind; onChange: (k: ComputerKind) => void; testid?: string }) {
   const options: { id: ComputerKind; title: string; detail: string }[] = [
     { id: 'builtin', title: 'Built-in', detail: 'The game plays it' },
-    { id: 'claude', title: 'Claude Code', detail: 'A Claude Code session plays it' },
+    { id: 'claude', title: 'Claude', detail: 'A Claude chat plays it' },
   ];
   return (
     <div className="grid grid-cols-2 gap-1.5" role="group" aria-label="Who plays this seat" data-testid={testid}>
