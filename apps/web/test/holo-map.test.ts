@@ -84,10 +84,18 @@ describe('T-AC-3 (pip): an analysed plot draws its best good on 3 dots', () => {
   it('T-AC-3 (pip): the tie goes to Food, drawn as 3 pips with 2 lit and labelled "Food 2 of 3"', () => {
     const map = render(PIP_TILES);
     const analysed = map.slice(map.indexOf('data-testid="map-plot-0-0"'), map.indexOf('data-testid="map-plot-1-0"'));
-    expect(map).toContain('aria-label="Plains, free, Food 2 of 3"');
+    expect(map).toContain('aria-label="Plains, free, Food 2 of 3, Crystite here"');
     expect(pips(analysed)).toHaveLength(3);
     expect(pips(analysed).filter((p) => p.includes('var(--color-g-food)'))).toHaveLength(2);
     expect(analysed).not.toContain('--color-g-water');
+  });
+
+  it('T-AC-3 (pip): the chip sits at the foot of the plot, centred, as the mock draws it', () => {
+    const chip = tag(render(PIP_TILES), /class="[^"]*\brounded-control\b/);
+    expect(chip).toMatch(/\babsolute\b/);
+    expect(chip).toMatch(/\bbottom-\[8%\]/);
+    expect(chip).toMatch(/\bleft-1\/2\b/);
+    expect(chip).toMatch(/ -translate-x-1\/2\b/);
   });
 
   it('T-AC-3 (pip): a plot without ground, as every plot on the TV, draws no pip and names no dots', () => {
@@ -157,5 +165,31 @@ describe('T-AC-3 (gem): Crystite and Rare earth found on a plot', () => {
     const tv = render(GEM_TILES.map(({ ground: _, ...t }) => t));
     expect(tv).not.toMatch(/data-testid="(map-)?gem-/);
     expect(render(GEM_TILES, true)).not.toMatch(/data-testid="(map-)?gem-/);
+  });
+
+  it('T-AC-3 (gem): a colony building’s plot shows the building, not its ground: no gem and no pip', () => {
+    const park = { kind: 'park', name: 'Park', stage: 'standing', buildMonths: 1 } as const;
+    const map = render([{ x: 0, y: 0, terrain: 'plains', owner: null, ground: { crystite: 2, food: 3 }, object: park }]);
+    expect(map).toContain('data-testid="plot-object-0-0"');
+    expect(map).not.toMatch(/data-testid="(map-)?gem-/);
+    expect(map).not.toMatch(/\brounded-control\b/);
+  });
+
+  it('T-AC-3 (gem): the plot’s label names its gems, "Crystite here", and none without ground or under hideGround', () => {
+    const label = (markup: string, x: number) => tag(markup, new RegExp(`data-testid="map-plot-${x}-0"`)).match(/aria-label="([^"]*)"/)?.[1] ?? '';
+    const map = render(GEM_TILES);
+    expect(label(map, 0)).toBe('Plains, free, Food 3 of 3, Crystite here');
+    expect(label(map, 1)).toMatch(/, Crystite here, Rare earth here$/);
+    expect(label(map, 3)).not.toMatch(/ here\b/);
+    expect(render(GEM_TILES.map(({ ground: _, ...t }) => t))).not.toMatch(/ here"/);
+    expect(render(GEM_TILES, true)).not.toMatch(/ here"/);
+  });
+
+  it('T-AC-3 (gem): a gem carries no title, which a pointer-events-none mark never shows', () => {
+    const map = render(GEM_TILES);
+    for (const good of ['crystite', 'rareEarth']) {
+      expect(gem(map, good)).not.toBe('');
+      expect(gem(map, good)).not.toMatch(/\btitle=/);
+    }
   });
 });

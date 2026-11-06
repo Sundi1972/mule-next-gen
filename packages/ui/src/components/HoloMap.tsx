@@ -137,6 +137,7 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
             t.owner !== null ? `owned by player ${t.owner + 1}` : t.object ? objectLabel(t.object) : t.terrain === 'store' ? '' : 'free',
             t.good ? `${GOOD_NAME[t.good]}${t.output ? ` +${t.output}` : ''}` : '',
             ...ground.map(([g, n]) => `${GOOD_NAME[g]} ${n} of 3`),
+            ...gems.map((g) => `${GOOD_NAME[g]} here`),
             t.pollution ? `pollution ${t.pollution} of 3` : '',
           ]
             .filter(Boolean)
@@ -158,9 +159,9 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
                   style={{ background: `radial-gradient(circle at 50% 55%, rgb(110 82 40 / ${0.25 + t.pollution * 0.18}), rgb(110 82 40 / ${0.12 + t.pollution * 0.12}) 80%)` }}
                 />
               )}
-              {/* An object's plot shows the object, not the ground under it: the plot's label still names the ground. */}
+              {/* An object's plot shows the object, not the ground under it (no pip, no gem): the plot's label still names the ground. */}
               {!t.good && !t.object && ground.length > 0 && (
-                <span className={cx('relative flex flex-col items-center rounded-control bg-map-chip/90 shadow-chip', tv ? 'gap-0.5 px-1.5 py-1' : 'px-[3px] py-[2px]', fade)}>
+                <span className={cx('absolute bottom-[8%] left-1/2 flex -translate-x-1/2 flex-col items-center rounded-control bg-map-chip/90 shadow-chip', tv ? 'gap-0.5 px-1.5 py-1' : 'px-[3px] py-[2px]', fade)}>
                   {ground.map(([g, n]) => (
                     <span key={g} className={cx('flex items-center', tv ? 'gap-0.5' : 'flex-col gap-px')}>
                       <GoodIcon good={g} size={tv ? 16 : 9} />
@@ -182,7 +183,7 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
                   <PlayerMark slot={t.owner} size={size.mark} glow={false} />
                 </span>
               )}
-              {gems.length > 0 && (
+              {!t.object && gems.length > 0 && (
                 // Right of the tab, which is 46% wide at 4%; z-[4], the tab's, so a neighbour's special badge never covers it.
                 <span
                   className={cx('pointer-events-none absolute top-[4%] z-[4] flex w-full', t.owner !== null ? 'left-[54%]' : 'left-[4%]', fade)}
@@ -323,7 +324,6 @@ function MapGem({ good, nth, share }: { good: RawGood; nth: number; share: numbe
     <span
       className="relative grid aspect-square shrink-0 place-items-center rounded-full shadow-chip ring-1 ring-white/80"
       style={{ width: `${share}%`, background: `var(--color-g-${good})`, marginLeft: nth > 0 ? `-${share / 2}%` : 0, zIndex: 2 - nth }}
-      title={`${GOOD_NAME[good]} here`}
       data-testid={`gem-${good}`}
     >
       <GoodIcon good={good} color="white" className="h-[62%] w-[62%]" />
