@@ -91,6 +91,8 @@ export interface ShowEffect {
   on: string;
   what: Good | 'money' | 'mules' | 'colonists' | 'energyNeed' | 'mood' | 'prestige' | 'air' | 'reputation';
   delta: number;
+  /** The holder's count of `what` right after this effect, before anything later in the month moves it. */
+  to?: number;
 }
 
 export type ShowHit = ShowEventView['hits'][number];
