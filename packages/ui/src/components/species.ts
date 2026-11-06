@@ -1,3 +1,4 @@
+import { SPECIES_PERK as PERK } from '@mule/engine';
 import { createContext, useContext, type ReactNode } from 'react';
 import type { Slot } from './tokens';
 
@@ -14,12 +15,14 @@ export const SPECIES_NAME: Record<Species, string> = {
   quibbit: 'Quibbit',
 };
 
-/** One clear perk per species. Numbers are placeholders until the balance sim has run. */
+const pct = (share: number) => `${Math.round(share * 100)}%`;
+
+/** One clear perk per species, in the numbers the game plays: read from the balance settings, so the words follow a tuning. */
 export const SPECIES_PERK: Record<Species, string> = {
-  zipwing: 'Fast flyer. Moves twice as fast during development.',
-  bramblet: 'Green thumb. Farms yield +1 Food.',
-  gearling: 'Tinkerer. MULEs and outfits cost a quarter less.',
-  mollox: 'Burrower. Mines yield +1, and geo analysis takes half the time.',
+  zipwing: `Fast flyer. Walks ${PERK.zipwingSpeed}× as fast during development.`,
+  bramblet: `Green thumb. Farms yield +${PERK.brambletFood} Food.`,
+  gearling: `Tinkerer. Pays ${pct(PERK.gearlingPrice)} of the price for MULEs and outfits.`,
+  mollox: `Burrower. Mines yield +${PERK.molloxMine}, and geo analysis takes ${pct(PERK.molloxAnalysis)} of the time.`,
   glimmer: 'Seer. Sees next month’s event one month early.',
   quibbit: 'Born trader. First in line when the store hands out units in turns.',
 };
