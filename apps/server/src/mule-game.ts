@@ -10,6 +10,7 @@ import {
   colonyFailed,
   cover,
   createGame,
+  defaultSpecies,
   createRng,
   declareRole,
   leaveBoard,
@@ -498,6 +499,11 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     if (!(this.phaseScale > 0 && this.phaseScale <= 1)) throw new RangeError(`phaseScale must be in (0, 1], got ${this.phaseScale}`);
     this.brain = options.brain ?? createBrain({ gameId: ledgerGameId(seed, ctx.now()) });
     this.recordPlaybook = options.recordPlaybook ?? (() => {});
+  }
+
+  /** What the lobby shows an unpicked seat: the species createGame will give it at this seat count. */
+  defaultPick(seat: number, seats: number): Species {
+    return defaultSpecies(seat, seats, this.seed);
   }
 
   start(seats: SeatInfo[]): void {
