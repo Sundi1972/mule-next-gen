@@ -51,8 +51,10 @@ describe('a GRAB pressed is a GRAB taken (FM-glint-fade, for FM-hurry-margin)', 
   /**
    * ai1 on the map `gap` tiles from the glint's middle: pressing GRAB this tick (`presses`), walking towards the glint
    * as it does (`walks`, so a rival a step short of GRAB's reach is in it when the press applies), or standing idle.
+   * It presses ahead of ai0 in the tick's press order, or after it with `behind`; `held` stuns it, or has it assaying,
+   * past the tick.
    */
-  type Rival = { gap: number; presses: boolean; walks?: boolean };
+  type Rival = { gap: number; presses: boolean; walks?: boolean; behind?: boolean; held?: 'stunnedUntilTick' | 'assayUntilTick' };
 
   /** What the tick came to: who holds the glint, whether ai0 analysed the land underfoot or started an assay, and how far it then stands from the glint. */
   type GlintTick = { holder: string | null; analysedUnderfoot: boolean; assaying: boolean; belowGrab: boolean; rivalInReach: boolean; rivalFirst: boolean; gapBefore: number; gapAfter: number };
@@ -82,10 +84,10 @@ describe('a GRAB pressed is a GRAB taken (FM-glint-fade, for FM-hurry-margin)', 
     if (analysed) player(state, ME).analysed.push(tileIndex(state.width, under.x, under.y));
     const seat = new AiSeat({ id: ME, name: 'AI 1', persona: 'trader', level: 'trader', seed: 11 });
     const built = buildFloor(state, cfg);
-    // With a rival by, the first tick from 200 on whose presses (read after its step) put the rival ahead of ai0.
+    // With a rival by, the first tick from 200 on whose presses (read after its step) put the rival where it asks.
     const ahead = (t: number) => pressOrder({ ...built, tick: t + 1 }, [ME, RIVAL])[0] === RIVAL;
     let tick = 200; // literal-ok: a tick well into the turn
-    while (rival && !ahead(tick)) tick++;
+    while (rival && ahead(tick) === Boolean(rival.behind)) tick++;
     const glint = { x: under.x + 1, y: under.y, sinceTick: 100, untilTick: tick + fadesIn };
     const mid = glintMiddle(glint);
     // The rival's spot: `gap` from the glint's middle, away from ai0, on open land off the glint's tile.
@@ -99,7 +101,7 @@ describe('a GRAB pressed is a GRAB taken (FM-glint-fade, for FM-hurry-margin)', 
       colonists: built.colonists.map((c) => {
         const step = (speedOf(c, state, cfg) * cfg.steer.tickMs) / MS_PER_SECOND;
         if (c.id === ME) return { ...c, x: stepsOff === undefined ? under.x + 0.5 : glint.x - stepsOff * step, y: under.y + 0.5 };
-        return c.id === RIVAL && spot ? { ...c, space: 'map' as const, ...spot } : c;
+        return c.id === RIVAL && spot ? { ...c, space: 'map' as const, ...spot, ...(rival.held && { [rival.held]: tick + 10 }) } : c; // literal-ok: held well past the tick
       }),
       moments: { ...built.moments, glint },
     };
@@ -170,6 +172,18 @@ describe('a GRAB pressed is a GRAB taken (FM-glint-fade, for FM-hurry-margin)', 
     const noCost = glintTick(lit, { rival: { gap: reach - 0.3, presses: false }, analysed: true }); // literal-ok: as above
     expect([noCost.belowGrab, noCost.rivalInReach], 'the case: nothing below GRAB, a rival in reach').toEqual([false, true]);
     expect.soft({ holder: noCost.holder, assaying: noCost.assaying }, 'no row below GRAB: grabbed').toEqual({ holder: ME, assaying: false });
+
+    // A rival in reach that cannot press first, so the guard has nothing to fear and it grabs: one behind it in the
+    // tick's press order and more than a step from the glint's tile, or one stunned or assaying through the tick.
+    for (const [name, r] of [
+      ['behind it in the press order', { behind: true }],
+      ['stunned', { held: 'stunnedUntilTick' }],
+      ['assaying', { held: 'assayUntilTick' }],
+    ] as const) {
+      const t = glintTick(lit, { rival: { gap: reach - 0.3, presses: true, ...r } }); // literal-ok: as above
+      expect([t.belowGrab, t.rivalInReach], `the case: ANALYSE below GRAB, a rival in reach, ${name}`).toEqual([true, true]);
+      expect.soft({ holder: t.holder, assaying: t.assaying }, `a rival in reach, ${name}: grabbed`).toEqual({ holder: ME, assaying: false });
+    }
 
     // No rival near, a row below GRAB on offer: it grabs while the glint is lit, as before.
     const alone = glintTick(lit);
