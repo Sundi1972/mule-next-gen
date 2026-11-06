@@ -212,6 +212,22 @@ const TV_FRESH_MS = 250;
 
 const TV_DRAWS = `(() => Object.fromEntries([...document.querySelectorAll('[data-testid^=colonist-]:not([data-testid^=colonist-name])')].map((e) => [e.getAttribute('data-testid').slice(9), { space: e.getAttribute('data-space'), x: Number(e.getAttribute('data-x')), y: Number(e.getAttribute('data-y')), at: e.hasAttribute('data-at') ? Number(e.getAttribute('data-at')) : null }])))()`;
 
+/** How long a TV read may take before the check fails by name: a stuck TV page must not hold the job silently. */
+const TV_ANSWER_MS = 5_000;
+
+/** The TV's drawn colonists, read within TV_ANSWER_MS; past it the check fails, naming the step that asked. */
+async function readTv<T>(tv: Page, who: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`E2E check failed: ${who}: the TV page did not answer within ${TV_ANSWER_MS / 1_000} s`)), TV_ANSWER_MS);
+  });
+  try {
+    return (await Promise.race([tv.evaluate(TV_DRAWS), late])) as T;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /**
  * Stops the page's animation frames, as a phone put in a pocket does, and tells the page it is hidden and has lost
  * focus. The loop's frames wait in a queue until resumeThePage plays them on.
@@ -330,7 +346,7 @@ export async function thePiecesMeet(t: ArcadeTable): Promise<string> {
 
   // The TV draws both where the server has them, both standing, and no clock while month 1's waits.
   await tv.waitForTimeout(300);
-  const drawn = (await tv.evaluate(TV_DRAWS)) as Record<string, { space: string; x: number; y: number }>;
+  const drawn = await readTv<Record<string, { space: string; x: number; y: number }>>(tv, 'step 1');
   for (const seat of ['s1', 's2']) {
     const s = onFloor(server, code, seat);
     const d = drawn[seat];
@@ -880,7 +896,7 @@ export async function theTvDrawsEveryoneLive(t: ArcadeTable): Promise<string> {
     const end = Date.now() + 1_500;
     while (Date.now() < end) {
       // Each drawn walker says the instant (the machine's Date.now) the TV worked its position out for.
-      const drawn = (await tv.evaluate(TV_DRAWS)) as Record<string, { space: string; x: number; y: number; at: number | null }>;
+      const drawn = await readTv<Record<string, { space: string; x: number; y: number; at: number | null }>>(tv, 'B-AC-2');
       samples.push({ readAt: Date.now(), drawn });
       await tv.waitForTimeout(30);
     }
@@ -930,7 +946,7 @@ export async function theTvDrawsEveryoneLive(t: ArcadeTable): Promise<string> {
   await tv.waitForTimeout(DEV_STEER.interpolateMs + 3 * TICK_MS);
   const stills = new Set<string>();
   for (let i = 0; i < 10; i++) {
-    const d = ((await tv.evaluate(TV_DRAWS)) as Record<string, { space: string; x: number; y: number }>)['s3'];
+    const d = (await readTv<Record<string, { space: string; x: number; y: number }>>(tv, 'B-AC-2'))['s3'];
     check(d, 'B-AC-2: the TV still draws Kai while he is away');
     stills.add(`${d.space} ${d.x.toFixed(3)},${d.y.toFixed(3)}`);
     await tv.waitForTimeout(100);
