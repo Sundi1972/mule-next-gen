@@ -282,7 +282,7 @@
 <li><strong>Which plots:</strong> on the phone, only free plots (not the store, nobody's land, not a colony site). The game's rules also allow a plot listed for this month's land auction, but the phone does not offer it; today only a computer player's plan can choose one.</li>
 <li><strong>How:</strong> open Geo drone in planning, tap up to two free plots ("Tap up to 2 free plots"; tapping a third drops the oldest), then press "Send the drone · 2 of 2 plots · 60 cr". If you picked one, the screen reminds you a second costs nothing extra. Once sent, it cannot be changed: "Your drone is on its way".</li>
 <li><strong>When the results arrive:</strong> silently, as the land grant starts. From then on those plots count as analysed for you, for the rest of the game, exactly as if you had stood on them.</li>
-<li><strong>What you see:</strong> nothing announces the results. While one of your drone's plots is lit in the grant, the "Lit now" panel shows its ground card (pips for every good) instead of the terrain hint, with a line such as "Your drone: 12·5 Desert, good for Energy", naming the best goods if they reach <span class="num">2</span> pips or more. Afterwards the same card shows whenever you look at that plot.</li>
+<li><strong>What you see:</strong> nothing announces the results. While one of your drone's plots is lit in the grant, the "Lit now" panel shows its ground card (<a href="#ground-dots">0 to 3 dots</a> for every good) instead of the terrain hint, with a line such as "Your drone: 12·5 Desert, good for Energy", naming the best goods if they reach <span class="num">2</span> dots or more. Afterwards the same card shows whenever you look at that plot.</li>
 <li><strong>Who sees it:</strong> only you. The TV and the other players never see what your drone found, nor that you sent one; computer players cannot see it either.</li>
 </ul>
 <div class="box example"><h4>Example</h4><p>Ossa has her eye on two crater plots near the river. In planning she sends the drone over both for <span class="num">60</span> cr. At the grant, the first lights and her phone says "Your drone: 7·2 Crater, good for Crystite": she has found a ring. She claims it. The other crater was empty; she lets it pass.</p></div>
@@ -326,6 +326,24 @@
 <p class="code-ref">In the code: <code>packages/engine/src/observe.ts::observe</code> · <code>packages/engine/src/map.ts::expectedGround</code> · <code>apps/server/src/mule-game.ts::viewFor</code> · <code>config.ts::STRATEGIST.analyseWhenClose</code> · <code>config.ts::STRATEGIST.analysesPerMonth</code></p>
 <p class="owner">Kept current by: the Auctions team (WS3) for the views, the Strategy team (WS1) for the computer players.</p>
 
+<h2 id="ground-dots">Every good on 0 to 3 dots <span class="pill built">In the game</span></h2>
+<p>Once you know a plot's ground, by analysing it or by your drone, every screen shows each of the six raw goods as <span class="num">0</span> to <span class="num">3</span> dots: the ground card in Look, in the land grant's "Lit now" panel and on the land auction's lot card, the plot card on the walking screen, and your own map, where an analysed plot shows its best good's dots. The hidden ratings and what a MULE makes do not change; the dots only read them.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Good</th><th><span class="num">0</span></th><th><span class="num">1</span></th><th><span class="num">2</span></th><th><span class="num">3</span></th></tr></thead>
+<tbody>
+<tr><td>Food, Water, Energy</td><td>rating <span class="num">-2</span> or <span class="num">-1</span> (makes <span class="num">1</span>)</td><td><span class="num">0</span> (makes <span class="num">2</span>)</td><td><span class="num">+1</span> (makes <span class="num">3</span>)</td><td><span class="num">+2</span> or <span class="num">+3</span> (makes <span class="num">4</span> to <span class="num">5</span>)</td></tr>
+<tr><td>Smithore, Crystite, Rare earth</td><td><span class="num">0</span> (nothing to mine)</td><td><span class="num">1</span></td><td><span class="num">2</span></td><td><span class="num">3</span> or <span class="num">4</span></td></tr>
+</tbody>
+</table></div>
+<ul>
+<li><strong>Best for:</strong> the good with the most dots; on a tie, the first of Food, Water, Energy, Smithore, Crystite, Rare earth. Your map and the walking screen's "Best here" always name the same good.</li>
+<li><strong>A plot you don't know</strong> shows no dots at all, never a row of zeros: its land's hint shows instead.</li>
+</ul>
+<div class="box example"><h4>Example</h4><p>A plot rated Food <span class="num">+3</span>, Water <span class="num">-2</span>, Energy <span class="num">0</span>, Smithore <span class="num">0</span>, Crystite <span class="num">4</span> (a meteor crater) and Rare earth <span class="num">0</span> shows Food <span class="num">3</span> dots, Water <span class="num">0</span>, Energy <span class="num">1</span>, Smithore <span class="num">0</span>, Crystite <span class="num">3</span>, Rare earth <span class="num">0</span>. Food and Crystite tie at <span class="num">3</span>, so the plot is best for Food, and your map shows Food's three dots on it.</p></div>
+<div class="box why"><h4>Why it is like this</h4><p>Heiko, 5 Nov: "One scale", every resource rated <span class="num">0</span> to <span class="num">3</span> per plot, the screen first; the hidden numbers change only if the Strategy team's simulator says they hold. Before, the phone drew grown goods as their rating plus one and mined goods as is, on <span class="num">0</span> to <span class="num">4</span> pips, so the same pips meant different things for Food and for Smithore.</p></div>
+<p class="code-ref">In the code: <code>packages/ui/src/ground-dots.ts::groundDots</code> · <code>ground-dots.ts::bestOf</code> · <code>apps/web/src/game/derive.ts::mapTiles</code> · <code>apps/web/src/phone/ground.tsx::GroundCard</code> · <code>apps/web/src/phone/arcade/parts.tsx::PlotCard</code> · <code>packages/ui/src/components/HoloMap.tsx::Pips</code></p>
+<p class="owner">Kept current by: the UX team (WS6), with the Table team (WS4) for the map.</p>
+
 <h2 id="drone-geology-redesign">Drone and geology redesign <span class="pill designed">Designed</span></h2>
 <p>On 5 Nov Heiko played a game, could not get the drone to work as he expected, and asked for a redesign of how players learn about the ground. In his words, condensed:</p>
 <ol>
@@ -342,8 +360,8 @@
 <tr><td>Pick, then scan, then a report</td><td>You pick and pay in planning, but the results arrive silently when the land grant starts. You meet them only when a drone plot is lit (its ground card and one line) or when you look the plot up later. There is no Scan button and no report screen.</td></tr>
 <tr><td>Always see your own land</td><td>The Look tool shows a ground card only for plots you analysed; a plot you own but never analysed shows its terrain hint and its traits, not its ratings.</td></tr>
 <tr><td>Pay to know</td><td>Already so: ratings show only after a drone or an analysis. The analysis costs time (<span class="num">8</span> s), not money.</td></tr>
-<tr><td>A marker for Crystite or Rare earth</td><td>None. An analysed plot shows pips for each good on its card, nothing on the map itself marks a rich deposit.</td></tr>
-<tr><td>Every good <span class="num">0</span> to <span class="num">3</span></td><td>Grown goods are rated <span class="num">-2</span> to <span class="num">+3</span> and mined goods <span class="num">0</span> to <span class="num">4</span>; the phone draws both on <span class="num">0</span> to <span class="num">4</span> pips (a grown rating plus one, so <span class="num">-2</span> and <span class="num">-1</span> both show as no pips).</td></tr>
+<tr><td>A marker for Crystite or Rare earth</td><td>None. An analysed plot shows dots for each good on its card and its best good's dots on your map; nothing on the map marks a rich deposit.</td></tr>
+<tr><td>Every good <span class="num">0</span> to <span class="num">3</span></td><td>In the game: every screen draws <a href="#ground-dots">0 to 3 dots</a>.</td></tr>
 </tbody>
 </table></div>
 <h3 id="redesign-designed">What you will see at the table</h3>
@@ -352,19 +370,11 @@
 <li><strong>Scan, and see at once.</strong> In planning, the Geo drone: tap up to <span class="num">2</span> free plots, then <em>Scan · 60 cr</em>. The plots pulse for a second and the report opens in the rail: each plot's land, what it is best for, any Crystite or Rare earth, and every good's dots. One drone each planning.</li>
 <li><strong>My plots.</strong> A tool beside Look in planning, and a <em>Plots</em> chip on the walking screen in development: every plot you own, one row each, with its MULE and every good's dots. A plot nobody analysed says how to find out. In the store, the "Your plots" box shows dots instead of words.</li>
 <li><strong>Analyse says what it found.</strong> After Analyse on any plot, not only your own, a card opens beside it for a few seconds with its dots and what it is best for.</li>
-<li><strong>The gem.</strong> On your own map only: a plot you analysed shows its best good as dots, and a gem at its top (beside your mark on your own plot) if it holds Crystite or Rare earth. The TV never shows either.</li>
-<li><strong>One scale, 0 to 3.</strong> On every screen, as the table below. The production numbers do not change.</li>
+<li><strong>The gem.</strong> On your own map only: a plot you analysed shows a gem at its top (beside your mark on your own plot) if it holds Crystite or Rare earth. Its best good's dots are on the map already (<a href="#ground-dots">one scale</a>). The TV never shows either.</li>
 </ul>
-<div class="table-wrap"><table>
-<thead><tr><th>Good</th><th><span class="num">0</span></th><th><span class="num">1</span></th><th><span class="num">2</span></th><th><span class="num">3</span></th></tr></thead>
-<tbody>
-<tr><td>Food, Water, Energy</td><td>rating <span class="num">-2</span> or <span class="num">-1</span> (makes <span class="num">1</span>)</td><td><span class="num">0</span> (makes <span class="num">2</span>)</td><td><span class="num">+1</span> (makes <span class="num">3</span>)</td><td><span class="num">+2</span> or <span class="num">+3</span> (makes <span class="num">4</span> to <span class="num">5</span>)</td></tr>
-<tr><td>Smithore, Crystite, Rare earth</td><td><span class="num">0</span> (nothing to mine)</td><td><span class="num">1</span></td><td><span class="num">2</span></td><td><span class="num">3</span> or <span class="num">4</span></td></tr>
-</tbody>
-</table></div>
 <div class="box why"><h4>Why it is like this</h4><p>Heiko at the table, 5 Nov: "I failed to use the drone … mark two plots first then click on scan and then I would get a detailed report", and "an easy way for me to always look at my lots and see the plots' resources". He chose B over the thinner A because A had no list of your plots. The report sits in the rail, not on the map, because two reports on the map cover a sixth of it on a sideways phone.</p></div>
-<div class="box next"><h4>What is changing</h4><p>Designed, not yet built. Three pieces, each usable on its own: Scan and the report; My plots; the card after Analyse, the gem and the 0 to 3 dots. The drone's results landing at Scan instead of at the land grant is a rule change for the Auctions team (WS3); the gem on the map is the Table team's map (WS4); the computer players simply learn their drone's results earlier, which the Strategy team (WS1) checks with the simulator.</p></div>
-<p class="code-ref">In the code: <code>game.ts::orderGeoDrone</code> · <code>game.ts::analysePlot</code> · <code>packages/engine/src/types.ts::Ground</code> · <code>apps/web/src/game/derive.ts::groundPips</code> · <code>apps/web/src/phone/ground.tsx::GroundCard</code> · spec <code>docs/specs/2026-11-05-ws6-plot-info.md</code> (PR #397) · mock <code>design/mocks/plot-info</code> at d3f64a51</p>
+<div class="box next"><h4>What is changing</h4><p>Designed, not yet built. Three pieces, each usable on its own: Scan and the report; My plots; the card after Analyse and the gem. The 0 to 3 dots are in the game already. The drone's results landing at Scan instead of at the land grant is a rule change for the Auctions team (WS3); the gem on the map is the Table team's map (WS4); the computer players simply learn their drone's results earlier, which the Strategy team (WS1) checks with the simulator.</p></div>
+<p class="code-ref">In the code: <code>game.ts::orderGeoDrone</code> · <code>game.ts::analysePlot</code> · <code>packages/engine/src/types.ts::Ground</code> · <code>packages/ui/src/ground-dots.ts</code> · <code>apps/web/src/phone/ground.tsx::GroundCard</code> · spec <code>docs/specs/2026-11-05-ws6-plot-info.md</code> (PR #397) · mock <code>design/mocks/plot-info</code> at d3f64a51</p>
 <p class="owner">Not in the game yet. Building it: the UX team (WS6), with the Auctions team (WS3) for the drone rule and the Table team (WS4) for the map. Kept current by: the UX team (WS6), with WS3 and WS5.</p>
 </article>
 </main>
