@@ -34,7 +34,7 @@ import {
 } from '@mule/engine';
 import { belief, outlook, type Outlook } from './outlook.js';
 import { candidate, consider, curve, shortlist, type Candidate, type Shortlist } from './utility.js';
-import { afterTax, canFeed, cashPlan, cashReserve, installGain, secondValue, unitValues, wholeNextMonth, yieldOf, type Mind, type UnitValues } from './value.js';
+import { afterTax, canFeed, cashPlan, cashReserve, installGain, monthNeedsCost, secondValue, unitValues, wholeNextMonth, yieldOf, type Mind, type UnitValues } from './value.js';
 
 /**
  * The strategist: for each of the month's decisions it lists the options,
@@ -301,12 +301,12 @@ export function muleValue(obs: GameState, mind: Mind, outfit: Outfit): number {
 export type SellListing = NonNullable<PlanningPlay['list']>[number];
 
 /**
- * What the seat lists for the land auction while its money is under its cash reserve: up to AI_PLANS.sell.perMonth
+ * What the seat lists for the land auction while its money is under what its month of needs costs (monthNeedsCost): up to AI_PLANS.sell.perMonth
  * lots, those worth least to it over what the store pays first, each sold to the store if no one bids. Its idle plots
  * and its MULEs are candidates, never its last Food or Energy MULE. Empty when it is not short.
  */
 export function sellWanted(obs: GameState, mind: Mind): SellListing[] {
-  if (me(obs, mind).money >= cashReserve(obs, mind)) return [];
+  if (me(obs, mind).money >= monthNeedsCost(obs, mind)) return [];
   const o = outlook(obs, mind.me, { lookAhead: mind.level.lookAhead });
   const mine = obs.tiles.flatMap((tile, plot) => (tile.owner === mind.me && tile.terrain !== 'store' ? [{ tile, plot }] : []));
   const isLast = (outfit: Outfit) => (outfit === 'food' || outfit === 'energy') && mine.filter((m) => m.tile.outfit === outfit).length === 1;
@@ -670,16 +670,9 @@ export function tradeDecision(obs: GameState, mind: Mind, plan: GoodPlan): Short
     spent += buy;
     upTo++;
   }
-  // The funded needed units an option ending at `end` leaves unbought: it forgoes what each gains over the ask.
-  const forgone = (end: number) => {
-    let lost = 0;
-    for (let k = Math.max(end, h); k < h + (plan.cash?.funded ?? 0); k++) lost += (v.buy[k] ?? 0) - buy;
-    return lost;
-  };
   const buyTo = (target: number, label: string, key: string, sure: number, sureWhy: string) => {
     let gain = 0;
     for (let k = h; k < target; k++) gain += (v.buy[k] ?? 0) - buy;
-    if (plan.cash) gain -= forgone(target);
     const cost = (target - h) * buy;
     const essential = (target <= v.block && (good === 'food' || good === 'energy')) || target <= plan.mustHold;
     const veto = !essential && p.money - cost < plan.reserve ? `it would dip into the ${cr(plan.reserve)} kept for upkeep` : null;
