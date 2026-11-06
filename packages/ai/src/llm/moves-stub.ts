@@ -46,7 +46,6 @@ export type IntentType =
   | 'donate'
   | 'payStrike'
   | 'repair'
-  | 'setSiteBid'
   | 'propose'
   | 'voteLaw'
   | 'continue'
@@ -354,7 +353,7 @@ export const MOVES: MoveTable = {
     command: 'commission',
     phases: ['planning'],
     does: () =>
-      'The Governor commissions a prestige object for the colony; the fund and donors pay for it from the next upkeep, and it builds once paid (and sited, if it needs a plot).',
+      "The Governor commissions a prestige object for the colony; the fund and donors pay for it from the next upkeep, and it builds once paid, on the colony's own grounds.",
     legalWhen: () => [
       refused("the game plays with the colony's council", "This game plays without the colony's council"),
       refused('the votes are over', 'Commission once the votes are over'),
@@ -416,27 +415,6 @@ export const MOVES: MoveTable = {
     ],
     cost: null,
     args: [{ name: 'id', kind: 'enum', values: PRESTIGE_IDS }],
-  },
-  setSiteBid: {
-    type: 'setSiteBid',
-    command: 'setSiteBid',
-    phases: ['planning'],
-    does: () =>
-      "The Governor sets the colony's top bid for a commissioned object's plot at the land auction, paid from the fund; null, the colony does not bid.",
-    legalWhen: () => [
-      refused("the game plays with the colony's council", "This game plays without the colony's council"),
-      refused('the votes are over', 'Set the bid once the votes are over'),
-      refused('you are the Governor', "Only the Governor sets the colony's bid"),
-      refused('a commissioned object is waiting for a site', 'Nothing is waiting for a site'),
-      refused('the object needs a plot', 'The <name> needs no plot'),
-      refused('it has no site yet', 'The <name> already has its site'),
-      refused('the bid is whole credits, or null', 'Bid a whole number of credits'),
-    ],
-    cost: null,
-    args: [
-      { name: 'id', kind: 'enum', values: PRESTIGE_IDS },
-      { name: 'maxBid', kind: 'number' },
-    ],
   },
   propose: {
     type: 'propose',
