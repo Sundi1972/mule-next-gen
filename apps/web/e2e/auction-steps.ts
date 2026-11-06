@@ -920,6 +920,14 @@ async function readTheRestZones(cast: { seller: Phone; bidder: Phone; rester: Ph
     const box = await bandAndWalker(s, 'rest-buyer', resterId);
     check(box !== null && box.walker >= box.top && box.walker <= box.bottom + 1, `B-AC-D1: ${s.name} draws ${rester.name} inside the buyers' zone, got ${JSON.stringify(box)}`);
   }
+  // The bands' words, as drawn on the TV and a phone: inside their band and under no line's label (WS4); the buyers'
+  // band, tall, always has room for some.
+  const said: string[] = [];
+  for (const s of [screens[2]!, screens[3]!]) {
+    for (const tone of ['seller', 'buyer'] as const) said.push(`${s.name} ${tone}s "${(await bandWordsClear(s, tone, 'B-AC-D1')).text}"`);
+    check(!said.at(-1)!.endsWith('""'), `B-AC-D1: ${s.name}'s buyers' band shows its words, got ${said.at(-1)}`);
+  }
+  console.log(`✓ B-AC-D1: the bands' words clear of every line label: ${said.join('; ')}`);
   console.log(`✓ B-AC-D1: ${rester.name} held ▼ and stopped at the bottom edge ${zones.lo} on the server, no deal; ${rester.name}'s phone and the TV draw the walker in the buyers' zone (under ${zones.buyersTop})`);
 
   // B-AC-E1: past the old line, the line is her bid on every screen.
@@ -981,21 +989,39 @@ async function theSoldOutTvFits(tv: Page, server: MuleServer, code: string): Pro
       await fitSettled(tv);
       const shown = await shownWhole(tv, 'auction (sold out, two deals)', ['[data-testid=tv-sold-out]', '[data-testid=tv-deal]']);
       check(shown.length === 3, `TV-FIT: the sold-out TV shows its box and both running deals, got ${shown.map((b) => b.id).join(', ')}`);
-      // The sellers' band, thin under a bid near the top edge, keeps its words inside it, off the line's label (WS4).
-      const band = await tv.locator('[data-testid=tv-walk] [data-testid=rest-seller]').evaluate((b) => {
-        const r = b.getBoundingClientRect();
-        const words = b.lastElementChild!.getBoundingClientRect();
-        return { top: r.top, bottom: r.bottom, wordsBottom: words.bottom, text: (b as HTMLElement).innerText.replace(/\s+/g, ' ').trim() };
-      });
-      check(band.wordsBottom <= band.bottom + 1, `TV-FIT: the sellers' band's words "${band.text}" end at y ${band.wordsBottom.toFixed(1)}, inside the band ending at y ${band.bottom.toFixed(1)}`);
+      // The sellers' band, thin under a bid near the top edge, keeps any words it draws clear of the labels (WS4).
+      const band = await bandWordsClear({ name: 'the TV', page: tv }, 'seller', 'TV-FIT, sold out');
       const foot = await nothingPastTheFoot(tv, 'auction (sold out, two deals)');
       const scale = await theTvScaleHolds(tv, 'auction (sold out, two deals)');
-      return `the sold-out box and both deal rows whole, y ${shown[0]!.top.toFixed(0)}–${shown.at(-1)!.bottom.toFixed(0)}; the sellers' band ${(band.bottom - band.top).toFixed(0)} px says "${band.text}" inside it; fit scales ${scale}; the foot at y ${foot.toFixed(0)}`;
+      return `the sold-out box and both deal rows whole, y ${shown[0]!.top.toFixed(0)}–${shown.at(-1)!.bottom.toFixed(0)}; the sellers' band ${band.height.toFixed(0)} px says "${band.text}" clear of its labels; fit scales ${scale}; the foot at y ${foot.toFixed(0)}`;
     } finally {
       a.deals = kept;
       room.broadcast();
     }
   });
+}
+
+/**
+ * A rest band's words as the browser draws them on `s`'s walk board: when it draws any, they lie inside the band and
+ * overlap no line's label in the gutter (WS4). Returns the words and the band's height.
+ */
+async function bandWordsClear(s: Screen, tone: 'seller' | 'buyer', ac: string): Promise<{ text: string; height: number }> {
+  const board = s.page.locator('[data-testid=tv-walk], [data-phase=auction]').first();
+  const read = await board.evaluate((root, t) => {
+    const band = root.querySelector(`[data-testid=rest-${t}]`)!;
+    const words = band.lastElementChild!;
+    const b = band.getBoundingClientRect();
+    const w = words.getBoundingClientRect();
+    const text = (words as HTMLElement).innerText.replace(/\s+/g, ' ').trim();
+    const under = [...root.querySelectorAll('[data-testid^=limit-] > span')]
+      .map((l) => ({ id: l.parentElement!.getAttribute('data-testid'), r: l.getBoundingClientRect() }))
+      .filter(({ r }) => text !== '' && r.top < w.bottom - 0.5 && r.bottom > w.top + 0.5 && r.left < w.right - 0.5 && r.right > w.left + 0.5)
+      .map(({ id, r }) => `${id} y ${r.top.toFixed(1)}–${r.bottom.toFixed(1)}`);
+    return { text, height: b.height, inside: text === '' || (w.top >= b.top - 1 && w.bottom <= b.bottom + 1), words: `y ${w.top.toFixed(1)}–${w.bottom.toFixed(1)}`, band: `y ${b.top.toFixed(1)}–${b.bottom.toFixed(1)}`, under };
+  }, tone);
+  check(read.inside, `${ac}: ${s.name}'s ${tone}s' band words "${read.text}" at ${read.words} lie inside the band, ${read.band}`);
+  check(read.under.length === 0, `${ac}: ${s.name}'s ${tone}s' band words "${read.text}" at ${read.words} lie under no line label, got ${read.under.join(', ')}`);
+  return { text: read.text, height: read.height };
 }
 
 /** Test fixture, during Food's walk: the store's shelf of `good` is empty, and `seller` holds `sellerHas` of it. */
