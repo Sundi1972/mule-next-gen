@@ -25,6 +25,8 @@ import {
   SPECIES_PERK,
   STRATEGIST,
   storeForSale,
+  storeQuotes,
+  storeSellLine,
   tileIndex,
   UPKEEP,
   walkSeconds,
@@ -515,9 +517,15 @@ function waterDamage(obs: GameState, o: Outlook, me: string): number {
   return farms.reduce((n, t) => n + rawOutput(obs, t), 0) * (1 - UPKEEP.shortOutputShare) * afterTax(obs, belief(obs, o, 'food'));
 }
 
-/** Buying a unit back from the store next month, which a needed unit is never valued below; none if the store sells none. */
+/**
+ * What a needed unit is never valued below while the store sells the good: having it now, at the store's ask today, or
+ * buying it back next month, whichever is more. The damage falls before next month's auction, so the buy-back alone
+ * can't avert it. None if the store sells none.
+ */
 function replaceCost(obs: GameState, o: Outlook, good: Good): number {
-  return storeForSale(obs, good) > 0 ? belief(obs, o, good) * (1 + PRICE.storeSpread) * AI_VALUE.shortFloorMarkup : 0;
+  if (storeForSale(obs, good) <= 0) return 0;
+  const today = (obs.auction?.good === good ? storeSellLine(obs) : storeQuotes(obs, good).sell) ?? 0;
+  return Math.max(today, belief(obs, o, good) * (1 + PRICE.storeSpread) * AI_VALUE.shortFloorMarkup);
 }
 
 /**
@@ -583,12 +591,12 @@ export interface CashPlan {
   left: number;
   /** The shadow price of cash: what the last funded unit gains per credit, 0 when every needed unit is funded. */
   lambda: number;
-  /** Needed units worth more than their ask, funded or not. */
+  /** Needed units worth at least their ask, funded or not. */
   needed: number;
 }
 
 /**
- * Ranks every needed unit (below the good's target) worth more than its expected ask, across `goods`, by value per
+ * Ranks every needed unit (below the good's target) worth at least its expected ask, across `goods`, by value per
  * credit, ties in `goods`' order, and funds them in that order while the money covers the ask.
  */
 export function cashPlan(obs: GameState, mind: Mind, goods: readonly Good[], valuesOf: (good: Good) => UnitValues, askOf: (good: Good) => number): CashPlan {
@@ -597,7 +605,7 @@ export function cashPlan(obs: GameState, mind: Mind, goods: readonly Good[], val
   goods.forEach((good, at) => {
     const v = valuesOf(good);
     const ask = askOf(good);
-    for (let k = p.stock[good]; k < v.block; k++) if ((v.buy[k] ?? 0) > ask) units.push({ good, at, ratio: v.buy[k]! / ask, ask });
+    for (let k = p.stock[good]; k < v.block; k++) if ((v.buy[k] ?? 0) >= ask) units.push({ good, at, ratio: v.buy[k]! / ask, ask });
   });
   units.sort((a, b) => b.ratio - a.ratio || a.at - b.at);
   const plan: CashPlan = { funded: {}, cost: {}, left: p.money, lambda: 0, needed: units.length };
