@@ -406,6 +406,8 @@ describe("C8: a new plot's own-use units are worth what going short costs", () =
     Object.assign(state.store.stock, store);
     return { ...view(state), mind: mindOf() };
   };
+  /** What the store pays for a unit posted at 20: what a unit the seat doesn't use earns (AM-6). */
+  const storePays = 20 * (1 - PRICE.storeSpread);
   const netOf = (plots: Plot[], outfit: Outfit, store: Partial<Record<Good, number>> = {}) => {
     const { obs, o, mind } = seatOf(plots, store);
     return monthlyNet(obs, o, yieldOf(obs, obs.tiles[6]!, outfit, 'ai0'), outfit, mind);
@@ -413,10 +415,10 @@ describe("C8: a new plot's own-use units are worth what going short costs", () =
 
   it('T-AC-12 (C8): a plant beside plots short of Energy earns, over its sale, S − price for each unit they would go without', () => {
     const rich = [0, 2, 4].map((x): Plot => ({ outfit: 'smithore', x, ground: { smithore: 6 } }));
-    // The mines use 6; the plant nets 3, each keeping a mine's unit on: 0.8 × 6 × 100 ÷ 2 = 240, sold at 20.
+    // The mines use 6; the plant nets 3, each keeping a mine's unit on: 0.8 × 6 × 100 ÷ 2 = 240, sold to the store at 20 less its spread.
     const gain = netOf(rich, 'energy') - netOf([], 'energy');
 
-    expect(gain).toBeCloseTo(3 * (lost(6, 100, 2) - 20), 6);
+    expect(gain).toBeCloseTo(3 * (lost(6, 100, 2) - storePays), 6);
   });
 
   it("T-AC-12 (C8) negative: a seat with no farm gains nothing from a well's drink units, whether the store sells Water or not", () => {
@@ -439,6 +441,6 @@ describe("C8: a new plot's own-use units are worth what going short costs", () =
     // With the store selling none, S has no floor; the damage alone is what its farm loses.
     const [bare = 0] = shortCosts(seatOf([farm], { water: 0 }).obs, seatOf([farm], { water: 0 }).o, 'water', mind, 1);
 
-    expect(gain).toBeCloseTo(own * (Math.max(0, S - 20) - Math.max(0, bare - 20)), 6);
+    expect(gain).toBeCloseTo(own * (Math.max(0, S - storePays) - Math.max(0, bare - storePays)), 6);
   });
 });

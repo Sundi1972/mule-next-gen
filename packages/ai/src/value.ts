@@ -117,8 +117,11 @@ export function monthlyNet(obs: GameState, o: Outlook, y: Yield, outfit: Outfit,
   // A plant pays its own use from what it makes (AM-17 R2): only the rest is its to sell or to use.
   const made = outfit === 'energy' ? Math.max(0, y.made - y.energy) : y.made;
   let revenue = afterTax(obs, made * P(outfit, made));
+  // Output is sold at its own month's auction, before upkeep spoils it: held 0 months.
+  const each = AI_VALUE.unit ? carrySell(obs, outfit, mind, P(outfit, made), 0) : 0;
+  if (AI_VALUE.unit) revenue = made * each;
   if (full && (outfit === 'food' || outfit === 'water' || outfit === 'energy') && AI_VALUE.unit) {
-    revenue += ownUseGain(obs, o, outfit, made, afterTax(obs, P(outfit, made)), mind);
+    revenue += ownUseGain(obs, o, outfit, made, each, mind);
   } else if (full && (outfit === 'food' || outfit === 'water' || outfit === 'energy')) {
     // The units that cover its own shortfall are worth what going short would cost it, and pay no tax.
     const short = Math.max(0, monthNeeds(obs, mind.me)[outfit] - ownSupply(obs, mind.me, o.made, outfit));
@@ -413,9 +416,14 @@ function depotRoom(obs: GameState, good: Good, mind: Mind): number {
  * resell it (`buy`). See spec RULE-4.
  */
 function unitCarry(obs: GameState, o: Outlook, good: Good, mind: Mind): { sell: number; buy: number; room: number } {
-  const keepRate = 1 - (mind.level.fullScoring ? GOOD_CONFIG[good].spoilage : 0);
-  const sell = afterTax(obs, belief(obs, o, good) * (1 - PRICE.storeSpread)) * keepRate ** AI_VALUE.holdMonths;
+  const sell = carrySell(obs, good, mind, belief(obs, o, good), AI_VALUE.holdMonths);
   return { sell, buy: sell * Math.min(1, mind.persona.speculate), room: depotRoom(obs, good, mind) };
+}
+
+/** RULE-4's sell side: what the store pays for a unit at the posted `price`, after the sales tax and `months` of spoilage. */
+function carrySell(obs: GameState, good: Good, mind: Mind, price: number, months: number): number {
+  const keepRate = 1 - (mind.level.fullScoring ? GOOD_CONFIG[good].spoilage : 0);
+  return afterTax(obs, price * (1 - PRICE.storeSpread)) * keepRate ** months;
 }
 
 // --- The resource-utility model, switched on by AI_VALUE.unit ------------------
