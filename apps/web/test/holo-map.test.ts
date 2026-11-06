@@ -1,4 +1,4 @@
-import { HoloMap, selectionRing, specialBadgeBox, type MapTile } from '@mule/ui';
+import { HoloMap, selectionGlow, selectionRing, smallDots, specialBadgeBox, type MapTile } from '@mule/ui';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -240,18 +240,25 @@ describe('B-AC-9 (WS4, plot look A): the selected ring’s outer reach stops und
     const r = selectionRing(plot, 'phone');
     return (r.inset ?? plot * 0.06) + r.band + r.edge;
   };
-  /** The phone chip's dot row ends P/2 − 6.5 px over the plot's foot; the ring stops half a pixel under that. */
-  const room = (plot: number) => plot / 2 - 6.5 - 0.5;
+  /** The phone chip's dot row ends P/2 − 6.5 px over the plot's foot (P/2 − 1.5 for the small chip); the ring stops half a pixel under that. */
+  const room = (plot: number) => plot / 2 - (plot < 16 ? 1.5 : 6.5) - 0.5;
 
-  it('on the small phone’s 20 px plot and the phone’s 25 px plot, comes in and thins to stop half a pixel under the dots', () => {
+  it('on a 20 px plot and the phone’s 25 px plot, comes in and thins to stop half a pixel under the dots', () => {
     expect(selectionRing(20, 'phone')).toEqual({ inset: 0, band: 1, edge: 2, inside: false });
     expect(selectionRing(25, 'phone')).toEqual({ inset: 0.5, band: 3, edge: 2, inside: false });
     for (const plot of [20, 25]) expect(reach(plot)).toBeLessThanOrEqual(room(plot));
   });
 
-  it('on a plot too small for even a 1 px band under the dots (the small phone’s hub draws 12.8 px plots), is drawn inside the plot', () => {
-    expect(selectionRing(13, 'phone').inside).toBe(true);
-    expect(selectionRing(19, 'phone').inside).toBe(true);
+  it('on the small phone’s 12.8 px hub plot, under the small chip’s dots, comes in 0.4 px out with its full 2 px band', () => {
+    const r = selectionRing(12.8, 'phone');
+    expect(r).toMatchObject({ band: 2, edge: 2, inside: false });
+    expect(r.inset).toBeCloseTo(0.4, 6);
+    expect(reach(12.8)).toBeLessThanOrEqual(room(12.8) + 1e-9);
+  });
+
+  it('on a 16–19 px plot, too small for even a 1 px band under the full chip’s dots, is drawn inside under dots and keeps its full band elsewhere', () => {
+    expect(selectionRing(16, 'phone')).toEqual({ inset: 0, band: 2, edge: 2, inside: true });
+    expect(selectionRing(19, 'phone')).toEqual({ inset: 0, band: 2, edge: 2, inside: true });
     expect(selectionRing(20, 'phone').inside).toBe(false);
   });
 
@@ -261,6 +268,48 @@ describe('B-AC-9 (WS4, plot look A): the selected ring’s outer reach stops und
     expect(selectionRing(20, 'tv')).toEqual({ inset: null, band: 2, edge: 3, inside: false });
     const map = renderToStaticMarkup(createElement(HoloMap, { width: 3, height: 3, tiles: [{ x: 1, y: 1, terrain: 'plains', owner: null }], selected: { x: 1, y: 1 } }));
     expect(tag(map, /data-testid="selected-ring"/)).toMatch(/-inset-\[6%\]/);
+  });
+});
+
+describe('B-AC-9 (WS4, plot look A; PM ruling, 7 Nov): under dots the selection’s glow stops at half strength under the dots above', () => {
+  /** The glow is at half strength on its spread edge, 4 px outside its box: the box's reach out plus 4. */
+  const halfReach = (plot: number) => (selectionGlow(plot, 'phone') ?? plot * 0.08) + 4;
+  const room = (plot: number) => plot / 2 - (plot < 16 ? 1.5 : 6.5) - 0.5;
+
+  it('on the 12.8 px and 25 px plots its box comes in so that edge stops within the ring’s room', () => {
+    expect(selectionGlow(12.8, 'phone')).toBeCloseTo(0.4, 6);
+    expect(selectionGlow(25, 'phone')).toBeCloseTo(1.5, 6);
+    expect(selectionGlow(20, 'phone')).toBeCloseTo(-1, 6);
+    for (const plot of [12.8, 20, 25]) expect(halfReach(plot)).toBeLessThanOrEqual(room(plot) + 1e-9);
+  });
+
+  it('where 8% of the plot already stops short (from 30 px), and on the TV, is not capped: 8% out, a 12 px blur, a 4 px spread', () => {
+    expect(selectionGlow(30, 'phone')).toBeNull();
+    expect(selectionGlow(12.8, 'tv')).toBeNull();
+    const map = renderToStaticMarkup(createElement(HoloMap, { width: 3, height: 3, tiles: [{ x: 1, y: 0, terrain: 'plains', owner: null, ground: { food: 2 } }, { x: 1, y: 1, terrain: 'plains', owner: null }], selected: { x: 1, y: 1 } }));
+    const glow = tag(map, /data-testid="selected-glow"/);
+    expect(glow).toMatch(/-inset-\[8%\]/);
+    expect(glow).toMatch(/box-shadow:0 0 12px 4px var\(--color-holo\)/);
+    expect(glow).not.toMatch(/\binset:/);
+  });
+});
+
+describe('B-AC-9 (WS6 ruling, 7 Nov): the phone’s small dots chip', () => {
+  it('is drawn on a phone plot under 16 px, never at 16 px and over, never on the TV', () => {
+    expect(smallDots(12.8, 'phone')).toBe(true);
+    expect(smallDots(15.9, 'phone')).toBe(true);
+    expect(smallDots(16, 'phone')).toBe(false);
+    expect(smallDots(25, 'phone')).toBe(false);
+    expect(smallDots(12.8, 'tv')).toBe(false);
+  });
+
+  it('at 16 px and over keeps its good’s icon over the three dots, 3 px padding, and the plot’s label names the good', () => {
+    const map = renderToStaticMarkup(createElement(HoloMap, { width: 1, height: 1, tiles: [{ x: 0, y: 0, terrain: 'plains', owner: null, ground: { water: 2 } }] }));
+    const chip = map.slice(map.indexOf('data-testid="map-dots-0-0"'));
+    expect(tag(map, /data-testid="map-dots-0-0"/)).toMatch(/\bpx-\[3px\] py-\[2px\]/);
+    expect(chip).toMatch(/^[^>]*><span[^>]*><svg/);
+    expect(chip.match(/size-\[3px\]/g)).toHaveLength(3);
+    expect(map).toContain('aria-label="Plains, free, Water 2 of 3"');
   });
 });
 
