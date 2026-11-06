@@ -115,21 +115,28 @@ export function ScanReport({ tiles, next }: { tiles: TileView[]; next: string })
 }
 
 /**
- * Scrolls an element wholly into its rail's view when it appears and when the window changes size: the rail can hold
- * notices above it (a strike alert, the Now card opened) that would push it below the fold. A footer changing size (a
- * player getting ready) never moves it, so a player who scrolled up to read a notice stays there.
+ * Scrolls an element wholly into its rail's view when it appears and when the window changes width (a turn of the
+ * phone): the rail can hold notices above it (a strike alert, the Now card opened) that would push it below the fold.
+ * Nothing else moves it: not a footer changing size (a player getting ready), so a player who scrolled up to read a
+ * notice stays there, and not a phone keyboard, which shrinks only the height, so a chat line being typed stays put.
  */
 function useKeptInView<T extends HTMLElement>() {
   const ref = useRef<T>(null);
   useEffect(() => {
     const el = ref.current;
     if (!el?.scrollIntoView) return;
+    let width = window.innerWidth;
     const show = () => {
       el.scrollIntoView({ block: 'nearest' });
     };
+    const turned = () => {
+      if (window.innerWidth === width) return;
+      width = window.innerWidth;
+      show();
+    };
     show();
-    window.addEventListener('resize', show);
-    return () => window.removeEventListener('resize', show);
+    window.addEventListener('resize', turned);
+    return () => window.removeEventListener('resize', turned);
   }, []);
   return ref;
 }
