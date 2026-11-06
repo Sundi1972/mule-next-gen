@@ -51,13 +51,13 @@
 <thead><tr><th>Reason on screen</th><th>When</th></tr></thead>
 <tbody>
 <tr><td>nobody has any</td><td>No player holds any of the good, and the store has none for sale.</td></tr>
-<tr><td>nobody buys</td><td>The store does not want any more, the ship (if in port) does not want it, and no player who is short of it can afford the store's buying price.</td></tr>
+<tr><td>nobody buys</td><td>The store does not want any more, the ship (if in port) does not want it, and no player who holds less than their need (the status screen's <a href="#status-screen">Needs</a>, spoilage included) can afford the store's buying price.</td></tr>
 <tr><td>nobody trading</td><td>The status screen ended, but no seller has a possible buyer and no buyer a possible seller, so there is nothing to walk for.</td></tr>
 </tbody>
 </table></div>
 <p>A skipped good still teaches the market: its reference price drifts a little toward the off-world price, as described in <a href="store-and-prices.html#reference-and-off-world">reference and off-world prices</a>.</p>
 <div class="box example"><h4>Example</h4><p>In month 2 the export ship has announced it wants Smithore, Alloy and Medicine, but not Crystite. The store then wants no Crystite either (it only stocks Crystite for a ship that will take it), and no player needs Crystite. Even if you hold 6 Crystite, the good is skipped with "nobody buys". You can sell it in a month when the store is buying it again, or to the ship when Crystite is on its wishlist.</p></div>
-<p class="code-ref">In the code: <code>packages/engine/src/config.ts::WALK.order</code> · <code>packages/engine/src/auction.ts::skipBefore</code> · <code>auction.ts::nextGood</code></p>
+<p class="code-ref">In the code: <code>packages/engine/src/config.ts::WALK.order</code> · <code>packages/engine/src/auction.ts::skipBefore</code> · <code>auction.ts::nextGood</code> · <code>auction.ts::auctionNeed</code></p>
 <p class="owner">Kept current by: WS3.</p>
 
 <h2 id="status-screen">Picking a side: the status screen <span class="pill built">In the game</span></h2>
@@ -69,11 +69,13 @@
 <tr><td>Used</td><td>What production burnt: Energy for your plots, and the inputs your factories took.</td></tr>
 <tr><td>Made</td><td>What your plots and factories made this month.</td></tr>
 <tr><td>Now</td><td>What you hold now, in bold.</td></tr>
-<tr><td>Needs</td><td>What you need for next month: Food and Water for your household and crew, Energy for your plots, factory inputs, and 1 Medicine when the air makes people sick.</td></tr>
-<tr><td>Goes bad</td><td>What would be lost at month end if you kept everything above your need: the share that spoils, plus anything over the 10 units your home depot holds.</td></tr>
+<tr><td>Needs</td><td>What you must hold now to be short of nothing before the next auction: the Food and Water your household and crew eat and drink at this month end, plus enough of what you use next month to survive the month end's spoilage. That is next month's Food ration; Water only if you have a Food farm to water; Energy for your plots; your factories' inputs; and 1 Medicine when the air makes people sick.</td></tr>
+<tr><td>Goes bad</td><td>What would be lost at month end if you kept everything you hold now: upkeep eats and drinks first, then the share of the rest that spoils, plus anything over the 10 units your home depot holds.</td></tr>
 <tr><td>Spare</td><td>Now minus Needs: green <em>+3</em> when you have more than you need, red <em>short 2</em> when you have less.</td></tr>
 </tbody>
 </table></div>
+<div class="box example"><h4>Example</h4><p>Your household and crew eat 3 Food a month, and Food loses half of what is left at month end. You need <strong>9</strong>: 3 eaten at this month end, and 6 more, because 6 halves to the 3 you will eat next month. Energy loses a quarter, so one plot that uses 1 Energy needs 2 (1 alone would spoil to nothing), and two plots need 3.</p></div>
+<div class="box why"><h4>Why it is like this</h4><p>The need used to be only what next month's production and upkeep use, so a player could hold exactly their need, see nobody buying, and still go hungry after the month end's spoilage. The PM ruled (6 Nov, option B, from WS9's finding) that the need counts spoilage, and that the status screen shows the same number the auction uses to decide whether anyone buys. WS3, #439. The computer players work out their own buying from what production uses and add spoilage themselves, so their arithmetic is unchanged.</p></div>
 <p>Beside the table your phone says, in one line, whether you are short, even or have a surplus ("You need 2 more Food this month." or "You have 3 more than you need."), what the store charges and pays ("You can buy from the store at 33 · sell to it at 27 · it has 12 for sale"), and, when the export ship is in port, what it still wants ("The ship wants 24 Crystite this month").</p>
 
 <h3 id="sides">Buy or Sell: everyone takes part</h3>
@@ -83,7 +85,7 @@
 <h3 id="no-clock">No clock on the status screen</h3>
 <p>The status screen waits until every player has pressed <em>Ready</em>. A bar shows how many have picked ("3 / 4 PICKED", "No clock: the walk starts when everyone has picked."). Computer players pick on their own within a few seconds. If someone is slow or their phone has dropped, the host can tap <em>Move on for Kai</em>; the phone first says, in words, what each waiting player will do ("Kai buys Food: 1 of 3, short 2."), and moving on starts the walk with everyone on the side they stand on. A player whose phone has dropped sits the walk out.</p>
 <div class="box why"><h4>Why it is like this</h4><p>Heiko, 5 Nov, after playing: "in an auction always all players should participate; a player is a buyer by default." The PM approved WS3's amendment the same day (C2: everyone starts as a buyer, no Pass, sitting out is standing still plus Done). The status screen lost its clock in the UX audit (A-7, G-7) so that nobody is rushed into a side.</p></div>
-<p class="code-ref">In the code: <code>packages/engine/src/auction.ts::statusRows</code> · <code>auction.ts::seedSides</code> · <code>auction.ts::declareRole</code> · <code>config.ts::WALK.statusMs</code> (null: no clock) · <code>apps/web/src/phone/Auction.tsx</code> · <code>apps/web/src/components/AuctionParts.tsx::StatusTable</code> · <code>apps/server/src/mule-game.ts</code> (host Continue)</p>
+<p class="code-ref">In the code: <code>packages/engine/src/auction.ts::statusRows</code> · <code>auction.ts::auctionNeed</code> · <code>auction.ts::seedSides</code> · <code>auction.ts::declareRole</code> · <code>config.ts::WALK.statusMs</code> (null: no clock) · <code>apps/web/src/phone/Auction.tsx</code> · <code>apps/web/src/components/AuctionParts.tsx::StatusTable</code> · <code>apps/server/src/mule-game.ts</code> (host Continue)</p>
 <p class="owner">Kept current by: WS3 (rules), WS6 (phone).</p>
 
 <h2 id="walk-board">The walk board <span class="pill built">In the game</span></h2>
