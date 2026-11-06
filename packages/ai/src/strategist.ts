@@ -316,7 +316,7 @@ export function sellWanted(obs: GameState, mind: Mind): SellListing[] {
   if (me(obs, mind).money >= monthNeedsCost(obs, mind)) return [];
   const o = outlook(obs, mind.me, { lookAhead: mind.level.lookAhead });
   const mine = obs.tiles.flatMap((tile, plot) => (tile.owner === mind.me && tile.terrain !== 'store' ? [{ tile, plot }] : []));
-  const isLast = (outfit: Outfit) => (outfit === 'food' || outfit === 'energy' || (outfit === 'water' && mine.some((m) => m.tile.outfit === 'food'))) && mine.filter((m) => m.tile.outfit === outfit).length === 1;
+  const isLast = (outfit: Outfit) => (outfit === 'food' || outfit === 'energy' || (outfit === 'water' && mine.some((m) => (UPKEEP.irrigated as readonly string[]).includes(m.tile.outfit ?? '')))) && mine.filter((m) => m.tile.outfit === outfit).length === 1;
   const lots = mine.flatMap(({ tile, plot }): { item: SellListing['item']; plot: number; worth: number }[] => {
     if (!tile.outfit) return [{ item: 'plot', plot, worth: plotValue(obs, mind, plot) }];
     if (isLast(tile.outfit)) return [];
