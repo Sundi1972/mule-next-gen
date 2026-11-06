@@ -294,6 +294,7 @@ describe('the validator holds every playbook to RULE-1', () => {
     const kept = middle.slice(0, 4);
     expect(fault(middle)).toMatchObject({ plays: kept, why: expect.stringContaining('route: not your plot, step 6, so steps 4 on are dropped') });
     expect(run('development', [{ path: '/development/route', to: middle, reason: 'Two MULEs.' }]).playbook.development!.route).toEqual(kept);
+    expect(fault('pub' as unknown as unknown[]).why).toBe('route: not a list of steps, step 0');
     // P9: RULE-1's example (a 50 s seat asked for 90 s), read against the seat's own development seconds.
     const devMs = at.development.players.find((p) => p.id === 'ai2')!.devSeconds * MS_PER_SECOND;
     expect(one('development', '/development/timeBudgetMs', devMs + 40 * MS_PER_SECOND)).toMatchObject({ plays: devMs, why: `clamped to ${devMs}: the seat's development time` });
