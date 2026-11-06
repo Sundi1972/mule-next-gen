@@ -40,6 +40,7 @@ import type { DevelopmentLog, DevelopmentStepLog } from '../playbook/outcome.js'
 import { floorDevWalk, installable, leading, mapFactor, planSeconds, plotErrandSeconds, pubDoor, pubMargin, pubSeconds, tileMiddle, tripSeconds, type PlanStop } from '../floor-time.js';
 import { analysesWanted, bestInstall, developDecision, filtersWanted, outfitName, plotName, walkVeto, type DevAction, type DevWalk } from '../strategist.js';
 import { situation } from '../summary.js';
+import type { Mind } from '../value.js';
 import { FloorWalker, type FloorView } from './floor-walker.js';
 
 /**
@@ -142,6 +143,8 @@ export interface RoutePlay {
   seed: number;
   /** The strategy's money-maker, the own pick's lean. */
   moneyMaker: Good | null;
+  /** The plan mind the own pick weighs with (RULE-14). */
+  mind: Mind;
   /** The seat's own draft; false for an adopted part, which plays as adopted: no re-pick, no MULE added. See AM-27. */
   own: boolean;
 }
@@ -910,8 +913,7 @@ export class DevelopHand {
   /** The seat's own pick for its next MULE on the live state: the draft's seeded pick for that MULE, leaning as the playbook does. */
   private ownPick(state: GameState, walk?: () => DevWalk): DevAction {
     const r = this.route!;
-    const mind = this.brain.mind;
-    const input = { state, seat: mind.me, mind, seed: r.play.seed, phase: 'development' as const, month: state.month };
+    const input = this.pickInput(state);
     return this.drafting('own MULE pick', "taken as 'stop'", STOP, () => draftMulePick(input, r.mules, walk?.(), r.play.moneyMaker));
   }
 
@@ -990,14 +992,19 @@ export class DevelopHand {
     return veto ? `stale: ${veto}` : null;
   }
 
+  /** What the route's own MULE picks are drafted from: the playbook's seed and the plan mind. See RULE-9 row 3, RULE-14. */
+  private pickInput(state: GameState) {
+    const play = this.route!.play;
+    return { state, seat: this.brain.mind.me, mind: play.mind, seed: play.seed, phase: 'development' as const, month: state.month };
+  }
+
   /**
    * The stale MULE's group, replaced once by the seat's own pick for that MULE, ahead of the rest; a pick of 'stop'
    * drops it, its steps logged 'skipped'. See RULE-9 row 3.
    */
   private replace(state: GameState, group: number, note: string, walk?: () => DevWalk): void {
     const r = this.route!;
-    const mind = this.brain.mind;
-    const input = { state, seat: mind.me, mind, seed: r.play.seed, phase: 'development' as const, month: state.month };
+    const input = this.pickInput(state);
     const pick = this.drafting('replacement MULE pick', "taken as 'stop'", STOP, () => draftMulePick(input, r.mules - 1, walk?.(), r.play.moneyMaker));
     for (const s of this.queue.filter((q) => q.group === group)) this.log(s, false, pick.kind === 'stop' ? 'skipped' : 'replaced', note);
     const rest = this.queue.filter((q) => q.group !== group);
