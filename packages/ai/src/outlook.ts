@@ -162,15 +162,12 @@ function rollForward(stage: GameState, months: number): Future {
 function produce(sim: GameState, me: string): { made: Stock; plantsUse: number } {
   // Development's end, as the game plays it: a MULE taken off a plot goes back to it, any other carried MULE runs off.
   for (const p of sim.players) endLead(sim, p.id);
-  // Each of the seat's plants' use, by tile, read before production runs: a meteor striking after the output clears a
-  // plant's outfit, and its use would read 0 though the engine had charged it.
-  const uses = new Map(sim.tiles.flatMap((t, i) => (t.owner === me && t.outfit === 'energy' ? [[i, energyUseOf(sim, t)] as const] : [])));
   const { produced, lines, events } = runProduction(sim);
   // Each plant's charge from its line, as runProduction takes it: min(made, use), its use under a cold snap's factor.
   const cold = events.some((e) => e.key === 'coldSnap') ? EVENTS.colony.coldSnap.factor : 1;
   const plantsUse = lines
-    .filter((l) => l.good === 'energy' && uses.has(l.tile))
-    .reduce((n, l) => n + Math.min(Math.max(0, l.made), uses.get(l.tile)! * cold), 0);
+    .filter((l) => l.good === 'energy' && sim.tiles[l.tile]!.owner === me)
+    .reduce((n, l) => n + Math.min(Math.max(0, l.made), energyUseOf(sim, sim.tiles[l.tile]!) * cold), 0);
   return { made: produced[me] ?? emptyStock(), plantsUse };
 }
 
