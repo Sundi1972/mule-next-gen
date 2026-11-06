@@ -18,6 +18,7 @@ import {
   type Council,
   type GameState,
   type LawProposal,
+  type PrestigeId,
   type Rng,
 } from '@mule/engine';
 import type { Act, AiAction } from '../src/actions.js';
@@ -72,6 +73,14 @@ function tick(hand: VoteHand, state: GameState): AiAction[] {
   hand.tick(state, 0, (action) => (sent.push(action), applyAction(state, hand.mind.me, action)));
   return sent;
 }
+
+/** The fund an AI Governor needs before it commissions this object: POLITICS.ai.colony.commissionShare of its credits. */
+function atShare(id: PrestigeId): number {
+  return Math.ceil(PRESTIGE[id].credits * POLITICS.ai.colony.commissionShare);
+}
+
+/** The colony acts a tick sent, without the tax its Governor steers. */
+const colonyActs = (sent: AiAction[]) => sent.filter((a) => a.type !== 'setTax');
 
 function ballot(state: GameState, proposal: LawProposal, proposer = 'ai0'): void {
   const council: Council = { stage: 'ballot', clockMs: 0, proposal, proposer, ballots: { [proposer]: true }, done: [], result: null };
@@ -257,16 +266,21 @@ describe("C44: the AI's council acts (slice 2a RULE-46)", () => {
 });
 
 describe('C25: AI Governors build and pay, AI voters weigh the mood (G-5)', () => {
-  it('T-AC-36: an AI Governor whose persona builds commissions the most prestige the fund can pay for, once the votes are over', () => {
+  it('T-AC-36: an AI Governor whose persona builds commissions the most prestige the fund holds its commission share of, once the votes are over', () => {
     POLITICS.ai.colony.commissions.trader = true;
     const state = governed();
-    state.treasury.money = 700;
+    state.treasury.money = atShare('stadium') - 1;
+    expect(state.treasury.money, 'the case: the Hospital and Observatory are in reach, the Stadium is not').toBeGreaterThanOrEqual(atShare('observatory'));
     tick(new VoteHand(mindOf('ai0', 'trader'), createRng(1)), state);
     expect(state.colony!.projects.map((p) => p.id), 'the Hospital (3) over the Park (2); the Observatory ties it and costs more').toEqual(['hospital']);
     const exact = governed();
-    exact.treasury.money = PRESTIGE.hospital.credits;
+    exact.treasury.money = atShare('hospital');
     tick(new VoteHand(mindOf('ai0', 'trader'), createRng(1)), exact);
-    expect(exact.colony!.projects.map((p) => p.id), 'a fund of exactly its price pays for it').toEqual(['hospital']);
+    expect(exact.colony!.projects.map((p) => p.id), 'a fund of exactly its share commissions it (pace set C)').toEqual(['hospital']);
+    const short = governed();
+    short.treasury.money = atShare('hospital') - 1;
+    tick(new VoteHand(mindOf('ai0', 'trader'), createRng(1)), short);
+    expect(short.colony!.projects.map((p) => p.id), 'one credit short of its share, the Park is the most it reaches').toEqual(['park']);
   });
 
   it('T-AC-36 (C25, AM-10): with a site budget it commissions an object that needs a plot, and at once sets the colony\'s top bid for its site', () => {
@@ -276,7 +290,7 @@ describe('C25: AI Governors build and pay, AI voters weigh the mood (G-5)', () =
     state.treasury.money = 1_500;
     const sent = tick(new VoteHand(mindOf('ai0', 'trader'), createRng(1)), state);
     expect(state.colony!.projects.map((p) => [p.id, p.maxBid]), 'the Spaceport upgrade (5), its bid the persona\'s').toEqual([['spaceport', 400]]);
-    expect(sent.map((a) => a.type)).toEqual(['commission', 'setSiteBid']);
+    expect(colonyActs(sent).map((a) => a.type)).toEqual(['commission', 'setSiteBid']);
   });
 
   it('T-AC-36 (C25, AM-10): with no site budget it commissions only objects that need no plot', () => {
@@ -297,19 +311,23 @@ describe('C25: AI Governors build and pay, AI voters weigh the mood (G-5)', () =
       state.colony!.projects[0]!.maxBid = given;
       const sent = tick(new VoteHand(mindOf('ai0', persona), createRng(1)), state);
       expect(state.colony!.projects[0]!.maxBid, `${persona}, bid ${given}`).toBe(then);
-      expect(sent.some((a) => a.type === 'setSiteBid'), `${persona}, bid ${given}: it only sends a bid it means to set`).toBe(given === null && then !== null);
+      // With COLONY.maxOpen above 1 it may also commission another object and bid for its site: only the Park's bid counts here.
+      const parkBid = sent.some((a) => a.type === 'setSiteBid' && a.id === 'park');
+      expect(parkBid, `${persona}, bid ${given}: it only sends a bid it means to set`).toBe(given === null && then !== null);
     }
     const plotFree = governed();
     commission(plotFree, 'ai0', 'hospital');
     const sent = tick(new VoteHand(mindOf('ai0', 'cautious'), createRng(1)), plotFree);
-    expect(sent.filter((a) => a.type === 'setSiteBid'), 'an object that needs no plot never gets a site bid').toEqual([]);
+    expect(sent.filter((a) => a.type === 'setSiteBid' && a.id === 'hospital'), 'an object that needs no plot never gets a site bid').toEqual([]);
   });
 
   it('T-AC-36: a strike paid this tick leaves less to build with — the Governor commissions only from the fund that is left', () => {
     POLITICS.ai.colony.commissions.trader = true;
     POLITICS.ai.colony.paysStrike.trader = true;
     const state = governed();
-    state.treasury.money = 900; // the Hospital's 680 is within it, but not once the strike's 250 is paid: the Park's 420 is
+    // Every object's share is within it, but once the strike is paid only the Park's is.
+    state.treasury.money = COLONY.strike.cost + atShare('park');
+    expect(state.treasury.money - COLONY.strike.cost, 'the case: after the strike the Hospital is out of reach').toBeLessThan(atShare('hospital'));
     callStrike(state, 'food');
     const sent = tick(new VoteHand(mindOf('ai0', 'trader'), createRng(1)), state);
     expect(state.colony!.strike!.paid).toBe(true);
@@ -364,14 +382,15 @@ describe('C25: AI Governors build and pay, AI voters weigh the mood (G-5)', () =
 
     POLITICS.ai.colony.commissions.trader = true;
     const poor = governed();
-    poor.treasury.money = PRESTIGE.park.credits - 1;
+    poor.treasury.money = atShare('park') - 1;
     tick(new VoteHand(mindOf('ai0', 'trader'), createRng(1)), poor);
     expect(poor.colony!.projects).toEqual([]);
 
     const busy = governed();
-    commission(busy, 'ai0', 'observatory');
+    const open = (['observatory', 'hospital', 'park', 'stadium', 'spaceport'] as const).slice(0, COLONY.maxOpen);
+    for (const id of open) commission(busy, 'ai0', id);
     tick(new VoteHand(mindOf('ai0', 'trader'), createRng(1)), busy);
-    expect(busy.colony!.projects.map((p) => p.id)).toEqual(['observatory']);
+    expect(busy.colony!.projects.map((p) => p.id), `COLONY.maxOpen (${COLONY.maxOpen}) objects open: no more`).toEqual([...open]);
   });
 
   it('INV-41: a VoteHand whose mind has no seat salt refuses to draw the council\'s coin rather than share a stream', () => {

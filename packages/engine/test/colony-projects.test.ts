@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   advancePhase,
+  COLONY,
   colonyPrestige,
   commission,
   createGame,
@@ -122,6 +123,9 @@ describe('prestige objects: commissioned, funded, built, kept up', () => {
     expect(refused(() => commission(state, 'lena', 'castle' as PrestigeId))).toBe("The colony can't build that");
     expect(refused(() => commission(state, 'lena', 'hospital'))).toBe('accepted');
     expect(refused(() => commission(state, 'lena', 'hospital'))).toBe('The colony already has a Hospital');
+    // COLONY.maxOpen objects may be open at once (3, pace set C, Heiko 6 Nov): the next one is refused.
+    const others: PrestigeId[] = ['observatory', 'stadium', 'spaceport'];
+    for (const id of others.slice(0, COLONY.maxOpen - 1)) expect(refused(() => commission(state, 'lena', id)), id).toBe('accepted');
     expect(refused(() => commission(state, 'lena', 'park'))).toBe('The colony is already building the Hospital');
     const vowel = governedGame();
     commission(vowel, 'lena', 'observatory');
