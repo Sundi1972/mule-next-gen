@@ -1964,9 +1964,11 @@ export const BRAIN = {
   /**
    * brain:trial --deep, a monitoring run (deep2-opus, Heiko 6 Nov): every write thinks at writeCall's effort, with room
    * for long thinking and a long wait, and every call is recorded with its summarized thinking. Its ledgers
-   * (deep-*.jsonl) count against capUsd, Heiko's clearance; a game's Smart seats may spend up to gameBudgetUsdMax.
+   * (deep-*.jsonl) count against capUsd, Heiko's clearances together: deep2-opus $20 (6 Nov), and deep3-haiku with
+   * deep3-sonnet $45 (6 Nov, after the free gate). Each run also gives its own --max-usd. A game's Smart seats may
+   * spend up to gameBudgetUsdMax.
    */
-  deep: { capUsd: 20, gameBudgetUsdMax: 10, writeCall: { effort: 'high', maxTokens: 16_000, timeoutMs: 180_000 } },
+  deep: { capUsd: 65, gameBudgetUsdMax: 10, writeCall: { effort: 'high', maxTokens: 16_000, timeoutMs: 180_000 } },
   /**
    * The calls that write a seat's strategy and its playbook edits, by kind: adaptive thinking at this effort, a reply
    * cap that includes the thinking, and how long one call may take in ms (a p90 of 3.9 s was measured).
