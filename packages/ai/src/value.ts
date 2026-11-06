@@ -231,7 +231,7 @@ function householdNeeds(obs: GameState, me: string): Partial<Stock> {
  * The links a chain to factory good `good` still needs a plot for: each input the seat can't feed and has no plot
  * making, and that input's own links when it is a factory good too. Empty when `good` is no chain: a raw good, a
  * factory the seat can feed, one missing an input the household eats or drinks, which it takes first, so no farm or
- * well is the works' alone, or with chains switched off. See AM-32.
+ * well is the works' alone, or with chains switched off. See AM-33.
  */
 export function chainLinks(obs: GameState, me: string, good: Good): Good[] {
   return chainParts(obs, me, good).links;
@@ -243,7 +243,7 @@ const chainsOn = () => AI_PLANS.chain.months > 0;
 /**
  * Every good a chain to `good` is built from, Energy aside, all the way up its recipes: Rare earth, Alloy and Smithore
  * for Electronics. None for a raw good, a factory with an input the household eats or drinks, or chains switched off.
- * See AM-32.
+ * See AM-33.
  */
 export function chainInputs(obs: GameState, me: string, good: Good): Good[] {
   if (!chainsOn() || !isFactory(good)) return [];
@@ -253,7 +253,7 @@ export function chainInputs(obs: GameState, me: string, good: Good): Good[] {
   return [...new Set(inputs.flatMap((g) => [g, ...chainInputs(obs, me, g)]))];
 }
 
-/** The seat's plots already making an input of the chain to `good` that it still can't feed: links that stand. See AM-32. */
+/** The seat's plots already making an input of the chain to `good` that it still can't feed: links that stand. See AM-33. */
 export function standingLinks(obs: GameState, me: string, good: Good): Tile[] {
   return chainParts(obs, me, good).standing;
 }
@@ -278,7 +278,7 @@ function chainParts(obs: GameState, me: string, good: Good): { links: Good[]; st
 
 /**
  * The share of its works' monthly run a link plot on `tile` supplies, at most 1: what it would make over what the chain
- * member that uses it needs a run. A link counts for the chain only as far as it feeds it. See AM-32.
+ * member that uses it needs a run. A link counts for the chain only as far as it feeds it. See AM-33.
  */
 export function linkShare(obs: GameState, tile: Tile, link: Good, members: readonly Good[], me: string): number {
   const user = members.find((m) => isFactory(m) && (RECIPES[m].inputs[link] ?? 0) > 0);
@@ -289,7 +289,7 @@ export function linkShare(obs: GameState, tile: Tile, link: Good, members: reado
 /**
  * The outlook a chain is valued at: its links' goods cost and fetch nothing. A link's output and the works' charge for
  * it cancel within the seat, so the works is valued with its input charge refunded and each link plot at its running
- * cost alone (MULE, outfit, Energy, crew, air). See AM-32.
+ * cost alone (MULE, outfit, Energy, crew, air). See AM-33.
  */
 export function chainOutlook(o: Outlook, links: readonly Good[]): Outlook {
   const free = (price: (good: Good, extra?: number) => number) => (good: Good, extra?: number) => (links.includes(good) ? 0 : price(good, extra));

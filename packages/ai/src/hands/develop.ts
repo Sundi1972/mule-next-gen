@@ -42,7 +42,7 @@ import type { DevelopmentLog, DevelopmentStepLog } from '../playbook/outcome.js'
 import { floorDevWalk, installable, leading, mapFactor, planSeconds, plotErrandSeconds, pubDoor, pubMargin, pubSeconds, tileMiddle, tripSeconds, type PlanStop } from '../floor-time.js';
 import { analysesWanted, bestInstall, developDecision, filtersWanted, outfitName, plotName, walkVeto, type DevAction, type DevWalk } from '../strategist.js';
 import { situation } from '../summary.js';
-import { adoptedNow, type Mind } from '../value.js';
+import { adoptedNow, cashReserve, type Mind } from '../value.js';
 import { FloorWalker, type FloorView } from './floor-walker.js';
 
 /**
@@ -1011,7 +1011,8 @@ export class DevelopHand {
     if (plot < 0) return null;
     const tile = state.tiles[plot]!;
     if (tile.owner !== this.brain.mind.me || tile.outfit !== null) return `stale: plot ${plot}`;
-    const floor = adoptedNow(state, this.brain.mind)?.cashFloor ?? null;
+    // The floor as cashReserve holds it (within AI_PLANS.bounds.cashFloorMax), not the raw field: one reading of it.
+    const floor = adoptedNow(state, this.brain.mind)?.cashFloor != null ? cashReserve(state, this.brain.mind) : null;
     if (floor !== null && outfit !== null) {
       const me = state.players.find((p) => p.id === this.brain.mind.me)!;
       const cost = (me.carriedMule === null ? mulePriceFor(state, me.id) : 0) + (me.carriedMule === outfit ? 0 : outfitCostFor(state, me.id, outfit));
