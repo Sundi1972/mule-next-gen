@@ -11,26 +11,31 @@ const ANCHOR_PRICE = 100;
 /** A 12-month game of four playbook seats drafts at every draft point of every month. */
 const SLOW_MS = 120_000;
 
+/** The office holders at the table and in the anchor: a term already served. */
+const OFFICES = { governor: 'ai1', sheriff: 'ai3' };
+
 /** A month-1 table of four, politics on; its free plots, nearest the top-left first. */
 function table(): { state: GameState; free: number[] } {
   const state = createGame({ seed: 7, players: [0, 1, 2, 3].map((i) => ({ id: `ai${i}`, name: `AI ${i + 1}`, isAi: true })) });
   state.store.posted.smithore = ANCHOR_PRICE;
+  Object.assign(state.politics!, OFFICES);
   const free = state.tiles.flatMap((t, i) => (t.owner === null && t.terrain !== 'store' ? [i] : []));
   return { state, free };
 }
 
 /** A monopolist cornering Smithore, anchored on `state` as it stands: key plots `keyPlots`, one rival Smithore plot. */
-function kept(state: GameState, keyPlots: number[], plan: Partial<Strategy> = {}): KeptPlan {
+function kept(state: GameState, keyPlots: number[], plan: Partial<Strategy> = {}, at: Partial<PlanAnchor> = {}): KeptPlan {
   const fields = { kind: 'monopolist' as const, moneyMaker: 'smithore' as const, monopolyTarget: 'smithore' as const, landTarget: { plots: 3, byMonth: 4 }, ...plan };
   const anchor: PlanAnchor = {
     month: state.month,
     point: 'planning',
+    pricedAt: 'planning',
     posted: { smithore: ANCHOR_PRICE },
     rivalPlots: 1,
     keyPlots,
     reportedMonth: 0,
-    governor: null,
-    sheriff: null,
+    ...OFFICES,
+    ...at,
   };
   return { ...fields, anchor, trigger: null };
 }
@@ -44,7 +49,7 @@ function produced(state: GameState, hits: { plot: number; delta: number }[]): vo
 }
 
 describe('the five re-plan triggers (C13, RULE-8)', () => {
-  type Row = [string, ReplanTrigger | null, (s: GameState, free: number[]) => void, Partial<Strategy>?];
+  type Row = [string, ReplanTrigger | null, (s: GameState, free: number[]) => void, Partial<Strategy>?, Partial<PlanAnchor>?];
   const { replan } = AI_PLANS;
   const rows: Row[] = [
     ['row 1: a key plot owned by a rival', 'lostKeyPlot', (s, f) => own(s, f[0]!, 'ai1')],
@@ -66,10 +71,18 @@ describe('the five re-plan triggers (C13, RULE-8)', () => {
       },
     ],
     ['row 2 skips with no target', null, (s, f) => [3, 4, 5].forEach((i) => own(s, f[i]!, 'ai2', 'smithore')), { kind: 'specialist', monopolyTarget: null }],
-    ['row 3: the price up by replan.priceShock of the anchor', 'priceShock', (s) => void (s.store.posted.smithore = ANCHOR_PRICE * (1 + replan.priceShock))],
     ['row 3: the price down by replan.priceShock of the anchor', 'priceShock', (s) => void (s.store.posted.smithore = ANCHOR_PRICE * (1 - replan.priceShock))],
-    ['row 3 under: up by one credit less', null, (s) => void (s.store.posted.smithore = ANCHOR_PRICE * (1 + replan.priceShock) - 1)],
-    ['rows 3 and 4 skip with no money-maker', null, (s) => void (s.store.posted.smithore = 3 * ANCHOR_PRICE), { kind: 'builder', moneyMaker: null, monopolyTarget: null }],
+    ['row 3 under: down by one credit less', null, (s) => void (s.store.posted.smithore = ANCHOR_PRICE * (1 - replan.priceShock) + 1)],
+    ['row 3 never on a rise: up by replan.priceShock and more', null, (s) => void (s.store.posted.smithore = 2 * ANCHOR_PRICE * (1 + replan.priceShock))],
+    [
+      'row 3 only like for like: a fall read at another draft point than the anchor’s price',
+      null,
+      (s) => {
+        s.phase = 'auction';
+        s.store.posted.smithore = ANCHOR_PRICE * (1 - replan.priceShock);
+      },
+    ],
+    ['rows 3 and 4 skip with no money-maker', null, (s) => void (s.store.posted.smithore = ANCHOR_PRICE / 10), { kind: 'builder', moneyMaker: null, monopolyTarget: null }],
     [
       'row 4: a production cuts replan.eventPlots of its money-maker plots',
       'event',
@@ -98,6 +111,16 @@ describe('the five re-plan triggers (C13, RULE-8)', () => {
       },
     ],
     [
+      'row 5 under: an anchor from before any election, at the first term',
+      null,
+      (s) => {
+        s.politics!.termStart = s.month;
+        s.politics!.governor = 'ai2';
+      },
+      {},
+      { governor: null, sheriff: null },
+    ],
+    [
       'row 5 under: another governor whose term began last month',
       null,
       (s) => {
@@ -113,14 +136,14 @@ describe('the five re-plan triggers (C13, RULE-8)', () => {
         s.politics = null;
       },
     ],
-    ['first match wins: a lost key plot and a price shock', 'lostKeyPlot', (s, f) => (own(s, f[0]!, 'ai1'), void (s.store.posted.smithore = 2 * ANCHOR_PRICE))],
+    ['first match wins: a lost key plot and a price shock', 'lostKeyPlot', (s, f) => (own(s, f[0]!, 'ai1'), void (s.store.posted.smithore = ANCHOR_PRICE / 10))],
   ];
 
-  it.each(rows)("T-AC-6: RULE-8's rows 1–5, each with a value just under its threshold as the negative (%s)", (_, want, change, plan) => {
+  it.each(rows)("T-AC-6: RULE-8's rows 1–5, each with a value just under its threshold as the negative (%s)", (_, want, change, plan, at) => {
     const { state, free } = table();
     const plotOf = (i: number) => free[i]!;
     own(state, plotOf(30), 'ai3', 'smithore'); // the anchor's one rival Smithore plot
-    const plan0 = kept(state, [plotOf(0), plotOf(1)], plan);
+    const plan0 = kept(state, [plotOf(0), plotOf(1)], plan, at);
     change(state, free);
 
     expect(replanReason(state, plan0, ME)).toBe(want);
