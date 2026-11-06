@@ -260,6 +260,27 @@ describe('C4: a pass that leaves a funded shortfall carries its cost', () => {
     expect(pass.value).toBeLessThan(buy.value);
   });
 
+  it('T-AC-5: with each needed unit worth exactly its ask, the pass gives up the whole value of every funded unit', () => {
+    // Two farms making 3 Food at 5: turned off one loses 12, under Energy's ask of 22, so each unit is worth the ask.
+    const farms = [0, 2].map((x): Plot => ({ outfit: 'food', x, ground: { food: 3 - GROWN_BASE } }));
+    const state = table({ plots: farms, posted: { food: 5, energy: 20 } });
+    const obs = observe(state, 'ai0');
+    const mind = mindOf();
+    const plan = goodPlan(obs, mind, 'energy');
+    const ask = Math.ceil(20 * (1 + PRICE.storeSpread));
+    const target = wholeNextMonth(obs, 'ai0', 'energy');
+    expect(plan.values.buy.slice(0, target), 'the premise: every needed unit is worth the ask').toEqual(Array(target).fill(ask));
+    expect(plan.cash?.funded, 'the premise: the cash plan funds them all').toBe(target);
+
+    const all = tradeDecision(obs, mind, plan).all;
+    const pass = all.find((c) => c.key === 'pass')!;
+    const buy = all.find((c) => c.key === 'buy' || c.key === 'buy:need')!;
+
+    expect(pass.value, 'minus the whole value of every funded unit').toBe(-target * ask);
+    expect(pass.veto).toBeNull();
+    expect(buy.utility, 'the buy outranks the pass').toBeGreaterThan(pass.utility);
+  });
+
   it('T-AC-5 negative: with less money than one unit, nothing is funded and the pass gains 0', () => {
     const pass = shortlistOf(10).find((c) => c.key === 'pass')!;
 
