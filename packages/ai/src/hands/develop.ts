@@ -404,8 +404,9 @@ export class DevelopHand {
     // the pub's, and every step left on the list after the glint (RULE-8).
     const racing = g !== null && this.racingGlint === g.sinceTick;
     const spare = !cfg.steer.botsSpareTime || (racing && secondsLeft > pubSeconds(state, cfg, c) + this.margin(cfg, c) && this.fitsDetour(view, c, glintMiddle(g)));
-    // A glint fading in the coming step can no longer be pressed for: the race is over.
-    if (g && racing && spare && !fading) {
+    // A glint fading in the coming step is walked onto, not pressed for (`sure` is false): the step gives it to a
+    // colonist on its tile before it fades it.
+    if (g && racing && spare) {
       const input = this.chaser.seek(view, glintMiddle(g), sure ? 'grab' : 'none');
       if (input) return input;
     }
