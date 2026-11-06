@@ -1,0 +1,16 @@
+{
+  "source": "10 seed-1 games, 4 computer players, politics on, trunk 2eccd439; WS5 prototype run of 6 Nov (store-pricing spec, Sim section)",
+  "charts": [
+    { "title": "Highest Food price in any month", "unit": " cr", "groups": [{ "label": "Food", "today": 2978, "after": 144 }, { "label": "Water", "today": 1368, "after": 251 }, { "label": "Energy", "today": 1476, "after": 144 }],
+      "note": "The store's highest asking price over all 120 game-months. Today's prices run away; the proposal stays readable." },
+    { "title": "Months a price sat at its ceiling", "unit": "", "groups": [{ "label": "Any good", "today": 42, "after": 0 }],
+      "note": "Months, over all ten games and all goods, when a store price was at twelve times normal." },
+    { "title": "Months colonists went short", "unit": "", "groups": [{ "label": "Food", "today": 55, "after": 74 }, { "label": "Water", "today": 63, "after": 34 }],
+      "note": "Of 120 game-months. Water shortages nearly halve. Food shortages rise: today's runaway prices drag Food out of players' hands into the store (657 units over the ten games, against 271), at prices nobody can plan around." },
+    { "title": "Months the store had no Food left to sell players", "unit": "", "groups": [{ "label": "Food", "today": 106, "after": 118 }],
+      "note": "Of 120 game-months. Under every rule we tried, today's included, the store runs out of Food almost every month: the colony doesn't grow enough." },
+    { "title": "Hungry seat-months", "unit": "", "groups": [{ "label": "Players", "today": 399, "after": 413 }],
+      "note": "Of 480 seat-months (ten games, four seats, twelve months): months a player began development with less Food than their household and crew eat. It is judged before the month's buying and after half the Food has spoiled, so a player needs about three months' Food left over to count as fed." }
+  ],
+  "note": "<b>What this says.</b> The new prices calm the market and fix Water, but no price rule can make Food appear. That is the supply decision (decision 1): bring the hardship rules in together with more Food, tuned in one pass."
+}
