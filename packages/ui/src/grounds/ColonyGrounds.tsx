@@ -162,7 +162,7 @@ export function ColonyGrounds({ colony, size, manifest, light = 'day', className
           </g>
         );
       })}
-      <Walkers count={walkers} rim={R + 0.85} />
+      <Walkers count={walkers} rim={R + 0.85} blocks={placed.map((q) => q.block)} />
       <g pointerEvents="none">{edge.filter((d) => d.col + d.row >= 0).map((d, i) => prop(d, `f${i}`))}</g>
       {placed.sort(inBack).map(({ n, p, col, row }) => (
         <Callout key={`c${n}`} n={n} p={p} c={col} r={row} words={size === 'tv'} />

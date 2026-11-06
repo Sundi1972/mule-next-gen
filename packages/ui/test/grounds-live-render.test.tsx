@@ -1,6 +1,8 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { ColonyGrounds, type GroundsColony, type GroundsManifest, type PictureStage } from '../src/index';
+import type { GridPlace } from '../src/grounds/layout';
+import { walkerAt, walkRoute } from '../src/grounds/walks';
 
 const FRAME: GroundsManifest['frame'] = { width: 1600, height: 1600, place: 1293, centre: [800, 1000] };
 const ALL: PictureStage[] = ['site', 'build1', 'build2', 'standing', 'closed', 'damaged'];
@@ -42,6 +44,38 @@ const FIVE_STANDING: GroundsColony = {
     ] as const
   ).map(([id, at]) => ({ id, name: id, stage: 'standing' as const, buildMonths: 1, monthsLeft: null, place: { ...at, w: 1, h: 1 } })),
 };
+
+/**
+ * RULE-32b's example: the Spaceport's 2×2 at (2,0) and the Stadium's at (3,2), whose centre lines are the gaps a 1×1
+ * colony walks; three 1×1 places round them. Happiness 100 with five standing: 12 walkers.
+ */
+const BLOCKS: [GroundsColony['projects'][number]['id'], GridPlace][] = [
+  ['spaceport', { x: 2, y: 0, w: 2, h: 2 }],
+  ['stadium', { x: 3, y: 2, w: 2, h: 2 }],
+  ['park', { x: 1, y: 1, w: 1, h: 1 }],
+  ['hospital', { x: 1, y: 3, w: 1, h: 1 }],
+  ['observatory', { x: 2, y: 4, w: 1, h: 1 }],
+];
+const LARGE: GroundsColony = {
+  gauges: { happiness: 100, wealth: 2000 },
+  projects: BLOCKS.map(([id, place]) => ({ id, name: id, stage: 'standing' as const, buildMonths: 1, monthsLeft: null, place })),
+};
+/** LARGE reaches ring 2, so its paths run out to the land's edge path, 0.85 of a place past it. */
+const LARGE_RIM = 2 + 0.85;
+
+/** Whether a spot, in place units from the hall, lies inside a block's footprint, its edges (the paths) excluded. */
+function inside([c, r]: [number, number], { x, y, w, h }: GridPlace, margin = 1e-9): boolean {
+  return c > x - 2.5 + margin && c < x + w - 2.5 - margin && r > y - 2.5 + margin && r < y + h - 2.5 - margin;
+}
+
+/** Each walker's spot on the ground, read back from where the SVG draws its feet (the projection's inverse). */
+function walkerSpots(html: string): [number, number][] {
+  return [...html.matchAll(/<g transform="translate\(([-\d.]+) ([-\d.]+)\)[^"]*" data-testid="walker"/g)].map((m) => {
+    const [x, y] = [Number(m[1]), Number(m[2])];
+    const [cMinusR, cPlusR] = [(2 * x) / 120, (4 * y) / 120];
+    return [(cPlusR + cMinusR) / 2, (cPlusR - cMinusR) / 2];
+  });
+}
 
 const grounds = (props: Partial<Parameters<typeof ColonyGrounds>[0]> = {}) => renderToStaticMarkup(<ColonyGrounds colony={MONTH_12} size="tv" manifest={MANIFEST} light="dusk" {...props} />);
 
@@ -102,5 +136,21 @@ describe('ColonyGrounds · the live layer', () => {
   it('B-AC-3 negative: happiness 72, five standing, no strike → 9 colonists walk; a strike the fund paid is over', () => {
     expect(walkersIn(grounds({ colony: { ...FIVE_STANDING, strike: null } }))).toHaveLength(9);
     expect(walkersIn(grounds({ colony: { ...FIVE_STANDING, strike: { paid: true } } }))).toHaveLength(9);
+  });
+
+  it('B-AC-3: colonists walk only the paths between places, never across a footprint, 2×2 blocks included', () => {
+    const blocks = BLOCKS.map(([, place]) => place);
+    // As drawn: every walker's feet on a path, read back from the SVG.
+    const drawn = walkerSpots(grounds({ colony: LARGE }));
+    expect(drawn).toHaveLength(12);
+    for (const spot of drawn) for (const b of blocks) expect(inside(spot, b, 0.01), `walker at ${spot} inside ${JSON.stringify(b)}`).toBe(false);
+    // And all the way round each walk, not just the frame the page opens on.
+    for (let i = 0; i < 14; i++) {
+      const route = walkRoute(i, LARGE_RIM, blocks);
+      for (let seconds = 0; seconds < 60; seconds += 0.25) {
+        const spot = walkerAt(i, seconds, route);
+        for (const b of blocks) expect(inside(spot, b), `walker ${i} at ${seconds}s, ${spot}, inside ${JSON.stringify(b)}`).toBe(false);
+      }
+    }
   });
 });
