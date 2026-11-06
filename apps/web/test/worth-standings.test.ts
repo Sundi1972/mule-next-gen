@@ -196,4 +196,22 @@ describe('N-6 (WS4): a shared win at game over', () => {
     expect([...element(tv, 'winner-marks').matchAll(/aria-label="([^"]+)"/g)].map((m) => m[1])).toEqual(['Mia']);
     expect(text(onPhone(OVER, GameOver))).not.toContain('share the win');
   });
+
+  // The TV's winner card, without a colony, is 2/5 of the 1,200 px body less its padding: about 420 px. Five 80 px marks
+  // and their gaps take 464, so a tie of five or six draws its marks smaller and wraps rather than running past the card.
+  const sizes = (tv: string) => [...element(tv, 'winner-marks').matchAll(/role="img"[^>]*style="width:(\d+)px/g)].map((m) => Number(m[1]));
+  const SIX = [HEIKO, MIA, KAI, row('s4', 'Ruth', 3, 0, 0), row('s5', 'Ole', 4, 0, 0), row('s6', 'Ana', 5, 0, 0)].map((p) => ({ ...p, worth: 5_200 }));
+
+  it('N-6: five or six level winners each get a mark, small enough to stand in one row of the card, wrapping if not', () => {
+    for (const n of [5, 6]) {
+      const tv = element(tvOf(tied(SIX.slice(0, n))), 'tv-winner');
+      expect([...element(tv, 'winner-marks').matchAll(/aria-label="([^"]+)"/g)].map((m) => m[1])).toEqual(SIX.slice(0, n).map((p) => p.name));
+      expect(sizes(tv), `${n} marks`).toEqual(Array(n).fill(48));
+      expect(tv.match(/<ul class="([^"]*)"[^>]*data-testid="winner-marks"/)?.[1], 'a row too wide for the card wraps').toMatch(/\bflex-wrap\b/);
+    }
+  });
+
+  it('N-6 (negative): two to four level winners keep their 80 px marks', () => {
+    for (const n of [2, 4]) expect(sizes(element(tvOf(tied(SIX.slice(0, n))), 'tv-winner'))).toEqual(Array(n).fill(80));
+  });
 });
