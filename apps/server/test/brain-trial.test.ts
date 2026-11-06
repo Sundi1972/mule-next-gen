@@ -187,6 +187,8 @@ describe('brain:trial paid-run guard (PR-5: --run label, the proof cap)', () => 
 // The tournament (WS1's bar for UBER-AC-A, Heiko 5 Nov): fast, so it runs in CI (it guards money and the bar).
 describe("brain:trial tournament (WS1's bar for UBER-AC-A: --table pair, --seeds, --control, its own cap)", () => {
   const T = BRAIN.tournament;
+  /** The control's line saying its pooled result cannot miss. */
+  const CONTROL_POOLED = /^Control, pooled\s+50% by construction: engine seats in every chair play a seed's two seatings as the same game, so the control checks the harness; the chair edge shows by seating$/;
   /** Results with the Claude chairs at `wins` of 100 games and the given mean ranks. */
   const results = (wins: number, claude: number, engine: number) => ({ games: 100, smartWins: wins, smart: { meanScore: 0, meanRank: claude }, strategist: { meanScore: 0, meanRank: engine } });
 
@@ -214,7 +216,7 @@ describe("brain:trial tournament (WS1's bar for UBER-AC-A: --table pair, --seeds
     expect(trialGames({ table: 'pair', seeds: [1, 101, 201], seed: 101, games: 40 })).toHaveLength(120);
   });
 
-  it('TOURNEY-9 (balanced seating, positive control of the cancellation): when chair 0 always wins, the Claude chairs win every even game and no odd one, 50% pooled, and the control passes; when the Claude chairs win in both seatings, the control fails', () => {
+  it('TOURNEY-9 (balanced seating, positive control of the cancellation): when chair 0 always wins, the Claude chairs win every even game and no odd one, 50% pooled, and the control passes, its report saying the pooled 50% is by construction; when the Claude chairs win in both seatings, the control fails', () => {
     const plan = trialGames({ table: 'pair', seeds: [1], seed: 101, games: 40 });
     /** The planned games played out with `order` ranking the seats first to last. */
     const played = (order: (claude: string[]) => string[]): TrialGame[] =>
@@ -231,6 +233,7 @@ describe("brain:trial tournament (WS1's bar for UBER-AC-A: --table pair, --seeds
     expect(chairZero.seatings!.odd).toMatchObject({ games: 20, smartWins: 0, smart: { meanRank: 3 }, strategist: { meanRank: 2 } });
     expect(chairZero.results).toMatchObject({ games: 40, smartWins: 20, smart: { meanRank: 2.5 }, strategist: { meanRank: 2.5 } });
     expect(chairZero.bar).toEqual({ kind: 'control', verdict: 'pass' });
+    expect(renderTrialReport(chairZero)).toContainEqual(expect.stringMatching(CONTROL_POOLED));
     expect(renderTrialReport(chairZero)).toContainEqual(
       expect.stringMatching(/^Claude chairs by seating\s+on 0 and 2: won 100\.0% \(20 of 20 games\), mean rank lead 1\.00; on 1 and 3: won 0\.0% \(0 of 20 games\), mean rank lead -1\.00$/),
     );
@@ -354,9 +357,21 @@ describe("brain:trial tournament (WS1's bar for UBER-AC-A: --table pair, --seeds
     const text = renderTrialReport(pair);
     expect(text).toContainEqual(expect.stringMatching(/^WS1's bar \(UBER-AC-A result\)\s+PASS: won 100\.0% of 1 games \(at least 60%\); mean rank lead 2\.00 \(at least 0\.30\); unscored 0 of 1 planned$/));
     expect(text).toContainEqual(expect.stringMatching(new RegExp(`^Spend so far, every ledger\\s+PR-5 proofs \\$8\\.50 of \\$${BRAIN.proofCapUsd.toFixed(2).replace('.', '\\.')}; tournament \\$0\\.40 of \\$${T.capUsd.toFixed(2).replace('.', '\\.')}$`)));
+    expect(text.some((l) => CONTROL_POOLED.test(l))).toBe(false);
     const plain = renderTrialReport(trialReport(input));
     expect(plain.some((l) => l.startsWith("WS1's bar") || l.startsWith('Spend so far'))).toBe(false);
   });
+
+  it("TOURNEY-10 (balanced seating): a paid pair run starts a seed only with room under the cap for both its games, so a cap of exactly one game's budget plays none and calls nothing", async () => {
+    const calls = called();
+    const { out, result } = run(['--table', 'pair', '--playbooks', '1', '--games', '2', '--seed', '1', '--max-usd', String(BRAIN.gameBudgetUsd)]);
+    const { code, report } = await result;
+    expect(code).toBe(0);
+    expect(report).toMatchObject({ played: 0, stopped: 'cap' });
+    expect(calls()).toBe(0);
+    expect(fs.readdirSync(dir)).toEqual([]);
+    expect(out.at(-1)).toBe(`No game started: cap $${BRAIN.gameBudgetUsd.toFixed(2)} is below a seed's two games' budget ($${(2 * BRAIN.gameBudgetUsd).toFixed(2)}).`);
+  }, GAMES_MS);
 
   it('TOURNEY-7: a paid game in which the API refused every call stops the run, naming the status and error type; one answered call, or a game that called nothing, does not', () => {
     const line = (game: string, outcome: string, extra: object = {}) => ({ game, seat: 'ai0', usd: 0, outcome, kind: 'playbook', ...extra }) as unknown as CallLine;
@@ -528,6 +543,27 @@ describe.runIf(process.env.MULE_FULL === '1')('brain:trial', () => {
       const unknown = await drive(run(['--games', '2', '--smart', '1', '--game-budget-usd', '0.06', '--max-usd', '0.0601']).result);
       expect(unknown.report).toMatchObject({ played: 1, stopped: 'cap', ledgerUsd: 0 });
       expect(unknown.report!.countedUsd).toBeGreaterThan(0.0001);
+    },
+    GAMES_MS,
+  );
+
+  it(
+    'TOURNEY-11 (balanced seating, paid wiring): a keyed pair run of one seed puts Claude, its decisions and its playbook writes, on ai0 and ai2 in the even game and on ai1 and ai3 in the odd one',
+    async () => {
+      called();
+      const { result } = run(['--table', 'pair', '--playbooks', '1', '--games', '2', '--seed', '1', '--max-usd', String(2 * BRAIN.gameBudgetUsd)]);
+      const { report } = await result;
+      expect(report).toMatchObject({ played: 2, stopped: 'done' });
+      const ledgerFile = path.join(dir, 'tourney-2026-10-22.jsonl');
+      const seatsIn = (game: string, writes: boolean) =>
+        [...new Set(callLines(ledgerFile).filter((l) => l.game === game && (l.kind === 'strategy' || l.kind === 'playbook') === writes).map((l) => l.seat))].sort();
+      for (const writes of [false, true]) {
+        expect(seatsIn('trial-2026-10-22-1-0', writes), `even, writes ${writes}`).toEqual(['ai0', 'ai2']);
+        expect(seatsIn('trial-2026-10-22-1-1', writes), `odd, writes ${writes}`).toEqual(['ai1', 'ai3']);
+      }
+      // Lines are counted per Smart seat (game.smart): two seats in each of the two games.
+      expect(report!.lines.seatMonths).toBe(2 * 2 * GAME.maxMonths);
+      expect(report!.seatings!.odd.games).toBe(1);
     },
     GAMES_MS,
   );
