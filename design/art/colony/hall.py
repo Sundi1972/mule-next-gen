@@ -1,4 +1,5 @@
-"""The town hall at the grounds' centre: one picture for now (tier1), day / dusk / glow.
+"""The town hall at the grounds' centre: one picture, keyed `standing` like every RULE-1 picture (spec §3; tiers are a
+non-goal until WS7 rules them), day / dusk / glow.
 Massing from layout.ts: 7.4 m square, 5 m tall, a flag. Accent: holo cyan banding and the colony flag.
 Run: blender -b -P hall.py -- <out-dir> [samples=256] [stages=all] [lights=day,dusk,glow] [percent=100]"""
 import math
@@ -13,10 +14,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lib import frame, kits  # noqa: E402
 from lib.core import ZT, accent, bx, cyl, flat, mat  # noqa: E402
 
-STAGES = ["tier1"]
+STAGES = ["standing"]
 
 
-def build(stage):
+def build(stage="standing"):
     kits.slab()
     cyan = accent("hall_cyan", (0.02, 0.42, 0.55), glow=3.0, emit=(0.1, 0.85, 1.0))
     gold = accent("hall_gold", (0.85, 0.62, 0.22), rough=0.3)
@@ -37,7 +38,7 @@ def build(stage):
     kits.rooftop(-1.2, 1.0, top, [(0, 0, 2.2, 1.4, 0.8)])
     # two lamps along the south forecourt
     for x in (-2.0, 2.0):
-        kits.lamp(x, -4.8)
+        kits.lamp(x, -4.8, energy=35)  # 110 W washed the whole slab orange in the glow layer
     # the colony flag at the forecourt's south-east corner, cloth rippled by a sine
     fx, fy = 4.7, -4.7
     cyl("flagpole", fx, fy, 0.05, ZT, 8.5, white, 12)

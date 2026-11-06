@@ -34,7 +34,7 @@ E = 2 * SL + AP  # apron half-size round C
 
 # kind, its stage, the places it covers (col, row)
 KINDS = [
-    ("hall", "tier1", [(0, 0)]),
+    ("hall", "standing", [(0, 0)]),
     ("park", "standing", [(1, 0)]),
     ("hospital", "standing", [(0, 1)]),
     ("observatory", "standing", [(1, 1)]),

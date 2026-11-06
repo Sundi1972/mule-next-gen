@@ -174,7 +174,10 @@ def glass_mat(name, lit_share=0.72, strength=2.6):
     level = math_(nt, "ADD", math_(nt, "MULTIPLY", wn.outputs["Value"], 0.8), 0.6)
     s = node(nt, "ShaderNodeValue")
     s.outputs[0].default_value = 0.0
-    link(nt, math_(nt, "MULTIPLY", math_(nt, "MULTIPLY", lit, level), s.outputs[0]), b.inputs["Emission Strength"])
+    # full strength to the camera, a quarter as light on the ground: at full spill a lit building washes its whole
+    # slab orange in the glow layer
+    spill = math_(nt, "ADD", math_(nt, "MULTIPLY", node(nt, "ShaderNodeLightPath").outputs["Is Camera Ray"], 0.75), 0.25)
+    link(nt, math_(nt, "MULTIPLY", math_(nt, "MULTIPLY", math_(nt, "MULTIPLY", lit, level), s.outputs[0]), spill), b.inputs["Emission Strength"])
     GLOW.append((s.outputs[0], strength))
     return m
 

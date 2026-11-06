@@ -10,10 +10,10 @@
   },
   "pictures": {
     "hall": {
-      "tier1": {
-        "day": "hall/tier1-day@800.webp",
-        "dusk": "hall/tier1-dusk@800.webp",
-        "glow": "hall/tier1-glow@800.webp"
+      "standing": {
+        "day": "hall/standing-day@800.webp",
+        "dusk": "hall/standing-dusk@800.webp",
+        "glow": "hall/standing-glow@800.webp"
       }
     },
     "park": {
