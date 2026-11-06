@@ -190,8 +190,8 @@ const OFF_MAP = {
   ratsInSilo: (_: GameState, p?: Player) => p !== undefined && taken(p.stock.food, EVENTS.player.ratsInSilo.share) >= 1,
   crookedAccountant: (_: GameState, p?: Player) => p !== undefined && taken(p.money, EVENTS.player.crookedAccountant.share) >= 1,
   packageFromHome: () => true,
-  // G-5 C26: a strike needs a good the colony works, a walkout and a loyal crew a plot the player works; the rest always
-  // find what they change.
+  // G-5 C26: a strike needs a good the colony works, a walkout a plot the player works and a loyal crew a raw plot of
+  // theirs; the rest always find what they change.
   festival: () => true,
   generalStrike: (state: GameState) => mostWorked(state).length > 0,
   emigrationWave: () => true,
@@ -200,7 +200,7 @@ const OFF_MAP = {
   riot: () => true,
   volunteerCleanup: () => true,
   walkout: (state: GameState, p?: Player) => p !== undefined && workedBy(state, p.id).length > 0,
-  loyalCrew: (state: GameState, p?: Player) => p !== undefined && workedBy(state, p.id).length > 0,
+  loyalCrew: (state: GameState, p?: Player) => p !== undefined && rawPlotsOf(state, p.id).length > 0,
 } satisfies Partial<Record<EventKey, (state: GameState, player?: Player) => boolean>>;
 type OffMapKey = keyof typeof OFF_MAP;
 
@@ -237,7 +237,7 @@ function offMapEvent(state: GameState, key: OffMapKey, rng: Rng, phase: Phase, p
     return standing.length > 0 ? { ...event, objects: [{ id: rng.pick(standing).id, becomes: 'damaged' }] } : event;
   }
   if (key === 'loyalCrew') {
-    const plot = rng.pick(workedBy(state, player!));
+    const plot = rng.pick(rawPlotsOf(state, player!));
     return toEvent(state, key, { x: plot.x, y: plot.y }, [plot], undefined, player, phase);
   }
   return offMapAtStore(state, key, phase, player);
@@ -252,6 +252,11 @@ function offMapAtStore(state: GameState, key: EventKey, phase: Phase, player?: s
 /** A player's working plots: those outfitted to make a good (a green belt makes none). */
 function workedBy(state: GameState, owner: string): Tile[] {
   return state.tiles.filter((t) => t.owner === owner && (GOODS as readonly string[]).includes(t.outfit ?? ''));
+}
+
+/** A player's raw plots: production credits each of them every month, where a factory short of inputs makes nothing. */
+function rawPlotsOf(state: GameState, owner: string): Tile[] {
+  return state.tiles.filter((t) => t.owner === owner && (RAW_GOODS as readonly string[]).includes(t.outfit ?? ''));
 }
 
 /**

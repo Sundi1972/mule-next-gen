@@ -1474,7 +1474,7 @@ export const SOCIAL_EVENTS = {
       output: 0.2,
       cap: 0.9,
     },
-    /** In production: one of the player's working plots, on the row's dice, makes `gain` more. */
+    /** In production: one of the player's raw plots, on the row's dice, makes `gain` more; none without one. */
     loyalCrew: {
       phases: { production: 0 },
       needsColony: true,
