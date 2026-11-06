@@ -67,7 +67,6 @@ const FULL_TABLE = 5;
  * Everyone by Worth, the leader called out, the change since last month. Totals only. `final` (game over): the final
  * standings, no callout (the winner card has it) and no change column.
  */
-
 export function LeagueTable({ view, density, selfId, final = false }: { view: MuleView; density: Density; selfId?: string; final?: boolean }) {
   const lg = league(view);
   const collapse = inCollapse(view);

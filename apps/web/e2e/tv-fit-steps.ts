@@ -97,19 +97,22 @@ const HEADER_ON_SCREEN = String.raw`(() => {
   const named = off.filter((c) => !off.includes(c.parentElement)).map((c) => (c.getAttribute('data-testid') || c.tagName.toLowerCase() + ' "' + (c.textContent || '').trim().slice(0, 20) + '"') + ' to x ' + Math.round(c.getBoundingClientRect().right));
   const gauges = header.parentElement.querySelector(':scope > [data-testid=colony-gauges]');
   const crowd = [...header.querySelectorAll('[role=timer], [data-testid=ready-count], [data-testid=strike-badge]')].filter((c) => c.checkVisibility()).map((c) => c.getAttribute('data-testid') || 'clock');
-  return { off: named, vw, crowd, ownRow: !!gauges && gauges.checkVisibility() };
+  const beside = [...header.querySelectorAll('[data-testid=colony-gauges]')].some((g) => g.checkVisibility());
+  return { off: named, vw, crowd, ownRow: !!gauges && gauges.checkVisibility(), drawn: beside || (!!gauges && gauges.checkVisibility()) };
 })()`;
 
 /**
  * GAUGES-ROW (PM ruling 5 Nov): a TV header with a clock, the strike badge or a ready count has nothing past the screen's
- * right edge; with the colony on, its gauges sit on their own row under the title; and nothing runs past the foot.
+ * right edge; with the colony on, its gauges are drawn, on their own row under the title (beside it on a screen that
+ * keeps them there, `beside`, as development does); and nothing runs past the foot.
  */
-export async function theTvHeaderStaysOnScreen(tv: Page, screen: string, colony: boolean): Promise<string> {
-  const read = (await tv.evaluate(HEADER_ON_SCREEN)) as { off: string[]; vw: number; crowd: string[]; ownRow: boolean } | null;
+export async function theTvHeaderStaysOnScreen(tv: Page, screen: string, colony: boolean, beside = false): Promise<string> {
+  const read = (await tv.evaluate(HEADER_ON_SCREEN)) as { off: string[]; vw: number; crowd: string[]; ownRow: boolean; drawn: boolean } | null;
   check(read !== null, `TV-FIT: the ${screen} TV shows its header`);
   check(read.off.length === 0, `GAUGES-ROW: on the ${screen} TV the header runs past the right edge (x ${read.vw}): ${read.off.join(', ')}`);
   const crowded = read.crowd.length > 0;
-  if (colony) check(read.ownRow === crowded, `GAUGES-ROW: on the ${screen} TV, with ${crowded ? read.crowd.join(' and ') : 'no clock, badge or ready count'} in the header, the colony's gauges sit ${crowded ? 'on their own row' : 'beside the title'}`);
+  if (colony) check(read.drawn, `GAUGES-ROW: the ${screen} TV draws the colony's gauges`);
+  if (colony) check(read.ownRow === (crowded && !beside), `GAUGES-ROW: on the ${screen} TV, with ${crowded ? read.crowd.join(' and ') : 'no clock, badge or ready count'} in the header, the colony's gauges sit ${crowded && !beside ? 'on their own row' : 'beside the title'}`);
   // The row costs height: the screen's foot is read too.
   const foot = await nothingPastTheFoot(tv, screen);
   return `${crowded ? read.crowd.join(' and ') : 'no clock'}, nothing past x ${read.vw}${colony ? `, the gauges ${read.ownRow ? 'on their own row' : 'beside the title'}` : ''}, the foot at y ${foot.toFixed(0)}`;

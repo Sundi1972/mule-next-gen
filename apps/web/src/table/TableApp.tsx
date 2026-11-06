@@ -134,7 +134,8 @@ function TvLobby({ table }: { table: TableView<MuleView> }) {
 /**
  * The TV's header: the month and the phase's title (after its `icon`, where it has one), the theme toggle, the colony's
  * gauges (or the air gauge alone when `gauges` is false, as game over and the goods auction keep it; none at all with
- * 'none', where the screen draws them itself, as the month end does) and the clock, then
+ * 'none', where the screen draws them itself, as the month end does; beside the title whatever the header shows with
+ * 'beside', as development keeps them, PM ruling 6 Nov) and the clock, then
  * the table chat. `ready`, a screen's ready count, sits beside the title. A header with a clock, the strike badge or a
  * ready count puts the colony's gauges on a row of their own under it, full width: they don't share 1280 px with the
  * title, or the clock runs off the screen's right edge (PM ruling, 5 Nov; rulebook #gauges-row).
@@ -158,13 +159,13 @@ export function TvHeader({
   seconds?: number | undefined;
   extra?: ReactNode;
   ready?: ReactNode;
-  gauges?: boolean | 'none';
+  gauges?: boolean | 'none' | 'beside';
   landing?: GaugeLanding | undefined;
   chatLines?: number;
 }) {
   const crowded = seconds !== undefined || ready !== undefined || !!game.colony?.strike;
   const ownRow = !!game.colony && gauges === true && crowded;
-  const colony = game.colony && gauges === true ? <ColonyGauges colony={game.colony} size="tv" className={ownRow ? 'w-full' : 'w-[760px]'} landing={landing} /> : null;
+  const colony = game.colony && (gauges === true || gauges === 'beside') ? <ColonyGauges colony={game.colony} size="tv" className={ownRow ? 'w-full' : 'w-[760px]'} landing={landing} /> : null;
   // With a ready chip the title keeps one line and the chip its size; without one the header is as it always was: the
   // gauges give way to a long title ("Election day · the result").
   const fixed = ready !== undefined;
