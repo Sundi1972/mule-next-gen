@@ -251,22 +251,36 @@ describe('RULE-2 in the engine: everyone takes part', () => {
     expect(a(state).walkers.map((w) => w.side)).toEqual(['buyer', 'buyer', 'buyer', 'buyer']);
   });
 
-  it('a buyer standing at the bottom edge never trades, even once the store has stopped buying (C2 pin)', () => {
+  it('B-AC-D2: with the store buying nothing and no ship in, a seller holding ▼ stops at the old buying line, and a buyer resting just below it never trades', () => {
     const state = newGame();
+    state.ship.arrives = state.month + 1;
     state.players[0]!.stock.smithore = 5;
     startAuction(state, ['smithore']);
-    a(state).storeBudget = 0; // the store buys nothing: no buying line under the seller
+    a(state).storeBudget = 0; // the store buys nothing: no house buys under the seller
     toWalk(state, { p0: 'seller' });
     a(state).clockMs = 600_000;
+    const line = a(state).storeBuy;
+    // p1 rests one step inside the buyers' zone, with the money to pay anything on the board.
+    walker(state, 'p1').price = line - 1;
     setWalk(state, 'p0', -1);
-    const trades = run(state, 60_000);
-    expect(trades, 'the idle buyers have money but stand at the edge').toEqual([]);
-    expect(Math.round(walker(state, 'p0').price)).toBeGreaterThan(a(state).lo);
-    // A tap down from there is held at the same place: it never steps onto the buyers' edge.
+    let lowest = Infinity;
+    const trades: Trade[] = [];
+    for (let t = 0; t < 60_000; t += TICK) {
+      trades.push(...stepAuction(state, TICK));
+      lowest = Math.min(lowest, Math.round(walker(state, 'p0').price));
+    }
+    expect(trades, 'every buyer rests in the buyers\' zone').toEqual([]);
+    expect(lowest).toBe(line);
+    // A tap down from there is held at the line too.
     setWalk(state, 'p0', 0);
     stepWalk(state, 'p0', -1);
     expect(run(state, 10_000)).toEqual([]);
-    expect(Math.round(walker(state, 'p0').price)).toBe(a(state).lo + 1);
+    expect(Math.round(walker(state, 'p0').price)).toBe(line);
+    // The seller at the line still sells to a buyer who walks up to it.
+    setWalk(state, 'p1', 1);
+    const met = run(state, 5_000);
+    expect(met.length).toBeGreaterThan(0);
+    expect(met.every((s) => s.buyer === 'p1' && s.seller === 'p0' && s.price === line)).toBe(true);
   });
 
   it("'pass' is refused with the rules' words, on the status screen and in the walk", () => {

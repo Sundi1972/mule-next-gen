@@ -578,7 +578,7 @@ describe('the store and the ship on the board', () => {
     expect(walker(state, 'p1').price).toBeGreaterThan(a(state).hi);
   });
 
-  it('buys from sellers at its buy line within its budget, and the line goes once the budget is spent', () => {
+  it('B-AC-D2: buys from sellers at its buy line within its budget; once the budget is spent the line still holds sellers up', () => {
     const state = newGame();
     state.players[0]!.stock.smithore = 10;
     startAuction(state, ['smithore']);
@@ -589,11 +589,12 @@ describe('the store and the ship on the board', () => {
     const store = trades.filter((t) => t.buyer === 'store');
     expect(store).toHaveLength(4);
     expect(store.every((t) => t.price === a(state).storeBuy)).toBe(true);
-    // Then the seller walks on down, but the buyers standing at the bottom edge never trade (C2's pin).
+    // Then the seller holds ▼ on, but the buying line it was fixed at still holds it, so the buyers resting in their
+    // zone never trade.
     setWalk(state, 'p0', -1);
     trades.push(...run(state, 7_000));
     expect(trades).toHaveLength(4);
-    expect(Math.round(walker(state, 'p0').price)).toBe(a(state).lo + 1);
+    expect(Math.round(walker(state, 'p0').price)).toBe(a(state).storeBuy);
   });
 
   it('lets the export ship in port buy from sellers at or under its price, paying a little less per unit', () => {
