@@ -847,7 +847,7 @@ describe("price T-AC-3: when a good's walk finishes, the store keeps its sold-ou
     expect(finish(state)).toEqual({ soldOutHigh: 90, highTrade: 100, dryBudget: false });
   });
 
-  it("price T-AC-3: the game keeps its lesson while an AI's what-if copy (cloneForSim) plays the next walk", () => {
+  it("price B-AC-1 (seam): the game keeps its walk lesson for next month while an AI's what-if copy (cloneForSim) plays the next walk", () => {
     const state = smithoreWalk(1, 0);
     tradeBetween(state, 100);
     emptyShelf(state);
