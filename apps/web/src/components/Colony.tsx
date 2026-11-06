@@ -627,12 +627,21 @@ export function PhoneMonthScoreHead({ view }: { view: MuleView }) {
 /** The winner, shorter and horizontal, so the colony's band fits under it on the TV. */
 export function TvWinner({ view, className }: { view: MuleView; className?: string }) {
   const lg = league(view);
-  const top = lg.rows[0];
-  if (!top) return null;
+  if (!lg.rows[0]) return null;
+  // Everyone level at the top shares the win: each gets a mark, smaller when there are several (as WinnerCard's). The
+  // marks keep to two abreast and wrap beyond, so a tie of four to six stays inside the card, the line beside it.
+  const winners = lg.rows.filter((r) => r.rank === 1);
+  const size = winners.length === 1 ? 88 : winners.length === 2 ? 64 : 48;
   return (
     <div className={cx('relative flex items-center gap-5 rounded-panel border-2 border-holo bg-holo-soft px-6 py-4 shadow-glow', className)} data-testid="tv-winner">
-      <PlayerMark slot={top.slot} species={top.player.species} size={88} label={top.player.name} />
-      <span className="flex flex-col gap-1">
+      <ul className="flex max-w-36 shrink-0 flex-wrap items-center gap-3" data-testid="winner-marks">
+        {winners.map((w) => (
+          <li key={w.player.id}>
+            <PlayerMark slot={w.slot} species={w.player.species} size={size} label={w.player.name} />
+          </li>
+        ))}
+      </ul>
+      <span className="flex min-w-0 flex-col gap-1">
         <span className="label-caps text-base!">The game goes to</span>
         <span className="font-display text-3xl font-semibold leading-tight" data-testid="winner-line">
           {winnerWords(view, lg)}
