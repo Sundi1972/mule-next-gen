@@ -72,12 +72,12 @@ export function needRows(need: Stock, stock: Stock, plots: readonly { outfit: Ou
   }));
 }
 
-/** RULE-8's Now: plan, then Ready; the land grant is next, with its claims; what she's short of, or that she has what she needs. */
+/** RULE-8's Now: plan your month (a title that fits the folded card's one line), then Ready; the land grant is next, with its claims; what she's short of, or that she has what she needs. */
 export function planNow(rows: readonly NeedRow[]): Now & { detail: string } {
   const short = rows.filter((r) => r.short > 0).map((r) => GOOD_NAME[r.good]);
   return {
-    title: 'Plan your month, then press Ready',
-    detail: `Next is the land grant: ${freePlots()} each. ${short.length > 0 ? `You're short of ${and(short)}: a plot for it, or buy it at the auction.` : 'You have what you need this month.'}`,
+    title: 'Plan your month',
+    detail: `Then press Ready. Next is the land grant: ${freePlots()} each. ${short.length > 0 ? `You're short of ${and(short)}: a plot for it, or buy it at the auction.` : 'You have what you need this month.'}`,
   };
 }
 

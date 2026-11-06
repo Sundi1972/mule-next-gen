@@ -40,9 +40,10 @@ describe("planning's This month you need (RULE-8)", () => {
     const rows = needRows(stock({ food: 3, water: 2, energy: 5 }), stock({ food: 1, water: 2, energy: 3 }), plots('food', 'energy', 'smithore', 'alloy'));
     expect(rows.find((r) => r.good === 'energy')).toMatchObject({ need: 5, short: 2, why: 'a farm, a mine and a factory' });
     const short = planNow(rows);
-    expect(short.title).toBe('Plan your month, then press Ready');
+    // A16 (WS4's sweep): the title fits the folded card's one line; "then press Ready" leads the detail.
+    expect(short.title).toBe('Plan your month');
     // The land grant's claims are config's, the same number the roadmap's next line gives.
-    expect(short.detail).toMatch(new RegExp(`^Next is the land grant: up to ${GAME.claimsPerGrant} free ${GAME.claimsPerGrant === 1 ? 'plot' : 'plots'} each\\. `));
+    expect(short.detail).toMatch(new RegExp(`^Then press Ready\\. Next is the land grant: up to ${GAME.claimsPerGrant} free ${GAME.claimsPerGrant === 1 ? 'plot' : 'plots'} each\\. `));
     expect(short.detail).not.toMatch(/one free plot/);
     expect(short.detail).toMatch(/short of Food and Energy/);
     const fine = planNow(needRows(stock({ food: 3, water: 2 }), stock({ food: 3, water: 2 }), plots()));

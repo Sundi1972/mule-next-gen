@@ -71,6 +71,8 @@ export interface Game<Intent, GameView> {
   quiet?(intent: Intent): boolean;
   /** What one seat may see, or with `null` what everyone may see (the big screen). */
   viewFor(seatId: string | null): GameView;
+  /** The pick seat `seat` (its index at the table) plays with if it never picks, in a game of `seats` seats; the lobby shows it. */
+  defaultPick?(seat: number, seats: number): string;
   /** A player's phone dropped or came back. The game may let AI play their routine moves meanwhile. */
   connectionChanged?(seatId: string, connected: boolean): void;
   /**
@@ -517,13 +519,14 @@ export class Room<Intent, View> {
       code: this.code,
       status: this.started ? 'playing' : 'lobby',
       hostId: this.hostId,
-      seats: this.seats.map((s) => ({
+      seats: this.seats.map((s, i) => ({
         id: s.id,
         name: s.name,
         isAi: s.isAi,
         connected: s.isAi || s.conn !== null,
         color: s.color,
         ...(s.pick !== undefined ? { pick: s.pick } : {}),
+        ...(!this.started && this.game.defaultPick ? { defaultPick: this.game.defaultPick(i, this.seats.length) } : {}),
       })),
       boards: this.boards.size,
       game: this.started ? this.game.viewFor(seatId) : null,

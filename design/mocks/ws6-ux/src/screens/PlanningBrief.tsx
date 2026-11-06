@@ -42,10 +42,10 @@ export function PlanningBrief({ mode: start = 'look' }: { mode?: Mode }) {
     mode === 'drone'
       ? { title: 'Scout free land with the geo drone', detail: 'Tap up to 2 free plots. The drone reads what is under them for 40 cr; only you see the result, in time for the land grant.' }
       : {
-          title: 'Plan your month, then press Ready',
+          title: 'Plan your month',
           detail: (
             <>
-              Next is the <strong className="text-ink">land grant</strong>: one free plot each. {short.length > 0 ? `You're short of ${short.map((n) => GOOD_NAME[n.good]).join(' and ')}: a plot for it, or buy it at the auction.` : 'You have what you need this month.'}
+              Then press Ready. Next is the <strong className="text-ink">land grant</strong>: one free plot each. {short.length > 0 ? `You're short of ${short.map((n) => GOOD_NAME[n.good]).join(' and ')}: a plot for it, or buy it at the auction.` : 'You have what you need this month.'}
             </>
           ),
         };

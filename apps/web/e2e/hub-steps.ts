@@ -121,7 +121,8 @@ export async function planningIsTheHub(phone: Page, server: MuleServer, code: st
     check(narrow.nowTitle === 'Set the sales tax', `C66 (E-7): the new Governor's Now says "Set the sales tax", got "${narrow.nowTitle}"`);
     check(/Then plan your month\. You are the new Governor/.test(narrow.nowDetail), `C66 (E-7): the new Governor's Now says to plan the month next, got "${narrow.nowDetail}"`);
   } else {
-    check(narrow.nowTitle === 'Plan your month, then press Ready', `B-AC-14 (RULE-8): Now says "Plan your month, then press Ready", got "${narrow.nowTitle}"`);
+    check(narrow.nowTitle === 'Plan your month', `B-AC-14 (RULE-8): Now says "Plan your month", got "${narrow.nowTitle}"`);
+    check(/^Then press Ready\./m.test(narrow.nowDetail), `B-AC-14 (RULE-8): Now's detail starts "Then press Ready.", got "${narrow.nowDetail}"`);
     check(/land grant/.test(narrow.nowDetail) && /Food/.test(narrow.nowDetail), `B-AC-14 (RULE-8): Now names the land grant as next and the short Food, got "${narrow.nowDetail}"`);
   }
 

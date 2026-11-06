@@ -36,8 +36,8 @@ const WHOLE: AuditScope = { roots: ['[data-testid=game-shell]'], skip: ['[data-t
 const HUB: AuditScope = {
   roots: [...RAIL.roots, '[data-testid=desks]', '[data-testid=actions]'],
   skip: RAIL.skip,
-  // H-9 in the approved mock: folded, the Now card keeps to one line, its long title truncating (whole one tap away).
-  truncates: ['[data-testid=now][aria-expanded=false] [data-testid=now-title]'],
+  // H-9: folded, the Now card keeps to one line, and that line is its whole title (WS4's sweep A16, 6 Nov: "Plan your
+  // month, …" lost the step it names), so no truncation is allowed here.
 };
 /**
  * Development, steered (walking on): the whole arcade screen, its HUD, the stage (map or hall) and the stick and the
