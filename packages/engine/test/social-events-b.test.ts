@@ -147,7 +147,7 @@ describe('C26 PR-B: the store strike, in development', () => {
     expect(plain.players[0]!.carriedMule).toBe('empty');
   });
 
-  it("FM-C26-11 (store strike ends with its month): in the next month's development the store sells MULEs again", () => {
+  it("FM-C26-14 (store strike ends with its month): in the next month's development the store sells MULEs again", () => {
     only(['storeStrike']);
     const state = developing(MID('unrest'));
     const month = state.month;
@@ -279,7 +279,7 @@ describe('C26 PR-B: the loyal crew, in production', () => {
     expect(picked.size).toBeGreaterThan(1);
   });
 
-  it("FM-C26-10 (loyal crew on an idle factory): the crew works only raw plots, so its +1 always reaches the line and the stock; with no raw plot, no crew", () => {
+  it("FM-C26-13 (loyal crew on an idle factory): the crew works only raw plots, so its +1 always reaches the line and the stock; with no raw plot, no crew", () => {
     /** A Thriving colony where p3 works an Alloy factory with no Smithore to run on and, unless `farm` is false, one Food plot. */
     const withFactory = (seed: number, farm = true) => {
       const state = colonyAt(MID('thriving'), { seed });
@@ -339,8 +339,8 @@ describe('C26 PR-B: the riot, at the month end', () => {
     expect(fired).toMatchObject([{ key: 'riot', scope: 'colony', sign: 'bad', phase: 'upkeep' }]);
     expect(Object.fromEntries(Object.keys(shelves).map((g) => [g, state.store.stock[g as keyof typeof shelves]]))).toEqual({ food: 1, energy: 2, smithore: 2, crystite: 5 });
     expect(fired[0]!.effects).toEqual([
-      { on: 'store', what: 'smithore', delta: -1 },
-      { on: 'store', what: 'crystite', delta: -2 },
+      { on: 'store', what: 'smithore', delta: -1, to: 2 },
+      { on: 'store', what: 'crystite', delta: -2, to: 5 },
     ]);
   });
 
@@ -374,8 +374,26 @@ describe('C26 PR-B: the riot, at the month end', () => {
     expect(fired).toHaveLength(1);
     expect(fired[0]!.objects).toBeUndefined();
     expect(fired[0]!.line).toBe('A riot: the store loses 33% of every shelf.');
-    expect(fired[0]!.effects).toContainEqual({ on: 'store', what: 'food', delta: -3 });
+    expect(fired[0]!.effects).toContainEqual({ on: 'store', what: 'food', delta: -3, to: 6 });
     expect(state.colony!.projects[0]!.stage).toBe('building');
+  });
+
+  it("FM-C26-15 (riot's shelf count read too late): each store effect carries the shelf's count right after the riot, not after the month-end upkeep", () => {
+    only(['riot']);
+    const state = colonyAt(MID('unrest'));
+    Object.assign(state.store.stock, { food: 30, smithore: 30 });
+    state.store.mules = 0;
+    state.phase = 'auction';
+    state.auction = null;
+    advancePhase(state);
+    expect(state.phase).toBe('upkeep');
+    const riot = state.monthEvents.find((e) => e.key === 'riot');
+    // 30 less floor(30 / 3).
+    expect(riot?.effects).toContainEqual({ on: 'store', what: 'food', delta: -10, to: 20 });
+    expect(riot?.effects).toContainEqual({ on: 'store', what: 'smithore', delta: -10, to: 20 });
+    // The colonists bought Food and the store built MULEs from Smithore after the riot.
+    expect(state.store.stock.food).toBeLessThan(20);
+    expect(state.store.stock.smithore).toBeLessThan(20);
   });
 });
 

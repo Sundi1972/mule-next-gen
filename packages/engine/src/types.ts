@@ -294,6 +294,8 @@ export interface EventEffect {
   /** G-5 C26 adds 'mood' (moodShift's change), 'prestige' (lasting points), 'air' (the gauge) and 'reputation'. */
   what: Good | 'money' | 'mules' | 'colonists' | 'energyNeed' | 'mood' | 'prestige' | 'air' | 'reputation';
   delta: number;
+  /** The holder's count of `what` right after this effect, before anything later in the month moves it; absent means not reported. */
+  to?: number;
 }
 
 export interface MonthEvent {
