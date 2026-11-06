@@ -1,24 +1,49 @@
-# WS2 · Claude Code plays a seat
+# WS2 · Claude plays a seat (any Claude app)
 
-**Status:** §0 AGREED (Heiko, 6 Nov, "Agree as written"). Approach **B** and class **Programme** chosen by Heiko (6 Nov).
-Side-pick wait chosen by Heiko (6 Nov). Design sections 1 (Heiko), 2 and 3 (PM, under Heiko's design authority, 6 Nov)
-approved. Written and self-reviewed 6 Nov by WS2-2, for Heiko's "Read it first". Built after the MVP proof.
-Spike: `docs/spikes/2026-11-06-claude-code-seat.md` on `ws2-spike-claude-code-seat` (b88bcbc7, not merged).
-Mocks: `design/mocks/claude-code-seat/` @ 526654c1 (PR #471 into ws2-brain; WS4's OK asked via the PM). Lobby: variant **B** recommended (compact row + sheet); variant A's inline row crushes inside the seat list.
+**Status:** **AMENDMENT 1 OPEN for Heiko (6 Nov):** his feedback widens the seat from Claude Code to any Claude app
+(Code, Desktop, web, phone), with one seat-agnostic connector per person and the seat code passed on every call.
+"What you'll see at the table" and §0.1 below are rewritten as options with a recommendation; **§0.2–§9 still describe
+the Claude Code-only design** and follow once Heiko picks (the list is in §8). Build nothing until then.
+Before the amendment: §0 AGREED (Heiko, 6 Nov, "Agree as written"); approach **B**, class **Programme** and the
+side-pick wait chosen by Heiko; design sections 1 (Heiko), 2 and 3 (PM, under Heiko's design authority) approved.
+Mocks: `design/mocks/claude-code-seat/` @ 526654c1 (lobby variant **B**); they show the Claude Code-only setup line,
+which the amendment replaces with an invite and a connector (§8).
 
 ## What you'll see at the table `[review-only]`
 
-- In the lobby the host taps a computer seat and picks **Built-in** or **Claude Code**. A Claude Code seat shows a join
-  code, a Copy button and one setup line. The host sends the code to whoever's Claude Code should play it: his own, or a
-  friend's anywhere. Its chip goes from *waiting for Claude* to *connected*.
-- Two Claude Code seats are two codes and two Claude Code sessions. Neither can ever act for the other seat.
-- In play the TV and phones show it *thinking*, *ready* or *offline*. It writes its plans and speaks its lines like a
-  Smart seat, through the same brief and checks. **When it is late or offline it plays its built-in plan for that
-  decision and never holds the table**, unlike a dropped phone.
-- The first good's side-pick screen waits up to **45 s** for its auction plan, as it waits for a slow person.
-- A dropped laptop pastes the same code again and the seat carries on. Taking the seat back kills the code.
-- A player who has to leave hands their own seat to their Claude Code from the phone's Move dialog (a 10-minute code).
-- The host pays nothing for these seats, with or without an API key.
+**Once per person, not per game or seat:** you add the **MULE** connector to your Claude account: Settings →
+Connectors → Add custom connector, one fixed address, "No sign in". It then works in Claude Desktop, claude.ai and
+the Claude phone app (connectors added on the computer reach the phone at its next login); Claude Code gets the same
+address with one command. Nothing else to install, no account with us, no API key.
+
+**In the lobby** the host taps a computer seat and picks **Built-in** or **Claude**. A Claude seat shows its **seat
+code** (like `K7QM-42`) and a **Copy invite** button. The invite is one ready-made message: *"Play MULE seat K7QM-42.
+Keep calling wait_for_my_turn with the code and answer every decision with submit_plan until the game is over. Don't
+stop to ask me."* The host sends it to whoever's Claude should play: his own, or a friend's anywhere.
+
+**To play,** that person opens a new chat with MULE switched on and pastes the invite. That chat plays that seat; a
+second chat with a second code plays a second seat. The connector never changes; only the code in the chat does.
+The seat's chip goes *waiting for Claude* → *connected*.
+
+**In play** the TV and phones show it *thinking*, *ready* or *offline*, as in the mocks. It writes its plans and speaks
+its lines like a Smart seat, through the same brief and checks. **When Claude is late, or the chat has stopped, the
+seat plays its built-in plan and never holds the table.** The first good's side pick still waits up to 45 s for it.
+
+**When a chat stops.** Claude Desktop, claude.ai and the phone app end a reply at some point, unlike Claude Code,
+which keeps going. How long a chat plays on its own before it stops, and whether the phone keeps playing when locked,
+is what Heiko's seat test (spike (b)) measures. **[Spike (b) result goes here.]** When it stops, typing "continue" in
+that chat (or pasting the invite into any chat) brings Claude back on the next decision; in between the seat played
+its built-in plans.
+
+**Taking it back.** The host switches the seat back to Built-in and the code stops working at once. A player who has
+to leave hands their own seat to Claude from the phone's Move dialog: it shows an invite whose code works for 10
+minutes to start.
+
+**Where it works.** Claude Desktop, claude.ai and the phone reach the connector **from Anthropic's cloud**, so the
+table must be reachable from the internet, not only from the home Wi-Fi (Anthropic's connector docs, 6 Nov). Claude
+Code reaches it on the home Wi-Fi with nothing extra. How the table becomes reachable is decision D-2 in §0.1.
+
+**The host pays nothing** for these seats, with or without an API key; each Claude runs on its owner's plan.
 
 ## §0 · Business Goals & Value
 
@@ -72,19 +97,74 @@ seat for the whole game on that person's Pro or Max plan, with no API key.** `[h
 **Rough cost** `[review-only]`: approach B about 10–11 lane-days (WS2 most; WS4 the screens; WS3 two seams).
 Thin baseline A about 6–7 days.
 
+
+**§0 as Amendment 1 would change it (Heiko to confirm; the text above is the agreed version)** `[review-only]`
+- **G-1:** "…hand any computer seat to a Claude chat in any Claude app (Claude Code, Desktop, claude.ai or the phone),
+  his own or a friend's…, on that person's own plan, with no API key." *Source: Heiko's feedback, 6 Nov.*
+- **UBER-AC-1:** unchanged for Claude Code (90% of decisions answered in time). For a Desktop or phone chat the bar
+  comes from spike (b): if a chat stops on its own, "nobody touches either seat" cannot hold, and the proof becomes
+  "answered in time, counting one 'continue' per N minutes". **[Set from spike (b).]**
+- **G-2 / UBER-AC-2:** "Someone who already has a Claude app adds the MULE connector and gets a seat to *connected*
+  in under 5 minutes, from the invite and the setup page alone."
+- **Non-goals:** remove "Players without Claude Code (claude.ai web or desktop, Free plan)". Add: logging in to
+  Anthropic from inside our app (still not allowed); more than one connector per person.
+
 ## §0.1 Decision Record `[review-only]`
 
-- **B (chosen), ~10–11 days:** the MCP endpoint and join codes, plus seat status, resume after a dropped session, a
-  per-turn rules digest, junk-line screening and a setup page.
-- **A (thin baseline), ~6–7 days:** endpoint, join codes, a copy line in the lobby, the built-in fallback, a static page.
-  **Why it loses:** a real game runs 45–60 minutes against the spike's 2–6. Without resume one dropped session puts its
-  seat on the built-in plan for the rest of the game, which fails UBER-AC-1's 90%; without a status, UBER-AC-2's
-  "the seat shows connected" cannot be observed. Both falsifiable by one game with a laptop closed for 3 minutes.
-- **C (rejected), ~3 weeks:** B plus a one-command Claude Code plugin and a host dashboard: no goal needs them.
-- **Auction deadline:** the production show (~11 s) is the auction write's real deadline today; slow answers took up to
-  30 s in the spike. Heiko chose "wait at the side pick, up to 45 s" over "never wait" and "ask a phase earlier".
-- **Heartbeat:** `wait_for_my_turn` returns "call again" every 110 s so Claude Code's interactive screen never moves the
-  call to the background (2-minute rule, untested in the spike); chosen over a player setting (PM, for G-2).
+Four decisions are open for Heiko. Each has options with an honest cost and a recommendation. The earlier choices
+(approach B over the thin baseline, the 45 s side-pick wait) stand and are recorded at the end.
+
+**D-1 · Which Claude apps the first build serves**
+| Option | Cost | For | Against |
+|---|---|---|---|
+| a. Claude Code only (as agreed) | B as specced, ~10–11 days | measured in the spike: 24/24 in time, no stops | not what Heiko asked: most friends have the Desktop or phone app, not Claude Code |
+| **b. Any Claude app, one connector (recommended)** | ~+1–2 days on B, plus D-2 | Heiko's ask; one connector per person, the same in every app | chat apps may stop between replies (D-4, spike (b)); needs the table on the internet (D-2) |
+
+Recommend **b**, provided spike (b) shows a Desktop chat plays at least several months on its own; if it stops after
+one or two decisions, ship **a** first and add the chat apps when Anthropic documents a longer-running mode.
+
+**D-2 · How Desktop, claude.ai and the phone reach a table on the home Wi-Fi.** They call from Anthropic's cloud,
+so the address must be public HTTPS (documented). Claude Code needs none of this.
+| Option | Cost | For | Against |
+|---|---|---|---|
+| a. Wait for stage 4 (the game server hosted on the internet) | 0 here | no new moving parts | Desktop and phone can't play until stage 4 ships |
+| b. A quick tunnel started with the game (random address each time) | ~1 day | no account, nothing to buy | the address changes every game, so everyone re-adds the connector each time: breaks "once per person" |
+| **c. A fixed tunnel address on the host's own domain, only `/mcp` exposed (recommended now)** | ~1–2 days, plus a one-time Cloudflare and domain setup by the host | fixed address, so each person adds the connector once; the rest of the game server stays private | each host needs that setup; a friend who plays at two hosts adds two connectors |
+| d. One public MULE relay at a fixed address; every game server dials out to it and the code routes the call | ~5–7 days plus a small hosted service we run (uptime, cost, abuse) | one connector per person for every host, no host setup | the most to build and run; it is half of stage 4 |
+
+Recommend **c** for Heiko's table now, with the connector address a single config value so **d** or stage 4 replaces it
+without anyone's chat changing. Reason: Heiko is the host today; d pays off only when there are other hosts.
+
+**D-3 · The seat code, now the only credential.** Every tool call carries it; the server keeps no session (PM direction).
+One finding changes the old guard: calls from Desktop, claude.ai and the phone **all arrive from Anthropic's addresses**,
+so the old per-address rate limit cannot tell a guesser from a player.
+| Option | For | Against |
+|---|---|---|
+| **a. Short code like `K7QM-42` (about 27 bits) + a game-wide limit on wrong codes only (recommended)** | readable, Heiko's ask; a right code is never slowed; at 20 wrong tries a minute, hitting any of four live codes takes about a year on average | a flood of wrong codes can't be told apart by sender; the limit only slows the flood, which is harmless to players |
+| b. Long code (16+ characters), pasted only | unguessable without any limit | can't be read out across the table; the invite is pasted anyway, so it costs little in practice |
+
+Either way: the code dies when the host takes the seat back or the game ends, is never logged in full, and two chats
+holding the same code are both that seat, with the first answer to each decision winning.
+
+**D-4 · How a chat waits for its turn** (spike (b) measures this; **[results go here]**).
+| Option | For | Against |
+|---|---|---|
+| a. Hold the call up to 110 s, then "call again" (as specced) | fewest calls; fine in Claude Code | chat apps may cut a call well before 110 s (unofficial reports: 60 s) |
+| **b. Hold up to the longest wait the test shows survives, minus a margin (recommended)** | measured, not guessed; one config value | more calls a game in chat apps |
+| c. Never hold: answer at once "not yet, call again in N s" | no timeout risk at all | many calls a turn; a chat may hit its own limit sooner and stop |
+
+**Earlier choices, kept**
+- **B (chosen, Heiko), ~10–11 days** before this amendment: endpoint, codes, seat status, resume, per-turn digest,
+  junk-line screening, setup page. Under Amendment 1, resume is simpler: no session to rebind; pasting the invite into
+  any chat carries on.
+- **A (thin baseline), ~6–7 days:** endpoint, codes, a copy line, the built-in fallback, a static page. **Why it loses:**
+  a real game runs 45–60 minutes; without a status, UBER-AC-2's *connected* can't be seen, and in a chat app the player
+  can't tell the seat has stopped and needs "continue".
+- **C (rejected), ~3 weeks:** B plus a one-command plugin and a host dashboard: no goal needs them.
+- **Auction deadline:** Heiko chose "wait at the side pick, up to 45 s" over "never wait" and "ask a phase earlier".
+
+**Rough cost with the recommendations (b, c, a, b):** about 12–14 lane-days (WS2 most; WS4 the screens and mocks;
+WS3 two seams), against 10–11 for Claude Code only.
 
 ## §0.2 Constraints `[handoff]`
 
@@ -421,7 +501,23 @@ No spike needed beyond what was done (6 Nov).
 
 ## §8 · Amendments `[review-only]`
 
-None yet.
+**Amendment 1 (6 Nov, OPEN for Heiko): any Claude app, one connector, the code on every call.** Source: Heiko's
+feedback via the PM, 6 Nov. Rewritten so far: the status, "What you'll see at the table", the proposed §0 edits and
+§0.1. Once Heiko picks D-1 to D-4, these follow in the same PR, and nothing below is built before then:
+- **§0.2 HC-2** becomes "a tool call acts only for the seat its code names; a chat holding one code can never act for
+  another seat"; **HC-5** allows the code in the invite text.
+- **C1** the code also forms the invite; **C2** no session binding: every tool takes `code`, stateless lookup, and the
+  join rate limit by address is replaced by the game-wide wrong-code limit (D-3); **C6** *connected* / *offline*
+  come from the time of the last call with the code, not from a session; **C9** the setup page shows the connector
+  (address, "No sign in") for each app instead of `claude mcp add`; **D-2** adds a change for the public `/mcp` address.
+- **§2 RULE-2** becomes the per-call code lookup (no binding, no "seat taken over"); **RULE-3** hold length from D-4;
+  **RULE-5** offline from the last call time.
+- **§6** T-AC-1 is inverted (every tool takes the code; a call with another seat's code acts only for that seat, a
+  wrong code is refused the same way as an expired one); T-AC-8 tests the wrong-code limit; B-AC-6 becomes "the
+  invite pasted into a new chat carries on"; B-AC-10 times a first-timer in Desktop as well as Claude Code.
+- **§7** R-1 depends on D-2; R-3 is answered by spike (b); R-5 adds "callers share Anthropic's addresses".
+- **Mocks** (WS4, named edit via the PM): the lobby sheet's setup line becomes **Copy invite**; `#setup` shows the
+  connector steps per app; the chips are unchanged.
 
 ## §9 · Ownership Boundaries `[handoff]`
 
