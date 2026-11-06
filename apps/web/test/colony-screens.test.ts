@@ -312,7 +312,7 @@ describe('C34: the build site at the month end', () => {
   });
 
   it('B-AC-34-4: a standing project shows its perk', () => {
-    expect(text(row('park'))).toContain('Calms the colony in a riot · upkeep 30 cr a month');
+    expect(text(row('park'))).toContain('Volunteer clean-ups come more often · upkeep 30 cr a month');
   });
 
   it('B-AC-34-4: a closed or damaged project is in alert, its prestige struck through; the damaged line names the repair cost', () => {

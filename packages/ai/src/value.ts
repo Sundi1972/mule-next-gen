@@ -282,7 +282,7 @@ export interface UnitValues {
   buy: number[];
   /** Units next month's needs take, spoilage included. */
   block: number;
-  /** Next month's need as the status screen shows it. */
+  /** Next month's need before spoilage (monthNeeds); the status screen's need (auctionNeed) adds spoilage. */
   need: number;
   /** Units it never sells: the Food and Energy it needs. strategist.ts goodPlan raises it for STRATEGIST.buyShortfall. */
   floorUnits: number;
