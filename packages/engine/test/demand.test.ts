@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { advancePhase, cloneForSim, colonistDemand, exportDemand, monthlyDemand, RECIPES, UPKEEP, type GameState } from '../src/index.js';
-import { game, to } from './fixtures/food-month.js';
+import { game, to, worked } from './fixtures/food-month.js';
 
 /** Month 1's production with `colonists` in the colony and no Electronics works. */
 function colonyOf(colonists: number): GameState {
@@ -70,5 +70,30 @@ describe('needs C17: the colonists want Electronics, and so its inputs', () => {
       UPKEEP.colonistsPerElectronics = savedPer;
       RECIPES.electronics.inputs = savedInputs;
     }
+  });
+
+  /** The Rare earth and Alloy the colony asks a month with `colonists` and `works` Electronics works, the export ship's part taken out. */
+  function inputsAsked(colonists: number, works: number): { rareEarth: number; alloy: number } {
+    const state = game();
+    to(state, 'production');
+    state.colonists = colonists;
+    worked(state, 'electronics', works);
+    expect(state.tiles.filter((t) => t.outfit === 'electronics'), 'the premise: the works stand').toHaveLength(works);
+    const [d, off] = [monthlyDemand(state), exportDemand(state)];
+    return { rareEarth: d.rareEarth - off.rareEarth, alloy: d.alloy - off.alloy };
+  }
+
+  it('needs C17 (AM): 200 colonists and 4 Electronics works ask 4 Rare earth and 4 Alloy, not 8', () => {
+    expect(RECIPES.electronics.inputs, 'the premise: a works takes one Rare earth and one Alloy a month').toMatchObject({ rareEarth: 1, alloy: 1 });
+
+    expect(inputsAsked(200, 4)).toEqual({ rareEarth: 4, alloy: 4 });
+  });
+
+  it('needs C17 (AM): 50 colonists want 1 Electronics, and 4 works making for export still ask their 4 Rare earth and 4 Alloy', () => {
+    expect(inputsAsked(50, 4)).toEqual({ rareEarth: 4, alloy: 4 });
+  });
+
+  it('needs C17 (AM): 200 colonists and no works still ask the 4 their Electronics would take', () => {
+    expect(inputsAsked(200, 0)).toEqual({ rareEarth: 4, alloy: 4 });
   });
 });
