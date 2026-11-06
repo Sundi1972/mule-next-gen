@@ -113,14 +113,14 @@ Every handoff carries, verbatim:
 
 **Files:** Create `packages/ui/src/ground-dots.ts` (source: the mock's `src/proposed/dots.ts`); Modify `packages/ui/src/index.ts` (one export line, as `events` is; WS4 named edit); Test `packages/ui/test/ground-dots.test.ts`
 
-- [ ] **Step 1: Write the failing test `T-AC-2: RULE-1, every row, as 0–3 dots`**
+- [x] **Step 1: Write the failing test `T-AC-2: RULE-1, every row, as 0–3 dots`**
   Altitude: unit (a pure decision table with seven rows and two good kinds, R1). Every row of RULE-1, its five examples,
   and the unknown case (no ground → no dots, never 0). In the same file, RULE-2's `bestOf` (Food first on a tie) and
   `gemsIn` (Crystite or Rare earth at 1 or more), with RULE-2's two examples.
-- [ ] **Step 2: Run it to verify it fails:** `cd packages/ui && npx vitest run test/ground-dots.test.ts` → FAIL, module not found.
-- [ ] **Step 3: Implement C6's module per spec §1 C6 and §2 RULE-1, RULE-2** — `groundDots`, `dotsOf`, `bestOf`, `gemsIn`, exported from `@mule/ui`. Plan-drift: none.
-- [ ] **Step 4: Run it to verify it passes** (same command) → PASS; then `pnpm --filter @mule/ui typecheck` → exit 0. The AM-17 guard (`packages/ui/test/engine-imports.test.ts`) passes: the module imports only `Good` types, or the guard names the import for WS6's ruling.
-- [ ] **Step 5: Commit** `feat(ui): C6 ground-dots, one 0–3 scale (verifies T-AC-2)`.
+- [x] **Step 2: Run it to verify it fails:** `cd packages/ui && npx vitest run test/ground-dots.test.ts` → FAIL, module not found.
+- [x] **Step 3: Implement C6's module per spec §1 C6 and §2 RULE-1, RULE-2** — `groundDots`, `dotsOf`, `bestOf`, `gemsIn`, exported from `@mule/ui`. Plan-drift: none.
+- [x] **Step 4: Run it to verify it passes** (same command) → PASS; then `pnpm --filter @mule/ui typecheck` → exit 0. The AM-17 guard (`packages/ui/test/engine-imports.test.ts`) passes: the module imports only `Good` types, or the guard names the import for WS6's ruling.
+- [x] **Step 5: Commit** `feat(ui): C6 ground-dots, one 0–3 scale (verifies T-AC-2)`.
 
 ### Task 1.2: C6 — every caller reads dots (PR-1a)
 
@@ -128,10 +128,10 @@ Every handoff carries, verbatim:
 
 **Files:** Modify `apps/web/src/game/derive.ts` (`groundPips` removed; `mapTiles` passes dots in `MapTile.ground`), `apps/web/src/phone/ground.tsx` (`GroundCard`, 3 dots), `apps/web/src/phone/LandGrant.tsx` (`droneFoundLine`), `apps/web/src/phone/arcade/plots.ts` (`bestHere`, `suits`, `fit`), `apps/web/src/phone/arcade/parts.tsx` (PlotCard's dots); Tests `apps/web/test/derive.test.ts`, `drone-words.test.ts`, `colony-plots.test.ts`, the arcade-screens and land-grant tests that count dots.
 
-- [ ] **Step 1: Change the pinned counts first (R-2), red:** every test that reads dots asserts the 0–3 count (from /4 to /3) and its "of 3" words; `arcade/plots.ts`'s `suits` keeps "3 or more" (RULE-1 maps the same plots). Run `cd apps/web && npx vitest run` → the changed assertions FAIL on the 0–4 code.
-- [ ] **Step 2: Implement C6's call sites per spec §1 C6** (mechanism extract: `derive.ts::groundPips` → `@mule/ui`'s `groundDots`). The land auction's lot card follows `GroundCard` with no edit to `AuctionParts.tsx` (spec §8). Plan-drift: grep `groundPips` → 0 hits after the change.
-- [ ] **Step 3: Run** `cd apps/web && npx vitest run` → all green; `pnpm typecheck` → exit 0.
-- [ ] **Step 4: Commit** `feat(web): C6 every screen draws 0–3 dots (R-2 counts changed, named)`.
+- [x] **Step 1: Change the pinned counts first (R-2), red:** every test that reads dots asserts the 0–3 count (from /4 to /3) and its "of 3" words; `arcade/plots.ts`'s `suits` keeps "3 or more" (RULE-1 maps the same plots). Run `cd apps/web && npx vitest run` → the changed assertions FAIL on the 0–4 code.
+- [x] **Step 2: Implement C6's call sites per spec §1 C6** (mechanism extract: `derive.ts::groundPips` → `@mule/ui`'s `groundDots`). The land auction's lot card follows `GroundCard` with no edit to `AuctionParts.tsx` (spec §8). Plan-drift: grep `groundPips` → 0 hits after the change.
+- [x] **Step 3: Run** `cd apps/web && npx vitest run` → all green; `pnpm typecheck` → exit 0.
+- [x] **Step 4: Commit** `feat(web): C6 every screen draws 0–3 dots (R-2 counts changed, named)`.
 
 ### Task 1.3: C7 (pip half) — the map's pip draws 3 (PR-1a, WS4 named edit)
 
@@ -139,15 +139,15 @@ Every handoff carries, verbatim:
 
 **Files:** Modify `packages/ui/src/components/HoloMap.tsx` (`Pips`, the label, `MapTile.ground` doc "0 to 3"); Test `apps/web/test/holo-map.test.ts`
 
-- [ ] **Step 1: Write the failing test `T-AC-3 (pip): an analysed tile draws its best good's 3-dot pip, labelled "of 3"; a tile without ground draws none`**
+- [x] **Step 1: Write the failing test `T-AC-3 (pip): an analysed tile draws its best good's 3-dot pip, labelled "of 3"; a tile without ground draws none`**
   Altitude: promise at the rendered map (`renderToStaticMarkup(HoloMap)`); the pip's good comes from `bestOf` (a Food/Water tie gives Food). Negative: the TV's tiles (no ground) draw no pip.
-- [ ] **Step 2: Run** `cd apps/web && npx vitest run test/holo-map.test.ts` → FAIL ("of 4").
-- [ ] **Step 3: Implement C7's pip per spec §1 C7** — `Pips` draws 3; its good from `bestOf`. Plan-drift: the gem is NOT in this task (PR-3a).
-- [ ] **Step 4: Run** → PASS. **Step 5: Commit** `feat(ui): C7 the map's pip draws 0–3 from bestOf (verifies T-AC-3 pip; WS4 named edit)`.
+- [x] **Step 2: Run** `cd apps/web && npx vitest run test/holo-map.test.ts` → FAIL ("of 4").
+- [x] **Step 3: Implement C7's pip per spec §1 C7** — `Pips` draws 3; its good from `bestOf`. Plan-drift: the gem is NOT in this task (PR-3a).
+- [x] **Step 4: Run** → PASS. **Step 5: Commit** `feat(ui): C7 the map's pip draws 0–3 from bestOf (verifies T-AC-3 pip; WS4 named edit)`.
 
-### Task 1.4: PR-1a merge gate
+### Task 1.4: PR-1a merge gate — done: #515, red f7c90099 → ef740435, a02b7eec, b614d429; docs e56abad7; WS4 minor 57bfe949 → 8b38a9a1; review fix db6ead27 → 732d35a8; `Review: APPROVE at 732d35a8`; WS4 OK on ef740435, b614d429, 8b38a9a1
 
-- [ ] T-AC-2 and T-AC-3 (pip) green, test-first in history; `pnpm typecheck && pnpm test` green; `node docs/rulebook/build-index.mjs` after the rulebook's 0–3 lines (the scale's chapter) flip from Designed to built; WS4's OK on `index.ts` and `HoloMap.tsx` SHAs via the PM; one independent review once CI is green (`Review: APPROVE at <sha>`).
+- [x] T-AC-2 and T-AC-3 (pip) green, test-first in history; `pnpm typecheck && pnpm test` green; `node docs/rulebook/build-index.mjs` after the rulebook's 0–3 lines (the scale's chapter) flip from Designed to built; WS4's OK on `index.ts` and `HoloMap.tsx` SHAs via the PM; one independent review once CI is green (`Review: APPROVE at <sha>`).
 
 ### Task 1.5: C1 — the drone's ground lands at Scan (PR-1b, WS3; WS2 named edits)
 
@@ -198,6 +198,15 @@ Every handoff carries, verbatim:
 
 - [ ] **Step 1: Write the failing browser step `B-AC-2 (plot info): My plots in planning and the Plots chip on the walking screen list every owned plot once, analysed ones with 0–3 dots and the gem, others "Not analysed …"`** in `apps/web/e2e/plot-info-steps.ts`. Altitude: promise, the rows (`plot-row-x-y`) in a real browser against the view's owned tiles. Negative: another player's plot is never listed.
 - [ ] **Step 2: Run the smoke** → FAIL at B-AC-2.
+
+### Task 2.1b: C2 amended — the Drone report compact (PR-2)
+
+**Depends on:** PR-1c landed · **Spec:** §8 (6 Nov, after PR-1c) · **ux:** `#scan-a` at #528 (79c253d6)
+
+**Files:** Modify `apps/web/src/phone/plotInfo.tsx` (ScanReport, GoodDots' six-in-a-row), `apps/web/src/phone/hub/tools.tsx` (the drone's footer line moves into the report); `apps/web/e2e/plot-info-steps.ts`
+
+- [ ] **Step 1: Extend B-AC-1's browser step, red:** at 844×390 and at 667×375, both plots' `report-x-y` rows lie inside the rail's visible scroll box, without scrolling. Run the smoke → FAIL on the first cut (the second plot is below the fold).
+- [ ] **Step 2: Graft `#scan-a`'s compact ScanReport** (one line per plot, six goods by icon and dots, "Next drone: month N" in the report; the rail's footer is empty while the report shows). **Step 3:** smoke and `npx vitest run` green. **Step 4: Commit** `feat(web): C2 the Drone report compact, both plots at once (B-AC-1 at 844 and 667)`.
 
 ### Task 2.2: C3 — My plots, a planning tool (PR-2)
 
