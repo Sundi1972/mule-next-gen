@@ -153,4 +153,34 @@ describe('ColonyGrounds · the live layer', () => {
       }
     }
   });
+
+  it('B-AC-3: a colonist behind a building is drawn before it, and one in front after it (painter\'s order)', () => {
+    const html = grounds({ colony: LARGE });
+    // Depth from the camera in the south-east is col + row: the hall's is 0, a block's is its centre's.
+    const buildings = [
+      { at: html.indexOf('data-testid="picture-hall"'), depth: 0 },
+      ...BLOCKS.map(([, { x, y, w, h }], k) => ({ at: html.indexOf(`data-testid="picture-${k + 1}"`), depth: x + (w - 1) / 2 - 2 + (y + (h - 1) / 2 - 2) })),
+    ];
+    for (const b of buildings) expect(b.at, 'every building drawn as a picture').toBeGreaterThan(-1);
+    const walkers = [...html.matchAll(/data-testid="walker"/g)].map((m) => m.index!);
+    const spots = walkerSpots(html);
+    expect(walkers).toHaveLength(12);
+
+    let behind = 0;
+    let before = 0;
+    walkers.forEach((at, i) => {
+      const depth = spots[i]![0] + spots[i]![1];
+      for (const b of buildings) {
+        if (depth < b.depth - 0.01) {
+          behind++;
+          expect(at, `walker ${i} (depth ${depth}) behind a building at depth ${b.depth}`).toBeLessThan(b.at);
+        } else if (depth > b.depth + 0.01) {
+          before++;
+          expect(at, `walker ${i} (depth ${depth}) in front of a building at depth ${b.depth}`).toBeGreaterThan(b.at);
+        }
+      }
+    });
+    expect(behind, 'some walker is behind some building').toBeGreaterThan(0);
+    expect(before, 'some walker is in front of some building').toBeGreaterThan(0);
+  });
 });
