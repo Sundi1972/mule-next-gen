@@ -12,7 +12,7 @@ import bmesh
 import bpy
 from mathutils import Vector, noise
 
-from .core import HALF, RIM, ZT, accent, box_uv, bx, cyl, flat, light, mat, mesh_obj, new_mat, node, link, math_
+from .core import HALF, RIM, ZT, accent, box_uv, bx, cyl, flat, light, link, mat, math_, mesh_obj, mix, new_mat, node
 
 
 def slab(cx=0.0, cy=0.0, top="pavers", n=1):
@@ -225,19 +225,38 @@ def fence_mat():
     return m
 
 
-def fence(x0, x1, y, h=1.8):
-    """A mesh site fence along y between x0 and x1, a post every 1.6 m, a top rail."""
+def bars_x(x0, x1, y, h, m):
+    """A barred gate: vertical bars every 12 cm between a bottom and a top rail."""
+    bx(x0, x1, y - 0.03, y + 0.03, ZT + 0.1, ZT + 0.16, m, 0, "gate_rail")
+    n = max(2, round((x1 - x0) / 0.12))
+    for k in range(n + 1):
+        cyl("gate_bar", x0 + (x1 - x0) * k / n, y, 0.016, ZT + 0.1, ZT + h, m, 6)
+
+
+def fence(x0, x1, y, h=1.8, bars=False):
+    """A mesh site fence along y between x0 and x1, a post every 1.6 m, a top rail. bars: a barred gate instead."""
     f, post = fence_mat(), flat("fence_post", (0.42, 0.44, 0.46), 0.5, 0.6)
-    bx(x0, x1, y - 0.01, y + 0.01, ZT, ZT + h, f, 0, "fence")
+    if bars:
+        post = flat("gate_iron", (0.035, 0.037, 0.04), 0.45, 0.7)
+        bars_x(x0, x1, y, h, post)
+    else:
+        bx(x0, x1, y - 0.01, y + 0.01, ZT, ZT + h, f, 0, "fence")
     bx(x0, x1, y - 0.02, y + 0.02, ZT + h - 0.04, ZT + h, post, 0, "fence_rail")
     n = max(1, round((x1 - x0) / 1.6))
     for k in range(n + 1):
         cyl("fence_post", x0 + (x1 - x0) * k / n, y, 0.03, ZT, ZT + h + 0.05, post, 8)
 
 
-def fence_y(x, y0, y1, h=1.8):
+def fence_y(x, y0, y1, h=1.8, bars=False):
     f, post = fence_mat(), flat("fence_post", (0.42, 0.44, 0.46), 0.5, 0.6)
-    bx(x - 0.01, x + 0.01, y0, y1, ZT, ZT + h, f, 0, "fence")
+    if bars:
+        post = flat("gate_iron", (0.035, 0.037, 0.04), 0.45, 0.7)
+        bx(x - 0.03, x + 0.03, y0, y1, ZT + 0.1, ZT + 0.16, post, 0, "gate_rail")
+        n = max(2, round((y1 - y0) / 0.12))
+        for k in range(n + 1):
+            cyl("gate_bar", x, y0 + (y1 - y0) * k / n, 0.016, ZT + 0.1, ZT + h, post, 6)
+    else:
+        bx(x - 0.01, x + 0.01, y0, y1, ZT, ZT + h, f, 0, "fence")
     bx(x - 0.02, x + 0.02, y0, y1, ZT + h - 0.04, ZT + h, post, 0, "fence_rail")
     n = max(1, round((y1 - y0) / 1.6))
     for k in range(n + 1):
@@ -298,8 +317,9 @@ def rubble(x, y, spread, mats, n=26, seed=4):
         c.data.materials.append(mats[k % len(mats)])
 
 
-def scorch(x, y, r, z=ZT + 0.004):
-    """A burn mark on the ground: soot fading out raggedly from the centre."""
+def scorch(x, y, r, z=ZT + 0.004, strong=False):
+    """A burn mark on the ground: soot fading out raggedly from the centre. strong: an opaque black core with an ash
+    ring, for a burn on grass, which hides a faint one."""
     m, nt, b = new_mat("scorch")
     b.inputs["Base Color"].default_value = (0.025, 0.022, 0.02, 1)
     b.inputs["Roughness"].default_value = 0.95
@@ -313,7 +333,11 @@ def scorch(x, y, r, z=ZT + 0.004):
     nz.inputs["Scale"].default_value = 2.5
     nz.inputs["Detail"].default_value = 6
     link(nt, tc, nz.inputs["Vector"])
-    a = math_(nt, "MULTIPLY", math_(nt, "SUBTRACT", math_(nt, "MULTIPLY", gr.outputs["Fac"], 1.6), math_(nt, "MULTIPLY", nz.outputs["Fac"], 0.7)), 2.5, True)
+    k_ = (2.4, 0.6, 3.5) if strong else (1.6, 0.7, 2.5)
+    a = math_(nt, "MULTIPLY", math_(nt, "SUBTRACT", math_(nt, "MULTIPLY", gr.outputs["Fac"], k_[0]), math_(nt, "MULTIPLY", nz.outputs["Fac"], k_[1])), k_[2], True)
+    if strong:  # grey ash toward the edge, black at the heart
+        ash = math_(nt, "MULTIPLY", gr.outputs["Fac"], 1.4, True)
+        link(nt, mix(nt, ash, (0.16, 0.15, 0.14, 1), (0.012, 0.011, 0.01, 1)), b.inputs["Base Color"])
     tr = node(nt, "ShaderNodeBsdfTransparent")
     mx = node(nt, "ShaderNodeMixShader")
     link(nt, a, mx.inputs[0])
