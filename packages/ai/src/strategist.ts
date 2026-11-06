@@ -192,7 +192,7 @@ export function landDecision(obs: GameState, mind: Mind): Shortlist<LandPlan> {
   // out). Without a look-ahead (Rookie) the outlook makes nothing, so that seat still counts plots: a Food and an Energy plot.
   const need = monthNeeds(obs, mind.me);
   const owns = (outfit: Outfit) => obs.tiles.some((t) => t.owner === mind.me && t.outfit === outfit);
-  const shortOfFood = mind.level.lookAhead ? (['food', 'energy'] as const).some((g) => ownSupply(o, mind.me, g) < need[g]) : !owns('food') || !owns('energy');
+  const shortOfFood = mind.level.lookAhead ? (['food', 'energy'] as const).some((g) => ownSupply(o, g) < need[g]) : !owns('food') || !owns('energy');
 
   const gains = new Map(free.map((t) => [t, plotGains(obs, o, t, mind)]));
   const land = STRATEGIST.land;
