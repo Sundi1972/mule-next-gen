@@ -9,6 +9,7 @@ import {
   factoryFit,
   floorConfig,
   GOOD_CONFIG,
+  GOODS,
   isFactory,
   monthNeeds,
   mulePrice,
@@ -169,10 +170,11 @@ export function installGain(obs: GameState, o: Outlook, tile: Tile, outfit: Outf
 }
 
 /**
- * True when the factory could run: every input other than Energy comes from
- * the seat's own plots, or its stock lasts STRATEGIST.factoryInputMonths
- * months of runs while the household, the new factory's crew included, eats
- * and drinks from the same stock and what is left spoils between months.
+ * True when the factory could run: for every input other than Energy, its stock plus what its own plots make lasts
+ * STRATEGIST.factoryInputMonths months of runs while the household, the new factory's crew included, eats and drinks
+ * from the same stock and what is left spoils between months. A plot of its own feeds the factory only with what is
+ * left after the household eats (FM-factory-input): a farm turned off, or one making only the household's Food, feeds
+ * nothing. Its plots make what the next production on a copy of what it sees makes (madeNext), each month alike.
  */
 export function canFeed(obs: GameState, me: string, outfit: Outfit): boolean {
   if (!isFactory(outfit)) return true;
@@ -183,15 +185,33 @@ export function canFeed(obs: GameState, me: string, outfit: Outfit): boolean {
     water: UPKEEP.baseWater + Math.ceil(crew / UPKEEP.crewPerWater),
   };
   return (Object.entries(RECIPES[outfit].inputs) as [Good, number][]).every(([g, q]) => {
-    if (g === 'energy' || obs.tiles.some((t) => t.owner === me && t.outfit === g)) return true;
+    if (g === 'energy') return true;
+    const own = obs.tiles.some((t) => t.owner === me && t.outfit === g) ? madeNext(obs, me)[g] : 0;
     let carry = p.stock[g];
     for (let m = 0; m < STRATEGIST.factoryInputMonths; m++) {
-      carry -= (household[g] ?? 0) + q;
+      carry += own - (household[g] ?? 0) - q;
       if (carry < 0) return false;
       carry = Math.floor(carry * (1 - GOOD_CONFIG[g].spoilage));
     }
     return true;
   });
+}
+
+const madeCache = new WeakMap<GameState, Map<string, Stock>>();
+
+/**
+ * What the seat's own plots make at the next production: the outlook's rollout of a copy of what it sees, Energy, Water
+ * and the turn-off rule included. Remembered per observation, seat, month, phase and plots, as canFeed asks it for every
+ * plot it scores.
+ */
+function madeNext(obs: GameState, me: string): Stock {
+  const plots = obs.tiles.flatMap((t, i) => (t.owner === me ? [`${i}:${t.outfit ?? ''}`] : [])).join(',');
+  const key = `${me}|${obs.month}|${obs.phase}|${plots}|${GOODS.map((g) => obs.players.find((p) => p.id === me)!.stock[g]).join(',')}`;
+  let seen = madeCache.get(obs);
+  if (!seen) madeCache.set(obs, (seen = new Map()));
+  let made = seen.get(key);
+  if (!made) seen.set(key, (made = outlook(obs, me, { lookAhead: true }).made));
+  return made;
 }
 
 /**
@@ -348,6 +368,10 @@ export function unitValues(obs: GameState, o: Outlook, good: Good, mind: Mind): 
     const sick = playerEventChance(obs, 'sickness', 'development', me);
     use = sick * monthWalkSeconds(obs, mind) * (1 / DEV_WALK.sickPace - 1) * sec;
   }
+  // The household's own block, before any factory's units join it: the buy side values it apart (FM-factory-input).
+  const household = { block, use };
+  let factoryUnits = 0;
+  let factoryWorth = 0;
   // Factory inputs: a factory's run is worth its output, shared over its inputs.
   for (const t of mine) {
     if (!isFactory(t.outfit!)) continue;
@@ -358,6 +382,8 @@ export function unitValues(obs: GameState, o: Outlook, good: Good, mind: Mind): 
     const add = Math.ceil(q / keepRate);
     use = (use * block + each * add) / Math.max(1, block + add);
     block += add;
+    factoryUnits += add;
+    factoryWorth += each * add;
   }
 
   // Beyond the block: resale next month, after spoilage, the sales tax and the depot limit.
@@ -380,9 +406,35 @@ export function unitValues(obs: GameState, o: Outlook, good: Good, mind: Mind): 
       buy.push(0);
     }
   }
+  if (factoryUnits > 0) buyForFactories(obs, me, good, buy, { household, factoryUnits, factoryWorth, resaleBuy, room });
   keep.sort((a, b) => b - a);
   buy.sort((a, b) => b - a);
   return { good, keep, buy, block, need, floorUnits };
+}
+
+/**
+ * The buy side of a factory input (FM-factory-input, PM ruling of 6 Nov; the keep side and the sell floor stay, Heiko's
+ * 5 Nov "sell surplus"). The factories' share of their runs (`factoryWorth`) is what the seat gets by holding the units
+ * that carry their inputs past upkeep: what upkeep eats or drinks first, then `factoryUnits`. It is spread over the
+ * units of those it still has to buy, not averaged down by the household's walking value; the household's own block
+ * keeps that value besides, and past it a unit is worth its resale.
+ */
+function buyForFactories(
+  obs: GameState,
+  me: string,
+  good: Good,
+  buy: number[],
+  f: { household: { block: number; use: number }; factoryUnits: number; factoryWorth: number; resaleBuy: number; room: number },
+): void {
+  const eaten = good === 'food' || good === 'water' ? needsOf(obs, me)[good] : 0;
+  const reach = eaten + f.factoryUnits;
+  const held = Math.min(obs.players.find((p) => p.id === me)!.stock[good], reach);
+  const run = f.factoryWorth / Math.max(1, reach - held);
+  for (let k = 0; k < buy.length; k++) {
+    const own = k < f.household.block ? f.household.use : 0;
+    const worth = (k < reach ? run : 0) + own;
+    buy[k] = k < reach || k < f.room ? Math.max(worth, f.resaleBuy) : 0;
+  }
 }
 
 /**
