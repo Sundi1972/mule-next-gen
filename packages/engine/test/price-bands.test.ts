@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
+  advancePhase,
   auctionDone,
+  cloneForSim,
   colonySupply,
   declareRole,
   GOOD_CONFIG,
   GOODS,
   monthlyDemand,
+  postPrices,
   priceBand,
   stepAuction,
   storeSellLine,
@@ -118,6 +121,25 @@ describe('price B-AC-7: the store posts the band of the colony’s months of cov
   });
 });
 
+describe('price B-AC-7: a good only the export ship wants follows the off-world price, not the normal one', () => {
+  it('price B-AC-7: Crystite with the off-world price at 60, under its normal 100, falls a quarter a month to 60 and stays there', () => {
+    const state = game();
+    to(state, 'production');
+    state.store.offWorld.crystite = 60;
+    advancePhase(state);
+    expect(state.store.band?.crystite, 'the premise: off-world').toBe('offWorld');
+    const posted = [state.store.posted.crystite];
+    for (let month = 2; month <= 7; month++) {
+      nextMonth(state);
+      advancePhase(state);
+      posted.push(state.store.posted.crystite);
+    }
+    expect(state.store.refPrice.crystite, 'the premise: N stays above 60').toBeGreaterThan(60);
+    // From month 1's opening 283: 212, 159, 119, 89, 67, then 60, the off-world price, never N.
+    expect(posted).toEqual([212, 159, 119, 89, 67, 60, 60]);
+  });
+});
+
 describe('price B-AC-4: the store’s Food lines when Food comes up, by band', () => {
   const lines = (holds: number, outputs: number[]) => {
     const state = foodMonth(holds, outputs);
@@ -211,7 +233,7 @@ describe('price B-AC-1: a sell-out the players bid past lifts the next selling l
    * Month 1 normal (mid 30), the store holding one Food over the colonists' reserve, which p2 buys first when `soldOut`;
    * then p1 sells p2 one at `price`, and month 2's Food comes up.
    */
-  function bidPast(price: number, { soldOut }: { soldOut: boolean }): GameState {
+  function bidPast(price: number, { soldOut }: { soldOut: boolean }): GameState & { leftAfterPosting?: GameState['store']['lastWalk'] } {
     const state = game();
     to(state, 'production');
     farms(state, [5, 5]);
@@ -224,13 +246,20 @@ describe('price B-AC-1: a sell-out the players bid past lifts the next selling l
     trade(state, 'p2', 'p1', price);
     nextMonth(state);
     hold(state, 10, 20);
+    expect(state.store.lastWalk?.food?.soldOutHigh, 'the premise: the lesson waits for the posting').toBe(soldOut ? price : null);
+    // The same posting on a copy, before Food comes up and starts a fresh lesson of its own.
+    const posting = cloneForSim(state);
+    postPrices(posting);
     post(state);
     expect(state.auction!.good, 'the premise: Food is up').toBe('food');
-    return state;
+    return Object.assign(state, { leftAfterPosting: posting.store.lastWalk });
   }
 
-  it('price B-AC-1: sold out and bid to 90, the next Food sell line is at least 90', () => {
-    expect(storeSellLine(bidPast(90, { soldOut: true }))).toBeGreaterThanOrEqual(90);
+  it('price B-AC-1: sold out and bid to 90, the next Food sell line is at least 90, and the lesson moves that posting only', () => {
+    const state = bidPast(90, { soldOut: true });
+    expect(storeSellLine(state)).toBeGreaterThanOrEqual(90);
+    // The posting read last month's lesson and dropped it, so it lifts that posting only.
+    expect(state.leftAfterPosting).toEqual({});
   });
 
   it('price B-AC-1: a 90 trade while the store still had Food sets no floor', () => {
