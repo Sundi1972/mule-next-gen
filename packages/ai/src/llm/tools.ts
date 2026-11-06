@@ -1,5 +1,6 @@
 import { allPrices, BRAIN, observe, scoreParts, type GameState, type Phase, type Playbook, type PlayerId } from '@mule/engine';
 import { monthSteps, type MonthSeat } from '../play.js';
+import type { AiSeat } from '../seat.js';
 import type { PlanEdit } from '../playbook/index.js';
 import { MOVES } from './moves-stub.js';
 
@@ -115,16 +116,25 @@ export function toolsFor(state: GameState, seat: PlayerId, sim?: WhatIfSim): { d
       if (played >= BRAIN.whatIfsPerWrite) return error('limit');
       played++;
       const edits = input.edits.map((e) => ({ path: e.path, to: e.to, reason: typeof e.reason === 'string' ? e.reason : '' }));
-      const { playbook, rejected } = sim.playbook(edits);
+      // The development's edits go onto its draft as the month's development starts, as they do in play (AM-A17).
+      const isDevelopment = (e: PlanEdit) => e.path.startsWith('/development/');
+      const development = edits.filter(isDevelopment);
+      const { playbook, rejected } = sim.playbook(edits.filter((e) => !isDevelopment(e)));
       const seats = sim.seats.map((s) => (s.id === seat ? { ...s, playbook } : s));
+      const atDevelopment: NonNullable<Playbook['rejected']> = [];
+      const editDevelopment = (s: AiSeat, draft: Playbook, at: GameState): readonly PlanEdit[] | null => {
+        if (s.id !== seat || draft.phase !== 'development' || development.length === 0) return null;
+        atDevelopment.push(...s.validator()(at, seat, draft, development).rejected);
+        return development;
+      };
       // observe() zeroes the seed: the month's dice are none of the live game's.
-      const steps = monthSteps(obs, seats, 0);
+      const steps = monthSteps(obs, seats, 0, { edits: editDevelopment });
       let step = steps.next();
       while (!step.done) {
         await sim.pause?.();
         step = steps.next();
       }
-      return ok({ month: step.value.month, worth: scoreParts(step.value.state, seat), rejected });
+      return ok({ month: step.value.month, worth: scoreParts(step.value.state, seat), rejected: [...rejected, ...atDevelopment] });
     },
   };
 
