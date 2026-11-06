@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { Fragment, type ReactNode } from 'react';
 import { PlayerMark } from '../components/PlayerMark';
 import { cx } from '../components/tokens';
 import { motionOf, offMap, STORY } from './catalogue';
@@ -8,7 +8,7 @@ import { ramp } from './fx';
 import { EventDeltaChip, EventEffectChip, EventSignBadge } from './glyphs';
 import { cardAt, cq, useEventLivingView } from './living';
 import { RollCall } from './rollcall';
-import { eventEffectsAt, eventHitAt, isRollCall, type EventSegment } from './timing';
+import { eventEffectsAt, eventHitAt, isRollCall, type EventScript, type EventSegment, type ShowGrid } from './timing';
 import type { ShowEffect, ShowEventView, ShowSize } from './types';
 
 /** The cards over the map, outside its camera: the phase's intro card and each event's title card. */
@@ -107,6 +107,7 @@ export function EffectsCard({ seg, size }: { seg: EventSegment; size: ShowSize }
   const seen = eventEffectsAt(s, t, reduced, grid)
     .filter((l) => l.seg === seg)
     .map((l) => l.effect);
+  const leaves = new Map(gaugeFlightsAt(s, reduced, grid).map((l) => [l.effect, l.leaves]));
   const tv = size === 'tv';
   const rows: { key: string; head: ReactNode; items: ShowEffect[] }[] = [
     ...cast.players.filter((p) => fx.some((f) => f.on === p.id)).map((p) => ({ key: p.id, head: <SeatHead id={p.id} size={size} />, items: fx.filter((f) => f.on === p.id) })),
@@ -132,9 +133,17 @@ export function EffectsCard({ seg, size }: { seg: EventSegment; size: ShowSize }
                 objects.map((w) => <EventDeltaChip key={w} delta={-1} text={w} size={tv ? 'tv' : 'phone'} className={cx(!reduced && 'animate-[ev-pop_0.3s_ease-out]', tv && 'text-xl!')} />)}
               {r.items
                 .filter((f) => seen.includes(f))
-                .map((f, i) => (
-                  <EventEffectChip key={i} f={f} size={tv ? 'tv' : 'phone'} className={cx(!reduced && 'animate-[ev-pop_0.3s_ease-out]', tv && 'text-xl!')} />
-                ))}
+                .map((f, i) => {
+                  const chip = <EventEffectChip f={f} size={tv ? 'tv' : 'phone'} className={cx(!reduced && 'animate-[ev-pop_0.3s_ease-out]', tv && 'text-xl!')} />;
+                  const leaving = leaves.get(f);
+                  if (leaving === undefined) return <Fragment key={i}>{chip}</Fragment>;
+                  // The flight to the header's gauge finds this chip by data-fly-from; once it has left, its place stays, faded.
+                  return (
+                    <span key={i} data-fly-from={f.what} style={{ opacity: t >= leaving ? 0.15 : 1 }}>
+                      {chip}
+                    </span>
+                  );
+                })}
             </span>
           </span>
         ))}
@@ -154,8 +163,31 @@ function SeatHead({ id, size }: { id: string; size: ShowSize }) {
   );
 }
 
+/** A change to one of the colony's gauges: its chip flies from the card to the gauge in the TV's header. */
+const movesAGauge = (f: ShowEffect) => f.on === 'colony' && (f.what === 'mood' || f.what === 'prestige' || f.what === 'air');
+
+/** Seconds: how long a gauge's chip sits on the card before it leaves, and how long it flies to its gauge. */
+export const GAUGE_FLIGHT = { wait: 0.7, fly: 0.9 } as const;
+
+/** One gauge chip's trip, on the show clock: it leaves the card, then lands on its gauge. */
+export interface GaugeFlightTimes {
+  effect: ShowEffect;
+  leaves: number;
+  landsAt: number;
+}
+
+/** Every gauge chip's trip in the show: it waits on the card from when both the card and its change are up. */
+export function gaugeFlightsAt(s: EventScript, reduced: boolean, grid: ShowGrid): GaugeFlightTimes[] {
+  return eventEffectsAt(s, Infinity, reduced, grid)
+    .filter((l) => movesAGauge(l.effect))
+    .map((l) => {
+      const leaves = Math.max(l.at, cardAt(l.seg)) + GAUGE_FLIGHT.wait;
+      return { effect: l.effect, leaves, landsAt: leaves + GAUGE_FLIGHT.fly };
+    });
+}
+
 /** Whether an event on the map also moved a colony gauge (a MULE theft's mood): its card says so. */
-const movesGauge = (ev: ShowEventView) => (ev.effects ?? []).some((f) => f.on === 'colony' && (f.what === 'mood' || f.what === 'prestige' || f.what === 'air'));
+const movesGauge = (ev: ShowEventView) => (ev.effects ?? []).some(movesAGauge);
 
 /** Everything that goes over the map: the intro, the title card, a card of changes off the map, the roll call. */
 export function Overlays({ size }: { size: ShowSize }) {

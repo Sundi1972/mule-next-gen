@@ -21,6 +21,7 @@ export {
 export { EVENT_ENTRY, type EventEntry, type EventMotion } from './catalogue';
 export { EventBoundary } from './boundary';
 export { EventEffectChip } from './glyphs';
+export { gaugeFlightsAt as eventGaugeFlightsAt, type GaugeFlightTimes as EventGaugeFlightTimes } from './cards';
 export { EventSickTag, sickAt as eventSickAt } from './rollcall';
 export { EventShow, useShow as useEventShow, useEnclosingEventShow, type EventShowProps } from './frame';
 export { EventLivingMap } from './map';

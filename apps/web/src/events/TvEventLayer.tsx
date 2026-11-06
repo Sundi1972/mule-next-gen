@@ -1,5 +1,5 @@
 import type { MuleView } from '@mule/protocol';
-import type { ReactNode } from 'react';
+import { useRef, type ReactNode } from 'react';
 import {
   Creature,
   cx,
@@ -19,6 +19,7 @@ import {
 } from '@mule/ui';
 import { fmt, PHASE_NAME, seatSpecies, slotOf } from '../game/derive';
 import { TvHeader } from '../table/TableApp';
+import { GaugeFlights, useShowLanding } from './GaugeFlights';
 import { useOverlayOn, useOverlayShow } from './overlay';
 
 /**
@@ -43,12 +44,13 @@ export function TvEventLayer({ game, children }: { game: MuleView; children: Rea
 /** The show over the phase screen, on the server's clock. */
 function TvEventOverlay({ game }: { game: MuleView }) {
   const { show, stage } = useOverlayShow(game);
+  const root = useRef<HTMLDivElement>(null);
   if (!show) return null;
   return (
     <SeatSpeciesProvider value={seatSpecies(game)}>
-    <div className="absolute inset-0 z-40 flex flex-col gap-4 bg-table px-10 py-6 text-ink" data-testid="tv-event-overlay" data-event-phase={game.phase}>
+    <div ref={root} className="absolute inset-0 z-40 flex flex-col gap-4 bg-table px-10 py-6 text-ink" data-testid="tv-event-overlay" data-event-phase={game.phase}>
       <EventShow events={show.events} introMs={show.introMs} t={show.t} mode="tv" {...stage}>
-        <TvHeader game={game} title={PHASE_NAME[game.phase]} extra={<EventPips />} />
+        <ShowHeader game={game} />
         <div className="flex min-h-0 flex-1 gap-6 [container-type:size]">
           <div className="shrink-0 self-start" style={{ width: `min(820px, calc(100cqh * ${game.width} / ${game.height}))` }}>
             <EventLivingMap size="tv" className="w-full" />
@@ -58,10 +60,17 @@ function TvEventOverlay({ game }: { game: MuleView }) {
           </div>
         </div>
         <ColonyBar game={game} />
+        <GaugeFlights root={root} colony={game.colony} />
       </EventShow>
     </div>
     </SeatSpeciesProvider>
   );
+}
+
+/** The header over the show: its gauges hold each change until the chip flying from the event's card lands. */
+function ShowHeader({ game }: { game: MuleView }) {
+  const landing = useShowLanding(game.colony);
+  return <TvHeader game={game} title={PHASE_NAME[game.phase]} extra={<EventPips />} landing={landing} />;
 }
 
 /** The colony bar: each player's slot, glowing while their spotlight plays, with the sick tag once their sickness lands. */
