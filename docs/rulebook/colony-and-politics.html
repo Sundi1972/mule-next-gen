@@ -132,7 +132,7 @@
 <div class="table-wrap"><table>
 <thead><tr><th>Building</th><th>Perk as the phone shows it</th><th>Built?</th></tr></thead>
 <tbody>
-<tr><td>Park</td><td>Calms the colony in a riot</td><td>Waits for the riot (designed)</td></tr>
+<tr><td>Park</td><td>Calms the colony in a riot</td><td>Being built (PR-B): a standing Park adds <span class="num">2</span> points to the volunteer clean-up's chance; the riot itself reads no Park (see <a href="#riot">Riots</a>)</td></tr>
 <tr><td>Hospital</td><td>Softens an epidemic</td><td>Not built; no rule reads it yet</td></tr>
 <tr><td>Observatory</td><td>Prestige only</td><td>Nothing to build</td></tr>
 <tr><td>Stadium</td><td>Festivals come more often</td><td>Being built: each standing Stadium adds <span class="num">5</span> points to the festival's chance (colony branch)</td></tr>
@@ -411,17 +411,32 @@
 </table></div>
 <p>Every chance is capped at <span class="num">90</span>%. Chances are in percentage points per month, and all are placeholders.</p>
 
-<h3 id="riot">Riots and the other events (PR-B, designed)</h3>
-<p>PR-B adds the events that roll in development, production and the month end: the store strike, MULE theft's mood part (development); the walkout and the loyal crew (production, personal); the riot and the volunteer clean-up (month end). Ruled so far:</p>
+<h3 id="riot">Riots and the other events (PR-B, being built)</h3>
+<p>PR-B adds the events that roll in development, production and the month end, and changes two of the planning ones. Chances are in points a month, each capped at <span class="num">90</span>%.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Event</th><th>When</th><th>Chance a month</th><th>Never in</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td>Store strike</td><td>Development</td><td>0; <span class="num">+2</span> Unhappy, <span class="num">+4</span> Unrest</td><td>none</td><td>The store sells no MULEs this turn</td></tr>
+<tr><td>Walkout (each player's own roll)</td><td>Production</td><td>0; <span class="num">+0.5</span> Restless, <span class="num">+2</span> Unhappy, <span class="num">+4</span> Unrest, <span class="num">+1</span> for the richest; from Restless down, <span class="num">+0.5</span> for every air point the player caused</td><td>Thriving</td><td>The player's plots of the good they work most make <span class="num">20</span>% this month</td></tr>
+<tr><td>Loyal crew (each player's own roll)</td><td>Production</td><td>0; <span class="num">+3</span> Thriving, <span class="num">+1</span> Content, <span class="num">+1</span> for the poorest</td><td>none</td><td>One of the player's plots makes <span class="num">1</span> more this month</td></tr>
+<tr><td>Riot</td><td>Month end</td><td>0; <span class="num">+1</span> Unhappy, <span class="num">+5</span> Unrest, <span class="num">+2</span> when Food is dear</td><td>none</td><td>Each store shelf loses a third, rounded down; one standing building is damaged</td></tr>
+<tr><td>Volunteer clean-up</td><td>Month end</td><td><span class="num">1</span>%; <span class="num">+3</span> Thriving, <span class="num">+1</span> Content, <span class="num">+2</span> with a Park standing</td><td>Unrest</td><td>The air gauge drops by <span class="num">5</span></td></tr>
+<tr><td>MULE theft (its mood part)</td><td>Development, month end</td><td>its <span class="num">1</span>% each; <span class="num">+0.5</span> Restless, <span class="num">+2</span> Unhappy, <span class="num">+4</span> Unrest</td><td>Thriving</td><td>As today</td></tr>
+<tr><td>Blamed for the unrest</td><td>Planning</td><td>as above</td><td>Thriving, Content</td><td>As above</td></tr>
+<tr><td>Immigration wave (its air parts)</td><td>Planning</td><td>as above; <span class="num">+1</span> in Clean air</td><td>Toxic or Collapse air, besides Unhappy and Unrest</td><td>As today</td></tr>
+</tbody>
+</table></div>
 <ul>
-<li><strong>The riot:</strong> for each good, the store loses a third of its stock, rounded down, so a shelf of 1 or 2 loses nothing. The share is a named config fraction, <span class="num">1/3</span>. A riot can also damage a colony building (which then counts no prestige until repaired; see <a href="#prestige-objects">Prestige objects</a>); the event picks the building on its own dice. A standing Park calms the colony in a riot.</li>
-<li><strong>Blamed for the unrest</strong> will never happen in a Thriving or Content colony.</li>
-<li><strong>The immigration wave</strong> gets air parts: more likely in clean air, never when the air is Toxic.</li>
+<li><strong>The riot:</strong> for each good, the store loses a third of its stock, rounded down, so a shelf of 1 or 2 loses nothing. The share is a named config fraction, <span class="num">1/3</span>. It also damages one standing building, picked on the riot's own dice, which then counts no prestige until the Governor repairs it (see <a href="#prestige-objects">Prestige objects</a>). With nothing standing, only the store suffers.</li>
+<li><strong>The store strike:</strong> a player who tries to buy a MULE is told "The store is on strike: no MULEs this turn"; computer players don't try.</li>
+<li><strong>The immigration wave's air parts</strong> count only in a colony: with politics off it rolls at its <span class="num">2</span>% in any air, as today.</li>
 </ul>
-<div class="box example"><h4>Example: a riot at the store</h4><p>The store holds 7 Food, 2 Water and 12 Smithore. A riot takes 2 Food (7 ÷ 3, rounded down), no Water (2 ÷ 3 rounds to 0) and 4 Smithore. The event's line shows exactly what was lost.</p></div>
-<div class="box why"><h4>Why it is like this</h4><p>G-5 (Heiko, 28 Oct) asks that unhappy months draw at least twice the strikes and thefts of thriving months, and that a strike cuts the struck good's plots to 20%. The rows come from the event catalogue Heiko approved (rev 22). The riot's store loss is a third of the stock (catalogue 04:149); how it rounds is WS1's to set with PR-B. The PM ruled "blamed" never in Thriving or Content, and the immigration wave's air parts, on 5 Nov.</p></div>
-<div class="box next"><h4>What is changing</h4><p>PR-A (#370) is in the game: it reached trunk with the colony batch (#413) on 5 Nov. PR-B is designed, due from WS1 next. Not yet settled in what I could read: the riot's chance by mood band, which building it damages and by how much the Park calms it; and the immigration wave's exact clean-air figure (the ruling reads "Clean air +1"). Owner: WS1.</p><p>Balance question: "blamed for the unrest" costs <span class="num">1</span> reputation, and reputation only changes votes below <span class="num">30</span>, from a start of <span class="num">50</span>. As built it would take 21 blamings to lose a vote. Owner: WS1 and WS7, at the final tuning.</p><p>The event shows for all of these (PR #364, WS8) are on trunk; the PR-B events' stories play once those events roll.</p></div>
-<p class="code-ref">In the code (colony branch): <code>packages/engine/src/config.ts::SOCIAL_EVENTS</code> · <code>events.ts</code> (mood, neverIn, objects, foodPrice in the chance) · <code>colony.ts::addPrestige</code> · <code>::moodShift</code> · <code>politics.ts::reputationShift</code> · G-5 C26, AM-11</p>
+<h4 id="theft-richest">MULE theft's "the richest +1" <span class="pill designed">Designed</span></h4>
+<p>The catalogue's MULE theft also has <span class="num">+1</span> for the richest player. Designed, not in the game yet: C29, WS1. It waits for the colony's balance pass, since it would change games played without politics.</p>
+<div class="box example"><h4>Example: a riot at the store</h4><p>The store holds 7 Food, 2 Water and 12 Smithore. A riot takes 2 Food (7 ÷ 3, rounded down), no Water (2 ÷ 3 rounds to 0) and 4 Smithore. The event's line shows exactly what was lost. If the Park and the Stadium stand and the dice pick the Stadium, the colony's prestige falls by <span class="num">4</span> until it is repaired.</p></div>
+<div class="box why"><h4>Why it is like this</h4><p>G-5 (Heiko, 28 Oct) asks that unhappy months draw at least twice the strikes and thefts of thriving months, and that a strike cuts the struck good's plots to 20%. The rows come from the event catalogue Heiko approved. The PM ruled on 5 Nov: the riot's loss per good, rounded down, and its building picked on its own dice; "blamed" never in Thriving or Content; every new event needs a colony. On 6 Nov: the immigration wave's air parts only with a colony, "Toxic" read as Toxic or Collapse; theft's richest +1 deferred to C29.</p></div>
+<div class="box next"><h4>What is changing</h4><p>PR-A (#370) is in the game: it reached trunk with the colony batch (#413) on 5 Nov. PR-B is being built on branch <code>ws1-c26b</code> by WS1, with WS7's <code>damageObject</code>. Until it merges none of the five new events rolls. The Park's perk on the phone reads "Calms the colony in a riot", but the catalogue's riot reads no Park: as built, a standing Park makes the volunteer clean-up likelier (+2). Owner of the perk's wording: WS8 with WS1.</p><p>Balance question: "blamed for the unrest" costs <span class="num">1</span> reputation, and reputation only changes votes below <span class="num">30</span>, from a start of <span class="num">50</span>. As built it would take 21 blamings to lose a vote. Owner: WS1 and WS7, at the final tuning.</p><p>The event shows for all of these (PR #364, WS8) are on trunk; the PR-B events' stories play once those events roll.</p></div>
+<p class="code-ref">In the code (colony branch): <code>packages/engine/src/config.ts::SOCIAL_EVENTS</code> · <code>events.ts</code> (mood, neverIn, objects, foodPrice in the chance; on <code>ws1-c26b</code>: pollutionIn, colonyAir, neverInAir, <code>::storeOnStrike</code>) · <code>colony.ts::addPrestige</code> · <code>::damageObject</code> (<code>ws1-c26b</code>) · <code>::moodShift</code> · <code>politics.ts::reputationShift</code> · G-5 C26, AM-11</p>
 <p class="owner">Kept current by: WS1 (events), WS7 (the colony's writers), WS8 (event shows).</p>
 
 <!-- ============================================================ -->

@@ -350,6 +350,13 @@ export function addPrestige(state: GameState, points: number): void {
   edit(state).permanentPrestige += Math.round(points);
 }
 
+/** A riot damages a standing object (G-5 C26, RULE-21): it counts 0 prestige until repaired. Returns whether it did. */
+export function damageObject(state: GameState, id: PrestigeId): boolean {
+  if (state.colony?.projects.find((p) => p.id === id)?.stage !== 'standing') return false;
+  edit(state).projects.find((p) => p.id === id)!.stage = 'damaged';
+  return true;
+}
+
 /** The band a mood falls in. */
 export function moodBand(h: number): MoodBand {
   const { bands } = HAPPINESS;
