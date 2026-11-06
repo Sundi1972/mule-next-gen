@@ -51,11 +51,13 @@ export function storeLines(auction: AuctionView): {
 /** What the store charges, as a price box shows it: "out" once it has none to sell, whatever line the board draws. */
 export const storeSellsWord = (auction: AuctionView): number | 'out' => (auction.storeForSale > 0 ? (auction.storeSells ?? 'out') : 'out');
 
-/** In the phone's rail while the store is sold out: nobody buys from it, and what it still pays. */
+/** In the phone's rail while the store is sold out: nobody buys from it, what it still pays, and the highest bid once one passes its old price. */
 export function SoldOutNote({ auction }: { auction: AuctionView }) {
+  const { soldOutAt } = storeLines(auction);
   return (
     <p className="rounded-control border border-rise/50 bg-void px-2.5 py-1.5 text-[11px] leading-snug text-ink-2" data-testid="sold-out-note">
       <strong className="text-rise">Store sold out.</strong> Nobody can buy from it{auction.storeBuys !== null ? `; it still buys at ${auction.storeBuys}` : ''}.
+      {soldOutAt?.bid && ` Highest bid ${soldOutAt.price}.`}
     </p>
   );
 }
