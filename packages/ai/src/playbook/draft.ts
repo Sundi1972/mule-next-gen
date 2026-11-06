@@ -36,7 +36,7 @@ import { outlook, productionsLeft, type Outlook } from '../outlook.js';
 import { PERSONAS, type DecisionKind } from '../personas.js';
 import { analysesWanted, developDecision, filtersWanted, goodPlan, landDecision, leaderOf, sellWanted, shortfallHold, tradeDecision, walkVeto, type DevAction, type DevWalk, type LandPlan } from '../strategist.js';
 import { candidate, shortlist, type Shortlist } from '../utility.js';
-import { beforeTax, canFeed, cashReserve, chainInputs, chainOf, chainOutlook, installGain, linkShare, standingLinks, type Mind } from '../value.js';
+import { beforeTax, canFeed, cashReserve, chainOf, chainOutlook, installGain, linkShare, standingLinks, type Mind } from '../value.js';
 import { landTargetWithin, planMind, type PlanFields } from './plan.js';
 import type { ReplanTrigger } from './replan.js';
 
@@ -272,8 +272,9 @@ function pickKind(input: DraftInput, obs: GameState, eligible: Record<Kind, bool
 /** What the seat lists in planning when short of cash; nothing outside this month's planning, as lots.ts lists only there (RULE-5). */
 function planningPart(input: DraftInput, obs: GameState, moneyMaker: Good | null): PlanningPlay {
   if (obs.phase !== 'planning' || monthOf(input, obs) !== obs.month) return {};
-  // The money-maker's chain links stay off the list: selling one breaks the plan (AM-33).
-  const list = sellWanted(obs, input.mind, moneyMaker ? chainInputs(obs, input.mind.me, moneyMaker) : []);
+  // The money-maker's standing chain links stay off the list: selling one breaks the plan (AM-33). A fed works has none.
+  const keep = moneyMaker ? [...new Set(standingLinks(obs, input.mind.me, moneyMaker).map((t) => t.outfit!))] : [];
+  const list = sellWanted(obs, input.mind, keep);
   return list.length > 0 ? { list } : {};
 }
 
