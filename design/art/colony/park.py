@@ -37,8 +37,8 @@ BED = SPEC["flowerBed"]
 RIM_TOP = 0.05  # the paved rim stands a kerb's height above the lawn, so the lawn reads as set in
 LH = SPEC["lamps"]["height"]
 GR = 0.16
-FALLEN = 1  # the 4.2 m tree, front left: in `damaged` it lies across the south-west bench
-SCORCH = (-3.0, -2.2, 1.5)  # x, y, r of the burn at its root
+FALLEN = 1  # the 4.2 m tree, front left: in `damaged` it lies across the south path
+SCORCH = (-2.6, -3.6, 1.7)  # x, y, r of the burn beside its root, on open lawn where the camera sees it
 
 
 # ---------- layout geometry (shared by mesh, hair and shader) ----------
@@ -318,8 +318,9 @@ def ground(state, grass, bald=None):
         w = max(0.0, min(1.0, (gravel_d(x, y) - 0.01) / 0.05))
         if abs(x) > INNER - 0.02 or abs(y) > INNER - 0.02 or pond_r(x, y) < 1.08 or bed_r(x, y) < BED["radius"] + 0.1:
             w = 0.0
-        if bald and math.hypot(x - bald[0], y - bald[1]) < bald[2] * 0.8:
-            w = 0.0  # burnt off
+        if bald:  # burnt off, with a ragged edge
+            d = math.hypot(x - bald[0], y - bald[1]) / bald[2] + 0.25 * noise.noise(Vector((x * 1.7, y * 1.7, 0.5)))
+            w *= max(0.0, min(1.0, (d - 0.5) / 0.25))
         vg.add([v.index], w, "REPLACE")
     lawn.modifiers.new("grass", "PARTICLE_SYSTEM")
     ps = lawn.particle_systems[0]
@@ -503,6 +504,40 @@ def flower_bed(planted=True, wilted=False):
     translucent(m, 0.2, 1.15)
 
 
+def root_plate(x, y, fall):
+    """The torn-up root plate: a disc of earth stood on edge at the trunk's foot, facing back the way the tree fell,
+    root strands sticking out of its rim, and the dark hole it tore in the lawn."""
+    back = Vector((-fall.x, -fall.y, 0)).normalized()
+    earth = mat("earth")
+    bpy.ops.mesh.primitive_cylinder_add(vertices=28, radius=1.05, depth=0.28, location=(x + back.x * 0.15, y + back.y * 0.15, 0.95))
+    rp = bpy.context.active_object
+    rp.name = "root_plate"
+    for v in rp.data.vertices:
+        v.co.x *= 1 + 0.18 * noise.noise(v.co * 2.3)
+        v.co.y *= 1 + 0.18 * noise.noise(v.co * 2.3 + Vector((3, 1, 0)))
+    rp.rotation_mode = "QUATERNION"
+    rp.rotation_quaternion = Vector((0, 0, 1)).rotation_difference(back)
+    rp.data.materials.append(earth)
+    roots = flat("roots", (0.16, 0.11, 0.07), 0.9)
+    rng = random.Random(3)
+    for k in range(14):
+        a = 2 * math.pi * k / 14 + rng.uniform(-0.2, 0.2)
+        side = Vector((-back.y, back.x, 0))
+        d = (side * math.cos(a) + Vector((0, 0, 1)) * math.sin(a)).normalized()
+        L = rng.uniform(0.5, 0.95)
+        base = Vector((x + back.x * 0.15, y + back.y * 0.15, 0.95)) + d * 0.95
+        tip = base + (d + back * rng.uniform(-0.3, 0.4)).normalized() * L
+        if tip.z < 0.02:
+            continue
+        bpy.ops.mesh.primitive_cone_add(vertices=6, radius1=0.05, radius2=0.008, depth=L, location=(base + tip) / 2)
+        r = bpy.context.active_object
+        r.name = "root"
+        r.rotation_euler = (tip - base).to_track_quat("Z", "Y").to_euler()
+        r.data.materials.append(roots)
+    hole = cyl("root_hole", x + back.x * 0.9, y + back.y * 0.9, 0.85, -0.05, 0.015, mat("earth"), 28)
+    hole.scale = (1.0, 0.8, 1.0)
+
+
 def trees(state):
     """The spec's two trees. build1: saplings on stakes. damaged: the smaller one fallen toward the plaza."""
     tpl = load("island_tree_01")[0]
@@ -520,18 +555,13 @@ def trees(state):
             cyl("tree_stake", t["at"][0] + 0.18, t["at"][1], 0.025, 0.0, 1.4, flat("stake_wood", (0.55, 0.4, 0.24), 0.8), 8)
         if state == "damaged" and i == FALLEN:
             # pivoted on its root and laid toward the north-east: the trunk crosses the bench, the crown the plaza's edge
-            fall = Vector((0.7, 0.7, 0.12)).normalized()
+            # fallen east across the south path, propped on its branches; its root plate then faces this camera
+            # (a tree falling north-east shows the plate edge-on, as a spike)
+            fall = Vector((1.0, 0.12, 0.2)).normalized()
             o.rotation_mode = "QUATERNION"
             o.rotation_quaternion = Vector((0, 0, 1)).rotation_difference(fall) @ Quaternion((0, 0, 1), t.get("rotate", 0.0))
-            o.location = (t["at"][0], t["at"][1], 0.2)
-            # the torn-up root ball: a lumpy mound of earth behind the trunk, and the hole it left
-            bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=3, radius=0.6, location=(t["at"][0] - 0.25, t["at"][1] - 0.25, 0.3))
-            rp = bpy.context.active_object
-            rp.name = "root_ball"
-            rp.scale = (1.0, 1.0, 0.7)
-            rp.data.materials.append(mat("earth"))
-            for v in rp.data.vertices:
-                v.co *= 1 + 0.25 * noise.noise(v.co * 3.0)
+            o.location = (t["at"][0], t["at"][1], 0.45)
+            root_plate(t["at"][0], t["at"][1], fall)
     unlink(tpl)
     m = bpy.data.materials["island_tree_01_leaves"]
     if state == "closed":
@@ -637,13 +667,13 @@ def turf_pallet(x, y):
 
 
 def gates():
-    """Closed: a locked mesh gate across each path where it meets the rim."""
+    """Closed: a locked barred gate across each path where it meets the rim."""
     g = INNER + RIM / 2
     w = PW + 0.25
-    kits.fence(-w, w, g, 1.4)
-    kits.fence(-w, w, -g, 1.4)
-    kits.fence_y(g, -w, w, 1.4)
-    kits.fence_y(-g, -w, w, 1.4)
+    kits.fence(-w, w, g, 1.4, bars=True)
+    kits.fence(-w, w, -g, 1.4, bars=True)
+    kits.fence_y(g, -w, w, 1.4, bars=True)
+    kits.fence_y(-g, -w, w, 1.4, bars=True)
 
 
 # ---------- the stages ----------
@@ -677,7 +707,7 @@ def build(stage):
     if closed:
         gates()
     if damaged:
-        kits.scorch(SCORCH[0], SCORCH[1], SCORCH[2], z=0.012)
+        kits.scorch(SCORCH[0], SCORCH[1], SCORCH[2], z=0.012, strong=True)
         kits.ember(SCORCH[0] + 0.3, SCORCH[1] - 0.2, 0.05, r=0.22, energy=35)
 
 
