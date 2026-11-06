@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { pick, type GroundsManifest, type PictureKind, type PictureStage } from '../src/grounds/pick';
+import { pick, type GroundsManifest, type ManifestEntry, type PictureKind, type PictureStage } from '../src/grounds/pick';
 
 /**
  * The art manifest is the contract between the pictures WS10 renders and ColonyGrounds, which reads only it (spec §3).
@@ -16,7 +16,7 @@ const RULE_1_STAGES: readonly string[] = ['site', 'build1', 'build2', 'standing'
 const named = Object.entries(manifest.pictures).flatMap(([kind, pictures]) =>
   Object.entries(pictures ?? {})
     .filter(([key]) => key !== 'frame')
-    .flatMap(([stage, entry]) => Object.values(entry as Record<string, string | null>).flatMap((src) => (src ? [{ kind, stage, src }] : []))),
+    .flatMap(([stage, entry]) => [entry as ManifestEntry].flatMap(({ day, dusk, glow }) => [day, dusk, glow]).flatMap((src) => (src ? [{ kind, stage, src }] : []))),
 );
 
 describe('the colony art manifest (T-AC-2)', () => {
