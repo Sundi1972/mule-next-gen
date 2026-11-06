@@ -4,6 +4,7 @@ import {
   cloneForSim,
   createGame,
   EXPORT_DEMAND,
+  expectedOffWorld,
   GOOD_CONFIG,
   GOODS,
   OFF_WORLD,
@@ -179,8 +180,12 @@ describe('pricing G-3: the export goods walk off-world', () => {
     for (const view of [cloneForSim(real), observe(real, 'p0')]) {
       draws.length = 0;
       openNextMonth(view);
-      expect(view.store.offWorld.crystite, `a ${view.seed === 0 ? 'seat\'s observed' : 'cloned'} what-if`).toBe(134);
+      expect(expectedOffWorld(view, 'crystite', 0), `a ${view.seed === 0 ? 'seat\'s observed' : 'cloned'} what-if`).toBe(134);
       expect(draws.filter((d) => ownSeeds.has(d.seed) || d.seed === seedOf(0, 2, 'offWorld', 'crystite')), 'a what-if draws no walk').toEqual([]);
+      // Month by month it stays on §3's path: 109 three months on, as expectedOffWorld(…, 3) says from 160.
+      openNextMonth(view);
+      openNextMonth(view);
+      expect(expectedOffWorld(view, 'crystite', 0), 'three what-if months on').toBe(109);
     }
     openNextMonth(real);
     expect(real.store.offWorld.crystite, 'the real game draws its swing').not.toBe(134);
