@@ -1,8 +1,8 @@
 import type { RawGood } from '@mule/engine';
-import { Creature, cx, GoodIcon, MuleIcon, sickReason, SLOT_COLOR, TERRAIN_NAME } from '@mule/ui';
+import { Creature, cx, GoodIcon, groundDots, MuleIcon, sickReason, SLOT_COLOR, TERRAIN_NAME } from '@mule/ui';
 import { useState, type CSSProperties } from 'react';
 import { useTableChat } from '../../chat/store';
-import { groundPips, plotName, toSlot } from '../../game/derive';
+import { plotName, toSlot } from '../../game/derive';
 import { SWAP_NOTE } from './guide';
 import { bestHere, OUTFIT_WORD, RAW, plotTitle, suits, suitsLine } from './plots';
 import { assaySeconds, type ArcadeSeat } from './seat';
@@ -13,7 +13,7 @@ import { assaySeconds, type ArcadeSeat } from './seat';
  * language. Every number is the view's or the engine's config.
  */
 
-const dots = (n: number) => '●'.repeat(n) + '○'.repeat(4 - n);
+const dots = (n: number) => '●'.repeat(n) + '○'.repeat(3 - n);
 
 /** The land underfoot and what it does to your speed: terrain you can feel, said in words. */
 export function GroundChip({ seat, className }: { seat: ArcadeSeat; className?: string }) {
@@ -207,7 +207,7 @@ export function PlotCard({ seat, now, at }: { seat: ArcadeSeat; now: number; at:
             {RAW.map((g: RawGood) => (
               <span key={g} className={cx('flex justify-between gap-1', g === best && 'font-bold text-holo')}>
                 <span className="font-sans">{OUTFIT_WORD[g]}</span>
-                <span>{dots(groundPips(g, t.ground![g]))}</span>
+                <span>{dots(groundDots(g, t.ground![g]))}</span>
               </span>
             ))}
           </span>
