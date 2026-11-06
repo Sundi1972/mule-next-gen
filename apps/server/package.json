@@ -11,6 +11,7 @@
     "brain:social-spike": "tsx src/brain/social-spike.ts",
     "brain:strategy-spike": "tsx src/brain/strategy-spike.ts",
     "brain:trial": "tsx src/brain/trial.ts",
+    "brain:gate": "tsx src/brain/gate.ts",
     "replay": "tsx src/replay-cli.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"

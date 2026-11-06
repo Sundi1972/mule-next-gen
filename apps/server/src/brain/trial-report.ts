@@ -180,7 +180,7 @@ export interface SeatResults {
 }
 
 /** The Claude chairs (the Smart seats, unless the game names its chairs) against the rest, over finished games with final scores. */
-function resultsOf(finished: readonly TrialGame[]): TrialReport['results'] {
+export function resultsOf(finished: readonly TrialGame[]): TrialReport['results'] {
   const scored = finished.filter((g) => g.scores !== undefined && Object.keys(g.scores).length > 0);
   const smart: { score: number; rank: number }[] = [];
   const strategist: { score: number; rank: number }[] = [];
