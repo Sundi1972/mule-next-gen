@@ -64,10 +64,10 @@ describe('B-AC-9: the special-field badge on the map (variant A)', () => {
     expect(html.match(/data-testid="special-glyph-/g)).toHaveLength(3);
   });
 
-  it("has the mock's sizes per density, hangs a quarter over the corner, and stays inside on the map's edges", () => {
+  it("is sized with the plot on a phone (11 px on the server render's 30 px plot) and as the mock on the TV, hangs a quarter over the corner, and stays inside on the map's edges", () => {
     const phone = map();
-    expect(badge(phone, 'special-glyph-0-0')).toMatch(/right:-3.75px;bottom:-3.75px;width:15px;height:15px/);
-    expect(badge(phone, 'special-glyph-2-0')).toMatch(/right:2px;bottom:-3.75px/);
+    expect(badge(phone, 'special-glyph-0-0')).toMatch(/right:-2.75px;bottom:-2.75px;width:11px;height:11px/);
+    expect(badge(phone, 'special-glyph-2-0')).toMatch(/right:2px;bottom:-2.75px/);
     expect(badge(phone, 'special-glyph-2-1')).toMatch(/right:2px;bottom:2px/);
     const tv = map({ density: 'tv' });
     expect(badge(tv, 'special-glyph-0-0')).toMatch(/right:-5.25px;bottom:-5.25px;width:21px;height:21px/);

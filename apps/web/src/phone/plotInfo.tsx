@@ -1,7 +1,7 @@
 import type { Ground } from '@mule/engine';
 import type { MuleView, TileView } from '@mule/protocol';
 import { bestOf, cx, dotsOf, gemsIn, GOOD_NAME, GoodIcon, TERRAIN_NAME, type RawGood } from '@mule/ui';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { plotName, tileAt } from '../game/derive';
 import { bestWords, OUTFIT_WORD } from './arcade/plots';
 import { OnlyYou } from './hub/OnlyYou';
@@ -83,8 +83,9 @@ export function nextDroneWords({ month, maxMonths }: Pick<MuleView, 'month' | 'm
  * line (where, what land, best for), then its six goods as icons with 0–3 dots in one row. `next` closes it.
  */
 export function ScanReport({ tiles, next }: { tiles: TileView[]; next: string }) {
+  const ref = useKeptInView<HTMLElement>();
   return (
-    <section className="flex flex-col gap-1 rounded-control border border-holo bg-panel px-2 py-1.5" data-testid="scan-report">
+    <section ref={ref} className="flex flex-col gap-1 rounded-control border border-holo bg-panel px-2 py-1.5" data-testid="scan-report">
       <span className="flex items-center justify-between">
         <span className="font-display text-sm font-semibold">Drone report</span>
         <OnlyYou />
@@ -105,6 +106,33 @@ export function ScanReport({ tiles, next }: { tiles: TileView[]; next: string })
       </span>
     </section>
   );
+}
+
+/**
+ * Scrolls an element wholly into its rail's view when it appears and when the window changes width (a turn of the
+ * phone): the rail can hold notices above it (a strike alert, the Now card opened) that would push it below the fold.
+ * Nothing else moves it: not a footer changing size (a player getting ready), so a player who scrolled up to read a
+ * notice stays there, and not a phone keyboard, which shrinks only the height, so a chat line being typed stays put.
+ */
+function useKeptInView<T extends HTMLElement>() {
+  const ref = useRef<T>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el?.scrollIntoView) return;
+    let width = window.innerWidth;
+    const show = () => {
+      el.scrollIntoView({ block: 'nearest' });
+    };
+    const turned = () => {
+      if (window.innerWidth === width) return;
+      width = window.innerWidth;
+      show();
+    };
+    show();
+    window.addEventListener('resize', turned);
+    return () => window.removeEventListener('resize', turned);
+  }, []);
+  return ref;
 }
 
 /** The plots `meId` owns in the view, in the map's order: what My plots lists. */

@@ -48,19 +48,18 @@ const SECOND_ROOM_TURN_MS = 60_000;
 /** The phone sizes the whole report must fit at, both plots in the rail with no scroll (UBER-AC-1, spec §8). */
 const FIT_SIZES = [PHONE.viewport, PHONE_SMALL.viewport];
 
-/** Where a row of the report lies against the rail's scroll box, scrolled to its top, in px from the box's top. */
+/** Where a row of the report lies against the rail's scroll box as the rail stands, in px from the box's visible top. */
 type Fit = { id: string; top: number; bottom: number; box: number };
 
 /**
- * Scrolls the rail holding `report` to its top, then measures each `report-x-y` row's box against the rail's visible
- * box: what the player sees without scrolling.
+ * Measures each `report-x-y` row's box against the rail's visible box as the rail stands, never scrolling it: what the
+ * player sees without touching it, whatever else the rail holds above the report (a strike alert, the Now card).
  */
 async function reportFit(report: Locator): Promise<Fit[]> {
   return report.evaluate(async (el) => {
     let box = el.parentElement;
     while (box && !/auto|scroll/.test(getComputedStyle(box).overflowY)) box = box.parentElement;
     if (!box) throw new Error('the Drone report sits in no scroll box');
-    box.scrollTop = 0;
     await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
     const top = box.getBoundingClientRect().top;
     return [...el.querySelectorAll<HTMLElement>('[data-testid^=report-]')].map((row) => {
@@ -127,9 +126,11 @@ export async function theDroneReportsInTheRail({ phone, server, code, held }: Ga
 
     const planning = phone.locator('[data-phase=planning]');
     const hubMap = planning.getByTestId('hub-map');
-    // Now as planning first draws it, folded to its title: an earlier step may have opened it to read it whole.
-    const fold = planning.getByTestId('now-fold');
-    if (await fold.count()) await fold.click({ timeout: STEP_MS });
+    // Now open, as a player who read it leaves it: the rail then holds more above the report than its box can show, so
+    // the report fits only by keeping itself in view (a strike alert above does the same). A Governor's strike card is
+    // drawn whole, with no fold, and is taller still.
+    const folded = planning.getByTestId('now');
+    if (!(await planning.getByTestId('now-fold').count()) && (await folded.count())) await folded.click({ timeout: STEP_MS });
     await planning.getByTestId('tool-drone').click({ timeout: STEP_MS });
     for (const p of picks) await tapPlot(phone, hubMap, p, state.width, STEP_MS);
     const scan = planning.getByTestId('scan');
@@ -226,8 +227,10 @@ function someOfMyPlotsAnalysed(room: Room, seat: string): void {
     check(gem, `${B_AC_2}: a free plot holding Crystite or Rare earth to give ${seat}`);
     give(gem);
   }
-  for (const t of free.filter((t) => !hasGem(t) && !me.analysed.includes(index(t)))) {
-    if (owned().length >= 2) break;
+  // One plot left unanalysed whatever the seat already owns, then at least two plots in all.
+  const unanalysed = (t: Plot) => !hasGem(t) && !me.analysed.includes(index(t));
+  for (const t of free.filter(unanalysed)) {
+    if (owned().some(unanalysed) && owned().length >= 2) break;
     give(t);
   }
   // Another seat owns a plot, so "never lists another player's plot" is read against one.

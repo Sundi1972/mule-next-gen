@@ -8,6 +8,7 @@ import { colorOf, OfficesCard, Steps } from '../phone/hub/politics/parts';
 import { Ceremony, Progress, showOf } from '../phone/hub/politics/Reveal';
 import { JOB, listNames, namer, OFFICE_NAME, officeNames, promiseWords, termEnd } from '../phone/hub/politics/words';
 import { TvHeader } from './TableApp';
+import { TvBody } from './TvFit';
 
 /** Election day on the big screen (E-2): the announcement, the ballot, then the reveal. Never who voted for whom. */
 export function TvElection({ table, game }: { table: TableView<MuleView>; game: MuleView }) {
@@ -84,6 +85,7 @@ function TvAnnounce({ table, game }: { table: TableView<MuleView>; game: MuleVie
   return (
     <div className="flex h-[720px] w-[1280px] flex-col gap-5 bg-table px-10 py-7 text-ink" data-phase="planning" data-testid="tv-announce">
       <TvHeader game={game} title="Election day" />
+      <TvBody>
       <div className="flex items-center gap-6 animate-[show-card-in_0.6s_ease-out_both]">
         <h2 className="font-display text-6xl font-semibold" data-testid="tv-day-title">
           {officeNames().join(' and ')}
@@ -124,6 +126,7 @@ function TvAnnounce({ table, game }: { table: TableView<MuleView>; game: MuleVie
           </span>
         )}
       </div>
+      </TvBody>
     </div>
   );
 }
@@ -147,6 +150,7 @@ function TvBallot({ table, game }: { table: TableView<MuleView>; game: MuleView 
   return (
     <div className="flex h-[720px] w-[1280px] flex-col gap-4 bg-table px-10 py-7 text-ink" data-phase="planning" data-testid="tv-ballot">
       <TvHeader game={game} title="Election day · vote" />
+      <TvBody>
       <div className="flex items-center gap-6">
         <span className="font-display text-4xl font-semibold text-holo">Vote on your phone</span>
         <span className="text-2xl text-ink-2">Nobody sees for whom.</span>
@@ -230,6 +234,7 @@ function TvBallot({ table, game }: { table: TableView<MuleView>; game: MuleView 
           </tbody>
         </table>
       </section>
+      </TvBody>
     </div>
   );
 }
@@ -240,11 +245,13 @@ function TvReveal({ game }: { game: MuleView }) {
   return (
     <div className="relative flex h-[720px] w-[1280px] flex-col gap-4 overflow-hidden bg-table px-10 py-7 text-ink" data-phase="planning" data-testid="tv-reveal">
       <TvHeader game={game} title="Election day · the result" />
+      <TvBody>
       {show && <Ceremony game={game} show={show} size="tv" me={null} />}
       <div className="flex items-center justify-between">
         {show && <Progress game={game} show={show} size="tv" />}
         <Steps at={3} tv />
       </div>
+      </TvBody>
     </div>
   );
 }

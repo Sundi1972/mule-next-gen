@@ -137,7 +137,8 @@ export class Playbooks {
         } catch (err) {
           console.error(`playbooks: seat ${seat.id} has no development draft for month ${month}: ${messageOf(err)}`);
         }
-        const brief = landBrief(state, seat.mind, seat.brain.persona, drafted.land, seat.brain.heard(), last, development?.development ?? null);
+        // The mind for the month briefed: asked at upkeep, this month's adopted fields never shape next month's plans.
+        const brief = landBrief(state, seat.mindFor(month), seat.brain.persona, drafted.land, seat.brain.heard(), last, development?.development ?? null);
         const ask: Ask = { month, draft: drafted.playbook, written: null, started: false, controller: new AbortController(), development };
         this.asks.set(seat.id, ask);
         seat.playbookAsked(month);
