@@ -124,7 +124,7 @@ export function freePlots(state: GameState) {
 export function orderGeoDrone(state: GameState, playerId: string, plots: { x: number; y: number }[]): void {
   requirePhase(state, 'planning');
   const p = player(state, playerId);
-  if (p.droneOrder.length > 0) throw new RuleError('A drone is already on its way');
+  if (p.droneOrder.length > 0) throw new RuleError('A drone was already used this planning');
   if (plots.length === 0 || plots.length > DEVELOPMENT.dronePlots) throw new RuleError(`Pick 1 to ${DEVELOPMENT.dronePlots} plots`);
   const indices = plots.map(({ x, y }) => {
     const tile = plotAt(state, x, y);

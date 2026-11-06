@@ -1,5 +1,5 @@
 import { GOOD_CONFIG, PRICE, UPKEEP, WALK } from './config.js';
-import { colonyPrice, driftReference, monthlyDemand, shelfShort, shipInPort, shipPrice, storeForSale, storeSellPrice, storeWants, taxSale } from './economy.js';
+import { colonyPrice, driftReference, monthlyDemand, shelfShort, shipInPort, shipPrice, storeBuyPrice, storeForSale, storeSellPrice, storeWants, taxSale } from './economy.js';
 import { RuleError } from './errors.js';
 import { chargeExportTax } from './politics.js';
 import { monthNeeds, needsOf } from './production.js';
@@ -223,7 +223,7 @@ function skipBefore(state: GameState, good: Good, storeBuy: number, storeBudget:
 /** How a good would come up now: its store lines, budget and board, or why it is skipped. Reads the state only. */
 function comeUp(state: GameState, good: Good, demand: ReturnType<typeof monthlyDemand>) {
   const posted = colonyPrice(state, good);
-  const usualBuy = Math.max(1, Math.floor(posted * (1 - PRICE.storeSpread)));
+  const usualBuy = storeBuyPrice(posted);
   // A shelf that can't feed the colonists for a month: the store bids up to restock, still under what they can pay.
   const ceiling = Math.floor((UPKEEP.colonistBudget[good] ?? 0) / (1 + PRICE.storeSpread) ** 2); // literal-ok: the spread applies twice, store buys then sells
   const storeBuy = shelfShort(state, good, 1) ? Math.max(usualBuy, Math.min(ceiling, Math.ceil(posted * PRICE.restockPremium))) : usualBuy;

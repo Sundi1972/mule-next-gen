@@ -90,6 +90,19 @@ const MULE_PRESSES = 3; // literal-ok: a count of the rule's steps, not balance
 const fadesThisStep = (floor: DevFloor): boolean => floor.moments.glint !== null && floor.tick + 1 >= floor.moments.glint.untilTick;
 
 /**
+ * Whether colonist `c` can step onto the glint's tile in the coming step: the step gives the glint to a colonist on its
+ * tile before it fades it, so a glint fading this step is won only from within one step of the tile's nearest edge.
+ */
+function onGlintInStep(state: GameState, floor: DevFloor, c: FloorColonist, cfg: FloorConfig): boolean {
+  const g = floor.moments.glint;
+  if (!g) return false;
+  const step = (speedOf(c, state, cfg) * cfg.steer.tickMs) / MS_PER_SECOND;
+  const dx = Math.max(g.x - c.x, 0, c.x - (g.x + 1));
+  const dy = Math.max(g.y - c.y, 0, c.y - (g.y + 1));
+  return Math.hypot(dx, dy) <= step;
+}
+
+/**
  * Whether a rival may take the lit glint before this seat's GRAB applies: the press applies after the coming step, which
  * gives the glint to a colonist that steps onto its tile, and after the presses ahead of it in the tick's press order
  * (public: seat order and the tick). So a rival on the map may take it first from within a step of the glint's tile,
@@ -427,8 +440,9 @@ export class DevelopHand {
     const racing = g !== null && this.racingGlint === g.sinceTick;
     const spare = !cfg.steer.botsSpareTime || (racing && secondsLeft > pubSeconds(state, cfg, c) + this.margin(cfg, c) && this.fitsDetour(view, c, glintMiddle(g)));
     // A glint fading in the coming step is walked onto, not pressed for (`sure` is false): the step gives it to a
-    // colonist on its tile before it fades it.
-    if (g && racing && spare) {
+    // colonist on its tile before it fades it. Only from within that step: further off, it is gone before it is reached,
+    // and the tick's walk towards it is a walk off the errand, so the race is given up.
+    if (g && racing && spare && (!fading || onGlintInStep(state, floor, c, cfg))) {
       const input = this.chaser.seek(view, glintMiddle(g), sure ? 'grab' : 'none');
       if (input) return input;
     }
