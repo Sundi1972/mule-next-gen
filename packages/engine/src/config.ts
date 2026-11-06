@@ -995,8 +995,9 @@ export const POLITICS = {
 /**
  * The colony as a shared project: its prestige objects, one table row each. Every number is a placeholder
  * until the colony's sim tuning sets it and Heiko OKs it. An object's full cost is its credits plus its goods at
- * their reference prices; upkeep and repair are in credits. Pace set C (Heiko, 6 Nov) halved credits, goods (rounded
- * up, at least 1) and upkeep; buildMonths and repairCost are unchanged.
+ * their reference prices; upkeep and repair are in credits. Pace set C (Heiko, 6 Nov) halved credits (exactly: every
+ * old value was even, so no rounding), goods (rounded up, at least 1) and upkeep (rounded up); buildMonths and
+ * repairCost are unchanged.
  */
 export const PRESTIGE = {
   park: { name: 'Park', credits: 210, goods: { alloy: 1 }, buildMonths: 1, needsPlot: true, prestige: 2, upkeep: 15, repairCost: 150 },
