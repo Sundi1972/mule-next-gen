@@ -116,7 +116,8 @@ export async function theTvBodyFits(tv: Page, server: MuleServer, code: string, 
   await theTableHasSaid(tv, server, code);
   const lines = await stripLines(tv);
   check(lines === 1, `TV-FIT: in play the ${screen} TV's chat strip shows the newest line only, got ${lines}`);
-  const scale = await tv.locator('[data-phase] [data-fit]').first().getAttribute('data-fit');
+  const scale = await tv.evaluate(() => document.querySelector('[data-phase] [data-fit]')?.getAttribute('data-fit') ?? null);
+  check(scale !== null, `TV-FIT: the ${screen} TV's body sits in a fit box`);
   return `one chat line of 3, the body at scale ${scale}, the foot at y ${(await nothingPastTheFoot(tv, screen)).toFixed(0)}`;
 }
 
