@@ -376,8 +376,9 @@ first match wins
                            first, then Water; wells and plants are never turned off)
   5  medicine              max(replace, today's sickness cost)
   6  any other good        0 (no need)
-replace    = belief(good) × (1 + PRICE.storeSpread) × AI_VALUE.shortFloorMarkup: buying it
-           back next month, never valued below that
+replace    = max(belief(good) × (1 + PRICE.storeSpread) × AI_VALUE.shortFloorMarkup, today's
+           ask) while the store sells the good: what it costs to have the unit now, never valued
+           below that (AM-3); a needed unit the cash plan funds is bought at v ≥ ask
 unknown    the store won't sell the good (storeQuotes(…).sell null, WS5 §3) → replace is
            unknown: S(k) is the damage alone (the row's second term), no buy-back floor;
            the order is empty (no plot needs Energy) → row 1 gives replace only;
@@ -599,3 +600,20 @@ No ownership change.
 - `value.ts`, `strategist.ts`, `outlook.ts`, `sim.ts` and `config.ts`'s AI blocks remain WS1's; WS9 edits them as named edits.
 - `engine/src/playbook.ts` remains WS3's.
 - `packages/ai/src/playbook/**` remains WS9's.
+
+```
+AM-3 · 2026-11-06 · WS9 · building PR-1
+
+target    §2 RULE-2's replace floor; §1 C1, C2 (tradeDecision's buy loop)
+said      replace = next month's buy-back price (belief × (1 + spread) × markup)
+did       replace = max(that, today's ask) while the store sells; a needed unit the cash
+          plan funds is bought at v ≥ ask (ties buy); surplus units keep v > ask and λ
+because   hunger is decided at the next development and Energy is spent at the next
+          production, both before the next auction, so buying back next month can't avert
+          the damage. At a flat price the buy-back (posted × 1.1) never beats the ask (the
+          same number rounded up), so B-AC-1 stayed red and UBER-AC-1 (a) at about 50%
+          (G-1: buys what it is short of when it can pay). No number added.
+open      hunger's true damage (what a month of hungry development costs the seat) stays
+          today's walking-time estimate; pricing it fully is a balance-phase question
+          (Heiko, 4 Nov: functions first, balance at the end)
+```
