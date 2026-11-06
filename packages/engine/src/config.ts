@@ -1854,6 +1854,11 @@ export const AI_PLANS = {
     /** That consideration's score, 0 to 1, for an outfit that makes another good (the money-maker scores 1). */
     otherScore: 0.8,
   },
+  /** A factory good the seat can't feed yet, scored with the plots that would make its inputs. See AM-32. */
+  chain: {
+    /** The chain's MULEs, at the level's MULEs a month, must all be bought within this many months, from cash on hand. */
+    months: 3,
+  },
   monopoly: {
     /** The goods a seat may try to corner. Not Food: it spoils too fast (STRATEGIST.cornerMaxSpoilage). */
     goods: ['energy', 'smithore'] as Good[],
