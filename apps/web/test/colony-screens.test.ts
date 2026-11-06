@@ -433,7 +433,8 @@ describe('G-5 AM-12: the colony score at every month end (variant A)', () => {
     // HC-22 to the tag: with no score, the footnote is today's bare <p>, and no wrapper sits around the league or the panel.
     for (const colony of [null, { ...MONTH_7, score: null }]) {
       const view = end(colony);
-      const footnote = '<p class="mt-auto text-[11px] leading-snug text-ink-3" data-testid="colony-on-tv">How the colony is doing is on the TV. Worth is cash + goods + land + MULEs + offices; your own lines are beside, for you only.</p>';
+      // A game with a colony names donations in the rule (G-5 AM-12, #421); with none, today's words.
+      const footnote = `<p class="mt-auto text-[11px] leading-snug text-ink-3" data-testid="colony-on-tv">How the colony is doing is on the TV. Worth is cash + goods + land + MULEs + offices${colony ? ' + donations' : ''}; your own lines are beside, for you only.</p>`;
       const phoneLeague = renderToStaticMarkup(createElement(LeagueTable, { view, density: 'phone', selfId: 's1' }));
       // The footnote is the month end's last child, straight after the league: no wrapper around it.
       expect(element(onPhone(view, 1, Results), 'phone-monthend').endsWith(`${phoneLeague}${footnote}</div>`)).toBe(true);
