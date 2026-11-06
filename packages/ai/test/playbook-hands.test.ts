@@ -664,6 +664,9 @@ describe('the seat plays its development and auction parts (C4, RULE-6, RULE-7)'
     const edit = (state: GameState) => {
       landed(1, ['plains:food', 'river:water', 'plains:energy', 'volcanic', 'river'], [], false)(state);
       stocked(1)(state);
+      // The ship pays 200 for Crystite (its off-world price, which the store posts): the volcanic plot's analysis can
+      // show a mine worth more than the route's MULE.
+      Object.assign(state.store, { posted: { ...state.store.posted, crystite: 200 }, offWorld: { ...state.store.offWorld, crystite: 200 } });
     };
     // The seat keeps the plan it drafted at planning (C12): here it plays the plan it would draft on the built case,
     // adopted bare, with no part, so every part is still its own.
