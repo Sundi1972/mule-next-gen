@@ -1,11 +1,11 @@
 // Generates docs/explainers/colony-needs-colonists.html: WS7's part of the colony-needs explainer.
-// Run: node docs/explainers/colony-needs-colonists.gen.mjs docs/explainers/colony-needs-colonists.html [measurement-fragment.html]
+// Run: node docs/explainers/colony-needs-colonists.gen.mjs docs/explainers/colony-needs-colonists.html docs/explainers/colony-needs-colonists.measure.html
 // Every number on the page is computed here from the spec's rules (RULE-2..5), so page and spec agree.
 import { writeFileSync, readFileSync, existsSync } from 'node:fs';
 
 const OUT = process.argv[2];
 const MEASURE = process.argv[3]; // optional HTML fragment with the measurement table
-const P = { tol: 0.1, pow: 1.5, shock: 15, perH: 12, keep: 0.5, cap: 3, shrink: 0.1, fed: 1.04, maxStep: 5, base: 60 };
+const P = { tol: 0.1, pow: 1.5, shock: 8, perH: 6, keep: 0.5, cap: 2, shrink: 0.1, fed: 1.04, maxStep: 5, base: 60 };
 const g = (s) => (s <= P.tol ? 0 : ((s - P.tol) / (1 - P.tol)) ** P.pow);
 const step = (h, t) => Math.max(0, Math.min(100, Math.round(h + Math.max(-P.maxStep, Math.min(P.maxStep, t - h)))));
 const band = (h) => (h >= 80 ? 'Thriving' : h >= 60 ? 'Content' : h >= 40 ? 'Restless' : h >= 20 ? 'Unhappy' : 'Unrest');
@@ -70,7 +70,7 @@ function chart1() {
   const x = (v) => L + (v / 100) * pw;
   const y = (v) => T + ((0 - v) / 20) * ph; // 0 at top, -20 at bottom
   let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-labelledby="c1t c1d" class="chart">`;
-  s += `<title id="c1t">Mood change in one month, by how much Food was missing</title><desc id="c1d">Recommended rule: no change up to 10% short, then a growing drop to 20 points at 100% short. Thin rule: stops at 5 points from 40% short. Today: 5 points for any shortfall.</desc>`;
+  s += `<title id="c1t">Mood change in one month, by how much Food was missing</title><desc id="c1d">Recommended rule: no change up to 20% short, then a growing drop to 13 points at 100% short. Thin rule: stops at 5 points from 40% short. Today: 5 points for any shortfall.</desc>`;
   for (let v = 0; v >= -20; v -= 5) s += `<line x1="${L}" x2="${L + pw}" y1="${y(v)}" y2="${y(v)}" class="grid"/><text x="${L - 8}" y="${y(v) + 4}" class="tick" text-anchor="end">${v === 0 ? '0' : '−' + -v}</text>`;
   for (let v = 0; v <= 100; v += 20) s += `<text x="${x(v)}" y="${T + ph + 18}" class="tick" text-anchor="middle">${v}%</text>`;
   s += `<line x1="${L}" x2="${L + pw}" y1="${y(0)}" y2="${y(0)}" class="axis"/>`;
@@ -99,7 +99,7 @@ function chart2() {
   const x = (v) => L + (v / 8) * pw;
   const y = (v) => T + ((100 - v) / 100) * ph;
   let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-labelledby="c2t c2d" class="chart">`;
-  s += `<title id="c2t">The colony's mood over eight months under three kinds of hardship</title><desc id="c2d">Starting Content at 60. Your example recovers to Content by month 5. Half rations every month settle at 49, Restless. No Food at all reaches Unrest in month 3 and 0 in month 5.</desc>`;
+  s += `<title id="c2t">The colony's mood over eight months under three kinds of hardship</title><desc id="c2d">Starting Content at 60. Your example is back to Content in month 4. Half rations every month settle at 54, Restless. No Food at all falls about 3 points a month, to 25 by month 8.</desc>`;
   const bands = [['Thriving', 80, 100], ['Content', 60, 80], ['Restless', 40, 60], ['Unhappy', 20, 40], ['Unrest', 0, 20]];
   bands.forEach(([n, lo, hi], i) => {
     s += `<rect x="${L}" y="${y(hi)}" width="${pw}" height="${y(lo) - y(hi)}" class="${i % 2 ? 'bandB' : 'bandA'}"/><text x="${L - 34}" y="${(y(hi) + y(lo)) / 2 + 4}" class="bandname" text-anchor="end">${n}</text>`;
@@ -176,9 +176,9 @@ th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--grid
 <ul>
 <li><b>Colonists never pay.</b> They take their Food and Water from the store's shelf, free. The store already keeps a month of their need back from the players, so they come first. The month-end line says how much they got: "The store fed the colony's 400 colonists 19 of 20 Food and all their Water." A dear Food price never starves them while the shelf has Food.</li>
 <li><b>A small miss is shrugged off.</b> Missing 1 Food of 20 changes nothing: the mood holds and the colony still grows. Today that same miss costs 5 mood points and 5% of the colonists.</li>
-<li><b>A big miss bites at once, and harder the bigger it is.</b> Half rations: the mood drops 8 that month, from Content 60 to Restless 52, and the colony shrinks 5%. No Food at all: the mood drops 20 in one month and the colony shrinks 10%. Today every miss costs the same 5 points and 5%, whether one unit was missing or all of them.</li>
-<li><b>The colony remembers.</b> After a hungry month, feeding them again lifts the mood, but slowly: for a few months it aims a little lower than before. Hunger month after month piles up. Half rations every month settle the mood around 49, Restless; no Food at all takes it into Unrest in three months.</li>
-<li><b>Hard times make trouble likelier.</b> While the memory of hunger lasts, riots, strikes and emigration waves come up more often, up to two and a half times their usual odds.</li>
+<li><b>A big miss bites at once, and harder the bigger it is.</b> Half rations: the mood drops 4 that month, from Content 60 to Restless 56, and the colony shrinks 5%. No Food at all: the mood drops 13 in one month and the colony shrinks 10%. Today every miss costs the same 5 points and 5%, whether one unit was missing or all of them.</li>
+<li><b>The colony remembers.</b> After a hungry month, feeding them again lifts the mood, but slowly: for a few months it aims a little lower than before. Hunger month after month piles up. Half rations every month settle the mood around 54, Restless; no Food at all keeps it falling about 3 points a month, into Unhappy by month 4.</li>
+<li><b>Hard times make trouble likelier.</b> While the memory of hunger lasts, riots, strikes and emigration waves come up more often, up to one and a half times their usual odds.</li>
 <li><b>The colony's size follows the shortfall.</b> Fed, or missing up to a tenth, it grows 4% a month. Short of more than that, it shrinks by a tenth of the share missing: 2% at a fifth short, 10% with nothing to eat. The mood adds a little on top: a thriving colony draws settlers, an unhappy one loses them.</li>
 </ul>
 
@@ -208,8 +208,8 @@ ${chart2()}
 <div class="scroll">${worked}</div>
 <ul>
 <li><b>Month 1, 19 of 20.</b> A 5% miss is inside the tolerance. Nothing happens, and the colony grows. Today it would cost 5 mood points and 5% of the colonists.</li>
-<li><b>Month 2, 10 of 20.</b> Half rations. The mood drifts down 4 and the hunger lands at once for 4 more: 52, Restless. The colony shrinks 5%, and riots and strikes become 15% likelier.</li>
-<li><b>Month 3, fed.</b> The mood climbs, but the memory still holds it under 60: 57, still Restless. The colony grows 3% (4% less 1% for being Restless). Fed again, it reaches 59 in month 4 and 60, Content, in month 5.</li>
+<li><b>Month 2, 10 of 20.</b> Half rations. The mood drifts down 2 and the hunger lands at once for 2 more: 56, Restless. The colony shrinks 5%, and riots and strikes become 7% likelier.</li>
+<li><b>Month 3, fed.</b> The mood climbs, but the memory still holds it under 60: 59, still Restless. The colony grows 3% (4% less 1% for being Restless). Fed again, it is back at 60, Content, in month 4.</li>
 </ul>
 
 <h2>How often each mood shows up: ten simulated games</h2>
@@ -230,8 +230,8 @@ ${measure}
 <div class="decision">
 <h3>2 · How should the mood react to a shortfall?</h3>
 <ul>
-<li><b>Curve, memory and an immediate blow</b> (the rule above). <i>For:</i> a bigger shortfall hurts more in the same month, and a long one keeps hurting; the charts above are this rule. <i>Against:</i> the most numbers to tune (seven).</li>
-<li><b>Curve only, inside the 5-point monthly limit.</b> <i>For:</i> simplest, half the work. <i>Against:</i> every shortfall from 40% up costs the same 5 points a month (the orange line), so it brings back today's flat cliff, only at 40% instead of 1 unit.</li>
+<li><b>Curve, memory and an immediate blow</b> (the rule above). <i>For:</i> a bigger shortfall hurts more in the same month, and a long one keeps hurting; the charts above are this rule. <i>Against:</i> the most numbers to tune (seven); in today's underfed colony it makes most months Unhappy (see the simulation).</li>
+<li><b>Curve only, inside the 5-point monthly limit.</b> <i>For:</i> simplest, half the work, and the gentlest in today's underfed colony. <i>Against:</i> every shortfall from 40% up costs the same 5 points a month (the orange line), so it brings back today's flat cliff, only at 40% instead of 1 unit.</li>
 <li><b>Lift the 5-point limit.</b> <i>For:</i> the curve shows in full at once. <i>Against:</i> the limit also governs tax, air and prestige, so a tax change would jolt the mood too.</li>
 </ul>
 <p class="rec"><b>Recommended: curve, memory and an immediate blow.</b> It is the only one where "the worse the crisis, the more unhappy they get" shows in a single month.</p>
@@ -248,7 +248,7 @@ ${measure}
 
 <div class="decision">
 <h3>4 · The starting numbers</h3>
-<p>Tolerance: a tenth. The curve's bend: 1.5. The blow: 15 points at no Food. The memory: 12 points lower aim per unit, halved each fed month, capped at 3. Unrest odds: up by half per unit of memory. The colony shrinks by a tenth of the share missing.</p>
+<p>Tolerance: a tenth. The curve's bend: 1.5. The blow: 8 points at no Food. The memory: 6 points lower aim per unit, halved each fed month, capped at 2. Unrest odds: up by a quarter per unit of memory. The colony shrinks by a tenth of the share missing. A harsher first set (a blow of 15, 12 points per unit, odds up by half) sent 8 of 10 simulated games into Unrest; this set is the one that did not.</p>
 <ul>
 <li><b>Take them as starting values</b>, to be tuned with the rest of the colony's numbers at the end. <i>For:</i> builds can go ahead now. <i>Against:</i> early playtests feel these values.</li>
 <li><b>Gentler or harsher now.</b> <i>For:</i> you set the feel directly; the first chart shows what each shortfall costs. <i>Against:</i> tuning before the simulation has measured the whole package.</li>
@@ -264,6 +264,16 @@ ${measure}
 <li><b>An off-world grant pays the store for what the colonists take.</b> <i>For:</i> keeps the store's books as they were. <i>Against:</i> money that nobody sees, for no effect.</li>
 </ul>
 <p class="rec"><b>Recommended: nothing replaces them.</b></p>
+</div>
+
+<div class="decision">
+<h3>6 · Bring in hardship together with the supply fix, or on its own first?</h3>
+<p>Today's simulated colony is short of Food or Water in 91 of 120 months, more than half short in 79. Any rule that counts how short they went makes that colony unhappier than today's flat 5 points does.</p>
+<ul>
+<li><b>Together with the new consumption and demand, tuned in one pass.</b> <i>For:</i> players first meet hardship in a colony that can be fed, so a hungry month means something. <i>Against:</i> hardship waits for the supply work.</li>
+<li><b>On its own, now.</b> <i>For:</i> the colony's real hunger shows at once. <i>Against:</i> most months would read Unhappy until supply catches up, and players would learn to ignore the mood.</li>
+</ul>
+<p class="rec"><b>Recommended: together.</b></p>
 </div>
 </main>
 </body>
