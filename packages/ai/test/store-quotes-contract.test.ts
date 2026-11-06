@@ -1,8 +1,24 @@
 import { describe, expect, it } from 'vitest';
-import { expectedOffWorld, GOODS, nextPostedPrice, observe, storeForSale, storeQuotes, storeWants, type GameState } from '@mule/engine';
+import {
+  advancePhase,
+  auctionDone,
+  createGame,
+  expectedOffWorld,
+  GOODS,
+  nextPostedPrice,
+  observe,
+  stepAuction,
+  storeForSale,
+  storeQuotes,
+  storeWants,
+  WALK,
+  type GameState,
+  type Good,
+} from '@mule/engine';
 import { simSeats } from '../src/lineup.js';
 import { outlook } from '../src/outlook.js';
 import { playGame } from '../src/play.js';
+import { expectedPrices } from '../src/strategist.js';
 
 /**
  * The AI price contract (pricing spec §3, HC-3, HC-5): the AI seats read prices only through nextPostedPrice,
@@ -60,4 +76,50 @@ describe("pricing §3: the AI's prices are the store's own rule", () => {
     // Without a walk's lesson at some upkeep, the stage check above compares nothing with nothing.
     expect(walked, 'some upkeep held a walk lesson').toBeGreaterThan(0);
   }, 60_000);
+});
+
+describe("pricing HC-4: off the auction, the AI expects the store's capped buy line", () => {
+  /** Month 1's auction: the colony holds `food` and `water` (all in p0's depot, none on the store's shelf), so the store posts from that. */
+  function auctionHolding(food: number, water: number): GameState {
+    const state = createGame({ seed: 11, players: [0, 1, 2, 3].map((i) => ({ id: `p${i}`, name: `P${i}`, isAi: false })) });
+    while (state.phase !== 'production') advancePhase(state);
+    state.store.stock.food = 0;
+    state.store.stock.water = 0;
+    state.players.forEach((p, i) => Object.assign(p.stock, { food: i === 0 ? food : 0, water: i === 0 ? water : 0 }));
+    advancePhase(state);
+    expect(state.phase, 'the premise: the store has posted').toBe('auction');
+    return state;
+  }
+
+  /** Everyone Done until `good` is the good on the status screen. */
+  function untilUp(state: GameState, good: Good): void {
+    for (let step = 0; state.auction!.good !== good; step++) {
+      expect(step, `${good} comes up`).toBeLessThan(1_000);
+      for (const p of state.players) auctionDone(state, p.id);
+      stepAuction(state, WALK.tickMs);
+    }
+  }
+
+  it.each([
+    { good: 'food' as const, other: 'water' as const, line: 96 },
+    { good: 'water' as const, other: 'food' as const, line: 76 },
+  ])("price T-AC-2: in a severe $good month the AI expects, while $other is up, what it gets when $good comes up (store buys at $line)", ({ good, other, line }) => {
+    const state = auctionHolding(4, 4);
+    expect(state.store.band?.[good], 'the premise: severe').toBe('severe');
+    // The off-auction view first when Water is the good, since Food comes up before it.
+    const offFirst = good === 'water';
+    let off = 0;
+    if (offFirst) {
+      untilUp(state, other);
+      off = expectedPrices(observe(state, 'p0'), good).sell;
+    }
+    untilUp(state, good);
+    expect(state.auction!.storeBuy, "the premise: the colonists' cap sets the store's line").toBe(line);
+    const on = expectedPrices(observe(state, 'p0'), good).sell;
+    if (!offFirst) {
+      untilUp(state, other);
+      off = expectedPrices(observe(state, 'p0'), good).sell;
+    }
+    expect(off).toBe(on);
+  });
 });

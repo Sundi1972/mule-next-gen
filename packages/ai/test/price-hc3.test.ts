@@ -22,9 +22,8 @@ function sources(group: string): string[] {
     .map((f) => relative(ROOT, f));
 }
 
-/** `file:line` for each line naming one of `names` as a whole identifier: a destructured or bracketed read counts too. */
-function hits(files: readonly string[], names: readonly string[]): string[] {
-  const pattern = new RegExp(`\\b(${names.join('|')})\\b`);
+/** `file:line` for each line naming one of `names` as a whole identifier (a destructured or bracketed read counts too), or matching `pattern`. */
+function hits(files: readonly string[], names: readonly string[], pattern = new RegExp(`\\b(${names.join('|')})\\b`)): string[] {
   return files.flatMap((file) =>
     readFileSync(join(ROOT, file), 'utf8')
       .split('\n')
@@ -44,5 +43,12 @@ describe('price HC-3: no copy of the store spread outside economy.ts', () => {
   it("price HC-3: the AI never reaches past storeQuotes to the engine's numeric core or its rounding", () => {
     const ai = files.filter((f) => f.startsWith('packages/ai/src/'));
     expect(hits(ai, ['storeLines', 'storeSellPrice']), 'the AI reads storeQuotes or the forecast helpers, never storeLines or storeSellPrice').toEqual([]);
+  });
+
+  it("price HC-3: the AI re-derives neither HC-4's cap nor a band's margin: storeBuyAt and colonistAffordable carry both", () => {
+    const ai = files.filter((f) => f.startsWith('packages/ai/src/'));
+    expect(hits(ai, ['colonistBudget']), "the colonists' budget is the cap's input: the AI reads the cap through storeBuyAt").toEqual([]);
+    // A margin typed out as a literal: 1 - 0.15, 1+.25. Read from config, it is bandSpread, which the scan above catches.
+    expect(hits(ai, [], /\b1 ?[-+] ?0?\.\d/), "a spread's margin is read through storeBuyAt and storeSellAt").toEqual([]);
   });
 });

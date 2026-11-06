@@ -278,13 +278,24 @@ export function storeSellAt(state: GameState, good: Good, mid: number, { exact =
   return Math.abs(line - whole) <= Number.EPSILON * line ? whole : Math.ceil(line);
 }
 
-/** What the store pays for a good around a mid price, with its band's spread: rounded down to at least 1, or unrounded with `exact`. */
+/**
+ * What the store pays for a good around a mid price, with its band's spread: rounded down to at least 1, or unrounded
+ * with `exact`. Never more for Food or Water than colonists can pay once the store sells it on (pricing HC-4).
+ */
 export function storeBuyAt(state: GameState, good: Good, mid: number, { exact = false } = {}): number {
   const line = mid * (1 - spreadOf(state, good).under);
-  if (exact) return line;
+  const cap = colonistCap(state, good);
+  if (exact) return Math.min(line, cap);
   const whole = Math.round(line);
   // The sell side's float, mirrored: 1 - 0.3 is a hair under 0.7, so 90 × 0.7 lands a hair under 63: that close, it is 63.
-  return Math.max(1, Math.abs(line - whole) <= Number.EPSILON * line ? whole : Math.floor(line));
+  const rounded = Math.abs(line - whole) <= Number.EPSILON * line ? whole : Math.floor(line);
+  return Math.max(1, Math.min(rounded, Math.floor(cap)));
+}
+
+/** HC-4's cap on the store's Food and Water buy line, unrounded: the colonists' budget less the spread twice; none for other goods. */
+function colonistCap(state: GameState, good: Good): number {
+  if (good !== 'food' && good !== 'water') return Infinity;
+  return (UPKEEP.colonistBudget[good] ?? 0) / (1 + spreadOf(state, good).over) ** 2; // literal-ok: the spread applies twice, store buys then sells
 }
 
 /** The highest mid price whose exact selling line the colonists' budget for a good still covers. */
@@ -293,16 +304,12 @@ export function colonistAffordable(state: GameState, good: Good): number {
 }
 
 /**
- * The store's two lines for a good, whether or not it trades today: the auction's board is drawn around both. It never
- * buys Food or Water above what colonists can pay once it sells on (pricing HC-4), nor above its own selling price.
+ * The store's two lines for a good at its posted price, whether or not it trades today: the auction's board is drawn
+ * around both. It never buys above its own selling price.
  */
 export function storeLines(state: GameState, good: Good): { buy: number; sell: number } {
   const posted = colonyPrice(state, good);
-  let buy = storeBuyAt(state, good, posted);
-  if (good === 'food' || good === 'water') {
-    const cap = Math.floor((UPKEEP.colonistBudget[good] ?? 0) / (1 + spreadOf(state, good).over) ** 2); // literal-ok: the spread applies twice, store buys then sells
-    buy = Math.max(1, Math.min(buy, cap));
-  }
+  const buy = storeBuyAt(state, good, posted);
   return { buy, sell: Math.max(storeSellAt(state, good, posted), buy + 1) };
 }
 

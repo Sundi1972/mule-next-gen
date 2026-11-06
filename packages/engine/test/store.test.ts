@@ -5,6 +5,7 @@ import {
   createGame,
   MULE,
   mulesWanted,
+  PRICE,
   runUpkeep,
   startAuction,
   stepAuction,
@@ -87,14 +88,15 @@ describe('the corral keeps its size when a grant gives one claim (Heiko, 5 Nov)'
 
 describe('pricing C2: one selling price', () => {
   /**
-   * Plays a game where nobody acts, calling `look` at the state each good comes up in. Every player is done at once,
-   * so each good's status screen and walk end on the next step.
+   * Plays a game where nobody acts, calling `look` at the state each good comes up in, and `arrange` at each production
+   * before the store posts. Every player is done at once, so each good's status screen and walk end on the next step.
    */
-  function eachComeUp(seed: number, look: (state: GameState, good: Good) => void): void {
+  function eachComeUp(seed: number, look: (state: GameState, good: Good) => void, arrange: (state: GameState) => void = () => {}): void {
     // literal-ok: long enough for the colonists to eat the store's Food and Water shelves short
     const state = createGame({ seed, players: SEATS.map((id) => ({ id, name: id, isAi: false })), maxMonths: 8 });
     while (state.phase !== 'gameOver') {
       advancePhase(state);
+      if (state.phase === 'production') arrange(state);
       if (state.phase !== 'auction') continue;
       let up: Good | null = null;
       for (let step = 0; state.auction!.stage !== 'over'; step++) {
@@ -108,14 +110,26 @@ describe('pricing C2: one selling price', () => {
     }
   }
 
-  it('price T-AC-6: one selling price: storeQuotes equals comeUp\'s lines, for every good over 20 seeded games', () => {
+  it('price T-AC-6: one selling price: storeQuotes equals comeUp\'s lines, for every good over 21 seeded games', () => {
     let banded = 0;
-    for (let seed = 401; seed <= 420; seed++)
-      eachComeUp(seed, (state, good) => {
-        if ((state.store.band?.[good] ?? 'normal') !== 'normal') banded++;
-        expect(storeQuotes(state, good), `seed ${seed}, month ${state.month}, ${good}`).toEqual({ buy: storeBuyLine(state), sell: storeSellLine(state) });
-      });
+    let capped = 0;
+    const look = (seed: number) => (state: GameState, good: Good) => {
+      const band = state.store.band?.[good] ?? 'normal';
+      if (band !== 'normal') banded++;
+      const spreadLine = Math.floor(state.store.posted[good] * (1 - PRICE.bandSpread[band].under));
+      if ((good === 'food' || good === 'water') && state.auction!.storeBuy < spreadLine) capped++;
+      expect(storeQuotes(state, good), `seed ${seed}, month ${state.month}, ${good}`).toEqual({ buy: storeBuyLine(state), sell: storeSellLine(state) });
+    };
+    for (let seed = 401; seed <= 420; seed++) eachComeUp(seed, look(seed));
+    // A colony kept at 4 Food and 4 Water, all in one depot so both still come up: severe every month.
+    const starve = (state: GameState) => {
+      Object.assign(state.store.stock, { food: 0, water: 0 });
+      state.players.forEach((p, i) => Object.assign(p.stock, { food: i === 0 ? 4 : 0, water: i === 0 ? 4 : 0 }));
+    };
+    eachComeUp(421, look(421), starve);
     // Without a good posted outside the normal band its own spread never runs, and the two could differ unseen.
     expect(banded, 'a good came up in a band other than normal').toBeGreaterThan(0);
+    // Likewise HC-4's cap: unless it binds somewhere, the two could apply it differently unseen.
+    expect(capped, "Food or Water came up with the colonists' cap under the band's line").toBeGreaterThan(0);
   });
 });
