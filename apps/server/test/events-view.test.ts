@@ -90,9 +90,13 @@ const fourSeats = [
 // and the slower auction walk and trade pace (#376, 5 Nov) moved seed 404's pest swarm: re-searched over seeds 1-120.
 // With trunk's batch 33 no seed of 1-60 fires both a comet pass with a pest swarm and a comet pass alone, so the lone
 // comet has a seed of its own (searched over seeds 1-60, months 1-10).
-const REAL_SEED = 17;
-/** Production fires a colony comet pass, then a personal pest swarm. */
-const TWO_EVENT_MONTH = 6;
+// Re-picked for #366, the plotless-seat fix: its month-1 plots moved seed 17's game, whose month 6 now rolls a solar
+// flare before the comet pass and the pest swarm; seed 56, picked then, was moved by trunk's batches 36-37. Searched
+// again over seeds 1-60, months 1-6: seed 29 fires a solar flare and a bumper harvest in month 2, a colony headline then
+// a personal spotlight as before, and nothing in month 3.
+const REAL_SEED = 29;
+/** Production fires a colony solar flare, then a personal bumper harvest. */
+const TWO_EVENT_MONTH = 2;
 /** On ONE_EVENT_SEED, production fires a colony comet pass and nothing else. */
 const ONE_EVENT_SEED = 10;
 const ONE_EVENT_MONTH = 2;
@@ -148,15 +152,15 @@ describe('the event show on real engine months: the view plays exactly what the 
     lone = playedLone();
   }, PLAY_MONTHS_MS);
 
-  it('T-AC-1, T-AC-2: a real month firing comet pass and pest swarm runs production its show, the events 14 000 ms of it, each event its own share', () => {
+  it('T-AC-1, T-AC-2: a real month firing solar flare and bumper harvest runs production its show, the events 14 000 ms of it, each event its own share', () => {
     const { report, production, length } = month(TWO_EVENT_MONTH);
     expect(report.events?.map(({ key, scope }) => ({ key, scope }))).toEqual([
-      { key: 'cometPass', scope: 'colony' },
-      { key: 'pestSwarm', scope: 'personal' },
+      { key: 'solarFlare', scope: 'colony' },
+      { key: 'bumperHarvest', scope: 'personal' },
     ]);
     expect(production.events.map(({ key, phase, weight, playMs }) => ({ key, phase, weight, playMs }))).toEqual([
-      { key: 'cometPass', phase: 'production', weight: 'headline', playMs: 7_000 },
-      { key: 'pestSwarm', phase: 'production', weight: 'spotlight', playMs: 5_200 },
+      { key: 'solarFlare', phase: 'production', weight: 'headline', playMs: 7_000 },
+      { key: 'bumperHarvest', phase: 'production', weight: 'spotlight', playMs: 5_200 },
     ]);
     // RULE-1: a 1 800 ms intro and 12 200 ms of stories make a 14 000 ms show, inside production's (AM-19 RULE-3).
     expect(production.introMs).toBe(1_800);
@@ -277,11 +281,11 @@ describe('T-AC-10: the view carries the current phase\'s events, when their show
     lone = playedLone();
   }, PLAY_MONTHS_MS);
 
-  it('T-AC-10: the view carries the phase\'s events with startsAt and showMs: a real comet pass and pest swarm, as production lists them', () => {
+  it('T-AC-10: the view carries the phase\'s events with startsAt and showMs: a real solar flare and bumper harvest, as production lists them', () => {
     const { view, at, production } = month(TWO_EVENT_MONTH);
     expect(view.events!.map(({ key, phase, weight, playMs }) => ({ key, phase, weight, playMs }))).toEqual([
-      { key: 'cometPass', phase: 'production', weight: 'headline', playMs: 7_000 },
-      { key: 'pestSwarm', phase: 'production', weight: 'spotlight', playMs: 5_200 },
+      { key: 'solarFlare', phase: 'production', weight: 'headline', playMs: 7_000 },
+      { key: 'bumperHarvest', phase: 'production', weight: 'spotlight', playMs: 5_200 },
     ]);
     // One shape for every phase: production's own list is the same list, field for field.
     expect(view.events).toEqual(production.events);
@@ -293,11 +297,11 @@ describe('T-AC-10: the view carries the current phase\'s events, when their show
 
   it('T-AC-10: a personal event names the player whose land it started on; a colony event names nobody', () => {
     const { view, report } = month(TWO_EVENT_MONTH);
-    const swarmOwner = report.events![1]!.player;
-    expect(swarmOwner).toMatch(/^s\d$/);
+    const harvestOwner = report.events![1]!.player;
+    expect(harvestOwner).toMatch(/^s\d$/);
     expect(view.events!.map(({ key, scope, player }) => ({ key, scope, player }))).toEqual([
-      { key: 'cometPass', scope: 'colony', player: undefined },
-      { key: 'pestSwarm', scope: 'personal', player: swarmOwner },
+      { key: 'solarFlare', scope: 'colony', player: undefined },
+      { key: 'bumperHarvest', scope: 'personal', player: harvestOwner },
     ]);
     expect('player' in view.events![0]!).toBe(false);
   });
@@ -381,7 +385,7 @@ describe('T-AC-10: the view carries the current phase\'s events, when their show
     const shown: ShowEventView = one;
     const listed: ShowEventView[] = view.events!;
     const timeline: ShowTimeline = { events: view.events!, introMs: view.eventShow!.introMs };
-    expect(shown.key).toBe('cometPass');
+    expect(shown.key).toBe('solarFlare');
     expect(listed).toHaveLength(2);
     expect(timeline.events).toBe(view.events);
   });
