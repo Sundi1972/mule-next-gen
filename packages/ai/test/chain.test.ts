@@ -200,33 +200,50 @@ describe('a factory chain (AM-33)', () => {
     expect(draftStrategyOf({ state, seat: ME, mind: seatOf().mind, seed: 11, phase: 'development' }).moneyMaker).not.toBe('electronics');
   }));
 
-  it('B-AC-11: a short seat never lists a MULE its chain depends on, fed or unfed, and lists the same MULE without a chain', () => withChains(() => {
-    // Planning, broke, its Food and Energy MULEs its last (never listed): the plots before them are what it can list.
-    const broke = (plots: Parameters<typeof development>[0]) => {
-      const state = development([...plots, { x: 12, ground: { food: 2 }, outfit: 'food' }, { x: 14, outfit: 'energy' }], DEAR);
-      state.phase = 'planning';
-      state.players.find((p) => p.id === ME)!.money = 0;
-      return state;
-    };
-    const listed = (state: GameState, moneyMaker: Good) => {
-      const strategy: Strategy = { kind: 'specialist', moneyMaker, monopolyTarget: null, cashFloor: 0, landTarget: { plots: 3, byMonth: 2 }, stances: {}, reason: '' };
-      return (draftPlanningPart({ state, seat: ME, mind: seatOf().mind, seed: 11, phase: 'planning', strategy }).list ?? []).map((l) => l.plot);
-    };
-    // A Smithore mine, the only source of Smithore, and Alloy the money-maker.
-    for (const smithore of [4, 1]) {
-      const state = broke([{ x: 0, ground: { smithore }, outfit: 'smithore' }]);
-      expect(canFeed(state, ME, 'alloy'), `Alloy fed on Smithore ground ${smithore}`).toBe(smithore >= 4);
-      expect(listed(state, 'food'), `Smithore ${smithore}: without a chain the mine is listed`).toContain(0);
-      // Fed, it is no standing link, but without it Alloy can't be fed: kept. Unfed, it is the standing link: kept.
-      expect(listed(state, 'alloy'), `Smithore ${smithore}: the chain keeps its mine`).not.toContain(0);
+  it('B-AC-11: a short seat never lists a MULE its chain depends on, half built or whole, fed or not, and lists the same MULE without a chain', () => withChains(() => {
+    // Planning, broke, its Food and Energy MULEs its last (never listed); every other lot it can list shows, the cap
+    // raised past them, and a Crystite mine on plot 6 is the decoy no chain needs.
+    const cap = AI_PLANS.sell.perMonth;
+    AI_PLANS.sell.perMonth = 20;
+    try {
+      const broke = (plots: Parameters<typeof development>[0]) => {
+        const state = development([...plots, { x: 12, ground: { food: 2 }, outfit: 'food' }, { x: 14, outfit: 'energy' }], DEAR);
+        state.phase = 'planning';
+        state.players.find((p) => p.id === ME)!.money = 0;
+        return state;
+      };
+      const listed = (state: GameState, moneyMaker: Good) => {
+        const strategy: Strategy = { kind: 'specialist', moneyMaker, monopolyTarget: null, cashFloor: 0, landTarget: { plots: 3, byMonth: 2 }, stances: {}, reason: '' };
+        return (draftPlanningPart({ state, seat: ME, mind: seatOf().mind, seed: 11, phase: 'planning', strategy }).list ?? []).map((l) => l.plot);
+      };
+      /** Under a Food plan every chain plot and the decoy are listed; under `moneyMaker`'s chain none of `chain` is, and the decoy is. */
+      const keeps = (state: GameState, moneyMaker: Good, chain: number[], what: string) => {
+        expect(listed(state, 'food'), `${what}: without a chain`).toEqual(expect.arrayContaining([...chain, 6]));
+        const kept = listed(state, moneyMaker);
+        expect(kept.filter((x) => chain.includes(x)), `${what}: the chain keeps its MULEs`).toEqual([]);
+        expect(kept, `${what}: and still lists a MULE it doesn't need`).toContain(6);
+      };
+      const decoy = { x: 6, ground: { crystite: 1 }, outfit: 'crystite' as const };
+      // A Smithore mine, the only source of Smithore, and Alloy the money-maker: fed on rich ground, unfed on thin.
+      for (const smithore of [4, 1]) {
+        const state = broke([{ x: 0, ground: { smithore }, outfit: 'smithore' }, decoy]);
+        expect(canFeed(state, ME, 'alloy'), `Alloy fed on Smithore ground ${smithore}`).toBe(smithore >= 4);
+        keeps(state, 'alloy', [0], `Smithore ${smithore}`);
+      }
+      // Half built, Electronics the plan: the Rare earth and Smithore mines stand, no Alloy works yet.
+      keeps(broke([{ x: 0, ground: { rareEarth: 4 }, outfit: 'rareEarth' }, { x: 2, ground: { smithore: 4 }, outfit: 'smithore' }, decoy]), 'electronics', [0, 2], 'half built');
+      // The whole chain but its works: Rare earth, Smithore and an Alloy works, fed, so no standing links.
+      const whole = [{ x: 0, ground: { rareEarth: 4 }, outfit: 'rareEarth' as const }, { x: 2, ground: { smithore: 4 }, outfit: 'smithore' as const }, { x: 4, outfit: 'alloy' as const }, decoy];
+      const chain = broke(whole);
+      expect(standingLinks(observe(chain, ME), ME, 'electronics')).toEqual([]);
+      keeps(chain, 'electronics', [0, 2, 4], 'whole');
+      // The same with 20 Smithore in stock, enough for the Alloy works without the mine for as long as canFeed looks.
+      const stocked = broke(whole);
+      stocked.players.find((p) => p.id === ME)!.stock.smithore = 20;
+      keeps(stocked, 'electronics', [0, 2, 4], 'whole, Smithore stocked');
+    } finally {
+      AI_PLANS.sell.perMonth = cap;
     }
-    // The whole chain to Electronics but its works: Rare earth, Smithore and an Alloy works, fed, so no standing links.
-    const chain = broke([{ x: 0, ground: { rareEarth: 4 }, outfit: 'rareEarth' }, { x: 2, ground: { smithore: 4 }, outfit: 'smithore' }, { x: 4, outfit: 'alloy' }, { x: 6, ground: { crystite: 1 }, outfit: 'crystite' }]);
-    expect(standingLinks(observe(chain, ME), ME, 'electronics')).toEqual([]);
-    expect(listed(chain, 'food'), 'without a chain the Alloy works is listed').toContain(4);
-    const kept = listed(chain, 'electronics');
-    expect(kept.filter((x) => [0, 2, 4].includes(x)), 'the chain keeps its mines and its own Alloy works').toEqual([]);
-    expect(kept, 'and still lists a MULE it doesn\'t need').toContain(6);
   }));
 
   it("B-AC-11: with an Alloy works standing, the strategist values a Smithore link by the draft's chain: its share of Alloy's 2 a run", () => withChains(() => {
