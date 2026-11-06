@@ -238,7 +238,7 @@ export const MOVES: MoveTable = {
       `Sends the geo drone over 1 to ${DEVELOPMENT.dronePlots} free or listed plots for ${DEVELOPMENT.droneFee} credits: their ground is known at once, in this planning.`,
     legalWhen: () => [
       refused('it is planning', 'Not allowed during <phase>'),
-      refused('no drone of yours is on its way', 'A drone is already on its way'),
+      refused('you have not sent a drone this planning', 'A drone was already used this planning'),
       refused(`1 to ${DEVELOPMENT.dronePlots} plots`, `Pick 1 to ${DEVELOPMENT.dronePlots} plots`),
       refused('each plot is free or listed', 'The drone only flies over free or listed plots'),
       refused(`you have ${DEVELOPMENT.droneFee} credits`, 'Not enough money'),
