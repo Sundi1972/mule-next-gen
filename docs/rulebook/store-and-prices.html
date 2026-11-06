@@ -83,10 +83,10 @@
 <div class="table-wrap"><table>
 <thead><tr><th>Good</th><th>Who counts as demand</th></tr></thead>
 <tbody>
-<tr><td>Food</td><td>Every player's household and crew (2 each, plus 1 per 4 crew); colonists, 1 per 20, fewer if the price is above what their wages pay (150)</td></tr>
-<tr><td>Water</td><td>Every player's household and crew (1 each, plus 1 per 6 crew); colonists, 1 per 20 (wages pay up to 120)</td></tr>
-<tr><td>Energy</td><td>What every working plot and factory burns, but an Energy plant, which pays its own 1 from its own output; <span class="num">1.6</span> for every MULE the colony will want (one per idle plot, plus a month's new land, 2 a seat, while free land is left), since each will burn Energy once installed; colonists, half a unit per 20 (wages pay up to 100)</td></tr>
-<tr><td>Medicine</td><td>Colonists, 1 per 50, half as much again while the air makes people sick (wages pay up to 400)</td></tr>
+<tr><td>Food</td><td>Every player's household and crew (2 each, plus 1 per 4 crew); colonists, 1 per 20, in full at any price</td></tr>
+<tr><td>Water</td><td>Every player's household and crew (1 each, plus 1 per 6 crew); colonists, 1 per 20, in full at any price</td></tr>
+<tr><td>Energy</td><td>What every working plot and factory burns, but an Energy plant, which pays its own 1 from its own output; <span class="num">1.6</span> for every MULE the colony will want (one per idle plot, plus a month's new land, 2 a seat, while free land is left), since each will burn Energy once installed; colonists, half a unit per 20, in full at any price</td></tr>
+<tr><td>Medicine</td><td>Colonists, 1 per 50, half as much again while the air makes people sick, in full at any price</td></tr>
 <tr><td>Smithore</td><td>2 for every Alloy smelter; 1 for every MULE the colony will want (one per idle plot, plus a month's new land while free land is left); the export ship</td></tr>
 <tr><td>Alloy</td><td>1 for every Electronics works; the export ship</td></tr>
 <tr><td>Rare earth</td><td>1 for every Electronics works; the export ship</td></tr>
@@ -95,7 +95,7 @@
 </tbody>
 </table></div>
 <p>The export ship's part: once its wishlist is announced (the month before it calls, and the month it is in port), each wishlist good counts a third of what the ship still wants, and goods not on the list count nothing. Before that, each good the ship might want counts its average share. See <a href="#export-ship">the export ship</a>.</p>
-<p>Colonists' demand bends with price: they need a fixed amount, but when the store's selling price is above what their wages pay per unit, they buy only the share they can afford. That is the colony's demand curve.</p>
+<p>Colonists' demand does not bend with price: they pay nothing for their meal (they take it from the shelf, free), so their full need counts whatever the store asks. See <a href="colony-and-politics.html#colonists-meal">the colonists' meal</a>.</p>
 <p>The <span class="num">1.6</span> Energy for a new MULE is not a setting of its own. It is the average Energy a month of the outfits that buy their Energy from the stock (Food 1, Water 1, Smithore 2, Crystite 2, Rare earth 2, from <code>UPKEEP.energyUse</code>), so it follows when those are tuned. The Energy plant's own 1 is left out, because a plant pays it from its own output. In month 1 of a four-seat game that is 8 new MULEs × 1.6 = 12.8 Energy, plus 2.5 for 100 colonists: 15.3 a month, against the 28 the colony holds (20 in the store and 2 for each player), so Energy opens tight.</p>
 <div class="box next"><h4>Under review: the Energy for new MULEs</h4><p>Measured with the build, on 40 four-seat games of seed 1 with politics on: counting the Energy new MULEs will need cut the farm-months without power from 40.4% to 31.8%, and the colonists at the end of a game fell from 77.5 to 71.7 on average. The programme manager ruled that it stays; Heiko keeps or drops it at the colony economy's first gate, from runs with and without it.</p></div>
 
@@ -197,13 +197,13 @@
 <tr><td>Normal</td><td>Holds 17 (1.2 months), but farms make 16, more than it eats</td><td class="n">30</td><td class="n">25</td><td class="n">35</td></tr>
 <tr><td>Tight</td><td>Holds 20 (1.4 months); farms make 10</td><td class="n">38</td><td class="n">32</td><td class="n">46</td></tr>
 <tr><td>Shortage</td><td>Holds 10 (0.7 month); farms make 8</td><td class="n">60</td><td class="n">54</td><td class="n">75</td></tr>
-<tr><td>Severe shortage</td><td>Holds 4 (0.3 month); farms make 6. Or the colonists went short of Food last month, whatever it holds</td><td class="n">120</td><td class="n">96</td><td class="n">150</td></tr>
+<tr><td>Severe shortage</td><td>Holds 4 (0.3 month); farms make 6. Or the colonists went short of Food last month, whatever it holds</td><td class="n">120</td><td class="n">108</td><td class="n">150</td></tr>
 <tr><td>Shortage, after a high trade</td><td>Holds 10; last month's price was 60, and two players traded Food at 95</td><td class="n">78</td><td class="n">70</td><td class="n">98</td></tr>
 </tbody>
 </table></div>
 <div class="box example"><h4>The arithmetic</h4>
 <p><strong>Tight.</strong> 30 × 1.25 = 37.5, posted <strong>38</strong>. The store buys at 38 less 15% = 32.3, rounded down to 32, and sells at 38 plus 20% = 45.6, rounded up to 46.</p>
-<p><strong>Severe.</strong> 30 × 4 = <strong>120</strong>. Less 10% would be 108, but the store never pays more for Food than its colonists could pay after its two margins: 150 ÷ 1.25² = 96 (see <a href="#short-shelf">the colonists' cap</a>). It sells at 120 plus 25% = 150, exactly what the colonists' wages pay.</p>
+<p><strong>Severe.</strong> 30 × 4 = <strong>120</strong>. The store buys at 120 less 10% = <strong>108</strong> and sells at 120 plus 25% = 150.</p>
 <p><strong>A high trade.</strong> Players paid 95, above the store's selling price of 75, so the price moves halfway from 60: 60 + ½ × 35 = 77.5, posted <strong>78</strong>. The store buys at 70 and sells at 98.</p>
 <p><strong>Sold out and bid past.</strong> In a shortage month at 60 the store ran out of Food, and two players then traded at 90. Next month, still in a shortage, two rules lift the price: the high trade (60 + ½ × 30 = 75) and the sell-out (90 ÷ 1.25 = 72, so the store sells at 90 at least). The higher wins: <strong>75</strong>, and the store sells at 94.</p></div>
 <div class="box example"><h4>Coming back down</h4><p>After a severe month the farms catch up (16 a month) and the colony holds 30 again. The price falls a quarter a month: 120 × 0.75 = <span class="num">90</span>, then 67.5 = <span class="num">68</span>, <span class="num">51</span>, 38.25 = <span class="num">38</span>, and then 28.5, which is under the normal price, so <span class="num">30</span>: normal again five months after the crisis.</p></div>
@@ -278,7 +278,7 @@
 <ul>
 <li>With nothing for sale, the store shows no selling price ("out").</li>
 <li>When it wants no more, it shows no buying price.</li>
-<li>In a shortage both lines climb with the price, so the store pays much more for what you sell it exactly when the colony needs it. For Food and Water its buying price stays under what its colonists can pay (see <a href="#short-shelf">the colonists' cap</a>).</li>
+<li>In a shortage both lines climb with the price, so the store pays much more for what you sell it exactly when the colony needs it.</li>
 <li>One selling price everywhere: the auction's line, the phone's market strip and the TV's market tiles show the same number.</li>
 </ul>
 <div class="box why"><h4>Why it is like this</h4><p>The design doc first set 10% either side, "so selling to another player is usually better than selling to the store". Heiko asked on 5 Nov for a wider spread ("i think the spread can be wider then what we are having currently"), and on 6 Nov approved the margins by step with his five rules: wider as a good runs short, with the buying line moving up too. See <a href="#store-pricing-design">the store-pricing design</a>.</p></div>
@@ -286,24 +286,13 @@
 <p class="owner">Kept current by: WS1 (the store's code), WS5 (the store-pricing design).</p>
 
 <h2 id="restocking">How the store restocks <span class="pill built">In the game</span></h2>
-<p>Nothing is ever imported. The store's shelf fills in only two ways: players sell to it at the auction, and goods it already holds. It empties when players and the colony fund buy from it, when colonists buy Food and Water at month end, when goods spoil, when it sells its surplus to the export ship, when it builds MULEs from Smithore, and when an event strikes.</p>
+<p>Nothing is ever imported. The store's shelf fills in only two ways: players sell to it at the auction, and goods it already holds. It empties when players and the colony fund buy from it, when colonists take their Food and Water at month end, when goods spoil, when it sells its surplus to the export ship, when it builds MULEs from Smithore, and when an event strikes.</p>
 <h3 id="how-much-it-buys">How much it buys</h3>
 <p>At each good's auction the store wants enough to fill its shelf to <code>PRICE.storeMaxCover</code> = <span class="num">3</span> months of next month's demand, plus, for a good the export ship takes, a full ship's load to sell when the ship calls. Once it has bought that many its buying line goes. Its money never limits it.</p>
 <div class="box example"><h4>Example</h4><p>Food demand is 13 a month and the store holds 12. It will buy up to 13 × 3 − 12 = <strong>27</strong> Food at this auction. For Crystite in a four-seat game in a month when the ship has not announced its wishlist, demand is 4 (the ship's average) and a ship's load is 12, so the store wants up to 4 × 3 + 12 = 24 Crystite, less what it holds.</p></div>
-<h3 id="short-shelf">The colonists' cap on Food and Water</h3>
-<p>The store never pays more for Food or Water than its colonists could pay for it after the store's two margins: their wages for a unit (150 for Food, 120 for Water) divided twice by one plus the step's selling margin. Its selling price is then at least one credit above what it pays, so a player can't buy from it and sell straight back.</p>
-<div class="table-wrap"><table>
-<thead><tr><th>Step</th><th class="n">Food: the store pays at most</th><th class="n">Water: the store pays at most</th></tr></thead>
-<tbody>
-<tr><td>Normal, off-world</td><td class="n">113</td><td class="n">90</td></tr>
-<tr><td>Tight</td><td class="n">104</td><td class="n">83</td></tr>
-<tr><td>Shortage, severe shortage</td><td class="n">96</td><td class="n">76</td></tr>
-</tbody>
-</table></div>
-<p>At the starting normal prices the cap bites only in a severe shortage: the store buys Food at 96 instead of 108, and Water at 76 instead of 90. The earlier restocking bid (1.5 times the posted price whenever the store's shelf held under a month of its colonists' need) is gone: the steps raise both lines instead.</p>
-<div class="box next"><h4>What is changing</h4><p>Designed, not in the game yet: the colonists stop paying wages and take their Food and Water from the store, free. This cap goes with their wages. The Politics team (WS7) builds it in the colony-economy package's PR-2; see <a href="#colony-demand">what the colony needs</a>.</p></div>
-<h3 id="colonists-buy">The colonists buy at month end</h3>
-<p>At upkeep the colonists buy 1 Food and 1 Water per 20 colonists at the store's selling price, paid from their off-world wages: at most 150 a unit for Food and 120 for Water. If the shelf is short, or the price is above their wages, they buy less and go hungry. A fed colony grows 4% a month; a hungry one shrinks 5%. A month the store couldn't feed its colonists is recorded as a shortage, which puts that good in the severe step the next month, whatever the colony holds.</p>
+<p>Its buying line is its step's own, for Food and Water as for every good: colonists pay nothing for their meal, so nothing caps what the store pays (in a severe shortage, Food 108 and Water 90). Its selling price is always at least one credit above what it pays, so a player can't buy from it and sell straight back. The earlier restocking bid (1.5 times the posted price whenever the store's shelf held under a month of its colonists' need) is gone: the steps raise both lines instead.</p>
+<h3 id="colonists-buy">The colonists take their meal at month end</h3>
+<p>At upkeep the colonists take 1 Food and 1 Water per 20 colonists from the store's shelf, free, as far as it holds them (see <a href="colony-and-politics.html#colonists-meal">the colonists' meal</a>). Only a short shelf leaves them hungry; the price never does. A fed colony grows 4% a month; a hungry one shrinks 5%. A month the store couldn't feed its colonists is recorded as a shortage, which puts that good in the severe step the next month, whatever the colony holds.</p>
 <h3 id="events-and-stock">Events that empty the shelf</h3>
 <div class="table-wrap"><table>
 <thead><tr><th>Event</th><th>Chance</th><th>What it does</th></tr></thead>
@@ -314,7 +303,7 @@
 </table></div>
 <p>See <a href="events.html">Events</a> for the full list.</p>
 <div class="box why"><h4>Why it is like this</h4><p>Heiko, 21 Oct: no imports, the colony is self-contained; every unit of Food, Water and Energy has to be grown by a player, so a shortage is the players' own doing. Heiko, 22 Oct: "the store should have unlimited amount of money".</p></div>
-<p class="code-ref">In the code: <code>economy.ts::storeWants</code>, <code>storeBuyAt</code> (the colonists' cap, so every buy line and the AI's forecasts carry it), <code>storeLines</code> · <code>auction.ts::comeUp</code> · <code>upkeep.ts::runUpkeep</code> · <code>events.ts</code> (<code>storeFire</code>, <code>pirateRaid</code>) · <code>config.ts::UPKEEP.colonistBudget</code>, <code>UPKEEP.colonistGrowth</code>, <code>EVENTS.colony</code></p>
+<p class="code-ref">In the code: <code>economy.ts::storeWants</code>, <code>storeBuyAt</code> (every buy line and the AI's forecasts), <code>storeLines</code> · <code>auction.ts::comeUp</code> · <code>upkeep.ts::runUpkeep</code> · <code>events.ts</code> (<code>storeFire</code>, <code>pirateRaid</code>) · <code>config.ts::UPKEEP.colonistsPerUnit</code>, <code>UPKEEP.colonistGrowth</code>, <code>EVENTS.colony</code></p>
 <p class="owner">Kept current by: WS1.</p>
 
 <h2 id="mule-price">The MULE price and the corral <span class="pill built">In the game</span></h2>
@@ -438,11 +427,10 @@
 <div class="table-wrap"><table>
 <thead><tr><th>Part</th><th>Today</th><th>Designed</th><th>Who builds it</th></tr></thead>
 <tbody>
-<tr><td>Colonists</td><td>Buy their Food and Water at the store's selling price from off-world wages (at most 150 a unit for Food, 120 for Water); the store's Food and Water buying price stays under what they can pay</td><td>Pay nothing: they take their need from the shelf, free, and count in full in the demand; the cap goes</td><td>The Politics team (WS7), PR-2</td></tr>
 <tr><td>Crystite's ship price</td><td>Never moves (100)</td><td>Moves every month, typically about 90, never below 40 or above 300 (as chosen on 5 Nov)</td><td>The Maps team (WS5), PR-4</td></tr>
 <tr><td>Other export goods</td><td>Never move</td><td>Move too, about half as much, within half their normal price either way (5 Nov)</td><td>The Maps team (WS5), PR-4</td></tr>
 <tr><td>MULE price</td><td>Smithore's price is under its ceiling, but the sell-out surcharge on MULEs has no limit (up to 7,087 measured before the ceiling)</td><td>The surcharge stops at 2 times (5 Nov)</td><td>The Maps team (WS5), PR-4</td></tr>
-<tr><td>What the colony needs</td><td>See <a href="#demand">Step 1</a></td><td>Each kind of plot eats and drinks its own amount, and the colonists count in full (below)</td><td>WS7 (PR-2) and WS5 (PR-6)</td></tr>
+<tr><td>What the colony needs</td><td>See <a href="#demand">Step 1</a></td><td>Each kind of plot eats and drinks its own amount (below)</td><td>WS5 (PR-6)</td></tr>
 <tr><td>The colonists' Electronics and Medicine</td><td>Not counted (Electronics); 1 per 50 colonists (Medicine)</td><td>See <a href="#medicine-electronics-demand">Medicine and Electronics</a></td><td>WS5 (PR-3, PR-10), WS7 (PR-9)</td></tr>
 </tbody>
 </table></div>
@@ -452,19 +440,19 @@
 <ul>
 <li><strong>Every player's household and crews:</strong> 2 Food and 1 Water a household, plus what each kind of plot uses (see <a href="production.html#plot-consumption">What each kind of plot uses</a>).</li>
 <li><strong>The Energy their plots burn</strong>, by the same table.</li>
-<li><strong>The colonists' full need</strong>, at any price: their Food, Water, Energy and Medicine, and the Electronics they want. Colonists no longer pay wages, so nothing caps their part.</li>
+<li><strong>The colonists' full need</strong>, at any price: their Food, Water, Energy and Medicine (in the game since PR-2: colonists pay nothing, so nothing caps their part), and the Electronics they want (PR-3).</li>
 <li>A festival's Food and the export ship's take, as today.</li>
 </ul>
 <p>The colony's <strong>stock</strong> is the store's shelf plus what every player holds, as today: a colony whose players hold Food is not short (Heiko's decision 9; counting the shelf alone measured worse on every count).</p>
-<div class="box example"><h4>Example: four farmers and 100 colonists</h4><p>Four players each work three farms and a well: each household and its crews eat <span class="num">3</span> Food. 100 colonists eat <span class="num">5</span>. The store counts <span class="num">4 × 3 + 5 = 17</span> Food a month, whatever the price; today the colonists' part would be cut to what their wages could pay.</p></div>
+<div class="box example"><h4>Example: four farmers and 100 colonists</h4><p>Four players each work three farms and a well: each household and its crews eat <span class="num">3</span> Food. 100 colonists eat <span class="num">5</span>. The store counts <span class="num">4 × 3 + 5 = 17</span> Food a month, whatever the price. The colonists' 5 already count in full today; the households' 3 each come with PR-6.</p></div>
 <p>Measured over ten simulated games, the demand the store counts rises from 18.1 to 19.3 Food, 12.8 to 16.6 Water and 17.4 to 18.6 Energy a month. Water rises most, to about 20 by the end of a game, as farms and plants spread.</p>
-<p class="owner">Designed, not in the game yet. The colonists' full need with no wages: the Politics team (WS7), PR-2. What each kind of plot eats and drinks: the Maps team (WS5), PR-6.</p>
+<p class="owner">The colonists' full need with no wages: in the game (the Politics team, WS7, PR-2). Designed, not in the game yet: what each kind of plot eats and drinks, the Maps team (WS5), PR-6.</p>
 
 <h3 id="price-steps">The four steps <span class="pill built">In the game</span></h3>
 <p>In the game as designed: see <a href="#target">Step 3: the step the good is in</a>, and Steps <a href="#momentum">4</a>, <a href="#short-goods">5</a> and <a href="#ceiling">6</a> for how the price moves. One addition came with the build: the opening prices go through the same steps (see <a href="#opening-prices">the opening prices</a>).</p>
 
 <h3 id="pricing-example">Worked example: Food in each step <span class="pill built">In the game</span></h3>
-<p>In the game: see <a href="#price-example">Worked example: Food in each step</a>. One number differs from the design's table while colonists still pay wages: in a severe shortage the store buys Food at 96, not 108, under <a href="#short-shelf">the colonists' cap</a>.</p>
+<p>In the game: see <a href="#price-example">Worked example: Food in each step</a>, every number as the design's table.</p>
 
 <h3 id="medicine-electronics-demand">Medicine and Electronics <span class="pill designed">Designed, not in the game yet, WS5 and WS7</span></h3>
 <p><strong>Medicine.</strong> Colonists take their Medicine from the store at the month end, free, after their Food and Water: one a month for every 50 colonists, half as much again in dirty air, and up to 40% more while many of them are sick. Hunger raises the need only through sickness: hungry colonists fall sick more easily, and the sick share sets the extra. There is no separate extra for hunger. It counts in what the colony needs, so a Medicine shortage raises its price through the same four steps as Food: up to 480 in a severe shortage, never above 1,440. Before the steps, Medicine's price climbed without limit: it reached 15,584 in one simulated game.</p>
@@ -476,7 +464,7 @@
 <p class="owner">Designed, not in the game yet. The colonists' Electronics want and its reach to Rare earth and Alloy: the Maps team (WS5), PR-3. The colonists' Medicine with the health rule: the Politics team (WS7), PR-9, and the Maps team (WS5), PR-10.</p>
 
 <div class="box why"><h4>Why it is like this</h4><p>Heiko, 6 Nov, his five rules above; he approved every recommendation in <a href="../explainers/2026-11-06-colony-economy.html">the colony economy explainer</a>: the colony's stock (shelf plus players) rather than the shelf alone, four steps rather than a smooth curve, a quarter a month down, never below normal, halfway towards a high trade, and Electronics demand reaching Rare earth and Alloy. Measured on ten simulated games against today: Food's highest price 144 instead of 2,978, no month at the ceiling instead of 42, colonists short of Water in 34 months instead of 63. No price rule makes Food appear: the store's Food shelf runs dry in almost every month under every rule tried, today's included. That is the supply pass (decision 1).</p></div>
-<div class="box next"><h4>What is next</h4><p>The Maps team (WS5) builds the colony-economy package, as named edits in the Strategy team's (WS1) economy code and the Auctions team's (WS3) auction and game code. Built in PR-1: the steps, the moves, the margins, the sell-out rule, the high-trade pull, the ceiling, one selling price, the opening prices and the Energy new MULEs need. Still to come: the colonists' free meal and no wages (PR-2, WS7), the colonists' Electronics want (PR-3, WS5), the moving ship prices and the MULE surcharge cap (PR-4, WS5), and each plot's own consumption in the demand (PR-6, WS5). When each part lands, it becomes "In the game" here.</p></div>
+<div class="box next"><h4>What is next</h4><p>The Maps team (WS5) builds the colony-economy package, as named edits in the Strategy team's (WS1) economy code and the Auctions team's (WS3) auction and game code. Built in PR-1: the steps, the moves, the margins, the sell-out rule, the high-trade pull, the ceiling, one selling price, the opening prices and the Energy new MULEs need. Built in PR-2 (WS7): the colonists' free meal and no wages, so their full need counts and no cap holds the store's Food and Water buying line down. Still to come: the colonists' Electronics want (PR-3, WS5), the moving ship prices and the MULE surcharge cap (PR-4, WS5), and each plot's own consumption in the demand (PR-6, WS5). When each part lands, it becomes "In the game" here.</p></div>
 <p class="code-ref">Spec: <code>docs/specs/2026-11-05-ws5-store-pricing.md</code> ("Rework, 6 Nov"; §8 AM-6 for what PR-1 built differently) and <code>docs/specs/2026-11-06-colony-needs.md</code> (WS5's C13) · <a href="../explainers/2026-11-06-colony-economy.html">the colony economy explainer</a> · code: <code>economy.ts::priceBand</code>, <code>nextPostedPrice</code>, <code>storeLines</code>, <code>storeQuotes</code>, <code>monthlyDemand</code> · <code>auction.ts::comeUp</code> · <code>game.ts::createGame</code> · <code>config.ts::PRICE</code></p>
 <p class="owner">The five rules: in the game since PR-1. The parts still designed name their lanes above. Kept current by: the Maps team (WS5) for the design; built as named edits in WS1's economy code and WS3's auction and game code.</p>
 
