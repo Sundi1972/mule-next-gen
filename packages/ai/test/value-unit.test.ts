@@ -147,6 +147,16 @@ describe('RULE-2: what going without a unit costs', () => {
     expect(shortCosts(obs, o, 'energy', mindOf(), 2)).toEqual([replace, replace]);
   });
 
+  it("T-AC-6: a needed unit is never valued below the store's ask today, though the belief for next month is lower", () => {
+    GOOD_CONFIG.energy.spoilage = 0;
+    // Food at 5, so a farm loses little turned off; the belief says Energy will post at 10, under today's 20.
+    const { obs, o } = view(table({ plots: FARMS, posted: { ...posted, food: 5 } }));
+    const cheaper: Outlook = { ...o, price: (good) => (good === 'energy' ? 10 : o.price(good)) };
+    const ask = Math.ceil(20 * (1 + PRICE.storeSpread));
+
+    expect(shortCosts(obs, cheaper, 'energy', mindOf(), 2)).toEqual([ask, ask]);
+  });
+
   it('T-AC-6 negative: no plot needs Energy, so S is the buy-back price alone', () => {
     const { obs, o } = view(table({ plots: [{ outfit: 'energy', x: 0 }], posted }));
 
