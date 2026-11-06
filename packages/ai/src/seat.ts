@@ -43,6 +43,7 @@ import {
   planFields,
   planMind,
   replanReason,
+  withOffices,
   validatePlaybook,
   validatorFor,
   type DraftInput,
@@ -307,6 +308,7 @@ export class AiSeat {
     if (!this.playsPlaybooks()) return;
     if (this.kept && !this.kept.anchor) this.kept.anchor = anchorOf(state, this.id, this.kept, 'adopt', this.landRanking(state));
     const trigger = this.replanDue(state);
+    if (this.kept?.anchor && !trigger) this.kept.anchor = withOffices(this.kept.anchor, state);
     if (this.kept && !trigger) return;
     this.keep(state, point, draftStrategyOf(this.draftInput(state, point)), trigger);
     if (trigger) this.replans.push({ month: state.month, point, trigger });
