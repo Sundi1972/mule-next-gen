@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { commission, createGame, donate, GOOD_CONFIG, player, PRESTIGE, RuleError, voteWeight, type GameState, type PrestigeId } from '../src/index.js';
+import { commission, createGame, donate, GOOD_CONFIG, player, PRESTIGE, RuleError, scoreParts, voteWeight, type GameState, type PrestigeId } from '../src/index.js';
 
 const SEATS = ['lena', 'brix', 'ossa', 'kai'];
 
@@ -31,7 +31,8 @@ describe('donations and plaques', () => {
     kai.money = 1_000;
     kai.stock.electronics = 1;
     const weight = voteWeight(state, 'kai').parts.taxes;
-    const value = 200 + GOOD_CONFIG.electronics.refPrice;
+    state.store.posted.electronics = 150; // the store's price today, not the reference price
+    const value = 200 + 150;
 
     donate(state, 'kai', 'hospital', 200, { electronics: 1 });
 
@@ -43,6 +44,22 @@ describe('donations and plaques', () => {
     expect(voteWeight(state, 'kai').parts.taxes).toBeGreaterThan(weight);
     expect(state.colony!.ledger.in.donation).toBe(200);
     expect(state.colony!.ledger.out.project).toBe(200);
+  });
+
+  it('AM-13 (PM ruling, option B): a gift is Worth-neutral: goods count at the store\'s price on the day, so buying cheap and donating gains nothing', () => {
+    for (const price of [40, GOOD_CONFIG.electronics.refPrice, 300]) {
+      const state = fundingHospital();
+      const kai = player(state, 'kai');
+      kai.money = 1_000;
+      kai.stock.electronics = 1;
+      state.store.posted.electronics = price;
+      const held = (s: GameState) => scoreParts(s, 'kai').money + scoreParts(s, 'kai').goods;
+      const before = held(state);
+      donate(state, 'kai', 'hospital', 25, { electronics: 1 });
+      const plaque = hospital(state).plaque.kai!;
+      expect(plaque, `Electronics at ${price}: the plaque records exactly what left Kai's Worth`).toBe(before - held(state));
+      expect(plaque).toBe(25 + price);
+    }
   });
 
   it("T-AC-26: each of RULE-23's rows refuses with its message, or takes the gift", () => {

@@ -60,6 +60,9 @@ const SIZE: Record<Density, Size> = {
   },
 };
 
+/** From this many players the TV's league is set a step tighter. */
+const FULL_TABLE = 5;
+
 /**
  * Everyone by Worth, the leader called out, the change since last month. Totals only. `final` (game over): the final
  * standings, no callout (the winner card has it) and no change column.
@@ -70,19 +73,26 @@ export function LeagueTable({ view, density, selfId, final = false }: { view: Mu
   // The change since last month, when there was a last month: none in month 1, none at game over.
   const changes = !final && lg.hasLastMonth;
   const tv = density === 'tv';
-  const s = final && tv ? { ...SIZE.tv, mark: 36, cell: 'px-3 py-1.5' } : SIZE[density];
+  const full = tv && !final && view.players.length >= FULL_TABLE;
+  // At a full table the TV's rows and callout are a step tighter: the rows' type the same, the leader's line a step
+  // smaller, so six rows and the colony's score fit the month end without scaling it down (PM ruling C, 5 Nov).
+  const s = final && tv ? { ...SIZE.tv, mark: 36, cell: 'px-3 py-1.5' } : full ? { ...SIZE.tv, mark: 32, cell: 'px-3 py-1', callMark: 36, call: 'text-3xl' } : SIZE[density];
   const words = leaderWords(view, lg, selfId);
   const top = lg.rows[0];
   const th = cx('label-caps align-bottom font-normal', s.head);
   return (
     <section className={cx('relative flex min-h-0 flex-col rounded-panel border border-holo-line bg-panel', s.pad)} aria-label="League table" data-testid="league">
-      <header className="flex items-baseline justify-between gap-2">
-        <h2 className={cx('label-caps', s.head)}>{final ? 'Final standings · by Worth' : `League table · month ${view.month}`}</h2>
-        {tv && <span className="text-lg text-ink-3">Worth, in credits</span>}
-      </header>
+      {/* At a full table the TV drops this small row for the rows' height (PM ruling C, option 2): the callout and the
+          column heads still say what the table is. */}
+      {!full && (
+        <header className="flex items-baseline justify-between gap-2">
+          <h2 className={cx('label-caps', s.head)}>{final ? 'Final standings · by Worth' : `League table · month ${view.month}`}</h2>
+          {tv && <span className="text-lg text-ink-3">Worth, in credits</span>}
+        </header>
+      )}
 
       {top && !final && (
-        <div className={cx('relative flex items-center', tv ? 'gap-4 rounded-panel border-2 border-holo bg-holo-soft px-5 py-2.5 shadow-glow' : 'gap-2')} data-testid="leader">
+        <div className={cx('relative flex items-center', tv ? cx('gap-4 rounded-panel border-2 border-holo bg-holo-soft px-5 shadow-glow', full ? 'py-1.5' : 'py-2.5') : 'gap-2')} data-testid="leader">
           <PlayerMark slot={top.slot} species={top.player.species} size={s.callMark} label={top.player.name} />
           <span className={cx('min-w-0 font-display font-semibold leading-tight', s.call)} data-testid="leader-line">
             {words.lead}
@@ -244,13 +254,13 @@ export function PhoneVerdict({ view, className }: { view: MuleView; className?: 
 
 // --- Collapse -----------------------------------------------------------------------------------------
 
-/** While the air is in Collapse: why every Worth is lower, in one line. */
-export function CollapseBanner({ density }: { density: Density }) {
+/** While the air is in Collapse: why every Worth is lower, in one line. With a colony, donations are cut too. */
+export function CollapseBanner({ density, donations = false }: { density: Density; donations?: boolean }) {
   const tv = density === 'tv';
   return (
     <div role="status" className={cx('relative flex shrink-0 flex-wrap items-baseline rounded-panel border-2 border-alert bg-alert-bg', tv ? 'gap-x-3 px-5 py-2' : 'gap-x-1.5 px-2.5 py-0.5')} data-testid="collapse-banner">
       <span className={cx('font-display font-semibold text-alert-ink', tv ? 'text-xl' : 'text-xs')}>The air is in Collapse.</span>
-      <span className={cx('text-ink', tv ? 'text-lg' : 'text-[11px]')}>Every Worth is cut by {collapseCutWords()}, offices too: the scores if the game ended now.</span>
+      <span className={cx('text-ink', tv ? 'text-lg' : 'text-[11px]')}>Every Worth is cut by {collapseCutWords()}, {donations ? 'offices and donations' : 'offices'} too: the scores if the game ended now.</span>
     </div>
   );
 }
@@ -423,6 +433,8 @@ export function YourWorth({ view, density }: { view: MuleView; density: Exclude<
     { key: 'mules', old: 'part-mules', label: `MULEs · ${p.mules} × ${view.mulePrice}`, cr: p.muleValue },
     ...(collapse ? [{ key: 'cut', old: 'part-collapse', label: `Collapse cut · ${collapseCutWords()}`, cr: -p.cut, tone: 'text-alert' }] : []),
     { key: 'offices', old: 'part-office', label: `Offices · ${p.terms} ${p.terms === 1 ? 'term' : 'terms'} × ${POLITICS.termScore}${collapse ? ', cut too' : ''}`, cr: p.office },
+    // Only where there is a colony to give to; counted 1:1 by the engine, and cut too in Collapse.
+    ...(view.colony ? [{ key: 'donations', old: 'part-donated', label: `Donations${collapse ? ', cut too' : ''}`, cr: p.donated }] : []),
   ];
   const tight = density === 'compact' || collapse;
   return (
