@@ -1,4 +1,4 @@
-import { COLONY, EVENTS, GAME, GOOD_CONFIG, SOCIAL_EVENTS, UPKEEP } from './config.js';
+import { COLONY, EVENTS, GAME, GOOD_CONFIG, PRESTIGE, SOCIAL_EVENTS, UPKEEP } from './config.js';
 import { addPrestige, callStrike, damageObject, fundIn, goodWords, moodBand, moodShift, strikeHolds } from './colony.js';
 import { neighbours } from './grid.js';
 import { reputationShift } from './politics.js';
@@ -57,13 +57,7 @@ const SHAPE: Record<EventKey, { kind: EventKind; title: string; scope: MonthEven
   },
   storeStrike: { kind: 'store', title: 'Store strike', scope: 'colony', sign: 'bad', line: () => 'The store is on strike: it sells no MULEs this turn.' },
   walkout: { kind: 'plot', title: 'Walkout', scope: 'personal', sign: 'bad', line: () => walkoutLine(null) },
-  riot: {
-    kind: 'store',
-    title: 'Riot',
-    scope: 'colony',
-    sign: 'bad',
-    line: () => `A riot: the store loses ${pct(SOCIAL_EVENTS.colony.riot.storeLoss)} of every shelf, and one colony object is damaged until it is repaired.`,
-  },
+  riot: { kind: 'store', title: 'Riot', scope: 'colony', sign: 'bad', line: () => riotLine(null) },
   volunteerCleanup: {
     kind: 'colony',
     title: 'Volunteer clean-up',
@@ -84,6 +78,12 @@ function strikeLine(good: Good | null): string {
 function walkoutLine(good: Good | null): string {
   const plots = good ? `your ${goodWords(good)} plots make` : 'your plots of one good make';
   return `A walkout: this month ${plots} ${pct(SOCIAL_EVENTS.player.walkout.output)}.`;
+}
+
+/** A riot's line, naming the object it damaged when it damaged one. */
+function riotLine(damaged: PrestigeId | null): string {
+  const damage = damaged ? `, and the ${PRESTIGE[damaged].name} is damaged until it is repaired` : '';
+  return `A riot: the store loses ${pct(SOCIAL_EVENTS.colony.riot.storeLoss)} of every shelf${damage}.`;
 }
 
 /** The goods a colony-wide event touches. */
@@ -731,6 +731,7 @@ export function applyEvents(state: GameState, fired: readonly MonthEvent[]): voi
         const damaged = (event.objects ?? []).filter((o) => damageObject(state, o.id));
         if (damaged.length > 0) event.objects = damaged;
         else delete event.objects;
+        event.line = riotLine(damaged[0]?.id ?? null);
         break;
       }
       case 'volunteerCleanup':
