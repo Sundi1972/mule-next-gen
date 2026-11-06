@@ -38,15 +38,14 @@ const FIT_SIZES = [PHONE.viewport, PHONE_SMALL.viewport];
 type Fit = { id: string; top: number; bottom: number; box: number };
 
 /**
- * Scrolls the rail holding `report` to its top, then measures each `report-x-y` row's box against the rail's visible
- * box: what the player sees without scrolling.
+ * Measures each `report-x-y` row's box against the rail's visible box as the rail stands, never scrolling it: what the
+ * player sees without touching it, whatever else the rail holds above the report (a strike alert, the Now card).
  */
 async function reportFit(report: Locator): Promise<Fit[]> {
   return report.evaluate(async (el) => {
     let box = el.parentElement;
     while (box && !/auto|scroll/.test(getComputedStyle(box).overflowY)) box = box.parentElement;
     if (!box) throw new Error('the Drone report sits in no scroll box');
-    box.scrollTop = 0;
     await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
     const top = box.getBoundingClientRect().top;
     return [...el.querySelectorAll<HTMLElement>('[data-testid^=report-]')].map((row) => {
