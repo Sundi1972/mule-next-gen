@@ -8,7 +8,9 @@ import {
   declareRole,
   GOOD_CONFIG,
   GOODS,
+  colonistDemand,
   monthlyDemand,
+  mulesWanted,
   postPrices,
   priceBand,
   stepAuction,
@@ -329,5 +331,37 @@ describe('price B-AC-1: a sell-out the players bid past lifts the next selling l
     const state = bidPast(1_000, { soldOut: true });
     expect(state.store.posted.food).toBe(360);
     for (const good of GOODS) expect(state.store.posted[good], good).toBeLessThanOrEqual(12 * GOOD_CONFIG[good].refPrice);
+  });
+});
+
+describe("price C6: the colony's Energy demand counts the MULEs it will add", () => {
+  // J: give the store free Energy each month. S: raise the demand, so the band and the buy line pull Energy in from players.
+  // I: Food and Water demand are unchanged; a plant's own use is no demand on the stock (AM-17 A).
+  // Hand-derived: Food 1, Water 1, Smithore 2, Crystite 2, RareEarth 2 draw from the stock, mean 8 / 5.
+  const PER_NEW_MULE = 1.6;
+
+  it('price C6: each MULE the colony will add raises the Energy demand by 1.6, and Food and Water by nothing', () => {
+    const before = game();
+    const after = game();
+    const idle = after.tiles.filter((t) => t.terrain !== 'store' && !t.owner).slice(0, 3);
+    for (const t of idle) t.owner = 'p0';
+    expect(mulesWanted(after) - mulesWanted(before), 'the premise: three idle plots, land still free').toBe(3);
+
+    const d0 = monthlyDemand(before);
+    const d1 = monthlyDemand(after);
+
+    expect(d1.energy - d0.energy).toBeCloseTo(3 * PER_NEW_MULE, 9);
+    expect(d1.food).toBe(d0.food);
+    expect(d1.water).toBe(d0.water);
+  });
+
+  it('price C6: with no land left and no idle plot, nothing is added to the Energy demand', () => {
+    const state = game();
+    for (const t of state.tiles) if (t.terrain !== 'store') { t.owner = 'p0'; t.outfit = 'energy'; }
+    expect(mulesWanted(state), 'the premise: no MULE wanted').toBe(0);
+
+    const colonists = colonistDemand(state, 'energy', (state.colonists / UPKEEP.colonistsPerUnit) * UPKEEP.colonistEnergyShare);
+
+    expect(monthlyDemand(state).energy).toBeCloseTo(colonists, 9);
   });
 });
