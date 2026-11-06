@@ -18,11 +18,12 @@ import {
   type Council,
   type GameState,
   type LawProposal,
+  type Good,
   type PrestigeId,
   type Rng,
 } from '@mule/engine';
 import type { Act, AiAction } from '../src/actions.js';
-import { VoteHand } from '../src/hands/vote.js';
+import { goodsInReach, VoteHand } from '../src/hands/vote.js';
 import { applyAction } from '../src/play.js';
 import { AiSeat } from '../src/seat.js';
 import type { Mind } from '../src/value.js';
@@ -58,6 +59,8 @@ function governed(seed = 7): GameState {
   state.month = 2;
   state.politics = { ...state.politics!, governor: 'ai0', election: null, baron: null };
   state.treasury.money = 5_000;
+  // Every good any object needs is on the store's shelf, so goods in reach decide nothing unless a case says so.
+  for (const row of Object.values(PRESTIGE)) for (const [good, need] of Object.entries(row.goods) as [Good, number][]) state.store.stock[good] = Math.max(state.store.stock[good], need);
   return state;
 }
 
@@ -291,6 +294,50 @@ describe('C25: AI Governors build and pay, AI voters weigh the mood (G-5)', () =
     const sent = tick(new VoteHand(mindOf('ai0', 'trader'), createRng(1)), state);
     expect(state.colony!.projects.map((p) => [p.id, p.maxBid]), 'the Spaceport upgrade (5), its bid the persona\'s').toEqual([['spaceport', 400]]);
     expect(colonyActs(sent).map((a) => a.type)).toEqual(['commission', 'setSiteBid']);
+  });
+
+  /** No unit of `goods` anywhere the Governor can see: not with a player, not in the store, not made last month. */
+  function without(state: GameState, goods: Good[]): void {
+    for (const good of goods) {
+      state.store.stock[good] = 0;
+      for (const p of state.players) p.stock[good] = 0;
+      for (const report of state.history) for (const row of Object.values(report.produced)) row[good] = 0;
+    }
+  }
+
+  it('T-AC-36 (PM ruling, 6 Nov): it commissions only an object whose goods are within reach; with no Electronics anywhere and 28 Crystite held, the Observatory over the Spaceport', () => {
+    POLITICS.ai.colony.commissions.trader = true;
+    POLITICS.ai.colony.siteBid.trader = 400;
+    const state = governed();
+    without(state, ['electronics', 'crystite']);
+    state.players.find((p) => p.id === 'ai0')!.stock.crystite = 28;
+    expect(goodsInReach(state, 'spaceport'), 'the case: no Electronics anywhere').toBe(false);
+    tick(new VoteHand(mindOf('ai0', 'trader'), createRng(1)), state);
+    expect(state.colony!.projects.map((p) => p.id), 'the Observatory (3, Crystite in reach) over the Spaceport (5, no Electronics)').toEqual(['observatory']);
+
+    const none = governed();
+    without(none, ['alloy', 'electronics', 'crystite']);
+    tick(new VoteHand(mindOf('ai0', 'trader'), createRng(1)), none);
+    expect(none.colony!.projects, 'nothing in reach: it commissions nothing').toEqual([]);
+  });
+
+  it('T-AC-36 (PM ruling, 6 Nov): with every object\'s goods in reach, prestige decides', () => {
+    POLITICS.ai.colony.commissions.trader = true;
+    POLITICS.ai.colony.siteBid.trader = 400;
+    const state = governed();
+    without(state, ['electronics', 'crystite']);
+    state.players.find((p) => p.id === 'ai0')!.stock.crystite = 28;
+    state.store.stock.electronics = PRESTIGE.spaceport.goods.electronics;
+    tick(new VoteHand(mindOf('ai0', 'trader'), createRng(1)), state);
+    expect(state.colony!.projects.map((p) => p.id), 'the Spaceport upgrade (5) over the Observatory (3)').toEqual(['spaceport']);
+  });
+
+  it('T-AC-36 (PM ruling, 6 Nov): units made last month count toward reach', () => {
+    const state = governed();
+    without(state, ['electronics']);
+    expect(goodsInReach(state, 'hospital')).toBe(false);
+    state.history = [{ ...structuredClone(state.history.at(-1) ?? ({} as GameState['history'][number])), produced: { ai0: { ...state.players[0]!.stock, electronics: PRESTIGE.hospital.goods.electronics } } }];
+    expect(goodsInReach(state, 'hospital'), 'the Governor made the Electronics last month').toBe(true);
   });
 
   it('T-AC-36 (C25, AM-10): with no site budget it commissions only objects that need no plot', () => {
