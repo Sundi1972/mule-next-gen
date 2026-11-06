@@ -10,7 +10,6 @@ import {
   needsOf,
   observe,
   PRICE,
-  STRATEGIST,
   UPKEEP,
   type GameState,
   type Good,
@@ -85,12 +84,13 @@ function nonIncreasing(v: UnitValues): void {
  */
 const lost = (units: number, price: number, use: number) => ((1 - UPKEEP.offOutputShare) * units * price) / use;
 
-const saved = { unit: AI_VALUE.unit, spoilage: GOOD_CONFIG.energy.spoilage };
+const saved = { unit: AI_VALUE.unit, holdMonths: AI_VALUE.holdMonths, spoilage: GOOD_CONFIG.energy.spoilage };
 beforeEach(() => {
   AI_VALUE.unit = true;
 });
 afterEach(() => {
   AI_VALUE.unit = saved.unit;
+  AI_VALUE.holdMonths = saved.holdMonths;
   GOOD_CONFIG.energy.spoilage = saved.spoilage;
 });
 
@@ -223,8 +223,8 @@ describe('RULE-3: the chance the seat needs the k-th unit', () => {
     const S = shortCosts(obs, o, 'energy', mind, target).sort((a, b) => b - a);
     const q = Math.min(1, AI_VALUE.forecastRisk * mind.persona.risk);
 
-    // What a unit fetches next month: today's price after spoilage and the forecast's risk (no sales tax here).
-    const carry = 20 * (1 - GOOD_CONFIG.energy.spoilage) * (1 - STRATEGIST.forecastHaircut * mind.persona.risk);
+    // RULE-4: what the store pays for a unit after the months it is held (no sales tax here).
+    const carry = 20 * (1 - PRICE.storeSpread) * (1 - GOOD_CONFIG.energy.spoilage) ** AI_VALUE.holdMonths;
 
     nonIncreasing(v);
     const expected = S.map((s) => q * s + (1 - q) * carry).sort((a, b) => b - a);
@@ -243,6 +243,36 @@ describe('RULE-3: the chance the seat needs the k-th unit', () => {
 
     expect(v.buy[0], "under the store's ask: it buys none").toBeLessThan(20 * (1 + PRICE.storeSpread));
     expect(v.block).toBe(0);
+  });
+});
+
+describe('RULE-4: what an unneeded unit is worth', () => {
+  /** A seat with no plots, so no unit is needed and each is worth its carry alone; Energy posted at 40, tax 8%. */
+  function carryAt(spoilage: number, persona: 'trader' | 'cautious' = 'trader'): UnitValues {
+    GOOD_CONFIG.energy.spoilage = spoilage;
+    AI_VALUE.holdMonths = 1;
+    const state = table({ plots: [], posted: { energy: 40 } });
+    state.treasury.salesTax = 0.08;
+    const { obs, o } = view(state);
+    return unitValues(obs, o, 'energy', mindOf(persona));
+  }
+
+  it("T-AC-7: Ck at RULE-4's example is about 29.8, and a seat speculating less pays that share of it", () => {
+    expect(PRICE.storeSpread, 'the premise: the example’s spread').toBe(0.1);
+    // 40 × (1 − 0.1 spread) × (1 − 0.08 tax) × 0.9 kept a month = 29.808.
+    const trader = carryAt(0.1);
+    const cautious = carryAt(0.1, 'cautious');
+
+    expect(trader.keep[0]).toBeCloseTo(29.808, 6);
+    expect(trader.buy[0], 'speculate 1.4 counts as 1').toBeCloseTo(29.808, 6);
+    expect(cautious.buy[0], 'speculate 0.3').toBeCloseTo(29.808 * 0.3, 6);
+  });
+
+  it('T-AC-7 negative: a good that spoils fully carries nothing', () => {
+    const v = carryAt(1);
+
+    expect(v.keep[0]).toBe(0);
+    expect(v.buy[0]).toBe(0);
   });
 });
 
