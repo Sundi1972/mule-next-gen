@@ -261,7 +261,13 @@ export type EventKey =
   | 'festival'
   | 'generalStrike'
   | 'emigrationWave'
-  | 'blamedForUnrest';
+  | 'blamedForUnrest'
+  // G-5 C26 PR-B: development's store strike, production's walkout and loyal crew, the month end's riot and clean-up.
+  | 'storeStrike'
+  | 'walkout'
+  | 'loyalCrew'
+  | 'riot'
+  | 'volunteerCleanup';
 
 /** How the screens animate an event; several events share a kind. */
 export type EventKind =
@@ -325,6 +331,8 @@ export interface MonthEvent {
   phase: Phase;
   /** What the event changed off the map, in the order it changed it; absent when it changed nothing there. */
   effects?: EventEffect[];
+  /** The colony's objects it damaged (a riot); absent when it damaged none. */
+  objects?: { id: PrestigeId; becomes: 'damaged' }[];
 }
 
 export interface EventWarning {

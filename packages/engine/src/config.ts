@@ -1366,8 +1366,9 @@ export type AiLevelId = keyof typeof AI_LEVELS;
 /**
  * G-5 C26: the colony's social events, rows of the event table (EVENTS.colony and EVENTS.player hold them, so they roll
  * as every row does) and their effects' sizes. Source: the M.U.L.E. Event Catalogue (rev 22, approved by Heiko
- * 2026-10-28), its planning rows Festival, General strike, Emigration wave, Immigration wave (the mood part) and
- * Blamed for the unrest, its points read as shares. Every number is a G-5 placeholder, tuned at the end (HC-25).
+ * 2026-10-28): its planning rows Festival, General strike, Emigration wave, Immigration wave (the mood and air parts)
+ * and Blamed for the unrest; its later rows Store strike, Walkout, Loyal crew, Riot and Volunteer clean-up; and MULE
+ * theft's mood part. Its points are read as shares. Every number is a G-5 placeholder, tuned at the end (HC-25).
  *
  * The mood bands are HAPPINESS.bands (moodBand). Happiness tilts an event's odds, not the event rate: a row's `mood`
  * adds to its chance in that band, and `neverIn` is a hard zero there, whatever else raises it. `needsColony` rows never
@@ -1375,10 +1376,20 @@ export type AiLevelId = keyof typeof AI_LEVELS;
  * slice 5 (D-G5-5: nothing is paid yet), so no row reads them.
  */
 export const SOCIAL_EVENTS = {
-  /** The mood part of the existing immigration wave (EVENTS.colony.immigrationWave). */
+  /**
+   * The mood and air parts of the existing immigration wave (EVENTS.colony.immigrationWave). Its air parts read only
+   * with a colony (PM, 6 Nov), so with politics off it rolls as before; the catalogue's "Toxic" is Toxic or Collapse.
+   */
   immigrationWave: {
     mood: { thriving: 0.06, content: 0.01 },
     neverIn: ['unhappy', 'unrest'],
+    colonyAir: { clean: 0.01 },
+    neverInAir: ['toxic', 'collapse'],
+  } satisfies Pick<import('./events.js').EventRow, 'mood' | 'neverIn' | 'colonyAir' | 'neverInAir'>,
+  /** The mood part of the existing MULE theft (EVENTS.player.muleTheft), in each phase it rolls in. */
+  muleTheft: {
+    mood: { restless: 0.005, unhappy: 0.02, unrest: 0.04 },
+    neverIn: ['thriving'],
   } satisfies Pick<import('./events.js').EventRow, 'mood' | 'neverIn'>,
   colony: {
     /**
@@ -1417,6 +1428,35 @@ export const SOCIAL_EVENTS = {
       shrink: 0.1,
       cap: 0.9,
     },
+    /** In development: the store sells no MULEs this turn (buyMule refuses, storeOnStrike). */
+    storeStrike: {
+      phases: { development: 0 },
+      needsColony: true,
+      mood: { unhappy: 0.02, unrest: 0.04 },
+      cap: 0.9,
+    },
+    /**
+     * At the month end: each store shelf loses `storeLoss` of its stock, floored, and one standing object, on the row's
+     * dice, is damaged (damageObject: no prestige until repaired).
+     */
+    riot: {
+      phases: { upkeep: 0 },
+      needsColony: true,
+      mood: { unhappy: 0.01, unrest: 0.05 },
+      foodPrice: { factor: 1.5, points: 0.02 },
+      storeLoss: 1 / 3,
+      cap: 0.9,
+    },
+    /** At the month end: the air gauge drops by `airDrop`, never below 0. */
+    volunteerCleanup: {
+      phases: { upkeep: 0.01 },
+      needsColony: true,
+      mood: { thriving: 0.03, content: 0.01 },
+      objects: { park: 0.02 },
+      neverIn: ['unrest'],
+      airDrop: 5,
+      cap: 0.9,
+    },
   } satisfies Record<string, import('./events.js').EventRow & import('./events.js').EventParams>,
   player: {
     /** Each player's own roll: `reputation` points (reputationShift), so fewer votes. The richest is likelier. */
@@ -1425,7 +1465,33 @@ export const SOCIAL_EVENTS = {
       needsColony: true,
       mood: { unhappy: 0.02, unrest: 0.05 },
       wealth: { richest: 0.02 },
+      neverIn: ['thriving', 'content'],
       reputation: -1,
+      cap: 0.9,
+    },
+    /**
+     * In production: every working plot of the good the player works most plots of (a tie on the row's dice) makes
+     * `output` of its output, floored. A polluter is likelier, but only when Restless or worse.
+     */
+    walkout: {
+      phases: { production: 0 },
+      needsColony: true,
+      mood: { restless: 0.005, unhappy: 0.02, unrest: 0.04 },
+      wealth: { richest: 0.01 },
+      // The catalogue gives the polluter part no most, so its most is the row's cap.
+      pollution: { perPoint: 0.005, max: 0.9 },
+      pollutionIn: ['restless', 'unhappy', 'unrest'],
+      neverIn: ['thriving'],
+      output: 0.2,
+      cap: 0.9,
+    },
+    /** In production: one of the player's raw plots, on the row's dice, makes `gain` more; none without one. */
+    loyalCrew: {
+      phases: { production: 0 },
+      needsColony: true,
+      mood: { thriving: 0.03, content: 0.01 },
+      wealth: { poorest: 0.01 },
+      gain: 1,
       cap: 0.9,
     },
   } satisfies Record<string, import('./events.js').EventRow & import('./events.js').EventParams>,
@@ -1518,7 +1584,7 @@ export const EVENTS = {
     /** Credits from min (the richest) to max (the poorest), linear in wealth rank (wave-2 AM-1 6a). */
     inheritance: { phases: { planning: 0.015 }, min: 100, max: 300, cap: 0.9 },
     /** One installed MULE is taken off one of the player's plots; rolls in development and again at the month end. */
-    muleTheft: { phases: { development: 0.01, upkeep: 0.01 }, cap: 0.9 },
+    muleTheft: { phases: { development: 0.01, upkeep: 0.01 }, cap: 0.9, ...SOCIAL_EVENTS.muleTheft },
     /** Share of the player's Food the rats eat (floored); fires only when that is at least 1. */
     ratsInSilo: { phases: { upkeep: 0.015 }, share: 0.5, cap: 0.9 },
     /** Share of the player's cash the accountant takes (floored); fires only when that is at least 1. */
