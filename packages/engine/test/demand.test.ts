@@ -72,24 +72,30 @@ describe('needs C17: the colonists want Electronics, and so its inputs', () => {
     }
   });
 
-  /** The Rare earth and Alloy the colony asks a month with `colonists` and `works` Electronics works, the export ship's part taken out. */
-  function inputsAsked(colonists: number, works: number): { rareEarth: number; alloy: number } {
+  /** The Electronics, Rare earth and Alloy the colony asks a month with `colonists` and `works` Electronics works, the export ship's part taken out. */
+  function asked(colonists: number, works: number): { electronics: number; rareEarth: number; alloy: number } {
     const state = game();
     to(state, 'production');
     state.colonists = colonists;
     worked(state, 'electronics', works);
     expect(state.tiles.filter((t) => t.outfit === 'electronics'), 'the premise: the works stand').toHaveLength(works);
     const [d, off] = [monthlyDemand(state), exportDemand(state)];
-    return { rareEarth: d.rareEarth - off.rareEarth, alloy: d.alloy - off.alloy };
+    return { electronics: d.electronics - off.electronics, rareEarth: d.rareEarth - off.rareEarth, alloy: d.alloy - off.alloy };
   }
 
   it.each([
-    { name: '0 works 4', works: 0, want: 4 },
-    { name: '4 works 4', works: 4, want: 4 },
-    { name: '6 works 6', works: 6, want: 6 },
-  ])('needs C17 AM-2: with 200 colonists the inputs ask max(works, E × recipe): $name', ({ works, want }) => {
-    expect(RECIPES.electronics.inputs, 'the premise: a works takes one Rare earth and one Alloy a month').toMatchObject({ rareEarth: 1, alloy: 1 });
-
-    expect(inputsAsked(200, works)).toEqual({ rareEarth: want, alloy: want });
+    { name: '0 works 4', works: 0, rareEarth: 1, output: 1, want: { electronics: 4, rareEarth: 4, alloy: 4 } },
+    { name: '4 works 4', works: 4, rareEarth: 1, output: 1, want: { electronics: 4, rareEarth: 4, alloy: 4 } },
+    { name: '6 works 6', works: 6, rareEarth: 1, output: 1, want: { electronics: 4, rareEarth: 6, alloy: 6 } },
+    { name: '6 works taking 2 Rare earth each ask 12', works: 6, rareEarth: 2, output: 1, want: { electronics: 4, rareEarth: 12, alloy: 6 } },
+    { name: 'a recipe making 2 needs 2 batches for E = 4', works: 0, rareEarth: 1, output: 2, want: { electronics: 4, rareEarth: 2, alloy: 2 } },
+  ])('needs C17 AM-2: with 200 colonists the inputs ask max(works, E ÷ output) × recipe, and Electronics stays E: $name', ({ works, rareEarth, output, want }) => {
+    const saved = RECIPES.electronics;
+    RECIPES.electronics = { inputs: { ...saved.inputs, rareEarth, alloy: 1 }, output };
+    try {
+      expect(asked(200, works)).toEqual(want);
+    } finally {
+      RECIPES.electronics = saved;
+    }
   });
 });
