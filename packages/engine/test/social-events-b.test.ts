@@ -323,3 +323,26 @@ describe('C26 PR-B: the riot, at the month end', () => {
     expect(state.colony!.projects[0]!.stage).toBe('building');
   });
 });
+
+describe('C26 PR-B: the volunteer clean-up, at the month end', () => {
+  it('INV-C26-19 (clean-up odds): 1% base, Thriving +3, Content +1, a standing park +2; never in Unrest; no colony, no clean-up', () => {
+    expect(chances('volunteerCleanup', 'upkeep')).toEqual(close([0.04, 0.02, 0.01, 0.01, 0]));
+    const park = (s: GameState) => s.colony!.projects.push(object('park'));
+    expect(chances('volunteerCleanup', 'upkeep', { tweak: park })).toEqual(close([0.06, 0.04, 0.03, 0.03, 0]));
+    expect(chances('volunteerCleanup', 'upkeep', { tweak: (s) => s.colony!.projects.push(object('park', 'damaged')) })).toEqual(close([0.04, 0.02, 0.01, 0.01, 0]));
+    expect(eventChance(colonyAt(MID('thriving'), { politics: false }), row('volunteerCleanup'), 'upkeep')).toBe(0);
+  });
+
+  it("INV-C26-20 (clean-up's effect): the air drops by 5, never below 0; the effect is the actual drop", () => {
+    only(['volunteerCleanup']);
+    const cleaned = (air: number) => {
+      const state = colonyAt(MID('content'));
+      state.air = air;
+      const [event] = firePhase(state, 'upkeep').filter((e) => e.key === 'volunteerCleanup');
+      return [state.air, event?.effects];
+    };
+    expect(cleaned(42)).toEqual([37, [{ on: 'colony', what: 'air', delta: -5 }]]);
+    expect(cleaned(3)).toEqual([0, [{ on: 'colony', what: 'air', delta: -3 }]]);
+    expect(cleaned(0)).toEqual([0, undefined]);
+  });
+});
