@@ -1369,6 +1369,11 @@ export const SOCIAL_EVENTS = {
     mood: { thriving: 0.06, content: 0.01 },
     neverIn: ['unhappy', 'unrest'],
   } satisfies Pick<import('./events.js').EventRow, 'mood' | 'neverIn'>,
+  /** The mood part of the existing MULE theft (EVENTS.player.muleTheft), in each phase it rolls in. */
+  muleTheft: {
+    mood: { restless: 0.005, unhappy: 0.02, unrest: 0.04 },
+    neverIn: ['thriving'],
+  } satisfies Pick<import('./events.js').EventRow, 'mood' | 'neverIn'>,
   colony: {
     /**
      * Mood +moodShift at once (moodShift, uncapped), +prestige lasting points (addPrestige), and the colonists ask
@@ -1414,6 +1419,7 @@ export const SOCIAL_EVENTS = {
       needsColony: true,
       mood: { unhappy: 0.02, unrest: 0.05 },
       wealth: { richest: 0.02 },
+      neverIn: ['thriving', 'content'],
       reputation: -1,
       cap: 0.9,
     },
@@ -1507,7 +1513,7 @@ export const EVENTS = {
     /** Credits from min (the richest) to max (the poorest), linear in wealth rank (wave-2 AM-1 6a). */
     inheritance: { phases: { planning: 0.015 }, min: 100, max: 300, cap: 0.9 },
     /** One installed MULE is taken off one of the player's plots; rolls in development and again at the month end. */
-    muleTheft: { phases: { development: 0.01, upkeep: 0.01 }, cap: 0.9 },
+    muleTheft: { phases: { development: 0.01, upkeep: 0.01 }, cap: 0.9, ...SOCIAL_EVENTS.muleTheft },
     /** Share of the player's Food the rats eat (floored); fires only when that is at least 1. */
     ratsInSilo: { phases: { upkeep: 0.015 }, share: 0.5, cap: 0.9 },
     /** Share of the player's cash the accountant takes (floored); fires only when that is at least 1. */
