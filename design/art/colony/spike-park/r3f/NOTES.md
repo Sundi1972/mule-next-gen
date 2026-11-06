@@ -121,3 +121,18 @@ Assumptions: same budget as the Park (≤150k triangles **drawn**, ≤8 MB), CC0
 | **Damaged / smoking** | Smoke: GPU sprite particles (one CC0 smoke texture). Fire glow: flickering point light plus emissive. Scorch: 1–2 decals. **All free.** Broken geometry (a holed roof, a fallen sign, rubble) needs **a damaged variant of the roof and sign, about ½–1 day**. Without it, decals plus smoke read as "on fire", not as "broken". | Smoke, glow and scorch are free; **broken geometry needs modelling**. |
 
 **Total for the Hospital:** about **3–4 days**, plus about 1½ days once for the shared site and scaffold kits that every later building reuses. In real time, the light-driven stages (closed, dusk, lamps, smoke) cost nothing extra to produce. In a pre-rendered pipeline each of them would be another render per angle and mood.
+
+## Colony scene (`?scene=colony`)
+
+`?scene=colony` loads `../out/colony_rt.glb` (symlinked as `public/colony_rt.glb`) and frames the 3×3 grounds, 36 m square, at the same 2:1 iso angle: 56 m fit across the view, the model centred on its bounding box, a ±30 m shadow box. Day/Dusk/Orbit work as in the Park. By day every emissive material is set to 0: windows, lamp globes and signs. At dusk each material gets back the emissive strength from the file, with bloom. Point lights go under the lamp globes, capped at 12, because each one costs every lit pixel.
+
+The measured file was the export of 14:42Z, sha1 `020d180d…`, with 174,717 triangles. Every run reported that count. Results are in `shots/measure-colony.json`, `shots/colony_day.png` and `shots/colony_dusk.png`, all at 1920×1080, Dusk.
+
+| Viewport | capped fps (1× / 4× CPU) | uncapped fps (1× / 4× CPU) | draw calls | triangles / frame | first frame |
+|---|---|---|---|---|---|
+| 1920×1080 @ DPR 1 | 60 / 60 | 240 / 194 | 160 | 524,184 | 0.7 s / 2.1 s |
+| 390×844 @ DPR 3 | 60 / 60 | 261 / 200 | 160 | 524,184 | 0.9 s / 2.7 s |
+
+**The triangle count is 3× the model, not 2×,** because the lamp-globe glass uses `KHR_materials_transmission`. Any transmissive material makes three.js render the whole scene once more. The page now sets transmission to 0 when it loads, which removes that pass: about a third fewer triangles, and calls go down too. The table above was measured before that change.
+
+**The file changed during the run.** At 14:50Z a 52.8 MB export with 1,417,477 triangles replaced `colony_rt.glb`. The page loads it (149 calls, 2.83M triangles per frame), but it is far over any phone budget, and I have not measured it.

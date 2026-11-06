@@ -976,6 +976,9 @@ def tris(objs):
 meshes = [o for o in scene.objects if o.type == "MESH"]
 print(f"SPIKE tris full scene (no grass blades): {tris(meshes)}; one tree: {tris(trees[:1])}; hedge: {tris(hedge)}; flowers: {tris(flowers)} ({len(flowers)} plants)", flush=True)
 
+if "PARK_BUILT" in globals():  # colony.py runs this file for the park and its helpers, then takes over
+    raise PARK_BUILT
+
 # ---------- render ----------
 
 scene.render.engine = "CYCLES"

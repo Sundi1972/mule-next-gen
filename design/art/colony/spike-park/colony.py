@@ -90,8 +90,10 @@ def worn(m, scale=0.6, lo=0.72):
     r.color_ramp.elements[1].color = (1.05, 1.05, 1.05, 1)
     link(nt, nz.outputs["Fac"], r.inputs["Fac"])
     link(nt, mix(nt, 1.0, src, r.outputs["Color"], "MULTIPLY"), b.inputs["Base Color"])
+    UNWEAR.append(lambda: link(nt, src, b.inputs["Base Color"]))  # the phone export drops the noise layer
 
 
+UNWEAR = []
 worn(apron_pavers)
 worn(pavers, 0.9, 0.82)
 
@@ -888,6 +890,7 @@ for i, (x, y) in enumerate([(t, -E - 1.25) for t in (-12, 0, 12)] + [(E + 1.25, 
         off = (k - 2) * 0.62
         h_.location = (x + (off if along else 0), y + (0 if along else off), -0.12)
         h_.scale = (h_.scale.x * 0.95, h_.scale.y * 0.95, h_.scale.z * 0.7)
+        SKIRT.append(h_)  # dropped on the phone with the other scanned plants
 
 # the planet round the colony: a terrain skirt, flat at the apron and rolling away, faded out at the frame's edge
 
@@ -999,6 +1002,61 @@ if WHAT == "colony":
 if WHAT == "rt":
     # ======== the real-time colony: the park's own phone build, plus the ring's buildings merged per building ========
     colony_view("dusk")  # signs exported lit, like the park's globes; the page dims them by day
+    render_setup((1920, 1080), 50)  # Cycles, for the terrain bake
+    rock_mesh = P["rock"].data
+    for o in SKIRT + [o for o in scene.objects if o.type == "MESH" and o.data == rock_mesh and o not in PARK_OBJS]:
+        if o.name in scene.objects:
+            bpy.data.objects.remove(o)  # scanned trees and rocks: 1.6 M and 5.6k triangles a copy
+    for u in UNWEAR:
+        u()
+    # bare places: the photo lawn alone, on the boxes' world-metre UVs (noise mixes do not travel)
+    mm = bpy.data.materials["rough_ground"]
+    mm.node_tree.nodes.clear()
+    mnt = mm.node_tree
+    mb = node(mnt, "ShaderNodeBsdfPrincipled")
+    link(mnt, mb.outputs[0], node(mnt, "ShaderNodeOutputMaterial").inputs["Surface"])
+    gim = node(mnt, "ShaderNodeTexImage", image=bpy.data.images.load(os.path.join(T, "Grass001", "Grass001_1K-JPG_Color.jpg"), check_existing=True))
+    link(mnt, P["uv_map"](mnt, 2.2), gim.inputs["Vector"])
+    link(mnt, gim.outputs["Color"], mb.inputs["Base Color"])
+    mb.inputs["Roughness"].default_value = 0.9
+    # terrain: a coarse grid cut to the fade ellipse, its ground baked to one 1k map (the page fades the rim with fog)
+    bpy.data.objects.remove(terrain)
+    N2, S2 = 64, 150.0
+    idx, tv2, tf2, uvs = {}, [], [], []
+    def vid(i, j):
+        if (i, j) not in idx:
+            x, y = -S2 / 2 + S2 * i / N2, -S2 / 2 + S2 * j / N2
+            idx[(i, j)] = len(tv2)
+            tv2.append((x, y, terrain_z(x, y)))
+        return idx[(i, j)]
+    for j in range(N2):
+        for i in range(N2):
+            x, y = -S2 / 2 + S2 * (i + 0.5) / N2, -S2 / 2 + S2 * (j + 0.5) / N2
+            if math.hypot(0.7071 * (x + y) / 30.0, 0.3536 * (y - x) / 17.0) < 1.05:
+                tf2.append((vid(i, j), vid(i + 1, j), vid(i + 1, j + 1), vid(i, j + 1)))
+    terrain = mesh_obj("terrain", tv2, tf2, ground_mat("terrain_bake"), smooth=True)
+    uvl = terrain.data.uv_layers.new(name="UVMap")
+    for l in terrain.data.loops:
+        x, y, _ = terrain.data.vertices[l.vertex_index].co
+        uvl.data[l.index].uv = ((x + S2 / 2) / S2, (y + S2 / 2) / S2)
+    tim = bpy.data.images.new("terrain", 1024, 1024)
+    tnt = terrain.data.materials[0].node_tree
+    tn = node(tnt, "ShaderNodeTexImage", image=tim)
+    tnt.nodes.active = tn
+    for o in scene.objects:
+        o.select_set(False)
+    terrain.select_set(True)
+    bpy.context.view_layer.objects.active = terrain
+    scene.cycles.samples = 8
+    bpy.ops.object.bake(type="DIFFUSE", pass_filter={"COLOR"}, margin=4, use_clear=True)
+    tim.filepath_raw = os.path.join(A, "baked", "terrain.jpg")
+    tim.file_format = "JPEG"
+    tim.save()
+    trt, tnt2, tb2 = new_mat("terrain_rt")
+    link(tnt2, P["tex"](tnt2, tim.filepath_raw, node(tnt2, "ShaderNodeTexCoord").outputs["UV"]).outputs["Color"], tb2.inputs["Base Color"])
+    tb2.inputs["Roughness"].default_value = 0.92
+    terrain.data.materials[0] = trt
+    GROUP[terrain] = "terrain"
     for o in list(PARK_OBJS) + FORECOURT_TREES:  # forecourt trees: 1.6 M triangles each; the phone keeps only the park's two
         if o.name in scene.objects:
             bpy.data.objects.remove(o)

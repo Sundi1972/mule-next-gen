@@ -5,7 +5,10 @@ const num = (k: string, d: number) => (q.has(k) ? Number(q.get(k)) : d)
 
 export type Mood = 'day' | 'dusk'
 
+const scene = q.get('scene') === 'colony' ? 'colony' : 'park'
+
 export const settings = {
+  scene: scene as 'park' | 'colony',
   model: q.get('model') ?? '', // empty: prefer park_rt.glb, fall back to park.glb
   mood: (q.get('mood') === 'dusk' ? 'dusk' : 'day') as Mood,
   shot: flag('shot', false), // hide the UI for screenshots
@@ -21,7 +24,8 @@ export const settings = {
   post: flag('post', true), // the whole composer; off = plain renderer with ACES
   dprMax: num('dpr', 2),
   orbit: flag('orbit', false),
-  // Metres of ground across the view width; 21 matches the Blender camera's ortho_scale.
-  frame: num('frame', 21),
+  // Metres across the view: 21 is the Blender camera's ortho_scale for one 12 m place; the 3×3 grounds need ~3×.
+  frame: num('frame', scene === 'colony' ? 56 : 21),
+  shadowExtent: scene === 'colony' ? 30 : 10, // half-size of the sun's shadow box, metres
   toneMap: (q.get('tm') ?? 'aces') as 'aces' | 'agx' | 'neutral',
 }

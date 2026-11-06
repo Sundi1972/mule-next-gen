@@ -55,6 +55,7 @@ window.__perf = { t0: performance.now() }
 
 async function pickModel(): Promise<string> {
   if (settings.model) return '/' + settings.model
+  if (settings.scene === 'colony') return '/colony_rt.glb'
   const rt = await fetch('/park_rt.glb', { method: 'HEAD' }).catch(() => null)
   // Vite answers a missing file with index.html, so check the type, not just ok.
   const isGlb = rt?.ok && !(rt.headers.get('content-type') ?? '').includes('html')
@@ -149,12 +150,12 @@ function Lighting({ mood }: { mood: Mood }) {
         shadow-bias={-0.0004}
         shadow-normalBias={0.03}
         // The tile is 12 m; its diagonal plus a 7 m tree's throw fits in ±10 m.
-        shadow-camera-left={-10}
-        shadow-camera-right={10}
-        shadow-camera-top={10}
-        shadow-camera-bottom={-10}
+        shadow-camera-left={-settings.shadowExtent}
+        shadow-camera-right={settings.shadowExtent}
+        shadow-camera-top={settings.shadowExtent}
+        shadow-camera-bottom={-settings.shadowExtent}
         shadow-camera-near={0.5}
-        shadow-camera-far={60}
+        shadow-camera-far={settings.shadowExtent * 6}
       />
       <GroundShadow />
     </>
@@ -176,13 +177,13 @@ function GroundShadow() {
   }, [])
   return (
     <mesh rotation-x={-Math.PI / 2} position={[0.4, -0.62, 0.4]} renderOrder={-1}>
-      <planeGeometry args={[19, 19]} />
+      <planeGeometry args={settings.scene === 'colony' ? [54, 54] : [19, 19]} />
       <meshBasicMaterial map={tex} transparent depthWrite={false} toneMapped={false} />
     </mesh>
   )
 }
 
-type Lamp = { mats: THREE.MeshStandardMaterial[]; pos: THREE.Vector3[]; added: boolean; root: THREE.Object3D }
+type Lamp = { mats: THREE.MeshStandardMaterial[]; pos: THREE.Vector3[]; added: boolean; root: THREE.Object3D; offset: THREE.Vector3 }
 
 function Park({ url, mood }: { url: string; mood: Mood }) {
   const { scene } = useGLTF(url)
@@ -209,21 +210,36 @@ function Park({ url, mood }: { url: string; mood: Mood }) {
           s.depthWrite = true
         }
         if (s.alphaTest > 0) s.side = THREE.DoubleSide
+        // Any transmissive material makes three render the whole scene once more; a lamp globe isn't worth it.
+        const phys = s as THREE.MeshPhysicalMaterial
+        if (phys.transmission > 0) phys.transmission = 0
         if (settings.lawnNoise && !s.map && /lawn|grass/i.test(s.name)) addLawnNoise(s)
         const e = s.emissive
         if (e && e.r + e.g + e.b > 0.05) {
+          s.userData.e0 ??= s.emissiveIntensity // the file's own strength, used at dusk in the colony
           mats.add(s)
-          pos.push(...globeCentres(mesh))
+          if (settings.scene === 'park' || /lamp_globe/.test(s.name)) pos.push(...globeCentres(mesh))
         }
       }
     })
     window.__perf.modelTris = tris
-    window.__perf.lamps = dedupe(pos).length
-    return { mats: [...mats], pos: dedupe(pos), added: false, root: settings.merge ? mergeStatic(scene) : scene }
+    // Centre the grounds on the origin so camera, sun and shadow box need no per-scene target.
+    const c = new THREE.Box3().setFromObject(scene).getCenter(new THREE.Vector3())
+    const offset = settings.scene === 'colony' ? new THREE.Vector3(-c.x, 0, -c.z) : new THREE.Vector3()
+    // Point lights cost every lit pixel; the colony gets one per lamp up to a cap.
+    const lampPos = dedupe(pos).slice(0, 12).map((p) => p.add(offset))
+    window.__perf.lamps = lampPos.length
+    return { mats: [...mats], pos: lampPos, added: false, root: settings.merge ? mergeStatic(scene) : scene, offset }
   }, [scene])
 
   useEffect(() => {
-    for (const mat of lamps.mats) mat.emissiveIntensity = Math.max(m.lampEmissive, mood === 'day' ? 0.4 : 0)
+    for (const mat of lamps.mats)
+      mat.emissiveIntensity =
+        settings.scene === 'colony'
+          ? mood === 'day'
+            ? 0
+            : (mat.userData.e0 as number)
+          : Math.max(m.lampEmissive, mood === 'day' ? 0.4 : 0)
   }, [lamps, m.lampEmissive, mood])
 
   // park.glb (the older export) has no lamps; draw the spec's four so dusk can be judged on it.
@@ -233,7 +249,7 @@ function Park({ url, mood }: { url: string; mood: Mood }) {
 
   return (
     <>
-      <primitive object={lamps.root} />
+      <primitive object={lamps.root} position={lamps.offset} />
       {fallback && SPEC_LAMPS.map(([x, y], i) => <LampPost key={i} x={x} z={-y} glow={m.lampEmissive} />)}
       {settings.lampLights &&
         m.lampLight > 0 &&

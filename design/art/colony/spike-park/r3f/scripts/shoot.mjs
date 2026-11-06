@@ -22,7 +22,12 @@ async function shot(name, w, h, dpr, q) {
   console.log(name, JSON.stringify(perf))
   await page.close()
 }
-await shot('park_day', 1600, 1200, 1, 'mood=day')
-await shot('park_dusk', 1600, 1200, 1, 'mood=dusk')
-await shot('park_phone_dusk', 390, 844, 3, 'mood=dusk&frame=18')
+if (process.env.SCENE === 'colony') {
+  await shot('colony_day', 1920, 1080, 1, 'scene=colony&mood=day')
+  await shot('colony_dusk', 1920, 1080, 1, 'scene=colony&mood=dusk')
+} else {
+  await shot('park_day', 1600, 1200, 1, 'mood=day')
+  await shot('park_dusk', 1600, 1200, 1, 'mood=dusk')
+  await shot('park_phone_dusk', 390, 844, 3, 'mood=dusk&frame=18')
+}
 await browser.close()

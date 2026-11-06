@@ -112,13 +112,21 @@ For comparison, this park (spec to delivered renders, glb and these notes) took 
 `colony.py` runs `park.py` up to its render step, which gives it the park plus every helper, then builds the rest of the first ring:
 
 ```
-Blender -b -P colony.py -- "$PWD" 256 day,dusk 100 colony   # out/colony_day.png, out/colony_dusk.png (~2.5 min)
+Blender -b -P colony.py -- "$PWD" 256 day,dusk 100 colony   # out/colony_day.png, out/colony_dusk.png (~1.5 min)
 Blender -b -P colony.py -- "$PWD" 256 day 100 stages        # out/hospital_stages.png (~20 s)
 Blender -b -P colony.py -- "$PWD" 16 dusk 50 rt             # out/colony_rt.glb (needs out/park_rt.glb)
 Blender -b -P rt_preview.py -- "$PWD" day|dusk colony       # EEVEE look at the glb
 ```
 
-**Layout.** Place (col, row) sits at (12·col, −12·row). The town hall is at (0,0) and the park at (1,0), moved there unchanged. Hospital (0,1), observatory (1,1), stadium (−1,0) and spaceport (0,−1) follow. The other three places are bare paved slabs. Each place sits on a park-style slab (sandstone rim and sides, square concrete pavers inside). The ring stands on a lower plaza apron 3.5 m wide with 28 lamps of 4 m, each with a warm point light. Five of the park's trees stand on forecourts. The camera has the same angle and centre, with ortho widened to 63 m; output is 1920×1080. The sun is WSW, as in the park.
+**Layout.** Place (col, row) sits at (12·col, −12·row). The town hall is at (0,0) and the park at (1,0), moved there unchanged. Hospital (0,1), observatory (1,1), stadium (−1,0) and spaceport (0,−1) follow.
+
+- **Places and plaza:** each place sits on a park-style slab (sandstone rim and sides, worn square pavers). The ring stands on a lower plaza apron, 2.5 m wide, also worn paving, with six dark concrete planters holding shrubs.
+- **"Room to grow":** the three bare places are rough ground with grass coming through, four orange survey stakes for a future footprint, and loose stones.
+- **Lamps:** twelve 3 m lamps stand on the walkways between places, each with a warm point light.
+- **Terrain skirt:** the planet's ground (photo lawns, earth and pebbles mixed by noise) runs flat at apron level, then rolls. It fades to transparent in a screen-space ellipse toward the frame edge, with 16 trees and rocks scattered inside the fade.
+- **Props:** an ambulance beside the hospital canopy, a six-wheeled rover and crates at the spaceport.
+- **Camera and light:** the same angle and centre, with ortho widened to 63 m; output is 1920×1080. The sun is WSW by day.
+- **Dusk is a blue hour:** a cool sky fill and a grazing sun, with about 72% of window bays lit warm at varying brightness.
 
 **Shared building kit.** About 200 lines, written once:
 - `modern()`: per floor, a solid spandrel band, then a glass band recessed 28 cm with real mullions every 1.4 m and a transom. On top, parapets and a roof membrane.
@@ -145,12 +153,14 @@ Blender -b -P rt_preview.py -- "$PWD" day|dusk colony       # EEVEE look at the 
 | Closed | dead glass, greyed facade, faded crosses, a boarded ground floor, a site fence | derived: material swaps plus a few boxes |
 | Damaged | a noise-displaced boolean bites the upper south-east corner out of every part it touches; rubble; an ember glow and light inside the break; a volumetric smoke column | derived: one cutter, rubble scatter, a smoke volume |
 
-**Phone version** (`colony_rt.glb`):
-- **Budgets:** 174,717 triangles drawn (budget 300k), 10.05 MB (budget 12 MB), 65 draw calls over 20 meshes.
-- **What it contains:** the park's own phone build plus one merged mesh per building, the plaza, and the lamp globes. Textures are at most 512 px.
-- **Two things that do not carry over:**
-  - **The five forecourt trees are left out**, because each one is a 1.6M-triangle scan.
+**Phone version** (`colony_rt.glb`, rebuilt after the polish):
+- **Budgets:** 164,797 triangles drawn (budget 300k), 10.06 MB (budget 12 MB), 83 draw calls over 21 meshes.
+- **What it contains:** the park's own phone build plus one merged mesh per building, the plaza, the terrain, and the lamp globes. Textures are at most 512 px, plus the 1k baked terrain.
+- **What does not carry over:**
+  - **Scanned plants and rocks:** the skirt and forecourt trees, the planter shrubs and the loose rocks are left out. They are 1.6M or 5.6k triangles a copy; only the park's two card trees ship.
+  - **Terrain fade:** the terrain ships as a coarse grid cut to the fade ellipse, with its ground baked to one map. Its rim is stepped, so the page should fade it with fog or a vignette.
   - **Window lighting is uniform.** The random per-bay lighting is procedural, so `window_glass` ships evenly lit (emissive 0.6, warm), like the signs and globes. The page must set those emissives to 0 by day.
+  - **Wear on the paving is dropped**, along with the noise mixes on the bare places.
 
 ### Measured effort: the colony
 
@@ -165,6 +175,8 @@ These are wall-clock times from `date -u`, for one agent session working in para
 | Hospital closed and damaged stages, three fix passes (boolean solver, bound boxes, smoke and embers), final render | 14:34 → 14:41 | 7 |
 | Real-time export, two fixes (dome slot cutter, lit windows), previews | 14:41 → 14:43 | 2 |
 | **Total: ring of 5 buildings, both renders, 5-stage strip, phone glb** | **14:20 → 14:43** | **23** |
+| Polish pass: 12 walkway lamps, worn paving and planters, room-to-grow places, terrain skirt with fade, blue-hour dusk, ambulance, rover and crates; two look passes; final renders | 14:44 → 14:50 | 6 |
+| Phone glb rebuilt for the polish (terrain bake, dropping the scanned extras) | 14:50 → 14:51 | 1 |
 
 Per building, as a share of the build, by size of its code:
 

@@ -6,6 +6,8 @@ const PW = '/Users/heiko/Projects/mule-next-gen/.claude/worktrees/ws10-visual/no
 const { chromium } = require(PW)
 
 const base = process.argv[2] ?? 'http://127.0.0.1:8820/'
+// SCENE=colony: the 3×3 grounds; only the FPS table, not the per-effect sweep.
+const SCENE = process.env.SCENE === 'colony' ? 'scene=colony&' : ''
 // GL=swiftshader: software GL as a stand-in for a weak GPU; slow, but per-effect pixel costs show up.
 const SOFT = process.env.GL === 'swiftshader'
 const GPU = SOFT ? ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] : ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist']
@@ -25,7 +27,7 @@ async function run(browser, view, q, throttle = 1, seconds = 5) {
   const cdp = await ctx.newCDPSession(page)
   await cdp.send('Emulation.setCPUThrottlingRate', { rate: throttle })
   const t0 = Date.now()
-  await page.goto(`${base}?shot=1&${q}`)
+  await page.goto(`${base}?shot=1&${SCENE}${q}`)
   await page.waitForFunction(() => (window.__perf?.frames ?? 0) > 20, null, { timeout: 180000 })
   const loadWall = Date.now() - t0
   await page.waitForTimeout(1000) // let shaders and the AO accumulation settle
@@ -69,7 +71,7 @@ for (const [label, args] of SOFT ? [] : [['capped', GPU], ['uncapped', [...GPU, 
 }
 
 // Per-effect cost: uncapped, phone viewport, one effect off at a time.
-{
+if (!SCENE) {
   const b = await chromium.launch({ args: [...GPU, ...UNCAP] })
   const variants = SOFT
     ? ['', 'ssao=0', 'shadows=0', 'bloom=0', 'post=0', 'dpr=2', 'dpr=2&shadowMap=1024&ssao=0', 'dpr=1.5&shadowMap=1024&ssao=0']
