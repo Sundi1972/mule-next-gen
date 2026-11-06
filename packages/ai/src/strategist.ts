@@ -635,8 +635,7 @@ export function shortfallHold(obs: GameState, me: string, good: Good): { whole: 
 export function expectedPrices(obs: GameState, good: Good): { sell: number; buy: number } {
   const a = obs.auction;
   const posted = obs.store.posted[good];
-  // Floored without the store's own minimum of 1: a posted price of 1 expects nothing from the store.
-  const storeBuy = a?.good === good ? (a.storeBudget > 0 ? a.storeBuy : 0) : Math.floor(storeBuyAt(obs, good, posted, { exact: true }));
+  const storeBuy = a?.good === good ? (a.storeBudget > 0 ? a.storeBuy : 0) : storeBuyAt(obs, good, posted);
   const ship = shipInPort(obs) ? (shipPrice(obs, good) ?? 0) : 0;
   const sell = Math.max(storeBuy, ship, Math.floor(posted * STRATEGIST.trade.sellFloor));
   const storeSell = a?.good === good ? a.storeSell : storeSellAt(obs, good, posted);

@@ -1,14 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import {
+  advanceGrant,
   advancePhase,
   cloneForSim,
   colonistAffordable,
   AI_LEVELS,
+  claimPlot,
   AI_PERSONAS,
   createGame,
   EVENTS,
   GAME,
   GOODS,
+  grantDone,
+  litPlot,
   mulePriceFor,
   observe,
   postPrices,
@@ -25,7 +29,7 @@ import { FOOD_TO_SPARE } from './store-food.js';
 import { AiSeat } from '../src/seat.js';
 import { simSeats } from '../src/lineup.js';
 import { playGame } from '../src/play.js';
-import { developDecision, goodPlan, landDecision, muleValue, plotRoom, plotValue, rivalsStillClaiming, tradeDecision, wantsAnyAhead, wantsPlot } from '../src/strategist.js';
+import { developDecision, goodPlan, landDecision, muleValue, plotRoom, plotsAhead, plotValue, rivalsStillClaiming, tradeDecision, wantsAnyAhead, wantsPlot } from '../src/strategist.js';
 import { cashReserve, installGain, secondValue, type Mind } from '../src/value.js';
 
 /**
@@ -105,6 +109,30 @@ describe('land claims', () => {
       if (new Set(plays).size > 1) differing.push(step);
     }
     expect(differing, 'steps where the hidden tail changed a press or a Done').toEqual([]);
+  });
+
+  it("INV-grant-view: over a grant with plots claimed, plotsAhead from a seat's view equals the hidden order's free plots from the light on", () => {
+    // observe() hides the order, so plotsAhead rebuilds it from the board; the two must agree at every step, claims and all.
+    const state = fourSeats(3);
+    while (state.phase !== 'landGrant') advancePhase(state);
+    let claims = 0;
+    let checked = 0;
+    for (let lit = litPlot(state); lit; lit = advanceGrant(state)) {
+      const { order, step } = state.grant!;
+      const hidden = order.slice(step).filter((index) => !state.tiles[index]!.owner);
+      for (const p of state.players) expect(plotsAhead(observe(state, p.id)), `${p.id}, step ${step}`).toEqual(hidden);
+      checked++;
+      // Every third lit plot is claimed by the next seat with claims left, so the pass holds claimed plots behind and on the light.
+      const claimer = state.players.find((p) => p.claimsThisGrant < GAME.claimsPerGrant && !p.doneWithLand);
+      if (checked % 3 === 0 && claimer) {
+        claimPlot(state, claimer.id, lit.x, lit.y);
+        claims++;
+        expect(plotsAhead(observe(state, 'ai0')), `just claimed, step ${step}`).toEqual(order.slice(step).filter((index) => !state.tiles[index]!.owner));
+      }
+      if (grantDone(state)) break;
+    }
+    expect(claims, 'the case: plots were claimed during the pass').toBeGreaterThan(1);
+    expect(checked, 'the case: the light walked the pass').toBeGreaterThan(claims);
   });
 
   it('INV-grant-ahead: wantsAnyAhead is true exactly when wantsPlot would take some plot still ahead of the light', () => {

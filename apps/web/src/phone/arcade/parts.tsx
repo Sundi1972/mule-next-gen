@@ -1,8 +1,8 @@
 import type { RawGood } from '@mule/engine';
-import { Creature, cx, GoodIcon, MuleIcon, sickReason, SLOT_COLOR, TERRAIN_NAME } from '@mule/ui';
+import { Creature, cx, GoodIcon, groundDots, MuleIcon, sickReason, SLOT_COLOR, TERRAIN_NAME } from '@mule/ui';
 import { useState, type CSSProperties } from 'react';
 import { useTableChat } from '../../chat/store';
-import { groundPips, plotName, toSlot } from '../../game/derive';
+import { plotName, toSlot } from '../../game/derive';
 import { SWAP_NOTE } from './guide';
 import { bestHere, OUTFIT_WORD, RAW, plotTitle, suits, suitsLine } from './plots';
 import { assaySeconds, type ArcadeSeat } from './seat';
@@ -13,7 +13,7 @@ import { assaySeconds, type ArcadeSeat } from './seat';
  * language. Every number is the view's or the engine's config.
  */
 
-const dots = (n: number) => '●'.repeat(n) + '○'.repeat(4 - n);
+const dots = (n: number) => '●'.repeat(n) + '○'.repeat(3 - n);
 
 /** The land underfoot and what it does to your speed: terrain you can feel, said in words. */
 export function GroundChip({ seat, className }: { seat: ArcadeSeat; className?: string }) {
@@ -187,6 +187,10 @@ export function PlotCard({ seat, now, at }: { seat: ArcadeSeat; now: number; at:
   if (seat.mine?.space !== 'map' || !t || t.owner !== seat.me.id) return null;
   const lead = seat.me.carriedMule && seat.me.carriedMule !== 'empty' ? seat.me.carriedMule : null;
   const best = t.ground ? bestHere(t.ground) : null;
+  // A MULE whose good ties the best on dots is on a plot as good for it as any; only a worse fit is a mismatch.
+  const misfits = (good: string | null | undefined): boolean =>
+    !!good && !!best && good !== best && !((RAW as string[]).includes(good) && groundDots(good as RawGood, t.ground![good as RawGood]) === groundDots(best, t.ground![best]));
+  const misfit = lead ? misfits(lead) : misfits(t.outfit);
   const total = assaySeconds(seat.view, seat.me);
   const left = seat.assayUntil !== null ? Math.max(0, seat.assayUntil - now) / 1000 : 0;
   return (
@@ -207,22 +211,22 @@ export function PlotCard({ seat, now, at }: { seat: ArcadeSeat; now: number; at:
             {RAW.map((g: RawGood) => (
               <span key={g} className={cx('flex justify-between gap-1', g === best && 'font-bold text-holo')}>
                 <span className="font-sans">{OUTFIT_WORD[g]}</span>
-                <span>{dots(groundPips(g, t.ground![g]))}</span>
+                <span>{dots(groundDots(g, t.ground![g]))}</span>
               </span>
             ))}
           </span>
           {/* A mismatch names the best good itself; otherwise the best gets its own line. */}
-          {!(lead && lead !== best) && !(!lead && t.outfit && t.outfit !== best) && (
+          {!misfit && (
             <span className="font-semibold" data-testid="plot-best">
               Best here: {OUTFIT_WORD[best!]}
             </span>
           )}
-          {lead && lead !== best && (
+          {lead && misfit && (
             <span className="font-semibold text-alert" data-testid="plot-mismatch">
               Your MULE makes {OUTFIT_WORD[lead]}; this plot is best for {OUTFIT_WORD[best!]}
             </span>
           )}
-          {!lead && t.outfit && t.outfit !== best && (
+          {!lead && t.outfit && misfit && (
             <span className="font-semibold text-warn" data-testid="plot-mismatch">
               Its {OUTFIT_WORD[t.outfit]} MULE: this plot is best for {OUTFIT_WORD[best!]}
             </span>
@@ -261,7 +265,7 @@ export function PlotsLegend({ seat, short = false }: { seat: ArcadeSeat; short?:
       ))}
       {all.length > mine.length && (
         <span className="text-ink-3" data-testid="legend-more">
-          +{all.length - mine.length} more
+          +{all.length - mine.length} more · Plots ▸{short ? '' : ' shows all'}
         </span>
       )}
     </div>

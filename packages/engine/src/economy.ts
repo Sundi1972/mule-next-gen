@@ -273,7 +273,10 @@ export function storeSellAt(state: GameState, good: Good, mid: number, { exact =
 /** What the store pays for a good around a mid price, with its band's spread: rounded down to at least 1, or unrounded with `exact`. */
 export function storeBuyAt(state: GameState, good: Good, mid: number, { exact = false } = {}): number {
   const line = mid * (1 - spreadOf(state, good).under);
-  return exact ? line : Math.max(1, Math.floor(line));
+  if (exact) return line;
+  const whole = Math.round(line);
+  // The sell side's float, mirrored: 1 - 0.3 is a hair under 0.7, so 90 × 0.7 lands a hair under 63: that close, it is 63.
+  return Math.max(1, Math.abs(line - whole) <= Number.EPSILON * line ? whole : Math.floor(line));
 }
 
 /** The highest mid price whose exact selling line the colonists' budget for a good still covers. */
