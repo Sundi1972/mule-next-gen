@@ -1,5 +1,5 @@
 import { DEVELOPMENT, GAME, POLITICS, type TaxPromise } from '@mule/engine';
-import type { ListingView, MuleView, MyView, PlayerView, PoliticsView, TableView } from '@mule/protocol';
+import type { ColonyView, ListingView, MuleView, MyView, PlayerView, PoliticsView, TableView } from '@mule/protocol';
 import type { Slot } from '@mule/ui';
 import { createElement, type ComponentType } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -263,6 +263,52 @@ describe('the planning hub, rendered (UX audit)', () => {
     expect(element(mine, 'standings-cut')).toMatch(/text-alert/);
     expect(parts.reduce((a, b) => a + b, 0)).toBe(cr(lines.at(-1)![1]));
     expect(cr(lines.at(-1)![1])).toBe(2_240);
+  });
+
+  /** A game with a colony (politics on): what the standings need of it is only that it exists. */
+  const COLONY: ColonyView = {
+    gauges: { wealth: 20_000, environment: 30, prestige: 2, happiness: 60, band: 'content' },
+    lastGauges: null,
+    fund: 400,
+    ledger: null,
+    projects: [],
+    catalogue: [],
+    score: null,
+  };
+  /** Each line of your Worth as the sheet draws it: label and credits. */
+  const yourLinesIn = (sheet: string) =>
+    [...element(sheet, 'standings-mine').matchAll(/<span class="flex justify-between gap-3[^"]*"><span>(.*?)<\/span><span[^>]*>(.*?)<\/span><\/span>/g)].map((m) => [plain(m[1]!), plain(m[2]!)] as const);
+  const credits = (s: string) => (s.startsWith('−') ? -1 : 1) * Number(s.replace(/[^0-9]/g, ''));
+
+  it('H-4 (G-5 AM-12): in a colony game your lines carry what you gave the colony, Donations, and they add up to your Worth', () => {
+    // Lena gave 250 to the colony's projects: 2,800 + 250 = 3,050.
+    const gave: MyView['worthParts'] = { ...LENAS_PARTS, donated: 250 };
+    const players = PLAYERS.map((p) => (p.id === 's1' ? { ...p, worth: 3_050 } : p));
+    const sheet = onPhone(month4({ players, colony: COLONY }, myView('s1', { worthParts: gave })), () => createElement(StandingsSheet, { onClose: () => {} }));
+    const lines = yourLinesIn(sheet);
+    expect(lines.map(([label]) => label)).toEqual(['Cash', 'Goods · 6 units', `Land · 3 × ${GAME.plotScore}`, 'MULEs · 2 × 150', `Offices · 0 terms × ${POLITICS.termScore}`, 'Donations', 'Your worth']);
+    const parts = lines.slice(0, -1).map(([, v]) => credits(v));
+    expect(parts.at(-1)).toBe(250);
+    expect(parts.reduce((a, b) => a + b, 0)).toBe(credits(lines.at(-1)![1]));
+    expect(credits(lines.at(-1)![1])).toBe(3_050);
+    expect(textOf(sheet, 'standings-rule')).toContain('donations to the colony');
+  });
+
+  it('H-4 (G-5 AM-12): in Collapse the Donations line is cut too, and the lines still add up', () => {
+    // Before the cut: 2,800 + 250 = 3,050; the fifth off it, 610, leaves 2,440.
+    const parts: MyView['worthParts'] = { ...LENAS_PARTS, donated: 250, cut: 610 };
+    const players = PLAYERS.map((p) => (p.id === 's1' ? { ...p, worth: 2_440, worthBeforeCut: 3_050 } : p));
+    const sheet = onPhone(month4({ players, colony: COLONY, air: { level: 97, band: 'collapse' } }, myView('s1', { worthParts: parts })), () => createElement(StandingsSheet, { onClose: () => {} }));
+    const lines = yourLinesIn(sheet);
+    expect(lines.map(([label]) => label).slice(-3)).toEqual([`Offices · 0 terms × ${POLITICS.termScore}, cut too`, 'Donations, cut too', 'Your worth']);
+    expect(lines.slice(0, -1).reduce((sum, [, v]) => sum + credits(v), 0)).toBe(2_440);
+    expect(textOf(sheet, 'standings-rule')).toContain('offices and donations too');
+  });
+
+  it('H-4 (G-5 AM-12, negative): a game without a colony has no Donations line: nobody can give', () => {
+    const sheet = onPhone(month4({ colony: null }), () => createElement(StandingsSheet, { onClose: () => {} }));
+    expect(textOf(sheet, 'standings-mine')).not.toContain('Donations');
+    expect(textOf(sheet, 'standings-rule'), 'the rule names no line the sheet does not draw').not.toMatch(/donation/i);
   });
 
   it("H-6: the ship's line is plain words, and no code is left on this screen", () => {

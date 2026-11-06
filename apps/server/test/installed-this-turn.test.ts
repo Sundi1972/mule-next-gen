@@ -1,16 +1,18 @@
 import { boxOf, doorOutside, floorConfig, HALL, pathTo, type GameState, type HallDoor, type HallPlace, type Outfit } from '@mule/engine';
 import { describe, expect, it } from 'vitest';
+import type { SeatInfo } from '@tabletop/core';
 import type { MuleGame } from '../src/mule-game.js';
-import { pressAct, pressThroughSidePick, readyAll, steerTo, toDevelopment as reachDevelopment, type SteerPoint } from './fake-context.js';
+import { pressAct, pressThroughSidePick, readyAll, seats, steerTo, toDevelopment as reachDevelopment, type SteerPoint } from './fake-context.js';
 
 /**
  * Month 1 into development with Heiko (s1) owning a land plot two tiles left of the store, on his door's side and out
  * of its reach: a steered colonist installs where it stands, and the grant's first lit plot on seed 7 is a lake that no
  * shore reaches.
  */
-function toDevelopment() {
+function toDevelopment(players?: SeatInfo[]) {
   let plot: { x: number; y: number } | null = null;
   const g = reachDevelopment({
+    ...(players && { players }),
     prepare: (state) => {
       const store = state.tiles.find((t) => t.terrain === 'store')!;
       const t = state.tiles.find((k) => k.y === store.y && k.x === store.x - 2 && k.owner === null && k.terrain !== 'lake')!;
@@ -183,7 +185,10 @@ describe('Installing over a MULE swaps it (Heiko at the table, 5 Nov)', () => {
   });
 
   it.each(['the pub', 'the clock'] as const)('B-AC-SWAP-2: Heiko\'s turn ends at %s with the swapped-out Food MULE still on his lead: it goes to the corral, and his plot keeps the Water MULE', (end) => {
-    const g = toDevelopment();
+    // The human seats only: the corral then changes, between the swap and the check, by the Food MULE alone. Re-picked
+    // for #366, the plotless-seat fix: with the AI seat at the table, its month-1 plot moved and it now buys a MULE
+    // in that window, so the corral read one short of before + 1.
+    const g = toDevelopment(seats.filter((s) => !s.isAi));
     const { game, plot } = g;
     buyAndOutfit(g, 's1', 'food');
     installOn(g, 's1', plot);

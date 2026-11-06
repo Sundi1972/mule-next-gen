@@ -7,6 +7,11 @@ name: CI
 #
 # Every job pins ubuntu-24.04: ubuntu-latest became 26.04, where Playwright 1.56.1 cannot install Chromium. Move to a
 # newer image only together with a Playwright that supports it.
+#
+# The e2e jobs run in Playwright's own image (its version = apps/web's playwright): Chromium and every system package it
+# needs are in it, so nothing is fetched from Ubuntu's mirror, which stalled for about nine minutes on 5–6 Nov and had
+# CI cancel the jobs at their limits (#424, #430). MULE_E2E_FILE_LIMIT_S is the e2e watchdog (e2e/harness.ts): a file
+# still running after that fails at once naming its last check, instead of holding the job until it is cancelled.
 
 on:
   pull_request:
@@ -33,6 +38,9 @@ jobs:
   e2e:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    container:
+      image: mcr.microsoft.com/playwright:v1.56.1-noble
+      options: --ipc=host
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -41,13 +49,12 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Install Chromium for Playwright
-        run: pnpm --filter @mule/web exec playwright install --with-deps chromium
       - run: pnpm --filter @mule/web build
       - name: Whole-game e2e, pinned seed
         run: pnpm --filter @mule/web e2e:core
         env:
           MULE_E2E_SEED: '1'
+          MULE_E2E_FILE_LIMIT_S: '360'
 
   # Tier 2
   sim:
@@ -77,6 +84,9 @@ jobs:
     if: github.event_name == 'push' || github.base_ref == 'feat/strategist' || github.base_ref == 'main'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    container:
+      image: mcr.microsoft.com/playwright:v1.56.1-noble
+      options: --ipc=host
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -85,8 +95,8 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Install Chromium for Playwright
-        run: pnpm --filter @mule/web exec playwright install --with-deps chromium
       - run: pnpm --filter @mule/web build
       - name: Regression e2e
         run: pnpm --filter @mule/web e2e:regression
+        env:
+          MULE_E2E_FILE_LIMIT_S: '360'
