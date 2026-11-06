@@ -29,11 +29,13 @@ describe('FM-pub-lead: a MULE bought is installed, not walked into the pub on it
       expect(state.players[2]!.species).toBe('glimmer');
       const reported = turns.find((t) => t.month === 7 && t.id === 'ai2')!;
       expect(reported.bought, 'month 7, ai2: MULEs bought').toBe(2);
-      // The promise: a MULE bought ends the turn installed. A pack met while leading it is the one excuse (FM-hurry-margin).
-      const lost = turns
-        .filter((t) => t.pubAt !== null)
-        .flatMap((t) => t.lostMules.filter((m) => !m.packLeading).map(() => `month ${t.month}, ${t.id}: bought ${t.bought}, installed ${t.installs}, PUB at ${t.pubAt} s`));
-      expect(lost, 'MULEs walked into the pub on their lead with no pack met').toEqual([]);
+      // The promise: a MULE bought ends the turn installed, at the pub or when the clock runs out. A pack met while
+      // leading it is the one excuse (FM-hurry-margin).
+      const ended = (t: (typeof turns)[number]) => (t.pubAt === null ? 'the clock ran out' : `PUB at ${t.pubAt} s`);
+      const lost = turns.flatMap((t) =>
+        t.lostMules.filter((m) => !m.packLeading).map(() => `month ${t.month}, ${t.id}: bought ${t.bought}, installed ${t.installs}, ${ended(t)}`),
+      );
+      expect(lost, 'MULEs bought and left on the lead with no pack met').toEqual([]);
     } finally {
       DEV_STEER.on = saved;
     }

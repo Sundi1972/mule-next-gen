@@ -403,9 +403,10 @@ export const DEV_STEER = {
   /** An AI colonist drops its errand for the pub once the clock shows no more than its walk there and this many seconds. */
   botPubMarginSeconds: 2,
   /**
-   * An AI colonist buys a MULE, or starts a glint race, only while its errand, this share longer than estimated, still leaves the pub margin
-   * (botPubMarginSeconds, as the hurry for the pub counts it): a walk that runs a little long then costs the margin
-   * nothing, and the MULE is installed, not walked into the pub (FM-hurry-margin, FM-pub-lead).
+   * An AI colonist buys a MULE, or starts a glint race, only while its errand, this share longer than estimated,
+   * still leaves the pub margin (botPubMarginSeconds, as the hurry for the pub counts it): a walk that runs a little
+   * long then costs the margin nothing, and the MULE is installed, not walked into the pub (FM-hurry-margin,
+   * FM-pub-lead).
    */
   botPlanSlackShare: 0.1,
   /** Ticks an AI colonist may push its stick without moving before it gives that step of its errand up. */
