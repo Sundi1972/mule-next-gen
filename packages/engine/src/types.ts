@@ -172,6 +172,21 @@ export interface Store {
   refPrice: Stock;
   /** Off-world price for each good: what the export ship pays for its first unit. */
   offWorld: Stock;
+  /**
+   * What each good's walk this month taught the store, read when it next posts prices. Optional, so records saved
+   * before it existed still load.
+   */
+  lastWalk?: Partial<Record<Good, WalkLesson>>;
+}
+
+/** One good's walk, as the store's next prices read it (pricing spec §3). */
+export interface WalkLesson {
+  /** The highest price paid between players while the store had none for sale, or null. */
+  soldOutHigh: number | null;
+  /** The highest price a unit traded at between players, or null when none traded. */
+  highTrade: number | null;
+  /** True when the store wanted the good as it came up and wanted no more when its walk finished. */
+  dryBudget: boolean;
 }
 
 /** The colony government's money, filled only by taxes, fines and donations. */

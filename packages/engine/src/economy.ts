@@ -246,6 +246,10 @@ export function storeQuotes(state: GameState, good: Good): { buy: number | null;
   };
 }
 
+export function expectedOffWorld(state: GameState, good: Good, monthsAhead: number): number {
+  throw new Error('NotImplemented: expectedOffWorld');
+}
+
 /**
  * Units the store will sell to players. It keeps back the Food and Water its
  * colonists will buy at the end of the month: the colony's own people come
