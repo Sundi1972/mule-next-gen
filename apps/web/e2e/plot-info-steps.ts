@@ -10,7 +10,7 @@ import type { MuleView } from '@mule/protocol';
 import { bestOf, dotsOf, gemsIn, GOOD_NAME, type RawGood } from '@mule/ui';
 import { errors as playwrightErrors, type Locator, type Page } from 'playwright';
 import { fmt, mapTiles } from '../src/game/derive';
-import { check, doneWithLand, held as heldIn, PHONE, PHONE_SMALL, TV, type GameStepContext } from './harness';
+import { check, doneWithLand, FLOOR_STARTS_MS, held as heldIn, PHONE, PHONE_SMALL, TV, type GameStepContext } from './harness';
 import { readyThroughTheElection } from './politics-steps';
 import { LAPTOP } from './shell-steps';
 import { plotName, tapPlot, type Plot } from './special-steps';
@@ -347,8 +347,11 @@ async function analyseSaysWhatItFound(room: Room, screens: { lena: Page; kai: Pa
   const dots = dotsOf(tile.ground);
   const best = GOOD_NAME[bestOf(dots)];
 
+  // A phone shows development while the phase's event show still holds it; the floor is steered only after that.
+  const end = Date.now() + FLOOR_STARTS_MS;
+  while (!game.steering && Date.now() < end) await screens.lena.waitForTimeout(ASSAY_POLL_MS);
   const steering = game.steering;
-  check(steering, `${B_AC_3}: the second room steers its development`);
+  check(steering, `${B_AC_3}: the second room steers its development within ${FLOOR_STARTS_MS / 1_000} s (phase ${state.phase})`);
   steering.floor = { ...steering.floor, colonists: steering.floor.colonists.map((c) => (c.id === seat ? { ...c, space: 'map', x: plot.x + 0.5, y: plot.y + 0.5, moving: false } : c)) };
   const walking = screens.lena.locator('[data-phase=development] [data-testid=phone-game]');
   await appears(walking.getByTestId('action-verb').filter({ hasText: 'ANALYSE' }), STEP_MS, `${B_AC_3}: on plot ${plotName(plot)} Lena's button offers ANALYSE`);
