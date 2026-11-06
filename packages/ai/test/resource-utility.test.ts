@@ -228,7 +228,9 @@ describe('C8: a power plant is worth what its output saves', () => {
   });
 
   it('B-AC-5: with Energy cheap and stocked at the store and a markedly better Food plot, it outfits Food instead', () => {
-    expect(develop({ energy: 2, food: 3 }, { energy: 200, posted: 10, normal: 10 })).toBe('food');
+    // Food rated 4 (makes 6) against Energy rated 2 (makes 4): a rating of 3 no longer outweighs the mines' Energy at the
+    // store's band prices.
+    expect(develop({ energy: 2, food: 4 }, { energy: 200, posted: 10, normal: 10 })).toBe('food');
   });
 
   it('B-AC-5: a seat whose own farm feeds it builds a plant though a farm sells better, for the plots the plant keeps on', () => {
