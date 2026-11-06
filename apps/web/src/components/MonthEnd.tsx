@@ -193,8 +193,8 @@ export function WinnerCard({ view, density, selfId, className }: { view: MuleVie
   if (!top) return null;
   const line = winnerWords(view, lg);
   // Everyone level at the top shares the win: each gets a mark, smaller when there are several. The TV's card is about
-  // 420 px inside: four 80 px marks fit a row, five do not, so a tie of five or six draws them at 48 (as TvWinner's), and
-  // the row wraps rather than run past the card.
+  // 418 px inside (TvGameOver's 2fr column of 1,200 less its gap, padding and border): four 80 px marks fit a row, five
+  // do not, so a tie of five or six draws them at 48 (as TvWinner's), and the row wraps rather than run past the card.
   const winners = lg.rows.filter((r) => r.rank === 1);
   if (density === 'tv')
     return (
