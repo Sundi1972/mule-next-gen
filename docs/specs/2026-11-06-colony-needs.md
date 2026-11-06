@@ -487,7 +487,7 @@ today        demand.electronics = 0 (+ the export ship); demand.rareEarth and de
              Electronics works · anchor: packages/engine/src/economy.ts::monthlyDemand · verified_by: read (trunk 38070ffb)
 tomorrow     MUST add E = colonists ÷ UPKEEP.colonistsPerElectronics (new, 50) to demand.electronics, and E ×
              RECIPES.electronics.inputs[g] to demand.rareEarth and demand.alloy, on top of today's terms (RULE-13).
-             AM-2: for the inputs, MUST take the larger of the works' term and E × recipe, never their sum
+             AM-2: for the inputs, MUST count the larger of the works' output and E, never their sum
 logic        → RULE-13 · evaluated wherever monthlyDemand is
 seam         packages/engine/src/economy.ts::monthlyDemand — the one demand every price and the AI read
 senior       junior would: count the want once someone makes Electronics · senior does: counts it from month 1,
@@ -665,12 +665,14 @@ examples      sF 0.1 → f 1 · sF 0.5 → 1 − 0.5 × 0.296 = 0.85 · sF 1 →
 RULE-13 · The colonists' Electronics want (C17)                      shape: formula
 E            = colonists ÷ UPKEEP.colonistsPerElectronics (50)        ≥ 0, not rounded (demand is a rate)
 electronics += E
-g ∈ {rareEarth, alloy}:  demand.g = max(works' term, E × RECIPES.electronics.inputs.g)    (AM-2; was the sum)
-             works' term = today's input demand from standing Electronics works (factories('electronics'))
+g ∈ {rareEarth, alloy}:  demand.g = max(W × out, E) × RECIPES.electronics.inputs.g ÷ out    (AM-2; was the sum)
+             W = standing Electronics works (factories('electronics')) · out = RECIPES.electronics.output (1)
+             While out is 1: demand.g = max(W, E) × the recipe's input of g
 unknown      none: colonists is a count in state
 example      200 colonists, 0 works → Electronics +4, Rare earth 4, Alloy 4 a month · 200 colonists, 4 works → Rare
              earth 4, Alloy 4 (the sum read 8) · 200 colonists, 6 works → 6 (a works making for export still counts)
-             · 0 colonists → Electronics +0, inputs = the works' term
+             · 0 colonists → Electronics +0, inputs = W × input · a recipe of Rare earth 2, 6 works, 200
+             colonists → Rare earth max(6, 4) × 2 = 12 (#572's pin)
 ```
 
 ```
@@ -893,8 +895,10 @@ said      Rare earth and Alloy demand = the works' input term + E × recipe
 because   once an Electronics works stands, the sum counts the same Electronics' inputs twice: 200 colonists and
           4 works read 8 where the colony needs 4. Invisible today (no works stand); it would over-signal the
           inputs as soon as WS9's chain build stands works
-did       inputs = max(the works' term, E × recipe): no double count, and a works making beyond the colonists'
-          want (for export) still counts its full input
+did       inputs = max(W × out, E) × input ÷ out, i.e. the larger of the works' Electronics output and the
+          colonists' want, charged at the recipe's input rate: no double count, and a works making beyond the
+          colonists' want (for export) still counts its full input. Worded so at #572's review (PM, 7 Nov): the
+          first wording, max(works' term, E × recipe), agreed with the code only while every input is 1
 not this  C49's waiting buildings' Electronics (G-5 AM-17) raise demand.electronics only; they do not reach the
           inputs. Under a unit a month per building, below the signal's resolution
 goal      G-1 unchanged
