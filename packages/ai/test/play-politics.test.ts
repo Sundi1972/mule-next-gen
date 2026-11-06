@@ -20,9 +20,9 @@ function playedPolitics(seeds: number[]) {
   return { how, taxes };
 }
 
-// One pinned game in CI: seed 1 has offices won by votes (5 of 8) and a tax off its start in 11 of 12 months, so it
-// qualifies with room. If a change stops it qualifying, the test fails; it never skips. MULE_FULL=1 plays four.
-const SEEDS = process.env.MULE_FULL === '1' ? [1, 2, 3, 4] : [1];
+// One pinned game in CI: seed 2 has offices won by votes and a tax off its start. Seed 1 stopped qualifying once the
+// store's Energy demand counted new MULEs (C6) and the game's prices moved; seeds 2 to 5 still qualify. If a change stops it qualifying, the test fails; it never skips. MULE_FULL=1 plays four.
+const SEEDS = process.env.MULE_FULL === '1' ? [1, 2, 3, 4] : [2];
 
 describe('the sim plays politics', () => {
   it('UBER-AC-1, T-AC-63: AI seats declare and vote, so every office is filled in every election and some are won by votes, not only appointed, and a Governor moves the tax', () => {

@@ -146,6 +146,8 @@ describe('the keep side does not move (Heiko 5 Nov, "sell surplus")', () => {
   /** Month 1's auction with `good` up; ai0 owns `plots` and holds `stock`. */
   function at(plots: { x: number; outfit: Outfit }[], stock: Partial<Stock>): GameState {
     const state = game();
+    // Energy's shelf is full before the month's prices are posted: C6 counts the MULEs the free land will bring, and it still posts normal.
+    state.store.stock.energy = 200;
     while (state.phase !== 'auction') advancePhase(state);
     place(state, plots);
     setStock(state, ME, stock, 2000);

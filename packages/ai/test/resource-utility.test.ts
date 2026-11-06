@@ -63,6 +63,8 @@ interface Seat {
  */
 function table(seat: Seat): GameState {
   const state = createGame({ seed: 1, players: ['ai0', 'ai1', 'ai2', 'ai3'].map((id) => ({ id, name: id, isAi: true })) });
+  // Energy's shelf is full before the month's prices are posted: C6 counts the MULEs the free land will bring, and it still posts normal.
+  state.store.stock.energy = 200;
   while (state.phase !== 'auction') advancePhase(state);
   for (const t of state.tiles) if (t.owner) Object.assign(t, { owner: null, outfit: null });
   const me = state.players.find((p) => p.id === ME)!;

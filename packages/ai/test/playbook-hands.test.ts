@@ -3,6 +3,7 @@ import {
   AI_PLANS,
   BRAIN,
   GOODS,
+  postPrices,
   stableJson,
   tileIndex,
   type AuctionSide,
@@ -664,6 +665,9 @@ describe('the seat plays its development and auction parts (C4, RULE-6, RULE-7)'
     const edit = (state: GameState) => {
       landed(1, ['plains:food', 'river:water', 'plains:energy', 'volcanic', 'river'], [], false)(state);
       stocked(1)(state);
+      // Energy's shelf is full when the month's prices are posted: C6 counts the MULEs the land brings, and it still posts normal.
+      state.store.stock.energy = 200;
+      postPrices(state);
       // The ship pays 200 for Crystite (its off-world price, which the store posts): the volcanic plot's analysis can
       // show a mine worth more than the route's MULE.
       Object.assign(state.store, { posted: { ...state.store.posted, crystite: 200 }, offWorld: { ...state.store.offWorld, crystite: 200 } });
