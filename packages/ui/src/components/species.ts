@@ -1,4 +1,4 @@
-import { SPECIES_PERK as PERK } from '@mule/engine';
+import { SPECIES_PERK as PERK_NUMBERS } from '@mule/engine';
 import { createContext, useContext, type ReactNode } from 'react';
 import type { Slot } from './tokens';
 
@@ -19,10 +19,10 @@ const pct = (share: number) => `${Math.round(share * 100)}%`;
 
 /** One clear perk per species, in the numbers the game plays: read from the balance settings, so the words follow a tuning. */
 export const SPECIES_PERK: Record<Species, string> = {
-  zipwing: `Fast flyer. Walks ${PERK.zipwingSpeed}× as fast during development.`,
-  bramblet: `Green thumb. Farms yield +${PERK.brambletFood} Food.`,
-  gearling: `Tinkerer. Pays ${pct(PERK.gearlingPrice)} of the price for MULEs and outfits.`,
-  mollox: `Burrower. Mines yield +${PERK.molloxMine}, and geo analysis takes ${pct(PERK.molloxAnalysis)} of the time.`,
+  zipwing: `Fast flyer. Walks ${PERK_NUMBERS.zipwingSpeed}× as fast during development.`,
+  bramblet: `Green thumb. Farms yield +${PERK_NUMBERS.brambletFood} Food.`,
+  gearling: `Tinkerer. Pays ${pct(PERK_NUMBERS.gearlingPrice)} of the price for MULEs and outfits.`,
+  mollox: `Burrower. Mines yield +${PERK_NUMBERS.molloxMine}, and geo analysis takes ${pct(PERK_NUMBERS.molloxAnalysis)} of the time.`,
   glimmer: 'Seer. Sees next month’s event one month early.',
   quibbit: 'Born trader. First in line when the store hands out units in turns.',
 };
