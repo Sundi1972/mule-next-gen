@@ -17,7 +17,7 @@ import { createGame, type GameState, type Tile } from '@mule/engine';
 import type { Locator, Page } from 'playwright';
 import { GRANT_TICK_MS, PHASE_MS } from '../../server/src/mule-game.js';
 import { check, CLAIM_MS, claimAPlot, doneWithLand, launch, PHONE, startServer, TV } from './harness';
-import { ELECTION_WAIT_MS, readyThroughTheElection } from './politics-steps';
+import { ELECTION_WAIT_MS, readyThroughTheElection, voteThroughTheElection } from './politics-steps';
 import { checkGlyphs as checkGlyphsOf, checkSpecialLine as checkSpecialLineOf, plotName, specialsOn, tapOnTheOverhang, tapPlot as tapPlotOf, type Density } from './special-steps';
 
 /** Seed 93 with two seats: a 13×7 map with ruins on the top row (7,0), a crystal cavern inside (10,3) and an oasis on the bottom edge (9,6). */
@@ -71,6 +71,10 @@ try {
   check(state, `a game in room ${code}`);
   check(JSON.stringify(state.tiles.map((t) => t.special ?? null)) === JSON.stringify(dealt.tiles.map((t) => t.special ?? null)), `seed ${SEED}: the server dealt the map the test read`);
 
+  // Month 1's planning opens on its election (POLITICS electionMonths), and the TV shows election day until it is over:
+  // vote through it to planning proper, whose desks the phone shows and whose colony map the TV shows.
+  await voteThroughTheElection(phone, ELECTION_WAIT_MS + READY_MS + SHOWN_MS);
+
   // Planning: the TV's colony map and the phone's hub map (its Look tool).
   const tvMap = tv.locator('[data-phase=planning]');
   await tvMap.waitFor({ timeout: SHOWN_MS });
@@ -109,8 +113,8 @@ try {
   await checkSpecialLine(drone, looked.special.kind, `B-AC-9: the drone rail of ${plotName(looked)}`);
 
   // Land grant: when the light reaches the special plot, the lit card says what it is, and both maps still draw it.
-  // Through month 1's election first when the table plays politics; with politics off this is one press.
-  await readyThroughTheElection(phone, ELECTION_WAIT_MS + READY_MS + SHOWN_MS);
+  // The election is over, so this is the one press of I'm ready that leaves planning.
+  await readyThroughTheElection(phone, READY_MS + SHOWN_MS);
   const grant = phone.locator('[data-phase=landGrant]');
   await grant.waitFor({ timeout: SHOWN_MS });
   const lit = grant.getByTestId('lit').filter({ hasText: plotName(firstLit) });
