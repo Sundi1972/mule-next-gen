@@ -7,6 +7,7 @@ import {
   ADJACENCY,
   DEV_WALK,
   DEVELOPMENT,
+  EXPORT_DEMAND,
   EXPORT_SHIP,
   GAME,
   GOOD_CONFIG,
@@ -16,6 +17,7 @@ import {
   PERCENT,
   POLITICS,
   POLLUTION,
+  PRICE,
   RECIPES,
   STRATEGIST,
   UPKEEP,
@@ -120,14 +122,33 @@ const PHASES: Record<Exclude<Phase, 'gameOver'>, () => string> = {
   landAuction: () =>
     `The listed lots come up one at a time: an intro of ${LOTS.introMs} ms, then a walk of ${LOTS.walkMs} ms where every player but the seller stands as a buyer, unless short of the minimum or leading a MULE when a MULE is up, and walks up to bid. The highest bid at the bell wins; a change of leader in the last ${LOTS.lateMs} ms sets the clock back to it. An unsold lot is kept, or sold to the store for ${pct(LOTS.storePlotShare)} of the ${GAME.plotScore} a plot scores and ${pct(LOTS.storeMuleShare)} of the MULE price for a MULE, as the seller chose. Each month the colony puts one free plot up with a chance of ${pct(LOTS.colonyPlotChance)}. With nothing listed it is skipped.`,
   development: () =>
-    `One clock of ${DEVELOPMENT.fullSeconds} s for every player. Each step from one map tile to the next takes ${DEV_WALK.tileSeconds} s; a hungry or sick colonist walks slower. You buy a MULE at the corral, outfit it, and install it on one of your plots; you may analyse ground, fit filters, or end at the pub for cash.`,
+    `One clock of ${DEVELOPMENT.fullSeconds} s for every player. Each step from one map tile to the next takes ${DEV_WALK.tileSeconds} s; a hungry or sick colonist walks slower. You buy a MULE at the corral, outfit it, and install it on one of your plots; you may analyse ground, fit filters, or end at the pub for cash. ${muleSupply()}`,
   production: () =>
-    `Every plot with a MULE makes its good, more on better ground, plus ${ADJACENCY.neighbour} when a neighbour of yours makes the same good, or ${ADJACENCY.cluster} in a cluster of ${ADJACENCY.clusterSize} or more. A raw plot burns Energy from your stock (${rawEnergy()}); an Energy plot pays its own from its output and is never turned off. An owner short of Energy has their other plots turned off, biggest use first, until the rest fit, and a plot turned off makes ${pct(UPKEEP.offOutputShare)} of its output. A Food plot also needs Water: when its owner holds less Water than their household and crew drink, it makes ${pct(UPKEEP.shortOutputShare)} of what it would. A factory turns inputs from your stock into its good (${(Object.keys(RECIPES) as ProcessedGood[]).map(recipe).join('; ')}) and makes nothing without them.`,
+    `Every plot with a MULE makes its good, more on better ground, plus ${ADJACENCY.neighbour} when a neighbour of yours makes the same good, or ${ADJACENCY.cluster} in a cluster of ${ADJACENCY.clusterSize} or more. A raw plot burns Energy from your stock (${rawEnergy()}); an Energy plot pays its own from its output and is never turned off. An owner short of Energy has their other plots turned off, biggest use first, until the rest fit; a plot turned off makes ${pct(UPKEEP.offOutputShare)} of its output, rounded half up. ${waterCut()} A factory turns inputs from your stock into its good (${(Object.keys(RECIPES) as ProcessedGood[]).map(recipe).join('; ')}) and makes nothing without them. A factory turned off for want of Energy makes ${pct(UPKEEP.offOutputShare)} of its output from ${pct(UPKEEP.offOutputShare)} of each non-Energy input, rounded up, and takes no inputs when its share of output rounds to 0.`,
   auction: () =>
-    `Goods come up one at a time (${goodList(WALK.order)}). Each has a status screen where players pick buyer, seller or pass, ${WALK.statusMs === null ? "with no clock: it waits for every player's Done or the host's Continue" : `for ${WALK.statusMs} ms`}, then a walk of ${WALK.goodMs} ms: buyers walk up, sellers down, and units trade while a buyer and a seller meet. The store buys and sells there too, and every sale pays the sales tax into the colony fund.`,
+    `Goods come up one at a time (${goodList(WALK.order)}). Each has a status screen where players pick buyer, seller or pass, ${WALK.statusMs === null ? "with no clock: it waits for every player's Done or the host's Continue" : `for ${WALK.statusMs} ms`}, then a walk of ${WALK.goodMs} ms: buyers walk up, sellers down, and units trade while a buyer and a seller meet. The store buys and sells there too, and every sale pays the sales tax into the colony fund. In a month the export ship calls it buys there too, from any seller, up to its hold of each good on its wishlist: the off-world price for its first unit of a good and ${pct(EXPORT_SHIP.stepDown)} less for each one after, ${pct(POLLUTION.cleanExportBonus)} more when the air is clean; a sale to it pays the sales tax and any export tax.`,
   upkeep: () =>
-    `Each player eats ${UPKEEP.baseFood} Food and drinks ${UPKEEP.baseWater} Water, plus 1 Food per ${UPKEEP.crewPerFood} crew and 1 Water per ${UPKEEP.crewPerWater}, from their own stock. Your goods spoil (${spoiling()}, rounded down), and anything above ${UPKEEP.depotCapacity} units of a good is lost. Every ${GAME.exportShipEvery} months an export ship calls, buying the ${EXPORT_SHIP.wishlist} goods on its wishlist, announced one month before.`,
+    `Each player eats ${UPKEEP.baseFood} Food and drinks ${UPKEEP.baseWater} Water, plus 1 Food per ${UPKEEP.crewPerFood} crew and 1 Water per ${UPKEEP.crewPerWater}, from their own stock. Your goods spoil (${spoiling()}, rounded down), and anything above ${UPKEEP.depotCapacity} units of a good is lost. Every ${GAME.exportShipEvery} months, first in month ${GAME.exportShipEvery}, an export ship calls; its wishlist of ${EXPORT_SHIP.wishlist} goods, drawn from ${goodList(Object.keys(EXPORT_DEMAND))}, is public from the month before. It buys from players at that month's goods auction, then at upkeep takes the store's surplus of those goods until its hold is full: what the store holds above ${PRICE.targetCover} months of the colony's demand.`,
 };
+
+/**
+ * The Water cut, and how it stacks on the Energy cut, as production.ts runProduction applies them: switchOff, then
+ * halve on what the parts add up to after it.
+ */
+function waterCut(): string {
+  const irrigated = UPKEEP.irrigated.map((g) => GOOD_NAME[g]).join(' or ');
+  return `A ${irrigated} plot also needs Water: when its owner holds less Water than their household and crew drink, it makes ${pct(UPKEEP.shortOutputShare)} of what it would, rounded down; one also turned off for want of Energy takes both cuts, the Water cut on what the Energy cut left.`;
+}
+
+/** How the store makes MULEs and prices them: upkeep.ts builds them, game.ts moves the factor, economy.ts mulePrice. */
+function muleSupply(): string {
+  return [
+    `At upkeep the store builds MULEs from its own Smithore, ${MULE.smithorePerMule} Smithore each, until the corral holds ${corral()}; short of Smithore it builds fewer, so the corral can run dry.`,
+    `A MULE costs ${MULE.labour} plus ${MULE.smithorePerMule} Smithore at the store's posted price, times a scarcity factor: up ${pct(MULE.scarcityUp)} after a development that sold the corral out, down ${pct(MULE.surplusDown)} after one that left ${pct(MULE.surplusShare)} or more of its MULEs unsold, never below ${pct(MULE.minFactor)} of that base.`,
+  ].join(' ');
+}
+
+const corral = () => `${MULE.corralPerPlayer} for each player plus ${MULE.spareInCorral}`;
 
 function rawEnergy(): string {
   return Object.entries(UPKEEP.energyUse)
@@ -168,7 +189,7 @@ export const ADVICE: readonly AdviceLine[] = [
     move: 'buyMule',
     field: 'DevelopmentPlay.route',
     when: () =>
-      `buy early: the corral has a MULE for each plot claimed this month plus ${MULE.spareInCorral}, and a sold-out corral raises next month's price by ${pct(MULE.scarcityUp)}.`,
+      `buy early: the store fills the corral to ${corral()} at upkeep, as its Smithore allows, and a sold-out corral raises next month's price by ${pct(MULE.scarcityUp)}.`,
   },
   {
     move: 'analyse',
@@ -209,7 +230,8 @@ export const ADVICE: readonly AdviceLine[] = [
   {
     move: 'declare',
     field: 'GoodPlay.hold',
-    when: () => `hold units for the export ship's month when its wishlist names the good; it calls every ${GAME.exportShipEvery} months.`,
+    when: () =>
+      `hold units for the export ship's month when its wishlist names the good: it buys at that month's goods auction, from the off-world price down; it calls every ${GAME.exportShipEvery} months.`,
   },
   {
     move: 'declare',
