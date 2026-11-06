@@ -1,4 +1,4 @@
-import { POLLUTION } from './config.js';
+import { HEALTH, POLLUTION } from './config.js';
 import { neighbours } from './grid.js';
 import type { GameState, Tile } from './types.js';
 
@@ -6,6 +6,7 @@ export type AirBand = (typeof POLLUTION.bands)[number];
 
 /** The band the colony air gauge is in: clean, smoggy, toxic or collapse. */
 export function airBand(air: number): AirBand {
+  if (HEALTH.forceAir !== null) air = Math.max(air, HEALTH.forceAir); // HEALTH prototype stress
   let band: AirBand = POLLUTION.bands[0];
   for (const b of POLLUTION.bands) if (air >= b.from) band = b;
   return band;

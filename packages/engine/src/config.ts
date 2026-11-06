@@ -17,7 +17,7 @@ export interface GoodConfig {
 }
 
 export const GOOD_CONFIG: Record<Good, GoodConfig> = {
-  food: { refPrice: 30, sensitivity: 1.5, spoilage: 0.5 },
+  food: { refPrice: 30, sensitivity: 1.5, spoilage: 0.25 }, // SPOIL prototype: was 0.5
   water: { refPrice: 25, sensitivity: 1.5, spoilage: 0.05 },
   energy: { refPrice: 25, sensitivity: 1.2, spoilage: 0.25 },
   smithore: { refPrice: 50, sensitivity: 1.2, spoilage: 0 },
@@ -254,6 +254,20 @@ export const UPKEEP = {
   colonistBudget: { food: 150, water: 120, energy: 100, medicine: 400 } as Partial<Record<Good, number>>,
   /** Units of each good a player's home depot holds. */
   depotCapacity: 10,
+};
+
+/** What one worked plot's crew and machines use a month, by what it makes (WS5, colony needs §1 C10). */
+export const CONSUMPTION: Record<Outfit, { food: number; water: number; energy: number }> = {
+  food:        { food: 0.25, water: 0.5,  energy: 1 },
+  water:       { food: 0.25, water: 0,    energy: 1 },
+  energy:      { food: 0.25, water: 0.5,  energy: 1 },
+  smithore:    { food: 0.5,  water: 0.25, energy: 2 },
+  crystite:    { food: 0.75, water: 0.5,  energy: 2 },
+  rareEarth:   { food: 0.5,  water: 0.25, energy: 2 },
+  alloy:       { food: 0.5,  water: 0.5,  energy: 1 },
+  electronics: { food: 0.5,  water: 0.25, energy: 2 },
+  medicine:    { food: 0.5,  water: 0.5,  energy: 1 },
+  greenBelt:   { food: 0,    water: 0.5,  energy: 0 },
 };
 
 export const START = {
@@ -1004,6 +1018,44 @@ export const PRESTIGE = {
  * The colony's mood (G-5 RULE-20). Every number is a placeholder, tuned at the end (HC-25). Each month the mood moves
  * toward a target by at most `maxStep`; an event's moodShift moves it at once.
  */
+/** HEALTH prototype (WS5 C17-C19 draft): the colony's sick share, Medicine and Electronics needs. */
+export const HEALTH = {
+  /** PROTOTYPE switch: base = today (no health), health = rules 1-4, healthE = + Electronics bonus. */
+  mode: 'base' as 'base' | 'health' | 'healthE',
+  /** PROTOTYPE stress: the air reads at least this dirty everywhere (null: as it is). */
+  forceAir: null as number | null,
+  /** PROTOTYPE check: 1 = the colonists' Medicine is always met (no shortfall), to isolate Food/Water. */
+  freeMedicine: 0,
+  /** WS7 RULE-2's curve, shared. */
+  tolerance: 0.1,
+  power: 1.5,
+  /** Sick share at the start, and its ceiling. */
+  start: 0.03,
+  max: 0.4,
+  /** WS7 (fixed): new sick = (1 - h)(newBase + hunger g(max(sF, sW)) + medicine g(sM) + contagion h). */
+  newBase: 0.01,
+  hunger: 0.2,
+  medicine: 0.2,
+  contagion: 0.15,
+  /** WS7: recovered = recover x h x (1 - g(sM) x medicineCut). */
+  recover: 0.5,
+  medicineCut: 1 / 3,
+  /** WS7: at h = max, Medicine need +needAtMax, growth -growthAtMax, mood aim -moodAtMax (all linear in h / max). */
+  needAtMax: 0.4,
+  growthAtMax: 0.02,
+  moodAtMax: 4,
+  /** A player's sickness chance x (1 + playerSpill h). */
+  playerSpill: 10,
+  /** Crews: from this sick share, crewSpill x h of a player's crews are sick unless it takes 1 Medicine at production. */
+  crewSickFrom: 0.1,
+  crewSpill: 1,
+  /** A sick crew works at (1 - crewSickDrop): output x (1 - crewSickDrop x share). */
+  crewSickDrop: 0.5,
+  /** WS7: Electronics 1 a month per this many colonists; up to +electronicsBonus to the mood aim (x share met). */
+  electronicsPerColonists: 50,
+  electronicsBonus: 4,
+};
+
 export const HAPPINESS = {
   /** Where a new colony's mood starts, 0..100. */
   start: 60,

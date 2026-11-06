@@ -1,7 +1,8 @@
-import { GAME, GOOD_CONFIG, MULE, POLLUTION, PRICE, UPKEEP } from './config.js';
+import { GAME, GOOD_CONFIG, HEALTH, MULE, POLLUTION, PRICE, UPKEEP } from './config.js';
+import { electronicsNeed, healthOn, medicineNeed, nextSickShare, sickShare } from './health.js';
 import { corralTarget, festivalFood, monthlyDemand, planShip, shipInPort, shipPrice, storeSellPrice } from './economy.js';
 import { airBand } from './pollution.js';
-import { needsOf } from './production.js';
+import { ceilUse, plotsUse } from './production.js';
 import { GOODS, type GameState, type Good } from './types.js';
 
 /**
@@ -16,10 +17,19 @@ export function runUpkeep(state: GameState): { shortages: Good[]; hungry: boolea
   const shortages = new Set<Good>();
 
   // Players. Energy for plots was already paid in production.
+  // CREW prototype: the household eats first, then the crews eat their table share; what they lack is remembered.
   for (const player of state.players) {
-    const needs = needsOf(state, player.id);
-    player.stock.food = Math.max(0, player.stock.food - needs.food);
-    player.stock.water = Math.max(0, player.stock.water - needs.water);
+    const use = plotsUse(state, player.id);
+    const short = { food: 0, water: 0 };
+    for (const good of ['food', 'water'] as const) {
+      const base = good === 'food' ? UPKEEP.baseFood : UPKEEP.baseWater;
+      player.stock[good] = Math.max(0, player.stock[good] - base);
+      const crewNeed = ceilUse(use[good]);
+      const eaten = Math.min(crewNeed, player.stock[good]);
+      player.stock[good] -= eaten;
+      short[good] = crewNeed > 0 ? (crewNeed - eaten) / crewNeed : 0;
+    }
+    player.crewShort = short;
   }
 
   // Colonists buy their Food and Water from the store at its selling price,
@@ -27,20 +37,36 @@ export function runUpkeep(state: GameState): { shortages: Good[]; hungry: boolea
   // more than they can pay, they go short.
   const colonistBase = state.colonists / UPKEEP.colonistsPerUnit;
   let fed = true;
+  const colonistShort = { food: 0, water: 0 };
   for (const good of ['food', 'water'] as const) {
     // A festival month the colonists eat more Food (G-5 C26).
     const colonistNeed = colonistBase + (good === 'food' ? festivalFood(state) : 0);
-    // The store's selling price; the share it kept back is theirs to buy.
-    const price = storeSellPrice(state.store.posted[good]);
-    const budget = colonistNeed * (UPKEEP.colonistBudget[good] ?? 0);
-    const bought = Math.min(colonistNeed, state.store.stock[good], budget / price);
+    // AFTER-B STAND-IN for WS7's mechanism (prototype only): colonists take their need straight from the store's
+    // stock, with no price, no budget cap and no change to the store's capital.
+    const bought = Math.min(colonistNeed, state.store.stock[good]);
     if (bought < colonistNeed) fed = false;
+    colonistShort[good] = colonistNeed > 0 ? (colonistNeed - bought) / colonistNeed : 0;
     if (state.store.stock[good] < colonistNeed) shortages.add(good);
     state.store.stock[good] = Math.max(0, state.store.stock[good] - bought);
-    state.store.capital += Math.round(bought * price);
   }
+  // HEALTH prototype: colonists take their Medicine free from the store; Electronics only a full month's want (bonus).
+  const h = sickShare(state);
+  const medNeed = medicineNeed(state);
+  const medTaken = healthOn() ? Math.min(medNeed, state.store.stock.medicine) : 0;
+  const sM = healthOn() ? (medNeed > 0 ? (medNeed - medTaken) / medNeed : 0) : medNeed > 0 ? Math.max(0, medNeed - state.store.stock.medicine) / medNeed : 0;
+  if (healthOn()) {
+    state.store.stock.medicine -= medTaken;
+    if (sM > 1e-9) shortages.add('medicine');
+  }
+  const eNeed = electronicsNeed(state);
+  const eTaken = Math.min(eNeed, state.store.stock.electronics);
+  const eMet = eTaken >= eNeed - 1e-9;
+  if (HEALTH.mode === 'healthE') state.store.stock.electronics -= eTaken;
+  const hNext = healthOn() ? nextSickShare(h, colonistShort.food, colonistShort.water, HEALTH.freeMedicine ? 0 : sM) : h;
+  state.health = { month: state.month, h: hNext, hBefore: h, sF: colonistShort.food, sW: colonistShort.water, sM, medNeed, medTaken, eNeed, eMet, eShare: eNeed > 0 ? eTaken / eNeed : 0 };
+
   // In Collapse colonists leave whatever they eat.
-  const growth = airBand(state.air).name === 'collapse' ? 1 - POLLUTION.collapseLeave : fed ? UPKEEP.colonistGrowth.fed : UPKEEP.colonistGrowth.hungry;
+  const growth = airBand(state.air).name === 'collapse' ? 1 - POLLUTION.collapseLeave : (fed ? UPKEEP.colonistGrowth.fed : UPKEEP.colonistGrowth.hungry) - (healthOn() ? HEALTH.growthAtMax * (h / HEALTH.max) : 0);
   state.colonists = Math.round(state.colonists * growth);
 
   // Spoilage, then anything above the home depot is lost. Selling it in time

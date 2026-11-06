@@ -1,7 +1,9 @@
-import { ADJACENCY, EVENTS, FACTORY, FACTORY_FIT, GROWN_BASE, GROWN_MIN, POLLUTION, RECIPES, SPECIES_PERK, THIN_VEIN_MONTHS, TRAIT_EFFECT, UPKEEP } from './config.js';
+import { ADJACENCY, CONSUMPTION, EVENTS, FACTORY, FACTORY_FIT, GROWN_BASE, GROWN_MIN, POLLUTION, RECIPES, SPECIES_PERK, THIN_VEIN_MONTHS, TRAIT_EFFECT, UPKEEP } from './config.js';
 import { applyEvents, eventOutput, plotEvent, rollAfterOutput, rollPhase, strikeEvent } from './events.js';
 import { neighbours } from './map.js';
 import { airBand, runPollution } from './pollution.js';
+import { healthOn, sickShare } from './health.js';
+import { HEALTH } from './config.js';
 import { formMeteorCrater, relicFit, settleSpecials, specialBonus } from './specials.js';
 import { addStock, emptyStock, hasStock } from './stock.js';
 import {
@@ -182,18 +184,40 @@ export function crewOf(state: GameState, playerId: string): number {
 
 /** Food and Water a player's household and crew need this month. */
 export function needsOf(state: GameState, playerId: string): { food: number; water: number } {
-  const crew = crewOf(state, playerId);
+  const use = plotsUse(state, playerId);
   return {
-    food: UPKEEP.baseFood + Math.ceil(crew / UPKEEP.crewPerFood),
-    water: UPKEEP.baseWater + Math.ceil(crew / UPKEEP.crewPerWater),
+    food: UPKEEP.baseFood + ceilUse(use.food),
+    water: UPKEEP.baseWater + ceilUse(use.water),
   };
+}
+
+/** CREW prototype: output factor from last upkeep's crew shortfall, f = (1 - 0.5 g(sF)) (1 - 0.5 g(sW)). */
+export function crewFactor(p: { crewShort?: { food: number; water: number } }): number {
+  const g = (s: number) => (s <= 0.1 ? 0 : Math.pow((s - 0.1) / 0.9, 1.5));
+  const s = p.crewShort ?? { food: 0, water: 0 };
+  return (1 - 0.5 * g(s.food)) * (1 - 0.5 * g(s.water));
+}
+
+/** WS5 prototype: an epsilon-safe ceil for sums of quarters. */
+export const ceilUse = (x: number) => Math.ceil(x - 1e-9);
+
+/** WS5 prototype: the Food and Water a player's outfitted plots use a month, summed from CONSUMPTION, before the ceil. */
+export function plotsUse(state: GameState, playerId: string): { food: number; water: number } {
+  const use = { food: 0, water: 0 };
+  for (const t of state.tiles) {
+    if (t.owner !== playerId || !t.outfit) continue;
+    use.food += CONSUMPTION[t.outfit].food;
+    use.water += CONSUMPTION[t.outfit].water;
+  }
+  return use;
 }
 
 /** Energy a working plot burns a month: by good for raw plots, by recipe for factories. */
 export function energyUseOf(state: GameState, tile: Tile): number {
-  if (!tile.owner || !tile.outfit || tile.outfit === 'greenBelt') return 0;
-  if (isFactory(tile.outfit)) return factoryFit(state, tile, tile.outfit, tile.owner).energy;
-  return UPKEEP.energyUse[tile.outfit as RawGood];
+  if (!tile.owner || !tile.outfit) return 0;
+  if (tile.outfit === 'greenBelt') return CONSUMPTION.greenBelt.energy;
+  if (isFactory(tile.outfit)) return factoryFit(state, tile, tile.outfit, tile.owner).energy + CONSUMPTION[tile.outfit].energy;
+  return CONSUMPTION[tile.outfit].energy;
 }
 
 /** One plot in AM-17's turn-off list: its Energy use this month and its full output. */
@@ -216,6 +240,7 @@ export function energyOffOrder(state: GameState, playerId: string, cold: number)
   const owner = state.players.find((p) => p.id === playerId);
   if (!owner) return [];
   const at = new Map(state.tiles.map((t, i) => [t, i]));
+  const last = (p: EnergyOffPlot) => (p.tile.outfit === 'food' ? 2 : p.tile.outfit === 'water' ? 1 : 0);
   const worth = (p: EnergyOffPlot) => state.store.posted[p.tile.outfit as Good] * p.full;
   const fed = new Set<Tile>();
   const left = { ...owner.stock };
@@ -234,7 +259,8 @@ export function energyOffOrder(state: GameState, playerId: string, cold: number)
       use: energyUseOf(state, tile) * cold,
       full: isFactory(tile.outfit!) ? factoryFit(state, tile, tile.outfit, playerId).output : rawOutput(state, tile),
     }))
-    .sort((a, b) => b.use - a.use || worth(a) - worth(b) || at.get(a.tile)! - at.get(b.tile)!);
+    // ORDER prototype: mines and factories go off first, then wells, farms last; biggest use first within each.
+    .sort((a, b) => last(a) - last(b) || b.use - a.use || worth(a) - worth(b) || at.get(a.tile)! - at.get(b.tile)!);
 }
 
 /** The factor every Energy use is multiplied by when a cold snap is among `events`, else 1. */
@@ -301,6 +327,22 @@ export function runProduction(state: GameState): {
   const ran = new Set<Tile>();
   const lines: ProductionLine[] = [];
   const events = rollPhase(state, 'production');
+  // HEALTH prototype: from crewSickFrom, a player's crews are sick (crewSpill x h) unless it takes 1 Medicine.
+  for (const p of state.players) {
+    p.crewSick = 0;
+    p.crewCured = false;
+    const h = sickShare(state);
+    if (!healthOn() || h < HEALTH.crewSickFrom) continue;
+    if (p.stock.medicine >= 1) {
+      p.stock.medicine--;
+      p.crewCured = true;
+    } else p.crewSick = HEALTH.crewSpill * h;
+  }
+  const sickCut = (parts: Part[], owner: { crewSick?: number }) => {
+    const f = 1 - HEALTH.crewSickDrop * (owner.crewSick ?? 0);
+    const made = parts.reduce((n, q) => n + q.delta, 0);
+    if (made > 0 && f < 1) parts.push({ why: 'sick', delta: Math.round(made * f) - made });
+  };
   applyEvents(state, events);
   // A general strike announced in planning and still unpaid (G-5 RULE-26): its good's plots make COLONY.strike.output,
   // last, on what everything else left; paid, the good produces in full and production files no strike.
@@ -340,12 +382,19 @@ export function runProduction(state: GameState): {
     if (made > 0) parts.push({ why: 'energyOff', delta: offShare(made) - made });
   };
   const use = (tile: Tile) => energyUseOf(state, tile) * cold;
+  /** CREW prototype: output x f, rounded half up, before Energy-off. */
+  const crewCut = (parts: Part[], f: number) => {
+    const made = parts.reduce((n, p) => n + p.delta, 0);
+    if (made > 0 && f < 1) parts.push({ why: 'crew', delta: Math.round(made * f) - made });
+  };
   /** Runs a factory: on, from its full inputs and Energy, or not at all without them; off, from its share of inputs. */
   const runFactory = (tile: Tile, good: ProcessedGood, isOff: boolean) => {
     const owner = playerById.get(tile.owner!)!;
     const fit = factoryFit(state, tile, good, owner.id);
     const feed = feedOf(good);
     const parts: Part[] = [{ why: 'factory', delta: fit.output }];
+    crewCut(parts, crewFactor(owner));
+    sickCut(parts, owner);
     if (isOff) {
       // Turned off it still files its line. Its inputs are there: a listed factory's were reserved for it
       // (energyOffOrder), a second-pass one is turned off only when it holds them. A share of output that rounds to 0
@@ -354,11 +403,11 @@ export function runProduction(state: GameState): {
       if (offShare(fit.output) > 0 && hasStock(owner.stock, share)) {
         addStock(owner.stock, share, -1);
         switchOff(parts);
-      } else parts.push({ why: 'energyOff', delta: 0 - fit.output });
+      } else parts.push({ why: 'energyOff', delta: 0 - parts.reduce((n, q) => n + q.delta, 0) }); // prototype fix: after crew/sick cuts
       credit(tile, good, parts);
       return;
     }
-    const inputs = { ...feed, energy: fit.energy * cold };
+    const inputs = { ...feed, energy: use(tile) };
     if (!hasStock(owner.stock, inputs)) return;
     addStock(owner.stock, inputs, -1);
     credit(tile, good, parts);
@@ -379,17 +428,16 @@ export function runProduction(state: GameState): {
     for (const tile of turnedOff(order, owner.stock.energy)) off.add(tile);
   }
 
-  // Who is short of Water is decided before anything runs, so a well
-  // harvested this month waters next month's crops, not this month's.
-  const dry = new Set(state.players.filter((p) => p.stock.water < needsOf(state, p.id).water).map((p) => p.id));
+  // CREW prototype: the dry-farm halving is gone; the farm's table Water is its irrigation.
 
   for (const tile of working.filter((t) => t.outfit !== 'energy' && isRaw(t.outfit!))) {
     const owner = playerById.get(tile.owner!)!;
     const good = tile.outfit as RawGood;
     const parts = rawOutputParts(state, tile);
+    crewCut(parts, crewFactor(owner));
+    sickCut(parts, owner);
     if (off.has(tile)) switchOff(parts);
     else owner.stock.energy -= use(tile);
-    if (dry.has(owner.id) && UPKEEP.irrigated.includes(good)) halve(parts, 'noWater');
     credit(tile, good, parts);
   }
 
@@ -401,7 +449,7 @@ export function runProduction(state: GameState): {
     for (const tile of working.filter((t) => t.outfit === good && !listed.has(t))) {
       const owner = playerById.get(tile.owner!)!;
       if (!hasStock(owner.stock, feedOf(good))) continue;
-      const short = owner.stock.energy < factoryFit(state, tile, good, owner.id).energy * cold;
+      const short = owner.stock.energy < use(tile);
       if (short) off.add(tile);
       runFactory(tile, good, short);
     }
@@ -452,5 +500,6 @@ export function monthNeeds(state: GameState, playerId: string): Stock {
     for (const [g, q] of Object.entries(RECIPES[t.outfit].inputs) as [Good, number][]) if (g !== 'energy') need[g] += q;
   }
   if (airBand(state.air).sickens) need.medicine = 1;
+  if (healthOn() && sickShare(state) >= HEALTH.crewSickFrom) need.medicine += 1; // HEALTH prototype: the crews' cure
   return need;
 }

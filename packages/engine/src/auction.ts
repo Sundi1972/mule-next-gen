@@ -1,5 +1,5 @@
 import { GOOD_CONFIG, PRICE, UPKEEP, WALK } from './config.js';
-import { colonyPrice, driftReference, monthlyDemand, shelfShort, shipInPort, shipPrice, storeForSale, storeSellPrice, storeWants, taxSale } from './economy.js';
+import { colonyPrice, driftReference, monthlyDemand, shelfShort, shipInPort, shipPrice, storeForSale, storeLines, storeSellPrice, storeWants, taxSale } from './economy.js';
 import { RuleError } from './errors.js';
 import { chargeExportTax } from './politics.js';
 import { monthNeeds, needsOf } from './production.js';
@@ -95,6 +95,7 @@ export function goodsMarket(state: GameState): WalkMarket {
     trade(buyer, seller, price) {
       const b = players.get(buyer);
       const s = players.get(seller);
+      if (b && s) state.store.maxBetween = { ...state.store.maxBetween, [good]: Math.max(state.store.maxBetween?.[good] ?? 0, price) };
       if (b) {
         b.money -= price;
         b.stock[good]++;
@@ -223,12 +224,8 @@ function skipBefore(state: GameState, good: Good, storeBuy: number, storeBudget:
 /** How a good would come up now: its store lines, budget and board, or why it is skipped. Reads the state only. */
 function comeUp(state: GameState, good: Good, demand: ReturnType<typeof monthlyDemand>) {
   const posted = colonyPrice(state, good);
-  const usualBuy = Math.max(1, Math.floor(posted * (1 - PRICE.storeSpread)));
-  // A shelf that can't feed the colonists for a month: the store bids up to restock, still under what they can pay.
-  const ceiling = Math.floor((UPKEEP.colonistBudget[good] ?? 0) / (1 + PRICE.storeSpread) ** 2); // literal-ok: the spread applies twice, store buys then sells
-  const storeBuy = shelfShort(state, good, 1) ? Math.max(usualBuy, Math.min(ceiling, Math.ceil(posted * PRICE.restockPremium))) : usualBuy;
-  // A store restocking a short shelf sells dearer too: it never buys above its own selling price, or a player could sell straight back.
-  const storeSell = Math.max(storeSellPrice(posted), storeBuy + 1);
+  // AFTER-P prototype: the lines come from storeQuotes' storeLines, so the auction and the quotes agree.
+  const { buy: storeBuy, sell: storeSell } = storeLines(state, good);
   const budget = storeWants(state, good, demand);
   const reason = skipBefore(state, good, storeBuy, budget);
   return { posted, storeBuy, storeSell, budget, reason };

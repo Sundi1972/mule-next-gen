@@ -132,6 +132,11 @@ export interface Player {
   sick: boolean;
   /** True when an epidemic made the player sick: next development they are sick again unless they then hold a Medicine. */
   sickNext: boolean;
+  /** CREW prototype: the share of its crews' Food and Water need the player could not feed at last upkeep. */
+  crewShort?: { food: number; water: number };
+  /** HEALTH prototype: share of its crews sick this production, and whether a Medicine cured them. */
+  crewSick?: number;
+  crewCured?: boolean;
   /** True once the player has gone to the pub: their development turn is over. */
   doneDeveloping: boolean;
   /** True once the player has installed a MULE in this development turn, so a reloaded phone still knows. */
@@ -172,7 +177,16 @@ export interface Store {
   refPrice: Stock;
   /** Off-world price for each good: what the export ship pays for its first unit. */
   offWorld: Stock;
+  /** AFTER-P prototype: this month's price band per good, set at postPrices. */
+  band?: Partial<Record<Good, PriceBand>>;
+  /** AFTER-P prototype: the highest price paid between players per good in this month's goods auction. */
+  maxBetween?: Partial<Record<Good, number>>;
+  /** AFTER-P prototype: the store's sell line per good as posted this month. */
+  sellLine?: Partial<Record<Good, number>>;
 }
+
+/** AFTER-P prototype: the store's price band for a good. */
+export type PriceBand = 'normal' | 'tight' | 'shortage' | 'severe' | 'offWorld';
 
 /** The colony government's money, filled only by taxes, fines and donations. */
 export interface Treasury {
@@ -355,7 +369,7 @@ export interface ProductionLine {
    * screens and fixtures that still name it; the engine no longer files it.
    */
   parts: {
-    why: 'ground' | 'trait' | 'species' | 'cluster' | 'pollution' | 'floor' | 'noEnergy' | 'energyOff' | 'noWater' | 'event' | 'factory' | 'special';
+    why: 'ground' | 'trait' | 'species' | 'cluster' | 'pollution' | 'floor' | 'noEnergy' | 'energyOff' | 'noWater' | 'crew' | 'sick' | 'event' | 'factory' | 'special';
     delta: number;
     event?: EventKey;
   }[];
@@ -382,6 +396,8 @@ export interface GameState {
   /** Month in which the last free plot was claimed, if it happened. */
   landRanOutMonth: number | null;
   history: MonthReport[];
+  /** HEALTH prototype: the colony's health after the last upkeep. */
+  health?: { month: number; h: number; hBefore: number; sF: number; sW: number; sM: number; medNeed: number; medTaken: number; eNeed: number; eMet: boolean; eShare: number };
   /**
    * Every event fired this month, in fired order, whatever the phase. A new array when the month opens; a what-if copy
    * gets its own copy (observe.ts::cloneForSim).

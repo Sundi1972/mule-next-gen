@@ -1,10 +1,12 @@
 import { EXPORT_DEMAND, EXPORT_SHIP, GAME, GOOD_CONFIG, MULE, POLLUTION, PRICE, RECIPES, UPKEEP } from './config.js';
 import { fundIn } from './colony.js';
 import { airBand } from './pollution.js';
-import { energyUseOf, needsOf } from './production.js';
+import { electronicsNeed, medicineNeed } from './health.js';
+import { HEALTH } from './config.js';
+import { energyUseOf, factoryFit, isFactory, needsOf, rawOutput } from './production.js';
 import { createRng } from './rng.js';
 import { emptyStock } from './stock.js';
-import { GOODS, type ExportShip, type GameState, type Good, type Stock } from './types.js';
+import { GOODS, type ExportShip, type GameState, type Good, type PriceBand, type ProcessedGood, type Stock } from './types.js';
 
 /** True from the month before the export ship calls: its wishlist is public and counts as demand. */
 export function shipAnnounced(state: GameState): boolean {
@@ -39,11 +41,13 @@ export function monthlyDemand(state: GameState, festival = festivalFood(state)):
   // less when the store's price is above what their wages pay.
   const sick = airBand(state.air).sickens;
   const own = playersUse(state);
-  demand.food = own.food + colonistDemand(state, 'food', colonistUnits + festival);
-  demand.water = own.water + colonistDemand(state, 'water', colonistUnits);
-  demand.energy = own.energy + colonistDemand(state, 'energy', colonistUnits * UPKEEP.colonistEnergyShare);
+  // WS5 prototype: the colonists' need enters demand whole, without the wage cap.
+  demand.food = own.food + colonistUnits + festival;
+  demand.water = own.water + colonistUnits;
+  demand.energy = own.energy + colonistUnits * UPKEEP.colonistEnergyShare;
   // Sick colonists in dirty air need more Medicine.
-  demand.medicine = colonistDemand(state, 'medicine', (state.colonists / UPKEEP.colonistsPerMedicine) * (sick ? POLLUTION.sickMedicineDemand : 1));
+  void sick;
+  demand.medicine = medicineNeed(state); // HEALTH prototype: x(1 + sickMedicine h) with the rule on
   const factories = (good: Good) => state.tiles.filter((t) => t.outfit === good).length;
   // The store builds a MULE from Smithore for every plot that will want one;
   // smelters need Smithore too, and Electronics works need Alloy.
@@ -52,7 +56,7 @@ export function monthlyDemand(state: GameState, festival = festivalFood(state)):
   demand.rareEarth = factories('electronics');
   // Crystite is a pure off-world luxury: only the export ship wants it.
   demand.crystite = 0;
-  demand.electronics = 0;
+  demand.electronics = HEALTH.mode === 'healthE' ? electronicsNeed(state) : 0;
   const off = exportDemand(state);
   for (const good of GOODS) demand[good] += off[good];
   return demand;
@@ -172,7 +176,60 @@ export function postPrices(state: GameState): void {
   const lastShortages = state.history.at(-2)?.shortages ?? []; // literal-ok: last month's report, a position in the history
   const off = exportDemand(state);
   const next = GOODS.map((good) => nextPostedPrice(state, good, demand, lastShortages, off));
+  const bands = GOODS.map((good) => priceBand(state, good, demand, lastShortages, off).band);
   GOODS.forEach((good, i) => (state.store.posted[good] = next[i]!));
+  // AFTER-P prototype: record the band and the sell line; last month's between-player highs are spent.
+  state.store.band = Object.fromEntries(GOODS.map((g, i) => [g, bands[i]!]));
+  state.store.sellLine = Object.fromEntries(GOODS.map((g) => [g, storeLines(state, g).sell]));
+  state.store.maxBetween = {};
+}
+
+/** AFTER-P prototype: the plots' expected output of a good this month. */
+export function expectedOutput(state: GameState, good: Good): number {
+  let n = 0;
+  for (const t of state.tiles) {
+    if (!t.owner || t.outfit !== good) continue;
+    n += isFactory(good) ? factoryFit(state, t, good as ProcessedGood, t.owner).output : rawOutput(state, t);
+  }
+  return n;
+}
+
+/** AFTER-P prototype: the band and target for a good (target null in the off-world band, which prices as before). */
+export function priceBand(
+  state: GameState,
+  good: Good,
+  demand: Stock,
+  lastShortages: readonly Good[],
+  off: Stock,
+): { band: PriceBand; target: number | null } {
+  const D = demand[good];
+  const N = state.store.refPrice[good];
+  if (D - off[good] <= 0) return { band: 'offWorld', target: null };
+  // P2a: colonists went short of it last month: severe, first.
+  if (lastShortages.includes(good)) return { band: 'severe', target: 4 * N };
+  const S = colonySupply(state, good);
+  const M = D > 0 ? S / D : Infinity;
+  if (expectedOutput(state, good) >= D || M >= 2) return { band: 'normal', target: N };
+  if (M >= 1) return { band: 'tight', target: 1.25 * N };
+  if (M >= 0.5 && !lastShortages.includes(good)) return { band: 'shortage', target: 2 * N };
+  return { band: 'severe', target: 4 * N };
+}
+
+/** AFTER-P prototype: buy-under and sell-over by band. */
+const SPREAD: Record<PriceBand, { under: number; over: number }> = {
+  offWorld: { under: 0.15, over: 0.15 },
+  normal: { under: 0.15, over: 0.15 },
+  tight: { under: 0.15, over: 0.2 },
+  shortage: { under: 0.1, over: 0.25 },
+  severe: { under: 0.1, over: 0.25 },
+};
+
+/** AFTER-P prototype: the store's buy and sell lines for a good from its posted mid and band. */
+export function storeLines(state: GameState, good: Good): { buy: number; sell: number } {
+  const mid = state.store.posted[good];
+  const { under, over } = SPREAD[state.store.band?.[good] ?? 'normal'];
+  const buy = Math.floor(mid * (1 - under));
+  return { buy, sell: Math.max(buy + 1, Math.ceil(mid * (1 + over))) };
 }
 
 /**
@@ -190,11 +247,23 @@ export function nextPostedPrice(
   off = exportDemand(state),
 ): number {
   const prev = state.store.posted[good];
-  const short = cover(state, good, demand) < PRICE.minCover || lastShortages.includes(good) || shelfShort(state, good, PRICE.shelfCover);
-  let target = short ? Infinity : targetPrice(state, good, demand);
-  if (demand[good] - off[good] <= 0) target = Math.min(target, state.store.offWorld[good]);
-  const next = Math.min(riseCap(state, good, prev), Math.max(prev * (1 - PRICE.maxFall), target));
-  return Math.max(1, Math.round(next));
+  const { target } = priceBand(state, good, demand, lastShortages, off);
+  if (target === null) {
+    // Off-world band: today's export-only pricing, unchanged.
+    const short = cover(state, good, demand) < PRICE.minCover || lastShortages.includes(good) || shelfShort(state, good, PRICE.shelfCover);
+    let t = short ? Infinity : targetPrice(state, good, demand);
+    t = Math.min(t, state.store.offWorld[good]);
+    const next = Math.min(riseCap(state, good, prev), Math.max(prev * (1 - PRICE.maxFall), t));
+    return Math.max(1, Math.round(next));
+  }
+  // AFTER-P prototype: jump up to the band's target at once, ease down by at most a quarter.
+  let mid = target > prev ? target : Math.max(target, prev * 0.75);
+  mid = Math.max(mid, state.store.refPrice[good]);
+  const T = state.store.maxBetween?.[good];
+  const lastSell = state.store.sellLine?.[good];
+  if (T !== undefined && lastSell !== undefined && T > lastSell) mid = Math.max(mid, prev + 0.5 * (T - prev));
+  mid = Math.min(mid, 12 * GOOD_CONFIG[good].refPrice);
+  return Math.max(1, Math.round(mid));
 }
 
 /**
@@ -238,11 +307,10 @@ export function storeSellPrice(posted: number): number {
  * no sell price with an empty shelf, no buy price when it wants no more.
  */
 export function storeQuotes(state: GameState, good: Good): { buy: number | null; sell: number | null } {
-  const price = colonyPrice(state, good);
-  const buy = Math.max(1, Math.floor(price * (1 - PRICE.storeSpread)));
+  const { buy, sell } = storeLines(state, good);
   return {
     buy: storeWants(state, good) > 0 ? buy : null,
-    sell: storeForSale(state, good) > 0 ? storeSellPrice(price) : null,
+    sell: storeForSale(state, good) > 0 ? sell : null,
   };
 }
 

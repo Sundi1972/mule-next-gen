@@ -1,4 +1,5 @@
-import { COLONY, EVENTS, GAME, GOOD_CONFIG, PRESTIGE, SOCIAL_EVENTS, UPKEEP } from './config.js';
+import { COLONY, EVENTS, GAME, GOOD_CONFIG, HEALTH, PRESTIGE, SOCIAL_EVENTS, UPKEEP } from './config.js';
+import { sickShare } from './health.js';
 import { addPrestige, callStrike, damageObject, fundIn, goodWords, moodBand, moodShift, strikeHolds } from './colony.js';
 import { neighbours } from './grid.js';
 import { reputationShift } from './politics.js';
@@ -495,7 +496,10 @@ export type PlayerEventKey = keyof typeof EVENTS.player;
  * firedThisPhase (a follows-this-phase raise counts 0) and not the row's only-if (buildEvent finding a plot to hit).
  */
 export function playerEventChance(state: GameState, key: PlayerEventKey, phase: Phase, id: string): number {
-  return eventChance(state, EVENTS.player[key], phase, { player: id });
+  const c = eventChance(state, EVENTS.player[key], phase, { player: id });
+  // HEALTH prototype: a sick colony spills over: x(1 + playerSpill h).
+  if (key === 'sickness' && c > 0) return Math.min(EVENTS.player.sickness.cap, c * (1 + HEALTH.playerSpill * sickShare(state)));
+  return c;
 }
 
 /**

@@ -3,7 +3,7 @@
  * Governor commissions. The only writer of GameState.colony and, through fundIn and fundOut, of treasury.money.
  * With politics off there is no colony, and the fund moves exactly as it always has, with no ledger.
  */
-import { COLONY, GAME, HAPPINESS, PRESTIGE } from './config.js';
+import { COLONY, GAME, HAPPINESS, HEALTH, PRESTIGE } from './config.js';
 import { allPrices, storeForSale, storeQuotes } from './economy.js';
 import { RuleError } from './errors.js';
 import { COLONY_SELLER } from './lots.js';
@@ -300,13 +300,18 @@ export interface MoodInputs {
   prestige: number;
   /** Credits between the richest and poorest player, by cash and land. */
   gap: number;
+  /** HEALTH prototype: the sick share, and whether the colonists' Electronics were met. */
+  sick?: number;
+  electronics?: number;
 }
 
 /** The month's inputs. `shortages` are this upkeep's, which the month's report only receives once upkeep is done. */
 export function moodInputs(state: GameState, shortages: readonly Good[]): MoodInputs {
   const brokeNow = state.colony?.promises.some((p) => p.month === state.month && !p.kept) ?? false;
   return {
-    short: shortages.length,
+    short: shortages.filter((g) => g !== 'medicine' && g !== 'electronics').length,
+    sick: HEALTH.mode !== 'base' ? (state.health?.h ?? 0) : 0,
+    electronics: HEALTH.mode === 'healthE' ? (state.health?.eShare ?? 0) : 0,
     air: state.air,
     tax: Math.round(state.treasury.salesTax * PERCENT),
     broken: brokeNow ? 1 : 0,
@@ -325,7 +330,9 @@ export function moodTarget(i: MoodInputs): number {
     w.tax * Math.max(0, i.tax - w.taxFree) -
     w.broken * i.broken +
     w.prestige * Math.min(i.prestige, w.prestigeCap) -
-    w.gap * Math.min(i.gap / w.gapUnit, w.gapCap);
+    w.gap * Math.min(i.gap / w.gapUnit, w.gapCap) -
+    HEALTH.moodAtMax * ((i.sick ?? 0) / HEALTH.max) +
+    HEALTH.electronicsBonus * (i.electronics ?? 0);
   return clampMood(target);
 }
 

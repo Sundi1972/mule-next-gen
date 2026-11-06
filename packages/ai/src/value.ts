@@ -1,7 +1,9 @@
 import {
   AI_VALUE,
   airPoints,
-  crewOf,
+  ceilUse,
+  CONSUMPTION,
+  plotsUse,
   DEV_STEER,
   DEV_WALK,
   DEVELOPMENT,
@@ -77,7 +79,7 @@ export function yieldOf(obs: GameState, tile: Tile, outfit: Outfit, me: string):
     if (isFactory(outfit)) {
       const fit = factoryFit(obs, probe, outfit, me);
       const { energy: _e, ...inputs } = RECIPES[outfit].inputs;
-      return { made: fit.output, energy: fit.energy, inputs, air, crew: UPKEEP.crew.factory };
+      return { made: fit.output, energy: fit.energy + CONSUMPTION[outfit].energy, inputs, air, crew: UPKEEP.crew.factory };
     }
     return { made: rawOutput(obs, probe), energy: energyUseOf(obs, probe), inputs: {}, air, crew: UPKEEP.crew.raw };
   } finally {
@@ -131,7 +133,8 @@ export function monthlyNet(obs: GameState, o: Outlook, y: Yield, outfit: Outfit,
   }
   const energy = outfit === 'energy' ? 0 : y.energy * P('energy', -y.energy);
   const inputs = (Object.entries(y.inputs) as [Good, number][]).reduce((n, [g, q]) => n + q * P(g, -q), 0);
-  const crew = full ? y.crew * (P('food') / UPKEEP.crewPerFood + P('water') / UPKEEP.crewPerWater) : 0;
+  // WS5 prototype: the plot's own Food and Water use, from CONSUMPTION.
+  const crew = full ? CONSUMPTION[outfit].food * P('food') + CONSUMPTION[outfit].water * P('water') : 0;
   const air = full ? y.air * airUnitCost(obs) : 0;
   return revenue - energy - inputs - crew - air;
 }
@@ -177,10 +180,11 @@ export function installGain(obs: GameState, o: Outlook, tile: Tile, outfit: Outf
 export function canFeed(obs: GameState, me: string, outfit: Outfit): boolean {
   if (!isFactory(outfit)) return true;
   const p = obs.players.find((q) => q.id === me)!;
-  const crew = crewOf(obs, me) + UPKEEP.crew.factory;
+  // WS5 prototype: needsOf with this factory's CONSUMPTION added, ceil'd the same way.
+  const use = plotsUse(obs, me);
   const household: Partial<Stock> = {
-    food: UPKEEP.baseFood + Math.ceil(crew / UPKEEP.crewPerFood),
-    water: UPKEEP.baseWater + Math.ceil(crew / UPKEEP.crewPerWater),
+    food: UPKEEP.baseFood + ceilUse(use.food + CONSUMPTION[outfit].food),
+    water: UPKEEP.baseWater + ceilUse(use.water + CONSUMPTION[outfit].water),
   };
   return (Object.entries(RECIPES[outfit].inputs) as [Good, number][]).every(([g, q]) => {
     if (g === 'energy' || obs.tiles.some((t) => t.owner === me && t.outfit === g)) return true;
