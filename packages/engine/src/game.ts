@@ -622,7 +622,7 @@ export interface ScoreParts {
   /** Points for terms served (POLITICS.termScore each), before any Collapse cut. 0 with politics off. */
   office: number;
   /**
-   * What this player gave the colony's projects, as their plaques record it (credits plus goods at reference price),
+   * What this player gave the colony's projects, as their plaques record it (credits plus goods at the store's price on the day they were given, G-5 AM-13),
    * counted 1:1 (Heiko, G-5): a donation moves Worth from money and goods to this line. 0 with politics off.
    */
   donated: number;
