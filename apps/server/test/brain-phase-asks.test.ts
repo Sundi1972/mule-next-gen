@@ -424,7 +424,35 @@ describe('RULE-A2 rows 3-4: the next phase is edited in the slack before it', { 
     const played = notes[0]!.playbook.auction as Record<string, unknown>;
     expect(played[good]).toEqual((plans.fresh as Record<string, unknown>)[good]);
     expect((played[kept!.split('/')[2]!] as { concedeCrPerS: number }).concedeCrPerS).toBe(3);
-    expect(notes[0]!.playbook.rejected).toContainEqual({ path: edited, to: 90, why: expect.stringMatching(/role/) });
+    // Listed once, beside whatever the rules rejected of the kept edit (nothing here).
+    expect(notes[0]!.playbook.rejected).toEqual([{ path: edited, to: 90, why: expect.stringMatching(/role/) }]);
+  });
+
+  it("B fix 1 (review of #551): a reply that sets a flipped good's role keeps its other edits for that good, read under the role it chose", async () => {
+    let plans: Plans | null = null;
+    let good: string | null = null;
+    const sdk = fakeSdk((_n, params) => {
+      const offered = offeredPaths(params);
+      const flipped = (g: string) => roleOf(plans!.shown, g) !== roleOf(plans!.fresh, g);
+      good = offered.filter((p) => p.endsWith('/walkAway')).map((p) => p.split('/')[2]!).find(flipped)!;
+      const shownRole = roleOf(plans!.shown, good);
+      return sdkMessage(
+        JSON.stringify({ edits: [{ path: `/auction/${good}/role`, to: shownRole, reason: 'Still.' }, { path: `/auction/${good}/concedeCrPerS`, to: 3, reason: 'Patient.' }], line: '' }),
+        USED,
+      );
+    });
+    const { state, seat, notes, playbooks } = table(smartOn(sdk));
+    advanceTo(state, 'production');
+    plans = raided(state, seat);
+    playbooks.askPhase(state, 'auction', []);
+    await vi.advanceTimersByTimeAsync(1_000);
+    advanceTo(state, 'auction');
+    raid(state, plans.shown);
+    playbooks.takePhase(state, 'auction');
+    expect(good).toBeTruthy();
+    const played = (notes[0]!.playbook.auction as Record<string, { concedeCrPerS: number }>)[good!]!;
+    expect(played.concedeCrPerS).toBe(3);
+    expect((notes[0]!.playbook.rejected ?? []).filter((r) => /role changed/.test(r.why))).toEqual([]);
   });
 });
 
