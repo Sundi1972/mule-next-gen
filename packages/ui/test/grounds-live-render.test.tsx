@@ -70,7 +70,7 @@ function inside([c, r]: [number, number], { x, y, w, h }: GridPlace, margin = 1e
 
 /** Each walker's spot on the ground, read back from where the SVG draws its feet (the projection's inverse). */
 function walkerSpots(html: string): [number, number][] {
-  return [...html.matchAll(/<g transform="translate\(([-\d.]+) ([-\d.]+)\)[^"]*" data-testid="walker"/g)].map((m) => {
+  return [...html.matchAll(/<g transform="translate\(([-\d.]+) ([-\d.]+)\)[^"]*"[^>]*\sdata-testid="walker"/g)].map((m) => {
     const [x, y] = [Number(m[1]), Number(m[2])];
     const [cMinusR, cPlusR] = [(2 * x) / 120, (4 * y) / 120];
     return [(cPlusR + cMinusR) / 2, (cPlusR - cMinusR) / 2];

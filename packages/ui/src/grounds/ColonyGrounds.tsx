@@ -3,7 +3,7 @@ import type { ObjectKind } from '../components/ObjectGlyph';
 import { useState, type ReactNode } from 'react';
 import { cx } from '../components/tokens';
 import { builtOf, HallShape, Lamp, PlaceShape, Tree } from './fallback';
-import { Glow, Walkers } from './LiveLayer';
+import { Glow, WalkingScene } from './LiveLayer';
 import { glowOpacity, walkersOut } from './live';
 import { centreOf, edgeDecoration, extentOf, MASSING, type EdgeProp, type GridPlace } from './layout';
 import { pick, type Frame, type GroundsManifest, type Light, type PictureKind, type PlaceState } from './pick';
@@ -101,8 +101,8 @@ const HALL_PLACE: PlaceState = { stage: 'standing', monthsLeft: null, buildMonth
 
 /**
  * The grounds as one SVG, back to front (painter's order): the land and plaza sized to the rings in use, the far edge's
- * trees, the hall and the places by col + row so nearer buildings cover farther ones (each with its glow at dusk), the
- * colonists on the paths, the near edge, then the callouts.
+ * trees, the hall and the places by col + row so nearer buildings cover farther ones (each with its glow at dusk), with
+ * the colonists on the paths sorted in among them, the near edge, then the callouts.
  */
 export function ColonyGrounds({ colony, size, manifest, light = 'day', className }: ColonyGroundsProps) {
   const placed = colony.projects.flatMap((p, i) => (p.place ? [{ p, n: i + 1, block: p.place, ...centreOf(p.place) }] : []));
@@ -154,15 +154,22 @@ export function ColonyGrounds({ colony, size, manifest, light = 'day', className
           <polyline key={`gr${k}`} points={poly([iso(-R - 0.55, k), iso(R + 0.55, k)])} stroke="var(--color-holo-line)" strokeWidth={1} opacity={paved} />,
         ])}
       {edge.filter((d) => d.col + d.row < 0).map((d, i) => prop(d, `b${i}`))}
-      {scene.map(({ n, p, block, col: c, row: r }) => {
-        if (!p || !block) return <g key="hall">{drawn('hall', HALL_PLACE, 0, 0, 'hall', <HallShape mood={mood} />)}</g>;
-        return (
-          <g key={n} data-testid={`place-${n}`} data-stage={p.stage}>
-            {drawn(p.id, p, c, r, String(n), <PlaceShape id={p.id} place={p} c={c} r={r} span={Math.min(block.w, block.h)} mood={mood} testid={`shape-${n}`} />)}
-          </g>
-        );
-      })}
-      <Walkers count={walkers} rim={R + 0.85} blocks={placed.map((q) => q.block)} />
+      <WalkingScene
+        scene={scene.map(({ n, p, block, col: c, row: r }) => ({
+          depth: c + r,
+          node:
+            !p || !block ? (
+              <g key="hall">{drawn('hall', HALL_PLACE, 0, 0, 'hall', <HallShape mood={mood} />)}</g>
+            ) : (
+              <g key={n} data-testid={`place-${n}`} data-stage={p.stage}>
+                {drawn(p.id, p, c, r, String(n), <PlaceShape id={p.id} place={p} c={c} r={r} span={Math.min(block.w, block.h)} mood={mood} testid={`shape-${n}`} />)}
+              </g>
+            ),
+        }))}
+        walkers={walkers}
+        rim={R + 0.85}
+        blocks={placed.map((q) => q.block)}
+      />
       <g pointerEvents="none">{edge.filter((d) => d.col + d.row >= 0).map((d, i) => prop(d, `f${i}`))}</g>
       {placed.sort(inBack).map(({ n, p, col, row }) => (
         <Callout key={`c${n}`} n={n} p={p} c={col} r={row} words={size === 'tv'} />

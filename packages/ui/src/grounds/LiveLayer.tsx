@@ -3,7 +3,7 @@
  * approved scaffold, design/mocks/colony-grounds/src/look/Living.tsx: its lit glow pass and its colonists, placed here on
  * the grounds' paths instead of one picture's frame.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactElement } from 'react';
 import { useEventReducedMotion } from '../events/motion';
 import type { GridPlace } from './layout';
 import { iso } from './projection';
@@ -30,15 +30,14 @@ export function Glow({ href, opacity, box, testid }: { href: string; opacity: nu
 const SCAFFOLD_METRE = 1600 / 21;
 const COLOURS = ['var(--color-p1)', 'var(--color-p2)', 'var(--color-p3)', 'var(--color-p4)'];
 
-/** One colonist at `seconds` into the walk: the scaffold's figure, 1.5 m tall in a coat of a player's colour. */
-function Colonist({ i, seconds, rim, blocks }: { i: number; seconds: number; rim: number; blocks: GridPlace[] }) {
-  const [c, r] = walkerAt(i, seconds, walkRoute(i, rim, blocks));
-  const [fx, fy] = iso(c, r);
+/** One colonist standing at `spot`, `seconds` into the walk: the scaffold's figure, 1.5 m tall in a player's colour. */
+function Colonist({ i, spot, seconds }: { i: number; spot: [number, number]; seconds: number }) {
+  const [fx, fy] = iso(spot[0], spot[1]);
   // The scaffold's drawing, in its own pixels with the feet at the origin.
   const z = (m: number) => -m * Math.cos(Math.PI / 6) * SCAFFOLD_METRE;
   const step = Math.sin(seconds * 9 + i * 1.7) * 3;
   return (
-    <g transform={`translate(${fx.toFixed(1)} ${fy.toFixed(1)}) scale(${(METRE / SCAFFOLD_METRE).toFixed(4)})`} data-testid="walker">
+    <g transform={`translate(${fx.toFixed(1)} ${fy.toFixed(1)}) scale(${(METRE / SCAFFOLD_METRE).toFixed(4)})`} pointerEvents="none" data-testid="walker">
       <ellipse cx={8} cy={2} rx={12} ry={4.5} fill="#000" opacity={0.3} />
       <line x1={-2.5} y1={0} x2={-2.5 + step} y2={z(0.75)} stroke="#2a2f3a" strokeWidth={4.5} strokeLinecap="round" />
       <line x1={2.5} y1={0} x2={2.5 - step} y2={z(0.75)} stroke="#2a2f3a" strokeWidth={4.5} strokeLinecap="round" />
@@ -48,15 +47,26 @@ function Colonist({ i, seconds, rim, blocks }: { i: number; seconds: number; rim
   );
 }
 
+/** Something on the grounds drawn in painter's order: its element and its depth from the camera, col + row. */
+export interface Placed {
+  depth: number;
+  node: ReactElement;
+}
+
 /**
- * The colonists out on the paths, walking from the edge of the land at `rim` (place units from the hall). With reduced
- * motion, and before the page runs, they stand still where the walk starts.
+ * The buildings, back to front, with the colonists walking among them: each colonist is drawn just before the first
+ * building deeper than it stands, so a nearer building hides a colonist on a path behind it. The colonists walk from the
+ * edge of the land at `rim` (place units from the hall) round the places in use (`blocks`). With reduced motion, and
+ * before the page runs, they stand still where the walk starts.
+ *
+ * The clock lives here, not in ColonyGrounds: each tick re-renders only this, and the buildings' elements arrive
+ * unchanged, so React leaves them alone.
  */
-export function Walkers({ count, rim, blocks }: { count: number; rim: number; blocks: GridPlace[] }) {
+export function WalkingScene({ scene, walkers, rim, blocks }: { scene: Placed[]; walkers: number; rim: number; blocks: GridPlace[] }) {
   const reduced = useEventReducedMotion();
   const [seconds, setSeconds] = useState(0);
   useEffect(() => {
-    if (reduced || count === 0) return;
+    if (reduced || walkers === 0) return;
     let frame = 0;
     const start = performance.now();
     const tick = (now: number) => {
@@ -65,12 +75,20 @@ export function Walkers({ count, rim, blocks }: { count: number; rim: number; bl
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [reduced, count]);
-  return (
-    <g pointerEvents="none" data-testid="walkers">
-      {Array.from({ length: count }, (_, i) => (
-        <Colonist key={i} i={i} seconds={reduced ? 0 : seconds} rim={rim} blocks={blocks} />
-      ))}
-    </g>
-  );
+  }, [reduced, walkers]);
+  const routes = useMemo(() => Array.from({ length: walkers }, (_, i) => walkRoute(i, rim, blocks)), [walkers, rim, blocks]);
+  const t = reduced ? 0 : seconds;
+  const people = routes.map((route, i) => {
+    const spot = walkerAt(i, t, route);
+    return { depth: spot[0] + spot[1], node: <Colonist key={`walker-${i}`} i={i} spot={spot} seconds={t} /> };
+  }).sort((a, b) => a.depth - b.depth);
+  const drawn: ReactElement[] = [];
+  let next = 0;
+  for (const item of scene) {
+    while (next < people.length && people[next]!.depth < item.depth) drawn.push(people[next++]!.node);
+    drawn.push(item.node);
+  }
+  while (next < people.length) drawn.push(people[next++]!.node);
+  return <>{drawn}</>;
 }
+
