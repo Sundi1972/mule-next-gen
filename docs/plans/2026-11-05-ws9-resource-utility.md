@@ -295,12 +295,11 @@ A finding from #408's review, outside this spec's changes. `strategist.ts::leade
 
 ## PR-2 · G-2: a surplus when cheap
 
-### Task 2.0: the record carries `AI_VALUE.unit` (WS3's finding on 3cc41b8a), and `wholeNextMonth` reads WS3's engine need
+### Task 2.0: the record carries `AI_VALUE.unit` (WS3's finding on 3cc41b8a)
 
-**Depends on:** WS3's engine function for the need held at the auction (`monthNeeds` grossed up for spoilage and the depot cap). It is in WS3's skipBefore fix.
+**Builds on:** WS1's tidy PR, which makes `value.ts::wholeNextMonth` call WS3's engine need function (PM ruling, 6 Nov). Task 2.0 doesn't do that change.
 
-- [ ] **Step 1:** Write the failing test. A recorded game played with `AI_VALUE.unit` true replays to the same state hash when the replay starts with the global false: the record (or its options) carries the switch and the replay sets it. Today T-AC-11 passes only because the global is still true in the test. Write it red first, in WS3's record test tree (named edit). Then make the record carry it: record.ts is WS3's, so the change goes to WS3 as a named edit, or WS3 builds it.
-- [ ] **Step 2:** `value.ts::wholeNextMonth` calls WS3's engine function instead of its own arithmetic, so the AI's target and the auction's status-row need can't drift. A WS1 named edit. The T-AC-9 pin, re-recorded on the trunk that carries WS3's fix, stays identical with the switch off.
+- [ ] **Step 1:** Write the failing test. A recorded game played with `AI_VALUE.unit` true replays to the same state hash when the replay starts with the global false: the record (or its options) carries the switch and the replay sets it. Today T-AC-11 passes only because the global is still true in the test. Write it red first, in WS3's record test tree (named edit). Then make the record carry it. record.ts is WS3's, and WS3 decides who builds it.
 
 ### Task 2.1: C1, RULE-4's carry
 
