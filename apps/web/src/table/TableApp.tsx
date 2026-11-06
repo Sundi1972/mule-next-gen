@@ -242,7 +242,7 @@ function TvGame({ table, game }: { table: TableView<MuleView>; game: MuleView })
             <span className="font-display text-2xl font-semibold">No free land left</span>
           )}
         </div>
-        <Players game={game} right={(p) => <span className="font-mono text-lg text-ink-2">{p.plots} plots</span>} />
+        <Players game={game} right={(p) => <span className="font-mono text-lg text-ink-2">{`${p.plots} ${p.plots === 1 ? 'plot' : 'plots'}`}</span>} />
         <p className="mt-auto font-display text-2xl leading-snug text-ink-2">Free plots light up one by one, row by row from the top. Tap CLAIM on your phone when yours is lit.</p>
       </>
     );
@@ -415,7 +415,7 @@ function MarketTiles({ game }: { game: MuleView }) {
         <div key={r.good} className="flex flex-col gap-1 bg-panel p-3">
           <GoodTag good={r.good} name />
           <span data-num className="font-mono text-3xl font-bold">
-            {r.price}
+            {r.price} <span className="text-base font-normal text-ink-3">cr</span>
           </span>
           <span data-num className={cx('font-mono text-xs', r.cover < 0.5 ? 'text-alert' : r.cover < 1 ? 'text-warn' : 'text-ink-3')}>
             {r.cover >= 99 ? 'no demand' : `${r.cover} months cover`}
