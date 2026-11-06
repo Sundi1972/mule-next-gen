@@ -590,7 +590,10 @@ export interface Walker {
   since: number;
   /** A seller stopped at the amount they must hold of this good (RULE-4): they sell nothing more until a hold of ▼ frees them. Survives a side switch. */
   held?: true;
-  /** Board time when the current hold of ▼ began; cleared by any other walk intent, a tap or a stop. */
+  /**
+   * Board time when the current hold of ▼ began; cleared by any other walk intent, a tap or a stop. Written on every hold,
+   * read only for a held seller (RULE-4 row 2), so with WALK.needStop off nothing reads it.
+   */
   downSince?: number;
   /** A stopped seller who held ▼ for WALK.shortHoldMs: sells into shortage for the rest of this good (RULE-4 row 2). */
   sellsShort?: true;
