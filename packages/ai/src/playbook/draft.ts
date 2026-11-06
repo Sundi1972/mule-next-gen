@@ -36,7 +36,7 @@ import { outlook, productionsLeft, type Outlook } from '../outlook.js';
 import { PERSONAS, type DecisionKind } from '../personas.js';
 import { analysesWanted, developDecision, filtersWanted, goodPlan, landDecision, leaderOf, sellWanted, shortfallHold, tradeDecision, walkVeto, type DevAction, type DevWalk, type LandPlan } from '../strategist.js';
 import { candidate, shortlist, type Shortlist } from '../utility.js';
-import { beforeTax, canFeed, cashReserve, chainOf, chainOutlook, installGain, linkShare, standingLinks, type Mind } from '../value.js';
+import { beforeTax, canFeed, cashReserve, chainInputs, chainOf, chainOutlook, installGain, linkShare, standingLinks, type Mind } from '../value.js';
 import { landTargetWithin, planMind, type PlanFields } from './plan.js';
 import type { ReplanTrigger } from './replan.js';
 
@@ -289,10 +289,30 @@ function pickKind(input: DraftInput, obs: GameState, eligible: Record<Kind, bool
 /** What the seat lists in planning when short of cash; nothing outside this month's planning, as lots.ts lists only there (RULE-5). */
 function planningPart(input: DraftInput, obs: GameState, moneyMaker: Good | null): PlanningPlay {
   if (obs.phase !== 'planning' || monthOf(input, obs) !== obs.month) return {};
-  // The money-maker's standing chain links stay off the list: selling one breaks the plan (AM-33). A fed works has none.
-  const keep = moneyMaker ? [...new Set(standingLinks(obs, input.mind.me, moneyMaker).map((t) => t.outfit!))] : [];
+  const keep = moneyMaker ? chainKeep(obs, input.mind.me, moneyMaker) : [];
   const list = sellWanted(obs, input.mind, keep);
   return list.length > 0 ? { list } : {};
+}
+
+/**
+ * The goods whose MULEs a seat planning a chain to `moneyMaker` keeps off its sell list, as selling one breaks the plan
+ * (AM-33): its standing links, and each chain input it holds plots of whose plots, all taken away, would turn canFeed
+ * false for the money-maker or for a chain works the seat runs. A chain fed in full has no standing links, so the
+ * second part is what keeps its mines and works. Per good, not per plot: a seat with two mines of a link good where
+ * one would do keeps both. None with chains switched off.
+ */
+function chainKeep(obs: GameState, me: string, moneyMaker: Good): Outfit[] {
+  const inputs = chainInputs(obs, me, moneyMaker);
+  const held = inputs.filter((g) => obs.tiles.some((t) => t.owner === me && t.outfit === g));
+  // The money-maker and the chain works the seat runs (canFeed is true for a mine, so a mine never turns).
+  const fed = (s: GameState) => [moneyMaker, ...held].map((o) => canFeed(s, me, o));
+  const now = fed(obs);
+  const starves = (g: Good) => {
+    // On a copy of what it sees: obs itself is never changed.
+    const without = { ...obs, tiles: obs.tiles.map((t) => (t.owner === me && t.outfit === g ? { ...t, outfit: null } : t)) };
+    return fed(without).some((ok, i) => now[i] && !ok);
+  };
+  return [...new Set([...standingLinks(obs, me, moneyMaker).map((t) => t.outfit!), ...held.filter(starves)])];
 }
 
 /** RULE-5 · land grant: the plan the seat's land hand plays (its pending pick), else the draft's own pick. */
