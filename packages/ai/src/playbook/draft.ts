@@ -36,7 +36,7 @@ import { outlook, productionsLeft, type Outlook } from '../outlook.js';
 import { PERSONAS, type DecisionKind } from '../personas.js';
 import { analysesWanted, developDecision, filtersWanted, goodPlan, landDecision, leaderOf, sellWanted, shortfallHold, tradeDecision, walkVeto, type DevAction, type DevWalk, type LandPlan } from '../strategist.js';
 import { candidate, shortlist, type Shortlist } from '../utility.js';
-import { beforeTax, canFeed, cashReserve, chainLinks, chainOutlook, installGain, linkShare, standingLinks, type Mind } from '../value.js';
+import { beforeTax, canFeed, cashReserve, chainInputs, chainLinks, chainOutlook, installGain, linkShare, standingLinks, type Mind } from '../value.js';
 import { landTargetWithin, planMind, type PlanFields } from './plan.js';
 import type { ReplanTrigger } from './replan.js';
 
@@ -271,9 +271,10 @@ function pickKind(input: DraftInput, obs: GameState, eligible: Record<Kind, bool
 }
 
 /** What the seat lists in planning when short of cash; nothing outside this month's planning, as lots.ts lists only there (RULE-5). */
-function planningPart(input: DraftInput, obs: GameState): PlanningPlay {
+function planningPart(input: DraftInput, obs: GameState, moneyMaker: Good | null): PlanningPlay {
   if (obs.phase !== 'planning' || monthOf(input, obs) !== obs.month) return {};
-  const list = sellWanted(obs, input.mind);
+  // The money-maker's chain links stay off the list: selling one breaks the plan (AM-32).
+  const list = sellWanted(obs, input.mind, moneyMaker ? chainInputs(obs, input.mind.me, moneyMaker) : []);
   return list.length > 0 ? { list } : {};
 }
 
@@ -466,7 +467,8 @@ function goodPart(input: DraftInput, obs: GameState, good: Good): GoodPlay {
 /** The planning part a planning draft from `input` carries, alone: the same decision, without the strategy or the land grant. */
 export function draftPlanningPart(input: DraftInput): PlanningPlay {
   const obs = observe(input.state, input.seat);
-  return planningPart(planned(input, headOf(input, obs).strategy), obs);
+  const { strategy } = headOf(input, obs);
+  return planningPart(planned(input, strategy), obs, strategy.moneyMaker);
 }
 
 /** The draft's strategy alone, as the seat's playbook for the phase would carry it. */
@@ -491,7 +493,7 @@ export function draftPlaybook(input: DraftInput, leftOut: LeftOutPick[] = []): P
   const obs = observe(input.state, input.seat);
   const head = headOf(input, obs);
   const plan = planned(input, head.strategy);
-  if (input.phase === 'planning') return { ...head, planning: planningPart(plan, obs), landGrant: landGrantPart(input, obs) };
+  if (input.phase === 'planning') return { ...head, planning: planningPart(plan, obs, head.strategy.moneyMaker), landGrant: landGrantPart(input, obs) };
   if (input.phase === 'development') return { ...head, development: developmentPart(plan, obs, head.strategy.moneyMaker, leftOut) };
   return { ...head, auction: auctionPart(plan, obs) };
 }
