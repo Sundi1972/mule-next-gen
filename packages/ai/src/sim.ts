@@ -27,7 +27,6 @@ import {
   moodBand,
   MS_PER_SECOND,
   observe,
-  PRICE,
   POLLUTION,
   rollPhase,
   rollPlayerEvent,
@@ -35,6 +34,7 @@ import {
   SIM_TARGETS,
   STORE_ID,
   storeForSale,
+  storeSellPrice,
   WALK,
   WOLVES,
   type AiLevelId,
@@ -425,7 +425,7 @@ function supplyHooks(tally: SupplyTally): { phase: (s: GameState) => void; seats
           if (cut && could) tally.cutCouldBuy++;
         }
       }
-      opened = new Map(seats.map((seat) => [seat.mind.me, new Map(WALK.order.map((g) => [g, shortOf(s, seat.mind, g, Math.ceil(s.store.posted[g] * (1 + PRICE.storeSpread)))]))]));
+      opened = new Map(seats.map((seat) => [seat.mind.me, new Map(WALK.order.map((g) => [g, shortOf(s, seat.mind, g, storeSellPrice(s.store.posted[g]))]))]));
       atStatus = new Map();
       atClose = new Map();
     }

@@ -24,6 +24,7 @@ import {
   storeForSale,
   storePaysFor,
   storeSellLine,
+  storeSellPrice,
   tileIndex,
   walkSeconds,
   WALK,
@@ -635,7 +636,7 @@ export function expectedPrices(obs: GameState, good: Good): { sell: number; buy:
   const storeBuy = a?.good === good ? (a.storeBudget > 0 ? a.storeBuy : 0) : Math.floor(posted * (1 - PRICE.storeSpread));
   const ship = shipInPort(obs) ? (shipPrice(obs, good) ?? 0) : 0;
   const sell = Math.max(storeBuy, ship, Math.floor(posted * STRATEGIST.trade.sellFloor));
-  const storeSell = a?.good === good ? a.storeSell : Math.ceil(posted * (1 + PRICE.storeSpread));
+  const storeSell = a?.good === good ? a.storeSell : storeSellPrice(posted);
   return { sell, buy: storeSell };
 }
 
