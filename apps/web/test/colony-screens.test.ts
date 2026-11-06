@@ -52,7 +52,7 @@ function project(over: Partial<ColonyProjectView> & Pick<ColonyProjectView, 'id'
     funded: { credits: 1_400, goods: { alloy: 4, electronics: 2 } },
     buildMonths: 3,
     monthsLeft: null,
-    slot: null,
+    place: null,
     prestige: 4,
     upkeep: 70,
     repairCost: null,
