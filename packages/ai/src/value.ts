@@ -13,6 +13,7 @@ import {
   monthNeeds,
   mulePrice,
   mulePriceFor,
+  monthsToExperience,
   needsOf,
   outfitCostFor,
   pace,
@@ -438,8 +439,9 @@ export function unitNeed(obs: GameState, mind: Mind, good: Good): UnitNeed {
 
 /** A factory short of its experience bonus, with the game long enough to reach it, waits a month more turned off. */
 function experienceMissed(obs: GameState, tile: Tile): number {
-  if (!tile.outfit || !isFactory(tile.outfit) || tile.runMonths >= FACTORY.experienceMonths) return 0;
-  return productionsLeft(obs) > FACTORY.experienceMonths - tile.runMonths ? FACTORY.experienceBonus : 0;
+  const months = monthsToExperience(tile);
+  if (!tile.outfit || !isFactory(tile.outfit) || months === 0) return 0;
+  return productionsLeft(obs) > months ? FACTORY.experienceBonus : 0;
 }
 
 /**
@@ -449,18 +451,20 @@ function experienceMissed(obs: GameState, tile: Tile): number {
  * last on what is left, so their units come last.
  */
 function energyUnits(obs: GameState, o: Outlook, mind: Mind): number[] {
-  return cached(o, `energy:${mind.me}`, () => energyUnitsOf(obs, o, mind));
+  return cached(o, obs, `energy:${mind.me}`, () => energyUnitsOf(obs, o, mind));
 }
 
 /**
- * Damage rows the model reads many times in one decision, kept for the outlook they were read with: an outlook is
- * built for one decision on one observation, so the rows can't go stale.
+ * Damage rows the model reads many times in one decision, kept for the outlook and the observation they were read
+ * with, so a row is never read for another seat's view or another moment.
  */
-const rows = new WeakMap<Outlook, Map<string, number[]>>();
+const rows = new WeakMap<Outlook, WeakMap<GameState, Map<string, number[]>>>();
 
-function cached(o: Outlook, key: string, make: () => number[]): number[] {
-  let at = rows.get(o);
-  if (!at) rows.set(o, (at = new Map()));
+function cached(o: Outlook, obs: GameState, key: string, make: () => number[]): number[] {
+  let byObs = rows.get(o);
+  if (!byObs) rows.set(o, (byObs = new WeakMap()));
+  let at = byObs.get(obs);
+  if (!at) byObs.set(obs, (at = new Map()));
   let row = at.get(key);
   if (!row) at.set(key, (row = make()));
   return row;
@@ -502,13 +506,14 @@ function inputWorth(obs: GameState, o: Outlook, good: Good, me: string): number 
 }
 
 /**
- * What going without each unit the seat holds would cost it, before the buy-back floor, unit 0 first. Energy: the
- * plot that unit keeps on (energyUnits), the seat's own plants covering the first units. Food: the walking hunger
- * slows. Water: half of what its irrigated farms make. Medicine: the walking sickness slows. A factory input: its
- * share of the run. Each household unit is worth the household's damage over the household's units.
+ * What going without each unit the seat holds would cost it, before the floor (replaceCost), unit 0 first. Energy: the
+ * share of a unit of use that survives spoilage, at what that unit of use keeps on (energyUnits), the seat's own
+ * plants covering the first units. Food: the walking hunger slows, over the household's units. Water: the
+ * (1 − UPKEEP.shortOutputShare) of what its irrigated farms make that a month short loses, over the household's
+ * units. Medicine: the walking sickness slows, for each unit. A factory input: its share of the run.
  */
 function heldDamage(obs: GameState, o: Outlook, good: Good, mind: Mind, need: UnitNeed): number[] {
-  return cached(o, `held:${mind.me}:${mind.levelId}:${good}:${need.sure}:${need.target}`, () => heldDamageOf(obs, o, good, mind, need));
+  return cached(o, obs, `held:${mind.me}:${mind.levelId}:${good}:${need.sure}:${need.target}`, () => heldDamageOf(obs, o, good, mind, need));
 }
 
 function heldDamageOf(obs: GameState, o: Outlook, good: Good, mind: Mind, need: UnitNeed): number[] {
@@ -517,8 +522,9 @@ function heldDamageOf(obs: GameState, o: Outlook, good: Good, mind: Mind, need: 
   if (good === 'energy') {
     const units = energyUnits(obs, o, mind);
     const net = mind.level.lookAhead ? plantsNet(obs, me) : 0;
-    // A unit needed for sure covers the plots above what the plants make; one beyond covers the plants' share.
-    return Array.from({ length: need.target }, (_, h) => units[h < need.sure ? net + Math.floor(h * keepRate) : Math.floor((h - need.sure) * keepRate)] ?? 0);
+    // A unit needed for sure covers the plots above what the plants make; one beyond covers the plants' share. Each held
+    // unit brings keepRate of a unit of use to production.
+    return Array.from({ length: need.target }, (_, h) => (units[h < need.sure ? net + Math.floor(h * keepRate) : Math.floor((h - need.sure) * keepRate)] ?? 0) * keepRate);
   }
   const household = good === 'medicine' ? keptUnits(good, monthNeeds(obs, me).medicine) : wholeNextMonth(obs, me, good);
   const sec = secondValue(obs, me);
@@ -531,7 +537,7 @@ function heldDamageOf(obs: GameState, o: Outlook, good: Good, mind: Mind, need: 
 }
 
 /**
- * What a month short of Water costs the seat: its irrigated farms make UPKEEP.shortOutputShare of their output. Water's
+ * What a month short of Water costs the seat: its irrigated farms lose (1 − UPKEEP.shortOutputShare) of their output. Water's
  * own turn-off order (AM-18) replaces this when the engine has it.
  */
 function waterDamage(obs: GameState, o: Outlook, me: string): number {
@@ -552,7 +558,7 @@ function replaceCost(obs: GameState, o: Outlook, good: Good): number {
 
 /**
  * What going without the k-th unit short of the seat's target costs, k = 0 first, the unit whose plot goes off first;
- * never below buying it back next month. Past the target, nothing is lost: buying it back alone.
+ * never below what having it costs (replaceCost). Past the target, nothing is lost: that cost alone.
  */
 export function shortCosts(obs: GameState, o: Outlook, good: Good, mind: Mind, length: number): number[] {
   const need = unitNeed(obs, mind, good);
@@ -599,7 +605,10 @@ function ownUseGain(obs: GameState, o: Outlook, good: 'food' | 'water' | 'energy
     for (let i = 0; i < own; i++) gain += Math.max(0, Math.max(replace, units[net + i]!) - price);
     return gain;
   }
-  const own = Math.min(made, Math.max(0, monthNeeds(obs, mind.me)[good] - ownSupply(obs, mind.me, o.made, good)));
+  // Only units the seat needs count: a well's drink units are worth nothing to a seat with no farm to water.
+  const target = unitNeed(obs, mind, good).target;
+  if (target === 0) return 0;
+  const own = Math.min(made, Math.max(0, target - ownSupply(obs, mind.me, o.made, good)));
   const [cost = replace] = shortCosts(obs, o, good, mind, 1);
   return own * Math.max(0, cost - price);
 }
@@ -613,8 +622,9 @@ export interface CashPlan {
   left: number;
   /** The shadow price of cash: what the last funded unit gains per credit, 0 when every needed unit is funded. */
   lambda: number;
-  /** Needed units worth at least their ask, funded or not. */
+  /** Needed units worth at least their ask, funded or not, and what they would all cost. */
   needed: number;
+  wanted: number;
 }
 
 /**
@@ -631,7 +641,7 @@ export function cashPlan(obs: GameState, mind: Mind, goods: readonly Good[], val
     for (let k = p.stock[good]; k < v.block; k++) if ((v.buy[k] ?? 0) >= ask) units.push({ good, at, ratio: v.buy[k]! / ask, ask });
   });
   units.sort((a, b) => b.ratio - a.ratio || a.at - b.at);
-  const plan: CashPlan = { funded: {}, cost: {}, left: p.money, lambda: 0, needed: units.length };
+  const plan: CashPlan = { funded: {}, cost: {}, left: p.money, lambda: 0, needed: units.length, wanted: units.reduce((n, u) => n + u.ask, 0) };
   let n = 0;
   let last: number | null = null;
   for (const u of units) {
@@ -646,10 +656,22 @@ export function cashPlan(obs: GameState, mind: Mind, goods: readonly Good[], val
   return plan;
 }
 
-/** The cash the month's needed units take at the belief's prices: the model's reserve for decisions off the auction. */
-function monthReserve(obs: GameState, mind: Mind, o?: Outlook, except?: Good): number {
+/** The month's cash plan off the auction: every good, at the belief's prices. */
+function monthPlan(obs: GameState, mind: Mind, o?: Outlook, except?: Good): CashPlan {
   const look = o ?? outlook(obs, mind.me, { lookAhead: mind.level.lookAhead });
   const goods = WALK.order.filter((g) => g !== except);
-  const plan = cashPlan(obs, mind, goods, (g) => unitValues(obs, look, g, mind), (g) => belief(obs, look, g) * (1 + PRICE.storeSpread));
-  return Math.round(Object.values(plan.cost).reduce((n, c) => n + (c ?? 0), 0));
+  return cashPlan(obs, mind, goods, (g) => unitValues(obs, look, g, mind), (g) => belief(obs, look, g) * (1 + PRICE.storeSpread));
+}
+
+/** The cash the month's needed units take at the belief's prices, as far as the money goes: the model's reserve off the auction. */
+function monthReserve(obs: GameState, mind: Mind, o?: Outlook, except?: Good): number {
+  return Math.round(Object.values(monthPlan(obs, mind, o, except).cost).reduce((n, c) => n + (c ?? 0), 0));
+}
+
+/**
+ * The cash every needed unit of the month would take at the belief's prices, funded or not: with the model on, what a
+ * seat's money must reach before it stops listing land to sell; today's cash reserve with it off.
+ */
+export function monthNeedsCost(obs: GameState, mind: Mind): number {
+  return AI_VALUE.unit ? Math.round(monthPlan(obs, mind).wanted) : cashReserve(obs, mind);
 }
