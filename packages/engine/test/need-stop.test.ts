@@ -206,11 +206,25 @@ describe('RULE-4 row 2: selling into shortage takes a conscious hold of ▼', ()
     });
   }
 
-  it('B-AC-B2: held survives a switch to buyer and back; back as a seller, a short hold still sells nothing and a full one sells on', () => {
+  it('B-AC-B2: held survives a switch to buyer and back, even after holding ▼ as a buyer; back as a seller, a short hold still sells nothing and a full one sells on', () => {
     const { state, need } = heldAtNeed();
     declareRole(state, 'p0', 'buyer');
+    // As a buyer, ▼ walks the bid down (a tap and a hold alike); held longer than WALK.shortHoldMs, it is no seller's hold.
+    const bid = walker(state, 'p0').price;
+    stepWalk(state, 'p0', -1);
+    const tapped = walker(state, 'p0').price;
+    setWalk(state, 'p0', -1);
+    run(state, WALK.shortHoldMs * 2);
+    expect(walker(state, 'p0')).toMatchObject({ side: 'buyer', held: true });
+    expect(walker(state, 'p0').sellsShort).toBeUndefined();
+    expect(tapped).toBeLessThan(bid);
+    expect(walker(state, 'p0').price).toBeLessThan(tapped);
+    // Switched back still holding ▼: the buyer's hold does not carry over.
     declareRole(state, 'p0', 'seller');
-    expect(walker(state, 'p0')).toMatchObject({ side: 'seller', held: true });
+    expect(walker(state, 'p0')).toMatchObject({ side: 'seller', held: true, dir: 0 });
+    expect(walker(state, 'p0').downSince).toBeUndefined();
+    expect(run(state, 5_000)).toEqual([]);
+    expect(state.players[0]!.stock.water).toBe(need);
     const at = walker(state, 'p0').price;
 
     setWalk(state, 'p0', -1);
