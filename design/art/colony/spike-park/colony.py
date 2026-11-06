@@ -301,12 +301,13 @@ def hospital(cx, cy, stage="standing"):
             cyl("fence_post", cx - 4.6 + k * 1.65, y0 - 2.58, 0.03, ZT, ZT + 1.85, fence, 8)
     if stage == "damaged":
         # a broken south-east corner: a lumpy cutter takes a bite out of every part it touches
-        bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=3, radius=2.3, location=(cx + 3.95, cy - 3.95, top - 0.3))
+        bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=3, radius=2.6, location=(cx + 3.95, cy - 3.95, top - 0.2))
         cut = bpy.context.active_object
         for v in cut.data.vertices:
             v.co *= 1 + 0.35 * P["noise"].noise(v.co * 0.9)
         cut.hide_render = True
         cut.display_type = "WIRE"
+        bpy.context.view_layer.update()  # bound boxes of just-made objects are zero until evaluated
         lo_ = Vector((cx + 3.95 - 3.0, cy - 3.95 - 3.0, top - 3.6))
         for o in set(scene.objects) - before - {cut}:
             if o.type != "MESH":
@@ -316,7 +317,7 @@ def hospital(cx, cy, stage="standing"):
                 bo = o.modifiers.new("break", "BOOLEAN")
                 bo.object = cut
                 bo.operation = "DIFFERENCE"
-                bo.solver = "EXACT"
+                bo.solver = "FLOAT"  # the exact solver silently leaves these bevelled boxes whole
         # rubble at the foot of the break
         rng = random.Random(4)
         for k in range(26):
@@ -339,7 +340,7 @@ def hospital(cx, cy, stage="standing"):
         tc = node(nt, "ShaderNodeTexCoord").outputs["Object"]
         mp = node(nt, "ShaderNodeMapping")
         mp.inputs["Location"].default_value = (0.08, -0.08, 0.45)  # plume leans down-wind (east) as it climbs
-        mp.inputs["Scale"].default_value = (2.4, 2.4, 1.15)
+        mp.inputs["Scale"].default_value = (1.7, 1.7, 1.0)
         link(nt, tc, mp.inputs["Vector"])
         gr = node(nt, "ShaderNodeTexGradient", gradient_type="SPHERICAL")
         link(nt, mp.outputs[0], gr.inputs["Vector"])
@@ -347,10 +348,18 @@ def hospital(cx, cy, stage="standing"):
         nz.inputs["Scale"].default_value = 3.0
         nz.inputs["Detail"].default_value = 6
         link(nt, tc, nz.inputs["Vector"])
-        dens = math_(nt, "MULTIPLY", math_(nt, "MULTIPLY", gr.outputs["Fac"], math_(nt, "POWER", nz.outputs["Fac"], 2.0)), 9.0)
+        dens = math_(nt, "MULTIPLY", math_(nt, "MULTIPLY", gr.outputs["Fac"], math_(nt, "POWER", nz.outputs["Fac"], 2.0)), 22.0)
         link(nt, dens, vol.inputs["Density"])
         link(nt, vol.outputs[0], nt.nodes["Material Output"].inputs["Volume"])
         sm.data.materials.append(m)
+        # embers in the break: a small hot glow that lights the broken edges from inside
+        ember = accent("ember", (1.0, 0.35, 0.06))
+        ember.node_tree.nodes["Principled BSDF"].inputs["Emission Strength"].default_value = 3.0
+        bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=2, radius=0.35, location=(cx + 3.0, cy - 3.0, top - 1.7))
+        bpy.context.active_object.data.materials.append(ember)
+        bpy.ops.object.light_add(type="POINT", location=(cx + 3.2, cy - 3.2, top - 1.2))
+        bpy.context.active_object.data.energy = 120
+        bpy.context.active_object.data.color = (1.0, 0.45, 0.15)
 
 
 def observatory(cx, cy):
@@ -561,7 +570,7 @@ def spaceport(cx, cy):
 def site_stakes(cx, cy, w, d):
     """Stage 1: graded earth, a stake at every corner and every 2 m, string between them, two survey flags."""
     m, nt, b = new_mat("earth")
-    b.inputs["Base Color"].default_value = (0.24, 0.17, 0.11, 1)
+    b.inputs["Base Color"].default_value = (0.2, 0.13, 0.08, 1)
     b.inputs["Roughness"].default_value = 0.95
     bp = node(nt, "ShaderNodeBump")
     nz = node(nt, "ShaderNodeTexNoise")
@@ -576,9 +585,18 @@ def site_stakes(cx, cy, w, d):
     for t in [i / 4 for i in range(4)]:
         pts += [(x0 + (x1 - x0) * t, y0), (x1, y0 + (y1 - y0) * t), (x1 - (x1 - x0) * t, y1), (x0, y1 - (y1 - y0) * t)]
     for (px, py) in pts:
-        bx(px - 0.04, px + 0.04, py - 0.04, py + 0.04, ZT, ZT + 0.6, wood, 0.005, "stake")
+        bx(px - 0.05, px + 0.05, py - 0.05, py + 0.05, ZT, ZT + 0.9, wood, 0.005, "stake")
     for (a, b_, c, d_) in ((x0, x1, y0, y0), (x1, x1, y0, y1), (x0, x1, y1, y1), (x0, x0, y0, y1)):
-        bx(a - 0.01, b_ + 0.01, c - 0.01, d_ + 0.01, ZT + 0.5, ZT + 0.52, string, 0, "string")
+        bx(a - 0.02, b_ + 0.02, c - 0.02, d_ + 0.02, ZT + 0.75, ZT + 0.79, string, 0, "string")
+    for (hx, hy, r) in ((x1 + 0.2, y1 - 1.0, 1.1), (x1 - 0.8, y1 + 0.3, 0.8)):
+        bpy.ops.mesh.primitive_uv_sphere_add(segments=24, ring_count=12, radius=r, location=(hx, hy, ZT))
+        hp = bpy.context.active_object
+        hp.name = "spoil_heap"
+        hp.scale = (1, 1, 0.45)
+        hp.data.materials.append(m)
+        hp.data.shade_smooth()
+    cab = flat("site_cabin", (0.85, 0.65, 0.1), 0.5)
+    bx(x0 - 0.6, x0 + 2.2, y1 - 0.2, y1 + 1.0, ZT, ZT + 2.4, cab, 0.02, "site_cabin")
     red = flat("survey_flag", (0.85, 0.08, 0.05), 0.6)
     for (px, py) in ((x0, y0), (x1, y1)):
         cyl("survey_pole", px, py, 0.025, ZT, ZT + 1.6, whitemetal, 8)
@@ -698,6 +716,7 @@ def hide_park():
     for o in list(scene.objects):
         if o.type in ("MESH", "LIGHT") and o.type != "CAMERA" and not (o.type == "LIGHT" and o.data.type == "SUN"):
             bpy.data.objects.remove(o)
+    P["lamp_lights"].clear()  # park.py's view() switches these
 
 
 # ================= what to make =================
