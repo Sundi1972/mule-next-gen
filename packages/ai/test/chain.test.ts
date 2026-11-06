@@ -60,6 +60,12 @@ const seatOf = (options: Partial<AiSeatOptions> = {}) => new AiSeat({ id: ME, na
 /** Plots for the whole chain: Rare earth ground, Smithore ground and two plains plots for the works. */
 const CHAIN_PLOTS = [{ x: 0, ground: { rareEarth: 4 } }, { x: 2, ground: { smithore: 4 } }, { x: 4 }, { x: 6 }];
 
+/**
+ * Electronics dear enough that the chain wins with a clear margin. On CHAIN_PLOTS one works and its links (SA-1371)
+ * starts to beat Smithore between 1950 and 2000: a test on that edge breaks on any valuation change.
+ */
+const DEAR = 2_500;
+
 /** The switch-on value under test: AI_PLANS.chain.months ships at 0, which switches chains off. */
 const CHAIN_ON_MONTHS = 3;
 
@@ -91,7 +97,7 @@ function fedMoneyMaker(state: GameState, mind: Mind): Good | null {
 
 describe('a factory chain (AM-33)', () => {
   it('B-AC-11: with Electronics dear, the seat commits to Electronics and builds an upstream mine before any works', () => withChains(() => {
-    const state = development(CHAIN_PLOTS, 2_000);
+    const state = development(CHAIN_PLOTS, DEAR);
     const seat = seatOf();
     const installed = playDevelopment(state, seat);
     expect(seat.draft(state, 'development').strategy.moneyMaker).toBe('electronics');
@@ -101,7 +107,7 @@ describe('a factory chain (AM-33)', () => {
   }));
 
   it('B-AC-11: with its mines standing, the seat builds the Alloy works, and the Electronics works only after it', () => withChains(() => {
-    const state = development([{ x: 0, ground: { rareEarth: 4 }, outfit: 'rareEarth' }, { x: 2, ground: { smithore: 4 }, outfit: 'smithore' }, { x: 4 }, { x: 6 }], 2_000);
+    const state = development([{ x: 0, ground: { rareEarth: 4 }, outfit: 'rareEarth' }, { x: 2, ground: { smithore: 4 }, outfit: 'smithore' }, { x: 4 }, { x: 6 }], DEAR);
     const installed = playDevelopment(state, seatOf());
     expect(installed[0], `installed ${installed.join(', ')}`).toBe('alloy');
     expect(installed.slice(1).every((o) => o === 'electronics')).toBe(true);
@@ -109,7 +115,7 @@ describe('a factory chain (AM-33)', () => {
 
   it('B-AC-11 (FM-chain-dry-link): a link plot that makes nothing adds nothing to the chain, so no mine goes onto dry ground', () => withChains(() => {
     // Rare earth only on ground the seat knows is dry; Smithore ground and plains for the rest.
-    const state = development([{ x: 0 }, { x: 2, ground: { smithore: 4 } }, { x: 4 }, { x: 6 }], 2_000);
+    const state = development([{ x: 0 }, { x: 2, ground: { smithore: 4 } }, { x: 4 }, { x: 6 }], DEAR);
     const installed = playDevelopment(state, seatOf());
     expect(installed, `installed ${installed.join(', ')}`).not.toContain('rareEarth');
   }));
@@ -128,7 +134,7 @@ describe('a factory chain (AM-33)', () => {
 
   it('B-AC-11: a seat short of cash keeps its chain\'s standing links off the land auction while the chain is its plan', () => withChains(() => {
     // Planning, broke: a Smithore mine on thin ground (worth little at the market) is what a short seat lists first.
-    const state = development([{ x: 0, ground: { smithore: 1 }, outfit: 'smithore' }, { x: 2, ground: { food: 2 }, outfit: 'food' }, { x: 4, outfit: 'energy' }], 2_000);
+    const state = development([{ x: 0, ground: { smithore: 1 }, outfit: 'smithore' }, { x: 2, ground: { food: 2 }, outfit: 'food' }, { x: 4, outfit: 'energy' }], DEAR);
     state.phase = 'planning';
     state.players.find((p) => p.id === ME)!.money = 0;
     const strategy = (moneyMaker: Good): Strategy => ({ kind: 'specialist', moneyMaker, monopolyTarget: null, cashFloor: 0, landTarget: { plots: 3, byMonth: 2 }, stances: {}, reason: '' });
@@ -153,7 +159,7 @@ describe('a factory chain (AM-33)', () => {
   it('B-AC-11: a short seat lists a spare Smithore MULE when its Alloy money-maker is fed, and keeps a standing link of an unfed chain', () => withChains(() => {
     // Planning, broke, its Food and Energy MULEs its last (never listed): a Smithore mine is the one lot it can list.
     const listed = (smithore: number, moneyMaker: Good) => {
-      const state = development([{ x: 0, ground: { smithore }, outfit: 'smithore' }, { x: 2, ground: { food: 2 }, outfit: 'food' }, { x: 4, outfit: 'energy' }], 2_000);
+      const state = development([{ x: 0, ground: { smithore }, outfit: 'smithore' }, { x: 2, ground: { food: 2 }, outfit: 'food' }, { x: 4, outfit: 'energy' }], DEAR);
       state.phase = 'planning';
       state.players.find((p) => p.id === ME)!.money = 0;
       expect(canFeed(state, ME, 'alloy'), `Alloy fed on Smithore ground ${smithore}`).toBe(smithore >= 4);
@@ -170,7 +176,7 @@ describe('a factory chain (AM-33)', () => {
 
   it("B-AC-11: with an Alloy works standing, the strategist values a Smithore link by the draft's chain: its share of Alloy's 2 a run", () => withChains(() => {
     // The Alloy works stands, unfed; no Smithore mine yet. Smithore ground making 1 a month (plot 4) and 3 (plot 6).
-    const state = development([{ x: 0, ground: { rareEarth: 4 }, outfit: 'rareEarth' }, { x: 2, outfit: 'alloy' }, { x: 4, ground: { smithore: 1 } }, { x: 6, ground: { smithore: 3 } }, { x: 8, outfit: 'energy' }], 2_000);
+    const state = development([{ x: 0, ground: { rareEarth: 4 }, outfit: 'rareEarth' }, { x: 2, outfit: 'alloy' }, { x: 4, ground: { smithore: 1 } }, { x: 6, ground: { smithore: 3 } }, { x: 8, outfit: 'energy' }], DEAR);
     const mind = seatOf().mind;
     const obs = observe(state, ME);
     // The draft's chain (chainOf): Smithore its one link, the standing Alloy works a member.
@@ -194,14 +200,14 @@ describe('a factory chain (AM-33)', () => {
 
   it('FM-chain-idle: no works is installed while its inputs neither stand nor are held, whatever the cash', () => withChains(() => {
     // Plains only: no ground for a mine, so the chain's inputs can't stand this month.
-    const state = development([{ x: 0 }, { x: 2 }, { x: 4 }, { x: 6 }], 2_000);
+    const state = development([{ x: 0 }, { x: 2 }, { x: 4 }, { x: 6 }], DEAR);
     state.players.find((p) => p.id === ME)!.money = 50_000;
     const installed = playDevelopment(state, seatOf());
     expect(installed.filter((o) => WORKS.includes(o))).toEqual([]);
   }));
 
   it('B-AC-11 negative: a price shock on Electronics drops the chain at the next draft point', () => withChains(() => {
-    const state = development(CHAIN_PLOTS, 2_000);
+    const state = development(CHAIN_PLOTS, DEAR);
     const seat = seatOf();
     playDevelopment(state, seat);
     expect(seat.draft(state, 'development').strategy.moneyMaker).toBe('electronics');
@@ -211,7 +217,7 @@ describe('a factory chain (AM-33)', () => {
     state.players.find((p) => p.id === ME)!.doneDeveloping = false;
     state.store.offWorld.electronics = 220;
     state.store.posted.electronics = 220;
-    expect(1 - 220 / 2_000).toBeGreaterThanOrEqual(AI_PLANS.replan.priceShock);
+    expect(1 - 220 / DEAR).toBeGreaterThanOrEqual(AI_PLANS.replan.priceShock);
     const installed = playDevelopment(state, seat);
     expect(seat.replanLog().at(-1)?.trigger).toBe('priceShock');
     expect(seat.draft(state, 'development').strategy.moneyMaker).not.toBe('electronics');
@@ -231,7 +237,7 @@ describe('a factory chain (AM-33)', () => {
 
 describe('the chain switch (AM-33, PM ruling B)', () => {
   it('INV-chain-off: at the shipped AI_PLANS.chain.months, a chain-eligible seat drafts the money-maker RULE-4 drafted before AM-33', () => {
-    const state = development(CHAIN_PLOTS, 2_000);
+    const state = development(CHAIN_PLOTS, DEAR);
     const seat = seatOf();
     const drafted = draftStrategyOf({ state, seat: ME, mind: seat.mind, seed: 11, phase: 'development' }).moneyMaker;
     expect(drafted).toBe(fedMoneyMaker(state, seat.mind));
@@ -244,7 +250,7 @@ describe('the chain switch (AM-33, PM ruling B)', () => {
   });
 
   it('INV-chain-off: at the shipped AI_PLANS.chain.months, a seat short of cash lists the same lot whatever its money-maker', () => {
-    const state = development([{ x: 0, ground: { smithore: 1 }, outfit: 'smithore' }, { x: 2, ground: { food: 2 }, outfit: 'food' }, { x: 4, outfit: 'energy' }], 2_000);
+    const state = development([{ x: 0, ground: { smithore: 1 }, outfit: 'smithore' }, { x: 2, ground: { food: 2 }, outfit: 'food' }, { x: 4, outfit: 'energy' }], DEAR);
     state.phase = 'planning';
     state.players.find((p) => p.id === ME)!.money = 0;
     const strategy = (moneyMaker: Good): Strategy => ({ kind: 'specialist', moneyMaker, monopolyTarget: null, cashFloor: 0, landTarget: { plots: 3, byMonth: 2 }, stances: {}, reason: '' });
