@@ -167,6 +167,13 @@ describe('a GRAB pressed is a GRAB taken (FM-glint-fade, for FM-hurry-margin)', 
     expect.soft({ holder: stepShort.holder, analysedUnderfoot: stepShort.analysedUnderfoot, assaying: stepShort.assaying }, 'a rival a step short of reach').toEqual({ holder: 'ai1', analysedUnderfoot: false, assaying: false });
     expect.soft(stepShort.gapAfter, 'it walks for the glint, or stands').toBeLessThanOrEqual(stepShort.gapBefore);
 
+    // A rival that never presses but walks onto the glint's tile, behind it in the press order: the step gives it the
+    // glint before any press applies, so a GRAB would fall to ANALYSE all the same. It presses for nothing.
+    const walksOn = glintTick(lit, { rival: { gap: 0.55, presses: false, walks: true, behind: true } }); // literal-ok: just off the glint's tile, a step from it
+    expect([walksOn.belowGrab, walksOn.rivalFirst], 'the case: ANALYSE below GRAB, the rival behind it in the press order').toEqual([true, false]);
+    expect.soft({ holder: walksOn.holder, analysedUnderfoot: walksOn.analysedUnderfoot, assaying: walksOn.assaying }, 'a rival walking onto the tile').toEqual({ holder: 'ai1', analysedUnderfoot: false, assaying: false });
+    expect.soft(walksOn.gapAfter, 'it walks for the glint, or stands').toBeLessThanOrEqual(walksOn.gapBefore);
+
     // The control: the same rival in reach (idle, which the seat cannot tell from about to press), but the land underfoot
     // analysed already, so a GRAB lost costs nothing. The guard does not make it timid where nothing is at stake: it grabs.
     const noCost = glintTick(lit, { rival: { gap: reach - 0.3, presses: false }, analysed: true }); // literal-ok: as above
