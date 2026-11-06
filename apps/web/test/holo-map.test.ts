@@ -1,4 +1,4 @@
-import { HoloMap, type MapTile } from '@mule/ui';
+import { HoloMap, selectionRing, specialBadgeBox, type MapTile } from '@mule/ui';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -84,10 +84,23 @@ describe('T-AC-3 (pip): an analysed plot draws its best good on 3 dots', () => {
   it('T-AC-3 (pip): the tie goes to Food, drawn as 3 pips with 2 lit and labelled "Food 2 of 3"', () => {
     const map = render(PIP_TILES);
     const analysed = map.slice(map.indexOf('data-testid="map-plot-0-0"'), map.indexOf('data-testid="map-plot-1-0"'));
-    expect(map).toContain('aria-label="Plains, free, Food 2 of 3"');
+    expect(map).toContain('aria-label="Plains, free, Food 2 of 3, Crystite here"');
     expect(pips(analysed)).toHaveLength(3);
     expect(pips(analysed).filter((p) => p.includes('var(--color-g-food)'))).toHaveLength(2);
     expect(analysed).not.toContain('--color-g-water');
+  });
+
+  it('T-AC-3 (pip): the chip sits in the middle of its plot, not at its foot (a right-column special plot’s steps left), and takes no taps', () => {
+    const right = renderToStaticMarkup(createElement(HoloMap, { width: 2, height: 1, tiles: [{ x: 0, y: 0, terrain: 'plains', owner: null }, { x: 1, y: 0, terrain: 'plains', owner: null, ground: { food: 3 }, special: { kind: 'oasis' } }] }));
+    const centred = tag(render(PIP_TILES), /class="[^"]*\brounded-control\b/);
+    const stepped = tag(right, /class="[^"]*\brounded-control\b/);
+    for (const chip of [centred, stepped]) {
+      expect(chip).toMatch(/\brelative\b/);
+      expect(chip).not.toMatch(/\babsolute\b|\bbottom-\[|style="bottom/);
+      expect(chip).toMatch(/\bpointer-events-none\b/);
+    }
+    expect(centred).not.toMatch(/style=/);
+    expect(stepped).toMatch(/style="left:-/);
   });
 
   it('T-AC-3 (pip): a plot without ground, as every plot on the TV, draws no pip and names no dots', () => {
@@ -157,5 +170,124 @@ describe('T-AC-3 (gem): Crystite and Rare earth found on a plot', () => {
     const tv = render(GEM_TILES.map(({ ground: _, ...t }) => t));
     expect(tv).not.toMatch(/data-testid="(map-)?gem-/);
     expect(render(GEM_TILES, true)).not.toMatch(/data-testid="(map-)?gem-/);
+  });
+
+  it('T-AC-3 (gem): a colony building’s plot shows the building, not its ground: no gem and no pip', () => {
+    const park = { kind: 'park', name: 'Park', stage: 'standing', buildMonths: 1 } as const;
+    const map = render([{ x: 0, y: 0, terrain: 'plains', owner: null, ground: { crystite: 2, food: 3 }, object: park }]);
+    expect(map).toContain('data-testid="plot-object-0-0"');
+    expect(map).not.toMatch(/data-testid="(map-)?gem-/);
+    expect(map).not.toMatch(/\brounded-control\b/);
+    const label = tag(map, /data-testid="map-plot-0-0"/).match(/aria-label="([^"]*)"/)?.[1] ?? '';
+    expect(label).toContain('Food 3 of 3');
+    expect(label).toContain('Crystite here');
+  });
+
+  it('T-AC-3 (gem): the plot’s label names its gems, "Crystite here", and none without ground or under hideGround', () => {
+    const label = (markup: string, x: number) => tag(markup, new RegExp(`data-testid="map-plot-${x}-0"`)).match(/aria-label="([^"]*)"/)?.[1] ?? '';
+    const map = render(GEM_TILES);
+    expect(label(map, 0)).toBe('Plains, free, Food 3 of 3, Crystite here');
+    expect(label(map, 1)).toMatch(/, Crystite here, Rare earth here$/);
+    expect(label(map, 3)).not.toMatch(/ here\b/);
+    expect(render(GEM_TILES.map(({ ground: _, ...t }) => t))).not.toMatch(/ here"/);
+    expect(render(GEM_TILES, true)).not.toMatch(/ here"/);
+  });
+
+  it('T-AC-3 (gem): a gem carries no title, which a pointer-events-none mark never shows', () => {
+    const map = render(GEM_TILES);
+    for (const good of ['crystite', 'rareEarth']) {
+      expect(gem(map, good)).not.toBe('');
+      expect(gem(map, good)).not.toMatch(/\btitle=/);
+    }
+  });
+});
+
+describe('B-AC-9 (WS4, plot look A): no mark hides the dots of the plot above a selection', () => {
+  /** A 3×3 map with plot 1-1 selected; `above` is what plot 1-0 holds, `below` what plot 1-1 holds. */
+  const render = (above: Partial<MapTile>, selected = { x: 1, y: 1 }, hideGround = false, below: Partial<MapTile> = {}) => {
+    const tiles: MapTile[] = [];
+    for (let y = 0; y < 3; y++) for (let x = 0; x < 3; x++) tiles.push({ x, y, terrain: 'plains', owner: null, ...(x === 1 && y === 0 ? above : {}), ...(x === 1 && y === 1 ? below : {}) });
+    return renderToStaticMarkup(createElement(HoloMap, { width: 3, height: 3, tiles, selected, hideGround }));
+  };
+  const pin = (markup: string) => tag(markup, /data-testid="selected-pin"/);
+  const ring = (markup: string) => tag(markup, /data-testid="selected-ring"/);
+
+  it('draws no pin under a plot showing its dots: the ring, outside the plot as ever, marks it alone', () => {
+    const map = render({ ground: { food: 2 } });
+    expect(pin(map)).toBe('');
+    expect(ring(map)).toMatch(/-inset-\[6%\]/);
+  });
+
+  it('draws the pin as ever otherwise: no ground above, a MULE above, the ground hidden, the top row with no dots below', () => {
+    for (const [why, map, side] of [
+      ['no ground above', render({}), /\bbottom-full mb-1\b/],
+      ['a MULE above', render({ ground: { food: 2 }, good: 'food' }), /\bbottom-full mb-1\b/],
+      ['the ground hidden', render({ ground: { food: 2 } }, undefined, true), /\bbottom-full mb-1\b/],
+      ['the top row, no ground below', render({ ground: { food: 2 } }, { x: 1, y: 0 }), /\btop-full mt-1\b/],
+    ] as const) expect(pin(map), why).toMatch(side);
+  });
+
+  it('on the top row, where the pin hangs below, draws no pin over a plot below showing its dots: the inside ring marks it alone', () => {
+    const map = render({}, { x: 1, y: 0 }, false, { ground: { food: 2 } });
+    expect(pin(map)).toBe('');
+    expect(ring(map)).toMatch(/\binset-0\b/);
+  });
+});
+
+describe('B-AC-9 (WS4, plot look A): the selected ring’s outer reach stops under the dots of the plot above', () => {
+  /** How far the ring paints out of its plot: its box's reach (6% of the plot when not capped), its band and its void edge. */
+  const reach = (plot: number) => {
+    const r = selectionRing(plot, 'phone');
+    return (r.inset ?? plot * 0.06) + r.band + r.edge;
+  };
+  /** The phone chip's dot row ends P/2 − 6.5 px over the plot's foot; the ring stops half a pixel under that. */
+  const room = (plot: number) => plot / 2 - 6.5 - 0.5;
+
+  it('on the small phone’s 20 px plot and the phone’s 25 px plot, comes in and thins to stop half a pixel under the dots', () => {
+    expect(selectionRing(20, 'phone')).toEqual({ inset: 0, band: 1, edge: 2, inside: false });
+    expect(selectionRing(25, 'phone')).toEqual({ inset: 0.5, band: 3, edge: 2, inside: false });
+    for (const plot of [20, 25]) expect(reach(plot)).toBeLessThanOrEqual(room(plot));
+  });
+
+  it('on a plot too small for even a 1 px band under the dots (the small phone’s hub draws 12.8 px plots), is drawn inside the plot', () => {
+    expect(selectionRing(13, 'phone').inside).toBe(true);
+    expect(selectionRing(19, 'phone').inside).toBe(true);
+    expect(selectionRing(20, 'phone').inside).toBe(false);
+  });
+
+  it('from a 30 px plot, and on the TV, is drawn as ever: 6% out, a ninth of the plot thick, a 2 px (TV 3 px) void edge', () => {
+    expect(selectionRing(30, 'phone')).toEqual({ inset: null, band: 3, edge: 2, inside: false });
+    expect(reach(30)).toBeLessThanOrEqual(room(30));
+    expect(selectionRing(20, 'tv')).toEqual({ inset: null, band: 2, edge: 3, inside: false });
+    const map = renderToStaticMarkup(createElement(HoloMap, { width: 3, height: 3, tiles: [{ x: 1, y: 1, terrain: 'plains', owner: null }], selected: { x: 1, y: 1 } }));
+    expect(tag(map, /data-testid="selected-ring"/)).toMatch(/-inset-\[6%\]/);
+  });
+});
+
+describe('B-AC-9 (MG-2): the special badge is sized with the plot, so it hides none of the plot’s dots', () => {
+  it('on a phone takes 36% of the plot, at most 15 px; the TV’s stays 21 px', () => {
+    expect(specialBadgeBox(25, 'phone')).toBe(9);
+    expect(specialBadgeBox(30, 'phone')).toBe(11);
+    expect(specialBadgeBox(60, 'phone')).toBe(15);
+    expect(specialBadgeBox(37, 'tv')).toBe(21);
+  });
+
+  it('in the map’s right column steps a special plot’s dots left by the badge’s hang and edge inset (2.75 + 2 px on a 30 px plot); a plain right-column plot’s stay put', () => {
+    const tiles: MapTile[] = [
+      { x: 2, y: 0, terrain: 'plains', owner: null, ground: { food: 3 }, special: { kind: 'oasis' } },
+      { x: 2, y: 1, terrain: 'plains', owner: null, ground: { food: 3 } },
+      { x: 1, y: 1, terrain: 'plains', owner: null, ground: { food: 3 }, special: { kind: 'oasis' } },
+    ];
+    const map = renderToStaticMarkup(createElement(HoloMap, { width: 3, height: 3, tiles }));
+    const chip = (at: string) => tag(map, new RegExp(`data-testid="map-dots-${at}"`));
+    expect(chip('2-0')).toMatch(/style="left:-4.75px"/);
+    expect(chip('2-1')).not.toMatch(/style=/);
+    expect(chip('1-1')).not.toMatch(/style=/);
+  });
+
+  it('draws the map’s badge at that size, hung by a quarter of it (the server render’s plot is 30 px)', () => {
+    const map = renderToStaticMarkup(createElement(HoloMap, { width: 3, height: 3, tiles: [{ x: 1, y: 1, terrain: 'plains', owner: null, special: { kind: 'oasis' } }] }));
+    const badge = map.match(/data-testid="special-glyph-1-1"[^>]*><span[^>]*style="([^"]*)"/)?.[1] ?? '';
+    expect(badge).toMatch(/right:-2.75px;bottom:-2.75px;width:11px;height:11px/);
   });
 });

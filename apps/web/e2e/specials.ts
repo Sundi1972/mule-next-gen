@@ -10,8 +10,8 @@
  * (the badge, variant A) shows on that plot; a plain plot shows none. On the phone, tapping a special plot selects
  * it and its plot card says what it does, first under the plot's name; when the land grant lights it, so does the
  * lit card; so does the geo drone's rail; and the TV's arcade map in development draws the glyph. The badge never
- * takes a plot's taps: a tap on the part that hangs over a neighbour selects the neighbour. Each badge is drawn at its density's size, and never over the
- * owner's mark of the plot it hangs into.
+ * takes a plot's taps: a tap on the part that hangs over a neighbour selects the neighbour. Each badge is drawn at its
+ * size (the TV's fixed, the phone's sized with its plot), and never over the owner's mark of the plot it hangs into.
  */
 import { createGame, type GameState, type Tile } from '@mule/engine';
 import type { Locator, Page } from 'playwright';
@@ -88,7 +88,7 @@ try {
   Object.assign(state.tiles[diagonal.y * dealt.width + diagonal.x]!, { owner: 's1' });
   const room = server.registry.get(code) as unknown as { broadcast(): void };
   room.broadcast();
-  const marks = [await checkMarkOnTop(hubMap, 'phone, planning', true), await checkMarkOnTop(tvMap, 'TV, planning', false)];
+  const marks = [await checkMarkOnTop(hubMap, 'phone, planning', false), await checkMarkOnTop(tvMap, 'TV, planning', true)];
 
   // Tap the special plot: it selects, and the plot card says what it is first under its name.
   const look = planning.getByTestId('look-plot');
@@ -157,8 +157,9 @@ function tapPlot(page: Page, map: Locator, p: { x: number; y: number }): Promise
 
 /**
  * The owner's mark of the plot diagonally below-right of the inner special paints above the badge hung into it: a hit
- * test, with the badge made hittable for that one probe, at the middle of where their boxes meet. On the phone the
- * boxes meet (the badge hangs 3.75 px, the mark starts 3 px in); `mustMeet` makes the check fail if they don't.
+ * test, with the badge made hittable for that one probe, at the middle of where their boxes meet. On the TV the boxes
+ * meet, and `mustMeet` makes the check fail if they don't; the phone's badge, sized with its plot, may hang short of
+ * the mark ('apart'), which passes.
  */
 async function checkMarkOnTop(map: Locator, where: string, mustMeet: boolean): Promise<string> {
   const mark = map.locator('[role=img][data-slot]').filter({ visible: true });

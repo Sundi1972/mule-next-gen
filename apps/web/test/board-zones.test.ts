@@ -10,6 +10,7 @@ import { ClientProvider } from '../src/net/react';
 import { Auction } from '../src/phone/Auction';
 import { PhoneGameProvider } from '../src/phone/game';
 import { TvAuction } from '../src/table/TableApp';
+import { BOARD_TYPE, labelLines } from '../../../packages/ui/src/components/board-layout';
 
 /**
  * RULE-6 and RULE-7 on the screens (WS6's mock design/mocks/auction-rules, PhoneRest, PhoneSoldOut and TvSoldOut): the
@@ -110,9 +111,9 @@ function tvScreen(view: MuleView): string {
 
 /** Lena's phone, Brix's phone and the TV, each as the server sends it. */
 const screens = (game: MuleGame) => [
-  { who: "Lena's phone", html: phoneScreen(game.viewFor('s1'), 's1') },
-  { who: "Brix's phone", html: phoneScreen(game.viewFor('s2'), 's2') },
-  { who: 'the TV', html: tvScreen(game.viewFor(null)) },
+  { who: "Lena's phone", size: 'phone' as const, html: phoneScreen(game.viewFor('s1'), 's1') },
+  { who: "Brix's phone", size: 'phone' as const, html: phoneScreen(game.viewFor('s2'), 's2') },
+  { who: 'the TV', size: 'tv' as const, html: tvScreen(game.viewFor(null)) },
 ];
 
 /** The text inside the first element carrying `testid`, tags dropped; null when absent. */
@@ -147,6 +148,49 @@ function bandOf(html: string, testid: string): { top: number; bottom: number } |
   return { top, bottom: top + height };
 }
 
+/** The rest band's words sit this far in from the band's edge (top-0.5 / bottom-0.5). */
+const BAND_INSET = 2;
+
+/**
+ * Every line label the board draws, as px boxes down the board: centred where the markup places it, as tall as the
+ * board's own label lines make its two rows. Reads only the rendered markup and BOARD_TYPE.
+ */
+function labelBoxes(html: string, size: 'tv' | 'phone'): { top: number; bottom: number }[] {
+  const { room, lineBox, perLine } = BOARD_TYPE[size];
+  const label = /<div [^>]*style="top:([\d.]+)%"[^>]*data-testid="limit-[^"]+"><span [^>]*style="width:\d+px;top:(-?[\d.e-]+)(?:px)?"><span[^>]*>([^<]*)<\/span><span>([^<]*)<\/span>/g;
+  return [...html.matchAll(label)].map(([, pct, offset, who, text]) => {
+    const centre = (Number(pct) / 100) * room + Number(offset);
+    const half = ((labelLines(who!, perLine) + labelLines(text!, perLine)) * lineBox) / 2;
+    return { top: centre - half, bottom: centre + half };
+  });
+}
+
+/**
+ * A rest band's words as shown, checked against the board's own label lines: one of `forms` (longest first) or none;
+ * it fits between the band's inset edge and the nearest line label reaching into the band; and the next longer form
+ * would not. The sellers' words sit at the band's top, the buyers' at its bottom.
+ */
+function bandWords(html: string, size: 'tv' | 'phone', tone: 'seller' | 'buyer', forms: string[], what: string): string {
+  const { room, lineBox, perLine } = BOARD_TYPE[size];
+  const band = bandOf(html, `rest-${tone}`)!;
+  const [top, bottom] = [(band.top / 100) * room, (band.bottom / 100) * room];
+  const inside = labelBoxes(html, size).filter((b) => b.top < bottom && b.bottom > top);
+  const clear = (tone === 'seller' ? Math.min(bottom, ...inside.map((b) => b.top)) - top : bottom - Math.max(top, ...inside.map((b) => b.bottom))) - BAND_INSET;
+  const height = (form: string) => form.split(' · ').reduce((n, part) => n + labelLines(part, perLine), 0) * lineBox;
+  const words = textOf(html, `rest-${tone}`) ?? '';
+  const shown = forms.findIndex((f) => f.replaceAll(' · ', ' ') === words);
+  const where = `${what}: the ${tone}s' band says "${words}" in ${clear.toFixed(0)} px`;
+  expect(shown >= 0 || words === '', `${where}: a known form`).toBe(true);
+  if (shown >= 0) expect(height(forms[shown]!), where).toBeLessThanOrEqual(clear);
+  const longer = shown >= 0 ? forms[shown - 1] : forms.at(-1);
+  if (longer) expect(height(longer), `${where}; "${longer}" would not fit`).toBeGreaterThan(clear);
+  return words;
+}
+
+const SELLERS = ['SELLERS WAIT · NO TRADE', 'SELLERS WAIT'];
+const BUYERS = ['BUYERS WAIT · NO TRADE', 'BUYERS WAIT'];
+const SHIP_INSIDE = { tv: ['SELLERS WAIT · ONLY THE SHIP BUYS', 'SELLERS WAIT · SHIP ONLY', 'SELLERS WAIT'], phone: ['SELLERS WAIT · SHIP ONLY', 'SELLERS WAIT'] };
+
 /** A price's height on the board, in percent from its top edge, from the board's own range as the view sends it. */
 const pctOf = (view: MuleView, price: number) => ((view.auction!.hi - price) / (view.auction!.hi - view.auction!.lo)) * 100;
 
@@ -155,7 +199,7 @@ describe('RULE-6: every board draws the rest zones', () => {
     const { game } = toWalk();
     const view = game.viewFor(null);
     const { buyersTop, sellersBottom } = view.auction!.zones!;
-    for (const { who, html } of screens(game)) {
+    for (const { who, size, html } of screens(game)) {
       const sellers = bandOf(html, 'rest-seller');
       const buyers = bandOf(html, 'rest-buyer');
       expect(sellers, `${who} draws the sellers' zone`).not.toBeNull();
@@ -164,9 +208,53 @@ describe('RULE-6: every board draws the rest zones', () => {
       expect(sellers!.bottom, `${who}: the sellers' zone ends at S`).toBeCloseTo(pctOf(view, sellersBottom), 6);
       expect(buyers!.top, `${who}: the buyers' zone starts at B`).toBeCloseTo(pctOf(view, buyersTop), 6);
       expect(buyers!.bottom, `${who}: the buyers' zone ends at the bottom edge`).toBeCloseTo(100, 6);
-      expect(textOf(html, 'rest-seller'), who).toBe('SELLERS WAIT NO TRADE');
-      expect(textOf(html, 'rest-buyer'), who).toBe('BUYERS WAIT NO TRADE');
+      // Each band's words: the longest that fits above the line labels; the TV has room for them whole.
+      const words = [bandWords(html, size, 'seller', SELLERS, who), bandWords(html, size, 'buyer', BUYERS, who)];
+      if (size === 'tv') expect(words, who).toEqual(['SELLERS WAIT NO TRADE', 'BUYERS WAIT NO TRADE']);
     }
+  });
+
+  it("B-AC-D1 (phone, TV): when the ship pays inside the sellers' zone, its band says only the ship buys there: the short form on a phone, the long one on the TV (WS6)", () => {
+    const { game } = toWalk();
+    const S = game.viewFor(null).auction!.zones!.sellersBottom;
+    // The ship a step above S, so its label stacks with the store's at the band's edge, under the words.
+    const withShip = (view: MuleView): MuleView => ({ ...view, auction: { ...view.auction!, shipPays: S + 1 } });
+    expect(withShip(game.viewFor(null)).auction!.shipPays!, 'the premise: the ship pays above S').toBeGreaterThan(S);
+    // Phones: the ship's words, as long as fit (the full short form is reached in the thin-band sweep below).
+    for (const id of ['s1', 's2']) bandWords(phoneScreen(withShip(game.viewFor(id)), id), 'phone', 'seller', SHIP_INSIDE.phone, id);
+    const tv = tvScreen(withShip(game.viewFor(null)));
+    // The TV names the ship (its full long form is reached in the thin-band sweep below, over a taller board).
+    expect(bandWords(tv, 'tv', 'seller', SHIP_INSIDE.tv, 'the TV')).toMatch(/SHIP/);
+    // The buyers' band never changes, and a ship at or under S leaves the sellers' band as it was.
+    // On a taller board, so the band has room for the full words: a ship exactly at S is not inside it.
+    const atS = (view: MuleView): MuleView => ({ ...view, auction: { ...view.auction!, hi: view.auction!.hi + 20, shipPays: S } });
+    expect(bandWords(tv, 'tv', 'buyer', BUYERS, 'the TV')).toBe('BUYERS WAIT NO TRADE');
+    expect(bandWords(tvScreen(atS(game.viewFor(null))), 'tv', 'seller', SELLERS, 'the TV, ship at S')).toBe('SELLERS WAIT NO TRADE');
+    bandWords(phoneScreen(atS(game.viewFor('s1')), 's1'), 'phone', 'seller', SELLERS, 's1, ship at S');
+  });
+
+  it("B-AC-D1 (phone, TV): a rest band shows the longest of its words that fits above the line labels reaching into it, never under them or past its edge (WS4)", () => {
+    const { game } = soldOut(0);
+    const seen = { tv: new Set<string>(), phone: new Set<string>() };
+    const { hi: top, zones } = game.viewFor(null).auction!;
+    // Sold out, a bid ever closer to the top edge thins the sellers' band; the ship pays inside it, a step above the bid.
+    // The board as it is and a taller one, so the bands run from roomy to a single step.
+    const cases = [top, top + 20].flatMap((hi) => Array.from({ length: hi - zones!.sellersBottom - 1 }, (_, i) => ({ hi, bid: zones!.sellersBottom + 1 + i })));
+    for (const { hi, bid } of cases) {
+      const staged = (view: MuleView): MuleView => ({ ...view, auction: { ...view.auction!, hi, storeSells: bid, storeSellsBid: true, shipPays: bid + 1 } });
+      for (const [size, html] of [
+        ['tv', tvScreen(staged(game.viewFor(null)))],
+        ['phone', phoneScreen(staged(game.viewFor('s1')), 's1')],
+      ] as const) {
+        const words = bandWords(html, size, 'seller', SHIP_INSIDE[size], `${size}, hi ${hi}, bid ${bid}`);
+        seen[size].add(words);
+      }
+    }
+    // The staging reaches both the full words and a shorter form on each board.
+    expect([...seen.tv]).toEqual(expect.arrayContaining(['SELLERS WAIT ONLY THE SHIP BUYS']));
+    expect([...seen.phone]).toEqual(expect.arrayContaining(['SELLERS WAIT SHIP ONLY']));
+    expect(seen.tv.size, `the TV's forms: ${[...seen.tv].join(' | ')}`).toBeGreaterThan(1);
+    expect(seen.phone.size, `the phone's forms: ${[...seen.phone].join(' | ')}`).toBeGreaterThan(1);
   });
 
   it("B-AC-D1 (phone, TV): once the store stops buying, the buyers' zone keeps its top at the old buying line", () => {
@@ -212,12 +300,12 @@ describe("RULE-7: a sold-out store's line shows the highest bid on every screen"
     expect(textOf(phoneScreen(game.viewFor('s1'), 's1'), 'sold-out-note')).toBe(`Store sold out. Nobody can buy from it; it still buys at ${buys}.`);
   });
 
-  it("B-AC-E1 (TV): a store with none of the good and no old price to name says it is sold out and nothing more, never a sentence without its number", () => {
+  it("B-AC-E1 (TV): a store that never posted a selling price for the good says bids set it, never a sentence without its number (WS6)", () => {
     const { game } = soldOut(0);
     const view = game.viewFor(null);
     // A store that never had the good: no selling line, and a view without zones (a record from before them).
     const { zones: _, ...auction } = { ...view.auction!, storeSells: null };
-    expect(textOf(tvScreen({ ...view, auction }), 'tv-sold-out')).toBe('Store sold out');
+    expect(textOf(tvScreen({ ...view, auction }), 'tv-sold-out')).toBe('Store sold out No store price yet: bids set it.');
   });
 
   it('B-AC-E1 (phone, TV): while the store sells, its line is its selling price, and no screen says sold out', () => {
