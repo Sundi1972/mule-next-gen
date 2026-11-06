@@ -53,18 +53,16 @@ export function monthlyDemand(state: GameState, festival = festivalFood(state)):
   // Sick colonists in dirty air need more Medicine.
   demand.medicine = colonistDemand(state, 'medicine', (state.colonists / UPKEEP.colonistsPerMedicine) * (sick ? POLLUTION.sickMedicineDemand : 1));
   const factories = (good: Good) => state.tiles.filter((t) => t.outfit === good).length;
-  // The store builds a MULE from Smithore for every plot that will want one;
-  // smelters need Smithore too, and Electronics works need Alloy.
+  // The store builds a MULE from Smithore for every plot that will want one; smelters need Smithore too.
   demand.smithore = factories('alloy') * (RECIPES.alloy.inputs.smithore ?? 0) + mulesWanted(state) * MULE.smithorePerMule;
-  demand.alloy = factories('electronics');
-  demand.rareEarth = factories('electronics');
   // Crystite is a pure off-world luxury: only the export ship wants it.
   demand.crystite = 0;
-  // Counted before any works stands, so the price tells players to build one.
   const electronics = state.colonists / UPKEEP.colonistsPerElectronics;
   demand.electronics = electronics;
-  demand.rareEarth += electronics * (RECIPES.electronics.inputs.rareEarth ?? 0);
-  demand.alloy += electronics * (RECIPES.electronics.inputs.alloy ?? 0);
+  // The larger, not the sum: the works and the colonists' want are the same Electronics. See needs AM-2.
+  // A works takes one recipe's inputs a month, so the want counts in recipes: E ÷ output.
+  const recipes = Math.max(factories('electronics'), electronics / RECIPES.electronics.output);
+  for (const input of ['rareEarth', 'alloy'] as const) demand[input] = recipes * (RECIPES.electronics.inputs[input] ?? 0);
   const off = exportDemand(state);
   for (const good of GOODS) demand[good] += off[good];
   return demand;
