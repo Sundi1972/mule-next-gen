@@ -344,6 +344,11 @@ did       Heiko ruled: no purchases. The six buildings and the rocket stay our o
 because   G-2: city-builder polish; Heiko's call by the non-goal itself
 goal      G-2
 folded    §0 non-goal; ART-DIRECTION §4; ASSET-LIST Hospital row; plan Task 1.6
+addendum  Heiko, later on 6 Nov: kit props as much as they fit at our scale — site, build and damaged stages, the
+          Spaceport apron, Park and edge plants, hall dressing; our buildings stay the base. Every picture gets a
+          kit-dressed twin rendered to a gitignored tree; the shipped manifest keeps today's pictures until the
+          licence answer; the switch is one flag (publish.sh SRC=out/kit). Measured, not used: the kit hospital is
+          141 × 104 × 58 m, ~12× too big for a 12 m place. → plan Task 3.4
 ```
 
 ## §9 · Ownership Boundaries  [handoff]

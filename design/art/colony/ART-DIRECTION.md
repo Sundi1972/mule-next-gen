@@ -60,6 +60,8 @@ Never change the camera per building. One camera is what lets 70 pictures sit to
   builds. The kit stays outside the repo (path from the PM). **Until Heiko answers the licence question, kit props
   appear in local renders only, never in committed art.** No real-time glb from kit parts without a licence check.
   No purchases. NASA models only as a reference unless a per-model licence check passes.
+  Heiko, later on 6 Nov: **as much kit dressing as fits at our scale**, everywhere (stages, apron, plants, hall). Every
+  picture gets a kit-dressed twin in `out/kit/`; shipping them is one flag (`SRC=out/kit publish.sh`) after the licence answer.
 
 ## 5. Scale and detail
 

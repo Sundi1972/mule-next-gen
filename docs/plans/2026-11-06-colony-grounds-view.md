@@ -246,6 +246,16 @@ Same lines as PR-1, for B-AC-2, B-AC-3, B-AC-5, T-AC-3, T-AC-4 and T-AC-5 (phone
 
 - [ ] Publish a page from `design/mocks/colony-grounds/look.html` showing all six kinds × stages at TV size. The PM asks Heiko. Record his verdict in the PR body.
 
+### Task 3.4: kit-dressed twins, behind one flag (AM-5 addendum)
+
+**Depends on:** the kit hook (`lib/props.py`, `KITS_DIR`). **ACs:** T-AC-2 on the kit manifest (local run).
+- [ ] Each kind script dresses every stage with kit props where they fit at our scale (site/build/damaged gear,
+  Spaceport apron, Park and edge plants, hall dressing); renders with `KITS_DIR` set go to `out/kit/` (gitignored).
+- [ ] `publish.sh` takes `SRC` (default `out`) and `PUB` (default `apps/web/public/art/colony`). Preview:
+  `SRC=out/kit PUB=out/kit-pub publish.sh`; the look page's catalogue switches to it. Ship (only after Heiko's licence
+  answer, relayed by the PM): `SRC=out/kit publish.sh`, then T-AC-2, commit.
+- [ ] Until then nothing kit-dressed is committed or published.
+
 ### PR-3 merge gate
 
 - [ ] T-AC-2 across the whole catalogue is green. Heiko's look round is recorded. No code changes (`git diff --stat -- packages apps/web/src` is empty).
