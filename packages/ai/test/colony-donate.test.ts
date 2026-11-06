@@ -18,9 +18,15 @@ function table({ politics = true, commissioned = true } = {}): GameState {
 
 const seatAs = (persona: AiPersonaId) => new AiSeat({ id: ME, name: ME, persona, level: 'trader', seed: 11 });
 
-/** Puts the seat's money at its reserve plus `spare` (negative: under it), and returns that money. */
+/**
+ * Puts the seat's money at its reserve plus `spare` (negative: under it), and returns that money. Its larder is emptied
+ * first, so the reserve is large enough that a trader ignoring it would give at least the least gift.
+ */
 function giveSpare(state: GameState, seat: AiSeat, spare: number): number {
+  for (const good of ['food', 'water', 'energy'] as const) player(state, ME).stock[good] = 0;
   const money = cashReserve(observe(state, ME), seat.mind) + spare;
+  const { share, minCredits } = POLITICS.ai.colony.donate;
+  expect((money - spare) * share.trader, 'a trader ignoring its reserve would give at least the least gift').toBeGreaterThanOrEqual(minCredits);
   player(state, ME).money = money;
   return money;
 }
@@ -43,7 +49,7 @@ const ROWS: Row[] = [
   { name: 'a trader with 1000 cr spare gives a tenth', persona: 'trader', spare: 1_000, gives: 100 },
   { name: 'a saboteur never donates', persona: 'saboteur', spare: 1_000, gives: 0 },
   { name: 'money at its reserve: nothing', persona: 'trader', spare: 0, gives: 0 },
-  { name: 'money under its reserve: nothing', persona: 'trader', spare: -50, gives: 0 },
+  { name: 'money under its reserve: nothing', persona: 'trader', spare: -10, gives: 0 },
   { name: 'politics off: nothing', persona: 'trader', spare: 1_000, politics: false, gives: 0 },
   { name: 'no commissioned object: nothing', persona: 'trader', spare: 1_000, commissioned: false, gives: 0 },
   { name: 'a project needing 15 cr gets 15, never more', persona: 'trader', spare: 1_000, needs: 15, gives: 15 },
