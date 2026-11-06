@@ -291,6 +291,19 @@ goal      G-2 — met more fully; HC-2 holds (one Spaceport ≈ +60 kB at 800 px
 folded    §3 manifest; ART-DIRECTION §2; ASSET-LIST Spaceport row; plan PR-1 Task 1.1 (lib supports a per-kind frame)
 ```
 
+```
+AM-2 · 2026-11-06 · lead · after Heiko: "a Stadium is much bigger than the Hospital"
+target    §1 C2 (one place per building), §3 manifest frame
+said      every building stands on one place
+did       footprint per kind, in proportion to real size: Stadium 2×2 (Heiko); WS10 proposes Spaceport 2×2, the
+          rest 1×1. WS7 rules the numbers, how a 2×2 takes places in the growth order, and the view contract.
+          A 2×2 kind's frame is drawn at the same scale and anchored on its footprint's centre; per-kind frames (AM-1)
+          carry it. PR-1's kinds are all 1×1; the 2×2 kinds land in PR-3 after WS7's contract.
+because   G-2: the grounds must look like a real place (Heiko's TV look review)
+goal      G-2
+folded    ART-DIRECTION §2 "Tall kinds" row widened to "Large kinds"; ASSET-LIST Stadium + Spaceport rows; plan PR-3
+```
+
 ## §9 · Ownership Boundaries  [handoff]
 
 - Sole owner: WS10, for `packages/ui/src/grounds/**`, `apps/web/public/art/colony/**` and `design/art/**`.

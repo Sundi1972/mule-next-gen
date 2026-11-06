@@ -25,7 +25,7 @@ picture (build1) for 1–2-month buildings and two (build1 ⅓, build2 ⅔) for 
 | Park | site, build1, standing, closed, damaged | 5 × 2 + 4 = **14** | done in the spike (`park.py`); closed = gates locked, lawn brown; damaged = fallen tree, scorched lawn |
 | Hospital | site, build1, standing, closed, damaged | **14** | done in the spike (`colony.py::hospital`) — needs the polish pass |
 | Observatory | site, build1, standing, closed, damaged | **14** | dome with slot + telescope; damaged = cracked dome |
-| Stadium | site, build1, build2, standing, closed, damaged | 6 × 2 + 5 = **17** | stands, pitch, floodlight masts; closed = masts dark, gates shut |
+| Stadium | site, build1, build2, standing, closed, damaged | 6 × 2 + 5 = **17** | **2×2 places** (Heiko): a real bowl with stands, pitch, floodlight masts; closed = masts dark, gates shut |
 | Spaceport upgrade | site, build1, build2, standing, closed, damaged | **17** | pad, gantry, **a ~36 m rocket, the tallest thing on the grounds** (Heiko 6 Nov), blockhouse, tall frame 1600×3200; build1 = rocket stacking on the pad, build2 = fully stacked in scaffold; closed = rocket shrouded, pad dark; damaged = toppled gantry arm, scorched pad |
 | **Total** | | **85 pictures** | |
 
