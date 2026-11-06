@@ -256,11 +256,6 @@ export const UPKEEP = {
   colonistsPerMedicine: 50,
   /** The colony grows by this factor in a month its colonists were fed, and shrinks by this one when they went hungry. */
   colonistGrowth: { fed: 1.04, hungry: 0.95 },
-  /**
-   * The most colonists pay per unit, from their off-world wages. Above it they
-   * buy less, so their demand falls as the price rises: this is the demand curve.
-   */
-  colonistBudget: { food: 150, water: 120, energy: 100, medicine: 400 } as Partial<Record<Good, number>>,
   /** Units of each good a player's home depot holds. */
   depotCapacity: 10,
 };
