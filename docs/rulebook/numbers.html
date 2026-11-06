@@ -14,12 +14,12 @@
 <main class="rb-main">
 <article>
 <h1>Every number</h1>
-<p class="rb-lede">Every balancing value in the game, as the game's settings file holds it today: 1235 settings in 52 groups, each with what it does.</p>
+<p class="rb-lede">Every balancing value in the game, as the game's settings file holds it today: 1242 settings in 52 groups, each with what it does.</p>
 <p>This page is generated from the game's settings file, <code>packages/engine/src/config.ts</code>, on trunk. Each group below is one block of that file, named the way the code names it; the setting is its full path, and the note is the comment written beside it in the file. A setting without a note of its own points to the nearest note that explains it. The rules these numbers drive are explained in <a href="index.html">the other chapters</a>.</p>
 <p>Do not edit this page by hand. To regenerate it after <code>config.ts</code> changes, run from the repo root:</p>
 <p><code>pnpm --filter @mule/engine exec tsx ../../docs/rulebook/build-numbers.ts</code> then <code>node docs/rulebook/build-index.mjs</code></p>
 <div class="box next"><h4>Not on this page</h4><p><code>MAP_SIZE</code> is kept inside <code>config.ts</code> without being exported, so this page cannot read it.</p></div>
-<p class="code-ref">Built from <code>config.ts</code> with fingerprint <code>11e68654de16</code> (the first 12 characters of its SHA-256).</p>
+<p class="code-ref">Built from <code>config.ts</code> with fingerprint <code>a0c417b23a0a</code> (the first 12 characters of its SHA-256).</p>
 
 <h2 id="good-config"><code>GOOD_CONFIG</code> <span class="pill built">In the game</span></h2>
 <div class="table-wrap"><table>
@@ -1023,6 +1023,16 @@
 <tr><td><code>POLITICS.ai.colony.siteBid.aggressive</code></td><td class="n">500</td><td>See the note on <code>POLITICS.ai.colony.siteBid</code>.</td></tr>
 <tr><td><code>POLITICS.ai.colony.siteBid.saboteur</code></td><td class="n">null</td><td>See the note on <code>POLITICS.ai.colony.siteBid</code>.</td></tr>
 <tr><td><code>POLITICS.ai.colony.leanIn</code></td><td class="n">[&quot;unhappy&quot;, &quot;unrest&quot;]</td><td>In these mood bands an AI voter will not vote for the sitting Governor if anyone else runs.</td></tr>
+<tr><td><code>POLITICS.ai.colony.donate</code></td><td class="n"></td><td>What an AI seat gives in planning toward a commissioned object (G-5 C28). Placeholders until the sim tunes them (HC-25).</td></tr>
+<tr><td><code>POLITICS.ai.colony.donate.share</code></td><td class="n"></td><td>The share of its cash above its reserve each persona gives.</td></tr>
+<tr><td><code>POLITICS.ai.colony.donate.share.trader</code></td><td class="n">0.1</td><td>See the note on <code>POLITICS.ai.colony.donate.share</code>.</td></tr>
+<tr><td><code>POLITICS.ai.colony.donate.share.cautious</code></td><td class="n">0.15</td><td>See the note on <code>POLITICS.ai.colony.donate.share</code>.</td></tr>
+<tr><td><code>POLITICS.ai.colony.donate.share.aggressive</code></td><td class="n">0.05</td><td>See the note on <code>POLITICS.ai.colony.donate.share</code>.</td></tr>
+<tr><td><code>POLITICS.ai.colony.donate.share.saboteur</code></td><td class="n">0</td><td>See the note on <code>POLITICS.ai.colony.donate.share</code>.</td></tr>
+<tr><td><code>POLITICS.ai.colony.donate.standing</code></td><td class="n"></td><td>The share&#39;s multiplier when the seat leads the table on Worth, or trails it.</td></tr>
+<tr><td><code>POLITICS.ai.colony.donate.standing.leading</code></td><td class="n">1</td><td>See the note on <code>POLITICS.ai.colony.donate.standing</code>.</td></tr>
+<tr><td><code>POLITICS.ai.colony.donate.standing.trailing</code></td><td class="n">1</td><td>See the note on <code>POLITICS.ai.colony.donate.standing</code>.</td></tr>
+<tr><td><code>POLITICS.ai.colony.donate.minCredits</code></td><td class="n">10</td><td>The least it gives, in credits; a smaller gift is not made.</td></tr>
 </tbody>
 </table></div>
 

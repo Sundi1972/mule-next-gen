@@ -143,9 +143,9 @@ tomorrow     apps/server/src/record.ts::Recorder. It MUST:
              (1) wrap the GameContext. `schedule` numbers each timer in call order, and its callback opens a
                  `fire` step; `now()` and `hostId()` append what they return to the open step's `reads` and
                  `hosts`, except while a `viewFor` runs (RULE-3). It never alters a value (HC-3).
-             (2) wrap the Game. `start`, `handle`, `connectionChanged` and `seatMoved` each open a step and record
-                 their input; `handle` also records a refusal's message and rethrows. `heard` is passed through
-                 unrecorded (RULE-5).
+             (2) wrap the Game. `start`, `handle`, `connectionChanged`, `seatMoved` and `heard` each open a step
+                 and record their input; `handle` also records a refusal's message and rethrows. A `heard` step
+                 keeps who spoke to whom and never the words (RULE-5, AM-4).
              (3) wrap the BrainService. `deciderFor` notes which seats are smart, and each decider's `decide`
                  call is numbered per seat, with its outcome recorded per RULE-4.
 logic        → RULE-1, RULE-2, RULE-3, RULE-4, RULE-5
@@ -268,7 +268,8 @@ first match wins
   6  an async decide settles (resolve or reject)           new step 'answer' { seat, call, choice | error }
   7  ctx.now() / ctx.hostId() outside viewFor              value appended to the OPEN step's reads / hosts
   8  notice / playbook                                     event appended after the open step, same at and seq
-  9  Game.heard                                            passed through, nothing recorded (RULE-5)
+  9  Game.heard(from, text, to?)                           new step 'heard' { from, to? }; the text is never
+                                                           recorded (RULE-5, AM-4)
   10 Game.viewFor                                          passed through; reads inside it untaped (RULE-3)
 
 the open step  a step stays open from its call until the next step opens. Microtasks that run after its synchronous
@@ -296,7 +297,8 @@ RULE-2 · When the record is written                               shape: decisi
   3  the write fails                               console.error with the path and error code; the room and
                                                    game carry on untouched; nothing retries
   4  the room is disposed before game over         nothing written; the record is dropped with the room
-  5  a game error ends the room                    nothing written (see §7 R-2)
+  5  a game error ends the room                    written as row 2, with `ended: 'error'` and the error's message;
+                                                   the replay reproduces the throw at the same step (AM-5)
 
 unknown  `recordDir` absent means "don't record". It is never a default folder in tests.
 ```
@@ -339,12 +341,19 @@ unknown          a promise still open at game over leaves no answer step. That's
 ```
 
 ```
-RULE-5 · Player chat is not an input to play                       shape: invariant (existing, pinned)
+RULE-5 · Who spoke to whom is an input; what they said never is     shape: invariant (AM-4)
 
-`MuleGame.heard` → `AiSeat.hear` → `Brain.hear` → `DecisionContext.tableTalk`, which only the LLM decider reads
-(TopPickDecider ignores it). In replay every smart seat's decider is the recorded one, so table talk can't change
-an outcome, and `heard` is not recorded (the §0 non-goal). Pinned by T-AC-1: the test game includes player chat,
-and the replay has none.
+A delivered line to the AI seats (`Game.heard`) is recorded as a step `{ from, to? }`, **without its text** (the §0
+non-goal "storing chat text" holds). The replay calls `game.heard(from, '', to)`. So:
+  - a brain call may open because a line arrived (from whom, to whom, when), and it replays identically;
+  - nothing in play, and no call's opening, may depend on the words. Words reach an outcome only through a recorded
+    reply (RULE-4), which the replay serves without reading the prompt;
+  - a line an AI seat sent, forwarded inside the game (spec B's C5), is not a heard step and may open no call: the
+    room never calls `Game.heard` for it, and its words come from an unrecorded part of a reply, so the replay would
+    never regenerate it (WS2's review of AM-4; mirrored in spec B AM-B4).
+Pinned by T-AC-12 here (a game with chat replays identical, and the file holds no chat text). Spec B's T-AC-B8 is
+the brain side: a replay with every heard text blanked is identical, positive-controlled by a reply that opens on a
+word.
 ```
 
 ```
@@ -361,6 +370,7 @@ RULE-6 · Replay, step by step                                     shape: sequen
      intent     game.handle(); throw vs record.refused must agree (message equal) → else ReplayDiverged
      connection game.connectionChanged()
      moved      game.seatMoved()
+     heard      game.heard(from, '', to)   (the text was never recorded; AM-4)
      answer     settle that call's promise with the recorded choice, write reply or error (by seat, call and kind)
      notice, playbook  skipped
    after each step: flush microtasks, check the tape was consumed, and check the step's brain calls (move and writer) match
@@ -412,6 +422,7 @@ export type RecordEvent<Intent> =
   | (RecordStep & { type: 'intent'; seat: PlayerId; intent: Intent; refused?: string })
   | (RecordStep & { type: 'connection'; seat: PlayerId; connected: boolean })
   | (RecordStep & { type: 'moved'; seat: PlayerId })
+  | (RecordStep & { type: 'heard'; from: PlayerId; to?: PlayerId })   // AM-4: who to whom, never the words
   | (RecordStep & { type: 'answer'; seat: PlayerId; call: number; kind: CallKind; choice?: RecordedChoice; write?: RecordedWrite; error?: string })
   | NoticeEntry
   | PlaybookEntry;
@@ -495,6 +506,7 @@ already git-ignored.
 | **T-AC-8** | RULE-2 row 3: an unwritable recordDir at game over → one console.error, and the room still shows game over and stays reachable | room view, log spy | C4 |
 | **T-AC-9** | A refused intent is recorded with its message, and the replay refuses it with the same message | record + replay | C2, C3 |
 | **T-AC-10** | Claims, declarations, trades (a sale to the ship included) and lot sales appear as `notice` events with month and phase, and `phaseNotices()` holds the same notices with recording off. A replay of the record with every notice removed is still identical | record, `phaseNotices()`, `replay()` | C6 |
+| **T-AC-12** | AM-4: a game whose humans chat publicly and whisper to an AI records one `heard` step per delivered line, with `from` and `to` and no text. The file holds none of the chat's words, and `replay` is identical | record file + `replay()` | C2, C3 |
 | **T-AC-11** | `recordPlaybook` entries come out in call order with their step's at and seq. The replay skips them as inputs, but each replayed playbook must equal its recorded entry, or ReplayDiverged (AM-1) | record + `replay()` | C7 |
 
 All T-ACs are server tests (`apps/server/test/record.test.ts`). Only T-AC-1 belongs in Tier 1 CI (lean CI); the rest
@@ -506,12 +518,16 @@ stay local.
   stream the steps to a file. That's a non-goal now.
 - **R-2, a crashed game leaves no file.** When a game error ends the room, nothing is written (RULE-2 row 5). That's
   exactly the game Heiko would most want replayed. It costs little to write the record with `ended: 'error'`, and the
-  replay would reproduce the throw. It's outside §0's proof, so it's offered as a follow-up for the PM and Heiko to
-  rule on, not built here.
+  replay would reproduce the throw. It was outside §0's proof, so it was offered as a follow-up. **Heiko approved it;
+  it is built as AM-5.**
 - **R-3, Node timer and promise semantics.** RULE-1 assumes a settled decider promise runs its handlers before the
   next timer callback, which holds in Node: microtasks drain between macrotasks. T-AC-1's positive control is the
   check. No spike needed.
 - **R-4, viewFor purity.** RULE-3 relies on views never mutating state. T-AC-6 proves the clock exclusion with a view forced to read the clock (AM-3); view purity itself rests on review.
+- **R-5, per-seat AI levels.** WS1's `validatorFor({ mind, seed })` (spec A step 2, its §7 R-7) closes over a seat's AI level, but
+  `GameRecord.seats` records no level. Every AI seat sits at `DEFAULT_AI_LEVEL` today, so a replay builds the same
+  validator. If seats ever get other levels, the record must carry each seat's level: a §3 amendment, made then and
+  agreed with WS1 and WS2. Raised by WS1, 2026-10-29.
 
 ## §8 · Amendments `[review-only]`
 
@@ -549,6 +565,64 @@ stay local.
     a view that reads the clock.
   - (4) §4: the game-over write ran outside the guard, where a throw would end the whole server process. It now runs
     inside the guard, and FM-REC-1 covers it.
+
+- **AM-4 (2026-10-29, WS2's spec B v2, social Claude; AGREED: WS2 and WS1 OK'd it at a25de0c4, along with WS3):** `heard` becomes a recorded
+  input, without its words.
+  - **Why:** Heiko vetoed spec B's first design. He wants Claude to react when it's whispered to, so a brain call may
+    open because a line arrived. That trigger must replay, so it must be recorded.
+  - **§3:** RecordEvent gains `{ type: 'heard'; from; to? }` (a step). No new reply fields and no new CallKind:
+    social replies are writer calls of kind 'playbook', and what plays goes in as playbook edits, e.g.
+    `/strategy/stances/<player>`, `/rivalReads/<player>` (WS2's check).
+  - **Rules:** RULE-1 row 9, RULE-5 and RULE-6 are restated above.
+  - **The §0 non-goal "storing chat text" holds.** The record has who spoke to whom and when, never what.
+  - **Versioning:** still `v: 1`. The addition is additive: an older record has no `heard` steps, and before AM-4
+    `heard` changed nothing in play.
+  - **Build:** a small WS3 PR. `wrap` opens a step in `heard`, with reads taped like any step, and the replay calls
+    `game.heard(from, '', to)`. T-AC-12 covers it. It lands before WS2's B-2b, which records social replies.
+  - **Spec B HC-B3 carries the two conditions:** (i) whether and where a recorded call opens never depends on chat
+    text; (ii) every effect flows through the recorded reply.
+  - **Playbook fields WS1 may add** (`Playbook.politics?`, `PlanningPlay.offers?`) reach the record only inside
+    PlaybookEntry, additively. The T-AC-11 stableJson comparison is unaffected, because absent fields serialise as
+    absent.
+  - **Follow-on (2026-10-29, #194 review):** §1 C2 (2) still said `heard` passes through unrecorded. It is now
+    restated as a step, matching RULE-1 row 9 and RULE-5. T-AC-12 also pins the replay's `heard` calls exactly, so a
+    replay that drops or garbles them goes red.
+
+- **AM-5 (2026-11-04, R-2, Heiko approved): a crashed game writes its record.**
+  - **RULE-2 row 5** is restated above: a game error that ends the room writes the file, as at game over.
+  - **§3, additive (still `v: 1`):** `GameRecord` gains `ended?: 'error'` and `error?: string` (the message only, no
+    stack, since paths and env must not reach the file). The outcome's `stateHash` is the state when the error ended
+    the room. The scores are what `score` gives on that state, or omitted if scoring itself throws. A record without
+    `ended` is a game that ended normally.
+  - **The replay:** it plays the steps, expects the same step to throw, and reports `identical` only if it throws at
+    that step with the same message and the state hash matches. A replay that doesn't throw, or throws elsewhere, is
+    not identical.
+  - **The seam:** the room's existing `onError` / `fail()` path in tabletop. WS3's `record.ts` wraps the game's
+    errors where it already wraps `handle` and fired steps, so no tabletop edit is needed if the throw reaches the
+    recorder first. If it doesn't, the edit is WS4's and is named.
+  - **The test** is T-AC-13: a forced throw mid-game gives a file with `ended: 'error'`, and its replay throws at the
+    same step and is identical. Positive control: a replay that swallows the throw is not identical.
+
+- **AM-6 (2026-11-05, WS3 ruling for WS9's AM-20): per-good goods-auction playbooks need no new field.**
+  - **The shape (still `v: 1`):** a seat's goods-auction play is one `PlaybookEntry` per good, per seat, per month:
+    `{ seat, month, phase: 'auction', playbook }`, whose `auction` part carries only that good. It is written at that
+    good's status step. No `good` marker, no new phase value.
+  - **The replay** matches playbooks strictly by order, `seq` and content (`replay.ts::ReplayScript.playbook`), never
+    by `(seat, month, phase)`, so several auction entries for one seat in one month replay as recorded.
+  - **Condition 1:** seats write in seat order within one step.
+  - **Condition 2:** a good's play is the latest auction entry for that seat and month written at or before that
+    good's status step. The month's first entry is the whole month's draft; its later-good parts are stale by design.
+  - **Owed by WS9's PR-3:** a T-AC-11 row with two goods and two auction entries for one seat, whose replay is
+    identical.
+- **AM-7 (2026-11-05, WS3, for G-5 C32 / T-AC-39): the outcome keeps the colony score.**
+  - **The shape (still `v: 1`):** `outcome.colonyScore?: number` is the colony score's total at game over (G-5
+    RULE-25, `colonyScore(state).total`). It is present in a game with the council and absent without one. A crashed
+    game's outcome keeps its seats' scores even if scoring the colony throws on the state the error left.
+  - **The replay** reports `colonyScore: { recorded, replayed }`. It is identical only if they match, as the seats'
+    scores must (T-AC-30 extended to the end score).
+  - **Old records:** none can disagree here. COLONY_SCORE is config, so a record made before it carries another
+    config fingerprint and is refused before any game is built (T-AC-3).
+  - **Built in:** #346 (C31/C32, into ws7-politics).
 
 ## §9 · Ownership Boundaries `[handoff]`
 
