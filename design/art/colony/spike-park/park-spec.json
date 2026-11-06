@@ -8,8 +8,8 @@
   "monument": { "asset": "moon_rock_03", "center": [0, 0], "plinth": { "radius": 0.7, "height": 0.35 }, "height": 1.4, "note": "the colony is not on Earth: a meteorite on a plinth" },
   "pond": { "center": [3.1, 3.1], "rx": 1.9, "ry": 1.4, "edge": "ring of rounded stones", "material": "clear dark water, reflective, with a shallow lighter edge" },
   "trees": [
-    { "asset": "island_tree_01", "at": [-3.1, 3.0], "height": 7.0 },
-    { "asset": "island_tree_01", "at": [-3.6, -2.8], "height": 5.2, "rotate": 2.1 }
+    { "asset": "island_tree_01", "at": [-3.1, 3.0], "height": 5.5 },
+    { "asset": "island_tree_01", "at": [-3.6, -2.8], "height": 4.2, "rotate": 2.1 }
   ],
   "hedge": { "asset": "shrub_01", "height": 1.0, "along": "inside the rim on the north and west edges, gaps at the paths", "spacing": 1.1 },
   "flowerBed": { "asset": "flower_gazania", "center": [3.1, -3.1], "radius": 1.3, "edge": "low stone kerb", "density": "full, no lawn showing inside" },
@@ -17,6 +17,6 @@
     { "asset": "painted_wooden_bench", "at": [-1.9, -1.2], "facing": "plaza" },
     { "asset": "painted_wooden_bench", "at": [1.2, -1.9], "facing": "plaza" }
   ],
-  "lamps": { "at": [[1.3, 1.3], [-1.3, 1.3], [1.3, -1.3], [-1.3, -1.3]], "height": 2.4, "look": "slim dark post, warm globe; lit at dusk" },
-  "views": { "day": "sun from west-south-west, sky fill", "dusk": "sun low and orange, sky dim, lamps lit warm, pond reflects them" }
+  "lamps": { "at": [[2.2, 2.2], [-2.2, 2.2], [2.2, -2.2], [-2.2, -2.2]], "height": 2.4, "look": "slim dark post, warm globe; lit at dusk" },
+  "views": { "day": "sun from west-south-west, sky fill", "dusk": "sun low and orange, sky dim, lamps lit warm (from this camera the pond cannot mirror the lamps; not required)" }
 }
