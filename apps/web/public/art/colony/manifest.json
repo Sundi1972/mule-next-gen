@@ -43,6 +43,33 @@
         "glow": "park/damaged-glow@800.webp"
       }
     },
+    "hospital": {
+      "site": {
+        "day": "hospital/site-day@800.webp",
+        "dusk": "hospital/site-dusk@800.webp",
+        "glow": "hospital/site-glow@800.webp"
+      },
+      "build1": {
+        "day": "hospital/build1-day@800.webp",
+        "dusk": "hospital/build1-dusk@800.webp",
+        "glow": "hospital/build1-glow@800.webp"
+      },
+      "standing": {
+        "day": "hospital/standing-day@800.webp",
+        "dusk": "hospital/standing-dusk@800.webp",
+        "glow": "hospital/standing-glow@800.webp"
+      },
+      "closed": {
+        "day": "hospital/closed-day@800.webp",
+        "dusk": "hospital/closed-dusk@800.webp",
+        "glow": null
+      },
+      "damaged": {
+        "day": "hospital/damaged-day@800.webp",
+        "dusk": "hospital/damaged-dusk@800.webp",
+        "glow": "hospital/damaged-glow@800.webp"
+      }
+    },
     "stadium": {
       "frame": {
         "width": 3200,
