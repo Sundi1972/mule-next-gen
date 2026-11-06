@@ -395,7 +395,8 @@ function colonistsLine(view: MuleView, r: ReturnType<typeof colonyReport>): stri
   const meal = view.colonistMeal;
   if (meal) {
     const got = (g: { took: number; need: number }, name: string) => (g.took >= g.need ? `all their ${name}` : `${fmt(g.took)} of ${fmt(g.need)} ${name}`);
-    const fed = `The store fed the colony’s ${fmt(r.colonists)} colonists`;
+    // The colonists who ate, from the meal itself: the month's growth or shrinking comes after.
+    const fed = `The store fed the colony’s ${fmt(meal.colonists)} colonists`;
     return meal.food.took >= meal.food.need && meal.water.took >= meal.water.need ? fed : `${fed} ${got(meal.food, 'Food')} and ${got(meal.water, 'Water')}`;
   }
   return r.colonistsFed ? `The store fed the colony’s ${fmt(r.colonists)} colonists` : `The colony’s ${fmt(r.colonists)} colonists${r.colonistsFed === false ? ' went short' : ''}`;
