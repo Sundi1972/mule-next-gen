@@ -194,7 +194,8 @@ describe('C8: a power plant is worth what its output saves', () => {
    * Month 1's development: three rich mines (use 6 Energy), no plant, no Energy, 3,000 cr, and an idle plot rated for
    * Energy and for Food as the row says. The other seats have no money, so they buy no MULE.
    */
-  function develop(idle: Partial<Tile['ground']>, store: { energy: number; posted: number }, more: { plots?: Plot[]; energy?: number } = {}): Outfit | null {
+  /** `store.normal`: Energy's normal (and off-world) price, for a row where Energy is cheap; the store never posts under it. */
+  function develop(idle: Partial<Tile['ground']>, store: { energy: number; posted: number; normal?: number }, more: { plots?: Plot[]; energy?: number } = {}): Outfit | null {
     const state = createGame({ seed: 1, players: ['ai0', 'ai1', 'ai2', 'ai3'].map((id) => ({ id, name: id, isAi: true })) });
     while (state.phase !== 'development') advancePhase(state);
     for (const t of state.tiles) if (t.owner) Object.assign(t, { owner: null, outfit: null });
@@ -209,6 +210,7 @@ describe('C8: a power plant is worth what its output saves', () => {
     }
     state.treasury.salesTax = 0;
     Object.assign(state.store.posted, seat.posted);
+    if (store.normal !== undefined) Object.assign(state.store, { refPrice: { ...state.store.refPrice, energy: store.normal }, offWorld: { ...state.store.offWorld, energy: store.normal } });
     Object.assign(state.store.stock, seat.store);
     for (const p of state.players) {
       for (const good of Object.keys(p.stock) as Good[]) p.stock[good] = p.id === ME ? (seat.stock?.[good] ?? 0) : 0;
@@ -226,7 +228,7 @@ describe('C8: a power plant is worth what its output saves', () => {
   });
 
   it('B-AC-5: with Energy cheap and stocked at the store and a markedly better Food plot, it outfits Food instead', () => {
-    expect(develop({ energy: 2, food: 3 }, { energy: 200, posted: 10 })).toBe('food');
+    expect(develop({ energy: 2, food: 3 }, { energy: 200, posted: 10, normal: 10 })).toBe('food');
   });
 
   it('B-AC-5: a seat whose own farm feeds it builds a plant though a farm sells better, for the plots the plant keeps on', () => {

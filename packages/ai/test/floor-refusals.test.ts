@@ -7,6 +7,7 @@ import {
   createGame,
   DEVELOPMENT,
   doorPresses,
+  GOODS,
   MS_PER_SECOND,
   observe,
   reachOf,
@@ -244,6 +245,9 @@ describe("the arcade floor's AI bugs of 5 Nov (FM-glint-install, FM-led-analyse,
     ownNearest(state, 4);
     const me = state.players.find((p) => p.id === ME)!;
     me.carriedMule = 'food';
+    // Month 1 opens some goods under their normal price (Water and Energy at 7); the store never posts under N, so N
+    // (and off-world, which N drifts to) is set to those cheap prices and the store's later postings keep them.
+    for (const g of GOODS) if (state.store.posted[g] < state.store.refPrice[g]) Object.assign(state.store, { refPrice: { ...state.store.refPrice, [g]: state.store.posted[g] }, offWorld: { ...state.store.offWorld, [g]: state.store.posted[g] } });
     const cfg = quietConfig();
     const seat = new AiSeat({ id: ME, name: 'AI 1', persona: 'trader', level: 'trader', seed: 11 });
     const gains = idleGains(state, seat, 'food');

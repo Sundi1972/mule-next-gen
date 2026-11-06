@@ -322,6 +322,10 @@ describe('C4: a pass that leaves a funded shortfall carries its cost', () => {
     // Two farms making 3 Food at 5: turned off one loses 12, under Energy's ask, so each unit is worth the ask.
     const farms = [0, 2].map((x): Plot => ({ outfit: 'food', x, ground: { food: 3 - GROWN_BASE } }));
     const state = table({ plots: farms, posted: { food: 5, energy: 20 } });
+    // Each price is the good's normal one, and off-world, which N drifts towards, agrees: the store's later postings
+    // keep it there (it never posts under N).
+    Object.assign(state.store.refPrice, { food: 5, energy: 20 });
+    Object.assign(state.store.offWorld, { food: 5, energy: 20 });
     const obs = observe(state, 'ai0');
     const mind = mindOf();
     const plan = goodPlan(obs, mind, 'energy');

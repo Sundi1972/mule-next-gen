@@ -278,12 +278,16 @@ describe('land claims when every seat wants the same plots', () => {
   });
 });
 
-/** Month 1's land grant on seed 3, ai0 already fed by its own Food and Energy plots, Smithore posted at `smithore`, Food to spare. */
-function grantWithFarms(smithore: number): GameState {
+/**
+ * Month 1's land grant on seed 3, ai0 already fed by its own Food and Energy plots, Smithore posted at `smithore`, Food
+ * to spare. `normal` sets Smithore's normal (and off-world) price too, for a price under today's: the store never posts under it.
+ */
+function grantWithFarms(smithore: number, normal?: number): GameState {
   const state = fourSeatsWithWater(3, WATER_TO_SPARE);
   state.store.stock.food = FOOD_TO_SPARE;
   while (state.phase !== 'landGrant') advancePhase(state);
   state.store.posted.smithore = smithore;
+  if (normal !== undefined) Object.assign(state.store, { refPrice: { ...state.store.refPrice, smithore: normal }, offWorld: { ...state.store.offWorld, smithore: normal } });
   const [food, energy] = state.tiles.filter((t) => !t.owner && t.terrain === 'plains');
   Object.assign(food!, { owner: 'ai0', outfit: 'food' });
   Object.assign(energy!, { owner: 'ai0', outfit: 'energy' });
@@ -298,7 +302,7 @@ describe('land plans by worth', () => {
     expect(best).toBeGreaterThan(3 * Math.min(...rich.all.filter((c) => c.action.focus === 'grown').map((c) => c.value)));
     for (const option of rich.options) expect(option.value).toBeGreaterThan(best / 2);
     // Negative case: at month 1's own Smithore price the farm plan is worth about 70% of the mines, and stays on offer.
-    const even = landDecision(observe(grantWithFarms(31), 'ai0'), traderMind);
+    const even = landDecision(observe(grantWithFarms(31, 31), 'ai0'), traderMind);
     const top = Math.max(...even.all.map((c) => c.value));
     expect(even.options.some((c) => c.value < top && c.value > top / 2)).toBe(true);
   });
