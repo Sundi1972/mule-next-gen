@@ -104,16 +104,19 @@ export async function theTableHasSaid(tv: Page, server: MuleServer, code: string
   return said;
 }
 
-/** Waits until the shown screen's fit boxes keep their scale across two reads: a line shown resizes the body a frame later. */
-export async function fitSettled(tv: Page): Promise<void> {
+/**
+ * Waits until the shown screen's fit boxes keep their scale across two reads: a line shown resizes the body a frame later.
+ * A scale still moving after 20 reads fails by name: the step after it would otherwise grade a screen mid-refit.
+ */
+export async function fitSettled(tv: Page, screen = 'shown'): Promise<void> {
   const read = () => tv.evaluate(() => [...document.querySelectorAll('[data-phase] [data-fit]')].map((b) => b.getAttribute('data-fit')).join(','));
-  let last = await read();
+  const reads = [await read()];
   for (let i = 0; i < 20; i++) {
     await tv.waitForTimeout(150);
-    const now = await read();
-    if (now === last) return;
-    last = now;
+    reads.push(await read());
+    if (reads.at(-1) === reads.at(-2)) return;
   }
+  check(false, `TV-FIT: the ${screen} TV's fit boxes never settled: their scales changed on each of ${reads.length - 1} reads 150 ms apart, the last reads ${reads.slice(-4).map((r) => `[${r}]`).join(' then ')}`);
 }
 
 /**
@@ -151,7 +154,7 @@ const FIT_SCALES = String.raw`((effective) => [...document.querySelectorAll('[da
  * product of their scales. Returns the scales drawn at.
  */
 export async function theTvScaleHolds(tv: Page, screen: string): Promise<string> {
-  await fitSettled(tv);
+  await fitSettled(tv, screen);
   const boxes = (await tv.evaluate(FIT_SCALES)) as { scale: number; own: number; room: number; tallest: string[] }[];
   check(boxes.length > 0, `TV-FIT: the ${screen} TV's body sits in a fit box`);
   for (const b of boxes)
@@ -417,7 +420,7 @@ export async function theAuctionTvFits(tv: Page, server: MuleServer, code: strin
       check(dealLines === 1, `TV-FIT: while deals run the auction TV shows the newest chat line only, got ${dealLines}`);
       const dealsBoard = await boardHeight();
       check(Math.abs(dealsBoard - helpBoard) <= 1, `TV-FIT: the walk board keeps its size as deals start, ${helpBoard.toFixed(1)} px then ${dealsBoard.toFixed(1)} px`);
-      await fitSettled(tv);
+      await fitSettled(tv, 'auction (two deals)');
       // Each row as the table sees it: its words on the screen, and every box above it that clips leaves it whole.
       const rows = await shownWhole(tv, 'auction (two deals)', ['[data-testid=tv-deal]']);
       check(rows.length === 2, `TV-FIT: the auction TV shows both running deals, got ${rows.length}`);

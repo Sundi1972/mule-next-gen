@@ -3,6 +3,7 @@ import { PlayerMark } from './PlayerMark';
 import type { CreatureWrap } from './species';
 import { TimeBar } from './TimeBar';
 import { cx, SLOT_COLOR, type Slot } from './tokens';
+import { percent } from '../events/catalogue';
 
 /**
  * One development clock for everyone; hunger and sickness slow a colonist's walk instead (AM-14, variant B). Shown on
@@ -54,8 +55,6 @@ const WADDLE_SECONDS = 0.36;
 /** How long a press on your own tag must last before the rule shows, in ms. */
 const HOLD_MS = 400;
 
-const pct = (x: number) => `${Math.round(x * 100)}%`;
-
 /** The hunger level from the share of the month's Food missing and the rule's hungerLevels. */
 export function hungerLevel(c: Condition, rule: PaceRule): HungerLevel {
   const missing = 1 - c.foodShare;
@@ -89,7 +88,7 @@ export function hungerRule(rule: PaceRule): string {
 
 /** What sickness costs. */
 export function sickRule(rule: PaceRule): string {
-  return rule.sickPace === 0.5 ? 'Sickness halves your walking speed.' : `Sickness slows you to ${pct(rule.sickPace)} of your walking speed.`;
+  return rule.sickPace === 0.5 ? 'Sickness halves your walking speed.' : `Sickness slows you to ${percent(rule.sickPace)} of your walking speed.`;
 }
 
 /** Why the colonist walks slower, one sentence per cause: the long press, and the detail under a pace line. */
@@ -103,8 +102,8 @@ export function paceLine(c: Condition, rule: PaceRule, food: FoodEaten): { title
   const level = hungerLevel(c, rule);
   if (level === 0 && !c.sick) return { title: 'Fed: full pace', short: 'full pace', detail: `You ate the ${food.need} Food you need.`, tone: 'ok' };
   return {
-    title: `${feeling(c, rule)}: ${pct(c.conditionPace)} pace`,
-    short: `${pct(c.conditionPace)} pace`,
+    title: `${feeling(c, rule)}: ${percent(c.conditionPace)} pace`,
+    short: `${percent(c.conditionPace)} pace`,
     detail: `${paceRule(c, rule, food).join(' ')} Everyone has the same time; you just cover less ground.`,
     tone: level === 3 || c.sick ? 'alert' : 'warn',
   };
@@ -174,7 +173,7 @@ export function ConditionTag({
   if (level === 0 && !condition.sick) return null;
   const g = size === 'tv' ? 18 : size === 'wide' ? 16 : 10;
   const box = g + 4;
-  const said = `${feeling(condition, rule)}: ${pct(condition.conditionPace)} pace`;
+  const said = `${feeling(condition, rule)}: ${percent(condition.conditionPace)} pace`;
   const press = explain
     ? {
         onPointerDown: () => (hold.current = setTimeout(() => setOpen(true), HOLD_MS)),
@@ -317,7 +316,7 @@ export function ThoughtBubble({
           </span>
         )}
         <span>
-          {feeling(condition, rule)}… <span className="font-mono font-bold not-italic">{pct(condition.conditionPace)} pace</span>
+          {feeling(condition, rule)}… <span className="font-mono font-bold not-italic">{percent(condition.conditionPace)} pace</span>
         </span>
       </span>
       <span className={cx('mt-0.5 rounded-full border-2 border-dotted border-ink-2 bg-raised', big ? 'h-2.5 w-2.5' : 'h-1.5 w-1.5', edge && (big ? 'mx-5' : 'mx-3'))} />
@@ -396,10 +395,10 @@ export function PaceList({ rows, rule, columns = 2, wrapMark = (_, mark) => mark
               {wrapMark(r.id, <PlayerMark slot={r.slot} size={wide ? 20 : 18} glow={wide && !r.done} />)}
               <span className={cx('min-w-0 flex-1 truncate font-semibold', wide ? 'font-display text-base' : 'text-sm')}>{r.name}</span>
               <div className={cx('relative h-2 shrink-0 overflow-hidden rounded-full bg-raised', wide ? 'w-20' : 'w-12')}>
-                <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: pct(pace), background: SLOT_COLOR[r.slot] }} />
+                <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: percent(pace), background: SLOT_COLOR[r.slot] }} />
               </div>
               <span data-num className={cx('w-10 text-right font-mono text-sm', pace < 1 ? (alarm ? 'text-alert' : 'text-warn') : 'text-ink-2')}>
-                {pct(pace)}
+                {percent(pace)}
               </span>
               <span className="flex w-9 justify-start">
                 <ConditionTag id={r.id} condition={r.condition} rule={rule} inline />
