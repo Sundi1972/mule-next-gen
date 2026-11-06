@@ -1,6 +1,7 @@
 import {
   AI_PLANS,
   airPoints,
+  allPrices,
   DEVELOPMENT,
   GAME,
   GOOD_CONFIG,
@@ -16,8 +17,10 @@ import {
   RAW_GOODS,
   STRATEGIST,
   UPKEEP,
+  scoreParts,
   shipInPort,
   shipPrice,
+  storeForSale,
   storePaysFor,
   storeSellLine,
   tileIndex,
@@ -62,15 +65,21 @@ function me(obs: GameState, mind: Mind) {
   return obs.players.find((p) => p.id === mind.me)!;
 }
 
-/** The rival with the most public wealth: money, land and MULEs. */
+/**
+ * The rival with the highest Worth as the seat sees it: the engine's score lines on the seat's observation, less the
+ * goods line, plus the good on the auction's status screen, the one good whose holdings are public. Elsewhere a
+ * rival's goods are the market panel's even split, which says nothing about that rival.
+ */
 export function leaderOf(obs: GameState, self: string): string | null {
-  const price = mulePrice(obs);
+  const status = obs.auction && obs.auction.stage !== 'over' ? obs.auction.good : null;
+  const prices = allPrices(obs);
   const worth = (id: string) => {
-    const p = obs.players.find((q) => q.id === id)!;
-    const plots = obs.tiles.filter((t) => t.owner === id);
-    return p.money + plots.length * GAME.plotScore + plots.filter((t) => t.outfit).length * price;
+    const parts = scoreParts(obs, id);
+    const shown = status ? obs.players.find((p) => p.id === id)!.stock[status] * prices[status] : 0;
+    return parts.total - parts.goods + shown;
   };
-  const rivals = obs.players.filter((p) => p.id !== self).sort((a, b) => worth(b.id) - worth(a.id));
+  const rivals = obs.players.filter((p) => p.id !== self).map((p) => ({ id: p.id, worth: worth(p.id) }));
+  rivals.sort((a, b) => b.worth - a.worth);
   return rivals[0]?.id ?? null;
 }
 
@@ -521,10 +530,11 @@ export function goodPlan(obs: GameState, mind: Mind, good: Good): GoodPlan {
   // store sells the good, each unit up to that is worth at least the store's ask, so it buys it there or cheaper from a
   // player, never dearer, and it sells none of them. Otherwise its floor is the screen's need and the rest is for sale
   // (Heiko's choice of 5 Nov, "sell surplus").
-  const whole = STRATEGIST.buyShortfall.includes(good) ? wholeNextMonth(obs, mind.me, good) : 0;
+  const short = shortfallHold(obs, mind.me, good);
+  const whole = short.whole;
   // The store's line is the good's that is up: a draft of a good still in the queue has no ask yet, and keeps its values.
   const ask = whole > 0 && obs.auction?.good === good ? storeSellLine(obs) : null;
-  const mustHold = ask !== null && p.stock[good] < whole ? whole : 0;
+  const mustHold = ask !== null ? short.mustHold : 0;
   for (let k = 0; k < mustHold; k++) {
     values.buy[k] = Math.max(values.buy[k] ?? 0, ask!);
     values.keep[k] = Infinity;
@@ -556,6 +566,17 @@ export function goodPlan(obs: GameState, mind: Mind, good: Good): GoodPlan {
     values.buy.sort((x, y) => y - x);
   }
   return { good, values, budget, reserve, spiteBid, corner, mustHold };
+}
+
+/**
+ * goodPlan's raise for `good` at its status screen: what keeps the seat whole next month (wholeNextMonth, for
+ * STRATEGIST.buyShortfall's goods; 0 for the rest), and the units it must hold there, which are that while it holds less
+ * and the store sells the good, else 0.
+ */
+export function shortfallHold(obs: GameState, me: string, good: Good): { whole: number; mustHold: number } {
+  const whole = STRATEGIST.buyShortfall.includes(good) ? wholeNextMonth(obs, me, good) : 0;
+  const held = obs.players.find((p) => p.id === me)!.stock[good];
+  return { whole, mustHold: held < whole && storeForSale(obs, good) > 0 ? whole : 0 };
 }
 
 /**

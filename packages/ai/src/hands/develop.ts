@@ -969,15 +969,18 @@ export class DevelopHand {
     return veto ? `stale: ${veto}` : null;
   }
 
-  /** The stale MULE's group, replaced once by the seat's own pick for that MULE, ahead of the rest. See RULE-9 row 3. */
+  /**
+   * The stale MULE's group, replaced once by the seat's own pick for that MULE, ahead of the rest; a pick of 'stop'
+   * drops it, its steps logged 'skipped'. See RULE-9 row 3.
+   */
   private replace(state: GameState, group: number, note: string, walk?: () => DevWalk): void {
     const r = this.route!;
-    for (const s of this.queue.filter((q) => q.group === group)) this.log(s, false, 'replaced', note);
-    const rest = this.queue.filter((q) => q.group !== group);
-    this.queue = [];
     const mind = this.brain.mind;
     const input = { state, seat: mind.me, mind, seed: r.play.seed, phase: 'development' as const, month: state.month };
     const pick = this.drafting('replacement MULE pick', "taken as 'stop'", STOP, () => draftMulePick(input, r.mules - 1, walk?.(), r.play.moneyMaker));
+    for (const s of this.queue.filter((q) => q.group === group)) this.log(s, false, pick.kind === 'stop' ? 'skipped' : 'replaced', note);
+    const rest = this.queue.filter((q) => q.group !== group);
+    this.queue = [];
     if (pick.kind !== 'stop') this.pushMule(state, pick.index, pick.outfit);
     this.queue.push(...rest);
   }

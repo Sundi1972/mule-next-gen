@@ -21,13 +21,27 @@ const SLOW = { timeout: 60_000 };
 const SEED = 3;
 const MONTHS = 2;
 
-/**
- * Seed 4's fifth month is the first in which a seat runs short of cash, so it lists in planning and sells at the land
- * auction. Re-picked 6 Nov for WS1's shortfall rule: it was the third month before seats bought what keeps them whole.
- */
-const [LISTS, LIST_MONTHS] = [4, 5];
 /** With every seat on its playbook, seed 4's first sale by a seat is at the fourth month's land auction. */
-const SELL_MONTHS = 4;
+const [LISTS, SELL_MONTHS] = [4, 4];
+
+/** As month 1 ends, ai0 holds no cash and an idle plot, so month 2's planning finds it short with a lot to list. */
+function broke(state: GameState): void {
+  if (state.phase !== 'upkeep' || state.month !== 1) return;
+  state.players.find((p) => p.id === 'ai0')!.money = 0;
+  Object.assign(state.tiles.find((t) => t.owner === null && t.terrain !== 'store')!, { owner: 'ai0', outfit: null });
+}
+
+/** More than a month's Food and its money cost, and more Food than any seat buys in one auction. */
+const [BUILT_MONEY, STORE_FOOD] = [3_000, 30];
+
+/** As month 1's production ends, ai0 holds no Food and BUILT_MONEY, and the store STORE_FOOD: it buys Food at the auction. */
+function hungry(state: GameState): void {
+  if (state.phase !== 'production' || state.month !== 1) return;
+  const me = state.players.find((p) => p.id === 'ai0')!;
+  me.stock.food = 0;
+  me.money = BUILT_MONEY;
+  state.store.stock.food = STORE_FOOD;
+}
 
 const withPlays = (plays: SeatSpec['plays'], seed = SEED): SeatSpec[] => simSeats(4, 'trader', seed).map((s) => ({ ...s, plays }));
 
@@ -43,14 +57,14 @@ const devOutcomes = (g: PlayedGame) => g.outcomes.filter((o) => o.phase === 'dev
 describe('a seat plays the path its spec names (C14, AM-26)', () => {
   it("T-AC-13, AM-26: a 'today' seat plays every phase as with AI_PLANS.on false; a 'playbook' seat plays its own development and auction while AI_PLANS.ownPhases is off", SLOW, () => {
     expect(AI_PLANS.ownPhases, 'the default').toBe(false);
-    // 'today': today's path in every phase, planning included, act for act.
-    const today = play(withPlays('today', LISTS), {}, LISTS, LIST_MONTHS);
+    // 'today': today's path in every phase, planning included, act for act, on a game where ai0 runs short of cash.
+    const today = play(withPlays('today'), { onPhase: broke });
     AI_PLANS.on = false;
-    const off = play(simSeats(4, 'trader', LISTS), {}, LISTS, LIST_MONTHS);
+    const off = play(simSeats(4, 'trader', SEED), { onPhase: broke });
     AI_PLANS.on = ON;
     expect(today.print).toBe(off.print);
-    // Unset: the shipped default, planning by the seat's own part (a listing in month 3), development and auction by today's.
-    const unset = play(simSeats(4, 'trader', LISTS), {}, LISTS, LIST_MONTHS);
+    // Unset: the shipped default, planning by the seat's own part (ai0's listing in month 2), development and auction by today's.
+    const unset = play(simSeats(4, 'trader', SEED), { onPhase: broke });
     expect(unset.print, 'the default plays its planning part').not.toBe(today.print);
     expect(devOutcomes(unset.game)).toEqual([]);
     expect(unset.game.playbooks).toEqual([]);
@@ -72,7 +86,7 @@ describe('a seat plays the path its spec names (C14, AM-26)', () => {
     expect([...new Set(pair.game.playbooks.map((pb) => pb.seat))]).toEqual(['ai0', 'ai2']);
     // With AI_PLANS.on false (the rollback), a 'playbook' seat is back on today's path too.
     AI_PLANS.on = false;
-    expect(play(withPlays('playbook', LISTS), {}, LISTS, LIST_MONTHS).print).toBe(off.print);
+    expect(play(withPlays('playbook'), { onPhase: broke }).print).toBe(off.print);
   });
 });
 
@@ -121,24 +135,28 @@ describe('the sim collects the public facts the server notifies (C8, C14)', () =
 describe('the sim adopts edited playbooks through the seat’s gate (C14, B-AC-6’s harness)', () => {
   it("B-AC-6: PlayOptions.edits' edits pass the seat's validator and the adopted part plays: the edited auction role is the seat's declared side", SLOW, () => {
     const specs = simSeats(4, 'trader', SEED);
-    const base = play(specs);
-    // A good ai0 trades in month 1 today and by its draft: set it out.
+    // The built case: ai0 opens month 1's auction with no Food and the money to buy it.
+    const base = play(specs, { onPhase: hungry });
+    // Food, which ai0 buys in month 1 today and by its draft: set it out.
     let out: Good | null = null;
     const edited = play(specs, {
+      onPhase: hungry,
       edits: (seat, draft, state) => {
         if (seat.id !== 'ai0' || state.month !== 1 || draft.phase !== 'auction') return null;
-        const goods = Object.keys(draft.auction ?? {}) as Good[];
-        out = goods.find((g) => draft.auction![g]!.role !== 'out' && declared(base.game, 'ai0', 1, g) === draft.auction![g]!.role && traded(base.game, 'ai0', 1, g) > 0) ?? null;
-        return out ? [{ path: `/auction/${out}/role`, to: 'out', reason: 'Sit this one out.' }] : null;
+        expect(draft.auction!.food!.role, 'the draft buys Food').toBe('buyer');
+        out = 'food';
+        return [{ path: '/auction/food/role', to: 'out', reason: 'Sit this one out.' }];
       },
     });
-    expect(out, 'a good the seat trades today and by its draft').not.toBeNull();
+    expect(out, 'the edit was asked of ai0’s auction draft').toBe('food');
+    expect(declared(base.game, 'ai0', 1, 'food'), 'today it buys Food').toBe('buyer');
+    expect(traded(base.game, 'ai0', 1, 'food'), 'today it trades Food').toBeGreaterThan(0);
     // There is no Pass (#335): 'out' sits the good out as the buyer everyone starts as, trading none of it.
     expect(declared(edited.game, 'ai0', 1, out!)).toBe('buyer');
     expect(traded(edited.game, 'ai0', 1, out!), 'it trades none of it').toBe(0);
     expect(edited.game.outcomes.find((o) => o.seat === 'ai0' && o.month === 1 && o.phase === 'auction')!.items.find((i) => i.path === `/auction/${out}/role`)).toMatchObject({ expected: 'out', actual: 'out' });
     // No edits, nothing adopted: the game is the one played without the hook.
-    expect(play(specs, { edits: () => null }).print).toBe(base.print);
+    expect(play(specs, { onPhase: hungry, edits: () => null }).print).toBe(base.print);
     // A 'today' seat plays no playbook: the hook that edits ai0's auction is never asked of it, and its game is unchanged.
     const today = withPlays('today');
     const asked: string[] = [];
