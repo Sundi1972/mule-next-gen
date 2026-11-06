@@ -51,7 +51,7 @@ ground, vitest with `renderToStaticMarkup` (packages/ui, apps/web), Playwright f
 | PR-2 | `ws10-grounds-pr2` | Tasks 2.1–2.4 (C4, C8) | B-AC-2, B-AC-3, B-AC-5, T-AC-3, T-AC-4, T-AC-5 (phone) | — | manifest.json, place | Yes |
 | PR-3 | `ws10-grounds-pr3` | Tasks 3.1–3.3 (C1 remaining kinds) | B-AC-4, T-AC-2 (all kinds) | — | manifest.json | No (static art) |
 | PR-4 | `ws10-grounds-pr4` | Tasks 4.1–4.3 (C3) | — (look; §4 worker row) | — | — | Yes |
-| PR-5 | `ws10-grounds-pr5` | Tasks 5.1–5.3 (C5) | T-AC-7 | — | — | Yes |
+| PR-5 | `ws10-grounds-pr5` | Tasks 5.1–5.5 (C5, C7, C9; AM-6) | T-AC-7, T-AC-8, T-AC-9, B-AC-6 | — | — | Yes |
 | WS7 | its engine PR | C6 | T-AC-6 | ColonyProjectView.place | — | No |
 
 ### Per-PR authority
@@ -62,7 +62,7 @@ ground, vitest with `renderToStaticMarkup` (packages/ui, apps/web), Playwright f
 | PR-2 | `packages/ui/src/grounds/**`, its tests | `design/mocks/colony-grounds/src/look/Living.tsx` (scaffold) | `apps/web/src/phone/hub/politics/Colony.tsx` (WS7: named edit, WS7's OK), `packages/ui/src/terrain/**` |
 | PR-3 | `design/art/colony/**`, `apps/web/public/art/colony/**` | — | `packages/ui/**` |
 | PR-4 | `packages/ui/src/grounds/ground*.ts` | — | `packages/ui/src/terrain/**` (import only) |
-| PR-5 | `packages/ui/src/grounds/useGroundsChange.ts`, `ColonyGrounds.tsx` | — | everything outside grounds/ |
+| PR-5 | `packages/ui/src/grounds/**` (useGroundsChange.ts, opener.ts, GroundsOpener.tsx, ColonyGrounds.tsx), their tests, `apps/web/test/colony-screens.test.ts`, `apps/web/e2e/` (its own test file) | `design/mocks/colony-grounds/tv-beat.html` + `src/look/Living.tsx` (scaffold) | `apps/web/src/table/TableApp.tsx` beyond TvGame's upkeep route, and `apps/web/src/components/Colony.tsx` beyond useMonthEndDrift (WS4: both named edits, WS4's OK); `TvMonthEnd` itself (must stay unchanged); `packages/protocol/**`, `apps/server/**` |
 
 > Naming, internal structure, helper decomposition and test fixtures are yours. Everything else in your payload is specified. If you need to change anything outside it — including because it appears impossible — stop and report to the lead with the element id and the goal it fails. Do not deviate: you can see one task, and the lead can see the whole graph.
 
@@ -291,24 +291,40 @@ Same lines as PR-1, for B-AC-2, B-AC-3, B-AC-5, T-AC-3, T-AC-4 and T-AC-5 (phone
 
 ---
 
-## PR-5 — the month-end lean-in (C5)
+## PR-5 — the month-end grounds opener on the TV (C5, C7, C9; spec AM-6)
+
+**Branch:** `ws10-grounds-pr5` off `ws10-visual` once PR-2 (#603) is in. **Scaffold:** `design/mocks/colony-grounds/tv-beat.html`
+(the full-screen canvas, header, caption) + `src/look/Living.tsx` (the lean-in). **Named edits:** `TableApp.tsx::TvGame`'s
+upkeep route and `components/Colony.tsx::useMonthEndDrift` (WS4's OK by SHA). WS4 measures TV-FIT ≥ 0.7, six seats.
 
 ### Task 5.1: T-AC-7 — RULE-5
 
 **Altitude:** unit (hook logic over two views). **Files:** `packages/ui/test/grounds-change.test.ts`, `packages/ui/src/grounds/useGroundsChange.ts`.
-- [ ] Implement C5 test-first: write `T-AC-7: a stage change between month ends leans in on that place; a first view leans in on none`. Run: FAIL. Implement. Run: PASS. Commit.
+- [ ] Implement C5's change detection test-first: write `T-AC-7: a stage change between month ends leans in on that place; a first view leans in on none`. Run: FAIL. Implement. Run: PASS. Commit.
 
-### Task 5.2: The lean-in in ColonyGrounds
+### Task 5.2: T-AC-8 — RULE-6
 
-- [ ] On the month end at size `tv`: dusk, then the lean-in on the changed places, then their lights coming on and the lean-out, about 5 s, played once. Scaffold: `Living.tsx`'s month-end move. With reduced motion, show the end frame only.
+**Altitude:** unit (pure: change found? reduced motion? politics? → full / still / none, and its length). **Files:** `packages/ui/test/grounds-opener.test.ts`, `packages/ui/src/grounds/opener.ts`.
+- [ ] Write `T-AC-8: <example>` per RULE-6 example. FAIL → implement → PASS. Commit.
 
-### Task 5.3: Browser check
+### Task 5.3: C5 — the opener
 
-- [ ] Extend the PR-1 browser test so that at the second month end, with the Park just standing, the grounds element plays the lean-in once (watch a `data-leaning` attribute appear and clear).
+**Files:** `packages/ui/src/grounds/GroundsOpener.tsx` (full-screen ColonyGrounds at dusk + header + caption from RULE-5's changes, the lean-in from `Living.tsx`, reduced motion → still).
+- [ ] Test at the rendered markup: a changed month carries the caption naming the change and `data-leaning`; a quiet month renders the still with no lean. FAIL → implement → PASS. Commit.
+
+### Task 5.4: C7 + C9 — on the TV (named edits, WS4)
+
+**Files:** `apps/web/src/table/TableApp.tsx::TvGame` (upkeep route: event show → opener → TvMonthEnd), `apps/web/src/components/Colony.tsx::useMonthEndDrift`; tests in `apps/web/test/colony-screens.test.ts`.
+- [ ] `T-AC-9: the gauges' count starts when TvMonthEnd mounts`. FAIL → C9 → PASS. Commit.
+- [ ] `T-AC-5`: politics off, no opener. Then route the opener; TvMonthEnd unchanged (`git diff` of TvMonthEnd empty). Commit. Send both SHAs to the PM for WS4's OK.
+
+### Task 5.5: B-AC-6 — browser test (front to back)
+
+- [ ] In `apps/web/e2e/`, the test command owns its stack: at the month end after the Park comes to stand, the TV shows `tv-grounds-opener` after the event show, then `tv-monthend`; everyone Ready during the opener → planning at once; reduced motion → the still. Also Task 1.5 Step 4's checks (failed picture → shape and its glow gone; back-to-front order). TV-FIT ≥ 0.7 at six seats on the opener and the month end (`theTvScalesHeld`).
 
 ### PR-5 merge gate
 
-- [ ] T-AC-7 and the browser check are green. Typecheck and tests exit 0. Review: APPROVE. Rulebook section updated.
+- [ ] T-AC-7, T-AC-8, T-AC-9, T-AC-5 and B-AC-6 green and named. WS4's OK on the two named edits by SHA; WS4's TV-FIT measure ≥ 0.7. Typecheck and tests exit 0. Review: APPROVE. Rulebook: WS6's "Designed, not in the game yet, WS10" lines (table-and-phones month end, events "Who waits") moved to built.
 
 ---
 

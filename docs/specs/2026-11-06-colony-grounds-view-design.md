@@ -141,11 +141,14 @@ depends_on   C2
 ```
 
 ```
-C5 · ADDED · the month-end lean-in
+C5 · ADDED · the month-end grounds opener (AM-6)
 today        no per-project "new this month" anywhere: useMonthEndDrift (apps/web/src/components/Colony.tsx) animates
              happiness only (verified_by: read)
-tomorrow     MUST, when the phase turns to the month end on the TV, fall to dusk, lean in on the places whose stage
-             changed since the last month end, light them, and lean back out (≈ 5 s, once); MUST NOT play on a reload
+tomorrow     MUST, on the TV at the month end, after the month end's event show (if any), show the grounds FULL-SCREEN
+             (1280 × 720 canvas, header "End of month N" + one caption line): dusk falls, the view leans in on the places
+             whose stage changed since the last month end, their lights come on, it leans back out (≈ 6 s, RULE-6); in a
+             month with no change, or with reduced motion, a 3 s still; then TvMonthEnd, unchanged. MUST NOT hold Ready
+             or the phones; MUST NOT play on a reload (RULE-5). Scaffold: design/mocks/colony-grounds/tv-beat.html.
 logic        → §2 RULE-5
 seam         packages/ui/src/grounds/useGroundsChange.ts (new): remembers stages per project at each month end
 senior       junior would: ask the server for a "changed" list · senior does: diff the two views the screen already
@@ -169,14 +172,25 @@ atomicity    must land before C7/C8 show real games (C2 renders fixtures until t
 ```
 
 ```
-C7 · MODIFIED · the TV shows the grounds   (WS4's file; mount line)
-today        apps/web/src/table/TableApp.tsx::TvMonthEnd shows ColonyGauges + BuildSite (a list); planning shows no
-             colony panel (verified_by: read)
-tomorrow     MUST mount <ColonyGrounds size="tv"> in the month end beside the BuildSite list, and in planning in the
-             colony panel the mock places beside the map (index.html "TV · planning")
-seam         TableApp.tsx::TvMonthEnd and ::TvGame — WS4
+C7 · MODIFIED · the TV shows the grounds   (WS4's file; one routing line — AM-6)
+today        apps/web/src/table/TableApp.tsx::TvGame routes upkeep to TvMonthEnd (ColonyGauges + BuildSite list);
+             planning shows no colony panel (verified_by: read)
+tomorrow     MUST, in the upkeep route, show C5's opener after the event show and before TvMonthEnd (RULE-6), politics on
+             only. TvMonthEnd and the planning screen stay unchanged (no side panel: WS4 measured 0.662 / 0.593 at six
+             seats, under the 0.7 floor)
+seam         TableApp.tsx::TvGame upkeep route — WS4
 mechanism    in_place
-depends_on   C2, C6
+depends_on   C2, C5, C6
+
+C9 · MODIFIED · the gauges count up when the month end comes on screen   (WS4's file; named edit — AM-6)
+today        apps/web/src/components/Colony.tsx::useMonthEndDrift starts its count 1.2 s after the phase turns to upkeep
+             (verified_by: read, line ~150)
+tomorrow     MUST start the count when TvMonthEnd mounts, so the gauges count up to the month's new numbers the
+             opener's lights already showed
+seam         apps/web/src/components/Colony.tsx::useMonthEndDrift — WS4
+mechanism    in_place
+pin          the existing drift tests keep passing
+depends_on   C7
 ```
 
 ```
@@ -226,6 +240,13 @@ examples happiness 72, 5 standing → 9 · strike → 0 · nothing standing, hap
 
 ```
 RULE-4 · How big the scene is: rings = 0 with no project, 1 while the highest slot ≤ 7, else 2 (design/mocks/colony-grounds/src/layout.ts::extentOf, by the highest slot)
+RULE-6 · The month-end opener's place and length (AM-6, PM ruling with WS6)
+order    1 the month end's event show (TvEventLayer, server clock) if any → 2 the opener → 3 TvMonthEnd
+length   RULE-5 finds a change (a stage started, stands or is damaged) → full ≈ 6 s; no change, or reduced motion → a
+         3 s still; politics off → no opener
+always   Ready is never refused during the opener and the phones never wait for it; the phase moving on ends it
+examples changed month → 6 s, then the month end · quiet month → 3 s still · reduced motion → 3 s still · everyone
+         Ready at 2 s → the planning screen (the opener ends) · reload mid-opener → no opener (RULE-5)
 RULE-5 · What leans in at the month end: the projects whose stage differs from the stage seen at the last month end
          on this screen; none seen before (a reload, a new screen) → no lean-in, the scene just shows
 ```
@@ -271,6 +292,9 @@ Code-only; no existing state to reach. Pictures are static files shipped with th
 | T-AC-4 (serves B-AC-3) | RULE-3's examples | C4 |
 | T-AC-5 (serves HC-5) | politics off: no ColonyGrounds in the TV or phone markup | C7 C8 |
 | T-AC-6 (serves C6) | the server's colony view carries each project's slot; a project without one carries null | C6 |
+| B-AC-6 (G-1) | Given a month end where the Stadium has just come to stand | When the TV reaches upkeep | Then after the event show the TV shows the grounds full-screen with "New this month", then TvMonthEnd unchanged | observed_at the TV markup over time (browser test) | negative: Ready pressed by all during the opener → planning shows at once | C5 C7 |
+| T-AC-8 (serves C5, C7) | RULE-6's examples: order and length | C5 C7 |
+| T-AC-9 (serves C9) | the gauges' count starts when TvMonthEnd mounts, not at the phase change | C9 |
 | T-AC-7 (serves C5) | RULE-5: a stage change between two month ends leans in on that place; a first view leans in on none | C5 |
 
 Invariant: the grounds never write state (HC-1).
@@ -353,6 +377,20 @@ licence   **Licence confirmed by Heiko, 7 Nov** (relayed by the PM, 17:13Z by da
           may ship in the game, rendered by our agents. Flip the flag (SRC=out/kit). Raw kit files (USD, textures)
           still never enter the repo or anything published; only our rendered WebP ships. Rebuilding the pictures
           needs Heiko's kit folder (KITS_DIR), so it runs on his Mac, not in CI.
+```
+
+```
+AM-6 · 2026-11-07 · lead · PM final ruling with WS6 (relayed 23:36Z by date -u)
+target    §1 C5, C7; adds C9, RULE-6, B-AC-6, T-AC-8, T-AC-9
+said      C7: the grounds beside BuildSite at the month end and as a panel beside the map in planning
+did       no TV side panel (WS4 measured six seats: planning 0.662, month end 0.593; floor 0.7; WS10 reproduced
+          0.593). The grounds get a full-screen TV moment: the month-end opener — event show → opener → TvMonthEnd
+          unchanged; ≈ 6 s only in a month the grounds changed, else a 3 s still (and with reduced motion); Ready
+          always wins, the phones never wait; no server timing change. useMonthEndDrift starts on TvMonthEnd's mount
+          (C9, WS4's named edit). WS4 measures the opener's canvas with header and caption at ≥ 0.7, six seats.
+because   G-1 / G-2: "a really nice view … showing how wealthy the colony is" — a 60–95 px strip defeats it
+goal      G-1, G-2
+folded    C5, C7, C9, RULE-6, §6; plan PR-5; the phone mount (C8) unchanged
 ```
 
 ## §9 · Ownership Boundaries  [handoff]
