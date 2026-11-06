@@ -198,7 +198,7 @@ function colonistMealAt(state: GameState): ColonistMealView | null {
   const meal = monthEndReport(state)?.colonistMeal;
   if (!meal) return null;
   const whole = ({ need, took }: { need: number; took: number }) => ({ took: took >= need ? Math.ceil(need) : Math.floor(took), need: Math.ceil(need) });
-  return { food: whole(meal.food), water: whole(meal.water) };
+  return { colonists: meal.colonists, food: whole(meal.food), water: whole(meal.water) };
 }
 
 /** This month's report at the month end (upkeep, or game over after the last); null otherwise. */

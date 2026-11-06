@@ -640,8 +640,15 @@ export interface ProductionView {
   hurry?: ProductionHurryView | null;
 }
 
-/** The colonists' meal at a month end (needs C6): of Food and of Water what they took of their need, in whole units as the month-end line shows them. */
-export type ColonistMealView = Record<'food' | 'water', { took: number; need: number }>;
+/**
+ * The colonists' meal at a month end (needs C6): how many colonists ate, before the month changed their number, and of
+ * Food and of Water what they took of their need, in whole units as the month-end line shows them.
+ */
+export interface ColonistMealView {
+  colonists: number;
+  food: { took: number; need: number };
+  water: { took: number; need: number };
+}
 
 /** One screen's view of the game: a player's private view, or the public one for a board. */
 export interface MuleView {
@@ -672,7 +679,8 @@ export interface MuleView {
    */
   colonistsFed: boolean | null;
   /**
-   * At the month end, as colonistsFed: of Food and of Water, what the colonists took of their need (needs C6), in whole units as the line shows them: need rounded up; took equal to it when they got it all, else
+   * At the month end, as colonistsFed: how many colonists ate and, of Food and of Water, what they took of their need
+   * (needs C6). Whole units as the line shows them: need rounded up; took equal to it when they got it all, else
    * rounded down. Null outside the month end or when the report has no meal; absent from an older server.
    */
   colonistMeal?: ColonistMealView | null;
