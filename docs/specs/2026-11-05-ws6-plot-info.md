@@ -372,6 +372,11 @@ lands at the land grant (droneOrder is kept until then).
   "Next drone: month N" closes the report instead of the rail's footer. Mock #528 (79c253d6), measured 132 px against
   about 137 px of room at 844×390 and 146 px at 667×375. Built in PR-2 (it already edits plotInfo.tsx), with a browser
   check that both plots sit inside the rail at both sizes.
+- 6 Nov, at PR-2 (#545), measured: C4's store box keeps its words. The mock's row with six goods needs about 194 px;
+  the real "Your plots" box is 148 px wide at 844×390 and 103 px at 667×375. The Plots chip already gives G-2 every
+  plot with dots anywhere on the walking screen, the hall included, so the box ends "+n more · Plots ▸ shows all".
+  The chip sits at the top of the left side room (on the right the box overran the store button by 20 px at 667).
+  "Dots in the store's box" stays Designed in the rulebook.
 
 ## §9 · Ownership Boundaries
 
