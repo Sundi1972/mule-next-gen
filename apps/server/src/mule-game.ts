@@ -10,9 +10,9 @@ import {
   colonyFailed,
   cover,
   createGame,
-  defaultSpecies,
   createRng,
   declareRole,
+  defaultSpecies,
   leaveBoard,
   electionDone,
   votesDone,
@@ -501,7 +501,9 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     this.recordPlaybook = options.recordPlaybook ?? (() => {});
   }
 
-  /** What the lobby shows an unpicked seat: the species createGame will give it at this seat count. */
+  /**
+   * The species the lobby shows each seat, picked or not: what createGame gives it at this seat count if it never picks.
+   */
   defaultPick(seat: number, seats: number): Species {
     return defaultSpecies(seat, seats, this.seed);
   }
