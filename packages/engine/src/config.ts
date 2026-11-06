@@ -1729,6 +1729,26 @@ export const AI_PLANS = {
     trader: { builder: 0.3, specialist: 1, monopolist: 1, landBaron: 0.3, politician: 0.2, spoiler: 0 },
     saboteur: { builder: 0.2, specialist: 0.4, monopolist: 0.5, landBaron: 0.4, politician: 0.3, spoiler: 1 },
   } satisfies Record<AiPersonaId, Record<PlanKind, number>>,
+  /** What a plan kind multiplies the persona's weights by while the seat plays it; a weight not named is × 1. */
+  kinds: {
+    builder: { reserve: 1.2, speculate: 0.5, corner: 0 },
+    specialist: { greed: 1.2, risk: 0.9 },
+    monopolist: { corner: 2.5, speculate: 1.2, patience: 1.2 },
+    landBaron: { greed: 1.1, reserve: 0.8 },
+    politician: {},
+    spoiler: { spite: 1.5 },
+  } satisfies Record<PlanKind, Partial<AiPersonaWeights>>,
+  /** When a kept plan is drafted again: each threshold is against the plan's anchor, set when it was drafted. */
+  replan: {
+    /** The plan's key plots: the first this many of its month's land ranking. One taken by a rival re-plans. */
+    keyPlots: 2,
+    /** Rival plots making the monopoly target, this many more than at the anchor, re-plan. */
+    rivalPlots: 1,
+    /** The money-maker's or the target's posted price moving by this share of its anchor price re-plans. */
+    priceShock: 0.4,
+    /** A production event cutting the output of this many of the seat's money-maker plots re-plans. */
+    eventPlots: 1,
+  },
   moneyMaker: {
     /** A good's score sums its install gain over this many of the seat's best plots for it (own idle and free). */
     plots: 3,
