@@ -126,6 +126,8 @@ export function WalkBoard({
   onDir,
   size = 'phone',
   wrapCreature,
+  zones = null,
+  soldOutAt = null,
   className,
 }: {
   lo: number;
@@ -148,6 +150,13 @@ export function WalkBoard({
   size?: 'phone' | 'tv';
   /** Wraps each walker's creature, such as in a chat bubble's anchor. */
   wrapCreature?: CreatureWrap;
+  /**
+   * The rest zones, where nobody trades: sellers wait above the store's selling line (or `sellersBottom` while none is
+   * drawn), buyers below `buyersTop`, the buying line as it stood when the good came up. Drawn as hatched bands.
+   */
+  zones?: { buyersTop: number; sellersBottom: number } | null;
+  /** The store is sold out and its selling line stands here: the highest bid when `bid`, else its old price. */
+  soldOutAt?: { price: number; bid: boolean } | null;
   className?: string;
 }) {
   const tv = size === 'tv';
@@ -179,6 +188,10 @@ export function WalkBoard({
 
   const lines = [
     { key: 'sells', price: storeSells, who: 'STORE', what: 'SELLS', note: storeStock === undefined ? '' : ` · ${storeStock} LEFT`, tone: 'border-rise text-rise' },
+    // Sold out, the selling line follows the highest bid, so a seller sees what a walk down would fetch.
+    soldOutAt?.bid
+      ? { key: 'follows', price: soldOutAt.price, who: 'SOLD OUT', what: 'HIGHEST BID', note: ' ↑', tone: 'border-rise/70 text-rise' }
+      : { key: 'follows', price: soldOutAt?.price ?? null, who: 'STORE', what: 'SOLD OUT', note: '', tone: 'border-rise/70 text-rise' },
     { key: 'buys', price: storeBuys, who: 'STORE', what: 'BUYS', note: '', tone: 'border-fall text-fall' },
     { key: 'ship', price: shipPays, who: 'SHIP', what: 'PAYS', note: '', tone: 'border-warn text-warn' },
     ...extra.map((l) => ({ key: `line-${l.id}`, price: l.price, who: l.label, what: '', note: '', tone: 'border-holo text-holo' })),
@@ -258,7 +271,12 @@ export function WalkBoard({
         </div>
 
         <div ref={area} className={cx('absolute inset-x-0', tv ? 'bottom-23 top-12' : 'bottom-14 top-6')}>
-          {storeStock === 0 && storeSells === null && (
+          {/* The rest zones. Nobody trades in them; their edge is where trading begins, drawn solid. */}
+          {zones && (
+            <RestBand from={0} to={pct(storeSells ?? soldOutAt?.price ?? zones.sellersBottom)} edge="bottom" tone="seller" words="SELLERS WAIT · NO TRADE" tv={tv} gutter={gutter} />
+          )}
+          {zones && <RestBand from={pct(zones.buyersTop)} to={100} edge="top" tone="buyer" words="BUYERS WAIT · NO TRADE" tv={tv} gutter={gutter} />}
+          {storeStock === 0 && storeSells === null && soldOutAt === null && (
             <span
               data-num
               data-testid="store-sold-out"
@@ -405,6 +423,39 @@ function useHeight(ref: RefObject<HTMLElement | null>, fallback: number): number
     return () => watch.disconnect();
   }, [ref]);
   return height;
+}
+
+/** A rest zone, hatched in its side's colour, with a solid edge where trading begins; its words sit in the gutter. */
+function RestBand({ from, to, edge, tone, words, tv, gutter }: { from: number; to: number; edge: 'top' | 'bottom'; tone: 'seller' | 'buyer'; words: string; tv: boolean; gutter: number }) {
+  const colour = tone === 'seller' ? 'var(--color-rise)' : 'var(--color-fall)';
+  return (
+    <div
+      aria-hidden
+      className={cx('pointer-events-none absolute left-0 transition-[top,height] duration-100 ease-linear', edge === 'bottom' ? 'border-b-2' : 'border-t-2', tone === 'seller' ? 'border-rise' : 'border-fall')}
+      style={{
+        top: `${from}%`,
+        height: `${Math.max(0, to - from)}%`,
+        right: gutter,
+        background: `repeating-linear-gradient(135deg, color-mix(in oklab, ${colour} 13%, transparent) 0 6px, transparent 6px 14px)`,
+      }}
+      data-testid={`rest-${tone}`}
+    >
+      {/* In the gutter with the store's labels, at the band's far end: never under a creature. */}
+      <span
+        className={cx(
+          'absolute flex flex-col items-end px-1 text-right font-mono font-bold leading-tight opacity-80',
+          edge === 'bottom' ? 'top-0.5' : 'bottom-0.5',
+          tv ? 'text-sm' : 'text-[9px]',
+          tone === 'seller' ? 'text-rise' : 'text-fall',
+        )}
+        style={{ left: '100%', width: gutter }}
+      >
+        {words.split(' · ').map((w) => (
+          <span key={w}>{w}</span>
+        ))}
+      </span>
+    </div>
+  );
 }
 
 /** One of the two moving lines, across the players' columns. */
