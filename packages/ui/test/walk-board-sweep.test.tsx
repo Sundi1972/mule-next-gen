@@ -36,8 +36,15 @@ function labelAt(html: string, key: string, size: 'tv' | 'phone' = 'tv'): number
 }
 
 describe('SWEEP-C1: the chart chip and the side panel show the same gap', () => {
-  it('SWEEP-C1: with the store selling at 100 and the ship paying 99, the chip says 1 APART, not the players’ 49', () => {
-    expect(gapChip(alloy())).toBe('1 APART');
+  it('SWEEP-C1: with the store selling at 100 and the ship paying 99, the chip says 16 APART (the seller’s 115 to the ship), not the houses’ 1 (FM-house-meet)', () => {
+    expect(gapChip(alloy())).toBe('16 APART');
+  });
+
+  it('SWEEP-C1: the ship paying over the store’s selling line is no meeting: the chip shows the player’s gap (FM-house-meet)', () => {
+    const html = renderToStaticMarkup(
+      <WalkBoard lo={56} hi={125} walkers={[walker('big', 'seller', 115), walker('heiko', 'buyer', 66)]} deals={[]} storeBuys={81} storeSells={100} shipPays={105} storeStock={1} marks={{ ask: true, bid: true }} />,
+    );
+    expect(gapChip(html)).toBe('10 APART');
   });
 
   it('SWEEP-C1: a player asking under the store and the store buying over every player: the chip counts both (90 against 81)', () => {

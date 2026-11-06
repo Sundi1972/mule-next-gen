@@ -1,4 +1,4 @@
-import type { Good } from '@mule/engine';
+import { WALK, type Good } from '@mule/engine';
 import type { AuctionView, MuleView } from '@mule/protocol';
 import { Button, cx, GOOD_NAME, GoodTag, TimeBar, WalkBoard } from '@mule/ui';
 import {
@@ -6,6 +6,8 @@ import {
   boardWalkers,
   dealLine,
   dealSpeed,
+  heldSeller,
+  heldWords,
   Hint,
   keepWords,
   lineHint,
@@ -220,6 +222,8 @@ export function Auction() {
   );
 
   const hint = walkHint(view, auction, me.id, have);
+  // RULE-4: stopped at what she must hold; ▼ becomes the one-second hold that sells on (the mock's variant A).
+  const held = !closed && heldSeller(mine);
   const lineSide = mine?.side === 'seller' ? 'seller' : 'buyer';
   // Selling into next month's need: shown, never asked (variant A's amber note).
   const keeping = lineSide === 'seller' && need > 0 && have < need;
@@ -262,6 +266,8 @@ export function Auction() {
       }
       {closed ? (
         <Hint line={`${GOOD_NAME[good]} is closed.`} how={auction.upNext ? `Next: ${GOOD_NAME[auction.upNext]}, buy or sell?` : null} />
+      ) : held ? (
+        <Hint tone="ok" {...heldWords(good, need)} testid="held" />
       ) : (
         (lineRail ?? (myDeal ? <Hint tone="lit" line={dealLine(view, myDeal, me.id)} testid="my-deal" /> : <Hint line={hint.line} how={hint.how} />))
       )}
@@ -284,7 +290,7 @@ export function Auction() {
 
   // G-2: a tap is one price step; a hold walks until let go.
   const hold = (dir: 'up' | 'down', disabled: boolean) => (
-    <WalkHold key={dir} dir={dir} disabled={!onBoard || disabled} onHold={(on) => walk(on ? dir : 'stop')} onStep={() => client.intent({ type: 'walkStep', dir })} />
+    <WalkHold key={dir} dir={dir} short={dir === 'down' && held} disabled={!onBoard || disabled} onHold={(on) => walk(on ? dir : 'stop')} onStep={() => client.intent({ type: 'walkStep', dir })} />
   );
   const footer = (
     <>
@@ -522,8 +528,12 @@ export const TAP_MS = 180;
  * The goods walk's Hold: it says so on the button, "Hold ▲ to walk up", and a quick tap moves one step (G-2). Tap or
  * hold is judged by the events' own timestamps, not by when they are handled: a busy phone can hand over a quick
  * tap's release late, and that must still be a step.
+ *
+ * `short`: a seller stopped at what she must hold (RULE-4). The button is the amber "▼ Hold: sell short" and fills
+ * while held, full when the engine lets her sell on: the walk starts after TAP_MS, then WALK.shortHoldMs of holding.
  */
-function WalkHold({ dir, disabled, onHold, onStep }: { dir: 'up' | 'down'; disabled: boolean; onHold: (on: boolean) => void; onStep: () => void }) {
+function WalkHold({ dir, short = false, disabled, onHold, onStep }: { dir: 'up' | 'down'; short?: boolean; disabled: boolean; onHold: (on: boolean) => void; onStep: () => void }) {
+  const [pressed, setPressed] = useState(false);
   const timer = useRef<number | null>(null);
   const holding = useRef(false);
   const down = useRef<number | null>(null);
@@ -538,6 +548,7 @@ function WalkHold({ dir, disabled, onHold, onStep }: { dir: 'up' | 'down'; disab
     [],
   );
   const end = (stamp: number) => {
+    setPressed(false);
     if (down.current === null) return;
     const tap = stamp - down.current < TAP_MS;
     down.current = null;
@@ -552,10 +563,14 @@ function WalkHold({ dir, disabled, onHold, onStep }: { dir: 'up' | 'down'; disab
   return (
     <button
       type="button"
-      aria-label={`Hold to walk ${dir}; a tap moves one step`}
+      aria-label={short ? 'Hold: sell short' : `Hold to walk ${dir}; a tap moves one step`}
       disabled={disabled}
       data-testid={`hold-${dir}`}
-      className="flex h-12 touch-none select-none flex-col items-center justify-center gap-1 rounded-control border-2 border-holo bg-holo-soft font-display text-holo active:bg-holo active:text-on-holo disabled:opacity-35 @min-[1100px]/shell:h-20"
+      data-short={short || undefined}
+      className={cx(
+        'flex h-12 touch-none select-none flex-col items-center justify-center gap-1 rounded-control border-2 font-display disabled:opacity-35 @min-[1100px]/shell:h-20',
+        short ? 'relative overflow-hidden border-warn bg-void text-warn' : 'border-holo bg-holo-soft text-holo active:bg-holo active:text-on-holo',
+      )}
       onPointerDown={(e) => {
         e.preventDefault();
         try {
@@ -565,6 +580,7 @@ function WalkHold({ dir, disabled, onHold, onStep }: { dir: 'up' | 'down'; disab
         }
         holding.current = false;
         down.current = e.timeStamp;
+        setPressed(true);
         timer.current = window.setTimeout(() => {
           timer.current = null;
           holding.current = true;
@@ -576,13 +592,26 @@ function WalkHold({ dir, disabled, onHold, onStep }: { dir: 'up' | 'down'; disab
       onLostPointerCapture={(e) => end(e.timeStamp)}
       onContextMenu={(e) => e.preventDefault()}
     >
-      <span className="flex items-center gap-1 text-sm font-semibold leading-none @min-[1100px]/shell:text-xl">
-        Hold{' '}
-        <span aria-hidden className="text-lg leading-none @min-[1100px]/shell:text-2xl">
-          {dir === 'up' ? '▲' : '▼'}
-        </span>
-      </span>
-      <span className="text-[11px] font-medium leading-none @min-[1100px]/shell:text-base">to walk {dir}</span>
+      {short ? (
+        <>
+          <span
+            aria-hidden
+            className="absolute inset-y-0 left-0 bg-warn/30"
+            style={{ width: pressed ? '100%' : '0%', transition: pressed ? `width ${TAP_MS + WALK.shortHoldMs}ms linear` : 'none' }}
+          />
+          <span className="relative text-sm font-semibold leading-none @min-[1100px]/shell:text-xl">▼ Hold: sell short</span>
+        </>
+      ) : (
+        <>
+          <span className="flex items-center gap-1 text-sm font-semibold leading-none @min-[1100px]/shell:text-xl">
+            Hold{' '}
+            <span aria-hidden className="text-lg leading-none @min-[1100px]/shell:text-2xl">
+              {dir === 'up' ? '▲' : '▼'}
+            </span>
+          </span>
+          <span className="text-[11px] font-medium leading-none @min-[1100px]/shell:text-base">to walk {dir}</span>
+        </>
+      )}
     </button>
   );
 }

@@ -8,7 +8,10 @@ import type { Seat } from '../phone/hub/ready';
 import { WaitingFor } from '../phone/hub/ReadyBar';
 import { SpecialLine } from './SpecialLine';
 
-/** The auction's walkers as the board draws them, in seat order, with their units and the surplus over this month's need. */
+/**
+ * The auction's walkers as the board draws them, in seat order, with their units and the surplus over this month's
+ * need; a seller stopped at what they must hold (RULE-4) carries the KEEPS mark with what they keep.
+ */
 export function boardWalkers(view: MuleView, auction: AuctionView): BoardWalker[] {
   return auction.walkers.map((w) => {
     const need = auction.status.find((r) => r.id === w.id)?.need;
@@ -22,8 +25,22 @@ export function boardWalkers(view: MuleView, auction: AuctionView): BoardWalker[
       done: w.done,
       units: w.units,
       ...(need === undefined ? {} : { surplus: w.units - need }),
+      ...(heldSeller(w) ? { keeps: w.units } : {}),
     };
   });
+}
+
+/** A seller the engine stopped at what they must hold (RULE-4). The engine keeps the flag through a switch to Buy; the screens don't. */
+export function heldSeller(w: Pick<WalkerView, 'side' | 'held'> | undefined): boolean {
+  return w?.side === 'seller' && w.held === true;
+}
+
+/**
+ * The held seller's rail (WS6's mock PhoneSale, variant A, at cde3ff61): she stopped at what she needs next month, and
+ * how to sell on.
+ */
+export function heldWords(good: Good, need: number): { line: string; how: string } {
+  return { line: `Stopped at ${need} ${GOOD_NAME[good]}: what you need next month.`, how: 'To sell more, hold ▼: you’d be short next month.' };
 }
 
 /** Who an id is, in a sentence: "you", "the store", "the ship", or the player's name. */
@@ -37,26 +54,43 @@ export function who(view: MuleView, id: string, meId?: string): string {
 interface Offer {
   id: string;
   price: number;
+  /** The store's or the ship's line: two houses never trade with each other. */
+  house: boolean;
 }
 
 /** Every price a walker on `side` could meet, the store and the ship included, best first: the lowest ask, the highest bid. */
 function pricesOn(auction: AuctionView, side: 'seller' | 'buyer', without?: string): Offer[] {
   if (side === 'seller') {
-    const list: Offer[] = auction.walkers.filter((w) => w.id !== without && w.side === 'seller' && w.units > 0).map((w) => ({ id: w.id, price: w.price }));
-    if (auction.storeSells !== null && auction.storeForSale > 0) list.push({ id: STORE_ID, price: auction.storeSells });
+    const list: Offer[] = auction.walkers.filter((w) => w.id !== without && w.side === 'seller' && w.units > 0).map((w) => ({ id: w.id, price: w.price, house: false }));
+    if (auction.storeSells !== null && auction.storeForSale > 0) list.push({ id: STORE_ID, price: auction.storeSells, house: true });
     return list.sort((a, b) => a.price - b.price);
   }
-  const list: Offer[] = auction.walkers.filter((w) => w.id !== without && w.side === 'buyer').map((w) => ({ id: w.id, price: w.price }));
+  const list: Offer[] = auction.walkers.filter((w) => w.id !== without && w.side === 'buyer').map((w) => ({ id: w.id, price: w.price, house: false }));
   // The ship before the store: on a tie the sort keeps it first, and the engine sells to the ship.
-  if (auction.shipPays !== null) list.push({ id: SHIP_ID, price: auction.shipPays });
-  if (auction.storeBuys !== null) list.push({ id: STORE_ID, price: auction.storeBuys });
+  if (auction.shipPays !== null) list.push({ id: SHIP_ID, price: auction.shipPays, house: true });
+  if (auction.storeBuys !== null) list.push({ id: STORE_ID, price: auction.storeBuys, house: true });
   return list.sort((a, b) => b.price - a.price);
 }
 
-/** The TV's readout: who holds the lowest ask and the highest bid, the store and the ship counted, and the gap. */
+/**
+ * How far the closest pair that could trade stands apart: a player's ask against the best bid, or the best ask against
+ * a player's bid. Zero or less, they meet; null when no player has a price facing one. The ship and the store crossing
+ * each other is no pair: every deal has a player on one side.
+ */
+function playerGap(asks: Offer[], bids: Offer[]): number | null {
+  const ask = asks.find((o) => !o.house);
+  const bid = bids.find((o) => !o.house);
+  const gaps = [ask && bids[0] ? ask.price - bids[0].price : null, bid && asks[0] ? asks[0].price - bid.price : null].filter((g): g is number => g !== null);
+  return gaps.length > 0 ? Math.min(...gaps) : null;
+}
+
+/** The TV's readout: who holds the lowest ask and the highest bid, the store and the ship counted, and the gap a player faces. */
 export function TvReadout({ view, auction }: { view: MuleView; auction: AuctionView }) {
-  const ask = pricesOn(auction, 'seller')[0];
-  const bid = pricesOn(auction, 'buyer')[0];
+  const asks = pricesOn(auction, 'seller');
+  const bids = pricesOn(auction, 'buyer');
+  const ask = asks[0];
+  const bid = bids[0];
+  const gap = playerGap(asks, bids);
   const trading = auction.deals.length > 0;
   return (
     <dl className="grid grid-cols-[auto_1fr] items-baseline gap-x-2 gap-y-1 font-mono text-lg" data-testid="tv-readout">
@@ -65,7 +99,7 @@ export function TvReadout({ view, auction }: { view: MuleView; auction: AuctionV
       <dt className="text-fall">HIGHEST BID</dt>
       <dd data-num className={cx('font-bold', bid?.id === SHIP_ID ? 'text-warn' : 'text-fall')}>{bid ? `${bid.price} · ${who(view, bid.id)}` : '—'}</dd>
       <dt className="text-ink-3">GAP</dt>
-      <dd data-num className="font-bold text-ink">{trading ? 'MET: TRADING' : ask && bid ? (ask.price > bid.price ? `${ask.price - bid.price} apart` : 'they meet') : '—'}</dd>
+      <dd data-num className="font-bold text-ink">{trading ? 'MET: TRADING' : gap === null ? '—' : gap > 0 ? `${gap} apart` : 'they meet'}</dd>
     </dl>
   );
 }

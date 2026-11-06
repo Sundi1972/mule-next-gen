@@ -14,42 +14,42 @@
 <main class="rb-main">
 <article>
 <h1>Every number</h1>
-<p class="rb-lede">Every balancing value in the game, as the game's settings file holds it today: 1242 settings in 52 groups, each with what it does.</p>
+<p class="rb-lede">Every balancing value in the game, as the game's settings file holds it today: 1240 settings in 52 groups, each with what it does.</p>
 <p>This page is generated from the game's settings file, <code>packages/engine/src/config.ts</code>, on trunk. Each group below is one block of that file, named the way the code names it; the setting is its full path, and the note is the comment written beside it in the file. A setting without a note of its own points to the nearest note that explains it. The rules these numbers drive are explained in <a href="index.html">the other chapters</a>.</p>
 <p>Do not edit this page by hand. To regenerate it after <code>config.ts</code> changes, run from the repo root:</p>
 <p><code>pnpm --filter @mule/engine exec tsx ../../docs/rulebook/build-numbers.ts</code> then <code>node docs/rulebook/build-index.mjs</code></p>
 <div class="box next"><h4>Not on this page</h4><p><code>MAP_SIZE</code> is kept inside <code>config.ts</code> without being exported, so this page cannot read it.</p></div>
-<p class="code-ref">Built from <code>config.ts</code> with fingerprint <code>a2c587144d82</code> (the first 12 characters of its SHA-256).</p>
+<p class="code-ref">Built from <code>config.ts</code> with fingerprint <code>4d93e8085efa</code> (the first 12 characters of its SHA-256).</p>
 
 <h2 id="good-config"><code>GOOD_CONFIG</code> <span class="pill built">In the game</span></h2>
 <div class="table-wrap"><table>
 <thead><tr><th>Setting</th><th class="n">Value</th><th>What it does</th></tr></thead>
 <tbody>
-<tr><td><code>GOOD_CONFIG.food.refPrice</code></td><td class="n">30</td><td>No note in the settings file.</td></tr>
+<tr><td><code>GOOD_CONFIG.food.refPrice</code></td><td class="n">30</td><td>Credits a unit at normal supply when the game starts: the store&#39;s opening price and off-world price; it drifts after.</td></tr>
 <tr><td><code>GOOD_CONFIG.food.sensitivity</code></td><td class="n">1.5</td><td>How strongly price reacts to low cover (k in the price formula).</td></tr>
 <tr><td><code>GOOD_CONFIG.food.spoilage</code></td><td class="n">0.5</td><td>Share lost each month without suitable storage.</td></tr>
-<tr><td><code>GOOD_CONFIG.water.refPrice</code></td><td class="n">25</td><td>No note in the settings file.</td></tr>
+<tr><td><code>GOOD_CONFIG.water.refPrice</code></td><td class="n">25</td><td>Credits a unit at normal supply when the game starts: the store&#39;s opening price and off-world price; it drifts after.</td></tr>
 <tr><td><code>GOOD_CONFIG.water.sensitivity</code></td><td class="n">1.5</td><td>How strongly price reacts to low cover (k in the price formula).</td></tr>
 <tr><td><code>GOOD_CONFIG.water.spoilage</code></td><td class="n">0.05</td><td>Share lost each month without suitable storage.</td></tr>
-<tr><td><code>GOOD_CONFIG.energy.refPrice</code></td><td class="n">25</td><td>No note in the settings file.</td></tr>
+<tr><td><code>GOOD_CONFIG.energy.refPrice</code></td><td class="n">25</td><td>Credits a unit at normal supply when the game starts: the store&#39;s opening price and off-world price; it drifts after.</td></tr>
 <tr><td><code>GOOD_CONFIG.energy.sensitivity</code></td><td class="n">1.2</td><td>How strongly price reacts to low cover (k in the price formula).</td></tr>
 <tr><td><code>GOOD_CONFIG.energy.spoilage</code></td><td class="n">0.25</td><td>Share lost each month without suitable storage.</td></tr>
-<tr><td><code>GOOD_CONFIG.smithore.refPrice</code></td><td class="n">50</td><td>No note in the settings file.</td></tr>
+<tr><td><code>GOOD_CONFIG.smithore.refPrice</code></td><td class="n">50</td><td>Credits a unit at normal supply when the game starts: the store&#39;s opening price and off-world price; it drifts after.</td></tr>
 <tr><td><code>GOOD_CONFIG.smithore.sensitivity</code></td><td class="n">1.2</td><td>How strongly price reacts to low cover (k in the price formula).</td></tr>
 <tr><td><code>GOOD_CONFIG.smithore.spoilage</code></td><td class="n">0</td><td>Share lost each month without suitable storage.</td></tr>
-<tr><td><code>GOOD_CONFIG.crystite.refPrice</code></td><td class="n">100</td><td>No note in the settings file.</td></tr>
+<tr><td><code>GOOD_CONFIG.crystite.refPrice</code></td><td class="n">100</td><td>Credits a unit at normal supply when the game starts: the store&#39;s opening price and off-world price; it drifts after.</td></tr>
 <tr><td><code>GOOD_CONFIG.crystite.sensitivity</code></td><td class="n">0.5</td><td>How strongly price reacts to low cover (k in the price formula).</td></tr>
 <tr><td><code>GOOD_CONFIG.crystite.spoilage</code></td><td class="n">0</td><td>Share lost each month without suitable storage.</td></tr>
-<tr><td><code>GOOD_CONFIG.rareEarth.refPrice</code></td><td class="n">60</td><td>No note in the settings file.</td></tr>
+<tr><td><code>GOOD_CONFIG.rareEarth.refPrice</code></td><td class="n">60</td><td>Credits a unit at normal supply when the game starts: the store&#39;s opening price and off-world price; it drifts after.</td></tr>
 <tr><td><code>GOOD_CONFIG.rareEarth.sensitivity</code></td><td class="n">0.8</td><td>How strongly price reacts to low cover (k in the price formula).</td></tr>
 <tr><td><code>GOOD_CONFIG.rareEarth.spoilage</code></td><td class="n">0</td><td>Share lost each month without suitable storage.</td></tr>
-<tr><td><code>GOOD_CONFIG.alloy.refPrice</code></td><td class="n">90</td><td>No note in the settings file.</td></tr>
+<tr><td><code>GOOD_CONFIG.alloy.refPrice</code></td><td class="n">90</td><td>Credits a unit at normal supply when the game starts: the store&#39;s opening price and off-world price; it drifts after.</td></tr>
 <tr><td><code>GOOD_CONFIG.alloy.sensitivity</code></td><td class="n">0.8</td><td>How strongly price reacts to low cover (k in the price formula).</td></tr>
 <tr><td><code>GOOD_CONFIG.alloy.spoilage</code></td><td class="n">0</td><td>Share lost each month without suitable storage.</td></tr>
-<tr><td><code>GOOD_CONFIG.electronics.refPrice</code></td><td class="n">220</td><td>No note in the settings file.</td></tr>
+<tr><td><code>GOOD_CONFIG.electronics.refPrice</code></td><td class="n">220</td><td>Credits a unit at normal supply when the game starts: the store&#39;s opening price and off-world price; it drifts after.</td></tr>
 <tr><td><code>GOOD_CONFIG.electronics.sensitivity</code></td><td class="n">0.5</td><td>How strongly price reacts to low cover (k in the price formula).</td></tr>
 <tr><td><code>GOOD_CONFIG.electronics.spoilage</code></td><td class="n">0</td><td>Share lost each month without suitable storage.</td></tr>
-<tr><td><code>GOOD_CONFIG.medicine.refPrice</code></td><td class="n">120</td><td>No note in the settings file.</td></tr>
+<tr><td><code>GOOD_CONFIG.medicine.refPrice</code></td><td class="n">120</td><td>Credits a unit at normal supply when the game starts: the store&#39;s opening price and off-world price; it drifts after.</td></tr>
 <tr><td><code>GOOD_CONFIG.medicine.sensitivity</code></td><td class="n">1</td><td>How strongly price reacts to low cover (k in the price formula).</td></tr>
 <tr><td><code>GOOD_CONFIG.medicine.spoilage</code></td><td class="n">0.2</td><td>Share lost each month without suitable storage.</td></tr>
 </tbody>
@@ -307,9 +307,10 @@
 <tr><td><code>UPKEEP.baseWater</code></td><td class="n">1</td><td>Explained in the note on <code>UPKEEP.baseFood</code>.</td></tr>
 <tr><td><code>UPKEEP.crewPerFood</code></td><td class="n">4</td><td>No note of its own; the note on <code>UPKEEP.baseFood</code>, just before it in the file, may cover it.</td></tr>
 <tr><td><code>UPKEEP.crewPerWater</code></td><td class="n">6</td><td>No note of its own; the note on <code>UPKEEP.baseFood</code>, just before it in the file, may cover it.</td></tr>
-<tr><td><code>UPKEEP.crew.raw</code></td><td class="n">1</td><td>No note in the settings file.</td></tr>
-<tr><td><code>UPKEEP.crew.factory</code></td><td class="n">2</td><td>No note in the settings file.</td></tr>
-<tr><td><code>UPKEEP.crew.greenBelt</code></td><td class="n">0</td><td>No note in the settings file.</td></tr>
+<tr><td><code>UPKEEP.crew</code></td><td class="n"></td><td>Crew a plot adds to its owner&#39;s, by kind: a raw plot, a factory, a green belt.</td></tr>
+<tr><td><code>UPKEEP.crew.raw</code></td><td class="n">1</td><td>See the note on <code>UPKEEP.crew</code>.</td></tr>
+<tr><td><code>UPKEEP.crew.factory</code></td><td class="n">2</td><td>See the note on <code>UPKEEP.crew</code>.</td></tr>
+<tr><td><code>UPKEEP.crew.greenBelt</code></td><td class="n">0</td><td>See the note on <code>UPKEEP.crew</code>.</td></tr>
 <tr><td><code>UPKEEP.offOutputShare</code></td><td class="n">0.2</td><td>Share of its output a plot turned off for want of Energy makes, rounded half up (Heiko, 5 Nov: 20%). A turned-off factory makes it from the same share of its non-Energy inputs, rounded up (PM, 5 Nov: nothing from nothing), and takes none when its share of output rounds to 0 (PM, 5 Nov: nothing spent for nothing).</td></tr>
 <tr><td><code>UPKEEP.irrigated</code></td><td class="n">[&quot;food&quot;]</td><td>Plots that need irrigation: when their owner holds less Water than the household and crew need, they make half (on top of any Energy shortfall).</td></tr>
 <tr><td><code>UPKEEP.shortOutputShare</code></td><td class="n">0.5</td><td>Share of its output an irrigated plot makes when its owner is short of Water, rounded down. (Energy no longer halves: offOutputShare, AM-17.)</td></tr>
@@ -346,7 +347,7 @@
 <div class="table-wrap"><table>
 <thead><tr><th>Setting</th><th class="n">Value</th><th>What it does</th></tr></thead>
 <tbody>
-<tr><td><code>START.money</code></td><td class="n">1000</td><td>No note in the settings file.</td></tr>
+<tr><td><code>START.money</code></td><td class="n">1000</td><td>Each player&#39;s credits at the start.</td></tr>
 <tr><td><code>START.playerStock</code></td><td class="n"></td><td>Each player&#39;s depot at the start. Food 2 and Energy 2 (Heiko, 5 Nov).</td></tr>
 <tr><td><code>START.playerStock.food</code></td><td class="n">2</td><td>See the note on <code>START.playerStock</code>.</td></tr>
 <tr><td><code>START.playerStock.water</code></td><td class="n">6</td><td>See the note on <code>START.playerStock</code>.</td></tr>
@@ -391,19 +392,20 @@
 </table></div>
 
 <h3 id="mule-outfit-cost"><code>MULE.outfitCost</code></h3>
+<p>Credits to outfit a MULE for each good, paid at the store&#39;s outfit counter.</p>
 <div class="table-wrap"><table>
 <thead><tr><th>Setting</th><th class="n">Value</th><th>What it does</th></tr></thead>
 <tbody>
-<tr><td><code>MULE.outfitCost.food</code></td><td class="n">25</td><td>No note in the settings file.</td></tr>
-<tr><td><code>MULE.outfitCost.water</code></td><td class="n">25</td><td>No note in the settings file.</td></tr>
-<tr><td><code>MULE.outfitCost.energy</code></td><td class="n">50</td><td>No note in the settings file.</td></tr>
-<tr><td><code>MULE.outfitCost.smithore</code></td><td class="n">75</td><td>No note in the settings file.</td></tr>
-<tr><td><code>MULE.outfitCost.crystite</code></td><td class="n">100</td><td>No note in the settings file.</td></tr>
-<tr><td><code>MULE.outfitCost.rareEarth</code></td><td class="n">100</td><td>No note in the settings file.</td></tr>
-<tr><td><code>MULE.outfitCost.alloy</code></td><td class="n">150</td><td>No note in the settings file.</td></tr>
-<tr><td><code>MULE.outfitCost.electronics</code></td><td class="n">200</td><td>No note in the settings file.</td></tr>
-<tr><td><code>MULE.outfitCost.medicine</code></td><td class="n">150</td><td>No note in the settings file.</td></tr>
-<tr><td><code>MULE.outfitCost.greenBelt</code></td><td class="n">20</td><td>No note in the settings file.</td></tr>
+<tr><td><code>MULE.outfitCost.food</code></td><td class="n">25</td><td>See the note on <code>MULE.outfitCost</code>.</td></tr>
+<tr><td><code>MULE.outfitCost.water</code></td><td class="n">25</td><td>See the note on <code>MULE.outfitCost</code>.</td></tr>
+<tr><td><code>MULE.outfitCost.energy</code></td><td class="n">50</td><td>See the note on <code>MULE.outfitCost</code>.</td></tr>
+<tr><td><code>MULE.outfitCost.smithore</code></td><td class="n">75</td><td>See the note on <code>MULE.outfitCost</code>.</td></tr>
+<tr><td><code>MULE.outfitCost.crystite</code></td><td class="n">100</td><td>See the note on <code>MULE.outfitCost</code>.</td></tr>
+<tr><td><code>MULE.outfitCost.rareEarth</code></td><td class="n">100</td><td>See the note on <code>MULE.outfitCost</code>.</td></tr>
+<tr><td><code>MULE.outfitCost.alloy</code></td><td class="n">150</td><td>See the note on <code>MULE.outfitCost</code>.</td></tr>
+<tr><td><code>MULE.outfitCost.electronics</code></td><td class="n">200</td><td>See the note on <code>MULE.outfitCost</code>.</td></tr>
+<tr><td><code>MULE.outfitCost.medicine</code></td><td class="n">150</td><td>See the note on <code>MULE.outfitCost</code>.</td></tr>
+<tr><td><code>MULE.outfitCost.greenBelt</code></td><td class="n">20</td><td>See the note on <code>MULE.outfitCost</code>.</td></tr>
 </tbody>
 </table></div>
 
@@ -1199,6 +1201,8 @@
 <tr><td><code>WALK.minSpeed</code></td><td class="n">1.6</td><td>Explained in the note on <code>WALK.crossSeconds</code>.</td></tr>
 <tr><td><code>WALK.boardMargin</code></td><td class="n">0.3</td><td>The board reaches this share beyond the outermost price line; sellers start at its top, buyers at its bottom.</td></tr>
 <tr><td><code>WALK.boardPostedMargin</code></td><td class="n">0.1</td><td>And this share of the posted price more, so a board whose price lines sit close together still has room to walk.</td></tr>
+<tr><td><code>WALK.needStop</code></td><td class="n">true</td><td>RULE-4 (AM-1): a seller stops at the amount they must hold (auctionNeed, fixed as the good comes up), one price step above the line, and sells below it only after holding ▼ for shortHoldMs. false turns the stop off, for sweeps.</td></tr>
+<tr><td><code>WALK.shortHoldMs</code></td><td class="n">1000</td><td>Board ms a stopped seller holds ▼ to sell on into shortage (Heiko&#39;s choice A, 5 Nov). A tap or a shorter hold moves nothing.</td></tr>
 <tr><td><code>WALK.tickMs</code></td><td class="n">100</td><td>How often the server steps the auction.</td></tr>
 </tbody>
 </table></div>
@@ -1865,11 +1869,6 @@
 <tr><td><code>STRATEGIST.grantShare</code></td><td class="n">0.75</td><td>The land grant is one pass, so a lit plot is weighed against the free plots still ahead of the light: its utility must be at least this share of the best of theirs to be pressed for.</td></tr>
 <tr><td><code>STRATEGIST.grantSpare</code></td><td class="n">0</td><td>Beyond the claims it has left, how many more of its top plots still ahead of the light it presses for. 0: it presses only for plots it would claim with the claims it has left.</td></tr>
 <tr><td><code>STRATEGIST.factoryInputMonths</code></td><td class="n">2</td><td>A factory needs this many months of its inputs on hand or from its own plots.</td></tr>
-<tr><td><code>STRATEGIST.keepSpare</code></td><td class="n"></td><td>Spare Food, Water, Energy and Medicine it keeps over next month&#39;s need, before the reserve multiplier.</td></tr>
-<tr><td><code>STRATEGIST.keepSpare.food</code></td><td class="n">1</td><td>See the note on <code>STRATEGIST.keepSpare</code>.</td></tr>
-<tr><td><code>STRATEGIST.keepSpare.water</code></td><td class="n">1</td><td>See the note on <code>STRATEGIST.keepSpare</code>.</td></tr>
-<tr><td><code>STRATEGIST.keepSpare.energy</code></td><td class="n">1</td><td>See the note on <code>STRATEGIST.keepSpare</code>.</td></tr>
-<tr><td><code>STRATEGIST.keepSpare.medicine</code></td><td class="n">0</td><td>See the note on <code>STRATEGIST.keepSpare</code>.</td></tr>
 <tr><td><code>STRATEGIST.analyseWhenClose</code></td><td class="n">0.25</td><td>It analyses an unknown plot of its own when the plot&#39;s best and second-best uses are this close, as a share.</td></tr>
 <tr><td><code>STRATEGIST.analysesPerMonth</code></td><td class="n">2</td><td>Analyses per month, at most, and never with less than this many seconds left.</td></tr>
 <tr><td><code>STRATEGIST.analyseMinSeconds</code></td><td class="n">20</td><td>No note of its own; the note on <code>STRATEGIST.analysesPerMonth</code>, just before it in the file, may cover it.</td></tr>
@@ -2003,7 +2002,7 @@
 <tr><td><code>AI_PLANS.moneyMaker.rivalDiscount</code></td><td class="n">0.15</td><td>Each rival plot already making the good cuts its score by this share.</td></tr>
 <tr><td><code>AI_PLANS.moneyMaker.weight</code></td><td class="n">1</td><td>Weight of the &quot;My money-maker&quot; consideration in a development pick.</td></tr>
 <tr><td><code>AI_PLANS.moneyMaker.otherScore</code></td><td class="n">0.8</td><td>That consideration&#39;s score, 0 to 1, for an outfit that makes another good (the money-maker scores 1).</td></tr>
-<tr><td><code>AI_PLANS.monopoly.goods</code></td><td class="n">[&quot;food&quot;, &quot;energy&quot;, &quot;smithore&quot;]</td><td>The goods a seat may try to corner.</td></tr>
+<tr><td><code>AI_PLANS.monopoly.goods</code></td><td class="n">[&quot;energy&quot;, &quot;smithore&quot;]</td><td>The goods a seat may try to corner. Not Food: it spoils too fast (STRATEGIST.cornerMaxSpoilage).</td></tr>
 <tr><td><code>AI_PLANS.monopoly.maxRivalPlots</code></td><td class="n">1</td><td>A good is cornered only while at most this many rival plots make it.</td></tr>
 <tr><td><code>AI_PLANS.monopoly.minPlots</code></td><td class="n">2</td><td>And only with at least this many of its own idle or free plots whose best outfit is the good.</td></tr>
 <tr><td><code>AI_PLANS.landBaron.minFreeShare</code></td><td class="n">0.3</td><td>The land baron is a plan while at least this share of all plots is free.</td></tr>

@@ -227,11 +227,11 @@
 <tr><td>Food</td><td class="n">30</td><td class="n">27</td><td class="n">33</td></tr>
 <tr><td>Water</td><td class="n">25</td><td class="n">22</td><td class="n">28</td></tr>
 <tr><td>Energy</td><td class="n">25</td><td class="n">22</td><td class="n">28</td></tr>
-<tr><td>Smithore</td><td class="n">50</td><td class="n">45</td><td class="n">56</td></tr>
-<tr><td>Crystite</td><td class="n">100</td><td class="n">90</td><td class="n">111</td></tr>
+<tr><td>Smithore</td><td class="n">50</td><td class="n">45</td><td class="n">55</td></tr>
+<tr><td>Crystite</td><td class="n">100</td><td class="n">90</td><td class="n">110</td></tr>
 <tr><td>Rare earth</td><td class="n">60</td><td class="n">54</td><td class="n">66</td></tr>
-<tr><td>Alloy</td><td class="n">90</td><td class="n">81</td><td class="n">100</td></tr>
-<tr><td>Electronics</td><td class="n">220</td><td class="n">198</td><td class="n">243</td></tr>
+<tr><td>Alloy</td><td class="n">90</td><td class="n">81</td><td class="n">99</td></tr>
+<tr><td>Electronics</td><td class="n">220</td><td class="n">198</td><td class="n">242</td></tr>
 <tr><td>Medicine</td><td class="n">120</td><td class="n">108</td><td class="n">132</td></tr>
 </tbody>
 </table></div>
@@ -241,9 +241,8 @@
 <li>When it wants no more, it shows no buying price.</li>
 <li>While a Food or Water shelf is short it bids more and sells dearer, always at least one credit apart (see <a href="#restocking">restocking</a>).</li>
 </ul>
-<div class="box next"><h4>Worth knowing (from reading the code)</h4><p>For Smithore, Crystite, Alloy and Electronics at their reference prices the selling price comes out one credit higher than 10% would give (56 rather than 55 for Smithore, 111 rather than 110 for Crystite). The computer's arithmetic makes 50 × 1.1 a hair over 55, and the store always rounds its selling price up. Small, but a player who checks will notice. WS1 owns it.</p></div>
 <div class="box why"><h4>Why it is like this</h4><p>The design doc: "The store sells at 10% above the posted price and buys at 10% below it, so selling to another player is usually better than selling to the store." Heiko asked on 5 Nov for a wider spread; see <a href="#store-pricing-design">the store-pricing design</a>.</p></div>
-<p class="code-ref">In the code: <code>economy.ts::storeQuotes</code>, <code>colonyPrice</code> · <code>auction.ts::comeUp</code> (the auction's lines)</p>
+<p class="code-ref">In the code: <code>economy.ts::storeQuotes</code>, <code>storeSellPrice</code>, <code>colonyPrice</code> · <code>auction.ts::comeUp</code> (the auction's lines)</p>
 <p class="owner">Kept current by: WS1.</p>
 
 <h2 id="restocking">How the store restocks <span class="pill built">In the game</span></h2>

@@ -4,8 +4,10 @@ import {
   airPoints,
   allPrices,
   DEVELOPMENT,
+  freePlots,
   GAME,
   GOOD_CONFIG,
+  litPlot,
   mulePrice,
   mulePriceFor,
   neighbours,
@@ -23,6 +25,7 @@ import {
   storePaysFor,
   storeOnStrike,
   storeSellLine,
+  storeSellPrice,
   tileIndex,
   walkSeconds,
   WALK,
@@ -209,6 +212,17 @@ export function landDecision(obs: GameState, mind: Mind): Shortlist<LandPlan> {
     return candidate<LandPlan>(`land:${focus}`, `${FOCUS_LABEL[focus]}: ${labels || 'nothing left'}`, { focus, ranking }, worth, cons);
   });
   return shortlist(plans, mind.level.shortlist, mind.level.shortlistTolerance);
+}
+
+/**
+ * The free plots from the lit one on, in reading order: the rest of the light's pass, rebuilt from the board every seat
+ * sees, since observe() hides the grant's order. The light walks the pass's free plots in reading order, so the two agree.
+ */
+export function plotsAhead(obs: GameState): number[] {
+  const lit = litPlot(obs);
+  if (!lit) return [];
+  const from = tileIndex(obs.width, lit.x, lit.y);
+  return freePlots(obs).map((t) => tileIndex(obs.width, t.x, t.y)).filter((index) => index >= from);
 }
 
 /** The other seats still claiming in this grant: claims left and not Done with land, both public on the grant. */
@@ -624,7 +638,7 @@ export function expectedPrices(obs: GameState, good: Good): { sell: number; buy:
   const storeBuy = a?.good === good ? (a.storeBudget > 0 ? a.storeBuy : 0) : Math.floor(posted * (1 - PRICE.storeSpread));
   const ship = shipInPort(obs) ? (shipPrice(obs, good) ?? 0) : 0;
   const sell = Math.max(storeBuy, ship, Math.floor(posted * STRATEGIST.trade.sellFloor));
-  const storeSell = a?.good === good ? a.storeSell : Math.ceil(posted * (1 + PRICE.storeSpread));
+  const storeSell = a?.good === good ? a.storeSell : storeSellPrice(posted);
   return { sell, buy: storeSell };
 }
 
