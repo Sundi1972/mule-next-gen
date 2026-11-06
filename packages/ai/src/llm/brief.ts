@@ -1,4 +1,4 @@
-import { allPrices, BRAIN, GAME, GOODS, MS_PER_SECOND, observe, type DevelopmentPlay, type GameState, type Good, type GoodPlay, type LandGrantPlay, type Outfit, type PhaseOutcome, type Playbook, type Strategy } from '@mule/engine';
+import { allPrices, BRAIN, GAME, GOODS, MS_PER_SECOND, observe, postPrices, scoreParts, SPECIES_PERK, type DevelopmentPlay, type GameState, type Good, type GoodPlay, type LandGrantPlay, type Outfit, type PhaseOutcome, type Playbook, type PlayerId, type Species, type Strategy } from '@mule/engine';
 import { OPTION_IDS, toOptions, type TableTalk } from '../decider.js';
 import type { Persona } from '../personas.js';
 import { GOOD_NAME, landDecision, outfitName } from '../strategist.js';
@@ -44,7 +44,66 @@ export type LandBrief = WriterBrief;
 export interface LastPhase {
   outcome?: PhaseOutcome | null;
   feedback?: Feedback | null;
+  /** Every seat's Worth when this seat's last plan was asked, and that plan's month; absent before its first. */
+  worthBefore?: WorthAt | null;
 }
+
+/** Every seat's Worth at one moment, by seat, and the month of the plan asked then. */
+export interface WorthAt {
+  month: number;
+  worth: Readonly<Record<PlayerId, number>>;
+}
+
+/** Every seat's Worth now, as the board shows it. */
+export const worthNow = (state: GameState): Record<PlayerId, number> => Object.fromEntries(state.players.map((p) => [p.id, scoreParts(state, p.id).total]));
+
+/**
+ * The game as the goods auction opens: a copy with the store's prices posted, as the auction's start posts them. The
+ * auction's edits are asked in the production show, before that, so its brief and draft read this instead of last
+ * month's prices. The phase's own events (a raid, a fire) are not foreseen.
+ */
+export function atAuctionPrices(state: GameState): GameState {
+  const view = structuredClone(state);
+  postPrices(view);
+  return view;
+}
+
+/** What each species does, in the brief's words; a species with no perk says so. */
+const SPECIES_TEXT: Record<Species, string> = {
+  zipwing: `you walk ${SPECIES_PERK.zipwingSpeed} times as fast in development`,
+  bramblet: `every farm of yours makes ${SPECIES_PERK.brambletFood} more Food`,
+  gearling: `you pay ${Math.round(SPECIES_PERK.gearlingPrice * 100)}% of the price for MULEs and outfits`,
+  mollox: `every working mine of yours makes ${SPECIES_PERK.molloxMine} more, and you analyse ground in ${SPECIES_PERK.molloxAnalysis} of the time`,
+  glimmer: 'no special gift',
+  quibbit: 'you are first in line at the goods auction',
+};
+const speciesLine = (s: Species) => `Your species: ${s[0]!.toUpperCase()}${s.slice(1)} — ${SPECIES_TEXT[s]}.`;
+
+const cr = (n: number) => n.toLocaleString('en-US');
+const signed = (n: number) => (n >= 0 ? `+${cr(n)}` : `−${cr(-n)}`);
+
+/** Every seat's Worth, best first, and the seat's own line by line: public on the board (the standings tool's). */
+function standingsLines(state: GameState, me: PlayerId): string[] {
+  const worth = worthNow(state);
+  const order = [...state.players].sort((a, b) => worth[b.id]! - worth[a.id]! || a.id.localeCompare(b.id));
+  const own = scoreParts(state, me);
+  return [
+    `Standings by Worth, best first (the highest Worth at the end wins): ${order.map((p) => `${p.name}${p.id === me ? ' (you)' : ''} ${cr(worth[p.id]!)}`).join(', ')}.`,
+    `Your Worth ${cr(own.total)}: money ${cr(own.money)}, goods ${cr(own.goods)}, land ${cr(own.land)} (${own.plots} plots), MULEs ${cr(own.muleValue)}, office ${cr(own.office)}, donated ${cr(own.donated)}${own.cut ? `, less the cut ${cr(own.cut)}` : ''}.`,
+  ];
+}
+
+/** Each seat's Worth change since the seat's last plan was asked; nothing before its first. */
+function resultLines(state: GameState, me: PlayerId, before: WorthAt | null | undefined): string[] {
+  if (!before) return [];
+  const now = worthNow(state);
+  const delta = (id: PlayerId) => now[id]! - (before.worth[id] ?? now[id]!);
+  const rivals = state.players.filter((p) => p.id !== me).map((p) => `${p.name} ${signed(delta(p.id))}`);
+  return [`Since your plan for month ${before.month}: your Worth ${cr(before.worth[me] ?? now[me]!)} → ${cr(now[me]!)} (${signed(delta(me))}); ${rivals.join(', ')}.`];
+}
+
+const AIM = 'Your aim: finish with the highest Worth. Make every edit raise your Worth against your rivals\'.';
+const characterLine = (persona: Persona) => `Your character, for your table line only: ${persona.card}`;
 
 /** The playbook paths a land brief lets the writer edit, besides the strategy's fields. */
 export const LAND_PATHS = ['/landGrant/ranked', '/landGrant/claims', '/landGrant/pressShare'] as const;
@@ -224,7 +283,11 @@ export function landBrief(
   const text = [
     `You are ${me.name}. Month ${obs.month} of ${obs.maxMonths}, phase ${obs.phase}.`,
     `Your level: ${mind.levelId}. ${seatBounds(mind.level)}`,
+    speciesLine(me.species),
     `You have ${me.money} credits. Your goods: ${goods.join(', ') || 'none'}.`,
+    '',
+    ...standingsLines(state, mind.me),
+    ...resultLines(state, mind.me, last.worthBefore),
     '',
     'Who owns the land:',
     ...ownership(obs, mind.me),
@@ -248,7 +311,8 @@ export function landBrief(
     ...changeLines(corners),
     ...(development ? DEV_CHANGES : []),
     '',
-    `Your character: ${persona.card}`,
+    AIM,
+    characterLine(persona),
     '',
     tableTalkBlock(talk.slice(-BRAIN.talkLines)),
     '',
@@ -323,7 +387,11 @@ export function phaseBrief(state: GameState, mind: Mind, persona: Persona, draft
   const text = [
     `You are ${me.name}. Month ${obs.month} of ${obs.maxMonths}, before the ${phase}.`,
     `Your level: ${mind.levelId}. ${seatBounds(mind.level)}`,
+    speciesLine(me.species),
     `You have ${me.money} credits. Your goods: ${goods.join(', ') || 'none'}.`,
+    '',
+    ...standingsLines(state, mind.me),
+    ...resultLines(state, mind.me, last.worthBefore),
     '',
     'Who owns the land:',
     ...ownership(obs, mind.me),
@@ -345,7 +413,8 @@ export function phaseBrief(state: GameState, mind: Mind, persona: Persona, draft
       : ['- /auction/<good>/role, hold, walkAway, start, concedeCrPerS, for each good above.']),
     `Every edit says why, in at most ${BRAIN.writeReasonChars} characters.`,
     '',
-    `Your character: ${persona.card}`,
+    AIM,
+    characterLine(persona),
     '',
     tableTalkBlock(talk.slice(-BRAIN.talkLines)),
     '',

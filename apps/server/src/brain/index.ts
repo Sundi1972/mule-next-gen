@@ -2,7 +2,8 @@ import { BRAIN, type AiLevelId, type AiPersonaId } from '@mule/engine';
 import { LlmDecider, ReplyRejected, unusableReply, writeReply, type Complete, type Decider, type DecisionRecord, type WriteAsk, type WriteComplete, type WriterReply } from '@mule/ai';
 import { createBudget, MOVE_CALL, worstCaseUsd, type PromptText } from './budget.js';
 import { chatter, type Spoken } from './chat.js';
-import { billUnknown, CallFailed, createAnthropicSdk, createHaikuComplete, createToolLoop, Stopped, WRITE_CALLS, WRITE_FALLBACK_MODEL, type HaikuReply, type HaikuSdk, type RoundGate, type ToolBox, type WriteKind } from './client.js';
+import { billUnknown, CallFailed, createAnthropicSdk, createHaikuComplete, createToolLoop, Stopped, WRITE_CALLS, WRITE_FALLBACK_MODEL, type HaikuReply, type HaikuSdk, type RoundGate, type ThinkingCall, type ToolBox, type WriteKind } from './client.js';
+import { recordingSdk, type TranscriptEntry } from './transcript.js';
 import { createLedger, NO_USAGE, type LedgerKind, type ModelId, type Outcome, type Usage } from './ledger.js';
 
 /** The seat a decider is built for: its id, persona and level. */
@@ -69,6 +70,12 @@ export interface BrainOptions {
   gameBudgetUsd?: number;
   /** Every write call goes to this model instead of its kind's: brain:trial --write-model, for a paired run (PR-5 5.4). */
   writeModel?: ModelId;
+  /** Every write call's effort, reply cap and wait instead of its kind's: brain:trial --deep. */
+  writeCall?: Partial<Pick<ThinkingCall, 'effort' | 'maxTokens' | 'timeoutMs'>>;
+  /** Hears every model call's request and whole response: brain:trial --deep, a monitoring run. */
+  transcript?: (entry: TranscriptEntry) => void;
+  /** The most gameBudgetUsd may be: BRAIN.gameBudgetUsd, or BRAIN.deep.gameBudgetUsdMax for brain:trial --deep. */
+  gameBudgetCapUsd?: number;
 }
 
 /** The port refused before calling. `lockedNow` is true for the refusal that locked the seat, the only one with a line. */
@@ -130,14 +137,16 @@ export function apiKeyFrom(env: Readonly<Record<string, string | undefined>>): s
  */
 export function createBrain(options: BrainOptions): MeteredBrain {
   const gameBudgetUsd = options.gameBudgetUsd ?? BRAIN.gameBudgetUsd;
-  if (!(gameBudgetUsd > 0 && gameBudgetUsd <= BRAIN.gameBudgetUsd)) {
-    throw new RangeError(`gameBudgetUsd must be above 0 and at most ${BRAIN.gameBudgetUsd}`);
+  const budgetCap = options.gameBudgetCapUsd ?? BRAIN.gameBudgetUsd;
+  if (!(gameBudgetUsd > 0 && gameBudgetUsd <= budgetCap)) {
+    throw new RangeError(`gameBudgetUsd must be above 0 and at most ${budgetCap}`);
   }
   const apiKey = apiKeyFrom(options.env ?? process.env);
   if (!apiKey) return CLASSIC;
 
   const { gameId } = options;
-  const sdk = (options.sdkFactory ?? createAnthropicSdk)(apiKey);
+  const made = (options.sdkFactory ?? createAnthropicSdk)(apiKey);
+  const sdk = options.transcript ? recordingSdk(made, options.transcript) : made;
   const haiku = createHaikuComplete(sdk, options.now);
   const toolLoop = createToolLoop(sdk, options.now);
   const ledger = createLedger(options.logPath === undefined ? {} : { path: options.logPath });
@@ -237,7 +246,7 @@ export function createBrain(options: BrainOptions): MeteredBrain {
         // The abort frees the seat in its own tick: the decider the game calls next must find it free.
         const release = take(seat.id);
         signal?.addEventListener('abort', release, { once: true });
-        const call = options.writeModel === undefined ? WRITE_CALLS[kind] : { ...WRITE_CALLS[kind], model: options.writeModel };
+        const call = { ...WRITE_CALLS[kind], ...options.writeCall, ...(options.writeModel === undefined ? {} : { model: options.writeModel }) };
         // The last round trip: its reply, or the failure it threw. The rounds before it that asked for tools are
         // ledgered as they end.
         const slot: CallSlot & { round: number } = { called: false, worstUsd: 0, reply: null, round: 1 };

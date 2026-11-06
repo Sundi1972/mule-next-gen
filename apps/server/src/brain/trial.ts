@@ -16,9 +16,10 @@
  * trial ledger past BRAIN.proofCapUsd. Each game's Smart seats together spend at most the game budget (default
  * BRAIN.gameBudgetUsd).
  */
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { BRAIN, score, type GameState, type Playbook } from '@mule/engine';
+import { BRAIN, score, scoreParts, type GameState, type Playbook } from '@mule/engine';
 import { playbookSource, playGameAsync, type AiSeat, ReplyRejected, simSeats, type Choice, type Decider, type SeatSpec } from '@mule/ai';
 import { alreadyRanToday, AUTH_STOPPED, claimLedger, day, dayLedgerPath, KINDS, numberFlags, resolveDeps, runAsScript, type MainDeps } from './cli.js';
 import type { Spoken } from './chat.js';
@@ -26,6 +27,7 @@ import { CallFailed } from './client.js';
 import { API_KEY_ENV, apiKeyFrom, createBrain, type BrainSeat } from './index.js';
 import { isCallLine, readLedgerLines, type CallLine, type ModelId } from './ledger.js';
 import { Playbooks } from './playbooks.js';
+import type { TranscriptEntry } from './transcript.js';
 import { capText, cutOffPhase, renderTrialReport, sum, trialReport, type SpendTotals, type Seating, type TrialGame, type TrialReport, type TrialStop } from './trial-report.js';
 
 /** AI seats per trial game. */
@@ -91,7 +93,27 @@ interface GameSetup {
   playbooks: boolean;
   /** The positive control: the Claude chairs play as engine seats, and nothing is called. */
   control: boolean;
+  /** A deep-monitoring run's record file (--deep), or null: every call, every playbook taken, every phase's Worth. */
+  deep: string | null;
   out: (line: string) => void;
+}
+
+/** Appends one record line to a deep run's file; the manual's system text goes in once per text, by its hash. */
+function deepRecorder(file: string, game: string): { call(e: TranscriptEntry): void; note(kind: string, fields: object): void } {
+  const written = new Set<string>();
+  const line = (o: object) => fs.appendFileSync(file, `${JSON.stringify({ game, ...o })}\n`);
+  return {
+    call(e) {
+      const sha = createHash('sha256').update(e.request.system).digest('hex').slice(0, 12);
+      if (!written.has(sha)) {
+        written.add(sha);
+        const systemFile = `${file.replace(/\.jsonl$/, '')}.system-${sha}.txt`;
+        if (!fs.existsSync(systemFile)) fs.writeFileSync(systemFile, e.request.system);
+      }
+      line({ kind: 'call', ...e, request: { ...e.request, system: `system-${sha}` } });
+    },
+    note: (kind, fields) => line({ kind, ...fields }),
+  };
 }
 
 /** Adds one to `counts[month - 1]`. */
@@ -102,12 +124,14 @@ const bump = (counts: number[], month: number) => {
 /** Plays one game with its own brain; pauses simulated time while a model call is open, and always closes the brain. */
 async function playTrialGame(setup: GameSetup): Promise<TrialGame> {
   const { id } = setup;
+  const deep = setup.deep === null ? null : deepRecorder(setup.deep, id);
   const brain = createBrain({
     gameId: id,
     env: setup.env,
     gameBudgetUsd: setup.gameBudgetUsd,
     ...(setup.logPath === null ? {} : { logPath: setup.logPath }),
     ...(setup.writeModel === null ? {} : { writeModel: setup.writeModel }),
+    ...(deep ? { writeCall: BRAIN.deep.writeCall, transcript: deep.call, gameBudgetCapUsd: BRAIN.deep.gameBudgetUsdMax } : {}),
   });
   const game: TrialGame = { id, end: 'unfinished', months: 0, smart: [], decisions: [], lines: {}, modelLines: {}, cutOff: [], countedUsd: 0, settledCalls: 0, playbooks: [] };
   // The Smart seats' playbooks (spec A C4): asked for at the start and as each upkeep ends, in effect from the land
@@ -164,10 +188,15 @@ async function playTrialGame(setup: GameSetup): Promise<TrialGame> {
           brain,
           source: playbookSource(smart),
           seats: smart,
-          record: (note) => game.playbooks.push({ seat: note.seat, month: note.month, by: note.playbook.by }),
+          record: (note) => {
+            game.playbooks.push({ seat: note.seat, month: note.month, by: note.playbook.by });
+            deep?.note('playbook', { seat: note.seat, month: note.month, phase: note.phase, playbook: note.playbook });
+          },
+          ...(deep ? { waitMs: { strategy: BRAIN.deep.writeCall.timeoutMs, playbook: BRAIN.deep.writeCall.timeoutMs } } : {}),
           // Ruling (a'): a plan's line is said as its phase starts, through the seat's chat, as MuleGame says it.
           speak: (seat, said) => route(seat, { ...said, by: 'llm' }),
         });
+        deep?.note('seats', { claude: smart.map((s) => s.id), players: state.players.map((p) => ({ id: p.id, name: p.name, species: p.species })) });
         held.playbooks.ask(state, state.month);
       },
       onDecision: (r) => {
@@ -175,6 +204,12 @@ async function playTrialGame(setup: GameSetup): Promise<TrialGame> {
         route(r.seat, r);
       },
       onPhase: (state) => {
+        deep?.note('phase', {
+          month: state.month,
+          phase: state.phase,
+          worth: Object.fromEntries(state.players.map((p) => [p.id, scoreParts(state, p.id)])),
+          prices: state.store.posted,
+        });
         const cut = cutOffPhase(state);
         if (cut) game.cutOff.push(cut);
         // Planning ends and the land grant comes next: this month's playbook takes effect. An upkeep ends: next month's is asked.
@@ -265,13 +300,15 @@ export interface TrialFlags {
   table: 'pair' | null;
   /** --control 1: the pair table's positive control. */
   control: boolean;
+  /** --deep 1: a deep-monitoring pair run, recorded call by call, on its own ledger and cap (BRAIN.deep). */
+  deep: boolean;
 }
 
 const USAGE =
-  `Usage: brain:trial [--games N] [--seed S | --seeds S1,S2,...] [--smart K] [--playbooks 0|1] [--max-usd X] [--game-budget-usd Y] [--run label] [--write-model sonnet|haiku] ` +
-  `[--table pair [--control 1]], --table pair with --playbooks 1 unless --control 1, --smart 2 if given, and --games even under --table pair ` +
+  `Usage: brain:trial [--games N] [--seed S | --seeds S1,S2,...] [--smart K] [--playbooks 0|1] [--max-usd X] [--game-budget-usd Y] [--run label] [--write-model sonnet|haiku|opus] ` +
+  `[--table pair [--control 1 | --deep 1]], --table pair with --playbooks 1 unless --control 1, --smart 2 if given, and --games even under --table pair ` +
   `(each seed in both seatings); ` +
-  `Y above 0 and at most ${BRAIN.gameBudgetUsd.toFixed(2)}; nothing played.`;
+  `Y above 0 and at most ${BRAIN.gameBudgetUsd.toFixed(2)} (${BRAIN.deep.gameBudgetUsdMax.toFixed(2)} with --deep 1); nothing played.`;
 
 /** A run label: lowercase letters, digits and dashes, so it can only name a file in the data folder. */
 const LABEL = /^[a-z0-9-]{1,32}$/;
@@ -285,9 +322,9 @@ function wordFlag(argv: readonly string[], name: string): { value: string | null
   return { value, rest: [...argv.slice(0, at), ...argv.slice(at + 2)] };
 }
 
-/** `--write-model sonnet|haiku`: the model every write goes to in a paired run (PR-5 5.4), or undefined for another name. */
+/** `--write-model sonnet|haiku|opus`: the model every write goes to in a paired run (PR-5 5.4), or undefined for another name. */
 export function writeModelFlag(name: string): ModelId | undefined {
-  return Object.hasOwn(BRAIN.strategySpike.models, name) ? BRAIN.strategySpike.models[name as keyof typeof BRAIN.strategySpike.models] : undefined;
+  return Object.hasOwn(BRAIN.trialWriteModels, name) ? BRAIN.trialWriteModels[name as keyof typeof BRAIN.trialWriteModels] : undefined;
 }
 
 /** The word flags (`--run`, `--write-model`, `--table`, `--seeds`) taken out, or undefined for a bad one. */
@@ -309,8 +346,11 @@ function wordFlags(
   return { label: run.value, writeModel, table: table.value as 'pair' | null, seeds, rest: seedList.rest };
 }
 
+/** A ledger's kind: the PR-5 proofs, the tournament, or a deep-monitoring run (--deep). */
+type LedgerKind = 'trial' | 'tourney' | 'deep';
+
 /** A paid run's ledger: <kind>-<day>.jsonl, or <kind>-<day>-<label>.jsonl for a labelled run; 'tourney' for a pair run. */
-export function trialLedgerPath(dataDir: string, at: Date, label: string | null, kind: 'trial' | 'tourney' = 'trial'): string {
+export function trialLedgerPath(dataDir: string, at: Date, label: string | null, kind: LedgerKind = 'trial'): string {
   return label === null ? dayLedgerPath(dataDir, kind, at) : path.join(dataDir, `${kind}-${day(at)}-${label}.jsonl`);
 }
 
@@ -375,7 +415,7 @@ export function tourneySpent(dataDir: string): number {
 }
 
 /** The call lines' dollars across every <kind>-*.jsonl ledger in the data folder. Throws UnreadableLedger. */
-function ledgersSpent(dataDir: string, kind: 'trial' | 'tourney'): number {
+function ledgersSpent(dataDir: string, kind: LedgerKind): number {
   if (!fs.existsSync(dataDir)) return 0;
   const ledgers = fs.readdirSync(dataDir).filter((f) => f.startsWith(`${kind}-`) && f.endsWith('.jsonl'));
   return sum(
@@ -399,7 +439,7 @@ export function proofCapRefusal(dataDir: string, maxUsd: number): string | null 
 }
 
 /** Why a run may not start against one cap and its ledgers, or null; an unreadable ledger refuses it (fail closed). */
-function ledgerCapRefusal(dataDir: string, maxUsd: number, cap: { kind: 'trial' | 'tourney'; cap: number; name: string; ledgers: string }): string | null {
+function ledgerCapRefusal(dataDir: string, maxUsd: number, cap: { kind: LedgerKind; cap: number; name: string; ledgers: string }): string | null {
   let spent: number;
   try {
     spent = ledgersSpent(dataDir, cap.kind);
@@ -415,7 +455,8 @@ function ledgerCapRefusal(dataDir: string, maxUsd: number, cap: { kind: 'trial' 
  * Why a paid run may not start, or null: a pair run counts against the tournament cap and its ledgers, any other
  * against the PR-5 cap and the trial ledgers. An unreadable ledger refuses it (fail closed).
  */
-export function capRefusal(dataDir: string, table: 'pair' | null, maxUsd: number): string | null {
+export function capRefusal(dataDir: string, table: 'pair' | null, maxUsd: number, deep = false): string | null {
+  if (deep) return ledgerCapRefusal(dataDir, maxUsd, { kind: 'deep', cap: BRAIN.deep.capUsd, name: 'the deep-monitoring cap', ledgers: 'the deep ledgers' });
   if (table !== 'pair') return proofCapRefusal(dataDir, maxUsd);
   return ledgerCapRefusal(dataDir, maxUsd, { kind: 'tourney', cap: BRAIN.tournament.capUsd, name: 'the tournament cap', ledgers: 'the tournament ledgers' });
 }
@@ -432,16 +473,18 @@ function spendTotals(dataDir: string): SpendTotals | null {
 
 /** The flags, or null for anything numberFlags refuses, a value out of range, or a tournament flag out of place. */
 function parseFlags(argv: readonly string[], words: { table: 'pair' | null; seeds: number[] | null }): TrialFlags | null {
-  const given = numberFlags(argv, ['--games', '--seed', '--smart', '--playbooks', '--max-usd', '--game-budget-usd', '--control']);
+  const given = numberFlags(argv, ['--games', '--seed', '--smart', '--playbooks', '--max-usd', '--game-budget-usd', '--control', '--deep']);
   if (!given) return null;
   const control = given.get('--control') ?? 0;
+  const deep = given.get('--deep') ?? 0;
   const pair = words.table === 'pair';
   const tourneyOk =
     (control === 0 || control === 1) &&
     (pair || control === 0) &&
     (!pair || (given.get('--smart') ?? SEATS / 2) === SEATS / 2) &&
     (!pair || control === 1 || given.get('--playbooks') === 1) &&
-    (words.seeds === null || !given.has('--seed'));
+    (words.seeds === null || !given.has('--seed')) &&
+    (deep === 0 || (deep === 1 && pair && control === 0));
   if (!tourneyOk) return null;
   const flags = {
     games: given.get('--games') ?? 20,
@@ -453,10 +496,10 @@ function parseFlags(argv: readonly string[], words: { table: 'pair' | null; seed
   };
   const ok =
     Number.isInteger(flags.games) && flags.games >= 1 && (!pair || flags.games % 2 === 0) && Number.isInteger(flags.seed) && Number.isInteger(flags.smart);
-  const budgetOk = flags.gameBudgetUsd > 0 && flags.gameBudgetUsd <= BRAIN.gameBudgetUsd;
+  const budgetOk = flags.gameBudgetUsd > 0 && flags.gameBudgetUsd <= (deep === 1 ? BRAIN.deep.gameBudgetUsdMax : BRAIN.gameBudgetUsd);
   const playbooksOk = flags.playbooks === 0 || flags.playbooks === 1;
   return ok && budgetOk && playbooksOk && flags.smart >= 1 && flags.smart <= SEATS && (flags.maxUsd === null || flags.maxUsd > 0)
-    ? { ...flags, playbooks: flags.playbooks === 1, seeds: words.seeds, table: words.table, control: control === 1 }
+    ? { ...flags, playbooks: flags.playbooks === 1, seeds: words.seeds, table: words.table, control: control === 1, deep: deep === 1 }
     : null;
 }
 
@@ -504,6 +547,7 @@ async function playRun(
       gameBudgetUsd: flags.gameBudgetUsd,
       playbooks: flags.playbooks,
       control: flags.control,
+      deep: paid && flags.deep ? paid.logPath.replace(/\.jsonl$/, '.record.jsonl') : null,
       out,
     });
     games.push(game);
@@ -566,7 +610,7 @@ export async function trial(
       out(`brain:trial spends real money with ${API_KEY_ENV} set: give --max-usd, the cap that was cleared; nothing called.`);
       return { code: 1, report: null };
     }
-    const logPath = trialLedgerPath(dataDir, at, run.label, flags.table === 'pair' ? 'tourney' : 'trial');
+    const logPath = trialLedgerPath(dataDir, at, run.label, flags.deep ? 'deep' : flags.table === 'pair' ? 'tourney' : 'trial');
     const used =
       run.label === null
         ? alreadyRanToday(logPath, 'brain:trial')
@@ -578,7 +622,7 @@ export async function trial(
       return { code: 1, report: null };
     }
     // One run a day used to stop an accidental overspend; with labels, the cap across every ledger of the run's kind does.
-    const overCap = capRefusal(dataDir, flags.table, flags.maxUsd);
+    const overCap = capRefusal(dataDir, flags.table, flags.maxUsd, flags.deep);
     if (overCap) {
       out(overCap);
       return { code: 1, report: null };

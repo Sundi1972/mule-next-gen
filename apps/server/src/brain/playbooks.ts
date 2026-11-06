@@ -5,6 +5,7 @@
  */
 import { BRAIN, type GameState, type Playbook, type PlayerId } from '@mule/engine';
 import {
+  atAuctionPrices,
   landBrief,
   phaseBrief,
   playbookFrom,
@@ -18,6 +19,8 @@ import {
   type ValidatePlan,
   type WhatIfSim,
   type WriterReply,
+  type WorthAt,
+  worthNow,
 } from '@mule/ai';
 import type { PlaybookNote } from '../mule-game.js';
 import type { Spoken } from './chat.js';
@@ -38,6 +41,8 @@ export interface PlaybooksOptions {
    * the auction's at the auction (PM ruling a', 5 Nov). The game says it through the seat's chat, inside its caps.
    */
   speak?: (seat: PlayerId, said: PlanLine) => void;
+  /** How long a write may take, by kind, instead of WRITE_CALLS': brain:trial --deep, whose calls think longer. */
+  waitMs?: Partial<Record<'strategy' | 'playbook', number>>;
 }
 
 /** A plan's line as the game hears it: a decision's spoken fields, said by Claude at the plan's phase. */
@@ -104,6 +109,8 @@ export class Playbooks {
   private readonly phaseAsks = new Map<string, Ask>();
   /** What the last reply for each seat's development or auction had refused, for that phase's next brief. */
   private readonly phaseFeedback = new Map<string, Feedback>();
+  /** Every seat's Worth when each seat's last land plan was asked, for the result line of its next. */
+  private readonly worthAtAsk = new Map<PlayerId, WorthAt>();
 
   constructor(private readonly options: PlaybooksOptions) {
     if (!options.source) return;
@@ -129,7 +136,11 @@ export class Playbooks {
         // What the rules and the writer refused of last month's reply. The seat's last PhaseOutcome joins it once its
         // producers write one (land: WS3; development and auction: WS9's playbook/outcome.ts); until then the brief
         // says nothing of it.
-        const last = { feedback: joined(this.feedback.get(seat.id) ?? null, this.phaseFeedback.get(`${seat.id}/development`) ?? null) };
+        const last = {
+          feedback: joined(this.feedback.get(seat.id) ?? null, this.phaseFeedback.get(`${seat.id}/development`) ?? null),
+          worthBefore: this.worthAtAsk.get(seat.id) ?? null,
+        };
+        this.worthAtAsk.set(seat.id, { month, worth: worthNow(state) });
         // The month's development rides on the land write, so its edits land every month (PM ruling, 5 Nov, option C).
         let development: Playbook | null = null;
         try {
@@ -141,7 +152,7 @@ export class Playbooks {
         const ask: Ask = { month, draft: drafted.playbook, written: null, started: false, controller: new AbortController(), development };
         this.asks.set(seat.id, ask);
         seat.playbookAsked(month);
-        const waitMs = WRITE_CALLS.strategy.timeoutMs;
+        const waitMs = this.options.waitMs?.strategy ?? WRITE_CALLS.strategy.timeoutMs;
         // The tools answer from the game as it is now, when it is asked: a game that moves on changes no answer.
         const tools = toolsFor(state, seat.id, this.simFor(state, seat.id, drafted.playbook, source.validate));
         const write = writer.write('strategy', { brief, system: WRITER_SYSTEM, waitMs, late: () => ask.started, signal: ask.controller.signal, tools }).then(
@@ -230,14 +241,21 @@ export class Playbooks {
       if (!writer) continue;
       const key = `${seat.id}/${phase}`;
       try {
-        const draft = seat.draft(state, phase);
+        // The auction is asked in the production show, before the store posts its prices: it is drafted and briefed at
+        // the prices the auction will open at, as the engine's own seats redraft at its start.
+        const view = phase === 'auction' ? atAuctionPrices(state) : state;
+        const draft = seat.draft(view, phase);
         const outcome = phase === 'auction' ? seat.outcome('development', state, facts) : null;
-        const brief = phaseBrief(state, seat.mind, seat.brain.persona, draft, phase, seat.brain.heard(), { outcome, feedback: this.phaseFeedback.get(key) ?? null });
+        const brief = phaseBrief(view, seat.mind, seat.brain.persona, draft, phase, seat.brain.heard(), {
+          outcome,
+          feedback: this.phaseFeedback.get(key) ?? null,
+          worthBefore: this.worthAtAsk.get(seat.id) ?? null,
+        });
         const ask: Ask = { month: state.month, draft, written: null, started: false, controller: new AbortController() };
         this.phaseAsks.set(key, ask);
-        const waitMs = WRITE_CALLS.playbook.timeoutMs;
+        const waitMs = this.options.waitMs?.playbook ?? WRITE_CALLS.playbook.timeoutMs;
         const write = writer
-          .write('playbook', { brief, system: WRITER_SYSTEM, waitMs, late: () => ask.started, signal: ask.controller.signal, tools: toolsFor(state, seat.id) })
+          .write('playbook', { brief, system: WRITER_SYSTEM, waitMs, late: () => ask.started, signal: ask.controller.signal, tools: toolsFor(view, seat.id) })
           .then(
             (written) => {
               if (!ask.started) ask.written = written;
