@@ -102,16 +102,22 @@ try {
   const compactQr = await qrWidth();
   check(compactQr > 0 && compactQr < 60, `B-AC-4: with a big screen the lobby shows the compact room card, QR ${compactQr} px`);
 
-  // B-AC-1: the host picks Mollox; the lobby rail and the TV lobby show it, the AI seats keep their defaults.
+  // B-AC-1: the host picks Mollox; the lobby rail and the TV lobby show it, and each AI seat the default the server will
+  // deal it, which turns with the seed (#497), never its chair's.
   const lobbySeats = phone.getByTestId('seats').locator('li');
   const hostMark = lobbySeats.nth(0).getByRole('img', { name: 'Mollox' });
   await phone.getByTestId('species-mollox').click({ timeout: 3_000 });
   await hostMark.waitFor({ timeout: 3_000 });
   check((await phone.getByTestId('species-mollox').getAttribute('aria-pressed')) === 'true', 'B-AC-1: the Mollox chip shows as chosen');
-  check((await lobbySeats.nth(1).getByRole('img', { name: 'Bramblet' }).count()) === 1, 'B-AC-1: the first AI (seat 2) keeps its default, Bramblet');
+  const titled = (species: string) => species[0]!.toUpperCase() + species.slice(1);
+  const dealt = (server.registry.get(code)?.viewFor(null).seats ?? []).filter((s) => s.isAi).map((s) => ({ name: s.name, species: s.defaultPick ?? '' }));
+  check(dealt.length === 2 && dealt.every((s) => (SPECIES as readonly string[]).includes(s.species)), `B-AC-1: the server deals each AI seat a default in the lobby, got ${JSON.stringify(dealt)}`);
   const tvLobbySeats = tv.locator('li');
   await tvLobbySeats.nth(0).getByRole('img', { name: 'Mollox' }).waitFor({ timeout: 3_000 });
-  check((await tvLobbySeats.nth(1).getByRole('img', { name: 'Bramblet' }).count()) === 1, 'B-AC-1: the TV lobby shows the first AI as a Bramblet');
+  for (const [i, ai] of dealt.entries()) {
+    check((await lobbySeats.nth(i + 1).getByRole('img', { name: titled(ai.species) }).count()) === 1, `B-AC-1: the lobby shows ${ai.name} (seat ${i + 2}) as the ${titled(ai.species)} the server will deal it`);
+    check((await tvLobbySeats.nth(i + 1).getByRole('img', { name: titled(ai.species) }).count()) === 1, `B-AC-1: the TV lobby shows ${ai.name} as the ${titled(ai.species)} the server will deal it`);
+  }
   await thePhonePicksRose(ctx);
 
   await phone.getByRole('button', { name: 'Start game' }).click();
@@ -136,8 +142,10 @@ try {
   const gameSeats = server.registry.get(code)?.viewFor(null).game?.players.map((p) => ({ name: p.name, species: p.species })) ?? [];
   check(gameSeats.length === 3, `B-AC-1: the server's game holds three seats, got ${gameSeats.length}`);
   check(gameSeats.find((p) => p.name === 'Heiko')?.species === 'mollox', `B-AC-1: the server's game has Heiko as the Mollox he picked: ${JSON.stringify(gameSeats)}`);
+  for (const ai of dealt)
+    check(gameSeats.find((p) => p.name === ai.name)?.species === ai.species, `B-AC-1: ${ai.name} plays the ${titled(ai.species)} the lobby showed: ${JSON.stringify(gameSeats)}`);
   for (const species of SPECIES) {
-    const name = species[0]!.toUpperCase() + species.slice(1);
+    const name = titled(species);
     const drawn = (await tvGame.getByRole('img', { name }).count()) > 0;
     const inGame = gameSeats.some((p) => p.species === species);
     check(drawn === inGame, `B-AC-1: the TV game ${inGame ? 'draws' : 'draws no'} ${name}, as the server's game holds ${gameSeats.map((p) => `${p.name} ${p.species}`).join(', ')}`);
