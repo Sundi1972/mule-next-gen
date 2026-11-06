@@ -167,7 +167,7 @@ export function expectedOutput(state: GameState, good: Good): number {
  * How short the colony is of a good (pricing RULE-6, first match wins): off-world when only the export ship wants it;
  * severe after colonists went short of it at the last upkeep; normal while production keeps up with demand or the
  * colony holds normalCover months of it; then tight, short and severe by its months of cover.
- * It reads the colony's true supply and demand, not a seat's observation: only the store's posting reads it.
+ * The store's posting runs it on the colony's true supply and demand; the AI's outlook (nextPostedPrice) on its own observation.
  */
 export function priceBand(
   state: GameState,
