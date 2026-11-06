@@ -36,7 +36,7 @@ import { outlook, productionsLeft, type Outlook } from '../outlook.js';
 import { PERSONAS, type DecisionKind } from '../personas.js';
 import { analysesWanted, developDecision, filtersWanted, goodPlan, landDecision, leaderOf, sellWanted, shortfallHold, tradeDecision, walkVeto, type DevAction, type DevWalk, type LandPlan } from '../strategist.js';
 import { candidate, shortlist, type Shortlist } from '../utility.js';
-import { beforeTax, canFeed, cashReserve, chainInputs, chainLinks, chainOutlook, installGain, linkShare, standingLinks, type Mind } from '../value.js';
+import { beforeTax, canFeed, cashReserve, chainInputs, chainOf, chainOutlook, installGain, linkShare, standingLinks, type Mind } from '../value.js';
 import { landTargetWithin, planMind, type PlanFields } from './plan.js';
 import type { ReplanTrigger } from './replan.js';
 
@@ -160,20 +160,19 @@ function goodScores(obs: GameState, mind: Mind) {
 const topGains = (gains: number[]) => [...gains].sort((a, b) => b - a).slice(0, AI_PLANS.moneyMaker.plots).reduce((n, g) => n + g, 0);
 
 /**
- * RULE-4's chain row, on what is still to build: the works' own score, its input charge refunded (chainOutlook) and
- * scaled by the least share of its run a link supplies (linkShare), plus each link at its running cost. A missing link
- * takes the plot of its own where it adds most to the chain; a link that stands counts its running cost with no
- * install price. Null when `good` is no chain (chainLinks), the plots run short, or the MULEs for the works and the
- * missing links don't fit in AI_PLANS.chain.months at the level's MULEs a month, or cost more than the cash on hand.
+ * RULE-4's chain row, on what is still to build: one works, as one set of links feeds one works' run. Its gain on its
+ * best plot, its input charge refunded (chainOutlook) and scaled by the least share of its run a link supplies
+ * (linkShare), plus each link at its running cost. A missing link takes the plot of its own where it adds most to the
+ * chain; a link that stands counts its running cost with no install price. Null when `good` is no chain (chainOf), the
+ * plots run short, or the MULEs for the works and the missing links don't fit in AI_PLANS.chain.months at the level's
+ * MULEs a month, or cost more than the cash on hand.
  */
 function chainScore(obs: GameState, o: Outlook, plots: Tile[], good: Good, mind: Mind): number | null {
-  const links = chainLinks(obs, mind.me, good);
+  const { links, standing, members } = chainOf(obs, mind.me, good);
   const mules = 1 + links.length;
   if (links.length === 0 || plots.length < mules || Math.ceil(mules / mind.level.mulesPerMonth) > AI_PLANS.chain.months) return null;
-  const standing = standingLinks(obs, mind.me, good);
-  const standingGoods = [...new Set(standing.map((t) => t.outfit as Good))];
-  const members = [good, ...links, ...standingGoods];
-  const valued = chainOutlook(o, [...links, ...standingGoods]);
+  const standingGoods = members.slice(1 + links.length);
+  const valued = chainOutlook(o, members.slice(1));
   const works = plots.map((t) => ({ t, ...installGain(obs, valued, t, good, mind) })).sort((a, b) => b.gain - a.gain);
   const taken = new Set([works[0]!.t]);
   let running = 0;
@@ -197,7 +196,7 @@ function chainScore(obs: GameState, o: Outlook, plots: Tile[], good: Good, mind:
     }
     share = Math.min(share, plotsOf.reduce((n, t) => n + linkShare(obs, t, g, members, mind.me), 0));
   }
-  return cost <= obs.players.find((p) => p.id === mind.me)!.money ? topGains(works.map((w) => w.gain)) * share + running : null;
+  return cost <= obs.players.find((p) => p.id === mind.me)!.money ? works[0]!.gain * share + running : null;
 }
 
 function best<T extends { score: number }>(rows: T[]): T | null {
