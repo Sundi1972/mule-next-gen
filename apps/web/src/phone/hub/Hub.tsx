@@ -96,6 +96,9 @@ export function Hub({ slots }: { slots: HubSlots }) {
             StageRail && <StageRail />
           ) : (
             <>
+              {drawn.underNow?.map(({ id, Body }) => (
+                <Body key={id} />
+              ))}
               {Panel && <Panel />}
               <DeskGroup tight={asked}>
                 <DeskTabs desks={drawn.desks} active={nav.desk} first={place.first} onPick={nav.openDesk} />

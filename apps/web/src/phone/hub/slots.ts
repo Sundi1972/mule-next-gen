@@ -112,6 +112,8 @@ export interface HubSlots {
   desks: DeskSlot[];
   /** The first that gives a Now wins, such as an election's step; with none, RULE-8's "Plan your month". */
   nows: ((seat: HubSeat) => Now | null)[];
+  /** Lines in the rail right under Now, such as a general strike's alert; not while a situation holds the stage. */
+  underNow?: BannerSlot[];
   /** The first shown takes the stage (on a phone all of it, from 1100 px above the map) and the rail under Now. */
   stage?: StageSlot[];
   /** The first that gives words wins; with none, planning's. */
@@ -131,7 +133,7 @@ export function drawnSlots(slots: HubSlots, seat: HubSeat): HubSlots {
   const tools = shown(slots.tools, seat);
   const agenda = shown(slots.agenda, seat).filter(({ opens }) => ('desk' in opens ? desks.some((d) => d.id === opens.desk) : tools.some((t) => t.id === opens.tool)));
   const stage = shown(slots.stage ?? [], seat).slice(0, 1);
-  return { banners: shown(slots.banners, seat), lines: shown(slots.lines ?? [], seat), beneath: shown(slots.beneath, seat), agenda, tools, desks, nows: slots.nows, stage, readyWords: slots.readyWords ?? [] };
+  return { banners: shown(slots.banners, seat), lines: shown(slots.lines ?? [], seat), underNow: shown(slots.underNow ?? [], seat), beneath: shown(slots.beneath, seat), agenda, tools, desks, nows: slots.nows, stage, readyWords: slots.readyWords ?? [] };
 }
 
 /** Where the hub is: the open desk and map tool, the focus the desk was opened with, and the desk that last asked first. */

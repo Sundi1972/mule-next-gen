@@ -568,7 +568,7 @@ const TABLE: Row[] = [
     row: '10 INSTALL: on an own plot, leading a fitted MULE',
     at: () => onTile(2, 1),
     game: (s) => void (a(s).carriedMule = 'food'),
-    reach: () => ({ kind: 'install', enabled: true, good: 'food', plot: { x: 2, y: 1 }, fromShore: false, replaces: null }),
+    reach: () => ({ kind: 'install', enabled: true, good: 'food', plot: { x: 2, y: 1 }, fromShore: false, replaces: null, why: null }),
     words: () => words('INSTALL · FOOD'),
     press: {
       game: (_, now) => {
@@ -581,7 +581,7 @@ const TABLE: Row[] = [
     row: '10, a lake plot from its shore',
     at: () => ({ space: 'map', x: 4.75, y: 1.5 }),
     game: (s) => void (a(s).carriedMule = 'water'),
-    reach: () => ({ kind: 'install', enabled: true, good: 'water', plot: { x: 5, y: 1 }, fromShore: true, replaces: null }),
+    reach: () => ({ kind: 'install', enabled: true, good: 'water', plot: { x: 5, y: 1 }, fromShore: true, replaces: null, why: null }),
     words: () => words('INSTALL · WATER', 'from the shore'),
     press: { game: (_, now) => expect(tileOf(now, 5, 1).outfit).toBe('water') },
   },
@@ -589,7 +589,7 @@ const TABLE: Row[] = [
     row: '10, a lake plot from its shore, across a corner',
     at: () => ({ space: 'map', x: 4.8, y: 2.2 }),
     game: (s) => void (a(s).carriedMule = 'water'),
-    reach: () => ({ kind: 'install', enabled: true, good: 'water', plot: { x: 5, y: 1 }, fromShore: true, replaces: null }),
+    reach: () => ({ kind: 'install', enabled: true, good: 'water', plot: { x: 5, y: 1 }, fromShore: true, replaces: null, why: null }),
     words: () => words('INSTALL · WATER', 'from the shore'),
     press: { game: (_, now) => expect(tileOf(now, 5, 1).outfit).toBe('water') },
   },
@@ -605,11 +605,12 @@ const TABLE: Row[] = [
     row: '10 SWAP over 12: on an own plot with a Smithore MULE, Alloy held, leading a fitted MULE',
     at: () => onTile(7, 4),
     game: (s) => void Object.assign(a(s), { carriedMule: 'energy', stock: { ...a(s).stock, alloy: DEVELOPMENT.filterAlloy } }),
-    reach: () => ({ kind: 'install', enabled: true, good: 'energy', plot: { x: 7, y: 4 }, fromShore: false, replaces: 'smithore' }),
-    words: () => words('SWAP', 'your Smithore MULE runs away'),
+    reach: () => ({ kind: 'install', enabled: true, good: 'energy', plot: { x: 7, y: 4 }, fromShore: false, replaces: 'smithore', why: null }),
+    words: () => words('SWAP', 'you lead your Smithore MULE'),
     press: {
       game: (was, now) => {
         expect(tileOf(now, 7, 4).outfit).toBe('energy');
+        expect(a(now).carriedMule, 'AM-35: the Smithore MULE comes onto the lead').toBe('smithore');
         expect([tileOf(now, 7, 4).filter, a(now).stock.alloy]).toEqual([false, a(was).stock.alloy]);
       },
     },
@@ -618,25 +619,33 @@ const TABLE: Row[] = [
     row: '10 SWAP: the old MULE named as in a sentence',
     at: () => onTile(2, 1),
     game: (s) => void ((tileOf(s, 2, 1).outfit = 'rareEarth'), (a(s).carriedMule = 'food')),
-    reach: () => ({ kind: 'install', enabled: true, good: 'food', plot: { x: 2, y: 1 }, fromShore: false, replaces: 'rareEarth' }),
-    words: () => words('SWAP', 'your Rare earth MULE runs away'),
-    press: { game: (_, now) => expect(tileOf(now, 2, 1).outfit).toBe('food') },
+    reach: () => ({ kind: 'install', enabled: true, good: 'food', plot: { x: 2, y: 1 }, fromShore: false, replaces: 'rareEarth', why: null }),
+    words: () => words('SWAP', 'you lead your Rare earth MULE'),
+    press: { game: (_, now) => expect([tileOf(now, 2, 1).outfit, a(now).carriedMule]).toEqual(['food', 'rareEarth']) },
   },
   {
-    row: '10 SWAP for the same outfit: nothing gained, said so, and the plot keeps its run',
+    row: '10 SWAP for the same outfit: dimmed, nothing to swap, said so; a press changes nothing (AM-35)',
     at: () => onTile(7, 4),
     game: (s) => void ((tileOf(s, 7, 4).runMonths = 4), (a(s).carriedMule = 'smithore')),
-    reach: () => ({ kind: 'install', enabled: true, good: 'smithore', plot: { x: 7, y: 4 }, fromShore: false, replaces: 'smithore' }),
-    words: () => words('SWAP', 'same outfit, nothing gained'),
-    press: { game: (was, now) => expect([tileOf(now, 7, 4).outfit, tileOf(now, 7, 4).runMonths]).toEqual(['smithore', tileOf(was, 7, 4).runMonths]) },
+    reach: () => ({ kind: 'install', enabled: false, good: 'smithore', plot: { x: 7, y: 4 }, fromShore: false, replaces: 'smithore', why: { kind: 'sameGood' } }),
+    words: () => words('SWAP', 'same outfit, nothing to swap', false),
+    press: 'nothing',
   },
   {
-    row: '10 SWAP for the same outfit, from the shore: the shore first, then nothing gained',
+    row: '10 SWAP for the same outfit, from the shore: the shore first, then nothing to swap, dimmed',
     at: () => ({ space: 'map', x: 4.75, y: 1.5 }),
     game: (s) => void ((tileOf(s, 5, 1).outfit = 'water'), (a(s).carriedMule = 'water')),
-    reach: () => ({ kind: 'install', enabled: true, good: 'water', plot: { x: 5, y: 1 }, fromShore: true, replaces: 'water' }),
-    words: () => words('SWAP', 'from the shore · same outfit, nothing gained'),
-    press: { game: (_, now) => expect(tileOf(now, 5, 1).outfit).toBe('water') },
+    reach: () => ({ kind: 'install', enabled: false, good: 'water', plot: { x: 5, y: 1 }, fromShore: true, replaces: 'water', why: { kind: 'sameGood' } }),
+    words: () => words('SWAP', 'from the shore · same outfit, nothing to swap', false),
+    press: 'nothing',
+  },
+  {
+    row: '10 SWAP on the plot the led MULE was just swapped off: dimmed, said so; a press holds and never falls through to FIT FILTER (AM-35, PM ruling A)',
+    at: () => onTile(7, 4),
+    game: (s) => void ((tileOf(s, 7, 4).outfit = 'energy'), Object.assign(a(s), { carriedMule: 'smithore', takenMule: { x: 7, y: 4, outfit: 'smithore', runMonths: 0, swapped: true }, stock: { ...a(s).stock, alloy: DEVELOPMENT.filterAlloy } })),
+    reach: () => ({ kind: 'install', enabled: false, good: 'smithore', plot: { x: 7, y: 4 }, fromShore: false, replaces: 'energy', why: { kind: 'justSwapped' } }),
+    words: () => words('SWAP', 'just swapped: lead it to another plot', false),
+    press: 'nothing',
   },
   {
     row: '11 ANALYSE: on an own plot, no MULE, not analysed',
@@ -790,9 +799,9 @@ const TABLE: Row[] = [
       tileOf(s, 5, 1).outfit = 'water';
       a(s).carriedMule = 'food';
     },
-    reach: () => ({ kind: 'install', enabled: true, good: 'food', plot: { x: 5, y: 1 }, fromShore: true, replaces: 'water' }),
-    words: () => words('SWAP', 'from the shore · your Water MULE runs away'),
-    press: { game: (_, now) => expect(tileOf(now, 5, 1).outfit).toBe('food') },
+    reach: () => ({ kind: 'install', enabled: true, good: 'food', plot: { x: 5, y: 1 }, fromShore: true, replaces: 'water', why: null }),
+    words: () => words('SWAP', 'from the shore · you lead your Water MULE'),
+    press: { game: (_, now) => expect([tileOf(now, 5, 1).outfit, a(now).carriedMule]).toEqual(['food', 'water']) },
   },
   {
     row: '13 PUB · END TURN: in the hall at the pub, with the payout pubPayoutFor gives',
@@ -1131,6 +1140,30 @@ describe('the dev floor: the action button', () => {
     expect([tileOf(state, 7, 4).outfit, a(state).carriedMule]).toEqual([null, 'smithore']);
     // Leading it, on the plot it came off, now empty: row 10 puts it back.
     expect(reachWords(reachNow(taken, state))).toEqual(words('INSTALL · SMITHORE'));
+  });
+
+  it('B-AC-SWAP-4: installMule refuses the swap back onto the plot the led MULE was just swapped off, for a direct action too', () => {
+    const { state } = world({ at: () => onTile(7, 4), game: (s) => void ((tileOf(s, 7, 4).outfit = 'energy'), Object.assign(a(s), { carriedMule: 'smithore', takenMule: { x: 7, y: 4, outfit: 'smithore', runMonths: 0, swapped: true } })) });
+    const was = structuredClone(state);
+    expect(() => installMule(state, 'a', 7, 4)).toThrow('Just swapped: lead it to another plot');
+    expect(state).toEqual(was);
+  });
+
+  it('B-AC-SWAP-4: re-outfitted since, the MULE swapped off a plot may go back there: a Food MULE over the Energy MULE is a real swap', () => {
+    const { state } = world({ at: () => onTile(7, 4), game: (s) => void ((tileOf(s, 7, 4).outfit = 'energy'), Object.assign(a(s), { carriedMule: 'food', takenMule: { x: 7, y: 4, outfit: 'smithore', runMonths: 0, swapped: true } })) });
+    installMule(state, 'a', 7, 4);
+    expect([tileOf(state, 7, 4).outfit, a(state).carriedMule]).toEqual(['food', 'energy']);
+  });
+
+  it('B-AC-SWAP-2: the swapped-out MULE installed on another plot is no longer led, so the turn end sends nothing to the corral', () => {
+    const { state } = world({ at: () => onTile(7, 4), game: (s) => void (a(s).carriedMule = 'energy') });
+    const corral = state.store.mules;
+    installMule(state, 'a', 7, 4);
+    expect(a(state).takenMule?.swapped).toBe(true);
+    installMule(state, 'a', 2, 4);
+    expect([tileOf(state, 7, 4).outfit, tileOf(state, 2, 4).outfit, a(state).carriedMule, a(state).takenMule]).toEqual(['energy', 'smithore', null, undefined]);
+    visitPub(state, 'a', 0);
+    expect(state.store.mules, 'no MULE back to the corral').toBe(corral);
   });
 
   it('T-AC-3: with the arcade on, OUTFIT is offered for no fitted MULE at any outfitter, and outfitMule refuses one', () => {
