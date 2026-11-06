@@ -1,11 +1,13 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  buyMule,
   createGame,
   eventChance,
   EVENTS,
   firePhase,
   GOOD_CONFIG,
   HAPPINESS,
+  RuleError,
   type EventRow,
   type GameState,
   type MoodBand,
@@ -100,5 +102,38 @@ describe("C26 PR-B: MULE theft's mood part", () => {
       return firePhase(state, 'development').filter((e) => e.key === 'muleTheft').length;
     };
     expect(BANDS.map((b) => [b, thefts(b) > 0])).toEqual(BANDS.map((b) => [b, b !== 'thriving']));
+  });
+});
+
+describe('C26 PR-B: the store strike, in development', () => {
+  /** A colony in development at mood `h`, with this phase's events fired. */
+  const developing = (h: number, politics = true) => {
+    const state = colonyAt(h, { politics });
+    state.phase = 'development';
+    firePhase(state, 'development');
+    return state;
+  };
+
+  it("INV-C26-10 (store strike odds): Unhappy +2, Unrest +4, 0 otherwise; no colony, no strike, even made certain", () => {
+    expect(chances('storeStrike', 'development')).toEqual(close([0, 0, 0, 0.02, 0.04]));
+    only(['storeStrike']);
+    expect(developing(MID('unrest'), false).monthEvents).toEqual([]);
+  });
+
+  it('FM-C26-6 (store strike): the store sells no MULEs this turn: buyMule is refused with its message and nothing moves', () => {
+    only(['storeStrike']);
+    const state = developing(MID('unrest'));
+    expect(state.monthEvents).toMatchObject([{ key: 'storeStrike', phase: 'development', scope: 'colony', sign: 'bad' }]);
+    expect(state.monthEvents[0]!.effects).toBeUndefined();
+    const before = { money: state.players[0]!.money, mules: state.store.mules, capital: state.store.capital };
+    expect(before.mules).toBeGreaterThan(0);
+    expect(() => buyMule(state, 'p0')).toThrow(new RuleError('The store is on strike: no MULEs this turn'));
+    expect({ money: state.players[0]!.money, mules: state.store.mules, capital: state.store.capital }).toEqual(before);
+    expect(state.players[0]!.carriedMule).toBeNull();
+    // With no strike this turn the same buy goes through.
+    only([]);
+    const plain = developing(MID('unrest'));
+    buyMule(plain, 'p0');
+    expect(plain.players[0]!.carriedMule).toBe('empty');
   });
 });
