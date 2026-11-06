@@ -137,10 +137,10 @@ function notes(v: unknown, max: number, maxName: string): Verdict {
   return clamped(cut, v.length > max ? `AI_PLANS.bounds.${maxName}` : 'AI_PLANS.bounds.rivalReadChars');
 }
 
-/** RULE-1b: (analyse | buyMule outfit install | filter)* pub?, own plots for install and filter, the level's MULEs. */
 /** Why a route fails: the reason, the faulty step, and where the steps that cannot play begin (its group's first). */
 type RouteFault = [why: string, step: number, cut: number];
 
+/** RULE-1b: (analyse | buyMule outfit install | filter)* pub?, own plots for install and filter, the level's MULEs. */
 function routeFault(route: unknown, ctx: Ctx): RouteFault | null {
   if (!Array.isArray(route)) return ['not a list of steps', 0, 0];
   const cap = AI_PLANS.bounds.routeSteps;
