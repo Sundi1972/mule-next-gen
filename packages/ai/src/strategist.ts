@@ -693,8 +693,11 @@ export function tradeDecision(obs: GameState, mind: Mind, plan: GoodPlan): Short
   }
 
   const short = upTo > h && h < plan.mustHold ? `it is ${plan.mustHold - h} ${GOOD_NAME[good]} short of next month's need and can pay the store's ${buy}` : null;
-  const passGain = plan.cash ? 0 - forgone(h) : 0;
-  const passWhy = passGain < 0 ? `no trade, leaving needed ${GOOD_NAME[good]} worth ${cr(-passGain)} over its price unbought` : 'no trade';
+  // A pass gives up the whole value of each funded needed unit: the cash plan has already set its money aside for it.
+  let given = 0;
+  for (let k = h; k < h + (plan.cash?.funded ?? 0); k++) given += v.buy[k] ?? 0;
+  const passGain = plan.cash ? 0 - given : 0;
+  const passWhy = passGain < 0 ? `no trade, leaving needed ${GOOD_NAME[good]} worth ${cr(-passGain)} to it unbought` : 'no trade';
   cands.push(candidate<TradeAction>('pass', `Pass on ${GOOD_NAME[good]}`, { side: 'pass' }, passGain, gainCons(passGain, p.money, 1, passWhy, 'nothing at stake'), short));
   return shortlist(cands, mind.level.shortlist, mind.level.shortlistTolerance);
 }
