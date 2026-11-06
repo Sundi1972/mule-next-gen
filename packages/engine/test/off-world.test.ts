@@ -187,6 +187,9 @@ describe('pricing G-3: the export goods walk off-world', () => {
       openNextMonth(view);
       expect(expectedOffWorld(view, 'crystite', 0), 'three what-if months on').toBe(109);
     }
+    draws.length = 0;
+    for (const good of GOODS) for (const months of [0, 1, 3]) expectedOffWorld(real, good, months);
+    expect(draws, 'expectedOffWorld never draws').toEqual([]);
     openNextMonth(real);
     expect(real.store.offWorld.crystite, 'the real game draws its swing').not.toBe(134);
   });

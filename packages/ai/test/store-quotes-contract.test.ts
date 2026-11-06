@@ -67,9 +67,10 @@ describe("pricing §3: the AI's prices are the store's own rule", () => {
         expect(expectedOffWorld(state, good, 0), `${good} now`).toBe(state.store.offWorld[good]);
       }
       if (checkedPurity) return;
-      // Pure and never draws: the state, its rng included, is as it was.
+      // Pure: the state is as it was, at every horizon. (No draw would show here, the game keeping no rng; the engine's
+      // off-world test logs the draws.)
       const before = structuredClone(state);
-      for (const good of GOODS) expectedOffWorld(state, good, 3);
+      for (const good of GOODS) for (const months of [0, 1, 3]) expectedOffWorld(state, good, months);
       expect(state).toEqual(before);
       checkedPurity = true;
     });
