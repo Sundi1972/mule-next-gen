@@ -56,6 +56,8 @@ function table({ plots, posted = {}, stock = {} }: Table): GameState {
   }
   state.treasury.salesTax = 0;
   Object.assign(state.store.posted, posted);
+  // The store sells plenty of every good the seat lives on, past the colonists' own month.
+  for (const good of ['food', 'water', 'energy'] as const) state.store.stock[good] = 200;
   for (const good of Object.keys(me.stock) as Good[]) me.stock[good] = stock[good] ?? 0;
   me.money = 5000;
   return state;
@@ -75,8 +77,11 @@ function nonIncreasing(v: UnitValues): void {
   for (let k = 1; k < v.buy.length; k++) expect(v.buy[k], `buy[${k}]`).toBeLessThanOrEqual(v.buy[k - 1]!);
 }
 
-/** Turned off, a plot makes UPKEEP.offOutputShare of its output: going without its Energy loses the rest. */
-const lost = (units: number, price: number) => (1 - UPKEEP.offOutputShare) * units * price;
+/**
+ * Turned off, a plot makes UPKEEP.offOutputShare of its output: going without its Energy loses the rest, spread over
+ * the plot's use, since only all of its units together keep it on.
+ */
+const lost = (units: number, price: number, use: number) => ((1 - UPKEEP.offOutputShare) * units * price) / use;
 
 const saved = { unit: AI_VALUE.unit, spoilage: GOOD_CONFIG.energy.spoilage };
 beforeEach(() => {
@@ -88,17 +93,19 @@ afterEach(() => {
 });
 
 describe('RULE-2: what going without a unit costs', () => {
-  // A furnace (use 2, makes 2 Alloy at 200, fed 2 Smithore) and two farms (use 1, make 3 Food at 100), no plant:
-  // energyOffOrder turns the furnace off first, then the farms. Energy is posted at 20, so buying a unit back is 22.
+  // A furnace (use 2, experienced, so it makes 2 + 1 Alloy at 200, fed 2 Smithore) and two farms (use 1, make 3 Food
+  // at 80), no plant:
+  // energyOffOrder turns the furnace off first, then the farms. Energy is posted at 20: buying a unit back costs little.
   const FURNACE: Plot = { outfit: 'alloy', x: 0, runMonths: FACTORY.experienceMonths };
   const FARMS: Plot[] = [
     { outfit: 'food', x: 2, ground: { food: 3 - GROWN_BASE } },
     { outfit: 'food', x: 4, ground: { food: 3 - GROWN_BASE } },
   ];
-  const posted = { energy: 20, food: 100, alloy: 200 };
+  const posted = { energy: 20, food: 80, alloy: 200 };
+  const made = 2 + FACTORY.experienceBonus;
   const replace = 20 * (1 + PRICE.storeSpread) * AI_VALUE.shortFloorMarkup;
 
-  it("T-AC-6: S(k) follows energyOffOrder's turn-off order: the furnace's two units, then a farm's", () => {
+  it("T-AC-6: S(k) follows energyOffOrder's turn-off order: the furnace's two units at half its loss each, then a farm's", () => {
     // The spec's example counts no spoilage: 4 units short, one per unit of the plots' use.
     GOOD_CONFIG.energy.spoilage = 0;
     const { obs, o } = view(table({ plots: [FURNACE, ...FARMS], posted, stock: { smithore: 2 } }));
@@ -107,7 +114,7 @@ describe('RULE-2: what going without a unit costs', () => {
 
     const S = shortCosts(obs, o, 'energy', mindOf(), target);
 
-    expect(S).toEqual([lost(2, 200), lost(2, 200), lost(3, 100), lost(3, 100)]);
+    expect(S).toEqual([lost(made, 200, 2), lost(made, 200, 2), lost(3, 80, 1), lost(3, 80, 1)]);
   });
 
   it('T-AC-6: with spoilage, every unit of the target keeps a plot on: the furnace first, a farm last', () => {
@@ -117,23 +124,24 @@ describe('RULE-2: what going without a unit costs', () => {
 
     const S = shortCosts(obs, o, 'energy', mindOf(), target);
 
-    expect(S.slice(0, 2)).toEqual([lost(2, 200), lost(2, 200)]);
-    expect(S.at(-1)).toBe(lost(3, 100));
-    for (const s of S) expect([lost(2, 200), lost(3, 100)]).toContain(s);
+    expect(S.slice(0, 2)).toEqual([lost(made, 200, 2), lost(made, 200, 2)]);
+    expect(S.at(-1)).toBe(lost(3, 80, 1));
+    for (const s of S) expect([lost(made, 200, 2), lost(3, 80, 1)]).toContain(s);
   });
 
-  it('T-AC-6: a furnace short of its experience misses the experience month as well', () => {
+  it('T-AC-6: a furnace short of its experience makes 2 and misses the experience month as well', () => {
     GOOD_CONFIG.energy.spoilage = 0;
     const { obs, o } = view(table({ plots: [{ ...FURNACE, runMonths: 0 }, ...FARMS], posted, stock: { smithore: 2 } }));
 
     const S = shortCosts(obs, o, 'energy', mindOf(), 4);
 
-    expect(S.slice(0, 2)).toEqual([lost(2, 200) + FACTORY.experienceBonus * 200, lost(2, 200) + FACTORY.experienceBonus * 200]);
+    const furnace = lost(2, 200, 2) + (FACTORY.experienceBonus * 200) / 2;
+    expect(S.slice(0, 2)).toEqual([furnace, furnace]);
   });
 
   it('T-AC-6: a plot worth less turned off than buying the unit back is valued at the buy-back price', () => {
     GOOD_CONFIG.energy.spoilage = 0;
-    // Food at 5: a farm loses 0.8 × 3 × 5 = 12 turned off, under the 22 a unit costs to buy back.
+    // Food at 5: a farm loses 0.8 × 3 × 5 = 12 turned off, under what a unit of Energy costs to buy back.
     const { obs, o } = view(table({ plots: FARMS, posted: { ...posted, food: 5 } }));
 
     expect(shortCosts(obs, o, 'energy', mindOf(), 2)).toEqual([replace, replace]);
@@ -151,19 +159,19 @@ describe('RULE-2: what going without a unit costs', () => {
     state.store.stock.energy = 0;
     const { obs, o } = view(state);
 
-    expect(shortCosts(obs, o, 'energy', mindOf(), 2)).toEqual([lost(3, 5), lost(3, 5)]);
+    expect(shortCosts(obs, o, 'energy', mindOf(), 2)).toEqual([lost(3, 5, 1), lost(3, 5, 1)]);
   });
 
   it('T-AC-6: unitValues keeps every unit of the target at S or more, and keep and buy never rise with k', () => {
     const { obs, o } = view(table({ plots: [FURNACE, ...FARMS], posted, stock: { smithore: 2 } }));
     const mind = mindOf();
     const target = wholeNextMonth(obs, 'ai0', 'energy');
-    const S = shortCosts(obs, o, 'energy', mind, target);
+    const S = shortCosts(obs, o, 'energy', mind, target).sort((a, b) => b - a);
 
     const v = unitValues(obs, o, 'energy', mind);
 
     nonIncreasing(v);
-    for (let k = 0; k < target; k++) expect(v.keep[k], `keep[${k}] is never below S(${k})`).toBeGreaterThanOrEqual(S[k]!);
+    for (let k = 0; k < target; k++) expect(v.keep[k], `keep[${k}] is never below the k-th largest S`).toBeGreaterThanOrEqual(S[k]!);
     expect(v.block).toBe(target);
   });
 });
@@ -199,7 +207,7 @@ describe('RULE-3: the chance the seat needs the k-th unit', () => {
 
     expect(unitNeed(obs, mind, 'energy')).toEqual({ sure: 0, target });
     const v = unitValues(obs, o, 'energy', mind);
-    const S = shortCosts(obs, o, 'energy', mind, target);
+    const S = shortCosts(obs, o, 'energy', mind, target).sort((a, b) => b - a);
     const q = Math.min(1, AI_VALUE.forecastRisk * mind.persona.risk);
 
     nonIncreasing(v);
