@@ -81,6 +81,8 @@ interface GameRecord {
   electronicsPosted: number[];
   foodSold: { store: number; players: number; ship: number };
   devMulePrices: number[];
+  /** Crystite's off-world price each month, as development opens (the walk moved it as the month opened). */
+  crystiteOffWorld: number[];
   /** The price Worth counts an installed MULE at (mulePrice): at the game's end. */
   worthMulePriceEnd: number;
   muleShareOfWorth: { month1: number[]; end: number[] };
@@ -114,6 +116,7 @@ async function playOne(seed: number, politics: boolean): Promise<GameRecord> {
   const bands: Partial<Record<Good, PriceBand>>[] = [];
   const electronicsPosted: number[] = [];
   let hungrySeatMonths = 0;
+  const crystiteOffWorld: number[] = [];
   let month1Shares: number[] = [];
   const moods: MoodBand[] = [];
   let month = -1;
@@ -163,6 +166,7 @@ async function playOne(seed: number, politics: boolean): Promise<GameRecord> {
     // `hungry` is set by the month's upkeep and read at development, as the sim reads it.
     onPhase: (s: GameState) => {
       if (s.phase === 'development') hungrySeatMonths += s.players.filter((p) => p.hungry).length;
+      if (s.phase === 'development') crystiteOffWorld.push(s.store.offWorld.crystite);
       // Upkeep has run by the time its phase is reported; the last month's upkeep goes straight to game over.
       if (s.phase === 'upkeep' && s.month === 1) month1Shares = muleShares(s);
       if (s.phase === 'upkeep' && s.colony) moods.push(moodBand(s.colony.happiness));
@@ -235,6 +239,7 @@ async function playOne(seed: number, politics: boolean): Promise<GameRecord> {
     electronicsPosted,
     foodSold,
     devMulePrices: state.history.map((h) => h.mulePrice),
+    crystiteOffWorld,
     worthMulePriceEnd: mulePrice(state),
     muleShareOfWorth: { month1: month1Shares, end: muleShares(state) },
     colonyScoreEnd: colonyScore(state)?.total ?? null,
@@ -414,6 +419,24 @@ const METRICS: Metric[] = [
   { name: 'Electronics made (all games)', value: (gs) => String(sum(gs.map((x) => x.made.electronics))) },
   { name: 'Rare earth made (all games)', value: (gs) => String(sum(gs.map((x) => x.made.rareEarth))) },
   { name: 'Alloy made (all games)', value: (gs) => String(sum(gs.map((x) => x.made.alloy))) },
+  {
+    name: 'UBER-AC-3 Crystite off-world price min / median / max (all months)',
+    value: (gs) => {
+      const p = pooled(gs, (x) => x.crystiteOffWorld);
+      return `${fmt(Math.min(...p))} / ${fmt(quantile(p, 0.5))} / ${fmt(Math.max(...p))}`;
+    },
+  },
+  ...([
+    ['above 200', (p: number) => p > 200],
+    ['at 280 or more', (p: number) => p >= 280],
+    ['at 50 or less', (p: number) => p <= 50],
+  ] as const).map(([where, test]): Metric => ({
+    name: `UBER-AC-3 Crystite off-world months ${where}`,
+    value: (gs) => {
+      const p = pooled(gs, (x) => x.crystiteOffWorld);
+      return share(p.filter(test).length, p.length);
+    },
+  })),
 ];
 
 async function main() {
