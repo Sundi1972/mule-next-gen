@@ -518,9 +518,12 @@ const monthScoreOf = (view: MuleView) => (view.colony?.score ? { colony: view.co
 /** From this many seats the TV band drops its sum and words so the month end fits the screen (PM ruling, 6 Nov: six seats). */
 export const COMPACT_FROM_SEATS = 5;
 
-/** The colony score under the league at a month end: the total, the change, the sum and its words. No verdict: that is game over's. */
+/** Whether the TV's month-end band is short: no sum, no words. */
+const compactBand = (view: MuleView) => view.players.length >= COMPACT_FROM_SEATS;
+
+/** The colony score under the league at a month end: the total, the change, and below five seats the sum and its words. No verdict: that is game over's. */
 function MonthScoreBand({ view, colony, score, last }: { view: MuleView; colony: ColonyView; score: ColonyScore; last: number | null }) {
-  const compact = view.players.length >= COMPACT_FROM_SEATS;
+  const compact = compactBand(view);
   return (
     <section className="relative flex shrink-0 flex-col gap-2 rounded-panel border border-holo-line bg-panel p-5" aria-label="The colony’s score" data-testid="colony-band" data-month={view.month}>
       <header className="flex items-baseline justify-between gap-4">
@@ -588,7 +591,9 @@ export function PhoneMonthScoreNote({ view, children }: { view: MuleView; childr
   return (
     <div className="mt-auto" data-testid="colony-on-tv">
       <PhoneMonthScore view={view} {...at}>
-        <span className="text-[11px] leading-snug text-ink-3">Its sum is on the TV; your own lines are beside, yours only.</span>
+        <span className="text-[11px] leading-snug text-ink-3">
+          {compactBand(view) ? 'Your own lines are beside, yours only.' : 'Its sum is on the TV; your own lines are beside, yours only.'}
+        </span>
       </PhoneMonthScore>
     </div>
   );
