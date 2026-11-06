@@ -228,6 +228,8 @@ export function secondValue(obs: GameState, me: string): number {
 
 /** Units of `good` to hold so that `n` are left after the month's spoilage, within what the depot keeps. */
 export function keptUnits(good: Good, n: number): number {
+  // A good that spoils fully would make 0 ÷ 0 of no need.
+  if (n <= 0) return 0;
   return Math.ceil(Math.min(n, UPKEEP.depotCapacity) / (1 - GOOD_CONFIG[good].spoilage));
 }
 
@@ -392,10 +394,28 @@ function carryOf(obs: GameState, o: Outlook, good: Good, mind: Mind): { sell: nu
   const haircut = full ? 1 - STRATEGIST.forecastHaircut * mind.persona.risk : 1;
   const sell = afterTax(obs, P(good)) * keepRate * haircut;
   const buy = sell * Math.min(1, mind.persona.speculate) * (1 - STRATEGIST.resaleRisk * mind.persona.risk);
+  return { sell, buy, room: depotRoom(obs, good, mind) };
+}
+
+/** How many units of a good the seat can hold before the depot limit takes them, after what upkeep eats. */
+function depotRoom(obs: GameState, good: Good, mind: Mind): number {
+  const full = mind.level.fullScoring;
+  const keepRate = 1 - (full ? GOOD_CONFIG[good].spoilage : 0);
   // literal-ok: 0.05 keeps the division finite for a good that all spoils; 99 stands for no depot limit (Rookie ignores it)
   const depot = full ? Math.ceil(UPKEEP.depotCapacity / Math.max(0.05, keepRate)) : 99;
   const eaten = good === 'food' || good === 'water' ? needsOf(obs, mind.me)[good] : 0;
-  return { sell, buy, room: eaten + depot };
+  return eaten + depot;
+}
+
+/**
+ * RULE-4's carry: what a unit held past the seat's needs fetches from the store at the belief, after the store's
+ * spread, the sales tax and AI_VALUE.holdMonths of spoilage (`sell`), and the share of that a seat pays for one only to
+ * resell it (`buy`). See spec RULE-4.
+ */
+function unitCarry(obs: GameState, o: Outlook, good: Good, mind: Mind): { sell: number; buy: number; room: number } {
+  const keepRate = 1 - (mind.level.fullScoring ? GOOD_CONFIG[good].spoilage : 0);
+  const sell = afterTax(obs, belief(obs, o, good) * (1 - PRICE.storeSpread)) * keepRate ** AI_VALUE.holdMonths;
+  return { sell, buy: sell * Math.min(1, mind.persona.speculate), room: depotRoom(obs, good, mind) };
 }
 
 // --- The resource-utility model, switched on by AI_VALUE.unit ------------------
@@ -574,7 +594,7 @@ export function shortCosts(obs: GameState, o: Outlook, good: Good, mind: Mind, l
 function modelValues(obs: GameState, o: Outlook, good: Good, mind: Mind): UnitValues {
   const need = unitNeed(obs, mind, good);
   const S = shortCosts(obs, o, good, mind, need.target);
-  const carry = carryOf(obs, o, good, mind);
+  const carry = unitCarry(obs, o, good, mind);
   const risky = Math.min(1, AI_VALUE.forecastRisk * mind.persona.risk);
   const keep: number[] = [];
   const buy: number[] = [];
