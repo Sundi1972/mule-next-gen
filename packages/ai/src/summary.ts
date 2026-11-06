@@ -19,7 +19,7 @@ export function situation(obs: GameState, mind: Mind): string {
     `You have ${me.money} credits, ${mine.length} plots (${mine.length - [...outfits.values()].reduce((a, b) => a + b, 0)} idle${outfits.size ? `; ${[...outfits].map(([k, n]) => `${n} ${k}`).join(', ')}` : ''}).`,
     `Your goods: ${stock || 'none'}.`,
     `A MULE costs ${mulePrice(obs)}; the store has ${obs.store.mules}.`,
-    leaderName ? `The richest rival looks like ${leaderName}.` : '',
+    leaderName ? `The rival ahead on Worth looks like ${leaderName}.` : '',
   ]
     .filter(Boolean)
     .join('\n');
