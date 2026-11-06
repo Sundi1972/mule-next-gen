@@ -147,6 +147,7 @@ async function playTheLandAuction(browser: Browser, base: string, server: MuleSe
   const truth = serverTruth(server, code);
   shipInPortThisMonth(server, code);
   foodToSpare(server, code);
+  noEnergyAnywhere(server, code);
 
   // Month 1: everyone claims (Brix and Lena list theirs in month 2), so the grant ends early. Nothing is listed, so only the colony's lot can follow.
   // Month 1 opens on election day, which holds the desks until it is over.
@@ -1646,6 +1647,19 @@ function foodToSpare(server: MuleServer, code: string): void {
   const room = server.registry.get(code) as unknown as { game: { state: { players: { stock: Record<Good, number> }[] }; ctx: { changed(): void } } } | undefined;
   check(room, `room ${code} is on the server`);
   for (const p of room.game.state.players) p.stock.food = Math.max(p.stock.food, FOOD_TO_SPARE);
+  room.game.ctx.changed();
+}
+
+/**
+ * Test fixture: no seat holds Energy and the store has none to sell, so month 1's auction skips Energy, the good just
+ * above Smithore, and Smithore's own status screen opens under a skipped line (G-6), whatever the store's prices.
+ */
+function noEnergyAnywhere(server: MuleServer, code: string): void {
+  const room = server.registry.get(code) as unknown as { game: { state: GameState; ctx: { changed(): void } } } | undefined;
+  check(room, `room ${code} is on the server`);
+  const { state } = room.game;
+  for (const p of state.players) p.stock.energy = 0;
+  state.store.stock.energy = 0;
   room.game.ctx.changed();
 }
 
