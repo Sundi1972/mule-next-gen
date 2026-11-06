@@ -275,8 +275,9 @@ senior       junior would: clamp posted prices in the auction where they're show
              and ceiling inside nextPostedPrice, so the AI's outlook sees the same price the store will post
 mechanism    in_place
 call sites   packages/engine/src/economy.ts::postPrices; packages/ai/src/outlook.ts (outlook's price/later and outlookPrices)
-pin          (AM-6) the target formula and refDrift/worldPull stay: packages/engine/test economy tests on targetPrice
-             and driftReference keep passing unchanged
+pin          (AM-6) refDrift/worldPull stay; targetPrice is removed (AM-6 item 9), so its tests go with it. PR-1 pins
+             N's drift with B-AC-8's two N-drift tests in packages/engine/test/price-bands.test.ts: a trade at 120 in a
+             severe month leaves N at 30; a trade at 36 in a normal month moves N a quarter of the way up, to 32
 depends_on   C5 (data: store.lastWalk; stubbable as "no walk": null)
 ```
 
@@ -542,7 +543,7 @@ AM-6 · 2026-11-07 · lead (WS5) · as built in PR-1
 target    §1 C1, C2, C5, C6, C7; §2 RULE-7; §3 the contract and the rule-E seam
 said      the approved rework (AM-5) as §1, §2 and §3 word it
 did       PR-1 (ws5-econ-pr1-bands at eb891c7e) built it with these differences (paths under packages/engine/src):
- 1  economy.ts::storeLines is the numeric core (band spread, HC-4 cap, sell ≥ buy + 1); storeQuotes = storeLines
+ 1  economy.ts::storeLines is the numeric core (storeBuyAt's line, sell ≥ buy + 1); storeQuotes = storeLines
     + §3's null mask (sell null iff storeForSale = 0, buy null iff storeWants = 0). Why: comeUp draws the board
     around both lines even where §3 says null, so the mask sits on top of one formula.
  2  economy.ts::storeSellAt / storeBuyAt(state, good, mid, { exact }) and colonistAffordable(state, good) are the
@@ -554,7 +555,7 @@ did       PR-1 (ws5-econ-pr1-bands at eb891c7e) built it with these differences 
  5  game.ts::createGame calls postPrices (a named edit in WS3's file): the opening prices go through the bands from
     N. Before, it posted round(targetPrice): with the starting stock Water and Energy opened far under N (four
     seats: Water 7 by the old formula).
- 6  HC-4's cap in economy.ts::storeLines divides colonistBudget by (1 + the posted band's over)²: Food at most
+ 6  HC-4's cap in economy.ts::storeBuyAt divides colonistBudget by (1 + the posted band's over)²: Food at most
     113 / 104 / 96 (normal or off-world / tight / shortage or severe), Water 90 / 83 / 76.
  7  economy.ts::monthlyDemand adds mulesWanted(state) × energyPerNewMule() to Energy (C6).
     a  C7's PRICE.energyPerNewMule became economy.ts::energyPerNewMule(), a private function: the mean of
@@ -563,8 +564,11 @@ did       PR-1 (ws5-econ-pr1-bands at eb891c7e) built it with these differences 
     b  the count is economy.ts::mulesWanted (idle owned plots, plus newLandMules while free land is left), not
        C6's newLandMules(players). Why: that counts 2 a seat even after the last plot is granted and never a
        granted plot still waiting for its MULE; mulesWanted is the count Smithore's demand already uses.
- 8  The buy side's near-whole snap (WS1's N4, from trunk) lives in storeBuyAt's default rounding;
-    packages/ai/src/strategist.ts::expectedPrices reads storeBuyAt's default, so its buy is at least 1.
+ 8  storeBuyAt carries HC-4's cap (exact: unrounded, no floor), and storeLines calls it, so the engine and the AI
+    share one cap: packages/ai/src/strategist.ts::expectedPrices and value.ts::carrySell read storeBuyAt off the
+    auction and expect what the store pays when the good comes up (T-AC-2 in
+    packages/ai/test/store-quotes-contract.test.ts). The buy side's near-whole snap (WS1's N4, from trunk) lives in
+    storeBuyAt's default rounding, so expectedPrices' buy is at least 1.
  9  Removed: storeSpread, restockPremium, maxRise, maxFall, shelfCover, minCover, sensitivity, shelfShort, riseCap,
     scarcity, targetPrice, storeSellPrice, storeBuyPrice. git grep -nw at eb891c7e over packages, apps and tools
     finds none in code. Left: storeSellPrice once, as a forbidden name in packages/ai/test/price-hc3.test.ts; the
@@ -583,6 +587,9 @@ did       PR-1 (ws5-econ-pr1-bands at eb891c7e) built it with these differences 
     unit from goodsMarket's trade (noteBetween for soldOutHigh and highTrade; dryBudget when storeBudget reaches
     0) and with a fresh lesson at nextGood. Why: C5's own senior line, "note it unit by unit where the store's
     sold-out state is known"; each lesson is a new record, so a cloneForSim copy never writes through (T-AC-3).
+ 14 Next month's forecast mid is priced with this month's band spread (packages/ai/src/strategist.ts:614;
+    value.ts:304, 657, 764): storeSellAt reads store.band, which is this month's until the next posting. Accepted as
+    an approximation for now; WS1 fixes it in its own PR after #555.
 because   each item gives its reason on its own lines
 goal      G-1, G-2 unchanged; G-3 is PR-4's
 folded    §1 C1, C2, C5, C6, C7 marked (AM-6); docs/rulebook/store-and-prices.html describes the build (cd7e8005)
