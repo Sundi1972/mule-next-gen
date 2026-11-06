@@ -8,6 +8,7 @@ import {
   GAME,
   GOOD_CONFIG,
   litPlot,
+  monthNeeds,
   mulePrice,
   mulePriceFor,
   neighbours,
@@ -39,7 +40,7 @@ import {
 } from '@mule/engine';
 import { belief, outlook, type Outlook } from './outlook.js';
 import { candidate, consider, curve, shortlist, type Candidate, type Shortlist } from './utility.js';
-import { afterTax, canFeed, cashPlan, cashReserve, chainLinks, chainOutlook, installGain, linkShare, monthNeedsCost, secondValue, unitValues, wholeNextMonth, yieldOf, type Mind, type UnitValues } from './value.js';
+import { afterTax, canFeed, cashPlan, cashReserve, chainLinks, chainOutlook, installGain, linkShare, monthNeedsCost, ownSupply, secondValue, unitValues, wholeNextMonth, yieldOf, type Mind, type UnitValues } from './value.js';
 
 /**
  * The strategist: for each of the month's decisions it lists the options,
@@ -186,7 +187,12 @@ export function landDecision(obs: GameState, mind: Mind): Shortlist<LandPlan> {
   const claims = GAME.claimsPerGrant;
   const p = me(obs, mind);
   const reserve = cashReserve(obs, mind, o);
-  const shortOfFood = !obs.tiles.some((t) => t.owner === mind.me && t.outfit === 'food') || !obs.tiles.some((t) => t.owner === mind.me && t.outfit === 'energy');
+  // Units against need (FM-feeds-me), not plots: a farm turned off for want of Energy, or halved for want of Water, feeds
+  // nobody. Supply is the outlook's next production on the footing monthNeeds uses (ownSupply: a plant's own use left
+  // out). Without a look-ahead (Rookie) the outlook makes nothing, so that seat still counts plots: a Food and an Energy plot.
+  const need = monthNeeds(obs, mind.me);
+  const owns = (outfit: Outfit) => obs.tiles.some((t) => t.owner === mind.me && t.outfit === outfit);
+  const shortOfFood = mind.level.lookAhead ? (['food', 'energy'] as const).some((g) => ownSupply(obs, mind.me, o.made, g) < need[g]) : !owns('food') || !owns('energy');
 
   const gains = new Map(free.map((t) => [t, plotGains(obs, o, t, mind)]));
   const land = STRATEGIST.land;
