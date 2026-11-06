@@ -161,6 +161,7 @@ const SCALE_WATCH = String.raw`{
   const shown = new Map();
   const cuts = [];
   const cutSince = new Map();
+  const reported = new WeakSet();
   const keep = (s, now) => {
     if (now - s.since < SETTLED_MS) return;
     if (!(s.screen in lows) || s.scale < lows[s.screen]) lows[s.screen] = s.scale;
@@ -187,15 +188,17 @@ const SCALE_WATCH = String.raw`{
       if (!g.checkVisibility()) continue;
       const box = g.getBoundingClientRect();
       for (const k of g.querySelectorAll('[data-fit-keep]')) {
+        if (!k.checkVisibility() || k.offsetHeight === 0) continue;
         const r = k.getBoundingClientRect();
-        const off = Math.max(box.top - r.top, r.bottom - box.bottom);
-        if (off <= 0.5) { cutSince.delete(k); continue; }
+        // In layout px (the drawn height over the laid-out one is every scale between): the fit works in whole pixels.
+        const off = (Math.max(box.top - r.top, r.bottom - box.bottom) * k.offsetHeight) / r.height;
+        if (off <= 1.5) { cutSince.delete(k); continue; }
         seen.add(k);
         if (!cutSince.has(k)) cutSince.set(k, now);
-        else if (now - cutSince.get(k) >= SETTLED_MS && cuts.length < 5) {
+        else if (now - cutSince.get(k) >= SETTLED_MS && !reported.has(k) && cuts.length < 5) {
           const stage = k.closest('[data-phase]');
-          cuts.push(stage.getAttribute('data-phase') + ': ' + (k.getAttribute('data-log') || k.getAttribute('data-testid') || k.tagName) + ' cut by ' + off.toFixed(1) + ' px');
-          cutSince.set(k, Infinity);
+          cuts.push(stage.getAttribute('data-phase') + ': ' + (k.getAttribute('data-log') || k.getAttribute('data-testid') || k.tagName) + ' cut by ' + off.toFixed(1) + ' layout px');
+          reported.add(k);
         }
       }
     }

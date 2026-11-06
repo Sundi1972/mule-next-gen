@@ -53,17 +53,18 @@ export function FitHeight({ className, innerClassName, gives = false, children }
       i.style.width = `${100 / s}%`;
       i.style[size] = gives ? 'auto' : '0px';
       for (const [g, css] of giving) g.style.cssText = css;
-      const keeps = giving.map(([g]) => [...g.querySelectorAll<HTMLElement>('[data-fit-keep]')].reduce((h, k) => h + k.offsetHeight, 0));
+      // A pixel over the rounded height: the fit reads whole pixels, so it may not land a fraction short of the kept item.
+      const keeps = giving.map(([g]) => { const kept = [...g.querySelectorAll<HTMLElement>('[data-fit-keep]')]; return kept.length === 0 ? 0 : kept.reduce((h, k) => h + k.offsetHeight, 0) + 1; });
       for (const [n, [g]] of giving.entries()) g.style.cssText += `;flex:none;height:${keeps[n]}px`;
       const natural = i.offsetHeight;
       if (spilling.length === 0) return natural;
       // A spilling box is read at the height the stretch gives it at this scale, a giving box in it still holding what
       // it keeps. What flies over the screen (data-fit-flies: production's goods on their way to the silos) leaves its
       // box by design: it is not content the box spills, so it is out of the reading (read before paint: never seen).
-      // The boxes between a giving box and its spilling one may not shrink past their content either (min-h-0 lets them):
-      // shrunk, the kept item would overflow them unseen, over what follows (production's speed-up line), and be cut.
+      // The boxes between a giving box (still at its kept height) and its spilling one may not shrink past their content
+      // either (min-h-0 lets them): shrunk, the kept item would overflow them unseen, over what follows (production's
+      // speed-up line), and be cut. min-height:auto holds only a box that does not clip: none of them may.
       i.style[size] = `${room / s}px`;
-      for (const [n, [g, css]] of giving.entries()) g.style.cssText = `${css};flex:none;height:${keeps[n]}px`;
       for (const [h] of holders) h.style.minHeight = 'auto';
       for (const [f] of flying) f.style.display = 'none';
       const spill = Math.max(...spilling.map((el) => el.scrollHeight - el.clientHeight));
