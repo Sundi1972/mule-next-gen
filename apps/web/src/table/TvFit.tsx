@@ -42,6 +42,13 @@ export function FitHeight({ className, innerClassName, gives = false, children }
     // it can give is all the rest of itself.
     const giving = gives ? [...i.querySelectorAll<HTMLElement>('[data-fit-gives]')].map((g) => [g, g.style.cssText] as const) : [];
     const spilling = [...i.querySelectorAll<HTMLElement>('[data-fit-spills]')];
+    const holders: (readonly [HTMLElement, string])[] = [];
+    for (const [g] of giving) {
+      const top = g.closest<HTMLElement>('[data-fit-spills]');
+      if (!top || !i.contains(top)) continue;
+      for (let h = g.parentElement; h && h !== top; h = h.parentElement) if (!holders.some(([x]) => x === h)) holders.push([h, h.style.cssText]);
+    }
+    const flying = spilling.length > 0 ? [...i.querySelectorAll<HTMLElement>('[data-fit-flies]')].map((f) => [f, f.style.display] as const) : [];
     const heightAt = (s: number) => {
       i.style.width = `${100 / s}%`;
       i.style[size] = gives ? 'auto' : '0px';
@@ -53,26 +60,35 @@ export function FitHeight({ className, innerClassName, gives = false, children }
       // A spilling box is read at the height the stretch gives it at this scale, a giving box in it still holding what
       // it keeps. What flies over the screen (data-fit-flies: production's goods on their way to the silos) leaves its
       // box by design: it is not content the box spills, so it is out of the reading (read before paint: never seen).
+      // The boxes between a giving box and its spilling one may not shrink past their content either (min-h-0 lets them):
+      // shrunk, the kept item would overflow them unseen, over what follows (production's speed-up line), and be cut.
       i.style[size] = `${room / s}px`;
-      for (const [n, [g, css]] of giving.entries()) g.style.cssText = `${css};min-height:${keeps[n]}px`;
-      const flying = [...i.querySelectorAll<HTMLElement>('[data-fit-flies]')].map((f) => [f, f.style.display] as const);
+      for (const [n, [g, css]] of giving.entries()) g.style.cssText = `${css};flex:none;height:${keeps[n]}px`;
+      for (const [h] of holders) h.style.minHeight = 'auto';
       for (const [f] of flying) f.style.display = 'none';
       const spill = Math.max(...spilling.map((el) => el.scrollHeight - el.clientHeight));
       for (const [f, display] of flying) f.style.display = display;
+      for (const [h, css] of holders) h.style.cssText = css;
       return spill > 0.5 ? Math.max(natural, room / s + spill) : natural;
     };
     const tried: [number, number][] = [];
     let s = current.current;
-    for (let k = 0; k < 8; k++) {
-      const natural = heightAt(s);
-      if (natural === 0) break;
-      tried.push([s, natural]);
-      const next = Math.min(1, room / natural);
-      if (tried.some(([t]) => Math.abs(next - t) < 0.001)) break;
-      s = next;
+    try {
+      for (let k = 0; k < 8; k++) {
+        const natural = heightAt(s);
+        if (natural === 0) break;
+        tried.push([s, natural]);
+        const next = Math.min(1, room / natural);
+        if (tried.some(([t]) => Math.abs(next - t) < 0.001)) break;
+        s = next;
+      }
+    } finally {
+      // Every measuring change undone, whatever happened: none of it may reach the screen.
+      for (const [f, display] of flying) f.style.display = display;
+      for (const [h, css] of holders) h.style.cssText = css;
+      for (const [g, css] of giving) g.style.cssText = css;
+      [i.style[size], i.style.width] = saved;
     }
-    for (const [g, css] of giving) g.style.cssText = css;
-    [i.style[size], i.style.width] = saved;
     if (tried.length === 0) return;
     // The largest scale whose content fits at its own width; if none did, the smallest any measure asked for.
     const fits = tried.filter(([t, n]) => t * n <= room + 0.5).map(([t]) => t);
