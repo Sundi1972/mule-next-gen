@@ -18,6 +18,8 @@ function atEachUpkeep(seed: number, look: (state: GameState) => void): number {
   let seen = 0;
   playGame(seed, simSeats(4, 'trader', seed), {
     maxMonths: MONTHS,
+    // Walking time changes how the seats develop, not how the store prices: off, the games run faster.
+    walking: false,
     onPhase: (state) => {
       if (state.phase !== 'upkeep') return;
       seen++;
