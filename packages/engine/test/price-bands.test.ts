@@ -131,17 +131,20 @@ describe('price B-AC-7: a good only the export ship wants follows the off-world 
   it('price B-AC-7: Crystite with the off-world price at 40, under its normal 100, falls a quarter a month to 40 and stays there', () => {
     const state = game();
     to(state, 'production');
+    // The off-world price is held at 40 as each month opens, over the walk; the posting it follows starts at 100.
+    state.store.posted.crystite = 100;
     state.store.offWorld.crystite = 40;
     advancePhase(state);
     expect(state.store.band?.crystite, 'the premise: off-world').toBe('offWorld');
     const posted = [state.store.posted.crystite];
     for (let month = 2; month <= 7; month++) {
       nextMonth(state);
+      state.store.offWorld.crystite = 40;
       advancePhase(state);
       posted.push(state.store.posted.crystite);
     }
     expect(state.store.refPrice.crystite, 'the premise: N stays above 40').toBeGreaterThan(40);
-    // From the opening 100: 75, 56, 42, then 40, the off-world price, never N.
+    // From 100: 75, 56, 42, then 40, the off-world price, never N.
     expect(posted).toEqual([75, 56, 42, 40, 40, 40, 40]);
   });
 });
