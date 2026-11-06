@@ -67,6 +67,27 @@ describe("RULE-32b: footprints on the colony's grounds (AM-18)", () => {
     expect(COLONY.grounds.size).toBe(5);
   });
 
+  it('COLONY.grounds.size is odd, so the town hall sits on the middle cell', () => {
+    const { size } = COLONY.grounds;
+    expect(size % 2, 'an even size has no middle cell: the hall would sit off-centre').toBe(1);
+    const hall = (size - 1) / 2;
+    // The hall is where no block may go: the first 1×1 lands on the cell straight above it, ring 1 at north.
+    const state = governedGame();
+    commission(state, 'lena', 'park');
+    expect(anchorOf(state, 'park')).toEqual([hall, hall - 1]);
+    // Every one of the eight cells around the middle one fills before any cell farther out, and the middle one never does.
+    const taken = [at(hall, hall - 1)];
+    for (let i = 0; i < 7; i++) {
+      const probe = governedGame();
+      probe.colony!.projects.push(...taken.map((slot) => ({ id: 'observatory' as const, stage: 'standing' as const, funded: { credits: 0, goods: {} }, monthsLeft: null, since: 1, plaque: {}, slot })));
+      commission(probe, 'lena', 'park');
+      taken.push(probe.colony!.projects.at(-1)!.slot!);
+    }
+    const ring1 = taken.map((slot) => Math.max(Math.abs((slot % size) - hall), Math.abs(Math.floor(slot / size) - hall)));
+    expect(ring1, 'the first eight 1×1 cells are the ring around the middle cell').toEqual(Array(8).fill(1));
+    expect(taken).not.toContain(at(hall, hall));
+  });
+
   it("RULE-32b example (the AI's order, most prestige first): Spaceport (2,0) 2×2 · Stadium (3,2) 2×2 · Observatory (2,3) · Hospital (1,3) · Park (1,2)", () => {
     const state = governedGame();
     for (const id of ['spaceport', 'stadium', 'observatory', 'hospital', 'park'] as const) commissionAndBuild(state, id);
