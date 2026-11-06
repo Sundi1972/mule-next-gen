@@ -297,6 +297,12 @@ export interface EventRow {
   objects?: Partial<Record<PrestigeId, number>>;
   /** Points when the store's Food is dearer than `factor` times its usual price (GOOD_CONFIG). */
   foodPrice?: { factor: number; points: number };
+  /**
+   * By the colony air's band, like `air`, and a hard zero in the `neverInAir` bands; both read only with a colony, so a
+   * wave-2 row that gains them rolls with politics off exactly as before (HC-22).
+   */
+  colonyAir?: Partial<Record<AirBand['name'], number>>;
+  neverInAir?: readonly AirBand['name'][];
   cap: number;
 }
 
@@ -335,6 +341,7 @@ export function eventChance(state: GameState, row: EventRow, phase: Phase, input
   // The hard zeros (G-5 C26): no colony for a row that needs one, or a mood band the row never fires in.
   if (row.needsColony && !state.colony) return 0;
   if (state.colony && row.neverIn?.includes(moodBand(state.colony.happiness))) return 0;
+  if (state.colony && row.neverInAir?.includes(airBand(state.air).name)) return 0;
   const { air, pollution, wealth, follows, mood, objects, foodPrice } = influences(state, row, input);
   return Math.min(row.cap, Math.max(0, base + air + pollution + wealth + follows + mood + objects + foodPrice));
 }
@@ -349,7 +356,7 @@ function influences(state: GameState, row: EventRow, { player, firedThisPhase = 
     .filter(([key, f]) => (f.thisPhase && firedThisPhase.includes(key)) || (f.lastMonth && firedLastMonth.includes(key)))
     .reduce((sum, [, f]) => sum + f.points, 0);
   return {
-    air: row.air?.[airBand(state.air).name] ?? 0,
+    air: (row.air?.[airBand(state.air).name] ?? 0) + (state.colony ? (row.colonyAir?.[airBand(state.air).name] ?? 0) : 0),
     pollution: row.pollution ? Math.min(row.pollution.max, row.pollution.perPoint * caused) : 0,
     wealth: row.wealth && player !== undefined ? wealthShare(state, row.wealth, player) : 0,
     follows,

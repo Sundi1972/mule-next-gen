@@ -1364,11 +1364,16 @@ export type AiLevelId = keyof typeof AI_LEVELS;
  * slice 5 (D-G5-5: nothing is paid yet), so no row reads them.
  */
 export const SOCIAL_EVENTS = {
-  /** The mood part of the existing immigration wave (EVENTS.colony.immigrationWave). */
+  /**
+   * The mood and air parts of the existing immigration wave (EVENTS.colony.immigrationWave). Its air parts read only
+   * with a colony (PM, 6 Nov), so with politics off it rolls as before; the catalogue's "Toxic" is Toxic or Collapse.
+   */
   immigrationWave: {
     mood: { thriving: 0.06, content: 0.01 },
     neverIn: ['unhappy', 'unrest'],
-  } satisfies Pick<import('./events.js').EventRow, 'mood' | 'neverIn'>,
+    colonyAir: { clean: 0.01 },
+    neverInAir: ['toxic', 'collapse'],
+  } satisfies Pick<import('./events.js').EventRow, 'mood' | 'neverIn' | 'colonyAir' | 'neverInAir'>,
   /** The mood part of the existing MULE theft (EVENTS.player.muleTheft), in each phase it rolls in. */
   muleTheft: {
     mood: { restless: 0.005, unhappy: 0.02, unrest: 0.04 },

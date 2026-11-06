@@ -246,8 +246,11 @@ describe('C26: the colony\'s planning social events, fired through the planning 
     only(['festival', 'generalStrike']);
     const kept = new Set<string>();
     for (let seed = 1; seed <= 40; seed++) {
-      const keys = firePhase(colonyAt(AT.restless, { seed }), 'planning').map((e) => e.key);
-      expect(keys.filter((k) => k === 'festival' || k === 'generalStrike')).toHaveLength(1);
+      // Other rows' raises still roll (a clean colony's immigration wave), so only the pair's keys count.
+      const keys = firePhase(colonyAt(AT.restless, { seed }), 'planning')
+        .map((e) => e.key)
+        .filter((k) => k === 'festival' || k === 'generalStrike');
+      expect(keys).toHaveLength(1);
       kept.add(keys[0]!);
     }
     expect([...kept].sort()).toEqual(['festival', 'generalStrike']);
