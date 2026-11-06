@@ -556,10 +556,13 @@ function heldDamageOf(obs: GameState, o: Outlook, good: Good, mind: Mind, need: 
   }
   const household = good === 'medicine' ? keptUnits(good, monthNeeds(obs, me).medicine) : wholeNextMonth(obs, me, good);
   const sec = secondValue(obs, me);
+  // A seat with no plots on the arcade floor walks to every tile, some it can't reach: no walking to lose, so S = replace.
+  const seconds = monthWalkSeconds(obs, mind);
+  const walk = Number.isFinite(seconds) ? seconds : 0;
   let worth = 0;
-  if (household > 0 && good === 'food') worth = (monthWalkSeconds(obs, mind) * (1 / DEV_WALK.hungerPaceMin - 1) * sec) / household;
+  if (household > 0 && good === 'food') worth = (walk * (1 / DEV_WALK.hungerPaceMin - 1) * sec) / household;
   if (household > 0 && good === 'water') worth = waterDamage(obs, o, me) / household;
-  if (household > 0 && good === 'medicine') worth = playerEventChance(obs, 'sickness', 'development', me) * monthWalkSeconds(obs, mind) * (1 / DEV_WALK.sickPace - 1) * sec;
+  if (household > 0 && good === 'medicine') worth = playerEventChance(obs, 'sickness', 'development', me) * walk * (1 / DEV_WALK.sickPace - 1) * sec;
   const input = inputWorth(obs, o, good, me);
   return Array.from({ length: need.target }, (_, h) => (h < household ? worth : input));
 }
