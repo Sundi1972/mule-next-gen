@@ -244,13 +244,13 @@
 <p class="code-ref">In the code: <code>packages/ui/src/theme.css, events/events.css, events/motion.ts</code> (<code>prefers-reduced-motion</code>) · <code>apps/web/src/components/ThemeToggle.tsx</code> · <code>apps/web/src/components/MonthEnd.tsx::ChangeTag</code></p>
 <p class="owner">Kept current by: the Table team (WS4), with the UX team (WS6).</p>
 
-<h2 id="colony-on-the-tv">The colony on the TV: mood drift and strikes <span class="pill progress">Being built</span></h2>
-<p>Two colony shows are built in the colony branch and are not on trunk yet.</p>
+<h2 id="colony-on-the-tv">The colony on the TV: mood drift and strikes <span class="pill built">In the game</span></h2>
+<p>Two colony shows on the TV, both in the game.</p>
 <h3 id="mood-drift">The month end's mood drift</h3>
 <p>At the month end, the TV's Happiness gauge opens on last month's value and, about 1.2 s later, counts to this month's. When the count crosses into another band (Restless into Unhappy, for example), the band's name flips and the gauge pulses. It shows no reasons, only "↓ n this month". It plays once, as the TV sees the month end arrive; a TV that reloads into the month end, or a device set to reduce motion, shows the end state at once. Nothing plays in month 1, with an unchanged mood, or with the council off.</p>
 <h3 id="strikes">Strikes</h3>
 <p>During a general strike, the TV header carries a strike badge ("STRIKE · Food 20%", then "PAID · −250 cr" once paid), the TV shows whose choice the strike waits on ("Waiting for Kai, the Governor"), and strikers with placards stand over every plot of the struck good on the map. The Governor's phone shows the strike in its Now card, with "Pay the strikers" and "Let them strike"; everyone else's phone shows a line saying the strike is on and who decides.</p>
-<div class="box next"><h4>What is changing</h4><p>Mood drift: PR #365. Strikes: PR #368. Both by the Events team (WS8) into the colony branch, with the Table team's OK on the TV header. When the colony branch reaches trunk, the TV fit's header row (PR #381) keeps the drift. The strike badge is one of the status badges that move the gauges to their own row.</p></div>
+<div class="box why"><h4>Why it is like this</h4><p>Mood drift (PR #365) reached trunk with the colony batch (#413) on 5 Nov; strikes (PR #368) followed on 5 Nov. Both are by the Events team (WS8), with the Table team's OK on the TV header. The TV fit's header row (PR #381) keeps the drift, and the strike badge is one of the status badges that move the gauges to their own row. The production half of the strike (strikers on the struck plots, each "STRIKE −80%") plays in production's event show.</p></div>
 <p class="code-ref">In the code: <code>apps/web/src/table/TableApp.tsx::TvHeader, TvMonthEnd</code> · <code>apps/web/src/components/Colony.tsx::ColonyGauges</code></p>
 <p class="owner">Kept current by: the Events team (WS8), with the Table team (WS4).</p>
 </article>
