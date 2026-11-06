@@ -55,7 +55,6 @@ const WADDLE_SECONDS = 0.36;
 /** How long a press on your own tag must last before the rule shows, in ms. */
 const HOLD_MS = 400;
 
-
 /** The hunger level from the share of the month's Food missing and the rule's hungerLevels. */
 export function hungerLevel(c: Condition, rule: PaceRule): HungerLevel {
   const missing = 1 - c.foodShare;

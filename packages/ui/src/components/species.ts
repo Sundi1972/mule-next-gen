@@ -16,7 +16,6 @@ export const SPECIES_NAME: Record<Species, string> = {
   quibbit: 'Quibbit',
 };
 
-
 /** One clear perk per species, in the numbers the game plays: read from the balance settings, so the words follow a tuning. */
 export const SPECIES_PERK: Record<Species, string> = {
   zipwing: `Fast flyer. Walks ${PERK_NUMBERS.zipwingSpeed}× as fast during development.`,
