@@ -73,6 +73,7 @@ import {
   shipInPort,
   shipLine,
   shipPrice,
+  shownSellLine,
   sickPace,
   SPECIES,
   type Species,
@@ -1743,6 +1744,8 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
     const market = goodsMarket(state);
     const prices = a.walkers.map((w) => w.price);
     const lines = [storeBuyLine(state), storeSellLine(state), shipLine(state)].filter((n): n is number => n !== null);
+    // RULE-7: once the store is sold out, its line shows the highest bid a buyer can pay, flagged so a screen labels it.
+    const selling = shownSellLine(state);
     return {
       good: a.good,
       stage: a.stage,
@@ -1752,7 +1755,9 @@ export class MuleGame implements Game<MuleIntent, MuleView> {
       slowed: a.stage === 'walk' && a.deals.length > 0,
       next: [...a.queue],
       storeBuys: storeBuyLine(state),
-      storeSells: storeSellLine(state),
+      storeSells: selling?.price ?? null,
+      ...(selling?.bid ? { storeSellsBid: true as const } : {}),
+      zones: { ...a.zones },
       storeForSale: storeForSale(state, a.good),
       shipPays: shipLine(state),
       shipQuote: shipQuote(state, a.good),

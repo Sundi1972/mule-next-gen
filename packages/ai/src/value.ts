@@ -59,7 +59,20 @@ export interface Mind {
   level: AiLevelConfig;
   /** Seeded per seat: breaks ties between plots it values the same, so seats don't all follow the map's order. */
   salt?: number;
+  /** What a playbook adopted for a month sets by an edit, which the hands play (RULE-6); never set for a seat's own draft. */
+  adopted?: AdoptedFields;
 }
+
+/** The fields the seat's adopted playbooks set by an edit, for the one month they were adopted for; null where none did. */
+export interface AdoptedFields {
+  month: number;
+  cashFloor: number | null;
+  pressShare: { start: number; end: number } | null;
+  monopolyTarget: Good | null;
+}
+
+/** The fields adopted for the month `obs` is in, or null: an adoption plays only in its own month. */
+export const adoptedNow = (obs: GameState, mind: Mind): AdoptedFields | null => (mind.adopted?.month === obs.month ? mind.adopted : null);
 
 export interface Yield {
   made: number;
@@ -382,12 +395,20 @@ export function wholeNextMonth(obs: GameState, me: string, good: Good): number {
 }
 
 /**
- * Cash the seat keeps back: a floor plus what next month's Food, Water and
- * Energy shortfall would cost, times its reserve weight. A short unit counts
- * at most a few times its reference price, so a price spike doesn't freeze
- * all its cash. `except` leaves out a good: the one a new farm would make.
+ * Cash the seat keeps back, the least it spends down to: neededReserve's, or, while an adopted playbook's edit sets the
+ * month's cash floor, that floor, within AI_PLANS.bounds.cashFloorMax.
  */
 export function cashReserve(obs: GameState, mind: Mind, o?: Outlook, except?: Good): number {
+  const floor = adoptedNow(obs, mind)?.cashFloor ?? null;
+  return floor !== null ? Math.min(AI_PLANS.bounds.cashFloorMax, floor) : neededReserve(obs, mind, o, except);
+}
+
+/**
+ * The cash the seat's needs call for: a floor plus what next month's Food, Water and Energy shortfall would cost,
+ * times its reserve weight. A short unit counts at most a few times its reference price, so a price spike doesn't
+ * freeze all its cash. `except` leaves out a good: the one a new farm would make.
+ */
+function neededReserve(obs: GameState, mind: Mind, o?: Outlook, except?: Good): number {
   if (AI_VALUE.unit) return monthReserve(obs, mind, o, except);
   const p = obs.players.find((q) => q.id === mind.me)!;
   const need = monthNeeds(obs, mind.me);
@@ -865,8 +886,9 @@ function monthReserve(obs: GameState, mind: Mind, o?: Outlook, except?: Good): n
 
 /**
  * The cash every needed unit of the month would take at the belief's prices, funded or not: with the model on, what a
- * seat's money must reach before it stops listing land to sell; today's cash reserve with it off.
+ * seat's money must reach before it stops listing land to sell; the reserve its needs call for with it off. An adopted
+ * cash floor never raises it: the floor is cash not spent, never cash to raise by selling.
  */
 export function monthNeedsCost(obs: GameState, mind: Mind): number {
-  return AI_VALUE.unit ? Math.round(monthPlan(obs, mind).wanted) : cashReserve(obs, mind);
+  return AI_VALUE.unit ? Math.round(monthPlan(obs, mind).wanted) : neededReserve(obs, mind);
 }

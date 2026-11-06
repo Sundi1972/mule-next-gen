@@ -40,7 +40,7 @@ import {
 } from '@mule/engine';
 import { belief, outlook, type Outlook } from './outlook.js';
 import { candidate, consider, curve, shortlist, type Candidate, type Shortlist } from './utility.js';
-import { afterTax, canFeed, cashPlan, cashReserve, chainLinks, chainOutlook, installGain, linkShare, monthNeedsCost, ownSupply, secondValue, unitValues, wholeNextMonth, yieldOf, type Mind, type UnitValues } from './value.js';
+import { adoptedNow, afterTax, canFeed, cashPlan, cashReserve, chainLinks, chainOutlook, installGain, linkShare, monthNeedsCost, ownSupply, secondValue, unitValues, wholeNextMonth, yieldOf, type Mind, type UnitValues } from './value.js';
 
 /**
  * The strategist: for each of the month's decisions it lists the options,
@@ -242,7 +242,7 @@ export function rivalsStillClaiming(obs: GameState, mind: Mind): number {
  * the free plots still ahead of the light (`ahead`: the pass's order from the lit plot on): plots it has gone by never
  * come back. It wants the lit plot when that ranks within its claims left plus STRATEGIST.grantSpare plus the rivals
  * still claiming (rivalsStillClaiming) among them by the plan's utility, and its utility is at least
- * STRATEGIST.grantShare of the best of theirs; a plot it values at nothing it never wants. Seats rank the board nearly
+ * grantShareAt's share of the best of theirs; a plot it values at nothing it never wants. Seats rank the board nearly
  * alike, so each rival still claiming may take one of the plots it ranks higher before the light reaches it
  * (FM-grant-plotless). Early in the pass better plots lie ahead and it waits;
  * late, few do and it takes the best that is left. Never while the seat already holds a month's worth of idle plots
@@ -258,7 +258,24 @@ export function wantsPlot(plan: LandPlan, obs: GameState, index: number, ahead: 
   if (!lit || lit.value <= 0) return false;
   const claimsLeft = GAME.claimsPerGrant - me(obs, mind).claimsThisGrant;
   if (rank >= claimsLeft + STRATEGIST.grantSpare + rivalsStillClaiming(obs, mind)) return false;
-  return lit.utility >= (rivals[0]?.utility ?? 0) * STRATEGIST.grantShare;
+  return lit.utility >= (rivals[0]?.utility ?? 0) * grantShareAt(obs, mind, ahead, 0);
+}
+
+/**
+ * The least share of the best plot ahead that the plot `k` steps ahead of the light must reach: STRATEGIST.grantShare,
+ * or, while an adopted playbook sets the grant's pressShare, start falling to end over the pass. How far the pass has
+ * gone is the plot's step over the pass's last step, as the seat sees them: the free plots behind the light and the
+ * plots claimed this grant behind it, then `ahead`.
+ */
+function grantShareAt(obs: GameState, mind: Mind, ahead: readonly number[], k: number): number {
+  const press = adoptedNow(obs, mind)?.pressShare;
+  if (!press) return STRATEGIST.grantShare;
+  const lit = ahead[0] ?? 0;
+  const behind = freePlots(obs).filter((t) => tileIndex(obs.width, t.x, t.y) < lit).length + obs.players.reduce((n, p) => n + p.claimsThisGrant, 0);
+  const length = behind + ahead.length;
+  // The pass's last plot is step length − 1 of it: there the share has reached `end`.
+  const gone = Math.min(1, (behind + k) / Math.max(1, length - 1));
+  return press.start + (press.end - press.start) * gone;
 }
 
 /**
@@ -282,7 +299,7 @@ export function wantsAnyAhead(plan: LandPlan, obs: GameState, ahead: readonly nu
     const lit = plan.ranking[rank]!;
     const withinRoom = later.length < room || later[room - 1]! > rank;
     const best = plan.ranking[Math.min(rank, later[0] ?? rank)]!;
-    if (lit.value > 0 && withinRoom && lit.utility >= best.utility * STRATEGIST.grantShare) return true;
+    if (lit.value > 0 && withinRoom && lit.utility >= best.utility * grantShareAt(obs, mind, ahead, k)) return true;
     const at = later.findIndex((r) => r > rank);
     later.splice(at === -1 ? later.length : at, 0, rank);
     later.length = Math.min(later.length, room);
@@ -397,6 +414,7 @@ export function developDecision(obs: GameState, mind: Mind, mulesSoFar: number, 
   const idle = obs.tiles.filter((t) => t.owner === mind.me && !t.outfit);
   // The reserve less the good a new farm would make, once per good: it is the same for every plot.
   const keepBacks = new Map<Good, number>();
+  const floored = (adoptedNow(obs, mind)?.cashFloor ?? null) !== null;
   const keepBackFor = (good: Good) => keepBacks.get(good) ?? keepBacks.set(good, cashReserve(obs, mind, o, good)).get(good)!;
   const needFood = !obs.tiles.some((t) => t.owner === mind.me && t.outfit === 'food');
   const needEnergy = !obs.tiles.some((t) => t.owner === mind.me && t.outfit === 'energy');
@@ -443,8 +461,9 @@ export function developDecision(obs: GameState, mind: Mind, mulesSoFar: number, 
       else if (mulesSoFar >= mind.level.mulesPerMonth) veto = `already led ${mulesSoFar} MULEs out this month`;
       else if (tooFar) veto = tooFar;
       else if (cashAfter < 0) veto = `it costs ${cr(cost)}, more than the ${cr(p.money)} on hand`;
-      // What the MULE makes arrives before the auction the reserve is kept for, so it counts toward it.
-      else if (cashAfter + Math.max(0, net) < keepBack) veto = `it would leave ${cr(cashAfter)}, under the ${cr(keepBack)} kept for upkeep`;
+      // What the MULE makes arrives before the auction the reserve is kept for, so it counts toward it; not toward an
+      // adopted cash floor, which is credits kept in hand.
+      else if (cashAfter + (floored ? 0 : Math.max(0, net)) < keepBack) veto = `it would leave ${cr(cashAfter)}, under the ${cr(keepBack)} kept for upkeep`;
       else if (!canFeed(obs, mind.me, outfit)) veto = `nothing to feed the ${outfitName(outfit)} with`;
       cands.push(
         candidate<DevAction>(
@@ -602,7 +621,9 @@ export function goodPlan(obs: GameState, mind: Mind, good: Good): GoodPlan {
   const others = rows.filter((r) => r.id !== mind.me);
   const shortfall = others.reduce((n, r) => n + Math.max(0, r.need - r.now), 0);
   const scarce = obs.store.stock[good] <= shortfall;
-  const cornering = mind.level.corners && mind.persona.corner > 0 && scarce && shortfall > 0 && GOOD_CONFIG[good].spoilage < STRATEGIST.cornerMaxSpoilage;
+  // An adopted monopoly target narrows cornering to that good; with none, scarcity alone picks the goods.
+  const target = adoptedNow(obs, mind)?.monopolyTarget ?? null;
+  const cornering = mind.level.corners && mind.persona.corner > 0 && scarce && shortfall > 0 && GOOD_CONFIG[good].spoilage < STRATEGIST.cornerMaxSpoilage && (target === null || good === target);
   const next = o.final ? obs.store.posted[good] : o.price(good);
   const corner = cornering ? { units: Math.min(shortfall, STRATEGIST.cornerMaxUnits), premium: next * STRATEGIST.cornerPremium * mind.persona.corner } : { units: 0, premium: 0 };
   const leader = leaderOf(obs, mind.me);
