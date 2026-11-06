@@ -73,6 +73,32 @@ describe('land claims', () => {
     expect(tycoon().passesGrant(used), 'its claims are used: nothing more to press').toBe(false);
   });
 
+  it("INV-grant-fair: no seat reads the light's hidden path — grants that differ only in the order's unseen tail get the same press and the same Done", () => {
+    const start = fourSeats(3);
+    while (start.phase !== 'landGrant') advancePhase(start);
+    const hide = (state: GameState, tail: (rest: number[]) => number[]): GameState => {
+      const copy = structuredClone(state);
+      const g = copy.grant!;
+      g.order = [...g.order.slice(0, g.step + 1), ...tail(g.order.slice(g.step + 1))];
+      return copy;
+    };
+    const decoy = start.tiles.findIndex((t) => t.terrain === 'store');
+    const tails = [(rest: number[]) => rest, (rest: number[]) => rest.reverse(), () => [], (rest: number[]) => [decoy, ...rest.slice(rest.length >> 1)]];
+    // One seat per tail, asked step by step alike, so their dice stay in step.
+    const seats = tails.map(() => tycoon());
+    const differing: number[] = [];
+    for (let step = 0; step < start.grant!.order.length; step++) {
+      const state = structuredClone(start);
+      state.grant!.step = step;
+      const plays = tails.map((tail, k) => {
+        const seen = hide(state, tail);
+        return JSON.stringify([seats[k]!.onLit(seen), seats[k]!.passesGrant(seen)]);
+      });
+      if (new Set(plays).size > 1) differing.push(step);
+    }
+    expect(differing, 'steps where the hidden tail changed a press or a Done').toEqual([]);
+  });
+
   it('INV-grant-ahead: wantsAnyAhead is true exactly when wantsPlot would take some plot still ahead of the light', () => {
     for (const seed of [1, 3]) {
       const state = fourSeats(seed);
