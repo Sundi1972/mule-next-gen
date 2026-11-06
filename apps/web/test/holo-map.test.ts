@@ -97,4 +97,13 @@ describe('T-AC-3 (pip): an analysed plot draws its best good on 3 dots', () => {
     const unanalysed = render(PIP_TILES).split('data-testid="map-plot-1-0"')[1]!;
     expect(pips(unanalysed)).toHaveLength(0);
   });
+
+  it('T-AC-3 (pip): the TV names a second good only when it has a dot; a barren plot still shows its best at 0', () => {
+    const tv = (ground: MapTile['ground']) =>
+      renderToStaticMarkup(createElement(HoloMap, { width: 1, height: 1, density: 'tv', tiles: [{ x: 0, y: 0, terrain: 'plains', owner: null, ground }] }));
+    expect(tv({ food: 2, crystite: 0 })).toContain('aria-label="Plains, free, Food 2 of 3"');
+    expect(tv({ food: 2, crystite: 0 })).not.toContain('Crystite');
+    expect(tv({ food: 2, water: 1 })).toContain('aria-label="Plains, free, Food 2 of 3, Water 1 of 3"');
+    expect(tv({ food: 0, water: 0 })).toContain('aria-label="Plains, free, Food 0 of 3"');
+  });
 });
