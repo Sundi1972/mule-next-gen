@@ -10,7 +10,7 @@ import { PHASE_MS } from '../../server/src/mule-game.js';
 import type { MuleServer } from '../../server/src/server.js';
 import { check, CLAIM_MS, claimAPlot, doneWithLand, held, launch, PHONE, startServer, TV, type AuctionSteps, type GameStepContext } from './harness';
 import { planningIsTheHub } from './hub-steps';
-import { theAuctionTvFits, theTvHeaderFits, theTvTitleIsClear } from './tv-fit-steps';
+import { theAuctionTvFits, theMonthEndTvFits, theTvHeaderFits, theTvHeaderStaysOnScreen, theTvTitleIsClear } from './tv-fit-steps';
 import { gameOverIsInCredits, theLeagueTableAtTheMonthEnd, theMonthEndHoldsForThePhone } from './month-end-steps';
 import { ELECTION_WAIT_MS, readyThroughTheElection } from './politics-steps';
 import { checkTheShow, watchShow, type ShowWatch } from './production-steps';
@@ -132,6 +132,7 @@ try {
   await claim.waitFor({ timeout: 5_000 });
   check(await claim.isVisible(), 'CLAIM button visible');
   await tv.getByTestId('tv-phase').filter({ hasText: 'Land grant' }).waitFor({ timeout: 3_000 });
+  console.log(`TV-FIT, the land grant: ${await theTvHeaderStaysOnScreen(tv, 'land grant', true)}`);
   await noZoomBeforeYourFirstPlot(ctx);
   await claimAPlot(phone, CLAIM_MS, 'AM-7: the phone claims a plot in the month-1 land grant');
   await zoomButtonOnceYouOwnAPlot(ctx, phoneIntents);
@@ -154,7 +155,7 @@ try {
   console.log(`plots, TV: ${await theTvShowsWhoOwnsEachPlot(ctx)}`);
   // The header without a ready chip: its gauges give way, so a long title keeps clear of them.
   await tv.locator('[data-phase=development] [data-testid=tv-header]').waitFor({ timeout: PRESS_MS });
-  console.log(`TV-FIT, development: ${await theTvTitleIsClear(tv, 'development')}`);
+  console.log(`TV-FIT, development: ${await theTvTitleIsClear(tv, 'development')}; ${await theTvHeaderStaysOnScreen(tv, 'development', true, true)}`);
   // B-AC-6 and B-AC-8, from what both screens drew of month 1's show. The turn runs its whole clock, which starts only
   // once the AI seats have their first MULEs too: a development's length again for that wait.
   await phone.locator('[data-phase=auction]').waitFor({ timeout: within(2 * PHASE_MS.development + PHASE_MS.production) });
@@ -172,7 +173,7 @@ try {
   // B-AC-12 at month 1's end, the one a two-month game has; then it holds until the phone moves on (B-AC-13).
   console.log(`league table: ${await theLeagueTableAtTheMonthEnd(ctx)}`);
   await tv.getByTestId('tv-monthend').waitFor({ timeout: PRESS_MS });
-  console.log(`TV-FIT, the month end: ${await theTvHeaderFits(tv, 'month end')}`);
+  console.log(`TV-FIT, the month end: ${await theMonthEndTvFits(tv, server, code)}`);
   console.log(`month end: ${(await theMonthEndHoldsForThePhone(ctx, 1)).line}`);
 
   // Month 2.
