@@ -89,6 +89,9 @@ describe('the goods auction walkers carry their units', () => {
     let checks = 0;
     let betweenPlayers = 0;
     for (let i = 0; i < 2_000 && game.viewFor(null).auction?.good === good && game.viewFor(null).auction?.stage === 'walk'; i++) {
+      // RULE-4: stopped at what he must hold, s1 holds ▼ again, so he sells on to s2 into shortage.
+      const s1 = state.auction?.walkers.find((w) => w.id === 's1');
+      if (s1?.held && s1.dir === 0) game.handle('s1', { type: 'walk', dir: 'down' });
       advance(WALK.tickMs);
       if (state.auction?.units === traded) continue;
       if (game.viewFor(null).auction?.good !== good) break;
