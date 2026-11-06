@@ -1,0 +1,86 @@
+<!-- WS7's colony-level section for WS5's shortage-chain explainer. A fragment: it uses the same
+     classes as colony-needs-colonists.html (.decision, .rec, .scroll). Measured on trunk e4e78193,
+     10 seed-1 games, 4 computer players, politics on: data in ws7-politics/.handover/ws7-findings/m20/. -->
+<section id="colony-level">
+<h2>The colony level: what a shortage does to the colonists</h2>
+
+<h3>What happens today</h3>
+<ul>
+<li><b>Food and Water</b> are the only goods colonists consume. A short shelf makes the colony shrink 5% instead of growing 4%, and costs the mood 8 points of its aim per good short. (The colonists' hardship proposal makes both depend on how short they went.)</li>
+<li><b>Energy and Medicine</b> do nothing to the colonists. Their only effect is on what the store wants and charges.</li>
+<li><b>Sickness exists only for players.</b> At the start of development each player has a small chance of being sick, higher in dirty air, cured by holding 1 Medicine; a sick player walks at half pace. An epidemic makes every player use a Medicine or be sick. Colonists are never sick, and hunger and sickness are not linked anywhere.</li>
+<li><b>The colony feeds back into production only through its mood.</b> A restless or unhappy colony brings strikes (a good's plots make 20% unless the strikers are paid), walkouts (a player's main good makes 20%), MULE thefts, riots (the store loses a third of each good) and emigration. A dear Food price (over 1.5 times normal) makes strikes and riots likelier. The number of colonists sets the store's demand and prices.</li>
+<li><b>Crews</b> are 1 per raw plot and 2 per factory. They only add to their owner's Food and Water needs: they have no mood of their own.</li>
+</ul>
+
+<h3>Measured: ten simulated games, 120 month ends</h3>
+<div class="scroll"><table>
+<thead><tr><th>Good</th><th>Months the colonists' shelf was short</th><th>More than half short</th></tr></thead>
+<tbody>
+<tr><td>Food</td><td>46</td><td>31</td></tr>
+<tr><td>Water</td><td>66</td><td>57</td></tr>
+<tr><td>Energy</td><td>95</td><td>93</td></tr>
+<tr><td>Medicine</td><td>54</td><td>42</td></tr>
+</tbody></table></div>
+<ul>
+<li>Medicine was short in 54 months, and in 40 of them Food or Water was short too.</li>
+<li>Medicine's price climbs half again every month nobody sells it: it reached 15,584 credits in one game.</li>
+<li>The air stayed clean in all 120 months, so dirty air never made anyone sick. 22 of 480 player-months were sick, all from the small base chance. No epidemic happened.</li>
+<li>No colony was ever Content or Thriving: every month was Restless or Unhappy.</li>
+</ul>
+
+<h3>Decisions for you</h3>
+
+<div class="decision">
+<h3>1 · Do hungry colonists get sick more easily?</h3>
+<ul>
+<li><b>Yes: hunger makes them need more Medicine.</b> The colony's memory of hunger (from the hardship proposal) raises the colonists' Medicine need, by up to half again after long hunger, the same as dirty air does today. Dirty air and hunger together count the larger of the two, not both. <i>For:</i> one link Heiko asked for, using a number the game already keeps; it shows up as Medicine the store must stock. <i>Against:</i> today's supply already runs short of Medicine; measured, the colonists' Medicine need would rise by about a fifth on average.</li>
+<li><b>Yes, at full strength: up to double.</b> <i>For:</i> a bigger, more visible effect. <i>Against:</i> measured, the need would average nearly half again more and reach double, in a game whose Medicine already runs out; it would feed the same downward spiral the first hardship numbers did.</li>
+<li><b>No link.</b> <i>For:</i> nothing to build. <i>Against:</i> hunger and sickness stay unrelated, which is the question you asked.</li>
+</ul>
+<p class="rec"><b>Recommended: yes, up to half again.</b></p>
+</div>
+
+<div class="decision">
+<h3>2 · Does running out of Medicine hurt the colonists?</h3>
+<ul>
+<li><b>Yes, at half the weight of Food and Water.</b> A Medicine shortfall counts in the colonists' hardship at half its share: missing all their Medicine counts like missing half their Food. <i>For:</i> sickness then matters, and the chain closes: hunger, then sickness, then Medicine runs short, then the mood falls. Measured: it adds hardship in 14 of 120 months where Food and Water were fine, and raises the average hardship by about 6%. <i>Against:</i> one more good to watch; it is short in 54 months today.</li>
+<li><b>Yes, at full weight.</b> <i>Against:</i> with Medicine short 54 months in 120 and its price running away, it would dominate the colony's mood.</li>
+<li><b>No.</b> <i>For:</i> simplest. <i>Against:</i> decision 1's extra Medicine need would then change only prices.</li>
+</ul>
+<p class="rec"><b>Recommended: yes, at half weight.</b></p>
+</div>
+
+<div class="decision">
+<h3>3 · Does an Energy shortage hurt the colonists?</h3>
+<ul>
+<li><b>No, it stays a price, as today.</b> <i>For:</i> Energy is short for the colonists in 95 of 120 months; counting it would keep every colony in hardship until supply is tuned. <i>Against:</i> colonists without power feel nothing.</li>
+<li><b>Yes, at a low weight.</b> <i>For:</i> complete. <i>Against:</i> under today's supply it is permanent hardship; better decided when supply is tuned.</li>
+</ul>
+<p class="rec"><b>Recommended: no for now; look again when the supply numbers are tuned.</b></p>
+</div>
+
+<div class="decision">
+<h3>4 · Should the colony's state feed back into production or the store?</h3>
+<ul>
+<li><b>Through what exists, no new channel.</b> An unhappy colony already strikes, walks out, steals MULEs and riots, which cuts production and empties the store; the hardship proposal makes those likelier the longer the hunger lasts. A bigger or smaller colony already changes what the store wants. <i>For:</i> the chain is already closed and measured. <i>Against:</i> the feedback comes by chance, through events, not every month.</li>
+<li><b>A new direct link</b>, for example production falling with the colony's size or mood every month. <i>For:</i> steady and predictable. <i>Against:</i> a second way the mood cuts production beside the events, and the first hardship numbers already showed how fast that spirals.</li>
+</ul>
+<p class="rec"><b>Recommended: through what exists.</b></p>
+</div>
+
+<div class="decision">
+<h3>5 · Crews' unhappiness: where does it live?</h3>
+<ul>
+<li><b>At the player level, through the existing walkout.</b> If crews get unhappy, it is because their own player left them short; that makes the walkout likelier for that player's plots. The colony's mood stays the colony-wide driver, so the two never count the same hunger twice. <i>For:</i> no new mood to show; the walkout already exists and players already see it. <i>Against:</i> crews have no gauge of their own.</li>
+<li><b>A crew mood per player</b>, shown beside the colony's. <i>For:</i> visible. <i>Against:</i> a second mood to design, show and tune.</li>
+</ul>
+<p class="rec"><b>Recommended: at the player level, through the walkout.</b> The player-level rule is WS5's part.</p>
+</div>
+
+<h3>Two findings for the supply and pricing work</h3>
+<ul>
+<li>Medicine's price grows half again every month nobody sells it, without a ceiling: 15,584 credits in one game.</li>
+<li>The air never got dirty in ten games, so every pollution and sickness rule is untested by the simulation.</li>
+</ul>
+</section>
