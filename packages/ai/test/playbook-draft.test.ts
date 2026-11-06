@@ -26,7 +26,7 @@ import { planMind } from '../src/playbook/plan.js';
 import { AiSeat } from '../src/seat.js';
 import { applySets } from '../src/sim.js';
 import { goodPlan, landDecision, leaderOf, shortfallHold, tradeDecision } from '../src/strategist.js';
-import { beforeTax, canFeed, cashReserve, installGain, type Mind } from '../src/value.js';
+import { beforeTax, canFeed, cashReserve, chainLinks, chainOutlook, installGain, type Mind } from '../src/value.js';
 import { outlook } from '../src/outlook.js';
 import { FOOD_TO_SPARE } from './store-food.js';
 
@@ -65,15 +65,36 @@ function withPlans<T>(sets: string[], fn: () => T): T {
   }
 }
 
-/** RULE-4's money-maker score, written out from the rule's words: the best plots' install gains, less the rivals' share. */
-function moneyMakerByRule(state: GameState, mind: Mind): Good | null {
+/**
+ * RULE-4's money-maker score, written out from the rule's words: the best plots' install gains, less the rivals' share.
+ * A factory good the seat can't feed scores as AM-32's chain, or not at all; `chains` false is the rule before AM-32.
+ */
+function moneyMakerByRule(state: GameState, mind: Mind, chains = true): Good | null {
   const obs = observe(state, mind.me);
   const o = outlook(obs, mind.me, { lookAhead: mind.level.lookAhead });
   const plots = obs.tiles.filter((t) => t.terrain !== 'store' && (t.owner === null || (t.owner === mind.me && !t.outfit)));
+  const top = (gains: number[]) => [...gains].sort((a, b) => b - a).slice(0, AI_PLANS.moneyMaker.plots).reduce((n, g) => n + g, 0);
   let best: { good: Good; score: number } | null = null;
-  for (const good of GOODS.filter((g) => canFeed(obs, mind.me, g))) {
-    const gains = plots.map((t) => installGain(obs, o, t, good, mind).gain).sort((a, b) => b - a);
-    const sum = gains.slice(0, AI_PLANS.moneyMaker.plots).reduce((n, g) => n + g, 0);
+  for (const good of GOODS) {
+    let sum = top(plots.map((t) => installGain(obs, o, t, good, mind).gain));
+    if (!canFeed(obs, mind.me, good)) {
+      // The chain: the works with its inputs free, each missing link on a plot of its own at its running cost.
+      const links = chainLinks(obs, mind.me, good);
+      const mules = links.length + 1;
+      if (!chains || links.length === 0 || Math.ceil(mules / mind.level.mulesPerMonth) > AI_PLANS.chain.months) continue;
+      const free = chainOutlook(o, links);
+      const works = plots.map((t) => ({ t, ...installGain(obs, free, t, good, mind) })).sort((a, b) => b.gain - a.gain);
+      const used = [works[0]!.t];
+      sum = top(works.map((w) => w.gain));
+      let cost = works[0]!.cost;
+      for (const link of links) {
+        const at = plots.filter((t) => !used.includes(t)).map((t) => ({ t, ...installGain(obs, free, t, link, mind) })).sort((a, b) => b.gain - a.gain)[0]!;
+        used.push(at.t);
+        sum += at.gain;
+        cost += at.cost;
+      }
+      if (cost > obs.players.find((p) => p.id === mind.me)!.money) continue;
+    }
     const rivals = obs.tiles.filter((t) => t.owner !== null && t.owner !== mind.me && t.outfit === good).length;
     const score = sum * (1 - AI_PLANS.moneyMaker.rivalDiscount * rivals);
     if (score > 0 && (!best || score > best.score)) best = { good, score };
@@ -144,6 +165,17 @@ describe('the draft picks a plan kind and writes its strategy', () => {
     expect(new Set(reasons).size).toBe(reasons.length);
   });
 
+
+  it('FM-chain-household: a seat with no spare Food or Water never drafts Medicine as a chain; its money-maker is the rule before AM-32', () => {
+    const { state, seats } = table('trader');
+    const trader = seats[2]!;
+    const obs = observe(state, trader.mind.me);
+    expect(canFeed(obs, trader.mind.me, 'medicine'), 'Medicine is short of an input').toBe(false);
+    expect(chainLinks(obs, trader.mind.me, 'medicine')).toEqual([]);
+    const specialist = withPlans(['AI_PLANS.leaning.trader.monopolist=0.9'], () => strategyOf(state, trader.mind, trader.seed));
+    expect(specialist.moneyMaker).not.toBe('medicine');
+    expect(specialist.moneyMaker).toBe(moneyMakerByRule(state, trader.mind, false));
+  });
   it('T-AC-5: a Trader table drafts cautious builder, aggressive landBaron, trader specialist or monopolist, saboteur spoiler; at Rookie no monopolist and no spoiler', { timeout: SLOW_MS }, () => {
     const trader = table('trader');
     const kinds = trader.seats.map((s) => strategyOf(trader.state, s.mind, s.seed).kind);
