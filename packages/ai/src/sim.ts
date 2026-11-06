@@ -50,7 +50,7 @@ import { simSeats, type TablePlays } from './lineup.js';
 import type { FloorMomentCounts } from './floor-turn.js';
 import { playGame, type DevTurn, type PlayedGame, type SeatSpec } from './play.js';
 import type { AiSeat } from './seat.js';
-import { unitNeed, type Mind } from './value.js';
+import { unitNeed, wholeNextMonth, type Mind } from './value.js';
 
 function arg(name: string, fallback: number): number {
   const i = process.argv.indexOf(`--${name}`);
@@ -358,7 +358,7 @@ const SHORT_WHY_LABEL: Record<ShortWhy, string> = {
  * then, and how many left that good still short; a good the engine skips holds no auction and counts none. Beside it,
  * why each seat short of a good when the auction opened (with the store selling and the cash then) ended still short.
  * (b) and T-AC-12: the seat-months that lost output for want of Energy, those while the store had Energy for it and it
- * could pay, and plants and wells at each game's end.
+ * could pay, and plants and wells at each game's end. UBER-AC-2: each seat at each Food auction (foodBandLine).
  */
 interface SupplyTally {
   entered: number;
@@ -369,9 +369,10 @@ interface SupplyTally {
   cutCouldBuy: number;
   plants: number;
   wells: number;
+  food: FoodHeld[];
 }
 
-const newSupplyTally = (): SupplyTally => ({ entered: 0, leftShort: 0, why: {}, seatMonths: 0, cut: 0, cutCouldBuy: 0, plants: 0, wells: 0 });
+const newSupplyTally = (): SupplyTally => ({ entered: 0, leftShort: 0, why: {}, seatMonths: 0, cut: 0, cutCouldBuy: 0, plants: 0, wells: 0, food: [] });
 
 interface Short {
   target: number;
@@ -398,11 +399,19 @@ function supplyHooks(tally: SupplyTally): { phase: (s: GameState) => void; seats
   /** At each good's status screen, per seat; at its close, per seat: the stock, the trade it chose, the shelf. */
   let atStatus = new Map<engine.Good, Map<string, Short>>();
   let atClose = new Map<engine.Good, Map<string, { stock: number; buyTo: number | null; soldOut: boolean }>>();
+  /** At Food's status screen: its ask, Food's reference then, and per seat next month's need. */
+  let foodAt: { ask: number; reference: number; need: Map<string, number> } | null = null;
   const watch = (s: GameState) => {
     const a = s.auction;
     if (!opened || !a?.good) return;
     const good = a.good;
-    if (a.stage === 'status' && !atStatus.has(good)) atStatus.set(good, new Map(seats.map((seat) => [seat.mind.me, shortOf(s, seat.mind, good, a.storeSell)])));
+    if (a.stage === 'status' && !atStatus.has(good)) {
+      atStatus.set(good, new Map(seats.map((seat) => [seat.mind.me, shortOf(s, seat.mind, good, a.storeSell)])));
+      if (good === 'food') {
+        const need = new Map(seats.map((seat) => [seat.mind.me, wholeNextMonth(observe(s, seat.mind.me), seat.mind.me, good)]));
+        foodAt = { ask: a.storeSell, reference: s.store.refPrice.food, need };
+      }
+    }
     if (a.stage === 'close' && atStatus.has(good) && !atClose.has(good)) {
       const close = new Map<string, { stock: number; buyTo: number | null; soldOut: boolean }>();
       for (const seat of seats) {
@@ -428,8 +437,17 @@ function supplyHooks(tally: SupplyTally): { phase: (s: GameState) => void; seats
       opened = new Map(seats.map((seat) => [seat.mind.me, new Map(WALK.order.map((g) => [g, shortOf(s, seat.mind, g, Math.ceil(s.store.posted[g] * (1 + PRICE.storeSpread)))]))]));
       atStatus = new Map();
       atClose = new Map();
+      foodAt = null;
     }
     if (s.phase !== 'auction' || !opened) return;
+    // A Food auction nobody trades in ends at its status screen, with no close: the seat holds what it held.
+    if (foodAt) {
+      const { ask, reference } = foodAt;
+      for (const [me, need] of foodAt.need) {
+        const held = atClose.get('food')?.get(me)?.stock ?? s.players.find((p) => p.id === me)!.stock.food;
+        tally.food.push({ ask, reference, held, need });
+      }
+    }
     for (const p of s.players) {
       for (const good of WALK.order) {
         const status = atStatus.get(good)?.get(p.id);
@@ -474,8 +492,25 @@ export interface FoodHeld {
   need: number;
 }
 
+const DEAR_TIMES = 2; // literal-ok: UBER-AC-2's own band boundary ("ask ≥ 2× reference"), a proof's term, not a balance number
+const FOOD_BANDS = [
+  { label: 'ask ≤ ref', holds: (x: FoodHeld) => x.ask <= x.reference },
+  { label: `ref < ask < ${DEAR_TIMES}× ref`, holds: (x: FoodHeld) => x.ask > x.reference && x.ask < DEAR_TIMES * x.reference },
+  { label: `ask ≥ ${DEAR_TIMES}× ref`, holds: (x: FoodHeld) => x.ask >= DEAR_TIMES * x.reference },
+];
+
+/**
+ * UBER-AC-2's row: per band, the median of Food held after the auction ÷ next month's need over every seat at every
+ * Food auction in it. A seat needing no Food has no ratio and counts in no band.
+ */
 export function foodBandLine(samples: readonly FoodHeld[], colonyShort: string): string {
-  throw new Error('NotImplemented: foodBandLine');
+  const counted = samples.filter((x) => x.need > 0);
+  const bands = FOOD_BANDS.map(({ label, holds }) => {
+    const ratios = counted.filter(holds).map((x) => x.held / x.need);
+    const median = ratios.length > 0 ? quantile(ratios, 0.5).toFixed(2) : 'no median'; // literal-ok: the median, two decimals for display
+    return `${label} ${median} (n ${ratios.length})`;
+  });
+  return `     Resource utility (UBER-AC-2): Food held after its auction ÷ next month's need, the median seat by the ask against Food's reference: ${bands.join(', ')} (target over 1.0 at ask ≤ ref, at most 1.0 at ask ≥ ${DEAR_TIMES}× ref); colonists short of Food or Water in ${colonyShort} of months`;
 }
 
 /** The model's proof rows, beside the colony's own Food and Water shortage (HC-6). */
@@ -489,6 +524,7 @@ function supplyLines(t: SupplyTally, playerGames: number, colonyShort: string): 
     `     Resource utility (UBER-AC-1 a, why): short when the auction opened, with the store selling and the cash then, and still short after the good:`,
     ...why,
     `     Resource utility (UBER-AC-1 b): Energy cut while the store had Energy and the seat could pay in ${pct(t.cutCouldBuy, t.seatMonths)} of ${t.seatMonths} seat-months (target under 5%); colonists short of Food or Water in ${colonyShort} of months`,
+    foodBandLine(t.food, colonyShort),
     `     Resource utility (T-AC-12): ${perSeat(t.plants)} plants and ${perSeat(t.wells)} wells a seat-game at the end; a cut for want of Energy in ${pct(t.cut, t.seatMonths)} of seat-months; colonists short of Food or Water in ${colonyShort} of months`,
   ];
 }
