@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   advancePhase,
   AI_HANDS,
+  AI_PLANS,
   applyReach,
   buildFloor,
   createGame,
@@ -32,6 +33,7 @@ import {
 } from '@mule/engine';
 import { simFloorConfig } from '../src/floor-turn.js';
 import { DevelopHand, type RoutePlay } from '../src/hands/develop.js';
+import { planMind } from '../src/playbook/plan.js';
 import { draftPlaybook, type LeftOutPick } from '../src/playbook/draft.js';
 import { applyAction, arrive, type DevClock } from '../src/play.js';
 import { AiSeat } from '../src/seat.js';
@@ -113,18 +115,19 @@ function seatAndHand(): { seat: AiSeat; hand: DevelopHand } {
   return { seat, hand: new DevelopHand(seat.brain, createRng(SEED)) };
 }
 
-/** A route of the test's own, played with the draft's seed and no money-maker: as the seat's own draft, or, `own` false, as adopted. */
+/** A route of the test's own, played with the draft's seed, no money-maker and the seat's own mind: as the seat's own draft, or, `own` false, as adopted. */
 const routeOf = (route: DevelopmentPlay['route'], extra: Partial<DevelopmentPlay> = {}, own = true): RoutePlay => ({
   part: { route, timeBudgetMs: DEVELOPMENT.fullSeconds * MS_PER_SECOND, ifSoldOut: 'pub', ...extra },
   seed: SEED,
   moneyMaker: null,
+  mind: seatAndHand().seat.mind,
   own,
 });
 
 /** The seat's own validated development draft, as a hand is given it on the own path. */
 function drafted(seat: AiSeat, state: GameState): RoutePlay {
   const pb = seat.draft(state, 'development');
-  return { part: pb.development!, seed: SEED, moneyMaker: pb.strategy.moneyMaker, own: true };
+  return { part: pb.development!, seed: SEED, moneyMaker: pb.strategy.moneyMaker, mind: planMind(seat.mind, pb.strategy), own: true };
 }
 
 type Runner = 'tick' | 'steer';
@@ -188,7 +191,11 @@ let steer = DEV_STEER.on;
 beforeEach(() => {
   steer = DEV_STEER.on;
 });
+const builderReserve = AI_PLANS.kinds.builder.reserve;
+/** A builder's reserve multiplier no seat's money covers. */
+const THRIFTY_RESERVE = 100;
 afterEach(() => {
+  AI_PLANS.kinds.builder.reserve = builderReserve;
   DEV_STEER.on = steer;
   seam.throwing = false;
   vi.restoreAllMocks();
@@ -284,19 +291,25 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
       expect(me(state).doneDeveloping).toBe(true);
     });
 
-    it.each(['sold', 'built on'])("T-AC-7 row 3 (example 2): its plot %s since the draft, that MULE is replaced by its own pick, 'stale'", (how) => {
+    it.each(['sold', 'built on', 'sold, under a plan that keeps its cash back'])("T-AC-7 row 3 (example 2): its plot %s since the draft, that MULE is replaced by its own pick, 'stale'", (how) => {
       const { state, plots } = development(4);
       const [drafted0, ...spares] = plots as [Tile, Tile, Tile, Tile];
       drafted0.owner = ME;
       // Known ground: a route with no analyses keeps its drafted MULE until row 3 reads it (AM-27 re-picks one after an analysis).
       me(state).analysed.push(...plots.map((t) => indexOf(state, t)));
       const { seat, hand } = seatAndHand();
-      const play0 = drafted(seat, state);
+      let play0 = drafted(seat, state);
       expect(play0.part.route.some((s) => s.act === 'analyse')).toBe(false);
+      // RULE-14: the own pick weighs with the route's plan mind. A builder's reserve, swept far up, keeps every credit back.
+      const thrifty = how.includes('cash back');
+      if (thrifty) {
+        AI_PLANS.kinds.builder.reserve = THRIFTY_RESERVE;
+        play0 = { ...play0, mind: planMind(seat.mind, { kind: 'builder' }) };
+      }
       // After the draft: the plot goes to a rival at the land auction, or gets a MULE; the seat holds three other idle
       // plots, so the replacement is a pick between them (with two, the picks for the first MULE and the second fall
       // alike).
-      if (how === 'sold') drafted0.owner = RIVAL;
+      if (how !== 'built on') drafted0.owner = RIVAL;
       else drafted0.outfit = 'food';
       for (const t of spares) t.owner = ME;
       // What a fresh draft on the changed state holds for that MULE, the route's first.
@@ -310,6 +323,12 @@ describe("T-AC-7: RULE-9's rows, with their examples", () => {
       const log = JSON.stringify(hand.done);
       const stale = hand.routeLog(state).steps.filter((s) => s.note === `stale: plot ${plot}`);
       expect(stale.length, log).toBe(3);
+      if (thrifty) {
+        // Its pick under the plan is 'stop': the group is skipped, and no MULE goes anywhere.
+        expect(stale.every((s) => s.outcome === 'skipped'), log).toBe(true);
+        expect(spares.every((t) => t.outfit === null), log).toBe(true);
+        return;
+      }
       expect(stale.every((s) => s.outcome === 'replaced')).toBe(true);
       // The promise: the MULE went onto a plot it does hold, idle, as the fresh draft puts it, and none onto the stale one.
       expect(spares.map((t) => indexOf(state, t)), log).toContain(freshPlot);

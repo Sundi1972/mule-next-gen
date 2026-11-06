@@ -246,6 +246,7 @@
 <p>Without counting rivals, four to six seats queued for the same few plots and a loser could end month 1 with no land: <span class="num">75</span> seats in <span class="num">400</span> games before, none after.</p>
 <h3 id="land-auction">The land auction</h3>
 <p>For a plot up for auction, the seat bids up to the lowest of: what the plot is worth to it, its money minus the cash reserve, and its money minus the price of a MULE for this plot and each idle plot it already holds. For a MULE lot, up to what a MULE of that outfit gains on its best idle plot. Against a player it overtakes by <span class="num">10–35%</span> of the gap to its limit; against the colony's proxy bid it walks straight to the colony's cap if that is within its limit, otherwise leaves the lot to the colony. When its money is under its cash reserve it lists one lot a month itself (an idle plot or a MULE, the one worth least to it, never its last Food or Energy MULE) at a minimum of <span class="num">0.8</span> of its worth, sold to the store if nobody bids.</p>
+<p>A player with a farm keeps its last Water MULE too, as it keeps its last Food and Energy MULE, since an unwatered farm makes half. Without a farm it may still sell it.</p>
 <p class="code-ref">In the code: <code>packages/ai/src/strategist.ts::landDecision, wantsPlot, rivalsStillClaiming, plotValue, plotRoom, muleValue, sellWanted</code> · <code>packages/ai/src/value.ts::installGain</code> · <code>packages/ai/src/hands/lot.ts::LotHand</code> · <code>packages/engine/src/config.ts::STRATEGIST.land, grantShare, LOTS.aiOvershoot, AI_PLANS.sell</code></p>
 <p class="owner">Kept current by: WS1, with WS3 for the grant and auction rules.</p>
 
@@ -301,6 +302,44 @@
 <div class="box next"><h4>What is changing</h4><p>PR #379 (WS9, the playbook follow-ups) goes to trunk in batch 32: a route plays no filter while the seat still leads a MULE, a rival counts as “declared but idle” only for a declared Sell that traded nothing, more tests (among them a bluffing seller never selling under value) and spec amendments that tick the switch's preconditions. Turning the switch on waits for the draft to re-decide after each MULE. Owner: WS9.</p></div>
 <p class="code-ref">In the code: <code>packages/engine/src/playbook.ts::Playbook, Strategy</code> · <code>packages/ai/src/playbook/draft.ts, validate.ts, path.ts</code> · <code>packages/engine/src/config.ts::AI_PLANS</code> (<code>ownPhases: false</code>)</p>
 <p class="owner">Kept current by: WS9 (playbooks), WS1 (hands).</p>
+
+<h2 id="kept-plan">Keeping a plan, and when it changes <span class="pill built">In the game</span></h2>
+<p>A computer player picks one of the six plan kinds above and then <strong>plays like that kind</strong>: the kind tilts its persona's weights while it holds the plan. It <strong>keeps the plan from month to month</strong> and changes it only when something big happens.</p>
+<h3 id="plan-tilt">How a plan kind tilts the persona</h3>
+<p>Each kind multiplies some of the persona's weights (see <a href="#personas">Personas</a>); a weight the kind does not name stays as it is.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Kind</th><th>Its weights while it holds the plan</th></tr></thead>
+<tbody>
+<tr><td>Builder</td><td>reserve × <span class="num">1.2</span>, speculate × <span class="num">0.5</span>, corner × <span class="num">0</span>: keeps more cash back, doesn't gamble, never corners</td></tr>
+<tr><td>Specialist</td><td>greed × <span class="num">1.2</span>, risk × <span class="num">0.9</span>: chases the gain from its money-maker, a little bolder</td></tr>
+<tr><td>Monopolist</td><td>corner × <span class="num">2.5</span>, speculate × <span class="num">1.2</span>, patience × <span class="num">1.2</span>: pays up to corner its good</td></tr>
+<tr><td>Land baron</td><td>greed × <span class="num">1.1</span>, reserve × <span class="num">0.8</span>: spends more of its cash on land</td></tr>
+<tr><td>Politician</td><td>none: plays as its persona</td></tr>
+<tr><td>Spoiler</td><td>spite × <span class="num">1.5</span>: works harder against the leader</td></tr>
+</tbody>
+</table></div>
+<div class="box example"><h4>Example</h4><p>The Trader persona has corner <span class="num">0.4</span>. As a Monopolist that becomes 0.4 × 2.5 = <strong>1.0</strong>, so while it holds that plan it weighs buying up a scarce good as much as the Aggressive persona does. As a Politician its weights stay as they are.</p></div>
+<p>The tilt applies to what the seat plans: its strategy and cash floor, what it lists when it is short of cash, the MULEs it picks for its own route, and what each good is worth to it in the auction. It does not change how it claims land in the grant, nor its reaction times and waiting in the auction. While the switch for its own development and auction plans is off (see <a href="#who-plays-the-playbook">Who plays it</a>), the hands decide those phases as today, so there the tilt shows only in a plan Claude wrote and the seat adopted.</p>
+<h3 id="plan-kept">Keeping the plan</h3>
+<p>The seat keeps its kind, its money-maker, the good it means to corner and its land target across months. A land target that has fallen behind is held to what the grants can still give. Each month it works out its cash floor, its stance toward each rival and its one-line reason again. A plan Claude wrote and the seat adopted becomes the plan it keeps.</p>
+<h3 id="replan-triggers">The five things that make it re-plan</h3>
+<p>When it makes a plan the seat notes where things stand. At each point in the month where it plans (planning, the start of development, the start of the auction) it checks five things against those notes, in this order, and re-plans at the first that holds:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>#</th><th>What happened</th><th>Exactly</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>It lost a key plot</td><td>A rival owns one of its <span class="num">2</span> key plots: the best-ranked plots of its land plan that nobody else owned when it planned</td></tr>
+<tr><td>2</td><td>A rival started making its corner good</td><td>Rival plots making the good it means to corner reach <span class="num">1</span> more than when it planned</td></tr>
+<tr><td>3</td><td>Its good's price fell</td><td>The store's price of its money-maker or its corner good has fallen by <span class="num">40%</span> or more, measured at the same point in the month as when it planned. A rise never counts: dearer is good news for a seller</td></tr>
+<tr><td>4</td><td>A production event hit it</td><td>Since it planned, an event cut the output of at least <span class="num">1</span> of its own plots making its money-maker</td></tr>
+<tr><td>5</td><td>New office holders</td><td>A new term began this month and the Governor or the Sheriff is someone else than when it planned. The first term after a plan made before any election does not count; the seat notes those holders and goes on</td></tr>
+</tbody>
+</table></div>
+<p>A re-plan picks the kind and its fields again, so the kind may stay the same, and takes fresh notes. The seat logs the month, the point and the reason, and its plan's reason line says it first, for example “Lost a key plot.” before the kind's usual line. Everything else is noise: the plan stands.</p>
+<p>Measured in a probe, not a target: on seeds 1, 2 and 3, four playbook seats for 12 months, a seat re-planned about <span class="num">4.4</span> times a game (over the 12 seat-games: new office holders 24, a lost key plot 12, a production event 11, a price fall 4, a rival producer 2). Before the ruling below (a price rise counted too, the price compared at different points in the month, and the first term always counted) it was about 9.4, nearly every month.</p>
+<div class="box why"><h4>Why it is like this</h4><p>The goal (AI step 2, G-1): an opponent worth beating, each persona leaning to its own plan and keeping it. A kind is a multiplier on the weights every decision already reads, so a plan reaches every decision without new rules for each kind. The five triggers are the design doc's big events, each a threshold on what every player can see, so a seat keeps its plan through noise and anyone reading the record sees why it changed. On 6 November WS9's lead ruled the price trigger like-for-like and fall-only, and the first term after a pre-election plan out (spec amendment AM-31), after a probe showed the store's normal monthly price steps (up to 50%) set it off almost every month.</p></div>
+<p>The tilt numbers are starting values for the balance round.</p>
+<p class="code-ref">In the code: <code>packages/ai/src/playbook/plan.ts::planMind, anchorOf</code> · <code>packages/ai/src/playbook/replan.ts::replanReason</code> · <code>packages/ai/src/seat.ts::AiSeat.replanDue, replanLog</code> · <code>packages/engine/src/config.ts::AI_PLANS.kinds, replan</code> · spec C12, C13, RULE-8, RULE-14, AM-31</p>
+<p class="owner">Kept current by: WS9.</p>
 
 <h2 id="ai-politics">In politics <span class="pill built">In the game</span></h2>
 <p>Computer players run for office, vote and, as Governor, set the tax, propose laws and spend the colony fund. In short: a persona runs for Governor with a set chance per election (the aggressive seat most often); it votes for itself if it runs, otherwise for the smallest landowner, so the table leans against the leader; in an unhappy colony it will not back the sitting Governor if anyone else runs. As Governor it steers the sales tax toward its persona's target, proposes the law that costs the leader most against itself, pays a general strike and repairs damage when its persona does, and commissions the most prestige the fund can pay for. On a law ballot it votes for a new law when it costs it no more than the table's median, and for a repeal when the law costs it more (a Governor always votes yes, a Rookie flips a coin). The full rules and numbers are in <a href="colony-and-politics.html#ai-governor">Colony and politics: the computer Governor</a>.</p>
