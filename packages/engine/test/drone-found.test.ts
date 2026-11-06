@@ -89,7 +89,7 @@ describe('T-AC-1: the drone\'s ground lands at Scan', () => {
     const seenByBrix = observe(state, 'brix').players.find((p) => p.id === 'ossa')!;
     expect([seenByBrix.analysed, seenByBrix.droneFound], 'another seat sees none of it in planning').toEqual([[], []]);
 
-    expect(() => orderGeoDrone(state, 'ossa', plots)).toThrow('A drone is already on its way');
+    expect(() => orderGeoDrone(state, 'ossa', plots)).toThrow('A drone was already used this planning');
     expect(ossa(state).money, 'charged once').toBe(money - DEVELOPMENT.droneFee);
 
     const analysed = ossa(state).analysed.slice();

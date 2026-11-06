@@ -2,10 +2,11 @@ import type { GameState } from '@mule/engine';
 import type { MuleView } from '@mule/protocol';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { dotsOf } from '@mule/ui';
 import { describe, expect, it } from 'vitest';
 import { MuleGame } from '../../server/src/mule-game';
 import { fakeContext, walkers } from '../../server/test/fake-context';
-import { droneReport, ScanReport } from '../src/phone/plotInfo';
+import { bestLine, bestWords, droneReport, nextDroneWords, ScanReport } from '../src/phone/plotInfo';
 
 /**
  * The Drone report is drawn from the view (the seat's droneOrder and its tiles' ground), never from the tap on Scan, so
@@ -25,7 +26,7 @@ function scanned() {
   return { game, fake, plots, before };
 }
 
-const html = (view: MuleView) => renderToStaticMarkup(createElement(ScanReport, { tiles: droneReport(view)! }));
+const html = (view: MuleView) => renderToStaticMarkup(createElement(ScanReport, { tiles: droneReport(view)!, next: nextDroneWords(view) }));
 
 describe("the Drone report is the view's: droneOrder plus the tiles' ground", () => {
   it("after Scan, the sender's view gives the report both plots, in the order picked, each with its ground", () => {
@@ -47,7 +48,7 @@ describe("the Drone report is the view's: droneOrder plus the tiles' ground", ()
     expect(drawn).toContain('data-testid="scan-report"');
     for (const p of plots) expect(drawn).toContain(`data-testid="report-${p.x}-${p.y}"`);
     expect(drawn).toContain('best for ');
-    expect(drawn).toContain('ONLY YOU');
+    expect(drawn).toContain('Only you');
   });
 
   it('(negative) there is no report before Scan, for another seat, or for the TV', () => {
@@ -63,5 +64,22 @@ describe("the Drone report is the view's: droneOrder plus the tiles' ground", ()
     const last = plots.at(-1)!;
     const partial = { ...view, tiles: view.tiles.map((t) => (t.x === last.x && t.y === last.y ? { ...t, ground: undefined } : t)) };
     expect(droneReport(partial)).toBeNull();
+  });
+});
+
+describe('C2: "best for" never names a good the plot draws no dot for', () => {
+  const POOR = { food: -2, water: -1, energy: -2, smithore: 0, crystite: 0, rareEarth: 0 };
+
+  it('a plot whose best good draws 0 dots is "nothing worth working", in the report and in the one-line summary', () => {
+    expect(bestWords(dotsOf(POOR))).toBe('nothing worth working');
+    expect(bestLine(POOR)).toBe('nothing worth working');
+    const report = renderToStaticMarkup(createElement(ScanReport, { tiles: [{ x: 0, y: 0, terrain: 'desert', peaks: 0, owner: null, outfit: null, pollution: 0, filter: false, ground: POOR }], next: 'Next drone: month 3.' }));
+    expect(report).toContain('nothing worth working');
+    expect(report).not.toContain('best for');
+  });
+
+  it('one dot is enough to name it: water 0 is 1 dot, "best for Water"', () => {
+    expect(bestWords(dotsOf({ ...POOR, water: 0 }))).toBe('best for Water');
+    expect(bestLine({ ...POOR, crystite: 2 })).toBe('best for Crystite');
   });
 });

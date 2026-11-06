@@ -244,7 +244,7 @@ const DESCRIBED = {
       `Sends the geo drone over ${DEVELOPMENT.dronePlots} or fewer free or listed plots, for ${DEVELOPMENT.droneFee} credits; their ground is known at once, in this planning.`,
     legalWhen: () => [
       PHASE,
-      'A drone is already on its way',
+      'A drone was already used this planning',
       `Pick 1 to ${DEVELOPMENT.dronePlots} plots`,
       'Not a plot',
       'The drone only flies over free or listed plots',

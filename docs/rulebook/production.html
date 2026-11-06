@@ -282,14 +282,14 @@
 <h2 id="production-events">Events during production <span class="pill built">In the game</span></h2>
 <p>Production is the busiest phase for events. Its events roll at the start of the phase and act at the end of each plot's line: after the ground, the bonuses, pollution and any shortage. Several can hit one plot; each works on what the ones before it left, and no plot goes below 0.</p>
 <ul>
-<li>Events only reach farms, wells, Energy plots and mines. Factories are never hit by a production event, except a meteor strike.</li>
+<li>Events only reach farms, wells, Energy plots and mines. Factories are never hit by a production event, except a meteor strike and a general strike on their own good.</li>
 <li>Energy plots are credited first, events included: a dust storm leaves you less Energy for your other plots that same month, and a solar flare more.</li>
 <li>A cold snap does not touch output directly; it doubles every plot's Energy need, which can push you into a shortage.</li>
 <li>A crystal cavern that was mined for Crystite may collapse after production (<span class="num">6%</span> each), and a meteor may strike after it (<span class="num">3.2%</span>).</li>
+<li>A general strike announced in planning bites here while the strikers are unpaid: after the month's other events, every working plot of the struck good makes <span class="num">COLONY.strike.output</span> = <span class="num">0.2</span> of what it would have made, rounded down. Paid by the Governor, the good is made in full. Only games with the colony's council have strikes (see <a href="events.html#colony-social-events">the colony's social events</a>).</li>
 </ul>
 <p>The <a href="events.html">Events</a> chapter has every event, its chance and its numbers.</p>
-<div class="box next"><h4>What is changing</h4><p>A general strike, announced in planning when the colony is restless, will bite in production: every plot of the struck good makes 20% of its output, rounded down, unless the Governor pays the strikers. Being built in the colony branch (C26 PR-A, PR #370, the Balance team WS1). See <a href="events.html#colony-social-events">the colony's social events</a>.</p></div>
-<p class="code-ref">In the code: <code>packages/engine/src/production.ts::runProduction</code> (<code>credit</code>) · <code>packages/engine/src/events.ts::eventOutput</code>, <code>::rollPhase</code></p>
+<p class="code-ref">In the code: <code>packages/engine/src/production.ts::runProduction</code> (<code>credit</code>) · <code>packages/engine/src/events.ts::eventOutput</code>, <code>::rollPhase</code>, <code>::strikeEvent</code> · <code>packages/engine/src/colony.ts::strikeHolds</code></p>
 <p class="owner">Kept current by: the Balance team (WS1).</p>
 
 <h2 id="spoilage-and-storage">Spoilage and storage <span class="pill built">In the game</span></h2>

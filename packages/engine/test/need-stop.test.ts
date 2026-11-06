@@ -210,6 +210,8 @@ describe('RULE-4 row 2: selling into shortage takes a conscious hold of ▼', ()
     const { state, need } = heldAtNeed();
     declareRole(state, 'p0', 'buyer');
     // As a buyer, ▼ walks the bid down (a tap and a hold alike); held longer than WALK.shortHoldMs, it is no seller's hold.
+    // The bid starts up the board, so ▼ has room above the buyers' edge.
+    walker(state, 'p0').price = a(state).lo + 10;
     const bid = walker(state, 'p0').price;
     stepWalk(state, 'p0', -1);
     const tapped = walker(state, 'p0').price;

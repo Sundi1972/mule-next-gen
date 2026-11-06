@@ -239,13 +239,21 @@ export function storeSellPrice(posted: number): number {
   return Math.abs(exact - whole) <= Number.EPSILON * exact ? whole : Math.ceil(exact);
 }
 
+/** What the store pays for a posted price: the price less PRICE.storeSpread, rounded down, and never under 1. */
+export function storeBuyPrice(posted: number): number {
+  const exact = posted * (1 - PRICE.storeSpread);
+  const whole = Math.round(exact);
+  // The sell side's float, mirrored: 1 - 0.3 is a hair under 0.7, so 90 × 0.7 lands a hair under 63: that close, it is 63.
+  return Math.max(1, Math.abs(exact - whole) <= Number.EPSILON * exact ? whole : Math.floor(exact));
+}
+
 /**
  * What the store charges and what it pays, or null where it doesn't trade:
  * no sell price with an empty shelf, no buy price when it wants no more.
  */
 export function storeQuotes(state: GameState, good: Good): { buy: number | null; sell: number | null } {
   const price = colonyPrice(state, good);
-  const buy = Math.max(1, Math.floor(price * (1 - PRICE.storeSpread)));
+  const buy = storeBuyPrice(price);
   return {
     buy: storeWants(state, good) > 0 ? buy : null,
     sell: storeForSale(state, good) > 0 ? storeSellPrice(price) : null,

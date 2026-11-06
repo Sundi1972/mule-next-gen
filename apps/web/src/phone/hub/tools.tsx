@@ -1,19 +1,20 @@
 import { COLONY_SELLER, DEVELOPMENT } from '@mule/engine';
 import type { MuleView, TileView } from '@mule/protocol';
 import { Button, GOOD_NAME, HoloMap, TERRAIN_NAME, type MapTile } from '@mule/ui';
+import { useEffect, useRef } from 'react';
 import { mapTiles, player, plotName, TERRAIN_ODDS, tileAt } from '../../game/derive';
 import { SpecialLine } from '../../components/SpecialLine';
 import { StrikeMap } from '../../components/Strike';
 import { useClient } from '../../net/react';
 import { usePhoneGame } from '../game';
 import { GroundCard } from '../ground';
-import { droneReport, ScanReport, useScanning } from '../plotInfo';
+import { droneReport, myPlots, nextDroneWords, PlotRow, ScanReport, useScanning } from '../plotInfo';
 import { SellMap } from '../Sell';
 import { MapFit, useWide } from '../Shell';
 import { OnlyYou } from './OnlyYou';
 import { useToday } from './state';
 
-/* Today's map tools: Look, the geo drone (planning's drone flow) and selling a plot (the Sell form's map). */
+/* Today's map tools: Look, My plots, the geo drone (planning's drone flow) and selling a plot (the Sell form's map). */
 
 /** A plot the drone may fly over: nobody's, not the store, and not the colony's (a sited object's plot is no player's). */
 export const freeForDrone = (t: MapTile) => t.owner === null && !t.object && t.terrain !== 'store';
@@ -73,6 +74,47 @@ export function LookPanel() {
   );
 }
 
+/** My plots on the map: a tap on one of yours selects its row; a tap anywhere else lets go. */
+export function MyPlotsMap() {
+  const { view, me, slot } = usePhoneGame();
+  const { looked, setLooked } = useToday();
+  const wide = useWide();
+  const mine = (p: { x: number; y: number } | null) => !!p && tileAt(view, p.x, p.y)?.owner === me.id;
+  const tap = (t: MapTile) => setLooked(mine(t) ? { x: t.x, y: t.y } : null);
+  return (
+    <MapFit width={view.width} height={view.height}>
+      <StrikeMap view={view} size="phone">
+        <HoloMap width={view.width} height={view.height} tiles={mapTiles(view)} onTile={tap} selected={mine(looked) ? looked : null} focusSlot={slot} density={wide ? 'tv' : 'phone'} />
+      </StrikeMap>
+    </MapFit>
+  );
+}
+
+/** Every plot you own, one row each with its goods' dots; a tap on a row selects the plot on the map. */
+export function MyPlotsPanel() {
+  const { view, me } = usePhoneGame();
+  const { looked, setLooked } = useToday();
+  const list = useRef<HTMLElement>(null);
+  const mine = myPlots(view, me.id);
+  const isLooked = (t: TileView) => looked?.x === t.x && looked.y === t.y;
+  // A plot tapped on the map may have its row below the rail's fold.
+  useEffect(() => {
+    if (looked) list.current?.querySelector?.(`[data-testid="plot-row-${looked.x}-${looked.y}"]`)?.scrollIntoView?.({ block: 'nearest' });
+  }, [looked]);
+  return (
+    <section ref={list} className="flex flex-col gap-1.5" data-testid="my-plots">
+      <span className="flex items-center justify-between">
+        <span className="font-display text-sm font-semibold">My plots · {mine.length}</span>
+        <OnlyYou />
+      </span>
+      {mine.length === 0 && <span className="text-[11px] leading-snug text-ink-2">No plots yet: claim one in the land grant.</span>}
+      {mine.map((t) => (
+        <PlotRow key={`${t.x},${t.y}`} t={t} selected={isLooked(t)} onPick={() => setLooked({ x: t.x, y: t.y })} dense />
+      ))}
+    </section>
+  );
+}
+
 /** Where the drone stands this planning: plots being picked, a second of scanning after Scan, then its report. */
 function useDrone() {
   const { view, me } = usePhoneGame();
@@ -113,7 +155,7 @@ export function DroneMap() {
 export function DronePanel() {
   const { view } = usePhoneGame();
   const { stage, report, chosen } = useDrone();
-  if (stage === 'report') return <ScanReport tiles={report!} />;
+  if (stage === 'report') return <ScanReport tiles={report!} next={nextDroneWords(view)} />;
   const scanning = stage === 'scanning';
   const last = chosen.at(-1);
   const lastTile = last ? tileAt(view, last.x, last.y) : undefined;
@@ -145,23 +187,15 @@ export function DronePanel() {
   );
 }
 
-/** "One drone each planning", with the month of the next while the game has one. */
-function oneDroneWords(view: Pick<MuleView, 'month' | 'maxMonths'>): string {
-  return view.month < view.maxMonths ? `One drone each planning: the next in month ${view.month + 1}.` : 'One drone each planning.';
-}
-
-/** Scan: the button counts the plots picked and, while one more is free to add, says so; once used, one drone a planning. */
+/**
+ * Scan: the button counts the plots picked and, while one more is free to add, says so. Once the report shows it is
+ * gone: the report says when the next drone flies, and the footer's room goes to the report.
+ */
 export function DroneSend() {
   const client = useClient();
-  const { view, self } = usePhoneGame();
+  const { self } = usePhoneGame();
   const { stage, picked } = useDrone();
-  if (stage === 'report') {
-    return (
-      <span className="flex items-center justify-between text-[11px] text-ink-3" data-testid="drone-used">
-        {oneDroneWords(view)}
-      </span>
-    );
-  }
+  if (stage === 'report') return null;
   const scanning = stage === 'scanning';
   const left = DEVELOPMENT.dronePlots - picked.length;
   return (

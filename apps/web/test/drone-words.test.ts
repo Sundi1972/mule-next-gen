@@ -12,6 +12,7 @@ import { LandGrant } from '../src/phone/LandGrant';
 import type { HubSeat } from '../src/phone/hub/slots';
 import { HUB_SLOTS } from '../src/phone/hub/today';
 import { droneButtonWords } from '../src/phone/hub/tools';
+import { nextDroneWords } from '../src/phone/plotInfo';
 
 /**
  * H-3 (WS6 UX audit, A-2's named edit in WS3's LandGrant.tsx): while the land grant's lit plot is one your drone
@@ -155,7 +156,7 @@ describe('H-3: the land grant names what your drone found, on your phone only', 
   });
 });
 
-describe('the drone tells the truth: its report comes at Scan, not at the land grant', () => {
+describe('C2: the drone tells the truth: its report comes at Scan, not at the land grant', () => {
   it('the button reads "Scan · n of 2 plots · 60 cr", its count and fee from config', () => {
     expect(droneButtonWords(0)).toBe('Pick a free plot for the drone');
     for (let n = 1; n <= DEVELOPMENT.dronePlots; n++) expect(droneButtonWords(n)).toBe(`Scan · ${n} of ${DEVELOPMENT.dronePlots} plots · ${DEVELOPMENT.droneFee} cr`);
@@ -183,3 +184,11 @@ describe('the drone tells the truth: its report comes at Scan, not at the land g
  */
 const EXPECTED_FIRST = 'Your drone: 12·7 Plains, good for Rare earth';
 const EXPECTED_SECOND = 'Your drone: 13·7 Tundra, good for Water and Energy';
+
+describe('C2: the Drone report closes with when the next drone flies', () => {
+  it('before the last month it names the next month; in the last month it says there is none', () => {
+    expect(nextDroneWords({ month: 2, maxMonths: 12 })).toBe('Next drone: month 3.');
+    expect(nextDroneWords({ month: 11, maxMonths: 12 })).toBe('Next drone: month 12.');
+    expect(nextDroneWords({ month: 12, maxMonths: 12 })).toBe('No more drones this game.');
+  });
+});

@@ -108,7 +108,27 @@ describe('C11: the plots legend in the hall fits above the button', () => {
     const html = phone(devView(lenasMe({ carriedMule: 'empty' }), { tiles: many(7) }), live(mine(4, 6, { space: 'hall' })));
     expect(rows(html)).toBe(4);
     expect(order(html)).toEqual([4, 5, 6, 0]);
-    expect(text(html, 'my-plots-legend')).toContain('+3 more');
+    expect(text(html, 'my-plots-legend')).toContain('+3 more · Plots ▸ shows all');
+  });
+
+  it('C4: at 667 the narrow side room says it short, "+3 more · Plots ▸", so the line keeps to one row', () => {
+    const html = phone(devView(lenasMe({ carriedMule: 'empty' }), { tiles: many(7) }), live(mine(4, 6, { space: 'hall' })), 667);
+    expect(text(html, 'legend-more')).toBe('+3 more · Plots ▸');
+  });
+});
+
+describe('C4: the Plots chip in the walking screen\'s status', () => {
+  it.each<[844 | 667, 'map' | 'hall', string]>([
+    [844, 'map', 'phone-status-left'],
+    [844, 'hall', 'phone-status-left'],
+    [667, 'map', 'phone-status-bar'],
+    [667, 'hall', 'phone-status-left'],
+  ])('C4: at %i on the %s the status (%s) carries the Plots chip, its list closed until tapped', (size, where, holder) => {
+    const html = phone(devView(), live(where === 'map' ? mine(5.5, 4.5) : mine(4, 6, { space: 'hall' })), size);
+    expect(inside(html, holder)).toContain('data-testid="plots-chip"');
+    expect(text(html, 'plots-chip')).toBe('Plots ▸');
+    expect(tag(html, 'plots-chip')).toMatch(/aria-expanded="false"/);
+    expect(html).not.toContain('data-testid="plots-panel"');
   });
 });
 

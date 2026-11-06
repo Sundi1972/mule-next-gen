@@ -1,5 +1,6 @@
 import type { TileView } from '@mule/protocol';
 import { cx, GOOD_NAME, GoodTag, groundDots, type Good } from '@mule/ui';
+import { Dots } from './plotInfo';
 
 const RAW = ['food', 'water', 'energy', 'smithore', 'crystite', 'rareEarth'] as const satisfies readonly Good[];
 
@@ -15,11 +16,7 @@ export function GroundCard({ ground }: { ground: NonNullable<TileView['ground']>
         return (
           <span key={g} className={cx('flex items-center gap-1.5', n === 0 && 'opacity-50')} title={GOOD_NAME[g]}>
             <GoodTag good={g} className="flex-1 text-[11px]" />
-            <span className="flex gap-0.5" aria-label={`${GOOD_NAME[g]} ${n} of 3`}>
-              {[1, 2, 3].map((i) => (
-                <span key={i} className="size-2 rounded-full" style={{ background: i <= n ? `var(--color-g-${g})` : 'var(--color-holo-line)' }} />
-              ))}
-            </span>
+            <Dots good={g} n={n} size={8} />
           </span>
         );
       })}

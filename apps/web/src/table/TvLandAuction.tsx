@@ -5,6 +5,7 @@ import { tvSpeakerAt } from '../chat/Chat';
 import { lotWalkers, lotWhat, sellerName } from '../components/AuctionParts';
 import { mapTiles, plotName, slotOf, tileAt } from '../game/derive';
 import { TvHeader } from './TableApp';
+import { TvBody } from './TvFit';
 
 /**
  * The land auction on the big screen (/table), readable from 3 metres.
@@ -21,6 +22,7 @@ export function TvLandAuction({ table, game, lot }: { table: TableView<MuleView>
   return (
     <div className="flex h-[720px] w-[1280px] flex-col gap-4 bg-table px-10 py-8 text-ink" data-phase="landAuction">
       <TvHeader game={view} title={title} />
+      <TvBody>
       {lot.stage === 'intro' ? (
         <div className="flex min-h-0 flex-1 gap-6">
           <div className="flex w-[700px] shrink-0 flex-col gap-3">
@@ -64,6 +66,7 @@ export function TvLandAuction({ table, game, lot }: { table: TableView<MuleView>
           </div>
         </div>
       )}
+      </TvBody>
     </div>
   );
 }

@@ -57,7 +57,7 @@ describe('a GRAB pressed is a GRAB taken (FM-glint-fade, for FM-hurry-margin)', 
   type Rival = { gap: number; presses: boolean; walks?: boolean; behind?: boolean; held?: 'stunnedUntilTick' | 'assayUntilTick' };
 
   /** What the tick came to: who holds the glint, whether ai0 analysed the land underfoot or started an assay, and how far it then stands from the glint. */
-  type GlintTick = { holder: string | null; analysedUnderfoot: boolean; assaying: boolean; belowGrab: boolean; rivalInReach: boolean; rivalFirst: boolean; gapBefore: number; gapAfter: number };
+  type GlintTick = { holder: string | null; analysedUnderfoot: boolean; assaying: boolean; belowGrab: boolean; rivalInReach: boolean; rivalFirst: boolean; gapBefore: number; gapAfter: number; input: FloorInput; errand: FloorInput };
 
   /**
    * One tick of ai0 standing on open land a tile from a glint that fades `fadesIn` ticks on, refereed as the sim's
@@ -66,7 +66,8 @@ describe('a GRAB pressed is a GRAB taken (FM-glint-fade, for FM-hurry-margin)', 
    * by the glint; with `analysed`, ai0 has analysed the land underfoot already, so no row below GRAB is on offer to it.
    * With `racing`, ai0 races every glint, and with `stepsOff` it stands that many of its steps short of the glint tile's
    * near edge instead of a tile from it. `belowGrab`: whether a row below GRAB was on offer to ai0 as it chose (what its press
-   * becomes with the glint gone).
+   * becomes with the glint gone). `input`: ai0's input for the tick; `errand`: the input the same seat gives on the same
+   * floor with no glint lit, where its errand leads it.
    */
   function glintTick(fadesIn: number, { rival, analysed = false, racing = false, stepsOff }: { rival?: Rival; analysed?: boolean; racing?: boolean; stepsOff?: number } = {}): GlintTick {
     const state = createGame({ seed: 4, players: [0, 1].map((i) => ({ id: `ai${i}`, name: `AI ${i + 1}`, isAi: true })) });
@@ -113,6 +114,7 @@ describe('a GRAB pressed is a GRAB taken (FM-glint-fade, for FM-hurry-margin)', 
     const belowGrab = reachOf({ ...floor, moments: { ...floor.moments, glint: null } }, state, ME, cfg, { secondsLeft: left }).enabled;
     const gapBefore = gapOf(floor, ME);
     const inputs: Record<string, FloorInput> = { [ME]: seat.developSteer(state, floor, left, cfg) };
+    const errand = new AiSeat({ id: ME, name: 'AI 1', persona: 'trader', level: 'trader', seed: 11 }).developSteer(state, { ...floor, moments: { ...floor.moments, glint: null } }, left, cfg);
     if (rival) {
       const toward = { x: (mid.x - spot!.x) / rival.gap, y: (mid.y - spot!.y) / rival.gap };
       inputs[RIVAL] = { ...(rival.walks ? toward : { x: 0, y: 0 }), act: rival.presses };
@@ -129,7 +131,7 @@ describe('a GRAB pressed is a GRAB taken (FM-glint-fade, for FM-hurry-margin)', 
     const me = floor.colonists.find((c) => c.id === ME)!;
     // Analysed this tick: the land underfoot, if it was not before.
     const analysedUnderfoot = !analysed && player(state, ME).analysed.includes(tileIndex(state.width, under.x, under.y));
-    return { holder, analysedUnderfoot, assaying: me.assayUntilTick !== null, belowGrab, rivalInReach, rivalFirst, gapBefore, gapAfter: gapOf(floor, ME) };
+    return { holder, analysedUnderfoot, assaying: me.assayUntilTick !== null, belowGrab, rivalInReach, rivalFirst, gapBefore, gapAfter: gapOf(floor, ME), input: inputs[ME]!, errand };
   }
 
   /** ai0 alone by the glint: the tick as FM-glint-fade's rows read it. */
@@ -148,6 +150,13 @@ describe('a GRAB pressed is a GRAB taken (FM-glint-fade, for FM-hurry-margin)', 
     // before it fades it, so walking on still wins the race.
     const walkOn = glintTick(1, { racing: true, stepsOff: 0.5 }); // literal-ok: half a step short
     expect({ holder: walkOn.holder, analysedUnderfoot: walkOn.analysedUnderfoot, assaying: walkOn.assaying }, 'racing, fading this step, half a step off its tile: won by walking on').toEqual({ holder: ME, analysedUnderfoot: false, assaying: false });
+    // Fading this step, and more than a step short of its tile: no step reaches it before it fades, so the seat gives the
+    // race up and keeps to its errand instead of walking a tick towards a glint about to vanish: its input is the one the
+    // same seat gives with no glint lit (on this tick, standing as it picks its first step), not a step east to the glint.
+    const tooFar = glintTick(1, { racing: true, stepsOff: 3 }); // literal-ok: three steps short
+    expect({ holder: tooFar.holder, assaying: tooFar.assaying }, 'racing, fading this step, three steps off its tile: not won').toEqual({ holder: null, assaying: false });
+    expect(tooFar.input, 'racing, fading this step, three steps off its tile: its input leads where its errand does, not to the glint').toEqual(tooFar.errand);
+    expect(walkOn.input, 'the control: half a step off, its input leads to the glint, off its errand').not.toEqual(walkOn.errand);
 
     // Seed 1 of T-AC-5's sim sample, month 11, ai0 (c20e1360): leading its MULE out to its plot, it pressed GRAB on a glint
     // lit beside it, and ai3, ahead of it in the tick's press order, grabbed it first. Its press fell to ANALYSE of the
@@ -166,6 +175,13 @@ describe('a GRAB pressed is a GRAB taken (FM-glint-fade, for FM-hurry-margin)', 
     expect([stepShort.belowGrab, stepShort.rivalInReach, stepShort.rivalFirst], 'the case: ANALYSE below GRAB, the rival in reach after its step, ahead in the press order').toEqual([true, true, true]);
     expect.soft({ holder: stepShort.holder, analysedUnderfoot: stepShort.analysedUnderfoot, assaying: stepShort.assaying }, 'a rival a step short of reach').toEqual({ holder: 'ai1', analysedUnderfoot: false, assaying: false });
     expect.soft(stepShort.gapAfter, 'it walks for the glint, or stands').toBeLessThanOrEqual(stepShort.gapBefore);
+
+    // A rival that never presses but walks onto the glint's tile, behind it in the press order: the step gives it the
+    // glint before any press applies, so a GRAB would fall to ANALYSE all the same. It presses for nothing.
+    const walksOn = glintTick(lit, { rival: { gap: 0.55, presses: false, walks: true, behind: true } }); // literal-ok: just off the glint's tile, a step from it
+    expect([walksOn.belowGrab, walksOn.rivalFirst], 'the case: ANALYSE below GRAB, the rival behind it in the press order').toEqual([true, false]);
+    expect.soft({ holder: walksOn.holder, analysedUnderfoot: walksOn.analysedUnderfoot, assaying: walksOn.assaying }, 'a rival walking onto the tile').toEqual({ holder: 'ai1', analysedUnderfoot: false, assaying: false });
+    expect.soft(walksOn.gapAfter, 'it walks for the glint, or stands').toBeLessThanOrEqual(walksOn.gapBefore);
 
     // The control: the same rival in reach (idle, which the seat cannot tell from about to press), but the land underfoot
     // analysed already, so a GRAB lost costs nothing. The guard does not make it timid where nothing is at stake: it grabs.
