@@ -51,7 +51,7 @@
 <thead><tr><th>Reason on screen</th><th>When</th></tr></thead>
 <tbody>
 <tr><td>nobody has any</td><td>No player holds any of the good, and the store has none for sale.</td></tr>
-<tr><td>nobody buys</td><td>The store does not want any more, the ship (if in port) does not want it, and no player who holds less than their need (the status screen's <a href="#status-screen">Needs</a>, spoilage included) can afford the store's buying price.</td></tr>
+<tr><td>nobody buys</td><td>The store does not want any more, the ship (if in port) does not want it, and no player who holds less than their need (the status screen's <a href="#status-screen">Hold</a>, spoilage included) can afford the store's buying price.</td></tr>
 <tr><td>nobody trading</td><td>The status screen ended, but no seller has a possible buyer and no buyer a possible seller, so there is nothing to walk for.</td></tr>
 </tbody>
 </table></div>
@@ -69,14 +69,14 @@
 <tr><td>Used</td><td>What production burnt: Energy for your plots, and the inputs your factories took.</td></tr>
 <tr><td>Made</td><td>What your plots and factories made this month.</td></tr>
 <tr><td>Now</td><td>What you hold now, in bold.</td></tr>
-<tr><td>Needs</td><td>What you must hold now to be short of nothing before the next auction: the Food and Water your household and crew eat and drink at this month end, plus enough of what you use next month to survive the month end's spoilage. That is next month's Food ration; Water only if you have a Food farm to water; Energy for your plots; your factories' inputs; and Medicine when the air makes people sick (2: the 1 you need, and 1 more, because a fifth spoils). No good counts above the 10 your home depot holds.</td></tr>
+<tr><td>Hold</td><td>What you must hold now to be short of nothing before the next auction: the Food and Water your household and crew eat and drink at this month end, plus enough of what you use next month to survive the month end's spoilage. That is next month's Food ration; Water only if you have a Food farm to water; Energy for your plots; your factories' inputs; and Medicine when the air makes people sick (2: the 1 you need, and 1 more, because a fifth spoils). No good counts above the 10 your home depot holds.</td></tr>
 <tr><td>Goes bad</td><td>What would be lost at month end if you kept everything you hold now: upkeep eats and drinks first, then the share of the rest that spoils, plus anything over the 10 units your home depot holds.</td></tr>
-<tr><td>Spare</td><td>Now minus Needs: green <em>+3</em> when you have more than you need, red <em>short 2</em> when you have less.</td></tr>
+<tr><td>Spare</td><td>Now minus Hold: green <em>+3</em> when you have more than you must hold, red <em>short 2</em> when you have less.</td></tr>
 </tbody>
 </table></div>
 <div class="box example"><h4>Example</h4><p>Your household and crew eat 3 Food a month, and Food loses half of what is left at month end. You need <strong>9</strong>: 3 eaten at this month end, and 6 more, because 6 halves to the 3 you will eat next month. Energy loses a quarter, so one plot that uses 1 Energy needs 2 (1 alone would spoil to nothing), and two plots need 3.</p></div>
 <div class="box why"><h4>Why it is like this</h4><p>The need used to be only what next month's production and upkeep use, so a player could hold exactly their need, see nobody buying, and still go hungry after the month end's spoilage. The PM ruled (6 Nov, option B, from WS9's finding) that the need counts spoilage, and that the status screen shows the same number the auction uses to decide whether anyone buys. WS3, #439. The computer players work out their own buying from what production uses and add spoilage themselves, so their own buying is unchanged; when they corner a rival or spite the leader, they read rivals' needs from the status screen, so they now see the spoilage-aware need there.</p></div>
-<p>Beside the table your phone says, in one line, whether you are short, even or have a surplus ("You need 2 more Food this month." or "You have 3 more than you need."), what the store charges and pays ("You can buy from the store at 33 · sell to it at 27 · it has 12 for sale"), and, when the export ship is in port, what it still wants ("The ship wants 24 Crystite this month").</p>
+<p>Beside the table your phone says, in one line, whether you are short, even or have a surplus ("Hold 2 more Food: upkeep and spoilage take some before next month.", "You have 3 more than you must hold." or "You hold just enough."), what the store charges and pays ("You can buy from the store at 33 · sell to it at 27 · it has 12 for sale"), and, when the export ship is in port, what it still wants ("The ship wants 24 Crystite this month").</p>
 
 <h3 id="sides">Buy or Sell: everyone takes part</h3>
 <p>There are two buttons, <em>Buy</em> and <em>Sell</em>, and no <em>Pass</em>. <strong>Everyone starts every good as a buyer</strong>, standing at the bottom of the board. Tap <em>Sell</em> to become a seller; you can only sell a good you hold, so <em>Sell</em> is greyed out when you have none. Tapping your own side again changes nothing. A buyer who never walks up never buys anything, so standing still and pressing <em>Done</em> is how you sit a good out.</p>
@@ -86,11 +86,12 @@
 <p>The status screen waits until every player has pressed <em>Ready</em>. A bar shows how many have picked ("3 / 4 PICKED", "No clock: the walk starts when everyone has picked."). Computer players pick on their own within a few seconds. If someone is slow or their phone has dropped, the host can tap <em>Move on for Kai</em>; the phone first says, in words, what each waiting player will do ("Kai buys Food: 1 of 3, short 2."), and moving on starts the walk with everyone on the side they stand on. A player whose phone has dropped sits the walk out.</p>
 <div class="box why"><h4>Why it is like this</h4><p>Heiko, 5 Nov, after playing: "in an auction always all players should participate; a player is a buyer by default." The PM approved WS3's amendment the same day (C2: everyone starts as a buyer, no Pass, sitting out is standing still plus Done). The status screen lost its clock in the UX audit (A-7, G-7) so that nobody is rushed into a side.</p></div>
 <p class="code-ref">In the code: <code>packages/engine/src/auction.ts::statusRows</code> · <code>auction.ts::auctionNeed</code> · <code>auction.ts::seedSides</code> · <code>auction.ts::declareRole</code> · <code>config.ts::WALK.statusMs</code> (null: no clock) · <code>apps/web/src/phone/Auction.tsx</code> · <code>apps/web/src/components/AuctionParts.tsx::StatusTable</code> · <code>apps/server/src/mule-game.ts</code> (host Continue)</p>
-<h3 id="hold-wording">"Hold" at the auction, "need" in planning <span class="pill designed">Designed</span></h3>
-<p>Two numbers can look alike. In planning, your phone's "This month you need" is what next month uses: the Food and Water your household and crew eat, Energy for your plots, your factories' inputs. At the auction you must hold more than that, because upkeep eats some and the month end spoils some before next month. So every auction screen will call its number <strong>Hold</strong>, never "need": the TV's status column "Hold"; your phone's line "Hold 4 more Water: upkeep and spoilage take some before next month.", "You have 2 more than you must hold." or "You hold just enough."; the bidding readout HAVE · HOLD · SPARE; and "You keep 3 of the 6 Food you must hold." The planning screens keep "need".</p>
-<p id="nearest-trade">The TV readout's third row will say <strong>NEAREST TRADE</strong>, not GAP: "NEAREST TRADE&nbsp;&nbsp;31 apart", "they meet", or "MET: TRADING". The store and the ship never trade with each other, so the number counts only a pair with a player on one side: a player's ask against the best bid, or the best ask against a player's bid, whichever is closer. With the store asking 100 and the ship bidding 119, the row can read 31 apart, and its name says why that is not 119 − 100.</p>
+<h3 id="hold-wording">"Hold" at the auction, "need" in planning <span class="pill built">In the game</span></h3>
+<p>Two numbers can look alike. In planning, your phone's "This month you need" is what next month uses: the Food and Water your household and crew eat, Energy for your plots, your factories' inputs. At the auction you may have to hold more than that: upkeep eats Food and Water at this month end, and the month end spoils some of every good that spoils (Food, Water, Energy, Medicine). A good that neither touches, such as a factory's Smithore, is held for next month's use alone, so there Hold and need are the same number. So every auction screen calls its number <strong>Hold</strong>, never "need": the TV's status column "Hold"; your phone's line, with the reason true for the good: "Hold 4 more Water: upkeep and spoilage take some before next month.", "Hold 2 more Energy: next month uses it, and some spoils first." or "Hold 2 more Smithore: next month uses it."; "You have 2 more than you must hold." or "You hold just enough."; the bidding readout HAVE · HOLD · SPARE; the held seller's "Stopped at 6 Food: what you must hold."; "You keep 3 of the 6 Food you must hold."; and the receipt's "You have 4 Water, you must hold 6: short 2". The planning screens keep "need".</p>
+<p id="nearest-trade">The TV readout's third row says <strong>NEAREST TRADE</strong>, not GAP: "NEAREST TRADE&nbsp;&nbsp;31 apart", "they meet", or "TRADING" while a deal runs. The store and the ship never trade with each other, so the number counts only a pair with a player on one side: a player's ask against the best bid, or the best ask against a player's bid, whichever is closer. With the store asking 100 and the ship bidding 119, the row can read 31 apart, and its name says why that is not 119 − 100.</p>
 <div class="box why"><h4>Why it is like this</h4><p>From WS3's review of #439, which makes the auction's number cover spoilage: a player saw Water 2 on the hub and 6 at the auction and could not tell why. The UX team (WS6) ruled the wording on 6 Nov. NEAREST TRADE comes from WS3's #490, where the gap began counting only pairs with a player in them and "GAP 31 apart" under an ask of 100 and a bid of 119 read as a contradiction; WS6 ruled it on 6 Nov.</p></div>
-<p class="owner">Responsible: the UX team (WS6), with the Table team (WS4) for the TV column · Status: Designed 6 Nov; the auction's number (<code>auctionNeed</code>) is in the game since batch 49, the words follow in WS6's relabel.</p>
+<p class="owner">Responsible: the UX team (WS6), with the Table team (WS4) for the TV column · Status: Designed 6 Nov; in the game with WS6's relabel (the auction's number, <code>auctionNeed</code>, since batch 49).</p>
+<p class="code-ref">In the code: <code>apps/web/src/phone/Auction.tsx</code> (the status line, HAVE · HOLD · SPARE, the receipt) · <code>apps/web/src/components/AuctionParts.tsx::StatusTable, holdReason, heldWords, keepWords, TvReadout</code></p>
 <p class="owner">Kept current by: WS3 (rules), WS6 (phone).</p>
 
 <h2 id="walk-board">The walk board <span class="pill built">In the game</span></h2>
@@ -102,8 +103,8 @@
 <tbody>
 <tr><td>Sellers' asks</td><td>Red</td><td>The lowest ask any seller is making.</td><td>Buyers walking up meet it.</td></tr>
 <tr><td>Buyers' bids</td><td>Green</td><td>The highest bid any buyer is making.</td><td>Sellers walking down meet it.</td></tr>
-<tr><td>Store sells</td><td>Dashed, near the top</td><td>What the store charges. Shown only while it has some of the good for sale.</td><td>Buyers can't walk above it while the store sells.</td></tr>
-<tr><td>Store buys</td><td>Dashed, near the bottom</td><td>What the store pays. Shown only while it still wants the good.</td><td>Sellers can't walk below it.</td></tr>
+<tr><td>Store sells</td><td>Dashed, near the top</td><td>What the store charges. Once the store has none left to sell, the line reads "SOLD OUT 28" at its old price, and "HIGHEST BID 30 ↑" once a buyer bids past it; the TV's panel says "Bids can go past its old 28. Highest bid 30".</td><td>Buyers can't walk above it while the store sells; sold out, they may (<a href="#rule-e-sold-out">rule E</a>).</td></tr>
+<tr><td>Store buys</td><td>Dashed, near the bottom</td><td>What the store pays when the good's walk begins.</td><td>Sellers can't walk below it, even once the store stops buying (<a href="#rule-d-rest-zones">rule D</a>).</td></tr>
 <tr><td>Ship buys</td><td>Amber</td><td>What the export ship pays for its next unit, only in a month it is in port and wants this good.</td><td>Sellers who reach it sell to the ship.</td></tr>
 </tbody>
 </table></div>
@@ -129,10 +130,9 @@
 
 <h3 id="what-stops-you">What stops you</h3>
 <ul>
-<li>A buyer walking up stops at the store's selling line (while the store sells) and at the lowest ask of any seller who still has units. Meeting that seller is a trade.</li>
-<li>A seller walking down stops at the store's buying line (while the store buys) and at the highest bid of any buyer who can pay it. Meeting that buyer is a trade.</li>
-<li>When no house is buying at all, a seller can walk down to one credit above the board's bottom edge, so a buyer still standing at the start is never traded with.</li>
-<li>A buyer can walk down to 0; a seller can walk up without limit. Neither trades up there. (Heiko's rest zones, <a href="#heiko-auction-rules">being designed</a>, would put hard edges here.)</li>
+<li>A buyer walking up stops at the store's selling line (while the store sells) and at the lowest ask of any seller who still has units. Meeting that seller is a trade. With the store sold out, a seller resting above the store's old selling line is not met: the buyer stops one step below them (<a href="#rule-e-sold-out">rule E</a>).</li>
+<li>A seller walking down stops at the store's buying line, whether or not the store still buys, and at the highest bid of any buyer who can pay it. Meeting that buyer is a trade.</li>
+<li>A buyer can't walk below the board's bottom edge, and a seller can't walk above its top edge (<a href="#rule-d-rest-zones">rule D</a>). Neither trades out there.</li>
 <li>A buyer who can no longer pay their own bid, or a seller with nothing left, no longer blocks anyone: the other side walks through them.</li>
 </ul>
 <p class="code-ref">In the code: <code>packages/engine/src/walk.ts::stepBoard</code>, <code>stepWalker</code>, <code>takeSide</code>, <code>sellerFloor</code> · <code>auction.ts::nextGood</code> (board range and speed) · <code>config.ts::WALK.crossSeconds</code>, <code>minSpeed</code>, <code>boardMargin</code>, <code>boardPostedMargin</code> · <code>apps/web/src/phone/Auction.tsx::WalkHold</code> (TAP_MS) · <code>AuctionParts.tsx::BoardKey</code></p>
@@ -209,7 +209,7 @@
 <ul>
 <li>The store sells at its posted price plus 10%, rounded up. Walk up to that line and you buy, one unit at a time.</li>
 <li>It sells only what it has <strong>for sale</strong>. For Food and Water it holds back what its colonists will buy at month end, one unit per <span class="num">20</span> colonists: the colony's own people come first, so in a shortage the shelf runs empty for the players first.</li>
-<li>When the store has nothing more for sale, its selling line disappears ("STORE SELLS out" on the TV) and buyers can walk higher, to tempt a player to sell.</li>
+<li>When the store has nothing more for sale, buyers can walk higher, to tempt a player to sell, and the store's selling line shows the highest bid (<a href="#rule-e-sold-out">rule E</a>).</li>
 </ul>
 <h3 id="selling-to-the-store">Selling to the store</h3>
 <ul>
@@ -240,16 +240,16 @@
 <p class="owner">Kept current by: WS3.</p>
 
 <h2 id="needs-and-surplus">Your needs and surplus on the phone <span class="pill built">In the game</span></h2>
-<p>Throughout a good your phone keeps three numbers in view: <strong>HAVE</strong>, <strong>NEED</strong> and <strong>SPARE</strong> (or <strong>SHORT</strong>), green when you have more than you need and red when you have less. Under them a hint tells you where to walk: "Walk up to the store's line at 33: it's the only seller.", "Walk up to Mia's ask at 30: Kai asks 32.", "Walk down to the ship's line at 104: it pays the most. The store pays 81." and how: "Hold ▲ to walk up; a tap moves 1 cr."</p>
+<p>Throughout a good your phone keeps three numbers in view: <strong>HAVE</strong>, <strong>HOLD</strong> and <strong>SPARE</strong> (or <strong>SHORT</strong>), green when you have more than you must hold and red when you have less. Under them a hint tells you where to walk: "Walk up to the store's line at 33: it's the only seller.", "Walk up to Mia's ask at 30: Kai asks 32.", "Walk down to the ship's line at 104: it pays the most. The store pays 81." and how: "Hold ▲ to walk up; a tap moves 1 cr."</p>
 <p>When you stand at a line where nothing moves, the phone says why: "You can't pay for one at 33 cr" or "You have no Water to sell".</p>
 <h3 id="selling-into-shortage">Selling below your need</h3>
-<p>You may sell goods you need next month, but not by accident: selling stops at your need (<a href="#rule-b-stop-at-need">rule B</a>), and to sell on you hold ▼ for one second. Once you do, the phone shows an amber note, "You keep 3 of the 5 Food you need next month.", and your HAVE turns amber. A shortage next month has real costs: a hungry colonist walks slower in development, a plot without its Energy makes only part of its output, and a Food farm without Water makes half (see <a href="production.html">Production</a> and <a href="development.html">Development</a>).</p>
+<p>You may sell goods you need next month, but not by accident: selling stops at your need (<a href="#rule-b-stop-at-need">rule B</a>), and to sell on you hold ▼ for one second. Once you do, the phone shows an amber note, "You keep 3 of the 6 Food you must hold.", and your HAVE turns amber. A shortage next month has real costs: a hungry colonist walks slower in development, a plot without its Energy makes only part of its output, and a Food farm without Water makes half (see <a href="production.html">Production</a> and <a href="development.html">Development</a>).</p>
 <h3 id="the-receipt">The receipt</h3>
 <p>When a good closes, each phone shows a receipt over the still board:</p>
 <ul>
 <li>"Water: you sold 5 for 117 cr", with each unit's price and who bought ("26 + 26 + 26 + 22 + 22 cr to Ben and the store"),</li>
 <li>on a sale, the tax spelled out: "122 cr, less 5 cr sales tax: 117. The tax goes to the colony fund." (and the export tax beside it when it applies),</li>
-<li>where you stand: "You have 4 Water, you need 2 ✓", or "short 1" in red,</li>
+<li>where you stand: "You have 4 Water, you must hold 2 ✓", or "short 1" in red,</li>
 <li>what comes next ("Next: Energy, buy or sell?") and your running total for the month's auction ("This month: +212 cr").</li>
 </ul>
 <p>If you bought and sold the same good, there is a line for each. If you did not trade, it says "Water: you didn't trade".</p>
@@ -299,9 +299,9 @@
 <ul>
 <li>The board, large, with every creature walking live and the store and ship lines; the time bar shows when the clock is slowed.</li>
 <li>A panel with the good, the stage (<em>Walk</em>, <em>Trading · clock slowed</em>, <em>Closed</em>) and the units traded so far.</li>
-<li>The readout: <strong>LOWEST ASK</strong> and who holds it, <strong>HIGHEST BID</strong> and who holds it (the store and the ship count), and the <strong>GAP</strong> ("4 apart", "they meet", or "MET: TRADING"). The gap is the one a player faces: the closest of a player's ask to the highest bid and the lowest ask to a player's bid. <strong>"They meet" needs a player on at least one side</strong>, since two houses never trade with each other: with the ship paying 119, the store selling at 100 and the only seller asking 150, it reads "31 apart", not "they meet". With no player price facing one, it reads "—".</li>
+<li>The readout: <strong>LOWEST ASK</strong> and who holds it, <strong>HIGHEST BID</strong> and who holds it (the store and the ship count), and the <strong>NEAREST TRADE</strong> ("4 apart", "they meet", or "TRADING"; see <a href="#nearest-trade">why it is not called the gap</a>). It is the gap a player faces: the closest of a player's ask to the highest bid and the lowest ask to a player's bid. <strong>"They meet" needs a player on at least one side</strong>, since two houses never trade with each other: with the ship paying 119, the store selling at 100 and the only seller asking 150, it reads "31 apart", not "they meet". With no player price facing one, it reads "—".</li>
 <li>The store's <strong>Sells</strong>, <strong>Buys</strong> and <strong>Stock</strong>, and "The ship buys Smithore at 50" when it is in port.</li>
-<li>Each running deal on a row ("Mia → Kai · 4 units @ 41") with its speed shown as chevrons, "faster and faster" until "full speed". The units and the price always show; long names are shortened first.</li>
+<li>Each running deal on a row ("Mia → Kai · 4 units @ 41"), newest first, the newest with its speed shown as chevrons, "faster and faster" until "full speed"; each older deal compressed to one row. The units and the price always show; long names are shortened first. Every running deal stays in sight: when they don't all fit, the side column is drawn smaller, not the board, and never under 0.7 of its size (PM rulings 5 and 6 Nov; see <a href="table-and-phones.html#tv-fit">The TV fits a real table</a>).</li>
 <li>When nothing trades, a reminder: "Sellers push the red line down, buyers push the green line up. When the two lines meet, the goods change hands."</li>
 <li>The room code and, at the close, the good that really comes up next, the same one the phones name ("NEXT SMITHORE", or "LAST GOOD" after the last good that trades). During the status screen and the walk it names none, since a good still to come may yet be skipped.</li>
 </ul>
@@ -335,14 +335,14 @@
 <p class="code-ref">In the code: <code>apps/web/src/phone/Auction.tsx</code> · <code>apps/web/src/table/TableApp.tsx::TvAuction</code></p>
 <p class="owner">Kept current by: WS6, with WS3 and WS4.</p>
 
-<h2 id="heiko-auction-rules">Heiko's auction rules of 5 November <span class="pill designed">Designed</span></h2>
+<h2 id="heiko-auction-rules">Heiko's auction rules of 5 November <span class="pill built">In the game</span></h2>
 <p>Selling a Water surplus at the table on 5 Nov, Heiko sold too much and ended up short. He asked for four changes, in his words (shortened): "When I am selling it should auto-stop when I reached my equilibrium, it should get me up the store lane. If I still want to sell (in shortage) it must be a conscious decision … It should be possible to flip sides (buy / sell) within the auction. Below the store buying lane and above the store selling lane there should be safe or rest areas … so that I am not participating in the auction accidentally. When the store has no more goods to sell, buyers can walk up and drive the prices up further, trying to convince a seller to sell. The sell lane of the store is representing the latest bid price of the buyers."</p>
-<p>Heiko approved the rules on 5 Nov after seeing WS6's screens, choosing <strong>hold ▼ for one second</strong> as the way to sell into a shortage. B and C are in the game (WS3, 6 Nov); D and E are designed, not built yet, and the Auctions team (WS3) builds them next. Until then the game plays as the sections above describe for those two.</p>
+<p>Heiko approved the rules on 5 Nov after seeing WS6's screens, choosing <strong>hold ▼ for one second</strong> as the way to sell into a shortage. All four are in the game (WS3, 6 Nov): B and C with #483, D and E with #503.</p>
 
 <h3 id="rule-b-stop-at-need">B · You stop at your need <span class="pill built">In the game</span></h3>
 <ul>
-<li>A seller who holds more than their need sells down to their need and then stops: the unit that would take them below need does not sell, and they are moved <strong>one step</strong> up off the line. Your need here is the status screen's: what you must hold now, spoilage included (see <a href="#status-screen">the status screen</a>). Every phone and the TV mark the seller <em>KEEPS 6</em>, and their own phone says "Stopped at 6 Food: what you need next month."</li>
-<li>To sell on into a shortage, <strong>hold ▼ for one second</strong>. A tap, or a shorter hold, does nothing, so a thumb resting on the arrow never sells you short by accident. After the one-second hold you sell for the rest of that good, starting slow again. The phone says "To sell more, hold ▼: you'd be short next month".</li>
+<li>A seller who holds more than their need sells down to their need and then stops: the unit that would take them below need does not sell, and they are moved <strong>one step</strong> up off the line. Your need here is the status screen's: what you must hold now, spoilage included (see <a href="#status-screen">the status screen</a>). Every phone and the TV mark the seller <em>KEEPS 6</em>, and their own phone says "Stopped at 6 Food: what you must hold."</li>
+<li>To sell on into a shortage, <strong>hold ▼ for one second</strong>. A tap, or a shorter hold, does nothing, so a thumb resting on the arrow never sells you short by accident. The hold starts at the stop: a ▼ you were already holding when selling stopped stops with you, so let go and hold ▼ again. After the one-second hold you sell for the rest of that good, starting slow again. The phone says "To sell more, hold ▼: you'd be short next month".</li>
 <li>It applies to <strong>every</strong> sale: to the store, to the ship and to other players (Heiko, 5 Nov). A good you don't need (Smithore, Crystite and the like, when no factory of yours uses them) has no stop.</li>
 <li>There is no matching stop for buyers (Heiko, 5 Nov).</li>
 <li>Computer players hold ▼ again only when the least they mean to keep is below this need, so selling short is a choice they made, never an accident of the walk. Today a computer player's least is what next month uses before spoilage, so for Food, Energy and Water it does sell on below this need, a second later.</li>
@@ -351,25 +351,30 @@
 <h3 id="rule-c-flip-sides">C · Flip sides during the auction <span class="pill built">In the game</span></h3>
 <p>Tap <em>Buy</em> or <em>Sell</em> during the walk (see <a href="#switching-sides">switching sides</a>): a switch stops any trade at once, takes back your Done, and keeps your stop-at-need for this good. A computer player that has sold more than it meant to switches to buying.</p>
 
-<h3 id="rule-d-rest-zones">D · Rest zones with hard edges</h3>
+<h3 id="rule-d-rest-zones">D · Rest zones with hard edges <span class="pill built">In the game</span></h3>
 <ul>
-<li>Below the best buying line (the store's, or the ship's if higher) is the <strong>buyers' rest zone</strong>; above the store's selling line is the <strong>sellers' rest zone</strong>. Standing in your own rest zone you can't trade, because the other side can't reach you.</li>
+<li>Below the store's buying line is the <strong>buyers' rest zone</strong>; above the store's selling line is the <strong>sellers' rest zone</strong>. Both lines are taken when the good's walk begins and stay put for that good, even when the store's money runs out or it sells out. Standing in your own rest zone you can't trade, because the other side can't reach you.</li>
 <li>Buyers can't walk below the board's bottom edge; sellers can't walk above the top edge. The edges are hard: there is no extra "click" at a line you are allowed to cross, because crossing one is always a deliberate hold, and the one crossing that can cost you, selling below your need, is caught by rule B.</li>
-<li>Sellers always stop at the old buying line, even after the store has bought all it wants and no ship is in. (Today they can then walk down into the buyers' area.)</li>
+<li>Sellers always stop at the store's buying line, even after the store has bought all it wants and no ship is in. A seller there trades only with a buyer who walks up to them.</li>
+<li>The export ship's line sits above the store's buying line, on the trading floor. A seller sells to the ship as its price falls, unit by unit, then walks on down to the store, and stops at the store's line.</li>
+<li>Computer players walk inside the same edges as a phone. Sitting a good out (standing at the edge and pressing Done) is unchanged.</li>
 </ul>
 
-<h3 id="rule-e-sold-out">E · Bidding past a sold-out store</h3>
+<h3 id="rule-e-sold-out">E · Bidding past a sold-out store <span class="pill built">In the game</span></h3>
 <ul>
 <li>When the store has none of the good left to sell, buyers may walk above its old selling line, up to one step below the top.</li>
 <li>Walking up never trades with a seller resting in the sellers' zone: the buyer stops one step below them. A seller who wants the bid walks down onto it, and then they trade.</li>
-<li>The store's selling line stays at its old price until a bid passes it, then shows the <strong>highest bid</strong> on the board ("Highest bid N"), so every seller sees what walking down would fetch. The store itself sells nothing.</li>
+<li>The store's selling line stays at its old price ("SOLD OUT 28") until a bid passes it, then shows the <strong>highest bid</strong> on the board ("HIGHEST BID 30 ↑"), so every seller sees what walking down would fetch. The store itself sells nothing.</li>
+<li>Both rest zones are drawn on the board as bands, "SELLERS WAIT · NO TRADE" and "BUYERS WAIT · NO TRADE", and they keep their place for the whole good. When the export ship pays more than the store's selling line, its line lies inside the sellers' band and a seller who walks down to it still sells to the ship, so that band says "SELLERS WAIT · ONLY THE SHIP BUYS" on the TV and "SELLERS WAIT · SHIP ONLY" on a phone. A band's words never print under a line's label or past its edge: a thin band shows only "SELLERS WAIT" (or "BUYERS WAIT"), and one too thin for that shows its hatching alone.</li>
 <li>Every seller above that line is still resting: since a buyer can never walk past a resting seller, the highest bid is always below every resting seller.</li>
+<li>On the trading floor below the store's old selling line, walking up into a seller still trades, as before.</li>
+<li>A computer player short of the good walks up as far as it values it. A computer seller walks down onto the highest bid when that bid is at least what it would sell for.</li>
 </ul>
 
-<div class="box next"><h4>What is changing</h4>
-<p><strong>Designed, not built yet.</strong> Approved by Heiko on 5 Nov. He chose hold ▼ for one second, the stop covers every sale, and buyers get no matching stop. To be built by the Auctions team (WS3) for the rules, with the UX team (WS6) for the phone and TV screens (mock <code>design/mocks/auction-rules</code>) and the Strategy team (WS1) for the computer players.</p>
+<div class="box why"><h4>Why it is like this</h4>
+<p>Heiko approved the rules on 5 Nov: hold ▼ for one second, the stop covers every sale, and buyers get no matching stop. The buyers' rest zone ends at the <em>store's</em> buying line, his words "below the store buying lane". A first draft also counted the export ship's price, the higher of the two. But the ship pays a little less for every unit it buys, so a line fixed at its opening price let it buy one unit and then never again, and once the ship left, no seller could reach the store. WS3 ruled the store's line alone on 6 Nov.</p>
 <p>How the store sets its prices after it sells out, and a wider gap between its buying and selling prices, are part of WS5's <a href="store-and-prices.html#store-pricing-design">store-pricing design</a>, not this one.</p></div>
-<p class="code-ref">In the code (where it would land): <code>packages/engine/src/walk.ts::stepBoard</code>, <code>sellerFloor</code> · <code>auction.ts::declareRole</code> · <code>packages/ai/src/hands/auction.ts</code> · rules: <code>docs/specs/2026-11-05-ws3-auction-auto-trade.md</code> §10 AM-1 (WS3's branch <code>ws3-auction-rules-b-e</code>, a33879c4)</p>
+<p class="code-ref">In the code: <code>packages/engine/src/walk.ts::stepBoard</code>, <code>stepWalker</code>, <code>topBid</code> · <code>auction.ts::nextGood</code> (the zones), <code>shownSellLine</code> · <code>WALK.soldOutBidding</code> in <code>config.ts</code> · <code>packages/ai/src/hands/auction.ts</code> · rules: <code>docs/specs/2026-11-05-ws3-auction-auto-trade.md</code> §10, §12 AM-3</p>
 <p class="owner">Kept current by: WS3 (rules), WS6 (screens), WS1 (AI).</p>
 </article>
 </main>

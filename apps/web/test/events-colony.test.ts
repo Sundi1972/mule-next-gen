@@ -73,16 +73,17 @@ const STRIKE = event('generalStrike', 'planning', {
   line: `This month every Food plot makes ${STRIKE_SHARE}, unless the Governor pays the strikers 240 cr from the colony fund.`,
   hits: FOOD_PLOTS.map((p, order) => ({ ...p, order, delta: 0 })),
 });
-const riot = (object: 'park' | 'hospital') =>
+/** The riot takes floor(stock / 3) of each shelf: 18 Food, 12 Energy and 15 Smithore leave 12, 8 and 10. */
+const riot = (object: 'park' | 'hospital', { counted = true } = {}) =>
   event('riot', 'upkeep', {
     title: 'Riot',
     line: 'One prestige object is damaged (no prestige until repaired); the store loses a third of its stock.',
     hits: [],
     objects: [{ id: object, becomes: 'damaged' }],
     effects: [
-      { on: 'store', what: 'food', delta: -6 },
-      { on: 'store', what: 'energy', delta: -4 },
-      { on: 'store', what: 'smithore', delta: -5 },
+      { on: 'store', what: 'food', delta: -6, ...(counted ? { to: 12 } : {}) },
+      { on: 'store', what: 'energy', delta: -4, ...(counted ? { to: 8 } : {}) },
+      { on: 'store', what: 'smithore', delta: -5, ...(counted ? { to: 10 } : {}) },
     ],
   });
 
@@ -104,17 +105,15 @@ interface Opts {
   reduced?: boolean;
   me?: string;
   map?: MapTile[];
-  /** The store's stock per good as the view's market sends it, after the phase's events. */
-  storeStock?: Partial<Record<'food' | 'energy' | 'smithore', number>>;
 }
-function screen(events: ShowEventView[], t: number, where: Where, { reduced = false, me = LENA, map = tiles, storeStock }: Opts = {}): string {
+function screen(events: ShowEventView[], t: number, where: Where, { reduced = false, me = LENA, map = tiles }: Opts = {}): string {
   const mode: ShowMode = where === 'alone' ? 'solo' : 'tv';
   const slot = players.find((p) => p.id === me)!.slot;
   const parts =
     where === 'tv'
       ? [createElement(EventLivingMap, { key: 'm', size: 'tv' }), createElement(EventTvLog, { key: 'l' })]
       : [createElement(EventLivingMap, { key: 'm', size: 'phone', focusSlot: slot, onSkip: () => undefined }), createElement(EventSoloRail, { key: 'r', me })];
-  return renderToStaticMarkup(createElement(EventShow, { events, introMs: INTRO_MS, t, mode, reduced, width: W, height: H, tiles: map, players, ...(storeStock ? { storeStock } : {}), children: parts }));
+  return renderToStaticMarkup(createElement(EventShow, { events, introMs: INTRO_MS, t, mode, reduced, width: W, height: H, tiles: map, players, children: parts }));
 }
 const segOf = (events: ShowEventView[], where: Where) => eventSegments({ events, introMs: INTRO_MS }, 0, where === 'alone' ? 'solo' : 'tv')[0]!;
 function showFrames(events: ShowEventView[], where: Where, opts: Opts = {}): string[] {
@@ -191,13 +190,11 @@ describe('B-AC-26-3: the riot takes a third of each shelf and damages one object
   // The view's tiles are after the event; no map plot holds the park (C48).
   const after = tilesWith();
 
-  it('B-AC-26-3: the park: each shelf counts down from the store’s real stock, and the card names the park damaged, with no mark on the map', () => {
+  it('B-AC-26-3: the park: each shelf counts down to the store’s count right after the riot, and the card names the park damaged, with no mark on the map', () => {
     const ev = [riot('park')];
-    // The view's market after the riot: 11 Food, 9 Energy, 10 Smithore left, so 17, 13 and 15 before.
-    const storeStock = { food: 11, energy: 9, smithore: 10 };
-    expect(text(inside(storyAt(ev, 1.5, { map: after, storeStock }), 'riot-storage')).match(/\d+/g)).toEqual(['17', '13', '15']);
-    const shelves = storyAt(ev, 4.3, { map: after, storeStock });
-    expect(text(inside(shelves, 'riot-storage')).match(/\d+/g)).toEqual(['11', '9', '10']);
+    expect(text(inside(storyAt(ev, 1.5, { map: after }), 'riot-storage')).match(/\d+/g)).toEqual(['18', '12', '15']);
+    const shelves = storyAt(ev, 4.3, { map: after });
+    expect(text(inside(shelves, 'riot-storage')).match(/\d+/g)).toEqual(['12', '8', '10']);
     expect(has(shelves, 'store-flames')).toBe(false);
     // The card is up, but the park's chip waits for the riot to reach it.
     expect(has(shelves, 'effects-card')).toBe(true);
@@ -211,8 +208,8 @@ describe('B-AC-26-3: the riot takes a third of each shelf and damages one object
     expect(text(inside(result(ev, 'alone', { map: after }), 'phone-card'))).toContain('Park damaged in the riot');
   });
 
-  it('B-AC-26-3: without the store’s stock, each shelf shows only what it lost, never a guessed count', () => {
-    const shelves = text(inside(storyAt([riot('park')], 4.3, { map: after }), 'riot-storage'));
+  it('B-AC-26-3: without the count after the riot, each shelf shows only what it lost, never a guessed count', () => {
+    const shelves = text(inside(storyAt([riot('park', { counted: false })], 4.3, { map: after }), 'riot-storage'));
     expect(shelves.match(/[−-]?\d+/g)).toEqual(['−6', '−4', '−5']);
   });
 

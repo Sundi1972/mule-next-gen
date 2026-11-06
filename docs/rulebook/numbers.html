@@ -14,12 +14,12 @@
 <main class="rb-main">
 <article>
 <h1>Every number</h1>
-<p class="rb-lede">Every balancing value in the game, as the game's settings file holds it today: 1232 settings in 52 groups, each with what it does.</p>
+<p class="rb-lede">Every balancing value in the game, as the game's settings file holds it today: 1250 settings in 52 groups, each with what it does.</p>
 <p>This page is generated from the game's settings file, <code>packages/engine/src/config.ts</code>, on trunk. Each group below is one block of that file, named the way the code names it; the setting is its full path, and the note is the comment written beside it in the file. A setting without a note of its own points to the nearest note that explains it. The rules these numbers drive are explained in <a href="index.html">the other chapters</a>.</p>
 <p>Do not edit this page by hand. To regenerate it after <code>config.ts</code> changes, run from the repo root:</p>
 <p><code>pnpm --filter @mule/engine exec tsx ../../docs/rulebook/build-numbers.ts</code> then <code>node docs/rulebook/build-index.mjs</code></p>
 <div class="box next"><h4>Not on this page</h4><p><code>MAP_SIZE</code> is kept inside <code>config.ts</code> without being exported, so this page cannot read it.</p></div>
-<p class="code-ref">Built from <code>config.ts</code> with fingerprint <code>3ce677fb9099</code> (the first 12 characters of its SHA-256).</p>
+<p class="code-ref">Built from <code>config.ts</code> with fingerprint <code>3b5a83036a7f</code> (the first 12 characters of its SHA-256).</p>
 
 <h2 id="good-config"><code>GOOD_CONFIG</code> <span class="pill built">In the game</span></h2>
 <div class="table-wrap"><table>
@@ -1194,6 +1194,7 @@
 <tr><td><code>WALK.boardPostedMargin</code></td><td class="n">0.1</td><td>And this share of the posted price more, so a board whose price lines sit close together still has room to walk.</td></tr>
 <tr><td><code>WALK.needStop</code></td><td class="n">true</td><td>RULE-4 (AM-1): a seller stops at the amount they must hold (auctionNeed, fixed as the good comes up), one price step above the line, and sells below it only after holding ▼ for shortHoldMs. false turns the stop off, for sweeps.</td></tr>
 <tr><td><code>WALK.shortHoldMs</code></td><td class="n">1000</td><td>Board ms a stopped seller holds ▼ to sell on into shortage (Heiko&#39;s choice A, 5 Nov). A tap or a shorter hold moves nothing.</td></tr>
+<tr><td><code>WALK.soldOutBidding</code></td><td class="n">true</td><td>While the store has none of the good left to sell, buyers may bid above its old selling line, up to one step under the board&#39;s top, stopping one step short of any seller resting above that line; the line then shows the highest bid and a seller walks down onto it to trade. false: buyers walk as before, into a resting seller. For sweeps.</td></tr>
 <tr><td><code>WALK.tickMs</code></td><td class="n">100</td><td>How often the server steps the auction.</td></tr>
 </tbody>
 </table></div>
@@ -1989,10 +1990,17 @@
 <tbody>
 <tr><td><code>AI_PLANS.on</code></td><td class="n">true</td><td>Seats play their playbook; false: every seat plays the phase-by-phase asks, as before playbooks.</td></tr>
 <tr><td><code>AI_PLANS.ownPhases</code></td><td class="n">false</td><td>A feature switch, not a balance value: a seat&#39;s own path plays its drafted development and auction parts; false, today&#39;s. See AM-26.</td></tr>
+<tr><td><code>AI_PLANS.replan</code></td><td class="n"></td><td>When a kept plan is drafted again: each threshold is against the plan&#39;s anchor, set when it was drafted.</td></tr>
+<tr><td><code>AI_PLANS.replan.keyPlots</code></td><td class="n">2</td><td>The plan&#39;s key plots: the first this many of its month&#39;s land ranking. One taken by a rival re-plans.</td></tr>
+<tr><td><code>AI_PLANS.replan.rivalPlots</code></td><td class="n">1</td><td>Rival plots making the monopoly target, this many more than at the anchor, re-plan.</td></tr>
+<tr><td><code>AI_PLANS.replan.priceShock</code></td><td class="n">0.4</td><td>The money-maker&#39;s or the target&#39;s posted price moving by this share of its anchor price re-plans.</td></tr>
+<tr><td><code>AI_PLANS.replan.eventPlots</code></td><td class="n">1</td><td>A production event cutting the output of this many of the seat&#39;s money-maker plots re-plans.</td></tr>
 <tr><td><code>AI_PLANS.moneyMaker.plots</code></td><td class="n">3</td><td>A good&#39;s score sums its install gain over this many of the seat&#39;s best plots for it (own idle and free).</td></tr>
 <tr><td><code>AI_PLANS.moneyMaker.rivalDiscount</code></td><td class="n">0.15</td><td>Each rival plot already making the good cuts its score by this share.</td></tr>
 <tr><td><code>AI_PLANS.moneyMaker.weight</code></td><td class="n">1</td><td>Weight of the &quot;My money-maker&quot; consideration in a development pick.</td></tr>
 <tr><td><code>AI_PLANS.moneyMaker.otherScore</code></td><td class="n">0.8</td><td>That consideration&#39;s score, 0 to 1, for an outfit that makes another good (the money-maker scores 1).</td></tr>
+<tr><td><code>AI_PLANS.chain</code></td><td class="n"></td><td>A factory good the seat can&#39;t feed yet, scored with the plots that would make its inputs. See AM-33.</td></tr>
+<tr><td><code>AI_PLANS.chain.months</code></td><td class="n">0</td><td>A feature switch. 0 is off: no chain is ever committed and the seats play as before AM-33. Above 0, the chain&#39;s MULEs, at the level&#39;s MULEs a month, must all be bought within this many months, from cash on hand. Switching on (at 3, as tested) is Heiko&#39;s decision, once the economy lets a chain pay.</td></tr>
 <tr><td><code>AI_PLANS.monopoly.goods</code></td><td class="n">[&quot;energy&quot;, &quot;smithore&quot;]</td><td>The goods a seat may try to corner. Not Food: it spoils too fast (STRATEGIST.cornerMaxSpoilage).</td></tr>
 <tr><td><code>AI_PLANS.monopoly.maxRivalPlots</code></td><td class="n">1</td><td>A good is cornered only while at most this many rival plots make it.</td></tr>
 <tr><td><code>AI_PLANS.monopoly.minPlots</code></td><td class="n">2</td><td>And only with at least this many of its own idle or free plots whose best outfit is the good.</td></tr>
@@ -2036,6 +2044,26 @@
 <tr><td><code>AI_PLANS.leaning.saboteur.landBaron</code></td><td class="n">0.4</td><td>See the note on <code>AI_PLANS.leaning</code>.</td></tr>
 <tr><td><code>AI_PLANS.leaning.saboteur.politician</code></td><td class="n">0.3</td><td>See the note on <code>AI_PLANS.leaning</code>.</td></tr>
 <tr><td><code>AI_PLANS.leaning.saboteur.spoiler</code></td><td class="n">1</td><td>See the note on <code>AI_PLANS.leaning</code>.</td></tr>
+</tbody>
+</table></div>
+
+<h3 id="ai-plans-kinds"><code>AI_PLANS.kinds</code></h3>
+<p>What a plan kind multiplies the persona&#39;s weights by while the seat plays it; a weight not named is × 1.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Setting</th><th class="n">Value</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td><code>AI_PLANS.kinds.builder.reserve</code></td><td class="n">1.2</td><td>Multiplies the cash and the Food and Energy it keeps back for next month.</td></tr>
+<tr><td><code>AI_PLANS.kinds.builder.speculate</code></td><td class="n">0.5</td><td>Willingness to buy now to sell next month. 0 never.</td></tr>
+<tr><td><code>AI_PLANS.kinds.builder.corner</code></td><td class="n">0</td><td>Willingness to buy up a scarce good the others are short of, to sell it to them dear. 0 never.</td></tr>
+<tr><td><code>AI_PLANS.kinds.specialist.greed</code></td><td class="n">1.2</td><td>Weight on money made. Higher chases bigger but less certain gains.</td></tr>
+<tr><td><code>AI_PLANS.kinds.specialist.risk</code></td><td class="n">0.9</td><td>Dislike of uncertain bets (unanalysed ground, thin markets). 1 is neutral; higher avoids risk.</td></tr>
+<tr><td><code>AI_PLANS.kinds.monopolist.corner</code></td><td class="n">2.5</td><td>Willingness to buy up a scarce good the others are short of, to sell it to them dear. 0 never.</td></tr>
+<tr><td><code>AI_PLANS.kinds.monopolist.speculate</code></td><td class="n">1.2</td><td>Willingness to buy now to sell next month. 0 never.</td></tr>
+<tr><td><code>AI_PLANS.kinds.monopolist.patience</code></td><td class="n">1.2</td><td>Auction patience: higher waits longer for the other side to come to it.</td></tr>
+<tr><td><code>AI_PLANS.kinds.landBaron.greed</code></td><td class="n">1.1</td><td>Weight on money made. Higher chases bigger but less certain gains.</td></tr>
+<tr><td><code>AI_PLANS.kinds.landBaron.reserve</code></td><td class="n">0.8</td><td>Multiplies the cash and the Food and Energy it keeps back for next month.</td></tr>
+<tr><td><code>AI_PLANS.kinds.politician</code></td><td class="n">{}</td><td>See the note on <code>AI_PLANS.kinds</code>.</td></tr>
+<tr><td><code>AI_PLANS.kinds.spoiler.spite</code></td><td class="n">1.5</td><td>Weight on hurting the leader: blocking their land, outbidding them for what they need. 0 never.</td></tr>
 </tbody>
 </table></div>
 

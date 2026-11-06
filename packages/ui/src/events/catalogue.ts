@@ -1,4 +1,4 @@
-import { COLONY } from '@mule/engine';
+import { COLONY, SOCIAL_EVENTS } from '@mule/engine';
 import type { ShowEventKey } from './types';
 
 /**
@@ -69,7 +69,7 @@ export const EVENT_ENTRY = {
   emigrationWave: { key: 'emigrationWave', motion: 'colony', look: 'Colonists leave for good; the colony’s head count ticks down.' },
   volunteerCleanup: { key: 'volunteerCleanup', motion: 'colony', look: 'Volunteers clean up; the air gauge drops.' },
   storeStrike: { key: 'storeStrike', motion: 'store', look: 'The store’s MULE corral greys out: no MULEs this turn.' },
-  walkout: { key: 'walkout', motion: 'plot', look: 'The player’s plots of one good are struck in turn, each down to 20%.' },
+  walkout: { key: 'walkout', motion: 'plot', look: `The player’s plots of one good are struck in turn, each down to ${percent(SOCIAL_EVENTS.player.walkout.output)}.` },
   loyalCrew: { key: 'loyalCrew', motion: 'plot', look: 'One plot glows and makes 1 more.' },
   blamedForUnrest: { key: 'blamedForUnrest', motion: 'ledger', look: 'The player’s reputation chip drops: fewer votes.' },
 } satisfies { [K in ShowEventKey]?: EventEntry & { key: K } };

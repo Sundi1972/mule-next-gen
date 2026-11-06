@@ -27,11 +27,12 @@ import type { Act, AiAction } from './actions.js';
 import { Brain, type DecisionRecord, type Pending } from './brain.js';
 import { donationFor, standingOf } from './colony-donate.js';
 import { templateLine, type Decider, type TableTalk } from './decider.js';
-import { AuctionHand, type AuctionDebug } from './hands/auction.js';
+import { AuctionHand, type AuctionDebug, type PlannedPlay } from './hands/auction.js';
 import { DevelopHand, type DevLogEntry, type DevWalking } from './hands/develop.js';
 import { PERSONAS } from './personas.js';
 import {
   adoptInto,
+  anchorOf,
   auctionOutcome,
   developmentOutcome,
   DRAFT_PHASE_OF,
@@ -39,23 +40,33 @@ import {
   draftPlanningPart,
   draftPlaybook,
   draftRoll,
+  draftStrategyOf,
+  landRanking,
   pathFor,
+  planFields,
+  planMind,
+  replanReason,
+  withOffices,
   validatePlaybook,
   validatorFor,
   type DraftInput,
   type DraftPhase,
+  type KeptPlan,
   type LeftOutPick,
   type OwnDeclare,
   type PartKey,
   type PhaseFact,
+  type PlanFields,
+  type PlanPoint,
   type PlayedPart,
   type PlayPath,
+  type ReplanTrigger,
   type ValidatePlan,
   type ValidatorProfile,
 } from './playbook/index.js';
 import { GOOD_NAME, landDecision, outfitName, plotName, plotsAhead, rankedBy, wantsAnyAhead, wantsPlot, type LandPlan } from './strategist.js';
 import { situation } from './summary.js';
-import type { Mind } from './value.js';
+import { chainLinks, chainsOn, type AdoptedFields, type Mind } from './value.js';
 
 /** One act of the seat's planning part, and whether the rules took it. */
 export interface PlanningStep {
@@ -76,6 +87,15 @@ interface AuctionRun {
   failed: boolean;
   /** Its own declares, in order: the outcome's side for each good. See AM-23. */
   declared: OwnDeclare[];
+  /** Whether the month's auction draft point has passed. */
+  planned: boolean;
+}
+
+/** A re-plan of the seat's kept plan: when, and the trigger that called it. See RULE-8. */
+export interface ReplanEntry {
+  month: number;
+  point: PlanPoint;
+  trigger: ReplanTrigger;
 }
 
 /** The `id` of a DecisionRecord the seat builds itself, for a drafted part: no Brain decision, so no Brain id. See AM-22. */
@@ -147,6 +167,9 @@ export class AiSeat {
   private devMonth = -1;
   private devPlayed: Playbook | null = null;
   private auctionRun: AuctionRun | null = null;
+  /** The plan the seat plays across months; null until its first draft point or adopt. See C12. */
+  private kept: KeptPlan | null = null;
+  private replans: ReplanEntry[] = [];
 
   constructor(readonly options: AiSeatOptions) {
     this.mind = {
@@ -185,6 +208,7 @@ export class AiSeat {
     const list = landDecision(obs, this.mind);
     const summary = situation(obs, this.mind);
     this.land = this.askedFor === state.month ? this.brain.pick('land', list, obs, null, summary) : this.brain.ask('land', list, obs, Infinity, null, summary);
+    this.planPoint(state, 'planning');
     // Written only for a listener; the part plays whenever the seat may act, recorded or not.
     if (this.options.onPlaybook && this.playPath(state.month, 'planning').by === 'own') this.writeDraft(state, 'planning');
     if (!act) return;
@@ -273,7 +297,66 @@ export class AiSeat {
   private draftInput(state: GameState, phase: DraftPhase, month = state.month): DraftInput {
     // Read, never settled: settling would log the land decision before the grant.
     const land = this.landMonth === month ? this.land : null;
-    return { state, seat: this.id, mind: this.mind, seed: this.options.seed, phase, land, month };
+    // A trigger due now drafts the plan again, as the draft point will (RULE-8).
+    const trigger = this.replanDue(state);
+    return { state, seat: this.id, mind: this.mindFor(month), seed: this.options.seed, phase, land, month, kept: trigger ? null : this.kept, replanned: trigger ?? this.kept?.trigger ?? null };
+  }
+
+  /**
+   * The mind a draft or brief for `month` reads: the adopted fields only while they are that month's, so what the
+   * upkeep drafts or briefs for the next month reads none of them.
+   */
+  mindFor(month: number): Mind {
+    if (this.mind.adopted === undefined || this.mind.adopted.month === month) return this.mind;
+    const { adopted: _, ...mind } = this.mind;
+    return mind;
+  }
+
+  /** Whether the seat plays playbooks at all (RULE-6 row 1 does not match): only then does it keep a plan. */
+  private playsPlaybooks(): boolean {
+    return AI_PLANS.on && this.options.playbook !== false;
+  }
+
+  /** The kept money-maker while it is a factory good with an input the seat can't feed yet, else null. See AM-33. */
+  private chainFocus(state: GameState): Good | null {
+    const good = this.kept?.moneyMaker ?? null;
+    // Switched off, no good is a chain: no observation is made at every development start for nothing.
+    if (!good || !chainsOn()) return null;
+    return chainLinks(observe(state, this.id), this.id, good).length > 0 ? good : null;
+  }
+
+  /** RULE-8's re-plan trigger the kept plan meets on `state`, or null: also null with no plan kept, or none anchored yet. */
+  replanDue(state: GameState): ReplanTrigger | null {
+    return this.kept ? replanReason(state, this.kept, this.id) : null;
+  }
+
+  /**
+   * A draft point's plan (RULE-7, RULE-8): the kept plan stands until a trigger names a re-plan, which drafts it again
+   * with a new anchor and is logged. With none kept, the seat drafts one. An adopted plan takes its anchor here, from
+   * the first state the seat sees after the adopt.
+   */
+  private planPoint(state: GameState, point: DraftPhase): void {
+    if (!this.playsPlaybooks()) return;
+    if (this.kept && !this.kept.anchor) this.kept.anchor = anchorOf(state, this.id, this.kept, 'adopt', this.landRanking(state));
+    const trigger = this.replanDue(state);
+    if (this.kept?.anchor && !trigger) this.kept.anchor = withOffices(this.kept.anchor, state);
+    if (this.kept && !trigger) return;
+    this.keep(state, point, draftStrategyOf(this.draftInput(state, point)), trigger);
+    if (trigger) this.replans.push({ month: state.month, point, trigger });
+  }
+
+  private keep(state: GameState, point: PlanPoint, plan: PlanFields, trigger: ReplanTrigger | null): void {
+    this.kept = { ...planFields(plan), anchor: anchorOf(state, this.id, plan, point, this.landRanking(state)), trigger };
+  }
+
+  /** This month's land ranking, as the planning draft ranks it: the plan's key plots come from it. */
+  private landRanking(state: GameState): number[] {
+    return landRanking(this.draftInput(state, 'planning'));
+  }
+
+  /** Each re-plan of the kept plan, in order: when, and its trigger. */
+  replanLog(): readonly ReplanEntry[] {
+    return this.replans;
   }
 
   /**
@@ -303,12 +386,32 @@ export class AiSeat {
    * the seat acts in, it plays the listings again, from the planning part now in effect.
    */
   adopt(playbook: Playbook): void {
+    const newest = this.adopted.at(-1);
     this.adopted = adoptInto(this.adopted, playbook);
+    if (this.adopted.at(-1) !== newest) this.kept = { ...planFields(playbook.strategy), anchor: null, trigger: null };
+    this.mind.adopted = this.adoptedFields();
     const p = this.planning;
     // Listings are made in planning only: once it has ended, the ones made stand.
     if (!p || p.state.phase !== 'planning' || p.state.month !== p.month || playbook.month !== p.month) return;
     const played = this.part(p.state, 'planning');
     if (played) this.playListings(p.state, played.part);
+  }
+
+  /**
+   * The fields the playbooks adopted for the newest month set by an edit, each from the newest that edited it: Claude's
+   * edits play, a value the engine drafted does not. None while the seat plays no playbooks, or nothing was edited.
+   */
+  private adoptedFields(): AdoptedFields | undefined {
+    const month = this.adopted.at(-1)?.month;
+    if (month === undefined || !this.playsPlaybooks()) return undefined;
+    const edited = (path: string) => this.adopted.filter((pb) => pb.month === month && pb.edits?.some((e) => e.path === path || e.path.startsWith(`${path}/`))).at(-1);
+    const fields: AdoptedFields = {
+      month,
+      cashFloor: edited('/strategy/cashFloor')?.strategy.cashFloor ?? null,
+      pressShare: edited('/landGrant/pressShare')?.landGrant?.pressShare ?? null,
+      monopolyTarget: edited('/strategy/monopolyTarget')?.strategy.monopolyTarget ?? null,
+    };
+    return fields.cashFloor === null && fields.pressShare === null && fields.monopolyTarget === null ? undefined : fields;
   }
 
   /**
@@ -325,7 +428,7 @@ export class AiSeat {
   }
 
   private profileFor(month: number): ValidatorProfile {
-    return { mind: this.mind, seed: this.options.seed, land: this.landMonth === month ? this.land : null };
+    return { mind: this.mindFor(month), seed: this.options.seed, land: this.landMonth === month ? this.land : null };
   }
 
   /**
@@ -417,6 +520,8 @@ export class AiSeat {
     if (state.phase !== 'development' || this.devMonth === state.month) return;
     this.devMonth = state.month;
     this.devPlayed = null;
+    this.planPoint(state, 'development');
+    this.develop.leanOn(state.month, this.chainFocus(state));
     const path = this.playPath(state.month, 'development');
     if (path.by === 'today') return;
     const playbook = path.by === 'adopted' ? path.playbook : this.ownDraft(state, 'development', () => this.draft(state, 'development'));
@@ -424,7 +529,8 @@ export class AiSeat {
     if (!playbook || !part) return;
     if (path.by === 'own') this.say(state, 'develop', null, routeLabel(state, part.route), 'development');
     this.devPlayed = playbook;
-    this.develop.follow(state.month, { part: structuredClone(part), seed: this.options.seed, moneyMaker: playbook.strategy.moneyMaker, own: path.by === 'own' });
+    const mind = planMind(this.mind, playbook.strategy);
+    this.develop.follow(state.month, { part: structuredClone(part), seed: this.options.seed, moneyMaker: playbook.strategy.moneyMaker, mind, own: path.by === 'own' });
   }
 
   /**
@@ -432,8 +538,12 @@ export class AiSeat {
    * draft, written; null plays today's ask. A good the adopted part lacks is drafted only with ownPhases on. A draft or
    * validator error is logged, and the month's later goods play today's ask. See AM-20, AM-26, HC-9.
    */
-  private goodPlay(state: GameState, good: Good): GoodPlay | null {
+  private goodPlay(state: GameState, good: Good): PlannedPlay | null {
     const run = this.auctionFor(state.month);
+    if (!run.planned) {
+      run.planned = true;
+      this.planPoint(state, 'auction');
+    }
     const path = this.playPath(state.month, 'auction');
     if (run.failed || path.by === 'today') return null;
     let play = path.by === 'adopted' ? path.playbook.auction?.[good] : undefined;
@@ -452,11 +562,11 @@ export class AiSeat {
     }
     if (!play) return null;
     run.played[good] = structuredClone(play);
-    return structuredClone(play);
+    return { play: structuredClone(play), mind: planMind(this.mind, run.head!.strategy) };
   }
 
   private auctionFor(month: number): AuctionRun {
-    if (this.auctionRun?.month !== month) this.auctionRun = { month, head: null, played: {}, failed: false, declared: [] };
+    if (this.auctionRun?.month !== month) this.auctionRun = { month, head: null, played: {}, failed: false, declared: [], planned: false };
     return this.auctionRun;
   }
 

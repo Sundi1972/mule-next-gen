@@ -1,4 +1,4 @@
-import type { AuctionSide, CanRun, CeremonyBeat, DevPlace, Election, EventEffect, EventKey, EventKind, EventWeight, FundLine, FundSource, Good, LawId, LawImpact, LawProposal, GoodReceipt, Ground, MonthEvent, Office, OfficeResult, Outfit, Phase, PrestigeId, ScoreParts, SkipReason, SpecialField, Species, StatusRow, Stock, TaxPromise, Terrain, TileTrait, VoteWeight } from '@mule/engine';
+import type { AuctionSide, BoardZones, CanRun, CeremonyBeat, DevPlace, Election, EventEffect, EventKey, EventKind, EventWeight, FundLine, FundSource, Good, LawId, LawImpact, LawProposal, GoodReceipt, Ground, MonthEvent, Office, OfficeResult, Outfit, Phase, PrestigeId, ScoreParts, SkipReason, SpecialField, Species, StatusRow, Stock, TaxPromise, Terrain, TileTrait, VoteWeight } from '@mule/engine';
 export type { ChatMessage, ClientEnvelope, ServerEnvelope, TableView } from '@tabletop/core/protocol';
 
 /**
@@ -274,10 +274,10 @@ export interface MyView {
   /** What this player pays for a MULE and for each outfit. */
   mulePrice: number;
   outfitCosts: Record<Outfit, number>;
-  /** Free plots chosen for the geo drone this month. */
+  /** Free or listed plots the geo drone flew over this month; set until the land grant frees the drone. */
   droneOrder: { x: number; y: number }[];
   /**
-   * The plots this month's drone surveyed, from the land grant until the month ends: the land grant's rail says
+   * The plots this month's drone surveyed, from the moment it is sent until the month ends: the land grant's rail says
    * "Your drone: …" while one is lit (H-3). Only on this player's own view; absent reads as none.
    */
   droneFound?: { x: number; y: number }[];
@@ -433,9 +433,18 @@ export interface AuctionView {
   slowed: boolean;
   /** Goods still to come after this one. */
   next: Good[];
-  /** What the store pays and charges, or null while it doesn't trade at that line. */
+  /** What the store pays, or null while it doesn't buy. */
   storeBuys: number | null;
+  /**
+   * The store's selling line: what it charges while it has units to sell. Once it is sold out (`storeForSale` 0), the
+   * highest bid a buyer can pay, flagged by `storeSellsBid`, or its old price while no bid is above it; the store sells
+   * nothing there. Null when it is sold out and the line is off.
+   */
   storeSells: number | null;
+  /** Present, as true, while `storeSells` is the highest bid on a sold-out store's line, not a price it sells at. */
+  storeSellsBid?: true;
+  /** The board's rest zones and hard edges, fixed as the good comes up: buyers rest below `buyersTop`, sellers above `sellersBottom`. */
+  zones?: BoardZones;
   /** Units the store will sell of this good: its stock less the colonists' Food and Water reserve. */
   storeForSale: number;
   /** What the export ship pays for the next unit, while it is in port and wants this good. */

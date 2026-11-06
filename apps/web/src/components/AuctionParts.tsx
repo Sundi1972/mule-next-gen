@@ -1,4 +1,4 @@
-import { COLONY_SELLER, SHIP_ID, STORE_ID, tradeInterval, WALK, type AuctionRole, type AuctionSide, type Good } from '@mule/engine';
+import { COLONY_SELLER, GOOD_CONFIG, SHIP_ID, STORE_ID, tradeInterval, WALK, type AuctionRole, type AuctionSide, type Good } from '@mule/engine';
 import type { AuctionView, DealView, LandAuctionView, ListingView, MuleView, WalkerView } from '@mule/protocol';
 import { Button, Creature, cx, GOOD_NAME, GoodIcon, MuleIcon, PlayerMark, SLOT_COLOR, TERRAIN_NAME, useSeatSpecies, type BoardWalker, type Slot } from '@mule/ui';
 import type { ReactNode } from 'react';
@@ -30,17 +30,83 @@ export function boardWalkers(view: MuleView, auction: AuctionView): BoardWalker[
   });
 }
 
+/**
+ * The store's selling line and the rest zones, as the board takes them. Once the store is sold out, the line the server
+ * sends is the highest bid (flagged) or the store's old price: never a price it sells at, so the board draws it as the
+ * sold-out line.
+ */
+export function storeLines(auction: AuctionView): {
+  storeSells: number | null;
+  soldOutAt: { price: number; bid: boolean } | null;
+  zones: { buyersTop: number; sellersBottom: number } | null;
+} {
+  const soldOut = auction.storeForSale === 0 && auction.storeSells !== null;
+  return {
+    storeSells: soldOut ? null : auction.storeSells,
+    soldOutAt: soldOut ? { price: auction.storeSells!, bid: auction.storeSellsBid === true } : null,
+    zones: auction.zones ?? null,
+  };
+}
+
+/** What the store charges, as a price box shows it: "out" once it has none to sell, whatever line the board draws. */
+export const storeSellsWord = (auction: AuctionView): number | 'out' => (auction.storeForSale > 0 ? (auction.storeSells ?? 'out') : 'out');
+
+/** In the phone's rail while the store is sold out: nobody buys from it, what it still pays, and the highest bid once one passes its old price. */
+export function SoldOutNote({ auction }: { auction: AuctionView }) {
+  const { soldOutAt } = storeLines(auction);
+  return (
+    <p className="rounded-control border border-rise/50 bg-void px-2.5 py-1.5 text-[11px] leading-snug text-ink-2" data-testid="sold-out-note">
+      <strong className="text-rise">Store sold out.</strong> Nobody can buy from it{auction.storeBuys !== null ? `; it still buys at ${auction.storeBuys}` : ''}.
+      {soldOutAt?.bid && ` Highest bid ${soldOutAt.price}.`}
+    </p>
+  );
+}
+
+/** On the TV during the walk while the store is sold out: bids may pass its old price, and the highest bid once one has. */
+export function TvSoldOutBox({ auction }: { auction: AuctionView }) {
+  const { soldOutAt } = storeLines(auction);
+  // The old price is the sellers' zone's floor; without zones, the sold-out line until a bid passes it. Never the bid.
+  const old = auction.zones?.sellersBottom ?? (soldOutAt && !soldOutAt.bid ? soldOutAt.price : null);
+  const bid = soldOutAt?.bid ? soldOutAt.price : null;
+  return (
+    <div className="flex flex-col gap-1 rounded-panel border-2 border-rise bg-panel p-4" data-testid="tv-sold-out">
+      <span className="font-display text-2xl font-semibold text-rise">Store sold out</span>
+      <span className="text-lg leading-snug text-ink-2">
+        {old !== null ? `Bids can go past its old ${old}.` : 'No store price yet: bids set it.'}
+        {bid !== null && ' '}
+        {bid !== null && (
+          <>
+            Highest bid{' '}
+            <strong data-num className="font-mono text-ink">
+              {bid}
+            </strong>
+          </>
+        )}
+      </span>
+    </div>
+  );
+}
+
 /** A seller the engine stopped at what they must hold (RULE-4). The engine keeps the flag through a switch to Buy; the screens don't. */
 export function heldSeller(w: Pick<WalkerView, 'side' | 'held'> | undefined): boolean {
   return w?.side === 'seller' && w.held === true;
 }
 
 /**
- * The held seller's rail (WS6's mock PhoneSale, variant A, at cde3ff61): she stopped at what she needs next month, and
+ * Why the auction asks you to hold more of `good`, true for that good (auctionNeed): upkeep eats Food and Water, the
+ * month end spoils what has spoilage in config, and what neither touches is held for next month's use alone.
+ */
+export function holdReason(good: Good): string {
+  if (good === 'food' || good === 'water') return 'upkeep and spoilage take some before next month';
+  return GOOD_CONFIG[good].spoilage > 0 ? 'next month uses it, and some spoils first' : 'next month uses it';
+}
+
+/**
+ * The held seller's rail (WS6's mock PhoneSale, variant A, at cde3ff61): she stopped at what she must hold, and
  * how to sell on.
  */
 export function heldWords(good: Good, need: number): { line: string; how: string } {
-  return { line: `Stopped at ${need} ${GOOD_NAME[good]}: what you need next month.`, how: 'To sell more, hold ▼: you’d be short next month.' };
+  return { line: `Stopped at ${need} ${GOOD_NAME[good]}: what you must hold.`, how: 'To sell more, hold ▼: you’d be short next month.' };
 }
 
 /** Who an id is, in a sentence: "you", "the store", "the ship", or the player's name. */
@@ -84,7 +150,11 @@ function playerGap(asks: Offer[], bids: Offer[]): number | null {
   return gaps.length > 0 ? Math.min(...gaps) : null;
 }
 
-/** The TV's readout: who holds the lowest ask and the highest bid, the store and the ship counted, and the gap a player faces. */
+/**
+ * The TV's readout: who holds the lowest ask and the highest bid, the store and the ship counted, and the nearest trade a
+ * player faces. TRADING is one word: NEAREST TRADE widens the label column, and a two-line value pushed the second deal row
+ * out of the TV's list (TV-FIT).
+ */
 export function TvReadout({ view, auction }: { view: MuleView; auction: AuctionView }) {
   const asks = pricesOn(auction, 'seller');
   const bids = pricesOn(auction, 'buyer');
@@ -98,8 +168,8 @@ export function TvReadout({ view, auction }: { view: MuleView; auction: AuctionV
       <dd data-num className="font-bold text-rise">{ask ? `${ask.price} · ${who(view, ask.id)}` : '—'}</dd>
       <dt className="text-fall">HIGHEST BID</dt>
       <dd data-num className={cx('font-bold', bid?.id === SHIP_ID ? 'text-warn' : 'text-fall')}>{bid ? `${bid.price} · ${who(view, bid.id)}` : '—'}</dd>
-      <dt className="text-ink-3">GAP</dt>
-      <dd data-num className="font-bold text-ink">{trading ? 'MET: TRADING' : gap === null ? '—' : gap > 0 ? `${gap} apart` : 'they meet'}</dd>
+      <dt className="text-ink-3">NEAREST TRADE</dt>
+      <dd data-num className="font-bold text-ink">{trading ? 'TRADING' : gap === null ? '—' : gap > 0 ? `${gap} apart` : 'they meet'}</dd>
     </dl>
   );
 }
@@ -166,7 +236,7 @@ export function StoreBox({ auction }: { auction: AuctionView; tv?: true }) {
     <dl className="grid grid-cols-3 gap-px overflow-hidden rounded-panel border border-holo-line bg-holo-line font-mono text-2xl" data-testid="status-store">
       {(
         [
-          ['STORE SELLS', auction.storeSells ?? 'out', 'text-rise'],
+          ['STORE SELLS', storeSellsWord(auction), 'text-rise'],
           ['STORE BUYS', auction.storeBuys ?? '—', 'text-fall'],
           ['IN STOCK', stock, stock === 0 ? 'text-alert' : 'text-ink'],
         ] as const
@@ -360,8 +430,8 @@ function Who({ slot, name, size }: { slot: Slot; name: string; size: number }) {
 
 /**
  * The original's status screen before each good: for every player, what
- * they had before production, used, made and hold now, what they need for
- * next month, what goes bad, and the spare or shortage that leaves.
+ * they had before production, used, made and hold now, what they must hold
+ * (Hold: next month's use and what spoils first), what goes bad, and the spare or shortage that leaves.
  */
 export function StatusTable({ view, auction, meId, tv = false }: { view: MuleView; auction: AuctionView; meId?: string; tv?: boolean }) {
   // On a phone the whole table fits the stage of a small landscape phone (667×375), an AI's long name included.
@@ -376,7 +446,7 @@ export function StatusTable({ view, auction, meId, tv = false }: { view: MuleVie
           <th className={head}>Used</th>
           <th className={head}>Made</th>
           <th className={head}>Now</th>
-          <th className={head}>Needs</th>
+          <th className={head}>Hold</th>
           <th className={cx(head, 'whitespace-nowrap')} data-testid="head-goes-bad">
             Goes bad
           </th>
@@ -577,8 +647,8 @@ export function dealSpeed(units: number): number {
   return (WALK.tradeStartMs - tradeInterval(units)) / (WALK.tradeStartMs - WALK.tradeFloorMs);
 }
 
-/** "You keep 3 of the 5 Food you need next month.": selling into next month's need is shown, never asked. */
+/** "You keep 3 of the 6 Food you must hold.": selling into what you must hold is shown, never asked. */
 export function keepWords(good: Good, have: number, need: number): string {
-  return `You keep ${have} of the ${need} ${GOOD_NAME[good]} you need next month.`;
+  return `You keep ${have} of the ${need} ${GOOD_NAME[good]} you must hold.`;
 }
 

@@ -495,6 +495,8 @@ function Flight({ line, t, at, tv, geom, colour, units, grid }: { line: ShowLine
       className={cx('pointer-events-none absolute z-20 flex items-center rounded-chip border-2 bg-panel font-mono font-bold text-ink shadow-chip', tv ? 'gap-1 px-1.5 py-0.5 text-base' : 'gap-0.5 px-1 text-[10px]')}
       style={{ ...place, transform: `translate(-50%, -50%) scale(${1 - 0.35 * p})`, borderColor: colour }}
       data-testid="flying-goods"
+      // It flies from its plot to its owner's silo, out of the map's box by design: a TV body fitting its height leaves it out.
+      data-fit-flies
     >
       +{units}
       <GoodIcon good={line.good} size={tv ? 18 : 11} />

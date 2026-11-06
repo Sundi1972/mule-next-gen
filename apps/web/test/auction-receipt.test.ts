@@ -207,6 +207,14 @@ describe('A-5 the receipt on the phone (#audit-auction-receipt)', () => {
     expect(textOf(html, 'receipt-stand')).toMatch(new RegExp(`^You have ${have} ${good}`));
   });
 
+  it('HOLD (WS6, 6 Nov): the receipt says what you must hold, never what you need', () => {
+    const view = toClose().game.viewFor('s1');
+    const good = view.auction!.good;
+    const have = view.me!.stock[good];
+    view.auction = { ...view.auction!, status: view.auction!.status.map((r) => (r.id === 's1' ? { ...r, need: have + 2 } : r)) };
+    expect(textOf(phoneScreen(view, 's1'), 'receipt-stand')).toBe(`You have ${have} ${GOOD_NAME[good]}, you must hold ${have + 2}: short 2`);
+  });
+
   it('B-AC-A5-2: the buyer reads what it bought and for how much, with no tax line', () => {
     const { game } = toClose();
     const view = game.viewFor('s2');

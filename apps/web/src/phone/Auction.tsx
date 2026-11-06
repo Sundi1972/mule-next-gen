@@ -8,6 +8,7 @@ import {
   dealSpeed,
   heldSeller,
   heldWords,
+  holdReason,
   Hint,
   keepWords,
   lineHint,
@@ -18,7 +19,9 @@ import {
   ShipWants,
   SIDE_WORD,
   skippedLine,
+  SoldOutNote,
   StatusTable,
+  storeLines,
   toggleSide,
   WaitingToPick,
   walkHint,
@@ -118,7 +121,7 @@ export function Auction() {
               </span>
             </div>
             <p className="text-xs leading-snug text-ink-2" data-testid="status-words">
-              {spare < 0 ? `You need ${-spare} more ${GOOD_NAME[good]} this month.` : spare > 0 ? `You have ${spare} more than you need.` : 'You have just what you need.'} Pick your side; you can change it until everyone has.
+              {spare < 0 ? `Hold ${-spare} more ${GOOD_NAME[good]}: ${holdReason(good)}.` : spare > 0 ? `You have ${spare} more than you must hold.` : 'You hold just enough.'} Pick your side; you can change it until everyone has.
             </p>
           </>
         }
@@ -252,7 +255,7 @@ export function Auction() {
               </strong>
             </span>
             <span className="flex flex-col">
-              NEED<strong data-num className="text-sm text-ink">{need}</strong>
+              HOLD<strong data-num className="text-sm text-ink">{need}</strong>
             </span>
             <span className="flex flex-col">
               {spare < 0 ? 'SHORT' : 'SPARE'}
@@ -271,6 +274,7 @@ export function Auction() {
       ) : (
         (lineRail ?? (myDeal ? <Hint tone="lit" line={dealLine(view, myDeal, me.id)} testid="my-deal" /> : <Hint line={hint.line} how={hint.how} />))
       )}
+      {stage === 'walk' && auction.storeForSale === 0 && <SoldOutNote auction={auction} />}
       {!closed && keeping && (
         <p className="rounded-control border border-warn bg-warn/10 px-2.5 py-1.5 text-xs leading-snug text-warn" data-testid="keep">
           {keepWords(good, have, need)}
@@ -336,7 +340,7 @@ export function Auction() {
           walkers={walkers}
           deals={auction.deals.map((d) => ({ ...d, speed: dealSpeed(d.units) }))}
           storeBuys={auction.storeBuys}
-          storeSells={auction.storeSells}
+          {...storeLines(auction)}
           shipPays={auction.shipPays}
           {...(auction.shipPays !== null ? { shipCaption: `The ship buys ${GOOD_NAME[good]} at ${auction.shipPays}` } : {})}
           storeStock={auction.storeForSale}
@@ -493,7 +497,7 @@ export function ReceiptCard({
       })}
       <span className={cx('text-xs @min-[1100px]/shell:text-lg', ok ? 'text-ok' : 'text-alert')} data-testid="receipt-stand">
         You have {`${have} ${name}`}
-        {need > 0 ? `, you need ${need}` : ''}
+        {need > 0 ? `, you must hold ${need}` : ''}
         {need > 0 ? (ok ? ' ✓' : `: short ${need - have}`) : ''}
       </span>
       {next && <span className="border-t border-holo-faint pt-1.5 text-xs text-ink-2 @min-[1100px]/shell:pt-3 @min-[1100px]/shell:text-lg">Next: {GOOD_NAME[next]}, buy or sell?</span>}

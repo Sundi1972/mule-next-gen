@@ -258,6 +258,38 @@ describe('C34: the colony at game over', () => {
   });
 });
 
+describe('C34 / N-6: a shared win at game over, with the colony band', () => {
+  const marks = (tv: string) => [...element(element(tv, 'tv-winner'), 'winner-marks').matchAll(/aria-label="([^"]+)"/g)].map((m) => m[1]);
+  const sizes = (tv: string) => [...element(element(tv, 'tv-winner'), 'winner-marks').matchAll(/role="img"[^>]*style="width:(\d+)px/g)].map((m) => Number(m[1]));
+  /** Heiko catches Mia on 7,050: they share the win. */
+  const level = (players: typeof PLAYERS) => over(FINAL, { players, scores: players.map((p) => ({ id: p.id, score: p.worth })) });
+
+  it('N-6: the colony TV names both winners and draws a mark for each, as the TV without a colony does', () => {
+    const tv = onTv(level(PLAYERS.map((p) => (p.id === 's1' ? { ...p, worth: 7_050 } : p))), TvGameOver);
+    expect(said(element(tv, 'tv-winner'), 'winner-line')).toBe('Heiko and Mia share the win, each with a Worth of 7,050 cr');
+    expect(marks(tv)).toEqual(['Heiko', 'Mia']);
+    expect(sizes(tv), 'two marks, one size, smaller than a sole winner\'s').toEqual([64, 64]);
+    expect(has(tv, 'colony-band'), 'the band stays under it').toBe(true);
+  });
+
+  it('N-6: three or more level winners get a mark each, smaller again, two abreast so they wrap inside the card', () => {
+    const tv = onTv(level(PLAYERS.map((p) => (p.id === 's1' || p.id === 's3' ? { ...p, worth: 7_050 } : p))), TvGameOver);
+    expect(marks(tv)).toEqual(['Heiko', 'Mia', 'Kai']);
+    expect(sizes(tv)).toEqual([48, 48, 48]);
+    const all = onTv(level(PLAYERS.map((p) => ({ ...p, worth: 7_050 }))), TvGameOver);
+    expect(marks(all)).toEqual(['Heiko', 'Mia', 'Kai', 'Ruth']);
+    // Two 48 px marks and their gap fit its 9rem; a third wraps, so four winners take two rows, never the line's width.
+    expect(element(element(all, 'tv-winner'), 'winner-marks')).toMatch(/class="[^"]*\bmax-w-36\b[^"]*\bflex-wrap\b/);
+  });
+
+  it('N-6 (negative): a sole winner keeps one mark, at its full size', () => {
+    const tv = onTv(over(FINAL), TvGameOver);
+    expect(marks(tv)).toEqual(['Mia']);
+    expect(sizes(tv)).toEqual([88]);
+    expect(said(element(tv, 'tv-winner'), 'winner-line')).toBe('Mia wins with a Worth of 7,050 cr');
+  });
+});
+
 describe('C34: the four gauges in the TV header', () => {
   it('B-AC-34-3: the header shows wealth, environment, prestige and happiness in the air gauge’s place', () => {
     const html = header(game(MIDGAME));

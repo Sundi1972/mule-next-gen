@@ -1,6 +1,6 @@
 import { WALK } from './config.js';
 import { RuleError } from './errors.js';
-import type { AuctionSide, Deal, Walker, WalkBoard } from './types.js';
+import type { AuctionSide, BoardZones, Deal, Walker, WalkBoard } from './types.js';
 import { MS_PER_SECOND } from './units.js';
 
 /**
@@ -43,6 +43,8 @@ export interface WalkMarket {
   houseBuys: HouseLine[];
   /** Sellers can't walk below this. */
   floor(): number | null;
+  /** The board's rest zones and hard edges, where it has them (the goods auction); they replace floor() for sellers. */
+  zones?: BoardZones;
   /** First in line at a house's turns (a Quibbit at the goods auction). */
   first(playerId: string): boolean;
   /** Seat order, the last tie-break. */
@@ -77,6 +79,12 @@ const selling = (m: WalkMarket, w: Walker) => w.side === 'seller' && free(m, w) 
 const minAsk = (board: WalkBoard, m: WalkMarket) => Math.min(Infinity, ...board.walkers.filter((w) => selling(m, w)).map((w) => w.price));
 const maxBid = (board: WalkBoard, m: WalkMarket) => Math.max(-Infinity, ...board.walkers.filter((w) => activeBuyer(m, w)).map((w) => w.price));
 
+/** The highest bid on the board that its buyer can pay, as a whole price; null when no buyer can pay theirs. */
+export function topBid(board: WalkBoard, market: WalkMarket): number | null {
+  const bids = board.walkers.filter((w) => activeBuyer(market, w)).map(rounded);
+  return bids.length > 0 ? Math.max(...bids) : null;
+}
+
 /**
  * The house line a walker stands at, if any: a buyer at or over the house's selling line, a seller at or under a
  * buying house's price (the one that pays most, as stepBoard serves them).
@@ -92,11 +100,33 @@ export function houseLineAt(market: WalkMarket, w: Walker): { house: string; pri
 }
 
 /**
- * The lowest a seller walks or taps to: the house's buying line, or with no house buying, just above the buyers' edge,
- * so a buyer standing there never trades (everyone starts there as a buyer, so standing still is how you buy nothing).
+ * The lowest a seller walks or taps to. On a board with zones, the buying line fixed at the start, whether or not any
+ * house still buys there, so a buyer resting below it never trades. Otherwise the house's buying line, or with no house
+ * buying, just above the buyers' edge (everyone starts there as a buyer, so standing still is how you buy nothing).
  */
 function sellerFloor(board: WalkBoard, market: WalkMarket): number {
-  return market.floor() ?? board.lo + 1;
+  return market.zones?.buyersTop ?? market.floor() ?? board.lo + 1;
+}
+
+/** The lowest a buyer walks or taps to: the buyers' hard edge on a board with zones, else 0. */
+const buyerBottom = (market: WalkMarket) => market.zones?.lo ?? 0;
+/** The highest a seller walks or taps to: the sellers' hard edge on a board with zones, else no limit. */
+const sellerTop = (market: WalkMarket) => market.zones?.hi ?? Infinity;
+
+/**
+ * The highest a buyer walks or taps to. While the store sells, its line or the lowest ask, whichever is lower. Once a
+ * board with zones has its store sold out, buyers may bid above the store's old selling line, up to one step under the
+ * top edge, but stop one step short of a seller resting above that line: walking up never trades with them, they walk
+ * down onto a bid. Otherwise up to the lowest ask, where the two meet.
+ */
+function buyerTop(board: WalkBoard, market: WalkMarket): number {
+  const sellLine = market.houseSells?.price() ?? null;
+  const zones = market.zones;
+  if (sellLine !== null || !zones || !WALK.soldOutBidding) return Math.min(sellLine ?? Infinity, minAsk(board, market));
+  // Above S, any seller with units rests, the need-stop's held ones too (RULE-4): no seller is left between S and the line.
+  const stops = (w: Walker) => selling(market, w) || (activeSeller(market, w) && rounded(w) > zones.sellersBottom);
+  const asks = board.walkers.filter(stops).map((w) => (rounded(w) > zones.sellersBottom ? rounded(w) - 1 : w.price));
+  return Math.min(zones.hi - 1, ...asks);
 }
 
 /** The price a seller would trade at now, at a buying house's line or with a buyer whose bid reaches their ask; else null. */
@@ -152,10 +182,9 @@ export function stepWalker(board: WalkBoard, market: WalkMarket, playerId: strin
   const before = rounded(w);
   const to = before + dir;
   if (w.side === 'buyer') {
-    const sellLine = market.houseSells?.price() ?? null;
-    w.price = dir > 0 ? Math.max(w.price, Math.min(to, sellLine ?? Infinity, minAsk(board, market))) : Math.max(0, to);
+    w.price = dir > 0 ? Math.max(w.price, Math.min(to, buyerTop(board, market))) : Math.min(w.price, Math.max(buyerBottom(market), to));
   } else {
-    w.price = dir < 0 ? Math.min(w.price, Math.max(to, sellerFloor(board, market), maxBid(board, market), 1)) : to;
+    w.price = dir < 0 ? Math.min(w.price, Math.max(to, sellerFloor(board, market), maxBid(board, market), 1)) : Math.max(w.price, Math.min(sellerTop(market), to));
   }
   if (rounded(w) !== before) w.since = board.elapsed;
 }
@@ -204,15 +233,15 @@ export function stepBoard(board: WalkBoard, market: WalkMarket, dt: number): Sal
   for (const w of board.walkers) {
     if (w.side !== 'buyer' || w.dir === 0) continue;
     const before = rounded(w);
-    if (w.dir > 0) w.price = Math.max(w.price, Math.min(w.price + step, sellLine ?? Infinity, minAsk(board, market)));
-    else w.price = Math.max(0, w.price - step);
+    if (w.dir > 0) w.price = Math.max(w.price, Math.min(w.price + step, buyerTop(board, market)));
+    else w.price = Math.min(w.price, Math.max(buyerBottom(market), w.price - step));
     if (rounded(w) !== before) w.since = board.elapsed;
   }
   for (const w of board.walkers) {
     if (w.side !== 'seller' || w.dir === 0 || (w.held && w.dir < 0)) continue;
     const before = rounded(w);
     if (w.dir < 0) w.price = Math.min(w.price, Math.max(w.price - step, sellerFloor(board, market), maxBid(board, market), 1));
-    else w.price += step;
+    else w.price = Math.max(w.price, Math.min(sellerTop(market), w.price + step));
     if (rounded(w) !== before) w.since = board.elapsed;
   }
   stopAtNeed(board, market);

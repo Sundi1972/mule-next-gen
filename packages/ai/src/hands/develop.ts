@@ -10,7 +10,9 @@ import {
   isAssaying,
   isStunned,
   MS_PER_SECOND,
+  mulePriceFor,
   observe,
+  outfitCostFor,
   pathTo,
   pressOrder,
   terrainShare,
@@ -40,6 +42,7 @@ import type { DevelopmentLog, DevelopmentStepLog } from '../playbook/outcome.js'
 import { floorDevWalk, installable, leading, mapFactor, planSeconds, plotErrandSeconds, pubDoor, pubMargin, pubSeconds, tileMiddle, tripSeconds, type PlanStop } from '../floor-time.js';
 import { analysesWanted, bestInstall, developDecision, filtersWanted, outfitName, plotName, walkVeto, type DevAction, type DevWalk } from '../strategist.js';
 import { situation } from '../summary.js';
+import { adoptedNow, cashReserve, type Mind } from '../value.js';
 import { FloorWalker, type FloorView } from './floor-walker.js';
 
 /**
@@ -87,6 +90,19 @@ const MULE_PRESSES = 3; // literal-ok: a count of the rule's steps, not balance
  * (stepGlint) before the tick's presses apply, so a GRAB pressed now reaches nothing of the glint's.
  */
 const fadesThisStep = (floor: DevFloor): boolean => floor.moments.glint !== null && floor.tick + 1 >= floor.moments.glint.untilTick;
+
+/**
+ * Whether colonist `c` can step onto the glint's tile in the coming step: the step gives the glint to a colonist on its
+ * tile before it fades it, so a glint fading this step is won only from within one step of the tile's nearest edge.
+ */
+function onGlintInStep(state: GameState, floor: DevFloor, c: FloorColonist, cfg: FloorConfig): boolean {
+  const g = floor.moments.glint;
+  if (!g) return false;
+  const step = (speedOf(c, state, cfg) * cfg.steer.tickMs) / MS_PER_SECOND;
+  const dx = Math.max(g.x - c.x, 0, c.x - (g.x + 1));
+  const dy = Math.max(g.y - c.y, 0, c.y - (g.y + 1));
+  return Math.hypot(dx, dy) <= step;
+}
 
 /**
  * Whether a rival may take the lit glint before this seat's GRAB applies: the press applies after the coming step, which
@@ -142,6 +158,8 @@ export interface RoutePlay {
   seed: number;
   /** The strategy's money-maker, the own pick's lean. */
   moneyMaker: Good | null;
+  /** The plan mind the own pick weighs with (RULE-14). */
+  mind: Mind;
   /** The seat's own draft; false for an adopted part, which plays as adopted: no re-pick, no MULE added. See AM-27. */
   own: boolean;
 }
@@ -220,6 +238,8 @@ export class DevelopHand {
   private floorCfg: FloorConfig | null = null;
   /** This month's route, if the seat handed one in; null plays today's list. */
   private route: RouteRun | null = null;
+  /** The good today's picks lean to, and the month it is for. */
+  private lean: { month: number; good: Good | null } = { month: -1, good: null };
   /** The route step last let through, so it is judged once, before its tap or walk starts. */
   private vetted: DevStep | null = null;
   /** The MULE group whose buy was the MULE the seat already led ('led'). */
@@ -256,6 +276,11 @@ export class DevelopHand {
     if (month !== this.month) this.reset(month);
     if (this.stage !== 'start') return;
     this.route = { play, at: 0, mules: 0, soldOut: false, noMore: false, startLeft: null, left: 0, usedMs: 0 };
+  }
+
+  /** Leans today's picks in `month` to `good`; null, or another month, leaves them unleaned. */
+  leanOn(month: number, good: Good | null): void {
+    this.lean = { month, good };
   }
 
   /**
@@ -424,8 +449,9 @@ export class DevelopHand {
     const racing = g !== null && this.racingGlint === g.sinceTick;
     const spare = !cfg.steer.botsSpareTime || (racing && secondsLeft > pubSeconds(state, cfg, c) + this.margin(cfg, c) && this.fitsDetour(view, c, glintMiddle(g)));
     // A glint fading in the coming step is walked onto, not pressed for (`sure` is false): the step gives it to a
-    // colonist on its tile before it fades it.
-    if (g && racing && spare) {
+    // colonist on its tile before it fades it. Only from within that step: further off, it is gone before it is reached,
+    // and the tick's walk towards it is a walk off the errand, so the race is given up.
+    if (g && racing && spare && (!fading || onGlintInStep(state, floor, c, cfg))) {
       const input = this.chaser.seek(view, glintMiddle(g), sure ? 'grab' : 'none');
       if (input) return input;
     }
@@ -673,7 +699,7 @@ export class DevelopHand {
       if (!this.pending) {
         const obs = observe(state, mind.me);
         const d = AI_HANDS.develop;
-        const list = developDecision(obs, mind, this.mules, walk?.());
+        const list = developDecision(obs, mind, this.mules, walk?.(), this.lean.month === state.month ? this.lean.good : null);
         // On the floor the server computes this inside the tick's recorded step, and a replay computes it again: no
         // decider call and no reply to wait for (WS3's condition 1). A Smart seat plays the default pick here.
         this.pending = this.onFloor
@@ -910,8 +936,7 @@ export class DevelopHand {
   /** The seat's own pick for its next MULE on the live state: the draft's seeded pick for that MULE, leaning as the playbook does. */
   private ownPick(state: GameState, walk?: () => DevWalk): DevAction {
     const r = this.route!;
-    const mind = this.brain.mind;
-    const input = { state, seat: mind.me, mind, seed: r.play.seed, phase: 'development' as const, month: state.month };
+    const input = this.pickInput(state);
     return this.drafting('own MULE pick', "taken as 'stop'", STOP, () => draftMulePick(input, r.mules, walk?.(), r.play.moneyMaker));
   }
 
@@ -972,7 +997,10 @@ export class DevelopHand {
     return true;
   }
 
-  /** Why a route MULE about to be bought is stale, or null: its plot is not its idle plot, or the floor's walk vetoes it. See AM-25. */
+  /**
+   * Why a route MULE about to be bought is stale, or null: its plot is not its idle plot, the floor's walk vetoes it
+   * (AM-25), or it would take the cash under the cash floor an adopted playbook set.
+   */
   private staleMule(state: GameState, group: number, walk?: () => DevWalk): string | null {
     let plot = -1;
     let outfit: Outfit | null = null;
@@ -983,11 +1011,24 @@ export class DevelopHand {
     if (plot < 0) return null;
     const tile = state.tiles[plot]!;
     if (tile.owner !== this.brain.mind.me || tile.outfit !== null) return `stale: plot ${plot}`;
+    // The floor as cashReserve holds it (within AI_PLANS.bounds.cashFloorMax), not the raw field: one reading of it.
+    const floor = adoptedNow(state, this.brain.mind)?.cashFloor != null ? cashReserve(state, this.brain.mind) : null;
+    if (floor !== null && outfit !== null) {
+      const me = state.players.find((p) => p.id === this.brain.mind.me)!;
+      const cost = (me.carriedMule === null ? mulePriceFor(state, me.id) : 0) + (me.carriedMule === outfit ? 0 : outfitCostFor(state, me.id, outfit));
+      if (me.money - cost < floor) return `stale: under the cash floor of ${floor} cr`;
+    }
     // Only the floor's walk: where the game walks (DEV_WALK) the draft priced the route by that same walk.
     const w = walk?.();
     const legs = outfit === null ? undefined : w?.floor?.(plot, outfit);
     const veto = legs && walkVeto(w!, legs.there, legs.pub);
     return veto ? `stale: ${veto}` : null;
+  }
+
+  /** What the route's own MULE picks are drafted from: the playbook's seed and the plan mind. See RULE-9 row 3, RULE-14. */
+  private pickInput(state: GameState) {
+    const play = this.route!.play;
+    return { state, seat: this.brain.mind.me, mind: play.mind, seed: play.seed, phase: 'development' as const, month: state.month };
   }
 
   /**
@@ -996,8 +1037,7 @@ export class DevelopHand {
    */
   private replace(state: GameState, group: number, note: string, walk?: () => DevWalk): void {
     const r = this.route!;
-    const mind = this.brain.mind;
-    const input = { state, seat: mind.me, mind, seed: r.play.seed, phase: 'development' as const, month: state.month };
+    const input = this.pickInput(state);
     const pick = this.drafting('replacement MULE pick', "taken as 'stop'", STOP, () => draftMulePick(input, r.mules - 1, walk?.(), r.play.moneyMaker));
     for (const s of this.queue.filter((q) => q.group === group)) this.log(s, false, pick.kind === 'stop' ? 'skipped' : 'replaced', note);
     const rest = this.queue.filter((q) => q.group !== group);

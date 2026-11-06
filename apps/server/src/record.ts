@@ -180,6 +180,8 @@ export class Recorder {
         this.begin(() => ({ type: 'heard', from, ...(to ? { to } : {}) }));
         this.run(() => game.heard?.(from, text, to));
       },
+      // The lobby's read of the game's defaults, before any step: not an input, so not recorded.
+      ...(game.defaultPick ? { defaultPick: (seat: number, seats: number) => game.defaultPick!(seat, seats) } : {}),
       viewFor: (seat) => {
         this.viewing++;
         try {

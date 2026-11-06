@@ -150,8 +150,8 @@ describe('G-6: what the ship in port wants, in one panel', () => {
 });
 
 describe("the TV's gap", () => {
-  /** What the readout's GAP row says, as rendered. */
-  const gapOf = (a: AuctionView) => /GAP<\/dt><dd[^>]*>([^<]*)<\/dd>/.exec(renderToStaticMarkup(createElement(TvReadout, { view, auction: a })))?.[1];
+  /** What the readout's NEAREST TRADE row says, as rendered (WS6, 6 Nov: the row counts only pairs with a player in them). */
+  const gapOf = (a: AuctionView) => /NEAREST TRADE<\/dt><dd[^>]*>([^<]*)<\/dd>/.exec(renderToStaticMarkup(createElement(TvReadout, { view, auction: a })))?.[1];
   it.each<[string, Partial<AuctionView>, string]>([
     // Two houses never trade with each other: the ship paying over the store's selling line is no meeting.
     ['the ship pays over the store’s selling line, the only player asks above both', { good: 'crystite', storeSells: 100, storeForSale: 3, shipPays: 119, walkers: [walker('lena', 'seller', 150)] }, '31 apart'],
@@ -165,6 +165,13 @@ describe("the TV's gap", () => {
     ['a player’s bid at the store’s selling line', { storeSells: 30, storeForSale: 3, storeBuys: 24, walkers: [walker('lena', 'buyer', 30)] }, 'they meet'],
   ])('FM-house-meet: the readout never says the lines meet when only the ship and the store cross; a player crossing a house line still meets — %s', (_, over, gap) => {
     expect(gapOf(auction(over))).toBe(gap);
+  });
+});
+
+describe("the TV's nearest trade while a deal runs", () => {
+  it('NEAREST TRADE (WS6, 6 Nov): while a deal runs the row reads TRADING, one word, so the longer label costs the readout no line (TV-FIT)', () => {
+    const html = renderToStaticMarkup(createElement(TvReadout, { view, auction: auction({ walkers: [walker('lena', 'seller', 40), walker('kai', 'buyer', 45)], deals: [{ buyer: 'kai', seller: 'lena', price: 40, units: 1 }] }) }));
+    expect(/NEAREST TRADE<\/dt><dd[^>]*>([^<]*)<\/dd>/.exec(html)?.[1]).toBe('TRADING');
   });
 });
 

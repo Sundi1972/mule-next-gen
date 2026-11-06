@@ -2,9 +2,10 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, u
 import { GoodIcon } from './GoodIcon';
 import { Landscape } from './Landscape';
 import { PlayerMark } from './PlayerMark';
-import { SPECIAL_BADGE, SPECIAL_HANG, SpecialBadge } from './SpecialIcon';
+import { SPECIAL_HANG, SpecialBadge, specialBadgeBox } from './SpecialIcon';
 import { useTheme } from './theme';
 import { cx, GOOD_NAME, SLOT_COLOR, specialLabel, TERRAIN_NAME, type Good, type MapSpecial, type Slot, type Terrain } from './tokens';
+import { bestOf, gemsIn, type Dots, type RawGood } from '../ground-dots';
 
 export interface MapTile {
   x: number;
@@ -17,7 +18,7 @@ export interface MapTile {
   peaks?: number;
   /** Marks a plot: being surveyed, hit by sabotage, or up for sale. */
   flag?: 'survey' | 'sabotage' | 'sale';
-  /** What a geo analysis found here, only on the map of the player who ran it. Ratings 1 to 4. */
+  /** What a geo analysis found here, only on the map of the player who ran it: each raw good's dots, 0 to 3. */
   ground?: Partial<Record<Good, number>>;
   /** Local pollution, 0 clean to 3 toxic. Drawn as a brown haze over the land. */
   pollution?: number;
@@ -56,6 +57,59 @@ export interface HoloMapProps {
 /** Every mark is a share of the plot's size, so it reads the same at any width. */
 const SHARE = { border: 1 / 12, tab: 0.46, mark: 0.36, disc: 0.62, icon: 0.44, ring: 1 / 9 };
 
+/** Under this plot width, in px, the phone's dots chip drops its good's icon and keeps its dots, so it fits inside the plot. */
+const SMALL_DOTS_PLOT = 16;
+
+/** Whether a plot `plot` px wide draws the small dots chip: only on a phone, only under SMALL_DOTS_PLOT. */
+export function smallDots(plot: number, density: 'phone' | 'tv'): boolean {
+  return density === 'phone' && plot < SMALL_DOTS_PLOT;
+}
+
+/**
+ * How far under its plot's middle the phone's dots chip ends its dot row, in px. Follows the chip's classes in HoloMap:
+ * the full chip is 17 px tall (2 px padding, a 9 px icon, a 1 px gap, 3 px dots), the small one 7 px (2 px padding, 3 px dots).
+ */
+const DOTS_FOOT = { full: 6.5, small: 1.5 };
+
+/** The room from a phone plot's edge to the dots of the plot next to it, less half a pixel, in px. */
+function dotsRoom(plot: number): number {
+  return plot / 2 - (smallDots(plot, 'phone') ? DOTS_FOOT.small : DOTS_FOOT.full) - 0.5;
+}
+
+/**
+ * The selected ring outside its plot, in px: how far its box reaches out (`inset`; null for 6% of the plot, as drawn on
+ * a larger plot), its holo band and its void edge. On a small phone plot the three together stop within dotsRoom: the
+ * box comes in first, then the band thins. `inside` when not even a 1 px band fits there: under dots the ring is then
+ * drawn inside its plot, and elsewhere outside with its full `band`, as there is nothing above to keep off.
+ */
+export function selectionRing(plot: number, density: 'phone' | 'tv'): { inset: number | null; band: number; edge: number; inside: boolean } {
+  const band = Math.max(2, Math.round(plot * SHARE.ring));
+  const edge = density === 'tv' ? 3 : 2;
+  const room = dotsRoom(plot);
+  if (density === 'tv' || plot * 0.06 + band + edge <= room) return { inset: null, band, edge, inside: false };
+  const inside = room - edge < 1;
+  const thin = Math.max(1, Math.min(band, room - edge));
+  return { inset: Math.max(0, room - thin - edge), band: inside ? band : thin, edge, inside };
+}
+
+/** The selection's pulsing glow: its box reaches 8% of the plot out; its box-shadow's blur and spread, in px. */
+/** out: the uncapped glow's reach, as the glow span's -inset-[8%] class draws it: change both together. */
+const GLOW = { out: 0.08, phone: { blur: 12, spread: 4 }, tv: { blur: 26, spread: 8 } };
+
+/**
+ * How far the selection's glow box reaches out of its plot under the dots of the plot above, in px (negative: it stays
+ * inside), or null where its usual 8% stops short of them. A box-shadow's blur is a Gaussian of σ = blur / 2 across the
+ * spread edge, so the glow is at half strength on that edge, `spread` outside the box: capped, that edge stops at dotsRoom.
+ */
+export function selectionGlow(plot: number, density: 'phone' | 'tv'): number | null {
+  if (density === 'tv') return null;
+  const room = dotsRoom(plot);
+  return plot * GLOW.out + GLOW.phone.spread <= room ? null : room - GLOW.phone.spread;
+}
+
+/** How far inside the map's right or bottom edge an edge plot's special badge sits, in px, where it can't hang out. */
+const BADGE_EDGE = 2;
+
 /** Before paint in the browser; the server renderer (and the node tests) has nothing to measure and no paint. */
 const useBeforePaint = typeof document === 'undefined' ? useEffect : useLayoutEffect;
 
@@ -84,7 +138,7 @@ function usePlotSize(width: number) {
 /**
  * The colony map: a painted landscape with a fine plot grid over it. An owned plot is bordered and tinted in its owner's
  * colour, with a corner tab holding the owner's creature; an installed good sits on a disc ringed in the good's colour.
- * Geo analysis results float above the land as chips.
+ * Geo analysis results float above the land as chips, and a found Crystite or Rare earth as a gem at the plot's top.
  */
 export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], showOutput = false, focusSlot, onTile, density = 'phone', hideGround = false, className }: HoloMapProps) {
   const tv = density === 'tv';
@@ -97,6 +151,18 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
     for (const t of tiles) grid[t.y * width + t.x] = t.terrain;
     return grid;
   }, [tiles, width, height]);
+  const cells = useMemo(() => {
+    const grid: (MapTile | undefined)[] = new Array(width * height);
+    for (const t of tiles) grid[t.y * width + t.x] = t;
+    return grid;
+  }, [tiles, width, height]);
+  const badge = specialBadgeBox(plot, density);
+  const ring = selectionRing(plot, density);
+  const glow = selectionGlow(plot, density);
+  const small = smallDots(plot, density);
+  const groundOf = (t: MapTile) => (!hideGround && t.ground ? bestGoods(t.ground, tv ? 2 : 1) : []);
+  /** Whether the plot draws its dots chip: an installed good shows instead. */
+  const showsDots = (t: MapTile) => !t.good && groundOf(t).length > 0;
 
   return (
     <div
@@ -125,13 +191,23 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
           const fade = cx('transition-opacity', faded && 'opacity-45');
           // The map clips at its edge, so an edge plot's selection is drawn inside it, and on the top row the pin hangs below.
           const onEdge = t.x === 0 || t.y === 0 || t.x === width - 1 || t.y === height - 1;
-          const ground = !hideGround && t.ground ? (Object.entries(t.ground) as [Good, number][]).sort((a, b) => b[1] - a[1]).slice(0, tv ? 2 : 1) : [];
+          const ground = groundOf(t);
+          const above = t.y > 0 ? cells[(t.y - 1) * width + t.x] : undefined;
+          // The pin would hang over the dots of the plot it points from, above, or below on the top row: there the ring alone marks the selection.
+          const under = t.y === 0 ? cells[width + t.x] : above;
+          const pin = !under || !showsDots(under);
+          const underDots = !!above && showsDots(above);
+          // Inside the plot on the map's edge, which clips, and under dots on a plot too small for a band between.
+          const inner = onEdge || (ring.inside && underDots);
+          const glowOut = !inner && underDots ? glow : null;
+          const gems = !hideGround && t.ground ? gemsIn(t.ground) : [];
           const label = [
             TERRAIN_NAME[t.terrain],
             t.special ? specialLabel(t.special) : '',
             t.owner !== null ? `owned by player ${t.owner + 1}` : t.terrain === 'store' ? '' : 'free',
             t.good ? `${GOOD_NAME[t.good]}${t.output ? ` +${t.output}` : ''}` : '',
-            ...ground.map(([g, n]) => `${GOOD_NAME[g]} ${n} of 4`),
+            ...ground.map(([g, n]) => `${GOOD_NAME[g]} ${n} of 3`),
+            ...gems.map((g) => `${GOOD_NAME[g]} here`),
             t.pollution ? `pollution ${t.pollution} of 3` : '',
           ]
             .filter(Boolean)
@@ -153,11 +229,18 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
                   style={{ background: `radial-gradient(circle at 50% 55%, rgb(110 82 40 / ${0.25 + t.pollution * 0.18}), rgb(110 82 40 / ${0.12 + t.pollution * 0.12}) 80%)` }}
                 />
               )}
-              {!t.good && ground.length > 0 && (
-                <span className={cx('relative flex flex-col items-center rounded-control bg-map-chip/90 shadow-chip', tv ? 'gap-0.5 px-1.5 py-1' : 'px-[3px] py-[2px]', fade)}>
+              {showsDots(t) && (
+                // The full chip (17 px) can stand taller than a 16 px plot: a tap on what overhangs goes to the plot beneath.
+                <span
+                  className={cx('pointer-events-none relative flex flex-col items-center rounded-control bg-map-chip/90 shadow-chip', tv ? 'gap-0.5 px-1.5 py-1' : small ? 'px-px py-[2px]' : 'px-[3px] py-[2px]', fade)}
+                  // In the right column the badge sits inside the plot instead of hanging out: the chip steps left by as much,
+                  // except the small chip, which fills its plot's width and would step into the next plot.
+                  style={t.special && t.x === width - 1 && !small ? { left: -(badge * SPECIAL_HANG + BADGE_EDGE) } : undefined}
+                  data-testid={`map-dots-${t.x}-${t.y}`}
+                >
                   {ground.map(([g, n]) => (
                     <span key={g} className={cx('flex items-center', tv ? 'gap-0.5' : 'flex-col gap-px')}>
-                      <GoodIcon good={g} size={tv ? 16 : 9} />
+                      {!small && <GoodIcon good={g} size={tv ? 16 : 9} />}
                       <Pips n={n} tv={tv} good={g} />
                     </span>
                   ))}
@@ -174,6 +257,17 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
                   data-testid={`owner-${t.x}-${t.y}`}
                 >
                   <PlayerMark slot={t.owner} size={size.mark} glow={false} />
+                </span>
+              )}
+              {gems.length > 0 && (
+                // Right of the tab, which is 46% wide at 4%; z-[4], the tab's, so a neighbour's special badge never covers it.
+                <span
+                  className={cx('pointer-events-none absolute top-[4%] z-[4] flex w-full', t.owner !== null ? 'left-[54%]' : 'left-[4%]', fade)}
+                  data-testid={`map-gem-${t.x}-${t.y}`}
+                >
+                  {gems.map((g, i) => (
+                    <MapGem key={g} good={g} nth={i} share={t.owner !== null && gems.length > 1 ? 30 : 40} />
+                  ))}
                 </span>
               )}
               {t.terrain === 'store' && (
@@ -218,10 +312,11 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
                   <SpecialBadge
                     special={t.special}
                     density={density}
+                    box={badge}
                     className="absolute"
                     style={{
-                      right: t.x === width - 1 ? 2 : -SPECIAL_BADGE[density].box * SPECIAL_HANG,
-                      bottom: t.y === height - 1 ? 2 : -SPECIAL_BADGE[density].box * SPECIAL_HANG,
+                      right: t.x === width - 1 ? BADGE_EDGE : -badge * SPECIAL_HANG,
+                      bottom: t.y === height - 1 ? BADGE_EDGE : -badge * SPECIAL_HANG,
                     }}
                   />
                 </span>
@@ -231,29 +326,36 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
                   {/* The ring stays solid; only its glow breathes, so the selection never dims. */}
                   <span
                     aria-hidden
-                    className={cx('pointer-events-none absolute z-[5] motion-safe:animate-pulse', onEdge ? 'inset-0 rounded-[10%]' : '-inset-[8%] rounded-[16%]')}
-                    style={{ boxShadow: `${onEdge ? 'inset ' : ''}0 0 ${tv ? 26 : 12}px ${tv ? 8 : 4}px var(--color-holo)` }}
+                    className={cx('pointer-events-none absolute z-[5] motion-safe:animate-pulse', inner ? 'inset-0 rounded-[10%]' : cx('rounded-[16%]', glowOut === null && '-inset-[8%]'))}
+                    style={{
+                      ...(glowOut !== null ? { inset: -glowOut } : {}),
+                      boxShadow: `${inner ? 'inset ' : ''}0 0 ${GLOW[density].blur}px ${GLOW[density].spread}px var(--color-holo)`,
+                    }}
+                    data-testid="selected-glow"
                   />
                   <span
                     aria-hidden
-                    className={cx('pointer-events-none absolute z-[5]', onEdge ? 'inset-0 rounded-[10%]' : '-inset-[6%] rounded-[14%]')}
+                    className={cx('pointer-events-none absolute z-[5]', inner ? 'inset-0 rounded-[10%]' : cx('rounded-[14%]', ring.inset === null && '-inset-[6%]'))}
                     style={{
-                      boxShadow: onEdge
+                      ...(!inner && ring.inset !== null ? { inset: -ring.inset } : {}),
+                      boxShadow: inner
                         ? `inset 0 0 0 ${size.ring}px var(--color-holo-strong), inset 0 0 0 ${size.ring + (tv ? 3 : 2)}px var(--color-void)`
-                        : `0 0 0 ${size.ring}px var(--color-holo-strong), 0 0 0 ${size.ring + (tv ? 3 : 2)}px var(--color-void)`,
+                        : `0 0 0 ${ring.band}px var(--color-holo-strong), 0 0 0 ${ring.band + ring.edge}px var(--color-void)`,
                     }}
                     data-testid="selected-ring"
                   />
-                  <span
-                    className={cx(
-                      'pointer-events-none absolute left-1/2 z-[6] -translate-x-1/2 whitespace-nowrap rounded-chip bg-holo font-mono font-bold text-on-holo shadow-glow',
-                      t.y === 0 ? 'top-full mt-1' : 'bottom-full mb-1',
-                      tv ? 'px-2 py-0.5 text-sm' : 'px-1 text-[8px]',
-                    )}
-                    data-testid="selected-pin"
-                  >
-                    {t.y === 0 ? '▴' : '▾'}
-                  </span>
+                  {pin && (
+                    <span
+                      className={cx(
+                        'pointer-events-none absolute left-1/2 z-[6] -translate-x-1/2 whitespace-nowrap rounded-chip bg-holo font-mono font-bold text-on-holo shadow-glow',
+                        t.y === 0 ? 'top-full mt-1' : 'bottom-full mb-1',
+                        tv ? 'px-2 py-0.5 text-sm' : 'px-1 text-[8px]',
+                      )}
+                      data-testid="selected-pin"
+                    >
+                      {t.y === 0 ? '▴' : '▾'}
+                    </span>
+                  )}
                 </>
               )}
               {isCursor && (
@@ -285,10 +387,37 @@ export function HoloMap({ width, height, tiles, cursor, selected, avatars = [], 
   );
 }
 
+/**
+ * The plot's best goods with their dots, best first, each by bestOf so the map and the rail name the same one. The best
+ * is shown even at 0 dots (analysed, nothing there); a runner-up only with a dot.
+ */
+function bestGoods(dots: Dots, count: number): [Good, number][] {
+  const left = { ...dots };
+  const out: [Good, number][] = [];
+  for (let best = bestOf(left); best !== undefined && out.length < count && (out.length === 0 || left[best]! > 0); best = bestOf(left)) {
+    out.push([best, left[best]!]);
+    delete left[best];
+  }
+  return out;
+}
+
+/** A found Crystite or Rare earth, `share`% of the plot wide; a second gem overlaps the first by half. */
+function MapGem({ good, nth, share }: { good: RawGood; nth: number; share: number }) {
+  return (
+    <span
+      className="relative grid aspect-square shrink-0 place-items-center rounded-full shadow-chip ring-1 ring-white/80"
+      style={{ width: `${share}%`, background: `var(--color-g-${good})`, marginLeft: nth > 0 ? `-${share / 2}%` : 0, zIndex: 2 - nth }}
+      data-testid={`gem-${good}`}
+    >
+      <GoodIcon good={good} color="white" className="h-[62%] w-[62%]" />
+    </span>
+  );
+}
+
 function Pips({ n, tv, good }: { n: number; tv: boolean; good: Good }) {
   return (
     <span className="flex gap-px" aria-hidden>
-      {[1, 2, 3, 4].map((i) => (
+      {[1, 2, 3].map((i) => (
         <span
           key={i}
           className={cx('rounded-full', tv ? 'size-1.5' : 'size-[3px]')}

@@ -1,9 +1,9 @@
-import { AI_HANDS, lineOf, MS_PER_SECOND, observe, SHIP_ID, shipLine, shipPrice, storeBuyLine, storeSellLine, tradeInterval, type GameState, type Good, type GoodPlay, type Rng, type Walker } from '@mule/engine';
+import { AI_HANDS, lineOf, MS_PER_SECOND, observe, SHIP_ID, shipLine, shipPrice, storeBuyLine, storeSellLine, tradeInterval, WALK, type GameState, type Good, type GoodPlay, type Rng, type Walker } from '@mule/engine';
 import type { Act } from '../actions.js';
 import type { Brain, Pending } from '../brain.js';
 import { goodPlan, tradeDecision, type GoodPlan, type TradeAction } from '../strategist.js';
 import { situation } from '../summary.js';
-import { beforeTax } from '../value.js';
+import { beforeTax, type Mind } from '../value.js';
 
 /**
  * Auction hands, after the design doc's auction example. At the status
@@ -27,6 +27,15 @@ import { beforeTax } from '../value.js';
  * amendment, C4): it stands there while they move and steps off once the
  * units it still wants are no more than will trade before it next re-aims.
  *
+ * Once the store has none of the good left to sell, a seller above the store's
+ * old selling line rests: a buyer walking up stops one step under it and never
+ * trades. So a buyer bids instead, up to its limit or as close under the
+ * resting asks as the board lets it stand, and a seller walks down onto the
+ * highest bid once it is at or over its floor. A seller whose floor is above
+ * that line rests a step over its floor, so a bid can reach it.
+ *
+ * Its targets stay inside the board's edges and zones, where the walk stops it.
+ *
  * On the playbook path the good's play replaces the decider's pick and bounds the same walk: walkAway bounds the
  * limit, at the line too; start and concedeCrPerS bound the target; vsRival and per say whom it overtakes. See RULE-10.
  */
@@ -40,8 +49,14 @@ export interface AuctionDebug {
   goal: number | null;
 }
 
+/** A good's play on the playbook path, and the plan mind its unit values are read with (RULE-10, RULE-14). */
+export interface PlannedPlay {
+  play: GoodPlay;
+  mind: Mind;
+}
+
 /** The good's play on the playbook path, asked once a good at its status screen; null plays today's ask. */
-export type GoodPlaySource = (state: GameState, good: Good) => GoodPlay | null;
+export type GoodPlaySource = (state: GameState, good: Good) => PlannedPlay | null;
 
 type Side = 'buyer' | 'seller';
 
@@ -98,8 +113,9 @@ export class AuctionHand {
 
     if (!this.plan) {
       const obs = observe(state, mind.me);
-      this.plan = goodPlan(obs, mind, a.good);
-      this.play = this.playOf?.(state, a.good) ?? null;
+      const planned = this.playOf?.(state, a.good) ?? null;
+      this.play = planned?.play ?? null;
+      this.plan = goodPlan(obs, planned?.mind ?? mind, a.good);
       if (this.play) this.trade = tradeOf(this.play, this.plan);
       else this.pending = this.brain.ask('trade', tradeDecision(obs, mind, this.plan), obs, AI_HANDS.auction.decideWaitMs, a.good, situation(obs, mind));
     }
@@ -182,6 +198,8 @@ export class AuctionHand {
       return;
     }
     const pricesOf = (rivals: Walker[], stance: GoodPlay['vsRival']) => rivals.filter((x) => this.stanceTo(x.id) === stance).map((x) => Math.round(x.price));
+    const { sellersBottom, buyersTop } = a.zones;
+    const bidding = WALK.soldOutBidding && storeSellLine(state) === null;
 
     if (w.side === 'seller') {
       // Units past the table are beyond what the depot keeps: they spoil, so they are worth nothing.
@@ -192,19 +210,29 @@ export class AuctionHand {
       const houses = Math.max(storeBuyLine(state) ?? 0, shipLine(state) ?? 0);
       const bids = others.filter((x) => x.side === 'buyer' && money(x.id) >= Math.max(1, Math.round(x.price))).map((x) => Math.round(x.price));
       const bestBid = Math.max(houses, ...bids, 0);
+      // Resting at its floor above the old line, the best bid it could see is a step under that floor: it rests a step
+      // higher instead.
+      const restAt = bidding && floor > sellersBottom ? floor + 1 : floor;
       if (finished) this.target = a.hi;
       else if (bestBid >= floor) this.target = bestBid;
       else {
         const rivals = others.filter((x) => x.side === 'seller' && stock(x.id) > 0);
         const lowest = Math.min(Infinity, ...pricesOf(rivals, 'undercut1'));
         const yielded = Math.min(Infinity, ...pricesOf(rivals, 'yield'));
-        if (lowest <= mine && lowest - 1 >= floor) this.target = Math.max(floor, lowest - 1 - Math.abs(this.jitter));
-        else if (yielded <= mine) this.target = Math.max(floor, yielded + 1);
+        if (lowest <= mine && lowest - 1 >= restAt) this.target = Math.max(restAt, lowest - 1 - Math.abs(this.jitter));
+        else if (yielded <= mine) this.target = Math.max(restAt, yielded + 1);
         else if (mine - bestBid <= gap) this.target = mine;
-        else this.target = Math.max(floor, bestBid + gap + this.jitter);
+        else this.target = Math.max(restAt, bestBid + gap + this.jitter);
       }
       if (!finished) this.target = this.scheduled('seller', this.target, a.elapsed);
-      this.doneFlag = finished || (this.target <= floor && a.deals.every((d) => d.seller !== me.id));
+      if (!finished && bestBid < floor) this.target = Math.max(this.target, restAt);
+      this.target = Math.min(a.zones.hi, Math.max(buyersTop, this.target));
+      // A bid still rising may yet reach its floor: it is not done until the bids it sees have stopped.
+      const rising = bidding && others.some((x) => x.side === 'buyer' && x.dir > 0 && money(x.id) >= Math.max(1, Math.round(x.price)));
+      // With no house buying at the buyers' zone's top, a floor under it can go no lower than that top, so standing
+      // there is as low as it goes; while a house still buys there it is selling, not done.
+      const lowest = houses >= buyersTop ? restAt : Math.max(restAt, buyersTop);
+      this.doneFlag = finished || (this.target <= lowest && !rising && a.deals.every((d) => d.seller !== me.id));
       return;
     }
 
@@ -219,7 +247,11 @@ export class AuctionHand {
     const finished = trade.side !== 'buyer' || h >= trade.upTo || ceiling < 1 || this.enoughAtLine(state, w);
     const storeAsk = storeSellLine(state);
     const asks = others.filter((x) => x.side === 'seller' && stock(x.id) > 0).map((x) => Math.round(x.price));
-    const bestAsk = Math.min(Infinity, storeAsk ?? Infinity, ...asks);
+    // Sold out, an ask above the old line and above its own bid is resting: out of reach by walking, and the highest it
+    // can stand is a step under it. A seller who walked down onto its bid is meeting it, so that ask is there to take.
+    const resting = bidding ? asks.filter((p) => p > sellersBottom && p > mine) : [];
+    const reach = bidding ? Math.min(a.zones.hi - 1, ...resting.map((p) => p - 1)) : Infinity;
+    const bestAsk = Math.min(Infinity, storeAsk ?? Infinity, ...asks.filter((p) => !resting.includes(p)));
     if (finished) this.target = a.lo;
     else if (bestAsk <= ceiling) this.target = bestAsk;
     else {
@@ -228,11 +260,17 @@ export class AuctionHand {
       const yielded = Math.max(-Infinity, ...pricesOf(rivals, 'yield'));
       if (highest >= mine && highest + 1 <= ceiling) this.target = Math.min(ceiling, highest + 1 + Math.abs(this.jitter));
       else if (yielded >= mine) this.target = Math.min(ceiling, yielded - 1);
-      else if (bestAsk - mine <= gap) this.target = mine;
-      else this.target = Math.min(ceiling, (Number.isFinite(bestAsk) ? bestAsk : ceiling) - gap + this.jitter);
+      // A buyer short of the good has no ask to wait for: the sellers left all rest, and only a bid they find good enough
+      // brings one down. Any other buyer edges toward the resting asks as it edges toward any ask.
+      else if (bidding && h < Math.max(plan.values.floorUnits, plan.mustHold)) this.target = Math.min(ceiling, reach);
+      else {
+        const edgeAsk = Math.min(bestAsk, ...resting);
+        if (edgeAsk - mine <= gap) this.target = mine;
+        else this.target = Math.min(ceiling, (Number.isFinite(edgeAsk) ? edgeAsk : ceiling) - gap + this.jitter);
+      }
     }
     if (!finished) this.target = this.scheduled('buyer', this.target, a.elapsed);
-    this.target = Math.max(0, this.target);
+    this.target = Math.max(a.zones.lo, Math.min(reach, this.target));
     // At its limit with nobody meeting it, it is done; an ask inside the limit (at the limit, too) it walks on to take.
     this.doneFlag = finished || (bestAsk > ceiling && this.target >= ceiling && a.deals.every((d) => d.buyer !== me.id));
   }

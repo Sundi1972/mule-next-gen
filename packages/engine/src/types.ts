@@ -138,11 +138,11 @@ export interface Player {
   installedThisTurn: boolean;
   /** Indices of tiles whose ground this player has analysed. Private to them. */
   analysed: number[];
-  /** Free plots chosen for a geo drone this planning phase, analysed when the land grant starts. */
+  /** Free or listed plots this planning's geo drone flew over, analysed at once; it marks the drone used until the land grant clears it. */
   droneOrder: number[];
   /**
-   * The plots this month's drone surveyed: what droneOrder held when the land grant started, kept until the next month
-   * opens, so the player's phone can say "Your drone: …" while one is lit. Private to them, like analysed.
+   * The plots this month's drone surveyed, set when it is sent and kept until the next month opens, so the player's
+   * phone can say "Your drone: …" while one is lit. Private to them, like analysed.
    */
   droneFound: number[];
 }
@@ -629,6 +629,18 @@ export interface WalkBoard {
   between: { units: number; value: number };
 }
 
+/** The goods board's rest zones and hard edges, fixed as the good comes up: a house that stops buying moves none of them. */
+export interface BoardZones {
+  /** The store's buying line at the good's start: sellers never walk below it, so a buyer resting under it never trades. */
+  buyersTop: number;
+  /** The store's selling line at the good's start: buyers walk no higher while the store sells. */
+  sellersBottom: number;
+  /** The buyers' hard edge: no buyer walks or taps below it. */
+  lo: number;
+  /** The sellers' hard edge: no seller walks or taps above it. */
+  hi: number;
+}
+
 /** One player's line on the status screen before a good comes up. */
 export interface StatusRow {
   id: string;
@@ -689,6 +701,7 @@ export interface LiveAuction extends WalkBoard {
   storeSell: number;
   /** Units the store will still buy of this good, from its demand and its budget. */
   storeBudget: number;
+  zones: BoardZones;
   /** Players who pressed Done in this stage. */
   done: string[];
   status: StatusRow[];

@@ -1,4 +1,7 @@
+import { mkdtempSync, rmSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { MuleView, ServerEnvelope } from '@mule/protocol';
 import { expect, it } from 'vitest';
 import WebSocket from 'ws';
@@ -72,3 +75,51 @@ it('T-AC-3: a species picked over the socket reaches the game; a seat that never
     await running.close();
   }
 });
+
+// Three seeds, three rotations of the defaults at three seats (43, 42, -5 put a different species first), so a
+// lobby that showed the base order, or one rotation for every seed, can't pass.
+it.each([
+  { seed: 43, recorded: false },
+  { seed: 42, recorded: false },
+  { seed: -5, recorded: true },
+])(
+  'T-AC-LS1: at seed $seed (recorded: $recorded) the lobby tells each seat the species it will play if it never picks, and Start gives it exactly that',
+  async ({ seed, recorded }) => {
+    // A recording server hosts the game through the recorder's wrapper, which must pass the defaults on too.
+    const recordDir = recorded ? mkdtempSync(join(tmpdir(), 'mule-ls1-')) : null;
+    const running = createMuleServer({ seed: () => seed, recordDir });
+    const sockets: WebSocket[] = [];
+    let code = '';
+    try {
+      await new Promise<void>((r) => running.server.listen(0, '127.0.0.1', r));
+      const { port } = running.server.address() as AddressInfo;
+      ({ code } = (await (await fetch(`http://127.0.0.1:${port}/rooms`, { method: 'POST' })).json()) as { code: string });
+      const ws = `ws://127.0.0.1:${port}/ws`;
+
+      const heiko = await phone(ws);
+      sockets.push(heiko.socket);
+      heiko.send({ t: 'join', code, name: 'Heiko' });
+      await heiko.next((m) => m.t === 'welcome');
+      const mia = await phone(ws);
+      sockets.push(mia.socket);
+      mia.send({ t: 'join', code, name: 'Mia' });
+      await mia.next((m) => m.t === 'welcome');
+      heiko.send({ t: 'addAi' });
+
+      // The last lobby view before Start, once all three seats are in it: what every phone is showing when the host presses.
+      const lobby = (await heiko.next((m) => m.t === 'view' && m.view.status === 'lobby' && m.view.seats.length === 3)) as Extract<Envelope, { t: 'view' }>;
+      const shown = lobby.view.seats.map((s) => s.defaultPick);
+      expect(new Set(shown).size, 'three seats, three different species').toBe(3);
+
+      heiko.send({ t: 'start' });
+      const started = (await heiko.next((m) => m.t === 'view' && m.view.status === 'playing')) as Extract<Envelope, { t: 'view' }>;
+      expect(started.view.game?.players.map((p) => p.species)).toEqual(shown);
+      expect(started.view.seats.every((s) => s.defaultPick === undefined), 'a started table no longer shows lobby defaults').toBe(true);
+    } finally {
+      for (const s of sockets) s.terminate();
+      running.registry.get(code)?.dispose();
+      await running.close();
+      if (recordDir) rmSync(recordDir, { recursive: true, force: true });
+    }
+  },
+);

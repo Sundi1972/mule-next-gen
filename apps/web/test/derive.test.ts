@@ -2,7 +2,7 @@ import { POLLUTION, TERRAIN_ODDS as ENGINE_ODDS } from '@mule/engine';
 import type { MuleView, PlayerView, TileView } from '@mule/protocol';
 import { GOOD_NAME, type Good } from '@mule/ui';
 import { describe, expect, it } from 'vitest';
-import { colonyVerdict, groundPips, mapTiles, seatSpecies, secondsUntil, slotOf, standings, TERRAIN_ODDS } from '../src/game/derive';
+import { colonyVerdict, mapTiles, seatSpecies, secondsUntil, slotOf, standings, TERRAIN_ODDS } from '../src/game/derive';
 
 const p = (id: string, money: number, slot: number, worth = money): PlayerView => ({ id, name: id, isAi: false, color: '', slot, species: 'zipwing', money, worth, lastWorth: null, worthBeforeCut: null, plots: 0, ready: false, doneDeveloping: false, condition: null, colonist: null });
 const tile = (x: number, y: number, extra: Partial<TileView> = {}): TileView => ({ x, y, terrain: 'plains', peaks: 0, owner: null, outfit: null, pollution: 0, filter: false, ...extra });
@@ -64,13 +64,12 @@ describe('reading the view', () => {
     expect(bySlot[0]).toBe('gearling');
   });
 
-  it('turns tiles into map tiles: owner slots, outfits as goods, ground on four pips', () => {
+  it('turns tiles into map tiles: owner slots, outfits as goods, ground as 0–3 dots', () => {
     const [a, b] = mapTiles(view());
     expect(a).toMatchObject({ owner: 1, good: 'energy' });
     expect(b!.good).toBeUndefined();
     expect(b).toMatchObject({ owner: 0, pollution: 2 });
-    expect(b!.ground).toEqual({ food: 0, water: 4, energy: 1, smithore: 4, crystite: 0, rareEarth: 1 });
-    expect(groundPips('smithore', 9)).toBe(4);
+    expect(b!.ground).toEqual({ food: 0, water: 3, energy: 1, smithore: 3, crystite: 0, rareEarth: 1 });
   });
 
   it('B-AC-10 (WS4, Worth): standings rank by worth, not cash, and the value is worth, which at game over is the final score', () => {
