@@ -25,6 +25,12 @@ export function planShip(seed: number, arrives: number, players: number): Export
   return { arrives, goods, hold, bought: {} };
 }
 
+/** Energy a new MULE draws from the stock: the mean use of the outfits that buy Energy, a plant's own use being no demand (AM-17 A). */
+const ENERGY_PER_NEW_MULE = (() => {
+  const buyers = Object.entries(UPKEEP.energyUse).filter(([good]) => good !== 'energy');
+  return buyers.reduce((sum, [, use]) => sum + use, 0) / buyers.length;
+})();
+
 /**
  * Expected demand for next month, per good, from colonists, players,
  * industry and the export ship's off-world buyers. `festival` is the extra Food the colonists ask this month (G-5 C26);
@@ -42,6 +48,8 @@ export function monthlyDemand(state: GameState, festival = festivalFood(state)):
   demand.food = own.food + colonistDemand(state, 'food', colonistUnits + festival);
   demand.water = own.water + colonistDemand(state, 'water', colonistUnits);
   demand.energy = own.energy + colonistDemand(state, 'energy', colonistUnits * UPKEEP.colonistEnergyShare);
+  // The MULEs players are about to install will each need Energy before any plot draws it (C6).
+  demand.energy += mulesWanted(state) * ENERGY_PER_NEW_MULE;
   // Sick colonists in dirty air need more Medicine.
   demand.medicine = colonistDemand(state, 'medicine', (state.colonists / UPKEEP.colonistsPerMedicine) * (sick ? POLLUTION.sickMedicineDemand : 1));
   const factories = (good: Good) => state.tiles.filter((t) => t.outfit === good).length;
