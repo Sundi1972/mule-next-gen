@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { advancePhase, AI_PERSONAS, createGame, GROWN_BASE, observe, PRICE, STRATEGIST, type GameState, type Outfit, type Tile } from '@mule/engine';
+import { advancePhase, AI_PERSONAS, cloneForSim, createGame, EVENTS, GROWN_BASE, observe, PRICE, rollAfterOutput, STRATEGIST, type GameState, type Outfit, type Phase, type Tile } from '@mule/engine';
 import { outlook } from '../src/outlook.js';
 import { AiSeat } from '../src/seat.js';
 import { landDecision } from '../src/strategist.js';
@@ -63,5 +63,46 @@ describe('AM-17, ruling A: the AI counts a plant net', () => {
     const y = (made: number, energy: number): Yield => ({ made, energy, inputs: {}, air: 0, crew: 1 });
 
     expect(monthlyNet(obs, o, y(3, 1), 'energy', seat.mind)).toBeCloseTo(monthlyNet(obs, o, y(2, 0), 'energy', seat.mind), 6);
+  });
+});
+
+describe("the outlook's plantsUse is what the engine charged, though the roll's meteor then strikes the plant (R1)", () => {
+  type Row = { phases: Partial<Record<Phase, number>>; cap: number };
+  const rows = (): Row[] => [...Object.values(EVENTS.colony), ...Object.values(EVENTS.player)] as Row[];
+
+  it('FM-plant-net-meteor: a plant the meteor craters after its output still paid min(made, use), and plantsUse counts it', () => {
+    // Only the meteor rolls, and it always strikes (test-local: the case needs the strike). Every other row at 0.
+    const saved = rows().map((row) => ({ row, phases: { ...row.phases }, cap: row.cap }));
+    try {
+      for (const row of rows()) row.phases = Object.fromEntries(Object.keys(row.phases).map((p) => [p, row === EVENTS.colony.meteorStrike ? 1 : 0]));
+      EVENTS.colony.meteorStrike.cap = 1;
+      const state = createGame({ seed: 11, players: ['ai0', 'ai1', 'ai2', 'ai3'].map((id) => ({ id, name: id, isAi: true, species: 'zipwing' as const })) });
+      while (state.phase !== 'landGrant') advancePhase(state);
+      state.month = EVENTS.firstMonth;
+      // The tile the outlook's meteor strikes: its dice read the seed (which observe zeroes), the month and the map, not
+      // who owns what. ai0's one plot, a plant making 3 and using 1, goes there.
+      const probe = cloneForSim(observe(state, 'ai0'));
+      delete probe.whatIf;
+      const hit = rollAfterOutput(probe)[0]!.plots[0]!.index;
+      for (const t of state.tiles) if (t.owner === 'ai0') Object.assign(t, { owner: null, outfit: null });
+      const tile = state.tiles[hit]!;
+      Object.assign(tile, { terrain: 'plains', traits: [], ground: { ...flatGround, energy: 3 - GROWN_BASE }, owner: 'ai0', outfit: 'energy', pollution: 0, runMonths: 0 } satisfies Partial<Tile>);
+      delete tile.special;
+      const me = state.players.find((p) => p.id === 'ai0')!;
+      me.analysed.push(hit);
+      me.stock.energy = 0;
+      const obs = observe(state, 'ai0');
+      // A what-if copy rolls no event; the outlook's clone is let roll, so its meteor strikes as the real month's would.
+      const o = outlook(obs, 'ai0', { lookAhead: true, apply: (sim) => delete sim.whatIf });
+
+      expect(o.stage.tiles[hit], "the case: the roll's meteor cratered the plant").toMatchObject({ outfit: null, special: { kind: 'meteorCrater' } });
+      expect(o.made.energy, 'the case: the plant made its 3 first').toBe(3);
+      // What the engine charged the plant: what it made less what reached the seat's stock (it owns nothing else).
+      const charged = o.made.energy - (o.stage.players.find((p) => p.id === 'ai0')!.stock.energy - obs.players.find((p) => p.id === 'ai0')!.stock.energy);
+      expect(charged, 'the case: the engine charged its use, 1').toBe(1);
+      expect(o.plantsUse).toBe(charged);
+    } finally {
+      for (const { row, phases, cap } of saved) Object.assign(row, { phases, cap });
+    }
   });
 });
