@@ -55,16 +55,19 @@ P  expected production           this month's output of every worked plot making
 M  months of cover               S ÷ D;  D = 0 → the good has no colony demand (export-only): off-world rule
 ```
 "Shortage" and "severe shortage" are measured by M, and only count while P < D (the colony is eating into its
-stock). Last month's colonist shortfall of g counts as severe, whatever M says (today's rule keeps that too).
+stock). Last month's colonist shortfall of g counts as severe, whatever M or P say: it is checked first (RULE-6
+row 2). Measured: with that check after the normal row, Food read "normal" in 84 of 120 months while its shelf was
+empty in 118, and colonists went short of Food more often than today.
 
 ### The bands (RULE-6, decision table, first match wins)
 ```
  #  when                                              band       target mid     store buys   store sells
  1  D = 0 (only the export ship wants it)             off-world  offWorld[g]    15% under    15% over   (existing)
- 2  P ≥ D,  or  M ≥ 2                                 normal     N              15% under    15% over
- 3  M ≥ 1                                             tight      1.25 N         15% under    20% over
- 4  M ≥ 0.5  and colonists weren't short of it        shortage   2 N            10% under    25% over
- 5  otherwise                                         severe     4 N            10% under    25% over
+ 2  colonists went short of g at last upkeep          severe     4 N            10% under    25% over
+ 3  P ≥ D,  or  M ≥ 2                                 normal     N              15% under    15% over
+ 4  M ≥ 1                                             tight      1.25 N         15% under    20% over
+ 5  M ≥ 0.5                                           shortage   2 N            10% under    25% over
+ 6  otherwise                                         severe     4 N            10% under    25% over
 N = the good's normal price: store.refPrice[g] (existing; drifts with what players pay and, for export goods,
     towards the off-world price). Every number is a named PRICE value: normalCover 2, tightCover 1,
     shortCover 0.5, the three multipliers 1.25 / 2 / 4 and the per-band spreads.
@@ -118,8 +121,8 @@ lines    buy = floor(mid × (1 − under)), sell = max(buy + 1, ceil(mid × (1 +
 ### Decisions for Heiko
 1. **What counts as stock.** A (recommended): the colony's — store plus players' depots. B: the store's shelf only.
    A: matches "overall supply"; a colony whose players hold Food isn't in a shortage. B: literal "store stock", but
-   the store usually holds under a month while depots hold the rest, so prices would sit in the shortage bands
-   most months.
+   the store usually holds under a month while depots hold the rest, so prices sit in the severe band most months;
+   measured, B is worse than A on every line of the sim.
 2. **Steps or a curve.** A (recommended): the four steps above; plain to say at the table ("Food is short"), but a
    price jumps at a band's edge (38 → 60). B: a smooth curve through the same points (N × 2 ÷ M while P < D);
    no jumps, but nothing to name. C: a monthly rise per band (+15% / +40% / +80% a month while it lasts); a long
@@ -133,7 +136,36 @@ lines    buy = floor(mid × (1 − under)), sell = max(buy + 1, ceil(mid × (1 +
    C: a quarter.
 
 ### Sim: the 10 seed-1 games, before and after
-*(pending: filled at the next commit)*
+Trunk 2eccd439, a throwaway prototype (nothing committed): 4 trader seats, rotating personas, walking on, full 12
+months, politics on (off in brackets where it differs). "After" = this rework with the Colony-needs demand (the
+consumption table, colonists' full need) and colonists eating free from the store (a stand-in for WS7's C1).
+Prices read when the goods auction opens; sold out = no units for players at some point in that good's auction;
+hungry = the game's own flag. Scripts and raw rows: WS5's scratch `needs/` (measure.ts, summary-p2.txt).
+
+| | Today | As first written | **Recommended (row 2 first)** | Store shelf only (Decision 1 B) | + shelf must hold the colonists' month |
+|---|---|---|---|---|---|
+| Food price, min / median / max | 23 / 141 / 2978 | 17 / 30 / 120 | **26 / 120 / 144** | 30 / 120 / 156 | 38 / 120 / 360 |
+| Water price, min / median / max | 6 / 83 / 1368 | 14 / 31 / 300 | **25 / 69 / 251** | 25 / 85 / 300 | 25 / 100 / 300 |
+| Energy price, median / max | 129 / 1476 | 100 / 144 | **100 / 144** | 96 / 140 | 96 / 140 |
+| Months at the 12× ceiling, any good | 42 (43) | 5 (7) | **0 (2)** | 3 (0) | 10 (9) |
+| Food sold out (of 120) | 106 (108) | 120 (118) | **118 (115)** | 118 (116) | 118 (119) |
+| Water sold out | 89 (94) | 69 (64) | **59 (69)** | 76 (78) | 71 (74) |
+| Colonists short of Food / Water | 55 / 63 (50 / 62) | 79 / 37 | **74 / 34 (67 / 34)** | 83 / 39 | 62 / 56 |
+| Hungry seat-months (of 480) | 399 (403) | 421 | **413 (397)** | 418 | 418 |
+| Food bands, normal / tight / short / severe | — | 85 / 10 / 5 / 20 | 37 / 8 / 6 / 69 | 27 / 3 / 7 / 83 | 11 / 3 / 7 / 99 |
+| Food units players sold to the store | 657 | 271 | — | 271 | — |
+
+What it says:
+- **No price rule makes Food appear.** The store's Food shelf empties in 115–120 of 120 months under every rule,
+  today's included. The colony doesn't grow enough Food (Colony needs D6, Heiko's C29 supply pass).
+- **The rework calms prices and fixes Water.** Food tops out at 144 instead of 2978, nothing sits at the ceiling,
+  Water sells out in 59 months instead of 89, and colonists go short of Water in 34 months instead of 63.
+- **The trade-off: colonists go short of Food more often (74 vs 55).** Today's runaway prices drag more Food out of
+  players' hands into the store (657 units against 271), at prices nobody can read. Sane prices don't.
+- Counting only the store's shelf (Decision 1 B) is worse on every line; requiring the shelf to hold the colonists'
+  month helps their Food (62) but hurts their Water (56). Recommended: row 2 first, colony stock.
+- Hungry seat-months (83–88%) barely move under any rule. The flag is read when development starts, before that
+  month's buying and after 50% spoilage, so a player needs about three months' Food left to start a month fed.
 
 ## §0 · Business Goals & Value
 
