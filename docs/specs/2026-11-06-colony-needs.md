@@ -486,7 +486,8 @@ C17 · MODIFIED · the colonists' Electronics want is store demand, and reaches 
 today        demand.electronics = 0 (+ the export ship); demand.rareEarth and demand.alloy = one per standing
              Electronics works · anchor: packages/engine/src/economy.ts::monthlyDemand · verified_by: read (trunk 38070ffb)
 tomorrow     MUST add E = colonists ÷ UPKEEP.colonistsPerElectronics (new, 50) to demand.electronics, and E ×
-             RECIPES.electronics.inputs[g] to demand.rareEarth and demand.alloy, on top of today's terms (RULE-13)
+             RECIPES.electronics.inputs[g] to demand.rareEarth and demand.alloy, on top of today's terms (RULE-13).
+             AM-2: for the inputs, MUST take the larger of the works' term and E × recipe, never their sum
 logic        → RULE-13 · evaluated wherever monthlyDemand is
 seam         packages/engine/src/economy.ts::monthlyDemand — the one demand every price and the AI read
 senior       junior would: count the want once someone makes Electronics · senior does: counts it from month 1,
@@ -663,9 +664,13 @@ examples      sF 0.1 → f 1 · sF 0.5 → 1 − 0.5 × 0.296 = 0.85 · sF 1 →
 ```
 RULE-13 · The colonists' Electronics want (C17)                      shape: formula
 E            = colonists ÷ UPKEEP.colonistsPerElectronics (50)        ≥ 0, not rounded (demand is a rate)
-electronics += E · rareEarth += E × RECIPES.electronics.inputs.rareEarth · alloy += E × RECIPES.electronics.inputs.alloy
+electronics += E
+g ∈ {rareEarth, alloy}:  demand.g = max(works' term, E × RECIPES.electronics.inputs.g)    (AM-2; was the sum)
+             works' term = today's input demand from standing Electronics works (factories('electronics'))
 unknown      none: colonists is a count in state
-example      200 colonists → Electronics +4, Rare earth +4, Alloy +4 a month; 0 colonists → nothing
+example      200 colonists, 0 works → Electronics +4, Rare earth 4, Alloy 4 a month · 200 colonists, 4 works → Rare
+             earth 4, Alloy 4 (the sum read 8) · 200 colonists, 6 works → 6 (a works making for export still counts)
+             · 0 colonists → Electronics +0, inputs = the works' term
 ```
 
 ```
@@ -879,6 +884,20 @@ did       wrote WS5's side of decisions 23, 24, 25, 27 and the WS8 view contract
           "× sickness" is WS7's health factor (up to +40% at the cap), replacing POLLUTION.sickMedicineDemand
 because   the build plan (docs/plans/2026-11-06-ws5-colony-economy-build.md) needs every change it builds in a spec
 goal      G-1, G-2 unchanged; WS7's colonist health ids are WS7's to add
+```
+
+```
+AM-2 · 2026-11-07 · WS7 (spec owner) · PM ruling, WS5's option (a), from PR-3 #569's review · built in a milestone A follow-up, not #569
+target    §1 C17 tomorrow; §2 RULE-13
+said      Rare earth and Alloy demand = the works' input term + E × recipe
+because   once an Electronics works stands, the sum counts the same Electronics' inputs twice: 200 colonists and
+          4 works read 8 where the colony needs 4. Invisible today (no works stand); it would over-signal the
+          inputs as soon as WS9's chain build stands works
+did       inputs = max(the works' term, E × recipe): no double count, and a works making beyond the colonists'
+          want (for export) still counts its full input
+not this  C49's waiting buildings' Electronics (G-5 AM-17) raise demand.electronics only; they do not reach the
+          inputs. Under a unit a month per building, below the signal's resolution
+goal      G-1 unchanged
 ```
 
 ## §9 · Ownership Boundaries
