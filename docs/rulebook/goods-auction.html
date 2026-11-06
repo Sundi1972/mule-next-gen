@@ -103,7 +103,7 @@
 <tbody>
 <tr><td>Sellers' asks</td><td>Red</td><td>The lowest ask any seller is making.</td><td>Buyers walking up meet it.</td></tr>
 <tr><td>Buyers' bids</td><td>Green</td><td>The highest bid any buyer is making.</td><td>Sellers walking down meet it.</td></tr>
-<tr><td>Store sells</td><td>Dashed, near the top</td><td>What the store charges. Once the store has none left to sell, the line reads "SOLD OUT 28" at its old price, and "HIGHEST BID 30 ↑" once a buyer bids past it; the TV's panel says "Highest bid 30".</td><td>Buyers can't walk above it while the store sells; sold out, they may (<a href="#rule-e-sold-out">rule E</a>).</td></tr>
+<tr><td>Store sells</td><td>Dashed, near the top</td><td>What the store charges. Once the store has none left to sell, the line reads "SOLD OUT 28" at its old price, and "HIGHEST BID 30 ↑" once a buyer bids past it; the TV's panel says "Bids can go past its old 28. Highest bid 30", or "No store price yet: bids set it." when the store never posted a selling price for the good.</td><td>Buyers can't walk above it while the store sells; sold out, they may (<a href="#rule-e-sold-out">rule E</a>).</td></tr>
 <tr><td>Store buys</td><td>Dashed, near the bottom</td><td>What the store pays when the good's walk begins.</td><td>Sellers can't walk below it, even once the store stops buying (<a href="#rule-d-rest-zones">rule D</a>).</td></tr>
 <tr><td>Ship buys</td><td>Amber</td><td>What the export ship pays for its next unit, only in a month it is in port and wants this good.</td><td>Sellers who reach it sell to the ship.</td></tr>
 </tbody>
@@ -365,7 +365,7 @@
 <li>When the store has none of the good left to sell, buyers may walk above its old selling line, up to one step below the top.</li>
 <li>Walking up never trades with a seller resting in the sellers' zone: the buyer stops one step below them. A seller who wants the bid walks down onto it, and then they trade.</li>
 <li>The store's selling line stays at its old price ("SOLD OUT 28") until a bid passes it, then shows the <strong>highest bid</strong> on the board ("HIGHEST BID 30 ↑"), so every seller sees what walking down would fetch. The store itself sells nothing.</li>
-<li>Both rest zones are drawn on the board as bands, "SELLERS WAIT · NO TRADE" and "BUYERS WAIT · NO TRADE", and they keep their place for the whole good.</li>
+<li>Both rest zones are drawn on the board as bands, "SELLERS WAIT · NO TRADE" and "BUYERS WAIT · NO TRADE", and they keep their place for the whole good. When the export ship pays more than the store's selling line, its line lies inside the sellers' band and a seller who walks down to it still sells to the ship, so that band says "SELLERS WAIT · ONLY THE SHIP BUYS" on the TV and "SELLERS WAIT · SHIP ONLY" on a phone.</li>
 <li>Every seller above that line is still resting: since a buyer can never walk past a resting seller, the highest bid is always below every resting seller.</li>
 <li>On the trading floor below the store's old selling line, walking up into a seller still trades, as before.</li>
 <li>A computer player short of the good walks up as far as it values it. A computer seller walks down onto the highest bid when that bid is at least what it would sell for.</li>
