@@ -8,11 +8,14 @@ import {
   declareRole,
   GOOD_CONFIG,
   GOODS,
+  colonistDemand,
   monthlyDemand,
+  mulesWanted,
   postPrices,
   priceBand,
   stepAuction,
   storeSellLine,
+  storeWants,
   UPKEEP,
   WALK,
   type GameState,
@@ -329,5 +332,66 @@ describe('price B-AC-1: a sell-out the players bid past lifts the next selling l
     const state = bidPast(1_000, { soldOut: true });
     expect(state.store.posted.food).toBe(360);
     for (const good of GOODS) expect(state.store.posted[good], good).toBeLessThanOrEqual(12 * GOOD_CONFIG[good].refPrice);
+  });
+});
+
+describe("price C6: the colony's Energy demand counts the MULEs it will add", () => {
+  // J: give the store free Energy each month. S: raise the demand, so the band and the buy line pull Energy in from players.
+  // I: Food and Water demand are unchanged; a plant's own use is no demand on the stock (AM-17 A).
+  // Hand-derived: Food 1, Water 1, Smithore 2, Crystite 2, RareEarth 2 draw from the stock, mean 8 / 5.
+  const PER_NEW_MULE = 1.6;
+
+  it('price C6: each MULE the colony will add raises the Energy demand by 1.6, and Food and Water by nothing', () => {
+    const before = game();
+    const after = game();
+    const idle = after.tiles.filter((t) => t.terrain !== 'store' && !t.owner).slice(0, 3);
+    for (const t of idle) t.owner = 'p0';
+    expect(mulesWanted(after) - mulesWanted(before), 'the premise: three idle plots, land still free').toBe(3);
+
+    const d0 = monthlyDemand(before);
+    const d1 = monthlyDemand(after);
+
+    expect(d1.energy - d0.energy).toBeCloseTo(3 * PER_NEW_MULE, 9);
+    expect(d1.food).toBe(d0.food);
+    expect(d1.water).toBe(d0.water);
+
+    // The store's own want for Energy rises with it, its shelf held empty: 3 × 1.6 × 3 months of cover = 14.4, so 14 or 15 more.
+    for (const s of [before, after]) s.store.stock.energy = 0;
+    const wantsMore = storeWants(after, 'energy') - storeWants(before, 'energy');
+    expect(wantsMore).toBeGreaterThanOrEqual(14);
+    expect(wantsMore).toBeLessThanOrEqual(15);
+  });
+
+  it.each([undefined, 500])("price C6: a month's new land alone adds 8 MULEs' Energy, at any Energy price (posted %s)", (posted) => {
+    const state = game();
+    if (posted) state.store.posted.energy = posted;
+    expect(state.tiles.some((t) => t.owner), 'the premise: no plot owned, so no idle plot and no plant').toBe(false);
+    expect(mulesWanted(state), 'the premise: a month of new land, 4 seats × 2').toBe(8);
+
+    const colonists = colonistDemand(state, 'energy', (state.colonists / UPKEEP.colonistsPerUnit) * UPKEEP.colonistEnergyShare);
+
+    expect(monthlyDemand(state).energy - colonists).toBeCloseTo(8 * PER_NEW_MULE, 9);
+  });
+
+  it('price C6: the Energy a new MULE needs follows UPKEEP.energyUse as a run sets it', () => {
+    const saved = UPKEEP.energyUse.smithore;
+    const state = game();
+    const base = monthlyDemand(state).energy;
+    try {
+      UPKEEP.energyUse.smithore = 4; // the mean over Food 1, Water 1, Smithore 4, Crystite 2, Rare Earth 2 is 2
+      expect(monthlyDemand(state).energy - base).toBeCloseTo(8 * (2 - PER_NEW_MULE), 9);
+    } finally {
+      UPKEEP.energyUse.smithore = saved;
+    }
+  });
+
+  it('price C6: with no land left and no idle plot, nothing is added to the Energy demand', () => {
+    const state = game();
+    for (const t of state.tiles) if (t.terrain !== 'store') { t.owner = 'p0'; t.outfit = 'energy'; }
+    expect(mulesWanted(state), 'the premise: no MULE wanted').toBe(0);
+
+    const colonists = colonistDemand(state, 'energy', (state.colonists / UPKEEP.colonistsPerUnit) * UPKEEP.colonistEnergyShare);
+
+    expect(monthlyDemand(state).energy).toBeCloseTo(colonists, 9);
   });
 });

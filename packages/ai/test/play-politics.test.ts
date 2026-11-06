@@ -20,9 +20,9 @@ function playedPolitics(seeds: number[]) {
   return { how, taxes };
 }
 
-// One pinned game in CI: seed 1 has offices won by votes (5 of 8) and a tax off its start in 11 of 12 months, so it
-// qualifies with room. If a change stops it qualifying, the test fails; it never skips. MULE_FULL=1 plays four.
-const SEEDS = process.env.MULE_FULL === '1' ? [1, 2, 3, 4] : [1];
+// Four games, so one seed's trajectory moving does not fail the test. The assertions cover all four together:
+// every election fills every office, some office is won by votes, and the tax moves from its start in some month.
+const SEEDS = [1, 2, 3, 4];
 
 describe('the sim plays politics', () => {
   it('UBER-AC-1, T-AC-63: AI seats declare and vote, so every office is filled in every election and some are won by votes, not only appointed, and a Governor moves the tax', () => {
@@ -31,5 +31,5 @@ describe('the sim plays politics', () => {
     expect(how).toHaveLength(SEEDS.length * 4 * POLITICS.offices.length);
     expect(how).toContain('votes');
     expect(taxes.some((t) => t !== Math.round(TAX.salesTax * 100))).toBe(true);
-  }, 30_000); // up to four full games under MULE_FULL: about 5 s locally, over vitest's 5 s default
+  }, 30_000); // four full games: about 5 s locally, over vitest's 5 s default
 });

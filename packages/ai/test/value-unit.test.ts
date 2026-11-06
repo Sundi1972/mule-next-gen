@@ -50,6 +50,8 @@ const BUILT_SPECIES = ['zipwing', 'bramblet', 'gearling', 'mollox'] as const;
 function table({ plots, posted = {}, stock = {} }: Table): GameState {
   // Species picked as the table was built: the default turns with the seed (FM-species-by-chair), and ai0 is no Bramblet.
   const state = createGame({ seed: 7, players: (['ai0', 'ai1', 'ai2', 'ai3'] as const).map((id, i) => ({ id, name: id, isAi: true, species: BUILT_SPECIES[i] })) });
+  // Energy's shelf is full before the month's prices are posted: C6 counts the MULEs the free land will bring, and it still posts normal.
+  state.store.stock.energy = 200;
   while (state.phase !== 'auction') advancePhase(state);
   for (const t of state.tiles) if (t.owner) Object.assign(t, { owner: null, outfit: null });
   const me = state.players.find((p) => p.id === 'ai0')!;
