@@ -148,8 +148,11 @@ export async function theMonthEndTvFits(tv: Page, server: MuleServer, code: stri
     const inBody = await end.locator('[data-fit] [data-testid=colony-gauges]').count();
     check(inBody === 1, "TV-FIT: the month end's colony gauges sit in its body beside the league, not in a row under the header");
   }
+  // The worth rule is one truncated line; the table reads it whole, donations and all, or the cut falls on the rule itself.
+  const rule = await end.getByTestId('worth-rule').evaluate((p) => ({ text: (p as HTMLElement).innerText, cut: p.scrollWidth > p.clientWidth }));
+  check(!rule.cut, `TV-FIT: the month end's worth rule fits its one line, got it cut: "${rule.text}"`);
   const scale = Number(await end.locator('[data-fit]').getAttribute('data-fit'));
-  return `${header}; one chat line of ${said.length}, the gauges ${gauges > 0 ? 'beside the league' : 'not drawn (no colony)'}, the body at scale ${scale.toFixed(3)} with ${await end.locator('[data-testid^=league-row-]').count()} league rows`;
+  return `${header}; the worth rule whole on one line; one chat line of ${said.length}, the gauges ${gauges > 0 ? 'beside the league' : 'not drawn (no colony)'}, the body at scale ${scale.toFixed(3)} with ${await end.locator('[data-testid^=league-row-]').count()} league rows`;
 }
 
 export async function theAuctionTvFits(tv: Page, server: MuleServer, code: string): Promise<string> {
