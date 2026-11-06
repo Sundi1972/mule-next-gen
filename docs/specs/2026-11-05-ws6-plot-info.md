@@ -366,6 +366,22 @@ lands at the land grant (droneOrder is kept until then).
   components/AuctionParts.tsx through phone/ground.tsx::GroundCard (the land auction's lot card): it follows GroundCard
   with no edit to WS3's file, and its tests' dot counts change with R-2's. (3) packages/ai/src/llm/moves-stub.ts is on
   trunk now (C1's anchor said WS2's branch). (4) The mock lands on trunk in its own PR (#505) before PR-1.
+- 6 Nov, after PR-1c (#524), PM ruling on UBER-AC-1: at 844×390 the built rail showed the Drone report's first plot
+  and needed a scroll for the second, which fails "see it at the table". C2's report becomes compact: per plot one line
+  (where, land, best for) and one row of six goods by icon with 0–3 dots, a found Crystite or Rare earth as its gem;
+  "Next drone: month N" closes the report instead of the rail's footer. Mock #528 (79c253d6), measured 132 px against
+  about 137 px of room at 844×390 and 146 px at 667×375. Built in PR-2 (it already edits plotInfo.tsx), with a browser
+  check that both plots sit inside the rail at both sizes.
+- 6 Nov, at PR-2 (#545), measured: C4's store box keeps its words. The mock's row with six goods needs about 194 px;
+  the real "Your plots" box is 148 px wide at 844×390 and 103 px at 667×375. The Plots chip already gives G-2 every
+  plot with dots anywhere on the walking screen, the hall included, so the box ends "+n more · Plots ▸ shows all".
+  The chip sits at the top of the left side room (on the right the box overran the store button by 20 px at 667).
+  "Dots in the store's box" stays Designed in the rulebook.
+- 7 Nov, PM ruling X on #562 (C7), measured at real plot sizes (25 px at 3 seats, 30 px at 6 on 844×390): the 0–3
+  dots chip stays centred on the plot, as PR-1a built it, not at the plot's foot as the mock drew it (bottom 8%). At the
+  foot a 17 px chip clipped a bottom-row pin, went under the owner's tab and gem on the right column, and lost its third
+  dot under a special's badge; centred, the tab and gem stay clear and a badge clips about 1 px of dot 3. The mock's
+  MapMarks pip position is superseded by this line.
 
 ## §9 · Ownership Boundaries
 
