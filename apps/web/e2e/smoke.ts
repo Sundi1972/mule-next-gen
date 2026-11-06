@@ -11,7 +11,7 @@ import type { MuleServer } from '../../server/src/server.js';
 import { check, CLAIM_MS, claimAPlot, doneWithLand, held, launch, PHONE, startServer, TV, type AuctionSteps, type GameStepContext } from './harness';
 import { planningIsTheHub } from './hub-steps';
 import { theDroneReportsInTheRail } from './plot-info-steps';
-import { theAuctionTvFits, theMonthEndTvFits, theTvHeaderFits, theTvHeaderStaysOnScreen, theTvTitleIsClear } from './tv-fit-steps';
+import { theAuctionTvFits, theMonthEndTvFits, theTvBodyFits, theTvHeaderFits, theTvHeaderStaysOnScreen, theTvScalesHeld, theTvTitleIsClear, watchTvScales } from './tv-fit-steps';
 import { gameOverIsInCredits, theLeagueTableAtTheMonthEnd, theMonthEndHoldsForThePhone } from './month-end-steps';
 import { ELECTION_WAIT_MS, readyThroughTheElection } from './politics-steps';
 import { checkTheShow, watchShow, type ShowWatch } from './production-steps';
@@ -87,6 +87,7 @@ try {
   const tv = await (await browser.newContext(TV)).newPage();
   tv.on('pageerror', (e) => errors.push(`tv: ${e.message}`));
   const tvShow = await watchShow(tv);
+  await watchTvScales(tv);
   await tv.goto(`${base}/table?room=${code}`);
   await tv.getByTestId('room-code').waitFor();
   let ctx: GameStepContext = { phone, tv, check, server, code, held: (step) => held(server, code, step) };
@@ -120,6 +121,11 @@ try {
   const tvGame = tv.locator('[data-phase]');
   await tvGame.waitFor({ timeout: 5_000 });
 
+  // Held, so election day's announcement stays up while the TV is read.
+  await ctx.held(async () => {
+    await tv.getByTestId('tv-announce').waitFor({ timeout: 5_000 });
+    console.log(`TV-FIT, election day: ${await theTvBodyFits(tv, server, code, 'election day')}`);
+  });
   // Month 1: the election, then planning's steps, then Ready.
   console.log(`election: ${await doneThroughTheElection(ctx, within(ELECTION_WAIT_MS))}`);
   // The TV shows election day first; its planning roster comes after.
@@ -143,7 +149,7 @@ try {
   await claim.waitFor({ timeout: 5_000 });
   check(await claim.isVisible(), 'CLAIM button visible');
   await tv.getByTestId('tv-phase').filter({ hasText: 'Land grant' }).waitFor({ timeout: 3_000 });
-  console.log(`TV-FIT, the land grant: ${await theTvHeaderStaysOnScreen(tv, 'land grant', true)}`);
+  console.log(`TV-FIT, the land grant: ${await theTvBodyFits(tv, server, code, 'land grant')}; ${await theTvHeaderStaysOnScreen(tv, 'land grant', true)}`);
   await noZoomBeforeYourFirstPlot(ctx);
   await claimAPlot(phone, CLAIM_MS, 'AM-7: the phone claims a plot in the month-1 land grant');
   await zoomButtonOnceYouOwnAPlot(ctx, phoneIntents);
@@ -166,20 +172,24 @@ try {
   console.log(`plots, TV: ${await theTvShowsWhoOwnsEachPlot(ctx)}`);
   // The header without a ready chip: its gauges give way, so a long title keeps clear of them.
   await tv.locator('[data-phase=development] [data-testid=tv-header]').waitFor({ timeout: PRESS_MS });
-  console.log(`TV-FIT, development: ${await theTvTitleIsClear(tv, 'development')}; ${await theTvHeaderStaysOnScreen(tv, 'development', true, true)}`);
+  console.log(`TV-FIT, development: ${await theTvBodyFits(tv, server, code, 'development')}; ${await theTvTitleIsClear(tv, 'development')}; ${await theTvHeaderStaysOnScreen(tv, 'development', true, true)}`);
+  await tv.locator('[data-phase=production]').waitFor({ timeout: within(2 * PHASE_MS.development) });
+  console.log(`TV-FIT, production: ${await theTvBodyFits(tv, server, code, 'production')}`);
   // B-AC-6 and B-AC-8, from what both screens drew of month 1's show. The turn runs its whole clock, which starts only
   // once the AI seats have their first MULEs too: a development's length again for that wait.
   await phone.locator('[data-phase=auction]').waitFor({ timeout: within(2 * PHASE_MS.development + PHASE_MS.production) });
   console.log(`production show, month 1: ${await checkTheShow({ tv: tvShow, phone: phoneShow })}`);
   let measured = false;
   let fits = '';
+  let statusFits = '';
   await pressDoneThroughTheAuction(phone, async (button) => {
+    if (!statusFits && (await tv.locator('[data-testid=tv-status]').count()) > 0) statusFits = await theTvBodyFits(tv, server, code, 'auction (status)');
     if (!measured && button.startsWith('Done with')) measured = await checkTheFloorClearsTheNames(phone, tv);
     if (!fits && button.startsWith('Done with') && (await tv.locator('[data-testid=tv-walk]').count()) > 0) fits = await theAuctionTvFits(tv, server, code);
   });
   check(measured, 'FM-2: the month-1 auction reached a walk to measure');
   check(fits !== '', 'TV-FIT: the month-1 auction reached a walk to measure the TV in');
-  console.log(`TV-FIT, the auction: ${fits}`);
+  console.log(`TV-FIT, the auction: status ${statusFits}; the walk ${fits}`);
 
   // B-AC-12 at month 1's end, the one a two-month game has; then it holds until the phone moves on (B-AC-13).
   console.log(`league table: ${await theLeagueTableAtTheMonthEnd(ctx)}`);
@@ -192,7 +202,7 @@ try {
   makeHungry(server, code);
   // B-AC-14: planning is the hub, its needs read from that seed; with B-AC-12's planning part.
   await tv.getByTestId('tv-planning').waitFor({ timeout: READY_MS });
-  console.log(`TV-FIT, planning: ${await theTvHeaderFits(tv, 'planning')}`);
+  console.log(`TV-FIT, planning: ${await theTvBodyFits(tv, server, code, 'planning')}; ${await theTvHeaderFits(tv, 'planning')}`);
   console.log(`hub: ${await planningIsTheHub(phone, server, code)}`);
   await theDroneReportsInTheRail(ctx);
   // B-AC-7 (in game): the player moves to a second device, which plays the rest of the game.
@@ -222,6 +232,7 @@ try {
   await checkTheScoresAddUp(phone, tv);
   console.log(`game over: ${await gameOverIsInCredits(phone, tv)}`);
   console.log(`turned upright and back: ${await turnUprightAndBack(phone)}`);
+  console.log(`TV-FIT floor, every screen at three seats: ${await theTvScalesHeld(tv, 'three seats')}`);
 
   const phases = seen.map((s) => s.phase);
   check(isSubsequence(EXPECTED_PHASES, phases), `phone showed every phase of months 1 and 2 in order: ${phases.join(' > ')}`);
