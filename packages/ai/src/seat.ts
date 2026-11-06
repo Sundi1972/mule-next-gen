@@ -66,7 +66,7 @@ import {
 } from './playbook/index.js';
 import { GOOD_NAME, landDecision, outfitName, plotName, plotsAhead, rankedBy, wantsAnyAhead, wantsPlot, type LandPlan } from './strategist.js';
 import { situation } from './summary.js';
-import type { Mind } from './value.js';
+import { chainLinks, type Mind } from './value.js';
 
 /** One act of the seat's planning part, and whether the rules took it. */
 export interface PlanningStep {
@@ -307,6 +307,12 @@ export class AiSeat {
     return AI_PLANS.on && this.options.playbook !== false;
   }
 
+  /** The kept money-maker while it is a factory good with an input the seat can't feed yet, else null. See AM-32. */
+  private chainFocus(state: GameState): Good | null {
+    const good = this.kept?.moneyMaker ?? null;
+    return good && chainLinks(observe(state, this.id), this.id, good).length > 0 ? good : null;
+  }
+
   /** RULE-8's re-plan trigger the kept plan meets on `state`, or null: also null with no plan kept, or none anchored yet. */
   replanDue(state: GameState): ReplanTrigger | null {
     return this.kept ? replanReason(state, this.kept, this.id) : null;
@@ -485,6 +491,7 @@ export class AiSeat {
     this.devMonth = state.month;
     this.devPlayed = null;
     this.planPoint(state, 'development');
+    this.develop.leanOn(state.month, this.chainFocus(state));
     const path = this.playPath(state.month, 'development');
     if (path.by === 'today') return;
     const playbook = path.by === 'adopted' ? path.playbook : this.ownDraft(state, 'development', () => this.draft(state, 'development'));
