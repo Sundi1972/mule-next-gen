@@ -434,6 +434,8 @@ export interface Project {
   plaque: Record<string, number>;
   /** The most the colony bids for this object's plot at the land auction; null, it does not bid. See G-5 RULE-28. */
   maxBid: number | null;
+  /** Its slot on the colony's own grounds, 0..COLONY.groundsSlots−1; null or absent holds none, as one sited on a map plot before (G-5 RULE-32). */
+  slot?: number | null;
 }
 
 export interface Colony {
