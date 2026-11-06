@@ -4,8 +4,11 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { TableClient } from '../src/net/client';
 import { ClientProvider } from '../src/net/react';
+import { StaticLive } from '../src/phone/arcade/live';
 import { ReadyCount } from '../src/phone/hub/ReadyBar';
 import { TvHeader } from '../src/table/TableApp';
+import { TvArcade } from '../src/table/TvDevelop';
+import { devView, FRAMED, NOW, tableOf } from './fixtures/arcade';
 import { aMuleView, aPlayer } from './fixtures/views';
 
 /**
@@ -71,6 +74,23 @@ describe('GAUGES-ROW (WS4): a crowded TV header puts the colony gauges on their 
     const html = header({ game: game(colony({ good: 'food', cost: 240, paid: false })), title: 'Development', gauges: 'beside' });
     expect(gauges(html)).toEqual({ where: 'header', width: 'w-[760px]' });
     expect(html).toContain('data-testid="strike-badge"');
+  });
+
+  it('the development TV, in a strike month, draws the strike badge and keeps its gauges beside the title', () => {
+    const view = devView(undefined, { colony: colony({ good: 'food', cost: 240, paid: false }) });
+    const board = {
+      subscribe: () => () => {},
+      getState: () => ({ status: 'open', role: 'board', code: 'MULE', seatId: null, view: tableOf(view), chat: [], emotes: [], toasts: [], notice: null, clockOffset: 0, handoffCode: null }),
+      serverNow: () => NOW,
+      intent: () => {},
+      onFrame: () => () => {},
+    } as unknown as TableClient;
+    const live = { me: null, others: new Map(FRAMED.map((c) => [c.id, c])), status: 'live' as const, beats: [] };
+    const html = renderToStaticMarkup(
+      createElement(ClientProvider, { client: board, children: createElement(StaticLive, { live, children: createElement(TvArcade, { game: view }) }) }),
+    );
+    expect(html).toContain('data-testid="strike-badge"');
+    expect(gauges(html)).toEqual({ where: 'header', width: 'w-[760px]' });
   });
 
   it('without the colony (politics off) a clocked header keeps its air gauge and draws no colony gauges', () => {
