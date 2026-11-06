@@ -525,7 +525,10 @@ export function TvAuction({ table, game, auction }: { table: TableView<MuleView>
               />
             )}
           </div>
-          <div className="flex w-[300px] shrink-0 flex-col gap-4">
+          {/* The side fits its own height, so every running deal stays in sight (PM rulings 5 and 6 Nov): when the deals
+              don't fit at full size the side is drawn smaller, never the board, which keeps one size as deals come and
+              go. Size-contained, it takes the row's height and never sets it. */}
+          <FitHeight className="w-[300px] shrink-0 [contain:size]" innerClassName="gap-4" gives>
             <div className="flex flex-col gap-1 rounded-panel border-2 border-holo bg-holo-soft p-4 shadow-glow">
               <GoodTag good={auction.good} name className="text-2xl" />
               <span className={cx('font-display text-xl font-semibold', auction.slowed && 'text-warn')} data-testid="tv-stage">
@@ -588,12 +591,11 @@ export function TvAuction({ table, game, auction }: { table: TableView<MuleView>
                 </strong>
               </p>
             )}
-            {/* Newest first. A row that doesn't fit below the others wraps into a second column, which the clip hides; the
-                newest is kept before the body scales. */}
-            <ul className="flex min-h-0 flex-1 flex-col flex-wrap gap-1.5 overflow-hidden" data-fit-gives>
+            {/* Newest first, every one of them: none is clipped or wrapped out of sight; the side scales instead. */}
+            <ul className="flex flex-1 flex-col gap-1.5">
               {deals.map(({ key, deal }, i) => {
                 // Variant A (Heiko's pick): the newest deal shows its speed-up, as the board's counter does; the older
-                // ones are one line each, so two deals fit under the store box (PM ruling, 5 Nov).
+                // ones are compressed to one row each, so two deals fit under the store box (PM ruling, 5 Nov).
                 const steps = speedStep(dealSpeed(deal.units));
                 // The units and the price always show; a long pair of names gives way first.
                 const line = dealLine(game, deal);
@@ -615,7 +617,7 @@ export function TvAuction({ table, game, auction }: { table: TableView<MuleView>
                     </li>
                   );
                 return (
-                  <li key={key} className="flex w-full flex-col rounded-control border border-holo bg-holo-soft px-3 py-1.5 font-mono text-lg font-bold leading-tight text-holo" data-testid="tv-deal" data-fit-keep>
+                  <li key={key} className="flex w-full flex-col rounded-control border border-holo bg-holo-soft px-3 py-1.5 font-mono text-lg font-bold leading-tight text-holo" data-testid="tv-deal">
                     <span className="flex">{words}</span>
                     <span className="flex items-center gap-2 text-base font-normal text-ink-2">
                       <span className="text-2xl font-bold leading-none tracking-[-0.1em]" aria-label={`speed ${steps} of ${SPEED_STEPS}`} data-testid="tv-deal-speed">
@@ -641,7 +643,7 @@ export function TvAuction({ table, game, auction }: { table: TableView<MuleView>
               {/* The queue may still skip goods, so only the close names what comes next, as the phone does. */}
               {closed ? ` · ${auction.upNext ? `NEXT ${GOOD_NAME[auction.upNext].toUpperCase()}` : 'LAST GOOD'}` : ''}
             </span>
-          </div>
+          </FitHeight>
         </div>
       </TvBody>
     </div>

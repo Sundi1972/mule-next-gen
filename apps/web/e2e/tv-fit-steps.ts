@@ -318,8 +318,9 @@ export async function theMonthEndTvFits(tv: Page, server: MuleServer, code: stri
 /**
  * TV-FIT auction (the walk), with deals put on the board through the server while the room is held, then taken off
  * again: the walk's chat strip shows the newest line only (PM ruling 6 Nov), and the board keeps one size as deals come
- * and go; with nothing trading the help and the room line show whole, with two deals up the newest is whole inside the
- * deal list and an older one is whole or wrapped out of it, and either way nothing runs past the foot.
+ * and go; with nothing trading the help and the room line show whole; with two deals up, both show whole on the screen,
+ * the newest with its speed line and the older on one row (PM ruling 5 Nov, kept 6 Nov: every running deal stays in
+ * sight); and either way nothing runs past the foot.
  */
 export async function theAuctionTvFits(tv: Page, server: MuleServer, code: string): Promise<string> {
   const room = server.registry.get(code);
@@ -357,23 +358,20 @@ export async function theAuctionTvFits(tv: Page, server: MuleServer, code: strin
       check(dealLines === 1, `TV-FIT: while deals run the auction TV shows the newest chat line only, got ${dealLines}`);
       const dealsBoard = await boardHeight();
       check(Math.abs(dealsBoard - helpBoard) <= 1, `TV-FIT: the walk board keeps its size as deals start, ${helpBoard.toFixed(1)} px then ${dealsBoard.toFixed(1)} px`);
-      const rows = await tv.evaluate(() => {
-        const list = document.querySelector('[data-testid=tv-deal]')?.parentElement?.getBoundingClientRect();
-        return [...document.querySelectorAll('[data-testid=tv-deal]')].map((d) => {
-          const b = d.getBoundingClientRect();
-          const whole = !!list && b.top >= list.top - 1 && b.bottom <= list.bottom + 1 && b.left >= list.left - 1 && b.right <= list.right + 1;
-          // A row with no room under the others wraps into the list's second column, which the list's clip hides whole.
-          const away = !!list && (b.left >= list.right - 1 || b.top >= list.bottom - 1);
-          return { whole, away, top: b.top, bottom: b.bottom, left: b.left, list: list ? `${list.left.toFixed(0)},${list.top.toFixed(0)}–${list.right.toFixed(0)},${list.bottom.toFixed(0)}` : 'none' };
-        });
-      });
-      check(rows.length === 2, `TV-FIT: the auction TV lists both deals, got ${rows.length}`);
-      check(rows[0]!.whole, `TV-FIT: the auction TV's newest deal row is whole in its list, at x ${rows[0]!.left.toFixed(1)}, y ${rows[0]!.top.toFixed(1)}–${rows[0]!.bottom.toFixed(1)}, in the list at ${rows[0]!.list}`);
-      for (const [i, r] of rows.entries()) check(r.whole || r.away, `TV-FIT: the auction TV's deal row ${i + 1} is whole in its list or wrapped out of it, at x ${r.left.toFixed(1)}, y ${r.top.toFixed(1)}–${r.bottom.toFixed(1)}, in the list at ${r.list}`);
-      await shownWhole(tv, 'auction (two deals)', ['[data-testid=tv-deal]:first-child', '[data-testid=tv-room-line]']);
+      await fitSettled(tv);
+      // Each row as the table sees it: its words on the screen, and every box above it that clips leaves it whole.
+      const rows = await shownWhole(tv, 'auction (two deals)', ['[data-testid=tv-deal]']);
+      check(rows.length === 2, `TV-FIT: the auction TV shows both running deals, got ${rows.length}`);
+      const forms = await tv.evaluate(() =>
+        [...document.querySelectorAll('[data-testid=tv-deal]')].map((d) => ({ text: (d as HTMLElement).innerText.replace(/\s+/g, ' '), speed: !!d.querySelector('[data-testid=tv-deal-speed]'), height: d.getBoundingClientRect().height, line: parseFloat(getComputedStyle(d).lineHeight) * (d.getBoundingClientRect().height / (d as HTMLElement).offsetHeight) })),
+      );
+      check(forms[0]!.speed, `TV-FIT: the auction TV's newest deal shows its speed line, got "${forms[0]!.text}"`);
+      // One row: no speed line, and no taller than two of its lines (its padding included).
+      check(!forms[1]!.speed && forms[1]!.height < 2 * forms[1]!.line, `TV-FIT: the auction TV's older deal takes one row, got "${forms[1]!.text}" ${forms[1]!.height.toFixed(1)} px high`);
+      await shownWhole(tv, 'auction (two deals)', ['[data-testid=tv-room-line]']);
       const dealsFoot = await nothingPastTheFoot(tv, 'auction (two deals)');
-      const shown = rows.filter((r) => r.whole);
-      return `one chat line on the walk, the board ${helpBoard.toFixed(0)} px with or without deals; the help whole, its foot at y ${helpFoot.toFixed(0)}; ${shown.length} of 2 deal rows shown whole, y ${shown[0]!.top.toFixed(0)}–${shown.at(-1)!.bottom.toFixed(0)}, the foot at y ${dealsFoot.toFixed(0)}`;
+      const side = await theTvScaleHolds(tv, 'auction (two deals)');
+      return `one chat line on the walk, the board ${helpBoard.toFixed(0)} px with or without deals; the help whole, its foot at y ${helpFoot.toFixed(0)}; both deal rows shown whole, y ${rows[0]!.top.toFixed(0)}–${rows[1]!.bottom.toFixed(0)}, the older on one row; fit scales ${side}; the foot at y ${dealsFoot.toFixed(0)}`;
     } finally {
       a.deals = kept;
       (room as unknown as { broadcast(): void }).broadcast();

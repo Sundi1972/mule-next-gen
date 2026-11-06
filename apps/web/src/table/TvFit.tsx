@@ -10,10 +10,10 @@ const REFIT_MS = 120;
  * Its content at full size when it fits, scaled down as a whole when it doesn't, and back up when room returns. While
  * it fits, the content stretches to fill the box.
  *
- * With `gives`, a box inside marked data-fit-gives (planning's news, the auction's deals) takes what room is left and
- * clips, before anything scales, down to what it keeps (data-fit-keep, the newest item); the content is held to the
- * box's height instead of growing past it, so it is measured again as it renders, its content being free to change
- * without a resize. A box marked data-fit-spills does not grow with its content (size containment, as production's
+ * With `gives`, a box inside marked data-fit-gives (planning's news) takes what room is left and clips, before anything
+ * scales, down to what it keeps (data-fit-keep, the newest item); the content is held to the box's height instead of
+ * growing past it, so it is measured again as it renders, its content being free to change without a resize (the
+ * auction's side, whose deals come and go, is measured so for that, and gives nothing: every deal stays in sight). A box marked data-fit-spills does not grow with its content (size containment, as production's
  * map row): what spills past it at the height it would have is height the content still needs.
  */
 export function FitHeight({ className, innerClassName, gives = false, children }: { className?: string; innerClassName?: string; gives?: boolean; children: ReactNode }) {
