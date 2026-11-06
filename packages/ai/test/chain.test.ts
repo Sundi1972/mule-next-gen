@@ -89,7 +89,7 @@ function fedMoneyMaker(state: GameState, mind: Mind): Good | null {
 }
 
 describe('a factory chain (AM-32)', () => {
-  it('B-AC-AM32-1: with Electronics dear, the seat commits to Electronics and builds an upstream mine before any works', () => withChains(() => {
+  it('B-AC-11: with Electronics dear, the seat commits to Electronics and builds an upstream mine before any works', () => withChains(() => {
     const state = development(CHAIN_PLOTS, 2_000);
     const seat = seatOf();
     const installed = playDevelopment(state, seat);
@@ -99,21 +99,21 @@ describe('a factory chain (AM-32)', () => {
     expect(installed.filter((o) => WORKS.includes(o))).toEqual([]);
   }));
 
-  it('B-AC-AM32-1: with its mines standing, the seat builds the Alloy works, and the Electronics works only after it', () => withChains(() => {
+  it('B-AC-11: with its mines standing, the seat builds the Alloy works, and the Electronics works only after it', () => withChains(() => {
     const state = development([{ x: 0, ground: { rareEarth: 4 }, outfit: 'rareEarth' }, { x: 2, ground: { smithore: 4 }, outfit: 'smithore' }, { x: 4 }, { x: 6 }], 2_000);
     const installed = playDevelopment(state, seatOf());
     expect(installed[0], `installed ${installed.join(', ')}`).toBe('alloy');
     expect(installed.slice(1).every((o) => o === 'electronics')).toBe(true);
   }));
 
-  it('B-AC-AM32-1 (FM-chain-dry-link): a link plot that makes nothing adds nothing to the chain, so no mine goes onto dry ground', () => withChains(() => {
+  it('B-AC-11 (FM-chain-dry-link): a link plot that makes nothing adds nothing to the chain, so no mine goes onto dry ground', () => withChains(() => {
     // Rare earth only on ground the seat knows is dry; Smithore ground and plains for the rest.
     const state = development([{ x: 0 }, { x: 2, ground: { smithore: 4 } }, { x: 4 }, { x: 6 }], 2_000);
     const installed = playDevelopment(state, seatOf());
     expect(installed, `installed ${installed.join(', ')}`).not.toContain('rareEarth');
   }));
 
-  it('B-AC-AM32-1: a chain under way is re-drafted on what is left to build: its standing link at running cost, cash for the missing links only', () => withChains(() => {
+  it('B-AC-11: a chain under way is re-drafted on what is left to build: its standing link at running cost, cash for the missing links only', () => withChains(() => {
     // The Smithore mine stands on thin ground (one a month, the Alloy works wants two), so Smithore is still short; the
     // cash pays the works, the Rare earth mine and the Alloy works, not a second Smithore mine as well.
     const state = development([{ x: 0, ground: { rareEarth: 4 } }, { x: 2, ground: { smithore: 1 }, outfit: 'smithore' }, { x: 4 }, { x: 6 }], 2_000);
@@ -123,7 +123,7 @@ describe('a factory chain (AM-32)', () => {
     expect(redraft.moneyMaker).toBe('electronics');
   }));
 
-  it('B-AC-AM32-1: a seat short of cash keeps its chain\'s standing links off the land auction while the chain is its plan', () => withChains(() => {
+  it('B-AC-11: a seat short of cash keeps its chain\'s standing links off the land auction while the chain is its plan', () => withChains(() => {
     // Planning, broke: a Smithore mine on thin ground (worth little at the market) is what a short seat lists first.
     const state = development([{ x: 0, ground: { smithore: 1 }, outfit: 'smithore' }, { x: 2, ground: { food: 2 }, outfit: 'food' }, { x: 4, outfit: 'energy' }], 2_000);
     state.phase = 'planning';
@@ -142,7 +142,7 @@ describe('a factory chain (AM-32)', () => {
     expect(installed.filter((o) => WORKS.includes(o))).toEqual([]);
   }));
 
-  it('B-AC-AM32-1 negative: a price shock on Electronics drops the chain at the next draft point', () => withChains(() => {
+  it('B-AC-11 negative: a price shock on Electronics drops the chain at the next draft point', () => withChains(() => {
     const state = development(CHAIN_PLOTS, 2_000);
     const seat = seatOf();
     playDevelopment(state, seat);
