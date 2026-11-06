@@ -7,16 +7,16 @@
 ## Goals: from spec §10 (AM-1). Reference, do not restate.
 
 AM-1 has no §0 of its own. Its goals are Heiko's four asks quoted at the head of §10, each proved by its B-AC in
-§10 "Acceptance criteria". The auto-trade goals G-1 and G-2 (§0) are already delivered.
+§10 "Acceptance criteria". The auto-trade goals G-1 and G-2 (§0) are already delivered; AM-1's four goals are numbered G-3 to G-6 here.
 
 | Goal | Who benefits | Value delivered | Proof | First delivered in |
 |------|--------------|-----------------|-------|--------------------|
-| G-B · selling stops at your need; selling short is a conscious hold (RULE-4) | the player selling a surplus | no accidental shortage next month | B-AC-B1, B-AC-B2 | **PR-1** |
-| G-C · flip sides within the walk (RULE-5) | any player who over-sold | buy back without waiting a month | B-AC-C1 | **PR-1** |
-| G-D · rest zones and hard edges (RULE-6) | every player standing still | never in a trade by accident | B-AC-D1, B-AC-D2 | PR-2 |
-| G-E · bidding past a sold-out store (RULE-7) | a buyer short of a sold-out good | can bid a seller out | B-AC-E1 | PR-3 |
+| G-3 (B) · selling stops at your need; selling short is a conscious hold (RULE-4) | the player selling a surplus | no accidental shortage next month | B-AC-B1, B-AC-B2 | **PR-1** |
+| G-4 (C) · flip sides within the walk (RULE-5) | any player who over-sold | buy back without waiting a month | B-AC-C1 | **PR-1** |
+| G-5 (D) · rest zones and hard edges (RULE-6) | every player standing still | never in a trade by accident | B-AC-D1, B-AC-D2 | **PR-2** |
+| G-6 (E) · bidding past a sold-out store (RULE-7) | a buyer short of a sold-out good | can bid a seller out | B-AC-E1 | **PR-2** |
 
-PR-2 and PR-3 come after PR-1 for a real reason: all three edit the same walk code (`walk.ts::stepWalker`/`stepBoard`), and RULE-7's sellers' zone is defined by RULE-6's fixed lines. PR-1 is useful on its own the day it lands.
+PR-2 comes after PR-1 because both edit the same walk code (`walk.ts::stepWalker`/`stepBoard`); PR-1 is useful on its own the day it lands. RULE-6 and RULE-7 ship together in PR-2: both are the board's zones around S and B, and RULE-7's sellers' zone is RULE-6's.
 
 **Non-goals (spec §0), lifted verbatim. A task serving one is cut:**
 - the land auction (its own rules, unchanged); the board's look (WS6's mock); new AI strategy beyond playing the new flow; balancing the speed curve (named values, tuned after play).
@@ -36,6 +36,9 @@ PR-2 and PR-3 come after PR-1 for a real reason: all three edit the same walk co
 - Not in AM-1: §0.1 (no thin baseline recorded), §4 (no failure/ops rows: an engine rule has none), §5 (no data migration: the record's shape is unchanged, per "What the server sends"), §7 (no spikes).
 - N/A claims I checked: "record shape unchanged" holds. `held` and `downSince` derive from recorded `walk` intents and board ticks, and T-AC-1′ proves it.
 - C1–C5 (§1) were built and merged before AM-1: <!-- plan-check: no-task C1 C2 C3 C4 C5 — the auto-trade changes, built and merged before AM-1 -->
+- The auto-trade's own ACs are proved and merged: <!-- plan-check: no-task B-AC-1 B-AC-2 B-AC-3 B-AC-4 T-AC-2 T-AC-10 — the auto-trade's ACs, built and merged before AM-1 -->
+- A-6 is the UX-audit item the spec supersedes, not a change: <!-- plan-check: no-task A-6 — superseded audit item, not a change -->
+- AM-1's ACs are lettered (B-AC-B1 …), which plan-check's pattern does not match: checked by hand, each in a `- [ ]` step (self-review below).
 
 ---
 
@@ -47,20 +50,19 @@ Per §10 "What the server sends" and AM-2 items 2–3. Each PR adds only its own
 |---|---|
 | `WalkerView.held?: true` (protocol), `Walker.held?`, `Walker.downSince?` (engine `types.ts`) | PR-1 |
 | `AuctionView.zones: { buyersTop, sellersBottom, lo, hi }`, `LiveAuction.zones` | PR-2 |
-| `AuctionView` store selling line while sold out = highest active bid, `bid: true` flag | PR-3 |
-| WALK: `needStop`, `shortHoldMs` (PR-1); `soldOutBidding` (PR-3) | as listed |
+| `AuctionView` store selling line while sold out = highest active bid, `bid: true` flag | PR-2 |
+| WALK: `needStop`, `shortHoldMs` (PR-1); `soldOutBidding` (PR-2) | as listed |
 
 ## PR decomposition
 
 Lane PRs go straight to `feat/strategist` (the PM batches them). There is one PR per wave, and the waves are serial,
-because every PR edits the walk code.
+because both PRs edit the walk code.
 
 | PR | Sub-branch | Scope | ACs verified | Contracts produced | Contracts consumed | Frontend touched? |
 |----|------------|-------|--------------|--------------------|--------------------|-------------------|
-| PR-0 | `ws3-auction-rules-b-e` | spec AM-1 + AM-2, this plan (docs) | — | — | — | No |
+| PR-0 | `ws3-auction-rules-b-e` | spec AM-1 + AM-2, this plan, and the stale "(soon)" at `development.html:126` (docs) | — | — | — | No |
 | PR-1 | `ws3-need-stop` | Tasks 1.1–1.8: RULE-4, RULE-5's e2e | B-AC-B1, B-AC-B2, B-AC-B3, B-AC-C1, T-AC-1′, T-AC-2′ (needStop) | `held`, `downSince`, WALK.needStop/shortHoldMs | auctionNeed (#439) | Yes |
-| PR-2 | `ws3-rest-zones` | Tasks 2.1–2.6: RULE-6 | B-AC-D1, B-AC-D2 | `zones` | `held` | Yes |
-| PR-3 | `ws3-sold-out-bids` | Tasks 3.1–3.7: RULE-7 | B-AC-E1, T-AC-E2, T-AC-2′ (soldOutBidding) | line `bid` flag, WALK.soldOutBidding | `zones` | Yes |
+| PR-2 | `ws3-board-zones` | Tasks 2.1–2.6 (RULE-6) and 3.1–3.7 (RULE-7): the board's zones around S and B | B-AC-D1, B-AC-D2, B-AC-E1, T-AC-E2, T-AC-2′ (soldOutBidding) | `zones`, line `bid` flag, WALK.soldOutBidding | `held` | Yes |
 
 **Per-PR authority** (each PR, in its own wave):
 - `may_edit`: `packages/engine/src/{walk,auction,types,config}.ts` (the WALK block only), `packages/engine/test/*`,
@@ -78,10 +80,10 @@ because every PR edits the walk code.
 
 | path | touched by | resolution |
 |---|---|---|
-| `walk.ts`, `auction.ts`, `types.ts`, WALK, protocol, `mule-game.ts` | PR-1, PR-2, PR-3 | **serialised** (PR-n+1 cut from trunk after PR-n merges) |
-| `phone/Auction.tsx`, `AuctionParts.tsx`, `auction-steps.ts`, `goods-auction.html` | PR-1, PR-2, PR-3 | **serialised** |
-| `hands/auction.ts` (WS1) | PR-1, PR-3 | **serialised**, each a named edit |
-| `WalkBoard.tsx` (WS4) | PR-2, PR-3 | **serialised**, each a named edit |
+| `walk.ts`, `auction.ts`, `types.ts`, WALK, protocol, `mule-game.ts` | PR-1, PR-2 | **serialised** (PR-2 cut from trunk after PR-1 merges) |
+| `phone/Auction.tsx`, `AuctionParts.tsx`, `auction-steps.ts`, `goods-auction.html` | PR-1, PR-2 | **serialised** |
+| `hands/auction.ts` (WS1) | PR-1, PR-2 | **serialised**, each a named edit |
+| `WalkBoard.tsx` (WS4) | PR-1 (if the KEEPS mark needs it), PR-2 | **serialised**, each a named edit |
 
 **Why each wave is safe:** one PR per wave, and the waves are serial, so there is no parallel contention.
 
@@ -132,7 +134,7 @@ because every PR edits the walk code.
 **ACs verified:** B-AC-B1/B2 at the screen (driven in 1.7)
 
 - [ ] **Step 1: Fill `WalkerView.held`** in `mule-game.ts` from the walker. Write the failing server test `B-AC-B1 (view): …`: the seller's own view and every other view carry `held: true` once stopped.
-- [ ] **Step 2: Phone and TV, built to the mock:** `git show cde3ff61:design/mocks/auction-rules/src/Screens.tsx`, `PhoneSale` and `TvSale`. The KEEPS mark and the rail line "To sell more, hold ▼: you'd be short next month" are the mock's words. They are wired in `phone/Auction.tsx` and `AuctionParts.tsx` (`may_edit_content`). If the mark needs a change in `WalkBoard.tsx`, write it as a separate named-edit commit for WS4.
+- [ ] **Step 2: Phone and TV, built to the mock:** `git show cde3ff61:design/mocks/auction-rules/src/Screens.tsx`, `PhoneSale` and `TvSale`. The KEEPS mark and the rail line are the mock's, in the words of WS6's "hold" copy ruling (AM-2 item 7); if the two disagree, ask the PM for WS6, don't choose. They are wired in `phone/Auction.tsx` and `AuctionParts.tsx` (`may_edit_content`). If the mark needs a change in `WalkBoard.tsx`, write it as a separate named-edit commit for WS4.
 - [ ] **Step 3: `pnpm --filter @mule/web test` and typecheck.** Expected: green.
 - [ ] **Step 4: Commit.**
 
@@ -140,19 +142,19 @@ because every PR edits the walk code.
 
 **Spec:** §10 RULE-4 "AI" bullet; AM-2 item 4
 
-- [ ] **Step 1: Write the failing AI test `RULE-4 AI: …`** in `packages/ai/test/`. A held AI seller whose strategist target is no more than its surplus never presses ▼ again. One whose target is larger holds ▼ for `shortHoldMs` and sells on.
+- [ ] **Step 1: Write the failing AI test `RULE-4 AI: …`** in `packages/ai/test/`. A held AI seller whose keep floor (`aim`/`steer`, AM-2 item 4) is at or above its need never presses ▼ again. One whose floor is below its need holds ▼ for `shortHoldMs` and sells on.
 - [ ] **Step 2: Implement in `hands/auction.ts`** as ONE commit titled "named edit (WS1)". Send its SHA to the PM for WS1's OK before the PR leaves draft.
 - [ ] **Step 3: `cd packages/ai && npx vitest run`.** Expected: green, FM-hurry-margin included. A seed-searched test that moves gets re-searched against trunk merged in.
 
 ### Task 1.7: front to back (B-AC-B1, B-AC-B2, B-AC-C1)
 
-- [ ] **Step 1: Add the e2e steps** beside `readTheGoodsWalk` in `apps/web/e2e/auction-steps.ts`. B1: a phone seller walks to the store's line and stops, the phone shows the KEEPS mark, and the server's stock agrees. B2: hold ▼ 1 s and units sell on, with the server's count checked; a tap sells nothing. C1: a seller trading at the store's line taps Buy; trading stops at once, the server has her as a buyer at the bottom edge, and walking up she buys. Negative: Sell holding none is refused. Each check reads the server truth (`untilServer`), not only the screen.
+- [ ] **Step 1: Add the e2e steps** beside `readTheGoodsWalk` in `apps/web/e2e/auction-steps.ts`. B-AC-B1: a phone seller walks to the store's line and stops, the phone shows the KEEPS mark, and the server's stock agrees. B-AC-B2: hold ▼ 1 s and units sell on, with the server's count checked; a tap sells nothing. B-AC-C1: a seller trading at the store's line taps Buy; trading stops at once, the server has her as a buyer at the bottom edge, and walking up she buys. Negative: Sell holding none is refused. Each check reads the server truth (`untilServer`), not only the screen.
 - [ ] **Step 2: Run** `cd apps/web && npx vite build && npx tsx e2e/auction-steps.ts` (it owns its server on port 0). Expected: exit 0.
 - [ ] **Step 3: Commit.**
 
 ### Task 1.8: T-AC-2′ sim, rulebook
 
-- [ ] **Step 1: `pnpm sim -- --games 40 --seed 101`** on trunk and on the branch, plus `--set WALK.needStop=false` on the branch as the control. Put money, stock and shortages per seat, and units sold to the store, in the PR body, and send them to WS1 via the PM.
+- [ ] **Step 1: T-AC-2′ (needStop): `pnpm sim -- --games 40 --seed 101`** on trunk and on the branch, plus `--set WALK.needStop=false` on the branch as the control. Put money, stock and shortages per seat, and units sold to the store, in the PR body, and send them to WS1 via the PM.
 - [ ] **Step 2: Rulebook:** in `docs/rulebook/goods-auction.html` §B and §C, move the pill from Designed to "In the game" with the lane (WS3) and the PR number; describe the rules as built, with the example's numbers taken from the config. Run `node docs/rulebook/build-index.mjs`.
 - [ ] **Step 3: Commit.**
 
@@ -209,13 +211,9 @@ because every PR edits the walk code.
 
 - [ ] **Step 1:** Run `pnpm sim` before and after, and put the auction lines and units sold to the store in the PR body. RULE-6 has no config switch; the hard edges are the rule.
 
-### PR-2 merge gate
-
-Same lines as PR-1's, with B-AC-D1 and D2, and WS4's OK on the `WalkBoard.tsx` SHA.
-
 ---
 
-## PR-3: bidding past a sold-out store (RULE-7)
+## PR-2, continued: bidding past a sold-out store (RULE-7)
 
 ### Task 3.1: config and contract
 
@@ -253,12 +251,12 @@ Same lines as PR-1's, with B-AC-D1 and D2, and WS4's OK on the `WalkBoard.tsx` S
 
 ### Task 3.7: T-AC-2′ (soldOutBidding), rulebook §E
 
-- [ ] **Step 1:** Run `pnpm sim -- --games 40 --seed 101` before and after, with `--set WALK.soldOutBidding=false` as the control, and send the results to WS1 via the PM.
+- [ ] **Step 1: T-AC-2′ (soldOutBidding):** Run `pnpm sim -- --games 40 --seed 101` before and after, with `--set WALK.soldOutBidding=false` as the control, and send the results to WS1 via the PM.
 - [ ] **Step 2:** In `goods-auction.html` §E, move the pill to "In the game", then run `build-index.mjs`. **Step 3:** Commit.
 
-### PR-3 merge gate
+### PR-2 merge gate
 
-Same lines as PR-1's, with B-AC-E1, T-AC-E2 and T-AC-2′, and the WS1 and WS4 OKs on their SHAs.
+Same lines as PR-1's, with B-AC-D1, B-AC-D2, B-AC-E1, T-AC-E2 and T-AC-2′ (soldOutBidding), and the WS1 and WS4 OKs on their SHAs.
 
 ---
 
@@ -270,4 +268,4 @@ Same lines as PR-1's, with B-AC-E1, T-AC-E2 and T-AC-2′, and the WS1 and WS4 O
 - [ ] Base `feat/strategist` @ `<sha at PR-1's cut>` green: `pnpm typecheck` 0 · engine · ai · server · web · ui · tabletop green ← run at the cut and paste the numbers
 - [x] Repo access: lane allow rules for `gh pr` (5 Nov)
 - [x] No spikes
-- [ ] Effort to the PM: three PRs, each about a day of agent time plus its WS1/WS4 OK round-trips
+- [ ] Effort to the PM: two PRs, about a day and two days of agent time, plus their WS1/WS4 OK round-trips

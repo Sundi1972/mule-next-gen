@@ -416,10 +416,14 @@ item corrects a claim in §10 that the code no longer bears out; none changes a 
 4. **RULE-5's AI line is false.** The AI hand does switch sides mid-walk: a seller that `oversells()` declares
    buyer (`hands/auction.ts`). That stays (it is WS1's, and RULE-5 allows it); `held` carries over the switch as
    RULE-5 says.
+   RULE-4's "AI" bullet names `chooseAtLine`, which is gone: the hand now plans with `aim` and `steer`, selling down to
+   its keep floor. "Its target" reads as that floor: held, it presses ▼ again only if its keep floor is below its need.
 5. **RULE-5 is already built end to end** (engine `declareRole` in the walk; the phone's Buy/Sell switch during the
    walk, `phone/Auction.tsx`). Only B-AC-C1's front-to-back step is new.
 6. **The mock is not on trunk.** WS6's `design/mocks/auction-rules` is at cde3ff61 on `ws6-mock-auction-rules`;
    screens are built on a base that contains it.
-7. **Owners, per SEAMS:** the board drawing is `packages/ui` `WalkBoard` (WS4; the zones and the line label are a
+7. **Words follow WS6's copy ruling of 6 Nov:** on the auction's screens, `auctionNeed` is "hold" (the status column
+   *Hold*, "You keep 3 of the 6 Food you must hold"). RULE-4's rail line takes the same word.
+8. **Owners, per SEAMS:** the board drawing is `packages/ui` `WalkBoard` (WS4; the zones and the line label are a
    named edit there). `phone/Auction.tsx`, `AuctionParts.tsx`, protocol, `mule-game.ts`, `walk.ts`, `auction.ts`,
    `types.ts` and WALK are WS3's. `hands/auction.ts` is WS1's (named edit). `apps/web/e2e/auction-steps.ts` is WS3's.
