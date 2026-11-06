@@ -9,14 +9,14 @@
   --ink:#1d2233; --ink-soft:#545b70; --paper:#f5f6f9; --panel:#ffffff; --line:#d9dce5; --accent:#b5651d; --accent-soft:#f6e7d6;
   --font-display:"Chakra Petch","Trebuchet MS",sans-serif; --font-body:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
   --bg:var(--paper); --surface:var(--panel); --ink2:var(--ink-soft); --muted:#7a8094; --grid:#e3e5ec; --axis:#b9bdcb; --ring:rgba(29,34,51,0.12);
-  --s1:#1f5fa8; --s2:#b5651d; --s3:#2f7d4f; --bandA:rgba(29,34,51,0.05); --bandB:rgba(29,34,51,0); --tol:rgba(31,95,168,0.08); --rec:var(--accent); }
+  --s1:#1f5fa8; --s2:#b5651d; --s3:#2f7d4f; --c-food:#2f7d4f; --c-water:#1f5fa8; --c-energy:#c08a12; --c-smithore:#6b4fa0; --c-crystite:#a3471f; --c-rare:#3c8a95; --bandA:rgba(29,34,51,0.05); --bandB:rgba(29,34,51,0); --tol:rgba(31,95,168,0.08); --rec:var(--accent); }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { color-scheme: dark;
   --ink:#e4e7f0; --ink-soft:#a3a9bb; --paper:#141722; --panel:#1c2030; --line:#2f3448; --accent:#e8a35c; --accent-soft:#3a2b1d;
-  --muted:#8d93a6; --grid:#2a2f42; --axis:#4a5068; --ring:rgba(228,231,240,0.14); --s1:#8ab8f0; --s2:#e8a35c; --s3:#7fd3a0;
+  --muted:#8d93a6; --grid:#2a2f42; --axis:#4a5068; --ring:rgba(228,231,240,0.14); --s1:#8ab8f0; --s2:#e8a35c; --s3:#7fd3a0; --c-food:#7fd3a0; --c-water:#8ab8f0; --c-energy:#f0c85c; --c-smithore:#c2a8ef; --c-crystite:#f0a07c; --c-rare:#7fd0da;
   --bandA:rgba(228,231,240,0.06); --tol:rgba(138,184,240,0.12); } }
 :root[data-theme="dark"] { color-scheme: dark;
   --ink:#e4e7f0; --ink-soft:#a3a9bb; --paper:#141722; --panel:#1c2030; --line:#2f3448; --accent:#e8a35c; --accent-soft:#3a2b1d;
-  --muted:#8d93a6; --grid:#2a2f42; --axis:#4a5068; --ring:rgba(228,231,240,0.14); --s1:#8ab8f0; --s2:#e8a35c; --s3:#7fd3a0;
+  --muted:#8d93a6; --grid:#2a2f42; --axis:#4a5068; --ring:rgba(228,231,240,0.14); --s1:#8ab8f0; --s2:#e8a35c; --s3:#7fd3a0; --c-food:#7fd3a0; --c-water:#8ab8f0; --c-energy:#f0c85c; --c-smithore:#c2a8ef; --c-crystite:#f0a07c; --c-rare:#7fd0da;
   --bandA:rgba(228,231,240,0.06); --tol:rgba(138,184,240,0.12); }
 * { box-sizing: border-box; }
 body { margin:0; background:var(--paper); color:var(--ink); font:16px/1.6 var(--font-body); }
@@ -30,7 +30,14 @@ figcaption { color: var(--ink-soft); font-size: 14px; margin-top: 6px; }
 .chart { width: 100%; height: auto; display: block; }
 .grid { stroke: var(--grid); stroke-width: 1; } .axis { stroke: var(--axis); stroke-width: 1; }
 .tick { fill: var(--muted); font-size: 11px; } .axislabel { fill: var(--ink2); font-size: 12px; } .lbl { fill: var(--ink); font-size: 12px; }
-.bandname { fill: var(--muted); font-size: 11px; } .barv { fill: #fff; font-size: 12px; font-weight: 600; } .bandA { fill: var(--bandA); } .bandB { fill: var(--bandB); } .tol { fill: var(--tol); }
+.bandname { fill: var(--muted); font-size: 11px; }
+.lane { fill: var(--bandA); stroke: var(--line); } .lanet { fill: var(--ink2); font-size: 12px; font-weight: 600; }
+.effline { fill: none; stroke: var(--s2); stroke-width: 1.8; stroke-dasharray: 5 4; } .effhead { fill: var(--s2); } .efflbl { fill: var(--s2); font-size: 11px; }
+.gl { fill: none; stroke: var(--ink2); stroke-opacity: 0.7; stroke-width: 1.4; } .gl.strong { stroke-opacity: 0.9; stroke-width: 2; }
+.g0 { stroke: var(--c-food); } .g1 { stroke: var(--c-water); } .g2 { stroke: var(--c-energy); } .g3 { stroke: var(--c-smithore); }
+.g4 { stroke: var(--c-crystite); } .g5 { stroke: var(--c-rare); } .g6, .g7, .g8 { stroke: var(--ink2); stroke-dasharray: 4 3; }
+.nodet.sm { font-size: 12px; }
+.matrix tbody th { white-space: nowrap; } .today { color: var(--ink2); font-weight: 600; } .prop { color: var(--s1); font-weight: 600; } .barv { fill: #fff; font-size: 12px; font-weight: 600; } .bandA { fill: var(--bandA); } .bandB { fill: var(--bandB); } .tol { fill: var(--tol); }
 .hit { fill: transparent; } .hit:hover { fill: var(--ring); }
 .node { fill: var(--panel); stroke: var(--axis); stroke-width: 1.5; } .node.accent { fill: var(--accent-soft); stroke: var(--accent); }
 .nodet { fill: var(--ink); font-size: 14px; font-weight: 600; } .nodes { fill: var(--ink2); font-size: 11px; }
@@ -50,7 +57,7 @@ th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line
 <main>
 <p class="sub">Colony economy · a proposal for you to approve · nothing is built yet</p>
 <h1>How the colony eats, and what the store charges</h1>
-<p>Four parts that work as one: what each kind of plot uses, what the whole colony needs, how the store prices a good from that, and how colonists feel when they go short. 12 decisions for you are at the end, each with a recommendation.</p>
+<p>Four parts that work as one: what each kind of plot uses, what the whole colony needs, how the store prices a good from that, and how colonists feel when they go short. 22 decisions for you are at the end, each with a recommendation.</p>
 
 <h2>What you'll see at the table</h2>
 <div class="lead">
@@ -75,8 +82,10 @@ th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line
 
 </div>
 
-<div class="decision"><h3>First: the colony is underfed today</h3>
-<p>In ten simulated games of today's colony, the store runs out of Food for players in about nine months of ten, and colonists go short of Food or Water in 91 of 120 months. Every rule below reads that shortage more honestly than today, so on today's supply each of them makes the colony look worse, not better. That is why the first decision asks to bring the hardship rules in together with more supply, tuned in one pass.</p></div>
+<div class="decision"><h3>First: the colony is short of power, and that empties its farms</h3>
+<p>Two teams measured today's colony over ten simulated games and found the same thing. It has enough farms and wells; it is short of <b>Energy</b>. There are no power plants until about month four, the colony is 40% short of Energy over a game, and 7 to 11 plots stand switched off every month from then on. When the power runs out, wells are switched off before farms, so the Water goes next, and then the farms, short of both, make about a quarter of what they could: a median farm makes 1 Food a month where it could make 4. By month twelve the colony has 14 farms where 6 would feed everyone if they were powered and watered.</p>
+<p>On top of that, Food loses half its weight every month in a player's stock, and a player counts as hungry when they hold too little <i>after</i> that loss, so most "hungry" months are spoilage, not starvation. And colonists still pay wages today: late in a game they go short beside a store holding Food they can't afford.</p>
+<p>So every rule below reads a real shortage more honestly than today, and on today's power supply each of them makes the colony look worse, not better. That is why the first decision asks to bring the hardship rules in together with more supply, tuned in one pass, starting with power.</p></div>
 
 <h2>How it fits together</h2>
 <figure><svg viewBox="0 0 680 330" role="img" aria-labelledby="fl-t fl-d" class="chart"><title id="fl-t">How the colony's economy fits together</title><desc id="fl-d">Plots produce. Players' households and crews eat from players' own stock; colonists eat from the store first. The store compares what it holds with what everyone needs, which sets its price, and the colonists' shortfall sets their mood.</desc>
@@ -115,6 +124,72 @@ th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line
 </tbody></table></div>
 <p>Three estates, today's needs → the proposal's (Food / Water a month): three farms and a well, 3 / 2 → 3 / 3; two Smithore mines, a Crystite mine and a power plant, 3 / 2 → 4 / 3; two works and two Smithore mines, 4 / 2 → 4 / 3, and their Energy 7 → 10. Crews still eat from their own player's stock, never from the store: feeding the crew or selling the Food stays the player's choice.</p>
 
+<h2>Every good, from the ground to its uses</h2>
+<figure><svg viewBox="0 0 680 450" role="img" aria-labelledby="ag-t ag-d" class="chart"><title id="ag-t">Every good, from the ground to its uses</title><desc id="ag-d">Farms, wells and plants feed households, crews, colonists and every working plot. Smithore goes to Alloy works, to the store's MULE building and to the ship. Rare earth and Alloy make Electronics. Food, Water and Energy make Medicine. Alloy and Electronics go to colony buildings and the ship; Medicine cures sick players; Crystite goes to the ship and one colony building.</desc>
+<defs><marker id="ah4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="arrowhead"/></marker></defs>
+<text x="91" y="18" text-anchor="middle" class="axislabel">From the ground</text><text x="337" y="18" text-anchor="middle" class="axislabel">Made from other goods</text><text x="587" y="18" text-anchor="middle" class="axislabel">Used by</text><path d="M166,60 C338,60 338,50 510,50" class="gl g0" marker-end="url(#ah4)"/><path d="M166,60 C338,60 338,108 510,108" class="gl g0" marker-end="url(#ah4)"/><path d="M166,60 C213,60 213,276 260,276" class="gl g0" marker-end="url(#ah4)"/><path d="M166,124 C338,124 338,50 510,50" class="gl g1" marker-end="url(#ah4)"/><path d="M166,124 C338,124 338,108 510,108" class="gl g1" marker-end="url(#ah4)"/><path d="M166,124 C213,124 213,276 260,276" class="gl g1" marker-end="url(#ah4)"/><path d="M166,188 C338,188 338,166 510,166" class="gl g2" marker-end="url(#ah4)"/><path d="M166,188 C213,188 213,92 260,92" class="gl g2" marker-end="url(#ah4)"/><path d="M166,188 C213,188 213,184 260,184" class="gl g2" marker-end="url(#ah4)"/><path d="M166,188 C213,188 213,276 260,276" class="gl g2" marker-end="url(#ah4)"/><path d="M166,252 C213,252 213,92 260,92" class="gl g3" marker-end="url(#ah4)"/><path d="M166,252 C213,252 213,368 260,368" class="gl g3" marker-end="url(#ah4)"/><path d="M166,252 C338,252 338,398 510,398" class="gl g3" marker-end="url(#ah4)"/><path d="M166,316 C338,316 338,398 510,398" class="gl g4" marker-end="url(#ah4)"/><path d="M166,316 C338,316 338,282 510,282" class="gl g4" marker-end="url(#ah4)"/><path d="M166,380 C213,380 213,184 260,184" class="gl g5" marker-end="url(#ah4)"/><path d="M166,380 C338,380 338,398 510,398" class="gl g5" marker-end="url(#ah4)"/><path d="M412,92 C461,92 461,282 510,282" class="gl g6" marker-end="url(#ah4)"/><path d="M412,92 C461,92 461,398 510,398" class="gl g6" marker-end="url(#ah4)"/><path d="M412,184 C461,184 461,282 510,282" class="gl g7" marker-end="url(#ah4)"/><path d="M412,184 C461,184 461,398 510,398" class="gl g7" marker-end="url(#ah4)"/><path d="M412,276 C461,276 461,340 510,340" class="gl g8" marker-end="url(#ah4)"/><path d="M412,276 C461,276 461,398 510,398" class="gl g8" marker-end="url(#ah4)"/><path d="M412,368 C461,368 461,224 510,224" class="gl g3" marker-end="url(#ah4)"/><path d="M337,112 C337,112 337,162 337,162" class="gl strong" marker-end="url(#ah4)"/><text x="343" y="142" class="flowlbl">Alloy</text><rect x="16" y="40" width="150" height="40" rx="8" class="node"/><text x="91" y="64" text-anchor="middle" class="nodet sm">Food (farm)</text><rect x="16" y="104" width="150" height="40" rx="8" class="node"/><text x="91" y="128" text-anchor="middle" class="nodet sm">Water (well)</text><rect x="16" y="168" width="150" height="40" rx="8" class="node"/><text x="91" y="192" text-anchor="middle" class="nodet sm">Energy (plant)</text><rect x="16" y="232" width="150" height="40" rx="8" class="node"/><text x="91" y="256" text-anchor="middle" class="nodet sm">Smithore (mine)</text><rect x="16" y="296" width="150" height="40" rx="8" class="node"/><text x="91" y="320" text-anchor="middle" class="nodet sm">Crystite (mine)</text><rect x="16" y="360" width="150" height="40" rx="8" class="node"/><text x="91" y="384" text-anchor="middle" class="nodet sm">Rare earth (mine)</text><rect x="262" y="72" width="150" height="40" rx="8" class="node accent"/><text x="337" y="96" text-anchor="middle" class="nodet sm">Alloy works</text><rect x="262" y="164" width="150" height="40" rx="8" class="node accent"/><text x="337" y="188" text-anchor="middle" class="nodet sm">Electronics works</text><rect x="262" y="256" width="150" height="40" rx="8" class="node accent"/><text x="337" y="280" text-anchor="middle" class="nodet sm">Medicine lab</text><rect x="262" y="348" width="150" height="40" rx="8" class="node accent"/><text x="337" y="372" text-anchor="middle" class="nodet sm">The store builds MULEs</text><rect x="512" y="30" width="150" height="40" rx="8" class="node"/><text x="587" y="54" text-anchor="middle" class="nodet sm">Households and crews</text><rect x="512" y="88" width="150" height="40" rx="8" class="node"/><text x="587" y="112" text-anchor="middle" class="nodet sm">Colonists</text><rect x="512" y="146" width="150" height="40" rx="8" class="node"/><text x="587" y="170" text-anchor="middle" class="nodet sm">Every working plot</text><rect x="512" y="204" width="150" height="40" rx="8" class="node"/><text x="587" y="228" text-anchor="middle" class="nodet sm">Outfitting a plot (MULE)</text><rect x="512" y="262" width="150" height="40" rx="8" class="node"/><text x="587" y="286" text-anchor="middle" class="nodet sm">Colony buildings, filters</text><rect x="512" y="320" width="150" height="40" rx="8" class="node"/><text x="587" y="344" text-anchor="middle" class="nodet sm">Sick players</text><rect x="512" y="378" width="150" height="40" rx="8" class="node"/><text x="587" y="402" text-anchor="middle" class="nodet sm">The export ship</text></svg><div class="legend"><span class="key"><i style="background:var(--c-food)"></i>Food</span><span class="key"><i style="background:var(--c-water)"></i>Water</span><span class="key"><i style="background:var(--c-energy)"></i>Energy</span><span class="key"><i style="background:var(--c-smithore)"></i>Smithore</span><span class="key"><i style="background:var(--c-crystite)"></i>Crystite</span><span class="key"><i style="background:var(--c-rare)"></i>Rare earth</span><span class="key"><i style="background:var(--ink2)"></i>Alloy, Electronics, Medicine, MULEs (dashed)</span></div><figcaption>Recipes: an Alloy works turns 2 Smithore and 2 Energy into 2 Alloy; an Electronics works turns 1 Rare earth, 1 Alloy and 1 Energy into 1 Electronics; a Medicine lab turns 1 Food, 1 Water and 1 Energy into 2 Medicine; the store builds a MULE from 1 Smithore. Colony buildings take Alloy, Electronics and, for the observatory, Crystite.</figcaption></figure>
+
+<h2>What a shortage does, at the plot, the player and the colony</h2>
+<figure><svg viewBox="0 0 680 470" role="img" aria-labelledby="ch-t ch-d" class="chart"><title id="ch-t">What runs short, and what it does, at plot, player and colony level</title><desc id="ch-d">Goods flow down from plots to the player's stock, where the household and crews eat, and on to the store, where colonists eat. Shortages flow back up as effects: a hungry or thirsty crew works slower, a hungry player walks slower and falls sick more easily, a plot without Energy switches off, hungry colonists lose mood and leave, and a short store raises its price.</desc>
+<defs><marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="arrowhead"/></marker>
+<marker id="ah3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="effhead"/></marker></defs>
+<rect x="8" y="8" width="664" height="130" rx="12" class="lane"/><text x="22" y="28" class="lanet">Plot</text><rect x="8" y="150" width="664" height="150" rx="12" class="lane"/><text x="22" y="170" class="lanet">Player</text><rect x="8" y="312" width="664" height="150" rx="12" class="lane"/><text x="22" y="332" class="lanet">Colony</text>
+<g><rect x="40" y="50" width="150" height="54" rx="9" class="node"/><text x="115" y="82" text-anchor="middle" class="nodet">Energy for the plot</text></g>
+<g><rect x="270" y="50" width="150" height="54" rx="9" class="node"/><text x="345" y="74" text-anchor="middle" class="nodet">The plot works</text><text x="345" y="90" text-anchor="middle" class="nodes">Food, Water, mines, works</text></g>
+<g><rect x="490" y="50" width="150" height="54" rx="9" class="node"/><text x="565" y="74" text-anchor="middle" class="nodet">Its crew</text><text x="565" y="90" text-anchor="middle" class="nodes">eats, drinks by plot type</text></g>
+<g><rect x="40" y="196" width="150" height="54" rx="9" class="node accent"/><text x="115" y="220" text-anchor="middle" class="nodet">The player</text><text x="115" y="236" text-anchor="middle" class="nodes">walks, may fall sick</text></g>
+<g><rect x="270" y="196" width="150" height="54" rx="9" class="node"/><text x="345" y="220" text-anchor="middle" class="nodet">Household</text><text x="345" y="236" text-anchor="middle" class="nodes">eats 2, drinks 1</text></g>
+<g><rect x="490" y="196" width="150" height="54" rx="9" class="node"/><text x="565" y="228" text-anchor="middle" class="nodet">Player's stock</text></g>
+<g><rect x="40" y="360" width="150" height="54" rx="9" class="node accent"/><text x="115" y="384" text-anchor="middle" class="nodet">Price and mood</text><text x="115" y="400" text-anchor="middle" class="nodes">and how many stay</text></g>
+<g><rect x="270" y="360" width="150" height="54" rx="9" class="node"/><text x="345" y="384" text-anchor="middle" class="nodet">Colonists</text><text x="345" y="400" text-anchor="middle" class="nodes">eat from the store, free</text></g>
+<g><rect x="490" y="360" width="150" height="54" rx="9" class="node"/><text x="565" y="392" text-anchor="middle" class="nodet">Store's shelf</text></g>
+<path d="M345,104 L345,140 L610,140 L610,194" class="flowline" marker-end="url(#ah2)"/><text x="452" y="154" class="flowlbl">output</text>
+<path d="M490,223 L422,223" class="flowline" marker-end="url(#ah2)"/>
+<path d="M530,196 L530,106" class="flowline" marker-end="url(#ah2)"/><text x="536" y="160" class="flowlbl">crews eat</text>
+<path d="M565,250 L565,358" class="flowline" marker-end="url(#ah2)"/><text x="572" y="306" class="flowlbl">sold to the store</text>
+<path d="M490,387 L422,387" class="flowline" marker-end="url(#ah2)"/>
+<path d="M190,77 L268,77" class="effline" marker-end="url(#ah3)"/><text x="229" y="122" text-anchor="middle" class="efflbl">no Energy: off</text>
+<path d="M490,77 L422,77" class="effline" marker-end="url(#ah3)"/><text x="456" y="122" text-anchor="middle" class="efflbl">hungry or thirsty: slower</text>
+<path d="M270,223 L192,223" class="effline" marker-end="url(#ah3)"/><text x="229" y="272" text-anchor="middle" class="efflbl">hungry: slower, sick</text>
+<path d="M270,387 L192,387" class="effline" marker-end="url(#ah3)"/><text x="229" y="434" text-anchor="middle" class="efflbl">short: mood, leave</text>
+<path d="M640,400 L656,400 L656,452 L115,452 L115,416" class="effline" marker-end="url(#ah3)"/><text x="400" y="446" text-anchor="middle" class="efflbl">shelf against need: price</text>
+</svg><div class="legend"><span class="key"><i style="background:var(--ink2)"></i>Goods move</span><span class="key"><i style="background:var(--s2)"></i>A shortage acts (proposed and today)</span></div>
+<figcaption>Read top to bottom for goods, and follow the orange arrows back for what a shortage does. The table below says which of these exist today and which are proposed.</figcaption></figure>
+<div class="scroll"><table class="matrix"><thead><tr><th>Short of</th><th>The plot</th><th>The player</th><th>The colony</th></tr></thead><tbody>
+<tr><th>Energy</th><td><span class="today">Today:</span> Switched off, biggest user first; makes a fifth<br><span class="prop">Proposed:</span> Unchanged</td><td><span class="today">Today:</span> Nothing<br><span class="prop">Proposed:</span> Unchanged</td><td><span class="today">Today:</span> A price only<br><span class="prop">Proposed:</span> A price only; steps up in a shortage</td></tr>
+<tr><th>Water</th><td><span class="today">Today:</span> A farm makes half if its owner holds too little<br><span class="prop">Proposed:</span> A thirsty crew works slower on every plot; a farm’s own Water is its irrigation</td><td><span class="today">Today:</span> Nothing<br><span class="prop">Proposed:</span> Nothing</td><td><span class="today">Today:</span> Colonists shrink 5% whenever short<br><span class="prop">Proposed:</span> As Food; the store price steps up</td></tr>
+<tr><th>Food</th><td><span class="today">Today:</span> Nothing<br><span class="prop">Proposed:</span> A crew that went hungry last month works slower (curve below)</td><td><span class="today">Today:</span> Walks slower, down to 60% with none<br><span class="prop">Proposed:</span> Same; hunger read from whether the household ate (decision)</td><td><span class="today">Today:</span> Colonists shrink 5% whenever short<br><span class="prop">Proposed:</span> Mood and population follow how short; the store price steps up</td></tr>
+<tr><th>Smithore</th><td><span class="today">Today:</span> Nothing<br><span class="prop">Proposed:</span> Unchanged</td><td><span class="today">Today:</span> No MULE to buy, so a plot stays idle<br><span class="prop">Proposed:</span> Unchanged</td><td><span class="today">Today:</span> The corral sells out; MULEs 15% dearer next month<br><span class="prop">Proposed:</span> Unchanged; the store price steps up</td></tr>
+<tr><th>MULEs</th><td><span class="today">Today:</span> A plot cannot be outfitted<br><span class="prop">Proposed:</span> Unchanged</td><td><span class="today">Today:</span> The store refuses the purchase<br><span class="prop">Proposed:</span> Unchanged</td><td><span class="today">Today:</span> Price rises while the corral sells out<br><span class="prop">Proposed:</span> Unchanged, capped like every price</td></tr>
+<tr><th>Crystite</th><td><span class="today">Today:</span> Nothing<br><span class="prop">Proposed:</span> Unchanged</td><td><span class="today">Today:</span> Nothing<br><span class="prop">Proposed:</span> Unchanged</td><td><span class="today">Today:</span> The ship gets less; the observatory waits<br><span class="prop">Proposed:</span> Unchanged</td></tr>
+<tr><th>Rare earth</th><td><span class="today">Today:</span> An Electronics works cannot run<br><span class="prop">Proposed:</span> Unchanged</td><td><span class="today">Today:</span> Nothing<br><span class="prop">Proposed:</span> Unchanged</td><td><span class="today">Today:</span> The ship gets less<br><span class="prop">Proposed:</span> Unchanged</td></tr>
+<tr><th>Alloy</th><td><span class="today">Today:</span> An Electronics works cannot run<br><span class="prop">Proposed:</span> Unchanged</td><td><span class="today">Today:</span> No pollution filter<br><span class="prop">Proposed:</span> Unchanged</td><td><span class="today">Today:</span> Park, stadium, spaceport wait<br><span class="prop">Proposed:</span> Unchanged</td></tr>
+<tr><th>Electronics</th><td><span class="today">Today:</span> Nothing<br><span class="prop">Proposed:</span> Unchanged</td><td><span class="today">Today:</span> Nothing<br><span class="prop">Proposed:</span> Unchanged</td><td><span class="today">Today:</span> Hospital, stadium, spaceport wait; no other building starts meanwhile<br><span class="prop">Proposed:</span> Unchanged</td></tr>
+<tr><th>Medicine</th><td><span class="today">Today:</span> Nothing<br><span class="prop">Proposed:</span> Unchanged</td><td><span class="today">Today:</span> A sick player walks at half pace until cured<br><span class="prop">Proposed:</span> Same; hunger may raise the odds (decision)</td><td><span class="today">Today:</span> A price only<br><span class="prop">Proposed:</span> Hungry colonists need more; a shortfall counts half in their hardship (colonists’ decisions)</td></tr>
+</tbody></table></div>
+
+<h2>Does the colony use too little?</h2>
+<p>Per colony, a month, averaged over ten simulated games (four computer players):</p>
+<div class="scroll"><table><thead><tr><th>Good</th><th>Made a month</th><th>Used by</th><th>Spoiled</th><th>To the ship</th><th>Made ÷ used</th></tr></thead><tbody>
+<tr><td>Food</td><td>17.9</td><td>households and crews 10.0, colonists 2.8, Medicine 0.5</td><td>4.6</td><td>—</td><td>1.35</td></tr>
+<tr><td>Water</td><td>10.7</td><td>households and crews 6.7, colonists 2.1, Medicine 0.5</td><td>2.6</td><td>—</td><td>1.14</td></tr>
+<tr><td>Energy</td><td>13.3</td><td>plots and works 12.0</td><td>2.9</td><td>—</td><td>1.11</td></tr>
+<tr><td>Smithore</td><td>0.98</td><td>building MULEs 2.0</td><td>—</td><td>—</td><td>0.49</td></tr>
+<tr><td>Crystite</td><td>0.52</td><td>only the ship</td><td>—</td><td>0.71</td><td>0.73</td></tr>
+<tr><td>Rare earth</td><td>0</td><td>nothing: never mined</td><td>—</td><td>0.23</td><td>0</td></tr>
+<tr><td>Alloy</td><td>0</td><td>nothing: no Alloy works was ever built</td><td>—</td><td>0.53</td><td>0</td></tr>
+<tr><td>Electronics</td><td>0.07</td><td>colony buildings (one in ten games)</td><td>—</td><td>0.08</td><td>1.14</td></tr>
+<tr><td>Medicine</td><td>1.5</td><td>sick players</td><td>1.06</td><td>0.34</td><td>4.4</td></tr>
+</tbody></table></div>
+<figure><svg viewBox="0 0 680 108" role="img" aria-label="What a plot makes" class="chart"><text x="110" y="30" text-anchor="end" class="lbl">Farm, Food</text><rect x="120" y="12" width="490" height="16" rx="3" fill="var(--axis)"/><text x="616" y="25" class="tick">4.76</text><rect x="120" y="30" width="187.3529411764706" height="16" rx="3" fill="var(--s1)"/><text x="313.3529411764706" y="43" class="tick">1.82</text><text x="110" y="76" text-anchor="end" class="lbl">Well, Water</text><rect x="120" y="58" width="405.5882352941177" height="16" rx="3" fill="var(--axis)"/><text x="531.5882352941177" y="71" class="tick">3.94</text><rect x="120" y="76" width="254.26470588235293" height="16" rx="3" fill="var(--s1)"/><text x="380.2647058823529" y="89" class="tick">2.47</text></svg><div class="legend"><span class="key"><i style="background:var(--axis)"></i>What the ground gives</span><span class="key"><i style="background:var(--s1)"></i>What it made</span></div><figcaption>Grey: what the ground gives an average worked plot. Blue: what it actually made. 44% of farm-months were switched off for want of Energy and 59% were cut to half as “dry”; in 54% of a player’s months they had no power plant at all.</figcaption></figure>
+<p><b>Your gut is right: use is low against what a plot can make</b>, but raising it now would starve the colony (see Crews below). One average farm, uncut, feeds the crews of 19 plots, or 95 colonists; one well, 24 plots' crews. A player's own farms cover their Food from the first month (half of all players; one in ten never), Water from about month four (one in five never).</p>
+<p><b>Yet the colony runs short, because of a chain, not of appetite.</b> Farms lose most of their Food to Energy and to the "dry" rule, which looks at a player's Water just after the month's eating and spoilage have emptied it. Smithore is the other break: building MULEs takes twice what the mines make, so the store's starting Smithore is gone by about month seven, the corral sells out in 43 months of 120, and plots stand idle. No Rare earth or Alloy was made in any game, so the factory chain and the colony buildings barely run. Most Medicine spoils on the shelf.</p>
+
+<h2>Crews that go short</h2>
+<p>Today a crew only eats; nothing happens to it if its player leaves it short. The proposal gives each player's crews last month's meal as their state: crews eat at the month's end, after the household, from their own player's stock, and next month every plot of that player works at the share below. A power plant keeps running, as today. The farm's “dry” rule goes: the farm's own Water in the table is its irrigation, and a thirsty crew works slower on every plot instead of only farms halving.</p>
+<p>Why last month's meal: a plot works before the month's market, so a crew can only be fed from what its player kept back, and today's rule, which looks at the stock just after the month's eating and spoilage, finds nearly everyone short.</p>
+<figure><svg viewBox="0 0 680 280" role="img" aria-labelledby="cc-t" class="chart"><title id="cc-t">A plot's output against how short its crew went last month</title><rect x="56" y="16" width="50.400000000000006" height="220" class="tol"/><line x1="56" x2="560" y1="236" y2="236" class="grid"/><text x="48" y="240" text-anchor="end" class="tick">0%</text><line x1="56" x2="560" y1="181" y2="181" class="grid"/><text x="48" y="185" text-anchor="end" class="tick">25%</text><line x1="56" x2="560" y1="126" y2="126" class="grid"/><text x="48" y="130" text-anchor="end" class="tick">50%</text><line x1="56" x2="560" y1="71" y2="71" class="grid"/><text x="48" y="75" text-anchor="end" class="tick">75%</text><line x1="56" x2="560" y1="16" y2="16" class="grid"/><text x="48" y="20" text-anchor="end" class="tick">100%</text><text x="56" y="252" text-anchor="middle" class="tick">0%</text><text x="182" y="252" text-anchor="middle" class="tick">25%</text><text x="308" y="252" text-anchor="middle" class="tick">50%</text><text x="434" y="252" text-anchor="middle" class="tick">75%</text><text x="560" y="252" text-anchor="middle" class="tick">100%</text><polyline points="56,16 81.2,16 106.4,16 131.6,17.440402702417042 156.8,20.07407407407407 182,23.484551991837485 207.2,27.52322161933632 232.39999999999998,32.10419178789452 257.6,37.169509870286284 282.8,42.67663136866605 308,48.59259259259259 333.20000000000005,54.89087296526014 358.4,61.54953287499572 383.6,68.55002842024398 408.79999999999995,75.8764159346999 434,83.51479541146 459.20000000000005,91.45290775999018 484.4,99.67983517440038 509.6,108.18577295469065 534.8,116.96185225333993 560,126" fill="none" stroke="var(--s1)" stroke-width="2.5"/><text x="566" y="130" class="lbl">Proposed, any plot</text><polyline points="56,17.5 81.2,127.5 106.4,127.5 131.6,127.5 156.8,127.5 182,127.5 207.2,127.5 232.39999999999998,127.5 257.6,127.5 282.8,127.5 308,127.5 333.20000000000005,127.5 358.4,127.5 383.6,127.5 408.79999999999995,127.5 434,127.5 459.20000000000005,127.5 484.4,127.5 509.6,127.5 534.8,127.5 560,127.5" fill="none" stroke="var(--s2)" stroke-width="2.5"/><text x="566" y="142" class="lbl">Today, a farm short of Water</text><polyline points="56,19 81.2,19 106.4,19 131.6,19 156.8,19 182,19 207.2,19 232.39999999999998,19 257.6,19 282.8,19 308,19 333.20000000000005,19 358.4,19 383.6,19 408.79999999999995,19 434,19 459.20000000000005,19 484.4,19 509.6,19 534.8,19 560,19" fill="none" stroke="var(--axis)" stroke-width="2.5"/><text x="566" y="44" class="lbl">Today, any other plot</text><text x="308" y="274" text-anchor="middle" class="axislabel">How much of its Food or Water the crew went without last month</text></svg><figcaption>The shaded strip is the tolerance: up to a tenth short costs nothing. Food and Water each count, so a crew short of both works slower on both counts. The curve is the colonists' curve, so one rule reads every shortage.</figcaption></figure><div class="scroll"><table><thead><tr><th>Ten games, 120 months</th><th>Today</th><th>New prices only</th><th>+ crews work slower</th><th>+ crews eat twice as much</th><th>+ Food spoils a quarter</th></tr></thead><tbody><tr><td>Food the colony made a month</td><td>17.1</td><td>10.2</td><td>14.8</td><td>4.8</td><td>15.2</td></tr><tr><td>Food per farm a month</td><td>1.74</td><td>1.50</td><td>2.05</td><td>0.91</td><td>2.17</td></tr><tr><td>Months colonists went short of Food / Water</td><td>55 / 63</td><td>74 / 34</td><td>61 / 53</td><td>98 / 44</td><td>58 / 57</td></tr><tr><td>Colonists left of 100 at the end</td><td>72</td><td>72</td><td>74</td><td>64</td><td>80</td></tr><tr><td>Player-months read “hungry” (of 480)</td><td>399</td><td>413</td><td>391</td><td>429</td><td>354</td></tr><tr><td>Player-months the household actually went short</td><td>164</td><td>229</td><td>189</td><td>330</td><td>160</td></tr><tr><td>Plots switched off for Energy, a month</td><td>7.0</td><td>9.8</td><td>8.7</td><td>12.8</td><td>8.8</td></tr></tbody></table></div><p>Each column adds to the one before it, except “crews eat twice as much”, which doubles the crews' Food and Water on top of “crews work slower”. The last column also switches farms and wells off last when power runs short; on its own that change made no difference (13.6 Food a month). <b>Crews that work slower help</b>, because the farm's “dry” halving goes. <b>Doubling what crews eat starves the colony on today's power.</b> <b>Slower spoilage is the best single change.</b> No column fixes Energy: the store runs out of it in about 100 months of 120 in every one.</p>
+
 <h2>What the whole colony needs</h2>
 <p>The store adds up what every player's household and crews need, the Energy their plots burn, and what the colonists need, all of it, at any price, because colonists no longer pay. Measured over ten simulated games:</p>
 <figure><svg viewBox="0 0 680 154" role="img" aria-label="Store demand a month" class="chart"><text x="110" y="30" text-anchor="end" class="lbl">Food</text><rect x="120" y="12" width="459.53367875647666" height="16" rx="3" fill="var(--axis)"/><text x="585.5336787564767" y="25" class="tick">18.1</text><rect x="120" y="30" width="490" height="16" rx="3" fill="var(--s1)"/><text x="616" y="43" class="tick">19.3</text><text x="110" y="76" text-anchor="end" class="lbl">Water</text><rect x="120" y="58" width="324.9740932642487" height="16" rx="3" fill="var(--axis)"/><text x="450.9740932642487" y="71" class="tick">12.8</text><rect x="120" y="76" width="421.4507772020726" height="16" rx="3" fill="var(--s1)"/><text x="547.4507772020726" y="89" class="tick">16.6</text><text x="110" y="122" text-anchor="end" class="lbl">Energy</text><rect x="120" y="104" width="441.761658031088" height="16" rx="3" fill="var(--axis)"/><text x="567.761658031088" y="117" class="tick">17.4</text><rect x="120" y="122" width="472.22797927461147" height="16" rx="3" fill="var(--s1)"/><text x="598.2279792746115" y="135" class="tick">18.6</text></svg><div class="legend"><span class="key"><i style="background:var(--axis)"></i>Today</span><span class="key"><i style="background:var(--s1)"></i>Proposed</span></div><figcaption>Units a month the store counts as demand, mean over twelve months of ten games. Water rises most, to about 20 by the end of a game, as farms and plants spread.</figcaption></figure>
@@ -135,6 +210,45 @@ th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line
 <p>The store's own margin widens as goods run short (15% either side when normal, up to 10% under and 25% over in a shortage), but both its prices move up together, so selling Food to the store pays well exactly when the colony needs it. No price ever goes above twelve times normal.</p>
 <h3>Coming back down</h3>
 <figure><svg viewBox="0 0 680 260" role="img" aria-labelledby="fc-t" class="chart"><title id="fc-t">Food's store price after a severe shortage ends, three ways of falling back</title><line x1="56" x2="664" y1="220" y2="220" class="grid"/><text x="48" y="224" text-anchor="end" class="tick">0</text><line x1="56" x2="664" y1="172.9230769230769" y2="172.9230769230769" class="grid"/><text x="48" y="176.9230769230769" text-anchor="end" class="tick">30</text><line x1="56" x2="664" y1="125.84615384615384" y2="125.84615384615384" class="grid"/><text x="48" y="129.84615384615384" text-anchor="end" class="tick">60</text><line x1="56" x2="664" y1="78.76923076923077" y2="78.76923076923077" class="grid"/><text x="48" y="82.76923076923077" text-anchor="end" class="tick">90</text><line x1="56" x2="664" y1="31.692307692307683" y2="31.692307692307683" class="grid"/><text x="48" y="35.69230769230768" text-anchor="end" class="tick">120</text><text x="56" y="236" text-anchor="middle" class="tick">crisis</text><text x="157.33333333333331" y="236" text-anchor="middle" class="tick">+1</text><text x="258.66666666666663" y="236" text-anchor="middle" class="tick">+2</text><text x="360" y="236" text-anchor="middle" class="tick">+3</text><text x="461.3333333333333" y="236" text-anchor="middle" class="tick">+4</text><text x="562.6666666666667" y="236" text-anchor="middle" class="tick">+5</text><text x="664" y="236" text-anchor="middle" class="tick">+6</text><polyline points="56,31.692307692307683 157.33333333333331,78.76923076923077 258.66666666666663,113.29230769230769 360,139.96923076923076 461.3333333333333,160.36923076923077 562.6666666666667,172.9230769230769 664,172.9230769230769" fill="none" stroke="var(--s1)" stroke-width="2.5"/><circle cx="56" cy="31.692307692307683" r="3" fill="var(--s1)"><title>the crisis month: 120</title></circle><circle cx="157.33333333333331" cy="78.76923076923077" r="3" fill="var(--s1)"><title>1 month after: 90</title></circle><circle cx="258.66666666666663" cy="113.29230769230769" r="3" fill="var(--s1)"><title>2 months after: 68</title></circle><circle cx="360" cy="139.96923076923076" r="3" fill="var(--s1)"><title>3 months after: 51</title></circle><circle cx="461.3333333333333" cy="160.36923076923077" r="3" fill="var(--s1)"><title>4 months after: 38</title></circle><circle cx="562.6666666666667" cy="172.9230769230769" r="3" fill="var(--s1)"><title>5 months after: 30</title></circle><circle cx="664" cy="172.9230769230769" r="3" fill="var(--s1)"><title>6 months after: 30</title></circle><polyline points="56,31.692307692307683 157.33333333333331,102.30769230769232 258.66666666666663,136.83076923076925 360,154.0923076923077 461.3333333333333,163.5076923076923 562.6666666666667,168.2153846153846 664,172.9230769230769" fill="none" stroke="var(--s3)" stroke-width="2.5"/><circle cx="56" cy="31.692307692307683" r="3" fill="var(--s3)"><title>the crisis month: 120</title></circle><circle cx="157.33333333333331" cy="102.30769230769232" r="3" fill="var(--s3)"><title>1 month after: 75</title></circle><circle cx="258.66666666666663" cy="136.83076923076925" r="3" fill="var(--s3)"><title>2 months after: 53</title></circle><circle cx="360" cy="154.0923076923077" r="3" fill="var(--s3)"><title>3 months after: 42</title></circle><circle cx="461.3333333333333" cy="163.5076923076923" r="3" fill="var(--s3)"><title>4 months after: 36</title></circle><circle cx="562.6666666666667" cy="168.2153846153846" r="3" fill="var(--s3)"><title>5 months after: 33</title></circle><circle cx="664" cy="172.9230769230769" r="3" fill="var(--s3)"><title>6 months after: 30</title></circle><polyline points="56,31.692307692307683 157.33333333333331,172.9230769230769 258.66666666666663,172.9230769230769 360,172.9230769230769 461.3333333333333,172.9230769230769 562.6666666666667,172.9230769230769 664,172.9230769230769" fill="none" stroke="var(--s2)" stroke-width="2.5"/><circle cx="56" cy="31.692307692307683" r="3" fill="var(--s2)"><title>the crisis month: 120</title></circle><circle cx="157.33333333333331" cy="172.9230769230769" r="3" fill="var(--s2)"><title>1 month after: 30</title></circle><circle cx="258.66666666666663" cy="172.9230769230769" r="3" fill="var(--s2)"><title>2 months after: 30</title></circle><circle cx="360" cy="172.9230769230769" r="3" fill="var(--s2)"><title>3 months after: 30</title></circle><circle cx="461.3333333333333" cy="172.9230769230769" r="3" fill="var(--s2)"><title>4 months after: 30</title></circle><circle cx="562.6666666666667" cy="172.9230769230769" r="3" fill="var(--s2)"><title>5 months after: 30</title></circle><circle cx="664" cy="172.9230769230769" r="3" fill="var(--s2)"><title>6 months after: 30</title></circle><text x="360" y="256" text-anchor="middle" class="axislabel">Months after the colony holds enough Food again</text></svg><div class="legend"><span class="key"><i style="background:var(--s1)"></i>A quarter a month (recommended)</span><span class="key"><i style="background:var(--s3)"></i>Half the gap a month</span><span class="key"><i style="background:var(--s2)"></i>Straight back</span></div><figcaption>The store price (before its spread). A quarter a month: 120 → 90 → 68 → 51 → 38 → 30.</figcaption></figure>
+
+<h2>The colony level: what a shortage does to the colonists</h2>
+
+<section id="colony-level">
+
+
+<h3>What happens today</h3>
+<ul>
+<li><b>Food and Water</b> are the only goods colonists consume. A short shelf makes the colony shrink 5% instead of growing 4%, and costs the mood 8 points of its aim per good short. (The colonists' hardship proposal makes both depend on how short they went.)</li>
+<li><b>Energy and Medicine</b> do nothing to the colonists. Their only effect is on what the store wants and charges.</li>
+<li><b>Sickness exists only for players.</b> At the start of development each player has a small chance of being sick, higher in dirty air, cured by holding 1 Medicine; a sick player walks at half pace. An epidemic makes every player use a Medicine or be sick. Colonists are never sick, and hunger and sickness are not linked anywhere.</li>
+<li><b>The colony feeds back into production only through its mood.</b> A restless or unhappy colony brings strikes (a good's plots make 20% unless the strikers are paid), walkouts (a player's main good makes 20%), MULE thefts, riots (the store loses a third of each good) and emigration. A dear Food price (over 1.5 times normal) makes strikes and riots likelier. The number of colonists sets the store's demand and prices.</li>
+<li><b>Crews</b> are 1 per raw plot and 2 per factory. They only add to their owner's Food and Water needs: they have no mood of their own.</li>
+</ul>
+
+<!-- WS7's colony-level section for WS5's shortage-chain explainer. A fragment: it uses the same
+     classes as colony-needs-colonists.html (.decision, .rec, .scroll). Measured on trunk e4e78193,
+     10 seed-1 games, 4 computer players, politics on: data in ws7-politics/.handover/ws7-findings/m20/. -->
+<section id="colony-level">
+<h2>The colony level: what a shortage does to the colonists</h2>
+
+<h3>Measured: ten simulated games, 120 month ends</h3>
+<div class="scroll"><table>
+<thead><tr><th>Good</th><th>Months the colonists' shelf was short</th><th>More than half short</th></tr></thead>
+<tbody>
+<tr><td>Food</td><td>46</td><td>31</td></tr>
+<tr><td>Water</td><td>66</td><td>57</td></tr>
+<tr><td>Energy</td><td>95</td><td>93</td></tr>
+<tr><td>Medicine</td><td>54</td><td>42</td></tr>
+</tbody></table></div>
+<ul>
+<li>Medicine was short in 54 months, and in 40 of them Food or Water was short too.</li>
+<li>Medicine's price climbs half again every month nobody sells it: it reached 15,584 credits in one game.</li>
+<li>The air stayed clean in all 120 months, so dirty air never made anyone sick. 22 of 480 player-months were sick, all from the small base chance. No epidemic happened.</li>
+<li>No colony was ever Content or Thriving: every month was Restless or Unhappy.</li>
+</ul>
+
+
+<p><b>Two notes on the numbers.</b> Medicine's store price today climbs without limit (15,584 in one game); the proposed store prices cap every good at twelve times normal (1,440 for Medicine), and their steps stop at four times (480). And the air stayed clean in all ten simulated games, so nothing here has tested pollution or sickness yet.</p>
 
 <h2>How colonists feel when they go short</h2>
 
@@ -219,32 +333,88 @@ th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line
 </ul>
 <p class="rec"><b>Recommended: together.</b></p>
 </div>
-<div class="decision"><h3>2 · How hungry are crews?</h3>
-<ul><li><b>The table above.</b> Each kind of plot has its own needs; Water demand rises by about a third; Food stays at today's rate. <i>For:</i> no new hunger on a colony that is already short. <i>Against:</i> crews are a steady, not a steep, Food demand.</li>
-<li><b>Hungrier crews</b> (mines and works eat three quarters of a Food each, Crystite miners a whole one). <i>For:</i> crews are clearly the colony's main demand. <i>Against:</i> without more Food supply it deepens a shortage that already shows in nine months of ten.</li></ul>
-<p class="rec"><b>Recommended: the table above</b>, and revisit it with the Food supply numbers.</p></div>
-<div class="decision"><h3>3 · What counts as the colony's stock?</h3>
+<div class="decision"><h3>2 · Where does the supply work start?</h3>
+<ul><li><b>With power.</b> Plants from the first month (the starting Energy, and the computer players' first plot), so that farms and wells run. <i>For:</i> the colony already has more farms than it needs if they are powered; power is what's missing. <i>Against:</i> none of our trial rules tested it yet; it is the supply pass's first job.</li>
+<li><b>With more farms and wells.</b> <i>Against:</i> the colony already has 14 farms where 6 would do.</li></ul>
+<p class="rec"><b>Recommended: power first.</b></p></div>
+<div class="decision"><h3>3 · How fast does Food spoil in a player's stock?</h3>
+<ul><li><b>A quarter a month</b> (today: half). <i>For:</i> the best colony of every rule we tried: fewest hungry months for players and colonists, 80 colonists at the end instead of 72. <i>Against:</i> stockpiling Food gets easier.</li>
+<li><b>Half, as today.</b> A player must grow twice what they eat to keep fed.</li></ul>
+<p class="rec"><b>Recommended: a quarter.</b> (Measured with farms and wells switched off last, which on its own changed nothing.)</p></div>
+<div class="decision"><h3>4 · What does a hungry or thirsty crew do?</h3>
+<ul><li><b>It works slower</b>, on the curve above: nothing under a tenth short, down to half pace with nothing. The farm's “dry” rule goes. <i>For:</i> the worse the shortage the bigger the cost, never all-or-nothing, and the player whose crew it is sees why. <i>Against:</i> a new rule to show on the month's report.</li>
+<li><b>It makes its player's walkout likelier</b> (the colonists' team recommends this). <i>For:</i> the walkout already exists and players know it. <i>Against:</i> a walkout is a dice roll and all-or-nothing (the main good makes a fifth), so a slightly short crew and a starving one look the same until the dice fall.</li></ul>
+<p class="rec"><b>Recommended: it works slower.</b> Walkouts stay with the colony's mood, so the same hunger never counts twice. Measured: the colony makes 14.8 Food a month instead of 10.2, and colonists go short of Food in 61 months instead of 74.</p></div>
+<div class="decision"><h3>5 · Should crews eat and drink more?</h3>
+<ul><li><b>Not yet: keep the table, and raise it together with the power supply.</b> <i>For:</i> on today's power, doubling what crews use cut the colony's Food from 14.8 to 4.8 a month and left 64 colonists instead of 74. <i>Against:</i> your sense that use is low is right (an uncut farm feeds the crews of 19 plots), and it waits.</li>
+<li><b>Double it now.</b> <i>Against:</i> measured above: the colony starves.</li></ul>
+<p class="rec"><b>Recommended: not yet</b>; set it in the same pass as the power supply.</p></div>
+<div class="decision"><h3>6 · When power runs short, which plots switch off first?</h3>
+<ul><li><b>As today:</b> the biggest user first, then the least valuable.</li><li><b>Farms and wells last.</b> <i>Against:</i> measured, it changed nothing: the power is short whichever plots wait.</li></ul>
+<p class="rec"><b>Recommended: as today</b>; more power is the fix.</p></div>
+<div class="decision"><h3>7 · When is a player hungry?</h3>
+<ul><li><b>When their household went short at the last month's end.</b> <i>For:</i> it says what happened. <i>Against:</i> a player who bought Food late in the month still walks fed.</li>
+<li><b>As today: when they start development holding less Food than they eat.</b> <i>Against:</i> it reads the stock after half the Food has spoiled and before the month's market, so a player whose farms make twice their need still counts as hungry; 83 of every 100 player-months read hungry today.</li></ul>
+<p class="rec"><b>Recommended: the household's last meal.</b></p></div>
+<div class="decision"><h3>8 · Does hunger make a player sick more easily?</h3>
+<ul><li><b>Not yet.</b> The simulations never got the air dirty, so sickness is untested; decide it when it can be measured.</li><li><b>Yes</b>: hunger raises the existing sickness odds by up to half. <i>For:</i> one more link in the chain. <i>Against:</i> untested; it stacks on the slower walk.</li></ul>
+<p class="rec"><b>Recommended: not yet.</b></p></div>
+<div class="decision"><h3>9 · What counts as the colony's stock?</h3>
 <ul><li><b>The store's shelf plus what players hold.</b> <i>For:</i> it is the overall supply you described; a colony whose players hold Food is not short. <i>Against:</i> a player hoarding Food keeps the price normal while others go short.</li>
 <li><b>The store's shelf only.</b> <i>For:</i> exactly what the store can see. <i>Against:</i> the store usually holds less than a month while players hold the rest, so prices would sit in the shortage bands most months.</li></ul>
 <p class="rec"><b>Recommended: shelf plus players.</b> We simulated both: counting only the shelf was worse on every count, including the colonists' Food.</p></div>
-<div class="decision"><h3>4 · Steps or a smooth curve?</h3>
+<div class="decision"><h3>10 · Steps or a smooth curve?</h3>
 <ul><li><b>Four steps</b> (the chart above). <i>For:</i> easy to say at the table: "Food is short". <i>Against:</i> the price jumps at a step's edge (38 to 60).</li>
 <li><b>A smooth curve</b> through the same points. <i>For:</i> no jumps. <i>Against:</i> no name for the state the colony is in.</li>
 <li><b>A rise each month while it lasts</b> (+15%, +40%, +80% a month by band). <i>For:</i> a long shortage keeps climbing. <i>Against:</i> the price depends on history, is hard to predict, and overshoots when supply returns.</li></ul>
 <p class="rec"><b>Recommended: four steps.</b></p></div>
-<div class="decision"><h3>5 · How fast does the price come down?</h3>
+<div class="decision"><h3>11 · How fast does the price come down?</h3>
 <ul><li><b>A quarter a month</b> (120 to 30 in five months). <i>For:</i> a crisis is felt for a while, then forgotten. <i>Against:</i> Food stays dear a few months after the farms recover.</li>
 <li><b>Half the gap a month</b> (about four months).</li><li><b>Straight back to normal.</b> <i>For:</i> simplest. <i>Against:</i> no memory of the crisis; the price snaps.</li></ul>
 <p class="rec"><b>Recommended: a quarter a month.</b> The chart above shows all three.</p></div>
-<div class="decision"><h3>6 · Can a glut push the price below normal?</h3>
+<div class="decision"><h3>12 · Can a glut push the price below normal?</h3>
 <ul><li><b>Never</b>: normal is the lowest price, as you put it; a full store simply stops buying. <i>For:</i> your rule as written; one rule fewer. <i>Against:</i> players who over-produce feel it only when the store stops buying, not in its price. This drops yesterday's "glut step" (after the store stopped buying, its next buying price was lower).</li>
 <li><b>A surplus step at 80% of normal</b> when the colony holds three months or more. <i>For:</i> a gentle signal to stop over-producing. <i>Against:</i> a second rule beside your five.</li></ul>
 <p class="rec"><b>Recommended: never below normal.</b></p></div>
-<div class="decision"><h3>7 · How hard does a high trade between players pull the store's price?</h3>
+<div class="decision"><h3>13 · How hard does a high trade between players pull the store's price?</h3>
 <ul><li><b>Halfway</b> to what players paid (a shortage price of 60 after a trade at 95 becomes 78).</li><li><b>All the way</b> (the store sells at what players paid). <i>Against:</i> one desperate buyer sets the whole colony's price.</li><li><b>A quarter of the way.</b> <i>Against:</i> barely noticed.</li></ul>
 <p class="rec"><b>Recommended: halfway.</b> If the store had sold out while they traded, it opens next month selling at what they paid, as agreed yesterday.</p></div>
 <div class="decision">
-<h3>8 · Do colonists eat free in every game, or only with politics on?</h3>
+<h3>14 · Do hungry colonists get sick more easily?</h3>
+<ul>
+<li><b>Yes: hunger makes them need more Medicine.</b> The colony's memory of hunger (from the hardship proposal) raises the colonists' Medicine need, by up to half again after long hunger, the same as dirty air does today. Dirty air and hunger together count the larger of the two, not both. <i>For:</i> one link Heiko asked for, using a number the game already keeps; it shows up as Medicine the store must stock. <i>Against:</i> today's supply already runs short of Medicine; measured, the colonists' Medicine need would rise by about a fifth on average.</li>
+<li><b>Yes, at full strength: up to double.</b> <i>For:</i> a bigger, more visible effect. <i>Against:</i> measured, the need would average nearly half again more and reach double, in a game whose Medicine already runs out; it would feed the same downward spiral the first hardship numbers did.</li>
+<li><b>No link.</b> <i>For:</i> nothing to build. <i>Against:</i> hunger and sickness stay unrelated, which is the question you asked.</li>
+</ul>
+<p class="rec"><b>Recommended: yes, up to half again.</b></p>
+</div>
+<div class="decision">
+<h3>15 · Does running out of Medicine hurt the colonists?</h3>
+<ul>
+<li><b>Yes, at half the weight of Food and Water.</b> A Medicine shortfall counts in the colonists' hardship at half its share: missing all their Medicine counts like missing half their Food. <i>For:</i> sickness then matters, and the chain closes: hunger, then sickness, then Medicine runs short, then the mood falls. Measured: it adds hardship in 14 of 120 months where Food and Water were fine, and raises the average hardship by about 6%. <i>Against:</i> one more good to watch; it is short in 54 months today.</li>
+<li><b>Yes, at full weight.</b> <i>Against:</i> with Medicine short 54 months in 120 and its price running away, it would dominate the colony's mood.</li>
+<li><b>No.</b> <i>For:</i> simplest. <i>Against:</i> decision 1's extra Medicine need would then change only prices.</li>
+</ul>
+<p class="rec"><b>Recommended: yes, at half weight.</b></p>
+</div>
+<div class="decision">
+<h3>16 · Does an Energy shortage hurt the colonists?</h3>
+<ul>
+<li><b>No, it stays a price, as today.</b> <i>For:</i> Energy is short for the colonists in 95 of 120 months; counting it would keep every colony in hardship until supply is tuned. <i>Against:</i> colonists without power feel nothing.</li>
+<li><b>Yes, at a low weight.</b> <i>For:</i> complete. <i>Against:</i> under today's supply it is permanent hardship; better decided when supply is tuned.</li>
+</ul>
+<p class="rec"><b>Recommended: no for now; look again when the supply numbers are tuned.</b></p>
+</div>
+<div class="decision">
+<h3>17 · Should the colony's state feed back into production or the store?</h3>
+<ul>
+<li><b>Through what exists, no new channel.</b> An unhappy colony already strikes, walks out, steals MULEs and riots, which cuts production and empties the store; the hardship proposal makes those likelier the longer the hunger lasts. A bigger or smaller colony already changes what the store wants. <i>For:</i> the chain is already closed and measured. <i>Against:</i> the feedback comes by chance, through events, not every month.</li>
+<li><b>A new direct link</b>, for example production falling with the colony's size or mood every month. <i>For:</i> steady and predictable. <i>Against:</i> a second way the mood cuts production beside the events, and the first hardship numbers already showed how fast that spirals.</li>
+</ul>
+<p class="rec"><b>Recommended: through what exists.</b></p>
+</div>
+<div class="decision">
+<h3>18 · Do colonists eat free in every game, or only with politics on?</h3>
 <p>Colonists eat in every game; the mood exists only when politics is on. When we built the colony we promised a game with politics off plays exactly as before.</p>
 <ul>
 <li><b>Every game.</b> One way of feeding colonists everywhere: no wages, no price cap, and the colony grows or shrinks by its shortfall in every game. The mood, its memory and the unrest odds stay politics-only. <i>For:</i> one rule to learn and test; the computer players reason about one kind of demand. <i>Against:</i> games with politics off change too (their colony's size and the store's prices), so the "exactly as before" promise is narrowed to "no mood, prestige or social events".</li>
@@ -253,7 +423,7 @@ th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line
 <p class="rec"><b>Recommended: every game.</b> You asked for colonists with no economy; keeping wages alive in one mode keeps the thing you asked to remove.</p>
 </div>
 <div class="decision">
-<h3>9 · How should the mood react to a shortfall?</h3>
+<h3>19 · How should the mood react to a shortfall?</h3>
 <ul>
 <li><b>Curve, memory and an immediate blow</b> (the rule above). <i>For:</i> a bigger shortfall hurts more in the same month, and a long one keeps hurting; the charts above are this rule. <i>Against:</i> the most numbers to tune (seven); in today's underfed colony it makes most months Unhappy (see the simulation).</li>
 <li><b>Curve only, inside the 5-point monthly limit.</b> <i>For:</i> simplest, half the work, and the gentlest in today's underfed colony. <i>Against:</i> every shortfall from 40% up costs the same 5 points a month (the orange line), so it brings back today's flat cliff, only at 40% instead of 1 unit.</li>
@@ -262,7 +432,7 @@ th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line
 <p class="rec"><b>Recommended: curve, memory and an immediate blow.</b> It is the only one where "the worse the crisis, the more unhappy they get" shows in a single month.</p>
 </div>
 <div class="decision">
-<h3>10 · Keep the 5-point monthly limit on the mood?</h3>
+<h3>20 · Keep the 5-point monthly limit on the mood?</h3>
 <ul>
 <li><b>Keep it for the slow drift; let hunger land outside it.</b> <i>For:</i> tax, air and prestige stay gentle and readable; hunger can still hit hard. <i>Against:</i> two ways the mood moves, which the month-end line has to explain.</li>
 <li><b>Drop it.</b> <i>For:</i> one way the mood moves. <i>Against:</i> every input swings at once; a 1% tax change could move the mood by several points in a month.</li>
@@ -270,7 +440,7 @@ th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line
 <p class="rec"><b>Recommended: keep it for the drift.</b> Events already land outside it, so hunger joins a pattern players have already seen.</p>
 </div>
 <div class="decision">
-<h3>11 · The starting numbers</h3>
+<h3>21 · The starting numbers</h3>
 <p>Tolerance: a tenth. The curve's bend: 1.5. The blow: 8 points at no Food. The memory: 6 points lower aim per unit, halved each fed month, capped at 2. Unrest odds: up by a quarter per unit of memory. The colony shrinks by a tenth of the share missing. A harsher first set (a blow of 15, 12 points per unit, odds up by half) sent 8 of 10 simulated games into Unrest; this set is the one that did not.</p>
 <ul>
 <li><b>Take them as starting values</b>, to be tuned with the rest of the colony's numbers at the end. <i>For:</i> builds can go ahead now. <i>Against:</i> early playtests feel these values.</li>
@@ -279,7 +449,7 @@ th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line
 <p class="rec"><b>Recommended: take them as starting values.</b></p>
 </div>
 <div class="decision">
-<h3>12 · The store loses the colonists' payments</h3>
+<h3>22 · The store loses the colonists' payments</h3>
 <p>Colonists paid the store for their Food and Water; now they don't. You ruled in October that the store's money is unlimited and never shown, so the store's buying is not affected.</p>
 <ul>
 <li><b>Nothing replaces the payments.</b> <i>For:</i> it is what "no economy" means; nothing the players see changes. <i>Against:</i> none at the table; the store's hidden running total just stops receiving them.</li>

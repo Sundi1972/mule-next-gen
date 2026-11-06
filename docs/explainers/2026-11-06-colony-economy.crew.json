@@ -1,0 +1,14 @@
+{
+  "source": "10 seed-1 games, 4 computer players, politics on, trunk 2eccd439; WS5 prototype runs of 6 Nov (summary-r4)",
+  "head": ["Ten games, 120 months", "Today", "New prices only", "+ crews work slower", "+ crews eat twice as much", "+ Food spoils a quarter"],
+  "rows": [
+    ["Food the colony made a month", "17.1", "10.2", "14.8", "4.8", "15.2"],
+    ["Food per farm a month", "1.74", "1.50", "2.05", "0.91", "2.17"],
+    ["Months colonists went short of Food / Water", "55 / 63", "74 / 34", "61 / 53", "98 / 44", "58 / 57"],
+    ["Colonists left of 100 at the end", "72", "72", "74", "64", "80"],
+    ["Player-months read “hungry” (of 480)", "399", "413", "391", "429", "354"],
+    ["Player-months the household actually went short", "164", "229", "189", "330", "160"],
+    ["Plots switched off for Energy, a month", "7.0", "9.8", "8.7", "12.8", "8.8"]
+  ],
+  "note": "Each column adds to the one before it, except “crews eat twice as much”, which doubles the crews' Food and Water on top of “crews work slower”. The last column also switches farms and wells off last when power runs short; on its own that change made no difference (13.6 Food a month). <b>Crews that work slower help</b>, because the farm's “dry” halving goes. <b>Doubling what crews eat starves the colony on today's power.</b> <b>Slower spoilage is the best single change.</b> No column fixes Energy: the store runs out of it in about 100 months of 120 in every one."
+}
