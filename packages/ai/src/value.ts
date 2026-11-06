@@ -177,15 +177,19 @@ export function installGain(obs: GameState, o: Outlook, tile: Tile, outfit: Outf
  * nothing. Its plots make what the next production on a copy of what it sees makes (madeNext), each month alike.
  */
 export function canFeed(obs: GameState, me: string, outfit: Outfit): boolean {
-  if (!isFactory(outfit)) return true;
+  return unfedInputs(obs, me, outfit).length === 0;
+}
+
+/** The inputs other than Energy that canFeed finds the seat can't feed a new `outfit` factory with; none for a raw outfit. */
+export function unfedInputs(obs: GameState, me: string, outfit: Outfit): Good[] {
+  if (!isFactory(outfit)) return [];
   const p = obs.players.find((q) => q.id === me)!;
   const crew = crewOf(obs, me) + UPKEEP.crew.factory;
   const household: Partial<Stock> = {
     food: UPKEEP.baseFood + Math.ceil(crew / UPKEEP.crewPerFood),
     water: UPKEEP.baseWater + Math.ceil(crew / UPKEEP.crewPerWater),
   };
-  return (Object.entries(RECIPES[outfit].inputs) as [Good, number][]).every(([g, q]) => {
-    if (g === 'energy') return true;
+  const lasts = (g: Good, q: number) => {
     const own = obs.tiles.some((t) => t.owner === me && t.outfit === g) ? madeNext(obs, me)[g] : 0;
     let carry = p.stock[g];
     for (let m = 0; m < STRATEGIST.factoryInputMonths; m++) {
@@ -194,7 +198,28 @@ export function canFeed(obs: GameState, me: string, outfit: Outfit): boolean {
       carry = Math.floor(carry * (1 - GOOD_CONFIG[g].spoilage));
     }
     return true;
-  });
+  };
+  return (Object.entries(RECIPES[outfit].inputs) as [Good, number][]).filter(([g, q]) => g !== 'energy' && !lasts(g, q)).map(([g]) => g);
+}
+
+/**
+ * The links a chain to factory good `good` still needs a plot for: each input the seat can't feed, and that input's
+ * own links when it is a factory good too. Empty when `good` is no chain: a raw good, or a factory the seat can feed.
+ * See AM-32.
+ */
+export function chainLinks(obs: GameState, me: string, good: Good): Good[] {
+  const links = unfedInputs(obs, me, good).flatMap((g) => [g, ...chainLinks(obs, me, g)]);
+  return [...new Set(links)];
+}
+
+/**
+ * The outlook a chain is valued at: its links' goods cost and fetch nothing. A link's output and the works' charge for
+ * it cancel within the seat, so the works is valued with its input charge refunded and each link plot at its running
+ * cost alone (MULE, outfit, Energy, crew, air). See AM-32.
+ */
+export function chainOutlook(o: Outlook, links: readonly Good[]): Outlook {
+  const free = (price: (good: Good, extra?: number) => number) => (good: Good, extra?: number) => (links.includes(good) ? 0 : price(good, extra));
+  return { ...o, price: free(o.price.bind(o)), later: free(o.later.bind(o)) };
 }
 
 const madeCache = new WeakMap<GameState, Map<string, Stock>>();
