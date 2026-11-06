@@ -247,12 +247,13 @@ export class VoteHand {
 
   /**
    * G-5 C25 (AM-10): the AI Governor pays the strike, mends what is damaged, the most prestige first, then commissions
-   * the most prestige the fund still covers, with its site bid; and gives an object waiting for its site a bid.
+   * the most prestige whose credits the fund holds POLITICS.ai.colony.commissionShare of (pace set C), with its site
+   * bid; and gives an object waiting for its site a bid.
    */
   private colonyActs(obs: GameState, act: Act): void {
     const colony = obs.colony;
     if (!colony) return;
-    const { commissions, paysStrike, repairs, siteBid } = POLITICS.ai.colony;
+    const { commissions, commissionShare, paysStrike, repairs, siteBid } = POLITICS.ai.colony;
     const bid = siteBid[this.persona];
     const strike = colony.strike;
     let fund = obs.treasury.money;
@@ -266,7 +267,7 @@ export class VoteHand {
     }
     if (!commissions[this.persona]) return;
     const choices = (Object.keys(PRESTIGE) as PrestigeId[])
-      .filter((id) => (bid !== null || !PRESTIGE[id].needsPlot) && PRESTIGE[id].credits <= fund && commissionRefusal(obs, id) === null)
+      .filter((id) => (bid !== null || !PRESTIGE[id].needsPlot) && PRESTIGE[id].credits * commissionShare <= fund && commissionRefusal(obs, id) === null)
       .sort((a, b) => PRESTIGE[b].prestige - PRESTIGE[a].prestige || PRESTIGE[a].credits - PRESTIGE[b].credits);
     const pick = choices[0];
     if (pick && act({ type: 'commission', id: pick }) && PRESTIGE[pick].needsPlot) act({ type: 'setSiteBid', id: pick, maxBid: bid });
