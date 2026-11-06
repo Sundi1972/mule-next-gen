@@ -448,8 +448,11 @@ Test: `packages/engine/test/off-world.test.ts` (new).
   on, against Task 1.6's table: colonists at the end, months short of Food or Water, hungry seat-months, mood, and
   AI Food sold (WS9's watch row).
 - [ ] The MULE price (WS1, 6 Nov; WS1 re-measures after the batch lands): on 40 games, seed 1, base vs head, the
-  MULE price p90 (the sim's target is under 500; the base gives 679 on trunk 773f96b5), and a MULE's end-of-game
-  price ÷ its month-1 price (the base median is 9.99×, 18 of 40 games at 10× or more, max 83×). The cap comes from
+  MULE price p90 (the sim's target is under 500; the base gives 679 on trunk 773f96b5); a MULE's Worth price at
+  the game's end (month 12, after the auction re-posts Smithore: what a MULE counts in the final score) ÷ the
+  month-1 development price (the base median is 9.99×, 18 of 40 games at 10× or more, max 83×; not the last
+  development price, which reads 6.0×); and the MULEs' share of a seat's Worth, month 1 vs month 12 (base 10% →
+  46%). Definitions: WS1's `.handover/ws1-findings/2026-11-07-mule-value.md`, "Month-12 to month-1 ratio". The cap comes from
   PR-1's Smithore ceiling (12× reference) and PR-4's `MULE.maxFactor` 2.0 together.
 - [ ] Every rulebook chapter the milestone touched reads "In the game" for what it built.
 - [ ] The PM batches it to trunk; WS5 tells WS9 that C17 is on trunk.
