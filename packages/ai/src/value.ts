@@ -1,4 +1,5 @@
 import {
+  AI_PLANS,
   AI_VALUE,
   airPoints,
   crewOf,
@@ -210,19 +211,23 @@ function householdNeeds(obs: GameState, me: string): Partial<Stock> {
 /**
  * The links a chain to factory good `good` still needs a plot for: each input the seat can't feed and has no plot
  * making, and that input's own links when it is a factory good too. Empty when `good` is no chain: a raw good, a
- * factory the seat can feed, or one missing an input the household eats or drinks, which it takes first, so no farm or
- * well is the works' alone. See AM-32.
+ * factory the seat can feed, one missing an input the household eats or drinks, which it takes first, so no farm or
+ * well is the works' alone, or with chains switched off. See AM-32.
  */
 export function chainLinks(obs: GameState, me: string, good: Good): Good[] {
   return chainParts(obs, me, good).links;
 }
 
+/** AI_PLANS.chain.months, the switch: at 0 there is no chain, and every chain helper answers none. */
+const chainsOn = () => AI_PLANS.chain.months > 0;
+
 /**
  * Every good a chain to `good` is built from, Energy aside, all the way up its recipes: Rare earth, Alloy and Smithore
- * for Electronics. None for a raw good, or for a factory with an input the household eats or drinks. See AM-32.
+ * for Electronics. None for a raw good, a factory with an input the household eats or drinks, or chains switched off.
+ * See AM-32.
  */
 export function chainInputs(obs: GameState, me: string, good: Good): Good[] {
-  if (!isFactory(good)) return [];
+  if (!chainsOn() || !isFactory(good)) return [];
   const inputs = (Object.keys(RECIPES[good].inputs) as Good[]).filter((g) => g !== 'energy');
   const household = householdNeeds(obs, me);
   if (inputs.some((g) => g in household)) return [];
@@ -235,6 +240,7 @@ export function standingLinks(obs: GameState, me: string, good: Good): Tile[] {
 }
 
 function chainParts(obs: GameState, me: string, good: Good): { links: Good[]; standing: Tile[] } {
+  if (!chainsOn()) return { links: [], standing: [] };
   const unfed = unfedInputs(obs, me, good);
   const household = householdNeeds(obs, me);
   if (unfed.some((g) => g in household)) return { links: [], standing: [] };
