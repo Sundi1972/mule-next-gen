@@ -90,6 +90,37 @@ describe('a farm feeds a new factory only with what is left after the household 
   });
 });
 
+describe('a farm feeds a new factory only with what its factories already running leave (FM-factory-input, N7)', () => {
+  /**
+   * Development: ai0 owns a farm on column 0 (rating `food`), a Medicine factory on column 1 and an idle plot on column
+   * 2, with Water and Energy to spare and no Food. Whether a second Medicine factory on column 2 is vetoed for want of Food.
+   */
+  function secondFactory(food: number, farmMakes: number): string | null | undefined {
+    const state = game();
+    while (state.phase !== 'development') advancePhase(state);
+    place(state, [
+      { x: 0, outfit: 'food', food },
+      { x: 1, outfit: 'medicine' },
+      { x: 2, outfit: null },
+    ]);
+    for (const p of state.players) setStock(state, p.id, p.id === ME ? { water: 30, energy: 20 } : {}, p.id === ME ? 5000 : 0);
+    expect(outlook(observe(state, ME), ME, { lookAhead: true }).made.food, 'the farm makes').toBe(farmMakes);
+    const medicine = developDecision(observe(state, ME), mindOf(), 0).all.find((c) => c.key === 'install:medicine:2');
+    expect(medicine, 'a Medicine install on the idle plot is listed').toBeDefined();
+    return medicine!.veto;
+  }
+
+  it('FM-factory-input-N7a: a farm whose one spare Food the first Medicine factory takes does not feed a second', () => {
+    // Crew: 1 for the farm and 2 for each factory, so the household eats 2 + ceil(5 / 4) = 4 of the farm's 5; the first
+    // factory takes the fifth. Nothing is left for a second, which would idle.
+    expect(secondFactory(3, 5) ?? '').toMatch(/nothing to feed/);
+  });
+
+  it('FM-factory-input-N7b: a farm with a Food to spare beyond the household and the first factory feeds a second', () => {
+    expect(secondFactory(4, 6) ?? '').not.toMatch(/nothing to feed/);
+  });
+});
+
 describe("a factory seat bids for its Food at a worthwhile ask (FM-factory-input, option 1)", () => {
   /**
    * Month 1's auction, Food up: ai0 owns one Medicine factory and holds Water and Energy for it, no Food. The store
