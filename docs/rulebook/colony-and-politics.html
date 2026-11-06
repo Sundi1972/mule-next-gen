@@ -442,7 +442,7 @@
 <!-- ============================================================ -->
 <h2 id="migration">Mood and migration <span class="pill designed">Designed</span></h2>
 <p>Today the colony grows by <span class="num">4</span>% in a month its colonists were fed and shrinks by <span class="num">5</span>% when they went hungry, whatever the mood. The design says the mood will scale that growth and shrinkage: a happy colony attracts settlers, an unhappy one loses them. How much is not set yet; the numbers will live with the mood's.</p>
-<div class="box next"><h4>What is changing</h4><p>C27 is on hold: on 6 Nov Heiko asked to think the colonists concept through before the mood shapes their growth. Owner: WS1.</p></div>
+<div class="box next"><h4>What is changing</h4><p>C27 is on hold: on 6 Nov Heiko asked to think the colonists concept through first. Owner: WS1.</p></div>
 <p class="code-ref">In the code: <code>packages/engine/src/upkeep.ts::runUpkeep</code> · <code>config.ts::UPKEEP.colonistGrowth</code> · G-5 C27</p>
 <p class="owner">Kept current by: WS1.</p>
 
@@ -491,7 +491,7 @@
 
 <!-- ============================================================ -->
 <h2 id="reputation-deals">Reputation and deal cards <span class="pill backlog">Backlog</span></h2>
-<p>Every player has a reputation from <span class="num">0</span> to <span class="num">100</span>, starting at <span class="num">50</span>, and it already counts in vote weight (<span class="num">+1</span> at 70 or more, <span class="num">−1</span> below 30). On trunk nothing changes it yet, so it is 50 for everyone all game. In the colony branch, "blamed for the unrest" takes 1 point.</p>
+<p>Every player has a reputation from <span class="num">0</span> to <span class="num">100</span>, starting at <span class="num">50</span>, and it already counts in vote weight (<span class="num">+1</span> at 70 or more, <span class="num">−1</span> below 30). The social event "blamed for the unrest" takes <span class="num">1</span> point from a player (see <a href="#social-events">Social events</a>); nothing else changes it yet.</p>
 <p>The design (politics slice 3) makes reputation move: a deal card attached to a whisper turns a promise into something one tap accepts ("a non-aggression pact", "my vote for your law"), and breaking a signed card costs reputation, so it costs votes next time. Deal cards carry pacts, votes and promises only; nothing of value ever changes hands outside an auction. Borrowed votes (another player's votes for one month, by deal card) are part of the same design. Computer players may bluff about their own intentions, never about facts (Heiko, 28 Oct).</p>
 <div class="box next"><h4>What is changing</h4><p>Slice 3 is outside the MVP and runs in parallel after it (Heiko, 4 Nov); no lane is on it now. Claude seats winning allies through deal cards (WS2's social play) waits for it. Owner: WS7.</p></div>
 <p class="code-ref">In the code: <code>config.ts::START.reputation</code> · <code>::POLITICS.weight</code> · design <code>docs/design/05-colony-politics.md</code> · <code>docs/specs/2026-10-22-ws7-politics.md</code> (P-2, slice 3)</p>
@@ -514,7 +514,7 @@
 
 <!-- ============================================================ -->
 <h2 id="colonists-as-workers">Colonists as workers <span class="pill backlog">Backlog</span></h2>
-<p>Players&#x27; plots would be worked by the colony&#x27;s colonists, paid wages by the players, so the population limits production and players compete for workers. Today colonists only buy Food and Water from the store; their numbers grow when they are fed and shrink when they go hungry or the air is in Collapse, and the immigration and emigration waves move them. The mood will steer their growth later (see <a href="#migration">Mood and migration</a>, designed).</p>
+<p>Players&#x27; plots would be worked by the colony&#x27;s colonists, paid wages by the players, so the population limits production and players compete for workers. Today colonists only buy Food and Water from the store; their numbers grow when they are fed and shrink when they go hungry or the air is in Collapse, and the immigration and emigration waves move them; the mood already tilts those waves (a happy colony draws immigrants, an unhappy one loses colonists). The mood steering their growth directly is designed, not built (see <a href="#migration">Mood and migration</a>).</p>
 <div class="box why"><h4>Why it is like this</h4><p>Parked by Heiko on 6 Nov: wages would add a second economy.</p></div>
 <div class="box next"><h4>What is changing</h4><p>Nothing; no lane is on it. Owner: not assigned.</p></div>
 <p class="owner">Kept current by: WS7.</p>
