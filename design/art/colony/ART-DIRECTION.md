@@ -2,7 +2,7 @@
 
 **Status:** Heiko ruled direction **C** on 6 Nov 2026: each building is modelled once in Blender and shown as a
 pre-rendered picture, with a live layer drawn over it; the same models become live 3D on the TV later; the world
-map's painter draws the ground. Free (CC0) assets, plus the KitBash3D kits Heiko chose for the Hospital (6 Nov, spec AM-5).
+map's painter draws the ground. Our own builds with free (CC0) assets, dressed with props from the free KitBash3D Mission to Minerva kit (Heiko, 6 Nov, spec AM-5).
 Evidence: `design/mocks/colony-grounds/look.html` (the whole colony, the Park three ways, the live layer) and the
 spikes in `spike-park/`.
 
@@ -55,9 +55,11 @@ Never change the camera per building. One camera is what lets 70 pictures sit to
 
 - **Ground:** paving and lawns come from the map painter (§6), so the grounds and the planet map read as one place.
 - **Textures:** CC0 (Poly Haven, ambientCG), ≤ 1k in renders' source, ≤ 512 px in the real-time glb.
-- **KitBash3D kits** (Heiko's choice, 6 Nov): allowed for pre-rendered pictures. They stay in
-  `/Users/heiko/.kitbash3d/kits` (4k PNG textures), outside the repo; only the rendered WebP is committed. Whether
-  their licence also allows a real-time glb is not settled; ask before exporting one.
+- **Mission to Minerva props** (Heiko's ruling, 6 Nov): Spaceport apron (landing pads, control tower, cranes, tanks,
+  haulers), garden modules, rooftop dishes, construction scaffolding, rubble. Buildings and the rocket stay our own
+  builds. The kit stays outside the repo (path from the PM). **Until Heiko answers the licence question, kit props
+  appear in local renders only, never in committed art.** No real-time glb from kit parts without a licence check.
+  No purchases. NASA models only as a reference unless a per-model licence check passes.
 
 ## 5. Scale and detail
 

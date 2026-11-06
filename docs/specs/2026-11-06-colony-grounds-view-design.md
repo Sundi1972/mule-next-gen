@@ -32,8 +32,8 @@ this spec adds nothing to them.
 - Live 3D on the TV (react-three-fiber): later, from the same models — its own spec when Heiko asks.
 - Any rule, number or data change: slots, stages, gauges are C48/RULE-32 and ColonyView as they are.
 - Weather from events, seasons, a camera the player moves: later, each its own small spec.
-- Paid assets beyond what Heiko has chosen: his call. He chose KitBash3D kits for the Hospital (AM-5); renders only,
-  the raw kits stay outside the repo.
+- Paid assets: none (Heiko, 6 Nov). Buildings and the rocket are our own Blender builds, dressed with props from the
+  free KitBash3D Mission to Minerva kit (AM-5); NASA models only as a reference.
 - The town hall growing with prestige: needs a rule (tiers) from WS7; until then the hall has one picture.
 
 **Rough cost**
@@ -332,13 +332,15 @@ folded    C2; PR-1 fix round
 ```
 
 ```
-AM-5 · 2026-11-06 · lead · Heiko (via the PM): KitBash3D Cargo connector installed
+AM-5 · 2026-11-06 · lead · Heiko's ruling (via the PM), after the Mission to Minerva part table
 target    §0 non-goal "Paid assets: Heiko's call"
 said      no paid assets until Heiko decides
-did       Heiko decided: the Hospital is redone with KitBash3D kits (possibly other kinds later). Kits download to
-          /Users/heiko/.kitbash3d/kits (4k PNG textures, Blender 5.2); only the rendered WebP enters the repo, never
-          a raw kit. UNPROVEN: whether the licence covers a company with staff and AI agents rendering — the
-          follow-up (4f07afba) advised emailing KitBash first; whether Heiko did is not known to WS10.
+did       Heiko ruled: no purchases. The six buildings and the rocket stay our own Blender builds, dressed with props
+          from the free KitBash3D Mission to Minerva kit (Spaceport apron, garden, rooftop dishes, construction
+          scaffolding, rubble). The kit has no rocket, observatory, hospital or stadium. NASA models only as a
+          reference unless a per-model licence check passes. Raw kit files never enter the repo; the folder path
+          comes from the PM. UNTIL Heiko answers the licence question (AI agents rendering), kit props appear in
+          local renders only, never in committed art.
 because   G-2: city-builder polish; Heiko's call by the non-goal itself
 goal      G-2
 folded    §0 non-goal; ART-DIRECTION §4; ASSET-LIST Hospital row; plan Task 1.6

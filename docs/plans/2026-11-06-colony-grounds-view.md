@@ -15,8 +15,8 @@
 - Live 3D on the TV (react-three-fiber): later, from the same models — its own spec when Heiko asks.
 - Any rule, number or data change: slots, stages, gauges are C48/RULE-32 and ColonyView as they are.
 - Weather from events, seasons, a camera the player moves: later, each its own small spec.
-- Paid assets beyond what Heiko has chosen: his call. He chose KitBash3D kits for the Hospital (AM-5); renders only,
-  the raw kits stay outside the repo.
+- Paid assets: none (Heiko, 6 Nov). Buildings and the rocket are our own Blender builds, dressed with props from the
+  free KitBash3D Mission to Minerva kit (AM-5); NASA models only as a reference.
 - The town hall growing with prestige: needs a rule (tiers) from WS7; until then the hall has one picture.
 
 **Thin baseline (spec §0.1):** WS6's SVG `Scene` with pictures for standing buildings only · ≈ 1 PR · fails UBER-AC-2
@@ -172,12 +172,15 @@ Plan-drift corrections (as built):
 - [ ] **Step 4:** Browser test (front to back), also covering review findings: a picture that fails to load shows the SVG shape (B-AC-4's negative case: block one `/art/colony/` URL in the test), and the pictures sit in back-to-front order in the DOM.
   Original step: browser test (front to back): in `apps/web/e2e/` the test command starts its own stack, plays to the first month end with a Park commissioned and funded, and asserts `[data-testid=colony-grounds] image[href*="park/"]` is visible. It never targets the integration rig.
 
-### Task 1.6: the Hospital, redone with KitBash3D kits (AM-5)
+### Task 1.6: the Hospital, polished, with kit props (AM-5)
 
-**Depends on:** the PM's list of kit folders under `/Users/heiko/.kitbash3d/kits`. **ACs:** T-AC-2 for hospital.
-- [ ] Rebuild `design/art/colony/hospital.py` from kit pieces, loaded from outside the repo. The raw kits never enter
-  the repo or `.gitignore`d folders inside it. Same camera, frame and light (ART-DIRECTION §2–§3).
-- [ ] Render every RULE-1 stage, look at each one, run `publish.sh`, extend T-AC-2 to the Hospital. Commit.
+**Depends on:** none for the polish; the kit folder path from the PM for the props. **ACs:** T-AC-2 for hospital.
+- [ ] Polish our own `design/art/colony/hospital.py` (massing, glass, crosses, ambulance bay) at the shared camera,
+  frame and light (ART-DIRECTION §2–§3). Render every RULE-1 stage, look at each one, run `publish.sh`; T-AC-2 covers
+  it from the manifest. Commit.
+- [ ] Kit props (rooftop dishes, a helipad, scaffolding for build1, rubble for damaged) from Mission to Minerva, loaded
+  from outside the repo: **local renders only until Heiko answers the licence question**; committed pictures carry
+  none of them until then.
 
 ### Task 1.7: the colony ring re-render for Heiko's look review
 
