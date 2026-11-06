@@ -366,6 +366,12 @@ lands at the land grant (droneOrder is kept until then).
   components/AuctionParts.tsx through phone/ground.tsx::GroundCard (the land auction's lot card): it follows GroundCard
   with no edit to WS3's file, and its tests' dot counts change with R-2's. (3) packages/ai/src/llm/moves-stub.ts is on
   trunk now (C1's anchor said WS2's branch). (4) The mock lands on trunk in its own PR (#505) before PR-1.
+- 6 Nov, after PR-1c (#524), PM ruling on UBER-AC-1: at 844×390 the built rail showed the Drone report's first plot
+  and needed a scroll for the second, which fails "see it at the table". C2's report becomes compact: per plot one line
+  (where, land, best for) and one row of six goods by icon with 0–3 dots, a found Crystite or Rare earth as its gem;
+  "Next drone: month N" closes the report instead of the rail's footer. Mock #528 (79c253d6), measured 132 px against
+  about 137 px of room at 844×390 and 146 px at 667×375. Built in PR-2 (it already edits plotInfo.tsx), with a browser
+  check that both plots sit inside the rail at both sizes.
 
 ## §9 · Ownership Boundaries
 
