@@ -64,8 +64,7 @@ describe("pricing §3: the AI's prices are the store's own rule", () => {
         const q = storeQuotes(state, good);
         expect(q.sell === null, `${good}: sell is null exactly when nothing is for sale`).toBe(storeForSale(state, good) === 0);
         expect(q.buy === null, `${good}: buy is null exactly when the store wants none`).toBe(storeWants(state, good) === 0);
-        // Until PR-4 the off-world price is expected to stay where it is.
-        for (const months of [0, 1, 3]) expect(expectedOffWorld(state, good, months), `${good} in ${months} months`).toBe(state.store.offWorld[good]);
+        expect(expectedOffWorld(state, good, 0), `${good} now`).toBe(state.store.offWorld[good]);
       }
       if (checkedPurity) return;
       // Pure and never draws: the state, its rng included, is as it was.
@@ -78,6 +77,20 @@ describe("pricing §3: the AI's prices are the store's own rule", () => {
     // Without a walk's lesson at some upkeep, the stage check above compares nothing with nothing.
     expect(walked, 'some upkeep held a walk lesson').toBeGreaterThan(0);
   }, 60_000);
+});
+
+describe("pricing §3: the AI expects the off-world walk's mean reversion", () => {
+  it('price T-AC-2: Crystite off-world at 160 is expected at 134 in one month and 109 in three; Smithore reverts to its reference; goods not exported stay', () => {
+    const state = createGame({ seed: 5, players: [0, 1, 2, 3].map((i) => ({ id: `p${i}`, name: `P${i}`, isAi: false })) });
+    state.store.offWorld.crystite = 160;
+    expect([0, 1, 3].map((months) => expectedOffWorld(state, 'crystite', months))).toEqual([160, 134, 109]);
+    // The other export goods revert to their reference: Smithore 75 → 50 × 1.5^0.7 = 66.4.
+    state.store.offWorld.smithore = 75;
+    expect(expectedOffWorld(state, 'smithore', 1)).toBe(66);
+    for (const good of ['food', 'water', 'energy'] as const) {
+      expect(expectedOffWorld(state, good, 3), `${good} is not exported`).toBe(state.store.offWorld[good]);
+    }
+  });
 });
 
 describe("pricing T-AC-2: off the auction, the AI expects the store's buy line (no wage cap since needs C2)", () => {
