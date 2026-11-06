@@ -789,7 +789,7 @@ async function readTheNeedStop(cast: { seller: Phone; empty: Phone; others: Phon
     check(!a.deals.some((d) => d.seller === id), `B-AC-B1: once held ${seller.name} sells nothing`);
     await Promise.all(screens.map((s) => untilKeeps(s, id, `KEEPS ${need}`, `B-AC-B1: ${seller.name}'s walker is marked KEEPS ${need}`)));
     const words = await readText(seller.page, 'held');
-    check(words === `Stopped at ${need} Food: what you need next month. To sell more, hold ▼: you’d be short next month.`, `B-AC-B1: ${seller.name}'s rail says she stopped and how to sell on, got "${words}"`);
+    check(words === `Stopped at ${need} Food: what you must hold. To sell more, hold ▼: you’d be short next month.`, `B-AC-B1: ${seller.name}'s rail says she stopped and how to sell on, got "${words}"`);
     const down = await readText(seller.page, 'hold-down');
     check(down === '▼ Hold: sell short', `B-AC-B1: ${seller.name}'s ▼ is the hold that sells short, got "${down}"`);
     for (const p of [empty, ...others]) check((await p.page.getByTestId('held').count()) === 0, `B-AC-B1: ${p.name}'s rail says nothing of ${seller.name}'s stop`);
