@@ -10,8 +10,11 @@ import {
   GOODS,
   colonistDemand,
   monthlyDemand,
+  MULE,
+  mulePrice,
   mulesWanted,
   postPrices,
+  PRICE,
   priceBand,
   stepAuction,
   storeSellLine,
@@ -393,5 +396,22 @@ describe("price C6: the colony's Energy demand counts the MULEs it will add", ()
     const colonists = colonistDemand(state, 'energy', (state.colonists / UPKEEP.colonistsPerUnit) * UPKEEP.colonistEnergyShare);
 
     expect(monthlyDemand(state).energy).toBeCloseTo(colonists, 9);
+  });
+});
+
+describe('price B-AC-6: a corral sold out month after month stops raising the MULE price at the cap', () => {
+  it('price B-AC-6: after many sold-out months the factor is at most 2.0 and Smithore at most its ceiling', () => {
+    const state = game();
+    const smithoreCeiling = PRICE.ceiling * GOOD_CONFIG.smithore.refPrice;
+    const cap = (MULE.labour + MULE.smithorePerMule * smithoreCeiling) * MULE.maxFactor;
+    for (let month = 1; month <= 10; month++) {
+      to(state, 'development');
+      state.store.mules = 0;
+      to(state, 'production');
+      expect(state.store.muleFactor, `month ${month}`).toBeLessThanOrEqual(MULE.maxFactor);
+      expect(state.store.posted.smithore, `month ${month}`).toBeLessThanOrEqual(smithoreCeiling);
+      expect(mulePrice(state), `month ${month}`).toBeLessThanOrEqual(cap);
+    }
+    expect(state.store.muleFactor, 'the premise: ten sold-out months reached the cap').toBe(MULE.maxFactor);
   });
 });
