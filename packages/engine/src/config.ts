@@ -1653,6 +1653,25 @@ export const STRATEGIST = {
   },
 };
 
+/**
+ * The resource-utility model: one value per unit a seat could hold, the chance it is needed times what going without
+ * it costs, plus the rest times what it fetches later. Placeholders until the balance phase.
+ */
+export const AI_VALUE = {
+  /** The switch: true values every unit with this model, false keeps the strategist's own values. */
+  unit: false,
+  /**
+   * Chance, per point of the persona's risk weight, that a unit the seat's own plots are forecast to make is needed
+   * anyway (the forecast falls short). 0 to 1; the product is capped at 1.
+   */
+  forecastRisk: 0.5,
+  /**
+   * What a needed unit is never valued below, as a multiple of buying it back from the store next month (the belief
+   * plus the store's spread). 1 is the buy-back price itself.
+   */
+  shortFloorMarkup: 1,
+};
+
 /** The AI's hands in the real-time phases. Times are in ms. */
 export const AI_HANDS = {
   /** How often AI hands act during development, in the server and the simulator alike. */
