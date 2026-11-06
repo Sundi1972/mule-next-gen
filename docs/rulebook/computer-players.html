@@ -387,20 +387,20 @@
 <h3 id="resource-utility-why">Why it is like this</h3>
 <p>Measured on today's game (40 games on each of 3 seeds, 5 November): a computer player went into the Food auction short in 86&#8211;87% of months, and refused to buy in most of them because it valued a needed unit at about 19 cr against an asking price near 50. It was hungry at 88&#8211;89% of developments with about 1,200 cr in hand. Energy shortages cut some production in 40&#8211;43% of months. Today a needed Food unit is worth only the walking time hunger costs, which takes no account of the price level. A short buying fix from the Balance team (WS1) covers Food, Water and Energy until this design ships.</p>
 
-<div class="box next"><h4>What is changing</h4><p>Not in the game yet. The first piece (keep supplied, plants and wells valued at what they save) is being built on the branch <code>ws9-util-pr1</code>, switched off behind <code>AI_VALUE.unit</code>; with the switch off the game plays exactly as trunk. It is switched on only when Heiko rules on its measured numbers. Two things differ from the text above: a plot's loss is shared over the Energy it uses (a plot using 2 is kept on only by both units, so each is worth half its loss), and the example's Food is bought only when next month's expected price is close to today's ask, because a needed unit is valued at least at buying it back next month; when the store's stock points to a cheaper Food next month, the seat still waits and goes hungry. That is open with the AI Strategy team's lead.</p>
+<div class="box next"><h4>What is changing</h4><p>Not in the game yet. The first piece (keep supplied, plants and wells valued at what they save) is being built on the branch <code>ws9-util-pr1</code>, switched off behind <code>AI_VALUE.unit</code>; with the switch off the game plays exactly as trunk. It is switched on only when Heiko rules on its measured numbers. Two rulings refine the text above. A plot's loss is shared over the Energy it uses: a plot using 2 is kept on only by both units, so each is worth half its loss. And a needed unit is never valued below what it costs to have it now, the store's price today, or buying it back next month if that is dearer: hunger and a plot turned off come before next month's auction, so waiting can't avert them. A needed unit at exactly the store's price is bought, and passing on it counts as giving up its whole value.</p>
 <p>Measured with the switch on, 40 games on each of seeds 1, 101 and 201, against today's model on the same seeds:</p>
 <div class="table-wrap"><table>
 <thead><tr><th>Check</th><th>Switch on</th><th>Today</th></tr></thead>
 <tbody>
-<tr><td>Went into an auction short, the store selling and cash for all of it, and left still short (target under 5%)</td><td>49&#8211;50%</td><td>49&#8211;53%</td></tr>
+<tr><td>Went into an auction short, the store selling and cash for all of it, and left still short (target under 5%)</td><td>44&#8211;49%</td><td>49&#8211;53%</td></tr>
 <tr><td>Months with plots cut for want of Energy while the store had it and the player could pay (target under 5%)</td><td>14&#8211;15%</td><td>17&#8211;19%</td></tr>
-<tr><td>Months with any plot cut for want of Energy</td><td>41&#8211;48%</td><td>62&#8211;67%</td></tr>
+<tr><td>Months with any plot cut for want of Energy</td><td>41&#8211;50%</td><td>62&#8211;67%</td></tr>
 <tr><td>Power plants a player holds at the end of a game</td><td>2.5&#8211;2.8</td><td>1.7&#8211;2.0</td></tr>
 <tr><td>Wells a player holds at the end of a game</td><td>1.5&#8211;1.7</td><td>1.9&#8211;2.1</td></tr>
 <tr><td>Colonists short of Food or Water (the colony, beside the rows above)</td><td>91&#8211;92% of months</td><td>79&#8211;82% of months</td></tr>
 </tbody>
 </table></div>
-<p>The simulator runs about 1.4 times as long with the switch on. The surplus comes second and speculation third. It replaces the Balance team's short buying fix and its Energy valuation when it ships.</p></div>
+<p>The simulator runs about as fast with the switch on as with it off. The surplus comes second and speculation third. It replaces the Balance team's short buying fix and its Energy valuation when it ships.</p></div>
 <p class="code-ref">In the code: spec <code>docs/specs/2026-11-05-ws9-resource-utility.md</code> (PR #385) · <code>packages/ai/src/value.ts::unitValues, monthlyNet</code> · <code>packages/ai/src/strategist.ts::goodPlan, tradeDecision</code> · <code>packages/ai/src/outlook.ts::belief</code> · <code>packages/ai/src/sim.ts</code> (the Resource utility rows) · the playbook's <code>GoodPlay.expect</code></p>
 <p class="owner">Responsible: AI Strategy team (WS9), which builds it, with the Balance team (WS1) for <code>value.ts</code> and <code>strategist.ts</code>. Status: Being built, branch <code>ws9-util-pr1</code>, 6 November.</p>
 
