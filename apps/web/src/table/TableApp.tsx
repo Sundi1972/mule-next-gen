@@ -446,8 +446,6 @@ function useNewestFirst(deals: DealView[]): DealRow[] {
 export function TvAuction({ table, game, auction }: { table: TableView<MuleView>; game: MuleView; auction: NonNullable<MuleView['auction']> }) {
   useAuctionSound(auction);
   const skipped = skippedLine(auction);
-  // The status line names the skipped goods only, no reasons, so it fits its one line (WS6 ruling on #204).
-  const skippedGoods = auction.skipped.length > 0 ? `Skipped: ${auction.skipped.map((s) => GOOD_NAME[s.good]).join(', ')}` : null;
   const walkers = boardWalkers(game, auction);
   const stock = auction.storeForSale;
   const deals = useNewestFirst(auction.deals);
@@ -470,20 +468,23 @@ export function TvAuction({ table, game, auction }: { table: TableView<MuleView>
       <div className="flex min-h-0 flex-1 gap-6">
         <div className={cx('flex min-w-0 flex-1 flex-col', status ? 'gap-3' : 'gap-2')}>
           {status ? (
-            // On the status stage the skipped words share the picked count's row, so the ship panel keeps its room.
+            // On the status stage the skipped words share the picked count's row, under the no-clock line, so the ship
+            // panel keeps its room; both lines show in full, wrapping rather than cut.
             <div className="flex shrink-0 items-center gap-4" data-testid="tv-pick-bar">
               {/* The time bar's height, not ReadyCount's TV chip: a taller row pushes the ship panel off the screen. */}
               <span className="flex h-8 shrink-0 items-center rounded-chip border border-holo-line bg-holo-soft px-4 font-mono text-2xl font-bold leading-none text-holo" data-testid="ready-count">
                 {picked.filter((p) => p.isAi || p.ready).length} / {picked.length} PICKED
               </span>
-              <span className="min-w-0 flex-1 truncate text-2xl text-ink-2">
-                <strong className="font-semibold text-ink">No clock:</strong> {SIDE_PICK_WORDS.noClock}
-              </span>
-              {skippedGoods && (
-                <p className="min-w-0 max-w-[45%] truncate font-mono text-base text-ink-3" data-testid="skipped">
-                  {skippedGoods}
-                </p>
-              )}
+              <div className="flex min-w-0 flex-1 flex-col">
+                <span className="text-2xl leading-tight text-ink-2">
+                  <strong className="font-semibold text-ink">No clock:</strong> {SIDE_PICK_WORDS.noClock}
+                </span>
+                {skipped && (
+                  <p className="font-mono text-sm leading-tight text-ink-3" data-testid="skipped">
+                    {skipped}
+                  </p>
+                )}
+              </div>
             </div>
           ) : (
             <>
@@ -593,15 +594,28 @@ export function TvAuction({ table, game, auction }: { table: TableView<MuleView>
               // Variant A (Heiko's pick): the newest deal shows its speed-up, as the board's counter does; the older
               // ones are one line each, so two deals fit under the store box (PM ruling, 5 Nov).
               const steps = speedStep(dealSpeed(deal.units));
+              // The units and the price always show; a long pair of names gives way first.
+              const line = dealLine(game, deal);
+              const cut = line.lastIndexOf(' · ');
+              const words = (
+                <>
+                  <span className="min-w-0 truncate" data-testid="tv-deal-names">
+                    {line.slice(0, cut)}
+                  </span>
+                  <span className="shrink-0 whitespace-pre" data-testid="tv-deal-terms">
+                    {line.slice(cut)}
+                  </span>
+                </>
+              );
               if (i > 0)
                 return (
-                  <li key={key} className="w-full truncate rounded-control border border-holo bg-holo-soft px-3 py-1.5 font-mono text-base font-bold leading-tight text-holo" data-testid="tv-deal">
-                    {dealLine(game, deal)}
+                  <li key={key} className="flex w-full rounded-control border border-holo bg-holo-soft px-3 py-1.5 font-mono text-base font-bold leading-tight text-holo" data-testid="tv-deal">
+                    {words}
                   </li>
                 );
               return (
                 <li key={key} className="flex w-full flex-col rounded-control border border-holo bg-holo-soft px-3 py-1.5 font-mono text-lg font-bold leading-tight text-holo" data-testid="tv-deal">
-                  <span className="truncate">{dealLine(game, deal)}</span>
+                  <span className="flex">{words}</span>
                   <span className="flex items-center gap-2 text-base font-normal text-ink-2">
                     <span className="text-2xl font-bold leading-none tracking-[-0.1em]" aria-label={`speed ${steps} of ${SPEED_STEPS}`} data-testid="tv-deal-speed">
                       {Array.from({ length: SPEED_STEPS }, (_, k) => (
@@ -623,7 +637,8 @@ export function TvAuction({ table, game, auction }: { table: TableView<MuleView>
           </p>
           <span className="shrink-0 truncate font-mono text-sm text-ink-3" data-testid="tv-room-line">
             ROOM {table.code}
-            {auction.next.length > 0 ? ` · NEXT ${auction.next.map((g) => GOOD_NAME[g].toUpperCase()).join(', ')}` : ''}
+            {/* The queue may still skip goods, so only the close names what comes next, as the phone does. */}
+            {closed ? ` · ${auction.upNext ? `NEXT ${GOOD_NAME[auction.upNext].toUpperCase()}` : 'LAST GOOD'}` : ''}
           </span>
         </div>
       </div>
