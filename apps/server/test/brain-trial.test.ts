@@ -8,7 +8,7 @@ import { Brain, candidate, consider, parseReply, PERSONAS, ReplyRejected, shortl
 import { createHaikuComplete } from '../src/brain/client.js';
 import { isCallLine, readLedgerLines, type CallLine } from '../src/brain/ledger.js';
 import { cutOffPhase, fallbackReason, renderTrialReport, tournamentBar, trialReport, type TrialGame, type TrialInput } from '../src/brain/trial-report.js';
-import { capRefusal, everyCallFailed, exitCode, proofCapRefusal, seedsFlag, tableSeats, tourneySpent, trial, trialLedgerPath, trialSeeds, trialSpent, writeModelFlag } from '../src/brain/trial.js';
+import { capRefusal, everyCallFailed, exitCode, proofCapRefusal, seedsFlag, tableSeats, tourneySpent, trial, trialGames, trialLedgerPath, trialSeeds, trialSpent, writeModelFlag } from '../src/brain/trial.js';
 import { fakeSdk, KEY, neverAnswers, requestOf, sdkMessage, worstUsdOfRequest, type SdkModuleFake, type SdkParams } from './brain-fakes.js';
 
 /** The SDK module's client: records its options and answers through `sdk.create`; it never reaches the network. */
@@ -190,27 +190,68 @@ describe("brain:trial tournament (WS1's bar for UBER-AC-A: --table pair, --seeds
   /** Results with the Claude chairs at `wins` of 100 games and the given mean ranks. */
   const results = (wins: number, claude: number, engine: number) => ({ games: 100, smartWins: wins, smart: { meanScore: 0, meanRank: claude }, strategist: { meanScore: 0, meanRank: engine } });
 
-  it('TOURNEY-1: --table pair seats Claude on the even chairs and every seat on its playbook path, personas rotating by seed as the sim does; without it, the first K chairs as before', () => {
+  // Since balanced seating (PM, option A) the Claude chairs follow the game's seating; before it they were always 0 and 2.
+  it('TOURNEY-1: --table pair seats Claude on the even or the odd chairs as the game is seated, every seat on its playbook path, personas rotating by seed as the sim does; without it, the first K chairs as before', () => {
     for (const seed of [1, 101, 202]) {
-      const pair = tableSeats('pair', seed, 2);
-      expect(pair.claude).toEqual([0, 2]);
-      expect(pair.specs).toEqual(simSeats(4, 'trader', seed, null, 'playbook'));
-      expect(pair.specs.map((s) => s.persona)).toEqual(simSeats(4, 'trader', seed, null, 'pair').map((s) => s.persona));
+      const even = tableSeats({ seed, seating: 'even' }, 2);
+      const odd = tableSeats({ seed, seating: 'odd' }, 2);
+      expect(even.claude).toEqual([0, 2]);
+      expect(odd.claude).toEqual([1, 3]);
+      expect(even.specs).toEqual(simSeats(4, 'trader', seed, null, 'playbook'));
+      expect(odd.specs).toEqual(even.specs);
+      expect(even.specs.map((s) => s.persona)).toEqual(simSeats(4, 'trader', seed, null, 'pair').map((s) => s.persona));
     }
-    expect(tableSeats(null, 7, 2)).toEqual({ specs: simSeats(4, 'trader', 7), claude: [0, 1] });
-    expect(tableSeats(null, 7, 3).claude).toEqual([0, 1, 2]);
+    expect(tableSeats({ seed: 7, seating: null }, 2)).toEqual({ specs: simSeats(4, 'trader', 7), claude: [0, 1] });
+    expect(tableSeats({ seed: 7, seating: null }, 3).claude).toEqual([0, 1, 2]);
   });
 
-  it('TOURNEY-2: --seeds 1,101,201 with --games 40 plays seeds 1-40, 101-140 and 201-240, as the sim plays 40 games from each; --seed alone plays seed onward as before', () => {
+  it('TOURNEY-8 (balanced seating): --table pair --seeds 1,101 --games 4 plays 8 games, seeds 1, 2, 101 and 102 each with the Claude chairs on 0 and 2 and again on 1 and 3', () => {
+    const plan = trialGames({ table: 'pair', seeds: [1, 101], seed: 101, games: 4 });
+    expect(plan.map((g) => [g.seed, tableSeats(g, 2).claude])).toEqual([
+      [1, [0, 2]], [1, [1, 3]], [2, [0, 2]], [2, [1, 3]],
+      [101, [0, 2]], [101, [1, 3]], [102, [0, 2]], [102, [1, 3]],
+    ]);
+    expect(trialGames({ table: 'pair', seeds: [1, 101, 201], seed: 101, games: 40 })).toHaveLength(120);
+  });
+
+  it('TOURNEY-9 (balanced seating, positive control of the cancellation): when chair 0 always wins, the Claude chairs win every even game and no odd one, 50% pooled, and the control passes; when the Claude chairs win in both seatings, the control fails', () => {
+    const plan = trialGames({ table: 'pair', seeds: [1], seed: 101, games: 40 });
+    /** The planned games played out with `order` ranking the seats first to last. */
+    const played = (order: (claude: string[]) => string[]): TrialGame[] =>
+      plan.map((g, i) => {
+        const chairs = tableSeats(g, 2).claude.map((c) => `ai${c}`);
+        const scores = Object.fromEntries(order(chairs).map((seat, rank) => [seat, 400 - 100 * rank]));
+        return { id: `g${i}`, end: 'over', months: 12, smart: [], chairs, seating: g.seating!, decisions: [], lines: {}, modelLines: {}, cutOff: [], countedUsd: 0, settledCalls: 0, playbooks: [], scores };
+      });
+    const control = (games: TrialGame[]) =>
+      trialReport({ keyed: false, planned: plan.length, stopped: 'done', smartPerGame: 0, seatsPerGame: 4, cap: null, gameBudgetUsd: 0.55, games, calls: [], playbooks: false, table: 'pair', control: true });
+
+    const chairZero = control(played(() => ['ai0', 'ai1', 'ai2', 'ai3']));
+    expect(chairZero.seatings!.even).toMatchObject({ games: 20, smartWins: 20, smart: { meanRank: 2 }, strategist: { meanRank: 3 } });
+    expect(chairZero.seatings!.odd).toMatchObject({ games: 20, smartWins: 0, smart: { meanRank: 3 }, strategist: { meanRank: 2 } });
+    expect(chairZero.results).toMatchObject({ games: 40, smartWins: 20, smart: { meanRank: 2.5 }, strategist: { meanRank: 2.5 } });
+    expect(chairZero.bar).toEqual({ kind: 'control', verdict: 'pass' });
+    expect(renderTrialReport(chairZero)).toContainEqual(
+      expect.stringMatching(/^Claude chairs by seating\s+on 0 and 2: won 100\.0% \(20 of 20 games\), mean rank lead 1\.00; on 1 and 3: won 0\.0% \(0 of 20 games\), mean rank lead -1\.00$/),
+    );
+    expect(renderTrialReport(chairZero)).toContainEqual(expect.stringMatching(/^WS1's bar, positive control\s+PASS: won 50\.0% of 40 games/));
+
+    const claudeAhead = control(played((claude) => [...claude, ...['ai0', 'ai1', 'ai2', 'ai3'].filter((s) => !claude.includes(s))]));
+    expect(claudeAhead.results.smartWins / claudeAhead.results.games).toBeGreaterThan(0.55);
+    expect(claudeAhead.bar).toEqual({ kind: 'control', verdict: 'fail' });
+  });
+
+  it('TOURNEY-2: without --table, --seeds 1,101,201 with --games 40 plays seeds 1-40, 101-140 and 201-240, as the sim plays 40 games from each, and --seed alone plays seed onward, each game unseated, as before balanced seating', () => {
     const seeds = trialSeeds({ seeds: [1, 101, 201], seed: 101, games: 40 });
     expect(seeds).toHaveLength(120);
     expect([seeds[0], seeds[39], seeds[40], seeds[79], seeds[80], seeds[119]]).toEqual([1, 40, 101, 140, 201, 240]);
-    expect(trialSeeds({ seeds: null, seed: 101, games: 3 })).toEqual([101, 102, 103]);
+    expect(trialGames({ table: null, seeds: [1, 101, 201], seed: 101, games: 40 })).toEqual(seeds.map((seed) => ({ seed, seating: null })));
+    expect(trialGames({ table: null, seeds: null, seed: 101, games: 3 })).toEqual([101, 102, 103].map((seed) => ({ seed, seating: null })));
     expect(seedsFlag('1,101,201')).toEqual([1, 101, 201]);
     for (const bad of ['', '1,,2', '1,x', '1.5', '-1', '1,1']) expect(seedsFlag(bad), bad).toBeUndefined();
   });
 
-  it('TOURNEY-2: --seeds with --seed, a bad --seeds, --table other than pair, --smart other than 2 under pair, pair without --playbooks 1 (unless --control), or --control without pair, is a bad flag; nothing is called', async () => {
+  it('TOURNEY-2: --seeds with --seed, a bad --seeds, --table other than pair, --smart other than 2 under pair, pair without --playbooks 1 (unless --control), --control without pair, or an odd --games under pair, is a bad flag; nothing is called or played', async () => {
     const calls = called();
     for (const argv of [
       ['--seeds', '1,101', '--seed', '5', '--playbooks', '1'],
@@ -220,10 +261,14 @@ describe("brain:trial tournament (WS1's bar for UBER-AC-A: --table pair, --seeds
       ['--table', 'pair'],
       ['--control', '1'],
     ]) {
-      const { out, result } = run(['--games', '1', '--max-usd', '1', ...argv]);
+      const { out, result } = run(['--games', '2', '--max-usd', '1', ...argv]);
       expect((await result).code, argv.join(' ')).toBe(1);
       expect(out[0], argv.join(' ')).toMatch(/^Usage: brain:trial/);
     }
+    // The control would play at once: refused, it prints the usage and nothing else.
+    const { out, result } = run(['--table', 'pair', '--control', '1', '--games', '3', '--seed', '1']);
+    expect(await result).toEqual({ code: 1, report: null });
+    expect(out).toEqual([expect.stringMatching(/^Usage: brain:trial .*--games even under --table pair/)]);
     expect(calls()).toBe(0);
   });
 
@@ -241,22 +286,28 @@ describe("brain:trial tournament (WS1's bar for UBER-AC-A: --table pair, --seeds
     );
 
     const calls = called();
-    const { out, result } = run(['--table', 'pair', '--playbooks', '1', '--games', '1', '--max-usd', '11', '--run', 't1']);
+    const { out, result } = run(['--table', 'pair', '--playbooks', '1', '--games', '2', '--max-usd', '11', '--run', 't1']);
     expect((await result).code).toBe(1);
     expect(calls()).toBe(0);
     expect(out).toEqual([capRefusal(dir, 'pair', 11)]);
     expect(fs.existsSync(path.join(dir, 'tourney-2026-10-22-t1.jsonl'))).toBe(false);
   });
 
-  it('TOURNEY-4 (positive control): --control plays the Claude chairs as engine seats: no call with the key set, no --max-usd needed, no ledger; the report judges the control bar over chairs 0 and 2', async () => {
+  it('TOURNEY-4 (positive control): --control plays the Claude chairs as engine seats: no call with the key set, no --max-usd needed, no ledger; the report judges the control bar over the Claude chairs in both seatings', async () => {
     const calls = called();
-    const { out, result } = run(['--table', 'pair', '--control', '1', '--games', '1', '--seed', '1']);
+    const { out, result } = run(['--table', 'pair', '--control', '1', '--games', '2', '--seed', '1']);
     const { code, report } = await result;
-    expect(code).toBe(report!.bar!.verdict === 'pass' ? 0 : 1);
     expect(calls()).toBe(0);
     expect(fs.readdirSync(dir)).toEqual([]);
-    expect(report!.results.games).toBe(1);
-    expect(report!.bar).toEqual({ kind: 'control', verdict: tournamentBar(report!.results, true, 1) });
+    // Engine seats only, one seed in both seatings: the same game twice, the Claude chairs on one side of it and then
+    // the other, so between them they win exactly one and their pooled mean rank is the engine chairs'.
+    expect(report!.seatings!.even.games).toBe(1);
+    expect(report!.seatings!.odd.games).toBe(1);
+    expect(report!.seatings!.even.smartWins + report!.seatings!.odd.smartWins).toBe(1);
+    expect(report!.results).toMatchObject({ games: 2, smartWins: 1 });
+    expect(report!.results.smart.meanRank).toBe(report!.results.strategist.meanRank);
+    expect(report!.bar).toEqual({ kind: 'control', verdict: 'pass' });
+    expect(code).toBe(0);
     expect(out.join('\n')).toContain('control: the Claude chairs play as engine seats');
   }, GAMES_MS);
 

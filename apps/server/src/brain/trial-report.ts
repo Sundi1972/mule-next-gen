@@ -14,6 +14,9 @@ export interface TrialDecision {
   note?: string;
 }
 
+/** Where the Claude chairs sit at the pair table: 'even' on chairs 0 and 2, 'odd' on 1 and 3. */
+export type Seating = 'even' | 'odd';
+
 /** What one game left behind. */
 export interface TrialGame {
   id: string;
@@ -40,6 +43,8 @@ export interface TrialGame {
   scores?: Record<string, number>;
   /** The seats in the Claude chairs, Claude's or, in the control, the engine's; absent, the Smart seats. */
   chairs?: string[];
+  /** At the pair table, where the Claude chairs sat: 'even' on chairs 0 and 2, 'odd' on 1 and 3. */
+  seating?: Seating;
 }
 
 /** Why a run stopped: the commands' reasons, a ledger write that was lost, or a game in which the API refused every call. */
@@ -144,6 +149,8 @@ export interface TrialReport {
    * verdict: the bar is set from WS1's tournament numbers.
    */
   results: { games: number; smartWins: number; smart: SeatResults; strategist: SeatResults };
+  /** A pair run's results per seating, the Claude chairs on 0 and 2 (even) or on 1 and 3 (odd); `results` pools them. */
+  seatings?: Record<Seating, TrialReport['results']>;
   /** WS1's bar for a pair run: the claim, or the positive control; absent without --table pair. */
   bar?: { kind: 'claim' | 'control'; verdict: Verdict };
   totals?: SpendTotals;

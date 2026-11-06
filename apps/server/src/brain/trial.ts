@@ -22,7 +22,7 @@ import { CallFailed } from './client.js';
 import { API_KEY_ENV, apiKeyFrom, createBrain, type BrainSeat } from './index.js';
 import { isCallLine, readLedgerLines, type CallLine, type ModelId } from './ledger.js';
 import { Playbooks } from './playbooks.js';
-import { capText, cutOffPhase, renderTrialReport, sum, trialReport, type SpendTotals, type TrialGame, type TrialReport, type TrialStop } from './trial-report.js';
+import { capText, cutOffPhase, renderTrialReport, sum, trialReport, type SpendTotals, type Seating, type TrialGame, type TrialReport, type TrialStop } from './trial-report.js';
 
 /** AI seats per trial game. */
 const SEATS = 4;
@@ -333,6 +333,17 @@ export function seedsFlag(text: string): number[] | undefined {
 /** The seeds a run plays: `games` from each of --seeds, as the sim plays from one --seed, or `games` from --seed. */
 export function trialSeeds(flags: { seeds: number[] | null; seed: number; games: number }): number[] {
   return (flags.seeds ?? [flags.seed]).flatMap((first) => Array.from({ length: flags.games }, (_, i) => first + i));
+}
+
+/** One game a run plays: its seed, and its seating at the pair table (null off it). */
+export interface PlannedGame {
+  seed: number;
+  seating: Seating | null;
+}
+
+/** The games a run plays, in order. */
+export function trialGames(_flags: { table: 'pair' | null; seeds: number[] | null; seed: number; games: number }): PlannedGame[] {
+  throw new Error('NotImplemented: trial-games');
 }
 
 /** A trial ledger that could not be read, so the spend behind the cap is unknown. */
