@@ -8,6 +8,7 @@ import type { Strategy } from './playbook.js';
  */
 
 export interface GoodConfig {
+  /** Credits a unit at normal supply when the game starts: the store's opening price and off-world price; it drifts after. */
   refPrice: number;
   /** How strongly price reacts to low cover (k in the price formula). */
   sensitivity: number;
@@ -214,6 +215,7 @@ export const UPKEEP = {
   baseWater: 1,
   crewPerFood: 4,
   crewPerWater: 6,
+  /** Crew a plot adds to its owner's, by kind: a raw plot, a factory, a green belt. */
   crew: { raw: 1, factory: 2, greenBelt: 0 },
   /**
    * Energy a raw plot burns a month, by what it makes. Factories burn what their recipe says. An Energy plot pays its
@@ -255,6 +257,7 @@ export const UPKEEP = {
 };
 
 export const START = {
+  /** Each player's credits at the start. */
   money: 1000,
   /** Each player's depot at the start. Food 2 and Energy 2 (Heiko, 5 Nov). */
   playerStock: { food: 2, water: 6, energy: 2 } as Partial<Stock>,
@@ -303,6 +306,7 @@ export const MULE = {
   surplusShare: 0.5,
   /** The scarcity factor never falls below this. */
   minFactor: 0.6,
+  /** Credits to outfit a MULE for each good, paid at the store's outfit counter. */
   outfitCost: {
     food: 25, water: 25, energy: 50, smithore: 75, crystite: 100, rareEarth: 100,
     alloy: 150, electronics: 200, medicine: 150, greenBelt: 20,
