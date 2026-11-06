@@ -380,6 +380,50 @@ What it says:
   are clearly the key demand. Con: without more Food supply (C29) it deepens a shortage that already reaches 9 months
   in 10; best decided with C29's supply numbers.
 
+```
+C14 · MODIFIED · a crew left short works slower next month (replaces the dry-farm halving)
+
+today        crews have no state; a farm makes half when its owner holds less Water than needsOf before
+             production (packages/engine/src/production.ts::runProduction, `dry`, UPKEEP.irrigated,
+             UPKEEP.shortOutputShare) · verified_by: read + executed (59% of farm-months cut)
+tomorrow     MUST record, at upkeep after the household eats, each player's crew shortfall for Food and Water
+             (missing ÷ crews' table need); MUST scale every plot of that player but Energy plants by RULE-12's
+             factor in the next production, before AM-17's Energy turn-off; the dry-farm halving goes
+logic        → RULE-12 · written at upkeep, read at production
+seam         packages/engine/src/upkeep.ts::runUpkeep (writes) · packages/engine/src/production.ts::runProduction (reads)
+senior       junior would: judge crews at production from the stock in hand · senior does: last month's meal,
+             because production runs before the month's market, so stock in hand reads nearly everyone short
+mechanism    in_place · the curve is WS7's RULE-2 function, imported, never copied
+pin          Energy plants unchanged (AM-17 R2); output rounding half up as offOutputShare
+owner        WS1 (upkeep.ts, production.ts, config.ts), WS3 (types.ts: Player.crewShort)
+measured     10 seed-1 games, politics on: colony Food 10.2 → 14.8 a month, colonists short of Food 74 → 61,
+             colonists at the end 72 → 74; Water short 34 → 53 (the next lever is power, not this rule)
+```
+
+```
+C15 · MODIFIED · a player is hungry when their household went short at the last month's end
+
+today        packages/engine/src/game.ts::startDevelopment sets hungry when stock < max(1, needsOf.food), read
+             after upkeep's 50% Food spoilage: 83% of seat-months, 214 of 258 seats that ate in full (WS1)
+tomorrow     MUST set hungry from the household's last meal (short of UPKEEP.baseFood at upkeep)
+seam         packages/engine/src/upkeep.ts::runUpkeep (records) · packages/engine/src/game.ts::startDevelopment (reads)
+mechanism    in_place
+owner        WS1 / WS3 (game.ts named edit) · decision for Heiko ("When is a player hungry?")
+```
+
+```
+C16 · MODIFIED (config) · Food spoils a quarter a month in a player's stock, not half — decision for Heiko
+
+today        GOOD_CONFIG.food.spoilage 0.5 (the store's follows it at PRICE.storeSpoilage)
+tomorrow     0.25, set in the supply pass with the power supply (D6), never alone
+measured     with C14: hungry seat-months 391 → 354, colonists at the end 74 → 80, the best of six rules tried
+owner        WS1 (config.ts)
+```
+
+**Measured, and not proposed:** doubling the crews' table (colony Food 14.8 → 4.8 a month; 64 colonists at the end)
+and switching farms and wells off last (no gain: the power is short whichever plots wait). Power supply is the
+first lever (WS1's measurement): plants from month 1; the supply pass (WS1, WS9 for the computer players) owns it.
+
 ## §2 · The Logic `[handoff]`
 
 ```
@@ -460,6 +504,15 @@ D_g     = Σ players RULE-10 food/water (household + crews)            g ∈ {fo
         + a festival's Food (existing) + the export ship's take (existing)
 unknown   none: every term is a count in state
 example   4 seats of "3 farms + well", 100 colonists: Food 4 × 3 + 5 = 17 (today 4 × 3 + 5 × wage share)
+```
+
+
+```
+RULE-12 · A crew's working share (C14)                                 shape: formula
+inputs        sF, sW  the player's crew shortfall at last upkeep, ∈ [0, 1]; month 1 → 0; crews' need 0 → 0
+then          f = (1 − crewDrop × g(sF)) × (1 − crewDrop × g(sW)),  g = WS7 RULE-2 (tolerance 0.1, power 1.5),
+              crewDrop 0.5 (named, config); output = round-half-up(output × f), Energy plants excepted
+examples      sF 0.1 → f 1 · sF 0.5 → 1 − 0.5 × 0.296 = 0.85 · sF 1 → 0.5 · sF 1 and sW 1 → 0.25
 ```
 
 ## The curve: shortfall → mood change in one month
@@ -615,6 +668,9 @@ What it says:
 | T-AC-21 (B-AC-10) | HC-11: no `crewPerFood`, `crewPerWater`, `UPKEEP.crew` or `energyUse` outside config history; value.ts asks needsWith | C12 | source scan, like engine-imports.test.ts |
 | T-AC-22 (B-AC-11) | the factory run draws energyUseOf × cold: an Alloy works with 3 Energy in stock and use 3 runs; with 2 it is turned off (AM-17) | C11 | engine unit |
 | T-AC-23 (B-AC-12) | `pnpm sim -- --games 10 --seed 1`, politics off and on: Water demand's 12-month mean rises from about 13 to about 16-17; hungry seat-months do not rise by more than 3% | C10-C13 | sim, against trunk at run time |
+| B-AC-13 | Given a player whose crews got half their Food at last month's end · When production runs · Then each of their plots but Energy plants makes 85% of its output, rounded half up (RULE-12). observed_at: the month report's production lines. negative: a crew 10% short loses nothing | C14 | engine test |
+| B-AC-14 | Given a player whose household ate in full and whose stock then spoiled below their need · When development starts · Then they are not hungry. observed_at: the player's walking pace. negative: a household short at upkeep is hungry | C15 | engine test |
+| T-AC-24 (B-AC-13) | RULE-12's examples; no farm halving remains (grep UPKEEP.irrigated, shortOutputShare); the curve is imported from WS7's function | C14 | engine unit + scan |
 
 ## §8 · Amendments
 
