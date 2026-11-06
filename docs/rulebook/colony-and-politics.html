@@ -132,10 +132,10 @@
 <div class="table-wrap"><table>
 <thead><tr><th>Building</th><th>Perk as the phone shows it</th><th>Built?</th></tr></thead>
 <tbody>
-<tr><td>Park</td><td>Volunteer clean-ups come more often</td><td>Being built (PR-B): a standing Park adds <span class="num">2</span> points to the volunteer clean-up's chance; the riot itself reads no Park (see <a href="#riot">Riots</a>)</td></tr>
+<tr><td>Park</td><td>Volunteer clean-ups come more often</td><td>In the game: a standing Park adds <span class="num">2</span> points to the volunteer clean-up's chance; the riot itself reads no Park (see <a href="#riot">Riots</a>)</td></tr>
 <tr><td>Hospital</td><td>Softens an epidemic</td><td>Not built; no rule reads it yet</td></tr>
 <tr><td>Observatory</td><td>Prestige only</td><td>Nothing to build</td></tr>
-<tr><td>Stadium</td><td>Festivals come more often</td><td>Being built: each standing Stadium adds <span class="num">5</span> points to the festival's chance (colony branch)</td></tr>
+<tr><td>Stadium</td><td>Festivals come more often</td><td>In the game: each standing Stadium adds <span class="num">5</span> points to the festival's chance</td></tr>
 <tr><td>Spaceport upgrade</td><td>Prestige only</td><td>Nothing to build</td></tr>
 </tbody>
 </table></div>
@@ -395,7 +395,7 @@
 <p class="owner">Kept current by: WS7 (the pay-off), WS1 (the event), WS8 (screens).</p>
 
 <!-- ============================================================ -->
-<h2 id="social-events">Social events: the mood shapes what happens <span class="pill progress">Being built</span></h2>
+<h2 id="social-events">Social events: the mood shapes what happens <span class="pill built">In the game</span></h2>
 <p>The colony's mood tilts the odds of the colony's social events. It does not make more events in total: it changes which ones come. Each event rolls on its own dice like every other event. A mood band can add to an event's chance, and some events can never happen in some bands. None of these happen with politics off.</p>
 
 <h3 id="planning-social-events">The planning events (PR-A, in the game)</h3>
@@ -411,7 +411,7 @@
 </table></div>
 <p>Every chance is capped at <span class="num">90</span>%. Chances are in percentage points per month, and all are placeholders.</p>
 
-<h3 id="riot">Riots and the other events (PR-B, being built)</h3>
+<h3 id="riot">Riots and the other events</h3>
 <p>PR-B adds the events that roll in development, production and the month end, and changes two of the planning ones. Chances are in points a month, each capped at <span class="num">90</span>%.</p>
 <div class="table-wrap"><table>
 <thead><tr><th>Event</th><th>When</th><th>Chance a month</th><th>Never in</th><th>What it does</th></tr></thead>
@@ -435,14 +435,14 @@
 <p>The catalogue's MULE theft also has <span class="num">+1</span> for the richest player. Designed, not in the game yet: C29, WS1. It waits for the colony's balance pass, since it would change games played without politics.</p>
 <div class="box example"><h4>Example: a riot at the store</h4><p>The store holds 7 Food, 2 Water and 12 Smithore. A riot takes 2 Food (7 ÷ 3, rounded down), no Water (2 ÷ 3 rounds to 0) and 4 Smithore. The event's line shows exactly what was lost. If the Park and the Stadium stand and the dice pick the Stadium, the colony's prestige falls by <span class="num">4</span> until it is repaired.</p></div>
 <div class="box why"><h4>Why it is like this</h4><p>G-5 (Heiko, 28 Oct) asks that unhappy months draw at least twice the strikes and thefts of thriving months, and that a strike cuts the struck good's plots to 20%. The rows come from the event catalogue Heiko approved. The PM ruled on 5 Nov: the riot's loss per good, rounded down, and its building picked on its own dice; "blamed" never in Thriving or Content; every new event needs a colony. On 6 Nov: the immigration wave's air parts only with a colony, "Toxic" read as Toxic or Collapse; theft's richest +1 deferred to C29.</p></div>
-<div class="box next"><h4>What is changing</h4><p>PR-A (#370) is in the game: it reached trunk with the colony batch (#413) on 5 Nov. PR-B is being built on branch <code>ws1-c26b</code> by WS1, with WS7's <code>damageObject</code>. Until it merges none of the five new events rolls. The catalogue's riot reads no Park: a standing Park makes the volunteer clean-up likelier (+2), so the Park's perk on the phone reads "Volunteer clean-ups come more often" (WS8, 6 Nov; it read "Calms the colony in a riot" before).</p><p>Balance question: "blamed for the unrest" costs <span class="num">1</span> reputation, and reputation only changes votes below <span class="num">30</span>, from a start of <span class="num">50</span>. As built it would take 21 blamings to lose a vote. Owner: WS1 and WS7, at the final tuning.</p><p>The event shows for all of these (PR #364, WS8) are on trunk; the PR-B events' stories play once those events roll.</p></div>
-<p class="code-ref">In the code (colony branch): <code>packages/engine/src/config.ts::SOCIAL_EVENTS</code> · <code>events.ts</code> (mood, neverIn, objects, foodPrice in the chance; on <code>ws1-c26b</code>: pollutionIn, colonyAir, neverInAir, <code>::storeOnStrike</code>) · <code>colony.ts::addPrestige</code> · <code>::damageObject</code> (<code>ws1-c26b</code>) · <code>::moodShift</code> · <code>politics.ts::reputationShift</code> · G-5 C26, AM-11</p>
+<div class="box next"><h4>What is changing</h4><p>Both halves are in the game: PR-A (#370) reached trunk with the colony batch (#413) on 5 Nov, and PR-B (#445, WS1, with WS7's <code>damageObject</code>) with batch 45 (#465) on 6 Nov. The catalogue's riot reads no Park: a standing Park makes the volunteer clean-up likelier (+2), so the Park's perk on the phone reads "Volunteer clean-ups come more often" (WS8, 6 Nov; it read "Calms the colony in a riot" before).</p><p>Balance question: "blamed for the unrest" costs <span class="num">1</span> reputation, and reputation only changes votes below <span class="num">30</span>, from a start of <span class="num">50</span>. As built it would take 21 blamings to lose a vote. Owner: WS1 and WS7, at the final tuning.</p><p>The event shows for all of these (PR #364, WS8) are on trunk, so the PR-B events' stories play when they roll.</p></div>
+<p class="code-ref">In the code: <code>packages/engine/src/config.ts::SOCIAL_EVENTS</code> · <code>events.ts</code> (mood, neverIn, objects, foodPrice, pollutionIn, colonyAir, neverInAir in the chance; <code>::storeOnStrike</code>) · <code>colony.ts::addPrestige</code> · <code>::damageObject</code> · <code>::moodShift</code> · <code>politics.ts::reputationShift</code> · G-5 C26, AM-11</p>
 <p class="owner">Kept current by: WS1 (events), WS7 (the colony's writers), WS8 (event shows).</p>
 
 <!-- ============================================================ -->
 <h2 id="migration">Mood and migration <span class="pill designed">Designed</span></h2>
 <p>Today the colony grows by <span class="num">4</span>% in a month its colonists were fed and shrinks by <span class="num">5</span>% when they went hungry, whatever the mood. The design says the mood will scale that growth and shrinkage: a happy colony attracts settlers, an unhappy one loses them. How much is not set yet; the numbers will live with the mood's.</p>
-<div class="box next"><h4>What is changing</h4><p>C27, after C26's PR-B, on WS1's queue (it was planned for the evening of 5 Nov). Owner: WS1.</p></div>
+<div class="box next"><h4>What is changing</h4><p>C27 is on hold: on 6 Nov Heiko asked to think the colonists concept through before the mood shapes their growth. Owner: WS1.</p></div>
 <p class="code-ref">In the code: <code>packages/engine/src/upkeep.ts::runUpkeep</code> · <code>config.ts::UPKEEP.colonistGrowth</code> · G-5 C27</p>
 <p class="owner">Kept current by: WS1.</p>
 
