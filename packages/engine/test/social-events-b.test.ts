@@ -222,3 +222,31 @@ describe('C26 PR-B: the walkout, in production', () => {
     expect(madeAt(report, food)).toEqual(madeAt(full, food).map((n) => Math.floor(Math.floor(n * 0.2) * COLONY.strike.output)));
   });
 });
+
+describe('C26 PR-B: the loyal crew, in production', () => {
+  it('INV-C26-14 (loyal crew odds): Thriving +3, Content +1, the poorest +1', () => {
+    // p2 is neither the richest nor the poorest; p3, with no land, is the poorest.
+    expect(chances('loyalCrew', 'production', { player: 'p2' })).toEqual(close([0.03, 0.01, 0, 0, 0]));
+    expect(chances('loyalCrew', 'production', { player: 'p3' })).toEqual(close([0.04, 0.02, 0.01, 0.01, 0.01]));
+  });
+
+  it("INV-C26-15 (loyal crew's effect): one of the player's working plots, on the event's dice, makes 1 more; no plot, no loyal crew", () => {
+    only([]);
+    const full = produce(colonyAt(MID('thriving')));
+    only(['loyalCrew']);
+    const state = colonyAt(MID('thriving'));
+    const report = produce(state);
+    const crews = report.events!.filter((e) => e.key === 'loyalCrew');
+    expect(crews.map((e) => [e.player, e.scope, e.sign, e.phase, e.plots.length])).toEqual(['p0', 'p1', 'p2'].map((p) => [p, 'personal', 'good', 'production', 1]));
+    for (const crew of crews) {
+      const mine = plotsOf(state, crew.player!);
+      const [plot] = crew.plots;
+      expect(mine).toContain(plot!.index);
+      expect(plot!.delta).toBe(1);
+      expect(madeAt(report, mine)).toEqual(madeAt(full, mine).map((n, k) => (mine[k] === plot!.index ? n + 1 : n)));
+    }
+    // The dice pick among p0's three Food plots: more than one of them on some seed.
+    const picked = new Set([1, 2, 3, 4, 5, 6].map((seed) => produce(colonyAt(MID('thriving'), { seed })).events!.find((e) => e.key === 'loyalCrew' && e.player === 'p0')?.plots[0]?.index));
+    expect(picked.size).toBeGreaterThan(1);
+  });
+});
