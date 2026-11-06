@@ -661,3 +661,30 @@ because   the funded total never exceeds the money, so a cash-short seat stopped
           about 1/keep, against AM-2's own reasoning
 folded    PR-1's fix round; T-AC-6's spoilage row
 ```
+
+AM-6 · 2026-11-06 · WS9 · building PR-2 (Task 2.1)
+
+target    §2 RULE-4; §1 C8 ("the rest at its carry")
+said      Ck = afterTax(belief × (1 − storeSpread)) × keep^holdMonths, for every unit not needed
+did       holdMonths applies to units carried past upkeep. A plot's output sold at its own month's
+          auction is held 0 months: monthlyNet values its surplus unit at RULE-4's sell side with
+          months = 0, through the same function unitValues uses
+because   production → auction → upkeep: the output reaches its auction before upkeep spoils it.
+          keep^holdMonths there would halve every Food farm's sold output, a spoilage the engine
+          never applies. One function keeps building and trading from disagreeing (C8's senior line)
+folded    Task 2.1; one assertion under T-AC-7 (0 months: 40 × 0.9 × 0.92 = 33.12)
+
+AM-7 · 2026-11-06 · WS9 · building PR-2 (Task 2.2)
+
+target    §1 C1's senior line ("tradeDecision's existing 'buy while value > ask' loop buys"); C2's
+          trade scorer
+said      the existing loop buys any unit whose value beats the ask
+did       with AI_VALUE.unit on, the trade scorer gives a buy valued by unitValues the same 'Sure
+          thing' whether the unit is needed or surplus; switch-off unchanged
+because   RULE-4 already prices a surplus unit's risk (keep, spread, speculate). The scorer's
+          resale 'Sure thing' (STRATEGIST.trade.sure.resale) discounted it a second time, so a seat
+          with its need held passed on a surplus worth 8.98 at an ask of 7 (the implementer's
+          probe: only the aggressive persona preferred it, and even it stopped at its need). The
+          same class as AM-3: a spec rule taken as settled that only the code could prove
+folded    Task 2.2; B-AC-3 as played. If the probe shows B-AC-3 still needs a number tuned, this
+          amendment is withdrawn and B-AC-3 goes to the PM as a balance question
