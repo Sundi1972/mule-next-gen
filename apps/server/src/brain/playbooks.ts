@@ -5,7 +5,7 @@
  */
 import { BRAIN, type GameState, type Playbook, type PlayerId } from '@mule/engine';
 import {
-  atAuctionPrices,
+  atAuctionStart,
   landBrief,
   phaseBrief,
   playbookFrom,
@@ -242,9 +242,9 @@ export class Playbooks {
       if (!writer) continue;
       const key = `${seat.id}/${phase}`;
       try {
-        // The auction is asked in the production show, before the store posts its prices: it is drafted and briefed at
-        // the prices the auction will open at, as the engine's own seats redraft at its start.
-        const view = phase === 'auction' ? atAuctionPrices(state) : state;
+        // The auction is asked in the production show: it is drafted and briefed on the game as the auction will open,
+        // its events and posted prices included, as the engine's own seats draft at its start.
+        const view = phase === 'auction' ? atAuctionStart(state) : state;
         const draft = seat.draft(view, phase);
         const outcome = phase === 'auction' ? seat.outcome('development', state, facts) : null;
         const brief = phaseBrief(view, seat.mind, seat.brain.persona, draft, phase, seat.brain.heard(), {

@@ -3,7 +3,7 @@
  * Claude chairs running the whole Smart pipeline (Playbooks, the validator, adoption at each phase's start) with a
  * writer whose edits change nothing a seat plays. A plumbing that plays as the engine's own seats lands in WS1's control
  * band (BRAIN.tournament.control); one that does not hands the tournament a handicap no model can be blamed for.
- * Never reads a key; never calls anything.
+ * Its brain is a stub with no client, so it can reach no key and calls nothing.
  *
  *   brain:gate play --seeds 1001,2001 --per-seed 30 --out <file.jsonl>   games for these seed blocks, a line each
  *   brain:gate report <file.jsonl>...                                    the control-band verdict over them all
@@ -117,7 +117,11 @@ async function main(argv: readonly string[]): Promise<number> {
     console.error('Usage: brain:gate play --seeds S1,S2 --per-seed N --out file.jsonl | brain:gate report file.jsonl...');
     return 1;
   }
-  delete process.env.ANTHROPIC_API_KEY;
+  // A report counts the lines it is given, so a rerun into the same file would be judged on the wrong n.
+  if (fs.existsSync(out)) {
+    console.error(`brain:gate: ${out} exists; give a new file.`);
+    return 1;
+  }
   const games = trialGames({ table: 'pair', seeds, seed: seeds[0]!, games: perSeed * 2 });
   const t0 = Date.now();
   for (const g of games) fs.appendFileSync(out, JSON.stringify(await playOne(g.seed, g.seating as 'even' | 'odd')) + '\n');
