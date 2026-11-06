@@ -380,6 +380,13 @@ describe('TV-FIT (WS4, month end, PM ruling C): the league and the colony keep t
     expect(said(tv, 'gauge-happiness')).toContain('Happiness 59');
   });
 
+  it('from five players the TV league drops its small header row ("League table · month N"), the rows and their column heads stay; under five it keeps it', () => {
+    expect(element(tv, 'league')).not.toContain('League table · month');
+    expect(said(tv, 'worth-head')).toBe('Worth');
+    expect(tv.match(/data-testid="league-row-/g)).toHaveLength(6);
+    expect(element(onTv(view({ colony }), TvMonthEnd), 'league')).toContain('League table · month 4');
+  });
+
   it('without the colony (politics off) the header keeps its air gauge, as before', () => {
     const plain = onTv(view({ players: six }), TvMonthEnd);
     expect(has(plain, 'colony-gauges')).toBe(false);

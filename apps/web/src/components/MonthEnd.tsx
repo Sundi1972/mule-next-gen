@@ -82,10 +82,14 @@ export function LeagueTable({ view, density, selfId, final = false }: { view: Mu
   const th = cx('label-caps align-bottom font-normal', s.head);
   return (
     <section className={cx('relative flex min-h-0 flex-col rounded-panel border border-holo-line bg-panel', s.pad)} aria-label="League table" data-testid="league">
-      <header className="flex items-baseline justify-between gap-2">
-        <h2 className={cx('label-caps', s.head)}>{final ? 'Final standings · by Worth' : `League table · month ${view.month}`}</h2>
-        {tv && <span className="text-lg text-ink-3">Worth, in credits</span>}
-      </header>
+      {/* At a full table the TV drops this small row for the rows' height (PM ruling C, option 2): the callout and the
+          column heads still say what the table is. */}
+      {!full && (
+        <header className="flex items-baseline justify-between gap-2">
+          <h2 className={cx('label-caps', s.head)}>{final ? 'Final standings · by Worth' : `League table · month ${view.month}`}</h2>
+          {tv && <span className="text-lg text-ink-3">Worth, in credits</span>}
+        </header>
+      )}
 
       {top && !final && (
         <div className={cx('relative flex items-center', tv ? cx('gap-4 rounded-panel border-2 border-holo bg-holo-soft px-5 shadow-glow', full ? 'py-1.5' : 'py-2.5') : 'gap-2')} data-testid="leader">
