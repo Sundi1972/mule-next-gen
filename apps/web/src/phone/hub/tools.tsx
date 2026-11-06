@@ -3,6 +3,7 @@ import type { MuleView, TileView } from '@mule/protocol';
 import { Button, GOOD_NAME, HoloMap, TERRAIN_NAME, type MapTile } from '@mule/ui';
 import { mapTiles, player, plotName, TERRAIN_ODDS, tileAt } from '../../game/derive';
 import { SpecialLine } from '../../components/SpecialLine';
+import { StrikeMap } from '../../components/Strike';
 import { useClient } from '../../net/react';
 import { usePhoneGame } from '../game';
 import { GroundCard } from '../ground';
@@ -34,7 +35,9 @@ export function LookMap() {
   };
   return (
     <MapFit width={view.width} height={view.height}>
-      <HoloMap width={view.width} height={view.height} tiles={mapTiles(view)} onTile={tap} selected={looked} focusSlot={slot} density={wide ? 'tv' : 'phone'} />
+      <StrikeMap view={view} size="phone">
+        <HoloMap width={view.width} height={view.height} tiles={mapTiles(view)} onTile={tap} selected={looked} focusSlot={slot} density={wide ? 'tv' : 'phone'} />
+      </StrikeMap>
     </MapFit>
   );
 }
