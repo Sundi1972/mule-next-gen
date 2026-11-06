@@ -22,6 +22,119 @@ Heiko's words, the provenance of every goal:
 4. His scope answers (5 Nov): Energy supply at the store in; the other export goods' off-world prices move too,
    with smaller swings than Crystite; the MULE price and the corral refill in; taxes out.
 
+## Rework, 6 Nov: Heiko's five rules (PROPOSED, waiting for Heiko) `[handoff]`
+
+Heiko, 6 Nov, close to his words: (1) the store knows OVERALL demand; when overall supply covers it, it sells at
+the lowest, normal price. (2) If stock covers less than 2 months AND demand is bigger than production, prices
+rise. (3) In a shortage they rise more dramatically. (4) In a severe shortage more again. (5) If the last trade
+between players was very high, above the store's price, the store's price moves towards it. "Can be a function,
+but also a function with steps." If approved, this replaces RULE-1's step and target and RULE-2's lean (AM-4).
+Overall demand comes from the Colony-needs spec (`docs/specs/2026-11-06-colony-needs.md`, WS5's §1 C12): the
+two specs share one demand.
+
+### What players see at the table
+- While the colony grows and stores enough of a good, its store price sits at its normal price (Food 30) and
+  does not drift below it however full the shelves are. A full store simply stops buying.
+- When the colony eats more than it makes and holds under two months of it, the store's price steps up the next
+  month: a little when it is tight (Food 38), sharply in a shortage (60), very sharply in a severe one (120).
+  Both lines move: in a shortage the store also pays more for Food (54 instead of 25), so selling to it pays.
+- When players have just paid each other far more than the store asked, the store's price jumps towards that.
+- Once the colony holds enough again, the price comes down a quarter a month, so a crisis is felt for a few
+  months after it ends, then is forgotten.
+- The hub's market strip, the auction and the TV tiles show the same store price (Task 1.1 Step 1b).
+
+### The measures (RULE-5) — evaluated when prices are posted, each good
+```
+D  overall monthly demand        players' households + crews (consumption table) + their plots' Energy
+                                 + colonists' full need (no wages) + a festival's Food + the export ship's take
+                                 = economy.ts::monthlyDemand as Colony needs C12 makes it
+S  stock                         the colony's: store shelf + players' depots (+ corral MULEs as Smithore)
+                                 = economy.ts::colonySupply (existing)                         see Decision 1
+P  expected production           this month's output of every worked plot making g, before Energy shortfalls
+                                 and events: production.ts::rawOutput per raw plot, factoryFit(...).output per factory
+M  months of cover               S ÷ D;  D = 0 → the good has no colony demand (export-only): off-world rule
+```
+"Shortage" and "severe shortage" are measured by M, and only count while P < D (the colony is eating into its
+stock). Last month's colonist shortfall of g counts as severe, whatever M says (today's rule keeps that too).
+
+### The bands (RULE-6, decision table, first match wins)
+```
+ #  when                                              band       target mid     store buys   store sells
+ 1  D = 0 (only the export ship wants it)             off-world  offWorld[g]    15% under    15% over   (existing)
+ 2  P ≥ D,  or  M ≥ 2                                 normal     N              15% under    15% over
+ 3  M ≥ 1                                             tight      1.25 N         15% under    20% over
+ 4  M ≥ 0.5  and colonists weren't short of it        shortage   2 N            10% under    25% over
+ 5  otherwise                                         severe     4 N            10% under    25% over
+N = the good's normal price: store.refPrice[g] (existing; drifts with what players pay and, for export goods,
+    towards the off-world price). Every number is a named PRICE value: normalCover 2, tightCover 1,
+    shortCover 0.5, the three multipliers 1.25 / 2 / 4 and the per-band spreads.
+```
+Chart: target price against months of cover, while production is below demand (Food, N = 30):
+```
+ price
+  120 |█████                                    severe   (M < 0.5)
+   60 |     █████                               shortage (0.5 ≤ M < 1)
+   38 |          ██████████                     tight    (1 ≤ M < 2)
+   30 |                    ████████████████     normal   (M ≥ 2, or production keeps up)
+      +----+----+----+----+----+----+----+---- months of cover
+      0   0.5   1        2               4
+```
+
+### How the price moves (RULE-7)
+```
+up       a band's target above last month's mid: the mid goes straight to it (no momentum on the way up)
+down     a target below last month's mid: the mid falls at most fallStep (25%) a month, never below the target
+trade    T = the highest price players paid each other for g in last month's walk (store.lastWalk[g].highTrade)
+         T above last month's store selling price → mid ≥ prev + tradePull × (T − prev), tradePull 0.5
+         the store sold out while they traded (soldOutHigh, existing C5) → mid ≥ soldOutHigh ÷ (1 + sell half-spread)
+ceiling  mid ≤ 12 × GOOD_CONFIG[g].refPrice (5 Nov, kept); floor: mid ≥ N (rule 1: normal is the lowest)
+order    band target, move, trade, ceiling, then m = max(1, round(m)): the ceiling always wins
+lines    buy = floor(mid × (1 − under)), sell = max(buy + 1, ceil(mid × (1 + over))) — the band's own spread
+         storeQuotes is the one formula; comeUp, the hub strip and the TV tiles read it (Task 1.1 Step 1b)
+```
+
+### A Food month in each band (4 seats, D = 14 a month, N = 30)
+| Band | The colony holds | Farms make | Mid | Store buys / sells |
+|---|---|---|---|---|
+| normal | 30 (M 2.1) — or 17 (M 1.2) with farms making 16 | 10 / 16 | 30 | 25 / 35 |
+| tight | 20 (M 1.4) | 10 | 38 | 32 / 46 |
+| shortage | 10 (M 0.7) | 8 | 60 | 54 / 75 |
+| severe | 4 (M 0.3), or colonists went short last month | 6 | 120 | 108 / 150 |
+| shortage + a high trade | 10, and players paid each other 95 last month | 8 | 60 + ½ × 35 = 78 | 70 / 98 |
+| recovering | back to 30 after a severe month | 16 | 120 → 90 → 68 → 51 → 38 → 30 | follows the mid |
+
+### Heiko's 5 Nov picks against the new rules
+- Market-maker store: kept. The bands replace RULE-2's inventory lean as what moves the mid; the spread per band
+  replaces the lean's widening, and the buy line now rises with a shortage (the buy-line fix, stronger).
+- 12× ceiling: kept. Crystite as proposed: kept (an export-only good is row 1, the off-world walk; PR-2's C3).
+- 4 Food per seat at the start: kept; month 1 will usually read "tight" (WS9's month-1 finding), which is the honest
+  signal. The AI's sell-surplus behaviour: kept; the store's buy line is never below 0.85 N now.
+- **Conflict 1**: rule 1 ("the lowest, normal price") against G-1's glut step (after the store stopped buying, its
+  next buy line is lower; B-AC-2). Decision 4.
+- **Conflict 2 (with Colony needs)**: colonists without wages leave HC-4's cap (a Food buy line under the
+  colonists' budget) with nothing to measure against. Recommended: drop HC-4; the ceiling and rule 1's floor bound
+  the buy line.
+
+### Decisions for Heiko
+1. **What counts as stock.** A (recommended): the colony's — store plus players' depots. B: the store's shelf only.
+   A: matches "overall supply"; a colony whose players hold Food isn't in a shortage. B: literal "store stock", but
+   the store usually holds under a month while depots hold the rest, so prices would sit in the shortage bands
+   most months.
+2. **Steps or a curve.** A (recommended): the four steps above; plain to say at the table ("Food is short"), but a
+   price jumps at a band's edge (38 → 60). B: a smooth curve through the same points (N × 2 ÷ M while P < D);
+   no jumps, but nothing to name. C: a monthly rise per band (+15% / +40% / +80% a month while it lasts); a long
+   shortage keeps climbing, but the price depends on history and overshoots once supply returns.
+3. **How fast it falls back.** A (recommended): a quarter a month (120 → 30 in five months). B: half the gap a
+   month (four months). C: straight back to normal (no memory of the crisis).
+4. **Below normal in a glut.** A (recommended, rule 1 as worded): never; a full store stops buying (existing),
+   G-1's glut step and B-AC-2 are dropped. B: keep a surplus band at 0.8 N when M ≥ 3; players who over-produce
+   feel it, but that is a second rule beside Heiko's five.
+5. **How hard a high trade pulls.** A (recommended): halfway. B: all the way to the trade's price less the spread.
+   C: a quarter.
+
+### Sim: the 10 seed-1 games, before and after
+*(pending: filled at the next commit)*
+
 ## §0 · Business Goals & Value
 
 **G-1 · The store's prices answer what happens at the table** `[handoff]`
@@ -355,6 +468,15 @@ because   RULE-1 reads lastWalk, which later goods' walks write this month, so t
 goal      G-1 unchanged (the AI and the store apply one rule, HC-3)
 folded    §6 T-AC-2, §1 C6, header; plan Tasks 1.1, 1.3, 1.6, 2.4
 ```
+
+AM-4 · 2026-11-06 · lead (WS5) · Heiko's five rules, relayed by the PM (PROPOSED until he approves)
+
+target    §2 RULE-1 (step, target), RULE-2 (lean); §0 G-1's glut clause; §0.2 HC-4; §1 C5
+said      a power-law target with momentum, a shelf lean on both lines, a glut step down, HC-4's colonist cap
+did       "Rework, 6 Nov" above: RULE-5 measures, RULE-6 bands, RULE-7 moves; C5's walk also keeps highTrade
+because   G-1 (prices answer the table) and G-2 (a wider spread) — Heiko's own rules for how they answer
+goal      G-1, G-2 — still met; G-1's glut clause goes if Decision 4 is A
+folded    on approval: RULE-1/RULE-2 rewritten to RULE-5..7, C1/C2/C5 and B-AC-2/B-AC-4 updated, plan Tasks 1.3-1.5
 
 ## §9 · Ownership Boundaries `[handoff]`
 No ownership change. WS1 remains sole owner of `economy.ts`, `upkeep.ts` and its `config.ts` blocks (PRICE, MULE,
