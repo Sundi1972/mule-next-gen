@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { advancePhase, cloneForSim, createGame, DEVELOPMENT, observe, orderGeoDrone, type GameState } from '../src/index.js';
 
 /**
- * H-3 (WS6 UX audit): the land grant's "Your drone: …" line. At the grant the drone's plots are analysed and its
- * order is emptied, so the engine keeps what it surveyed, per player, for that month: `droneFound`.
+ * H-3 (WS6 UX audit): the land grant's "Your drone: …" line. The drone's plots are analysed when it is sent, and the
+ * grant empties its order, so the engine keeps what it surveyed, per player, for that month: `droneFound`.
  */
 const SEATS = ['brix', 'ossa', 'lena'];
 

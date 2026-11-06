@@ -120,7 +120,7 @@ export function freePlots(state: GameState) {
 
 // --- Planning: geo drone ----------------------------------------------------
 
-/** Orders a geo drone to analyse up to two free or listed plots from orbit. The results arrive when the land grant starts. */
+/** Orders a geo drone to analyse up to two free or listed plots from orbit. The results are the player's at once, in this planning. */
 export function orderGeoDrone(state: GameState, playerId: string, plots: { x: number; y: number }[]): void {
   requirePhase(state, 'planning');
   const p = player(state, playerId);
